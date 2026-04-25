@@ -61,6 +61,8 @@ static const zone_type_id zone_LOOT_SEEDS( "LOOT_SEEDS" );
 static const zone_type_id zone_LOOT_UNSORTED( "LOOT_UNSORTED" );
 static const zone_type_id zone_LOOT_DUMP( "LOOT_DUMP" );
 static const zone_type_id zone_LOOT_WOOD( "LOOT_WOOD" );
+static const zone_type_id zone_LOOT_BROKEN( "LOOT_BROKEN" );
+static const zone_type_id zone_LOOT_DAMAGED( "LOOT_DAMAGED" );
 static const zone_type_id zone_NO_AUTO_PICKUP( "NO_AUTO_PICKUP" );
 static const zone_type_id zone_NO_NPC_PICKUP( "NO_NPC_PICKUP" );
 static const zone_type_id zone_CONSTRUCTION_IGNORE( "CONSTRUCTION_IGNORE" );
@@ -1123,6 +1125,17 @@ zone_type_id zone_manager::get_near_zone_type_for_item( const item &it,
             return zone_LOOT_CUSTOM;
         }
     }
+
+    if( it.damage() >= it.max_damage() ) {
+        if( has_near( zone_LOOT_BROKEN, where, range ) ) {
+            return zone_LOOT_BROKEN;
+        }
+    } else if( it.damage() >= it.max_damage() / 2 ) {
+        if( has_near( zone_LOOT_DAMAGED, where, range ) ) {
+            return zone_LOOT_DAMAGED;
+        }
+    }
+
     if( it.has_flag( STATIC( flag_id( "FIREWOOD" ) ) ) ) {
         if( has_near( zone_LOOT_WOOD, where, range ) ) {
             return zone_LOOT_WOOD;
