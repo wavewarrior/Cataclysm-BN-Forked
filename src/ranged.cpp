@@ -1682,6 +1682,10 @@ auto throw_damage_projectile( const item &it, const int skill, const int str ) -
 
     proj.impact.add_damage( DT_BASH, damage );
 
+    for( const auto &eff : it.ammo_effects() ) {
+        proj.add_effect( eff );
+    }
+
     // add_msg( m_info, "skill_level is %s", skill );
     // add_msg( m_info, "effective_strength is %s", str );
     // add_msg( m_info, "Thrown item weight is %s grams", to_gram( weight ) );

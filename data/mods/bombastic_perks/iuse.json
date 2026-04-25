@@ -1,0 +1,7 @@
+[
+  {
+    "type": "item_action",
+    "id": "BOMBASTIC_PERKS_MENU",
+    "name": { "str": "Open the [Bombastic Perks] menu" }
+  }
+]

@@ -21,6 +21,7 @@
 #   include "sdltiles.h"
 #endif // TILES
 #include "cata_utility.h" // for normal_cdf
+#include "character.h"
 #include "creature.h"
 #include "damage.h"
 #include "debug.h"
@@ -70,10 +71,18 @@ static const efftype_id effect_tied( "tied" );
 
 static const efftype_id effect_bounced( "bounced" );
 
+static const efftype_id effect_poison( "poison" );
+static const efftype_id effect_badpoison( "badpoison" );
+static const efftype_id effect_bleed( "bleed" );
+
 static const std::string flag_LIQUID( "LIQUID" );
 static const std::string flag_THIN_OBSTACLE( "THIN_OBSTACLE" );
 
 static const flag_id flag_FLY_STRAIGHT( "FLY_STRAIGHT" );
+
+static const trait_id trait_MUT_HEMORRHAGE( "MUT_HEMORRHAGE" );
+static const trait_id trait_MUT_TOXIC_SECRETION( "MUT_TOXIC_SECRETION" );
+static const trait_id trait_MUT_VENOM_GLAND( "MUT_VENOM_GLAND" );
 
 thread_local int projectile_animation_suppression_depth = 0;
 
@@ -160,6 +169,22 @@ void drop_or_embed_projectile( dealt_projectile_attack &attack )
         if( g->u.sees( *mon ) ) {
             add_msg( _( "The %1$s embeds in %2$s!" ), drop_item.tname(), mon->disp_name() );
         }
+        avatar *ch = g->u.attitude_to( *mon ) == Attitude::A_FRIENDLY ? &g->u : nullptr;
+        if( ch && ( attack.dealt_dam.type_damage( DT_CUT ) > 0 || attack.dealt_dam.type_damage( DT_STAB ) > 0 ) ) {
+            if( ch->has_trait( trait_MUT_TOXIC_SECRETION ) && one_in( 3 ) ) {
+                ch->add_msg_if_player( m_good, _( "Your toxic secretion corrodes %s!" ), mon->disp_name() );
+                mon->add_effect( effect_poison, 4_turns );
+                mon->apply_damage( ch, bodypart_id( "torso" ), 2 );
+            }
+            if( ch->has_trait( trait_MUT_VENOM_GLAND ) && one_in( 4 ) ) {
+                ch->add_msg_if_player( m_good, _( "Your venom glands coat the wound!" ), mon->disp_name() );
+                mon->add_effect( effect_poison, 4_turns );
+            }
+            if( ch->has_trait( trait_MUT_HEMORRHAGE ) && one_in( 3 ) ) {
+                ch->add_msg_if_player( m_good, _( "The wound bleeds heavily!" ), mon->disp_name() );
+                mon->add_effect( effect_bleed, 3_turns );
+            }
+        }
     } else {
         bool do_drop = true;
         // monsters that are able to be tied up will store the item another way
@@ -190,6 +215,21 @@ void drop_or_embed_projectile( dealt_projectile_attack &attack )
             const trap &tr = here.tr_at( pt );
             if( tr.triggered_by_item( drop_item ) ) {
                 tr.trigger( pt, nullptr, &drop_item );
+            }
+        }
+        if( mon && attack.dealt_dam.total_damage() > 0 && g->u.attitude_to( *mon ) == Attitude::A_FRIENDLY ) {
+            if( g->u.has_trait( trait_MUT_TOXIC_SECRETION ) && one_in( 3 ) ) {
+                g->u.add_msg_if_player( m_good, _( "Your toxic secretion corrodes %s!" ), mon->disp_name() );
+                mon->add_effect( effect_poison, 4_turns );
+                mon->apply_damage( &g->u, bodypart_id( "torso" ), 2 );
+            }
+            if( g->u.has_trait( trait_MUT_VENOM_GLAND ) && one_in( 4 ) ) {
+                g->u.add_msg_if_player( m_good, _( "Your venom glands coat the wound!" ), mon->disp_name() );
+                mon->add_effect( effect_poison, 4_turns );
+            }
+            if( g->u.has_trait( trait_MUT_HEMORRHAGE ) && one_in( 3 ) ) {
+                g->u.add_msg_if_player( m_good, _( "The wound bleeds heavily!" ), mon->disp_name() );
+                mon->add_effect( effect_bleed, 3_turns );
             }
         }
     }

@@ -955,7 +955,7 @@ struct itype {
         itype_id repairs_like;
 
         std::set<weapon_category_id> weapon_category;
-
+        std::set<ammo_effect_str_id> ammo_effects;
         std::string snippet_category;
         translation description; // Flavor text
         ascii_art_id picture_id;

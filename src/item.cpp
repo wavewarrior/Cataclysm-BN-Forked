@@ -8559,11 +8559,17 @@ itype_id item::common_ammo_default( bool conversion ) const
 
 std::set<ammo_effect_str_id> item::ammo_effects( bool with_ammo ) const
 {
-    if( !is_gun() ) {
-        return std::set<ammo_effect_str_id>();
+    std::set<ammo_effect_str_id> res;
+
+    if( !type->ammo_effects.empty() ) {
+        res.insert( type->ammo_effects.begin(), type->ammo_effects.end() );
     }
 
-    std::set<ammo_effect_str_id> res = type->gun->ammo_effects;
+    if( !is_gun() ) {
+        return res;
+    }
+
+    res.insert( type->gun->ammo_effects.begin(), type->gun->ammo_effects.end() );
     if( with_ammo && ammo_data() ) {
         res.insert( ammo_data()->ammo->ammo_effects.begin(), ammo_data()->ammo->ammo_effects.end() );
     }

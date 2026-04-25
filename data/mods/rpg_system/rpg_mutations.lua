@@ -339,6 +339,18 @@ local MUTATIONS = {
     requirements = { level = 10, stats = { PER = 16 } },
     kill_monster_bonuses = { heal_percent = 0.5 },
   }),
+
+  RPG_TRAIT_DEADLY_AIM = Mutation.new({
+    id = "RPG_TRAIT_DEADLY_AIM",
+    type = "trait",
+    requirements = { level = 5, stats = { DEX = 12 } },
+  }),
+
+  RPG_TRAIT_LIGHT_FINGERS = Mutation.new({
+    id = "RPG_TRAIT_LIGHT_FINGERS",
+    type = "trait",
+    requirements = { level = 10, stats = { DEX = 14 } },
+  }),
 }
 
 -- Derived lists

@@ -1,0 +1,341 @@
+[
+  {
+    "type": "effect_type",
+    "id": "effect_psi_momentum",
+    "name": [ "Telekinetic Momentum" ],
+    "desc": [ "Your telekinetic powers are heightened." ],
+    "rating": "good",
+    "apply_message": "Kinetic energy floods your mind.",
+    "remove_message": "Your telekinetic focus fades.",
+    "base_mods": { "str_mod": [ 2 ], "dex_mod": [ 2 ] }
+  },
+  {
+    "type": "effect_type",
+    "id": "biokin_enhance_item",
+    "name": [ "Physical Enhancement" ],
+    "desc": [ "Your body is enhanced beyond normal limits." ],
+    "rating": "good",
+    "apply_message": "Your muscles bulge with psionic power!",
+    "remove_message": "Your enhancement fades.",
+    "base_mods": { "str_mod": [ 3 ], "dex_mod": [ 3 ], "speed_mod": [ 15 ] }
+  },
+  {
+    "type": "effect_type",
+    "id": "painkillers",
+    "name": [ "Pain Suppression" ],
+    "desc": [ "Pain signals are being blocked." ],
+    "rating": "good",
+    "apply_message": "Pain fades from your awareness.",
+    "remove_message": "Pain returns.",
+    "flags": [ "BLOCK_PAIN" ]
+  },
+  {
+    "type": "effect_type",
+    "id": "bio_skin_item",
+    "name": [ "Oxygen Absorption" ],
+    "desc": [ "Your skin can absorb oxygen directly." ],
+    "rating": "good",
+    "apply_message": "Your skin becomes permeable.",
+    "remove_message": "Your skin returns to normal.",
+    "flags": [ "EFFECT_GAS_IMMUNE" ]
+  },
+  {
+    "type": "effect_type",
+    "id": "bio_armor_item",
+    "name": [ "Dermal Armor" ],
+    "desc": [ "Your skin is hardened like crystal." ],
+    "rating": "good",
+    "apply_message": "Your skin crystallizes into armor!",
+    "remove_message": "Your skin softens.",
+    "base_mods": { "dodge_mod": [ 2 ], "speed_mod": [ 5 ] }
+  },
+  {
+    "type": "effect_type",
+    "id": "bio_claw_item",
+    "name": [ "Biokinetic Claw" ],
+    "desc": [ "Sharp claws extend from your fingers." ],
+    "rating": "good",
+    "apply_message": "Claws extend from your fingers!",
+    "remove_message": "Your claws retract."
+  },
+  {
+    "type": "effect_type",
+    "id": "bio_grow_item",
+    "name": [ "Size Enhancement" ],
+    "desc": [ "Your body has grown larger." ],
+    "rating": "good",
+    "apply_message": "You grow larger!",
+    "remove_message": "You return to normal size.",
+    "base_mods": { "str_mod": [ 4 ], "size_mod": [ 1 ] }
+  },
+  {
+    "type": "effect_type",
+    "id": "bio_fast_item",
+    "name": [ "Accelerated Metabolism" ],
+    "desc": [ "Your metabolism is boosted." ],
+    "rating": "good",
+    "apply_message": "Metabolism accelerates!",
+    "remove_message": "Metabolism normalizes."
+  },
+  {
+    "type": "effect_type",
+    "id": "bio_whisper_item",
+    "name": [ "Flesh Whisper" ],
+    "desc": [ "Your flesh is malleable." ],
+    "rating": "good",
+    "apply_message": "Your face shifts...",
+    "remove_message": "Your face returns to normal."
+  },
+  {
+    "type": "effect_type",
+    "id": "telepath_sense",
+    "name": [ "Mind Sense" ],
+    "desc": [ "You can sense other minds." ],
+    "rating": "good",
+    "apply_message": "Other minds become visible.",
+    "remove_message": "Mind sense fades."
+  },
+  {
+    "type": "effect_type",
+    "id": "telepath_control",
+    "name": [ "Mind Control" ],
+    "desc": [ "Your mind controls theirs." ],
+    "rating": "good",
+    "apply_message": "You seize control!",
+    "remove_message": "Control breaks."
+  },
+  {
+    "type": "effect_type",
+    "id": "telepath_morale_item",
+    "name": [ "Emotional Surge" ],
+    "desc": [ "Emotions are heightened." ],
+    "rating": "good",
+    "apply_message": "Emotional power floods in!",
+    "remove_message": "Emotions normalize."
+  },
+  {
+    "type": "effect_type",
+    "id": "telepath_shield_item",
+    "name": [ "Mind Shield" ],
+    "desc": [ "Your mind is protected." ],
+    "rating": "good",
+    "apply_message": "Mental shields activate!",
+    "remove_message": "Shields fade."
+  },
+  {
+    "type": "effect_type",
+    "id": "telepath_fortress_item",
+    "name": [ "Psychic Fortress" ],
+    "desc": [ "Shared mental defenses." ],
+    "rating": "good",
+    "apply_message": "A fortress of mind forms!",
+    "remove_message": "Fortress dissolves."
+  },
+  {
+    "type": "effect_type",
+    "id": "pyro_shield_item",
+    "name": [ "Thermal Shield" ],
+    "desc": [ "Protected from heat." ],
+    "rating": "good",
+    "apply_message": "Heat bends around you.",
+    "remove_message": "Thermal protection fades.",
+    "flags": [ "EFFECT_HEAT_IMMUNE" ]
+  },
+  {
+    "type": "effect_type",
+    "id": "pyro_walk_item",
+    "name": [ "Fire Walking" ],
+    "desc": [ "Fire cannot harm you." ],
+    "rating": "good",
+    "apply_message": "Fire seems harmless now.",
+    "remove_message": "Fire becomes dangerous again.",
+    "flags": [ "EFFECT_HEAT_IMMUNE" ]
+  },
+  {
+    "type": "effect_type",
+    "id": "electro_armor_item",
+    "name": [ "Lightning Armor" ],
+    "desc": [ "Crackling electricity surrounds you." ],
+    "rating": "good",
+    "apply_message": "Lightning surrounds you!",
+    "remove_message": "Lightning fades."
+  },
+  {
+    "type": "effect_type",
+    "id": "electro_field_item",
+    "name": [ "Static Field" ],
+    "desc": [ "Electricity slows attackers." ],
+    "rating": "good",
+    "apply_message": "A static field surrounds you.",
+    "remove_message": "Field dissipates."
+  },
+  {
+    "type": "effect_type",
+    "id": "photo_glow_item",
+    "name": [ "Body Glow" ],
+    "desc": [ "You emit light." ],
+    "rating": "good",
+    "apply_message": "You begin to glow!",
+    "remove_message": "You stop glowing."
+  },
+  {
+    "type": "effect_type",
+    "id": "photo_armor_item",
+    "name": [ "Light Armor" ],
+    "desc": [ "Hardened light protects you." ],
+    "rating": "good",
+    "apply_message": "Light hardens around you!",
+    "remove_message": "Light armor fades.",
+    "base_mods": { "dodge_mod": [ 1 ], "speed_mod": [ 3 ] }
+  },
+  {
+    "type": "effect_type",
+    "id": "clair_sense_item",
+    "name": [ "Clairvoyance" ],
+    "desc": [ "You can see through walls and sense your surroundings." ],
+    "rating": "good",
+    "apply_message": "Your sight extends beyond your eyes!",
+    "remove_message": "Normal sight returns.",
+    "flags": [ "EFFECT_NIGHT_VISION" ]
+  },
+  {
+    "type": "effect_type",
+    "id": "clair_precog_item",
+    "name": [ "Precognition" ],
+    "desc": [ "You see the immediate future and can anticipate attacks." ],
+    "rating": "good",
+    "apply_message": "The future becomes clear!",
+    "remove_message": "Future sight fades.",
+    "base_mods": { "dodge_mod": [ 3 ], "speed_mod": [ 5 ] }
+  },
+  {
+    "type": "effect_type",
+    "id": "clair_inv_item",
+    "name": [ "See Invisible" ],
+    "desc": [ "Invisible creatures and objects are visible to you." ],
+    "rating": "good",
+    "apply_message": "Invisible things become visible!",
+    "remove_message": "Normal sight returns."
+  },
+  {
+    "type": "effect_type",
+    "id": "clair_danger_item",
+    "name": [ "Danger Sense" ],
+    "desc": [ "You sense danger before it hits - warnings flash in your mind." ],
+    "rating": "good",
+    "apply_message": "Danger becomes a whisper in your mind!",
+    "remove_message": "Danger sense fades.",
+    "base_mods": { "dodge_mod": [ 2 ] }
+  },
+  {
+    "type": "effect_type",
+    "id": "clair_read_item",
+    "name": [ "Photographic Memory" ],
+    "desc": [ "Your mind processes information at superhuman speed." ],
+    "rating": "good",
+    "apply_message": "Your mind sharpens!",
+    "remove_message": "Normal processing returns.",
+    "base_mods": { "int_mod": [ 4 ] }
+  },
+  {
+    "type": "effect_type",
+    "id": "clair_analyze_item",
+    "name": [ "Analyzed" ],
+    "desc": [ "Your weak points have been exposed - you take more damage." ],
+    "rating": "bad",
+    "apply_message": "Your weaknesses have been exposed!",
+    "remove_message": "The analysis fades.",
+    "base_mods": { "dodge_mod": [ -2 ], "speed_mod": [ -10 ] }
+  },
+  {
+    "type": "effect_type",
+    "id": "clair_astral",
+    "name": [ "Astral Projection" ],
+    "desc": [ "Your senses are projected far from your body." ],
+    "rating": "good",
+    "apply_message": "Your spirit separates from your body!",
+    "remove_message": "You return to your body."
+  },
+  {
+    "type": "effect_type",
+    "id": "clair_hear_item",
+    "name": [ "Clairaudience" ],
+    "desc": [ "You can hear sounds from great distances." ],
+    "rating": "good",
+    "apply_message": "Your hearing extends!",
+    "remove_message": "Normal hearing returns."
+  },
+  {
+    "type": "effect_type",
+    "id": "clair_compass_item",
+    "name": [ "Psychic Compass" ],
+    "desc": [ "You know the direction of your target." ],
+    "rating": "good",
+    "apply_message": "The direction becomes clear!",
+    "remove_message": "Compass sense fades."
+  },
+  {
+    "type": "effect_type",
+    "id": "clair_enhance_item",
+    "name": [ "Sense Enhancement" ],
+    "desc": [ "All your senses are heightened - sight, hearing, smell, taste, touch." ],
+    "rating": "good",
+    "apply_message": "Your senses peak!",
+    "remove_message": "Senses normalize.",
+    "base_mods": { "per_mod": [ 4 ] }
+  },
+  {
+    "type": "effect_type",
+    "id": "teleport_anchor_item",
+    "name": [ "Spatial Anchor" ],
+    "desc": [ "You cannot be moved." ],
+    "rating": "good",
+    "apply_message": "You anchor yourself in space!",
+    "remove_message": "You can move again."
+  },
+  {
+    "type": "effect_type",
+    "id": "teleport_field_item",
+    "name": [ "Distortion Field" ],
+    "desc": [ "Space distorts around you." ],
+    "rating": "good",
+    "apply_message": "Space bends around you!",
+    "remove_message": "Space normalizes."
+  },
+  {
+    "type": "effect_type",
+    "id": "vita_cure_item",
+    "name": [ "Cure Ailment" ],
+    "desc": [ "Illness is being purged." ],
+    "rating": "good",
+    "apply_message": "Illness exits your body!",
+    "remove_message": "Cure effect ends."
+  },
+  {
+    "type": "effect_type",
+    "id": "vita_boost_item",
+    "name": [ "Vitality Boost" ],
+    "desc": [ "Maximum HP increased." ],
+    "rating": "good",
+    "apply_message": "Vitality surges!",
+    "remove_message": "Vitality normalizes."
+  },
+  {
+    "type": "effect_type",
+    "id": "vita_barrier_item",
+    "name": [ "Life Barrier" ],
+    "desc": [ "Vital energy protects you." ],
+    "rating": "good",
+    "apply_message": "Life energy shields you!",
+    "remove_message": "Barrier fades."
+  },
+  {
+    "type": "effect_type",
+    "id": "vita_banish_item",
+    "name": [ "Banish Illness" ],
+    "desc": [ "All disease is removed." ],
+    "rating": "good",
+    "apply_message": "Disease is banished!",
+    "remove_message": "Banish effect ends."
+  }
+]

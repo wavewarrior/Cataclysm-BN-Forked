@@ -42,6 +42,12 @@
 #include "point.h"
 
 class player;
+
+namespace iuse
+{
+auto report_fluid_grid_connections( player *, item *, bool, const tripoint & ) -> int;
+auto modify_fluid_grid_connections( player *, item *, bool, const tripoint & ) -> int;
+} // namespace iuse
 #include "material.h"
 #include "options.h"
 #include "recipe.h"
@@ -2701,6 +2707,7 @@ void Item_factory::load_basic_info( const JsonObject &jo, itype &def, const std:
     }
 
     assign( jo, "weapon_category", def.weapon_category );
+    assign( jo, "ammo_effects", def.ammo_effects );
 
     if( jo.has_member( "damage_states" ) ) {
         auto arr = jo.get_array( "damage_states" );

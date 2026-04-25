@@ -1,0 +1,93 @@
+[
+  {
+    "type": "mutation",
+    "id": "BIOKIN_NEEDS",
+    "name": "Efficient System",
+    "points": 1,
+    "description": "You need less food and drink due to your biokinetic optimization.",
+    "player_display": true,
+    "purifiable": false,
+    "category": [ "ATTUNEMENT" ],
+    "enchantments": [ "ENCH_TELEPATHIC_FOCUS" ]
+  },
+  {
+    "type": "mutation",
+    "id": "TELEKIN_FOCUS",
+    "name": "Telekinetic Focus",
+    "points": 1,
+    "description": "Your telekinetic powers are slightly more focused, reducing fatigue cost.",
+    "player_display": true,
+    "purifiable": false,
+    "category": [ "ATTUNEMENT" ]
+  },
+  {
+    "type": "mutation",
+    "id": "TELEPATH_EMPATH",
+    "name": "Emotional Empathy",
+    "points": 1,
+    "description": "You can better sense the emotional state of others.",
+    "player_display": true,
+    "purifiable": false,
+    "category": [ "ATTUNEMENT" ]
+  },
+  {
+    "type": "mutation",
+    "id": "PYRO_HEAT_TOL",
+    "name": "Heat Tolerance",
+    "points": 1,
+    "description": "You are more resistant to heat and fire.",
+    "player_display": true,
+    "purifiable": false,
+    "category": [ "ATTUNEMENT" ]
+  },
+  {
+    "type": "mutation",
+    "id": "ELECTRO_SHOCK",
+    "name": "Electrosensitivity",
+    "points": 1,
+    "description": "You are more sensitive to electrical fields.",
+    "player_display": true,
+    "purifiable": false,
+    "category": [ "ATTUNEMENT" ]
+  },
+  {
+    "type": "mutation",
+    "id": "PHOTO_LIGHT",
+    "name": "Light Sensitivity",
+    "points": 1,
+    "description": "Your eyes are more adapted to bright light.",
+    "player_display": true,
+    "purifiable": false,
+    "category": [ "ATTUNEMENT" ]
+  },
+  {
+    "type": "mutation",
+    "id": "CLAIR_SENSES",
+    "name": "Enhanced Senses",
+    "points": 1,
+    "description": "Your senses are slightly enhanced.",
+    "player_display": true,
+    "purifiable": false,
+    "category": [ "ATTUNEMENT" ]
+  },
+  {
+    "type": "mutation",
+    "id": "TELESPATIAL",
+    "name": "Spatial Sense",
+    "points": 1,
+    "description": "Your sense of space and direction is enhanced.",
+    "player_display": true,
+    "purifiable": false,
+    "category": [ "ATTUNEMENT" ]
+  },
+  {
+    "type": "mutation",
+    "id": "VITA_VITAL",
+    "name": "Enhanced Vitality",
+    "points": 1,
+    "description": "Your connection to life energy enhances your natural healing.",
+    "player_display": true,
+    "purifiable": false,
+    "category": [ "ATTUNEMENT" ]
+  }
+]

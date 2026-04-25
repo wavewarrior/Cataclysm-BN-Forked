@@ -1,0 +1,13 @@
+[
+  {
+    "type": "MOD_INFO",
+    "id": "bombastic_perks",
+    "name": "Bombastic Perks",
+    "authors": [ "NOIGEL" ],
+    "maintainers": [ "NOIGEL" ],
+    "description": "Killing enemies allows you to level up, unlocking powerful and fun perks for your character. Ported from DDA with Lua-based architecture for Cataclysm BN.",
+    "category": "content",
+    "lua_api_version": 2,
+    "dependencies": [ "bn", "rpg_system" ]
+  }
+]

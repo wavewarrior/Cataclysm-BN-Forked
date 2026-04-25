@@ -1,0 +1,383 @@
+[
+  {
+    "type": "mutation",
+    "id": "perk_STR_UP",
+    "name": "Stronger",
+    "points": 0,
+    "description": "Have you been working out? +1 Strength per level.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_STR_UP_2",
+    "name": "Even Stronger",
+    "points": 0,
+    "description": "You HAVE been working out. +2 Strength per level.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_DEX_UP",
+    "name": "Faster",
+    "points": 0,
+    "description": "Have you been doing cardio? +1 Dexterity per level.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_DEX_UP_2",
+    "name": "Even Faster",
+    "points": 0,
+    "description": "You HAVE been doing cardio. +2 Dexterity per level.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_INT_UP",
+    "name": "Smarter",
+    "points": 0,
+    "description": "Have you been reading? +1 Intelligence per level.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_INT_UP_2",
+    "name": "Even Smarter",
+    "points": 0,
+    "description": "You HAVE been reading. +2 Intelligence per level.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_PER_UP",
+    "name": "Sharper",
+    "points": 0,
+    "description": "Have you been staring out into the middle distance? +1 Perception per level.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_PER_UP_2",
+    "name": "Even Sharper",
+    "points": 0,
+    "description": "You HAVE been staring out into the middle distance. +2 Perception per level.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_mighty_thews",
+    "name": "Mighty Thews",
+    "points": 0,
+    "description": "Your rippling muscles enable you to split the skulls of your enemies. +5% to Lifting and Grip.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_pantherish_grace",
+    "name": "Pantherish Grace",
+    "points": 0,
+    "description": "Your movements bring to mind a multitude of cat-based metaphors. +5% to Balance and Footing.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_eagle_eyes",
+    "name": "Eagle Eyes",
+    "points": 0,
+    "description": "Your sharp gazes misses little. +25% to Vision and Night Vision.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_thick_skull",
+    "name": "Thick Skull",
+    "points": 0,
+    "description": "You've taken so many blows to the head you've lost count. Additional skull armor.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true,
+    "armor": [ { "parts": "head", "physical": 4 } ]
+  },
+  {
+    "type": "mutation",
+    "id": "perk_built_tough",
+    "name": "Built Tough",
+    "points": 0,
+    "description": "You're like a walking tank! Take 5% less damage from all sources.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true,
+    "armor": [ { "parts": "ALL", "physical": 2 } ]
+  },
+  {
+    "type": "mutation",
+    "id": "perk_hauler",
+    "name": "Hauler",
+    "points": 0,
+    "description": "All that hauling has paid off. You can carry 10kg of additional items.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true,
+    "weight_capacity_modifier": 1.25
+  },
+  {
+    "type": "mutation",
+    "id": "perk_vacationer",
+    "name": "Vacationer",
+    "points": 0,
+    "description": "Every day in the apocalypse is just like the beach. You are more comfortable in cold and warm weather.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true,
+    "bodytemp_modifiers": [ -500, 500 ]
+  },
+  {
+    "type": "mutation",
+    "id": "perk_gym_rat",
+    "name": "Gym Rat",
+    "points": 0,
+    "description": "Your time exercising has gotten you used to being drenched in your own sweat. Being wet doesn't bother you as much.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_quickdraw",
+    "name": "Quickdraw",
+    "points": 0,
+    "description": "Practicing with handguns has improved your draw speed. Retrieve objects 25% faster from containers.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_animal_friend",
+    "name": "Animal Friend",
+    "points": 0,
+    "description": "Even with everything that's happened, you still find solace in nature. Natural animals are less likely to attack you.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_vengeful",
+    "name": "Vengeful",
+    "points": 0,
+    "description": "Oh, they're not getting away with THAT. You do +15% damage for two turns after you're hit.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_twice_shy",
+    "name": "Twice Shy",
+    "points": 0,
+    "description": "Pain is really painful; best to avoid it. For five turns after you are hit, you gain +1 bonus dodge.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true,
+    "dodge_modifier": 1
+  },
+  {
+    "type": "mutation",
+    "id": "perk_grit_your_teeth",
+    "name": "Grit Your Teeth",
+    "points": 0,
+    "description": "When you have to you can wipe the blood off your chin, grit your teeth, and get it done. Use to reduce your pain.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true,
+    "active": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_second_wind",
+    "name": "Second Wind",
+    "points": 0,
+    "description": "Anyone can pause and catch their breath but you're extremely good at doing so. Regenerate stamina periodically.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true,
+    "max_stamina_modifier": 1.25
+  },
+  {
+    "type": "mutation",
+    "id": "perk_slippery_escape",
+    "name": "Slippery Escape",
+    "points": 0,
+    "description": "Your joints are flexible enough that you can twist out of nearly anything. At the cost of some pain.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true,
+    "active": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_surgical_strikes",
+    "name": "Surgical Strikes",
+    "points": 0,
+    "description": "Careful aim allows you to take down game with little tissue damage.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_bloody_mess",
+    "name": "Bloody Mess",
+    "points": 0,
+    "description": "For whatever reason you seem to always make a real mess of things.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_perfect_time",
+    "name": "Perfect Timing",
+    "points": 0,
+    "description": "You used to annoy your friends before the Cataclysm by always being *exactly* on time.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_all_terrain",
+    "name": "All Terrain",
+    "points": 0,
+    "description": "You have a persistent sense of how to move around in sharp and rough terrain.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_jumpy",
+    "name": "Jumpy",
+    "points": 0,
+    "description": "You've not been the same since the apocalypse, almost everything makes you jump.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true,
+    "speed_modifier": 1.03
+  },
+  {
+    "type": "mutation",
+    "id": "perk_quick_recovery",
+    "name": "Quick Recovery",
+    "points": 0,
+    "description": "You get knocked down, but you get up again. 75% chance to stand up when downed.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_sleepy",
+    "name": "Easy Sleeper",
+    "points": 0,
+    "description": "You've always been able to fall asleep within a few minutes of closing your eyes.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true,
+    "fatigue_modifier": -0.5
+  },
+  {
+    "type": "mutation",
+    "id": "perk_running_in_heels",
+    "name": "Running in Heels",
+    "points": 0,
+    "description": "You have mastered the ways of the 90s action heroine. Heels only encumber you as much as normal shoes.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_duck_and_weave",
+    "name": "Duck and Weave",
+    "points": 0,
+    "description": "Run without rhythm. After a short wind-up period, you gain dodge bonus as long as you keep running.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true,
+    "dodge_modifier": 5
+  },
+  {
+    "type": "mutation",
+    "id": "perk_hobbyist",
+    "name": "Hobbyist",
+    "points": 0,
+    "description": "No work, no social obligations, lots of time to focus on your hobbies. You feel like you've been picking up skills faster.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_non_combatant",
+    "name": "Non-Combatant",
+    "points": 0,
+    "description": "Hey, that's against the Geneva Convention! When completely unarmed, you take -25% reduced damage.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_blood_drinker",
+    "name": "Hemophage",
+    "points": 0,
+    "description": "You do not drink…wine. You are immune to the negative consequences of drinking blood.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_red_rage",
+    "name": "Red rage",
+    "points": 0,
+    "description": "You hate the feeling of your blood leaking so much that it empowers you. You deal more melee damage when bleeding.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_peer_pressure",
+    "name": "Peer pressure",
+    "points": 0,
+    "description": "You know how to leverage your allies' presence when talking with others.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  }
+]

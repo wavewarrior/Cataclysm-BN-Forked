@@ -458,5 +458,26 @@
     "valid": false,
     "purifiable": false,
     "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "RPG_TRAIT_DEADLY_AIM",
+    "name": "[Deadly Aim]",
+    "points": 0,
+    "description": "Your thrown weapons strike with deadly precision. Throwing attacks deal +20% damage per level.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "RPG_TRAIT_LIGHT_FINGERS",
+    "name": "[Light Fingers]",
+    "points": 0,
+    "description": "Your fingers are unnaturally quick. Throwing attacks are 25% faster.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true,
+    "attackcost_modifier": 0.75
   }
 ]

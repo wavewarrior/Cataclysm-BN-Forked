@@ -1,0 +1,68 @@
+[
+  {
+    "id": "psionic_dermal_armor",
+    "type": "ARMOR",
+    "name": { "str": "Psionic Dermal Armor" },
+    "description": { "str": "Hardened quasi-crystalline skin, tough as armor." },
+    "weight": "2 kg",
+    "volume": "2500 ml",
+    "price": "8000 USD",
+    "material": [ "stone" ],
+    "symbol": "[",
+    "color": "cyan",
+    "covers": [ "arm_either", "leg_either", "torso" ],
+    "coverage": 100,
+    "encumbrance": 10,
+    "material_thickness": 4,
+    "environmental_protection": 1,
+    "flags": [ "WATERPROOF" ]
+  },
+  {
+    "id": "psionic_light_armor",
+    "type": "ARMOR",
+    "name": { "str": "Psionic Light Armor" },
+    "description": { "str": "Hardened light forms a protective shell." },
+    "weight": "500 g",
+    "volume": "500 ml",
+    "price": "5000 USD",
+    "material": [ "glass" ],
+    "symbol": "[",
+    "color": "yellow",
+    "covers": [ "arm_either", "leg_either", "torso" ],
+    "coverage": 80,
+    "encumbrance": 5,
+    "material_thickness": 2,
+    "environmental_protection": 1,
+    "flags": [ "WATERPROOF" ]
+  },
+  {
+    "id": "psionic_vulnerability",
+    "type": "ARMOR",
+    "name": { "str": "Psionic Exposed Weakness" },
+    "description": { "str": "Your weaknesses are exposed - you take more damage." },
+    "weight": "100 g",
+    "volume": "100 ml",
+    "price": "0 USD",
+    "material": [ "cotton" ],
+    "symbol": "[",
+    "color": "dark_gray",
+    "covers": [ "torso" ],
+    "coverage": 5,
+    "encumbrance": 0,
+    "material_thickness": 0,
+    "relic_data": {
+      "passive_effects": [
+        {
+          "has": "WORN",
+          "condition": "ALWAYS",
+          "values": [
+            { "value": "ARMOR_BASH", "add": 50 },
+            { "value": "ARMOR_CUT", "add": 50 },
+            { "value": "ARMOR_STAB", "add": 50 },
+            { "value": "ARMOR_BULLET", "add": 50 }
+          ]
+        }
+      ]
+    }
+  }
+]

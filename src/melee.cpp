@@ -118,6 +118,7 @@ static const efftype_id effect_lightsnare( "lightsnare" );
 static const efftype_id effect_narcosis( "narcosis" );
 static const efftype_id effect_poison( "poison" );
 static const efftype_id effect_stunned( "stunned" );
+static const efftype_id effect_bleed("bleed");
 
 static const trait_id trait_ARM_TENTACLES( "ARM_TENTACLES" );
 static const trait_id trait_ARM_TENTACLES_4( "ARM_TENTACLES_4" );
@@ -128,6 +129,9 @@ static const trait_id trait_DEBUG_NIGHTVISION( "DEBUG_NIGHTVISION" );
 static const trait_id trait_DEFT( "DEFT" );
 static const trait_id trait_DRUNKEN( "DRUNKEN" );
 static const trait_id trait_HYPEROPIC( "HYPEROPIC" );
+static const trait_id trait_MUT_HEMORRHAGE( "MUT_HEMORRHAGE" );
+static const trait_id trait_MUT_TOXIC_SECRETION( "MUT_TOXIC_SECRETION" );
+static const trait_id trait_MUT_VENOM_GLAND( "MUT_VENOM_GLAND" );
 static const trait_id trait_POISONOUS2( "POISONOUS2" );
 static const trait_id trait_POISONOUS( "POISONOUS" );
 static const trait_id trait_PROF_SKATER( "PROF_SKATER" );
@@ -651,6 +655,21 @@ void Character::melee_attack( Creature &t, bool allow_special, const matec_id *f
                     add_msg_if_player( m_good, _( "You inject your venom into %s!" ),
                                        t.disp_name() );
                     t.add_effect( effect_badpoison, 6_turns );
+                }
+                // Throwing mutation effects on melee hit
+                if( has_trait( trait_MUT_TOXIC_SECRETION ) && one_in( 3 ) ) {
+                    add_msg_if_player( m_good, _( "Your toxic secretion corrodes %s!" ), t.disp_name() );
+                    t.add_effect( effect_poison, 4_turns );
+                    // Apply damage over time effect
+                    t.apply_damage( this, bodypart_id( "torso" ), 2 );
+                }
+                if( has_trait( trait_MUT_VENOM_GLAND ) && one_in( 4 ) ) {
+                    add_msg_if_player( m_good, _( "Your venom glands coat the wound!" ), t.disp_name() );
+                    t.add_effect( effect_poison, 4_turns );
+                }
+                if( has_trait( trait_MUT_HEMORRHAGE ) && one_in( 3 ) ) {
+                    add_msg_if_player( m_good, _( "The wound bleeds heavily!" ), t.disp_name() );
+                    t.add_effect( effect_bleed, 3_turns );
                 }
             }
 
