@@ -7,6 +7,7 @@
 #include <iosfwd>
 #include <iterator>
 #include <mutex>
+#include <sstream>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -1034,9 +1035,47 @@ bool zone_manager::custom_loot_has( const tripoint &where, const item *it ) cons
     }
     const loot_options &options = dynamic_cast<const loot_options &>( zone->get_options() );
     std::string filter_string = options.get_mark();
-    auto z = item_filter_from_string( filter_string );
 
-    return z( *it );
+    if( filter_string.empty() ) {
+        return false;
+    }
+
+    std::string main_filter;
+    std::vector<std::string> exclusions;
+
+    std::istringstream iss( filter_string );
+    std::string word;
+    while( iss >> word ) {
+        if( word.starts_with( '-' ) ) {
+            exclusions.push_back( word.substr( 1 ) );
+        } else {
+            if( !main_filter.empty() ) {
+                main_filter += ' ';
+            }
+            main_filter += word;
+        }
+    }
+
+    if( !main_filter.empty() ) {
+        auto z = item_filter_from_string( main_filter );
+        if( !z( *it ) ) {
+            return false;
+        }
+    }
+
+    for( const auto &exc : exclusions ) {
+        if( exc == "broken" ) {
+            if( it->max_damage() > 0 && it->damage() >= it->max_damage() ) {
+                return false;
+            }
+        } else if( exc == "damaged" ) {
+            if( it->max_damage() > 0 && it->damage() >= it->max_damage() / 2 ) {
+                return false;
+            }
+        }
+    }
+
+    return true;
 }
 
 std::unordered_set<tripoint> zone_manager::get_near( const zone_type_id &type,
@@ -1126,13 +1165,15 @@ zone_type_id zone_manager::get_near_zone_type_for_item( const item &it,
         }
     }
 
-    if( it.damage() >= it.max_damage() ) {
-        if( has_near( zone_LOOT_BROKEN, where, range ) ) {
-            return zone_LOOT_BROKEN;
-        }
-    } else if( it.damage() >= it.max_damage() / 2 ) {
-        if( has_near( zone_LOOT_DAMAGED, where, range ) ) {
-            return zone_LOOT_DAMAGED;
+    if( it.max_damage() > 0 ) {
+        if( it.damage() >= it.max_damage() ) {
+            if( has_near( zone_LOOT_BROKEN, where, range ) ) {
+                return zone_LOOT_BROKEN;
+            }
+        } else if( it.damage() >= it.max_damage() / 2 ) {
+            if( has_near( zone_LOOT_DAMAGED, where, range ) ) {
+                return zone_LOOT_DAMAGED;
+            }
         }
     }
 
