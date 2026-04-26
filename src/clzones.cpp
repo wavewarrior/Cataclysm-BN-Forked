@@ -1040,36 +1040,41 @@ bool zone_manager::custom_loot_has( const tripoint &where, const item *it ) cons
         return false;
     }
 
-    std::string main_filter;
-    std::vector<std::string> exclusions;
+    std::string positive_filter;
+    std::vector<std::string> negations;
 
     std::istringstream iss( filter_string );
     std::string word;
     while( iss >> word ) {
         if( word.starts_with( '-' ) ) {
-            exclusions.push_back( word.substr( 1 ) );
+            negations.push_back( word.substr( 1 ) );
         } else {
-            if( !main_filter.empty() ) {
-                main_filter += ' ';
+            if( !positive_filter.empty() ) {
+                positive_filter += ' ';
             }
-            main_filter += word;
+            positive_filter += word;
         }
     }
 
-    if( !main_filter.empty() ) {
-        auto z = item_filter_from_string( main_filter );
+    if( !positive_filter.empty() ) {
+        auto z = item_filter_from_string( positive_filter );
         if( !z( *it ) ) {
             return false;
         }
     }
 
-    for( const auto &exc : exclusions ) {
-        if( exc == "broken" ) {
+    for( const auto &neg : negations ) {
+        if( neg == "broken" ) {
             if( it->max_damage() > 0 && it->damage() >= it->max_damage() ) {
                 return false;
             }
-        } else if( exc == "damaged" ) {
+        } else if( neg == "damaged" ) {
             if( it->max_damage() > 0 && it->damage() >= it->max_damage() / 2 ) {
+                return false;
+            }
+        } else {
+            auto neg_filter = item_filter_from_string( neg );
+            if( neg_filter( *it ) ) {
                 return false;
             }
         }
