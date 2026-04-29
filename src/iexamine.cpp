@@ -2799,7 +2799,7 @@ itype_id iexamine::choose_fertilizer( player &p, const std::string &pname, bool 
     std::vector<itype_id> f_types;
     std::vector<std::string> f_names;
     for( auto &f : f_inv ) {
-        if( std::ranges::find( f_types, f->typeId() ) == f_types.end() ) {
+        if( !std::ranges::contains( f_types, f->typeId() ) ) {
             f_types.push_back( f->typeId() );
             f_names.push_back( f->tname() );
         }
@@ -3330,7 +3330,7 @@ void iexamine::fvat_empty( player &p, const tripoint &examp )
         std::vector<itype_id> b_types;
         std::vector<std::string> b_names;
         for( auto &b : b_inv ) {
-            if( std::ranges::find( b_types, b->typeId() ) == b_types.end() ) {
+            if( !std::ranges::contains( b_types, b->typeId() ) ) {
                 b_types.push_back( b->typeId() );
                 b_names.push_back( item::nname( b->typeId() ) );
             }
@@ -3687,7 +3687,7 @@ void iexamine::keg( player &p, const tripoint &examp )
                 return 0;
             }
 
-            auto &items = target_submap->get_items( target_pos.raw() );
+            auto &items = target_submap->get_items( target_pos );
             auto liquid_item = item::spawn( liquid_type, calendar::turn, available );
             auto iter = items.insert( items.end(), std::move( liquid_item ) );
             item *water_item = *iter;
@@ -3725,7 +3725,7 @@ void iexamine::keg( player &p, const tripoint &examp )
                     return;
                 }
 
-                auto &items = target_submap->get_items( target_pos.raw() );
+                auto &items = target_submap->get_items( target_pos );
                 auto liquid_item = item::spawn( liquid_type, calendar::turn, available );
                 auto iter = items.insert( items.end(), std::move( liquid_item ) );
                 item *water_item = *iter;
@@ -4544,8 +4544,8 @@ void iexamine::trap( player &p, const tripoint &examp )
     }
     const int possible = tr.get_difficulty();
     bool seen = tr.can_see( examp, p );
-    if( tr.loadid == tr_unfinished_construction || here.partial_con_at( examp ) ) {
-        partial_con *pc = here.partial_con_at( examp );
+    if( tr.loadid == tr_unfinished_construction || here.partial_con_at( tripoint_bub_ms( examp ) ) ) {
+        partial_con *pc = here.partial_con_at( tripoint_bub_ms( examp ) );
         if( pc ) {
             const construction &built = pc->id.obj();
             if( !character_funcs::can_see_fine_details( p ) && !built.dark_craftable &&
@@ -4665,7 +4665,7 @@ auto iexamine::fluid_grid_fixture( player &p, const tripoint &examp ) -> void
         return;
     }
 
-    auto &items = target_submap->get_items( target_pos.raw() );
+    auto &items = target_submap->get_items( target_pos );
     auto liquid_item = item::spawn( liquid_type, calendar::turn, available );
     auto iter = items.insert( items.end(), std::move( liquid_item ) );
     item *water_item = *iter;

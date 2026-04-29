@@ -114,7 +114,7 @@ void vehicle::add_toggle_to_opts( std::vector<uilist_entry> &options,
 {
     // fetch matching parts and abort early if none found
     const auto found = get_avail_parts( flag );
-    if( empty( found ) ) {
+    if( found.empty() ) {
         return;
     }
 
@@ -190,7 +190,7 @@ void vehicle::control_doors()
     // Locations used to display the doors
     std::vector< tripoint > locations;
     // it is possible to have one door to open and one to close for single motor
-    if( empty( door_motors ) ) {
+    if( door_motors.empty() ) {
         debugmsg( "vehicle::control_doors called but no door motors found" );
         return;
     }
@@ -1679,7 +1679,7 @@ void vehicle::open_or_close( const int part_index, const bool opening )
     insides_dirty = true;
     map &here = get_map();
     here.set_transparency_cache_dirty( sm_pos.z );
-    const tripoint part_location = mount_to_tripoint( parts[part_index].mount );
+    const tripoint part_location = mount_to_bubble( parts[part_index].mount ).raw();
     here.set_seen_cache_dirty( part_location );
     const int dist = rl_dist( get_player_character().pos(), part_location );
     if( dist < 20 ) {
