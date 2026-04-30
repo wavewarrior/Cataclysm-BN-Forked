@@ -72,12 +72,14 @@ static const ammo_effect_str_id ammo_effect_NO_CRIT( "NO_CRIT" );
 static const ammo_effect_str_id ammo_effect_NO_DAMAGE( "NO_DAMAGE" );
 static const ammo_effect_str_id ammo_effect_NO_DAMAGE_SCALING( "NO_DAMAGE_SCALING" );
 static const ammo_effect_str_id ammo_effect_NOGIB( "NOGIB" );
+static const ammo_effect_str_id ammo_effect_BLEED( "BLEED" );
 static const ammo_effect_str_id ammo_effect_PARALYZEPOISON( "PARALYZEPOISON" );
 static const ammo_effect_str_id ammo_effect_POISON( "POISON" );
 static const ammo_effect_str_id ammo_effect_TANGLE( "TANGLE" );
 static const ammo_effect_str_id ammo_effect_THROWN( "THROWN" );
 
 static const efftype_id effect_badpoison( "badpoison" );
+static const efftype_id effect_bleed( "bleed" );
 static const efftype_id effect_blind( "blind" );
 static const efftype_id effect_bounced( "bounced" );
 static const efftype_id effect_downed( "downed" );
@@ -1157,6 +1159,11 @@ void Creature::deal_projectile_attack( Creature *source, item *source_weapon,
             add_msg_if_player( m_bad, _( "You're envenomed!" ) );
             add_effect( effect_poison, 5_minutes );
         }
+    }
+
+    if( proj.has_effect( ammo_effect_BLEED ) && total_damage > 6 && attack.dealt_dam.type_damage( DT_STAB ) > 0 ) {
+        add_msg_if_player( m_bad, _( "The wound bleeds!" ) );
+        add_effect( effect_bleed, 6_minutes, bp_hit.id() );
     }
 
     const int stun_strength = get_stun_srength( proj, get_size() ) - get_env_resist( bp_hit );

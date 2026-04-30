@@ -481,6 +481,7 @@
       "pain_chance": [ 30, 180 ],
       "pain_max_val": [ 20 ],
       "hurt_min": [ 1 ],
+      "hurt_max": [ 3 ],
       "hurt_chance": [ 90, 540 ],
       "hit_mod": [ -1, -1 ],
       "dodge_mod": [ -1, -1 ],
@@ -1187,7 +1188,7 @@
     "max_intensity": 3,
     "int_decay_tick": 120,
     "int_add_val": 1,
-    "base_mods": { "str_mod": [ -1 ], "per_mod": [ -1 ], "bash_mod": [ -1 ], "cut_mod": [ -1 ] },
+    "base_mods": { "str_mod": [ -1 ], "per_mod": [ -1 ], "bash_mod": [ -1 ], "cut_mod": [ -1 ], "hurt_min": [ 1 ], "hurt_max": [ 5 ] },
     "show_in_info": true
   },
   {
