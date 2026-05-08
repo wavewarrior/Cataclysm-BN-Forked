@@ -1410,8 +1410,13 @@ static auto construction_activity_name( const zone_data *zone,
 
 static auto farm_plot_seed( const zone_data *zone ) -> itype_id
 {
-    return zone ? dynamic_cast<const plot_options &>( zone->get_options() ).get_seed() :
-           itype_id::NULL_ID();
+    if( zone ) {
+        const auto &opt = zone->get_options();
+        if( const auto *po = dynamic_cast<const plot_options *>( &opt ) ) {
+            return po->get_seed();
+        }
+    }
+    return itype_id::NULL_ID();
 }
 
 static auto farm_plot_name( const zone_data *zone ) -> std::string
@@ -1785,8 +1790,12 @@ static activity_reason_info can_do_activity_there( const activity_id &act, playe
         zones = mgr.get_zones( zone_type_FARM_PLOT,
                                here.getabs( src_loc ) );
         for( const zone_data &zone : zones ) {
-            const plot_options &options = dynamic_cast<const plot_options &>( zone.get_options() );
-            const itype_id seed = options.get_seed();
+            const auto &opt = zone.get_options();
+            const plot_options *options = dynamic_cast<const plot_options *>( &opt );
+            if( !options ) {
+                continue;
+            }
+            const itype_id seed = options->get_seed();
             if( here.has_flag_furn( flag_GROWTH_HARVEST, src_loc ) ) {
                 // simple work, pulling up plants, nothing else required.
                 return activity_reason_info::ok( do_activity_reason::NEEDS_HARVESTING );
@@ -1798,8 +1807,8 @@ static activity_reason_info can_do_activity_there( const activity_id &act, playe
                     // we need a shovel/hoe
                     return activity_reason_info::fail( do_activity_reason::NEEDS_TILLING );
                 }
-            } else if( seed.is_valid() &&
-                       here.has_flag_ter_or_furn( seed->seed->required_terrain_flag, src_loc ) ) {
+            } else if( seed.is_valid() && seed.obj().seed &&
+                       here.has_flag_ter_or_furn( seed.obj().seed->required_terrain_flag, src_loc ) ) {
                 if( here.has_items( src_loc ) ) {
                     return activity_reason_info::fail( do_activity_reason::BLOCKING_TILE );
                 } else if( !warm_enough_to_plant( src_loc ) ) {
@@ -3068,9 +3077,12 @@ static requirement_check_result generic_multi_activity_check_requirement( player
                        reason == do_activity_reason::NEEDS_TREE_CHOPPING ) {
                 quality_comp_vector.push_back( std::vector<quality_requirement> { quality_requirement( qual_AXE, 1, 1 ) } );
             } else if( reason == do_activity_reason::NEEDS_PLANTING ) {
-                requirement_comp_vector.push_back( std::vector<item_comp> { item_comp( itype_id( dynamic_cast<const plot_options &>
-                                                   ( zone->get_options() ).get_seed() ), 1 )
-                                                                          } );
+                if( zone ) {
+                    const auto &opt = zone->get_options();
+                    if( const auto *po = dynamic_cast<const plot_options *>( &opt ) ) {
+                        requirement_comp_vector.push_back( std::vector<item_comp> { item_comp( itype_id( po->get_seed() ), 1 ) } );
+                    }
+                }
             } else if( reason == do_activity_reason::NEEDS_BUTCHERING ||
                        reason == do_activity_reason::NEEDS_BIG_BUTCHERING ) {
                 quality_comp_vector.push_back( std::vector<quality_requirement> { quality_requirement( qual_BUTCHER, 1, 1 ) } );
@@ -3216,8 +3228,12 @@ static bool generic_multi_activity_do( player &p, const activity_id &act_id,
         std::vector<zone_data> zones = mgr.get_zones( zone_type_FARM_PLOT,
                                        here.getabs( src_loc ) );
         for( const zone_data &zone : zones ) {
-            const itype_id seed =
-                dynamic_cast<const plot_options &>( zone.get_options() ).get_seed();
+            const auto &opt = zone.get_options();
+            const plot_options *po = dynamic_cast<const plot_options *>( &opt );
+            if( !po ) {
+                continue;
+            }
+            const itype_id seed = po->get_seed();
             std::vector<item *> seed_inv = p.items_with( [seed]( const item & itm ) {
                 return itm.typeId() == itype_id( seed );
             } );
@@ -3226,7 +3242,10 @@ static bool generic_multi_activity_do( player &p, const activity_id &act_id,
             if( seed_inv.empty() ) {
                 continue;
             }
-            if( !here.has_flag_ter_or_furn( seed->seed->required_terrain_flag, src_loc ) ) {
+            if( !seed.is_valid() || !seed.obj().seed ) {
+                continue;
+            }
+            if( !here.has_flag_ter_or_furn( seed.obj().seed->required_terrain_flag, src_loc ) ) {
                 continue;
             }
             iexamine::plant_seed( p, src_loc, itype_id( seed ) );
