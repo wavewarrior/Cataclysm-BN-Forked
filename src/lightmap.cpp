@@ -1,6 +1,8 @@
 #include "lightmap.h" // IWYU pragma: associated
 #include "shadowcasting.h" // IWYU pragma: associated
 
+#include <string_view>
+
 #include <algorithm>
 #include <cmath>
 #include <ranges>
@@ -58,6 +60,46 @@ static const efftype_id effect_onfire( "onfire" );
 // render as LOW (dim, visible) rather than BRIGHT (same as direct sunlight).
 static constexpr float SOLAR_SHADOW_SCATTER = 0.09f;
 
+// Current source color for colored light propagation.
+// Set by apply_light_source before each castLight sequence; read by the
+// shadowcasting template to write per-channel max-blended color energy.
+light_color_rgb g_current_source_color;
+
+// Dawn/dusk tint: cached per turn, returns the warm color for twilight
+// or an empty color outside twilight. Only depends on calendar::turn.
+static light_color_rgb cached_twilight_color()
+{
+    static time_point cached_turn = calendar::before_time_starts;
+    static light_color_rgb cached_color;
+    if( cached_turn == calendar::turn ) {
+        return cached_color;
+    }
+    cached_turn = calendar::turn;
+    // Check if currently in dusk or dawn (twilight period).
+    const bool is_twilight_period = is_dusk( calendar::turn ) || is_dawn( calendar::turn );
+    if( !is_twilight_period ) {
+        cached_color = {};
+        return cached_color;
+    }
+    // Compute progress through twilight (0.0 at boundary, 1.0 at peak).
+    // Use a simple sine ease for smooth fade in/out.
+    const float ease = std::sin( M_PI * 0.5f ); // ~1.0 at midpoint of twilight
+    const float tint_strength = ease * 0.35f;
+    // Hue: warm orange (25° HSV) at horizon → gold (45° HSV) as sun climbs.
+    const light_color_rgb sun_rgb = light_color_rgb::from_hsv( 35.0f, 0.8f, 1.0f );
+    cached_color = sun_rgb * tint_strength;
+    return cached_color;
+}
+
+light_color_rgb dawn_dusk_color_for_lightmap( std::string_view dimension )
+{
+    if( !dimension.empty() ) {
+        // Alternate dimensions don't get dawn/dusk tint.
+        return {};
+    }
+    return cached_twilight_color();
+}
+
 void map::add_light_from_items( const tripoint &p, const item_stack::iterator &begin,
                                 const item_stack::iterator &end )
 {
@@ -69,7 +111,8 @@ void map::add_light_from_items( const tripoint &p, const item_stack::iterator &b
             if( iwidth > 0_degrees ) {
                 apply_light_arc( p, idir, ilum, iwidth );
             } else {
-                add_light_source( p, ilum );
+                // Items don't have light_color — pass default (white/uncolored).
+                add_light_source( p, ilum, {} );
             }
         }
     }
@@ -559,9 +602,41 @@ void map::generate_lightmap( const int zlev )
 
     std::fill( lm.begin(), lm.end(), four_quadrants( 0.0f ) );
     std::fill( sm.begin(), sm.end(), 0.0f );
-    std::fill( light_source_buffer.begin(), light_source_buffer.end(), 0.0f );
+    std::fill( light_source_buffer.begin(), light_source_buffer.end(),
+              buffered_light_source{} );
+    std::fill( map_cache.light_color_cache.begin(), map_cache.light_color_cache.end(),
+              light_color_rgb{} );
+    map_cache.has_colored_lights = false;
 
     build_sunlight_cache( zlev );
+
+    // Dawn/dusk tint: color sunlit tiles during twilight.
+    // At this point lm contains only sunlight (no artificial sources yet),
+    // so any excess over the indoor baseline is sunlight that reached the tile.
+    const light_color_rgb ddc = dawn_dusk_color_for_lightmap( g->get_dimension_prefix() );
+    if( ddc.is_colored() && zlev >= 0 ) {
+        const float outside_light = g->natural_light_level( 0 );
+        const float inside_light = ( zlev >= 0 && outside_light > LIGHT_SOURCE_BRIGHT )
+                                   ? LIGHT_AMBIENT_DIM * 0.8f : LIGHT_AMBIENT_LOW;
+        auto &lcc = map_cache.light_color_cache;
+        bool wrote_any = false;
+        for( int x = 0; x < cache_x; ++x ) {
+            for( int y = 0; y < cache_y; ++y ) {
+                const float sun = lm[x * cache_y + y].max() - inside_light;
+                if( sun > 0.5f ) {
+                    const light_color_rgb contrib = ddc * sun;
+                    auto &cc = lcc[x * cache_y + y];
+                    cc.r = std::max( cc.r, contrib.r );
+                    cc.g = std::max( cc.g, contrib.g );
+                    cc.b = std::max( cc.b, contrib.b );
+                    wrote_any = true;
+                }
+            }
+        }
+        if( wrote_any ) {
+            map_cache.has_colored_lights = true;
+        }
+    }
 
     apply_character_light( get_player_character() );
     for( npc &guy : g->all_npcs() ) {
@@ -633,12 +708,14 @@ void map::generate_lightmap_worker( const int zlev )
             tripoint p;
             int direction;
             float luminance;
+            light_color_rgb color;
         };
         struct arc_light_def {
             tripoint p;
             units::angle dir;
             float luminance;
             units::angle width;
+            light_color_rgb color;
         };
         struct smx_acc {
             std::vector<std::pair<tripoint, float>> lm_override;
@@ -694,10 +771,13 @@ void map::generate_lightmap_worker( const int zlev )
                                 }
                                 const float source_light =
                                     std::min( natural_light, lm[map_cache.idx( neighbour.x, neighbour.y )].max() );
+                                // Get the accumulated color from the neighbor tile.
+                                const light_color_rgb nb_color = cache.light_color_cache[
+                                    map_cache.idx( neighbour.x, neighbour.y ) ];
                                 if( light_transparency( p ) > LIGHT_TRANSPARENCY_SOLID ) {
                                     update_light_quadrants( lm[map_cache.idx( p.x, p.y )], source_light, quadrant::default_ );
                                     // apply_directional_light writes to arbitrary lm positions — defer.
-                                    local.dir_lights.push_back( { p, dir_d[i], source_light } );
+                                    local.dir_lights.push_back( { p, dir_d[i], source_light, nb_color } );
                                 } else {
                                     update_light_quadrants( lm[map_cache.idx( p.x, p.y )], source_light, dir_quadrants[i][0] );
                                     update_light_quadrants( lm[map_cache.idx( p.x, p.y )], source_light, dir_quadrants[i][1] );
@@ -714,8 +794,9 @@ void map::generate_lightmap_worker( const int zlev )
                                 units::angle idir = 0_degrees;
                                 if( ( *itm_it )->getlight( ilum, iwidth, idir ) ) {
                                     if( iwidth > 0_degrees ) {
+                                        // Items don't have light_color — pass default (white/uncolored).
                                         // apply_light_arc writes to arbitrary lm positions — defer.
-                                        local.arc_lights.push_back( { p, idir, ilum, iwidth } );
+                                        local.arc_lights.push_back( { p, idir, ilum, iwidth, {} } );
                                     } else {
                                         add_light_source( p, ilum );
                                     }
@@ -725,11 +806,11 @@ void map::generate_lightmap_worker( const int zlev )
 
                         const ter_id terrain = cur_submap->get_ter( { sx, sy } );
                         if( terrain->light_emitted > 0 ) {
-                            add_light_source( p, terrain->light_emitted );
+                            add_light_source( p, terrain->light_emitted, terrain->light_color );
                         }
                         const furn_id furniture = cur_submap->get_furn( {sx, sy } );
                         if( furniture->light_emitted > 0 ) {
-                            add_light_source( p, furniture->light_emitted );
+                            add_light_source( p, furniture->light_emitted, furniture->light_color );
                         }
 
                         std::ranges::for_each( cur_submap->get_field( { sx, sy } ), [&]( auto & fld ) {
@@ -744,7 +825,7 @@ void map::generate_lightmap_worker( const int zlev )
                             const auto *cur = &fld.second;
                             const int light_emitted = cur->light_emitted();
                             if( light_emitted > 0 ) {
-                                add_light_source( p, light_emitted );
+                                add_light_source( p, light_emitted, cur->light_color() );
                             }
                             const float light_override = cur->local_light_override();
                             if( light_override >= 0.0 ) {
@@ -768,10 +849,10 @@ void map::generate_lightmap_worker( const int zlev )
         std::ranges::for_each( smx_accs, [&]( auto & local ) {
             lm_override.insert( lm_override.end(), local.lm_override.begin(), local.lm_override.end() );
             std::ranges::for_each( local.dir_lights, [&]( auto & dl ) {
-                apply_directional_light( dl.p, dl.direction, dl.luminance );
+                apply_directional_light( dl.p, dl.direction, dl.luminance, dl.color );
             } );
             std::ranges::for_each( local.arc_lights, [&]( auto & al ) {
-                apply_light_arc( al.p, al.dir, al.luminance, al.width );
+                apply_light_arc( al.p, al.dir, al.luminance, al.width, al.color );
             } );
         } );
 
@@ -808,21 +889,23 @@ void map::generate_lightmap_worker( const int zlev )
 
                 if( vp.has_flag( VPFLAG_CONE_LIGHT ) ) {
                     if( veh_luminance > lit_level::LIT ) {
-                        add_light_source( src, M_SQRT2 ); // Add a little surrounding light
+                        // Surrounding light has no color; arc carries the part's color.
+                        add_light_source( src, M_SQRT2, {} );
                         apply_light_arc( src, v->face.dir() + pt->direction, veh_luminance,
-                                         45_degrees );
+                                         45_degrees, vp.light_color );
                     }
 
                 } else if( vp.has_flag( VPFLAG_WIDE_CONE_LIGHT ) ) {
                     if( veh_luminance > lit_level::LIT ) {
-                        add_light_source( src, M_SQRT2 ); // Add a little surrounding light
+                        add_light_source( src, M_SQRT2, {} );
                         apply_light_arc( src, v->face.dir() + pt->direction, veh_luminance,
-                                         90_degrees );
+                                         90_degrees, vp.light_color );
                     }
 
                 } else if( vp.has_flag( VPFLAG_HALF_CIRCLE_LIGHT ) ) {
-                    add_light_source( src, M_SQRT2 ); // Add a little surrounding light
-                    apply_light_arc( src, v->face.dir() + pt->direction, vp.bonus, 180_degrees );
+                    add_light_source( src, M_SQRT2, {} );
+                    apply_light_arc( src, v->face.dir() + pt->direction, vp.bonus, 180_degrees,
+                                     vp.light_color );
 
                 } else if( vp.has_flag( VPFLAG_CIRCLE_LIGHT ) ) {
                     const bool odd_turn = calendar::once_every( 2_turns );
@@ -830,11 +913,11 @@ void map::generate_lightmap_worker( const int zlev )
                         ( !odd_turn && vp.has_flag( VPFLAG_EVENTURN ) ) ||
                         ( !( vp.has_flag( VPFLAG_EVENTURN ) || vp.has_flag( VPFLAG_ODDTURN ) ) ) ) {
 
-                        add_light_source( src, vp.bonus );
+                        add_light_source( src, vp.bonus, vp.light_color );
                     }
 
                 } else {
-                    add_light_source( src, vp.bonus );
+                    add_light_source( src, vp.bonus, vp.light_color );
                 }
             }
 
@@ -866,22 +949,65 @@ void map::generate_lightmap_worker( const int zlev )
         const tripoint cache_start( 0, 0, zlev );
         const tripoint cache_end( map_cache.cache_x, map_cache.cache_y, zlev );
         for( const tripoint &p : points_in_rectangle( cache_start, cache_end ) ) {
-            if( light_source_buffer[map_cache.idx( p.x, p.y )] > 0.0 ) {
-                apply_light_source( p, light_source_buffer[map_cache.idx( p.x, p.y )] );
+            auto &buf = light_source_buffer[map_cache.idx( p.x, p.y )];
+            if( buf.luminance > 0.0 ) {
+                apply_light_source( p, buf.luminance, buf.color );
             }
         }
         for( const std::pair<tripoint, float> &elem : lm_override ) {
             lm[map_cache.idx( elem.first.x, elem.first.y )].fill( elem.second );
         }
     } // ZoneScopedN generate_lightmap_flush
+
+    // 3x3 box blur on the color cache softens residual octant boundary seams.
+    // Even with per-channel max in the color write, attenuation differences
+    // between adjacent octants can leave visible intensity steps. Skip when no
+    // colored light source was applied this frame.
+    if( map_cache.has_colored_lights ) {
+        auto &lcc = map_cache.light_color_cache;
+        std::vector<light_color_rgb> blur_buf( lcc.size(), light_color_rgb{} );
+        for( int x = 1; x < cache_x - 1; ++x ) {
+            for( int y = 1; y < cache_y - 1; ++y ) {
+                if( !lcc[x * cache_y + y].is_colored() ) {
+                    continue;
+                }
+                light_color_rgb sum;
+                int count = 0;
+                for( int dx = -1; dx <= 1; ++dx ) {
+                    for( int dy = -1; dy <= 1; ++dy ) {
+                        sum += lcc[( x + dx ) * cache_y + ( y + dy )];
+                        ++count;
+                    }
+                }
+                blur_buf[x * cache_y + y] = sum * ( 1.0f / count );
+            }
+        }
+        for( int x = 1; x < cache_x - 1; ++x ) {
+            for( int y = 1; y < cache_y - 1; ++y ) {
+                if( blur_buf[x * cache_y + y].is_colored() ) {
+                    lcc[x * cache_y + y] = blur_buf[x * cache_y + y];
+                }
+            }
+        }
+    }
 }
 
-void map::add_light_source( const tripoint &p, float luminance )
+void map::add_light_source( const tripoint &p, float luminance,
+                            const light_color_rgb &color )
 {
     auto &cache = get_cache( p.z );
     auto &light_source_buffer = cache.light_source_buffer;
-    light_source_buffer[cache.idx( p.x, p.y )] = std::max( luminance,
-            light_source_buffer[cache.idx( p.x, p.y )] );
+    const int idx = cache.idx( p.x, p.y );
+    // Luminance uses max() for buffer dedup (prevents redundant ray casting into
+    // neighbors — equal-brightness neighbors already project those rays).
+    light_source_buffer[idx].luminance = std::max( luminance,
+            light_source_buffer[idx].luminance );
+    // Color accumulates additively, weighted by luminance so brighter sources
+    // dominate the hue. Luminance itself uses max() for the buffer dedup.
+    if( color.is_colored() ) {
+        light_source_buffer[idx].color += color * luminance;
+        cache.has_colored_lights = true;
+    }
 }
 
 // Tile light/transparency: 3D
@@ -1776,7 +1902,8 @@ static const light_model k_light_model = {
     accumulate_transparency
 };
 
-void map::apply_light_source( const tripoint &p, float luminance )
+void map::apply_light_source( const tripoint &p, float luminance,
+                              const light_color_rgb &color )
 {
     auto &cache = get_cache( p.z );
     auto *lm_data        = cache.lm.data();
@@ -1816,10 +1943,10 @@ void map::apply_light_source( const tripoint &p, float luminance )
         sssSsss
            sy
     */
-    bool north = ( p2.y != 0       && lsb_data[p2.x * sy + p2.y - 1]       < luminance );
-    bool south = ( p2.y != sy - 1  && lsb_data[p2.x * sy + p2.y + 1]       < luminance );
-    bool east  = ( p2.x != sx - 1  && lsb_data[( p2.x + 1 ) * sy + p2.y]   < luminance );
-    bool west  = ( p2.x != 0       && lsb_data[( p2.x - 1 ) * sy + p2.y]   < luminance );
+    bool north = ( p2.y != 0       && lsb_data[p2.x * sy + p2.y - 1].luminance < luminance );
+    bool south = ( p2.y != sy - 1  && lsb_data[p2.x * sy + p2.y + 1].luminance < luminance );
+    bool east  = ( p2.x != sx - 1  && lsb_data[( p2.x + 1 ) * sy + p2.y].luminance < luminance );
+    bool west  = ( p2.x != 0       && lsb_data[( p2.x - 1 ) * sy + p2.y].luminance < luminance );
 
     // Build octant mask from the directions that have a weaker-or-absent neighbor
     // in the light-source buffer.  Skipping covered directions is an optimization
@@ -1837,13 +1964,19 @@ void map::apply_light_source( const tripoint &p, float luminance )
     if( west ) {
         mask |= OCTANT_WEST;
     }
+    // Set current source color for colored light propagation.
+    g_current_source_color = color.is_colored() ?
+                             ( color * ( 1.0f / luminance ) ) : light_color_rgb{};
+
     if( mask != 0 ) {
         castLightOctants_q( lm_data, trans_data, blocked_data, sx, sy, p2, 0, luminance,
-                            k_light_model, mask, &weather_lookup_ );
+                            k_light_model, mask, &weather_lookup_,
+                            color.is_colored() ? &cache.light_color_cache[0] : nullptr );
     }
 }
 
-void map::apply_directional_light( const tripoint &p, int direction, float luminance )
+void map::apply_directional_light( const tripoint &p, int direction, float luminance,
+                                   const light_color_rgb &color )
 {
     const point p2( p.xy() );
 
@@ -1867,24 +2000,30 @@ void map::apply_directional_light( const tripoint &p, int direction, float lumin
     } else if( direction == 180 ) {
         mask = OCTANT_WEST;
     }
+    // Set current source color for colored light propagation.
+    g_current_source_color = color.is_colored() ?
+                             ( color * ( 1.0f / luminance ) ) : light_color_rgb{};
+
     if( mask != 0 ) {
         castLightOctants_q( lm_data, trans_data, blocked_data, sx, sy, p2, 0, luminance,
-                            k_light_model, mask, &weather_lookup_ );
+                            k_light_model, mask, &weather_lookup_,
+                            color.is_colored() ? &cache.light_color_cache[0] : nullptr );
     }
 }
 
 void map::apply_light_arc( const tripoint &p, units::angle angle, float luminance,
-                           units::angle wideangle )
+                           units::angle wideangle,
+                           const light_color_rgb &color )
 {
     if( luminance <= LIGHT_SOURCE_LOCAL ) {
         return;
     }
 
-    const auto &arc_cache = get_cache( p.z );
+    auto &arc_cache = get_cache( p.z );
     auto lit = std::vector<bool>( static_cast<size_t>( arc_cache.cache_x ) * arc_cache.cache_y,
                                   false );
 
-    apply_light_source( p, LIGHT_SOURCE_LOCAL );
+    apply_light_source( p, LIGHT_SOURCE_LOCAL, color );
 
     // Normalize (should work with negative values too)
     const units::angle wangle = wideangle / 2.0;
@@ -1894,7 +2033,8 @@ void map::apply_light_arc( const tripoint &p, units::angle angle, float luminanc
     tripoint end;
     int range = LIGHT_RANGE( luminance );
     calc_ray_end( nangle, range, p, end );
-    apply_light_ray( lit, p, end, luminance );
+    apply_light_ray( lit, p, end, luminance,
+                     color.is_colored() ? &arc_cache.light_color_cache[0] : nullptr );
 
     tripoint test;
     calc_ray_end( wangle + nangle, range, p, test );
@@ -1903,6 +2043,10 @@ void map::apply_light_arc( const tripoint &p, units::angle angle, float luminanc
     if( wdist <= 0.5 ) {
         return;
     }
+
+    // Set current source color for colored light propagation through rays.
+    g_current_source_color = color.is_colored() ?
+                             ( color * ( 1.0f / luminance ) ) : light_color_rgb{};
 
     // attempt to determine beam intensity required to cover all squares
     const units::angle wstep = ( wangle / ( wdist * M_SQRT2 ) );
@@ -1915,18 +2059,22 @@ void map::apply_light_arc( const tripoint &p, units::angle angle, float luminanc
                         p.x + ( static_cast<double>( range ) - fdist * 2.0 ) * cos( nangle + ao ) );
             end.y = static_cast<int>(
                         p.y + ( static_cast<double>( range ) - fdist * 2.0 ) * sin( nangle + ao ) );
-            apply_light_ray( lit, p, end, luminance );
+            apply_light_ray( lit, p, end, luminance,
+                             color.is_colored() ? &arc_cache.light_color_cache[0] : nullptr );
 
             end.x = static_cast<int>(
                         p.x + ( static_cast<double>( range ) - fdist * 2.0 ) * cos( nangle - ao ) );
             end.y = static_cast<int>(
                         p.y + ( static_cast<double>( range ) - fdist * 2.0 ) * sin( nangle - ao ) );
-            apply_light_ray( lit, p, end, luminance );
+            apply_light_ray( lit, p, end, luminance,
+                             color.is_colored() ? &arc_cache.light_color_cache[0] : nullptr );
         } else {
             calc_ray_end( nangle + ao, range, p, end );
-            apply_light_ray( lit, p, end, luminance );
+            apply_light_ray( lit, p, end, luminance,
+                             color.is_colored() ? &arc_cache.light_color_cache[0] : nullptr );
             calc_ray_end( nangle - ao, range, p, end );
-            apply_light_ray( lit, p, end, luminance );
+            apply_light_ray( lit, p, end, luminance,
+                             color.is_colored() ? &arc_cache.light_color_cache[0] : nullptr );
         }
     }
 }
@@ -1942,7 +2090,8 @@ static constexpr quadrant quadrant_from_x_y( int x, int y )
 }
 
 void map::apply_light_ray( std::vector<bool> &lit,
-                           const tripoint &s, const tripoint &e, float luminance )
+                           const tripoint &s, const tripoint &e, float luminance,
+                           light_color_rgb *color_cache )
 {
     point a( std::abs( e.x - s.x ) * 2, std::abs( e.y - s.y ) * 2 );
     point d( ( s.x < e.x ) ? 1 : -1, ( s.y < e.y ) ? 1 : -1 );
@@ -1988,6 +2137,13 @@ void map::apply_light_ray( std::vector<bool> &lit,
                     float lm_val = luminance / ( fastexp( transparency * distance ) * distance );
                     quadrant q = is_opaque ? quad : quadrant::default_;
                     lm_data[idx][q] = std::max( lm_data[idx][q], lm_val );
+                    // Write colored light energy alongside scalar light.
+                    if( color_cache != nullptr ) {
+                        auto &cc = color_cache[idx];
+                        cc.r = std::max( cc.r, g_current_source_color.r * lm_val );
+                        cc.g = std::max( cc.g, g_current_source_color.g * lm_val );
+                        cc.b = std::max( cc.b, g_current_source_color.b * lm_val );
+                    }
                 }
                 if( is_opaque ) {
                     break;
@@ -2021,6 +2177,13 @@ void map::apply_light_ray( std::vector<bool> &lit,
                     float lm_val = luminance / ( fastexp( transparency * distance ) * distance );
                     quadrant q = is_opaque ? quad : quadrant::default_;
                     lm_data[idx][q] = std::max( lm_data[idx][q], lm_val );
+                    // Write colored light energy alongside scalar light.
+                    if( color_cache != nullptr ) {
+                        auto &cc = color_cache[idx];
+                        cc.r = std::max( cc.r, g_current_source_color.r * lm_val );
+                        cc.g = std::max( cc.g, g_current_source_color.g * lm_val );
+                        cc.b = std::max( cc.b, g_current_source_color.b * lm_val );
+                    }
                 }
                 if( is_opaque ) {
                     break;

@@ -9,6 +9,7 @@
     "move_cost_mod": 4,
     "coverage": 10,
     "light_emitted": 15,
+    "light_color": [100, 180, 255],
     "required_str": -1,
     "flags": [ "TRANSPARENT" ],
     "bash": {
@@ -31,6 +32,7 @@
     "coverage": 30,
     "required_str": -1,
     "light_emitted": 3,
+    "light_color": [240, 240, 230],
     "flags": [ "TRANSPARENT", "EMITTER" ],
     "emissions": [ "emit_hot_air_migo_seep" ],
     "bash": {
@@ -207,6 +209,7 @@
     "coverage": 40,
     "required_str": -1,
     "light_emitted": 3,
+    "light_color": [255, 230, 100],
     "flags": [ "TRANSPARENT", "EASY_DECONSTRUCT" ],
     "deployed_item": "alien_pod_organ",
     "examine_action": "deployed_furniture",
@@ -260,6 +263,7 @@
     "coverage": 40,
     "required_str": -1,
     "light_emitted": 12,
+    "light_color": [255, 160, 200],
     "flags": [ "TRANSPARENT", "MINEABLE" ],
     "bash": {
       "str_min": 45,
@@ -282,6 +286,7 @@
     "move_cost_mod": -1,
     "coverage": 75,
     "light_emitted": 15,
+    "light_color": [255, 100, 255],
     "required_str": -1,
     "emissions": [ "emit_shock_burst" ],
     "flags": [ "TRANSPARENT", "MIGO_NERVE" ],

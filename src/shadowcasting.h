@@ -197,6 +197,11 @@ inline float sight_from_lookup( const float &numerator, const float &transparenc
     return numerator * transparency;
 }
 
+// ── Current source color for colored light propagation ────────────────────────
+// Set by map::apply_light_source before each castLight sequence. Read by the
+// shadowcasting template to write per-channel max-blended color energy.
+extern light_color_rgb g_current_source_color;
+
 // ── Public shadowcasting API ──────────────────────────────────────────────────
 
 /// 2D FOV / light cast — writes to a flat float array (seen_cache, shrapnel).
@@ -215,6 +220,9 @@ void castLightAll(
     const exp_lookup *weather_lookup = nullptr );
 
 /// 2D light cast — writes to a flat four_quadrants array (lm).
+/// @p color_cache   Optional per-tile colored light energy cache. If non-null,
+///                  color is propagated alongside scalar light using the same
+///                  shadowcasting recursion. Written via per-channel max blending.
 void castLightAll_q(
     four_quadrants *output_cache,
     const float *input_array,
@@ -222,7 +230,8 @@ void castLightAll_q(
     int sx, int sy,
     point offset, int offset_distance, float numerator,
     const light_model &model,
-    const exp_lookup *weather_lookup = nullptr );
+    const exp_lookup *weather_lookup = nullptr,
+    light_color_rgb *color_cache = nullptr );
 
 // ── Octant bitmasks ───────────────────────────────────────────────────────────
 // Bit i selects k_octant_xforms[i].  Used by map::apply_light_source and
@@ -235,6 +244,7 @@ inline constexpr uint8_t OCTANT_WEST  = 0x11u; ///< octants 0, 4  (xy = +1 half)
 /// 2D light cast — writes to a flat four_quadrants array, casting only the
 /// octants selected by @p octant_mask.  Bit i of octant_mask enables
 /// k_octant_xforms[i].  Use OCTANT_NORTH/EAST/SOUTH/WEST constants.
+/// @p color_cache   Optional per-tile colored light energy cache (same as above).
 void castLightOctants_q(
     four_quadrants *output_cache,
     const float *input_array,
@@ -243,7 +253,8 @@ void castLightOctants_q(
     point offset, int offset_distance, float numerator,
     const light_model &model,
     uint8_t octant_mask,
-    const exp_lookup *weather_lookup = nullptr );
+    const exp_lookup *weather_lookup = nullptr,
+    light_color_rgb *color_cache = nullptr );
 
 /// 3D FOV cast across all z-levels.
 /// Only model.calc, model.check, and model.accumulate are consulted;

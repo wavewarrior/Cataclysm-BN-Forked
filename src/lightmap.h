@@ -1,6 +1,8 @@
 #pragma once
 
+#include <array>
 #include <cmath>
+#include <cstdint>
 #include <ostream>
 
 static constexpr float LIGHT_SOURCE_LOCAL = 0.1f;
@@ -35,6 +37,36 @@ static constexpr float LIGHT_TRANSPARENCY_OPEN_AIR = 0.038376418216f;
 
 // indicates starting (full) visibility (for seen_cache)
 static constexpr float VISIBILITY_FULL = 1.0f;
+
+// ── Per-tile accumulated light color energy (float RGB) ───────────────────────
+// Stored as raw energy, not display-ready; the renderer converts to uint8.
+struct light_color_rgb {
+    float r = 0.0f;
+    float g = 0.0f;
+    float b = 0.0f;
+
+    bool is_colored() const { return r > 0.0f || g > 0.0f || b > 0.0f; }
+
+    light_color_rgb &operator+=(const light_color_rgb &rhs) {
+        r += rhs.r; g += rhs.g; b += rhs.b;
+        return *this;
+    }
+
+    light_color_rgb operator*(float scale) const {
+        return { r * scale, g * scale, b * scale };
+    }
+
+    bool operator==(const light_color_rgb &rhs) const {
+        return r == rhs.r && g == rhs.g && b == rhs.b;
+    }
+    bool operator!=(const light_color_rgb &rhs) const { return !(*this == rhs); }
+
+    // HSV → RGB conversion (H in degrees [0,360), S/V in [0,1])
+    static light_color_rgb from_hsv(float h, float s, float v);
+};
+
+// Dawn/dusk tint: returns cached warm color for twilight or empty outside.
+light_color_rgb dawn_dusk_color_for_lightmap(std::string_view dimension);
 
 #define LIGHT_RANGE(b) static_cast<int>( -std::log(LIGHT_AMBIENT_LOW / static_cast<float>(b)) * (1.0 / LIGHT_TRANSPARENCY_OPEN_AIR) )
 

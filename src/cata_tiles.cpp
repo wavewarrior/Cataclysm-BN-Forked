@@ -1,6 +1,7 @@
 #include "units_temperature.h"
 #if defined(TILES)
 #include "cata_tiles.h"
+#include "lightmap.h"
 
 #include <algorithm>
 #include <array>
@@ -3530,6 +3531,98 @@ void cata_tiles::draw( point dest, const tripoint &center, int width, int height
         }
     }
     // tile overrides are already drawn in the previous code
+
+    // ── Colored light overlay ───────────────────────────────────────────────
+    // Draws a tinted rect over tiles that have colored light energy in the cache.
+    // Only the chromatic (saturated) component produces a tint — white light
+    // (equal RGB) is ignored. Alpha scales with the ratio of saturated energy
+    // to total scalar light so the effect is subtle under bright ambient and
+    // vivid in darkness. Disabled in isometric mode.
+    if( !iso_mode ) {
+        for( int z = min_z; z <= center.z; ++z ) {
+            const auto &zlev_cache = here.access_cache( z );
+            if( !zlev_cache.has_colored_lights ) {
+                continue;
+            }
+            for( const tile_render_info &p : draw_points ) {
+                if( p.pos.z != z ) {
+                    continue;
+                }
+                // Only visible sprite tiles can receive a tint.
+                if( p.ll == lit_level::DARK || p.ll == lit_level::BLANK ||
+                    p.ll == lit_level::MEMORIZED ) {
+                    continue;
+                }
+                const light_color_rgb &lc = zlev_cache.light_color_cache[
+                    zlev_cache.idx( p.pos.x, p.pos.y ) ];
+                if( !lc.is_colored() ) {
+                    continue;
+                }
+                // Subtract the achromatic (white) component to isolate saturated color.
+                const float min_ch = std::min( { lc.r, lc.g, lc.b } );
+                const float sat_r = lc.r - min_ch;
+                const float sat_g = lc.g - min_ch;
+                const float sat_b = lc.b - min_ch;
+                const float sat_mag = std::max( { sat_r, sat_g, sat_b } );
+                if( sat_mag < 0.01f ) {
+                    continue; // pure white light, no tint
+                }
+                // Alpha: saturated energy relative to total scalar light at this tile.
+                const four_quadrants &lm_val = zlev_cache.lm[zlev_cache.idx( p.pos.x, p.pos.y )];
+                const float scalar = lm_val.max();
+                const float ratio = scalar > 0.1f ? std::min( 1.0f, sat_mag / scalar ) : 0.0f;
+                const Uint8 alpha = static_cast<Uint8>( ratio * 80.0f );
+                if( alpha == 0 ) {
+                    continue;
+                }
+                // Normalize saturated color to full brightness for the SDL tint.
+                const SDL_Color tint = {
+                    static_cast<Uint8>( sat_r / sat_mag * 255.0f ),
+                    static_cast<Uint8>( sat_g / sat_mag * 255.0f ),
+                    static_cast<Uint8>( sat_b / sat_mag * 255.0f ),
+                    alpha
+                };
+                const point screen = player_to_screen( p.pos.xy() );
+                const SDL_Rect draw_rect{ static_cast<int>( screen.x ),
+                                          static_cast<int>( screen.y - p.height_3d ),
+                                          tile_width, tile_height };
+                SetRenderDrawBlendMode( renderer.get(), SDL_BLENDMODE_BLEND );
+                geometry->rect( renderer.get(), draw_rect, tint );
+                SetRenderDrawBlendMode( renderer.get(), SDL_BLENDMODE_NONE );
+            }
+        }
+    }
+
+    // ── Dawn/dusk warm color temperature overlay ────────────────────────────
+    // During twilight, render a warm hue shift on outside tiles that have sunlight.
+    if( ( is_dusk( calendar::turn ) || is_dawn( calendar::turn ) ) && center.z >= 0 ) {
+        const light_color_rgb ddc = dawn_dusk_color_for_lightmap( g->get_dimension_prefix() );
+        if( ddc.is_colored() ) {
+            for( int z = min_z; z <= center.z; ++z ) {
+                const auto &zlev_cache = here.access_cache( z );
+                if( !zlev_cache.has_colored_lights ) {
+                    continue;
+                }
+                SetRenderDrawBlendMode( renderer.get(), SDL_BLENDMODE_BLEND );
+                for( const tile_render_info &p : draw_points ) {
+                    if( p.pos.z != z ) {
+                        continue;
+                    }
+                    // Only outside tiles with sunlight get the dawn/dusk tint.
+                    if( !zlev_cache.outside_cache[zlev_cache.idx( p.pos.x, p.pos.y )] ) {
+                        continue;
+                    }
+                    const point screen = player_to_screen( p.pos.xy() );
+                    const SDL_Rect draw_rect{ static_cast<int>( screen.x ),
+                                              static_cast<int>( screen.y - p.height_3d ),
+                                              tile_width, tile_height };
+                    geometry->rect( renderer.get(), draw_rect, ddc );
+                }
+                SetRenderDrawBlendMode( renderer.get(), SDL_BLENDMODE_NONE );
+            }
+        }
+    }
+
     void_radiation_override();
     void_terrain_override();
     void_furniture_override();

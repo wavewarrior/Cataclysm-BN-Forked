@@ -449,6 +449,12 @@ void vpart_info::load( const JsonObject &jo, const std::string &src )
     assign( jo, "size", def.size );
     assign( jo, "difficulty", def.difficulty );
     assign( jo, "bonus", def.bonus );
+    if( jo.has_array( "light_color" ) ) {
+        JsonArray jarr = jo.get_array( "light_color" );
+        def.light_color.r = static_cast<float>( jarr.get_int( 0 ) ) / 255.0f;
+        def.light_color.g = static_cast<float>( jarr.get_int( 1 ) ) / 255.0f;
+        def.light_color.b = static_cast<float>( jarr.get_int( 2 ) ) / 255.0f;
+    }
     assign( jo, "cargo_weight_modifier", def.cargo_weight_modifier );
     assign( jo, "weight_modifier", def.weight_modifier );
     assign( jo, "flags", def.flags );
