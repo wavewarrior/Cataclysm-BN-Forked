@@ -159,6 +159,27 @@ static const ter_str_id t_rock_floor_no_roof( "t_rock_floor_no_roof" );
 static const std::string str_DOOR_LOCKING( "DOOR_LOCKING" );
 static const std::string str_OPENCLOSE_INSIDE( "OPENCLOSE_INSIDE" );
 
+namespace
+{
+
+auto horde_should_avoid_vehicle_tile( const map &here, const tripoint &p,
+                                      const mongroup &group ) -> bool
+{
+    if( !group.horde ) {
+        return false;
+    }
+
+    const auto vp = here.veh_at( p );
+    if( !vp ) {
+        return false;
+    }
+
+    const auto &veh = vp->vehicle();
+    return veh.is_owned_by( get_avatar() );
+}
+
+} // namespace
+
 #define dbg(x) DebugLog((x),DC::Map)
 
 static location_vector<item> nulitems( new
@@ -391,6 +412,17 @@ void map::on_submap_unloaded( const tripoint_abs_sm &pos, const std::string &dim
 {
     if( dim_id != bound_dimension_ ) {
         return;
+    }
+
+    // Stamp the departure time so actualize() computes the correct time-since-simulated
+    // on the next load.  Only meaningful for submaps that were actually simulated;
+    // border-preloaded submaps that were never in the simulation set should not be
+    // touched (their last_touched reflects their real generate-or-load time).
+    if( submap_loader.is_in_simulated_set( dim_id, pos.raw() ) ) {
+        submap *sm = MAPBUFFER_REGISTRY.get( dim_id ).lookup_submap_in_memory( pos.raw() );
+        if( sm ) {
+            sm->last_touched = calendar::turn;
+        }
     }
 
     // Vehicle tracking: remove all vehicles whose home submap matches the unloaded position.
@@ -3647,6 +3679,17 @@ bool map::has_adjacent_terrain_with( const tripoint &p,
     return false;
 }
 
+bool map::has_nearby( const tripoint &p,
+                      const std::function<bool( map &m, const tripoint &p )> &pred, int radius )
+{
+    for( const tripoint &adj : points_in_radius( p, radius ) ) {
+        if( pred( *this, adj ) ) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool map::has_nearby_fire( const tripoint &p, int radius )
 {
     for( const tripoint &pt : points_in_radius( p, radius ) ) {
@@ -5647,10 +5690,6 @@ void map::add_item( const tripoint &p, detached_ptr<item> &&new_item )
         new_item->activate();
     }
 
-    if( new_item->is_map() && !new_item->has_var( "reveal_map_center_omt" ) ) {
-        new_item->set_var( "reveal_map_center_omt", ms_to_omt_copy( getabs( p ) ) );
-    }
-
     current_submap->is_uniform = false;
     invalidate_max_populated_zlev( p.z );
 
@@ -5662,6 +5701,8 @@ void map::add_item( const tripoint &p, detached_ptr<item> &&new_item )
         }
         current_submap->active_items.add( *new_item );
     }
+
+    new_item->on_map_placement( *this, p );
 
     current_submap->get_items( l ).push_back( std::move( new_item ) );
     return;
@@ -7870,21 +7911,6 @@ std::vector<tripoint> map::get_dir_circle( const tripoint &f, const tripoint &t 
     return circle;
 }
 
-void map::save()
-{
-    for( int gridx = 0; gridx < my_MAPSIZE; gridx++ ) {
-        for( int gridy = 0; gridy < my_MAPSIZE; gridy++ ) {
-            if( zlevels ) {
-                for( int gridz = -OVERMAP_DEPTH; gridz <= OVERMAP_HEIGHT; gridz++ ) {
-                    saven( tripoint( gridx, gridy, gridz ) );
-                }
-            } else {
-                saven( tripoint( gridx, gridy, abs_sub.z() ) );
-            }
-        }
-    }
-}
-
 void map::load( const tripoint &w, const bool update_vehicle, const bool pump_events )
 {
     std::fill( grid.begin(), grid.end(), nullptr );
@@ -8224,85 +8250,6 @@ void map::shift( point sp )
     invalidate_lightmap_caches();
 }
 
-void map::vertical_shift( const int newz )
-{
-    if( !zlevels ) {
-        debugmsg( "Called map::vertical_shift in a non-z-level world" );
-        return;
-    }
-
-    if( newz < -OVERMAP_DEPTH || newz > OVERMAP_HEIGHT ) {
-        debugmsg( "Tried to get z-level %d outside allowed range of %d-%d",
-                  newz, -OVERMAP_DEPTH, OVERMAP_HEIGHT );
-        return;
-    }
-
-    tripoint_abs_sm trp = get_abs_sub();
-    set_abs_sub( tripoint_abs_sm( trp.xy(), newz ) );
-
-    // TODO: Remove the function when it's safe
-    return;
-}
-
-// saven saves a single nonant.  worldx and worldy are used for the file
-// name and specifies where in the world this nonant is.  gridx and gridy are
-// the offset from the top left nonant:
-// 0,0 1,0 2,0
-// 0,1 1,1 2,1
-// 0,2 1,2 2,2
-// (worldx,worldy,worldz) denotes the absolute coordinate of the submap
-// in grid[0].
-void map::saven( const tripoint &grid )
-{
-    dbg( DL::Debug ) << "map::saven( world=" << abs_sub << ", grid=" << grid << " )";
-
-    const auto grid_bub_sm = tripoint_bub_sm( grid );
-
-    // Skip saving submaps outside dimension bounds - they are generated on load
-    if( current_bounds_ ) {
-        const tripoint_abs_sm grid_abs_sub = bub_to_abs( grid_bub_sm );
-        if( !current_bounds_->contains( tripoint_abs_sm( grid_abs_sub ) ) ) {
-            return;
-        }
-    }
-
-    const int gridn = get_nonant( grid_bub_sm );
-    submap *submap_to_save = getsubmap( gridn );
-    if( submap_to_save == nullptr ) {
-        // Corner slot outside the circular load footprint — nothing to save.
-        return;
-    }
-    if( submap_to_save->get_ter( point_sm_ms{} ) == t_null ) {
-        // This is a serious error and should be signaled as soon as possible
-        debugmsg( "map::saven grid (%s) uninitialized!", grid.to_string() );
-        return;
-    }
-
-    const tripoint_abs_sm abs = abs_sub.xy() + tripoint_rel_sm( grid );
-
-    if( !zlevels && grid.z != abs_sub.z() ) {
-        debugmsg( "Tried to save submap (%d,%d,%d) as (%d,%d,%d), which isn't supported in non-z-level builds",
-                  abs.x(), abs.y(), abs_sub.z(), abs.x(), abs.y(), grid.z );
-    }
-
-    dbg( DL::Debug ) << "map::saven abs: " << abs << "  gridn: " << gridn;
-
-    // An edge case: restock_fruits relies on last_touched, so we must call it before save
-    if( season_of_year( calendar::turn ) != season_of_year( submap_to_save->last_touched ) ) {
-        const time_duration time_since_last_actualize = calendar::turn - submap_to_save->last_touched;
-        for( int x = 0; x < SEEX; x++ ) {
-            for( int y = 0; y < SEEY; y++ ) {
-                const tripoint pnt = sm_to_ms_copy( grid ) + point( x, y );
-                restock_fruits( pnt, time_since_last_actualize );
-            }
-        }
-    }
-
-    submap_to_save->last_touched = calendar::turn;
-    // Add to the dimension-aware mapbuffer slot, not always primary.
-    MAPBUFFER_REGISTRY.get( bound_dimension_ ).add_submap( abs.raw(), submap_to_save );
-}
-
 // Optimized mapgen function that only works properly for very simple overmap types
 // Does not create or require a temporary map and does its own saving
 static void generate_uniform( const tripoint_abs_sm &p, const ter_id &terrain_type,
@@ -8311,16 +8258,17 @@ static void generate_uniform( const tripoint_abs_sm &p, const ter_id &terrain_ty
     dbg( DL::Info ) << "generate_uniform p: " << p
                     << "  terrain_type: " << terrain_type.id().str();
 
-    for( int xd = 0; xd <= 1; xd++ ) {
-        for( int yd = 0; yd <= 1; yd++ ) {
-            auto pos = p + point( xd, yd );
-            submap *sm = new submap( project_to<coords::ms>( pos ) );
-            sm->is_uniform = true;
-            sm->set_all_ter( terrain_type );
-            sm->last_touched = calendar::turn;
-            dest.add_submap( pos.raw(), sm );
-        }
-    }
+    std::ranges::for_each(
+        cata::views::cartesian_product( std::views::iota( 0, 2 ), std::views::iota( 0, 2 ) ),
+    [&]( const auto & xy ) {
+        const auto [xd, yd] = xy;
+        auto pos = p + point( xd, yd );
+        auto sm = std::make_unique<submap>( project_to<coords::ms>( pos ) );
+        sm->is_uniform = true;
+        sm->set_all_ter( terrain_type );
+        sm->last_touched = calendar::turn;
+        dest.add_submap( pos.raw(), sm );
+    } );
 }
 
 auto map::apply_boundary_overlay( submap &sm, const tripoint_abs_sm &pos ) -> void
@@ -9113,6 +9061,10 @@ void map::spawn_monsters_submap_group( const tripoint &gp, mongroup &group, bool
 
             if( !ignore_inside_checks && !is_outside( fp ) ) {
                 continue; // monster must spawn outside.
+            }
+
+            if( horde_should_avoid_vehicle_tile( *this, fp, group ) ) {
+                continue; // hordes must not appear inside player-owned vehicles.
             }
 
             locations.push_back( fp );
@@ -10212,13 +10164,6 @@ size_t map::get_nonant( const tripoint_bub_sm &gridp ) const
 tinymap::tinymap( int mapsize, bool zlevels )
     : map( mapsize, zlevels )
 {
-}
-
-void tinymap::drain_to_mapbuffer( mapbuffer &dest )
-{
-    // No-op: generate() via loadn() already places submaps in the correct
-    // registry slot for the bound dimension.
-    ( void )dest;
 }
 
 void tinymap::bind_submaps_for_hook( const tripoint &sm_base )

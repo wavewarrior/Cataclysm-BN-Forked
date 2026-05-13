@@ -97,8 +97,10 @@ enum action_id : int {
     ACTION_SMASH,
     /** Examine or pick up items from adjacent square */
     ACTION_EXAMINE,
-    /** Pick up items from current/adjacent squares */
+    /** Pick up items from one current/adjacent square */
     ACTION_PICKUP,
+    /** Pick up items from all current/adjacent squares */
+    ACTION_PICKUP_ALL,
     /** Pick up items from current square. Auto pickup if only one item */
     ACTION_PICKUP_FEET,
     /** Grab or let go of an object */
@@ -157,6 +159,8 @@ enum action_id : int {
     ACTION_RELOAD_WIELDED,
     /** Open the unload item (e.g. firearms) select menu */
     ACTION_UNLOAD,
+    /** Unload every carried item that can be unloaded */
+    ACTION_UNLOAD_ALL,
     /** Open the mending menu (e.g. when using a sewing kit) */
     ACTION_MEND,
     /** Open the throw menu */
@@ -487,6 +491,9 @@ std::optional<tripoint> choose_adjacent_highlight( const std::string &message,
 std::optional<tripoint> choose_adjacent_highlight( const std::string &message,
         const std::string &failure_message, const std::function<bool( const tripoint & )> &allowed,
         bool allow_vertical = false );
+
+std::optional<std::pair<tripoint, tripoint>> choose_area( const std::string &message,
+        const tripoint &start_pos, bool allow_vertical = false );
 
 // (Press X (or Y)|Try) to Z
 std::string press_x( action_id act );

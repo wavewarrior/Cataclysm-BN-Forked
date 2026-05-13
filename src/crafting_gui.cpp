@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "avatar.h"
+#include "cached_options.h"
 #include "calendar.h"
 #include "cata_utility.h"
 #include "catacharset.h"
@@ -29,7 +30,12 @@
 #include "item_contents.h"
 #include "itype.h"
 #include "json.h"
+#include "line.h"
+#include "map.h"
+#include "messages.h"
+#include "npc.h"
 #include "options.h"
+#include "player_activity.h"
 #include "mod_manager.h"
 #include "output.h"
 #include "player.h"
@@ -46,10 +52,12 @@
 #include "ui_manager.h"
 #include "uistate.h"
 
+static const std::string flag_BLIND_NO_EFFECT( "BLIND_NO_EFFECT" );
 static const std::string flag_BLIND_EASY( "BLIND_EASY" );
 static const std::string flag_BLIND_HARD( "BLIND_HARD" );
+static const std::string flag_BLIND_NEARLY_IMPOSSIBLE( "BLIND_NEARLY_IMPOSSIBLE" );
+static const std::string flag_BLIND_IMPOSSIBLE( "BLIND_IMPOSSIBLE" );
 
-class npc;
 
 enum TAB_MODE {
     NORMAL,
@@ -500,9 +508,12 @@ static std::vector<std::string> recipe_info(
     }
 
     oss << string_format( _( "Craftable in the dark?  <color_cyan>%s</color>\n" ),
+                          recp.has_flag( flag_BLIND_NO_EFFECT ) ? _( "Effortless" ) :
                           recp.has_flag( flag_BLIND_EASY ) ? _( "Easy" ) :
-                          recp.has_flag( flag_BLIND_HARD ) ? _( "Hard" ) :
-                          _( "Impossible" ) );
+                          recp.has_flag( flag_BLIND_HARD ) ? _( "Awkward" ) :
+                          recp.has_flag( flag_BLIND_NEARLY_IMPOSSIBLE ) ? _( "Very Hard" ) :
+                          recp.has_flag( flag_BLIND_IMPOSSIBLE ) ? _( "Impossible" ) :
+                          _( "Reasonabe" ) );
 
     std::string nearby_string;
     const inventory &crafting_inv = crafter.crafting_inventory();
@@ -605,6 +616,7 @@ static input_context make_crafting_context( bool highlight_unread_recipes )
     ctxt.register_action( "HIDE_SHOW_RECIPE" );
     ctxt.register_action( "COMPARE" );
     ctxt.register_action( "TOGGLE_UNAVAILABLE" );
+    ctxt.register_action( "ASSIGN_NPC_CRAFT", to_translation( "Assign nearest NPC to craft" ) );
     if( highlight_unread_recipes ) {
         ctxt.register_action( "TOGGLE_RECIPE_UNREAD" );
         ctxt.register_action( "MARK_ALL_RECIPES_READ" );
@@ -1377,6 +1389,68 @@ const recipe *select_crafting_recipe( int &batch_size_out, Character &crafter )
                     recalc_unread = true;
                 }
             }
+        } else if( action == "ASSIGN_NPC_CRAFT" ) {
+            if( current.empty() || available[line].is_nested_category || current[line]->is_nested() ) {
+                popup( _( "Select a craftable recipe first." ) );
+            } else {
+                const recipe *rec = current[line];
+                const int bs = ( batch ) ? line + 1 : 1;
+                std::vector<npc *> nearby = g->get_npcs_if( [&]( const npc & guy ) {
+                    return !guy.in_sleep_state()
+                           && guy.is_obeying( crafter )
+                           && ( !guy.activity || guy.activity->is_null() )
+                           && rl_dist( guy.pos(), crafter.pos() ) <= PICKUP_RANGE
+                           && get_map().clear_path( crafter.pos(), guy.pos(), PICKUP_RANGE, 1, 100 );
+                } );
+                std::vector<npc *> candidates;
+                bool any_knows = false;
+                for( npc *guy : nearby ) {
+                    if( !guy->knows_recipe( rec ) ) {
+                        continue;
+                    }
+                    any_knows = true;
+                    if( guy->can_make( rec, bs ) ) {
+                        candidates.push_back( guy );
+                    }
+                }
+                if( candidates.empty() ) {
+                    if( nearby.empty() ) {
+                        popup( _( "No NPC available to craft that nearby." ) );
+                    } else if( !any_knows ) {
+                        popup( _( "No nearby NPC knows how to craft that." ) );
+                    } else {
+                        popup( _( "No nearby NPC has the necessary components to craft that." ) );
+                    }
+                } else {
+                    std::sort( candidates.begin(), candidates.end(), [&]( const npc * a, const npc * b ) {
+                        return rl_dist( a->pos(), crafter.pos() ) < rl_dist( b->pos(), crafter.pos() );
+                    } );
+                    npc *target = nullptr;
+                    if( candidates.size() == 1 ) {
+                        target = candidates.front();
+                    } else {
+                        uilist menu;
+                        menu.text = _( "Assign craft to which NPC?" );
+                        for( size_t i = 0; i < candidates.size(); i++ ) {
+                            menu.addentry( static_cast<int>( i ), true, MENU_AUTOASSIGN,
+                                           candidates[i]->get_name() );
+                        }
+                        menu.addentry( static_cast<int>( candidates.size() ), true, MENU_AUTOASSIGN,
+                                       _( "Cancel" ) );
+                        menu.query();
+                        if( menu.ret >= 0 && menu.ret < static_cast<int>( candidates.size() ) ) {
+                            target = candidates[menu.ret];
+                        }
+                    }
+                    if( target != nullptr ) {
+                        target->make_craft( rec->ident(), bs, target->pos() );
+                        add_msg( m_good, _( "%s starts crafting %s." ),
+                                 target->get_name(), rec->result_name() );
+                        chosen = nullptr;
+                        done = true;
+                    }
+                }
+            }
         } else if( action == "HELP_RECIPE" ) {
             if( current.empty() ) {
                 popup( _( "Nothing selected!  Press [<color_yellow>ESC</color>]!" ) );
@@ -1423,7 +1497,10 @@ const recipe *select_crafting_recipe( int &batch_size_out, Character &crafter )
                 { 's', _( "cooking" ), _( "<color_cyan>any skill</color> used to craft" ) },
                 { 'Q', _( "fine bolt turning" ), _( "<color_cyan>quality</color> required to craft" ) },
                 { 't', _( "soldering iron" ), _( "<color_cyan>tool</color> required to craft" ) },
-                { 'm', _( "yes" ), _( "recipes which are <color_cyan>memorized</color> or not" ) },
+                {
+                    'm', pgettext( "memorized recipe search term", "yes" ),
+                    _( "recipes which are <color_cyan>memorized</color> or not" )
+                },
             };
             int max_example_length = 0;
             for( const auto &prefix : prefixes ) {
@@ -1745,7 +1822,7 @@ static bool query_is_yes( const std::string &query )
 
     return subquery == "yes" || subquery == "y" || subquery == "1" ||
            subquery == "true" || subquery == "t" || subquery == "on" ||
-           subquery == _( "yes" );
+           subquery == pgettext( "memorized recipe search term", "yes" );
 }
 
 static void draw_hidden_amount( const catacurses::window &w, int amount, int num_recipe )

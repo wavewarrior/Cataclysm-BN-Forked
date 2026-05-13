@@ -73,6 +73,7 @@
 #include "map_iterator.h"
 #include "map_selector.h"
 #include "map_functions.h"
+#include "map_utils.h"
 #include "mapdata.h"
 #include "mapbuffer.h"
 #include "mapbuffer_registry.h"
@@ -407,6 +408,67 @@ void iexamine::nanofab( player &p, const tripoint &examp )
         liquid_handler::handle_all_liquid( std::move( new_item ), PICKUP_RANGE );  // let it own the pointer
         return;
     }
+
+    here.add_item_or_charges( spawn_point, std::move( new_item ) );
+}
+
+/**
+ * UI FOR LAB_FINALE SUPERALLOY FORGE.
+ */
+void iexamine::nanoforge( player &p, const tripoint &examp )
+{
+    if( !query_yn(
+            _( "Use the superalloy forge? Requires 1 sheet metal and 5 nanomaterial canisters." ) ) ) {
+        none( p, examp );
+        return;
+    }
+
+    bool table_exists = false;
+    tripoint spawn_point;
+    map &here = get_map();
+    for( const auto &valid_location : here.points_in_radius( examp, 1 ) ) {
+        if( here.ter( valid_location ) == ter_str_id( "t_nanoforge_body" ) ) {
+            spawn_point = valid_location;
+            table_exists = true;
+            break;
+        }
+    }
+    if( !table_exists ) {
+        return;
+    }
+
+    std::vector<std::string> recipe_ids;
+    recipe_ids.push_back( "alloy_sheet" );
+
+    if( recipe_ids.empty() ) {
+        return;
+    }
+
+    std::string chosen_recipe = recipe_ids.front();;
+
+    if( chosen_recipe.empty() ) {
+        return;
+    }
+
+    int item_count = 1;
+
+    detached_ptr<item> new_item = item::spawn( itype_id( chosen_recipe ), calendar::turn );
+
+    auto qty = 1;
+    auto reqs = *requirement_id( "superalloy_forge" ) * qty;
+
+    if( !reqs.can_make_with_inventory( p.crafting_inventory(), is_crafting_component ) ) {
+        popup( "%s", reqs.list_missing() );
+        return;
+    }
+
+    for( const auto &e : reqs.get_components() ) {
+        p.consume_items( e, 1, is_crafting_component );
+    }
+    for( const auto &e : reqs.get_tools() ) {
+        p.consume_tools( e );
+    }
+    p.invalidate_crafting_inventory();
 
     here.add_item_or_charges( spawn_point, std::move( new_item ) );
 }
@@ -1348,10 +1410,7 @@ void iexamine::deployed_furniture( player &p, const tripoint &pos )
     }
     p.add_msg_if_player( m_info, _( "You take down the %s." ),
                          here.furn( pos ).obj().name() );
-    const auto furn_item = here.furn( pos ).obj().deployed_item;
-    const auto item = here.add_item_or_charges( pos, item::spawn( furn_item, calendar::turn ) );
-    item->item_vars().merge( *here.furn_vars( pos ) );
-    here.furn_set( pos, f_null );
+    take_down_deployed_furniture( pos, pos );
 }
 
 static std::pair<itype_id, const deploy_tent_actor *> find_tent_itype( const furn_str_id &id )
@@ -1885,9 +1944,7 @@ void iexamine::transform( player &p, const tripoint &pos )
             case 2: {
                 add_msg( m_info, _( "You take down the %s." ),
                          g->m.furnname( pos ) );
-                const auto furn_item = g->m.furn( pos ).obj().deployed_item;
-                g->m.add_item_or_charges( pos, item::spawn( furn_item, calendar::turn ) );
-                g->m.furn_set( pos, f_null );
+                take_down_deployed_furniture( pos, pos );
                 return;
             }
             case 3: {
@@ -3271,9 +3328,7 @@ void iexamine::fireplace( player &p, const tripoint &examp )
             }
             p.add_msg_if_player( m_info, _( "You take down the %s." ),
                                  here.furnname( examp ) );
-            const auto furn_item = here.furn( examp ).obj().deployed_item;
-            here.add_item_or_charges( examp, item::spawn( furn_item, calendar::turn ) );
-            here.furn_set( examp, f_null );
+            take_down_deployed_furniture( examp, examp );
             return;
         }
         case 4: {
@@ -5643,9 +5698,7 @@ void iexamine::ledge( player &p, const tripoint &examp )
             map &here = get_map();
             p.add_msg_if_player( m_info, _( "You pull up the %s." ),
                                  here.furn( below_rope ).obj().name() );
-            const auto furn_item = here.furn( below_rope ).obj().deployed_item;
-            here.add_item_or_charges( p.pos(), item::spawn( furn_item, calendar::turn ) );
-            here.furn_set( below_rope, f_null );
+            take_down_deployed_furniture( below_rope, p.pos() );
             break;
         }
         case ledge_action::spin_web_bridge: {
@@ -8007,6 +8060,7 @@ iexamine_function iexamine_function_from_string( const std::string &function_nam
             { "deployed_furniture", &iexamine::deployed_furniture },
             { "cvdmachine", &iexamine::cvdmachine },
             { "nanofab", &iexamine::nanofab },
+            { "nanoforge", &iexamine::nanoforge },
             { "gaspump", &iexamine::gaspump },
             { "atm", &iexamine::atm },
             { "vending", &iexamine::vending },

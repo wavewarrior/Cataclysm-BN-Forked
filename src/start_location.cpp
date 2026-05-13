@@ -212,10 +212,8 @@ tripoint_abs_omt start_location::find_player_initial_location() const
     // creating overmaps as necessary.
     const int radius = 3;
     std::vector<point_abs_om> overmaps = closest_points_first( point_abs_om(), radius );
-    // Skip overmap (0,0), that's endgame
-    overmaps.erase( overmaps.begin() );
-    // Shuffle 8 first ones so that we don't always start at (1,0)
-    std::shuffle( overmaps.begin(), overmaps.begin() + 7, rng_get_engine() );
+    // Shuffle 8 first ones after (0,0) so that (0,0) retains priority, but if not so that we don't always start at (1,0)
+    std::shuffle( overmaps.begin() + 1, overmaps.begin() + 8, rng_get_engine() );
     for( const point_abs_om &omp : overmaps ) {
         overmap &omap = get_primary_overmapbuffer().get( omp );
         const tripoint_om_omt omtstart = omap.find_random_omt( random_target() );
@@ -277,7 +275,6 @@ void start_location::prepare_map( const tripoint_abs_omt &omtstart ) const
     // TODO: fix point types
     player_start.load( player_location.raw(), false );
     prepare_map( player_start );
-    player_start.save();
 }
 
 /** Helper for place_player
@@ -428,7 +425,6 @@ void start_location::burn( const tripoint_abs_omt &omtstart, const size_t count,
     for( size_t i = 0; i < std::min( count, valid.size() ); i++ ) {
         m.add_field( valid[i], fd_fire, 3 );
     }
-    m.save();
 }
 
 void start_location::add_map_extra( const tripoint_abs_omt &omtstart,
@@ -440,8 +436,6 @@ void start_location::add_map_extra( const tripoint_abs_omt &omtstart,
 
     // TODO: fix point types
     MapExtras::apply_function( map_extra, m, player_location );
-
-    m.save();
 }
 
 void start_location::handle_heli_crash( player &u ) const
@@ -487,7 +481,6 @@ static void add_monsters( const tripoint_abs_omt &omtstart, const mongroup_id &t
     // map::place_spawns internally multiplies density by rng(10, 50)
     const float density = expected_points / ( ( 10 + 50 ) / 2.0 );
     m.place_spawns( type, 1, point_zero, point( SEEX * 2 - 1, SEEY * 2 - 1 ), density );
-    m.save();
 }
 
 void start_location::surround_with_monsters(

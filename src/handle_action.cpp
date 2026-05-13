@@ -1398,7 +1398,7 @@ static void fire()
             return;
         }
 
-        if( vp.part_with_feature( "CONTROLS", true ) ) {
+        if( vp.part_with_feature( "CONTROLS", true ) && vp->vehicle().has_part( "TURRET" ) ) {
             if( vp->vehicle().turrets_aim_and_fire_mult( u, turret_filter_types::MANUAL, true ) ) {
                 return;
             }
@@ -2160,6 +2160,16 @@ bool game::handle_action()
                 }
                 break;
 
+            case ACTION_PICKUP_ALL:
+                if( u.has_active_mutation( trait_SHELL2 ) ) {
+                    add_msg( m_info, _( "You can't pick anything up while you're in your shell." ) );
+                } else if( u.is_mounted() ) {
+                    add_msg( m_info, _( "You can't pick anything up while you're riding." ) );
+                } else {
+                    pickup_all();
+                }
+                break;
+
             case ACTION_PICKUP_FEET:
                 if( u.has_active_mutation( trait_SHELL2 ) ) {
                     add_msg( m_info, _( "You can't pick anything up while you're in your shell." ) );
@@ -2302,6 +2312,10 @@ bool game::handle_action()
 
             case ACTION_UNLOAD:
                 avatar_action::unload( u );
+                break;
+
+            case ACTION_UNLOAD_ALL:
+                avatar_action::unload_all( u );
                 break;
 
             case ACTION_MEND:
