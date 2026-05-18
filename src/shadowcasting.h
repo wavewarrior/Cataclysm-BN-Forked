@@ -78,6 +78,11 @@ struct four_quadrants {
     }
 };
 
+inline light_color_rgb elementwise_max( const light_color_rgb &l, const light_color_rgb &r )
+{
+    return { std::max( l.r, r.r ), std::max( l.g, r.g ), std::max( l.b, r.b ) };
+}
+
 // ── exp_lookup ────────────────────────────────────────────────────────────────
 // Pre-computes { 1/exp( t * i ) : i in [0, size) } for a fixed transparency t.
 // castLightAll selects a matching table when the first tile's transparency equals

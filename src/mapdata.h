@@ -653,6 +653,10 @@ struct furn_t : map_data_common_t {
     /** Emissions of furniture */
     std::set<emit_id> emissions;
 
+    // Light emission properties (optional JSON fields)
+    int light_emitted = 0;
+    light_color_rgb light_color = {};
+
     int bonus_fire_warmth_feet = 300;
     itype_id deployed_item; // item id string used to create furniture
 

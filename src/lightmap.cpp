@@ -65,6 +65,22 @@ static constexpr float SOLAR_SHADOW_SCATTER = 0.09f;
 // shadowcasting template to write per-channel max-blended color energy.
 light_color_rgb g_current_source_color;
 
+// HSV → RGB conversion (H in degrees [0,360), S/V in [0,1])
+light_color_rgb light_color_rgb::from_hsv( float h, float s, float v )
+{
+    const float c = v * s;
+    const float x = c * ( 1.0f - std::fabs( std::fmod( h / 60.0f, 2.0f ) - 1.0f ) );
+    const float m = v - c;
+    float r = 0.f, g = 0.f, b = 0.f;
+    if( h < 60.0f )       { r = c; g = x; }
+    else if( h < 120.0f ) { r = x; g = c; }
+    else if( h < 180.0f ) { g = c; b = x; }
+    else if( h < 240.0f ) { g = x; b = c; }
+    else if( h < 300.0f ) { r = x; b = c; }
+    else                  { r = c; b = x; }
+    return { r + m, g + m, b + m };
+}
+
 // Dawn/dusk tint: cached per turn, returns the warm color for twilight
 // or an empty color outside twilight. Only depends on calendar::turn.
 static light_color_rgb cached_twilight_color()
@@ -603,7 +619,7 @@ void map::generate_lightmap( const int zlev )
     std::fill( lm.begin(), lm.end(), four_quadrants( 0.0f ) );
     std::fill( sm.begin(), sm.end(), 0.0f );
     std::fill( light_source_buffer.begin(), light_source_buffer.end(),
-              buffered_light_source{} );
+              level_cache::buffered_light_source{} );
     std::fill( map_cache.light_color_cache.begin(), map_cache.light_color_cache.end(),
               light_color_rgb{} );
     map_cache.has_colored_lights = false;
@@ -620,12 +636,12 @@ void map::generate_lightmap( const int zlev )
                                    ? LIGHT_AMBIENT_DIM * 0.8f : LIGHT_AMBIENT_LOW;
         auto &lcc = map_cache.light_color_cache;
         bool wrote_any = false;
-        for( int x = 0; x < cache_x; ++x ) {
-            for( int y = 0; y < cache_y; ++y ) {
-                const float sun = lm[x * cache_y + y].max() - inside_light;
+        for( int x = 0; x < map_cache.cache_x; ++x ) {
+            for( int y = 0; y < map_cache.cache_y; ++y ) {
+                const float sun = lm[x * map_cache.cache_y + y].max() - inside_light;
                 if( sun > 0.5f ) {
                     const light_color_rgb contrib = ddc * sun;
-                    auto &cc = lcc[x * cache_y + y];
+                    auto &cc = lcc[x * map_cache.cache_y + y];
                     cc.r = std::max( cc.r, contrib.r );
                     cc.g = std::max( cc.g, contrib.g );
                     cc.b = std::max( cc.b, contrib.b );
@@ -772,7 +788,7 @@ void map::generate_lightmap_worker( const int zlev )
                                 const float source_light =
                                     std::min( natural_light, lm[map_cache.idx( neighbour.x, neighbour.y )].max() );
                                 // Get the accumulated color from the neighbor tile.
-                                const light_color_rgb nb_color = cache.light_color_cache[
+                                const light_color_rgb nb_color = map_cache.light_color_cache[
                                     map_cache.idx( neighbour.x, neighbour.y ) ];
                                 if( light_transparency( p ) > LIGHT_TRANSPARENCY_SOLID ) {
                                     update_light_quadrants( lm[map_cache.idx( p.x, p.y )], source_light, quadrant::default_ );
@@ -966,30 +982,35 @@ void map::generate_lightmap_worker( const int zlev )
     if( map_cache.has_colored_lights ) {
         auto &lcc = map_cache.light_color_cache;
         std::vector<light_color_rgb> blur_buf( lcc.size(), light_color_rgb{} );
-        for( int x = 1; x < cache_x - 1; ++x ) {
-            for( int y = 1; y < cache_y - 1; ++y ) {
-                if( !lcc[x * cache_y + y].is_colored() ) {
+        for( int x = 1; x < map_cache.cache_x - 1; ++x ) {
+            for( int y = 1; y < map_cache.cache_y - 1; ++y ) {
+                if( !lcc[x * map_cache.cache_y + y].is_colored() ) {
                     continue;
                 }
                 light_color_rgb sum;
                 int count = 0;
                 for( int dx = -1; dx <= 1; ++dx ) {
                     for( int dy = -1; dy <= 1; ++dy ) {
-                        sum += lcc[( x + dx ) * cache_y + ( y + dy )];
+                        sum += lcc[( x + dx ) * map_cache.cache_y + ( y + dy )];
                         ++count;
                     }
                 }
-                blur_buf[x * cache_y + y] = sum * ( 1.0f / count );
+                blur_buf[x * map_cache.cache_y + y] = sum * ( 1.0f / count );
             }
         }
-        for( int x = 1; x < cache_x - 1; ++x ) {
-            for( int y = 1; y < cache_y - 1; ++y ) {
-                if( blur_buf[x * cache_y + y].is_colored() ) {
-                    lcc[x * cache_y + y] = blur_buf[x * cache_y + y];
+        for( int x = 1; x < map_cache.cache_x - 1; ++x ) {
+            for( int y = 1; y < map_cache.cache_y - 1; ++y ) {
+                if( blur_buf[x * map_cache.cache_y + y].is_colored() ) {
+                    lcc[x * map_cache.cache_y + y] = blur_buf[x * map_cache.cache_y + y];
                 }
             }
         }
     }
+}
+
+void map::add_light_source( const tripoint &p, float luminance )
+{
+    add_light_source( p, luminance, light_color_rgb{} );
 }
 
 void map::add_light_source( const tripoint &p, float luminance,
@@ -1902,6 +1923,11 @@ static const light_model k_light_model = {
     accumulate_transparency
 };
 
+void map::apply_light_source( const tripoint &p, float luminance )
+{
+    apply_light_source( p, luminance, light_color_rgb{} );
+}
+
 void map::apply_light_source( const tripoint &p, float luminance,
                               const light_color_rgb &color )
 {
@@ -2009,6 +2035,12 @@ void map::apply_directional_light( const tripoint &p, int direction, float lumin
                             k_light_model, mask, &weather_lookup_,
                             color.is_colored() ? &cache.light_color_cache[0] : nullptr );
     }
+}
+
+void map::apply_light_arc( const tripoint &p, units::angle angle, float luminance,
+                           units::angle wideangle )
+{
+    apply_light_arc( p, angle, luminance, wideangle, light_color_rgb{} );
 }
 
 void map::apply_light_arc( const tripoint &p, units::angle angle, float luminance,

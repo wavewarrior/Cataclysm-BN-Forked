@@ -10035,7 +10035,8 @@ void map::build_map_cache( const int zlev, bool skip_lightmap )
                 for( const int z : dirty_seen_cache_levels ) {
                     auto &c = get_cache( z );
                     std::fill( c.sm.begin(), c.sm.end(), 0.0f );
-                    std::fill( c.light_source_buffer.begin(), c.light_source_buffer.end(), 0.0f );
+                    std::fill( c.light_source_buffer.begin(), c.light_source_buffer.end(),
+                              level_cache::buffered_light_source{} );
                     std::fill( c.lm.begin(), c.lm.end(), four_quadrants( 0.0f ) );
                 }
                 // Build sunlight (all z-levels, top-to-bottom; serial).

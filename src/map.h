@@ -2221,13 +2221,19 @@ class map : public submap_load_listener
         int determine_wall_corner( const tripoint &p ) const;
         // apply a circular light pattern immediately, however it's best to use...
         void apply_light_source( const tripoint &p, float luminance );
+        void apply_light_source( const tripoint &p, float luminance, const light_color_rgb &color );
         // ...this, which will apply the light after at the end of generate_lightmap, and prevent redundant
         // light rays from causing massive slowdowns, if there's a huge amount of light.
         void add_light_source( const tripoint &p, float luminance );
+        void add_light_source( const tripoint &p, float luminance, const light_color_rgb &color );
         // Handle just cardinal directions and 45 deg angles.
         void apply_directional_light( const tripoint &p, int direction, float luminance );
+        void apply_directional_light( const tripoint &p, int direction, float luminance,
+                                      const light_color_rgb &color );
         void apply_light_arc( const tripoint &p, units::angle, float luminance,
                               units::angle wideangle = 30_degrees );
+        void apply_light_arc( const tripoint &p, units::angle angle, float luminance,
+                              units::angle wideangle, const light_color_rgb &color );
         void apply_light_ray( std::vector<bool> &lit,
                               const tripoint &s, const tripoint &e, float luminance,
                               light_color_rgb *color_cache = nullptr );

@@ -3586,9 +3586,9 @@ void cata_tiles::draw( point dest, const tripoint &center, int width, int height
                 const SDL_Rect draw_rect{ static_cast<int>( screen.x ),
                                           static_cast<int>( screen.y - p.height_3d ),
                                           tile_width, tile_height };
-                SetRenderDrawBlendMode( renderer.get(), SDL_BLENDMODE_BLEND );
-                geometry->rect( renderer.get(), draw_rect, tint );
-                SetRenderDrawBlendMode( renderer.get(), SDL_BLENDMODE_NONE );
+                SetRenderDrawBlendMode( renderer, SDL_BLENDMODE_BLEND );
+                geometry->rect( renderer, draw_rect, tint );
+                SetRenderDrawBlendMode( renderer, SDL_BLENDMODE_NONE );
             }
         }
     }
@@ -3603,7 +3603,7 @@ void cata_tiles::draw( point dest, const tripoint &center, int width, int height
                 if( !zlev_cache.has_colored_lights ) {
                     continue;
                 }
-                SetRenderDrawBlendMode( renderer.get(), SDL_BLENDMODE_BLEND );
+                SetRenderDrawBlendMode( renderer, SDL_BLENDMODE_BLEND );
                 for( const tile_render_info &p : draw_points ) {
                     if( p.pos.z != z ) {
                         continue;
@@ -3616,9 +3616,15 @@ void cata_tiles::draw( point dest, const tripoint &center, int width, int height
                     const SDL_Rect draw_rect{ static_cast<int>( screen.x ),
                                               static_cast<int>( screen.y - p.height_3d ),
                                               tile_width, tile_height };
-                    geometry->rect( renderer.get(), draw_rect, ddc );
+                    const SDL_Color ddc_color = {
+                        static_cast<Uint8>( std::min( 255.0f, ddc.r * 255.0f ) ),
+                        static_cast<Uint8>( std::min( 255.0f, ddc.g * 255.0f ) ),
+                        static_cast<Uint8>( std::min( 255.0f, ddc.b * 255.0f ) ),
+                        255
+                    };
+                    geometry->rect( renderer, draw_rect, ddc_color );
                 }
-                SetRenderDrawBlendMode( renderer.get(), SDL_BLENDMODE_NONE );
+                SetRenderDrawBlendMode( renderer, SDL_BLENDMODE_NONE );
             }
         }
     }
