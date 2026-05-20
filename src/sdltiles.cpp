@@ -64,6 +64,7 @@
 #include "sdl_utils.h"
 #include "sdl_font.h"
 #include "sdlsound.h"
+#include "lighting/render_state.h"
 #include "string_formatter.h"
 #include "uistate.h"
 #include "ui_manager.h"
@@ -342,10 +343,22 @@ static void WinCreate()
     } else {
         geometry = std::make_unique<DefaultGeometryRenderer>();
     }
+
+    // Phase 2i-A: spin up the SDL_GPU lighting stack on a hidden secondary
+    // window so the cutover commit (phase 2i-B) inherits a verified
+    // gpu_device / shadercross / DXC pipeline. Failure here is non-fatal —
+    // the game continues to render via the SDL_Renderer above; only the
+    // lighting rework is gated on it. Diagnostics land in the SDL log so a
+    // first-run on a Win11 / RTX 4090 box can confirm the D3D12 backend
+    // initialises cleanly before we depend on it.
+    lighting::try_init_render_state();
 }
 
 static void WinDestroy()
 {
+    // Tear the SDL_GPU lighting stack down before SDL_Quit. Idempotent;
+    // safe even if try_init_render_state() never succeeded.
+    lighting::shutdown_render_state();
 
     shutdown_sound();
     tilecontext.reset();
