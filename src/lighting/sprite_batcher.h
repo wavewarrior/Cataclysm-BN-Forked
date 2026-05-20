@@ -1,0 +1,138 @@
+#pragma once
+
+// SDL_GPU instance-batched sprite renderer — phase 2b of lighting rework.
+//
+// One batcher = one graphics pipeline + one persistent vertex buffer (a unit
+// quad) + a ring of per-frame transfer/storage buffers holding sprite
+// instances. Each draw call goes through SDL_DrawGPUPrimitives with an
+// instance count, so a single pipeline binds the unit quad once and issues
+// one draw per atlas-texture run.
+//
+// Phase 2 will instantiate two batchers:
+//   1. tile_batcher  — full tile sprites (terrain, furniture, vehicles, mobs,
+//                      effects, animated frames). Color-mod path emulates the
+//                      legacy SDL_SetTextureColorMod tint exactly so the
+//                      golden-image regression in sub-phase 2h passes.
+//   2. ui_batcher    — UI glyphs / framebuffer chars (font texture pages
+//                      produced by sdl_font.cpp's GPU text engine in 2f).
+//
+// Both share this class — different pipelines are achieved purely by
+// supplying a different `pipeline_desc` at init().
+//
+// This is the *header* for sub-phase 2b. Implementation lands in 2d; the
+// translation unit will reference no symbols until then so the build stays
+// green. The struct layouts below are wire-stable: changing them requires a
+// matching shader update in data/shaders/lighting/src/sprite.{vert,frag}.
+
+#include "gpu_device.h"
+
+#include <cstdint>
+#include <memory>
+
+namespace lighting
+{
+
+// One sprite = one instance. 32 bytes, packed std140-friendly.
+// Layout must match data/shaders/lighting/src/sprite.vert input bindings.
+//
+//   dst_*  — pixel-space destination quad in the bound render target.
+//   src_*  — normalised UV rect within the bound texture (0..1).
+//   tint_* — RGBA multiplier applied per-pixel (1.0 == passthrough).
+//            Legacy SDL_SetTextureColorMod/SetTextureAlphaMod fold into this.
+struct sprite_instance {
+    float dst_x;
+    float dst_y;
+    float dst_w;
+    float dst_h;
+    float src_u;
+    float src_v;
+    float src_uw;
+    float src_vh;
+    float tint_r;
+    float tint_g;
+    float tint_b;
+    float tint_a;
+};
+static_assert( sizeof( sprite_instance ) == 48,
+               "sprite_instance is wire-stable with the vertex shader; "
+               "changing its layout requires shader edits." );
+
+// Describes the graphics pipeline a batcher should build at init.
+// `color_target_format` must match the SDL_GPUTexture the batcher will
+// render into — usually the swapchain format for direct presentation, or an
+// offscreen RT format (RGBA8 / RGBA16F) for the deferred lighting passes.
+struct pipeline_desc {
+    SDL_GPUTextureFormat color_target_format = SDL_GPU_TEXTUREFORMAT_INVALID;
+    SDL_GPUBlendFactor   src_color_blend = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+    SDL_GPUBlendFactor   dst_color_blend = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    SDL_GPUBlendOp       color_blend_op  = SDL_GPU_BLENDOP_ADD;
+    SDL_GPUBlendFactor   src_alpha_blend = SDL_GPU_BLENDFACTOR_ONE;
+    SDL_GPUBlendFactor   dst_alpha_blend = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    SDL_GPUBlendOp       alpha_blend_op  = SDL_GPU_BLENDOP_ADD;
+    bool                 enable_blend    = true;
+};
+
+// PIMPL — keeps SDL_GPU storage-buffer / pipeline details out of the header
+// so the rest of the codebase compiles without the SDL_gpu.h surface.
+class sprite_batcher_impl;
+
+class sprite_batcher
+{
+    public:
+        sprite_batcher();
+        sprite_batcher( const sprite_batcher & ) = delete;
+        sprite_batcher &operator=( const sprite_batcher & ) = delete;
+        sprite_batcher( sprite_batcher && ) noexcept;
+        sprite_batcher &operator=( sprite_batcher && ) noexcept;
+        ~sprite_batcher();
+
+        // Build pipeline + persistent buffers. Throws on shader / pipeline
+        // creation failure — caller treats as fatal (same policy as
+        // gpu_device::init).
+        void init( gpu_device &dev, const pipeline_desc &desc,
+                   const char *debug_label = "sprite_batcher" );
+
+        void shutdown() noexcept;
+
+        // Open a render pass that targets `target`. The batcher records all
+        // subsequent draw() calls into `cb` until end_pass(). The target
+        // resolution drives the viewport / orthographic projection sent to
+        // the vertex shader as a push-constant.
+        //
+        //   clear_color present => LOAD_OP_CLEAR with that color
+        //   clear_color absent  => LOAD_OP_LOAD (preserve)
+        void begin_pass( SDL_GPUCommandBuffer *cb,
+                         SDL_GPUTexture *target,
+                         std::uint32_t target_w,
+                         std::uint32_t target_h,
+                         const float *clear_color_rgba = nullptr );
+
+        // Bind a different atlas page. Calling this with the currently bound
+        // page is a no-op; calling it with a different one flushes the
+        // pending batch implicitly before re-binding.
+        void set_texture( SDL_GPUTexture *atlas, SDL_GPUSampler *sampler );
+
+        // Append one sprite to the pending batch. Triggers an automatic
+        // flush when the per-frame instance budget is reached so callers can
+        // ignore buffer overflow.
+        void draw( const sprite_instance &inst );
+        void draw( const sprite_instance *insts, std::size_t count );
+
+        // Force-flush the pending instances as one SDL_DrawGPUPrimitives
+        // call. Normally implicit via set_texture() / end_pass(), exposed for
+        // call sites that want explicit grouping.
+        void flush();
+
+        // Close the render pass started by begin_pass().
+        void end_pass();
+
+        // Per-frame reset — called by the render orchestrator at the start
+        // of each frame to roll the instance-buffer ring forward. No GPU
+        // sync; the buffers are sized so the in-flight frames never alias.
+        void begin_frame();
+
+    private:
+        std::unique_ptr<sprite_batcher_impl> p;
+};
+
+} // namespace lighting
