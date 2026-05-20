@@ -5,24 +5,15 @@
 
 #define dbg(x) DebugLogFL((x),DC::SDL)
 
-// Phase 2i-B-2 bridge: every GeometryRenderer::rect that hits the hidden
-// SDL_Renderer also pushes a coloured sprite_instance into the deferred UI
-// queue maintained by lighting::render_state. refresh_display() drains the
-// queue through ui_batcher each frame, so UI rectangles re-appear on the
-// visible window without touching any caller. Sub-pixel rects (w or h ≤ 0)
-// are skipped — they'd otherwise upload zero-area instances and the
-// fragment shader would still allocate per-tile bin slots.
-static void mirror_rect_to_gpu( const SDL_FRect &r, const SDL_Color &c ) noexcept
+// Phase 2i-B-3 made this a no-op: the legacy display_buffer (which already
+// contains every GeometryRenderer rect drawn into it) is read back and
+// blitted full-screen onto the GPU swapchain each frame. Pushing the same
+// rect through ui_batcher on top would double-blend translucent overlays.
+// Once 2i-B-7 removes the legacy renderer entirely the queue path takes
+// over again and this helper rewires to lighting::render_state::queue_ui_rect.
+static void mirror_rect_to_gpu( const SDL_FRect & /*r*/, const SDL_Color & /*c*/ ) noexcept
 {
-    if( r.w <= 0.0f || r.h <= 0.0f ) {
-        return;
-    }
-    lighting::get_render_state().queue_ui_rect(
-        r.x, r.y, r.w, r.h,
-        static_cast<float>( c.r ) / 255.0f,
-        static_cast<float>( c.g ) / 255.0f,
-        static_cast<float>( c.b ) / 255.0f,
-        static_cast<float>( c.a ) / 255.0f );
+    // intentionally empty — see comment above.
 }
 
 void GeometryRenderer::horizontal_line( const SDL_Renderer_Ptr &renderer, point pos, int x2,
