@@ -12,20 +12,9 @@ namespace lighting
 
 namespace
 {
-// The hidden window the GPU device claims during phase 2i-A. Owned here so
-// the WinDestroy path doesn't have to reach into render_state's internals
-// to clean it up; the destructor below tears it down after the device has
-// released its claim.
-struct hidden_window_holder {
-    SDL_Window *win = nullptr;
-    ~hidden_window_holder() {
-        if( win ) {
-            SDL_DestroyWindow( win );
-            win = nullptr;
-        }
-    }
-};
-hidden_window_holder secondary;
+// Atomic gate so try_init / shutdown are safe to call more than once.
+// Phase 2i-A's hidden-window holder is gone — the GPU device now claims
+// the *visible* window that the caller hands us.
 std::atomic<bool> initialised{ false };
 
 } // namespace
@@ -70,37 +59,24 @@ render_state &get_render_state()
     return instance;
 }
 
-bool try_init_render_state()
+bool init_render_state_on( SDL_Window *visible_window )
 {
     bool expected = false;
     if( !initialised.compare_exchange_strong( expected, true ) ) {
         return true; // already initialised
     }
-
-    // Hidden secondary window — SDL_GPU exclusive-claims a window, so we
-    // can't share the one SDL_CreateRenderer already owns. 1x1 is the
-    // smallest SDL3 allows; the actual size doesn't matter because we
-    // never present to it during phase 2i-A.
-    secondary.win = SDL_CreateWindow( "cataclysm_gpu_warmup", 1, 1,
-                                      SDL_WINDOW_HIDDEN );
-    if( !secondary.win ) {
-        dbg( DL::Warn ) << "lighting: hidden window create failed: " << SDL_GetError()
-                        << " — phase 2i-A warmup skipped.";
+    if( !visible_window ) {
         initialised.store( false );
+        dbg( DL::Warn ) << "lighting: init_render_state_on(nullptr)";
         return false;
     }
 
     try {
-        get_render_state().init( secondary.win );
-        dbg( DL::Info ) << "lighting: render_state up (phase 2i-A warmup).";
+        get_render_state().init( visible_window );
+        dbg( DL::Info ) << "lighting: render_state up on visible window.";
         return true;
     } catch( const std::exception &e ) {
-        dbg( DL::Warn ) << "lighting: render_state init failed: " << e.what()
-                        << " — phase 2i-A warmup skipped. Legacy SDL_Renderer "
-                        << "path unaffected; lighting rework cutover (phase 2i-B) "
-                        << "will need this to succeed first.";
-        SDL_DestroyWindow( secondary.win );
-        secondary.win = nullptr;
+        dbg( DL::Warn ) << "lighting: render_state init failed: " << e.what();
         initialised.store( false );
         return false;
     }
@@ -113,10 +89,6 @@ void shutdown_render_state() noexcept
         return;
     }
     get_render_state().shutdown();
-    if( secondary.win ) {
-        SDL_DestroyWindow( secondary.win );
-        secondary.win = nullptr;
-    }
 }
 
 } // namespace lighting

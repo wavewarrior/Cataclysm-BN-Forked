@@ -104,6 +104,14 @@ static Font_Ptr map_font;
 static Font_Ptr overmap_font;
 
 static SDL_Window_Ptr window;
+// Phase 2i-B-1: SDL_Renderer no longer claims the visible window — that
+// belongs to the SDL_GPU device now (lighting::render_state). The legacy
+// renderer keeps running on a hidden mirror window so every call site that
+// still talks SDL_Renderer (cata_tiles draw_sprite_at, sdl_font glyph
+// cache, pixel_minimap, vehicle_preview …) compiles and executes
+// unchanged; its output is just invisible. Subsequent 2i-B-N commits port
+// those call sites to the GPU stack and drop the hidden window.
+static SDL_Window_Ptr legacy_window;
 static SDL_Renderer_Ptr renderer;
 static SDL_PixelFormat format = SDL_PIXELFORMAT_UNKNOWN;
 static SDL_Texture_Ptr display_buffer;
@@ -229,6 +237,13 @@ static void WinCreate()
                            SDL_WINDOWPOS_CENTERED_DISPLAY( display ) );
     SDL_StartTextInput( ::window.get() );
 
+    // Hidden mirror window for the legacy SDL_Renderer. Same dimensions as
+    // the visible one so display_buffer textures match the pixel grid that
+    // the GPU bridge in refresh_display() will eventually sample.
+    ::legacy_window.reset( SDL_CreateWindow( "cataclysm_legacy", WindowWidth, WindowHeight,
+                          SDL_WINDOW_HIDDEN ) );
+    throwErrorIf( !::legacy_window, "SDL_CreateWindow (legacy mirror) failed" );
+
     // On Android SDL seems janky in windowed mode so we're fullscreen all the time.
     // Fullscreen mode is now modified so it obeys terminal width/height, rather than
     // overwriting it with this calculation.
@@ -275,7 +290,7 @@ static void WinCreate()
         dbg( DL::Info ) << "Attempting to initialize accelerated SDL renderer.";
 
         const char *renderer_driver = renderer_id >= 0 ? SDL_GetRenderDriver( renderer_id ) : nullptr;
-        renderer.reset( SDL_CreateRenderer( ::window.get(), renderer_driver ) );
+        renderer.reset( SDL_CreateRenderer( ::legacy_window.get(), renderer_driver ) );
         if( printErrorIf( !renderer,
                           "Failed to initialize accelerated renderer, falling back to software rendering" ) ) {
             software_renderer = true;
@@ -294,7 +309,7 @@ static void WinCreate()
     }
 
     if( software_renderer ) {
-        renderer.reset( SDL_CreateRenderer( ::window.get(), "software" ) );
+        renderer.reset( SDL_CreateRenderer( ::legacy_window.get(), "software" ) );
         throwErrorIf( !renderer, "Failed to initialize software renderer" );
         throwErrorIf( !SetupRenderTarget(),
                       "Failed to initialize display buffer under software rendering, unable to continue." );
@@ -344,14 +359,16 @@ static void WinCreate()
         geometry = std::make_unique<DefaultGeometryRenderer>();
     }
 
-    // Phase 2i-A: spin up the SDL_GPU lighting stack on a hidden secondary
-    // window so the cutover commit (phase 2i-B) inherits a verified
-    // gpu_device / shadercross / DXC pipeline. Failure here is non-fatal —
-    // the game continues to render via the SDL_Renderer above; only the
-    // lighting rework is gated on it. Diagnostics land in the SDL log so a
-    // first-run on a Win11 / RTX 4090 box can confirm the D3D12 backend
-    // initialises cleanly before we depend on it.
-    lighting::try_init_render_state();
+    // Phase 2i-B-1: claim the *visible* window for the SDL_GPU device.
+    // The legacy SDL_Renderer above now lives on the hidden mirror window
+    // and its output is invisible until subsequent commits bridge or
+    // replace each draw call site. From this point on, only the GPU
+    // present in refresh_display() actually reaches the user's screen.
+    //
+    // If init fails the visible window remains blank for the session —
+    // the legacy path keeps running invisibly. The SDL log carries the
+    // exact failure mode.
+    lighting::init_render_state_on( ::window.get() );
 }
 
 static void WinDestroy()
@@ -372,6 +389,7 @@ static void WinDestroy()
     format = SDL_PIXELFORMAT_UNKNOWN;
     display_buffer.reset();
     renderer.reset();
+    ::legacy_window.reset();
     ::window.reset();
 }
 
@@ -390,13 +408,37 @@ void refresh_display()
         return;
     }
 
-    // Select default target (the window), copy rendered buffer
-    // there, present it, select the buffer as target again.
-    SetRenderTarget( renderer, nullptr );
-    ClearScreen();
-    RenderCopy( renderer, display_buffer, nullptr, nullptr );
-    SDL_RenderPresent( renderer.get() );
-    SetRenderTarget( renderer, display_buffer );
+    // Phase 2i-B-1: present from the SDL_GPU device on the visible window.
+    // The legacy `renderer` keeps composing the game's frame onto
+    // `display_buffer` against the hidden mirror window — those pixels are
+    // not yet bridged onto the visible window, so the screen stays at the
+    // GPU clear colour (black) until 2i-B-2 introduces a bridge or 2i-B-3+
+    // start emitting draws through the sprite_batcher.
+    //
+    // The "set the renderer target back to display_buffer" handshake the
+    // legacy refresh_display did is no longer relevant — the renderer's
+    // window is never presented to anything visible, and other call sites
+    // (set_displaybuffer_rendertarget) still flip the target on their own.
+    auto &rs = lighting::get_render_state();
+    if( !rs.ready() ) {
+        return;
+    }
+    lighting::frame_context ctx = rs.device().begin_frame();
+    if( !ctx.valid() ) {
+        return;
+    }
+    if( !ctx.swapchain_tex ) {
+        // Minimised — nothing to present, but we still must submit the cb.
+        rs.device().submit_frame( ctx );
+        return;
+    }
+
+    constexpr float clear_black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    rs.tile_batcher().begin_pass( ctx.cmd_buffer, ctx.swapchain_tex,
+                                  ctx.swapchain_w, ctx.swapchain_h,
+                                  clear_black );
+    rs.tile_batcher().end_pass();
+    rs.device().submit_frame( ctx );
 }
 
 // only update if the set interval has elapsed

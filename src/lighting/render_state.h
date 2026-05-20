@@ -58,14 +58,15 @@ class render_state
 // in shutdown(); calling either more than once is a no-op.
 render_state &get_render_state();
 
-// One-shot init that creates the secondary hidden window, claims it for
-// the GPU device, and brings the rest of the stack up. Returns true on
-// success and logs a single-line summary to the SDL debug channel; logs +
-// returns false on any failure (the rest of the game continues to render
-// via SDL_Renderer normally).
-bool try_init_render_state();
+// Bring up the GPU stack against `visible_window`. The window must outlive
+// the render_state. Returns true on success; on failure, logs a Warn and
+// returns false (the caller is expected to fall back to whatever legacy
+// path it still has). Idempotent: calling more than once with a live state
+// is a no-op.
+bool init_render_state_on( SDL_Window *visible_window );
 
-// Idempotent. Safe to call from atexit / WinDestroy.
+// Idempotent. Safe to call from atexit / WinDestroy regardless of init
+// outcome.
 void shutdown_render_state() noexcept;
 
 } // namespace lighting
