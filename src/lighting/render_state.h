@@ -20,6 +20,8 @@
 #include "gpu_atlas.h"
 #include "gpu_geometry.h"
 
+#include <vector>
+
 namespace lighting
 {
 
@@ -45,6 +47,17 @@ class render_state
         gpu_atlas      &atlas()         noexcept { return atlas_; }
         gpu_geometry   &geometry()      noexcept { return geometry_; }
 
+        // Phase 2i-B-2 deferred-UI queue. Legacy GeometryRenderer calls
+        // (sdl_geometry.cpp) push pre-baked sprite_instances here; the
+        // sdltiles refresh_display() drains them through ui_batcher each
+        // frame so existing call sites need no source edits.
+        void queue_ui_rect( float x, float y, float w, float h,
+                            float r, float g, float b, float a );
+        bool ui_rects_empty() const noexcept { return ui_rect_queue_.empty(); }
+        // Drains `ui_rect_queue_` into `dst` (assumes the caller has an
+        // active pass + white-tex segment open). Clears the queue.
+        void flush_ui_rects( sprite_batcher &dst );
+
     private:
         gpu_device     device_;
         sprite_batcher tile_batcher_;
@@ -52,6 +65,8 @@ class render_state
         font_engine    fonts_;
         gpu_atlas      atlas_{ 2048, 2048, 32, 32 };
         gpu_geometry   geometry_;
+
+        std::vector<sprite_instance> ui_rect_queue_;
 };
 
 // Process-wide accessor. The object is constructed in init() and torn down

@@ -1,8 +1,29 @@
 #include "sdl_geometry.h"
 #include "sdl_utils.h"
 #include "debug.h"
+#include "lighting/render_state.h"
 
 #define dbg(x) DebugLogFL((x),DC::SDL)
+
+// Phase 2i-B-2 bridge: every GeometryRenderer::rect that hits the hidden
+// SDL_Renderer also pushes a coloured sprite_instance into the deferred UI
+// queue maintained by lighting::render_state. refresh_display() drains the
+// queue through ui_batcher each frame, so UI rectangles re-appear on the
+// visible window without touching any caller. Sub-pixel rects (w or h ≤ 0)
+// are skipped — they'd otherwise upload zero-area instances and the
+// fragment shader would still allocate per-tile bin slots.
+static void mirror_rect_to_gpu( const SDL_FRect &r, const SDL_Color &c ) noexcept
+{
+    if( r.w <= 0.0f || r.h <= 0.0f ) {
+        return;
+    }
+    lighting::get_render_state().queue_ui_rect(
+        r.x, r.y, r.w, r.h,
+        static_cast<float>( c.r ) / 255.0f,
+        static_cast<float>( c.g ) / 255.0f,
+        static_cast<float>( c.b ) / 255.0f,
+        static_cast<float>( c.a ) / 255.0f );
+}
 
 void GeometryRenderer::horizontal_line( const SDL_Renderer_Ptr &renderer, point pos, int x2,
                                         int thickness, const SDL_Color &color ) const
@@ -34,6 +55,7 @@ void DefaultGeometryRenderer::rect( const SDL_Renderer_Ptr &renderer, const SDL_
 {
     SetRenderDrawColor( renderer, color.r, color.g, color.b, color.a );
     RenderFillRect( renderer, &rect );
+    mirror_rect_to_gpu( rect, color );
 }
 
 ColorModulatedGeometryRenderer::ColorModulatedGeometryRenderer( const SDL_Renderer_Ptr &renderer )
@@ -65,6 +87,7 @@ void ColorModulatedGeometryRenderer::rect( const SDL_Renderer_Ptr &renderer, con
     if( tex ) {
         SetTextureColorMod( tex, color.r, color.g, color.b );
         RenderCopy( renderer, tex, nullptr, &rect );
+        mirror_rect_to_gpu( rect, color );
     } else {
         DefaultGeometryRenderer::rect( renderer, rect, color );
     }

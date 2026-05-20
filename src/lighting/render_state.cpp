@@ -53,6 +53,37 @@ void render_state::shutdown() noexcept
     device_.shutdown();
 }
 
+void render_state::queue_ui_rect( float x, float y, float w, float h,
+                                  float r, float g, float b, float a )
+{
+    if( !device_.ready() ) {
+        return;
+    }
+    sprite_instance s{};
+    s.dst_x = x;
+    s.dst_y = y;
+    s.dst_w = w;
+    s.dst_h = h;
+    s.src_u = 0.5f;
+    s.src_v = 0.5f;
+    s.src_uw = 0.0f;
+    s.src_vh = 0.0f;
+    s.tint_r = r;
+    s.tint_g = g;
+    s.tint_b = b;
+    s.tint_a = a;
+    ui_rect_queue_.push_back( s );
+}
+
+void render_state::flush_ui_rects( sprite_batcher &dst )
+{
+    if( ui_rect_queue_.empty() ) {
+        return;
+    }
+    dst.draw( ui_rect_queue_.data(), ui_rect_queue_.size() );
+    ui_rect_queue_.clear();
+}
+
 render_state &get_render_state()
 {
     static render_state instance;

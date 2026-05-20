@@ -423,6 +423,12 @@ void refresh_display()
     if( !rs.ready() ) {
         return;
     }
+    // Roll per-frame ring buffers forward on every batcher / engine so the
+    // upload regions for the in-flight frame don't alias the previous one.
+    rs.tile_batcher().begin_frame();
+    rs.ui_batcher().begin_frame();
+    rs.fonts().begin_frame();
+
     lighting::frame_context ctx = rs.device().begin_frame();
     if( !ctx.valid() ) {
         return;
@@ -433,11 +439,26 @@ void refresh_display()
         return;
     }
 
+    // Pass 1: tiles. Clears the swapchain to opaque black. Once
+    // sub-phase 2i-B-3 ports cata_tiles draw_sprite_at this pass picks up
+    // the tile draws; for now it just defines the canvas.
     constexpr float clear_black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
     rs.tile_batcher().begin_pass( ctx.cmd_buffer, ctx.swapchain_tex,
                                   ctx.swapchain_w, ctx.swapchain_h,
                                   clear_black );
     rs.tile_batcher().end_pass();
+
+    // Pass 2: UI rectangles + lines (sdl_geometry mirror). LOAD_OP_LOAD so
+    // tile output below stays intact when sub-phase 2i-B-3 fills it in.
+    if( !rs.ui_rects_empty() ) {
+        rs.ui_batcher().begin_pass( ctx.cmd_buffer, ctx.swapchain_tex,
+                                    ctx.swapchain_w, ctx.swapchain_h,
+                                    nullptr );
+        rs.ui_batcher().set_texture( rs.geometry().white_texture(), nullptr );
+        rs.flush_ui_rects( rs.ui_batcher() );
+        rs.ui_batcher().end_pass();
+    }
+
     rs.device().submit_frame( ctx );
 }
 
