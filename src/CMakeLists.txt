@@ -157,6 +157,25 @@ else()
     )
 endif ()
 
+# SDL_shadercross: always shared. Phase 2c of the lighting rework uses it to
+# translate HLSL → backend-native shader bytecode at runtime (Metal/Mac,
+# DXIL/Win11, SPIR-V/Linux).
+target_link_libraries(cataclysm-bn-tiles-common PUBLIC SDL3_shadercross::SDL3_shadercross)
+
+# Ship the runtime DLLs next to the executable so a fresh-checkout dev build
+# on Windows 11 (NVIDIA RTX 4090 target) and a macOS dev build both have the
+# shadercross dylib + DXC sidecars resolvable at launch. RUNTIME_DEPENDENCY
+# lets CMake follow shadercross's PE/dylib import table to harvest
+# dxcompiler.dll / dxil.dll on Windows and libdxcompiler.dylib on macOS.
+if (DYNAMIC_LINKING OR WIN32 OR APPLE)
+    add_custom_command(TARGET cataclysm-bn-tiles POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_RUNTIME_DLLS:cataclysm-bn-tiles>
+                $<TARGET_FILE_DIR:cataclysm-bn-tiles>
+        COMMAND_EXPAND_LISTS
+        VERBATIM)
+endif ()
+
 if (SOUND)
     if (NOT DYNAMIC_LINKING)
         target_link_libraries(cataclysm-bn-tiles-common PUBLIC

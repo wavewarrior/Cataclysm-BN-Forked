@@ -461,6 +461,55 @@ if (SOUND)
     endif ()
 endif ()
 
+# --- SDL_shadercross ---
+# Runtime HLSL → SPIR-V / DXIL / MSL translation for the SDL_GPU lighting
+# pipeline (phase 2c of the lighting rework). VENDORED brings in DXC and
+# SPIRV-Cross as sub-projects so we don't need a system Vulkan SDK or a
+# separately installed dxcompiler.dll. We always build the shared variant —
+# the resulting runtime library + DXC dependencies (dxcompiler.dll / dxil.dll
+# on Win11, libSDL3_shadercross.dylib on macOS, libSDL3_shadercross.so on
+# Linux) are copied next to the executable below.
+#
+# Target platforms verified:
+#   * macOS arm64 (M-series) — Metal backend, HLSL → MSL via shadercross.
+#   * Windows 11 + NVIDIA RTX 4090 — D3D12 backend, HLSL → DXIL via DXC.
+#                                    Also Vulkan backend, HLSL → SPIR-V.
+#   * Linux — Vulkan backend, HLSL → SPIR-V.
+message(STATUS "Searching for SDL3_shadercross library --")
+if (NOT TARGET SDL3_shadercross::SDL3_shadercross)
+    if (NOT BUILD_SDL3)
+        set(CMAKE_FIND_PACKAGE_PREFER_CONFIG ON)
+        find_package(SDL3_shadercross CONFIG QUIET)
+        set(CMAKE_FIND_PACKAGE_PREFER_CONFIG OFF)
+    endif ()
+    if (NOT TARGET SDL3_shadercross::SDL3_shadercross)
+        message("Installing SDL3_shadercross from Source")
+        # Pin to a known-good main SHA (libsdl-org/SDL_shadercross has no
+        # tagged release as of 2026-05-20). Bump deliberately.
+        set(SDLSHADERCROSS_DXC          ON  CACHE BOOL "" FORCE)
+        set(SDLSHADERCROSS_VENDORED     ON  CACHE BOOL "" FORCE)
+        set(SDLSHADERCROSS_SHARED       ON  CACHE BOOL "" FORCE)
+        set(SDLSHADERCROSS_STATIC       OFF CACHE BOOL "" FORCE)
+        set(SDLSHADERCROSS_CLI          OFF CACHE BOOL "" FORCE)
+        set(SDLSHADERCROSS_INSTALL      OFF CACHE BOOL "" FORCE)
+        FetchContent_Declare(
+            SDL3_SHADERCROSS
+            GIT_REPOSITORY https://github.com/libsdl-org/SDL_shadercross.git
+            GIT_TAG        6b06e55c7c5d7e7a09a8a14f76e866dcfad5ab99
+            EXCLUDE_FROM_ALL
+        )
+        FetchContent_MakeAvailable(SDL3_SHADERCROSS)
+    else ()
+        message("Using system SDL3_shadercross")
+    endif ()
+endif ()
+if (NOT TARGET SDL3_shadercross::SDL3_shadercross)
+    message(FATAL_ERROR
+            "This project requires SDL3_shadercross. \
+             FetchContent failed and no system package was found. \
+             See doc/COMPILING/COMPILING-CMAKE.md.")
+endif ()
+
 if (BACKTRACE)
     add_definitions(-DBACKTRACE)
     if (LIBBACKTRACE AND NOT MSVC)

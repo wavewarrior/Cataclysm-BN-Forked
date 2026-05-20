@@ -21,7 +21,21 @@ Deferred from phase 1: `.github/workflows/*` still reference `TILES` env var (do
 - **SDL3 = 3.4.8** (CMake FetchContent: `release-3.4.8.tar.gz`). `SDL_gpu.h` available — SDL_GPU API landed in 3.2.0.
 - **SDL3_ttf = 3.2.2** — exposes `TTF_CreateGPUTextEngine` + `TTF_GetGPUTextDrawData`. Glyph upload to `SDL_GPUTexture` is first-class; no need to keep an `SDL_Renderer` alive for text.
 - **SDL3_image = 3.4.4**, **SDL3_mixer = 3.2.0**.
-- **SDL_shadercross — NOT integrated.** Plan deviates from earlier note: ship **pre-compiled bytecode embedded as C arrays** (`xxd -i` style). Compile pipeline = HLSL/GLSL source → offline `shadercross` invocation (dev machine, not CI/build) → emit SPIR-V/DXIL/MSL byte blobs → include header. Eliminates build-time shadercross dependency. Source shaders live in `data/shaders/lighting/src/`; emitted blobs in `data/shaders/lighting/embed/`.
+- **SDL_shadercross — strategy B: runtime translation.** Pin
+  `libsdl-org/SDL_shadercross @ 6b06e55c` (no tagged release yet) via
+  `FetchContent` with `SDLSHADERCROSS_VENDORED=ON` so DXC and SPIRV-Cross are
+  built in-tree — no system Vulkan SDK needed. Ship HLSL sources under
+  `data/shaders/lighting/src/`; translate on first use through
+  `lighting::compile_graphics_shader` (`src/lighting/shader_compiler.*`).
+  Backend coverage:
+    * macOS / Metal — HLSL → SPIR-V → MSL.
+    * Windows 11 / D3D12 — HLSL → SPIR-V → DXIL via DXC. **Primary play
+      target: RTX 4090.** Vulkan path remains available.
+    * Linux / Vulkan — HLSL → SPIR-V.
+  Runtime DLL/dylib (`SDL3_shadercross-shared` + `dxcompiler*`) auto-copied
+  next to the game executable by a `POST_BUILD` step that follows
+  `$<TARGET_RUNTIME_DLLS:...>` so a fresh Windows checkout requires no manual
+  Vulkan SDK install.
 - Hard-cutover "build will not compile until phase 2 done" → revised: phase 2 runs as **a single long branch (~10 commits)** with build green at every commit. New GPU code lands inert (no call-sites) until sub-phase 2i flips the switch and removes `SDL_Renderer`.
 
 ### Phase 2 sub-decomposition
@@ -32,7 +46,7 @@ Each row = one commit on `feat/lighting-phase2-sdl_gpu`. Build green at every st
 |---|---|---|---|
 | 2a | GPU device + window claim + swapchain (`gpu_device.{h,cpp}`) | new | no |
 | 2b | Sprite batcher header + draw-cmd POD (`sprite_batcher.h`) | new | no |
-| 2c | Shader source tree + offline `tools/compile_shaders.{py,sh}` + embedded byte blobs | new | no |
+| 2c | SDL_shadercross FetchContent + `shader_compiler.{h,cpp}` + HLSL sources | new | no |
 | 2d | Sprite batcher impl + per-pipeline graphics pipelines | new | no |
 | 2e | `dynamic_atlas` → `SDL_GPUTexture` backing (parallel path; old kept) | mod | no |
 | 2f | Font path → `TTF_CreateGPUTextEngine` (parallel) | mod | no |
