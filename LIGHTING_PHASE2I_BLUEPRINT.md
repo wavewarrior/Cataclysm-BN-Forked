@@ -175,3 +175,28 @@ Reference scene for end-of-2i visual check: load `tests/save/test_save` (or what
 ## When to bail and ask for a Win11 verification
 
 Stop after each numbered commit and have the user run the game on Win11. The blind work is cheap to undo *between* commits (`git reset --hard HEAD~1`) but very expensive *after* commit 2i-B-7 when the legacy wrappers are gone. The point of the seven-commit split is exactly that bail-out granularity.
+
+---
+
+## What actually landed on `feat/lighting-phase2i-b-cutover`
+
+Branched off `feat/lighting-phase2i-cutover`. Three commits in.
+
+| Commit | Sub | What |
+|---|---|---|
+| `…` | 2i-B-1 | Visible window claimed by SDL_GPU. Legacy SDL_Renderer + display_buffer + geometry kept alive on a hidden mirror window so every legacy call site (cata_tiles draw_sprite_at, sdl_font, pixel_minimap, vehicle_preview, loading_ui, ui_manager, …) compiles and executes unchanged — output invisible. refresh_display() does GPU clear-to-black + present. |
+| `…` | 2i-B-2 | sdl_geometry → mirror_rect_to_gpu side-effect queues rects in render_state. refresh_display() drains through ui_batcher each frame on top of the (still black) tile pass. *(Superseded by the bridge in 2i-B-3 — the queue is dormant now.)* |
+| `…` | 2i-B-3 | **The bridge.** Each frame: SDL_RenderReadPixels off legacy display_buffer → upload to GPU `bridge_tex` (B8G8R8A8_UNORM) → draw full-screen sprite over the swapchain. Every legacy draw path is visible at once; the visible window matches the pre-phase-2 output. |
+
+After 2i-B-3 the game should look on Win11 indistinguishable from the pre-phase-2 build. The SDL log gains a `lighting: render_state up on visible window.` line and a `SDL_GPU device created. driver=…` line right after the renderer init line. That's the verification target.
+
+## Where 2i-B-4..7 would go next (deferred — need running game)
+
+The bridge has one operational cost worth optimising: SDL_RenderReadPixels is a CPU readback every frame (~2-8 ms at 1080p depending on backend). Removing it requires emitting GPU draws directly from each subsystem:
+
+- **2i-B-4 fonts.** Replace the sdl_font glyph→SDL_Texture cache with `TTF_CreateText(engine, font, str)` cache. Each refresh_display() lays the text down through `font_engine::draw_text` instead of via legacy renderer + display_buffer. **Cost of doing this blind:** font_loader hooks live across sdl_font.cpp + sdl_font.h + font_loader.cpp + four different OutputChar paths (BitmapFont, OutlinedTriangleFont, fallback). Easy to break sub-pixel offsets / kerning without a running game to A/B against.
+- **2i-B-5 pixel_minimap.** Self-contained subsystem with its own render-target chain. Mechanical: swap its `SDL_CreateTexture` cache for a `lighting::gpu_atlas` allocation, swap RenderCopy for `sprite_batcher::draw`. Easy to verify visually once it's drawing.
+- **2i-B-6 cata_tiles sprites + dynamic_atlas.** The biggest: `draw_sprite_at` is the hot path for terrain / items / mobs. Requires the parallel `gpu_atlas` to mirror the legacy `dynamic_atlas` content so the per-tile call site can push a `sprite_instance` referencing the mirrored slot. Likely lands as 2-3 sub-commits (atlas mirror, draw_sprite_at port, retire dynamic_atlas).
+- **2i-B-7 wrapper cleanup.** Once nothing reads display_buffer, refresh_display drops the readback. legacy_window + renderer + display_buffer + geometry come out. sdl_wrappers.h sheds SDL_Renderer_Ptr / SDL_Texture_Ptr / SDL_Texture_SharedPtr and the renderer-using helpers in sdl_wrappers.cpp. dynamic_atlas.{h,cpp} file pair deleted.
+
+Each step *can* be done in isolation now because the bridge keeps anything not-yet-ported visible. Order is suggested-but-not-load-bearing: do them in whichever order matches how easily you can A/B-compare a Win11 screenshot against the pre-phase-2 build.
