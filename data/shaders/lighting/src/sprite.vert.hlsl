@@ -36,7 +36,8 @@ StructuredBuffer<SpriteInstance> Instances : register( t0, space0 );
 
 cbuffer FrameParams : register( b0, space1 ) {
     float2 target_size; // (width, height) in pixels
-    float2 pad;
+    uint   instance_base; // start offset into Instances for this draw segment
+    uint   pad;
 };
 
 struct VS_OUT {
@@ -59,7 +60,11 @@ static const float2 quad_uv[6] = {
 
 VS_OUT main( uint vid : SV_VertexID, uint iid : SV_InstanceID )
 {
-    const SpriteInstance s = Instances[iid];
+    // SV_InstanceID behaviour varies across backends after first_instance
+    // (D3D12 starts from 0; Vulkan starts from base). Add the explicit base
+    // from the uniform so the indexing is portable across all SDL_GPU
+    // backends.
+    const SpriteInstance s = Instances[iid + instance_base];
     const float2 corner = quad_uv[vid];
 
     // Pixel-space position on the target.
