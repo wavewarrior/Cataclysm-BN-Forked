@@ -110,6 +110,10 @@ add_library(
         ${CATACLYSM_BN_SOURCES}
         ${CATACLYSM_BN_HEADERS})
 target_include_directories(cataclysm-bn-tiles-common INTERFACE ${CMAKE_SOURCE_DIR}/src)
+# PRIVATE entry so sources nested under src/<subdir>/ (e.g. src/lighting/) can
+# `#include "foo.h"` to reach top-level src/ headers. Without this only sources
+# directly in src/ resolve those includes via the current-file-directory rule.
+target_include_directories(cataclysm-bn-tiles-common PRIVATE ${CMAKE_SOURCE_DIR}/src)
 
 if (WIN32)
     add_definitions(-DUSE_WINMAIN)

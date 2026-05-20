@@ -11,10 +11,40 @@ Current lighting: per-turn CPU shadowcasting (`src/lightmap.cpp`, `src/shadowcas
 | Phase | State | Notes |
 |---|---|---|
 | 1. Curses + Android removal | ✅ done | commit `e96086b658` on `feat/lighting-phase1-curses-android-removal`. 169 files, -13042 lines. |
-| 2. SDL_GPU device + sprite batcher | ⏳ next | hard cutover — build will not compile until done |
+| 2. SDL_GPU device + sprite batcher | ⏳ in progress | branch-WIP commits; build stays green until final cutover (sub-phase 2i). |
 | 3–14 | pending | see Phasing below |
 
 Deferred from phase 1: `.github/workflows/*` still reference `TILES` env var (doesn't block local compile).
+
+### Tech baseline (verified 2026-05-20)
+
+- **SDL3 = 3.4.8** (CMake FetchContent: `release-3.4.8.tar.gz`). `SDL_gpu.h` available — SDL_GPU API landed in 3.2.0.
+- **SDL3_ttf = 3.2.2** — exposes `TTF_CreateGPUTextEngine` + `TTF_GetGPUTextDrawData`. Glyph upload to `SDL_GPUTexture` is first-class; no need to keep an `SDL_Renderer` alive for text.
+- **SDL3_image = 3.4.4**, **SDL3_mixer = 3.2.0**.
+- **SDL_shadercross — NOT integrated.** Plan deviates from earlier note: ship **pre-compiled bytecode embedded as C arrays** (`xxd -i` style). Compile pipeline = HLSL/GLSL source → offline `shadercross` invocation (dev machine, not CI/build) → emit SPIR-V/DXIL/MSL byte blobs → include header. Eliminates build-time shadercross dependency. Source shaders live in `data/shaders/lighting/src/`; emitted blobs in `data/shaders/lighting/embed/`.
+- Hard-cutover "build will not compile until phase 2 done" → revised: phase 2 runs as **a single long branch (~10 commits)** with build green at every commit. New GPU code lands inert (no call-sites) until sub-phase 2i flips the switch and removes `SDL_Renderer`.
+
+### Phase 2 sub-decomposition
+
+Each row = one commit on `feat/lighting-phase2-sdl_gpu`. Build green at every step.
+
+| # | Commit | Touches | Wired? |
+|---|---|---|---|
+| 2a | GPU device + window claim + swapchain (`gpu_device.{h,cpp}`) | new | no |
+| 2b | Sprite batcher header + draw-cmd POD (`sprite_batcher.h`) | new | no |
+| 2c | Shader source tree + offline `tools/compile_shaders.{py,sh}` + embedded byte blobs | new | no |
+| 2d | Sprite batcher impl + per-pipeline graphics pipelines | new | no |
+| 2e | `dynamic_atlas` → `SDL_GPUTexture` backing (parallel path; old kept) | mod | no |
+| 2f | Font path → `TTF_CreateGPUTextEngine` (parallel) | mod | no |
+| 2g | Geometry renderer → GPU pipeline (parallel) | mod | no |
+| 2h | Pixel-parity golden-image harness (`tests/lighting_gpu_test.cpp`) | new | no |
+| 2i | **Cutover commit** — `sdltiles.cpp` switches `WinCreate` to GPU device; `SDL_Renderer*` deleted; `sdl_wrappers.h` `SDL_Renderer_Ptr` removed; legacy `dynamic_atlas`/`sdl_font`/`sdl_geometry` paths deleted. | mass-mod | yes |
+
+### Phase 2 atlas semantics (advisor concern #5)
+
+Legacy: `dynamic_atlas::allocate_sprite` creates `SDL_TEXTUREACCESS_TARGET` textures and **renders into them via `SDL_SetRenderTarget` + draw calls** (uses CPU staging surface that gets copied with SDL_Renderer ops).
+
+GPU equivalent: `SDL_GPUTexture` + `SDL_GPUTransferBuffer`. No render-target-into-atlas pattern; instead **upload via transfer buffer** (`SDL_UploadToGPUTexture`). Staging surface remains CPU-side (`SDL_Surface` for IMG_Load), then `SDL_MapGPUTransferBuffer` → memcpy → `SDL_UploadToGPUTexture`. Render-target-style writes (active_tile_data animated overlays etc.) move to compute-shader or per-frame uploaded sub-texture. Spelled out in sub-phase 2e commit.
 
 ## Decisions (locked w/ user, 20 grill rounds)
 
