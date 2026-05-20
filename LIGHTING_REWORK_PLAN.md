@@ -11,8 +11,25 @@ Current lighting: per-turn CPU shadowcasting (`src/lightmap.cpp`, `src/shadowcas
 | Phase | State | Notes |
 |---|---|---|
 | 1. Curses + Android removal | ✅ done | commit `e96086b658` on `feat/lighting-phase1-curses-android-removal`. 169 files, -13042 lines. |
-| 2. SDL_GPU device + sprite batcher | ⏳ in progress | branch-WIP commits; build stays green until final cutover (sub-phase 2i). |
+| 2. SDL_GPU device + sprite batcher | ⏳ 2a–2g inert foundation done; 2h/2i pending | branch `feat/lighting-phase2-sdl_gpu`. |
 | 3–14 | pending | see Phasing below |
+
+### Phase 2 progress (branch `feat/lighting-phase2-sdl_gpu`)
+
+| Sub | SHA (prefix) | Files | Verified |
+|---|---|---|---|
+| 2a | `b3879e93` | `src/lighting/gpu_device.{h,cpp}`, CMake `-I src` | standalone obj + nm vs libSDL3 |
+| 2b | `58bd1200` | `src/lighting/sprite_batcher.h` | header-only |
+| 2c | `675f7d1f` | SDL_shadercross FetchContent, `shader_compiler.{h,cpp}`, `sprite.{vert,frag}.hlsl`, runtime DLL post-build | standalone obj |
+| 2d | (next) | `sprite_batcher.cpp`, `sprite.vert.hlsl` (instance_base uniform) | standalone obj, all 23 SDL_GPU syms in libSDL3 |
+| 2e | (next) | `gpu_atlas.{h,cpp}` | standalone obj |
+| 2f | (next) | `font_engine.{h,cpp}` (TTF_CreateGPUTextEngine; ALPHA only) | obj + nm vs libSDL3_ttf 3.2.2 |
+| 2g | (next) | `gpu_geometry.{h,cpp}` (1×1 white tex → sprite_batcher) | standalone obj |
+
+Total foundation: ~3.2 kLOC new code, every translation unit compiles
+clean and links against the actually-fetched SDL3 + SDL3_ttf +
+SDL_shadercross. **No call sites yet — game still uses the legacy
+SDL_Renderer path 100 %.**
 
 Deferred from phase 1: `.github/workflows/*` still reference `TILES` env var (doesn't block local compile).
 
