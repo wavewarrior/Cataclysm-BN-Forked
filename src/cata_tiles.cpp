@@ -1,5 +1,4 @@
 #include "units_temperature.h"
-#if defined(TILES)
 #include "cata_tiles.h"
 
 #include <algorithm>
@@ -2959,13 +2958,6 @@ void cata_tiles::draw( point dest, const tripoint &center, int width, int height
     if( !g ) {
         return;
     }
-
-#if defined(__ANDROID__)
-    // Attempted bugfix for Google Play crash - prevent divide-by-zero if no tile width/height specified
-    if( tile_width == 0 || tile_height == 0 ) {
-        return;
-    }
-#endif
 
     ZoneScoped;
     {
@@ -6888,4 +6880,3 @@ std::vector<options_manager::id_and_option> cata_tiles::build_display_list()
     return display_names.empty() ? default_display_names : display_names;
 }
 
-#endif // SDL_TILES

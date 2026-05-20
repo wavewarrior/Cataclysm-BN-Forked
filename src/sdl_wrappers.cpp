@@ -1,5 +1,3 @@
-#if defined(TILES)
-
 #include "sdl_wrappers.h"
 #include "sdl_utils.h"
 
@@ -205,4 +203,3 @@ SDL_Surface_Ptr CreateSurface( const SDL_PixelFormat format, const int width, co
     return surface;
 }
 
-#endif

@@ -7,11 +7,7 @@
 #include "line.h"
 #include <unordered_map>
 
-#if defined(TILES)
 #include "sdl_wrappers.h"
-#else
-#include <cstdint>
-#endif
 
 struct RGBColor {
     uint8_t r;
@@ -22,12 +18,10 @@ struct RGBColor {
     constexpr RGBColor() = default;
     constexpr RGBColor( const uint8_t r, const uint8_t g, const uint8_t b, const uint8_t a ) : r{r}, g{g},
         b{b}, a{a} {}
-#if defined(TILES)
     constexpr RGBColor( const SDL_Color &c ) : r( c.r ), g( c.g ), b( c.b ), a( c.a ) {}
     constexpr operator SDL_Color() const {
         return SDL_Color{ r, g, b, a };
     }
-#endif
     void serialize( JsonOut & ) const;
     void deserialize( JsonIn & );
 

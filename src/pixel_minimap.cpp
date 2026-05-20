@@ -1,5 +1,3 @@
-#if defined(TILES)
-
 #include "pixel_minimap.h"
 
 #include <algorithm>
@@ -644,4 +642,3 @@ const
     return nullptr;
 }
 
-#endif // SDL_TILES

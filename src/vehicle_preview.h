@@ -11,8 +11,6 @@
 
 class vehicle;
 
-#if defined(TILES)
-
 /**
  * A window that displays a vehicle using graphical tiles.
  * Used by the vehicle interaction screen as an alternative to ASCII display.
@@ -96,4 +94,3 @@ struct vehicle_preview_window {
         point calc_window_center_pixels() const;
 };
 
-#endif // TILES

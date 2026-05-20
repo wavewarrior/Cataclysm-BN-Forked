@@ -506,11 +506,6 @@ void editmap::draw_main_ui_overlay()
     const Creature *critter = g->critter_at( target );
 
     map &here = get_map();
-#if !defined( TILES )
-    if( uberdraw ) {
-        uber_draw_ter( g->w_terrain, &here ); // Bypassing the usual draw methods; not versatile enough
-    }
-#endif
 
     // update target point
     if( critter != nullptr ) {
@@ -518,7 +513,6 @@ void editmap::draw_main_ui_overlay()
     } else {
         here.drawsq( g->w_terrain, target, drawsq_params().highlight( true ).center( target ) );
     }
-#ifdef TILES
     // give some visual indication of different cursor moving modes
     if( use_tiles && altblink ) {
         point p[2] = { origin.xy(), target.xy() };
@@ -541,16 +535,12 @@ void editmap::draw_main_ui_overlay()
             g->draw_cursor( target );
         }
     } else {
-#endif
         g->draw_cursor( target );
-#ifdef TILES
     }
-#endif
 
     // hilight target_list points if blink=true
     if( blink ) {
         for( const auto &p : target_list ) {
-#ifdef TILES
             if( use_tiles ) {
                 if( draw_target_override ) {
                     draw_target_override( p );
@@ -558,7 +548,6 @@ void editmap::draw_main_ui_overlay()
                     g->draw_highlight( p );
                 }
             } else {
-#endif
                 // but only if there's no vehicles/mobs/npcs on a point
                 if( !here.veh_at( p ) && !g->critter_at( p ) ) {
                     const ter_t &terrain = here.ter( p ).obj();
@@ -583,9 +572,7 @@ void editmap::draw_main_ui_overlay()
                     tripoint scrpos = pos2screen( p );
                     mvwputch( g->w_terrain, scrpos.xy(), t_col, t_sym );
                 }
-#ifdef TILES
             }
-#endif
         }
     }
 
@@ -608,7 +595,6 @@ void editmap::draw_main_ui_overlay()
 
     if( tmpmap_ptr ) {
         tinymap &tmpmap = *tmpmap_ptr;
-#ifdef TILES
         if( use_tiles ) {
             const point origin_p = target.xy() + point( 1 - SEEX, 1 - SEEY );
             for( int x = 0; x < SEEX * 2; x++ ) {
@@ -679,16 +665,13 @@ void editmap::draw_main_ui_overlay()
                                           std::get<2>( it.second ), std::get<3>( it.second ) );
             }
         } else {
-#endif
             hilights["mapgentgt"].draw( *this, true );
             tmpmap.reset_vehicle_cache( );
             drawsq_params params = drawsq_params().center( tripoint( SEEX - 1, SEEY - 1, target.z ) );
             for( const tripoint &p : tmpmap.points_on_zlevel() ) {
                 tmpmap.drawsq( g->w_terrain, p, params );
             }
-#ifdef TILES
         }
-#endif
     }
 }
 

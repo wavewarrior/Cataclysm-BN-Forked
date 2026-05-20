@@ -872,9 +872,6 @@ class game : public submap_load_listener
         // Game-start procedures
         auto validate_save_json( std::istream &fin ) -> bool; // for load
         void load_master(); // Load the master data file, with factions &c
-#if defined(__ANDROID__)
-        void load_shortcuts( std::istream &fin );
-#endif
         bool start_game(); // Starts a new game in the active world
 
         //private save functions.
@@ -889,9 +886,6 @@ class game : public submap_load_listener
         bool save_artifacts();
         // returns false if saving failed for whatever reason
         bool save_maps();
-#if defined(__ANDROID__)
-        void save_shortcuts( std::ostream &fout );
-#endif
         // Data Initialization
         void init_autosave();     // Initializes autosave parameters
         void create_starting_npcs(); // Creates NPCs that start near you

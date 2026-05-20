@@ -1,7 +1,6 @@
 #pragma once
 
 #include <array>
-#if defined(TILES)
 
 #include <string>
 #include <memory>
@@ -57,7 +56,5 @@ void draw_sdl_text_outlined( const sdl_text_outline_options &opts );
 
 const SDL_Renderer_Ptr &get_sdl_renderer();
 const SDL_Window_Ptr &get_sdl_window();
-
-#endif // TILES
 
 

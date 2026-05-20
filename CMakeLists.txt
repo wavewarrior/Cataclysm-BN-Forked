@@ -22,12 +22,7 @@ set(CMAKE_TLS_VERIFY ON)
 # Build options
 include(CMakeDependentOption)
 include(ExternalProject)
-option(TILES "Build graphical tileset version." "OFF")
-cmake_dependent_option(DYNAMIC_ATLAS
-    "Enable dynamic atlas generation" ON
-    TILES OFF
-)
-option(CURSES "Build curses version." "ON")
+option(DYNAMIC_ATLAS "Enable dynamic atlas generation" ON)
 option(SOUND "Support for in-game sounds & music." "OFF")
 option(BACKTRACE "Support for printing stack backtraces on crash" "ON")
 option(LIBBACKTRACE "Print backtrace with libbacktrace." "OFF")
@@ -126,9 +121,7 @@ endif ()
 if ("${CMAKE_SYSTEM_NAME}" MATCHES "Darwin")
     set(_OS_DARWIN_ 1)
     add_definitions(-DMACOSX)
-    if (TILES)
-        add_definitions(-DOSX_SDL3_LIBS)
-    endif ()
+    add_definitions(-DOSX_SDL3_LIBS)
 endif ()
 
 include(CheckCXXCompilerFlag)
@@ -186,11 +179,6 @@ else ()
     endif ()
 endif ()
 
-# Can't compile curses and tiles build's at same time
-if (TILES)
-    set(CURSES OFF)
-endif ()
-
 # Can't use both home and xdg directories
 if (USE_XDG_DIR)
     set(USE_HOME_DIR OFF)
@@ -238,9 +226,7 @@ endif ()
 
 message(STATUS "GIT_BINARY                    : ${GIT_EXECUTABLE}")
 message(STATUS "DYNAMIC_LINKING               : ${DYNAMIC_LINKING}")
-message(STATUS "TILES                         : ${TILES}")
 message(STATUS "DYNAMIC_ATLAS                 : ${DYNAMIC_ATLAS}")
-message(STATUS "CURSES                        : ${CURSES}")
 message(STATUS "SOUND                         : ${SOUND}")
 message(STATUS "BACKTRACE                     : ${BACKTRACE}")
 message(STATUS "LIBBACKTRACE                  : ${LIBBACKTRACE}")
@@ -343,9 +329,8 @@ if (USE_TRACY)
 endif ()
 
 # Check for build types and libraries
-if (TILES)
-    # Find SDL, SDL_ttf & SDL_image for graphical install
-    message(STATUS "Searching for SDL3 library --")
+# Find SDL, SDL_ttf & SDL_image for graphical install
+message(STATUS "Searching for SDL3 library --")
     if (NOT CMAKE_FIND_PACKAGE_PREFER_CONFIG)
         if (NOT BUILD_SDL3)
             set(CMAKE_FIND_PACKAGE_PREFER_CONFIG ON)
@@ -373,9 +358,8 @@ if (TILES)
     endif()
     if (NOT (SDL3_FOUND OR TARGET SDL3::SDL3 OR TARGET SDL3::SDL3-static))
         message(FATAL_ERROR
-                "This project requires SDL3 to be installed to compile in graphical mode.  \
-                 Please install the SDL3 development libraries, \
-                 or try compiling without -DTILES=1 for a text-only compilation. \
+                "This project requires SDL3 to be installed. \
+                 Please install the SDL3 development libraries. \
                  See CMake compiling guide for details and more info.")
     endif ()
 
@@ -406,9 +390,8 @@ if (TILES)
     endif()
     if (NOT (SDL3_ttf_FOUND OR TARGET SDL3_ttf::SDL3_ttf OR TARGET SDL3_ttf::SDL3_ttf-static))
         message(FATAL_ERROR
-                "This project requires SDL3_ttf to be installed to compile in graphical mode. \
-                Please install the SDL3_ttf development libraries, \
-                or try compiling without -DTILES=1 for a text-only compilation. \
+                "This project requires SDL3_ttf to be installed. \
+                Please install the SDL3_ttf development libraries. \
                 See CMake compiling guide for details and more info.")
     endif ()
 
@@ -440,41 +423,11 @@ if (TILES)
     endif()
     if (NOT (SDL3_image_FOUND OR TARGET SDL3_image::SDL3_image OR TARGET SDL3_image::SDL3_image-static))
         message(FATAL_ERROR
-                "This project requires SDL3_image to be installed to compile in graphical mode. \
-                 Please install the SDL3_image development libraries, \
-                 or try compiling without -DTILES=1 for a text-only compilation. \
+                "This project requires SDL3_image to be installed. \
+                 Please install the SDL3_image development libraries. \
                  See doc/COMPILING/COMPILING-CMAKE.md for details and more info.")
     endif ()
-    add_definitions(-DTILES)
-endif ()
-
-if (CURSES)
-    # Find the ncurses library for a text based compile
-    message(STATUS "Searching for Curses library --")
-    set(CURSES_NEED_NCURSES TRUE)
-    set(CURSES_NEED_WIDE TRUE)
-    find_package(Curses)
-    if (NOT CURSES_FOUND)
-        message(FATAL_ERROR
-                "This project requires ncurses to be installed to be compiled in text-only mode. \
-                Please install the ncurses development libraries, \
-                or try compiling with -DTILES=1 for a graphical compilation. \
-                See CMake compiling guide for details and more info.")
-    endif ()
-    if (NOT DYNAMIC_LINKING)
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DNCURSES_STATIC")
-    endif ()
-endif ()
-
 if (SOUND)
-    # You need TILES to be able to use SOUND
-    if (NOT TILES)
-        message(FATAL_ERROR
-                "You must enable graphical support with -DTILES=1 \
-                to be able to enable sound support. \
-                See CMake compiling guide for details and more info.")
-    endif ()
-
     # Sound requires SDL_mixer library
     message(STATUS "Searching for SDL3_mixer library --")
     if (NOT CMAKE_FIND_PACKAGE_PREFER_CONFIG)
@@ -621,7 +574,7 @@ endif ()
 add_subdirectory(src)
 add_subdirectory(data)
 
-if (UNIX AND TILES AND DYNAMIC_LINKING)
+if (UNIX AND DYNAMIC_LINKING)
     set_target_properties(
             cataclysm-bn-tiles
             PROPERTIES
@@ -658,14 +611,12 @@ if (RELEASE)
             ${CMAKE_SOURCE_DIR}/VERSION.txt
             DESTINATION .)
     endif()
-    if (TILES)
-        if (USE_PREFIX_DATA_DIR)
-            install(DIRECTORY ${CMAKE_SOURCE_DIR}/gfx
-                TYPE DATA)
-        else()
-            install(DIRECTORY ${CMAKE_SOURCE_DIR}/gfx
-                DESTINATION .)
-        endif()
+    if (USE_PREFIX_DATA_DIR)
+        install(DIRECTORY ${CMAKE_SOURCE_DIR}/gfx
+            TYPE DATA)
+    else()
+        install(DIRECTORY ${CMAKE_SOURCE_DIR}/gfx
+            DESTINATION .)
     endif()
     # Install cataclysm-launcher for portable Linux builds
     if (NOT USE_PREFIX_DATA_DIR AND UNIX AND NOT APPLE)
@@ -678,12 +629,8 @@ if (RELEASE)
     endif()
 endif()
 
-if (APPLE AND RELEASE AND (TILES OR CURSES))
-    if (TILES)
-        set(CATA_OSX_GAME_TARGET cataclysm-bn-tiles)
-    else()
-        set(CATA_OSX_GAME_TARGET cataclysm-bn)
-    endif()
+if (APPLE AND RELEASE)
+    set(CATA_OSX_GAME_TARGET cataclysm-bn-tiles)
 
     set(CATA_OSX_APP_DIR "${CMAKE_SOURCE_DIR}/Cataclysm.app")
     set(CATA_OSX_CONTENTS_DIR "${CATA_OSX_APP_DIR}/Contents")
@@ -699,17 +646,15 @@ if (APPLE AND RELEASE AND (TILES OR CURSES))
     endif()
 
     set(CATA_OSX_COPY_RESOURCE_COMMANDS)
-    if (TILES)
-        list(APPEND CATA_OSX_COPY_RESOURCE_COMMANDS
-            COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/gfx" "${CATA_OSX_RESOURCES_DIR}/gfx")
-    endif()
+    list(APPEND CATA_OSX_COPY_RESOURCE_COMMANDS
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/gfx" "${CATA_OSX_RESOURCES_DIR}/gfx")
     if (SOUND)
         list(APPEND CATA_OSX_COPY_RESOURCE_COMMANDS
             COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/data/sound" "${CATA_OSX_DATA_DIR}/sound")
     endif()
 
     set(CATA_OSX_COPY_FRAMEWORK_COMMANDS)
-    if (TILES AND CATA_OSX_FRAMEWORKS_DIR)
+    if (CATA_OSX_FRAMEWORKS_DIR)
         set(CATA_OSX_FRAMEWORK_NAMES SDL3 SDL3_image SDL3_ttf)
         if (SOUND)
             list(APPEND CATA_OSX_FRAMEWORK_NAMES SDL3_mixer)

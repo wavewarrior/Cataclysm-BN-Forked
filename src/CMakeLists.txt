@@ -104,114 +104,80 @@ function(setup_common_target_properties target_name)
     endif ()
 endfunction()
 
-# Build tiles version if requested
-if (TILES)
-    add_library(
-            cataclysm-bn-tiles-common OBJECT
-            ${CATACLYSM_BN_SOURCES}
-            ${CATACLYSM_BN_HEADERS})
-    target_include_directories(cataclysm-bn-tiles-common INTERFACE ${CMAKE_SOURCE_DIR}/src)
+# Build tiles version (only supported configuration)
+add_library(
+        cataclysm-bn-tiles-common OBJECT
+        ${CATACLYSM_BN_SOURCES}
+        ${CATACLYSM_BN_HEADERS})
+target_include_directories(cataclysm-bn-tiles-common INTERFACE ${CMAKE_SOURCE_DIR}/src)
 
-    if (WIN32)
-        add_definitions(-DUSE_WINMAIN)
-        add_executable(
-                cataclysm-bn-tiles WIN32
-                ${MAIN_CPP}
-                ${MESSAGES_CPP}
-                ${RESOURCE_RC})
-    else ()
-        add_executable(cataclysm-bn-tiles
-                ${MAIN_CPP}
-                ${MESSAGES_CPP})
-    endif ()
+if (WIN32)
+    add_definitions(-DUSE_WINMAIN)
+    add_executable(
+            cataclysm-bn-tiles WIN32
+            ${MAIN_CPP}
+            ${MESSAGES_CPP}
+            ${RESOURCE_RC})
+else ()
+    add_executable(cataclysm-bn-tiles
+            ${MAIN_CPP}
+            ${MESSAGES_CPP})
+endif ()
 
-    setup_common_target_properties(cataclysm-bn-tiles-common)
+setup_common_target_properties(cataclysm-bn-tiles-common)
 
-    # Tiles-specific setup
-    target_compile_definitions(cataclysm-bn-tiles-common PUBLIC TILES)
-    if (DYNAMIC_ATLAS)
-        target_compile_definitions(cataclysm-bn-tiles-common PUBLIC DYNAMIC_ATLAS)
+if (DYNAMIC_ATLAS)
+    target_compile_definitions(cataclysm-bn-tiles-common PUBLIC DYNAMIC_ATLAS)
+endif()
+target_link_libraries(cataclysm-bn-tiles PRIVATE cataclysm-bn-tiles-common)
+
+# Windows specific tiles libraries
+if (WIN32)
+    target_link_libraries(cataclysm-bn-tiles-common PUBLIC setupapi.lib)
+    if (SOUND)
+        target_link_libraries(cataclysm-bn-tiles-common PUBLIC shlwapi.lib)
     endif()
-    target_link_libraries(cataclysm-bn-tiles PRIVATE cataclysm-bn-tiles-common)
+endif()
 
-    # Windows specific tiles libraries
-    if (WIN32)
-        target_link_libraries(cataclysm-bn-tiles-common PUBLIC setupapi.lib)
-        if (SOUND)
-            target_link_libraries(cataclysm-bn-tiles-common PUBLIC shlwapi.lib)
-        endif()
-    endif()
+if (NOT DYNAMIC_LINKING)
+    target_link_libraries(cataclysm-bn-tiles-common PUBLIC
+        SDL3::SDL3-static
+        SDL3_image::SDL3_image-static
+        SDL3_ttf::SDL3_ttf-static
+    )
+else()
+    target_link_libraries(cataclysm-bn-tiles-common PUBLIC
+        SDL3::SDL3
+        SDL3_image::SDL3_image
+        SDL3_ttf::SDL3_ttf
+    )
+endif ()
 
+if (SOUND)
     if (NOT DYNAMIC_LINKING)
         target_link_libraries(cataclysm-bn-tiles-common PUBLIC
-            SDL3::SDL3-static
-            SDL3_image::SDL3_image-static
-            SDL3_ttf::SDL3_ttf-static
+            SDL3_mixer::SDL3_mixer-static
         )
     else()
         target_link_libraries(cataclysm-bn-tiles-common PUBLIC
-            SDL3::SDL3
-            SDL3_image::SDL3_image
-            SDL3_ttf::SDL3_ttf
-        )
-    endif ()
-
-    if (SOUND)
-        if (NOT DYNAMIC_LINKING)
-            target_link_libraries(cataclysm-bn-tiles-common PUBLIC
-                SDL3_mixer::SDL3_mixer-static
-            )
-        else()
-            target_link_libraries(cataclysm-bn-tiles-common PUBLIC
-                SDL3_mixer::SDL3_mixer
-            )
-        endif()
-        add_definitions(-DSDL_SOUND)
-    endif ()
-
-    if (RELEASE)
-        install(TARGETS cataclysm-bn-tiles RUNTIME)
-    endif ()
-
-    set_target_properties(cataclysm-bn-tiles PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
-
-    if( LUA_DOCS_ON_BUILD AND DENO_BINARY )
-        add_custom_command(
-            TARGET cataclysm-bn-tiles POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E env --unset=LD_LIBRARY_PATH "CATA_EXE=$<TARGET_FILE:cataclysm-bn-tiles>" ${DENO_BINARY} task docs:gen
-            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-            COMMENT "Generating Lua reference/annotations (deno task docs:gen)"
-            VERBATIM
+            SDL3_mixer::SDL3_mixer
         )
     endif()
+    add_definitions(-DSDL_SOUND)
 endif ()
 
-# Build curses version if requested
-if (CURSES)
-    add_library(cataclysm-bn-common OBJECT
-            ${CATACLYSM_BN_SOURCES}
-            ${CATACLYSM_BN_HEADERS})
-    target_include_directories(cataclysm-bn-common INTERFACE ${CMAKE_SOURCE_DIR}/src)
-
-    if (WIN32)
-        add_executable(cataclysm-bn
-                ${MAIN_CPP}
-                ${MESSAGES_CPP}
-                ${RESOURCE_RC})
-    else ()
-        add_executable(cataclysm-bn
-                ${MAIN_CPP}
-                ${MESSAGES_CPP})
-    endif ()
-
-    setup_common_target_properties(cataclysm-bn-common)
-
-    # Curses-specific setup
-    target_include_directories(cataclysm-bn-common PUBLIC ${CURSES_INCLUDE_DIR})
-    target_link_libraries(cataclysm-bn-common PUBLIC ${CURSES_LIBRARIES})
-    target_link_libraries(cataclysm-bn PRIVATE cataclysm-bn-common)
-
-    if (RELEASE)
-        install(TARGETS cataclysm-bn RUNTIME)
-    endif ()
+if (RELEASE)
+    install(TARGETS cataclysm-bn-tiles RUNTIME)
 endif ()
+
+set_target_properties(cataclysm-bn-tiles PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+if( LUA_DOCS_ON_BUILD AND DENO_BINARY )
+    add_custom_command(
+        TARGET cataclysm-bn-tiles POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E env --unset=LD_LIBRARY_PATH "CATA_EXE=$<TARGET_FILE:cataclysm-bn-tiles>" ${DENO_BINARY} task docs:gen
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        COMMENT "Generating Lua reference/annotations (deno task docs:gen)"
+        VERBATIM
+    )
+endif()

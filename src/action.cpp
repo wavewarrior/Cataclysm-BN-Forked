@@ -946,12 +946,7 @@ action_id handle_action_menu()
                 // debug _is_a menu.
                 entry->txt += "…";
             }
-#if !defined(TILES)
-            register_actions( { ACTION_TOGGLE_FULLSCREEN } );
-#endif
-#if defined(TILES)
             register_actions( { ACTION_TOGGLE_PIXEL_MINIMAP, ACTION_RELOAD_TILESET  } );
-#endif // TILES
             register_actions( {
                 ACTION_TOGGLE_PANEL_ADM, ACTION_DISPLAY_SCENT, ACTION_DISPLAY_SCENT_TYPE,
                 ACTION_DISPLAY_TEMPERATURE, ACTION_DISPLAY_VEHICLE_AI, ACTION_DISPLAY_VISIBILITY,
@@ -996,11 +991,9 @@ action_id handle_action_menu()
                 ACTION_WAIT, ACTION_SLEEP, ACTION_BIONICS, ACTION_MUTATIONS,
                 ACTION_CONTROL_VEHICLE, ACTION_ITEMACTION, ACTION_TOGGLE_THIEF_MODE
             } );
-#if defined(TILES)
             if( use_tiles ) {
                 register_actions( { ACTION_ZOOM_OUT, ACTION_ZOOM_IN } );
             }
-#endif
             register_lua_action_entries( category_id );
         } else {
             register_lua_action_entries( category_id );

@@ -1,7 +1,5 @@
 #pragma once
 
-#if defined(TILES)
-
 #include "cursesdef.h" // IWYU pragma: associated
 #include "sdltiles.h" // IWYU pragma: associated
 
@@ -166,7 +164,5 @@ class FontFallbackList : public Font
         std::vector<std::unique_ptr<Font>> fonts;
         std::map<std::string, std::vector<std::unique_ptr<Font>>::iterator> glyph_font;
 };
-
-#endif // TILES
 
 

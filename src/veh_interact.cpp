@@ -65,9 +65,7 @@
 #include "vpart_range.h"
 #include "wheel_dimensions.h"
 
-#if defined(TILES)
 #include "vehicle_preview.h"
-#endif
 
 static const itype_id fuel_type_battery( "battery" );
 
@@ -306,13 +304,9 @@ void veh_interact::allocate_windows()
     const int pane_w = ( grid_w / 3 ) - 1;
 
     const int disp_w = grid_w - ( pane_w * 2 ) - 2;
-#if defined(TILES)
     // Larger display area when using graphical tiles mode
     const bool use_tiles_layout = get_option<bool>( "VEHICLE_EDIT_TILES" ) && is_draw_tiles_mode();
     const int disp_h = page_size * ( use_tiles_layout ? 0.65 : 0.45 );
-#else
-    const int disp_h = page_size * 0.45;
-#endif
     const int parts_h = page_size - disp_h;
     const int parts_y = pane_y + disp_h;
 
@@ -543,7 +537,6 @@ void veh_interact::do_main_loop()
             if( parts_list_offset > 0 ) {
                 parts_list_offset--;
             }
-#if defined(TILES)
         } else if( action == "ZOOM_IN" ) {
             if( tile_preview ) {
                 tile_preview->zoom_in();
@@ -552,7 +545,6 @@ void veh_interact::do_main_loop()
             if( tile_preview ) {
                 tile_preview->zoom_out();
             }
-#endif
         }
         if( sel_cmd != ' ' ) {
             finish = true;
@@ -2373,12 +2365,10 @@ void veh_interact::display_grid()
  */
 void veh_interact::display_veh()
 {
-#if defined(TILES)
     if( get_option<bool>( "VEHICLE_EDIT_TILES" ) && is_draw_tiles_mode() ) {
         display_veh_tiles();
         return;
     }
-#endif
 
     werase( w_disp );
     const point h_size = point( getmaxx( w_disp ), getmaxy( w_disp ) ) / 2;
@@ -2471,7 +2461,6 @@ void veh_interact::display_veh()
     wnoutrefresh( w_disp );
 }
 
-#if defined(TILES)
 /**
  * Draws the viewport with the vehicle using graphical tiles.
  */
@@ -2493,7 +2482,6 @@ void veh_interact::display_veh_tiles()
     // dd is the cursor offset (negative), so we pass it directly
     tile_preview->display( *veh, dd, cpart );
 }
-#endif // TILES
 
 static std::string wheel_state_description( const vehicle &veh )
 {

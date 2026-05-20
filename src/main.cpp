@@ -54,88 +54,16 @@
 
 class ui_adaptor;
 
-#if defined(TILES)
 #   define SDL_MAIN_HANDLED
 #   include <SDL3/SDL_main.h>
 #   include "sdl_wrappers.h"
-#endif
-
-#if defined(__ANDROID__)
-#include <SDL3/SDL.h>
-#include <SDL3/SDL_system.h>
-#include <android/log.h>
-#include <unistd.h>
-
-// Taken from: https://codelab.wordpress.com/2014/11/03/how-to-use-standard-output-streams-for-logging-in-android-apps/
-// Force Android standard output to adb logcat output
-
-static int pfd[2];
-static pthread_t thr;
-static const char *tag = "cdda";
-
-static void *thread_func( void * )
-{
-    ssize_t rdsz;
-    char buf[128];
-    for( ;; ) {
-        if( ( ( rdsz = read( pfd[0], buf, sizeof buf - 1 ) ) > 0 ) ) {
-            if( buf[rdsz - 1] == '\n' ) {
-                --rdsz;
-            }
-            buf[rdsz] = 0;  /* add null-terminator */
-            __android_log_write( ANDROID_LOG_DEBUG, tag, buf );
-        }
-    }
-    return nullptr;
-}
-
-int start_logger( const char *app_name )
-{
-    tag = app_name;
-
-    /* make stdout line-buffered and stderr unbuffered */
-    setvbuf( stdout, nullptr, _IOLBF, 0 );
-    setvbuf( stderr, nullptr, _IONBF, 0 );
-
-    /* create the pipe and redirect stdout and stderr */
-    pipe( pfd );
-    dup2( pfd[1], 1 );
-    dup2( pfd[1], 2 );
-
-    /* spawn the logging thread */
-    if( pthread_create( &thr, nullptr, thread_func, nullptr ) == -1 ) {
-        return -1;
-    }
-    pthread_detach( thr );
-    return 0;
-}
-
-#endif //__ANDROID__
 
 #if !defined(_WIN32)
-#if defined(TILES)
 [[ noreturn ]]
 static void signal_handler( int )
 {
     exit_handler( 0 );
 }
-#else
-static void signal_handler( int signal )
-{
-    if( signal == SIGINT ) {
-        const int old_timeout = inp_mngr.get_timeout();
-        inp_mngr.reset_timeout();
-        bool confirmed = query_yn( _( "Really Quit?  All unsaved changes will be lost." ) );
-        inp_mngr.set_timeout( old_timeout );
-        ui_manager::redraw_invalidated();
-        catacurses::doupdate();
-        if( !confirmed ) {
-            return;
-        }
-    }
-    exit_handler( 0 );
-}
-#endif //defined(TILES)
 #endif //!defined(_WIN32)
 
 /**
@@ -144,11 +72,8 @@ static void signal_handler( int signal )
  */
 static void report_fatal_error( const std::string &msg )
 {
-#if defined(TILES)
     if( test_mode ) {
-#endif
         std::cerr << "Cataclysm BN: Fatal error" << '\n' << msg << '\n';
-#if defined(TILES)
     } else {
         SDL_ShowSimpleMessageBox(
             SDL_MESSAGEBOX_ERROR,
@@ -157,7 +82,6 @@ static void report_fatal_error( const std::string &msg )
             nullptr
         );
     }
-#endif
 }
 
 namespace
@@ -187,8 +111,6 @@ int APIENTRY WinMain( HINSTANCE /* hInstance */, HINSTANCE /* hPrevInstance */,
 {
     int argc = __argc;
     char **argv = __argv;
-#elif defined(__ANDROID__)
-extern "C" int SDL_main( int argc, char **argv ) {
 #else
 int main( int argc, char *argv[] )
 {
@@ -204,33 +126,18 @@ int main( int argc, char *argv[] )
     std::vector<std::string> opts;
     std::string world; /** if set try to load first save in this world on startup */
 
-#if defined(__ANDROID__)
-    // Start the standard output logging redirector
-    start_logger( "cdda" );
-
-    // On Android first launch, we copy all data files from the APK into the app's writeable folder so std::io stuff works.
-    // Use the external storage so it's publicly modifiable data (so users can mess with installed data, save games etc.)
-    std::string external_storage_path( SDL_GetAndroidExternalStoragePath() );
-
-    PATH_INFO::init_base_path( external_storage_path );
-#else
     // Set default file paths
 #if defined(PREFIX)
     PATH_INFO::init_base_path( std::string( PREFIX ) );
 #else
     PATH_INFO::init_base_path( "" );
 #endif
-#endif
 
-#if defined(__ANDROID__)
-    PATH_INFO::init_user_dir( external_storage_path );
-#else
 #   if defined(USE_HOME_DIR) || defined(USE_XDG_DIR)
     PATH_INFO::init_user_dir( "" );
 #   else
     PATH_INFO::init_user_dir( "." );
 #   endif
-#endif
     PATH_INFO::set_standard_filenames();
 
     MAP_SHARING::setDefaults();
@@ -670,26 +577,6 @@ int main( int argc, char *argv[] )
         }
     };
 
-#if defined(__ANDROID__)
-    if( !dir_exist( PATH_INFO::user_dir() ) ) {
-        check_dir_good( PATH_INFO::user_dir() );
-        std::string external_storage_path( SDL_GetAndroidExternalStoragePath() );
-        if( dir_exist( external_storage_path + "/config" ) ) {
-            std::filesystem::copy( external_storage_path + "/config", PATH_INFO::user_dir() + "config",
-                                   std::filesystem::copy_options::recursive );
-            std::filesystem::copy( external_storage_path + "/font", PATH_INFO::user_dir() + "font",
-                                   std::filesystem::copy_options::recursive );
-            std::filesystem::copy( external_storage_path + "/gfx", PATH_INFO::user_dir() + "gfx",
-                                   std::filesystem::copy_options::recursive );
-            std::filesystem::copy( external_storage_path + "/save", PATH_INFO::user_dir() + "save",
-                                   std::filesystem::copy_options::recursive );
-            std::filesystem::copy( external_storage_path + "/sound", PATH_INFO::user_dir() + "sound",
-                                   std::filesystem::copy_options::recursive );
-            std::filesystem::copy( external_storage_path + "/templates", PATH_INFO::user_dir() + "templates",
-                                   std::filesystem::copy_options::recursive );
-        }
-    }
-#endif
     check_dir_good( PATH_INFO::user_dir() );
     check_dir_good( PATH_INFO::config_dir() );
     check_dir_good( PATH_INFO::savedir() );
@@ -700,7 +587,6 @@ int main( int argc, char *argv[] )
         exit_handler( -999 );
     }
 
-#if defined(TILES)
     DebugLog( DL::Info, DC::Main ) << "SDL version used during compile is "
                                    << SDL_MAJOR_VERSION << "."
                                    << SDL_MINOR_VERSION << "."
@@ -711,14 +597,6 @@ int main( int argc, char *argv[] )
                                    << SDL_VERSIONNUM_MAJOR( linked_ver ) << "."
                                    << SDL_VERSIONNUM_MINOR( linked_ver ) << "."
                                    << SDL_VERSIONNUM_MICRO( linked_ver );
-#endif
-
-#if !defined(TILES)
-    get_options().init();
-    get_options().load();
-    get_options().save();
-    set_language(); // Have to set locale before initializing ncurses
-#endif
 
     // in test mode don't initialize curses to avoid escape sequences being inserted into output stream
     if( !test_mode ) {
@@ -735,13 +613,11 @@ int main( int argc, char *argv[] )
         }
     }
 
-#if defined(TILES)
     if( test_mode ) {
         get_options().init();
         get_options().load();
     }
     set_language();
-#endif
 
     rng_set_engine_seed( seed );
 

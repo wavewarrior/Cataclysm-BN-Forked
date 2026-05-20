@@ -1,4 +1,3 @@
-#if defined(TILES)
 #include "sdl_geometry.h"
 #include "sdl_utils.h"
 #include "debug.h"
@@ -71,4 +70,3 @@ void ColorModulatedGeometryRenderer::rect( const SDL_Renderer_Ptr &renderer, con
     }
 }
 
-#endif // TILES

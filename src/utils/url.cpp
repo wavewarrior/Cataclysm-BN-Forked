@@ -16,8 +16,6 @@ auto open_url(const std::string& url) -> void {
         "xdg-open";
 #elif defined(__APPLE__)
         "open";
-#elif defined(__ANDROID__)
-        "am start -a android.intent.action.VIEW -d";
 #endif
     const auto command = std::string(executable) + " \"" + url + "\"";
 

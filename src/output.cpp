@@ -40,10 +40,6 @@
 #include "point.h"
 #include "wcwidth.h"
 
-#if defined(__ANDROID__)
-#include <SDL3/SDL.h>
-#endif
-
 // Display data
 int TERMX;
 int TERMY;
@@ -806,9 +802,7 @@ input_event draw_item_info( const int iLeft, const int iWidth, const int iTop, c
         catacurses::newwin( iHeight, iWidth,
                             point( iLeft, iTop ) );
 
-#if defined(TILES)
     clear_window_area( win );
-#endif // TILES
     wclear( win );
     wnoutrefresh( win );
 
@@ -1737,9 +1731,6 @@ void insert_table( const catacurses::window &w, int pad, int line, int columns,
     int div = columns - 1;
     int offset = 0;
 
-#if defined(__ANDROID__)
-    input_context ctxt( "INSERT_TABLE" );
-#endif
     wattron( w, FG );
     for( int i = 0; i < rows * columns; i++ ) {
         if( i + offset * columns >= static_cast<int>( data.size() ) ) {
@@ -1788,9 +1779,7 @@ scrollingcombattext::cSCT::cSCT( point p_pos, const direction p_oDir,
 
     // translate from player relative to screen relative direction
     iso_mode = false;
-#if defined(TILES)
     iso_mode = tile_iso && use_tiles;
-#endif
     oUp = iso_mode ? direction::NORTHEAST : direction::NORTH;
     oUpRight = iso_mode ? direction::EAST : direction::NORTHEAST;
     oRight = iso_mode ? direction::SOUTHEAST : direction::EAST;
@@ -1836,10 +1825,8 @@ void scrollingcombattext::add( point pos, direction p_oDir,
 
         bool tiled = false;
         bool iso_mode = false;
-#if defined(TILES)
         tiled = use_tiles;
         iso_mode = tile_iso && use_tiles;
-#endif
 
         if( p_sType == "hp" ) {
             //Remove old HP bar
@@ -2132,26 +2119,6 @@ std::string format_volume( const units::volume &volume, int width, bool *out_tru
 }
 
 // In non-SDL mode, width/height is just what's specified in the menu
-#if !defined(TILES)
-// We need to override these for Windows console resizing
-#   if !defined(_WIN32)
-int get_terminal_width()
-{
-    int width = get_option<int>( "TERMINAL_X" );
-    return width < FULL_SCREEN_WIDTH ? FULL_SCREEN_WIDTH : width;
-}
-
-int get_terminal_height()
-{
-    return get_option<int>( "TERMINAL_Y" );
-}
-#   endif
-
-bool is_draw_tiles_mode()
-{
-    return false;
-}
-#endif
 
 void mvwprintz( const catacurses::window &w, point p, const nc_color &FG,
                 const std::string &text )

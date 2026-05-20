@@ -359,10 +359,6 @@ item &inventory::add_item_by_items_type_cache( item &newit, bool keep_invlet, bo
     return add_item_internal<true>( newit, keep_invlet, assign_invlet, should_stack );
 }
 
-#if defined(__ANDROID__)
-extern void remove_stale_inventory_quick_shortcuts();
-#endif
-
 void inventory::restack( player &p )
 {
     // tasks that the old restack seemed to do:
@@ -428,9 +424,6 @@ void inventory::restack( player &p )
     }
     items.sort( stack_compare );
 
-#if defined(__ANDROID__)
-    remove_stale_inventory_quick_shortcuts();
-#endif
 }
 
 static int count_charges_in_list( const itype *type, const map_stack &items )

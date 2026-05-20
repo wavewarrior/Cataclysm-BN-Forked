@@ -40,13 +40,7 @@
 #include "ui_manager.h"
 #include "worldfactory.h"
 
-#if defined(TILES)
 #include "cata_tiles.h"
-#endif // TILES
-
-#if defined(__ANDROID__)
-#include <jni.h>
-#endif
 
 #include <algorithm>
 #include <cstdlib>
@@ -158,9 +152,6 @@ constexpr auto graphics = "graphics";
 constexpr auto performance = "performance";
 constexpr auto world_default = "world_default";
 constexpr auto debug = "debug";
-#if defined(__ANDROID__)
-constexpr auto android = "android";
-#endif
 
 options_manager::options_manager()
 {
@@ -173,9 +164,6 @@ options_manager::options_manager()
         pages_.emplace_back( world_default, to_translation( "World Defaults" ) );
         pages_.emplace_back( "debug", to_translation( "Debug" ) );
     }
-#if defined(__ANDROID__)
-    pages_.emplace_back( android, to_translation( "Android" ) );
-#endif
 
     mMigrateOption = { {"DELETE_WORLD", { "WORLD_END", { {"no", "keep" }, {"yes", "delete"} } } } };
 
@@ -625,26 +613,14 @@ bool options_manager::cOpt::is_hidden() const
             return false;
 
         case COPT_SDL_HIDE:
-#if defined(TILES)
             return true;
-#else
-            return false;
-#endif
 
         case COPT_CURSES_HIDE:
-#if !defined(TILES) // If not defined.  it's curses interface.
-            return true;
-#else
             return false;
-#endif
 
         case COPT_POSIX_CURSES_HIDE:
             // Check if we on windows and using wincurses.
-#if defined(TILES) || defined(_WIN32)
             return false;
-#else
-            return true;
-#endif
 
         case COPT_NO_SOUND_HIDE:
 #if !defined(SDL_SOUND) // If not defined, we have no sound support.
@@ -1160,21 +1136,6 @@ std::vector<options_manager::id_and_option> options_manager::build_soundpacks_li
     }
     return result;
 }
-
-#if defined(__ANDROID__)
-bool options_manager::android_get_default_setting( const char *settings_name, bool default_value )
-{
-    JNIEnv *env = static_cast< JNIEnv *>( SDL_GetAndroidJNIEnv() );
-    jobject activity = static_cast< jobject>( SDL_GetAndroidActivity() );
-    jclass clazz( env->GetObjectClass( activity ) );
-    jmethodID method_id = env->GetMethodID( clazz, "getDefaultSetting", "(Ljava/lang/String;Z)Z" );
-    jboolean ans = env->CallBooleanMethod( activity, method_id, env->NewStringUTF( settings_name ),
-                                           default_value );
-    env->DeleteLocalRef( activity );
-    env->DeleteLocalRef( clazz );
-    return ans;
-}
-#endif
 
 void options_manager::Page::removeRepeatedEmptyLines()
 {
@@ -2030,7 +1991,6 @@ void options_manager::add_options_graphics()
 
     add_empty_line();
 
-#if defined(TILES)
     add_option_group( graphics, Group( "font_params", to_translation( "Font settings" ),
                                        to_translation( "Font display settings.  To change font type or source file, edit fonts.json in config directory." ) ),
     [&]( auto & page_id ) {
@@ -2061,7 +2021,6 @@ void options_manager::add_options_graphics()
             add( option, page_id, option_name, option_desc, 8, 100, 16, COPT_CURSES_HIDE );
         }
     } );
-#endif // TILES
 
     add( "ENABLE_ASCII_ART_ITEM", graphics,
          translate_marker( "Enable ASCII art in item descriptions" ),
@@ -2212,15 +2171,12 @@ void options_manager::add_options_graphics()
 
     add_empty_line();
 
-#if defined(TILES)
     std::vector<options_manager::id_and_option> display_list = cata_tiles::build_display_list();
     add( "DISPLAY", graphics, translate_marker( "Display" ),
          translate_marker( "Sets which video display will be used to show the game.  Requires restart." ),
          display_list,
          display_list.front().first, COPT_CURSES_HIDE );
-#endif
 
-#if !defined(__ANDROID__) // Android is always fullscreen
     add( "FULLSCREEN", graphics, translate_marker( "Fullscreen" ),
          translate_marker( "Starts Cataclysm in one of the fullscreen modes.  Requires restart." ),
     { { "no", translate_marker( "No" ) }, { "maximized", translate_marker( "Maximized" ) }, { "fullscreen", translate_marker( "Fullscreen" ) }, { "windowedbl", translate_marker( "Windowed borderless" ) } },
@@ -2230,15 +2186,7 @@ void options_manager::add_options_graphics()
     add( "MINIMIZE_ON_FOCUS_LOSS", graphics,
          translate_marker( "Minimize on focus loss" ),
          translate_marker( "Minimize fullscreen window when it loses focus.  Requires restart." ), false );
-#endif
 
-#if !defined(__ANDROID__)
-#   if !defined(TILES)
-    // No renderer selection in non-TILES mode
-    add( "RENDERER", graphics, translate_marker( "Renderer" ),
-    translate_marker( "Set which renderer to use.  Requires restart." ),   {   { "software", translate_marker( "software" ) } },
-    "software", COPT_CURSES_HIDE );
-#   else
     std::vector<options_manager::id_and_option> renderer_list = cata_tiles::build_renderer_list();
     std::string default_renderer = renderer_list.front().first;
 #   if defined(_WIN32)
@@ -2252,16 +2200,6 @@ void options_manager::add_options_graphics()
     add( "RENDERER", graphics, translate_marker( "Renderer" ),
          translate_marker( "Set which renderer to use.  Requires restart." ), renderer_list,
          default_renderer, COPT_CURSES_HIDE );
-#   endif
-
-#else
-    add( "SOFTWARE_RENDERING", graphics, translate_marker( "Software rendering" ),
-         translate_marker( "Use software renderer instead of graphics card acceleration.  Requires restart." ),
-         // take default setting from pre-game settings screen - important as both software + hardware rendering have issues with specific devices
-         android_get_default_setting( "Software rendering", false ),
-         COPT_CURSES_HIDE
-       );
-#endif
 
 #if defined(SDL_HINT_RENDER_BATCHING)
     add( "RENDER_BATCHING", graphics, translate_marker( "Allow render batching" ),
@@ -2281,18 +2219,13 @@ void options_manager::add_options_graphics()
        );
 #endif
 
-#if defined(__ANDROID__)
-    get_option( "FRAMEBUFFER_ACCEL" ).setPrerequisite( "SOFTWARE_RENDERING" );
-#else
     get_option( "FRAMEBUFFER_ACCEL" ).setPrerequisite( "RENDERER", "software" );
-#endif
 
     add( "USE_COLOR_MODULATED_TEXTURES", graphics, translate_marker( "Use color modulated textures" ),
          translate_marker( "If true, tries to use color modulated textures to speed-up ASCII drawing.  Requires restart." ),
          false, COPT_CURSES_HIDE
        );
 
-#if !defined(__ANDROID__)
     add( "SCALING_FACTOR", graphics, translate_marker( "Display scaling factor" ),
     translate_marker( "Factor by which to scale the game display, 1x means no scaling.  Requires restart." ), {
         { "1", translate_marker( "1x" ) },
@@ -2300,7 +2233,6 @@ void options_manager::add_options_graphics()
         { "4", translate_marker( "4x" ) }
     },
     "1", COPT_CURSES_HIDE );
-#endif
 
 }
 
@@ -2309,11 +2241,7 @@ void options_manager::add_options_performance()
     const auto add_empty_line = [&]() {
         this->add_empty_line( performance );
     };
-#if defined(__ANDROID__)
-    const static bool is_android = true;
-#else
     const static bool is_android = false;
-#endif
     add_option_group( performance, Group( "rem_act_perf", to_translation( "Sleep Boost" ),
                                           to_translation( "Skip expensive processing while the player sleeps." ) ),
     [&]( auto & page_id ) {
@@ -2332,12 +2260,6 @@ void options_manager::add_options_performance()
                                "NPCs with non-interruptible activities (e.g. surgery) are frozen "
                                "for the turn instead." ),
              is_android ? false : true );
-#if defined(__ANDROID__)
-        add( "LOAD_FROM_EXTERNAL", page_id, translate_marker( "External Storage Saving" ),
-             translate_marker( "Save in data/catalcysm... instead of Documents/..." ),
-             false );
-
-#endif
     } );
 
     add_empty_line();
@@ -3261,260 +3183,8 @@ void options_manager::add_options_world_default()
 
 void options_manager::add_options_android()
 {
-#if defined(__ANDROID__)
-    const auto add_empty_line = [&]() {
-        this->add_empty_line( android );
-    };
-
-    add( "ANDROID_QUICKSAVE", android, translate_marker( "Quicksave on app lose focus" ),
-         translate_marker( "If true, quicksave whenever the app loses focus (screen locked, app moved into background etc.) WARNING: Experimental. This may result in corrupt save games." ),
-         false
-       );
-
-    add_empty_line();
-
-    add( "ANDROID_TRAP_BACK_BUTTON", android, translate_marker( "Trap Back button" ),
-         translate_marker( "If true, the back button will NOT back out of the app and will be passed to the application as SDL_SCANCODE_AC_BACK.  Requires restart." ),
-         // take default setting from pre-game settings screen - important as there are issues with Back button on Android 9 with specific devices
-         android_get_default_setting( "Trap Back button", true )
-       );
-
-    add( "ANDROID_AUTO_KEYBOARD", android, translate_marker( "Auto-manage virtual keyboard" ),
-         translate_marker( "If true, automatically show/hide the virtual keyboard when necessary based on context. If false, virtual keyboard must be toggled manually." ),
-         true
-       );
-
-    add( "ANDROID_KEYBOARD_SCREEN_SCALE", android,
-         translate_marker( "Virtual keyboard screen scale" ),
-         translate_marker( "When the virtual keyboard is visible, scale the screen to prevent overlapping. Useful for text entry so you can see what you're typing." ),
-         true
-       );
-
-    add_empty_line();
-
-    add( "ANDROID_VIBRATION", android, translate_marker( "Vibration duration" ),
-         translate_marker( "If non-zero, vibrate the device for this long on input, in milliseconds. Ignored if hardware keyboard connected." ),
-         0, 200, 10
-       );
-
-    add_empty_line();
-
-    add( "ANDROID_SHOW_VIRTUAL_JOYSTICK", android, translate_marker( "Show virtual joystick" ),
-         translate_marker( "If true, show the virtual joystick when touching and holding the screen. Gives a visual indicator of deadzone and stick deflection." ),
-         true
-       );
-
-    add( "ANDROID_VIRTUAL_JOYSTICK_OPACITY", android, translate_marker( "Virtual joystick opacity" ),
-         translate_marker( "The opacity of the on-screen virtual joystick, as a percentage." ),
-         0, 100, 20
-       );
-
-    add( "ANDROID_DEADZONE_RANGE", android, translate_marker( "Virtual joystick deadzone size" ),
-         translate_marker( "While using the virtual joystick, deflecting the stick beyond this distance will trigger directional input. Specified as a percentage of longest screen edge." ),
-         0.01f, 0.2f, 0.03f, 0.001f, COPT_NO_HIDE, "%.3f"
-       );
-
-    add( "ANDROID_REPEAT_DELAY_RANGE", android, translate_marker( "Virtual joystick size" ),
-         translate_marker( "While using the virtual joystick, deflecting the stick by this much will repeat input at the deflected rate (see below). Specified as a percentage of longest screen edge." ),
-         0.05f, 0.5f, 0.10f, 0.001f, COPT_NO_HIDE, "%.3f"
-       );
-
-    add( "ANDROID_VIRTUAL_JOYSTICK_FOLLOW", android,
-         translate_marker( "Virtual joystick follows finger" ),
-         translate_marker( "If true, the virtual joystick will follow when sliding beyond its range." ),
-         false
-       );
-
-    add( "ANDROID_REPEAT_DELAY_MAX", android,
-         translate_marker( "Virtual joystick repeat rate (centered)" ),
-         translate_marker( "When the virtual joystick is centered, how fast should input events repeat, in milliseconds." ),
-         50, 1000, 500
-       );
-
-    add( "ANDROID_REPEAT_DELAY_MIN", android,
-         translate_marker( "Virtual joystick repeat rate (deflected)" ),
-         translate_marker( "When the virtual joystick is fully deflected, how fast should input events repeat, in milliseconds." ),
-         50, 1000, 100
-       );
-
-    add( "ANDROID_SENSITIVITY_POWER", android,
-         translate_marker( "Virtual joystick repeat rate sensitivity" ),
-         translate_marker( "As the virtual joystick moves from centered to fully deflected, this value is an exponent that controls the blend between the two repeat rates defined above. 1.0 = linear." ),
-         0.1f, 5.0f, 0.75f, 0.05f, COPT_NO_HIDE, "%.2f"
-       );
-
-    add( "ANDROID_INITIAL_DELAY", android, translate_marker( "Input repeat delay" ),
-         translate_marker( "While touching the screen, wait this long before showing the virtual joystick and repeating input, in milliseconds. Also used to determine tap/double-tap detection, flick detection and toggling quick shortcuts." ),
-         150, 1000, 300
-       );
-
-    add( "ANDROID_HIDE_HOLDS", android, translate_marker( "Virtual joystick hides shortcuts" ),
-         translate_marker( "If true, hides on-screen keyboard shortcuts while using the virtual joystick. Helps keep the view uncluttered while traveling long distances and navigating menus." ),
-         true
-       );
-
-    add_empty_line();
-
-    add( "ANDROID_SHORTCUT_DEFAULTS", android, translate_marker( "Default gameplay shortcuts" ),
-         translate_marker( "The default set of gameplay shortcuts to show. Used on starting a new game and whenever all gameplay shortcuts are removed." ),
-         "0mi", 30
-       );
-
-    add( "ANDROID_ACTIONMENU_AUTOADD", android,
-         translate_marker( "Add shortcuts for action menu selections" ),
-         translate_marker( "If true, automatically add a shortcut for actions selected via the in-game action menu." ),
-         true
-       );
-
-    add( "ANDROID_INVENTORY_AUTOADD", android,
-         translate_marker( "Add shortcuts for inventory selections" ),
-         translate_marker( "If true, automatically add a shortcut for items selected via the inventory." ),
-         true
-       );
-
-    add_empty_line();
-
-    add( "ANDROID_TAP_KEY", android, translate_marker( "Tap key (in-game)" ),
-         translate_marker( "The key to press when tapping during gameplay." ),
-         ".", 1
-       );
-
-    add( "ANDROID_2_TAP_KEY", android, translate_marker( "Two-finger tap key (in-game)" ),
-         translate_marker( "The key to press when tapping with two fingers during gameplay." ),
-         "i", 1
-       );
-
-    add( "ANDROID_2_SWIPE_UP_KEY", android, translate_marker( "Two-finger swipe up key (in-game)" ),
-         translate_marker( "The key to press when swiping up with two fingers during gameplay." ),
-         "K", 1
-       );
-
-    add( "ANDROID_2_SWIPE_DOWN_KEY", android,
-         translate_marker( "Two-finger swipe down key (in-game)" ),
-         translate_marker( "The key to press when swiping down with two fingers during gameplay." ),
-         "J", 1
-       );
-
-    add( "ANDROID_2_SWIPE_LEFT_KEY", android,
-         translate_marker( "Two-finger swipe left key (in-game)" ),
-         translate_marker( "The key to press when swiping left with two fingers during gameplay." ),
-         "L", 1
-       );
-
-    add( "ANDROID_2_SWIPE_RIGHT_KEY", android,
-         translate_marker( "Two-finger swipe right key (in-game)" ),
-         translate_marker( "The key to press when swiping right with two fingers during gameplay." ),
-         "H", 1
-       );
-
-    add( "ANDROID_PINCH_IN_KEY", android, translate_marker( "Pinch in key (in-game)" ),
-         translate_marker( "The key to press when pinching in during gameplay." ),
-         "Z", 1
-       );
-
-    add( "ANDROID_PINCH_OUT_KEY", android, translate_marker( "Pinch out key (in-game)" ),
-         translate_marker( "The key to press when pinching out during gameplay." ),
-         "z", 1
-       );
-
-    add_empty_line();
-
-    add( "ANDROID_SHORTCUT_AUTOADD", android,
-         translate_marker( "Auto-manage contextual gameplay shortcuts" ),
-         translate_marker( "If true, contextual in-game shortcuts are added and removed automatically as needed: examine, close, butcher, move up/down, control vehicle, pickup, toggle enemy + safe mode, sleep." ),
-         true
-       );
-
-    add( "ANDROID_SHORTCUT_AUTOADD_FRONT", android,
-         translate_marker( "Move contextual gameplay shortcuts to front" ),
-         translate_marker( "If the above option is enabled, specifies whether contextual in-game shortcuts will be added to the front or back of the shortcuts list. True makes them easier to reach, False reduces shuffling of shortcut positions." ),
-         false
-       );
-
-    add( "ANDROID_SHORTCUT_MOVE_FRONT", android, translate_marker( "Move used shortcuts to front" ),
-         translate_marker( "If true, using an existing shortcut will always move it to the front of the shortcuts list. If false, only shortcuts typed via keyboard will move to the front." ),
-         false
-       );
-
-    add( "ANDROID_SHORTCUT_ZONE", android,
-         translate_marker( "Separate shortcuts for No Auto Pickup zones" ),
-         translate_marker( "If true, separate gameplay shortcuts will be used within No Auto Pickup zones. Useful for keeping home base actions separate from exploring actions." ),
-         true
-       );
-
-    add( "ANDROID_SHORTCUT_REMOVE_TURNS", android,
-         translate_marker( "Turns to remove unused gameplay shortcuts" ),
-         translate_marker( "If non-zero, unused gameplay shortcuts will be removed after this many turns (as in discrete player actions, not world calendar turns)." ),
-         0, 1000, 0
-       );
-
-    add( "ANDROID_SHORTCUT_PERSISTENCE", android, translate_marker( "Shortcuts persistence" ),
-         translate_marker( "If true, shortcuts are saved/restored with each save game. If false, shortcuts reset between sessions." ),
-         true
-       );
-
-    add_empty_line();
-
-    add( "ANDROID_SHORTCUT_POSITION", android, translate_marker( "Shortcuts position" ),
-         translate_marker( "Switch between shortcuts on the left or on the right side of the screen." ),
-    { { "left", translate_marker( "Left" ) }, { "right", translate_marker( "Right" ) } }, "left"
-       );
-
-    add( "ANDROID_SHORTCUT_SCREEN_PERCENTAGE", android,
-         translate_marker( "Shortcuts screen percentage" ),
-         translate_marker( "How much of the screen can shortcuts occupy, as a percentage of total screen width." ),
-         10, 100, 100
-       );
-
-    add( "ANDROID_SHORTCUT_OVERLAP", android, translate_marker( "Shortcuts overlap screen" ),
-         translate_marker( "If true, shortcuts will be drawn transparently overlapping the game screen. If false, the game screen size will be reduced to fit the shortcuts below." ),
-         true
-       );
-
-    add( "ANDROID_SHORTCUT_OPACITY_BG", android, translate_marker( "Shortcut opacity (background)" ),
-         translate_marker( "The background opacity of on-screen keyboard shortcuts, as a percentage." ),
-         0, 100, 75
-       );
-
-    add( "ANDROID_SHORTCUT_OPACITY_SHADOW", android, translate_marker( "Shortcut opacity (shadow)" ),
-         translate_marker( "The shadow opacity of on-screen keyboard shortcuts, as a percentage." ),
-         0, 100, 100
-       );
-
-    add( "ANDROID_SHORTCUT_OPACITY_FG", android, translate_marker( "Shortcut opacity (text)" ),
-         translate_marker( "The foreground opacity of on-screen keyboard shortcuts, as a percentage." ),
-         0, 100, 100
-       );
-
-    add( "ANDROID_SHORTCUT_COLOR", android, translate_marker( "Shortcut color" ),
-         translate_marker( "The color of on-screen keyboard shortcuts." ),
-         0, 15, 15
-       );
-
-    add( "ANDROID_SHORTCUT_BORDER", android, translate_marker( "Shortcut border" ),
-         translate_marker( "The border of each on-screen keyboard shortcut in pixels. ." ),
-         0, 16, 0
-       );
-
-    add( "ANDROID_SHORTCUT_WIDTH_MIN", android, translate_marker( "Shortcut width (min)" ),
-         translate_marker( "The minimum width of each on-screen keyboard shortcut in pixels. Only relevant when lots of shortcuts are visible at once." ),
-         20, 1000, 50
-       );
-
-    add( "ANDROID_SHORTCUT_WIDTH_MAX", android, translate_marker( "Shortcut width (max)" ),
-         translate_marker( "The maximum width of each on-screen keyboard shortcut in pixels." ),
-         50, 1000, 160
-       );
-
-    add( "ANDROID_SHORTCUT_HEIGHT", android, translate_marker( "Shortcut height" ),
-         translate_marker( "The height of each on-screen keyboard shortcut in pixels." ),
-         50, 1000, 130
-       );
-
-#endif
 }
 
-#if defined(TILES)
 // Helper method to isolate #ifdeffed tiles code.
 static void refresh_tiles( bool used_tiles_changed, bool pixel_minimap_height_changed, bool ingame,
                            bool force_tile_change )
@@ -3577,11 +3247,6 @@ static void refresh_tiles( bool used_tiles_changed, bool pixel_minimap_height_ch
         g->mark_main_ui_adaptor_resize();
     }
 }
-#else
-static void refresh_tiles( bool, bool, bool, bool )
-{
-}
-#endif // TILES
 
 static void draw_borders_external(
     const catacurses::window &w, int horizontal_level, const std::set<int> &vert_lines,
@@ -3629,7 +3294,6 @@ options_manager::PageItem::fmt_tooltip( const Group &group,
             std::string ret = string_format( "%s #%s",
                                              opt.getTooltip(),
                                              opt.getDefaultText() );
-#if defined(TILES) || defined(_WIN32)
             if( opt_name == "TERMINAL_X" ) {
                 int new_window_width = 0;
                 new_window_width = projected_window_width();
@@ -3649,7 +3313,6 @@ options_manager::PageItem::fmt_tooltip( const Group &group,
                                      "The window will be %d pixels tall with the selected value.",
                                      new_window_height ), new_window_height );
             }
-#endif
             return ret;
         }
         default:
@@ -4146,7 +3809,6 @@ std::string options_manager::show( bool ingame, const bool world_options_only,
     calendar::set_eternal_season( ::get_option<bool>( "ETERNAL_SEASON" ) );
     calendar::set_season_length( ::get_option<int>( "SEASON_LENGTH" ) );
 
-#if !defined(__ANDROID__) && (defined(TILES) || defined(_WIN32))
     if( terminal_size_changed ) {
         int scaling_factor = get_scaling_factor();
         int TERMX = ::get_option<int>( "TERMINAL_X" );
@@ -4159,9 +3821,6 @@ std::string options_manager::show( bool ingame, const bool world_options_only,
 
         resize_term( ::get_option<int>( "TERMINAL_X" ), ::get_option<int>( "TERMINAL_Y" ) );
     }
-#else
-    ( void ) terminal_size_changed;
-#endif
 
     refresh_tiles( used_tiles_changed, pixel_minimap_changed, ingame, force_tile_change );
 
@@ -4249,13 +3908,8 @@ void options_manager::cache_to_globals()
     display_mod_source = ::get_option<bool>( "MOD_SOURCE" );
     display_object_ids = ::get_option<bool>( "SHOW_IDS" );
     trigdist = ::get_option<bool>( "CIRCLEDIST" );
-#if defined(TILES)
     use_tiles = ::get_option<bool>( "USE_TILES" );
     use_tiles_overmap = ::get_option<bool>( "USE_TILES_OVERMAP" );
-#else
-    use_tiles = false;
-    use_tiles_overmap = false;
-#endif
     use_pinyin_search = ::get_option<bool>( "USE_PINYIN_SEARCH" );
     log_from_top = ::get_option<std::string>( "LOG_FLOW" ) == "new_top";
     message_ttl = ::get_option<int>( "MESSAGE_TTL" );

@@ -1,10 +1,5 @@
 #include "ime.h"
 
-#ifdef __ANDROID__
-#include "options.h"
-#include "sdltiles.h"
-#endif
-
 #ifdef _WIN32
 
 #if 1 // Prevent IWYU reordering this below <imm.h>
@@ -103,9 +98,7 @@ static imm_wrapper imm;
 
 static bool ime_enabled()
 {
-#if defined( __ANDROID__ )
-    return false; // always call disable_ime() (i.e. do nothing) on return
-#elif defined( _WIN32 )
+#if   defined( _WIN32 )
     return imm.ime_enabled();
 #endif
     return false;
@@ -114,11 +107,7 @@ static bool ime_enabled()
 
 void enable_ime()
 {
-#if defined( __ANDROID__ )
-    if( get_option<bool>( "ANDROID_AUTO_KEYBOARD" ) ) {
-        SDL_StartTextInput( get_sdl_window().get() );
-    }
-#elif defined( _WIN32 )
+#if   defined( _WIN32 )
     imm.enable_ime();
 #endif
     // TODO: other platforms?
@@ -126,9 +115,7 @@ void enable_ime()
 
 void disable_ime()
 {
-#if defined( __ANDROID__ )
-    // the original android code did nothing, so don't change it
-#elif defined( _WIN32 )
+#if   defined( _WIN32 )
     imm.disable_ime();
 #endif
     // TODO: other platforms?

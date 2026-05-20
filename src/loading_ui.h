@@ -8,7 +8,6 @@
 
 #include "point.h"
 
-#if defined( TILES )
 struct loading_image_cache;
 struct loading_image_selection_state {
     std::vector<std::string> paths;
@@ -17,7 +16,6 @@ struct loading_image_selection_state {
     std::optional<std::string> current_author;
     bool lookup_attempted = false;
 };
-#endif
 
 class background_pane;
 class loading_image_splash;
@@ -36,20 +34,16 @@ class loading_image_splash
 {
     private:
         std::unique_ptr<background_pane> ui_background;
-#if defined( TILES )
         loading_image_selection_state owned_selection_state;
         loading_image_selection_state *selection_state = nullptr;
         bool selected_image_for_this_ui = false;
         std::unique_ptr<loading_image_cache> loading_image_cache_state;
 
         auto draw_current_loading_image() -> bool;
-#endif
 
     public:
         loading_image_splash();
-#if defined( TILES )
         explicit loading_image_splash( loading_image_selection_state &selection_state );
-#endif
         ~loading_image_splash();
 };
 
@@ -59,9 +53,7 @@ class loading_ui
         std::unique_ptr<uilist> menu;
         std::unique_ptr<ui_adaptor> ui;
         std::unique_ptr<loading_image_splash> ui_splash;
-#if defined( TILES )
         loading_image_selection_state loading_image_selection;
-#endif
 
         void init();
     public:

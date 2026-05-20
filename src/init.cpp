@@ -114,9 +114,7 @@
 #include "world_type.h"
 #include "worldfactory.h"
 
-#if defined(TILES)
 #  include "mod_tileset.h"
-#endif
 
 struct DynamicDataLoader::cached_streams {
     lru_cache<std::string, shared_ptr_fast<std::istringstream>> cache;
@@ -471,12 +469,7 @@ void DynamicDataLoader::initialize()
     add( "score", &score::load_score );
     add( "achievement", &achievement::load_achievement );
     add( "named_color", &RGBColor::load_named_color );
-#if defined(TILES)
     add( "mod_tileset", &load_mod_tileset );
-#else
-    // No TILES - no tilesets
-    add( "mod_tileset", &load_ignored_type );
-#endif
 }
 
 void DynamicDataLoader::load_data_from_path( const std::string &path, const std::string &src,
@@ -650,9 +643,7 @@ void DynamicDataLoader::unload_data()
     zone_type::reset_zones();
     l10n_data::unload_mod_catalogues();
     RGBColor::unload_names();
-#if defined(TILES)
     reset_mod_tileset();
-#endif
 
     // Has to be cleaned last in case one of the above data collections
     // holds references to Lua functions or tables.
@@ -730,9 +721,7 @@ void DynamicDataLoader::finalize_loaded_data( loading_ui &ui )
             { _( "Mutations" ), &mutation_branch::finalize },
             { _( "Achievements" ), &achievement::finalize },
             { _( "Localization" ), &l10n_data::load_mod_catalogues },
-#if defined(TILES)
             { _( "Tileset" ), &load_tileset },
-#endif
         }
     };
 

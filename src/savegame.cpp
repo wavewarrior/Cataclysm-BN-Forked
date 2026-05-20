@@ -51,12 +51,6 @@
 #include "dimension_bounds.h"
 #include "overmapbuffer_registry.h"
 
-#if defined(__ANDROID__)
-#include "input.h"
-
-extern std::map<std::string, std::list<input_event>> quick_shortcuts_map;
-#endif
-
 static const oter_str_id oter_omt_obsolete( "omt_obsolete" );
 
 /*
@@ -416,52 +410,6 @@ auto game::unserialize( std::istream &fin ) -> bool
 }
 
 // scent_map::deserialize() moved to scent_map.cpp
-
-#if defined(__ANDROID__)
-///// quick shortcuts
-void game::load_shortcuts( std::istream &fin )
-{
-    JsonIn jsin( fin );
-    try {
-        JsonObject data = jsin.get_object();
-
-        if( get_option<bool>( "ANDROID_SHORTCUT_PERSISTENCE" ) ) {
-            quick_shortcuts_map.clear();
-            for( const JsonMember &member : data.get_object( "quick_shortcuts" ) ) {
-                std::list<input_event> &qslist = quick_shortcuts_map[member.name()];
-                for( const int i : member.get_array() ) {
-                    qslist.push_back( input_event( i, input_event_t::keyboard ) );
-                }
-            }
-        }
-    } catch( const JsonError &jsonerr ) {
-        debugmsg( "Bad shortcuts json\n%s", jsonerr.c_str() );
-        return;
-    }
-}
-
-void game::save_shortcuts( std::ostream &fout )
-{
-    JsonOut json( fout, true ); // pretty-print
-
-    json.start_object();
-    if( get_option<bool>( "ANDROID_SHORTCUT_PERSISTENCE" ) ) {
-        json.member( "quick_shortcuts" );
-        json.start_object();
-        for( auto &e : quick_shortcuts_map ) {
-            json.member( e.first );
-            const std::list<input_event> &qsl = e.second;
-            json.start_array();
-            for( const auto &event : qsl ) {
-                json.write( event.get_first_input() );
-            }
-            json.end_array();
-        }
-        json.end_object();
-    }
-    json.end_object();
-}
-#endif
 
 void overmap::load_monster_groups( JsonIn &jsin )
 {

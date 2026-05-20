@@ -1,5 +1,4 @@
 #include "dynamic_atlas.h"
-#if defined(TILES)
 
 #include "cata_tiles.h"
 
@@ -287,4 +286,3 @@ void dynamic_atlas::clear()
     sheets.clear();
 }
 
-#endif

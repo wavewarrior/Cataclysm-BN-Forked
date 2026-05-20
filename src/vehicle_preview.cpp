@@ -1,5 +1,3 @@
-#if defined(TILES)
-
 #include "vehicle_preview.h"
 
 #include <algorithm>
@@ -309,4 +307,3 @@ void vehicle_preview_window::clear()
     SDL_SetRenderClipRect( renderer.get(), nullptr );
 }
 
-#endif // TILES

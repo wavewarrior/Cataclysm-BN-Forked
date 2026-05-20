@@ -29,14 +29,12 @@
 #include "ui_manager.h"
 #include "worldfactory.h"
 
-#if defined( TILES )
 struct loading_image_cache {
     std::string path;
     SDL_Texture_Ptr texture;
     point image_size = point_zero;
     bool attempted = false;
 };
-#endif
 
 auto get_scaled_loading_image_size( const loading_image_scaling_options &opts ) ->
 std::optional<point>
@@ -55,8 +53,6 @@ std::optional<point>
 
 namespace
 {
-
-#if defined( TILES )
 
 auto log_loading_image( const std::string &message ) -> void
 {
@@ -354,11 +350,8 @@ struct sdl_render_state_guard {
     }
 };
 
-#endif // defined( TILES )
-
 } // namespace
 
-#if defined( TILES )
 auto advance_loading_image( loading_image_selection_state &state ) -> bool
 {
     if( state.paths.empty() ) {
@@ -403,9 +396,7 @@ auto loading_image_splash::draw_current_loading_image() -> bool
 
     return false;
 }
-#endif
 
-#if defined( TILES )
 loading_image_splash::loading_image_splash() : selection_state( &owned_selection_state )
 {
     loading_image_cache_state = std::make_unique<loading_image_cache>();
@@ -448,18 +439,10 @@ loading_image_splash::loading_image_splash( loading_image_selection_state &selec
         draw_current_loading_image();
     } );
 }
-#else
-loading_image_splash::loading_image_splash()
-{
-    ui_background = std::make_unique<background_pane>();
-}
-#endif
 
 loading_image_splash::~loading_image_splash()
 {
-#if defined( TILES )
     clear_sdl_display_buffer_before_redraw();
-#endif
 }
 
 loading_ui::loading_ui( bool display )
@@ -472,9 +455,7 @@ loading_ui::loading_ui( bool display )
 
 loading_ui::~loading_ui()
 {
-#if defined( TILES )
     clear_sdl_display_buffer_before_redraw();
-#endif
 }
 
 void loading_ui::add_entry( const std::string &description )
@@ -497,11 +478,7 @@ void loading_ui::new_context( const std::string &desc )
 void loading_ui::init()
 {
     if( menu != nullptr && ui == nullptr ) {
-#if defined( TILES )
         ui_splash = std::make_unique<loading_image_splash>( loading_image_selection );
-#else
-        ui_splash = std::make_unique<loading_image_splash>();
-#endif
 
         ui = std::make_unique<ui_adaptor>();
         ui->on_screen_resize( [this]( ui_adaptor & ui ) { menu->reposition( ui ); } );

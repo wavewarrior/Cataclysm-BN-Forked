@@ -1,7 +1,5 @@
 #pragma once
 
-#if defined(TILES)
-
 #include <string>
 #include <optional>
 #include <vector>
@@ -72,4 +70,3 @@ class dynamic_atlas
         int hint_sprite_height;
 };
 
-#endif

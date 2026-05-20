@@ -35,10 +35,6 @@
 #include "visitable.h"
 #include "vpart_position.h"
 
-#if defined(__ANDROID__)
-#include <SDL3/SDL.h>
-#endif
-
 #include <algorithm>
 #include <iterator>
 #include <limits>
@@ -2219,10 +2215,6 @@ inventory_drop_selector::inventory_drop_selector( player &p,
         const inventory_selector_preset &preset ) :
     inventory_multiselector( p, preset, _( "ITEMS TO DROP" ) )
 {
-#if defined(__ANDROID__)
-    // allow user to type a drop number without dismissing virtual keyboard after each keypress
-    ctxt.allow_text_entry = true;
-#endif
 }
 
 void inventory_drop_selector::process_selected( int &count,
