@@ -163,11 +163,12 @@ endif ()
 target_link_libraries(cataclysm-bn-tiles-common PUBLIC SDL3_shadercross::SDL3_shadercross)
 
 # Ship the runtime DLLs next to the executable so a fresh-checkout dev build
-# on Windows 11 (NVIDIA RTX 4090 target) and a macOS dev build both have the
-# shadercross dylib + DXC sidecars resolvable at launch. RUNTIME_DEPENDENCY
-# lets CMake follow shadercross's PE/dylib import table to harvest
-# dxcompiler.dll / dxil.dll on Windows and libdxcompiler.dylib on macOS.
-if (DYNAMIC_LINKING OR WIN32 OR APPLE)
+# on Windows 11 (NVIDIA RTX 4090 target) has the shadercross DLL + DXC
+# sidecars (dxcompiler.dll / dxil.dll) resolvable at launch. Windows-only:
+# $<TARGET_RUNTIME_DLLS> is empty on macOS/Linux (those use rpath baked into
+# the executable instead), and an empty source list crashes
+# `cmake -E copy_if_different`.
+if (WIN32)
     add_custom_command(TARGET cataclysm-bn-tiles POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 $<TARGET_RUNTIME_DLLS:cataclysm-bn-tiles>

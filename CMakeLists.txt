@@ -492,6 +492,16 @@ if (NOT TARGET SDL3_shadercross::SDL3_shadercross)
         set(SDLSHADERCROSS_STATIC       OFF CACHE BOOL "" FORCE)
         set(SDLSHADERCROSS_CLI          OFF CACHE BOOL "" FORCE)
         set(SDLSHADERCROSS_INSTALL      OFF CACHE BOOL "" FORCE)
+        # Save + scrub CATA_WARNINGS while the vendored DXC / SPIRV-Tools /
+        # SPIRV-Cross trees configure: those subprojects build with
+        # `-Werror -Wold-style-cast -Wshadow -Wundef -Wconversion …` of
+        # their own, and they trip immediately when our project-level
+        # `-Wold-style-cast`, `-Wmissing-noreturn`, `-Wsuggest-override`,
+        # etc. leak in through CMAKE_CXX_FLAGS. Restore right after.
+        set(_CATA_SAVED_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+        set(_CATA_SAVED_C_FLAGS   "${CMAKE_C_FLAGS}")
+        string(REPLACE "${CATA_WARNINGS}"    "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+        string(REPLACE "${CATA_OTHER_FLAGS}" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
         FetchContent_Declare(
             SDL3_SHADERCROSS
             GIT_REPOSITORY https://github.com/libsdl-org/SDL_shadercross.git
@@ -499,6 +509,8 @@ if (NOT TARGET SDL3_shadercross::SDL3_shadercross)
             EXCLUDE_FROM_ALL
         )
         FetchContent_MakeAvailable(SDL3_SHADERCROSS)
+        set(CMAKE_CXX_FLAGS "${_CATA_SAVED_CXX_FLAGS}")
+        set(CMAKE_C_FLAGS   "${_CATA_SAVED_C_FLAGS}")
     else ()
         message("Using system SDL3_shadercross")
     endif ()
