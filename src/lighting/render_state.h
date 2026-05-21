@@ -135,6 +135,20 @@ class render_state
                                 const sprite_instance &inst );
         bool tile_sprites_empty() const noexcept { return tile_sprite_queue_.empty(); }
         void flush_tile_sprites( sprite_batcher &dst, SDL_GPUSampler *sampler );
+
+        // Phase 2i-B-5 lifecycle fix. Legacy SDL_Renderer's display_buffer
+        // is a persistent render target — content stays between redraws.
+        // The GPU queues here are transient and used to be cleared by
+        // flush, which made refresh_display run with empty queues on
+        // every no-input frame and blanked the swapchain to black.
+        //
+        // Fix: ui_adaptor::redraw_invalidated() now calls
+        // clear_frame_queues() at the start of each redraw cycle. The
+        // flush_* methods drain WITHOUT clearing, so refresh_display
+        // can re-fire the same queues on no-input frames and reproduce
+        // the same draws as long as the last redraw cycle's content
+        // remains valid. The next redraw clears + repopulates.
+        void clear_frame_queues() noexcept;
         bool font_glyphs_empty() const noexcept { return font_glyph_queue_.empty(); }
         // Drains `font_glyph_queue_` into `dst` using `sampler`. Caller
         // must have an active begin_pass on `dst`. Internally rebinds
