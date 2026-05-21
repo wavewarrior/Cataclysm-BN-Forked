@@ -81,18 +81,24 @@ class render_state
         // buffer alloc, copy submit). Logs via DC::SDL.
         SDL_GPUTexture *upload_surface_to_gpu_texture( SDL_Surface *surface );
 
-        // Phase 2i-B-5 helper. Upload an RGBA SDL_Surface's pixels into
-        // a sub-rectangle of an existing SDL_GPUTexture at (dst_x,dst_y).
-        // The destination texture must already be sized large enough
-        // for `dst_x + src->w` × `dst_y + src->h` and have
+        // Phase 2i-B-5 helper. Upload pixels from `src` into a
+        // sub-rectangle of `dst` at (dst_x,dst_y). If `src_rect` is
+        // non-null, only that sub-rect of `src` is uploaded (size of
+        // that rect, not the full surface); otherwise the entire `src`
+        // surface is uploaded. The destination texture must be sized
+        // large enough for the upload region and have
         // SDL_GPU_TEXTUREUSAGE_SAMPLER. Used by dynamic_atlas to copy
         // each tile's CPU bitmap onto its sheet's GPU mirror at the
-        // same atlas-packed offset the legacy SDL_Renderer path uses.
+        // same atlas-packed offset the legacy SDL_Renderer path uses —
+        // staging surfaces in cata_tiles are size-rounded so the
+        // sub-rect form is mandatory there to avoid clobbering
+        // neighbouring sprites in the atlas with stale padding bytes.
         //
         // Returns true on success; false if any step fails (logs via
         // DC::SDL). Idempotent — caller owns the destination texture.
         bool upload_surface_subregion_to_gpu_texture(
-            SDL_GPUTexture *dst, int dst_x, int dst_y, SDL_Surface *src );
+            SDL_GPUTexture *dst, int dst_x, int dst_y,
+            SDL_Surface *src, const SDL_Rect *src_rect = nullptr );
 
         // Allocate a SAMPLER-only SDL_GPUTexture of the given size and
         // RGBA format. Returns nullptr on failure. Caller owns the

@@ -1119,10 +1119,18 @@ bool tileset_loader::copy_surface_to_dynamic_atlas(
             // Phase 2i-B-5: mirror this stamp into the GPU atlas at
             // the same offset. cata_tiles' GPU draw path samples the
             // GPU texture via find_gpu_texture(legacy_atlas).
+            //
+            // CRITICAL: st_surf is sized r_width × r_height (rounded
+            // up to the sprite hint) — larger than the sprite itself.
+            // Pass `st_sub_rect` so the upload only copies the sprite-
+            // sized region, otherwise the surrounding zero padding
+            // would overwrite neighbouring sprites already packed
+            // into the atlas at adjacent offsets.
             if( SDL_GPUTexture *gpu_atlas =
                     ts.tileset_atlas->find_gpu_texture( atl_tex.first.get() ) ) {
                 lighting::get_render_state().upload_surface_subregion_to_gpu_texture(
-                    gpu_atlas, atl_tex.second.x, atl_tex.second.y, st_surf );
+                    gpu_atlas, atl_tex.second.x, atl_tex.second.y,
+                    st_surf, &st_sub_rect );
             }
         }
 

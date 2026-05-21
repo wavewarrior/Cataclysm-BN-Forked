@@ -3,6 +3,7 @@
 #include "shader_compiler.h"
 #include "debug.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cstring>
 
@@ -242,7 +243,8 @@ SDL_GPUTexture *render_state::create_rgba_gpu_texture( int w, int h )
 }
 
 bool render_state::upload_surface_subregion_to_gpu_texture(
-    SDL_GPUTexture *dst, int dst_x, int dst_y, SDL_Surface *src )
+    SDL_GPUTexture *dst, int dst_x, int dst_y,
+    SDL_Surface *src, const SDL_Rect *src_rect )
 {
     if( !device_.ready() || !dst || !src || src->w <= 0 || src->h <= 0 ) {
         return false;
@@ -258,8 +260,26 @@ bool render_state::upload_surface_subregion_to_gpu_texture(
         psrc = converted;
     }
 
-    const std::uint32_t row_bytes = static_cast<std::uint32_t>( psrc->w ) * 4;
-    const std::uint32_t total_bytes = row_bytes * static_cast<std::uint32_t>( psrc->h );
+    // Sub-rect of the (potentially converted) source surface to upload.
+    int sx = 0;
+    int sy = 0;
+    int sw = psrc->w;
+    int sh = psrc->h;
+    if( src_rect ) {
+        sx = std::max( 0, src_rect->x );
+        sy = std::max( 0, src_rect->y );
+        sw = std::clamp( src_rect->w, 0, psrc->w - sx );
+        sh = std::clamp( src_rect->h, 0, psrc->h - sy );
+        if( sw <= 0 || sh <= 0 ) {
+            if( converted ) {
+                SDL_DestroySurface( converted );
+            }
+            return false;
+        }
+    }
+
+    const std::uint32_t row_bytes = static_cast<std::uint32_t>( sw ) * 4;
+    const std::uint32_t total_bytes = row_bytes * static_cast<std::uint32_t>( sh );
 
     SDL_GPUTransferBufferCreateInfo tbi{};
     tbi.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
@@ -282,10 +302,15 @@ bool render_state::upload_surface_subregion_to_gpu_texture(
     }
     auto *out = static_cast<std::uint8_t *>( mapped );
     const auto *in = static_cast<const std::uint8_t *>( psrc->pixels );
-    for( int y = 0; y < psrc->h; ++y ) {
+    // Copy only the sub-rect rows, packed tightly into the transfer
+    // buffer; the GPU upload region below is sized to the sub-rect
+    // dimensions so the upload doesn't touch neighbouring atlas cells.
+    for( int y = 0; y < sh; ++y ) {
+        const std::uint8_t *row_src = in
+                                      + static_cast<std::size_t>( sy + y ) * psrc->pitch
+                                      + static_cast<std::size_t>( sx ) * 4;
         std::memcpy( out + static_cast<std::size_t>( y ) * row_bytes,
-                     in + static_cast<std::size_t>( y ) * psrc->pitch,
-                     row_bytes );
+                     row_src, row_bytes );
     }
     SDL_UnmapGPUTransferBuffer( device_.raw(), xfer );
 
@@ -304,8 +329,8 @@ bool render_state::upload_surface_subregion_to_gpu_texture(
     region.texture = dst;
     region.x = static_cast<std::uint32_t>( dst_x );
     region.y = static_cast<std::uint32_t>( dst_y );
-    region.w = static_cast<std::uint32_t>( psrc->w );
-    region.h = static_cast<std::uint32_t>( psrc->h );
+    region.w = static_cast<std::uint32_t>( sw );
+    region.h = static_cast<std::uint32_t>( sh );
     region.d = 1;
     SDL_UploadToGPUTexture( cp, &ti, &region, false );
     SDL_EndGPUCopyPass( cp );
