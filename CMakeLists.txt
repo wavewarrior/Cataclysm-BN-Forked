@@ -514,6 +514,17 @@ if (NOT TARGET SDL3_shadercross::SDL3_shadercross)
         set(SDLSHADERCROSS_STATIC       ${_CATA_SHADERCROSS_STATIC} CACHE BOOL "" FORCE)
         set(SDLSHADERCROSS_CLI          OFF CACHE BOOL "" FORCE)
         set(SDLSHADERCROSS_INSTALL      OFF CACHE BOOL "" FORCE)
+        # Vendored SPIRV-Tools defaults `SPIRV_WERROR=ON` and additionally
+        # hardcodes `/WX` into its MSVC base warning flags. MSVC 14.50 emits
+        # new warnings the SPIRV-Tools tree does not suppress
+        # (e.g. set_spec_constant_default_value_pass.cpp), which with `/WX`
+        # become fatal errors — the build dies around 800/1785. Disable the
+        # cache toggle and post-process the subtree below to also strip the
+        # hardcoded `/WX`. Same treatment covers vendored DXC, SPIRV-Cross.
+        set(SPIRV_WERROR                OFF CACHE BOOL "" FORCE)
+        set(SPIRV_WARN_EVERYTHING       OFF CACHE BOOL "" FORCE)
+        set(SPIRV_SKIP_TESTS            ON  CACHE BOOL "" FORCE)
+        set(SPIRV_SKIP_EXECUTABLES      ON  CACHE BOOL "" FORCE)
         # Save + scrub CATA_WARNINGS while the vendored DXC / SPIRV-Tools /
         # SPIRV-Cross trees configure: those subprojects build with
         # `-Werror -Wold-style-cast -Wshadow -Wundef -Wconversion …` of
@@ -533,6 +544,37 @@ if (NOT TARGET SDL3_shadercross::SDL3_shadercross)
         FetchContent_MakeAvailable(SDL3_SHADERCROSS)
         set(CMAKE_CXX_FLAGS "${_CATA_SAVED_CXX_FLAGS}")
         set(CMAKE_C_FLAGS   "${_CATA_SAVED_C_FLAGS}")
+        # Recursively strip `/WX` (and `-Werror`) from every target the
+        # shadercross subtree just created — SPIRV-Tools hardcodes `/WX`
+        # in its target COMPILE_OPTIONS bypassing both SPIRV_WERROR and
+        # any flags scrub. Append `/WX-` so MSVC's last-flag-wins picks
+        # warnings-as-warnings even on targets we cannot enumerate by name.
+        function(_cata_strip_werror _dir)
+            get_directory_property(_targets DIRECTORY "${_dir}" BUILDSYSTEM_TARGETS)
+            foreach(_t IN LISTS _targets)
+                get_target_property(_type ${_t} TYPE)
+                if(_type STREQUAL "INTERFACE_LIBRARY" OR _type STREQUAL "UTILITY")
+                    continue()
+                endif()
+                get_target_property(_opts ${_t} COMPILE_OPTIONS)
+                if(_opts)
+                    list(REMOVE_ITEM _opts "/WX" "-WX" "-Werror")
+                    set_target_properties(${_t} PROPERTIES COMPILE_OPTIONS "${_opts}")
+                endif()
+                if(MSVC)
+                    target_compile_options(${_t} PRIVATE /WX-)
+                else()
+                    target_compile_options(${_t} PRIVATE -Wno-error)
+                endif()
+            endforeach()
+            get_directory_property(_subs DIRECTORY "${_dir}" SUBDIRECTORIES)
+            foreach(_s IN LISTS _subs)
+                _cata_strip_werror("${_s}")
+            endforeach()
+        endfunction()
+        if(DEFINED sdl3_shadercross_SOURCE_DIR)
+            _cata_strip_werror("${sdl3_shadercross_SOURCE_DIR}")
+        endif()
     else ()
         message("Using system SDL3_shadercross")
     endif ()
