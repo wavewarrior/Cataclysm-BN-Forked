@@ -11,7 +11,7 @@ Current lighting: per-turn CPU shadowcasting (`src/lightmap.cpp`, `src/shadowcas
 | Phase | State | Notes |
 |---|---|---|
 | 1. Curses + Android removal | ✅ done | commit `e96086b658` on `feat/lighting-phase1-curses-android-removal`. 169 files, -13042 lines. |
-| 2. SDL_GPU device + sprite batcher | ⏳ 2a–2g inert foundation done; 2h/2i pending | branch `feat/lighting-phase2-sdl_gpu`. |
+| 2. SDL_GPU device + sprite batcher | ⏳ 2a–2g inert + 2i-A + 2i-B-1..3 done; verified Win11 D3D12 + Mac Metal | branch `feat/lighting-phase2i-B-cutover`. RENDERER option `gpu` must be avoided pre-2e/2f/2g — two SDL_GPU devices race. |
 | 3–14 | pending | see Phasing below |
 
 ### Phase 2 progress (branch `feat/lighting-phase2-sdl_gpu`)
