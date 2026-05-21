@@ -32,13 +32,18 @@
 namespace lighting
 {
 
-// One sprite = one instance. 32 bytes, packed std140-friendly.
+// One sprite = one instance. 64 bytes, packed std140-friendly.
 // Layout must match data/shaders/lighting/src/sprite.vert input bindings.
 //
-//   dst_*  — pixel-space destination quad in the bound render target.
-//   src_*  — normalised UV rect within the bound texture (0..1).
-//   tint_* — RGBA multiplier applied per-pixel (1.0 == passthrough).
-//            Legacy SDL_SetTextureColorMod/SetTextureAlphaMod fold into this.
+//   dst_*    — pixel-space destination quad in the bound render target.
+//   src_*    — normalised UV rect within the bound texture (0..1).
+//   tint_*   — RGBA multiplier applied per-pixel (1.0 == passthrough).
+//              Legacy SDL_SetTextureColorMod/SetTextureAlphaMod fold into this.
+//   rotation — Radians, applied to the destination quad around its centre.
+//              Sprite content is unchanged; only the quad's pixel coverage
+//              rotates. 0 = no rotation; π/2 = 90° clockwise.
+//   pad*     — keep struct 16-byte-aligned for std140; required by the
+//              vertex shader's StructuredBuffer<SpriteInstance> binding.
 struct sprite_instance {
     float dst_x;
     float dst_y;
@@ -52,8 +57,12 @@ struct sprite_instance {
     float tint_g;
     float tint_b;
     float tint_a;
+    float rotation;
+    float pad0;
+    float pad1;
+    float pad2;
 };
-static_assert( sizeof( sprite_instance ) == 48,
+static_assert( sizeof( sprite_instance ) == 64,
                "sprite_instance is wire-stable with the vertex shader; "
                "changing its layout requires shader edits." );
 

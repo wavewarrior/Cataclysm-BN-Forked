@@ -28,10 +28,16 @@
 #include "ui.h"
 #include "ui_manager.h"
 #include "worldfactory.h"
+#include "lighting/render_state.h"
 
 struct loading_image_cache {
     std::string path;
     SDL_Texture_Ptr texture;
+    // Phase 2i-B-7c: GPU mirror of the loading image. Created from the
+    // same SDL_Surface that fed CreateTextureFromSurface. draw_current_
+    // loading_image prefers the GPU path (tile sprite queue) and falls
+    // back to RenderCopy only when the upload missed.
+    lighting::gpu_texture_unique_ptr gpu_texture;
     point image_size = point_zero;
     bool attempted = false;
 };
@@ -227,6 +233,16 @@ auto get_loading_image_cache( loading_image_cache &cache,
     try {
         auto surface = load_image( loading_image_path.c_str() );
         cache.image_size = point( surface->w, surface->h );
+        // Upload GPU mirror first (consumes a clone of the surface
+        // pixels via transfer buffer) before CreateTextureFromSurface,
+        // which may move-from the surface depending on SDL3 build.
+        auto &rs = lighting::get_render_state();
+        if( rs.ready() ) {
+            SDL_GPUTexture *raw = rs.upload_surface_to_gpu_texture( surface.get() );
+            if( raw ) {
+                cache.gpu_texture.reset( raw );
+            }
+        }
         cache.texture = CreateTextureFromSurface( get_sdl_renderer(), surface );
     } catch( const std::exception &err ) {
         log_loading_image( string_format( "failed to load image '%s': %s", loading_image_path,
@@ -385,7 +401,30 @@ auto loading_image_splash::draw_current_loading_image() -> bool
             clear_sdl_display_buffer();
             SDL_FRect fRect{};
             SDL_RectToFRect( &*rect, &fRect );
-            RenderCopy( renderer, cache->texture, nullptr, &fRect );
+            // Phase 2i-B-7c: prefer GPU enqueue. The tile sprite queue
+            // flushes inside refresh_display's tile_batcher pass on top
+            // of the bridge blit, before the ui_batcher pass that
+            // contains the author text. So the image lands underneath
+            // the author overlay correctly.
+            if( cache->gpu_texture ) {
+                lighting::sprite_instance s{};
+                s.dst_x = fRect.x;
+                s.dst_y = fRect.y;
+                s.dst_w = fRect.w;
+                s.dst_h = fRect.h;
+                s.src_u = 0.0f;
+                s.src_v = 0.0f;
+                s.src_uw = 1.0f;
+                s.src_vh = 1.0f;
+                s.tint_r = 1.0f;
+                s.tint_g = 1.0f;
+                s.tint_b = 1.0f;
+                s.tint_a = 1.0f;
+                lighting::get_render_state().queue_tile_sprite(
+                    cache->gpu_texture.get(), s );
+            } else {
+                RenderCopy( renderer, cache->texture, nullptr, &fRect );
+            }
             draw_loading_image_author_if_present( this->selection_state->current_author );
             return true;
         }
