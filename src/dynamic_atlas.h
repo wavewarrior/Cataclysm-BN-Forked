@@ -74,6 +74,12 @@ class dynamic_atlas
         // nullptr if `legacy_tex` is not an atlas sheet of ours or if
         // the GPU mirror failed to allocate at sheet-creation time.
         SDL_GPUTexture *find_gpu_texture( SDL_Texture *legacy_tex ) const;
+
+        // Same as find_gpu_texture but also returns the atlas page's
+        // dimensions, which the caller needs to convert pixel-space
+        // srcrects into normalised UV for sprite_instance.
+        struct gpu_lookup { SDL_GPUTexture *texture; int atlas_w; int atlas_h; };
+        gpu_lookup find_gpu_texture_full( SDL_Texture *legacy_tex ) const;
     private:
         std::vector<sprite_sheet> sheets;
         std::unordered_map<size_t, std::pair<int, SDL_Rect>> sprite_ids;

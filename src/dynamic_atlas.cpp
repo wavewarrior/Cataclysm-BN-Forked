@@ -294,6 +294,19 @@ SDL_GPUTexture *dynamic_atlas::find_gpu_texture( SDL_Texture *legacy_tex ) const
     return nullptr;
 }
 
+dynamic_atlas::gpu_lookup dynamic_atlas::find_gpu_texture_full( SDL_Texture *legacy_tex ) const
+{
+    if( !legacy_tex ) {
+        return { nullptr, 0, 0 };
+    }
+    for( const auto &s : sheets ) {
+        if( s.texture.get() == legacy_tex ) {
+            return { s.gpu_texture.get(), s.atlas_width, s.atlas_height };
+        }
+    }
+    return { nullptr, 0, 0 };
+}
+
 void dynamic_atlas::readback_dump( const std::string &s ) const
 {
 

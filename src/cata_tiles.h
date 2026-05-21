@@ -26,6 +26,7 @@
 #include "sdl_geometry.h"
 #include "sdl_utils.h"
 #include "sdl_wrappers.h"
+#include "lighting/sprite_batcher.h"
 #include "type_id.h"
 #include "weather.h"
 #include "weighted_list.h"
@@ -183,6 +184,55 @@ class texture
             const SDL_FRect fdst{ float( dstrect->x ), float( dstrect->y ),
                                   float( dstrect->w ), float( dstrect->h ) };
             return SDL_RenderTexture( renderer.get(), sdl_texture_ptr.get(), &srcrect, &fdst );
+        }
+
+        /// Phase 2i-B-5: GPU draw path. Issues one sprite_batcher::draw
+        /// instead of SDL_RenderTexture. Caller must have set the matching
+        /// atlas page texture on the batcher already (via set_texture).
+        /// Returns false if `atlas_w/atlas_h` are zero (caller couldn't
+        /// look up the GPU mirror — fall back to legacy SDL_RenderTexture).
+        ///
+        /// FLIP is encoded into UV: horizontal flip swaps u/u+uw,
+        /// vertical flip swaps v/v+vh. ROTATION is not handled here —
+        /// caller routes rotated draws through the legacy path until the
+        /// sprite shader gains a rotation push-constant.
+        bool render_via_batcher( lighting::sprite_batcher &batcher,
+                                 int atlas_w, int atlas_h,
+                                 const SDL_FRect &destination,
+                                 SDL_FlipMode flip,
+                                 float alpha = 1.0f ) const {
+            if( atlas_w <= 0 || atlas_h <= 0 ) {
+                return false;
+            }
+            const float inv_w = 1.0f / static_cast<float>( atlas_w );
+            const float inv_h = 1.0f / static_cast<float>( atlas_h );
+            float u  = srcrect.x * inv_w;
+            float v  = srcrect.y * inv_h;
+            float uw = srcrect.w * inv_w;
+            float vh = srcrect.h * inv_h;
+            if( flip & SDL_FLIP_HORIZONTAL ) {
+                u += uw;
+                uw = -uw;
+            }
+            if( flip & SDL_FLIP_VERTICAL ) {
+                v += vh;
+                vh = -vh;
+            }
+            lighting::sprite_instance s{};
+            s.dst_x = destination.x;
+            s.dst_y = destination.y;
+            s.dst_w = destination.w;
+            s.dst_h = destination.h;
+            s.src_u  = u;
+            s.src_v  = v;
+            s.src_uw = uw;
+            s.src_vh = vh;
+            s.tint_r = 1.0f;
+            s.tint_g = 1.0f;
+            s.tint_b = 1.0f;
+            s.tint_a = alpha;
+            batcher.draw( s );
+            return true;
         }
 
         bool get_blend_mode( SDL_BlendMode *mode ) const {
