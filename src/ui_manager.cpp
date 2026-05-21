@@ -13,6 +13,7 @@
 #include "point.h"
 #include "sdltiles.h"
 #include "profile.h"
+#include "lighting/render_state.h"
 
 using ui_stack_t = std::vector<std::reference_wrapper<ui_adaptor>>;
 
@@ -289,6 +290,20 @@ void ui_adaptor::redraw_invalidated()
     ZoneScoped;
     if( test_mode || ui_stack.empty() ) {
         return;
+    }
+
+    // Phase 2i-B-5 lifecycle fix. Reset the GPU draw queues at the
+    // start of each redraw cycle so the per-window draw callbacks
+    // below repopulate them from scratch. refresh_display's flush_*
+    // calls then drain the queues without clearing, so subsequent
+    // refresh_display calls on no-input frames re-fire the same
+    // draws (matching how the legacy SDL_Renderer display_buffer
+    // persisted between redraws).
+    {
+        auto &rs = lighting::get_render_state();
+        if( rs.ready() ) {
+            rs.clear_frame_queues();
+        }
     }
 
     restore_on_out_of_scope<bool> prev_redraw_in_progress( redraw_in_progress );

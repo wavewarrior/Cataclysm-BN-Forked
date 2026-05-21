@@ -114,8 +114,19 @@ void render_state::flush_ui_rects( sprite_batcher &dst )
     if( ui_rect_queue_.empty() ) {
         return;
     }
+    // Drain WITHOUT clearing — clear_frame_queues() (called at the top
+    // of each redraw cycle) is what resets the queue. This lets
+    // refresh_display re-flush the same queue on no-input frames so
+    // the swapchain shows the previous draw state instead of going
+    // black when curses hasn't run the per-window draws this frame.
     dst.draw( ui_rect_queue_.data(), ui_rect_queue_.size() );
+}
+
+void render_state::clear_frame_queues() noexcept
+{
     ui_rect_queue_.clear();
+    font_glyph_queue_.clear();
+    tile_sprite_queue_.clear();
 }
 
 SDL_GPUTexture *render_state::upload_surface_to_gpu_texture( SDL_Surface *surface )
@@ -391,11 +402,13 @@ void render_state::flush_font_glyphs( sprite_batcher &dst, SDL_GPUSampler *sampl
     // set_texture() flushes the previous segment, so this is
     // equivalent to per-glyph SDL_DrawGPUPrimitives calls. Atlas
     // packing to fold these into one batch is a future opt.
+    //
+    // Drain WITHOUT clearing — clear_frame_queues() handles reset at
+    // the top of each redraw cycle.
     for( const font_glyph_draw &g : font_glyph_queue_ ) {
         dst.set_texture( g.texture, sampler );
         dst.draw( g.inst );
     }
-    font_glyph_queue_.clear();
 }
 
 void render_state::queue_tile_sprite( SDL_GPUTexture *atlas_tex,
@@ -421,6 +434,8 @@ void render_state::flush_tile_sprites( sprite_batcher &dst, SDL_GPUSampler *samp
     // already bound, so we don't need explicit grouping logic — but a
     // tight loop with one set_texture per entry keeps the code simple
     // and atlas-packed runs naturally batch.
+    // Drain WITHOUT clearing — clear_frame_queues() handles reset at
+    // the top of each redraw cycle.
     SDL_GPUTexture *bound = nullptr;
     for( const tile_sprite_draw &s : tile_sprite_queue_ ) {
         if( s.texture != bound ) {
@@ -429,7 +444,6 @@ void render_state::flush_tile_sprites( sprite_batcher &dst, SDL_GPUSampler *samp
         }
         dst.draw( s.inst );
     }
-    tile_sprite_queue_.clear();
 }
 
 bool render_state::bridge_ready( int w, int h )
