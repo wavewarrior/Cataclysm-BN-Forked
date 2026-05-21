@@ -1643,6 +1643,18 @@ texture_result tileset::get_or_default( const int sprite_index,
                 const SDL_FRect fdst{ float( atl_tex.second.x ), float( atl_tex.second.y ), float( atl_tex.second.w ), float( atl_tex.second.h ) };
                 SDL_RenderTexture( rp, st_tex, &fsrc, &fdst );
             }
+            // Phase 2i-B-5: mirror this run-time stamp into the GPU
+            // atlas at the same offset. tileset::get_or_default
+            // produces every in-game tinted/vfx/warped sprite — without
+            // this upload, draw_sprite_at's GPU lookup finds the atlas
+            // page but samples uninitialised pixels for the just-
+            // allocated slot, rendering the entire map area black.
+            if( SDL_GPUTexture *gpu_atlas =
+                    tileset_atlas->find_gpu_texture( atl_tex.first.get() ) ) {
+                lighting::get_render_state().upload_surface_subregion_to_gpu_texture(
+                    gpu_atlas, atl_tex.second.x, atl_tex.second.y,
+                    st_surf, &st_sub_rect_final );
+            }
         }
 
         sdl_restore_render_state( rp, state );
