@@ -24,7 +24,7 @@ each remaining draw site needs migration. Ordering forced by atlas dependency:
 | 2i-B-6 | ✅ landed | CachedTTFFont + BitmapFont glyphs route through font_engine queue. Verified Win11 D3D12. |
 | 2i-B-5 | ✅ landed | dynamic_atlas dual-back + cata_tiles `draw_sprite_at` unrotated path → tile_batcher + sdl_geometry rect → ui_batcher. Verified Win11 D3D12. Rotated sprites still fall through to legacy SDL_RenderTextureRotated. |
 | 2i-B-7 | ⏳ pending | Cleanup. **Cannot fully delete SDL_Renderer** until rotation lands on GPU. Smaller bounded steps: |
-|   2i-B-7a | ⏳ | Add 90-multiple rotation to sprite_instance + sprite.vert shader. Re-route 90/180/270 rotated draws through GPU. Arbitrary-angle (45/135/225/315 — rare, used for `LINE_*` ascii rotation tricks) still falls back. |
+|   2i-B-7a | ✅ landed | Added `rotation` field + 12 bytes padding to sprite_instance (struct now 64 B). sprite.vert.hlsl rotates the dst quad around its centre via cos/sin in radians. draw_sprite_at routes every rotation through the GPU path; legacy SDL_RenderTextureRotated remains only as the find_gpu_texture_full-miss fallback. Awaiting Win11 verify. |
 |   2i-B-7b | ⏳ | Migrate pixel_minimap → tile_batcher (~500 LOC). Cache textures on SDL_GPUTexture; per-pixel writes via SDL_UploadToGPUTexture sub-regions or compute. |
 |   2i-B-7c | ⏳ | loading_ui image draw via tile_batcher (single-shot SDL_Surface → SDL_GPUTexture upload, one sprite draw). vehicle_preview / ui_manager clip-rect wrappers → tile_batcher scissor (or accept no clip until 2i-B-7d). |
 |   2i-B-7d | ⏳ | Add scissor (clip rect) to sprite_batcher pipeline so clip wrappers can route through GPU. |
