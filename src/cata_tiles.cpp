@@ -4538,14 +4538,13 @@ bool cata_tiles::draw_sprite_at( const tile_type &tile, point p,
     auto render = [&]( const int rotation, const SDL_FlipMode flip ) {
         int ret = 0;
 
-        // Phase 2i-B-5 + 2i-B-7a: GPU path for every draw, including
-        // rotated. Rotation enters the vertex shader and rotates the
-        // destination quad around its centre; the legacy
-        // SDL_RenderTextureRotated path is only reached when the GPU
-        // atlas lookup misses (an atlas sheet whose GPU mirror failed
-        // to allocate at sheet-creation time).
+        // Phase 2i-B-5 GPU path. Rotation re-routed through legacy
+        // (SDL_RenderTextureRotated) while the rotation math in
+        // sprite.vert is disabled for diagnosis of the Win11
+        // black-buffer regression.
         dynamic_atlas *atlas = tileset_ptr->texture_atlas();
-        const auto gpu = atlas ? atlas->find_gpu_texture_full(
+        const auto gpu = ( rotation == 0 && atlas )
+                         ? atlas->find_gpu_texture_full(
                              sprite_tex->sdl_texture_handle() )
                          : dynamic_atlas::gpu_lookup{ nullptr, 0, 0 };
         if( gpu.texture ) {
