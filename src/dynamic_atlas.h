@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "sdl_wrappers.h"
+#include "lighting/render_state.h"
 
 #include <unordered_map>
 
@@ -30,6 +31,14 @@ class dynamic_atlas
     public:
         struct sprite_sheet {
             SDL_Texture_SharedPtr texture;
+            // Phase 2i-B-5: GPU mirror of `texture`. Built alongside the
+            // legacy SDL_Texture in allocate_sprite; uploaded into via
+            // upload_surface_subregion_to_gpu_texture each time
+            // copy_surface_to_dynamic_atlas stamps a tile into the legacy
+            // atlas. Sampled by tile_batcher in cata_tiles' GPU draw
+            // path. Lifetime tracked by the unique_ptr — released against
+            // the live device on sheet destruction.
+            lighting::gpu_texture_unique_ptr gpu_texture;
             std::unique_ptr<detail::texture_packer> packer;
             int atlas_width;
             int atlas_height;
@@ -58,6 +67,13 @@ class dynamic_atlas
 
         auto id_assign( size_t id, const atlas_texture &tex ) -> bool;
         auto id_search( size_t id ) -> std::optional<atlas_texture>;
+
+        // Phase 2i-B-5: locate the GPU mirror of a legacy atlas texture.
+        // Used by cata_tiles' GPU draw path to bind the correct
+        // SDL_GPUTexture before issuing tile_batcher draws. Returns
+        // nullptr if `legacy_tex` is not an atlas sheet of ours or if
+        // the GPU mirror failed to allocate at sheet-creation time.
+        SDL_GPUTexture *find_gpu_texture( SDL_Texture *legacy_tex ) const;
     private:
         std::vector<sprite_sheet> sheets;
         std::unordered_map<size_t, std::pair<int, SDL_Rect>> sprite_ids;

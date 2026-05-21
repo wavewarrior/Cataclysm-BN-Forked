@@ -253,20 +253,45 @@ atlas_texture dynamic_atlas::allocate_sprite( const int w, const int h )
         sdl_restore_render_state( r.get(), state );
     }
 
-    auto s = sprite_sheet{
-        SDL_Texture_Ptr( tex ),
-        std::move( packer ),
-        tex_width,
-        tex_height,
-        nullptr,
-        true
-    };
+    sprite_sheet s;
+    s.texture       = SDL_Texture_SharedPtr( SDL_Texture_Ptr( tex ) );
+    s.packer        = std::move( packer );
+    s.atlas_width   = tex_width;
+    s.atlas_height  = tex_height;
+    s.readback      = nullptr;
+    s.dirty         = true;
+
+    // Phase 2i-B-5: allocate the GPU mirror at the same dimensions.
+    // Soft-fail to nullptr if the device isn't ready; cata_tiles' GPU
+    // draw path will fall back to legacy SDL_RenderTexture when
+    // find_gpu_texture returns null.
+    auto &rs = lighting::get_render_state();
+    if( rs.ready() ) {
+        SDL_GPUTexture *gpu = rs.create_rgba_gpu_texture( tex_width, tex_height );
+        if( gpu ) {
+            s.gpu_texture.reset( gpu );
+        }
+    }
+
     auto &entry = sheets.emplace_back( std::move( s ) );
     entry.dirty = true;
 
     const auto rect = entry.packer->pack( w, h );
 
     return get_texture( entry.texture, rect.value(), w, h );
+}
+
+SDL_GPUTexture *dynamic_atlas::find_gpu_texture( SDL_Texture *legacy_tex ) const
+{
+    if( !legacy_tex ) {
+        return nullptr;
+    }
+    for( const auto &s : sheets ) {
+        if( s.texture.get() == legacy_tex ) {
+            return s.gpu_texture.get();
+        }
+    }
+    return nullptr;
 }
 
 void dynamic_atlas::readback_dump( const std::string &s ) const

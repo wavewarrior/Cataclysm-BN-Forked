@@ -1116,6 +1116,14 @@ bool tileset_loader::copy_surface_to_dynamic_atlas(
                 const SDL_FRect fdst{ float( atl_tex.second.x ), float( atl_tex.second.y ), float( atl_tex.second.w ), float( atl_tex.second.h ) };
                 SDL_RenderTexture( renderer.get(), st_tex, &fsrc, &fdst );
             }
+            // Phase 2i-B-5: mirror this stamp into the GPU atlas at
+            // the same offset. cata_tiles' GPU draw path samples the
+            // GPU texture via find_gpu_texture(legacy_atlas).
+            if( SDL_GPUTexture *gpu_atlas =
+                    ts.tileset_atlas->find_gpu_texture( atl_tex.first.get() ) ) {
+                lighting::get_render_state().upload_surface_subregion_to_gpu_texture(
+                    gpu_atlas, atl_tex.second.x, atl_tex.second.y, st_surf );
+            }
         }
 
         const auto tex_key = tileset_lookup_key{ index, TILESET_NO_MASK, tileset_fx_type::none, TILESET_NO_COLOR, TILESET_NO_WARP, point_zero };

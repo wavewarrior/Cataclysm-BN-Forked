@@ -81,6 +81,25 @@ class render_state
         // buffer alloc, copy submit). Logs via DC::SDL.
         SDL_GPUTexture *upload_surface_to_gpu_texture( SDL_Surface *surface );
 
+        // Phase 2i-B-5 helper. Upload an RGBA SDL_Surface's pixels into
+        // a sub-rectangle of an existing SDL_GPUTexture at (dst_x,dst_y).
+        // The destination texture must already be sized large enough
+        // for `dst_x + src->w` × `dst_y + src->h` and have
+        // SDL_GPU_TEXTUREUSAGE_SAMPLER. Used by dynamic_atlas to copy
+        // each tile's CPU bitmap onto its sheet's GPU mirror at the
+        // same atlas-packed offset the legacy SDL_Renderer path uses.
+        //
+        // Returns true on success; false if any step fails (logs via
+        // DC::SDL). Idempotent — caller owns the destination texture.
+        bool upload_surface_subregion_to_gpu_texture(
+            SDL_GPUTexture *dst, int dst_x, int dst_y, SDL_Surface *src );
+
+        // Allocate a SAMPLER-only SDL_GPUTexture of the given size and
+        // RGBA format. Returns nullptr on failure. Caller owns the
+        // returned handle — pair with SDL_ReleaseGPUTexture or wrap in
+        // gpu_texture_unique_ptr.
+        SDL_GPUTexture *create_rgba_gpu_texture( int w, int h );
+
         // Font glyph draw queue. Each entry binds its own texture (no
         // shared atlas yet), so flush iterates and issues one set_texture
         // + one draw per glyph. Acceptable for the typical 500–2000

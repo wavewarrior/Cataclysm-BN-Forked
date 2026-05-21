@@ -220,6 +220,104 @@ SDL_GPUTexture *render_state::upload_surface_to_gpu_texture( SDL_Surface *surfac
     return tex;
 }
 
+SDL_GPUTexture *render_state::create_rgba_gpu_texture( int w, int h )
+{
+    if( !device_.ready() || w <= 0 || h <= 0 ) {
+        return nullptr;
+    }
+    SDL_GPUTextureCreateInfo tci{};
+    tci.type = SDL_GPU_TEXTURETYPE_2D;
+    tci.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    tci.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    tci.width = static_cast<std::uint32_t>( w );
+    tci.height = static_cast<std::uint32_t>( h );
+    tci.layer_count_or_depth = 1;
+    tci.num_levels = 1;
+    tci.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    SDL_GPUTexture *tex = SDL_CreateGPUTexture( device_.raw(), &tci );
+    if( !tex ) {
+        dbg( DL::Warn ) << "create_rgba_gpu_texture: " << SDL_GetError();
+    }
+    return tex;
+}
+
+bool render_state::upload_surface_subregion_to_gpu_texture(
+    SDL_GPUTexture *dst, int dst_x, int dst_y, SDL_Surface *src )
+{
+    if( !device_.ready() || !dst || !src || src->w <= 0 || src->h <= 0 ) {
+        return false;
+    }
+    SDL_Surface *psrc = src;
+    SDL_Surface *converted = nullptr;
+    if( src->format != SDL_PIXELFORMAT_RGBA32 ) {
+        converted = SDL_ConvertSurface( src, SDL_PIXELFORMAT_RGBA32 );
+        if( !converted ) {
+            dbg( DL::Warn ) << "upload_surface_subregion: convert: " << SDL_GetError();
+            return false;
+        }
+        psrc = converted;
+    }
+
+    const std::uint32_t row_bytes = static_cast<std::uint32_t>( psrc->w ) * 4;
+    const std::uint32_t total_bytes = row_bytes * static_cast<std::uint32_t>( psrc->h );
+
+    SDL_GPUTransferBufferCreateInfo tbi{};
+    tbi.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    tbi.size = total_bytes;
+    SDL_GPUTransferBuffer *xfer = SDL_CreateGPUTransferBuffer( device_.raw(), &tbi );
+    if( !xfer ) {
+        dbg( DL::Warn ) << "upload_surface_subregion: xfer: " << SDL_GetError();
+        if( converted ) {
+            SDL_DestroySurface( converted );
+        }
+        return false;
+    }
+    void *mapped = SDL_MapGPUTransferBuffer( device_.raw(), xfer, false );
+    if( !mapped ) {
+        SDL_ReleaseGPUTransferBuffer( device_.raw(), xfer );
+        if( converted ) {
+            SDL_DestroySurface( converted );
+        }
+        return false;
+    }
+    auto *out = static_cast<std::uint8_t *>( mapped );
+    const auto *in = static_cast<const std::uint8_t *>( psrc->pixels );
+    for( int y = 0; y < psrc->h; ++y ) {
+        std::memcpy( out + static_cast<std::size_t>( y ) * row_bytes,
+                     in + static_cast<std::size_t>( y ) * psrc->pitch,
+                     row_bytes );
+    }
+    SDL_UnmapGPUTransferBuffer( device_.raw(), xfer );
+
+    SDL_GPUCommandBuffer *cb = SDL_AcquireGPUCommandBuffer( device_.raw() );
+    if( !cb ) {
+        SDL_ReleaseGPUTransferBuffer( device_.raw(), xfer );
+        if( converted ) {
+            SDL_DestroySurface( converted );
+        }
+        return false;
+    }
+    SDL_GPUCopyPass *cp = SDL_BeginGPUCopyPass( cb );
+    SDL_GPUTextureTransferInfo ti{};
+    ti.transfer_buffer = xfer;
+    SDL_GPUTextureRegion region{};
+    region.texture = dst;
+    region.x = static_cast<std::uint32_t>( dst_x );
+    region.y = static_cast<std::uint32_t>( dst_y );
+    region.w = static_cast<std::uint32_t>( psrc->w );
+    region.h = static_cast<std::uint32_t>( psrc->h );
+    region.d = 1;
+    SDL_UploadToGPUTexture( cp, &ti, &region, false );
+    SDL_EndGPUCopyPass( cp );
+    SDL_SubmitGPUCommandBuffer( cb );
+
+    SDL_ReleaseGPUTransferBuffer( device_.raw(), xfer );
+    if( converted ) {
+        SDL_DestroySurface( converted );
+    }
+    return true;
+}
+
 void render_state::queue_font_glyph( SDL_GPUTexture *glyph_tex,
                                      float dst_x, float dst_y, float dst_w, float dst_h,
                                      float r, float g, float b, float a )
