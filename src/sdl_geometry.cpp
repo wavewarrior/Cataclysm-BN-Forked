@@ -50,29 +50,53 @@ void GeometryRenderer::rect( const SDL_Renderer_Ptr &renderer, point pos, int wi
 }
 
 
-void DefaultGeometryRenderer::rect( const SDL_Renderer_Ptr & /*renderer*/, const SDL_FRect &rect,
+void DefaultGeometryRenderer::rect( const SDL_Renderer_Ptr &renderer, const SDL_FRect &rect,
                                     const SDL_Color &color ) const
 {
-    // No more RenderFillRect into display_buffer — the GPU queue is the
-    // single source of truth for UI rects.
+    // Phase 2i-B-4 transitional: still draw into display_buffer via the
+    // legacy SDL_Renderer (so the bridge keeps the rect-under-text z-order
+    // correct) AND queue the same rect into the GPU ui_batcher. The GPU
+    // copy draws on top of the bridge blit, doubling intensity for any
+    // translucent rect by α*α — visually negligible for opaque UI fills
+    // (the dominant case). Once Font::OutputChar moves to a GPU queue,
+    // we drop the RenderFillRect path entirely.
+    SetRenderDrawColor( renderer, color.r, color.g, color.b, color.a );
+    RenderFillRect( renderer, &rect );
     mirror_rect_to_gpu( rect, color );
 }
 
-ColorModulatedGeometryRenderer::ColorModulatedGeometryRenderer( const SDL_Renderer_Ptr & /*renderer*/ )
+ColorModulatedGeometryRenderer::ColorModulatedGeometryRenderer( const SDL_Renderer_Ptr &renderer )
 {
-    // The legacy 1×1 white SDL_Texture this class once held is unused now
-    // that all rects go through render_state::queue_ui_rect (which samples
-    // the lighting subsystem's own 1×1 white SDL_GPUTexture). Constructor
-    // kept so existing call sites in sdltiles.cpp still compile.
-    dbg( DL::Info ) << "ColorModulatedGeometryRenderer: GPU-backed (legacy SDL_Texture path removed).";
+    SDL_Surface_Ptr alt_surf = CreateSurface( sdl_color_pixel_format, 1, 1 );
+    if( alt_surf ) {
+        FillSurfaceRect( alt_surf, nullptr,
+                         SDL_MapRGB( SDL_GetPixelFormatDetails( alt_surf->format ), nullptr,
+                                     255, 255, 255 ) );
+
+        tex.reset( SDL_CreateTextureFromSurface( renderer.get(), alt_surf.get() ) );
+        alt_surf.reset();
+
+        // Test to make sure color modulation is supported by renderer
+        bool tex_enable = !SetTextureColorMod( tex, 0, 0, 0 );
+        if( !tex_enable ) {
+            tex.reset();
+        }
+        dbg( DL::Info ) << "ColorModulatedGeometryRenderer constructor() = " <<
+                        ( tex_enable ? "FAIL" : "SUCCESS" ) << ". tex_enable = " << tex_enable;
+    } else {
+        dbg( DL::Error ) << "CreateRGBSurface failed: " << SDL_GetError();
+    }
 }
 
 void ColorModulatedGeometryRenderer::rect( const SDL_Renderer_Ptr &renderer, const SDL_FRect &rect,
         const SDL_Color &color ) const
 {
-    // Same path as DefaultGeometryRenderer now — the "color-modulated
-    // texture" trick was an SDL_Renderer fallback for blend-rate limited
-    // back-ends and is irrelevant under SDL_GPU.
-    DefaultGeometryRenderer::rect( renderer, rect, color );
+    if( tex ) {
+        SetTextureColorMod( tex, color.r, color.g, color.b );
+        RenderCopy( renderer, tex, nullptr, &rect );
+        mirror_rect_to_gpu( rect, color );
+    } else {
+        DefaultGeometryRenderer::rect( renderer, rect, color );
+    }
 }
 
