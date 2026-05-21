@@ -498,26 +498,26 @@ void refresh_display()
     // GPU rects layer cleanly above them. The white texture from
     // gpu_geometry is bound once; rect tints come from per-instance
     // colour.
-    if( !rs.ui_rects_empty() && rs.geometry().white_texture() && rs.bridge_sampler() ) {
+    // Phase 2i-B-6: single ui_batcher pass drains both the rect queue
+    // (white-tex segment first) and the font glyph queue (per-glyph
+    // texture binds via flush). sprite_batcher::set_texture flushes the
+    // previous segment internally so changing texture inside the pass
+    // is safe. Sampler reused from the bridge (NEAREST — correct for
+    // both white-tex sampling and pre-rendered glyphs at target px).
+    const bool have_rects = !rs.ui_rects_empty() && rs.geometry().white_texture();
+    const bool have_glyphs = !rs.font_glyphs_empty();
+    if( ( have_rects || have_glyphs ) && rs.bridge_sampler() ) {
         rs.ui_batcher().begin_pass( ctx.cmd_buffer, ctx.swapchain_tex,
                                     ctx.swapchain_w, ctx.swapchain_h,
                                     /*clear=*/nullptr );
-        rs.ui_batcher().set_texture( rs.geometry().white_texture(),
-                                     rs.bridge_sampler() );
-        rs.flush_ui_rects( rs.ui_batcher() );
-        rs.ui_batcher().end_pass();
-    }
-
-    // Phase 2i-B-6: drain CachedTTFFont glyph queue on top of the
-    // bridge + rects. Each glyph rebinds its own texture so the pass
-    // emits one set_texture + one draw per glyph until atlas packing
-    // lands. Sampler reused from the bridge (NEAREST is correct for
-    // pre-rendered glyphs already at target pixel size).
-    if( !rs.font_glyphs_empty() && rs.bridge_sampler() ) {
-        rs.ui_batcher().begin_pass( ctx.cmd_buffer, ctx.swapchain_tex,
-                                    ctx.swapchain_w, ctx.swapchain_h,
-                                    /*clear=*/nullptr );
-        rs.flush_font_glyphs( rs.ui_batcher(), rs.bridge_sampler() );
+        if( have_rects ) {
+            rs.ui_batcher().set_texture( rs.geometry().white_texture(),
+                                         rs.bridge_sampler() );
+            rs.flush_ui_rects( rs.ui_batcher() );
+        }
+        if( have_glyphs ) {
+            rs.flush_font_glyphs( rs.ui_batcher(), rs.bridge_sampler() );
+        }
         rs.ui_batcher().end_pass();
     }
 
