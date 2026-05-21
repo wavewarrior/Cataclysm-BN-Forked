@@ -7,6 +7,7 @@
 #include <iosfwd>
 #include <iterator>
 #include <mutex>
+#include <sstream>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -61,6 +62,8 @@ static const zone_type_id zone_LOOT_SEEDS( "LOOT_SEEDS" );
 static const zone_type_id zone_LOOT_UNSORTED( "LOOT_UNSORTED" );
 static const zone_type_id zone_LOOT_DUMP( "LOOT_DUMP" );
 static const zone_type_id zone_LOOT_WOOD( "LOOT_WOOD" );
+static const zone_type_id zone_LOOT_BROKEN( "LOOT_BROKEN" );
+static const zone_type_id zone_LOOT_DAMAGED( "LOOT_DAMAGED" );
 static const zone_type_id zone_NO_AUTO_PICKUP( "NO_AUTO_PICKUP" );
 static const zone_type_id zone_NO_NPC_PICKUP( "NO_NPC_PICKUP" );
 static const zone_type_id zone_CONSTRUCTION_IGNORE( "CONSTRUCTION_IGNORE" );
@@ -1032,9 +1035,52 @@ bool zone_manager::custom_loot_has( const tripoint &where, const item *it ) cons
     }
     const loot_options &options = dynamic_cast<const loot_options &>( zone->get_options() );
     std::string filter_string = options.get_mark();
-    auto z = item_filter_from_string( filter_string );
 
-    return z( *it );
+    if( filter_string.empty() ) {
+        return false;
+    }
+
+    std::string positive_filter;
+    std::vector<std::string> negations;
+
+    std::istringstream iss( filter_string );
+    std::string word;
+    while( iss >> word ) {
+        if( word.starts_with( '-' ) ) {
+            negations.push_back( word.substr( 1 ) );
+        } else {
+            if( !positive_filter.empty() ) {
+                positive_filter += ' ';
+            }
+            positive_filter += word;
+        }
+    }
+
+    if( !positive_filter.empty() ) {
+        auto z = item_filter_from_string( positive_filter );
+        if( !z( *it ) ) {
+            return false;
+        }
+    }
+
+    for( const auto &neg : negations ) {
+        if( neg == "broken" ) {
+            if( it->max_damage() > 0 && it->damage() >= it->max_damage() ) {
+                return false;
+            }
+        } else if( neg == "damaged" ) {
+            if( it->max_damage() > 0 && it->damage() >= it->max_damage() / 2 ) {
+                return false;
+            }
+        } else {
+            auto neg_filter = item_filter_from_string( neg );
+            if( neg_filter( *it ) ) {
+                return false;
+            }
+        }
+    }
+
+    return true;
 }
 
 std::unordered_set<tripoint> zone_manager::get_near( const zone_type_id &type,
@@ -1123,6 +1169,19 @@ zone_type_id zone_manager::get_near_zone_type_for_item( const item &it,
             return zone_LOOT_CUSTOM;
         }
     }
+
+    if( it.max_damage() > 0 ) {
+        if( it.damage() >= it.max_damage() ) {
+            if( has_near( zone_LOOT_BROKEN, where, range ) ) {
+                return zone_LOOT_BROKEN;
+            }
+        } else if( it.damage() >= it.max_damage() / 2 ) {
+            if( has_near( zone_LOOT_DAMAGED, where, range ) ) {
+                return zone_LOOT_DAMAGED;
+            }
+        }
+    }
+
     if( it.has_flag( STATIC( flag_id( "FIREWOOD" ) ) ) ) {
         if( has_near( zone_LOOT_WOOD, where, range ) ) {
             return zone_LOOT_WOOD;

@@ -41,6 +41,8 @@ class field_entry
         mongroup_id monster_spawn_group() const;
 
         float light_emitted() const;
+        // Returns the colored light energy for this field entry.
+        light_color_rgb light_color() const;
         float local_light_override() const;
         float translucency() const;
         bool is_transparent() const;

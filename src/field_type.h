@@ -126,6 +126,9 @@ struct field_intensity_level {
     int monster_spawn_radius = 0;
     mongroup_id monster_spawn_group;
     float light_emitted = 0.0f;
+    // Per-tile accumulated colored light energy (RGB, normalized to [0,1]).
+    // Inherited from previous intensity level when not explicitly set.
+    light_color_rgb light_color;
     float local_light_override = -1.0f;
     float translucency = 0.0f;
     int convection_temperature_mod = 0;
@@ -248,6 +251,10 @@ struct field_type {
         }
         float get_local_light_override( int level = 0 )const {
             return get_intensity_level( level ).local_light_override;
+        }
+        // Returns the light color for a given intensity level.
+        const light_color_rgb &get_light_color( int level = 0 ) const {
+            return get_intensity_level( level ).light_color;
         }
         float get_translucency( int level = 0 ) const {
             return get_intensity_level( level ).translucency;

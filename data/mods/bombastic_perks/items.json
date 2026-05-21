@@ -1,0 +1,18 @@
+[
+  {
+    "id": "bombastic_perk_menu",
+    "type": "GENERIC",
+    "category": "tools",
+    "name": { "str": "[Bombastic Perks]" },
+    "description": "A shimmering, otherworldly interface that materialized in your possession. It grants access to your growing power.",
+    "weight": "100 g",
+    "volume": "500 ml",
+    "price": 0,
+    "price_postapoc": 0,
+    "material": [ "superalloy" ],
+    "symbol": "B",
+    "color": "yellow",
+    "flags": [ "UNBREAKABLE_MELEE", "TRADER_AVOID", "PSEUDO" ],
+    "use_action": [ "BOMBASTIC_PERKS_MENU" ]
+  }
+]

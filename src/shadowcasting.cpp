@@ -250,7 +250,8 @@ static void castLight(
     octant_xform xf,
     int row, float start, float end,
     float cumulative_transparency,
-    const exp_lookup *lookup )
+    const exp_lookup *lookup,
+    light_color_rgb *color_cache = nullptr )
 {
     if( start < end ) {
         return;
@@ -345,6 +346,16 @@ static void castLight(
                 model.update_quadrants( output_cache[idx], last_intensity, update_quad );
             }
 
+            // Write colored light energy alongside scalar light (if requested).
+            // Per-channel max blending prevents octant boundary seams.
+            if( color_cache != nullptr ) {
+                const float intensity = last_intensity;
+                auto &cc = color_cache[idx];
+                cc.r = std::max( cc.r, g_current_source_color.r * intensity );
+                cc.g = std::max( cc.g, g_current_source_color.g * intensity );
+                cc.b = std::max( cc.b, g_current_source_color.b * intensity );
+            }
+
             if( new_transparency == current_transparency ) {
                 continue;
             }
@@ -366,7 +377,7 @@ static void castLight(
                 castLight<Out>( output_cache, input_array, blocked_array, sx, sy,
                                 offset, offset_distance, numerator, model, xf,
                                 distance + 1, start, trailing_edge,
-                                next_cumulative, next_lookup );
+                                next_cumulative, next_lookup, color_cache );
             }
 
             // Advance the leading edge.
@@ -394,7 +405,7 @@ static void castLight(
                             offset, offset_distance, numerator, model, xf,
                             distance + 1, start, end,
                             model.accumulate( lookup->transparency, current_transparency, distance ),
-                            nullptr );
+                            nullptr, color_cache );
             return;
         }
 
@@ -449,7 +460,8 @@ void castLightAll_q(
     int sx, int sy,
     point offset, int offset_distance, float numerator,
     const light_model &model,
-    const exp_lookup *weather_lookup )
+    const exp_lookup *weather_lookup,
+    light_color_rgb *color_cache )
 {
     ZoneScoped;
 
@@ -469,7 +481,7 @@ void castLightAll_q(
 
         castLight<four_quadrants>( output_cache, input_array, blocked_array, sx, sy,
                                    offset, offset_distance, numerator, model, xf,
-                                   1, 1.0f, 0.0f, LIGHT_TRANSPARENCY_OPEN_AIR, fast );
+                                   1, 1.0f, 0.0f, LIGHT_TRANSPARENCY_OPEN_AIR, fast, color_cache );
     }
 }
 
@@ -481,7 +493,8 @@ void castLightOctants_q(
     point offset, int offset_distance, float numerator,
     const light_model &model,
     uint8_t octant_mask,
-    const exp_lookup *weather_lookup )
+    const exp_lookup *weather_lookup,
+    light_color_rgb *color_cache )
 {
     ZoneScoped;
 
@@ -504,7 +517,7 @@ void castLightOctants_q(
         }
         castLight<four_quadrants>( output_cache, input_array, blocked_array, sx, sy,
                                    offset, offset_distance, numerator, model, xf,
-                                   1, 1.0f, 0.0f, LIGHT_TRANSPARENCY_OPEN_AIR, fast );
+                                   1, 1.0f, 0.0f, LIGHT_TRANSPARENCY_OPEN_AIR, fast, color_cache );
     }
 }
 

@@ -10030,7 +10030,8 @@ void map::build_map_cache( const int zlev, bool skip_lightmap )
                 for( const int z : dirty_seen_cache_levels ) {
                     auto &c = get_cache( z );
                     std::fill( c.sm.begin(), c.sm.end(), 0.0f );
-                    std::fill( c.light_source_buffer.begin(), c.light_source_buffer.end(), 0.0f );
+                    std::fill( c.light_source_buffer.begin(), c.light_source_buffer.end(),
+                              level_cache::buffered_light_source{} );
                     std::fill( c.lm.begin(), c.lm.end(), four_quadrants( 0.0f ) );
                 }
                 // Build sunlight (all z-levels, top-to-bottom; serial).
@@ -10651,7 +10652,8 @@ level_cache::level_cache( int mx, int my )
       floor_cache_dirty( static_cast<size_t>( mx / SEEX ) * ( my / SEEY ) ),
       lm( static_cast<size_t>( mx * my ), four_quadrants( 0.0f ) ),
       sm( static_cast<size_t>( mx * my ), 0.0f ),
-      light_source_buffer( static_cast<size_t>( mx * my ), 0.0f ),
+      light_source_buffer( static_cast<size_t>( mx * my ), buffered_light_source{} ),
+      light_color_cache( static_cast<size_t>( mx * my ), light_color_rgb{} ),
       outside_cache( static_cast<size_t>( mx * my ), false ),
       sheltered_cache( static_cast<size_t>( mx * my ), false ),
       angled_sunlight_cache( static_cast<size_t>( mx * my ), false ),

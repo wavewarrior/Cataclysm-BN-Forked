@@ -475,9 +475,23 @@
     "description": "Items in this zone will be automatically eaten during a long activity if you get hungry.",
     "color": "light_green"
   },
+{
+      "id": "LOOT_BROKEN",
+      "type": "LOOT_ZONE",
+      "name": "Loot: Broken Items",
+      "description": "Destination for broken items (shown with XX prefix). Items at max damage go here.",
+      "color": "red"
+    },
+    {
+      "id": "LOOT_DAMAGED",
+      "type": "LOOT_ZONE",
+      "name": "Loot: Damaged Items",
+      "description": "Destination for damaged items (poor condition). Items at half or more damage go here.",
+      "color": "yellow"
+    },
   {
-    "id": "AUTO_DRINK",
     "type": "LOOT_ZONE",
+    "id": "AUTO_DRINK",
     "name": "Auto Drink",
     "description": "Items in this zone will be automatically consumed during a long activity if you get thirsty.",
     "color": "light_blue"

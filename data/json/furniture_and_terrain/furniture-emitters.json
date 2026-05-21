@@ -40,6 +40,7 @@
     "move_cost_mod": 6,
     "coverage": 30,
     "light_emitted": 1,
+    "light_color": [ 255, 160, 80 ],
     "required_str": -1,
     "flags": [ "TRANSPARENT", "EMITTER" ],
     "emissions": [ "emit_smoke_plume" ]

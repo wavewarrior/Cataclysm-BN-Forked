@@ -150,6 +150,11 @@
     "//": "Applies paralyzing poison to hit critter."
   },
   {
+    "id": "BLEED",
+    "type": "ammo_effect",
+    "//": "Applies bleed effect to hit critter."
+  },
+  {
     "id": "RECYCLED",
     "type": "ammo_effect",
     "//": "Nearly-immeasurable chance to fail to fire."

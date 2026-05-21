@@ -1,0 +1,19 @@
+[
+  {
+    "type": "MOD_INFO",
+    "id": "mindovermatter",
+    "name": "Mind Over Matter",
+    "authors": [ "StandingStorm" ],
+    "maintainers": [ "BN Port Maintainer" ],
+    "description": "Psionic powers for Cataclysm.  Manipulate the world with your mind - telekinesis, telepathy, biokinesis, and more.  All 9 psionic schools included.",
+    "category": "content",
+    "dependencies": [ "bn" ]
+  },
+  {
+    "type": "skill",
+    "id": "metaphysics",
+    "name": { "str": "Metaphysics" },
+    "display_category": "display_ranged",
+    "description": "Your ability to manipulate forces of energy often considered supernatural. A higher skill increases how quickly you can learn powers and decreases failure chance."
+  }
+]

@@ -1428,6 +1428,12 @@ void ter_t::load( const JsonObject &jo, const std::string &src )
     assign( jo, "trap", trap_id_str, is_json_check_strict( src ) );
 
     assign( jo, "light_emitted", light_emitted, is_json_check_strict( src ) );
+    if( jo.has_array( "light_color" ) ) {
+        JsonArray jarr = jo.get_array( "light_color" );
+        light_color.r = static_cast<float>( jarr.get_int( 0 ) ) / 255.0f;
+        light_color.g = static_cast<float>( jarr.get_int( 1 ) ) / 255.0f;
+        light_color.b = static_cast<float>( jarr.get_int( 2 ) ) / 255.0f;
+    }
     assign( jo, "heat_radiation", heat_radiation, is_json_check_strict( src ) );
 
     load_symbol( jo );
@@ -1721,6 +1727,12 @@ void furn_t::load( const JsonObject &jo, const std::string &src )
     load_symbol( jo );
 
     optional( jo, was_loaded, "light_emitted", light_emitted );
+    if( jo.has_array( "light_color" ) ) {
+        JsonArray jarr = jo.get_array( "light_color" );
+        light_color.r = static_cast<float>( jarr.get_int( 0 ) ) / 255.0f;
+        light_color.g = static_cast<float>( jarr.get_int( 1 ) ) / 255.0f;
+        light_color.b = static_cast<float>( jarr.get_int( 2 ) ) / 255.0f;
+    }
 
     // see the comment in ter_id::load for connect_group handling
     connect_group = TERCONN_NONE;

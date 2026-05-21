@@ -13,6 +13,7 @@
 #include "calendar.h"
 #include "color.h"
 #include "damage.h"
+#include "mapdata.h"
 #include "point.h"
 #include "hsv_color.h"
 #include "requirements.h"
@@ -313,6 +314,9 @@ class vpart_info
 
         /** seatbelt (str), muffler (%), horn (vol), light (intensity), recharing (power) */
         int bonus = 0;
+        // Per-tile accumulated colored light energy (RGB, normalized to [0,1]).
+        // Optional JSON field "light_color": [R,G,B] where R/G/B are 0-255.
+        light_color_rgb light_color = {};
 
         /** cargo weight modifier (percentage) */
         int cargo_weight_modifier = 100;

@@ -71,6 +71,11 @@ float field_entry::light_emitted() const
     return type.obj().get_light_emitted( intensity - 1 );
 }
 
+light_color_rgb field_entry::light_color() const
+{
+    return type.obj().get_light_color( intensity - 1 );
+}
+
 float field_entry::local_light_override() const
 {
     return type.obj().get_local_light_override( intensity - 1 );
