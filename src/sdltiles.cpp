@@ -508,6 +508,19 @@ void refresh_display()
         rs.ui_batcher().end_pass();
     }
 
+    // Phase 2i-B-6: drain CachedTTFFont glyph queue on top of the
+    // bridge + rects. Each glyph rebinds its own texture so the pass
+    // emits one set_texture + one draw per glyph until atlas packing
+    // lands. Sampler reused from the bridge (NEAREST is correct for
+    // pre-rendered glyphs already at target pixel size).
+    if( !rs.font_glyphs_empty() && rs.bridge_sampler() ) {
+        rs.ui_batcher().begin_pass( ctx.cmd_buffer, ctx.swapchain_tex,
+                                    ctx.swapchain_w, ctx.swapchain_h,
+                                    /*clear=*/nullptr );
+        rs.flush_font_glyphs( rs.ui_batcher(), rs.bridge_sampler() );
+        rs.ui_batcher().end_pass();
+    }
+
     rs.device().submit_frame( ctx );
 
     // Restore the legacy render target invariant for callers that draw

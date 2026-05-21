@@ -20,6 +20,20 @@ std::atomic<bool> initialised{ false };
 
 } // namespace
 
+void gpu_texture_deleter::operator()( SDL_GPUTexture *t ) const noexcept
+{
+    if( !t ) {
+        return;
+    }
+    auto &rs = get_render_state();
+    if( rs.ready() ) {
+        SDL_ReleaseGPUTexture( rs.device().raw(), t );
+    }
+    // If render_state is already shut down, the GPU device is too —
+    // SDL has released all underlying objects on device teardown. Leak
+    // the handle (which now points at freed memory).
+}
+
 void render_state::init( SDL_Window *host_window )
 {
     device_.init( host_window, /*debug=*/false, /*vsync=*/false );
@@ -101,6 +115,154 @@ void render_state::flush_ui_rects( sprite_batcher &dst )
     }
     dst.draw( ui_rect_queue_.data(), ui_rect_queue_.size() );
     ui_rect_queue_.clear();
+}
+
+SDL_GPUTexture *render_state::upload_surface_to_gpu_texture( SDL_Surface *surface )
+{
+    if( !device_.ready() || !surface || surface->w <= 0 || surface->h <= 0 ) {
+        return nullptr;
+    }
+
+    // Force the source pixels into RGBA32 so the GPU format can be
+    // hard-coded. SDL_ConvertSurface returns a new owning surface; only
+    // free it if we actually converted.
+    SDL_Surface *src = surface;
+    SDL_Surface *converted = nullptr;
+    if( surface->format != SDL_PIXELFORMAT_RGBA32 ) {
+        converted = SDL_ConvertSurface( surface, SDL_PIXELFORMAT_RGBA32 );
+        if( !converted ) {
+            dbg( DL::Warn ) << "upload_surface_to_gpu_texture: SDL_ConvertSurface failed: "
+                            << SDL_GetError();
+            return nullptr;
+        }
+        src = converted;
+    }
+
+    SDL_GPUTextureCreateInfo tci{};
+    tci.type = SDL_GPU_TEXTURETYPE_2D;
+    tci.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    tci.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    tci.width = static_cast<std::uint32_t>( src->w );
+    tci.height = static_cast<std::uint32_t>( src->h );
+    tci.layer_count_or_depth = 1;
+    tci.num_levels = 1;
+    tci.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+    SDL_GPUTexture *tex = SDL_CreateGPUTexture( device_.raw(), &tci );
+    if( !tex ) {
+        dbg( DL::Warn ) << "upload_surface_to_gpu_texture: create tex: " << SDL_GetError();
+        if( converted ) {
+            SDL_DestroySurface( converted );
+        }
+        return nullptr;
+    }
+
+    const std::uint32_t row_bytes = static_cast<std::uint32_t>( src->w ) * 4;
+    const std::uint32_t total_bytes = row_bytes * static_cast<std::uint32_t>( src->h );
+
+    SDL_GPUTransferBufferCreateInfo tbi{};
+    tbi.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    tbi.size = total_bytes;
+    SDL_GPUTransferBuffer *xfer = SDL_CreateGPUTransferBuffer( device_.raw(), &tbi );
+    if( !xfer ) {
+        dbg( DL::Warn ) << "upload_surface_to_gpu_texture: xfer alloc: " << SDL_GetError();
+        SDL_ReleaseGPUTexture( device_.raw(), tex );
+        if( converted ) {
+            SDL_DestroySurface( converted );
+        }
+        return nullptr;
+    }
+    void *mapped = SDL_MapGPUTransferBuffer( device_.raw(), xfer, false );
+    if( !mapped ) {
+        SDL_ReleaseGPUTransferBuffer( device_.raw(), xfer );
+        SDL_ReleaseGPUTexture( device_.raw(), tex );
+        if( converted ) {
+            SDL_DestroySurface( converted );
+        }
+        return nullptr;
+    }
+    // SDL_Surface pitch may exceed w*4 (alignment padding). Copy row by
+    // row to drop any trailing bytes the GPU upload doesn't expect.
+    auto *dst = static_cast<std::uint8_t *>( mapped );
+    const auto *psrc = static_cast<const std::uint8_t *>( src->pixels );
+    for( int y = 0; y < src->h; ++y ) {
+        std::memcpy( dst + static_cast<std::size_t>( y ) * row_bytes,
+                     psrc + static_cast<std::size_t>( y ) * src->pitch,
+                     row_bytes );
+    }
+    SDL_UnmapGPUTransferBuffer( device_.raw(), xfer );
+
+    SDL_GPUCommandBuffer *cb = SDL_AcquireGPUCommandBuffer( device_.raw() );
+    if( !cb ) {
+        SDL_ReleaseGPUTransferBuffer( device_.raw(), xfer );
+        SDL_ReleaseGPUTexture( device_.raw(), tex );
+        if( converted ) {
+            SDL_DestroySurface( converted );
+        }
+        return nullptr;
+    }
+    SDL_GPUCopyPass *cp = SDL_BeginGPUCopyPass( cb );
+    SDL_GPUTextureTransferInfo ti{};
+    ti.transfer_buffer = xfer;
+    SDL_GPUTextureRegion region{};
+    region.texture = tex;
+    region.w = static_cast<std::uint32_t>( src->w );
+    region.h = static_cast<std::uint32_t>( src->h );
+    region.d = 1;
+    SDL_UploadToGPUTexture( cp, &ti, &region, false );
+    SDL_EndGPUCopyPass( cp );
+    SDL_SubmitGPUCommandBuffer( cb );
+
+    SDL_ReleaseGPUTransferBuffer( device_.raw(), xfer );
+    if( converted ) {
+        SDL_DestroySurface( converted );
+    }
+    return tex;
+}
+
+void render_state::queue_font_glyph( SDL_GPUTexture *glyph_tex,
+                                     float dst_x, float dst_y, float dst_w, float dst_h,
+                                     float r, float g, float b, float a )
+{
+    if( !device_.ready() || !glyph_tex ) {
+        return;
+    }
+    font_glyph_draw d{};
+    d.texture = glyph_tex;
+    d.inst.dst_x = dst_x;
+    d.inst.dst_y = dst_y;
+    d.inst.dst_w = dst_w;
+    d.inst.dst_h = dst_h;
+    // Full-texture sample — one texture per glyph for now.
+    d.inst.src_u = 0.0f;
+    d.inst.src_v = 0.0f;
+    d.inst.src_uw = 1.0f;
+    d.inst.src_vh = 1.0f;
+    d.inst.tint_r = r;
+    d.inst.tint_g = g;
+    d.inst.tint_b = b;
+    d.inst.tint_a = a;
+    font_glyph_queue_.push_back( d );
+}
+
+void render_state::flush_font_glyphs( sprite_batcher &dst, SDL_GPUSampler *sampler )
+{
+    if( font_glyph_queue_.empty() ) {
+        return;
+    }
+    if( !sampler ) {
+        font_glyph_queue_.clear();
+        return;
+    }
+    // One set_texture + one draw per glyph. sprite_batcher's
+    // set_texture() flushes the previous segment, so this is
+    // equivalent to per-glyph SDL_DrawGPUPrimitives calls. Atlas
+    // packing to fold these into one batch is a future opt.
+    for( const font_glyph_draw &g : font_glyph_queue_ ) {
+        dst.set_texture( g.texture, sampler );
+        dst.draw( g.inst );
+    }
+    font_glyph_queue_.clear();
 }
 
 bool render_state::bridge_ready( int w, int h )
