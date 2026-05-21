@@ -492,9 +492,21 @@ void refresh_display()
     }
     rs.tile_batcher().end_pass();
 
-    // ui_rect queue is dormant in this phase (mirror_rect_to_gpu is a
-    // no-op while the bridge is active). 2i-B-7 will reactivate the
-    // queue + render the second pass once the bridge is removed.
+    // Phase 2i-B-4: drain the GeometryRenderer rect queue onto the
+    // swapchain on top of the bridge blit. LOAD_OP_LOAD preserves the
+    // bridge's pixels (legacy sprites + still-present text glyphs) so the
+    // GPU rects layer cleanly above them. The white texture from
+    // gpu_geometry is bound once; rect tints come from per-instance
+    // colour.
+    if( !rs.ui_rects_empty() && rs.geometry().white_texture() && rs.bridge_sampler() ) {
+        rs.ui_batcher().begin_pass( ctx.cmd_buffer, ctx.swapchain_tex,
+                                    ctx.swapchain_w, ctx.swapchain_h,
+                                    /*clear=*/nullptr );
+        rs.ui_batcher().set_texture( rs.geometry().white_texture(),
+                                     rs.bridge_sampler() );
+        rs.flush_ui_rects( rs.ui_batcher() );
+        rs.ui_batcher().end_pass();
+    }
 
     rs.device().submit_frame( ctx );
 

@@ -37,8 +37,11 @@ class DefaultGeometryRenderer : public GeometryRenderer
                    const SDL_Color &color ) const override;
 };
 
-/// Implementation of a GeometryRenderer using color modulated textures if
-/// possible, falling back to DefaultGeometryRenderer otherwise.
+/// Legacy alias. The color-modulated-texture fallback only mattered for
+/// SDL_Renderer back-ends that throttled SDL_RenderFillRect; SDL_GPU has no
+/// such limitation, so this class delegates entirely to DefaultGeometryRenderer.
+/// Kept as a distinct type so sdltiles.cpp's USE_COLOR_MODULATED_TEXTURES
+/// branch keeps compiling — both subclasses now hit the same GPU queue.
 class ColorModulatedGeometryRenderer: public DefaultGeometryRenderer
 {
     public:
@@ -46,8 +49,6 @@ class ColorModulatedGeometryRenderer: public DefaultGeometryRenderer
 
         void rect( const SDL_Renderer_Ptr &renderer, const SDL_FRect &rect,
                    const SDL_Color &color ) const override;
-    private:
-        SDL_Texture_Ptr tex;
 };
 
 
