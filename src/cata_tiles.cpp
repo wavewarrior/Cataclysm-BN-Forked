@@ -4417,6 +4417,46 @@ bool cata_tiles::draw_sprite_at( const tile_type &tile, point p,
     auto render = [&]( const int rotation, const SDL_FlipMode flip ) {
         int ret = 0;
 
+        // Phase 2i-B-5: GPU path for the unrotated draws (vast majority
+        // of tiles). Skips display_buffer entirely; the sprite lands
+        // directly on the SDL_GPU swapchain via the tile_batcher pass.
+        if( rotation == 0 ) {
+            dynamic_atlas *atlas = tileset_ptr->texture_atlas();
+            const auto gpu = atlas ? atlas->find_gpu_texture_full(
+                                 sprite_tex->sdl_texture_handle() )
+                             : dynamic_atlas::gpu_lookup{ nullptr, 0, 0 };
+            if( gpu.texture ) {
+                const SDL_FRect fdst{
+                    static_cast<float>( destination.x ),
+                    static_cast<float>( destination.y ),
+                    static_cast<float>( destination.w ),
+                    static_cast<float>( destination.h )
+                };
+                sprite_tex->enqueue_tile_sprite( gpu.texture, gpu.atlas_w, gpu.atlas_h,
+                                                 fdst, flip );
+                if( !static_z_effect && overlay_count > 0 ) {
+                    const auto [overlay_tex, overlay_warp_offset] =
+                        tileset_ptr->get_or_default(
+                            tile_idx, TILESET_NO_MASK, tileset_fx_type::z_overlay, TILESET_NO_COLOR,
+                            effective_warp_hash, tile_offset );
+                    if( overlay_tex ) {
+                        const auto ov_gpu = atlas->find_gpu_texture_full(
+                                                overlay_tex->sdl_texture_handle() );
+                        if( ov_gpu.texture ) {
+                            const float a = std::min( 192, overlay_count ) / 255.0f;
+                            overlay_tex->enqueue_tile_sprite(
+                                ov_gpu.texture, ov_gpu.atlas_w, ov_gpu.atlas_h,
+                                fdst, flip, a );
+                        }
+                    }
+                }
+                return 0;
+            }
+        }
+
+        // Legacy fallback: rotation != 0, or the GPU atlas lookup
+        // missed (sprite stored in a sheet whose GPU mirror wasn't
+        // allocated, or the device wasn't ready at allocation time).
         // UV warping is now handled in get_or_default, so we just render normally
         sprite_tex->set_alpha_mod( 255 );
         ret = sprite_tex->render_copy_ex( renderer, &destination, rotation, nullptr, flip );
