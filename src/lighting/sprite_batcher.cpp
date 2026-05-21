@@ -31,6 +31,10 @@ struct SpriteInstance {
     float tint_g;
     float tint_b;
     float tint_a;
+    float rotation;
+    float pad0;
+    float pad1;
+    float pad2;
 };
 StructuredBuffer<SpriteInstance> Instances : register(t0, space0);
 cbuffer FrameParams : register(b0, space1) {
@@ -50,8 +54,19 @@ static const float2 quad_uv[6] = {
 VS_OUT main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
     const SpriteInstance s = Instances[iid + instance_base];
     const float2 c = quad_uv[vid];
-    const float2 pixel = float2(s.dst_x + c.x * s.dst_w,
-                                s.dst_y + c.y * s.dst_h);
+    // Rotate the destination quad around its centre. UV stays as the
+    // axis-aligned corner mapping — sprite content sample is unchanged,
+    // only the pixel coverage of the quad rotates. rotation=0 collapses
+    // to identity (cos=1, sin=0) → same pixel as the legacy layout.
+    const float co = cos(s.rotation);
+    const float si = sin(s.rotation);
+    const float2 dst_size = float2(s.dst_w, s.dst_h);
+    const float2 local = (c - 0.5) * dst_size;
+    const float2 rotated = float2(local.x * co - local.y * si,
+                                  local.x * si + local.y * co);
+    const float2 centre = float2(s.dst_x + s.dst_w * 0.5,
+                                 s.dst_y + s.dst_h * 0.5);
+    const float2 pixel = centre + rotated;
     const float2 ndc = float2(
         pixel.x / target_size.x *  2.0 - 1.0,
         pixel.y / target_size.y * -2.0 + 1.0);
