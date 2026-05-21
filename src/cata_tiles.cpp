@@ -3615,9 +3615,10 @@ void cata_tiles::draw( point dest, const tripoint &center, int width, int height
                     alpha
                 };
                 const point screen = player_to_screen( p.pos.xy() );
-                const SDL_Rect draw_rect{ static_cast<int>( screen.x ),
-                                          static_cast<int>( screen.y - p.height_3d ),
-                                          tile_width, tile_height };
+                const SDL_FRect draw_rect{ static_cast<float>( screen.x ),
+                                           static_cast<float>( screen.y - p.height_3d ),
+                                           static_cast<float>( tile_width ),
+                                           static_cast<float>( tile_height ) };
                 SetRenderDrawBlendMode( renderer, SDL_BLENDMODE_BLEND );
                 geometry->rect( renderer, draw_rect, tint );
                 SetRenderDrawBlendMode( renderer, SDL_BLENDMODE_NONE );
@@ -3645,9 +3646,10 @@ void cata_tiles::draw( point dest, const tripoint &center, int width, int height
                         continue;
                     }
                     const point screen = player_to_screen( p.pos.xy() );
-                    const SDL_Rect draw_rect{ static_cast<int>( screen.x ),
-                                              static_cast<int>( screen.y - p.height_3d ),
-                                              tile_width, tile_height };
+                    const SDL_FRect draw_rect{ static_cast<float>( screen.x ),
+                                               static_cast<float>( screen.y - p.height_3d ),
+                                               static_cast<float>( tile_width ),
+                                               static_cast<float>( tile_height ) };
                     const SDL_Color ddc_color = {
                         static_cast<Uint8>( std::min( 255.0f, ddc.r * 255.0f ) ),
                         static_cast<Uint8>( std::min( 255.0f, ddc.g * 255.0f ) ),

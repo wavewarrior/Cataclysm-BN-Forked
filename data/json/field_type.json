@@ -594,7 +594,7 @@
     "type": "field_type",
     "legacy_enum_id": 19,
     "intensity_levels": [
-      { "name": "sparks", "sym": "9", "dangerous": true, "light_emitted": 0.01, "light_color": [ 95, 204, 247 ] },
+      { "name": "sparks", "sym": "9", "dangerous": true, "light_emitted": 15, "light_color": [ 100, 180, 255 ] },
       { "name": "electric crackle", "color": "cyan", "light_emitted": 4, "light_color": [ 146, 217, 245 ] },
       { "name": "electric cloud", "color": "blue", "light_emitted": 20, "light_color": [ 182, 231, 250 ] }
     ],

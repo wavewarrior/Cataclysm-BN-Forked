@@ -1,0 +1,155 @@
+gdebug.log_info("Bombastic Perks: Main")
+
+local mod = game.mod_runtime[game.current_mod]
+local storage = game.mod_storage[game.current_mod]
+local mutations = require("bp_mutations")
+local Mutation = mutations.Mutation
+local PERKS = mutations.PERKS
+local ALL_PERK_IDS = mutations.ALL_PERK_IDS
+local STAT_BONUS_IDS = mutations.STAT_BONUS_IDS
+local PERIODIC_BONUS_IDS = mutations.PERIODIC_BONUS_IDS
+local KILL_MONSTER_BONUS_IDS = mutations.KILL_MONSTER_BONUS_IDS
+local ACTIVATED_PERK_IDS = mutations.ACTIVATED_PERK_IDS
+local CONDITIONAL_PERK_IDS = mutations.CONDITIONAL_PERK_IDS
+local register_perk = mutations.register_perk
+local gettext = locale.gettext
+local vgettext = locale.vgettext
+
+local function color_text(text, color) return string.format("<color_%s>%s</color>", color, text) end
+local function color_good(text) return color_text(text, "light_green") end
+local function color_bad(text) return color_text(text, "light_red") end
+local function color_warning(text) return color_text(text, "yellow") end
+local function color_info(text) return color_text(text, "light_cyan") end
+local function color_highlight(text) return color_text(text, "white") end
+
+local function create_progress_bar(current, max, width)
+  width = width or 20
+  local filled = math.floor((current / max) * width)
+  local empty = width - filled
+  local bar = color_good(string.rep("█", filled)) .. color_text(string.rep("░", empty), "dark_gray")
+  local percent = math.floor((current / max) * 100)
+  return string.format("[%s] %d%%", bar, percent)
+end
+
+local XP_COEFFICIENT = 2.2387
+local XP_EXPONENT = 3.65
+local LEVELS_PER_PERK = 3
+
+local BOMBASTIC_PERK_MENU_ITEM_ID = ItypeId.new("bombastic_perk_menu")
+
+mod.add_perk = function(config)
+  if not config or not config.id then
+    gdebug.log_error("Bombastic Perks: add_perk called without valid config or id")
+    return false
+  end
+
+  if PERKS[config.id] then return false end
+
+  local perk = Mutation.new(config)
+  PERKS[config.id] = perk
+  register_perk(perk)
+
+  gdebug.log_info("Bombastic Perks: Registered new perk: " .. config.id)
+  return true
+end
+
+local function get_perk_level(exp)
+  local level = math.floor((exp / XP_COEFFICIENT) ^ (1 / XP_EXPONENT))
+  return math.min(level, 40)
+end
+
+local function rpg_xp_needed(level)
+  if level >= 40 then return XP_COEFFICIENT * (40 ^ XP_EXPONENT) end
+  return XP_COEFFICIENT * (level ^ XP_EXPONENT)
+end
+
+local function get_char_value(char, key, default)
+  local val = char:get_value(key)
+  if val == "" then return default end
+  return tonumber(val) or default
+end
+
+local function set_char_value(char, key, value) char:set_value(key, tostring(value)) end
+
+local function check_requirements(player, perk, current_level)
+  local reqs = perk.requirements
+  if not reqs or (not reqs.level and not reqs.stats and not reqs.skills) then return true, {} end
+
+  local unmet = {}
+
+  if reqs.level and current_level < reqs.level then
+    table.insert(unmet, { type = "level", label = "Lv", current = current_level, required = reqs.level })
+  end
+
+  if reqs.stats then
+    local stats_map = {
+      STR = player:get_str(),
+      DEX = player:get_dex(),
+      INT = player:get_int(),
+      PER = player:get_per(),
+    }
+    for stat, required in pairs(reqs.stats) do
+      local current = stats_map[stat]
+      if current < required then
+        table.insert(unmet, { type = "stat", label = stat, current = current, required = required })
+      end
+    end
+  end
+
+  if reqs.skills then
+    for skill_name, required in pairs(reqs.skills) do
+      local current = player:get_skill_level(SkillId.new(skill_name))
+      if current < required then
+        local display_name = skill_name:gsub("^%l", string.upper)
+        table.insert(unmet, { type = "skill", label = display_name, current = current, required = required })
+      end
+    end
+  end
+
+  return #unmet == 0, unmet
+end
+
+local function format_requirement(label, current, required, show_current)
+  local met = current >= required
+  local color_fn = met and color_good or color_bad
+  if show_current then
+    return color_fn(string.format("%s %d/%d", label, current, required))
+  else
+    return color_fn(string.format("%s %d+", label, required))
+  end
+end
+
+local function format_requirements_list(unmet, show_current)
+  local parts = {}
+  for _, req in ipairs(unmet) do
+    table.insert(parts, format_requirement(req.label, req.current, req.required, show_current))
+  end
+  return table.concat(parts, ", ")
+end
+
+local function get_current_perks(char)
+  local current = {}
+  for _, perk_id in ipairs(ALL_PERK_IDS) do
+    if char:has_trait(perk_id) then
+      local perk = PERKS[perk_id:str()]
+      if perk then
+        table.insert(current, { name = perk.name, desc = perk.description })
+      else
+        gdebug.log_warning("Bombastic Perks: missing PERKS entry for " .. perk_id:str())
+      end
+    end
+  end
+  return current
+end
+
+local function give_perk_menu_item(char)
+  if char:has_item_with_id(BOMBASTIC_PERK_MENU_ITEM_ID, true) then return end
+  char:add_item_with_id(BOMBASTIC_PERK_MENU_ITEM_ID, 1)
+end
+    // ... 533 lines omitted
+function grit_your_teeth(avatar, item)
+    // ... 532 lines omitted
+function slippery_escape(avatar, item)
+    // ... 531 lines omitted
+function popeye(avatar, item)
+// ... 530 more lines (total: 681)

@@ -10,6 +10,7 @@ local STAT_BONUS_IDS = mutations.STAT_BONUS_IDS
 local PERIODIC_BONUS_IDS = mutations.PERIODIC_BONUS_IDS
 local KILL_MONSTER_BONUS_IDS = mutations.KILL_MONSTER_BONUS_IDS
 local ACTIVATED_PERK_IDS = mutations.ACTIVATED_PERK_IDS
+local CONDITIONAL_PERK_IDS = mutations.CONDITIONAL_PERK_IDS
 local register_perk = mutations.register_perk
 local gettext = locale.gettext
 local vgettext = locale.vgettext
@@ -21,16 +22,20 @@ local function color_warning(text) return color_text(text, "yellow") end
 local function color_info(text) return color_text(text, "light_cyan") end
 local function color_highlight(text) return color_text(text, "white") end
 
+local function create_progress_bar(current, max, width)
+  width = width or 20
+  local filled = math.floor((current / max) * width)
+  local empty = width - filled
+  local bar = color_good(string.rep("█", filled)) .. color_text(string.rep("░", empty), "dark_gray")
+  local percent = math.floor((current / max) * 100)
+  return string.format("[%s] %d%%", bar, percent)
+end
+
 local XP_COEFFICIENT = 2.2387
 local XP_EXPONENT = 3.65
 local LEVELS_PER_PERK = 3
 
 local BOMBASTIC_PERK_MENU_ITEM_ID = ItypeId.new("bombastic_perk_menu")
-
-local function give_perk_menu_item(char)
-  if char:has_item_with_id(BOMBASTIC_PERK_MENU_ITEM_ID, true) then return end
-  char:add_item_with_id(BOMBASTIC_PERK_MENU_ITEM_ID, 1)
-end
 
 mod.add_perk = function(config)
   if not config or not config.id then
@@ -127,10 +132,19 @@ local function get_current_perks(char)
   for _, perk_id in ipairs(ALL_PERK_IDS) do
     if char:has_trait(perk_id) then
       local perk = PERKS[perk_id:str()]
-      table.insert(current, { name = perk.name, desc = perk.description })
+      if perk then
+        table.insert(current, { name = perk.name, desc = perk.description })
+      else
+        gdebug.log_warning("Bombastic Perks: missing PERKS entry for " .. perk_id:str())
+      end
     end
   end
   return current
+end
+
+local function give_perk_menu_item(char)
+  if char:has_item_with_id(BOMBASTIC_PERK_MENU_ITEM_ID, true) then return end
+  char:add_item_with_id(BOMBASTIC_PERK_MENU_ITEM_ID, 1)
 end
 
 mod.on_game_started = function()
@@ -142,6 +156,8 @@ mod.on_game_started = function()
   set_char_value(player, "bp_exp", 0)
   set_char_value(player, "bp_xp_to_perk", rpg_xp_needed(1))
   set_char_value(player, "bp_perk_points", 0)
+  set_char_value(player, "bp_turn_counter", 0)
+  set_char_value(player, "bp_last_kill_turn", 0)
 
   give_perk_menu_item(player)
 
@@ -165,6 +181,8 @@ mod.on_game_load = function()
     set_char_value(player, "bp_exp", 0)
     set_char_value(player, "bp_xp_to_perk", rpg_xp_needed(1))
     set_char_value(player, "bp_perk_points", 0)
+    set_char_value(player, "bp_turn_counter", 0)
+    set_char_value(player, "bp_last_kill_turn", 0)
 
     gapi.add_msg(
       MsgType.mixed,
@@ -190,14 +208,30 @@ mod.on_character_reset_stats = function(params)
   for _, perk_id in ipairs(STAT_BONUS_IDS) do
     if character:has_trait(perk_id) then
       local perk = PERKS[perk_id:str()]
-      local bonuses = perk.stat_bonuses
-      local bonus_val = bonuses.val or 1
+      if not perk then
+        gdebug.log_warning("Bombastic Perks: missing PERKS entry for " .. perk_id:str())
+      else
+        local bonuses = perk.stat_bonuses
+        local bonus_val = bonuses.val or 1
 
-      if bonuses.str then character:mod_str_bonus(math.floor(level * bonuses.str * bonus_val)) end
-      if bonuses.dex then character:mod_dex_bonus(math.floor(level * bonuses.dex * bonus_val)) end
-      if bonuses.int then character:mod_int_bonus(math.floor(level * bonuses.int * bonus_val)) end
-      if bonuses.per then character:mod_per_bonus(math.floor(level * bonuses.per * bonus_val)) end
-      if bonuses.speed then character:mod_speed_bonus(math.floor(level * bonuses.speed * bonus_val)) end
+        if bonuses.str then character:mod_str_bonus(math.floor(level * bonuses.str * bonus_val)) end
+        if bonuses.dex then character:mod_dex_bonus(math.floor(level * bonuses.dex * bonus_val)) end
+        if bonuses.int then character:mod_int_bonus(math.floor(level * bonuses.int * bonus_val)) end
+        if bonuses.per then character:mod_per_bonus(math.floor(level * bonuses.per * bonus_val)) end
+        if bonuses.speed then character:mod_speed_bonus(math.floor(level * bonuses.speed * bonus_val)) end
+      end
+    end
+  end
+
+  if character:has_trait(MutationBranchId.new("perk_non_combatant")) then
+    if not character:has_weapon() then
+      local perk = PERKS["perk_non_combatant"]
+      if perk and perk.conditional then
+        local cond = perk.conditional
+        character:mod_armor_bash(cond.armor_bash or 0)
+        character:mod_armor_cut(cond.armor_cut or 0)
+        character:mod_armor_bullet(cond.armor_bullet or 0)
+      end
     end
   end
 end
@@ -249,11 +283,15 @@ local function apply_kill_perk_bonuses(player, monster_hp)
   for _, perk_id in ipairs(KILL_MONSTER_BONUS_IDS) do
     if player:has_trait(perk_id) then
       local perk = PERKS[perk_id:str()]
-      local bonuses = perk.kill_monster_bonuses
+      if not perk then
+        gdebug.log_warning("Bombastic Perks: missing PERKS entry for " .. perk_id:str())
+      else
+        local bonuses = perk.kill_monster_bonuses
 
-      if bonuses.heal_percent then
-        local heal_amount = math.max(1, math.floor(monster_hp * (bonuses.heal_percent * level / 100)))
-        player:healall(heal_amount)
+        if bonuses.heal_percent then
+          local heal_amount = math.max(1, math.floor(monster_hp * (bonuses.heal_percent * level / 100)))
+          player:healall(heal_amount)
+        end
       end
     end
   end
@@ -273,6 +311,59 @@ mod.on_monster_killed = function(params)
 
   level_up(player, monster_hp, xp_gain)
   apply_kill_perk_bonuses(player, monster_hp)
+
+  local current_turn = get_char_value(player, "bp_turn_counter", 0)
+  set_char_value(player, "bp_last_kill_turn", current_turn)
+end
+
+local function handle_conditional_perks(player)
+  local level = get_char_value(player, "bp_level", 0)
+  if level <= 0 then return end
+
+  for _, perk_id in ipairs(CONDITIONAL_PERK_IDS) do
+    if player:has_trait(perk_id) then
+      local perk = PERKS[perk_id:str()]
+      if not perk or not perk.conditional then
+        gdebug.log_warning("Bombastic Perks: missing PERKS entry or conditional for " .. perk_id:str())
+      else
+        local cond = perk.conditional
+
+        if cond.type == "damage_buff" then
+          local last_kill_turn = get_char_value(player, "bp_last_kill_turn", 0)
+          local current_turn = get_char_value(player, "bp_turn_counter", 0)
+          if current_turn - last_kill_turn <= cond.buff_duration then
+            local bonus = cond.effect.melee_damage or 0
+            player:mod_str_bonus(math.floor(level * bonus * 100))
+          end
+        end
+
+        if cond.type == "dodge_buff" then
+          local last_kill_turn = get_char_value(player, "bp_last_kill_turn", 0)
+          local current_turn = get_char_value(player, "bp_turn_counter", 0)
+          if current_turn - last_kill_turn <= cond.buff_duration then
+            if cond.effect.dodge then player:mod_dex_bonus(cond.effect.dodge * level) end
+            if cond.effect.dodge_skill then player:mod_skill_level(SkillId.new("dodge"), cond.effect.dodge_skill * level) end
+          end
+        end
+
+        if cond.type == "downed_recovery" then
+          local downed = player:get_character_state_for_group("downed")
+          if downed and math.random() < cond.chance then
+            player:set_value("bp_downed_check", "1")
+            player:add_effect(EffectTypeId.new("downed"), 0)
+          end
+        end
+
+        if cond.type == "bleed_damage_scaling" then
+          local bleed_intensity = player:get_effect_int(EffectTypeId.new("bleed"), BodyPart.new("bp_torso"))
+          if bleed_intensity > 0 then
+            local multiplier = math.min(cond.max_multiplier, bleed_intensity * 0.05)
+            player:mod_str_bonus(math.floor(level * multiplier * 100))
+          end
+        end
+      end
+    end
+  end
 end
 
 mod.on_every_5_minutes = function()
@@ -282,24 +373,58 @@ mod.on_every_5_minutes = function()
   local level = get_char_value(player, "bp_level", 0)
   if level <= 0 then return end
 
+  local turn = get_char_value(player, "bp_turn_counter", 0)
+  set_char_value(player, "bp_turn_counter", turn + 1)
+
   for _, perk_id in ipairs(PERIODIC_BONUS_IDS) do
     if player:has_trait(perk_id) then
       local perk = PERKS[perk_id:str()]
-      local bonuses = perk.periodic_bonuses
+      if not perk then
+        gdebug.log_warning("Bombastic Perks: missing PERKS entry for " .. perk_id:str())
+      else
+        local bonuses = perk.periodic_bonuses
 
-      if bonuses.fatigue then player:mod_fatigue(math.floor(level * bonuses.fatigue)) end
-      if bonuses.stamina then player:mod_stamina(math.floor(level * bonuses.stamina)) end
-      if bonuses.thirst and player:get_thirst() >= 40 and math.random() > 0.75 then
-        player:mod_thirst(math.floor(level * bonuses.thirst * 4))
-      end
-      if bonuses.rad then player:mod_rad(math.floor(level * bonuses.rad)) end
-      if bonuses.healthy_mod then player:mod_healthy_mod(bonuses.healthy_mod * level, 100) end
-      if bonuses.power_level then
-        local power_regen = Energy.from_joule(math.floor(level * bonuses.power_level * 1000))
-        player:mod_power_level(power_regen)
+        if bonuses.fatigue then player:mod_fatigue(math.floor(level * bonuses.fatigue)) end
+        if bonuses.stamina then player:mod_stamina(math.floor(level * bonuses.stamina)) end
+        if bonuses.thirst and player:get_thirst() >= 40 and math.random() > 0.75 then
+          player:mod_thirst(math.floor(level * bonuses.thirst * 4))
+        end
+        if bonuses.rad then player:mod_rad(math.floor(level * bonuses.rad)) end
+        if bonuses.healthy_mod then player:mod_healthy_mod(bonuses.healthy_mod * level, 100) end
+        if bonuses.power_level then
+          local power_regen = Energy.from_joule(math.floor(level * bonuses.power_level * 1000))
+          player:mod_power_level(power_regen)
+        end
       end
     end
   end
+
+  handle_conditional_perks(player)
+end
+
+function grit_your_teeth(avatar, item)
+  local player = avatar or gapi.get_avatar()
+  if not player then return 0 end
+  local pain = player:get_pain()
+  local reduction = math.max(30, math.floor(pain / 2))
+  player:mod_pain(-reduction)
+  gapi.add_msg(MsgType.good, "You grit your teeth against the pain!")
+  return 1
+end
+
+function slippery_escape(avatar, item)
+  local player = avatar or gapi.get_avatar()
+  if not player then return 0 end
+  player:mod_pain(10)
+  gapi.add_msg(MsgType.good, "You twist out of their grasp!")
+  return 1
+end
+
+function popeye(avatar, item)
+  local player = avatar or gapi.get_avatar()
+  if not player then return 0 end
+  gapi.add_msg(MsgType.good, "Your muscles swell and clench!")
+  return 1
 end
 
 mod.open_perk_menu = function(params)
@@ -316,13 +441,46 @@ mod.open_perk_menu = function(params)
     local level = get_char_value(player, "bp_level", 0)
     local num_perks = get_char_value(player, "bp_num_perks", 0)
     local max_perks = get_char_value(player, "bp_max_perks", 1)
+    local xp_to_next = get_char_value(player, "bp_xp_to_perk", 0)
     local current_perks = get_current_perks(player)
+
+    local current_level_xp = rpg_xp_needed(level)
+    local next_level_xp = rpg_xp_needed(level + 1)
+    local xp_in_level = exp - current_level_xp
+    local xp_for_level = next_level_xp - current_level_xp
 
     local ui = UiList.new()
     ui:title(gettext("=== [BOMBASTIC PERKS] ==="))
 
     local info_text = ""
-    info_text = info_text .. color_highlight(gettext("Level:")) .. " " .. color_good(string.format("%d", level)) .. "\n"
+    info_text = info_text .. color_highlight(gettext("Level:")) .. " " .. color_good(string.format("%d", level))
+    if level < 40 then
+      info_text = info_text
+        .. color_text(
+          string.format(" (" .. gettext("Next:") .. " %.0f " .. gettext("XP") .. ")", xp_to_next),
+          "light_gray"
+        )
+    else
+      info_text = info_text .. color_warning(" [" .. gettext("MAX") .. "]")
+    end
+    info_text = info_text .. "\n"
+
+    if level > 0 and level < 40 then
+      local progress = create_progress_bar(xp_in_level, xp_for_level, 30)
+      info_text = info_text .. "XP: " .. progress .. "\n"
+    end
+
+    if level > 0 then
+      info_text = info_text .. color_highlight(gettext("Total XP:")) .. " " .. string.format("%.0f", exp) .. "\n"
+    end
+
+    info_text = info_text
+      .. color_text(
+        "─────────────────────────────────────────",
+        "light_gray"
+      )
+      .. "\n"
+
     info_text = info_text .. color_highlight(gettext("Perk Slots:")) .. " "
       .. color_good(string.format("%d", num_perks)) .. color_text("/", "light_gray")
       .. color_highlight(string.format("%d", max_perks)) .. "\n\n"
