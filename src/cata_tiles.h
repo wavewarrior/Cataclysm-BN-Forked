@@ -206,14 +206,17 @@ class texture
         /// to convert the pixel-space srcrect into normalised UV.
         ///
         /// FLIP folds into UV: horizontal flip swaps u/u+uw, vertical
-        /// flip swaps v/v+vh. ROTATION is not handled — callers route
-        /// rotated draws through the legacy SDL_RenderTextureRotated
-        /// path until the sprite shader gains a rotation push-constant.
+        /// flip swaps v/v+vh.
+        /// ROTATION_DEGREES is converted to radians and stored in the
+        /// sprite_instance; the vertex shader rotates the destination
+        /// quad around its centre. Matches SDL_RenderTextureRotated
+        /// convention (positive = clockwise on screen).
         bool enqueue_tile_sprite( SDL_GPUTexture *atlas_tex,
                                   int atlas_w, int atlas_h,
                                   const SDL_FRect &destination,
                                   SDL_FlipMode flip,
-                                  float alpha = 1.0f ) const {
+                                  float alpha = 1.0f,
+                                  double rotation_degrees = 0.0 ) const {
             if( !atlas_tex || atlas_w <= 0 || atlas_h <= 0 ) {
                 return false;
             }
@@ -244,6 +247,7 @@ class texture
             s.tint_g = 1.0f;
             s.tint_b = 1.0f;
             s.tint_a = alpha;
+            s.rotation = static_cast<float>( rotation_degrees * 3.14159265358979323846 / 180.0 );
             lighting::get_render_state().queue_tile_sprite( atlas_tex, s );
             return true;
         }

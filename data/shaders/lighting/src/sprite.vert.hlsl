@@ -30,6 +30,10 @@ struct SpriteInstance {
     float tint_g;
     float tint_b;
     float tint_a;
+    float rotation;
+    float pad0;
+    float pad1;
+    float pad2;
 };
 
 StructuredBuffer<SpriteInstance> Instances : register( t0, space0 );
@@ -67,10 +71,20 @@ VS_OUT main( uint vid : SV_VertexID, uint iid : SV_InstanceID )
     const SpriteInstance s = Instances[iid + instance_base];
     const float2 corner = quad_uv[vid];
 
-    // Pixel-space position on the target.
-    const float2 pixel = float2(
-                             s.dst_x + corner.x * s.dst_w,
-                             s.dst_y + corner.y * s.dst_h );
+    // Rotation around the destination rect's centre. corner ∈ [0,1] so
+    // (corner - 0.5) is the offset from centre in normalised units; we
+    // multiply by dst_size to convert to pixel-space, rotate, then add
+    // the rect centre back to land in absolute pixels.
+    const float c = cos( s.rotation );
+    const float si = sin( s.rotation );
+    const float2 dst_size = float2( s.dst_w, s.dst_h );
+    const float2 local_pixel = ( corner - 0.5 ) * dst_size;
+    const float2 rotated = float2(
+                               local_pixel.x * c - local_pixel.y * si,
+                               local_pixel.x * si + local_pixel.y * c );
+    const float2 centre = float2( s.dst_x + s.dst_w * 0.5,
+                                  s.dst_y + s.dst_h * 0.5 );
+    const float2 pixel = centre + rotated;
 
     // Orthographic projection: pixel (0..target) → clip (-1..+1).
     // Y is flipped so (0,0) is top-left, matching SDL_Renderer legacy
