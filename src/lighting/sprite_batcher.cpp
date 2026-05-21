@@ -54,19 +54,12 @@ static const float2 quad_uv[6] = {
 VS_OUT main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
     const SpriteInstance s = Instances[iid + instance_base];
     const float2 c = quad_uv[vid];
-    // Rotate the destination quad around its centre. UV stays as the
-    // axis-aligned corner mapping — sprite content sample is unchanged,
-    // only the pixel coverage of the quad rotates. rotation=0 collapses
-    // to identity (cos=1, sin=0) → same pixel as the legacy layout.
-    const float co = cos(s.rotation);
-    const float si = sin(s.rotation);
-    const float2 dst_size = float2(s.dst_w, s.dst_h);
-    const float2 local = (c - 0.5) * dst_size;
-    const float2 rotated = float2(local.x * co - local.y * si,
-                                  local.x * si + local.y * co);
-    const float2 centre = float2(s.dst_x + s.dst_w * 0.5,
-                                 s.dst_y + s.dst_h * 0.5);
-    const float2 pixel = centre + rotated;
+    // Diagnostic: legacy non-rotated math. The rotation field stays in
+    // the struct (matching C++'s 64-byte sprite_instance layout) but is
+    // currently unused. Restored once it's clear that the rotation math
+    // wasn't the cause of the Win11 black-buffer regression.
+    const float2 pixel = float2(s.dst_x + c.x * s.dst_w,
+                                s.dst_y + c.y * s.dst_h);
     const float2 ndc = float2(
         pixel.x / target_size.x *  2.0 - 1.0,
         pixel.y / target_size.y * -2.0 + 1.0);
