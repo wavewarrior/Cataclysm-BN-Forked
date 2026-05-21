@@ -175,6 +175,29 @@ if (WIN32)
                 $<TARGET_FILE_DIR:cataclysm-bn-tiles>
         COMMAND_EXPAND_LISTS
         VERBATIM)
+
+    # When SDL3_shadercross is built static (vcpkg x64-windows-static path)
+    # its vendored shared deps don't appear in $<TARGET_RUNTIME_DLLS> because
+    # they're PRIVATE inside the static lib and the link chain has nothing
+    # to follow. Copy them explicitly so the exe finds dxcompiler.dll,
+    # dxil.dll, and spirv-cross-c-shared.dll at launch. Install them into
+    # the RUNTIME dir too so `RELEASE` packaging picks them up.
+    set(_CATA_SHADERCROSS_RUNTIME_TARGETS dxcompiler dxildll spirv-cross-c-shared)
+    foreach(_t IN LISTS _CATA_SHADERCROSS_RUNTIME_TARGETS)
+        if(TARGET ${_t})
+            get_target_property(_type ${_t} TYPE)
+            if(_type STREQUAL "SHARED_LIBRARY" OR _type STREQUAL "MODULE_LIBRARY")
+                add_custom_command(TARGET cataclysm-bn-tiles POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                            $<TARGET_FILE:${_t}>
+                            $<TARGET_FILE_DIR:cataclysm-bn-tiles>
+                    VERBATIM)
+                if (RELEASE)
+                    install(FILES $<TARGET_FILE:${_t}> DESTINATION ${CMAKE_INSTALL_BINDIR})
+                endif()
+            endif()
+        endif()
+    endforeach()
 endif ()
 
 if (SOUND)
