@@ -116,6 +116,19 @@ class render_state
                                float dst_x, float dst_y, float dst_w, float dst_h,
                                float src_u, float src_v, float src_uw, float src_vh,
                                float r, float g, float b, float a );
+
+        // Phase 2i-B-5 part 3: tile sprite queue. cata_tiles' draw paths
+        // enqueue every map sprite here during the per-window redraw;
+        // refresh_display drains them inside the tile_batcher pass after
+        // the bridge blit. Per-entry texture binding mirrors the font
+        // queue — set_texture on each sprite_batcher::draw call. Atlas
+        // packing already groups runs of sprites onto the same SDL_GPU
+        // texture, so consecutive same-texture entries get one
+        // set_texture and N draws.
+        void queue_tile_sprite( SDL_GPUTexture *atlas_tex,
+                                const sprite_instance &inst );
+        bool tile_sprites_empty() const noexcept { return tile_sprite_queue_.empty(); }
+        void flush_tile_sprites( sprite_batcher &dst, SDL_GPUSampler *sampler );
         bool font_glyphs_empty() const noexcept { return font_glyph_queue_.empty(); }
         // Drains `font_glyph_queue_` into `dst` using `sampler`. Caller
         // must have an active begin_pass on `dst`. Internally rebinds
@@ -155,6 +168,15 @@ class render_state
             sprite_instance inst;
         };
         std::vector<font_glyph_draw> font_glyph_queue_;
+
+        // Tile sprite queue (2i-B-5 part 3). Same shape as font glyph
+        // queue; semantically separate so cata_tiles' map draws can land
+        // in the tile_batcher pass instead of the ui_batcher pass.
+        struct tile_sprite_draw {
+            SDL_GPUTexture *texture;
+            sprite_instance inst;
+        };
+        std::vector<tile_sprite_draw> tile_sprite_queue_;
 
         // Bridge state (phase 2i-B-3).
         SDL_GPUTexture        *bridge_tex_     = nullptr;

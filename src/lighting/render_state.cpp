@@ -373,6 +373,40 @@ void render_state::flush_font_glyphs( sprite_batcher &dst, SDL_GPUSampler *sampl
     font_glyph_queue_.clear();
 }
 
+void render_state::queue_tile_sprite( SDL_GPUTexture *atlas_tex,
+                                      const sprite_instance &inst )
+{
+    if( !device_.ready() || !atlas_tex ) {
+        return;
+    }
+    tile_sprite_queue_.push_back( { atlas_tex, inst } );
+}
+
+void render_state::flush_tile_sprites( sprite_batcher &dst, SDL_GPUSampler *sampler )
+{
+    if( tile_sprite_queue_.empty() ) {
+        return;
+    }
+    if( !sampler ) {
+        tile_sprite_queue_.clear();
+        return;
+    }
+    // Group consecutive same-texture draws under a single set_texture
+    // call. set_texture is a no-op when the requested texture is
+    // already bound, so we don't need explicit grouping logic — but a
+    // tight loop with one set_texture per entry keeps the code simple
+    // and atlas-packed runs naturally batch.
+    SDL_GPUTexture *bound = nullptr;
+    for( const tile_sprite_draw &s : tile_sprite_queue_ ) {
+        if( s.texture != bound ) {
+            dst.set_texture( s.texture, sampler );
+            bound = s.texture;
+        }
+        dst.draw( s.inst );
+    }
+    tile_sprite_queue_.clear();
+}
+
 bool render_state::bridge_ready( int w, int h )
 {
     if( !device_.ready() || w <= 0 || h <= 0 ) {

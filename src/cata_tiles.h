@@ -27,6 +27,7 @@
 #include "sdl_utils.h"
 #include "sdl_wrappers.h"
 #include "lighting/sprite_batcher.h"
+#include "lighting/render_state.h"
 #include "type_id.h"
 #include "weather.h"
 #include "weighted_list.h"
@@ -186,22 +187,34 @@ class texture
             return SDL_RenderTexture( renderer.get(), sdl_texture_ptr.get(), &srcrect, &fdst );
         }
 
-        /// Phase 2i-B-5: GPU draw path. Issues one sprite_batcher::draw
-        /// instead of SDL_RenderTexture. Caller must have set the matching
-        /// atlas page texture on the batcher already (via set_texture).
-        /// Returns false if `atlas_w/atlas_h` are zero (caller couldn't
-        /// look up the GPU mirror — fall back to legacy SDL_RenderTexture).
+        /// Underlying SDL_Texture handle for the texture this `texture`
+        /// wraps. Used by cata_tiles' GPU draw path to look up the
+        /// matching GPU atlas mirror via
+        /// dynamic_atlas::find_gpu_texture_full.
+        SDL_Texture *sdl_texture_handle() const noexcept {
+            return sdl_texture_ptr.get();
+        }
+
+        /// Phase 2i-B-5 GPU draw path. Enqueues exactly one tile sprite
+        /// into render_state::tile_sprite_queue_; the queue is drained
+        /// by refresh_display inside the tile_batcher pass after the
+        /// bridge blit.
         ///
-        /// FLIP is encoded into UV: horizontal flip swaps u/u+uw,
-        /// vertical flip swaps v/v+vh. ROTATION is not handled here —
-        /// caller routes rotated draws through the legacy path until the
-        /// sprite shader gains a rotation push-constant.
-        bool render_via_batcher( lighting::sprite_batcher &batcher,
-                                 int atlas_w, int atlas_h,
-                                 const SDL_FRect &destination,
-                                 SDL_FlipMode flip,
-                                 float alpha = 1.0f ) const {
-            if( atlas_w <= 0 || atlas_h <= 0 ) {
+        /// `atlas_tex` is the GPU mirror of this texture's atlas sheet
+        /// (look up via dynamic_atlas::find_gpu_texture_full).
+        /// `atlas_w/atlas_h` are the atlas page pixel dimensions, used
+        /// to convert the pixel-space srcrect into normalised UV.
+        ///
+        /// FLIP folds into UV: horizontal flip swaps u/u+uw, vertical
+        /// flip swaps v/v+vh. ROTATION is not handled — callers route
+        /// rotated draws through the legacy SDL_RenderTextureRotated
+        /// path until the sprite shader gains a rotation push-constant.
+        bool enqueue_tile_sprite( SDL_GPUTexture *atlas_tex,
+                                  int atlas_w, int atlas_h,
+                                  const SDL_FRect &destination,
+                                  SDL_FlipMode flip,
+                                  float alpha = 1.0f ) const {
+            if( !atlas_tex || atlas_w <= 0 || atlas_h <= 0 ) {
                 return false;
             }
             const float inv_w = 1.0f / static_cast<float>( atlas_w );
@@ -231,7 +244,7 @@ class texture
             s.tint_g = 1.0f;
             s.tint_b = 1.0f;
             s.tint_a = alpha;
-            batcher.draw( s );
+            lighting::get_render_state().queue_tile_sprite( atlas_tex, s );
             return true;
         }
 

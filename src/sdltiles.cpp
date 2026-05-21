@@ -490,6 +490,14 @@ void refresh_display()
         s.tint_a = 1.0f;
         rs.tile_batcher().draw( s );
     }
+    // Phase 2i-B-5 part 3: drain any sprites cata_tiles enqueued during
+    // the per-window redraw onto the swapchain *inside the same
+    // tile_batcher pass* as the bridge blit. set_texture rebinds the
+    // atlas page; grouping by texture handles atlas-packed runs in one
+    // SDL_DrawGPUPrimitives call. Sampler reused from the bridge.
+    if( !rs.tile_sprites_empty() && rs.bridge_sampler() ) {
+        rs.flush_tile_sprites( rs.tile_batcher(), rs.bridge_sampler() );
+    }
     rs.tile_batcher().end_pass();
 
     // Phase 2i-B-4: drain the GeometryRenderer rect queue onto the
