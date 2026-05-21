@@ -484,12 +484,34 @@ if (NOT TARGET SDL3_shadercross::SDL3_shadercross)
     endif ()
     if (NOT TARGET SDL3_shadercross::SDL3_shadercross)
         message("Installing SDL3_shadercross from Source")
+        # Pick SHARED vs STATIC based on which SDL3 target the caller has
+        # exposed. Shadercross's CMakeLists requires the matching SDL3
+        # component:
+        #   * SHARED → `find_package(SDL3 REQUIRED COMPONENTS SDL3-shared)`
+        #   * STATIC → `find_package(SDL3 REQUIRED COMPONENTS Headers)`
+        # On vcpkg `x64-windows-static`, SDL3 ships as static-only — the
+        # SHARED branch then errors out with `SDL3_FOUND to FALSE`. We
+        # cannot fix that by *also* fetching SDL3-shared, because the exe
+        # would end up with two SDL3 instances (static linked into the exe,
+        # shared loaded by shadercross.dll) and SDL_GPU device state would
+        # split between them. Build shadercross-static instead — it links
+        # against `SDL3::Headers` only and resolves the actual SDL3 symbols
+        # through the exe at link time. DXC sidecar DLLs (dxcompiler.dll /
+        # dxil.dll) still ship via the POST_BUILD copy step further down.
+        if (TARGET SDL3::SDL3-shared)
+            set(_CATA_SHADERCROSS_SHARED ON)
+            set(_CATA_SHADERCROSS_STATIC OFF)
+        else ()
+            message(STATUS "SDL3-shared target missing (vcpkg static triplet?) — building SDL3_shadercross as static")
+            set(_CATA_SHADERCROSS_SHARED OFF)
+            set(_CATA_SHADERCROSS_STATIC ON)
+        endif ()
         # Pin to a known-good main SHA (libsdl-org/SDL_shadercross has no
         # tagged release as of 2026-05-20). Bump deliberately.
         set(SDLSHADERCROSS_DXC          ON  CACHE BOOL "" FORCE)
         set(SDLSHADERCROSS_VENDORED     ON  CACHE BOOL "" FORCE)
-        set(SDLSHADERCROSS_SHARED       ON  CACHE BOOL "" FORCE)
-        set(SDLSHADERCROSS_STATIC       OFF CACHE BOOL "" FORCE)
+        set(SDLSHADERCROSS_SHARED       ${_CATA_SHADERCROSS_SHARED} CACHE BOOL "" FORCE)
+        set(SDLSHADERCROSS_STATIC       ${_CATA_SHADERCROSS_STATIC} CACHE BOOL "" FORCE)
         set(SDLSHADERCROSS_CLI          OFF CACHE BOOL "" FORCE)
         set(SDLSHADERCROSS_INSTALL      OFF CACHE BOOL "" FORCE)
         # Save + scrub CATA_WARNINGS while the vendored DXC / SPIRV-Tools /
