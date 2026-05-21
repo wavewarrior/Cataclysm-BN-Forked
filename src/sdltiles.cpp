@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cassert>
 #include <climits>
 #include <cmath>
@@ -274,6 +275,54 @@ static void WinCreate()
         renderer_name = "software";
     } else {
         renderer_name = get_option<std::string>( "RENDERER" );
+    }
+
+    // Phase 2i-B-5 conflict avoidance: the visible window has already
+    // been claimed by an SDL_GPU device (lighting::gpu_device, driver
+    // typically direct3d12 on Win11). The hidden mirror window we're
+    // about to create an SDL_Renderer for is used for the bridge
+    // readback + the legacy fallback draw paths (rotated sprites,
+    // pixel_minimap, vehicle_preview clip). If THAT SDL_Renderer also
+    // picks direct3d12, two D3D12 device instances coexist in the
+    // same process — observed symptom is SDL_RenderTextureRotated
+    // returning false with a garbled error string ("Parameter
+    // 'joystick' is invalid") and tiles never actually drawing.
+    //
+    // The user's RENDERER setting still drives what backend the
+    // application *thinks* it's using (the active driver name is
+    // logged + reused everywhere else), but the hidden renderer is
+    // forced to a non-D3D12, non-"gpu" alternative so it can coexist
+    // with the SDL_GPU device. direct3d11 is preferred; opengl is a
+    // fallback. The user-facing RENDERER option only matters for the
+    // bridge readback texture format, which is the same regardless.
+    if( !software_renderer ) {
+        const std::string lower_name = []( std::string s ) {
+            for( char &c : s ) {
+                c = static_cast<char>( std::tolower( static_cast<unsigned char>( c ) ) );
+            }
+            return s;
+        }( renderer_name );
+        if( lower_name == "direct3d12" || lower_name == "gpu" ) {
+            const std::array<const char *, 3> alt_priorities{ "direct3d11", "direct3d", "opengl" };
+            const int num_drivers = SDL_GetNumRenderDrivers();
+            for( const char *alt : alt_priorities ) {
+                for( int i = 0; i < num_drivers; ++i ) {
+                    const char *name = SDL_GetRenderDriver( i );
+                    if( name && std::string( name ) == alt ) {
+                        DebugLog( DL::Info, DC::Main )
+                                << "RENDERER='" << renderer_name
+                                << "' would conflict with the SDL_GPU device on the visible "
+                                "window; forcing the hidden mirror SDL_Renderer to '" << alt
+                                << "' instead (visible window still on SDL_GPU).";
+                        renderer_name = alt;
+                        break;
+                    }
+                }
+                if( renderer_name == alt ) {
+                    break;
+                }
+            }
+        }
     }
 
     const int numRenderDrivers = SDL_GetNumRenderDrivers();
