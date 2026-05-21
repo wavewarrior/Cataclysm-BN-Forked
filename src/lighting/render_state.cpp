@@ -20,6 +20,20 @@ std::atomic<bool> initialised{ false };
 
 } // namespace
 
+void gpu_texture_deleter::operator()( SDL_GPUTexture *t ) const noexcept
+{
+    if( !t ) {
+        return;
+    }
+    auto &rs = get_render_state();
+    if( rs.ready() ) {
+        SDL_ReleaseGPUTexture( rs.device().raw(), t );
+    }
+    // If render_state is already shut down, the GPU device is too —
+    // SDL has released all underlying objects on device teardown. Leak
+    // the handle (which now points at freed memory).
+}
+
 void render_state::init( SDL_Window *host_window )
 {
     device_.init( host_window, /*debug=*/false, /*vsync=*/false );

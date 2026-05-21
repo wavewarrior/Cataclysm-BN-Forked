@@ -366,6 +366,59 @@ SDL_Texture_Ptr CachedTTFFont::create_glyph( const SDL_Renderer_Ptr &renderer,
     return CreateTextureFromSurface( renderer, sglyph );
 }
 
+// Phase 2i-B-6 helper. Builds the GPU-side mirror of create_glyph's
+// output by rendering the same surface and uploading it once. Returns
+// nullptr handle on any failure (caller falls back to legacy texture).
+static lighting::gpu_texture_unique_ptr create_gpu_glyph(
+    const TTF_Font_Ptr &font, const std::string &ch, int color,
+    int target_w, int target_h, bool fontblending, int &out_w, int &out_h )
+{
+    out_w = 0;
+    out_h = 0;
+    SDL_Surface_Ptr sglyph(
+        fontblending
+        ? TTF_RenderText_Blended( font.get(), ch.c_str(), 0, windowsPalette[color] )
+        : TTF_RenderText_Solid( font.get(), ch.c_str(), 0, windowsPalette[color] )
+    );
+    if( !sglyph ) {
+        return lighting::gpu_texture_unique_ptr{};
+    }
+    SDL_Surface_Ptr surface( SDL_CreateSurface( target_w, target_h, SDL_PIXELFORMAT_RGBA32 ) );
+    if( !surface ) {
+        return lighting::gpu_texture_unique_ptr{};
+    }
+    SDL_Rect src_rect = { 0, 0, sglyph->w, sglyph->h };
+    SDL_Rect dst_rect = { 0, 0, target_w, target_h };
+    if( src_rect.w < dst_rect.w ) {
+        dst_rect.x = ( dst_rect.w - src_rect.w ) / 2;
+        dst_rect.w = src_rect.w;
+    } else if( src_rect.w > dst_rect.w ) {
+        src_rect.x = ( src_rect.w - dst_rect.w ) / 2;
+        src_rect.w = dst_rect.w;
+    }
+    if( src_rect.h < dst_rect.h ) {
+        dst_rect.y = ( dst_rect.h - src_rect.h ) / 2;
+        dst_rect.h = src_rect.h;
+    } else if( src_rect.h > dst_rect.h ) {
+        src_rect.y = ( src_rect.h - dst_rect.h ) / 2;
+        src_rect.h = dst_rect.h;
+    }
+    if( !SDL_BlitSurface( sglyph.get(), &src_rect, surface.get(), &dst_rect ) ) {
+        return lighting::gpu_texture_unique_ptr{};
+    }
+    auto &rs = lighting::get_render_state();
+    if( !rs.ready() ) {
+        return lighting::gpu_texture_unique_ptr{};
+    }
+    SDL_GPUTexture *raw = rs.upload_surface_to_gpu_texture( surface.get() );
+    if( !raw ) {
+        return lighting::gpu_texture_unique_ptr{};
+    }
+    out_w = target_w;
+    out_h = target_h;
+    return lighting::gpu_texture_unique_ptr( raw );
+}
+
 bool CachedTTFFont::isGlyphProvided( const std::string &ch ) const
 {
     return TTF_FontHasGlyph( font.get(), UTF8_getch( ch ) );
@@ -379,13 +432,33 @@ void CachedTTFFont::OutputChar( const SDL_Renderer_Ptr &renderer, const Geometry
 
     auto it = glyph_cache_map.find( key );
     if( it == std::end( glyph_cache_map ) ) {
-        cached_t new_entry {
-            create_glyph( renderer, key.codepoints, key.color ),
-            static_cast<int>( width * utf8_wrapper( key.codepoints ).display_width() )
-        };
+        const int wf = utf8_wrapper( key.codepoints ).display_width();
+        const int target_w = width * wf;
+        cached_t new_entry;
+        new_entry.texture = create_glyph( renderer, key.codepoints, key.color );
+        new_entry.width = target_w;
+        // Build the GPU mirror alongside. Independent surface render so
+        // the legacy path stays bit-exact; only the GPU copy is new.
+        new_entry.gpu_texture = create_gpu_glyph(
+                                    font, key.codepoints, key.color,
+                                    target_w, height, fontblending,
+                                    new_entry.gpu_w, new_entry.gpu_h );
         it = glyph_cache_map.insert( std::make_pair( std::move( key ), std::move( new_entry ) ) ).first;
     }
     const cached_t &value = it->second;
+
+    // Prefer the GPU path. If the upload failed, fall back to legacy
+    // RenderCopy so the glyph is still visible (via the bridge blit).
+    if( value.gpu_texture ) {
+        auto &rs = lighting::get_render_state();
+        rs.queue_font_glyph( value.gpu_texture.get(),
+                             static_cast<float>( p.x ),
+                             static_cast<float>( p.y ),
+                             static_cast<float>( value.gpu_w ),
+                             static_cast<float>( value.gpu_h ),
+                             1.0f, 1.0f, 1.0f, opacity );
+        return;
+    }
 
     if( !value.texture ) {
         // Nothing we can do here )-:

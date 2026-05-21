@@ -20,10 +20,21 @@
 #include "gpu_atlas.h"
 #include "gpu_geometry.h"
 
+#include <memory>
 #include <vector>
 
 namespace lighting
 {
+
+// Custom deleter that releases an SDL_GPUTexture against the live
+// render_state device. Safe to invoke even if the render_state has
+// already been shut down — leaks the texture in that case (process
+// exit path; SDL releases everything on device teardown anyway).
+struct gpu_texture_deleter {
+    void operator()( SDL_GPUTexture *t ) const noexcept;
+};
+using gpu_texture_unique_ptr = std::unique_ptr<SDL_GPUTexture, gpu_texture_deleter>;
+
 
 class render_state
 {
