@@ -224,6 +224,17 @@ void render_state::queue_font_glyph( SDL_GPUTexture *glyph_tex,
                                      float dst_x, float dst_y, float dst_w, float dst_h,
                                      float r, float g, float b, float a )
 {
+    // Full-texture sample — for callers with one texture per glyph
+    // (CachedTTFFont).
+    queue_font_glyph( glyph_tex, dst_x, dst_y, dst_w, dst_h,
+                      0.0f, 0.0f, 1.0f, 1.0f, r, g, b, a );
+}
+
+void render_state::queue_font_glyph( SDL_GPUTexture *glyph_tex,
+                                     float dst_x, float dst_y, float dst_w, float dst_h,
+                                     float src_u, float src_v, float src_uw, float src_vh,
+                                     float r, float g, float b, float a )
+{
     if( !device_.ready() || !glyph_tex ) {
         return;
     }
@@ -233,11 +244,10 @@ void render_state::queue_font_glyph( SDL_GPUTexture *glyph_tex,
     d.inst.dst_y = dst_y;
     d.inst.dst_w = dst_w;
     d.inst.dst_h = dst_h;
-    // Full-texture sample — one texture per glyph for now.
-    d.inst.src_u = 0.0f;
-    d.inst.src_v = 0.0f;
-    d.inst.src_uw = 1.0f;
-    d.inst.src_vh = 1.0f;
+    d.inst.src_u = src_u;
+    d.inst.src_v = src_v;
+    d.inst.src_uw = src_uw;
+    d.inst.src_vh = src_vh;
     d.inst.tint_r = r;
     d.inst.tint_g = g;
     d.inst.tint_b = b;

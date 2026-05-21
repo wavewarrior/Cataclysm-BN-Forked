@@ -143,6 +143,14 @@ class BitmapFont : public Font
                                unsigned char line_id, point p, unsigned char color ) const override;
     protected:
         std::array<SDL_Texture_Ptr, color_loader<SDL_Color>::COLOR_NAMES_COUNT> ascii;
+        // Phase 2i-B-6: per-colour GPU mirrors of the `ascii` sheets.
+        // Built alongside the legacy textures in the constructor and
+        // sampled by OutputChar's GPU enqueue path. UV coords come from
+        // gpu_sheet_w / gpu_sheet_h.
+        std::array<lighting::gpu_texture_unique_ptr,
+            color_loader<SDL_Color>::COLOR_NAMES_COUNT> gpu_ascii;
+        int gpu_sheet_w = 0;
+        int gpu_sheet_h = 0;
         int tilewidth;
 };
 

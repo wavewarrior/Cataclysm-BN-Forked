@@ -85,8 +85,17 @@ class render_state
         // shared atlas yet), so flush iterates and issues one set_texture
         // + one draw per glyph. Acceptable for the typical 500–2000
         // glyphs/frame the game renders; an atlas pack is a later opt.
+        //
+        // The full-texture overload defaults UV to (0,0)..(1,1) — useful
+        // for per-glyph textures (CachedTTFFont). The UV overload accepts
+        // a sub-rect for callers that pack multiple glyphs into one
+        // atlas sheet (BitmapFont's per-colour `ascii` textures).
         void queue_font_glyph( SDL_GPUTexture *glyph_tex,
                                float dst_x, float dst_y, float dst_w, float dst_h,
+                               float r, float g, float b, float a );
+        void queue_font_glyph( SDL_GPUTexture *glyph_tex,
+                               float dst_x, float dst_y, float dst_w, float dst_h,
+                               float src_u, float src_v, float src_uw, float src_vh,
                                float r, float g, float b, float a );
         bool font_glyphs_empty() const noexcept { return font_glyph_queue_.empty(); }
         // Drains `font_glyph_queue_` into `dst` using `sampler`. Caller

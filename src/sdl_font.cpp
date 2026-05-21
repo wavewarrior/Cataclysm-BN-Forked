@@ -513,9 +513,21 @@ BitmapFont::BitmapFont(
         SDL_UnlockSurface( ascii_surf[a].get() );
     }
     tilewidth = ascii_surf[0]->w / width;
+    gpu_sheet_w = ascii_surf[0]->w;
+    gpu_sheet_h = ascii_surf[0]->h;
 
-    //convert ascii_surf to SDL_Texture
+    //convert ascii_surf to SDL_Texture + parallel SDL_GPUTexture upload
+    auto &rs = lighting::get_render_state();
     for( size_t a = 0; a < std::tuple_size<decltype( ascii )>::value; ++a ) {
+        // Build the GPU mirror BEFORE the legacy CreateTextureFromSurface
+        // call moves the surface into the SDL_Renderer texture: the SDL3
+        // wrapper consumes ascii_surf[a] in some build configurations.
+        if( rs.ready() ) {
+            SDL_GPUTexture *raw = rs.upload_surface_to_gpu_texture( ascii_surf[a].get() );
+            if( raw ) {
+                gpu_ascii[a].reset( raw );
+            }
+        }
         ascii[a] = CreateTextureFromSurface( renderer, ascii_surf[a] );
     }
 }
@@ -614,6 +626,23 @@ void BitmapFont::OutputChar( const SDL_Renderer_Ptr &renderer, const GeometryRen
         src.y = ( t / tilewidth ) * height;
         src.w = width;
         src.h = height;
+        // Prefer the GPU mirror — drop the legacy RenderCopy entirely
+        // when it's available so the glyph doesn't double-draw on top
+        // of itself via the bridge.
+        if( gpu_ascii[color] && gpu_sheet_w > 0 && gpu_sheet_h > 0 ) {
+            const float inv_w = 1.0f / static_cast<float>( gpu_sheet_w );
+            const float inv_h = 1.0f / static_cast<float>( gpu_sheet_h );
+            lighting::get_render_state().queue_font_glyph(
+                gpu_ascii[color].get(),
+                static_cast<float>( p.x ), static_cast<float>( p.y ),
+                static_cast<float>( width ), static_cast<float>( height ),
+                static_cast<float>( src.x ) * inv_w,
+                static_cast<float>( src.y ) * inv_h,
+                static_cast<float>( src.w ) * inv_w,
+                static_cast<float>( src.h ) * inv_h,
+                1.0f, 1.0f, 1.0f, opacity );
+            return;
+        }
         SDL_Rect rect;
         rect.x = p.x;
         rect.y = p.y;

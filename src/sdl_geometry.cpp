@@ -5,24 +5,25 @@
 
 #define dbg(x) DebugLogFL((x),DC::SDL)
 
-// Phase 2i-B-4 plumbing — currently deactivated.
+// Phase 2i-B-4/6: route every GeometryRenderer rect through the lighting
+// render_state's deferred UI quad queue. CachedTTFFont + BitmapFont have
+// already moved off the bridge in the preceding commits, so we no longer
+// risk an opaque rect covering legacy text that's still on display_buffer.
 //
-// Earlier attempt enqueued every legacy rect into render_state::queue_ui_rect
-// so the ui_batcher could drain them on the swapchain. Problem surfaced on
-// Win11: legacy text glyphs still draw through SDL_Renderer into
-// display_buffer, then via the bridge blit. Queued GPU rects then draw ON
-// TOP of the bridge — and opaque-black rects (window separators, status bar
-// chrome, …) covered the text underneath. Symptom: "UI / fonts sometimes
-// render black."
-//
-// The queue infrastructure (render_state::queue_ui_rect, flush_ui_rects,
-// the ui_batcher pass in refresh_display) stays in tree but unused. It
-// re-activates with the font-cutover commit, which also drops the legacy
-// RenderFillRect path so rects + text both render via ui_batcher in a
-// single z-coherent layer.
-static void mirror_rect_to_gpu( const SDL_FRect & /*r*/, const SDL_Color & /*c*/ ) noexcept
+// SDL_Renderer_Ptr on the public interface stays for now — it's pruned
+// in the cleanup commit alongside SDL_Renderer itself.
+static void mirror_rect_to_gpu( const SDL_FRect &r, const SDL_Color &c ) noexcept
 {
-    // intentionally empty — see comment above.
+    auto &rs = lighting::get_render_state();
+    if( !rs.ready() ) {
+        return;
+    }
+    constexpr float inv255 = 1.0f / 255.0f;
+    rs.queue_ui_rect( r.x, r.y, r.w, r.h,
+                      static_cast<float>( c.r ) * inv255,
+                      static_cast<float>( c.g ) * inv255,
+                      static_cast<float>( c.b ) * inv255,
+                      static_cast<float>( c.a ) * inv255 );
 }
 
 void GeometryRenderer::horizontal_line( const SDL_Renderer_Ptr &renderer, point pos, int x2,
@@ -50,53 +51,28 @@ void GeometryRenderer::rect( const SDL_Renderer_Ptr &renderer, point pos, int wi
 }
 
 
-void DefaultGeometryRenderer::rect( const SDL_Renderer_Ptr &renderer, const SDL_FRect &rect,
+void DefaultGeometryRenderer::rect( const SDL_Renderer_Ptr & /*renderer*/, const SDL_FRect &rect,
                                     const SDL_Color &color ) const
 {
-    // Phase 2i-B-4 transitional: still draw into display_buffer via the
-    // legacy SDL_Renderer (so the bridge keeps the rect-under-text z-order
-    // correct) AND queue the same rect into the GPU ui_batcher. The GPU
-    // copy draws on top of the bridge blit, doubling intensity for any
-    // translucent rect by α*α — visually negligible for opaque UI fills
-    // (the dominant case). Once Font::OutputChar moves to a GPU queue,
-    // we drop the RenderFillRect path entirely.
-    SetRenderDrawColor( renderer, color.r, color.g, color.b, color.a );
-    RenderFillRect( renderer, &rect );
+    // Legacy SDL_RenderFillRect path dropped — display_buffer no longer
+    // receives rect fills. Only the GPU queue draws rects from now on.
     mirror_rect_to_gpu( rect, color );
 }
 
-ColorModulatedGeometryRenderer::ColorModulatedGeometryRenderer( const SDL_Renderer_Ptr &renderer )
+ColorModulatedGeometryRenderer::ColorModulatedGeometryRenderer( const SDL_Renderer_Ptr & /*renderer*/ )
 {
-    SDL_Surface_Ptr alt_surf = CreateSurface( sdl_color_pixel_format, 1, 1 );
-    if( alt_surf ) {
-        FillSurfaceRect( alt_surf, nullptr,
-                         SDL_MapRGB( SDL_GetPixelFormatDetails( alt_surf->format ), nullptr,
-                                     255, 255, 255 ) );
-
-        tex.reset( SDL_CreateTextureFromSurface( renderer.get(), alt_surf.get() ) );
-        alt_surf.reset();
-
-        // Test to make sure color modulation is supported by renderer
-        bool tex_enable = !SetTextureColorMod( tex, 0, 0, 0 );
-        if( !tex_enable ) {
-            tex.reset();
-        }
-        dbg( DL::Info ) << "ColorModulatedGeometryRenderer constructor() = " <<
-                        ( tex_enable ? "FAIL" : "SUCCESS" ) << ". tex_enable = " << tex_enable;
-    } else {
-        dbg( DL::Error ) << "CreateRGBSurface failed: " << SDL_GetError();
-    }
+    // 2i-B-6: the legacy 1×1 white SDL_Texture this class once held is
+    // unused now that all rects go through render_state::queue_ui_rect
+    // (which samples gpu_geometry's own 1×1 white SDL_GPUTexture).
+    dbg( DL::Info ) << "ColorModulatedGeometryRenderer: GPU-backed (legacy SDL_Texture path removed).";
 }
 
 void ColorModulatedGeometryRenderer::rect( const SDL_Renderer_Ptr &renderer, const SDL_FRect &rect,
         const SDL_Color &color ) const
 {
-    if( tex ) {
-        SetTextureColorMod( tex, color.r, color.g, color.b );
-        RenderCopy( renderer, tex, nullptr, &rect );
-        mirror_rect_to_gpu( rect, color );
-    } else {
-        DefaultGeometryRenderer::rect( renderer, rect, color );
-    }
+    // The "color-modulated texture" trick was an SDL_Renderer back-end
+    // workaround for blend-rate-limited drivers; irrelevant under
+    // SDL_GPU. Single-path delegate to the default queue path.
+    DefaultGeometryRenderer::rect( renderer, rect, color );
 }
 
