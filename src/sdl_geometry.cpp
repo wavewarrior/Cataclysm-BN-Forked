@@ -5,13 +5,15 @@
 
 #define dbg(x) DebugLogFL((x),DC::SDL)
 
-// Phase 2i-B-4/6: route every GeometryRenderer rect through the lighting
-// render_state's deferred UI quad queue. CachedTTFFont + BitmapFont have
-// already moved off the bridge in the preceding commits, so we no longer
-// risk an opaque rect covering legacy text that's still on display_buffer.
+// Phase 2i-B-5 cutover: cata_tiles' unrotated draws now land on the
+// GPU swapchain via the tile_batcher pass (see draw_sprite_at). Rects
+// can finally migrate too: they queue into render_state and flush in
+// the ui_batcher pass *after* the tile_batcher pass, so colour-block
+// overlays render on top of GPU sprites and UI bgs render on top of
+// (mostly empty) bridge.
 //
-// SDL_Renderer_Ptr on the public interface stays for now — it's pruned
-// in the cleanup commit alongside SDL_Renderer itself.
+// Legacy SDL_RenderFillRect path dropped in the rect impl below;
+// display_buffer no longer receives rect fills.
 static void mirror_rect_to_gpu( const SDL_FRect &r, const SDL_Color &c ) noexcept
 {
     auto &rs = lighting::get_render_state();
@@ -54,25 +56,27 @@ void GeometryRenderer::rect( const SDL_Renderer_Ptr &renderer, point pos, int wi
 void DefaultGeometryRenderer::rect( const SDL_Renderer_Ptr & /*renderer*/, const SDL_FRect &rect,
                                     const SDL_Color &color ) const
 {
-    // Legacy SDL_RenderFillRect path dropped — display_buffer no longer
-    // receives rect fills. Only the GPU queue draws rects from now on.
+    // Single GPU path now that cata_tiles' draws are also off
+    // display_buffer (2i-B-5 cutover). Rects queue into the GPU
+    // ui_batcher pass; flush runs after the tile_batcher pass so
+    // colour-block overlays land on top of GPU sprites and UI bgs
+    // land on top of (mostly empty) bridge.
     mirror_rect_to_gpu( rect, color );
 }
 
 ColorModulatedGeometryRenderer::ColorModulatedGeometryRenderer( const SDL_Renderer_Ptr & /*renderer*/ )
 {
-    // 2i-B-6: the legacy 1×1 white SDL_Texture this class once held is
-    // unused now that all rects go through render_state::queue_ui_rect
-    // (which samples gpu_geometry's own 1×1 white SDL_GPUTexture).
+    // The colour-modulated SDL_Texture trick was an SDL_Renderer
+    // back-end workaround for blend-rate-limited drivers; SDL_GPU has
+    // no such limitation. Constructor kept so sdltiles.cpp's
+    // USE_COLOR_MODULATED_TEXTURES branch keeps compiling; the rect
+    // impl below delegates to DefaultGeometryRenderer.
     dbg( DL::Info ) << "ColorModulatedGeometryRenderer: GPU-backed (legacy SDL_Texture path removed).";
 }
 
 void ColorModulatedGeometryRenderer::rect( const SDL_Renderer_Ptr &renderer, const SDL_FRect &rect,
         const SDL_Color &color ) const
 {
-    // The "color-modulated texture" trick was an SDL_Renderer back-end
-    // workaround for blend-rate-limited drivers; irrelevant under
-    // SDL_GPU. Single-path delegate to the default queue path.
     DefaultGeometryRenderer::rect( renderer, rect, color );
 }
 
