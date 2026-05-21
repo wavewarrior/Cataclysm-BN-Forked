@@ -216,6 +216,9 @@ SDL_GPUTexture *render_state::upload_surface_to_gpu_texture( SDL_Surface *surfac
     SDL_GPUCopyPass *cp = SDL_BeginGPUCopyPass( cb );
     SDL_GPUTextureTransferInfo ti{};
     ti.transfer_buffer = xfer;
+    ti.offset = 0;
+    ti.pixels_per_row = static_cast<std::uint32_t>( src->w );
+    ti.rows_per_layer = static_cast<std::uint32_t>( src->h );
     SDL_GPUTextureRegion region{};
     region.texture = tex;
     region.w = static_cast<std::uint32_t>( src->w );
@@ -336,6 +339,12 @@ bool render_state::upload_surface_subregion_to_gpu_texture(
     SDL_GPUCopyPass *cp = SDL_BeginGPUCopyPass( cb );
     SDL_GPUTextureTransferInfo ti{};
     ti.transfer_buffer = xfer;
+    ti.offset = 0;
+    // Tightly packed layout in the transfer buffer — sw pixels per row,
+    // sh rows. SDL_GPU's 0-default for these means "use region.w/region.h",
+    // but setting explicitly removes any ambiguity across backends.
+    ti.pixels_per_row = static_cast<std::uint32_t>( sw );
+    ti.rows_per_layer = static_cast<std::uint32_t>( sh );
     SDL_GPUTextureRegion region{};
     region.texture = dst;
     region.x = static_cast<std::uint32_t>( dst_x );
@@ -436,6 +445,20 @@ void render_state::flush_tile_sprites( sprite_batcher &dst, SDL_GPUSampler *samp
     // and atlas-packed runs naturally batch.
     // Drain WITHOUT clearing — clear_frame_queues() handles reset at
     // the top of each redraw cycle.
+    static std::size_t last_logged_count = 0;
+    if( tile_sprite_queue_.size() != last_logged_count ) {
+        dbg( DL::Info ) << "flush_tile_sprites: queue=" << tile_sprite_queue_.size()
+                        << " first_tex=" << ( void * )tile_sprite_queue_.front().texture
+                        << " first_inst dst=(" << tile_sprite_queue_.front().inst.dst_x << ","
+                        << tile_sprite_queue_.front().inst.dst_y << " "
+                        << tile_sprite_queue_.front().inst.dst_w << "x"
+                        << tile_sprite_queue_.front().inst.dst_h << ") src_uv=("
+                        << tile_sprite_queue_.front().inst.src_u << ","
+                        << tile_sprite_queue_.front().inst.src_v << " "
+                        << tile_sprite_queue_.front().inst.src_uw << "x"
+                        << tile_sprite_queue_.front().inst.src_vh << ")";
+        last_logged_count = tile_sprite_queue_.size();
+    }
     SDL_GPUTexture *bound = nullptr;
     for( const tile_sprite_draw &s : tile_sprite_queue_ ) {
         if( s.texture != bound ) {
