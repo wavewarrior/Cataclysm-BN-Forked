@@ -11,7 +11,7 @@ Current lighting: per-turn CPU shadowcasting (`src/lightmap.cpp`, `src/shadowcas
 | Phase | State | Notes |
 |---|---|---|
 | 1. Curses + Android removal | ✅ done | commit `e96086b658` on `feat/lighting-phase1-curses-android-removal`. 169 files, -13042 lines. |
-| 2. SDL_GPU device + sprite batcher | ⏳ 2a–2g inert + 2i-A + 2i-B-1..3 done; verified Win11 D3D12 + Mac Metal. 2i-B-4 queue plumbing wired (dual-path, no functional change yet). | branch `feat/lighting-phase2i-B-cutover`. RENDERER option `gpu` must be avoided pre-2e/2f/2g — two SDL_GPU devices race. |
+| 2. SDL_GPU device + sprite batcher | 🟡 2i-B-5/6 cutover landed (cata_tiles + dynamic_atlas + sdl_font + sdl_geometry → GPU). Bridge still alive for rotated sprites and a handful of remaining SDL_Renderer consumers (pixel_minimap, loading_ui, vehicle_preview clip). Phase complete after 2i-B-7a-f. | branch `feat/lighting-phase2i-B-cutover`. RENDERER option `gpu` must still be avoided — bridge alive means two SDL_GPU devices race. |
 
 ### Phase 2 finish — remaining commits
 
@@ -19,25 +19,34 @@ Bridge approach (2i-B-3) already meets the plan's pixel-parity gate. To get
 to the row table's ambition ("SDL_Renderer deleted; legacy files removed"),
 each remaining draw site needs migration. Ordering forced by atlas dependency:
 
-| Commit | Scope (rough LOC) | Notes |
+| Commit | State | Notes |
 |---|---|---|
-| 2i-B-5 | **dynamic_atlas → gpu_atlas + cata_tiles draw paths → tile_batcher** (~5000, single coupled commit) | Coupling discovered 2026-05-21: `atlas_texture = pair<SDL_Texture_SharedPtr, SDL_Rect>` is the public type cata_tiles consumes (`draw_sprite_at`, vehicle parts, animated frames, fields, look-cursor, ~50 sites). Migrating just the atlas backend would leave consumers reading null SDL_Textures, and the legacy uses `SDL_SetRenderTarget(SDL_TEXTUREACCESS_TARGET)` which has no SDL_GPU equivalent — content must move to `SDL_UploadToGPUTexture` via transfer buffer, which changes the surface→atlas flow at the source. Atlas + cata_tiles draws are therefore one commit, not two. Plan multi-session work on a sub-branch with intermediate progress commits if needed; final merge into the cutover branch is the single atomic GPU consumer flip. |
-| 2i-B-6 | sdl_font glyph cache mirrored to GPU + Font::OutputChar → ui_batcher queue (~800) | per-glyph SDL_GPUTexture cache; OutputChar enqueues a sprite_instance. After this lands, drop legacy RenderFillRect from sdl_geometry too — single GPU source for both. |
-| 2i-B-7 | pixel_minimap → tile_batcher (~500), loading_ui / vehicle_preview / ui_manager touch-ups (~150) | cache textures on SDL_GPUTexture; subsystem clip wrappers replaced. |
-| 2i-B-8 | delete SDL_Renderer + sdl_wrappers.h SDL_Renderer_Ptr + bridge + legacy_window + display_buffer + sdl_font/sdl_geometry/dynamic_atlas .{h,cpp} (~-3000) | mechanical mass-delete commit. |
+| 2i-B-6 | ✅ landed | CachedTTFFont + BitmapFont glyphs route through font_engine queue. Verified Win11 D3D12. |
+| 2i-B-5 | ✅ landed | dynamic_atlas dual-back + cata_tiles `draw_sprite_at` unrotated path → tile_batcher + sdl_geometry rect → ui_batcher. Verified Win11 D3D12. Rotated sprites still fall through to legacy SDL_RenderTextureRotated. |
+| 2i-B-7 | ⏳ pending | Cleanup. **Cannot fully delete SDL_Renderer** until rotation lands on GPU. Smaller bounded steps: |
+|   2i-B-7a | ⏳ | Add 90-multiple rotation to sprite_instance + sprite.vert shader. Re-route 90/180/270 rotated draws through GPU. Arbitrary-angle (45/135/225/315 — rare, used for `LINE_*` ascii rotation tricks) still falls back. |
+|   2i-B-7b | ⏳ | Migrate pixel_minimap → tile_batcher (~500 LOC). Cache textures on SDL_GPUTexture; per-pixel writes via SDL_UploadToGPUTexture sub-regions or compute. |
+|   2i-B-7c | ⏳ | loading_ui image draw via tile_batcher (single-shot SDL_Surface → SDL_GPUTexture upload, one sprite draw). vehicle_preview / ui_manager clip-rect wrappers → tile_batcher scissor (or accept no clip until 2i-B-7d). |
+|   2i-B-7d | ⏳ | Add scissor (clip rect) to sprite_batcher pipeline so clip wrappers can route through GPU. |
+|   2i-B-7e | ⏳ | Screenshot path: switch from SDL_RenderReadPixels(display_buffer) to swapchain readback via SDL_GPU copy pass. |
+|   2i-B-7f | ⏳ | Mechanical delete: SDL_Renderer_Ptr, static renderer, legacy_window, display_buffer, bridge_texture, set_displaybuffer_rendertarget(), sdl_font/sdl_geometry/dynamic_atlas .{h,cpp}, related CMake source list entries. |
 
-Estimate: 4 commits, ~3.5 kLOC net delta, but the 2i-B-5 chunk is large
-and tightly coupled. Bridge stays load-bearing until 2i-B-8 — no
-intermediate commit between now and then will reduce SDL_Renderer surface
-area in a way that breaks the game; each removes one consumer cluster at a
-time while the bridge covers the rest.
+Estimate: 6 small commits, ~−3000 LOC net once mechanical delete runs.
+Each step keeps the game playable: until 7f, the bridge is alive for
+whatever consumers haven't migrated yet. After 7a, the bridge is empty
+in normal play because all common sprite rotations + all rects + all
+text are on GPU; legacy fallback only fires for 45° tricks. After 7b
+the minimap is on GPU. After 7c-d UI surfaces are migrated. After 7e
+the screenshot path stops needing SDL_RenderReadPixels. 7f is the
+final removal.
 
 **Pattern noted while planning**: the bridge in 2i-B-3 exists *because*
 these subsystems aren't cleanly separable in this codebase. Repeated
 attempts to find a "smaller first migration" (loading_ui, vehicle_preview,
 geometry-alone, atlas-alone) each discovered a coupling forcing the next
-neighbour to come with it. The remaining commits are sized to honest scope,
-not optimistic decomposition.
+neighbour to come with it. 2i-B-5 (cata_tiles + atlas + rects atomic
+cutover) confirmed the same shape — it's now one commit that landed
+clean. Remaining 7a-f are independently sized.
 | 3–14 | pending | see Phasing below |
 
 ### Phase 2 progress (branch `feat/lighting-phase2-sdl_gpu`)
