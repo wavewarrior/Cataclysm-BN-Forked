@@ -58,6 +58,32 @@ class render_state
         // active pass + white-tex segment open). Clears the queue.
         void flush_ui_rects( sprite_batcher &dst );
 
+        // Phase 2i-B-6 scaffolding (additive — no callers wired yet).
+        // Upload an RGBA SDL_Surface into a fresh SDL_GPUTexture (one
+        // texture per surface, sized to the surface). Caller owns the
+        // returned handle and must call SDL_ReleaseGPUTexture on the
+        // device when done. Used by the font glyph cache: each cached
+        // TTF glyph mirrors its CPU bitmap into one of these so the
+        // ui_batcher can sample it.
+        //
+        // Returns nullptr on any failure (device not ready, transfer
+        // buffer alloc, copy submit). Logs via DC::SDL.
+        SDL_GPUTexture *upload_surface_to_gpu_texture( SDL_Surface *surface );
+
+        // Font glyph draw queue. Each entry binds its own texture (no
+        // shared atlas yet), so flush iterates and issues one set_texture
+        // + one draw per glyph. Acceptable for the typical 500–2000
+        // glyphs/frame the game renders; an atlas pack is a later opt.
+        void queue_font_glyph( SDL_GPUTexture *glyph_tex,
+                               float dst_x, float dst_y, float dst_w, float dst_h,
+                               float r, float g, float b, float a );
+        bool font_glyphs_empty() const noexcept { return font_glyph_queue_.empty(); }
+        // Drains `font_glyph_queue_` into `dst` using `sampler`. Caller
+        // must have an active begin_pass on `dst`. Internally rebinds
+        // the texture per glyph; trivial atlas-packing optimisation
+        // belongs in a later commit.
+        void flush_font_glyphs( sprite_batcher &dst, SDL_GPUSampler *sampler );
+
         // Phase 2i-B-3 screen bridge: a GPU texture mirroring the legacy
         // SDL_Renderer display_buffer plus a persistent transfer buffer
         // sized to one frame. The bridge keeps every legacy draw path
@@ -83,6 +109,13 @@ class render_state
         gpu_geometry   geometry_;
 
         std::vector<sprite_instance> ui_rect_queue_;
+
+        // Font glyph queue (additive scaffolding for 2i-B-6).
+        struct font_glyph_draw {
+            SDL_GPUTexture *texture;
+            sprite_instance inst;
+        };
+        std::vector<font_glyph_draw> font_glyph_queue_;
 
         // Bridge state (phase 2i-B-3).
         SDL_GPUTexture        *bridge_tex_     = nullptr;
