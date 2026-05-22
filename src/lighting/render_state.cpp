@@ -114,12 +114,35 @@ void render_state::flush_ui_rects( sprite_batcher &dst )
     if( ui_rect_queue_.empty() ) {
         return;
     }
-    // Drain WITHOUT clearing — clear_frame_queues() (called at the top
-    // of each redraw cycle) is what resets the queue. This lets
-    // refresh_display re-flush the same queue on no-input frames so
-    // the swapchain shows the previous draw state instead of going
-    // black when curses hasn't run the per-window draws this frame.
-    dst.draw( ui_rect_queue_.data(), ui_rect_queue_.size() );
+    // 2026-05-22 diag: override every UI rect's tint to opaque white.
+    // Discriminator suggested by advisor — if map area now shows white
+    // blocks where lighting overlays sit, the rendering path is fine
+    // and the original black appearance is a data problem in callers
+    // (likely low-alpha or dark-tint values blended over black bridge).
+    // If still all black, the bug is in the draw-call sequence itself
+    // (pipeline blend state, set_texture order, etc).
+    // Drain WITHOUT clearing — clear_frame_queues() resets at top of cycle.
+    static thread_local std::vector<sprite_instance> diag_copy;
+    diag_copy.assign( ui_rect_queue_.begin(), ui_rect_queue_.end() );
+    for( sprite_instance &s : diag_copy ) {
+        s.tint_r = 1.0f;
+        s.tint_g = 1.0f;
+        s.tint_b = 1.0f;
+        s.tint_a = 1.0f;
+    }
+    static bool logged = false;
+    if( !logged && !diag_copy.empty() ) {
+        const auto &f = diag_copy.front();
+        const auto &b = diag_copy.back();
+        dbg( DL::Info ) << "flush_ui_rects DIAG white-tint override: count="
+                        << diag_copy.size()
+                        << " first dst=(" << f.dst_x << "," << f.dst_y
+                        << "," << f.dst_w << "," << f.dst_h << ")"
+                        << " back dst=(" << b.dst_x << "," << b.dst_y
+                        << "," << b.dst_w << "," << b.dst_h << ")";
+        logged = true;
+    }
+    dst.draw( diag_copy.data(), diag_copy.size() );
 }
 
 void render_state::clear_frame_queues() noexcept
