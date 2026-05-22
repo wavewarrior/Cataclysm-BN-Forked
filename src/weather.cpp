@@ -25,6 +25,7 @@
 #include "item_contents.h"
 #include "map.h"
 #include "mapbuffer.h"
+#include "lighting/render_state.h"
 #include "math_defines.h"
 #include "messages.h"
 #include "options.h"
@@ -473,6 +474,16 @@ void weather_effect::lightning( int intensity )
             add_msg( _( "A flash of lightning illuminates your surroundings!" ) );
             sfx::play_variant_sound( "environment", "thunder_near", 100, random_direction() );
             get_weather().lightning_active = true;
+
+            // Push a brief, wide lightning flash to the GPU emitter pipeline.
+            lighting::flash_event fe{};
+            fe.pos         = get_map().getglobal( g->u.pos() );
+            fe.r           = 1.0f;
+            fe.g           = 1.0f;
+            fe.b           = 1.0f;
+            fe.intensity   = 120.0f; // Lightning illuminates a huge area.
+            fe.duration_ms = 150.0f; // Very brief.
+            lighting::get_render_state().emitter_events().push( fe );
         }
     } else {
         get_weather().lightning_active = false;
