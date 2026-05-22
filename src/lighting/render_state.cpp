@@ -459,13 +459,33 @@ void render_state::flush_tile_sprites( sprite_batcher &dst, SDL_GPUSampler *samp
                         << tile_sprite_queue_.front().inst.src_vh << ")";
         last_logged_count = tile_sprite_queue_.size();
     }
+    // DIAGNOSTIC (2026-05-22): force ALL tile sprite draws onto the
+    // gpu_geometry white texture instead of the per-sprite atlas.
+    // White*tint=tint, so every sprite collapses to a flat-coloured
+    // (tint or white if tint=1,1,1,1) quad at its dst rect. If the
+    // user reports tile-shaped white squares filling the map area
+    // after this, the draw pipeline (queue, batcher, swapchain bind)
+    // is fine and the bug is in the atlas upload not actually
+    // populating the GPU mirror. If still black, the bug is in the
+    // draw chain itself.
+    SDL_GPUTexture *force_white = geometry_.white_texture();
     SDL_GPUTexture *bound = nullptr;
     for( const tile_sprite_draw &s : tile_sprite_queue_ ) {
-        if( s.texture != bound ) {
-            dst.set_texture( s.texture, sampler );
-            bound = s.texture;
+        SDL_GPUTexture *tex = force_white ? force_white : s.texture;
+        if( tex != bound ) {
+            dst.set_texture( tex, sampler );
+            bound = tex;
         }
-        dst.draw( s.inst );
+        // Override UV to centre-sample the 1×1 white tex so flip/uv
+        // math in the queued instance doesn't degenerate.
+        sprite_instance inst = s.inst;
+        if( force_white ) {
+            inst.src_u  = 0.5f;
+            inst.src_v  = 0.5f;
+            inst.src_uw = 0.0f;
+            inst.src_vh = 0.0f;
+        }
+        dst.draw( inst );
     }
 }
 
