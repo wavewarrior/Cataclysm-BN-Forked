@@ -34,8 +34,6 @@
 #include "vehicle_part.h"
 #include "vpart_position.h"
 
-extern void set_displaybuffer_rendertarget();
-
 namespace
 {
 
@@ -46,7 +44,7 @@ static point total_tiles_count = { ( 11 - 2 ) *SEEX, ( 11 - 2 ) *SEEY }; // defa
 // (clipped to keep tile_size >= 2 so dots always have a 1-pixel gap) or larger
 // (minimum 60-tile radius = 120 tiles, padding with black beyond the bubble edge).
 static auto view_tiles_count = total_tiles_count;
-// The view_tiles_count that the current projector / main_tex were built from.
+// The view_tiles_count that the current projector was built from.
 // Updated whenever set_screen_rect actually rebuilds; used to detect stale projectors
 // whose tile_size happens to match even though view_tiles_count changed.
 static auto built_view_tiles_count = point {0, 0};
@@ -75,19 +73,6 @@ float get_animation_phase( int phase_length_ms )
     }
 
     return std::fmod<float>( SDL_GetTicks(), phase_length_ms ) / phase_length_ms;
-}
-
-//creates the texture that individual minimap updates are drawn to
-//later, the main texture is drawn to the display buffer
-//the surface is needed to determine the color format needed by the texture
-SDL_Texture_Ptr create_cache_texture( const SDL_Renderer_Ptr &renderer, int tile_width,
-                                      int tile_height )
-{
-    return CreateTexture( renderer,
-                          SDL_PIXELFORMAT_ARGB8888,
-                          SDL_TEXTUREACCESS_TARGET,
-                          tile_width,
-                          tile_height );
 }
 
 SDL_Color get_map_color_at( const tripoint &p )
@@ -132,84 +117,13 @@ SDL_Color get_critter_color( Creature *critter, int flicker, int mixture )
 } // namespace
 
 // a texture pool to avoid recreating textures every time player changes their view
-// at most 142 out of 144 textures can be in use due to regular player movement
-//  (moving from submap corner to new corner) with MAPSIZE = 11
-// textures are dumped when the player moves more than one submap in one update
-//  (teleporting, z-level change) to prevent running out of the remaining pool
-class pixel_minimap::shared_texture_pool
-{
-    public:
-        shared_texture_pool( const std::function<SDL_Texture_Ptr()> &generator ) {
-            const size_t pool_size = static_cast<size_t>( g_mapsize + 1 ) * ( g_mapsize + 1 );
-
-            texture_pool.reserve( pool_size );
-            inactive_index.reserve( pool_size );
-
-            for( size_t i = 0; i < pool_size; ++i ) {
-                texture_pool.emplace_back( generator() );
-                inactive_index.push_back( i );
-            }
-        }
-
-        //reserves a texture from the inactive group and returns tracking info
-        SDL_Texture_Ptr request_tex( size_t &index ) {
-            if( inactive_index.empty() ) {
-                debugmsg( "Ran out of available textures in the pool." );
-                //shouldn't be happening, but minimap will just be default color instead of crashing
-                return nullptr;
-            }
-            index = inactive_index.back();
-            inactive_index.pop_back();
-            return std::move( texture_pool[index] );
-        }
-
-        //releases the provided texture back into the inactive pool to be used again
-        //called automatically in the submap cache destructor
-        void release_tex( size_t index, SDL_Texture_Ptr &&ptr ) {
-            inactive_index.push_back( index );
-            texture_pool[index] = std::move( ptr );
-        }
-
-    private:
-        std::vector<SDL_Texture_Ptr> texture_pool;
-        std::vector<size_t> inactive_index;
-};
-
 struct pixel_minimap::submap_cache {
-    //the color stored for each submap tile
-    std::array<SDL_Color, SEEX *SEEY> minimap_colors = {};
-    //checks if the submap has been looked at by the minimap routine
-    bool touched;
-    //the texture updates are drawn to
-    SDL_Texture_Ptr chunk_tex;
-    //the submap being handled
-    size_t texture_index;
-    //the list of updates to apply to the texture
-    //reduces render target switching to once per submap
-    std::vector<point> update_list;
-    //flag used to indicate that the texture needs to be cleared before first use
-    bool ready;
-    shared_texture_pool &pool;
-
-    //reserve the SEEX * SEEY submap tiles
-    submap_cache( shared_texture_pool &pool ) :
-        touched( false ),
-        ready( false ),
-        pool( pool ) {
-        chunk_tex = pool.request_tex( texture_index );
-    }
-
-    //handle the release of the borrowed texture
-    ~submap_cache() {
-        pool.release_tex( texture_index, std::move( chunk_tex ) );
-    }
-
-    submap_cache( submap_cache && ) = default;
+    std::array<SDL_Color, SEEX * SEEY> minimap_colors = {};
+    bool touched = false;
 
     SDL_Color &color_at( point p ) {
         assert( p.x < SEEX );
         assert( p.y < SEEY );
-
         return minimap_colors[p.y * SEEX + p.x];
     }
 };
@@ -265,47 +179,10 @@ void pixel_minimap::clear_unused_cache()
     }
 }
 
-//draws individual updates to the submap cache texture
-//the render target will be set back to display_buffer after all submaps are updated
 void pixel_minimap::flush_cache_updates()
 {
-    for( auto &mcp : cache ) {
-        if( mcp.second.update_list.empty() ) {
-            continue;
-        }
-
-        SetRenderTarget( renderer, mcp.second.chunk_tex );
-
-        if( !mcp.second.ready ) {
-            mcp.second.ready = true;
-
-            SetRenderDrawColor( renderer, 0x00, 0x00, 0x00, 0x00 );
-            RenderClear( renderer );
-
-            for( int y = 0; y < SEEY; ++y ) {
-                for( int x = 0; x < SEEX; ++x ) {
-                    const point tile_pos = projector->get_tile_pos( { x, y }, { SEEX, SEEY } );
-                    const point tile_size = projector->get_tile_size();
-
-                    geometry->rect( renderer, tile_pos, tile_size.x, tile_size.y, SDL_Color() );
-                }
-            }
-        }
-
-        for( point p : mcp.second.update_list ) {
-            const point tile_pos = projector->get_tile_pos( p, { SEEX, SEEY } );
-            const SDL_Color tile_color = mcp.second.color_at( p );
-
-            if( pixel_size.x == 1 && pixel_size.y == 1 ) {
-                SetRenderDrawColor( renderer, tile_color.r, tile_color.g, tile_color.b, tile_color.a );
-                RenderDrawPoint( renderer, tile_pos );
-            } else {
-                geometry->rect( renderer, tile_pos, pixel_size.x, pixel_size.y, tile_color );
-            }
-        }
-
-        mcp.second.update_list.clear();
-    }
+    // GPU path: color data lives in minimap_colors arrays.
+    // render_cache() draws directly to screen via queue_ui_rect each frame.
 }
 
 void pixel_minimap::update_cache_at( const tripoint &pos )
@@ -352,7 +229,6 @@ void pixel_minimap::update_cache_at( const tripoint &pos )
 
             if( current_color != color ) {
                 current_color = color;
-                cache_item.update_list.emplace_back( x, y );
             }
         }
     }
@@ -360,13 +236,7 @@ void pixel_minimap::update_cache_at( const tripoint &pos )
 
 pixel_minimap::submap_cache &pixel_minimap::get_cache_at( const tripoint &abs_sm_pos )
 {
-    auto it = cache.find( abs_sm_pos );
-
-    if( it == cache.end() ) {
-        it = cache.emplace( abs_sm_pos, *tex_pool ).first;
-    }
-
-    return it->second;
+    return cache.try_emplace( abs_sm_pos ).first->second;
 }
 
 void pixel_minimap::process_cache( const tripoint &center )
@@ -388,7 +258,7 @@ void pixel_minimap::process_cache( const tripoint &center )
 
 void pixel_minimap::set_screen_rect( const SDL_Rect &screen_rect )
 {
-    if( this->screen_rect == screen_rect && main_tex && tex_pool && projector
+    if( this->screen_rect == screen_rect && projector
         && built_view_tiles_count == view_tiles_count ) {
         return;
     }
@@ -401,14 +271,13 @@ void pixel_minimap::set_screen_rect( const SDL_Rect &screen_rect )
     const auto size_on_screen = projector->get_tiles_size( view_tiles_count );
 
     if( settings.scale_to_fit ) {
+        // TODO: scale_to_fit renders at natural pixel size for now (no transform);
+        // will be fixed when phase 2i-B-7d adds scissor rect support.
         main_tex_clip_rect = SDL_Rect{ 0, 0, size_on_screen.x, size_on_screen.y };
         screen_clip_rect = fit_rect_inside( main_tex_clip_rect, screen_rect );
-
-        main_tex = create_cache_texture( renderer, size_on_screen.x, size_on_screen.y );
-        SDL_SetTextureScaleMode( main_tex.get(), SDL_SCALEMODE_LINEAR );
-
     } else {
-        const point d( ( size_on_screen.x - screen_rect.w ) / 2, ( size_on_screen.y - screen_rect.h ) / 2 );
+        const point d( ( size_on_screen.x - screen_rect.w ) / 2,
+                       ( size_on_screen.y - screen_rect.h ) / 2 );
 
         main_tex_clip_rect = SDL_Rect{
             std::max( d.x, 0 ),
@@ -423,21 +292,9 @@ void pixel_minimap::set_screen_rect( const SDL_Rect &screen_rect )
             main_tex_clip_rect.w,
             main_tex_clip_rect.h
         };
-
-        main_tex = create_cache_texture( renderer, size_on_screen.x, size_on_screen.y );
     }
 
     cache.clear();
-
-    const point chunk_size = projector->get_tiles_size( { SEEX, SEEY } );
-
-    const auto chunk_texture_generator = [&chunk_size, this]() {
-        SDL_Texture_Ptr result = create_cache_texture( renderer, chunk_size.x, chunk_size.y );
-        SetTextureBlendMode( result, SDL_BLENDMODE_BLEND );
-        return result;
-    };
-
-    tex_pool = std::make_unique<shared_texture_pool>( chunk_texture_generator );
     built_view_tiles_count = view_tiles_count;
 }
 
@@ -445,32 +302,12 @@ void pixel_minimap::reset()
 {
     projector.reset();
     cache.clear();
-    main_tex.reset();
-    tex_pool.reset();
 }
 
 void pixel_minimap::render( const tripoint &center )
 {
-    // pixel_minimap renders via the legacy SDL_Renderer path which no longer
-    // reaches the screen (bridge removed in phase 2i-B cutover). No-op until
-    // a GPU-backed minimap is implemented.
-    ( void )center;
-    return;
-
-    SetRenderDrawColor( renderer, 0x00, 0x00, 0x00, 0x00 );
-    RenderClear( renderer );
-
     render_cache( center );
     render_critters( center );
-
-    //set display buffer to main screen
-    set_displaybuffer_rendertarget();
-    //paint intermediate texture to screen
-    const SDL_FRect fsrc{ float( main_tex_clip_rect.x ), float( main_tex_clip_rect.y ),
-                          float( main_tex_clip_rect.w ), float( main_tex_clip_rect.h ) };
-    const SDL_FRect fdst{ float( screen_clip_rect.x ), float( screen_clip_rect.y ),
-                          float( screen_clip_rect.w ), float( screen_clip_rect.h ) };
-    RenderCopy( renderer, main_tex, &fsrc, &fdst );
 }
 
 void pixel_minimap::render_cache( const tripoint &center )
@@ -483,19 +320,22 @@ void pixel_minimap::render_cache( const tripoint &center )
 
     auto ms_remain = center.xy();
     ms_to_sm_remain( ms_remain );
-    // Compute the tile offset so the player lands exactly at the texture centre
-    // (view_tiles_count / 2).  The old formula used SEEX/2 as an approximation,
-    // which is only correct when view_tiles_count is an exact odd multiple of
-    // SEEX — producing a systematic upper-left drift otherwise (most visible at
-    // bubble size 4, where view_tiles_count = screen_rect.w / 3).
     const auto ms_offset = point{
-        view_tiles_count.x / 2 - sm_offset.x *SEEX - ms_remain.x,
-        view_tiles_count.y / 2 - sm_offset.y *SEEY - ms_remain.y
+        view_tiles_count.x / 2 - sm_offset.x * SEEX - ms_remain.x,
+        view_tiles_count.y / 2 - sm_offset.y * SEEY - ms_remain.y
     };
 
+    // Offset to convert from main_tex space to screen space.
+    const point screen_base{
+        screen_clip_rect.x - main_tex_clip_rect.x,
+        screen_clip_rect.y - main_tex_clip_rect.y
+    };
+
+    // TODO: instance-cap monitoring — at g_mapsize=11 this is ~17K rects;
+    // very large bubbles may approach MAX_INSTANCES=65536.
     for( const auto &elem : cache ) {
         if( !elem.second.touched ) {
-            continue;   // What you gonna do with all that junk?
+            continue;
         }
 
         const tripoint rel_pos = elem.first - sm_center;
@@ -509,19 +349,33 @@ void pixel_minimap::render_cache( const tripoint &center )
         const tripoint sm_pos = rel_pos + sm_offset;
         const tripoint ms_pos = sm_to_ms_copy( sm_pos ) + ms_offset;
 
-        const SDL_Rect chunk_rect = projector->get_chunk_rect( ms_pos.xy(), { SEEX, SEEY } );
+        for( int y = 0; y < SEEY; ++y ) {
+            for( int x = 0; x < SEEX; ++x ) {
+                const SDL_Color color = elem.second.color_at( { x, y } );
+                if( color.a == 0 ) {
+                    continue;
+                }
 
-        const SDL_FRect fchunk{ float( chunk_rect.x ), float( chunk_rect.y ),
-                                float( chunk_rect.w ), float( chunk_rect.h ) };
-        RenderCopy( renderer, elem.second.chunk_tex, nullptr, &fchunk );
+                const point tile_pos = projector->get_tile_pos(
+                                           { ms_pos.x + x, ms_pos.y + y }, view_tiles_count )
+                                       + screen_base;
+
+                if( tile_pos.x < screen_clip_rect.x ||
+                    tile_pos.y < screen_clip_rect.y ||
+                    tile_pos.x + pixel_size.x > screen_clip_rect.x + screen_clip_rect.w ||
+                    tile_pos.y + pixel_size.y > screen_clip_rect.y + screen_clip_rect.h ) {
+                    continue;
+                }
+
+                geometry->rect( renderer, tile_pos, pixel_size.x, pixel_size.y, color );
+            }
+        }
     }
 }
 
 void pixel_minimap::render_critters( const tripoint &center )
 {
-    //handles the enemy faction red highlights
-    //this value should be divisible by 200
-    const int indicator_length = settings.beacon_blink_interval * 200; //default is 2000 ms, 2 seconds
+    const int indicator_length = settings.beacon_blink_interval * 200;
 
     int flicker = 100;
     int mixture = 0;
@@ -539,15 +393,16 @@ void pixel_minimap::render_critters( const tripoint &center )
     const auto start_x = center.x - view_tiles_count.x / 2;
     const auto start_y = center.y - view_tiles_count.y / 2;
     const point beacon_size = {
-        std::max<int>( projector->get_tile_size().x *settings.beacon_size / 2, 2 ),
-        std::max<int>( projector->get_tile_size().y *settings.beacon_size / 2, 2 )
+        std::max<int>( projector->get_tile_size().x * settings.beacon_size / 2, 2 ),
+        std::max<int>( projector->get_tile_size().y * settings.beacon_size / 2, 2 )
+    };
+
+    const point screen_base{
+        screen_clip_rect.x - main_tex_clip_rect.x,
+        screen_clip_rect.y - main_tex_clip_rect.y
     };
 
     cached_has_animated_beacons = false;
-    // Loop over view_tiles_count (the clipped view, not total_tiles_count) so that
-    // start_{x,y} + loop index always stays within the loaded cache for large bubbles.
-    // An inbounds() guard handles the opposite case (small bubble, wide screen) where
-    // view_tiles_count can exceed the cache dimensions.
     for( int y = 0; y < view_tiles_count.y; y++ ) {
         for( int x = 0; x < view_tiles_count.x; x++ ) {
             const tripoint p = tripoint{ start_x + x, start_y + y, center.z };
@@ -566,8 +421,11 @@ void pixel_minimap::render_critters( const tripoint &center )
                 continue;
             }
 
-            const point critter_pos = projector->get_tile_pos( { x, y }, view_tiles_count );
-            const SDL_Rect critter_rect = SDL_Rect{ critter_pos.x, critter_pos.y, beacon_size.x, beacon_size.y };
+            const point critter_pos = projector->get_tile_pos( { x, y }, view_tiles_count )
+                                      + screen_base;
+            const SDL_Rect critter_rect = SDL_Rect{
+                critter_pos.x, critter_pos.y, beacon_size.x, beacon_size.y
+            };
             const SDL_Color critter_color = get_critter_color( critter, flicker, mixture );
             cached_has_animated_beacons = cached_has_animated_beacons || is_critter_animated( critter );
 
@@ -620,9 +478,11 @@ void pixel_minimap::draw_beacon( const SDL_Rect &rect, const SDL_Color &color )
     for( int x = -rect.w, x_max = rect.w; x <= x_max; ++x ) {
         for( int y = -rect.h + std::abs( x ), y_max = rect.h - std::abs( x ); y <= y_max; ++y ) {
             const int divisor = 2 * ( std::abs( y ) == rect.h - std::abs( x ) ? 1 : 0 ) + 1;
-
-            SetRenderDrawColor( renderer, color.r / divisor, color.g / divisor, color.b / divisor, 0xFF );
-            RenderDrawPoint( renderer, point( rect.x + x, rect.y + y ) );
+            const SDL_Color dot{ static_cast<Uint8>( color.r / divisor ),
+                                 static_cast<Uint8>( color.g / divisor ),
+                                 static_cast<Uint8>( color.b / divisor ),
+                                 0xFF };
+            geometry->rect( renderer, point( rect.x + x, rect.y + y ), 1, 1, dot );
         }
     }
 }
