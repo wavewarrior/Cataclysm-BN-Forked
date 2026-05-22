@@ -95,7 +95,6 @@ static Uint64 lastupdate = 0;
 static uint32_t interval = 25;
 static bool needupdate = false;
 static bool need_invalidate_framebuffers = false;
-static bool clear_display_buffer_before_redraw = false;
 static const std::string empty_string;
 
 palette_array windowsPalette;
@@ -115,7 +114,6 @@ static SDL_Window_Ptr window;
 static SDL_Window_Ptr legacy_window;
 static SDL_Renderer_Ptr renderer;
 static SDL_PixelFormat format = SDL_PIXELFORMAT_UNKNOWN;
-static SDL_Texture_Ptr display_buffer;
 static GeometryRenderer_Ptr geometry;
 static int WindowWidth;        //Width of the actual window, not the curses window
 static int WindowHeight;       //Height of the actual window, not the curses window
@@ -178,23 +176,6 @@ static void InitSDL()
     atexit( SDL_Quit );
 }
 
-static bool SetupRenderTarget()
-{
-    SetRenderDrawBlendMode( renderer, SDL_BLENDMODE_NONE );
-    display_buffer.reset( SDL_CreateTexture( renderer.get(), SDL_PIXELFORMAT_ARGB8888,
-                          SDL_TEXTUREACCESS_TARGET, WindowWidth / scaling_factor, WindowHeight / scaling_factor ) );
-    SDL_SetTextureScaleMode( display_buffer.get(), SDL_SCALEMODE_NEAREST );
-    if( printErrorIf( !display_buffer, "Failed to create window buffer" ) ) {
-        return false;
-    }
-    if( printErrorIf( !SDL_SetRenderTarget( renderer.get(), display_buffer.get() ),
-                      "SDL_SetRenderTarget failed" ) ) {
-        return false;
-    }
-    ClearScreen();
-
-    return true;
-}
 
 //Registers, creates, and shows the Window!!
 static void WinCreate()
@@ -347,21 +328,14 @@ static void WinCreate()
             if( get_option<bool>( "VSYNC" ) ) {
                 SDL_SetRenderVSync( renderer.get(), 1 );
             }
-            if( !SetupRenderTarget() ) {
-                dbg( DL::Error ) << "Failed to initialize display buffer under accelerated rendering, "
-                                 "falling back to software rendering.";
-                software_renderer = true;
-                display_buffer.reset();
-                renderer.reset();
-            }
+            SetRenderDrawBlendMode( renderer, SDL_BLENDMODE_NONE );
         }
     }
 
     if( software_renderer ) {
         renderer.reset( SDL_CreateRenderer( ::legacy_window.get(), "software" ) );
         throwErrorIf( !renderer, "Failed to initialize software renderer" );
-        throwErrorIf( !SetupRenderTarget(),
-                      "Failed to initialize display buffer under software rendering, unable to continue." );
+        SetRenderDrawBlendMode( renderer, SDL_BLENDMODE_NONE );
     }
 
     SDL_SetWindowMinimumSize( ::window.get(), fontwidth * FULL_SCREEN_WIDTH * scaling_factor,
@@ -436,7 +410,6 @@ static void WinDestroy()
     }
     geometry.reset();
     format = SDL_PIXELFORMAT_UNKNOWN;
-    display_buffer.reset();
     renderer.reset();
     ::legacy_window.reset();
     ::window.reset();
@@ -497,12 +470,6 @@ void refresh_display()
     rs.tile_batcher().end_pass();
 
     rs.device().submit_frame( ctx );
-
-    // Keep display_buffer as active render target so atlas/font texture
-    // creation via SDL_Renderer still has a valid target between frames.
-    if( renderer && display_buffer ) {
-        SDL_SetRenderTarget( renderer.get(), display_buffer.get() );
-    }
 }
 
 // only update if the set interval has elapsed
@@ -516,11 +483,9 @@ static void try_sdl_update()
     }
 }
 
-//for resetting the render target after updating texture caches in cata_tiles.cpp
-void set_displaybuffer_rendertarget()
-{
-    SetRenderTarget( renderer, display_buffer );
-}
+// No-op: display_buffer removed. Remains until atlas lookup uses GPU-native
+// keys and SDL_Renderer can be removed entirely (2i-B-7f Part B).
+void set_displaybuffer_rendertarget() {}
 
 static void invalidate_framebuffer( std::vector<curseline> &framebuffer, point p, int width,
                                     int height )
@@ -1577,12 +1542,6 @@ static bool draw_window( Font_Ptr &font, const catacurses::window &w )
 
 void cata_cursesport::curses_drawwindow( const catacurses::window &w )
 {
-    if( clear_display_buffer_before_redraw ) {
-        clear_display_buffer_before_redraw = false;
-        SetRenderTarget( renderer, display_buffer );
-        ClearScreen();
-    }
-
     if( scaling_factor > 1 ) {
         SDL_SetRenderLogicalPresentation( renderer.get(), WindowWidth / scaling_factor,
                                           WindowHeight / scaling_factor, SDL_LOGICAL_PRESENTATION_STRETCH );
@@ -2082,7 +2041,6 @@ bool handle_resize( int w, int h )
         TERMINAL_HEIGHT = WindowHeight / fontheight / scaling_factor;
         need_invalidate_framebuffers = true;
         catacurses::stdscr = catacurses::newwin( TERMINAL_HEIGHT, TERMINAL_WIDTH, point_zero );
-        throwErrorIf( !SetupRenderTarget(), "SetupRenderTarget failed" );
         game_ui::init_ui();
         ui_manager::screen_resized();
         return true;
@@ -2288,9 +2246,7 @@ static void CheckMessages()
         restore_on_out_of_scope<input_event> prev_last_input( last_input );
         needupdate = resized = handle_resize( resize_dims.value().x, resize_dims.value().y );
     }
-    // resizing already reinitializes the render target
     if( !resized && render_target_reset ) {
-        throwErrorIf( !SetupRenderTarget(), "SetupRenderTarget failed" );
         reinitialize_framebuffer( true );
         needupdate = true;
         restore_on_out_of_scope<input_event> prev_last_input( last_input );
@@ -2745,19 +2701,6 @@ window_dimensions get_window_dimensions( point pos, point size )
     return get_window_dimensions( {}, pos, size );
 }
 
-auto get_sdl_display_buffer_size() -> point
-{
-    if( !display_buffer ) { return point_zero; }
-
-    auto width = 0.0f;
-    auto height = 0.0f;
-
-    if( !SDL_GetTextureSize( display_buffer.get(), &width, &height ) ) {
-        return point_zero;
-    }
-    return point( width, height );
-}
-
 auto get_sdl_window_size() -> point
 {
     return point( std::max( 1, WindowWidth / scaling_factor ),
@@ -2767,20 +2710,6 @@ auto get_sdl_window_size() -> point
 auto get_sdl_font_size() -> point
 {
     return point( fontwidth, fontheight );
-}
-
-void clear_sdl_display_buffer()
-{
-    if( !renderer || !display_buffer ) { return; }
-
-    SetRenderTarget( renderer, display_buffer );
-    ClearScreen();
-}
-
-void clear_sdl_display_buffer_before_redraw()
-{
-    clear_display_buffer_before_redraw = true;
-    reinitialize_framebuffer( true );
 }
 
 std::optional<tripoint> input_context::get_coordinates( const catacurses::window &capture_win_ )

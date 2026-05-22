@@ -266,8 +266,7 @@ auto get_loading_image_cache( loading_image_cache &cache,
 auto get_loading_image_rect( const point &image_size ) -> std::optional<SDL_Rect>
 {
     const auto window_size = get_sdl_window_size();
-    const auto buffer_size = get_sdl_display_buffer_size();
-    if( window_size.x <= 0 || window_size.y <= 0 || buffer_size.x <= 0 || buffer_size.y <= 0 ) {
+    if( window_size.x <= 0 || window_size.y <= 0 ) {
         return std::nullopt;
     }
 
@@ -294,7 +293,7 @@ auto get_loading_image_rect( const point &image_size ) -> std::optional<SDL_Rect
 
 auto get_loading_image_author_pos( const std::string &text ) -> std::optional<point>
 {
-    const auto screen_dimensions = get_sdl_display_buffer_size();
+    const auto screen_dimensions = get_sdl_window_size();
     const auto font_size = get_sdl_font_size();
     if( screen_dimensions.x <= 0 || screen_dimensions.y <= 0 || font_size.x <= 0 ||
         font_size.y <= 0 ) {
@@ -398,7 +397,6 @@ auto loading_image_splash::draw_current_loading_image() -> bool
             }
             const auto &renderer = get_sdl_renderer();
             const auto render_state_guard = sdl_render_state_guard( renderer );
-            clear_sdl_display_buffer();
             SDL_FRect fRect{};
             SDL_RectToFRect( &*rect, &fRect );
             // Phase 2i-B-7c: prefer GPU enqueue. The tile sprite queue
@@ -479,10 +477,7 @@ loading_image_splash::loading_image_splash( loading_image_selection_state &selec
     } );
 }
 
-loading_image_splash::~loading_image_splash()
-{
-    clear_sdl_display_buffer_before_redraw();
-}
+loading_image_splash::~loading_image_splash() = default;
 
 loading_ui::loading_ui( bool display )
 {
@@ -492,10 +487,7 @@ loading_ui::loading_ui( bool display )
     }
 }
 
-loading_ui::~loading_ui()
-{
-    clear_sdl_display_buffer_before_redraw();
-}
+loading_ui::~loading_ui() = default;
 
 void loading_ui::add_entry( const std::string &description )
 {

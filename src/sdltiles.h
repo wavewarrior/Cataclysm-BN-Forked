@@ -40,11 +40,8 @@ window_dimensions get_window_dimensions( const catacurses::window &win );
 // Get dimensional info of an imaginary normal catacurses::window with the given
 // position and size. Unlike real catacurses::window, size can be zero.
 window_dimensions get_window_dimensions( point pos, point size );
-auto get_sdl_display_buffer_size() -> point;
 auto get_sdl_window_size() -> point;
 auto get_sdl_font_size() -> point;
-void clear_sdl_display_buffer();
-void clear_sdl_display_buffer_before_redraw();
 struct sdl_text_outline_options {
     std::string text;
     point pos_pixel = point_zero;
