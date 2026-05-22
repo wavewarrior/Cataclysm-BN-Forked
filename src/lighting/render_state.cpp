@@ -447,27 +447,52 @@ void render_state::flush_tile_sprites( sprite_batcher &dst, SDL_GPUSampler *samp
     // the top of each redraw cycle.
     static std::size_t last_logged_count = 0;
     if( tile_sprite_queue_.size() != last_logged_count ) {
-        dbg( DL::Info ) << "flush_tile_sprites: queue=" << tile_sprite_queue_.size()
+        const std::size_t n   = tile_sprite_queue_.size();
+        const std::size_t mid = n / 2;
+        const std::size_t bk  = n - 1;
+        const auto &f = tile_sprite_queue_.front().inst;
+        const auto &m = tile_sprite_queue_[mid].inst;
+        const auto &b = tile_sprite_queue_[bk].inst;
+        dbg( DL::Info ) << "flush_tile_sprites: queue=" << n
                         << " first_tex=" << ( void * )tile_sprite_queue_.front().texture
-                        << " first_inst dst=(" << tile_sprite_queue_.front().inst.dst_x << ","
-                        << tile_sprite_queue_.front().inst.dst_y << " "
-                        << tile_sprite_queue_.front().inst.dst_w << "x"
-                        << tile_sprite_queue_.front().inst.dst_h << ") src_uv=("
-                        << tile_sprite_queue_.front().inst.src_u << ","
-                        << tile_sprite_queue_.front().inst.src_v << " "
-                        << tile_sprite_queue_.front().inst.src_uw << "x"
-                        << tile_sprite_queue_.front().inst.src_vh << ")";
-        last_logged_count = tile_sprite_queue_.size();
+                        << " front dst=(" << f.dst_x << "," << f.dst_y
+                        << " " << f.dst_w << "x" << f.dst_h << ") uv=("
+                        << f.src_u << "," << f.src_v << ")"
+                        << " mid dst=(" << m.dst_x << "," << m.dst_y
+                        << " " << m.dst_w << "x" << m.dst_h << ")"
+                        << " back dst=(" << b.dst_x << "," << b.dst_y
+                        << " " << b.dst_w << "x" << b.dst_h << ")";
+        last_logged_count = n;
     }
     // Drain WITHOUT clearing — clear_frame_queues() handles reset at
     // the top of each redraw cycle.
+    //
+    // DIAGNOSTIC (2026-05-22, one-pass arch re-test): force ALL tile
+    // sprites onto gpu_geometry's white texture + centre-sample UV.
+    // Now that the tile/UI/font passes share one render pass and UI
+    // rects render correctly, white squares appearing here would mean
+    // the tile draw path itself is healthy and the atlas upload is
+    // not actually populating the GPU mirror with sprite pixels.
+    // Still black → tile sprite path is broken in a way the UI rect
+    // path (same batcher, same draw call, same shader) is not.
+    SDL_GPUTexture *force_white = geometry_.white_texture();
     SDL_GPUTexture *bound = nullptr;
     for( const tile_sprite_draw &s : tile_sprite_queue_ ) {
-        if( s.texture != bound ) {
-            dst.set_texture( s.texture, sampler );
-            bound = s.texture;
+        SDL_GPUTexture *tex = force_white ? force_white : s.texture;
+        if( tex != bound ) {
+            dst.set_texture( tex, sampler );
+            bound = tex;
         }
-        dst.draw( s.inst );
+        sprite_instance inst = s.inst;
+        if( force_white ) {
+            inst.src_u  = 0.5f;
+            inst.src_v  = 0.5f;
+            inst.src_uw = 0.0f;
+            inst.src_vh = 0.0f;
+            // Keep the original tint so coloured tiles still distinguish
+            // themselves; if tint=1,1,1,1 the white tex × tint = white.
+        }
+        dst.draw( inst );
     }
 }
 

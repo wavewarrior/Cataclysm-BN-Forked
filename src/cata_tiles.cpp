@@ -4535,6 +4535,11 @@ bool cata_tiles::draw_sprite_at( const tile_type &tile, point p,
     destination.w = width * tile_width * tile.pixelscale / tileset_ptr->get_tile_width();
     destination.h = height * tile_height * tile.pixelscale / tileset_ptr->get_tile_height();
 
+    // Tracks whether the lambda below actually fell through to
+    // SDL_RenderTextureRotated, so the throttled-error log at the
+    // bottom of draw_sprite_at can distinguish "GPU path succeeded
+    // and returned 0" from "legacy fallback was taken and failed".
+    bool legacy_fallback_taken = false;
     auto render = [&]( const int rotation, const SDL_FlipMode flip ) {
         int ret = 0;
 
@@ -4593,6 +4598,7 @@ bool cata_tiles::draw_sprite_at( const tile_type &tile, point p,
         }
 
         // Legacy fallback when find_gpu_texture_full missed.
+        legacy_fallback_taken = true;
         sprite_tex->set_alpha_mod( 255 );
         ret = sprite_tex->render_copy_ex( renderer, &destination, rotation, nullptr, flip );
 
@@ -4695,7 +4701,12 @@ bool cata_tiles::draw_sprite_at( const tile_type &tile, point p,
     // the visible window, SDL_RenderTextureRotated on the hidden
     // mirror renderer can spam validation errors every frame. Log
     // only the first failure per process to keep debug.log readable.
-    if( !ret ) {
+    //
+    // IMPORTANT: only log when the legacy fallback was actually
+    // taken. The GPU success path returns 0 from the lambda, which
+    // would otherwise trip `!ret` on every frame even though no
+    // SDL_RenderTextureRotated call was made.
+    if( legacy_fallback_taken && !ret ) {
         static bool logged_once = false;
         if( !logged_once ) {
             logged_once = true;
