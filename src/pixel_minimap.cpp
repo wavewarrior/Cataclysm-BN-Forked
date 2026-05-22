@@ -351,7 +351,7 @@ void pixel_minimap::render_cache( const tripoint &center )
 
         for( int y = 0; y < SEEY; ++y ) {
             for( int x = 0; x < SEEX; ++x ) {
-                const SDL_Color color = elem.second.color_at( { x, y } );
+                const SDL_Color color = elem.second.minimap_colors[y * SEEX + x];
                 if( color.a == 0 ) {
                     continue;
                 }
