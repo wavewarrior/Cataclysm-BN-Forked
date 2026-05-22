@@ -393,7 +393,19 @@ class sprite_batcher_impl
                 dst.buffer = storage_bufs[slot];
                 dst.offset = 0;
                 dst.size = byte_size;
-                SDL_UploadToGPUBuffer( cp, &src, &dst, /*cycle=*/false );
+                // 2026-05-22: cycle=true on the storage buffer upload.
+                // RING_SLOTS=3 lets the application rotate buffers across
+                // frames, but on Win11 D3D12 with heavy frames (5000+
+                // instances) the GPU still reads the previous frame's
+                // contents of this slot when the CPU starts overwriting,
+                // because the SDL_GPU device queues more than RING_SLOTS
+                // frames in flight under load. Forcing cycle here makes
+                // SDL discard the in-use allocation and provide a fresh
+                // one, removing the race. Bridge (1 inst) and per-glyph
+                // segments (1 inst each) never showed the symptom; the
+                // tile-sprite white-tex segment with thousands of
+                // instances did.
+                SDL_UploadToGPUBuffer( cp, &src, &dst, /*cycle=*/true );
                 SDL_EndGPUCopyPass( cp );
             }
 
