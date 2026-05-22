@@ -2988,10 +2988,11 @@ void cata_tiles::draw( point dest, const tripoint &center, int width, int height
         return;
     }
 
-    // Clear only tile sprites — UI/font queues are owned by the window
-    // redraw cycle and must persist across map/UI split-frame cases.
+    // Clear all GPU queues at the start of each full map draw. Partial
+    // UI redraws (tooltip, mouse-hover) do NOT call clear_frame_queues,
+    // so they append to — not wipe — the queues populated here.
     if( lighting::render_state *rs = &lighting::get_render_state(); rs->ready() ) {
-        rs->clear_tile_queue();
+        rs->clear_frame_queues();
     }
 
     ZoneScoped;
