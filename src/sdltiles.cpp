@@ -457,41 +457,16 @@ void refresh_display()
         return;
     }
 
-    // Phase 2i-B-1: present from the SDL_GPU device on the visible window.
-    // The legacy `renderer` keeps composing the game's frame onto
-    // `display_buffer` against the hidden mirror window — those pixels are
-    // not yet bridged onto the visible window, so the screen stays at the
-    // GPU clear colour (black) until 2i-B-2 introduces a bridge or 2i-B-3+
-    // start emitting draws through the sprite_batcher.
-    //
-    // The "set the renderer target back to display_buffer" handshake the
-    // legacy refresh_display did is no longer relevant — the renderer's
-    // window is never presented to anything visible, and other call sites
-    // (set_displaybuffer_rendertarget) still flip the target on their own.
+    // All rendering is GPU-direct. Single pass: clear black, tile sprites,
+    // UI rects, font glyphs. D3D12 requires one pass per swapchain texture;
+    // set_texture() flushes segments inside the pass so all draw kinds coexist.
     auto &rs = lighting::get_render_state();
     if( !rs.ready() ) {
         return;
     }
-    // Roll per-frame ring buffers forward on every batcher / engine so the
-    // upload regions for the in-flight frame don't alias the previous one.
     rs.tile_batcher().begin_frame();
     rs.ui_batcher().begin_frame();
     rs.fonts().begin_frame();
-
-    // Phase 2i-B-3 readback: pull the legacy display_buffer's current
-    // content off the hidden SDL_Renderer. SetRenderTarget(display_buffer)
-    // first so SDL_RenderReadPixels reads the right surface; restore the
-    // target after so callers that draw into display_buffer between
-    // frames keep working.
-    const int bridge_w = WindowWidth / scaling_factor;
-    const int bridge_h = WindowHeight / scaling_factor;
-    SDL_Surface_Ptr readback;
-    if( renderer && display_buffer && bridge_w > 0 && bridge_h > 0 ) {
-        SDL_SetRenderTarget( renderer.get(), display_buffer.get() );
-        readback.reset( SDL_RenderReadPixels( renderer.get(), nullptr ) );
-        // Caller invariant: display_buffer is the active render target
-        // between refresh_display() calls.
-    }
 
     lighting::frame_context ctx = rs.device().begin_frame();
     if( !ctx.valid() ) {
@@ -502,80 +477,29 @@ void refresh_display()
         return;
     }
 
-    // Push the legacy framebuffer onto the GPU bridge texture.
-    bool bridge_ok = false;
-    if( readback ) {
-        if( rs.bridge_ready( bridge_w, bridge_h ) ) {
-            rs.bridge_upload( ctx.cmd_buffer, readback->pixels,
-                              static_cast<std::uint32_t>( readback->pitch ),
-                              bridge_w, bridge_h );
-            bridge_ok = true;
-        }
-    }
-
-    // Pass 1: tiles. Clear to opaque black, then if the bridge is up,
-    // blit the full-screen legacy framebuffer over it. The blit covers
-    // every legacy draw path simultaneously (sprites, fonts,
-    // pixel_minimap, vehicle_preview …) so the visible window matches
-    // the pre-phase-2 output without porting individual call sites yet.
     constexpr float clear_black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
     rs.tile_batcher().begin_pass( ctx.cmd_buffer, ctx.swapchain_tex,
                                   ctx.swapchain_w, ctx.swapchain_h,
                                   clear_black );
-    if( bridge_ok ) {
-        rs.tile_batcher().set_texture( rs.bridge_texture(), rs.bridge_sampler() );
-        lighting::sprite_instance s{};
-        s.dst_x = 0.0f;
-        s.dst_y = 0.0f;
-        s.dst_w = static_cast<float>( ctx.swapchain_w );
-        s.dst_h = static_cast<float>( ctx.swapchain_h );
-        s.src_u = 0.0f;
-        s.src_v = 0.0f;
-        s.src_uw = 1.0f;
-        s.src_vh = 1.0f;
-        s.tint_r = 1.0f;
-        s.tint_g = 1.0f;
-        s.tint_b = 1.0f;
-        s.tint_a = 1.0f;
-        rs.tile_batcher().draw( s );
-    }
-    // 2026-05-22 fix: SDL_GPU D3D12 silently drops draws from earlier
-    // render passes on the same swapchain texture when a second
-    // BeginGPURenderPass opens it (even with LOAD_OP_LOAD + cycle=false).
-    // Diagnosed by forcing the tile_sprite_queue to draw white quads —
-    // the white quads were invisible while ui_batcher's rects+fonts
-    // still rendered, meaning the tile_batcher pass output was being
-    // discarded when ui_batcher's pass opened.
-    //
-    // Collapse everything into a single tile_batcher pass:
-    //   1. clear swapchain to black (LOAD_OP_CLEAR)
-    //   2. bridge blit (segment with bridge_tex)
-    //   3. tile sprites (per-atlas segments)
-    //   4. UI rects (segment with gpu_geometry's white texture)
-    //   5. font glyphs (one segment per glyph, per-texture rebind)
-    // sprite_batcher::set_texture flushes the previous segment when the
-    // texture changes, so all five draw kinds coexist cleanly in the
-    // same pass. ui_batcher is now unused — its begin_frame/begin_pass
-    // calls stay only as no-ops while the existing infrastructure
-    // settles; cleanup commit can remove the second batcher entirely.
-    if( !rs.tile_sprites_empty() && rs.bridge_sampler() ) {
-        rs.flush_tile_sprites( rs.tile_batcher(), rs.bridge_sampler() );
+
+    if( !rs.tile_sprites_empty() && rs.gpu_sampler() ) {
+        rs.flush_tile_sprites( rs.tile_batcher(), rs.gpu_sampler() );
     }
     const bool have_rects = !rs.ui_rects_empty() && rs.geometry().white_texture();
     if( have_rects ) {
         rs.tile_batcher().set_texture( rs.geometry().white_texture(),
-                                       rs.bridge_sampler() );
+                                       rs.gpu_sampler() );
         rs.flush_ui_rects( rs.tile_batcher() );
     }
-    if( !rs.font_glyphs_empty() && rs.bridge_sampler() ) {
-        rs.flush_font_glyphs( rs.tile_batcher(), rs.bridge_sampler() );
+    if( !rs.font_glyphs_empty() && rs.gpu_sampler() ) {
+        rs.flush_font_glyphs( rs.tile_batcher(), rs.gpu_sampler() );
     }
     rs.tile_batcher().end_pass();
 
     rs.device().submit_frame( ctx );
 
-    // Restore the legacy render target invariant for callers that draw
-    // into display_buffer between refresh_display() calls.
+    // Keep display_buffer as active render target so atlas/font texture
+    // creation via SDL_Renderer still has a valid target between frames.
     if( renderer && display_buffer ) {
         SDL_SetRenderTarget( renderer.get(), display_buffer.get() );
     }

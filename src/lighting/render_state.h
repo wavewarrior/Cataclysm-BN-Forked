@@ -148,6 +148,15 @@ class render_state
         // can re-fire the same queues on no-input frames and reproduce
         // the same draws as long as the last redraw cycle's content
         // remains valid. The next redraw clears + repopulates.
+        // Clear only the UI and font queues — call at the start of any
+        // partial UI redraw (e.g. sidebar, tooltip) that does NOT also
+        // redraw the tile map. Leaves tile_sprite_queue intact so terrain
+        // remains visible on frames where cata_tiles::draw() isn't called.
+        void clear_ui_queues() noexcept;
+        // Clear only the tile sprite queue — call at the top of
+        // cata_tiles::draw() before re-enqueuing all terrain/mob/vehicle sprites.
+        void clear_tile_queue() noexcept;
+        // Clear all three queues — used for full redraws.
         void clear_frame_queues() noexcept;
         bool font_glyphs_empty() const noexcept { return font_glyph_queue_.empty(); }
         // Drains `font_glyph_queue_` into `dst` using `sampler`. Caller
@@ -156,21 +165,10 @@ class render_state
         // belongs in a later commit.
         void flush_font_glyphs( sprite_batcher &dst, SDL_GPUSampler *sampler );
 
-        // Phase 2i-B-3 screen bridge: a GPU texture mirroring the legacy
-        // SDL_Renderer display_buffer plus a persistent transfer buffer
-        // sized to one frame. The bridge keeps every legacy draw path
-        // (sprites, fonts, minimap, vehicle_preview …) visible in one go
-        // via a CPU readback + full-screen blit on the swapchain. Phases
-        // 2i-B-4..7 progressively emit GPU draws directly and tear this
-        // bridge down once every legacy path is gone.
-        bool             bridge_ready( int w, int h );
-        void             bridge_upload( SDL_GPUCommandBuffer *cb,
-                                        const void *pixels, std::uint32_t row_stride,
-                                        int w, int h );
-        SDL_GPUTexture  *bridge_texture() const noexcept { return bridge_tex_; }
-        SDL_GPUSampler  *bridge_sampler() const noexcept { return bridge_sampler_; }
-        int              bridge_width()   const noexcept { return bridge_w_; }
-        int              bridge_height()  const noexcept { return bridge_h_; }
+        // Nearest-filter sampler used by all GPU draw passes (tile sprites,
+        // UI rects, font glyphs). Created in init(); live for the full
+        // lifetime of the render_state.
+        SDL_GPUSampler  *gpu_sampler() const noexcept { return gpu_sampler_; }
 
     private:
         gpu_device     device_;
@@ -198,13 +196,7 @@ class render_state
         };
         std::vector<tile_sprite_draw> tile_sprite_queue_;
 
-        // Bridge state (phase 2i-B-3).
-        SDL_GPUTexture        *bridge_tex_     = nullptr;
-        SDL_GPUSampler        *bridge_sampler_ = nullptr;
-        SDL_GPUTransferBuffer *bridge_xfer_    = nullptr;
-        std::uint32_t          bridge_xfer_capacity_ = 0;
-        int                    bridge_w_ = 0;
-        int                    bridge_h_ = 0;
+        SDL_GPUSampler        *gpu_sampler_ = nullptr;
 };
 
 // Process-wide accessor. The object is constructed in init() and torn down

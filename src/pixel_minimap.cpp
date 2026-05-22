@@ -449,9 +449,12 @@ void pixel_minimap::reset()
     tex_pool.reset();
 }
 
-void pixel_minimap::render( const tripoint &center )
+void pixel_minimap::render( const tripoint & /*center*/ )
 {
-    SetRenderTarget( renderer, main_tex );
+    // pixel_minimap renders via the legacy SDL_Renderer path which no longer
+    // reaches the screen (bridge removed in phase 2i-B cutover). No-op until
+    // a GPU-backed minimap is implemented.
+    return;
 
     SetRenderDrawColor( renderer, 0x00, 0x00, 0x00, 0x00 );
     RenderClear( renderer );

@@ -2987,6 +2987,12 @@ void cata_tiles::draw( point dest, const tripoint &center, int width, int height
         return;
     }
 
+    // Clear only tile sprites — UI/font queues are owned by the window
+    // redraw cycle and must persist across map/UI split-frame cases.
+    if( lighting::render_state *rs = &lighting::get_render_state(); rs->ready() ) {
+        rs->clear_tile_queue();
+    }
+
     ZoneScoped;
     {
         //set clipping to prevent drawing over stuff we shouldn't
@@ -4437,71 +4443,51 @@ bool cata_tiles::draw_sprite_at( const tile_type &tile, point p,
     destination.w = width * tile_width * tile.pixelscale / tileset_ptr->get_tile_width();
     destination.h = height * tile_height * tile.pixelscale / tileset_ptr->get_tile_height();
 
-    // Tracks whether the lambda below actually fell through to
-    // SDL_RenderTextureRotated, so the throttled-error log at the
-    // bottom of draw_sprite_at can distinguish "GPU path succeeded
-    // and returned 0" from "legacy fallback was taken and failed".
-    bool legacy_fallback_taken = false;
+    // GPU-only render. Rotation is stored in sprite_instance but the HLSL
+    // shader currently ignores it — rotated sprites appear unrotated until
+    // the vertex shader rotation math is implemented. Preferable to invisible.
     auto render = [&]( const int rotation, const SDL_FlipMode flip ) {
-        int ret = 0;
-
-        // Phase 2i-B-5 GPU path. Rotation re-routed through legacy
-        // (SDL_RenderTextureRotated) while the rotation math in
-        // sprite.vert is disabled for diagnosis of the Win11
-        // black-buffer regression.
         dynamic_atlas *atlas = tileset_ptr->texture_atlas();
-        const auto gpu = ( rotation == 0 && atlas )
-                         ? atlas->find_gpu_texture_full(
-                             sprite_tex->sdl_texture_handle() )
+        const auto gpu = atlas
+                         ? atlas->find_gpu_texture_full( sprite_tex->sdl_texture_handle() )
                          : dynamic_atlas::gpu_lookup{ nullptr, 0, 0 };
 
-        if( gpu.texture ) {
-            const SDL_FRect fdst{
-                static_cast<float>( destination.x ),
-                static_cast<float>( destination.y ),
-                static_cast<float>( destination.w ),
-                static_cast<float>( destination.h )
-            };
-            sprite_tex->enqueue_tile_sprite( gpu.texture, gpu.atlas_w, gpu.atlas_h,
-                                             fdst, flip, 1.0f,
-                                             static_cast<double>( rotation ) );
-            if( !static_z_effect && overlay_count > 0 ) {
-                const auto [overlay_tex, overlay_warp_offset] =
-                    tileset_ptr->get_or_default(
-                        tile_idx, TILESET_NO_MASK, tileset_fx_type::z_overlay, TILESET_NO_COLOR,
-                        effective_warp_hash, tile_offset );
-                if( overlay_tex ) {
-                    const auto ov_gpu = atlas->find_gpu_texture_full(
-                                            overlay_tex->sdl_texture_handle() );
-                    if( ov_gpu.texture ) {
-                        const float a = std::min( 192, overlay_count ) / 255.0f;
-                        overlay_tex->enqueue_tile_sprite(
-                            ov_gpu.texture, ov_gpu.atlas_w, ov_gpu.atlas_h,
-                            fdst, flip, a,
-                            static_cast<double>( rotation ) );
-                    }
-                }
+        if( !gpu.texture ) {
+            static bool warned = false;
+            if( !warned ) {
+                warned = true;
+                dbg( D_WARNING ) << "GPU atlas miss in draw_sprite_at — sprite invisible";
             }
             return 0;
         }
 
-        // Legacy fallback when find_gpu_texture_full missed.
-        legacy_fallback_taken = true;
-        sprite_tex->set_alpha_mod( 255 );
-        ret = sprite_tex->render_copy_ex( renderer, &destination, rotation, nullptr, flip );
-
+        const SDL_FRect fdst{
+            static_cast<float>( destination.x ),
+            static_cast<float>( destination.y ),
+            static_cast<float>( destination.w ),
+            static_cast<float>( destination.h )
+        };
+        sprite_tex->enqueue_tile_sprite( gpu.texture, gpu.atlas_w, gpu.atlas_h,
+                                         fdst, flip, 1.0f,
+                                         static_cast<double>( rotation ) );
         if( !static_z_effect && overlay_count > 0 ) {
             const auto [overlay_tex, overlay_warp_offset] =
                 tileset_ptr->get_or_default(
                     tile_idx, TILESET_NO_MASK, tileset_fx_type::z_overlay, TILESET_NO_COLOR,
                     effective_warp_hash, tile_offset );
             if( overlay_tex ) {
-                overlay_tex->set_alpha_mod( std::min( 192, overlay_count ) );
-                overlay_tex->render_copy_ex( renderer, &destination, rotation, nullptr, flip );
-                overlay_tex->set_alpha_mod( 255 );
+                const auto ov_gpu = atlas->find_gpu_texture_full(
+                                        overlay_tex->sdl_texture_handle() );
+                if( ov_gpu.texture ) {
+                    const float a = std::min( 192, overlay_count ) / 255.0f;
+                    overlay_tex->enqueue_tile_sprite(
+                        ov_gpu.texture, ov_gpu.atlas_w, ov_gpu.atlas_h,
+                        fdst, flip, a,
+                        static_cast<double>( rotation ) );
+                }
             }
         }
-        return ret;
+        return 0;
     };
 
     int ret = 0;
@@ -4585,22 +4571,6 @@ bool cata_tiles::draw_sprite_at( const tile_type &tile, point p,
         ret = render( 0, SDL_FLIP_NONE );
     }
 
-    // Throttle this error: on Win11 with the SDL_GPU device active on
-    // the visible window, SDL_RenderTextureRotated on the hidden
-    // mirror renderer can spam validation errors every frame. Log
-    // only the first failure per process to keep debug.log readable.
-    //
-    // IMPORTANT: only log when the legacy fallback was actually
-    // taken. The GPU success path returns 0 from the lambda, which
-    // would otherwise trip `!ret` on every frame even though no
-    // SDL_RenderTextureRotated call was made.
-    if( legacy_fallback_taken && !ret ) {
-        static bool logged_once = false;
-        if( !logged_once ) {
-            logged_once = true;
-            printErrorIf( !ret, "SDL_RenderTextureRotated() failed (throttled — further failures silent)" );
-        }
-    }
     // this reference passes all the way back up the call chain back to
     // cata_tiles::draw() std::vector<tile_render_info> draw_points[].height_3d
     // where we are accumulating the height of every sprite stacked up in a tile
