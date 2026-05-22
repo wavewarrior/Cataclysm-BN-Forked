@@ -2994,8 +2994,11 @@ void cata_tiles::draw( point dest, const tripoint &center, int width, int height
         printErrorIf( !SDL_SetRenderClipRect( renderer.get(), &clipRect ),
                       "SDL_SetRenderClipRect failed" );
 
-        //fill render area with black to prevent artifacts where no new pixels are drawn
-        geometry->rect( renderer, point{ clipRect.x, clipRect.y }, clipRect.w, clipRect.h, SDL_Color{ 0, 0, 0, 255 } );
+        // No explicit black fill needed: the swapchain is cleared to black
+        // by the tile_batcher pass (LOADOP_CLEAR) before tile sprites draw.
+        // The old SDL_RenderFillRect here targeted the legacy display_buffer;
+        // its GPU-path replacement (geometry->rect → ui_rect_queue) rendered
+        // after tile sprites in the single-pass pipeline, covering them.
     }
 
     point s;
