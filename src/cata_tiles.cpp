@@ -2995,8 +2995,11 @@ void cata_tiles::draw( point dest, const tripoint &center, int width, int height
         printErrorIf( !SDL_SetRenderClipRect( renderer.get(), &clipRect ),
                       "SDL_SetRenderClipRect failed" );
 
-        //fill render area with black to prevent artifacts where no new pixels are drawn
-        geometry->rect( renderer, point{ clipRect.x, clipRect.y }, clipRect.w, clipRect.h, SDL_Color{ 0, 0, 0, 255 } );
+        // No explicit black fill needed: the swapchain is cleared to black
+        // by the tile_batcher pass (LOADOP_CLEAR) before tile sprites draw.
+        // The old SDL_RenderFillRect here targeted the legacy display_buffer;
+        // its GPU-path replacement (geometry->rect → ui_rect_queue) rendered
+        // after tile sprites in the single-pass pipeline, covering them.
     }
 
     point s;
@@ -4552,21 +4555,7 @@ bool cata_tiles::draw_sprite_at( const tile_type &tile, point p,
                          ? atlas->find_gpu_texture_full(
                              sprite_tex->sdl_texture_handle() )
                          : dynamic_atlas::gpu_lookup{ nullptr, 0, 0 };
-        // One-shot diagnostic: log the first call's result so we know
-        // whether the GPU path is being taken at all on Win11.
-        {
-            static bool logged_first = false;
-            if( !logged_first ) {
-                logged_first = true;
-                dbg( DL::Info )
-                        << "TILES_DEBUG: first draw_sprite_at GPU lookup — "
-                        << "rotation=" << rotation
-                        << " atlas=" << static_cast<void *>( atlas )
-                        << " sdl_tex=" << static_cast<void *>( sprite_tex->sdl_texture_handle() )
-                        << " gpu.texture=" << static_cast<void *>( gpu.texture )
-                        << " atlas_w=" << gpu.atlas_w << " atlas_h=" << gpu.atlas_h;
-            }
-        }
+
         if( gpu.texture ) {
             const SDL_FRect fdst{
                 static_cast<float>( destination.x ),
