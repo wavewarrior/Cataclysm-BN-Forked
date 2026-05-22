@@ -114,35 +114,12 @@ void render_state::flush_ui_rects( sprite_batcher &dst )
     if( ui_rect_queue_.empty() ) {
         return;
     }
-    // 2026-05-22 diag: override every UI rect's tint to opaque white.
-    // Discriminator suggested by advisor — if map area now shows white
-    // blocks where lighting overlays sit, the rendering path is fine
-    // and the original black appearance is a data problem in callers
-    // (likely low-alpha or dark-tint values blended over black bridge).
-    // If still all black, the bug is in the draw-call sequence itself
-    // (pipeline blend state, set_texture order, etc).
-    // Drain WITHOUT clearing — clear_frame_queues() resets at top of cycle.
-    static thread_local std::vector<sprite_instance> diag_copy;
-    diag_copy.assign( ui_rect_queue_.begin(), ui_rect_queue_.end() );
-    for( sprite_instance &s : diag_copy ) {
-        s.tint_r = 1.0f;
-        s.tint_g = 1.0f;
-        s.tint_b = 1.0f;
-        s.tint_a = 1.0f;
-    }
-    static bool logged = false;
-    if( !logged && !diag_copy.empty() ) {
-        const auto &f = diag_copy.front();
-        const auto &b = diag_copy.back();
-        dbg( DL::Info ) << "flush_ui_rects DIAG white-tint override: count="
-                        << diag_copy.size()
-                        << " first dst=(" << f.dst_x << "," << f.dst_y
-                        << "," << f.dst_w << "," << f.dst_h << ")"
-                        << " back dst=(" << b.dst_x << "," << b.dst_y
-                        << "," << b.dst_w << "," << b.dst_h << ")";
-        logged = true;
-    }
-    dst.draw( diag_copy.data(), diag_copy.size() );
+    // Drain WITHOUT clearing — clear_frame_queues() (called at the top
+    // of each redraw cycle) is what resets the queue. This lets
+    // refresh_display re-flush the same queue on no-input frames so
+    // the swapchain shows the previous draw state instead of going
+    // black when curses hasn't run the per-window draws this frame.
+    dst.draw( ui_rect_queue_.data(), ui_rect_queue_.size() );
 }
 
 void render_state::clear_frame_queues() noexcept
@@ -463,59 +440,17 @@ void render_state::flush_tile_sprites( sprite_batcher &dst, SDL_GPUSampler *samp
     }
     // Group consecutive same-texture draws under a single set_texture
     // call. set_texture is a no-op when the requested texture is
-    // already bound, so we don't need explicit grouping logic — but a
-    // tight loop with one set_texture per entry keeps the code simple
-    // and atlas-packed runs naturally batch.
+    // already bound, so atlas-packed runs naturally batch into one
+    // segment.
     // Drain WITHOUT clearing — clear_frame_queues() handles reset at
     // the top of each redraw cycle.
-    static std::size_t last_logged_count = 0;
-    if( tile_sprite_queue_.size() != last_logged_count ) {
-        const std::size_t n   = tile_sprite_queue_.size();
-        const std::size_t mid = n / 2;
-        const std::size_t bk  = n - 1;
-        const auto &f = tile_sprite_queue_.front().inst;
-        const auto &m = tile_sprite_queue_[mid].inst;
-        const auto &b = tile_sprite_queue_[bk].inst;
-        dbg( DL::Info ) << "flush_tile_sprites: queue=" << n
-                        << " first_tex=" << ( void * )tile_sprite_queue_.front().texture
-                        << " front dst=(" << f.dst_x << "," << f.dst_y
-                        << " " << f.dst_w << "x" << f.dst_h << ") uv=("
-                        << f.src_u << "," << f.src_v << ")"
-                        << " mid dst=(" << m.dst_x << "," << m.dst_y
-                        << " " << m.dst_w << "x" << m.dst_h << ")"
-                        << " back dst=(" << b.dst_x << "," << b.dst_y
-                        << " " << b.dst_w << "x" << b.dst_h << ")";
-        last_logged_count = n;
-    }
-    // Drain WITHOUT clearing — clear_frame_queues() handles reset at
-    // the top of each redraw cycle.
-    //
-    // DIAGNOSTIC (2026-05-22, one-pass arch re-test): force ALL tile
-    // sprites onto gpu_geometry's white texture + centre-sample UV.
-    // Now that the tile/UI/font passes share one render pass and UI
-    // rects render correctly, white squares appearing here would mean
-    // the tile draw path itself is healthy and the atlas upload is
-    // not actually populating the GPU mirror with sprite pixels.
-    // Still black → tile sprite path is broken in a way the UI rect
-    // path (same batcher, same draw call, same shader) is not.
-    SDL_GPUTexture *force_white = geometry_.white_texture();
     SDL_GPUTexture *bound = nullptr;
     for( const tile_sprite_draw &s : tile_sprite_queue_ ) {
-        SDL_GPUTexture *tex = force_white ? force_white : s.texture;
-        if( tex != bound ) {
-            dst.set_texture( tex, sampler );
-            bound = tex;
+        if( s.texture != bound ) {
+            dst.set_texture( s.texture, sampler );
+            bound = s.texture;
         }
-        sprite_instance inst = s.inst;
-        if( force_white ) {
-            inst.src_u  = 0.5f;
-            inst.src_v  = 0.5f;
-            inst.src_uw = 0.0f;
-            inst.src_vh = 0.0f;
-            // Keep the original tint so coloured tiles still distinguish
-            // themselves; if tint=1,1,1,1 the white tex × tint = white.
-        }
-        dst.draw( inst );
+        dst.draw( s.inst );
     }
 }
 

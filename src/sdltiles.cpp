@@ -558,20 +558,7 @@ void refresh_display()
     // same pass. ui_batcher is now unused — its begin_frame/begin_pass
     // calls stay only as no-ops while the existing infrastructure
     // settles; cleanup commit can remove the second batcher entirely.
-    // DIAGNOSTIC (2026-05-22): temporarily SKIP flush_tile_sprites.
-    // With the white-tex diag active in flush_tile_sprites, segments
-    // small enough to fit in the overmap (~3700 inst in segment 1)
-    // render white, but the in-game frame's larger segment (~9000 inst)
-    // stays black. Same code path, same texture, same shader — only
-    // the queued content differs. Skipping flush_tile_sprites leaves
-    // segment 1 populated by UI rects only (terrain colour-block
-    // overlays, ~4000 inst). If those white-blocks now render where
-    // the map is, the bug is content-specific (a malformed
-    // sprite_instance the tile queue pushes — NaN dst, broken UV,
-    // etc.); if still black, the bug is per-segment instance count
-    // regardless of source.
-    constexpr bool DIAG_SKIP_TILE_SPRITES = true;
-    if( !DIAG_SKIP_TILE_SPRITES && !rs.tile_sprites_empty() && rs.bridge_sampler() ) {
+    if( !rs.tile_sprites_empty() && rs.bridge_sampler() ) {
         rs.flush_tile_sprites( rs.tile_batcher(), rs.bridge_sampler() );
     }
     const bool have_rects = !rs.ui_rects_empty() && rs.geometry().white_texture();
