@@ -2907,22 +2907,114 @@ bool is_draw_tiles_mode()
     return use_tiles;
 }
 
-/** Saves a screenshot of the current viewport, as a PNG file, to the given location.
-* @param file_path: A full path to the file where the screenshot should be saved.
-* @returns `true` if the screenshot generation was successful, `false` otherwise.
-*/
+/** Saves a screenshot of the current viewport as a PNG file.
+ * Re-renders the current queue state to a temporary offscreen GPU texture,
+ * downloads it via SDL_GPU copy pass, then saves with IMG_SavePNG.
+ * Bridge-free: does not use SDL_RenderReadPixels / display_buffer.
+ * @param file_path: Full path where the PNG file should be saved.
+ * @returns true on success.
+ */
 bool save_screenshot( const std::string &file_path )
 {
-    // SDL3: SDL_RenderReadPixels returns a new SDL_Surface* owned by caller.
-    auto readback = SDL_Surface_Ptr( SDL_RenderReadPixels( renderer.get(), nullptr ) );
-    if( printErrorIf( !readback, "save_screenshot: cannot read data from SDL_Renderer." ) ) {
+    auto &rs = lighting::get_render_state();
+    if( !rs.ready() ) {
+        dbg( DL::Error ) << "save_screenshot: render state not ready";
         return false;
     }
 
-    // Save screenshot as PNG file
-    const bool ok = !printErrorIf( !IMG_SavePNG( readback.get(), file_path.c_str() ),
-                                   std::string( "save_screenshot: cannot save screenshot file: " +
-                                           file_path ).c_str() );
+    const int w = WindowWidth;
+    const int h = WindowHeight;
+    if( w <= 0 || h <= 0 ) {
+        return false;
+    }
+
+    // Use the same format as the swapchain so the existing pipeline matches.
+    SDL_GPUTextureCreateInfo tci{};
+    tci.type                 = SDL_GPU_TEXTURETYPE_2D;
+    tci.format               = rs.device().swapchain_format();
+    tci.usage                = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    tci.width                = static_cast<Uint32>( w );
+    tci.height               = static_cast<Uint32>( h );
+    tci.layer_count_or_depth = 1;
+    tci.num_levels           = 1;
+    tci.sample_count         = SDL_GPU_SAMPLECOUNT_1;
+    SDL_GPUTexture *offscreen = SDL_CreateGPUTexture( rs.device().raw(), &tci );
+    if( printErrorIf( !offscreen, "save_screenshot: SDL_CreateGPUTexture failed" ) ) {
+        return false;
+    }
+
+    SDL_GPUCommandBuffer *cb = SDL_AcquireGPUCommandBuffer( rs.device().raw() );
+    if( !cb ) {
+        SDL_ReleaseGPUTexture( rs.device().raw(), offscreen );
+        return false;
+    }
+
+    // Re-render current queue state into the offscreen texture.
+    rs.tile_batcher().begin_frame();
+    constexpr float clear_black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    rs.tile_batcher().begin_pass( cb, offscreen,
+                                  static_cast<Uint32>( w ), static_cast<Uint32>( h ),
+                                  clear_black );
+    if( !rs.tile_sprites_empty() && rs.gpu_sampler() ) {
+        rs.flush_tile_sprites( rs.tile_batcher(), rs.gpu_sampler() );
+    }
+    if( !rs.ui_rects_empty() && rs.geometry().white_texture() ) {
+        rs.tile_batcher().set_texture( rs.geometry().white_texture(), rs.gpu_sampler() );
+        rs.flush_ui_rects( rs.tile_batcher() );
+    }
+    if( !rs.font_glyphs_empty() && rs.gpu_sampler() ) {
+        rs.flush_font_glyphs( rs.tile_batcher(), rs.gpu_sampler() );
+    }
+    rs.tile_batcher().end_pass();
+
+    // Download the rendered pixels to a CPU-accessible transfer buffer.
+    const Uint32 row_pitch = static_cast<Uint32>( w ) * 4;
+    const Uint32 buf_size  = row_pitch * static_cast<Uint32>( h );
+
+    SDL_GPUTransferBufferCreateInfo tbci{};
+    tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD;
+    tbci.size  = buf_size;
+    SDL_GPUTransferBuffer *tb = SDL_CreateGPUTransferBuffer( rs.device().raw(), &tbci );
+    if( !tb ) {
+        SDL_CancelGPUCommandBuffer( cb );
+        SDL_ReleaseGPUTexture( rs.device().raw(), offscreen );
+        return false;
+    }
+
+    SDL_GPUCopyPass *cp = SDL_BeginGPUCopyPass( cb );
+    SDL_GPUTextureTransferInfo dst_info{};
+    dst_info.transfer_buffer = tb;
+    dst_info.pixels_per_row  = static_cast<Uint32>( w );
+    SDL_GPUTextureRegion region{};
+    region.texture = offscreen;
+    region.w       = static_cast<Uint32>( w );
+    region.h       = static_cast<Uint32>( h );
+    region.d       = 1;
+    SDL_DownloadFromGPUTexture( cp, &region, &dst_info );
+    SDL_EndGPUCopyPass( cp );
+
+    SDL_SubmitGPUCommandBuffer( cb );
+    SDL_WaitForGPUIdle( rs.device().raw() );
+
+    bool ok = false;
+    void *mapped = SDL_MapGPUTransferBuffer( rs.device().raw(), tb, false );
+    if( mapped ) {
+        // Swapchain is typically BGRA8 on D3D12; map to SDL_PIXELFORMAT_ARGB8888
+        // (little-endian BGRA byte order) so IMG_SavePNG writes correct colours.
+        SDL_Surface *surf = SDL_CreateSurfaceFrom(
+            w, h, SDL_PIXELFORMAT_ARGB8888,
+            mapped, static_cast<int>( row_pitch ) );
+        if( surf ) {
+            ok = !printErrorIf(
+                     !IMG_SavePNG( surf, file_path.c_str() ),
+                     ( std::string( "save_screenshot: cannot save file: " ) + file_path ).c_str() );
+            SDL_DestroySurface( surf );
+        }
+        SDL_UnmapGPUTransferBuffer( rs.device().raw(), tb );
+    }
+
+    SDL_ReleaseGPUTransferBuffer( rs.device().raw(), tb );
+    SDL_ReleaseGPUTexture( rs.device().raw(), offscreen );
     return ok;
 }
 
