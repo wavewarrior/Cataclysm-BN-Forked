@@ -802,9 +802,12 @@ void cata_tiles::draw_om( point dest, const tripoint_abs_omt &center_abs_omt, bo
         return;
     }
 
-    // Full-screen view with its own UI layout — start from a clean slate.
+    // clear_frame_queues() was already called by redraw_invalidated() before
+    // this callback runs. Only clear the tile sprite queue so that overmap
+    // tiles don't accumulate across ticks; UI queues are owned by the
+    // enclosing redraw_invalidated() cycle.
     if( auto *rs = &lighting::get_render_state(); rs->ready() ) {
-        rs->clear_frame_queues();
+        rs->clear_tile_queue();
     }
 
     int width = OVERMAP_WINDOW_TERM_WIDTH * font->width;

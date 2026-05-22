@@ -302,9 +302,7 @@ void ui_adaptor::redraw_invalidated()
     {
         auto &rs = lighting::get_render_state();
         if( rs.ready() ) {
-            // Queues are cleared at the top of cata_tiles::draw() instead
-            // so partial UI redraws (tooltip, cursor-info) do not wipe the
-            // sidebar content that the full map-draw cycle populated.
+            rs.clear_frame_queues();
         }
     }
 
