@@ -302,7 +302,7 @@ void ui_adaptor::redraw_invalidated()
     {
         auto &rs = lighting::get_render_state();
         if( rs.ready() ) {
-            rs.clear_frame_queues();
+            rs.clear_ui_queues();
         }
     }
 
