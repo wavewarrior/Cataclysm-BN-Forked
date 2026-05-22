@@ -1,6 +1,6 @@
 # Lighting module — architecture reference
 
-**Phase**: 2i-B (single-pass GPU rendering, partial cutover)  
+**Phase**: 2i-B (bridge removed, GPU-only rendering)
 **Backend**: SDL_GPU / SPIRV-Cross on D3D12 (Win11), Vulkan, Metal
 
 ---
@@ -12,42 +12,51 @@
 | `gpu_device.cpp/h` | SDL_GPU device lifecycle; swapchain format query |
 | `sprite_batcher.cpp/h` | Instance-batched draw engine; one pass per batcher |
 | `render_state.cpp/h` | **Singleton** (`get_render_state()`). Owns device, batchers, queues |
-| `gpu_atlas.cpp/h` | GPU mirror of SDL_Texture atlas pages (2048×2048, 32×32 tiles) |
+| `gpu_atlas.cpp/h` | GPU mirror of SDL_Texture atlas pages |
 | `font_engine.cpp/h` | SDL_Surface→GPU glyph upload; per-glyph texture cache |
 | `gpu_geometry.cpp/h` | 1×1 white texture (shared by UI rects and solid fills) |
 | `shader_compiler.cpp/h` | HLSL→SPIRV-Cross compile; embedded `SPRITE_VERT_HLSL` in `sprite_batcher.cpp` |
 
 ---
 
-## Per-frame render pass (single pass)
+## Per-frame render pass (bridge-free single pass)
 
-`refresh_display()` in `sdltiles.cpp` drives everything:
+`refresh_display()` in `sdltiles.cpp`:
 
 ```
-tile_batcher.begin_pass(cb, swapchain_tex, clear=black)
-  1. bridge blit       ← legacy SDL_Renderer output (sidebar, menus, any non-GPU window)
-  2. flush_tile_sprites ← terrain/mob/item sprites, per-atlas-page segments
-  3. set_texture(white) + flush_ui_rects  ← colour-block overlays (lighting, debug)
-  4. flush_font_glyphs  ← one set_texture+draw per glyph
+tile_batcher.begin_pass(cb, swapchain_tex, LOADOP_CLEAR=black)
+  1. flush_tile_sprites(gpu_sampler)   ← terrain/mob/item/vehicle sprites
+  2. set_texture(white) + flush_ui_rects(gpu_sampler)  ← colour-block overlays
+  3. flush_font_glyphs(gpu_sampler)    ← one set_texture+draw per unique glyph
 tile_batcher.end_pass()
+submit_frame()
 ```
 
-**All five kinds of draw share one render pass on one command buffer.**  
-The old `ui_batcher` pass was merged here because D3D12 silently drops prior-pass draws when a second `BeginGPURenderPass` opens the same swapchain texture.
+Bridge removed 2026-05-22. `gpu_sampler_` created eagerly in `render_state::init()`.
 
 ---
 
 ## Queue lifecycle
 
-Queues persist across frames. Only cleared at the START of a redraw cycle:
-
 ```
-UIManager::redraw_invalidated() → render_state::clear_frame_queues()
+ui_adaptor::redraw_invalidated()        ← called on every UI redraw cycle
+  → clear_frame_queues()                ← ALL 3 queues cleared at start
+  → window callbacks run                ← populate ui_rect + font_glyph queues
+
+cata_tiles::draw() (in-game map)        ← called as a window callback WITHIN redraw_invalidated()
+  → clear_tile_queue()                  ← ONLY tile sprites; NOT ui/font (already cleared by outer cycle)
+  → enqueue all terrain/mob/vehicle sprites
+
+draw_om() (sdltiles.cpp, overmap)       ← also a window callback within redraw_invalidated()
+  → clear_tile_queue()                  ← same: tile-only clear
+  → enqueue overmap tile sprites
 ```
 
-On **no-input frames**, `refresh_display()` re-drains the same queues from the previous cycle. This prevents a black flash when curses hasn't re-run the per-window draws.
+On **no-input frames** (between redraw cycles), `refresh_display()` re-drains the **same queues** from the previous cycle. This is intentional — prevents black flash when no redraw has run yet.
 
 Do NOT clear queues inside a flush method.
+
+**Known limitation**: Partial redraws (e.g. tooltip on mouse-move) trigger `redraw_invalidated()` → `clear_frame_queues()` → only tooltip repopulates → one-frame black sidebar. Root fix = GPU accumulation texture (future phase 2i-B-7g or similar).
 
 ---
 
@@ -55,61 +64,69 @@ Do NOT clear queues inside a flush method.
 
 ```
 float dst_x, dst_y, dst_w, dst_h   // pixel-space destination quad
-float src_u, src_v, src_uw, src_vh  // normalised UV rect (0..1)
+float src_u, src_v, src_uw, src_vh  // normalised UV (negative = flipped axis)
 float tint_r, tint_g, tint_b, tint_a  // RGBA multiplier (1.0 = passthrough)
-float rotation                      // radians, around quad centre
+float rotation                      // radians, clockwise, around quad centre
 float pad0, pad1, pad2
 ```
 
-Changing this struct requires updating the embedded `SPRITE_VERT_HLSL` in `sprite_batcher.cpp`. The static_assert on `sizeof(sprite_instance)==64` enforces the contract.
+Changing this struct requires updating `SPRITE_VERT_HLSL` in `sprite_batcher.cpp`. `static_assert(sizeof(sprite_instance)==64)` enforces the contract.
+
+---
+
+## Rotation in vertex shader
+
+Clockwise screen-space rotation (Y-down) around quad centre. `rotation` field is in radians (converted from degrees by `enqueue_tile_sprite` in `cata_tiles.h`). Flip is UV-encoded (negative `src_uw`/`src_vh`), independent of rotation.
+
+Formula: `x' = x*cos - y*sin`, `y' = x*sin + y*cos`
 
 ---
 
 ## sprite_batcher internals
 
 - `MAX_INSTANCES = 65536`, `RING_SLOTS = 3` (storage-buffer ring)
-- Storage buffer upload uses **`cycle=true`** (fixes D3D12 frames-in-flight race where GPU was still reading slot N when CPU started overwriting it under heavy load)
+- `cycle=true` on storage buffer upload (D3D12 frames-in-flight race fix)
 - Blend: `SrcAlpha · src + (1−SrcAlpha) · dst`
-- `set_texture()` closes the current segment and starts a new one; same-texture consecutive calls are no-ops and extend the current segment
-
----
-
-## Bridge
-
-`bridge_tex` / `bridge_sampler` / `bridge_xfer` in `render_state` hold the legacy SDL_Renderer output:
-
-1. Per-frame, `refresh_display()` calls `SDL_RenderPresent` on the hidden mirror renderer, reads back `display_buffer`, then `bridge_upload()` copies it to `bridge_tex`.
-2. The first segment in the pass (`set_texture(bridge_tex, bridge_sampler)`) blits it over the whole swapchain.
-
-Since 2i-B-5, `cata_tiles::draw` no longer writes terrain to `display_buffer`, so the bridge is mostly black in-game. Non-terrain windows (sidebar, overmap, menus) still write via the legacy path.
+- `set_texture()` closes current segment and starts a new one; same-texture calls extend current segment
+- Null texture in a segment → D3D12 command list corruption → crash at next GPU call. Never pass null.
 
 ---
 
 ## Known invariants & gotchas
 
-**1. No opaque fills before tile sprites.**  
-`cata_tiles::draw` used to call `geometry->rect(..., {0,0,0,255})` to clear the terrain area. After 2i-B-5, `geometry->rect` routes to `ui_rect_queue` which flushes **after** tile sprites → opaque black painted over terrain. This fill was removed (swapchain LOADOP_CLEAR does the job). Compare: `draw_om` used `SDL_Color()` (alpha=0 no-op) and so never exhibited the bug.
+**1. No opaque fills before tile sprites.**
+`geometry->rect` routes to `ui_rect_queue` which flushes **after** tile sprites. An opaque fill in `ui_rect_queue` will paint over terrain. Use LOADOP_CLEAR for full-screen black, not a queued rect.
 
-**2. overmap vs in-game discrepancy.**  
-Any regression where overmap works but the in-game frame is black is almost always a UI rect with `alpha=255` queuing before or overlapping tile sprites. Check `ui_rect_queue_` content first.
+**2. GPU atlas lookup (`find_gpu_texture_full`).** 
+Returns `{nullptr,0,0}` if the SDL_Texture is not tracked as an atlas sheet. GPU miss → sprite invisible + D_WARNING log. Causes: sprite not packing through `copy_surface_to_dynamic_atlas`, or texture handle mismatch.
 
-**3. cata_tiles enqueue path.**  
-`cata_tiles::enqueue_tile_sprite()` (in `cata_tiles.h`) calls `render_state::queue_tile_sprite()`. Always sets `tint=(1,1,1,alpha)`. UV comes from `gpu_atlas::find_gpu_texture_full()` returning the GPU-mirror texture + pixel-space coords divided by atlas dimensions.
+**3. `draw()` and `draw_om()` are window callbacks.**
+Both run INSIDE a `redraw_invalidated()` cycle. `clear_frame_queues()` already ran before them. They call `clear_tile_queue()` only to reset tile sprites before re-enqueuing. Calling `clear_frame_queues()` here would wipe UI content the other window callbacks just populated.
 
-**4. Rotation field.**  
-`rotation` is stored in sprite_instance but the embedded HLSL shader currently does non-rotated math (the rotation shader path is disabled). Rotated sprites fall through to `SDL_RenderTextureRotated` on the hidden mirror renderer → appear only via the bridge. Restoring rotation shader math is a separate task.
+**4. Loading image GPU path disabled.**
+`loading_ui.cpp:409` has `if (false && cache->gpu_texture)`. The GPU path caused a D3D12 crash: `upload_surface_to_gpu_texture` submits on a separate CB; D3D12 may not complete the resource barrier to PIXEL_SHADER_RESOURCE before the render pass samples → command buffer corruption. Fix: upload on the render CB, or fence the separate CB before sampling.
 
----
-
-## File sizes (2026-05-22)
-
-`cata_tiles.cpp` 6971 lines — the dominant cost. The draw path (`draw_sprite_at`, `draw`, `draw_om`) and the atlas loader (`load_tilejson`) are the two large zones; a future split would be `cata_tiles_draw.cpp` + `cata_tiles_atlas.cpp`.
+**5. SDL_Renderer still alive.**
+`copy_surface_to_dynamic_atlas` still creates SDL_Textures (used as lookup keys for `find_gpu_texture_full`). Cannot delete SDL_Renderer until atlas switches to a pure GPU key. Target: phase 2i-B-7f.
 
 ---
 
-## Token-cost tips for future sessions
+## What remains for 2i-B completion (phase 2i-B-7)
 
-- **Don't paste full game logs.** Tail ~200 lines; filter to `ERROR|WARN` + specific patterns.
-- **Read files once then edit in sequence.** Re-reads from "stale" files cost full file tokens.
+| Sub | State | Notes |
+|---|---|---|
+| 7b pixel_minimap | ⏳ stubbed as no-op | Migrate to GPU or drop entirely |
+| 7d scissor/clip | ⏳ | `vehicle_preview` and UI clip-rect wrappers need scissor pass in sprite_batcher |
+| 7e screenshot | ⏳ | Switch from `SDL_RenderReadPixels(display_buffer)` to SDL_GPU copy pass on swapchain |
+| 7f mechanical delete | ⏳ | Remove `SDL_Renderer_Ptr`, `legacy_window`, `display_buffer`, `bridge_*`, `set_displaybuffer_rendertarget()` |
+| accumulation texture | future | GPU-side "previous frame" buffer to fix partial-redraw flicker |
+
+---
+
+## Token-cost tips
+
+- **Don't paste full game logs.** Tail ~200 lines; filter to `ERROR|WARN`.
+- **Read files once then edit in sequence.**
 - **Use `smart_outline` → `smart_unfold`** instead of reading large files whole.
 - **This CLAUDE.md** exists so you don't have to re-discover the pipeline architecture every session.
+- **CRITICAL**: read `project_rendering_pipeline.md` from the auto-memory directory at session start (path in main CLAUDE.md).
