@@ -447,8 +447,9 @@ void CachedTTFFont::OutputChar( const SDL_Renderer_Ptr &renderer, const Geometry
     }
     const cached_t &value = it->second;
 
-    // Prefer the GPU path. If the upload failed, fall back to legacy
-    // RenderCopy so the glyph is still visible (via the bridge blit).
+    // GPU-only path. Bridge removed — legacy RenderCopy goes nowhere.
+    // If GPU glyph creation failed, the character is silently skipped
+    // (visible as a missing glyph rather than a silent black block).
     if( value.gpu_texture ) {
         auto &rs = lighting::get_render_state();
         rs.queue_font_glyph( value.gpu_texture.get(),
@@ -626,9 +627,7 @@ void BitmapFont::OutputChar( const SDL_Renderer_Ptr &renderer, const GeometryRen
         src.y = ( t / tilewidth ) * height;
         src.w = width;
         src.h = height;
-        // Prefer the GPU mirror — drop the legacy RenderCopy entirely
-        // when it's available so the glyph doesn't double-draw on top
-        // of itself via the bridge.
+        // GPU-only. Bridge removed — legacy RenderCopy goes nowhere.
         if( gpu_ascii[color] && gpu_sheet_w > 0 && gpu_sheet_h > 0 ) {
             const float inv_w = 1.0f / static_cast<float>( gpu_sheet_w );
             const float inv_h = 1.0f / static_cast<float>( gpu_sheet_h );
