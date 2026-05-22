@@ -4557,7 +4557,7 @@ bool cata_tiles::draw_sprite_at( const tile_type &tile, point p,
             static bool warned = false;
             if( !warned ) {
                 warned = true;
-                dbg( D_WARNING ) << "GPU atlas miss in draw_sprite_at — sprite invisible";
+                dbg( DL::Warn ) << "GPU atlas miss in draw_sprite_at — sprite invisible";
             }
             return 0;
         }
