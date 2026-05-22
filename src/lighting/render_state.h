@@ -19,6 +19,10 @@
 #include "font_engine.h"
 #include "gpu_atlas.h"
 #include "gpu_geometry.h"
+#include "event_queue.h"
+#include "emitter_collector.h"
+
+#include <memory>
 
 #include <memory>
 #include <vector>
@@ -175,6 +179,16 @@ class render_state
         // lifetime of the render_state.
         SDL_GPUSampler  *gpu_sampler() const noexcept { return gpu_sampler_; }
 
+        // Phase 3: emitter pipeline ------------------------------------------
+        // Thread-safe queue for transient light flashes pushed by game events
+        // (explosions, muzzle flashes, lightning). Drained each frame by the
+        // emitter_collector before SSBO upload.
+        event_queue &emitter_events() noexcept { return emitter_events_; }
+
+        // Collector thread + double-buffered SSBO.  Created in init(), torn
+        // down in shutdown().  Returns nullptr before init() or after shutdown().
+        emitter_collector *collector() noexcept { return collector_.get(); }
+
     private:
         gpu_device     device_;
         sprite_batcher tile_batcher_;
@@ -202,6 +216,10 @@ class render_state
         std::vector<tile_sprite_draw> tile_sprite_queue_;
 
         SDL_GPUSampler        *gpu_sampler_ = nullptr;
+
+        // Phase 3: emitter pipeline
+        event_queue                          emitter_events_;
+        std::unique_ptr<emitter_collector>   collector_;
 };
 
 // Process-wide accessor. The object is constructed in init() and torn down

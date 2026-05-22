@@ -1,4 +1,5 @@
 #include "render_state.h"
+#include "emitter_collector.h"
 
 #include "shader_compiler.h"
 #include "debug.h"
@@ -63,10 +64,16 @@ void render_state::init( SDL_Window *host_window )
     si.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
     si.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
     gpu_sampler_ = SDL_CreateGPUSampler( device_.raw(), &si );
+
+    // Phase 3: start the emitter collector thread.
+    collector_ = std::make_unique<emitter_collector>( *this );
 }
 
 void render_state::shutdown() noexcept
 {
+    // Phase 3: stop collector thread before releasing GPU resources.
+    collector_.reset();
+
     if( device_.ready() && gpu_sampler_ ) {
         SDL_ReleaseGPUSampler( device_.raw(), gpu_sampler_ );
     }

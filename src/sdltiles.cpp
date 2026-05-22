@@ -66,6 +66,7 @@
 #include "sdl_font.h"
 #include "sdlsound.h"
 #include "lighting/render_state.h"
+#include "lighting/snapshot.h"
 #include "string_formatter.h"
 #include "uistate.h"
 #include "ui_manager.h"
@@ -470,6 +471,15 @@ void refresh_display()
     rs.tile_batcher().end_pass();
 
     rs.device().submit_frame( ctx );
+
+    // Phase 3: submit emitter snapshot to the collector thread for SSBO upload.
+    // Frame delta is approximated from the 25ms poll interval; Phase 4 will
+    // pass the real elapsed time from the game clock.
+    if( rs.collector() ) {
+        constexpr float FRAME_MS = 25.0f;
+        auto snapshot = lighting::build_emitter_snapshot( rs.emitter_events(), FRAME_MS );
+        rs.collector()->submit( std::move( snapshot ) );
+    }
 }
 
 // only update if the set interval has elapsed
