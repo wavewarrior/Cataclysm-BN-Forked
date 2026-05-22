@@ -4547,6 +4547,21 @@ bool cata_tiles::draw_sprite_at( const tile_type &tile, point p,
                          ? atlas->find_gpu_texture_full(
                              sprite_tex->sdl_texture_handle() )
                          : dynamic_atlas::gpu_lookup{ nullptr, 0, 0 };
+        // One-shot diagnostic: log the first call's result so we know
+        // whether the GPU path is being taken at all on Win11.
+        {
+            static bool logged_first = false;
+            if( !logged_first ) {
+                logged_first = true;
+                dbg( DL::Info )
+                        << "TILES_DEBUG: first draw_sprite_at GPU lookup — "
+                        << "rotation=" << rotation
+                        << " atlas=" << static_cast<void *>( atlas )
+                        << " sdl_tex=" << static_cast<void *>( sprite_tex->sdl_texture_handle() )
+                        << " gpu.texture=" << static_cast<void *>( gpu.texture )
+                        << " atlas_w=" << gpu.atlas_w << " atlas_h=" << gpu.atlas_h;
+            }
+        }
         if( gpu.texture ) {
             const SDL_FRect fdst{
                 static_cast<float>( destination.x ),
@@ -4676,7 +4691,17 @@ bool cata_tiles::draw_sprite_at( const tile_type &tile, point p,
         ret = render( 0, SDL_FLIP_NONE );
     }
 
-    printErrorIf( !ret, "SDL_RenderTextureRotated() failed" );
+    // Throttle this error: on Win11 with the SDL_GPU device active on
+    // the visible window, SDL_RenderTextureRotated on the hidden
+    // mirror renderer can spam validation errors every frame. Log
+    // only the first failure per process to keep debug.log readable.
+    if( !ret ) {
+        static bool logged_once = false;
+        if( !logged_once ) {
+            logged_once = true;
+            printErrorIf( !ret, "SDL_RenderTextureRotated() failed (throttled — further failures silent)" );
+        }
+    }
     // this reference passes all the way back up the call chain back to
     // cata_tiles::draw() std::vector<tile_render_info> draw_points[].height_3d
     // where we are accumulating the height of every sprite stacked up in a tile
