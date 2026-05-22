@@ -406,7 +406,7 @@ auto loading_image_splash::draw_current_loading_image() -> bool
             // of the bridge blit, before the ui_batcher pass that
             // contains the author text. So the image lands underneath
             // the author overlay correctly.
-            if( cache->gpu_texture ) {
+            if( false && cache->gpu_texture ) { // DIAG: disabled to isolate crash
                 lighting::sprite_instance s{};
                 s.dst_x = fRect.x;
                 s.dst_y = fRect.y;
