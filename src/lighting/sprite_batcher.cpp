@@ -393,7 +393,19 @@ class sprite_batcher_impl
                 dst.buffer = storage_bufs[slot];
                 dst.offset = 0;
                 dst.size = byte_size;
-                SDL_UploadToGPUBuffer( cp, &src, &dst, /*cycle=*/false );
+                // 2026-05-22: cycle=true on the storage buffer upload.
+                // RING_SLOTS=3 lets the application rotate buffers across
+                // frames, but on Win11 D3D12 with heavy frames (5000+
+                // instances) the GPU still reads the previous frame's
+                // contents of this slot when the CPU starts overwriting,
+                // because the SDL_GPU device queues more than RING_SLOTS
+                // frames in flight under load. Forcing cycle here makes
+                // SDL discard the in-use allocation and provide a fresh
+                // one, removing the race. Bridge (1 inst) and per-glyph
+                // segments (1 inst each) never showed the symptom; the
+                // tile-sprite white-tex segment with thousands of
+                // instances did.
+                SDL_UploadToGPUBuffer( cp, &src, &dst, /*cycle=*/true );
                 SDL_EndGPUCopyPass( cp );
             }
 
@@ -433,6 +445,34 @@ class sprite_batcher_impl
                     0.0f, 1.0f
                 };
                 SDL_SetGPUViewport( rp, &vp );
+
+                // DIAGNOSTIC: log per-segment draw stats once per change.
+                // We are trying to discriminate "segment never draws" from
+                // "segment draws but pixels don't appear" in the Win11
+                // black-tile regression. Throttle by segment count so we
+                // don't spam — only logs when the segment shape changes.
+                static std::size_t last_seg_count = 0;
+                static Uint32       last_total    = 0;
+                Uint32 total = 0;
+                for( const segment &s : segments ) {
+                    total += s.count;
+                }
+                const bool log_now = ( segments.size() != last_seg_count ) ||
+                                     ( total != last_total );
+                if( log_now ) {
+                    last_seg_count = segments.size();
+                    last_total     = total;
+                    dbg( DL::Info ) << "tile_batcher end_pass: segments="
+                                    << segments.size()
+                                    << " total_instances=" << total
+                                    << " target=" << cur_target_w << "x" << cur_target_h;
+                    for( std::size_t i = 0; i < segments.size() && i < 8; ++i ) {
+                        const segment &s = segments[i];
+                        dbg( DL::Info ) << "  seg[" << i << "] tex=" << ( void * )s.tex
+                                        << " start=" << s.start
+                                        << " count=" << s.count;
+                    }
+                }
 
                 for( const segment &s : segments ) {
                     SDL_GPUTextureSamplerBinding tsb{};
