@@ -5,6 +5,7 @@
 #include "debug.h"
 #include "lighting/render_state.h"
 #include "lighting/gpu_device.h"
+#include "lighting/sdf_pass.h"
 #include "sdl_wrappers.h" // SDL3 headers
 
 // SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ — shader reads the SSBO.
@@ -64,12 +65,16 @@ emitter_collector::~emitter_collector()
     }
 }
 
-void emitter_collector::submit( std::vector<gpu_emitter> snapshot )
+void emitter_collector::submit( std::vector<gpu_emitter> snapshot,
+                                 std::vector<uint8_t>    transparency,
+                                 std::vector<float>      sdf )
 {
     {
         std::lock_guard<std::mutex> lk( mu_ );
-        pending_      = std::move( snapshot );
-        have_pending_ = true;
+        pending_              = std::move( snapshot );
+        pending_transparency_ = std::move( transparency );
+        pending_sdf_          = std::move( sdf );
+        have_pending_         = true;
     }
     cv_.notify_one();
 }
@@ -82,21 +87,27 @@ SDL_GPUBuffer *emitter_collector::read_buffer() const noexcept
 void emitter_collector::thread_main()
 {
     while( true ) {
-        std::vector<gpu_emitter> work;
+        std::vector<gpu_emitter> work_emitters;
+        std::vector<uint8_t>    work_transparency;
+        std::vector<float>      work_sdf;
         {
             std::unique_lock<std::mutex> lk( mu_ );
             cv_.wait( lk, [this] { return have_pending_ || stop_; } );
             if( stop_ ) {
                 break;
             }
-            work         = std::move( pending_ );
+            work_emitters     = std::move( pending_ );
+            work_transparency = std::move( pending_transparency_ );
+            work_sdf          = std::move( pending_sdf_ );
             have_pending_ = false;
         }
-        upload_to_gpu( work );
+        upload_to_gpu( work_emitters, work_transparency, work_sdf );
     }
 }
 
-void emitter_collector::upload_to_gpu( const std::vector<gpu_emitter> &data )
+void emitter_collector::upload_to_gpu( const std::vector<gpu_emitter> &data,
+                                         const std::vector<uint8_t>    &transparency,
+                                         const std::vector<float>      &sdf )
 {
     if( !rs_.device().raw() ) {
         return;
@@ -142,6 +153,12 @@ void emitter_collector::upload_to_gpu( const std::vector<gpu_emitter> &data )
     dst.size   = byte_size;
 
     SDL_UploadToGPUBuffer( cp, &src, &dst, /*cycle=*/true );
+
+    // Phase 4: upload transparency + SDF textures in the same copy pass.
+    if( rs_.sdf().ready() && !transparency.empty() && !sdf.empty() ) {
+        rs_.sdf().upload( cp, rs_.device().raw(), transparency, sdf );
+    }
+
     SDL_EndGPUCopyPass( cp );
     SDL_SubmitGPUCommandBuffer( cb );
 

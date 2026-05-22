@@ -21,6 +21,7 @@
 #include "gpu_geometry.h"
 #include "event_queue.h"
 #include "emitter_collector.h"
+#include "sdf_pass.h"
 
 #include <memory>
 
@@ -180,14 +181,11 @@ class render_state
         SDL_GPUSampler  *gpu_sampler() const noexcept { return gpu_sampler_; }
 
         // Phase 3: emitter pipeline ------------------------------------------
-        // Thread-safe queue for transient light flashes pushed by game events
-        // (explosions, muzzle flashes, lightning). Drained each frame by the
-        // emitter_collector before SSBO upload.
-        event_queue &emitter_events() noexcept { return emitter_events_; }
+        event_queue       &emitter_events() noexcept { return emitter_events_; }
+        emitter_collector *collector()      noexcept { return collector_.get(); }
 
-        // Collector thread + double-buffered SSBO.  Created in init(), torn
-        // down in shutdown().  Returns nullptr before init() or after shutdown().
-        emitter_collector *collector() noexcept { return collector_.get(); }
+        // Phase 4: SDF + transparency ----------------------------------------
+        sdf_pass &sdf() noexcept { return sdf_; }
 
     private:
         gpu_device     device_;
@@ -220,6 +218,9 @@ class render_state
         // Phase 3: emitter pipeline
         event_queue                          emitter_events_;
         std::unique_ptr<emitter_collector>   collector_;
+
+        // Phase 4: SDF + transparency
+        sdf_pass  sdf_;
 };
 
 // Process-wide accessor. The object is constructed in init() and torn down

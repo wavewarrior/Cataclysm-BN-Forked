@@ -32,8 +32,12 @@ public:
     ~emitter_collector();
 
     // Submit a fresh snapshot for asynchronous upload.
+    // Also accepts pre-computed transparency (uint8, 1 byte/tile) and
+    // SDF (float, 1 float/tile) data for Phase 4 GPU textures.
     // Called from the main thread; non-blocking.
-    void submit( std::vector<gpu_emitter> snapshot );
+    void submit( std::vector<gpu_emitter> snapshot,
+                 std::vector<uint8_t>    transparency = {},
+                 std::vector<float>      sdf          = {} );
 
     // Return the GPU buffer for the last fully-uploaded frame.
     // May return nullptr until the first upload completes.
@@ -45,7 +49,9 @@ public:
 
 private:
     void thread_main();
-    void upload_to_gpu( const std::vector<gpu_emitter> &data );
+    void upload_to_gpu( const std::vector<gpu_emitter> &data,
+                        const std::vector<uint8_t>    &transparency,
+                        const std::vector<float>      &sdf );
 
     render_state &rs_;
 
@@ -53,6 +59,8 @@ private:
     std::mutex mu_;
     std::condition_variable cv_;
     std::vector<gpu_emitter> pending_;
+    std::vector<uint8_t>    pending_transparency_;
+    std::vector<float>      pending_sdf_;
     bool have_pending_ = false;
     bool stop_         = false;
 

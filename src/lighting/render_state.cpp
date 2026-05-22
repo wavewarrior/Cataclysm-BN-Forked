@@ -1,8 +1,10 @@
 #include "render_state.h"
 #include "emitter_collector.h"
+#include "sdf_pass.h"
 
 #include "shader_compiler.h"
 #include "debug.h"
+#include "game_constants.h"
 
 #include <algorithm>
 #include <atomic>
@@ -67,12 +69,24 @@ void render_state::init( SDL_Window *host_window )
 
     // Phase 3: start the emitter collector thread.
     collector_ = std::make_unique<emitter_collector>( *this );
+
+    // Phase 4: initialise SDF + transparency textures.
+    // Map size: my_MAPSIZE * SEEX tiles per side (e.g. 11*12=132 for MAPSIZE=11).
+    // Include game_constants.h for SEEX/SEEY/my_MAPSIZE.
+    // These are set at runtime from options; use a safe upper bound here and
+    // re-init if the bubble size ever changes (rare / future concern).
+    const int map_w = my_MAPSIZE * SEEX;
+    const int map_h = my_MAPSIZE * SEEY;
+    sdf_.init( device_, map_w, map_h );
 }
 
 void render_state::shutdown() noexcept
 {
     // Phase 3: stop collector thread before releasing GPU resources.
     collector_.reset();
+
+    // Phase 4: release SDF textures.
+    sdf_.shutdown( device_ );
 
     if( device_.ready() && gpu_sampler_ ) {
         SDL_ReleaseGPUSampler( device_.raw(), gpu_sampler_ );

@@ -67,6 +67,10 @@
 #include "sdlsound.h"
 #include "lighting/render_state.h"
 #include "lighting/snapshot.h"
+#include "lighting/sdf_pass.h"
+#include "map.h"
+#include "lightmap.h"
+#include "game_constants.h"
 #include "string_formatter.h"
 #include "uistate.h"
 #include "ui_manager.h"
@@ -472,13 +476,48 @@ void refresh_display()
 
     rs.device().submit_frame( ctx );
 
-    // Phase 3: submit emitter snapshot to the collector thread for SSBO upload.
-    // Frame delta is approximated from the 25ms poll interval; Phase 4 will
-    // pass the real elapsed time from the game clock.
+    // Phase 3+4: build emitter snapshot + SDF, submit to collector for GPU upload.
     if( rs.collector() ) {
         constexpr float FRAME_MS = 25.0f;
+
         auto snapshot = lighting::build_emitter_snapshot( rs.emitter_events(), FRAME_MS );
-        rs.collector()->submit( std::move( snapshot ) );
+
+        // Phase 4: compute transparency + SDF from the current map cache.
+        std::vector<uint8_t> transparency;
+        std::vector<float>   sdf;
+        if( g && rs.sdf().ready() ) {
+            const map &m = get_map();
+            const int zlev = g->u.pos().z;
+            const auto &mc = m.get_cache( zlev );
+            const int W = my_MAPSIZE * SEEX;
+            const int H = my_MAPSIZE * SEEY;
+            const int total = W * H;
+
+            // Pack float transparency_cache → uint8 (0=opaque, 255=transparent).
+            transparency.resize( total );
+            for( int i = 0; i < total; ++i ) {
+                const float t = mc.transparency_cache[ i ];
+                // transparency_cache: 0.0 = fully opaque, >0 = some transparency.
+                // Clamp and scale to uint8.
+                transparency[i] = static_cast<uint8_t>(
+                    std::min( 255.0f, std::max( 0.0f, t * 255.0f ) ) );
+            }
+
+            // CPU BFS distance transform.
+            if( static_cast<int>( mc.transparency_cache.size() ) >= total ) {
+                sdf = lighting::compute_sdf_cpu( mc.transparency_cache.data(), W, H );
+            }
+
+            // Diagnostic: verify SDF is reasonable (wall should be 0.0).
+            // Phase 6 will remove this once GPU JFA is in.
+            dbg( DL::Debug ) << "sdf[player]: "
+                             << sdf[g->u.pos().x * H + g->u.pos().y]
+                             << " (0 if standing in wall, >0 otherwise)";
+        }
+
+        rs.collector()->submit( std::move( snapshot ),
+                                std::move( transparency ),
+                                std::move( sdf ) );
     }
 }
 
