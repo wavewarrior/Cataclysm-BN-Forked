@@ -105,6 +105,16 @@ void render_state::queue_ui_rect( float x, float y, float w, float h,
     ui_rect_queue_.push_back( s );
 }
 
+void render_state::set_tile_scissor( const SDL_Rect *rect )
+{
+    tile_batcher_.set_scissor( rect );
+}
+
+void render_state::clear_tile_scissor()
+{
+    tile_batcher_.set_scissor( nullptr );
+}
+
 void render_state::flush_ui_rects( sprite_batcher &dst )
 {
     if( ui_rect_queue_.empty() ) {

@@ -814,10 +814,9 @@ void cata_tiles::draw_om( point dest, const tripoint_abs_omt &center_abs_omt, bo
     int height = OVERMAP_WINDOW_TERM_HEIGHT * font->height;
 
     {
-        //set clipping to prevent drawing over stuff we shouldn't
+        // GPU scissor — clips overmap tile sprites to the overmap viewport.
         SDL_Rect clipRect = { dest.x, dest.y, width, height };
-        printErrorIf( !SDL_SetRenderClipRect( renderer.get(), &clipRect ),
-                      "SDL_SetRenderClipRect failed" );
+        lighting::get_render_state().set_tile_scissor( &clipRect );
 
         //fill render area with black to prevent artifacts where no new pixels are drawn
         geometry->rect( renderer, point{ clipRect.x, clipRect.y }, clipRect.w, clipRect.h, SDL_Color() );
@@ -1378,8 +1377,7 @@ void cata_tiles::draw_om( point dest, const tripoint_abs_omt &center_abs_omt, bo
         }
     }
 
-    printErrorIf( !SDL_SetRenderClipRect( renderer.get(), nullptr ),
-                  "SDL_SetRenderClipRect failed" );
+    lighting::get_render_state().clear_tile_scissor();
 }
 
 static bool draw_window( Font_Ptr &font, const catacurses::window &w, point offset )

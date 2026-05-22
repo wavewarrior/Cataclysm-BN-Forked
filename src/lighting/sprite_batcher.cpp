@@ -129,14 +129,18 @@ class sprite_batcher_impl
             SDL_GPUSampler *sampler;
             Uint32 start;
             Uint32 count;
+            SDL_Rect scissor     = {};
+            bool     has_scissor = false;
         };
         std::vector<sprite_instance> pending;
         std::vector<segment>          segments;
 
         // Pending segment in progress (not yet pushed to `segments`).
-        SDL_GPUTexture *bound_tex     = nullptr;
-        SDL_GPUSampler *bound_sampler = nullptr;
-        Uint32          seg_start     = 0;
+        SDL_GPUTexture *bound_tex      = nullptr;
+        SDL_GPUSampler *bound_sampler  = nullptr;
+        Uint32          seg_start      = 0;
+        SDL_Rect        bound_scissor  = {};
+        bool            bound_has_scissor = false;
 
         // Pass-scope state captured by begin_pass().
         SDL_GPUCommandBuffer *cur_cb = nullptr;
@@ -315,10 +319,12 @@ class sprite_batcher_impl
             }
             pending.clear();
             segments.clear();
-            bound_tex = nullptr;
-            bound_sampler = nullptr;
-            seg_start = 0;
-            pass_open = true;
+            bound_tex         = nullptr;
+            bound_sampler     = nullptr;
+            seg_start         = 0;
+            bound_has_scissor = false;
+            bound_scissor     = {};
+            pass_open         = true;
         }
 
         void set_texture( SDL_GPUTexture *atlas, SDL_GPUSampler *sampler ) {
@@ -332,6 +338,19 @@ class sprite_batcher_impl
             bound_tex = atlas;
             bound_sampler = sampler;
             seg_start = static_cast<Uint32>( pending.size() );
+        }
+
+        void set_scissor( const SDL_Rect *rect ) {
+            const bool want = ( rect != nullptr );
+            const SDL_Rect r = want ? *rect : SDL_Rect{};
+            if( want == bound_has_scissor
+                && ( !want || ( r.x == bound_scissor.x && r.y == bound_scissor.y
+                                && r.w == bound_scissor.w && r.h == bound_scissor.h ) ) ) {
+                return;
+            }
+            close_segment();
+            bound_has_scissor = want;
+            bound_scissor     = r;
         }
 
         void draw( const sprite_instance &inst ) {
@@ -450,7 +469,28 @@ class sprite_batcher_impl
                 };
                 SDL_SetGPUViewport( rp, &vp );
 
+                bool     last_has_scissor = false;
+                SDL_Rect last_scissor     = {};
                 for( const segment &s : segments ) {
+                    const bool changed = ( s.has_scissor != last_has_scissor )
+                                         || ( s.has_scissor
+                                              && ( s.scissor.x != last_scissor.x
+                                                   || s.scissor.y != last_scissor.y
+                                                   || s.scissor.w != last_scissor.w
+                                                   || s.scissor.h != last_scissor.h ) );
+                    if( changed ) {
+                        if( s.has_scissor ) {
+                            SDL_SetGPUScissor( rp, &s.scissor );
+                        } else {
+                            const SDL_Rect full{ 0, 0,
+                                                 static_cast<int>( cur_target_w ),
+                                                 static_cast<int>( cur_target_h ) };
+                            SDL_SetGPUScissor( rp, &full );
+                        }
+                        last_has_scissor = s.has_scissor;
+                        last_scissor     = s.scissor;
+                    }
+
                     SDL_GPUTextureSamplerBinding tsb{};
                     tsb.texture = s.tex;
                     tsb.sampler = s.sampler;
@@ -481,8 +521,10 @@ class sprite_batcher_impl
             if( !bound_tex || end <= seg_start ) {
                 return;
             }
-            segments.push_back( segment{ bound_tex, bound_sampler,
-                                         seg_start, end - seg_start } );
+            segment s{ bound_tex, bound_sampler, seg_start, end - seg_start };
+            s.scissor     = bound_scissor;
+            s.has_scissor = bound_has_scissor;
+            segments.push_back( s );
             seg_start = end;
         }
 };
@@ -524,6 +566,11 @@ void sprite_batcher::begin_pass( SDL_GPUCommandBuffer *cb,
 void sprite_batcher::set_texture( SDL_GPUTexture *atlas, SDL_GPUSampler *sampler )
 {
     p->set_texture( atlas, sampler );
+}
+
+void sprite_batcher::set_scissor( const SDL_Rect *rect )
+{
+    p->set_scissor( rect );
 }
 
 void sprite_batcher::draw( const sprite_instance &inst )

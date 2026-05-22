@@ -135,6 +135,11 @@ class render_state
                                 const sprite_instance &inst );
         bool tile_sprites_empty() const noexcept { return tile_sprite_queue_.empty(); }
         void flush_tile_sprites( sprite_batcher &dst, SDL_GPUSampler *sampler );
+        // Apply a GPU scissor rect to tile_sprite draws from this point forward.
+        // Pass nullptr to restore full-viewport rendering. Closes the current
+        // batcher segment so previously queued sprites are unaffected.
+        void set_tile_scissor( const SDL_Rect *rect );
+        void clear_tile_scissor();
 
         // Phase 2i-B-5 lifecycle fix. Legacy SDL_Renderer's display_buffer
         // is a persistent render target — content stays between redraws.

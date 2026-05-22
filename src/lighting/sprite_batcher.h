@@ -120,6 +120,10 @@ class sprite_batcher
         // page is a no-op; calling it with a different one flushes the
         // pending batch implicitly before re-binding.
         void set_texture( SDL_GPUTexture *atlas, SDL_GPUSampler *sampler );
+        // Set a GPU scissor rect for subsequent draws. nullptr = full viewport.
+        // Closes the current segment (like set_texture) so all draws since the
+        // last set_scissor() share the same clip region.
+        void set_scissor( const SDL_Rect *rect );
 
         // Append one sprite to the pending batch. Triggers an automatic
         // flush when the per-frame instance budget is reached so callers can

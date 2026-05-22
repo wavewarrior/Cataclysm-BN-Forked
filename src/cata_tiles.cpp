@@ -2998,10 +2998,9 @@ void cata_tiles::draw( point dest, const tripoint &center, int width, int height
 
     ZoneScoped;
     {
-        //set clipping to prevent drawing over stuff we shouldn't
+        // GPU scissor — clips tile sprites to the map viewport.
         SDL_Rect clipRect = {dest.x, dest.y, width, height};
-        printErrorIf( !SDL_SetRenderClipRect( renderer.get(), &clipRect ),
-                      "SDL_SetRenderClipRect failed" );
+        lighting::get_render_state().set_tile_scissor( &clipRect );
 
         // No explicit black fill needed: the swapchain is cleared to black
         // by the tile_batcher pass (LOADOP_CLEAR) before tile sprites draw.
@@ -3946,8 +3945,7 @@ void cata_tiles::draw( point dest, const tripoint &center, int width, int height
         }
     }
 
-    printErrorIf( !SDL_SetRenderClipRect( renderer.get(), nullptr ),
-                  "SDL_SetRenderClipRect failed" );
+    lighting::get_render_state().clear_tile_scissor();
 }
 
 bool cata_tiles::terrain_requires_animation() const
