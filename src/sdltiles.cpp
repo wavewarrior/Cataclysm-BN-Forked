@@ -802,6 +802,11 @@ void cata_tiles::draw_om( point dest, const tripoint_abs_omt &center_abs_omt, bo
         return;
     }
 
+    // Full-screen view with its own UI layout — start from a clean slate.
+    if( auto *rs = &lighting::get_render_state(); rs->ready() ) {
+        rs->clear_frame_queues();
+    }
+
     int width = OVERMAP_WINDOW_TERM_WIDTH * font->width;
     int height = OVERMAP_WINDOW_TERM_HEIGHT * font->height;
 
