@@ -2987,11 +2987,12 @@ void cata_tiles::draw( point dest, const tripoint &center, int width, int height
         return;
     }
 
-    // Clear all GPU queues at the start of each full map draw. Partial
-    // UI redraws (tooltip, mouse-hover) do NOT call clear_frame_queues,
-    // so they append to — not wipe — the queues populated here.
+    // Clear only tile sprites. UI/font queues are NOT cleared here so
+    // partial UI redraws (tooltip, mouse-hover) still see sidebar content
+    // from the last full tick. draw_om() uses clear_frame_queues() because
+    // it is a full-screen view with its own UI layout.
     if( lighting::render_state *rs = &lighting::get_render_state(); rs->ready() ) {
-        rs->clear_frame_queues();
+        rs->clear_tile_queue();
     }
 
     ZoneScoped;
