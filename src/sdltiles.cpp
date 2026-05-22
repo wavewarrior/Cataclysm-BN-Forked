@@ -539,44 +539,38 @@ void refresh_display()
         s.tint_a = 1.0f;
         rs.tile_batcher().draw( s );
     }
-    // Phase 2i-B-5 part 3: drain any sprites cata_tiles enqueued during
-    // the per-window redraw onto the swapchain *inside the same
-    // tile_batcher pass* as the bridge blit. set_texture rebinds the
-    // atlas page; grouping by texture handles atlas-packed runs in one
-    // SDL_DrawGPUPrimitives call. Sampler reused from the bridge.
+    // 2026-05-22 fix: SDL_GPU D3D12 silently drops draws from earlier
+    // render passes on the same swapchain texture when a second
+    // BeginGPURenderPass opens it (even with LOAD_OP_LOAD + cycle=false).
+    // Diagnosed by forcing the tile_sprite_queue to draw white quads —
+    // the white quads were invisible while ui_batcher's rects+fonts
+    // still rendered, meaning the tile_batcher pass output was being
+    // discarded when ui_batcher's pass opened.
+    //
+    // Collapse everything into a single tile_batcher pass:
+    //   1. clear swapchain to black (LOAD_OP_CLEAR)
+    //   2. bridge blit (segment with bridge_tex)
+    //   3. tile sprites (per-atlas segments)
+    //   4. UI rects (segment with gpu_geometry's white texture)
+    //   5. font glyphs (one segment per glyph, per-texture rebind)
+    // sprite_batcher::set_texture flushes the previous segment when the
+    // texture changes, so all five draw kinds coexist cleanly in the
+    // same pass. ui_batcher is now unused — its begin_frame/begin_pass
+    // calls stay only as no-ops while the existing infrastructure
+    // settles; cleanup commit can remove the second batcher entirely.
     if( !rs.tile_sprites_empty() && rs.bridge_sampler() ) {
         rs.flush_tile_sprites( rs.tile_batcher(), rs.bridge_sampler() );
     }
-    rs.tile_batcher().end_pass();
-
-    // Phase 2i-B-4: drain the GeometryRenderer rect queue onto the
-    // swapchain on top of the bridge blit. LOAD_OP_LOAD preserves the
-    // bridge's pixels (legacy sprites + still-present text glyphs) so the
-    // GPU rects layer cleanly above them. The white texture from
-    // gpu_geometry is bound once; rect tints come from per-instance
-    // colour.
-    // Phase 2i-B-6: single ui_batcher pass drains both the rect queue
-    // (white-tex segment first) and the font glyph queue (per-glyph
-    // texture binds via flush). sprite_batcher::set_texture flushes the
-    // previous segment internally so changing texture inside the pass
-    // is safe. Sampler reused from the bridge (NEAREST — correct for
-    // both white-tex sampling and pre-rendered glyphs at target px).
     const bool have_rects = !rs.ui_rects_empty() && rs.geometry().white_texture();
-    const bool have_glyphs = !rs.font_glyphs_empty();
-    if( ( have_rects || have_glyphs ) && rs.bridge_sampler() ) {
-        rs.ui_batcher().begin_pass( ctx.cmd_buffer, ctx.swapchain_tex,
-                                    ctx.swapchain_w, ctx.swapchain_h,
-                                    /*clear=*/nullptr );
-        if( have_rects ) {
-            rs.ui_batcher().set_texture( rs.geometry().white_texture(),
-                                         rs.bridge_sampler() );
-            rs.flush_ui_rects( rs.ui_batcher() );
-        }
-        if( have_glyphs ) {
-            rs.flush_font_glyphs( rs.ui_batcher(), rs.bridge_sampler() );
-        }
-        rs.ui_batcher().end_pass();
+    if( have_rects ) {
+        rs.tile_batcher().set_texture( rs.geometry().white_texture(),
+                                       rs.bridge_sampler() );
+        rs.flush_ui_rects( rs.tile_batcher() );
     }
+    if( !rs.font_glyphs_empty() && rs.bridge_sampler() ) {
+        rs.flush_font_glyphs( rs.tile_batcher(), rs.bridge_sampler() );
+    }
+    rs.tile_batcher().end_pass();
 
     rs.device().submit_frame( ctx );
 
