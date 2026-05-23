@@ -26,32 +26,15 @@ struct SpriteInstance {
     float rotation, pad0, pad1, pad2;
 };
 
-// ---- Phase 6: GPU emitter descriptor (64 bytes, matches lighting::gpu_emitter) ----
-struct GpuEmitter {
-    float pos_x, pos_y, pos_z;
-    float radius;
-    float r, g, b;
-    float falloff;
-    float cone_dir_x, cone_dir_y;
-    float cone_half_angle;
-    uint  shape;
-    uint  flicker_seed;
-    float ep0, ep1, ep2;
-};
-
-// Vertex storage slot 0: sprite instances (existing)
+// Vertex storage slot 0: sprite instances
 StructuredBuffer<SpriteInstance> Instances : register(t0, space0);
-// Vertex storage slot 1: emitters (Phase 6)
-StructuredBuffer<GpuEmitter>     Emitters  : register(t1, space0);
 
-// Cbuffer slot 0: per-segment viewport + instance base (existing, wire-stable)
+// Cbuffer slot 0: per-segment viewport + instance base (wire-stable)
 cbuffer FrameParams : register(b0, space1) {
     float2 target_size;
     uint   instance_base;
     uint   fp_pad;
 };
-// Phase 6b: SDF values as vertex storage slot 2 (x-outer layout: [x*map_h + y])
-StructuredBuffer<float> SdfBuffer : register(t2, space0);
 
 // Cbuffer slot 1: per-frame lighting params (Phase 6/6b)
 cbuffer LightParams : register(b1, space1) {
@@ -66,9 +49,10 @@ cbuffer LightParams : register(b1, space1) {
 };
 
 struct VS_OUT {
-    float4 pos  : SV_Position;
-    float2 uv   : TEXCOORD0;
-    float4 tint : TEXCOORD1;
+    float4 pos      : SV_Position;
+    float2 uv       : TEXCOORD0;
+    float4 tint     : TEXCOORD1;
+    float2 world_pos: TEXCOORD2; // map tile coords for fragment lighting
 };
 static const float2 quad_uv[6] = {
     float2(0.0,0.0), float2(1.0,0.0), float2(0.0,1.0),
@@ -92,82 +76,81 @@ VS_OUT main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
         pixel.x / target_size.x *  2.0 - 1.0,
         pixel.y / target_size.y * -2.0 + 1.0);
 
-    // ---- Phase 6/6b: emitter-based light with soft shadows per tile centre ----
-    // tile_tu: screen tile units. map_pos converts to map tile coordinates.
+    // Phase 7: pass map tile coords to fragment for per-pixel lighting.
+    // Fragment shader evaluates emitters, Lambert normals, SDF shadows.
     const float2 tile_tu  = centre / max(tile_pixel_size, 1.0);
     const float2 map_pos  = tile_tu - float2(camera_off_x, camera_off_y);
 
-    float3 gpu_light = float3(ambient, ambient, ambient);
-
-    // Phase 6b: soft-shadow helper using the SDF buffer.
-    // Ray-marches from tile centre toward emitter; returns penumbra factor 0..1.
-    // sdf_map_w==0 means SDF not available → hard cutoff (no shadows).
-    float sdf_shadow_factor = 0.0; // scoped inside loop below
-
-    const uint map_hw = sdf_map_w; // alias for readability
-
-    // Evaluate at most 64 emitters with attenuation + SDF soft shadows.
-    const uint max_e = min(emitter_count, 64u);
-    for (uint i = 0u; i < max_e; ++i) {
-        const GpuEmitter e = Emitters[i];
-        if (abs(e.pos_z - current_z) > 0.5) continue;
-
-        const float2 d    = float2(e.pos_x, e.pos_y) - map_pos;
-        const float  dist = length(d);
-        if (dist >= e.radius || dist < 0.01) continue;
-
-        const float atten = 1.0 - pow(saturate(dist / e.radius), e.falloff);
-
-        // --- SDF ray-march for soft penumbra shadow ---
-        float shadow = 1.0;
-        if (map_hw > 0u) {
-            const float2 dir = d / dist;
-            float t = 0.3;
-            float k = 6.0; // penumbra sharpness
-            [loop]
-            for (int step = 0; step < 8; ++step) {
-                if (t >= dist - 0.2) break;
-                const float2 p  = map_pos + dir * t;
-                const int    ix = clamp((int)p.x, 0, (int)map_hw - 1);
-                const int    iy = clamp((int)p.y, 0, (int)map_hw - 1);
-                const float  sd = SdfBuffer[ix * (int)map_hw + iy];
-                if (sd < 0.05) { shadow = 0.0; break; }
-                shadow = min(shadow, k * sd / max(dist - t, 0.01));
-                t += max(sd, 0.1);
-            }
-            shadow = saturate(shadow);
-        }
-
-        const float3 rgb = (e.r < 0.01 && e.g < 0.01 && e.b < 0.01)
-                           ? float3(1.0, 1.0, 1.0) : float3(e.r, e.g, e.b);
-        gpu_light += rgb * atten * shadow;
-    }
-
-    // Phase 5 sets tint_r/g/b to the CPU-shadowcast luminance (0..1).
-    // Phase 6: take the per-channel max so GPU emitters can illuminate
-    // areas beyond what the static CPU lightmap provides.
-    const float3 cpu_tint = float3(s.tint_r, s.tint_g, s.tint_b);
-    const float3 combined = max(cpu_tint, min(gpu_light, float3(2.0, 2.0, 2.0)));
-
     VS_OUT o;
-    o.pos  = float4(ndc, 0.0, 1.0);
-    o.uv   = float2(s.src_u + c.x * s.src_uw, s.src_v + c.y * s.src_vh);
-    o.tint = float4(combined, s.tint_a);
+    o.pos       = float4(ndc, 0.0, 1.0);
+    o.uv        = float2(s.src_u + c.x * s.src_uw, s.src_v + c.y * s.src_vh);
+    // Pass Phase 5 CPU lightmap tint as the ambient floor.
+    // Fragment shader blends GPU emitter light on top of this.
+    o.tint      = float4(s.tint_r, s.tint_g, s.tint_b, s.tint_a);
+    o.world_pos = map_pos;
     return o;
 }
 )HLSL";
 
 static const char *const SPRITE_FRAG_HLSL = R"HLSL(
-Texture2D<float4> Atlas    : register(t0, space2);
-SamplerState      AtlasSmp : register(s0, space2);
-struct VS_OUT {
-    float4 pos  : SV_Position;
-    float2 uv   : TEXCOORD0;
-    float4 tint : TEXCOORD1;
+// Phase 7: normal-map Lambert shading with per-pixel SDF soft shadows.
+struct GpuEmitter {
+    float pos_x, pos_y, pos_z; float radius;
+    float r, g, b;             float falloff;
+    float cone_dir_x, cone_dir_y, cone_half_angle;
+    uint shape, flicker_seed;  float ep0, ep1, ep2;
 };
+Texture2D<float4>            Atlas    : register(t0, space2);
+SamplerState                 AtlasSmp : register(s0, space2);
+StructuredBuffer<GpuEmitter> Emitters : register(t0, space4);
+StructuredBuffer<float>      SdfBuf   : register(t1, space4);
+cbuffer LightParams : register(b0, space3) {
+    float tile_pixel_size; float current_z;
+    uint  emitter_count;   float ambient;
+    float camera_off_x;    float camera_off_y;
+    uint  sdf_map_w;       float lp_pad;
+};
+struct VS_OUT {
+    float4 pos      : SV_Position;
+    float2 uv       : TEXCOORD0;
+    float4 tint     : TEXCOORD1;
+    float2 world_pos: TEXCOORD2;
+};
+float sdf_shadow(float2 tp, float2 ep, uint mw) {
+    if(mw==0u) return 1.0;
+    float2 d=ep-tp; float dist=length(d); if(dist<0.01) return 1.0;
+    d/=dist; float t=0.3,sh=1.0,k=6.0;
+    [loop] for(int i=0;i<8;++i){
+        if(t>=dist-0.2) break;
+        float2 p=tp+d*t; int ix=clamp((int)p.x,0,(int)mw-1),iy=clamp((int)p.y,0,(int)mw-1);
+        float sd=SdfBuf[ix*(int)mw+iy]; if(sd<0.05){sh=0.0;break;}
+        sh=min(sh,k*sd/max(dist-t,0.01)); t+=max(sd,0.1);
+    }
+    return saturate(sh);
+}
 float4 main(VS_OUT i) : SV_Target0 {
     const float4 texel = Atlas.Sample(AtlasSmp, i.uv);
-    return texel * i.tint;
+    if(texel.a < 0.01) discard;
+    // Phase 7: derive surface normal from luminance gradients (ddx/ddy).
+    float lx=dot(ddx(texel.rgb),float3(0.299,0.587,0.114));
+    float ly=dot(ddy(texel.rgb),float3(0.299,0.587,0.114));
+    float3 normal=normalize(float3(-lx*8.0,-ly*8.0,1.0));
+    float3 gl=float3(ambient,ambient,ambient);
+    const uint me=min(emitter_count,64u);
+    for(uint ei=0u;ei<me;++ei){
+        const GpuEmitter e=Emitters[ei];
+        if(abs(e.pos_z-current_z)>0.5) continue;
+        float2 dv=float2(e.pos_x,e.pos_y)-i.world_pos;
+        float dist=length(dv); if(dist>=e.radius||dist<0.01) continue;
+        float atten=1.0-pow(saturate(dist/e.radius),e.falloff);
+        float3 ld=normalize(float3(dv/max(dist,0.001),0.5));
+        float lambert=saturate(dot(normal,ld));
+        float shadow=sdf_shadow(i.world_pos,float2(e.pos_x,e.pos_y),sdf_map_w);
+        float3 rgb=(e.r<0.01&&e.g<0.01&&e.b<0.01)?float3(1,1,1):float3(e.r,e.g,e.b);
+        gl+=rgb*atten*lambert*shadow;
+    }
+    float3 combined=max(i.tint.rgb,min(gl,float3(2.0,2.0,2.0)));
+    return float4(texel.rgb*combined, texel.a*i.tint.a);
 }
 )HLSL";
 
@@ -586,15 +569,14 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                 SDL_BindGPUVertexStorageBuffers( rp, /*first_slot=*/0,
                                                  &storage_binding.buffer, 1 );
 
-                // Phase 6: bind emitter SSBO at vertex storage slot 1.
+                // Phase 7: emitter + SDF are fragment storage (eval moved from vertex).
                 if( lp_emitter_ssbo ) {
-                    SDL_BindGPUVertexStorageBuffers( rp, /*first_slot=*/1,
-                                                     &lp_emitter_ssbo, 1 );
+                    SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0,
+                                                      &lp_emitter_ssbo, 1 );
                 }
-                // Phase 6b: bind SDF buffer at vertex storage slot 2.
                 if( lp_sdf_buffer ) {
-                    SDL_BindGPUVertexStorageBuffers( rp, /*first_slot=*/2,
-                                                     &lp_sdf_buffer, 1 );
+                    SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/1,
+                                                      &lp_sdf_buffer, 1 );
                 }
 
                 const SDL_GPUViewport vp{
@@ -640,8 +622,10 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                     };
                     SDL_PushGPUVertexUniformData( cur_cb, /*slot=*/0, &fp, sizeof( fp ) );
 
-                    // Phase 6: push lighting params at cbuffer slot 1.
+                    // Vertex slot 1: world_pos computation (tile_pixel_size, camera_off)
                     SDL_PushGPUVertexUniformData( cur_cb, /*slot=*/1, &lp, sizeof( lp ) );
+                    // Phase 7: fragment slot 0: emitter eval + Lambert + SDF shadow
+                    SDL_PushGPUFragmentUniformData( cur_cb, /*slot=*/0, &lp, sizeof( lp ) );
 
                     SDL_DrawGPUPrimitives( rp, /*num_vertices=*/6, /*num_instances=*/s.count,
                                            /*first_vertex=*/0, /*first_instance=*/0 );
