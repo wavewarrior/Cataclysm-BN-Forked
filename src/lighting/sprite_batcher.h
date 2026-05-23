@@ -121,9 +121,15 @@ class sprite_batcher
         // pending batch implicitly before re-binding.
         void set_texture( SDL_GPUTexture *atlas, SDL_GPUSampler *sampler );
         // Set a GPU scissor rect for subsequent draws. nullptr = full viewport.
-        // Closes the current segment (like set_texture) so all draws since the
-        // last set_scissor() share the same clip region.
         void set_scissor( const SDL_Rect *rect );
+        // Phase 6: supply emitter SSBO + per-frame lighting params.
+        // Call before begin_pass(); values persist for the whole pass.
+        // Pass nullptr emitter_ssbo to disable GPU emitter lighting.
+        void set_lighting_resources( SDL_GPUBuffer *emitter_ssbo,
+                                     float tile_pixel_size,
+                                     float z_level,
+                                     Uint32 emitter_count,
+                                     float ambient );
 
         // Append one sprite to the pending batch. Triggers an automatic
         // flush when the per-frame instance budget is reached so callers can

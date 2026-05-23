@@ -145,6 +145,12 @@ class render_state
         // batcher segment so previously queued sprites are unaffected.
         void set_tile_scissor( const SDL_Rect *rect );
         void clear_tile_scissor();
+        // Phase 6: supply GPU emitter SSBO to the tile_batcher vertex shader.
+        void set_tile_lighting( SDL_GPUBuffer *emitter_ssbo,
+                                float tile_pixel_size,
+                                float z_level,
+                                Uint32 emitter_count,
+                                float ambient );
 
         // Phase 2i-B-5 lifecycle fix. Legacy SDL_Renderer's display_buffer
         // is a persistent render target — content stays between redraws.

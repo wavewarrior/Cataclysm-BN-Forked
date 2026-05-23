@@ -135,6 +135,16 @@ void render_state::clear_tile_scissor()
     tile_batcher_.set_scissor( nullptr );
 }
 
+void render_state::set_tile_lighting( SDL_GPUBuffer *emitter_ssbo,
+                                       float tile_pixel_size,
+                                       float z_level,
+                                       Uint32 emitter_count,
+                                       float ambient )
+{
+    tile_batcher_.set_lighting_resources( emitter_ssbo, tile_pixel_size,
+                                           z_level, emitter_count, ambient );
+}
+
 void render_state::flush_ui_rects( sprite_batcher &dst )
 {
     if( ui_rect_queue_.empty() ) {

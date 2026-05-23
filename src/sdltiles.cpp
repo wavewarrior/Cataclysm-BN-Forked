@@ -476,6 +476,16 @@ void refresh_display()
 
     rs.device().submit_frame( ctx );
 
+    // Phase 6: supply emitter SSBO to tile_batcher vertex shader so GPU emitter
+    // lighting runs next frame (collector uploads async; this frame uses last).
+    if( rs.collector() ) {
+        const float tile_px   = tilecontext ? static_cast<float>( tilecontext->get_tile_width() ) : 32.0f;
+        const float z_lev     = g ? static_cast<float>( g->u.pos().z ) : 0.0f;
+        const Uint32 n_emit   = static_cast<Uint32>( rs.collector()->last_count() );
+        const float ambient   = 0.05f; // dim base; outdoor ambient added via Phase 8 sun
+        rs.set_tile_lighting( rs.collector()->read_buffer(), tile_px, z_lev, n_emit, ambient );
+    }
+
     // Phase 3+4: build emitter snapshot + SDF, submit to collector for GPU upload.
     if( rs.collector() ) {
         constexpr float FRAME_MS = 25.0f;
