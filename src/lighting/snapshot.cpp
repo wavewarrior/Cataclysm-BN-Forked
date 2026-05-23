@@ -195,6 +195,14 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
     }
 
     map &m = get_map(); // non-const required for i_at, get_vehicles
+
+    // Guard: if the player's position is not within the loaded map,
+    // the map is being torn down (e.g., exiting to main menu).
+    // Walking submaps with stale pointers would crash.
+    if( !m.inbounds( g->u.pos() ) ) {
+        return out;
+    }
+
     const int zlev = g->u.pos().z;
 
     auto collect_character = [&]( const Character &c ) {
