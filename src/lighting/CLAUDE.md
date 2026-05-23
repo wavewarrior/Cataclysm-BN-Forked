@@ -123,6 +123,83 @@ Both run INSIDE a `redraw_invalidated()` cycle. `clear_frame_queues()` already r
 
 ---
 
+## Recurring build friction & fixes (2026-05-22/23 session)
+
+Every item below has bitten us and costs 1+ build cycles. Check here first.
+
+### C++ API patterns that differ from what you'd expect
+
+| Wrong | Right | Why |
+|-------|-------|-----|
+| `my_MAPSIZE * SEEX` (global) | `get_map().getmapsize() * SEEX` | `my_MAPSIZE` is a **member** of the `map` class, not a global. `SEEX`/`SEEY` are in `game_constants.h`. |
+| `get_map()` in `render_state::init()` | hardcode `11 * SEEX` or use `get_option` | `g == nullptr` at WinCreate time — `get_map()` dereferences `g`. Use a safe default; lazy-init on first game load if exact size matters. |
+| `ter_id.obj_ptr()` | `ter_id->light_emitted` | `int_id<ter_t>` has `operator->` returning `const ter_t*`. There is no `obj_ptr()` method. |
+| `m.i_at(tripoint_bub_ms)` | `m.i_at(p.raw())` | `map::i_at` takes `point` or `tripoint`, not strong-type wrappers. Call `.raw()`. |
+| `map::get_cache(z)` from outside map | `map::access_cache(z)` | `get_cache` is private; `access_cache` is the public const accessor. |
+| `effect_onfire` (extern) | `static const efftype_id my_effect_onfire("onfire")` | It's a translation-unit static in `lightmap.cpp`. Define a local copy. |
+| `std::ranges::for_each(field, lambda)` | plain range-based `for` | MSVC rejects `std::ranges::for_each` on `field` objects; use `for(const auto& [ftype, fentry] : field)`. |
+| `get_option<int>("MAPSIZE")` | doesn't exist | The option is named differently (or doesn't exist). Use `get_map().getmapsize()`. |
+| `display_buffer` (removed) | `get_sdl_window_size()` | `display_buffer` was deleted in 2i-B-7f Part A. Callers of `get_sdl_display_buffer_size()` → use `get_sdl_window_size()`. |
+
+### `dbg` macro — lighting/ files must define it themselves
+
+The `dbg(x)` macro (`#define dbg(x) DebugLogFL((x),DC::SDL)`) is NOT globally available. Every new `.cpp` in `src/lighting/` that wants to log must add:
+```cpp
+#define dbg(x) DebugLogFL((x),DC::SDL)
+```
+after its includes. Using `DebugLog(DL::Error)` directly fails because `DebugLog` takes TWO arguments (level + class). Always use `dbg(DL::Error) << "..."` inside lighting/ files.
+
+### SDL_GPU HLSL register spaces (D3D12 / SPIRV-Cross)
+
+| SDL_GPU API | HLSL register |
+|---|---|
+| `SDL_BindGPUVertexStorageBuffers(rp, N, ...)` | `register(tN, space0)` |
+| `SDL_PushGPUVertexUniformData(cb, N, ...)` | `register(bN, space1)` |
+| `SDL_BindGPUFragmentSamplers(rp, N, ...)` | `register(tN, space2)` + `register(sN, space2)` |
+| `SDL_BindGPUFragmentStorageBuffers(rp, N, ...)` | `register(tN, space4)` |
+| `SDL_PushGPUFragmentUniformData(cb, N, ...)` | `register(bN, space3)` |
+
+### cata_tiles.h nested class trap
+
+`cata_tiles` contains a nested struct/class with getters like `get_tile_width()`. Code added inside THAT nested class cannot access `cata_tiles` members like `point o` (declared in the outer class at line ~1243).
+
+**Rule**: any new method that touches `cata_tiles` private members (`o`, `tile_width`, `screentile_width`, etc.) must go in the **outer** `cata_tiles` class body, using explicit `public:`/`private:` guards if the surrounding region is private:
+```cpp
+    public:
+        point get_tile_map_origin() const { return o; }
+    private:
+```
+
+### Forward declarations missing in lighting/ headers
+
+Always forward-declare ALL SDL GPU types used in a lighting/ header. Common omissions:
+- `struct SDL_GPUBuffer;` — needed when any field or return type is `SDL_GPUBuffer*`
+- `struct SDL_GPUTransferBuffer;`
+- `struct SDL_GPUCopyPass;`
+
+`sdl_wrappers.h` is NOT included by lighting/ headers (by design — they're self-contained).
+
+### Phase 5 CPU lightmap tint: guards required
+
+The `gpu_light_r/g/b = lm[idx].max()` path in `draw_from_id_string` MUST have:
+1. `g != nullptr` — `get_map()` is only safe when `g` exists  
+2. `lum > 0.001f` — before `generate_lightmap` runs, `lm` is all zeros. Tiles reaching this code are guaranteed LIT by the draw loop, so `lum == 0` means lightmap not generated yet (main menu, loading). Fall back to white tint (1.0f).
+
+Without guard 2, the main menu renders completely black.
+
+### MAX_INSTANCES must be large for 4K + minimap
+
+At 4K with a large terminal sidebar + pixel_minimap (17K rects) + tile sprites, the old 65536 cap is hit constantly. Current value: **262144** (262144 × 64 bytes = 16 MB/ring slot). Do not reduce.
+
+### Variable scope in upload functions
+
+When adding a storage buffer upload alongside a texture upload, do NOT reference `byte_size` from the texture block — declare a fresh variable:
+```cpp
+const Uint32 sbuf_size = pixel_count * static_cast<Uint32>(sizeof(float));
+```
+
+---
+
 ## Token-cost tips
 
 - **Don't paste full game logs.** Tail ~200 lines; filter to `ERROR|WARN`.
