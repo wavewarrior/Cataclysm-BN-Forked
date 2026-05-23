@@ -106,7 +106,10 @@ class sprite_batcher_impl
     public:
         // Sized so a 1080p screen worth of tiles + UI elements has comfortable
         // headroom (a tile screen at the densest zoom is ~3-4 k instances).
-        static constexpr Uint32 MAX_INSTANCES = 65536;
+        // 262144 × 64 bytes = 16 MB per ring slot (×3 = 48 MB).
+// Needed for 4K displays: minimap (~17K) + large terminal sidebar (~27K) +
+// tile sprites (~10K) easily exceed 65536 on high-res setups.
+static constexpr Uint32 MAX_INSTANCES = 262144;
         // SDL_GPU defaults to 2-3 frames in flight; 3 ring slots is enough to
         // avoid waiting for the GPU to finish reading the previous frame's
         // storage buffer before we overwrite it.
