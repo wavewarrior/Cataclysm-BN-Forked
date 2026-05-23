@@ -187,24 +187,44 @@ The `gpu_light_r/g/b = lm[idx].max()` path in `draw_from_id_string` MUST have:
 
 Without guard 2, the main menu renders completely black.
 
-### Phase 7 black screen — diagnosis in progress (UNVERIFIED)
+### Phase 7 black screen — CONFIRMED FIX: use Texture2D for fragment emitter data
 
-**Symptom**: Main menu (and all rendering) fully black after Phase 7 commit.
+**Root cause** (confirmed by Win11 D3D12 debug.log):
+```
+lighting: render_state init failed: sprite_batcher pipeline:
+  Could not create graphics pipeline state! The parameter is incorrect. (0x80070057)
+```
+`SDL_CreateGPUGraphicsPipeline` → `E_INVALIDARG`.
 
-**Known mechanism** (confirmed by code reading): `init_render_state_on`
-(render_state.cpp:527) has a try-catch that silently swallows any exception from
-`render_state::init()`. `ready()` = `device_.ready()` only (render_state.h:57).
-`WinCreate` ignores the return value of `init_render_state_on` (sdltiles.cpp ~399).
-If `tile_batcher_.init()` throws, `gpu_sampler_` is never set → all flush guards
-fail → LOADOP_CLEAR black. To confirm: check Win11 debug.log for "render_state
-init failed".
+**Mechanism**: `init_render_state_on` (render_state.cpp:527) silently catches
+the exception. `ready()` = `device_.ready()` only. `WinCreate` ignores the return
+value. `gpu_sampler_` never set → all flush guards fail → LOADOP_CLEAR black only.
 
-**If init fails**: the specific D3D12 failure cause has not been isolated yet.
-Candidates: pipeline creation rejecting Phase 7's fragment resource layout,
-static_assert mismatch on MSVC, or DXC choking on a specific construct.
+**Root cause**: SDL_shadercross @ 6b06e55c doesn't correctly reflect fragment
+`StructuredBuffer` resources at HLSL `register(tN, space4)` for D3D12. The
+root signature SDL_GPU generates has `num_storage_buffers=0` for fragment; the
+DXIL shader has the SRV entries → descriptor layout mismatch → `E_INVALIDARG`.
 
-**If init succeeds**: investigate `enqueue_tile_sprite`/`queue_font_glyph`
-`tint_a` values, whether tile/font queues are actually populated on main menu.
+**Fix applied**: moved emitter data and SDF to **Texture2D fragment samplers**
+(`register(tN, space2)`, the same space as the Atlas). These are correctly
+reflected by SDL_shadercross on all backends.
+
+| Resource | Old (broken) | New (working) |
+|----------|-------------|---------------|
+| Emitters | `StructuredBuffer<GpuEmitter> : register(t0, space4)` | `Texture2D<float4> EmitterTex : register(t1, space2)` |
+| SDF | `StructuredBuffer<float> SdfBuf : register(t1, space4)` | `Texture2D<float> SdfTex : register(t2, space2)` |
+
+**EmitterTex layout**: 4×64 RGBA32F. Row = emitter index. Col 0 = (pos_x,pos_y,pos_z,radius). Col 1 = (r,g,b,falloff). Upload reuses `xfer_[write_slot_]` (same bytes as SSBO, since `sizeof(gpu_emitter)=64=4×float4=one texture row`).
+
+**Rule**: Never use fragment `StructuredBuffer` (space4) with SDL_shadercross @ 6b06e55c on D3D12. Use Texture2D samplers (space2) for fragment-stage data access.
+
+**Post-review fixes applied:**
+- `sdf_map_h` added to `light_params` (replacing `lp_pad` — same size, `sizeof` unchanged). Passed from `rs.sdf().map_h()`. Shader now uses `sdf_map_h` for Y-coord clamping; square-map assumption eliminated.
+- Null-sampler guard in `set_lighting_resources`: if textures non-null but `data_sampler` null, both textures cleared to null and `emitter_count`/`sdf_map_w/h` zeroed — prevents fragment shader looping over unbound sampler slot.
+- Dead parameters `emitter_ssbo` and `sdf_buffer` removed from the entire delegation chain.
+- `SDL_GPUTextureRegion` in emitter texture upload: all fields explicitly set (x,y,z,layer,mip_level).
+
+**To restore proper StructuredBuffer support**: bump SDL_shadercross GIT_TAG in CMakeLists.txt to a commit that correctly reflects fragment storage buffers.
 
 ### MAX_INSTANCES must be large for 4K + minimap
 

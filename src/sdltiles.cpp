@@ -489,18 +489,20 @@ void refresh_display()
         // Phase 6b: camera offset converts screen tile units → map tile coords.
         // map_pos = tile_tu - camera_offset  (see sdf_pass.h comment)
         float cam_off_x = 0.0f, cam_off_y = 0.0f;
-        Uint32 sdf_w = 0u;
+        Uint32 sdf_w = 0u, sdf_h = 0u;
         if( tilecontext && tile_px > 0.0f ) {
             const point origin = tilecontext->get_tile_map_origin();
             cam_off_x = static_cast<float>( origin.x ) / tile_px + 0.5f;
             cam_off_y = static_cast<float>( origin.y ) / tile_px + 0.5f;
             sdf_w     = static_cast<Uint32>( rs.sdf().map_w() );
+            sdf_h     = static_cast<Uint32>( rs.sdf().map_h() );
         }
 
-        rs.set_tile_lighting( rs.collector()->read_buffer(),
-                              tile_px, z_lev, n_emit, ambient,
-                              rs.sdf().sdf_buffer(),
-                              cam_off_x, cam_off_y, sdf_w );
+        rs.set_tile_lighting( tile_px, z_lev, n_emit, ambient,
+                              cam_off_x, cam_off_y, sdf_w, sdf_h,
+                              rs.collector()->emitter_texture(),
+                              rs.sdf().sdf_texture(),
+                              rs.gpu_sampler() );
     }
 
     // Phase 3+4: build emitter snapshot + SDF, submit to collector for GPU upload.

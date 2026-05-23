@@ -122,18 +122,22 @@ class sprite_batcher
         void set_texture( SDL_GPUTexture *atlas, SDL_GPUSampler *sampler );
         // Set a GPU scissor rect for subsequent draws. nullptr = full viewport.
         void set_scissor( const SDL_Rect *rect );
-        // Phase 6: supply emitter SSBO + per-frame lighting params.
-        // Call before begin_pass(); values persist for the whole pass.
-        // Pass nullptr emitter_ssbo to disable GPU emitter lighting.
-        void set_lighting_resources( SDL_GPUBuffer *emitter_ssbo,
-                                     float tile_pixel_size,
-                                     float z_level,
-                                     Uint32 emitter_count,
-                                     float ambient,
-                                     SDL_GPUBuffer *sdf_buffer  = nullptr,
-                                     float cam_off_x = 0.0f,
-                                     float cam_off_y = 0.0f,
-                                     Uint32 sdf_map_w = 0u );
+        // Phase 7: supply per-frame lighting resources.
+        // emitter_tex: 4×64 RGBA32F (row=emitter index; col 0=pos+radius, col 1=rgb+falloff)
+        // sdf_tex:     W×H R32_FLOAT from sdf_pass (use map_w() + map_h() for dimensions)
+        // data_sampler: nearest-neighbor sampler (reuse gpu_sampler_); if null while textures
+        //               are non-null, emitter lighting is silently disabled (prevents UB).
+        void set_lighting_resources( float           tile_pixel_size,
+                                     float           z_level,
+                                     Uint32          emitter_count,
+                                     float           ambient,
+                                     float           cam_off_x    = 0.0f,
+                                     float           cam_off_y    = 0.0f,
+                                     Uint32          sdf_map_w    = 0u,
+                                     Uint32          sdf_map_h    = 0u,
+                                     SDL_GPUTexture *emitter_tex  = nullptr,
+                                     SDL_GPUTexture *sdf_tex      = nullptr,
+                                     SDL_GPUSampler *data_sampler = nullptr );
 
         // Append one sprite to the pending batch. Triggers an automatic
         // flush when the per-frame instance budget is reached so callers can

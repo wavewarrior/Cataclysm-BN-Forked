@@ -8,6 +8,7 @@
 #include "lighting/gpu_emitter.h"
 // Forward declarations so this header doesn't pull in SDL3 GPU types.
 struct SDL_GPUBuffer;
+struct SDL_GPUTexture;
 struct SDL_GPUTransferBuffer;
 
 namespace lighting
@@ -44,6 +45,10 @@ public:
     // Safe to call from the main thread; uses an atomic slot index.
     SDL_GPUBuffer *read_buffer() const noexcept;
 
+    // 4×64 RGBA32F texture for fragment-stage emitter access (Phase 7).
+    // Row = emitter index; col 0 = (pos_x,pos_y,pos_z,radius); col 1 = (r,g,b,falloff).
+    SDL_GPUTexture *emitter_texture() const noexcept;
+
     // Number of emitters in the last completed upload.
     int last_count() const noexcept { return last_count_.load( std::memory_order_relaxed ); }
 
@@ -66,8 +71,9 @@ private:
 
     // Double-buffered SSBO: GPU reads [read_slot_], CPU writes [write_slot_].
     static constexpr int RING = 2;
-    SDL_GPUBuffer         *ssbo_[RING] = {};
-    SDL_GPUTransferBuffer *xfer_[RING] = {};
+    SDL_GPUBuffer         *ssbo_[RING]        = {};
+    SDL_GPUTransferBuffer *xfer_[RING]        = {};
+    SDL_GPUTexture        *emitter_tex_[RING] = {}; // 4×64 RGBA32F for fragment sampler
 
     std::atomic<int> read_slot_ = 0;
     int              write_slot_ = 1;

@@ -40,6 +40,21 @@ emitter_collector::emitter_collector( render_state &rs ) : rs_( rs )
         if( !xfer_[i] ) {
             dbg( DL::Error ) << "emitter_collector: failed to create transfer buffer slot " << i;
         }
+
+        // Phase 7: 4×64 RGBA32F emitter data texture for fragment-stage access.
+        // Row = emitter index; width = 4 (4 float4 data slots per emitter).
+        SDL_GPUTextureCreateInfo etci{};
+        etci.type              = SDL_GPU_TEXTURETYPE_2D;
+        etci.format            = SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT;
+        etci.usage             = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+        etci.width             = 4u;
+        etci.height            = 64u;
+        etci.layer_count_or_depth = 1;
+        etci.num_levels        = 1;
+        emitter_tex_[i] = SDL_CreateGPUTexture( dev, &etci );
+        if( !emitter_tex_[i] ) {
+            dbg( DL::Warn ) << "emitter_collector: failed to create emitter texture slot " << i;
+        }
     }
 
     thread_ = std::thread( &emitter_collector::thread_main, this );
@@ -64,6 +79,9 @@ emitter_collector::~emitter_collector()
         if( ssbo_[i] ) {
             SDL_ReleaseGPUBuffer( dev, ssbo_[i] );
         }
+        if( emitter_tex_[i] ) {
+            SDL_ReleaseGPUTexture( dev, emitter_tex_[i] );
+        }
     }
 }
 
@@ -84,6 +102,11 @@ void emitter_collector::submit( std::vector<gpu_emitter> snapshot,
 SDL_GPUBuffer *emitter_collector::read_buffer() const noexcept
 {
     return ssbo_[read_slot_.load( std::memory_order_acquire )];
+}
+
+SDL_GPUTexture *emitter_collector::emitter_texture() const noexcept
+{
+    return emitter_tex_[read_slot_.load( std::memory_order_acquire )];
 }
 
 void emitter_collector::thread_main()
@@ -155,6 +178,30 @@ void emitter_collector::upload_to_gpu( const std::vector<gpu_emitter> &data,
     dst.size   = byte_size;
 
     SDL_UploadToGPUBuffer( cp, &src, &dst, /*cycle=*/true );
+
+    // Phase 7: upload same emitter data to 4×64 RGBA32F texture for fragment access.
+    // Reuses the same transfer buffer (same bytes; gpu_emitter = 4×float4 = one texture row).
+    if( emitter_tex_[write_slot_] && count > 0 ) {
+        const Uint32 rows = static_cast<Uint32>( std::min( count, std::size_t( 64 ) ) );
+        SDL_GPUTextureTransferInfo tex_src{};
+        tex_src.transfer_buffer = xfer_[write_slot_];
+        tex_src.offset          = 0;
+        tex_src.pixels_per_row  = 0;  // 0 = tight packing (row stride = region width)
+        tex_src.rows_per_layer  = 0;  // 0 = tight packing
+
+        SDL_GPUTextureRegion tex_dst{};
+        tex_dst.texture   = emitter_tex_[write_slot_];
+        tex_dst.x         = 0;
+        tex_dst.y         = 0;
+        tex_dst.z         = 0;
+        tex_dst.w         = 4;
+        tex_dst.h         = rows;
+        tex_dst.d         = 1;
+        tex_dst.layer     = 0;
+        tex_dst.mip_level = 0;
+
+        SDL_UploadToGPUTexture( cp, &tex_src, &tex_dst, /*cycle=*/true );
+    }
 
     // Phase 4: upload transparency + SDF textures in the same copy pass.
     if( rs_.sdf().ready() && !transparency.empty() && !sdf.empty() ) {

@@ -36,23 +36,23 @@ cbuffer FrameParams : register(b0, space1) {
     uint   fp_pad;
 };
 
-// Cbuffer slot 1: per-frame lighting params (Phase 6/6b)
+// Cbuffer slot 1: per-frame lighting params (world_pos computation)
 cbuffer LightParams : register(b1, space1) {
-    float tile_pixel_size;  // screen pixels per tile
-    float current_z;        // player z-level
-    uint  emitter_count;    // live emitters in SSBO
-    float ambient;          // base ambient
-    float camera_off_x;     // tile_tu → map coords: map_pos = tile_tu - offset
+    float tile_pixel_size;
+    float current_z;
+    uint  emitter_count;
+    float ambient;
+    float camera_off_x;
     float camera_off_y;
-    uint  sdf_map_w;        // SDF/map width in tiles
-    float lp_pad;
+    uint  sdf_map_w;
+    uint  sdf_map_h;
 };
 
 struct VS_OUT {
     float4 pos      : SV_Position;
     float2 uv       : TEXCOORD0;
-    float4 tint     : TEXCOORD1;
-    float2 world_pos: TEXCOORD2; // map tile coords for fragment lighting
+    float4 tint     : TEXCOORD1; // Phase 5 CPU lightmap tint (ambient floor)
+    float2 world_pos: TEXCOORD2; // map tile coords for fragment per-pixel lighting
 };
 static const float2 quad_uv[6] = {
     float2(0.0,0.0), float2(1.0,0.0), float2(0.0,1.0),
@@ -63,7 +63,6 @@ VS_OUT main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
     const SpriteInstance s = Instances[iid + instance_base];
     const float2 c = quad_uv[vid];
 
-    // Rotate offset around quad centre (clockwise in Y-down screen space).
     const float2 centre = float2(s.dst_x + 0.5 * s.dst_w,
                                  s.dst_y + 0.5 * s.dst_h);
     const float2 off    = float2((c.x - 0.5) * s.dst_w,
@@ -76,16 +75,12 @@ VS_OUT main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
         pixel.x / target_size.x *  2.0 - 1.0,
         pixel.y / target_size.y * -2.0 + 1.0);
 
-    // Phase 7: pass map tile coords to fragment for per-pixel lighting.
-    // Fragment shader evaluates emitters, Lambert normals, SDF shadows.
-    const float2 tile_tu  = centre / max(tile_pixel_size, 1.0);
-    const float2 map_pos  = tile_tu - float2(camera_off_x, camera_off_y);
+    const float2 tile_tu = centre / max(tile_pixel_size, 1.0);
+    const float2 map_pos = tile_tu - float2(camera_off_x, camera_off_y);
 
     VS_OUT o;
     o.pos       = float4(ndc, 0.0, 1.0);
     o.uv        = float2(s.src_u + c.x * s.src_uw, s.src_v + c.y * s.src_vh);
-    // Pass Phase 5 CPU lightmap tint as the ambient floor.
-    // Fragment shader blends GPU emitter light on top of this.
     o.tint      = float4(s.tint_r, s.tint_g, s.tint_b, s.tint_a);
     o.world_pos = map_pos;
     return o;
@@ -93,24 +88,22 @@ VS_OUT main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
 )HLSL";
 
 static const char *const SPRITE_FRAG_HLSL = R"HLSL(
-// Phase 7: Lambert shading with per-pixel SDF soft shadows.
-// sdf_shadow is inlined (no helper fn) to avoid SPIRV-Cross resource threading on Metal.
-// Normal uses flat (0,0,1) — Phase 7b will sample a normal atlas texture.
-struct GpuEmitter {
-    float pos_x, pos_y, pos_z; float radius;
-    float r, g, b;             float falloff;
-    float cone_dir_x, cone_dir_y, cone_half_angle;
-    uint shape, flicker_seed;  float ep0, ep1, ep2;
-};
-Texture2D<float4>            Atlas    : register(t0, space2);
-SamplerState                 AtlasSmp : register(s0, space2);
-StructuredBuffer<GpuEmitter> Emitters : register(t0, space4);
-StructuredBuffer<float>      SdfBuf   : register(t1, space4);
+// Phase 7: per-pixel Lambert shading + SDF soft shadows.
+// Emitter data and SDF passed as Texture2D samplers (space2) — StructuredBuffer
+// space4 fails D3D12 pipeline creation with SDL_shadercross @ 6b06e55c.
+// EmitterTex: 4×64 RGBA32F; row=emitter index, col=data slot (0=pos+radius, 1=rgb+falloff).
+// SdfTex: W×H R32_FLOAT matching sdf_pass dimensions.
+Texture2D<float4> Atlas      : register(t0, space2);
+SamplerState      AtlasSmp   : register(s0, space2);
+Texture2D<float4> EmitterTex : register(t1, space2);
+SamplerState      EmitterSmp : register(s1, space2);
+Texture2D<float>  SdfTex     : register(t2, space2);
+SamplerState      SdfSmp     : register(s2, space2);
 cbuffer LightParams : register(b0, space3) {
     float tile_pixel_size; float current_z;
     uint  emitter_count;   float ambient;
     float camera_off_x;    float camera_off_y;
-    uint  sdf_map_w;       float lp_pad;
+    uint  sdf_map_w;       uint  sdf_map_h;
 };
 struct VS_OUT {
     float4 pos      : SV_Position;
@@ -121,38 +114,47 @@ struct VS_OUT {
 float4 main(VS_OUT i) : SV_Target0 {
     const float4 texel = Atlas.Sample(AtlasSmp, i.uv);
     if(texel.a < 0.01) discard;
+    // Flat surface normal — Phase 7b will sample a normal atlas texture.
     const float3 normal = float3(0.0, 0.0, 1.0);
-    float3 gl=float3(ambient,ambient,ambient);
-    const uint me=min(emitter_count,64u);
-    for(uint ei=0u;ei<me;++ei){
-        const GpuEmitter e=Emitters[ei];
-        if(abs(e.pos_z-current_z)>0.5) continue;
-        float2 dv=float2(e.pos_x,e.pos_y)-i.world_pos;
-        float dist=length(dv); if(dist>=e.radius||dist<0.01) continue;
-        float atten=1.0-pow(saturate(dist/e.radius),e.falloff);
-        float3 ld=normalize(float3(dv/max(dist,0.001),0.5));
-        float lambert=saturate(dot(normal,ld));
-        float shadow=1.0;
-        if(sdf_map_w>0u){
-            float2 sd=float2(e.pos_x,e.pos_y)-i.world_pos;
-            float sdist=length(sd);
-            if(sdist>0.01){
-                sd/=sdist; float t=0.3,sh=1.0,k=6.0;
-                [loop] for(int si=0;si<8;++si){
-                    if(t>=sdist-0.2) break;
-                    float2 p=i.world_pos+sd*t;
-                    int ix=clamp((int)p.x,0,(int)sdf_map_w-1),iy=clamp((int)p.y,0,(int)sdf_map_w-1);
-                    float s=SdfBuf[ix*(int)sdf_map_w+iy]; if(s<0.05){sh=0.0;break;}
-                    sh=min(sh,k*s/max(sdist-t,0.01)); t+=max(s,0.1);
+    float3 gl = float3(ambient, ambient, ambient);
+    const uint me = min(emitter_count, 64u);
+    for(uint ei = 0u; ei < me; ++ei) {
+        // row=emitter index, col 0=pos+radius, col 1=rgb+falloff
+        const float4 d0 = EmitterTex.Load(int3(0, ei, 0));
+        const float4 d1 = EmitterTex.Load(int3(1, ei, 0));
+        if(abs(d0.z - current_z) > 0.5) continue;
+        const float2 dv   = d0.xy - i.world_pos;
+        const float  dist = length(dv);
+        if(dist >= d0.w || dist < 0.01) continue;
+        const float  atten   = 1.0 - pow(saturate(dist / d0.w), d1.w);
+        const float3 ld      = normalize(float3(dv / max(dist, 0.001), 0.5));
+        const float  lambert = saturate(dot(normal, ld));
+        float shadow = 1.0;
+        if(sdf_map_w > 0u) {
+            const float2 sd    = d0.xy - i.world_pos;
+            const float  sdist = length(sd);
+            if(sdist > 0.01) {
+                const float2 dir = sd / sdist;
+                float t = 0.3, sh = 1.0, k = 6.0;
+                [loop] for(int si = 0; si < 8; ++si) {
+                    if(t >= sdist - 0.2) break;
+                    const float2 p  = i.world_pos + dir * t;
+                    const int    ix = clamp((int)p.x, 0, (int)sdf_map_w - 1);
+                    const int    iy = clamp((int)p.y, 0, (int)sdf_map_h - 1);
+                    const float  s  = SdfTex.Load(int3(ix, iy, 0));
+                    if(s < 0.05) { sh = 0.0; break; }
+                    sh = min(sh, k * s / max(sdist - t, 0.01));
+                    t += max(s, 0.1);
                 }
-                shadow=saturate(sh);
+                shadow = saturate(sh);
             }
         }
-        float3 rgb=(e.r<0.01&&e.g<0.01&&e.b<0.01)?float3(1,1,1):float3(e.r,e.g,e.b);
-        gl+=rgb*atten*lambert*shadow;
+        const float3 rgb = (d1.x < 0.01 && d1.y < 0.01 && d1.z < 0.01)
+                           ? float3(1, 1, 1) : d1.xyz;
+        gl += rgb * atten * lambert * shadow;
     }
-    float3 combined=max(i.tint.rgb,min(gl,float3(2.0,2.0,2.0)));
-    return float4(texel.rgb*combined, texel.a*i.tint.a);
+    const float3 combined = max(i.tint.rgb, min(gl, float3(2.0, 2.0, 2.0)));
+    return float4(texel.rgb * combined, texel.a * i.tint.a);
 }
 )HLSL";
 
@@ -176,8 +178,8 @@ struct light_params {
     // Phase 6b: camera offset (screen tile → map tile: map_pos = tile_tu - offset)
     float  camera_off_x;    // = tile_map_origin_px.x / tile_px + 0.5
     float  camera_off_y;
-    Uint32 sdf_map_w;       // SDF/map width in tiles (e.g. 132 for MAPSIZE=11)
-    float  lp_pad;          // padding to 32 bytes
+    Uint32 sdf_map_w;       // SDF/map width  in tiles
+    Uint32 sdf_map_h;       // SDF/map height in tiles (was lp_pad; same type, sizeof unchanged)
 };
 static_assert( sizeof( light_params ) == 32, "light_params wire-stable with LightParams cbuffer" );
 
@@ -236,29 +238,40 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
         float  cur_clear_color[4] = {};
         bool   pass_open = false;
 
-        // Phase 6/6b: per-frame lighting resources.
-        SDL_GPUBuffer *lp_emitter_ssbo = nullptr;
-        SDL_GPUBuffer *lp_sdf_buffer   = nullptr;
-        light_params   lp              = {};  // defaults: all zero
+        // Phase 7: per-frame lighting resources.
+        SDL_GPUTexture *lp_emitter_tex  = nullptr;  // bound as fragment sampler 1
+        SDL_GPUTexture *lp_sdf_tex      = nullptr;  // bound as fragment sampler 2
+        SDL_GPUSampler *lp_data_sampler = nullptr;
+        light_params    lp              = {};  // defaults: all zero
 
-        void set_lighting_resources( SDL_GPUBuffer *emitter_ssbo,
-                                     float tile_pixel_size,
-                                     float z_level,
-                                     Uint32 count,
-                                     float ambient,
-                                     SDL_GPUBuffer *sdf_buffer  = nullptr,
-                                     float cam_off_x = 0.0f,
-                                     float cam_off_y = 0.0f,
-                                     Uint32 sdf_map_w = 0u ) noexcept {
-            lp_emitter_ssbo    = emitter_ssbo;
-            lp_sdf_buffer      = sdf_buffer;
+        void set_lighting_resources( float           tile_pixel_size,
+                                     float           z_level,
+                                     Uint32          count,
+                                     float           ambient,
+                                     float           cam_off_x    = 0.0f,
+                                     float           cam_off_y    = 0.0f,
+                                     Uint32          sdf_map_w    = 0u,
+                                     Uint32          sdf_map_h    = 0u,
+                                     SDL_GPUTexture *emitter_tex  = nullptr,
+                                     SDL_GPUTexture *sdf_tex      = nullptr,
+                                     SDL_GPUSampler *data_sampler = nullptr ) noexcept {
+            // Fix #2: if textures exist but sampler is missing, disable GPU lighting
+            // to prevent fragment shader looping over an unbound texture slot.
+            if( ( emitter_tex || sdf_tex ) && !data_sampler ) {
+                emitter_tex = nullptr;
+                sdf_tex     = nullptr;
+            }
+            lp_emitter_tex  = emitter_tex;
+            lp_sdf_tex      = sdf_tex;
+            lp_data_sampler = data_sampler;
             lp.tile_pixel_size = tile_pixel_size;
             lp.current_z       = z_level;
-            lp.emitter_count   = emitter_ssbo ? count : 0u;
+            lp.emitter_count   = emitter_tex ? count : 0u;
             lp.ambient         = ambient;
             lp.camera_off_x    = cam_off_x;
             lp.camera_off_y    = cam_off_y;
-            lp.sdf_map_w       = sdf_map_w;
+            lp.sdf_map_w       = sdf_tex ? sdf_map_w : 0u;
+            lp.sdf_map_h       = sdf_tex ? sdf_map_h : 0u;
         }
 
         // ---- lifecycle -------------------------------------------------
@@ -571,14 +584,17 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                 SDL_BindGPUVertexStorageBuffers( rp, /*first_slot=*/0,
                                                  &storage_binding.buffer, 1 );
 
-                // Phase 7: emitter + SDF are fragment storage (eval moved from vertex).
-                if( lp_emitter_ssbo ) {
-                    SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0,
-                                                      &lp_emitter_ssbo, 1 );
+                // Phase 7: emitter + SDF bound as fragment samplers (slots 1/2).
+                // StructuredBuffer space4 → E_INVALIDARG in D3D12 pipeline creation
+                // with SDL_shadercross @ 6b06e55c; Texture2D space2 works.
+                if( lp_emitter_tex && lp_data_sampler ) {
+                    SDL_GPUTextureSamplerBinding emitter_bind{ lp_emitter_tex,
+                                                               lp_data_sampler };
+                    SDL_BindGPUFragmentSamplers( rp, /*first_slot=*/1, &emitter_bind, 1 );
                 }
-                if( lp_sdf_buffer ) {
-                    SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/1,
-                                                      &lp_sdf_buffer, 1 );
+                if( lp_sdf_tex && lp_data_sampler ) {
+                    SDL_GPUTextureSamplerBinding sdf_bind{ lp_sdf_tex, lp_data_sampler };
+                    SDL_BindGPUFragmentSamplers( rp, /*first_slot=*/2, &sdf_bind, 1 );
                 }
 
                 const SDL_GPUViewport vp{
@@ -624,9 +640,9 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                     };
                     SDL_PushGPUVertexUniformData( cur_cb, /*slot=*/0, &fp, sizeof( fp ) );
 
-                    // Vertex slot 1: world_pos computation (tile_pixel_size, camera_off)
+                    // Vertex slot 1: LightParams (world_pos computation)
                     SDL_PushGPUVertexUniformData( cur_cb, /*slot=*/1, &lp, sizeof( lp ) );
-                    // Phase 7: fragment slot 0: emitter eval + Lambert + SDF shadow
+                    // Fragment slot 0: LightParams (ambient, emitter_count, sdf_map_w)
                     SDL_PushGPUFragmentUniformData( cur_cb, /*slot=*/0, &lp, sizeof( lp ) );
 
                     SDL_DrawGPUPrimitives( rp, /*num_vertices=*/6, /*num_instances=*/s.count,
@@ -698,19 +714,22 @@ void sprite_batcher::set_scissor( const SDL_Rect *rect )
     p->set_scissor( rect );
 }
 
-void sprite_batcher::set_lighting_resources( SDL_GPUBuffer *emitter_ssbo,
-                                              float tile_pixel_size,
-                                              float z_level,
-                                              Uint32 emitter_count,
-                                              float ambient,
-                                              SDL_GPUBuffer *sdf_buffer,
-                                              float cam_off_x,
-                                              float cam_off_y,
-                                              Uint32 sdf_map_w )
+void sprite_batcher::set_lighting_resources( float           tile_pixel_size,
+                                              float           z_level,
+                                              Uint32          emitter_count,
+                                              float           ambient,
+                                              float           cam_off_x,
+                                              float           cam_off_y,
+                                              Uint32          sdf_map_w,
+                                              Uint32          sdf_map_h,
+                                              SDL_GPUTexture *emitter_tex,
+                                              SDL_GPUTexture *sdf_tex,
+                                              SDL_GPUSampler *data_sampler )
 {
-    p->set_lighting_resources( emitter_ssbo, tile_pixel_size, z_level,
+    p->set_lighting_resources( tile_pixel_size, z_level,
                                 emitter_count, ambient,
-                                sdf_buffer, cam_off_x, cam_off_y, sdf_map_w );
+                                cam_off_x, cam_off_y, sdf_map_w, sdf_map_h,
+                                emitter_tex, sdf_tex, data_sampler );
 }
 
 void sprite_batcher::draw( const sprite_instance &inst )
