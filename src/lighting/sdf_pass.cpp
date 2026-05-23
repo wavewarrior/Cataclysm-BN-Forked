@@ -143,7 +143,7 @@ void sdf_pass::init( gpu_device &dev, int map_w, int map_h )
         bci.size  = static_cast<Uint32>( map_w * map_h * 4 );
         sdf_storage_ = SDL_CreateGPUBuffer( d, &bci );
         if( !sdf_storage_ ) {
-            DebugLog( DL::Error ) << "sdf_pass::init: failed to create sdf_storage";
+            dbg( DL::Error ) << "sdf_pass::init: failed to create sdf_storage";
         }
     }
 }
@@ -238,7 +238,7 @@ void sdf_pass::upload( SDL_GPUCopyPass *cp,
                 SDL_GPUBufferRegion buf_dst{};
                 buf_dst.buffer = sdf_storage_;
                 buf_dst.offset = 0;
-                buf_dst.size   = byte_size;
+                buf_dst.size   = pixel_count * static_cast<Uint32>( sizeof( float ) );
 
                 SDL_UploadToGPUBuffer( cp, &tb_src, &buf_dst, true );
             }
