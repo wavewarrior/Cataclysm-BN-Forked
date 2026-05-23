@@ -5,6 +5,7 @@
 // Forward-declare SDL3 GPU types to avoid pulling in the full SDL header here.
 struct SDL_GPUTexture;
 struct SDL_GPUTransferBuffer;
+struct SDL_GPUBuffer;
 struct SDL_GPUDevice;
 struct SDL_GPUCopyPass;
 
