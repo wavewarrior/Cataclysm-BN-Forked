@@ -116,7 +116,10 @@ float4 main(VS_OUT i) : SV_Target0 {
     if(texel.a < 0.01) discard;
     // Flat surface normal — Phase 7b will sample a normal atlas texture.
     const float3 normal = float3(0.0, 0.0, 1.0);
-    float3 gl = float3(ambient, ambient, ambient);
+    // emitter_light accumulates GPU point-light contributions (starts at zero).
+    // Combined with CPU tint ADDITIVELY so colored emitter glow is visible on
+    // top of the CPU-shadowcasting result, not suppressed by max().
+    float3 emitter_light = float3(0.0, 0.0, 0.0);
     const uint me = min(emitter_count, 64u);
     for(uint ei = 0u; ei < me; ++ei) {
         // row=emitter index, col 0=pos+radius, col 1=rgb+falloff
@@ -151,9 +154,12 @@ float4 main(VS_OUT i) : SV_Target0 {
         }
         const float3 rgb = (d1.x < 0.01 && d1.y < 0.01 && d1.z < 0.01)
                            ? float3(1, 1, 1) : d1.xyz;
-        gl += rgb * atten * lambert * shadow;
+        emitter_light += rgb * atten * lambert * shadow;
     }
-    const float3 combined = max(i.tint.rgb, min(gl, float3(2.0, 2.0, 2.0)));
+    // Additive blend: CPU tint = base, GPU emitters ADD colored glow on top.
+    // Ambient raises all tiles slightly so emitter_light has a warm minimum near lights.
+    const float3 combined = min(i.tint.rgb + float3(ambient,ambient,ambient) + emitter_light,
+                                float3(2.0, 2.0, 2.0));
     return float4(texel.rgb * combined, texel.a * i.tint.a);
 }
 )HLSL";
