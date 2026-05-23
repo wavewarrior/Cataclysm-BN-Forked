@@ -23,6 +23,8 @@
 #include "vehicle_part.h"
 #include "vpart_position.h"
 
+#define dbg(x) DebugLogFL((x),DC::SDL)
+
 // effect_onfire is a static in lightmap.cpp; define a local copy.
 static const efftype_id snapshot_effect_onfire( "onfire" );
 
@@ -82,22 +84,23 @@ static void collect_zlev( map &m, int zlev, std::vector<gpu_emitter> &out )
                     const int ly = smy * SEEY + sy;
                     const tripoint_bub_ms p{ lx, ly, zlev };
 
-                    const ter_t *terrain = cur->get_ter( { sx, sy } ).obj_ptr();
-                    if( terrain && terrain->light_emitted > 0 ) {
+                    // ter_id / furn_id have operator-> returning const ter_t*/furn_t*
+                    const ter_id t_id = cur->get_ter( { sx, sy } );
+                    if( t_id->light_emitted > 0 ) {
                         out.push_back( make_omni( lx, ly, zlev,
-                                                  static_cast<float>( terrain->light_emitted ),
-                                                  terrain->light_color.r,
-                                                  terrain->light_color.g,
-                                                  terrain->light_color.b ) );
+                                                  static_cast<float>( t_id->light_emitted ),
+                                                  t_id->light_color.r,
+                                                  t_id->light_color.g,
+                                                  t_id->light_color.b ) );
                     }
 
-                    const furn_t *furniture = cur->get_furn( { sx, sy } ).obj_ptr();
-                    if( furniture && furniture->light_emitted > 0 ) {
+                    const furn_id f_id = cur->get_furn( { sx, sy } );
+                    if( f_id->light_emitted > 0 ) {
                         out.push_back( make_omni( lx, ly, zlev,
-                                                  static_cast<float>( furniture->light_emitted ),
-                                                  furniture->light_color.r,
-                                                  furniture->light_color.g,
-                                                  furniture->light_color.b ) );
+                                                  static_cast<float>( f_id->light_emitted ),
+                                                  f_id->light_color.r,
+                                                  f_id->light_color.g,
+                                                  f_id->light_color.b ) );
                     }
 
                     // Fields — plain range-based for; std::ranges::for_each not
@@ -114,7 +117,7 @@ static void collect_zlev( map &m, int zlev, std::vector<gpu_emitter> &out )
                     }
 
                     if( cur->get_lum( { sx, sy } ) ) {
-                        for( const item * const itm : m.i_at( p ) ) {
+                        for( const item * const itm : m.i_at( p.raw() ) ) {
                             float ilum = 0.0f;
                             units::angle iwidth = 0_degrees;
                             units::angle idir   = 0_degrees;
@@ -249,7 +252,7 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
     }
 
     if( static_cast<int>( out.size() ) > MAX_EMITTERS * 3 / 4 ) {
-        DebugLog( DL::Warn ) << "build_emitter_snapshot: " << out.size()
+        dbg( DL::Warn ) << "build_emitter_snapshot: " << out.size()
                              << " emitters (budget " << MAX_EMITTERS << ")";
     }
     if( static_cast<int>( out.size() ) > MAX_EMITTERS ) {

@@ -6,7 +6,9 @@
 #include "lighting/render_state.h"
 #include "lighting/gpu_device.h"
 #include "lighting/sdf_pass.h"
-#include "sdl_wrappers.h" // SDL3 headers
+#include "sdl_wrappers.h"
+
+#define dbg(x) DebugLogFL((x),DC::SDL) // SDL3 headers
 
 // SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ — shader reads the SSBO.
 // SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD        — CPU → GPU staging path.
@@ -28,7 +30,7 @@ emitter_collector::emitter_collector( render_state &rs ) : rs_( rs )
         bci.size  = SSBO_SIZE;
         ssbo_[i] = SDL_CreateGPUBuffer( dev, &bci );
         if( !ssbo_[i] ) {
-            DebugLog( DL::Error ) << "emitter_collector: failed to create SSBO slot " << i;
+            dbg( DL::Error ) << "emitter_collector: failed to create SSBO slot " << i;
         }
 
         SDL_GPUTransferBufferCreateInfo tbci{};
@@ -36,7 +38,7 @@ emitter_collector::emitter_collector( render_state &rs ) : rs_( rs )
         tbci.size  = SSBO_SIZE;
         xfer_[i] = SDL_CreateGPUTransferBuffer( dev, &tbci );
         if( !xfer_[i] ) {
-            DebugLog( DL::Error ) << "emitter_collector: failed to create transfer buffer slot " << i;
+            dbg( DL::Error ) << "emitter_collector: failed to create transfer buffer slot " << i;
         }
     }
 
@@ -124,7 +126,7 @@ void emitter_collector::upload_to_gpu( const std::vector<gpu_emitter> &data,
     void *mapped = SDL_MapGPUTransferBuffer( rs_.device().raw(),
                                               xfer_[write_slot_], /*cycle=*/true );
     if( !mapped ) {
-        DebugLog( DL::Error ) << "emitter_collector: SDL_MapGPUTransferBuffer failed";
+        dbg( DL::Error ) << "emitter_collector: SDL_MapGPUTransferBuffer failed";
         return;
     }
     std::memcpy( mapped, data.data(), byte_size );
@@ -133,7 +135,7 @@ void emitter_collector::upload_to_gpu( const std::vector<gpu_emitter> &data,
     // Acquire command buffer, do copy pass.
     SDL_GPUCommandBuffer *cb = SDL_AcquireGPUCommandBuffer( rs_.device().raw() );
     if( !cb ) {
-        DebugLog( DL::Error ) << "emitter_collector: SDL_AcquireGPUCommandBuffer failed";
+        dbg( DL::Error ) << "emitter_collector: SDL_AcquireGPUCommandBuffer failed";
         return;
     }
 
