@@ -28,7 +28,7 @@ emitter_collector::emitter_collector( render_state &rs ) : rs_( rs )
         bci.size  = SSBO_SIZE;
         ssbo_[i] = SDL_CreateGPUBuffer( dev, &bci );
         if( !ssbo_[i] ) {
-            dbg( DL::Error ) << "emitter_collector: failed to create SSBO slot " << i;
+            DebugLog( DL::Error ) << "emitter_collector: failed to create SSBO slot " << i;
         }
 
         SDL_GPUTransferBufferCreateInfo tbci{};
@@ -36,7 +36,7 @@ emitter_collector::emitter_collector( render_state &rs ) : rs_( rs )
         tbci.size  = SSBO_SIZE;
         xfer_[i] = SDL_CreateGPUTransferBuffer( dev, &tbci );
         if( !xfer_[i] ) {
-            dbg( DL::Error ) << "emitter_collector: failed to create transfer buffer slot " << i;
+            DebugLog( DL::Error ) << "emitter_collector: failed to create transfer buffer slot " << i;
         }
     }
 
@@ -124,7 +124,7 @@ void emitter_collector::upload_to_gpu( const std::vector<gpu_emitter> &data,
     void *mapped = SDL_MapGPUTransferBuffer( rs_.device().raw(),
                                               xfer_[write_slot_], /*cycle=*/true );
     if( !mapped ) {
-        dbg( DL::Error ) << "emitter_collector: SDL_MapGPUTransferBuffer failed";
+        DebugLog( DL::Error ) << "emitter_collector: SDL_MapGPUTransferBuffer failed";
         return;
     }
     std::memcpy( mapped, data.data(), byte_size );
@@ -133,7 +133,7 @@ void emitter_collector::upload_to_gpu( const std::vector<gpu_emitter> &data,
     // Acquire command buffer, do copy pass.
     SDL_GPUCommandBuffer *cb = SDL_AcquireGPUCommandBuffer( rs_.device().raw() );
     if( !cb ) {
-        dbg( DL::Error ) << "emitter_collector: SDL_AcquireGPUCommandBuffer failed";
+        DebugLog( DL::Error ) << "emitter_collector: SDL_AcquireGPUCommandBuffer failed";
         return;
     }
 

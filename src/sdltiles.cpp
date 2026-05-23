@@ -486,11 +486,12 @@ void refresh_display()
         std::vector<uint8_t> transparency;
         std::vector<float>   sdf;
         if( g && rs.sdf().ready() ) {
-            const map &m = get_map();
+            map &m = get_map(); // non-const for i_at etc.
             const int zlev = g->u.pos().z;
-            const auto &mc = m.get_cache( zlev );
-            const int W = my_MAPSIZE * SEEX;
-            const int H = my_MAPSIZE * SEEY;
+            const level_cache &mc = m.access_cache( zlev );
+            const int mapsize = m.getmapsize();
+            const int W = mapsize * SEEX;
+            const int H = mapsize * SEEY;
             const int total = W * H;
 
             // Pack float transparency_cache → uint8 (0=opaque, 255=transparent).

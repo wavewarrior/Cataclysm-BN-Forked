@@ -3,9 +3,11 @@
 #include <algorithm>
 #include <cmath>
 
+#include "avatar.h"
 #include "character.h"
 #include "creature.h"
 #include "debug.h"
+#include "effect.h"
 #include "field.h"
 #include "game.h"
 #include "game_constants.h"
@@ -14,11 +16,15 @@
 #include "map_iterator.h"
 #include "monster.h"
 #include "npc.h"
+#include "submap.h"
 #include "units.h"
 #include "vehicle.h"
 #include "veh_type.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
+
+// effect_onfire is a static in lightmap.cpp; define a local copy.
+static const efftype_id snapshot_effect_onfire( "onfire" );
 
 static constexpr float M_PIf = 3.14159265358979323846f;
 static constexpr float FALLOFF_DEFAULT = 1.5f;
@@ -26,7 +32,6 @@ static constexpr float FALLOFF_DEFAULT = 1.5f;
 namespace lighting
 {
 
-// Helper: construct a basic OMNI gpu_emitter from tile position + intensity + color.
 static gpu_emitter make_omni( int lx, int ly, int lz,
                                float radius, float r, float g, float b )
 {
@@ -43,12 +48,10 @@ static gpu_emitter make_omni( int lx, int ly, int lz,
     e.cone_dir_y      = 0.0f;
     e.cone_half_angle = M_PIf;
     e.shape           = static_cast<uint32_t>( emitter_shape::OMNI );
-    // Stable per-tile seed so flicker is spatially coherent across frames.
     e.flicker_seed    = static_cast<uint32_t>( lx * 31337 + ly * 7919 );
     return e;
 }
 
-// Helper: construct a CONE gpu_emitter.
 static gpu_emitter make_cone( int lx, int ly, int lz,
                                float radius, float r, float g, float b,
                                float dir_x, float dir_y, float half_angle_rad )
@@ -61,16 +64,15 @@ static gpu_emitter make_cone( int lx, int ly, int lz,
     return e;
 }
 
-// Enumerate all emitters for a single z-level and append to `out`.
-// Mirrors map::generate_lightmap_worker() and the character/creature
-// enumeration above it in lightmap.cpp.
-static void collect_zlev( const map &m, int zlev,
-                           std::vector<gpu_emitter> &out )
+// Non-const map& required for i_at() and get_vehicles().
+static void collect_zlev( map &m, int zlev, std::vector<gpu_emitter> &out )
 {
-    // ---------- terrain / furniture / fields / items (submap grid) ----------
-    for( int smx = 0; smx < my_MAPSIZE; ++smx ) {
-        for( int smy = 0; smy < my_MAPSIZE; ++smy ) {
-            const submap *cur = m.get_submap_at_grid( tripoint_bub_sm{ smx, smy, zlev } );
+    const int mapsize = m.getmapsize();
+
+    for( int smx = 0; smx < mapsize; ++smx ) {
+        for( int smy = 0; smy < mapsize; ++smy ) {
+            const submap *cur = m.get_submap_at_grid(
+                                    tripoint_bub_sm{ smx, smy, zlev } );
             if( !cur ) {
                 continue;
             }
@@ -80,7 +82,6 @@ static void collect_zlev( const map &m, int zlev,
                     const int ly = smy * SEEY + sy;
                     const tripoint_bub_ms p{ lx, ly, zlev };
 
-                    // Terrain
                     const ter_t *terrain = cur->get_ter( { sx, sy } ).obj_ptr();
                     if( terrain && terrain->light_emitted > 0 ) {
                         out.push_back( make_omni( lx, ly, zlev,
@@ -90,7 +91,6 @@ static void collect_zlev( const map &m, int zlev,
                                                   terrain->light_color.b ) );
                     }
 
-                    // Furniture
                     const furn_t *furniture = cur->get_furn( { sx, sy } ).obj_ptr();
                     if( furniture && furniture->light_emitted > 0 ) {
                         out.push_back( make_omni( lx, ly, zlev,
@@ -100,22 +100,19 @@ static void collect_zlev( const map &m, int zlev,
                                                   furniture->light_color.b ) );
                     }
 
-                    // Fields
-                    std::ranges::for_each( cur->get_field( { sx, sy } ), [&]( const auto &fld ) {
-                        if( !fld.first.is_valid() ) {
-                            return;
-                        }
-                        const field_entry *fe = &fld.second;
-                        const int fe_lum = fe->light_emitted();
+                    // Fields — plain range-based for; std::ranges::for_each not
+                    // usable here due to MSVC's stricter range-concept checks.
+                    for( const auto &[ftype, fentry] : cur->get_field( { sx, sy } ) ) {
+                        ( void )ftype;
+                        const int fe_lum = fentry.light_emitted();
                         if( fe_lum > 0 ) {
-                            const light_color_rgb fc = fe->light_color();
+                            const light_color_rgb fc = fentry.light_color();
                             out.push_back( make_omni( lx, ly, zlev,
                                                       static_cast<float>( fe_lum ),
                                                       fc.r, fc.g, fc.b ) );
                         }
-                    } );
+                    }
 
-                    // Items
                     if( cur->get_lum( { sx, sy } ) ) {
                         for( const item * const itm : m.i_at( p ) ) {
                             float ilum = 0.0f;
@@ -123,7 +120,6 @@ static void collect_zlev( const map &m, int zlev,
                             units::angle idir   = 0_degrees;
                             if( itm->getlight( ilum, iwidth, idir ) ) {
                                 if( iwidth > 0_degrees ) {
-                                    // Arc/directional light — convert to CONE approximation.
                                     const float dir_rad = units::to_radians( idir );
                                     out.push_back( make_cone( lx, ly, zlev,
                                                               ilum, 0, 0, 0,
@@ -142,10 +138,9 @@ static void collect_zlev( const map &m, int zlev,
         }
     }
 
-    // ---------- vehicles ----------
-    // Mirrors the vehicle lights loop in generate_lightmap_worker.
-    for( const wrapped_vehicle &wv : m.get_vehicles() ) {
-        const vehicle *v = wv.v;
+    // Vehicles — non-const for v->lights()
+    for( wrapped_vehicle &wv : m.get_vehicles() ) {
+        vehicle *v = wv.v;
         if( !v ) {
             continue;
         }
@@ -164,12 +159,11 @@ static void collect_zlev( const map &m, int zlev,
             const float b = vp.light_color.b;
 
             if( vp.has_flag( VPFLAG_CONE_LIGHT ) || vp.has_flag( VPFLAG_WIDE_CONE_LIGHT ) ) {
-                // Directed cone light.  45° half-angle for narrow, 45° for wide cone.
                 const float half_rad = vp.has_flag( VPFLAG_WIDE_CONE_LIGHT )
                                        ? units::to_radians( 45_degrees )
                                        : units::to_radians( 22.5_degrees );
-                const float face_rad = static_cast<float>( v->face.dir() ) *
-                                       ( M_PIf / 180.0f );
+                // v->face.dir() returns units::angle; convert via to_radians.
+                const float face_rad = units::to_radians( v->face.dir() );
                 out.push_back( make_cone( lx, ly, zlev,
                                           static_cast<float>( vp.bonus ),
                                           r, g, b,
@@ -197,10 +191,9 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
         return out;
     }
 
-    const map &m = get_map();
+    map &m = get_map(); // non-const required for i_at, get_vehicles
     const int zlev = g->u.pos().z;
 
-    // ---------- characters (player + NPCs) ----------
     auto collect_character = [&]( const Character &c ) {
         const float lum = c.active_light();
         if( lum <= 0.0f ) {
@@ -211,7 +204,7 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
             return;
         }
         out.push_back( make_omni( pos.x, pos.y, pos.z, lum, 0, 0, 0 ) );
-        if( c.has_effect( effect_onfire ) ) {
+        if( c.has_effect( snapshot_effect_onfire ) ) {
             out.push_back( make_omni( pos.x, pos.y, pos.z, 8.0f, 1.0f, 0.5f, 0.0f ) );
         }
     };
@@ -221,7 +214,6 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
         collect_character( guy );
     }
 
-    // ---------- monsters ----------
     for( const monster &critter : g->all_monsters() ) {
         if( critter.is_hallucination() ) {
             continue;
@@ -230,7 +222,7 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
         if( !m.inbounds( mp ) ) {
             continue;
         }
-        if( critter.has_effect( effect_onfire ) ) {
+        if( critter.has_effect( snapshot_effect_onfire ) ) {
             out.push_back( make_omni( mp.x, mp.y, mp.z, 8.0f, 1.0f, 0.5f, 0.0f ) );
         }
         if( critter.type->luminance > 0 ) {
@@ -239,20 +231,15 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
         }
     }
 
-    // ---------- static emitters (terrain / furniture / fields / items / vehicles) ----------
     collect_zlev( m, zlev, out );
 
-    // ---------- flash events from event_queue ----------
     {
         std::vector<flash_event> flashes;
         eq.drain( frame_ms, flashes );
         for( const flash_event &f : flashes ) {
-            // Fade intensity linearly over lifespan.
             const float frac = 1.0f - ( f.elapsed_ms / f.duration_ms );
             const float radius = f.intensity * std::max( 0.0f, frac );
-            const tripoint_abs_ms &wp = f.pos;
-            // Convert to local map coordinates.
-            const tripoint local = m.getlocal( wp );
+            const tripoint local = m.getlocal( f.pos );
             if( !m.inbounds( local ) ) {
                 continue;
             }
@@ -261,12 +248,10 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
         }
     }
 
-    // Warn if we're approaching the per-frame budget.
     if( static_cast<int>( out.size() ) > MAX_EMITTERS * 3 / 4 ) {
-        dbg( DL::Warn ) << "build_emitter_snapshot: " << out.size()
-                        << " emitters (budget " << MAX_EMITTERS << ")";
+        DebugLog( DL::Warn ) << "build_emitter_snapshot: " << out.size()
+                             << " emitters (budget " << MAX_EMITTERS << ")";
     }
-    // Clamp hard at MAX_EMITTERS to prevent SSBO overflow.
     if( static_cast<int>( out.size() ) > MAX_EMITTERS ) {
         out.resize( MAX_EMITTERS );
     }

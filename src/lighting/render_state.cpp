@@ -5,6 +5,7 @@
 #include "shader_compiler.h"
 #include "debug.h"
 #include "game_constants.h"
+#include "map.h"
 
 #include <algorithm>
 #include <atomic>
@@ -71,13 +72,11 @@ void render_state::init( SDL_Window *host_window )
     collector_ = std::make_unique<emitter_collector>( *this );
 
     // Phase 4: initialise SDF + transparency textures.
-    // Map size: my_MAPSIZE * SEEX tiles per side (e.g. 11*12=132 for MAPSIZE=11).
-    // Include game_constants.h for SEEX/SEEY/my_MAPSIZE.
-    // These are set at runtime from options; use a safe upper bound here and
-    // re-init if the bubble size ever changes (rare / future concern).
-    const int map_w = my_MAPSIZE * SEEX;
-    const int map_h = my_MAPSIZE * SEEY;
-    sdf_.init( device_, map_w, map_h );
+    // my_MAPSIZE is a member of map, not a global; query at init time.
+    // SEEX/SEEY from game_constants.h (always 12).
+    // Re-init if the bubble size changes (rare).
+    const int mapsize = get_map().getmapsize();
+    sdf_.init( device_, mapsize * SEEX, mapsize * SEEY );
 }
 
 void render_state::shutdown() noexcept

@@ -271,22 +271,13 @@ auto get_loading_image_rect( const point &image_size ) -> std::optional<SDL_Rect
     }
 
     return get_scaled_loading_image_size( { .image_size = image_size, .screen_size = window_size } )
-    .transform( [&window_size, &buffer_size]( const point & scaled_size ) {
-        const auto output_rect = SDL_Rect{
+    .transform( [&window_size]( const point &scaled_size ) {
+        // buffer_size == window_size (display_buffer removed); ratio is 1:1.
+        return SDL_Rect{
             ( window_size.x - scaled_size.x ) / 2,
             ( window_size.y - scaled_size.y ) / 2,
             scaled_size.x,
             scaled_size.y
-        };
-        return SDL_Rect{
-            static_cast<int>( std::lround( static_cast<double>( output_rect.x ) * buffer_size.x /
-                                           window_size.x ) ),
-            static_cast<int>( std::lround( static_cast<double>( output_rect.y ) * buffer_size.y /
-                                           window_size.y ) ),
-            static_cast<int>( std::lround( static_cast<double>( output_rect.w ) * buffer_size.x /
-                                           window_size.x ) ),
-            static_cast<int>( std::lround( static_cast<double>( output_rect.h ) * buffer_size.y /
-                                           window_size.y ) )
         };
     } );
 }

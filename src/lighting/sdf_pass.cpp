@@ -96,7 +96,7 @@ void sdf_pass::init( gpu_device &dev, int map_w, int map_h )
         tci.sample_count         = SDL_GPU_SAMPLECOUNT_1;
         transparency_tex_ = SDL_CreateGPUTexture( d, &tci );
         if( !transparency_tex_ ) {
-            dbg( DL::Error ) << "sdf_pass::init: failed to create transparency_tex";
+            DebugLog( DL::Error ) << "sdf_pass::init: failed to create transparency_tex";
         }
     }
 
@@ -116,7 +116,7 @@ void sdf_pass::init( gpu_device &dev, int map_w, int map_h )
         tci.sample_count         = SDL_GPU_SAMPLECOUNT_1;
         sdf_tex_ = SDL_CreateGPUTexture( d, &tci );
         if( !sdf_tex_ ) {
-            dbg( DL::Error ) << "sdf_pass::init: failed to create sdf_tex";
+            DebugLog( DL::Error ) << "sdf_pass::init: failed to create sdf_tex";
         }
     }
 
