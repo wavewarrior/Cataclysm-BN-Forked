@@ -4393,23 +4393,32 @@ bool cata_tiles::draw_from_id_string(
     }
 
     // Phase 5: compute per-tile GPU light tint from lightmap color cache.
-    // `pos` is in map tile coordinates here, so it indexes level_cache directly.
-    // Default to (1,1,1) for UI tiles, overmap tiles, and anything out-of-bounds.
+    // `pos` is in map tile coordinates; default to white (1,1,1) for UI tiles,
+    // overmap tiles, out-of-bounds, or when the lightmap hasn't been generated
+    // yet (lum == 0: main menu / first frame before generate_lightmap runs).
+    // NOTE: the draw loop filters lit_level::DARK *before* calling this function,
+    // so any tile arriving here with lum==0 is a pre-lightmap false-zero, not a
+    // genuinely dark tile.
     gpu_light_r = gpu_light_g = gpu_light_b = 1.0f;
-    if( !as_independent_entity && tile.category != C_OVERMAP_TERRAIN ) {
+    if( !as_independent_entity
+        && tile.category != C_OVERMAP_TERRAIN
+        && g != nullptr ) {
         const map &here = get_map();
         if( here.inbounds( tripoint( pos.x, pos.y, pos.z ) ) ) {
             const level_cache &mc = here.access_cache( pos.z );
             const int idx = mc.idx( pos.x, pos.y );
-            const float lum = std::min( 1.0f, mc.lm[idx].max() );
-            const light_color_rgb &lcc = mc.light_color_cache[idx];
-            if( lcc.is_colored() ) {
-                // Colored light: take per-channel max of white and color components.
-                gpu_light_r = std::min( 1.0f, std::max( lum, lcc.r ) );
-                gpu_light_g = std::min( 1.0f, std::max( lum, lcc.g ) );
-                gpu_light_b = std::min( 1.0f, std::max( lum, lcc.b ) );
-            } else {
-                gpu_light_r = gpu_light_g = gpu_light_b = lum;
+            const float lum = mc.lm[idx].max();
+            // lum==0 → lightmap not generated yet; keep white tint.
+            if( lum > 0.001f ) {
+                const float clum = std::min( 1.0f, lum );
+                const light_color_rgb &lcc = mc.light_color_cache[idx];
+                if( lcc.is_colored() ) {
+                    gpu_light_r = std::min( 1.0f, std::max( clum, lcc.r ) );
+                    gpu_light_g = std::min( 1.0f, std::max( clum, lcc.g ) );
+                    gpu_light_b = std::min( 1.0f, std::max( clum, lcc.b ) );
+                } else {
+                    gpu_light_r = gpu_light_g = gpu_light_b = clum;
+                }
             }
         }
     }

@@ -5,7 +5,6 @@
 #include "shader_compiler.h"
 #include "debug.h"
 #include "game_constants.h"
-#include "options.h"
 
 #include <algorithm>
 #include <atomic>
@@ -72,11 +71,12 @@ void render_state::init( SDL_Window *host_window )
     collector_ = std::make_unique<emitter_collector>( *this );
 
     // Phase 4: initialise SDF + transparency textures.
-    // get_map() cannot be called at WinCreate time (g is null).
-    // Use the MAPSIZE option which is loaded before init_render_state_on.
-    // If MAPSIZE changes, the sdf_ textures will need to be re-created (rare).
-    const int mapsize = get_option<int>( "MAPSIZE" );
-    sdf_.init( device_, mapsize * SEEX, mapsize * SEEY );
+    // get_map() cannot be used here (g is null at WinCreate time).
+    // Use the default bubble size: 11 submaps × SEEX/SEEY = 132×132 tiles.
+    // render_state::ensure_sdf_size() re-inits on first game load if actual
+    // size differs.
+    static constexpr int DEFAULT_MAP_TILES = 11 * 12; // MAPSIZE=11, SEEX=SEEY=12
+    sdf_.init( device_, DEFAULT_MAP_TILES, DEFAULT_MAP_TILES );
 }
 
 void render_state::shutdown() noexcept
