@@ -216,7 +216,10 @@ class texture
                                   const SDL_FRect &destination,
                                   SDL_FlipMode flip,
                                   float alpha = 1.0f,
-                                  double rotation_degrees = 0.0 ) const {
+                                  double rotation_degrees = 0.0,
+                                  float light_r = 1.0f,
+                                  float light_g = 1.0f,
+                                  float light_b = 1.0f ) const {
             if( !atlas_tex || atlas_w <= 0 || atlas_h <= 0 ) {
                 return false;
             }
@@ -243,9 +246,9 @@ class texture
             s.src_v  = v;
             s.src_uw = uw;
             s.src_vh = vh;
-            s.tint_r = 1.0f;
-            s.tint_g = 1.0f;
-            s.tint_b = 1.0f;
+            s.tint_r = light_r;
+            s.tint_g = light_g;
+            s.tint_b = light_b;
             s.tint_a = alpha;
             s.rotation = static_cast<float>( rotation_degrees * 3.14159265358979323846 / 180.0 );
             lighting::get_render_state().queue_tile_sprite( atlas_tex, s );
@@ -1179,6 +1182,13 @@ class cata_tiles
         int screentile_height = 0;
         float tile_ratiox = 0.0f;
         float tile_ratioy = 0.0f;
+
+        // Phase 5: per-tile GPU light tint set by draw_from_id_string() from
+        // level_cache.lm / light_color_cache before draw_sprite_at() runs.
+        // White (1,1,1) means fully lit / no tint applied.
+        mutable float gpu_light_r = 1.0f;
+        mutable float gpu_light_g = 1.0f;
+        mutable float gpu_light_b = 1.0f;
 
         idle_animation_manager idle_animations;
 

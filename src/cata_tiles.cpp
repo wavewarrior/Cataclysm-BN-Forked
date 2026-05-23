@@ -1,6 +1,7 @@
 #include "units_temperature.h"
 #include "cata_tiles.h"
 #include "lightmap.h"
+#include "shadowcasting.h"
 
 #include <algorithm>
 #include <array>
@@ -4391,6 +4392,28 @@ bool cata_tiles::draw_from_id_string(
         return true;
     }
 
+    // Phase 5: compute per-tile GPU light tint from lightmap color cache.
+    // `pos` is in map tile coordinates here, so it indexes level_cache directly.
+    // Default to (1,1,1) for UI tiles, overmap tiles, and anything out-of-bounds.
+    gpu_light_r = gpu_light_g = gpu_light_b = 1.0f;
+    if( !as_independent_entity && tile.category != C_OVERMAP_TERRAIN ) {
+        const map &here = get_map();
+        if( here.inbounds( tripoint( pos.x, pos.y, pos.z ) ) ) {
+            const level_cache &mc = here.access_cache( pos.z );
+            const int idx = mc.idx( pos.x, pos.y );
+            const float lum = std::min( 1.0f, mc.lm[idx].max() );
+            const light_color_rgb &lcc = mc.light_color_cache[idx];
+            if( lcc.is_colored() ) {
+                // Colored light: take per-channel max of white and color components.
+                gpu_light_r = std::min( 1.0f, std::max( lum, lcc.r ) );
+                gpu_light_g = std::min( 1.0f, std::max( lum, lcc.g ) );
+                gpu_light_b = std::min( 1.0f, std::max( lum, lcc.b ) );
+            } else {
+                gpu_light_r = gpu_light_g = gpu_light_b = lum;
+            }
+        }
+    }
+
     //draw it!
     draw_tile_at( display_tile, screen_pos, loc_rand, true_rota,
                   bg_tint, fg_tint, ll, apply_visual_effects, height_3d,
@@ -4570,7 +4593,8 @@ bool cata_tiles::draw_sprite_at( const tile_type &tile, point p,
         };
         sprite_tex->enqueue_tile_sprite( gpu.texture, gpu.atlas_w, gpu.atlas_h,
                                          fdst, flip, 1.0f,
-                                         static_cast<double>( rotation ) );
+                                         static_cast<double>( rotation ),
+                                         gpu_light_r, gpu_light_g, gpu_light_b );
         if( !static_z_effect && overlay_count > 0 ) {
             const auto [overlay_tex, overlay_warp_offset] =
                 tileset_ptr->get_or_default(
@@ -4584,7 +4608,8 @@ bool cata_tiles::draw_sprite_at( const tile_type &tile, point p,
                     overlay_tex->enqueue_tile_sprite(
                         ov_gpu.texture, ov_gpu.atlas_w, ov_gpu.atlas_h,
                         fdst, flip, a,
-                        static_cast<double>( rotation ) );
+                        static_cast<double>( rotation ),
+                        gpu_light_r, gpu_light_g, gpu_light_b );
                 }
             }
         }
