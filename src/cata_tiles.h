@@ -494,6 +494,11 @@ class tileset
         int get_tile_height() const {
             return tile_height;
         }
+        // Phase 6b: pixel coordinates of map tile (0,0) from window top-left.
+        // camera_off = o / tile_width + 0.5  converts screen→map tile coords.
+        point get_tile_map_origin() const {
+            return o;
+        }
         float get_tile_pixelscale() const {
             return tile_pixelscale;
         }

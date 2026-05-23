@@ -476,14 +476,31 @@ void refresh_display()
 
     rs.device().submit_frame( ctx );
 
-    // Phase 6: supply emitter SSBO to tile_batcher vertex shader so GPU emitter
-    // lighting runs next frame (collector uploads async; this frame uses last).
+    // Phase 6/6b: supply emitter SSBO + SDF buffer + camera offset to the
+    // tile_batcher vertex shader (async; this frame uses collector's last upload).
     if( rs.collector() ) {
-        const float tile_px   = tilecontext ? static_cast<float>( tilecontext->get_tile_width() ) : 32.0f;
-        const float z_lev     = g ? static_cast<float>( g->u.pos().z ) : 0.0f;
-        const Uint32 n_emit   = static_cast<Uint32>( rs.collector()->last_count() );
-        const float ambient   = 0.05f; // dim base; outdoor ambient added via Phase 8 sun
-        rs.set_tile_lighting( rs.collector()->read_buffer(), tile_px, z_lev, n_emit, ambient );
+        const float tile_px = tilecontext
+                              ? static_cast<float>( tilecontext->get_tile_width() )
+                              : 32.0f;
+        const float z_lev   = g ? static_cast<float>( g->u.pos().z ) : 0.0f;
+        const Uint32 n_emit = static_cast<Uint32>( rs.collector()->last_count() );
+        const float ambient = 0.05f;
+
+        // Phase 6b: camera offset converts screen tile units → map tile coords.
+        // map_pos = tile_tu - camera_offset  (see sdf_pass.h comment)
+        float cam_off_x = 0.0f, cam_off_y = 0.0f;
+        Uint32 sdf_w = 0u;
+        if( tilecontext && tile_px > 0.0f ) {
+            const point origin = tilecontext->get_tile_map_origin();
+            cam_off_x = static_cast<float>( origin.x ) / tile_px + 0.5f;
+            cam_off_y = static_cast<float>( origin.y ) / tile_px + 0.5f;
+            sdf_w     = static_cast<Uint32>( rs.sdf().map_w() );
+        }
+
+        rs.set_tile_lighting( rs.collector()->read_buffer(),
+                              tile_px, z_lev, n_emit, ambient,
+                              rs.sdf().sdf_buffer(),
+                              cam_off_x, cam_off_y, sdf_w );
     }
 
     // Phase 3+4: build emitter snapshot + SDF, submit to collector for GPU upload.

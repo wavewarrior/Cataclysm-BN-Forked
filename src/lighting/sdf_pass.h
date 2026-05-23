@@ -46,6 +46,9 @@ public:
 
     SDL_GPUTexture *transparency_texture() const noexcept { return transparency_tex_; }
     SDL_GPUTexture *sdf_texture()          const noexcept { return sdf_tex_; }
+    // Phase 6b: SDF values as a vertex-readable storage buffer.
+    // Indexed [x * map_h + y] (x-outer, matching compute_sdf_cpu layout).
+    SDL_GPUBuffer  *sdf_buffer()           const noexcept { return sdf_storage_; }
 
     bool ready() const noexcept { return sdf_tex_ != nullptr; }
 
@@ -55,6 +58,7 @@ public:
 private:
     SDL_GPUTexture        *transparency_tex_ = nullptr;
     SDL_GPUTexture        *sdf_tex_          = nullptr;
+    SDL_GPUBuffer         *sdf_storage_      = nullptr; // vertex-shader storage buffer
     SDL_GPUTransferBuffer *xfer_transparency_ = nullptr;
     SDL_GPUTransferBuffer *xfer_sdf_          = nullptr;
     int map_w_ = 0;

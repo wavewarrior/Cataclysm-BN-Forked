@@ -129,7 +129,11 @@ class sprite_batcher
                                      float tile_pixel_size,
                                      float z_level,
                                      Uint32 emitter_count,
-                                     float ambient );
+                                     float ambient,
+                                     SDL_GPUBuffer *sdf_buffer  = nullptr,
+                                     float cam_off_x = 0.0f,
+                                     float cam_off_y = 0.0f,
+                                     Uint32 sdf_map_w = 0u );
 
         // Append one sprite to the pending batch. Triggers an automatic
         // flush when the per-frame instance budget is reached so callers can

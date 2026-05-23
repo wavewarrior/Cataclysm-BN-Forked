@@ -139,10 +139,15 @@ void render_state::set_tile_lighting( SDL_GPUBuffer *emitter_ssbo,
                                        float tile_pixel_size,
                                        float z_level,
                                        Uint32 emitter_count,
-                                       float ambient )
+                                       float ambient,
+                                       SDL_GPUBuffer *sdf_buffer,
+                                       float cam_off_x,
+                                       float cam_off_y,
+                                       Uint32 sdf_map_w )
 {
     tile_batcher_.set_lighting_resources( emitter_ssbo, tile_pixel_size,
-                                           z_level, emitter_count, ambient );
+                                           z_level, emitter_count, ambient,
+                                           sdf_buffer, cam_off_x, cam_off_y, sdf_map_w );
 }
 
 void render_state::flush_ui_rects( sprite_batcher &dst )

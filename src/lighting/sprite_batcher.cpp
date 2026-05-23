@@ -50,12 +50,19 @@ cbuffer FrameParams : register(b0, space1) {
     uint   instance_base;
     uint   fp_pad;
 };
-// Cbuffer slot 1: per-frame lighting params (Phase 6)
+// Phase 6b: SDF values as vertex storage slot 2 (x-outer layout: [x*map_h + y])
+StructuredBuffer<float> SdfBuffer : register(t2, space0);
+
+// Cbuffer slot 1: per-frame lighting params (Phase 6/6b)
 cbuffer LightParams : register(b1, space1) {
-    float tile_pixel_size;  // screen pixels per tile (e.g. 32 for 32px tiles)
-    float current_z;        // player z-level as float
-    uint  emitter_count;    // live emitters in the SSBO
-    float ambient;          // base ambient (0=dungeon dark, 0.3=overcast day)
+    float tile_pixel_size;  // screen pixels per tile
+    float current_z;        // player z-level
+    uint  emitter_count;    // live emitters in SSBO
+    float ambient;          // base ambient
+    float camera_off_x;     // tile_tu → map coords: map_pos = tile_tu - offset
+    float camera_off_y;
+    uint  sdf_map_w;        // SDF/map width in tiles
+    float lp_pad;
 };
 
 struct VS_OUT {
@@ -85,30 +92,55 @@ VS_OUT main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
         pixel.x / target_size.x *  2.0 - 1.0,
         pixel.y / target_size.y * -2.0 + 1.0);
 
-    // ---- Phase 6: emitter-based light evaluation per tile centre ----
-    // tile_tu: tile-space coordinates of this sprite's centre
-    const float2 tile_tu = centre / max(tile_pixel_size, 1.0);
+    // ---- Phase 6/6b: emitter-based light with soft shadows per tile centre ----
+    // tile_tu: screen tile units. map_pos converts to map tile coordinates.
+    const float2 tile_tu  = centre / max(tile_pixel_size, 1.0);
+    const float2 map_pos  = tile_tu - float2(camera_off_x, camera_off_y);
 
     float3 gpu_light = float3(ambient, ambient, ambient);
 
-    // Evaluate at most 64 emitters.  Dynamic emitters (explosions, fire,
-    // muzzle flashes) produce visible color even in CPU-shadow-cast dark areas.
+    // Phase 6b: soft-shadow helper using the SDF buffer.
+    // Ray-marches from tile centre toward emitter; returns penumbra factor 0..1.
+    // sdf_map_w==0 means SDF not available → hard cutoff (no shadows).
+    float sdf_shadow_factor = 0.0; // scoped inside loop below
+
+    const uint map_hw = sdf_map_w; // alias for readability
+
+    // Evaluate at most 64 emitters with attenuation + SDF soft shadows.
     const uint max_e = min(emitter_count, 64u);
     for (uint i = 0u; i < max_e; ++i) {
         const GpuEmitter e = Emitters[i];
-        // Skip emitters on different z-levels.
         if (abs(e.pos_z - current_z) > 0.5) continue;
 
-        const float2 d    = float2(e.pos_x, e.pos_y) - tile_tu;
+        const float2 d    = float2(e.pos_x, e.pos_y) - map_pos;
         const float  dist = length(d);
-        if (dist >= e.radius) continue;
+        if (dist >= e.radius || dist < 0.01) continue;
 
-        const float  atten = 1.0 - pow(saturate(dist / e.radius), e.falloff);
-        // Uncolored emitter (r=g=b=0) → pure white light.
-        const float3 rgb   = (e.r < 0.01 && e.g < 0.01 && e.b < 0.01)
-                             ? float3(1.0, 1.0, 1.0)
-                             : float3(e.r, e.g, e.b);
-        gpu_light += rgb * atten;
+        const float atten = 1.0 - pow(saturate(dist / e.radius), e.falloff);
+
+        // --- SDF ray-march for soft penumbra shadow ---
+        float shadow = 1.0;
+        if (map_hw > 0u) {
+            const float2 dir = d / dist;
+            float t = 0.3;
+            float k = 6.0; // penumbra sharpness
+            [loop]
+            for (int step = 0; step < 8; ++step) {
+                if (t >= dist - 0.2) break;
+                const float2 p  = map_pos + dir * t;
+                const int    ix = clamp((int)p.x, 0, (int)map_hw - 1);
+                const int    iy = clamp((int)p.y, 0, (int)map_hw - 1);
+                const float  sd = SdfBuffer[ix * (int)map_hw + iy];
+                if (sd < 0.05) { shadow = 0.0; break; }
+                shadow = min(shadow, k * sd / max(dist - t, 0.01));
+                t += max(sd, 0.1);
+            }
+            shadow = saturate(shadow);
+        }
+
+        const float3 rgb = (e.r < 0.01 && e.g < 0.01 && e.b < 0.01)
+                           ? float3(1.0, 1.0, 1.0) : float3(e.r, e.g, e.b);
+        gpu_light += rgb * atten * shadow;
     }
 
     // Phase 5 sets tint_r/g/b to the CPU-shadowcast luminance (0..1).
@@ -149,15 +181,20 @@ struct frame_params {
 };
 static_assert( sizeof( frame_params ) == 16, "frame_params is wire-stable with vert shader" );
 
-// Phase 6: per-frame lighting params pushed as cbuffer slot 1 in the vertex
-// shader.  16 bytes, wire-stable with the LightParams cbuffer in SPRITE_VERT_HLSL.
+// Phase 6/6b: per-frame lighting params (cbuffer slot 1, vertex shader).
+// 32 bytes, wire-stable with the LightParams cbuffer in SPRITE_VERT_HLSL.
 struct light_params {
     float  tile_pixel_size; // screen pixels per tile (e.g. 32.0)
     float  current_z;       // player z-level
     Uint32 emitter_count;   // live entries in the emitter SSBO
     float  ambient;         // base ambient (0=dark dungeon, 0.05-0.3=outdoors)
+    // Phase 6b: camera offset (screen tile → map tile: map_pos = tile_tu - offset)
+    float  camera_off_x;    // = tile_map_origin_px.x / tile_px + 0.5
+    float  camera_off_y;
+    Uint32 sdf_map_w;       // SDF/map width in tiles (e.g. 132 for MAPSIZE=11)
+    float  lp_pad;          // padding to 32 bytes
 };
-static_assert( sizeof( light_params ) == 16, "light_params wire-stable with LightParams cbuffer" );
+static_assert( sizeof( light_params ) == 32, "light_params wire-stable with LightParams cbuffer" );
 
 // ---- PIMPL body --------------------------------------------------------
 
@@ -214,20 +251,29 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
         float  cur_clear_color[4] = {};
         bool   pass_open = false;
 
-        // Phase 6: per-frame lighting resources set before begin_pass().
+        // Phase 6/6b: per-frame lighting resources.
         SDL_GPUBuffer *lp_emitter_ssbo = nullptr;
+        SDL_GPUBuffer *lp_sdf_buffer   = nullptr;
         light_params   lp              = {};  // defaults: all zero
 
         void set_lighting_resources( SDL_GPUBuffer *emitter_ssbo,
                                      float tile_pixel_size,
                                      float z_level,
                                      Uint32 count,
-                                     float ambient ) noexcept {
+                                     float ambient,
+                                     SDL_GPUBuffer *sdf_buffer  = nullptr,
+                                     float cam_off_x = 0.0f,
+                                     float cam_off_y = 0.0f,
+                                     Uint32 sdf_map_w = 0u ) noexcept {
             lp_emitter_ssbo    = emitter_ssbo;
+            lp_sdf_buffer      = sdf_buffer;
             lp.tile_pixel_size = tile_pixel_size;
             lp.current_z       = z_level;
             lp.emitter_count   = emitter_ssbo ? count : 0u;
             lp.ambient         = ambient;
+            lp.camera_off_x    = cam_off_x;
+            lp.camera_off_y    = cam_off_y;
+            lp.sdf_map_w       = sdf_map_w;
         }
 
         // ---- lifecycle -------------------------------------------------
@@ -545,6 +591,11 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                     SDL_BindGPUVertexStorageBuffers( rp, /*first_slot=*/1,
                                                      &lp_emitter_ssbo, 1 );
                 }
+                // Phase 6b: bind SDF buffer at vertex storage slot 2.
+                if( lp_sdf_buffer ) {
+                    SDL_BindGPUVertexStorageBuffers( rp, /*first_slot=*/2,
+                                                     &lp_sdf_buffer, 1 );
+                }
 
                 const SDL_GPUViewport vp{
                     0.0f, 0.0f,
@@ -665,10 +716,15 @@ void sprite_batcher::set_lighting_resources( SDL_GPUBuffer *emitter_ssbo,
                                               float tile_pixel_size,
                                               float z_level,
                                               Uint32 emitter_count,
-                                              float ambient )
+                                              float ambient,
+                                              SDL_GPUBuffer *sdf_buffer,
+                                              float cam_off_x,
+                                              float cam_off_y,
+                                              Uint32 sdf_map_w )
 {
     p->set_lighting_resources( emitter_ssbo, tile_pixel_size, z_level,
-                                emitter_count, ambient );
+                                emitter_count, ambient,
+                                sdf_buffer, cam_off_x, cam_off_y, sdf_map_w );
 }
 
 void sprite_batcher::draw( const sprite_instance &inst )

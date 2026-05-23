@@ -150,7 +150,11 @@ class render_state
                                 float tile_pixel_size,
                                 float z_level,
                                 Uint32 emitter_count,
-                                float ambient );
+                                float ambient,
+                                SDL_GPUBuffer *sdf_buffer = nullptr,
+                                float cam_off_x = 0.0f,
+                                float cam_off_y = 0.0f,
+                                Uint32 sdf_map_w = 0u );
 
         // Phase 2i-B-5 lifecycle fix. Legacy SDL_Renderer's display_buffer
         // is a persistent render target — content stays between redraws.

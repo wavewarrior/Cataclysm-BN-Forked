@@ -135,6 +135,17 @@ void sdf_pass::init( gpu_device &dev, int map_w, int map_h )
         tbci.size  = static_cast<Uint32>( map_w * map_h * 4 ); // 4 bytes per tile
         xfer_sdf_ = SDL_CreateGPUTransferBuffer( d, &tbci );
     }
+
+    // Phase 6b: SDF as vertex-readable storage buffer (same data as sdf_tex).
+    {
+        SDL_GPUBufferCreateInfo bci{};
+        bci.usage = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ;
+        bci.size  = static_cast<Uint32>( map_w * map_h * 4 );
+        sdf_storage_ = SDL_CreateGPUBuffer( d, &bci );
+        if( !sdf_storage_ ) {
+            DebugLog( DL::Error ) << "sdf_pass::init: failed to create sdf_storage";
+        }
+    }
 }
 
 void sdf_pass::shutdown( gpu_device &dev )
@@ -150,6 +161,10 @@ void sdf_pass::shutdown( gpu_device &dev )
     if( xfer_transparency_ ) {
         SDL_ReleaseGPUTransferBuffer( d, xfer_transparency_ );
         xfer_transparency_ = nullptr;
+    }
+    if( sdf_storage_ ) {
+        SDL_ReleaseGPUBuffer( d, sdf_storage_ );
+        sdf_storage_ = nullptr;
     }
     if( sdf_tex_ ) {
         SDL_ReleaseGPUTexture( d, sdf_tex_ );
@@ -213,6 +228,20 @@ void sdf_pass::upload( SDL_GPUCopyPass *cp,
             dst.d       = 1;
 
             SDL_UploadToGPUTexture( cp, &src, &dst, true );
+
+            // Also upload SDF to the vertex-shader storage buffer.
+            if( sdf_storage_ ) {
+                SDL_GPUTransferBufferLocation tb_src{};
+                tb_src.transfer_buffer = xfer_sdf_;
+                tb_src.offset          = 0;
+
+                SDL_GPUBufferRegion buf_dst{};
+                buf_dst.buffer = sdf_storage_;
+                buf_dst.offset = 0;
+                buf_dst.size   = byte_size;
+
+                SDL_UploadToGPUBuffer( cp, &tb_src, &buf_dst, true );
+            }
         }
     }
 }
