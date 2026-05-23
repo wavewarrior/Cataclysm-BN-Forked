@@ -187,35 +187,24 @@ The `gpu_light_r/g/b = lm[idx].max()` path in `draw_from_id_string` MUST have:
 
 Without guard 2, the main menu renders completely black.
 
-### Phase 7 black screen — SPIRV-Cross resource threading + ddx/ddy
+### Phase 7 black screen — diagnosis in progress (UNVERIFIED)
 
-**Symptom**: Main menu (and all rendering) fully black after adding fragment-stage
-StructuredBuffers combined with ddx/ddy in the same HLSL shader.
+**Symptom**: Main menu (and all rendering) fully black after Phase 7 commit.
 
-**Mechanism**: `init_render_state_on` (render_state.cpp:527) has a try-catch
-that silently swallows shader compile/pipeline failures. `ready()` only checks
-`device_.ready()`, not the batcher. If `tile_batcher_.init()` throws, `gpu_sampler_`
-is never set → all `refresh_display` flush guards (`rs.gpu_sampler()`) fail →
-only LOADOP_CLEAR black runs. `WinCreate` ignores the return value of
-`init_render_state_on`, so the game runs with black screen instead of crashing.
+**Known mechanism** (confirmed by code reading): `init_render_state_on`
+(render_state.cpp:527) has a try-catch that silently swallows any exception from
+`render_state::init()`. `ready()` = `device_.ready()` only (render_state.h:57).
+`WinCreate` ignores the return value of `init_render_state_on` (sdltiles.cpp ~399).
+If `tile_batcher_.init()` throws, `gpu_sampler_` is never set → all flush guards
+fail → LOADOP_CLEAR black. To confirm: check Win11 debug.log for "render_state
+init failed".
 
-**Root causes**:
-1. **SPIRV-Cross resource threading**: a helper function that accesses a global
-   `StructuredBuffer` (e.g. `sdf_shadow(float2, float2, uint)` accessing `SdfBuf`)
-   requires SPIRV-Cross to thread the buffer as an implicit MSL argument. Older
-   SPIRV-Cross pins (SDL_shadercross @ 6b06e55c) may fail this silently.
-   **Fix**: inline the helper — no separate function accessing global buffers.
+**If init fails**: the specific D3D12 failure cause has not been isolated yet.
+Candidates: pipeline creation rejecting Phase 7's fragment resource layout,
+static_assert mismatch on MSVC, or DXC choking on a specific construct.
 
-2. **ddx/ddy + fragment StructuredBuffer combination**: `ddx(texel.rgb)` combined
-   with `StructuredBuffer` in the same fragment shader can fail HLSL→SPIR-V→MSL
-   on macOS Metal. **Fix**: replace `ddx/ddy` normal with flat `float3(0,0,1)`;
-   proper normals come from normal atlas texture in Phase 7b.
-
-**Rule**: In SPRITE_FRAG_HLSL —
-- Never put StructuredBuffer access inside a helper function. Inline all SDF/emitter
-  buffer accesses directly in `main()`.
-- Avoid `ddx/ddy` on sampled texture values (screen-space derivatives + storage
-  buffers in the same shader = Metal MSL translation failure on this SDL_shadercross pin).
+**If init succeeds**: investigate `enqueue_tile_sprite`/`queue_font_glyph`
+`tint_a` values, whether tile/font queues are actually populated on main menu.
 
 ### MAX_INSTANCES must be large for 4K + minimap
 
