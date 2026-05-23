@@ -1245,6 +1245,9 @@ class cata_tiles
         // camera_off = o.x/tile_width + 0.5  converts screen tile → map tile.
     public:
         point get_tile_map_origin() const { return o; }
+        // Pixel offset of the tile-drawing area from the window's top-left.
+        // camera_off = op / tile_width - o  converts tile_tu → absolute map tile.
+        point get_drawing_pixel_offset() const { return op; }
     private:
         // offset for drawing, in pixels.
         point op;

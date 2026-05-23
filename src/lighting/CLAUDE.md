@@ -179,6 +179,24 @@ Always forward-declare ALL SDL GPU types used in a lighting/ header. Common omis
 
 `sdl_wrappers.h` is NOT included by lighting/ headers (by design — they're self-contained).
 
+### cata_tiles coordinate system — CRITICAL for world_pos shader
+
+`cata_tiles` has TWO distinct offset members:
+- **`o`** (`point o`): leftmost/topmost visible tile's MAP INDEX in tile coordinates (e.g., 135 when player is at tile 150 with a 30-tile view). NOT in pixels.
+- **`op`** (`point op`): pixel offset of the tile-drawing area from the window top-left (e.g., sidebar width in pixels). Set from `dest` rect at draw time.
+
+Sprite screen position: `screen.x = (mx - o.x) * tile_width + op.x`
+
+The correct world_pos → map-tile camera offset formula:
+```
+cam_off = op / tile_width - o
+```
+(solved from `world_pos = tile_tu - cam_off = mx + 0.5` for emitter matching)
+
+The WRONG formula (early bug): `cam_off = o / tile_px + 0.5` — this was ~135 tiles off, making all emitters appear 135+ tiles away → zero attenuation → no visible lighting.
+
+Getters: `get_tile_map_origin()` → `o`, `get_drawing_pixel_offset()` → `op`.
+
 ### Phase 5 CPU lightmap tint: guards required
 
 The `gpu_light_r/g/b = lm[idx].max()` path in `draw_from_id_string` MUST have:

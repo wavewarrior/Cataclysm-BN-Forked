@@ -491,9 +491,17 @@ void refresh_display()
         float cam_off_x = 0.0f, cam_off_y = 0.0f;
         Uint32 sdf_w = 0u, sdf_h = 0u;
         if( tilecontext && tile_px > 0.0f ) {
-            const point origin = tilecontext->get_tile_map_origin();
-            cam_off_x = static_cast<float>( origin.x ) / tile_px + 0.5f;
-            cam_off_y = static_cast<float>( origin.y ) / tile_px + 0.5f;
+            // o  = leftmost/topmost visible tile's MAP INDEX (tile coords, e.g. 135)
+            // op = pixel offset of tile-view from window top-left (e.g. 0 or sidebar_w)
+            // screen.x = (mx - o.x)*tile_px + op.x  →  tile_tu = screen.x/tile_px
+            // world_pos = tile_tu - cam_off  must equal  mx + 0.5  (emitter centre)
+            // Solving: cam_off = op.x/tile_px - o.x
+            const point map_origin  = tilecontext->get_tile_map_origin();
+            const point draw_offset = tilecontext->get_drawing_pixel_offset();
+            cam_off_x = static_cast<float>( draw_offset.x ) / tile_px
+                        - static_cast<float>( map_origin.x );
+            cam_off_y = static_cast<float>( draw_offset.y ) / tile_px
+                        - static_cast<float>( map_origin.y );
             sdf_w     = static_cast<Uint32>( rs.sdf().map_w() );
             sdf_h     = static_cast<Uint32>( rs.sdf().map_h() );
         }
