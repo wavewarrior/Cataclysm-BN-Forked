@@ -182,7 +182,7 @@ void emitter_collector::upload_to_gpu( const std::vector<gpu_emitter> &data,
     // Phase 7: upload same emitter data to 4×64 RGBA32F texture for fragment access.
     // Reuses the same transfer buffer (same bytes; gpu_emitter = 4×float4 = one texture row).
     if( emitter_tex_[write_slot_] && count > 0 ) {
-        const Uint32 rows = static_cast<Uint32>( std::min( count, std::size_t( 64 ) ) );
+        const Uint32 rows = count > 64 ? 64u : static_cast<Uint32>( count );
         SDL_GPUTextureTransferInfo tex_src{};
         tex_src.transfer_buffer = xfer_[write_slot_];
         tex_src.offset          = 0;
