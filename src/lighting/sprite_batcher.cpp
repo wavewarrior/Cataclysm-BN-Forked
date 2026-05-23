@@ -93,7 +93,9 @@ VS_OUT main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
 )HLSL";
 
 static const char *const SPRITE_FRAG_HLSL = R"HLSL(
-// Phase 7: normal-map Lambert shading with per-pixel SDF soft shadows.
+// Phase 7: Lambert shading with per-pixel SDF soft shadows.
+// sdf_shadow is inlined (no helper fn) to avoid SPIRV-Cross resource threading on Metal.
+// Normal uses flat (0,0,1) — Phase 7b will sample a normal atlas texture.
 struct GpuEmitter {
     float pos_x, pos_y, pos_z; float radius;
     float r, g, b;             float falloff;
@@ -116,25 +118,10 @@ struct VS_OUT {
     float4 tint     : TEXCOORD1;
     float2 world_pos: TEXCOORD2;
 };
-float sdf_shadow(float2 tp, float2 ep, uint mw) {
-    if(mw==0u) return 1.0;
-    float2 d=ep-tp; float dist=length(d); if(dist<0.01) return 1.0;
-    d/=dist; float t=0.3,sh=1.0,k=6.0;
-    [loop] for(int i=0;i<8;++i){
-        if(t>=dist-0.2) break;
-        float2 p=tp+d*t; int ix=clamp((int)p.x,0,(int)mw-1),iy=clamp((int)p.y,0,(int)mw-1);
-        float sd=SdfBuf[ix*(int)mw+iy]; if(sd<0.05){sh=0.0;break;}
-        sh=min(sh,k*sd/max(dist-t,0.01)); t+=max(sd,0.1);
-    }
-    return saturate(sh);
-}
 float4 main(VS_OUT i) : SV_Target0 {
     const float4 texel = Atlas.Sample(AtlasSmp, i.uv);
     if(texel.a < 0.01) discard;
-    // Phase 7: derive surface normal from luminance gradients (ddx/ddy).
-    float lx=dot(ddx(texel.rgb),float3(0.299,0.587,0.114));
-    float ly=dot(ddy(texel.rgb),float3(0.299,0.587,0.114));
-    float3 normal=normalize(float3(-lx*8.0,-ly*8.0,1.0));
+    const float3 normal = float3(0.0, 0.0, 1.0);
     float3 gl=float3(ambient,ambient,ambient);
     const uint me=min(emitter_count,64u);
     for(uint ei=0u;ei<me;++ei){
@@ -145,7 +132,22 @@ float4 main(VS_OUT i) : SV_Target0 {
         float atten=1.0-pow(saturate(dist/e.radius),e.falloff);
         float3 ld=normalize(float3(dv/max(dist,0.001),0.5));
         float lambert=saturate(dot(normal,ld));
-        float shadow=sdf_shadow(i.world_pos,float2(e.pos_x,e.pos_y),sdf_map_w);
+        float shadow=1.0;
+        if(sdf_map_w>0u){
+            float2 sd=float2(e.pos_x,e.pos_y)-i.world_pos;
+            float sdist=length(sd);
+            if(sdist>0.01){
+                sd/=sdist; float t=0.3,sh=1.0,k=6.0;
+                [loop] for(int si=0;si<8;++si){
+                    if(t>=sdist-0.2) break;
+                    float2 p=i.world_pos+sd*t;
+                    int ix=clamp((int)p.x,0,(int)sdf_map_w-1),iy=clamp((int)p.y,0,(int)sdf_map_w-1);
+                    float s=SdfBuf[ix*(int)sdf_map_w+iy]; if(s<0.05){sh=0.0;break;}
+                    sh=min(sh,k*s/max(sdist-t,0.01)); t+=max(s,0.1);
+                }
+                shadow=saturate(sh);
+            }
+        }
         float3 rgb=(e.r<0.01&&e.g<0.01&&e.b<0.01)?float3(1,1,1):float3(e.r,e.g,e.b);
         gl+=rgb*atten*lambert*shadow;
     }
