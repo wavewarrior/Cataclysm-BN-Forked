@@ -94,6 +94,9 @@ struct sun_params {
     float sp_pad;
 };
 
+// Returns sun/sky params interpolated from a 24h LUT for the given hour (0..24).
+sun_params make_sun_params( float hour_of_day ) noexcept;
+
 class sprite_batcher_impl;
 
 class sprite_batcher

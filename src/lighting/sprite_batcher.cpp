@@ -4,6 +4,7 @@
 #include "debug.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <utility>
 #include <vector>
@@ -226,6 +227,52 @@ struct light_params {
 static_assert( sizeof( light_params ) == 32, "light_params wire-stable with LightParams cbuffer" );
 
 static_assert( sizeof( sun_params ) == 48, "sun_params wire-stable with SunParams cbuffer" );
+
+// ---- 24h sun LUT -------------------------------------------------------
+// Defined at file scope so MSVC won't complain about static-local in nested block.
+namespace {
+struct sun_lut_key { float hr, si, sr, sg, sb, sky_i, sky_r, sky_g, sky_b, elev; };
+static const sun_lut_key k_sun[] = {
+  //  hr    si     sr     sg     sb    sky_i  sky_r  sky_g  sky_b  elev
+    {  0, 0.00f, 0.f,  0.f,  0.f,  0.03f, 0.05f, 0.05f, 0.15f, 0.f   },
+    {  5, 0.00f, 0.f,  0.f,  0.f,  0.05f, 0.05f, 0.10f, 0.25f, 0.f   },
+    {  6, 0.10f, 0.90f,0.50f,0.20f,0.15f, 0.60f, 0.40f, 0.30f, 0.15f },
+    {  8, 0.60f, 1.00f,0.80f,0.50f,0.50f, 0.55f, 0.65f, 0.85f, 0.50f },
+    { 12, 1.00f, 1.00f,0.95f,0.80f,0.80f, 0.50f, 0.60f, 0.90f, 0.87f },
+    { 16, 0.80f, 1.00f,0.90f,0.60f,0.60f, 0.50f, 0.60f, 0.85f, 0.70f },
+    { 19, 0.20f, 1.00f,0.40f,0.10f,0.20f, 0.70f, 0.40f, 0.30f, 0.20f },
+    { 21, 0.00f, 0.f,  0.f,  0.f,  0.05f, 0.10f, 0.08f, 0.15f, 0.f   },
+    { 24, 0.00f, 0.f,  0.f,  0.f,  0.03f, 0.05f, 0.05f, 0.15f, 0.f   },
+};
+static constexpr int k_sun_n = static_cast<int>( sizeof( k_sun ) / sizeof( k_sun[0] ) );
+} // anonymous namespace
+
+sun_params make_sun_params( float sun_hour ) noexcept
+{
+    int ki = 0;
+    while( ki < k_sun_n - 2 && k_sun[ki + 1].hr <= sun_hour ) {
+        ++ki;
+    }
+    const auto &a = k_sun[ki], &b = k_sun[ki + 1];
+    const float dt = ( b.hr > a.hr ) ? ( sun_hour - a.hr ) / ( b.hr - a.hr ) : 0.f;
+    auto lp = [dt]( float x, float y ) { return x + dt * ( y - x ); };
+    sun_params sp{};
+    sp.sun_intensity = lp( a.si,    b.si );
+    sp.sun_r         = lp( a.sr,    b.sr );
+    sp.sun_g         = lp( a.sg,    b.sg );
+    sp.sun_b         = lp( a.sb,    b.sb );
+    sp.sky_intensity = lp( a.sky_i, b.sky_i );
+    sp.sky_r         = lp( a.sky_r, b.sky_r );
+    sp.sky_g         = lp( a.sky_g, b.sky_g );
+    sp.sky_b         = lp( a.sky_b, b.sky_b );
+    sp.sun_sin_elev  = lp( a.elev,  b.elev );
+    // Sun direction rotates E→W (noon = overhead, dawn from east, dusk from west).
+    const float angle = ( sun_hour - 12.f ) * 3.14159f / 12.f;
+    sp.sun_dir_x = static_cast<float>( cos( static_cast<double>( angle ) ) );
+    sp.sun_dir_y = 0.f;
+    sp.sp_pad = 0.f;
+    return sp;
+}
 
 // ---- PIMPL body --------------------------------------------------------
 
