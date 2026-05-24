@@ -455,6 +455,24 @@ void refresh_display()
         return;
     }
 
+    // Phase 8 main-menu background: when no game is loaded, inject a fullscreen
+    // tile sprite (tint=0, game-tile mode) so the warm amber decorative emitter
+    // shows as a lit gradient behind the UI text.  Added only when the tile queue
+    // is empty (once per redraw cycle) to prevent stacking across frames.
+    if( !g && rs.tile_sprites_empty() && rs.geometry().white_texture() ) {
+        lighting::sprite_instance bg{};
+        bg.dst_x  = 0.f;
+        bg.dst_y  = 0.f;
+        bg.dst_w  = static_cast<float>( ctx.swapchain_w );
+        bg.dst_h  = static_cast<float>( ctx.swapchain_h );
+        bg.src_u  = 0.f;  bg.src_v  = 0.f;
+        bg.src_uw = 1.f;  bg.src_vh = 1.f;
+        bg.tint_r = 0.f;  bg.tint_g = 0.f;  bg.tint_b = 0.f;  // game-tile mode
+        bg.tint_a = 1.f;
+        bg.rotation = 0.f;
+        rs.queue_tile_sprite( rs.geometry().white_texture(), bg );
+    }
+
     constexpr float clear_black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
     rs.tile_batcher().begin_pass( ctx.cmd_buffer, ctx.swapchain_tex,
                                   ctx.swapchain_w, ctx.swapchain_h,

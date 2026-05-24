@@ -193,10 +193,15 @@ float4 main(VS_OUT i) : SV_Target0 {
                       * sun_shadow * sky_vis;
     }
 
-    // GPU emitters are PRIMARY light. Tiny ambient floor + sky/sun for outdoors.
-    const float3 combined = min(float3(ambient, ambient, ambient)
-                                + emitter_light + sky_contrib + sun_contrib,
-                                float3(2.0, 2.0, 2.0));
+    // GPU total light (emitters + sky + sun + ambient floor).
+    const float3 gpu_total = min(float3(ambient, ambient, ambient)
+                                 + emitter_light + sky_contrib + sun_contrib,
+                                 float3(2.0, 2.0, 2.0));
+    // max(tint, gpu_total):
+    //   Game tiles:  tint = 0 (set by CPU side) → gpu_total drives brightness (Stoneshard)
+    //   UI / fonts:  tint = element color (1.0 for white) → stays fully visible
+    //   Main menu:   tint = 1.0 (no game state) → all elements bright; emitters add glow
+    const float3 combined = max(i.tint.rgb, gpu_total);
     return float4(texel.rgb * combined, texel.a * i.tint.a);
 }
 )HLSL";

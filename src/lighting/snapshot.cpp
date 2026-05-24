@@ -191,6 +191,12 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
     out.reserve( 1024 );
 
     if( !g ) {
+        // Main menu: no game map, so no terrain/item/creature emitters.
+        // Add a decorative warm-amber light from the upper-left corner.
+        // Position in screen-tile space (world_pos when cam_off=0, tile_px=32):
+        //   screen pos (256px,128px) → world_pos (8, 4).
+        // Radius 45 covers the whole 1920×1080 menu (60×34 screen-tiles).
+        out.push_back( make_omni( 8, 4, 0, 45.f, 1.f, 0.55f, 0.15f ) );
         return out;
     }
 

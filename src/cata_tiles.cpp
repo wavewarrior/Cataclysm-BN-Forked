@@ -4396,10 +4396,11 @@ bool cata_tiles::draw_from_id_string(
     // `pos` is in map tile coordinates; default to white (1,1,1) for UI tiles,
     // overmap tiles, out-of-bounds, or when the lightmap hasn't been generated
     // yet (lum == 0: main menu / first frame before generate_lightmap runs).
-    // NOTE: the draw loop filters lit_level::DARK *before* calling this function,
-    // so any tile arriving here with lum==0 is a pre-lightmap false-zero, not a
-    // genuinely dark tile.
-    gpu_light_r = gpu_light_g = gpu_light_b = 1.0f;
+    // Phase 8: tint = 0 for game tiles so max(tint, gpu_light) = gpu_light.
+    // GPU emitters + sky/sun are the sole brightness source for game tiles.
+    // UI elements and main menu (g==nullptr or as_independent_entity) keep tint=1.0
+    // so max(1.0, gpu_light) = 1.0 → full color passthrough regardless of lighting.
+    gpu_light_r = gpu_light_g = gpu_light_b = 1.0f;  // default: UI/main-menu passthrough
     if( !as_independent_entity
         && tile.category != C_OVERMAP_TERRAIN
         && g != nullptr ) {
@@ -4408,18 +4409,12 @@ bool cata_tiles::draw_from_id_string(
             const level_cache &mc = here.access_cache( pos.z );
             const int idx = mc.idx( pos.x, pos.y );
             const float lum = mc.lm[idx].max();
-            // lum==0 → lightmap not generated yet; keep white tint.
             if( lum > 0.001f ) {
-                const float clum = std::min( 1.0f, lum );
-                const light_color_rgb &lcc = mc.light_color_cache[idx];
-                if( lcc.is_colored() ) {
-                    gpu_light_r = std::min( 1.0f, std::max( clum, lcc.r ) );
-                    gpu_light_g = std::min( 1.0f, std::max( clum, lcc.g ) );
-                    gpu_light_b = std::min( 1.0f, std::max( clum, lcc.b ) );
-                } else {
-                    gpu_light_r = gpu_light_g = gpu_light_b = clum;
-                }
+                // Tile IS lit by CPU lightmap → let GPU emitters drive brightness.
+                // tint = 0 so max(0, gpu_light) = gpu_light (Stoneshard quality).
+                gpu_light_r = gpu_light_g = gpu_light_b = 0.0f;
             }
+            // lum == 0: lightmap not generated yet; keep tint=1.0 (safe white fallback).
         }
     }
 
