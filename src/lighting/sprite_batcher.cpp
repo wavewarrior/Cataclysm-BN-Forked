@@ -143,8 +143,9 @@ float4 main(VS_OUT i) : SV_Target0 {
         const float  dist = length(dv);
         if(dist >= d0.w || dist < 0.01) continue;
         const float  atten   = 1.0 - pow(saturate(dist / d0.w), d1.w);
-        const float3 ld      = normalize(float3(dv / max(dist, 0.001), 0.5));
-        const float  lambert = saturate(dot(normal, ld));
+        // Lambert = 1.0 for omnidirectional point lights with flat normal.
+        // Directional shading from real surface normals comes in Phase 7b.
+        const float  lambert = 1.0;
         float shadow = 1.0;
         if(sdf_map_w > 0u) {
             const float2 sd    = d0.xy - i.world_pos;

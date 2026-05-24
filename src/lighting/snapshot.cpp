@@ -41,7 +41,12 @@ static gpu_emitter make_omni( int lx, int ly, int lz,
     e.pos_x           = static_cast<float>( lx ) + 0.5f;
     e.pos_y           = static_cast<float>( ly ) + 0.5f;
     e.pos_z           = static_cast<float>( lz );
-    e.radius          = radius;
+    // Convert game luminance units to GPU tile radius via sqrt.
+    // light_emitted/active_light use luminance (not tile radius):
+    //   lum=30 (fire field)   → 5.5 tiles
+    //   lum=120 (indoor lamp) → 11 tiles
+    //   lum=400 (bright)      → 20 tiles
+    e.radius          = std::sqrt( std::max( 0.f, radius ) );
     e.r               = r;
     e.g               = g;
     e.b               = b;
@@ -196,7 +201,8 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
         // Position in screen-tile space (world_pos when cam_off=0, tile_px=32):
         //   screen pos (256px,128px) → world_pos (8, 4).
         // Radius 45 covers the whole 1920×1080 menu (60×34 screen-tiles).
-        out.push_back( make_omni( 8, 4, 0, 45.f, 1.f, 0.55f, 0.15f ) );
+        // radius=2025 → sqrt(2025)=45 tile radius covers full screen
+        out.push_back( make_omni( 8, 4, 0, 2025.f, 1.f, 0.55f, 0.15f ) );
         return out;
     }
 
