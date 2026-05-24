@@ -135,22 +135,25 @@ void render_state::clear_tile_scissor()
     tile_batcher_.set_scissor( nullptr );
 }
 
-void render_state::set_tile_lighting( float           tile_pixel_size,
-                                       float           z_level,
-                                       Uint32          emitter_count,
-                                       float           ambient,
-                                       float           cam_off_x,
-                                       float           cam_off_y,
-                                       Uint32          sdf_map_w,
-                                       Uint32          sdf_map_h,
-                                       SDL_GPUTexture *emitter_tex,
-                                       SDL_GPUTexture *sdf_tex,
-                                       SDL_GPUSampler *data_sampler )
+void render_state::set_tile_lighting( float             tile_pixel_size,
+                                       float             z_level,
+                                       Uint32            emitter_count,
+                                       float             ambient,
+                                       float             cam_off_x,
+                                       float             cam_off_y,
+                                       Uint32            sdf_map_w,
+                                       Uint32            sdf_map_h,
+                                       SDL_GPUTexture   *emitter_tex,
+                                       SDL_GPUTexture   *sdf_tex,
+                                       SDL_GPUSampler   *data_sampler,
+                                       SDL_GPUTexture   *sky_vis_tex,
+                                       const sun_params *sp )
 {
     tile_batcher_.set_lighting_resources( tile_pixel_size, z_level,
                                            emitter_count, ambient,
                                            cam_off_x, cam_off_y, sdf_map_w, sdf_map_h,
-                                           emitter_tex, sdf_tex, data_sampler );
+                                           emitter_tex, sdf_tex, data_sampler,
+                                           sky_vis_tex, sp );
 }
 
 void render_state::flush_ui_rects( sprite_batcher &dst )

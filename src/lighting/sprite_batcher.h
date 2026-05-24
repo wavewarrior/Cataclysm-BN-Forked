@@ -83,6 +83,17 @@ struct pipeline_desc {
 
 // PIMPL — keeps SDL_GPU storage-buffer / pipeline details out of the header
 // so the rest of the codebase compiles without the SDL_gpu.h surface.
+// Phase 8: sun + skylight parameters.  Wire-stable with SunParams cbuffer (b1, space3).
+struct sun_params {
+    float sun_dir_x, sun_dir_y;    // direction sun comes FROM (normalized 2D)
+    float sun_sin_elev;             // sin(elevation): 0=horizon, 1=zenith
+    float sun_intensity;            // 0=night, 1=noon
+    float sun_r, sun_g, sun_b;     // sun color RGB
+    float sky_r, sky_g, sky_b;     // sky ambient RGB
+    float sky_intensity;            // overall sky brightness
+    float sp_pad;
+};
+
 class sprite_batcher_impl;
 
 class sprite_batcher
@@ -122,22 +133,24 @@ class sprite_batcher
         void set_texture( SDL_GPUTexture *atlas, SDL_GPUSampler *sampler );
         // Set a GPU scissor rect for subsequent draws. nullptr = full viewport.
         void set_scissor( const SDL_Rect *rect );
-        // Phase 7: supply per-frame lighting resources.
-        // emitter_tex: 4×64 RGBA32F (row=emitter index; col 0=pos+radius, col 1=rgb+falloff)
-        // sdf_tex:     W×H R32_FLOAT from sdf_pass (use map_w() + map_h() for dimensions)
-        // data_sampler: nearest-neighbor sampler (reuse gpu_sampler_); if null while textures
-        //               are non-null, emitter lighting is silently disabled (prevents UB).
-        void set_lighting_resources( float           tile_pixel_size,
-                                     float           z_level,
-                                     Uint32          emitter_count,
-                                     float           ambient,
-                                     float           cam_off_x    = 0.0f,
-                                     float           cam_off_y    = 0.0f,
-                                     Uint32          sdf_map_w    = 0u,
-                                     Uint32          sdf_map_h    = 0u,
-                                     SDL_GPUTexture *emitter_tex  = nullptr,
-                                     SDL_GPUTexture *sdf_tex      = nullptr,
-                                     SDL_GPUSampler *data_sampler = nullptr );
+        // Phase 7/8: supply per-frame lighting resources.
+        // emitter_tex:  4×64 RGBA32F (row=emitter, col 0=pos+radius, col 1=rgb+falloff)
+        // sdf_tex:      W×H R32_FLOAT from sdf_pass
+        // sky_vis_tex:  W×H R8_UNORM sky visibility (255=open sky, 0=indoor) Phase 8
+        // sp:           sun+sky params pointer (nullptr = no sun)
+        void set_lighting_resources( float             tile_pixel_size,
+                                     float             z_level,
+                                     Uint32            emitter_count,
+                                     float             ambient,
+                                     float             cam_off_x    = 0.0f,
+                                     float             cam_off_y    = 0.0f,
+                                     Uint32            sdf_map_w    = 0u,
+                                     Uint32            sdf_map_h    = 0u,
+                                     SDL_GPUTexture   *emitter_tex  = nullptr,
+                                     SDL_GPUTexture   *sdf_tex      = nullptr,
+                                     SDL_GPUSampler   *data_sampler = nullptr,
+                                     SDL_GPUTexture   *sky_vis_tex  = nullptr,
+                                     const sun_params *sp           = nullptr );
 
         // Append one sprite to the pending batch. Triggers an automatic
         // flush when the per-frame instance budget is reached so callers can

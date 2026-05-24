@@ -99,11 +99,20 @@ Texture2D<float4> EmitterTex : register(t1, space2);
 SamplerState      EmitterSmp : register(s1, space2);
 Texture2D<float>  SdfTex     : register(t2, space2);
 SamplerState      SdfSmp     : register(s2, space2);
+// Phase 8: sky visibility (R8_UNORM, 255=open sky).
+Texture2D<float>  SkyVisTex  : register(t3, space2);
+SamplerState      SkyVisSmp  : register(s3, space2);
 cbuffer LightParams : register(b0, space3) {
     float tile_pixel_size; float current_z;
     uint  emitter_count;   float ambient;
     float camera_off_x;    float camera_off_y;
     uint  sdf_map_w;       uint  sdf_map_h;
+};
+// Phase 8: sun + skylight params.
+cbuffer SunParams : register(b1, space3) {
+    float sun_dir_x, sun_dir_y, sun_sin_elev, sun_intensity;
+    float sun_r,     sun_g,     sun_b,        sky_r;
+    float sky_g,     sky_b,     sky_intensity, sp_pad;
 };
 struct VS_OUT {
     float4 pos      : SV_Position;
@@ -156,9 +165,36 @@ float4 main(VS_OUT i) : SV_Target0 {
                            ? float3(1, 1, 1) : d1.xyz;
         emitter_light += rgb * atten * lambert * shadow;
     }
-    // Additive blend: CPU tint = base, GPU emitters ADD colored glow on top.
-    // Ambient raises all tiles slightly so emitter_light has a warm minimum near lights.
-    const float3 combined = min(i.tint.rgb + float3(ambient,ambient,ambient) + emitter_light,
+    // Phase 8: sky ambient + directional sun contribution.
+    float sky_vis = SkyVisTex.Load(int3(clamp((int)i.world_pos.x, 0, (int)sdf_map_w-1),
+                                        clamp((int)i.world_pos.y, 0, (int)sdf_map_h-1), 0));
+    // Sky ambient: soft, no shadowing needed.
+    float3 sky_contrib = float3(sky_r, sky_g, sky_b) * sky_intensity * sky_vis;
+    // Sun direct: ray-march SDF for soft shadow (16 steps, light-to-fragment direction).
+    float3 sun_contrib = float3(0.0, 0.0, 0.0);
+    if(sun_intensity > 0.001 && sky_vis > 0.01 && sdf_map_w > 0u) {
+        const float2 toward_sun = -float2(sun_dir_x, sun_dir_y);
+        float t = 0.3, sh = 1.0, k = 4.0;
+        [loop] for(int ss = 0; ss < 16; ++ss) {
+            if(t > 8.0) break;
+            const float2 p  = i.world_pos + toward_sun * t;
+            const int    ix = clamp((int)p.x, 0, (int)sdf_map_w - 1);
+            const int    iy = clamp((int)p.y, 0, (int)sdf_map_h - 1);
+            const float  s  = SdfTex.Load(int3(ix, iy, 0));
+            if(s < 0.05) { sh = 0.0; break; }
+            sh = min(sh, k * s / max(8.0 - t, 0.01));
+            t += max(s, 0.15);
+        }
+        const float sun_shadow = saturate(sh);
+        // Lambert with flat normal: dot((0,0,1), normalize(sun_dir_xy, sin_elev))
+        const float sun_lambert = sun_sin_elev / sqrt(1.0 + sun_sin_elev * sun_sin_elev);
+        sun_contrib = float3(sun_r, sun_g, sun_b) * sun_intensity * sun_lambert
+                      * sun_shadow * sky_vis;
+    }
+
+    // GPU emitters are PRIMARY light. Tiny ambient floor + sky/sun for outdoors.
+    const float3 combined = min(float3(ambient, ambient, ambient)
+                                + emitter_light + sky_contrib + sun_contrib,
                                 float3(2.0, 2.0, 2.0));
     return float4(texel.rgb * combined, texel.a * i.tint.a);
 }
@@ -188,6 +224,8 @@ struct light_params {
     Uint32 sdf_map_h;       // SDF/map height in tiles (was lp_pad; same type, sizeof unchanged)
 };
 static_assert( sizeof( light_params ) == 32, "light_params wire-stable with LightParams cbuffer" );
+
+static_assert( sizeof( sun_params ) == 48, "sun_params wire-stable with SunParams cbuffer" );
 
 // ---- PIMPL body --------------------------------------------------------
 
@@ -244,11 +282,13 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
         float  cur_clear_color[4] = {};
         bool   pass_open = false;
 
-        // Phase 7: per-frame lighting resources.
-        SDL_GPUTexture *lp_emitter_tex  = nullptr;  // bound as fragment sampler 1
-        SDL_GPUTexture *lp_sdf_tex      = nullptr;  // bound as fragment sampler 2
+        // Phase 7/8: per-frame lighting resources.
+        SDL_GPUTexture *lp_emitter_tex  = nullptr;  // fragment sampler 1
+        SDL_GPUTexture *lp_sdf_tex      = nullptr;  // fragment sampler 2
+        SDL_GPUTexture *lp_sky_vis_tex  = nullptr;  // fragment sampler 3 (Phase 8)
         SDL_GPUSampler *lp_data_sampler = nullptr;
         light_params    lp              = {};  // defaults: all zero
+        sun_params      lp_sun          = {};  // Phase 8: sun/sky params
 
         void set_lighting_resources( float           tile_pixel_size,
                                      float           z_level,
@@ -260,15 +300,18 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                                      Uint32          sdf_map_h    = 0u,
                                      SDL_GPUTexture *emitter_tex  = nullptr,
                                      SDL_GPUTexture *sdf_tex      = nullptr,
-                                     SDL_GPUSampler *data_sampler = nullptr ) noexcept {
-            // Fix #2: if textures exist but sampler is missing, disable GPU lighting
-            // to prevent fragment shader looping over an unbound texture slot.
-            if( ( emitter_tex || sdf_tex ) && !data_sampler ) {
-                emitter_tex = nullptr;
-                sdf_tex     = nullptr;
+                                     SDL_GPUSampler *data_sampler = nullptr,
+                                     SDL_GPUTexture *sky_vis_tex  = nullptr,
+                                     const sun_params *sp         = nullptr ) noexcept {
+            // Guard: if textures exist but sampler is missing, disable GPU lighting.
+            if( ( emitter_tex || sdf_tex || sky_vis_tex ) && !data_sampler ) {
+                emitter_tex  = nullptr;
+                sdf_tex      = nullptr;
+                sky_vis_tex  = nullptr;
             }
             lp_emitter_tex  = emitter_tex;
             lp_sdf_tex      = sdf_tex;
+            lp_sky_vis_tex  = sky_vis_tex;
             lp_data_sampler = data_sampler;
             lp.tile_pixel_size = tile_pixel_size;
             lp.current_z       = z_level;
@@ -278,6 +321,7 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
             lp.camera_off_y    = cam_off_y;
             lp.sdf_map_w       = sdf_tex ? sdf_map_w : 0u;
             lp.sdf_map_h       = sdf_tex ? sdf_map_h : 0u;
+            if( sp ) { lp_sun = *sp; } else { lp_sun = {}; }
         }
 
         // ---- lifecycle -------------------------------------------------
@@ -602,6 +646,10 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                     SDL_GPUTextureSamplerBinding sdf_bind{ lp_sdf_tex, lp_data_sampler };
                     SDL_BindGPUFragmentSamplers( rp, /*first_slot=*/2, &sdf_bind, 1 );
                 }
+                if( lp_sky_vis_tex && lp_data_sampler ) {
+                    SDL_GPUTextureSamplerBinding sky_bind{ lp_sky_vis_tex, lp_data_sampler };
+                    SDL_BindGPUFragmentSamplers( rp, /*first_slot=*/3, &sky_bind, 1 );
+                }
 
                 const SDL_GPUViewport vp{
                     0.0f, 0.0f,
@@ -650,6 +698,8 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                     SDL_PushGPUVertexUniformData( cur_cb, /*slot=*/1, &lp, sizeof( lp ) );
                     // Fragment slot 0: LightParams (ambient, emitter_count, sdf_map_w)
                     SDL_PushGPUFragmentUniformData( cur_cb, /*slot=*/0, &lp, sizeof( lp ) );
+                    // Fragment slot 1: SunParams (sun/sky direction + color)
+                    SDL_PushGPUFragmentUniformData( cur_cb, /*slot=*/1, &lp_sun, sizeof( lp_sun ) );
 
                     SDL_DrawGPUPrimitives( rp, /*num_vertices=*/6, /*num_instances=*/s.count,
                                            /*first_vertex=*/0, /*first_instance=*/0 );
@@ -720,22 +770,25 @@ void sprite_batcher::set_scissor( const SDL_Rect *rect )
     p->set_scissor( rect );
 }
 
-void sprite_batcher::set_lighting_resources( float           tile_pixel_size,
-                                              float           z_level,
-                                              Uint32          emitter_count,
-                                              float           ambient,
-                                              float           cam_off_x,
-                                              float           cam_off_y,
-                                              Uint32          sdf_map_w,
-                                              Uint32          sdf_map_h,
-                                              SDL_GPUTexture *emitter_tex,
-                                              SDL_GPUTexture *sdf_tex,
-                                              SDL_GPUSampler *data_sampler )
+void sprite_batcher::set_lighting_resources( float            tile_pixel_size,
+                                              float            z_level,
+                                              Uint32           emitter_count,
+                                              float            ambient,
+                                              float            cam_off_x,
+                                              float            cam_off_y,
+                                              Uint32           sdf_map_w,
+                                              Uint32           sdf_map_h,
+                                              SDL_GPUTexture  *emitter_tex,
+                                              SDL_GPUTexture  *sdf_tex,
+                                              SDL_GPUSampler  *data_sampler,
+                                              SDL_GPUTexture  *sky_vis_tex,
+                                              const sun_params *sp )
 {
     p->set_lighting_resources( tile_pixel_size, z_level,
                                 emitter_count, ambient,
                                 cam_off_x, cam_off_y, sdf_map_w, sdf_map_h,
-                                emitter_tex, sdf_tex, data_sampler );
+                                emitter_tex, sdf_tex, data_sampler,
+                                sky_vis_tex, sp );
 }
 
 void sprite_batcher::draw( const sprite_instance &inst )

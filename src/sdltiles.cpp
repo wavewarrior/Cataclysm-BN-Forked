@@ -506,11 +506,57 @@ void refresh_display()
             sdf_h     = static_cast<Uint32>( rs.sdf().map_h() );
         }
 
+        // Phase 8: compute sun/sky params from time-of-day.
+        // Simple 24h LUT: lerp between keyframes keyed by real-hours (0..24).
+        struct sun_lut_key {
+            float hour, si, sr, sg, sb, sky_i, sky_r, sky_g, sky_b, elev;
+        };
+        static const sun_lut_key k_sun[] = {
+          //  hr    si     sr     sg     sb    sky_i  sky_r  sky_g  sky_b  elev
+            {  0, 0.00f, 0.f,   0.f,  0.f,  0.03f, 0.05f, 0.05f, 0.15f, 0.f   },
+            {  5, 0.00f, 0.f,   0.f,  0.f,  0.05f, 0.05f, 0.10f, 0.25f, 0.f   },
+            {  6, 0.10f, 0.90f, 0.50f,0.20f,0.15f, 0.60f, 0.40f, 0.30f, 0.15f },
+            {  8, 0.60f, 1.00f, 0.80f,0.50f,0.50f, 0.55f, 0.65f, 0.85f, 0.50f },
+            { 12, 1.00f, 1.00f, 0.95f,0.80f,0.80f, 0.50f, 0.60f, 0.90f, 0.87f },
+            { 16, 0.80f, 1.00f, 0.90f,0.60f,0.60f, 0.50f, 0.60f, 0.85f, 0.70f },
+            { 19, 0.20f, 1.00f, 0.40f,0.10f,0.20f, 0.70f, 0.40f, 0.30f, 0.20f },
+            { 21, 0.00f, 0.f,   0.f,  0.f,  0.05f, 0.10f, 0.08f, 0.15f, 0.f   },
+            { 24, 0.00f, 0.f,   0.f,  0.f,  0.03f, 0.05f, 0.05f, 0.15f, 0.f   },
+        };
+        // Get fractional hour of day (0..24).
+        const float hour_of_day = g ? hour_of_day<float>( calendar::turn ) : 12.f;
+        static constexpr int k_sun_n = static_cast<int>( sizeof( k_sun ) / sizeof( k_sun[0] ) );
+        int ki = 0;
+        while( ki < k_sun_n - 2 && k_sun[ki + 1].hour <= hour_of_day ) {
+            ++ki;
+        }
+        const auto &ka = k_sun[ki], &kb = k_sun[ki + 1];
+        const float t = ( hour_of_day - ka.hour ) / ( kb.hour - ka.hour );
+        auto lerp = [t]( float a, float b ) { return a + t * ( b - a ); };
+        lighting::sun_params sp{};
+        sp.sun_intensity = lerp( ka.si,    kb.si );
+        sp.sun_r         = lerp( ka.sr,    kb.sr );
+        sp.sun_g         = lerp( ka.sg,    kb.sg );
+        sp.sun_b         = lerp( ka.sb,    kb.sb );
+        sp.sky_intensity = lerp( ka.sky_i, kb.sky_i );
+        sp.sky_r         = lerp( ka.sky_r, kb.sky_r );
+        sp.sky_g         = lerp( ka.sky_g, kb.sky_g );
+        sp.sky_b         = lerp( ka.sky_b, kb.sky_b );
+        sp.sun_sin_elev  = lerp( ka.elev,  kb.elev );
+        // Sun direction: rotates E→W over the day (noon = due south shadow).
+        {
+            const float angle = ( hour_of_day - 12.f ) * 3.14159f / 12.f;
+            sp.sun_dir_x = std::cos( angle );
+            sp.sun_dir_y = 0.f;  // simplified: E-W rotation only
+        }
+
         rs.set_tile_lighting( tile_px, z_lev, n_emit, ambient,
                               cam_off_x, cam_off_y, sdf_w, sdf_h,
                               rs.collector()->emitter_texture(),
                               rs.sdf().sdf_texture(),
-                              rs.gpu_sampler() );
+                              rs.gpu_sampler(),
+                              rs.sdf().sky_vis_texture(),
+                              &sp );
     }
 
     // Phase 3+4: build emitter snapshot + SDF, submit to collector for GPU upload.
@@ -546,16 +592,25 @@ void refresh_display()
                 sdf = lighting::compute_sdf_cpu( mc.transparency_cache.data(), W, H );
             }
 
-            // Diagnostic: verify SDF is reasonable (wall should be 0.0).
-            // Phase 6 will remove this once GPU JFA is in.
             dbg( DL::Debug ) << "sdf[player]: "
-                             << sdf[g->u.pos().x * H + g->u.pos().y]
-                             << " (0 if standing in wall, >0 otherwise)";
+                             << sdf[g->u.pos().x * H + g->u.pos().y];
+        }
+
+        // Phase 8: sky visibility — 255 = open sky above, 0 = indoor.
+        // Simple approach: all tiles at player z-level are "open sky" for now;
+        // a future pass will check floor_cache at z+1 for proper roof detection.
+        std::vector<uint8_t> sky_vis;
+        if( g && rs.sdf().ready() ) {
+            map &msv = get_map();
+            const int Wsv = msv.getmapsize() * SEEX;
+            const int Hsv = msv.getmapsize() * SEEY;
+            sky_vis.resize( static_cast<size_t>( Wsv * Hsv ), 255u );
         }
 
         rs.collector()->submit( std::move( snapshot ),
                                 std::move( transparency ),
-                                std::move( sdf ) );
+                                std::move( sdf ),
+                                std::move( sky_vis ) );
     }
 }
 

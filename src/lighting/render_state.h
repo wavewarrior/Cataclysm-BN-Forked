@@ -145,18 +145,20 @@ class render_state
         // batcher segment so previously queued sprites are unaffected.
         void set_tile_scissor( const SDL_Rect *rect );
         void clear_tile_scissor();
-        // Phase 7: supply per-frame lighting resources to tile_batcher fragment shader.
-        void set_tile_lighting( float           tile_pixel_size,
-                                float           z_level,
-                                Uint32          emitter_count,
-                                float           ambient,
-                                float           cam_off_x    = 0.0f,
-                                float           cam_off_y    = 0.0f,
-                                Uint32          sdf_map_w    = 0u,
-                                Uint32          sdf_map_h    = 0u,
-                                SDL_GPUTexture *emitter_tex  = nullptr,
-                                SDL_GPUTexture *sdf_tex      = nullptr,
-                                SDL_GPUSampler *data_sampler = nullptr );
+        // Phase 7/8: supply per-frame lighting resources to tile_batcher fragment shader.
+        void set_tile_lighting( float             tile_pixel_size,
+                                float             z_level,
+                                Uint32            emitter_count,
+                                float             ambient,
+                                float             cam_off_x    = 0.0f,
+                                float             cam_off_y    = 0.0f,
+                                Uint32            sdf_map_w    = 0u,
+                                Uint32            sdf_map_h    = 0u,
+                                SDL_GPUTexture   *emitter_tex  = nullptr,
+                                SDL_GPUTexture   *sdf_tex      = nullptr,
+                                SDL_GPUSampler   *data_sampler = nullptr,
+                                SDL_GPUTexture   *sky_vis_tex  = nullptr,
+                                const sun_params *sp           = nullptr );
 
         // Phase 2i-B-5 lifecycle fix. Legacy SDL_Renderer's display_buffer
         // is a persistent render target — content stays between redraws.

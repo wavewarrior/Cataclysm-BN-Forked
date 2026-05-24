@@ -38,7 +38,8 @@ public:
     // Called from the main thread; non-blocking.
     void submit( std::vector<gpu_emitter> snapshot,
                  std::vector<uint8_t>    transparency = {},
-                 std::vector<float>      sdf          = {} );
+                 std::vector<float>      sdf          = {},
+                 std::vector<uint8_t>    sky_vis      = {} );
 
     // Return the GPU buffer for the last fully-uploaded frame.
     // May return nullptr until the first upload completes.
@@ -56,7 +57,8 @@ private:
     void thread_main();
     void upload_to_gpu( const std::vector<gpu_emitter> &data,
                         const std::vector<uint8_t>    &transparency,
-                        const std::vector<float>      &sdf );
+                        const std::vector<float>      &sdf,
+                        const std::vector<uint8_t>    &sky_vis );
 
     render_state &rs_;
 
@@ -65,6 +67,7 @@ private:
     std::condition_variable cv_;
     std::vector<gpu_emitter> pending_;
     std::vector<uint8_t>    pending_transparency_;
+    std::vector<uint8_t>    pending_sky_vis_;
     std::vector<float>      pending_sdf_;
     bool have_pending_ = false;
     bool stop_         = false;

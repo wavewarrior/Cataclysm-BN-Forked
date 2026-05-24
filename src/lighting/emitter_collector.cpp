@@ -87,13 +87,15 @@ emitter_collector::~emitter_collector()
 
 void emitter_collector::submit( std::vector<gpu_emitter> snapshot,
                                  std::vector<uint8_t>    transparency,
-                                 std::vector<float>      sdf )
+                                 std::vector<float>      sdf,
+                                 std::vector<uint8_t>    sky_vis )
 {
     {
         std::lock_guard<std::mutex> lk( mu_ );
         pending_              = std::move( snapshot );
         pending_transparency_ = std::move( transparency );
         pending_sdf_          = std::move( sdf );
+        pending_sky_vis_      = std::move( sky_vis );
         have_pending_         = true;
     }
     cv_.notify_one();
@@ -115,6 +117,7 @@ void emitter_collector::thread_main()
         std::vector<gpu_emitter> work_emitters;
         std::vector<uint8_t>    work_transparency;
         std::vector<float>      work_sdf;
+        std::vector<uint8_t>    work_sky_vis;
         {
             std::unique_lock<std::mutex> lk( mu_ );
             cv_.wait( lk, [this] { return have_pending_ || stop_; } );
@@ -124,15 +127,17 @@ void emitter_collector::thread_main()
             work_emitters     = std::move( pending_ );
             work_transparency = std::move( pending_transparency_ );
             work_sdf          = std::move( pending_sdf_ );
+            work_sky_vis      = std::move( pending_sky_vis_ );
             have_pending_ = false;
         }
-        upload_to_gpu( work_emitters, work_transparency, work_sdf );
+        upload_to_gpu( work_emitters, work_transparency, work_sdf, work_sky_vis );
     }
 }
 
 void emitter_collector::upload_to_gpu( const std::vector<gpu_emitter> &data,
                                          const std::vector<uint8_t>    &transparency,
-                                         const std::vector<float>      &sdf )
+                                         const std::vector<float>      &sdf,
+                                         const std::vector<uint8_t>    &sky_vis )
 {
     if( !rs_.device().raw() ) {
         return;
@@ -203,9 +208,9 @@ void emitter_collector::upload_to_gpu( const std::vector<gpu_emitter> &data,
         SDL_UploadToGPUTexture( cp, &tex_src, &tex_dst, /*cycle=*/true );
     }
 
-    // Phase 4: upload transparency + SDF textures in the same copy pass.
+    // Phase 4/8: upload transparency + SDF + sky_vis textures in the same copy pass.
     if( rs_.sdf().ready() && !transparency.empty() && !sdf.empty() ) {
-        rs_.sdf().upload( cp, rs_.device().raw(), transparency, sdf );
+        rs_.sdf().upload( cp, rs_.device().raw(), transparency, sdf, sky_vis );
     }
 
     SDL_EndGPUCopyPass( cp );

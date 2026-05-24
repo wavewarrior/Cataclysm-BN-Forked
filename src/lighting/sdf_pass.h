@@ -40,16 +40,19 @@ public:
     // in init().
     // transparency : map_w*map_h bytes (0=opaque, 255=transparent).
     // sdf          : map_w*map_h floats (tiles to nearest opaque).
+    // sky_vis      : map_w*map_h bytes (255=open sky, 0=indoor). Empty = skip.
     void upload( SDL_GPUCopyPass *cp,
                  SDL_GPUDevice   *dev,
                  const std::vector<uint8_t> &transparency,
-                 const std::vector<float>   &sdf );
+                 const std::vector<float>   &sdf,
+                 const std::vector<uint8_t> &sky_vis = {} );
 
     SDL_GPUTexture *transparency_texture() const noexcept { return transparency_tex_; }
     SDL_GPUTexture *sdf_texture()          const noexcept { return sdf_tex_; }
     // Phase 6b: SDF values as a vertex-readable storage buffer.
-    // Indexed [x * map_h + y] (x-outer, matching compute_sdf_cpu layout).
     SDL_GPUBuffer  *sdf_buffer()           const noexcept { return sdf_storage_; }
+    // Phase 8: sky visibility per tile (R8_UNORM, 255=open sky, 0=indoor).
+    SDL_GPUTexture *sky_vis_texture()      const noexcept { return sky_vis_tex_; }
 
     bool ready() const noexcept { return sdf_tex_ != nullptr; }
 
@@ -59,9 +62,11 @@ public:
 private:
     SDL_GPUTexture        *transparency_tex_ = nullptr;
     SDL_GPUTexture        *sdf_tex_          = nullptr;
+    SDL_GPUTexture        *sky_vis_tex_      = nullptr; // Phase 8: R8_UNORM
     SDL_GPUBuffer         *sdf_storage_      = nullptr; // vertex-shader storage buffer
     SDL_GPUTransferBuffer *xfer_transparency_ = nullptr;
     SDL_GPUTransferBuffer *xfer_sdf_          = nullptr;
+    SDL_GPUTransferBuffer *xfer_sky_vis_      = nullptr;
     int map_w_ = 0;
     int map_h_ = 0;
 };

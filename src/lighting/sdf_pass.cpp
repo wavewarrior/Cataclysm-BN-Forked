@@ -122,7 +122,24 @@ void sdf_pass::init( gpu_device &dev, int map_w, int map_h )
         }
     }
 
-    // Transfer buffers: one for transparency (R8), one for SDF (R32F).
+    // Sky visibility texture: R8_UNORM, 1 byte per tile (255=open sky, 0=indoor).
+    {
+        SDL_GPUTextureCreateInfo tci{};
+        tci.type                 = SDL_GPU_TEXTURETYPE_2D;
+        tci.format               = SDL_GPU_TEXTUREFORMAT_R8_UNORM;
+        tci.usage                = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+        tci.width                = static_cast<Uint32>( map_w );
+        tci.height               = static_cast<Uint32>( map_h );
+        tci.layer_count_or_depth = 1;
+        tci.num_levels           = 1;
+        tci.sample_count         = SDL_GPU_SAMPLECOUNT_1;
+        sky_vis_tex_ = SDL_CreateGPUTexture( d, &tci );
+        if( !sky_vis_tex_ ) {
+            dbg( DL::Warn ) << "sdf_pass::init: failed to create sky_vis_tex";
+        }
+    }
+
+    // Transfer buffers: one for transparency (R8), one for SDF (R32F), one for sky_vis (R8).
     {
         SDL_GPUTransferBufferCreateInfo tbci{};
         tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
@@ -134,6 +151,12 @@ void sdf_pass::init( gpu_device &dev, int map_w, int map_h )
         tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
         tbci.size  = static_cast<Uint32>( map_w * map_h * 4 ); // 4 bytes per tile
         xfer_sdf_ = SDL_CreateGPUTransferBuffer( d, &tbci );
+    }
+    {
+        SDL_GPUTransferBufferCreateInfo tbci{};
+        tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+        tbci.size  = static_cast<Uint32>( map_w * map_h ); // 1 byte per tile
+        xfer_sky_vis_ = SDL_CreateGPUTransferBuffer( d, &tbci );
     }
 
     // Phase 6b: SDF as vertex-readable storage buffer (same data as sdf_tex).
@@ -162,6 +185,10 @@ void sdf_pass::shutdown( gpu_device &dev )
         SDL_ReleaseGPUTransferBuffer( d, xfer_transparency_ );
         xfer_transparency_ = nullptr;
     }
+    if( xfer_sky_vis_ ) {
+        SDL_ReleaseGPUTransferBuffer( d, xfer_sky_vis_ );
+        xfer_sky_vis_ = nullptr;
+    }
     if( sdf_storage_ ) {
         SDL_ReleaseGPUBuffer( d, sdf_storage_ );
         sdf_storage_ = nullptr;
@@ -174,12 +201,17 @@ void sdf_pass::shutdown( gpu_device &dev )
         SDL_ReleaseGPUTexture( d, transparency_tex_ );
         transparency_tex_ = nullptr;
     }
+    if( sky_vis_tex_ ) {
+        SDL_ReleaseGPUTexture( d, sky_vis_tex_ );
+        sky_vis_tex_ = nullptr;
+    }
 }
 
 void sdf_pass::upload( SDL_GPUCopyPass *cp,
                         SDL_GPUDevice   *dev,
                         const std::vector<uint8_t> &transparency,
-                        const std::vector<float>   &sdf )
+                        const std::vector<float>   &sdf,
+                        const std::vector<uint8_t> &sky_vis )
 {
     if( !cp || !dev || !transparency_tex_ || !sdf_tex_ ) {
         return;
@@ -242,6 +274,32 @@ void sdf_pass::upload( SDL_GPUCopyPass *cp,
 
                 SDL_UploadToGPUBuffer( cp, &tb_src, &buf_dst, true );
             }
+        }
+    }
+
+    // Phase 8: upload sky_vis (R8_UNORM, 1 byte/tile, 255=open sky).
+    if( sky_vis_tex_ && xfer_sky_vis_
+        && static_cast<int>( sky_vis.size() ) >= map_w_ * map_h_ ) {
+        void *mapped = SDL_MapGPUTransferBuffer( dev, xfer_sky_vis_, true );
+        if( mapped ) {
+            std::memcpy( mapped, sky_vis.data(),
+                         static_cast<size_t>( map_w_ * map_h_ ) );
+            SDL_UnmapGPUTransferBuffer( dev, xfer_sky_vis_ );
+
+            SDL_GPUTextureTransferInfo src{};
+            src.transfer_buffer = xfer_sky_vis_;
+            src.offset          = 0;
+
+            SDL_GPUTextureRegion dst{};
+            dst.texture   = sky_vis_tex_;
+            dst.x         = 0; dst.y = 0; dst.z = 0;
+            dst.w         = static_cast<Uint32>( map_w_ );
+            dst.h         = static_cast<Uint32>( map_h_ );
+            dst.d         = 1;
+            dst.layer     = 0;
+            dst.mip_level = 0;
+
+            SDL_UploadToGPUTexture( cp, &src, &dst, true );
         }
     }
 }
