@@ -179,6 +179,25 @@ Always forward-declare ALL SDL GPU types used in a lighting/ header. Common omis
 
 `sdl_wrappers.h` is NOT included by lighting/ headers (by design — they're self-contained).
 
+### SDF texture coordinate transposition — CRITICAL
+
+The SDF CPU array is stored **x-major**: `sdf[x * H + y]` (x is outer loop).
+SDL_GPU textures are **row-major**: `Load(int3(col, row, 0))` → memory `row * W + col`.
+
+When you upload an x-major array into a row-major texture, the coordinates are **transposed**.
+To read the correct SDF value for world position `(wx, wy)`:
+```hlsl
+// WRONG — reads transposed position:
+SdfTex.Load(int3(wx, wy, 0));   // → sdf[wy * W + wx]
+// CORRECT — swap x/y to undo the transposition:
+SdfTex.Load(int3(wy, wx, 0));   // → sdf[wx * W + wy] = sdf[wx * H + wy] (when W==H)
+```
+
+The same applies to SkyVisTex (also uploaded from an x-major vector).
+
+**This bug caused `shadow=0` for ALL emitters**: the shadow march read transposed SDF values,
+which often returned 0 (wall), causing immediate shadow=0 → emitter_light=0 everywhere.
+
 ### cata_tiles coordinate system — CRITICAL for world_pos shader
 
 `cata_tiles` has TWO distinct offset members:

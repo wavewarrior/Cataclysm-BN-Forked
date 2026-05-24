@@ -158,7 +158,9 @@ float4 main(VS_OUT i) : SV_Target0 {
                     const float2 p  = i.world_pos + dir * t;
                     const int    ix = clamp((int)p.x, 0, (int)sdf_map_w - 1);
                     const int    iy = clamp((int)p.y, 0, (int)sdf_map_h - 1);
-                    const float  s  = SdfTex.Load(int3(ix, iy, 0));
+                    // SDF array is x-major [x*H+y]; GPU texture is row-major.
+                    // Correct read: Load(int3(iy, ix, 0)) → memory[ix*W+iy] = sdf[ix*H+iy].
+                    const float  s  = SdfTex.Load(int3(iy, ix, 0));
                     if(s < 0.05) { sh = 0.0; break; }
                     sh = min(sh, k * s / max(sdist - t, 0.01));
                     t += max(s, 0.1);
@@ -171,8 +173,10 @@ float4 main(VS_OUT i) : SV_Target0 {
         emitter_light += rgb * atten * lambert * shadow;
     }
     // Phase 8: sky ambient + directional sun contribution.
-    float sky_vis = SkyVisTex.Load(int3(clamp((int)i.world_pos.x, 0, (int)sdf_map_w-1),
-                                        clamp((int)i.world_pos.y, 0, (int)sdf_map_h-1), 0));
+    // Swap x/y: sky_vis also stored x-major like SDF (iy=row→col, ix=col→row).
+    const int sky_ix = clamp((int)i.world_pos.x, 0, (int)sdf_map_w - 1);
+    const int sky_iy = clamp((int)i.world_pos.y, 0, (int)sdf_map_h - 1);
+    float sky_vis = SkyVisTex.Load(int3(sky_iy, sky_ix, 0));
     // Sky ambient: soft, no shadowing needed.
     float3 sky_contrib = float3(sky_r, sky_g, sky_b) * sky_intensity * sky_vis;
     // Sun direct: ray-march SDF for soft shadow (16 steps, light-to-fragment direction).
@@ -185,7 +189,7 @@ float4 main(VS_OUT i) : SV_Target0 {
             const float2 p  = i.world_pos + toward_sun * t;
             const int    ix = clamp((int)p.x, 0, (int)sdf_map_w - 1);
             const int    iy = clamp((int)p.y, 0, (int)sdf_map_h - 1);
-            const float  s  = SdfTex.Load(int3(ix, iy, 0));
+            const float  s  = SdfTex.Load(int3(iy, ix, 0)); // swap: x-major SDF storage
             if(s < 0.05) { sh = 0.0; break; }
             sh = min(sh, k * s / max(8.0 - t, 0.01));
             t += max(s, 0.15);
