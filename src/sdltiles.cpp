@@ -508,12 +508,10 @@ void refresh_display()
         // map_pos = tile_tu - camera_offset  (see sdf_pass.h comment)
         float cam_off_x = 0.0f, cam_off_y = 0.0f;
         Uint32 sdf_w = 0u, sdf_h = 0u;
-        if( tilecontext && tile_px > 0.0f ) {
-            // o  = leftmost/topmost visible tile's MAP INDEX (tile coords, e.g. 135)
-            // op = pixel offset of tile-view from window top-left (e.g. 0 or sidebar_w)
-            // screen.x = (mx - o.x)*tile_px + op.x  →  tile_tu = screen.x/tile_px
-            // world_pos = tile_tu - cam_off  must equal  mx + 0.5  (emitter centre)
-            // Solving: cam_off = op.x/tile_px - o.x
+        // Only compute cam_off while a game is loaded. On the main menu (g==nullptr),
+        // keep cam_off=(0,0) so the decorative emitter coordinates stay consistent
+        // with the screen-tile world_pos used by the background sprite.
+        if( g && tilecontext && tile_px > 0.0f ) {
             const point map_origin  = tilecontext->get_tile_map_origin();
             const point draw_offset = tilecontext->get_drawing_pixel_offset();
             cam_off_x = static_cast<float>( draw_offset.x ) / tile_px
@@ -528,6 +526,17 @@ void refresh_display()
         // sun_hour is renamed to avoid shadowing the hour_of_day<T>() template.
         const float sun_hour = g ? hour_of_day<float>( calendar::turn ) : 12.f;
         lighting::sun_params sp = lighting::make_sun_params( sun_hour );
+
+        // Debug: log emitter count and texture state once every ~120 frames.
+        static int emit_dbg_frame = 0;
+        if( ++emit_dbg_frame >= 120 ) {
+            emit_dbg_frame = 0;
+            dbg( DL::Debug ) << "lighting: n_emit=" << n_emit
+                             << " emitter_tex=" << ( rs.collector()->emitter_texture() ? "ok" : "NULL" )
+                             << " sdf_tex=" << ( rs.sdf().sdf_texture() ? "ok" : "NULL" )
+                             << " cam_off=(" << cam_off_x << "," << cam_off_y << ")"
+                             << " sdf=" << sdf_w << "x" << sdf_h;
+        }
 
         rs.set_tile_lighting( tile_px, z_lev, n_emit, ambient,
                               cam_off_x, cam_off_y, sdf_w, sdf_h,

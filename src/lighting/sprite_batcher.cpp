@@ -76,7 +76,10 @@ VS_OUT main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
         pixel.x / target_size.x *  2.0 - 1.0,
         pixel.y / target_size.y * -2.0 + 1.0);
 
-    const float2 tile_tu = centre / max(tile_pixel_size, 1.0);
+    // Use per-VERTEX pixel (not sprite centre) so world_pos interpolates across
+    // the quad.  For small tiles (32px) the difference is < 0.5 tile — negligible.
+    // For a fullscreen background quad this gives the lighting gradient we want.
+    const float2 tile_tu = pixel / max(tile_pixel_size, 1.0);
     const float2 map_pos = tile_tu - float2(camera_off_x, camera_off_y);
 
     VS_OUT o;

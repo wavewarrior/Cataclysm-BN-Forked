@@ -202,9 +202,12 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
 
     map &m = get_map(); // non-const required for i_at, get_vehicles
 
-    // Guard: if the player's position is not within the loaded map,
-    // the map is being torn down (e.g., exiting to main menu).
-    // Walking submaps with stale pointers would crash.
+    // Guard 1: game is quitting (uquit != QUIT_NO).
+    // Map data may be partially freed during teardown even while g is non-null.
+    if( g->uquit != QUIT_NO ) {
+        return out;
+    }
+    // Guard 2: player is not in the loaded map area.
     if( !m.inbounds( g->u.pos() ) ) {
         return out;
     }
