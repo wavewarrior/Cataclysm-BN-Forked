@@ -259,6 +259,28 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
 
     collect_zlev( m, zlev, out );
 
+#ifdef DEBUG_SYNTHETIC_EMITTER
+    // Replace all emitters with one huge test emitter centred on the player.
+    // Build with -DDEBUG_SYNTHETIC_EMITTER to isolate whether the emitter
+    // pipeline works at all when given known-good input.
+    {
+        out.clear();
+        const tripoint pp = g->u.pos();
+        gpu_emitter t{};
+        t.pos_x           = static_cast<float>( pp.x ) + 0.5f;
+        t.pos_y           = static_cast<float>( pp.y ) + 0.5f;
+        t.pos_z           = static_cast<float>( pp.z );
+        t.radius          = 30.0f;
+        t.r               = 1.0f;
+        t.g               = 1.0f;
+        t.b               = 1.0f;
+        t.falloff         = 2.0f;
+        t.cone_half_angle = M_PIf;
+        t.shape           = static_cast<uint32_t>( emitter_shape::OMNI );
+        out.push_back( t );
+    }
+#endif
+
     {
         std::vector<flash_event> flashes;
         eq.drain( frame_ms, flashes );

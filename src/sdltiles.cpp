@@ -24,6 +24,7 @@
 #include <unordered_map>
 #include <vector>
 #include "avatar.h"
+#include "cached_options.h"
 #include "cata_tiles.h"
 #include "cata_utility.h"
 #include "catacharset.h"
@@ -439,6 +440,15 @@ void refresh_display()
     // UI rects, font glyphs. D3D12 requires one pass per swapchain texture;
     // set_texture() flushes segments inside the pass so all draw kinds coexist.
     auto &rs = lighting::get_render_state();
+
+    // Debug overlay state — saved from the previous frame, drawn this frame.
+    struct EmitterOverlayState {
+        std::vector<gpu_emitter> snap;
+        float cam_off_x = 0.f, cam_off_y = 0.f, tile_px = 32.f;
+        float op_x = 0.f, op_y = 0.f;
+    };
+    static EmitterOverlayState s_emo;
+
     if( !rs.ready() ) {
         return;
     }
@@ -481,6 +491,26 @@ void refresh_display()
     if( !rs.tile_sprites_empty() && rs.gpu_sampler() ) {
         rs.flush_tile_sprites( rs.tile_batcher(), rs.gpu_sampler() );
     }
+    // Debug emitter overlay: solid dot at emitter center, dotted ring at radius.
+    // Active when debug_mode is on (same toggle as the in-game debug menu).
+    if( debug_mode && g && !s_emo.snap.empty() ) {
+        constexpr float OL_PI = 3.14159265358979323846f;
+        for( const auto &e : s_emo.snap ) {
+            const float sx  = ( e.pos_x + s_emo.cam_off_x ) * s_emo.tile_px + s_emo.op_x;
+            const float sy  = ( e.pos_y + s_emo.cam_off_y ) * s_emo.tile_px + s_emo.op_y;
+            const float rpx = e.radius * s_emo.tile_px;
+            const float cr  = e.r > 0.01f ? e.r : 1.0f;
+            const float cg  = e.g > 0.01f ? e.g : 1.0f;
+            const float cb  = e.b > 0.01f ? e.b : 1.0f;
+            rs.queue_ui_rect( sx - 3.f, sy - 3.f, 6.f, 6.f, cr, cg, cb, 1.0f );
+            for( int i = 0; i < 32; ++i ) {
+                const float a = 2.0f * OL_PI * static_cast<float>( i ) / 32.0f;
+                rs.queue_ui_rect( sx + std::cos( a ) * rpx - 1.5f,
+                                  sy + std::sin( a ) * rpx - 1.5f,
+                                  3.f, 3.f, cr, cg, cb, 0.4f );
+            }
+        }
+    }
     const bool have_rects = !rs.ui_rects_empty() && rs.geometry().white_texture();
     if( have_rects ) {
         rs.tile_batcher().set_texture( rs.geometry().white_texture(),
@@ -520,6 +550,13 @@ void refresh_display()
                         - static_cast<float>( map_origin.y );
             sdf_w     = static_cast<Uint32>( rs.sdf().map_w() );
             sdf_h     = static_cast<Uint32>( rs.sdf().map_h() );
+            if( debug_mode ) {
+                s_emo.cam_off_x = cam_off_x;
+                s_emo.cam_off_y = cam_off_y;
+                s_emo.tile_px   = tile_px;
+                s_emo.op_x      = static_cast<float>( draw_offset.x );
+                s_emo.op_y      = static_cast<float>( draw_offset.y );
+            }
         }
 
         // Phase 8: compute sun/sky params from time-of-day (24h LUT).
@@ -599,6 +636,9 @@ void refresh_display()
             sky_vis.resize( static_cast<size_t>( Wsv * Hsv ), 255u );
         }
 
+        if( debug_mode && g ) {
+            s_emo.snap = snapshot;
+        }
         rs.collector()->submit( std::move( snapshot ),
                                 std::move( transparency ),
                                 std::move( sdf ),

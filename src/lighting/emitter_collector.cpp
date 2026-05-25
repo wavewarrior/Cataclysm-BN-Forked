@@ -157,6 +157,12 @@ void emitter_collector::upload_to_gpu( const std::vector<gpu_emitter> &data,
         dbg( DL::Error ) << "emitter_collector: SDL_MapGPUTransferBuffer failed";
         return;
     }
+    if( !data.empty() ) {
+        const gpu_emitter &e0 = data[0];
+        dbg( DL::Debug ) << "emitter[0]: pos=(" << e0.pos_x << "," << e0.pos_y
+                         << "," << e0.pos_z << ") r=" << e0.radius
+                         << " rgb=(" << e0.r << "," << e0.g << "," << e0.b << ")";
+    }
     std::memcpy( mapped, data.data(), byte_size );
     SDL_UnmapGPUTransferBuffer( rs_.device().raw(), xfer_[write_slot_] );
 

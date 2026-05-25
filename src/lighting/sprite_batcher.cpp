@@ -727,6 +727,22 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                     tsb.sampler = s.sampler;
                     SDL_BindGPUFragmentSamplers( rp, /*first_slot=*/0, &tsb, 1 );
 
+                    // Re-bind emitter/SDF/sky-vis each segment. On D3D12 a
+                    // SDL_BindGPUFragmentSamplers call may rebuild the descriptor
+                    // table and zero any slot not included in that call.
+                    if( lp_emitter_tex && lp_data_sampler ) {
+                        SDL_GPUTextureSamplerBinding eb{ lp_emitter_tex, lp_data_sampler };
+                        SDL_BindGPUFragmentSamplers( rp, /*first_slot=*/1, &eb, 1 );
+                    }
+                    if( lp_sdf_tex && lp_data_sampler ) {
+                        SDL_GPUTextureSamplerBinding sb{ lp_sdf_tex, lp_data_sampler };
+                        SDL_BindGPUFragmentSamplers( rp, /*first_slot=*/2, &sb, 1 );
+                    }
+                    if( lp_sky_vis_tex && lp_data_sampler ) {
+                        SDL_GPUTextureSamplerBinding skb{ lp_sky_vis_tex, lp_data_sampler };
+                        SDL_BindGPUFragmentSamplers( rp, /*first_slot=*/3, &skb, 1 );
+                    }
+
                     frame_params fp{
                         static_cast<float>( cur_target_w ),
                         static_cast<float>( cur_target_h ),
@@ -735,6 +751,15 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                     };
                     SDL_PushGPUVertexUniformData( cur_cb, /*slot=*/0, &fp, sizeof( fp ) );
 
+                    // Diagnostic: log lp values at actual draw time (throttled to ~1/120 frames).
+                    static int lp_dbg_frame = 0;
+                    if( ++lp_dbg_frame >= 120 ) {
+                        lp_dbg_frame = 0;
+                        dbg( DL::Debug ) << "lp_push: n=" << lp.emitter_count
+                                         << " z=" << lp.current_z
+                                         << " cam=(" << lp.camera_off_x << ","
+                                         << lp.camera_off_y << ")";
+                    }
                     // Vertex slot 1: LightParams (world_pos computation)
                     SDL_PushGPUVertexUniformData( cur_cb, /*slot=*/1, &lp, sizeof( lp ) );
                     // Fragment slot 0: LightParams (ambient, emitter_count, sdf_map_w)
