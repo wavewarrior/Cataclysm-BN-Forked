@@ -493,7 +493,7 @@ void refresh_display()
     }
     // Debug emitter overlay: solid dot at emitter center, dotted ring at radius.
     // Active when debug_mode is on (same toggle as the in-game debug menu).
-    if( debug_mode && g && !s_emo.snap.empty() ) {
+    if( g && !s_emo.snap.empty() ) { // TEMP: overlay always-on; restore debug_mode gate after test
         constexpr float OL_PI = 3.14159265358979323846f;
         for( const auto &e : s_emo.snap ) {
             const float sx  = ( e.pos_x + s_emo.cam_off_x ) * s_emo.tile_px + s_emo.op_x;

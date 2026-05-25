@@ -259,7 +259,7 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
 
     collect_zlev( m, zlev, out );
 
-#ifdef DEBUG_SYNTHETIC_EMITTER
+#if 1 // TEMP: always active to validate emitter pipeline; revert after test
     // Replace all emitters with one huge test emitter centred on the player.
     // Build with -DDEBUG_SYNTHETIC_EMITTER to isolate whether the emitter
     // pipeline works at all when given known-good input.
