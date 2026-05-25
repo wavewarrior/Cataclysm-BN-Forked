@@ -443,7 +443,7 @@ void refresh_display()
 
     // Debug overlay state — saved from the previous frame, drawn this frame.
     struct EmitterOverlayState {
-        std::vector<gpu_emitter> snap;
+        std::vector<lighting::gpu_emitter> snap;
         float cam_off_x = 0.f, cam_off_y = 0.f, tile_px = 32.f;
         float op_x = 0.f, op_y = 0.f;
     };
