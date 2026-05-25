@@ -153,6 +153,12 @@ float4 main(VS_OUT i) : SV_Target0 {
                            ? float3(1, 1, 1) : d1.xyz;
         emitter_light += rgb * atten * lambert * shadow;
     }
+    // DEFINITIVE TEST: force red on all fragments when any emitters are submitted.
+    // If screen stays black → emitter_count=0 in shader OR output suppressed by tint/blend.
+    // If screen turns red → emitter loop reaches shader. Remove after confirming.
+    if( emitter_count > 0u ) {
+        emitter_light = float3( 2.0, 0.0, 0.0 );
+    }
     // Phase 8: sky ambient + directional sun contribution.
     // Swap x/y: sky_vis also stored x-major like SDF (iy=row→col, ix=col→row).
     const int sky_ix = clamp((int)i.world_pos.x, 0, (int)sdf_map_w - 1);
