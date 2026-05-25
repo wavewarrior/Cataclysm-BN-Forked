@@ -146,28 +146,9 @@ float4 main(VS_OUT i) : SV_Target0 {
         // Lambert = 1.0 for omnidirectional point lights with flat normal.
         // Directional shading from real surface normals comes in Phase 7b.
         const float  lambert = 1.0;
-        float shadow = 1.0;
-        if(sdf_map_w > 0u) {
-            const float2 sd    = d0.xy - i.world_pos;
-            const float  sdist = length(sd);
-            if(sdist > 0.01) {
-                const float2 dir = sd / sdist;
-                float t = 0.3, sh = 1.0, k = 6.0;
-                [loop] for(int si = 0; si < 8; ++si) {
-                    if(t >= sdist - 0.2) break;
-                    const float2 p  = i.world_pos + dir * t;
-                    const int    ix = clamp((int)p.x, 0, (int)sdf_map_w - 1);
-                    const int    iy = clamp((int)p.y, 0, (int)sdf_map_h - 1);
-                    // SDF array is x-major [x*H+y]; GPU texture is row-major.
-                    // Correct read: Load(int3(iy, ix, 0)) → memory[ix*W+iy] = sdf[ix*H+iy].
-                    const float  s  = SdfTex.Load(int3(iy, ix, 0));
-                    if(s < 0.05) { sh = 0.0; break; }
-                    sh = min(sh, k * s / max(sdist - t, 0.01));
-                    t += max(s, 0.1);
-                }
-                shadow = saturate(sh);
-            }
-        }
+        // DEBUG: bypass shadow to confirm emitter_light pipeline.
+        // Remove this once lighting is confirmed working and re-enable SDF shadow.
+        const float shadow = 1.0;
         const float3 rgb = (d1.x < 0.01 && d1.y < 0.01 && d1.z < 0.01)
                            ? float3(1, 1, 1) : d1.xyz;
         emitter_light += rgb * atten * lambert * shadow;

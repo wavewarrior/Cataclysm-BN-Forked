@@ -527,15 +527,19 @@ void refresh_display()
         const float sun_hour = g ? hour_of_day<float>( calendar::turn ) : 12.f;
         lighting::sun_params sp = lighting::make_sun_params( sun_hour );
 
-        // Debug: log emitter count and texture state once every ~120 frames.
+        // Debug: log emitter count, texture state, and first emitter data every ~120 frames.
         static int emit_dbg_frame = 0;
         if( ++emit_dbg_frame >= 120 ) {
             emit_dbg_frame = 0;
             dbg( DL::Debug ) << "lighting: n_emit=" << n_emit
                              << " emitter_tex=" << ( rs.collector()->emitter_texture() ? "ok" : "NULL" )
                              << " sdf_tex=" << ( rs.sdf().sdf_texture() ? "ok" : "NULL" )
+                             << " sampler=" << ( rs.gpu_sampler() ? "ok" : "NULL" )
                              << " cam_off=(" << cam_off_x << "," << cam_off_y << ")"
-                             << " sdf=" << sdf_w << "x" << sdf_h;
+                             << " sdf=" << sdf_w << "x" << sdf_h
+                             << " z=" << z_lev
+                             << " ambient=" << ambient
+                             << " tile_px=" << tile_px;
         }
 
         rs.set_tile_lighting( tile_px, z_lev, n_emit, ambient,
