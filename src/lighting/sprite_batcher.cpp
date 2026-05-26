@@ -210,9 +210,10 @@ float4 main(VS_OUT i) : SV_Target0 {
     //   Main menu:   tint = 1.0 (no game state) → all elements bright; emitters add glow
     const float3 combined = max(i.tint.rgb, gpu_total);
     float3 final_rgb = texel.rgb * combined;
-    // (debug overlay disabled — sampler path on D3D12 doesn't see the
-    // uploaded texture content; CPU readback confirms data is uploaded
-    // correctly, so the bug is in SDL_GPU's bind path, not our upload.)
+    // Debug overlay — replace final colour with raw d0 read (when sp_pad>0.5).
+    if(sp_pad > 0.5) {
+        final_rgb = float3(dbg_r, dbg_g, dbg_b);
+    }
     return float4(final_rgb, texel.a * i.tint.a);
 }
 )HLSL";
