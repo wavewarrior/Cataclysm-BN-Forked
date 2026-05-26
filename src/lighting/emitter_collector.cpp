@@ -142,7 +142,14 @@ void emitter_collector::thread_main()
 
 void emitter_collector::flush_to_render_cb( SDL_GPUCommandBuffer *cb )
 {
-    if( !cb || !rs_.device().raw() ) {
+    // NOTE: the `cb` parameter is no longer used — we acquire and submit our
+    // own command buffer on this (main) thread. SDL_GPU inserts resource
+    // transitions between separately submitted command buffers from the
+    // same thread, so the subsequent render CB will see the uploaded
+    // textures. Single-CB recording was producing a write→sample hazard
+    // that left the sampler reading pre-upload content.
+    (void)cb;
+    if( !rs_.device().raw() ) {
         return;
     }
 
@@ -214,11 +221,18 @@ void emitter_collector::flush_to_render_cb( SDL_GPUCommandBuffer *cb )
     // (sentinel removed — pipeline confirmed working in zoomed-out view)
     SDL_UnmapGPUTransferBuffer( rs_.device().raw(), xfer_[write_slot_] );
 
-    // Issue the copy pass on the GIVEN render command buffer so the GPU
-    // executes uploads before the subsequent render pass samples the
-    // textures. No separate AcquireCommandBuffer / SubmitCommandBuffer here.
-    SDL_GPUCopyPass *cp = SDL_BeginGPUCopyPass( cb );
+    // Acquire our own command buffer for the copy pass. The render command
+    // buffer is acquired later in refresh_display; SDL_GPU tracks resource
+    // state across separately submitted CBs from the same thread and
+    // inserts barriers as needed.
+    SDL_GPUCommandBuffer *my_cb = SDL_AcquireGPUCommandBuffer( rs_.device().raw() );
+    if( !my_cb ) {
+        dbg( DL::Error ) << "emitter_collector: AcquireGPUCommandBuffer failed";
+        return;
+    }
+    SDL_GPUCopyPass *cp = SDL_BeginGPUCopyPass( my_cb );
     if( !cp ) {
+        SDL_CancelGPUCommandBuffer( my_cb );
         return;
     }
 
@@ -294,8 +308,7 @@ void emitter_collector::flush_to_render_cb( SDL_GPUCommandBuffer *cb )
     }
 
     SDL_EndGPUCopyPass( cp );
-    // No submit here — caller (refresh_display) submits the render CB after
-    // the render pass, so uploads and draws share one CB and execute in order.
+    SDL_SubmitGPUCommandBuffer( my_cb );
 
     // DIAGNOSTIC: bypass the slot-swap. Always pin to slot 0 so the shader
     // bind pointer (captured by set_tile_lighting) is the same physical
