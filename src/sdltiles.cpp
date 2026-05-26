@@ -462,6 +462,7 @@ void refresh_display()
         int screen_w = 0, screen_h = 0;
         int map_origin_x = 0, map_origin_y = 0;
         int draw_off_px_x = 0, draw_off_px_y = 0;
+        Uint32 last_n_emit_pushed = 0; // actual count pushed to the GPU lp
         // Tier 3 per-tile coord cache.
         std::vector<TileCoordGlyph> tile_labels;
         int cached_player_x = INT_MIN, cached_player_y = INT_MIN;
@@ -675,8 +676,9 @@ void refresh_display()
                            s_emo.cam_off_x, s_emo.cam_off_y, s_emo.op_x, s_emo.op_y );
             put( buf );
             std::snprintf( buf, sizeof( buf ),
-                           "player=(%d,%d,%d)  emitters=%zu",
-                           s_emo.player_x, s_emo.player_y, s_emo.player_z, n_emit_dbg );
+                           "player=(%d,%d,%d)  emitters=%zu  pushed=%u",
+                           s_emo.player_x, s_emo.player_y, s_emo.player_z,
+                           n_emit_dbg, s_emo.last_n_emit_pushed );
             put( buf );
             const float pscr_x = ( s_emo.player_x + s_emo.cam_off_x ) * tp + s_emo.op_x;
             const float pscr_y = ( s_emo.player_y + s_emo.cam_off_y ) * tp + s_emo.op_y;
@@ -796,6 +798,7 @@ void refresh_display()
                              << " tile_px=" << tile_px;
         }
 
+        s_emo.last_n_emit_pushed = n_emit;
         rs.set_tile_lighting( tile_px, z_lev, n_emit, ambient,
                               cam_off_x, cam_off_y, sdf_w, sdf_h,
                               rs.collector()->emitter_texture(),

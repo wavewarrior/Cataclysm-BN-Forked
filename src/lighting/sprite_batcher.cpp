@@ -187,21 +187,31 @@ float4 main(VS_OUT i) : SV_Target0 {
     // legible because we layer the heatmap into the final colour AFTER the
     // normal lighting path runs. Computed up-front so the value is available
     // when we return.
-    float dbg_inside  = 0.0;
-    float dbg_grid    = 0.0;
+    // DIAGNOSTIC: visualize the shader's world_pos directly + emitter_count
+    // presence. R = world_pos.x / 200, G = world_pos.y / 200, B = sky_vis,
+    // tile-edge grid in cyan, and a magenta dot in upper-left signals
+    // emitter_count > 0 reaching this fragment's draw call. Lets us
+    // independently verify each input the lighting math depends on.
+    float dbg_r = 0.0, dbg_g = 0.0, dbg_b = 0.0;
     if(sp_pad > 0.5) {
-        float best = 1.0; // 1.0 = no emitter in range (no red)
-        for(uint dj = 0u; dj < me; ++dj) {
-            const float4 d0 = EmitterTex.Load(int3(0, dj, 0));
-            if(abs(d0.z - current_z) > 0.5) continue;
-            const float dd = length(d0.xy - i.world_pos);
-            const float ratio = (d0.w > 0.001) ? (dd / d0.w) : 1.0;
-            best = min(best, ratio);
+        dbg_r = saturate(i.world_pos.x / 200.0);
+        dbg_g = saturate(i.world_pos.y / 200.0);
+        dbg_b = sky_vis;
+        // Mark presence of emitters: paint top-left 64x32px region magenta if
+        // emitter_count > 0 (i.e. cbuffer reached shader).
+        // pos in pixels of this fragment (vertex shader divided by tile_pixel_size).
+        // Top-left guess based on world_pos < ~2 (close to map origin).
+        // Instead use the dedicated emitter-presence signal via direct distance
+        // to emitter 0. If we read any nonzero emitter data, paint bright cyan
+        // pixel pattern.
+        if(emitter_count > 0u) {
+            const float4 d0 = EmitterTex.Load(int3(0, 0, 0));
+            // Draw a 2-tile-radius solid magenta disc around emitter 0 so
+            // even if world_pos coordinates are wrong, you can see where the
+            // shader thinks emitter 0 lives (relative to world_pos space).
+            const float ed = length(d0.xy - i.world_pos);
+            if(ed < 2.0) { dbg_r = 1.0; dbg_g = 0.0; dbg_b = 1.0; }
         }
-        dbg_inside = 1.0 - saturate(best);
-        const float gx = frac(i.world_pos.x);
-        const float gy = frac(i.world_pos.y);
-        dbg_grid = (gx < 0.05 || gy < 0.05) ? 1.0 : 0.0;
     }
     // GPU total light (emitters + sky + sun + ambient floor).
     const float3 gpu_total = min(float3(ambient, ambient, ambient)
@@ -213,10 +223,11 @@ float4 main(VS_OUT i) : SV_Target0 {
     //   Main menu:   tint = 1.0 (no game state) → all elements bright; emitters add glow
     const float3 combined = max(i.tint.rgb, gpu_total);
     float3 final_rgb = texel.rgb * combined;
-    // Debug heatmap additive overlay (sp_pad sentinel).
+    // Debug overlay (sp_pad sentinel) — replace channels with diagnostic RGB.
     if(sp_pad > 0.5) {
-        final_rgb.r = max(final_rgb.r, dbg_inside);
-        final_rgb.g = max(final_rgb.g, dbg_grid * 0.4);
+        final_rgb.r = max(final_rgb.r, dbg_r);
+        final_rgb.g = max(final_rgb.g, dbg_g);
+        final_rgb.b = max(final_rgb.b, dbg_b);
     }
     return float4(final_rgb, texel.a * i.tint.a);
 }
