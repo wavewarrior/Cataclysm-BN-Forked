@@ -204,23 +204,32 @@ float4 main(VS_OUT i) : SV_Target0 {
         // Instead use the dedicated emitter-presence signal via direct distance
         // to emitter 0. If we read any nonzero emitter data, paint bright cyan
         // pixel pattern.
-        // Unconditionally read EmitterTex slot 0 so we can tell whether the
-        // texture has data (independent of whatever emitter_count says).
+        // Encode EmitterTex slot 0 read directly into a screen-wide bar so we
+        // can READ the value visually, independent of world_pos alignment.
         const float4 d0_dbg = EmitterTex.Load(int3(0, 0, 0));
-        // Encode d0_dbg.xy into a marker:
-        //   - MAGENTA disc at the (xy) read from EmitterTex slot 0.
-        //   - WHITE bar at top of screen if d0_dbg.x is "near-zero"
-        //     (which would mean the texture is empty).
-        const float ed = length(d0_dbg.xy - i.world_pos);
-        if(ed < 2.0) { dbg_r = 1.0; dbg_g = 0.0; dbg_b = 1.0; }
-        // Top-screen status bar: draw white if EmitterTex appears empty
-        // (d0_dbg.xy near zero AND radius zero). pixel.y derived from
-        // world_pos via tile_pixel_size — sentinel-safe.
-        if(i.world_pos.y < (camera_off_y + 1.5)
-           && abs(d0_dbg.x) < 0.01 && abs(d0_dbg.y) < 0.01
-           && abs(d0_dbg.w) < 0.01) {
-            dbg_r = 1.0; dbg_g = 1.0; dbg_b = 1.0;
+        // Top 32 px (1 tile worth): paint a horizontal bar whose colour
+        // encodes d0_dbg.xyw (pos_x, pos_y, radius) — normalised /200.
+        // Left third = pos_x, middle third = pos_y, right third = radius.
+        // Each segment shows R = value/200 saturated. Blue solid backdrop.
+        if(i.world_pos.y < (camera_off_y + 1.0)) {
+            const float third = 200.0 / 3.0;
+            const float wx = i.world_pos.x - camera_off_x;
+            if(wx < third) {
+                dbg_r = saturate(d0_dbg.x / 200.0);
+                dbg_g = 0.0; dbg_b = 0.2;
+            } else if(wx < 2.0 * third) {
+                dbg_r = 0.0;
+                dbg_g = saturate(d0_dbg.y / 200.0);
+                dbg_b = 0.2;
+            } else {
+                dbg_r = saturate(d0_dbg.w / 20.0);
+                dbg_g = saturate(d0_dbg.w / 20.0);
+                dbg_b = 0.2;
+            }
         }
+        // Also magenta disc with HUGE threshold so even far-off d0 shows.
+        const float ed = length(d0_dbg.xy - i.world_pos);
+        if(ed < 10.0) { dbg_r = 1.0; dbg_g = 0.0; dbg_b = 1.0; }
     }
     // GPU total light (emitters + sky + sun + ambient floor).
     const float3 gpu_total = min(float3(ambient, ambient, ambient)
