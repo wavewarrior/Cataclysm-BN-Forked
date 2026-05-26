@@ -187,7 +187,11 @@ float4 main(VS_OUT i) : SV_Target0 {
     // sentinel toggle (g_dbg_lighting_shader in sdltiles.cpp). Lets us see
     // visually whether the shader's world_pos / light_pos / radius math is
     // even close — bright red = inside an emitter's radius at this fragment.
-    if(ambient < -0.5) {
+    // Debug heatmap only on game tile sprites. UI rects, fonts, and main-menu
+    // sprites set tint != 0 (CLAUDE.md invariant: game tiles tint=0,
+    // UI/fonts tint=element-color), so we only override when tint is ~zero.
+    const float tint_sum = i.tint.r + i.tint.g + i.tint.b;
+    if(ambient < -0.5 && tint_sum < 0.01) {
         float best = 1.0; // 1.0 = no emitter in range (no red)
         for(uint dj = 0u; dj < me; ++dj) {
             const float4 d0 = EmitterTex.Load(int3(0, dj, 0));
