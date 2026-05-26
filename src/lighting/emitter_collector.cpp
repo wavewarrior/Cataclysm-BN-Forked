@@ -174,6 +174,17 @@ void emitter_collector::flush_to_render_cb( SDL_GPUCommandBuffer *cb )
                          << " rgb=(" << e0.r << "," << e0.g << "," << e0.b << ")";
     }
     std::memcpy( mapped, data.data(), byte_size );
+    // TEMPORARY DEBUG: overwrite emitter[0] with a known sentinel pattern so
+    // the shader debug viz can prove the upload actually reaches the bound
+    // texture. pos=(99, 99, 0), radius=5, full red. If magenta appears near
+    // world_pos (99,99), the upload-bind-sample chain works end-to-end and
+    // the bug lies upstream in snapshot construction. If still no magenta,
+    // the upload itself is not reaching the sampler.
+    {
+        auto *p = static_cast<float *>( mapped );
+        p[0] = 99.0f; p[1] = 99.0f; p[2] = 0.0f; p[3] = 5.0f;
+        p[4] = 1.0f;  p[5] = 0.0f;  p[6] = 0.0f; p[7] = 1.0f;
+    }
     SDL_UnmapGPUTransferBuffer( rs_.device().raw(), xfer_[write_slot_] );
 
     // Issue the copy pass on the GIVEN render command buffer so the GPU
