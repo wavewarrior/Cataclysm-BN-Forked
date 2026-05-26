@@ -266,13 +266,13 @@ void emitter_collector::flush_to_render_cb( SDL_GPUCommandBuffer *cb )
         tex_dst.layer     = 0;
         tex_dst.mip_level = 0;
 
-        // cycle=true: GPU readback proves the upload lands, but the shader
-        // sampler in the SAME CB reads stale (empty) content. SDL_GPU
-        // appears to skip the write→read transition between copy pass and
-        // render pass when cycle=false on D3D12; cycle=true forces a fresh
-        // internal resource and a proper barrier so the sampler sees the
-        // new data.
-        SDL_UploadToGPUTexture( cp, &tex_src, &tex_dst, /*cycle=*/true );
+        // cycle=false + ring slot rotation: each frame writes a DIFFERENT
+        // physical texture so the previous frame's GPU work isn't disturbed
+        // (no race), AND the SDL_GPUTexture* handle's underlying resource
+        // never changes (so the shader's bound SRV stays valid). The
+        // alternative — cycle=true — orphans the bound SRV on D3D12, which
+        // is exactly the bug we observed.
+        SDL_UploadToGPUTexture( cp, &tex_src, &tex_dst, /*cycle=*/false );
 
         // Diagnostic: download the FIRST pixel of the just-written texture
         // back into download_xfer_ so the CPU can verify what the GPU has.
@@ -305,13 +305,14 @@ void emitter_collector::flush_to_render_cb( SDL_GPUCommandBuffer *cb )
     SDL_EndGPUCopyPass( cp );
     // No submit — the caller submits the render CB after the render pass.
 
-    // DIAGNOSTIC: bypass the slot-swap. Always pin to slot 0 so the shader
-    // bind pointer (captured by set_tile_lighting) is the same physical
-    // texture handle we just wrote to. Removes one source of ambiguity for
-    // the "readback ok / shader sees zero" mystery.
+    // Restore ring rotation: write_slot wrote the new data; promote it to
+    // read_slot and flip write_slot to the OTHER physical texture for the
+    // next frame. set_tile_lighting captures emitter_tex_[read_slot_]
+    // immediately after this, so the bound SRV always points to a fully
+    // written, idle (not in-flight) physical texture.
     last_count_.store( count, std::memory_order_relaxed );
-    read_slot_.store( 0, std::memory_order_release );
-    write_slot_ = 0;
+    read_slot_.store( write_slot_, std::memory_order_release );
+    write_slot_ = 1 - write_slot_;
 }
 
 } // namespace lighting

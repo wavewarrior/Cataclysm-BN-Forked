@@ -210,8 +210,9 @@ float4 main(VS_OUT i) : SV_Target0 {
     //   Main menu:   tint = 1.0 (no game state) → all elements bright; emitters add glow
     const float3 combined = max(i.tint.rgb, gpu_total);
     float3 final_rgb = texel.rgb * combined;
-    // Debug overlay — replace final colour with raw d0 read (when sp_pad>0.5).
-    if(sp_pad > 0.5) {
+    // Debug overlay — only on game tiles (tint near zero), so UI/text stays.
+    const float dbg_tint_sum = i.tint.r + i.tint.g + i.tint.b;
+    if(sp_pad > 0.5 && dbg_tint_sum < 0.01) {
         final_rgb = float3(dbg_r, dbg_g, dbg_b);
     }
     return float4(final_rgb, texel.a * i.tint.a);
