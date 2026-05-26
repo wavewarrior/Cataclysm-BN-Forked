@@ -187,29 +187,18 @@ float4 main(VS_OUT i) : SV_Target0 {
     // legible because we layer the heatmap into the final colour AFTER the
     // normal lighting path runs. Computed up-front so the value is available
     // when we return.
-    // DIAGNOSTIC overlay — subtle so original tiles remain visible.
-    //  R boost: proximity to nearest emitter (0=far, 1=at center)
-    //  G boost: tile-edge grid lines
-    //  B boost: sky_vis high
-    // dbg_alpha controls how strongly the overlay tints the final colour.
+    // DIAGNOSTIC: paint EVERY visible tile with raw EmitterTex slot 0 read.
+    // R = emit[0].pos_x / 200, G = emit[0].pos_y / 200, B = emit[0].radius/20.
+    // Expected for real emit[0]=(86.5, 89.5, *, 13.4) → R≈0.43 G≈0.45 B≈0.67
+    // (a yellowish tint). All zero → texture is empty / unbound.
     float dbg_r = 0.0, dbg_g = 0.0, dbg_b = 0.0;
     float dbg_alpha = 0.0;
     if(sp_pad > 0.5) {
-        // Closest emitter in same z-level.
-        float best = 1.0;
-        for(uint dj = 0u; dj < me; ++dj) {
-            const float4 d0 = EmitterTex.Load(int3(0, dj, 0));
-            if(abs(d0.z - current_z) > 0.5) continue;
-            const float dd = length(d0.xy - i.world_pos);
-            const float ratio = (d0.w > 0.001) ? (dd / d0.w) : 1.0;
-            best = min(best, ratio);
-        }
-        dbg_r = 1.0 - saturate(best);              // strong inside any radius
-        const float gx = frac(i.world_pos.x);
-        const float gy = frac(i.world_pos.y);
-        dbg_g = (gx < 0.04 || gy < 0.04) ? 0.6 : 0.0;
-        dbg_b = sky_vis * 0.5;
-        dbg_alpha = 0.35;  // 35% overlay — tile sprite still readable
+        const float4 d0 = EmitterTex.Load(int3(0, 0, 0));
+        dbg_r = saturate(d0.x / 200.0);
+        dbg_g = saturate(d0.y / 200.0);
+        dbg_b = saturate(d0.w / 20.0);
+        dbg_alpha = 0.5;
     }
     // GPU total light (emitters + sky + sun + ambient floor).
     const float3 gpu_total = min(float3(ambient, ambient, ambient)
