@@ -738,8 +738,7 @@ void refresh_display()
                               : 32.0f;
         const float z_lev   = g ? static_cast<float>( g->u.pos().z ) : 0.0f;
         const Uint32 n_emit = static_cast<Uint32>( rs.collector()->last_count() );
-        // Negative-ambient sentinel triggers the shader's debug heatmap path.
-        const float ambient = g_dbg_lighting_shader ? -1.0f : 0.05f;
+        const float ambient = 0.05f;
 
         // Phase 6b: camera offset converts screen tile units → map tile coords.
         // map_pos = tile_tu - camera_offset  (see sdf_pass.h comment)
@@ -779,6 +778,8 @@ void refresh_display()
         // sun_hour is renamed to avoid shadowing the hour_of_day<T>() template.
         const float sun_hour = g ? hour_of_day<float>( calendar::turn ) : 12.f;
         lighting::sun_params sp = lighting::make_sun_params( sun_hour );
+        // Repurpose sp.sp_pad as the shader debug-heatmap sentinel.
+        sp.sp_pad = g_dbg_lighting_shader ? 1.0f : 0.0f;
 
         // Debug: log emitter count, texture state, and first emitter data every ~120 frames.
         static int emit_dbg_frame = 0;

@@ -182,16 +182,14 @@ float4 main(VS_OUT i) : SV_Target0 {
                       * sun_shadow * sky_vis;
     }
 
-    // DEBUG VIZ: when ambient is negative, replace lighting with a
-    // distance-to-nearest-emitter heatmap. CPU side sets ambient<0 via a
-    // sentinel toggle (g_dbg_lighting_shader in sdltiles.cpp). Lets us see
-    // visually whether the shader's world_pos / light_pos / radius math is
-    // even close — bright red = inside an emitter's radius at this fragment.
-    // Debug heatmap only on game tile sprites. UI rects, fonts, and main-menu
-    // sprites set tint != 0 (CLAUDE.md invariant: game tiles tint=0,
-    // UI/fonts tint=element-color), so we only override when tint is ~zero.
-    const float tint_sum = i.tint.r + i.tint.g + i.tint.b;
-    if(ambient < -0.5 && tint_sum < 0.01) {
+    // DEBUG VIZ: additive heatmap over normal lighting. Sentinel: sun_params
+    // sp_pad > 0.5 (set by sdltiles.cpp::g_dbg_lighting_shader). Keeps UI/text
+    // legible because we layer the heatmap into the final colour AFTER the
+    // normal lighting path runs. Computed up-front so the value is available
+    // when we return.
+    float dbg_inside  = 0.0;
+    float dbg_grid    = 0.0;
+    if(sp_pad > 0.5) {
         float best = 1.0; // 1.0 = no emitter in range (no red)
         for(uint dj = 0u; dj < me; ++dj) {
             const float4 d0 = EmitterTex.Load(int3(0, dj, 0));
@@ -200,13 +198,10 @@ float4 main(VS_OUT i) : SV_Target0 {
             const float ratio = (d0.w > 0.001) ? (dd / d0.w) : 1.0;
             best = min(best, ratio);
         }
-        // best: 0=at emitter centre, 1=at radius edge, >1=outside.
-        const float inside = 1.0 - saturate(best);
-        // Channels: R = inside emitter, G = grid bands (tile boundaries), B = sky_vis.
+        dbg_inside = 1.0 - saturate(best);
         const float gx = frac(i.world_pos.x);
         const float gy = frac(i.world_pos.y);
-        const float grid = (gx < 0.05 || gy < 0.05) ? 1.0 : 0.0;
-        return float4(inside, grid * 0.5, sky_vis * 0.5, 1.0);
+        dbg_grid = (gx < 0.05 || gy < 0.05) ? 1.0 : 0.0;
     }
     // GPU total light (emitters + sky + sun + ambient floor).
     const float3 gpu_total = min(float3(ambient, ambient, ambient)
@@ -217,7 +212,13 @@ float4 main(VS_OUT i) : SV_Target0 {
     //   UI / fonts:  tint = element color (1.0 for white) → stays fully visible
     //   Main menu:   tint = 1.0 (no game state) → all elements bright; emitters add glow
     const float3 combined = max(i.tint.rgb, gpu_total);
-    return float4(texel.rgb * combined, texel.a * i.tint.a);
+    float3 final_rgb = texel.rgb * combined;
+    // Debug heatmap additive overlay (sp_pad sentinel).
+    if(sp_pad > 0.5) {
+        final_rgb.r = max(final_rgb.r, dbg_inside);
+        final_rgb.g = max(final_rgb.g, dbg_grid * 0.4);
+    }
+    return float4(final_rgb, texel.a * i.tint.a);
 }
 )HLSL";
 
