@@ -210,9 +210,10 @@ float4 main(VS_OUT i) : SV_Target0 {
     //   Main menu:   tint = 1.0 (no game state) → all elements bright; emitters add glow
     const float3 combined = max(i.tint.rgb, gpu_total);
     float3 final_rgb = texel.rgb * combined;
-    // Debug overlay — lerp instead of max so tile content stays readable.
-    if(sp_pad > 0.5 && dbg_alpha > 0.001) {
-        final_rgb = lerp(final_rgb, float3(dbg_r, dbg_g, dbg_b), dbg_alpha);
+    // Debug overlay — REPLACE final colour with raw d0 read so even very dim
+    // tiles light up brightly when the upload is delivering data.
+    if(sp_pad > 0.5) {
+        final_rgb = float3(dbg_r, dbg_g, dbg_b);
     }
     return float4(final_rgb, texel.a * i.tint.a);
 }
