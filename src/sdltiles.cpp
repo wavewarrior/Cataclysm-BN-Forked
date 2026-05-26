@@ -473,6 +473,11 @@ void refresh_display()
     // Master toggle for the lighting debug HUD. Default ON while diagnosing
     // the GPU lighting cutover. Flip to false to silence.
     static bool g_dbg_lighting = true;
+    // When true, the fragment shader replaces lighting output with a
+    // distance/radius heatmap (R = inside emitter radius, G = tile grid,
+    // B = sky_vis). Implemented as a negative-ambient sentinel; the shader
+    // checks `ambient < -0.5` and short-circuits to the diagnostic colour.
+    static bool g_dbg_lighting_shader = true;
 
     if( !rs.ready() ) {
         return;
@@ -639,9 +644,9 @@ void refresh_display()
         // ── Tier 1: top-left HUD strip ─────────────────────────────────────
         if( font ) {
             const int lh = font->height + 1;
-            constexpr int HUD_LINES = 6;
+            constexpr int HUD_LINES = 8;
             constexpr int HUD_PAD   = 4;
-            const int hud_w = 640;
+            const int hud_w = 720;
             const int hud_h = lh * HUD_LINES + HUD_PAD * 2;
             // Dark backdrop so HUD stays readable over sprites + tile labels.
             rs.queue_ui_rect( 0.f, 0.f,
@@ -685,6 +690,31 @@ void refresh_display()
                            "delta_to_center=(%.1f,%.1f)px  =(%.2f,%.2f)tiles",
                            dx, dy, dx / tp, dy / tp );
             put( buf );
+
+            // First-emitter diagnostic: world position the shader will use is
+            //   world_pos = (map_pos + cam_off)   (in map-tile units).
+            // Player world_pos = player + cam_off; emitter's stored pos_x/y is
+            // ALREADY in absolute map-tile units, so distance is just
+            //   d = length(emitter.pos - player_map_pos).
+            // If d < emitter.radius the shader's branch should illuminate.
+            if( !s_emo.snap.empty() ) {
+                const lighting::gpu_emitter &e0 = s_emo.snap.front();
+                const float ed_x = e0.pos_x - static_cast<float>( s_emo.player_x );
+                const float ed_y = e0.pos_y - static_cast<float>( s_emo.player_y );
+                const float ed   = std::sqrt( ed_x * ed_x + ed_y * ed_y );
+                const char *in_r = ( ed < e0.radius ) ? "INSIDE" : "outside";
+                std::snprintf( buf, sizeof( buf ),
+                               "emit[0] pos=(%.1f,%.1f,%.1f) r=%.1f dist=%.2f %s  shaderViz=%s",
+                               e0.pos_x, e0.pos_y, e0.pos_z, e0.radius,
+                               ed, in_r,
+                               g_dbg_lighting_shader ? "ON" : "off" );
+                put( buf );
+            } else {
+                std::snprintf( buf, sizeof( buf ),
+                               "emit[0] (none)  shaderViz=%s",
+                               g_dbg_lighting_shader ? "ON" : "off" );
+                put( buf );
+            }
         }
     }
     const bool have_rects = !rs.ui_rects_empty() && rs.geometry().white_texture();
@@ -708,7 +738,8 @@ void refresh_display()
                               : 32.0f;
         const float z_lev   = g ? static_cast<float>( g->u.pos().z ) : 0.0f;
         const Uint32 n_emit = static_cast<Uint32>( rs.collector()->last_count() );
-        const float ambient = 0.05f;
+        // Negative-ambient sentinel triggers the shader's debug heatmap path.
+        const float ambient = g_dbg_lighting_shader ? -1.0f : 0.05f;
 
         // Phase 6b: camera offset converts screen tile units → map tile coords.
         // map_pos = tile_tu - camera_offset  (see sdf_pass.h comment)

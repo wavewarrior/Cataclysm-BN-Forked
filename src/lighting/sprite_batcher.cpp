@@ -182,6 +182,28 @@ float4 main(VS_OUT i) : SV_Target0 {
                       * sun_shadow * sky_vis;
     }
 
+    // DEBUG VIZ: when ambient is negative, replace lighting with a
+    // distance-to-nearest-emitter heatmap. CPU side sets ambient<0 via a
+    // sentinel toggle (g_dbg_lighting_shader in sdltiles.cpp). Lets us see
+    // visually whether the shader's world_pos / light_pos / radius math is
+    // even close — bright red = inside an emitter's radius at this fragment.
+    if(ambient < -0.5) {
+        float best = 1.0; // 1.0 = no emitter in range (no red)
+        for(uint dj = 0u; dj < me; ++dj) {
+            const float4 d0 = EmitterTex.Load(int3(0, dj, 0));
+            if(abs(d0.z - current_z) > 0.5) continue;
+            const float dd = length(d0.xy - i.world_pos);
+            const float ratio = (d0.w > 0.001) ? (dd / d0.w) : 1.0;
+            best = min(best, ratio);
+        }
+        // best: 0=at emitter centre, 1=at radius edge, >1=outside.
+        const float inside = 1.0 - saturate(best);
+        // Channels: R = inside emitter, G = grid bands (tile boundaries), B = sky_vis.
+        const float gx = frac(i.world_pos.x);
+        const float gy = frac(i.world_pos.y);
+        const float grid = (gx < 0.05 || gy < 0.05) ? 1.0 : 0.0;
+        return float4(inside, grid * 0.5, sky_vis * 0.5, 1.0);
+    }
     // GPU total light (emitters + sky + sun + ambient floor).
     const float3 gpu_total = min(float3(ambient, ambient, ambient)
                                  + emitter_light + sky_contrib + sun_contrib,
