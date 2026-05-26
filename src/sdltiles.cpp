@@ -8,6 +8,7 @@
 #include <climits>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <exception>
 #include <fstream>
@@ -442,12 +443,27 @@ void refresh_display()
     auto &rs = lighting::get_render_state();
 
     // Debug overlay state — saved from the previous frame, drawn this frame.
+    struct TileCoordGlyph {
+        float x, y;
+        std::string text;
+    };
     struct EmitterOverlayState {
         std::vector<lighting::gpu_emitter> snap;
         float cam_off_x = 0.f, cam_off_y = 0.f, tile_px = 32.f;
         float op_x = 0.f, op_y = 0.f;
+        int player_x = 0, player_y = 0, player_z = 0;
+        int screen_w = 0, screen_h = 0;
+        // Tier 3 per-tile coord cache.
+        std::vector<TileCoordGlyph> tile_labels;
+        int cached_player_x = INT_MIN, cached_player_y = INT_MIN;
+        float cached_cam_off_x = 0.f, cached_cam_off_y = 0.f;
+        float cached_tile_px = 0.f;
+        int cached_screen_w = 0, cached_screen_h = 0;
     };
     static EmitterOverlayState s_emo;
+    // Master toggle for the lighting debug HUD. Default ON while diagnosing
+    // the GPU lighting cutover. Flip to false to silence.
+    static bool g_dbg_lighting = true;
 
     if( !rs.ready() ) {
         return;
@@ -491,10 +507,32 @@ void refresh_display()
     if( !rs.tile_sprites_empty() && rs.gpu_sampler() ) {
         rs.flush_tile_sprites( rs.tile_batcher(), rs.gpu_sampler() );
     }
-    // Debug emitter overlay: solid dot at emitter center, dotted ring at radius.
-    // Active when debug_mode is on (same toggle as the in-game debug menu).
-    if( g && !s_emo.snap.empty() ) {
+    // Lighting debug HUD. Tiers:
+    //   1: top-left text strip (screen dims, tile_px, cam_off, player, op, n_emit)
+    //   2: emitter markers + player + screen-center crosses
+    //   3: per-tile (x,y) coord labels — cached, rebuilt on player/camera change
+    //   4: tile grid lines (1px) at every tile boundary
+    if( g_dbg_lighting && g ) {
         constexpr float OL_PI = 3.14159265358979323846f;
+        const float tp  = s_emo.tile_px > 0.f ? s_emo.tile_px : 32.f;
+        const float sw  = static_cast<float>( ctx.swapchain_w );
+        const float sh  = static_cast<float>( ctx.swapchain_h );
+
+        // ── Tier 4: grid lines ─────────────────────────────────────────────
+        // Vertical and horizontal 1px lines aligned to the tile lattice.
+        // Anchor on op (drawing pixel offset) so lines coincide with sprite edges.
+        {
+            const float anchor_x = std::fmod( s_emo.op_x, tp );
+            const float anchor_y = std::fmod( s_emo.op_y, tp );
+            for( float x = anchor_x; x < sw; x += tp ) {
+                rs.queue_ui_rect( x, 0.f, 1.f, sh, 0.25f, 0.25f, 0.30f, 0.35f );
+            }
+            for( float y = anchor_y; y < sh; y += tp ) {
+                rs.queue_ui_rect( 0.f, y, sw, 1.f, 0.25f, 0.25f, 0.30f, 0.35f );
+            }
+        }
+
+        // ── Tier 2: emitter markers (solid dot + dotted ring) ──────────────
         static bool emo_cam_logged = false;
         if( !emo_cam_logged ) {
             emo_cam_logged = true;
@@ -504,19 +542,113 @@ void refresh_display()
                              << ") snap=" << s_emo.snap.size();
         }
         for( const auto &e : s_emo.snap ) {
-            const float sx  = ( e.pos_x + s_emo.cam_off_x ) * s_emo.tile_px + s_emo.op_x;
-            const float sy  = ( e.pos_y + s_emo.cam_off_y ) * s_emo.tile_px + s_emo.op_y;
-            const float rpx = e.radius * s_emo.tile_px;
+            const float sx  = ( e.pos_x + s_emo.cam_off_x ) * tp + s_emo.op_x;
+            const float sy  = ( e.pos_y + s_emo.cam_off_y ) * tp + s_emo.op_y;
+            const float rpx = e.radius * tp;
             const float cr  = e.r > 0.01f ? e.r : 1.0f;
             const float cg  = e.g > 0.01f ? e.g : 1.0f;
             const float cb  = e.b > 0.01f ? e.b : 1.0f;
-            rs.queue_ui_rect( sx - 3.f, sy - 3.f, 6.f, 6.f, cr, cg, cb, 1.0f );
-            for( int i = 0; i < 32; ++i ) {
-                const float a = 2.0f * OL_PI * static_cast<float>( i ) / 32.0f;
-                rs.queue_ui_rect( sx + std::cos( a ) * rpx - 1.5f,
-                                  sy + std::sin( a ) * rpx - 1.5f,
-                                  3.f, 3.f, cr, cg, cb, 0.4f );
+            // Bright filled core.
+            rs.queue_ui_rect( sx - 4.f, sy - 4.f, 8.f, 8.f, cr, cg, cb, 1.0f );
+            // Dotted ring at radius.
+            for( int i = 0; i < 48; ++i ) {
+                const float a = 2.0f * OL_PI * static_cast<float>( i ) / 48.0f;
+                rs.queue_ui_rect( sx + std::cos( a ) * rpx - 2.f,
+                                  sy + std::sin( a ) * rpx - 2.f,
+                                  4.f, 4.f, cr, cg, cb, 0.75f );
             }
+        }
+
+        // Player cross (bright green) at map-coord player pos.
+        {
+            const float px = ( s_emo.player_x + s_emo.cam_off_x ) * tp + s_emo.op_x;
+            const float py = ( s_emo.player_y + s_emo.cam_off_y ) * tp + s_emo.op_y;
+            rs.queue_ui_rect( px - 12.f, py - 1.f, 24.f, 2.f, 0.f, 1.f, 0.f, 1.f );
+            rs.queue_ui_rect( px - 1.f, py - 12.f, 2.f, 24.f, 0.f, 1.f, 0.f, 1.f );
+        }
+        // Screen-center cross (cyan).
+        {
+            const float cx = sw * 0.5f;
+            const float cy = sh * 0.5f;
+            rs.queue_ui_rect( cx - 10.f, cy - 1.f, 20.f, 2.f, 0.f, 1.f, 1.f, 0.9f );
+            rs.queue_ui_rect( cx - 1.f, cy - 10.f, 2.f, 20.f, 0.f, 1.f, 1.f, 0.9f );
+        }
+
+        // ── Tier 3: per-tile (x,y) coord labels, cached on player move ─────
+        const bool cache_stale =
+            s_emo.player_x != s_emo.cached_player_x ||
+            s_emo.player_y != s_emo.cached_player_y ||
+            s_emo.cam_off_x != s_emo.cached_cam_off_x ||
+            s_emo.cam_off_y != s_emo.cached_cam_off_y ||
+            s_emo.tile_px != s_emo.cached_tile_px ||
+            s_emo.screen_w != s_emo.cached_screen_w ||
+            s_emo.screen_h != s_emo.cached_screen_h;
+        if( cache_stale && tp >= 16.f ) {
+            s_emo.tile_labels.clear();
+            // Compute visible tile range in map coords.
+            // screen = (map + cam_off) * tp + op  →  map = (screen - op)/tp - cam_off
+            const int mx0 = static_cast<int>( std::floor(
+                                                  ( 0.f - s_emo.op_x ) / tp - s_emo.cam_off_x ) );
+            const int my0 = static_cast<int>( std::floor(
+                                                  ( 0.f - s_emo.op_y ) / tp - s_emo.cam_off_y ) );
+            const int mx1 = static_cast<int>( std::ceil(
+                                                  ( sw  - s_emo.op_x ) / tp - s_emo.cam_off_x ) );
+            const int my1 = static_cast<int>( std::ceil(
+                                                  ( sh  - s_emo.op_y ) / tp - s_emo.cam_off_y ) );
+            s_emo.tile_labels.reserve(
+                static_cast<size_t>( std::max( 0, ( mx1 - mx0 ) * ( my1 - my0 ) ) ) );
+            for( int my = my0; my < my1; ++my ) {
+                for( int mx = mx0; mx < mx1; ++mx ) {
+                    const float tx = ( mx + s_emo.cam_off_x ) * tp + s_emo.op_x + 1.f;
+                    const float ty = ( my + s_emo.cam_off_y ) * tp + s_emo.op_y + 1.f;
+                    s_emo.tile_labels.push_back( {
+                        tx, ty,
+                        std::to_string( mx ) + "," + std::to_string( my )
+                    } );
+                }
+            }
+            s_emo.cached_player_x  = s_emo.player_x;
+            s_emo.cached_player_y  = s_emo.player_y;
+            s_emo.cached_cam_off_x = s_emo.cam_off_x;
+            s_emo.cached_cam_off_y = s_emo.cam_off_y;
+            s_emo.cached_tile_px   = tp;
+            s_emo.cached_screen_w  = s_emo.screen_w;
+            s_emo.cached_screen_h  = s_emo.screen_h;
+        }
+        if( font ) {
+            for( const TileCoordGlyph &g_lbl : s_emo.tile_labels ) {
+                draw_string( *font, renderer, geometry, g_lbl.text,
+                             point( static_cast<int>( g_lbl.x ),
+                                    static_cast<int>( g_lbl.y ) ),
+                             7 ); // 7 = light grey curses color
+            }
+        }
+
+        // ── Tier 1: top-left HUD strip ─────────────────────────────────────
+        if( font ) {
+            char buf[256];
+            const size_t n_emit_dbg = s_emo.snap.size();
+            int line_y = 4;
+            const int lh = font->height + 1;
+            auto put = [&]( const char *s ) {
+                draw_string( *font, renderer, geometry, std::string( s ),
+                             point( 4, line_y ), 15 ); // 15 = bright white
+                line_y += lh;
+            };
+            std::snprintf( buf, sizeof( buf ), "LIGHT-DBG  screen=%dx%d  tile_px=%.1f",
+                           s_emo.screen_w, s_emo.screen_h, tp );
+            put( buf );
+            std::snprintf( buf, sizeof( buf ), "cam_off=(%.2f,%.2f)  op=(%.0f,%.0f)",
+                           s_emo.cam_off_x, s_emo.cam_off_y, s_emo.op_x, s_emo.op_y );
+            put( buf );
+            std::snprintf( buf, sizeof( buf ), "player=(%d,%d,%d)  emitters=%zu",
+                           s_emo.player_x, s_emo.player_y, s_emo.player_z, n_emit_dbg );
+            put( buf );
+            const float pscr_x = ( s_emo.player_x + s_emo.cam_off_x ) * tp + s_emo.op_x;
+            const float pscr_y = ( s_emo.player_y + s_emo.cam_off_y ) * tp + s_emo.op_y;
+            std::snprintf( buf, sizeof( buf ), "player_screen=(%.1f,%.1f)  center=(%.1f,%.1f)",
+                           pscr_x, pscr_y, sw * 0.5f, sh * 0.5f );
+            put( buf );
         }
     }
     const bool have_rects = !rs.ui_rects_empty() && rs.geometry().white_texture();
@@ -558,12 +690,17 @@ void refresh_display()
                         - static_cast<float>( map_origin.y );
             sdf_w     = static_cast<Uint32>( rs.sdf().map_w() );
             sdf_h     = static_cast<Uint32>( rs.sdf().map_h() );
-            if( debug_mode ) {
+            if( g_dbg_lighting ) {
                 s_emo.cam_off_x = cam_off_x;
                 s_emo.cam_off_y = cam_off_y;
                 s_emo.tile_px   = tile_px;
                 s_emo.op_x      = static_cast<float>( draw_offset.x );
                 s_emo.op_y      = static_cast<float>( draw_offset.y );
+                s_emo.player_x  = g->u.pos().x;
+                s_emo.player_y  = g->u.pos().y;
+                s_emo.player_z  = g->u.pos().z;
+                s_emo.screen_w  = static_cast<int>( ctx.swapchain_w );
+                s_emo.screen_h  = static_cast<int>( ctx.swapchain_h );
             }
         }
 
@@ -644,7 +781,7 @@ void refresh_display()
             sky_vis.resize( static_cast<size_t>( Wsv * Hsv ), 255u );
         }
 
-        if( debug_mode && g ) {
+        if( g_dbg_lighting && g ) {
             s_emo.snap = snapshot;
         }
         rs.collector()->submit( std::move( snapshot ),
