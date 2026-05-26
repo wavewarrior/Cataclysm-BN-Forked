@@ -257,13 +257,13 @@ void emitter_collector::flush_to_render_cb( SDL_GPUCommandBuffer *cb )
         tex_dst.layer     = 0;
         tex_dst.mip_level = 0;
 
-        // cycle=false now that upload runs on the render CB. The render pass
-        // that samples this texture follows in the same CB, so SDL's
-        // automatic resource transition handles the write→read barrier
-        // without needing a copy-on-write swap. cycle=true was orphaning
-        // the handle each frame on D3D12, leaving the bound sampler view
-        // pointing at the original empty texture.
-        SDL_UploadToGPUTexture( cp, &tex_src, &tex_dst, /*cycle=*/false );
+        // cycle=true: GPU readback proves the upload lands, but the shader
+        // sampler in the SAME CB reads stale (empty) content. SDL_GPU
+        // appears to skip the write→read transition between copy pass and
+        // render pass when cycle=false on D3D12; cycle=true forces a fresh
+        // internal resource and a proper barrier so the sampler sees the
+        // new data.
+        SDL_UploadToGPUTexture( cp, &tex_src, &tex_dst, /*cycle=*/true );
 
         // Diagnostic: download the FIRST pixel of the just-written texture
         // back into download_xfer_ so the CPU can verify what the GPU has.
