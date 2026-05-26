@@ -180,11 +180,7 @@ void emitter_collector::flush_to_render_cb( SDL_GPUCommandBuffer *cb )
     // world_pos (99,99), the upload-bind-sample chain works end-to-end and
     // the bug lies upstream in snapshot construction. If still no magenta,
     // the upload itself is not reaching the sampler.
-    {
-        auto *p = static_cast<float *>( mapped );
-        p[0] = 99.0f; p[1] = 99.0f; p[2] = 0.0f; p[3] = 5.0f;
-        p[4] = 1.0f;  p[5] = 0.0f;  p[6] = 0.0f; p[7] = 1.0f;
-    }
+    // (sentinel removed — pipeline confirmed working in zoomed-out view)
     SDL_UnmapGPUTransferBuffer( rs_.device().raw(), xfer_[write_slot_] );
 
     // Issue the copy pass on the GIVEN render command buffer so the GPU
