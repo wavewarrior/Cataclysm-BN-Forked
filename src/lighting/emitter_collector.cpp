@@ -197,8 +197,11 @@ void emitter_collector::upload_to_gpu( const std::vector<gpu_emitter> &data,
         SDL_GPUTextureTransferInfo tex_src{};
         tex_src.transfer_buffer = xfer_[write_slot_];
         tex_src.offset          = 0;
-        tex_src.pixels_per_row  = 0;  // 0 = tight packing (row stride = region width)
-        tex_src.rows_per_layer  = 0;  // 0 = tight packing
+        // SDL3's "0 = tight packing" can be unreliable on D3D12 — pass the
+        // values explicitly so the row stride matches the gpu_emitter
+        // struct's 64-byte layout (4 RGBA32F pixels = 64 bytes = one row).
+        tex_src.pixels_per_row  = 4u;
+        tex_src.rows_per_layer  = rows;
 
         SDL_GPUTextureRegion tex_dst{};
         tex_dst.texture   = emitter_tex_[write_slot_];
