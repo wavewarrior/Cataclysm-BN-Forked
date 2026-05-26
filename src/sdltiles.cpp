@@ -422,6 +422,13 @@ static void WinDestroy()
     ::window.reset();
 }
 
+static point draw_string( Font &font,
+                          const SDL_Renderer_Ptr &renderer,
+                          const GeometryRenderer_Ptr &geometry,
+                          const std::string &str,
+                          point p,
+                          unsigned char color );
+
 /// Converts a color from colorscheme to SDL_Color.
 inline const SDL_Color &color_as_sdl( const unsigned char color )
 {
