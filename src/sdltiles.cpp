@@ -479,7 +479,7 @@ void refresh_display()
     // distance/radius heatmap (R = inside emitter radius, G = tile grid,
     // B = sky_vis). Implemented as a negative-ambient sentinel; the shader
     // checks `ambient < -0.5` and short-circuits to the diagnostic colour.
-    static bool g_dbg_lighting_shader = false;
+    static bool g_dbg_lighting_shader = true;
 
     if( !rs.ready() ) {
         return;
