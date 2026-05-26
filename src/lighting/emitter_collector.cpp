@@ -297,10 +297,13 @@ void emitter_collector::flush_to_render_cb( SDL_GPUCommandBuffer *cb )
     // No submit here — caller (refresh_display) submits the render CB after
     // the render pass, so uploads and draws share one CB and execute in order.
 
-    // Swap slots atomically. After this the new data is visible via read_buffer().
+    // DIAGNOSTIC: bypass the slot-swap. Always pin to slot 0 so the shader
+    // bind pointer (captured by set_tile_lighting) is the same physical
+    // texture handle we just wrote to. Removes one source of ambiguity for
+    // the "readback ok / shader sees zero" mystery.
     last_count_.store( count, std::memory_order_relaxed );
-    read_slot_.store( write_slot_, std::memory_order_release );
-    write_slot_ = 1 - write_slot_;
+    read_slot_.store( 0, std::memory_order_release );
+    write_slot_ = 0;
 }
 
 } // namespace lighting
