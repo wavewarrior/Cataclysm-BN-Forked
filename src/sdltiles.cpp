@@ -759,7 +759,11 @@ void refresh_display()
                               : 32.0f;
         const float z_lev   = g ? static_cast<float>( g->u.pos().z ) : 0.0f;
         const Uint32 n_emit = static_cast<Uint32>( rs.collector()->last_count() );
-        const float ambient = 0.05f;
+        // BAND-AID: GPU emitter texture binding is broken on D3D12 (sampler
+        // reads zero while CPU readback shows correct data). Bumping ambient
+        // restores baseline visibility while the SDL_GPU binding issue is
+        // resolved. Drop back to 0.05 once samplers see uploaded data.
+        const float ambient = 0.5f;
 
         // Phase 6b: camera offset converts screen tile units → map tile coords.
         // map_pos = tile_tu - camera_offset  (see sdf_pass.h comment)
