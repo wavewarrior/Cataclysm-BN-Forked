@@ -8,6 +8,7 @@
 #include "lighting/gpu_emitter.h"
 // Forward declarations so this header doesn't pull in SDL3 GPU types.
 struct SDL_GPUBuffer;
+struct SDL_GPUCommandBuffer;
 struct SDL_GPUTexture;
 struct SDL_GPUTransferBuffer;
 
@@ -53,12 +54,16 @@ public:
     // Number of emitters in the last completed upload.
     int last_count() const noexcept { return last_count_.load( std::memory_order_relaxed ); }
 
+    // Drains any pending snapshot and issues GPU copy commands ON THE GIVEN
+    // command buffer (begins+ends its own copy pass). Caller submits the cb.
+    // This eliminates the cross-CB race where the previous async upload's
+    // command buffer was submitted on a separate thread, leaving the
+    // fragment-stage sampler reading stale (uninitialized) texture content.
+    // No-op if no pending data.
+    void flush_to_render_cb( SDL_GPUCommandBuffer *cb );
+
 private:
     void thread_main();
-    void upload_to_gpu( const std::vector<gpu_emitter> &data,
-                        const std::vector<uint8_t>    &transparency,
-                        const std::vector<float>      &sdf,
-                        const std::vector<uint8_t>    &sky_vis );
 
     render_state &rs_;
 

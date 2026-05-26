@@ -113,35 +113,45 @@ SDL_GPUTexture *emitter_collector::emitter_texture() const noexcept
 
 void emitter_collector::thread_main()
 {
+    // Worker thread no longer performs the GPU upload — that path produced a
+    // cross-CB race against the render command buffer (sampler read stale
+    // texture data). All GPU work is now done from the main thread via
+    // flush_to_render_cb() on the render command buffer. The thread is kept
+    // alive so the ctor/dtor flow stays unchanged; it just sleeps on the cv.
     while( true ) {
-        std::vector<gpu_emitter> work_emitters;
-        std::vector<uint8_t>    work_transparency;
-        std::vector<float>      work_sdf;
-        std::vector<uint8_t>    work_sky_vis;
-        {
-            std::unique_lock<std::mutex> lk( mu_ );
-            cv_.wait( lk, [this] { return have_pending_ || stop_; } );
-            if( stop_ ) {
-                break;
-            }
-            work_emitters     = std::move( pending_ );
-            work_transparency = std::move( pending_transparency_ );
-            work_sdf          = std::move( pending_sdf_ );
-            work_sky_vis      = std::move( pending_sky_vis_ );
-            have_pending_ = false;
+        std::unique_lock<std::mutex> lk( mu_ );
+        cv_.wait( lk, [this] { return stop_; } );
+        if( stop_ ) {
+            break;
         }
-        upload_to_gpu( work_emitters, work_transparency, work_sdf, work_sky_vis );
     }
 }
 
-void emitter_collector::upload_to_gpu( const std::vector<gpu_emitter> &data,
-                                         const std::vector<uint8_t>    &transparency,
-                                         const std::vector<float>      &sdf,
-                                         const std::vector<uint8_t>    &sky_vis )
+void emitter_collector::flush_to_render_cb( SDL_GPUCommandBuffer *cb )
 {
-    if( !rs_.device().raw() ) {
+    if( !cb || !rs_.device().raw() ) {
         return;
     }
+
+    // Atomically take pending data — main thread is the only consumer now,
+    // but the worker-thread submit() path still writes pending_* under the
+    // mutex.
+    std::vector<gpu_emitter> data;
+    std::vector<uint8_t>     transparency;
+    std::vector<float>       sdf;
+    std::vector<uint8_t>     sky_vis;
+    {
+        std::lock_guard<std::mutex> lk( mu_ );
+        if( !have_pending_ ) {
+            return;
+        }
+        data         = std::move( pending_ );
+        transparency = std::move( pending_transparency_ );
+        sdf          = std::move( pending_sdf_ );
+        sky_vis      = std::move( pending_sky_vis_ );
+        have_pending_ = false;
+    }
+
     if( !xfer_[write_slot_] || !ssbo_[write_slot_] ) {
         return;
     }
@@ -166,16 +176,11 @@ void emitter_collector::upload_to_gpu( const std::vector<gpu_emitter> &data,
     std::memcpy( mapped, data.data(), byte_size );
     SDL_UnmapGPUTransferBuffer( rs_.device().raw(), xfer_[write_slot_] );
 
-    // Acquire command buffer, do copy pass.
-    SDL_GPUCommandBuffer *cb = SDL_AcquireGPUCommandBuffer( rs_.device().raw() );
-    if( !cb ) {
-        dbg( DL::Error ) << "emitter_collector: SDL_AcquireGPUCommandBuffer failed";
-        return;
-    }
-
+    // Issue the copy pass on the GIVEN render command buffer so the GPU
+    // executes uploads before the subsequent render pass samples the
+    // textures. No separate AcquireCommandBuffer / SubmitCommandBuffer here.
     SDL_GPUCopyPass *cp = SDL_BeginGPUCopyPass( cb );
     if( !cp ) {
-        SDL_CancelGPUCommandBuffer( cb );
         return;
     }
 
@@ -228,9 +233,10 @@ void emitter_collector::upload_to_gpu( const std::vector<gpu_emitter> &data,
     }
 
     SDL_EndGPUCopyPass( cp );
-    SDL_SubmitGPUCommandBuffer( cb );
+    // No submit here — caller (refresh_display) submits the render CB after
+    // the render pass, so uploads and draws share one CB and execute in order.
 
-    // Swap slots atomically.  After this the new data is visible via read_buffer().
+    // Swap slots atomically. After this the new data is visible via read_buffer().
     last_count_.store( count, std::memory_order_relaxed );
     read_slot_.store( write_slot_, std::memory_order_release );
     write_slot_ = 1 - write_slot_;

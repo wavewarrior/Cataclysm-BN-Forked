@@ -67,6 +67,7 @@
 #include "sdl_utils.h"
 #include "sdl_font.h"
 #include "sdlsound.h"
+#include "lighting/emitter_collector.h"
 #include "lighting/render_state.h"
 #include "lighting/snapshot.h"
 #include "lighting/sdf_pass.h"
@@ -494,6 +495,15 @@ void refresh_display()
     if( !ctx.swapchain_tex ) {
         rs.device().submit_frame( ctx );
         return;
+    }
+
+    // Drain last frame's pending emitter/SDF/transparency/sky_vis upload onto
+    // THIS frame's render command buffer. Single CB = ordered: copy pass runs
+    // before the render pass on the GPU, so the fragment shader samples freshly
+    // uploaded textures instead of racing a worker-thread CB. Was the root
+    // cause of the empty EmitterTex / corrupted SkyVisTex observed earlier.
+    if( rs.collector() ) {
+        rs.collector()->flush_to_render_cb( ctx.cmd_buffer );
     }
 
     // Phase 8 main-menu background: when no game is loaded, inject a fullscreen
