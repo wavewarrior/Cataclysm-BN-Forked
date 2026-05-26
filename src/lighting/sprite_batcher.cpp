@@ -187,49 +187,29 @@ float4 main(VS_OUT i) : SV_Target0 {
     // legible because we layer the heatmap into the final colour AFTER the
     // normal lighting path runs. Computed up-front so the value is available
     // when we return.
-    // DIAGNOSTIC: visualize the shader's world_pos directly + emitter_count
-    // presence. R = world_pos.x / 200, G = world_pos.y / 200, B = sky_vis,
-    // tile-edge grid in cyan, and a magenta dot in upper-left signals
-    // emitter_count > 0 reaching this fragment's draw call. Lets us
-    // independently verify each input the lighting math depends on.
+    // DIAGNOSTIC overlay — subtle so original tiles remain visible.
+    //  R boost: proximity to nearest emitter (0=far, 1=at center)
+    //  G boost: tile-edge grid lines
+    //  B boost: sky_vis high
+    // dbg_alpha controls how strongly the overlay tints the final colour.
     float dbg_r = 0.0, dbg_g = 0.0, dbg_b = 0.0;
+    float dbg_alpha = 0.0;
     if(sp_pad > 0.5) {
-        dbg_r = saturate(i.world_pos.x / 200.0);
-        dbg_g = saturate(i.world_pos.y / 200.0);
-        dbg_b = sky_vis;
-        // Mark presence of emitters: paint top-left 64x32px region magenta if
-        // emitter_count > 0 (i.e. cbuffer reached shader).
-        // pos in pixels of this fragment (vertex shader divided by tile_pixel_size).
-        // Top-left guess based on world_pos < ~2 (close to map origin).
-        // Instead use the dedicated emitter-presence signal via direct distance
-        // to emitter 0. If we read any nonzero emitter data, paint bright cyan
-        // pixel pattern.
-        // Encode EmitterTex slot 0 read directly into a screen-wide bar so we
-        // can READ the value visually, independent of world_pos alignment.
-        const float4 d0_dbg = EmitterTex.Load(int3(0, 0, 0));
-        // Top 32 px (1 tile worth): paint a horizontal bar whose colour
-        // encodes d0_dbg.xyw (pos_x, pos_y, radius) — normalised /200.
-        // Left third = pos_x, middle third = pos_y, right third = radius.
-        // Each segment shows R = value/200 saturated. Blue solid backdrop.
-        if(i.world_pos.y < (camera_off_y + 1.0)) {
-            const float third = 200.0 / 3.0;
-            const float wx = i.world_pos.x - camera_off_x;
-            if(wx < third) {
-                dbg_r = saturate(d0_dbg.x / 200.0);
-                dbg_g = 0.0; dbg_b = 0.2;
-            } else if(wx < 2.0 * third) {
-                dbg_r = 0.0;
-                dbg_g = saturate(d0_dbg.y / 200.0);
-                dbg_b = 0.2;
-            } else {
-                dbg_r = saturate(d0_dbg.w / 20.0);
-                dbg_g = saturate(d0_dbg.w / 20.0);
-                dbg_b = 0.2;
-            }
+        // Closest emitter in same z-level.
+        float best = 1.0;
+        for(uint dj = 0u; dj < me; ++dj) {
+            const float4 d0 = EmitterTex.Load(int3(0, dj, 0));
+            if(abs(d0.z - current_z) > 0.5) continue;
+            const float dd = length(d0.xy - i.world_pos);
+            const float ratio = (d0.w > 0.001) ? (dd / d0.w) : 1.0;
+            best = min(best, ratio);
         }
-        // Also magenta disc with HUGE threshold so even far-off d0 shows.
-        const float ed = length(d0_dbg.xy - i.world_pos);
-        if(ed < 10.0) { dbg_r = 1.0; dbg_g = 0.0; dbg_b = 1.0; }
+        dbg_r = 1.0 - saturate(best);              // strong inside any radius
+        const float gx = frac(i.world_pos.x);
+        const float gy = frac(i.world_pos.y);
+        dbg_g = (gx < 0.04 || gy < 0.04) ? 0.6 : 0.0;
+        dbg_b = sky_vis * 0.5;
+        dbg_alpha = 0.35;  // 35% overlay — tile sprite still readable
     }
     // GPU total light (emitters + sky + sun + ambient floor).
     const float3 gpu_total = min(float3(ambient, ambient, ambient)
@@ -241,11 +221,9 @@ float4 main(VS_OUT i) : SV_Target0 {
     //   Main menu:   tint = 1.0 (no game state) → all elements bright; emitters add glow
     const float3 combined = max(i.tint.rgb, gpu_total);
     float3 final_rgb = texel.rgb * combined;
-    // Debug overlay (sp_pad sentinel) — replace channels with diagnostic RGB.
-    if(sp_pad > 0.5) {
-        final_rgb.r = max(final_rgb.r, dbg_r);
-        final_rgb.g = max(final_rgb.g, dbg_g);
-        final_rgb.b = max(final_rgb.b, dbg_b);
+    // Debug overlay — lerp instead of max so tile content stays readable.
+    if(sp_pad > 0.5 && dbg_alpha > 0.001) {
+        final_rgb = lerp(final_rgb, float3(dbg_r, dbg_g, dbg_b), dbg_alpha);
     }
     return float4(final_rgb, texel.a * i.tint.a);
 }
