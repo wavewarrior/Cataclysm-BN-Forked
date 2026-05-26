@@ -655,7 +655,7 @@ void refresh_display()
         // ── Tier 1: top-left HUD strip ─────────────────────────────────────
         if( font ) {
             const int lh = font->height + 1;
-            constexpr int HUD_LINES = 8;
+            constexpr int HUD_LINES = 9;
             constexpr int HUD_PAD   = 4;
             const int hud_w = 720;
             const int hud_h = lh * HUD_LINES + HUD_PAD * 2;
@@ -720,6 +720,15 @@ void refresh_display()
                                e0.pos_x, e0.pos_y, e0.pos_z, e0.radius,
                                ed, in_r,
                                g_dbg_lighting_shader ? "ON" : "off" );
+                put( buf );
+                // GPU readback line — what the GPU actually has in EmitterTex
+                // slot 0 pixel (0,0). Confirms whether upload bytes land.
+                std::snprintf( buf, sizeof( buf ),
+                               "GPU readback[0]=(%.2f,%.2f,%.2f,%.2f)",
+                               rs.collector()->debug_d0_x(),
+                               rs.collector()->debug_d0_y(),
+                               rs.collector()->debug_d0_z(),
+                               rs.collector()->debug_d0_w() );
                 put( buf );
             } else {
                 std::snprintf( buf, sizeof( buf ),

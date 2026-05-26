@@ -62,6 +62,15 @@ public:
     // No-op if no pending data.
     void flush_to_render_cb( SDL_GPUCommandBuffer *cb );
 
+    // GPU texture readback (diagnostic). Returns what the GPU actually has
+    // in EmitterTex slot 0 pixel 0 (= pos_x, pos_y, pos_z, radius of the
+    // first emitter row). Updated one frame after each flush so values
+    // reflect the GPU-resident texture content, not the CPU snapshot.
+    float debug_d0_x() const noexcept { return debug_d0_x_.load( std::memory_order_relaxed ); }
+    float debug_d0_y() const noexcept { return debug_d0_y_.load( std::memory_order_relaxed ); }
+    float debug_d0_z() const noexcept { return debug_d0_z_.load( std::memory_order_relaxed ); }
+    float debug_d0_w() const noexcept { return debug_d0_w_.load( std::memory_order_relaxed ); }
+
 private:
     void thread_main();
 
@@ -86,6 +95,14 @@ private:
     std::atomic<int> read_slot_ = 0;
     int              write_slot_ = 1;
     std::atomic<int> last_count_ = 0;
+
+    // Diagnostic GPU→CPU readback of EmitterTex slot 0, pixel (col=0, row=0).
+    SDL_GPUTransferBuffer *download_xfer_ = nullptr;
+    bool                   download_pending_ = false;
+    std::atomic<float>     debug_d0_x_{0.f};
+    std::atomic<float>     debug_d0_y_{0.f};
+    std::atomic<float>     debug_d0_z_{0.f};
+    std::atomic<float>     debug_d0_w_{0.f};
 };
 
 } // namespace lighting

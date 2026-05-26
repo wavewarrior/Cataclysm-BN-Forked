@@ -57,6 +57,15 @@ emitter_collector::emitter_collector( render_state &rs ) : rs_( rs )
         }
     }
 
+    // Diagnostic download transfer buffer: holds one RGBA32F pixel = 16 bytes
+    // so we can read back what the GPU actually has in EmitterTex slot 0.
+    {
+        SDL_GPUTransferBufferCreateInfo tbci{};
+        tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD;
+        tbci.size  = 16u;
+        download_xfer_ = SDL_CreateGPUTransferBuffer( dev, &tbci );
+    }
+
     thread_ = std::thread( &emitter_collector::thread_main, this );
 }
 
@@ -82,6 +91,10 @@ emitter_collector::~emitter_collector()
         if( emitter_tex_[i] ) {
             SDL_ReleaseGPUTexture( dev, emitter_tex_[i] );
         }
+    }
+    if( download_xfer_ ) {
+        SDL_ReleaseGPUTransferBuffer( dev, download_xfer_ );
+        download_xfer_ = nullptr;
     }
 }
 
@@ -131,6 +144,24 @@ void emitter_collector::flush_to_render_cb( SDL_GPUCommandBuffer *cb )
 {
     if( !cb || !rs_.device().raw() ) {
         return;
+    }
+
+    // Diagnostic readback: drain the previous frame's download (if any). The
+    // GPU has had >=1 frame to complete; on D3D12 begin_frame's
+    // WaitAndAcquireGPUSwapchainTexture also stalls for in-flight frames so
+    // the data is safe to map here.
+    if( download_pending_ && download_xfer_ ) {
+        void *mapped = SDL_MapGPUTransferBuffer( rs_.device().raw(),
+                                                  download_xfer_, false );
+        if( mapped ) {
+            const float *p = static_cast<const float *>( mapped );
+            debug_d0_x_.store( p[0], std::memory_order_relaxed );
+            debug_d0_y_.store( p[1], std::memory_order_relaxed );
+            debug_d0_z_.store( p[2], std::memory_order_relaxed );
+            debug_d0_w_.store( p[3], std::memory_order_relaxed );
+            SDL_UnmapGPUTransferBuffer( rs_.device().raw(), download_xfer_ );
+        }
+        download_pending_ = false;
     }
 
     // Atomically take pending data — main thread is the only consumer now,
@@ -233,6 +264,28 @@ void emitter_collector::flush_to_render_cb( SDL_GPUCommandBuffer *cb )
         // the handle each frame on D3D12, leaving the bound sampler view
         // pointing at the original empty texture.
         SDL_UploadToGPUTexture( cp, &tex_src, &tex_dst, /*cycle=*/false );
+
+        // Diagnostic: download the FIRST pixel of the just-written texture
+        // back into download_xfer_ so the CPU can verify what the GPU has.
+        // Read happens on the NEXT call to flush_to_render_cb (~1 frame
+        // later) when the GPU has finished this CB.
+        if( download_xfer_ ) {
+            SDL_GPUTextureRegion dl_src{};
+            dl_src.texture   = emitter_tex_[write_slot_];
+            dl_src.x         = 0; dl_src.y = 0; dl_src.z = 0;
+            dl_src.w         = 1; dl_src.h = 1; dl_src.d = 1;
+            dl_src.layer     = 0;
+            dl_src.mip_level = 0;
+
+            SDL_GPUTextureTransferInfo dl_dst{};
+            dl_dst.transfer_buffer = download_xfer_;
+            dl_dst.offset          = 0;
+            dl_dst.pixels_per_row  = 1u;
+            dl_dst.rows_per_layer  = 1u;
+
+            SDL_DownloadFromGPUTexture( cp, &dl_src, &dl_dst );
+            download_pending_ = true;
+        }
     }
 
     // Phase 4/8: upload transparency + SDF + sky_vis textures in the same copy pass.
