@@ -230,12 +230,13 @@ void emitter_collector::flush_to_render_cb( SDL_GPUCommandBuffer *cb )
         tex_dst.layer     = 0;
         tex_dst.mip_level = 0;
 
-        // cycle=false: shader binds emitter_tex_[read_slot_] by pointer.
-        // cycle=true would orphan the original GPU handle each upload, so the
-        // sampler would read the stale (empty) texture while our writes land
-        // in an invisible new one. Ring-slot swap below provides the
-        // frames-in-flight safety this would otherwise be needed for.
-        SDL_UploadToGPUTexture( cp, &tex_src, &tex_dst, /*cycle=*/false );
+        // cycle=true: required on D3D12 so SDL hands us a fresh internal
+        // resource if the previous frame's render hasn't released the
+        // texture yet. The SDL_GPUTexture* handle remains valid; internally
+        // the new resource is what the upload (and subsequent samplers in
+        // this CB) see. Cross-CB race was the real cause of the earlier
+        // empty-texture symptom — single-CB sequencing fixes that.
+        SDL_UploadToGPUTexture( cp, &tex_src, &tex_dst, /*cycle=*/true );
     }
 
     // Phase 4/8: upload transparency + SDF + sky_vis textures in the same copy pass.
