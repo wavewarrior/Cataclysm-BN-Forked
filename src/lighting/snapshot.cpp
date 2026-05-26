@@ -46,7 +46,7 @@ static gpu_emitter make_omni( int lx, int ly, int lz,
     //   lum=30 (fire field)   → 5.5 tiles
     //   lum=120 (indoor lamp) → 11 tiles
     //   lum=400 (bright)      → 20 tiles
-    e.radius          = std::sqrt( std::max( 0.f, radius ) );
+    e.radius          = 3.0f * std::sqrt( std::max( 0.f, radius ) );
     e.r               = r;
     e.g               = g;
     e.b               = b;
@@ -258,6 +258,16 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
     }
 
     collect_zlev( m, zlev, out );
+
+    // Player personal light (torch, flashlight, worn items, mutations).
+    {
+        const float lum = g->u.active_light();
+        if( lum > 0.5f ) {
+            const tripoint pp = g->u.pos();
+            out.push_back( make_omni( pp.x, pp.y, pp.z, lum,
+                                      1.0f, 0.9f, 0.7f ) );
+        }
+    }
 
 #ifdef DEBUG_SYNTHETIC_EMITTER
     // Replace all emitters with one huge test emitter centred on the player.

@@ -751,15 +751,6 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                     };
                     SDL_PushGPUVertexUniformData( cur_cb, /*slot=*/0, &fp, sizeof( fp ) );
 
-                    // Diagnostic: log lp values at actual draw time (throttled to ~1/120 frames).
-                    static int lp_dbg_frame = 0;
-                    if( ++lp_dbg_frame >= 120 ) {
-                        lp_dbg_frame = 0;
-                        dbg( DL::Debug ) << "lp_push: n=" << lp.emitter_count
-                                         << " z=" << lp.current_z
-                                         << " cam=(" << lp.camera_off_x << ","
-                                         << lp.camera_off_y << ")";
-                    }
                     // Vertex slot 1: LightParams (world_pos computation)
                     SDL_PushGPUVertexUniformData( cur_cb, /*slot=*/1, &lp, sizeof( lp ) );
                     // Fragment slot 0: LightParams (ambient, emitter_count, sdf_map_w)
