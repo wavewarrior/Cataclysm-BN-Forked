@@ -204,13 +204,22 @@ float4 main(VS_OUT i) : SV_Target0 {
         // Instead use the dedicated emitter-presence signal via direct distance
         // to emitter 0. If we read any nonzero emitter data, paint bright cyan
         // pixel pattern.
-        if(emitter_count > 0u) {
-            const float4 d0 = EmitterTex.Load(int3(0, 0, 0));
-            // Draw a 2-tile-radius solid magenta disc around emitter 0 so
-            // even if world_pos coordinates are wrong, you can see where the
-            // shader thinks emitter 0 lives (relative to world_pos space).
-            const float ed = length(d0.xy - i.world_pos);
-            if(ed < 2.0) { dbg_r = 1.0; dbg_g = 0.0; dbg_b = 1.0; }
+        // Unconditionally read EmitterTex slot 0 so we can tell whether the
+        // texture has data (independent of whatever emitter_count says).
+        const float4 d0_dbg = EmitterTex.Load(int3(0, 0, 0));
+        // Encode d0_dbg.xy into a marker:
+        //   - MAGENTA disc at the (xy) read from EmitterTex slot 0.
+        //   - WHITE bar at top of screen if d0_dbg.x is "near-zero"
+        //     (which would mean the texture is empty).
+        const float ed = length(d0_dbg.xy - i.world_pos);
+        if(ed < 2.0) { dbg_r = 1.0; dbg_g = 0.0; dbg_b = 1.0; }
+        // Top-screen status bar: draw white if EmitterTex appears empty
+        // (d0_dbg.xy near zero AND radius zero). pixel.y derived from
+        // world_pos via tile_pixel_size — sentinel-safe.
+        if(i.world_pos.y < (camera_off_y + 1.5)
+           && abs(d0_dbg.x) < 0.01 && abs(d0_dbg.y) < 0.01
+           && abs(d0_dbg.w) < 0.01) {
+            dbg_r = 1.0; dbg_g = 1.0; dbg_b = 1.0;
         }
     }
     // GPU total light (emitters + sky + sun + ambient floor).
