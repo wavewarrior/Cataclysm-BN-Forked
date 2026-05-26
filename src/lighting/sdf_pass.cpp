@@ -237,7 +237,8 @@ void sdf_pass::upload( SDL_GPUCopyPass *cp,
             dst.h       = static_cast<Uint32>( map_h_ );
             dst.d       = 1;
 
-            SDL_UploadToGPUTexture( cp, &src, &dst, true );
+            // cycle=false: shader binds transparency_tex_ by handle.
+            SDL_UploadToGPUTexture( cp, &src, &dst, false );
         }
     }
 
@@ -259,7 +260,8 @@ void sdf_pass::upload( SDL_GPUCopyPass *cp,
             dst.h       = static_cast<Uint32>( map_h_ );
             dst.d       = 1;
 
-            SDL_UploadToGPUTexture( cp, &src, &dst, true );
+            // cycle=false: same rationale — shader keeps the original handle.
+            SDL_UploadToGPUTexture( cp, &src, &dst, false );
 
             // Also upload SDF to the vertex-shader storage buffer.
             if( sdf_storage_ ) {
@@ -299,7 +301,12 @@ void sdf_pass::upload( SDL_GPUCopyPass *cp,
             dst.layer     = 0;
             dst.mip_level = 0;
 
-            SDL_UploadToGPUTexture( cp, &src, &dst, true );
+            // cycle=false: sky_vis_tex_ is one handle the shader binds by
+            // pointer every frame. cycle=true would orphan it after each
+            // upload (write goes to a new texture, sampler reads the stale
+            // one) — observed as terrain-shaped sky_vis garbage in the
+            // shader debug view.
+            SDL_UploadToGPUTexture( cp, &src, &dst, false );
         }
     }
 }
