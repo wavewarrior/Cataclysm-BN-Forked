@@ -70,13 +70,16 @@ void render_state::init( SDL_Window *host_window )
     // Phase 3: start the emitter collector thread.
     collector_ = std::make_unique<emitter_collector>( *this );
 
-    // Phase 4: initialise SDF + transparency textures.
-    // get_map() cannot be used here (g is null at WinCreate time).
-    // Use the default bubble size: 11 submaps × SEEX/SEEY = 132×132 tiles.
-    // render_state::ensure_sdf_size() re-inits on first game load if actual
-    // size differs.
-    static constexpr int DEFAULT_MAP_TILES = 11 * 12; // MAPSIZE=11, SEEX=SEEY=12
-    sdf_.init( device_, DEFAULT_MAP_TILES, DEFAULT_MAP_TILES );
+    // Phase 4: initialise SDF + transparency textures sized to the maximum
+    // possible reality-bubble extent. game_constants.h enforces square maps
+    // (SEEY == SEEX, single MAPSIZE constant for both axes) so MAPSIZE_X ==
+    // MAPSIZE_Y at compile time. Sizing for MAPSIZE_X avoids the truncate-
+    // to-upper-left bug we hit when DEFAULT_MAP_TILES was hardcoded to the
+    // legacy 11×12 = 132 (assuming the old MAPSIZE=11). With current
+    // REALITY_BUBBLE_SIZE_MAX=16 → MAPSIZE=35 → MAPSIZE_X=420, that costs
+    // ~700 KB extra GPU memory (R32F + R8 + R8) and removes a class of bug
+    // where the SDF texture is smaller than the live transparency_cache.
+    sdf_.init( device_, MAPSIZE_X, MAPSIZE_Y );
 }
 
 void render_state::shutdown() noexcept
@@ -135,25 +138,25 @@ void render_state::clear_tile_scissor()
     tile_batcher_.set_scissor( nullptr );
 }
 
-void render_state::set_tile_lighting( float             tile_pixel_size,
-                                       float             z_level,
-                                       Uint32            emitter_count,
-                                       float             ambient,
-                                       float             cam_off_x,
-                                       float             cam_off_y,
-                                       Uint32            sdf_map_w,
-                                       Uint32            sdf_map_h,
-                                       SDL_GPUTexture   *emitter_tex,
-                                       SDL_GPUTexture   *sdf_tex,
-                                       SDL_GPUSampler   *data_sampler,
-                                       SDL_GPUTexture   *sky_vis_tex,
-                                       const sun_params *sp )
+void render_state::begin_lighting_frame( const frame_light_inputs &in )
 {
-    tile_batcher_.set_lighting_resources( tile_pixel_size, z_level,
-                                           emitter_count, ambient,
-                                           cam_off_x, cam_off_y, sdf_map_w, sdf_map_h,
-                                           emitter_tex, sdf_tex, data_sampler,
-                                           sky_vis_tex, sp );
+    // Resolve everything render_state owns internally: emitter texture +
+    // count from the collector, SDF + sky_vis textures + dimensions from
+    // the sdf_pass, sampler from this object. Caller only provides what
+    // it alone knows (camera, time, tile geometry, ambient).
+    SDL_GPUTexture *etex = collector_ ? collector_->emitter_texture() : nullptr;
+    SDL_GPUTexture *stex = sdf_.sdf_texture();
+    SDL_GPUTexture *kvis = sdf_.sky_vis_texture();
+    const Uint32 ne = collector_
+                      ? static_cast<Uint32>( collector_->last_count() )
+                      : 0u;
+    const Uint32 sw = static_cast<Uint32>( sdf_.map_w() );
+    const Uint32 sh = static_cast<Uint32>( sdf_.map_h() );
+
+    tile_batcher_.set_lighting_resources(
+        in.tile_pixel_size, in.z_level, ne, in.ambient,
+        in.camera_off_x, in.camera_off_y, sw, sh,
+        etex, stex, gpu_sampler_, kvis, &in.sun );
 }
 
 void render_state::flush_ui_rects( sprite_batcher &dst )
@@ -422,18 +425,20 @@ bool render_state::upload_surface_subregion_to_gpu_texture(
 
 void render_state::queue_font_glyph( SDL_GPUTexture *glyph_tex,
                                      float dst_x, float dst_y, float dst_w, float dst_h,
-                                     float r, float g, float b, float a )
+                                     float r, float g, float b, float a,
+                                     bool lit )
 {
     // Full-texture sample — for callers with one texture per glyph
     // (CachedTTFFont).
     queue_font_glyph( glyph_tex, dst_x, dst_y, dst_w, dst_h,
-                      0.0f, 0.0f, 1.0f, 1.0f, r, g, b, a );
+                      0.0f, 0.0f, 1.0f, 1.0f, r, g, b, a, lit );
 }
 
 void render_state::queue_font_glyph( SDL_GPUTexture *glyph_tex,
                                      float dst_x, float dst_y, float dst_w, float dst_h,
                                      float src_u, float src_v, float src_uw, float src_vh,
-                                     float r, float g, float b, float a )
+                                     float r, float g, float b, float a,
+                                     bool lit )
 {
     if( !device_.ready() || !glyph_tex ) {
         return;
@@ -452,6 +457,7 @@ void render_state::queue_font_glyph( SDL_GPUTexture *glyph_tex,
     d.inst.tint_g = g;
     d.inst.tint_b = b;
     d.inst.tint_a = a;
+    d.lit         = lit;
     font_glyph_queue_.push_back( d );
 }
 
@@ -472,7 +478,10 @@ void render_state::flush_font_glyphs( sprite_batcher &dst, SDL_GPUSampler *sampl
     // Drain WITHOUT clearing — clear_frame_queues() handles reset at
     // the top of each redraw cycle.
     for( const font_glyph_draw &g : font_glyph_queue_ ) {
-        dst.set_texture( g.texture, sampler );
+        // Pass per-glyph `lit` flag so HUD glyphs (default false) skip the
+        // lighting fragment-shader path, while future world-space text
+        // (queued with lit=true) goes through the full lit segment.
+        dst.set_texture( g.texture, sampler, g.lit );
         dst.draw( g.inst );
     }
 }

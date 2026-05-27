@@ -16,81 +16,69 @@
 namespace lighting
 {
 
-static constexpr Uint32 SSBO_SIZE = static_cast<Uint32>( MAX_EMITTERS ) *
-                                    static_cast<Uint32>( sizeof( gpu_emitter ) );
+// Q9 (Path B): single texture + single staging buffer. SDL_GPU's
+// cycle=true on map/upload handles frame-to-frame data dependencies
+// internally — the previous 2-slot manual ring is gone.
+//
+// Q7 (earlier): the 512 KB SSBO ring was deleted. Transfer buffer is now
+// sized to exactly one texture upload: 256 rows × sizeof(gpu_emitter) =
+// 16 KB.
+static constexpr int    EMITTER_TEX_ROWS  = 256;
+static constexpr Uint32 EMITTER_TEX_BYTES = static_cast<Uint32>( EMITTER_TEX_ROWS ) *
+                                            static_cast<Uint32>( sizeof( gpu_emitter ) );
 
 emitter_collector::emitter_collector( render_state &rs ) : rs_( rs )
 {
-    // Allocate the double-buffered GPU storage buffers and transfer buffers.
     SDL_GPUDevice *dev = rs_.device().raw();
 
-    for( int i = 0; i < RING; ++i ) {
-        SDL_GPUBufferCreateInfo bci{};
-        bci.usage = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ;
-        bci.size  = SSBO_SIZE;
-        ssbo_[i] = SDL_CreateGPUBuffer( dev, &bci );
-        if( !ssbo_[i] ) {
-            dbg( DL::Error ) << "emitter_collector: failed to create SSBO slot " << i;
-        }
-
+    {
         SDL_GPUTransferBufferCreateInfo tbci{};
         tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-        tbci.size  = SSBO_SIZE;
-        xfer_[i] = SDL_CreateGPUTransferBuffer( dev, &tbci );
-        if( !xfer_[i] ) {
-            dbg( DL::Error ) << "emitter_collector: failed to create transfer buffer slot " << i;
+        tbci.size  = EMITTER_TEX_BYTES;
+        xfer_ = SDL_CreateGPUTransferBuffer( dev, &tbci );
+        if( !xfer_ ) {
+            dbg( DL::Error ) << "emitter_collector: failed to create transfer buffer";
         }
+    }
 
-        // Phase 7: 4×64 RGBA32F emitter data texture for fragment-stage access.
-        // Row = emitter index; width = 4 (4 float4 data slots per emitter).
+    {
+        // Phase 7 / Q4 fix: 4×256 RGBA32F emitter data texture for
+        // fragment-stage access. Row = emitter index; width = 4 (4 float4
+        // data slots per emitter).
         SDL_GPUTextureCreateInfo etci{};
         etci.type              = SDL_GPU_TEXTURETYPE_2D;
         etci.format            = SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT;
         etci.usage             = SDL_GPU_TEXTUREUSAGE_SAMPLER;
         etci.width             = 4u;
-        etci.height            = 64u;
+        etci.height            = 256u;
         etci.layer_count_or_depth = 1;
         etci.num_levels        = 1;
-        emitter_tex_[i] = SDL_CreateGPUTexture( dev, &etci );
-        if( !emitter_tex_[i] ) {
-            dbg( DL::Warn ) << "emitter_collector: failed to create emitter texture slot " << i;
+        emitter_tex_ = SDL_CreateGPUTexture( dev, &etci );
+        if( !emitter_tex_ ) {
+            dbg( DL::Warn ) << "emitter_collector: failed to create emitter texture";
         }
     }
 
-    // Diagnostic download transfer buffer: holds one RGBA32F pixel = 16 bytes
-    // so we can read back what the GPU actually has in EmitterTex slot 0.
+    // Diagnostic download transfer buffer: one RGBA32F pixel = 16 bytes
+    // so we can read back what the GPU actually has in EmitterTex pixel 0.
     {
         SDL_GPUTransferBufferCreateInfo tbci{};
         tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD;
         tbci.size  = 16u;
         download_xfer_ = SDL_CreateGPUTransferBuffer( dev, &tbci );
     }
-
-    thread_ = std::thread( &emitter_collector::thread_main, this );
 }
 
 emitter_collector::~emitter_collector()
 {
-    {
-        std::lock_guard<std::mutex> lk( mu_ );
-        stop_ = true;
-    }
-    cv_.notify_one();
-    if( thread_.joinable() ) {
-        thread_.join();
-    }
-
     SDL_GPUDevice *dev = rs_.device().raw();
-    for( int i = 0; i < RING; ++i ) {
-        if( xfer_[i] ) {
-            SDL_ReleaseGPUTransferBuffer( dev, xfer_[i] );
-        }
-        if( ssbo_[i] ) {
-            SDL_ReleaseGPUBuffer( dev, ssbo_[i] );
-        }
-        if( emitter_tex_[i] ) {
-            SDL_ReleaseGPUTexture( dev, emitter_tex_[i] );
-        }
+    if( xfer_ ) {
+        SDL_ReleaseGPUTransferBuffer( dev, xfer_ );
+        xfer_ = nullptr;
+    }
+    if( emitter_tex_ ) {
+        SDL_ReleaseGPUTexture( dev, emitter_tex_ );
+        emitter_tex_ = nullptr;
     }
     if( download_xfer_ ) {
         SDL_ReleaseGPUTransferBuffer( dev, download_xfer_ );
@@ -103,60 +91,29 @@ void emitter_collector::submit( std::vector<gpu_emitter> snapshot,
                                  std::vector<float>      sdf,
                                  std::vector<uint8_t>    sky_vis )
 {
-    {
-        std::lock_guard<std::mutex> lk( mu_ );
-        pending_              = std::move( snapshot );
-        pending_transparency_ = std::move( transparency );
-        pending_sdf_          = std::move( sdf );
-        pending_sky_vis_      = std::move( sky_vis );
-        have_pending_         = true;
-    }
-    cv_.notify_one();
-}
-
-SDL_GPUBuffer *emitter_collector::read_buffer() const noexcept
-{
-    return ssbo_[read_slot_.load( std::memory_order_acquire )];
-}
-
-SDL_GPUTexture *emitter_collector::emitter_texture() const noexcept
-{
-    return emitter_tex_[read_slot_.load( std::memory_order_acquire )];
-}
-
-void emitter_collector::thread_main()
-{
-    // Worker thread no longer performs the GPU upload — that path produced a
-    // cross-CB race against the render command buffer (sampler read stale
-    // texture data). All GPU work is now done from the main thread via
-    // flush_to_render_cb() on the render command buffer. The thread is kept
-    // alive so the ctor/dtor flow stays unchanged; it just sleeps on the cv.
-    while( true ) {
-        std::unique_lock<std::mutex> lk( mu_ );
-        cv_.wait( lk, [this] { return stop_; } );
-        if( stop_ ) {
-            break;
-        }
-    }
+    // Single-threaded post-Q8: no mutex, no cv. Refresh_display calls
+    // submit() then flush_to_render_cb() in sequence on the main thread.
+    pending_              = std::move( snapshot );
+    pending_transparency_ = std::move( transparency );
+    pending_sdf_          = std::move( sdf );
+    pending_sky_vis_      = std::move( sky_vis );
+    have_pending_         = true;
 }
 
 void emitter_collector::flush_to_render_cb( SDL_GPUCommandBuffer *cb )
 {
-    // NOTE: the `cb` parameter is no longer used — we acquire and submit our
-    // own command buffer on this (main) thread. SDL_GPU inserts resource
-    // transitions between separately submitted command buffers from the
-    // same thread, so the subsequent render CB will see the uploaded
-    // textures. Single-CB recording was producing a write→sample hazard
-    // that left the sampler reading pre-upload content.
-    (void)cb;
-    if( !rs_.device().raw() ) {
+    // Record the copy pass ON THE CALLER'S COMMAND BUFFER. Same-CB
+    // ordering means SDL_GPU emits the write→sample barrier between this
+    // copy pass and the upcoming render pass automatically; no fence
+    // needed. With cycle=true the underlying physical resource is
+    // orphaned and replaced per upload, so the GPU may still be sampling
+    // last frame's data via the previous physical resource — SDL_GPU
+    // keeps that alive until its consumer retires.
+    if( !cb || !rs_.device().raw() ) {
         return;
     }
 
-    // Diagnostic readback: drain the previous frame's download (if any). The
-    // GPU has had >=1 frame to complete; on D3D12 begin_frame's
-    // WaitAndAcquireGPUSwapchainTexture also stalls for in-flight frames so
-    // the data is safe to map here.
+    // Diagnostic readback: drain the previous frame's download (if any).
     if( download_pending_ && download_xfer_ ) {
         void *mapped = SDL_MapGPUTransferBuffer( rs_.device().raw(),
                                                   download_xfer_, false );
@@ -171,36 +128,30 @@ void emitter_collector::flush_to_render_cb( SDL_GPUCommandBuffer *cb )
         download_pending_ = false;
     }
 
-    // Atomically take pending data — main thread is the only consumer now,
-    // but the worker-thread submit() path still writes pending_* under the
-    // mutex.
-    std::vector<gpu_emitter> data;
-    std::vector<uint8_t>     transparency;
-    std::vector<float>       sdf;
-    std::vector<uint8_t>     sky_vis;
-    {
-        std::lock_guard<std::mutex> lk( mu_ );
-        if( !have_pending_ ) {
-            return;
-        }
-        data         = std::move( pending_ );
-        transparency = std::move( pending_transparency_ );
-        sdf          = std::move( pending_sdf_ );
-        sky_vis      = std::move( pending_sky_vis_ );
-        have_pending_ = false;
+    if( !have_pending_ ) {
+        return;
     }
+    std::vector<gpu_emitter> data         = std::move( pending_ );
+    std::vector<uint8_t>     transparency = std::move( pending_transparency_ );
+    std::vector<float>       sdf          = std::move( pending_sdf_ );
+    std::vector<uint8_t>     sky_vis      = std::move( pending_sky_vis_ );
+    have_pending_ = false;
 
-    if( !xfer_[write_slot_] || !ssbo_[write_slot_] ) {
+    if( !xfer_ || !emitter_tex_ ) {
         return;
     }
 
-    const int count = std::min( static_cast<int>( data.size() ), MAX_EMITTERS );
+    // Cap to texture row count (the only consumer). MAX_EMITTERS at the
+    // snapshot/CPU side is an upper safety bound; the GPU never sees
+    // more than EMITTER_TEX_ROWS regardless.
+    const int count = std::min( static_cast<int>( data.size() ), EMITTER_TEX_ROWS );
     const Uint32 byte_size = static_cast<Uint32>( count ) *
                              static_cast<Uint32>( sizeof( gpu_emitter ) );
 
-    // Map transfer buffer, copy data.
+    // Map staging with cycle=true — SDL_GPU rotates its internal
+    // physical staging if last frame's upload is still in flight.
     void *mapped = SDL_MapGPUTransferBuffer( rs_.device().raw(),
-                                              xfer_[write_slot_], /*cycle=*/true );
+                                              xfer_, /*cycle=*/true );
     if( !mapped ) {
         dbg( DL::Error ) << "emitter_collector: SDL_MapGPUTransferBuffer failed";
         return;
@@ -212,51 +163,28 @@ void emitter_collector::flush_to_render_cb( SDL_GPUCommandBuffer *cb )
                          << " rgb=(" << e0.r << "," << e0.g << "," << e0.b << ")";
     }
     std::memcpy( mapped, data.data(), byte_size );
-    // TEMPORARY DEBUG: overwrite emitter[0] with a known sentinel pattern so
-    // the shader debug viz can prove the upload actually reaches the bound
-    // texture. pos=(99, 99, 0), radius=5, full red. If magenta appears near
-    // world_pos (99,99), the upload-bind-sample chain works end-to-end and
-    // the bug lies upstream in snapshot construction. If still no magenta,
-    // the upload itself is not reaching the sampler.
-    // (sentinel removed — pipeline confirmed working in zoomed-out view)
-    SDL_UnmapGPUTransferBuffer( rs_.device().raw(), xfer_[write_slot_] );
+    SDL_UnmapGPUTransferBuffer( rs_.device().raw(), xfer_ );
 
-    // Run the copy pass on the SAME command buffer as the upcoming render
-    // pass. SDL_GPU inserts the write→sample barrier between the copy pass
-    // and the render pass on a single CB; this avoids the cross-CB
-    // resource-aliasing issue where the sampler binds the pre-cycle
-    // (empty) resource while the upload landed in the post-cycle one.
+    // Copy pass on the CALLER'S command buffer.
     SDL_GPUCopyPass *cp = SDL_BeginGPUCopyPass( cb );
     if( !cp ) {
         return;
     }
 
-    SDL_GPUTransferBufferLocation src{};
-    src.transfer_buffer = xfer_[write_slot_];
-    src.offset          = 0;
-
-    SDL_GPUBufferRegion dst{};
-    dst.buffer = ssbo_[write_slot_];
-    dst.offset = 0;
-    dst.size   = byte_size;
-
-    SDL_UploadToGPUBuffer( cp, &src, &dst, /*cycle=*/true );
-
-    // Phase 7: upload same emitter data to 4×64 RGBA32F texture for fragment access.
-    // Reuses the same transfer buffer (same bytes; gpu_emitter = 4×float4 = one texture row).
-    if( emitter_tex_[write_slot_] && count > 0 ) {
-        const Uint32 rows = count > 64 ? 64u : static_cast<Uint32>( count );
+    // Phase 7: upload emitter data to 4×256 RGBA32F texture.
+    if( count > 0 ) {
+        const Uint32 rows = static_cast<Uint32>( count );
         SDL_GPUTextureTransferInfo tex_src{};
-        tex_src.transfer_buffer = xfer_[write_slot_];
+        tex_src.transfer_buffer = xfer_;
         tex_src.offset          = 0;
-        // SDL3's "0 = tight packing" can be unreliable on D3D12 — pass the
-        // values explicitly so the row stride matches the gpu_emitter
-        // struct's 64-byte layout (4 RGBA32F pixels = 64 bytes = one row).
+        // SDL3 "0 = tight packing" can be unreliable on D3D12 — pass the
+        // values explicitly so the row stride matches gpu_emitter's
+        // 64-byte layout (4 RGBA32F pixels = 64 bytes = one row).
         tex_src.pixels_per_row  = 4u;
         tex_src.rows_per_layer  = rows;
 
         SDL_GPUTextureRegion tex_dst{};
-        tex_dst.texture   = emitter_tex_[write_slot_];
+        tex_dst.texture   = emitter_tex_;
         tex_dst.x         = 0;
         tex_dst.y         = 0;
         tex_dst.z         = 0;
@@ -266,21 +194,21 @@ void emitter_collector::flush_to_render_cb( SDL_GPUCommandBuffer *cb )
         tex_dst.layer     = 0;
         tex_dst.mip_level = 0;
 
-        // cycle=false + ring slot rotation: each frame writes a DIFFERENT
-        // physical texture so the previous frame's GPU work isn't disturbed
-        // (no race), AND the SDL_GPUTexture* handle's underlying resource
-        // never changes (so the shader's bound SRV stays valid). The
-        // alternative — cycle=true — orphans the bound SRV on D3D12, which
-        // is exactly the bug we observed.
-        SDL_UploadToGPUTexture( cp, &tex_src, &tex_dst, /*cycle=*/false );
+        // cycle=true: SDL_GPU orphans the previous physical texture if
+        // the GPU is still using it, allocates a new one, and updates the
+        // SRV bound this frame to reference the new physical resource —
+        // all within the same CB so the upcoming render pass samples the
+        // freshly written data. The Phase 7 "stale sampler" symptom that
+        // motivated cycle=false was a cross-CB artefact (resolved by Q2's
+        // single-CB rewrite); within one CB this is the canonical
+        // SDL_GPU pattern.
+        SDL_UploadToGPUTexture( cp, &tex_src, &tex_dst, /*cycle=*/true );
 
-        // Diagnostic: download the FIRST pixel of the just-written texture
-        // back into download_xfer_ so the CPU can verify what the GPU has.
-        // Read happens on the NEXT call to flush_to_render_cb (~1 frame
-        // later) when the GPU has finished this CB.
+        // Diagnostic: download the FIRST pixel back into download_xfer_.
+        // Read happens on the next flush_to_render_cb (~1 frame later).
         if( download_xfer_ ) {
             SDL_GPUTextureRegion dl_src{};
-            dl_src.texture   = emitter_tex_[write_slot_];
+            dl_src.texture   = emitter_tex_;
             dl_src.x         = 0; dl_src.y = 0; dl_src.z = 0;
             dl_src.w         = 1; dl_src.h = 1; dl_src.d = 1;
             dl_src.layer     = 0;
@@ -297,22 +225,15 @@ void emitter_collector::flush_to_render_cb( SDL_GPUCommandBuffer *cb )
         }
     }
 
-    // Phase 4/8: upload transparency + SDF + sky_vis textures in the same copy pass.
+    // Phase 4/8: upload transparency + SDF + sky_vis in the same copy pass.
     if( rs_.sdf().ready() && !transparency.empty() && !sdf.empty() ) {
         rs_.sdf().upload( cp, rs_.device().raw(), transparency, sdf, sky_vis );
     }
 
     SDL_EndGPUCopyPass( cp );
-    // No submit — the caller submits the render CB after the render pass.
+    // No submit — caller submits `cb` after the render pass.
 
-    // Restore ring rotation: write_slot wrote the new data; promote it to
-    // read_slot and flip write_slot to the OTHER physical texture for the
-    // next frame. set_tile_lighting captures emitter_tex_[read_slot_]
-    // immediately after this, so the bound SRV always points to a fully
-    // written, idle (not in-flight) physical texture.
     last_count_.store( count, std::memory_order_relaxed );
-    read_slot_.store( write_slot_, std::memory_order_release );
-    write_slot_ = 1 - write_slot_;
 }
 
 } // namespace lighting

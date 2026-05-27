@@ -235,7 +235,12 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
         }
     };
 
-    collect_character( get_player_character() );
+    // Player's active light is added separately below (L263–270) with a warm
+    // tint. Skip collect_character() here — using it as well produced a
+    // duplicate uncolored-white emitter stacked on the warm one at the same
+    // tile, doubling the player's brightness AND burning two of the 256
+    // GPU emitter slots on one light source. The standalone block below
+    // handles both active_light and the on-fire glow for the player.
     for( const npc &guy : g->all_npcs() ) {
         collect_character( guy );
     }
@@ -259,13 +264,20 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
 
     collect_zlev( m, zlev, out );
 
-    // Player personal light (torch, flashlight, worn items, mutations).
+    // Player personal light (torch, flashlight, worn items, mutations) +
+    // on-fire glow. Folded in here after dropping collect_character() for
+    // the player so we don't get two stacked emitters at the same tile.
     {
-        const float lum = g->u.active_light();
+        const tripoint pp = g->u.pos();
+        const Character &pc = get_player_character();
+        const float lum = pc.active_light();
         if( lum > 0.5f ) {
-            const tripoint pp = g->u.pos();
             out.push_back( make_omni( pp.x, pp.y, pp.z, lum,
                                       1.0f, 0.9f, 0.7f ) );
+        }
+        if( pc.has_effect( snapshot_effect_onfire ) ) {
+            out.push_back( make_omni( pp.x, pp.y, pp.z,
+                                      8.0f, 1.0f, 0.5f, 0.0f ) );
         }
     }
 
@@ -304,6 +316,44 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
             out.push_back( make_omni( local.x, local.y, local.z,
                                       radius, f.r, f.g, f.b ) );
         }
+    }
+
+    // Fix D — CPU-side cull: drop emitters that cannot contribute to any
+    // visible fragment. Visible region is ~25 tiles around the player
+    // (camera half-extent for a typical viewport at 32 px/tile). An emitter
+    // contributes only if its reach (`radius`) plus the half-view margin
+    // is greater than its distance to the player. Wrong-z emitters are
+    // already culled in the fragment shader, but doing it here saves
+    // upload bandwidth and frees emitter slots.
+    if( g ) {
+        const tripoint pp = g->u.pos();
+        constexpr float view_margin = 25.0f;
+        out.erase( std::remove_if( out.begin(), out.end(),
+                                   [&pp]( const gpu_emitter & e ) {
+            if( static_cast<int>( std::floor( e.pos_z + 0.5f ) ) != pp.z ) {
+                return true;
+            }
+            const float dx = e.pos_x - ( static_cast<float>( pp.x ) + 0.5f );
+            const float dy = e.pos_y - ( static_cast<float>( pp.y ) + 0.5f );
+            const float d  = std::sqrt( dx * dx + dy * dy );
+            return d > e.radius + view_margin;
+        } ), out.end() );
+
+        // Fix C — sort by contribution at the player. `dist - radius` is
+        // negative when the emitter reaches the player (more negative =
+        // deeper inside its lit region); positive when the emitter only
+        // contributes to off-player visible tiles. Ascending sort keeps
+        // strongest contributors first, so the GPU's 256-row truncation
+        // always keeps the player's own light and nearest sources.
+        std::sort( out.begin(), out.end(),
+                   [&pp]( const gpu_emitter & a, const gpu_emitter & b ) {
+            const float ax = a.pos_x - ( static_cast<float>( pp.x ) + 0.5f );
+            const float ay = a.pos_y - ( static_cast<float>( pp.y ) + 0.5f );
+            const float bx = b.pos_x - ( static_cast<float>( pp.x ) + 0.5f );
+            const float by = b.pos_y - ( static_cast<float>( pp.y ) + 0.5f );
+            return std::sqrt( ax * ax + ay * ay ) - a.radius
+                   < std::sqrt( bx * bx + by * by ) - b.radius;
+        } );
     }
 
     if( static_cast<int>( out.size() ) > MAX_EMITTERS * 3 / 4 ) {

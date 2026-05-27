@@ -131,9 +131,19 @@ class sprite_batcher
                          const float *clear_color_rgba = nullptr );
 
         // Bind a different atlas page. Calling this with the currently bound
-        // page is a no-op; calling it with a different one flushes the
+        // page and the same is_lit state is a no-op; otherwise flushes the
         // pending batch implicitly before re-binding.
-        void set_texture( SDL_GPUTexture *atlas, SDL_GPUSampler *sampler );
+        //
+        // `is_lit` controls whether the lighting fragment-shader path runs
+        // for instances drawn in this segment. Default true preserves
+        // existing tile-sprite behaviour. UI rects + HUD font glyphs pass
+        // false; the shader's existing emitter_count==0 / sdf_map_w==0
+        // guards short-circuit both the per-emitter loop and the sun
+        // march for these segments, recovering the GPU cost of running
+        // lighting math on fragments where the result would be discarded
+        // by max(tint, gpu_total).
+        void set_texture( SDL_GPUTexture *atlas, SDL_GPUSampler *sampler,
+                          bool is_lit = true );
         // Set a GPU scissor rect for subsequent draws. nullptr = full viewport.
         void set_scissor( const SDL_Rect *rect );
         // Phase 7/8: supply per-frame lighting resources.

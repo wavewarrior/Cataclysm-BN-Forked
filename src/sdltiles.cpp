@@ -506,6 +506,84 @@ void refresh_display()
         rs.collector()->flush_to_render_cb( ctx.cmd_buffer );
     }
 
+    // Phase 6/6b: stamp the per-frame lighting params onto the tile_batcher
+    // BEFORE begin_pass. end_pass() reads impl.lp / impl.lp_emitter_tex when
+    // it records SDL_BindGPUFragmentSamplers + SDL_PushGPU*UniformData onto
+    // the command buffer; doing this AFTER end_pass means the recorded values
+    // are one frame stale (camera-drift on motion; frame 0 fully black).
+    if( rs.collector() ) {
+        // Q10 refactor: assemble the per-frame lighting inputs the caller
+        // alone knows (camera + tile geometry + time-of-day + ambient).
+        // render_state::begin_lighting_frame() resolves the textures,
+        // sampler, emitter count, and SDF dimensions internally from its
+        // own subsystems — caller no longer threads those by hand.
+        lighting::render_state::frame_light_inputs in{};
+        in.tile_pixel_size = tilecontext
+                             ? static_cast<float>( tilecontext->get_tile_width() )
+                             : 32.0f;
+        in.z_level         = g ? static_cast<float>( g->u.pos().z ) : 0.0f;
+        // BAND-AID: GPU emitter texture binding is broken on D3D12 (sampler
+        // reads zero while CPU readback shows correct data). Bumping ambient
+        // restores baseline visibility while the SDL_GPU binding issue is
+        // resolved. Drop back to 0.05 once samplers see uploaded data.
+        in.ambient         = 0.5f;
+
+        // Camera offset converts screen tile units → map tile coords:
+        //   map_pos = tile_tu - camera_offset   (see sdf_pass.h comment)
+        // On the main menu (g==nullptr) keep cam_off=(0,0) so the
+        // decorative emitter coordinates stay consistent with the
+        // screen-tile world_pos used by the background sprite.
+        if( g && tilecontext && in.tile_pixel_size > 0.0f ) {
+            const point map_origin  = tilecontext->get_tile_map_origin();
+            const point draw_offset = tilecontext->get_drawing_pixel_offset();
+            in.camera_off_x = static_cast<float>( draw_offset.x ) / in.tile_pixel_size
+                              - static_cast<float>( map_origin.x );
+            in.camera_off_y = static_cast<float>( draw_offset.y ) / in.tile_pixel_size
+                              - static_cast<float>( map_origin.y );
+            if( g_dbg_lighting ) {
+                s_emo.cam_off_x = in.camera_off_x;
+                s_emo.cam_off_y = in.camera_off_y;
+                s_emo.tile_px   = in.tile_pixel_size;
+                s_emo.op_x      = static_cast<float>( draw_offset.x );
+                s_emo.op_y      = static_cast<float>( draw_offset.y );
+                s_emo.player_x  = g->u.pos().x;
+                s_emo.player_y  = g->u.pos().y;
+                s_emo.player_z  = g->u.pos().z;
+                s_emo.screen_w  = static_cast<int>( ctx.swapchain_w );
+                s_emo.screen_h  = static_cast<int>( ctx.swapchain_h );
+                s_emo.map_origin_x = map_origin.x;
+                s_emo.map_origin_y = map_origin.y;
+                s_emo.draw_off_px_x = draw_offset.x;
+                s_emo.draw_off_px_y = draw_offset.y;
+            }
+        }
+
+        // Compute sun/sky params from time-of-day (24h LUT). sun_hour is
+        // renamed to avoid shadowing the hour_of_day<T>() template.
+        const float sun_hour = g ? hour_of_day<float>( calendar::turn ) : 12.f;
+        in.sun = lighting::make_sun_params( sun_hour );
+        // Repurpose sun.sp_pad as the shader debug-heatmap sentinel.
+        in.sun.sp_pad = g_dbg_lighting_shader ? 1.0f : 0.0f;
+
+        // Debug: log emitter count, texture state, and first emitter data every ~120 frames.
+        static int emit_dbg_frame = 0;
+        if( ++emit_dbg_frame >= 120 ) {
+            emit_dbg_frame = 0;
+            dbg( DL::Debug ) << "lighting: n_emit=" << rs.collector()->last_count()
+                             << " emitter_tex=" << ( rs.collector()->emitter_texture() ? "ok" : "NULL" )
+                             << " sdf_tex=" << ( rs.sdf().sdf_texture() ? "ok" : "NULL" )
+                             << " sampler=" << ( rs.gpu_sampler() ? "ok" : "NULL" )
+                             << " cam_off=(" << in.camera_off_x << "," << in.camera_off_y << ")"
+                             << " sdf=" << rs.sdf().map_w() << "x" << rs.sdf().map_h()
+                             << " z=" << in.z_level
+                             << " ambient=" << in.ambient
+                             << " tile_px=" << in.tile_pixel_size;
+        }
+        s_emo.last_n_emit_pushed = static_cast<Uint32>( rs.collector()->last_count() );
+
+        rs.begin_lighting_frame( in );
+    }
+
     // Phase 8 main-menu background: when no game is loaded, inject a fullscreen
     // tile sprite (tint=0, game-tile mode) so the warm amber decorative emitter
     // shows as a lit gradient behind the UI text.  Added only when the tile queue
@@ -740,8 +818,10 @@ void refresh_display()
     }
     const bool have_rects = !rs.ui_rects_empty() && rs.geometry().white_texture();
     if( have_rects ) {
+        // UI rects are HUD: unlit segment so the fragment shader skips
+        // emitter loop + sun march for these fragments.
         rs.tile_batcher().set_texture( rs.geometry().white_texture(),
-                                       rs.gpu_sampler() );
+                                       rs.gpu_sampler(), /*is_lit=*/false );
         rs.flush_ui_rects( rs.tile_batcher() );
     }
     if( !rs.font_glyphs_empty() && rs.gpu_sampler() ) {
@@ -750,86 +830,6 @@ void refresh_display()
     rs.tile_batcher().end_pass();
 
     rs.device().submit_frame( ctx );
-
-    // Phase 6/6b: supply emitter SSBO + SDF buffer + camera offset to the
-    // tile_batcher vertex shader (async; this frame uses collector's last upload).
-    if( rs.collector() ) {
-        const float tile_px = tilecontext
-                              ? static_cast<float>( tilecontext->get_tile_width() )
-                              : 32.0f;
-        const float z_lev   = g ? static_cast<float>( g->u.pos().z ) : 0.0f;
-        const Uint32 n_emit = static_cast<Uint32>( rs.collector()->last_count() );
-        // BAND-AID: GPU emitter texture binding is broken on D3D12 (sampler
-        // reads zero while CPU readback shows correct data). Bumping ambient
-        // restores baseline visibility while the SDL_GPU binding issue is
-        // resolved. Drop back to 0.05 once samplers see uploaded data.
-        const float ambient = 0.5f;
-
-        // Phase 6b: camera offset converts screen tile units → map tile coords.
-        // map_pos = tile_tu - camera_offset  (see sdf_pass.h comment)
-        float cam_off_x = 0.0f, cam_off_y = 0.0f;
-        Uint32 sdf_w = 0u, sdf_h = 0u;
-        // Only compute cam_off while a game is loaded. On the main menu (g==nullptr),
-        // keep cam_off=(0,0) so the decorative emitter coordinates stay consistent
-        // with the screen-tile world_pos used by the background sprite.
-        if( g && tilecontext && tile_px > 0.0f ) {
-            const point map_origin  = tilecontext->get_tile_map_origin();
-            const point draw_offset = tilecontext->get_drawing_pixel_offset();
-            cam_off_x = static_cast<float>( draw_offset.x ) / tile_px
-                        - static_cast<float>( map_origin.x );
-            cam_off_y = static_cast<float>( draw_offset.y ) / tile_px
-                        - static_cast<float>( map_origin.y );
-            sdf_w     = static_cast<Uint32>( rs.sdf().map_w() );
-            sdf_h     = static_cast<Uint32>( rs.sdf().map_h() );
-            if( g_dbg_lighting ) {
-                s_emo.cam_off_x = cam_off_x;
-                s_emo.cam_off_y = cam_off_y;
-                s_emo.tile_px   = tile_px;
-                s_emo.op_x      = static_cast<float>( draw_offset.x );
-                s_emo.op_y      = static_cast<float>( draw_offset.y );
-                s_emo.player_x  = g->u.pos().x;
-                s_emo.player_y  = g->u.pos().y;
-                s_emo.player_z  = g->u.pos().z;
-                s_emo.screen_w  = static_cast<int>( ctx.swapchain_w );
-                s_emo.screen_h  = static_cast<int>( ctx.swapchain_h );
-                s_emo.map_origin_x = map_origin.x;
-                s_emo.map_origin_y = map_origin.y;
-                s_emo.draw_off_px_x = draw_offset.x;
-                s_emo.draw_off_px_y = draw_offset.y;
-            }
-        }
-
-        // Phase 8: compute sun/sky params from time-of-day (24h LUT).
-        // sun_hour is renamed to avoid shadowing the hour_of_day<T>() template.
-        const float sun_hour = g ? hour_of_day<float>( calendar::turn ) : 12.f;
-        lighting::sun_params sp = lighting::make_sun_params( sun_hour );
-        // Repurpose sp.sp_pad as the shader debug-heatmap sentinel.
-        sp.sp_pad = g_dbg_lighting_shader ? 1.0f : 0.0f;
-
-        // Debug: log emitter count, texture state, and first emitter data every ~120 frames.
-        static int emit_dbg_frame = 0;
-        if( ++emit_dbg_frame >= 120 ) {
-            emit_dbg_frame = 0;
-            dbg( DL::Debug ) << "lighting: n_emit=" << n_emit
-                             << " emitter_tex=" << ( rs.collector()->emitter_texture() ? "ok" : "NULL" )
-                             << " sdf_tex=" << ( rs.sdf().sdf_texture() ? "ok" : "NULL" )
-                             << " sampler=" << ( rs.gpu_sampler() ? "ok" : "NULL" )
-                             << " cam_off=(" << cam_off_x << "," << cam_off_y << ")"
-                             << " sdf=" << sdf_w << "x" << sdf_h
-                             << " z=" << z_lev
-                             << " ambient=" << ambient
-                             << " tile_px=" << tile_px;
-        }
-
-        s_emo.last_n_emit_pushed = n_emit;
-        rs.set_tile_lighting( tile_px, z_lev, n_emit, ambient,
-                              cam_off_x, cam_off_y, sdf_w, sdf_h,
-                              rs.collector()->emitter_texture(),
-                              rs.sdf().sdf_texture(),
-                              rs.gpu_sampler(),
-                              rs.sdf().sky_vis_texture(),
-                              &sp );
-    }
 
     // Phase 3+4: build emitter snapshot + SDF, submit to collector for GPU upload.
     if( rs.collector() ) {
@@ -3305,7 +3305,9 @@ bool save_screenshot( const std::string &file_path )
         rs.flush_tile_sprites( rs.tile_batcher(), rs.gpu_sampler() );
     }
     if( !rs.ui_rects_empty() && rs.geometry().white_texture() ) {
-        rs.tile_batcher().set_texture( rs.geometry().white_texture(), rs.gpu_sampler() );
+        // UI rects are HUD: unlit segment.
+        rs.tile_batcher().set_texture( rs.geometry().white_texture(),
+                                       rs.gpu_sampler(), /*is_lit=*/false );
         rs.flush_ui_rects( rs.tile_batcher() );
     }
     if( !rs.font_glyphs_empty() && rs.gpu_sampler() ) {

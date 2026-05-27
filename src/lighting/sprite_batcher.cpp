@@ -133,7 +133,7 @@ float4 main(VS_OUT i) : SV_Target0 {
     // Combined with CPU tint ADDITIVELY so colored emitter glow is visible on
     // top of the CPU-shadowcasting result, not suppressed by max().
     float3 emitter_light = float3(0.0, 0.0, 0.0);
-    const uint me = min(emitter_count, 64u);
+    const uint me = min(emitter_count, 256u);
     for(uint ei = 0u; ei < me; ++ei) {
         // row=emitter index, col 0=pos+radius, col 1=rgb+falloff
         const float4 d0 = EmitterTex.Load(int3(0, ei, 0));
@@ -146,9 +146,30 @@ float4 main(VS_OUT i) : SV_Target0 {
         // Lambert = 1.0 for omnidirectional point lights with flat normal.
         // Directional shading from real surface normals comes in Phase 7b.
         const float  lambert = 1.0;
-        // DEBUG: bypass shadow to confirm emitter_light pipeline.
-        // Remove this once lighting is confirmed working and re-enable SDF shadow.
-        const float shadow = 1.0;
+        // Per-emitter soft shadow via SDF sphere trace. Matches the sun
+        // march style: k * s / remaining_distance (Inigo Quilez cone-ratio,
+        // receiver→light formulation). 16 step cap, min step 0.15. k=8 →
+        // moderately sharp shadow that suits tile-based art. Same SdfTex
+        // transpose convention as the sun march: Load(int3(iy, ix, 0)).
+        // Start bias is clamped against very-close emitters (dist < 0.6)
+        // so we don't overshoot the emitter on the first step.
+        float shadow = 1.0;
+        if(sdf_map_w > 0u) {
+            const float2 sh_dir = dv / max(dist, 0.001);
+            const float  sh_k   = 8.0;
+            float t = min(0.3, dist * 0.5);
+            [loop] for(int ss = 0; ss < 16; ++ss) {
+                if(t >= dist - 0.4) break;
+                const float2 p = i.world_pos + sh_dir * t;
+                const int sx = clamp((int)p.x, 0, (int)sdf_map_w - 1);
+                const int sy = clamp((int)p.y, 0, (int)sdf_map_h - 1);
+                const float s = SdfTex.Load(int3(sy, sx, 0));
+                if(s < 0.05) { shadow = 0.0; break; }
+                shadow = min(shadow, sh_k * s / max(dist - t, 0.01));
+                t += max(s, 0.15);
+            }
+            shadow = saturate(shadow);
+        }
         const float3 rgb = (d1.x < 0.01 && d1.y < 0.01 && d1.z < 0.01)
                            ? float3(1, 1, 1) : d1.xyz;
         emitter_light += rgb * atten * lambert * shadow;
@@ -327,6 +348,12 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
             Uint32 count;
             SDL_Rect scissor     = {};
             bool     has_scissor = false;
+            // When false, end_pass pushes a zeroed light_params / sun_params
+            // for this segment so the fragment shader skips the per-emitter
+            // loop and the sun march (saves wasted GPU on HUD/UI fragments
+            // whose lighting result is discarded by max(tint, gpu_total)).
+            // Default true preserves tile-sprite behaviour.
+            bool     is_lit      = true;
         };
         std::vector<sprite_instance> pending;
         std::vector<segment>          segments;
@@ -337,6 +364,10 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
         Uint32          seg_start      = 0;
         SDL_Rect        bound_scissor  = {};
         bool            bound_has_scissor = false;
+        // Lighting state of the segment currently being accumulated.
+        // True = run full fragment-shader lighting; false = push zeroed
+        // light_params + sun_params so the loop + sun march short-circuit.
+        bool            bound_is_lit   = true;
 
         // Pass-scope state captured by begin_pass().
         SDL_GPUCommandBuffer *cur_cb = nullptr;
@@ -368,11 +399,14 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                                      SDL_GPUSampler *data_sampler = nullptr,
                                      SDL_GPUTexture *sky_vis_tex  = nullptr,
                                      const sun_params *sp         = nullptr ) noexcept {
-            // Guard: if textures exist but sampler is missing, disable GPU lighting.
-            if( ( emitter_tex || sdf_tex || sky_vis_tex ) && !data_sampler ) {
-                emitter_tex  = nullptr;
-                sdf_tex      = nullptr;
-                sky_vis_tex  = nullptr;
+            // The shader reads EmitterTex/SdfTex/SkyVisTex via HLSL `Load`, not
+            // `Sample` — the sampler is irrelevant for those reads. But the
+            // SDL_GPU bind API requires a non-null sampler in the binding
+            // struct. Fall back to default_sampler when none was supplied so
+            // that a missing caller-side sampler does NOT silently disable
+            // all GPU lighting (was masking the lighting failure for weeks).
+            if( !data_sampler ) {
+                data_sampler = default_sampler;
             }
             lp_emitter_tex  = emitter_tex;
             lp_sdf_tex      = sdf_tex;
@@ -562,20 +596,24 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
             seg_start         = 0;
             bound_has_scissor = false;
             bound_scissor     = {};
+            bound_is_lit      = true;
             pass_open         = true;
         }
 
-        void set_texture( SDL_GPUTexture *atlas, SDL_GPUSampler *sampler ) {
+        void set_texture( SDL_GPUTexture *atlas, SDL_GPUSampler *sampler,
+                          bool is_lit ) {
             if( !sampler ) {
                 sampler = default_sampler;
             }
-            if( atlas == bound_tex && sampler == bound_sampler ) {
+            if( atlas == bound_tex && sampler == bound_sampler
+                && is_lit == bound_is_lit ) {
                 return;
             }
             close_segment();
-            bound_tex = atlas;
+            bound_tex     = atlas;
             bound_sampler = sampler;
-            seg_start = static_cast<Uint32>( pending.size() );
+            bound_is_lit  = is_lit;
+            seg_start     = static_cast<Uint32>( pending.size() );
         }
 
         void set_scissor( const SDL_Rect *rect ) {
@@ -702,16 +740,16 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                 // Phase 7: emitter + SDF bound as fragment samplers (slots 1/2).
                 // StructuredBuffer space4 → E_INVALIDARG in D3D12 pipeline creation
                 // with SDL_shadercross @ 6b06e55c; Texture2D space2 works.
-                if( lp_emitter_tex && lp_data_sampler ) {
+                if( lp_emitter_tex ) {
                     SDL_GPUTextureSamplerBinding emitter_bind{ lp_emitter_tex,
                                                                lp_data_sampler };
                     SDL_BindGPUFragmentSamplers( rp, /*first_slot=*/1, &emitter_bind, 1 );
                 }
-                if( lp_sdf_tex && lp_data_sampler ) {
+                if( lp_sdf_tex ) {
                     SDL_GPUTextureSamplerBinding sdf_bind{ lp_sdf_tex, lp_data_sampler };
                     SDL_BindGPUFragmentSamplers( rp, /*first_slot=*/2, &sdf_bind, 1 );
                 }
-                if( lp_sky_vis_tex && lp_data_sampler ) {
+                if( lp_sky_vis_tex ) {
                     SDL_GPUTextureSamplerBinding sky_bind{ lp_sky_vis_tex, lp_data_sampler };
                     SDL_BindGPUFragmentSamplers( rp, /*first_slot=*/3, &sky_bind, 1 );
                 }
@@ -754,15 +792,19 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                     // Re-bind emitter/SDF/sky-vis each segment. On D3D12 a
                     // SDL_BindGPUFragmentSamplers call may rebuild the descriptor
                     // table and zero any slot not included in that call.
-                    if( lp_emitter_tex && lp_data_sampler ) {
+                    // Skip these for unlit (HUD/UI) segments — the shader's
+                    // emitter_count==0 / sdf_map_w==0 guards will short-circuit
+                    // the per-emitter loop and the sun march, so the
+                    // unbound slots are never sampled.
+                    if( s.is_lit && lp_emitter_tex ) {
                         SDL_GPUTextureSamplerBinding eb{ lp_emitter_tex, lp_data_sampler };
                         SDL_BindGPUFragmentSamplers( rp, /*first_slot=*/1, &eb, 1 );
                     }
-                    if( lp_sdf_tex && lp_data_sampler ) {
+                    if( s.is_lit && lp_sdf_tex ) {
                         SDL_GPUTextureSamplerBinding sb{ lp_sdf_tex, lp_data_sampler };
                         SDL_BindGPUFragmentSamplers( rp, /*first_slot=*/2, &sb, 1 );
                     }
-                    if( lp_sky_vis_tex && lp_data_sampler ) {
+                    if( s.is_lit && lp_sky_vis_tex ) {
                         SDL_GPUTextureSamplerBinding skb{ lp_sky_vis_tex, lp_data_sampler };
                         SDL_BindGPUFragmentSamplers( rp, /*first_slot=*/3, &skb, 1 );
                     }
@@ -775,12 +817,27 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                     };
                     SDL_PushGPUVertexUniformData( cur_cb, /*slot=*/0, &fp, sizeof( fp ) );
 
+                    // For unlit segments push a copy of lp with all
+                    // light-driving counts zeroed; the vertex shader still
+                    // needs camera_off + tile_pixel_size for world_pos
+                    // (consistent geometry), and the fragment shader's
+                    // existing guards then skip the loop and march.
+                    // Similarly, lp_sun gets sun_intensity zeroed.
+                    light_params lp_use = lp;
+                    sun_params   lp_sun_use = lp_sun;
+                    if( !s.is_lit ) {
+                        lp_use.emitter_count   = 0u;
+                        lp_use.sdf_map_w       = 0u;
+                        lp_use.sdf_map_h       = 0u;
+                        lp_sun_use.sun_intensity = 0.0f;
+                        lp_sun_use.sky_intensity = 0.0f;
+                    }
                     // Vertex slot 1: LightParams (world_pos computation)
-                    SDL_PushGPUVertexUniformData( cur_cb, /*slot=*/1, &lp, sizeof( lp ) );
+                    SDL_PushGPUVertexUniformData( cur_cb, /*slot=*/1, &lp_use, sizeof( lp_use ) );
                     // Fragment slot 0: LightParams (ambient, emitter_count, sdf_map_w)
-                    SDL_PushGPUFragmentUniformData( cur_cb, /*slot=*/0, &lp, sizeof( lp ) );
+                    SDL_PushGPUFragmentUniformData( cur_cb, /*slot=*/0, &lp_use, sizeof( lp_use ) );
                     // Fragment slot 1: SunParams (sun/sky direction + color)
-                    SDL_PushGPUFragmentUniformData( cur_cb, /*slot=*/1, &lp_sun, sizeof( lp_sun ) );
+                    SDL_PushGPUFragmentUniformData( cur_cb, /*slot=*/1, &lp_sun_use, sizeof( lp_sun_use ) );
 
                     SDL_DrawGPUPrimitives( rp, /*num_vertices=*/6, /*num_instances=*/s.count,
                                            /*first_vertex=*/0, /*first_instance=*/0 );
@@ -802,6 +859,7 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
             segment s{ bound_tex, bound_sampler, seg_start, end - seg_start };
             s.scissor     = bound_scissor;
             s.has_scissor = bound_has_scissor;
+            s.is_lit      = bound_is_lit;
             segments.push_back( s );
             seg_start = end;
         }
@@ -841,9 +899,10 @@ void sprite_batcher::begin_pass( SDL_GPUCommandBuffer *cb,
     p->begin_pass( cb, target, target_w, target_h, clear_color_rgba );
 }
 
-void sprite_batcher::set_texture( SDL_GPUTexture *atlas, SDL_GPUSampler *sampler )
+void sprite_batcher::set_texture( SDL_GPUTexture *atlas, SDL_GPUSampler *sampler,
+                                  bool is_lit )
 {
-    p->set_texture( atlas, sampler );
+    p->set_texture( atlas, sampler, is_lit );
 }
 
 void sprite_batcher::set_scissor( const SDL_Rect *rect )

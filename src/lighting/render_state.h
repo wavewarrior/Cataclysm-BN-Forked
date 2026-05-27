@@ -120,13 +120,20 @@ class render_state
         // for per-glyph textures (CachedTTFFont). The UV overload accepts
         // a sub-rect for callers that pack multiple glyphs into one
         // atlas sheet (BitmapFont's per-colour `ascii` textures).
+        // `lit` controls whether the lighting fragment-shader path runs
+        // for this glyph. Default false treats glyphs as screen-space HUD
+        // (lighting math short-circuited so it cannot dim HUD text). Pass
+        // true for in-world floating text that should respect ambient /
+        // emitter / sun contributions.
         void queue_font_glyph( SDL_GPUTexture *glyph_tex,
                                float dst_x, float dst_y, float dst_w, float dst_h,
-                               float r, float g, float b, float a );
+                               float r, float g, float b, float a,
+                               bool lit = false );
         void queue_font_glyph( SDL_GPUTexture *glyph_tex,
                                float dst_x, float dst_y, float dst_w, float dst_h,
                                float src_u, float src_v, float src_uw, float src_vh,
-                               float r, float g, float b, float a );
+                               float r, float g, float b, float a,
+                               bool lit = false );
 
         // Phase 2i-B-5 part 3: tile sprite queue. cata_tiles' draw paths
         // enqueue every map sprite here during the per-window redraw;
@@ -145,20 +152,29 @@ class render_state
         // batcher segment so previously queued sprites are unaffected.
         void set_tile_scissor( const SDL_Rect *rect );
         void clear_tile_scissor();
-        // Phase 7/8: supply per-frame lighting resources to tile_batcher fragment shader.
-        void set_tile_lighting( float             tile_pixel_size,
-                                float             z_level,
-                                Uint32            emitter_count,
-                                float             ambient,
-                                float             cam_off_x    = 0.0f,
-                                float             cam_off_y    = 0.0f,
-                                Uint32            sdf_map_w    = 0u,
-                                Uint32            sdf_map_h    = 0u,
-                                SDL_GPUTexture   *emitter_tex  = nullptr,
-                                SDL_GPUTexture   *sdf_tex      = nullptr,
-                                SDL_GPUSampler   *data_sampler = nullptr,
-                                SDL_GPUTexture   *sky_vis_tex  = nullptr,
-                                const sun_params *sp           = nullptr );
+        // Per-frame light state the caller has to fill in (camera + time +
+        // tile geometry) before each frame is drawn. Everything the
+        // *lighting subsystem itself* owns (emitter texture, SDF + sky_vis
+        // textures, sampler, emitter count, SDF dimensions) is resolved
+        // inside `begin_lighting_frame` — the caller does not pass those.
+        // Q10 refactor: replaces the 13-positional-arg `set_tile_lighting`
+        // god-call with a struct-grouped per-frame inputs object, matching
+        // the canonical "frequency-tiered uniform struct" pattern used in
+        // Vulkan / D3D12 / Metal render APIs.
+        struct frame_light_inputs {
+            float       tile_pixel_size = 32.0f;
+            float       z_level         = 0.0f;
+            float       ambient         = 0.05f;
+            float       camera_off_x    = 0.0f;
+            float       camera_off_y    = 0.0f;
+            sun_params  sun             = {};
+        };
+
+        // Stamp per-frame lighting state on the tile_batcher. Must be
+        // called BEFORE begin_pass each frame so end_pass's per-segment
+        // uniform push reads this frame's values, not the previous
+        // frame's. See Q1 fix in /Users/.../plans/i-want-you-to-wise-nygaard.md.
+        void begin_lighting_frame( const frame_light_inputs &in );
 
         // Phase 2i-B-5 lifecycle fix. Legacy SDL_Renderer's display_buffer
         // is a persistent render target — content stays between redraws.
@@ -215,6 +231,9 @@ class render_state
         struct font_glyph_draw {
             SDL_GPUTexture *texture;
             sprite_instance inst;
+            // false = HUD/UI (skip lighting); true = world-space text
+            // that should be lit by ambient/emitters/sun. Default false.
+            bool            lit = false;
         };
         std::vector<font_glyph_draw> font_glyph_queue_;
 
