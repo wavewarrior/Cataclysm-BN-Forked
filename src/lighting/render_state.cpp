@@ -70,16 +70,24 @@ void render_state::init( SDL_Window *host_window )
     // Phase 3: start the emitter collector thread.
     collector_ = std::make_unique<emitter_collector>( *this );
 
-    // Phase 4: initialise SDF + transparency textures sized to the maximum
-    // possible reality-bubble extent. game_constants.h enforces square maps
-    // (SEEY == SEEX, single MAPSIZE constant for both axes) so MAPSIZE_X ==
-    // MAPSIZE_Y at compile time. Sizing for MAPSIZE_X avoids the truncate-
-    // to-upper-left bug we hit when DEFAULT_MAP_TILES was hardcoded to the
-    // legacy 11×12 = 132 (assuming the old MAPSIZE=11). With current
-    // REALITY_BUBBLE_SIZE_MAX=16 → MAPSIZE=35 → MAPSIZE_X=420, that costs
-    // ~700 KB extra GPU memory (R32F + R8 + R8) and removes a class of bug
-    // where the SDF texture is smaller than the live transparency_cache.
-    sdf_.init( device_, MAPSIZE_X, MAPSIZE_Y );
+    // Phase 4: initialise SDF + transparency textures sized to the live
+    // reality-bubble extent at startup time. `g_mapsize` is the user-facing
+    // setting (1–REALITY_BUBBLE_SIZE_MAX, default 4) loaded from options
+    // before WinCreate. Runtime map dimensions = g_mapsize × SEEX per axis.
+    //
+    // Previously sized at MAPSIZE_X = 420 (compile-time max). The SDF
+    // pixel_count guard in sdf_pass::upload requires the CPU transparency
+    // vector to be at least as large as the allocated pixel count, so
+    // oversizing caused the guard to silently fail: with default g_mapsize=4,
+    // the CPU array is 48² = 2304 floats while the guard required 420² =
+    // 176,400, so no SDF upload ever happened and shadow marches returned
+    // s≈0 (= "wall") everywhere → every emitter contributed 0.
+    //
+    // Clamp to MAPSIZE_X as a defensive ceiling — g_mapsize should never
+    // exceed REALITY_BUBBLE_SIZE_MAX, but if a bad config slips through
+    // we'd rather oversize the GPU texture than crash the upload.
+    const int rt_tiles = std::min( g_mapsize, REALITY_BUBBLE_SIZE_MAX ) * SEEX;
+    sdf_.init( device_, rt_tiles, rt_tiles );
 }
 
 void render_state::shutdown() noexcept
@@ -156,7 +164,7 @@ void render_state::begin_lighting_frame( const frame_light_inputs &in )
     tile_batcher_.set_lighting_resources(
         in.tile_pixel_size, in.z_level, ne, in.ambient,
         in.camera_off_x, in.camera_off_y, sw, sh,
-        etex, stex, gpu_sampler_, kvis, &in.sun );
+        etex, stex, gpu_sampler_, kvis, &in.sun, &in.debug );
 }
 
 void render_state::flush_ui_rects( sprite_batcher &dst )

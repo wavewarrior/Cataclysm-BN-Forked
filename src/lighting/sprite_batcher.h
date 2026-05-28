@@ -91,7 +91,25 @@ struct sun_params {
     float sun_r, sun_g, sun_b;     // sun color RGB
     float sky_r, sky_g, sky_b;     // sky ambient RGB
     float sky_intensity;            // overall sky brightness
-    float sp_pad;
+    float sp_pad;        // deprecated; debug visualisation moved to debug_params
+};
+
+// Debug visualisation + runtime tuning knobs (DebugParams cbuffer at
+// register(b2, space3); 32 bytes; wire-stable). debug_mode dispatches per-
+// component visualisations in the fragment shader; emitter/sun/sky_scale
+// multiply the corresponding contributions; shadow_k and shadow_steps tune
+// the per-emitter sphere-trace. Defaults are no-ops (off, scale=1, k=8,
+// steps=16) so leaving the struct default-constructed reproduces the pre-
+// widget shader behaviour.
+struct debug_params {
+    uint32_t debug_mode    = 0u;
+    float    debug_opacity = 0.6f;
+    float    emitter_scale = 1.0f;
+    float    sun_scale     = 1.0f;
+    float    sky_scale     = 1.0f;
+    float    shadow_k      = 8.0f;
+    uint32_t shadow_steps  = 16u;
+    float    dp_pad        = 0.0f;
 };
 
 // Returns sun/sky params interpolated from a 24h LUT for the given hour (0..24).
@@ -163,7 +181,8 @@ class sprite_batcher
                                      SDL_GPUTexture   *sdf_tex      = nullptr,
                                      SDL_GPUSampler   *data_sampler = nullptr,
                                      SDL_GPUTexture   *sky_vis_tex  = nullptr,
-                                     const sun_params *sp           = nullptr );
+                                     const sun_params *sp           = nullptr,
+                                     const debug_params *dbg        = nullptr );
 
         // Append one sprite to the pending batch. Triggers an automatic
         // flush when the per-frame instance budget is reached so callers can

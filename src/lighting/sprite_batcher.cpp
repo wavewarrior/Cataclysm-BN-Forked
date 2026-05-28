@@ -118,6 +118,18 @@ cbuffer SunParams : register(b1, space3) {
     float sun_r,     sun_g,     sun_b,        sky_r;
     float sky_g,     sky_b,     sky_intensity, sp_pad;
 };
+// Debug visualisation + runtime-tunable knobs. See lighting::debug_params
+// in sprite_batcher.cpp for the C++-side wire-stable layout.
+cbuffer DebugParams : register(b2, space3) {
+    uint  debug_mode;          // 0=off, 1..7=visualisation modes (see C++ comment)
+    float debug_opacity;       // blend fraction for modes 1-5
+    float emitter_scale;       // per-channel multiplier applied to emitter_light
+    float sun_scale;           // multiplier for sun_contrib
+    float sky_scale;           // multiplier for sky_contrib
+    float shadow_k;            // sphere-trace cone hardness (was hardcoded 8.0)
+    uint  shadow_steps;        // per-emitter march iteration cap (was 16)
+    float dp_pad;
+};
 struct VS_OUT {
     float4 pos      : SV_Position;
     float2 uv       : TEXCOORD0;
@@ -146,26 +158,26 @@ float4 main(VS_OUT i) : SV_Target0 {
         // Lambert = 1.0 for omnidirectional point lights with flat normal.
         // Directional shading from real surface normals comes in Phase 7b.
         const float  lambert = 1.0;
-        // Per-emitter soft shadow via SDF sphere trace. Matches the sun
-        // march style: k * s / remaining_distance (Inigo Quilez cone-ratio,
-        // receiver→light formulation). 16 step cap, min step 0.15. k=8 →
-        // moderately sharp shadow that suits tile-based art. Same SdfTex
-        // transpose convention as the sun march: Load(int3(iy, ix, 0)).
-        // Start bias is clamped against very-close emitters (dist < 0.6)
-        // so we don't overshoot the emitter on the first step.
+        // Per-emitter soft shadow via SDF sphere trace. Inigo Quilez
+        // cone-ratio formulation. shadow_k controls hardness (higher =
+        // sharper), shadow_steps caps the iteration count — both runtime-
+        // tunable via the lighting debug widget (DebugParams cbuffer).
+        // Same SdfTex transpose convention as the sun march:
+        // Load(int3(iy, ix, 0)). Start bias is clamped against very-close
+        // emitters (dist < 0.6) so we don't overshoot on the first step.
         float shadow = 1.0;
-        if(sdf_map_w > 0u) {
+        if(sdf_map_w > 0u && shadow_steps > 0u) {
             const float2 sh_dir = dv / max(dist, 0.001);
-            const float  sh_k   = 8.0;
             float t = min(0.3, dist * 0.5);
-            [loop] for(int ss = 0; ss < 16; ++ss) {
+            const int max_steps = (int)shadow_steps;
+            [loop] for(int ss = 0; ss < max_steps; ++ss) {
                 if(t >= dist - 0.4) break;
                 const float2 p = i.world_pos + sh_dir * t;
                 const int sx = clamp((int)p.x, 0, (int)sdf_map_w - 1);
                 const int sy = clamp((int)p.y, 0, (int)sdf_map_h - 1);
                 const float s = SdfTex.Load(int3(sy, sx, 0));
                 if(s < 0.05) { shadow = 0.0; break; }
-                shadow = min(shadow, sh_k * s / max(dist - t, 0.01));
+                shadow = min(shadow, shadow_k * s / max(dist - t, 0.01));
                 t += max(s, 0.15);
             }
             shadow = saturate(shadow);
@@ -203,38 +215,63 @@ float4 main(VS_OUT i) : SV_Target0 {
                       * sun_shadow * sky_vis;
     }
 
-    // DEBUG VIZ: additive heatmap over normal lighting. Sentinel: sun_params
-    // sp_pad > 0.5 (set by sdltiles.cpp::g_dbg_lighting_shader). Keeps UI/text
-    // legible because we layer the heatmap into the final colour AFTER the
-    // normal lighting path runs. Computed up-front so the value is available
-    // when we return.
-    // DIAGNOSTIC: paint EVERY visible tile with raw EmitterTex slot 0 read.
-    // R = emit[0].pos_x / 200, G = emit[0].pos_y / 200, B = emit[0].radius/20.
-    // Expected for real emit[0]=(86.5, 89.5, *, 13.4) → R≈0.43 G≈0.45 B≈0.67
-    // (a yellowish tint). All zero → texture is empty / unbound.
-    float dbg_r = 0.0, dbg_g = 0.0, dbg_b = 0.0;
-    float dbg_alpha = 0.0;
-    if(sp_pad > 0.5) {
-        const float4 d0 = EmitterTex.Load(int3(0, 0, 0));
-        dbg_r = saturate(d0.x / 200.0);
-        dbg_g = saturate(d0.y / 200.0);
-        dbg_b = saturate(d0.w / 20.0);
-        dbg_alpha = 0.5;
-    }
+    // Apply runtime tuning scales BEFORE compositing. emitter_scale tunes
+    // global brightness of all emitter contributions; sun_scale / sky_scale
+    // tune the sun + sky streams. Defaults are 1.0 (no-op).
+    emitter_light *= emitter_scale;
+    sun_contrib   *= sun_scale;
+    sky_contrib   *= sky_scale;
+
     // GPU total light (emitters + sky + sun + ambient floor).
-    const float3 gpu_total = min(float3(ambient, ambient, ambient)
-                                 + emitter_light + sky_contrib + sun_contrib,
+    const float3 ambient_v = float3(ambient, ambient, ambient);
+    const float3 gpu_total = min(ambient_v + emitter_light + sky_contrib + sun_contrib,
                                  float3(2.0, 2.0, 2.0));
     // max(tint, gpu_total):
-    //   Game tiles:  tint = 0 (set by CPU side) → gpu_total drives brightness (Stoneshard)
-    //   UI / fonts:  tint = element color (1.0 for white) → stays fully visible
-    //   Main menu:   tint = 1.0 (no game state) → all elements bright; emitters add glow
+    //   Game tiles:  tint = 0 (set by CPU side) → gpu_total drives brightness
+    //   UI / fonts:  tint = element color → stays fully visible (unlit segment also zeroes emitter_count)
+    //   Main menu:   tint = 1.0 (no game state) → bright; emitters add glow
     const float3 combined = max(i.tint.rgb, gpu_total);
     float3 final_rgb = texel.rgb * combined;
-    // Debug overlay — only on game tiles (tint near zero), so UI/text stays.
+
+    // Debug visualisation. Modes 1-5 BLEND a per-component visualisation
+    // over the lit scene at debug_opacity; modes 6-7 REPLACE the scene with
+    // raw SDF / sky_vis colormaps. All modes are gated to game tiles
+    // (tint near zero) so HUD glyphs / UI rects always render normally.
     const float dbg_tint_sum = i.tint.r + i.tint.g + i.tint.b;
-    if(sp_pad > 0.5 && dbg_tint_sum < 0.01) {
-        final_rgb = float3(dbg_r, dbg_g, dbg_b);
+    if(debug_mode > 0u && dbg_tint_sum < 0.01) {
+        float3 vis = float3(0, 0, 0);
+        bool   replace = false;
+        if(debug_mode == 1u) {
+            vis = ambient_v;
+        } else if(debug_mode == 2u) {
+            vis = emitter_light;
+        } else if(debug_mode == 3u) {
+            vis = sun_contrib;
+        } else if(debug_mode == 4u) {
+            vis = sky_contrib;
+        } else if(debug_mode == 5u) {
+            vis = gpu_total;
+        } else if(debug_mode == 6u) {
+            // SDF view: red (wall, s≈0) → yellow (s≈4) → green (open, s≥8).
+            const int sx = clamp((int)i.world_pos.x, 0, (int)sdf_map_w - 1);
+            const int sy = clamp((int)i.world_pos.y, 0, (int)sdf_map_h - 1);
+            const float s = (sdf_map_w > 0u) ? SdfTex.Load(int3(sy, sx, 0)) : 0.0;
+            const float t = saturate(s / 8.0);
+            vis = float3(1.0 - t, t, 0.0);
+            replace = true;
+        } else if(debug_mode == 7u) {
+            // SkyVis view: grayscale 0..1.
+            const int sx = clamp((int)i.world_pos.x, 0, (int)sdf_map_w - 1);
+            const int sy = clamp((int)i.world_pos.y, 0, (int)sdf_map_h - 1);
+            const float v = (sdf_map_w > 0u) ? SkyVisTex.Load(int3(sy, sx, 0)) : 0.0;
+            vis = float3(v, v, v);
+            replace = true;
+        }
+        if(replace) {
+            final_rgb = vis;
+        } else {
+            final_rgb = lerp(final_rgb, vis, saturate(debug_opacity));
+        }
     }
     return float4(final_rgb, texel.a * i.tint.a);
 }
@@ -266,6 +303,10 @@ struct light_params {
 static_assert( sizeof( light_params ) == 32, "light_params wire-stable with LightParams cbuffer" );
 
 static_assert( sizeof( sun_params ) == 48, "sun_params wire-stable with SunParams cbuffer" );
+
+// debug_params struct now lives in sprite_batcher.h so render_state.h can
+// embed it by value in frame_light_inputs. Wire-stable layout enforced here.
+static_assert( sizeof( debug_params ) == 32, "debug_params wire-stable with DebugParams cbuffer" );
 
 // ---- 24h sun LUT -------------------------------------------------------
 // Defined at file scope so MSVC won't complain about static-local in nested block.
@@ -385,6 +426,7 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
         SDL_GPUSampler *lp_data_sampler = nullptr;
         light_params    lp              = {};  // defaults: all zero
         sun_params      lp_sun          = {};  // Phase 8: sun/sky params
+        debug_params    lp_debug        = {};  // Debug viz + tuning knobs (DebugParams cbuffer)
 
         void set_lighting_resources( float           tile_pixel_size,
                                      float           z_level,
@@ -398,7 +440,8 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                                      SDL_GPUTexture *sdf_tex      = nullptr,
                                      SDL_GPUSampler *data_sampler = nullptr,
                                      SDL_GPUTexture *sky_vis_tex  = nullptr,
-                                     const sun_params *sp         = nullptr ) noexcept {
+                                     const sun_params *sp         = nullptr,
+                                     const debug_params *dbg      = nullptr ) noexcept {
             // The shader reads EmitterTex/SdfTex/SkyVisTex via HLSL `Load`, not
             // `Sample` — the sampler is irrelevant for those reads. But the
             // SDL_GPU bind API requires a non-null sampler in the binding
@@ -421,6 +464,12 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
             lp.sdf_map_w       = sdf_tex ? sdf_map_w : 0u;
             lp.sdf_map_h       = sdf_tex ? sdf_map_h : 0u;
             if( sp ) { lp_sun = *sp; } else { lp_sun = {}; }
+            // Default-construct debug_params when none passed — the member
+            // defaults provide sensible runtime values (emitter_scale=1,
+            // sun_scale=1, sky_scale=1, shadow_k=8, shadow_steps=16,
+            // debug_mode=0) so the shader behaves identically to the pre-
+            // debug-widget code path.
+            if( dbg ) { lp_debug = *dbg; } else { lp_debug = {}; }
         }
 
         // ---- lifecycle -------------------------------------------------
@@ -822,15 +871,19 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                     // needs camera_off + tile_pixel_size for world_pos
                     // (consistent geometry), and the fragment shader's
                     // existing guards then skip the loop and march.
-                    // Similarly, lp_sun gets sun_intensity zeroed.
-                    light_params lp_use = lp;
-                    sun_params   lp_sun_use = lp_sun;
+                    // Similarly, lp_sun gets sun_intensity zeroed, and
+                    // lp_debug gets debug_mode=0 so the visualisation
+                    // dispatch never fires on HUD fragments.
+                    light_params  lp_use     = lp;
+                    sun_params    lp_sun_use = lp_sun;
+                    debug_params  lp_dbg_use = lp_debug;
                     if( !s.is_lit ) {
                         lp_use.emitter_count   = 0u;
                         lp_use.sdf_map_w       = 0u;
                         lp_use.sdf_map_h       = 0u;
                         lp_sun_use.sun_intensity = 0.0f;
                         lp_sun_use.sky_intensity = 0.0f;
+                        lp_dbg_use.debug_mode  = 0u;
                     }
                     // Vertex slot 1: LightParams (world_pos computation)
                     SDL_PushGPUVertexUniformData( cur_cb, /*slot=*/1, &lp_use, sizeof( lp_use ) );
@@ -838,6 +891,8 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                     SDL_PushGPUFragmentUniformData( cur_cb, /*slot=*/0, &lp_use, sizeof( lp_use ) );
                     // Fragment slot 1: SunParams (sun/sky direction + color)
                     SDL_PushGPUFragmentUniformData( cur_cb, /*slot=*/1, &lp_sun_use, sizeof( lp_sun_use ) );
+                    // Fragment slot 2: DebugParams (visualisation + tunable scales)
+                    SDL_PushGPUFragmentUniformData( cur_cb, /*slot=*/2, &lp_dbg_use, sizeof( lp_dbg_use ) );
 
                     SDL_DrawGPUPrimitives( rp, /*num_vertices=*/6, /*num_instances=*/s.count,
                                            /*first_vertex=*/0, /*first_instance=*/0 );
@@ -922,13 +977,14 @@ void sprite_batcher::set_lighting_resources( float            tile_pixel_size,
                                               SDL_GPUTexture  *sdf_tex,
                                               SDL_GPUSampler  *data_sampler,
                                               SDL_GPUTexture  *sky_vis_tex,
-                                              const sun_params *sp )
+                                              const sun_params   *sp,
+                                              const debug_params *dbg )
 {
     p->set_lighting_resources( tile_pixel_size, z_level,
                                 emitter_count, ambient,
                                 cam_off_x, cam_off_y, sdf_map_w, sdf_map_h,
                                 emitter_tex, sdf_tex, data_sampler,
-                                sky_vis_tex, sp );
+                                sky_vis_tex, sp, dbg );
 }
 
 void sprite_batcher::draw( const sprite_instance &inst )

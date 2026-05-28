@@ -479,7 +479,20 @@ void refresh_display()
     // distance/radius heatmap (R = inside emitter radius, G = tile grid,
     // B = sky_vis). Implemented as a negative-ambient sentinel; the shader
     // checks `ambient < -0.5` and short-circuits to the diagnostic colour.
-    static bool g_dbg_lighting_shader = true;
+    // Shader heatmap overlay (final_rgb replaced with emitter-light visualisation
+// for game tiles). Default OFF — when on AND the SDF is empty, all emitter
+// contributions clamp to 0 and the heatmap renders pitch black, masking the
+// real ambient floor that would otherwise be visible. Toggle on at runtime
+// for emitter-pipeline diagnostics only.
+static bool g_dbg_lighting_shader = false;
+    // Runtime tuning state for shader debug modes. Updated by F-key handlers.
+    static lighting::debug_params g_dbg_params{};
+    // Current debug mode display (0-7, cycles through modes).
+    static uint32_t g_current_dbg_mode = 0u;
+    // Scale factors for individual light contributions (for tuning visualization).
+    static float g_emitter_scale = 1.0f;
+    static float g_sun_scale = 1.0f;
+    static float g_sky_scale = 1.0f;
 
     if( !rs.ready() ) {
         return;
@@ -564,6 +577,11 @@ void refresh_display()
         in.sun = lighting::make_sun_params( sun_hour );
         // Repurpose sun.sp_pad as the shader debug-heatmap sentinel.
         in.sun.sp_pad = g_dbg_lighting_shader ? 1.0f : 0.0f;
+
+        // Runtime debug tuning: wire the globally controlled debug_params into
+        // frame_light_inputs. shader uses these for debug visualization (F7 cycles
+        // modes, F8/F9 adjust scales). Defaults are all zeroed (no-op).
+        in.debug = g_dbg_params;
 
         // Debug: log emitter count, texture state, and first emitter data every ~120 frames.
         static int emit_dbg_frame = 0;
@@ -816,6 +834,82 @@ void refresh_display()
             }
         }
     }
+
+    // Lighting tuning widget — F-key controls to adjust debug modes and scales.
+    // Displays current values and hints for key bindings.
+    if( g_dbg_lighting ) {
+        constexpr float widget_x = 10.0f;
+        constexpr float widget_y = 10.0f;
+        constexpr float line_h = 12.0f;
+        constexpr float text_scale = 1.0f;
+        float widget_row = widget_y;
+
+        // Background panel (semi-transparent dark rect for readability)
+        rs.queue_ui_rect( widget_x - 5.f, widget_y - 5.f, 300.f, 110.f,
+                          0.0f, 0.0f, 0.0f, 0.5f );
+
+        // Title + mode
+        const char *mode_names[8] = {
+            "off", "ambient", "emitter", "sun",
+            "sky", "total", "SDF", "sky_vis"
+        };
+        const char *cur_mode = ( g_current_dbg_mode < 8 )
+                               ? mode_names[g_current_dbg_mode]
+                               : "?";
+        char widget_buf[256];
+        std::snprintf( widget_buf, sizeof( widget_buf ),
+                       "Debug: F5=toggle  F6=shaderViz  F7=mode[%s]",
+                       cur_mode );
+
+        // Font rendering would require a full integration. For now, just render
+        // as colored rects at specific widget positions to indicate state.
+        // Mode indicator rects (one for each of 8 modes, highlight current).
+        widget_row += line_h * 1.5f;
+        float mode_x = widget_x;
+        for( uint32_t i = 0u; i < 8u; ++i ) {
+            const float indicator_w = 30.0f;
+            const float r = ( i == g_current_dbg_mode ) ? 1.0f : 0.3f;
+            const float g = ( i == g_current_dbg_mode ) ? 1.0f : 0.3f;
+            const float b = ( i == g_current_dbg_mode ) ? 1.0f : 0.3f;
+            const float a = ( i == g_current_dbg_mode ) ? 1.0f : 0.6f;
+            rs.queue_ui_rect( mode_x, widget_row, indicator_w, line_h,
+                              r, g, b, a );
+            mode_x += indicator_w + 2.0f;
+        }
+
+        // Scale indicator bars (F8/F9 to adjust; 0-10 scale with visual bar).
+        widget_row += line_h * 1.5f;
+        const float bar_max_w = 150.0f;
+
+        // Emitter scale bar
+        const float emo_bar_w = g_emitter_scale / 10.0f * bar_max_w;
+        rs.queue_ui_rect( widget_x, widget_row, bar_max_w, 4.0f,
+                          0.2f, 0.2f, 0.3f, 0.7f );
+        rs.queue_ui_rect( widget_x, widget_row, emo_bar_w, 4.0f,
+                          1.0f, 0.5f, 0.0f, 0.9f );
+        widget_row += line_h;
+
+        // Sun scale bar
+        const float sun_bar_w = g_sun_scale / 10.0f * bar_max_w;
+        rs.queue_ui_rect( widget_x, widget_row, bar_max_w, 4.0f,
+                          0.2f, 0.2f, 0.3f, 0.7f );
+        rs.queue_ui_rect( widget_x, widget_row, sun_bar_w, 4.0f,
+                          1.0f, 1.0f, 0.0f, 0.9f );
+        widget_row += line_h;
+
+        // Sky scale bar
+        const float sky_bar_w = g_sky_scale / 10.0f * bar_max_w;
+        rs.queue_ui_rect( widget_x, widget_row, bar_max_w, 4.0f,
+                          0.2f, 0.2f, 0.3f, 0.7f );
+        rs.queue_ui_rect( widget_x, widget_row, sky_bar_w, 4.0f,
+                          0.0f, 1.0f, 1.0f, 0.9f );
+
+        // Hint text at bottom (F8/F9 for scale adjustment)
+        std::snprintf( widget_buf, sizeof( widget_buf ),
+                       "F8/F9: scales (emo=%.1f sun=%.1f sky=%.1f)",
+                       g_emitter_scale, g_sun_scale, g_sky_scale );
+    }
+
     const bool have_rects = !rs.ui_rects_empty() && rs.geometry().white_texture();
     if( have_rects ) {
         // UI rects are HUD: unlit segment so the fragment shader skips
@@ -2544,6 +2638,39 @@ static void CheckMessages()
                     SDL_HideCursor();
                 }
                 const int lc = sdl_keysym_to_curses( ev.key.key, ev.key.mod );
+                // Debug/tuning F-key handlers
+                if( lc == KEY_F( 5 ) ) {
+                    // F5: toggle debug HUD display
+                    g_dbg_lighting = !g_dbg_lighting;
+                    break;
+                } else if( lc == KEY_F( 6 ) ) {
+                    // F6: toggle shader debug visualization
+                    g_dbg_lighting_shader = !g_dbg_lighting_shader;
+                    break;
+                } else if( lc == KEY_F( 7 ) ) {
+                    // F7: cycle debug visualization mode (0-7)
+                    g_current_dbg_mode = ( g_current_dbg_mode + 1 ) % 8u;
+                    g_dbg_params.debug_mode = g_current_dbg_mode;
+                    break;
+                } else if( lc == KEY_F( 8 ) ) {
+                    // F8: decrease emitter/sun/sky scales
+                    g_emitter_scale = std::max( 0.0f, g_emitter_scale - 0.1f );
+                    g_sun_scale = std::max( 0.0f, g_sun_scale - 0.1f );
+                    g_sky_scale = std::max( 0.0f, g_sky_scale - 0.1f );
+                    g_dbg_params.emitter_scale = g_emitter_scale;
+                    g_dbg_params.sun_scale = g_sun_scale;
+                    g_dbg_params.sky_scale = g_sky_scale;
+                    break;
+                } else if( lc == KEY_F( 9 ) ) {
+                    // F9: increase emitter/sun/sky scales
+                    g_emitter_scale = std::min( 10.0f, g_emitter_scale + 0.1f );
+                    g_sun_scale = std::min( 10.0f, g_sun_scale + 0.1f );
+                    g_sky_scale = std::min( 10.0f, g_sky_scale + 0.1f );
+                    g_dbg_params.emitter_scale = g_emitter_scale;
+                    g_dbg_params.sun_scale = g_sun_scale;
+                    g_dbg_params.sky_scale = g_sky_scale;
+                    break;
+                }
                 if( lc <= 0 ) {
                     // a key we don't know in curses and won't handle.
                     break;

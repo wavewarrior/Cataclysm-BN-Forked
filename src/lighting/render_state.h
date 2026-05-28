@@ -162,12 +162,15 @@ class render_state
         // the canonical "frequency-tiered uniform struct" pattern used in
         // Vulkan / D3D12 / Metal render APIs.
         struct frame_light_inputs {
-            float       tile_pixel_size = 32.0f;
-            float       z_level         = 0.0f;
-            float       ambient         = 0.05f;
-            float       camera_off_x    = 0.0f;
-            float       camera_off_y    = 0.0f;
-            sun_params  sun             = {};
+            float        tile_pixel_size = 32.0f;
+            float        z_level         = 0.0f;
+            float        ambient         = 0.05f;
+            float        camera_off_x    = 0.0f;
+            float        camera_off_y    = 0.0f;
+            sun_params   sun             = {};
+            // Debug visualisation + runtime tuning knobs. Driven by the
+            // F5-toggled debug widget in sdltiles.cpp; defaults are no-ops.
+            debug_params debug           = {};
         };
 
         // Stamp per-frame lighting state on the tile_batcher. Must be
