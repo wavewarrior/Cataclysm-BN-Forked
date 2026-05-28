@@ -142,11 +142,21 @@ class sprite_batcher
         //
         //   clear_color present => LOAD_OP_CLEAR with that color
         //   clear_color absent  => LOAD_OP_LOAD (preserve)
+        // target_w/h drive the GPU viewport (rasterizer extent — physical
+        // swapchain pixels). proj_w/h drive the shader's pixel→NDC math
+        // (the orthographic "logical" coordinate system the UI draws in).
+        // When proj_w/h are 0 (default) they fall back to target_w/h, which
+        // preserves legacy behaviour for callers that don't need HiDPI
+        // decoupling (offscreen captures, fixed-res render-to-texture).
+        // HiDPI render path passes target = physical, proj = logical so the
+        // GPU stretches logical-coord draws across the full physical fb.
         void begin_pass( SDL_GPUCommandBuffer *cb,
                          SDL_GPUTexture *target,
                          std::uint32_t target_w,
                          std::uint32_t target_h,
-                         const float *clear_color_rgba = nullptr );
+                         const float *clear_color_rgba = nullptr,
+                         std::uint32_t proj_w = 0,
+                         std::uint32_t proj_h = 0 );
 
         // Bind a different atlas page. Calling this with the currently bound
         // page and the same is_lit state is a no-op; otherwise flushes the

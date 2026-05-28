@@ -14,6 +14,7 @@
 #include "sdltiles.h"
 #include "profile.h"
 #include "lighting/render_state.h"
+#include "lighting/ui_adaptor_draw_slices.h"
 
 using ui_stack_t = std::vector<std::reference_wrapper<ui_adaptor>>;
 
@@ -23,19 +24,22 @@ static bool restart_redrawing = false;
 static ui_stack_t ui_stack;
 
 ui_adaptor::ui_adaptor() : disabling_uis_below( false ), is_debug_message_ui( false ),
-    invalidated( false ), deferred_resize( false )
+    invalidated( false ), deferred_resize( false ),
+    slices_( std::make_unique<lighting::ui_adaptor_draw_slices>() )
 {
     ui_stack.emplace_back( *this );
 }
 
 ui_adaptor::ui_adaptor( ui_adaptor::disable_uis_below ) : disabling_uis_below( true ),
-    is_debug_message_ui( false ), invalidated( false ), deferred_resize( false )
+    is_debug_message_ui( false ), invalidated( false ), deferred_resize( false ),
+    slices_( std::make_unique<lighting::ui_adaptor_draw_slices>() )
 {
     ui_stack.emplace_back( *this );
 }
 
 ui_adaptor::ui_adaptor( ui_adaptor::debug_message_ui ) : disabling_uis_below( true ),
-    is_debug_message_ui( true ), invalidated( false ), deferred_resize( false )
+    is_debug_message_ui( true ), invalidated( false ), deferred_resize( false ),
+    slices_( std::make_unique<lighting::ui_adaptor_draw_slices>() )
 {
     assert( !showing_debug_message );
     showing_debug_message = true;
@@ -270,17 +274,26 @@ void ui_adaptor::redraw_invalidated()
         return;
     }
 
-    // Phase 2i-B-5 lifecycle fix. Reset the GPU draw queues at the
-    // start of each redraw cycle so the per-window draw callbacks
-    // below repopulate them from scratch. refresh_display's flush_*
-    // calls then drain the queues without clearing, so subsequent
-    // refresh_display calls on no-input frames re-fire the same
-    // draws (matching how the legacy SDL_Renderer display_buffer
-    // persisted between redraws).
+    // Phase 2i-B-7g lifecycle. Do NOT clear the UI-rect / font composited
+    // queues here: each ui_adaptor owns a retained draw slice; only
+    // invalidated adaptors clear+repopulate their own slice during
+    // redraw_cb (see the redraw loop below). After the loop, we
+    // recomposite all slices in z-order into render_state's global UI
+    // queues, which refresh_display drains. Non-invalidated adaptors keep
+    // their previous slice contents — partial redraws no longer wipe
+    // unrelated windows.
+    //
+    // Tile sprites are NOT in per-adaptor slices (they live in the global
+    // tile_queue, populated by cata_tiles::draw / draw_om as window
+    // callbacks). Clear tile_queue here so that contexts which do not
+    // re-populate it (main menu, loading screens, quit-to-menu) do not
+    // keep firing the previous in-game frame's tile sprites every
+    // refresh_display. In-game callbacks immediately repopulate after
+    // their own clear_tile_queue() at the top of draw()/draw_om().
     {
         auto &rs = lighting::get_render_state();
         if( rs.ready() ) {
-            rs.clear_frame_queues();
+            rs.clear_tile_queue();
         }
     }
 
@@ -364,6 +377,28 @@ void ui_adaptor::redraw_invalidated()
                 ui_adaptor &ui = *it;
                 if( ui.invalidated ) {
                     if( ui.redraw_cb ) {
+                        // Phase 2i-B-7g: clear this adaptor's retained
+                        // GPU slice and route queue_* into it for the
+                        // duration of redraw_cb. RAII guard restores the
+                        // previous routing even if redraw_cb throws — a
+                        // dangling current_slices_ would corrupt the next
+                        // adaptor's slice on the following queue_* call.
+                        auto &rs = lighting::get_render_state();
+                        ui.draw_slices().ui_rects.clear();
+                        ui.draw_slices().font_glyphs.clear();
+                        struct slice_router_guard {
+                            lighting::render_state &rs;
+                            bool active;
+                            ~slice_router_guard()
+                            {
+                                if( active ) {
+                                    rs.set_current_slices( nullptr );
+                                }
+                            }
+                        } router{ rs, rs.ready() };
+                        if( router.active ) {
+                            rs.set_current_slices( &ui.draw_slices() );
+                        }
                         ui.default_cursor();
                         ui.redraw_cb( ui );
                         if( ui.cursor_type == cursor::last ) {
@@ -384,6 +419,32 @@ void ui_adaptor::redraw_invalidated()
             }
         }
     } while( restart_redrawing );
+
+    // Phase 2i-B-7g composition. Drain per-adaptor retained slices into
+    // render_state's global GPU queues in z-order (bottom-up == stack
+    // order). refresh_display flushes the composited queues this frame
+    // and re-fires the same draws on subsequent input-less frames, which
+    // matches the legacy SDL_Renderer display_buffer behaviour. Honour
+    // `disabling_uis_below` so a fullscreen modal hides the stack below.
+    {
+        auto &rs = lighting::get_render_state();
+        if( rs.ready() ) {
+            rs.clear_ui_queues();
+            auto first = ui_stack.rbegin();
+            for( ; first != ui_stack.rend(); ++first ) {
+                if( first->get().disabling_uis_below ) {
+                    break;
+                }
+            }
+            auto first_enabled = first == ui_stack.rend()
+                                 ? ui_stack.begin() : std::prev( first.base() );
+            for( auto it = first_enabled; it != ui_stack.end(); ++it ) {
+                const ui_adaptor &ui = *it;
+                rs.append_ui_rects( ui.draw_slices().ui_rects );
+                rs.append_font_glyphs( ui.draw_slices().font_glyphs );
+            }
+        }
+    }
 }
 
 void ui_adaptor::screen_resized()

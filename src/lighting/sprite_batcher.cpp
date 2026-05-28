@@ -415,6 +415,12 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
         SDL_GPUTexture       *cur_target = nullptr;
         Uint32 cur_target_w = 0;
         Uint32 cur_target_h = 0;
+        // Shader pixel→NDC projection extents. Equal to cur_target_w/h
+        // when caller doesn't override (legacy); decoupled for HiDPI so
+        // logical-coord UI draws fill the physical swapchain via the
+        // larger viewport.
+        Uint32 cur_proj_w   = 0;
+        Uint32 cur_proj_h   = 0;
         bool   cur_clear    = false;
         float  cur_clear_color[4] = {};
         bool   pass_open = false;
@@ -626,7 +632,8 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
         // ---- pass scope -----------------------------------------------
 
         void begin_pass( SDL_GPUCommandBuffer *cb, SDL_GPUTexture *target,
-                         Uint32 w, Uint32 h, const float *clear ) {
+                         Uint32 w, Uint32 h, const float *clear,
+                         Uint32 proj_w, Uint32 proj_h ) {
             if( pass_open ) {
                 throw std::runtime_error( "sprite_batcher: begin_pass without end_pass" );
             }
@@ -634,6 +641,8 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
             cur_target = target;
             cur_target_w = w;
             cur_target_h = h;
+            cur_proj_w   = proj_w ? proj_w : w;
+            cur_proj_h   = proj_h ? proj_h : h;
             cur_clear = clear != nullptr;
             if( clear ) {
                 std::memcpy( cur_clear_color, clear, sizeof( cur_clear_color ) );
@@ -858,9 +867,14 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                         SDL_BindGPUFragmentSamplers( rp, /*first_slot=*/3, &skb, 1 );
                     }
 
+                    // Shader pixel→NDC math uses the projection extent
+                    // (logical UI space), NOT the viewport extent. The
+                    // SDL_GPUViewport above is set to physical pixels so
+                    // logical-coord draws stretch to fill the full
+                    // physical framebuffer on HiDPI.
                     frame_params fp{
-                        static_cast<float>( cur_target_w ),
-                        static_cast<float>( cur_target_h ),
+                        static_cast<float>( cur_proj_w ),
+                        static_cast<float>( cur_proj_h ),
                         s.start,
                         0u
                     };
@@ -949,9 +963,12 @@ void sprite_batcher::begin_pass( SDL_GPUCommandBuffer *cb,
                                  SDL_GPUTexture *target,
                                  std::uint32_t target_w,
                                  std::uint32_t target_h,
-                                 const float *clear_color_rgba )
+                                 const float *clear_color_rgba,
+                                 std::uint32_t proj_w,
+                                 std::uint32_t proj_h )
 {
-    p->begin_pass( cb, target, target_w, target_h, clear_color_rgba );
+    p->begin_pass( cb, target, target_w, target_h, clear_color_rgba,
+                   proj_w, proj_h );
 }
 
 void sprite_batcher::set_texture( SDL_GPUTexture *atlas, SDL_GPUSampler *sampler,

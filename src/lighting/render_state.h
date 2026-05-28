@@ -22,6 +22,7 @@
 #include "event_queue.h"
 #include "emitter_collector.h"
 #include "sdf_pass.h"
+#include "ui_adaptor_draw_slices.h"
 
 #include <memory>
 
@@ -69,7 +70,10 @@ class render_state
         // frame so existing call sites need no source edits.
         void queue_ui_rect( float x, float y, float w, float h,
                             float r, float g, float b, float a );
-        bool ui_rects_empty() const noexcept { return ui_rect_queue_.empty(); }
+        bool ui_rects_empty() const noexcept
+        {
+            return ui_rect_queue_.empty() && ui_rect_transient_.empty();
+        }
         // Drains `ui_rect_queue_` into `dst` (assumes the caller has an
         // active pass + white-tex segment open). Clears the queue.
         void flush_ui_rects( sprite_batcher &dst );
@@ -179,6 +183,31 @@ class render_state
         // frame's. See Q1 fix in /Users/.../plans/i-want-you-to-wise-nygaard.md.
         void begin_lighting_frame( const frame_light_inputs &in );
 
+        // Phase 2i-B-7g: per-adaptor draw routing. ui_manager calls this
+        // around each ui_adaptor's redraw_cb so the queue_* helpers below
+        // push into the adaptor's retained slice (cleared per-adaptor at
+        // the start of its callback) rather than the composited output.
+        // Pass nullptr to restore composite-direct routing (used by code
+        // paths outside the ui_manager redraw loop, e.g. cata_tiles in-game
+        // map draws that happen inside an adaptor callback but use their
+        // own tile queue).
+        void set_current_slices( ui_adaptor_draw_slices *s ) noexcept { current_slices_ = s; }
+
+        // Transient routing for per-frame ephemeral overlays (e.g. the
+        // LIGHT-DBG widget rendered inside refresh_display). When enabled
+        // and no slice is active, queue_ui_rect / queue_font_glyph push
+        // into transient queues that flush_* drain + clear every frame —
+        // unlike the composited queues, which are cleared only by the
+        // ui_manager redraw cycle and would accumulate widget pushes on
+        // no-input frames.
+        void set_transient_routing( bool on ) noexcept { transient_routing_ = on; }
+
+        // ui_manager-side composition. Called after the redraw loop with
+        // each ui_adaptor's slice, in stack order (bottom-up = z-order).
+        // Appends to the composited output that refresh_display drains.
+        void append_ui_rects( const std::vector<sprite_instance> &src );
+        void append_font_glyphs( const std::vector<font_glyph_draw> &src );
+
         // Phase 2i-B-5 lifecycle fix. Legacy SDL_Renderer's display_buffer
         // is a persistent render target — content stays between redraws.
         // The GPU queues here are transient and used to be cleared by
@@ -201,7 +230,10 @@ class render_state
         void clear_tile_queue() noexcept;
         // Clear all three queues — used for full redraws.
         void clear_frame_queues() noexcept;
-        bool font_glyphs_empty() const noexcept { return font_glyph_queue_.empty(); }
+        bool font_glyphs_empty() const noexcept
+        {
+            return font_glyph_queue_.empty() && font_glyph_transient_.empty();
+        }
         // Drains `font_glyph_queue_` into `dst` using `sampler`. Caller
         // must have an active begin_pass on `dst`. Internally rebinds
         // the texture per glyph; trivial atlas-packing optimisation
@@ -228,17 +260,25 @@ class render_state
         gpu_atlas      atlas_{ 2048, 2048, 32, 32 };
         gpu_geometry   geometry_;
 
+        // Composited UI rect output. ui_manager fills this by concatenating
+        // per-adaptor slices in z-order after the redraw loop completes.
         std::vector<sprite_instance> ui_rect_queue_;
 
-        // Font glyph queue (additive scaffolding for 2i-B-6).
-        struct font_glyph_draw {
-            SDL_GPUTexture *texture;
-            sprite_instance inst;
-            // false = HUD/UI (skip lighting); true = world-space text
-            // that should be lit by ambient/emitters/sun. Default false.
-            bool            lit = false;
-        };
+        // Composited font glyph output. Same lifecycle as ui_rect_queue_.
         std::vector<font_glyph_draw> font_glyph_queue_;
+
+        // When non-null, queue_ui_rect / queue_font_glyph route into this
+        // adaptor's per-window slice instead of the composited output above.
+        // Set by ui_manager around each redraw_cb; cleared between callbacks.
+        ui_adaptor_draw_slices *current_slices_ = nullptr;
+
+        // Per-frame transient overlay queues. Populated when
+        // transient_routing_ is on (no slice active); drained + cleared by
+        // flush_ui_rects / flush_font_glyphs every frame so refresh_display
+        // overlays do not pile up on no-input frames.
+        std::vector<sprite_instance> ui_rect_transient_;
+        std::vector<font_glyph_draw> font_glyph_transient_;
+        bool                         transient_routing_ = false;
 
         // Tile sprite queue (2i-B-5 part 3). Same shape as font glyph
         // queue; semantically separate so cata_tiles' map draws can land

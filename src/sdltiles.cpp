@@ -194,6 +194,12 @@ static void WinCreate()
     int window_flags = 0;
     WindowWidth = TERMINAL_WIDTH * fontwidth * scaling_factor;
     WindowHeight = TERMINAL_HEIGHT * fontheight * scaling_factor;
+    // HIGH_PIXEL_DENSITY: SDL3 industry-standard HiDPI path. Window opens
+    // at full physical resolution (e.g. 3680×2196 on a 4K Win11 monitor at
+    // 200% scaling), GPU swapchain matches. UI continues to lay out in
+    // LOGICAL pixels from SDL_GetWindowSize; sprite_batcher::begin_pass is
+    // called with viewport=physical and proj=logical so logical-coord draws
+    // stretch across the full physical framebuffer. See SDL3 HiDPI README.
     window_flags |= SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
 
     const auto screen_mode = get_option<std::string>( "FULLSCREEN" );
@@ -237,12 +243,19 @@ static void WinCreate()
     // On Android SDL seems janky in windowed mode so we're fullscreen all the time.
     // Fullscreen mode is now modified so it obeys terminal width/height, rather than
     // overwriting it with this calculation.
-    if( fullscreen || ( window_flags & SDL_WINDOW_MAXIMIZED ) ) {
-        SDL_GetWindowSize( ::window.get(), &WindowWidth, &WindowHeight );
-        // Ignore previous values, use the whole window, but nothing more.
-        TERMINAL_WIDTH = WindowWidth / fontwidth / scaling_factor;
-        TERMINAL_HEIGHT = WindowHeight / fontheight / scaling_factor;
-    }
+    // With SDL_WINDOW_HIGH_PIXEL_DENSITY the swapchain is sized in PHYSICAL
+    // pixels but SDL_GetWindowSize / SDL_CreateWindow's size args are LOGICAL
+    // (smaller on HiDPI / Retina). The UI lays out in TERMINAL cells * pixel
+    // size — if those cells are computed from logical px the layout lands in
+    // a half-quadrant of the physical swapchain. Resync WindowWidth/Height
+    // and TERMINAL_* from the physical pixel size for BOTH fullscreen and
+    // windowed startup. (SDL3 migration regression #8336.)
+    // HiDPI: WindowWidth/Height in LOGICAL pixels (the coord system the UI
+    // queues draws in). Swapchain is at physical pixels; the projection-vs-
+    // viewport split inside sprite_batcher::begin_pass handles the stretch.
+    SDL_GetWindowSize( ::window.get(), &WindowWidth, &WindowHeight );
+    TERMINAL_WIDTH  = WindowWidth  / fontwidth  / scaling_factor;
+    TERMINAL_HEIGHT = WindowHeight / fontheight / scaling_factor;
     // Initialize framebuffer caches
     terminal_framebuffer.resize( TERMINAL_HEIGHT );
     for( int i = 0; i < TERMINAL_HEIGHT; i++ ) {
@@ -621,9 +634,22 @@ void refresh_display()
     }
 
     constexpr float clear_black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    // HiDPI: viewport (target_w/h) = physical swapchain so the rasterizer
+    // fills the full framebuffer; projection (proj_w/h) = logical window
+    // size so the shader's pixel→NDC math matches the logical coords the
+    // UI / fonts queue draws at. GPU stretches logical → physical.
+    int proj_w = 0;
+    int proj_h = 0;
+    SDL_GetWindowSize( ::window.get(), &proj_w, &proj_h );
+    if( proj_w <= 0 || proj_h <= 0 ) {
+        proj_w = static_cast<int>( ctx.swapchain_w );
+        proj_h = static_cast<int>( ctx.swapchain_h );
+    }
     rs.tile_batcher().begin_pass( ctx.cmd_buffer, ctx.swapchain_tex,
                                   ctx.swapchain_w, ctx.swapchain_h,
-                                  clear_black );
+                                  clear_black,
+                                  static_cast<std::uint32_t>( proj_w ),
+                                  static_cast<std::uint32_t>( proj_h ) );
 
     if( !rs.tile_sprites_empty() && rs.gpu_sampler() ) {
         rs.flush_tile_sprites( rs.tile_batcher(), rs.gpu_sampler() );
@@ -633,6 +659,22 @@ void refresh_display()
     //   2: emitter markers + player + screen-center crosses
     //   3: per-tile (x,y) coord labels — cached, rebuilt on player/camera change
     //   4: tile grid lines (1px) at every tile boundary
+    //
+    // Route all overlay pushes (this block + the tuning widget below) into
+    // render_state's per-frame transient queues. refresh_display runs every
+    // frame, but ui_manager's clear_ui_queues() only fires on a redraw
+    // cycle — without transient routing these pushes would accumulate on
+    // no-input frames and ghost over composited UI slices. RAII guard
+    // ensures the flag clears even if a push path throws.
+    struct transient_routing_guard {
+        lighting::render_state &rs;
+        ~transient_routing_guard()
+        {
+            rs.set_transient_routing( false );
+        }
+    } _t_route{ rs };
+    rs.set_transient_routing( true );
+
     if( g_dbg_lighting && g ) {
         constexpr float OL_PI = 3.14159265358979323846f;
         const float tp  = s_emo.tile_px > 0.f ? s_emo.tile_px : 32.f;

@@ -133,7 +133,16 @@ void render_state::queue_ui_rect( float x, float y, float w, float h,
     s.tint_g = g;
     s.tint_b = b;
     s.tint_a = a;
-    ui_rect_queue_.push_back( s );
+    // Route into the current adaptor's retained slice if we're inside a
+    // redraw_cb. Otherwise fall through to the composited output (e.g.
+    // background fills queued outside the ui_manager redraw loop).
+    if( current_slices_ ) {
+        current_slices_->ui_rects.push_back( s );
+    } else if( transient_routing_ ) {
+        ui_rect_transient_.push_back( s );
+    } else {
+        ui_rect_queue_.push_back( s );
+    }
 }
 
 void render_state::set_tile_scissor( const SDL_Rect *rect )
@@ -169,21 +178,30 @@ void render_state::begin_lighting_frame( const frame_light_inputs &in )
 
 void render_state::flush_ui_rects( sprite_batcher &dst )
 {
-    if( ui_rect_queue_.empty() ) {
-        return;
+    // Composited queue: drain WITHOUT clearing — clear_ui_queues() at the
+    // top of each ui_manager redraw cycle resets it. Lets refresh_display
+    // re-flush the same draws on no-input frames instead of going black.
+    if( !ui_rect_queue_.empty() ) {
+        dst.draw( ui_rect_queue_.data(), ui_rect_queue_.size() );
     }
-    // Drain WITHOUT clearing — clear_frame_queues() (called at the top
-    // of each redraw cycle) is what resets the queue. This lets
-    // refresh_display re-flush the same queue on no-input frames so
-    // the swapchain shows the previous draw state instead of going
-    // black when curses hasn't run the per-window draws this frame.
-    dst.draw( ui_rect_queue_.data(), ui_rect_queue_.size() );
+    // Transient overlay queue: drain AND clear every frame. refresh_display
+    // re-populates this each frame (e.g. LIGHT-DBG widget); without the
+    // per-frame clear the same overlay pushes would pile up indefinitely.
+    if( !ui_rect_transient_.empty() ) {
+        dst.draw( ui_rect_transient_.data(), ui_rect_transient_.size() );
+        ui_rect_transient_.clear();
+    }
 }
 
 void render_state::clear_ui_queues() noexcept
 {
     ui_rect_queue_.clear();
     font_glyph_queue_.clear();
+    // Defensive: transient queues are normally drained by flush each
+    // frame; clearing here too prevents leftovers leaking across a
+    // ui_manager redraw cycle if a flush was skipped (no swapchain etc).
+    ui_rect_transient_.clear();
+    font_glyph_transient_.clear();
 }
 
 void render_state::clear_tile_queue() noexcept
@@ -466,25 +484,39 @@ void render_state::queue_font_glyph( SDL_GPUTexture *glyph_tex,
     d.inst.tint_b = b;
     d.inst.tint_a = a;
     d.lit         = lit;
-    font_glyph_queue_.push_back( d );
+    if( current_slices_ ) {
+        current_slices_->font_glyphs.push_back( d );
+    } else if( transient_routing_ ) {
+        font_glyph_transient_.push_back( d );
+    } else {
+        font_glyph_queue_.push_back( d );
+    }
+}
+
+void render_state::append_ui_rects( const std::vector<sprite_instance> &src )
+{
+    ui_rect_queue_.insert( ui_rect_queue_.end(), src.begin(), src.end() );
+}
+
+void render_state::append_font_glyphs( const std::vector<font_glyph_draw> &src )
+{
+    font_glyph_queue_.insert( font_glyph_queue_.end(), src.begin(), src.end() );
 }
 
 void render_state::flush_font_glyphs( sprite_batcher &dst, SDL_GPUSampler *sampler )
 {
-    if( font_glyph_queue_.empty() ) {
+    if( font_glyph_queue_.empty() && font_glyph_transient_.empty() ) {
         return;
     }
     if( !sampler ) {
-        font_glyph_queue_.clear();
+        font_glyph_transient_.clear();
         return;
     }
-    // One set_texture + one draw per glyph. sprite_batcher's
-    // set_texture() flushes the previous segment, so this is
-    // equivalent to per-glyph SDL_DrawGPUPrimitives calls. Atlas
-    // packing to fold these into one batch is a future opt.
-    //
-    // Drain WITHOUT clearing — clear_frame_queues() handles reset at
-    // the top of each redraw cycle.
+    // One set_texture + one draw per glyph. set_texture() flushes the
+    // previous segment, so each iteration is one SDL_DrawGPUPrimitives.
+    // Composited queue first (z-order: under transient overlays).
+    // Composited: drain WITHOUT clearing (ui_manager owns the reset).
+    // Transient: drain AND clear every frame (re-populated each frame).
     for( const font_glyph_draw &g : font_glyph_queue_ ) {
         // Pass per-glyph `lit` flag so HUD glyphs (default false) skip the
         // lighting fragment-shader path, while future world-space text
@@ -492,6 +524,11 @@ void render_state::flush_font_glyphs( sprite_batcher &dst, SDL_GPUSampler *sampl
         dst.set_texture( g.texture, sampler, g.lit );
         dst.draw( g.inst );
     }
+    for( const font_glyph_draw &g : font_glyph_transient_ ) {
+        dst.set_texture( g.texture, sampler, g.lit );
+        dst.draw( g.inst );
+    }
+    font_glyph_transient_.clear();
 }
 
 void render_state::queue_tile_sprite( SDL_GPUTexture *atlas_tex,
