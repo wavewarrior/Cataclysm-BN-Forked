@@ -436,6 +436,50 @@ inline const SDL_Color &color_as_sdl( const unsigned char color )
     return windowsPalette[color];
 }
 
+// Debug overlay state — saved from the previous frame, drawn this frame.
+struct TileCoordGlyph {
+    float x, y;
+    std::string text;
+};
+struct EmitterOverlayState {
+    std::vector<lighting::gpu_emitter> snap;
+    float cam_off_x = 0.f, cam_off_y = 0.f, tile_px = 32.f;
+    float op_x = 0.f, op_y = 0.f;
+    int player_x = 0, player_y = 0, player_z = 0;
+    int screen_w = 0, screen_h = 0;
+    int map_origin_x = 0, map_origin_y = 0;
+    int draw_off_px_x = 0, draw_off_px_y = 0;
+    Uint32 last_n_emit_pushed = 0; // actual count pushed to the GPU lp
+    // Tier 3 per-tile coord cache.
+    std::vector<TileCoordGlyph> tile_labels;
+    int cached_player_x = INT_MIN, cached_player_y = INT_MIN;
+    float cached_cam_off_x = 0.f, cached_cam_off_y = 0.f;
+    float cached_tile_px = 0.f;
+    int cached_screen_w = 0, cached_screen_h = 0;
+};
+static EmitterOverlayState s_emo;
+// Master toggle for the lighting debug HUD. Default ON while diagnosing
+// the GPU lighting cutover. Flip to false to silence.
+static bool g_dbg_lighting = true;
+// When true, the fragment shader replaces lighting output with a
+// distance/radius heatmap (R = inside emitter radius, G = tile grid,
+// B = sky_vis). Implemented as a negative-ambient sentinel; the shader
+// checks `ambient < -0.5` and short-circuits to the diagnostic colour.
+// Shader heatmap overlay (final_rgb replaced with emitter-light visualisation
+// for game tiles). Default OFF — when on AND the SDF is empty, all emitter
+// contributions clamp to 0 and the heatmap renders pitch black, masking the
+// real ambient floor that would otherwise be visible. Toggle on at runtime
+// for emitter-pipeline diagnostics only.
+static bool g_dbg_lighting_shader = false;
+// Runtime tuning state for shader debug modes. Updated by F-key handlers.
+static lighting::debug_params g_dbg_params{};
+// Current debug mode display (0-7, cycles through modes).
+static uint32_t g_current_dbg_mode = 0u;
+// Scale factors for individual light contributions (for tuning visualization).
+static float g_emitter_scale = 1.0f;
+static float g_sun_scale = 1.0f;
+static float g_sky_scale = 1.0f;
+
 void refresh_display()
 {
     needupdate = false;
@@ -449,50 +493,6 @@ void refresh_display()
     // UI rects, font glyphs. D3D12 requires one pass per swapchain texture;
     // set_texture() flushes segments inside the pass so all draw kinds coexist.
     auto &rs = lighting::get_render_state();
-
-    // Debug overlay state — saved from the previous frame, drawn this frame.
-    struct TileCoordGlyph {
-        float x, y;
-        std::string text;
-    };
-    struct EmitterOverlayState {
-        std::vector<lighting::gpu_emitter> snap;
-        float cam_off_x = 0.f, cam_off_y = 0.f, tile_px = 32.f;
-        float op_x = 0.f, op_y = 0.f;
-        int player_x = 0, player_y = 0, player_z = 0;
-        int screen_w = 0, screen_h = 0;
-        int map_origin_x = 0, map_origin_y = 0;
-        int draw_off_px_x = 0, draw_off_px_y = 0;
-        Uint32 last_n_emit_pushed = 0; // actual count pushed to the GPU lp
-        // Tier 3 per-tile coord cache.
-        std::vector<TileCoordGlyph> tile_labels;
-        int cached_player_x = INT_MIN, cached_player_y = INT_MIN;
-        float cached_cam_off_x = 0.f, cached_cam_off_y = 0.f;
-        float cached_tile_px = 0.f;
-        int cached_screen_w = 0, cached_screen_h = 0;
-    };
-    static EmitterOverlayState s_emo;
-    // Master toggle for the lighting debug HUD. Default ON while diagnosing
-    // the GPU lighting cutover. Flip to false to silence.
-    static bool g_dbg_lighting = true;
-    // When true, the fragment shader replaces lighting output with a
-    // distance/radius heatmap (R = inside emitter radius, G = tile grid,
-    // B = sky_vis). Implemented as a negative-ambient sentinel; the shader
-    // checks `ambient < -0.5` and short-circuits to the diagnostic colour.
-    // Shader heatmap overlay (final_rgb replaced with emitter-light visualisation
-// for game tiles). Default OFF — when on AND the SDF is empty, all emitter
-// contributions clamp to 0 and the heatmap renders pitch black, masking the
-// real ambient floor that would otherwise be visible. Toggle on at runtime
-// for emitter-pipeline diagnostics only.
-static bool g_dbg_lighting_shader = false;
-    // Runtime tuning state for shader debug modes. Updated by F-key handlers.
-    static lighting::debug_params g_dbg_params{};
-    // Current debug mode display (0-7, cycles through modes).
-    static uint32_t g_current_dbg_mode = 0u;
-    // Scale factors for individual light contributions (for tuning visualization).
-    static float g_emitter_scale = 1.0f;
-    static float g_sun_scale = 1.0f;
-    static float g_sky_scale = 1.0f;
 
     if( !rs.ready() ) {
         return;
