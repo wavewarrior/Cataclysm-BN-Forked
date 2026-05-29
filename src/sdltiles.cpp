@@ -548,11 +548,12 @@ void refresh_display()
                              ? static_cast<float>( tilecontext->get_tile_width() )
                              : 32.0f;
         in.z_level         = g ? static_cast<float>( g->u.pos().z ) : 0.0f;
-        // BAND-AID: GPU emitter texture binding is broken on D3D12 (sampler
-        // reads zero while CPU readback shows correct data). Bumping ambient
-        // restores baseline visibility while the SDL_GPU binding issue is
-        // resolved. Drop back to 0.05 once samplers see uploaded data.
-        in.ambient         = 0.5f;
+        // Restored to 0.05 (was 0.5 as band-aid for stale D3D12 emitter
+        // sampler issue — band-aid pre-dates the single-CB
+        // flush_to_render_cb rewrite and may no longer be needed. If
+        // in-game lighting is broken after this, revert to 0.5 and
+        // investigate sampler binding properly.
+        in.ambient         = 0.05f;
 
         // Camera offset converts screen tile units → map tile coords:
         //   map_pos = tile_tu - camera_offset   (see sdf_pass.h comment)
@@ -582,6 +583,25 @@ void refresh_display()
                 s_emo.draw_off_px_x = draw_offset.x;
                 s_emo.draw_off_px_y = draw_offset.y;
             }
+        } else if( g_dbg_lighting ) {
+            // Main menu / no-game path: still update the screen size so
+            // the HUD shows a non-zero center cross and the emitter count
+            // line reflects the collector state. Player / map-origin /
+            // draw-offset all stay zero (no map loaded).
+            s_emo.cam_off_x = 0.f;
+            s_emo.cam_off_y = 0.f;
+            s_emo.tile_px   = in.tile_pixel_size;
+            s_emo.op_x      = 0.f;
+            s_emo.op_y      = 0.f;
+            s_emo.player_x  = 0;
+            s_emo.player_y  = 0;
+            s_emo.player_z  = 0;
+            s_emo.screen_w  = static_cast<int>( ctx.swapchain_w );
+            s_emo.screen_h  = static_cast<int>( ctx.swapchain_h );
+            s_emo.map_origin_x = 0;
+            s_emo.map_origin_y = 0;
+            s_emo.draw_off_px_x = 0;
+            s_emo.draw_off_px_y = 0;
         }
 
         // Compute sun/sky params from time-of-day (24h LUT). sun_hour is
@@ -675,7 +695,10 @@ void refresh_display()
     } _t_route{ rs };
     rs.set_transient_routing( true );
 
-    if( g_dbg_lighting && g ) {
+    // Render the HUD on the main menu too so we can verify the decorative
+    // amber emitter is being collected/uploaded. Player / tile-coord tiers
+    // are skipped when no game is loaded (gated below on `g`).
+    if( g_dbg_lighting ) {
         constexpr float OL_PI = 3.14159265358979323846f;
         const float tp  = s_emo.tile_px > 0.f ? s_emo.tile_px : 32.f;
         const float sw  = static_cast<float>( ctx.swapchain_w );
@@ -880,8 +903,15 @@ void refresh_display()
     // Lighting tuning widget — F-key controls to adjust debug modes and scales.
     // Displays current values and hints for key bindings.
     if( g_dbg_lighting ) {
+        // Anchor below the top-left HUD strip so the tunable widget
+        // doesn't overlap the debug text. HUD is HUD_LINES=9 rows of
+        // `font->height + 1` plus HUD_PAD=4 top/bottom; leave a small
+        // gap. Fallback offset if no font available.
+        const float hud_bottom = font
+                                 ? static_cast<float>( ( font->height + 1 ) * 9 + 4 * 2 )
+                                 : 180.0f;
         constexpr float widget_x = 10.0f;
-        constexpr float widget_y = 10.0f;
+        const float widget_y = hud_bottom + 12.0f;
         constexpr float line_h = 12.0f;
         constexpr float text_scale = 1.0f;
         float widget_row = widget_y;
@@ -1015,7 +1045,10 @@ void refresh_display()
             sky_vis.resize( static_cast<size_t>( Wsv * Hsv ), 255u );
         }
 
-        if( g_dbg_lighting && g ) {
+        if( g_dbg_lighting ) {
+            // Mirror snapshot to HUD on both in-game AND main menu so the
+            // decorative amber emitter (snapshot.cpp:205 path) shows up in
+            // the emit[0] HUD line.
             s_emo.snap = snapshot;
         }
         rs.collector()->submit( std::move( snapshot ),

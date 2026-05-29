@@ -195,14 +195,17 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
     std::vector<gpu_emitter> out;
     out.reserve( 1024 );
 
-    if( !g ) {
-        // Main menu: no game map, so no terrain/item/creature emitters.
-        // Add a decorative warm-amber light from the upper-left corner.
-        // Position in screen-tile space (world_pos when cam_off=0, tile_px=32):
-        //   screen pos (256px,128px) → world_pos (8, 4).
-        // Radius 45 covers the whole 1920×1080 menu (60×34 screen-tiles).
-        // radius=2025 → sqrt(2025)=45 tile radius covers full screen
+    // Lambda: "no active game" path. g is created in main.cpp BEFORE the
+    // main menu is shown, so a null-g check alone is insufficient — we
+    // also fall through here when the game is quitting or no map is loaded
+    // (player coords aren't yet inside any map). Decorative warm-amber
+    // emitter, sized to cover a 1920×1080 menu (radius 45 tiles).
+    const auto push_menu_decoration = [&]() {
         out.push_back( make_omni( 8, 4, 0, 2025.f, 1.f, 0.55f, 0.15f ) );
+    };
+
+    if( !g ) {
+        push_menu_decoration();
         return out;
     }
 
@@ -213,8 +216,11 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
     if( g->uquit != QUIT_NO ) {
         return out;
     }
-    // Guard 2: player is not in the loaded map area.
+    // Guard 2: player is not in the loaded map area. This also catches the
+    // pre-world-loaded main-menu state (g exists, but no map is set up yet
+    // so player pos is outside any reasonable bounds). Show decoration.
     if( !m.inbounds( g->u.pos() ) ) {
+        push_menu_decoration();
         return out;
     }
 
