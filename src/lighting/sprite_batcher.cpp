@@ -92,20 +92,50 @@ VS_OUT main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
 )HLSL";
 
 static const char *const SPRITE_FRAG_HLSL = R"HLSL(
-// Phase 7: per-pixel Lambert shading + SDF soft shadows.
-// Emitter data and SDF passed as Texture2D samplers (space2) — StructuredBuffer
-// space4 fails D3D12 pipeline creation with SDL_shadercross @ 6b06e55c.
-// EmitterTex: 4×64 RGBA32F; row=emitter index, col=data slot (0=pos+radius, 1=rgb+falloff).
-// SdfTex: W×H R32_FLOAT matching sdf_pass dimensions.
-Texture2D<float4> Atlas      : register(t0, space2);
-SamplerState      AtlasSmp   : register(s0, space2);
-Texture2D<float4> EmitterTex : register(t1, space2);
-SamplerState      EmitterSmp : register(s1, space2);
-Texture2D<float>  SdfTex     : register(t2, space2);
-SamplerState      SdfSmp     : register(s2, space2);
-// Phase 8: sky visibility (R8_UNORM, 255=open sky).
-Texture2D<float>  SkyVisTex  : register(t3, space2);
-SamplerState      SkyVisSmp  : register(s3, space2);
+// Phase 7/8: per-pixel Lambert + SDF soft shadows + sun/sky.
+//
+// SDL_CreateGPUShader binding convention for pixel shaders (DXBC/DXIL):
+//   (t[n], space2) — sampled textures first, then storage textures, then
+//                    storage buffers; share the t-register range.
+//   (s[n], space2) — samplers, indices match their sampled textures.
+//   (b[n], space3) — uniform buffers.
+//
+// Resources (all space2). K=1 sampled texture ⇒ storage buffers start at t1.
+//   t0 / s0  Atlas       — sampled, current atlas texture (per segment)
+//   t1       Emitters    — StructuredBuffer<GpuEmitter>, 8192-entry  (storage slot 0)
+//   t2       SdfBuf      — StructuredBuffer<float>, sdf_pass dims    (storage slot 1)
+//   t3       SkyVisBuf   — StructuredBuffer<float>, sdf_pass dims    (storage slot 2)
+//
+// Emitter, SDF AND sky-vis data carriers ALL live in storage buffers, NOT
+// sampler textures: SDL_shadercross @ 6b06e55c silently mis-binds sampler
+// textures on Metal (readback proves the upload reaches the GPU, but the
+// shader's Load/Sample returns all zeros for every fragment). Atlas (slot 0)
+// is the only sampler texture that works. Emitters moved off Texture2D
+// 2026-05-29; SDF + SkyVis followed 2026-05-30 (the SDF Load returned 0 →
+// shadow=0 → emitters killed in-game; the SkyVis Load returned 0 → sky_vis=0
+// → sun gated off entirely). SkyVisBuf holds per-tile open-sky (1.0) /
+// roofed (0.0) from map outside_cache.
+// 64-byte layout, must mirror struct gpu_emitter in gpu_emitter.h exactly.
+// Packed as four float4s to guarantee 16-byte alignment under both DXC
+// (cbuffer-style) and SPIRV-Cross MSL output — empirical: declaring this
+// as float3/float interleaved made the shader read `radius` from
+// `cone_half_angle` (~π → tiny blob instead of full-screen gradient).
+//   slot0.xyz = pos       slot0.w = radius
+//   slot1.xyz = color     slot1.w = falloff
+//   slot2.xy  = cone_dir  slot2.z = cone_half_angle  slot2.w = asfloat(shape)
+//   slot3.x   = asfloat(flicker_seed)   slot3.yzw = pad0/1/2
+struct GpuEmitter {
+    float4 pos_radius;
+    float4 color_falloff;
+    float4 cone_shape;
+    float4 misc;
+};
+Texture2D<float4>            Atlas     : register(t0, space2);
+SamplerState                 AtlasSmp  : register(s0, space2);
+StructuredBuffer<GpuEmitter> Emitters  : register(t1, space2);
+StructuredBuffer<float>      SdfBuf    : register(t2, space2);
+StructuredBuffer<float>      SkyVisBuf : register(t3, space2);
+StructuredBuffer<float>      IndirectBuf : register(t4, space2); // 1-bounce GI, 3 floats/tile RGB
 cbuffer LightParams : register(b0, space3) {
     float tile_pixel_size; float current_z;
     uint  emitter_count;   float ambient;
@@ -128,7 +158,11 @@ cbuffer DebugParams : register(b2, space3) {
     float sky_scale;           // multiplier for sky_contrib
     float shadow_k;            // sphere-trace cone hardness (was hardcoded 8.0)
     uint  shadow_steps;        // per-emitter march iteration cap (was 16)
-    float dp_pad;
+    float dither_amt;          // 0=smooth .. 1=full ordered dither
+    float dither_bands;        // quantisation levels for the dither (e.g. 6)
+    float gi_strength;         // 1-bounce indirect light multiplier (0=off)
+    float dp_pad1;
+    float dp_pad2;
 };
 struct VS_OUT {
     float4 pos      : SV_Position;
@@ -136,6 +170,90 @@ struct VS_OUT {
     float4 tint     : TEXCOORD1;
     float2 world_pos: TEXCOORD2;
 };
+// Clamped raw SDF fetch. SdfBuf is x-major (sdf[x*H+y]).
+float sdf_texel(int x, int y) {
+    x = clamp(x, 0, (int)sdf_map_w - 1);
+    y = clamp(y, 0, (int)sdf_map_h - 1);
+    return SdfBuf[x * (int)sdf_map_h + y];
+}
+// Bilinear SDF sample. The CPU SDF is a Chebyshev BFS at tile resolution, so
+// raw nearest reads ((int)p.x) produced diamond-faceted (sawtooth) penumbrae.
+// Interpolating the four surrounding tile samples smooths those steps into a
+// clean gradient.
+//
+// Sample alignment: SdfBuf[x] stores the distance FOR tile x, whose CENTRE is
+// at world_pos x+0.5 (world_pos = mx+0.5 convention). So subtract 0.5 before
+// floor/frac — at a tile centre (world_pos = int+0.5) this returns that tile's
+// stored value with weight 1 (matching the old nearest read and the HUD's
+// sdf[player] readout). Using bare floor(p) would shift the whole field half a
+// tile and detach shadows ~16px from their occluders.
+float sdf_bilinear(float2 p) {
+    const float2 sp = p - 0.5;        // tile-centre alignment
+    const float2 fp = floor(sp);
+    const int   x0  = (int)fp.x;
+    const int   y0  = (int)fp.y;
+    const float2 w  = sp - fp;        // frac
+    const float a = sdf_texel(x0,     y0    );
+    const float b = sdf_texel(x0 + 1, y0    );
+    const float c = sdf_texel(x0,     y0 + 1);
+    const float d = sdf_texel(x0 + 1, y0 + 1);
+    return lerp(lerp(a, b, w.x), lerp(c, d, w.x), w.y);
+}
+// Per-tile 1-bounce indirect light (RGB, 3 floats/tile, x-major). Bilinear with
+// the same p-0.5 centre convention as sdf_bilinear (per-tile nearest would show
+// hard tile squares of fill).
+float3 indirect_texel(int x, int y) {
+    x = clamp(x, 0, (int)sdf_map_w - 1);
+    y = clamp(y, 0, (int)sdf_map_h - 1);
+    const int b = (x * (int)sdf_map_h + y) * 3;
+    return float3(IndirectBuf[b], IndirectBuf[b + 1], IndirectBuf[b + 2]);
+}
+float3 indirect_bilinear(float2 p) {
+    const float2 sp = p - 0.5;
+    const float2 fp = floor(sp);
+    const int   x0  = (int)fp.x;
+    const int   y0  = (int)fp.y;
+    const float2 w  = sp - fp;
+    const float3 a = indirect_texel(x0,     y0    );
+    const float3 b = indirect_texel(x0 + 1, y0    );
+    const float3 c = indirect_texel(x0,     y0 + 1);
+    const float3 d = indirect_texel(x0 + 1, y0 + 1);
+    return lerp(lerp(a, b, w.x), lerp(c, d, w.x), w.y);
+}
+// Shared soft-shadow sphere trace (Inigo Quilez cone ratio). Used by BOTH
+// emitters and the sun so they share the shadow_k / shadow_steps knobs and
+// look consistent. `dist_to_light` is the march length (real distance for
+// point emitters; a fixed reach for the directional sun).
+float trace_shadow(float2 origin, float2 dir, float dist_to_light,
+                   float k, int steps) {
+    if(sdf_map_w == 0u || steps <= 0) {
+        return 1.0;
+    }
+    float shadow = 1.0;
+    float t = min(0.3, dist_to_light * 0.5);
+    [loop] for(int ss = 0; ss < steps; ++ss) {
+        if(t >= dist_to_light - 0.4) break;
+        const float sd = sdf_bilinear(origin + dir * t);
+        if(sd < 0.05) { shadow = 0.0; break; }
+        shadow = min(shadow, k * sd / max(dist_to_light - t, 0.01));
+        t += max(sd, 0.15);
+    }
+    return saturate(shadow);
+}
+// 4x4 ordered (Bayer) dither matrix, values 0..15.
+static const float k_bayer4[16] = {
+     0.0,  8.0,  2.0, 10.0,
+    12.0,  4.0, 14.0,  6.0,
+     3.0, 11.0,  1.0,  9.0,
+    15.0,  7.0, 13.0,  5.0
+};
+// World-locked Bayer threshold in (0,1). Keyed to world PIXEL coords so the
+// pattern sticks to the terrain and does not shimmer when the camera pans.
+float dither_threshold(float2 world_px) {
+    const int bx = ((int)floor(world_px.x)) & 3;
+    const int by = ((int)floor(world_px.y)) & 3;
+    return (k_bayer4[by * 4 + bx] + 0.5) / 16.0;
+}
 float4 main(VS_OUT i) : SV_Target0 {
     const float4 texel = Atlas.Sample(AtlasSmp, i.uv);
     if(texel.a < 0.01) discard;
@@ -145,70 +263,47 @@ float4 main(VS_OUT i) : SV_Target0 {
     // Combined with CPU tint ADDITIVELY so colored emitter glow is visible on
     // top of the CPU-shadowcasting result, not suppressed by max().
     float3 emitter_light = float3(0.0, 0.0, 0.0);
-    const uint me = min(emitter_count, 256u);
+    const uint me = min(emitter_count, 8192u);
     for(uint ei = 0u; ei < me; ++ei) {
-        // row=emitter index, col 0=pos+radius, col 1=rgb+falloff
-        const float4 d0 = EmitterTex.Load(int3(0, ei, 0));
-        const float4 d1 = EmitterTex.Load(int3(1, ei, 0));
-        if(abs(d0.z - current_z) > 0.5) continue;
-        const float2 dv   = d0.xy - i.world_pos;
+        const GpuEmitter e = Emitters[ei];
+        const float3 e_pos    = e.pos_radius.xyz;
+        const float  e_radius = e.pos_radius.w;
+        const float3 e_color  = e.color_falloff.xyz;
+        const float  e_falloff= e.color_falloff.w;
+        if(abs(e_pos.z - current_z) > 0.5) continue;
+        const float2 dv   = e_pos.xy - i.world_pos;
         const float  dist = length(dv);
-        if(dist >= d0.w || dist < 0.01) continue;
-        const float  atten   = 1.0 - pow(saturate(dist / d0.w), d1.w);
+        if(dist >= e_radius || dist < 0.01) continue;
+        const float  atten   = 1.0 - pow(saturate(dist / e_radius), e_falloff);
         // Lambert = 1.0 for omnidirectional point lights with flat normal.
         // Directional shading from real surface normals comes in Phase 7b.
         const float  lambert = 1.0;
-        // Per-emitter soft shadow via SDF sphere trace. Inigo Quilez
-        // cone-ratio formulation. shadow_k controls hardness (higher =
-        // sharper), shadow_steps caps the iteration count — both runtime-
-        // tunable via the lighting debug widget (DebugParams cbuffer).
-        // Same SdfTex transpose convention as the sun march:
-        // Load(int3(iy, ix, 0)). Start bias is clamped against very-close
-        // emitters (dist < 0.6) so we don't overshoot on the first step.
-        float shadow = 1.0;
-        if(sdf_map_w > 0u && shadow_steps > 0u) {
-            const float2 sh_dir = dv / max(dist, 0.001);
-            float t = min(0.3, dist * 0.5);
-            const int max_steps = (int)shadow_steps;
-            [loop] for(int ss = 0; ss < max_steps; ++ss) {
-                if(t >= dist - 0.4) break;
-                const float2 p = i.world_pos + sh_dir * t;
-                const int sx = clamp((int)p.x, 0, (int)sdf_map_w - 1);
-                const int sy = clamp((int)p.y, 0, (int)sdf_map_h - 1);
-                const float s = SdfTex.Load(int3(sy, sx, 0));
-                if(s < 0.05) { shadow = 0.0; break; }
-                shadow = min(shadow, shadow_k * s / max(dist - t, 0.01));
-                t += max(s, 0.15);
-            }
-            shadow = saturate(shadow);
-        }
-        const float3 rgb = (d1.x < 0.01 && d1.y < 0.01 && d1.z < 0.01)
-                           ? float3(1, 1, 1) : d1.xyz;
+        // Per-emitter soft shadow via the shared SDF sphere trace (bilinear,
+        // shadow_k / shadow_steps tunable). See trace_shadow above.
+        const float2 sh_dir = dv / max(dist, 0.001);
+        const float  shadow = trace_shadow(i.world_pos, sh_dir, dist,
+                                            shadow_k, (int)shadow_steps);
+        const float3 rgb = (e_color.x < 0.01 && e_color.y < 0.01 && e_color.z < 0.01)
+                           ? float3(1, 1, 1) : e_color;
         emitter_light += rgb * atten * lambert * shadow;
     }
     // Phase 8: sky ambient + directional sun contribution.
-    // Swap x/y: sky_vis also stored x-major like SDF (iy=row→col, ix=col→row).
+    // SkyVisBuf is x-major (skyvis[x*H+y]) — index directly, no transpose.
     const int sky_ix = clamp((int)i.world_pos.x, 0, (int)sdf_map_w - 1);
     const int sky_iy = clamp((int)i.world_pos.y, 0, (int)sdf_map_h - 1);
-    float sky_vis = SkyVisTex.Load(int3(sky_iy, sky_ix, 0));
+    float sky_vis = (sdf_map_w > 0u) ? SkyVisBuf[sky_ix * (int)sdf_map_h + sky_iy] : 0.0;
     // Sky ambient: soft, no shadowing needed.
     float3 sky_contrib = float3(sky_r, sky_g, sky_b) * sky_intensity * sky_vis;
-    // Sun direct: ray-march SDF for soft shadow (16 steps, light-to-fragment direction).
+    // Sun direct: directional soft shadow via the SAME shared trace as
+    // emitters, so it honours shadow_k / shadow_steps and matches their
+    // softness (was a hardcoded copy: k=4, 16 steps, reach 8.0). 8.0 = the
+    // directional march reach (sun has no finite distance). Gated to open-sky
+    // tiles (sky_vis) — the sun cannot reach roofed interiors.
     float3 sun_contrib = float3(0.0, 0.0, 0.0);
     if(sun_intensity > 0.001 && sky_vis > 0.01 && sdf_map_w > 0u) {
         const float2 toward_sun = -float2(sun_dir_x, sun_dir_y);
-        float t = 0.3, sh = 1.0, k = 4.0;
-        [loop] for(int ss = 0; ss < 16; ++ss) {
-            if(t > 8.0) break;
-            const float2 p  = i.world_pos + toward_sun * t;
-            const int    ix = clamp((int)p.x, 0, (int)sdf_map_w - 1);
-            const int    iy = clamp((int)p.y, 0, (int)sdf_map_h - 1);
-            const float  s  = SdfTex.Load(int3(iy, ix, 0)); // swap: x-major SDF storage
-            if(s < 0.05) { sh = 0.0; break; }
-            sh = min(sh, k * s / max(8.0 - t, 0.01));
-            t += max(s, 0.15);
-        }
-        const float sun_shadow = saturate(sh);
+        const float sun_shadow = trace_shadow(i.world_pos, toward_sun, 8.0,
+                                               shadow_k, (int)shadow_steps);
         // Lambert with flat normal: dot((0,0,1), normalize(sun_dir_xy, sin_elev))
         const float sun_lambert = sun_sin_elev / sqrt(1.0 + sun_sin_elev * sun_sin_elev);
         sun_contrib = float3(sun_r, sun_g, sun_b) * sun_intensity * sun_lambert
@@ -222,10 +317,31 @@ float4 main(VS_OUT i) : SV_Target0 {
     sun_contrib   *= sun_scale;
     sky_contrib   *= sky_scale;
 
-    // GPU total light (emitters + sky + sun + ambient floor).
     const float3 ambient_v = float3(ambient, ambient, ambient);
-    const float3 gpu_total = min(ambient_v + emitter_light + sky_contrib + sun_contrib,
-                                 float3(2.0, 2.0, 2.0));
+
+    // Multi-band ordered (Bayer) dither, world-locked. Quantise ONLY the
+    // dynamic light (emitter + sky + sun) into `dither_bands` levels and
+    // stipple the band transitions — Stoneshard-style. The ambient floor is
+    // added AFTER so flat near-black areas stay clean (dithering the floor
+    // makes dark areas sparkle). Ordered dither is mean-preserving, so no
+    // global brightness shift. Anchored to world PIXELS (world_pos *
+    // tile_pixel_size) → pattern sticks to terrain, no shimmer on scroll.
+    float3 dyn = emitter_light + sky_contrib + sun_contrib;
+    // 1-bounce indirect fill (fake GI): colored light diffused off surfaces into
+    // open neighbours on the CPU, added here before dither so it bands with the
+    // rest of the dynamic light.
+    if(gi_strength > 0.001 && sdf_map_w > 0u) {
+        dyn += gi_strength * indirect_bilinear(i.world_pos);
+    }
+    if(dither_amt > 0.001) {
+        const float  bands = max(dither_bands, 1.0);
+        const float  bthr  = dither_threshold(i.world_pos * tile_pixel_size);
+        const float3 dithered = floor(dyn * bands + bthr) / bands;
+        dyn = lerp(dyn, dithered, saturate(dither_amt));
+    }
+
+    // GPU total light (dithered dynamic light + un-dithered ambient floor).
+    const float3 gpu_total = min(ambient_v + dyn, float3(2.0, 2.0, 2.0));
     // max(tint, gpu_total):
     //   Game tiles:  tint = 0 (set by CPU side) → gpu_total drives brightness
     //   UI / fonts:  tint = element color → stays fully visible (unlit segment also zeroes emitter_count)
@@ -235,10 +351,16 @@ float4 main(VS_OUT i) : SV_Target0 {
 
     // Debug visualisation. Modes 1-5 BLEND a per-component visualisation
     // over the lit scene at debug_opacity; modes 6-7 REPLACE the scene with
-    // raw SDF / sky_vis colormaps. All modes are gated to game tiles
+    // raw SDF / sky_vis colormaps. Modes 1-7 are gated to game tiles
     // (tint near zero) so HUD glyphs / UI rects always render normally.
+    // Mode 8 (emit_bw diagnostic) bypasses the tint gate so it works on the
+    // tinted main-menu blue backdrop — emitter_count==0 segments still
+    // short-circuit, so HUD/font segments stay untouched.
     const float dbg_tint_sum = i.tint.r + i.tint.g + i.tint.b;
-    if(debug_mode > 0u && dbg_tint_sum < 0.01) {
+    const bool  dbg_active   = (debug_mode == 8u)
+                               || (debug_mode > 0u && debug_mode < 8u
+                                   && dbg_tint_sum < 0.01);
+    if(dbg_active) {
         float3 vis = float3(0, 0, 0);
         bool   replace = false;
         if(debug_mode == 1u) {
@@ -253,9 +375,8 @@ float4 main(VS_OUT i) : SV_Target0 {
             vis = gpu_total;
         } else if(debug_mode == 6u) {
             // SDF view: red (wall, s≈0) → yellow (s≈4) → green (open, s≥8).
-            const int sx = clamp((int)i.world_pos.x, 0, (int)sdf_map_w - 1);
-            const int sy = clamp((int)i.world_pos.y, 0, (int)sdf_map_h - 1);
-            const float s = (sdf_map_w > 0u) ? SdfTex.Load(int3(sy, sx, 0)) : 0.0;
+            // Bilinear so the view matches what the shadow march now samples.
+            const float s = (sdf_map_w > 0u) ? sdf_bilinear(i.world_pos) : 0.0;
             const float t = saturate(s / 8.0);
             vis = float3(1.0 - t, t, 0.0);
             replace = true;
@@ -263,8 +384,16 @@ float4 main(VS_OUT i) : SV_Target0 {
             // SkyVis view: grayscale 0..1.
             const int sx = clamp((int)i.world_pos.x, 0, (int)sdf_map_w - 1);
             const int sy = clamp((int)i.world_pos.y, 0, (int)sdf_map_h - 1);
-            const float v = (sdf_map_w > 0u) ? SkyVisTex.Load(int3(sy, sx, 0)) : 0.0;
+            const float v = (sdf_map_w > 0u) ? SkyVisBuf[sx * (int)sdf_map_h + sy] : 0.0;
             vis = float3(v, v, v);
+            replace = true;
+        } else if(debug_mode == 8u) {
+            // emit_bw — grayscale luminance of accumulated emitter
+            // contribution. Bypasses tint gate so the main-menu blue
+            // backdrop sprite reveals the gradient. Bright top-left
+            // fading toward dim = working emitter pipeline.
+            const float L = max(emitter_light.r, max(emitter_light.g, emitter_light.b));
+            vis = float3(L, L, L);
             replace = true;
         }
         if(replace) {
@@ -306,7 +435,7 @@ static_assert( sizeof( sun_params ) == 48, "sun_params wire-stable with SunParam
 
 // debug_params struct now lives in sprite_batcher.h so render_state.h can
 // embed it by value in frame_light_inputs. Wire-stable layout enforced here.
-static_assert( sizeof( debug_params ) == 32, "debug_params wire-stable with DebugParams cbuffer" );
+static_assert( sizeof( debug_params ) == 48, "debug_params wire-stable with DebugParams cbuffer" );
 
 // ---- 24h sun LUT -------------------------------------------------------
 // Defined at file scope so MSVC won't complain about static-local in nested block.
@@ -425,10 +554,14 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
         float  cur_clear_color[4] = {};
         bool   pass_open = false;
 
-        // Phase 7/8: per-frame lighting resources.
-        SDL_GPUTexture *lp_emitter_tex  = nullptr;  // fragment sampler 1
-        SDL_GPUTexture *lp_sdf_tex      = nullptr;  // fragment sampler 2
-        SDL_GPUTexture *lp_sky_vis_tex  = nullptr;  // fragment sampler 3 (Phase 8)
+        // Phase 7/8: per-frame lighting resources. Emitter, SDF AND sky-vis
+        // data all live in fragment storage buffers (slots 0/1/2), not
+        // sampler textures — Metal mis-binds sampler-texture Load (see
+        // SPRITE_FRAG_HLSL comment). Atlas is the only sampler texture.
+        SDL_GPUBuffer  *lp_emitter_buf  = nullptr;  // fragment storage slot 0
+        SDL_GPUBuffer  *lp_sdf_buf      = nullptr;  // fragment storage slot 1
+        SDL_GPUBuffer  *lp_sky_vis_buf  = nullptr;  // fragment storage slot 2
+        SDL_GPUBuffer  *lp_indirect_buf = nullptr;  // fragment storage slot 3 (IndirectBuf)
         SDL_GPUSampler *lp_data_sampler = nullptr;
         light_params    lp              = {};  // defaults: all zero
         sun_params      lp_sun          = {};  // Phase 8: sun/sky params
@@ -442,33 +575,33 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                                      float           cam_off_y    = 0.0f,
                                      Uint32          sdf_map_w    = 0u,
                                      Uint32          sdf_map_h    = 0u,
-                                     SDL_GPUTexture *emitter_tex  = nullptr,
-                                     SDL_GPUTexture *sdf_tex      = nullptr,
+                                     SDL_GPUBuffer  *emitter_buf  = nullptr,
+                                     SDL_GPUBuffer  *sdf_buf       = nullptr,
                                      SDL_GPUSampler *data_sampler = nullptr,
-                                     SDL_GPUTexture *sky_vis_tex  = nullptr,
+                                     SDL_GPUBuffer  *sky_vis_buf  = nullptr,
+                                     SDL_GPUBuffer  *indirect_buf = nullptr,
                                      const sun_params *sp         = nullptr,
                                      const debug_params *dbg      = nullptr ) noexcept {
-            // The shader reads EmitterTex/SdfTex/SkyVisTex via HLSL `Load`, not
-            // `Sample` — the sampler is irrelevant for those reads. But the
-            // SDL_GPU bind API requires a non-null sampler in the binding
-            // struct. Fall back to default_sampler when none was supplied so
-            // that a missing caller-side sampler does NOT silently disable
-            // all GPU lighting (was masking the lighting failure for weeks).
+            // data_sampler is vestigial now that all lighting data (emitters,
+            // SDF, sky-vis) lives in storage buffers — Atlas is the only
+            // sampler texture and carries its own sampler from set_texture().
+            // Kept for signature stability; fall back to default if null.
             if( !data_sampler ) {
                 data_sampler = default_sampler;
             }
-            lp_emitter_tex  = emitter_tex;
-            lp_sdf_tex      = sdf_tex;
-            lp_sky_vis_tex  = sky_vis_tex;
+            lp_emitter_buf  = emitter_buf;
+            lp_sdf_buf      = sdf_buf;
+            lp_sky_vis_buf  = sky_vis_buf;
+            lp_indirect_buf = indirect_buf;
             lp_data_sampler = data_sampler;
             lp.tile_pixel_size = tile_pixel_size;
             lp.current_z       = z_level;
-            lp.emitter_count   = emitter_tex ? count : 0u;
+            lp.emitter_count   = emitter_buf ? count : 0u;
             lp.ambient         = ambient;
             lp.camera_off_x    = cam_off_x;
             lp.camera_off_y    = cam_off_y;
-            lp.sdf_map_w       = sdf_tex ? sdf_map_w : 0u;
-            lp.sdf_map_h       = sdf_tex ? sdf_map_h : 0u;
+            lp.sdf_map_w       = sdf_buf ? sdf_map_w : 0u;
+            lp.sdf_map_h       = sdf_buf ? sdf_map_h : 0u;
             if( sp ) { lp_sun = *sp; } else { lp_sun = {}; }
             // Default-construct debug_params when none passed — the member
             // defaults provide sensible runtime values (emitter_scale=1,
@@ -795,21 +928,28 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                 SDL_BindGPUVertexStorageBuffers( rp, /*first_slot=*/0,
                                                  &storage_binding.buffer, 1 );
 
-                // Phase 7: emitter + SDF bound as fragment samplers (slots 1/2).
-                // StructuredBuffer space4 → E_INVALIDARG in D3D12 pipeline creation
-                // with SDL_shadercross @ 6b06e55c; Texture2D space2 works.
-                if( lp_emitter_tex ) {
-                    SDL_GPUTextureSamplerBinding emitter_bind{ lp_emitter_tex,
-                                                               lp_data_sampler };
-                    SDL_BindGPUFragmentSamplers( rp, /*first_slot=*/1, &emitter_bind, 1 );
-                }
-                if( lp_sdf_tex ) {
-                    SDL_GPUTextureSamplerBinding sdf_bind{ lp_sdf_tex, lp_data_sampler };
-                    SDL_BindGPUFragmentSamplers( rp, /*first_slot=*/2, &sdf_bind, 1 );
-                }
-                if( lp_sky_vis_tex ) {
-                    SDL_GPUTextureSamplerBinding sky_bind{ lp_sky_vis_tex, lp_data_sampler };
-                    SDL_BindGPUFragmentSamplers( rp, /*first_slot=*/3, &sky_bind, 1 );
+                // After 2026-05-29 refactor: fragment resource layout is
+                //   sampler slot 0 → Atlas      (per-segment)
+                //   storage  slot 0 → Emitters  (StructuredBuffer<GpuEmitter>)
+                //   storage  slot 1 → SdfBuf      (StructuredBuffer<float>)
+                //   storage  slot 2 → SkyVisBuf   (StructuredBuffer<float>)
+                //   storage  slot 3 → IndirectBuf (StructuredBuffer<float>)
+                // matching HLSL t0 sampled + t1/t2/t3/t4 storage (space2).
+                // Bind all storage buffers in one call so a later bind can't
+                // zero an earlier slot. SDF/sky/indirect reads are gated by
+                // sdf_map_w>0 in the shader, so unbound slots (no SDF yet) are safe.
+                if( lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf && lp_indirect_buf ) {
+                    SDL_GPUBuffer *sbufs[4] = { lp_emitter_buf, lp_sdf_buf, lp_sky_vis_buf, lp_indirect_buf };
+                    SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0, sbufs, 4 );
+                } else if( lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf ) {
+                    SDL_GPUBuffer *sbufs[3] = { lp_emitter_buf, lp_sdf_buf, lp_sky_vis_buf };
+                    SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0, sbufs, 3 );
+                } else if( lp_emitter_buf && lp_sdf_buf ) {
+                    SDL_GPUBuffer *sbufs[2] = { lp_emitter_buf, lp_sdf_buf };
+                    SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0, sbufs, 2 );
+                } else if( lp_emitter_buf ) {
+                    SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0,
+                                                       &lp_emitter_buf, 1 );
                 }
 
                 const SDL_GPUViewport vp{
@@ -847,24 +987,52 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                     tsb.sampler = s.sampler;
                     SDL_BindGPUFragmentSamplers( rp, /*first_slot=*/0, &tsb, 1 );
 
-                    // Re-bind emitter/SDF/sky-vis each segment. On D3D12 a
-                    // SDL_BindGPUFragmentSamplers call may rebuild the descriptor
-                    // table and zero any slot not included in that call.
-                    // Skip these for unlit (HUD/UI) segments — the shader's
-                    // emitter_count==0 / sdf_map_w==0 guards will short-circuit
-                    // the per-emitter loop and the sun march, so the
-                    // unbound slots are never sampled.
-                    if( s.is_lit && lp_emitter_tex ) {
-                        SDL_GPUTextureSamplerBinding eb{ lp_emitter_tex, lp_data_sampler };
-                        SDL_BindGPUFragmentSamplers( rp, /*first_slot=*/1, &eb, 1 );
+                    // Diagnostic: log the first LIT segment per frame so we
+                    // can see, on the CPU, what state actually reaches the
+                    // GPU draw. Confirms is_lit, emitter texture binding,
+                    // emitter_count uniform, and debug_mode without
+                    // depending on screen-colour interpretation.
+                    {
+                        static int sb_dbg_frame = 0;
+                        static bool sb_dbg_logged_this_frame = false;
+                        // Reset the per-frame guard once per 60 frames.
+                        if( ++sb_dbg_frame % 60 == 0 ) {
+                            sb_dbg_logged_this_frame = false;
+                        }
+                        if( s.is_lit && !sb_dbg_logged_this_frame ) {
+                            sb_dbg_logged_this_frame = true;
+                            DebugLogFL( DL::Info, DC::Main )
+                                    << "sprite_batcher lit_seg: tex=" << static_cast<const void *>( s.tex )
+                                    << " emitter_buf=" << static_cast<const void *>( lp_emitter_buf )
+                                    << " ec=" << lp.emitter_count
+                                    << " tile_px=" << lp.tile_pixel_size
+                                    << " cam_off=(" << lp.camera_off_x << ","
+                                    << lp.camera_off_y << ")"
+                                    << " sdf_map_w=" << lp.sdf_map_w
+                                    << " sdf_buf=" << ( lp_sdf_buf ? "ok" : "NULL" )
+                                    << " skyvis_buf=" << ( lp_sky_vis_buf ? "ok" : "NULL" )
+                                    << " dbg_mode=" << lp_debug.debug_mode;
+                        }
                     }
-                    if( s.is_lit && lp_sdf_tex ) {
-                        SDL_GPUTextureSamplerBinding sb{ lp_sdf_tex, lp_data_sampler };
-                        SDL_BindGPUFragmentSamplers( rp, /*first_slot=*/2, &sb, 1 );
-                    }
-                    if( s.is_lit && lp_sky_vis_tex ) {
-                        SDL_GPUTextureSamplerBinding skb{ lp_sky_vis_tex, lp_data_sampler };
-                        SDL_BindGPUFragmentSamplers( rp, /*first_slot=*/3, &skb, 1 );
+
+                    // Re-bind emitter+SDF+sky-vis storage each segment.
+                    // SDL_BindGPUFragmentStorageBuffers can rebuild the
+                    // descriptor table and zero any slot not included, so we
+                    // re-issue for lit segments. Unlit (HUD/UI) segments skip —
+                    // emitter_count==0 / sdf_map_w==0 guards in the shader
+                    // short-circuit any reads there.
+                    if( s.is_lit && lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf && lp_indirect_buf ) {
+                        SDL_GPUBuffer *sbufs[4] = { lp_emitter_buf, lp_sdf_buf, lp_sky_vis_buf, lp_indirect_buf };
+                        SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0, sbufs, 4 );
+                    } else if( s.is_lit && lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf ) {
+                        SDL_GPUBuffer *sbufs[3] = { lp_emitter_buf, lp_sdf_buf, lp_sky_vis_buf };
+                        SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0, sbufs, 3 );
+                    } else if( s.is_lit && lp_emitter_buf && lp_sdf_buf ) {
+                        SDL_GPUBuffer *sbufs[2] = { lp_emitter_buf, lp_sdf_buf };
+                        SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0, sbufs, 2 );
+                    } else if( s.is_lit && lp_emitter_buf ) {
+                        SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0,
+                                                           &lp_emitter_buf, 1 );
                     }
 
                     // Shader pixel→NDC math uses the projection extent
@@ -990,18 +1158,19 @@ void sprite_batcher::set_lighting_resources( float            tile_pixel_size,
                                               float            cam_off_y,
                                               Uint32           sdf_map_w,
                                               Uint32           sdf_map_h,
-                                              SDL_GPUTexture  *emitter_tex,
-                                              SDL_GPUTexture  *sdf_tex,
+                                              SDL_GPUBuffer   *emitter_buf,
+                                              SDL_GPUBuffer   *sdf_buf,
                                               SDL_GPUSampler  *data_sampler,
-                                              SDL_GPUTexture  *sky_vis_tex,
+                                              SDL_GPUBuffer   *sky_vis_buf,
+                                              SDL_GPUBuffer   *indirect_buf,
                                               const sun_params   *sp,
                                               const debug_params *dbg )
 {
     p->set_lighting_resources( tile_pixel_size, z_level,
                                 emitter_count, ambient,
                                 cam_off_x, cam_off_y, sdf_map_w, sdf_map_h,
-                                emitter_tex, sdf_tex, data_sampler,
-                                sky_vis_tex, sp, dbg );
+                                emitter_buf, sdf_buf, data_sampler,
+                                sky_vis_buf, indirect_buf, sp, dbg );
 }
 
 void sprite_batcher::draw( const sprite_instance &inst )

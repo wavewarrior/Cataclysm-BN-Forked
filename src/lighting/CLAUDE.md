@@ -92,6 +92,62 @@ Formula: `x' = x*cos - y*sin`, `y' = x*sin + y*cos`
 
 ---
 
+## Shadow march + dither model (2026-05-30)
+
+Fragment shader (`SPRITE_FRAG_HLSL` in `sprite_batcher.cpp`):
+
+- **Bilinear SDF sampling.** `sdf_bilinear()` 4-taps the tile-resolution SDF.
+  The CPU SDF is a **Chebyshev** BFS (`sdf_pass.cpp:compute_sdf_cpu`) → integer
+  per-tile jumps; raw nearest reads gave diamond-faceted sawtooth penumbrae.
+  Bilinear smooths them. Cell-origin convention (`floor`/`frac`) — matches the
+  old `(int)p.x`, so shadows stay glued to occluder edges. Residual faint
+  squarish directionality is inherent to Chebyshev (Euclidean DT = future).
+- **One shared `trace_shadow(origin, dir, dist, k, steps)`** for BOTH emitters
+  and the sun (sun was a hardcoded k=4/16/8.0 copy). Sun passes `dist=8.0`
+  (directional reach) + the `shadow_k`/`shadow_steps` knobs, keeps its
+  `sky_vis>0.01` gate (can't reach roofed tiles).
+- **Multi-band ordered (Bayer) dither**, world-locked. `dither_threshold()`
+  keys a 4×4 Bayer matrix to **world pixels** (`world_pos * tile_pixel_size`) so
+  the pattern sticks to terrain (no shimmer on scroll). Quantises ONLY the
+  dynamic light (emitter+sky+sun) into `dither_bands` levels; **ambient floor is
+  added AFTER** (dithering the floor makes dark areas sparkle). Mean-preserving.
+- **Knobs** in `debug_params` (now **48 bytes**, was 32): `dither_amt` (0=off),
+  `dither_bands`. Widget: Shift+F8/F9 = strength, Ctrl+F8/F9 = bands.
+
+## 1-bounce indirect light / fake GI (2026-05-30)
+
+Cheap colored indirect fill — light bounces off surfaces into open neighbours,
+blocked by walls, leaks through windows. Per-tile (low-frequency), mirrors the
+SkyVis storage-buffer path.
+
+- **Source** (`sdltiles.cpp` refresh_display, in the SDF build block): seed
+  `D[t] = lm[t].max()/LIGHT_AMBIENT_LIT * hue`, where hue = normalized
+  `light_color_cache[t]` when `has_colored_lights` else white. `lm` is PHYSICAL
+  + turn-stable (generate_lightmap; vision applied later in apparent_light) →
+  per-frame read is shimmer-free. Normalised so a well-lit tile ≈ 1.0 (GPU dyn
+  scale). Then **2 wall-gated diffusion passes** (conduct only through tiles
+  with `transparency_cache > 0.01`; sources pinned, averaged → bounded).
+  Output `std::vector<float>` 3/tile RGB (`i*3+{0,1,2}`, x-major).
+- **Plumbing** (mirror SkyVis): `emitter_collector::submit/flush` carries
+  `pending_indirect_` → `sdf_pass::upload(..., indirect)` → `indirect_storage_`
+  (GRAPHICS_STORAGE_READ, 3 floats/tile) → `sdf().indirect_buffer()` →
+  `set_lighting_resources(..., indirect_buf, ...)`.
+- **Shader** (`sprite_batcher.cpp`): `StructuredBuffer<float> IndirectBuf :
+  register(t4, space2)` (storage slot 3). Bound as the **4th** fragment storage
+  buffer — top tier `{emitter,sdf,skyvis,indirect}` at BOTH bind sites (initial +
+  post-set_texture rebind), 3/2/1 fallbacks kept. `indirect_bilinear(p)` uses the
+  `p-0.5` centre convention (same as `sdf_bilinear`). Added to `dyn` before the
+  dither: `dyn += gi_strength * indirect_bilinear(world_pos)`, gated
+  `gi_strength>0.001 && sdf_map_w>0`.
+- **Knob**: `debug_params.gi_strength` (repurposed `dp_pad0`; struct still 48B).
+  Widget Alt+F8/F9. `gi_strength=0` → identical to pre-GI.
+- Expectation: colored bounce is vivid near fire / dawn-dusk, grey in white
+  light (`light_color_cache` is hue-only, zero for uncolored sources). Intensity
+  fill + window-spill work regardless.
+- **Deferred**: SDF/skyvis/indirect rebuild every refresh_display (incl. UI-only
+  redraws). A dirty-gate (rebuild only on turn change) is the right mitigation —
+  separate PR.
+
 ## Known invariants & gotchas
 
 **1. No opaque fills before tile sprites.**
@@ -179,24 +235,37 @@ Always forward-declare ALL SDL GPU types used in a lighting/ header. Common omis
 
 `sdl_wrappers.h` is NOT included by lighting/ headers (by design — they're self-contained).
 
-### SDF texture coordinate transposition — CRITICAL
+### SDF + SkyVis are FRAGMENT STORAGE BUFFERS, not sampler textures (Metal) — CRITICAL
 
-The SDF CPU array is stored **x-major**: `sdf[x * H + y]` (x is outer loop).
-SDL_GPU textures are **row-major**: `Load(int3(col, row, 0))` → memory `row * W + col`.
+**2026-05-30, build-verified.** SDL_shadercross @ 6b06e55c mis-binds sampler
+textures on Metal: the upload reaches the GPU (readback confirms) but the
+fragment shader's `Texture2D.Load`/`.Sample` returns **0 for every fragment**.
+This silently zeroed the SDF shadow march (`s=0 → shadow=0`), which in-game
+*killed all emitter light* (main-menu glow only worked because `sdf_map_w=0`
+there skips the march). Mode 6 was uniform red, mode 7 uniform black.
 
-When you upload an x-major array into a row-major texture, the coordinates are **transposed**.
-To read the correct SDF value for world position `(wx, wy)`:
-```hlsl
-// WRONG — reads transposed position:
-SdfTex.Load(int3(wx, wy, 0));   // → sdf[wy * W + wx]
-// CORRECT — swap x/y to undo the transposition:
-SdfTex.Load(int3(wy, wx, 0));   // → sdf[wx * W + wy] = sdf[wx * H + wy] (when W==H)
-```
+Emitters moved off `Texture2D` → `StructuredBuffer` 2026-05-29; **SDF + SkyVis
+followed 2026-05-30** (read `SdfBuf` / `SkyVisBuf`). Atlas (sampler slot 0) is
+the ONLY sampler texture left; all per-tile lighting data is in storage buffers.
+Confirmed: mode 6 shows a real red→green gradient, emitters light + shadow
+in-game. (SkyVis migration restores sun/sky, which the broken `sky_vis=0` had
+gated off entirely; sky_vis is sourced from `map::access_cache().outside_cache`,
+1.0=open sky / 0.0=roofed.)
 
-The same applies to SkyVisTex (also uploaded from an x-major vector).
+**Storage buffers hold the CPU array directly — no transpose.** Data is x-major
+`arr[x*H+y]`; the buffer is a verbatim memcpy (SDF) or per-element float convert
+(SkyVis), so the shader indexes `Buf[x*sdf_map_h + y]` (x=`(int)world.x`,
+y=`(int)world.y`, both clamped). No row/col swap (that was only needed for the
+row-major *texture* Load).
 
-**This bug caused `shadow=0` for ALL emitters**: the shadow march read transposed SDF values,
-which often returned 0 (wall), causing immediate shadow=0 → emitter_light=0 everywhere.
+Fragment resource layout (space2), K=1 sampled texture: Atlas `t0` (sampler) |
+Emitters `t1` (storage slot 0) | SdfBuf `t2` (storage slot 1) | SkyVisBuf `t3`
+(storage slot 2). Storage slot N → register `t(K+N)`. All 3 storage buffers are
+bound in ONE `SDL_BindGPUFragmentStorageBuffers(first_slot=0, …, 3)` call so a
+later bind can't zero an earlier slot. **The `space4` row below is WRONG** —
+that layout failed with E_INVALIDARG; working code uses space2.
+`sdf_tex_`/`sky_vis_tex_` R8/R32F textures still exist in `sdf_pass` but are now
+dead (no shader reads them) — removable in a later cleanup.
 
 ### cata_tiles coordinate system — CRITICAL for world_pos shader
 

@@ -70,23 +70,23 @@ void render_state::init( SDL_Window *host_window )
     // Phase 3: start the emitter collector thread.
     collector_ = std::make_unique<emitter_collector>( *this );
 
-    // Phase 4: initialise SDF + transparency textures sized to the live
-    // reality-bubble extent at startup time. `g_mapsize` is the user-facing
-    // setting (1–REALITY_BUBBLE_SIZE_MAX, default 4) loaded from options
-    // before WinCreate. Runtime map dimensions = g_mapsize × SEEX per axis.
+    // Phase 4: SDF / transparency / sky_vis textures.
     //
-    // Previously sized at MAPSIZE_X = 420 (compile-time max). The SDF
-    // pixel_count guard in sdf_pass::upload requires the CPU transparency
-    // vector to be at least as large as the allocated pixel count, so
-    // oversizing caused the guard to silently fail: with default g_mapsize=4,
-    // the CPU array is 48² = 2304 floats while the guard required 420² =
-    // 176,400, so no SDF upload ever happened and shadow marches returned
-    // s≈0 (= "wall") everywhere → every emitter contributed 0.
+    // Size the GPU textures for the WORST-CASE bubble (REALITY_BUBBLE_SIZE_MAX
+    // × SEEX). The CPU vectors and shader sampling use the *runtime* mapsize
+    // passed into sdf_pass::upload() each frame — texture is just storage.
     //
-    // Clamp to MAPSIZE_X as a defensive ceiling — g_mapsize should never
-    // exceed REALITY_BUBBLE_SIZE_MAX, but if a bad config slips through
-    // we'd rather oversize the GPU texture than crash the upload.
-    const int rt_tiles = std::min( g_mapsize, REALITY_BUBBLE_SIZE_MAX ) * SEEX;
+    // Why not g_mapsize at init time:
+    //   WinCreate runs BEFORE options are fully resolved into g_mapsize for
+    //   some configurations (and before world load can override it). Init-time
+    //   g_mapsize=11 + world load to g_mapsize=15 produced a 132x132 texture
+    //   fed 180x180 of CPU data — the upload's first 17424 of 32400 floats
+    //   landed in the texture with completely garbled row mapping → shader
+    //   sampled wrong tiles → SDF view uniformly red.
+    //
+    // Max-size cost: 192² × (4 sdf + 1 trans + 1 sky_vis + 4 storage) ≈ 370 KB
+    // GPU. Per-frame upload only touches runtime_w × runtime_h tiles.
+    const int rt_tiles = REALITY_BUBBLE_SIZE_MAX * SEEX;
     sdf_.init( device_, rt_tiles, rt_tiles );
 }
 
@@ -157,23 +157,32 @@ void render_state::clear_tile_scissor()
 
 void render_state::begin_lighting_frame( const frame_light_inputs &in )
 {
-    // Resolve everything render_state owns internally: emitter texture +
-    // count from the collector, SDF + sky_vis textures + dimensions from
-    // the sdf_pass, sampler from this object. Caller only provides what
-    // it alone knows (camera, time, tile geometry, ambient).
-    SDL_GPUTexture *etex = collector_ ? collector_->emitter_texture() : nullptr;
-    SDL_GPUTexture *stex = sdf_.sdf_texture();
-    SDL_GPUTexture *kvis = sdf_.sky_vis_texture();
+    // Resolve everything render_state owns internally: emitter storage
+    // buffer + count from the collector, SDF + sky_vis textures + dims
+    // from the sdf_pass, sampler from this object. Caller only provides
+    // what it alone knows (camera, time, tile geometry, ambient).
+    SDL_GPUBuffer  *ebuf = collector_ ? collector_->emitter_buffer() : nullptr;
+    // SDF buffer / sky_vis texture only get exposed to the shader once at
+    // least one upload has populated them. Until then, the bytes are
+    // undefined → the shader's shadow march would read s≈0 → shadow=0 and
+    // zero out all emitter contribution past ~1 tile. Surface as null +
+    // sdf_map_w/h=0 to take the no-SDF code path in the shader.
+    // SDF + sky_vis are fragment storage buffers now (Metal mis-binds
+    // sampler-texture Load → returned 0 for every fragment).
+    const bool      sdf_ready = sdf_.populated();
+    SDL_GPUBuffer  *sbuf = sdf_ready ? sdf_.sdf_buffer()      : nullptr;
+    SDL_GPUBuffer  *kvis = sdf_ready ? sdf_.sky_vis_buffer()  : nullptr;
+    SDL_GPUBuffer  *ibuf = sdf_ready ? sdf_.indirect_buffer() : nullptr;
     const Uint32 ne = collector_
                       ? static_cast<Uint32>( collector_->last_count() )
                       : 0u;
-    const Uint32 sw = static_cast<Uint32>( sdf_.map_w() );
-    const Uint32 sh = static_cast<Uint32>( sdf_.map_h() );
+    const Uint32 sw = sdf_ready ? static_cast<Uint32>( sdf_.map_w() ) : 0u;
+    const Uint32 sh = sdf_ready ? static_cast<Uint32>( sdf_.map_h() ) : 0u;
 
     tile_batcher_.set_lighting_resources(
         in.tile_pixel_size, in.z_level, ne, in.ambient,
         in.camera_off_x, in.camera_off_y, sw, sh,
-        etex, stex, gpu_sampler_, kvis, &in.sun, &in.debug );
+        ebuf, sbuf, gpu_sampler_, kvis, ibuf, &in.sun, &in.debug );
 }
 
 void render_state::flush_ui_rects( sprite_batcher &dst )

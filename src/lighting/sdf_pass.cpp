@@ -158,8 +158,21 @@ void sdf_pass::init( gpu_device &dev, int map_w, int map_h )
         tbci.size  = static_cast<Uint32>( map_w * map_h ); // 1 byte per tile
         xfer_sky_vis_ = SDL_CreateGPUTransferBuffer( d, &tbci );
     }
+    {
+        SDL_GPUTransferBufferCreateInfo tbci{};
+        tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+        tbci.size  = static_cast<Uint32>( map_w * map_h * 4 ); // 4 bytes per tile (float)
+        xfer_skyvis_f_ = SDL_CreateGPUTransferBuffer( d, &tbci );
+    }
+    {
+        SDL_GPUTransferBufferCreateInfo tbci{};
+        tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+        tbci.size  = static_cast<Uint32>( map_w * map_h * 3 * 4 ); // 3 floats per tile (RGB)
+        xfer_indirect_ = SDL_CreateGPUTransferBuffer( d, &tbci );
+    }
 
-    // Phase 6b: SDF as vertex-readable storage buffer (same data as sdf_tex).
+    // SDF + sky-vis as fragment-readable storage buffers (sampler-texture
+    // Load returns 0 on Metal). Same data as the textures, as float arrays.
     {
         SDL_GPUBufferCreateInfo bci{};
         bci.usage = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ;
@@ -167,6 +180,24 @@ void sdf_pass::init( gpu_device &dev, int map_w, int map_h )
         sdf_storage_ = SDL_CreateGPUBuffer( d, &bci );
         if( !sdf_storage_ ) {
             dbg( DL::Error ) << "sdf_pass::init: failed to create sdf_storage";
+        }
+    }
+    {
+        SDL_GPUBufferCreateInfo bci{};
+        bci.usage = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ;
+        bci.size  = static_cast<Uint32>( map_w * map_h * 4 );
+        skyvis_storage_ = SDL_CreateGPUBuffer( d, &bci );
+        if( !skyvis_storage_ ) {
+            dbg( DL::Error ) << "sdf_pass::init: failed to create skyvis_storage";
+        }
+    }
+    {
+        SDL_GPUBufferCreateInfo bci{};
+        bci.usage = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ;
+        bci.size  = static_cast<Uint32>( map_w * map_h * 3 * 4 ); // 3 floats/tile (RGB)
+        indirect_storage_ = SDL_CreateGPUBuffer( d, &bci );
+        if( !indirect_storage_ ) {
+            dbg( DL::Error ) << "sdf_pass::init: failed to create indirect_storage";
         }
     }
 }
@@ -189,9 +220,25 @@ void sdf_pass::shutdown( gpu_device &dev )
         SDL_ReleaseGPUTransferBuffer( d, xfer_sky_vis_ );
         xfer_sky_vis_ = nullptr;
     }
+    if( xfer_skyvis_f_ ) {
+        SDL_ReleaseGPUTransferBuffer( d, xfer_skyvis_f_ );
+        xfer_skyvis_f_ = nullptr;
+    }
+    if( xfer_indirect_ ) {
+        SDL_ReleaseGPUTransferBuffer( d, xfer_indirect_ );
+        xfer_indirect_ = nullptr;
+    }
     if( sdf_storage_ ) {
         SDL_ReleaseGPUBuffer( d, sdf_storage_ );
         sdf_storage_ = nullptr;
+    }
+    if( skyvis_storage_ ) {
+        SDL_ReleaseGPUBuffer( d, skyvis_storage_ );
+        skyvis_storage_ = nullptr;
+    }
+    if( indirect_storage_ ) {
+        SDL_ReleaseGPUBuffer( d, indirect_storage_ );
+        indirect_storage_ = nullptr;
     }
     if( sdf_tex_ ) {
         SDL_ReleaseGPUTexture( d, sdf_tex_ );
@@ -209,15 +256,40 @@ void sdf_pass::shutdown( gpu_device &dev )
 
 void sdf_pass::upload( SDL_GPUCopyPass *cp,
                         SDL_GPUDevice   *dev,
+                        int runtime_w, int runtime_h,
                         const std::vector<uint8_t> &transparency,
                         const std::vector<float>   &sdf,
-                        const std::vector<uint8_t> &sky_vis )
+                        const std::vector<uint8_t> &sky_vis,
+                        const std::vector<float>   &indirect )
 {
     if( !cp || !dev || !transparency_tex_ || !sdf_tex_ ) {
         return;
     }
+    if( runtime_w <= 0 || runtime_h <= 0 ) {
+        return;
+    }
+    // Refuse runtime sizes that exceed the texture allocation. Should never
+    // happen if render_state::init sized for REALITY_BUBBLE_SIZE_MAX, but
+    // clamp defensively rather than overrun the GPU texture.
+    if( runtime_w > map_w_ || runtime_h > map_h_ ) {
+        dbg( DL::Error ) << "sdf_pass::upload: runtime " << runtime_w << "x"
+                         << runtime_h << " exceeds tex " << map_w_ << "x" << map_h_;
+        return;
+    }
 
-    const Uint32 pixel_count = static_cast<Uint32>( map_w_ * map_h_ );
+    const Uint32 pixel_count = static_cast<Uint32>( runtime_w * runtime_h );
+    // populated_ flips only when SDF data actually lands on the GPU
+    // (see SDF block below). Main-menu / pre-world frames call upload()
+    // with empty vectors → guards skip every channel → populated_ must
+    // stay false so begin_lighting_frame keeps sdf_map_w/h=0 and the
+    // shader skips its shadow march (which would read s=0 → shadow=0
+    // → SDF debug view all red + sun killed).
+
+    // All uploads write a runtime_w × runtime_h sub-rect at (0,0). The
+    // texture is sized for REALITY_BUBBLE_SIZE_MAX so it can hold any
+    // legal mapsize; the shader clamps with runtime_w/h (via map_w()/h()).
+    // pixels_per_row = runtime_w so the source rows match the CPU x-major
+    // packing sdf[x * runtime_h + y].
 
     // Upload transparency (R8, 1 byte/tile).
     if( xfer_transparency_ &&
@@ -229,16 +301,18 @@ void sdf_pass::upload( SDL_GPUCopyPass *cp,
 
             SDL_GPUTextureTransferInfo src{};
             src.transfer_buffer = xfer_transparency_;
-            src.pixels_per_row  = static_cast<Uint32>( map_w_ );
+            src.pixels_per_row  = static_cast<Uint32>( runtime_w );
 
             SDL_GPUTextureRegion dst{};
             dst.texture = transparency_tex_;
-            dst.w       = static_cast<Uint32>( map_w_ );
-            dst.h       = static_cast<Uint32>( map_h_ );
+            dst.w       = static_cast<Uint32>( runtime_w );
+            dst.h       = static_cast<Uint32>( runtime_h );
             dst.d       = 1;
 
             // cycle=false: shader binds transparency_tex_ by handle.
-            SDL_UploadToGPUTexture( cp, &src, &dst, true );
+            // cycle=true would orphan it after every upload (new texture
+            // gets the bytes, sampler keeps the stale empty handle).
+            SDL_UploadToGPUTexture( cp, &src, &dst, false );
         }
     }
 
@@ -252,16 +326,23 @@ void sdf_pass::upload( SDL_GPUCopyPass *cp,
 
             SDL_GPUTextureTransferInfo src{};
             src.transfer_buffer = xfer_sdf_;
-            src.pixels_per_row  = static_cast<Uint32>( map_w_ );
+            src.pixels_per_row  = static_cast<Uint32>( runtime_w );
 
             SDL_GPUTextureRegion dst{};
             dst.texture = sdf_tex_;
-            dst.w       = static_cast<Uint32>( map_w_ );
-            dst.h       = static_cast<Uint32>( map_h_ );
+            dst.w       = static_cast<Uint32>( runtime_w );
+            dst.h       = static_cast<Uint32>( runtime_h );
             dst.d       = 1;
 
             // cycle=false: same rationale — shader keeps the original handle.
-            SDL_UploadToGPUTexture( cp, &src, &dst, true );
+            SDL_UploadToGPUTexture( cp, &src, &dst, false );
+
+            // Real SDF bytes landed on the GPU: now safe for the fragment
+            // shader to read. begin_lighting_frame() exposes sdf_map_w/h
+            // and the textures from this frame onward.
+            populated_  = true;
+            runtime_w_  = runtime_w;
+            runtime_h_  = runtime_h;
 
             // Also upload SDF to the vertex-shader storage buffer.
             if( sdf_storage_ ) {
@@ -274,29 +355,29 @@ void sdf_pass::upload( SDL_GPUCopyPass *cp,
                 buf_dst.offset = 0;
                 buf_dst.size   = pixel_count * static_cast<Uint32>( sizeof( float ) );
 
-                SDL_UploadToGPUBuffer( cp, &tb_src, &buf_dst, true );
+                SDL_UploadToGPUBuffer( cp, &tb_src, &buf_dst, false );
             }
         }
     }
 
     // Phase 8: upload sky_vis (R8_UNORM, 1 byte/tile, 255=open sky).
     if( sky_vis_tex_ && xfer_sky_vis_
-        && static_cast<int>( sky_vis.size() ) >= map_w_ * map_h_ ) {
+        && static_cast<Uint32>( sky_vis.size() ) >= pixel_count ) {
         void *mapped = SDL_MapGPUTransferBuffer( dev, xfer_sky_vis_, true );
         if( mapped ) {
-            std::memcpy( mapped, sky_vis.data(),
-                         static_cast<size_t>( map_w_ * map_h_ ) );
+            std::memcpy( mapped, sky_vis.data(), pixel_count );
             SDL_UnmapGPUTransferBuffer( dev, xfer_sky_vis_ );
 
             SDL_GPUTextureTransferInfo src{};
             src.transfer_buffer = xfer_sky_vis_;
             src.offset          = 0;
+            src.pixels_per_row  = static_cast<Uint32>( runtime_w );
 
             SDL_GPUTextureRegion dst{};
             dst.texture   = sky_vis_tex_;
             dst.x         = 0; dst.y = 0; dst.z = 0;
-            dst.w         = static_cast<Uint32>( map_w_ );
-            dst.h         = static_cast<Uint32>( map_h_ );
+            dst.w         = static_cast<Uint32>( runtime_w );
+            dst.h         = static_cast<Uint32>( runtime_h );
             dst.d         = 1;
             dst.layer     = 0;
             dst.mip_level = 0;
@@ -306,7 +387,56 @@ void sdf_pass::upload( SDL_GPUCopyPass *cp,
             // upload (write goes to a new texture, sampler reads the stale
             // one) — observed as terrain-shaped sky_vis garbage in the
             // shader debug view.
-            SDL_UploadToGPUTexture( cp, &src, &dst, true );
+            SDL_UploadToGPUTexture( cp, &src, &dst, false );
+        }
+    }
+
+    // Sky-vis as a fragment storage buffer of floats (1.0=open, 0.0=roofed).
+    // The shader reads SkyVisBuf, not the R8 texture, because sampler-texture
+    // Load returns 0 on Metal. Convert the uint8 bytes (0/255) → float here.
+    if( skyvis_storage_ && xfer_skyvis_f_
+        && static_cast<Uint32>( sky_vis.size() ) >= pixel_count ) {
+        void *mapped = SDL_MapGPUTransferBuffer( dev, xfer_skyvis_f_, true );
+        if( mapped ) {
+            float *fdst = static_cast<float *>( mapped );
+            for( Uint32 i = 0; i < pixel_count; ++i ) {
+                fdst[i] = static_cast<float>( sky_vis[i] ) / 255.0f;
+            }
+            SDL_UnmapGPUTransferBuffer( dev, xfer_skyvis_f_ );
+
+            SDL_GPUTransferBufferLocation tb_src{};
+            tb_src.transfer_buffer = xfer_skyvis_f_;
+            tb_src.offset          = 0;
+
+            SDL_GPUBufferRegion buf_dst{};
+            buf_dst.buffer = skyvis_storage_;
+            buf_dst.offset = 0;
+            buf_dst.size   = pixel_count * static_cast<Uint32>( sizeof( float ) );
+
+            SDL_UploadToGPUBuffer( cp, &tb_src, &buf_dst, false );
+        }
+    }
+
+    // 1-bounce indirect light: per-tile RGB (3 floats/tile, x-major i*3+{0,1,2}).
+    // Fragment storage buffer (IndirectBuf); shader adds gi_strength * this.
+    if( indirect_storage_ && xfer_indirect_
+        && static_cast<Uint32>( indirect.size() ) >= pixel_count * 3u ) {
+        void *mapped = SDL_MapGPUTransferBuffer( dev, xfer_indirect_, true );
+        if( mapped ) {
+            std::memcpy( mapped, indirect.data(),
+                         pixel_count * 3u * static_cast<Uint32>( sizeof( float ) ) );
+            SDL_UnmapGPUTransferBuffer( dev, xfer_indirect_ );
+
+            SDL_GPUTransferBufferLocation tb_src{};
+            tb_src.transfer_buffer = xfer_indirect_;
+            tb_src.offset          = 0;
+
+            SDL_GPUBufferRegion buf_dst{};
+            buf_dst.buffer = indirect_storage_;
+            buf_dst.offset = 0;
+            buf_dst.size   = pixel_count * 3u * static_cast<Uint32>( sizeof( float ) );
+
+            SDL_UploadToGPUBuffer( cp, &tb_src, &buf_dst, false );
         }
     }
 }

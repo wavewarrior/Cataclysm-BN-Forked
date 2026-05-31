@@ -4,36 +4,29 @@
 
 #include "lighting/gpu_emitter.h"
 // Forward declarations so this header doesn't pull in SDL3 GPU types.
+struct SDL_GPUBuffer;
 struct SDL_GPUCommandBuffer;
-struct SDL_GPUTexture;
 struct SDL_GPUTransferBuffer;
 
 namespace lighting
 {
 class render_state;
 
-// Per-frame emitter data uploader. Owns a single 4×256 RGBA32F texture
-// (`emitter_texture()`) that the lighting fragment shader samples via
-// Load() at register(t1, space2).
+// Per-frame emitter data uploader. Owns a single GRAPHICS_STORAGE_READ
+// buffer (`emitter_buffer()`) that the fragment shader reads via a
+// StructuredBuffer<GpuEmitter> binding at register(t3, space2) — the
+// "sampled textures first, then storage buffers" convention documented
+// by SDL_CreateGPUShader.
 //
-// Single-threaded by design (Q8 cleanup): submit() stages the next
-// frame's snapshot, flush_to_render_cb() drains it onto the caller's
-// render command buffer. Both run from the main thread sequentially
-// within refresh_display().
+// History — previously this was a 4×256 RGBA32F sampler texture
+// (register(t1, space2)). SDL_shadercross 6b06e55c silently mis-binds
+// FP32 sampler textures on Metal: readback proves the upload reaches
+// the GPU, but the fragment shader sees all-zero samples. Switching to
+// a storage buffer side-steps the codegen path entirely.
 //
-// Q9 (Path B): the previous 2-slot ring + manual read/write slot
-// indices were collapsed into a single texture + transfer buffer, using
-// SDL_GPU's cycle=true semantics for streaming-write. cycle=true tells
-// SDL_GPU to orphan the underlying physical resource on each upload (so
-// the GPU can still read the previous one if any work is in flight)
-// while keeping the public handle stable across frames. Inside the same
-// command buffer SDL_GPU emits the required write→sample barrier
-// automatically. This removes the entire dual-rotation puzzle (sprite-
-// batcher slot vs emitter-collector slot) — there's only one source of
-// truth now: the single emitter_texture() handle.
-//
-// Q7 (earlier): the legacy 512 KB SSBO ring + read_buffer() accessor
-// were deleted (no shader sampled them).
+// Single-threaded by design: submit() stages the next frame's snapshot,
+// flush_to_render_cb() drains it onto the caller's render command buffer.
+// Both run from the main thread sequentially within refresh_display().
 class emitter_collector
 {
     public:
@@ -47,12 +40,16 @@ class emitter_collector
         void submit( std::vector<gpu_emitter> snapshot,
                      std::vector<uint8_t>    transparency = {},
                      std::vector<float>      sdf          = {},
-                     std::vector<uint8_t>    sky_vis      = {} );
+                     std::vector<uint8_t>    sky_vis      = {},
+                     std::vector<float>      indirect     = {},
+                     int                     runtime_w    = 0,
+                     int                     runtime_h    = 0 );
 
-        // 4×256 RGBA32F texture handle. SDL_GPU's cycle=true on upload
-        // swaps the underlying physical resource per frame; this handle
-        // is stable for the process lifetime.
-        SDL_GPUTexture *emitter_texture() const noexcept { return emitter_tex_; }
+        // GRAPHICS_STORAGE_READ buffer handle, sized for MAX_EMITTERS
+        // entries. SDL_GPU's cycle=true on upload swaps the underlying
+        // physical resource per frame; this handle is stable for the
+        // process lifetime.
+        SDL_GPUBuffer *emitter_buffer() const noexcept { return emitter_buf_; }
 
         // Number of emitters in the last completed upload.
         int last_count() const noexcept { return last_count_.load( std::memory_order_relaxed ); }
@@ -63,15 +60,6 @@ class emitter_collector
         // fence wait. No-op if no pending data.
         void flush_to_render_cb( SDL_GPUCommandBuffer *cb );
 
-        // GPU texture readback (diagnostic). Returns what the GPU actually has
-        // in EmitterTex pixel 0 (= pos_x, pos_y, pos_z, radius of the
-        // first emitter row). Updated one frame after each flush so values
-        // reflect the GPU-resident texture content, not the CPU snapshot.
-        float debug_d0_x() const noexcept { return debug_d0_x_.load( std::memory_order_relaxed ); }
-        float debug_d0_y() const noexcept { return debug_d0_y_.load( std::memory_order_relaxed ); }
-        float debug_d0_z() const noexcept { return debug_d0_z_.load( std::memory_order_relaxed ); }
-        float debug_d0_w() const noexcept { return debug_d0_w_.load( std::memory_order_relaxed ); }
-
     private:
         render_state &rs_;
 
@@ -81,26 +69,15 @@ class emitter_collector
         std::vector<uint8_t>    pending_transparency_;
         std::vector<uint8_t>    pending_sky_vis_;
         std::vector<float>      pending_sdf_;
+        std::vector<float>      pending_indirect_;
+        int  pending_runtime_w_ = 0;
+        int  pending_runtime_h_ = 0;
         bool have_pending_ = false;
 
-        // Single staging buffer + single texture. SDL_GPU's cycle=true on
-        // map / upload handles frame-to-frame data dependencies internally;
-        // the previous 2-slot manual ring is gone.
         SDL_GPUTransferBuffer *xfer_        = nullptr;
-        SDL_GPUTexture        *emitter_tex_ = nullptr;
+        SDL_GPUBuffer         *emitter_buf_ = nullptr;
 
-        // last_count is read by begin_lighting_frame → fragment shader; stays
-        // atomic for cheap future-proofing post-Q8 worker deletion (relaxed
-        // memory order on x86/ARM is a plain load/store).
         std::atomic<int> last_count_ = 0;
-
-        // Diagnostic GPU→CPU readback of EmitterTex pixel (col=0, row=0).
-        SDL_GPUTransferBuffer *download_xfer_ = nullptr;
-        bool                   download_pending_ = false;
-        std::atomic<float>     debug_d0_x_{0.f};
-        std::atomic<float>     debug_d0_y_{0.f};
-        std::atomic<float>     debug_d0_z_{0.f};
-        std::atomic<float>     debug_d0_w_{0.f};
 };
 
 } // namespace lighting

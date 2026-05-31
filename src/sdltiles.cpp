@@ -463,6 +463,11 @@ struct EmitterOverlayState {
     int map_origin_x = 0, map_origin_y = 0;
     int draw_off_px_x = 0, draw_off_px_y = 0;
     Uint32 last_n_emit_pushed = 0; // actual count pushed to the GPU lp
+    // Sampled at submit time so HUD shows what shader actually sees.
+    float sdf_at_player = -1.f;
+    float trans_at_player = -1.f;
+    int   sdf_W_at_submit = 0;
+    size_t sdf_size_at_submit = 0;
     // Tier 3 per-tile coord cache.
     std::vector<TileCoordGlyph> tile_labels;
     int cached_player_x = INT_MIN, cached_player_y = INT_MIN;
@@ -492,6 +497,36 @@ static uint32_t g_current_dbg_mode = 0u;
 static float g_emitter_scale = 1.0f;
 static float g_sun_scale = 1.0f;
 static float g_sky_scale = 1.0f;
+
+// Main-menu decorative-emitter tuning (read by lighting/snapshot.cpp). F-keys:
+//   F10 / Shift+F10  — radius input  ± 100 (pre-sqrt; HUD shows 3*sqrt(r))
+//   F11 / Shift+F11  — position cycle (top-left / centre / bottom-right)
+//   F12              — toggle bright blue debug backdrop (proves bg sprite
+//                      reaches the swapchain even when emitter contribution is 0)
+namespace menu_emitter_tuning
+{
+// raw input to make_omni; actual radius = 3·√r. Default 100 → ~30 tiles ≈
+// 960 px corner glow at 32 px/tile. Tunable at runtime via F10 / Shift+F10
+// (±100). Set very low (< 5) to disable the menu glow visually.
+float radius_input = 100.0f;
+float pos_x        = 8.5f;
+float pos_y        = 4.5f;
+int   pos_preset   = 0;         // 0 top-left, 1 centre, 2 bottom-right
+bool  blue_backdrop = true;     // true: bright blue, false: black (lit)
+}  // namespace menu_emitter_tuning
+
+// Returns true if a curses cell BG fill should be suppressed: only when no
+// world is loaded AND the requested colour is opaque black (the default
+// "empty cell" fill). Anywhere else, including the in-game world, cell BGs
+// paint normally. Inlined check is safe to call inside the per-cell hot
+// loop — both reads are trivial.
+static inline bool suppress_cell_bg( const SDL_Color &c ) noexcept
+{
+    if( c.r != 0 || c.g != 0 || c.b != 0 ) {
+        return false;
+    }
+    return !g || !world_generator || !world_generator->active_world;
+}
 
 void refresh_display()
 {
@@ -523,7 +558,161 @@ void refresh_display()
         return;
     }
 
-    // Drain last frame's pending emitter/SDF/transparency/sky_vis upload onto
+    // Phase 3+4: build emitter snapshot + SDF from the CURRENT map state and
+    // submit to the collector, THEN flush it below onto this same frame's
+    // render CB. Built here (frame head) rather than at the tail so the
+    // emitter/SDF/sky_vis data matches this frame's sprites + camera offset.
+    // Building at the tail (after submit_frame) left the lighting one frame
+    // stale: on a step, sprites + camera jumped to the new tile but the light
+    // data was still the previous tile's — a visible one-frame "snap" in the
+    // dark. This mirrors the begin_lighting_frame hoist (see below) that already
+    // de-staled the camera/sun params; this completes it for the data upload.
+    if( rs.collector() ) {
+        constexpr float FRAME_MS = 25.0f;
+
+        auto snapshot = lighting::build_emitter_snapshot( rs.emitter_events(), FRAME_MS );
+
+        // Phase 4: compute transparency + SDF from the current map cache.
+        // Gate on active_world: g exists during the main menu but get_map()
+        // returns the default-constructed map (all transparent), which would
+        // upload a populated SDF and cause the fragment shadow march to
+        // shadow=0 every emitter beyond ~1 tile.
+        std::vector<uint8_t> transparency;
+        std::vector<float>   sdf;
+        std::vector<uint8_t> sky_vis;
+        std::vector<float>   indirect; // 1-bounce GI, 3 floats/tile RGB (x-major)
+        int sdf_runtime_w = 0;
+        int sdf_runtime_h = 0;
+        if( g && world_generator && world_generator->active_world && rs.sdf().ready() ) {
+            map &m = get_map(); // non-const for i_at etc.
+            const int zlev = g->u.pos().z;
+            const level_cache &mc = m.access_cache( zlev );
+            const int mapsize = m.getmapsize();
+            const int W = mapsize * SEEX;
+            const int H = mapsize * SEEY;
+            const int total = W * H;
+
+            // Guard transparency loop too — pre-fix this was UB if the cache
+            // hadn't been built yet (size 0). sdf+transparency now share one
+            // gate; either both populate or neither.
+            if( static_cast<int>( mc.transparency_cache.size() ) >= total ) {
+                // Pack float transparency_cache → uint8 (0=opaque, 255=transparent).
+                transparency.resize( total );
+                for( int i = 0; i < total; ++i ) {
+                    const float t = mc.transparency_cache[ i ];
+                    transparency[i] = static_cast<uint8_t>(
+                        std::min( 255.0f, std::max( 0.0f, t * 255.0f ) ) );
+                }
+                // CPU BFS distance transform.
+                sdf = lighting::compute_sdf_cpu( mc.transparency_cache.data(), W, H );
+                sdf_runtime_w = W;
+                sdf_runtime_h = H;
+
+                // Sky visibility from outside_cache (same x-major layout as
+                // transparency_cache, idx = x*H+y). 255 = open sky overhead,
+                // 0 = roofed/indoor. Falls back to all-open if the cache
+                // isn't built yet.
+                sky_vis.assign( total, 255u );
+                if( static_cast<int>( mc.outside_cache.size() ) >= total ) {
+                    for( int i = 0; i < total; ++i ) {
+                        sky_vis[i] = mc.outside_cache[i] ? 255u : 0u;
+                    }
+                }
+
+                // 1-bounce indirect light (fake GI). Seed per-tile colored
+                // direct radiance from the CPU lightmap — `lm` is PHYSICAL and
+                // turn-stable (generate_lightmap; vision is applied later in
+                // apparent_light), so reading it per-frame is shimmer-free.
+                // Normalise by LIGHT_AMBIENT_LIT so a well-lit tile ≈ 1.0, to
+                // match the GPU dynamic-light scale. light_color_cache supplies
+                // hue only when coloured (fire/twilight); else white.
+                // Then diffuse 2 passes through OPEN tiles (blocked by walls,
+                // leaks through windows) → soft colored fill that spills deeper
+                // than the direct cone. Shader adds gi_strength * this.
+                if( static_cast<int>( mc.lm.size() ) >= total ) {
+                    std::vector<float> seed( total * 3, 0.0f );
+                    const bool colored = mc.has_colored_lights
+                        && static_cast<int>( mc.light_color_cache.size() ) >= total;
+                    for( int i = 0; i < total; ++i ) {
+                        const float lum = mc.lm[i].max() / LIGHT_AMBIENT_LIT;
+                        if( lum <= 0.0f ) { continue; }
+                        float cr = 1.0f, cg = 1.0f, cb = 1.0f;
+                        if( colored ) {
+                            const light_color_rgb &lc = mc.light_color_cache[i];
+                            const float m = std::max( lc.r, std::max( lc.g, lc.b ) );
+                            if( m > 0.0001f ) { cr = lc.r / m; cg = lc.g / m; cb = lc.b / m; }
+                        }
+                        seed[i * 3 + 0] = lum * cr;
+                        seed[i * 3 + 1] = lum * cg;
+                        seed[i * 3 + 2] = lum * cb;
+                    }
+                    // Wall-gated diffusion. Sources stay pinned (seed re-added
+                    // each pass); light relaxes outward only through tiles whose
+                    // transparency is above SOLID (0). Averaging keeps it bounded.
+                    std::vector<float> cur = seed;
+                    std::vector<float> nxt( total * 3, 0.0f );
+                    const float decay = 0.55f;
+                    for( int pass = 0; pass < 2; ++pass ) {
+                        for( int x = 0; x < W; ++x ) {
+                            for( int y = 0; y < H; ++y ) {
+                                const int i = x * H + y;
+                                float ar = seed[i * 3 + 0];
+                                float ag = seed[i * 3 + 1];
+                                float ab = seed[i * 3 + 2];
+                                float wsum = 1.0f;
+                                for( int dx = -1; dx <= 1; ++dx ) {
+                                    for( int dy = -1; dy <= 1; ++dy ) {
+                                        if( dx == 0 && dy == 0 ) { continue; }
+                                        const int nx = x + dx, ny = y + dy;
+                                        if( nx < 0 || ny < 0 || nx >= W || ny >= H ) { continue; }
+                                        const int ni = nx * H + ny;
+                                        if( mc.transparency_cache[ni] <= 0.01f ) { continue; }
+                                        ar += decay * cur[ni * 3 + 0];
+                                        ag += decay * cur[ni * 3 + 1];
+                                        ab += decay * cur[ni * 3 + 2];
+                                        wsum += decay;
+                                    }
+                                }
+                                nxt[i * 3 + 0] = ar / wsum;
+                                nxt[i * 3 + 1] = ag / wsum;
+                                nxt[i * 3 + 2] = ab / wsum;
+                            }
+                        }
+                        cur.swap( nxt );
+                    }
+                    indirect = std::move( cur );
+                }
+            }
+
+            // Snapshot for HUD: what's the SDF / transparency at the player tile?
+            const int pi = g->u.pos().x * H + g->u.pos().y;
+            if( pi >= 0 && pi < static_cast<int>( sdf.size() ) ) {
+                s_emo.sdf_at_player = sdf[pi];
+                dbg( DL::Debug ) << "sdf[player]: " << sdf[pi];
+            }
+            if( pi >= 0 && pi < static_cast<int>( mc.transparency_cache.size() ) ) {
+                s_emo.trans_at_player = mc.transparency_cache[pi];
+            }
+            s_emo.sdf_W_at_submit    = W;
+            s_emo.sdf_size_at_submit = sdf.size();
+        }
+
+        if( g_dbg_lighting ) {
+            // Mirror snapshot to HUD on both in-game AND main menu so the
+            // decorative amber emitter (snapshot.cpp:205 path) shows up in
+            // the emit[0] HUD line.
+            s_emo.snap = snapshot;
+        }
+        rs.collector()->submit( std::move( snapshot ),
+                                std::move( transparency ),
+                                std::move( sdf ),
+                                std::move( sky_vis ),
+                                std::move( indirect ),
+                                sdf_runtime_w,
+                                sdf_runtime_h );
+    }
+
+    // Drain this frame's pending emitter/SDF/transparency/sky_vis upload onto
     // THIS frame's render command buffer. Single CB = ordered: copy pass runs
     // before the render pass on the GPU, so the fragment shader samples freshly
     // uploaded textures instead of racing a worker-thread CB. Was the root
@@ -533,10 +722,11 @@ void refresh_display()
     }
 
     // Phase 6/6b: stamp the per-frame lighting params onto the tile_batcher
-    // BEFORE begin_pass. end_pass() reads impl.lp / impl.lp_emitter_tex when
-    // it records SDL_BindGPUFragmentSamplers + SDL_PushGPU*UniformData onto
-    // the command buffer; doing this AFTER end_pass means the recorded values
-    // are one frame stale (camera-drift on motion; frame 0 fully black).
+    // BEFORE begin_pass. end_pass() reads impl.lp / impl.lp_emitter_buf when
+    // it records SDL_BindGPUFragmentSamplers + SDL_BindGPUFragmentStorageBuffers
+    // + SDL_PushGPU*UniformData onto the command buffer; doing this AFTER
+    // end_pass means the recorded values are one frame stale (camera-drift
+    // on motion; frame 0 fully black).
     if( rs.collector() ) {
         // Q10 refactor: assemble the per-frame lighting inputs the caller
         // alone knows (camera + tile geometry + time-of-day + ambient).
@@ -621,7 +811,7 @@ void refresh_display()
         if( ++emit_dbg_frame >= 120 ) {
             emit_dbg_frame = 0;
             dbg( DL::Debug ) << "lighting: n_emit=" << rs.collector()->last_count()
-                             << " emitter_tex=" << ( rs.collector()->emitter_texture() ? "ok" : "NULL" )
+                             << " emitter_buf=" << ( rs.collector()->emitter_buffer() ? "ok" : "NULL" )
                              << " sdf_tex=" << ( rs.sdf().sdf_texture() ? "ok" : "NULL" )
                              << " sampler=" << ( rs.gpu_sampler() ? "ok" : "NULL" )
                              << " cam_off=(" << in.camera_off_x << "," << in.camera_off_y << ")"
@@ -635,11 +825,14 @@ void refresh_display()
         rs.begin_lighting_frame( in );
     }
 
-    // Phase 8 main-menu background: when no game is loaded, inject a fullscreen
+    // Phase 8 main-menu background: when no world is loaded, inject a fullscreen
     // tile sprite (tint=0, game-tile mode) so the warm amber decorative emitter
     // shows as a lit gradient behind the UI text.  Added only when the tile queue
     // is empty (once per redraw cycle) to prevent stacking across frames.
-    if( !g && rs.tile_sprites_empty() && rs.geometry().white_texture() ) {
+    // Gate on active_world rather than !g: g is created before the main menu is
+    // shown, so !g misses the menu state — must match snapshot.cpp:207.
+    const bool no_world = !g || !world_generator || !world_generator->active_world;
+    if( no_world && rs.tile_sprites_empty() && rs.geometry().white_texture() ) {
         lighting::sprite_instance bg{};
         bg.dst_x  = 0.f;
         bg.dst_y  = 0.f;
@@ -647,7 +840,16 @@ void refresh_display()
         bg.dst_h  = static_cast<float>( ctx.swapchain_h );
         bg.src_u  = 0.f;  bg.src_v  = 0.f;
         bg.src_uw = 1.f;  bg.src_vh = 1.f;
-        bg.tint_r = 0.f;  bg.tint_g = 0.f;  bg.tint_b = 0.f;  // game-tile mode
+        // Debug backdrop (F12): bright blue floor — proves the bg sprite reaches
+        // the swapchain and that the fragment shader can light a non-tile sprite.
+        // Shader composites via max(tint, gpu_total), so a blue floor keeps the
+        // bg visible AND any emitter contribution >0.3 in R/G shines through.
+        // When toggled off, tint=0 ("game-tile mode") yields pure lit output.
+        if( menu_emitter_tuning::blue_backdrop ) {
+            bg.tint_r = 0.0f;  bg.tint_g = 0.0f;  bg.tint_b = 0.3f;
+        } else {
+            bg.tint_r = 0.0f;  bg.tint_g = 0.0f;  bg.tint_b = 0.0f;
+        }
         bg.tint_a = 1.f;
         bg.rotation = 0.f;
         rs.queue_tile_sprite( rs.geometry().white_texture(), bg );
@@ -816,7 +1018,7 @@ void refresh_display()
         // ── Tier 1: top-left HUD strip ─────────────────────────────────────
         if( font ) {
             const int lh = font->height + 1;
-            constexpr int HUD_LINES = 9;
+            constexpr int HUD_LINES = 12;
             constexpr int HUD_PAD   = 4;
             const int hud_w = 720;
             const int hud_h = lh * HUD_LINES + HUD_PAD * 2;
@@ -837,6 +1039,50 @@ void refresh_display()
             std::snprintf( buf, sizeof( buf ), "LIGHT-DBG  screen=%dx%d  tile_px=%.1f",
                            s_emo.screen_w, s_emo.screen_h, tp );
             put( buf );
+            {
+                const size_t cache_sz = g
+                    ? get_map().access_cache( g->u.pos().z ).transparency_cache.size()
+                    : 0;
+                const int wanted = g
+                    ? ( get_map().getmapsize() * SEEX )
+                    * ( get_map().getmapsize() * SEEY )
+                    : 0;
+                std::snprintf( buf, sizeof( buf ),
+                               "SDF pop=%d  rt=%dx%d  tex=%dx%d  cache=%zu/%d",
+                               rs.sdf().populated() ? 1 : 0,
+                               rs.sdf().map_w(), rs.sdf().map_h(),
+                               rs.sdf().tex_w(), rs.sdf().tex_h(),
+                               cache_sz, wanted );
+                put( buf );
+
+                // Sample SDF + transparency at player tile + 4 neighbours.
+                if( g && cache_sz > 0 ) {
+                    map &mm = get_map();
+                    const int H = mm.getmapsize() * SEEY;
+                    const auto &tc = mm.access_cache( g->u.pos().z ).transparency_cache;
+                    const int px = g->u.pos().x;
+                    const int py = g->u.pos().y;
+                    auto T = [&]( int x, int y ) -> float {
+                        const int i = x * H + y;
+                        return ( i >= 0 && i < (int)tc.size() ) ? tc[i] : -1.f;
+                    };
+                    auto S = [&]( int x, int y ) -> float {
+                        // Re-compute is too expensive — instead show cache neigh.
+                        return T( x, y );
+                    };
+                    std::snprintf( buf, sizeof( buf ),
+                                   "trans@p=(%.3f) N=%.3f S=%.3f E=%.3f W=%.3f",
+                                   T( px, py ), T( px, py - 1 ), T( px, py + 1 ),
+                                   T( px + 1, py ), T( px - 1, py ) );
+                    put( buf );
+                    std::snprintf( buf, sizeof( buf ),
+                                   "sdf@p=%.3f trans@p(submit)=%.3f sdfW=%d sz=%zu",
+                                   s_emo.sdf_at_player, s_emo.trans_at_player,
+                                   s_emo.sdf_W_at_submit, s_emo.sdf_size_at_submit );
+                    put( buf );
+                    (void)S;
+                }
+            }
             std::snprintf( buf, sizeof( buf ),
                            "map_origin=(%d,%d)  draw_off_px=(%d,%d)",
                            s_emo.map_origin_x, s_emo.map_origin_y,
@@ -882,104 +1128,123 @@ void refresh_display()
                                ed, in_r,
                                g_dbg_lighting_shader ? "ON" : "off" );
                 put( buf );
-                // GPU readback line — what the GPU actually has in EmitterTex
-                // slot 0 pixel (0,0). Confirms whether upload bytes land.
-                std::snprintf( buf, sizeof( buf ),
-                               "GPU readback[0]=(%.2f,%.2f,%.2f,%.2f)",
-                               rs.collector()->debug_d0_x(),
-                               rs.collector()->debug_d0_y(),
-                               rs.collector()->debug_d0_z(),
-                               rs.collector()->debug_d0_w() );
-                put( buf );
             } else {
                 std::snprintf( buf, sizeof( buf ),
                                "emit[0] (none)  shaderViz=%s",
                                g_dbg_lighting_shader ? "ON" : "off" );
                 put( buf );
             }
+            // Menu emitter tuning readout (F10 radius / F11 pos / F12 backdrop).
+            std::snprintf( buf, sizeof( buf ),
+                           "menu  F10:r_in=%.0f  F11:pos=(%.1f,%.1f)  F12:bgBlue=%s",
+                           menu_emitter_tuning::radius_input,
+                           menu_emitter_tuning::pos_x,
+                           menu_emitter_tuning::pos_y,
+                           menu_emitter_tuning::blue_backdrop ? "ON" : "off" );
+            put( buf );
         }
     }
 
     // Lighting tuning widget — F-key controls to adjust debug modes and scales.
-    // Displays current values and hints for key bindings.
-    if( g_dbg_lighting ) {
-        // Anchor below the top-left HUD strip so the tunable widget
-        // doesn't overlap the debug text. HUD is HUD_LINES=9 rows of
-        // `font->height + 1` plus HUD_PAD=4 top/bottom; leave a small
-        // gap. Fallback offset if no font available.
-        const float hud_bottom = font
-                                 ? static_cast<float>( ( font->height + 1 ) * 9 + 4 * 2 )
-                                 : 180.0f;
-        constexpr float widget_x = 10.0f;
-        const float widget_y = hud_bottom + 12.0f;
-        constexpr float line_h = 12.0f;
-        constexpr float text_scale = 1.0f;
-        float widget_row = widget_y;
-
-        // Background panel (semi-transparent dark rect for readability)
-        rs.queue_ui_rect( widget_x - 5.f, widget_y - 5.f, 300.f, 110.f,
-                          0.0f, 0.0f, 0.0f, 0.5f );
-
-        // Title + mode
-        const char *mode_names[8] = {
+    // Labels are drawn with the curses font (draw_string); bars are ui_rects.
+    if( g_dbg_lighting && font ) {
+        const char *mode_names[9] = {
             "off", "ambient", "emitter", "sun",
-            "sky", "total", "SDF", "sky_vis"
+            "sky", "total", "SDF", "sky_vis", "emit_bw"
         };
-        const char *cur_mode = ( g_current_dbg_mode < 8 )
+        const char *cur_mode = ( g_current_dbg_mode < 9 )
                                ? mode_names[g_current_dbg_mode]
                                : "?";
-        char widget_buf[256];
-        std::snprintf( widget_buf, sizeof( widget_buf ),
-                       "Debug: F5=toggle  F6=shaderViz  F7=mode[%s]",
-                       cur_mode );
 
-        // Font rendering would require a full integration. For now, just render
-        // as colored rects at specific widget positions to indicate state.
-        // Mode indicator rects (one for each of 8 modes, highlight current).
-        widget_row += line_h * 1.5f;
-        float mode_x = widget_x;
-        for( uint32_t i = 0u; i < 8u; ++i ) {
-            const float indicator_w = 30.0f;
-            const float r = ( i == g_current_dbg_mode ) ? 1.0f : 0.3f;
-            const float g = ( i == g_current_dbg_mode ) ? 1.0f : 0.3f;
-            const float b = ( i == g_current_dbg_mode ) ? 1.0f : 0.3f;
-            const float a = ( i == g_current_dbg_mode ) ? 1.0f : 0.6f;
-            rs.queue_ui_rect( mode_x, widget_row, indicator_w, line_h,
+        const int lh = font->height + 1;
+        const float hud_bottom = static_cast<float>( lh * 9 + 4 * 2 );
+        constexpr int widget_x_i = 10;
+        const int widget_y_i = static_cast<int>( hud_bottom ) + 12;
+        constexpr float widget_x = static_cast<float>( widget_x_i );
+        const float widget_y = static_cast<float>( widget_y_i );
+
+        // Panel background — sized to enclose labels + bars + spacing.
+        constexpr float panel_w = 360.0f;
+        const float     panel_h = static_cast<float>( lh * 7 + 8 );
+        rs.queue_ui_rect( widget_x - 5.f, widget_y - 5.f, panel_w, panel_h,
+                          0.0f, 0.0f, 0.0f, 0.55f );
+
+        char buf[256];
+        int  text_y = widget_y_i;
+        auto put_label = [&]( const char *s, int color = 15 ) {
+            draw_string( *font, renderer, geometry, std::string( s ),
+                         point( widget_x_i, text_y ), color );
+            text_y += lh;
+        };
+
+        // Title row.
+        std::snprintf( buf, sizeof( buf ),
+                       "Lighting Debug  F5:HUD  F6:shaderViz=%s",
+                       g_dbg_lighting_shader ? "ON" : "off" );
+        put_label( buf );
+
+        // Mode row — F7 cycles; bracket the current one.
+        std::snprintf( buf, sizeof( buf ),
+                       "F7 mode[%u]: %s", g_current_dbg_mode, cur_mode );
+        put_label( buf, 11 ); // cyan-ish
+
+        // Mode indicator row (9 small rects, current highlighted).
+        const int   mode_row_y = text_y;
+        const float indicator_w = 30.0f;
+        const float indicator_gap = 2.0f;
+        for( uint32_t i = 0u; i < 9u; ++i ) {
+            const bool cur = ( i == g_current_dbg_mode );
+            const float r = cur ? 1.0f : 0.3f;
+            const float g = cur ? 1.0f : 0.3f;
+            const float b = cur ? 1.0f : 0.3f;
+            const float a = cur ? 1.0f : 0.6f;
+            rs.queue_ui_rect( widget_x + i * ( indicator_w + indicator_gap ),
+                              static_cast<float>( mode_row_y ),
+                              indicator_w, static_cast<float>( lh ),
                               r, g, b, a );
-            mode_x += indicator_w + 2.0f;
         }
+        text_y += lh;
 
-        // Scale indicator bars (F8/F9 to adjust; 0-10 scale with visual bar).
-        widget_row += line_h * 1.5f;
+        // Scale-bar rows. Each row: label text, then a thin bar drawn at the
+        // baseline. Bars are 4px tall, anchored 4px below the label baseline.
         const float bar_max_w = 150.0f;
+        constexpr float bar_label_w = 200.0f;  // x-offset where the bar starts
+        auto put_scale_bar = [&]( const char *name, float scale,
+                                  float fr, float fg, float fb,
+        int color ) {
+            std::snprintf( buf, sizeof( buf ), "F8/F9 %s = %.2f", name, scale );
+            draw_string( *font, renderer, geometry, std::string( buf ),
+                         point( widget_x_i, text_y ), color );
+            const float by = static_cast<float>( text_y ) +
+                             static_cast<float>( font->height ) - 4.0f;
+            rs.queue_ui_rect( widget_x + bar_label_w, by, bar_max_w, 4.0f,
+                              0.2f, 0.2f, 0.3f, 0.7f );
+            rs.queue_ui_rect( widget_x + bar_label_w, by,
+                              std::clamp( scale / 10.0f, 0.0f, 1.0f ) * bar_max_w,
+                              4.0f, fr, fg, fb, 0.95f );
+            text_y += lh;
+        };
+        put_scale_bar( "emitter", g_emitter_scale, 1.0f, 0.55f, 0.10f, 14 );
+        put_scale_bar( "sun",     g_sun_scale,     1.0f, 1.00f, 0.30f, 14 );
+        put_scale_bar( "sky",     g_sky_scale,     0.3f, 0.70f, 1.00f, 14 );
 
-        // Emitter scale bar
-        const float emo_bar_w = g_emitter_scale / 10.0f * bar_max_w;
-        rs.queue_ui_rect( widget_x, widget_row, bar_max_w, 4.0f,
-                          0.2f, 0.2f, 0.3f, 0.7f );
-        rs.queue_ui_rect( widget_x, widget_row, emo_bar_w, 4.0f,
-                          1.0f, 0.5f, 0.0f, 0.9f );
-        widget_row += line_h;
+        // Stoneshard-style dither knobs. Shift+F8/F9 = strength, Ctrl+F8/F9 = bands.
+        std::snprintf( buf, sizeof( buf ),
+                       "Sh+F8/9 dither=%.2f  Ct+F8/9 bands=%.0f",
+                       g_dbg_params.dither_amt, g_dbg_params.dither_bands );
+        put_label( buf, 14 );
 
-        // Sun scale bar
-        const float sun_bar_w = g_sun_scale / 10.0f * bar_max_w;
-        rs.queue_ui_rect( widget_x, widget_row, bar_max_w, 4.0f,
-                          0.2f, 0.2f, 0.3f, 0.7f );
-        rs.queue_ui_rect( widget_x, widget_row, sun_bar_w, 4.0f,
-                          1.0f, 1.0f, 0.0f, 0.9f );
-        widget_row += line_h;
+        // 1-bounce indirect (fake GI). Alt+F8/F9 = strength.
+        std::snprintf( buf, sizeof( buf ),
+                       "Alt+F8/9 GI=%.2f", g_dbg_params.gi_strength );
+        put_label( buf, 14 );
 
-        // Sky scale bar
-        const float sky_bar_w = g_sky_scale / 10.0f * bar_max_w;
-        rs.queue_ui_rect( widget_x, widget_row, bar_max_w, 4.0f,
-                          0.2f, 0.2f, 0.3f, 0.7f );
-        rs.queue_ui_rect( widget_x, widget_row, sky_bar_w, 4.0f,
-                          0.0f, 1.0f, 1.0f, 0.9f );
-
-        // Hint text at bottom (F8/F9 for scale adjustment)
-        std::snprintf( widget_buf, sizeof( widget_buf ),
-                       "F8/F9: scales (emo=%.1f sun=%.1f sky=%.1f)",
-                       g_emitter_scale, g_sun_scale, g_sky_scale );
+        // Menu emitter tuning hints — only meaningful when no world is loaded
+        // but always shown so the key bindings are discoverable.
+        std::snprintf( buf, sizeof( buf ),
+                       "F10:r_in  F11:pos  F12:bgBlue=%s",
+                       menu_emitter_tuning::blue_backdrop ? "ON" : "off" );
+        put_label( buf, 7 );
     }
 
     const bool have_rects = !rs.ui_rects_empty() && rs.geometry().white_texture();
@@ -996,66 +1261,6 @@ void refresh_display()
     rs.tile_batcher().end_pass();
 
     rs.device().submit_frame( ctx );
-
-    // Phase 3+4: build emitter snapshot + SDF, submit to collector for GPU upload.
-    if( rs.collector() ) {
-        constexpr float FRAME_MS = 25.0f;
-
-        auto snapshot = lighting::build_emitter_snapshot( rs.emitter_events(), FRAME_MS );
-
-        // Phase 4: compute transparency + SDF from the current map cache.
-        std::vector<uint8_t> transparency;
-        std::vector<float>   sdf;
-        if( g && rs.sdf().ready() ) {
-            map &m = get_map(); // non-const for i_at etc.
-            const int zlev = g->u.pos().z;
-            const level_cache &mc = m.access_cache( zlev );
-            const int mapsize = m.getmapsize();
-            const int W = mapsize * SEEX;
-            const int H = mapsize * SEEY;
-            const int total = W * H;
-
-            // Pack float transparency_cache → uint8 (0=opaque, 255=transparent).
-            transparency.resize( total );
-            for( int i = 0; i < total; ++i ) {
-                const float t = mc.transparency_cache[ i ];
-                // transparency_cache: 0.0 = fully opaque, >0 = some transparency.
-                // Clamp and scale to uint8.
-                transparency[i] = static_cast<uint8_t>(
-                    std::min( 255.0f, std::max( 0.0f, t * 255.0f ) ) );
-            }
-
-            // CPU BFS distance transform.
-            if( static_cast<int>( mc.transparency_cache.size() ) >= total ) {
-                sdf = lighting::compute_sdf_cpu( mc.transparency_cache.data(), W, H );
-            }
-
-            dbg( DL::Debug ) << "sdf[player]: "
-                             << sdf[g->u.pos().x * H + g->u.pos().y];
-        }
-
-        // Phase 8: sky visibility — 255 = open sky above, 0 = indoor.
-        // Simple approach: all tiles at player z-level are "open sky" for now;
-        // a future pass will check floor_cache at z+1 for proper roof detection.
-        std::vector<uint8_t> sky_vis;
-        if( g && rs.sdf().ready() ) {
-            map &msv = get_map();
-            const int Wsv = msv.getmapsize() * SEEX;
-            const int Hsv = msv.getmapsize() * SEEY;
-            sky_vis.resize( static_cast<size_t>( Wsv * Hsv ), 255u );
-        }
-
-        if( g_dbg_lighting ) {
-            // Mirror snapshot to HUD on both in-game AND main menu so the
-            // decorative amber emitter (snapshot.cpp:205 path) shows up in
-            // the emit[0] HUD line.
-            s_emo.snap = snapshot;
-        }
-        rs.collector()->submit( std::move( snapshot ),
-                                std::move( transparency ),
-                                std::move( sdf ),
-                                std::move( sky_vis ) );
-    }
 }
 
 // only update if the set interval has elapsed
@@ -2034,8 +2239,11 @@ static bool draw_window( Font_Ptr &font, const catacurses::window &w, point offs
 
             // Spaces are used a lot, so this does help noticeably
             if( cell.ch == space_string ) {
-                geometry->rect( renderer, point( drawx, drawy ), font->width, font->height,
-                                color_as_sdl( cell.BG ) );
+                const SDL_Color bg_col = color_as_sdl( cell.BG );
+                if( !suppress_cell_bg( bg_col ) ) {
+                    geometry->rect( renderer, point( drawx, drawy ), font->width, font->height,
+                                    bg_col );
+                }
                 continue;
             }
             const int codepoint = UTF8_getch( cell.ch );
@@ -2101,8 +2309,13 @@ static bool draw_window( Font_Ptr &font, const catacurses::window &w, point offs
                     use_draw_ascii_lines_routine = false;
                     break;
             }
-            geometry->rect( renderer, point( drawx, drawy ), font->width * cw, font->height,
-                            color_as_sdl( BG ) );
+            {
+                const SDL_Color bg_col = color_as_sdl( BG );
+                if( !suppress_cell_bg( bg_col ) ) {
+                    geometry->rect( renderer, point( drawx, drawy ),
+                                    font->width * cw, font->height, bg_col );
+                }
+            }
             if( use_draw_ascii_lines_routine ) {
                 font->draw_ascii_lines( renderer, geometry, uc, point( drawx, drawy ), FG );
             } else {
@@ -2723,27 +2936,82 @@ static void CheckMessages()
                     g_dbg_lighting_shader = !g_dbg_lighting_shader;
                     break;
                 } else if( lc == KEY_F( 7 ) ) {
-                    // F7: cycle debug visualization mode (0-7)
-                    g_current_dbg_mode = ( g_current_dbg_mode + 1 ) % 8u;
+                    // F7: cycle debug visualization mode (0-8). Mode 8 is the
+                    // B/W emitter-only diagnostic — bypasses tint gating so it
+                    // works on the main-menu blue backdrop.
+                    g_current_dbg_mode = ( g_current_dbg_mode + 1 ) % 9u;
                     g_dbg_params.debug_mode = g_current_dbg_mode;
                     break;
                 } else if( lc == KEY_F( 8 ) ) {
-                    // F8: decrease emitter/sun/sky scales
-                    g_emitter_scale = std::max( 0.0f, g_emitter_scale - 0.1f );
-                    g_sun_scale = std::max( 0.0f, g_sun_scale - 0.1f );
-                    g_sky_scale = std::max( 0.0f, g_sky_scale - 0.1f );
-                    g_dbg_params.emitter_scale = g_emitter_scale;
-                    g_dbg_params.sun_scale = g_sun_scale;
-                    g_dbg_params.sky_scale = g_sky_scale;
+                    // F8: decrease emitter/sun/sky scales.
+                    // Shift+F8: less dither.  Ctrl+F8: fewer dither bands.
+                    if( ev.key.mod & SDL_KMOD_ALT ) {
+                        g_dbg_params.gi_strength =
+                            std::max( 0.0f, g_dbg_params.gi_strength - 0.05f );
+                    } else if( ev.key.mod & SDL_KMOD_CTRL ) {
+                        g_dbg_params.dither_bands =
+                            std::max( 1.0f, g_dbg_params.dither_bands - 1.0f );
+                    } else if( ev.key.mod & SDL_KMOD_SHIFT ) {
+                        g_dbg_params.dither_amt =
+                            std::max( 0.0f, g_dbg_params.dither_amt - 0.1f );
+                    } else {
+                        g_emitter_scale = std::max( 0.0f, g_emitter_scale - 0.1f );
+                        g_sun_scale = std::max( 0.0f, g_sun_scale - 0.1f );
+                        g_sky_scale = std::max( 0.0f, g_sky_scale - 0.1f );
+                        g_dbg_params.emitter_scale = g_emitter_scale;
+                        g_dbg_params.sun_scale = g_sun_scale;
+                        g_dbg_params.sky_scale = g_sky_scale;
+                    }
                     break;
                 } else if( lc == KEY_F( 9 ) ) {
-                    // F9: increase emitter/sun/sky scales
-                    g_emitter_scale = std::min( 10.0f, g_emitter_scale + 0.1f );
-                    g_sun_scale = std::min( 10.0f, g_sun_scale + 0.1f );
-                    g_sky_scale = std::min( 10.0f, g_sky_scale + 0.1f );
-                    g_dbg_params.emitter_scale = g_emitter_scale;
-                    g_dbg_params.sun_scale = g_sun_scale;
-                    g_dbg_params.sky_scale = g_sky_scale;
+                    // F9: increase emitter/sun/sky scales.
+                    // Shift+F9: more dither.  Ctrl+F9: more dither bands.
+                    if( ev.key.mod & SDL_KMOD_ALT ) {
+                        g_dbg_params.gi_strength =
+                            std::min( 2.0f, g_dbg_params.gi_strength + 0.05f );
+                    } else if( ev.key.mod & SDL_KMOD_CTRL ) {
+                        g_dbg_params.dither_bands =
+                            std::min( 16.0f, g_dbg_params.dither_bands + 1.0f );
+                    } else if( ev.key.mod & SDL_KMOD_SHIFT ) {
+                        g_dbg_params.dither_amt =
+                            std::min( 1.0f, g_dbg_params.dither_amt + 0.1f );
+                    } else {
+                        g_emitter_scale = std::min( 10.0f, g_emitter_scale + 0.1f );
+                        g_sun_scale = std::min( 10.0f, g_sun_scale + 0.1f );
+                        g_sky_scale = std::min( 10.0f, g_sky_scale + 0.1f );
+                        g_dbg_params.emitter_scale = g_emitter_scale;
+                        g_dbg_params.sun_scale = g_sun_scale;
+                        g_dbg_params.sky_scale = g_sky_scale;
+                    }
+                    break;
+                } else if( lc == KEY_F( 10 ) ) {
+                    // F10: menu emitter radius input ± 100 (Shift = down).
+                    // Input feeds make_omni; HUD shows 3·√r as actual radius.
+                    const bool shift = ( ev.key.mod & SDL_KMOD_SHIFT ) != 0;
+                    const float step = shift ? -100.0f : 100.0f;
+                    menu_emitter_tuning::radius_input = std::clamp(
+                        menu_emitter_tuning::radius_input + step, 1.0f, 10000.0f );
+                    break;
+                } else if( lc == KEY_F( 11 ) ) {
+                    // F11: cycle menu emitter position preset.
+                    // 0 top-left (8.5, 4.5) — current default
+                    // 1 screen centre (~40, 22) for a 80×45 tile viewport
+                    // 2 bottom-right (~70, 38)
+                    menu_emitter_tuning::pos_preset =
+                        ( menu_emitter_tuning::pos_preset + 1 ) % 3;
+                    switch( menu_emitter_tuning::pos_preset ) {
+                        case 0: menu_emitter_tuning::pos_x = 8.5f;
+                                menu_emitter_tuning::pos_y = 4.5f;  break;
+                        case 1: menu_emitter_tuning::pos_x = 40.0f;
+                                menu_emitter_tuning::pos_y = 22.0f; break;
+                        case 2: menu_emitter_tuning::pos_x = 70.0f;
+                                menu_emitter_tuning::pos_y = 38.0f; break;
+                    }
+                    break;
+                } else if( lc == KEY_F( 12 ) ) {
+                    // F12: toggle bright-blue debug backdrop.
+                    menu_emitter_tuning::blue_backdrop =
+                        !menu_emitter_tuning::blue_backdrop;
                     break;
                 }
                 if( lc <= 0 ) {

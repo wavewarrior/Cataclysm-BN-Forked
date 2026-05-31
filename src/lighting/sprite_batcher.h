@@ -95,12 +95,12 @@ struct sun_params {
 };
 
 // Debug visualisation + runtime tuning knobs (DebugParams cbuffer at
-// register(b2, space3); 32 bytes; wire-stable). debug_mode dispatches per-
+// register(b2, space3); 48 bytes; wire-stable). debug_mode dispatches per-
 // component visualisations in the fragment shader; emitter/sun/sky_scale
 // multiply the corresponding contributions; shadow_k and shadow_steps tune
-// the per-emitter sphere-trace. Defaults are no-ops (off, scale=1, k=8,
-// steps=16) so leaving the struct default-constructed reproduces the pre-
-// widget shader behaviour.
+// the shared sphere-trace (emitter + sun); dither_amt/dither_bands tune the
+// world-locked ordered (Bayer) dither. Defaults are the shipping look
+// (scale=1, k=8, steps=16, dither on at 6 bands).
 struct debug_params {
     uint32_t debug_mode    = 0u;
     float    debug_opacity = 0.6f;
@@ -109,7 +109,11 @@ struct debug_params {
     float    sky_scale     = 1.0f;
     float    shadow_k      = 8.0f;
     uint32_t shadow_steps  = 16u;
-    float    dp_pad        = 0.0f;
+    float    dither_amt    = 1.0f;
+    float    dither_bands  = 6.0f;
+    float    gi_strength   = 0.60f;  // 1-bounce indirect multiplier (0=off); Alt+F8/F9 to tune
+    float    dp_pad1       = 0.0f;
+    float    dp_pad2       = 0.0f;
 };
 
 // Returns sun/sky params interpolated from a 24h LUT for the given hour (0..24).
@@ -175,9 +179,16 @@ class sprite_batcher
         // Set a GPU scissor rect for subsequent draws. nullptr = full viewport.
         void set_scissor( const SDL_Rect *rect );
         // Phase 7/8: supply per-frame lighting resources.
-        // emitter_tex:  4×64 RGBA32F (row=emitter, col 0=pos+radius, col 1=rgb+falloff)
-        // sdf_tex:      W×H R32_FLOAT from sdf_pass
-        // sky_vis_tex:  W×H R8_UNORM sky visibility (255=open sky, 0=indoor) Phase 8
+        // emitter_buf:  GRAPHICS_STORAGE_READ buffer of gpu_emitter records.
+        //               Bound as fragment storage buffer slot 0 → HLSL
+        //               StructuredBuffer<GpuEmitter> at register(t2, space2).
+        // sdf_buf:      GRAPHICS_STORAGE_READ buffer of W×H floats (sdf[x*H+y])
+        //               from sdf_pass — fragment storage slot 1 → HLSL
+        //               StructuredBuffer<float> at register(t3, space2).
+        //               (Was a sampler texture; Metal mis-binds those.)
+        // sky_vis_buf:  GRAPHICS_STORAGE_READ buffer of W×H floats (1.0=open
+        //               sky, 0.0=roofed) — fragment storage slot 2 → HLSL
+        //               StructuredBuffer<float> at register(t3, space2).
         // sp:           sun+sky params pointer (nullptr = no sun)
         void set_lighting_resources( float             tile_pixel_size,
                                      float             z_level,
@@ -187,10 +198,11 @@ class sprite_batcher
                                      float             cam_off_y    = 0.0f,
                                      Uint32            sdf_map_w    = 0u,
                                      Uint32            sdf_map_h    = 0u,
-                                     SDL_GPUTexture   *emitter_tex  = nullptr,
-                                     SDL_GPUTexture   *sdf_tex      = nullptr,
+                                     SDL_GPUBuffer    *emitter_buf  = nullptr,
+                                     SDL_GPUBuffer    *sdf_buf      = nullptr,
                                      SDL_GPUSampler   *data_sampler = nullptr,
-                                     SDL_GPUTexture   *sky_vis_tex  = nullptr,
+                                     SDL_GPUBuffer    *sky_vis_buf  = nullptr,
+                                     SDL_GPUBuffer    *indirect_buf = nullptr,
                                      const sun_params *sp           = nullptr,
                                      const debug_params *dbg        = nullptr );
 

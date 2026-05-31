@@ -22,6 +22,19 @@
 #include "veh_type.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
+#include "worldfactory.h"
+
+// Runtime-tunable menu-emitter knobs, owned by sdltiles.cpp. F-key handlers
+// there mutate these; the snapshot reads them when pushing the decorative
+// emitter on the main menu. Forward-declared rather than pulling a sdltiles
+// header into the lighting module (no such header exists; this file would
+// otherwise have no reason to depend on the SDL frontend).
+namespace menu_emitter_tuning
+{
+extern float radius_input;
+extern float pos_x;
+extern float pos_y;
+}  // namespace menu_emitter_tuning
 
 #define dbg(x) DebugLogFL((x),DC::SDL)
 
@@ -196,31 +209,47 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
     out.reserve( 1024 );
 
     // Lambda: "no active game" path. g is created in main.cpp BEFORE the
-    // main menu is shown, so a null-g check alone is insufficient — we
-    // also fall through here when the game is quitting or no map is loaded
-    // (player coords aren't yet inside any map). Decorative warm-amber
-    // emitter, sized to cover a 1920×1080 menu (radius 45 tiles).
+    // main menu is shown, and inbounds((0,0,0)) returns true at that point
+    // (my_MAPSIZE > 0), so player-pos checks alone miss the main menu.
+    // The reliable discriminator is world_generator->active_world: null
+    // when no world is loaded (main menu, between worlds), set after a
+    // world is picked. Decorative warm-amber emitter sized to cover a
+    // 1920×1080 menu (radius ~45 tiles).
     const auto push_menu_decoration = [&]() {
-        out.push_back( make_omni( 8, 4, 0, 2025.f, 1.f, 0.55f, 0.15f ) );
+        // Position is float-valued — make_omni takes ints, but we want
+        // sub-tile resolution for the cycle-presets. Build the emitter
+        // inline rather than rounding through make_omni.
+        gpu_emitter e{};
+        e.pos_x           = menu_emitter_tuning::pos_x;
+        e.pos_y           = menu_emitter_tuning::pos_y;
+        e.pos_z           = 0.f;
+        e.radius          = 3.0f * std::sqrt( std::max( 0.f,
+                                                        menu_emitter_tuning::radius_input ) );
+        e.r               = 1.0f;
+        e.g               = 0.55f;
+        e.b               = 0.15f;
+        e.falloff         = 2.0f;
+        e.cone_half_angle = static_cast<float>( M_PI );
+        e.shape           = static_cast<uint32_t>( emitter_shape::OMNI );
+        out.push_back( e );
     };
 
-    if( !g ) {
+    if( !g || !world_generator || !world_generator->active_world ) {
         push_menu_decoration();
         return out;
     }
 
     map &m = get_map(); // non-const required for i_at, get_vehicles
 
-    // Guard 1: game is quitting (uquit != QUIT_NO).
-    // Map data may be partially freed during teardown even while g is non-null.
+    // Game is quitting (uquit != QUIT_NO). Map data may be partially freed
+    // during teardown even while g is non-null. No decoration here — quit
+    // is a transient state, drawing a stray emitter would flicker.
     if( g->uquit != QUIT_NO ) {
         return out;
     }
-    // Guard 2: player is not in the loaded map area. This also catches the
-    // pre-world-loaded main-menu state (g exists, but no map is set up yet
-    // so player pos is outside any reasonable bounds). Show decoration.
+    // Defense-in-depth: player outside loaded map (shouldn't happen with
+    // active_world non-null, but cheap to guard).
     if( !m.inbounds( g->u.pos() ) ) {
-        push_menu_decoration();
         return out;
     }
 
