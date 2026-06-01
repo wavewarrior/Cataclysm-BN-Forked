@@ -6,12 +6,32 @@ Current lighting: per-turn CPU shadowcasting (`src/lightmap.cpp`, `src/shadowcas
 
 **Goal**: high-fidelity dynamic lighting at Stoneshard-tier or better — per-pixel light propagation, soft penumbra shadows, RGB colored lights, normal-mapped tile relief, volumetric god-rays through smoke, indirect bounce GI (world-anchored), AO, reflections, bloom + AgX tonemap, smooth day/night cycle. GPU offload mandatory. Solo-dev project — no soak periods, no opt-in flags, no backward compat.
 
+> **Reconciled 2026-06-01 against shipped code (`feature/improvements`).** This
+> doc had drifted hard: it claimed Phase 2 was mid-cutover and phases 3–14 were
+> "pending", and it specified a ~16-pass GPU pipeline. Reality: the bridge is
+> gone, scissor + screenshot shipped, and direct shading / soft shadows / sun /
+> 24h cycle / fake GI / a full vision rework all ship **inline in one fragment
+> shader** — none of the planned pass files exist. See **Architecture pivot** and
+> **Decisions superseded by implementation** below. Three locked decisions
+> (#13, #14, #24) were silently overridden in code; they are flagged for grill,
+> not silently rewritten.
+
 ## Status
 
 | Phase | State | Notes |
 |---|---|---|
-| 1. Curses + Android removal | ✅ done | commit `e96086b658` on `feat/lighting-phase1-curses-android-removal`. 169 files, -13042 lines. |
-| 2. SDL_GPU device + sprite batcher | 🟡 2i-B-5/6 cutover landed (cata_tiles + dynamic_atlas + sdl_font + sdl_geometry → GPU). Bridge still alive for rotated sprites and a handful of remaining SDL_Renderer consumers (pixel_minimap, loading_ui, vehicle_preview clip). Phase complete after 2i-B-7a-f. | branch `feat/lighting-phase2i-B-cutover`. RENDERER option `gpu` must still be avoided — bridge alive means two SDL_GPU devices race. |
+| 1. Curses + Android removal | ✅ done | commit `e96086b658`. 169 files, -13042 lines. |
+| 2. SDL_GPU cutover | 🟢 near-complete | Bridge removed 2026-05-22. Scissor (7d) + screenshot (7e) landed. **Remaining**: pixel_minimap still on SDL_Renderer (7b), loading-image GPU path disabled for crash (7c), SDL_Renderer not yet deletable (7f — atlas still needs SDL_Texture key). See "Phase 2 finish" table. |
+| 3. Snapshot + emitter collector + event queue | 🟢 shipped (single-thread) | `snapshot`, `emitter_collector`, `event_queue` all exist. Transient flashes WIRED: `explosion.cpp:1565,1683`, `weather.cpp:480`. **Not** on a dedicated thread (decision #14 overridden). `ranged.cpp` flash NOT wired. |
+| 4. SDF + transparency upload | 🟢 shipped (CPU BFS) | `sdf_pass.cpp` — CPU **Chebyshev BFS** (~17ms), not GPU JFA (decision #24 overridden). Uploaded as fragment storage buffer. |
+| 5/6. Direct shading + RGB + soft shadows | 🟢 shipped (inline) | Per-pixel emitter loop, RGB colour, shared `trace_shadow` SDF sphere-trace + world-locked Bayer dither. All in `SPRITE_FRAG_HLSL`. |
+| 7. Normal maps / Lambert relief | 🔴 absent | Hardcoded flat normal `(0,0,1)`; comment-only. `normal_gen` never created. |
+| 8. Sun + skylight + 24h LUT | 🟢 shipped (inline) | 24h keyframe LUT, sphere-trace sun shadow, sky-vis gate. **Weather multiplier absent.** |
+| 9. GI + AO | 🟡 GI shipped (CPU diffusion), AO absent | GI = CPU 2-pass wall-gated diffusion + `gi_strength` knob, NOT probe grid (decision #13 overridden). AO not built. |
+| 10–13. Volumetric / reflection / underwater / bloom+tonemap | 🔴 absent | None built. All require an HDR render target + post stack that does not exist yet. |
+| 14. Z-level 2.5D holes | 🟡 implicit | Per-z SDF + emitter z-filter handle cross-Z; no explicit `hole_up/down` upload. |
+| — Vision rework | 🟢 shipped (inline) | `plan_vision_rework.md` effectively done: vis-edge + radial falloff, memory desaturate-fade, night/day ambient floor (frag shader). |
+| — ImGui debug panel | 🟢 shipped (not in original plan) | F4 dev panel (`imgui_layer`), all tuning knobs live. |
 
 ### Phase 2 finish — remaining commits
 
@@ -25,11 +45,11 @@ each remaining draw site needs migration. Ordering forced by atlas dependency:
 | 2i-B-5 | ✅ landed | dynamic_atlas dual-back + cata_tiles `draw_sprite_at` unrotated path → tile_batcher + sdl_geometry rect → ui_batcher. Verified Win11 D3D12. Rotated sprites still fall through to legacy SDL_RenderTextureRotated. |
 | 2i-B-7 | ⏳ pending | Cleanup. **Cannot fully delete SDL_Renderer** until rotation lands on GPU. Smaller bounded steps: |
 |   2i-B-7a | ✅ landed | Added `rotation` field + 12 bytes padding to sprite_instance (struct now 64 B). sprite.vert.hlsl rotates the dst quad around its centre via cos/sin in radians. draw_sprite_at routes every rotation through the GPU path; legacy SDL_RenderTextureRotated remains only as the find_gpu_texture_full-miss fallback. Awaiting Win11 verify. |
-|   2i-B-7b | ⏳ | Migrate pixel_minimap → tile_batcher (~500 LOC). Cache textures on SDL_GPUTexture; per-pixel writes via SDL_UploadToGPUTexture sub-regions or compute. |
-|   2i-B-7c | ✅ landed | loading_image_cache holds an SDL_GPUTexture alongside the legacy SDL_Texture. draw_current_loading_image enqueues via render_state::queue_tile_sprite. Legacy RenderCopy stays as fallback when the upload misses. Awaiting Win11 verify. vehicle_preview / ui_manager clip-rect wrappers still pending — depend on 2i-B-7d. |
-|   2i-B-7d | ⏳ | Add scissor (clip rect) to sprite_batcher pipeline so clip wrappers can route through GPU. |
-|   2i-B-7e | ⏳ | Screenshot path: switch from SDL_RenderReadPixels(display_buffer) to swapchain readback via SDL_GPU copy pass. |
-|   2i-B-7f | ⏳ | Mechanical delete: SDL_Renderer_Ptr, static renderer, legacy_window, display_buffer, bridge_texture, set_displaybuffer_rendertarget(), sdl_font/sdl_geometry/dynamic_atlas .{h,cpp}, related CMake source list entries. |
+|   2i-B-7b | ⏳ | pixel_minimap NOT migrated + invisible: `render()` blits `main_tex` via `RenderCopy(renderer,…)` (`pixel_minimap.cpp:324`) to the no-op'd display_buffer target. The line-190 `queue_ui_rect` comment is stale (no such call); a May-22 GPU migration was reverted. Migrate to tile_batcher, or drop the minimap. |
+|   2i-B-7c | 🟡 partial | loading_image GPU upload built, but the enqueue path is `if(false && …)` "DIAG: disabled to isolate crash" (`loading_ui.cpp:398,420`); legacy `RenderCopy` is the live path. Root cause documented in `src/lighting/CLAUDE.md` (separate-CB barrier race). Re-enable = upload on the render CB or fence the copy CB. |
+|   2i-B-7d | ✅ landed | `sprite_batcher::set_scissor` + `SDL_SetGPUScissor` (`sprite_batcher.cpp:898-909,1067-1075`). Clip wrappers can route through GPU. |
+|   2i-B-7e | ✅ landed | `save_screenshot` uses SDL_GPU copy-pass readback, no `SDL_RenderReadPixels`/`display_buffer` (`sdltiles.cpp:3920-3960`). |
+|   2i-B-7f | ⏳ | Mechanical delete blocked. `SDL_Renderer_Ptr renderer` + `SDL_CreateRenderer` still live (`sdltiles.cpp:129,350,363`); `display_buffer` still referenced (`sdltiles.cpp:3781`) **despite memory claiming "7f Part A removed it" — memory stale**. `copy_surface_to_dynamic_atlas` still creates SDL_Textures used as the `find_gpu_texture_full` key → SDL_Renderer cannot die until the atlas switches to a pure GPU key. |
 
 Estimate: 6 small commits, ~−3000 LOC net once mechanical delete runs.
 Each step keeps the game playable: until 7f, the bridge is alive for
@@ -146,6 +166,58 @@ GPU equivalent: `SDL_GPUTexture` + `SDL_GPUTransferBuffer`. No render-target-int
 | 28 | Animated sprites | Sprite-batcher: instance buffer per layer, CPU computes frame index per anim tile per frame. Vehicle multi-part = many instances. Smoke writes both sprite-instance (faint base) + density texture (volumetric input). |
 | 29 | Shipping | Solo dev. No soak periods, no opt-in flags between phases. Each phase lands → use immediately. Phase 2 = hard cutover, no legacy renderer remains. |
 
+## Decisions superseded by implementation
+
+Three decisions locked in the original table were overridden in shipped code to
+ship the cheap version fast. **Grilled + resolved 2026-06-01** against a quality
+bar (bevy-magic-light-2d reference + observed artifacts): the cheap CPU GI/SDF
+produce a squarish penumbra and blocky bounce the reference does not. Perf is not
+the issue; **quality is** — so #13 and #24 are *retargeted* to GPU, #14 is
+ratified with a gate.
+
+| # | Locked choice | Shipped (cheap) | **Resolution (grilled)** |
+|---|---|---|---|
+| 13 | World-space probe-grid GI | CPU 2-pass wall-gated per-tile diffusion (a tile-res box blur — not light transport → blocky, grid-aligned bounce) | **RETARGET → Radiance Cascades** (Sannikov 2023; noise-free *without* temporal — fits the discrete tile-scroll camera, which would ghost under raymarch+temporal). Bilinear-Fix variant; port from a known-good open impl (Hybrid46/tlegoc); D3D12/shadercross smoke-test *before* building around it. Runs as fragment ping-pong on the RT backbone. |
+| 14 | Dedicated `std::thread` + double-buffered snapshot | Single-thread main collect; SDF/GI/vis rebuilt **every** `refresh_display` incl. UI-only redraws (`sdltiles.cpp:766-897`, no turn gate) | **RATIFY single-thread** (no observed hitches at play map size; a thread solves a problem we don't have) + **ADD dirty-gate**: key on `{turn, z, camera-origin}`, skip the rebuild + re-upload when unchanged; **bust the gate while the F4 panel is visible** so debug tuning stays realtime. F4 knobs are per-frame uniforms (outside the gated block) so they already stay live. |
+| 24 | GPU JFA SDF, R16F | CPU **Chebyshev** BFS (chessboard metric → square isolines → squarish penumbra; memory file admits it) | **RETARGET → GPU JFA SDF** (Euclidean → round isolines → smooth penumbra). Fragment ping-pong on the RT backbone. The inline shader already *samples* the SDF, so shadows improve with **no shader change** once the buffer is Euclidean. (CPU Euclidean-DT quick-win was offered and declined — going straight to GPU JFA.) |
+
+**Why CPU at all (root cause):** no compute pipeline exists (`shader_compiler`
+supports only VERTEX/FRAGMENT) and no multi-pass RT wiring was live; CPU BFS +
+box-diffusion were the expedient stand-ins against the one graphics pipeline.
+**Compute is not required** to fix this — JFA and Radiance Cascades both run as
+**fragment ping-pong over render targets**, and the RT machinery is half-built
+(`ui_composite_target` + the stubbed `sprite_batcher.color_target_format`).
+
+## Architecture pivot (single-shader, CPU-fed) — supersedes the 16-pass design
+
+The original §Architecture below specified ~16 discrete GPU passes with one
+file each. **That pipeline was not built.** Instead, every cheap lighting effect
+lives **inline in `SPRITE_FRAG_HLSL`** (`src/lighting/sprite_batcher.cpp`), fed
+by 5 CPU-built fragment storage buffers:
+
+| Slot | Buffer | Built by | Carries |
+|---|---|---|---|
+| 0 | Emitters | `emitter_collector` | `gpu_emitter[]` (pos, rgb, radius, falloff; `cone_*` unused) |
+| 1 | SDF | `sdf_pass` (CPU Chebyshev BFS) | per-tile distance, bilinear-sampled |
+| 2 | SkyVis | `sdf_pass` | per-tile `outside_cache` (sun/sky gate) |
+| 3 | Indirect | CPU diffusion (in `refresh_display` SDF block) | per-tile RGB bounce |
+| 4 | Vis | snapshot | per-tile `seen_cache` (≥0 live, <0 memorized) |
+
+Inline in the fragment shader today: direct RGB emitter shading, soft SDF
+shadows (`trace_shadow` sphere-trace, shared emitter+sun) + world-locked Bayer
+dither, sun/sky 24h LUT, fake 1-bounce GI, and the full vision rework. Tuning
+knobs live in `debug_params` (96 B) / `light_params` / `sun_params`, driven by
+the **F4 ImGui panel** (`imgui_layer`).
+
+**Forced inflection for the rest of the roadmap:** everything past normal maps
+(bloom, AgX tonemap, LUT, volumetric, underwater, reflection) needs the lit
+result in a sampleable **RGBA16F render target**, not direct-to-swapchain. The
+original §Architecture composite/post passes assumed that target. It still
+doesn't exist — but `ui_composite_target.{h,cpp}` already provides reusable
+offscreen `COLOR_TARGET` + dirty-tracking machinery to build it from. The old
+16-pass table below is **retained as the design reference for that post stack**,
+not as the literal plan.
+
 ## Architecture
 
 ### CPU side
@@ -155,6 +227,14 @@ GPU equivalent: `SDL_GPUTexture` + `SDL_GPUTransferBuffer`. No render-target-int
 - **Lighting event queue** (`src/lighting/event_queue.{h,cpp}`, new) — sim pushes transient flashes (`g->lighting.push_flash(pos, rgb, intensity, ms)`). Wire ~20 call sites: `explosion.cpp`, `ranged.cpp`, weather lightning, electrical sparks.
 
 ### GPU side — SDL_GPU pipeline
+
+> **ORIGINAL DESIGN — superseded; retained as the target for the post stack
+> (phases 11–14).** Passes 1, 4, 6b are shipped inline in `SPRITE_FRAG_HLSL`
+> (not as separate passes); 5, 7, 9, 10, 11, 13, 14 are not built. Shaders are
+> compiled at **runtime** via SDL_shadercross from HLSL embedded in
+> `sprite_batcher.cpp` + `data/shaders/lighting/src/*.hlsl`; **no `.spv` is
+> shipped** (the "pre-compiled .spv" line below never happened).
+
 Single device. All shaders SPIR-V, compiled via SDL_shadercross at build, pre-compiled `.spv` shipped.
 
 | # | Pass | Output | Input / Notes |
@@ -213,48 +293,87 @@ Target: 50-60 Hz on RTX 3060 baseline at MED. ULTRA needs 4070+/M2+. Volumetric 
 - Item JSON loaders: new optional `light_shape` field.
 - Tile JSON loaders: new optional `tile_reflectivity`, material flag mappings.
 
-## New files
+## New files — planned vs actual
 
+**Created and shipping:**
 - `src/lighting/snapshot.{h,cpp}` — main-thread frame-start handle collection.
-- `src/lighting/emitter_collector.{h,cpp}` — worker thread, SSBO build.
-- `src/lighting/event_queue.{h,cpp}` — transient flashes.
+- `src/lighting/emitter_collector.{h,cpp}` — SSBO build (single-thread, not worker).
+- `src/lighting/event_queue.{h,cpp}` — transient flashes (wired: explosion, weather).
 - `src/lighting/gpu_device.{h,cpp}` — SDL_GPU init, swapchain.
-- `src/lighting/sprite_batcher.{h,cpp}` — tile/vehicle/UI instance buffers.
-- `src/lighting/normal_gen.{h,cpp}` — Sobel + edge-fade, content-hash cache.
-- `src/lighting/sdf_pass.{h,cpp}` — JFA.
-- `src/lighting/forward_plus.{h,cpp}` — light tile-binning.
-- `src/lighting/sun_sky_pass.{h,cpp}` — directional sun + skylight + 24h LUT.
-- `src/lighting/direct_pass.{h,cpp}` — direct shading + soft shadows + normals.
-- `src/lighting/gi_pass.{h,cpp}` — probe grid + sample.
-- `src/lighting/ao_pass.{h,cpp}`.
-- `src/lighting/volumetric_pass.{h,cpp}`.
-- `src/lighting/reflection_pass.{h,cpp}`.
-- `src/lighting/composite_pass.{h,cpp}`.
-- `src/lighting/underwater_pass.{h,cpp}`.
-- `src/lighting/post_pass.{h,cpp}` — bloom + tonemap + LUT + dust.
-- `data/shaders/lighting/*.{vert,frag,comp}` + pre-compiled `*.spv`.
-- `tests/lighting_emitter_test.cpp` — snapshot + collector parity.
-- `tests/lighting_gpu_test.cpp` — headless SDL_GPU golden-image regression.
-- `tests/lighting_bench.cpp` — frame budget validation.
+- `src/lighting/sprite_batcher.{h,cpp}` — instance batcher **+ all inline lighting** (`SPRITE_FRAG_HLSL`).
+- `src/lighting/sdf_pass.{h,cpp}` — **CPU Chebyshev BFS** (not JFA) + SkyVis.
+- `data/shaders/lighting/src/sprite.{vert,frag}.hlsl` — HLSL sources (also embedded in sprite_batcher.cpp). **No `.spv` shipped** — runtime-compiled.
+
+**Created, not in original plan** (infrastructure the pivot required):
+- `render_state.{h,cpp}` — singleton owning the whole GPU stack.
+- `gpu_atlas.{h,cpp}`, `font_engine.{h,cpp}`, `gpu_geometry.{h,cpp}`, `shader_compiler.{h,cpp}`.
+- `gpu_emitter.h` — emitter struct + shape enum.
+- `imgui_layer.{h,cpp}` — F4 dev/debug panel.
+- `ui_composite_target.{h,cpp}` — offscreen UI RT (reusable HDR-RT machinery).
+- `ui_adaptor_draw_slices.h` — retained per-adaptor draw slices (partial-redraw fix).
+
+**Planned, never created** (folded into the fragment shader or deferred to the post stack):
+- `normal_gen` (deferred — Bucket A), `forward_plus`, `sun_sky_pass`, `direct_pass`, `gi_pass`, `ao_pass`, `volumetric_pass`, `reflection_pass`, `composite_pass`, `underwater_pass`, `post_pass`.
+
+**Tests — not created:** `tests/lighting_emitter_test.cpp`, `lighting_gpu_test.cpp`, `lighting_bench.cpp`. (Verification has been manual + in-game so far.)
 
 ## Phasing
 
-Solo dev → each phase lands and is used immediately. Phase 2 is hard cutover; no legacy renderer survives.
+**Done (1–8 + GI + vision, see Status table):** curses/Android removal, SDL_GPU
+cutover (bar minimap/loading/renderer-delete), emitter collector + event queue,
+CPU SDF, inline direct shading + soft shadows, sun/sky 24h, fake GI, vision
+rework, ImGui panel.
 
-1. **Curses + Android removal** ✅ — done in `e96086b658`.
-2. **SDL_GPU device + sprite batcher** — replace SDL_Renderer end-to-end w/ SDL_GPU instance batcher for tiles + vehicles + animated frames + UI. Pixel-equivalent parity gate vs legacy render.
-3. **Snapshot + emitter collector + event queue** — own thread, SSBO upload. No shader use yet. Parity vs `lightmap.cpp` enumeration.
-4. **SDF (JFA) + transparency upload** — distance field pass + density texture array. Visualized as debug overlay.
-5. **Forward+ direct shading + RGB emitters + emissive auto-detect** — replaces last vestige of legacy color-mod. First visible win: smooth per-pixel light + colored lights + bloomable emitters.
-6. **Soft shadows (SDF ray-march, penumbra)** — Stoneshard signature look.
-7. **Normal-map auto-gen + per-pixel Lambert + `_n.png` override** — tile relief.
-8. **Sun + skylight + 24h LUT + weather mult** — outdoor scenes come alive.
-9. **GI probe grid + AO** — depth, ambient occlusion in corners.
-10. **Volumetric (smoke, god-rays, outdoor fog)** — atmosphere.
-11. **Reflection (water + wet floor + rain)**.
-12. **Underwater post + water-column attenuation**.
-13. **Bloom + AgX tonemap + per-tileset LUT + dust** — final polish.
-14. **Z-level 2.5D holes** — `hole_up/down` upload, shader cross-Z sampling.
+### Re-planned roadmap for what remains
+
+Split by the **forced HDR render-target inflection**: everything past normal
+maps needs the lit result in a sampleable RGBA16F target, not direct-to-swapchain.
+
+**Bucket A — stays inline (no new render target):**
+- **A1. Normal maps + per-pixel Lambert** — Sobel auto-gen + `_n.png` override, uploaded as a normal atlas (NOT the planned `normal_gen` pass; sample alongside the albedo atlas). Replaces the hardcoded flat normal. *First win, zero infra.*
+- **A2. Cone / directional emitters** — wire the already-present-but-unused `gpu_emitter.cone_dir` / `cone_half_angle`; flashlights/headlights stop being omni.
+- **A3. Weather multiplier** on sun/sky intensity (currently absent).
+- **A4. Cheap inline AO** — SDF + normal short cone-trace, a few taps.
+
+**Bucket B — HDR-RT + fullscreen post backbone (one-time infra, unblocks all of C):**
+- Add an offscreen RGBA16F scene target reusing `ui_composite_target`'s `COLOR_TARGET` machinery; render the existing sprite/lighting pass into it; add a fullscreen post pass sampling it to the swapchain. This is the prerequisite the old §Architecture composite/post passes assumed.
+
+**Bucket C — fullscreen post stages built on B:**
+- **C1. Bloom + AgX tonemap + per-tileset LUT** (+ optional dust).
+- **C2. Volumetric / god-rays** — half-res ray-march + bilateral upsample.
+- **C3. Reflection** — water/wet-floor/rain.
+- **C4. Underwater post** + water-column attenuation.
+- Re-introduce the `LIGHTING_VOLUMETRIC_TIER` / `LIGHTING_TONEMAP` / `LIGHTING_GI_QUALITY` / `LIGHTING_DUST` options here (none exist in `options.cpp` yet).
+
+### Confirmed sequence (grilled 2026-06-01) — backbone-first
+
+Backbone-first, **not** normals-first: GPU JFA (#24) and Radiance Cascades (#13)
+both live on the RT backbone, so the backbone is the prerequisite for GI/shadow
+*quality*, not merely for bloom.
+
+0. **Pre-backbone cleanup (one bundled commit, before B).** Same code region, all prerequisites:
+   - Extract the `refresh_display` SDF/GI/vis CPU-build block (`sdltiles.cpp:766-897`) → `lighting/frame_build.{h,cpp}` (pulls lighting out of the windowing file).
+   - **Dirty-gate** that block: key `{turn, z, camera-origin}`, skip rebuild + re-upload when unchanged; **bust while F4 panel visible**.
+   - **Single-source the shaders**: load the live HLSL from external `.hlsl` at runtime; delete the dead `data/shaders/lighting/src/*.hlsl` duplicates and the embedded string. (−~400 lines from `sprite_batcher.cpp`; establishes the file-based pattern before authoring B/JFA/RC shaders.)
+1. **B — RT backbone + AgX tonemap (mandatory together).** RGBA16F scene target reusing `ui_composite_target` + the stubbed `sprite_batcher.color_target_format`; fullscreen tonemap pass to swapchain. *HDR without a tonemap clips/looks washed — tonemap is not optional polish.*
+2. **GPU JFA SDF (#24).** Fragment ping-pong on the backbone. Inline shadows get round penumbra for free (shader already samples the SDF).
+3. **Radiance Cascades GI (#13).** Bilinear-Fix; replaces the CPU diffusion. Headline quality win.
+4. **Bloom + per-tileset LUT.** Now that tonemap exists.
+5. **Inline Bucket A** — normals (A1), cone emitters (A2), weather (A3), cheap AO (A4). Backbone-independent; lower priority than the GI core.
+6. **C2 volumetric → C3 reflection → C4 underwater.**
+
+**Cross-cutting, independent, do whenever:** wire `ranged.cpp` muzzle-flash into the event queue; finish Phase 2 tail (minimap 7b, loading-image 7c, SDL_Renderer delete 7f).
+
+### Architecture / ergonomics principles (dev + AI friendly)
+
+Driven by file-size reality: `lighting/` is 28 files, median ~110 lines —
+already right-sized. `cata_tiles.cpp` is **7169** lines, `sdltiles.cpp` **4055**.
+
+- **A GPU stage earns its own file/class when it needs its own render target or is inherently multi-pass** (JFA, RC, tonemap, bloom, volumetric, reflection, underwater → each `{name}_pass.{h,cpp}` + `{name}.frag.hlsl`). **Cheap per-fragment shading stays inline** in the forward sprite shader (direct, shadow-sample, sun dot, vision, tone grade) — deferring it would only add RT bandwidth. Split at RT boundaries, not maximally — the original 16-pass design was over-decomposed for a 2D tile game.
+- **Right-size, don't minimize.** ~150–500 line cohesive modules. Many-tiny-files is a context anti-pattern (chase-hell); 1000+ god-files are load-hell. Don't split the existing `lighting/` files.
+- **Co-locate lighting in the module.** The real context win is *extracting* lighting out of `cata_tiles.cpp` / `sdltiles.cpp` (step 0 starts this), not splitting `lighting/`. Goal: "to work on lighting, read `src/lighting/`."
+- **Watch, don't act:** `render_state.cpp` (651) is the forming god-object (device + 3 queues + atlas + fonts + geometry + sampler); extract queue mgmt if it crosses ~900. As the forward `.frag.hlsl` grows with JFA/RC sampling, split *the shader* via `#include` (common + lighting), not the `.cpp`.
+- **One source of truth** (kills the dead-shader-file trap) + **keep `src/lighting/CLAUDE.md` current** (the per-module map that lets an AI skip the giants — currently stale on minimap/display_buffer).
 
 ## Risks / unresolved
 
@@ -264,6 +383,8 @@ Solo dev → each phase lands and is used immediately. Phase 2 is hard cutover; 
 4. **Soft shadow penumbra max radius** — too large → noise, too small → hard-edged. Empirical tune in phase 6.
 5. **Lighting event queue back-pressure** — many simultaneous explosions could blow queue. Cap size, drop oldest.
 6. **Memorized state save format** — unchanged; `memorized_terrain` already in save. Shader reads existing `lit_level::MEMORIZED`.
+7. **Stale memory files** (flag, not a fix for this doc): `project_rendering_pipeline.md` + `src/lighting/CLAUDE.md` are now wrong on (a) pixel_minimap ("stubbed no-op" — actually still uses SDL_Renderer), (b) "7f Part A removed `display_buffer`" (still referenced at `sdltiles.cpp:3781`). Refresh those in a separate pass.
+8. **Vision rework** (`plan_vision_rework.md`) is effectively shipped inline in `SPRITE_FRAG_HLSL` (vis-edge + radial falloff, memory desaturate-fade, night/day ambient floor). That plan can be marked done and folded here.
 
 ## Verification
 

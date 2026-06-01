@@ -111,8 +111,9 @@ Fragment shader (`SPRITE_FRAG_HLSL` in `sprite_batcher.cpp`):
   the pattern sticks to terrain (no shimmer on scroll). Quantises ONLY the
   dynamic light (emitter+sky+sun) into `dither_bands` levels; **ambient floor is
   added AFTER** (dithering the floor makes dark areas sparkle). Mean-preserving.
-- **Knobs** in `debug_params` (now **48 bytes**, was 32): `dither_amt` (0=off),
-  `dither_bands`. Widget: Shift+F8/F9 = strength, Ctrl+F8/F9 = bands.
+- **Knobs** in `debug_params` (**96 bytes** as of 2026-06-01 — grew from 48 when
+  vision + tone-grade knobs were added; `static_assert` enforces 96): `dither_amt`
+  (0=off), `dither_bands`. Widget: Shift+F8/F9 = strength, Ctrl+F8/F9 = bands.
 
 ## 1-bounce indirect light / fake GI (2026-05-30)
 
@@ -139,7 +140,8 @@ SkyVis storage-buffer path.
   `p-0.5` centre convention (same as `sdf_bilinear`). Added to `dyn` before the
   dither: `dyn += gi_strength * indirect_bilinear(world_pos)`, gated
   `gi_strength>0.001 && sdf_map_w>0`.
-- **Knob**: `debug_params.gi_strength` (repurposed `dp_pad0`; struct still 48B).
+- **Knob**: `debug_params.gi_strength` (repurposed `dp_pad0`; struct now 96B after
+  vision/tone-grade knobs).
   Widget Alt+F8/F9. `gi_strength=0` → identical to pre-GI.
 - Expectation: colored bounce is vivid near fire / dawn-dusk, grey in white
   light (`light_color_cache` is hue-only, zero for uncolored sources). Intensity
@@ -147,6 +149,21 @@ SkyVis storage-buffer path.
 - **Deferred**: SDF/skyvis/indirect rebuild every refresh_display (incl. UI-only
   redraws). A dirty-gate (rebuild only on turn change) is the right mitigation —
   separate PR.
+
+## Intended direction (grilled 2026-06-01 — see `LIGHTING_REWORK_PLAN.md`)
+
+The CPU **Chebyshev BFS SDF** and CPU **per-tile diffusion GI** above are
+**interim, not the design target** — they produce squarish penumbra + blocky
+bounce. Approved retarget: **GPU JFA SDF** (Euclidean → round) and **Radiance
+Cascades GI** (Bilinear-Fix), both as fragment ping-pong on a new **RGBA16F RT
+backbone** (reuse `ui_composite_target` machinery + the stubbed
+`sprite_batcher.color_target_format`). Sequencing: a pre-backbone cleanup commit
+first — extract the `refresh_display` SDF/GI/vis block → `lighting/frame_build`,
+add the dirty-gate (busted while F4 panel visible), and single-source the shaders
+(externalize the live HLSL, delete the dead `data/shaders/lighting/src/*.hlsl`
+copies). Then backbone + AgX tonemap (mandatory together) → JFA → RC → bloom/LUT.
+Single-thread emitter collect is ratified (no dedicated thread). Full rationale +
+roadmap in `LIGHTING_REWORK_PLAN.md`.
 
 ## Known invariants & gotchas
 
@@ -171,10 +188,11 @@ Both run INSIDE a `redraw_invalidated()` cycle. `clear_frame_queues()` already r
 
 | Sub | State | Notes |
 |---|---|---|
-| 7b pixel_minimap | ⏳ stubbed as no-op | Migrate to GPU or drop entirely |
-| 7d scissor/clip | ⏳ | `vehicle_preview` and UI clip-rect wrappers need scissor pass in sprite_batcher |
-| 7e screenshot | ⏳ | Switch from `SDL_RenderReadPixels(display_buffer)` to SDL_GPU copy pass on swapchain |
-| 7f mechanical delete | ⏳ | Remove `SDL_Renderer_Ptr`, `legacy_window`, `display_buffer`, `bridge_*`, `set_displaybuffer_rendertarget()` |
+| 7b pixel_minimap | ⏳ NOT migrated, invisible | `render()` blits `main_tex` via `RenderCopy(renderer,…)` (pixel_minimap.cpp:324) to the no-op'd display_buffer target → invisible. The line-190 `queue_ui_rect` comment is stale (no such call); a May-22 GPU migration was reverted. Migrate or drop. |
+| 7c loading image | 🟡 GPU path disabled | `if(false && …)` "DIAG: disabled to isolate crash" (loading_ui.cpp:398); legacy `RenderCopy` live but dead. Re-enable = upload on render CB / fence the copy CB. |
+| 7d scissor/clip | ✅ done | `sprite_batcher::set_scissor` + `SDL_SetGPUScissor`. |
+| 7e screenshot | ✅ done | `save_screenshot` GPU copy-pass readback (sdltiles.cpp:3920-3960); no `SDL_RenderReadPixels`. |
+| 7f mechanical delete | ⏳ | `SDL_Renderer_Ptr renderer` + `SDL_CreateRenderer` still live (sdltiles.cpp:129,350,363); `set_displaybuffer_rendertarget()` is no-op'd `{}` but `display_buffer` refs remain (sdltiles.cpp:3781) — **not fully removed** (corrects the "7f Part A removed display_buffer" note below). Blocked on atlas pure-GPU key. |
 | accumulation texture | future | GPU-side "previous frame" buffer to fix partial-redraw flicker |
 
 ---
@@ -195,7 +213,7 @@ Every item below has bitten us and costs 1+ build cycles. Check here first.
 | `effect_onfire` (extern) | `static const efftype_id my_effect_onfire("onfire")` | It's a translation-unit static in `lightmap.cpp`. Define a local copy. |
 | `std::ranges::for_each(field, lambda)` | plain range-based `for` | MSVC rejects `std::ranges::for_each` on `field` objects; use `for(const auto& [ftype, fentry] : field)`. |
 | `get_option<int>("MAPSIZE")` | doesn't exist | The option is named differently (or doesn't exist). Use `get_map().getmapsize()`. |
-| `display_buffer` (removed) | `get_sdl_window_size()` | `display_buffer` was deleted in 2i-B-7f Part A. Callers of `get_sdl_display_buffer_size()` → use `get_sdl_window_size()`. |
+| `display_buffer` (dead, not deleted) | `get_sdl_window_size()` | display_buffer rendertarget plumbing is no-op'd (`set_displaybuffer_rendertarget(){}`) but the symbol + refs remain (sdltiles.cpp:3781) — NOT deleted. Still: callers of `get_sdl_display_buffer_size()` → use `get_sdl_window_size()`. |
 
 ### `dbg` macro — lighting/ files must define it themselves
 
