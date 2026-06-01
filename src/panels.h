@@ -44,6 +44,9 @@ class window_panel
 
         std::function<void( avatar &, const catacurses::window & )> draw;
         std::function<bool()> render;
+        // Optional content-driven height. When set, get_height() returns this instead of the
+        // static height, letting a panel shrink/grow to its actual rendered content.
+        std::function<int()> dynamic_height;
 
         int get_height() const;
         int get_width() const;

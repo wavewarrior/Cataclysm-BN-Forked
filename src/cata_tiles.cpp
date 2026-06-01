@@ -3653,13 +3653,13 @@ void cata_tiles::draw( point dest, const tripoint_bub_ms &center, int width, int
     // to total scalar light so the effect is subtle under bright ambient and
     // vivid in darkness. Disabled in isometric mode.
     if( !iso_mode ) {
-        for( int z = min_z; z <= center.z; ++z ) {
+        for( int z = min_z; z <= center.z(); ++z ) {
             const auto &zlev_cache = here.access_cache( z );
             if( !zlev_cache.has_colored_lights ) {
                 continue;
             }
             for( const tile_render_info &p : draw_points ) {
-                if( p.pos.z != z ) {
+                if( p.pos.z() != z ) {
                     continue;
                 }
                 // Only visible sprite tiles can receive a tint.
@@ -3668,7 +3668,7 @@ void cata_tiles::draw( point dest, const tripoint_bub_ms &center, int width, int
                     continue;
                 }
                 const light_color_rgb &lc = zlev_cache.light_color_cache[
-                    zlev_cache.idx( p.pos.x, p.pos.y ) ];
+                    zlev_cache.idx( p.pos.x(), p.pos.y() ) ];
                 if( !lc.is_colored() ) {
                     continue;
                 }
@@ -3682,7 +3682,7 @@ void cata_tiles::draw( point dest, const tripoint_bub_ms &center, int width, int
                     continue; // pure white light, no tint
                 }
                 // Alpha: saturated energy relative to total scalar light at this tile.
-                const four_quadrants &lm_val = zlev_cache.lm[zlev_cache.idx( p.pos.x, p.pos.y )];
+                const four_quadrants &lm_val = zlev_cache.lm[zlev_cache.idx( p.pos.x(), p.pos.y() )];
                 const float scalar = lm_val.max();
                 const float ratio = scalar > 0.1f ? std::min( 1.0f, sat_mag / scalar ) : 0.0f;
                 const Uint8 alpha = static_cast<Uint8>( ratio * 80.0f );
@@ -3710,21 +3710,21 @@ void cata_tiles::draw( point dest, const tripoint_bub_ms &center, int width, int
 
     // ── Dawn/dusk warm color temperature overlay ────────────────────────────
     // During twilight, render a warm hue shift on outside tiles that have sunlight.
-    if( ( is_dusk( calendar::turn ) || is_dawn( calendar::turn ) ) && center.z >= 0 ) {
+    if( ( is_dusk( calendar::turn ) || is_dawn( calendar::turn ) ) && center.z() >= 0 ) {
         const light_color_rgb ddc = dawn_dusk_color_for_lightmap( g->get_dimension_prefix() );
         if( ddc.is_colored() ) {
-            for( int z = min_z; z <= center.z; ++z ) {
+            for( int z = min_z; z <= center.z(); ++z ) {
                 const auto &zlev_cache = here.access_cache( z );
                 if( !zlev_cache.has_colored_lights ) {
                     continue;
                 }
                 SetRenderDrawBlendMode( renderer, SDL_BLENDMODE_BLEND );
                 for( const tile_render_info &p : draw_points ) {
-                    if( p.pos.z != z ) {
+                    if( p.pos.z() != z ) {
                         continue;
                     }
                     // Only outside tiles with sunlight get the dawn/dusk tint.
-                    if( !zlev_cache.outside_cache[zlev_cache.idx( p.pos.x, p.pos.y )] ) {
+                    if( !zlev_cache.outside_cache[zlev_cache.idx( p.pos.x(), p.pos.y() )] ) {
                         continue;
                     }
                     const point screen = player_to_screen( p.pos.xy() );
@@ -4468,9 +4468,9 @@ bool cata_tiles::draw_from_id_string(
         && tile.category != C_OVERMAP_TERRAIN
         && g != nullptr ) {
         const map &here = get_map();
-        if( here.inbounds( tripoint( pos.x, pos.y, pos.z ) ) ) {
-            const level_cache &mc = here.access_cache( pos.z );
-            const int idx = mc.idx( pos.x, pos.y );
+        if( here.inbounds( pos ) ) {
+            const level_cache &mc = here.access_cache( pos.z() );
+            const int idx = mc.idx( pos.x(), pos.y() );
             const float lum = mc.lm[idx].max();
             if( lum > 0.001f ) {
                 // Tile IS lit by CPU lightmap → let GPU emitters drive brightness.
@@ -4487,7 +4487,7 @@ bool cata_tiles::draw_from_id_string(
     // mem_dim → persists, never black). 0 = normal tile (no fade).
     gpu_light_mul = 0.0f;
     if( ll == lit_level::MEMORIZED && g != nullptr ) {
-        gpu_light_mul = -static_cast<float>( trig_dist( g->u.pos(), pos ) );
+        gpu_light_mul = -static_cast<float>( trig_dist( g->u.bub_pos(), pos ) );
     }
 
     //draw it!

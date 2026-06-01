@@ -630,7 +630,7 @@ static void draw_lighting_dev_ui()
                      s_emo.screen_w, s_emo.screen_h, tp );
 
         const size_t cache_sz = g
-                                ? get_map().access_cache( g->u.pos().z ).transparency_cache.size()
+                                ? get_map().access_cache( g->u.bub_pos().z() ).transparency_cache.size()
                                 : 0;
         const int wanted = g
                            ? ( get_map().getmapsize() * SEEX )
@@ -645,9 +645,9 @@ static void draw_lighting_dev_ui()
         if( g && cache_sz > 0 ) {
             map &mm = get_map();
             const int H = mm.getmapsize() * SEEY;
-            const auto &tc = mm.access_cache( g->u.pos().z ).transparency_cache;
-            const int px = g->u.pos().x;
-            const int py = g->u.pos().y;
+            const auto &tc = mm.access_cache( g->u.bub_pos().z() ).transparency_cache;
+            const int px = g->u.bub_pos().x();
+            const int py = g->u.bub_pos().y();
             auto T = [&]( int x, int y ) -> float {
                 const int i = x * H + y;
                 return ( i >= 0 && i < static_cast<int>( tc.size() ) ) ? tc[i] : -1.f;
@@ -765,7 +765,7 @@ void refresh_display()
         int sdf_runtime_h = 0;
         if( g && world_generator && world_generator->active_world && rs.sdf().ready() ) {
             map &m = get_map(); // non-const for i_at etc.
-            const int zlev = g->u.pos().z;
+            const int zlev = g->u.bub_pos().z();
             const level_cache &mc = m.access_cache( zlev );
             const int mapsize = m.getmapsize();
             const int W = mapsize * SEEX;
@@ -884,7 +884,7 @@ void refresh_display()
             }
 
             // Snapshot for HUD: what's the SDF / transparency at the player tile?
-            const int pi = g->u.pos().x * H + g->u.pos().y;
+            const int pi = g->u.bub_pos().x() * H + g->u.bub_pos().y();
             if( pi >= 0 && pi < static_cast<int>( sdf.size() ) ) {
                 s_emo.sdf_at_player = sdf[pi];
                 dbg( DL::Debug ) << "sdf[player]: " << sdf[pi];
@@ -937,7 +937,7 @@ void refresh_display()
         in.tile_pixel_size = tilecontext
                              ? static_cast<float>( tilecontext->get_tile_width() )
                              : 32.0f;
-        in.z_level         = g ? static_cast<float>( g->u.pos().z ) : 0.0f;
+        in.z_level         = g ? static_cast<float>( g->u.bub_pos().z() ) : 0.0f;
         // Restored to 0.05 (was 0.5 as band-aid for stale D3D12 emitter
         // sampler issue — band-aid pre-dates the single-CB
         // flush_to_render_cb rewrite and may no longer be needed. If
@@ -951,7 +951,7 @@ void refresh_display()
         // decorative emitter coordinates stay consistent with the
         // screen-tile world_pos used by the background sprite.
         if( g && tilecontext && in.tile_pixel_size > 0.0f ) {
-            const point map_origin  = tilecontext->get_tile_map_origin();
+            const point map_origin  = tilecontext->get_tile_map_origin().raw();
             const point draw_offset = tilecontext->get_drawing_pixel_offset();
             in.camera_off_x = static_cast<float>( draw_offset.x ) / in.tile_pixel_size
                               - static_cast<float>( map_origin.x );
@@ -963,9 +963,9 @@ void refresh_display()
                 s_emo.tile_px   = in.tile_pixel_size;
                 s_emo.op_x      = static_cast<float>( draw_offset.x );
                 s_emo.op_y      = static_cast<float>( draw_offset.y );
-                s_emo.player_x  = g->u.pos().x;
-                s_emo.player_y  = g->u.pos().y;
-                s_emo.player_z  = g->u.pos().z;
+                s_emo.player_x  = g->u.bub_pos().x();
+                s_emo.player_y  = g->u.bub_pos().y();
+                s_emo.player_z  = g->u.bub_pos().z();
                 s_emo.screen_w  = static_cast<int>( ctx.swapchain_w );
                 s_emo.screen_h  = static_cast<int>( ctx.swapchain_h );
                 s_emo.map_origin_x = map_origin.x;
@@ -1010,8 +1010,8 @@ void refresh_display()
         // the shader world_pos space (= map tile index). Main menu (g==null)
         // leaves it at 0 with vis_radius gating on sdf_map_w>0 anyway.
         if( g ) {
-            in.debug.player_x = static_cast<float>( g->u.pos().x ) + 0.5f;
-            in.debug.player_y = static_cast<float>( g->u.pos().y ) + 0.5f;
+            in.debug.player_x = static_cast<float>( g->u.bub_pos().x() ) + 0.5f;
+            in.debug.player_y = static_cast<float>( g->u.bub_pos().y() ) + 0.5f;
         }
 
         // Debug: log emitter count, texture state, and first emitter data every ~120 frames.
@@ -3774,20 +3774,6 @@ auto get_sdl_window_size() -> point
 auto get_sdl_font_size() -> point
 {
     return point( fontwidth, fontheight );
-}
-
-void clear_sdl_display_buffer()
-{
-    if( !renderer || !display_buffer ) { return; }
-
-    SetRenderTarget( renderer, display_buffer );
-    ClearScreen();
-}
-
-void clear_sdl_display_buffer_before_redraw()
-{
-    clear_display_buffer_before_redraw = true;
-    reinitialize_framebuffer( true );
 }
 
 std::optional<tripoint_bub_ms> input_context::get_coordinates( const catacurses::window

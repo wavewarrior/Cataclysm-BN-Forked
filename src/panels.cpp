@@ -335,8 +335,22 @@ auto make_lua_widget_panel( const cata::lua_sidebar_widgets::widget_entry &widge
         }
         return should_render_lua_widget( *entry );
     };
-    return window_panel( draw_func, panel_name, widget.height, width, widget.default_toggle,
-                         render_func, widget.redraw_every_frame );
+    window_panel wp( draw_func, panel_name, widget.height, width, widget.default_toggle,
+                     render_func, widget.redraw_every_frame );
+    // Dynamic content height: size the panel to its actual rendered line count, collapsing
+    // unused rows. The declared height acts as the ceiling (mods declare a larger height to
+    // allow more lines). Stage 5's widget engine will unify this via get_wgt_height.
+    wp.dynamic_height = [widget_id, width]() -> int {
+        const auto *entry = cata::lua_sidebar_widgets::find_widget( widget_id );
+        if( entry == nullptr )
+        {
+            return 0;
+        }
+        const int ceiling = std::max( entry->height, 1 );
+        const auto lines = get_lua_widget_lines( *entry, width, ceiling );
+        return std::clamp( static_cast<int>( lines.size() ), 1, ceiling );
+    };
+    return wp;
 }
 } // namespace
 
@@ -385,6 +399,9 @@ static std::pair<nc_color, std::string> per_string( const avatar &p )
 
 int window_panel::get_height() const
 {
+    if( dynamic_height ) {
+        return dynamic_height();
+    }
     if( height != -1 ) {
         return height;
     } else if( pixel_minimap_option ) {
