@@ -10577,6 +10577,7 @@ level_cache::level_cache( int mx, int my )
       lm( static_cast<size_t>( mx * my ), four_quadrants( 0.0f ) ),
       sm( static_cast<size_t>( mx * my ), 0.0f ),
       light_source_buffer( static_cast<size_t>( mx * my ) ),
+      light_color_cache( static_cast<size_t>( mx * my ) ),
       outside_cache( static_cast<size_t>( mx * my ), '\0' ),
       sheltered_cache( static_cast<size_t>( mx * my ), '\0' ),
       angled_sunlight_cache( static_cast<size_t>( mx * my ), '\0' ),
