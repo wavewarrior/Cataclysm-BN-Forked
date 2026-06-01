@@ -24,7 +24,7 @@ struct SpriteInstance {
     float dst_x, dst_y, dst_w, dst_h;
     float src_u, src_v, src_uw, src_vh;
     float tint_r, tint_g, tint_b, tint_a;
-    float rotation, pad0, pad1, pad2;
+    float rotation, light_mul, pad1, pad2;
 };
 
 // Vertex storage slot 0: sprite instances
@@ -54,6 +54,7 @@ struct VS_OUT {
     float2 uv       : TEXCOORD0;
     float4 tint     : TEXCOORD1; // Phase 5 CPU lightmap tint (ambient floor)
     float2 world_pos: TEXCOORD2; // map tile coords for fragment per-pixel lighting
+    float  light_mul: TEXCOORD3; // memory-fade marker (<0 = -(dist); else no-op)
 };
 static const float2 quad_uv[6] = {
     float2(0.0,0.0), float2(1.0,0.0), float2(0.0,1.0),
@@ -87,6 +88,7 @@ VS_OUT main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
     o.uv        = float2(s.src_u + c.x * s.src_uw, s.src_v + c.y * s.src_vh);
     o.tint      = float4(s.tint_r, s.tint_g, s.tint_b, s.tint_a);
     o.world_pos = map_pos;
+    o.light_mul = s.light_mul;
     return o;
 }
 )HLSL";
@@ -136,6 +138,7 @@ StructuredBuffer<GpuEmitter> Emitters  : register(t1, space2);
 StructuredBuffer<float>      SdfBuf    : register(t2, space2);
 StructuredBuffer<float>      SkyVisBuf : register(t3, space2);
 StructuredBuffer<float>      IndirectBuf : register(t4, space2); // 1-bounce GI, 3 floats/tile RGB
+StructuredBuffer<float>      VisBuf      : register(t5, space2); // per-tile visibility (>=0 live, <0 memory)
 cbuffer LightParams : register(b0, space3) {
     float tile_pixel_size; float current_z;
     uint  emitter_count;   float ambient;
@@ -161,6 +164,18 @@ cbuffer DebugParams : register(b2, space3) {
     float dither_amt;          // 0=smooth .. 1=full ordered dither
     float dither_bands;        // quantisation levels for the dither (e.g. 6)
     float gi_strength;         // 1-bounce indirect light multiplier (0=off)
+    float vis_curve;           // vision-edge falloff exponent (0=off → no falloff)
+    float mem_dim;             // memorized-tile brightness floor
+    float mem_desat;           // memorized-tile desaturation 0..1
+    float night_floor;         // ambient floor at night (sun_intensity=0)
+    float day_floor;           // ambient floor at noon  (sun_intensity=1)
+    float grade_desat;         // tone grade: 0=full colour, 1=greyscale
+    float grade_cool;          // tone grade: blend toward cool teal tint
+    float grade_bright;        // tone grade: brightness multiplier (lit world tiles)
+    float vis_radius;          // radial player-distance falloff radius (tiles; 0=off)
+    float player_x;            // player map-tile centre x (radial origin)
+    float player_y;            // player map-tile centre y
+    float mem_radius;          // memory distance-fade scale in tiles (effect 3)
     float dp_pad1;
     float dp_pad2;
 };
@@ -169,6 +184,7 @@ struct VS_OUT {
     float2 uv       : TEXCOORD0;
     float4 tint     : TEXCOORD1;
     float2 world_pos: TEXCOORD2;
+    float  light_mul: TEXCOORD3; // memory-fade marker (<0 = -(dist); else no-op)
 };
 // Clamped raw SDF fetch. SdfBuf is x-major (sdf[x*H+y]).
 float sdf_texel(int x, int y) {
@@ -218,6 +234,28 @@ float3 indirect_bilinear(float2 p) {
     const float3 b = indirect_texel(x0 + 1, y0    );
     const float3 c = indirect_texel(x0,     y0 + 1);
     const float3 d = indirect_texel(x0 + 1, y0 + 1);
+    return lerp(lerp(a, b, w.x), lerp(c, d, w.x), w.y);
+}
+// Per-tile LIVE visibility (1 float/tile, x-major). VisBuf[i] is raw
+// max(seen_cache, camera_cache) in [0,1]; 0 = not currently visible.
+float vis_texel(int x, int y) {
+    x = clamp(x, 0, (int)sdf_map_w - 1);
+    y = clamp(y, 0, (int)sdf_map_h - 1);
+    return VisBuf[x * (int)sdf_map_h + y];
+}
+// Bilinear live visibility. Taps clamped to max(0, .) defensively. Same
+// p-0.5 tile-centre convention as sdf_bilinear (keeps the falloff glued to
+// tile centres; no half-tile shift).
+float vis_bilinear(float2 p) {
+    const float2 sp = p - 0.5;
+    const float2 fp = floor(sp);
+    const int   x0  = (int)fp.x;
+    const int   y0  = (int)fp.y;
+    const float2 w  = sp - fp;
+    const float a = max(0.0, vis_texel(x0,     y0    ));
+    const float b = max(0.0, vis_texel(x0 + 1, y0    ));
+    const float c = max(0.0, vis_texel(x0,     y0 + 1));
+    const float d = max(0.0, vis_texel(x0 + 1, y0 + 1));
     return lerp(lerp(a, b, w.x), lerp(c, d, w.x), w.y);
 }
 // Shared soft-shadow sphere trace (Inigo Quilez cone ratio). Used by BOTH
@@ -317,7 +355,15 @@ float4 main(VS_OUT i) : SV_Target0 {
     sun_contrib   *= sun_scale;
     sky_contrib   *= sky_scale;
 
-    const float3 ambient_v = float3(ambient, ambient, ambient);
+    // Ambient floor. In-game (sdf_map_w>0) it auto-tracks time-of-day:
+    // lerp(night_floor, day_floor, sun_intensity) → darker, more immersive
+    // nights (effect 4). UI / main menu (no world) keep the CPU `ambient`
+    // uniform so backdrops/text are unaffected. night_floor==day_floor
+    // disables the day/night swing (bisect).
+    const float amb_floor = (sdf_map_w > 0u)
+                            ? lerp(night_floor, day_floor, saturate(sun_intensity))
+                            : ambient;
+    const float3 ambient_v = float3(amb_floor, amb_floor, amb_floor);
 
     // Multi-band ordered (Bayer) dither, world-locked. Quantise ONLY the
     // dynamic light (emitter + sky + sun) into `dither_bands` levels and
@@ -357,6 +403,45 @@ float4 main(VS_OUT i) : SV_Target0 {
     // tinted main-menu blue backdrop — emitter_count==0 segments still
     // short-circuit, so HUD/font segments stay untouched.
     const float dbg_tint_sum = i.tint.r + i.tint.g + i.tint.b;
+
+    // Vision falloff (Stoneshard-style soft edge + radial darkening). Gated to
+    // game tiles (tint≈0) so UI/HUD glyphs are never darkened, and to
+    // sdf_map_w>0 (no world → main menu skips). vis_curve>1 steepens the edge;
+    // Vision + Stoneshard tone grade — LIT world tiles only (gpu_light==0 →
+    // tint≈0). UI/HUD (tint>0) and memory/dark tiles (tint=1.0) are untouched.
+    // Each sub-effect disables at its off-value for live bisect.
+    if(sdf_map_w > 0u && dbg_tint_sum < 0.01) {
+        // (a) Vision-edge falloff from seen_cache (softens the rim).
+        if(vis_curve > 0.0001) {
+            final_rgb *= pow(saturate(vis_bilinear(i.world_pos)), vis_curve);
+        }
+        // (b) Radial player-distance falloff — the torch-bubble gradient that
+        // seen_cache can't give (it's saturated ≈1 across the open interior).
+        // Darkens continuously with distance from the player. vis_radius=0=off.
+        if(vis_radius > 0.01) {
+            const float d = length(i.world_pos - float2(player_x, player_y));
+            const float r = saturate(1.0 - d / vis_radius);
+            final_rgb *= r * r * (3.0 - 2.0 * r); // smoothstep: bright centre, eased edge
+        }
+        // (c) Tone grade (Stoneshard wash): desaturate → cool tint → dim.
+        const float luma = dot(final_rgb, float3(0.299, 0.587, 0.114));
+        final_rgb = lerp(final_rgb, float3(luma, luma, luma), saturate(grade_desat));
+        final_rgb *= lerp(float3(1.0, 1.0, 1.0), float3(0.60, 0.85, 1.0), saturate(grade_cool));
+        final_rgb *= grade_bright;
+    }
+
+    // (effect 3) Memory distance-fade. Memorized tiles carry light_mul =
+    // -(distance from player in tiles). Dim by distance, floored at mem_dim so
+    // remembered terrain persists (never black). Applied post-combine (after
+    // max(tint, gpu_total)) so current lighting can't leak into unseen memory.
+    // Desaturation already comes from the tileset memory FX. Not tint-gated:
+    // memory tiles have tint=1.0, the negative marker is the sole trigger.
+    if(i.light_mul < -0.0001) {
+        const float d = -i.light_mul;
+        const float t = saturate(1.0 - d / max(mem_radius, 1.0));
+        final_rgb *= mem_dim + (1.0 - mem_dim) * t;
+    }
+
     const bool  dbg_active   = (debug_mode == 8u)
                                || (debug_mode > 0u && debug_mode < 8u
                                    && dbg_tint_sum < 0.01);
@@ -435,7 +520,7 @@ static_assert( sizeof( sun_params ) == 48, "sun_params wire-stable with SunParam
 
 // debug_params struct now lives in sprite_batcher.h so render_state.h can
 // embed it by value in frame_light_inputs. Wire-stable layout enforced here.
-static_assert( sizeof( debug_params ) == 48, "debug_params wire-stable with DebugParams cbuffer" );
+static_assert( sizeof( debug_params ) == 96, "debug_params wire-stable with DebugParams cbuffer" );
 
 // ---- 24h sun LUT -------------------------------------------------------
 // Defined at file scope so MSVC won't complain about static-local in nested block.
@@ -562,6 +647,7 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
         SDL_GPUBuffer  *lp_sdf_buf      = nullptr;  // fragment storage slot 1
         SDL_GPUBuffer  *lp_sky_vis_buf  = nullptr;  // fragment storage slot 2
         SDL_GPUBuffer  *lp_indirect_buf = nullptr;  // fragment storage slot 3 (IndirectBuf)
+        SDL_GPUBuffer  *lp_vis_buf      = nullptr;  // fragment storage slot 4 (VisBuf)
         SDL_GPUSampler *lp_data_sampler = nullptr;
         light_params    lp              = {};  // defaults: all zero
         sun_params      lp_sun          = {};  // Phase 8: sun/sky params
@@ -580,6 +666,7 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                                      SDL_GPUSampler *data_sampler = nullptr,
                                      SDL_GPUBuffer  *sky_vis_buf  = nullptr,
                                      SDL_GPUBuffer  *indirect_buf = nullptr,
+                                     SDL_GPUBuffer  *vis_buf      = nullptr,
                                      const sun_params *sp         = nullptr,
                                      const debug_params *dbg      = nullptr ) noexcept {
             // data_sampler is vestigial now that all lighting data (emitters,
@@ -593,6 +680,7 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
             lp_sdf_buf      = sdf_buf;
             lp_sky_vis_buf  = sky_vis_buf;
             lp_indirect_buf = indirect_buf;
+            lp_vis_buf      = vis_buf;
             lp_data_sampler = data_sampler;
             lp.tile_pixel_size = tile_pixel_size;
             lp.current_z       = z_level;
@@ -842,7 +930,7 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
             close_segment();
         }
 
-        void end_pass() {
+        void end_pass( const sprite_batcher::pass_overlay_fn &overlay ) {
             if( !pass_open ) {
                 return;
             }
@@ -934,11 +1022,15 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                 //   storage  slot 1 → SdfBuf      (StructuredBuffer<float>)
                 //   storage  slot 2 → SkyVisBuf   (StructuredBuffer<float>)
                 //   storage  slot 3 → IndirectBuf (StructuredBuffer<float>)
-                // matching HLSL t0 sampled + t1/t2/t3/t4 storage (space2).
+                //   storage  slot 4 → VisBuf      (StructuredBuffer<float>)
+                // matching HLSL t0 sampled + t1/t2/t3/t4/t5 storage (space2).
                 // Bind all storage buffers in one call so a later bind can't
-                // zero an earlier slot. SDF/sky/indirect reads are gated by
+                // zero an earlier slot. SDF/sky/indirect/vis reads are gated by
                 // sdf_map_w>0 in the shader, so unbound slots (no SDF yet) are safe.
-                if( lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf && lp_indirect_buf ) {
+                if( lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf && lp_indirect_buf && lp_vis_buf ) {
+                    SDL_GPUBuffer *sbufs[5] = { lp_emitter_buf, lp_sdf_buf, lp_sky_vis_buf, lp_indirect_buf, lp_vis_buf };
+                    SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0, sbufs, 5 );
+                } else if( lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf && lp_indirect_buf ) {
                     SDL_GPUBuffer *sbufs[4] = { lp_emitter_buf, lp_sdf_buf, lp_sky_vis_buf, lp_indirect_buf };
                     SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0, sbufs, 4 );
                 } else if( lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf ) {
@@ -1021,7 +1113,10 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                     // re-issue for lit segments. Unlit (HUD/UI) segments skip —
                     // emitter_count==0 / sdf_map_w==0 guards in the shader
                     // short-circuit any reads there.
-                    if( s.is_lit && lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf && lp_indirect_buf ) {
+                    if( s.is_lit && lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf && lp_indirect_buf && lp_vis_buf ) {
+                        SDL_GPUBuffer *sbufs[5] = { lp_emitter_buf, lp_sdf_buf, lp_sky_vis_buf, lp_indirect_buf, lp_vis_buf };
+                        SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0, sbufs, 5 );
+                    } else if( s.is_lit && lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf && lp_indirect_buf ) {
                         SDL_GPUBuffer *sbufs[4] = { lp_emitter_buf, lp_sdf_buf, lp_sky_vis_buf, lp_indirect_buf };
                         SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0, sbufs, 4 );
                     } else if( s.is_lit && lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf ) {
@@ -1079,6 +1174,11 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                     SDL_DrawGPUPrimitives( rp, /*num_vertices=*/6, /*num_instances=*/s.count,
                                            /*first_vertex=*/0, /*first_instance=*/0 );
                 }
+            }
+
+            // External overlay (Dear ImGui) draws last, inside this same pass.
+            if( overlay ) {
+                overlay( rp, cur_cb );
             }
 
             SDL_EndGPURenderPass( rp );
@@ -1163,6 +1263,7 @@ void sprite_batcher::set_lighting_resources( float            tile_pixel_size,
                                               SDL_GPUSampler  *data_sampler,
                                               SDL_GPUBuffer   *sky_vis_buf,
                                               SDL_GPUBuffer   *indirect_buf,
+                                              SDL_GPUBuffer   *vis_buf,
                                               const sun_params   *sp,
                                               const debug_params *dbg )
 {
@@ -1170,7 +1271,7 @@ void sprite_batcher::set_lighting_resources( float            tile_pixel_size,
                                 emitter_count, ambient,
                                 cam_off_x, cam_off_y, sdf_map_w, sdf_map_h,
                                 emitter_buf, sdf_buf, data_sampler,
-                                sky_vis_buf, indirect_buf, sp, dbg );
+                                sky_vis_buf, indirect_buf, vis_buf, sp, dbg );
 }
 
 void sprite_batcher::draw( const sprite_instance &inst )
@@ -1188,9 +1289,9 @@ void sprite_batcher::flush()
     p->flush();
 }
 
-void sprite_batcher::end_pass()
+void sprite_batcher::end_pass( const pass_overlay_fn &overlay )
 {
-    p->end_pass();
+    p->end_pass( overlay );
 }
 
 void sprite_batcher::begin_frame()

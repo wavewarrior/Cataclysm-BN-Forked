@@ -170,6 +170,12 @@ void sdf_pass::init( gpu_device &dev, int map_w, int map_h )
         tbci.size  = static_cast<Uint32>( map_w * map_h * 3 * 4 ); // 3 floats per tile (RGB)
         xfer_indirect_ = SDL_CreateGPUTransferBuffer( d, &tbci );
     }
+    {
+        SDL_GPUTransferBufferCreateInfo tbci{};
+        tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+        tbci.size  = static_cast<Uint32>( map_w * map_h * 4 ); // 1 float per tile
+        xfer_vis_f_ = SDL_CreateGPUTransferBuffer( d, &tbci );
+    }
 
     // SDF + sky-vis as fragment-readable storage buffers (sampler-texture
     // Load returns 0 on Metal). Same data as the textures, as float arrays.
@@ -200,6 +206,15 @@ void sdf_pass::init( gpu_device &dev, int map_w, int map_h )
             dbg( DL::Error ) << "sdf_pass::init: failed to create indirect_storage";
         }
     }
+    {
+        SDL_GPUBufferCreateInfo bci{};
+        bci.usage = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ;
+        bci.size  = static_cast<Uint32>( map_w * map_h * 4 ); // 1 float/tile
+        visbuf_storage_ = SDL_CreateGPUBuffer( d, &bci );
+        if( !visbuf_storage_ ) {
+            dbg( DL::Error ) << "sdf_pass::init: failed to create visbuf_storage";
+        }
+    }
 }
 
 void sdf_pass::shutdown( gpu_device &dev )
@@ -228,6 +243,10 @@ void sdf_pass::shutdown( gpu_device &dev )
         SDL_ReleaseGPUTransferBuffer( d, xfer_indirect_ );
         xfer_indirect_ = nullptr;
     }
+    if( xfer_vis_f_ ) {
+        SDL_ReleaseGPUTransferBuffer( d, xfer_vis_f_ );
+        xfer_vis_f_ = nullptr;
+    }
     if( sdf_storage_ ) {
         SDL_ReleaseGPUBuffer( d, sdf_storage_ );
         sdf_storage_ = nullptr;
@@ -239,6 +258,10 @@ void sdf_pass::shutdown( gpu_device &dev )
     if( indirect_storage_ ) {
         SDL_ReleaseGPUBuffer( d, indirect_storage_ );
         indirect_storage_ = nullptr;
+    }
+    if( visbuf_storage_ ) {
+        SDL_ReleaseGPUBuffer( d, visbuf_storage_ );
+        visbuf_storage_ = nullptr;
     }
     if( sdf_tex_ ) {
         SDL_ReleaseGPUTexture( d, sdf_tex_ );
@@ -260,7 +283,8 @@ void sdf_pass::upload( SDL_GPUCopyPass *cp,
                         const std::vector<uint8_t> &transparency,
                         const std::vector<float>   &sdf,
                         const std::vector<uint8_t> &sky_vis,
-                        const std::vector<float>   &indirect )
+                        const std::vector<float>   &indirect,
+                        const std::vector<float>   &vis )
 {
     if( !cp || !dev || !transparency_tex_ || !sdf_tex_ ) {
         return;
@@ -435,6 +459,29 @@ void sdf_pass::upload( SDL_GPUCopyPass *cp,
             buf_dst.buffer = indirect_storage_;
             buf_dst.offset = 0;
             buf_dst.size   = pixel_count * 3u * static_cast<Uint32>( sizeof( float ) );
+
+            SDL_UploadToGPUBuffer( cp, &tb_src, &buf_dst, false );
+        }
+    }
+
+    // Per-tile visibility: 1 float/tile (x-major). Fragment storage buffer
+    // (VisBuf); shader applies the soft vision falloff + memory fade.
+    if( visbuf_storage_ && xfer_vis_f_
+        && static_cast<Uint32>( vis.size() ) >= pixel_count ) {
+        void *mapped = SDL_MapGPUTransferBuffer( dev, xfer_vis_f_, true );
+        if( mapped ) {
+            std::memcpy( mapped, vis.data(),
+                         pixel_count * static_cast<Uint32>( sizeof( float ) ) );
+            SDL_UnmapGPUTransferBuffer( dev, xfer_vis_f_ );
+
+            SDL_GPUTransferBufferLocation tb_src{};
+            tb_src.transfer_buffer = xfer_vis_f_;
+            tb_src.offset          = 0;
+
+            SDL_GPUBufferRegion buf_dst{};
+            buf_dst.buffer = visbuf_storage_;
+            buf_dst.offset = 0;
+            buf_dst.size   = pixel_count * static_cast<Uint32>( sizeof( float ) );
 
             SDL_UploadToGPUBuffer( cp, &tb_src, &buf_dst, false );
         }

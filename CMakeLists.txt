@@ -696,6 +696,52 @@ if (CCACHE_FOUND AND CATA_CCACHE)
     set(CMAKE_CXX_LINKER_LAUNCHER   ${CATA_CCACHE_CMD})
 endif ()
 
+# --- Dear ImGui (dev/debug-only UI layer) ---
+# ImGui ships no CMakeLists, so we fetch sources and build a small static lib
+# ourselves: the 5 core TUs + the SDL3 platform backend + the SDL_GPU renderer
+# backend. The SDL_GPU backend uses PREBAKED shaders
+# (imgui_impl_sdlgpu3_shaders.h) — no runtime shadercross — so it cannot hit the
+# fragment-storage-buffer reflection bug that bit our own pipeline.
+#
+# Docking branch required (we use docking; multi-viewport stays OFF).
+# Pinned to a docking-branch SHA so Mac/Metal and Win11/D3D12 build IDENTICAL
+# code — the DXBC-vs-DXIL format question lives on D3D12, so the two targets
+# must not drift. Bump deliberately, re-running the D3D12 smoke test.
+FetchContent_Declare(
+    imgui
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
+    GIT_TAG 4cb21e4a1e6a1fe19617c5c64ffba051ddd274e7  # docking @ 2025
+    GIT_PROGRESS TRUE
+    EXCLUDE_FROM_ALL
+)
+FetchContent_MakeAvailable(imgui)
+
+add_library(imgui STATIC
+    ${imgui_SOURCE_DIR}/imgui.cpp
+    ${imgui_SOURCE_DIR}/imgui_draw.cpp
+    ${imgui_SOURCE_DIR}/imgui_tables.cpp
+    ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+    ${imgui_SOURCE_DIR}/imgui_demo.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlgpu3.cpp
+)
+target_include_directories(imgui PUBLIC
+    ${imgui_SOURCE_DIR}
+    ${imgui_SOURCE_DIR}/backends
+)
+# Backends need SDL3 headers; link whichever SDL3 target exists.
+if (TARGET SDL3::SDL3-static)
+    target_link_libraries(imgui PUBLIC SDL3::SDL3-static)
+else ()
+    target_link_libraries(imgui PUBLIC SDL3::SDL3)
+endif ()
+# Vendored third-party: silence warnings so the fork's -Werror/​/WX can't trip on it.
+if (MSVC)
+    target_compile_options(imgui PRIVATE /w)
+else ()
+    target_compile_options(imgui PRIVATE -w)
+endif ()
+
 add_subdirectory(src)
 add_subdirectory(data)
 

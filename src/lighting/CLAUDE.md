@@ -347,8 +347,17 @@ const Uint32 sbuf_size = pixel_count * static_cast<Uint32>(sizeof(float));
 
 ## Build workflow
 
-**Do NOT run builds on this Mac.** Builds run on the Win11 PC (MSVC/D3D12).
-If a build fails, the user pastes errors into the chat. Fix errors from the paste.
+**Builds run fine on this Mac** (SDL_GPU/Metal, Ninja). Build + run locally:
+```
+cmake --build out/build/osx-arm-slim --target cataclysm-bn-tiles
+```
+Add `--clean-first` to force a full recompile if a binary seems stale. Sources
+are `GLOB_RECURSE` with `CONFIGURE_DEPENDS`, so new files are picked up
+automatically on the next build. The runtime log is at
+`~/Library/Application Support/Cataclysm-BN/config/debug.log` (grep it directly;
+note `DL::Debug` is filtered — use `dbg(DL::Info)` for diagnostics that must
+appear). Win11 (MSVC/D3D12) is still the primary release target; cross-check
+D3D12-specific behaviour there when relevant.
 
 ## Token-cost tips
 

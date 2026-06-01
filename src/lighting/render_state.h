@@ -23,6 +23,7 @@
 #include "emitter_collector.h"
 #include "sdf_pass.h"
 #include "ui_adaptor_draw_slices.h"
+#include "ui_composite_target.h"
 
 #include <memory>
 
@@ -193,6 +194,13 @@ class render_state
         // own tile queue).
         void set_current_slices( ui_adaptor_draw_slices *s ) noexcept { current_slices_ = s; }
 
+        // True while an adaptor's redraw_cb is routing draws into its retained
+        // slice. The curses cell→GPU path (sdltiles.cpp draw_window) checks
+        // this to bypass its dirty-cell diff: a redrawing adaptor must re-push
+        // its FULL window into the slice (the slice was just cleared), not only
+        // the cells that changed vs the persistent framebuffer cache.
+        bool slice_routing_active() const noexcept { return current_slices_ != nullptr; }
+
         // Transient routing for per-frame ephemeral overlays (e.g. the
         // LIGHT-DBG widget rendered inside refresh_display). When enabled
         // and no slice is active, queue_ui_rect / queue_font_glyph push
@@ -252,6 +260,20 @@ class render_state
         // Phase 4: SDF + transparency ----------------------------------------
         sdf_pass &sdf() noexcept { return sdf_; }
 
+        // UI compositor target. Persistent offscreen texture the UI renders
+        // into; refresh_display blits it over the lit-world pass. nullptr
+        // until init() succeeds. Owned here; lives for the render_state's
+        // lifetime.
+        ui_composite_target *ui_target() noexcept { return ui_target_.get(); }
+
+        // World accumulation layer. Same persistent-texture class as the UI
+        // compositor, but used as a full-frame accumulation buffer: tiles
+        // render into it with LOADOP_LOAD (preserve), so a frame that enqueues
+        // no tiles (partial UI redraw) retains the last world instead of
+        // flashing black. consume_dirty() is reused here as the "needs full
+        // clear" signal (set on init + resize). nullptr until init() succeeds.
+        ui_composite_target *world_target() noexcept { return world_target_.get(); }
+
     private:
         gpu_device     device_;
         sprite_batcher tile_batcher_;
@@ -297,6 +319,12 @@ class render_state
 
         // Phase 4: SDF + transparency
         sdf_pass  sdf_;
+
+        // UI compositor target (offscreen UI render-to-texture).
+        std::unique_ptr<ui_composite_target> ui_target_;
+
+        // World accumulation target (persistent lit-world layer).
+        std::unique_ptr<ui_composite_target> world_target_;
 };
 
 // Process-wide accessor. The object is constructed in init() and torn down

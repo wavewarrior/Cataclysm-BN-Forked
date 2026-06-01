@@ -1,3 +1,8 @@
+// MUST precede any game header: debug.h defines a function-like `DebugLog`
+// macro that otherwise mangles ImGui::DebugLog in imgui.h (same reason
+// imgui_layer.cpp includes imgui.h before debug.h).
+#include "imgui.h"
+
 #include "cursesdef.h" // IWYU pragma: associated
 #include "sdltiles.h" // IWYU pragma: associated
 
@@ -68,6 +73,7 @@
 #include "sdl_font.h"
 #include "sdlsound.h"
 #include "lighting/emitter_collector.h"
+#include "lighting/imgui_layer.h"
 #include "lighting/render_state.h"
 #include "lighting/snapshot.h"
 #include "lighting/sdf_pass.h"
@@ -413,10 +419,16 @@ static void WinCreate()
     // the legacy path keeps running invisibly. The SDL log carries the
     // exact failure mode.
     lighting::init_render_state_on( ::window.get() );
+    // Dear ImGui inits lazily in refresh_display (device readiness isn't
+    // guaranteed at WinCreate); torn down in WinDestroy.
 }
 
 static void WinDestroy()
 {
+    // ImGui holds GPU resources on the shared device — tear it down BEFORE the
+    // device is destroyed by shutdown_render_state(). No-op if never inited.
+    imgui_layer::shutdown();
+
     // Tear the SDL_GPU lighting stack down before SDL_Quit. Idempotent;
     // safe even if try_init_render_state() never succeeded.
     lighting::shutdown_render_state();
@@ -515,17 +527,175 @@ int   pos_preset   = 0;         // 0 top-left, 1 centre, 2 bottom-right
 bool  blue_backdrop = true;     // true: bright blue, false: black (lit)
 }  // namespace menu_emitter_tuning
 
-// Returns true if a curses cell BG fill should be suppressed: only when no
-// world is loaded AND the requested colour is opaque black (the default
-// "empty cell" fill). Anywhere else, including the in-game world, cell BGs
-// paint normally. Inlined check is safe to call inside the per-cell hot
-// loop — both reads are trivial.
-static inline bool suppress_cell_bg( const SDL_Color &c ) noexcept
+// Returns true if a curses cell BG fill should be suppressed: only for windows
+// flagged transparent_backdrop (the main-menu decorative background) AND when
+// the colour is opaque black (the default "empty cell" fill). This lets the
+// lit-world emitter glow show through the decorative menu while every other
+// window — popups, the OPTIONS panel, in-game UI — paints a solid backdrop and
+// stays readable. Inlined; both reads are trivial in the per-cell hot loop.
+static inline bool suppress_cell_bg( const cata_cursesport::WINDOW *win,
+                                     const SDL_Color &c ) noexcept
 {
-    if( c.r != 0 || c.g != 0 || c.b != 0 ) {
+    if( !win || !win->transparent_backdrop ) {
         return false;
     }
-    return !g || !world_generator || !world_generator->active_world;
+    return c.r == 0 && c.g == 0 && c.b == 0;
+}
+
+// Dear ImGui lighting/debug tuning panel (F4). Replaces the hand-rolled
+// text+bar HUD with interactive widgets bound to the same globals the renderer
+// reads (g_dbg_params, mirrored by g_*_scale / g_current_dbg_mode). Dev-facing
+// only. Registered with imgui_layer in the lazy-init block below.
+static void draw_lighting_dev_ui()
+{
+    // Closing via the title-bar X flips visible() too (same flag as F4).
+    if( !ImGui::Begin( "Lighting Debug (F4)", &imgui_layer::visible() ) ) {
+        ImGui::End();
+        return;
+    }
+
+    ImGui::Checkbox( "Debug HUD active (F5)", &g_dbg_lighting );
+    ImGui::SameLine();
+    ImGui::Checkbox( "Shader heatmap (F6)", &g_dbg_lighting_shader );
+
+    static const char *mode_names[9] = {
+        "off", "ambient", "emitter", "sun", "sky", "total", "SDF", "sky_vis", "emit_bw"
+    };
+    int mode = static_cast<int>( g_current_dbg_mode );
+    if( ImGui::Combo( "mode (F7)", &mode, mode_names, 9 ) ) {
+        g_current_dbg_mode = static_cast<uint32_t>( mode );
+        g_dbg_params.debug_mode = g_current_dbg_mode;
+    }
+
+    ImGui::SeparatorText( "Light scales" );
+    // Edit the g_*_scale mirrors then sync into g_dbg_params (the struct the
+    // shader reads) — same path the F8/F9 handlers use, so keys + sliders agree.
+    if( ImGui::SliderFloat( "emitter", &g_emitter_scale, 0.0f, 10.0f ) ) {
+        g_dbg_params.emitter_scale = g_emitter_scale;
+    }
+    if( ImGui::SliderFloat( "sun", &g_sun_scale, 0.0f, 10.0f ) ) {
+        g_dbg_params.sun_scale = g_sun_scale;
+    }
+    if( ImGui::SliderFloat( "sky", &g_sky_scale, 0.0f, 10.0f ) ) {
+        g_dbg_params.sky_scale = g_sky_scale;
+    }
+
+    ImGui::SeparatorText( "Dither / GI / shadow" );
+    ImGui::SliderFloat( "dither amt", &g_dbg_params.dither_amt, 0.0f, 1.0f );
+    ImGui::SliderFloat( "dither bands", &g_dbg_params.dither_bands, 1.0f, 16.0f, "%.0f" );
+    ImGui::SliderFloat( "GI strength", &g_dbg_params.gi_strength, 0.0f, 2.0f );
+    ImGui::SliderFloat( "shadow k", &g_dbg_params.shadow_k, 0.0f, 32.0f );
+    int steps = static_cast<int>( g_dbg_params.shadow_steps );
+    if( ImGui::SliderInt( "shadow steps", &steps, 1, 64 ) ) {
+        g_dbg_params.shadow_steps = static_cast<uint32_t>( std::max( 1, steps ) );
+    }
+
+    ImGui::SeparatorText( "Vision (Stoneshard)" );
+    // Each knob is independent so a single effect can be zeroed live to bisect.
+    // vis curve: soft vision-edge falloff exponent on LIT tiles (0 = off/flat,
+    //            >1 = steeper edge). night/day floor: ambient floor lerp'd by
+    //            sun_intensity for darker, more immersive nights (equal = off).
+    ImGui::SliderFloat( "vis curve", &g_dbg_params.vis_curve, 0.0f, 4.0f );
+    ImGui::SliderFloat( "vis radius", &g_dbg_params.vis_radius, 0.0f, 40.0f, "%.1f" );
+    ImGui::SliderFloat( "night floor", &g_dbg_params.night_floor, 0.0f, 0.30f );
+    ImGui::SliderFloat( "day floor", &g_dbg_params.day_floor, 0.0f, 0.30f );
+
+    ImGui::SeparatorText( "Tone grade (Stoneshard wash)" );
+    ImGui::SliderFloat( "desaturate", &g_dbg_params.grade_desat, 0.0f, 1.0f );
+    ImGui::SliderFloat( "cool tint", &g_dbg_params.grade_cool, 0.0f, 1.0f );
+    ImGui::SliderFloat( "brightness", &g_dbg_params.grade_bright, 0.0f, 1.5f );
+
+    ImGui::SeparatorText( "Memory fade (effect 3)" );
+    // mem dim = brightness floor for remembered terrain (1=no dim, persists).
+    // mem radius = distance over which memory fades from bright (near) to floor.
+    ImGui::SliderFloat( "mem dim", &g_dbg_params.mem_dim, 0.0f, 1.0f );
+    ImGui::SliderFloat( "mem radius", &g_dbg_params.mem_radius, 1.0f, 60.0f, "%.0f" );
+
+    // Diagnostics — the former top-left curses HUD, now read-only ImGui text.
+    // Reads s_emo (file-scope, populated by the g_dbg_lighting overlay block in
+    // refresh_display BEFORE new_frame() runs, so values are current this frame).
+    // s_emo is ONLY refreshed while g_dbg_lighting is on, so gate on it to avoid
+    // showing frozen stale numbers. Every map access keeps its `g ?` guard — F4
+    // is openable on the main menu where g == nullptr.
+    ImGui::SeparatorText( "Diagnostics" );
+    if( !g_dbg_lighting ) {
+        ImGui::TextDisabled( "enable Debug HUD (F5) for live readout" );
+    } else {
+        auto &rs = lighting::get_render_state();
+        const float tp = s_emo.tile_px > 0.f ? s_emo.tile_px : 32.f;
+        const float sw = static_cast<float>( s_emo.screen_w );
+        const float sh = static_cast<float>( s_emo.screen_h );
+
+        ImGui::Text( "screen=%dx%d  tile_px=%.1f",
+                     s_emo.screen_w, s_emo.screen_h, tp );
+
+        const size_t cache_sz = g
+                                ? get_map().access_cache( g->u.pos().z ).transparency_cache.size()
+                                : 0;
+        const int wanted = g
+                           ? ( get_map().getmapsize() * SEEX )
+                           * ( get_map().getmapsize() * SEEY )
+                           : 0;
+        ImGui::Text( "SDF pop=%d  rt=%dx%d  tex=%dx%d  cache=%zu/%d",
+                     rs.sdf().populated() ? 1 : 0,
+                     rs.sdf().map_w(), rs.sdf().map_h(),
+                     rs.sdf().tex_w(), rs.sdf().tex_h(),
+                     cache_sz, wanted );
+
+        if( g && cache_sz > 0 ) {
+            map &mm = get_map();
+            const int H = mm.getmapsize() * SEEY;
+            const auto &tc = mm.access_cache( g->u.pos().z ).transparency_cache;
+            const int px = g->u.pos().x;
+            const int py = g->u.pos().y;
+            auto T = [&]( int x, int y ) -> float {
+                const int i = x * H + y;
+                return ( i >= 0 && i < static_cast<int>( tc.size() ) ) ? tc[i] : -1.f;
+            };
+            ImGui::Text( "trans@p=%.3f N=%.3f S=%.3f E=%.3f W=%.3f",
+                         T( px, py ), T( px, py - 1 ), T( px, py + 1 ),
+                         T( px + 1, py ), T( px - 1, py ) );
+            ImGui::Text( "sdf@p=%.3f trans@p(submit)=%.3f sdfW=%d sz=%zu",
+                         s_emo.sdf_at_player, s_emo.trans_at_player,
+                         s_emo.sdf_W_at_submit, s_emo.sdf_size_at_submit );
+        }
+
+        ImGui::Text( "map_origin=(%d,%d)  draw_off_px=(%d,%d)",
+                     s_emo.map_origin_x, s_emo.map_origin_y,
+                     s_emo.draw_off_px_x, s_emo.draw_off_px_y );
+        ImGui::Text( "cam_off=(%.2f,%.2f)  op=(%.0f,%.0f)",
+                     s_emo.cam_off_x, s_emo.cam_off_y, s_emo.op_x, s_emo.op_y );
+        ImGui::Text( "player=(%d,%d,%d)  emitters=%zu  pushed=%u",
+                     s_emo.player_x, s_emo.player_y, s_emo.player_z,
+                     s_emo.snap.size(), s_emo.last_n_emit_pushed );
+
+        const float pscr_x = ( s_emo.player_x + s_emo.cam_off_x ) * tp + s_emo.op_x;
+        const float pscr_y = ( s_emo.player_y + s_emo.cam_off_y ) * tp + s_emo.op_y;
+        ImGui::Text( "player_screen=(%.1f,%.1f)  center=(%.1f,%.1f)",
+                     pscr_x, pscr_y, sw * 0.5f, sh * 0.5f );
+        const float dx = pscr_x - sw * 0.5f;
+        const float dy = pscr_y - sh * 0.5f;
+        ImGui::Text( "delta_to_center=(%.1f,%.1f)px  =(%.2f,%.2f)tiles",
+                     dx, dy, dx / tp, dy / tp );
+
+        if( !s_emo.snap.empty() ) {
+            const lighting::gpu_emitter &e0 = s_emo.snap.front();
+            const float ed_x = e0.pos_x - static_cast<float>( s_emo.player_x );
+            const float ed_y = e0.pos_y - static_cast<float>( s_emo.player_y );
+            const float ed   = std::sqrt( ed_x * ed_x + ed_y * ed_y );
+            const char *in_r = ( ed < e0.radius ) ? "INSIDE" : "outside";
+            ImGui::Text( "emit[0] pos=(%.1f,%.1f,%.1f) r=%.1f dist=%.2f %s",
+                         e0.pos_x, e0.pos_y, e0.pos_z, e0.radius, ed, in_r );
+        } else {
+            ImGui::TextDisabled( "emit[0] (none)" );
+        }
+        ImGui::Text( "menu  F10:r_in=%.0f  F11:pos=(%.1f,%.1f)  F12:bgBlue=%s",
+                     menu_emitter_tuning::radius_input,
+                     menu_emitter_tuning::pos_x, menu_emitter_tuning::pos_y,
+                     menu_emitter_tuning::blue_backdrop ? "ON" : "off" );
+    }
+
+    ImGui::End();
 }
 
 void refresh_display()
@@ -545,6 +715,15 @@ void refresh_display()
     if( !rs.ready() ) {
         return;
     }
+
+    // One-time Dear ImGui init: the first frame the GPU device is actually
+    // ready. Device readiness is NOT guaranteed at WinCreate time, so init must
+    // be lazy here. No-op once ready(); fail-safe (a failure just means no dev UI).
+    if( !imgui_layer::ready() ) {
+        imgui_layer::init( rs.device().window_ptr(), rs.device().raw() );
+        imgui_layer::set_dev_ui( draw_lighting_dev_ui );
+    }
+
     rs.tile_batcher().begin_frame();
     rs.ui_batcher().begin_frame();
     rs.fonts().begin_frame();
@@ -581,6 +760,7 @@ void refresh_display()
         std::vector<float>   sdf;
         std::vector<uint8_t> sky_vis;
         std::vector<float>   indirect; // 1-bounce GI, 3 floats/tile RGB (x-major)
+        std::vector<float>   vis;      // per-tile visibility for soft vision falloff (x-major)
         int sdf_runtime_w = 0;
         int sdf_runtime_h = 0;
         if( g && world_generator && world_generator->active_world && rs.sdf().ready() ) {
@@ -616,6 +796,25 @@ void refresh_display()
                 if( static_cast<int>( mc.outside_cache.size() ) >= total ) {
                     for( int i = 0; i < total; ++i ) {
                         sky_vis[i] = mc.outside_cache[i] ? 255u : 0u;
+                    }
+                }
+
+                // Per-tile visibility for the soft vision falloff (effect 1+2).
+                // Raw max(seen_cache, camera_cache) — the SAME float
+                // apparent_light_helper reads, but the render path otherwise
+                // discards it by bucketing to discrete lit_level (the hard
+                // edge). seen_cache already encodes a continuous radial decay.
+                // x-major (idx = x*H+y), matching transparency_cache. Live-only
+                // (>=0); memorized-tile fade is handled CPU-side at draw time
+                // (ll==MEMORIZED), not via this buffer.
+                if( static_cast<int>( mc.seen_cache.size() ) >= total ) {
+                    vis.assign( total, 0.0f );
+                    const bool have_cam =
+                        static_cast<int>( mc.camera_cache.size() ) >= total;
+                    for( int i = 0; i < total; ++i ) {
+                        const float s = mc.seen_cache[i];
+                        const float c = have_cam ? mc.camera_cache[i] : 0.0f;
+                        vis[i] = std::max( s, c );
                     }
                 }
 
@@ -708,6 +907,7 @@ void refresh_display()
                                 std::move( sdf ),
                                 std::move( sky_vis ),
                                 std::move( indirect ),
+                                std::move( vis ),
                                 sdf_runtime_w,
                                 sdf_runtime_h );
     }
@@ -805,6 +1005,14 @@ void refresh_display()
         // frame_light_inputs. shader uses these for debug visualization (F7 cycles
         // modes, F8/F9 adjust scales). Defaults are all zeroed (no-op).
         in.debug = g_dbg_params;
+        // Inject the player map-tile centre as the radial vision-bubble origin
+        // (DATA, not a knob — overwrites the unused g_dbg_params slots). Matches
+        // the shader world_pos space (= map tile index). Main menu (g==null)
+        // leaves it at 0 with vis_radius gating on sdf_map_w>0 anyway.
+        if( g ) {
+            in.debug.player_x = static_cast<float>( g->u.pos().x ) + 0.5f;
+            in.debug.player_y = static_cast<float>( g->u.pos().y ) + 0.5f;
+        }
 
         // Debug: log emitter count, texture state, and first emitter data every ~120 frames.
         static int emit_dbg_frame = 0;
@@ -867,15 +1075,11 @@ void refresh_display()
         proj_w = static_cast<int>( ctx.swapchain_w );
         proj_h = static_cast<int>( ctx.swapchain_h );
     }
-    rs.tile_batcher().begin_pass( ctx.cmd_buffer, ctx.swapchain_tex,
-                                  ctx.swapchain_w, ctx.swapchain_h,
-                                  clear_black,
-                                  static_cast<std::uint32_t>( proj_w ),
-                                  static_cast<std::uint32_t>( proj_h ) );
 
-    if( !rs.tile_sprites_empty() && rs.gpu_sampler() ) {
-        rs.flush_tile_sprites( rs.tile_batcher(), rs.gpu_sampler() );
-    }
+    // Phase 3: the UI compositor Pass A, the swapchain pass, and the composite
+    // blit now run AFTER the transient LIGHT-DBG HUD is generated (below), so
+    // Pass A can drain the transient queues into the compositor. The HUD block
+    // is pure queue pushes (no open pass required), so it runs here first.
     // Lighting debug HUD. Tiers:
     //   1: top-left text strip (screen dims, tile_px, cam_off, player, op, n_emit)
     //   2: emitter markers + player + screen-center crosses
@@ -1015,250 +1219,144 @@ void refresh_display()
             }
         }
 
-        // ── Tier 1: top-left HUD strip ─────────────────────────────────────
-        if( font ) {
-            const int lh = font->height + 1;
-            constexpr int HUD_LINES = 12;
-            constexpr int HUD_PAD   = 4;
-            const int hud_w = 720;
-            const int hud_h = lh * HUD_LINES + HUD_PAD * 2;
-            // Dark backdrop so HUD stays readable over sprites + tile labels.
-            rs.queue_ui_rect( 0.f, 0.f,
-                              static_cast<float>( hud_w ),
-                              static_cast<float>( hud_h ),
-                              0.f, 0.f, 0.f, 0.85f );
+        // ── Tier 1: top-left HUD strip — MIGRATED to the F4 ImGui panel ────
+        // The text readout now lives in draw_lighting_dev_ui() under the
+        // "Diagnostics" header (reads the same s_emo). Removed here to stop the
+        // double-render: the spatial overlays above (grid/markers/crosses/
+        // labels) stay because they are world-aligned, not a top-left panel.
+    }
 
-            char buf[256];
-            const size_t n_emit_dbg = s_emo.snap.size();
-            int line_y = HUD_PAD;
-            auto put = [&]( const char *s ) {
-                draw_string( *font, renderer, geometry, std::string( s ),
-                             point( HUD_PAD, line_y ), 15 ); // 15 = bright white
-                line_y += lh;
-            };
-            std::snprintf( buf, sizeof( buf ), "LIGHT-DBG  screen=%dx%d  tile_px=%.1f",
-                           s_emo.screen_w, s_emo.screen_h, tp );
-            put( buf );
-            {
-                const size_t cache_sz = g
-                    ? get_map().access_cache( g->u.pos().z ).transparency_cache.size()
-                    : 0;
-                const int wanted = g
-                    ? ( get_map().getmapsize() * SEEX )
-                    * ( get_map().getmapsize() * SEEY )
-                    : 0;
-                std::snprintf( buf, sizeof( buf ),
-                               "SDF pop=%d  rt=%dx%d  tex=%dx%d  cache=%zu/%d",
-                               rs.sdf().populated() ? 1 : 0,
-                               rs.sdf().map_w(), rs.sdf().map_h(),
-                               rs.sdf().tex_w(), rs.sdf().tex_h(),
-                               cache_sz, wanted );
-                put( buf );
+    // Lighting tuning widget (F-key text+bar HUD) — REMOVED, fully migrated to
+    // the F4 ImGui panel (draw_lighting_dev_ui). All its knobs are now interactive
+    // sliders/combo there. The raw F-key handlers (F5–F12) still mutate the globals
+    // for users without the ImGui panel; only the on-screen text widget is gone.
 
-                // Sample SDF + transparency at player tile + 4 neighbours.
-                if( g && cache_sz > 0 ) {
-                    map &mm = get_map();
-                    const int H = mm.getmapsize() * SEEY;
-                    const auto &tc = mm.access_cache( g->u.pos().z ).transparency_cache;
-                    const int px = g->u.pos().x;
-                    const int py = g->u.pos().y;
-                    auto T = [&]( int x, int y ) -> float {
-                        const int i = x * H + y;
-                        return ( i >= 0 && i < (int)tc.size() ) ? tc[i] : -1.f;
-                    };
-                    auto S = [&]( int x, int y ) -> float {
-                        // Re-compute is too expensive — instead show cache neigh.
-                        return T( x, y );
-                    };
-                    std::snprintf( buf, sizeof( buf ),
-                                   "trans@p=(%.3f) N=%.3f S=%.3f E=%.3f W=%.3f",
-                                   T( px, py ), T( px, py - 1 ), T( px, py + 1 ),
-                                   T( px + 1, py ), T( px - 1, py ) );
-                    put( buf );
-                    std::snprintf( buf, sizeof( buf ),
-                                   "sdf@p=%.3f trans@p(submit)=%.3f sdfW=%d sz=%zu",
-                                   s_emo.sdf_at_player, s_emo.trans_at_player,
-                                   s_emo.sdf_W_at_submit, s_emo.sdf_size_at_submit );
-                    put( buf );
-                    (void)S;
-                }
+    // The transient LIGHT-DBG HUD (above) is re-pushed every frame and animates
+    // (emitter markers + crosses track the camera), so force a recomposite
+    // whenever it is active. clear_ui_queues() only invalidates on a ui_manager
+    // redraw cycle, which the HUD does not go through.
+    lighting::ui_composite_target *uct = rs.ui_target();
+    if( uct && g_dbg_lighting ) {
+        uct->invalidate();
+    }
+
+    // ── UI compositor Pass A (phase 4: dirty-gated) ────────────────────────
+    // Re-render the UI into the compositor ONLY when something invalidated it
+    // (a ui_manager redraw cycle via clear_ui_queues, the resize hook, or the
+    // HUD above). On a clean frame Pass A is skipped and Pass B reuses the
+    // persistent compositor texture from the last composite — this is the
+    // partial-redraw flicker fix (no black sidebar when only a tooltip redrew).
+    //
+    // STICKY: the pass runs only when dirty AND there is UI to draw. A
+    // transient-empty queue does NOT clear the compositor — the last composite
+    // is retained and reused by the Pass B blit. consume_dirty() is guarded
+    // behind any_ui (short-circuit) so the dirty flag is preserved across empty
+    // frames and the composite happens once content returns. (An always-clear
+    // variant blanked the whole UI on any frame the queue briefly emptied.)
+    //
+    // Two begin_pass/end_pass cycles on one batcher in one command buffer is
+    // safe: end_pass uploads instances with cycle=true (fresh backing per pass)
+    // and Pass A targets the compositor texture, not the swapchain.
+    const bool any_ui = !rs.ui_rects_empty() || !rs.font_glyphs_empty();
+    if( uct && uct->texture() && any_ui && uct->consume_dirty() ) {
+        constexpr float clear_transparent[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+        rs.tile_batcher().begin_pass( ctx.cmd_buffer, uct->texture(),
+                                      uct->width(), uct->height(),
+                                      clear_transparent,
+                                      static_cast<std::uint32_t>( proj_w ),
+                                      static_cast<std::uint32_t>( proj_h ) );
+        if( !rs.ui_rects_empty() && rs.geometry().white_texture() ) {
+            rs.tile_batcher().set_texture( rs.geometry().white_texture(),
+                                           rs.gpu_sampler(), /*is_lit=*/false );
+            rs.flush_ui_rects( rs.tile_batcher() );
+        }
+        if( !rs.font_glyphs_empty() && rs.gpu_sampler() ) {
+            rs.flush_font_glyphs( rs.tile_batcher(), rs.gpu_sampler() );
+        }
+        rs.tile_batcher().end_pass();
+    }
+
+    // ── Pass W: world accumulation ─────────────────────────────────────────
+    // Render the lit-world tile sprites into the PERSISTENT world_target.
+    //
+    // Retention comes from SKIPPING the pass, not from the load-op: a frame that
+    // enqueues no tiles (partial UI redraw → tile queue head-cleared in
+    // redraw_invalidated, map adaptor not re-invalidated) doesn't run the pass
+    // at all, so the last world is RETAINED instead of flashing black — the
+    // in-game whole-screen-black flicker fix.
+    //
+    // When the pass DOES run it always LOADOP_CLEARs (like the old swapchain
+    // tile pass), then repaints the full tile set. LOADOP_LOAD here would buy no
+    // retention (the skip already does that) and would smear stale pixels wher-
+    // ever a frame lacks full opaque coverage (unseen tiles, scroll edges,
+    // overlay-only frames). needs_clear (the target's dirty flag, init + resize)
+    // forces the pass to run at least once so the texture starts defined / resize
+    // garbage is wiped even before any tiles exist. Lighting is already stamped
+    // (begin_lighting_frame above); end_pass binds it for the lit tile segments.
+    lighting::ui_composite_target *wt = rs.world_target();
+    if( wt && wt->texture() ) {
+        const bool needs_clear = wt->consume_dirty();
+        const bool have_tiles  = !rs.tile_sprites_empty() && rs.gpu_sampler();
+        if( needs_clear || have_tiles ) {
+            rs.tile_batcher().begin_pass( ctx.cmd_buffer, wt->texture(),
+                                          wt->width(), wt->height(),
+                                          clear_black,
+                                          static_cast<std::uint32_t>( proj_w ),
+                                          static_cast<std::uint32_t>( proj_h ) );
+            if( have_tiles ) {
+                rs.flush_tile_sprites( rs.tile_batcher(), rs.gpu_sampler() );
             }
-            std::snprintf( buf, sizeof( buf ),
-                           "map_origin=(%d,%d)  draw_off_px=(%d,%d)",
-                           s_emo.map_origin_x, s_emo.map_origin_y,
-                           s_emo.draw_off_px_x, s_emo.draw_off_px_y );
-            put( buf );
-            std::snprintf( buf, sizeof( buf ),
-                           "cam_off=(%.2f,%.2f)  op=(%.0f,%.0f)",
-                           s_emo.cam_off_x, s_emo.cam_off_y, s_emo.op_x, s_emo.op_y );
-            put( buf );
-            std::snprintf( buf, sizeof( buf ),
-                           "player=(%d,%d,%d)  emitters=%zu  pushed=%u",
-                           s_emo.player_x, s_emo.player_y, s_emo.player_z,
-                           n_emit_dbg, s_emo.last_n_emit_pushed );
-            put( buf );
-            const float pscr_x = ( s_emo.player_x + s_emo.cam_off_x ) * tp + s_emo.op_x;
-            const float pscr_y = ( s_emo.player_y + s_emo.cam_off_y ) * tp + s_emo.op_y;
-            std::snprintf( buf, sizeof( buf ),
-                           "player_screen=(%.1f,%.1f)  center=(%.1f,%.1f)",
-                           pscr_x, pscr_y, sw * 0.5f, sh * 0.5f );
-            put( buf );
-            const float dx = pscr_x - sw * 0.5f;
-            const float dy = pscr_y - sh * 0.5f;
-            std::snprintf( buf, sizeof( buf ),
-                           "delta_to_center=(%.1f,%.1f)px  =(%.2f,%.2f)tiles",
-                           dx, dy, dx / tp, dy / tp );
-            put( buf );
-
-            // First-emitter diagnostic: world position the shader will use is
-            //   world_pos = (map_pos + cam_off)   (in map-tile units).
-            // Player world_pos = player + cam_off; emitter's stored pos_x/y is
-            // ALREADY in absolute map-tile units, so distance is just
-            //   d = length(emitter.pos - player_map_pos).
-            // If d < emitter.radius the shader's branch should illuminate.
-            if( !s_emo.snap.empty() ) {
-                const lighting::gpu_emitter &e0 = s_emo.snap.front();
-                const float ed_x = e0.pos_x - static_cast<float>( s_emo.player_x );
-                const float ed_y = e0.pos_y - static_cast<float>( s_emo.player_y );
-                const float ed   = std::sqrt( ed_x * ed_x + ed_y * ed_y );
-                const char *in_r = ( ed < e0.radius ) ? "INSIDE" : "outside";
-                std::snprintf( buf, sizeof( buf ),
-                               "emit[0] pos=(%.1f,%.1f,%.1f) r=%.1f dist=%.2f %s  shaderViz=%s",
-                               e0.pos_x, e0.pos_y, e0.pos_z, e0.radius,
-                               ed, in_r,
-                               g_dbg_lighting_shader ? "ON" : "off" );
-                put( buf );
-            } else {
-                std::snprintf( buf, sizeof( buf ),
-                               "emit[0] (none)  shaderViz=%s",
-                               g_dbg_lighting_shader ? "ON" : "off" );
-                put( buf );
-            }
-            // Menu emitter tuning readout (F10 radius / F11 pos / F12 backdrop).
-            std::snprintf( buf, sizeof( buf ),
-                           "menu  F10:r_in=%.0f  F11:pos=(%.1f,%.1f)  F12:bgBlue=%s",
-                           menu_emitter_tuning::radius_input,
-                           menu_emitter_tuning::pos_x,
-                           menu_emitter_tuning::pos_y,
-                           menu_emitter_tuning::blue_backdrop ? "ON" : "off" );
-            put( buf );
+            rs.tile_batcher().end_pass();
         }
     }
 
-    // Lighting tuning widget — F-key controls to adjust debug modes and scales.
-    // Labels are drawn with the curses font (draw_string); bars are ui_rects.
-    if( g_dbg_lighting && font ) {
-        const char *mode_names[9] = {
-            "off", "ambient", "emitter", "sun",
-            "sky", "total", "SDF", "sky_vis", "emit_bw"
-        };
-        const char *cur_mode = ( g_current_dbg_mode < 9 )
-                               ? mode_names[g_current_dbg_mode]
-                               : "?";
+    // Dear ImGui dev UI: build the frame and upload its vertex/index buffers
+    // OUTSIDE any render pass (prepare opens its own GPU copy pass), then draw
+    // it as the LAST thing inside Pass B via the end_pass overlay so it shares
+    // the single swapchain pass (D3D12 drops a 2nd pass on the same target).
+    const bool imgui_active = imgui_layer::ready() && imgui_layer::visible();
+    if( imgui_active ) {
+        imgui_layer::new_frame();
+        imgui_layer::prepare( ctx.cmd_buffer );
+    }
 
-        const int lh = font->height + 1;
-        const float hud_bottom = static_cast<float>( lh * 9 + 4 * 2 );
-        constexpr int widget_x_i = 10;
-        const int widget_y_i = static_cast<int>( hud_bottom ) + 12;
-        constexpr float widget_x = static_cast<float>( widget_x_i );
-        const float widget_y = static_cast<float>( widget_y_i );
+    // ── Pass B: swapchain composite ────────────────────────────────────────
+    // World (opaque) then UI (straight-alpha) blitted over the swapchain as
+    // fullscreen quads. No direct tile/UI flush here — both layers are
+    // persistent textures, so a partial redraw never blanks either layer.
+    rs.tile_batcher().begin_pass( ctx.cmd_buffer, ctx.swapchain_tex,
+                                  ctx.swapchain_w, ctx.swapchain_h,
+                                  clear_black,
+                                  static_cast<std::uint32_t>( proj_w ),
+                                  static_cast<std::uint32_t>( proj_h ) );
 
-        // Panel background — sized to enclose labels + bars + spacing.
-        constexpr float panel_w = 360.0f;
-        const float     panel_h = static_cast<float>( lh * 7 + 8 );
-        rs.queue_ui_rect( widget_x - 5.f, widget_y - 5.f, panel_w, panel_h,
-                          0.0f, 0.0f, 0.0f, 0.55f );
-
-        char buf[256];
-        int  text_y = widget_y_i;
-        auto put_label = [&]( const char *s, int color = 15 ) {
-            draw_string( *font, renderer, geometry, std::string( s ),
-                         point( widget_x_i, text_y ), color );
-            text_y += lh;
-        };
-
-        // Title row.
-        std::snprintf( buf, sizeof( buf ),
-                       "Lighting Debug  F5:HUD  F6:shaderViz=%s",
-                       g_dbg_lighting_shader ? "ON" : "off" );
-        put_label( buf );
-
-        // Mode row — F7 cycles; bracket the current one.
-        std::snprintf( buf, sizeof( buf ),
-                       "F7 mode[%u]: %s", g_current_dbg_mode, cur_mode );
-        put_label( buf, 11 ); // cyan-ish
-
-        // Mode indicator row (9 small rects, current highlighted).
-        const int   mode_row_y = text_y;
-        const float indicator_w = 30.0f;
-        const float indicator_gap = 2.0f;
-        for( uint32_t i = 0u; i < 9u; ++i ) {
-            const bool cur = ( i == g_current_dbg_mode );
-            const float r = cur ? 1.0f : 0.3f;
-            const float g = cur ? 1.0f : 0.3f;
-            const float b = cur ? 1.0f : 0.3f;
-            const float a = cur ? 1.0f : 0.6f;
-            rs.queue_ui_rect( widget_x + i * ( indicator_w + indicator_gap ),
-                              static_cast<float>( mode_row_y ),
-                              indicator_w, static_cast<float>( lh ),
-                              r, g, b, a );
+    auto blit_layer = [&]( lighting::ui_composite_target *layer ) {
+        if( !layer || !layer->texture() || !rs.gpu_sampler() ) {
+            return;
         }
-        text_y += lh;
+        lighting::sprite_instance quad{};
+        quad.dst_x  = 0.f;          quad.dst_y  = 0.f;
+        quad.dst_w  = static_cast<float>( proj_w );
+        quad.dst_h  = static_cast<float>( proj_h );
+        quad.src_u  = 0.f;  quad.src_v  = 0.f;
+        quad.src_uw = 1.f;  quad.src_vh = 1.f;
+        quad.tint_r = 1.f;  quad.tint_g = 1.f;
+        quad.tint_b = 1.f;  quad.tint_a = 1.f;
+        quad.rotation = 0.f;
+        rs.tile_batcher().set_texture( layer->texture(), rs.gpu_sampler(),
+                                       /*is_lit=*/false );
+        rs.tile_batcher().draw( quad );
+    };
+    blit_layer( wt );    // lit world (opaque base covers the swapchain)
+    blit_layer( uct );   // UI composited over the world (straight alpha)
 
-        // Scale-bar rows. Each row: label text, then a thin bar drawn at the
-        // baseline. Bars are 4px tall, anchored 4px below the label baseline.
-        const float bar_max_w = 150.0f;
-        constexpr float bar_label_w = 200.0f;  // x-offset where the bar starts
-        auto put_scale_bar = [&]( const char *name, float scale,
-                                  float fr, float fg, float fb,
-        int color ) {
-            std::snprintf( buf, sizeof( buf ), "F8/F9 %s = %.2f", name, scale );
-            draw_string( *font, renderer, geometry, std::string( buf ),
-                         point( widget_x_i, text_y ), color );
-            const float by = static_cast<float>( text_y ) +
-                             static_cast<float>( font->height ) - 4.0f;
-            rs.queue_ui_rect( widget_x + bar_label_w, by, bar_max_w, 4.0f,
-                              0.2f, 0.2f, 0.3f, 0.7f );
-            rs.queue_ui_rect( widget_x + bar_label_w, by,
-                              std::clamp( scale / 10.0f, 0.0f, 1.0f ) * bar_max_w,
-                              4.0f, fr, fg, fb, 0.95f );
-            text_y += lh;
-        };
-        put_scale_bar( "emitter", g_emitter_scale, 1.0f, 0.55f, 0.10f, 14 );
-        put_scale_bar( "sun",     g_sun_scale,     1.0f, 1.00f, 0.30f, 14 );
-        put_scale_bar( "sky",     g_sky_scale,     0.3f, 0.70f, 1.00f, 14 );
-
-        // Stoneshard-style dither knobs. Shift+F8/F9 = strength, Ctrl+F8/F9 = bands.
-        std::snprintf( buf, sizeof( buf ),
-                       "Sh+F8/9 dither=%.2f  Ct+F8/9 bands=%.0f",
-                       g_dbg_params.dither_amt, g_dbg_params.dither_bands );
-        put_label( buf, 14 );
-
-        // 1-bounce indirect (fake GI). Alt+F8/F9 = strength.
-        std::snprintf( buf, sizeof( buf ),
-                       "Alt+F8/9 GI=%.2f", g_dbg_params.gi_strength );
-        put_label( buf, 14 );
-
-        // Menu emitter tuning hints — only meaningful when no world is loaded
-        // but always shown so the key bindings are discoverable.
-        std::snprintf( buf, sizeof( buf ),
-                       "F10:r_in  F11:pos  F12:bgBlue=%s",
-                       menu_emitter_tuning::blue_backdrop ? "ON" : "off" );
-        put_label( buf, 7 );
-    }
-
-    const bool have_rects = !rs.ui_rects_empty() && rs.geometry().white_texture();
-    if( have_rects ) {
-        // UI rects are HUD: unlit segment so the fragment shader skips
-        // emitter loop + sun march for these fragments.
-        rs.tile_batcher().set_texture( rs.geometry().white_texture(),
-                                       rs.gpu_sampler(), /*is_lit=*/false );
-        rs.flush_ui_rects( rs.tile_batcher() );
-    }
-    if( !rs.font_glyphs_empty() && rs.gpu_sampler() ) {
-        rs.flush_font_glyphs( rs.tile_batcher(), rs.gpu_sampler() );
-    }
-    rs.tile_batcher().end_pass();
+    rs.tile_batcher().end_pass(
+        imgui_active
+        ? lighting::sprite_batcher::pass_overlay_fn(
+    []( SDL_GPURenderPass * rp, SDL_GPUCommandBuffer * cb ) {
+        imgui_layer::render_in_pass( rp, cb );
+    } )
+        : lighting::sprite_batcher::pass_overlay_fn{} );
 
     rs.device().submit_frame( ctx );
 }
@@ -1382,6 +1480,14 @@ void clear_window_area( const catacurses::window &win_ )
     cata_cursesport::WINDOW *const win = win_.get<cata_cursesport::WINDOW>();
     geometry->rect( renderer, point( win->pos.x * fontwidth, win->pos.y * fontheight ),
                     win->width * fontwidth, win->height * fontheight, color_as_sdl( catacurses::black ) );
+}
+
+void cata_cursesport::set_window_transparent_backdrop( const catacurses::window &win,
+        bool transparent )
+{
+    if( cata_cursesport::WINDOW *const w = win.get<cata_cursesport::WINDOW>() ) {
+        w->transparent_backdrop = transparent;
+    }
 }
 
 static std::optional<std::pair<tripoint_abs_omt, std::string>> get_mission_arrow(
@@ -2165,6 +2271,16 @@ static bool draw_window( Font_Ptr &font, const catacurses::window &w, point offs
     std::vector<curseline> &framebuffer = use_oversized_framebuffer ? oversized_framebuffer :
                                           terminal_framebuffer;
 
+    // When this window is being drawn inside an ui_adaptor redraw_cb, its draws
+    // route into the adaptor's retained GPU slice, which was just cleared. The
+    // per-cell framebuffer dirty-cell skip below assumes a persistent backbuffer
+    // (the removed display_buffer) keeps unchanged cells on screen — but the
+    // slice has no such persistence, so unchanged cells would be dropped (e.g. a
+    // navigated uilist collapsing to current+previous row). Force a FULL re-push
+    // of this window's cells into the slice by bypassing the skip while routing.
+    const bool slice_active = lighting::get_render_state().ready() &&
+                              lighting::get_render_state().slice_routing_active();
+
     /*
     Let's try to keep track of different windows.
     A number of windows are coexisting on the screen, so don't have to interfere.
@@ -2228,7 +2344,8 @@ static bool draw_window( Font_Ptr &font, const catacurses::window &w, point offs
             // TODO: handle caching when drawing normal windows over graphical tiles
             cursecell &oldcell = framebuffer[fby].chars[fbx];
 
-            if( oldWinCompatible && cell == oldcell && fontScale == fontScaleBuffer ) {
+            if( !slice_active && oldWinCompatible && cell == oldcell &&
+                fontScale == fontScaleBuffer ) {
                 continue;
             }
             oldcell = cell;
@@ -2240,7 +2357,7 @@ static bool draw_window( Font_Ptr &font, const catacurses::window &w, point offs
             // Spaces are used a lot, so this does help noticeably
             if( cell.ch == space_string ) {
                 const SDL_Color bg_col = color_as_sdl( cell.BG );
-                if( !suppress_cell_bg( bg_col ) ) {
+                if( !suppress_cell_bg( win, bg_col ) ) {
                     geometry->rect( renderer, point( drawx, drawy ), font->width, font->height,
                                     bg_col );
                 }
@@ -2311,7 +2428,7 @@ static bool draw_window( Font_Ptr &font, const catacurses::window &w, point offs
             }
             {
                 const SDL_Color bg_col = color_as_sdl( BG );
-                if( !suppress_cell_bg( bg_col ) ) {
+                if( !suppress_cell_bg( win, bg_col ) ) {
                     geometry->rect( renderer, point( drawx, drawy ),
                                     font->width * cw, font->height, bg_col );
                 }
@@ -2842,6 +2959,22 @@ bool handle_resize( int w, int h )
         catacurses::stdscr = catacurses::newwin( TERMINAL_HEIGHT, TERMINAL_WIDTH, point_zero );
         game_ui::init_ui();
         ui_manager::screen_resized();
+        // Keep the UI compositor texture sized to the physical swapchain so
+        // the composite blit stays 1:1 after a window resize.
+        {
+            auto &rs = lighting::get_render_state();
+            if( rs.ready() ) {
+                int pw = 0;
+                int ph = 0;
+                SDL_GetWindowSizeInPixels( window.get(), &pw, &ph );
+                if( rs.ui_target() ) {
+                    rs.ui_target()->resize( pw, ph );
+                }
+                if( rs.world_target() ) {
+                    rs.world_target()->resize( pw, ph );
+                }
+            }
+        }
         return true;
     }
     return false;
@@ -2903,6 +3036,22 @@ static void CheckMessages()
     bool render_target_reset = false;
 
     while( SDL_PollEvent( &ev ) ) {
+        // Dear ImGui dev UI sees every event first. While a tool is open keep
+        // producing frames (this event-driven loop has no vsync tick) so
+        // hover/drag stay responsive.
+        const bool imgui_capture = imgui_layer::process_event( ev );
+        // Open/close toggle (F4) — handled BEFORE the capture gate so the panel
+        // can always be closed even while ImGui holds keyboard focus. P0 dev
+        // key; revisit for collisions when promoting past P0.
+        if( ev.type == SDL_EVENT_KEY_DOWN && !ev.key.repeat && ev.key.key == SDLK_F4 ) {
+            imgui_layer::visible() = !imgui_layer::visible();
+            needupdate = true;
+            continue;
+        }
+        // ImGui consumed this mouse/keyboard event — keep it out of game input.
+        if( imgui_capture ) {
+            continue;
+        }
         switch( ev.type ) {
             case SDL_EVENT_WINDOW_SHOWN:
             case SDL_EVENT_WINDOW_MINIMIZED:
@@ -3128,6 +3277,16 @@ static void CheckMessages()
             break;
         }
     }
+
+    // While the ImGui dev panel is open, repaint every CheckMessages tick — not
+    // only on input events — so it animates/updates continuously. get_input_event
+    // spins CheckMessages ~1 kHz while waiting; vsync on submit_frame caps actual
+    // redraws to the display rate. Without this an idle panel (no mouse motion)
+    // looks frozen.
+    if( imgui_layer::visible() ) {
+        needupdate = true;
+    }
+
     bool resized = false;
     if( resize_dims.has_value() ) {
         restore_on_out_of_scope<input_event> prev_last_input( last_input );

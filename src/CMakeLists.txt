@@ -162,6 +162,11 @@ endif ()
 # DXIL/Win11, SPIR-V/Linux).
 target_link_libraries(cataclysm-bn-tiles-common PUBLIC SDL3_shadercross::SDL3_shadercross)
 
+# Dear ImGui dev/debug-only UI layer. PUBLIC so the executable and cata_test
+# both link it; it stays inert at runtime until imgui_layer init succeeds on a
+# real window (gated like render_state::ready()).
+target_link_libraries(cataclysm-bn-tiles-common PUBLIC imgui)
+
 # Ship the runtime DLLs next to the executable so a fresh-checkout dev build
 # on Windows 11 (NVIDIA RTX 4090 target) has the shadercross DLL + DXC
 # sidecars (dxcompiler.dll / dxil.dll) resolvable at launch. Windows-only:

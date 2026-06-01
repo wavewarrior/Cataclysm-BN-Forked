@@ -49,13 +49,18 @@ public:
     //                Empty = skip.
     // indirect     : runtime_w*runtime_h*3 floats — per-tile 1-bounce indirect
     //                RGB (i*3 + {0,1,2}), x-major. Empty = skip.
+    // vis          : runtime_w*runtime_h floats — per-tile visibility
+    //                (>=0: raw seen_cache [0..1]; <0: memorized tile sentinel),
+    //                x-major. Drives the Stoneshard-style soft vision falloff.
+    //                Empty = skip.
     void upload( SDL_GPUCopyPass *cp,
                  SDL_GPUDevice   *dev,
                  int runtime_w, int runtime_h,
                  const std::vector<uint8_t> &transparency,
                  const std::vector<float>   &sdf,
                  const std::vector<uint8_t> &sky_vis = {},
-                 const std::vector<float>   &indirect = {} );
+                 const std::vector<float>   &indirect = {},
+                 const std::vector<float>   &vis = {} );
 
     SDL_GPUTexture *transparency_texture() const noexcept { return transparency_tex_; }
     SDL_GPUTexture *sdf_texture()          const noexcept { return sdf_tex_; }
@@ -67,6 +72,10 @@ public:
     // (1.0=open sky, 0.0=roofed) — sampler-texture Load returns 0 on Metal.
     SDL_GPUBuffer  *sky_vis_buffer()       const noexcept { return skyvis_storage_; }
     SDL_GPUBuffer  *indirect_buffer()      const noexcept { return indirect_storage_; }
+    // Per-tile visibility as a fragment-readable storage buffer of floats
+    // (>=0 = live seen_cache [0..1]; <0 = memorized-tile sentinel). Drives the
+    // soft vision falloff + memory desaturate-fade in the fragment shader.
+    SDL_GPUBuffer  *vis_buffer()           const noexcept { return visbuf_storage_; }
 
     bool ready() const noexcept { return sdf_tex_ != nullptr; }
     // True after the first successful upload(). Until then the SDF/sky_vis
@@ -94,11 +103,13 @@ private:
     SDL_GPUBuffer         *sdf_storage_      = nullptr; // fragment storage buffer (SdfBuf)
     SDL_GPUBuffer         *skyvis_storage_   = nullptr; // fragment storage buffer (SkyVisBuf, floats)
     SDL_GPUBuffer         *indirect_storage_ = nullptr; // fragment storage buffer (IndirectBuf, 3 floats/tile RGB)
+    SDL_GPUBuffer         *visbuf_storage_   = nullptr; // fragment storage buffer (VisBuf, 1 float/tile)
     SDL_GPUTransferBuffer *xfer_transparency_ = nullptr;
     SDL_GPUTransferBuffer *xfer_sdf_          = nullptr;
     SDL_GPUTransferBuffer *xfer_sky_vis_      = nullptr; // R8 bytes for sky_vis_tex_
     SDL_GPUTransferBuffer *xfer_skyvis_f_     = nullptr; // float bytes for skyvis_storage_
     SDL_GPUTransferBuffer *xfer_indirect_     = nullptr; // float bytes for indirect_storage_ (3/tile)
+    SDL_GPUTransferBuffer *xfer_vis_f_        = nullptr; // float bytes for visbuf_storage_ (1/tile)
     int  map_w_     = 0;   // physical texture extent (REALITY_BUBBLE_SIZE_MAX*SEEX)
     int  map_h_     = 0;
     int  runtime_w_ = 0;   // last-uploaded runtime dimensions (≤ map_w_)

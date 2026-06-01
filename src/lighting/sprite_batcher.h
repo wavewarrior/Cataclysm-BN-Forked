@@ -27,7 +27,11 @@
 #include "gpu_device.h"
 
 #include <cstdint>
+#include <functional>
 #include <memory>
+
+// Forward-declared so the header stays self-contained (no SDL_gpu.h include).
+struct SDL_GPURenderPass;
 
 namespace lighting
 {
@@ -58,7 +62,11 @@ struct sprite_instance {
     float tint_b;
     float tint_a;
     float rotation;
-    float pad0;
+    // Memory-fade marker (effect 3): 0 or positive = normal sprite (no-op);
+    // negative = memorized tile carrying -(distance from player in tiles), which
+    // the fragment shader decodes to dim+fade remembered terrain. Default 0 so
+    // every existing sprite (UI/font/zero-init) is untouched.
+    float light_mul;
     float pad1;
     float pad2;
 };
@@ -112,8 +120,25 @@ struct debug_params {
     float    dither_amt    = 1.0f;
     float    dither_bands  = 6.0f;
     float    gi_strength   = 0.60f;  // 1-bounce indirect multiplier (0=off); Alt+F8/F9 to tune
+    // Vision rework knobs (Stoneshard-style). All default ON so the effect ships;
+    // set any to its off-value to bisect live. Wire-stable with DebugParams cbuffer.
+    float    vis_curve     = 1.0f;   // vision-edge falloff exponent (0=off → no falloff)
+    float    mem_dim       = 0.35f;  // memorized-tile brightness floor (effect 3)
+    float    mem_desat     = 0.70f;  // memorized-tile desaturation 0..1 (effect 3)
+    float    night_floor   = 0.02f;  // ambient floor at night   (effect 4)
+    float    day_floor     = 0.05f;  // ambient floor at noon     (effect 4)
+    // Tone grade (Stoneshard wash) + radial vision bubble. Applied to LIT world
+    // tiles only (tint≈0). Full-strength defaults; each knob disables at its
+    // off-value (grade_desat/cool=0, grade_bright=1, vis_radius=0).
+    float    grade_desat   = 0.55f;  // 0=full colour … 1=greyscale
+    float    grade_cool    = 0.20f;  // blend toward cool teal tint (0=off)
+    float    grade_bright  = 0.80f;  // brightness multiplier on lit world tiles
+    float    vis_radius    = 16.0f;  // radial player-distance falloff radius (tiles; 0=off)
+    float    player_x      = 0.0f;   // DATA (not a knob): player map-tile centre x
+    float    player_y      = 0.0f;   // DATA: player map-tile centre y
+    float    mem_radius    = 30.0f;  // memory distance-fade scale in tiles (effect 3)
     float    dp_pad1       = 0.0f;
-    float    dp_pad2       = 0.0f;
+    float    dp_pad2       = 0.0f;   // pad to 24-float (96-byte) alignment
 };
 
 // Returns sun/sky params interpolated from a 24h LUT for the given hour (0..24).
@@ -203,6 +228,7 @@ class sprite_batcher
                                      SDL_GPUSampler   *data_sampler = nullptr,
                                      SDL_GPUBuffer    *sky_vis_buf  = nullptr,
                                      SDL_GPUBuffer    *indirect_buf = nullptr,
+                                     SDL_GPUBuffer    *vis_buf      = nullptr,
                                      const sun_params *sp           = nullptr,
                                      const debug_params *dbg        = nullptr );
 
@@ -217,8 +243,19 @@ class sprite_batcher
         // call sites that want explicit grouping.
         void flush();
 
-        // Close the render pass started by begin_pass().
-        void end_pass();
+        // Overlay hook: invoked inside end_pass() with the live render pass +
+        // command buffer, AFTER this batcher's segments are replayed and just
+        // BEFORE SDL_EndGPURenderPass. Lets an external renderer (Dear ImGui)
+        // draw into the SAME swapchain pass — required because D3D12 drops
+        // prior-pass draws if a second pass targets the same swapchain texture.
+        // Passed by value per-call (NOT stored): early-return paths in end_pass
+        // simply drop it, so it can never leak into the next frame's pass.
+        using pass_overlay_fn =
+            std::function<void( SDL_GPURenderPass *, SDL_GPUCommandBuffer * )>;
+
+        // Close the render pass started by begin_pass(). If `overlay` is set it
+        // runs as the last draw inside the pass (see pass_overlay_fn).
+        void end_pass( const pass_overlay_fn &overlay = {} );
 
         // Per-frame reset — called by the render orchestrator at the start
         // of each frame to roll the instance-buffer ring forward. No GPU

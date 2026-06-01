@@ -88,12 +88,37 @@ void render_state::init( SDL_Window *host_window )
     // GPU. Per-frame upload only touches runtime_w × runtime_h tiles.
     const int rt_tiles = REALITY_BUBBLE_SIZE_MAX * SEEX;
     sdf_.init( device_, rt_tiles, rt_tiles );
+
+    // UI compositor target. Sized to the PHYSICAL (drawable) swapchain pixels
+    // so the composite blit is 1:1; the resize hook in sdltiles keeps it in
+    // sync with window size changes. A failed alloc leaves ui_target() != null
+    // with a null texture(); callers must guard on texture() before use.
+    {
+        int pw = 0;
+        int ph = 0;
+        SDL_GetWindowSizeInPixels( host_window, &pw, &ph );
+        if( pw <= 0 || ph <= 0 ) {
+            pw = 1;
+            ph = 1;
+        }
+        ui_target_ = std::make_unique<ui_composite_target>();
+        ui_target_->init( device_, pw, ph );
+
+        // World accumulation layer — same size/format. init() leaves it dirty,
+        // which the world pass treats as "needs full clear" on the first frame.
+        world_target_ = std::make_unique<ui_composite_target>();
+        world_target_->init( device_, pw, ph );
+    }
 }
 
 void render_state::shutdown() noexcept
 {
     // Phase 3: stop collector thread before releasing GPU resources.
     collector_.reset();
+
+    // Release the compositor textures while the device is still live.
+    ui_target_.reset();
+    world_target_.reset();
 
     // Phase 4: release SDF textures.
     sdf_.shutdown( device_ );
@@ -173,6 +198,7 @@ void render_state::begin_lighting_frame( const frame_light_inputs &in )
     SDL_GPUBuffer  *sbuf = sdf_ready ? sdf_.sdf_buffer()      : nullptr;
     SDL_GPUBuffer  *kvis = sdf_ready ? sdf_.sky_vis_buffer()  : nullptr;
     SDL_GPUBuffer  *ibuf = sdf_ready ? sdf_.indirect_buffer() : nullptr;
+    SDL_GPUBuffer  *vbuf = sdf_ready ? sdf_.vis_buffer()      : nullptr;
     const Uint32 ne = collector_
                       ? static_cast<Uint32>( collector_->last_count() )
                       : 0u;
@@ -182,7 +208,7 @@ void render_state::begin_lighting_frame( const frame_light_inputs &in )
     tile_batcher_.set_lighting_resources(
         in.tile_pixel_size, in.z_level, ne, in.ambient,
         in.camera_off_x, in.camera_off_y, sw, sh,
-        ebuf, sbuf, gpu_sampler_, kvis, ibuf, &in.sun, &in.debug );
+        ebuf, sbuf, gpu_sampler_, kvis, ibuf, vbuf, &in.sun, &in.debug );
 }
 
 void render_state::flush_ui_rects( sprite_batcher &dst )
@@ -211,6 +237,15 @@ void render_state::clear_ui_queues() noexcept
     // ui_manager redraw cycle if a flush was skipped (no swapchain etc).
     ui_rect_transient_.clear();
     font_glyph_transient_.clear();
+    // The composited UI is about to be rebuilt (ui_manager re-appends every
+    // adaptor's slice after this). Mark the compositor dirty so Pass A
+    // re-renders it this frame. On frames where this is NOT called (a bare
+    // refresh_display re-fire with no ui_manager redraw cycle), the compositor
+    // stays clean → Pass A is skipped → the persistent texture is reused,
+    // which is the partial-redraw flicker fix.
+    if( ui_target_ ) {
+        ui_target_->invalidate();
+    }
 }
 
 void render_state::clear_tile_queue() noexcept

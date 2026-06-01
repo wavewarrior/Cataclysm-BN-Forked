@@ -219,7 +219,8 @@ class texture
                                   double rotation_degrees = 0.0,
                                   float light_r = 1.0f,
                                   float light_g = 1.0f,
-                                  float light_b = 1.0f ) const {
+                                  float light_b = 1.0f,
+                                  float light_mul = 0.0f ) const {
             if( !atlas_tex || atlas_w <= 0 || atlas_h <= 0 ) {
                 return false;
             }
@@ -251,6 +252,7 @@ class texture
             s.tint_b = light_b;
             s.tint_a = alpha;
             s.rotation = static_cast<float>( rotation_degrees * 3.14159265358979323846 / 180.0 );
+            s.light_mul = light_mul;
             lighting::get_render_state().queue_tile_sprite( atlas_tex, s );
             return true;
         }
@@ -1189,6 +1191,10 @@ class cata_tiles
         mutable float gpu_light_r = 1.0f;
         mutable float gpu_light_g = 1.0f;
         mutable float gpu_light_b = 1.0f;
+        // Effect 3 memory-fade marker passed to enqueue_tile_sprite:
+        // 0 = normal sprite; negative = memorized tile carrying -(dist from
+        // player in tiles). Set per-tile in draw_from_id_string.
+        mutable float gpu_light_mul = 0.0f;
 
         idle_animation_manager idle_animations;
 

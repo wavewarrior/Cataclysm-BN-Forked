@@ -4418,6 +4418,15 @@ bool cata_tiles::draw_from_id_string(
         }
     }
 
+    // Effect 3: memorized (out-of-sight but remembered) tiles carry
+    // -(distance from player in tiles) as the sprite light_mul marker, so the
+    // fragment shader dims + distance-fades remembered terrain (floored at
+    // mem_dim → persists, never black). 0 = normal tile (no fade).
+    gpu_light_mul = 0.0f;
+    if( ll == lit_level::MEMORIZED && g != nullptr ) {
+        gpu_light_mul = -static_cast<float>( trig_dist( g->u.pos(), pos ) );
+    }
+
     //draw it!
     draw_tile_at( display_tile, screen_pos, loc_rand, true_rota,
                   bg_tint, fg_tint, ll, apply_visual_effects, height_3d,
@@ -4598,7 +4607,8 @@ bool cata_tiles::draw_sprite_at( const tile_type &tile, point p,
         sprite_tex->enqueue_tile_sprite( gpu.texture, gpu.atlas_w, gpu.atlas_h,
                                          fdst, flip, 1.0f,
                                          static_cast<double>( rotation ),
-                                         gpu_light_r, gpu_light_g, gpu_light_b );
+                                         gpu_light_r, gpu_light_g, gpu_light_b,
+                                         gpu_light_mul );
         if( !static_z_effect && overlay_count > 0 ) {
             const auto [overlay_tex, overlay_warp_offset] =
                 tileset_ptr->get_or_default(
