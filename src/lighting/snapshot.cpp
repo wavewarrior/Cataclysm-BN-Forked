@@ -135,7 +135,7 @@ static void collect_zlev( map &m, int zlev, std::vector<gpu_emitter> &out )
                     }
 
                     if( cur->get_lum( { sx, sy } ) ) {
-                        for( const item * const itm : m.i_at( p.raw() ) ) {
+                        for( const item * const itm : m.i_at( p ) ) {
                             float ilum = 0.0f;
                             units::angle iwidth = 0_degrees;
                             units::angle idir   = 0_degrees;
@@ -165,13 +165,13 @@ static void collect_zlev( map &m, int zlev, std::vector<gpu_emitter> &out )
         if( !v ) {
             continue;
         }
-        if( v->global_pos3().z != zlev ) {
+        if( v->bub_ms_location().z() != zlev ) {
             continue;
         }
 
         for( const vehicle_part * const pt : v->lights( true ) ) {
             const vpart_info &vp = pt->info();
-            const tripoint part_pos = v->global_part_pos3( *pt );
+            const tripoint part_pos = v->bub_part_location( *pt ).raw();
             const int lx = part_pos.x;
             const int ly = part_pos.y;
 
@@ -249,24 +249,24 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
     }
     // Defense-in-depth: player outside loaded map (shouldn't happen with
     // active_world non-null, but cheap to guard).
-    if( !m.inbounds( g->u.pos() ) ) {
+    if( !m.inbounds( g->u.bub_pos() ) ) {
         return out;
     }
 
-    const int zlev = g->u.pos().z;
+    const int zlev = g->u.bub_pos().z();
 
     auto collect_character = [&]( const Character &c ) {
         const float lum = c.active_light();
         if( lum <= 0.0f ) {
             return;
         }
-        const tripoint pos = c.pos();
+        const tripoint_bub_ms pos = c.bub_pos();
         if( !m.inbounds( pos ) ) {
             return;
         }
-        out.push_back( make_omni( pos.x, pos.y, pos.z, lum, 0, 0, 0 ) );
+        out.push_back( make_omni( pos.x(), pos.y(), pos.z(), lum, 0, 0, 0 ) );
         if( c.has_effect( snapshot_effect_onfire ) ) {
-            out.push_back( make_omni( pos.x, pos.y, pos.z, 8.0f, 1.0f, 0.5f, 0.0f ) );
+            out.push_back( make_omni( pos.x(), pos.y(), pos.z(), 8.0f, 1.0f, 0.5f, 0.0f ) );
         }
     };
 
@@ -284,15 +284,15 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
         if( critter.is_hallucination() ) {
             continue;
         }
-        const tripoint mp = critter.pos();
+        const tripoint_bub_ms mp = critter.bub_pos();
         if( !m.inbounds( mp ) ) {
             continue;
         }
         if( critter.has_effect( snapshot_effect_onfire ) ) {
-            out.push_back( make_omni( mp.x, mp.y, mp.z, 8.0f, 1.0f, 0.5f, 0.0f ) );
+            out.push_back( make_omni( mp.x(), mp.y(), mp.z(), 8.0f, 1.0f, 0.5f, 0.0f ) );
         }
         if( critter.type->luminance > 0 ) {
-            out.push_back( make_omni( mp.x, mp.y, mp.z,
+            out.push_back( make_omni( mp.x(), mp.y(), mp.z(),
                                       critter.type->luminance, 0, 0, 0 ) );
         }
     }
@@ -303,7 +303,7 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
     // on-fire glow. Folded in here after dropping collect_character() for
     // the player so we don't get two stacked emitters at the same tile.
     {
-        const tripoint pp = g->u.pos();
+        const tripoint pp = g->u.bub_pos().raw();
         const Character &pc = get_player_character();
         const float lum = pc.active_light();
         if( lum > 0.5f ) {
@@ -322,7 +322,7 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
     // pipeline works at all when given known-good input.
     {
         out.clear();
-        const tripoint pp = g->u.pos();
+        const tripoint pp = g->u.bub_pos().raw();
         gpu_emitter t{};
         t.pos_x           = static_cast<float>( pp.x ) + 0.5f;
         t.pos_y           = static_cast<float>( pp.y ) + 0.5f;
@@ -344,11 +344,11 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
         for( const flash_event &f : flashes ) {
             const float frac = 1.0f - ( f.elapsed_ms / f.duration_ms );
             const float radius = f.intensity * std::max( 0.0f, frac );
-            const tripoint local = m.getlocal( f.pos );
+            const tripoint_bub_ms local = m.abs_to_bub( f.pos );
             if( !m.inbounds( local ) ) {
                 continue;
             }
-            out.push_back( make_omni( local.x, local.y, local.z,
+            out.push_back( make_omni( local.x(), local.y(), local.z(),
                                       radius, f.r, f.g, f.b ) );
         }
     }
@@ -361,7 +361,7 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
     // already culled in the fragment shader, but doing it here saves
     // upload bandwidth and frees emitter slots.
     if( g ) {
-        const tripoint pp = g->u.pos();
+        const tripoint pp = g->u.bub_pos().raw();
         constexpr float view_margin = 25.0f;
         out.erase( std::remove_if( out.begin(), out.end(),
                                    [&pp]( const gpu_emitter & e ) {

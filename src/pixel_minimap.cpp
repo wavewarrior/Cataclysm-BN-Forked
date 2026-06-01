@@ -226,11 +226,10 @@ void pixel_minimap::update_cache_at( const tripoint_bub_sm &pos )
             color = adjust_color_brightness( color, settings.brightness );
         }
 
-        auto &current_color = cache_item.color_at( sm_ms );
+        auto &current_color = cache_item.color_at( sm_ms.raw() );
 
-            if( current_color != color ) {
-                current_color = color;
-            }
+        if( current_color != color ) {
+            current_color = color;
         }
     }
 }
@@ -311,17 +310,11 @@ void pixel_minimap::reset()
 
 void pixel_minimap::render( const tripoint_bub_ms &center )
 {
+    // GPU path: render_cache draws minimap tiles directly via geometry->rect.
+    // The legacy display_buffer/main_tex RenderCopy blit was removed in the
+    // 2i-B cutover (display_buffer is gone); nothing to composite here.
     render_cache( center );
     render_critters( center );
-
-    //set display buffer to main screen
-    set_displaybuffer_rendertarget();
-    //paint intermediate texture to screen
-    const SDL_FRect fsrc{ float( main_tex_clip_rect.x ), float( main_tex_clip_rect.y ),
-                          float( main_tex_clip_rect.w ), float( main_tex_clip_rect.h ) };
-    const SDL_FRect fdst{ float( screen_clip_rect.x ), float( screen_clip_rect.y ),
-                          float( screen_clip_rect.w ), float( screen_clip_rect.h ) };
-    RenderCopy( renderer, main_tex, &fsrc, &fdst );
 }
 
 void pixel_minimap::render_cache( const tripoint_bub_ms &center )
@@ -332,11 +325,11 @@ void pixel_minimap::render_cache( const tripoint_bub_ms &center )
     const auto sm_offset = tripoint_rel_sm( view_tiles_count.x / SEEX / 2,
                                             view_tiles_count.y / SEEY / 2, 0 );
 
-    auto ms_remain = center.xy();
-    ms_to_sm_remain( ms_remain );
+    const auto [ sm_remain_quot, ms_remain ] = project_remain<coords::sm>( center.xy() );
+    static_cast<void>( sm_remain_quot );
     const auto ms_offset = point{
-        view_tiles_count.x / 2 - sm_offset.x * SEEX - ms_remain.x,
-        view_tiles_count.y / 2 - sm_offset.y * SEEY - ms_remain.y
+        view_tiles_count.x / 2 - sm_offset.x() * SEEX - ms_remain.x(),
+        view_tiles_count.y / 2 - sm_offset.y() * SEEY - ms_remain.y()
     };
 
     // Offset to convert from main_tex space to screen space.
@@ -349,7 +342,7 @@ void pixel_minimap::render_cache( const tripoint_bub_ms &center )
     // very large bubbles may approach MAX_INSTANCES=65536.
     std::ranges::for_each( cache, [&]( const auto & elem ) {
         if( !elem.second.touched ) {
-            continue;
+            return;
         }
 
         const tripoint_rel_sm rel_pos = elem.first - sm_center;
@@ -371,7 +364,7 @@ void pixel_minimap::render_cache( const tripoint_bub_ms &center )
                 }
 
                 const point tile_pos = projector->get_tile_pos(
-                                           { ms_pos.x + x, ms_pos.y + y }, view_tiles_count )
+                                           { ms_pos.x() + x, ms_pos.y() + y }, view_tiles_count )
                                        + screen_base;
 
                 if( tile_pos.x < screen_clip_rect.x ||
@@ -384,7 +377,7 @@ void pixel_minimap::render_cache( const tripoint_bub_ms &center )
                 geometry->rect( renderer, tile_pos, pixel_size.x, pixel_size.y, color );
             }
         }
-    }
+    } );
 }
 
 void pixel_minimap::render_critters( const tripoint_bub_ms &center )

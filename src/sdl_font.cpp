@@ -521,6 +521,17 @@ BitmapFont::BitmapFont(
         glyphs.swap( new_surf );
     }
 
+    // Per-color tinted glyph surfaces, consumed below by both the GPU upload and
+    // the legacy CreateTextureFromSurface. ascii_surf[0] is the master copy of the
+    // (possibly remapped) glyph sheet; the rest are per-color duplicates.
+    SDL_Surface_Ptr ascii_surf[std::tuple_size<decltype( ascii )>::value];
+    ascii_surf[0].reset( SDL_ConvertSurface( glyphs.get(), format ) );
+    SDL_SetSurfaceRLE( ascii_surf[0].get(), true );
+    for( size_t a = 1; a < std::tuple_size<decltype( ascii )>::value; ++a ) {
+        ascii_surf[a].reset( SDL_ConvertSurface( ascii_surf[0].get(), format ) );
+        SDL_SetSurfaceRLE( ascii_surf[a].get(), true );
+    }
+
     constexpr auto COLORS = std::tuple_size_v<decltype( ascii )>;
     const auto fnt_fmt = SDL_GetPixelFormatDetails( format );
     const Uint32 fnt_key = SDL_MapRGB( fnt_fmt, nullptr, 0xFF, 0, 0xFF );

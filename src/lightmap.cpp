@@ -61,6 +61,57 @@ static const efftype_id effect_onfire( "onfire" );
 // render as LOW (dim, visible) rather than BRIGHT (same as direct sunlight).
 static constexpr float SOLAR_SHADOW_SCATTER = 0.09f;
 
+// Set by apply_light_source before each castLight sequence; read by the
+// shadowcasting template to write per-channel max-blended color energy.
+light_color_rgb g_current_source_color;
+
+// HSV → RGB conversion (H in degrees [0,360), S/V in [0,1])
+light_color_rgb light_color_rgb::from_hsv( float h, float s, float v )
+{
+    const float c = v * s;
+    const float x = c * ( 1.0f - std::fabs( std::fmod( h / 60.0f, 2.0f ) - 1.0f ) );
+    const float m = v - c;
+    float r = 0.f, g = 0.f, b = 0.f;
+    if( h < 60.0f )       { r = c; g = x; }
+    else if( h < 120.0f ) { r = x; g = c; }
+    else if( h < 180.0f ) { g = c; b = x; }
+    else if( h < 240.0f ) { g = x; b = c; }
+    else if( h < 300.0f ) { r = x; b = c; }
+    else                  { r = c; b = x; }
+    return { r + m, g + m, b + m };
+}
+
+// Dawn/dusk tint: cached per turn, returns the warm color for twilight
+// or an empty color outside twilight. Only depends on calendar::turn.
+static light_color_rgb cached_twilight_color()
+{
+    static time_point cached_turn = calendar::before_time_starts;
+    static light_color_rgb cached_color;
+    if( cached_turn == calendar::turn ) {
+        return cached_color;
+    }
+    cached_turn = calendar::turn;
+    const bool is_twilight_period = is_dusk( calendar::turn ) || is_dawn( calendar::turn );
+    if( !is_twilight_period ) {
+        cached_color = {};
+        return cached_color;
+    }
+    const float ease = std::sin( M_PI * 0.5f );
+    const float tint_strength = ease * 0.35f;
+    const light_color_rgb sun_rgb = light_color_rgb::from_hsv( 35.0f, 0.8f, 1.0f );
+    cached_color = sun_rgb * tint_strength;
+    return cached_color;
+}
+
+light_color_rgb dawn_dusk_color_for_lightmap( std::string_view dimension )
+{
+    if( !dimension.empty() ) {
+        // Alternate dimensions don't get dawn/dusk tint.
+        return {};
+    }
+    return cached_twilight_color();
+}
+
 static auto outside_player_3d_z_range( const tripoint_bub_ms &target ) -> bool
 {
     return fov_3d && std::abs( target.z() - g->u.bub_pos().z() ) > fov_3d_z_range;
