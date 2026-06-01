@@ -1,10 +1,9 @@
-#if defined(TILES)
-
 #include "vehicle_preview.h"
 
 #include <algorithm>
 
 #include "cata_tiles.h"
+#include "lighting/render_state.h"
 #include "cursesport.h"
 #include "game.h"
 #include "map.h"
@@ -238,10 +237,9 @@ void vehicle_preview_window::display( const vehicle &veh, tripoint_mnt_veh curso
     const int win_width = win_cols * termx_pixels;
     const int win_height = win_lines * termy_pixels;
 
-    // Set SDL clip rectangle to prevent drawing outside the window bounds
-    const SDL_Renderer_Ptr &renderer = get_sdl_renderer();
+    // GPU scissor — clips vehicle preview sprites to the preview window bounds.
     SDL_Rect clip_rect = { win_left, win_top, win_width, win_height };
-    SDL_SetRenderClipRect( renderer.get(), &clip_rect );
+    lighting::get_render_state().set_tile_scissor( &clip_rect );
 
     // Get all parts that should be displayed (one per tile)
     const std::vector<int> structural_parts = veh.all_standalone_parts();
@@ -285,8 +283,7 @@ void vehicle_preview_window::display( const vehicle &veh, tripoint_mnt_veh curso
     // Draw cursor at center (current cursor position)
     draw_cursor_at_pixel( center_px );
 
-    // Clear the clip rectangle
-    SDL_SetRenderClipRect( renderer.get(), nullptr );
+    lighting::get_render_state().clear_tile_scissor();
 }
 
 vehicle_preview_window::~vehicle_preview_window()
@@ -300,9 +297,6 @@ void vehicle_preview_window::clear()
         tilecontext->set_draw_scale( original_zoom );
     }
 
-    // Ensure clip rectangle is cleared
-    const auto &renderer = get_sdl_renderer();
-    SDL_SetRenderClipRect( renderer.get(), nullptr );
+    lighting::get_render_state().clear_tile_scissor();
 }
 
-#endif // TILES

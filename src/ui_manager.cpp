@@ -13,57 +13,41 @@
 #include "point.h"
 #include "sdltiles.h"
 #include "profile.h"
+#include "lighting/render_state.h"
+#include "lighting/ui_adaptor_draw_slices.h"
 
 using ui_stack_t = std::vector<std::reference_wrapper<ui_adaptor>>;
 
 static bool redraw_in_progress = false;
 static bool showing_debug_message = false;
 static bool restart_redrawing = false;
-#if defined( TILES )
-static std::optional<SDL_Rect> prev_clip_rect;
-#endif
 static ui_stack_t ui_stack;
 
 ui_adaptor::ui_adaptor() : disabling_uis_below( false ), is_debug_message_ui( false ),
-    invalidated( false ), deferred_resize( false )
+    invalidated( false ), deferred_resize( false ),
+    slices_( std::make_unique<lighting::ui_adaptor_draw_slices>() )
 {
     ui_stack.emplace_back( *this );
 }
 
 ui_adaptor::ui_adaptor( ui_adaptor::disable_uis_below ) : disabling_uis_below( true ),
-    is_debug_message_ui( false ), invalidated( false ), deferred_resize( false )
+    is_debug_message_ui( false ), invalidated( false ), deferred_resize( false ),
+    slices_( std::make_unique<lighting::ui_adaptor_draw_slices>() )
 {
     ui_stack.emplace_back( *this );
 }
 
 ui_adaptor::ui_adaptor( ui_adaptor::debug_message_ui ) : disabling_uis_below( true ),
-    is_debug_message_ui( true ), invalidated( false ), deferred_resize( false )
+    is_debug_message_ui( true ), invalidated( false ), deferred_resize( false ),
+    slices_( std::make_unique<lighting::ui_adaptor_draw_slices>() )
 {
     assert( !showing_debug_message );
     showing_debug_message = true;
     if( redraw_in_progress ) {
         restart_redrawing = true;
     }
-#if defined( TILES )
-    // Reset the clip rect because the debug message UI might be created in a
-    // redraw callback when a clip rect is active. When the UI is deconstructed,
-    // restore the previous clip rect to prevent the redraw callback from
-    // drawing outside the clip area, which will cause stuck graphics. This
-    // alone does not prevent the graphics from becoming borked in other ways,
-    // but `ui_manager` will redo the entire redrawing as soon as the redraw
-    // callback returns.
-    const SDL_Renderer_Ptr &renderer = get_sdl_renderer();
-    if( SDL_RenderClipEnabled( renderer.get() ) ) {
-        prev_clip_rect = SDL_Rect();
-        SDL_GetRenderClipRect( renderer.get(), &prev_clip_rect.value() );
-        SDL_SetRenderClipRect( renderer.get(), nullptr );
-    } else {
-        prev_clip_rect = std::nullopt;
-    }
-#endif
-    // The debug message might be shown during a normal UI's redraw callback,
-    // so we need to invalidate the frame buffer so it does not interfere
-    // with the display of the debug message.
+    // Invalidate the frame buffer so the debug message does not interfere
+    // with the normal UI's redraw callback.
     reinitialize_framebuffer( true );
     ui_stack.emplace_back( *this );
 }
@@ -73,13 +57,6 @@ ui_adaptor::~ui_adaptor()
     if( is_debug_message_ui ) {
         assert( showing_debug_message );
         showing_debug_message = false;
-#if defined( TILES )
-        // See ui_adaptor( debug_message_ui )
-        if( prev_clip_rect.has_value() ) {
-            const SDL_Renderer_Ptr &renderer = get_sdl_renderer();
-            SDL_SetRenderClipRect( renderer.get(), &prev_clip_rect.value() );
-        }
-#endif
     }
     for( auto it = ui_stack.rbegin(); it < ui_stack.rend(); ++it ) {
         if( &it->get() == this ) {
@@ -98,14 +75,9 @@ void ui_adaptor::position_from_window( const catacurses::window &win )
     } else {
         const rectangle<point> old_dimensions = dimensions;
         // ensure position is updated before calling invalidate
-#ifdef TILES
         const window_dimensions dim = get_window_dimensions( win );
         dimensions = rectangle<point>(
                          dim.window_pos_pixel, dim.window_pos_pixel + dim.window_size_pixel );
-#else
-        const point origin( getbegx( win ), getbegy( win ) );
-        dimensions = rectangle<point>( origin, origin + point( getmaxx( win ), getmaxy( win ) ) );
-#endif
         invalidated = true;
         ui_manager::invalidate( old_dimensions, false );
     }
@@ -115,13 +87,9 @@ void ui_adaptor::position( point topleft, point size )
 {
     const rectangle<point> old_dimensions = dimensions;
     // ensure position is updated before calling invalidate
-#ifdef TILES
     const window_dimensions dim = get_window_dimensions( topleft, size );
     dimensions = rectangle<point>( dim.window_pos_pixel,
                                    dim.window_pos_pixel + dim.window_size_pixel );
-#else
-    dimensions = rectangle<point>( topleft, topleft + size );
-#endif
     invalidated = true;
     ui_manager::invalidate( old_dimensions, false );
 }
@@ -138,48 +106,29 @@ void ui_adaptor::on_screen_resize( const screen_resize_callback_t &fun )
 
 void ui_adaptor::set_cursor( const catacurses::window &w, const point &pos )
 {
-#if !defined( TILES )
-    cursor_type = cursor::custom;
-    cursor_pos = point( getbegx( w ), getbegy( w ) ) + pos;
-#else
     // Unimplemented
     cursor_type = cursor::disabled;
     static_cast<void>( w );
     static_cast<void>( pos );
-#endif
 }
 
 void ui_adaptor::record_cursor( const catacurses::window &w )
 {
-#if !defined( TILES )
-    cursor_type = cursor::custom;
-    cursor_pos = point( getbegx( w ) + getcurx( w ), getbegy( w ) + getcury( w ) );
-#else
     // Unimplemented
     cursor_type = cursor::disabled;
     static_cast<void>( w );
-#endif
 }
 
 void ui_adaptor::record_term_cursor()
 {
-#if !defined( TILES )
-    cursor_type = cursor::custom;
-    cursor_pos = point( getcurx( catacurses::newscr ), getcury( catacurses::newscr ) );
-#else
     // Unimplemented
     cursor_type = cursor::disabled;
-#endif
 }
 
 void ui_adaptor::default_cursor()
 {
-#if !defined( TILES )
-    cursor_type = cursor::last;
-#else
     // Unimplemented
     cursor_type = cursor::disabled;
-#endif
 }
 
 void ui_adaptor::disable_cursor()
@@ -189,11 +138,7 @@ void ui_adaptor::disable_cursor()
 
 static void restore_cursor( const point &p )
 {
-#if !defined( TILES )
-    wmove( catacurses::newscr, p );
-#else
     static_cast<void>( p );
-#endif
 }
 
 void ui_adaptor::mark_resize() const
@@ -329,6 +274,29 @@ void ui_adaptor::redraw_invalidated()
         return;
     }
 
+    // Phase 2i-B-7g lifecycle. Do NOT clear the UI-rect / font composited
+    // queues here: each ui_adaptor owns a retained draw slice; only
+    // invalidated adaptors clear+repopulate their own slice during
+    // redraw_cb (see the redraw loop below). After the loop, we
+    // recomposite all slices in z-order into render_state's global UI
+    // queues, which refresh_display drains. Non-invalidated adaptors keep
+    // their previous slice contents — partial redraws no longer wipe
+    // unrelated windows.
+    //
+    // Tile sprites are NOT in per-adaptor slices (they live in the global
+    // tile_queue, populated by cata_tiles::draw / draw_om as window
+    // callbacks). Clear tile_queue here so that contexts which do not
+    // re-populate it (main menu, loading screens, quit-to-menu) do not
+    // keep firing the previous in-game frame's tile sprites every
+    // refresh_display. In-game callbacks immediately repopulate after
+    // their own clear_tile_queue() at the top of draw()/draw_om().
+    {
+        auto &rs = lighting::get_render_state();
+        if( rs.ready() ) {
+            rs.clear_tile_queue();
+        }
+    }
+
     restore_on_out_of_scope<bool> prev_redraw_in_progress( redraw_in_progress );
     restore_on_out_of_scope<bool> prev_restart_redrawing( restart_redrawing );
     redraw_in_progress = true;
@@ -409,6 +377,28 @@ void ui_adaptor::redraw_invalidated()
                 ui_adaptor &ui = *it;
                 if( ui.invalidated ) {
                     if( ui.redraw_cb ) {
+                        // Phase 2i-B-7g: clear this adaptor's retained
+                        // GPU slice and route queue_* into it for the
+                        // duration of redraw_cb. RAII guard restores the
+                        // previous routing even if redraw_cb throws — a
+                        // dangling current_slices_ would corrupt the next
+                        // adaptor's slice on the following queue_* call.
+                        auto &rs = lighting::get_render_state();
+                        ui.draw_slices().ui_rects.clear();
+                        ui.draw_slices().font_glyphs.clear();
+                        struct slice_router_guard {
+                            lighting::render_state &rs;
+                            bool active;
+                            ~slice_router_guard()
+                            {
+                                if( active ) {
+                                    rs.set_current_slices( nullptr );
+                                }
+                            }
+                        } router{ rs, rs.ready() };
+                        if( router.active ) {
+                            rs.set_current_slices( &ui.draw_slices() );
+                        }
                         ui.default_cursor();
                         ui.redraw_cb( ui );
                         if( ui.cursor_type == cursor::last ) {
@@ -429,6 +419,32 @@ void ui_adaptor::redraw_invalidated()
             }
         }
     } while( restart_redrawing );
+
+    // Phase 2i-B-7g composition. Drain per-adaptor retained slices into
+    // render_state's global GPU queues in z-order (bottom-up == stack
+    // order). refresh_display flushes the composited queues this frame
+    // and re-fires the same draws on subsequent input-less frames, which
+    // matches the legacy SDL_Renderer display_buffer behaviour. Honour
+    // `disabling_uis_below` so a fullscreen modal hides the stack below.
+    {
+        auto &rs = lighting::get_render_state();
+        if( rs.ready() ) {
+            rs.clear_ui_queues();
+            auto first = ui_stack.rbegin();
+            for( ; first != ui_stack.rend(); ++first ) {
+                if( first->get().disabling_uis_below ) {
+                    break;
+                }
+            }
+            auto first_enabled = first == ui_stack.rend()
+                                 ? ui_stack.begin() : std::prev( first.base() );
+            for( auto it = first_enabled; it != ui_stack.end(); ++it ) {
+                const ui_adaptor &ui = *it;
+                rs.append_ui_rects( ui.draw_slices().ui_rects );
+                rs.append_font_glyphs( ui.draw_slices().font_glyphs );
+            }
+        }
+    }
 }
 
 void ui_adaptor::screen_resized()

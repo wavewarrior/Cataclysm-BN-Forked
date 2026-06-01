@@ -1275,9 +1275,7 @@ int worldfactory::show_worldgen_tab_confirm( const catacurses::window &win, WORL
     ctxt.register_action( "TEXT.HOME" );
     ctxt.register_action( "TEXT.END" );
     ctxt.register_action( "TEXT.DELETE" );
-#if defined( TILES )
     ctxt.register_action( "TEXT.PASTE" );
-#endif
     ctxt.register_action( "TEXT.INPUT_FROM_FILE" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
     ctxt.register_action( "ANY_INPUT" );

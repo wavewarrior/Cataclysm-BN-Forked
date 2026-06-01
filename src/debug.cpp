@@ -67,9 +67,6 @@
 #       if defined(LIBBACKTRACE)
 #           include <winnt.h>
 #       endif
-#   elif defined(__ANDROID__)
-#       include <unwind.h>
-#       include <dlfcn.h>
 #   else
 #       include <execinfo.h>
 #       include <unistd.h>
@@ -80,14 +77,7 @@
 #   include <backtrace.h>
 #endif
 
-#if defined(TILES)
 #include "sdl_wrappers.h"
-#endif // TILES
-
-#if defined(__ANDROID__)
-// used by android_version() function for __system_property_get().
-#include <sys/system_properties.h>
-#endif
 
 #if (defined(__DragonFly__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)) && !defined(BSD)
 #define BSD
@@ -323,9 +313,7 @@ static void debug_error_prompt(
 #endif
                                     " %s\n" // translated user string: space to continue
                                     " %s\n" // translated user string: ignore key
-#if defined(TILES)
                                     " %s\n" // translated user string: copy
-#endif // TILES
                                     , _( "An error has occurred!  Written below is the error report:" ),
                                     formatted_report,
 #if defined(BACKTRACE)
@@ -333,9 +321,7 @@ static void debug_error_prompt(
 #endif
                                     _( "Press <color_white>space bar</color> to continue the game." ),
                                     _( "Press <color_white>I</color> (or <color_white>i</color>) to also ignore this particular message in the future." )
-#if defined(TILES)
                                     , _( "Press <color_white>C</color> (or <color_white>c</color>) to copy this message to the clipboard." )
-#endif // TILES
                                 );
     ui.on_redraw( [&]( const ui_adaptor & ) {
         catacurses::erase();
@@ -344,21 +330,13 @@ static void debug_error_prompt(
         wnoutrefresh( catacurses::stdscr );
     } );
 
-#if defined(__ANDROID__)
-    input_context ctxt( "DEBUG_MSG" );
-    ctxt.register_manual_key( 'C' );
-    ctxt.register_manual_key( 'I' );
-    ctxt.register_manual_key( ' ' );
-#endif
     for( bool stop = false; !stop && !dont_debugmsg; ) {
         ui_manager::redraw();
         switch( inp_mngr.get_input_event().get_first_input() ) {
-#if defined(TILES)
             case 'c':
             case 'C':
                 SDL_SetClipboardText( formatted_report.c_str() );
                 break;
-#endif // TILES
             case 'i':
             case 'I':
                 ignored_messages.insert( msg_key );
@@ -832,7 +810,7 @@ std::string enum_to_string<DC>( DC x )
 } // namespace io
 
 #if defined(BACKTRACE)
-#if !defined(_WIN32) && !defined(__CYGWIN__) && !defined(__ANDROID__) && !defined(LIBBACKTRACE)
+#if !defined(_WIN32) && !defined(__CYGWIN__) && !defined(LIBBACKTRACE)
 // Verify that a string is safe for passing as an argument to addr2line.
 // In particular, we want to avoid any characters of significance to the shell.
 static bool debug_is_safe_string( const char *start, const char *finish )
@@ -1063,12 +1041,12 @@ void set_crash_exception_context( void *context )
 {
     g_crash_context = static_cast<CONTEXT *>( context );
 }
-#elif !defined(__ANDROID__) && !defined(LIBBACKTRACE)
+#elif !defined(LIBBACKTRACE)
 constexpr int bt_cnt = 20;
 static void *bt[bt_cnt];
 #endif
 
-#if !defined(_WIN32) && !defined(__ANDROID__) && !defined(LIBBACKTRACE)
+#if !defined(_WIN32) && !defined(LIBBACKTRACE)
 static void write_demangled_frame( std::ostream &out, const char *frame )
 {
 #if defined(__linux__)
@@ -1116,10 +1094,9 @@ static void write_demangled_frame( std::ostream &out, const char *frame )
     out << "\n    " << frame;
 #endif
 }
-#endif // !defined(_WIN32) && !defined(__ANDROID__)
+#endif // !defined(_WIN32)
 
 
-#if !defined(__ANDROID__)
 void debug_write_backtrace( std::ostream &out )
 {
 #if defined(LIBBACKTRACE)
@@ -1486,51 +1463,6 @@ void debug_write_backtrace( std::ostream &out )
     free( funcNames );
 #   endif
 #endif
-}
-#endif
-#endif
-
-// Probably because there are too many nested #if..#else..#endif in this file
-// NDK compiler doesn't understand #if defined(__ANDROID__)..#else..#endif
-// So write as two separate #if blocks
-#if defined(__ANDROID__)
-
-// The following Android backtrace code was originally written by Eugene Shapovalov
-// on https://stackoverflow.com/questions/8115192/android-ndk-getting-the-backtrace
-struct android_backtrace_state {
-    void **current;
-    void **end;
-};
-
-static _Unwind_Reason_Code unwindCallback( struct _Unwind_Context *context, void *arg )
-{
-    android_backtrace_state *state = static_cast<android_backtrace_state *>( arg );
-    uintptr_t pc = _Unwind_GetIP( context );
-    if( pc ) {
-        if( state->current == state->end ) {
-            return _URC_END_OF_STACK;
-        } else {
-            *state->current++ = reinterpret_cast<void *>( pc );
-        }
-    }
-    return _URC_NO_REASON;
-}
-
-void debug_write_backtrace( std::ostream &out )
-{
-    const size_t max = 50;
-    void *buffer[max];
-    android_backtrace_state state = {buffer, buffer + max};
-    _Unwind_Backtrace( unwindCallback, &state );
-    const std::size_t count = state.current - buffer;
-    // Start from 1: skip debug_write_backtrace ourselves
-    for( size_t idx = 1; idx < count && idx < max; ++idx ) {
-        const void *addr = buffer[idx];
-        Dl_info info;
-        if( dladdr( addr, &info ) && info.dli_sname ) {
-            out << "#" << std::setw( 2 ) << idx << ": " << addr << " " << demangle( info.dli_sname ) << "\n";
-        }
-    }
 }
 #endif
 

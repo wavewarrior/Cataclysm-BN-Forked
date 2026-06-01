@@ -1,9 +1,32 @@
-#if defined(TILES)
 #include "sdl_geometry.h"
 #include "sdl_utils.h"
 #include "debug.h"
+#include "lighting/render_state.h"
 
 #define dbg(x) DebugLogFL((x),DC::SDL)
+
+// Phase 2i-B-5 cutover: cata_tiles' unrotated draws now land on the
+// GPU swapchain via the tile_batcher pass (see draw_sprite_at). Rects
+// can finally migrate too: they queue into render_state and flush in
+// the ui_batcher pass *after* the tile_batcher pass, so colour-block
+// overlays render on top of GPU sprites and UI bgs render on top of
+// (mostly empty) bridge.
+//
+// Legacy SDL_RenderFillRect path dropped in the rect impl below;
+// display_buffer no longer receives rect fills.
+static void mirror_rect_to_gpu( const SDL_FRect &r, const SDL_Color &c ) noexcept
+{
+    auto &rs = lighting::get_render_state();
+    if( !rs.ready() ) {
+        return;
+    }
+    constexpr float inv255 = 1.0f / 255.0f;
+    rs.queue_ui_rect( r.x, r.y, r.w, r.h,
+                      static_cast<float>( c.r ) * inv255,
+                      static_cast<float>( c.g ) * inv255,
+                      static_cast<float>( c.b ) * inv255,
+                      static_cast<float>( c.a ) * inv255 );
+}
 
 void GeometryRenderer::horizontal_line( const SDL_Renderer_Ptr &renderer, point pos, int x2,
                                         int thickness, const SDL_Color &color ) const
@@ -30,45 +53,30 @@ void GeometryRenderer::rect( const SDL_Renderer_Ptr &renderer, point pos, int wi
 }
 
 
-void DefaultGeometryRenderer::rect( const SDL_Renderer_Ptr &renderer, const SDL_FRect &rect,
+void DefaultGeometryRenderer::rect( const SDL_Renderer_Ptr & /*renderer*/, const SDL_FRect &rect,
                                     const SDL_Color &color ) const
 {
-    SetRenderDrawColor( renderer, color.r, color.g, color.b, color.a );
-    RenderFillRect( renderer, &rect );
+    // Single GPU path now that cata_tiles' draws are also off
+    // display_buffer (2i-B-5 cutover). Rects queue into the GPU
+    // ui_batcher pass; flush runs after the tile_batcher pass so
+    // colour-block overlays land on top of GPU sprites and UI bgs
+    // land on top of (mostly empty) bridge.
+    mirror_rect_to_gpu( rect, color );
 }
 
-ColorModulatedGeometryRenderer::ColorModulatedGeometryRenderer( const SDL_Renderer_Ptr &renderer )
+ColorModulatedGeometryRenderer::ColorModulatedGeometryRenderer( const SDL_Renderer_Ptr & /*renderer*/ )
 {
-    SDL_Surface_Ptr alt_surf = CreateSurface( sdl_color_pixel_format, 1, 1 );
-    if( alt_surf ) {
-        FillSurfaceRect( alt_surf, nullptr,
-                         SDL_MapRGB( SDL_GetPixelFormatDetails( alt_surf->format ), nullptr,
-                                     255, 255, 255 ) );
-
-        tex.reset( SDL_CreateTextureFromSurface( renderer.get(), alt_surf.get() ) );
-        alt_surf.reset();
-
-        // Test to make sure color modulation is supported by renderer
-        bool tex_enable = !SetTextureColorMod( tex, 0, 0, 0 );
-        if( !tex_enable ) {
-            tex.reset();
-        }
-        dbg( DL::Info ) << "ColorModulatedGeometryRenderer constructor() = " <<
-                        ( tex_enable ? "FAIL" : "SUCCESS" ) << ". tex_enable = " << tex_enable;
-    } else {
-        dbg( DL::Error ) << "CreateRGBSurface failed: " << SDL_GetError();
-    }
+    // The colour-modulated SDL_Texture trick was an SDL_Renderer
+    // back-end workaround for blend-rate-limited drivers; SDL_GPU has
+    // no such limitation. Constructor kept so sdltiles.cpp's
+    // USE_COLOR_MODULATED_TEXTURES branch keeps compiling; the rect
+    // impl below delegates to DefaultGeometryRenderer.
+    dbg( DL::Info ) << "ColorModulatedGeometryRenderer: GPU-backed (legacy SDL_Texture path removed).";
 }
 
 void ColorModulatedGeometryRenderer::rect( const SDL_Renderer_Ptr &renderer, const SDL_FRect &rect,
         const SDL_Color &color ) const
 {
-    if( tex ) {
-        SetTextureColorMod( tex, color.r, color.g, color.b );
-        RenderCopy( renderer, tex, nullptr, &rect );
-    } else {
-        DefaultGeometryRenderer::rect( renderer, rect, color );
-    }
+    DefaultGeometryRenderer::rect( renderer, rect, color );
 }
 
-#endif // TILES

@@ -1,5 +1,3 @@
-#if defined(TILES)
-
 #include "sdl_utils.h"
 
 #include <array>
@@ -307,4 +305,3 @@ void set_pixel_rgba( const SDL_Surface *surface, int x, int y,
     }
 }
 
-#endif // SDL_TILES

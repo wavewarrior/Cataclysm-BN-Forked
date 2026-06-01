@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <memory>
 
 #include "cuboid_rectangle.h"
 #include "point.h"
@@ -9,6 +10,14 @@ namespace catacurses
 {
 class window;
 } // namespace catacurses
+
+namespace lighting
+{
+// Phase 2i-B-7g: forward decl so ui_manager.h doesn't drag in the GPU
+// stack. Full definition in lighting/ui_adaptor_draw_slices.h, included
+// by ui_manager.cpp and consumers (render_state).
+struct ui_adaptor_draw_slices;
+} // namespace lighting
 
 /**
  * Adaptor between UI code and the UI management system. Using this class allows
@@ -97,6 +106,19 @@ class ui_adaptor
         ui_adaptor( const ui_adaptor &rhs ) = delete;
         ui_adaptor( ui_adaptor &&rhs ) = delete;
         ~ui_adaptor();
+
+        // Phase 2i-B-7g: per-adaptor retained GPU draw slices. The redraw
+        // loop in ui_manager.cpp clears these for invalidated adaptors,
+        // points render_state at the slice during the redraw_cb, then
+        // composites all slices into the global queues for refresh_display.
+        lighting::ui_adaptor_draw_slices &draw_slices() noexcept
+        {
+            return *slices_;
+        }
+        const lighting::ui_adaptor_draw_slices &draw_slices() const noexcept
+        {
+            return *slices_;
+        }
 
         ui_adaptor &operator=( const ui_adaptor &rhs ) = delete;
         ui_adaptor &operator=( ui_adaptor &&rhs ) = delete;
@@ -235,6 +257,11 @@ class ui_adaptor
 
         mutable bool invalidated;
         mutable bool deferred_resize;
+
+        // pImpl so callers don't need lighting/ui_adaptor_draw_slices.h.
+        // Destruction requires the full type, so ~ui_adaptor() is defined
+        // out-of-line in ui_manager.cpp.
+        std::unique_ptr<lighting::ui_adaptor_draw_slices> slices_;
 };
 
 /**

@@ -25,12 +25,7 @@ set(CMAKE_TLS_VERIFY ON)
 # Build options
 include(CMakeDependentOption)
 include(ExternalProject)
-option(TILES "Build graphical tileset version." "OFF")
-cmake_dependent_option(DYNAMIC_ATLAS
-    "Enable dynamic atlas generation" ON
-    TILES OFF
-)
-option(CURSES "Build curses version." "ON")
+option(DYNAMIC_ATLAS "Enable dynamic atlas generation" ON)
 option(SOUND "Support for in-game sounds & music." "OFF")
 option(BACKTRACE "Support for printing stack backtraces on crash" "ON")
 option(LIBBACKTRACE "Print backtrace with libbacktrace." "OFF")
@@ -129,9 +124,7 @@ endif ()
 if ("${CMAKE_SYSTEM_NAME}" MATCHES "Darwin")
     set(_OS_DARWIN_ 1)
     add_definitions(-DMACOSX)
-    if (TILES)
-        add_definitions(-DOSX_SDL3_LIBS)
-    endif ()
+    add_definitions(-DOSX_SDL3_LIBS)
 endif ()
 
 include(CheckCXXCompilerFlag)
@@ -189,11 +182,6 @@ else ()
     endif ()
 endif ()
 
-# Can't compile curses and tiles build's at same time
-if (TILES)
-    set(CURSES OFF)
-endif ()
-
 # Can't use both home and xdg directories
 if (USE_XDG_DIR)
     set(USE_HOME_DIR OFF)
@@ -241,9 +229,7 @@ endif ()
 
 message(STATUS "GIT_BINARY                    : ${GIT_EXECUTABLE}")
 message(STATUS "DYNAMIC_LINKING               : ${DYNAMIC_LINKING}")
-message(STATUS "TILES                         : ${TILES}")
 message(STATUS "DYNAMIC_ATLAS                 : ${DYNAMIC_ATLAS}")
-message(STATUS "CURSES                        : ${CURSES}")
 message(STATUS "SOUND                         : ${SOUND}")
 message(STATUS "BACKTRACE                     : ${BACKTRACE}")
 message(STATUS "LIBBACKTRACE                  : ${LIBBACKTRACE}")
@@ -346,9 +332,8 @@ if (USE_TRACY)
 endif ()
 
 # Check for build types and libraries
-if (TILES)
-    # Find SDL, SDL_ttf & SDL_image for graphical install
-    message(STATUS "Searching for SDL3 library --")
+# Find SDL, SDL_ttf & SDL_image for graphical install
+message(STATUS "Searching for SDL3 library --")
     if (NOT CMAKE_FIND_PACKAGE_PREFER_CONFIG)
         if (NOT BUILD_SDL3)
             set(CMAKE_FIND_PACKAGE_PREFER_CONFIG ON)
@@ -376,9 +361,8 @@ if (TILES)
     endif()
     if (NOT (SDL3_FOUND OR TARGET SDL3::SDL3 OR TARGET SDL3::SDL3-static))
         message(FATAL_ERROR
-                "This project requires SDL3 to be installed to compile in graphical mode.  \
-                 Please install the SDL3 development libraries, \
-                 or try compiling without -DTILES=1 for a text-only compilation. \
+                "This project requires SDL3 to be installed. \
+                 Please install the SDL3 development libraries. \
                  See CMake compiling guide for details and more info.")
     endif ()
 
@@ -409,9 +393,8 @@ if (TILES)
     endif()
     if (NOT (SDL3_ttf_FOUND OR TARGET SDL3_ttf::SDL3_ttf OR TARGET SDL3_ttf::SDL3_ttf-static))
         message(FATAL_ERROR
-                "This project requires SDL3_ttf to be installed to compile in graphical mode. \
-                Please install the SDL3_ttf development libraries, \
-                or try compiling without -DTILES=1 for a text-only compilation. \
+                "This project requires SDL3_ttf to be installed. \
+                Please install the SDL3_ttf development libraries. \
                 See CMake compiling guide for details and more info.")
     endif ()
 
@@ -443,41 +426,11 @@ if (TILES)
     endif()
     if (NOT (SDL3_image_FOUND OR TARGET SDL3_image::SDL3_image OR TARGET SDL3_image::SDL3_image-static))
         message(FATAL_ERROR
-                "This project requires SDL3_image to be installed to compile in graphical mode. \
-                 Please install the SDL3_image development libraries, \
-                 or try compiling without -DTILES=1 for a text-only compilation. \
+                "This project requires SDL3_image to be installed. \
+                 Please install the SDL3_image development libraries. \
                  See doc/COMPILING/COMPILING-CMAKE.md for details and more info.")
     endif ()
-    add_definitions(-DTILES)
-endif ()
-
-if (CURSES)
-    # Find the ncurses library for a text based compile
-    message(STATUS "Searching for Curses library --")
-    set(CURSES_NEED_NCURSES TRUE)
-    set(CURSES_NEED_WIDE TRUE)
-    find_package(Curses)
-    if (NOT CURSES_FOUND)
-        message(FATAL_ERROR
-                "This project requires ncurses to be installed to be compiled in text-only mode. \
-                Please install the ncurses development libraries, \
-                or try compiling with -DTILES=1 for a graphical compilation. \
-                See CMake compiling guide for details and more info.")
-    endif ()
-    if (NOT DYNAMIC_LINKING)
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DNCURSES_STATIC")
-    endif ()
-endif ()
-
 if (SOUND)
-    # You need TILES to be able to use SOUND
-    if (NOT TILES)
-        message(FATAL_ERROR
-                "You must enable graphical support with -DTILES=1 \
-                to be able to enable sound support. \
-                See CMake compiling guide for details and more info.")
-    endif ()
-
     # Sound requires SDL_mixer library
     message(STATUS "Searching for SDL3_mixer library --")
     if (NOT CMAKE_FIND_PACKAGE_PREFER_CONFIG)
@@ -509,6 +462,131 @@ if (SOUND)
                     to be able to compile with sound enabled. \
                     See CMake compiling guide for details and more info.")
     endif ()
+endif ()
+
+# --- SDL_shadercross ---
+# Runtime HLSL → SPIR-V / DXIL / MSL translation for the SDL_GPU lighting
+# pipeline (phase 2c of the lighting rework). VENDORED brings in DXC and
+# SPIRV-Cross as sub-projects so we don't need a system Vulkan SDK or a
+# separately installed dxcompiler.dll. We always build the shared variant —
+# the resulting runtime library + DXC dependencies (dxcompiler.dll / dxil.dll
+# on Win11, libSDL3_shadercross.dylib on macOS, libSDL3_shadercross.so on
+# Linux) are copied next to the executable below.
+#
+# Target platforms verified:
+#   * macOS arm64 (M-series) — Metal backend, HLSL → MSL via shadercross.
+#   * Windows 11 + NVIDIA RTX 4090 — D3D12 backend, HLSL → DXIL via DXC.
+#                                    Also Vulkan backend, HLSL → SPIR-V.
+#   * Linux — Vulkan backend, HLSL → SPIR-V.
+message(STATUS "Searching for SDL3_shadercross library --")
+if (NOT TARGET SDL3_shadercross::SDL3_shadercross)
+    if (NOT BUILD_SDL3)
+        set(CMAKE_FIND_PACKAGE_PREFER_CONFIG ON)
+        find_package(SDL3_shadercross CONFIG QUIET)
+        set(CMAKE_FIND_PACKAGE_PREFER_CONFIG OFF)
+    endif ()
+    if (NOT TARGET SDL3_shadercross::SDL3_shadercross)
+        message("Installing SDL3_shadercross from Source")
+        # Pick SHARED vs STATIC based on which SDL3 target the caller has
+        # exposed. Shadercross's CMakeLists requires the matching SDL3
+        # component:
+        #   * SHARED → `find_package(SDL3 REQUIRED COMPONENTS SDL3-shared)`
+        #   * STATIC → `find_package(SDL3 REQUIRED COMPONENTS Headers)`
+        # On vcpkg `x64-windows-static`, SDL3 ships as static-only — the
+        # SHARED branch then errors out with `SDL3_FOUND to FALSE`. We
+        # cannot fix that by *also* fetching SDL3-shared, because the exe
+        # would end up with two SDL3 instances (static linked into the exe,
+        # shared loaded by shadercross.dll) and SDL_GPU device state would
+        # split between them. Build shadercross-static instead — it links
+        # against `SDL3::Headers` only and resolves the actual SDL3 symbols
+        # through the exe at link time. DXC sidecar DLLs (dxcompiler.dll /
+        # dxil.dll) still ship via the POST_BUILD copy step further down.
+        if (TARGET SDL3::SDL3-shared)
+            set(_CATA_SHADERCROSS_SHARED ON)
+            set(_CATA_SHADERCROSS_STATIC OFF)
+        else ()
+            message(STATUS "SDL3-shared target missing (vcpkg static triplet?) — building SDL3_shadercross as static")
+            set(_CATA_SHADERCROSS_SHARED OFF)
+            set(_CATA_SHADERCROSS_STATIC ON)
+        endif ()
+        # Pin to a known-good main SHA (libsdl-org/SDL_shadercross has no
+        # tagged release as of 2026-05-20). Bump deliberately.
+        set(SDLSHADERCROSS_DXC          ON  CACHE BOOL "" FORCE)
+        set(SDLSHADERCROSS_VENDORED     ON  CACHE BOOL "" FORCE)
+        set(SDLSHADERCROSS_SHARED       ${_CATA_SHADERCROSS_SHARED} CACHE BOOL "" FORCE)
+        set(SDLSHADERCROSS_STATIC       ${_CATA_SHADERCROSS_STATIC} CACHE BOOL "" FORCE)
+        set(SDLSHADERCROSS_CLI          OFF CACHE BOOL "" FORCE)
+        set(SDLSHADERCROSS_INSTALL      OFF CACHE BOOL "" FORCE)
+        # Vendored SPIRV-Tools defaults `SPIRV_WERROR=ON` and additionally
+        # hardcodes `/WX` into its MSVC base warning flags. MSVC 14.50 emits
+        # new warnings the SPIRV-Tools tree does not suppress
+        # (e.g. set_spec_constant_default_value_pass.cpp), which with `/WX`
+        # become fatal errors — the build dies around 800/1785. Disable the
+        # cache toggle and post-process the subtree below to also strip the
+        # hardcoded `/WX`. Same treatment covers vendored DXC, SPIRV-Cross.
+        set(SPIRV_WERROR                OFF CACHE BOOL "" FORCE)
+        set(SPIRV_WARN_EVERYTHING       OFF CACHE BOOL "" FORCE)
+        set(SPIRV_SKIP_TESTS            ON  CACHE BOOL "" FORCE)
+        set(SPIRV_SKIP_EXECUTABLES      ON  CACHE BOOL "" FORCE)
+        # Save + scrub CATA_WARNINGS while the vendored DXC / SPIRV-Tools /
+        # SPIRV-Cross trees configure: those subprojects build with
+        # `-Werror -Wold-style-cast -Wshadow -Wundef -Wconversion …` of
+        # their own, and they trip immediately when our project-level
+        # `-Wold-style-cast`, `-Wmissing-noreturn`, `-Wsuggest-override`,
+        # etc. leak in through CMAKE_CXX_FLAGS. Restore right after.
+        set(_CATA_SAVED_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+        set(_CATA_SAVED_C_FLAGS   "${CMAKE_C_FLAGS}")
+        string(REPLACE "${CATA_WARNINGS}"    "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+        string(REPLACE "${CATA_OTHER_FLAGS}" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+        FetchContent_Declare(
+            SDL3_SHADERCROSS
+            GIT_REPOSITORY https://github.com/libsdl-org/SDL_shadercross.git
+            GIT_TAG        6b06e55c7c5d7e7a09a8a14f76e866dcfad5ab99
+            EXCLUDE_FROM_ALL
+        )
+        FetchContent_MakeAvailable(SDL3_SHADERCROSS)
+        set(CMAKE_CXX_FLAGS "${_CATA_SAVED_CXX_FLAGS}")
+        set(CMAKE_C_FLAGS   "${_CATA_SAVED_C_FLAGS}")
+        # Recursively strip `/WX` (and `-Werror`) from every target the
+        # shadercross subtree just created — SPIRV-Tools hardcodes `/WX`
+        # in its target COMPILE_OPTIONS bypassing both SPIRV_WERROR and
+        # any flags scrub. Append `/WX-` so MSVC's last-flag-wins picks
+        # warnings-as-warnings even on targets we cannot enumerate by name.
+        function(_cata_strip_werror _dir)
+            get_directory_property(_targets DIRECTORY "${_dir}" BUILDSYSTEM_TARGETS)
+            foreach(_t IN LISTS _targets)
+                get_target_property(_type ${_t} TYPE)
+                if(_type STREQUAL "INTERFACE_LIBRARY" OR _type STREQUAL "UTILITY")
+                    continue()
+                endif()
+                get_target_property(_opts ${_t} COMPILE_OPTIONS)
+                if(_opts)
+                    list(REMOVE_ITEM _opts "/WX" "-WX" "-Werror")
+                    set_target_properties(${_t} PROPERTIES COMPILE_OPTIONS "${_opts}")
+                endif()
+                if(MSVC)
+                    target_compile_options(${_t} PRIVATE /WX-)
+                else()
+                    target_compile_options(${_t} PRIVATE -Wno-error)
+                endif()
+            endforeach()
+            get_directory_property(_subs DIRECTORY "${_dir}" SUBDIRECTORIES)
+            foreach(_s IN LISTS _subs)
+                _cata_strip_werror("${_s}")
+            endforeach()
+        endfunction()
+        if(DEFINED sdl3_shadercross_SOURCE_DIR)
+            _cata_strip_werror("${sdl3_shadercross_SOURCE_DIR}")
+        endif()
+    else ()
+        message("Using system SDL3_shadercross")
+    endif ()
+endif ()
+if (NOT TARGET SDL3_shadercross::SDL3_shadercross)
+    message(FATAL_ERROR
+            "This project requires SDL3_shadercross. \
+             FetchContent failed and no system package was found. \
+             See doc/COMPILING/COMPILING-CMAKE.md.")
 endif ()
 
 if (BACKTRACE)
@@ -621,10 +699,56 @@ if (CCACHE_FOUND AND CATA_CCACHE)
     set(CMAKE_CXX_LINKER_LAUNCHER   ${CATA_CCACHE_CMD})
 endif ()
 
+# --- Dear ImGui (dev/debug-only UI layer) ---
+# ImGui ships no CMakeLists, so we fetch sources and build a small static lib
+# ourselves: the 5 core TUs + the SDL3 platform backend + the SDL_GPU renderer
+# backend. The SDL_GPU backend uses PREBAKED shaders
+# (imgui_impl_sdlgpu3_shaders.h) — no runtime shadercross — so it cannot hit the
+# fragment-storage-buffer reflection bug that bit our own pipeline.
+#
+# Docking branch required (we use docking; multi-viewport stays OFF).
+# Pinned to a docking-branch SHA so Mac/Metal and Win11/D3D12 build IDENTICAL
+# code — the DXBC-vs-DXIL format question lives on D3D12, so the two targets
+# must not drift. Bump deliberately, re-running the D3D12 smoke test.
+FetchContent_Declare(
+    imgui
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
+    GIT_TAG 4cb21e4a1e6a1fe19617c5c64ffba051ddd274e7  # docking @ 2025
+    GIT_PROGRESS TRUE
+    EXCLUDE_FROM_ALL
+)
+FetchContent_MakeAvailable(imgui)
+
+add_library(imgui STATIC
+    ${imgui_SOURCE_DIR}/imgui.cpp
+    ${imgui_SOURCE_DIR}/imgui_draw.cpp
+    ${imgui_SOURCE_DIR}/imgui_tables.cpp
+    ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+    ${imgui_SOURCE_DIR}/imgui_demo.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlgpu3.cpp
+)
+target_include_directories(imgui PUBLIC
+    ${imgui_SOURCE_DIR}
+    ${imgui_SOURCE_DIR}/backends
+)
+# Backends need SDL3 headers; link whichever SDL3 target exists.
+if (TARGET SDL3::SDL3-static)
+    target_link_libraries(imgui PUBLIC SDL3::SDL3-static)
+else ()
+    target_link_libraries(imgui PUBLIC SDL3::SDL3)
+endif ()
+# Vendored third-party: silence warnings so the fork's -Werror/​/WX can't trip on it.
+if (MSVC)
+    target_compile_options(imgui PRIVATE /w)
+else ()
+    target_compile_options(imgui PRIVATE -w)
+endif ()
+
 add_subdirectory(src)
 add_subdirectory(data)
 
-if (UNIX AND TILES AND DYNAMIC_LINKING)
+if (UNIX AND DYNAMIC_LINKING)
     set_target_properties(
             cataclysm-bn-tiles
             PROPERTIES
@@ -661,14 +785,12 @@ if (RELEASE)
             ${CMAKE_SOURCE_DIR}/VERSION.txt
             DESTINATION .)
     endif()
-    if (TILES)
-        if (USE_PREFIX_DATA_DIR)
-            install(DIRECTORY ${CMAKE_SOURCE_DIR}/gfx
-                TYPE DATA)
-        else()
-            install(DIRECTORY ${CMAKE_SOURCE_DIR}/gfx
-                DESTINATION .)
-        endif()
+    if (USE_PREFIX_DATA_DIR)
+        install(DIRECTORY ${CMAKE_SOURCE_DIR}/gfx
+            TYPE DATA)
+    else()
+        install(DIRECTORY ${CMAKE_SOURCE_DIR}/gfx
+            DESTINATION .)
     endif()
     # Install cataclysm-launcher for portable Linux builds
     if (NOT USE_PREFIX_DATA_DIR AND UNIX AND NOT APPLE)
@@ -681,12 +803,8 @@ if (RELEASE)
     endif()
 endif()
 
-if (APPLE AND RELEASE AND (TILES OR CURSES))
-    if (TILES)
-        set(CATA_OSX_GAME_TARGET cataclysm-bn-tiles)
-    else()
-        set(CATA_OSX_GAME_TARGET cataclysm-bn)
-    endif()
+if (APPLE AND RELEASE)
+    set(CATA_OSX_GAME_TARGET cataclysm-bn-tiles)
 
     set(CATA_OSX_APP_DIR "${CMAKE_SOURCE_DIR}/Cataclysm.app")
     set(CATA_OSX_CONTENTS_DIR "${CATA_OSX_APP_DIR}/Contents")
@@ -702,17 +820,15 @@ if (APPLE AND RELEASE AND (TILES OR CURSES))
     endif()
 
     set(CATA_OSX_COPY_RESOURCE_COMMANDS)
-    if (TILES)
-        list(APPEND CATA_OSX_COPY_RESOURCE_COMMANDS
-            COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/gfx" "${CATA_OSX_RESOURCES_DIR}/gfx")
-    endif()
+    list(APPEND CATA_OSX_COPY_RESOURCE_COMMANDS
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/gfx" "${CATA_OSX_RESOURCES_DIR}/gfx")
     if (SOUND)
         list(APPEND CATA_OSX_COPY_RESOURCE_COMMANDS
             COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/data/sound" "${CATA_OSX_DATA_DIR}/sound")
     endif()
 
     set(CATA_OSX_COPY_FRAMEWORK_COMMANDS)
-    if (TILES AND CATA_OSX_FRAMEWORKS_DIR)
+    if (CATA_OSX_FRAMEWORKS_DIR)
         set(CATA_OSX_FRAMEWORK_NAMES SDL3 SDL3_image SDL3_ttf)
         if (SOUND)
             list(APPEND CATA_OSX_FRAMEWORK_NAMES SDL3_mixer)

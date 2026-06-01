@@ -1,7 +1,6 @@
 #pragma once
 
 #include <utility>
-#if defined(TILES) || defined(_WIN32)
 
 #include <array>
 #include <string>
@@ -64,9 +63,19 @@ struct WINDOW {
     bool inuse;
     // Tracks if the window text has been changed
     bool draw;
+    // When true, this window's opaque-black cell backgrounds are NOT painted,
+    // letting the lit-world layer (e.g. the decorative main-menu emitter glow)
+    // show through. Default false → solid backdrops (readable popups/panels).
+    // Set only on the main-menu decorative background window.
+    bool transparent_backdrop = false;
     point cursor;
     std::vector<curseline> line;
 };
+
+// Mark a window so its opaque-black cell backgrounds are not painted, letting
+// the lit-world layer show through (see WINDOW::transparent_backdrop). Tiles
+// build only; implemented in sdltiles.cpp.
+void set_window_transparent_backdrop( const catacurses::window &win, bool transparent );
 
 extern std::array<pairs, 100> colorpairs;
 void curses_drawwindow( const catacurses::window &win );
@@ -84,7 +93,3 @@ int projected_window_height();
 bool handle_resize( int w, int h );
 void resize_term( int cell_w, int cell_h );
 int get_scaling_factor();
-
-#endif
-
-

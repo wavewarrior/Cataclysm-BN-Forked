@@ -74,24 +74,16 @@ class pixel_minimap
 
         point pixel_size;
 
-        //track the previous viewing area to determine if the minimap cache needs to be cleared
         tripoint_abs_sm cached_center_sm;
         std::string cached_dimension_id;
-        // track presence of animated beacons to determine whether the minimap needs to be animated
         bool cached_has_animated_beacons = true;
 
         SDL_Rect screen_rect;
         SDL_Rect main_tex_clip_rect;
         SDL_Rect screen_clip_rect;
 
-        SDL_Texture_Ptr main_tex;
-
         std::unique_ptr<pixel_minimap_projector> projector;
         int built_mapsize = 0;
-
-        //the minimap texture pool which is used to reduce new texture allocation spam
-        class shared_texture_pool;
-        std::unique_ptr<shared_texture_pool> tex_pool;
 
         std::map<tripoint_abs_sm, submap_cache> cache;
 };

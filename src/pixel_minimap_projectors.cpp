@@ -1,5 +1,3 @@
-#if defined(TILES)
-
 #include "pixel_minimap_projectors.h"
 
 #include <algorithm>
@@ -95,4 +93,3 @@ point pixel_minimap_iso_projector::get_tile_pos( point p, point tiles_count ) co
     };
 }
 
-#endif // TILES

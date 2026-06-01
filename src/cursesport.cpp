@@ -1,4 +1,7 @@
-#if defined(TILES) || defined(_WIN32)
+// Phase 1 left an `#if defined(TILES) || defined(_WIN32)` wrap around this
+// whole TU. After removing add_definitions(-DTILES) the file compiled to
+// nothing, dropping every catacurses::* symbol. TILES is implicit now —
+// guard stripped (matching cursesport.h).
 #include "cursesport.h"
 
 #include <cstdint>
@@ -557,5 +560,3 @@ bool nc_color::is_blink() const
 {
     return attribute_value & A_BLINK;
 }
-
-#endif

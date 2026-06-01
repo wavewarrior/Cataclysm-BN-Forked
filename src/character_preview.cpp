@@ -1,4 +1,3 @@
-#if defined(TILES)
 #include "character_preview.h"
 #include "bionics.h"
 #include "color.h"
@@ -367,4 +366,3 @@ auto character_preview_window::clothes_showing() const -> bool
     return !show_clothes;
 }
 
-#endif // TILES

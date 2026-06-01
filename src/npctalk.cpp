@@ -2095,17 +2095,6 @@ talk_topic dialogue::opt( dialogue_window &d_win, const std::string &npc_name,
     }
     auto selected_response = size_t{ 0 };
 
-#if defined(__ANDROID__)
-    input_context ctxt( "DIALOGUE_CHOOSE_RESPONSE" );
-    for( size_t i = 0; i < responses.size(); i++ ) {
-        ctxt.register_manual_key( 'a' + i );
-    }
-    ctxt.register_manual_key( 'L', "Look at" );
-    ctxt.register_manual_key( 'S', "Size up stats" );
-    ctxt.register_manual_key( 'Y', "Yell" );
-    ctxt.register_manual_key( 'O', "Check opinion" );
-#endif
-
     ui_adaptor ui;
     ui.on_screen_resize( [&]( ui_adaptor & ui ) {
         d_win.resize_dialogue( ui );

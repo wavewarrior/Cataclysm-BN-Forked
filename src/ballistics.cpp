@@ -16,10 +16,8 @@
 #include "avatar.h"
 #include "bodypart.h"
 #include "calendar.h"
-#if defined(TILES)
 #   include "cata_tiles.h"
 #   include "sdltiles.h"
-#endif // TILES
 #include "cata_utility.h" // for normal_cdf
 #include "character.h"
 #include "creature.h"
@@ -382,7 +380,6 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
     const auto is_thrown = proj.has_effect( ammo_effect_THROWN );
     const auto *thrown_item = proj.get_drop();
     auto custom_bullet_sprite = std::string{};
-#if defined(TILES)
     if( tilecontext ) {
         const auto set_sprite_from_lookup = [&]( const std::string & candidate, TILE_CATEGORY category ) {
             if( !custom_bullet_sprite.empty() ) { return; }
@@ -405,7 +402,6 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
             }
         }
     }
-#endif // TILES
 
     // If we were targetting a tile rather than a monster, don't overshoot
     // Unless the target was a wall, then we are aiming high enough to overshoot

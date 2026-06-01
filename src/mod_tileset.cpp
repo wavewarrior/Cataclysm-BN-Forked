@@ -1,4 +1,3 @@
-#if defined(TILES)
 #include "mod_tileset.h"
 
 #include <algorithm>
@@ -46,4 +45,3 @@ void mod_tileset::add_compatible_tileset( const std::string &tileset_id )
 {
     compatibility.push_back( tileset_id );
 }
-#endif // TILES

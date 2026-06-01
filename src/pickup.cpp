@@ -734,9 +734,6 @@ auto pick_up_from_items( const std::vector<item_stack::iterator> &here, const in
         ctxt.register_action( "FILTER" );
         ctxt.register_action( "WEAR", to_translation( "Wear" ) );
         ctxt.register_action( "WIELD", to_translation( "Wield" ) );
-#if defined(__ANDROID__)
-        ctxt.allow_text_entry = true; // allow user to specify pickup amount
-#endif
 
         bool update = true;
         int iScrollPos = 0;

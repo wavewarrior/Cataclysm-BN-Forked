@@ -1,14 +1,19 @@
-#if defined(TILES)
+// MUST precede any game header: debug.h defines a function-like `DebugLog`
+// macro that otherwise mangles ImGui::DebugLog in imgui.h (same reason
+// imgui_layer.cpp includes imgui.h before debug.h).
+#include "imgui.h"
 
 #include "cursesdef.h" // IWYU pragma: associated
 #include "sdltiles.h" // IWYU pragma: associated
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cassert>
 #include <climits>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <exception>
 #include <fstream>
@@ -25,6 +30,7 @@
 #include <unordered_map>
 #include <vector>
 #include "avatar.h"
+#include "cached_options.h"
 #include "cata_tiles.h"
 #include "cata_utility.h"
 #include "catacharset.h"
@@ -66,6 +72,14 @@
 #include "sdl_utils.h"
 #include "sdl_font.h"
 #include "sdlsound.h"
+#include "lighting/emitter_collector.h"
+#include "lighting/imgui_layer.h"
+#include "lighting/render_state.h"
+#include "lighting/snapshot.h"
+#include "lighting/sdf_pass.h"
+#include "map.h"
+#include "lightmap.h"
+#include "game_constants.h"
 #include "string_formatter.h"
 #include "uistate.h"
 #include "ui_manager.h"
@@ -83,18 +97,6 @@
 #   include <shlwapi.h>
 #endif
 
-#if defined(__ANDROID__)
-#include <jni.h>
-
-#include "action.h"
-#include "inventory.h"
-#include "map.h"
-#include "vehicle.h"
-#include "vehicle_part.h"
-#include "vpart_position.h"
-#include "worldfactory.h"
-#endif
-
 #define dbg(x) DebugLogFL((x),DC::SDL)
 
 //***********************************
@@ -107,7 +109,6 @@ static Uint64 lastupdate = 0;
 static uint32_t interval = 25;
 static bool needupdate = false;
 static bool need_invalidate_framebuffers = false;
-static bool clear_display_buffer_before_redraw = false;
 static const std::string empty_string;
 
 palette_array windowsPalette;
@@ -117,13 +118,17 @@ static Font_Ptr map_font;
 static Font_Ptr overmap_font;
 
 static SDL_Window_Ptr window;
+// Phase 2i-B-1: SDL_Renderer no longer claims the visible window — that
+// belongs to the SDL_GPU device now (lighting::render_state). The legacy
+// renderer keeps running on a hidden mirror window so every call site that
+// still talks SDL_Renderer (cata_tiles draw_sprite_at, sdl_font glyph
+// cache, pixel_minimap, vehicle_preview …) compiles and executes
+// unchanged; its output is just invisible. Subsequent 2i-B-N commits port
+// those call sites to the GPU stack and drop the hidden window.
+static SDL_Window_Ptr legacy_window;
 static SDL_Renderer_Ptr renderer;
 static SDL_PixelFormat format = SDL_PIXELFORMAT_UNKNOWN;
-static SDL_Texture_Ptr display_buffer;
 static GeometryRenderer_Ptr geometry;
-#if defined(__ANDROID__)
-static SDL_Texture_Ptr touch_joystick;
-#endif
 static int WindowWidth;        //Width of the actual window, not the curses window
 static int WindowHeight;       //Height of the actual window, not the curses window
 // input from various input sources. Each input source sets the type and
@@ -185,23 +190,6 @@ static void InitSDL()
     atexit( SDL_Quit );
 }
 
-static bool SetupRenderTarget()
-{
-    SetRenderDrawBlendMode( renderer, SDL_BLENDMODE_NONE );
-    display_buffer.reset( SDL_CreateTexture( renderer.get(), SDL_PIXELFORMAT_ARGB8888,
-                          SDL_TEXTUREACCESS_TARGET, WindowWidth / scaling_factor, WindowHeight / scaling_factor ) );
-    SDL_SetTextureScaleMode( display_buffer.get(), SDL_SCALEMODE_NEAREST );
-    if( printErrorIf( !display_buffer, "Failed to create window buffer" ) ) {
-        return false;
-    }
-    if( printErrorIf( !SDL_SetRenderTarget( renderer.get(), display_buffer.get() ),
-                      "SDL_SetRenderTarget failed" ) ) {
-        return false;
-    }
-    ClearScreen();
-
-    return true;
-}
 
 //Registers, creates, and shows the Window!!
 static void WinCreate()
@@ -212,9 +200,14 @@ static void WinCreate()
     int window_flags = 0;
     WindowWidth = TERMINAL_WIDTH * fontwidth * scaling_factor;
     WindowHeight = TERMINAL_HEIGHT * fontheight * scaling_factor;
+    // HIGH_PIXEL_DENSITY: SDL3 industry-standard HiDPI path. Window opens
+    // at full physical resolution (e.g. 3680×2196 on a 4K Win11 monitor at
+    // 200% scaling), GPU swapchain matches. UI continues to lay out in
+    // LOGICAL pixels from SDL_GetWindowSize; sprite_batcher::begin_pass is
+    // called with viewport=physical and proj=logical so logical-coord draws
+    // stretch across the full physical framebuffer. See SDL3 HiDPI README.
     window_flags |= SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
 
-#if !defined(__ANDROID__)
     const auto screen_mode = get_option<std::string>( "FULLSCREEN" );
     const auto minimize = get_option<bool>( "MINIMIZE_ON_FOCUS_LOSS" );
 
@@ -229,7 +222,6 @@ static void WinCreate()
     } else if( screen_mode == "maximized" ) {
         window_flags |= SDL_WINDOW_MAXIMIZED;
     }
-#endif
 
     int display = std::stoi( get_option<std::string>( "DISPLAY" ) );
     {
@@ -241,41 +233,35 @@ static void WinCreate()
         SDL_free( displays );
     }
 
-#if defined(__ANDROID__)
-    // Bugfix for red screen on Samsung S3/Mali
-    // https://forums.libsdl.org/viewtopic.php?t=11445
-    SDL_GL_SetAttribute( SDL_GL_RED_SIZE, 5 );
-    SDL_GL_SetAttribute( SDL_GL_GREEN_SIZE, 6 );
-    SDL_GL_SetAttribute( SDL_GL_BLUE_SIZE, 5 );
-
-    // Fix Back button crash on Android 9
-#if defined(SDL_HINT_ANDROID_TRAP_BACK_BUTTON )
-    const bool trap_back_button = get_option<bool>( "ANDROID_TRAP_BACK_BUTTON" );
-    SDL_SetHint( SDL_HINT_ANDROID_TRAP_BACK_BUTTON, trap_back_button ? "1" : "0" );
-#endif
-
-    // Prevent mouse|touch input confusion
-    SDL_SetHint( SDL_HINT_MOUSE_TOUCH_EVENTS, "0" );
-    SDL_SetHint( SDL_HINT_TOUCH_MOUSE_EVENTS, "0" );
-#endif
-
     ::window.reset( SDL_CreateWindow( version.c_str(), WindowWidth, WindowHeight, window_flags ) );
     throwErrorIf( !::window, "SDL_CreateWindow failed" );
     SDL_SetWindowPosition( ::window.get(), SDL_WINDOWPOS_CENTERED_DISPLAY( display ),
                            SDL_WINDOWPOS_CENTERED_DISPLAY( display ) );
     SDL_StartTextInput( ::window.get() );
 
-#if !defined(__ANDROID__)
+    // Hidden mirror window for the legacy SDL_Renderer. Same dimensions as
+    // the visible one so display_buffer textures match the pixel grid that
+    // the GPU bridge in refresh_display() will eventually sample.
+    ::legacy_window.reset( SDL_CreateWindow( "cataclysm_legacy", WindowWidth, WindowHeight,
+                          SDL_WINDOW_HIDDEN ) );
+    throwErrorIf( !::legacy_window, "SDL_CreateWindow (legacy mirror) failed" );
+
     // On Android SDL seems janky in windowed mode so we're fullscreen all the time.
     // Fullscreen mode is now modified so it obeys terminal width/height, rather than
     // overwriting it with this calculation.
-    if( fullscreen || ( window_flags & SDL_WINDOW_MAXIMIZED ) ) {
-        SDL_GetWindowSize( ::window.get(), &WindowWidth, &WindowHeight );
-        // Ignore previous values, use the whole window, but nothing more.
-        TERMINAL_WIDTH = WindowWidth / fontwidth / scaling_factor;
-        TERMINAL_HEIGHT = WindowHeight / fontheight / scaling_factor;
-    }
-#endif
+    // With SDL_WINDOW_HIGH_PIXEL_DENSITY the swapchain is sized in PHYSICAL
+    // pixels but SDL_GetWindowSize / SDL_CreateWindow's size args are LOGICAL
+    // (smaller on HiDPI / Retina). The UI lays out in TERMINAL cells * pixel
+    // size — if those cells are computed from logical px the layout lands in
+    // a half-quadrant of the physical swapchain. Resync WindowWidth/Height
+    // and TERMINAL_* from the physical pixel size for BOTH fullscreen and
+    // windowed startup. (SDL3 migration regression #8336.)
+    // HiDPI: WindowWidth/Height in LOGICAL pixels (the coord system the UI
+    // queues draws in). Swapchain is at physical pixels; the projection-vs-
+    // viewport split inside sprite_batcher::begin_pass handles the stretch.
+    SDL_GetWindowSize( ::window.get(), &WindowWidth, &WindowHeight );
+    TERMINAL_WIDTH  = WindowWidth  / fontwidth  / scaling_factor;
+    TERMINAL_HEIGHT = WindowHeight / fontheight / scaling_factor;
     // Initialize framebuffer caches
     terminal_framebuffer.resize( TERMINAL_HEIGHT );
     for( int i = 0; i < TERMINAL_HEIGHT; i++ ) {
@@ -291,13 +277,60 @@ static void WinCreate()
     throwErrorIf( format == SDL_PIXELFORMAT_UNKNOWN, "SDL_GetWindowPixelFormat failed" );
 
     int renderer_id = -1;
-#if !defined(__ANDROID__)
     bool software_renderer = get_option<std::string>( "RENDERER" ).empty();
     std::string renderer_name;
     if( software_renderer ) {
         renderer_name = "software";
     } else {
         renderer_name = get_option<std::string>( "RENDERER" );
+    }
+
+    // Phase 2i-B-5 conflict avoidance: the visible window has already
+    // been claimed by an SDL_GPU device (lighting::gpu_device, driver
+    // typically direct3d12 on Win11). The hidden mirror window we're
+    // about to create an SDL_Renderer for is used for the bridge
+    // readback + the legacy fallback draw paths (rotated sprites,
+    // pixel_minimap, vehicle_preview clip). If THAT SDL_Renderer also
+    // picks direct3d12, two D3D12 device instances coexist in the
+    // same process — observed symptom is SDL_RenderTextureRotated
+    // returning false with a garbled error string ("Parameter
+    // 'joystick' is invalid") and tiles never actually drawing.
+    //
+    // The user's RENDERER setting still drives what backend the
+    // application *thinks* it's using (the active driver name is
+    // logged + reused everywhere else), but the hidden renderer is
+    // forced to a non-D3D12, non-"gpu" alternative so it can coexist
+    // with the SDL_GPU device. direct3d11 is preferred; opengl is a
+    // fallback. The user-facing RENDERER option only matters for the
+    // bridge readback texture format, which is the same regardless.
+    if( !software_renderer ) {
+        const std::string lower_name = []( std::string s ) {
+            for( char &c : s ) {
+                c = static_cast<char>( std::tolower( static_cast<unsigned char>( c ) ) );
+            }
+            return s;
+        }( renderer_name );
+        if( lower_name == "direct3d12" || lower_name == "gpu" ) {
+            const std::array<const char *, 3> alt_priorities{ "direct3d11", "direct3d", "opengl" };
+            const int num_drivers = SDL_GetNumRenderDrivers();
+            for( const char *alt : alt_priorities ) {
+                for( int i = 0; i < num_drivers; ++i ) {
+                    const char *name = SDL_GetRenderDriver( i );
+                    if( name && std::string( name ) == alt ) {
+                        DebugLog( DL::Info, DC::Main )
+                                << "RENDERER='" << renderer_name
+                                << "' would conflict with the SDL_GPU device on the visible "
+                                "window; forcing the hidden mirror SDL_Renderer to '" << alt
+                                << "' instead (visible window still on SDL_GPU).";
+                        renderer_name = alt;
+                        break;
+                    }
+                }
+                if( renderer_name == alt ) {
+                    break;
+                }
+            }
+        }
     }
 
     const int numRenderDrivers = SDL_GetNumRenderDrivers();
@@ -309,15 +342,12 @@ static void WinCreate()
             break;
         }
     }
-#else
-    bool software_renderer = get_option<bool>( "SOFTWARE_RENDERING" );
-#endif
 
     if( !software_renderer ) {
         dbg( DL::Info ) << "Attempting to initialize accelerated SDL renderer.";
 
         const char *renderer_driver = renderer_id >= 0 ? SDL_GetRenderDriver( renderer_id ) : nullptr;
-        renderer.reset( SDL_CreateRenderer( ::window.get(), renderer_driver ) );
+        renderer.reset( SDL_CreateRenderer( ::legacy_window.get(), renderer_driver ) );
         if( printErrorIf( !renderer,
                           "Failed to initialize accelerated renderer, falling back to software rendering" ) ) {
             software_renderer = true;
@@ -325,35 +355,18 @@ static void WinCreate()
             if( get_option<bool>( "VSYNC" ) ) {
                 SDL_SetRenderVSync( renderer.get(), 1 );
             }
-            if( !SetupRenderTarget() ) {
-                dbg( DL::Error ) << "Failed to initialize display buffer under accelerated rendering, "
-                                 "falling back to software rendering.";
-                software_renderer = true;
-                display_buffer.reset();
-                renderer.reset();
-            }
+            SetRenderDrawBlendMode( renderer, SDL_BLENDMODE_NONE );
         }
     }
 
     if( software_renderer ) {
-        renderer.reset( SDL_CreateRenderer( ::window.get(), "software" ) );
+        renderer.reset( SDL_CreateRenderer( ::legacy_window.get(), "software" ) );
         throwErrorIf( !renderer, "Failed to initialize software renderer" );
-        throwErrorIf( !SetupRenderTarget(),
-                      "Failed to initialize display buffer under software rendering, unable to continue." );
+        SetRenderDrawBlendMode( renderer, SDL_BLENDMODE_NONE );
     }
 
     SDL_SetWindowMinimumSize( ::window.get(), fontwidth * FULL_SCREEN_WIDTH * scaling_factor,
                               fontheight * FULL_SCREEN_HEIGHT * scaling_factor );
-
-#if defined(__ANDROID__)
-    // TODO: Not too sure why this works to make fullscreen on Android behave. :/
-    if( fullscreen || ( window_flags & SDL_WINDOW_MAXIMIZED ) ) {
-        SDL_GetWindowSize( ::window.get(), &WindowWidth, &WindowHeight );
-    }
-
-    // Load virtual joystick texture
-    touch_joystick = CreateTextureFromSurface( renderer, load_image( "android/joystick.png" ) );
-#endif
 
     ClearScreen();
 
@@ -395,13 +408,30 @@ static void WinCreate()
     } else {
         geometry = std::make_unique<DefaultGeometryRenderer>();
     }
+
+    // Phase 2i-B-1: claim the *visible* window for the SDL_GPU device.
+    // The legacy SDL_Renderer above now lives on the hidden mirror window
+    // and its output is invisible until subsequent commits bridge or
+    // replace each draw call site. From this point on, only the GPU
+    // present in refresh_display() actually reaches the user's screen.
+    //
+    // If init fails the visible window remains blank for the session —
+    // the legacy path keeps running invisibly. The SDL log carries the
+    // exact failure mode.
+    lighting::init_render_state_on( ::window.get() );
+    // Dear ImGui inits lazily in refresh_display (device readiness isn't
+    // guaranteed at WinCreate); torn down in WinDestroy.
 }
 
 static void WinDestroy()
 {
-#if defined(__ANDROID__)
-    touch_joystick.reset();
-#endif
+    // ImGui holds GPU resources on the shared device — tear it down BEFORE the
+    // device is destroyed by shutdown_render_state(). No-op if never inited.
+    imgui_layer::shutdown();
+
+    // Tear the SDL_GPU lighting stack down before SDL_Quit. Idempotent;
+    // safe even if try_init_render_state() never succeeded.
+    lighting::shutdown_render_state();
 
     shutdown_sound();
     tilecontext.reset();
@@ -413,10 +443,17 @@ static void WinDestroy()
     }
     geometry.reset();
     format = SDL_PIXELFORMAT_UNKNOWN;
-    display_buffer.reset();
     renderer.reset();
+    ::legacy_window.reset();
     ::window.reset();
 }
+
+static point draw_string( Font &font,
+                          const SDL_Renderer_Ptr &renderer,
+                          const GeometryRenderer_Ptr &geometry,
+                          const std::string &str,
+                          point p,
+                          unsigned char color );
 
 /// Converts a color from colorscheme to SDL_Color.
 inline const SDL_Color &color_as_sdl( const unsigned char color )
@@ -424,78 +461,242 @@ inline const SDL_Color &color_as_sdl( const unsigned char color )
     return windowsPalette[color];
 }
 
-#if defined(__ANDROID__)
-void draw_terminal_size_preview();
-void draw_quick_shortcuts();
-void draw_virtual_joystick();
+// Debug overlay state — saved from the previous frame, drawn this frame.
+struct TileCoordGlyph {
+    float x, y;
+    std::string text;
+};
+struct EmitterOverlayState {
+    std::vector<lighting::gpu_emitter> snap;
+    float cam_off_x = 0.f, cam_off_y = 0.f, tile_px = 32.f;
+    float op_x = 0.f, op_y = 0.f;
+    int player_x = 0, player_y = 0, player_z = 0;
+    int screen_w = 0, screen_h = 0;
+    int map_origin_x = 0, map_origin_y = 0;
+    int draw_off_px_x = 0, draw_off_px_y = 0;
+    Uint32 last_n_emit_pushed = 0; // actual count pushed to the GPU lp
+    // Sampled at submit time so HUD shows what shader actually sees.
+    float sdf_at_player = -1.f;
+    float trans_at_player = -1.f;
+    int   sdf_W_at_submit = 0;
+    size_t sdf_size_at_submit = 0;
+    // Tier 3 per-tile coord cache.
+    std::vector<TileCoordGlyph> tile_labels;
+    int cached_player_x = INT_MIN, cached_player_y = INT_MIN;
+    float cached_cam_off_x = 0.f, cached_cam_off_y = 0.f;
+    float cached_tile_px = 0.f;
+    int cached_screen_w = 0, cached_screen_h = 0;
+};
+static EmitterOverlayState s_emo;
+// Master toggle for the lighting debug HUD. Default ON while diagnosing
+// the GPU lighting cutover. Flip to false to silence.
+static bool g_dbg_lighting = true;
+// When true, the fragment shader replaces lighting output with a
+// distance/radius heatmap (R = inside emitter radius, G = tile grid,
+// B = sky_vis). Implemented as a negative-ambient sentinel; the shader
+// checks `ambient < -0.5` and short-circuits to the diagnostic colour.
+// Shader heatmap overlay (final_rgb replaced with emitter-light visualisation
+// for game tiles). Default OFF — when on AND the SDF is empty, all emitter
+// contributions clamp to 0 and the heatmap renders pitch black, masking the
+// real ambient floor that would otherwise be visible. Toggle on at runtime
+// for emitter-pipeline diagnostics only.
+static bool g_dbg_lighting_shader = false;
+// Runtime tuning state for shader debug modes. Updated by F-key handlers.
+static lighting::debug_params g_dbg_params{};
+// Current debug mode display (0-7, cycles through modes).
+static uint32_t g_current_dbg_mode = 0u;
+// Scale factors for individual light contributions (for tuning visualization).
+static float g_emitter_scale = 1.0f;
+static float g_sun_scale = 1.0f;
+static float g_sky_scale = 1.0f;
 
-static bool quick_shortcuts_enabled = true;
-
-// For previewing the terminal size with a transparent rectangle overlay when user is adjusting it in the settings
-static int preview_terminal_width = -1;
-static int preview_terminal_height = -1;
-static Uint64 preview_terminal_change_time = 0;
-
-extern "C" {
-
-    static bool visible_display_frame_dirty = false;
-    static bool has_visible_display_frame = false;
-    static SDL_Rect visible_display_frame;
-
-    JNIEXPORT void JNICALL Java_org_libsdl_app_SDLActivity_onNativeVisibleDisplayFrameChanged(
-        JNIEnv *env, jclass jcls, jint left, jint top, jint right, jint bottom )
-    {
-        ( void )env; // unused
-        ( void )jcls; // unused
-        has_visible_display_frame = true;
-        visible_display_frame_dirty = true;
-        visible_display_frame.x = left;
-        visible_display_frame.y = top;
-        visible_display_frame.w = right - left;
-        visible_display_frame.h = bottom - top;
-    }
-
-} // "C"
-
-SDL_FRect get_android_render_rect( float DisplayBufferWidth, float DisplayBufferHeight )
+// Main-menu decorative-emitter tuning (read by lighting/snapshot.cpp). F-keys:
+//   F10 / Shift+F10  — radius input  ± 100 (pre-sqrt; HUD shows 3*sqrt(r))
+//   F11 / Shift+F11  — position cycle (top-left / centre / bottom-right)
+//   F12              — toggle bright blue debug backdrop (proves bg sprite
+//                      reaches the swapchain even when emitter contribution is 0)
+namespace menu_emitter_tuning
 {
-    // If the display buffer aspect ratio is wider than the display,
-    // draw it at the top of the screen so it doesn't get covered up
-    // by the virtual keyboard. Otherwise just center it.
-    SDL_FRect dstrect;
-    float DisplayBufferAspect = DisplayBufferWidth / static_cast<float>( DisplayBufferHeight );
-    float WindowHeightLessShortcuts = static_cast<float>( WindowHeight );
-    if( !get_option<bool>( "ANDROID_SHORTCUT_OVERLAP" ) && quick_shortcuts_enabled ) {
-        WindowHeightLessShortcuts -= get_option<int>( "ANDROID_SHORTCUT_HEIGHT" );
-    }
-    float WindowAspect = WindowWidth / static_cast<float>( WindowHeightLessShortcuts );
-    if( WindowAspect < DisplayBufferAspect ) {
-        dstrect.x = 0;
-        dstrect.y = 0;
-        dstrect.w = WindowWidth;
-        dstrect.h = WindowWidth / DisplayBufferAspect;
-    } else {
-        dstrect.x = 0.5f * ( WindowWidth - ( WindowHeightLessShortcuts * DisplayBufferAspect ) );
-        dstrect.y = 0;
-        dstrect.w = WindowHeightLessShortcuts * DisplayBufferAspect;
-        dstrect.h = WindowHeightLessShortcuts;
-    }
+// raw input to make_omni; actual radius = 3·√r. Default 100 → ~30 tiles ≈
+// 960 px corner glow at 32 px/tile. Tunable at runtime via F10 / Shift+F10
+// (±100). Set very low (< 5) to disable the menu glow visually.
+float radius_input = 100.0f;
+float pos_x        = 8.5f;
+float pos_y        = 4.5f;
+int   pos_preset   = 0;         // 0 top-left, 1 centre, 2 bottom-right
+bool  blue_backdrop = true;     // true: bright blue, false: black (lit)
+}  // namespace menu_emitter_tuning
 
-    // Make sure the destination rectangle fits within the visible area
-    if( get_option<bool>( "ANDROID_KEYBOARD_SCREEN_SCALE" ) && has_visible_display_frame ) {
-        int vdf_right = visible_display_frame.x + visible_display_frame.w;
-        int vdf_bottom = visible_display_frame.y + visible_display_frame.h;
-        if( vdf_right < dstrect.x + dstrect.w ) {
-            dstrect.w = vdf_right - dstrect.x;
-        }
-        if( vdf_bottom < dstrect.y + dstrect.h ) {
-            dstrect.h = vdf_bottom - dstrect.y;
-        }
+// Returns true if a curses cell BG fill should be suppressed: only for windows
+// flagged transparent_backdrop (the main-menu decorative background) AND when
+// the colour is opaque black (the default "empty cell" fill). This lets the
+// lit-world emitter glow show through the decorative menu while every other
+// window — popups, the OPTIONS panel, in-game UI — paints a solid backdrop and
+// stays readable. Inlined; both reads are trivial in the per-cell hot loop.
+static inline bool suppress_cell_bg( const cata_cursesport::WINDOW *win,
+                                     const SDL_Color &c ) noexcept
+{
+    if( !win || !win->transparent_backdrop ) {
+        return false;
     }
-    return dstrect;
+    return c.r == 0 && c.g == 0 && c.b == 0;
 }
 
-#endif
+// Dear ImGui lighting/debug tuning panel (F4). Replaces the hand-rolled
+// text+bar HUD with interactive widgets bound to the same globals the renderer
+// reads (g_dbg_params, mirrored by g_*_scale / g_current_dbg_mode). Dev-facing
+// only. Registered with imgui_layer in the lazy-init block below.
+static void draw_lighting_dev_ui()
+{
+    // Closing via the title-bar X flips visible() too (same flag as F4).
+    if( !ImGui::Begin( "Lighting Debug (F4)", &imgui_layer::visible() ) ) {
+        ImGui::End();
+        return;
+    }
+
+    ImGui::Checkbox( "Debug HUD active (F5)", &g_dbg_lighting );
+    ImGui::SameLine();
+    ImGui::Checkbox( "Shader heatmap (F6)", &g_dbg_lighting_shader );
+
+    static const char *mode_names[9] = {
+        "off", "ambient", "emitter", "sun", "sky", "total", "SDF", "sky_vis", "emit_bw"
+    };
+    int mode = static_cast<int>( g_current_dbg_mode );
+    if( ImGui::Combo( "mode (F7)", &mode, mode_names, 9 ) ) {
+        g_current_dbg_mode = static_cast<uint32_t>( mode );
+        g_dbg_params.debug_mode = g_current_dbg_mode;
+    }
+
+    ImGui::SeparatorText( "Light scales" );
+    // Edit the g_*_scale mirrors then sync into g_dbg_params (the struct the
+    // shader reads) — same path the F8/F9 handlers use, so keys + sliders agree.
+    if( ImGui::SliderFloat( "emitter", &g_emitter_scale, 0.0f, 10.0f ) ) {
+        g_dbg_params.emitter_scale = g_emitter_scale;
+    }
+    if( ImGui::SliderFloat( "sun", &g_sun_scale, 0.0f, 10.0f ) ) {
+        g_dbg_params.sun_scale = g_sun_scale;
+    }
+    if( ImGui::SliderFloat( "sky", &g_sky_scale, 0.0f, 10.0f ) ) {
+        g_dbg_params.sky_scale = g_sky_scale;
+    }
+
+    ImGui::SeparatorText( "Dither / GI / shadow" );
+    ImGui::SliderFloat( "dither amt", &g_dbg_params.dither_amt, 0.0f, 1.0f );
+    ImGui::SliderFloat( "dither bands", &g_dbg_params.dither_bands, 1.0f, 16.0f, "%.0f" );
+    ImGui::SliderFloat( "GI strength", &g_dbg_params.gi_strength, 0.0f, 2.0f );
+    ImGui::SliderFloat( "shadow k", &g_dbg_params.shadow_k, 0.0f, 32.0f );
+    int steps = static_cast<int>( g_dbg_params.shadow_steps );
+    if( ImGui::SliderInt( "shadow steps", &steps, 1, 64 ) ) {
+        g_dbg_params.shadow_steps = static_cast<uint32_t>( std::max( 1, steps ) );
+    }
+
+    ImGui::SeparatorText( "Vision (Stoneshard)" );
+    // Each knob is independent so a single effect can be zeroed live to bisect.
+    // vis curve: soft vision-edge falloff exponent on LIT tiles (0 = off/flat,
+    //            >1 = steeper edge). night/day floor: ambient floor lerp'd by
+    //            sun_intensity for darker, more immersive nights (equal = off).
+    ImGui::SliderFloat( "vis curve", &g_dbg_params.vis_curve, 0.0f, 4.0f );
+    ImGui::SliderFloat( "vis radius", &g_dbg_params.vis_radius, 0.0f, 40.0f, "%.1f" );
+    ImGui::SliderFloat( "night floor", &g_dbg_params.night_floor, 0.0f, 0.30f );
+    ImGui::SliderFloat( "day floor", &g_dbg_params.day_floor, 0.0f, 0.30f );
+
+    ImGui::SeparatorText( "Tone grade (Stoneshard wash)" );
+    ImGui::SliderFloat( "desaturate", &g_dbg_params.grade_desat, 0.0f, 1.0f );
+    ImGui::SliderFloat( "cool tint", &g_dbg_params.grade_cool, 0.0f, 1.0f );
+    ImGui::SliderFloat( "brightness", &g_dbg_params.grade_bright, 0.0f, 1.5f );
+
+    ImGui::SeparatorText( "Memory fade (effect 3)" );
+    // mem dim = brightness floor for remembered terrain (1=no dim, persists).
+    // mem radius = distance over which memory fades from bright (near) to floor.
+    ImGui::SliderFloat( "mem dim", &g_dbg_params.mem_dim, 0.0f, 1.0f );
+    ImGui::SliderFloat( "mem radius", &g_dbg_params.mem_radius, 1.0f, 60.0f, "%.0f" );
+
+    // Diagnostics — the former top-left curses HUD, now read-only ImGui text.
+    // Reads s_emo (file-scope, populated by the g_dbg_lighting overlay block in
+    // refresh_display BEFORE new_frame() runs, so values are current this frame).
+    // s_emo is ONLY refreshed while g_dbg_lighting is on, so gate on it to avoid
+    // showing frozen stale numbers. Every map access keeps its `g ?` guard — F4
+    // is openable on the main menu where g == nullptr.
+    ImGui::SeparatorText( "Diagnostics" );
+    if( !g_dbg_lighting ) {
+        ImGui::TextDisabled( "enable Debug HUD (F5) for live readout" );
+    } else {
+        auto &rs = lighting::get_render_state();
+        const float tp = s_emo.tile_px > 0.f ? s_emo.tile_px : 32.f;
+        const float sw = static_cast<float>( s_emo.screen_w );
+        const float sh = static_cast<float>( s_emo.screen_h );
+
+        ImGui::Text( "screen=%dx%d  tile_px=%.1f",
+                     s_emo.screen_w, s_emo.screen_h, tp );
+
+        const size_t cache_sz = g
+                                ? get_map().access_cache( g->u.pos().z ).transparency_cache.size()
+                                : 0;
+        const int wanted = g
+                           ? ( get_map().getmapsize() * SEEX )
+                           * ( get_map().getmapsize() * SEEY )
+                           : 0;
+        ImGui::Text( "SDF pop=%d  rt=%dx%d  tex=%dx%d  cache=%zu/%d",
+                     rs.sdf().populated() ? 1 : 0,
+                     rs.sdf().map_w(), rs.sdf().map_h(),
+                     rs.sdf().tex_w(), rs.sdf().tex_h(),
+                     cache_sz, wanted );
+
+        if( g && cache_sz > 0 ) {
+            map &mm = get_map();
+            const int H = mm.getmapsize() * SEEY;
+            const auto &tc = mm.access_cache( g->u.pos().z ).transparency_cache;
+            const int px = g->u.pos().x;
+            const int py = g->u.pos().y;
+            auto T = [&]( int x, int y ) -> float {
+                const int i = x * H + y;
+                return ( i >= 0 && i < static_cast<int>( tc.size() ) ) ? tc[i] : -1.f;
+            };
+            ImGui::Text( "trans@p=%.3f N=%.3f S=%.3f E=%.3f W=%.3f",
+                         T( px, py ), T( px, py - 1 ), T( px, py + 1 ),
+                         T( px + 1, py ), T( px - 1, py ) );
+            ImGui::Text( "sdf@p=%.3f trans@p(submit)=%.3f sdfW=%d sz=%zu",
+                         s_emo.sdf_at_player, s_emo.trans_at_player,
+                         s_emo.sdf_W_at_submit, s_emo.sdf_size_at_submit );
+        }
+
+        ImGui::Text( "map_origin=(%d,%d)  draw_off_px=(%d,%d)",
+                     s_emo.map_origin_x, s_emo.map_origin_y,
+                     s_emo.draw_off_px_x, s_emo.draw_off_px_y );
+        ImGui::Text( "cam_off=(%.2f,%.2f)  op=(%.0f,%.0f)",
+                     s_emo.cam_off_x, s_emo.cam_off_y, s_emo.op_x, s_emo.op_y );
+        ImGui::Text( "player=(%d,%d,%d)  emitters=%zu  pushed=%u",
+                     s_emo.player_x, s_emo.player_y, s_emo.player_z,
+                     s_emo.snap.size(), s_emo.last_n_emit_pushed );
+
+        const float pscr_x = ( s_emo.player_x + s_emo.cam_off_x ) * tp + s_emo.op_x;
+        const float pscr_y = ( s_emo.player_y + s_emo.cam_off_y ) * tp + s_emo.op_y;
+        ImGui::Text( "player_screen=(%.1f,%.1f)  center=(%.1f,%.1f)",
+                     pscr_x, pscr_y, sw * 0.5f, sh * 0.5f );
+        const float dx = pscr_x - sw * 0.5f;
+        const float dy = pscr_y - sh * 0.5f;
+        ImGui::Text( "delta_to_center=(%.1f,%.1f)px  =(%.2f,%.2f)tiles",
+                     dx, dy, dx / tp, dy / tp );
+
+        if( !s_emo.snap.empty() ) {
+            const lighting::gpu_emitter &e0 = s_emo.snap.front();
+            const float ed_x = e0.pos_x - static_cast<float>( s_emo.player_x );
+            const float ed_y = e0.pos_y - static_cast<float>( s_emo.player_y );
+            const float ed   = std::sqrt( ed_x * ed_x + ed_y * ed_y );
+            const char *in_r = ( ed < e0.radius ) ? "INSIDE" : "outside";
+            ImGui::Text( "emit[0] pos=(%.1f,%.1f,%.1f) r=%.1f dist=%.2f %s",
+                         e0.pos_x, e0.pos_y, e0.pos_z, e0.radius, ed, in_r );
+        } else {
+            ImGui::TextDisabled( "emit[0] (none)" );
+        }
+        ImGui::Text( "menu  F10:r_in=%.0f  F11:pos=(%.1f,%.1f)  F12:bgBlue=%s",
+                     menu_emitter_tuning::radius_input,
+                     menu_emitter_tuning::pos_x, menu_emitter_tuning::pos_y,
+                     menu_emitter_tuning::blue_backdrop ? "ON" : "off" );
+    }
+
+    ImGui::End();
+}
 
 void refresh_display()
 {
@@ -506,24 +707,658 @@ void refresh_display()
         return;
     }
 
-    // Select default target (the window), copy rendered buffer
-    // there, present it, select the buffer as target again.
-    SetRenderTarget( renderer, nullptr );
-    ClearScreen();
-#if defined(__ANDROID__)
-    SDL_FRect dstrect = get_android_render_rect( TERMINAL_WIDTH * fontwidth,
-                        TERMINAL_HEIGHT * fontheight );
-    RenderCopy( renderer, display_buffer, nullptr, &dstrect );
-#else
-    RenderCopy( renderer, display_buffer, nullptr, nullptr );
-#endif
-#if defined(__ANDROID__)
-    draw_terminal_size_preview();
-    draw_quick_shortcuts();
-    draw_virtual_joystick();
-#endif
-    SDL_RenderPresent( renderer.get() );
-    SetRenderTarget( renderer, display_buffer );
+    // All rendering is GPU-direct. Single pass: clear black, tile sprites,
+    // UI rects, font glyphs. D3D12 requires one pass per swapchain texture;
+    // set_texture() flushes segments inside the pass so all draw kinds coexist.
+    auto &rs = lighting::get_render_state();
+
+    if( !rs.ready() ) {
+        return;
+    }
+
+    // One-time Dear ImGui init: the first frame the GPU device is actually
+    // ready. Device readiness is NOT guaranteed at WinCreate time, so init must
+    // be lazy here. No-op once ready(); fail-safe (a failure just means no dev UI).
+    if( !imgui_layer::ready() ) {
+        imgui_layer::init( rs.device().window_ptr(), rs.device().raw() );
+        imgui_layer::set_dev_ui( draw_lighting_dev_ui );
+    }
+
+    rs.tile_batcher().begin_frame();
+    rs.ui_batcher().begin_frame();
+    rs.fonts().begin_frame();
+
+    lighting::frame_context ctx = rs.device().begin_frame();
+    if( !ctx.valid() ) {
+        return;
+    }
+    if( !ctx.swapchain_tex ) {
+        rs.device().submit_frame( ctx );
+        return;
+    }
+
+    // Phase 3+4: build emitter snapshot + SDF from the CURRENT map state and
+    // submit to the collector, THEN flush it below onto this same frame's
+    // render CB. Built here (frame head) rather than at the tail so the
+    // emitter/SDF/sky_vis data matches this frame's sprites + camera offset.
+    // Building at the tail (after submit_frame) left the lighting one frame
+    // stale: on a step, sprites + camera jumped to the new tile but the light
+    // data was still the previous tile's — a visible one-frame "snap" in the
+    // dark. This mirrors the begin_lighting_frame hoist (see below) that already
+    // de-staled the camera/sun params; this completes it for the data upload.
+    if( rs.collector() ) {
+        constexpr float FRAME_MS = 25.0f;
+
+        auto snapshot = lighting::build_emitter_snapshot( rs.emitter_events(), FRAME_MS );
+
+        // Phase 4: compute transparency + SDF from the current map cache.
+        // Gate on active_world: g exists during the main menu but get_map()
+        // returns the default-constructed map (all transparent), which would
+        // upload a populated SDF and cause the fragment shadow march to
+        // shadow=0 every emitter beyond ~1 tile.
+        std::vector<uint8_t> transparency;
+        std::vector<float>   sdf;
+        std::vector<uint8_t> sky_vis;
+        std::vector<float>   indirect; // 1-bounce GI, 3 floats/tile RGB (x-major)
+        std::vector<float>   vis;      // per-tile visibility for soft vision falloff (x-major)
+        int sdf_runtime_w = 0;
+        int sdf_runtime_h = 0;
+        if( g && world_generator && world_generator->active_world && rs.sdf().ready() ) {
+            map &m = get_map(); // non-const for i_at etc.
+            const int zlev = g->u.pos().z;
+            const level_cache &mc = m.access_cache( zlev );
+            const int mapsize = m.getmapsize();
+            const int W = mapsize * SEEX;
+            const int H = mapsize * SEEY;
+            const int total = W * H;
+
+            // Guard transparency loop too — pre-fix this was UB if the cache
+            // hadn't been built yet (size 0). sdf+transparency now share one
+            // gate; either both populate or neither.
+            if( static_cast<int>( mc.transparency_cache.size() ) >= total ) {
+                // Pack float transparency_cache → uint8 (0=opaque, 255=transparent).
+                transparency.resize( total );
+                for( int i = 0; i < total; ++i ) {
+                    const float t = mc.transparency_cache[ i ];
+                    transparency[i] = static_cast<uint8_t>(
+                        std::min( 255.0f, std::max( 0.0f, t * 255.0f ) ) );
+                }
+                // CPU BFS distance transform.
+                sdf = lighting::compute_sdf_cpu( mc.transparency_cache.data(), W, H );
+                sdf_runtime_w = W;
+                sdf_runtime_h = H;
+
+                // Sky visibility from outside_cache (same x-major layout as
+                // transparency_cache, idx = x*H+y). 255 = open sky overhead,
+                // 0 = roofed/indoor. Falls back to all-open if the cache
+                // isn't built yet.
+                sky_vis.assign( total, 255u );
+                if( static_cast<int>( mc.outside_cache.size() ) >= total ) {
+                    for( int i = 0; i < total; ++i ) {
+                        sky_vis[i] = mc.outside_cache[i] ? 255u : 0u;
+                    }
+                }
+
+                // Per-tile visibility for the soft vision falloff (effect 1+2).
+                // Raw max(seen_cache, camera_cache) — the SAME float
+                // apparent_light_helper reads, but the render path otherwise
+                // discards it by bucketing to discrete lit_level (the hard
+                // edge). seen_cache already encodes a continuous radial decay.
+                // x-major (idx = x*H+y), matching transparency_cache. Live-only
+                // (>=0); memorized-tile fade is handled CPU-side at draw time
+                // (ll==MEMORIZED), not via this buffer.
+                if( static_cast<int>( mc.seen_cache.size() ) >= total ) {
+                    vis.assign( total, 0.0f );
+                    const bool have_cam =
+                        static_cast<int>( mc.camera_cache.size() ) >= total;
+                    for( int i = 0; i < total; ++i ) {
+                        const float s = mc.seen_cache[i];
+                        const float c = have_cam ? mc.camera_cache[i] : 0.0f;
+                        vis[i] = std::max( s, c );
+                    }
+                }
+
+                // 1-bounce indirect light (fake GI). Seed per-tile colored
+                // direct radiance from the CPU lightmap — `lm` is PHYSICAL and
+                // turn-stable (generate_lightmap; vision is applied later in
+                // apparent_light), so reading it per-frame is shimmer-free.
+                // Normalise by LIGHT_AMBIENT_LIT so a well-lit tile ≈ 1.0, to
+                // match the GPU dynamic-light scale. light_color_cache supplies
+                // hue only when coloured (fire/twilight); else white.
+                // Then diffuse 2 passes through OPEN tiles (blocked by walls,
+                // leaks through windows) → soft colored fill that spills deeper
+                // than the direct cone. Shader adds gi_strength * this.
+                if( static_cast<int>( mc.lm.size() ) >= total ) {
+                    std::vector<float> seed( total * 3, 0.0f );
+                    const bool colored = mc.has_colored_lights
+                        && static_cast<int>( mc.light_color_cache.size() ) >= total;
+                    for( int i = 0; i < total; ++i ) {
+                        const float lum = mc.lm[i].max() / LIGHT_AMBIENT_LIT;
+                        if( lum <= 0.0f ) { continue; }
+                        float cr = 1.0f, cg = 1.0f, cb = 1.0f;
+                        if( colored ) {
+                            const light_color_rgb &lc = mc.light_color_cache[i];
+                            const float m = std::max( lc.r, std::max( lc.g, lc.b ) );
+                            if( m > 0.0001f ) { cr = lc.r / m; cg = lc.g / m; cb = lc.b / m; }
+                        }
+                        seed[i * 3 + 0] = lum * cr;
+                        seed[i * 3 + 1] = lum * cg;
+                        seed[i * 3 + 2] = lum * cb;
+                    }
+                    // Wall-gated diffusion. Sources stay pinned (seed re-added
+                    // each pass); light relaxes outward only through tiles whose
+                    // transparency is above SOLID (0). Averaging keeps it bounded.
+                    std::vector<float> cur = seed;
+                    std::vector<float> nxt( total * 3, 0.0f );
+                    const float decay = 0.55f;
+                    for( int pass = 0; pass < 2; ++pass ) {
+                        for( int x = 0; x < W; ++x ) {
+                            for( int y = 0; y < H; ++y ) {
+                                const int i = x * H + y;
+                                float ar = seed[i * 3 + 0];
+                                float ag = seed[i * 3 + 1];
+                                float ab = seed[i * 3 + 2];
+                                float wsum = 1.0f;
+                                for( int dx = -1; dx <= 1; ++dx ) {
+                                    for( int dy = -1; dy <= 1; ++dy ) {
+                                        if( dx == 0 && dy == 0 ) { continue; }
+                                        const int nx = x + dx, ny = y + dy;
+                                        if( nx < 0 || ny < 0 || nx >= W || ny >= H ) { continue; }
+                                        const int ni = nx * H + ny;
+                                        if( mc.transparency_cache[ni] <= 0.01f ) { continue; }
+                                        ar += decay * cur[ni * 3 + 0];
+                                        ag += decay * cur[ni * 3 + 1];
+                                        ab += decay * cur[ni * 3 + 2];
+                                        wsum += decay;
+                                    }
+                                }
+                                nxt[i * 3 + 0] = ar / wsum;
+                                nxt[i * 3 + 1] = ag / wsum;
+                                nxt[i * 3 + 2] = ab / wsum;
+                            }
+                        }
+                        cur.swap( nxt );
+                    }
+                    indirect = std::move( cur );
+                }
+            }
+
+            // Snapshot for HUD: what's the SDF / transparency at the player tile?
+            const int pi = g->u.pos().x * H + g->u.pos().y;
+            if( pi >= 0 && pi < static_cast<int>( sdf.size() ) ) {
+                s_emo.sdf_at_player = sdf[pi];
+                dbg( DL::Debug ) << "sdf[player]: " << sdf[pi];
+            }
+            if( pi >= 0 && pi < static_cast<int>( mc.transparency_cache.size() ) ) {
+                s_emo.trans_at_player = mc.transparency_cache[pi];
+            }
+            s_emo.sdf_W_at_submit    = W;
+            s_emo.sdf_size_at_submit = sdf.size();
+        }
+
+        if( g_dbg_lighting ) {
+            // Mirror snapshot to HUD on both in-game AND main menu so the
+            // decorative amber emitter (snapshot.cpp:205 path) shows up in
+            // the emit[0] HUD line.
+            s_emo.snap = snapshot;
+        }
+        rs.collector()->submit( std::move( snapshot ),
+                                std::move( transparency ),
+                                std::move( sdf ),
+                                std::move( sky_vis ),
+                                std::move( indirect ),
+                                std::move( vis ),
+                                sdf_runtime_w,
+                                sdf_runtime_h );
+    }
+
+    // Drain this frame's pending emitter/SDF/transparency/sky_vis upload onto
+    // THIS frame's render command buffer. Single CB = ordered: copy pass runs
+    // before the render pass on the GPU, so the fragment shader samples freshly
+    // uploaded textures instead of racing a worker-thread CB. Was the root
+    // cause of the empty EmitterTex / corrupted SkyVisTex observed earlier.
+    if( rs.collector() ) {
+        rs.collector()->flush_to_render_cb( ctx.cmd_buffer );
+    }
+
+    // Phase 6/6b: stamp the per-frame lighting params onto the tile_batcher
+    // BEFORE begin_pass. end_pass() reads impl.lp / impl.lp_emitter_buf when
+    // it records SDL_BindGPUFragmentSamplers + SDL_BindGPUFragmentStorageBuffers
+    // + SDL_PushGPU*UniformData onto the command buffer; doing this AFTER
+    // end_pass means the recorded values are one frame stale (camera-drift
+    // on motion; frame 0 fully black).
+    if( rs.collector() ) {
+        // Q10 refactor: assemble the per-frame lighting inputs the caller
+        // alone knows (camera + tile geometry + time-of-day + ambient).
+        // render_state::begin_lighting_frame() resolves the textures,
+        // sampler, emitter count, and SDF dimensions internally from its
+        // own subsystems — caller no longer threads those by hand.
+        lighting::render_state::frame_light_inputs in{};
+        in.tile_pixel_size = tilecontext
+                             ? static_cast<float>( tilecontext->get_tile_width() )
+                             : 32.0f;
+        in.z_level         = g ? static_cast<float>( g->u.pos().z ) : 0.0f;
+        // Restored to 0.05 (was 0.5 as band-aid for stale D3D12 emitter
+        // sampler issue — band-aid pre-dates the single-CB
+        // flush_to_render_cb rewrite and may no longer be needed. If
+        // in-game lighting is broken after this, revert to 0.5 and
+        // investigate sampler binding properly.
+        in.ambient         = 0.05f;
+
+        // Camera offset converts screen tile units → map tile coords:
+        //   map_pos = tile_tu - camera_offset   (see sdf_pass.h comment)
+        // On the main menu (g==nullptr) keep cam_off=(0,0) so the
+        // decorative emitter coordinates stay consistent with the
+        // screen-tile world_pos used by the background sprite.
+        if( g && tilecontext && in.tile_pixel_size > 0.0f ) {
+            const point map_origin  = tilecontext->get_tile_map_origin();
+            const point draw_offset = tilecontext->get_drawing_pixel_offset();
+            in.camera_off_x = static_cast<float>( draw_offset.x ) / in.tile_pixel_size
+                              - static_cast<float>( map_origin.x );
+            in.camera_off_y = static_cast<float>( draw_offset.y ) / in.tile_pixel_size
+                              - static_cast<float>( map_origin.y );
+            if( g_dbg_lighting ) {
+                s_emo.cam_off_x = in.camera_off_x;
+                s_emo.cam_off_y = in.camera_off_y;
+                s_emo.tile_px   = in.tile_pixel_size;
+                s_emo.op_x      = static_cast<float>( draw_offset.x );
+                s_emo.op_y      = static_cast<float>( draw_offset.y );
+                s_emo.player_x  = g->u.pos().x;
+                s_emo.player_y  = g->u.pos().y;
+                s_emo.player_z  = g->u.pos().z;
+                s_emo.screen_w  = static_cast<int>( ctx.swapchain_w );
+                s_emo.screen_h  = static_cast<int>( ctx.swapchain_h );
+                s_emo.map_origin_x = map_origin.x;
+                s_emo.map_origin_y = map_origin.y;
+                s_emo.draw_off_px_x = draw_offset.x;
+                s_emo.draw_off_px_y = draw_offset.y;
+            }
+        } else if( g_dbg_lighting ) {
+            // Main menu / no-game path: still update the screen size so
+            // the HUD shows a non-zero center cross and the emitter count
+            // line reflects the collector state. Player / map-origin /
+            // draw-offset all stay zero (no map loaded).
+            s_emo.cam_off_x = 0.f;
+            s_emo.cam_off_y = 0.f;
+            s_emo.tile_px   = in.tile_pixel_size;
+            s_emo.op_x      = 0.f;
+            s_emo.op_y      = 0.f;
+            s_emo.player_x  = 0;
+            s_emo.player_y  = 0;
+            s_emo.player_z  = 0;
+            s_emo.screen_w  = static_cast<int>( ctx.swapchain_w );
+            s_emo.screen_h  = static_cast<int>( ctx.swapchain_h );
+            s_emo.map_origin_x = 0;
+            s_emo.map_origin_y = 0;
+            s_emo.draw_off_px_x = 0;
+            s_emo.draw_off_px_y = 0;
+        }
+
+        // Compute sun/sky params from time-of-day (24h LUT). sun_hour is
+        // renamed to avoid shadowing the hour_of_day<T>() template.
+        const float sun_hour = g ? hour_of_day<float>( calendar::turn ) : 12.f;
+        in.sun = lighting::make_sun_params( sun_hour );
+        // Repurpose sun.sp_pad as the shader debug-heatmap sentinel.
+        in.sun.sp_pad = g_dbg_lighting_shader ? 1.0f : 0.0f;
+
+        // Runtime debug tuning: wire the globally controlled debug_params into
+        // frame_light_inputs. shader uses these for debug visualization (F7 cycles
+        // modes, F8/F9 adjust scales). Defaults are all zeroed (no-op).
+        in.debug = g_dbg_params;
+        // Inject the player map-tile centre as the radial vision-bubble origin
+        // (DATA, not a knob — overwrites the unused g_dbg_params slots). Matches
+        // the shader world_pos space (= map tile index). Main menu (g==null)
+        // leaves it at 0 with vis_radius gating on sdf_map_w>0 anyway.
+        if( g ) {
+            in.debug.player_x = static_cast<float>( g->u.pos().x ) + 0.5f;
+            in.debug.player_y = static_cast<float>( g->u.pos().y ) + 0.5f;
+        }
+
+        // Debug: log emitter count, texture state, and first emitter data every ~120 frames.
+        static int emit_dbg_frame = 0;
+        if( ++emit_dbg_frame >= 120 ) {
+            emit_dbg_frame = 0;
+            dbg( DL::Debug ) << "lighting: n_emit=" << rs.collector()->last_count()
+                             << " emitter_buf=" << ( rs.collector()->emitter_buffer() ? "ok" : "NULL" )
+                             << " sdf_tex=" << ( rs.sdf().sdf_texture() ? "ok" : "NULL" )
+                             << " sampler=" << ( rs.gpu_sampler() ? "ok" : "NULL" )
+                             << " cam_off=(" << in.camera_off_x << "," << in.camera_off_y << ")"
+                             << " sdf=" << rs.sdf().map_w() << "x" << rs.sdf().map_h()
+                             << " z=" << in.z_level
+                             << " ambient=" << in.ambient
+                             << " tile_px=" << in.tile_pixel_size;
+        }
+        s_emo.last_n_emit_pushed = static_cast<Uint32>( rs.collector()->last_count() );
+
+        rs.begin_lighting_frame( in );
+    }
+
+    // Phase 8 main-menu background: when no world is loaded, inject a fullscreen
+    // tile sprite (tint=0, game-tile mode) so the warm amber decorative emitter
+    // shows as a lit gradient behind the UI text.  Added only when the tile queue
+    // is empty (once per redraw cycle) to prevent stacking across frames.
+    // Gate on active_world rather than !g: g is created before the main menu is
+    // shown, so !g misses the menu state — must match snapshot.cpp:207.
+    const bool no_world = !g || !world_generator || !world_generator->active_world;
+    if( no_world && rs.tile_sprites_empty() && rs.geometry().white_texture() ) {
+        lighting::sprite_instance bg{};
+        bg.dst_x  = 0.f;
+        bg.dst_y  = 0.f;
+        bg.dst_w  = static_cast<float>( ctx.swapchain_w );
+        bg.dst_h  = static_cast<float>( ctx.swapchain_h );
+        bg.src_u  = 0.f;  bg.src_v  = 0.f;
+        bg.src_uw = 1.f;  bg.src_vh = 1.f;
+        // Debug backdrop (F12): bright blue floor — proves the bg sprite reaches
+        // the swapchain and that the fragment shader can light a non-tile sprite.
+        // Shader composites via max(tint, gpu_total), so a blue floor keeps the
+        // bg visible AND any emitter contribution >0.3 in R/G shines through.
+        // When toggled off, tint=0 ("game-tile mode") yields pure lit output.
+        if( menu_emitter_tuning::blue_backdrop ) {
+            bg.tint_r = 0.0f;  bg.tint_g = 0.0f;  bg.tint_b = 0.3f;
+        } else {
+            bg.tint_r = 0.0f;  bg.tint_g = 0.0f;  bg.tint_b = 0.0f;
+        }
+        bg.tint_a = 1.f;
+        bg.rotation = 0.f;
+        rs.queue_tile_sprite( rs.geometry().white_texture(), bg );
+    }
+
+    constexpr float clear_black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    // HiDPI: viewport (target_w/h) = physical swapchain so the rasterizer
+    // fills the full framebuffer; projection (proj_w/h) = logical window
+    // size so the shader's pixel→NDC math matches the logical coords the
+    // UI / fonts queue draws at. GPU stretches logical → physical.
+    int proj_w = 0;
+    int proj_h = 0;
+    SDL_GetWindowSize( ::window.get(), &proj_w, &proj_h );
+    if( proj_w <= 0 || proj_h <= 0 ) {
+        proj_w = static_cast<int>( ctx.swapchain_w );
+        proj_h = static_cast<int>( ctx.swapchain_h );
+    }
+
+    // Phase 3: the UI compositor Pass A, the swapchain pass, and the composite
+    // blit now run AFTER the transient LIGHT-DBG HUD is generated (below), so
+    // Pass A can drain the transient queues into the compositor. The HUD block
+    // is pure queue pushes (no open pass required), so it runs here first.
+    // Lighting debug HUD. Tiers:
+    //   1: top-left text strip (screen dims, tile_px, cam_off, player, op, n_emit)
+    //   2: emitter markers + player + screen-center crosses
+    //   3: per-tile (x,y) coord labels — cached, rebuilt on player/camera change
+    //   4: tile grid lines (1px) at every tile boundary
+    //
+    // Route all overlay pushes (this block + the tuning widget below) into
+    // render_state's per-frame transient queues. refresh_display runs every
+    // frame, but ui_manager's clear_ui_queues() only fires on a redraw
+    // cycle — without transient routing these pushes would accumulate on
+    // no-input frames and ghost over composited UI slices. RAII guard
+    // ensures the flag clears even if a push path throws.
+    struct transient_routing_guard {
+        lighting::render_state &rs;
+        ~transient_routing_guard()
+        {
+            rs.set_transient_routing( false );
+        }
+    } _t_route{ rs };
+    rs.set_transient_routing( true );
+
+    // Render the HUD on the main menu too so we can verify the decorative
+    // amber emitter is being collected/uploaded. Player / tile-coord tiers
+    // are skipped when no game is loaded (gated below on `g`).
+    if( g_dbg_lighting ) {
+        constexpr float OL_PI = 3.14159265358979323846f;
+        const float tp  = s_emo.tile_px > 0.f ? s_emo.tile_px : 32.f;
+        const float sw  = static_cast<float>( ctx.swapchain_w );
+        const float sh  = static_cast<float>( ctx.swapchain_h );
+
+        // ── Tier 4: grid lines ─────────────────────────────────────────────
+        // Vertical and horizontal 1px lines aligned to the tile lattice.
+        // Anchor on op (drawing pixel offset) so lines coincide with sprite edges.
+        {
+            const float anchor_x = std::fmod( s_emo.op_x, tp );
+            const float anchor_y = std::fmod( s_emo.op_y, tp );
+            for( float x = anchor_x; x < sw; x += tp ) {
+                rs.queue_ui_rect( x, 0.f, 1.f, sh, 0.25f, 0.25f, 0.30f, 0.35f );
+            }
+            for( float y = anchor_y; y < sh; y += tp ) {
+                rs.queue_ui_rect( 0.f, y, sw, 1.f, 0.25f, 0.25f, 0.30f, 0.35f );
+            }
+        }
+
+        // ── Tier 2: emitter markers (solid dot + dotted ring) ──────────────
+        static bool emo_cam_logged = false;
+        if( !emo_cam_logged ) {
+            emo_cam_logged = true;
+            dbg( DL::Debug ) << "overlay: cam=(" << s_emo.cam_off_x << ","
+                             << s_emo.cam_off_y << ") tile_px=" << s_emo.tile_px
+                             << " op=(" << s_emo.op_x << "," << s_emo.op_y
+                             << ") snap=" << s_emo.snap.size();
+        }
+        for( const auto &e : s_emo.snap ) {
+            const float sx  = ( e.pos_x + s_emo.cam_off_x ) * tp + s_emo.op_x;
+            const float sy  = ( e.pos_y + s_emo.cam_off_y ) * tp + s_emo.op_y;
+            const float rpx = e.radius * tp;
+            const float cr  = e.r > 0.01f ? e.r : 1.0f;
+            const float cg  = e.g > 0.01f ? e.g : 1.0f;
+            const float cb  = e.b > 0.01f ? e.b : 1.0f;
+            // Bright filled core.
+            rs.queue_ui_rect( sx - 4.f, sy - 4.f, 8.f, 8.f, cr, cg, cb, 1.0f );
+            // Dotted ring at radius.
+            for( int i = 0; i < 48; ++i ) {
+                const float a = 2.0f * OL_PI * static_cast<float>( i ) / 48.0f;
+                rs.queue_ui_rect( sx + std::cos( a ) * rpx - 2.f,
+                                  sy + std::sin( a ) * rpx - 2.f,
+                                  4.f, 4.f, cr, cg, cb, 0.75f );
+            }
+        }
+
+        // Player cross (bright green) at map-coord player pos.
+        {
+            const float px = ( s_emo.player_x + s_emo.cam_off_x ) * tp + s_emo.op_x;
+            const float py = ( s_emo.player_y + s_emo.cam_off_y ) * tp + s_emo.op_y;
+            rs.queue_ui_rect( px - 12.f, py - 1.f, 24.f, 2.f, 0.f, 1.f, 0.f, 1.f );
+            rs.queue_ui_rect( px - 1.f, py - 12.f, 2.f, 24.f, 0.f, 1.f, 0.f, 1.f );
+        }
+        // Screen-center cross (cyan).
+        {
+            const float cx = sw * 0.5f;
+            const float cy = sh * 0.5f;
+            rs.queue_ui_rect( cx - 10.f, cy - 1.f, 20.f, 2.f, 0.f, 1.f, 1.f, 0.9f );
+            rs.queue_ui_rect( cx - 1.f, cy - 10.f, 2.f, 20.f, 0.f, 1.f, 1.f, 0.9f );
+        }
+
+        // ── Tier 3: per-tile (x,y) coord labels, cached on player move ─────
+        // Labels span ~5–6 glyphs at small font width and easily exceed a 32px
+        // tile, smearing horizontally. Restrict to a small box around the
+        // player and label every other tile so they stay legible.
+        constexpr int TIER3_RADIUS = 6;   // tiles each side of player
+        constexpr int TIER3_STEP   = 2;   // every Nth tile
+        const bool cache_stale =
+            s_emo.player_x != s_emo.cached_player_x ||
+            s_emo.player_y != s_emo.cached_player_y ||
+            s_emo.cam_off_x != s_emo.cached_cam_off_x ||
+            s_emo.cam_off_y != s_emo.cached_cam_off_y ||
+            s_emo.tile_px != s_emo.cached_tile_px ||
+            s_emo.screen_w != s_emo.cached_screen_w ||
+            s_emo.screen_h != s_emo.cached_screen_h;
+        if( cache_stale && tp >= 16.f ) {
+            s_emo.tile_labels.clear();
+            const int mx0 = s_emo.player_x - TIER3_RADIUS;
+            const int my0 = s_emo.player_y - TIER3_RADIUS;
+            const int mx1 = s_emo.player_x + TIER3_RADIUS;
+            const int my1 = s_emo.player_y + TIER3_RADIUS;
+            for( int my = my0; my <= my1; my += TIER3_STEP ) {
+                for( int mx = mx0; mx <= mx1; mx += TIER3_STEP ) {
+                    const float tx = ( mx + s_emo.cam_off_x ) * tp + s_emo.op_x + 1.f;
+                    const float ty = ( my + s_emo.cam_off_y ) * tp + s_emo.op_y + 1.f;
+                    s_emo.tile_labels.push_back( {
+                        tx, ty,
+                        std::to_string( mx ) + "," + std::to_string( my )
+                    } );
+                }
+            }
+            s_emo.cached_player_x  = s_emo.player_x;
+            s_emo.cached_player_y  = s_emo.player_y;
+            s_emo.cached_cam_off_x = s_emo.cam_off_x;
+            s_emo.cached_cam_off_y = s_emo.cam_off_y;
+            s_emo.cached_tile_px   = tp;
+            s_emo.cached_screen_w  = s_emo.screen_w;
+            s_emo.cached_screen_h  = s_emo.screen_h;
+        }
+        if( font ) {
+            for( const TileCoordGlyph &g_lbl : s_emo.tile_labels ) {
+                // Tiny dark backdrop so labels remain readable over sprites.
+                const float lw = static_cast<float>( g_lbl.text.size() ) *
+                                 static_cast<float>( font->width );
+                rs.queue_ui_rect( g_lbl.x - 1.f, g_lbl.y - 1.f,
+                                  lw + 2.f, static_cast<float>( font->height ) + 2.f,
+                                  0.f, 0.f, 0.f, 0.7f );
+                draw_string( *font, renderer, geometry, g_lbl.text,
+                             point( static_cast<int>( g_lbl.x ),
+                                    static_cast<int>( g_lbl.y ) ),
+                             14 ); // 14 = yellow
+            }
+        }
+
+        // ── Tier 1: top-left HUD strip — MIGRATED to the F4 ImGui panel ────
+        // The text readout now lives in draw_lighting_dev_ui() under the
+        // "Diagnostics" header (reads the same s_emo). Removed here to stop the
+        // double-render: the spatial overlays above (grid/markers/crosses/
+        // labels) stay because they are world-aligned, not a top-left panel.
+    }
+
+    // Lighting tuning widget (F-key text+bar HUD) — REMOVED, fully migrated to
+    // the F4 ImGui panel (draw_lighting_dev_ui). All its knobs are now interactive
+    // sliders/combo there. The raw F-key handlers (F5–F12) still mutate the globals
+    // for users without the ImGui panel; only the on-screen text widget is gone.
+
+    // The transient LIGHT-DBG HUD (above) is re-pushed every frame and animates
+    // (emitter markers + crosses track the camera), so force a recomposite
+    // whenever it is active. clear_ui_queues() only invalidates on a ui_manager
+    // redraw cycle, which the HUD does not go through.
+    lighting::ui_composite_target *uct = rs.ui_target();
+    if( uct && g_dbg_lighting ) {
+        uct->invalidate();
+    }
+
+    // ── UI compositor Pass A (phase 4: dirty-gated) ────────────────────────
+    // Re-render the UI into the compositor ONLY when something invalidated it
+    // (a ui_manager redraw cycle via clear_ui_queues, the resize hook, or the
+    // HUD above). On a clean frame Pass A is skipped and Pass B reuses the
+    // persistent compositor texture from the last composite — this is the
+    // partial-redraw flicker fix (no black sidebar when only a tooltip redrew).
+    //
+    // STICKY: the pass runs only when dirty AND there is UI to draw. A
+    // transient-empty queue does NOT clear the compositor — the last composite
+    // is retained and reused by the Pass B blit. consume_dirty() is guarded
+    // behind any_ui (short-circuit) so the dirty flag is preserved across empty
+    // frames and the composite happens once content returns. (An always-clear
+    // variant blanked the whole UI on any frame the queue briefly emptied.)
+    //
+    // Two begin_pass/end_pass cycles on one batcher in one command buffer is
+    // safe: end_pass uploads instances with cycle=true (fresh backing per pass)
+    // and Pass A targets the compositor texture, not the swapchain.
+    const bool any_ui = !rs.ui_rects_empty() || !rs.font_glyphs_empty();
+    if( uct && uct->texture() && any_ui && uct->consume_dirty() ) {
+        constexpr float clear_transparent[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+        rs.tile_batcher().begin_pass( ctx.cmd_buffer, uct->texture(),
+                                      uct->width(), uct->height(),
+                                      clear_transparent,
+                                      static_cast<std::uint32_t>( proj_w ),
+                                      static_cast<std::uint32_t>( proj_h ) );
+        if( !rs.ui_rects_empty() && rs.geometry().white_texture() ) {
+            rs.tile_batcher().set_texture( rs.geometry().white_texture(),
+                                           rs.gpu_sampler(), /*is_lit=*/false );
+            rs.flush_ui_rects( rs.tile_batcher() );
+        }
+        if( !rs.font_glyphs_empty() && rs.gpu_sampler() ) {
+            rs.flush_font_glyphs( rs.tile_batcher(), rs.gpu_sampler() );
+        }
+        rs.tile_batcher().end_pass();
+    }
+
+    // ── Pass W: world accumulation ─────────────────────────────────────────
+    // Render the lit-world tile sprites into the PERSISTENT world_target.
+    //
+    // Retention comes from SKIPPING the pass, not from the load-op: a frame that
+    // enqueues no tiles (partial UI redraw → tile queue head-cleared in
+    // redraw_invalidated, map adaptor not re-invalidated) doesn't run the pass
+    // at all, so the last world is RETAINED instead of flashing black — the
+    // in-game whole-screen-black flicker fix.
+    //
+    // When the pass DOES run it always LOADOP_CLEARs (like the old swapchain
+    // tile pass), then repaints the full tile set. LOADOP_LOAD here would buy no
+    // retention (the skip already does that) and would smear stale pixels wher-
+    // ever a frame lacks full opaque coverage (unseen tiles, scroll edges,
+    // overlay-only frames). needs_clear (the target's dirty flag, init + resize)
+    // forces the pass to run at least once so the texture starts defined / resize
+    // garbage is wiped even before any tiles exist. Lighting is already stamped
+    // (begin_lighting_frame above); end_pass binds it for the lit tile segments.
+    lighting::ui_composite_target *wt = rs.world_target();
+    if( wt && wt->texture() ) {
+        const bool needs_clear = wt->consume_dirty();
+        const bool have_tiles  = !rs.tile_sprites_empty() && rs.gpu_sampler();
+        if( needs_clear || have_tiles ) {
+            rs.tile_batcher().begin_pass( ctx.cmd_buffer, wt->texture(),
+                                          wt->width(), wt->height(),
+                                          clear_black,
+                                          static_cast<std::uint32_t>( proj_w ),
+                                          static_cast<std::uint32_t>( proj_h ) );
+            if( have_tiles ) {
+                rs.flush_tile_sprites( rs.tile_batcher(), rs.gpu_sampler() );
+            }
+            rs.tile_batcher().end_pass();
+        }
+    }
+
+    // Dear ImGui dev UI: build the frame and upload its vertex/index buffers
+    // OUTSIDE any render pass (prepare opens its own GPU copy pass), then draw
+    // it as the LAST thing inside Pass B via the end_pass overlay so it shares
+    // the single swapchain pass (D3D12 drops a 2nd pass on the same target).
+    const bool imgui_active = imgui_layer::ready() && imgui_layer::visible();
+    if( imgui_active ) {
+        imgui_layer::new_frame();
+        imgui_layer::prepare( ctx.cmd_buffer );
+    }
+
+    // ── Pass B: swapchain composite ────────────────────────────────────────
+    // World (opaque) then UI (straight-alpha) blitted over the swapchain as
+    // fullscreen quads. No direct tile/UI flush here — both layers are
+    // persistent textures, so a partial redraw never blanks either layer.
+    rs.tile_batcher().begin_pass( ctx.cmd_buffer, ctx.swapchain_tex,
+                                  ctx.swapchain_w, ctx.swapchain_h,
+                                  clear_black,
+                                  static_cast<std::uint32_t>( proj_w ),
+                                  static_cast<std::uint32_t>( proj_h ) );
+
+    auto blit_layer = [&]( lighting::ui_composite_target *layer ) {
+        if( !layer || !layer->texture() || !rs.gpu_sampler() ) {
+            return;
+        }
+        lighting::sprite_instance quad{};
+        quad.dst_x  = 0.f;          quad.dst_y  = 0.f;
+        quad.dst_w  = static_cast<float>( proj_w );
+        quad.dst_h  = static_cast<float>( proj_h );
+        quad.src_u  = 0.f;  quad.src_v  = 0.f;
+        quad.src_uw = 1.f;  quad.src_vh = 1.f;
+        quad.tint_r = 1.f;  quad.tint_g = 1.f;
+        quad.tint_b = 1.f;  quad.tint_a = 1.f;
+        quad.rotation = 0.f;
+        rs.tile_batcher().set_texture( layer->texture(), rs.gpu_sampler(),
+                                       /*is_lit=*/false );
+        rs.tile_batcher().draw( quad );
+    };
+    blit_layer( wt );    // lit world (opaque base covers the swapchain)
+    blit_layer( uct );   // UI composited over the world (straight alpha)
+
+    rs.tile_batcher().end_pass(
+        imgui_active
+        ? lighting::sprite_batcher::pass_overlay_fn(
+    []( SDL_GPURenderPass * rp, SDL_GPUCommandBuffer * cb ) {
+        imgui_layer::render_in_pass( rp, cb );
+    } )
+        : lighting::sprite_batcher::pass_overlay_fn{} );
+
+    rs.device().submit_frame( ctx );
 }
 
 // only update if the set interval has elapsed
@@ -537,11 +1372,9 @@ static void try_sdl_update()
     }
 }
 
-//for resetting the render target after updating texture caches in cata_tiles.cpp
-void set_displaybuffer_rendertarget()
-{
-    SetRenderTarget( renderer, display_buffer );
-}
+// No-op: display_buffer removed. Remains until atlas lookup uses GPU-native
+// keys and SDL_Renderer can be removed entirely (2i-B-7f Part B).
+void set_displaybuffer_rendertarget() {}
 
 static void invalidate_framebuffer( std::vector<curseline> &framebuffer, point p, int width,
                                     int height )
@@ -647,6 +1480,14 @@ void clear_window_area( const catacurses::window &win_ )
     cata_cursesport::WINDOW *const win = win_.get<cata_cursesport::WINDOW>();
     geometry->rect( renderer, point( win->pos.x * fontwidth, win->pos.y * fontheight ),
                     win->width * fontwidth, win->height * fontheight, color_as_sdl( catacurses::black ) );
+}
+
+void cata_cursesport::set_window_transparent_backdrop( const catacurses::window &win,
+        bool transparent )
+{
+    if( cata_cursesport::WINDOW *const w = win.get<cata_cursesport::WINDOW>() ) {
+        w->transparent_backdrop = transparent;
+    }
 }
 
 static std::optional<std::pair<tripoint_abs_omt, std::string>> get_mission_arrow(
@@ -823,22 +1664,21 @@ void cata_tiles::draw_om( point dest, const tripoint_abs_omt &center_abs_omt, bo
         return;
     }
 
-#if defined(__ANDROID__)
-    // Attempted bugfix for Google Play crash - prevent divide-by-zero if no tile
-    // width/height specified
-    if( tile_width == 0 || tile_height == 0 ) {
-        return;
+    // clear_frame_queues() was already called by redraw_invalidated() before
+    // this callback runs. Only clear the tile sprite queue so that overmap
+    // tiles don't accumulate across ticks; UI queues are owned by the
+    // enclosing redraw_invalidated() cycle.
+    if( auto *rs = &lighting::get_render_state(); rs->ready() ) {
+        rs->clear_tile_queue();
     }
-#endif
 
     int width = OVERMAP_WINDOW_TERM_WIDTH * font->width;
     int height = OVERMAP_WINDOW_TERM_HEIGHT * font->height;
 
     {
-        //set clipping to prevent drawing over stuff we shouldn't
+        // GPU scissor — clips overmap tile sprites to the overmap viewport.
         SDL_Rect clipRect = { dest.x, dest.y, width, height };
-        printErrorIf( !SDL_SetRenderClipRect( renderer.get(), &clipRect ),
-                      "SDL_SetRenderClipRect failed" );
+        lighting::get_render_state().set_tile_scissor( &clipRect );
 
         //fill render area with black to prevent artifacts where no new pixels are drawn
         geometry->rect( renderer, point{ clipRect.x, clipRect.y }, clipRect.w, clipRect.h, SDL_Color() );
@@ -1402,8 +2242,7 @@ void cata_tiles::draw_om( point dest, const tripoint_abs_omt &center_abs_omt, bo
         }
     }
 
-    printErrorIf( !SDL_SetRenderClipRect( renderer.get(), nullptr ),
-                  "SDL_SetRenderClipRect failed" );
+    lighting::get_render_state().clear_tile_scissor();
 }
 
 static bool draw_window( Font_Ptr &font, const catacurses::window &w, point offset )
@@ -1434,6 +2273,16 @@ static bool draw_window( Font_Ptr &font, const catacurses::window &w, point offs
 
     std::vector<curseline> &framebuffer = use_oversized_framebuffer ? oversized_framebuffer :
                                           terminal_framebuffer;
+
+    // When this window is being drawn inside an ui_adaptor redraw_cb, its draws
+    // route into the adaptor's retained GPU slice, which was just cleared. The
+    // per-cell framebuffer dirty-cell skip below assumes a persistent backbuffer
+    // (the removed display_buffer) keeps unchanged cells on screen — but the
+    // slice has no such persistence, so unchanged cells would be dropped (e.g. a
+    // navigated uilist collapsing to current+previous row). Force a FULL re-push
+    // of this window's cells into the slice by bypassing the skip while routing.
+    const bool slice_active = lighting::get_render_state().ready() &&
+                              lighting::get_render_state().slice_routing_active();
 
     /*
     Let's try to keep track of different windows.
@@ -1498,7 +2347,8 @@ static bool draw_window( Font_Ptr &font, const catacurses::window &w, point offs
             // TODO: handle caching when drawing normal windows over graphical tiles
             cursecell &oldcell = framebuffer[fby].chars[fbx];
 
-            if( oldWinCompatible && cell == oldcell && fontScale == fontScaleBuffer ) {
+            if( !slice_active && oldWinCompatible && cell == oldcell &&
+                fontScale == fontScaleBuffer ) {
                 continue;
             }
             oldcell = cell;
@@ -1509,8 +2359,11 @@ static bool draw_window( Font_Ptr &font, const catacurses::window &w, point offs
 
             // Spaces are used a lot, so this does help noticeably
             if( cell.ch == space_string ) {
-                geometry->rect( renderer, point( drawx, drawy ), font->width, font->height,
-                                color_as_sdl( cell.BG ) );
+                const SDL_Color bg_col = color_as_sdl( cell.BG );
+                if( !suppress_cell_bg( win, bg_col ) ) {
+                    geometry->rect( renderer, point( drawx, drawy ), font->width, font->height,
+                                    bg_col );
+                }
                 continue;
             }
             const int codepoint = UTF8_getch( cell.ch );
@@ -1576,8 +2429,13 @@ static bool draw_window( Font_Ptr &font, const catacurses::window &w, point offs
                     use_draw_ascii_lines_routine = false;
                     break;
             }
-            geometry->rect( renderer, point( drawx, drawy ), font->width * cw, font->height,
-                            color_as_sdl( BG ) );
+            {
+                const SDL_Color bg_col = color_as_sdl( BG );
+                if( !suppress_cell_bg( win, bg_col ) ) {
+                    geometry->rect( renderer, point( drawx, drawy ),
+                                    font->width * cw, font->height, bg_col );
+                }
+            }
             if( use_draw_ascii_lines_routine ) {
                 font->draw_ascii_lines( renderer, geometry, uc, point( drawx, drawy ), FG );
             } else {
@@ -1603,12 +2461,6 @@ static bool draw_window( Font_Ptr &font, const catacurses::window &w )
 
 void cata_cursesport::curses_drawwindow( const catacurses::window &w )
 {
-    if( clear_display_buffer_before_redraw ) {
-        clear_display_buffer_before_redraw = false;
-        SetRenderTarget( renderer, display_buffer );
-        ClearScreen();
-    }
-
     if( scaling_factor > 1 ) {
         SDL_SetRenderLogicalPresentation( renderer.get(), WindowWidth / scaling_factor,
                                           WindowHeight / scaling_factor, SDL_LOGICAL_PRESENTATION_STRETCH );
@@ -2111,9 +2963,24 @@ bool handle_resize( int w, int h )
         TERMINAL_HEIGHT = WindowHeight / fontheight / scaling_factor;
         need_invalidate_framebuffers = true;
         catacurses::stdscr = catacurses::newwin( TERMINAL_HEIGHT, TERMINAL_WIDTH, point_zero );
-        throwErrorIf( !SetupRenderTarget(), "SetupRenderTarget failed" );
         game_ui::init_ui();
         ui_manager::screen_resized();
+        // Keep the UI compositor texture sized to the physical swapchain so
+        // the composite blit stays 1:1 after a window resize.
+        {
+            auto &rs = lighting::get_render_state();
+            if( rs.ready() ) {
+                int pw = 0;
+                int ph = 0;
+                SDL_GetWindowSizeInPixels( window.get(), &pw, &ph );
+                if( rs.ui_target() ) {
+                    rs.ui_target()->resize( pw, ph );
+                }
+                if( rs.world_target() ) {
+                    rs.world_target()->resize( pw, ph );
+                }
+            }
+        }
         return true;
     }
     return false;
@@ -2158,745 +3025,6 @@ void toggle_fullscreen_window()
     fullscreen = !fullscreen;
 }
 
-#if defined(__ANDROID__)
-static float finger_down_x = -1.0f; // in pixels
-static float finger_down_y = -1.0f; // in pixels
-static float finger_curr_x = -1.0f; // in pixels
-static float finger_curr_y = -1.0f; // in pixels
-static float second_finger_down_x = -1.0f; // in pixels
-static float second_finger_down_y = -1.0f; // in pixels
-static float second_finger_curr_x = -1.0f; // in pixels
-static float second_finger_curr_y = -1.0f; // in pixels
-// when did the first finger start touching the screen? 0 if not touching, otherwise the time in milliseconds.
-static Uint64 finger_down_time = 0;
-// the last time we repeated input for a finger hold, 0 if not touching, otherwise the time in milliseconds.
-static Uint64 finger_repeat_time = 0;
-// the last time a single tap was detected. used for double-tap detection.
-static Uint64 last_tap_time = 0;
-// when did the hardware back button start being pressed? 0 if not touching, otherwise the time in milliseconds.
-static Uint64 ac_back_down_time = 0;
-// has a second finger touched the screen while the first was touching?
-static bool is_two_finger_touch = false;
-// did this touch start on a quick shortcut?
-static bool is_quick_shortcut_touch = false;
-static bool quick_shortcuts_toggle_handled = false;
-// the current finger repeat delay - will be somewhere between the min/max values depending on user input
-Uint64 finger_repeat_delay = 500;
-// should we make sure the sdl surface is visible? set to true whenever the SDL window is shown.
-static bool needs_sdl_surface_visibility_refresh = true;
-
-// Quick shortcuts container: maps the touch input context category (std::string) to a std::list of input_events.
-using quick_shortcuts_t = std::list<input_event>;
-std::map<std::string, quick_shortcuts_t> quick_shortcuts_map;
-
-// A copy of the last known input_context from the input manager. It's important this is a copy, as there are times
-// the input manager has an empty input_context (eg. when player is moving over slow objects) and we don't want our
-// quick shortcuts to disappear momentarily.
-input_context touch_input_context;
-
-std::string get_quick_shortcut_name( const std::string &category )
-{
-    if( category == "DEFAULTMODE" &&
-        g->check_zone( zone_type_id( "NO_AUTO_PICKUP" ), g->u.bub_pos() ) &&
-        get_option<bool>( "ANDROID_SHORTCUT_ZONE" ) ) {
-        return "DEFAULTMODE____SHORTCUTS";
-    }
-    return category;
-}
-
-float android_get_display_density()
-{
-    JNIEnv *env = static_cast< JNIEnv *>( SDL_GetAndroidJNIEnv() );
-    jobject activity = static_cast<jobject>( SDL_GetAndroidActivity() );
-    jclass clazz( env->GetObjectClass( activity ) );
-    jmethodID method_id = env->GetMethodID( clazz, "getDisplayDensity", "()F" );
-    jfloat ans = env->CallFloatMethod( activity, method_id );
-    env->DeleteLocalRef( activity );
-    env->DeleteLocalRef( clazz );
-    return ans;
-}
-
-// given the active quick shortcuts, returns the dimensions of each quick shortcut button.
-void get_quick_shortcut_dimensions( quick_shortcuts_t &qsl, float &border, float &width,
-                                    float &height )
-{
-    const float shortcut_dimensions_authored_density = 3.0f; // 480p xxhdpi
-    float screen_density_scale = android_get_display_density() / shortcut_dimensions_authored_density;
-    border = std::floor( screen_density_scale * get_option<int>( "ANDROID_SHORTCUT_BORDER" ) );
-    width = std::floor( screen_density_scale * get_option<int>( "ANDROID_SHORTCUT_WIDTH_MAX" ) );
-    float min_width = std::floor( screen_density_scale * std::min(
-                                      get_option<int>( "ANDROID_SHORTCUT_WIDTH_MIN" ),
-                                      get_option<int>( "ANDROID_SHORTCUT_WIDTH_MAX" ) ) );
-    float usable_window_width = WindowWidth * get_option<int>( "ANDROID_SHORTCUT_SCREEN_PERCENTAGE" ) *
-                                0.01f;
-    if( width * qsl.size() > usable_window_width ) {
-        width *= usable_window_width / ( width * qsl.size() );
-        if( width < min_width ) {
-            width = min_width;
-        }
-    }
-    width = std::floor( width );
-    height = std::floor( screen_density_scale * get_option<int>( "ANDROID_SHORTCUT_HEIGHT" ) );
-}
-
-// Returns the quick shortcut (if any) under the finger's current position, or finger down position if down == true
-input_event *get_quick_shortcut_under_finger( bool down = false )
-{
-
-    if( !quick_shortcuts_enabled ) {
-        return nullptr;
-    }
-
-    quick_shortcuts_t &qsl = quick_shortcuts_map[get_quick_shortcut_name(
-                                 touch_input_context.get_category() )];
-
-    float border, width, height;
-    get_quick_shortcut_dimensions( qsl, border, width, height );
-
-    float finger_y = down ? finger_down_y : finger_curr_y;
-    if( finger_y < WindowHeight - height ) {
-        return nullptr;
-    }
-
-    int i = 0;
-    bool shortcut_right = get_option<std::string>( "ANDROID_SHORTCUT_POSITION" ) == "right";
-    float finger_x = down ? finger_down_x : finger_curr_x;
-    for( std::list<input_event>::iterator it = qsl.begin(); it != qsl.end(); ++it ) {
-        if( ( i + 1 ) * width > WindowWidth * get_option<int>( "ANDROID_SHORTCUT_SCREEN_PERCENTAGE" ) *
-            0.01f ) {
-            continue;
-        }
-        i++;
-        if( shortcut_right ) {
-            if( finger_x > WindowWidth - ( i * width ) ) {
-                return &( *it );
-            }
-        } else {
-            if( finger_x < i * width ) {
-                return &( *it );
-            }
-        }
-    }
-
-    return nullptr;
-}
-
-// when pre-populating a quick shortcut list with defaults, ignore these actions (since they're all handleable by native touch operations)
-bool ignore_action_for_quick_shortcuts( const std::string &action )
-{
-    return ( action == "UP"
-             || action == "DOWN"
-             || action == "LEFT"
-             || action == "RIGHT"
-             || action == "LEFTUP"
-             || action == "LEFTDOWN"
-             || action == "RIGHTUP"
-             || action == "RIGHTDOWN"
-             || action == "QUIT"
-             || action == "CONFIRM"
-             || action == "MOVE_SINGLE_ITEM" // maps to ENTER
-             || action == "MOVE_ARMOR" // maps to ENTER
-             || action == "ANY_INPUT"
-             || action ==
-             "DELETE_TEMPLATE" // strictly we shouldn't have this one, but I don't like seeing the "d" on the main menu by default. :)
-           );
-}
-
-// Adds a quick shortcut to a quick_shortcut list, setting shortcut_last_used_action_counter accordingly.
-void add_quick_shortcut( quick_shortcuts_t &qsl, input_event &event, bool back,
-                         bool reset_shortcut_last_used_action_counter )
-{
-    if( reset_shortcut_last_used_action_counter ) {
-        event.shortcut_last_used_action_counter =
-            g->get_user_action_counter();    // only used for DEFAULTMODE
-    }
-    if( back ) {
-        qsl.push_back( event );
-    } else {
-        qsl.push_front( event );
-    }
-}
-
-// Given a quick shortcut list and a specific key, move that key to the front or back of the list.
-void reorder_quick_shortcut( quick_shortcuts_t &qsl, int key, bool back )
-{
-    for( const auto &event : qsl ) {
-        if( event.get_first_input() == key ) {
-            input_event event_copy = event;
-            qsl.remove( event );
-            add_quick_shortcut( qsl, event_copy, back, false );
-            break;
-        }
-    }
-}
-
-void reorder_quick_shortcuts( quick_shortcuts_t &qsl )
-{
-    // Do some manual reordering to make transitions between input contexts more consistent
-    // Desired order of keys: < > BACKTAB TAB PPAGE NPAGE . . . . ?
-    bool shortcut_right = get_option<std::string>( "ANDROID_SHORTCUT_POSITION" ) == "right";
-    if( shortcut_right ) {
-        reorder_quick_shortcut( qsl, KEY_PPAGE, false ); // paging control
-        reorder_quick_shortcut( qsl, KEY_NPAGE, false );
-        reorder_quick_shortcut( qsl, KEY_BTAB, false ); // secondary tabs after that
-        reorder_quick_shortcut( qsl, '\t', false );
-        reorder_quick_shortcut( qsl, '<', false ); // tabs next
-        reorder_quick_shortcut( qsl, '>', false );
-        reorder_quick_shortcut( qsl, '?', false ); // help at the start
-    } else {
-        reorder_quick_shortcut( qsl, KEY_NPAGE, false );
-        reorder_quick_shortcut( qsl, KEY_PPAGE, false ); // paging control
-        reorder_quick_shortcut( qsl, '\t', false );
-        reorder_quick_shortcut( qsl, KEY_BTAB, false ); // secondary tabs after that
-        reorder_quick_shortcut( qsl, '>', false );
-        reorder_quick_shortcut( qsl, '<', false ); // tabs next
-        reorder_quick_shortcut( qsl, '?', false ); // help at the start
-    }
-}
-
-int choose_best_key_for_action( const std::string &action, const std::string &category )
-{
-    const std::vector<input_event> &events = inp_mngr.get_input_for_action( action, category );
-    int best_key = -1;
-    for( const auto &events_event : events ) {
-        if( events_event.type == input_event_t::keyboard && events_event.sequence.size() == 1 ) {
-            bool is_ascii_char = isprint( events_event.sequence.front() ) &&
-                                 events_event.sequence.front() < 0xFF;
-            bool is_best_ascii_char = best_key >= 0 && isprint( best_key ) && best_key < 0xFF;
-            if( best_key < 0 || ( is_ascii_char && !is_best_ascii_char ) ) {
-                best_key = events_event.sequence.front();
-            }
-        }
-    }
-    return best_key;
-}
-
-bool add_key_to_quick_shortcuts( int key, const std::string &category, bool back )
-{
-    if( key > 0 ) {
-        quick_shortcuts_t &qsl = quick_shortcuts_map[get_quick_shortcut_name( category )];
-        input_event event = input_event( key, input_event_t::keyboard );
-        quick_shortcuts_t::iterator it = std::find( qsl.begin(), qsl.end(), event );
-        if( it != qsl.end() ) { // already exists
-            ( *it ).shortcut_last_used_action_counter =
-                g->get_user_action_counter(); // make sure we refresh shortcut usage
-        } else {
-            add_quick_shortcut( qsl, event, back,
-                                true ); // doesn't exist, add it to the shortcuts and refresh shortcut usage
-            return true;
-        }
-    }
-    return false;
-}
-bool add_best_key_for_action_to_quick_shortcuts( std::string action_str,
-        const std::string &category, bool back )
-{
-    int best_key = choose_best_key_for_action( action_str, category );
-    return add_key_to_quick_shortcuts( best_key, category, back );
-}
-
-bool add_best_key_for_action_to_quick_shortcuts( action_id action, const std::string &category,
-        bool back )
-{
-    return add_best_key_for_action_to_quick_shortcuts( action_ident( action ), category, back );
-}
-
-void remove_action_from_quick_shortcuts( std::string action_str, const std::string &category )
-{
-    quick_shortcuts_t &qsl = quick_shortcuts_map[get_quick_shortcut_name( category )];
-    const std::vector<input_event> &events = inp_mngr.get_input_for_action( action_str, category );
-    for( const auto &event : events ) {
-        qsl.remove( event );
-    }
-}
-
-void remove_action_from_quick_shortcuts( action_id action, const std::string &category )
-{
-    remove_action_from_quick_shortcuts( action_ident( action ), category );
-}
-
-// Returns true if an expired action was removed
-bool remove_expired_actions_from_quick_shortcuts( const std::string &category )
-{
-    int remove_turns = get_option<int>( "ANDROID_SHORTCUT_REMOVE_TURNS" );
-    if( remove_turns <= 0 ) {
-        return false;
-    }
-
-    // This should only ever be used on "DEFAULTMODE" category for gameplay shortcuts
-    if( category != "DEFAULTMODE" ) {
-        return false;
-    }
-
-    bool ret = false;
-    quick_shortcuts_t &qsl = quick_shortcuts_map[get_quick_shortcut_name( category )];
-    quick_shortcuts_t::iterator it = qsl.begin();
-    while( it != qsl.end() ) {
-        if( g->get_user_action_counter() - ( *it ).shortcut_last_used_action_counter > remove_turns ) {
-            it = qsl.erase( it );
-            ret = true;
-        } else {
-            ++it;
-        }
-    }
-    return ret;
-}
-
-void remove_stale_inventory_quick_shortcuts()
-{
-    if( get_option<bool>( "ANDROID_INVENTORY_AUTOADD" ) ) {
-        quick_shortcuts_t &qsl = quick_shortcuts_map["INVENTORY"];
-        quick_shortcuts_t::iterator it = qsl.begin();
-        bool in_inventory;
-        int key;
-        bool valid;
-        while( it != qsl.end() ) {
-            key = ( *it ).get_first_input();
-            valid = inv_chars.valid( key );
-            in_inventory = false;
-            if( valid ) {
-                in_inventory = g->u.inv_invlet_to_position( key ) != INT_MIN;
-                if( !in_inventory ) {
-                    // We couldn't find this item in the inventory, let's check worn items
-                    for( const auto &item : g->u.worn ) {
-                        if( item->invlet == key ) {
-                            in_inventory = true;
-                            break;
-                        }
-                    }
-                }
-                if( !in_inventory ) {
-                    // We couldn't find it in worn items either, check weapon held
-                    if( g->u.primary_weapon().invlet == key ) {
-                        in_inventory = true;
-                    }
-                }
-            }
-            if( valid && !in_inventory ) {
-                it = qsl.erase( it );
-            } else {
-                ++it;
-            }
-        }
-    }
-}
-
-// Draw preview of terminal size when adjusting values
-void draw_terminal_size_preview()
-{
-    bool preview_terminal_dirty = preview_terminal_width != get_option<int>( "TERMINAL_X" ) * fontwidth
-                                  ||
-                                  preview_terminal_height != get_option<int>( "TERMINAL_Y" ) * fontheight;
-    if( preview_terminal_dirty ||
-        ( preview_terminal_change_time > 0 && SDL_GetTicks() - preview_terminal_change_time < 1000 ) ) {
-        if( preview_terminal_dirty ) {
-            preview_terminal_width = get_option<int>( "TERMINAL_X" ) * fontwidth;
-            preview_terminal_height = get_option<int>( "TERMINAL_Y" ) * fontheight;
-            preview_terminal_change_time = SDL_GetTicks();
-        }
-        SetRenderDrawColor( renderer, 255, 255, 255, 255 );
-        SDL_FRect previewrect = get_android_render_rect( preview_terminal_width, preview_terminal_height );
-        SDL_RenderRect( renderer.get(), &previewrect );
-        SetRenderDrawColor( renderer, 0, 0, 0, 255 );
-    }
-}
-
-// Draw quick shortcuts on top of the game view
-void draw_quick_shortcuts()
-{
-
-    if( !quick_shortcuts_enabled ||
-        SDL_TextInputActive( ::window.get() ) ||
-        ( get_option<bool>( "ANDROID_HIDE_HOLDS" ) && !is_quick_shortcut_touch && finger_down_time > 0 &&
-          SDL_GetTicks() - finger_down_time >= static_cast<Uint64>(
-              get_option<int>( "ANDROID_INITIAL_DELAY" ) ) ) ) { // player is swipe + holding in a direction
-        return;
-    }
-
-    bool shortcut_right = get_option<std::string>( "ANDROID_SHORTCUT_POSITION" ) == "right";
-    std::string &category = touch_input_context.get_category();
-    bool is_default_mode = category == "DEFAULTMODE";
-    quick_shortcuts_t &qsl = quick_shortcuts_map[get_quick_shortcut_name( category )];
-    if( qsl.empty() || !touch_input_context.get_registered_manual_keys().empty() ) {
-        if( category == "DEFAULTMODE" ) {
-            const std::string default_gameplay_shortcuts =
-                get_option<std::string>( "ANDROID_SHORTCUT_DEFAULTS" );
-            for( const auto &c : default_gameplay_shortcuts ) {
-                add_key_to_quick_shortcuts( c, category, true );
-            }
-        } else {
-            // This is an empty quick-shortcuts list, let's pre-populate it as best we can from the input context
-
-            // For manual key lists, force-clear them each time since there's no point allowing custom bindings anyway
-            if( !touch_input_context.get_registered_manual_keys().empty() ) {
-                qsl.clear();
-            }
-
-            // First process registered actions
-            std::vector<std::string> &registered_actions = touch_input_context.get_registered_actions();
-            for( std::vector<std::string>::iterator it = registered_actions.begin();
-                 it != registered_actions.end(); ++it ) {
-                std::string &action = *it;
-                if( ignore_action_for_quick_shortcuts( action ) ) {
-                    continue;
-                }
-
-                add_best_key_for_action_to_quick_shortcuts( action, category, !shortcut_right );
-            }
-
-            // Then process manual keys
-            std::vector<input_context::manual_key> &registered_manual_keys =
-                touch_input_context.get_registered_manual_keys();
-            for( const auto &manual_key : registered_manual_keys ) {
-                input_event event( manual_key.key, input_event_t::keyboard );
-                add_quick_shortcut( qsl, event, !shortcut_right, true );
-            }
-        }
-    }
-
-    // Only reorder quick shortcuts for non-gameplay lists that are likely to have navigational menu stuff
-    if( !is_default_mode ) {
-        reorder_quick_shortcuts( qsl );
-    }
-
-    float border, width, height;
-    get_quick_shortcut_dimensions( qsl, border, width, height );
-    input_event *hovered_quick_shortcut = get_quick_shortcut_under_finger();
-    SDL_FRect rect;
-    bool hovered, show_hint;
-    int i = 0;
-    for( std::list<input_event>::iterator it = qsl.begin(); it != qsl.end(); ++it ) {
-        if( ( i + 1 ) * width > WindowWidth * get_option<int>( "ANDROID_SHORTCUT_SCREEN_PERCENTAGE" ) *
-            0.01f ) {
-            continue;
-        }
-        input_event &event = *it;
-        std::string text = event.text;
-        int key = event.get_first_input();
-        float default_text_scale = std::floor( 0.75f * ( height /
-                                               font->height ) ); // default for single character strings
-        float text_scale = default_text_scale;
-        if( text.empty() || text == " " ) {
-            text = inp_mngr.get_keyname( key, event.type );
-            text_scale = std::min( text_scale, 0.75f * ( width / ( font->width * utf8_width( text ) ) ) );
-        }
-        hovered = is_quick_shortcut_touch && hovered_quick_shortcut == &event;
-        show_hint = hovered &&
-                    SDL_GetTicks() - finger_down_time > static_cast<uint32_t>
-                    ( get_option<int>( "ANDROID_INITIAL_DELAY" ) );
-        std::string hint_text;
-        if( show_hint ) {
-            if( touch_input_context.get_category() == "INVENTORY" && inv_chars.valid( key ) ) {
-                // Special case for inventory items - show the inventory item name as help text
-                hint_text = g->u.inv_find_item( g->u.inv_invlet_to_position( key ) ).display_name();
-                if( hint_text == "none" ) {
-                    // We couldn't find this item in the inventory, let's check worn items
-                    for( const auto &item : g->u.worn ) {
-                        if( item->invlet == key ) {
-                            hint_text = item->display_name();
-                            break;
-                        }
-                    }
-                }
-                if( hint_text == "none" ) {
-                    // We couldn't find it in worn items either, must be weapon held
-                    if( g->u.primary_weapon().invlet == key ) {
-                        hint_text = g->u.primary_weapon().display_name();
-                    }
-                }
-            } else {
-                // All other screens - try and show the action name, either from registered actions or manually registered keys
-                hint_text = touch_input_context.get_action_name( touch_input_context.input_to_action( event ) );
-                if( hint_text == "ERROR" ) {
-                    hint_text = touch_input_context.get_action_name_for_manual_key( key );
-                }
-            }
-            if( hint_text == "ERROR" || hint_text == "none" || hint_text.empty() ) {
-                show_hint = false;
-            }
-        }
-        if( shortcut_right )
-            rect = { WindowWidth - ( ( i + 1 ) * width + border ), ( WindowHeight - height ), ( width - border * 2 ), ( height ) };
-        else
-            rect = { ( i * width + border ), ( WindowHeight - height ), ( width - border * 2 ), ( height ) };
-        if( hovered ) {
-            SetRenderDrawColor( renderer, 0, 0, 0, 255 );
-        } else {
-            SetRenderDrawColor( renderer, 0, 0, 0,
-                                get_option<int>( "ANDROID_SHORTCUT_OPACITY_BG" ) * 0.01f * 255.0f );
-        }
-        SetRenderDrawBlendMode( renderer, SDL_BLENDMODE_BLEND );
-        RenderFillRect( renderer, &rect );
-        if( hovered ) {
-            // draw a second button hovering above the first one
-            if( shortcut_right )
-                rect = { WindowWidth - ( ( i + 1 ) * width + border ), ( WindowHeight - height * 2.2f ), ( width - border * 2 ), ( height ) };
-            else
-                rect = { ( i * width + border ), ( WindowHeight - height * 2.2f ), ( width - border * 2 ), ( height ) };
-            SetRenderDrawColor( renderer, 0, 0, 196, 255 );
-            RenderFillRect( renderer, &rect );
-
-            if( show_hint ) {
-                // draw a backdrop for the hint text
-                rect = { 0, ( ( WindowHeight - height ) * 0.5f ), static_cast<float>( WindowWidth ), ( height ) };
-                SetRenderDrawColor( renderer, 0, 0, 0,
-                                    get_option<int>( "ANDROID_SHORTCUT_OPACITY_BG" ) * 0.01f * 255.0f );
-                RenderFillRect( renderer, &rect );
-            }
-        }
-        SetRenderDrawBlendMode( renderer, SDL_BLENDMODE_NONE );
-        SDL_SetRenderScale( renderer.get(), text_scale, text_scale );
-        int text_x, text_y;
-        if( shortcut_right ) {
-            text_x = ( WindowWidth - ( i + 0.5f ) * width - ( font->width * utf8_width(
-                           text ) ) * text_scale * 0.5f ) / text_scale;
-        } else {
-            text_x = ( ( i + 0.5f ) * width - ( font->width * utf8_width( text ) ) * text_scale * 0.5f ) /
-                     text_scale;
-        }
-        // TODO use draw_string instead
-        text_y = ( WindowHeight - ( height + font->height * text_scale ) * 0.5f ) / text_scale;
-        font->OutputChar( renderer, geometry, text, point( text_x + 1, text_y + 1 ), 0,
-                          get_option<int>( "ANDROID_SHORTCUT_OPACITY_SHADOW" ) * 0.01f );
-        font->OutputChar( renderer, geometry, text, point( text_x, text_y ),
-                          get_option<int>( "ANDROID_SHORTCUT_COLOR" ),
-                          get_option<int>( "ANDROID_SHORTCUT_OPACITY_FG" ) * 0.01f );
-        if( hovered ) {
-            // draw a second button hovering above the first one
-            font->OutputChar( renderer, geometry, text,
-                              point( text_x, text_y - ( height * 1.2f / text_scale ) ),
-                              get_option<int>( "ANDROID_SHORTCUT_COLOR" ) );
-            if( show_hint ) {
-                // draw hint text
-                text_scale = default_text_scale;
-                hint_text = text + " " + hint_text;
-                hint_text = remove_color_tags( hint_text );
-                const float safe_margin = 0.9f;
-                int hint_length = utf8_width( hint_text );
-                if( WindowWidth * safe_margin < font->width * text_scale * hint_length ) {
-                    text_scale *= ( WindowWidth * safe_margin ) / ( font->width * text_scale *
-                                  hint_length );    // scale to fit comfortably
-                }
-                SDL_SetRenderScale( renderer.get(), text_scale, text_scale );
-                text_x = ( WindowWidth - ( ( font->width  * hint_length ) * text_scale ) ) * 0.5f / text_scale;
-                text_y = ( WindowHeight - font->height * text_scale ) * 0.5f / text_scale;
-                font->OutputChar( renderer, geometry, hint_text, point( text_x + 1, text_y + 1 ), 0,
-                                  get_option<int>( "ANDROID_SHORTCUT_OPACITY_SHADOW" ) * 0.01f );
-                font->OutputChar( renderer, geometry, hint_text, point( text_x, text_y ),
-                                  get_option<int>( "ANDROID_SHORTCUT_COLOR" ),
-                                  get_option<int>( "ANDROID_SHORTCUT_OPACITY_FG" ) * 0.01f );
-            }
-        }
-        SDL_SetRenderScale( renderer.get(), 1.0f, 1.0f );
-        i++;
-        if( ( i + 1 ) * width > WindowWidth ) {
-            break;
-        }
-    }
-}
-
-void draw_virtual_joystick()
-{
-
-    // Bail out if we don't need to draw the joystick
-    if( !get_option<bool>( "ANDROID_SHOW_VIRTUAL_JOYSTICK" ) ||
-        finger_down_time <= 0 ||
-        SDL_GetTicks() - finger_down_time <= static_cast<uint32_t>
-        ( get_option<int>( "ANDROID_INITIAL_DELAY" ) ) ||
-        is_quick_shortcut_touch ||
-        is_two_finger_touch ) {
-        return;
-    }
-
-    SDL_SetTextureAlphaMod( touch_joystick.get(),
-                            get_option<int>( "ANDROID_VIRTUAL_JOYSTICK_OPACITY" ) * 0.01f * 255.0f );
-
-    float longest_window_edge = std::max( WindowWidth, WindowHeight );
-
-    SDL_FRect dstrect;
-
-    // Draw deadzone range
-    dstrect.w = dstrect.h = ( get_option<float>( "ANDROID_DEADZONE_RANGE" ) ) * longest_window_edge * 2;
-    dstrect.x = finger_down_x - dstrect.w / 2;
-    dstrect.y = finger_down_y - dstrect.h / 2;
-    RenderCopy( renderer, touch_joystick, nullptr, &dstrect );
-
-    // Draw repeat delay range
-    dstrect.w = dstrect.h = ( get_option<float>( "ANDROID_DEADZONE_RANGE" ) +
-                              get_option<float>( "ANDROID_REPEAT_DELAY_RANGE" ) ) * longest_window_edge * 2;
-    dstrect.x = finger_down_x - dstrect.w / 2;
-    dstrect.y = finger_down_y - dstrect.h / 2;
-    RenderCopy( renderer, touch_joystick, nullptr, &dstrect );
-
-    // Draw current touch position (50% size of repeat delay range)
-    dstrect.w = dstrect.h = dstrect.w / 2;
-    dstrect.x = finger_down_x + ( finger_curr_x - finger_down_x ) / 2 - dstrect.w / 2;
-    dstrect.y = finger_down_y + ( finger_curr_y - finger_down_y ) / 2 - dstrect.h / 2;
-    RenderCopy( renderer, touch_joystick, nullptr, &dstrect );
-
-}
-
-float clmp( float value, float low, float high )
-{
-    return ( value < low ) ? low : ( ( value > high ) ? high : value );
-}
-float lerp( float t, float a, float b )
-{
-    return ( 1.0f - t ) * a + t * b;
-}
-
-void update_finger_repeat_delay()
-{
-    float delta_x = finger_curr_x - finger_down_x;
-    float delta_y = finger_curr_y - finger_down_y;
-    float dist = std::sqrt( delta_x * delta_x + delta_y * delta_y );
-    float longest_window_edge = std::max( WindowWidth, WindowHeight );
-    float t = clmp( ( dist - ( get_option<float>( "ANDROID_DEADZONE_RANGE" ) * longest_window_edge ) ) /
-                    std::max( 0.01f, ( get_option<float>( "ANDROID_REPEAT_DELAY_RANGE" ) ) * longest_window_edge ),
-                    0.0f, 1.0f );
-    finger_repeat_delay = lerp( std::pow( t, get_option<float>( "ANDROID_SENSITIVITY_POWER" ) ),
-                                static_cast<Uint64>( std::max( get_option<int>( "ANDROID_REPEAT_DELAY_MIN" ),
-                                        get_option<int>( "ANDROID_REPEAT_DELAY_MAX" ) ) ),
-                                static_cast<Uint64>( std::min( get_option<int>( "ANDROID_REPEAT_DELAY_MIN" ),
-                                        get_option<int>( "ANDROID_REPEAT_DELAY_MAX" ) ) ) );
-}
-
-// TODO: Is there a better way to detect when string entry is allowed?
-// ANY_INPUT seems close but is abused by code everywhere.
-// Had a look through and think I've got all the cases but can't be 100% sure.
-bool is_string_input( input_context &ctx )
-{
-    std::string &category = ctx.get_category();
-    return category == "STRING_INPUT"
-           || category == "HELP_KEYBINDINGS"
-           || category == "NEW_CHAR_DESCRIPTION"
-           || category == "WORLDGEN_CONFIRM_DIALOG";
-}
-
-int get_key_event_from_string( const std::string &str )
-{
-    if( !str.empty() ) {
-        return str[0];
-    }
-    return -1;
-}
-// This function is triggered on finger up events, OR by a repeating timer for touch hold events.
-void handle_finger_input( Uint64 ticks )
-{
-
-    float delta_x = finger_curr_x - finger_down_x;
-    float delta_y = finger_curr_y - finger_down_y;
-    float dist = std::sqrt( delta_x * delta_x + delta_y * delta_y ); // in pixel space
-    bool handle_diagonals = touch_input_context.is_action_registered( "LEFTUP" );
-    bool is_default_mode = touch_input_context.get_category() == "DEFAULTMODE";
-    if( dist > ( get_option<float>( "ANDROID_DEADZONE_RANGE" )*std::max( WindowWidth,
-                 WindowHeight ) ) ) {
-        if( !handle_diagonals ) {
-            if( delta_x >= 0 && delta_y >= 0 ) {
-                last_input = input_event( delta_x > delta_y ? KEY_RIGHT : KEY_DOWN, input_event_t::keyboard );
-            } else if( delta_x < 0 && delta_y >= 0 ) {
-                last_input = input_event( -delta_x > delta_y ? KEY_LEFT : KEY_DOWN, input_event_t::keyboard );
-            } else if( delta_x >= 0 && delta_y < 0 ) {
-                last_input = input_event( delta_x > -delta_y ? KEY_RIGHT : KEY_UP, input_event_t::keyboard );
-            } else if( delta_x < 0 && delta_y < 0 ) {
-                last_input = input_event( -delta_x > -delta_y ? KEY_LEFT : KEY_UP, input_event_t::keyboard );
-            }
-        } else {
-            if( delta_x > 0 ) {
-                if( std::abs( delta_y ) < delta_x * 0.5f ) {
-                    // swipe right
-                    last_input = input_event( KEY_RIGHT, input_event_t::keyboard );
-                } else if( std::abs( delta_y ) < delta_x * 2.0f ) {
-                    if( delta_y < 0 ) {
-                        // swipe up-right
-                        last_input = input_event( JOY_RIGHTUP, input_event_t::gamepad );
-                    } else {
-                        // swipe down-right
-                        last_input = input_event( JOY_RIGHTDOWN, input_event_t::gamepad );
-                    }
-                } else {
-                    if( delta_y < 0 ) {
-                        // swipe up
-                        last_input = input_event( KEY_UP, input_event_t::keyboard );
-                    } else {
-                        // swipe down
-                        last_input = input_event( KEY_DOWN, input_event_t::keyboard );
-                    }
-                }
-            } else {
-                if( std::abs( delta_y ) < -delta_x * 0.5f ) {
-                    // swipe left
-                    last_input = input_event( KEY_LEFT, input_event_t::keyboard );
-                } else if( std::abs( delta_y ) < -delta_x * 2.0f ) {
-                    if( delta_y < 0 ) {
-                        // swipe up-left
-                        last_input = input_event( JOY_LEFTUP, input_event_t::gamepad );
-
-                    } else {
-                        // swipe down-left
-                        last_input = input_event( JOY_LEFTDOWN, input_event_t::gamepad );
-                    }
-                } else {
-                    if( delta_y < 0 ) {
-                        // swipe up
-                        last_input = input_event( KEY_UP, input_event_t::keyboard );
-                    } else {
-                        // swipe down
-                        last_input = input_event( KEY_DOWN, input_event_t::keyboard );
-                    }
-                }
-            }
-        }
-    } else {
-        if( ticks - finger_down_time >= static_cast<uint32_t>
-            ( get_option<int>( "ANDROID_INITIAL_DELAY" ) ) ) {
-            // Single tap (repeat) - held, so always treat this as a tap
-            // We only allow repeats for waiting, not confirming in menus as that's a bit silly
-            if( is_default_mode ) {
-                last_input = input_event( get_key_event_from_string( get_option<std::string>( "ANDROID_TAP_KEY" ) ),
-                                          input_event_t::keyboard );
-            }
-        } else {
-            if( last_tap_time > 0 &&
-                ticks - last_tap_time < static_cast<Uint64>( get_option<int>( "ANDROID_INITIAL_DELAY" ) ) ) {
-                // Double tap
-                last_input = input_event( is_default_mode ? KEY_ESCAPE : KEY_ESCAPE, input_event_t::keyboard );
-                last_tap_time = 0;
-            } else {
-                // First tap detected, waiting to decide whether it's a single or a double tap input
-                last_tap_time = ticks;
-            }
-        }
-    }
-}
-
-bool android_is_hardware_keyboard_available()
-{
-    JNIEnv *env = static_cast<JNIEnv *>( SDL_GetAndroidJNIEnv() );
-    jobject activity = static_cast<jobject>( SDL_GetAndroidActivity() );
-    jclass clazz( env->GetObjectClass( activity ) );
-    jmethodID method_id = env->GetMethodID( clazz, "isHardwareKeyboardAvailable", "()Z" );
-    jboolean ans = env->CallBooleanMethod( activity, method_id );
-    env->DeleteLocalRef( activity );
-    env->DeleteLocalRef( clazz );
-    return ans;
-}
-
-void android_vibrate()
-{
-    int vibration_ms = get_option<int>( "ANDROID_VIBRATION" );
-    if( vibration_ms > 0 && !android_is_hardware_keyboard_available() ) {
-        JNIEnv *env = static_cast<JNIEnv *>( SDL_GetAndroidJNIEnv() );
-        jobject activity = static_cast<jobject>( SDL_GetAndroidActivity() );
-        jclass clazz( env->GetObjectClass( activity ) );
-        jmethodID method_id = env->GetMethodID( clazz, "vibrate", "(I)V" );
-        env->CallVoidMethod( activity, method_id, vibration_ms );
-        env->DeleteLocalRef( activity );
-        env->DeleteLocalRef( clazz );
-    }
-}
-#endif
-
 //Check for any window messages (keypress, paint, mousemove, etc)
 static void CheckMessages()
 {
@@ -2908,338 +3036,29 @@ static void CheckMessages()
         return;
     }
 
-#if defined(__ANDROID__)
-    if( visible_display_frame_dirty ) {
-        needupdate = true;
-        visible_display_frame_dirty = false;
-    }
-
-    Uint64 ticks = SDL_GetTicks();
-
-    // Force text input mode if hardware keyboard is available.
-    if( android_is_hardware_keyboard_available() && !SDL_TextInputActive( ::window.get() ) ) {
-        SDL_StartTextInput( ::window.get() );
-    }
-
-    // Make sure the SDL surface view is visible, otherwise the "Z" loading screen is visible.
-    if( needs_sdl_surface_visibility_refresh ) {
-        needs_sdl_surface_visibility_refresh = false;
-
-        // Call Java show_sdl_surface()
-        JNIEnv *env = static_cast<JNIEnv *>( SDL_GetAndroidJNIEnv() );
-        jobject activity = static_cast<jobject>( SDL_GetAndroidActivity() );
-        jclass clazz( env->GetObjectClass( activity ) );
-        jmethodID method_id = env->GetMethodID( clazz, "show_sdl_surface", "()V" );
-        env->CallVoidMethod( activity, method_id );
-        env->DeleteLocalRef( activity );
-        env->DeleteLocalRef( clazz );
-    }
-
-    // Copy the current input context
-    if( !input_context::input_context_stack.empty() ) {
-        input_context *new_input_context = *--input_context::input_context_stack.end();
-        if( new_input_context && *new_input_context != touch_input_context ) {
-
-            // If we were in an allow_text_entry input context, and text input is still active, and we're auto-managing keyboard, hide it.
-            if( touch_input_context.allow_text_entry &&
-                !new_input_context->allow_text_entry &&
-                !is_string_input( *new_input_context ) &&
-                SDL_TextInputActive( ::window.get() ) &&
-                get_option<bool>( "ANDROID_AUTO_KEYBOARD" ) ) {
-                SDL_StopTextInput( ::window.get() );
-            }
-
-            touch_input_context = *new_input_context;
-            needupdate = true;
-        }
-    }
-
-    bool is_default_mode = touch_input_context.get_category() == "DEFAULTMODE";
-    quick_shortcuts_t &qsl = quick_shortcuts_map[get_quick_shortcut_name(
-                                 touch_input_context.get_category() )];
-
-    // Don't do this logic if we already need an update, otherwise we're likely to overload the game with too much input on hold repeat events
-    if( !needupdate ) {
-
-        // Check action weightings and auto-add any immediate-surrounding actions as quick shortcuts
-        // This code is based heavily off action.cpp handle_action_menu() which puts common shortcuts at the top
-        if( is_default_mode && get_option<bool>( "ANDROID_SHORTCUT_AUTOADD" ) ) {
-            static int last_moves_since_last_save = -1;
-            if( last_moves_since_last_save != g->get_moves_since_last_save() ) {
-                last_moves_since_last_save = g->get_moves_since_last_save();
-
-                // Actions to add
-                std::set<action_id> actions;
-
-                // Actions to remove - we only want to remove things that we're 100% sure won't be useful to players otherwise
-                std::set<action_id> actions_remove;
-
-                // Check if we're in a potential combat situation, if so, sort a few actions to the top.
-                if( !g->u.get_hostile_creatures( g_max_view_distance ).empty() ) {
-                    // Only prioritize movement options if we're not driving.
-                    if( !g->u.controlling_vehicle ) {
-                        actions.insert( ACTION_CYCLE_MOVE );
-                    }
-                    // Only prioritize fire weapon options if we're wielding a ranged weapon.
-                    if( g->u.primary_weapon().is_gun() ||
-                        g->u.primary_weapon().has_flag( STATIC( flag_id( "REACH_ATTACK" ) ) ) ) {
-                        actions.insert( ACTION_FIRE );
-                    }
-                }
-
-                // If we're already running, make it simple to toggle running to off.
-                if( g->u.movement_mode_is( CMM_RUN ) ) {
-                    actions.insert( ACTION_TOGGLE_RUN );
-                }
-                // If we're already crouching, make it simple to toggle crouching to off.
-                if( g->u.movement_mode_is( CMM_CROUCH ) ) {
-                    actions.insert( ACTION_TOGGLE_CROUCH );
-                }
-
-                // We're not already running or in combat, so remove cycle walk/run
-                if( std::find( actions.begin(), actions.end(), ACTION_CYCLE_MOVE ) == actions.end() ) {
-                    actions_remove.insert( ACTION_CYCLE_MOVE );
-                }
-
-                map &here = get_map();
-                // Check if we can perform one of our actions on nearby terrain. If so,
-                // display that action at the top of the list.
-                for( int dx = -1; dx <= 1; dx++ ) {
-                    for( int dy = -1; dy <= 1; dy++ ) {
-                        int x = g->u.bub_pos().x() + dx;
-                        int y = g->u.bub_pos().y() + dy;
-                        int z = g->u.bub_pos().z();
-                        const tripoint_bub_ms pos( x, y, z );
-
-                        // Check if we're near a vehicle, if so, vehicle controls should be top.
-                        {
-                            const optional_vpart_position vp = here.veh_at( pos );
-                            vehicle *const veh = veh_pointer_or_null( vp );
-                            if( veh ) {
-                                const int veh_part = vp ? vp->part_index() : -1;
-                                if( veh->part_with_feature( veh_part, "CONTROLS", true ) >= 0 ) {
-                                    actions.insert( ACTION_CONTROL_VEHICLE );
-                                }
-                                const int openablepart = veh->part_with_feature( veh_part, "OPENABLE", true );
-                                if( openablepart >= 0 && veh->is_open( openablepart ) && ( dx != 0 ||
-                                        dy != 0 ) ) { // an open door adjacent to us
-                                    actions.insert( ACTION_CLOSE );
-                                }
-                                const int curtainpart = veh->part_with_feature( veh_part, "CURTAIN", true );
-                                if( curtainpart >= 0 && veh->is_open( curtainpart ) && ( dx != 0 || dy != 0 ) ) {
-                                    actions.insert( ACTION_CLOSE );
-                                }
-                                const int cargopart = veh->part_with_feature( veh_part, "CARGO", true );
-                                if( cargopart >= 0 && ( !veh->get_items( cargopart ).empty() ) ) {
-                                    actions.insert( ACTION_PICKUP );
-                                }
-                                if( g->u.controlling_vehicle && veh->has_sufficient_lift() ) {
-                                    actions.insert( ACTION_MOVE_UP );
-                                    actions.insert( ACTION_MOVE_DOWN );
-                                }
-                            }
-                        }
-
-                        if( dx != 0 || dy != 0 ) {
-                            // Check for actions that work on nearby tiles
-                            //if( can_interact_at( ACTION_OPEN, pos ) ) {
-                            // don't bother with open since user can just walk into target
-                            //}
-                            if( can_interact_at( ACTION_CLOSE, pos ) ) {
-                                actions.insert( ACTION_CLOSE );
-                            }
-                            if( can_interact_at( ACTION_EXAMINE, pos ) ) {
-                                actions.insert( ACTION_EXAMINE );
-                            }
-                        } else {
-                            // Check for actions that work on own tile only
-                            if( can_interact_at( ACTION_BUTCHER, pos ) ) {
-                                actions.insert( ACTION_BUTCHER );
-                            } else {
-                                actions_remove.insert( ACTION_BUTCHER );
-                            }
-
-                            if( can_interact_at( ACTION_MOVE_UP, pos ) ) {
-                                actions.insert( ACTION_MOVE_UP );
-                            } else {
-                                actions_remove.insert( ACTION_MOVE_UP );
-                            }
-
-                            if( can_interact_at( ACTION_MOVE_DOWN, pos ) ) {
-                                actions.insert( ACTION_MOVE_DOWN );
-                            } else {
-                                actions_remove.insert( ACTION_MOVE_DOWN );
-                            }
-                        }
-
-                        // Check for actions that work on nearby tiles and own tile
-                        if( can_interact_at( ACTION_PICKUP, pos ) ) {
-                            actions.insert( ACTION_PICKUP );
-                        }
-                    }
-                }
-
-                // We're not near a vehicle, so remove control vehicle
-                if( std::find( actions.begin(), actions.end(), ACTION_CONTROL_VEHICLE ) == actions.end() ) {
-                    actions_remove.insert( ACTION_CONTROL_VEHICLE );
-                }
-
-                // We're not able to close anything nearby, so remove it
-                if( std::find( actions.begin(), actions.end(), ACTION_CLOSE ) == actions.end() ) {
-                    actions_remove.insert( ACTION_CLOSE );
-                }
-
-                // We're not able to examine anything nearby, so remove it
-                if( std::find( actions.begin(), actions.end(), ACTION_EXAMINE ) == actions.end() ) {
-                    actions_remove.insert( ACTION_EXAMINE );
-                }
-
-                // We're not able to pickup anything nearby, so remove it
-                if( std::find( actions.begin(), actions.end(), ACTION_PICKUP ) == actions.end() ) {
-                    actions_remove.insert( ACTION_PICKUP );
-                }
-
-                // Check if we can't move because of safe mode - if so, add ability to ignore
-                if( g && !g->check_safe_mode_allowed( false ) ) {
-                    actions.insert( ACTION_IGNORE_ENEMY );
-                    actions.insert( ACTION_TOGGLE_SAFEMODE );
-                } else {
-                    actions_remove.insert( ACTION_IGNORE_ENEMY );
-                    actions_remove.insert( ACTION_TOGGLE_SAFEMODE );
-                }
-
-                // Check if we're significantly hungry or thirsty - if so, add eat
-                if( g->u.max_stored_kcal() - g->u.get_stored_kcal() > 1000 ||
-                    g->u.get_thirst() > thirst_levels::thirsty ) {
-                    actions.insert( ACTION_EAT );
-                }
-
-                // Check if we're dead tired - if so, add sleep
-                if( g->u.get_fatigue() > fatigue_levels::dead_tired ) {
-                    actions.insert( ACTION_SLEEP );
-                }
-
-                for( const auto &action : actions ) {
-                    if( add_best_key_for_action_to_quick_shortcuts( action, touch_input_context.get_category(),
-                            !get_option<bool>( "ANDROID_SHORTCUT_AUTOADD_FRONT" ) ) ) {
-                        needupdate = true;
-                    }
-                }
-
-                size_t old_size = qsl.size();
-                for( const auto &action_remove : actions_remove ) {
-                    remove_action_from_quick_shortcuts( action_remove, touch_input_context.get_category() );
-                }
-                if( qsl.size() != old_size ) {
-                    needupdate = true;
-                }
-            }
-        }
-
-        if( remove_expired_actions_from_quick_shortcuts( touch_input_context.get_category() ) ) {
-            needupdate = true;
-        }
-
-        // Toggle quick shortcuts on/off
-        if( ac_back_down_time > 0 &&
-            ticks - ac_back_down_time > static_cast<uint32_t>
-            ( get_option<int>( "ANDROID_INITIAL_DELAY" ) ) ) {
-            if( !quick_shortcuts_toggle_handled ) {
-                quick_shortcuts_enabled = !quick_shortcuts_enabled;
-                quick_shortcuts_toggle_handled = true;
-                refresh_display();
-
-                // Display an Android toast message
-                {
-                    JNIEnv *env = static_cast<JNIEnv *>( SDL_GetAndroidJNIEnv() );
-                    jobject activity = static_cast<jobject>( SDL_GetAndroidActivity() );
-                    jclass clazz( env->GetObjectClass( activity ) );
-                    jstring toast_message = env->NewStringUTF( quick_shortcuts_enabled ? "Shortcuts visible" :
-                                            "Shortcuts hidden" );
-                    jmethodID method_id = env->GetMethodID( clazz, "toast", "(Ljava/lang/String;)V" );
-                    env->CallVoidMethod( activity, method_id, toast_message );
-                    env->DeleteLocalRef( activity );
-                    env->DeleteLocalRef( clazz );
-                }
-            }
-        }
-
-        // Handle repeating inputs from touch + holds
-        if( !is_quick_shortcut_touch && !is_two_finger_touch && finger_down_time > 0 &&
-            ticks - finger_down_time > static_cast<uint32_t>
-            ( get_option<int>( "ANDROID_INITIAL_DELAY" ) ) ) {
-            if( ticks - finger_repeat_time > finger_repeat_delay ) {
-                handle_finger_input( ticks );
-                finger_repeat_time = ticks;
-                // Prevent repeating inputs on the next call to this function if there is a fingerup event
-                while( SDL_PollEvent( &ev ) ) {
-                    if( ev.type == SDL_EVENT_FINGER_UP ) {
-                        second_finger_down_x = second_finger_curr_x = finger_down_x = finger_curr_x = -1.0f;
-                        second_finger_down_y = second_finger_curr_y = finger_down_y = finger_curr_y = -1.0f;
-                        is_two_finger_touch = false;
-                        finger_down_time = 0;
-                        finger_repeat_time = 0;
-                        // let the next call decide if needupdate should be true
-                        break;
-                    }
-                }
-                return;
-            }
-        }
-
-        // If we received a first tap and not another one within a certain period, this was a single tap, so trigger the input event
-        if( !is_quick_shortcut_touch && !is_two_finger_touch && last_tap_time > 0 &&
-            ticks - last_tap_time >= static_cast<uint32_t>
-            ( get_option<int>( "ANDROID_INITIAL_DELAY" ) ) ) {
-            // Single tap
-            last_tap_time = ticks;
-            last_input = input_event( is_default_mode ? get_key_event_from_string(
-                                          get_option<std::string>( "ANDROID_TAP_KEY" ) ) : '\n', input_event_t::keyboard );
-            last_tap_time = 0;
-            return;
-        }
-
-        // ensure hint text pops up even if player doesn't move finger to trigger a FINGERMOTION event
-        if( is_quick_shortcut_touch && finger_down_time > 0 &&
-            ticks - finger_down_time > static_cast<uint32_t>
-            ( get_option<int>( "ANDROID_INITIAL_DELAY" ) ) ) {
-            needupdate = true;
-        }
-    }
-#endif
-
     last_input = input_event();
 
     std::optional<point> resize_dims;
     bool render_target_reset = false;
 
     while( SDL_PollEvent( &ev ) ) {
+        // Dear ImGui dev UI sees every event first. While a tool is open keep
+        // producing frames (this event-driven loop has no vsync tick) so
+        // hover/drag stay responsive.
+        const bool imgui_capture = imgui_layer::process_event( ev );
+        // Open/close toggle (F4) — handled BEFORE the capture gate so the panel
+        // can always be closed even while ImGui holds keyboard focus. P0 dev
+        // key; revisit for collisions when promoting past P0.
+        if( ev.type == SDL_EVENT_KEY_DOWN && !ev.key.repeat && ev.key.key == SDLK_F4 ) {
+            imgui_layer::visible() = !imgui_layer::visible();
+            needupdate = true;
+            continue;
+        }
+        // ImGui consumed this mouse/keyboard event — keep it out of game input.
+        if( imgui_capture ) {
+            continue;
+        }
         switch( ev.type ) {
-#if defined(__ANDROID__)
-            // SDL will send a focus lost event whenever the app loses focus (eg. lock screen, switch app focus etc.)
-            // If we detect it and the game seems in a saveable state, try and do a quicksave. This is a bit dodgy
-            // as the player could be ANYWHERE doing ANYTHING (a sub-menu, interacting with an NPC/computer etc.)
-            // but it seems to work so far, and the alternative is the player losing their progress as the app is likely
-            // to be destroyed pretty quickly when it goes out of focus due to memory usage.
-            case SDL_EVENT_WINDOW_FOCUS_LOST:
-                if( world_generator &&
-                    world_generator->active_world &&
-                    g && g->uquit == QUIT_NO &&
-                    get_option<bool>( "ANDROID_QUICKSAVE" ) &&
-                    !std::uncaught_exceptions() ) {
-                    g->quicksave();
-                }
-                break;
-            // SDL sends a pixel size changed event whenever the screen rotates orientation
-            case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
-                WindowWidth = ev.window.data1;
-                WindowHeight = ev.window.data2;
-                SDL_Delay( 500 );
-                SDL_GetWindowSurface( window.get() );
-                refresh_display();
-                needupdate = true;
-                break;
-#endif
             case SDL_EVENT_WINDOW_SHOWN:
             case SDL_EVENT_WINDOW_MINIMIZED:
             case SDL_EVENT_WINDOW_FOCUS_GAINED:
@@ -3248,13 +3067,6 @@ static void CheckMessages()
                 needupdate = true;
                 break;
             case SDL_EVENT_WINDOW_RESTORED:
-#if defined(__ANDROID__)
-                needs_sdl_surface_visibility_refresh = true;
-                if( android_is_hardware_keyboard_available() ) {
-                    SDL_StopTextInput( ::window.get() );
-                    SDL_StartTextInput( ::window.get() );
-                }
-#endif
                 break;
             case SDL_EVENT_WINDOW_RESIZED:
                 resize_dims = point( ev.window.data1, ev.window.data2 );
@@ -3263,19 +3075,100 @@ static void CheckMessages()
                 render_target_reset = true;
                 break;
             case SDL_EVENT_KEY_DOWN: {
-#if defined(__ANDROID__)
-                // Toggle virtual keyboard with Android back button. For some reason I get double inputs, so ignore everything once it's already down.
-                if( ev.key.key == SDLK_AC_BACK && ac_back_down_time == 0 ) {
-                    ac_back_down_time = ticks;
-                    quick_shortcuts_toggle_handled = false;
-                }
-#endif
                 is_repeat = ev.key.repeat;
                 //hide mouse cursor on keyboard input
                 if( get_option<std::string>( "HIDE_CURSOR" ) != "show" && SDL_CursorVisible() ) {
                     SDL_HideCursor();
                 }
                 const int lc = sdl_keysym_to_curses( ev.key.key, ev.key.mod );
+                // Debug/tuning F-key handlers
+                if( lc == KEY_F( 5 ) ) {
+                    // F5: toggle debug HUD display
+                    g_dbg_lighting = !g_dbg_lighting;
+                    break;
+                } else if( lc == KEY_F( 6 ) ) {
+                    // F6: toggle shader debug visualization
+                    g_dbg_lighting_shader = !g_dbg_lighting_shader;
+                    break;
+                } else if( lc == KEY_F( 7 ) ) {
+                    // F7: cycle debug visualization mode (0-8). Mode 8 is the
+                    // B/W emitter-only diagnostic — bypasses tint gating so it
+                    // works on the main-menu blue backdrop.
+                    g_current_dbg_mode = ( g_current_dbg_mode + 1 ) % 9u;
+                    g_dbg_params.debug_mode = g_current_dbg_mode;
+                    break;
+                } else if( lc == KEY_F( 8 ) ) {
+                    // F8: decrease emitter/sun/sky scales.
+                    // Shift+F8: less dither.  Ctrl+F8: fewer dither bands.
+                    if( ev.key.mod & SDL_KMOD_ALT ) {
+                        g_dbg_params.gi_strength =
+                            std::max( 0.0f, g_dbg_params.gi_strength - 0.05f );
+                    } else if( ev.key.mod & SDL_KMOD_CTRL ) {
+                        g_dbg_params.dither_bands =
+                            std::max( 1.0f, g_dbg_params.dither_bands - 1.0f );
+                    } else if( ev.key.mod & SDL_KMOD_SHIFT ) {
+                        g_dbg_params.dither_amt =
+                            std::max( 0.0f, g_dbg_params.dither_amt - 0.1f );
+                    } else {
+                        g_emitter_scale = std::max( 0.0f, g_emitter_scale - 0.1f );
+                        g_sun_scale = std::max( 0.0f, g_sun_scale - 0.1f );
+                        g_sky_scale = std::max( 0.0f, g_sky_scale - 0.1f );
+                        g_dbg_params.emitter_scale = g_emitter_scale;
+                        g_dbg_params.sun_scale = g_sun_scale;
+                        g_dbg_params.sky_scale = g_sky_scale;
+                    }
+                    break;
+                } else if( lc == KEY_F( 9 ) ) {
+                    // F9: increase emitter/sun/sky scales.
+                    // Shift+F9: more dither.  Ctrl+F9: more dither bands.
+                    if( ev.key.mod & SDL_KMOD_ALT ) {
+                        g_dbg_params.gi_strength =
+                            std::min( 2.0f, g_dbg_params.gi_strength + 0.05f );
+                    } else if( ev.key.mod & SDL_KMOD_CTRL ) {
+                        g_dbg_params.dither_bands =
+                            std::min( 16.0f, g_dbg_params.dither_bands + 1.0f );
+                    } else if( ev.key.mod & SDL_KMOD_SHIFT ) {
+                        g_dbg_params.dither_amt =
+                            std::min( 1.0f, g_dbg_params.dither_amt + 0.1f );
+                    } else {
+                        g_emitter_scale = std::min( 10.0f, g_emitter_scale + 0.1f );
+                        g_sun_scale = std::min( 10.0f, g_sun_scale + 0.1f );
+                        g_sky_scale = std::min( 10.0f, g_sky_scale + 0.1f );
+                        g_dbg_params.emitter_scale = g_emitter_scale;
+                        g_dbg_params.sun_scale = g_sun_scale;
+                        g_dbg_params.sky_scale = g_sky_scale;
+                    }
+                    break;
+                } else if( lc == KEY_F( 10 ) ) {
+                    // F10: menu emitter radius input ± 100 (Shift = down).
+                    // Input feeds make_omni; HUD shows 3·√r as actual radius.
+                    const bool shift = ( ev.key.mod & SDL_KMOD_SHIFT ) != 0;
+                    const float step = shift ? -100.0f : 100.0f;
+                    menu_emitter_tuning::radius_input = std::clamp(
+                        menu_emitter_tuning::radius_input + step, 1.0f, 10000.0f );
+                    break;
+                } else if( lc == KEY_F( 11 ) ) {
+                    // F11: cycle menu emitter position preset.
+                    // 0 top-left (8.5, 4.5) — current default
+                    // 1 screen centre (~40, 22) for a 80×45 tile viewport
+                    // 2 bottom-right (~70, 38)
+                    menu_emitter_tuning::pos_preset =
+                        ( menu_emitter_tuning::pos_preset + 1 ) % 3;
+                    switch( menu_emitter_tuning::pos_preset ) {
+                        case 0: menu_emitter_tuning::pos_x = 8.5f;
+                                menu_emitter_tuning::pos_y = 4.5f;  break;
+                        case 1: menu_emitter_tuning::pos_x = 40.0f;
+                                menu_emitter_tuning::pos_y = 22.0f; break;
+                        case 2: menu_emitter_tuning::pos_x = 70.0f;
+                                menu_emitter_tuning::pos_y = 38.0f; break;
+                    }
+                    break;
+                } else if( lc == KEY_F( 12 ) ) {
+                    // F12: toggle bright-blue debug backdrop.
+                    menu_emitter_tuning::blue_backdrop =
+                        !menu_emitter_tuning::blue_backdrop;
+                    break;
+                }
                 if( lc <= 0 ) {
                     if( ev.key.key >= SDLK_KP_1 && ev.key.key <= SDLK_KP_0 ) {
                         last_input = input_event( ev.key.key - SDLK_KP_1 + NUMPAD_1, input_event_t::keyboard );
@@ -3287,44 +3180,10 @@ static void CheckMessages()
                     // key was handled
                 } else {
                     last_input = input_event( lc, input_event_t::keyboard );
-#if defined(__ANDROID__)
-                    if( !android_is_hardware_keyboard_available() ) {
-                        if( !is_string_input( touch_input_context ) && !touch_input_context.allow_text_entry ) {
-                            if( get_option<bool>( "ANDROID_AUTO_KEYBOARD" ) ) {
-                                SDL_StopTextInput( ::window.get() );
-                            }
-
-                            // add a quick shortcut
-                            if( !last_input.text.empty() || !inp_mngr.get_keyname( lc, input_event_t::keyboard ).empty() ) {
-                                qsl.remove( last_input );
-                                add_quick_shortcut( qsl, last_input, false, true );
-                                refresh_display();
-                            }
-                        } else if( lc == '\n' || lc == KEY_ESCAPE ) {
-                            if( get_option<bool>( "ANDROID_AUTO_KEYBOARD" ) ) {
-                                SDL_StopTextInput( ::window.get() );
-                            }
-                        }
-                    }
-#endif
                 }
             }
             break;
             case SDL_EVENT_KEY_UP: {
-#if defined(__ANDROID__)
-                // Toggle virtual keyboard with Android back button
-                if( ev.key.key == SDLK_AC_BACK ) {
-                    if( ticks - ac_back_down_time <= static_cast<uint32_t>
-                        ( get_option<int>( "ANDROID_INITIAL_DELAY" ) ) ) {
-                        if( SDL_TextInputActive( ::window.get() ) ) {
-                            SDL_StopTextInput( ::window.get() );
-                        } else {
-                            SDL_StartTextInput( ::window.get() );
-                        }
-                    }
-                    ac_back_down_time = 0;
-                }
-#endif
                 is_repeat = ev.key.repeat;
                 if( ev.key.key == SDLK_LALT || ev.key.key == SDLK_RALT ) {
                     int code = end_alt_code();
@@ -3420,168 +3279,6 @@ static void CheckMessages()
                 }
                 break;
 
-#if defined(__ANDROID__)
-            case SDL_EVENT_FINGER_MOTION:
-                if( ev.tfinger.fingerID == 1 ) {
-                    if( !is_quick_shortcut_touch ) {
-                        update_finger_repeat_delay();
-                    }
-                    needupdate = true; // ensure virtual joystick and quick shortcuts redraw as we interact
-                    finger_curr_x = ev.tfinger.x * WindowWidth;
-                    finger_curr_y = ev.tfinger.y * WindowHeight;
-
-                    if( get_option<bool>( "ANDROID_VIRTUAL_JOYSTICK_FOLLOW" ) && !is_two_finger_touch ) {
-                        // If we've moved too far from joystick center, offset joystick center automatically
-                        float delta_x = finger_curr_x - finger_down_x;
-                        float delta_y = finger_curr_y - finger_down_y;
-                        float dist = std::sqrt( delta_x * delta_x + delta_y * delta_y );
-                        float max_dist = ( get_option<float>( "ANDROID_DEADZONE_RANGE" ) +
-                                           get_option<float>( "ANDROID_REPEAT_DELAY_RANGE" ) ) * std::max( WindowWidth, WindowHeight );
-                        if( dist > max_dist ) {
-                            float delta_ratio = ( dist / max_dist ) - 1.0f;
-                            finger_down_x += delta_x * delta_ratio;
-                            finger_down_y += delta_y * delta_ratio;
-                        }
-                    }
-
-                } else if( ev.tfinger.fingerID == 2 ) {
-                    second_finger_curr_x = ev.tfinger.x * WindowWidth;
-                    second_finger_curr_y = ev.tfinger.y * WindowHeight;
-                }
-                break;
-            case SDL_EVENT_FINGER_DOWN:
-                if( ev.tfinger.fingerID == 1 ) {
-                    finger_down_x = finger_curr_x = ev.tfinger.x * WindowWidth;
-                    finger_down_y = finger_curr_y = ev.tfinger.y * WindowHeight;
-                    finger_down_time = ticks;
-                    finger_repeat_time = 0;
-                    is_quick_shortcut_touch = get_quick_shortcut_under_finger() != nullptr;
-                    if( !is_quick_shortcut_touch ) {
-                        update_finger_repeat_delay();
-                    }
-                    needupdate = true; // ensure virtual joystick and quick shortcuts redraw as we interact
-                } else if( ev.tfinger.fingerID == 2 ) {
-                    if( !is_quick_shortcut_touch ) {
-                        second_finger_down_x = second_finger_curr_x = ev.tfinger.x * WindowWidth;
-                        second_finger_down_y = second_finger_curr_y = ev.tfinger.y * WindowHeight;
-                        is_two_finger_touch = true;
-                    }
-                }
-                break;
-            case SDL_EVENT_FINGER_UP:
-                if( ev.tfinger.fingerID == 1 ) {
-                    finger_curr_x = ev.tfinger.x * WindowWidth;
-                    finger_curr_y = ev.tfinger.y * WindowHeight;
-                    if( is_quick_shortcut_touch ) {
-                        input_event *quick_shortcut = get_quick_shortcut_under_finger();
-                        if( quick_shortcut ) {
-                            last_input = *quick_shortcut;
-                            if( get_option<bool>( "ANDROID_SHORTCUT_MOVE_FRONT" ) ) {
-                                quick_shortcuts_t &qsl = quick_shortcuts_map[get_quick_shortcut_name(
-                                                             touch_input_context.get_category() )];
-                                reorder_quick_shortcut( qsl, quick_shortcut->get_first_input(), false );
-                            }
-                            quick_shortcut->shortcut_last_used_action_counter = g->get_user_action_counter();
-                        } else {
-                            // Get the quick shortcut that was originally touched
-                            quick_shortcut = get_quick_shortcut_under_finger( true );
-                            if( quick_shortcut &&
-                                ticks - finger_down_time <= static_cast<Uint64>( get_option<int>( "ANDROID_INITIAL_DELAY" ) )
-                                &&
-                                finger_curr_y < finger_down_y &&
-                                finger_down_y - finger_curr_y > std::abs( finger_down_x - finger_curr_x ) ) {
-                                // a flick up was detected, remove the quick shortcut!
-                                quick_shortcuts_t &qsl = quick_shortcuts_map[get_quick_shortcut_name(
-                                                             touch_input_context.get_category() )];
-                                qsl.remove( *quick_shortcut );
-                            }
-                        }
-                    } else {
-                        if( is_two_finger_touch ) {
-                            // handle zoom in/out
-                            if( is_default_mode ) {
-                                float x1 = ( finger_curr_x - finger_down_x );
-                                float y1 = ( finger_curr_y - finger_down_y );
-                                float d1 = std::sqrt( x1 * x1 + y1 * y1 );
-
-                                float x2 = ( second_finger_curr_x - second_finger_down_x );
-                                float y2 = ( second_finger_curr_y - second_finger_down_y );
-                                float d2 = std::sqrt( x2 * x2 + y2 * y2 );
-
-                                float longest_window_edge = std::max( WindowWidth, WindowHeight );
-
-                                if( std::max( d1, d2 ) < get_option<float>( "ANDROID_DEADZONE_RANGE" ) * longest_window_edge ) {
-                                    last_input = input_event( get_key_event_from_string(
-                                                                  get_option<std::string>( "ANDROID_2_TAP_KEY" ) ), input_event_t::keyboard );
-                                } else {
-                                    float dot = ( x1 * x2 + y1 * y2 ) / ( d1 * d2 ); // dot product of two finger vectors, -1 to +1
-                                    if( dot > 0.0f ) { // both fingers mostly heading in same direction, check for double-finger swipe gesture
-                                        float dratio = d1 / d2;
-                                        const float dist_ratio = 0.3f;
-                                        if( dratio > dist_ratio &&
-                                            dratio < ( 1.0f /
-                                                       dist_ratio ) ) { // both fingers moved roughly the same distance, so it's a double-finger swipe!
-                                            float xavg = 0.5f * ( x1 + x2 );
-                                            float yavg = 0.5f * ( y1 + y2 );
-                                            if( xavg > 0 && xavg > std::abs( yavg ) ) {
-                                                last_input = input_event( get_key_event_from_string(
-                                                                              get_option<std::string>( "ANDROID_2_SWIPE_LEFT_KEY" ) ), input_event_t::keyboard );
-                                            } else if( xavg < 0 && -xavg > std::abs( yavg ) ) {
-                                                last_input = input_event( get_key_event_from_string(
-                                                                              get_option<std::string>( "ANDROID_2_SWIPE_RIGHT_KEY" ) ), input_event_t::keyboard );
-                                            } else if( yavg > 0 && yavg > std::abs( xavg ) ) {
-                                                last_input = input_event( get_key_event_from_string(
-                                                                              get_option<std::string>( "ANDROID_2_SWIPE_DOWN_KEY" ) ), input_event_t::keyboard );
-                                            } else {
-                                                last_input = input_event( get_key_event_from_string(
-                                                                              get_option<std::string>( "ANDROID_2_SWIPE_UP_KEY" ) ), input_event_t::keyboard );
-                                            }
-                                        }
-                                    } else {
-                                        // both fingers heading in opposite direction, check for zoom gesture
-                                        float down_x = finger_down_x - second_finger_down_x;
-                                        float down_y = finger_down_y - second_finger_down_y;
-                                        float down_dist = std::sqrt( down_x * down_x + down_y * down_y );
-
-                                        float curr_x = finger_curr_x - second_finger_curr_x;
-                                        float curr_y = finger_curr_y - second_finger_curr_y;
-                                        float curr_dist = std::sqrt( curr_x * curr_x + curr_y * curr_y );
-
-                                        const float zoom_ratio = 0.9f;
-                                        if( curr_dist < down_dist * zoom_ratio ) {
-                                            last_input = input_event( get_key_event_from_string(
-                                                                          get_option<std::string>( "ANDROID_PINCH_IN_KEY" ) ), input_event_t::keyboard );
-                                        } else if( curr_dist > down_dist / zoom_ratio ) {
-                                            last_input = input_event( get_key_event_from_string(
-                                                                          get_option<std::string>( "ANDROID_PINCH_OUT_KEY" ) ), input_event_t::keyboard );
-                                        }
-                                    }
-                                }
-                            }
-                        } else if( ticks - finger_down_time <= static_cast<Uint64>(
-                                       get_option<int>( "ANDROID_INITIAL_DELAY" ) ) ) {
-                            handle_finger_input( ticks );
-                        }
-                    }
-                    second_finger_down_x = second_finger_curr_x = finger_down_x = finger_curr_x = -1.0f;
-                    second_finger_down_y = second_finger_curr_y = finger_down_y = finger_curr_y = -1.0f;
-                    is_two_finger_touch = false;
-                    finger_down_time = 0;
-                    finger_repeat_time = 0;
-                    needupdate = true; // ensure virtual joystick and quick shortcuts are updated properly
-                    refresh_display(); // as above, but actually redraw it now as well
-                } else if( ev.tfinger.fingerID == 2 ) {
-                    if( is_two_finger_touch ) {
-                        // on second finger release, just remember the x/y position so we can calculate delta once first finger is done
-                        // is_two_finger_touch will be reset when first finger lifts (see above)
-                        second_finger_curr_x = ev.tfinger.x * WindowWidth;
-                        second_finger_curr_y = ev.tfinger.y * WindowHeight;
-                    }
-                }
-
-                break;
-#endif
-
             case SDL_EVENT_QUIT:
                 quit = true;
                 break;
@@ -3590,14 +3287,22 @@ static void CheckMessages()
             break;
         }
     }
+
+    // While the ImGui dev panel is open, repaint every CheckMessages tick — not
+    // only on input events — so it animates/updates continuously. get_input_event
+    // spins CheckMessages ~1 kHz while waiting; vsync on submit_frame caps actual
+    // redraws to the display rate. Without this an idle panel (no mouse motion)
+    // looks frozen.
+    if( imgui_layer::visible() ) {
+        needupdate = true;
+    }
+
     bool resized = false;
     if( resize_dims.has_value() ) {
         restore_on_out_of_scope<input_event> prev_last_input( last_input );
         needupdate = resized = handle_resize( resize_dims.value().x, resize_dims.value().y );
     }
-    // resizing already reinitializes the render target
     if( !resized && render_target_reset ) {
-        throwErrorIf( !SetupRenderTarget(), "SetupRenderTarget failed" );
         reinitialize_framebuffer( true );
         needupdate = true;
         restore_on_out_of_scope<input_event> prev_last_input( last_input );
@@ -3659,8 +3364,6 @@ static void init_term_size_and_scaling_factor()
 {
     scaling_factor = 1;
     point terminal( get_option<int>( "TERMINAL_X" ), get_option<int>( "TERMINAL_Y" ) );
-
-#if !defined(__ANDROID__)
 
     if( get_option<std::string>( "SCALING_FACTOR" ) == "2" ) {
         scaling_factor = 2;
@@ -3754,8 +3457,6 @@ static void init_term_size_and_scaling_factor()
 
         get_options().save();
     }
-
-#endif //__ANDROID__
 
     TERMINAL_WIDTH = terminal.x / scaling_factor;
     TERMINAL_HEIGHT = terminal.y / scaling_factor;
@@ -3858,11 +3559,6 @@ void catacurses::init_interface()
     stdscr = newwin( get_terminal_height(), get_terminal_width(), point_zero );
     //newwin calls `new WINDOW`, and that will throw, but not return nullptr.
 
-#if defined(__ANDROID__)
-    // Make sure we initialize preview_terminal_width/height to sensible values
-    preview_terminal_width = TERMINAL_WIDTH * fontwidth;
-    preview_terminal_height = TERMINAL_HEIGHT * fontheight;
-#endif
 }
 
 // This is supposed to be called from init.cpp, and only from there.
@@ -3995,15 +3691,7 @@ input_event input_manager::get_input_event()
         last_input.mouse_pos.y = static_cast<int>( my );
     } else if( last_input.type == input_event_t::keyboard ) {
         previously_pressed_key = last_input.get_first_input();
-#if defined(__ANDROID__)
-        android_vibrate();
-#endif
     }
-#if defined(__ANDROID__)
-    else if( last_input.type == input_event_t::gamepad ) {
-        android_vibrate();
-    }
-#endif
 
     return last_input;
 }
@@ -4075,19 +3763,6 @@ window_dimensions get_window_dimensions( const catacurses::window &win )
 window_dimensions get_window_dimensions( point pos, point size )
 {
     return get_window_dimensions( {}, pos, size );
-}
-
-auto get_sdl_display_buffer_size() -> point
-{
-    if( !display_buffer ) { return point_zero; }
-
-    auto width = 0.0f;
-    auto height = 0.0f;
-
-    if( !SDL_GetTextureSize( display_buffer.get(), &width, &height ) ) {
-        return point_zero;
-    }
-    return point( width, height );
 }
 
 auto get_sdl_window_size() -> point
@@ -4240,22 +3915,116 @@ bool is_draw_tiles_mode()
     return use_tiles;
 }
 
-/** Saves a screenshot of the current viewport, as a PNG file, to the given location.
-* @param file_path: A full path to the file where the screenshot should be saved.
-* @returns `true` if the screenshot generation was successful, `false` otherwise.
-*/
+/** Saves a screenshot of the current viewport as a PNG file.
+ * Re-renders the current queue state to a temporary offscreen GPU texture,
+ * downloads it via SDL_GPU copy pass, then saves with IMG_SavePNG.
+ * Bridge-free: does not use SDL_RenderReadPixels / display_buffer.
+ * @param file_path: Full path where the PNG file should be saved.
+ * @returns true on success.
+ */
 bool save_screenshot( const std::string &file_path )
 {
-    // SDL3: SDL_RenderReadPixels returns a new SDL_Surface* owned by caller.
-    auto readback = SDL_Surface_Ptr( SDL_RenderReadPixels( renderer.get(), nullptr ) );
-    if( printErrorIf( !readback, "save_screenshot: cannot read data from SDL_Renderer." ) ) {
+    auto &rs = lighting::get_render_state();
+    if( !rs.ready() ) {
+        dbg( DL::Error ) << "save_screenshot: render state not ready";
         return false;
     }
 
-    // Save screenshot as PNG file
-    const bool ok = !printErrorIf( !IMG_SavePNG( readback.get(), file_path.c_str() ),
-                                   std::string( "save_screenshot: cannot save screenshot file: " +
-                                           file_path ).c_str() );
+    const int w = WindowWidth;
+    const int h = WindowHeight;
+    if( w <= 0 || h <= 0 ) {
+        return false;
+    }
+
+    // Use the same format as the swapchain so the existing pipeline matches.
+    SDL_GPUTextureCreateInfo tci{};
+    tci.type                 = SDL_GPU_TEXTURETYPE_2D;
+    tci.format               = rs.device().swapchain_format();
+    tci.usage                = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    tci.width                = static_cast<Uint32>( w );
+    tci.height               = static_cast<Uint32>( h );
+    tci.layer_count_or_depth = 1;
+    tci.num_levels           = 1;
+    tci.sample_count         = SDL_GPU_SAMPLECOUNT_1;
+    SDL_GPUTexture *offscreen = SDL_CreateGPUTexture( rs.device().raw(), &tci );
+    if( printErrorIf( !offscreen, "save_screenshot: SDL_CreateGPUTexture failed" ) ) {
+        return false;
+    }
+
+    SDL_GPUCommandBuffer *cb = SDL_AcquireGPUCommandBuffer( rs.device().raw() );
+    if( !cb ) {
+        SDL_ReleaseGPUTexture( rs.device().raw(), offscreen );
+        return false;
+    }
+
+    // Re-render current queue state into the offscreen texture.
+    rs.tile_batcher().begin_frame();
+    constexpr float clear_black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    rs.tile_batcher().begin_pass( cb, offscreen,
+                                  static_cast<Uint32>( w ), static_cast<Uint32>( h ),
+                                  clear_black );
+    if( !rs.tile_sprites_empty() && rs.gpu_sampler() ) {
+        rs.flush_tile_sprites( rs.tile_batcher(), rs.gpu_sampler() );
+    }
+    if( !rs.ui_rects_empty() && rs.geometry().white_texture() ) {
+        // UI rects are HUD: unlit segment.
+        rs.tile_batcher().set_texture( rs.geometry().white_texture(),
+                                       rs.gpu_sampler(), /*is_lit=*/false );
+        rs.flush_ui_rects( rs.tile_batcher() );
+    }
+    if( !rs.font_glyphs_empty() && rs.gpu_sampler() ) {
+        rs.flush_font_glyphs( rs.tile_batcher(), rs.gpu_sampler() );
+    }
+    rs.tile_batcher().end_pass();
+
+    // Download the rendered pixels to a CPU-accessible transfer buffer.
+    const Uint32 row_pitch = static_cast<Uint32>( w ) * 4;
+    const Uint32 buf_size  = row_pitch * static_cast<Uint32>( h );
+
+    SDL_GPUTransferBufferCreateInfo tbci{};
+    tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD;
+    tbci.size  = buf_size;
+    SDL_GPUTransferBuffer *tb = SDL_CreateGPUTransferBuffer( rs.device().raw(), &tbci );
+    if( !tb ) {
+        SDL_CancelGPUCommandBuffer( cb );
+        SDL_ReleaseGPUTexture( rs.device().raw(), offscreen );
+        return false;
+    }
+
+    SDL_GPUCopyPass *cp = SDL_BeginGPUCopyPass( cb );
+    SDL_GPUTextureTransferInfo dst_info{};
+    dst_info.transfer_buffer = tb;
+    dst_info.pixels_per_row  = static_cast<Uint32>( w );
+    SDL_GPUTextureRegion region{};
+    region.texture = offscreen;
+    region.w       = static_cast<Uint32>( w );
+    region.h       = static_cast<Uint32>( h );
+    region.d       = 1;
+    SDL_DownloadFromGPUTexture( cp, &region, &dst_info );
+    SDL_EndGPUCopyPass( cp );
+
+    SDL_SubmitGPUCommandBuffer( cb );
+    SDL_WaitForGPUIdle( rs.device().raw() );
+
+    bool ok = false;
+    void *mapped = SDL_MapGPUTransferBuffer( rs.device().raw(), tb, false );
+    if( mapped ) {
+        // Swapchain is typically BGRA8 on D3D12; map to SDL_PIXELFORMAT_ARGB8888
+        // (little-endian BGRA byte order) so IMG_SavePNG writes correct colours.
+        SDL_Surface *surf = SDL_CreateSurfaceFrom(
+            w, h, SDL_PIXELFORMAT_ARGB8888,
+            mapped, static_cast<int>( row_pitch ) );
+        if( surf ) {
+            ok = !printErrorIf(
+                     !IMG_SavePNG( surf, file_path.c_str() ),
+                     ( std::string( "save_screenshot: cannot save file: " ) + file_path ).c_str() );
+            SDL_DestroySurface( surf );
+        }
+        SDL_UnmapGPUTransferBuffer( rs.device().raw(), tb );
+    }
+
+    SDL_ReleaseGPUTransferBuffer( rs.device().raw(), tb );
+    SDL_ReleaseGPUTexture( rs.device().raw(), offscreen );
     return ok;
 }
 
@@ -4284,4 +4053,3 @@ const SDL_Window_Ptr &get_sdl_window()
 }
 
 
-#endif // TILES

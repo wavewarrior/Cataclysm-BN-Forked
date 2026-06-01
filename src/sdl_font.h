@@ -1,7 +1,5 @@
 #pragma once
 
-#if defined(TILES)
-
 #include "cursesdef.h" // IWYU pragma: associated
 #include "sdltiles.h" // IWYU pragma: associated
 
@@ -19,6 +17,7 @@
 #include "point.h"
 #include "hash_utils.h"
 #include "sdl_wrappers.h"
+#include "lighting/render_state.h"
 
 using palette_array = std::array<SDL_Color, color_loader<SDL_Color>::COLOR_NAMES_COUNT>;
 
@@ -108,8 +107,11 @@ class CachedTTFFont : public Font
         };
 
         struct cached_t {
-            SDL_Texture_Ptr texture;
-            int          width;
+            SDL_Texture_Ptr texture;       // legacy SDL_Renderer-side cache
+            lighting::gpu_texture_unique_ptr gpu_texture; // 2i-B-6: GPU-side glyph
+            int  width;
+            int  gpu_w = 0;
+            int  gpu_h = 0;
         };
 
         std::unordered_map<key_t, cached_t, key_t_hash> glyph_cache_map;
@@ -141,6 +143,14 @@ class BitmapFont : public Font
                                unsigned char line_id, point p, unsigned char color ) const override;
     protected:
         std::array<SDL_Texture_Ptr, color_loader<SDL_Color>::COLOR_NAMES_COUNT> ascii;
+        // Phase 2i-B-6: per-colour GPU mirrors of the `ascii` sheets.
+        // Built alongside the legacy textures in the constructor and
+        // sampled by OutputChar's GPU enqueue path. UV coords come from
+        // gpu_sheet_w / gpu_sheet_h.
+        std::array<lighting::gpu_texture_unique_ptr,
+            color_loader<SDL_Color>::COLOR_NAMES_COUNT> gpu_ascii;
+        int gpu_sheet_w = 0;
+        int gpu_sheet_h = 0;
         int tilewidth;
 };
 
@@ -166,7 +176,5 @@ class FontFallbackList : public Font
         std::vector<std::unique_ptr<Font>> fonts;
         std::map<std::string, std::vector<std::unique_ptr<Font>>::iterator> glyph_font;
 };
-
-#endif // TILES
 
 

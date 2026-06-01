@@ -21,9 +21,6 @@
 #include "vehicle.h"
 #include "vehicle_part.h"
 
-#if defined(__ANDROID__)
-#   include <SDL3/SDL.h>
-#endif
 void advanced_inventory_pane::save_settings()
 {
     save_state->in_vehicle = in_vehicle();

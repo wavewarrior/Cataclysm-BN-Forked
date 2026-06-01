@@ -33,9 +33,7 @@
 
 auto game_info::operating_system() -> std::string
 {
-#if defined(__ANDROID__)
-    return "Android";
-#elif defined(_WIN32)
+#if   defined(_WIN32)
     return "Windows";
 #elif defined(__linux__)
     return "Linux";
@@ -94,47 +92,7 @@ static auto shell_exec( const std::string &command ) -> std::string
 }
 #endif
 
-#if defined (__ANDROID__)
-/** Get a precise version number for Android systems.
- * @note see:
- *    - https://stackoverflow.com/a/19777977/507028
- *    - https://github.com/pytorch/cpuinfo/blob/master/test/build.prop/galaxy-s7-us.log
- * @returns If successful, a string containing the Android system version, otherwise an empty string.
- */
-static std::string android_version()
-{
-    std::string output;
-
-    // buffer used for the __system_property_get() function.
-    // note: according to android sources, it can't be greater than 92 chars (see 'PROP_VALUE_MAX' define in system_properties.h)
-    std::vector<char> buffer( 255 );
-
-    static const std::vector<std::pair<std::string, std::string>> system_properties = {
-        // The manufacturer of the product/hardware; e.g. "Samsung", this is different than the carrier.
-        { "ro.product.manufacturer", "Manufacturer" },
-        // The end-user-visible name for the end product; .e.g. "SAMSUNG-SM-G930A" for a Samsung S7.
-        { "ro.product.model", "Model" },
-        // The Android system version; e.g. "6.0.1"
-        { "ro.build.version.release", "Release" },
-        // The internal value used by the underlying source control to represent this build; e.g "G930AUCS4APK1" for a Samsung S7 on 6.0.1.
-        { "ro.build.version.incremental", "Incremental" },
-    };
-
-    for( const auto &entry : system_properties ) {
-        int len = __system_property_get( entry.first.c_str(), &buffer[0] );
-        std::string value;
-        if( len <= 0 ) {
-            // failed to get the property
-            value = "<unknown>";
-        } else {
-            value = std::string( buffer.data() );
-        }
-        output.append( string_format( "%s: %s; ", entry.second, value ) );
-    }
-    return output;
-}
-
-#elif defined(BSD)
+#if   defined(BSD)
 
 /** Get a precise version number for BSD systems.
  * @note The code shells-out to call `uname -a`.
@@ -320,9 +278,7 @@ static std::string windows_version()
 
 auto game_info::operating_system_version() -> std::string
 {
-#if defined(__ANDROID__)
-    return android_version();
-#elif defined(BSD)
+#if   defined(BSD)
     return bsd_version();
 #elif defined(__linux__)
     return linux_version();
@@ -367,11 +323,7 @@ auto game_info::game_version() -> std::string
 
 auto game_info::graphics_version() -> std::string
 {
-#if defined(TILES)
     return "Tiles";
-#else
-    return "Curses";
-#endif
 }
 
 auto game_info::save_file_version() -> std::string
@@ -460,7 +412,7 @@ auto get_os_bitness() -> std::optional<int>
             // FIXME: other architectures?
             break;
     }
-#elif defined(__linux__) && !defined(__ANDROID__)
+#elif defined(__linux__)
     std::string output;
     output = shell_exec( "getconf LONG_BIT" );
 

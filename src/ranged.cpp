@@ -3878,33 +3878,25 @@ void target_ui::draw_terrain_overlay()
             if( tile.z() != center.z() ) {
                 continue;
             }
-#ifdef TILES
             if( use_tiles ) {
                 g->draw_highlight( tile );
             } else {
-#endif
                 get_map().drawsq( g->w_terrain, tile, params );
-#ifdef TILES
             }
-#endif
         }
     } else if( mode == TargetMode::Shape || ( mode == TargetMode::Fire && shape_gen ) ) {
         drawsq_params params = drawsq_params().highlight( true ).center( center );
         for( const std::pair<const tripoint_bub_ms, double> &pr : shape_coverage ) {
             const tripoint_bub_ms &tile = pr.first;
-#ifdef TILES
             if( use_tiles ) {
                 g->draw_highlight( tile );
             } else {
-#endif
                 get_map().drawsq( g->w_terrain, tile, params );
                 Creature *critter = g->critter_at( tile );
                 if( critter != nullptr ) {
                     g->draw_critter_highlighted( *critter, center );
                 }
-#ifdef TILES
             }
-#endif
         }
     }
 }

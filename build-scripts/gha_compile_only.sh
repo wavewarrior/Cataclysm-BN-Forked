@@ -21,7 +21,7 @@ ccache --zero-stats
 ccache -M 5G
 ccache --show-stats
 
-echo "COMPILER: $COMPILER, OS: $OS, TILES: $TILES, SOUND: $SOUND, TEST_STAGE: $TEST_STAGE"
+echo "COMPILER: $COMPILER, OS: $OS, SOUND: $SOUND, TEST_STAGE: $TEST_STAGE"
 echo "LANGUAGES: $LANGUAGES, LIBBACKTRACE: $LIBBACKTRACE, NATIVE: $NATIVE, RELEASE: $RELEASE, CROSS_COMPILATION: $CROSS_COMPILATION"
 
 if [ "$RELEASE" = "1" ]
@@ -31,17 +31,12 @@ else
     build_type=Debug
 fi
 
-TILES="${TILES:-0}"
-CURSES=$((1 - TILES))
-
 cmake_args=(
     -B build
     -G Ninja
     -DBACKTRACE=ON
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
     -DCMAKE_BUILD_TYPE="$build_type"
-    -DTILES="$TILES"
-    -DCURSES="$CURSES"
     -DSOUND="${SOUND:-0}"
 )
 
@@ -71,10 +66,7 @@ cmake --build build --parallel "$num_jobs"
 # For CI on macOS, patch the test binary so it can find SDL3 libraries.
 if [[ ! -z "$OS" && "$OS" = "macos-14" ]]
 then
-    test_bin="build/tests/cata_test"
-    if [ "$TILES" = "1" ]; then
-        test_bin="build/tests/cata_test-tiles"
-    fi
+    test_bin="build/tests/cata_test-tiles"
     if [ -f "$test_bin" ]; then
         file "$test_bin"
         install_name_tool -add_rpath "$HOME"/Library/Frameworks "$test_bin"

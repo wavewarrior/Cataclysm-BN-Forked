@@ -6,11 +6,7 @@
 #include "rng.h"
 #include "translations.h"
 
-#if defined(TILES)
 #include "sdl_utils.h"
-#else
-#include "ncurses_def.h"
-#endif
 
 static std::unordered_map<RGBColor, std::string> named_colors = {};
 static std::unordered_map<RGBColor, std::string> similar_name_cache = {};
@@ -95,11 +91,7 @@ std::string RGBColor::friendly_name() const
 
 auto curses_color_to_RGB( const nc_color &color ) -> RGBColor
 {
-#if defined(TILES)
     return curses_color_to_SDL( color );
-#else
-    return ncurses::color_to_RGB( color );;
-#endif
 }
 
 static auto median( const uint8_t a, const uint8_t b, const uint8_t c )

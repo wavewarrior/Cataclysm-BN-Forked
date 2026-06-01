@@ -413,8 +413,6 @@ void throbber_popup::refresh()
         ui_manager::redraw();
         refresh_display();
         last_update = now;
-#if defined(TILES)
         SDL_PumpEvents();
-#endif // TILES
     }
 }

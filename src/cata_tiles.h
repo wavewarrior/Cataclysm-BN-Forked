@@ -26,6 +26,8 @@
 #include "sdl_geometry.h"
 #include "sdl_utils.h"
 #include "sdl_wrappers.h"
+#include "lighting/sprite_batcher.h"
+#include "lighting/render_state.h"
 #include "type_id.h"
 #include "weather.h"
 #include "weighted_list.h"
@@ -183,6 +185,76 @@ class texture
             const SDL_FRect fdst{ float( dstrect->x ), float( dstrect->y ),
                                   float( dstrect->w ), float( dstrect->h ) };
             return SDL_RenderTexture( renderer.get(), sdl_texture_ptr.get(), &srcrect, &fdst );
+        }
+
+        /// Underlying SDL_Texture handle for the texture this `texture`
+        /// wraps. Used by cata_tiles' GPU draw path to look up the
+        /// matching GPU atlas mirror via
+        /// dynamic_atlas::find_gpu_texture_full.
+        SDL_Texture *sdl_texture_handle() const noexcept {
+            return sdl_texture_ptr.get();
+        }
+
+        /// Phase 2i-B-5 GPU draw path. Enqueues exactly one tile sprite
+        /// into render_state::tile_sprite_queue_; the queue is drained
+        /// by refresh_display inside the tile_batcher pass after the
+        /// bridge blit.
+        ///
+        /// `atlas_tex` is the GPU mirror of this texture's atlas sheet
+        /// (look up via dynamic_atlas::find_gpu_texture_full).
+        /// `atlas_w/atlas_h` are the atlas page pixel dimensions, used
+        /// to convert the pixel-space srcrect into normalised UV.
+        ///
+        /// FLIP folds into UV: horizontal flip swaps u/u+uw, vertical
+        /// flip swaps v/v+vh.
+        /// ROTATION_DEGREES is converted to radians and stored in the
+        /// sprite_instance; the vertex shader rotates the destination
+        /// quad around its centre. Matches SDL_RenderTextureRotated
+        /// convention (positive = clockwise on screen).
+        bool enqueue_tile_sprite( SDL_GPUTexture *atlas_tex,
+                                  int atlas_w, int atlas_h,
+                                  const SDL_FRect &destination,
+                                  SDL_FlipMode flip,
+                                  float alpha = 1.0f,
+                                  double rotation_degrees = 0.0,
+                                  float light_r = 1.0f,
+                                  float light_g = 1.0f,
+                                  float light_b = 1.0f,
+                                  float light_mul = 0.0f ) const {
+            if( !atlas_tex || atlas_w <= 0 || atlas_h <= 0 ) {
+                return false;
+            }
+            const float inv_w = 1.0f / static_cast<float>( atlas_w );
+            const float inv_h = 1.0f / static_cast<float>( atlas_h );
+            float u  = srcrect.x * inv_w;
+            float v  = srcrect.y * inv_h;
+            float uw = srcrect.w * inv_w;
+            float vh = srcrect.h * inv_h;
+            if( flip & SDL_FLIP_HORIZONTAL ) {
+                u += uw;
+                uw = -uw;
+            }
+            if( flip & SDL_FLIP_VERTICAL ) {
+                v += vh;
+                vh = -vh;
+            }
+            lighting::sprite_instance s{};
+            s.dst_x = destination.x;
+            s.dst_y = destination.y;
+            s.dst_w = destination.w;
+            s.dst_h = destination.h;
+            s.src_u  = u;
+            s.src_v  = v;
+            s.src_uw = uw;
+            s.src_vh = vh;
+            s.tint_r = light_r;
+            s.tint_g = light_g;
+            s.tint_b = light_b;
+            s.tint_a = alpha;
+            s.rotation = static_cast<float>( rotation_degrees * 3.14159265358979323846 / 180.0 );
+            s.light_mul = light_mul;
+            lighting::get_render_state().queue_tile_sprite( atlas_tex, s );
+            return true;
         }
 
         bool get_blend_mode( SDL_BlendMode *mode ) const {
@@ -1124,6 +1196,17 @@ class cata_tiles
         float tile_ratiox = 0.0f;
         float tile_ratioy = 0.0f;
 
+        // Phase 5: per-tile GPU light tint set by draw_from_id_string() from
+        // level_cache.lm / light_color_cache before draw_sprite_at() runs.
+        // White (1,1,1) means fully lit / no tint applied.
+        mutable float gpu_light_r = 1.0f;
+        mutable float gpu_light_g = 1.0f;
+        mutable float gpu_light_b = 1.0f;
+        // Effect 3 memory-fade marker passed to enqueue_tile_sprite:
+        // 0 = normal sprite; negative = memorized tile carrying -(dist from
+        // player in tiles). Set per-tile in draw_from_id_string.
+        mutable float gpu_light_mul = 0.0f;
+
         idle_animation_manager idle_animations;
 
         bool in_animation = false;
@@ -1175,6 +1258,14 @@ class cata_tiles
 
         // offset values, in tile coordinates, not pixels
         point_bub_ms o;
+        // Phase 6b: pixel coords of map tile (0,0) — used for camera offset.
+        // camera_off = o.x/tile_width + 0.5  converts screen tile → map tile.
+    public:
+        point_bub_ms get_tile_map_origin() const { return o; }
+        // Pixel offset of the tile-drawing area from the window's top-left.
+        // camera_off = op / tile_width - o  converts tile_tu → absolute map tile.
+        point get_drawing_pixel_offset() const { return op; }
+    private:
         // offset for drawing, in pixels.
         point op;
 

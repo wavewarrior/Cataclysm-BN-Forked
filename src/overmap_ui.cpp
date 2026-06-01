@@ -23,9 +23,7 @@
 #include "avatar.h"
 #include "cached_options.h"
 #include "calendar.h"
-#ifdef TILES
 #include "cata_tiles.h"
-#endif // TILES
 #include "cata_utility.h"
 #include "catacharset.h"
 #include "clzones.h"
@@ -88,10 +86,6 @@ static const mongroup_id GROUP_FOREST( "GROUP_FOREST" );
 static const mongroup_id GROUP_NEMESIS( "GROUP_NEMESIS" );
 
 static const trait_id trait_DEBUG_NIGHTVISION( "DEBUG_NIGHTVISION" );
-
-#if defined(__ANDROID__)
-#include <SDL3/SDL.h>
-#endif
 
 static constexpr int UILIST_MAP_NOTE_DELETED = -2047;
 static constexpr int UILIST_MAP_NOTE_EDITED = -2048;
@@ -1605,9 +1599,7 @@ static void draw_om_sidebar(
     wnoutrefresh( wbar );
 }
 
-#if defined(TILES)
 tiles_redraw_info redraw_info;
-#endif
 
 static void draw(
     ui_adaptor &ui,
@@ -1625,12 +1617,10 @@ static void draw(
         draw_ascii( ui, g->w_overmap, center, orig, blink, show_explored, fast_scroll, inp_ctxt, data,
                     grids_data );
     } else {
-#ifdef TILES
         redraw_info = tiles_redraw_info { center, blink };
         werase( g->w_overmap );
         // trigger the actual redraw code in sdltiles.cpp
         wnoutrefresh( g->w_overmap );
-#endif // TILES
     }
 }
 
@@ -2197,7 +2187,6 @@ static tripoint_abs_omt display( const tripoint_abs_omt &orig,
     do {
 
         ui_manager::redraw();
-#if (defined TILES || defined _WIN32 || defined WINDOWS )
         int scroll_timeout = get_option<int>( "EDGE_SCROLL" );
         // If EDGE_SCROLL is disabled, it will have a value of -1.
         // blinking won't work if handle_input() is passed a negative integer.
@@ -2205,9 +2194,6 @@ static tripoint_abs_omt display( const tripoint_abs_omt &orig,
             scroll_timeout = get_option<int>( "BLINK_SPEED" );
         }
         action = ictxt.handle_input( scroll_timeout );
-#else
-        action = ictxt.handle_input( get_option<int>( "BLINK_SPEED" ) );
-#endif
         if( const std::optional<tripoint_rel_ms> vec = ictxt.get_direction( action ) ) {
             int scroll_d = fast_scroll ? fast_scroll_offset : 1;
             curs += vec->xy().raw() * scroll_d;

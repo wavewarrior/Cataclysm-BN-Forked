@@ -45,6 +45,7 @@
 #include "line.h"
 #include "map.h"
 #include "map_iterator.h"
+#include "lighting/render_state.h"
 #include "mapdata.h"
 #include "material.h"
 #include "math_defines.h"
@@ -1559,6 +1560,18 @@ void explosion_funcs::regular( const queued_explosion &qe )
     const explosion_data &ex = qe.exp_data;
     auto &shr = ex.fragment;
 
+    // Push a transient flash event for the GPU lighting pipeline.
+    {
+        lighting::flash_event fe{};
+        fe.pos         = get_map().getglobal( p );
+        fe.r           = 1.0f;
+        fe.g           = ex.fire ? 0.4f : 0.5f;
+        fe.b           = 0.0f;
+        fe.intensity   = std::max( 2.0f, ex.radius );
+        fe.duration_ms = 350.0f;
+        lighting::get_render_state().emitter_events().push( fe );
+    }
+
     cata::run_hooks( "on_explosion_start", [&]( sol::table & params ) {
         params["pos"] = cata::detail::lua_coords::to_lua( p );
         params["damage"] = ex.damage;
@@ -1664,6 +1677,18 @@ void explosion_funcs::flashbang( const queued_explosion &qe )
 {
     const tripoint_bub_ms &p = qe.pos;
     map &here = get_map();
+
+    // Push bright white flash for GPU lighting.
+    {
+        lighting::flash_event fe{};
+        fe.pos         = here.getglobal( p );
+        fe.r           = 1.0f;
+        fe.g           = 1.0f;
+        fe.b           = 1.0f;
+        fe.intensity   = 12.0f;
+        fe.duration_ms = 500.0f;
+        lighting::get_render_state().emitter_events().push( fe );
+    }
 
     draw_explosion( p, 8, c_white, qe.graphics_name );
     int dist = rl_dist( g->u.bub_pos(), p );

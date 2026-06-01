@@ -1,7 +1,7 @@
 #include "units_temperature.h"
-#if defined(TILES)
 #include "cata_tiles.h"
 #include "lightmap.h"
+#include "shadowcasting.h"
 
 #include <algorithm>
 #include <array>
@@ -1118,6 +1118,22 @@ bool tileset_loader::copy_surface_to_dynamic_atlas(
                 const SDL_FRect fdst{ float( atl_tex.second.x ), float( atl_tex.second.y ), float( atl_tex.second.w ), float( atl_tex.second.h ) };
                 SDL_RenderTexture( renderer.get(), st_tex, &fsrc, &fdst );
             }
+            // Phase 2i-B-5: mirror this stamp into the GPU atlas at
+            // the same offset. cata_tiles' GPU draw path samples the
+            // GPU texture via find_gpu_texture(legacy_atlas).
+            //
+            // CRITICAL: st_surf is sized r_width × r_height (rounded
+            // up to the sprite hint) — larger than the sprite itself.
+            // Pass `st_sub_rect` so the upload only copies the sprite-
+            // sized region, otherwise the surrounding zero padding
+            // would overwrite neighbouring sprites already packed
+            // into the atlas at adjacent offsets.
+            if( SDL_GPUTexture *gpu_atlas =
+                    ts.tileset_atlas->find_gpu_texture( atl_tex.first.get() ) ) {
+                lighting::get_render_state().upload_surface_subregion_to_gpu_texture(
+                    gpu_atlas, atl_tex.second.x, atl_tex.second.y,
+                    st_surf, &st_sub_rect );
+            }
         }
 
         const auto tex_key = tileset_lookup_key{ index, TILESET_NO_MASK, tileset_fx_type::none, TILESET_NO_COLOR, TILESET_NO_WARP, point_zero };
@@ -1628,6 +1644,18 @@ texture_result tileset::get_or_default( const int sprite_index,
                 const SDL_FRect fsrc{ float( st_sub_rect_final.x ), float( st_sub_rect_final.y ), float( st_sub_rect_final.w ), float( st_sub_rect_final.h ) };
                 const SDL_FRect fdst{ float( atl_tex.second.x ), float( atl_tex.second.y ), float( atl_tex.second.w ), float( atl_tex.second.h ) };
                 SDL_RenderTexture( rp, st_tex, &fsrc, &fdst );
+            }
+            // Phase 2i-B-5: mirror this run-time stamp into the GPU
+            // atlas at the same offset. tileset::get_or_default
+            // produces every in-game tinted/vfx/warped sprite — without
+            // this upload, draw_sprite_at's GPU lookup finds the atlas
+            // page but samples uninitialised pixels for the just-
+            // allocated slot, rendering the entire map area black.
+            if( SDL_GPUTexture *gpu_atlas =
+                    tileset_atlas->find_gpu_texture( atl_tex.first.get() ) ) {
+                lighting::get_render_state().upload_surface_subregion_to_gpu_texture(
+                    gpu_atlas, atl_tex.second.x, atl_tex.second.y,
+                    st_surf, &st_sub_rect_final );
             }
         }
 
@@ -2961,22 +2989,25 @@ void cata_tiles::draw( point dest, const tripoint_bub_ms &center, int width, int
         return;
     }
 
-#if defined(__ANDROID__)
-    // Attempted bugfix for Google Play crash - prevent divide-by-zero if no tile width/height specified
-    if( tile_width == 0 || tile_height == 0 ) {
-        return;
+    // Clear only tile sprites. UI/font queues are NOT cleared here so
+    // partial UI redraws (tooltip, mouse-hover) still see sidebar content
+    // from the last full tick. draw_om() uses clear_frame_queues() because
+    // it is a full-screen view with its own UI layout.
+    if( lighting::render_state *rs = &lighting::get_render_state(); rs->ready() ) {
+        rs->clear_tile_queue();
     }
-#endif
 
     ZoneScoped;
     {
-        //set clipping to prevent drawing over stuff we shouldn't
+        // GPU scissor — clips tile sprites to the map viewport.
         SDL_Rect clipRect = {dest.x, dest.y, width, height};
-        printErrorIf( !SDL_SetRenderClipRect( renderer.get(), &clipRect ),
-                      "SDL_SetRenderClipRect failed" );
+        lighting::get_render_state().set_tile_scissor( &clipRect );
 
-        //fill render area with black to prevent artifacts where no new pixels are drawn
-        geometry->rect( renderer, point{ clipRect.x, clipRect.y }, clipRect.w, clipRect.h, SDL_Color{ 0, 0, 0, 255 } );
+        // No explicit black fill needed: the swapchain is cleared to black
+        // by the tile_batcher pass (LOADOP_CLEAR) before tile sprites draw.
+        // The old SDL_RenderFillRect here targeted the legacy display_buffer;
+        // its GPU-path replacement (geometry->rect → ui_rect_queue) rendered
+        // after tile sprites in the single-pass pipeline, covering them.
     }
 
     point s;
@@ -3971,8 +4002,7 @@ void cata_tiles::draw( point dest, const tripoint_bub_ms &center, int width, int
         }
     }
 
-    printErrorIf( !SDL_SetRenderClipRect( renderer.get(), nullptr ),
-                  "SDL_SetRenderClipRect failed" );
+    lighting::get_render_state().clear_tile_scissor();
 }
 
 bool cata_tiles::terrain_requires_animation() const
@@ -4425,6 +4455,41 @@ bool cata_tiles::draw_from_id_string(
         return true;
     }
 
+    // Phase 5: compute per-tile GPU light tint from lightmap color cache.
+    // `pos` is in map tile coordinates; default to white (1,1,1) for UI tiles,
+    // overmap tiles, out-of-bounds, or when the lightmap hasn't been generated
+    // yet (lum == 0: main menu / first frame before generate_lightmap runs).
+    // Phase 8: tint = 0 for game tiles so max(tint, gpu_light) = gpu_light.
+    // GPU emitters + sky/sun are the sole brightness source for game tiles.
+    // UI elements and main menu (g==nullptr or as_independent_entity) keep tint=1.0
+    // so max(1.0, gpu_light) = 1.0 → full color passthrough regardless of lighting.
+    gpu_light_r = gpu_light_g = gpu_light_b = 1.0f;  // default: UI/main-menu passthrough
+    if( !as_independent_entity
+        && tile.category != C_OVERMAP_TERRAIN
+        && g != nullptr ) {
+        const map &here = get_map();
+        if( here.inbounds( tripoint( pos.x, pos.y, pos.z ) ) ) {
+            const level_cache &mc = here.access_cache( pos.z );
+            const int idx = mc.idx( pos.x, pos.y );
+            const float lum = mc.lm[idx].max();
+            if( lum > 0.001f ) {
+                // Tile IS lit by CPU lightmap → let GPU emitters drive brightness.
+                // tint = 0 so max(0, gpu_light) = gpu_light (Stoneshard quality).
+                gpu_light_r = gpu_light_g = gpu_light_b = 0.0f;
+            }
+            // lum == 0: lightmap not generated yet; keep tint=1.0 (safe white fallback).
+        }
+    }
+
+    // Effect 3: memorized (out-of-sight but remembered) tiles carry
+    // -(distance from player in tiles) as the sprite light_mul marker, so the
+    // fragment shader dims + distance-fades remembered terrain (floored at
+    // mem_dim → persists, never black). 0 = normal tile (no fade).
+    gpu_light_mul = 0.0f;
+    if( ll == lit_level::MEMORIZED && g != nullptr ) {
+        gpu_light_mul = -static_cast<float>( trig_dist( g->u.pos(), pos ) );
+    }
+
     //draw it!
     draw_tile_at( display_tile, screen_pos, loc_rand, true_rota,
                   bg_tint, fg_tint, ll, apply_visual_effects, height_3d,
@@ -4578,25 +4643,54 @@ bool cata_tiles::draw_sprite_at( const tile_type &tile, point_bub_ms p,
     destination.w = width * tile_width * tile.pixelscale / tileset_ptr->get_tile_width();
     destination.h = height * tile_height * tile.pixelscale / tileset_ptr->get_tile_height();
 
+    // GPU-only render. Rotation is stored in sprite_instance but the HLSL
+    // shader currently ignores it — rotated sprites appear unrotated until
+    // the vertex shader rotation math is implemented. Preferable to invisible.
     auto render = [&]( const int rotation, const SDL_FlipMode flip ) {
-        int ret = 0;
+        dynamic_atlas *atlas = tileset_ptr->texture_atlas();
+        const auto gpu = atlas
+                         ? atlas->find_gpu_texture_full( sprite_tex->sdl_texture_handle() )
+                         : dynamic_atlas::gpu_lookup{ nullptr, 0, 0 };
 
-        // UV warping is now handled in get_or_default, so we just render normally
-        sprite_tex->set_alpha_mod( 255 );
-        ret = sprite_tex->render_copy_ex( renderer, &destination, rotation, nullptr, flip );
+        if( !gpu.texture ) {
+            static bool warned = false;
+            if( !warned ) {
+                warned = true;
+                dbg( DL::Warn ) << "GPU atlas miss in draw_sprite_at — sprite invisible";
+            }
+            return 0;
+        }
 
+        const SDL_FRect fdst{
+            static_cast<float>( destination.x ),
+            static_cast<float>( destination.y ),
+            static_cast<float>( destination.w ),
+            static_cast<float>( destination.h )
+        };
+        sprite_tex->enqueue_tile_sprite( gpu.texture, gpu.atlas_w, gpu.atlas_h,
+                                         fdst, flip, 1.0f,
+                                         static_cast<double>( rotation ),
+                                         gpu_light_r, gpu_light_g, gpu_light_b,
+                                         gpu_light_mul );
         if( !static_z_effect && overlay_count > 0 ) {
             const auto [overlay_tex, overlay_warp_offset] =
                 tileset_ptr->get_or_default(
                     tile_idx, TILESET_NO_MASK, tileset_fx_type::z_overlay, TILESET_NO_COLOR,
                     effective_warp_hash, tile_offset );
             if( overlay_tex ) {
-                overlay_tex->set_alpha_mod( std::min( 192, overlay_count ) );
-                overlay_tex->render_copy_ex( renderer, &destination, rotation, nullptr, flip );
-                overlay_tex->set_alpha_mod( 255 );
+                const auto ov_gpu = atlas->find_gpu_texture_full(
+                                        overlay_tex->sdl_texture_handle() );
+                if( ov_gpu.texture ) {
+                    const float a = std::min( 192, overlay_count ) / 255.0f;
+                    overlay_tex->enqueue_tile_sprite(
+                        ov_gpu.texture, ov_gpu.atlas_w, ov_gpu.atlas_h,
+                        fdst, flip, a,
+                        static_cast<double>( rotation ),
+                        gpu_light_r, gpu_light_g, gpu_light_b );
+                }
             }
         }
-        return ret;
+        return 0;
     };
 
     int ret = 0;
@@ -4680,7 +4774,6 @@ bool cata_tiles::draw_sprite_at( const tile_type &tile, point_bub_ms p,
         ret = render( 0, SDL_FLIP_NONE );
     }
 
-    printErrorIf( !ret, "SDL_RenderTextureRotated() failed" );
     // this reference passes all the way back up the call chain back to
     // cata_tiles::draw() std::vector<tile_render_info> draw_points[].height_3d
     // where we are accumulating the height of every sprite stacked up in a tile
@@ -7074,4 +7167,3 @@ std::vector<options_manager::id_and_option> cata_tiles::build_display_list()
     return display_names.empty() ? default_display_names : display_names;
 }
 
-#endif // SDL_TILES

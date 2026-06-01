@@ -21,12 +21,6 @@
 #include "string_utils.h"
 #include "ui_manager.h"
 
-#if defined(__ANDROID__)
-#include <SDL3/SDL.h>
-
-#include "options.h"
-#endif
-
 catacurses::window new_centered_win( int nlines, int ncols )
 {
     int height = std::min( nlines, TERMY );
@@ -248,9 +242,7 @@ input_context uilist::create_filter_input_context() const
     ctxt.register_action( "TEXT.HOME" );
     ctxt.register_action( "TEXT.END" );
     ctxt.register_action( "TEXT.DELETE" );
-#if defined( TILES )
     ctxt.register_action( "TEXT.PASTE" );
-#endif
     ctxt.register_action( "TEXT.INPUT_FROM_FILE" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
     ctxt.register_action( "ANY_INPUT" );
@@ -932,14 +924,6 @@ void uilist::query( bool loop, int timeout )
     shared_ptr_fast<ui_adaptor> ui = create_or_get_ui_adaptor();
 
     ui_manager::redraw();
-
-#if defined(__ANDROID__)
-    for( const auto &entry : entries ) {
-        if( entry.hotkey > 0 && entry.enabled ) {
-            ctxt.register_manual_key( entry.hotkey, entry.txt );
-        }
-    }
-#endif
 
     do {
         ret_act = ctxt.handle_input( timeout );

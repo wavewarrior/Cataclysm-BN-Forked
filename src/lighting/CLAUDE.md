@@ -1,0 +1,368 @@
+# Lighting module — architecture reference
+
+**Phase**: 2i-B (bridge removed, GPU-only rendering)
+**Backend**: SDL_GPU / SPIRV-Cross on D3D12 (Win11), Vulkan, Metal
+
+---
+
+## File map
+
+| File | Role |
+|---|---|
+| `gpu_device.cpp/h` | SDL_GPU device lifecycle; swapchain format query |
+| `sprite_batcher.cpp/h` | Instance-batched draw engine; one pass per batcher |
+| `render_state.cpp/h` | **Singleton** (`get_render_state()`). Owns device, batchers, queues |
+| `gpu_atlas.cpp/h` | GPU mirror of SDL_Texture atlas pages |
+| `font_engine.cpp/h` | SDL_Surface→GPU glyph upload; per-glyph texture cache |
+| `gpu_geometry.cpp/h` | 1×1 white texture (shared by UI rects and solid fills) |
+| `shader_compiler.cpp/h` | HLSL→SPIRV-Cross compile; embedded `SPRITE_VERT_HLSL` in `sprite_batcher.cpp` |
+
+---
+
+## Per-frame render pass (bridge-free single pass)
+
+`refresh_display()` in `sdltiles.cpp`:
+
+```
+tile_batcher.begin_pass(cb, swapchain_tex, LOADOP_CLEAR=black)
+  1. flush_tile_sprites(gpu_sampler)   ← terrain/mob/item/vehicle sprites
+  2. set_texture(white) + flush_ui_rects(gpu_sampler)  ← colour-block overlays
+  3. flush_font_glyphs(gpu_sampler)    ← one set_texture+draw per unique glyph
+tile_batcher.end_pass()
+submit_frame()
+```
+
+Bridge removed 2026-05-22. `gpu_sampler_` created eagerly in `render_state::init()`.
+
+---
+
+## Queue lifecycle
+
+```
+ui_adaptor::redraw_invalidated()        ← called on every UI redraw cycle
+  → clear_frame_queues()                ← ALL 3 queues cleared at start
+  → window callbacks run                ← populate ui_rect + font_glyph queues
+
+cata_tiles::draw() (in-game map)        ← called as a window callback WITHIN redraw_invalidated()
+  → clear_tile_queue()                  ← ONLY tile sprites; NOT ui/font (already cleared by outer cycle)
+  → enqueue all terrain/mob/vehicle sprites
+
+draw_om() (sdltiles.cpp, overmap)       ← also a window callback within redraw_invalidated()
+  → clear_tile_queue()                  ← same: tile-only clear
+  → enqueue overmap tile sprites
+```
+
+On **no-input frames** (between redraw cycles), `refresh_display()` re-drains the **same queues** from the previous cycle. This is intentional — prevents black flash when no redraw has run yet.
+
+Do NOT clear queues inside a flush method.
+
+**Known limitation**: Partial redraws (e.g. tooltip on mouse-move) trigger `redraw_invalidated()` → `clear_frame_queues()` → only tooltip repopulates → one-frame black sidebar. Root fix = GPU accumulation texture (future phase 2i-B-7g or similar).
+
+---
+
+## sprite_instance struct (64 bytes, wire-stable)
+
+```
+float dst_x, dst_y, dst_w, dst_h   // pixel-space destination quad
+float src_u, src_v, src_uw, src_vh  // normalised UV (negative = flipped axis)
+float tint_r, tint_g, tint_b, tint_a  // RGBA multiplier (1.0 = passthrough)
+float rotation                      // radians, clockwise, around quad centre
+float pad0, pad1, pad2
+```
+
+Changing this struct requires updating `SPRITE_VERT_HLSL` in `sprite_batcher.cpp`. `static_assert(sizeof(sprite_instance)==64)` enforces the contract.
+
+---
+
+## Rotation in vertex shader
+
+Clockwise screen-space rotation (Y-down) around quad centre. `rotation` field is in radians (converted from degrees by `enqueue_tile_sprite` in `cata_tiles.h`). Flip is UV-encoded (negative `src_uw`/`src_vh`), independent of rotation.
+
+Formula: `x' = x*cos - y*sin`, `y' = x*sin + y*cos`
+
+---
+
+## sprite_batcher internals
+
+- `MAX_INSTANCES = 65536`, `RING_SLOTS = 3` (storage-buffer ring)
+- `cycle=true` on storage buffer upload (D3D12 frames-in-flight race fix)
+- Blend: `SrcAlpha · src + (1−SrcAlpha) · dst`
+- `set_texture()` closes current segment and starts a new one; same-texture calls extend current segment
+- Null texture in a segment → D3D12 command list corruption → crash at next GPU call. Never pass null.
+
+---
+
+## Shadow march + dither model (2026-05-30)
+
+Fragment shader (`SPRITE_FRAG_HLSL` in `sprite_batcher.cpp`):
+
+- **Bilinear SDF sampling.** `sdf_bilinear()` 4-taps the tile-resolution SDF.
+  The CPU SDF is a **Chebyshev** BFS (`sdf_pass.cpp:compute_sdf_cpu`) → integer
+  per-tile jumps; raw nearest reads gave diamond-faceted sawtooth penumbrae.
+  Bilinear smooths them. Cell-origin convention (`floor`/`frac`) — matches the
+  old `(int)p.x`, so shadows stay glued to occluder edges. Residual faint
+  squarish directionality is inherent to Chebyshev (Euclidean DT = future).
+- **One shared `trace_shadow(origin, dir, dist, k, steps)`** for BOTH emitters
+  and the sun (sun was a hardcoded k=4/16/8.0 copy). Sun passes `dist=8.0`
+  (directional reach) + the `shadow_k`/`shadow_steps` knobs, keeps its
+  `sky_vis>0.01` gate (can't reach roofed tiles).
+- **Multi-band ordered (Bayer) dither**, world-locked. `dither_threshold()`
+  keys a 4×4 Bayer matrix to **world pixels** (`world_pos * tile_pixel_size`) so
+  the pattern sticks to terrain (no shimmer on scroll). Quantises ONLY the
+  dynamic light (emitter+sky+sun) into `dither_bands` levels; **ambient floor is
+  added AFTER** (dithering the floor makes dark areas sparkle). Mean-preserving.
+- **Knobs** in `debug_params` (now **48 bytes**, was 32): `dither_amt` (0=off),
+  `dither_bands`. Widget: Shift+F8/F9 = strength, Ctrl+F8/F9 = bands.
+
+## 1-bounce indirect light / fake GI (2026-05-30)
+
+Cheap colored indirect fill — light bounces off surfaces into open neighbours,
+blocked by walls, leaks through windows. Per-tile (low-frequency), mirrors the
+SkyVis storage-buffer path.
+
+- **Source** (`sdltiles.cpp` refresh_display, in the SDF build block): seed
+  `D[t] = lm[t].max()/LIGHT_AMBIENT_LIT * hue`, where hue = normalized
+  `light_color_cache[t]` when `has_colored_lights` else white. `lm` is PHYSICAL
+  + turn-stable (generate_lightmap; vision applied later in apparent_light) →
+  per-frame read is shimmer-free. Normalised so a well-lit tile ≈ 1.0 (GPU dyn
+  scale). Then **2 wall-gated diffusion passes** (conduct only through tiles
+  with `transparency_cache > 0.01`; sources pinned, averaged → bounded).
+  Output `std::vector<float>` 3/tile RGB (`i*3+{0,1,2}`, x-major).
+- **Plumbing** (mirror SkyVis): `emitter_collector::submit/flush` carries
+  `pending_indirect_` → `sdf_pass::upload(..., indirect)` → `indirect_storage_`
+  (GRAPHICS_STORAGE_READ, 3 floats/tile) → `sdf().indirect_buffer()` →
+  `set_lighting_resources(..., indirect_buf, ...)`.
+- **Shader** (`sprite_batcher.cpp`): `StructuredBuffer<float> IndirectBuf :
+  register(t4, space2)` (storage slot 3). Bound as the **4th** fragment storage
+  buffer — top tier `{emitter,sdf,skyvis,indirect}` at BOTH bind sites (initial +
+  post-set_texture rebind), 3/2/1 fallbacks kept. `indirect_bilinear(p)` uses the
+  `p-0.5` centre convention (same as `sdf_bilinear`). Added to `dyn` before the
+  dither: `dyn += gi_strength * indirect_bilinear(world_pos)`, gated
+  `gi_strength>0.001 && sdf_map_w>0`.
+- **Knob**: `debug_params.gi_strength` (repurposed `dp_pad0`; struct still 48B).
+  Widget Alt+F8/F9. `gi_strength=0` → identical to pre-GI.
+- Expectation: colored bounce is vivid near fire / dawn-dusk, grey in white
+  light (`light_color_cache` is hue-only, zero for uncolored sources). Intensity
+  fill + window-spill work regardless.
+- **Deferred**: SDF/skyvis/indirect rebuild every refresh_display (incl. UI-only
+  redraws). A dirty-gate (rebuild only on turn change) is the right mitigation —
+  separate PR.
+
+## Known invariants & gotchas
+
+**1. No opaque fills before tile sprites.**
+`geometry->rect` routes to `ui_rect_queue` which flushes **after** tile sprites. An opaque fill in `ui_rect_queue` will paint over terrain. Use LOADOP_CLEAR for full-screen black, not a queued rect.
+
+**2. GPU atlas lookup (`find_gpu_texture_full`).** 
+Returns `{nullptr,0,0}` if the SDL_Texture is not tracked as an atlas sheet. GPU miss → sprite invisible + D_WARNING log. Causes: sprite not packing through `copy_surface_to_dynamic_atlas`, or texture handle mismatch.
+
+**3. `draw()` and `draw_om()` are window callbacks.**
+Both run INSIDE a `redraw_invalidated()` cycle. `clear_frame_queues()` already ran before them. They call `clear_tile_queue()` only to reset tile sprites before re-enqueuing. Calling `clear_frame_queues()` here would wipe UI content the other window callbacks just populated.
+
+**4. Loading image GPU path disabled.**
+`loading_ui.cpp:409` has `if (false && cache->gpu_texture)`. The GPU path caused a D3D12 crash: `upload_surface_to_gpu_texture` submits on a separate CB; D3D12 may not complete the resource barrier to PIXEL_SHADER_RESOURCE before the render pass samples → command buffer corruption. Fix: upload on the render CB, or fence the separate CB before sampling.
+
+**5. SDL_Renderer still alive.**
+`copy_surface_to_dynamic_atlas` still creates SDL_Textures (used as lookup keys for `find_gpu_texture_full`). Cannot delete SDL_Renderer until atlas switches to a pure GPU key. Target: phase 2i-B-7f.
+
+---
+
+## What remains for 2i-B completion (phase 2i-B-7)
+
+| Sub | State | Notes |
+|---|---|---|
+| 7b pixel_minimap | ⏳ stubbed as no-op | Migrate to GPU or drop entirely |
+| 7d scissor/clip | ⏳ | `vehicle_preview` and UI clip-rect wrappers need scissor pass in sprite_batcher |
+| 7e screenshot | ⏳ | Switch from `SDL_RenderReadPixels(display_buffer)` to SDL_GPU copy pass on swapchain |
+| 7f mechanical delete | ⏳ | Remove `SDL_Renderer_Ptr`, `legacy_window`, `display_buffer`, `bridge_*`, `set_displaybuffer_rendertarget()` |
+| accumulation texture | future | GPU-side "previous frame" buffer to fix partial-redraw flicker |
+
+---
+
+## Recurring build friction & fixes (2026-05-22/23 session)
+
+Every item below has bitten us and costs 1+ build cycles. Check here first.
+
+### C++ API patterns that differ from what you'd expect
+
+| Wrong | Right | Why |
+|-------|-------|-----|
+| `my_MAPSIZE * SEEX` (global) | `get_map().getmapsize() * SEEX` | `my_MAPSIZE` is a **member** of the `map` class, not a global. `SEEX`/`SEEY` are in `game_constants.h`. |
+| `get_map()` in `render_state::init()` | hardcode `11 * SEEX` or use `get_option` | `g == nullptr` at WinCreate time — `get_map()` dereferences `g`. Use a safe default; lazy-init on first game load if exact size matters. |
+| `ter_id.obj_ptr()` | `ter_id->light_emitted` | `int_id<ter_t>` has `operator->` returning `const ter_t*`. There is no `obj_ptr()` method. |
+| `m.i_at(tripoint_bub_ms)` | `m.i_at(p.raw())` | `map::i_at` takes `point` or `tripoint`, not strong-type wrappers. Call `.raw()`. |
+| `map::get_cache(z)` from outside map | `map::access_cache(z)` | `get_cache` is private; `access_cache` is the public const accessor. |
+| `effect_onfire` (extern) | `static const efftype_id my_effect_onfire("onfire")` | It's a translation-unit static in `lightmap.cpp`. Define a local copy. |
+| `std::ranges::for_each(field, lambda)` | plain range-based `for` | MSVC rejects `std::ranges::for_each` on `field` objects; use `for(const auto& [ftype, fentry] : field)`. |
+| `get_option<int>("MAPSIZE")` | doesn't exist | The option is named differently (or doesn't exist). Use `get_map().getmapsize()`. |
+| `display_buffer` (removed) | `get_sdl_window_size()` | `display_buffer` was deleted in 2i-B-7f Part A. Callers of `get_sdl_display_buffer_size()` → use `get_sdl_window_size()`. |
+
+### `dbg` macro — lighting/ files must define it themselves
+
+The `dbg(x)` macro (`#define dbg(x) DebugLogFL((x),DC::SDL)`) is NOT globally available. Every new `.cpp` in `src/lighting/` that wants to log must add:
+```cpp
+#define dbg(x) DebugLogFL((x),DC::SDL)
+```
+after its includes. Using `DebugLog(DL::Error)` directly fails because `DebugLog` takes TWO arguments (level + class). Always use `dbg(DL::Error) << "..."` inside lighting/ files.
+
+### SDL_GPU HLSL register spaces (D3D12 / SPIRV-Cross)
+
+| SDL_GPU API | HLSL register |
+|---|---|
+| `SDL_BindGPUVertexStorageBuffers(rp, N, ...)` | `register(tN, space0)` |
+| `SDL_PushGPUVertexUniformData(cb, N, ...)` | `register(bN, space1)` |
+| `SDL_BindGPUFragmentSamplers(rp, N, ...)` | `register(tN, space2)` + `register(sN, space2)` |
+| `SDL_BindGPUFragmentStorageBuffers(rp, N, ...)` | `register(tN, space4)` |
+| `SDL_PushGPUFragmentUniformData(cb, N, ...)` | `register(bN, space3)` |
+
+### cata_tiles.h nested class trap
+
+`cata_tiles` contains a nested struct/class with getters like `get_tile_width()`. Code added inside THAT nested class cannot access `cata_tiles` members like `point o` (declared in the outer class at line ~1243).
+
+**Rule**: any new method that touches `cata_tiles` private members (`o`, `tile_width`, `screentile_width`, etc.) must go in the **outer** `cata_tiles` class body, using explicit `public:`/`private:` guards if the surrounding region is private:
+```cpp
+    public:
+        point get_tile_map_origin() const { return o; }
+    private:
+```
+
+### Forward declarations missing in lighting/ headers
+
+Always forward-declare ALL SDL GPU types used in a lighting/ header. Common omissions:
+- `struct SDL_GPUBuffer;` — needed when any field or return type is `SDL_GPUBuffer*`
+- `struct SDL_GPUTransferBuffer;`
+- `struct SDL_GPUCopyPass;`
+
+`sdl_wrappers.h` is NOT included by lighting/ headers (by design — they're self-contained).
+
+### SDF + SkyVis are FRAGMENT STORAGE BUFFERS, not sampler textures (Metal) — CRITICAL
+
+**2026-05-30, build-verified.** SDL_shadercross @ 6b06e55c mis-binds sampler
+textures on Metal: the upload reaches the GPU (readback confirms) but the
+fragment shader's `Texture2D.Load`/`.Sample` returns **0 for every fragment**.
+This silently zeroed the SDF shadow march (`s=0 → shadow=0`), which in-game
+*killed all emitter light* (main-menu glow only worked because `sdf_map_w=0`
+there skips the march). Mode 6 was uniform red, mode 7 uniform black.
+
+Emitters moved off `Texture2D` → `StructuredBuffer` 2026-05-29; **SDF + SkyVis
+followed 2026-05-30** (read `SdfBuf` / `SkyVisBuf`). Atlas (sampler slot 0) is
+the ONLY sampler texture left; all per-tile lighting data is in storage buffers.
+Confirmed: mode 6 shows a real red→green gradient, emitters light + shadow
+in-game. (SkyVis migration restores sun/sky, which the broken `sky_vis=0` had
+gated off entirely; sky_vis is sourced from `map::access_cache().outside_cache`,
+1.0=open sky / 0.0=roofed.)
+
+**Storage buffers hold the CPU array directly — no transpose.** Data is x-major
+`arr[x*H+y]`; the buffer is a verbatim memcpy (SDF) or per-element float convert
+(SkyVis), so the shader indexes `Buf[x*sdf_map_h + y]` (x=`(int)world.x`,
+y=`(int)world.y`, both clamped). No row/col swap (that was only needed for the
+row-major *texture* Load).
+
+Fragment resource layout (space2), K=1 sampled texture: Atlas `t0` (sampler) |
+Emitters `t1` (storage slot 0) | SdfBuf `t2` (storage slot 1) | SkyVisBuf `t3`
+(storage slot 2). Storage slot N → register `t(K+N)`. All 3 storage buffers are
+bound in ONE `SDL_BindGPUFragmentStorageBuffers(first_slot=0, …, 3)` call so a
+later bind can't zero an earlier slot. **The `space4` row below is WRONG** —
+that layout failed with E_INVALIDARG; working code uses space2.
+`sdf_tex_`/`sky_vis_tex_` R8/R32F textures still exist in `sdf_pass` but are now
+dead (no shader reads them) — removable in a later cleanup.
+
+### cata_tiles coordinate system — CRITICAL for world_pos shader
+
+`cata_tiles` has TWO distinct offset members:
+- **`o`** (`point o`): leftmost/topmost visible tile's MAP INDEX in tile coordinates (e.g., 135 when player is at tile 150 with a 30-tile view). NOT in pixels.
+- **`op`** (`point op`): pixel offset of the tile-drawing area from the window top-left (e.g., sidebar width in pixels). Set from `dest` rect at draw time.
+
+Sprite screen position: `screen.x = (mx - o.x) * tile_width + op.x`
+
+The correct world_pos → map-tile camera offset formula:
+```
+cam_off = op / tile_width - o
+```
+(solved from `world_pos = tile_tu - cam_off = mx + 0.5` for emitter matching)
+
+The WRONG formula (early bug): `cam_off = o / tile_px + 0.5` — this was ~135 tiles off, making all emitters appear 135+ tiles away → zero attenuation → no visible lighting.
+
+Getters: `get_tile_map_origin()` → `o`, `get_drawing_pixel_offset()` → `op`.
+
+### Phase 5 CPU lightmap tint: guards required
+
+The `gpu_light_r/g/b = lm[idx].max()` path in `draw_from_id_string` MUST have:
+1. `g != nullptr` — `get_map()` is only safe when `g` exists  
+2. `lum > 0.001f` — before `generate_lightmap` runs, `lm` is all zeros. Tiles reaching this code are guaranteed LIT by the draw loop, so `lum == 0` means lightmap not generated yet (main menu, loading). Fall back to white tint (1.0f).
+
+Without guard 2, the main menu renders completely black.
+
+### Phase 7 black screen — CONFIRMED FIX: use Texture2D for fragment emitter data
+
+**Root cause** (confirmed by Win11 D3D12 debug.log):
+```
+lighting: render_state init failed: sprite_batcher pipeline:
+  Could not create graphics pipeline state! The parameter is incorrect. (0x80070057)
+```
+`SDL_CreateGPUGraphicsPipeline` → `E_INVALIDARG`.
+
+**Mechanism**: `init_render_state_on` (render_state.cpp:527) silently catches
+the exception. `ready()` = `device_.ready()` only. `WinCreate` ignores the return
+value. `gpu_sampler_` never set → all flush guards fail → LOADOP_CLEAR black only.
+
+**Root cause**: SDL_shadercross @ 6b06e55c doesn't correctly reflect fragment
+`StructuredBuffer` resources at HLSL `register(tN, space4)` for D3D12. The
+root signature SDL_GPU generates has `num_storage_buffers=0` for fragment; the
+DXIL shader has the SRV entries → descriptor layout mismatch → `E_INVALIDARG`.
+
+**Fix applied**: moved emitter data and SDF to **Texture2D fragment samplers**
+(`register(tN, space2)`, the same space as the Atlas). These are correctly
+reflected by SDL_shadercross on all backends.
+
+| Resource | Old (broken) | New (working) |
+|----------|-------------|---------------|
+| Emitters | `StructuredBuffer<GpuEmitter> : register(t0, space4)` | `Texture2D<float4> EmitterTex : register(t1, space2)` |
+| SDF | `StructuredBuffer<float> SdfBuf : register(t1, space4)` | `Texture2D<float> SdfTex : register(t2, space2)` |
+
+**EmitterTex layout**: 4×64 RGBA32F. Row = emitter index. Col 0 = (pos_x,pos_y,pos_z,radius). Col 1 = (r,g,b,falloff). Upload reuses `xfer_[write_slot_]` (same bytes as SSBO, since `sizeof(gpu_emitter)=64=4×float4=one texture row`).
+
+**Rule**: Never use fragment `StructuredBuffer` (space4) with SDL_shadercross @ 6b06e55c on D3D12. Use Texture2D samplers (space2) for fragment-stage data access.
+
+**Post-review fixes applied:**
+- `sdf_map_h` added to `light_params` (replacing `lp_pad` — same size, `sizeof` unchanged). Passed from `rs.sdf().map_h()`. Shader now uses `sdf_map_h` for Y-coord clamping; square-map assumption eliminated.
+- Null-sampler guard in `set_lighting_resources`: if textures non-null but `data_sampler` null, both textures cleared to null and `emitter_count`/`sdf_map_w/h` zeroed — prevents fragment shader looping over unbound sampler slot.
+- Dead parameters `emitter_ssbo` and `sdf_buffer` removed from the entire delegation chain.
+- `SDL_GPUTextureRegion` in emitter texture upload: all fields explicitly set (x,y,z,layer,mip_level).
+
+**To restore proper StructuredBuffer support**: bump SDL_shadercross GIT_TAG in CMakeLists.txt to a commit that correctly reflects fragment storage buffers.
+
+### MAX_INSTANCES must be large for 4K + minimap
+
+At 4K with a large terminal sidebar + pixel_minimap (17K rects) + tile sprites, the old 65536 cap is hit constantly. Current value: **262144** (262144 × 64 bytes = 16 MB/ring slot). Do not reduce.
+
+### Variable scope in upload functions
+
+When adding a storage buffer upload alongside a texture upload, do NOT reference `byte_size` from the texture block — declare a fresh variable:
+```cpp
+const Uint32 sbuf_size = pixel_count * static_cast<Uint32>(sizeof(float));
+```
+
+---
+
+## Build workflow
+
+**Builds run fine on this Mac** (SDL_GPU/Metal, Ninja). Build + run locally:
+```
+cmake --build out/build/osx-arm-slim --target cataclysm-bn-tiles
+```
+Add `--clean-first` to force a full recompile if a binary seems stale. Sources
+are `GLOB_RECURSE` with `CONFIGURE_DEPENDS`, so new files are picked up
+automatically on the next build. The runtime log is at
+`~/Library/Application Support/Cataclysm-BN/config/debug.log` (grep it directly;
+note `DL::Debug` is filtered — use `dbg(DL::Info)` for diagnostics that must
+appear). Win11 (MSVC/D3D12) is still the primary release target; cross-check
+D3D12-specific behaviour there when relevant.
+
+## Token-cost tips
+
+- **Don't paste full game logs.** Tail ~200 lines; filter to `ERROR|WARN`.
+- **Read files once then edit in sequence.**
+- **Use `smart_outline` → `smart_unfold`** instead of reading large files whole.
+- **This CLAUDE.md** exists so you don't have to re-discover the pipeline architecture every session.
+- **CRITICAL**: read `project_rendering_pipeline.md` from the auto-memory directory at session start (path in main CLAUDE.md).

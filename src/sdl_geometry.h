@@ -1,6 +1,5 @@
 #pragma once
 
-#if defined(TILES)
 #include <memory>
 
 #include "sdl_wrappers.h"
@@ -50,7 +49,5 @@ class ColorModulatedGeometryRenderer: public DefaultGeometryRenderer
     private:
         SDL_Texture_Ptr tex;
 };
-
-#endif // TILES
 
 

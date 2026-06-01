@@ -19,6 +19,7 @@
 #include "catalua.h"
 #include "character_id.h"
 #include "color.h"
+#include "cursesport.h"
 #include "debug.h"
 #include "distraction_manager.h"
 #include "enums.h"
@@ -445,6 +446,11 @@ void main_menu::init_windows()
     const point p0( ( TERMX - total_w ) / 2, ( TERMY - total_h ) / 2 );
 
     w_open = catacurses::newwin( total_h, total_w, p0 );
+    // Let the decorative lit-world emitter glow show through the main-menu
+    // background instead of a solid black fill. Popups and the OPTIONS panel
+    // are separate windows and stay opaque (readable). Re-applied here because
+    // the window is recreated on resize.
+    cata_cursesport::set_window_transparent_backdrop( w_open, true );
 
     menu_offset.y = total_h - 3;
     // note: if iMenuOffset is changed,

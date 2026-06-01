@@ -141,13 +141,6 @@ static const std::string flag_LOCKED( "LOCKED" );
 
 #define dbg(x) DebugLogFL((x),DC::Game)
 
-#if defined(__ANDROID__)
-extern std::map<std::string, std::list<input_event>> quick_shortcuts_map;
-extern bool add_best_key_for_action_to_quick_shortcuts( action_id action,
-        const std::string &category, bool back );
-extern bool add_key_to_quick_shortcuts( int key, const std::string &category, bool back );
-#endif
-
 class user_turn
 {
 
@@ -301,14 +294,8 @@ input_context game::get_player_input( std::string &action )
             animate_weather = weather_has_anim && get_option<bool>( "ANIMATION_RAIN" );
             animate_sct = !SCT.vSCT.empty() && uquit != QUIT_WATCH && get_option<bool>( "ANIMATION_SCT" );
 
-#if defined(TILES)
             // Always animate, minimap and terrain may have animations to run
             return true;
-#else
-            // Otherwise we need to see if we actually should animate.
-            // Minimap and Terrain never animate in !TILES
-            return animate_weather || animate_sct || uquit == QUIT_WATCH;
-#endif
         }
         return false;
     }
@@ -1733,11 +1720,6 @@ bool game::handle_action()
             if( act == ACTION_NULL ) {
                 return false;
             }
-#if defined(__ANDROID__)
-            if( get_option<bool>( "ANDROID_ACTIONMENU_AUTOADD" ) && ctxt.get_category() == "DEFAULTMODE" ) {
-                add_best_key_for_action_to_quick_shortcuts( act, ctxt.get_category(), false );
-            }
-#endif
         }
 
         if( act == ACTION_KEYBINDINGS ) {

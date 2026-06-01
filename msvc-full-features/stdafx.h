@@ -72,11 +72,9 @@
 
 #include "../src/platform_win.h"
 
-#if defined(TILES)
-#   include <SDL3/SDL.h>
-#   include <SDL3_image/SDL_image.h>
-#   include <SDL3_ttf/SDL_ttf.h>
-#   ifdef SDL_SOUND
-#      include <SDL3_mixer/SDL_mixer.h>
-#   endif
+#include <SDL3/SDL.h>
+#include <SDL3_image/SDL_image.h>
+#include <SDL3_ttf/SDL_ttf.h>
+#ifdef SDL_SOUND
+#   include <SDL3_mixer/SDL_mixer.h>
 #endif

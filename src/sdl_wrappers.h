@@ -1,7 +1,5 @@
 #pragma once
 
-#if defined(TILES)
-
 // IWYU pragma: begin_exports
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wold-style-cast"
@@ -134,4 +132,3 @@ inline bool operator!=( const SDL_Rect &lhs, const SDL_Rect &rhs )
 
 /**@}*/
 
-#endif // if defined(TILES)

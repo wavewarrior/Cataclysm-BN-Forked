@@ -1,4 +1,3 @@
-#if defined(TILES)
 #include "cata_tiles.h"
 
 #include "map.h"
@@ -262,4 +261,3 @@ auto cata_tiles::get_mutation_color(
     return { std::nullopt, std::nullopt };
 }
 
-#endif

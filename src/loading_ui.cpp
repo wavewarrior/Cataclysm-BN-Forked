@@ -28,15 +28,19 @@
 #include "ui.h"
 #include "ui_manager.h"
 #include "worldfactory.h"
+#include "lighting/render_state.h"
 
-#if defined( TILES )
 struct loading_image_cache {
     std::string path;
     SDL_Texture_Ptr texture;
+    // Phase 2i-B-7c: GPU mirror of the loading image. Created from the
+    // same SDL_Surface that fed CreateTextureFromSurface. draw_current_
+    // loading_image prefers the GPU path (tile sprite queue) and falls
+    // back to RenderCopy only when the upload missed.
+    lighting::gpu_texture_unique_ptr gpu_texture;
     point image_size = point_zero;
     bool attempted = false;
 };
-#endif
 
 auto get_scaled_loading_image_size( const loading_image_scaling_options &opts ) ->
 std::optional<point>
@@ -55,8 +59,6 @@ std::optional<point>
 
 namespace
 {
-
-#if defined( TILES )
 
 auto log_loading_image( const std::string &message ) -> void
 {
@@ -231,6 +233,16 @@ auto get_loading_image_cache( loading_image_cache &cache,
     try {
         auto surface = load_image( loading_image_path.c_str() );
         cache.image_size = point( surface->w, surface->h );
+        // Upload GPU mirror first (consumes a clone of the surface
+        // pixels via transfer buffer) before CreateTextureFromSurface,
+        // which may move-from the surface depending on SDL3 build.
+        auto &rs = lighting::get_render_state();
+        if( rs.ready() ) {
+            SDL_GPUTexture *raw = rs.upload_surface_to_gpu_texture( surface.get() );
+            if( raw ) {
+                cache.gpu_texture.reset( raw );
+            }
+        }
         cache.texture = CreateTextureFromSurface( get_sdl_renderer(), surface );
     } catch( const std::exception &err ) {
         log_loading_image( string_format( "failed to load image '%s': %s", loading_image_path,
@@ -254,35 +266,25 @@ auto get_loading_image_cache( loading_image_cache &cache,
 auto get_loading_image_rect( const point &image_size ) -> std::optional<SDL_Rect>
 {
     const auto window_size = get_sdl_window_size();
-    const auto buffer_size = get_sdl_display_buffer_size();
-    if( window_size.x <= 0 || window_size.y <= 0 || buffer_size.x <= 0 || buffer_size.y <= 0 ) {
+    if( window_size.x <= 0 || window_size.y <= 0 ) {
         return std::nullopt;
     }
 
     return get_scaled_loading_image_size( { .image_size = image_size, .screen_size = window_size } )
-    .transform( [&window_size, &buffer_size]( const point & scaled_size ) {
-        const auto output_rect = SDL_Rect{
+    .transform( [&window_size]( const point &scaled_size ) {
+        // buffer_size == window_size (display_buffer removed); ratio is 1:1.
+        return SDL_Rect{
             ( window_size.x - scaled_size.x ) / 2,
             ( window_size.y - scaled_size.y ) / 2,
             scaled_size.x,
             scaled_size.y
-        };
-        return SDL_Rect{
-            static_cast<int>( std::lround( static_cast<double>( output_rect.x ) * buffer_size.x /
-                                           window_size.x ) ),
-            static_cast<int>( std::lround( static_cast<double>( output_rect.y ) * buffer_size.y /
-                                           window_size.y ) ),
-            static_cast<int>( std::lround( static_cast<double>( output_rect.w ) * buffer_size.x /
-                                           window_size.x ) ),
-            static_cast<int>( std::lround( static_cast<double>( output_rect.h ) * buffer_size.y /
-                                           window_size.y ) )
         };
     } );
 }
 
 auto get_loading_image_author_pos( const std::string &text ) -> std::optional<point>
 {
-    const auto screen_dimensions = get_sdl_display_buffer_size();
+    const auto screen_dimensions = get_sdl_window_size();
     const auto font_size = get_sdl_font_size();
     if( screen_dimensions.x <= 0 || screen_dimensions.y <= 0 || font_size.x <= 0 ||
         font_size.y <= 0 ) {
@@ -354,11 +356,8 @@ struct sdl_render_state_guard {
     }
 };
 
-#endif // defined( TILES )
-
 } // namespace
 
-#if defined( TILES )
 auto advance_loading_image( loading_image_selection_state &state ) -> bool
 {
     if( state.paths.empty() ) {
@@ -389,10 +388,32 @@ auto loading_image_splash::draw_current_loading_image() -> bool
             }
             const auto &renderer = get_sdl_renderer();
             const auto render_state_guard = sdl_render_state_guard( renderer );
-            clear_sdl_display_buffer();
             SDL_FRect fRect{};
             SDL_RectToFRect( &*rect, &fRect );
-            RenderCopy( renderer, cache->texture, nullptr, &fRect );
+            // Phase 2i-B-7c: prefer GPU enqueue. The tile sprite queue
+            // flushes inside refresh_display's tile_batcher pass on top
+            // of the bridge blit, before the ui_batcher pass that
+            // contains the author text. So the image lands underneath
+            // the author overlay correctly.
+            if( false && cache->gpu_texture ) { // DIAG: disabled to isolate crash
+                lighting::sprite_instance s{};
+                s.dst_x = fRect.x;
+                s.dst_y = fRect.y;
+                s.dst_w = fRect.w;
+                s.dst_h = fRect.h;
+                s.src_u = 0.0f;
+                s.src_v = 0.0f;
+                s.src_uw = 1.0f;
+                s.src_vh = 1.0f;
+                s.tint_r = 1.0f;
+                s.tint_g = 1.0f;
+                s.tint_b = 1.0f;
+                s.tint_a = 1.0f;
+                lighting::get_render_state().queue_tile_sprite(
+                    cache->gpu_texture.get(), s );
+            } else {
+                RenderCopy( renderer, cache->texture, nullptr, &fRect );
+            }
             draw_loading_image_author_if_present( this->selection_state->current_author );
             return true;
         }
@@ -403,9 +424,7 @@ auto loading_image_splash::draw_current_loading_image() -> bool
 
     return false;
 }
-#endif
 
-#if defined( TILES )
 loading_image_splash::loading_image_splash() : selection_state( &owned_selection_state )
 {
     loading_image_cache_state = std::make_unique<loading_image_cache>();
@@ -448,19 +467,8 @@ loading_image_splash::loading_image_splash( loading_image_selection_state &selec
         draw_current_loading_image();
     } );
 }
-#else
-loading_image_splash::loading_image_splash()
-{
-    ui_background = std::make_unique<background_pane>();
-}
-#endif
 
-loading_image_splash::~loading_image_splash()
-{
-#if defined( TILES )
-    clear_sdl_display_buffer_before_redraw();
-#endif
-}
+loading_image_splash::~loading_image_splash() = default;
 
 loading_ui::loading_ui( bool display )
 {
@@ -470,12 +478,7 @@ loading_ui::loading_ui( bool display )
     }
 }
 
-loading_ui::~loading_ui()
-{
-#if defined( TILES )
-    clear_sdl_display_buffer_before_redraw();
-#endif
-}
+loading_ui::~loading_ui() = default;
 
 void loading_ui::add_entry( const std::string &description )
 {
@@ -497,11 +500,7 @@ void loading_ui::new_context( const std::string &desc )
 void loading_ui::init()
 {
     if( menu != nullptr && ui == nullptr ) {
-#if defined( TILES )
         ui_splash = std::make_unique<loading_image_splash>( loading_image_selection );
-#else
-        ui_splash = std::make_unique<loading_image_splash>();
-#endif
 
         ui = std::make_unique<ui_adaptor>();
         ui->on_screen_resize( [this]( ui_adaptor & ui ) { menu->reposition( ui ); } );

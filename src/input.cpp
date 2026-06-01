@@ -73,11 +73,7 @@ static std::string int_to_str( int number )
 
 bool is_mouse_enabled()
 {
-#if defined(_WIN32) && !defined(TILES)
-    return false;
-#else
     return true;
-#endif
 }
 
 //helper function for those have problem inputting certain characters.
@@ -697,32 +693,6 @@ const std::string &input_context::input_to_action( const input_event &inp ) cons
     return CATA_ERROR;
 }
 
-#if defined(__ANDROID__)
-std::list<input_context *> input_context::input_context_stack;
-
-void input_context::register_manual_key( manual_key mk )
-{
-    // Prevent duplicates
-    for( const manual_key &manual_key : registered_manual_keys )
-        if( manual_key.key == mk.key ) {
-            return;
-        }
-
-    registered_manual_keys.push_back( mk );
-}
-
-void input_context::register_manual_key( int key, const std::string text )
-{
-    // Prevent duplicates
-    for( const manual_key &manual_key : registered_manual_keys )
-        if( manual_key.key == key ) {
-            return;
-        }
-
-    registered_manual_keys.push_back( manual_key( key, text ) );
-}
-#endif
-
 void input_context::register_action( const std::string &action_descriptor )
 {
     register_action( action_descriptor, translation() );
@@ -1109,9 +1079,7 @@ action_id input_context::display_menu( const bool permit_execute_action )
     ctxt.register_action( "TEXT.HOME" );
     ctxt.register_action( "TEXT.END" );
     ctxt.register_action( "TEXT.DELETE" );
-#if defined( TILES )
     ctxt.register_action( "TEXT.PASTE" );
-#endif
     ctxt.register_action( "TEXT.INPUT_FROM_FILE" );
     ctxt.register_action( "ANY_INPUT" );
 
@@ -1447,9 +1415,6 @@ int input_manager::get_previously_pressed_key() const
 
 void input_manager::wait_for_any_key()
 {
-#if defined(__ANDROID__)
-    input_context ctxt( "WAIT_FOR_ANY_KEY" );
-#endif
     while( true ) {
         const input_event evt = inp_mngr.get_input_event();
         switch( evt.type ) {
@@ -1466,37 +1431,6 @@ void input_manager::wait_for_any_key()
         }
     }
 }
-
-#if !(defined(TILES) || defined(_WIN32))
-// Also specify that we don't have a gamepad plugged in.
-bool gamepad_available()
-{
-    return false;
-}
-
-std::optional<tripoint_bub_ms> input_context::get_coordinates( const catacurses::window
-        &capture_win )
-{
-    if( !coordinate_input_received ) {
-        return std::nullopt;
-    }
-    const point view_size( getmaxx( capture_win ), getmaxy( capture_win ) );
-    const point win_min( getbegx( capture_win ),
-                         getbegy( capture_win ) );
-    const half_open_rectangle<point> win_bounds( win_min, win_min + view_size );
-    if( !win_bounds.contains( coordinate ) ) {
-        return std::nullopt;
-    }
-
-    point_bub_ms view_offset;
-    if( capture_win == g->w_terrain ) {
-        view_offset = g->ter_view_p.xy();
-    }
-
-    const point_bub_ms p = view_offset - ( view_size / 2 - coordinate );
-    return tripoint_bub_ms( p, g->get_levz() );
-}
-#endif
 
 std::string input_context::get_action_name( const std::string &action_id ) const
 {

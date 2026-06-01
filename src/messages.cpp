@@ -20,10 +20,6 @@
 #include "ui_manager.h"
 #include "uistate.h"
 
-#if defined(__ANDROID__)
-#include <optional>
-#include <SDL3/SDL.h>
-#endif
 #include "options.h"
 
 #include <algorithm>
@@ -765,13 +761,11 @@ void Messages::dialog::input( const ui_adaptor &ui )
             DebugLog( DL::Info, DC::Main ) << " MESSAGE LOG COPY:\n" << clipboard_text;
             std::string popup_msg = _( "Messages written to debug.log" );
 
-#if defined(TILES)
             // Also copy to clipboard in tiles mode
             const int clipboard_result = SDL_SetClipboardText( clipboard_text.c_str() );
             if( clipboard_result == 0 ) {
                 popup_msg = _( "Messages written to debug.log and copied to clipboard" );
             }
-#endif
             popup( popup_msg );
         } else if( action == "ERASE_HISTORY" ) {
             clear_messages();
