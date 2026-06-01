@@ -117,10 +117,12 @@ rule_state rule_list::operator()( const item &item ) const
     return ( *this )( item.typeId() );
 }
 
-item_search_cache::item_search_cache()
-{
-    clear_items();
-}
+// Trivial ctor: the cache is populated lazily via refresh_map_items()
+// (gated by base_settings::cache_is_valid) the first time it is queried in-game.
+// Calling clear_items() here would iterate item_controller->all() at singleton
+// construction time (game::load_static_data), before item types are frozen,
+// tripping assert(frozen) in Item_factory::all() on debug builds.
+item_search_cache::item_search_cache() = default;
 
 
 void item_search_cache::apply_rules( const rule_list &curr_rules )

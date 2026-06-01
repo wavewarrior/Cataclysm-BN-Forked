@@ -693,7 +693,10 @@ void player_settings::load( const bool bCharacter )
             ( bCharacter ? character_rules : global_rules ).deserialize( jsin );
         }, true );
     }
-    refresh_map_items( map_items );
+    // Don't eagerly refresh here: load_global() runs during game::load_static_data,
+    // before item types are frozen, so refresh_map_items() -> Item_factory::all()
+    // would assert. The cache is rebuilt lazily on first check_item() in-game.
+    invalidate();
 }
 
 void npc_settings::show( const std::string &name )
