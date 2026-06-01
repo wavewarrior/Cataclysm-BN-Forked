@@ -369,6 +369,13 @@ class overmap
         static bool inbounds( const point_om_omt &p, int clearance = 0 ) {
             return inbounds( tripoint_om_omt( p, 0 ), clearance );
         }
+        static bool inbounds( const tripoint_abs_omt &p, int clearance = 0 ) {
+            const auto proj = project_remain<coords::om>( p );
+            return proj.quotient == point_abs_om::zero() && inbounds( proj.remainder, clearance );
+        }
+        static bool inbounds( const point_abs_omt &p, int clearance = 0 ) {
+            return inbounds( tripoint_abs_omt( p, 0 ), clearance );
+        }
         /**
          * Dummy value, used to indicate that a point returned by a function is invalid.
          */
@@ -512,8 +519,8 @@ class overmap
 
         const city &get_nearest_city( const tripoint_om_omt &p ) const;
 
-        void signal_hordes( const tripoint_rel_sm &p, int sig_power );
-        void signal_nemesis( tripoint_abs_sm p );
+        void signal_hordes( const tripoint_abs_sm &p, int sig_power );
+        void signal_nemesis( const tripoint_abs_sm &p );
         void process_mongroups();
         void move_hordes();
         void move_nemesis();
@@ -537,7 +544,8 @@ class overmap
                 const overmap *south, const overmap *west );
 
         // City Building
-        overmap_special_id pick_random_building_to_place( int town_dist, bool attempt_finale_place ) const;
+        overmap_special_id pick_random_building_to_place( int town_dist, int town_size,
+                bool attempt_finale_place ) const;
 
         void place_cities();
         bool place_building( const tripoint_om_omt &p, om_direction::type dir, city &town,

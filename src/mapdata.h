@@ -13,6 +13,7 @@
 #include "lightmap.h"
 #include "catalua_type_operators.h"
 #include "color.h"
+#include "coordinates.h"
 #include "numeric_interval.h"
 #include "poly_serialized.h"
 #include "translations.h"
@@ -31,7 +32,7 @@ struct itype;
 struct ter_t;
 struct tripoint;
 
-using iexamine_function = void ( * )( player &, const tripoint & );
+using iexamine_function = void ( * )( player &, const tripoint_bub_ms & );
 
 struct ranged_bash_info {
         numeric_interval<int> reduction; // Damage reduction when shot. Rolled like rng(min, max).

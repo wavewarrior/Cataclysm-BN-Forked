@@ -114,11 +114,13 @@ extern int  lod_action_budget;
 extern int  lod_macro_interval;
 extern int  lod_coarse_scent_interval;
 extern int  lod_group_morale_max_tier;
+extern int  activity_skip_monster_lod_gate;
 
 /** Out-of-bubble world-tick options. */
 extern bool reality_bubble_fire_spread;
 
 extern bool lazy_border_enabled;
+extern int retained_omt_cache_multiplier;
 
 /**
  * Maximum number of fire-spread-loaded submaps allowed across all dimensions
@@ -203,4 +205,3 @@ extern error_log_format_t error_log_format;
 #else
 constexpr error_log_format_t error_log_format = error_log_format_t::human_readable;
 #endif
-

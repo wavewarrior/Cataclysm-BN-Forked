@@ -7,9 +7,7 @@
 
 #include "game_constants.h"
 #include "lightmap.h"
-
-struct point;
-struct tripoint;
+#include "coordinates.h"
 
 // Tracks whether a diagonal between two tiles is blocked by a vehicle part.
 // Stored per-tile in level_cache::vehicle_obscured_cache.
@@ -220,7 +218,7 @@ void castLightAll(
     const float *input_array,
     const diagonal_blocks *blocked_array,
     int sx, int sy,
-    point offset, int offset_distance, float numerator,
+    point_bub_ms offset, int offset_distance, float numerator,
     const light_model &model,
     const exp_lookup *weather_lookup = nullptr );
 
@@ -233,7 +231,7 @@ void castLightAll_q(
     const float *input_array,
     const diagonal_blocks *blocked_array,
     int sx, int sy,
-    point offset, int offset_distance, float numerator,
+    point_bub_ms offset, int offset_distance, float numerator,
     const light_model &model,
     const exp_lookup *weather_lookup = nullptr,
     light_color_rgb *color_cache = nullptr );
@@ -255,7 +253,7 @@ void castLightOctants_q(
     const float *input_array,
     const diagonal_blocks *blocked_array,
     int sx, int sy,
-    point offset, int offset_distance, float numerator,
+    point_bub_ms offset, int offset_distance, float numerator,
     const light_model &model,
     uint8_t octant_mask,
     const exp_lookup *weather_lookup = nullptr,
@@ -269,5 +267,5 @@ void cast_zlight(
     const array_of_grids_of<const float> &input_arrays,
     const array_of_grids_of<const char> &floor_caches,
     const array_of_grids_of<const diagonal_blocks> &blocked_caches,
-    const tripoint &origin, int offset_distance, float numerator,
+    const tripoint_bub_ms &origin, int offset_distance, float numerator,
     const light_model &model );
