@@ -2280,17 +2280,21 @@ uint8_t map::get_known_connections( const tripoint_bub_ms &p, int connect_group,
     }
     uint8_t val = 0;
     std::function<bool( const tripoint_bub_ms & )> is_memorized;
+#ifdef TILES
     if( use_tiles ) {
         is_memorized =
         [&]( const tripoint_bub_ms & q ) {
             return !g->u.get_memorized_tile( bub_to_abs( q ) ).tile.empty();
         };
     } else {
+#endif
         is_memorized =
         [&]( const tripoint_bub_ms & q ) {
             return g->u.get_memorized_symbol( bub_to_abs( q ) );
         };
+#ifdef TILES
     }
+#endif
 
     const bool overridden = override.contains( p );
     const bool is_transparent = ch.transparency_cache[ch.idx( p.x(),
@@ -2333,15 +2337,19 @@ uint8_t map::get_known_connections_f( const tripoint_bub_ms &p, int connect_grou
     uint8_t val = 0;
     std::function<bool( const tripoint_bub_ms & )> is_memorized;
     avatar &player_character = get_avatar();
+#ifdef TILES
     if( use_tiles ) {
         is_memorized = [&]( const tripoint_bub_ms & q ) {
             return !player_character.get_memorized_tile( bub_to_abs( q ) ).tile.empty();
         };
     } else {
+#endif
         is_memorized = [&]( const tripoint_bub_ms & q ) {
             return player_character.get_memorized_symbol( bub_to_abs( q ) );
         };
+#ifdef TILES
     }
+#endif
 
     const bool overridden = override.contains( p );
     const bool is_transparent = ch.transparency_cache[ch.idx( p.x(),

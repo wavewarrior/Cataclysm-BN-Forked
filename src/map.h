@@ -2246,17 +2246,24 @@ class map : public submap_load_listener
         int determine_wall_corner( const tripoint_bub_ms &p ) const;
         // apply a circular light pattern immediately, however it's best to use...
         void apply_light_source( const tripoint_bub_ms &p, float luminance );
+        // Colored variant: same propagation, also accumulates hue into the light_color cache.
+        void apply_light_source( const tripoint_bub_ms &p, float luminance, const light_color_rgb &color );
         // ...this, which will apply the light after at the end of generate_lightmap, and prevent redundant
         // light rays from causing massive slowdowns, if there's a huge amount of light.
         void add_light_source( const tripoint_bub_ms &p, float luminance );
+        // Colored variant: buffers the light with a hue for the colored-light overlay.
+        void add_light_source( const tripoint_bub_ms &p, float luminance, const light_color_rgb &color );
         // Handle just cardinal directions and 45 deg angles.
         void apply_directional_light( const tripoint_bub_ms &p, int direction, float luminance );
+        void apply_directional_light( const tripoint_bub_ms &p, int direction, float luminance,
+                                      const light_color_rgb &color );
         void apply_light_arc( const tripoint_bub_ms &p, units::angle, float luminance,
                               units::angle wideangle = 30_degrees );
-        void apply_light_arc( const tripoint &p, units::angle angle, float luminance,
+        void apply_light_arc( const tripoint_bub_ms &p, units::angle angle, float luminance,
                               units::angle wideangle, const light_color_rgb &color );
         void apply_light_ray( std::vector<bool> &lit,
-                              const tripoint_bub_ms &s, const tripoint_bub_ms &e, float luminance );
+                              const tripoint_bub_ms &s, const tripoint_bub_ms &e, float luminance,
+                              light_color_rgb *color_cache = nullptr );
         void add_light_from_items( const tripoint_bub_ms &p, const item_stack::iterator &begin,
                                    const item_stack::iterator &end );
         std::unique_ptr<vehicle> add_vehicle_to_map( std::unique_ptr<vehicle> veh, bool merge_wrecks );

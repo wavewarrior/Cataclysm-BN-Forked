@@ -755,24 +755,6 @@ void map::generate_lightmap_worker( const int zlev )
                         }
                     }
 
-                        if( cur_submap->get_lum( { sx, sy } ) && has_items( p ) ) {
-                            // Inline add_light_from_items to split arc (deferred) from point (safe).
-                            auto items = i_at( p );
-                            for( auto itm_it = items.begin(); itm_it != items.end(); ++itm_it ) {
-                                float ilum = 0.0f;
-                                units::angle iwidth = 0_degrees;
-                                units::angle idir = 0_degrees;
-                                if( ( *itm_it )->getlight( ilum, iwidth, idir ) ) {
-                                    if( iwidth > 0_degrees ) {
-                                        // Items don't have light_color — pass default (white/uncolored).
-                                        // apply_light_arc writes to arbitrary lm positions — defer.
-                                        local.arc_lights.push_back( { p, idir, ilum, iwidth, {} } );
-                                    } else {
-                                        add_light_source( p, ilum );
-                                    }
-                                }
-                            }
-                        }
                     if( cur_submap->get_lum( sm_ms ) && has_items( p ) ) {
                         // Inline add_light_from_items to split arc (deferred) from point (safe).
                         auto items = i_at( p );
@@ -791,21 +773,13 @@ void map::generate_lightmap_worker( const int zlev )
                         }
                     }
 
-                        const ter_id terrain = cur_submap->get_ter( { sx, sy } );
-                        if( terrain->light_emitted > 0 ) {
-                            add_light_source( p, terrain->light_emitted, terrain->light_color );
-                        }
-                        const furn_id furniture = cur_submap->get_furn( {sx, sy } );
-                        if( furniture->light_emitted > 0 ) {
-                            add_light_source( p, furniture->light_emitted, furniture->light_color );
-                        }
                     const ter_id terrain = cur_submap->get_ter( sm_ms );
                     if( terrain->light_emitted > 0 ) {
-                        add_light_source( p, terrain->light_emitted );
+                        add_light_source( p, terrain->light_emitted, terrain->light_color );
                     }
                     const furn_id furniture = cur_submap->get_furn( sm_ms );
                     if( furniture->light_emitted > 0 ) {
-                        add_light_source( p, furniture->light_emitted );
+                        add_light_source( p, furniture->light_emitted, furniture->light_color );
                     }
 
                     std::ranges::for_each( cur_submap->get_field( sm_ms ), [&]( auto & fld ) {
@@ -943,8 +917,9 @@ void map::generate_lightmap_worker( const int zlev )
         const tripoint_bub_ms cache_start( 0, 0, zlev );
         const tripoint_bub_ms cache_end( map_cache.cache_x, map_cache.cache_y, zlev );
         for( const auto &p : points_in_rectangle( cache_start, cache_end ) ) {
-            if( light_source_buffer[map_cache.idx( p.x(), p.y() )] > 0.0 ) {
-                apply_light_source( p, light_source_buffer[map_cache.idx( p.x(), p.y() )] );
+            const auto &lsb = light_source_buffer[map_cache.idx( p.x(), p.y() )];
+            if( lsb.luminance > 0.0 ) {
+                apply_light_source( p, lsb.luminance, lsb.color );
             }
         }
         for( const std::pair<tripoint_bub_ms, float> &elem : lm_override ) {
@@ -955,10 +930,20 @@ void map::generate_lightmap_worker( const int zlev )
 
 void map::add_light_source( const tripoint_bub_ms &p, float luminance )
 {
+    add_light_source( p, luminance, light_color_rgb{} );
+}
+
+void map::add_light_source( const tripoint_bub_ms &p, float luminance, const light_color_rgb &color )
+{
     auto &cache = get_cache( p.z() );
     auto &light_source_buffer = cache.light_source_buffer;
-    light_source_buffer[cache.idx( p.x(), p.y() )] = std::max( luminance,
-            light_source_buffer[cache.idx( p.x(), p.y() )] );
+    const int idx = cache.idx( p.x(), p.y() );
+    // Luminance dedups via max(); color accumulates additively, weighted by luminance.
+    light_source_buffer[idx].luminance = std::max( luminance, light_source_buffer[idx].luminance );
+    if( color.is_colored() ) {
+        light_source_buffer[idx].color += color * luminance;
+        cache.has_colored_lights = true;
+    }
 }
 
 // Tile light/transparency: 3D
@@ -1883,6 +1868,11 @@ static const light_model k_light_model = {
 
 void map::apply_light_source( const tripoint_bub_ms &p, float luminance )
 {
+    apply_light_source( p, luminance, light_color_rgb{} );
+}
+
+void map::apply_light_source( const tripoint_bub_ms &p, float luminance, const light_color_rgb &color )
+{
     auto &cache = get_cache( p.z() );
     auto *lm_data        = cache.lm.data();
     auto *sm_data        = cache.sm.data();
@@ -1921,10 +1911,10 @@ void map::apply_light_source( const tripoint_bub_ms &p, float luminance )
         sssSsss
            sy
     */
-    bool north = ( p2.y() != 0       && lsb_data[p2.x() * sy + p2.y() - 1]       < luminance );
-    bool south = ( p2.y() != sy - 1  && lsb_data[p2.x() * sy + p2.y() + 1]       < luminance );
-    bool east  = ( p2.x() != sx - 1  && lsb_data[( p2.x() + 1 ) * sy + p2.y()]   < luminance );
-    bool west  = ( p2.x() != 0       && lsb_data[( p2.x() - 1 ) * sy + p2.y()]   < luminance );
+    bool north = ( p2.y() != 0       && lsb_data[p2.x() * sy + p2.y() - 1].luminance       < luminance );
+    bool south = ( p2.y() != sy - 1  && lsb_data[p2.x() * sy + p2.y() + 1].luminance       < luminance );
+    bool east  = ( p2.x() != sx - 1  && lsb_data[( p2.x() + 1 ) * sy + p2.y()].luminance   < luminance );
+    bool west  = ( p2.x() != 0       && lsb_data[( p2.x() - 1 ) * sy + p2.y()].luminance   < luminance );
 
     // Build octant mask from the directions that have a weaker-or-absent neighbor
     // in the light-source buffer.  Skipping covered directions is an optimization
@@ -1954,6 +1944,12 @@ void map::apply_light_source( const tripoint_bub_ms &p, float luminance )
 }
 
 void map::apply_directional_light( const tripoint_bub_ms &p, int direction, float luminance )
+{
+    apply_directional_light( p, direction, luminance, light_color_rgb{} );
+}
+
+void map::apply_directional_light( const tripoint_bub_ms &p, int direction, float luminance,
+                                   const light_color_rgb &color )
 {
     const auto p2 = p.xy();
 
@@ -1994,7 +1990,7 @@ void map::apply_light_arc( const tripoint_bub_ms &p, units::angle angle, float l
     apply_light_arc( p, angle, luminance, wideangle, light_color_rgb{} );
 }
 
-void map::apply_light_arc( const tripoint &p, units::angle angle, float luminance,
+void map::apply_light_arc( const tripoint_bub_ms &p, units::angle angle, float luminance,
                            units::angle wideangle,
                            const light_color_rgb &color )
 {
@@ -2002,7 +1998,7 @@ void map::apply_light_arc( const tripoint &p, units::angle angle, float luminanc
         return;
     }
 
-    const auto &arc_cache = get_cache( p.z() );
+    auto &arc_cache = get_cache( p.z() );
     auto lit = std::vector<bool>( static_cast<size_t>( arc_cache.cache_x ) * arc_cache.cache_y,
                                   false );
 
@@ -2071,7 +2067,8 @@ static constexpr quadrant quadrant_from_x_y( int x, int y )
 }
 
 void map::apply_light_ray( std::vector<bool> &lit,
-                           const tripoint_bub_ms &s, const tripoint_bub_ms &e, float luminance )
+                           const tripoint_bub_ms &s, const tripoint_bub_ms &e, float luminance,
+                           light_color_rgb *color_cache )
 {
     point_bub_ms a( std::abs( e.x() - s.x() ) * 2, std::abs( e.y() - s.y() ) * 2 );
     point_bub_ms d( ( s.x() < e.x() ) ? 1 : -1, ( s.y() < e.y() ) ? 1 : -1 );

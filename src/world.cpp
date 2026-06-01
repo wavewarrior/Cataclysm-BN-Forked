@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <chrono>
-#include <mutex>
 #include <cstring>
 #include <memory>
 #include <mutex>
@@ -342,16 +341,14 @@ auto file_exist_in_db( sqlite3 *db, const std::string &path ) -> bool
     return fileCount > 0;
 }
 
-// Serialises the SQLite C-API calls below. mapbuffer::save runs write_to_db on
-// many cata_thread_pool workers sharing ONE connection (map_db), and a single
-// sqlite3 connection is not safe to use concurrently — the race corrupted the
-// connection heap and segfaulted in sqlite3Prepare. The expensive work
-// (serialize + zlib_compress) stays OUTSIDE the lock so it still parallelises;
-// only prepare/bind/step/finalize serialise (which SQLite enforces anyway — one
-// writer per file). The outer BEGIN/COMMIT batched transaction is preserved.
-static std::mutex db_write_mutex;
+struct db_write_payload {
+    std::string path;
+    std::string parent;
+    std::vector<std::byte> data;
+};
 
-static void write_to_db( sqlite3 *db, const std::string &path, file_write_fn writer )
+auto make_db_write_payload( const std::string &path,
+                            file_write_fn writer ) -> db_write_payload
 {
     std::ostringstream oss;
     writer( oss );
@@ -376,10 +373,6 @@ auto write_payload_to_db( sqlite3 *db, const db_write_payload &payload ) -> void
                 parent = excluded.parent,
                 compression = excluded.compression;
     )sql";
-
-    // Everything above (serialize + zlib_compress) ran lock-free in parallel.
-    // Guard only the connection-touching calls — see db_write_mutex comment.
-    std::lock_guard<std::mutex> db_lock( db_write_mutex );
 
     sqlite3_stmt *stmt = nullptr;
 
