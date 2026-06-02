@@ -32,6 +32,7 @@
 #include "color.h"
 #include "cursesdef.h"
 #include "debug.h"
+#include "widget.h"
 #include "effect.h"
 #include "fstream_utils.h"
 #include "game.h"
@@ -2531,6 +2532,54 @@ static std::vector<window_panel> initialize_default_label_panels()
     ret.emplace_back( draw_ai_goal, "AI Needs", 1, 44, false );
 
     return ret;
+}
+
+// ── Native-wrapper widget bridge (widget-engine port, Stage 3) ──────────────
+// Maps a "native"-style widget's target name to an existing draw_* sidebar
+// function. Stage 3 only wires the draw_* with the avatar&/window& signature;
+// player&-signature draws are added as their widgets are converted (Stage 4+).
+using native_draw_fn = void ( * )( avatar &, const catacurses::window & );
+
+static const std::map<std::string, native_draw_fn> &native_draw_registry()
+{
+    static const std::map<std::string, native_draw_fn> reg = {
+        { "draw_stats", draw_stats },
+        { "draw_messages", draw_messages },
+    };
+    return reg;
+}
+
+bool native_draw_target_exists( const std::string &name )
+{
+    return native_draw_registry().contains( name );
+}
+
+window_panel make_native_widget_panel( const widget &w, int width )
+{
+    const std::string &target = w.native();
+    const auto &reg = native_draw_registry();
+    const auto it = reg.find( target );
+    const native_draw_fn fn = it != reg.end() ? it->second : nullptr;
+    if( fn == nullptr ) {
+        // Misconfigured sidebar.json. This builder runs once per panel at
+        // layout-build time (not per frame), so a plain warn is fine; the draw
+        // falls back to clearing the window so a bad target never crashes.
+        debugmsg( "native widget '%s' references unknown draw target '%s'",
+                  w.getId().c_str(), target.c_str() );
+    }
+    auto draw_func = [fn]( avatar & u, const catacurses::window & win ) {
+        if( fn != nullptr ) {
+            fn( u, win );
+        } else {
+            werase( win );
+            wnoutrefresh( win );
+        }
+    };
+    // window_panel's name is its save/load match key (untranslated, stable) and
+    // is re-localized for display via _(). The widget id is that stable key;
+    // _label is the display label, applied when rendering lands (Stage 6).
+    const int panel_width = std::max( 1, width > 0 ? width : w.width() );
+    return window_panel( draw_func, w.getId().str(), w.height(), panel_width, true );
 }
 
 static std::map<std::string, std::vector<window_panel>> initialize_default_panel_layouts()

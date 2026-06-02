@@ -42,6 +42,9 @@ using scenttype_id = string_id<scent_type>;
 class ascii_art;
 using ascii_art_id = string_id<ascii_art>;
 
+class widget;
+using widget_id = string_id<widget>;
+
 class disease_type;
 using diseasetype_id = string_id<disease_type>;
 

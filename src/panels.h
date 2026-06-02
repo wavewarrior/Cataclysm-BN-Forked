@@ -35,6 +35,8 @@ void draw_overmap_chunk( const catacurses::window &w_minimap, const avatar &you,
 
 bool default_render();
 
+class widget;
+
 class window_panel
 {
     public:
@@ -60,6 +62,17 @@ class window_panel
         bool default_toggle;
         std::string name;
 };
+
+// Build a window_panel for a "native"-style widget by delegating its draw to the
+// existing draw_* sidebar function named by widget::native(). This is the parity
+// bridge for the widget-engine port (Stage 3): a JSON widget can reference an
+// existing panel by id and render identically, without value/var wiring. An
+// unknown target yields a panel that just erases its window (logged once) — never
+// crashes.
+window_panel make_native_widget_panel( const widget &w, int width );
+// True if `name` resolves to a known native draw_* target. Exposed for tests so
+// the dispatch table can be verified without a curses context.
+bool native_draw_target_exists( const std::string &name );
 
 class panel_manager
 {

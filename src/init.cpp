@@ -20,6 +20,7 @@
 #include "ammo_effect.h"
 #include "anatomy.h"
 #include "ascii_art.h"
+#include "widget.h"
 #include "artifact.h"
 #include "behavior.h"
 #include "bionics.h"
@@ -294,6 +295,7 @@ void DynamicDataLoader::initialize()
     add( "scent_type", &scent_type::load_scent_type );
     add( "disease_type", &disease_type::load_disease_type );
     add( "ascii_art", &ascii_art::load_ascii_art );
+    add( "widget", &widget::load_widget );
 
     // json/colors.json would be listed here, but it's loaded before the others (see init_colors())
     // Non Static Function Access
@@ -559,6 +561,7 @@ void DynamicDataLoader::unload_data()
     ammunition_type::reset();
     anatomy::reset();
     ascii_art::reset();
+    widget::reset();
     behavior::reset();
     bionic_data::reset();
     body_part_type::reset();
@@ -676,6 +679,7 @@ void DynamicDataLoader::finalize_loaded_data( loading_ui &ui )
             { _( "Field types" ), &field_types::finalize_all },
             { _( "Ammo effects" ), &ammo_effects::finalize_all },
             { _( "Emissions" ), &emit::finalize },
+            { _( "Sidebar widgets" ), &widget::finalize_all },
             {
                 _( "Items" ), []()
                 {
@@ -758,6 +762,7 @@ void DynamicDataLoader::check_consistency( loading_ui &ui )
             { _( "Field types" ), &field_types::check_consistency },
             { _( "Ammo effects" ), &ammo_effects::check_consistency },
             { _( "Emissions" ), &emit::check_consistency },
+            { _( "Sidebar widgets" ), &widget::check_consistency },
             { _( "Activities" ), &activity_type::check_consistency },
             {
                 _( "Items" ), []()

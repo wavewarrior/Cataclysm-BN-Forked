@@ -1,0 +1,28 @@
+[
+  {
+    "type": "widget",
+    "id": "stats_native_test",
+    "style": "native",
+    "label": "Stats",
+    "native": "draw_stats",
+    "height": 1,
+    "width": 38
+  },
+  {
+    "type": "widget",
+    "id": "messages_native_test",
+    "style": "native",
+    "label": "Messages",
+    "native": "draw_messages",
+    "height": 7,
+    "width": 38
+  },
+  {
+    "type": "widget",
+    "id": "test_sidebar",
+    "style": "sidebar",
+    "label": "Custom (test)",
+    "width": 38,
+    "widgets": [ "stats_native_test", "messages_native_test" ]
+  }
+]
