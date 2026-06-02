@@ -33,6 +33,7 @@
 #include "cursesdef.h"
 #include "debug.h"
 #include "widget.h"
+#include "widget_icon.h"
 #include "effect.h"
 #include "fstream_utils.h"
 #include "game.h"
@@ -1612,13 +1613,43 @@ static void draw_loc_wide_map( const avatar &u, const catacurses::window &w )
     draw_loc_labels( u, w, true );
 }
 
+// Phase-accurate moon icon name for the current time. Maps the 8 moon_phase
+// enumerators to the per-phase SVGs in gfx/widgets/ (waxing lights from the
+// right, waning from the left). Any out-of-range phase falls back to the
+// generic moon disc.
+static std::string moon_phase_icon()
+{
+    switch( get_moon_phase( calendar::turn ) ) {
+        case MOON_NEW:
+            return "moon_new";
+        case MOON_WAXING_CRESCENT:
+            return "moon_waxing_crescent";
+        case MOON_HALF_MOON_WAXING:
+            return "moon_first_quarter";
+        case MOON_WAXING_GIBBOUS:
+            return "moon_waxing_gibbous";
+        case MOON_FULL:
+            return "moon_full";
+        case MOON_WANING_GIBBOUS:
+            return "moon_waning_gibbous";
+        case MOON_HALF_MOON_WANING:
+            return "moon_last_quarter";
+        case MOON_WANING_CRESCENT:
+            return "moon_waning_crescent";
+        default:
+            return "moon";
+    }
+}
+
 static void draw_moon_narrow( const avatar &u, const catacurses::window &w )
 {
     werase( w );
     // NOLINTNEXTLINE(cata-use-named-point-constants)
-    mvwprintz( w, point( 1, 0 ), c_light_gray, _( "Moon : %s" ), get_moon() );
+    mvwprintz( w, point( 3, 0 ), c_light_gray, _( "Moon : %s" ), get_moon() );
     // NOLINTNEXTLINE(cata-use-named-point-constants)
     mvwprintz( w, point( 1, 1 ), c_light_gray, _( "Temp : %s" ), get_temp( u ) );
+    // Phase-accurate two-tone SVG moon disc in the free leading column.
+    draw_widget_icon( w, point( 0, 0 ), moon_phase_icon(), c_light_gray );
     wnoutrefresh( w );
 }
 
@@ -1626,8 +1657,10 @@ static void draw_moon_wide( const avatar &u, const catacurses::window &w )
 {
     werase( w );
     // NOLINTNEXTLINE(cata-use-named-point-constants)
-    mvwprintz( w, point( 1, 0 ), c_light_gray, _( "Moon : %s" ), get_moon() );
+    mvwprintz( w, point( 3, 0 ), c_light_gray, _( "Moon : %s" ), get_moon() );
     mvwprintz( w, point( 23, 0 ), c_light_gray, _( "Temp : %s" ), get_temp( u ) );
+    // Phase-accurate two-tone SVG moon disc in the free leading column.
+    draw_widget_icon( w, point( 0, 0 ), moon_phase_icon(), c_light_gray );
     wnoutrefresh( w );
 }
 
@@ -1786,18 +1819,47 @@ static void draw_env_compact( avatar &u, const catacurses::window &w )
     wnoutrefresh( w );
 }
 
+// Pre-rotated directional wind-arrow icon for `dirangle`. Bins to the same 8
+// 45-degree sectors as get_wind_arrow() (weather.cpp), keyed by the origin
+// cardinal; the SVG points where the wind blows TOWARD (origin N -> arrow down).
+// Out-of-range angle (calm / no direction) -> the generic gust icon.
+static std::string wind_arrow_icon( int dirangle )
+{
+    if( dirangle < 0 || dirangle >= 360 ) {
+        return "wind";
+    } else if( dirangle <= 23 || dirangle > 338 ) {
+        return "wind_n";
+    } else if( dirangle <= 68 ) {
+        return "wind_ne";
+    } else if( dirangle <= 113 ) {
+        return "wind_e";
+    } else if( dirangle <= 158 ) {
+        return "wind_se";
+    } else if( dirangle <= 203 ) {
+        return "wind_s";
+    } else if( dirangle <= 248 ) {
+        return "wind_sw";
+    } else if( dirangle <= 293 ) {
+        return "wind_w";
+    }
+    return "wind_nw";
+}
+
 static void render_wind( avatar &u, const catacurses::window &w, const std::string &formatstr )
 {
     werase( w );
-    mvwprintz( w, point_zero, c_light_gray,
-               //~ translation should not exceed 5 console cells
-               string_format( formatstr, left_justify( _( "Wind" ), 5 ) ) );
     const oter_id &cur_om_ter = ACTIVE_OVERMAP_BUFFER.ter( u.abs_omt_pos() );
     const weather_manager &weather = get_weather();
     double windpower = get_local_windpower( weather.windspeed, cur_om_ter,
                                             u.abs_pos(), weather.winddirection, g->is_sheltered( u.bub_pos() ) );
-    mvwprintz( w, point( 8, 0 ), get_wind_color( windpower ),
-               get_wind_desc( windpower ) + " " + get_wind_arrow( weather.winddirection ) );
+    const nc_color wind_color = get_wind_color( windpower );
+    // Directional vector arrow in the leading column, tinted by wind strength;
+    // it replaces the trailing unicode arrow the text used to append.
+    draw_widget_icon( w, point( 0, 0 ), wind_arrow_icon( weather.winddirection ), wind_color );
+    mvwprintz( w, point( 3, 0 ), c_light_gray,
+               //~ translation should not exceed 5 console cells
+               string_format( formatstr, left_justify( _( "Wind" ), 5 ) ) );
+    mvwprintz( w, point( 11, 0 ), wind_color, get_wind_desc( windpower ) );
     wnoutrefresh( w );
 }
 
@@ -2534,17 +2596,85 @@ static std::vector<window_panel> initialize_default_label_panels()
     return ret;
 }
 
-// ── Native-wrapper widget bridge (widget-engine port, Stage 3) ──────────────
+// ── Native-wrapper widget bridge (widget-engine port) ───────────────────────
 // Maps a "native"-style widget's target name to an existing draw_* sidebar
-// function. Stage 3 only wires the draw_* with the avatar&/window& signature;
-// player&-signature draws are added as their widgets are converted (Stage 4+).
-using native_draw_fn = void ( * )( avatar &, const catacurses::window & );
+// function — the parity bridge. native_draw_fn is std::function (not a raw
+// pointer) so it transparently holds draw_* with const avatar& or const player&
+// parameters (avatar : public player), no per-signature adapter thunks needed.
+using native_draw_fn = std::function<void( avatar &, const catacurses::window & )>;
 
 static const std::map<std::string, native_draw_fn> &native_draw_registry()
 {
     static const std::map<std::string, native_draw_fn> reg = {
+        // Tier 1 — leaf value widgets
         { "draw_stats", draw_stats },
+        { "draw_stat_narrow", draw_stat_narrow },
+        { "draw_stat_wide", draw_stat_wide },
+        { "draw_char_narrow", draw_char_narrow },
+        { "draw_char_wide", draw_char_wide },
+        { "draw_stealth", draw_stealth },
+        { "draw_sound_narrow", draw_sound_narrow },
+        { "draw_sound_labels", draw_sound_labels },
+        { "draw_mana_classic", draw_mana_classic },
+        { "draw_mana_compact", draw_mana_compact },
+        { "draw_mana_narrow", draw_mana_narrow },
+        { "draw_mana_wide", draw_mana_wide },
+        { "draw_needs_compact", draw_needs_compact },
+        { "draw_needs_narrow", draw_needs_narrow },
+        { "draw_needs_labels", draw_needs_labels },
+        { "draw_weightvolume_classic", draw_weightvolume_classic },
+        { "draw_weightvolume_compact", draw_weightvolume_compact },
+        { "draw_weightvolume_narrow", draw_weightvolume_narrow },
+        { "draw_weightvolume_labels", draw_weightvolume_labels },
+        { "draw_time", draw_time },
+        { "draw_time_classic", draw_time_classic },
+        { "draw_weather_classic", draw_weather_classic },
+        { "draw_lighting_classic", draw_lighting_classic },
+        { "draw_wind", draw_wind },
+        { "draw_wind_padding", draw_wind_padding },
+        { "draw_health_classic", draw_health_classic },
+        // Tier 2 — composite / multi-row
+        { "draw_limb2", draw_limb2 },
+        { "draw_limb_narrow", draw_limb_narrow },
+        { "draw_limb_wide", draw_limb_wide },
+        { "draw_armor", draw_armor },
+        { "draw_armor_padding", draw_armor_padding },
+        { "draw_armor_comp", draw_armor_comp },
+        { "draw_veh_classic", draw_veh_classic },
+        { "draw_veh_compact", draw_veh_compact },
+        { "draw_veh_padding", draw_veh_padding },
+        { "draw_location_classic", draw_location_classic },
+        { "draw_loc_narrow", draw_loc_narrow },
+        { "draw_loc_wide", draw_loc_wide },
+        { "draw_loc_wide_map", draw_loc_wide_map },
+        { "draw_weapon_classic", draw_weapon_classic },
+        { "draw_weapon_classic_alt", draw_weapon_classic_alt },
+        { "draw_weapon_labels", draw_weapon_labels },
+        { "draw_env_compact", draw_env_compact },
+        { "draw_moon_narrow", draw_moon_narrow },
+        { "draw_moon_wide", draw_moon_wide },
+        { "draw_hint", draw_hint },
+        { "draw_ai_goal", draw_ai_goal },
+        // Tier 3 — dynamic height
+        { "draw_compass", draw_compass },
+        { "draw_compass_padding", draw_compass_padding },
+        { "draw_simple_compass", draw_simple_compass },
+        // Native permanent
         { "draw_messages", draw_messages },
+        { "draw_messages_classic", draw_messages_classic },
+        { "draw_mminimap", draw_mminimap },
+    };
+    return reg;
+}
+
+// Optional show/hide predicates a widget can name via "show_if" — the data-driven
+// equivalent of the render_func gate the hardcoded panels pass (spell_panel,
+// veh_panel). std::function so the TU-static predicates bind directly.
+static const std::map<std::string, std::function<bool()>> &render_predicate_registry()
+{
+    static const std::map<std::string, std::function<bool()>> reg = {
+        { "spell_panel", spell_panel },
+        { "veh_panel", veh_panel },
     };
     return reg;
 }
@@ -2554,13 +2684,31 @@ bool native_draw_target_exists( const std::string &name )
     return native_draw_registry().contains( name );
 }
 
+// Resolve a widget's "show_if" to a window_panel render predicate (the data-driven
+// equivalent of the hardcoded panels' render_func). Empty / unknown → always show.
+static std::function<bool()> resolve_widget_show_if( const widget &w )
+{
+    const std::string &gate = w.show_if();
+    if( gate.empty() ) {
+        return default_render;
+    }
+    const auto &preg = render_predicate_registry();
+    const auto pit = preg.find( gate );
+    if( pit != preg.end() ) {
+        return pit->second;
+    }
+    debugmsg( "widget '%s' references unknown show_if '%s'",
+              w.getId().c_str(), gate.c_str() );
+    return default_render;
+}
+
 window_panel make_native_widget_panel( const widget &w, int width )
 {
     const std::string &target = w.native();
     const auto &reg = native_draw_registry();
     const auto it = reg.find( target );
-    const native_draw_fn fn = it != reg.end() ? it->second : nullptr;
-    if( fn == nullptr ) {
+    const native_draw_fn fn = it != reg.end() ? it->second : native_draw_fn{};
+    if( !fn ) {
         // Misconfigured sidebar.json. This builder runs once per panel at
         // layout-build time (not per frame), so a plain warn is fine; the draw
         // falls back to clearing the window so a bad target never crashes.
@@ -2568,18 +2716,246 @@ window_panel make_native_widget_panel( const widget &w, int width )
                   w.getId().c_str(), target.c_str() );
     }
     auto draw_func = [fn]( avatar & u, const catacurses::window & win ) {
-        if( fn != nullptr ) {
+        if( fn ) {
             fn( u, win );
         } else {
             werase( win );
             wnoutrefresh( win );
         }
     };
+
     // window_panel's name is its save/load match key (untranslated, stable) and
     // is re-localized for display via _(). The widget id is that stable key;
-    // _label is the display label, applied when rendering lands (Stage 6).
+    // _label is the display label. The W_DISABLED_BY_DEFAULT flag mirrors CDDA's
+    // default-off panels.
     const int panel_width = std::max( 1, width > 0 ? width : w.width() );
-    return window_panel( draw_func, w.getId().str(), w.height(), panel_width, true );
+    const bool default_toggle = !w.has_flag( "W_DISABLED_BY_DEFAULT" );
+    return window_panel( draw_func, w.getId().str(), w.height(), panel_width,
+                         default_toggle, resolve_widget_show_if( w ) );
+}
+
+// Color for a value widget's number, mirroring how the native draw_* panels
+// color the same stat so the data-driven rows read like the legacy sidebar.
+// Reuses the TU-static color helpers above; falls back to c_white.
+static nc_color value_widget_color( const widget &w, int val, const avatar &u )
+{
+    switch( w.var() ) {
+        case widget_var::stat_str:
+            return str_string( u ).first;
+        case widget_var::stat_dex:
+            return dex_string( u ).first;
+        case widget_var::stat_int:
+            return int_string( u ).first;
+        case widget_var::stat_per:
+            return per_string( u ).first;
+        case widget_var::speed:
+            return value_color( u.get_speed() );
+        case widget_var::stamina:
+            return get_hp_bar( u.get_stamina(), u.get_stamina_max() ).second;
+        case widget_var::thirst:
+            return u.get_thirst_description().second;
+        case widget_var::fatigue:
+            return u.get_fatigue_description().second;
+        case widget_var::morale:
+            return morale_stat( u ).first;
+        case widget_var::mana:
+            return mana_stat( u ).first;
+        case widget_var::max_mana:
+            return c_light_blue;
+        case widget_var::pain:
+            // BN has no native pain-color helper; redden as perceived pain rises.
+            return val <= 0 ? c_light_gray : val < 20 ? c_yellow : val < 40 ? c_light_red : c_red;
+        // Body-graph dimensions never flow through the value renderer.
+        case widget_var::body_graph:
+        case widget_var::body_graph_temp:
+        case widget_var::body_graph_encumb:
+        case widget_var::body_graph_status:
+        case widget_var::body_graph_wet:
+        case widget_var::last:
+            break;
+    }
+    return c_white;
+}
+
+// Clean English gutter/save-key name for a value widget: strip the "val_" id
+// prefix and capitalize ("val_pain" -> "Pain"). These widgets are new and
+// opt-in — no save has ever persisted the raw id — so this becomes the stable
+// save-key, re-localized via _() at display (show_adm). The translated _label
+// stays the in-row display string.
+static std::string value_widget_name( const widget_id &id )
+{
+    std::string name = id.str();
+    if( name.starts_with( "val_" ) ) {
+        name.erase( 0, 4 );
+    }
+    // Title-case each underscore-separated segment, joining with spaces:
+    // "val_pain" -> "Pain", "bodygraph_temp" -> "Bodygraph Temp".
+    bool at_word_start = true;
+    for( char &c : name ) {
+        if( c == '_' ) {
+            c = ' ';
+            at_word_start = true;
+        } else if( at_word_start ) {
+            c = toupper( static_cast<unsigned char>( c ) );
+            at_word_start = false;
+        }
+    }
+    return name;
+}
+
+// Data-driven value widget: draws "[icon] label value" itself from the widget's
+// _var (via get_var_value), with an optional leading two-tone SVG icon tinted to
+// match the value color. The parity bridge (native) hands its whole window to a
+// draw_* fn; this renderer owns the layout, so it is where icons have a clean home.
+window_panel make_value_widget_panel( const widget &w, int width )
+{
+    const widget_id id = w.getId();
+    const std::string label = w.label().translated();
+    const std::string &icon = w.icon();
+    auto draw_func = [id, label, icon]( avatar & u, const catacurses::window & win ) {
+        werase( win );
+        if( !id.is_valid() ) {
+            wnoutrefresh( win );
+            return;
+        }
+        const widget &wd = *id; // static widget data; u carries the live state
+        const int val = wd.get_var_value( u );
+        const nc_color val_color = value_widget_color( wd, val, u );
+        int col = 0;
+        if( !icon.empty() ) {
+            // Tint the icon to the value color so a reddening stat reddens its glyph.
+            draw_widget_icon( win, point( 0, 0 ), icon, val_color );
+            // A square icon is ~2 cells wide at the usual ~2:1 font ratio; start
+            // the label at col 3 to leave a one-cell gap after it.
+            col = 3;
+        }
+        mvwprintz( win, point( col, 0 ), c_light_gray, "%s", label );
+        mvwprintz( win, point( col + utf8_width( label ) + 1, 0 ), val_color, "%d", val );
+        wnoutrefresh( win );
+    };
+    const int panel_width = std::max( 1, width > 0 ? width : w.width() );
+    const bool default_toggle = !w.has_flag( "W_DISABLED_BY_DEFAULT" );
+    return window_panel( draw_func, value_widget_name( id ), w.height(), panel_width,
+                         default_toggle, resolve_widget_show_if( w ) );
+}
+
+// Build a window_panel for any widget, dispatching on style. Unknown styles fall
+// back to the native bridge.
+// Per-body-part color for a body-graph dimension. The renderer-agnostic core:
+// each body_graph* var picks a different per-bp value to color by, mirroring
+// CDDA's display::get_bodygraph_bp_color but against BN's getters.
+static nc_color bodygraph_bp_color( widget_var var, const avatar &u, const bodypart_id &bp )
+{
+    switch( var ) {
+        case widget_var::body_graph_temp: {
+            const int t = u.get_part_temp_cur( bp );
+            if( t > BODYTEMP_VERY_HOT ) {
+                return c_red;
+            } else if( t > BODYTEMP_HOT ) {
+                return c_light_red;
+            } else if( t > BODYTEMP_COLD ) {
+                return c_light_gray;
+            } else if( t > BODYTEMP_VERY_COLD ) {
+                return c_light_blue;
+            }
+            return c_blue;
+        }
+        case widget_var::body_graph_encumb: {
+            const int e = u.encumb( bp.id() );
+            if( e <= 0 ) {
+                return c_green;
+            } else if( e < 20 ) {
+                return c_light_gray;
+            } else if( e < 40 ) {
+                return c_yellow;
+            } else if( e < 60 ) {
+                return c_light_red;
+            }
+            return c_red;
+        }
+        case widget_var::body_graph_status:
+            return u.limb_color( bp.id(), true, true, true );
+        case widget_var::body_graph_wet:
+            // BN has no per-bp wetness (only global) → degraded placeholder.
+            return c_light_gray;
+        case widget_var::body_graph:
+        default:
+            // HP — matches the Limbs panel coloring.
+            return get_hp_bar( u.get_part_hp_cur( bp ), u.get_part_hp_max( bp ) ).second;
+    }
+}
+
+// Body-graph value widget: lays the main body parts in a 2-column grid (the
+// draw_limb2 layout) and colors each limb label by the widget's body_graph*
+// dimension. Color encodes the data; no HP bar, to stay distinct from the
+// native Limbs panel.
+window_panel make_bodygraph_widget_panel( const widget &w, int width )
+{
+    const widget_id id = w.getId();
+    const widget_var var = w.var();
+    if( var == widget_var::body_graph_wet ) {
+        // Builder runs once per panel at layout-build, not per frame → a plain
+        // warn is fine. BN has no per-bp wetness, so this dimension is degraded.
+        debugmsg( "body_graph_wet: BN has no per-bp wetness; rendering degraded (flat color)" );
+    }
+    auto draw_func = [var]( avatar & u, const catacurses::window & win ) {
+        werase( win );
+        // The HP dimension mirrors the Limbs panel: colored limb label + an HP
+        // bar, two limbs per row. The other dimensions (temp/encumb/status/wet)
+        // have no bar representation, so they render as color-only labels — the
+        // tint IS the data — with wider spacing.
+        const bool hp_dim = ( var == widget_var::body_graph );
+        int i = 0;
+        for( const bodypart_id &bp : u.get_all_body_parts( true ) ) {
+            const bool left = ( i % 2 == 0 );
+            const int label_x = left ? 0 : ( hp_dim ? 11 : 16 );
+            mvwprintz( win, point( label_x, i / 2 ), bodygraph_bp_color( var, u, bp ),
+                       body_part_hp_bar_ui_text( bp ) );
+            if( hp_dim ) {
+                wmove( win, point( left ? 5 : 16, i / 2 ) );
+                draw_limb_health( u, win, bp.id() );
+            }
+            i++;
+        }
+        wnoutrefresh( win );
+    };
+    const int panel_width = std::max( 1, width > 0 ? width : w.width() );
+    const bool default_toggle = !w.has_flag( "W_DISABLED_BY_DEFAULT" );
+    return window_panel( draw_func, value_widget_name( id ), w.height(), panel_width,
+                         default_toggle, resolve_widget_show_if( w ) );
+}
+
+static window_panel make_widget_panel( const widget &w, int width )
+{
+    if( w.style() == "number" || w.style() == "value" ) {
+        return make_value_widget_panel( w, width );
+    }
+    if( w.style() == "body_graph" ) {
+        return make_bodygraph_widget_panel( w, width );
+    }
+    return make_native_widget_panel( w, width );
+}
+
+// Build selectable sidebar layouts from every "sidebar"-style widget and merge
+// them into `layouts`, keyed by the widget id (e.g. "custom"). Called post-load
+// so widget::get_all() is populated. Custom layouts are opt-in — they never
+// replace a built-in or auto-switch a player.
+static void inject_widget_layouts( std::map<std::string, std::vector<window_panel>> &layouts )
+{
+    for( const widget &sb : widget::get_all() ) {
+        if( sb.style() != "sidebar" ) {
+            continue;
+        }
+        std::vector<window_panel> panels;
+        for( const widget_id &child : sb._widgets ) {
+            if( child.is_valid() ) {
+                panels.push_back( make_widget_panel( *child, sb.width() ) );
+            }
+        }
+        if( !panels.empty() ) {
+            layouts[sb.getId().str()] = std::move( panels );
+        }
+    }
 }
 
 static std::map<std::string, std::vector<window_panel>> initialize_default_panel_layouts()
@@ -2617,6 +2993,11 @@ std::string panel_manager::get_current_layout_id() const
     return current_layout_id;
 }
 
+bool panel_manager::has_layout( const std::string &id ) const
+{
+    return layouts.contains( id );
+}
+
 int panel_manager::get_width_right()
 {
     if( get_option<std::string>( "SIDEBAR_POSITION" ) == "left" ) {
@@ -2635,8 +3016,16 @@ int panel_manager::get_width_left()
 
 void panel_manager::init()
 {
+    // NOTE: this runs in game::load_static_data, BEFORE world modfiles (widget
+    // JSON) load — so widget-driven layouts are built later via
+    // reload_widget_layouts(), called from game::setup after load_world_modfiles.
     load();
     update_offsets( get_current_layout().begin()->get_width() );
+}
+
+void panel_manager::reload_widget_layouts()
+{
+    inject_widget_layouts( layouts );
 }
 
 auto panel_manager::sync_lua_panels() -> void

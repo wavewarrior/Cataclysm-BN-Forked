@@ -70,6 +70,13 @@ class window_panel
 // unknown target yields a panel that just erases its window (logged once) — never
 // crashes.
 window_panel make_native_widget_panel( const widget &w, int width );
+// Build a window_panel for a "number"/"value" style widget: draws "[icon] label:
+// value" from the widget's _var, with an optional leading two-tone SVG icon.
+window_panel make_value_widget_panel( const widget &w, int width );
+// Build a window_panel for a "body_graph" style widget: lays the main body parts
+// in a grid, coloring each by the widget's body_graph* dimension (hp/temp/encumb/
+// status; wet degraded — BN has no per-bp wetness).
+window_panel make_bodygraph_widget_panel( const widget &w, int width );
 // True if `name` resolves to a known native draw_* target. Exposed for tests so
 // the dispatch table can be verified without a curses context.
 bool native_draw_target_exists( const std::string &name );
@@ -91,12 +98,18 @@ class panel_manager
 
         std::vector<window_panel> &get_current_layout();
         std::string get_current_layout_id() const;
+        // True if a layout with this id (built-in or widget-built) is registered.
+        bool has_layout( const std::string &id ) const;
         int get_width_right();
         int get_width_left();
 
         void show_adm();
 
         void init();
+        // (Re)build selectable layouts from data-driven "sidebar" widgets. Must be
+        // called AFTER world modfiles load (widget JSON), since init() runs in
+        // load_static_data before any mod data exists.
+        void reload_widget_layouts();
         auto sync_lua_panels() -> void;
 
     private:

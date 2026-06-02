@@ -84,6 +84,7 @@
 #include "uistate.h"
 #include "ui_manager.h"
 #include "wcwidth.h"
+#include "widget_icon.h"
 #include "worldfactory.h"
 
 #if defined(__linux__)
@@ -459,6 +460,31 @@ static point draw_string( Font &font,
 inline const SDL_Color &color_as_sdl( const unsigned char color )
 {
     return windowsPalette[color];
+}
+
+// Draw a cached two-tone SVG widget icon into a sidebar panel cell, tinted by a
+// curses color. Square, one cell tall. The icon is uploaded once at the current
+// font cell size (re-rasterized on size change) and drawn as an unlit UI sprite
+// via the font-glyph queue, so it composites with sidebar text and survives
+// partial redraws. No-op when the window is invalid or no GPU device is live.
+void draw_widget_icon( const catacurses::window &win, const point &cell,
+                       const std::string &icon, const nc_color &color )
+{
+    cata_cursesport::WINDOW *const w = win.get<cata_cursesport::WINDOW>();
+    if( w == nullptr || fontwidth <= 0 || fontheight <= 0 ) {
+        return;
+    }
+    const int px = fontheight; // square icon, one cell tall
+    SDL_GPUTexture *tex = widget_icon::get( icon, px );
+    if( tex == nullptr ) {
+        return;
+    }
+    const float x = static_cast<float>( ( w->pos.x + cell.x ) * fontwidth );
+    const float y = static_cast<float>( ( w->pos.y + cell.y ) * fontheight );
+    const SDL_Color c = curses_color_to_SDL( color );
+    lighting::get_render_state().queue_font_glyph(
+        tex, x, y, static_cast<float>( px ), static_cast<float>( px ),
+        c.r / 255.f, c.g / 255.f, c.b / 255.f, 1.f, /*lit=*/false );
 }
 
 // Debug overlay state — saved from the previous frame, drawn this frame.
@@ -2979,6 +3005,9 @@ bool handle_resize( int w, int h )
                 if( rs.world_target() ) {
                     rs.world_target()->resize( pw, ph );
                 }
+                // Font cell size may have changed; drop stale-size icon rasters
+                // so the next request re-rasterizes crisp at the new size.
+                widget_icon::clear();
             }
         }
         return true;

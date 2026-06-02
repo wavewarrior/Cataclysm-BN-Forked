@@ -8,16 +8,32 @@
 #include "type_id.h"
 
 class JsonObject;
+class avatar;
 
-// Data-driven sidebar widget — CDDA widget-engine port, Stage 3 trim.
+// Value source for a "number"/"value" style widget. A trimmed BN-relevant subset
+// of CDDA's widget_var — each maps to an existing avatar/Character getter in
+// widget::get_var_value. `last` = unset / unsupported (renders 0). Expression
+// (custom_var) and display:: text vars are intentionally excluded (BN lacks the
+// deps); they remain native-wrapped.
+enum class widget_var : int {
+    last = 0,
+    stat_str, stat_dex, stat_int, stat_per,
+    pain, stamina, mana, max_mana, morale,
+    thirst, fatigue, speed,
+    // Body-graph color dimensions — not scalar; the body_graph renderer reads
+    // these directly to pick which per-bp value colors the limb grid.
+    body_graph, body_graph_temp, body_graph_encumb, body_graph_status, body_graph_wet,
+};
+
+// Data-driven sidebar widget — CDDA widget-engine port.
 //
-// Stage 3 scope is JSON loading + the "native" wrapper style only. A native
-// widget delegates drawing to an existing draw_* sidebar function (the parity
-// bridge, resolved in panels.cpp::make_native_widget_panel). This class
-// therefore deliberately OMITS CDDA's value/expression machinery
-// (widget_var/get_var_value, widget_custom_var, widget_clause) and the display::
-// text helpers: BN has no dbl_or_var and no display.cpp. Those land in Stage 4+,
-// at which point the widget_var enum + get_var_value are added here.
+// Two render paths exist: "native" delegates drawing to an existing draw_*
+// sidebar function (the parity bridge, panels.cpp::make_native_widget_panel);
+// "number"/"value" is the data-driven renderer (panels.cpp::make_value_widget_panel)
+// that draws "[icon] label: value" itself from _var via get_var_value, with an
+// optional two-tone SVG icon. CDDA's expression machinery (widget_custom_var,
+// widget_clause) and display:: text vars are deliberately omitted — BN lacks the
+// deps; those widgets stay native-wrapped.
 class widget
 {
     public:
@@ -36,6 +52,14 @@ class widget
         // For _style == "native": name of the existing draw_* sidebar function
         // to delegate to. Bound to a draw callback in panels.cpp.
         std::string _native;
+        // Optional show/hide predicate name (e.g. "spell_panel", "veh_panel"),
+        // resolved to a window_panel render condition in panels.cpp. Empty =
+        // always shown.
+        std::string _show_if;
+        // For value styles: the value source, and an optional two-tone SVG icon
+        // name (gfx/widgets/<icon>.svg) drawn in the leading column.
+        widget_var  _var = widget_var::last;
+        std::string _icon;
         std::set<flag_id>      _flags;
         std::vector<widget_id> _widgets;
 
@@ -61,6 +85,18 @@ class widget
         const std::string &native() const {
             return _native;
         }
+        const std::string &show_if() const {
+            return _show_if;
+        }
+        widget_var var() const {
+            return _var;
+        }
+        const std::string &icon() const {
+            return _icon;
+        }
+        // Resolve _var to its current integer value for `ava`. Returns 0 for
+        // widget_var::last / unsupported.
+        int get_var_value( const avatar &ava ) const;
         // Raw height — may be negative. window_panel treats -1/-2 as flex
         // sentinels (minimap height / fill remaining sidebar space), so the
         // bridge must pass it through UNCLAMPED for a native Log/Map to flex.

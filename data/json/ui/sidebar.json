@@ -1,28 +1,50 @@
 [
+  { "type": "widget", "id": "hint",          "style": "native", "native": "draw_hint",              "label": "Hint",          "height": 1,  "width": 44 },
+  { "type": "widget", "id": "limbs",         "style": "native", "native": "draw_limb_wide",         "label": "Limbs",         "height": 2,  "width": 44 },
+  { "type": "widget", "id": "movement",      "style": "native", "native": "draw_char_wide",         "label": "Movement",      "height": 2,  "width": 44 },
+  { "type": "widget", "id": "mana",          "style": "native", "native": "draw_mana_wide",         "label": "Mana",          "height": 1,  "width": 44, "show_if": "spell_panel" },
+  { "type": "widget", "id": "stats",         "style": "native", "native": "draw_stat_wide",         "label": "Stats",         "height": 2,  "width": 44 },
+  { "type": "widget", "id": "vehicle",       "style": "native", "native": "draw_veh_padding",       "label": "Vehicle",       "height": 2,  "width": 44, "show_if": "veh_panel" },
+  { "type": "widget", "id": "location",      "style": "native", "native": "draw_loc_wide_map",      "label": "Location",      "height": 6,  "width": 44 },
+  { "type": "widget", "id": "wind",          "style": "native", "native": "draw_wind_padding",      "label": "Wind",          "height": 1,  "width": 44, "flags": [ "W_DISABLED_BY_DEFAULT" ] },
+  { "type": "widget", "id": "location_alt",  "style": "native", "native": "draw_loc_wide",          "label": "Location Alt",  "height": 6,  "width": 44, "flags": [ "W_DISABLED_BY_DEFAULT" ] },
+  { "type": "widget", "id": "weapon",        "style": "native", "native": "draw_weapon_labels",     "label": "Weapon",        "height": 2,  "width": 44 },
+  { "type": "widget", "id": "weightvolume",  "style": "native", "native": "draw_weightvolume_labels", "label": "Wgt/Vol",     "height": 1,  "width": 44 },
+  { "type": "widget", "id": "needs",         "style": "native", "native": "draw_needs_labels",      "label": "Needs",         "height": 3,  "width": 44 },
+  { "type": "widget", "id": "sound",         "style": "native", "native": "draw_sound_labels",      "label": "Sound",         "height": 1,  "width": 44 },
+  { "type": "widget", "id": "log",           "style": "native", "native": "draw_messages",          "label": "Log",           "height": -2, "width": 44 },
+  { "type": "widget", "id": "moon",          "style": "native", "native": "draw_moon_wide",         "label": "Moon",          "height": 1,  "width": 44, "flags": [ "W_DISABLED_BY_DEFAULT" ] },
+  { "type": "widget", "id": "armor",         "style": "native", "native": "draw_armor_padding",     "label": "Armor",         "height": 5,  "width": 44, "flags": [ "W_DISABLED_BY_DEFAULT" ] },
+  { "type": "widget", "id": "armor_comp",    "style": "native", "native": "draw_armor_comp",        "label": "Compact Armor", "height": 1,  "width": 32, "flags": [ "W_DISABLED_BY_DEFAULT" ] },
+  { "type": "widget", "id": "compass",       "style": "native", "native": "draw_compass_padding",   "label": "Compass",       "height": 8,  "width": 44 },
+  { "type": "widget", "id": "compass_comp",  "style": "native", "native": "draw_compass_padding",   "label": "Compact Compass", "height": 3, "width": 32, "flags": [ "W_DISABLED_BY_DEFAULT" ] },
+  { "type": "widget", "id": "compass_simple","style": "native", "native": "draw_simple_compass",    "label": "Simple Compass", "height": 1,  "width": 44, "flags": [ "W_DISABLED_BY_DEFAULT" ] },
+  { "type": "widget", "id": "map",           "style": "native", "native": "draw_mminimap",          "label": "Map",           "height": -1, "width": 44 },
+  { "type": "widget", "id": "ai_goal",       "style": "native", "native": "draw_ai_goal",           "label": "AI Needs",      "height": 1,  "width": 44, "flags": [ "W_DISABLED_BY_DEFAULT" ] },
+
+  { "type": "widget", "id": "val_pain",    "style": "number", "var": "pain",    "icon": "heart",   "label": "Pain",    "height": 1, "width": 44 },
+  { "type": "widget", "id": "val_thirst",  "style": "number", "var": "thirst",  "icon": "droplet", "label": "Thirst",  "height": 1, "width": 44 },
+  { "type": "widget", "id": "val_stamina", "style": "number", "var": "stamina",                     "label": "Stamina", "height": 1, "width": 44 },
+  { "type": "widget", "id": "val_mana",    "style": "number", "var": "mana",    "icon": "spark",   "label": "Mana",    "height": 1, "width": 44, "show_if": "spell_panel" },
+
+  { "type": "widget", "id": "bodygraph",        "style": "body_graph", "var": "body_graph",        "label": "Body",        "height": 3, "width": 44 },
+  { "type": "widget", "id": "bodygraph_temp",   "style": "body_graph", "var": "body_graph_temp",   "label": "Body Temp",   "height": 3, "width": 44, "flags": [ "W_DISABLED_BY_DEFAULT" ] },
+  { "type": "widget", "id": "bodygraph_encumb", "style": "body_graph", "var": "body_graph_encumb", "label": "Body Encumb", "height": 3, "width": 44, "flags": [ "W_DISABLED_BY_DEFAULT" ] },
+  { "type": "widget", "id": "bodygraph_status", "style": "body_graph", "var": "body_graph_status", "label": "Body Status", "height": 3, "width": 44, "flags": [ "W_DISABLED_BY_DEFAULT" ] },
+
   {
     "type": "widget",
-    "id": "stats_native_test",
-    "style": "native",
-    "label": "Stats",
-    "native": "draw_stats",
-    "height": 1,
-    "width": 38
-  },
-  {
-    "type": "widget",
-    "id": "messages_native_test",
-    "style": "native",
-    "label": "Messages",
-    "native": "draw_messages",
-    "height": 7,
-    "width": 38
-  },
-  {
-    "type": "widget",
-    "id": "test_sidebar",
+    "id": "custom",
     "style": "sidebar",
-    "label": "Custom (test)",
-    "width": 38,
-    "widgets": [ "stats_native_test", "messages_native_test" ]
+    "label": "Custom",
+    "width": 44,
+    "widgets": [
+      "hint", "limbs", "movement", "mana", "stats",
+      "val_pain", "val_thirst", "val_stamina", "val_mana",
+      "bodygraph", "bodygraph_temp", "bodygraph_encumb", "bodygraph_status",
+      "vehicle", "location", "wind", "location_alt", "weapon", "weightvolume",
+      "needs", "sound", "log", "moon", "armor", "armor_comp", "compass",
+      "compass_comp", "compass_simple", "map", "ai_goal"
+    ]
   }
 ]

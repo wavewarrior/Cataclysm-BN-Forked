@@ -569,6 +569,9 @@ void game::setup( bool load_world_modfiles )
 
     if( load_world_modfiles ) {
         init::load_world_modfiles( ui, get_active_world(), SAVE_ARTIFACTS );
+        // Widget JSON (data/json/ui/*) is now loaded; build the data-driven
+        // sidebar layouts so the "custom" layout becomes selectable.
+        panel_manager::get_manager().reload_widget_layouts();
     }
 
     init_bubble_config();

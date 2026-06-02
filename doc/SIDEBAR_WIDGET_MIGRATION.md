@@ -256,6 +256,286 @@ JSON files. Implications:
 
 ---
 
+## Part E — grounded conversion inventory (the porting checklist)
+
+Authoritative list, read from BN's 4 default layouts in `panels.cpp`
+(`initialize_default_{classic,compact,label_narrow,label}_panels`, default =
+`labels`). ~53 distinct `draw_*` fns collapse into **23 logical widgets**. Each
+is **native-wrapped first** (parity bridge, `make_native_widget_panel`), then
+**converted to data-driven vars** by tier. Width variants collapse (vars are
+width-agnostic; layout handles width).
+
+Legend: ☐ native-wrapped · ☐ var-converted · **sig** = draw fn signature
+(`a`=`avatar&`, `cp`=`const player&`, `ca`=`const avatar&`) — non-`avatar&`
+needs an adapter in the native registry. **SVG** = strong candidate for a vector
+icon (see Part F).
+
+### Tier 1 — leaf value widgets
+| ☐wrap ☐var | Logical | draw_* variants | var source | sig | SVG |
+|---|---|---|---|---|---|
+| ☐ ☐ | Stats | draw_stats · draw_stat_narrow · draw_stat_wide | stat_str/dex/int/per | a | – |
+| ☐ ☐ | Movement | draw_char_narrow · draw_char_wide | move/speed/stamina | ? | – |
+| ☐ ☐ | Sound | draw_stealth · draw_sound_narrow · draw_sound_labels | sound | ? | 🔊 icon |
+| ☐ ☐ | Mana | draw_mana_classic/_compact/_narrow/_wide | mana/max_mana | **cp** | ✦ icon |
+| ☐ ☐ | Needs | draw_needs_compact/_narrow/_labels | hunger/thirst/**fatigue**/pain | ? | 🍖💧 icons |
+| ☐ ☐ | Wgt/Vol | draw_weightvolume_classic/_compact/_narrow/_labels | carry_weight/volume | ? | – |
+| ☐ ☐ | Time | draw_time · draw_time_classic | time_text | ? | – |
+| ☐ ☐ | Weather | draw_weather_classic | weather_text | ? | ☀☁ icon |
+| ☐ ☐ | Lighting | draw_lighting_classic | light level | ? | – |
+| ☐ ☐ | Wind | draw_wind · draw_wind_padding | wind/weather | ? | ➤ dir-arrow |
+| ☐ ☐ | Health | draw_health_classic | morale/power/health | ? | – |
+
+### Tier 2 — composite / multi-row
+| ☐wrap ☐var | Logical | draw_* variants | var source | sig | SVG |
+|---|---|---|---|---|---|
+| ☐ ☐ | Limbs/HP | draw_limb2 · draw_limb_narrow · draw_limb_wide | bp_hp + **body-graph** | ? | **body silhouette** |
+| ☐ ☐ | Armor | draw_armor · draw_armor_padding · draw_armor_comp | per-bp get_armor → bp_* | ? | – |
+| ☐ ☐ | Vehicle | draw_veh_classic · draw_veh_compact · draw_veh_padding | veh vars | ? | – |
+| ☐ ☐ | Location | draw_location_classic · draw_loc_narrow · draw_loc_wide_map · draw_loc_wide | place + overmap | ? | – |
+| ☐ ☐ | Weapon | draw_weapon_classic · draw_weapon_classic_alt · draw_weapon_labels | wielding text | ? | – |
+| ☐ ☐ | Env | draw_env_compact | temperature/weather | ? | 🌡 icon |
+| ☐ ☐ | Moon | draw_moon_narrow · draw_moon_wide | moon phase | ? | **moon-phase disc** |
+| ☐ ☐ | Hint | draw_hint | activity/hint | ? | – |
+| ☐ ☐ | AI goal | draw_ai_goal | custom/text | ? | – (name hardcoded "AI Needs", no translate_marker) |
+
+### Tier 3 — dynamic height (validates flex end-to-end)
+| ☐wrap ☐var | Logical | draw_* variants | notes | SVG |
+|---|---|---|---|---|
+| ☐ ☐ | Compass | draw_compass · draw_compass_padding · draw_simple_compass | canonical dyn-height; 3 variants | **compass rose** |
+
+### Native permanent — wrapped, NEVER converted to vars
+| ☐wrap | Logical | draw_* | height | notes |
+|---|---|---|---|---|
+| ☐ | Log | draw_messages · draw_messages_classic | **-2** flex-fill | height-sentinel fix (#1) enables native-wrap |
+| ☐ | Map | draw_mminimap | **-1** minimap | GPU pixel-minimap, genuinely special |
+
+**Render-gated** (only drawn when a condition holds): Mana (`spell_panel`),
+Vehicle (`veh_panel`). The widget needs an equivalent show/hide condition
+(CDDA: `widget_clause`/flags; BN-trim: a render predicate, mirror Stage-1 lua
+`render_func`).
+
+**Signature audit (`sig` column) is a Stage-4 task** — most `draw_*` were not
+individually checked beyond Stats/Messages (`a`) and Mana (`cp`). The native
+registry needs per-fn adapters where the signature isn't `void(avatar&,
+const catacurses::window&)`.
+
+---
+
+## Part F — SVG icon aesthetic (proposed "spice")
+
+Goal: vector line-art icons that match the ASCII/bitmap-font look but stay crisp
+at any `tile_px` / HiDPI. **Feasible with zero new deps** — SDL3_image (already a
+dependency) bundles `nanosvg`/`nanosvgrast`/`IMG_svg.c`. Pipeline:
+`.svg` → rasterize at target px (`IMG_LoadSVG_IO` / nanosvgrast scale) →
+`SDL_Surface` (RGBA) → `copy_surface_to_dynamic_atlas` → `sprite_batcher` draw
+with `tint` = the curses color. Monochrome white line-art + tint = recolorable
+icons; re-raster per `tile_px` = crisp at HiDPI (the pipeline already does this
+for tiles).
+
+Prime candidates (semantically iconic, marked SVG above): **body-graph
+silhouette** (ties to the in-scope body-graph port), **moon-phase disc**,
+**compass rose**, **weather** (sun/cloud/rain), **wind direction arrow**, plus
+small inline glyph-icons for needs/mana/sound/env.
+
+Design + integration details: plan `dapper-wandering-popcorn`.
+
+### Phase 2 status — SVG icon infra landed (2026-06-02)
+
+- `src/widget_icon.{h,cpp}`: `widget_icon::get(name, px)` resolves
+  `gfx/widgets/<name>.svg`, rasterizes at `px²` via `IMG_LoadSizedSVG_IO`,
+  uploads **once** through `render_state::upload_surface_to_gpu_texture`, caches
+  by `(name, px)`. `widget_icon::clear()` (called from the window-resize hook in
+  sdltiles.cpp) drops stale-size rasters.
+- `draw_widget_icon(win, cell, icon, nc_color)` in `sdltiles.cpp`: maps a panel
+  cell to absolute pixels (`win->pos * fontwidth/height`), tints via
+  `curses_color_to_SDL`, draws an **unlit** sprite through
+  `render_state::queue_font_glyph` (composites with sidebar text, partial-redraw
+  safe). `sdltiles.cpp` is in the common lib, so `panels.cpp` links it in both
+  game + test.
+- Assets: `gfx/widgets/{moon,heart,droplet,sound,wind,compass}.svg` (repo-root
+  `gfx/`, beside the tilesets — `gfxdir()` is `gfx/`, NOT `data/gfx/`) +
+  `README.md` (white-stroke / gray-fill two-tone tint contract).
+- Proof: `draw_moon_narrow`/`draw_moon_wide` draw the `moon` icon in their free
+  leading column (Phase 4 makes it phase-accurate).
+- Verified: game + test build green; `[widget]` 26/26; 6 SVGs well-formed; game
+  boots + loads the 22-widget sidebar.json clean, no `widget_icon`/SVG/assert
+  errors. **On-screen icon render is reachable only in-game with the Moon panel
+  enabled** — user-side visual confirmation pending.
+
+---
+
+## Phase 3 status — value renderer + custom layout selectable (2026-06-02)
+
+- `widget_var` enum + `widget::get_var_value(avatar&)` (widget.{h,cpp}): 12 vars
+  wired to BN getters — stat_str/dex/int/per, pain, stamina, mana, max_mana,
+  morale, thirst, fatigue, speed. (`hunger` dropped — BN has no numeric getter,
+  only `get_hunger_description`.) Unknown/`last` → 0.
+- `make_value_widget_panel` (panels.cpp): draws `[icon] label: value` itself for
+  `style:"number"`/`"value"`, with an optional leading two-tone SVG icon tinted
+  by the value color. `make_widget_panel` dispatches native vs value by style.
+- **`inject_widget_layouts` → `panel_manager::init()`**: builds a selectable
+  layout from every `style:"sidebar"` widget (keyed by id, e.g. `custom`) and
+  merges it into the layouts map post-load. This is the Stage-6 slice that makes
+  BOTH the Phase-1 native widgets AND the value widgets actually **render in-game**
+  (select the `custom` sidebar via `}`). Custom layouts are opt-in — never
+  auto-selected, never replace a built-in. (Full Stage 6 — `sync_lua_panels`
+  rework + save migration — still deferred.)
+- `sidebar.json`: 4 value widgets (`val_pain`→heart, `val_thirst`→droplet,
+  `val_stamina` no-icon, `val_mana`→spark, gated `spell_panel`) inserted into the
+  `custom` container (now 26 children). Icons: 8 total (added `food`, `spark`).
+- Verified: game + test build green; `[widget]` 35/5; **full suite 716 cases**;
+  game boots + loads the 26-child container clean. In-game visual (select
+  `custom` sidebar) is user-side.
+- Known-minor / incremental: value color is currently flat (`c_white` value,
+  `c_light_gray` label) — per-var coloring (stat compare, hp-bar) is a follow-up;
+  left-aligned layout (right-align/bars need the Stage-5 arrange engine).
+
+## Phase 3b status — value-widget polish (2026-06-02)
+
+Polish pass on the data-driven value widgets (options 1+2), all in `panels.cpp`
+`make_value_widget_panel` + new TU-static helpers:
+
+- **Per-var value color** (`value_widget_color`): the number is now colored to
+  match how the native `draw_*` panels color the same stat — reuses the existing
+  static helpers (`str/dex/int/per_string`, `value_color` for speed,
+  `get_hp_bar().second` for stamina, `morale_stat`, `mana_stat`,
+  `get_thirst_description().second`, `get_fatigue_description().second`). Pain has
+  no native helper → reddens with perceived pain (gray→yellow→light_red→red).
+  The leading SVG icon is tinted to the **same** value color (two-tone contract),
+  so a reddening stat reddens its glyph.
+- **Clean gutter name** (`value_widget_name`): the value panel's `window_panel`
+  name is now the id with the `val_` prefix stripped + capitalized
+  (`val_pain` → `Pain`). These widgets are new + opt-in, so no save ever
+  persisted the raw id — this clean English string becomes the stable save/load
+  key AND the gutter label (`show_adm` re-localizes via `_()` at `panels.cpp:3079`,
+  verified). No `translation::untranslated()` needed; mirrors the native panels'
+  clean-English-key pattern.
+- **In-row layout**: dropped the redundant colon — each value row now reads
+  `[icon] Label value` (e.g. `♥ Pain  5`). The translated `_label` is the in-row
+  string; the gutter rename removes the felt duplication.
+- **Native casing dedup** (`sidebar.json`): `comp.Armor`→`Compact Armor`,
+  `Comp.Compass`→`Compact Compass`, `Sim.Compass`→`Simple Compass`. NOTE: this is
+  forward-looking hygiene only — `make_native_widget_panel` keys the gutter on
+  `getId().str()` and never reads `_label`, so the native gutters still display
+  the raw id (`armor_comp`, …). Pretty native gutters require renaming the
+  window_panel **name**, which is the existing save/load key → a Stage-6
+  save-migration task, NOT a freebie like the new value widgets.
+- Verified: `cata_test-tiles` + `cataclysm-bn-tiles` link green; `[widget]`
+  37 assertions / 6 cases pass (name assertion updated `val_pain`→`Pain`).
+
+Deferred to the Stage-5 arrange engine: right-align / value bars (still left-aligned).
+
+## Phase 4a status — phase-accurate moon (2026-06-02)
+
+The moon-panel icon is no longer a static disc; it tracks the lunar phase.
+
+- **8 per-phase SVGs** in `gfx/widgets/`: `moon_new`, `moon_waxing_crescent`,
+  `moon_first_quarter`, `moon_waxing_gibbous`, `moon_full`, `moon_waning_gibbous`,
+  `moon_last_quarter`, `moon_waning_crescent`. Each follows the two-tone contract:
+  a gray `#707070` base disc, a white `#FFFFFF` lit path, and a white rim stroke
+  always on top (so the disc outline reads at any phase). Northern-hemisphere
+  convention — **waxing lights from the right, waning from the left**.
+- The lit path is two SVG arcs (outer rim + terminator ellipse). Terminator
+  `rx` controls crescent vs gibbous; the arc sweep flag controls bulge side.
+  Geometry verified by reasoning (SVG y-down → sweep=1 is clockwise); no
+  rasterizer was available locally, so confirm the on-screen shapes in-game.
+- `panels.cpp::moon_phase_icon()` maps the 8 `moon_phase` enumerators
+  (`calendar.h`) to those names via `get_moon_phase( calendar::turn )`; any
+  out-of-range phase falls back to the generic `moon` disc. Both
+  `draw_moon_narrow`/`draw_moon_wide` now draw `moon_phase_icon()` (was the flat
+  `"moon"`).
+- Verified: `cataclysm-bn-tiles` links green; all 8 SVGs well-formed (`xmllint`).
+  On-screen render reachable with the Moon panel enabled (W_DISABLED_BY_DEFAULT)
+  — user-side visual confirmation pending.
+
+## Phase 4b status — directional wind arrow (2026-06-02)
+
+The wind panel now shows a vector arrow that points the way the wind blows.
+
+- **8 pre-rotated arrow SVGs** in `gfx/widgets/` (`wind_n`/`wind_ne`/…/`wind_nw`):
+  one up-arrow path wrapped in `<g transform="rotate(R 12 12)">`, rotation about
+  the cell center so the glyph never clips the 24×24 box. Chose pre-rotated SVGs
+  over adding a rotation param to the GPU font-glyph draw path — zero change to
+  `draw_widget_icon`/`queue_font_glyph`. Two-tone contract (gray fill + white
+  outline). These are the **first** repo icons to use a group transform.
+  **nanosvg support verified in the vendored source** (`sdl3_image-src/src/
+  nanosvg.h`): `<g>` → `nsvg__pushAttr` + `nsvg__parseAttribs` (which handles the
+  `transform` attr), the child `<path>` inherits the composed xform, and
+  `nsvg__parseRotate` implements `rotate(angle cx cy)` (translate −c · rotate ·
+  translate +c). So the rotation is honored, not assumed.
+- `panels.cpp::wind_arrow_icon( int dirangle )` bins the angle to the **same 8
+  45° sectors as `get_wind_arrow()`** (`weather.cpp`), keyed by origin cardinal
+  (origin N → arrow points down/south). Out-of-range (calm) → the generic `wind`
+  gust icon.
+- `render_wind` rewired: the directional arrow is drawn in the **leading column**
+  tinted by `get_wind_color(windpower)`; the "Wind" label shifts to col 3 and the
+  description to col 11; the trailing unicode arrow the text used to append is
+  **dropped** (the icon replaces it). Both `draw_wind` and `draw_wind_padding`
+  feed through `render_wind`, so both get the arrow. The `wind` widget exists in
+  `sidebar.json` (W_DISABLED_BY_DEFAULT), so this is reachable in-game.
+- **Blast radius**: `render_wind` backs the *built-in* layouts (classic/compact/…)
+  too, not just the opt-in `custom` container — so the col-shift (text now starts
+  at col 3) and the dropped unicode arrow ship to those wind panels as well. The
+  column math fits width-44; narrower built-in wind panels also start text at
+  col 3. (This is a behavior change to shipped panels, unlike the value widgets.)
+- Verified: `cataclysm-bn-tiles` links green; all 8 arrow SVGs well-formed
+  (`xmllint`); `[widget]` 37/6 still pass. On-screen arrow orientation + nanosvg
+  rasterization of the rotate transform are user-side (enable the Wind panel).
+
+Skipped this pass (no layout consumer / low value): a **weather** sun/cloud/rain
+icon — `draw_weather_classic` is in the `classic` built-in but NOT in the custom
+container, so a weather icon wouldn't render there yet; and a **compass-rose**
+icon — `compass.svg` already exists and the compass panel is a dense 8-row grid
+where a corner icon adds clutter. Revisit if a weather widget joins the container.
+
+## Phase 4c status — body-graph widget (minimal native grid, 2026-06-02)
+
+The body-graph landed as a **BN-native colored limb grid**, NOT a port of CDDA's
+data-driven ASCII silhouette. Research (this session) found CDDA's
+`get_bodygraph_lines()` compiles against `sub_bodypart_id` (which BN lacks),
+though the sidebar's own bodygraph JSON never populates sub-parts — so the dep is
+a no-op for sidebar data. User chose the minimal grid over porting the full
+`bodygraph` JSON type system: smaller, no new type, no `init.cpp` registration.
+
+- **`widget_var` enum** (`widget.h`/`widget.cpp`): added `body_graph` (HP),
+  `body_graph_temp`, `body_graph_encumb`, `body_graph_status`, `body_graph_wet`.
+  Not scalar → excluded from `get_var_value`/`value_widget_color` (grouped with
+  `last` → 0 / `c_white`). The body-graph renderer reads `w.var()` directly.
+- **`bodygraph_bp_color( var, avatar&, bodypart_id& )`** (`panels.cpp`): the
+  renderer-agnostic core — per-bp → `nc_color` for each dimension. HP via
+  `get_hp_bar(get_part_hp_cur,max).second` (matches Limbs panel); temp bands
+  `get_part_temp_cur` against `weather.h` `BODYTEMP_*`; encumb bands
+  `encumb(bp.id())`; status = `limb_color(bp.id(),…)`. `body_graph_wet` →
+  `c_light_gray` + once-at-build `debugmsg` (**BN has no per-bp wetness** — only
+  global; this dimension is intentionally degraded).
+- **`make_bodygraph_widget_panel`** (`panels.cpp`, declared in `panels.h`): lays
+  `get_all_body_parts(true)` in the `draw_limb2` 2-column grid, each limb label
+  (`body_part_hp_bar_ui_text`) tinted by `bodygraph_bp_color(w.var(),…)`. The **HP
+  dimension** also draws the HP bar (`draw_limb_health`, label x0/x11 + bar x5/x16)
+  to match the Limbs-panel look the approved preview showed; the temp/encumb/status/
+  wet dimensions have no bar representation, so they render **color-only** (the tint
+  is the data) at wider x0/x16 spacing. Dispatched from `make_widget_panel` on
+  `style=="body_graph"`.
+- **`value_widget_name` generalized**: now title-cases underscore-separated
+  segments (`bodygraph_temp`→`"Bodygraph Temp"`); `val_`-stripped value ids are
+  single-segment so their names are unchanged (`val_pain`→`"Pain"`).
+- **`sidebar.json`**: 4 body_graph widgets (`bodygraph` HP default + temp/encumb/
+  status `W_DISABLED_BY_DEFAULT`) added + inserted into the `custom` container
+  (now 30 children).
+- Verified: `cata_test-tiles` + `cataclysm-bn-tiles` link green; `[widget]`
+  46 assertions / 7 cases pass (added a body_graph parse+build case; container
+  count 26→30). In-game render (select `custom` sidebar, enable Body widget;
+  switch dimension via the temp/encumb/status variants) is user-side.
+
+**Part B B2 update**: the `body_graph` family is now **supported via the minimal
+grid** (hp/temp/encumb/status); `body_graph_wet` is **degraded** (no BN per-bp
+wetness). The CDDA ASCII silhouette + the SVG silhouette (Part F) remain the
+optional follow-up upgrade if the colored grid reads as redundant with Limbs.
+
+Phase 4 complete (4a moon · 4b wind · 4c body-graph). Remaining widget-engine work
+is Stage 5/6 (arrange engine: right-align/bars; `sync_lua_panels` rework + save
+migration; default-flip gate).
+
 ## Go / No-Go recommendation
 
 **GO.** The recommendation rests on **directly-verified BN-side facts**, not the
