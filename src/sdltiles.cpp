@@ -510,6 +510,24 @@ void draw_widget_icon( const catacurses::window &win, const point &cell,
     draw_widget_icon( win, cell, icon, color, sidebar_anim::icon_transform{} );
 }
 
+void draw_widget_row_highlight( const catacurses::window &win, int row, int width_cells,
+                                const nc_color &color, float alpha )
+{
+    cata_cursesport::WINDOW *const w = win.get<cata_cursesport::WINDOW>();
+    if( w == nullptr || fontwidth <= 0 || fontheight <= 0 || alpha <= 0.f || width_cells <= 0 ) {
+        return;
+    }
+    const float x = static_cast<float>( w->pos.x * fontwidth );
+    const float y = static_cast<float>( ( w->pos.y + row ) * fontheight );
+    const float wpx = static_cast<float>( width_cells * fontwidth );
+    const float hpx = static_cast<float>( fontheight );
+    const SDL_Color c = curses_color_to_SDL( color );
+    // queue_ui_rect feeds the UI-rect layer, flushed before font glyphs, so the
+    // row text draws over this bar.
+    lighting::get_render_state().queue_ui_rect( x, y, wpx, hpx,
+            c.r / 255.f, c.g / 255.f, c.b / 255.f, alpha );
+}
+
 // Debug overlay state — saved from the previous frame, drawn this frame.
 struct TileCoordGlyph {
     float x, y;

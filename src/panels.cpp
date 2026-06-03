@@ -2856,17 +2856,26 @@ window_panel make_value_widget_panel( const widget &w, int width )
         const widget &wd = *id; // static widget data; u carries the live state
         const int val = wd.get_var_value( u );
         const nc_color val_color = value_widget_color( wd, val, u );
+        // Animation: feed the live value to the registry once, then drive both the
+        // icon transform and the row-change highlight. State is keyed by widget id
+        // and lives in the registry, not this closure (closures rebuild on reload).
+        const std::uint32_t now = sidebar_anim::now_ms();
+        sidebar_anim::registry &reg = sidebar_anim::get();
+        // Critical band reuses the value colour: the stat's own colouring already
+        // turns red in its danger zone (high pain, low stamina, ...).
+        const bool crit = val_color == c_red || val_color == c_light_red;
+        // Row-change flash: a fading highlight bar behind the whole row, driven by
+        // specs under the reserved "_row" id (the color_blend channel rests at 0,
+        // so it is invisible until a change fires it).
+        reg.update( id.str() + "#row", "_row", static_cast<double>( val ), crit, now );
+        const sidebar_anim::icon_transform row_tr = reg.sample( id.str() + "#row", now );
+        if( row_tr.blend > 0.001f ) {
+            draw_widget_row_highlight( win, 0, getmaxx( win ), row_tr.blend_color, row_tr.blend );
+        }
         int col = 0;
         if( !icon.empty() ) {
-            // Tint the icon to the value color so a reddening stat reddens its glyph.
-            // Feed the live value to the animation registry: a change pops the icon
-            // (scale ease-back). State is keyed by widget id and lives in the
-            // registry, not this closure (closures are rebuilt on layout reload).
-            const std::uint32_t now = sidebar_anim::now_ms();
-            sidebar_anim::registry &reg = sidebar_anim::get();
-            // Critical band reuses the value colour: the stat's own colouring
-            // already turns red in its danger zone (high pain, low stamina, ...).
-            const bool crit = val_color == c_red || val_color == c_light_red;
+            // Tint the icon to the value color so a reddening stat reddens its glyph;
+            // a value change pops the icon (scale ease-back).
             reg.update( id.str(), icon, static_cast<double>( val ), crit, now );
             const sidebar_anim::icon_transform tr = reg.sample( id.str(), now );
             draw_widget_icon( win, point( 0, 0 ), icon, val_color, tr );

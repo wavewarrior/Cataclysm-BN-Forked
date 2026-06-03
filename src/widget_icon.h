@@ -63,3 +63,9 @@ void draw_widget_icon( const catacurses::window &win, const point &cell,
 
 void draw_widget_icon( const catacurses::window &win, const point &cell,
                        const std::string &icon, const nc_color &color );
+
+// Draw a translucent highlight bar behind a panel row (cell row `row`, spanning
+// `width_cells`), tinted `color` at `alpha` (0..1). UI rects flush before font
+// glyphs, so the row's text renders on top. Used for the value-row change flash.
+void draw_widget_row_highlight( const catacurses::window &win, int row, int width_cells,
+                                const nc_color &color, float alpha );
