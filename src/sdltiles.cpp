@@ -579,6 +579,8 @@ static lighting::debug_params g_dbg_params{};
 // Step-3 Phase 2 A/B: sprite GI source — true = GPU radiance cascade (default),
 // false = CPU 1-bounce indirect (the oracle). Synced into render_state per frame.
 static bool g_gi_use_rc = true;
+// Step-3 dev oracle: one-shot readback of the RC cascade texture (logs stats).
+static bool g_rc_readback = false;
 // Tonemap pass controls (F4 sliders). Pre-AgX exposure (lit world is linear
 // light above AgX's 0.18 mid-gray anchor → needs exposing down) + the AgX log2
 // EV window (defaults are the canonical AgX range).
@@ -676,6 +678,9 @@ static void draw_lighting_dev_ui()
     ImGui::SliderFloat( "dither bands", &g_dbg_params.dither_bands, 1.0f, 16.0f, "%.0f" );
     ImGui::SliderFloat( "GI strength", &g_dbg_params.gi_strength, 0.0f, 2.0f );
     ImGui::Checkbox( "GI: GPU radiance cascade (off = CPU oracle)", &g_gi_use_rc );
+    if( ImGui::Button( "RC cascade readback (log stats)" ) ) {
+        g_rc_readback = true;
+    }
     ImGui::SliderInt( "GI bounces", &g_gi_passes, 0, 12 );
     ImGui::SliderFloat( "GI decay", &g_gi_decay, 0.0f, 0.95f );
     ImGui::SliderFloat( "shadow k", &g_dbg_params.shadow_k, 0.0f, 32.0f );
@@ -916,6 +921,17 @@ void refresh_display()
         rs.rc().record( ctx.cmd_buffer,
                         rs.collector()->emitter_buffer(), rs.sdf().sdf_buffer(),
                         rp.map_w, rp.map_h, rp );
+    }
+
+    // Dev oracle (one-shot, F4 button): read back the RC cascade and log stats.
+    // Reads the last fully-submitted cascade (this frame's gather is still on the
+    // unsubmitted render CB) — fine on a held-still scene, which is when it's used.
+    if( g_rc_readback ) {
+        g_rc_readback = false;
+        if( rs.rc().ready() && rs.sdf().populated() ) {
+            rs.rc().debug_log_stats( static_cast<std::uint32_t>( rs.sdf().map_w() ),
+                                     static_cast<std::uint32_t>( rs.sdf().map_h() ) );
+        }
     }
 
     // Phase 6/6b: stamp the per-frame lighting params onto the tile_batcher
