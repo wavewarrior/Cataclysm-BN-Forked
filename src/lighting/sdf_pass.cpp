@@ -1,9 +1,10 @@
 #include "lighting/sdf_pass.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
-#include <queue>
 #include <utility>
+#include <vector>
 
 #include "debug.h"
 #include "lighting/gpu_device.h"
@@ -18,48 +19,85 @@ namespace lighting
 // CPU distance transform
 // ---------------------------------------------------------------------------
 
+// Exact Euclidean distance transform (Felzenszwalb & Huttenlocher 2012):
+// distance in tiles from each cell to the nearest opaque tile. Two O(n) 1D
+// lower-envelope passes (down columns, then across rows) on the squared
+// distance, sqrt at the end. Replaces the old Chebyshev BFS, whose chessboard
+// metric gave square isolines → square/faceted shadow penumbrae; Euclidean
+// gives round isolines → smooth round penumbrae (the sprite shader samples this
+// SDF unchanged, so shadows improve for free). Layout is x-major (idx = x*h+y).
 std::vector<float> compute_sdf_cpu( const float *trans, int w, int h )
 {
     const int total = w * h;
-    std::vector<float> dist( total, 1e9f );
+    constexpr float INF = 1e20f;
 
-    struct cell {
-        int x, y;
+    // Squared-distance working grid: 0 at opaque seeds, INF elsewhere.
+    std::vector<float> grid( total );
+    for( int i = 0; i < total; ++i ) {
+        grid[i] = ( trans[i] == 0.0f ) ? 0.0f : INF;
+    }
+
+    const int maxdim = std::max( w, h );
+    std::vector<float> f( maxdim ), d( maxdim ), z( maxdim + 1 );
+    std::vector<int>   vtx( maxdim );
+
+    // 1D squared-distance transform of f[0..n) into d[0..n) (lower envelope of
+    // upward parabolas rooted at each sample).
+    auto dt1d = [&]( int n ) {
+        int k = 0;
+        vtx[0] = 0;
+        z[0] = -INF;
+        z[1] =  INF;
+        for( int q = 1; q < n; ++q ) {
+            float s = ( ( f[q] + static_cast<float>( q * q ) )
+                        - ( f[vtx[k]] + static_cast<float>( vtx[k] * vtx[k] ) ) )
+                      / static_cast<float>( 2 * q - 2 * vtx[k] );
+            while( s <= z[k] ) {
+                --k;
+                s = ( ( f[q] + static_cast<float>( q * q ) )
+                      - ( f[vtx[k]] + static_cast<float>( vtx[k] * vtx[k] ) ) )
+                    / static_cast<float>( 2 * q - 2 * vtx[k] );
+            }
+            ++k;
+            vtx[k]  = q;
+            z[k]    = s;
+            z[k + 1] = INF;
+        }
+        k = 0;
+        for( int q = 0; q < n; ++q ) {
+            while( z[k + 1] < static_cast<float>( q ) ) {
+                ++k;
+            }
+            const int dq = q - vtx[k];
+            d[q] = static_cast<float>( dq * dq ) + f[vtx[k]];
+        }
     };
-    std::queue<cell> q;
 
-    // Seed: every opaque tile (transparency == 0) starts at distance 0.
+    // Pass 1: down each column (fixed x, vary y — contiguous in x-major).
     for( int x = 0; x < w; ++x ) {
         for( int y = 0; y < h; ++y ) {
-            if( trans[x * h + y] == 0.0f ) {
-                dist[x * h + y] = 0.0f;
-                q.push( { x, y } );
-            }
+            f[y] = grid[x * h + y];
+        }
+        dt1d( h );
+        for( int y = 0; y < h; ++y ) {
+            grid[x * h + y] = d[y];
+        }
+    }
+    // Pass 2: across each row (fixed y, vary x).
+    for( int y = 0; y < h; ++y ) {
+        for( int x = 0; x < w; ++x ) {
+            f[x] = grid[x * h + y];
+        }
+        dt1d( w );
+        for( int x = 0; x < w; ++x ) {
+            grid[x * h + y] = d[x];
         }
     }
 
-    // Chebyshev BFS (8-connected, step cost = 1.0 for all neighbours).
-    static constexpr int DX[8] = { -1, -1, -1, 0, 0, 1, 1, 1 };
-    static constexpr int DY[8] = { -1,  0,  1,-1, 1,-1, 0, 1 };
-
-    while( !q.empty() ) {
-        const auto [cx, cy] = q.front();
-        q.pop();
-        const float cd = dist[cx * h + cy];
-        for( int i = 0; i < 8; ++i ) {
-            const int nx = cx + DX[i];
-            const int ny = cy + DY[i];
-            if( nx < 0 || ny < 0 || nx >= w || ny >= h ) {
-                continue;
-            }
-            const float nd = cd + 1.0f;
-            if( nd < dist[nx * h + ny] ) {
-                dist[nx * h + ny] = nd;
-                q.push( { nx, ny } );
-            }
-        }
+    std::vector<float> dist( total );
+    for( int i = 0; i < total; ++i ) {
+        dist[i] = std::sqrt( grid[i] );
     }
-
     return dist;
 }
 

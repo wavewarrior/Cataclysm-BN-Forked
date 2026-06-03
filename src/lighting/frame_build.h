@@ -36,7 +36,11 @@ struct frame_lighting_result {
     std::vector<gpu_emitter> snapshot_copy;
 };
 
+// gi_passes / gi_decay tune the 1-bounce indirect diffusion (more passes =
+// light bleeds/bounces further; higher decay = more energy carried per ring →
+// richer colored spread). Only used when rebuild_pertile.
 frame_lighting_result build_and_submit_lighting( render_state &rs,
-        bool rebuild_pertile, bool want_hud_snapshot );
+        bool rebuild_pertile, bool want_hud_snapshot,
+        int gi_passes, float gi_decay );
 
 } // namespace lighting

@@ -20,7 +20,8 @@ namespace lighting
 {
 
 frame_lighting_result build_and_submit_lighting( render_state &rs,
-        bool rebuild_pertile, bool want_hud_snapshot )
+        bool rebuild_pertile, bool want_hud_snapshot,
+        int gi_passes, float gi_decay )
 {
     frame_lighting_result result;
 
@@ -130,10 +131,12 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
                 // Wall-gated diffusion. Sources stay pinned (seed re-added
                 // each pass); light relaxes outward only through tiles whose
                 // transparency is above SOLID (0). Averaging keeps it bounded.
+                // gi_passes = how many tile-rings the bounce reaches (more =
+                // deeper colored bleed); gi_decay = energy carried per ring.
                 std::vector<float> cur = seed;
                 std::vector<float> nxt( total * 3, 0.0f );
-                const float decay = 0.55f;
-                for( int pass = 0; pass < 2; ++pass ) {
+                const float decay = gi_decay;
+                for( int pass = 0; pass < gi_passes; ++pass ) {
                     for( int x = 0; x < W; ++x ) {
                         for( int y = 0; y < H; ++y ) {
                             const int i = x * H + y;
