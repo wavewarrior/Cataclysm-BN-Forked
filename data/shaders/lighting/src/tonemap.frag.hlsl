@@ -10,6 +10,16 @@
 Texture2D    SrcTex : register( t0, space2 );
 SamplerState SrcSmp : register( s0, space2 );
 
+// Phase 1a HARD-GATE spike (LIGHTING_REWORK_PLAN.md step 3): a read-only
+// storage texture. It is a Texture2D with NO paired SamplerState and is read
+// with .Load() only — that is precisely what makes SDL_shadercross reflect it
+// as a storage texture (num_separate_images - num_separate_samplers) rather
+// than a 2nd sampled image. As fragment storage slot 0 it lands at t1/space2
+// (after the t0 sampled SrcTex). Sentinel is 1.0: if storage-read textures
+// bind correctly the output is identity; if they read 0 (the known Metal
+// sampler-zero failure) the whole frame goes black. Removed after the gate.
+Texture2D<float> ProbeTex : register( t1, space2 );
+
 // Live tuning from the F4 dev panel (SDL_PushGPUFragmentUniformData slot 0 →
 // b0/space3). Pre-AgX exposure scale; see agx_tonemap().
 cbuffer TonemapParams : register( b0, space3 )
@@ -79,5 +89,7 @@ float4 main( VS_OUT i ) : SV_Target0
 {
     float4 c = SrcTex.Sample( SrcSmp, i.uv );
     c.rgb = agx_tonemap( c.rgb, tm_exposure, tm_min_ev, tm_max_ev );
+    // Phase 1a gate: sentinel 1.0 → identity; 0 → black (storage-read broken).
+    c.rgb *= ProbeTex.Load( int3( 0, 0, 0 ) );
     return c;
 }

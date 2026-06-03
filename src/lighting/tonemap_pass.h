@@ -50,10 +50,26 @@ class tonemap_pass
                      float exposure, float min_ev, float max_ev );
 
     private:
+        // Create + fill the Phase 1a probe texture (one-shot submitted copy).
+        // Returns false (logged, distinct from the gate) on format/alloc failure.
+        bool init_probe_texture( gpu_device &dev );
+
         gpu_device              *dev_      = nullptr;
         SDL_GPUShader           *vert_     = nullptr;
         SDL_GPUShader           *frag_     = nullptr;
         SDL_GPUGraphicsPipeline *pipeline_ = nullptr;
+
+        // Phase 1a HARD-GATE spike (LIGHTING_REWORK_PLAN.md step 3): a 1×1
+        // GRAPHICS_STORAGE_READ probe texture (sentinel 1.0) bound to this
+        // bufferless pass at storage slot 0 (→ t1/space2, after the t0 sampled
+        // SrcTex). The frag does `.Load()` (NO sampler — that is what makes
+        // shadercross reflect it as a read-only storage texture, not a 2nd
+        // sampled image) and multiplies its output by the texel: works →
+        // identity, broken → black. A binary test of whether fragment
+        // storage-read textures bind at all on this Metal/shadercross build.
+        // Filled once at init via a one-shot submitted copy cb (no per-frame
+        // upload). Removed once the RC consumer path is proven.
+        SDL_GPUTexture          *probe_tex_ = nullptr;
 };
 
 } // namespace lighting
