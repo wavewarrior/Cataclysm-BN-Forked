@@ -209,11 +209,44 @@ float dither_threshold(float2 world_px) {
     const int by = ((int)floor(world_px.y)) & 3;
     return (k_bayer4[by * 4 + bx] + 0.5) / 16.0;
 }
+// --- Bucket A / A1: inline alpha-aware Sobel surface normal ----------------
+// Per-pixel relief derived from the albedo atlas itself (decision #15's
+// "alpha-aware Sobel + edge-fade-to-flat at silhouettes"), computed in the
+// fragment instead of baked to a normal atlas at tileset load. This needs NO
+// second texture, so it sidesteps the Metal/shadercross sampler-vs-storage
+// gate entirely — the question of whether per-pixel normals add visible value
+// in a 2D tile game is answered before any normal-atlas pipeline is built.
+// GetDimensions queries the *currently bound* atlas page, so per-page texel
+// size is correct without a uniform. Tuning is shader constants for now
+// (promote to F4 sliders only if the effect earns its keep). NRM_AMOUNT=0
+// reduces both Lambert sites to the previous flat-normal behaviour exactly.
+static const float NRM_RELIEF = 2.0;   // luminance-gradient → surface tilt
+static const float NRM_ELEV   = 0.7;   // implied emitter height above the tile plane
+static const float NRM_AMOUNT = 0.5;   // 0 = flat (off) .. 1 = full Lambert
+float3 surface_normal(float2 uv) {
+    float aw, ah;
+    Atlas.GetDimensions(aw, ah);
+    const float2 ts = 1.0 / float2(max(aw, 1.0), max(ah, 1.0));
+    const float4 sL = Atlas.Sample(AtlasSmp, uv - float2(ts.x, 0.0));
+    const float4 sR = Atlas.Sample(AtlasSmp, uv + float2(ts.x, 0.0));
+    const float4 sU = Atlas.Sample(AtlasSmp, uv - float2(0.0, ts.y));
+    const float4 sD = Atlas.Sample(AtlasSmp, uv + float2(0.0, ts.y));
+    const float3 luma = float3(0.299, 0.587, 0.114);
+    const float dx = dot(sR.rgb, luma) - dot(sL.rgb, luma);
+    const float dy = dot(sD.rgb, luma) - dot(sU.rgb, luma);
+    const float3 n = normalize(float3(-dx * NRM_RELIEF, -dy * NRM_RELIEF, 1.0));
+    // Edge-fade-to-flat: a (near-)transparent neighbour means we're at the
+    // sprite silhouette — collapse back toward flat so a packed-atlas
+    // neighbour can't bleed a hard fake edge across the gap.
+    const float edge = min(min(sL.a, sR.a), min(sU.a, sD.a));
+    return normalize(lerp(float3(0.0, 0.0, 1.0), n, saturate(edge)));
+}
 float4 main(VS_OUT i) : SV_Target0 {
     const float4 texel = Atlas.Sample(AtlasSmp, i.uv);
     if(texel.a < 0.01) discard;
-    // Flat surface normal — Phase 7b will sample a normal atlas texture.
-    const float3 normal = float3(0.0, 0.0, 1.0);
+    // Per-pixel surface normal from inline alpha-aware Sobel (Bucket A / A1).
+    // Replaces the old hardcoded flat normal; drives the emitter + sun Lambert.
+    const float3 normal = surface_normal(i.uv);
     // emitter_light accumulates GPU point-light contributions (starts at zero).
     // Combined with CPU tint ADDITIVELY so colored emitter glow is visible on
     // top of the CPU-shadowcasting result, not suppressed by max().
@@ -233,12 +266,17 @@ float4 main(VS_OUT i) : SV_Target0 {
         const float  dist = length(dv);
         if(dist >= e_radius || dist < 0.01) continue;
         const float  atten   = 1.0 - pow(saturate(dist / e_radius), e_falloff);
-        // Lambert = 1.0 for omnidirectional point lights with flat normal.
-        // Directional shading from real surface normals comes in Phase 7b.
-        const float  lambert = 1.0;
-        // Per-emitter soft shadow via the shared SDF sphere trace (bilinear,
-        // shadow_k / shadow_steps tunable). See trace_shadow above.
+        // Per-pixel Lambert against this emitter (Bucket A / A1). The light's
+        // in-plane direction is sh_dir (fragment→light); NRM_ELEV lifts it off
+        // the tile plane so relief tilts catch it. Blended with NRM_AMOUNT so
+        // flat surfaces stay near full brightness (0 = old omni lambert=1).
         const float2 sh_dir = dv / max(dist, 0.001);
+        const float  lambert = lerp(1.0,
+                                    saturate(dot(normal, normalize(float3(sh_dir, NRM_ELEV)))),
+                                    NRM_AMOUNT);
+        // Per-emitter soft shadow via the shared SDF sphere trace (bilinear,
+        // shadow_k / shadow_steps tunable). See trace_shadow above. sh_dir is
+        // declared above (the A1 Lambert reuses it).
         const float  shadow = trace_shadow(i.world_pos, sh_dir, dist,
                                             shadow_k, (int)shadow_steps);
         // Cone / spotlight angular falloff (Bucket A / A2). Held flashlights and
@@ -276,8 +314,13 @@ float4 main(VS_OUT i) : SV_Target0 {
         const float2 toward_sun = -float2(sun_dir_x, sun_dir_y);
         const float sun_shadow = trace_shadow(i.world_pos, toward_sun, 8.0,
                                                shadow_k, (int)shadow_steps);
-        // Lambert with flat normal: dot((0,0,1), normalize(sun_dir_xy, sin_elev))
-        const float sun_lambert = sun_sin_elev / sqrt(1.0 + sun_sin_elev * sun_sin_elev);
+        // Per-pixel Lambert against the sun (Bucket A / A1). The 3D sun ray is
+        // (toward_sun.xy, sin_elev). At NRM_AMOUNT=0 this collapses to the old
+        // flat-normal value: dot((0,0,1), normalize(toward_sun, sin_elev)) =
+        // sin_elev / sqrt(1 + sin_elev^2).
+        const float flat_sun = sun_sin_elev / sqrt(1.0 + sun_sin_elev * sun_sin_elev);
+        const float3 sun_L   = normalize(float3(toward_sun, sun_sin_elev));
+        const float sun_lambert = lerp(flat_sun, saturate(dot(normal, sun_L)), NRM_AMOUNT);
         sun_contrib = float3(sun_r, sun_g, sun_b) * sun_intensity * sun_lambert
                       * sun_shadow * sky_vis;
     }
@@ -377,7 +420,7 @@ float4 main(VS_OUT i) : SV_Target0 {
     }
 
     const bool  dbg_active   = (debug_mode == 8u)
-                               || (debug_mode > 0u && debug_mode < 8u
+                               || (debug_mode > 0u && debug_mode != 8u
                                    && dbg_tint_sum < 0.01);
     if(dbg_active) {
         float3 vis = float3(0, 0, 0);
@@ -413,6 +456,13 @@ float4 main(VS_OUT i) : SV_Target0 {
             // fading toward dim = working emitter pipeline.
             const float L = max(emitter_light.r, max(emitter_light.g, emitter_light.b));
             vis = float3(L, L, L);
+            replace = true;
+        } else if(debug_mode == 9u) {
+            // Normal view (Bucket A / A1): encode the inline-Sobel surface
+            // normal as RGB via n*0.5+0.5. Flat tiles read ~(0.5,0.5,1.0)
+            // lavender-blue; relief tilts push R (x-slope) / G (y-slope).
+            // Replace so it shows raw; game tiles only (tint-gated below).
+            vis = normal * 0.5 + 0.5;
             replace = true;
         }
         if(replace) {

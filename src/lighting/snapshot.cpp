@@ -36,6 +36,18 @@ extern float pos_x;
 extern float pos_y;
 }  // namespace menu_emitter_tuning
 
+// Dev tool (F4 panel): a movable omni light pinned to the mouse cursor, used to
+// sweep light across terrain while inspecting normals / shadows / GI. Owned by
+// sdltiles.cpp, which computes the world-tile position from the cursor + camera
+// each frame; the snapshot just reads these and appends the emitter.
+namespace cursor_light_emitter
+{
+extern bool  enabled;
+extern float radius;     // emission radius in tiles (used directly, not sqrt'd)
+extern float intensity;  // white emission brightness
+extern float wx, wy, wz; // world-tile position under the cursor
+}  // namespace cursor_light_emitter
+
 #define dbg(x) DebugLogFL((x),DC::SDL)
 
 // effect_onfire is a static in lightmap.cpp; define a local copy.
@@ -389,6 +401,25 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
             return std::sqrt( ax * ax + ay * ay ) - a.radius
                    < std::sqrt( bx * bx + by * by ) - b.radius;
         } );
+    }
+
+    // Dev cursor light — appended AFTER the view-cull so it is never dropped
+    // while swept around, and given radius/intensity straight from the F4
+    // sliders (radius is already in tiles, so it bypasses make_omni's sqrt).
+    if( cursor_light_emitter::enabled ) {
+        gpu_emitter e{};
+        e.pos_x           = cursor_light_emitter::wx;
+        e.pos_y           = cursor_light_emitter::wy;
+        e.pos_z           = cursor_light_emitter::wz;
+        e.radius          = std::max( 0.0f, cursor_light_emitter::radius );
+        const float lum   = cursor_light_emitter::intensity;
+        e.r = lum; e.g = lum; e.b = lum;
+        e.falloff         = FALLOFF_DEFAULT;
+        e.cone_dir_x      = 0.0f;
+        e.cone_dir_y      = 0.0f;
+        e.cone_half_angle = M_PIf;
+        e.shape           = static_cast<uint32_t>( emitter_shape::OMNI );
+        out.push_back( e );
     }
 
     if( static_cast<int>( out.size() ) > MAX_EMITTERS * 3 / 4 ) {

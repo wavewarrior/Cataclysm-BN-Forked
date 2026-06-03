@@ -614,6 +614,19 @@ int   pos_preset   = 0;         // 0 top-left, 1 centre, 2 bottom-right
 bool  blue_backdrop = true;     // true: bright blue, false: black (lit)
 }  // namespace menu_emitter_tuning
 
+// Dev cursor light (F4 panel). A movable omni emitter pinned to the mouse, for
+// sweeping light across terrain while inspecting normals / shadows / GI. The
+// world position (wx/wy/wz) is recomputed from the cursor + camera each frame
+// in refresh_display; build_emitter_snapshot (snapshot.cpp) reads these and
+// appends the emitter. radius is in tiles (used directly).
+namespace cursor_light_emitter
+{
+bool  enabled   = false;
+float radius    = 8.0f;
+float intensity = 1.5f;
+float wx = 0.0f, wy = 0.0f, wz = 0.0f;
+}  // namespace cursor_light_emitter
+
 // Returns true if a curses cell BG fill should be suppressed: only for windows
 // flagged transparent_backdrop (the main-menu decorative background) AND when
 // the colour is opaque black (the default "empty cell" fill). This lets the
@@ -645,14 +658,22 @@ static void draw_lighting_dev_ui()
     ImGui::SameLine();
     ImGui::Checkbox( "Shader heatmap (F6)", &g_dbg_lighting_shader );
 
-    static const char *mode_names[9] = {
-        "off", "ambient", "emitter", "sun", "sky", "total", "SDF", "sky_vis", "emit_bw"
+    static const char *mode_names[10] = {
+        "off", "ambient", "emitter", "sun", "sky", "total", "SDF", "sky_vis", "emit_bw",
+        "normal"
     };
     int mode = static_cast<int>( g_current_dbg_mode );
-    if( ImGui::Combo( "mode (F7)", &mode, mode_names, 9 ) ) {
+    if( ImGui::Combo( "mode (F7)", &mode, mode_names, 10 ) ) {
         g_current_dbg_mode = static_cast<uint32_t>( mode );
         g_dbg_params.debug_mode = g_current_dbg_mode;
     }
+
+    ImGui::SeparatorText( "Cursor light (dev)" );
+    // Movable omni light pinned to the mouse — sweep it over terrain to probe
+    // normals (mode 9) / shadows / GI. Position is tracked in refresh_display.
+    ImGui::Checkbox( "omni light follows cursor", &cursor_light_emitter::enabled );
+    ImGui::SliderFloat( "cursor radius (tiles)", &cursor_light_emitter::radius, 1.0f, 40.0f );
+    ImGui::SliderFloat( "cursor intensity", &cursor_light_emitter::intensity, 0.0f, 5.0f );
 
     ImGui::SeparatorText( "Light scales" );
     // Edit the g_*_scale mirrors then sync into g_dbg_params (the struct the
@@ -875,6 +896,26 @@ void refresh_display()
                 last_z = z;
                 last_origin = origin;
             }
+        }
+        // Dev cursor light (F4): translate the mouse pixel into the shader's
+        // world-tile space so the snapshot can pin an omni emitter under it.
+        // Inverse of the sprite vertex's tile→screen map: world = (mouse_px -
+        // draw_offset)/tile_dim + tile_map_origin. Mouse, draw_offset and tile
+        // dims are all in LOGICAL window pixels (the projection space the tiles
+        // draw in; see the proj_w/h note below), so no HiDPI density scaling.
+        if( cursor_light_emitter::enabled && g && tilecontext
+            && world_generator && world_generator->active_world ) {
+            float msx = 0.0f, msy = 0.0f;
+            SDL_GetMouseState( &msx, &msy );
+            const point o  = tilecontext->get_tile_map_origin().raw();
+            const point op = tilecontext->get_drawing_pixel_offset();
+            const int   tw = std::max( 1, tilecontext->get_tile_width() );
+            const int   th = std::max( 1, tilecontext->get_tile_height() );
+            cursor_light_emitter::wx = ( msx - static_cast<float>( op.x ) )
+                                       / static_cast<float>( tw ) + static_cast<float>( o.x );
+            cursor_light_emitter::wy = ( msy - static_cast<float>( op.y ) )
+                                       / static_cast<float>( th ) + static_cast<float>( o.y );
+            cursor_light_emitter::wz = static_cast<float>( g->u.bub_pos().z() );
         }
         lighting::frame_lighting_result fr =
             lighting::build_and_submit_lighting( rs, rebuild_pertile, g_dbg_lighting );
@@ -3157,10 +3198,11 @@ static void CheckMessages()
                     g_dbg_lighting_shader = !g_dbg_lighting_shader;
                     break;
                 } else if( lc == KEY_F( 7 ) ) {
-                    // F7: cycle debug visualization mode (0-8). Mode 8 is the
+                    // F7: cycle debug visualization mode (0-9). Mode 8 is the
                     // B/W emitter-only diagnostic — bypasses tint gating so it
-                    // works on the main-menu blue backdrop.
-                    g_current_dbg_mode = ( g_current_dbg_mode + 1 ) % 9u;
+                    // works on the main-menu blue backdrop. Mode 9 = surface
+                    // normal (Sobel) as RGB, game tiles only.
+                    g_current_dbg_mode = ( g_current_dbg_mode + 1 ) % 10u;
                     g_dbg_params.debug_mode = g_current_dbg_mode;
                     break;
                 } else if( lc == KEY_F( 8 ) ) {
