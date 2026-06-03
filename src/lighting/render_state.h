@@ -26,6 +26,7 @@
 #include "ui_composite_target.h"
 #include "tonemap_pass.h"
 #include "radiance_cascade_pass.h"
+#include "bloom_pass.h"
 
 #include <memory>
 
@@ -290,6 +291,10 @@ class render_state
         // its cascade texture is the sprite's sole GI input since Phase 4.
         radiance_cascade_pass &rc() noexcept { return rc_; }
 
+        // Bloom post pass (Step-4). Driven from refresh_display between Pass W
+        // and the tonemap resolve; composites additively into world_target.
+        bloom_pass &bloom() noexcept { return bloom_; }
+
     private:
         gpu_device     device_;
         sprite_batcher tile_batcher_;
@@ -348,6 +353,7 @@ class render_state
         std::unique_ptr<ui_composite_target> world_ldr_target_;
         tonemap_pass                         tonemap_;
         radiance_cascade_pass                rc_;
+        bloom_pass                           bloom_;
 };
 
 // Process-wide accessor. The object is constructed in init() and torn down

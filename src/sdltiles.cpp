@@ -584,8 +584,10 @@ static bool g_rc_readback = false;
 static float g_tonemap_exposure = 0.35f;
 static float g_tonemap_min_ev = -12.47393f;
 static float g_tonemap_max_ev = 4.026069f;
-// 1-bounce indirect (fake GI) diffusion controls (F4 sliders). More passes =
-// colored light bleeds/bounces deeper; higher decay = more energy per ring.
+// Bloom post controls (F4 sliders, Step-4). Conservative defaults; tune by eye.
+static bool  g_bloom_enable    = true;
+static float g_bloom_threshold = 1.0f; // HDR luma above which pixels glow
+static float g_bloom_intensity = 0.5f; // additive glow strength
 // Current debug mode display (0-7, cycles through modes).
 static uint32_t g_current_dbg_mode = 0u;
 // Scale factors for individual light contributions (for tuning visualization).
@@ -667,6 +669,9 @@ static void draw_lighting_dev_ui()
     ImGui::SliderFloat( "exposure", &g_tonemap_exposure, 0.0f, 2.0f );
     ImGui::SliderFloat( "min EV", &g_tonemap_min_ev, -20.0f, 0.0f );
     ImGui::SliderFloat( "max EV", &g_tonemap_max_ev, 0.0f, 12.0f );
+    ImGui::Checkbox( "bloom", &g_bloom_enable );
+    ImGui::SliderFloat( "bloom threshold", &g_bloom_threshold, 0.0f, 4.0f );
+    ImGui::SliderFloat( "bloom intensity", &g_bloom_intensity, 0.0f, 2.0f );
 
     ImGui::SeparatorText( "Dither / GI / shadow" );
     ImGui::SliderFloat( "dither amt", &g_dbg_params.dither_amt, 0.0f, 1.0f );
@@ -1314,6 +1319,16 @@ void refresh_display()
                 rs.flush_tile_sprites( rs.tile_batcher(), rs.gpu_sampler() );
             }
             rs.tile_batcher().end_pass();
+
+            // Step-4 bloom: add glow into world_target AFTER it is freshly drawn
+            // this frame (only when Pass W ran — bloom mutates the target in
+            // place, so running it on a retained frame would accumulate glow).
+            // The tonemap (Pass T) then resolves the augmented HDR target.
+            if( g_bloom_enable && rs.bloom().ready() ) {
+                rs.bloom().record( ctx.cmd_buffer, wt->texture(),
+                                   wt->width(), wt->height(),
+                                   g_bloom_threshold, g_bloom_intensity );
+            }
         }
     }
 
@@ -3004,6 +3019,9 @@ bool handle_resize( int w, int h )
                 if( rs.world_ldr_target() ) {
                     rs.world_ldr_target()->resize( pw, ph );
                 }
+                // Bloom half-res textures track the world_target size.
+                rs.bloom().resize( static_cast<std::uint32_t>( pw ),
+                                   static_cast<std::uint32_t>( ph ) );
                 // Font cell size may have changed; drop stale-size icon rasters
                 // so the next request re-rasterizes crisp at the new size.
                 widget_icon::clear();

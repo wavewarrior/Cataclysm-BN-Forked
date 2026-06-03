@@ -139,6 +139,11 @@ void render_state::init( SDL_Window *host_window )
         world_ldr_target_ = std::make_unique<ui_composite_target>();
         world_ldr_target_->init( device_, pw, ph );
         tonemap_.init( device_, device_.swapchain_format() );
+
+        // Bloom post pass (Step-4): half-res bright-pass + blur, composited
+        // additively into world_target (world_fmt) before the tonemap resolve.
+        bloom_.init( device_, world_fmt, static_cast<std::uint32_t>( pw ),
+                     static_cast<std::uint32_t>( ph ) );
     }
 }
 
@@ -153,6 +158,7 @@ void render_state::shutdown() noexcept
     world_ldr_target_.reset();
     tonemap_.shutdown();
     rc_.shutdown();
+    bloom_.shutdown();
 
     // Phase 4: release SDF textures.
     sdf_.shutdown( device_ );
