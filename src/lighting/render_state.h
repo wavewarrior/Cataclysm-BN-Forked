@@ -25,6 +25,7 @@
 #include "ui_adaptor_draw_slices.h"
 #include "ui_composite_target.h"
 #include "tonemap_pass.h"
+#include "radiance_cascade_pass.h"
 
 #include <memory>
 
@@ -285,6 +286,14 @@ class render_state
         // Fullscreen tonemap pass (HDR world_target → world_ldr_target).
         tonemap_pass &tonemap() noexcept { return tonemap_; }
 
+        // Radiance-cascade GI pass (Step-3 Phase 2). Driven from refresh_display.
+        radiance_cascade_pass &rc() noexcept { return rc_; }
+
+        // Select the sprite's GI source: true = GPU radiance cascade (default),
+        // false = CPU 1-bounce indirect texture (the A/B oracle). F4 toggle.
+        void set_gi_use_rc( bool use_rc ) noexcept { gi_use_rc_ = use_rc; }
+        bool gi_use_rc() const noexcept { return gi_use_rc_; }
+
     private:
         gpu_device     device_;
         sprite_batcher tile_batcher_;
@@ -342,6 +351,8 @@ class render_state
         // fullscreen tonemap pass that produces it.
         std::unique_ptr<ui_composite_target> world_ldr_target_;
         tonemap_pass                         tonemap_;
+        radiance_cascade_pass                rc_;
+        bool                                 gi_use_rc_ = true; // RC vs CPU GI (F4 A/B)
 };
 
 // Process-wide accessor. The object is constructed in init() and torn down

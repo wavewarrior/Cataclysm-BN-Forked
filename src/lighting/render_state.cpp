@@ -89,6 +89,12 @@ void render_state::init( SDL_Window *host_window )
     const int rt_tiles = REALITY_BUBBLE_SIZE_MAX * SEEX;
     sdf_.init( device_, rt_tiles, rt_tiles );
 
+    // Radiance-cascade GI pass (Step-3 Phase 2). Its output cascade texture is
+    // sized to the same physical map extent as the SDF (square), stored
+    // transposed as a drop-in for the sprite's IndirectTex.
+    rc_.init( device_, static_cast<std::uint32_t>( rt_tiles ),
+              static_cast<std::uint32_t>( rt_tiles ) );
+
     // UI compositor target. Sized to the PHYSICAL (drawable) swapchain pixels
     // so the composite blit is 1:1; the resize hook in sdltiles keeps it in
     // sync with window size changes. A failed alloc leaves ui_target() != null
@@ -146,6 +152,7 @@ void render_state::shutdown() noexcept
     world_target_.reset();
     world_ldr_target_.reset();
     tonemap_.shutdown();
+    rc_.shutdown();
 
     // Phase 4: release SDF textures.
     sdf_.shutdown( device_ );
@@ -224,8 +231,18 @@ void render_state::begin_lighting_frame( const frame_light_inputs &in )
     const bool      sdf_ready = sdf_.populated();
     SDL_GPUBuffer  *sbuf = sdf_ready ? sdf_.sdf_buffer()      : nullptr;
     SDL_GPUBuffer  *kvis = sdf_ready ? sdf_.sky_vis_buffer()  : nullptr;
-    SDL_GPUTexture *itex = sdf_ready ? sdf_.indirect_texture() : nullptr;
     SDL_GPUBuffer  *vbuf = sdf_ready ? sdf_.vis_buffer()      : nullptr;
+    // GI source for the sprite's IndirectTex: the GPU radiance-cascade gather
+    // (Phase 2) when enabled + ready, else the CPU 1-bounce indirect texture.
+    // Both share the transposed drop-in layout, so this is a pure bind swap —
+    // the A/B oracle that lets RC be validated against the known-good CPU path
+    // (the CPU path is retired in Phase 4). cascade_tex_ is cleared at init, so
+    // it is safe to bind before the first gather (reads as no-GI).
+    SDL_GPUTexture *itex = nullptr;
+    if( sdf_ready ) {
+        itex = ( gi_use_rc_ && rc_.ready() ) ? rc_.cascade_texture()
+                                             : sdf_.indirect_texture();
+    }
     const Uint32 ne = collector_
                       ? static_cast<Uint32>( collector_->last_count() )
                       : 0u;

@@ -576,6 +576,9 @@ static bool g_dbg_lighting = true;
 static bool g_dbg_lighting_shader = false;
 // Runtime tuning state for shader debug modes. Updated by F-key handlers.
 static lighting::debug_params g_dbg_params{};
+// Step-3 Phase 2 A/B: sprite GI source — true = GPU radiance cascade (default),
+// false = CPU 1-bounce indirect (the oracle). Synced into render_state per frame.
+static bool g_gi_use_rc = true;
 // Tonemap pass controls (F4 sliders). Pre-AgX exposure (lit world is linear
 // light above AgX's 0.18 mid-gray anchor → needs exposing down) + the AgX log2
 // EV window (defaults are the canonical AgX range).
@@ -672,6 +675,7 @@ static void draw_lighting_dev_ui()
     ImGui::SliderFloat( "dither amt", &g_dbg_params.dither_amt, 0.0f, 1.0f );
     ImGui::SliderFloat( "dither bands", &g_dbg_params.dither_bands, 1.0f, 16.0f, "%.0f" );
     ImGui::SliderFloat( "GI strength", &g_dbg_params.gi_strength, 0.0f, 2.0f );
+    ImGui::Checkbox( "GI: GPU radiance cascade (off = CPU oracle)", &g_gi_use_rc );
     ImGui::SliderInt( "GI bounces", &g_gi_passes, 0, 12 );
     ImGui::SliderFloat( "GI decay", &g_gi_decay, 0.0f, 0.95f );
     ImGui::SliderFloat( "shadow k", &g_dbg_params.shadow_k, 0.0f, 32.0f );
@@ -827,6 +831,9 @@ void refresh_display()
         return;
     }
 
+    // Step-3 Phase 2: did the per-tile lighting rebuild this frame? Drives the
+    // radiance-cascade gather under the same dirty gate (retain cascade on skip).
+    bool rc_rebuild = false;
     // Phase 3+4: build emitter snapshot + per-tile SDF/sky-vis/GI/vision and
     // submit to the collector, THEN flush below onto this same frame's render
     // CB. Built at the frame head (not the tail) so the light data matches this
@@ -868,6 +875,7 @@ void refresh_display()
         lighting::frame_lighting_result fr =
             lighting::build_and_submit_lighting( rs, rebuild_pertile,
                     g_dbg_lighting, g_gi_passes, g_gi_decay );
+        rc_rebuild = fr.built_pertile;
         if( fr.built_pertile ) {
             s_emo.sdf_at_player      = fr.sdf_at_player;
             s_emo.trans_at_player    = fr.trans_at_player;
@@ -886,6 +894,28 @@ void refresh_display()
     // cause of the empty EmitterTex / corrupted SkyVisTex observed earlier.
     if( rs.collector() ) {
         rs.collector()->flush_to_render_cb( ctx.cmd_buffer );
+    }
+
+    rs.set_gi_use_rc( g_gi_use_rc ); // A/B: which GI texture the sprite binds
+
+    // Step-3 Phase 2: gather the radiance cascade into rs.rc().cascade_texture()
+    // on THIS frame's render CB — after the emitter/SDF upload (its inputs) and
+    // before Pass W (its consumer). Rides the per-tile dirty gate (rc_rebuild):
+    // on skip frames the pass is not re-run and the cascade texture is retained,
+    // exactly like world_target. The sprite reads it as IndirectTex when the F4
+    // GI source is RC (the default).
+    if( rc_rebuild && rs.sdf().populated() && rs.rc().ready()
+        && rs.collector() && rs.sdf().sdf_buffer() ) {
+        lighting::rc_params rp{};
+        rp.emitter_count = static_cast<std::uint32_t>( std::max( 0, rs.collector()->last_count() ) );
+        rp.map_w         = static_cast<std::uint32_t>( rs.sdf().map_w() );
+        rp.map_h         = static_cast<std::uint32_t>( rs.sdf().map_h() );
+        rp.current_z     = g ? static_cast<float>( g->u.bub_pos().z() ) : 0.0f;
+        rp.shadow_k      = g_dbg_params.shadow_k;
+        rp.shadow_steps  = g_dbg_params.shadow_steps;
+        rs.rc().record( ctx.cmd_buffer,
+                        rs.collector()->emitter_buffer(), rs.sdf().sdf_buffer(),
+                        rp.map_w, rp.map_h, rp );
     }
 
     // Phase 6/6b: stamp the per-frame lighting params onto the tile_batcher
