@@ -85,6 +85,8 @@
 #include "uistate.h"
 #include "ui_manager.h"
 #include "wcwidth.h"
+#include "weather.h"
+#include "weather_type.h"
 #include "widget_icon.h"
 #include "sidebar_anim.h"
 #include "worldfactory.h"
@@ -1005,6 +1007,24 @@ void refresh_display()
         // renamed to avoid shadowing the hour_of_day<T>() template.
         const float sun_hour = g ? hour_of_day<float>( calendar::turn ) : 12.f;
         in.sun = lighting::make_sun_params( sun_hour );
+        // Weather multiplier on sun + sky intensity (Bucket A / A3). Reuses the
+        // sim's own light model: incident sunlight = clear-sky sunlight() plus the
+        // weather type's light_modifier (negative for clouds/rain/storm; see
+        // incident_sunlight() in weather.cpp). Normalised against the clear-sky
+        // baseline so it is 1.0 in clear weather and dims under overcast, keeping
+        // the GPU sun/sky in step with gameplay light. CPU-side multiply only —
+        // no shader, wire, or uniform change.
+        float weather_mult = 1.0f;
+        if( g ) {
+            const float base = sunlight( calendar::turn, false );
+            if( base > 1.0f ) {
+                const int mod = get_weather().weather_id->light_modifier;
+                weather_mult = std::clamp( ( base + static_cast<float>( mod ) ) / base,
+                                           0.0f, 1.0f );
+            }
+            in.sun.sun_intensity *= weather_mult;
+            in.sun.sky_intensity *= weather_mult;
+        }
         // Repurpose sun.sp_pad as the shader debug-heatmap sentinel.
         in.sun.sp_pad = g_dbg_lighting_shader ? 1.0f : 0.0f;
 
