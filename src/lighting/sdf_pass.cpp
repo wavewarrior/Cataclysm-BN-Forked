@@ -205,7 +205,7 @@ void sdf_pass::init( gpu_device &dev, int map_w, int map_h )
     {
         SDL_GPUTransferBufferCreateInfo tbci{};
         tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-        tbci.size  = static_cast<Uint32>( map_w * map_h * 3 * 4 ); // 3 floats per tile (RGB)
+        tbci.size  = static_cast<Uint32>( map_w * map_h * 4 * 4 ); // RGBA32F (4 floats/tile)
         xfer_indirect_ = SDL_CreateGPUTransferBuffer( d, &tbci );
     }
     {
@@ -235,13 +235,27 @@ void sdf_pass::init( gpu_device &dev, int map_w, int map_h )
             dbg( DL::Error ) << "sdf_pass::init: failed to create skyvis_storage";
         }
     }
-    {
-        SDL_GPUBufferCreateInfo bci{};
-        bci.usage = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ;
-        bci.size  = static_cast<Uint32>( map_w * map_h * 3 * 4 ); // 3 floats/tile (RGB)
-        indirect_storage_ = SDL_CreateGPUBuffer( d, &bci );
-        if( !indirect_storage_ ) {
-            dbg( DL::Error ) << "sdf_pass::init: failed to create indirect_storage";
+    // 1-bounce indirect light as a fragment storage-READ texture (RGBA32F),
+    // the Step-3 Phase 1b consumer-path proof. Transposed dims (width=map_h,
+    // height=map_w) so the x-major CPU source uploads in linear order; the
+    // shader reads Load(int3(y, x, 0)). RC will write this texture in Phase 2.
+    if( !SDL_GPUTextureSupportsFormat( d, SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT,
+                                       SDL_GPU_TEXTURETYPE_2D,
+                                       SDL_GPU_TEXTUREUSAGE_GRAPHICS_STORAGE_READ ) ) {
+        dbg( DL::Error ) << "sdf_pass::init: RGBA32F GRAPHICS_STORAGE_READ unsupported";
+    } else {
+        SDL_GPUTextureCreateInfo tci{};
+        tci.type                 = SDL_GPU_TEXTURETYPE_2D;
+        tci.format               = SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT;
+        tci.usage                = SDL_GPU_TEXTUREUSAGE_GRAPHICS_STORAGE_READ;
+        tci.width                = static_cast<Uint32>( map_h ); // transposed
+        tci.height               = static_cast<Uint32>( map_w );
+        tci.layer_count_or_depth = 1;
+        tci.num_levels           = 1;
+        tci.sample_count         = SDL_GPU_SAMPLECOUNT_1;
+        indirect_tex_ = SDL_CreateGPUTexture( d, &tci );
+        if( !indirect_tex_ ) {
+            dbg( DL::Error ) << "sdf_pass::init: failed to create indirect_tex";
         }
     }
     {
@@ -293,9 +307,9 @@ void sdf_pass::shutdown( gpu_device &dev )
         SDL_ReleaseGPUBuffer( d, skyvis_storage_ );
         skyvis_storage_ = nullptr;
     }
-    if( indirect_storage_ ) {
-        SDL_ReleaseGPUBuffer( d, indirect_storage_ );
-        indirect_storage_ = nullptr;
+    if( indirect_tex_ ) {
+        SDL_ReleaseGPUTexture( d, indirect_tex_ );
+        indirect_tex_ = nullptr;
     }
     if( visbuf_storage_ ) {
         SDL_ReleaseGPUBuffer( d, visbuf_storage_ );
@@ -479,26 +493,36 @@ void sdf_pass::upload( SDL_GPUCopyPass *cp,
         }
     }
 
-    // 1-bounce indirect light: per-tile RGB (3 floats/tile, x-major i*3+{0,1,2}).
-    // Fragment storage buffer (IndirectBuf); shader adds gi_strength * this.
-    if( indirect_storage_ && xfer_indirect_
+    // 1-bounce indirect light → fragment storage-READ texture (IndirectTex,
+    // RGBA32F). The CPU source is x-major RGB (3 floats/tile, i*3+{0,1,2}); the
+    // texture is transposed (width=map_h height=map_w) so this linear x-major
+    // order uploads straight in with pixels_per_row=runtime_h, region
+    // runtime_h × runtime_w, and the shader reads Load(int3(y, x, 0)). Repack
+    // 3→4 floats/tile (pad .a=0) into the transfer buffer en route.
+    if( indirect_tex_ && xfer_indirect_
         && static_cast<Uint32>( indirect.size() ) >= pixel_count * 3u ) {
-        void *mapped = SDL_MapGPUTransferBuffer( dev, xfer_indirect_, true );
+        float *mapped = static_cast<float *>(
+                            SDL_MapGPUTransferBuffer( dev, xfer_indirect_, true ) );
         if( mapped ) {
-            std::memcpy( mapped, indirect.data(),
-                         pixel_count * 3u * static_cast<Uint32>( sizeof( float ) ) );
+            for( Uint32 i = 0; i < pixel_count; ++i ) {
+                mapped[i * 4u + 0u] = indirect[i * 3u + 0u];
+                mapped[i * 4u + 1u] = indirect[i * 3u + 1u];
+                mapped[i * 4u + 2u] = indirect[i * 3u + 2u];
+                mapped[i * 4u + 3u] = 0.0f;
+            }
             SDL_UnmapGPUTransferBuffer( dev, xfer_indirect_ );
 
-            SDL_GPUTransferBufferLocation tb_src{};
-            tb_src.transfer_buffer = xfer_indirect_;
-            tb_src.offset          = 0;
+            SDL_GPUTextureTransferInfo src{};
+            src.transfer_buffer = xfer_indirect_;
+            src.pixels_per_row  = static_cast<Uint32>( runtime_h );
 
-            SDL_GPUBufferRegion buf_dst{};
-            buf_dst.buffer = indirect_storage_;
-            buf_dst.offset = 0;
-            buf_dst.size   = pixel_count * 3u * static_cast<Uint32>( sizeof( float ) );
+            SDL_GPUTextureRegion dst{};
+            dst.texture = indirect_tex_;
+            dst.w       = static_cast<Uint32>( runtime_h );
+            dst.h       = static_cast<Uint32>( runtime_w );
+            dst.d       = 1;
 
-            SDL_UploadToGPUBuffer( cp, &tb_src, &buf_dst, false );
+            SDL_UploadToGPUTexture( cp, &src, &dst, false );
         }
     }
 

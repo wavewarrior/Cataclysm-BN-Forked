@@ -6,11 +6,17 @@
 //   (s[n], space2) — samplers, indices match their sampled textures.
 //   (b[n], space3) — uniform buffers.
 //
-// Resources (all space2). K=1 sampled texture ⇒ storage buffers start at t1.
+// Resources (all space2). t-register order is sampled → storage textures →
+// storage buffers, so 1 sampled (t0) + 1 storage texture (t1) ⇒ the storage
+// buffers start at t2.
 //   t0 / s0  Atlas       — sampled, current atlas texture (per segment)
-//   t1       Emitters    — StructuredBuffer<GpuEmitter>, 8192-entry  (storage slot 0)
-//   t2       SdfBuf      — StructuredBuffer<float>, sdf_pass dims    (storage slot 1)
-//   t3       SkyVisBuf   — StructuredBuffer<float>, sdf_pass dims    (storage slot 2)
+//   t1       IndirectTex — Texture2D<float4> GRAPHICS_STORAGE_READ, 1-bounce GI
+//                          (storage-texture slot 0; Step-3 Phase 1b consumer
+//                          path — RC will write this texture in Phase 2)
+//   t2       Emitters    — StructuredBuffer<GpuEmitter>, 8192-entry  (storage buf slot 0)
+//   t3       SdfBuf      — StructuredBuffer<float>, sdf_pass dims    (storage buf slot 1)
+//   t4       SkyVisBuf   — StructuredBuffer<float>, sdf_pass dims    (storage buf slot 2)
+//   t5       VisBuf      — StructuredBuffer<float>, per-tile vis     (storage buf slot 3)
 //
 // Emitter, SDF AND sky-vis data carriers ALL live in storage buffers, NOT
 // sampler textures: SDL_shadercross @ 6b06e55c silently mis-binds sampler
@@ -36,12 +42,16 @@ struct GpuEmitter {
     float4 cone_shape;
     float4 misc;
 };
-Texture2D<float4>            Atlas     : register(t0, space2);
-SamplerState                 AtlasSmp  : register(s0, space2);
-StructuredBuffer<GpuEmitter> Emitters  : register(t1, space2);
-StructuredBuffer<float>      SdfBuf    : register(t2, space2);
-StructuredBuffer<float>      SkyVisBuf : register(t3, space2);
-StructuredBuffer<float>      IndirectBuf : register(t4, space2); // 1-bounce GI, 3 floats/tile RGB
+Texture2D<float4>            Atlas       : register(t0, space2);
+SamplerState                 AtlasSmp    : register(s0, space2);
+// 1-bounce GI as a read-only storage texture (Texture2D, NO sampler, read via
+// .Load only — that is what makes shadercross reflect it as a storage texture,
+// not a 2nd sampled image). Storage-texture slot 0 ⇒ t1, ahead of the storage
+// buffers. RGBA32F, width=sdf_map_h height=sdf_map_w (see indirect_texel).
+Texture2D<float4>            IndirectTex : register(t1, space2);
+StructuredBuffer<GpuEmitter> Emitters    : register(t2, space2);
+StructuredBuffer<float>      SdfBuf      : register(t3, space2);
+StructuredBuffer<float>      SkyVisBuf   : register(t4, space2);
 StructuredBuffer<float>      VisBuf      : register(t5, space2); // per-tile visibility (>=0 live, <0 memory)
 cbuffer LightParams : register(b0, space3) {
     float tile_pixel_size; float current_z;
@@ -119,14 +129,17 @@ float sdf_bilinear(float2 p) {
     const float d = sdf_texel(x0 + 1, y0 + 1);
     return lerp(lerp(a, b, w.x), lerp(c, d, w.x), w.y);
 }
-// Per-tile 1-bounce indirect light (RGB, 3 floats/tile, x-major). Bilinear with
-// the same p-0.5 centre convention as sdf_bilinear (per-tile nearest would show
-// hard tile squares of fill).
+// Per-tile 1-bounce indirect light (RGB). Now a read-only storage texture
+// (Phase 1b). The CPU source is x-major arr[x*map_h+y]; the texture is uploaded
+// in that same linear order into dims width=map_h height=map_w, so tile (x,y)
+// lives at texel (col=y, row=x) → Load(int3(y, x, 0)). This row/col swap is the
+// row-major texture convention (cf. the sampler-texture note in CLAUDE.md);
+// it makes the texture read pixel-identical to the old x-major buffer index.
+// Bilinear with the same p-0.5 centre convention as sdf_bilinear.
 float3 indirect_texel(int x, int y) {
     x = clamp(x, 0, (int)sdf_map_w - 1);
     y = clamp(y, 0, (int)sdf_map_h - 1);
-    const int b = (x * (int)sdf_map_h + y) * 3;
-    return float3(IndirectBuf[b], IndirectBuf[b + 1], IndirectBuf[b + 2]);
+    return IndirectTex.Load(int3(y, x, 0)).rgb;
 }
 float3 indirect_bilinear(float2 p) {
     const float2 sp = p - 0.5;

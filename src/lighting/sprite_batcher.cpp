@@ -181,11 +181,14 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
         // data all live in fragment storage buffers (slots 0/1/2), not
         // sampler textures — Metal mis-binds sampler-texture Load (see
         // SPRITE_FRAG_HLSL comment). Atlas is the only sampler texture.
-        SDL_GPUBuffer  *lp_emitter_buf  = nullptr;  // fragment storage slot 0
-        SDL_GPUBuffer  *lp_sdf_buf      = nullptr;  // fragment storage slot 1
-        SDL_GPUBuffer  *lp_sky_vis_buf  = nullptr;  // fragment storage slot 2
-        SDL_GPUBuffer  *lp_indirect_buf = nullptr;  // fragment storage slot 3 (IndirectBuf)
-        SDL_GPUBuffer  *lp_vis_buf      = nullptr;  // fragment storage slot 4 (VisBuf)
+        SDL_GPUBuffer  *lp_emitter_buf  = nullptr;  // fragment storage BUFFER slot 0
+        SDL_GPUBuffer  *lp_sdf_buf      = nullptr;  // fragment storage BUFFER slot 1
+        SDL_GPUBuffer  *lp_sky_vis_buf  = nullptr;  // fragment storage BUFFER slot 2
+        SDL_GPUBuffer  *lp_vis_buf      = nullptr;  // fragment storage BUFFER slot 3 (VisBuf)
+        // 1-bounce GI is now a storage-READ TEXTURE (IndirectTex), not a buffer
+        // (Step-3 Phase 1b). Bound via SDL_BindGPUFragmentStorageTextures slot 0
+        // → t1/space2 (storage textures precede storage buffers in t-space).
+        SDL_GPUTexture *lp_indirect_tex = nullptr;
         SDL_GPUSampler *lp_data_sampler = nullptr;
         light_params    lp              = {};  // defaults: all zero
         sun_params      lp_sun          = {};  // Phase 8: sun/sky params
@@ -203,7 +206,7 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                                      SDL_GPUBuffer  *sdf_buf       = nullptr,
                                      SDL_GPUSampler *data_sampler = nullptr,
                                      SDL_GPUBuffer  *sky_vis_buf  = nullptr,
-                                     SDL_GPUBuffer  *indirect_buf = nullptr,
+                                     SDL_GPUTexture *indirect_tex = nullptr,
                                      SDL_GPUBuffer  *vis_buf      = nullptr,
                                      const sun_params *sp         = nullptr,
                                      const debug_params *dbg      = nullptr ) noexcept {
@@ -217,7 +220,7 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
             lp_emitter_buf  = emitter_buf;
             lp_sdf_buf      = sdf_buf;
             lp_sky_vis_buf  = sky_vis_buf;
-            lp_indirect_buf = indirect_buf;
+            lp_indirect_tex = indirect_tex;
             lp_vis_buf      = vis_buf;
             lp_data_sampler = data_sampler;
             lp.tile_pixel_size = tile_pixel_size;
@@ -324,6 +327,19 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
             }
             vert_shader = v.shader;
             frag_shader = f.shader;
+
+            // Step-3 Phase 1b structural gate: confirm shadercross reflected the
+            // renumbered sprite frag as 1 storage texture (IndirectTex at t1) +
+            // 4 storage buffers (emitter/sdf/skyvis/vis at t2..t5), not the old
+            // 5-buffer layout. Logged to DC::Main (DC::SDL is filtered on this
+            // build) so a wrong count surfaces before any pixel check — this
+            // separates the layout axis from the data axis.
+            DebugLogFL( DL::Info, DC::Main )
+                    << "sprite_batcher frag reflection: samplers="
+                    << f.resources.num_samplers
+                    << " storage_textures=" << f.resources.num_storage_textures
+                    << " storage_buffers=" << f.resources.num_storage_buffers
+                    << " (Phase 1b expects storage_textures=1 storage_buffers=4)";
 
             // Build the pipeline for the configured (swapchain) target format.
             // Other formats (e.g. the RGBA16F HDR world target) are built
@@ -594,33 +610,18 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                 SDL_BindGPUVertexStorageBuffers( rp, /*first_slot=*/0,
                                                  &storage_binding.buffer, 1 );
 
-                // After 2026-05-29 refactor: fragment resource layout is
-                //   sampler slot 0 → Atlas      (per-segment)
-                //   storage  slot 0 → Emitters  (StructuredBuffer<GpuEmitter>)
-                //   storage  slot 1 → SdfBuf      (StructuredBuffer<float>)
-                //   storage  slot 2 → SkyVisBuf   (StructuredBuffer<float>)
-                //   storage  slot 3 → IndirectBuf (StructuredBuffer<float>)
-                //   storage  slot 4 → VisBuf      (StructuredBuffer<float>)
-                // matching HLSL t0 sampled + t1/t2/t3/t4/t5 storage (space2).
-                // Bind all storage buffers in one call so a later bind can't
-                // zero an earlier slot. SDF/sky/indirect/vis reads are gated by
-                // sdf_map_w>0 in the shader, so unbound slots (no SDF yet) are safe.
-                if( lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf && lp_indirect_buf && lp_vis_buf ) {
-                    SDL_GPUBuffer *sbufs[5] = { lp_emitter_buf, lp_sdf_buf, lp_sky_vis_buf, lp_indirect_buf, lp_vis_buf };
-                    SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0, sbufs, 5 );
-                } else if( lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf && lp_indirect_buf ) {
-                    SDL_GPUBuffer *sbufs[4] = { lp_emitter_buf, lp_sdf_buf, lp_sky_vis_buf, lp_indirect_buf };
-                    SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0, sbufs, 4 );
-                } else if( lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf ) {
-                    SDL_GPUBuffer *sbufs[3] = { lp_emitter_buf, lp_sdf_buf, lp_sky_vis_buf };
-                    SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0, sbufs, 3 );
-                } else if( lp_emitter_buf && lp_sdf_buf ) {
-                    SDL_GPUBuffer *sbufs[2] = { lp_emitter_buf, lp_sdf_buf };
-                    SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0, sbufs, 2 );
-                } else if( lp_emitter_buf ) {
-                    SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0,
-                                                       &lp_emitter_buf, 1 );
-                }
+                // Fragment resource layout (space2), t-order sampled → storage
+                // textures → storage buffers (Step-3 Phase 1b):
+                //   sampler slot 0  → Atlas       (t0, per-segment)
+                //   stor-tex slot 0 → IndirectTex (t1, 1-bounce GI texture)
+                //   stor-buf slot 0 → Emitters    (t2)
+                //   stor-buf slot 1 → SdfBuf       (t3)
+                //   stor-buf slot 2 → SkyVisBuf    (t4)
+                //   stor-buf slot 3 → VisBuf       (t5)
+                // Textures and buffers are SEPARATE SDL binding arrays. All
+                // per-tile reads are gated by sdf_map_w>0 in the shader, so a
+                // not-yet-ready (null) resource is safe to leave unbound.
+                bind_lighting_resources( rp );
 
                 const SDL_GPUViewport vp{
                     0.0f, 0.0f,
@@ -685,27 +686,14 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                         }
                     }
 
-                    // Re-bind emitter+SDF+sky-vis storage each segment.
-                    // SDL_BindGPUFragmentStorageBuffers can rebuild the
+                    // Re-bind the lighting storage texture + buffers each lit
+                    // segment. SDL_BindGPUFragmentStorage* can rebuild the
                     // descriptor table and zero any slot not included, so we
                     // re-issue for lit segments. Unlit (HUD/UI) segments skip —
                     // emitter_count==0 / sdf_map_w==0 guards in the shader
                     // short-circuit any reads there.
-                    if( s.is_lit && lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf && lp_indirect_buf && lp_vis_buf ) {
-                        SDL_GPUBuffer *sbufs[5] = { lp_emitter_buf, lp_sdf_buf, lp_sky_vis_buf, lp_indirect_buf, lp_vis_buf };
-                        SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0, sbufs, 5 );
-                    } else if( s.is_lit && lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf && lp_indirect_buf ) {
-                        SDL_GPUBuffer *sbufs[4] = { lp_emitter_buf, lp_sdf_buf, lp_sky_vis_buf, lp_indirect_buf };
-                        SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0, sbufs, 4 );
-                    } else if( s.is_lit && lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf ) {
-                        SDL_GPUBuffer *sbufs[3] = { lp_emitter_buf, lp_sdf_buf, lp_sky_vis_buf };
-                        SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0, sbufs, 3 );
-                    } else if( s.is_lit && lp_emitter_buf && lp_sdf_buf ) {
-                        SDL_GPUBuffer *sbufs[2] = { lp_emitter_buf, lp_sdf_buf };
-                        SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0, sbufs, 2 );
-                    } else if( s.is_lit && lp_emitter_buf ) {
-                        SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0,
-                                                           &lp_emitter_buf, 1 );
+                    if( s.is_lit ) {
+                        bind_lighting_resources( rp );
                     }
 
                     // Shader pixel→NDC math uses the projection extent
@@ -778,6 +766,31 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
             segments.push_back( s );
             seg_start = end;
         }
+
+        // Bind the lighting storage texture + storage buffers for a lit segment
+        // (shared by the initial bind and each per-segment rebind, so the two
+        // sites can never drift). Textures and buffers are separate SDL binding
+        // arrays. All per-tile reads are gated by sdf_map_w>0 in the shader, so
+        // a not-yet-ready (null) resource is safe to leave unbound.
+        void bind_lighting_resources( SDL_GPURenderPass *rp ) {
+            // Storage TEXTURE slot 0 → t1 (1-bounce GI, IndirectTex).
+            if( lp_indirect_tex ) {
+                SDL_BindGPUFragmentStorageTextures( rp, /*first_slot=*/0,
+                                                    &lp_indirect_tex, 1 );
+            }
+            // Storage BUFFER slots 0..3 → t2..t5. One call so a later bind can't
+            // zero an earlier slot; rungs preserve not-ready (no-SDF) frames.
+            if( lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf && lp_vis_buf ) {
+                SDL_GPUBuffer *sbufs[4] = { lp_emitter_buf, lp_sdf_buf, lp_sky_vis_buf, lp_vis_buf };
+                SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0, sbufs, 4 );
+            } else if( lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf ) {
+                SDL_GPUBuffer *sbufs[3] = { lp_emitter_buf, lp_sdf_buf, lp_sky_vis_buf };
+                SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0, sbufs, 3 );
+            } else if( lp_emitter_buf ) {
+                SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0,
+                                                   &lp_emitter_buf, 1 );
+            }
+        }
 };
 
 // ---- sprite_batcher trampolines ---------------------------------------
@@ -841,7 +854,7 @@ void sprite_batcher::set_lighting_resources( float            tile_pixel_size,
                                               SDL_GPUBuffer   *sdf_buf,
                                               SDL_GPUSampler  *data_sampler,
                                               SDL_GPUBuffer   *sky_vis_buf,
-                                              SDL_GPUBuffer   *indirect_buf,
+                                              SDL_GPUTexture  *indirect_tex,
                                               SDL_GPUBuffer   *vis_buf,
                                               const sun_params   *sp,
                                               const debug_params *dbg )
@@ -850,7 +863,7 @@ void sprite_batcher::set_lighting_resources( float            tile_pixel_size,
                                 emitter_count, ambient,
                                 cam_off_x, cam_off_y, sdf_map_w, sdf_map_h,
                                 emitter_buf, sdf_buf, data_sampler,
-                                sky_vis_buf, indirect_buf, vis_buf, sp, dbg );
+                                sky_vis_buf, indirect_tex, vis_buf, sp, dbg );
 }
 
 void sprite_batcher::draw( const sprite_instance &inst )

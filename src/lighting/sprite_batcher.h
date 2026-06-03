@@ -32,6 +32,7 @@
 
 // Forward-declared so the header stays self-contained (no SDL_gpu.h include).
 struct SDL_GPURenderPass;
+struct SDL_GPUTexture;
 
 namespace lighting
 {
@@ -233,7 +234,7 @@ class sprite_batcher
                                      SDL_GPUBuffer    *sdf_buf      = nullptr,
                                      SDL_GPUSampler   *data_sampler = nullptr,
                                      SDL_GPUBuffer    *sky_vis_buf  = nullptr,
-                                     SDL_GPUBuffer    *indirect_buf = nullptr,
+                                     SDL_GPUTexture   *indirect_tex = nullptr,
                                      SDL_GPUBuffer    *vis_buf      = nullptr,
                                      const sun_params *sp           = nullptr,
                                      const debug_params *dbg        = nullptr );

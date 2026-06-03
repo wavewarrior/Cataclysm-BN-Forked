@@ -224,7 +224,7 @@ void render_state::begin_lighting_frame( const frame_light_inputs &in )
     const bool      sdf_ready = sdf_.populated();
     SDL_GPUBuffer  *sbuf = sdf_ready ? sdf_.sdf_buffer()      : nullptr;
     SDL_GPUBuffer  *kvis = sdf_ready ? sdf_.sky_vis_buffer()  : nullptr;
-    SDL_GPUBuffer  *ibuf = sdf_ready ? sdf_.indirect_buffer() : nullptr;
+    SDL_GPUTexture *itex = sdf_ready ? sdf_.indirect_texture() : nullptr;
     SDL_GPUBuffer  *vbuf = sdf_ready ? sdf_.vis_buffer()      : nullptr;
     const Uint32 ne = collector_
                       ? static_cast<Uint32>( collector_->last_count() )
@@ -235,7 +235,7 @@ void render_state::begin_lighting_frame( const frame_light_inputs &in )
     tile_batcher_.set_lighting_resources(
         in.tile_pixel_size, in.z_level, ne, in.ambient,
         in.camera_off_x, in.camera_off_y, sw, sh,
-        ebuf, sbuf, gpu_sampler_, kvis, ibuf, vbuf, &in.sun, &in.debug );
+        ebuf, sbuf, gpu_sampler_, kvis, itex, vbuf, &in.sun, &in.debug );
 }
 
 void render_state::flush_ui_rects( sprite_batcher &dst )

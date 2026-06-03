@@ -71,7 +71,11 @@ public:
     // Sky visibility as a fragment-readable storage buffer of floats
     // (1.0=open sky, 0.0=roofed) — sampler-texture Load returns 0 on Metal.
     SDL_GPUBuffer  *sky_vis_buffer()       const noexcept { return skyvis_storage_; }
-    SDL_GPUBuffer  *indirect_buffer()      const noexcept { return indirect_storage_; }
+    // 1-bounce indirect light as a fragment storage-READ texture (RGBA32F;
+    // Step-3 Phase 1b consumer-path proof — replaces the old IndirectBuf
+    // storage buffer). Width=map_h, height=map_w (transposed): the x-major CPU
+    // source uploads in linear order and the shader reads Load(int3(y, x, 0)).
+    SDL_GPUTexture *indirect_texture()     const noexcept { return indirect_tex_; }
     // Per-tile visibility as a fragment-readable storage buffer of floats
     // (>=0 = live seen_cache [0..1]; <0 = memorized-tile sentinel). Drives the
     // soft vision falloff + memory desaturate-fade in the fragment shader.
@@ -102,13 +106,13 @@ private:
     SDL_GPUTexture        *sky_vis_tex_      = nullptr; // Phase 8: R8_UNORM
     SDL_GPUBuffer         *sdf_storage_      = nullptr; // fragment storage buffer (SdfBuf)
     SDL_GPUBuffer         *skyvis_storage_   = nullptr; // fragment storage buffer (SkyVisBuf, floats)
-    SDL_GPUBuffer         *indirect_storage_ = nullptr; // fragment storage buffer (IndirectBuf, 3 floats/tile RGB)
+    SDL_GPUTexture        *indirect_tex_     = nullptr; // fragment storage-read texture (IndirectTex, RGBA32F)
     SDL_GPUBuffer         *visbuf_storage_   = nullptr; // fragment storage buffer (VisBuf, 1 float/tile)
     SDL_GPUTransferBuffer *xfer_transparency_ = nullptr;
     SDL_GPUTransferBuffer *xfer_sdf_          = nullptr;
     SDL_GPUTransferBuffer *xfer_sky_vis_      = nullptr; // R8 bytes for sky_vis_tex_
     SDL_GPUTransferBuffer *xfer_skyvis_f_     = nullptr; // float bytes for skyvis_storage_
-    SDL_GPUTransferBuffer *xfer_indirect_     = nullptr; // float bytes for indirect_storage_ (3/tile)
+    SDL_GPUTransferBuffer *xfer_indirect_     = nullptr; // RGBA32F upload staging for indirect_tex_ (4/tile)
     SDL_GPUTransferBuffer *xfer_vis_f_        = nullptr; // float bytes for visbuf_storage_ (1/tile)
     int  map_w_     = 0;   // physical texture extent (REALITY_BUBBLE_SIZE_MAX*SEEX)
     int  map_h_     = 0;
