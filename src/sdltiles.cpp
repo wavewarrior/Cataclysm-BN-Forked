@@ -720,6 +720,10 @@ static void draw_lighting_dev_ui()
     // (tight but grid-snapped). Tile-resolution SDF can't be both crisp AND smooth;
     // crank with shadow k for the tightest shadows the tile field allows.
     ImGui::SliderFloat( "SDF sharpness", &g_dbg_params.sdf_sharp, 0.0f, 1.0f );
+    // Ambient occlusion (A4): SDF-cavity darkening of the ambient/sky/GI fills
+    // (direct emitter/sun already self-shadow, so AO leaves them alone). 0=off
+    // is the committed default; mode 10 visualises the raw AO term (grayscale).
+    ImGui::SliderFloat( "ambient occlusion", &g_dbg_params.ao_strength, 0.0f, 1.0f );
 
     ImGui::SeparatorText( "Vision (Stoneshard)" );
     // Each knob is independent so a single effect can be zeroed live to bisect.
@@ -3210,11 +3214,12 @@ static void CheckMessages()
                     g_dbg_lighting_shader = !g_dbg_lighting_shader;
                     break;
                 } else if( lc == KEY_F( 7 ) ) {
-                    // F7: cycle debug visualization mode (0-9). Mode 8 is the
+                    // F7: cycle debug visualization mode (0-10). Mode 8 is the
                     // B/W emitter-only diagnostic — bypasses tint gating so it
                     // works on the main-menu blue backdrop. Mode 9 = surface
-                    // normal (Sobel) as RGB, game tiles only.
-                    g_current_dbg_mode = ( g_current_dbg_mode + 1 ) % 10u;
+                    // normal (Sobel) as RGB; mode 10 = ambient occlusion
+                    // (grayscale openness), both game tiles only.
+                    g_current_dbg_mode = ( g_current_dbg_mode + 1 ) % 11u;
                     g_dbg_params.debug_mode = g_current_dbg_mode;
                     break;
                 } else if( lc == KEY_F( 8 ) ) {

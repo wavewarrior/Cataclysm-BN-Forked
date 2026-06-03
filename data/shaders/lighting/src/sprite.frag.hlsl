@@ -94,8 +94,8 @@ cbuffer DebugParams : register(b2, space3) {
     float nrm_relief;          // A1 normal tilt magnitude; SIGNED (negative flips global relief direction)
     float nrm_elev;            // A1 implied light height above plane; LOWER=more grazing=stronger relief
     float sdf_sharp;           // SDF sample sharpness: 0=bilinear(smooth) .. 1=nearest(tight, grid-snapped)
+    float ao_strength;         // A4 ambient occlusion: 0=off .. 1=full SDF-cavity darkening of the ambient fills
     float dp_pad1;
-    float dp_pad2;
 };
 struct VS_OUT {
     float4 pos      : SV_Position;
@@ -348,6 +348,33 @@ float4 main(VS_OUT i) : SV_Target0 {
     sun_contrib   *= sun_scale;
     sky_contrib   *= sky_scale;
 
+    // Ambient occlusion (Bucket A / A4). SDF-proximity cavity term: 8 short taps
+    // of the (4x-supersampled, transposed) SDF around the fragment via the shared
+    // sdf_bilinear, averaged to a mean openness. Near walls the taps read small →
+    // darker; in the open they saturate to 1 → no-op. Deliberately the SDF cavity
+    // term, NOT a normal-hemisphere trace: in top-down the relief normal is near
+    // z-up so normal-weighting adds noise, not shape; wall proximity is the term
+    // that reads as 3D here. AO modulates ONLY the directionless fills (ambient
+    // floor + sky + GI) below — emitter/sun already self-shadow via trace_shadow,
+    // so AO must not touch them or crevices double-darken. ao_strength=0 → exact
+    // no-op (off, the committed default).
+    float ao = 1.0;
+    if(ao_strength > 0.001 && sdf_map_w > 0u) {
+        const float aor = 1.5;              // tap radius in tiles
+        const float ad  = aor * 0.70711;    // diagonal taps at the same radius
+        float open = 0.0;
+        open += saturate(sdf_bilinear(i.world_pos + float2( aor, 0.0)) / aor);
+        open += saturate(sdf_bilinear(i.world_pos + float2(-aor, 0.0)) / aor);
+        open += saturate(sdf_bilinear(i.world_pos + float2( 0.0, aor)) / aor);
+        open += saturate(sdf_bilinear(i.world_pos + float2( 0.0,-aor)) / aor);
+        open += saturate(sdf_bilinear(i.world_pos + float2( ad,  ad)) / aor);
+        open += saturate(sdf_bilinear(i.world_pos + float2(-ad,  ad)) / aor);
+        open += saturate(sdf_bilinear(i.world_pos + float2( ad, -ad)) / aor);
+        open += saturate(sdf_bilinear(i.world_pos + float2(-ad, -ad)) / aor);
+        open *= 0.125;                      // mean of the 8 taps
+        ao = lerp(1.0, open, saturate(ao_strength));
+    }
+
     // Ambient floor. In-game (sdf_map_w>0) it auto-tracks time-of-day:
     // lerp(night_floor, day_floor, sun_intensity) → darker, more immersive
     // nights (effect 4). UI / main menu (no world) keep the CPU `ambient`
@@ -356,7 +383,7 @@ float4 main(VS_OUT i) : SV_Target0 {
     const float amb_floor = (sdf_map_w > 0u)
                             ? lerp(night_floor, day_floor, saturate(sun_intensity))
                             : ambient;
-    const float3 ambient_v = float3(amb_floor, amb_floor, amb_floor);
+    const float3 ambient_v = float3(amb_floor, amb_floor, amb_floor) * ao;
 
     // Multi-band ordered (Bayer) dither, world-locked. Quantise ONLY the
     // dynamic light (emitter + sky + sun) into `dither_bands` levels and
@@ -365,12 +392,12 @@ float4 main(VS_OUT i) : SV_Target0 {
     // makes dark areas sparkle). Ordered dither is mean-preserving, so no
     // global brightness shift. Anchored to world PIXELS (world_pos *
     // tile_pixel_size) → pattern sticks to terrain, no shimmer on scroll.
-    float3 dyn = emitter_light + sky_contrib + sun_contrib;
+    float3 dyn = emitter_light + sky_contrib * ao + sun_contrib;
     // 1-bounce indirect fill (fake GI): colored light diffused off surfaces into
     // open neighbours on the CPU, added here before dither so it bands with the
     // rest of the dynamic light.
     if(gi_strength > 0.001 && sdf_map_w > 0u) {
-        dyn += gi_strength * indirect_bilinear(i.world_pos);
+        dyn += gi_strength * indirect_bilinear(i.world_pos) * ao;
     }
     if(dither_amt > 0.001) {
         const float  bands = max(dither_bands, 1.0);
@@ -479,6 +506,12 @@ float4 main(VS_OUT i) : SV_Target0 {
             // lavender-blue; relief tilts push R (x-slope) / G (y-slope).
             // Replace so it shows raw; game tiles only (tint-gated below).
             vis = normal * 0.5 + 0.5;
+            replace = true;
+        } else if(debug_mode == 10u) {
+            // AO view (Bucket A / A4): grayscale mean SDF-openness. White =
+            // fully open (ao≈1, no darkening), darkening toward walls/crevices.
+            // Uniform white = ao_strength is 0 or the SDF is empty.
+            vis = float3(ao, ao, ao);
             replace = true;
         }
         if(replace) {

@@ -143,8 +143,8 @@ struct debug_params {
     float    nrm_relief    = -2.0f;  // tilt magnitude; SIGNED — negative flips global relief dir
     float    nrm_elev      = 0.3f;   // implied light height; LOWER=more grazing=stronger relief
     float    sdf_sharp     = 0.0f;   // SDF sample: 0=bilinear(smooth) .. 1=nearest(tight/grid-snap)
-    float    dp_pad1       = 0.0f;
-    float    dp_pad2       = 0.0f;   // pad to 28-float (112-byte) alignment
+    float    ao_strength   = 0.0f;   // A4 ambient occlusion: 0=off(default) .. 1=full SDF-cavity darkening
+    float    dp_pad1       = 0.0f;   // pad to 28-float (112-byte) alignment
 };
 
 // Returns sun/sky params interpolated from a 24h LUT for the given hour (0..24).
