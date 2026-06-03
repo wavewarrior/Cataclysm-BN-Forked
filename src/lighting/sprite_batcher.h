@@ -179,13 +179,19 @@ class sprite_batcher
         // decoupling (offscreen captures, fixed-res render-to-texture).
         // HiDPI render path passes target = physical, proj = logical so the
         // GPU stretches logical-coord draws across the full physical fb.
+        // `target_format` selects the cached graphics pipeline for this pass
+        // (built lazily). INVALID (default) uses the format the batcher was
+        // init'd with (the swapchain format) — so existing swapchain/UI passes
+        // need no change; an HDR (RGBA16F) target passes its format explicitly.
         void begin_pass( SDL_GPUCommandBuffer *cb,
                          SDL_GPUTexture *target,
                          std::uint32_t target_w,
                          std::uint32_t target_h,
                          const float *clear_color_rgba = nullptr,
                          std::uint32_t proj_w = 0,
-                         std::uint32_t proj_h = 0 );
+                         std::uint32_t proj_h = 0,
+                         SDL_GPUTextureFormat target_format =
+                             SDL_GPU_TEXTUREFORMAT_INVALID );
 
         // Bind a different atlas page. Calling this with the currently bound
         // page and the same is_lit state is a no-op; otherwise flushes the

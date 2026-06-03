@@ -24,6 +24,7 @@
 #include "sdf_pass.h"
 #include "ui_adaptor_draw_slices.h"
 #include "ui_composite_target.h"
+#include "tonemap_pass.h"
 
 #include <memory>
 
@@ -276,6 +277,14 @@ class render_state
         // clear" signal (set on init + resize). nullptr until init() succeeds.
         ui_composite_target *world_target() noexcept { return world_target_.get(); }
 
+        // Tonemapped (LDR) world target: the HDR world_target() resolved through
+        // the tonemap pass for display. Pass B blits this instead of the raw
+        // HDR world. Swapchain format. nullptr until init() succeeds.
+        ui_composite_target *world_ldr_target() noexcept { return world_ldr_target_.get(); }
+
+        // Fullscreen tonemap pass (HDR world_target → world_ldr_target).
+        tonemap_pass &tonemap() noexcept { return tonemap_; }
+
     private:
         gpu_device     device_;
         sprite_batcher tile_batcher_;
@@ -325,8 +334,14 @@ class render_state
         // UI compositor target (offscreen UI render-to-texture).
         std::unique_ptr<ui_composite_target> ui_target_;
 
-        // World accumulation target (persistent lit-world layer).
+        // World accumulation target (persistent lit-world layer, HDR once
+        // step 1b lands).
         std::unique_ptr<ui_composite_target> world_target_;
+
+        // Tonemapped LDR resolve of world_target_ (swapchain format) + the
+        // fullscreen tonemap pass that produces it.
+        std::unique_ptr<ui_composite_target> world_ldr_target_;
+        tonemap_pass                         tonemap_;
 };
 
 // Process-wide accessor. The object is constructed in init() and torn down

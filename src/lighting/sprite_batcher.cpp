@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <map>
 #include <utility>
 #include <vector>
 
@@ -115,7 +116,13 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
         gpu_device *dev = nullptr;
         pipeline_desc desc{};
 
-        SDL_GPUGraphicsPipeline *pipeline = nullptr;
+        // One graphics pipeline per color-target format we render into — same
+        // shaders + resource layout, only the target format differs (swapchain
+        // 8-bit for UI/composite, RGBA16F for the HDR world target). Lazily
+        // built by get_or_build_pipeline() the first time begin_pass sees a
+        // format; un-stubs pipeline_desc.color_target_format
+        // (LIGHTING_REWORK_PLAN.md step 1).
+        std::map<SDL_GPUTextureFormat, SDL_GPUGraphicsPipeline *> pipelines;
         SDL_GPUShader *vert_shader = nullptr;
         SDL_GPUShader *frag_shader = nullptr;
         SDL_GPUSampler *default_sampler = nullptr;
@@ -163,6 +170,9 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
         // larger viewport.
         Uint32 cur_proj_w   = 0;
         Uint32 cur_proj_h   = 0;
+        // Color-target format of the current pass → selects which cached
+        // pipeline end_pass binds (resolved from begin_pass's target_format).
+        SDL_GPUTextureFormat cur_target_format = SDL_GPU_TEXTUREFORMAT_INVALID;
         bool   cur_clear    = false;
         float  cur_clear_color[4] = {};
         bool   pass_open = false;
@@ -229,6 +239,60 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
 
         // ---- lifecycle -------------------------------------------------
 
+        // Build a graphics pipeline for a specific color-target format. Shaders
+        // + blend + raster come from the shared shaders / desc; only the target
+        // format varies. Returns nullptr on failure (caller logs/throws).
+        SDL_GPUGraphicsPipeline *build_pipeline( SDL_GPUTextureFormat fmt ) {
+            SDL_GPUColorTargetBlendState blend{};
+            blend.enable_blend = desc.enable_blend;
+            blend.src_color_blendfactor = desc.src_color_blend;
+            blend.dst_color_blendfactor = desc.dst_color_blend;
+            blend.color_blend_op        = desc.color_blend_op;
+            blend.src_alpha_blendfactor = desc.src_alpha_blend;
+            blend.dst_alpha_blendfactor = desc.dst_alpha_blend;
+            blend.alpha_blend_op        = desc.alpha_blend_op;
+            blend.color_write_mask = SDL_GPU_COLORCOMPONENT_R |
+                                     SDL_GPU_COLORCOMPONENT_G |
+                                     SDL_GPU_COLORCOMPONENT_B |
+                                     SDL_GPU_COLORCOMPONENT_A;
+            blend.enable_color_write_mask = false;
+
+            SDL_GPUColorTargetDescription color_target{};
+            color_target.format = fmt;
+            color_target.blend_state = blend;
+
+            SDL_GPUGraphicsPipelineCreateInfo pci{};
+            pci.vertex_shader   = vert_shader;
+            pci.fragment_shader = frag_shader;
+            pci.primitive_type  = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+            pci.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+            pci.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+            pci.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+            pci.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
+            pci.target_info.num_color_targets = 1;
+            pci.target_info.color_target_descriptions = &color_target;
+            pci.target_info.has_depth_stencil_target  = false;
+            pci.props = 0;
+            return SDL_CreateGPUGraphicsPipeline( dev->raw(), &pci );
+        }
+
+        // Return the cached pipeline for `fmt`, lazily building it on first use.
+        // nullptr on build failure (logged).
+        SDL_GPUGraphicsPipeline *get_or_build_pipeline( SDL_GPUTextureFormat fmt ) {
+            auto it = pipelines.find( fmt );
+            if( it != pipelines.end() ) {
+                return it->second;
+            }
+            SDL_GPUGraphicsPipeline *pl = build_pipeline( fmt );
+            if( pl ) {
+                pipelines[fmt] = pl;
+            } else {
+                dbg( DL::Error ) << "sprite_batcher: pipeline build failed for format "
+                                 << static_cast<int>( fmt ) << ": " << SDL_GetError();
+            }
+            return pl;
+        }
+
         void init( gpu_device &d, const pipeline_desc &pd, const char *label ) {
             if( !d.ready() ) {
                 throw std::runtime_error( "sprite_batcher::init: gpu_device not ready" );
@@ -261,43 +325,15 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
             vert_shader = v.shader;
             frag_shader = f.shader;
 
-            // Pipeline.
-            SDL_GPUColorTargetBlendState blend{};
-            blend.enable_blend = desc.enable_blend;
-            blend.src_color_blendfactor = desc.src_color_blend;
-            blend.dst_color_blendfactor = desc.dst_color_blend;
-            blend.color_blend_op        = desc.color_blend_op;
-            blend.src_alpha_blendfactor = desc.src_alpha_blend;
-            blend.dst_alpha_blendfactor = desc.dst_alpha_blend;
-            blend.alpha_blend_op        = desc.alpha_blend_op;
-            blend.color_write_mask = SDL_GPU_COLORCOMPONENT_R |
-                                     SDL_GPU_COLORCOMPONENT_G |
-                                     SDL_GPU_COLORCOMPONENT_B |
-                                     SDL_GPU_COLORCOMPONENT_A;
-            blend.enable_color_write_mask = false;
-
-            SDL_GPUColorTargetDescription color_target{};
-            color_target.format = desc.color_target_format;
-            color_target.blend_state = blend;
-
-            SDL_GPUGraphicsPipelineCreateInfo pci{};
-            pci.vertex_shader   = vert_shader;
-            pci.fragment_shader = frag_shader;
-            pci.primitive_type  = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
-            pci.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
-            pci.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
-            pci.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
-            pci.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
-            pci.target_info.num_color_targets = 1;
-            pci.target_info.color_target_descriptions = &color_target;
-            pci.target_info.has_depth_stencil_target  = false;
-            pci.props = 0;
-
-            pipeline = SDL_CreateGPUGraphicsPipeline( d.raw(), &pci );
-            if( !pipeline ) {
+            // Build the pipeline for the configured (swapchain) target format.
+            // Other formats (e.g. the RGBA16F HDR world target) are built
+            // lazily by get_or_build_pipeline() when begin_pass first sees them.
+            SDL_GPUGraphicsPipeline *pl = build_pipeline( desc.color_target_format );
+            if( !pl ) {
                 throw std::runtime_error( std::string( "sprite_batcher pipeline: " ) +
                                           SDL_GetError() );
             }
+            pipelines[desc.color_target_format] = pl;
 
             // Default sampler: NEAREST to keep pixel-art parity with the
             // legacy SDL_Renderer SCALEMODE_NEAREST atlas.
@@ -361,10 +397,12 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                 SDL_ReleaseGPUSampler( r, default_sampler );
                 default_sampler = nullptr;
             }
-            if( pipeline ) {
-                SDL_ReleaseGPUGraphicsPipeline( r, pipeline );
-                pipeline = nullptr;
+            for( auto &kv : pipelines ) {
+                if( kv.second ) {
+                    SDL_ReleaseGPUGraphicsPipeline( r, kv.second );
+                }
             }
+            pipelines.clear();
             if( vert_shader ) {
                 SDL_ReleaseGPUShader( r, vert_shader );
                 vert_shader = nullptr;
@@ -388,7 +426,8 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
 
         void begin_pass( SDL_GPUCommandBuffer *cb, SDL_GPUTexture *target,
                          Uint32 w, Uint32 h, const float *clear,
-                         Uint32 proj_w, Uint32 proj_h ) {
+                         Uint32 proj_w, Uint32 proj_h,
+                         SDL_GPUTextureFormat target_format ) {
             if( pass_open ) {
                 throw std::runtime_error( "sprite_batcher: begin_pass without end_pass" );
             }
@@ -398,6 +437,9 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
             cur_target_h = h;
             cur_proj_w   = proj_w ? proj_w : w;
             cur_proj_h   = proj_h ? proj_h : h;
+            // INVALID → the format the batcher was init'd with (swapchain).
+            cur_target_format = ( target_format == SDL_GPU_TEXTUREFORMAT_INVALID )
+                                ? desc.color_target_format : target_format;
             cur_clear = clear != nullptr;
             if( clear ) {
                 std::memcpy( cur_clear_color, clear, sizeof( cur_clear_color ) );
@@ -541,8 +583,10 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                 return;
             }
 
-            if( !segments.empty() ) {
-                SDL_BindGPUGraphicsPipeline( rp, pipeline );
+            SDL_GPUGraphicsPipeline *pl =
+                segments.empty() ? nullptr : get_or_build_pipeline( cur_target_format );
+            if( !segments.empty() && pl ) {
+                SDL_BindGPUGraphicsPipeline( rp, pl );
 
                 SDL_GPUBufferBinding storage_binding{};
                 storage_binding.buffer = storage_bufs[cur_slot];
@@ -767,10 +811,11 @@ void sprite_batcher::begin_pass( SDL_GPUCommandBuffer *cb,
                                  std::uint32_t target_h,
                                  const float *clear_color_rgba,
                                  std::uint32_t proj_w,
-                                 std::uint32_t proj_h )
+                                 std::uint32_t proj_h,
+                                 SDL_GPUTextureFormat target_format )
 {
     p->begin_pass( cb, target, target_w, target_h, clear_color_rgba,
-                   proj_w, proj_h );
+                   proj_w, proj_h, target_format );
 }
 
 void sprite_batcher::set_texture( SDL_GPUTexture *atlas, SDL_GPUSampler *sampler,

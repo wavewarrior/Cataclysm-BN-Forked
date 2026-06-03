@@ -104,10 +104,35 @@ void render_state::init( SDL_Window *host_window )
         ui_target_ = std::make_unique<ui_composite_target>();
         ui_target_->init( device_, pw, ph );
 
-        // World accumulation layer — same size/format. init() leaves it dirty,
-        // which the world pass treats as "needs full clear" on the first frame.
+        // World accumulation layer. HDR (RGBA16F) so the lit result keeps
+        // values >1 for the tonemap pass instead of clipping at the 8-bit
+        // store. Guard on format support (universal on the min-spec, but a
+        // silent miss = black screen) and fall back to swapchain 8-bit, which
+        // is the pre-1b behaviour (identity tonemap → unchanged output).
+        // init() leaves it dirty → the world pass treats that as "needs full
+        // clear" on the first frame.
+        SDL_GPUTextureFormat world_fmt = SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT;
+        if( !SDL_GPUTextureSupportsFormat( device_.raw(), world_fmt,
+                SDL_GPU_TEXTURETYPE_2D,
+                SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER ) ) {
+            dbg( DL::Error ) << "render_state: RGBA16F unsupported as color+sampler "
+                             "target; HDR world target falls back to swapchain 8-bit "
+                             "(bright lighting will clip).";
+            world_fmt = device_.swapchain_format();
+        } else {
+            dbg( DL::Info ) << "render_state: HDR world target = RGBA16F.";
+        }
         world_target_ = std::make_unique<ui_composite_target>();
-        world_target_->init( device_, pw, ph );
+        world_target_->init( device_, pw, ph, world_fmt );
+
+        // Tonemapped LDR resolve target (swapchain format) + the fullscreen
+        // tonemap pass that fills it from world_target_. In step 1a the world
+        // target is still 8-bit and the tonemap shader is identity, so this is
+        // a pixel-identical passthrough; the RGBA16F flip (1b) and AgX (1c)
+        // build on this seam. (LIGHTING_REWORK_PLAN.md step 1.)
+        world_ldr_target_ = std::make_unique<ui_composite_target>();
+        world_ldr_target_->init( device_, pw, ph );
+        tonemap_.init( device_, device_.swapchain_format() );
     }
 }
 
@@ -116,9 +141,11 @@ void render_state::shutdown() noexcept
     // Phase 3: stop collector thread before releasing GPU resources.
     collector_.reset();
 
-    // Release the compositor textures while the device is still live.
+    // Release the compositor textures + tonemap pass while the device is live.
     ui_target_.reset();
     world_target_.reset();
+    world_ldr_target_.reset();
+    tonemap_.shutdown();
 
     // Phase 4: release SDF textures.
     sdf_.shutdown( device_ );

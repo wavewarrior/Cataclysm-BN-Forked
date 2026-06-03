@@ -576,6 +576,12 @@ static bool g_dbg_lighting = true;
 static bool g_dbg_lighting_shader = false;
 // Runtime tuning state for shader debug modes. Updated by F-key handlers.
 static lighting::debug_params g_dbg_params{};
+// Tonemap pass controls (F4 sliders). Pre-AgX exposure (lit world is linear
+// light above AgX's 0.18 mid-gray anchor → needs exposing down) + the AgX log2
+// EV window (defaults are the canonical AgX range).
+static float g_tonemap_exposure = 0.35f;
+static float g_tonemap_min_ev = -12.47393f;
+static float g_tonemap_max_ev = 4.026069f;
 // Current debug mode display (0-7, cycles through modes).
 static uint32_t g_current_dbg_mode = 0u;
 // Scale factors for individual light contributions (for tuning visualization).
@@ -652,6 +658,11 @@ static void draw_lighting_dev_ui()
     if( ImGui::SliderFloat( "sky", &g_sky_scale, 0.0f, 10.0f ) ) {
         g_dbg_params.sky_scale = g_sky_scale;
     }
+
+    ImGui::SeparatorText( "Tonemap (AgX)" );
+    ImGui::SliderFloat( "exposure", &g_tonemap_exposure, 0.0f, 2.0f );
+    ImGui::SliderFloat( "min EV", &g_tonemap_min_ev, -20.0f, 0.0f );
+    ImGui::SliderFloat( "max EV", &g_tonemap_max_ev, 0.0f, 12.0f );
 
     ImGui::SeparatorText( "Dither / GI / shadow" );
     ImGui::SliderFloat( "dither amt", &g_dbg_params.dither_amt, 0.0f, 1.0f );
@@ -1248,16 +1259,36 @@ void refresh_display()
         const bool needs_clear = wt->consume_dirty();
         const bool have_tiles  = !rs.tile_sprites_empty() && rs.gpu_sampler();
         if( needs_clear || have_tiles ) {
+            // target_format = wt->format() selects the batcher's pipeline for
+            // this target. Swapchain 8-bit in step 1a; RGBA16F once 1b flips
+            // world_target — the per-format pipeline cache builds the HDR
+            // variant on first use.
             rs.tile_batcher().begin_pass( ctx.cmd_buffer, wt->texture(),
                                           wt->width(), wt->height(),
                                           clear_black,
                                           static_cast<std::uint32_t>( proj_w ),
-                                          static_cast<std::uint32_t>( proj_h ) );
+                                          static_cast<std::uint32_t>( proj_h ),
+                                          wt->format() );
             if( have_tiles ) {
                 rs.flush_tile_sprites( rs.tile_batcher(), rs.gpu_sampler() );
             }
             rs.tile_batcher().end_pass();
         }
+    }
+
+    // ── Pass T: tonemap resolve ────────────────────────────────────────────
+    // Resolve the (HDR, once 1b lands) world_target through the tonemap pass
+    // into the LDR world_ldr_target that Pass B blits. wt persists across
+    // partial-redraw frames, so running this every frame keeps the LDR copy in
+    // sync without coupling to whether Pass W ran. Identity shader in 1a/1b →
+    // pixel-identical; AgX in 1c. Self-contained pass on world_ldr (no swapchain
+    // pass conflict).
+    lighting::ui_composite_target *wldr = rs.world_ldr_target();
+    if( wt && wt->texture() && wldr && wldr->texture() && rs.gpu_sampler()
+        && rs.tonemap().ready() ) {
+        rs.tonemap().record( ctx.cmd_buffer, wt->texture(), rs.gpu_sampler(),
+                             wldr->texture(), wldr->width(), wldr->height(),
+                             g_tonemap_exposure, g_tonemap_min_ev, g_tonemap_max_ev );
     }
 
     // Dear ImGui dev UI: build the frame and upload its vertex/index buffers
@@ -1297,8 +1328,8 @@ void refresh_display()
                                        /*is_lit=*/false );
         rs.tile_batcher().draw( quad );
     };
-    blit_layer( wt );    // lit world (opaque base covers the swapchain)
-    blit_layer( uct );   // UI composited over the world (straight alpha)
+    blit_layer( rs.world_ldr_target() ); // tonemapped world (opaque base)
+    blit_layer( uct );                   // UI over the world (straight alpha)
 
     rs.tile_batcher().end_pass(
         imgui_active
@@ -2928,6 +2959,9 @@ bool handle_resize( int w, int h )
                 }
                 if( rs.world_target() ) {
                     rs.world_target()->resize( pw, ph );
+                }
+                if( rs.world_ldr_target() ) {
+                    rs.world_ldr_target()->resize( pw, ph );
                 }
                 // Font cell size may have changed; drop stale-size icon rasters
                 // so the next request re-rasterizes crisp at the new size.

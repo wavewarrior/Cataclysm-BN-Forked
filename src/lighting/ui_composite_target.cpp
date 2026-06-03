@@ -14,7 +14,8 @@ ui_composite_target::~ui_composite_target()
     shutdown();
 }
 
-bool ui_composite_target::init( gpu_device &dev, int w, int h )
+bool ui_composite_target::init( gpu_device &dev, int w, int h,
+                                SDL_GPUTextureFormat format )
 {
     shutdown();
 
@@ -25,10 +26,15 @@ bool ui_composite_target::init( gpu_device &dev, int w, int h )
         return false;
     }
 
+    // INVALID resolves to the swapchain format (the default: a composite blit
+    // then needs no conversion). An explicit format (e.g. RGBA16F) gives an HDR
+    // scene target. resize() re-calls init() with fmt_ so the format sticks.
+    fmt_ = ( format == SDL_GPU_TEXTUREFORMAT_INVALID )
+           ? dev.swapchain_format() : format;
+
     SDL_GPUTextureCreateInfo tci{};
     tci.type   = SDL_GPU_TEXTURETYPE_2D;
-    // Match the swapchain so the composite blit needs no format conversion.
-    tci.format = dev.swapchain_format();
+    tci.format = fmt_;
     tci.usage  = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
     tci.width  = static_cast<std::uint32_t>( w );
     tci.height = static_cast<std::uint32_t>( h );
@@ -72,7 +78,7 @@ void ui_composite_target::resize( int w, int h )
     if( !dev_ ) {
         return;
     }
-    init( *dev_, w, h );
+    init( *dev_, w, h, fmt_ );
 }
 
 } // namespace lighting

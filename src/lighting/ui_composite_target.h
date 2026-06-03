@@ -21,6 +21,8 @@
 
 #include <cstdint>
 
+#include <SDL3/SDL_gpu.h> // SDL_GPUTextureFormat
+
 struct SDL_GPUTexture;
 
 namespace lighting
@@ -36,11 +38,14 @@ class ui_composite_target
         ui_composite_target &operator=( const ui_composite_target & ) = delete;
         ~ui_composite_target();
 
-        // Allocate the texture at w×h in the device's swapchain format. A
-        // re-init releases any prior texture first. Returns false on failure
-        // (logs via DC::SDL). Marks the target dirty so the first frame
-        // composites.
-        bool init( gpu_device &dev, int w, int h );
+        // Allocate the texture at w×h. `format` defaults to the device's
+        // swapchain format (SDL_GPU_TEXTUREFORMAT_INVALID resolves to it) so a
+        // composite blit needs no conversion; pass an explicit format (e.g.
+        // RGBA16F) for an HDR scene target. A re-init releases any prior
+        // texture first. Returns false on failure (logs via DC::SDL). Marks the
+        // target dirty so the first frame composites.
+        bool init( gpu_device &dev, int w, int h,
+                   SDL_GPUTextureFormat format = SDL_GPU_TEXTUREFORMAT_INVALID );
 
         // Release the texture. Idempotent. Safe while the device is live.
         void shutdown() noexcept;
@@ -52,6 +57,7 @@ class ui_composite_target
         SDL_GPUTexture *texture() const noexcept { return tex_; }
         std::uint32_t   width()  const noexcept { return w_; }
         std::uint32_t   height() const noexcept { return h_; }
+        SDL_GPUTextureFormat format() const noexcept { return fmt_; }
 
         // One-shot dirty flag. invalidate() requests a recomposite;
         // consume_dirty() returns the pending state and clears it.
@@ -68,6 +74,9 @@ class ui_composite_target
         SDL_GPUTexture *tex_   = nullptr;
         std::uint32_t   w_     = 0;
         std::uint32_t   h_     = 0;
+        // Resolved texture format (swapchain format unless an explicit one was
+        // passed to init). resize() re-uses this so the format survives.
+        SDL_GPUTextureFormat fmt_ = SDL_GPU_TEXTUREFORMAT_INVALID;
         // First frame must composite; init() also sets this.
         bool            dirty_ = true;
 };
