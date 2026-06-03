@@ -154,6 +154,7 @@
 #include "overmap_ui.h"
 #include "overmapbuffer.h"
 #include "panels.h"
+#include "sidebar_anim.h"
 #include "path_info.h"
 #include "pathfinding.h"
 #include "pickup.h"
@@ -573,6 +574,13 @@ void game::setup( bool load_world_modfiles )
         // sidebar layouts so the "custom" layout becomes selectable.
         panel_manager::get_manager().reload_widget_layouts();
     }
+
+    // Drop sidebar animation state from any prior session: the registry is a
+    // process-lifetime singleton keyed by widget id, so without this the first
+    // sidebar draw of a freshly loaded game would see this world's values differ
+    // from the last and pop every icon (the "flash on load" we want to avoid).
+    sidebar_anim::get().clear();
+    sidebar_anim::get().load_specs(); // (re)bind icon animation specs from icons.json
 
     init_bubble_config();
     m.resize( g_mapsize );

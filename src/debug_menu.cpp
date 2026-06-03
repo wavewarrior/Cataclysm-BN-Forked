@@ -112,6 +112,8 @@
 #include "weather.h"
 #include "weather_gen.h"
 #include "weighted_list.h"
+#include "sidebar_anim.h"
+#include "widget_icon.h"
 #include "game_info.h"
 #include "overmap_special.h"
 
@@ -2291,6 +2293,11 @@ void debug()
             g->reload_tileset( [&ss]( const std::string & str ) {
                 ss << str << '\n';
             } );
+            // Also refresh sidebar widget icons: re-read gfx/widgets/icons.json and
+            // drop cached rasters so edited/remapped SVGs show without a restart.
+            widget_icon::reload();
+            sidebar_anim::get().load_specs(); // re-bind animation specs too
+            sidebar_anim::get().clear();      // drop live state so reload can't pop
             add_msg( ss.str() );
             break;
         }

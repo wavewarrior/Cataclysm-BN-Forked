@@ -532,9 +532,38 @@ grid** (hp/temp/encumb/status); `body_graph_wet` is **degraded** (no BN per-bp
 wetness). The CDDA ASCII silhouette + the SVG silhouette (Part F) remain the
 optional follow-up upgrade if the colored grid reads as redundant with Limbs.
 
-Phase 4 complete (4a moon · 4b wind · 4c body-graph). Remaining widget-engine work
-is Stage 5/6 (arrange engine: right-align/bars; `sync_lua_panels` rework + save
-migration; default-flip gate).
+Phase 4 complete (4a moon · 4b wind · 4c body-graph).
+
+## Stage 5 status — value readout polish (right-align + bars, 2026-06-02)
+
+**Scope decision (user):** Stage 5 as written ("port `get_window_panel`/`layout`/
+`show`/`arrange`") assumed CDDA's everything-is-a-widget-tree model. BN took the
+**flat-panel native-renderer path** (native bridge + `make_value_widget_panel` +
+`make_bodygraph_widget_panel`), so porting CDDA's engine would orphan those and
+drag in `dbl_or_var`/dialogue eval. We did the **consumer-driven subset** instead:
+- **Built:** right-aligned values + fill bars (the value widgets looked
+  unfinished — clear consumer).
+- **Deferred:** the generic `style:"layout"`/`arrange:"columns"` composition tree
+  + content-driven `get_wgt_height`. **No current consumer** — body-graph
+  hand-draws its own grid; the only eventual user is Stage-7 labels-layout-as-value
+  widgets, which is gated and already covered by the native wrappers. Revisit when
+  a widget actually composes children.
+
+**Shipped** (all in `make_value_widget_panel`, `panels.cpp`):
+- Value/readout is **right-aligned to the panel edge** (`getmaxx(win) -
+  utf8_width(rhs)`, clamped so it never overlaps the label).
+- **Bounded vars get a fill bar + percent**: `value_var_max(var,u)` returns the
+  ceiling for `stamina` (`get_stamina_max`) and `mana` (`max_mana`); the rhs is
+  then `get_hp_bar(val,max).first + " NN%"` (reuses the native 5-cell bar string,
+  so it reads like the HP/stamina panels). Unbounded vars (pain/speed/morale/
+  thirst/fatigue — no clean ceiling) stay a right-aligned number. The whole rhs is
+  tinted by the existing `value_widget_color`.
+- Verified: `cata_test-tiles` + `cataclysm-bn-tiles` green; `[widget]` 46/7 pass
+  (build path only — the right-align/bar draw is in-game, user-side).
+
+Remaining: Stage 6 (`sync_lua_panels` rework + save migration; promote storage to
+the `panel_layout` wrapper) and the Stage-7 default-flip gate. The deferred arrange
+tree folds into whichever later stage first needs widget composition.
 
 ## Go / No-Go recommendation
 
@@ -560,3 +589,95 @@ Scope notes (carried into the questions below):
 **Provisional, verify before port code:** CDDA `window_panel`/`panel_layout`/
 `get_window_panel` signatures (re-fetch verbatim, Stage 3); the ~75-row var
 table (confirm per-row, Stage 4).
+
+---
+
+# Icon config + tween animation arc (plan `as-a-continuation-of-deep-ullman`, 2026-06-03)
+
+Continuation of the sidebar work: (1) a config registry so SVG icons can be
+swapped without recompiling, (2) a state-based tween animation system so the
+sidebar "feels alive". 5 stages; foundation (1–3) landed, 4–5 pending.
+
+**Stage 1 — icon config registry + reload (DONE).** `gfx/widgets/icons.json`
+maps a logical icon id → SVG file (+ an optional per-icon `animations` array,
+consumed in Stage 4). `widget_icon` parses it (`load_config`, lazy on first
+`get()`); `get()` resolves the file via the registry with **fallback
+`<id>.svg`** so unlisted icons keep working. `reload()` = `clear()` cached
+rasters + re-read JSON, wired into the existing `DEBUG_RELOAD_TILES` debug action
+→ edit an SVG, "Reload tileset", art swaps live. Files: `widget_icon.{h,cpp}`,
+`debug_menu.cpp`, `gfx/widgets/icons.json` (24 icons).
+
+**Stage 2 — tween core + anim registry (DONE, unit-tested).**
+- `src/ui_tween.{h,cpp}` — **pure, dependency-free**: full Penner `ease_curve`
+  set (normalized `[0,1]→[0,1]`; back/elastic overshoot intentionally), a POD
+  `tween{from,to,start_ms,duration_ms,ease,loop,repeats}` with `value_at(now)` /
+  `settled(now)`. Time-based on `SDL_GetTicks`, so cadence (8–30 fps) only
+  changes sample smoothness, never timing. Implementation is custom (the interp
+  primitive `lerp` already exists; a library would replace only ~60 lines of
+  trivial math and impose its own update loop) — grill outcome.
+- `src/sidebar_anim.{h,cpp}` — the **state registry** (process singleton, keyed by
+  widget id). `update(key,value,is_critical,now)` primes WITHOUT animating on
+  first sight (no open-flash), pops on value change (retarget-from-current),
+  starts a pingpong blink on critical-band entry and an ease-out-to-identity on
+  exit. `sample(key,now)→icon_transform{scale,alpha,offset_y,rotation,blend}`.
+  `any_active(now)` + the free fn `sidebar_requires_animation()` drive the idle
+  redraw. `now_ms()` centralizes the SDL clock (keeps SDL out of panels.cpp).
+- `tests/ui_tween_test.cpp` — 10 cases / 141 assertions: easing endpoints+clamp,
+  known midpoints, `value_at` once/loop/pingpong/finite-repeat, registry
+  prime-no-flash / pop-then-settle / critical blink+ease-back. **Caveat: these
+  test the math + state machine, NOT the on-screen feature** (the draw is
+  GPU/in-game). New test file ⇒ explicit `cmake` reconfigure (file(GLOB)).
+
+**Stage 3 — draw integration + idle hook + 30fps + one effect (DONE, in-game
+unverified).**
+- `draw_widget_icon` gains a transform overload (scale about cell centre, alpha,
+  vertical offset, tint colour-blend; rotation deferred to Stage 5). Old 4-arg
+  overload delegates with identity → existing callers unchanged.
+- `make_value_widget_panel` feeds the live value to the registry and passes the
+  sampled transform to the icon draw → a value change pops the icon.
+- `handle_action.cpp`: `sidebar_requires_animation()` added to the
+  `minimap/terrain_requires_animation()` invalidation `||`; input cadence is
+  re-evaluated each loop iteration — **125 ms while weather/SCT animate**
+  (their step speed unchanged), **~30 fps only while a sidebar tween is live**,
+  else 125 ms (idle stays cheap; no perpetual 30fps wake). Chose dynamic
+  re-eval over a weather/SCT step-accumulator (simpler, also covers SCT).
+- **Post-grill fixes (advisor):** clear the anim singleton in `game::setup`
+  (else loading a save pops every icon whose value differs from the prior
+  session — the rejected "flash on load"); cadence gated on
+  `sidebar_requires_animation()` inside the loop (else idle ran 30fps for all
+  players). Latent: every value-icon currently pops (fine for slow stats); Stage
+  4's config-driven binding makes pop opt-in per icon, resolving it.
+
+Build: `cataclysm-bn-tiles` + `cata_test-tiles` link green; `[ui_tween]` +
+`[widget]` = 187 assertions / 17 cases pass.
+
+**In-game verification (user-side, NOT covered by the tests):** boots + loads the
+custom sidebar with no `widget_icon`/SVG warning; spike pain → heart pops, eases
+(`back_out`), settles; reload-tileset swaps an edited SVG live; **load a save →
+no pop-storm**; idle in clear weather → redraw quiets (loop relaxes to 125 ms).
+
+**Stage 4 — full vocabulary + config-driven binding (DONE, in-game unverified).**
+`sidebar_anim` is now **fully data-driven**: each icon's `animations` array in
+`icons.json` is parsed into `anim_spec`s (`trigger` on_change|critical|ambient ×
+`property` scale|alpha|offset_y|rotation|color_blend × from/to/duration/ease/loop/
+repeats/color) and bound via `load_specs()`/`bind_specs()`. `update(key, icon, …)`
+fires specs by trigger — config says WHAT/HOW, C++ says WHEN. **No specs → no
+animation (opt-in)**, which also retires the "every value-icon pops" latent risk.
+`load_specs()` is called from `game::setup` (after `clear()`) and the debug
+reload. Value widgets derive `is_critical` from the value colour (red band).
+Native **moon/wind** panels wired (`draw_moon_phase_icon` shared helper; wind in
+`render_wind`) → pop on phase/direction change. **Default specs shipped (modest):**
+pop on heart/droplet/food/spark/moon/wind; critical alpha-blink on heart; one
+gentle ambient alpha-pulse on spark (mana panel, opt-in → low blast radius). New
+test: "no specs → never animates". Spin is config-only (no default spinning icon).
+
+**Stage 5 — spin (DONE).** `queue_font_glyph` gained a trailing `rotation`
+(radians, default 0) on both overloads → `sprite_instance.rotation`; the shared
+`SPRITE_VERT_HLSL` already rotates by it (no shader change). `draw_widget_icon`
+converts the transform's degrees→radians. Enable on any icon with an ambient
+`rotation` spec, e.g. `{"trigger":"ambient","property":"rotation","from":0,
+"to":360,"duration":4000,"ease":"linear","loop":"loop"}`.
+
+**Status:** all 5 stages build green (`cataclysm-bn-tiles` + `cata_test-tiles`);
+`[ui_tween]` + `[widget]` = 189 assertions / 18 cases. The in-game checklist
+above is the real verification and remains user-side.

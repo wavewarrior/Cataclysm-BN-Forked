@@ -34,6 +34,7 @@
 #include "debug.h"
 #include "widget.h"
 #include "widget_icon.h"
+#include "sidebar_anim.h"
 #include "effect.h"
 #include "fstream_utils.h"
 #include "game.h"
@@ -1641,6 +1642,18 @@ static std::string moon_phase_icon()
     }
 }
 
+// Draw the phase-accurate moon disc with animation: a pop on phase change (specs
+// under the "moon" icon id in icons.json). Shared by the narrow + wide panels.
+static void draw_moon_phase_icon( const catacurses::window &w )
+{
+    const std::uint32_t now = sidebar_anim::now_ms();
+    sidebar_anim::registry &reg = sidebar_anim::get();
+    reg.update( "moon", "moon",
+                static_cast<double>( get_moon_phase( calendar::turn ) ), false, now );
+    draw_widget_icon( w, point( 0, 0 ), moon_phase_icon(), c_light_gray,
+                      reg.sample( "moon", now ) );
+}
+
 static void draw_moon_narrow( const avatar &u, const catacurses::window &w )
 {
     werase( w );
@@ -1649,7 +1662,7 @@ static void draw_moon_narrow( const avatar &u, const catacurses::window &w )
     // NOLINTNEXTLINE(cata-use-named-point-constants)
     mvwprintz( w, point( 1, 1 ), c_light_gray, _( "Temp : %s" ), get_temp( u ) );
     // Phase-accurate two-tone SVG moon disc in the free leading column.
-    draw_widget_icon( w, point( 0, 0 ), moon_phase_icon(), c_light_gray );
+    draw_moon_phase_icon( w );
     wnoutrefresh( w );
 }
 
@@ -1660,7 +1673,7 @@ static void draw_moon_wide( const avatar &u, const catacurses::window &w )
     mvwprintz( w, point( 3, 0 ), c_light_gray, _( "Moon : %s" ), get_moon() );
     mvwprintz( w, point( 23, 0 ), c_light_gray, _( "Temp : %s" ), get_temp( u ) );
     // Phase-accurate two-tone SVG moon disc in the free leading column.
-    draw_widget_icon( w, point( 0, 0 ), moon_phase_icon(), c_light_gray );
+    draw_moon_phase_icon( w );
     wnoutrefresh( w );
 }
 
@@ -1854,8 +1867,15 @@ static void render_wind( avatar &u, const catacurses::window &w, const std::stri
                                             u.abs_pos(), weather.winddirection, g->is_sheltered( u.bub_pos() ) );
     const nc_color wind_color = get_wind_color( windpower );
     // Directional vector arrow in the leading column, tinted by wind strength;
-    // it replaces the trailing unicode arrow the text used to append.
-    draw_widget_icon( w, point( 0, 0 ), wind_arrow_icon( weather.winddirection ), wind_color );
+    // it replaces the trailing unicode arrow the text used to append. Animated via
+    // the "wind" icon specs (pop when the wind direction changes).
+    {
+        const std::uint32_t now = sidebar_anim::now_ms();
+        sidebar_anim::registry &reg = sidebar_anim::get();
+        reg.update( "wind", "wind", static_cast<double>( weather.winddirection ), false, now );
+        draw_widget_icon( w, point( 0, 0 ), wind_arrow_icon( weather.winddirection ),
+                          wind_color, reg.sample( "wind", now ) );
+    }
     mvwprintz( w, point( 3, 0 ), c_light_gray,
                //~ translation should not exceed 5 console cells
                string_format( formatstr, left_justify( _( "Wind" ), 5 ) ) );
@@ -2777,6 +2797,21 @@ static nc_color value_widget_color( const widget &w, int val, const avatar &u )
     return c_white;
 }
 
+// Max for a bounded value var — the divisor for a fill bar. nullopt → unbounded,
+// so the widget shows a right-aligned number with no bar (pain/speed/morale/etc.
+// have no clean ceiling). Only vars with a real max getter qualify.
+static std::optional<int> value_var_max( widget_var var, const avatar &u )
+{
+    switch( var ) {
+        case widget_var::stamina:
+            return u.get_stamina_max();
+        case widget_var::mana:
+            return u.magic->max_mana( u );
+        default:
+            return std::nullopt;
+    }
+}
+
 // Clean English gutter/save-key name for a value widget: strip the "val_" id
 // prefix and capitalize ("val_pain" -> "Pain"). These widgets are new and
 // opt-in — no save has ever persisted the raw id — so this becomes the stable
@@ -2824,13 +2859,40 @@ window_panel make_value_widget_panel( const widget &w, int width )
         int col = 0;
         if( !icon.empty() ) {
             // Tint the icon to the value color so a reddening stat reddens its glyph.
-            draw_widget_icon( win, point( 0, 0 ), icon, val_color );
+            // Feed the live value to the animation registry: a change pops the icon
+            // (scale ease-back). State is keyed by widget id and lives in the
+            // registry, not this closure (closures are rebuilt on layout reload).
+            const std::uint32_t now = sidebar_anim::now_ms();
+            sidebar_anim::registry &reg = sidebar_anim::get();
+            // Critical band reuses the value colour: the stat's own colouring
+            // already turns red in its danger zone (high pain, low stamina, ...).
+            const bool crit = val_color == c_red || val_color == c_light_red;
+            reg.update( id.str(), icon, static_cast<double>( val ), crit, now );
+            const sidebar_anim::icon_transform tr = reg.sample( id.str(), now );
+            draw_widget_icon( win, point( 0, 0 ), icon, val_color, tr );
             // A square icon is ~2 cells wide at the usual ~2:1 font ratio; start
             // the label at col 3 to leave a one-cell gap after it.
             col = 3;
         }
         mvwprintz( win, point( col, 0 ), c_light_gray, "%s", label );
-        mvwprintz( win, point( col + utf8_width( label ) + 1, 0 ), val_color, "%d", val );
+
+        // Right-hand readout: a fill bar + percent for bounded vars (those with a
+        // max), else the raw number. Reuses get_hp_bar's 5-cell bar string so it
+        // reads like the native HP/stamina panels.
+        const std::optional<int> vmax = value_var_max( wd.var(), u );
+        std::string rhs;
+        if( vmax && *vmax > 0 ) {
+            // Clamp the percent to match get_hp_bar's clamped bar — val can exceed
+            // max (e.g. buffs) and would otherwise print ">100%" beside a full bar.
+            const int pct = std::clamp( 100 * val / *vmax, 0, 100 );
+            rhs = get_hp_bar( val, *vmax ).first + string_format( " %d%%", pct );
+        } else {
+            rhs = string_format( "%d", val );
+        }
+        // Right-align to the panel edge, but never overlap the label.
+        const int label_end = col + utf8_width( label ) + 1;
+        const int rhs_x = std::max( label_end, getmaxx( win ) - utf8_width( rhs ) );
+        mvwprintz( win, point( rhs_x, 0 ), val_color, "%s", rhs );
         wnoutrefresh( win );
     };
     const int panel_width = std::max( 1, width > 0 ? width : w.width() );
@@ -2983,9 +3045,16 @@ std::vector<window_panel> &panel_manager::get_current_layout()
     if( kv != layouts.end() ) {
         return kv->second;
     }
-    debugmsg( "Invalid current panel layout, defaulting to classic" );
-    current_layout_id = "classic";
-    return get_current_layout();
+    // The selected id may name a layout not built yet — notably the runtime
+    // "custom" widget layout, which is injected only after world load
+    // (reload_widget_layouts). Fall back to a built-in for this call WITHOUT
+    // discarding current_layout_id, so the selection resolves once that layout
+    // exists rather than being silently reset to classic on every launch.
+    auto fallback = layouts.find( "classic" );
+    if( fallback == layouts.end() ) {
+        fallback = layouts.begin();
+    }
+    return fallback->second;
 }
 
 std::string panel_manager::get_current_layout_id() const
@@ -3026,6 +3095,18 @@ void panel_manager::init()
 void panel_manager::reload_widget_layouts()
 {
     inject_widget_layouts( layouts );
+    // These layouts are built after panel_options.json was read, so re-apply any
+    // saved toggle/order state for them now that they exist (e.g. the "custom"
+    // sidebar). apply_saved_layout_entries is idempotent for the built-ins that
+    // already had it applied during deserialize.
+    auto &saved_layouts = saved_panel_layouts();
+    for( auto &kv : layouts ) {
+        const auto saved = saved_layouts.find( kv.first );
+        if( saved != saved_layouts.end() ) {
+            apply_saved_layout_entries( kv.second, saved->second,
+                                        std::map<std::string, std::string> {} );
+        }
+    }
 }
 
 auto panel_manager::sync_lua_panels() -> void
@@ -3209,11 +3290,11 @@ void panel_manager::deserialize( JsonIn &jsin )
     std::ranges::for_each( layout_indices, [&]( const size_t layout_index ) {
         const auto joLayout = layouts_array.get_object( layout_index );
         const auto layout_id = joLayout.get_string( "layout_id" );
-        auto layout_iter = layouts.find( layout_id );
-        if( layout_iter == layouts.end() ) {
-            return;
-        }
-        auto &layout = layout_iter->second;
+        // Always read "panels" — even for a layout not (yet) registered. The
+        // runtime "custom" widget layout is built later (reload_widget_layouts,
+        // after world load), so at this point it is absent from `layouts`. We
+        // still consume + preserve its entries: skipping the field here left it
+        // unvisited and tripped JsonObject::report_unvisited at load.
         auto entries = std::vector<panel_layout_entry> {};
         const auto panels_array = joLayout.get_array( "panels" );
         const auto panels_count = panels_array.size();
@@ -3232,7 +3313,13 @@ void panel_manager::deserialize( JsonIn &jsin )
                 .toggle = toggle,
             } );
         } );
-        apply_saved_layout_entries( layout, entries, std::map<std::string, std::string> {} );
+        // Apply to the live layout if it exists now; preserve the saved entries
+        // regardless, so a later-built layout (custom) can restore its toggles.
+        auto layout_iter = layouts.find( layout_id );
+        if( layout_iter != layouts.end() ) {
+            apply_saved_layout_entries( layout_iter->second, entries,
+                                        std::map<std::string, std::string> {} );
+        }
         saved_layouts[layout_id] = std::move( entries );
     } );
     jsin.end_array();

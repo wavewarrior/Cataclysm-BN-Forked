@@ -496,19 +496,19 @@ bool render_state::upload_surface_subregion_to_gpu_texture(
 void render_state::queue_font_glyph( SDL_GPUTexture *glyph_tex,
                                      float dst_x, float dst_y, float dst_w, float dst_h,
                                      float r, float g, float b, float a,
-                                     bool lit )
+                                     bool lit, float rotation )
 {
     // Full-texture sample — for callers with one texture per glyph
     // (CachedTTFFont).
     queue_font_glyph( glyph_tex, dst_x, dst_y, dst_w, dst_h,
-                      0.0f, 0.0f, 1.0f, 1.0f, r, g, b, a, lit );
+                      0.0f, 0.0f, 1.0f, 1.0f, r, g, b, a, lit, rotation );
 }
 
 void render_state::queue_font_glyph( SDL_GPUTexture *glyph_tex,
                                      float dst_x, float dst_y, float dst_w, float dst_h,
                                      float src_u, float src_v, float src_uw, float src_vh,
                                      float r, float g, float b, float a,
-                                     bool lit )
+                                     bool lit, float rotation )
 {
     if( !device_.ready() || !glyph_tex ) {
         return;
@@ -527,6 +527,7 @@ void render_state::queue_font_glyph( SDL_GPUTexture *glyph_tex,
     d.inst.tint_g = g;
     d.inst.tint_b = b;
     d.inst.tint_a = a;
+    d.inst.rotation = rotation; // radians, clockwise about the quad centre
     d.lit         = lit;
     if( current_slices_ ) {
         current_slices_->font_glyphs.push_back( d );

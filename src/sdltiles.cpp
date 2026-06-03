@@ -85,6 +85,7 @@
 #include "ui_manager.h"
 #include "wcwidth.h"
 #include "widget_icon.h"
+#include "sidebar_anim.h"
 #include "worldfactory.h"
 
 #if defined(__linux__)
@@ -468,7 +469,8 @@ inline const SDL_Color &color_as_sdl( const unsigned char color )
 // via the font-glyph queue, so it composites with sidebar text and survives
 // partial redraws. No-op when the window is invalid or no GPU device is live.
 void draw_widget_icon( const catacurses::window &win, const point &cell,
-                       const std::string &icon, const nc_color &color )
+                       const std::string &icon, const nc_color &color,
+                       const sidebar_anim::icon_transform &tr )
 {
     cata_cursesport::WINDOW *const w = win.get<cata_cursesport::WINDOW>();
     if( w == nullptr || fontwidth <= 0 || fontheight <= 0 ) {
@@ -479,12 +481,33 @@ void draw_widget_icon( const catacurses::window &win, const point &cell,
     if( tex == nullptr ) {
         return;
     }
-    const float x = static_cast<float>( ( w->pos.x + cell.x ) * fontwidth );
-    const float y = static_cast<float>( ( w->pos.y + cell.y ) * fontheight );
+    const float base = static_cast<float>( px );
+    const float scaled = base * tr.scale;
+    // Recentre the scaled sprite on the original cell box; apply vertical offset.
+    const float half = ( scaled - base ) * 0.5f;
+    const float x = static_cast<float>( ( w->pos.x + cell.x ) * fontwidth ) - half;
+    const float y = static_cast<float>( ( w->pos.y + cell.y ) * fontheight ) - half + tr.offset_y;
     const SDL_Color c = curses_color_to_SDL( color );
+    float r = c.r / 255.f;
+    float g = c.g / 255.f;
+    float b = c.b / 255.f;
+    if( tr.blend > 0.f ) {
+        const SDL_Color bc = curses_color_to_SDL( tr.blend_color );
+        r += ( bc.r / 255.f - r ) * tr.blend;
+        g += ( bc.g / 255.f - g ) * tr.blend;
+        b += ( bc.b / 255.f - b ) * tr.blend;
+    }
+    // Spin: tr.rotation is degrees (clockwise); the instance field is radians.
+    constexpr float deg_to_rad = 0.01745329252f;
     lighting::get_render_state().queue_font_glyph(
-        tex, x, y, static_cast<float>( px ), static_cast<float>( px ),
-        c.r / 255.f, c.g / 255.f, c.b / 255.f, 1.f, /*lit=*/false );
+        tex, x, y, scaled, scaled, r, g, b, tr.alpha, /*lit=*/false,
+        /*rotation=*/tr.rotation * deg_to_rad );
+}
+
+void draw_widget_icon( const catacurses::window &win, const point &cell,
+                       const std::string &icon, const nc_color &color )
+{
+    draw_widget_icon( win, cell, icon, color, sidebar_anim::icon_transform{} );
 }
 
 // Debug overlay state — saved from the previous frame, drawn this frame.

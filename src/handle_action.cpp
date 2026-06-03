@@ -75,6 +75,7 @@
 #include "output.h"
 #include "overmap_ui.h"
 #include "panels.h"
+#include "sidebar_anim.h"
 #include "player.h"
 #include "player_activity.h"
 #include "popup.h"
@@ -302,7 +303,18 @@ input_context game::get_player_input( std::string &action )
     ();
 
     if( do_animations ) {
-        ctxt.set_timeout( 125 );
+        // Input/redraw cadence. Weather/SCT frame-stepping is tuned to a 125ms
+        // tick, so keep that while either is active (rain/combat-text speed
+        // unchanged). When ONLY the sidebar is animating, run ~30fps so tween
+        // motion is smooth. Otherwise (idle, nothing animating) stay at 125ms so
+        // we don't wake 30x/sec for nothing — this is re-evaluated each iteration
+        // below, since a tween only starts once the first redraw runs.
+        constexpr int ANIM_FRAME_MS = 33;
+        const auto anim_timeout = []( bool weather, bool sct ) {
+            return ( weather || sct ) ? 125
+                   : sidebar_requires_animation() ? ANIM_FRAME_MS : 125;
+        };
+        ctxt.set_timeout( anim_timeout( animate_weather, animate_sct ) );
 
         shared_ptr_fast<game::draw_callback_t> animation_cb =
         make_shared_fast<game::draw_callback_t>( [&]() {
@@ -357,7 +369,8 @@ input_context game::get_player_input( std::string &action )
                 animate_sct = !SCT.vSCT.empty();
             }
             // We don't cache these checks as their result may change after 1st redraw
-            if( minimap_requires_animation() || terrain_requires_animation() ) {
+            if( minimap_requires_animation() || terrain_requires_animation()
+            || sidebar_requires_animation() ) {
                 // TODO: we redraw *everything* just to animate a couple blinking dots
                 //       on the minimap or a few tiles.
                 //       This is far from ideal, and can probably be done much cheaper
@@ -374,6 +387,10 @@ input_context game::get_player_input( std::string &action )
             }
 
             ui_manager::redraw_invalidated();
+            // This redraw may have started a sidebar tween (a value-change pop):
+            // tighten to ~30fps while one is live, relax back to 125ms once it
+            // settles, so an idle sidebar doesn't hold the loop at 30fps.
+            ctxt.set_timeout( anim_timeout( animate_weather, animate_sct ) );
         } while( handle_mouseview( ctxt, action ) && uquit != QUIT_WATCH
                  && ( action != "TIMEOUT" || !current_turn.has_timeout_elapsed() ) );
         ctxt.reset_timeout();

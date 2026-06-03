@@ -130,15 +130,17 @@ class render_state
         // (lighting math short-circuited so it cannot dim HUD text). Pass
         // true for in-world floating text that should respect ambient /
         // emitter / sun contributions.
+        // `rotation` (radians, clockwise, about the quad centre) lets HUD glyphs
+        // spin — used by animated sidebar icons. Default 0 (no rotation).
         void queue_font_glyph( SDL_GPUTexture *glyph_tex,
                                float dst_x, float dst_y, float dst_w, float dst_h,
                                float r, float g, float b, float a,
-                               bool lit = false );
+                               bool lit = false, float rotation = 0.0f );
         void queue_font_glyph( SDL_GPUTexture *glyph_tex,
                                float dst_x, float dst_y, float dst_w, float dst_h,
                                float src_u, float src_v, float src_uw, float src_vh,
                                float r, float g, float b, float a,
-                               bool lit = false );
+                               bool lit = false, float rotation = 0.0f );
 
         // Phase 2i-B-5 part 3: tile sprite queue. cata_tiles' draw paths
         // enqueue every map sprite here during the per-window redraw;
