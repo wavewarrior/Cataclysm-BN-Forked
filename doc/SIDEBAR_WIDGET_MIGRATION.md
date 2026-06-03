@@ -681,3 +681,39 @@ converts the transform's degrees→radians. Enable on any icon with an ambient
 **Status:** all 5 stages build green (`cataclysm-bn-tiles` + `cata_test-tiles`);
 `[ui_tween]` + `[widget]` = 189 assertions / 18 cases. The in-game checklist
 above is the real verification and remains user-side.
+
+## Polish + save/load fixes (2026-06-03)
+
+User confirmed the base animations work in-game, then asked for polish.
+
+- **Directional change effect** (replaces the uniform pop + the colour row-flash):
+  `on_increase`/`on_decrease` triggers fire by the sign of the change, driving a
+  `scale_y` tween anchored at `pivot_y` (top for up, bottom for down, `back_out`
+  spring) → the icon recoils as if hit from below/above. No colour coding (user
+  preference). `icon_transform` gained `scale_y`+`pivot_y`; `draw_widget_icon`
+  applies an anchored vertical scale (uniform case unchanged). heart/droplet/food
+  use it.
+- **Ambient spin**: spark (6 s) + compass slow drift (12 s) via `rotation` loop
+  specs. Rotation was plumbed through `queue_font_glyph` (Stage 5).
+- **Row highlight** (`draw_widget_row_highlight`, `queue_ui_rect`, draws under the
+  row text): shipped then demoted to **opt-in** — add a `_row` entry with a
+  `color_blend` spec to re-enable. The directional icon squash is the default
+  change cue instead.
+
+**Save/load fixes (the deferred Stage 6 path, surfaced by loading a saved
+"custom" layout — NOT caused by the animation work):**
+- `panel_manager::deserialize`: always read + preserve a layout's `panels`, even
+  when the layout isn't built yet (the runtime "custom" layout loads after world
+  load) — previously early-returned, leaving `panels` unvisited → `report_unvisited`.
+- `get_current_layout()`: fall back to a built-in **without discarding**
+  `current_layout_id`, so a saved "custom" selection resolves once built instead
+  of being reset to classic on every launch.
+- `reload_widget_layouts()`: re-apply saved toggle/order state to the layouts it
+  builds (so the custom sidebar's toggles restore).
+- `icons.json` readers (`widget_icon::load_config`, `sidebar_anim::load_specs`):
+  `allow_omitted_members()` — strict JSON, two readers each see the other's fields
+  + the `//` comments.
+
+Shipped as 3 commits on `feature/improvements`. Tests `[ui_tween]` 147 / `[widget]`
+green; the real `icons.json` parse is covered by a headless test. On-screen feel
+remains user-verified.
