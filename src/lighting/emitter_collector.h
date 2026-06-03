@@ -41,7 +41,6 @@ class emitter_collector
                      std::vector<uint8_t>    transparency = {},
                      std::vector<float>      sdf          = {},
                      std::vector<uint8_t>    sky_vis      = {},
-                     std::vector<float>      indirect     = {},
                      std::vector<float>      vis          = {},
                      int                     runtime_w    = 0,
                      int                     runtime_h    = 0 );
@@ -70,7 +69,6 @@ class emitter_collector
         std::vector<uint8_t>    pending_transparency_;
         std::vector<uint8_t>    pending_sky_vis_;
         std::vector<float>      pending_sdf_;
-        std::vector<float>      pending_indirect_;
         std::vector<float>      pending_vis_;
         int  pending_runtime_w_ = 0;
         int  pending_runtime_h_ = 0;

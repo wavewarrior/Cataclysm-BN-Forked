@@ -115,40 +115,35 @@ Fragment shader (`SPRITE_FRAG_HLSL` in `sprite_batcher.cpp`):
   vision + tone-grade knobs were added; `static_assert` enforces 96): `dither_amt`
   (0=off), `dither_bands`. Widget: Shift+F8/F9 = strength, Ctrl+F8/F9 = bands.
 
-## 1-bounce indirect light / fake GI (2026-05-30)
+## Colored indirect light / GI — now GPU (Step-3, supersedes the CPU path)
 
-Cheap colored indirect fill — light bounces off surfaces into open neighbours,
-blocked by walls, leaks through windows. Per-tile (low-frequency), mirrors the
-SkyVis storage-buffer path.
+GI is computed on the GPU by `radiance_cascade_pass` (Step-3 Phases 2/3). The
+old CPU seed + wall-gated diffusion (`frame_build.cpp`) and its entire plumbing
+(`pending_indirect_`, `sdf_pass` `indirect_tex_`/`indirect_texture()`, the
+`indirect` params through `submit/flush/upload`, the `g_gi_passes/g_gi_decay`
+knobs) were **deleted in Phase 4 (2026-06-03)**.
 
-- **Source** (`sdltiles.cpp` refresh_display, in the SDF build block): seed
-  `D[t] = lm[t].max()/LIGHT_AMBIENT_LIT * hue`, where hue = normalized
-  `light_color_cache[t]` when `has_colored_lights` else white. `lm` is PHYSICAL
-  + turn-stable (generate_lightmap; vision applied later in apparent_light) →
-  per-frame read is shimmer-free. Normalised so a well-lit tile ≈ 1.0 (GPU dyn
-  scale). Then **2 wall-gated diffusion passes** (conduct only through tiles
-  with `transparency_cache > 0.01`; sources pinned, averaged → bounded).
-  Output `std::vector<float>` 3/tile RGB (`i*3+{0,1,2}`, x-major).
-- **Plumbing** (mirror SkyVis): `emitter_collector::submit/flush` carries
-  `pending_indirect_` → `sdf_pass::upload(..., indirect)` → `indirect_storage_`
-  (GRAPHICS_STORAGE_READ, 3 floats/tile) → `sdf().indirect_buffer()` →
-  `set_lighting_resources(..., indirect_buf, ...)`.
-- **Shader** (`sprite_batcher.cpp`): `StructuredBuffer<float> IndirectBuf :
-  register(t4, space2)` (storage slot 3). Bound as the **4th** fragment storage
-  buffer — top tier `{emitter,sdf,skyvis,indirect}` at BOTH bind sites (initial +
-  post-set_texture rebind), 3/2/1 fallbacks kept. `indirect_bilinear(p)` uses the
-  `p-0.5` centre convention (same as `sdf_bilinear`). Added to `dyn` before the
-  dither: `dyn += gi_strength * indirect_bilinear(world_pos)`, gated
+- **Two-pass GPU GI** (`radiance_cascade_pass.{h,cpp}` + `rc.frag.hlsl` +
+  `rc_bounce.frag.hlsl`): pass 1 gathers per-tile direct emitter radiance
+  (occluded, SDF-marched) → `radiance_field_tex_`; pass 2 marches N=16 rays per
+  probe through that field (1/(1+t) falloff, stop at walls) → `cascade_tex_`.
+  Real colored bounce into shadow / around corners. Both RGBA16F
+  COLOR_TARGET|GRAPHICS_STORAGE_READ, transposed (width=tex_h height=tex_w).
+- **Consumer** (`sprite.frag.hlsl`): `Texture2D<float4> IndirectTex :
+  register(t1, space2)` — a fragment **storage-read texture** (storage-tex slot 0,
+  ahead of the 4 storage buffers emitter/sdf/skyvis/vis at t2–t5; see the Phase-1b
+  notes). `render_state` binds `rc().cascade_texture()` to it (the sole GI source
+  since Phase 4). Read transposed `Load(int3(y,x,0))`; `indirect_bilinear(p)` uses
+  the `p-0.5` centre. `dyn += gi_strength * indirect_bilinear(world_pos)`, gated
   `gi_strength>0.001 && sdf_map_w>0`.
-- **Knob**: `debug_params.gi_strength` (repurposed `dp_pad0`; struct now 96B after
-  vision/tone-grade knobs).
-  Widget Alt+F8/F9. `gi_strength=0` → identical to pre-GI.
-- Expectation: colored bounce is vivid near fire / dawn-dusk, grey in white
-  light (`light_color_cache` is hue-only, zero for uncolored sources). Intensity
-  fill + window-spill work regardless.
-- **Deferred**: SDF/skyvis/indirect rebuild every refresh_display (incl. UI-only
-  redraws). A dirty-gate (rebuild only on turn change) is the right mitigation —
-  separate PR.
+- **Driven** in `refresh_display` after the emitter/SDF upload, before Pass W,
+  under the `rc_rebuild` (=`fr.built_pertile`) dirty gate; cascade retained on
+  skip frames. Knob: `debug_params.gi_strength` (Alt+F8/F9). Gather tuning
+  (RC_DIRS/STEPS/STEP/START/WALL) are `rc_bounce.frag` constants.
+- **Dev oracle**: F4 "RC cascade readback" → `rc().debug_log_stats()` synchronous
+  GPU→CPU readback logging sum/max/nonzero/centroid to DC::Main.
+- **Future**: directional cascade hierarchy + bilinear-fix merge (range/perf), and
+  promoting the gather constants to F4 knobs.
 
 ## Intended direction (grilled 2026-06-01 — see `LIGHTING_REWORK_PLAN.md`)
 

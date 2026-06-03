@@ -233,16 +233,10 @@ void render_state::begin_lighting_frame( const frame_light_inputs &in )
     SDL_GPUBuffer  *kvis = sdf_ready ? sdf_.sky_vis_buffer()  : nullptr;
     SDL_GPUBuffer  *vbuf = sdf_ready ? sdf_.vis_buffer()      : nullptr;
     // GI source for the sprite's IndirectTex: the GPU radiance-cascade gather
-    // (Phase 2) when enabled + ready, else the CPU 1-bounce indirect texture.
-    // Both share the transposed drop-in layout, so this is a pure bind swap —
-    // the A/B oracle that lets RC be validated against the known-good CPU path
-    // (the CPU path is retired in Phase 4). cascade_tex_ is cleared at init, so
-    // it is safe to bind before the first gather (reads as no-GI).
-    SDL_GPUTexture *itex = nullptr;
-    if( sdf_ready ) {
-        itex = ( gi_use_rc_ && rc_.ready() ) ? rc_.cascade_texture()
-                                             : sdf_.indirect_texture();
-    }
+    // (Step-3 Phases 2/3, single-bounce). The CPU diffusion path was retired in
+    // Phase 4 — RC is the sole GI now. cascade_tex_ is cleared at init, so it is
+    // safe to bind before the first gather (reads as no-GI).
+    SDL_GPUTexture *itex = ( sdf_ready && rc_.ready() ) ? rc_.cascade_texture() : nullptr;
     const Uint32 ne = collector_
                       ? static_cast<Uint32>( collector_->last_count() )
                       : 0u;

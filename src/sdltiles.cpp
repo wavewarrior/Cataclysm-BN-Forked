@@ -576,9 +576,6 @@ static bool g_dbg_lighting = true;
 static bool g_dbg_lighting_shader = false;
 // Runtime tuning state for shader debug modes. Updated by F-key handlers.
 static lighting::debug_params g_dbg_params{};
-// Step-3 Phase 2 A/B: sprite GI source — true = GPU radiance cascade (default),
-// false = CPU 1-bounce indirect (the oracle). Synced into render_state per frame.
-static bool g_gi_use_rc = true;
 // Step-3 dev oracle: one-shot readback of the RC cascade texture (logs stats).
 static bool g_rc_readback = false;
 // Tonemap pass controls (F4 sliders). Pre-AgX exposure (lit world is linear
@@ -589,8 +586,6 @@ static float g_tonemap_min_ev = -12.47393f;
 static float g_tonemap_max_ev = 4.026069f;
 // 1-bounce indirect (fake GI) diffusion controls (F4 sliders). More passes =
 // colored light bleeds/bounces deeper; higher decay = more energy per ring.
-static int   g_gi_passes = 4;
-static float g_gi_decay  = 0.6f;
 // Current debug mode display (0-7, cycles through modes).
 static uint32_t g_current_dbg_mode = 0u;
 // Scale factors for individual light contributions (for tuning visualization).
@@ -677,12 +672,9 @@ static void draw_lighting_dev_ui()
     ImGui::SliderFloat( "dither amt", &g_dbg_params.dither_amt, 0.0f, 1.0f );
     ImGui::SliderFloat( "dither bands", &g_dbg_params.dither_bands, 1.0f, 16.0f, "%.0f" );
     ImGui::SliderFloat( "GI strength", &g_dbg_params.gi_strength, 0.0f, 2.0f );
-    ImGui::Checkbox( "GI: GPU radiance cascade (off = CPU oracle)", &g_gi_use_rc );
     if( ImGui::Button( "RC cascade readback (log stats)" ) ) {
         g_rc_readback = true;
     }
-    ImGui::SliderInt( "GI bounces", &g_gi_passes, 0, 12 );
-    ImGui::SliderFloat( "GI decay", &g_gi_decay, 0.0f, 0.95f );
     ImGui::SliderFloat( "shadow k", &g_dbg_params.shadow_k, 0.0f, 32.0f );
     int steps = static_cast<int>( g_dbg_params.shadow_steps );
     if( ImGui::SliderInt( "shadow steps", &steps, 1, 64 ) ) {
@@ -878,8 +870,7 @@ void refresh_display()
             }
         }
         lighting::frame_lighting_result fr =
-            lighting::build_and_submit_lighting( rs, rebuild_pertile,
-                    g_dbg_lighting, g_gi_passes, g_gi_decay );
+            lighting::build_and_submit_lighting( rs, rebuild_pertile, g_dbg_lighting );
         rc_rebuild = fr.built_pertile;
         if( fr.built_pertile ) {
             s_emo.sdf_at_player      = fr.sdf_at_player;
@@ -900,8 +891,6 @@ void refresh_display()
     if( rs.collector() ) {
         rs.collector()->flush_to_render_cb( ctx.cmd_buffer );
     }
-
-    rs.set_gi_use_rc( g_gi_use_rc ); // A/B: which GI texture the sprite binds
 
     // Step-3 Phase 2: gather the radiance cascade into rs.rc().cascade_texture()
     // on THIS frame's render CB — after the emitter/SDF upload (its inputs) and
