@@ -27,6 +27,8 @@ namespace sidebar_anim
 // The transform an icon/row applies on top of its base draw, resolved each frame.
 struct icon_transform {
     float scale = 1.0f;        // uniform, about the cell centre
+    float scale_y = 1.0f;      // extra vertical scale, anchored at pivot_y
+    float pivot_y = 0.5f;      // vertical anchor for scale_y (0 = top, 1 = bottom)
     float alpha = 1.0f;        // multiplies the tint alpha
     float offset_y = 0.0f;     // additive, pixels
     float rotation = 0.0f;     // degrees, clockwise (spin)
@@ -34,11 +36,12 @@ struct icon_transform {
     float blend = 0.0f;        // 0 = base tint, 1 = fully blend_color
 };
 
-enum class anim_prop { scale, alpha, offset_y, rotation, color_blend };
+enum class anim_prop { scale, scale_y, alpha, offset_y, rotation, color_blend };
 
-// When a spec fires: on a value change, while in a critical/danger band, or
-// continuously (ambient loop, started once when the widget is first seen).
-enum class anim_trigger { on_change, critical, ambient };
+// When a spec fires: on any value change, on an increase / decrease specifically
+// (for directional effects), while in a critical/danger band, or continuously
+// (ambient loop, started once when the widget is first seen).
+enum class anim_trigger { on_change, on_increase, on_decrease, critical, ambient };
 
 // One parsed animation directive from icons.json (per icon).
 struct anim_spec {
@@ -51,6 +54,7 @@ struct anim_spec {
     ui_tween::tween_loop loop = ui_tween::tween_loop::once;
     int repeats = 0;
     nc_color blend_color = c_white; // only used when prop == color_blend
+    float pivot_y = 0.5f;           // only used when prop == scale_y (0 top, 1 bottom)
 };
 
 class registry
@@ -84,6 +88,7 @@ class registry
             bool was_critical = false;
             bool ambient_started = false;
             nc_color blend_color = c_white;
+            float pivot_y = 0.5f;
             std::map<anim_prop, ui_tween::tween> active;
         };
         std::map<std::string, channel_state> states_;

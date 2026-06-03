@@ -145,6 +145,30 @@ TEST_CASE( "registry without specs never animates (opt-in)", "[ui_tween][sidebar
     CHECK( r.sample( "val_speed", 1100 ).scale == Approx( 1.0f ) );
 }
 
+TEST_CASE( "registry directional scale_y selects pivot by change sign", "[ui_tween][sidebar_anim]" )
+{
+    sidebar_anim::anim_spec up;
+    up.trigger = sidebar_anim::anim_trigger::on_increase;
+    up.prop = sidebar_anim::anim_prop::scale_y;
+    up.from = 0.6f;
+    up.to = 1.0f;
+    up.duration_ms = 300;
+    up.ease = ease_curve::back_out;
+    up.pivot_y = 0.0f;            // anchored top
+    sidebar_anim::anim_spec dn = up;
+    dn.trigger = sidebar_anim::anim_trigger::on_decrease;
+    dn.pivot_y = 1.0f;            // anchored bottom
+
+    sidebar_anim::registry r;
+    r.bind_specs( { { "heart", { up, dn } } } );
+    r.update( "x", "heart", 10.0, false, 0 );     // prime
+    r.update( "x", "heart", 20.0, false, 100 );   // increase -> top pivot
+    CHECK( r.sample( "x", 100 ).pivot_y == Approx( 0.0f ) );
+    CHECK( r.sample( "x", 100 ).scale_y < 1.0f );  // mid-squash
+    r.update( "x", "heart", 5.0, false, 500 );    // decrease -> bottom pivot
+    CHECK( r.sample( "x", 500 ).pivot_y == Approx( 1.0f ) );
+}
+
 TEST_CASE( "shipped icons.json parses through load_specs (strict JSON)", "[ui_tween][sidebar_anim]" )
 {
     // Reads the real gfx/widgets/icons.json. If a parser left a field unvisited

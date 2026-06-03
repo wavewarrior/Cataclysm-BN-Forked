@@ -482,11 +482,16 @@ void draw_widget_icon( const catacurses::window &win, const point &cell,
         return;
     }
     const float base = static_cast<float>( px );
-    const float scaled = base * tr.scale;
-    // Recentre the scaled sprite on the original cell box; apply vertical offset.
-    const float half = ( scaled - base ) * 0.5f;
-    const float x = static_cast<float>( ( w->pos.x + cell.x ) * fontwidth ) - half;
-    const float y = static_cast<float>( ( w->pos.y + cell.y ) * fontheight ) - half + tr.offset_y;
+    const float wpx = base * tr.scale;                 // uniform scale -> width
+    const float hpx = base * tr.scale * tr.scale_y;    // extra vertical squash
+    const float cell_x = static_cast<float>( ( w->pos.x + cell.x ) * fontwidth );
+    const float cell_y = static_cast<float>( ( w->pos.y + cell.y ) * fontheight );
+    // Horizontal: keep centred on the base box. Vertical: anchor at pivot_y, so a
+    // scale_y < 1 squashes toward the top (0), centre (0.5) or bottom (1) edge —
+    // the "hit from above/below" recoil. With scale_y=1, pivot_y=0.5 this reduces
+    // to the plain centred (re)scale.
+    const float x = cell_x - ( wpx - base ) * 0.5f;
+    const float y = cell_y + tr.pivot_y * ( base - hpx ) + tr.offset_y;
     const SDL_Color c = curses_color_to_SDL( color );
     float r = c.r / 255.f;
     float g = c.g / 255.f;
@@ -500,7 +505,7 @@ void draw_widget_icon( const catacurses::window &win, const point &cell,
     // Spin: tr.rotation is degrees (clockwise); the instance field is radians.
     constexpr float deg_to_rad = 0.01745329252f;
     lighting::get_render_state().queue_font_glyph(
-        tex, x, y, scaled, scaled, r, g, b, tr.alpha, /*lit=*/false,
+        tex, x, y, wpx, hpx, r, g, b, tr.alpha, /*lit=*/false,
         /*rotation=*/tr.rotation * deg_to_rad );
 }
 

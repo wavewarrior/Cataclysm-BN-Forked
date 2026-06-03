@@ -13,6 +13,9 @@ namespace
 {
 anim_prop string_to_prop( const std::string &s )
 {
+    if( s == "scale_y" ) {
+        return anim_prop::scale_y;
+    }
     if( s == "alpha" ) {
         return anim_prop::alpha;
     }
@@ -30,6 +33,12 @@ anim_prop string_to_prop( const std::string &s )
 
 anim_trigger string_to_trigger( const std::string &s )
 {
+    if( s == "on_increase" ) {
+        return anim_trigger::on_increase;
+    }
+    if( s == "on_decrease" ) {
+        return anim_trigger::on_decrease;
+    }
     if( s == "critical" ) {
         return anim_trigger::critical;
     }
@@ -42,7 +51,8 @@ anim_trigger string_to_trigger( const std::string &s )
 // Resting value a property eases back to when its effect ends.
 float identity_of( anim_prop p )
 {
-    return ( p == anim_prop::scale || p == anim_prop::alpha ) ? 1.0f : 0.0f;
+    return ( p == anim_prop::scale || p == anim_prop::scale_y || p == anim_prop::alpha )
+           ? 1.0f : 0.0f;
 }
 
 // Default per-property end value for a spec that omits "from"/"to" (so a minimal
@@ -83,6 +93,7 @@ void registry::load_specs()
                 if( a.has_string( "color" ) ) {
                     sp.blend_color = color_from_string( a.get_string( "color" ) );
                 }
+                sp.pivot_y = static_cast<float>( a.get_float( "pivot", 0.5 ) );
                 list.push_back( sp );
             }
             if( !list.empty() ) {
@@ -119,6 +130,9 @@ void registry::update( const std::string &key, const std::string &icon, double v
         if( sp.prop == anim_prop::color_blend ) {
             st.blend_color = sp.blend_color;
         }
+        if( sp.prop == anim_prop::scale_y ) {
+            st.pivot_y = sp.pivot_y;
+        }
     };
 
     // First sight: record state, start ambient loops, do NOT fire on_change.
@@ -137,12 +151,18 @@ void registry::update( const std::string &key, const std::string &icon, double v
         return;
     }
 
-    // Value change -> fire on_change specs, retargeting from the current sampled
-    // value so a rapid re-trigger doesn't snap.
+    // Value change -> fire on_change plus the matching directional trigger
+    // (on_increase / on_decrease), retargeting from the current sampled value so a
+    // rapid re-trigger doesn't snap.
     if( value != st.last_value ) {
+        const bool up = value > st.last_value;
         if( specs ) {
             for( const anim_spec &sp : *specs ) {
-                if( sp.trigger != anim_trigger::on_change ) {
+                const bool match =
+                    sp.trigger == anim_trigger::on_change ||
+                    ( sp.trigger == anim_trigger::on_increase && up ) ||
+                    ( sp.trigger == anim_trigger::on_decrease && !up );
+                if( !match ) {
                     continue;
                 }
                 float from = sp.from;
@@ -154,6 +174,9 @@ void registry::update( const std::string &key, const std::string &icon, double v
                     from, sp.to, now, sp.duration_ms, sp.ease, sp.loop, sp.repeats };
                 if( sp.prop == anim_prop::color_blend ) {
                     st.blend_color = sp.blend_color;
+                }
+                if( sp.prop == anim_prop::scale_y ) {
+                    st.pivot_y = sp.pivot_y;
                 }
             }
         }
@@ -199,11 +222,15 @@ icon_transform registry::sample( const std::string &key, std::uint32_t now ) con
     }
     const channel_state &st = sit->second;
     out.blend_color = st.blend_color;
+    out.pivot_y = st.pivot_y;
     for( const auto &pr : st.active ) {
         const float v = pr.second.value_at( now );
         switch( pr.first ) {
             case anim_prop::scale:
                 out.scale = v;
+                break;
+            case anim_prop::scale_y:
+                out.scale_y = v;
                 break;
             case anim_prop::alpha:
                 out.alpha = v;

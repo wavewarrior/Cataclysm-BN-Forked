@@ -9,32 +9,33 @@
   "//anim3": "ease (linear|sine_*|quad_*|cubic_*|quart_*|expo_*|back_*|elastic_*|",
   "//anim4": "bounce_* with _in/_out/_in_out), loop (once|loop|pingpong), repeats,",
   "//anim5": "and color (for color_blend). Omit \"animations\" for a static icon.",
-  "//row": "Reserved pseudo-icon: value rows look up row-level effects (e.g. the",
-  "//row2": "change-flash highlight bar) under \"_row\". It is never drawn as an icon.",
+  "//row": "Reserved pseudo-icon \"_row\" drives row-level effects (a full-width",
+  "//row2": "highlight bar via the color_blend property). Off by default; add a",
+  "//row3": "\"_row\" entry with an animations array to enable. Never drawn as an icon.",
+  "//dir": "Directional change: on_increase/on_decrease fire by the sign of the",
+  "//dir2": "change. Used here with property scale_y + pivot (0 top, 1 bottom) for a",
+  "//dir3": "squash anchored to an edge — the icon recoils as if hit from that side.",
   "icons": [
-    {
-      "id": "_row",
-      "animations": [
-        { "trigger": "on_change", "property": "color_blend", "from": 0.4, "to": 0.0, "duration": 450, "ease": "quad_out", "color": "white" }
-      ]
-    },
     {
       "id": "heart", "svg": "heart.svg",
       "animations": [
-        { "trigger": "on_change", "property": "scale", "from": 1.3, "to": 1.0, "duration": 300, "ease": "back_out" },
+        { "trigger": "on_increase", "property": "scale_y", "from": 0.6, "to": 1.0, "duration": 320, "ease": "back_out", "pivot": 0.0 },
+        { "trigger": "on_decrease", "property": "scale_y", "from": 0.6, "to": 1.0, "duration": 320, "ease": "back_out", "pivot": 1.0 },
         { "trigger": "critical", "property": "alpha", "from": 1.0, "to": 0.35, "duration": 280, "ease": "sine_in_out", "loop": "pingpong", "repeats": 6 }
       ]
     },
     {
       "id": "droplet", "svg": "droplet.svg",
       "animations": [
-        { "trigger": "on_change", "property": "scale", "from": 1.25, "to": 1.0, "duration": 300, "ease": "back_out" }
+        { "trigger": "on_increase", "property": "scale_y", "from": 0.6, "to": 1.0, "duration": 320, "ease": "back_out", "pivot": 0.0 },
+        { "trigger": "on_decrease", "property": "scale_y", "from": 0.6, "to": 1.0, "duration": 320, "ease": "back_out", "pivot": 1.0 }
       ]
     },
     {
       "id": "food", "svg": "food.svg",
       "animations": [
-        { "trigger": "on_change", "property": "scale", "from": 1.25, "to": 1.0, "duration": 300, "ease": "back_out" }
+        { "trigger": "on_increase", "property": "scale_y", "from": 0.6, "to": 1.0, "duration": 320, "ease": "back_out", "pivot": 0.0 },
+        { "trigger": "on_decrease", "property": "scale_y", "from": 0.6, "to": 1.0, "duration": 320, "ease": "back_out", "pivot": 1.0 }
       ]
     },
     { "id": "sound",   "svg": "sound.svg" },
@@ -45,7 +46,12 @@
         { "trigger": "ambient", "property": "rotation", "from": 0, "to": 360, "duration": 6000, "ease": "linear", "loop": "loop" }
       ]
     },
-    { "id": "compass", "svg": "compass.svg" },
+    {
+      "id": "compass", "svg": "compass.svg",
+      "animations": [
+        { "trigger": "ambient", "property": "rotation", "from": 0, "to": 360, "duration": 12000, "ease": "linear", "loop": "loop" }
+      ]
+    },
 
     {
       "id": "moon", "svg": "moon.svg",
