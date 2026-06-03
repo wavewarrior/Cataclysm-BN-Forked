@@ -225,6 +225,9 @@ float4 main(VS_OUT i) : SV_Target0 {
         const float  e_radius = e.pos_radius.w;
         const float3 e_color  = e.color_falloff.xyz;
         const float  e_falloff= e.color_falloff.w;
+        const float2 e_cone_dir = e.cone_shape.xy;          // normalized beam axis
+        const float  e_cone_ha  = e.cone_shape.z;           // half-angle (rad; π = omni)
+        const uint   e_shape    = asuint(e.cone_shape.w);   // emitter_shape enum
         if(abs(e_pos.z - current_z) > 0.5) continue;
         const float2 dv   = e_pos.xy - i.world_pos;
         const float  dist = length(dv);
@@ -238,9 +241,23 @@ float4 main(VS_OUT i) : SV_Target0 {
         const float2 sh_dir = dv / max(dist, 0.001);
         const float  shadow = trace_shadow(i.world_pos, sh_dir, dist,
                                             shadow_k, (int)shadow_steps);
+        // Cone / spotlight angular falloff (Bucket A / A2). Held flashlights and
+        // vehicle headlights are tagged CONE by build_emitter_snapshot with a
+        // normalized beam direction (cone_dir) and half-angle; OMNI emitters keep
+        // cone=1. sh_dir points fragment→light, so the light→fragment ray is
+        // -sh_dir; both the beam axis and that ray live in world tile space
+        // (x, y-down) matching the CPU cos/sin(idir) / v->face.dir() convention.
+        // Soft edge: full intensity within ~0.6 of the half-angle, smoothstep to
+        // zero at the rim (cos is monotone-decreasing in angle, so the inner
+        // threshold cos(0.6·ha) > the rim threshold cos(ha)).
+        float cone = 1.0;
+        if(e_shape == 1u) {            // emitter_shape::CONE
+            const float cosang = dot(normalize(e_cone_dir), -sh_dir);
+            cone = smoothstep(cos(e_cone_ha), cos(e_cone_ha * 0.6), cosang);
+        }
         const float3 rgb = (e_color.x < 0.01 && e_color.y < 0.01 && e_color.z < 0.01)
                            ? float3(1, 1, 1) : e_color;
-        emitter_light += rgb * atten * lambert * shadow;
+        emitter_light += rgb * atten * lambert * shadow * cone;
     }
     // Phase 8: sky ambient + directional sun contribution.
     // SkyVisBuf is x-major (skyvis[x*H+y]) — index directly, no transpose.
