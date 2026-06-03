@@ -138,8 +138,13 @@ struct debug_params {
     float    player_x      = 0.0f;   // DATA (not a knob): player map-tile centre x
     float    player_y      = 0.0f;   // DATA: player map-tile centre y
     float    mem_radius    = 30.0f;  // memory distance-fade scale in tiles (effect 3)
+    // Bucket A / A1 surface-normal knobs (live; sprite.frag surface_normal + Lambert).
+    float    nrm_amount    = 0.9f;   // normal Lambert blend: 0=flat(off) .. 1=full
+    float    nrm_relief    = -2.0f;  // tilt magnitude; SIGNED — negative flips global relief dir
+    float    nrm_elev      = 0.3f;   // implied light height; LOWER=more grazing=stronger relief
+    float    sdf_sharp     = 0.0f;   // SDF sample: 0=bilinear(smooth) .. 1=nearest(tight/grid-snap)
     float    dp_pad1       = 0.0f;
-    float    dp_pad2       = 0.0f;   // pad to 24-float (96-byte) alignment
+    float    dp_pad2       = 0.0f;   // pad to 28-float (112-byte) alignment
 };
 
 // Returns sun/sky params interpolated from a 24h LUT for the given hour (0..24).

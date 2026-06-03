@@ -144,6 +144,10 @@ void sdf_pass::init( gpu_device &dev, int map_w, int map_h )
     // Plan calls for R16F; using R32F in Phase 4 for simpler CPU→GPU copy
     // (no half-float conversion needed). Phase 6 JFA can switch to R16F.
     {
+        // sdf_tex_ is DEAD (nothing samples it; SDF reads from sdf_storage_ on
+        // Metal). Kept tile-sized only because the upload()/shutdown() guards and
+        // the (removable) Phase-6 JFA note reference it. The live SS-finer data
+        // goes to xfer_sdf_/sdf_storage_ below.
         SDL_GPUTextureCreateInfo tci{};
         tci.type                 = SDL_GPU_TEXTURETYPE_2D;
         tci.format               = SDL_GPU_TEXTUREFORMAT_R32_FLOAT;
@@ -187,7 +191,8 @@ void sdf_pass::init( gpu_device &dev, int map_w, int map_h )
     {
         SDL_GPUTransferBufferCreateInfo tbci{};
         tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-        tbci.size  = static_cast<Uint32>( map_w * map_h * 4 ); // 4 bytes per tile
+        // 4 bytes per SDF subcell (SDF_SUPERSAMPLE² subcells per tile).
+        tbci.size  = static_cast<Uint32>( map_w * map_h * SDF_SUPERSAMPLE * SDF_SUPERSAMPLE * 4 );
         xfer_sdf_ = SDL_CreateGPUTransferBuffer( d, &tbci );
     }
     {
@@ -205,7 +210,8 @@ void sdf_pass::init( gpu_device &dev, int map_w, int map_h )
     {
         SDL_GPUTransferBufferCreateInfo tbci{};
         tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-        tbci.size  = static_cast<Uint32>( map_w * map_h * 4 ); // 1 float per tile
+        // VisBuf shares the SDF_SUPERSAMPLE grid (sub-tile vision-edge sampling).
+        tbci.size  = static_cast<Uint32>( map_w * map_h * SDF_SUPERSAMPLE * SDF_SUPERSAMPLE * 4 );
         xfer_vis_f_ = SDL_CreateGPUTransferBuffer( d, &tbci );
     }
 
@@ -214,7 +220,8 @@ void sdf_pass::init( gpu_device &dev, int map_w, int map_h )
     {
         SDL_GPUBufferCreateInfo bci{};
         bci.usage = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ;
-        bci.size  = static_cast<Uint32>( map_w * map_h * 4 );
+        // SDF_SUPERSAMPLE² subcells per tile, 4 bytes each.
+        bci.size  = static_cast<Uint32>( map_w * map_h * SDF_SUPERSAMPLE * SDF_SUPERSAMPLE * 4 );
         sdf_storage_ = SDL_CreateGPUBuffer( d, &bci );
         if( !sdf_storage_ ) {
             dbg( DL::Error ) << "sdf_pass::init: failed to create sdf_storage";
@@ -232,7 +239,8 @@ void sdf_pass::init( gpu_device &dev, int map_w, int map_h )
     {
         SDL_GPUBufferCreateInfo bci{};
         bci.usage = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ;
-        bci.size  = static_cast<Uint32>( map_w * map_h * 4 ); // 1 float/tile
+        // VisBuf shares the SDF_SUPERSAMPLE grid (SS² floats per tile).
+        bci.size  = static_cast<Uint32>( map_w * map_h * SDF_SUPERSAMPLE * SDF_SUPERSAMPLE * 4 );
         visbuf_storage_ = SDL_CreateGPUBuffer( d, &bci );
         if( !visbuf_storage_ ) {
             dbg( DL::Error ) << "sdf_pass::init: failed to create visbuf_storage";
@@ -354,35 +362,32 @@ void sdf_pass::upload( SDL_GPUCopyPass *cp,
         }
     }
 
-    // Upload SDF (R32F, 4 bytes/tile).
+    // Upload SDF (R32F). The SDF channel is SDF_SUPERSAMPLE× finer per axis, so
+    // it carries SS² subcells per tile — sized/indexed independently of the
+    // tile-res transparency/skyvis/vis channels above. The `sdf` vector is
+    // x-major over the SS grid: sdf[(x*SS+sx)*(runtime_h*SS) + (y*SS+sy)].
+    const int    ss           = SDF_SUPERSAMPLE;
+    const Uint32 sdf_subcells  = pixel_count * static_cast<Uint32>( ss * ss );
     if( xfer_sdf_ &&
-        static_cast<Uint32>( sdf.size() ) >= pixel_count ) {
+        static_cast<Uint32>( sdf.size() ) >= sdf_subcells ) {
         void *mapped = SDL_MapGPUTransferBuffer( dev, xfer_sdf_, true );
         if( mapped ) {
-            std::memcpy( mapped, sdf.data(), pixel_count * sizeof( float ) );
+            std::memcpy( mapped, sdf.data(), sdf_subcells * sizeof( float ) );
             SDL_UnmapGPUTransferBuffer( dev, xfer_sdf_ );
 
-            SDL_GPUTextureTransferInfo src{};
-            src.transfer_buffer = xfer_sdf_;
-            src.pixels_per_row  = static_cast<Uint32>( runtime_w );
-
-            SDL_GPUTextureRegion dst{};
-            dst.texture = sdf_tex_;
-            dst.w       = static_cast<Uint32>( runtime_w );
-            dst.h       = static_cast<Uint32>( runtime_h );
-            dst.d       = 1;
-
-            // cycle=false: same rationale — shader keeps the original handle.
-            SDL_UploadToGPUTexture( cp, &src, &dst, false );
+            // sdf_tex_ (R32F texture) is DEAD — nothing samples it (see CLAUDE.md;
+            // SDF is read from sdf_storage_ on Metal). Skip its upload entirely so
+            // we don't pay an SS²-sized texture copy per rebuild for unread data.
 
             // Real SDF bytes landed on the GPU: now safe for the fragment
             // shader to read. begin_lighting_frame() exposes sdf_map_w/h
-            // and the textures from this frame onward.
+            // from this frame onward.
             populated_  = true;
             runtime_w_  = runtime_w;
             runtime_h_  = runtime_h;
 
-            // Also upload SDF to the vertex-shader storage buffer.
+            // Upload SDF to the fragment-shader storage buffer (the live
+            // consumer). Full SS² subcell payload, x-major (stride map_h*SS).
             if( sdf_storage_ ) {
                 SDL_GPUTransferBufferLocation tb_src{};
                 tb_src.transfer_buffer = xfer_sdf_;
@@ -391,7 +396,7 @@ void sdf_pass::upload( SDL_GPUCopyPass *cp,
                 SDL_GPUBufferRegion buf_dst{};
                 buf_dst.buffer = sdf_storage_;
                 buf_dst.offset = 0;
-                buf_dst.size   = pixel_count * static_cast<Uint32>( sizeof( float ) );
+                buf_dst.size   = sdf_subcells * static_cast<Uint32>( sizeof( float ) );
 
                 SDL_UploadToGPUBuffer( cp, &tb_src, &buf_dst, false );
             }
@@ -455,14 +460,15 @@ void sdf_pass::upload( SDL_GPUCopyPass *cp,
         }
     }
 
-    // Per-tile visibility: 1 float/tile (x-major). Fragment storage buffer
-    // (VisBuf); shader applies the soft vision falloff + memory fade.
+    // Per-tile visibility on the SDF_SUPERSAMPLE grid (SS² floats/tile, x-major,
+    // stride runtime_h*SS). Fragment storage buffer (VisBuf); shader applies the
+    // soft vision falloff sampled as finely as the SDF shadows.
     if( visbuf_storage_ && xfer_vis_f_
-        && static_cast<Uint32>( vis.size() ) >= pixel_count ) {
+        && static_cast<Uint32>( vis.size() ) >= sdf_subcells ) {
         void *mapped = SDL_MapGPUTransferBuffer( dev, xfer_vis_f_, true );
         if( mapped ) {
             std::memcpy( mapped, vis.data(),
-                         pixel_count * static_cast<Uint32>( sizeof( float ) ) );
+                         sdf_subcells * static_cast<Uint32>( sizeof( float ) ) );
             SDL_UnmapGPUTransferBuffer( dev, xfer_vis_f_ );
 
             SDL_GPUTransferBufferLocation tb_src{};
@@ -472,7 +478,7 @@ void sdf_pass::upload( SDL_GPUCopyPass *cp,
             SDL_GPUBufferRegion buf_dst{};
             buf_dst.buffer = visbuf_storage_;
             buf_dst.offset = 0;
-            buf_dst.size   = pixel_count * static_cast<Uint32>( sizeof( float ) );
+            buf_dst.size   = sdf_subcells * static_cast<Uint32>( sizeof( float ) );
 
             SDL_UploadToGPUBuffer( cp, &tb_src, &buf_dst, false );
         }

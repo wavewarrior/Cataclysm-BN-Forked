@@ -675,6 +675,14 @@ static void draw_lighting_dev_ui()
     ImGui::SliderFloat( "cursor radius (tiles)", &cursor_light_emitter::radius, 1.0f, 40.0f );
     ImGui::SliderFloat( "cursor intensity", &cursor_light_emitter::intensity, 0.0f, 5.0f );
 
+    ImGui::SeparatorText( "Surface normals (A1)" );
+    // Inline Sobel relief (mode 9 visualises the normal). amount=0 → flat/off.
+    // relief is SIGNED: flip its sign to correct the global relief direction
+    // (the y-down/atlas-V inversion) without a rebuild. elev lower = more grazing.
+    ImGui::SliderFloat( "normal amount", &g_dbg_params.nrm_amount, 0.0f, 10.0f );
+    ImGui::SliderFloat( "normal relief (signed)", &g_dbg_params.nrm_relief, -6.0f, 6.0f );
+    ImGui::SliderFloat( "normal elev (grazing)", &g_dbg_params.nrm_elev, 0.05f, 1.5f );
+
     ImGui::SeparatorText( "Light scales" );
     // Edit the g_*_scale mirrors then sync into g_dbg_params (the struct the
     // shader reads) — same path the F8/F9 handlers use, so keys + sliders agree.
@@ -708,6 +716,10 @@ static void draw_lighting_dev_ui()
     if( ImGui::SliderInt( "shadow steps", &steps, 1, 64 ) ) {
         g_dbg_params.shadow_steps = static_cast<uint32_t>( std::max( 1, steps ) );
     }
+    // SDF sample sharpness: 0=bilinear (smooth, ≥1-tile penumbra floor) .. 1=nearest
+    // (tight but grid-snapped). Tile-resolution SDF can't be both crisp AND smooth;
+    // crank with shadow k for the tightest shadows the tile field allows.
+    ImGui::SliderFloat( "SDF sharpness", &g_dbg_params.sdf_sharp, 0.0f, 1.0f );
 
     ImGui::SeparatorText( "Vision (Stoneshard)" );
     // Each knob is independent so a single effect can be zeroed live to bisect.

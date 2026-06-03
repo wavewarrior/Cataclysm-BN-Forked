@@ -64,9 +64,33 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
                 transparency[i] = static_cast<uint8_t>(
                     std::min( 255.0f, std::max( 0.0f, t * 255.0f ) ) );
             }
-            // CPU BFS distance transform.
-            sdf = lighting::compute_sdf_cpu( mc.transparency_cache.data(), W, H );
-            sdf_runtime_w = W;
+            // CPU Euclidean distance transform on an SDF_SUPERSAMPLE× finer grid:
+            // replicate each tile's transparency into its SS×SS subcells (occluder
+            // edges stay tile-aligned — correct for tile-walls), run the same DT,
+            // then rescale subcell distances to TILE units (÷SS) so the shader's
+            // cone trace is unchanged. Sub-tile-fine penumbra → tight + smooth.
+            const int ss = lighting::SDF_SUPERSAMPLE;
+            const int SW = W * ss;
+            const int SH = H * ss;
+            std::vector<float> trans_ss( static_cast<size_t>( SW ) * SH );
+            for( int x = 0; x < W; ++x ) {
+                for( int y = 0; y < H; ++y ) {
+                    const float t  = mc.transparency_cache[ x * H + y ];
+                    const int   bx = x * ss;
+                    const int   by = y * ss;
+                    for( int sx = 0; sx < ss; ++sx ) {
+                        for( int sy = 0; sy < ss; ++sy ) {
+                            trans_ss[ static_cast<size_t>( bx + sx ) * SH + ( by + sy ) ] = t;
+                        }
+                    }
+                }
+            }
+            sdf = lighting::compute_sdf_cpu( trans_ss.data(), SW, SH );
+            const float inv_ss = 1.0f / static_cast<float>( ss );
+            for( float &d : sdf ) {
+                d *= inv_ss;   // subcell distance → tile units
+            }
+            sdf_runtime_w = W;   // tile dims; the SS factor is implicit (shader SDF_SS)
             sdf_runtime_h = H;
 
             // Sky visibility from outside_cache (same x-major layout as
@@ -88,14 +112,28 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
             // x-major (idx = x*H+y), matching transparency_cache. Live-only
             // (>=0); memorized-tile fade is handled CPU-side at draw time
             // (ll==MEMORIZED), not via this buffer.
+            // Built at the SAME SDF_SUPERSAMPLE grid as the SDF so the shader's
+            // vision-edge falloff is sampled as finely as the lighting shadows
+            // (tile-res bilinear smeared the rim ~1 tile; the SS grid sharpens
+            // the inter-tile interpolation to ~1/SS tile). Per-tile value is
+            // replicated into its SS×SS subcells (no sub-tile LOS data exists).
             if( static_cast<int>( mc.seen_cache.size() ) >= total ) {
-                vis.assign( total, 0.0f );
+                vis.assign( static_cast<size_t>( SW ) * SH, 0.0f );
                 const bool have_cam =
                     static_cast<int>( mc.camera_cache.size() ) >= total;
-                for( int i = 0; i < total; ++i ) {
-                    const float s = mc.seen_cache[i];
-                    const float c = have_cam ? mc.camera_cache[i] : 0.0f;
-                    vis[i] = std::max( s, c );
+                for( int x = 0; x < W; ++x ) {
+                    for( int y = 0; y < H; ++y ) {
+                        const float s = mc.seen_cache[ x * H + y ];
+                        const float c = have_cam ? mc.camera_cache[ x * H + y ] : 0.0f;
+                        const float v = std::max( s, c );
+                        const int bx = x * ss;
+                        const int by = y * ss;
+                        for( int sx = 0; sx < ss; ++sx ) {
+                            for( int sy = 0; sy < ss; ++sy ) {
+                                vis[ static_cast<size_t>( bx + sx ) * SH + ( by + sy ) ] = v;
+                            }
+                        }
+                    }
                 }
             }
 
@@ -106,7 +144,10 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
         }
 
         // Snapshot for HUD: what's the SDF / transparency at the player tile?
-        const int pi = g->u.bub_pos().x() * H + g->u.bub_pos().y();
+        // sdf is SS-grid indexed now → sample the player tile's centre subcell.
+        const int ss_hud = lighting::SDF_SUPERSAMPLE;
+        const int pi = ( g->u.bub_pos().x() * ss_hud + ss_hud / 2 ) * ( H * ss_hud )
+                       + ( g->u.bub_pos().y() * ss_hud + ss_hud / 2 );
         if( pi >= 0 && pi < static_cast<int>( sdf.size() ) ) {
             result.sdf_at_player = sdf[pi];
             dbg( DL::Debug ) << "sdf[player]: " << sdf[pi];

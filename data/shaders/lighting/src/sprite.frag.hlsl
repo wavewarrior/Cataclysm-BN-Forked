@@ -90,6 +90,10 @@ cbuffer DebugParams : register(b2, space3) {
     float player_x;            // player map-tile centre x (radial origin)
     float player_y;            // player map-tile centre y
     float mem_radius;          // memory distance-fade scale in tiles (effect 3)
+    float nrm_amount;          // A1 normal Lambert blend: 0=flat(off) .. 1=full
+    float nrm_relief;          // A1 normal tilt magnitude; SIGNED (negative flips global relief direction)
+    float nrm_elev;            // A1 implied light height above plane; LOWER=more grazing=stronger relief
+    float sdf_sharp;           // SDF sample sharpness: 0=bilinear(smooth) .. 1=nearest(tight, grid-snapped)
     float dp_pad1;
     float dp_pad2;
 };
@@ -100,34 +104,40 @@ struct VS_OUT {
     float2 world_pos: TEXCOORD2;
     float  light_mul: TEXCOORD3; // memory-fade marker (<0 = -(dist); else no-op)
 };
-// Clamped raw SDF fetch. SdfBuf is x-major (sdf[x*H+y]).
+// SDF supersample factor — MUST match lighting::SDF_SUPERSAMPLE (sdf_pass.h).
+// SdfBuf is the SS-finer grid: dims (sdf_map_w*SDF_SS) x (sdf_map_h*SDF_SS),
+// x-major (stride = sdf_map_h*SDF_SS). Stored distances are already in TILE
+// units (the CPU ÷SS), so the cone trace below is unchanged.
+static const int SDF_SS = 4;
+// Clamped raw SDF fetch; (x,y) are SS-GRID coords.
 float sdf_texel(int x, int y) {
-    x = clamp(x, 0, (int)sdf_map_w - 1);
-    y = clamp(y, 0, (int)sdf_map_h - 1);
-    return SdfBuf[x * (int)sdf_map_h + y];
+    const int gw = (int)sdf_map_w * SDF_SS;
+    const int gh = (int)sdf_map_h * SDF_SS;
+    x = clamp(x, 0, gw - 1);
+    y = clamp(y, 0, gh - 1);
+    return SdfBuf[x * gh + y];
 }
-// Bilinear SDF sample. The CPU SDF is a Chebyshev BFS at tile resolution, so
-// raw nearest reads ((int)p.x) produced diamond-faceted (sawtooth) penumbrae.
-// Interpolating the four surrounding tile samples smooths those steps into a
-// clean gradient.
-//
-// Sample alignment: SdfBuf[x] stores the distance FOR tile x, whose CENTRE is
-// at world_pos x+0.5 (world_pos = mx+0.5 convention). So subtract 0.5 before
-// floor/frac — at a tile centre (world_pos = int+0.5) this returns that tile's
-// stored value with weight 1 (matching the old nearest read and the HUD's
-// sdf[player] readout). Using bare floor(p) would shift the whole field half a
-// tile and detach shadows ~16px from their occluders.
+// Bilinear SDF sample over the SS-finer Euclidean grid → sub-tile-fine, tight
+// AND smooth penumbra (no stair-step). p is in TILE units; map to subcell-grid
+// coords g = p*SDF_SS - 0.5, where subcell c's CENTRE sits at tile (c+0.5)/SDF_SS
+// (so a tile centre still lands on a subcell sample, preserving the old p-0.5
+// alignment that keeps shadows glued to occluders).
 float sdf_bilinear(float2 p) {
-    const float2 sp = p - 0.5;        // tile-centre alignment
-    const float2 fp = floor(sp);
+    const float2 g  = p * (float)SDF_SS - 0.5;
+    const float2 fp = floor(g);
     const int   x0  = (int)fp.x;
     const int   y0  = (int)fp.y;
-    const float2 w  = sp - fp;        // frac
+    const float2 w  = g - fp;         // frac
     const float a = sdf_texel(x0,     y0    );
     const float b = sdf_texel(x0 + 1, y0    );
     const float c = sdf_texel(x0,     y0 + 1);
     const float d = sdf_texel(x0 + 1, y0 + 1);
-    return lerp(lerp(a, b, w.x), lerp(c, d, w.x), w.y);
+    const float bil = lerp(lerp(a, b, w.x), lerp(c, d, w.x), w.y);
+    // sdf_sharp biases bilinear→nearest. With the SS grid this is rarely needed
+    // (the field is already fine), but kept as a live tightness lever.
+    if(sdf_sharp <= 0.001) { return bil; }
+    const float nr = sdf_texel((int)floor(g.x + 0.5), (int)floor(g.y + 0.5));
+    return lerp(bil, nr, saturate(sdf_sharp));
 }
 // Per-tile 1-bounce indirect light (RGB). Now a read-only storage texture
 // (Phase 1b). The CPU source is x-major arr[x*map_h+y]; the texture is uploaded
@@ -153,22 +163,26 @@ float3 indirect_bilinear(float2 p) {
     const float3 d = indirect_texel(x0 + 1, y0 + 1);
     return lerp(lerp(a, b, w.x), lerp(c, d, w.x), w.y);
 }
-// Per-tile LIVE visibility (1 float/tile, x-major). VisBuf[i] is raw
-// max(seen_cache, camera_cache) in [0,1]; 0 = not currently visible.
+// LIVE visibility on the SDF_SUPERSAMPLE grid (SS² floats/tile, x-major, stride
+// sdf_map_h*SDF_SS). VisBuf is raw max(seen_cache, camera_cache) in [0,1];
+// 0 = not currently visible. Sampled as finely as the SDF so the vision-edge
+// falloff matches the lighting-shadow sharpness (per-tile value replicated into
+// its subcells CPU-side; the bilinear below smooths over ~1/SS tile).
 float vis_texel(int x, int y) {
-    x = clamp(x, 0, (int)sdf_map_w - 1);
-    y = clamp(y, 0, (int)sdf_map_h - 1);
-    return VisBuf[x * (int)sdf_map_h + y];
+    const int gw = (int)sdf_map_w * SDF_SS;
+    const int gh = (int)sdf_map_h * SDF_SS;
+    x = clamp(x, 0, gw - 1);
+    y = clamp(y, 0, gh - 1);
+    return VisBuf[x * gh + y];
 }
-// Bilinear live visibility. Taps clamped to max(0, .) defensively. Same
-// p-0.5 tile-centre convention as sdf_bilinear (keeps the falloff glued to
-// tile centres; no half-tile shift).
+// Bilinear live visibility over the SS grid. Taps clamped to max(0,.) defensively.
+// p is in TILE units; same subcell-centre mapping as sdf_bilinear (g = p*SS-0.5).
 float vis_bilinear(float2 p) {
-    const float2 sp = p - 0.5;
-    const float2 fp = floor(sp);
+    const float2 g  = p * (float)SDF_SS - 0.5;
+    const float2 fp = floor(g);
     const int   x0  = (int)fp.x;
     const int   y0  = (int)fp.y;
-    const float2 w  = sp - fp;
+    const float2 w  = g - fp;
     const float a = max(0.0, vis_texel(x0,     y0    ));
     const float b = max(0.0, vis_texel(x0 + 1, y0    ));
     const float c = max(0.0, vis_texel(x0,     y0 + 1));
@@ -217,12 +231,9 @@ float dither_threshold(float2 world_px) {
 // gate entirely — the question of whether per-pixel normals add visible value
 // in a 2D tile game is answered before any normal-atlas pipeline is built.
 // GetDimensions queries the *currently bound* atlas page, so per-page texel
-// size is correct without a uniform. Tuning is shader constants for now
-// (promote to F4 sliders only if the effect earns its keep). NRM_AMOUNT=0
-// reduces both Lambert sites to the previous flat-normal behaviour exactly.
-static const float NRM_RELIEF = 2.0;   // luminance-gradient → surface tilt
-static const float NRM_ELEV   = 0.7;   // implied emitter height above the tile plane
-static const float NRM_AMOUNT = 0.5;   // 0 = flat (off) .. 1 = full Lambert
+// size is correct without a uniform. Tuning is LIVE via DebugParams (F4 panel):
+// nrm_amount / nrm_relief (signed) / nrm_elev. nrm_amount=0 reduces both Lambert
+// sites to the previous flat-normal behaviour exactly.
 float3 surface_normal(float2 uv) {
     float aw, ah;
     Atlas.GetDimensions(aw, ah);
@@ -234,7 +245,10 @@ float3 surface_normal(float2 uv) {
     const float3 luma = float3(0.299, 0.587, 0.114);
     const float dx = dot(sR.rgb, luma) - dot(sL.rgb, luma);
     const float dy = dot(sD.rgb, luma) - dot(sU.rgb, luma);
-    const float3 n = normalize(float3(-dx * NRM_RELIEF, -dy * NRM_RELIEF, 1.0));
+    // Symmetric height-field tilt; nrm_relief is SIGNED so the F4 slider flips the
+    // global relief direction (negative = full negation of both axes) to resolve
+    // the y-down/atlas-V sign without a rebuild. Magnitude = relief strength.
+    const float3 n = normalize(float3(-dx * nrm_relief, -dy * nrm_relief, 1.0));
     // Edge-fade-to-flat: a (near-)transparent neighbour means we're at the
     // sprite silhouette — collapse back toward flat so a packed-atlas
     // neighbour can't bleed a hard fake edge across the gap.
@@ -271,9 +285,11 @@ float4 main(VS_OUT i) : SV_Target0 {
         // the tile plane so relief tilts catch it. Blended with NRM_AMOUNT so
         // flat surfaces stay near full brightness (0 = old omni lambert=1).
         const float2 sh_dir = dv / max(dist, 0.001);
-        const float  lambert = lerp(1.0,
-                                    saturate(dot(normal, normalize(float3(sh_dir, NRM_ELEV)))),
-                                    NRM_AMOUNT);
+        // saturate() guards nrm_amount>1: the lerp extrapolates past full Lambert
+        // (a strong contrast knob) but must not go negative and subtract light.
+        const float  lambert = saturate(lerp(1.0,
+                                    saturate(dot(normal, normalize(float3(sh_dir, nrm_elev)))),
+                                    nrm_amount));
         // Per-emitter soft shadow via the shared SDF sphere trace (bilinear,
         // shadow_k / shadow_steps tunable). See trace_shadow above. sh_dir is
         // declared above (the A1 Lambert reuses it).
@@ -320,7 +336,7 @@ float4 main(VS_OUT i) : SV_Target0 {
         // sin_elev / sqrt(1 + sin_elev^2).
         const float flat_sun = sun_sin_elev / sqrt(1.0 + sun_sin_elev * sun_sin_elev);
         const float3 sun_L   = normalize(float3(toward_sun, sun_sin_elev));
-        const float sun_lambert = lerp(flat_sun, saturate(dot(normal, sun_L)), NRM_AMOUNT);
+        const float sun_lambert = saturate(lerp(flat_sun, saturate(dot(normal, sun_L)), nrm_amount));
         sun_contrib = float3(sun_r, sun_g, sun_b) * sun_intensity * sun_lambert
                       * sun_shadow * sky_vis;
     }

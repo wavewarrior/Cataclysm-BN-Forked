@@ -13,6 +13,17 @@ namespace lighting
 {
 class gpu_device;
 
+// SDF supersampling factor: the Euclidean DT is built on a grid SDF_SUPERSAMPLE×
+// finer than the tile grid (each tile → SDF_SUPERSAMPLE² subcells, seeds
+// replicated). Tile occluder EDGES stay grid-aligned, but the distance falloff
+// becomes sub-tile-fine → penumbra floor ~1/SDF_SUPERSAMPLE tile (tight) WITHOUT
+// the stair-stepping that nearest-sampling a tile-res field would cause. The SDF
+// GPU buffer is sized SDF_SUPERSAMPLE² larger; distances are rescaled to tile
+// units (÷SDF_SUPERSAMPLE) at build so the shader's cone trace is unchanged.
+// MUST match the SDF_SS constant in sprite.frag.hlsl. (This is the resolution
+// fix; it is orthogonal to JFA, which is only a faster way to COMPUTE a DT.)
+inline constexpr int SDF_SUPERSAMPLE = 4;
+
 // Manages per-z-level transparency and SDF (signed-distance-field) GPU textures.
 //
 // Layout (Phase 4):  1 texel per tile.
