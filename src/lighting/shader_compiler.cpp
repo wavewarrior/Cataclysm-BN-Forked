@@ -1,6 +1,8 @@
 #include "shader_compiler.h"
 
 #include "debug.h"
+#include "filesystem.h"
+#include "path_info.h"
 
 #include <SDL3_shadercross/SDL_shadercross.h>
 
@@ -42,6 +44,16 @@ void shutdown_shader_compiler() noexcept
         return;
     }
     SDL_ShaderCross_Quit();
+}
+
+std::string load_lighting_shader_source( const std::string &name )
+{
+    const std::string path = PATH_INFO::datadir() + "shaders/lighting/src/" + name;
+    std::string src = read_entire_file( path );
+    if( src.empty() ) {
+        dbg( DL::Error ) << "load_lighting_shader_source: empty/missing " << path;
+    }
+    return src;
 }
 
 compiled_shader compile_graphics_shader(

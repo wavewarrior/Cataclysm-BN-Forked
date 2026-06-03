@@ -79,4 +79,11 @@ compiled_shader compile_graphics_shader(
     SDL_ShaderCross_ShaderStage stage,
     const char *debug_name = nullptr );
 
+// Load an HLSL shader source from the lighting shader dir
+// (data/shaders/lighting/src/<name>). Single source of truth for the live
+// shaders (no longer embedded in sprite_batcher.cpp). Returns the file text, or
+// an empty string (logged) when missing/unreadable — the caller treats an empty
+// source as a fatal compile failure, same as compile_graphics_shader.
+std::string load_lighting_shader_source( const std::string &name );
+
 } // namespace lighting

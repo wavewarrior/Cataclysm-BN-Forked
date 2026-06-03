@@ -73,6 +73,7 @@
 #include "sdl_font.h"
 #include "sdlsound.h"
 #include "lighting/emitter_collector.h"
+#include "lighting/frame_build.h"
 #include "lighting/imgui_layer.h"
 #include "lighting/render_state.h"
 #include "lighting/snapshot.h"
@@ -809,179 +810,56 @@ void refresh_display()
         return;
     }
 
-    // Phase 3+4: build emitter snapshot + SDF from the CURRENT map state and
-    // submit to the collector, THEN flush it below onto this same frame's
-    // render CB. Built here (frame head) rather than at the tail so the
-    // emitter/SDF/sky_vis data matches this frame's sprites + camera offset.
-    // Building at the tail (after submit_frame) left the lighting one frame
-    // stale: on a step, sprites + camera jumped to the new tile but the light
-    // data was still the previous tile's — a visible one-frame "snap" in the
-    // dark. This mirrors the begin_lighting_frame hoist (see below) that already
-    // de-staled the camera/sun params; this completes it for the data upload.
+    // Phase 3+4: build emitter snapshot + per-tile SDF/sky-vis/GI/vision and
+    // submit to the collector, THEN flush below onto this same frame's render
+    // CB. Built at the frame head (not the tail) so the light data matches this
+    // frame's sprites + camera; tail-building left lighting one frame stale (a
+    // visible one-frame "snap" on a step). The build itself now lives in
+    // lighting/frame_build.cpp (LIGHTING_REWORK_PLAN.md step 0).
     if( rs.collector() ) {
-        constexpr float FRAME_MS = 25.0f;
-
-        auto snapshot = lighting::build_emitter_snapshot( rs.emitter_events(), FRAME_MS );
-
-        // Phase 4: compute transparency + SDF from the current map cache.
-        // Gate on active_world: g exists during the main menu but get_map()
-        // returns the default-constructed map (all transparent), which would
-        // upload a populated SDF and cause the fragment shadow march to
-        // shadow=0 every emitter beyond ~1 tile.
-        std::vector<uint8_t> transparency;
-        std::vector<float>   sdf;
-        std::vector<uint8_t> sky_vis;
-        std::vector<float>   indirect; // 1-bounce GI, 3 floats/tile RGB (x-major)
-        std::vector<float>   vis;      // per-tile visibility for soft vision falloff (x-major)
-        int sdf_runtime_w = 0;
-        int sdf_runtime_h = 0;
-        if( g && world_generator && world_generator->active_world && rs.sdf().ready() ) {
-            map &m = get_map(); // non-const for i_at etc.
-            const int zlev = g->u.bub_pos().z();
-            const level_cache &mc = m.access_cache( zlev );
-            const int mapsize = m.getmapsize();
-            const int W = mapsize * SEEX;
-            const int H = mapsize * SEEY;
-            const int total = W * H;
-
-            // Guard transparency loop too — pre-fix this was UB if the cache
-            // hadn't been built yet (size 0). sdf+transparency now share one
-            // gate; either both populate or neither.
-            if( static_cast<int>( mc.transparency_cache.size() ) >= total ) {
-                // Pack float transparency_cache → uint8 (0=opaque, 255=transparent).
-                transparency.resize( total );
-                for( int i = 0; i < total; ++i ) {
-                    const float t = mc.transparency_cache[ i ];
-                    transparency[i] = static_cast<uint8_t>(
-                        std::min( 255.0f, std::max( 0.0f, t * 255.0f ) ) );
-                }
-                // CPU BFS distance transform.
-                sdf = lighting::compute_sdf_cpu( mc.transparency_cache.data(), W, H );
-                sdf_runtime_w = W;
-                sdf_runtime_h = H;
-
-                // Sky visibility from outside_cache (same x-major layout as
-                // transparency_cache, idx = x*H+y). 255 = open sky overhead,
-                // 0 = roofed/indoor. Falls back to all-open if the cache
-                // isn't built yet.
-                sky_vis.assign( total, 255u );
-                if( static_cast<int>( mc.outside_cache.size() ) >= total ) {
-                    for( int i = 0; i < total; ++i ) {
-                        sky_vis[i] = mc.outside_cache[i] ? 255u : 0u;
-                    }
-                }
-
-                // Per-tile visibility for the soft vision falloff (effect 1+2).
-                // Raw max(seen_cache, camera_cache) — the SAME float
-                // apparent_light_helper reads, but the render path otherwise
-                // discards it by bucketing to discrete lit_level (the hard
-                // edge). seen_cache already encodes a continuous radial decay.
-                // x-major (idx = x*H+y), matching transparency_cache. Live-only
-                // (>=0); memorized-tile fade is handled CPU-side at draw time
-                // (ll==MEMORIZED), not via this buffer.
-                if( static_cast<int>( mc.seen_cache.size() ) >= total ) {
-                    vis.assign( total, 0.0f );
-                    const bool have_cam =
-                        static_cast<int>( mc.camera_cache.size() ) >= total;
-                    for( int i = 0; i < total; ++i ) {
-                        const float s = mc.seen_cache[i];
-                        const float c = have_cam ? mc.camera_cache[i] : 0.0f;
-                        vis[i] = std::max( s, c );
-                    }
-                }
-
-                // 1-bounce indirect light (fake GI). Seed per-tile colored
-                // direct radiance from the CPU lightmap — `lm` is PHYSICAL and
-                // turn-stable (generate_lightmap; vision is applied later in
-                // apparent_light), so reading it per-frame is shimmer-free.
-                // Normalise by LIGHT_AMBIENT_LIT so a well-lit tile ≈ 1.0, to
-                // match the GPU dynamic-light scale. light_color_cache supplies
-                // hue only when coloured (fire/twilight); else white.
-                // Then diffuse 2 passes through OPEN tiles (blocked by walls,
-                // leaks through windows) → soft colored fill that spills deeper
-                // than the direct cone. Shader adds gi_strength * this.
-                if( static_cast<int>( mc.lm.size() ) >= total ) {
-                    std::vector<float> seed( total * 3, 0.0f );
-                    const bool colored = mc.has_colored_lights
-                        && static_cast<int>( mc.light_color_cache.size() ) >= total;
-                    for( int i = 0; i < total; ++i ) {
-                        const float lum = mc.lm[i].max() / LIGHT_AMBIENT_LIT;
-                        if( lum <= 0.0f ) { continue; }
-                        float cr = 1.0f, cg = 1.0f, cb = 1.0f;
-                        if( colored ) {
-                            const light_color_rgb &lc = mc.light_color_cache[i];
-                            const float m = std::max( lc.r, std::max( lc.g, lc.b ) );
-                            if( m > 0.0001f ) { cr = lc.r / m; cg = lc.g / m; cb = lc.b / m; }
-                        }
-                        seed[i * 3 + 0] = lum * cr;
-                        seed[i * 3 + 1] = lum * cg;
-                        seed[i * 3 + 2] = lum * cb;
-                    }
-                    // Wall-gated diffusion. Sources stay pinned (seed re-added
-                    // each pass); light relaxes outward only through tiles whose
-                    // transparency is above SOLID (0). Averaging keeps it bounded.
-                    std::vector<float> cur = seed;
-                    std::vector<float> nxt( total * 3, 0.0f );
-                    const float decay = 0.55f;
-                    for( int pass = 0; pass < 2; ++pass ) {
-                        for( int x = 0; x < W; ++x ) {
-                            for( int y = 0; y < H; ++y ) {
-                                const int i = x * H + y;
-                                float ar = seed[i * 3 + 0];
-                                float ag = seed[i * 3 + 1];
-                                float ab = seed[i * 3 + 2];
-                                float wsum = 1.0f;
-                                for( int dx = -1; dx <= 1; ++dx ) {
-                                    for( int dy = -1; dy <= 1; ++dy ) {
-                                        if( dx == 0 && dy == 0 ) { continue; }
-                                        const int nx = x + dx, ny = y + dy;
-                                        if( nx < 0 || ny < 0 || nx >= W || ny >= H ) { continue; }
-                                        const int ni = nx * H + ny;
-                                        if( mc.transparency_cache[ni] <= 0.01f ) { continue; }
-                                        ar += decay * cur[ni * 3 + 0];
-                                        ag += decay * cur[ni * 3 + 1];
-                                        ab += decay * cur[ni * 3 + 2];
-                                        wsum += decay;
-                                    }
-                                }
-                                nxt[i * 3 + 0] = ar / wsum;
-                                nxt[i * 3 + 1] = ag / wsum;
-                                nxt[i * 3 + 2] = ab / wsum;
-                            }
-                        }
-                        cur.swap( nxt );
-                    }
-                    indirect = std::move( cur );
-                }
+        // Dirty-gate the expensive per-tile build (CPU SDF BFS + GI diffusion +
+        // big GPU upload). The per-tile data (transparency/sdf/sky_vis/seen)
+        // only changes on a turn tick, a Z change, or a camera pan/scroll — so
+        // key on {turn, z, camera-origin} and skip the rebuild when unchanged.
+        // The emitter snapshot is built every frame regardless (transient
+        // flashes age per-frame); when we skip the per-tile rebuild,
+        // build_and_submit_lighting submits empty per-tile vectors and
+        // flush_to_render_cb leaves last frame's GPU buffers resident.
+        // Busted while the F4 dev panel is visible so live knob tuning stays
+        // realtime. NOTE(verify): camera_cache (remote-view consoles) feeds
+        // `vis`; if a console updates it without a turn/origin change the gate
+        // could show stale vision — confirm in-game, add to the key if so.
+        static time_point last_turn = calendar::before_time_starts;
+        static int        last_z = INT_MIN;
+        static point      last_origin{ INT_MIN, INT_MIN };
+        bool rebuild_pertile = true;
+        if( g && world_generator && world_generator->active_world ) {
+            const time_point now = calendar::turn;
+            const int z = g->u.bub_pos().z();
+            const point origin = tilecontext
+                                 ? tilecontext->get_tile_map_origin().raw()
+                                 : point{ INT_MIN, INT_MIN };
+            rebuild_pertile = imgui_layer::visible()
+                              || now != last_turn || z != last_z
+                              || origin != last_origin;
+            if( rebuild_pertile ) {
+                last_turn = now;
+                last_z = z;
+                last_origin = origin;
             }
-
-            // Snapshot for HUD: what's the SDF / transparency at the player tile?
-            const int pi = g->u.bub_pos().x() * H + g->u.bub_pos().y();
-            if( pi >= 0 && pi < static_cast<int>( sdf.size() ) ) {
-                s_emo.sdf_at_player = sdf[pi];
-                dbg( DL::Debug ) << "sdf[player]: " << sdf[pi];
-            }
-            if( pi >= 0 && pi < static_cast<int>( mc.transparency_cache.size() ) ) {
-                s_emo.trans_at_player = mc.transparency_cache[pi];
-            }
-            s_emo.sdf_W_at_submit    = W;
-            s_emo.sdf_size_at_submit = sdf.size();
         }
-
+        lighting::frame_lighting_result fr =
+            lighting::build_and_submit_lighting( rs, rebuild_pertile,
+                    g_dbg_lighting );
+        if( fr.built_pertile ) {
+            s_emo.sdf_at_player      = fr.sdf_at_player;
+            s_emo.trans_at_player    = fr.trans_at_player;
+            s_emo.sdf_W_at_submit    = fr.sdf_W;
+            s_emo.sdf_size_at_submit = fr.sdf_size;
+        }
         if( g_dbg_lighting ) {
-            // Mirror snapshot to HUD on both in-game AND main menu so the
-            // decorative amber emitter (snapshot.cpp:205 path) shows up in
-            // the emit[0] HUD line.
-            s_emo.snap = snapshot;
+            s_emo.snap = std::move( fr.snapshot_copy );
         }
-        rs.collector()->submit( std::move( snapshot ),
-                                std::move( transparency ),
-                                std::move( sdf ),
-                                std::move( sky_vis ),
-                                std::move( indirect ),
-                                std::move( vis ),
-                                sdf_runtime_w,
-                                sdf_runtime_h );
     }
 
     // Drain this frame's pending emitter/SDF/transparency/sky_vis upload onto
