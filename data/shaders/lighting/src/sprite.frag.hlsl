@@ -103,6 +103,7 @@ struct VS_OUT {
     float4 tint     : TEXCOORD1;
     float2 world_pos: TEXCOORD2;
     float  light_mul: TEXCOORD3; // memory-fade marker (<0 = -(dist); else no-op)
+    float2 light_pos: TEXCOORD4; // base-tile centre for tall sprites, else world_pos
 };
 // SDF supersample factor — MUST match lighting::SDF_SUPERSAMPLE (sdf_pass.h).
 // SdfBuf is the SS-finer grid: dims (sdf_map_w*SDF_SS) x (sdf_map_h*SDF_SS),
@@ -189,22 +190,68 @@ float vis_bilinear(float2 p) {
     const float d = max(0.0, vis_texel(x0 + 1, y0 + 1));
     return lerp(lerp(a, b, w.x), lerp(c, d, w.x), w.y);
 }
+// Sky visibility, bilinear. UNLIKE sdf/vis, SkyVisBuf is TILE-res (one float per
+// tile, stride sdf_map_h — NOT supersampled), so the centre map is g = p-0.5
+// (no SDF_SS factor). Smooths the indoor daylight-bleed gradient over ~1 tile so
+// the interior fill reads cleanly instead of stair-stepping per tile.
+float skyvis_texel(int x, int y) {
+    x = clamp(x, 0, (int)sdf_map_w - 1);
+    y = clamp(y, 0, (int)sdf_map_h - 1);
+    return SkyVisBuf[x * (int)sdf_map_h + y];
+}
+float skyvis_bilinear(float2 p) {
+    const float2 g  = p - 0.5;
+    const float2 fp = floor(g);
+    const int   x0  = (int)fp.x;
+    const int   y0  = (int)fp.y;
+    const float2 w  = g - fp;
+    const float a = skyvis_texel(x0,     y0    );
+    const float b = skyvis_texel(x0 + 1, y0    );
+    const float c = skyvis_texel(x0,     y0 + 1);
+    const float d = skyvis_texel(x0 + 1, y0 + 1);
+    return lerp(lerp(a, b, w.x), lerp(c, d, w.x), w.y);
+}
 // Shared soft-shadow sphere trace (Inigo Quilez cone ratio). Used by BOTH
 // emitters and the sun so they share the shadow_k / shadow_steps knobs and
 // look consistent. `dist_to_light` is the march length (real distance for
 // point emitters; a fixed reach for the directional sun).
 float trace_shadow(float2 origin, float2 dir, float dist_to_light,
-                   float k, int steps) {
+                   float k, int steps, bool directional) {
     if(sdf_map_w == 0u || steps <= 0) {
         return 1.0;
     }
     float shadow = 1.0;
     float t = min(0.3, dist_to_light * 0.5);
+    // Self-shadow guard (sun AND point lights). A tall sprite is lit by its BASE
+    // tile (vertex light_pos), which is itself an occluder (the tree/wall the
+    // shadow is cast from). A naive march would hit that occluder at t~0 and report
+    // the lit TOP as fully shadowed. So when the RECEIVER ITSELF sits on an occluder
+    // (sdf(origin) < 0.05 — true only for tall sprites anchored to their own tile,
+    // NOT for open ground near a wall, which is ~0.3), step out of that occluder
+    // body before shadowing. Exit the instant we re-enter open air (sd >= 0.05) so
+    // the NEXT occluder still shadows — a tree inside a building marches out of the
+    // tree, hits the building wall, stays dark (option A). No-op for ground (any
+    // light): its SDF is well above the threshold so the guard never fires.
+    if(sdf_bilinear(origin) < 0.05) {
+        [loop] for(int ss = 0; ss < steps; ++ss) {
+            if(t >= dist_to_light - 0.4) return 1.0;           // never left occluder → sunlit top
+            if(sdf_bilinear(origin + dir * t) >= 0.05) break;  // back in open air
+            t += 0.15;
+        }
+    }
     [loop] for(int ss = 0; ss < steps; ++ss) {
         if(t >= dist_to_light - 0.4) break;
         const float sd = sdf_bilinear(origin + dir * t);
         if(sd < 0.05) { shadow = 0.0; break; }
-        shadow = min(shadow, k * sd / max(dist_to_light - t, 0.01));
+        // Penumbra reference for the IQ cone ratio. A POINT light keys it to the
+        // real remaining distance-to-light (dist_to_light - t), which is valid
+        // because dist_to_light is a true distance. A DIRECTIONAL light (the sun)
+        // has no finite distance — dist_to_light is only the march CAP — so
+        // (cap - t) keys the penumbra to a meaningless constant and inverts the
+        // soft/hard ends (the "vertically flipped" sun penumbra). Directional uses
+        // the textbook IQ form k*sd/t (t = distance from the receiver).
+        const float denom = directional ? max(t, 0.01) : max(dist_to_light - t, 0.01);
+        shadow = min(shadow, k * sd / denom);
         t += max(sd, 0.15);
     }
     return saturate(shadow);
@@ -276,7 +323,7 @@ float4 main(VS_OUT i) : SV_Target0 {
         const float  e_cone_ha  = e.cone_shape.z;           // half-angle (rad; π = omni)
         const uint   e_shape    = asuint(e.cone_shape.w);   // emitter_shape enum
         if(abs(e_pos.z - current_z) > 0.5) continue;
-        const float2 dv   = e_pos.xy - i.world_pos;
+        const float2 dv   = e_pos.xy - i.light_pos;
         const float  dist = length(dv);
         if(dist >= e_radius || dist < 0.01) continue;
         const float  atten   = 1.0 - pow(saturate(dist / e_radius), e_falloff);
@@ -293,8 +340,8 @@ float4 main(VS_OUT i) : SV_Target0 {
         // Per-emitter soft shadow via the shared SDF sphere trace (bilinear,
         // shadow_k / shadow_steps tunable). See trace_shadow above. sh_dir is
         // declared above (the A1 Lambert reuses it).
-        const float  shadow = trace_shadow(i.world_pos, sh_dir, dist,
-                                            shadow_k, (int)shadow_steps);
+        const float  shadow = trace_shadow(i.light_pos, sh_dir, dist,
+                                            shadow_k, (int)shadow_steps, false);
         // Cone / spotlight angular falloff (Bucket A / A2). Held flashlights and
         // vehicle headlights are tagged CONE by build_emitter_snapshot with a
         // normalized beam direction (cone_dir) and half-angle; OMNI emitters keep
@@ -314,10 +361,9 @@ float4 main(VS_OUT i) : SV_Target0 {
         emitter_light += rgb * atten * lambert * shadow * cone;
     }
     // Phase 8: sky ambient + directional sun contribution.
-    // SkyVisBuf is x-major (skyvis[x*H+y]) — index directly, no transpose.
-    const int sky_ix = clamp((int)i.world_pos.x, 0, (int)sdf_map_w - 1);
-    const int sky_iy = clamp((int)i.world_pos.y, 0, (int)sdf_map_h - 1);
-    float sky_vis = (sdf_map_w > 0u) ? SkyVisBuf[sky_ix * (int)sdf_map_h + sky_iy] : 0.0;
+    // SkyVisBuf is x-major (skyvis[x*H+y]). Bilinear so the indoor daylight-bleed
+    // gradient (frame_build) reads smoothly instead of per-tile blocky.
+    float sky_vis = (sdf_map_w > 0u) ? saturate(skyvis_bilinear(i.light_pos)) : 0.0;
     // Sky ambient: soft, no shadowing needed.
     float3 sky_contrib = float3(sky_r, sky_g, sky_b) * sky_intensity * sky_vis;
     // Sun direct: directional soft shadow via the SAME shared trace as
@@ -325,11 +371,19 @@ float4 main(VS_OUT i) : SV_Target0 {
     // softness (was a hardcoded copy: k=4, 16 steps, reach 8.0). 8.0 = the
     // directional march reach (sun has no finite distance). Gated to open-sky
     // tiles (sky_vis) — the sun cannot reach roofed interiors.
+    // Gate at a LOW epsilon (just skip the march where there's no sky at all);
+    // the smooth `* sky_vis` multiply below feathers the shaft edge. A high gate
+    // (>0.99) hard-thresholds the bilinear sky_vis back into a binary per-tile
+    // mask → tile-square "blocky sun". With bilinear sky_vis the open↔roofed edge
+    // ramps over ~1 tile, so the sun shaft through an opening fades smoothly.
+    // (With indoor bleed>0 the interior gradient also passes here — that is the
+    // sunbeam-through-window behaviour; trace_shadow keeps it to tiles with a
+    // clear path to the sun.)
     float3 sun_contrib = float3(0.0, 0.0, 0.0);
-    if(sun_intensity > 0.001 && sky_vis > 0.01 && sdf_map_w > 0u) {
+    if(sun_intensity > 0.001 && sky_vis > 0.05 && sdf_map_w > 0u) {
         const float2 toward_sun = -float2(sun_dir_x, sun_dir_y);
-        const float sun_shadow = trace_shadow(i.world_pos, toward_sun, 8.0,
-                                               shadow_k, (int)shadow_steps);
+        const float sun_shadow = trace_shadow(i.light_pos, toward_sun, 8.0,
+                                               shadow_k, (int)shadow_steps, true);
         // Per-pixel Lambert against the sun (Bucket A / A1). The 3D sun ray is
         // (toward_sun.xy, sin_elev). At NRM_AMOUNT=0 this collapses to the old
         // flat-normal value: dot((0,0,1), normalize(toward_sun, sin_elev)) =
@@ -363,14 +417,14 @@ float4 main(VS_OUT i) : SV_Target0 {
         const float aor = 1.5;              // tap radius in tiles
         const float ad  = aor * 0.70711;    // diagonal taps at the same radius
         float open = 0.0;
-        open += saturate(sdf_bilinear(i.world_pos + float2( aor, 0.0)) / aor);
-        open += saturate(sdf_bilinear(i.world_pos + float2(-aor, 0.0)) / aor);
-        open += saturate(sdf_bilinear(i.world_pos + float2( 0.0, aor)) / aor);
-        open += saturate(sdf_bilinear(i.world_pos + float2( 0.0,-aor)) / aor);
-        open += saturate(sdf_bilinear(i.world_pos + float2( ad,  ad)) / aor);
-        open += saturate(sdf_bilinear(i.world_pos + float2(-ad,  ad)) / aor);
-        open += saturate(sdf_bilinear(i.world_pos + float2( ad, -ad)) / aor);
-        open += saturate(sdf_bilinear(i.world_pos + float2(-ad, -ad)) / aor);
+        open += saturate(sdf_bilinear(i.light_pos + float2( aor, 0.0)) / aor);
+        open += saturate(sdf_bilinear(i.light_pos + float2(-aor, 0.0)) / aor);
+        open += saturate(sdf_bilinear(i.light_pos + float2( 0.0, aor)) / aor);
+        open += saturate(sdf_bilinear(i.light_pos + float2( 0.0,-aor)) / aor);
+        open += saturate(sdf_bilinear(i.light_pos + float2( ad,  ad)) / aor);
+        open += saturate(sdf_bilinear(i.light_pos + float2(-ad,  ad)) / aor);
+        open += saturate(sdf_bilinear(i.light_pos + float2( ad, -ad)) / aor);
+        open += saturate(sdf_bilinear(i.light_pos + float2(-ad, -ad)) / aor);
         open *= 0.125;                      // mean of the 8 taps
         ao = lerp(1.0, open, saturate(ao_strength));
     }
@@ -397,7 +451,7 @@ float4 main(VS_OUT i) : SV_Target0 {
     // open neighbours on the CPU, added here before dither so it bands with the
     // rest of the dynamic light.
     if(gi_strength > 0.001 && sdf_map_w > 0u) {
-        dyn += gi_strength * indirect_bilinear(i.world_pos) * ao;
+        dyn += gi_strength * indirect_bilinear(i.light_pos) * ao;
     }
     if(dither_amt > 0.001) {
         const float  bands = max(dither_bands, 1.0);
@@ -433,13 +487,13 @@ float4 main(VS_OUT i) : SV_Target0 {
     if(sdf_map_w > 0u && dbg_tint_sum < 0.01) {
         // (a) Vision-edge falloff from seen_cache (softens the rim).
         if(vis_curve > 0.0001) {
-            final_rgb *= pow(saturate(vis_bilinear(i.world_pos)), vis_curve);
+            final_rgb *= pow(saturate(vis_bilinear(i.light_pos)), vis_curve);
         }
         // (b) Radial player-distance falloff — the torch-bubble gradient that
         // seen_cache can't give (it's saturated ≈1 across the open interior).
         // Darkens continuously with distance from the player. vis_radius=0=off.
         if(vis_radius > 0.01) {
-            const float d = length(i.world_pos - float2(player_x, player_y));
+            const float d = length(i.light_pos - float2(player_x, player_y));
             const float r = saturate(1.0 - d / vis_radius);
             final_rgb *= r * r * (3.0 - 2.0 * r); // smoothstep: bright centre, eased edge
         }

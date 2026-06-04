@@ -34,6 +34,8 @@ struct VS_OUT {
     float4 tint     : TEXCOORD1; // Phase 5 CPU lightmap tint (ambient floor)
     float2 world_pos: TEXCOORD2; // map tile coords for fragment per-pixel lighting
     float  light_mul: TEXCOORD3; // memory-fade marker (<0 = -(dist); else no-op)
+    float2 light_pos: TEXCOORD4; // lighting sample pos: base-tile centre for tall
+                                 // sprites (uniform), else == world_pos (per-pixel)
 };
 static const float2 quad_uv[6] = {
     float2(0.0,0.0), float2(1.0,0.0), float2(0.0,1.0),
@@ -62,11 +64,27 @@ VS_OUT main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
     const float2 tile_tu = pixel / max(tile_pixel_size, 1.0);
     const float2 map_pos = tile_tu - float2(camera_off_x, camera_off_y);
 
+    // Tall sprites (trees, tall furniture) are drawn extending UP from the tile
+    // they stand on — straight into the region their own cast shadow falls — so
+    // per-pixel map_pos samples shadowed/occluded tiles and the sprite self-
+    // darkens ("shadow on top of the tree"). Light a tall sprite by the CENTRE of
+    // its base tile instead (constant across all its fragments → uniform), so the
+    // object renders lit ON TOP of the ground shadow. The base-tile centre is the
+    // bottom edge minus half a tile; for a 1-tile sprite that is just the sprite
+    // centre, so light_pos == map_pos and small sprites keep per-pixel ground
+    // lighting (preserving the 4x-SDF shadow smoothness). Threshold at 1.5 tiles.
+    const float2 base_px   = float2(centre.x,
+                                    s.dst_y + s.dst_h - 0.5 * tile_pixel_size);
+    const float2 base_tile = base_px / max(tile_pixel_size, 1.0)
+                             - float2(camera_off_x, camera_off_y);
+    const bool   is_tall   = s.dst_h > tile_pixel_size * 1.5;
+
     VS_OUT o;
     o.pos       = float4(ndc, 0.0, 1.0);
     o.uv        = float2(s.src_u + c.x * s.src_uw, s.src_v + c.y * s.src_vh);
     o.tint      = float4(s.tint_r, s.tint_g, s.tint_b, s.tint_a);
     o.world_pos = map_pos;
     o.light_mul = s.light_mul;
+    o.light_pos = is_tall ? base_tile : map_pos;
     return o;
 }
