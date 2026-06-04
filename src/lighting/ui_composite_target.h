@@ -45,7 +45,13 @@ class ui_composite_target
         // texture first. Returns false on failure (logs via DC::SDL). Marks the
         // target dirty so the first frame composites.
         bool init( gpu_device &dev, int w, int h,
-                   SDL_GPUTextureFormat format = SDL_GPU_TEXTUREFORMAT_INVALID );
+                   SDL_GPUTextureFormat format = SDL_GPU_TEXTUREFORMAT_INVALID,
+                   // Texture usage flags. 0 = the default COLOR_TARGET|SAMPLER
+                   // (render into + composite-blit). Pass extra flags (e.g.
+                   // GRAPHICS_STORAGE_READ for a target a later fragment shader
+                   // .Load()s, like the silhouette shadow mask). resize() re-uses
+                   // this so the usage survives.
+                   SDL_GPUTextureUsageFlags usage = 0 );
 
         // Release the texture. Idempotent. Safe while the device is live.
         void shutdown() noexcept;
@@ -77,6 +83,10 @@ class ui_composite_target
         // Resolved texture format (swapchain format unless an explicit one was
         // passed to init). resize() re-uses this so the format survives.
         SDL_GPUTextureFormat fmt_ = SDL_GPU_TEXTUREFORMAT_INVALID;
+        // Resolved usage flags (default COLOR_TARGET|SAMPLER). resize() re-uses
+        // this so storage-read targets keep their usage across a window resize.
+        SDL_GPUTextureUsageFlags usage_ =
+            SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
         // First frame must composite; init() also sets this.
         bool            dirty_ = true;
 };

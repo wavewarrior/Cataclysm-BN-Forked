@@ -49,10 +49,18 @@ SamplerState                 AtlasSmp    : register(s0, space2);
 // not a 2nd sampled image). Storage-texture slot 0 ⇒ t1, ahead of the storage
 // buffers. RGBA32F, width=sdf_map_h height=sdf_map_w (see indirect_texel).
 Texture2D<float4>            IndirectTex : register(t1, space2);
-StructuredBuffer<GpuEmitter> Emitters    : register(t2, space2);
-StructuredBuffer<float>      SdfBuf      : register(t3, space2);
-StructuredBuffer<float>      SkyVisBuf   : register(t4, space2);
-StructuredBuffer<float>      VisBuf      : register(t5, space2); // per-tile visibility (>=0 live, <0 memory)
+// Silhouette sun-shadow mask (Phase 2). Screen-space coverage, read-only storage
+// texture (Texture2D, .Load only — same reflect-as-storage trick as IndirectTex).
+// Storage-texture slot 1 ⇒ t2, which pushes the storage BUFFERS to t3..t6 (the
+// shadercross sampled→storage-tex→storage-buf t-order). Read at the fragment's
+// SCREEN pixel (SV_Position.xy) — NOT transposed/map-space like IndirectTex —
+// because the mask shares world_target's physical size + viewport+proj, so a
+// direct screen-texel fetch aligns 1:1 (no camera/proj math).
+Texture2D<float4>            ShadowMask  : register(t2, space2);
+StructuredBuffer<GpuEmitter> Emitters    : register(t3, space2);
+StructuredBuffer<float>      SdfBuf      : register(t4, space2);
+StructuredBuffer<float>      SkyVisBuf   : register(t5, space2);
+StructuredBuffer<float>      VisBuf      : register(t6, space2); // per-tile visibility (>=0 live, <0 memory)
 cbuffer LightParams : register(b0, space3) {
     float tile_pixel_size; float current_z;
     uint  emitter_count;   float ambient;
@@ -95,7 +103,7 @@ cbuffer DebugParams : register(b2, space3) {
     float nrm_elev;            // A1 implied light height above plane; LOWER=more grazing=stronger relief
     float sdf_sharp;           // SDF sample sharpness: 0=bilinear(smooth) .. 1=nearest(tight, grid-snapped)
     float ao_strength;         // A4 ambient occlusion: 0=off .. 1=full SDF-cavity darkening of the ambient fills
-    float dp_pad1;
+    float shadow_mask_str;     // Phase 2: silhouette sun-shadow mask strength on ground (0=off/default .. 1=full)
 };
 struct VS_OUT {
     float4 pos      : SV_Position;
@@ -379,6 +387,17 @@ float4 main(VS_OUT i) : SV_Target0 {
     // (With indoor bleed>0 the interior gradient also passes here — that is the
     // sunbeam-through-window behaviour; trace_shadow keeps it to tiles with a
     // clear path to the sun.)
+    // Phase 2 silhouette sun-shadow mask: coverage at this fragment's SCREEN
+    // pixel (the mask shares world_target's physical size + viewport+proj, so a
+    // direct SV_Position fetch aligns 1:1). Read UNCONDITIONALLY so the storage
+    // texture stays live in reflection (a debug-only read gets DCE-stripped).
+    // Applied only to GROUND fragments' sun term below; tall sprites (trees/
+    // walls — light_pos is their base-tile centre, ≠ world_pos) keep the SDF
+    // self-shadow so they stay lit on top. shadow_mask_str=0 → exact no-op.
+    const float sun_mask_cov  = ShadowMask.Load(int3((int)i.pos.x, (int)i.pos.y, 0)).r;
+    const bool  frag_is_tall  = (i.light_pos.x != i.world_pos.x)
+                                || (i.light_pos.y != i.world_pos.y);
+
     float3 sun_contrib = float3(0.0, 0.0, 0.0);
     if(sun_intensity > 0.001 && sky_vis > 0.05 && sdf_map_w > 0u) {
         const float2 toward_sun = -float2(sun_dir_x, sun_dir_y);
@@ -391,8 +410,15 @@ float4 main(VS_OUT i) : SV_Target0 {
         const float flat_sun = sun_sin_elev / sqrt(1.0 + sun_sin_elev * sun_sin_elev);
         const float3 sun_L   = normalize(float3(toward_sun, sun_sin_elev));
         const float sun_lambert = saturate(lerp(flat_sun, saturate(dot(normal, sun_L)), nrm_amount));
+        // Silhouette mask darkens the GROUND sun term (knob-gated; 0=identity).
+        // Tall sprites skip it (mask_term=1) so trees/walls stay lit on top.
+        // NOTE (Phase 2.2): trees still ALSO cast via the SDF (sun_shadow) here →
+        // a temporary double shadow until 2.3 drops trees from the sun SDF.
+        const float mask_term = frag_is_tall
+                                ? 1.0
+                                : saturate(1.0 - sun_mask_cov * shadow_mask_str);
         sun_contrib = float3(sun_r, sun_g, sun_b) * sun_intensity * sun_lambert
-                      * sun_shadow * sky_vis;
+                      * sun_shadow * sky_vis * mask_term;
     }
 
     // Apply runtime tuning scales BEFORE compositing. emitter_scale tunes
@@ -566,6 +592,14 @@ float4 main(VS_OUT i) : SV_Target0 {
             // fully open (ao≈1, no darkening), darkening toward walls/crevices.
             // Uniform white = ao_strength is 0 or the SDF is empty.
             vis = float3(ao, ao, ao);
+            replace = true;
+        } else if(debug_mode == 11u) {
+            // Shadow-mask view (Phase 2.1 alignment gate): the silhouette mask
+            // .Load()ed at this fragment's SCREEN pixel. Should match the
+            // Phase-1 sampler debug blit (g_shadow_debug) — same silhouettes in
+            // the same screen positions = the storage-read fetch is aligned.
+            const float m = ShadowMask.Load(int3((int)i.pos.x, (int)i.pos.y, 0)).r;
+            vis = float3(m, m, m);
             replace = true;
         }
         if(replace) {

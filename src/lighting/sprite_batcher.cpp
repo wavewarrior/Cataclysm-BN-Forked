@@ -31,7 +31,12 @@ struct frame_params {
 static_assert( sizeof( frame_params ) == 16, "frame_params is wire-stable with vert shader" );
 
 // Phase 6/6b: per-frame lighting params (cbuffer slot 1, vertex shader).
-// 32 bytes, wire-stable with the LightParams cbuffer in SPRITE_VERT_HLSL.
+// 48 bytes, wire-stable with the LightParams cbuffer in sprite.vert.hlsl /
+// shadow.vert.hlsl. Grew 32→48 for the silhouette-shadow shear: shadow.vert
+// needs the sun direction + cot(elevation) in the VERTEX stage, and the
+// fragment-only sun_params (b1/space3) is not visible there. The three sun
+// fields land in one new 16-byte row (no straddle); existing offsets unchanged,
+// so the normal world/tile render reads identically.
 struct light_params {
     float  tile_pixel_size; // screen pixels per tile (e.g. 32.0)
     float  current_z;       // player z-level
@@ -42,8 +47,13 @@ struct light_params {
     float  camera_off_y;
     Uint32 sdf_map_w;       // SDF/map width  in tiles
     Uint32 sdf_map_h;       // SDF/map height in tiles (was lp_pad; same type, sizeof unchanged)
+    // Silhouette-shadow shear (VERTEX stage; shadow.vert). Filled from sun_params.
+    float  sun_dir_x;       // shadow-fall direction (= away from sun, unit 2D)
+    float  sun_dir_y;       // world y-down; CPU/shader flip sign if shadows invert
+    float  sun_cot_elev;    // cot(sun elevation), clamped; low sun → long shadow
+    float  lp_sun_pad;      // pad to 48 (one full float4 row)
 };
-static_assert( sizeof( light_params ) == 32, "light_params wire-stable with LightParams cbuffer" );
+static_assert( sizeof( light_params ) == 48, "light_params wire-stable with LightParams cbuffer" );
 
 static_assert( sizeof( sun_params ) == 48, "sun_params wire-stable with SunParams cbuffer" );
 
@@ -89,10 +99,19 @@ sun_params make_sun_params( float sun_hour ) noexcept
     sp.sky_g         = lp( a.sky_g, b.sky_g );
     sp.sky_b         = lp( a.sky_b, b.sky_b );
     sp.sun_sin_elev  = lp( a.elev,  b.elev );
-    // Sun direction rotates E→W (noon = overhead, dawn from east, dusk from west).
-    const float angle = ( sun_hour - 12.f ) * 3.14159f / 12.f;
-    sp.sun_dir_x = static_cast<float>( cos( static_cast<double>( angle ) ) );
-    sp.sun_dir_y = 0.f;
+    // Sun horizontal direction (light→ground), a UNIT vector — the shader marches
+    // trace_shadow with `toward_sun = -sun_dir` UN-normalized, so a non-unit dir
+    // breaks the shadow step distance. Hour angle h: 6am=-pi/2, noon=0, 6pm=+pi/2.
+    //   toward_sun = -sun_dir = (-sin h, cos h)  sweeps E(+x)→S(+y)→W(-x) and is
+    //   NEVER the zero vector. The OLD (cos h, 0) collapsed to (0,0) at 6am/6pm
+    //   (and was tiny near them) → degenerate normalize → the SDF sun-shadow
+    //   vanished → flat, "blocky" sun shaped only by the tile sky_vis mask.
+    // Grazing-vs-overhead is carried separately by sun_sin_elev (shader lambert),
+    // so the horizontal dir stays unit at all hours. (y sign = world y-down; flip
+    // sun_dir_y if morning shadows point the wrong way — cosmetic.)
+    const float h = ( sun_hour - 12.f ) * 3.14159265f / 12.f;
+    sp.sun_dir_x = static_cast<float>(  sin( static_cast<double>( h ) ) );
+    sp.sun_dir_y = static_cast<float>( -cos( static_cast<double>( h ) ) );
     sp.sp_pad = 0.f;
     return sp;
 }
@@ -189,6 +208,10 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
         // (Step-3 Phase 1b). Bound via SDL_BindGPUFragmentStorageTextures slot 0
         // → t1/space2 (storage textures precede storage buffers in t-space).
         SDL_GPUTexture *lp_indirect_tex = nullptr;
+        // Silhouette sun-shadow mask (Phase 2). Storage-READ texture slot 1 ⇒
+        // t2/space2, ahead of the storage buffers (now t3..t6). Null on the
+        // shadow batcher (which reads no lighting resources).
+        SDL_GPUTexture *lp_shadow_mask  = nullptr;
         SDL_GPUSampler *lp_data_sampler = nullptr;
         light_params    lp              = {};  // defaults: all zero
         sun_params      lp_sun          = {};  // Phase 8: sun/sky params
@@ -231,6 +254,22 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
             lp.camera_off_y    = cam_off_y;
             lp.sdf_map_w       = sdf_buf ? sdf_map_w : 0u;
             lp.sdf_map_h       = sdf_buf ? sdf_map_h : 0u;
+            // Silhouette-shadow shear inputs for the VERTEX stage (shadow.vert).
+            // Derived from the same sun_params the fragment stage uses, so the
+            // shear direction tracks the sun exactly. cot(elev)=cos/sin from
+            // sun_sin_elev, clamped away from the horizon so dawn/dusk shadows
+            // stay finite (sin=0.15 → cot≈6.6 = ~6.6× sprite-height reach).
+            if( sp ) {
+                lp.sun_dir_x = sp->sun_dir_x;
+                lp.sun_dir_y = sp->sun_dir_y;
+                const float se = std::clamp( sp->sun_sin_elev, 0.15f, 1.0f );
+                lp.sun_cot_elev = std::sqrt( 1.0f - se * se ) / se;
+            } else {
+                lp.sun_dir_x = 0.0f;
+                lp.sun_dir_y = 0.0f;
+                lp.sun_cot_elev = 0.0f;
+            }
+            lp.lp_sun_pad = 0.0f;
             if( sp ) { lp_sun = *sp; } else { lp_sun = {}; }
             // Default-construct debug_params when none passed — the member
             // defaults provide sensible runtime values (emitter_scale=1,
@@ -239,6 +278,12 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
             // debug-widget code path.
             if( dbg ) { lp_debug = *dbg; } else { lp_debug = {}; }
         }
+
+        // Silhouette sun-shadow mask (Phase 2). Set separately from the lighting
+        // god-call: only the tile batcher reads it (sprite.frag storage-tex slot
+        // 1). Left null on the shadow/UI batchers → bind_lighting_resources skips
+        // it for them. Persists across frames until re-set.
+        void set_shadow_mask( SDL_GPUTexture *tex ) noexcept { lp_shadow_mask = tex; }
 
         // ---- lifecycle -------------------------------------------------
 
@@ -309,9 +354,9 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
             // data/shaders/lighting/src/ as the single source of truth (no
             // longer embedded in this file) — LIGHTING_REWORK_PLAN.md step 0.
             const std::string vert_src =
-                load_lighting_shader_source( "sprite.vert.hlsl" );
+                load_lighting_shader_source( desc.vert_name );
             const std::string frag_src =
-                load_lighting_shader_source( "sprite.frag.hlsl" );
+                load_lighting_shader_source( desc.frag_name );
             auto v = compile_graphics_shader( d, vert_src, "main",
                                               SDL_SHADERCROSS_SHADERSTAGE_VERTEX,
                                               "sprite_batcher.vert" );
@@ -335,11 +380,13 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
             // build) so a wrong count surfaces before any pixel check — this
             // separates the layout axis from the data axis.
             DebugLogFL( DL::Info, DC::Main )
-                    << "sprite_batcher frag reflection: samplers="
-                    << f.resources.num_samplers
+                    << "sprite_batcher frag reflection [" << ( label ? label : "?" )
+                    << "]: samplers=" << f.resources.num_samplers
                     << " storage_textures=" << f.resources.num_storage_textures
                     << " storage_buffers=" << f.resources.num_storage_buffers
-                    << " (Phase 1b expects storage_textures=1 storage_buffers=4)";
+                    << " uniform_buffers=" << f.resources.num_uniform_buffers
+                    << " (sprite frag expects st=1 sb=4 ub=3; shadow frag expects "
+                    "samplers=1 st=0 sb=0 ub=0)";
 
             // Build the pipeline for the configured (swapchain) target format.
             // Other formats (e.g. the RGBA16F HDR world target) are built
@@ -728,14 +775,23 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                         lp_sun_use.sky_intensity = 0.0f;
                         lp_dbg_use.debug_mode  = 0u;
                     }
-                    // Vertex slot 1: LightParams (world_pos computation)
+                    // Vertex slot 1: LightParams (world_pos computation + the
+                    // shadow shear). Always pushed — both sprite.vert and
+                    // shadow.vert declare FrameParams + LightParams.
                     SDL_PushGPUVertexUniformData( cur_cb, /*slot=*/1, &lp_use, sizeof( lp_use ) );
-                    // Fragment slot 0: LightParams (ambient, emitter_count, sdf_map_w)
-                    SDL_PushGPUFragmentUniformData( cur_cb, /*slot=*/0, &lp_use, sizeof( lp_use ) );
-                    // Fragment slot 1: SunParams (sun/sky direction + color)
-                    SDL_PushGPUFragmentUniformData( cur_cb, /*slot=*/1, &lp_sun_use, sizeof( lp_sun_use ) );
-                    // Fragment slot 2: DebugParams (visualisation + tunable scales)
-                    SDL_PushGPUFragmentUniformData( cur_cb, /*slot=*/2, &lp_dbg_use, sizeof( lp_dbg_use ) );
+                    // Fragment lighting cbuffers. The silhouette-shadow frag
+                    // declares ZERO fragment cbuffers, so its batcher disables
+                    // these pushes (push_frag_lighting_uniforms=false) to keep
+                    // the push count == the shader's reflected uniform-buffer
+                    // count. Default-true preserves the sprite/UI/font path.
+                    if( desc.push_frag_lighting_uniforms ) {
+                        // Fragment slot 0: LightParams (ambient, emitter_count, sdf_map_w)
+                        SDL_PushGPUFragmentUniformData( cur_cb, /*slot=*/0, &lp_use, sizeof( lp_use ) );
+                        // Fragment slot 1: SunParams (sun/sky direction + color)
+                        SDL_PushGPUFragmentUniformData( cur_cb, /*slot=*/1, &lp_sun_use, sizeof( lp_sun_use ) );
+                        // Fragment slot 2: DebugParams (visualisation + tunable scales)
+                        SDL_PushGPUFragmentUniformData( cur_cb, /*slot=*/2, &lp_dbg_use, sizeof( lp_dbg_use ) );
+                    }
 
                     SDL_DrawGPUPrimitives( rp, /*num_vertices=*/6, /*num_instances=*/s.count,
                                            /*first_vertex=*/0, /*first_instance=*/0 );
@@ -773,13 +829,25 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
         // arrays. All per-tile reads are gated by sdf_map_w>0 in the shader, so
         // a not-yet-ready (null) resource is safe to leave unbound.
         void bind_lighting_resources( SDL_GPURenderPass *rp ) {
-            // Storage TEXTURE slot 0 → t1 (1-bounce GI, IndirectTex).
-            if( lp_indirect_tex ) {
+            // Storage TEXTURE slot 0 → t1 (1-bounce GI, IndirectTex), slot 1 → t2
+            // (silhouette ShadowMask). Bound in ONE call when both are present
+            // (the normal case — both textures are created at init and bound
+            // unconditionally) so a later bind can't zero an earlier slot. The
+            // shadow/UI batchers leave both null → nothing bound (they declare no
+            // storage textures). Shader gates reads (gi_strength>0, etc.).
+            if( lp_indirect_tex && lp_shadow_mask ) {
+                SDL_GPUTexture *stex[2] = { lp_indirect_tex, lp_shadow_mask };
+                SDL_BindGPUFragmentStorageTextures( rp, /*first_slot=*/0, stex, 2 );
+            } else if( lp_indirect_tex ) {
                 SDL_BindGPUFragmentStorageTextures( rp, /*first_slot=*/0,
                                                     &lp_indirect_tex, 1 );
+            } else if( lp_shadow_mask ) {
+                SDL_BindGPUFragmentStorageTextures( rp, /*first_slot=*/1,
+                                                    &lp_shadow_mask, 1 );
             }
-            // Storage BUFFER slots 0..3 → t2..t5. One call so a later bind can't
-            // zero an earlier slot; rungs preserve not-ready (no-SDF) frames.
+            // Storage BUFFER slots 0..3 → t3..t6 (after the 2 storage textures).
+            // One call so a later bind can't zero an earlier slot; rungs preserve
+            // not-ready (no-SDF) frames.
             if( lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf && lp_vis_buf ) {
                 SDL_GPUBuffer *sbufs[4] = { lp_emitter_buf, lp_sdf_buf, lp_sky_vis_buf, lp_vis_buf };
                 SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0, sbufs, 4 );
@@ -816,6 +884,11 @@ void sprite_batcher::shutdown() noexcept
     if( p ) {
         p->shutdown();
     }
+}
+
+void sprite_batcher::set_shadow_mask( SDL_GPUTexture *tex )
+{
+    p->set_shadow_mask( tex );
 }
 
 void sprite_batcher::begin_pass( SDL_GPUCommandBuffer *cb,

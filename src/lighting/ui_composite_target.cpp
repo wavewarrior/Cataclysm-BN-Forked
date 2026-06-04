@@ -15,7 +15,8 @@ ui_composite_target::~ui_composite_target()
 }
 
 bool ui_composite_target::init( gpu_device &dev, int w, int h,
-                                SDL_GPUTextureFormat format )
+                                SDL_GPUTextureFormat format,
+                                SDL_GPUTextureUsageFlags usage )
 {
     shutdown();
 
@@ -31,11 +32,15 @@ bool ui_composite_target::init( gpu_device &dev, int w, int h,
     // scene target. resize() re-calls init() with fmt_ so the format sticks.
     fmt_ = ( format == SDL_GPU_TEXTUREFORMAT_INVALID )
            ? dev.swapchain_format() : format;
+    // 0 keeps the default COLOR_TARGET|SAMPLER. resize() re-uses usage_.
+    usage_ = ( usage == 0 )
+             ? ( SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER )
+             : usage;
 
     SDL_GPUTextureCreateInfo tci{};
     tci.type   = SDL_GPU_TEXTURETYPE_2D;
     tci.format = fmt_;
-    tci.usage  = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    tci.usage  = usage_;
     tci.width  = static_cast<std::uint32_t>( w );
     tci.height = static_cast<std::uint32_t>( h );
     tci.layer_count_or_depth = 1;
@@ -78,7 +83,7 @@ void ui_composite_target::resize( int w, int h )
     if( !dev_ ) {
         return;
     }
-    init( *dev_, w, h, fmt_ );
+    init( *dev_, w, h, fmt_, usage_ );
 }
 
 } // namespace lighting

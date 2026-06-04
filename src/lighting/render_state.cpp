@@ -54,6 +54,24 @@ void render_state::init( SDL_Window *host_window )
     ui_desc.color_target_format = fmt;
     ui_batcher_.init( device_, ui_desc, "ui_batcher" );
 
+    // Silhouette sun-shadow batcher (Phase 1). Same instance engine, but
+    // shadow.vert (shear) + shadow.frag (alpha→coverage), MAX colour+alpha blend
+    // so overlapping tree shadows take the max coverage (no double-darken), and
+    // push_frag_lighting_uniforms=false because shadow.frag declares no fragment
+    // cbuffers. Renders into shadow_mask_ (swapchain format).
+    pipeline_desc shadow_desc{};
+    shadow_desc.color_target_format         = fmt;
+    shadow_desc.vert_name                   = "shadow.vert.hlsl";
+    shadow_desc.frag_name                   = "shadow.frag.hlsl";
+    shadow_desc.push_frag_lighting_uniforms = false;
+    shadow_desc.src_color_blend             = SDL_GPU_BLENDFACTOR_ONE;
+    shadow_desc.dst_color_blend             = SDL_GPU_BLENDFACTOR_ONE;
+    shadow_desc.color_blend_op              = SDL_GPU_BLENDOP_MAX;
+    shadow_desc.src_alpha_blend             = SDL_GPU_BLENDFACTOR_ONE;
+    shadow_desc.dst_alpha_blend             = SDL_GPU_BLENDFACTOR_ONE;
+    shadow_desc.alpha_blend_op              = SDL_GPU_BLENDOP_MAX;
+    shadow_batcher_.init( device_, shadow_desc, "shadow_batcher" );
+
     fonts_.init( device_, fmt );
     atlas_.init( device_ );
     geometry_.init( device_ );
@@ -131,6 +149,33 @@ void render_state::init( SDL_Window *host_window )
         world_target_ = std::make_unique<ui_composite_target>();
         world_target_->init( device_, pw, ph, world_fmt );
 
+        // Silhouette sun-shadow mask. Screen-space coverage, sized to
+        // world_target_ (physical pixels). RGBA16F + GRAPHICS_STORAGE_READ so
+        // sprite.frag can .Load() it as a 2nd fragment storage texture (Phase 2,
+        // the proven IndirectTex/rc path — NOT a 2nd sampler), plus SAMPLER for
+        // the Phase-1 debug blit. RGBA16F is the format with confirmed
+        // COLOR_TARGET|STORAGE_READ support on Metal (matches rc cascade); the
+        // triple usage is guarded, falling back to storage-only (drops the debug
+        // blit, which then routes through the sprite.frag debug_mode) if the
+        // combo is unsupported.
+        {
+            SDL_GPUTextureFormat mask_fmt = SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT;
+            const SDL_GPUTextureUsageFlags mask_usage_full =
+                SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER |
+                SDL_GPU_TEXTUREUSAGE_GRAPHICS_STORAGE_READ;
+            SDL_GPUTextureUsageFlags mask_usage = mask_usage_full;
+            if( !SDL_GPUTextureSupportsFormat( device_.raw(), mask_fmt,
+                    SDL_GPU_TEXTURETYPE_2D, mask_usage_full ) ) {
+                mask_usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET |
+                             SDL_GPU_TEXTUREUSAGE_GRAPHICS_STORAGE_READ;
+                dbg( DL::Warn ) << "render_state: shadow_mask RGBA16F COLOR|SAMPLER|"
+                                "STORAGE_READ unsupported; dropping SAMPLER (debug "
+                                "blit falls back to sprite.frag debug_mode).";
+            }
+            shadow_mask_ = std::make_unique<ui_composite_target>();
+            shadow_mask_->init( device_, pw, ph, mask_fmt, mask_usage );
+        }
+
         // Tonemapped LDR resolve target (swapchain format) + the fullscreen
         // tonemap pass that fills it from world_target_. In step 1a the world
         // target is still 8-bit and the tonemap shader is identity, so this is
@@ -144,6 +189,10 @@ void render_state::init( SDL_Window *host_window )
         // additively into world_target (world_fmt) before the tonemap resolve.
         bloom_.init( device_, world_fmt, static_cast<std::uint32_t>( pw ),
                      static_cast<std::uint32_t>( ph ) );
+        // Volumetric "lit fog" sun shafts (Step-6 / C2): a fullscreen additive
+        // pass into world_target (world_fmt), driven before bloom. Owns no
+        // textures, so no resize hook is needed.
+        volumetric_.init( device_, world_fmt );
     }
 }
 
@@ -155,10 +204,12 @@ void render_state::shutdown() noexcept
     // Release the compositor textures + tonemap pass while the device is live.
     ui_target_.reset();
     world_target_.reset();
+    shadow_mask_.reset();
     world_ldr_target_.reset();
     tonemap_.shutdown();
     rc_.shutdown();
     bloom_.shutdown();
+    volumetric_.shutdown();
 
     // Phase 4: release SDF textures.
     sdf_.shutdown( device_ );
@@ -222,6 +273,11 @@ void render_state::clear_tile_scissor()
 
 void render_state::begin_lighting_frame( const frame_light_inputs &in )
 {
+    // Cache for flush_shadow_casters: the silhouette-shadow batcher is stamped
+    // separately (own pass, before Pass W) with the same tile geometry + sun so
+    // the vertex shear tracks the sun. No lighting storage buffers there.
+    last_frame_inputs_ = in;
+
     // Resolve everything render_state owns internally: emitter storage
     // buffer + count from the collector, SDF + sky_vis textures + dims
     // from the sdf_pass, sampler from this object. Caller only provides
@@ -253,6 +309,11 @@ void render_state::begin_lighting_frame( const frame_light_inputs &in )
         in.tile_pixel_size, in.z_level, ne, in.ambient,
         in.camera_off_x, in.camera_off_y, sw, sh,
         ebuf, sbuf, gpu_sampler_, kvis, itex, vbuf, &in.sun, &in.debug );
+
+    // Silhouette sun-shadow mask (Phase 2): bind it as the tile batcher's 2nd
+    // fragment storage texture (sprite.frag ShadowMask, t2/space2). Always
+    // non-null after init; the shadow pass writes it before Pass W reads it.
+    tile_batcher_.set_shadow_mask( shadow_mask_ ? shadow_mask_->texture() : nullptr );
 }
 
 void render_state::flush_ui_rects( sprite_batcher &dst )
@@ -652,6 +713,57 @@ void render_state::flush_tile_sprites( sprite_batcher &dst, SDL_GPUSampler *samp
         }
         dst.draw( s.inst );
     }
+}
+
+void render_state::flush_shadow_casters( SDL_GPUCommandBuffer *cb,
+                                         std::uint32_t proj_w, std::uint32_t proj_h )
+{
+    if( !cb || !shadow_mask_ || !shadow_mask_->texture() || !gpu_sampler_ ) {
+        return;
+    }
+
+    const frame_light_inputs &in = last_frame_inputs_;
+
+    // Stamp the shadow batcher's VERTEX light_params with this frame's tile
+    // geometry + sun (the shear reads sun_dir + cot(elev)). Pass NO lighting
+    // storage buffers (count=0, sdf_map_w/h=0, all buffers null) so
+    // bind_lighting_resources no-ops — shadow.frag reads only the atlas. The
+    // sampler is forwarded so set_lighting_resources' null-guard is satisfied.
+    shadow_batcher_.set_lighting_resources(
+        in.tile_pixel_size, in.z_level, 0u, in.ambient,
+        in.camera_off_x, in.camera_off_y, 0u, 0u,
+        /*emitter*/nullptr, /*sdf*/nullptr, gpu_sampler_,
+        /*sky_vis*/nullptr, /*indirect*/nullptr, /*vis*/nullptr,
+        &in.sun, &in.debug );
+
+    // Clear to opaque black (alpha 1): shadow.frag writes alpha=1 and the
+    // batcher MAX-blends alpha, so the mask stays opaque → the Phase-1 debug
+    // blit reads as clean grey silhouettes on black. Always open the pass when
+    // driven (even with zero tall casters) so the mask is defined each frame.
+    const float clear_mask[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    shadow_batcher_.begin_pass( cb, shadow_mask_->texture(),
+                                shadow_mask_->width(), shadow_mask_->height(),
+                                clear_mask, proj_w, proj_h,
+                                shadow_mask_->format() );
+
+    // Drain the TALL subset of the (still-populated) tile queue as sheared
+    // coverage. Same dst_h > 1.5*tile_px test the vertex shader uses for the
+    // "lit on top" tall-sprite path. Drain WITHOUT clearing — Pass W re-drains
+    // the full set right after.
+    const float tall_threshold = in.tile_pixel_size * 1.5f;
+    SDL_GPUTexture *bound = nullptr;
+    for( const tile_sprite_draw &s : tile_sprite_queue_ ) {
+        if( s.inst.dst_h <= tall_threshold ) {
+            continue;
+        }
+        if( s.texture != bound ) {
+            shadow_batcher_.set_texture( s.texture, gpu_sampler_ );
+            bound = s.texture;
+        }
+        shadow_batcher_.draw( s.inst );
+    }
+
+    shadow_batcher_.end_pass();
 }
 
 

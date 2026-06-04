@@ -88,6 +88,20 @@ struct pipeline_desc {
     SDL_GPUBlendFactor   dst_alpha_blend = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
     SDL_GPUBlendOp       alpha_blend_op  = SDL_GPU_BLENDOP_ADD;
     bool                 enable_blend    = true;
+    // Shader source filenames (under data/shaders/lighting/src/), loaded at
+    // init via load_lighting_shader_source. Default = the sprite shaders, so
+    // existing tile/UI batchers are unchanged; the silhouette-shadow batcher
+    // passes shadow.vert/shadow.frag with a MAX color_blend_op.
+    const char          *vert_name = "sprite.vert.hlsl";
+    const char          *frag_name = "sprite.frag.hlsl";
+    // When true (default), end_pass pushes the 3 fragment lighting uniform slots
+    // (LightParams/SunParams/DebugParams) every segment, matching sprite.frag's
+    // 3 fragment cbuffers. The silhouette-shadow frag declares ZERO cbuffers, so
+    // its batcher sets this false to skip those pushes — otherwise the push count
+    // would not match the shader's reflected uniform-buffer count. The vertex
+    // uniform pushes (FrameParams + LightParams) are always issued; shadow.vert
+    // uses both.
+    bool                 push_frag_lighting_uniforms = true;
 };
 
 // PIMPL — keeps SDL_GPU storage-buffer / pipeline details out of the header
@@ -144,7 +158,7 @@ struct debug_params {
     float    nrm_elev      = 0.3f;   // implied light height; LOWER=more grazing=stronger relief
     float    sdf_sharp     = 0.0f;   // SDF sample: 0=bilinear(smooth) .. 1=nearest(tight/grid-snap)
     float    ao_strength   = 0.0f;   // A4 ambient occlusion: 0=off(default) .. 1=full SDF-cavity darkening
-    float    dp_pad1       = 0.0f;   // pad to 28-float (112-byte) alignment
+    float    shadow_mask_str = 0.0f; // Phase 2 silhouette sun-shadow mask on ground: 0=off(default) .. 1=full
 };
 
 // Returns sun/sky params interpolated from a 24h LUT for the given hour (0..24).
@@ -243,6 +257,11 @@ class sprite_batcher
                                      SDL_GPUBuffer    *vis_buf      = nullptr,
                                      const sun_params *sp           = nullptr,
                                      const debug_params *dbg        = nullptr );
+
+        // Silhouette sun-shadow mask (Phase 2). Bound as fragment storage-read
+        // texture slot 1 (t2/space2) for sprite.frag. Set separately from the
+        // lighting god-call; only the tile batcher uses it. Persists until re-set.
+        void set_shadow_mask( SDL_GPUTexture *tex );
 
         // Append one sprite to the pending batch. Triggers an automatic
         // flush when the per-frame instance budget is reached so callers can

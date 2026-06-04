@@ -590,12 +590,42 @@ static float g_tonemap_max_ev = 4.026069f;
 static bool  g_bloom_enable    = true;
 static float g_bloom_threshold = 1.0f; // HDR luma above which pixels glow
 static float g_bloom_intensity = 0.5f; // additive glow strength
+
+// Volumetric sun-shaft "lit fog" (Step-6 / C2). OFF by default — this is the
+// legibility kill-gate: enable + dial to judge whether top-down sun shafts read
+// before any per-tile-density / tier / upsample work. g_vol_params holds the
+// per-frame sun/cam/sdf inputs (populated where the lighting `in` struct is
+// assembled, since it is out of scope at the Pass-W record site); the three
+// knobs below are merged in at record time.
+static bool  g_vol_enable    = false;
+static float g_vol_density   = 0.3f; // uniform haze amount
+static float g_vol_intensity = 1.0f; // overall multiplier
+static float g_vol_shadow    = 0.0f; // 0 = uniform sky-gated haze (no cast shadow);
+                                     // >0 = directional wall/tree shadow lanes (the
+                                     // top-down "offset" was this cast shadow)
+static float g_vol_reach     = 8.0f; // sun-shadow march reach (tiles) = shaft length
+static lighting::vol_params g_vol_params;
+
+// Silhouette sun-shadow mask (Phase 1) debug kill-gate. When on, Pass B blits
+// the shadow_mask_ in place of the tonemapped world so the sheared tree
+// silhouettes can be eyeballed in isolation (direction / length / overlap).
+static bool g_shadow_debug = false;
 // Current debug mode display (0-7, cycles through modes).
 static uint32_t g_current_dbg_mode = 0u;
 // Scale factors for individual light contributions (for tuning visualization).
 static float g_emitter_scale = 1.0f;
 static float g_sun_scale = 1.0f;
 static float g_sky_scale = 1.0f;
+
+// Indoor daylight bleed strength (0..1). Drives the wall-aware sky-vis flood-fill
+// in frame_build so roofed interiors near windows/doors pick up daytime sky
+// ambient instead of reading cave-dark. 0 = old binary behaviour (off/bisect).
+static float g_skylight_bleed = 0.5f;
+
+// Vision-mask blur (tiles). Gaussian sigma applied to the FOV + sky-vis masks in
+// frame_build so the tile-staircase the shadowcast produces through narrow
+// apertures (windows) reads as a smooth gradient. 0 = off (hard tile steps).
+static float g_vision_blur = 1.5f;
 
 // Main-menu decorative-emitter tuning (read by lighting/snapshot.cpp). F-keys:
 //   F10 / Shift+F10  — radius input  ± 100 (pre-sqrt; HUD shows 3*sqrt(r))
@@ -658,12 +688,12 @@ static void draw_lighting_dev_ui()
     ImGui::SameLine();
     ImGui::Checkbox( "Shader heatmap (F6)", &g_dbg_lighting_shader );
 
-    static const char *mode_names[10] = {
+    static const char *mode_names[12] = {
         "off", "ambient", "emitter", "sun", "sky", "total", "SDF", "sky_vis", "emit_bw",
-        "normal"
+        "normal", "AO", "shadow mask"
     };
     int mode = static_cast<int>( g_current_dbg_mode );
-    if( ImGui::Combo( "mode (F7)", &mode, mode_names, 10 ) ) {
+    if( ImGui::Combo( "mode (F7)", &mode, mode_names, 12 ) ) {
         g_current_dbg_mode = static_cast<uint32_t>( mode );
         g_dbg_params.debug_mode = g_current_dbg_mode;
     }
@@ -695,6 +725,13 @@ static void draw_lighting_dev_ui()
     if( ImGui::SliderFloat( "sky", &g_sky_scale, 0.0f, 10.0f ) ) {
         g_dbg_params.sky_scale = g_sky_scale;
     }
+    // Indoor daylight bleed: wall-aware sky-vis flood-fill (frame_build). Lifts
+    // roofed interiors near openings with daytime sky ambient. 0 = old binary
+    // (cave-dark interiors). Scales with sky_intensity → dim at dawn, full at noon.
+    ImGui::SliderFloat( "indoor sky bleed", &g_skylight_bleed, 0.0f, 1.0f );
+    // Vision-mask blur: smears the tile-quantised FOV / sky-vis staircase into a
+    // smooth gradient (Stoneshard mask blur). 0 = hard tile steps. Render-only.
+    ImGui::SliderFloat( "vision blur (tiles)", &g_vision_blur, 0.0f, 6.0f );
 
     ImGui::SeparatorText( "Tonemap (AgX)" );
     ImGui::SliderFloat( "exposure", &g_tonemap_exposure, 0.0f, 2.0f );
@@ -703,6 +740,29 @@ static void draw_lighting_dev_ui()
     ImGui::Checkbox( "bloom", &g_bloom_enable );
     ImGui::SliderFloat( "bloom threshold", &g_bloom_threshold, 0.0f, 4.0f );
     ImGui::SliderFloat( "bloom intensity", &g_bloom_intensity, 0.0f, 2.0f );
+
+    ImGui::SeparatorText( "Volumetric sun shafts (C2)" );
+    // Off by default (kill-gate). Enable + dial to judge whether top-down sun
+    // shafts read. Shafts = wall/tree shadow lanes carved into sunlit haze
+    // outdoors (sun is sky-gated, so no indoor window beams in this slice).
+    ImGui::Checkbox( "volumetric", &g_vol_enable );
+    ImGui::SliderFloat( "vol density", &g_vol_density, 0.0f, 2.0f );
+    ImGui::SliderFloat( "vol intensity", &g_vol_intensity, 0.0f, 4.0f );
+    ImGui::SliderFloat( "vol reach (tiles)", &g_vol_reach, 1.0f, 24.0f );
+    // 0 = pure uniform sky-gated haze (the "offset"-looking building cast-shadow
+    // OFF — recommended default). >0 dials the directional wall/tree shadow lanes
+    // back in, same sun direction as the sprite sun shadow.
+    ImGui::SliderFloat( "vol shadow (lanes)", &g_vol_shadow, 0.0f, 1.0f );
+
+    ImGui::SeparatorText( "Silhouette sun shadows (Phase 1/2)" );
+    // Kill-gate: blit the shadow mask in place of the world. Sheared tree
+    // silhouettes should fall away from the sun, plausible length, overlap-clean.
+    // Tune shear length/direction in shadow.vert.hlsl (hot-reloaded at restart).
+    ImGui::Checkbox( "show shadow mask (debug blit)", &g_shadow_debug );
+    // Phase 2: the mask darkens the GROUND sun term. 0 = off (default, world
+    // unchanged); dial up to see tree silhouette shadows on the ground. Trees
+    // still ALSO cast the SDF column until Phase 2.3 (temporary double shadow).
+    ImGui::SliderFloat( "shadow mask strength", &g_dbg_params.shadow_mask_str, 0.0f, 1.0f );
 
     ImGui::SeparatorText( "Dither / GI / shadow" );
     ImGui::SliderFloat( "dither amt", &g_dbg_params.dither_amt, 0.0f, 1.0f );
@@ -934,7 +994,8 @@ void refresh_display()
             cursor_light_emitter::wz = static_cast<float>( g->u.bub_pos().z() );
         }
         lighting::frame_lighting_result fr =
-            lighting::build_and_submit_lighting( rs, rebuild_pertile, g_dbg_lighting );
+            lighting::build_and_submit_lighting( rs, rebuild_pertile, g_dbg_lighting,
+                                                 g_skylight_bleed, g_vision_blur );
         rc_rebuild = fr.built_pertile;
         if( fr.built_pertile ) {
             s_emo.sdf_at_player      = fr.sdf_at_player;
@@ -1084,6 +1145,28 @@ void refresh_display()
         }
         // Repurpose sun.sp_pad as the shader debug-heatmap sentinel.
         in.sun.sp_pad = g_dbg_lighting_shader ? 1.0f : 0.0f;
+
+        // Stash the per-frame volumetric inputs (Step-6 / C2). Consumed at the
+        // Pass-W record site, where `in` is out of scope. Sun dir/colour/intensity
+        // already carry the A3 weather multiplier; cam_off/tile_px are the SAME
+        // values the sprite vtx uses (single source of truth for the world_pos
+        // reconstruction in vol.frag). shadow_k/steps reuse the sprite knobs so
+        // shafts match the surface-shadow softness. The density/intensity/reach
+        // knobs are merged in at record time.
+        g_vol_params.tile_pixel_size = in.tile_pixel_size;
+        g_vol_params.camera_off_x    = in.camera_off_x;
+        g_vol_params.camera_off_y    = in.camera_off_y;
+        g_vol_params.current_z       = in.z_level;
+        g_vol_params.sun_dir_x       = in.sun.sun_dir_x;
+        g_vol_params.sun_dir_y       = in.sun.sun_dir_y;
+        g_vol_params.sun_intensity   = in.sun.sun_intensity;
+        g_vol_params.sun_r           = in.sun.sun_r;
+        g_vol_params.sun_g           = in.sun.sun_g;
+        g_vol_params.sun_b           = in.sun.sun_b;
+        g_vol_params.shadow_k        = in.debug.shadow_k;
+        g_vol_params.shadow_steps    = in.debug.shadow_steps;
+        g_vol_params.sdf_map_w       = static_cast<std::uint32_t>( rs.sdf().map_w() );
+        g_vol_params.sdf_map_h       = static_cast<std::uint32_t>( rs.sdf().map_h() );
 
         // Runtime debug tuning: wire the globally controlled debug_params into
         // frame_light_inputs. shader uses these for debug visualization (F7 cycles
@@ -1382,6 +1465,16 @@ void refresh_display()
         const bool needs_clear = wt->consume_dirty();
         const bool have_tiles  = !rs.tile_sprites_empty() && rs.gpu_sampler();
         if( needs_clear || have_tiles ) {
+            // Silhouette sun-shadow mask (Phase 1). Render the TALL subset of
+            // the tile queue as sheared coverage into shadow_mask_ BEFORE Pass W
+            // (own batcher + pass; the queue is still populated and re-drained by
+            // Pass W below). Phase 1 only debug-blits the mask — no sprite wiring
+            // yet. Gated with Pass W so the mask is rebuilt on the same frames
+            // the world is.
+            rs.flush_shadow_casters( ctx.cmd_buffer,
+                                     static_cast<std::uint32_t>( proj_w ),
+                                     static_cast<std::uint32_t>( proj_h ) );
+
             // target_format = wt->format() selects the batcher's pipeline for
             // this target. Swapchain 8-bit in step 1a; RGBA16F once 1b flips
             // world_target — the per-format pipeline cache builds the HDR
@@ -1396,6 +1489,29 @@ void refresh_display()
                 rs.flush_tile_sprites( rs.tile_batcher(), rs.gpu_sampler() );
             }
             rs.tile_batcher().end_pass();
+
+            // Step-6 C2 volumetric sun shafts: composite occlusion-gated lit-fog
+            // additively into world_target after it is freshly drawn, BEFORE
+            // bloom (so shafts bloom too). Same Pass-W-ran gate as bloom
+            // (additive → must not re-add on a retained frame). Off by default
+            // (legibility kill-gate); F4 knobs merged onto the stashed per-frame
+            // params.
+            if( g_vol_enable && rs.volumetric().ready() ) {
+                lighting::vol_params vp = g_vol_params;
+                vp.vol_density   = g_vol_density;
+                vp.vol_intensity = g_vol_intensity;
+                vp.vol_reach     = g_vol_reach;
+                vp.vol_shadow    = g_vol_shadow;
+                // proj-space (game-view) size: vol.frag reconstructs world_pos as
+                // uv*proj_size/tile_px - camera_off, because the sprite pass
+                // stretches proj-space into the full world_target texture.
+                vp.proj_w = static_cast<float>( proj_w );
+                vp.proj_h = static_cast<float>( proj_h );
+                rs.volumetric().record( ctx.cmd_buffer, wt->texture(),
+                                        wt->width(), wt->height(),
+                                        rs.sdf().sdf_buffer(), rs.sdf().sky_vis_buffer(),
+                                        vp );
+            }
 
             // Step-4 bloom: add glow into world_target AFTER it is freshly drawn
             // this frame (only when Pass W ran — bloom mutates the target in
@@ -1461,7 +1577,13 @@ void refresh_display()
                                        /*is_lit=*/false );
         rs.tile_batcher().draw( quad );
     };
-    blit_layer( rs.world_ldr_target() ); // tonemapped world (opaque base)
+    if( g_shadow_debug && rs.shadow_mask() && rs.shadow_mask()->texture() ) {
+        // Phase-1 kill-gate: show the silhouette-shadow mask instead of the
+        // world. Opaque (mask alpha=1) → clean grey shadows on black.
+        blit_layer( rs.shadow_mask() );
+    } else {
+        blit_layer( rs.world_ldr_target() ); // tonemapped world (opaque base)
+    }
     blit_layer( uct );                   // UI over the world (straight alpha)
 
     rs.tile_batcher().end_pass(
@@ -3093,6 +3215,9 @@ bool handle_resize( int w, int h )
                 if( rs.world_target() ) {
                     rs.world_target()->resize( pw, ph );
                 }
+                if( rs.shadow_mask() ) {
+                    rs.shadow_mask()->resize( pw, ph );
+                }
                 if( rs.world_ldr_target() ) {
                     rs.world_ldr_target()->resize( pw, ph );
                 }
@@ -3218,8 +3343,9 @@ static void CheckMessages()
                     // B/W emitter-only diagnostic — bypasses tint gating so it
                     // works on the main-menu blue backdrop. Mode 9 = surface
                     // normal (Sobel) as RGB; mode 10 = ambient occlusion
-                    // (grayscale openness), both game tiles only.
-                    g_current_dbg_mode = ( g_current_dbg_mode + 1 ) % 11u;
+                    // (grayscale openness); mode 11 = silhouette shadow mask
+                    // (.Load at screen pixel); all game tiles only.
+                    g_current_dbg_mode = ( g_current_dbg_mode + 1 ) % 12u;
                     g_dbg_params.debug_mode = g_current_dbg_mode;
                     break;
                 } else if( lc == KEY_F( 8 ) ) {

@@ -1,6 +1,7 @@
 #include "frame_build.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 
@@ -19,8 +20,58 @@
 namespace lighting
 {
 
+namespace
+{
+// Separable Gaussian blur of a tile-resolution scalar field (x-major,
+// idx = x*H+y), in place. sigma is in tiles; < 0.05 → no-op. Used to soften the
+// FOV / sky-vis masks so the tile-quantised shadowcast staircase reads as a
+// smooth gradient (Stoneshard-style mask blur) instead of hard tile steps.
+// Two passes (H then V), clamp at borders.
+void gaussian_blur_tilefield( std::vector<float> &f, int W, int H, float sigma )
+{
+    if( sigma < 0.05f || W <= 0 || H <= 0
+        || static_cast<int>( f.size() ) < W * H ) {
+        return;
+    }
+    const int rad = std::min( 8, static_cast<int>( std::ceil( 2.5f * sigma ) ) );
+    std::vector<float> kernel( 2 * rad + 1 );
+    float ksum = 0.0f;
+    const float inv2s2 = 1.0f / ( 2.0f * sigma * sigma );
+    for( int k = -rad; k <= rad; ++k ) {
+        const float w = std::exp( -static_cast<float>( k * k ) * inv2s2 );
+        kernel[k + rad] = w;
+        ksum += w;
+    }
+    for( float &w : kernel ) {
+        w /= ksum;
+    }
+    std::vector<float> tmp( f.size(), 0.0f );
+    for( int x = 0; x < W; ++x ) {            // horizontal pass (along x)
+        for( int y = 0; y < H; ++y ) {
+            float acc = 0.0f;
+            for( int k = -rad; k <= rad; ++k ) {
+                const int sx = std::clamp( x + k, 0, W - 1 );
+                acc += kernel[k + rad] * f[ sx * H + y ];
+            }
+            tmp[ x * H + y ] = acc;
+        }
+    }
+    for( int x = 0; x < W; ++x ) {            // vertical pass (along y)
+        for( int y = 0; y < H; ++y ) {
+            float acc = 0.0f;
+            for( int k = -rad; k <= rad; ++k ) {
+                const int sy = std::clamp( y + k, 0, H - 1 );
+                acc += kernel[k + rad] * tmp[ x * H + sy ];
+            }
+            f[ x * H + y ] = acc;
+        }
+    }
+}
+} // namespace
+
 frame_lighting_result build_and_submit_lighting( render_state &rs,
-        bool rebuild_pertile, bool want_hud_snapshot )
+        bool rebuild_pertile, bool want_hud_snapshot, float skylight_bleed,
+        float vision_blur )
 {
     frame_lighting_result result;
 
@@ -104,6 +155,86 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
                 }
             }
 
+            // Indoor daylight bleed (Step 5 / indoor fix). The binary sky_vis
+            // above gives roofed tiles ZERO sun + sky, so daytime interiors read
+            // as cave-dark even when the sim says "bright". Propagate open-sky
+            // luminance into roofed tiles through TRANSPARENT cells (windows /
+            // doorways), blocked by opaque walls — a cheap wall-aware flood-fill
+            // on the tile grid. The result overwrites the interior sky_vis bytes
+            // with a soft gradient (the upload converts /255 → continuous float),
+            // so the shader's sky-ambient term fills the room near openings and
+            // decays inward. Open-sky tiles stay 255. Pure sky-ambient — the sun
+            // DIRECT term is decoupled (shader gate sky_vis>0.99) so this never
+            // fakes a sunbeam; artificial light is GPU-side, so no double-count.
+            // strength==0 → exact binary behaviour (off / bisect). Runs under the
+            // rebuild_pertile gate, alongside the SDF DT.
+            if( skylight_bleed > 0.001f
+                && static_cast<int>( transparency.size() ) >= total ) {
+                constexpr int   K     = 8;      // bleed radius in tiles
+                constexpr float decay = 0.80f;  // per-step falloff
+                std::vector<float> bleed( total );
+                for( int i = 0; i < total; ++i ) {
+                    bleed[i] = sky_vis[i] ? 1.0f : 0.0f;
+                }
+                std::vector<float> next = bleed;
+                for( int it = 0; it < K; ++it ) {
+                    for( int x = 0; x < W; ++x ) {
+                        for( int y = 0; y < H; ++y ) {
+                            const int idx = x * H + y;
+                            if( sky_vis[idx] ) {       // open sky stays full
+                                next[idx] = 1.0f;
+                                continue;
+                            }
+                            float m = bleed[idx];
+                            // Receive from a 4-neighbour ONLY if that neighbour is
+                            // transparent (light can exit it toward us). Opaque
+                            // walls (transparency==0) neither receive-through nor
+                            // relay, so sealed rooms stay dark and walls are only
+                            // lit on their open-facing side.
+                            const auto recv = [&]( int nx, int ny ) {
+                                if( nx < 0 || nx >= W || ny < 0 || ny >= H ) {
+                                    return;
+                                }
+                                const int ni = nx * H + ny;
+                                if( transparency[ni] > 0u ) {
+                                    m = std::max( m, bleed[ni] * decay );
+                                }
+                            };
+                            recv( x - 1, y );
+                            recv( x + 1, y );
+                            recv( x, y - 1 );
+                            recv( x, y + 1 );
+                            next[idx] = m;
+                        }
+                    }
+                    bleed.swap( next );
+                }
+                const float s = std::min( skylight_bleed, 1.0f );
+                for( int i = 0; i < total; ++i ) {
+                    if( !sky_vis[i] ) {     // interior only; open sky untouched
+                        const float v = std::clamp( bleed[i] * s, 0.0f, 1.0f );
+                        sky_vis[i] = static_cast<uint8_t>( v * 255.0f );
+                    }
+                }
+            }
+
+            // Soften the open↔roof boundary so the sun/sky edge isn't a 1-tile
+            // bilinear step. Plain separable Gaussian over the tile field (stacks
+            // on top of the wall-aware bleed above; the bleed fills interiors, this
+            // rounds the edge). vision_blur=0 → exact prior behaviour.
+            if( vision_blur > 0.05f
+                && static_cast<int>( sky_vis.size() ) >= total ) {
+                std::vector<float> sf( total );
+                for( int i = 0; i < total; ++i ) {
+                    sf[i] = static_cast<float>( sky_vis[i] );
+                }
+                gaussian_blur_tilefield( sf, W, H, vision_blur );
+                for( int i = 0; i < total; ++i ) {
+                    sky_vis[i] = static_cast<uint8_t>(
+                                     std::clamp( sf[i], 0.0f, 255.0f ) );
+                }
+            }
+
             // Per-tile visibility for the soft vision falloff (effect 1+2).
             // Raw max(seen_cache, camera_cache) — the SAME float
             // apparent_light_helper reads, but the render path otherwise
@@ -118,16 +249,32 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
             // the inter-tile interpolation to ~1/SS tile). Per-tile value is
             // replicated into its SS×SS subcells (no sub-tile LOS data exists).
             if( static_cast<int>( mc.seen_cache.size() ) >= total ) {
-                vis.assign( static_cast<size_t>( SW ) * SH, 0.0f );
+                // Per-tile visibility FIRST, so the blur radius is in tile units.
+                std::vector<float> vtile( total, 0.0f );
                 const bool have_cam =
                     static_cast<int>( mc.camera_cache.size() ) >= total;
                 for( int x = 0; x < W; ++x ) {
                     for( int y = 0; y < H; ++y ) {
                         const float s = mc.seen_cache[ x * H + y ];
                         const float c = have_cam ? mc.camera_cache[ x * H + y ] : 0.0f;
-                        const float v = std::max( s, c );
-                        const int bx = x * ss;
-                        const int by = y * ss;
+                        vtile[ x * H + y ] = std::max( s, c );
+                    }
+                }
+                // Blur the FOV mask: shadowcasting through a narrow aperture
+                // (window) expands the visible cone in tile-sized jumps, so the
+                // beam is a hard staircase in the source. A tile-radius Gaussian
+                // smears the steps into a smooth diagonal (Stoneshard mask blur).
+                // Render-only — does not change gameplay LOS. vision_blur=0 = no-op.
+                gaussian_blur_tilefield( vtile, W, H, vision_blur );
+                // Replicate each (now-smoothed) tile value into its SS×SS subcells
+                // for the shader's SS-grid vis_bilinear (sub-tile interpolation on
+                // top of the blur).
+                vis.assign( static_cast<size_t>( SW ) * SH, 0.0f );
+                for( int x = 0; x < W; ++x ) {
+                    for( int y = 0; y < H; ++y ) {
+                        const float v  = vtile[ x * H + y ];
+                        const int   bx = x * ss;
+                        const int   by = y * ss;
                         for( int sx = 0; sx < ss; ++sx ) {
                             for( int sy = 0; sy < ss; ++sy ) {
                                 vis[ static_cast<size_t>( bx + sx ) * SH + ( by + sy ) ] = v;

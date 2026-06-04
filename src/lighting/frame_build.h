@@ -39,7 +39,22 @@ struct frame_lighting_result {
 // 1-bounce GI is computed on the GPU (radiance_cascade_pass); this only builds
 // + submits the emitter snapshot and per-tile SDF / sky-vis / vis (the latter
 // when rebuild_pertile). The HUD snapshot is filled when want_hud_snapshot.
+//
+// skylight_bleed (0..1): indoor daylight bleed strength. 0 = the old binary
+// sky-vis (open sky 1.0 / roofed 0.0). >0 runs a wall-aware flood-fill that
+// propagates open-sky into roofed tiles through transparent cells (windows /
+// doorways), blocked by opaque walls, scaled by this strength. Pure sky-ambient
+// lift — artificial light stays GPU-side, so no double-count.
+//
+// vision_blur (tiles, 0 = off): Gaussian sigma applied to BOTH the FOV `vis`
+// mask and the `sky_vis` mask (at tile resolution) before upload. FOV
+// shadowcasting expands through narrow apertures (windows) in tile-sized jumps,
+// so the beam shape is a hard staircase in the source data that bilinear can't
+// dissolve; a blur of radius >= a few tiles smears the steps into a smooth
+// diagonal (Stoneshard's mask-blur technique). Render-only (modulates final_rgb),
+// so gameplay LOS is untouched.
 frame_lighting_result build_and_submit_lighting( render_state &rs,
-        bool rebuild_pertile, bool want_hud_snapshot );
+        bool rebuild_pertile, bool want_hud_snapshot, float skylight_bleed = 0.0f,
+        float vision_blur = 0.0f );
 
 } // namespace lighting

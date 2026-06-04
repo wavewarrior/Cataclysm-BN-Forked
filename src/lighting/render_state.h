@@ -27,6 +27,7 @@
 #include "tonemap_pass.h"
 #include "radiance_cascade_pass.h"
 #include "bloom_pass.h"
+#include "volumetric_pass.h"
 
 #include <memory>
 
@@ -64,6 +65,8 @@ class render_state
         gpu_device     &device()        noexcept { return device_; }
         sprite_batcher &tile_batcher()  noexcept { return tile_batcher_; }
         sprite_batcher &ui_batcher()    noexcept { return ui_batcher_; }
+        // Silhouette sun-shadow batcher (shadow.vert/shadow.frag, MAX blend).
+        sprite_batcher &shadow_batcher() noexcept { return shadow_batcher_; }
         font_engine    &fonts()         noexcept { return fonts_; }
         gpu_atlas      &atlas()         noexcept { return atlas_; }
         gpu_geometry   &geometry()      noexcept { return geometry_; }
@@ -157,6 +160,16 @@ class render_state
                                 const sprite_instance &inst );
         bool tile_sprites_empty() const noexcept { return tile_sprite_queue_.empty(); }
         void flush_tile_sprites( sprite_batcher &dst, SDL_GPUSampler *sampler );
+
+        // Silhouette sun-shadow mask (Phase 1). Opens a pass on shadow_batcher_
+        // into the shadow_mask_ target (LOADOP_CLEAR), stamps it with the cached
+        // per-frame sun/geometry (vertex shear only — no lighting storage
+        // buffers), and drains the TALL subset of tile_sprite_queue_
+        // (dst_h > 1.5*tile_px) as sheared coverage. Drains WITHOUT clearing the
+        // queue (Pass W re-drains the full set after). Drive before Pass W.
+        // proj_w/h = the game-view projection extent (matches Pass W's push).
+        void flush_shadow_casters( SDL_GPUCommandBuffer *cb,
+                                   std::uint32_t proj_w, std::uint32_t proj_h );
         // Apply a GPU scissor rect to tile_sprite draws from this point forward.
         // Pass nullptr to restore full-viewport rendering. Closes the current
         // batcher segment so previously queued sprites are unaffected.
@@ -295,10 +308,21 @@ class render_state
         // and the tonemap resolve; composites additively into world_target.
         bloom_pass &bloom() noexcept { return bloom_; }
 
+        // Volumetric sun-shaft "lit fog" (Step-6 / C2). Driven from
+        // refresh_display inside the Pass-W-ran block, before bloom.
+        volumetric_pass &volumetric() noexcept { return volumetric_; }
+
+        // Silhouette sun-shadow mask (Phase 1). Screen-space coverage texture
+        // (swapchain format) the shadow_batcher_ renders sheared caster
+        // silhouettes into; sized to world_target. Phase 1 debug-blits it;
+        // Phase 2 will sample it in the sun term. nullptr until init() succeeds.
+        ui_composite_target *shadow_mask() noexcept { return shadow_mask_.get(); }
+
     private:
         gpu_device     device_;
         sprite_batcher tile_batcher_;
         sprite_batcher ui_batcher_;
+        sprite_batcher shadow_batcher_;
         font_engine    fonts_;
         gpu_atlas      atlas_{ 2048, 2048, 32, 32 };
         gpu_geometry   geometry_;
@@ -348,12 +372,22 @@ class render_state
         // step 1b lands).
         std::unique_ptr<ui_composite_target> world_target_;
 
+        // Silhouette sun-shadow mask (Phase 1). Sized to world_target_; the
+        // shadow_batcher_ renders sheared caster coverage into it before Pass W.
+        std::unique_ptr<ui_composite_target> shadow_mask_;
+
+        // Per-frame inputs cached by begin_lighting_frame so flush_shadow_casters
+        // can stamp the shadow_batcher_ with the same sun/geometry (the shear is
+        // vertex-side; no lighting storage buffers are bound for the mask).
+        frame_light_inputs last_frame_inputs_;
+
         // Tonemapped LDR resolve of world_target_ (swapchain format) + the
         // fullscreen tonemap pass that produces it.
         std::unique_ptr<ui_composite_target> world_ldr_target_;
         tonemap_pass                         tonemap_;
         radiance_cascade_pass                rc_;
         bloom_pass                           bloom_;
+        volumetric_pass                      volumetric_;
 };
 
 // Process-wide accessor. The object is constructed in init() and torn down

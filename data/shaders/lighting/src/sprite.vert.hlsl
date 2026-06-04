@@ -17,6 +17,9 @@ cbuffer FrameParams : register(b0, space1) {
 };
 
 // Cbuffer slot 1: per-frame lighting params (world_pos computation)
+// 48 bytes — wire-stable with C++ light_params. The trailing sun_* row is used
+// only by shadow.vert (silhouette-shadow shear); this shader ignores it but
+// declares the same layout so the shared per-frame vertex push lines up.
 cbuffer LightParams : register(b1, space1) {
     float tile_pixel_size;
     float current_z;
@@ -26,6 +29,10 @@ cbuffer LightParams : register(b1, space1) {
     float camera_off_y;
     uint  sdf_map_w;
     uint  sdf_map_h;
+    float sun_dir_x;
+    float sun_dir_y;
+    float sun_cot_elev;
+    float lp_sun_pad;
 };
 
 struct VS_OUT {
