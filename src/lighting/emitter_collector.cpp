@@ -67,11 +67,13 @@ void emitter_collector::submit( std::vector<gpu_emitter> snapshot,
                                 std::vector<uint8_t>    sky_vis,
                                 std::vector<float>      vis,
                                 int                     runtime_w,
-                                int                     runtime_h )
+                                int                     runtime_h,
+                                std::vector<float>      sun_sdf )
 {
     pending_              = std::move( snapshot );
     pending_transparency_ = std::move( transparency );
     pending_sdf_          = std::move( sdf );
+    pending_sun_sdf_      = std::move( sun_sdf );
     pending_sky_vis_      = std::move( sky_vis );
     pending_vis_          = std::move( vis );
     pending_runtime_w_    = runtime_w;
@@ -91,6 +93,7 @@ void emitter_collector::flush_to_render_cb( SDL_GPUCommandBuffer *cb )
     std::vector<gpu_emitter> data         = std::move( pending_ );
     std::vector<uint8_t>     transparency = std::move( pending_transparency_ );
     std::vector<float>       sdf          = std::move( pending_sdf_ );
+    std::vector<float>       sun_sdf      = std::move( pending_sun_sdf_ );
     std::vector<uint8_t>     sky_vis      = std::move( pending_sky_vis_ );
     std::vector<float>       vis          = std::move( pending_vis_ );
     const int                runtime_w    = pending_runtime_w_;
@@ -158,7 +161,7 @@ void emitter_collector::flush_to_render_cb( SDL_GPUCommandBuffer *cb )
         && runtime_w > 0 && runtime_h > 0 ) {
         rs_.sdf().upload( cp, rs_.device().raw(),
                           runtime_w, runtime_h,
-                          transparency, sdf, sky_vis, vis );
+                          transparency, sdf, sky_vis, vis, sun_sdf );
     }
 
     SDL_EndGPUCopyPass( cp );

@@ -61,6 +61,12 @@ StructuredBuffer<GpuEmitter> Emitters    : register(t3, space2);
 StructuredBuffer<float>      SdfBuf      : register(t4, space2);
 StructuredBuffer<float>      SkyVisBuf   : register(t5, space2);
 StructuredBuffer<float>      VisBuf      : register(t6, space2); // per-tile visibility (>=0 live, <0 memory)
+// Phase 2.3: wall-only sun SDF (storage buffer slot 4 ⇒ t7). Same SS grid +
+// x-major layout as SdfBuf, but built from a transparency grid where TREE tiles
+// are forced transparent → the SUN shadow march uses THIS (trees cast no SDF
+// column; their silhouette comes from the mask). Emitters/GI/AO keep the full
+// SdfBuf (trees still occlude lamps + form AO cavities).
+StructuredBuffer<float>      SunSdfBuf   : register(t7, space2);
 cbuffer LightParams : register(b0, space3) {
     float tile_pixel_size; float current_z;
     uint  emitter_count;   float ambient;
@@ -148,6 +154,32 @@ float sdf_bilinear(float2 p) {
     const float nr = sdf_texel((int)floor(g.x + 0.5), (int)floor(g.y + 0.5));
     return lerp(bil, nr, saturate(sdf_sharp));
 }
+// Phase 2.3: sun-SDF variants (HLSL has no default params, so these are explicit
+// copies reading SunSdfBuf instead of SdfBuf — identical indexing/grid). Only
+// the sun shadow march uses them; trace_shadow selects via a literal use_sun
+// flag (constant-folds per call site, no runtime branch).
+float sdf_texel_sun(int x, int y) {
+    const int gw = (int)sdf_map_w * SDF_SS;
+    const int gh = (int)sdf_map_h * SDF_SS;
+    x = clamp(x, 0, gw - 1);
+    y = clamp(y, 0, gh - 1);
+    return SunSdfBuf[x * gh + y];
+}
+float sdf_bilinear_sun(float2 p) {
+    const float2 g  = p * (float)SDF_SS - 0.5;
+    const float2 fp = floor(g);
+    const int   x0  = (int)fp.x;
+    const int   y0  = (int)fp.y;
+    const float2 w  = g - fp;
+    const float a = sdf_texel_sun(x0,     y0    );
+    const float b = sdf_texel_sun(x0 + 1, y0    );
+    const float c = sdf_texel_sun(x0,     y0 + 1);
+    const float d = sdf_texel_sun(x0 + 1, y0 + 1);
+    const float bil = lerp(lerp(a, b, w.x), lerp(c, d, w.x), w.y);
+    if(sdf_sharp <= 0.001) { return bil; }
+    const float nr = sdf_texel_sun((int)floor(g.x + 0.5), (int)floor(g.y + 0.5));
+    return lerp(bil, nr, saturate(sdf_sharp));
+}
 // Per-tile 1-bounce indirect light (RGB). Now a read-only storage texture
 // (Phase 1b). The CPU source is x-major arr[x*map_h+y]; the texture is uploaded
 // in that same linear order into dims width=map_h height=map_w, so tile (x,y)
@@ -224,7 +256,7 @@ float skyvis_bilinear(float2 p) {
 // look consistent. `dist_to_light` is the march length (real distance for
 // point emitters; a fixed reach for the directional sun).
 float trace_shadow(float2 origin, float2 dir, float dist_to_light,
-                   float k, int steps, bool directional) {
+                   float k, int steps, bool directional, bool use_sun) {
     if(sdf_map_w == 0u || steps <= 0) {
         return 1.0;
     }
@@ -240,16 +272,19 @@ float trace_shadow(float2 origin, float2 dir, float dist_to_light,
     // the NEXT occluder still shadows — a tree inside a building marches out of the
     // tree, hits the building wall, stays dark (option A). No-op for ground (any
     // light): its SDF is well above the threshold so the guard never fires.
-    if(sdf_bilinear(origin) < 0.05) {
+    if((use_sun ? sdf_bilinear_sun(origin) : sdf_bilinear(origin)) < 0.05) {
         [loop] for(int ss = 0; ss < steps; ++ss) {
             if(t >= dist_to_light - 0.4) return 1.0;           // never left occluder → sunlit top
-            if(sdf_bilinear(origin + dir * t) >= 0.05) break;  // back in open air
+            const float sg = use_sun ? sdf_bilinear_sun(origin + dir * t)
+                                     : sdf_bilinear(origin + dir * t);
+            if(sg >= 0.05) break;  // back in open air
             t += 0.15;
         }
     }
     [loop] for(int ss = 0; ss < steps; ++ss) {
         if(t >= dist_to_light - 0.4) break;
-        const float sd = sdf_bilinear(origin + dir * t);
+        const float sd = use_sun ? sdf_bilinear_sun(origin + dir * t)
+                                 : sdf_bilinear(origin + dir * t);
         if(sd < 0.05) { shadow = 0.0; break; }
         // Penumbra reference for the IQ cone ratio. A POINT light keys it to the
         // real remaining distance-to-light (dist_to_light - t), which is valid
@@ -349,7 +384,8 @@ float4 main(VS_OUT i) : SV_Target0 {
         // shadow_k / shadow_steps tunable). See trace_shadow above. sh_dir is
         // declared above (the A1 Lambert reuses it).
         const float  shadow = trace_shadow(i.light_pos, sh_dir, dist,
-                                            shadow_k, (int)shadow_steps, false);
+                                            shadow_k, (int)shadow_steps,
+                                            /*directional=*/false, /*use_sun=*/false);
         // Cone / spotlight angular falloff (Bucket A / A2). Held flashlights and
         // vehicle headlights are tagged CONE by build_emitter_snapshot with a
         // normalized beam direction (cone_dir) and half-angle; OMNI emitters keep
@@ -402,7 +438,8 @@ float4 main(VS_OUT i) : SV_Target0 {
     if(sun_intensity > 0.001 && sky_vis > 0.05 && sdf_map_w > 0u) {
         const float2 toward_sun = -float2(sun_dir_x, sun_dir_y);
         const float sun_shadow = trace_shadow(i.light_pos, toward_sun, 8.0,
-                                               shadow_k, (int)shadow_steps, true);
+                                               shadow_k, (int)shadow_steps,
+                                               /*directional=*/true, /*use_sun=*/true);
         // Per-pixel Lambert against the sun (Bucket A / A1). The 3D sun ray is
         // (toward_sun.xy, sin_elev). At NRM_AMOUNT=0 this collapses to the old
         // flat-normal value: dot((0,0,1), normalize(toward_sun, sin_elev)) =

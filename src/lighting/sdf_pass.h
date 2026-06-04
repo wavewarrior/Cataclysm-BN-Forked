@@ -68,12 +68,16 @@ public:
                  const std::vector<uint8_t> &transparency,
                  const std::vector<float>   &sdf,
                  const std::vector<uint8_t> &sky_vis = {},
-                 const std::vector<float>   &vis = {} );
+                 const std::vector<float>   &vis = {},
+                 // Phase 2.3: wall-only sun SDF, same SS grid as `sdf`. Empty = skip.
+                 const std::vector<float>   &sun_sdf = {} );
 
     SDL_GPUTexture *transparency_texture() const noexcept { return transparency_tex_; }
     SDL_GPUTexture *sdf_texture()          const noexcept { return sdf_tex_; }
     // Phase 6b: SDF values as a vertex-readable storage buffer.
     SDL_GPUBuffer  *sdf_buffer()           const noexcept { return sdf_storage_; }
+    // Phase 2.3: wall-only sun SDF (trees excluded). Same SS grid as sdf_buffer.
+    SDL_GPUBuffer  *sun_sdf_buffer()       const noexcept { return sun_sdf_storage_; }
     // Phase 8: sky visibility per tile (R8_UNORM, 255=open sky, 0=indoor).
     SDL_GPUTexture *sky_vis_texture()      const noexcept { return sky_vis_tex_; }
     // Sky visibility as a fragment-readable storage buffer of floats
@@ -108,10 +112,12 @@ private:
     SDL_GPUTexture        *sdf_tex_          = nullptr;
     SDL_GPUTexture        *sky_vis_tex_      = nullptr; // Phase 8: R8_UNORM
     SDL_GPUBuffer         *sdf_storage_      = nullptr; // fragment storage buffer (SdfBuf)
+    SDL_GPUBuffer         *sun_sdf_storage_  = nullptr; // Phase 2.3 wall-only sun SDF (SunSdfBuf)
     SDL_GPUBuffer         *skyvis_storage_   = nullptr; // fragment storage buffer (SkyVisBuf, floats)
     SDL_GPUBuffer         *visbuf_storage_   = nullptr; // fragment storage buffer (VisBuf, 1 float/tile)
     SDL_GPUTransferBuffer *xfer_transparency_ = nullptr;
     SDL_GPUTransferBuffer *xfer_sdf_          = nullptr;
+    SDL_GPUTransferBuffer *xfer_sun_sdf_      = nullptr; // Phase 2.3 sun-SDF staging
     SDL_GPUTransferBuffer *xfer_sky_vis_      = nullptr; // R8 bytes for sky_vis_tex_
     SDL_GPUTransferBuffer *xfer_skyvis_f_     = nullptr; // float bytes for skyvis_storage_
     SDL_GPUTransferBuffer *xfer_vis_f_        = nullptr; // float bytes for visbuf_storage_ (1/tile)

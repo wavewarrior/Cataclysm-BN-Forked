@@ -292,6 +292,7 @@ void render_state::begin_lighting_frame( const frame_light_inputs &in )
     // sampler-texture Load → returned 0 for every fragment).
     const bool      sdf_ready = sdf_.populated();
     SDL_GPUBuffer  *sbuf = sdf_ready ? sdf_.sdf_buffer()      : nullptr;
+    SDL_GPUBuffer  *ssun = sdf_ready ? sdf_.sun_sdf_buffer()  : nullptr; // Phase 2.3 wall-only sun SDF
     SDL_GPUBuffer  *kvis = sdf_ready ? sdf_.sky_vis_buffer()  : nullptr;
     SDL_GPUBuffer  *vbuf = sdf_ready ? sdf_.vis_buffer()      : nullptr;
     // GI source for the sprite's IndirectTex: the GPU radiance-cascade gather
@@ -308,7 +309,7 @@ void render_state::begin_lighting_frame( const frame_light_inputs &in )
     tile_batcher_.set_lighting_resources(
         in.tile_pixel_size, in.z_level, ne, in.ambient,
         in.camera_off_x, in.camera_off_y, sw, sh,
-        ebuf, sbuf, gpu_sampler_, kvis, itex, vbuf, &in.sun, &in.debug );
+        ebuf, sbuf, gpu_sampler_, kvis, itex, vbuf, &in.sun, &in.debug, ssun );
 
     // Silhouette sun-shadow mask (Phase 2): bind it as the tile batcher's 2nd
     // fragment storage texture (sprite.frag ShadowMask, t2/space2). Always

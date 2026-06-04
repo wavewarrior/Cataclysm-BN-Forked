@@ -43,7 +43,9 @@ class emitter_collector
                      std::vector<uint8_t>    sky_vis      = {},
                      std::vector<float>      vis          = {},
                      int                     runtime_w    = 0,
-                     int                     runtime_h    = 0 );
+                     int                     runtime_h    = 0,
+                     // Phase 2.3: wall-only sun SDF, same SS grid as `sdf`.
+                     std::vector<float>      sun_sdf      = {} );
 
         // GRAPHICS_STORAGE_READ buffer handle, sized for MAX_EMITTERS
         // entries. SDL_GPU's cycle=true on upload swaps the underlying
@@ -69,6 +71,7 @@ class emitter_collector
         std::vector<uint8_t>    pending_transparency_;
         std::vector<uint8_t>    pending_sky_vis_;
         std::vector<float>      pending_sdf_;
+        std::vector<float>      pending_sun_sdf_;   // Phase 2.3 wall-only sun SDF
         std::vector<float>      pending_vis_;
         int  pending_runtime_w_ = 0;
         int  pending_runtime_h_ = 0;

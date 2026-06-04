@@ -90,6 +90,7 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
     // shadow=0 every emitter beyond ~1 tile.
     std::vector<uint8_t> transparency;
     std::vector<float>   sdf;
+    std::vector<float>   sun_sdf;   // Phase 2.3: wall-only sun SDF (trees excluded)
     std::vector<uint8_t> sky_vis;
     std::vector<float>   vis;      // per-tile visibility for soft vision falloff (x-major)
     int sdf_runtime_w = 0;
@@ -143,6 +144,35 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
             }
             sdf_runtime_w = W;   // tile dims; the SS factor is implicit (shader SDF_SS)
             sdf_runtime_h = H;
+
+            // Phase 2.3: wall-only sun SDF. Rebuild the SS transparency grid
+            // with TREE tiles forced fully transparent → the sun shadow march
+            // ignores them (their silhouette comes from the screen-space shadow
+            // mask instead of a blocky SDF column). Trees stay opaque in `sdf`
+            // above, so they still occlude emitters + form AO cavities. Separate
+            // per-tile loop (32k flag lookups, not per-subcell) — leaves the main
+            // trans_ss loop untouched.
+            std::vector<float> trans_ss_sun( static_cast<size_t>( SW ) * SH );
+            for( int x = 0; x < W; ++x ) {
+                for( int y = 0; y < H; ++y ) {
+                    float t = mc.transparency_cache[ x * H + y ];
+                    if( m.has_flag( TFLAG_TREE,
+                                    tripoint_bub_ms( point_bub_ms( x, y ), zlev ) ) ) {
+                        t = 1.0f;   // open air to the sun (max transparent)
+                    }
+                    const int bx = x * ss;
+                    const int by = y * ss;
+                    for( int sx = 0; sx < ss; ++sx ) {
+                        for( int sy = 0; sy < ss; ++sy ) {
+                            trans_ss_sun[ static_cast<size_t>( bx + sx ) * SH + ( by + sy ) ] = t;
+                        }
+                    }
+                }
+            }
+            sun_sdf = lighting::compute_sdf_cpu( trans_ss_sun.data(), SW, SH );
+            for( float &d : sun_sdf ) {
+                d *= inv_ss;   // subcell distance → tile units
+            }
 
             // Sky visibility from outside_cache (same x-major layout as
             // transparency_cache, idx = x*H+y). 255 = open sky overhead,
@@ -319,7 +349,8 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
                             std::move( sky_vis ),
                             std::move( vis ),
                             sdf_runtime_w,
-                            sdf_runtime_h );
+                            sdf_runtime_h,
+                            std::move( sun_sdf ) );
 
     return result;
 }

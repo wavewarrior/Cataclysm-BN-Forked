@@ -256,7 +256,8 @@ class sprite_batcher
                                      SDL_GPUTexture   *indirect_tex = nullptr,
                                      SDL_GPUBuffer    *vis_buf      = nullptr,
                                      const sun_params *sp           = nullptr,
-                                     const debug_params *dbg        = nullptr );
+                                     const debug_params *dbg        = nullptr,
+                                     SDL_GPUBuffer    *sun_sdf_buf  = nullptr );
 
         // Silhouette sun-shadow mask (Phase 2). Bound as fragment storage-read
         // texture slot 1 (t2/space2) for sprite.frag. Set separately from the
