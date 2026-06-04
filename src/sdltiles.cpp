@@ -1135,8 +1135,13 @@ void refresh_display()
         float weather_mult = 1.0f;
         if( g ) {
             const float base = sunlight( calendar::turn, false );
-            if( base > 1.0f ) {
-                const int mod = get_weather().weather_id->light_modifier;
+            // weather_id can be a stale/unregistered id on the main menu after
+            // quit-to-menu (the world's weather_type JSON is unloaded but g and
+            // the weather_manager survive). is_valid() guards the factory lookup
+            // so the dangling "clear" id no longer triggers a debugmsg storm.
+            const weather_type_id wid = get_weather().weather_id;
+            if( base > 1.0f && wid.is_valid() ) {
+                const int mod = wid->light_modifier;
                 weather_mult = std::clamp( ( base + static_cast<float>( mod ) ) / base,
                                            0.0f, 1.0f );
             }
