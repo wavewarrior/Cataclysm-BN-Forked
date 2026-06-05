@@ -1,6 +1,7 @@
 #include "catch/catch.hpp"
 
 #include <string>
+#include <vector>
 
 #include "panels.h"
 #include "type_id.h"
@@ -121,5 +122,52 @@ TEST_CASE( "reload_widget_layouts registers the custom sidebar layout", "[widget
     pm.reload_widget_layouts();
     CHECK( pm.has_layout( "custom" ) );
     // Built-ins remain.
+    CHECK( pm.has_layout( "labels" ) );
+}
+
+TEST_CASE( "W_ALWAYS_DRAW maps to the window_panel force-draw flag", "[widget][sidebar]" )
+{
+    // The Map panel must redraw every frame (smooth GPU minimap) — the hardcoded
+    // builder passes always_draw=true; the JSON path expresses it via W_ALWAYS_DRAW.
+    REQUIRE( widget_id( "map" ).is_valid() );
+    CHECK( make_native_widget_panel( *widget_id( "map" ), 44 ).always_draw );
+    // A widget without the flag stays event-driven.
+    REQUIRE( widget_id( "stats" ).is_valid() );
+    CHECK_FALSE( make_native_widget_panel( *widget_id( "stats" ), 44 ).always_draw );
+}
+
+TEST_CASE( "widget-engine layouts reproduce the four built-ins", "[widget][sidebar]" )
+{
+    // Each we_* sidebar container mirrors initialize_default_*_panels: same panel
+    // count and the same first/last panel, in builder order. (Native casing/heights
+    // are covered by the per-widget defs; this guards the container transcription.)
+    struct layout_case {
+        std::string id;
+        size_t count;
+        std::string front;
+        std::string back;
+    };
+    const std::vector<layout_case> cases = {
+        { "we_classic",       19, "health_classic", "ai_goal" },
+        { "we_compact",       17, "limbs_compact",  "ai_goal" },
+        { "we_labels_narrow", 21, "hint",           "ai_goal" },
+        { "we_labels",        22, "hint",           "ai_goal" },
+    };
+    for( const layout_case &c : cases ) {
+        CAPTURE( c.id );
+        const widget_id sb_id( c.id );
+        REQUIRE( sb_id.is_valid() );
+        const widget &s = *sb_id;
+        CHECK( s.style() == "sidebar" );
+        REQUIRE( s._widgets.size() == c.count );
+        CHECK( s._widgets.front() == widget_id( c.front ) );
+        CHECK( s._widgets.back() == widget_id( c.back ) );
+    }
+
+    // They register as selectable layouts beside the built-ins, never replacing them.
+    panel_manager &pm = panel_manager::get_manager();
+    pm.reload_widget_layouts();
+    CHECK( pm.has_layout( "we_classic" ) );
+    CHECK( pm.has_layout( "we_labels" ) );
     CHECK( pm.has_layout( "labels" ) );
 }

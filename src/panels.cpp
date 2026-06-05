@@ -2750,8 +2750,12 @@ window_panel make_native_widget_panel( const widget &w, int width )
     // default-off panels.
     const int panel_width = std::max( 1, width > 0 ? width : w.width() );
     const bool default_toggle = !w.has_flag( "W_DISABLED_BY_DEFAULT" );
+    // W_ALWAYS_DRAW → window_panel force_draw: the panel redraws every frame even
+    // when the sidebar isn't otherwise dirty (the hardcoded Map/draw_mminimap panel
+    // passes always_draw=true so the GPU minimap stays smooth while moving).
+    const bool force_draw = w.has_flag( "W_ALWAYS_DRAW" );
     return window_panel( draw_func, w.getId().str(), w.height(), panel_width,
-                         default_toggle, resolve_widget_show_if( w ) );
+                         default_toggle, resolve_widget_show_if( w ), force_draw );
 }
 
 // Color for a value widget's number, mirroring how the native draw_* panels

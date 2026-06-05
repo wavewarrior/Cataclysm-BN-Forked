@@ -565,6 +565,46 @@ Remaining: Stage 6 (`sync_lua_panels` rework + save migration; promote storage t
 the `panel_layout` wrapper) and the Stage-7 default-flip gate. The deferred arrange
 tree folds into whichever later stage first needs widget composition.
 
+## Stage 7 status — layout parity (default-capable, 2026-06-03)
+
+Stage 7 **gate #2 (layout parity)** done: BN's four hardcoded layouts are now
+reproduced as JSON `style:"sidebar"` widgets, so the widget engine is
+**default-capable**. They ship as ADDITIONAL selectable layouts (parallel ids,
+`we_` prefix) beside the built-ins — the actual default-flip (gate #3: delete the
+`draw_*` builders) stays a separate release step.
+
+- **`data/json/ui/sidebar.json`**: 4 new containers `we_classic` (19), `we_compact`
+  (17), `we_labels_narrow` (21), `we_labels` (22) — each a verbatim transcription of
+  `initialize_default_{classic,compact,label_narrow,label}_panels` (`panels.cpp:2486-
+  2617`): same panels, order, toggle defaults (`W_DISABLED_BY_DEFAULT`), `show_if`
+  gates (`spell_panel`/`veh_panel`). The pre-existing 22 wide native defs already
+  WERE the `labels` set, so `we_labels` reuses them wholesale; the other three added
+  ~33 native defs for the classic/compact/narrow `draw_*` variants. The container
+  width drives all child widths (the `make_native_widget_panel` rule), so a few
+  builder quirks where a disabled panel hardcoded width 32 inside a width-44 layout
+  (`comp.Armor`, `Sim.Compass`) now take the container width — accepted, same as the
+  shipped `custom` container, all on `W_DISABLED_BY_DEFAULT` panels.
+- **Gate #1 (var parity)** was already satisfiable (Part B3) — the default layouts
+  show no unsupported var; this port uses native wrappers, so no var work was needed.
+- **One C++ change** (`make_native_widget_panel`, `panels.cpp`): honor a
+  `W_ALWAYS_DRAW` widget flag → the `window_panel` `force_draw` ctor arg. The Map
+  (`draw_mminimap`) panel needs it (the hardcoded builders pass `always_draw=true`
+  so the GPU minimap redraws every frame; `game.cpp:4372` `panel.always_draw ||
+  draw_this_turn`). Added the flag to the `map` def. `widget::has_flag(string)` takes
+  arbitrary flag strings (no enum/registration), same path as `W_DISABLED_BY_DEFAULT`.
+  Side effect: the shipped `custom` container reuses the same `map` def, so its
+  minimap now also redraws smoothly — a strict improvement, but a behavior change to
+  already-shipped data, noted for the record.
+- **Tests** (`tests/widget_test.cpp`): `W_ALWAYS_DRAW`→`always_draw` (map true, stats
+  false); each `we_*` builds the expected panel count + first/last id in builder order
+  + registers via `reload_widget_layouts` without replacing the built-ins.
+- Verified: `cataclysm-bn-tiles` + `cata_test-tiles` link green; `[widget]`+`[ui_tween]`
+  220 assertions / 22 cases; **full suite 7,765,782 assertions / 733 cases** (the
+  data-integrity pass over all loaded widgets covers the new defs). **In-game A/B
+  (user-side):** `}` selector now lists `we_classic`/`we_compact`/`we_labels_narrow`/
+  `we_labels` beside the built-ins; select each, compare to its hardcoded twin (panel
+  set/order/toggles/heights, gating, and the Map redrawing smoothly while moving).
+
 ## Go / No-Go recommendation
 
 **GO.** The recommendation rests on **directly-verified BN-side facts**, not the
