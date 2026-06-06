@@ -310,9 +310,17 @@ input_context game::get_player_input( std::string &action )
         // we don't wake 30x/sec for nothing — this is re-evaluated each iteration
         // below, since a tween only starts once the first redraw runs.
         constexpr int ANIM_FRAME_MS = 33;
+        constexpr int SPRITE_ANIM_FRAME_MS = 25; // ~40fps while sprite animations are live
         const auto anim_timeout = []( bool weather, bool sct ) {
-            return ( weather || sct ) ? 125
-                   : sidebar_requires_animation() ? ANIM_FRAME_MS : 125;
+            // Weather/SCT frame-stepping is tuned to 125ms ticks; keep that while active
+            // (sprite anims degrade to 8fps during rain rather than speeding the rain 5x).
+            if( weather || sct ) {
+                return 125;
+            }
+            if( creatures_require_animation() ) {
+                return SPRITE_ANIM_FRAME_MS;
+            }
+            return sidebar_requires_animation() ? ANIM_FRAME_MS : 125;
         };
         ctxt.set_timeout( anim_timeout( animate_weather, animate_sct ) );
 
@@ -370,7 +378,7 @@ input_context game::get_player_input( std::string &action )
             }
             // We don't cache these checks as their result may change after 1st redraw
             if( minimap_requires_animation() || terrain_requires_animation()
-            || sidebar_requires_animation() ) {
+            || sidebar_requires_animation() || creatures_require_animation() ) {
                 // TODO: we redraw *everything* just to animate a couple blinking dots
                 //       on the minimap or a few tiles.
                 //       This is far from ideal, and can probably be done much cheaper
@@ -770,6 +778,7 @@ static void smash()
     }
     didit = here.bash( smashp, smashskill, false, false, smash_floor ).did_bash;
     if( didit ) {
+        u.anim_on_attack( smashp, false ); // sprite lunge toward the smashed tile
         if( !mech_smash ) {
             u.handle_melee_wear( weapon );
             const int mod_sta = ( ( weapon.weight() / 10_gram ) + 200 + static_cast<int>

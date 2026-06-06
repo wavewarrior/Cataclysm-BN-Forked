@@ -806,6 +806,10 @@ static void draw_lighting_dev_ui()
     ImGui::SliderFloat( "mem dim", &g_dbg_params.mem_dim, 0.0f, 1.0f );
     ImGui::SliderFloat( "mem radius", &g_dbg_params.mem_radius, 1.0f, 60.0f, "%.0f" );
 
+    ImGui::SeparatorText( "Foliage sway" );
+    ImGui::SliderFloat( "sway amplitude", &g_dbg_params.sway_amp, 0.0f, 8.0f, "%.1f px" );
+    ImGui::SliderFloat( "sway frequency", &g_dbg_params.sway_freq, 0.0f, 3.0f, "%.1f Hz" );
+
     // Diagnostics — the former top-left curses HUD, now read-only ImGui text.
     // Reads s_emo (file-scope, populated by the g_dbg_lighting overlay block in
     // refresh_display BEFORE new_frame() runs, so values are current this frame).
@@ -1177,6 +1181,9 @@ void refresh_display()
         // frame_light_inputs. shader uses these for debug visualization (F7 cycles
         // modes, F8/F9 adjust scales). Defaults are all zeroed (no-op).
         in.debug = g_dbg_params;
+        // Feed a live wall-clock seconds (wrapped to keep float32 phase precision)
+        // so the foliage sway shader has a non-zero anim_time → sin oscillates.
+        in.debug.anim_time = std::fmod( static_cast<float>( SDL_GetTicks() ) / 1000.0f, 1000.0f );
         // Inject the player map-tile centre as the radial vision-bubble origin
         // (DATA, not a knob — overwrites the unused g_dbg_params slots). Matches
         // the shader world_pos space (= map tile index). Main menu (g==null)

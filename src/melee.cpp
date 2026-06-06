@@ -482,6 +482,7 @@ void Character::melee_attack( Creature &t, bool allow_special, const matec_id *f
                               bool allow_unarmed )
 {
     melee::melee_stats.attack_count += 1;
+    anim_on_attack( t.bub_pos(), false ); // sprite lunge toward the target
     // Old check for if the target is player retained in case you somehow hit yourself
     if( !t.is_player() && is_player() ) {
         t.add_effect( effect_hit_by_player, 10_minutes ); // Flag as attacked by us for AI

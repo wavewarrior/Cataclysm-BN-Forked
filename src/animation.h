@@ -59,6 +59,9 @@ bucketed_points optimal_bucketing( const bucketed_points &buckets, size_t max_bu
 
 bool minimap_requires_animation();
 bool terrain_requires_animation();
+bool creatures_require_animation();
+// Register a transient bash-shake on a terrain/furniture tile (sprite-animation system).
+void note_tile_bash( const tripoint_bub_ms &p );
 
 struct draw_sprite_line_options {
     const tripoint_bub_ms &p;

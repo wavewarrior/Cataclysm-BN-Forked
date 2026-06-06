@@ -324,6 +324,7 @@ enum ter_bitflags : int {
     TFLAG_SHRUB,
     TFLAG_TREE,
     TFLAG_YOUNG,
+    TFLAG_TALL_GRASS,
     TFLAG_SUSPENDED,
     TFLAG_FRIDGE,
     TFLAG_FREEZER,

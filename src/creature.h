@@ -1,6 +1,8 @@
 #pragma once
 
+#include <array>
 #include <climits>
+#include <cstdint>
 #include <map>
 #include <set>
 #include <unordered_map>
@@ -186,12 +188,98 @@ enum FacingDirection {
     FD_RIGHT = 2
 };
 
+// Transient per-creature sprite-animation state (movement bob/slide, idle foot-to-foot
+// sway, hit reaction, attack lunge). Pure data — NO SDL/render types — and NOT serialized:
+// it is render gloss recomputed each frame, meaningless across save/load.
+//
+// Split ownership:
+//   * sim hooks (move/hit/attack) write the trigger fields + bump the matching *_seq
+//     counter (and push the hit ring). They never touch wall-clock.
+//   * the render layer detects a changed *_seq, latches SDL wall-time into *_wall, then
+//     computes the per-frame outputs via update_animation_state().
+struct animation_state {
+    // --- written by sim hooks ---
+    float move_dir_x = 0.f, move_dir_y = 0.f;   // last step direction (tiles)
+    bool  move_slide = false;                   // true only for a single-tile step
+    uint32_t move_seq = 0;
+
+    float attack_dir_x = 0.f, attack_dir_y = 0.f; // toward target
+    bool  attack_ranged = false;
+    uint32_t attack_seq = 0;
+
+    struct hit_evt {
+        float dir_x = 0.f, dir_y = 0.f;         // away from attacker (0,0 if unknown)
+        float intensity = 0.f;
+        uint32_t seq = 0;
+    };
+    std::array<hit_evt, 3> hit_ring{};          // bounded queue, drop-oldest
+    uint32_t hit_push = 0;                       // sim tail; total pushes ever
+
+    // --- owned by the render layer (latch + read cursor) ---
+    uint32_t move_latched = 0, attack_latched = 0, hit_consumed = 0;
+    double move_wall = 0.0, attack_wall = 0.0, hit_wall = 0.0; // SDL wall-seconds at latch
+
+    // active hit slot the render layer popped from the ring (valid while hit anim plays)
+    hit_evt hit_active{};
+
+    // --- per-frame computed outputs (set by update_animation_state) ---
+    float bob_offset_y = 0.f;       // pixels
+    float slide_offset_x = 0.f;     // TILE units (renderer scales by tile size)
+    float slide_offset_y = 0.f;     // TILE units
+    float tilt_degrees = 0.f;       // enqueue_tile_sprite takes degrees; vertex rotates center-pivot
+    float idle_offset_x = 0.f;      // pixels — idle foot-to-foot weight shift
+    float idle_offset_y = 0.f;      // pixels
+    float idle_tilt = 0.f;          // degrees — idle rock
+    float hit_flash = 0.f;          // 0..1, drives tint (white if avatar, else red)
+    float hit_offset_x = 0.f, hit_offset_y = 0.f;
+    float hit_tilt = 0.f;
+    float attack_offset_x = 0.f, attack_offset_y = 0.f;
+    float attack_tilt = 0.f;
+};
+
+// Tuning knobs for update_animation_state, filled render-side from in-game options so
+// creature.cpp stays free of the options surface. Defaults mirror the option defaults.
+struct animation_tuning {
+    bool  move_bob = true;
+    bool  breathing = true;
+    bool  hit_reaction = true;
+    bool  attack_lunge = true;
+    float bob_amplitude = 4.f;          // pixels
+    float bob_duration = 0.3f;          // seconds
+    float idle_sway = 1.5f;             // pixels — idle foot-to-foot sway amplitude
+    float hit_push = 6.f;               // pixels of kickback
+    float hit_duration = 0.25f;         // seconds (single hit)
+    float hit_flash_intensity = 1.f;
+    float attack_amplitude = 4.f;       // pixels (melee); ranged recoils at half
+    float attack_duration = 0.2f;       // seconds
+};
+
+// Render-side per-frame update: detects new sim events via the *_seq counters, latches
+// wall-time, pops the hit ring, and computes the output offsets/tilt/scale/flash.
+// Offsets are in PIXELS except slide_offset_{x,y} which are in TILE units (the renderer
+// scales those by tile_pixel_size, since they must track zoom). `wall_now` is SDL
+// wall-clock seconds (monotonic). No SDL dependency lives here.
+void update_animation_state( animation_state &state, const animation_tuning &tuning,
+                             double wall_now, float idle_phase = 0.f );
+
 class Creature
 {
     public:
         virtual ~Creature();
 
         static const std::map<std::string, creature_size> size_map;
+
+        // Transient sprite-animation state (render gloss; not serialized). See
+        // animation_state above. Sim hooks write triggers; the tiled renderer latches
+        // wall-time and computes outputs each frame. `mutable` because the renderer
+        // updates it through const Creature refs (it is a render cache, like gpu_light).
+        mutable animation_state anim_state;
+
+        // Sim-side write API for the animation triggers (no SDL/render dependency).
+        // Hook sites call these; the renderer reads anim_state via update_animation_state.
+        void anim_on_move( const tripoint_bub_ms &from, const tripoint_bub_ms &to );
+        void anim_on_hit( const Creature *source, float intensity ); // `this` is the victim
+        void anim_on_attack( const tripoint_bub_ms &target, bool ranged );
 
         // Like disp_name, but without any "the"
         virtual std::string get_name() const = 0;

@@ -1196,6 +1196,7 @@ int ranged::fire_gun( Character &who, const tripoint_bub_ms &target, int max_sho
                       item *ammo, const std::optional<tripoint_bub_ms> &shot_origin )
 {
     int attack_moves = time_to_attack( who, gun, ammo );
+    who.anim_on_attack( target, true ); // sprite recoil away from the target
 
     if( !gun.is_gun() ) {
         debugmsg( "%s tried to fire non-gun (%s).", who.name, gun.tname() );

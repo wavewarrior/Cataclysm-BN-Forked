@@ -186,6 +186,163 @@ Creature::Creature( const Creature &source )
 
 Creature::~Creature() = default;
 
+void update_animation_state( animation_state &s, const animation_tuning &t, double now,
+                             float idle_phase )
+{
+    // ---- Movement: slide (single-tile only) + decaying bob/tilt ----
+    if( t.move_bob && s.move_seq != 0 ) {
+        if( s.move_seq != s.move_latched ) {
+            s.move_latched = s.move_seq;
+            s.move_wall = now;
+        }
+        const float dt = static_cast<float>( now - s.move_wall );
+        // Slide: sprite travels from the old tile toward the new over ~0.15s. Output in
+        // TILE units (renderer scales by tile size). Only for a true single-step move.
+        if( s.move_slide ) {
+            const float slide_dur = 0.15f;
+            const float frac = std::min( 1.f, dt / slide_dur );
+            const float remain = 1.f - frac;                 // 1 at start, 0 arrived
+            s.slide_offset_x = -s.move_dir_x * remain;
+            // No vertical positional slide: displacing a (tile-taller, bottom-anchored)
+            // sprite downward draws it over the floor below and reads as clipping into it —
+            // unavoidable for one direction with any sign. Vertical moves use the up-hop bob.
+            s.slide_offset_y = 0.f;
+        } else {
+            s.slide_offset_x = 0.f;
+            s.slide_offset_y = 0.f;
+        }
+        const float decay = std::max( 0.f, 1.f - dt / t.bob_duration );
+        const float phase = dt * 20.9f;
+        // Up-only hop: screen +y is down, so a positive bob would sink the sprite into the
+        // floor. Use -|sin| so the sprite only ever rises above its feet, then settles.
+        s.bob_offset_y = -std::fabs( std::sin( phase ) ) * t.bob_amplitude * decay;
+        s.tilt_degrees = std::sin( phase ) * 3.f * decay;
+    } else {
+        s.slide_offset_x = s.slide_offset_y = 0.f;
+        s.bob_offset_y = 0.f;
+        s.tilt_degrees = 0.f;
+    }
+
+    // ---- Idle: continuous foot-to-foot weight shift (sway + rock + foot-plant lift) ----
+    // idle_phase desyncs creatures so a horde doesn't sway in unison. Low frequency reads
+    // as a relaxed shift of weight rather than a jitter.
+    if( t.breathing ) {
+        const float sway = std::sin( static_cast<float>( now ) * 1.6f + idle_phase );
+        s.idle_offset_x = sway * t.idle_sway;                        // shift left/right
+        s.idle_tilt = sway * 1.2f;                                   // lean with the weight
+        // Vertical bob: rises on each foot plant (twice per sway cycle) for an up/down bounce.
+        s.idle_offset_y = -std::fabs( sway ) * t.idle_sway * 0.9f;
+    } else {
+        s.idle_offset_x = 0.f;
+        s.idle_offset_y = 0.f;
+        s.idle_tilt = 0.f;
+    }
+
+    // ---- Hit reaction: bounded ring queue, sequential stutter ----
+    if( t.hit_reaction && s.hit_push != 0 ) {
+        // Drop-oldest: never replay a hit that has scrolled out of the 3-slot ring.
+        const uint32_t oldest_avail = s.hit_push > 3u ? s.hit_push - 3u : 0u;
+        s.hit_consumed = std::max( s.hit_consumed, oldest_avail );
+        const uint32_t pending = s.hit_push - s.hit_consumed;
+        // Shrink per-hit duration as the queue deepens so the whole burst stays ~0.4s.
+        const float eff_dur = pending > 1u
+                              ? std::max( 0.08f, 0.4f / static_cast<float>( pending ) )
+                              : t.hit_duration;
+        const bool active_done = ( s.hit_active.seq == 0 ) ||
+                                 ( static_cast<float>( now - s.hit_wall ) >= eff_dur );
+        if( s.hit_consumed < s.hit_push && active_done ) {
+            const uint32_t target = s.hit_consumed + 1u;     // 1-based push id
+            s.hit_active = s.hit_ring[( target - 1u ) % s.hit_ring.size()];
+            s.hit_consumed = target;
+            s.hit_wall = now;
+        }
+        const float dt = static_cast<float>( now - s.hit_wall );
+        const float cur_dur = pending > 1u
+                              ? std::max( 0.08f, 0.4f / static_cast<float>( std::max( 1u, pending ) ) )
+                              : t.hit_duration;
+        const float flash_dur = cur_dur * 0.6f;
+        s.hit_flash = std::max( 0.f, 1.f - dt / flash_dur ) * t.hit_flash_intensity;
+        const float decay = std::max( 0.f, 1.f - dt / cur_dur );
+        const float phase = dt * 15.7f;
+        const float kick = std::cos( phase ) * t.hit_push * decay * s.hit_active.intensity;
+        s.hit_offset_x = kick * s.hit_active.dir_x;
+        s.hit_offset_y = kick * s.hit_active.dir_y;
+        s.hit_tilt = std::sin( phase ) * ( 5.f * static_cast<float>( M_PI ) / 180.f ) * decay;
+        if( decay <= 0.f && s.hit_consumed >= s.hit_push ) {
+            s.hit_active = animation_state::hit_evt{};       // burst finished; clear slot
+        }
+    } else {
+        s.hit_flash = 0.f;
+        s.hit_offset_x = s.hit_offset_y = 0.f;
+        s.hit_tilt = 0.f;
+    }
+
+    // ---- Attack lunge: melee lunges forward, ranged recoils back ----
+    if( t.attack_lunge && s.attack_seq != 0 ) {
+        if( s.attack_seq != s.attack_latched ) {
+            s.attack_latched = s.attack_seq;
+            s.attack_wall = now;
+        }
+        const float dt = static_cast<float>( now - s.attack_wall );
+        const float decay = std::max( 0.f, 1.f - dt / t.attack_duration );
+        const float phase = dt * 15.7f;
+        const float amp = s.attack_ranged ? -t.attack_amplitude * 0.5f : t.attack_amplitude;
+        const float push = std::sin( phase ) * amp * decay;
+        s.attack_offset_x = push * s.attack_dir_x;
+        s.attack_offset_y = push * s.attack_dir_y;
+        s.attack_tilt = std::sin( phase ) *
+                        ( ( s.attack_ranged ? 2.f : -3.f ) * static_cast<float>( M_PI ) / 180.f ) * decay;
+    } else {
+        s.attack_offset_x = s.attack_offset_y = 0.f;
+        s.attack_tilt = 0.f;
+    }
+}
+
+void Creature::anim_on_move( const tripoint_bub_ms &from, const tripoint_bub_ms &to )
+{
+    anim_state.move_dir_x = static_cast<float>( to.x() - from.x() );
+    anim_state.move_dir_y = static_cast<float>( to.y() - from.y() );
+    // Slide only for a true single-tile step; teleports / long jumps snap (bob only).
+    const int dx = std::abs( to.x() - from.x() );
+    const int dy = std::abs( to.y() - from.y() );
+    anim_state.move_slide = ( std::max( dx, dy ) == 1 ) && ( to.z() == from.z() );
+    ++anim_state.move_seq;
+}
+
+void Creature::anim_on_hit( const Creature *source, float intensity )
+{
+    animation_state::hit_evt e;
+    e.intensity = std::min( 1.f, std::max( 0.f, intensity ) );
+    if( source != nullptr && source != this ) {
+        const tripoint_bub_ms sp = source->bub_pos();
+        const tripoint_bub_ms vp = bub_pos();
+        const float dx = static_cast<float>( vp.x() - sp.x() );
+        const float dy = static_cast<float>( vp.y() - sp.y() );
+        const float len = std::sqrt( dx * dx + dy * dy );
+        if( len > 0.f ) {
+            e.dir_x = dx / len;     // kick away from the attacker
+            e.dir_y = dy / len;
+        }
+    } // else: no known source (environmental) -> flash only, zero direction
+    ++anim_state.hit_push;
+    e.seq = anim_state.hit_push;
+    anim_state.hit_ring[( anim_state.hit_push - 1u ) % anim_state.hit_ring.size()] = e;
+}
+
+void Creature::anim_on_attack( const tripoint_bub_ms &target, bool ranged )
+{
+    const tripoint_bub_ms ap = bub_pos();
+    const float dx = static_cast<float>( target.x() - ap.x() );
+    const float dy = static_cast<float>( target.y() - ap.y() );
+    const float len = std::sqrt( dx * dx + dy * dy );
+    if( len > 0.f ) {
+        anim_state.attack_dir_x = dx / len;   // toward target
+        anim_state.attack_dir_y = dy / len;
+    }
+    anim_state.attack_ranged = ranged;
+    ++anim_state.attack_seq;
+}
+
 std::vector<std::string> Creature::get_grammatical_genders() const
 {
     // Returning empty list means we use the language-specified default
@@ -1223,6 +1380,10 @@ dealt_damage_instance Creature::deal_damage( Creature *source, bodypart_id bp,
     mod_pain( total_pain );
 
     apply_damage( source, source_weapon, source_projectile, bp, total_damage );
+    if( total_damage > 0 ) {
+        // Sprite hit-reaction trigger (covers melee/ranged/environmental — all route here).
+        anim_on_hit( source, static_cast<float>( total_damage ) / 50.f );
+    }
     return dealt_dams;
 }
 dealt_damage_instance Creature::deal_damage( Creature *source, bodypart_id bp,

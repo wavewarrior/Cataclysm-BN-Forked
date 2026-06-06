@@ -33,6 +33,7 @@
 #include "weighted_list.h"
 
 class Character;
+class Creature;
 struct char_trait_data;
 using mutation = std::pair<const trait_id, char_trait_data>;
 class monster;
@@ -220,7 +221,8 @@ class texture
                                   float light_r = 1.0f,
                                   float light_g = 1.0f,
                                   float light_b = 1.0f,
-                                  float light_mul = 0.0f ) const {
+                                  float light_mul = 0.0f,
+                                  float sway = 0.0f ) const {
             if( !atlas_tex || atlas_w <= 0 || atlas_h <= 0 ) {
                 return false;
             }
@@ -253,6 +255,7 @@ class texture
             s.tint_a = alpha;
             s.rotation = static_cast<float>( rotation_degrees * 3.14159265358979323846 / 180.0 );
             s.light_mul = light_mul;
+            s.pad1 = sway;            // foliage sway weight (read by sprite.vert)
             lighting::get_render_state().queue_tile_sprite( atlas_tex, s );
             return true;
         }
@@ -755,6 +758,32 @@ struct tile_search_params {
     int rota;
 };
 
+// Composited per-frame sprite-animation transform applied to a creature's sprite + all
+// its overlays (rigid body). Set into cata_tiles::active_anim_xform_ around a creature
+// draw (mirrors the active_warp_hash pattern) and read in draw_sprite_at. Identity = no-op.
+struct sprite_xform {
+    float off_x = 0.f;       // pixel offset (bob/slide/hit/attack composited)
+    float off_y = 0.f;
+    float tilt_deg = 0.f;    // added to the sprite's rotation (degrees)
+    float flash_r = 0.f;     // additive light tint (white if avatar, red otherwise)
+    float flash_g = 0.f;
+    float flash_b = 0.f;
+    bool fg_only = false;    // tile-bash recoil: apply to fg layer only (ground/bg stays put)
+    bool active() const {
+        return off_x != 0.f || off_y != 0.f || tilt_deg != 0.f ||
+               flash_r != 0.f || flash_g != 0.f || flash_b != 0.f;
+    }
+};
+
+// A transient bash shake on a terrain/furniture tile. Stamped with SDL wall-time at the
+// moment of the bash (tiles don't move, so position is a stable key); self-cleans when the
+// shake decays. Stored render-side in cata_tiles::tile_hits_.
+struct tile_hit_state {
+    double wall = 0.0;     // SDL wall-clock seconds when the bash landed
+    float dir_x = 0.f;     // recoil direction (away from the basher), normalized
+    float dir_y = 0.f;
+};
+
 class cata_tiles
 {
     public:
@@ -856,7 +885,7 @@ class cata_tiles
                                   const tint_config &fg_tint,
                                   lit_level ll, bool apply_visual_effects,
                                   int overlay_count, bool as_independent_entity,
-                                  int &height_3d );
+                                  int &height_3d, float sway = 0.0f );
         /**
         * @brief Draw overmap tile, if it's transparent, then draw lower tile first
         *
@@ -889,7 +918,8 @@ class cata_tiles
                              const tint_config &tint, lit_level ll,
                              bool apply_visual_effects, int overlay_count,
                              int *height_3d, int retract = 0,
-                             size_t warp_hash = TILESET_NO_WARP );
+                             size_t warp_hash = TILESET_NO_WARP,
+                             float sway = 0.0f );
 
         /**
          * @brief Calls draw_sprite_at() twice each for foreground and background.
@@ -910,7 +940,7 @@ class cata_tiles
                            unsigned int loc_rand, int rota,
                            const tint_config &bg_tint, const tint_config &fg_tint,
                            lit_level ll, bool apply_visual_effects, int &height_3d,
-                           int overlay_count, int retract );
+                           int overlay_count, int retract, float sway = 0.0f );
 
         /**
          * @brief Draws a colored solid color tile at position, with optional blending
@@ -1295,6 +1325,34 @@ class cata_tiles
 
         // Active warp hash for character rendering (0 if none)
         size_t active_warp_hash = TILESET_NO_WARP;
+
+        // Sprite-animation transform for the creature currently being drawn (identity
+        // for terrain/items/UI). Set/reset around creature draws; read by draw_sprite_at.
+        sprite_xform active_anim_xform_;
+        // Per-frame animation context, refreshed once at the top of draw().
+        double anim_wall_now_ = 0.0;   // SDL wall-clock seconds
+        bool anim_enabled_ = false;    // master option AND tiles path
+        // True if any sprite animation produced motion this frame (breathing, a decaying
+        // event reaction, or a live tile-hit). Drives the redraw pump. Reset each draw().
+        mutable bool creatures_anim_active_ = false;
+        // Refresh anim_wall_now_/anim_enabled_ and the file-scope tuning from options.
+        void refresh_anim_frame();
+        // Run update_animation_state for `c` and composite its outputs into a transform.
+        sprite_xform compute_anim_xform( const Creature &c ) const;
+
+        // Active terrain/furniture bash shakes, keyed by tile (self-cleaning).
+        std::unordered_map<tripoint_bub_ms, tile_hit_state> tile_hits_;
+        // Compute the bash-shake transform for tile `p` (identity if none/expired); erases
+        // expired entries and keeps the redraw pump alive while a shake is live.
+        sprite_xform tile_hit_xform( const tripoint_bub_ms &p );
+
+    public:
+        // Whether sprite animations need the redraw pump to keep ticking (~40fps).
+        bool creatures_require_animation() const;
+        // Register a directional bash recoil on a tile (called from map::bash via a bridge).
+        void register_tile_hit( const tripoint_bub_ms &p, float dir_x, float dir_y );
+
+    private:
 
         pimpl<pixel_minimap> minimap;
 

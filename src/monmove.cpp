@@ -2260,7 +2260,9 @@ bool monster::move_to( const tripoint_bub_ms &p, bool force, bool step_on_critte
         }
     }
 
+    const tripoint_bub_ms anim_move_from = bub_pos();
     setpos( destination );
+    anim_on_move( anim_move_from, destination );
     footsteps( destination );
     set_underwater( will_be_water );
     // If an aquatic monster is aggressive and on the surface, have it swim where the player can see it

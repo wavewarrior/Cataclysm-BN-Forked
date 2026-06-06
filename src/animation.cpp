@@ -726,11 +726,8 @@ void game::draw_hit_mon( const tripoint_bub_ms &p, const monster &m, const bool 
         return;
     }
 
-    shared_ptr_fast<draw_callback_t> hit_cb = make_shared_fast<draw_callback_t>( [&]() {
-        tilecontext->init_draw_hit( p, m.type->id.str() );
-    } );
-    add_draw_callback( hit_cb );
-
+    // Tiles: the old single-frame hit flash is retired — the sprite-animation system draws
+    // the hit reaction (directional recoil + red flash) instead. Keep the pacing tick.
     bullet_animation().progress();
 }
 
@@ -756,19 +753,8 @@ void game::draw_hit_player( const Character &p, const int dam )
         return;
     }
 
-    static const std::string player_male   {"player_male"};
-    static const std::string player_female {"player_female"};
-    static const std::string npc_male      {"npc_male"};
-    static const std::string npc_female    {"npc_female"};
-
-    const std::string &type = p.is_player() ? ( p.male ? player_male : player_female )
-                              : p.male ? npc_male : npc_female;
-
-    shared_ptr_fast<draw_callback_t> hit_cb = make_shared_fast<draw_callback_t>( [&]() {
-        tilecontext->init_draw_hit( p.bub_pos(), type );
-    } );
-    add_draw_callback( hit_cb );
-
+    // Tiles: old single-frame hit flash retired — sprite-animation hit reaction (white flash
+    // + recoil on the avatar) replaces it. Keep the pacing tick.
     bullet_animation().progress();
 }
 
@@ -1256,4 +1242,35 @@ bool minimap_requires_animation()
 bool terrain_requires_animation()
 {
     return tilecontext->terrain_requires_animation();
+}
+
+bool creatures_require_animation()
+{
+    return tilecontext->creatures_require_animation();
+}
+
+void note_tile_bash( const tripoint_bub_ms &p )
+{
+    // tilecontext is null on the curses/headless path; bash runs there too.
+    if( !tilecontext ) {
+        return;
+    }
+    // Recoil away from the basher (use the avatar as the origin — bashes are player-driven
+    // or adjacent; this reads as the tile getting knocked away from you).
+    float dx = 0.f;
+    float dy = 0.f;
+    if( g ) {
+        const tripoint_bub_ms u = g->u.bub_pos();
+        dx = static_cast<float>( p.x() - u.x() );
+        dy = static_cast<float>( p.y() - u.y() );
+        const float len = std::sqrt( dx * dx + dy * dy );
+        if( len > 0.f ) {
+            dx /= len;
+            dy /= len;
+        } else {
+            dx = 0.f;
+            dy = 0.f;
+        }
+    }
+    tilecontext->register_tile_hit( p, dx, dy );
 }

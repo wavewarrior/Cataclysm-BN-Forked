@@ -23,6 +23,7 @@
 #include "active_item_cache.h"
 #include "ammo.h"
 #include "ammo_effect.h"
+#include "animation.h"
 #include "artifact.h"
 #include "avatar.h"
 #include "batch_turns.h"
@@ -4532,6 +4533,10 @@ bash_results map::bash( const tripoint_bub_ms &p, const int str,
     // If we still didn't bash anything solid (a vehicle) or a tile with SEALED flag, bash ter/furn
     if( !result.bashed_solid && !bashed_sealed ) {
         result |= bash_ter_furn( p, bsh );
+    }
+
+    if( result.did_bash ) {
+        note_tile_bash( p );   // sprite-animation bash shake (any connecting bash, not only destruction)
     }
 
     return result;

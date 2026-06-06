@@ -59,7 +59,7 @@ static_assert( sizeof( sun_params ) == 48, "sun_params wire-stable with SunParam
 
 // debug_params struct now lives in sprite_batcher.h so render_state.h can
 // embed it by value in frame_light_inputs. Wire-stable layout enforced here.
-static_assert( sizeof( debug_params ) == 112, "debug_params wire-stable with DebugParams cbuffer" );
+static_assert( sizeof( debug_params ) == 128, "debug_params wire-stable with DebugParams cbuffer" );
 
 // ---- 24h sun LUT -------------------------------------------------------
 // Defined at file scope so MSVC won't complain about static-local in nested block.
@@ -782,6 +782,10 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                     // shadow shear). Always pushed — both sprite.vert and
                     // shadow.vert declare FrameParams + LightParams.
                     SDL_PushGPUVertexUniformData( cur_cb, /*slot=*/1, &lp_use, sizeof( lp_use ) );
+                    // Vertex slot 2: DebugParams (foliage sway reads sway_amp/
+                    // sway_freq/anim_time here). sprite.vert declares b2/space1;
+                    // shadow.vert is a separate pipeline and ignores it.
+                    SDL_PushGPUVertexUniformData( cur_cb, /*slot=*/2, &lp_dbg_use, sizeof( lp_dbg_use ) );
                     // Fragment lighting cbuffers. The silhouette-shadow frag
                     // declares ZERO fragment cbuffers, so its batcher disables
                     // these pushes (push_frag_lighting_uniforms=false) to keep

@@ -1961,6 +1961,90 @@ void options_manager::add_options_graphics()
 
     get_option( "SKIP_EXPLOSION_ANIMATION_AFTER" ).setPrerequisite( "ANIMATIONS" );
 
+    add( "SPRITE_ANIMATIONS", graphics, translate_marker( "Sprite animations" ),
+         translate_marker( "If true, sprites bob when moving, breathe when idle, flinch when hit, and lunge when attacking (tiles renderer only)." ),
+         true
+       );
+    get_option( "SPRITE_ANIMATIONS" ).setPrerequisite( "ANIMATIONS" );
+
+    add( "SPRITE_MOVE_BOB", graphics, translate_marker( "Sprite movement bob" ),
+         translate_marker( "If true, sprites slide and bob in their direction of movement." ),
+         true
+       );
+    get_option( "SPRITE_MOVE_BOB" ).setPrerequisite( "SPRITE_ANIMATIONS" );
+
+    add( "SPRITE_BOB_AMPLITUDE", graphics, translate_marker( "Movement bob amplitude" ),
+         translate_marker( "Height in pixels of the movement bounce." ),
+         0.0, 10.0, 4.0, 0.5
+       );
+    get_option( "SPRITE_BOB_AMPLITUDE" ).setPrerequisite( "SPRITE_ANIMATIONS" );
+
+    add( "SPRITE_BOB_DURATION", graphics, translate_marker( "Movement bob duration" ),
+         translate_marker( "Seconds the movement bounce takes to settle." ),
+         0.1, 1.0, 0.3, 0.05
+       );
+    get_option( "SPRITE_BOB_DURATION" ).setPrerequisite( "SPRITE_ANIMATIONS" );
+
+    add( "SPRITE_BREATHING", graphics, translate_marker( "Sprite idle sway" ),
+         translate_marker( "If true, standing sprites shift their weight foot to foot." ),
+         true
+       );
+    get_option( "SPRITE_BREATHING" ).setPrerequisite( "SPRITE_ANIMATIONS" );
+
+    add( "SPRITE_IDLE_SWAY", graphics, translate_marker( "Idle sway amount" ),
+         translate_marker( "Pixels a standing sprite sways from side to side." ),
+         0.0, 4.0, 1.5, 0.25
+       );
+    get_option( "SPRITE_IDLE_SWAY" ).setPrerequisite( "SPRITE_ANIMATIONS" );
+
+    add( "SPRITE_HIT_REACTION", graphics, translate_marker( "Sprite hit reaction" ),
+         translate_marker( "If true, sprites flash and recoil when they take damage (you flash white, others red)." ),
+         true
+       );
+    get_option( "SPRITE_HIT_REACTION" ).setPrerequisite( "SPRITE_ANIMATIONS" );
+
+    add( "SPRITE_HIT_FLASH_INTENSITY", graphics, translate_marker( "Hit flash intensity" ),
+         translate_marker( "Brightness of the damage flash." ),
+         0.0, 2.0, 1.0, 0.1
+       );
+    get_option( "SPRITE_HIT_FLASH_INTENSITY" ).setPrerequisite( "SPRITE_ANIMATIONS" );
+
+    add( "SPRITE_HIT_PUSH", graphics, translate_marker( "Hit kickback distance" ),
+         translate_marker( "Pixels a sprite is knocked back when hit." ),
+         0.0, 20.0, 6.0, 1.0
+       );
+    get_option( "SPRITE_HIT_PUSH" ).setPrerequisite( "SPRITE_ANIMATIONS" );
+
+    add( "SPRITE_HIT_DURATION", graphics, translate_marker( "Hit reaction duration" ),
+         translate_marker( "Seconds a single hit reaction takes to settle." ),
+         0.1, 1.0, 0.25, 0.05
+       );
+    get_option( "SPRITE_HIT_DURATION" ).setPrerequisite( "SPRITE_ANIMATIONS" );
+
+    add( "SPRITE_ATTACK_LUNGE", graphics, translate_marker( "Sprite attack lunge" ),
+         translate_marker( "If true, sprites lunge forward on melee and recoil on ranged attacks." ),
+         true
+       );
+    get_option( "SPRITE_ATTACK_LUNGE" ).setPrerequisite( "SPRITE_ANIMATIONS" );
+
+    add( "SPRITE_ATTACK_AMPLITUDE", graphics, translate_marker( "Attack lunge amplitude" ),
+         translate_marker( "Pixels a sprite lunges when attacking." ),
+         0.0, 15.0, 4.0, 1.0
+       );
+    get_option( "SPRITE_ATTACK_AMPLITUDE" ).setPrerequisite( "SPRITE_ANIMATIONS" );
+
+    add( "SPRITE_ATTACK_DURATION", graphics, translate_marker( "Attack lunge duration" ),
+         translate_marker( "Seconds the attack lunge takes to settle." ),
+         0.1, 1.0, 0.2, 0.05
+       );
+    get_option( "SPRITE_ATTACK_DURATION" ).setPrerequisite( "SPRITE_ANIMATIONS" );
+
+    add( "SPRITE_TILE_HIT", graphics, translate_marker( "Tile bash shake" ),
+         translate_marker( "If true, furniture and terrain shake briefly when smashed." ),
+         true
+       );
+    get_option( "SPRITE_TILE_HIT" ).setPrerequisite( "SPRITE_ANIMATIONS" );
+
     add( "BULLETS_AS_LASERS", graphics, translate_marker( "Draw bullets as lines" ),
          translate_marker( "If true, bullets are drawn as lines of images, and the animation lasts only one frame." ),
          true

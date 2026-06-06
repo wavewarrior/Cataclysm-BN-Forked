@@ -2026,6 +2026,7 @@ void monster::melee_attack( Creature &target, float accuracy )
         return;
     }
 
+    anim_on_attack( target.bub_pos(), false ); // sprite lunge toward the target
     int hitspread = target.deal_melee_attack( this, melee::melee_hit_range( accuracy ) );
     const bool attack_success = hitspread >= 0;
 

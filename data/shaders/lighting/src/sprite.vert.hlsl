@@ -35,6 +35,45 @@ cbuffer LightParams : register(b1, space1) {
     float lp_sun_pad;
 };
 
+// Cbuffer slot 2: DebugParams (128 bytes — wire-stable with C++ debug_params).
+// Pushed to the vertex stage so foliage sway can read sway_amp/sway_freq/anim_time.
+// The full field list is declared so those three land at the correct byte offset;
+// every other field is ignored by this shader.
+cbuffer DebugParams : register(b2, space1) {
+    uint  debug_mode;
+    float debug_opacity;
+    float emitter_scale;
+    float sun_scale;
+    float sky_scale;
+    float shadow_k;
+    uint  shadow_steps;
+    float dither_amt;
+    float dither_bands;
+    float gi_strength;
+    float vis_curve;
+    float mem_dim;
+    float mem_desat;
+    float night_floor;
+    float day_floor;
+    float grade_desat;
+    float grade_cool;
+    float grade_bright;
+    float vis_radius;
+    float player_x;
+    float player_y;
+    float mem_radius;
+    float nrm_amount;
+    float nrm_relief;
+    float nrm_elev;
+    float sdf_sharp;
+    float ao_strength;
+    float shadow_mask_str;
+    float sway_amp;     // wind displacement amplitude (pixels); 0 = sway off
+    float sway_freq;    // wind oscillation frequency
+    float anim_time;    // wrapped render seconds (per-frame data)
+    float sway_pad;
+};
+
 struct VS_OUT {
     float4 pos      : SV_Position;
     float2 uv       : TEXCOORD0;
@@ -61,10 +100,6 @@ VS_OUT main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
     const float  sn     = sin(s.rotation);
     const float2 pixel  = centre + float2(off.x * cs - off.y * sn,
                                           off.x * sn + off.y * cs);
-    const float2 ndc = float2(
-        pixel.x / target_size.x *  2.0 - 1.0,
-        pixel.y / target_size.y * -2.0 + 1.0);
-
     // Use per-VERTEX pixel (not sprite centre) so world_pos interpolates across
     // the quad.  For small tiles (32px) the difference is < 0.5 tile — negligible.
     // For a fullscreen background quad this gives the lighting gradient we want.
@@ -86,9 +121,35 @@ VS_OUT main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
                              - float2(camera_off_x, camera_off_y);
     const bool   is_tall   = s.dst_h > tile_pixel_size * 1.5;
 
+    // ---- Foliage sway (cosmetic breeze: UV offset) ----
+    // Offsets UVs horizontally instead of displacing vertices, so the quad
+    // geometry stays solid (no black gaps from sheared edges). The atlas
+    // sampler uses CLAMP_TO_EDGE, so out-of-range UVs clamp to the sprite's
+    // edge texels rather than wrapping to neighbouring atlas content.
+    // swayw (s.pad1) is the per-sprite foliage weight set at enqueue (0 = no
+    // sway). Phase keys off the world-locked base tile so neighbouring plants
+    // desync and the motion sticks to terrain on scroll. The (1.0 - c.y)
+    // gradient pins the base and peaks at the canopy.
+    float2      c_uv = c;
+    const float swayw = s.pad1;
+    if( swayw > 0.0 ) {
+        const float ph   = base_tile.x * 0.7 + base_tile.y * 1.3;
+        const float wind = sin( anim_time * sway_freq + ph );
+        // Pin the base: the lower BASE_PIN fraction of the sprite stays planted (zero sway)
+        // and the bend ramps in toward the top, so the canopy sways while the trunk/base of
+        // a single un-split sprite (shrubs, etc.) stays put. Sharper than the old linear
+        // (1.0 - c.y), which still swayed the lower half.
+        const float BASE_PIN = 0.55;
+        const float bend = 1.0 - smoothstep( 0.0, BASE_PIN, c.y );
+        c_uv.x += bend * swayw * sway_amp * wind / max( s.dst_w, 1.0 );
+    }
+    const float2 ndc = float2(
+        pixel.x / target_size.x *  2.0 - 1.0,
+        pixel.y / target_size.y * -2.0 + 1.0);
+
     VS_OUT o;
     o.pos       = float4(ndc, 0.0, 1.0);
-    o.uv        = float2(s.src_u + c.x * s.src_uw, s.src_v + c.y * s.src_vh);
+    o.uv        = float2(s.src_u + c_uv.x * s.src_uw, s.src_v + c_uv.y * s.src_vh);
     o.tint      = float4(s.tint_r, s.tint_g, s.tint_b, s.tint_a);
     o.world_pos = map_pos;
     o.light_mul = s.light_mul;

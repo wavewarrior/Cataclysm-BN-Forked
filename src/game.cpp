@@ -12356,6 +12356,8 @@ bool game::walk_move( const tripoint_bub_ms &dest_loc, const bool via_ramp )
     auto submap_shift = place_player( dest_loc, keep_grab );
     auto ms_shift = project_to<coords::ms>( submap_shift );
     oldpos = oldpos - ms_shift;
+    // Sprite-animation move trigger (both endpoints now in the post-shift frame).
+    u.anim_on_move( oldpos, u.bub_pos() );
 
     if( pulling && u.get_grab_type() == OBJECT_FURNITURE ) {
         const auto shifted_furn_pos = grabbed_furn_pos - ms_shift;

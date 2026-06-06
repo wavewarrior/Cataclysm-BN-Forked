@@ -2981,6 +2981,109 @@ static int divide_round_down( int a, int b )
     }
 }
 
+// Tuning knobs for the sprite-animation system, refreshed once per frame from options
+// (avoids re-reading 14 options per creature). File-scope keeps creature.h's
+// animation_tuning type out of cata_tiles.h.
+static animation_tuning s_anim_tuning;
+
+void cata_tiles::refresh_anim_frame()
+{
+    creatures_anim_active_ = false;   // re-evaluated as creatures/tiles draw this frame
+    anim_wall_now_ = static_cast<double>( SDL_GetTicks() ) / 1000.0;
+    anim_enabled_ = get_option<bool>( "SPRITE_ANIMATIONS" );
+    if( !anim_enabled_ ) {
+        return;
+    }
+    animation_tuning &t = s_anim_tuning;
+    t.move_bob = get_option<bool>( "SPRITE_MOVE_BOB" );
+    t.breathing = get_option<bool>( "SPRITE_BREATHING" );
+    t.hit_reaction = get_option<bool>( "SPRITE_HIT_REACTION" );
+    t.attack_lunge = get_option<bool>( "SPRITE_ATTACK_LUNGE" );
+    t.bob_amplitude = static_cast<float>( get_option<float>( "SPRITE_BOB_AMPLITUDE" ) );
+    t.bob_duration = static_cast<float>( get_option<float>( "SPRITE_BOB_DURATION" ) );
+    t.idle_sway = static_cast<float>( get_option<float>( "SPRITE_IDLE_SWAY" ) );
+    t.hit_push = static_cast<float>( get_option<float>( "SPRITE_HIT_PUSH" ) );
+    t.hit_duration = static_cast<float>( get_option<float>( "SPRITE_HIT_DURATION" ) );
+    t.hit_flash_intensity = static_cast<float>( get_option<float>( "SPRITE_HIT_FLASH_INTENSITY" ) );
+    t.attack_amplitude = static_cast<float>( get_option<float>( "SPRITE_ATTACK_AMPLITUDE" ) );
+    t.attack_duration = static_cast<float>( get_option<float>( "SPRITE_ATTACK_DURATION" ) );
+}
+
+sprite_xform cata_tiles::compute_anim_xform( const Creature &c ) const
+{
+    sprite_xform x;
+    if( !anim_enabled_ ) {
+        return x;
+    }
+    // Per-creature idle phase (from tile position) so a horde doesn't sway in unison.
+    const tripoint_bub_ms cp = c.bub_pos();
+    const float idle_phase = static_cast<float>( ( cp.x() * 7 + cp.y() * 13 ) & 15 ) * 0.3927f;
+    update_animation_state( c.anim_state, s_anim_tuning, anim_wall_now_, idle_phase );
+    const animation_state &a = c.anim_state;
+    x.off_x = a.hit_offset_x + a.attack_offset_x + a.idle_offset_x +
+              a.slide_offset_x * static_cast<float>( tile_width );
+    x.off_y = a.bob_offset_y + a.hit_offset_y + a.attack_offset_y + a.idle_offset_y +
+              a.slide_offset_y * static_cast<float>( tile_height );
+    x.tilt_deg = a.tilt_degrees + a.hit_tilt + a.attack_tilt + a.idle_tilt;
+    if( a.hit_flash > 0.f ) {
+        if( c.is_avatar() ) {
+            x.flash_r = x.flash_g = x.flash_b = a.hit_flash * 0.5f;   // white
+        } else {
+            x.flash_r = a.hit_flash * 0.6f;                          // red
+            x.flash_g = x.flash_b = -a.hit_flash * 0.5f;
+        }
+    }
+    if( x.active() ) {
+        creatures_anim_active_ = true;   // keep the redraw pump alive
+    }
+    return x;
+}
+
+bool cata_tiles::creatures_require_animation() const
+{
+    return creatures_anim_active_;
+}
+
+void cata_tiles::register_tile_hit( const tripoint_bub_ms &p, float dir_x, float dir_y )
+{
+    if( !get_option<bool>( "SPRITE_ANIMATIONS" ) || !get_option<bool>( "SPRITE_TILE_HIT" ) ) {
+        return;
+    }
+    tile_hits_[p] = tile_hit_state{ static_cast<double>( SDL_GetTicks() ) / 1000.0, dir_x, dir_y };
+}
+
+sprite_xform cata_tiles::tile_hit_xform( const tripoint_bub_ms &p )
+{
+    sprite_xform x;
+    if( tile_hits_.empty() ) {
+        return x;   // fast path: no bashes pending
+    }
+    const auto it = tile_hits_.find( p );
+    if( it == tile_hits_.end() ) {
+        return x;
+    }
+    constexpr double dur = 0.25;
+    const double t = anim_wall_now_ - it->second.wall;
+    if( t < 0.0 || t >= dur ) {
+        tile_hits_.erase( it );   // self-cleaning when the recoil decays
+        return x;
+    }
+    // Directional recoil away from the basher + decaying wobble (like a creature hit reaction,
+    // a bit more extreme). dir is normalized; falls back to a vertical jolt if unknown.
+    const float decay = 1.0f - static_cast<float>( t / dur );
+    const float kick = std::cos( static_cast<float>( t ) * 28.0f ) * 9.0f * decay;   // px
+    float dx = it->second.dir_x;
+    float dy = it->second.dir_y;
+    if( dx == 0.f && dy == 0.f ) {
+        dy = 1.f;   // unknown source: jolt downward
+    }
+    x.off_x = kick * dx;
+    x.off_y = kick * dy;
+    x.fg_only = true;                // recoil the smashed feature, not the ground beneath it
+    creatures_anim_active_ = true;   // keep the redraw pump alive while shaking
+    return x;
+}
+
 void cata_tiles::draw( point dest, const tripoint_bub_ms &center, int width, int height,
                        std::multimap<point, formatted_text> &overlay_strings,
                        color_block_overlay_container &color_blocks )
@@ -2988,6 +3091,8 @@ void cata_tiles::draw( point dest, const tripoint_bub_ms &center, int width, int
     if( !g ) {
         return;
     }
+    // Refresh the sprite-animation frame context (wall-clock + option tuning) once.
+    refresh_anim_frame();
 
     // Clear only tile sprites. UI/font queues are NOT cleared here so
     // partial UI redraws (tooltip, mouse-hover) still see sidebar content
@@ -4206,7 +4311,7 @@ bool cata_tiles::draw_from_id_string(
     const tile_search_params &tile, const tripoint_bub_ms &pos,
     const tint_config &bg_tint, const tint_config &fg_tint,
     lit_level ll, bool apply_visual_effects, int overlay_count,
-    const bool as_independent_entity, int &height_3d )
+    const bool as_independent_entity, int &height_3d, float sway )
 {
     // If the ID string does not produce a drawable tile
     // it will revert to the "unknown" tile.
@@ -4493,7 +4598,7 @@ bool cata_tiles::draw_from_id_string(
     //draw it!
     draw_tile_at( display_tile, screen_pos, loc_rand, true_rota,
                   bg_tint, fg_tint, ll, apply_visual_effects, height_3d,
-                  base_overlay_alpha * overlay_count, retract );
+                  base_overlay_alpha * overlay_count, retract, sway );
 
     return true;
 }
@@ -4527,7 +4632,7 @@ bool cata_tiles::draw_sprite_at( const tile_type &tile, point_bub_ms p,
                                  unsigned int loc_rand, bool is_fg, int rota,
                                  const tint_config &tint, lit_level ll,
                                  bool apply_visual_effects, int overlay_count,
-                                 int *height_3d, int retract, size_t warp_hash )
+                                 int *height_3d, int retract, size_t warp_hash, float sway )
 {
 
 
@@ -4643,6 +4748,20 @@ bool cata_tiles::draw_sprite_at( const tile_type &tile, point_bub_ms p,
     destination.w = width * tile_width * tile.pixelscale / tileset_ptr->get_tile_width();
     destination.h = height * tile_height * tile.pixelscale / tileset_ptr->get_tile_height();
 
+    // Sprite-animation transform (identity for non-creature tiles). Offset shifts the
+    // rect; flash brightens the light tint (white for the avatar, red for others); tilt is
+    // added to the rotation in render().
+    // fg_only transforms (tile-bash recoil) must not move the bg layer (ground stays put);
+    // creature transforms leave fg_only false and apply to all layers (rigid body).
+    if( active_anim_xform_.active() && !( active_anim_xform_.fg_only && !is_fg ) ) {
+        const sprite_xform &xf = active_anim_xform_;
+        destination.x += static_cast<int>( xf.off_x );
+        destination.y += static_cast<int>( xf.off_y );
+        gpu_light_r = std::max( 0.0f, gpu_light_r + xf.flash_r );
+        gpu_light_g = std::max( 0.0f, gpu_light_g + xf.flash_g );
+        gpu_light_b = std::max( 0.0f, gpu_light_b + xf.flash_b );
+    }
+
     // GPU-only render. Rotation is stored in sprite_instance but the HLSL
     // shader currently ignores it — rotated sprites appear unrotated until
     // the vertex shader rotation math is implemented. Preferable to invisible.
@@ -4667,11 +4786,14 @@ bool cata_tiles::draw_sprite_at( const tile_type &tile, point_bub_ms p,
             static_cast<float>( destination.w ),
             static_cast<float>( destination.h )
         };
+        // Only the foreground (vegetation) layer gets foliage sway.
+        // The background layer (ground under the tile) must stay static.
+        const float enq_sway = is_fg ? sway : 0.0f;
         sprite_tex->enqueue_tile_sprite( gpu.texture, gpu.atlas_w, gpu.atlas_h,
                                          fdst, flip, 1.0f,
-                                         static_cast<double>( rotation ),
+                                         static_cast<double>( rotation ) + active_anim_xform_.tilt_deg,
                                          gpu_light_r, gpu_light_g, gpu_light_b,
-                                         gpu_light_mul );
+                                         gpu_light_mul, enq_sway );
         if( !static_z_effect && overlay_count > 0 ) {
             const auto [overlay_tex, overlay_warp_offset] =
                 tileset_ptr->get_or_default(
@@ -4685,7 +4807,7 @@ bool cata_tiles::draw_sprite_at( const tile_type &tile, point_bub_ms p,
                     overlay_tex->enqueue_tile_sprite(
                         ov_gpu.texture, ov_gpu.atlas_w, ov_gpu.atlas_h,
                         fdst, flip, a,
-                        static_cast<double>( rotation ),
+                        static_cast<double>( rotation ) + active_anim_xform_.tilt_deg,
                         gpu_light_r, gpu_light_g, gpu_light_b );
                 }
             }
@@ -4788,12 +4910,14 @@ bool cata_tiles::draw_tile_at( const tile_type &tile, point_bub_ms p,
                                const tint_config &bg_tint,
                                const tint_config &fg_tint, lit_level ll,
                                bool apply_visual_effects, int &height_3d,
-                               int overlay_count, int retract )
+                               int overlay_count, int retract, float sway )
 {
     draw_sprite_at( tile, p, loc_rand, /*fg:*/ false, rota, bg_tint, ll,
-                    apply_visual_effects, overlay_count, nullptr, retract );
+                    apply_visual_effects, overlay_count, nullptr, retract,
+                    TILESET_NO_WARP, sway );
     draw_sprite_at( tile, p, loc_rand, /*fg:*/ true, rota, fg_tint, ll,
-                    apply_visual_effects, overlay_count, &height_3d, retract );
+                    apply_visual_effects, overlay_count, &height_3d, retract,
+                    TILESET_NO_WARP, sway );
     return true;
 }
 
@@ -4980,9 +5104,33 @@ bool cata_tiles::draw_block( const tripoint_bub_ms &p, SDL_Color color, int scal
     return true;
 }
 
+// Foliage sway weight by vegetation type (0 = no sway). Trees are stiffer than
+// saplings/shrubs. draw_terrain/draw_furniture tag swayable sprites with this so
+// sprite.vert applies a wind breeze to the canopy (read from sprite_instance.pad1).
+// Templated so it works for both ter_t and furn_t (shared has_flag base).
+template<typename T>
+static float foliage_sway_weight( const T &obj )
+{
+    if( obj.has_flag( TFLAG_TREE ) ) {
+        return 0.5f;
+    }
+    if( obj.has_flag( TFLAG_YOUNG ) ) {
+        return 0.8f;
+    }
+    if( obj.has_flag( TFLAG_SHRUB ) ) {
+        return 1.0f;
+    }
+    if( obj.has_flag( TFLAG_TALL_GRASS ) ) {
+        return 0.6f;
+    }
+    return 0.0f;
+}
+
 bool cata_tiles::draw_terrain( const tripoint_bub_ms &p, const lit_level ll, int &height_3d,
                                const bool ( &invisible )[5], int z_drop )
 {
+    // Bash-shake transform for this tile (identity when none/expired; self-resetting per call).
+    active_anim_xform_ = tile_hit_xform( p );
     map &here = get_map();
     const auto override = terrain_override.find( p );
     const bool overridden = override != terrain_override.end();
@@ -4998,6 +5146,15 @@ bool cata_tiles::draw_terrain( const tripoint_bub_ms &p, const lit_level ll, int
 
     const ter_id &t = here.ter( p );
     const auto [bgCol, fgCol] = get_terrain_color( t.obj(), here, p );
+
+    // Foliage sway: tag swayable vegetation so sprite.vert breezes the canopy.
+    // Gated by the ANIMATIONS option (idle_animations.enabled()), and marking it
+    // present keeps the redraw loop repainting so the breeze actually animates.
+    const float ter_sway = ( t && idle_animations.enabled() )
+                           ? foliage_sway_weight( *t ) : 0.0f;
+    if( ter_sway > 0.0f ) {
+        idle_animations.mark_present();
+    }
 
     // first memorize the actual terrain
     if( t && !invisible[0] ) {
@@ -5037,9 +5194,24 @@ bool cata_tiles::draw_terrain( const tripoint_bub_ms &p, const lit_level ll, int
             }
 
             const auto tile = tile_search_params{ .id = tname, .category = C_TERRAIN, .subcategory = empty_string, .subtile = subtile, .rota = rotation };
-            return draw_from_id_string(
-                       tile, p, bgCol, fgCol,
-                       ll, true, z_drop, false, height_3d );
+            // If this terrain is foliage-swayable AND a dedicated canopy overlay
+            // sprite (_canopy suffix) exists in the tileset, draw the base
+            // terrain completely static and let the overlay carry the sway.
+            // Otherwise fall back to the bg/fg split (draw_sprite_at enforces
+            // sway=0 on the bg layer so ground stays static either way).
+            std::string canopy_id;
+            if( ter_sway > 0.0f && tileset_ptr &&
+                tileset_ptr->find_tile_type( canopy_id = tname + "_canopy" ) ) {
+                draw_from_id_string( tile, p, bgCol, fgCol, ll, true, z_drop,
+                                     false, height_3d, 0.0f );
+                const tile_search_params canopy{ canopy_id, C_TERRAIN, empty_string, 0, 0 };
+                draw_from_id_string( canopy, p, bgCol, fgCol, ll, true, z_drop,
+                                     false, height_3d, ter_sway );
+            } else {
+                draw_from_id_string( tile, p, bgCol, fgCol, ll, true, z_drop,
+                                     false, height_3d, ter_sway );
+            }
+            return true;
         }
     }
     if( invisible[0] ? overridden : neighborhood_overridden ) {
@@ -5083,6 +5255,8 @@ bool cata_tiles::draw_terrain( const tripoint_bub_ms &p, const lit_level ll, int
 bool cata_tiles::draw_furniture( const tripoint_bub_ms &p, const lit_level ll, int &height_3d,
                                  const bool ( &invisible )[5], int z_drop )
 {
+    // Bash-shake transform for this tile (identity when none/expired; self-resetting per call).
+    active_anim_xform_ = tile_hit_xform( p );
     const auto override = furniture_override.find( p );
     const bool overridden = override != furniture_override.end();
     bool neighborhood_overridden = overridden;
@@ -5098,6 +5272,13 @@ bool cata_tiles::draw_furniture( const tripoint_bub_ms &p, const lit_level ll, i
     const map &here = get_map();
     const furn_id &f = here.furn( p );
     const auto [bgCol, fgCol] = get_furniture_color( f.obj(), here, p );
+
+    // Foliage sway: tag swayable furniture vegetation (gated by ANIMATIONS).
+    const float furn_sway = ( f && idle_animations.enabled() )
+                            ? foliage_sway_weight( *f ) : 0.0f;
+    if( furn_sway > 0.0f ) {
+        idle_animations.mark_present();
+    }
 
     // first memorize the actual furniture
     if( f && !invisible[0] ) {
@@ -5124,9 +5305,21 @@ bool cata_tiles::draw_furniture( const tripoint_bub_ms &p, const lit_level ll, i
         // draw the actual furniture if there's no override
         if( !neighborhood_overridden ) {
             const tile_search_params tile { fname, C_FURNITURE, empty_string, subtile, rotation};
-            return draw_from_id_string(
-                       tile, p, bgCol, fgCol,
-                       ll, true, z_drop, false, height_3d );
+            // Same canopy-overlay pattern as draw_terrain: if a _canopy sprite
+            // exists, draw the furniture static and let the overlay carry sway.
+            std::string canopy_id_f;
+            if( furn_sway > 0.0f && tileset_ptr &&
+                tileset_ptr->find_tile_type( canopy_id_f = fname + "_canopy" ) ) {
+                draw_from_id_string( tile, p, bgCol, fgCol, ll, true, z_drop,
+                                     false, height_3d, 0.0f );
+                const tile_search_params canopy{ canopy_id_f, C_FURNITURE, empty_string, 0, 0 };
+                draw_from_id_string( canopy, p, bgCol, fgCol, ll, true, z_drop,
+                                     false, height_3d, furn_sway );
+            } else {
+                draw_from_id_string( tile, p, bgCol, fgCol, ll, true, z_drop,
+                                     false, height_3d, furn_sway );
+            }
+            return true;
         }
     }
     if( invisible[0] ? overridden : neighborhood_overridden ) {
@@ -5548,6 +5741,8 @@ bool cata_tiles::draw_vpart( const tripoint_bub_ms &p, lit_level ll, int &height
 bool cata_tiles::draw_critter_at( const tripoint_bub_ms &p, lit_level ll, int &height_3d,
                                   const bool ( &invisible )[5], int z_drop )
 {
+    // Don't let a leftover tile bash-shake bleed onto creature sprites.
+    active_anim_xform_ = {};
     if( ( !fov_3d && z_drop > 0 ) || fov_3d_z_range < z_drop ) {
         return false;
     }
@@ -5626,9 +5821,12 @@ bool cata_tiles::draw_critter_at( const tripoint_bub_ms &p, lit_level ll, int &h
                 const auto [bgCol, fgCol] = get_monster_color( *m, get_map(), p );
 
                 const tile_search_params tile { chosen_id, ent_category, ent_subcategory, subtile, rot_facing };
+                // Sprite-animation transform for this monster (and its z-overlay).
+                active_anim_xform_ = compute_anim_xform( critter );
                 result = draw_from_id_string(
                              tile, p, bgCol, fgCol,
                              ll, false, z_drop, false, height_3d );
+                active_anim_xform_ = {};
                 sees_player = m->sees( g->u );
                 attitude = m->attitude_to( g-> u );
             }
@@ -5968,6 +6166,8 @@ void cata_tiles::draw_entity_with_overlays( const Character &ch, const tripoint_
 #endif
     }
     active_warp_hash = base_warp_hash;
+    // Sprite-animation transform for this character + all its overlays (rigid body).
+    active_anim_xform_ = compute_anim_xform( ch );
 
     // first draw the character itself(i guess this means a tileset that
     // takes this seriously needs a naked sprite)
@@ -6149,6 +6349,7 @@ void cata_tiles::draw_entity_with_overlays( const Character &ch, const tripoint_
 
     // Clear the warp state after drawing is complete
     active_warp_hash = TILESET_NO_WARP;
+    active_anim_xform_ = {};
 #if defined(DYNAMIC_ATLAS)
     tileset_ptr->clear_warp_cache();
 #endif
