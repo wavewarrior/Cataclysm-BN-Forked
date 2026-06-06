@@ -317,27 +317,63 @@ void render_state::begin_lighting_frame( const frame_light_inputs &in )
     tile_batcher_.set_shadow_mask( shadow_mask_ ? shadow_mask_->texture() : nullptr );
 }
 
-void render_state::flush_ui_rects( sprite_batcher &dst )
+void render_state::flush_ui( sprite_batcher &dst, SDL_GPUSampler *sampler )
 {
-    // Composited queue: drain WITHOUT clearing — clear_ui_queues() at the
-    // top of each ui_manager redraw cycle resets it. Lets refresh_display
-    // re-flush the same draws on no-input frames instead of going black.
-    if( !ui_rect_queue_.empty() ) {
-        dst.draw( ui_rect_queue_.data(), ui_rect_queue_.size() );
+    // Composited queues: drain WITHOUT clearing — clear_ui_queues() at the top
+    // of each ui_manager redraw cycle resets them. Lets refresh_display re-flush
+    // the same draws on no-input frames instead of going black.
+    //
+    // Walk slices in z-order (ui_slice_spans_, cumulative end indices). For each
+    // slice draw its background rects (white texture, unlit) THEN its glyphs, so
+    // a higher slice's opaque backgrounds occlude lower slices' glyphs. The old
+    // all-rects-then-all-glyphs flush submitted every glyph after every rect, so
+    // an overlapping window (e.g. the targeting UI over the sidebar) could never
+    // hide the window beneath it. UI is alpha-blended with no depth test, so
+    // submission order is the only occlusion lever.
+    SDL_GPUTexture *white = geometry_.white_texture();
+    std::uint32_t r0 = 0;
+    std::uint32_t g0 = 0;
+    const auto draw_range = [&]( std::uint32_t r1, std::uint32_t g1 ) {
+        if( r1 > r0 && white ) {
+            dst.set_texture( white, sampler, /*is_lit=*/false );
+            dst.draw( ui_rect_queue_.data() + r0, r1 - r0 );
+        }
+        for( std::uint32_t k = g0; k < g1; ++k ) {
+            const font_glyph_draw &gd = font_glyph_queue_[k];
+            dst.set_texture( gd.texture, sampler, gd.lit );
+            dst.draw( gd.inst );
+        }
+        r0 = r1;
+        g0 = g1;
+    };
+    if( sampler ) {
+        for( const auto &span : ui_slice_spans_ ) {
+            draw_range( span.first, span.second );
+        }
+        // Tail: any rects/glyphs pushed directly (no slice span recorded).
+        draw_range( static_cast<std::uint32_t>( ui_rect_queue_.size() ),
+                    static_cast<std::uint32_t>( font_glyph_queue_.size() ) );
     }
-    // Transient overlay queue: drain AND clear every frame. refresh_display
-    // re-populates this each frame (e.g. LIGHT-DBG widget); without the
-    // per-frame clear the same overlay pushes would pile up indefinitely.
-    if( !ui_rect_transient_.empty() ) {
+    // Transient overlays last (on top); drain AND clear every frame.
+    // refresh_display re-populates these each frame (e.g. LIGHT-DBG widget);
+    // without the per-frame clear the same overlay pushes would pile up.
+    if( !ui_rect_transient_.empty() && white ) {
+        dst.set_texture( white, sampler, /*is_lit=*/false );
         dst.draw( ui_rect_transient_.data(), ui_rect_transient_.size() );
         ui_rect_transient_.clear();
     }
+    for( const font_glyph_draw &g : font_glyph_transient_ ) {
+        dst.set_texture( g.texture, sampler, g.lit );
+        dst.draw( g.inst );
+    }
+    font_glyph_transient_.clear();
 }
 
 void render_state::clear_ui_queues() noexcept
 {
     ui_rect_queue_.clear();
     font_glyph_queue_.clear();
+    ui_slice_spans_.clear();
     // Defensive: transient queues are normally drained by flush each
     // frame; clearing here too prevents leftovers leaking across a
     // ui_manager redraw cycle if a flush was skipped (no swapchain etc).
@@ -644,42 +680,16 @@ void render_state::queue_font_glyph( SDL_GPUTexture *glyph_tex,
     }
 }
 
-void render_state::append_ui_rects( const std::vector<sprite_instance> &src )
+void render_state::append_slice( const std::vector<sprite_instance> &rects,
+                                 const std::vector<font_glyph_draw> &glyphs )
 {
-    ui_rect_queue_.insert( ui_rect_queue_.end(), src.begin(), src.end() );
-}
-
-void render_state::append_font_glyphs( const std::vector<font_glyph_draw> &src )
-{
-    font_glyph_queue_.insert( font_glyph_queue_.end(), src.begin(), src.end() );
-}
-
-void render_state::flush_font_glyphs( sprite_batcher &dst, SDL_GPUSampler *sampler )
-{
-    if( font_glyph_queue_.empty() && font_glyph_transient_.empty() ) {
-        return;
-    }
-    if( !sampler ) {
-        font_glyph_transient_.clear();
-        return;
-    }
-    // One set_texture + one draw per glyph. set_texture() flushes the
-    // previous segment, so each iteration is one SDL_DrawGPUPrimitives.
-    // Composited queue first (z-order: under transient overlays).
-    // Composited: drain WITHOUT clearing (ui_manager owns the reset).
-    // Transient: drain AND clear every frame (re-populated each frame).
-    for( const font_glyph_draw &g : font_glyph_queue_ ) {
-        // Pass per-glyph `lit` flag so HUD glyphs (default false) skip the
-        // lighting fragment-shader path, while future world-space text
-        // (queued with lit=true) goes through the full lit segment.
-        dst.set_texture( g.texture, sampler, g.lit );
-        dst.draw( g.inst );
-    }
-    for( const font_glyph_draw &g : font_glyph_transient_ ) {
-        dst.set_texture( g.texture, sampler, g.lit );
-        dst.draw( g.inst );
-    }
-    font_glyph_transient_.clear();
+    ui_rect_queue_.insert( ui_rect_queue_.end(), rects.begin(), rects.end() );
+    font_glyph_queue_.insert( font_glyph_queue_.end(), glyphs.begin(), glyphs.end() );
+    // Record the cumulative end of each queue so flush_ui replays this slice as
+    // a self-contained rects-then-glyphs group, ordered above earlier slices.
+    ui_slice_spans_.emplace_back(
+        static_cast<std::uint32_t>( ui_rect_queue_.size() ),
+        static_cast<std::uint32_t>( font_glyph_queue_.size() ) );
 }
 
 void render_state::queue_tile_sprite( SDL_GPUTexture *atlas_tex,

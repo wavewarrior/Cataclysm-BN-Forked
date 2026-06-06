@@ -81,9 +81,15 @@ class render_state
         {
             return ui_rect_queue_.empty() && ui_rect_transient_.empty();
         }
-        // Drains `ui_rect_queue_` into `dst` (assumes the caller has an
-        // active pass + white-tex segment open). Clears the queue.
-        void flush_ui_rects( sprite_batcher &dst );
+        // Per-slice ordered flush of the composited UI. Walks ui_slice_spans_,
+        // drawing each adaptor slice's background rects (white texture) THEN its
+        // glyphs, slices in z-order, so a higher slice's opaque backgrounds
+        // occlude lower slices' glyphs (the old two-phase all-rects-then-all-
+        // glyphs flush could not, so overlapping windows mashed together).
+        // Binds textures internally; caller only needs an active begin_pass.
+        // Drains transient overlays last (on top). Drains WITHOUT clearing the
+        // composited queues (ui_manager owns the reset via clear_ui_queues).
+        void flush_ui( sprite_batcher &dst, SDL_GPUSampler *sampler );
 
         // Phase 2i-B-6 scaffolding (additive — no callers wired yet).
         // Upload an RGBA SDL_Surface into a fresh SDL_GPUTexture (one
@@ -228,11 +234,12 @@ class render_state
         // no-input frames.
         void set_transient_routing( bool on ) noexcept { transient_routing_ = on; }
 
-        // ui_manager-side composition. Called after the redraw loop with
-        // each ui_adaptor's slice, in stack order (bottom-up = z-order).
-        // Appends to the composited output that refresh_display drains.
-        void append_ui_rects( const std::vector<sprite_instance> &src );
-        void append_font_glyphs( const std::vector<font_glyph_draw> &src );
+        // ui_manager-side composition. Called after the redraw loop with each
+        // ui_adaptor's slice, in stack order (bottom-up = z-order). Appends the
+        // slice's rects + glyphs to the composited output and records a slice
+        // boundary so flush_ui preserves per-slice z-order (rects-then-glyphs).
+        void append_slice( const std::vector<sprite_instance> &rects,
+                           const std::vector<font_glyph_draw> &glyphs );
 
         // Phase 2i-B-5 lifecycle fix. Legacy SDL_Renderer's display_buffer
         // is a persistent render target — content stays between redraws.
@@ -260,11 +267,6 @@ class render_state
         {
             return font_glyph_queue_.empty() && font_glyph_transient_.empty();
         }
-        // Drains `font_glyph_queue_` into `dst` using `sampler`. Caller
-        // must have an active begin_pass on `dst`. Internally rebinds
-        // the texture per glyph; trivial atlas-packing optimisation
-        // belongs in a later commit.
-        void flush_font_glyphs( sprite_batcher &dst, SDL_GPUSampler *sampler );
 
         // Nearest-filter sampler used by all GPU draw passes (tile sprites,
         // UI rects, font glyphs). Created in init(); live for the full
@@ -334,6 +336,13 @@ class render_state
         // Composited font glyph output. Same lifecycle as ui_rect_queue_.
         std::vector<font_glyph_draw> font_glyph_queue_;
 
+        // Per-slice boundaries into the two composited queues above, in z-order.
+        // Each entry is the cumulative END index (ui_rect_queue_.size(),
+        // font_glyph_queue_.size()) after appending one adaptor's slice, so
+        // flush_ui can replay each slice as rects-then-glyphs and let higher
+        // slices occlude lower ones. Same lifecycle as the queues.
+        std::vector<std::pair<std::uint32_t, std::uint32_t>> ui_slice_spans_;
+
         // When non-null, queue_ui_rect / queue_font_glyph route into this
         // adaptor's per-window slice instead of the composited output above.
         // Set by ui_manager around each redraw_cb; cleared between callbacks.
@@ -341,8 +350,8 @@ class render_state
 
         // Per-frame transient overlay queues. Populated when
         // transient_routing_ is on (no slice active); drained + cleared by
-        // flush_ui_rects / flush_font_glyphs every frame so refresh_display
-        // overlays do not pile up on no-input frames.
+        // flush_ui every frame so refresh_display overlays do not pile up on
+        // no-input frames.
         std::vector<sprite_instance> ui_rect_transient_;
         std::vector<font_glyph_draw> font_glyph_transient_;
         bool                         transient_routing_ = false;

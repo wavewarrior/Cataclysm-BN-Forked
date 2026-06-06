@@ -440,8 +440,10 @@ void ui_adaptor::redraw_invalidated()
                                  ? ui_stack.begin() : std::prev( first.base() );
             for( auto it = first_enabled; it != ui_stack.end(); ++it ) {
                 const ui_adaptor &ui = *it;
-                rs.append_ui_rects( ui.draw_slices().ui_rects );
-                rs.append_font_glyphs( ui.draw_slices().font_glyphs );
+                // One slice per adaptor, in z-order, so flush_ui can keep each
+                // adaptor's backgrounds+glyphs together and let higher adaptors
+                // occlude lower ones (fixes overlapping windows mashing).
+                rs.append_slice( ui.draw_slices().ui_rects, ui.draw_slices().font_glyphs );
             }
         }
     }

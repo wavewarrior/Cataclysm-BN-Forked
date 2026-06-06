@@ -26,11 +26,21 @@
 ```
 tile_batcher.begin_pass(cb, swapchain_tex, LOADOP_CLEAR=black)
   1. flush_tile_sprites(gpu_sampler)   ← terrain/mob/item/vehicle sprites
-  2. set_texture(white) + flush_ui_rects(gpu_sampler)  ← colour-block overlays
-  3. flush_font_glyphs(gpu_sampler)    ← one set_texture+draw per unique glyph
+  2. flush_ui(gpu_sampler)             ← per-slice ordered: each ui_adaptor slice
+                                          draws its rects (white) THEN its glyphs,
+                                          slices in z-order, so overlapping windows
+                                          occlude correctly; transient overlays last
 tile_batcher.end_pass()
 submit_frame()
 ```
+
+UI flush is **per-adaptor-slice ordered**, not two-phase. `ui_manager` calls
+`render_state::append_slice(rects, glyphs)` per adaptor in z-order (recording a
+boundary in `ui_slice_spans_`); `flush_ui` replays each slice rects-then-glyphs so
+a higher slice's opaque backgrounds hide lower slices' glyphs. The old all-rects-
+then-all-glyphs flush submitted every glyph after every rect → overlapping windows
+(e.g. targeting UI over the sidebar) mashed together. UI is alpha-blended, no depth
+test → submission order is the only occlusion lever.
 
 Bridge removed 2026-05-22. `gpu_sampler_` created eagerly in `render_state::init()`.
 

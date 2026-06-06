@@ -1444,14 +1444,10 @@ void refresh_display()
                                       clear_transparent,
                                       static_cast<std::uint32_t>( proj_w ),
                                       static_cast<std::uint32_t>( proj_h ) );
-        if( !rs.ui_rects_empty() && rs.geometry().white_texture() ) {
-            rs.tile_batcher().set_texture( rs.geometry().white_texture(),
-                                           rs.gpu_sampler(), /*is_lit=*/false );
-            rs.flush_ui_rects( rs.tile_batcher() );
-        }
-        if( !rs.font_glyphs_empty() && rs.gpu_sampler() ) {
-            rs.flush_font_glyphs( rs.tile_batcher(), rs.gpu_sampler() );
-        }
+        // Per-slice ordered flush: each ui_adaptor slice draws rects-then-glyphs
+        // in z-order so overlapping windows occlude correctly. flush_ui binds the
+        // white (rect) and per-glyph textures itself.
+        rs.flush_ui( rs.tile_batcher(), rs.gpu_sampler() );
         rs.tile_batcher().end_pass();
     }
 
@@ -4215,15 +4211,8 @@ bool save_screenshot( const std::string &file_path )
     if( !rs.tile_sprites_empty() && rs.gpu_sampler() ) {
         rs.flush_tile_sprites( rs.tile_batcher(), rs.gpu_sampler() );
     }
-    if( !rs.ui_rects_empty() && rs.geometry().white_texture() ) {
-        // UI rects are HUD: unlit segment.
-        rs.tile_batcher().set_texture( rs.geometry().white_texture(),
-                                       rs.gpu_sampler(), /*is_lit=*/false );
-        rs.flush_ui_rects( rs.tile_batcher() );
-    }
-    if( !rs.font_glyphs_empty() && rs.gpu_sampler() ) {
-        rs.flush_font_glyphs( rs.tile_batcher(), rs.gpu_sampler() );
-    }
+    // Per-slice ordered UI flush (matches the live compositor path).
+    rs.flush_ui( rs.tile_batcher(), rs.gpu_sampler() );
     rs.tile_batcher().end_pass();
 
     // Download the rendered pixels to a CPU-accessible transfer buffer.
