@@ -4549,6 +4549,17 @@ bool cata_tiles::draw_from_id_string(
     //Overmap overlays usually have higher counts, so make them less opaque
     const int base_overlay_alpha = tile.category == C_OVERMAP_TERRAIN ? 12 : 24;
 
+    // Overmap tiles are an UNLIT map view (sdf_map_w==0, no sun/sky/emitter).
+    // The lit shader brightens game tiles via gpu_light (tint); with tint left
+    // at a stale ~0 from the last in-game lit tile, max(tint, ambient=0.05)
+    // collapses the overmap to texel*0.05 -> black. Force full-bright passthrough
+    // (tint=1.0) up here so it applies to BOTH the transparent early-return path
+    // below AND the normal path; the per-tile gpu_light=0 lit-branch at the
+    // Phase-5 block skips C_OVERMAP_TERRAIN, so this is the overmap's final tint.
+    if( tile.category == C_OVERMAP_TERRAIN ) {
+        gpu_light_r = gpu_light_g = gpu_light_b = 1.0f;
+    }
+
     //Let's branch transparent overmaps early if tranparency overlays are enabled
     //Because if tranparency is enabled then backgrounds should not be drawn
     if( tile.category == C_OVERMAP_TERRAIN

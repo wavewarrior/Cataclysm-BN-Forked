@@ -2098,6 +2098,25 @@ static tripoint_abs_omt display( const tripoint_abs_omt &orig,
 
     background_pane bg_pane;
 
+    // Graphical overmap: tiles render into the lit world layer (world_target),
+    // but bg_pane's fullscreen black erase of stdscr would composite OVER that
+    // layer in Pass B and hide the tiles (pitch-black map). Flag stdscr's
+    // backdrop transparent so suppress_cell_bg() skips its pure-black cells and
+    // the overmap tiles show through. The legend (w_omlegend) is a separate,
+    // opaque window so it is unaffected, and disable_uis_below still hides the
+    // game UI. ASCII overmap draws its glyphs into stdscr/w_overmap and still
+    // needs the opaque backdrop, so this is tile-mode only. Restored on exit via
+    // RAII so the main-menu / loading background panes keep their solid black.
+    const bool om_graphical = use_tiles && use_tiles_overmap;
+    if( om_graphical ) {
+        cata_cursesport::set_window_transparent_backdrop( catacurses::stdscr, true );
+    }
+    on_out_of_scope restore_stdscr_backdrop( [om_graphical]() {
+        if( om_graphical ) {
+            cata_cursesport::set_window_transparent_backdrop( catacurses::stdscr, false );
+        }
+    } );
+
     ui_adaptor ui;
     ui.on_screen_resize( []( ui_adaptor & ui ) {
         /**
