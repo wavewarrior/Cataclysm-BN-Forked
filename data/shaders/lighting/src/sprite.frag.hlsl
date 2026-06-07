@@ -548,9 +548,19 @@ float4 main(VS_OUT i) : SV_Target0 {
     // tint≈0). UI/HUD (tint>0) and memory/dark tiles (tint=1.0) are untouched.
     // Each sub-effect disables at its off-value for live bisect.
     if(sdf_map_w > 0u && dbg_tint_sum < 0.01) {
+        // Combine the two darkening terms into ONE multiplier, then floor it to a
+        // dark-grey readability minimum. The old code multiplied final_rgb by each
+        // term separately, and either could reach 0 at the vision edge → PURE BLACK
+        // (terrain unreadable). Flooring the COMBINED multiplier (not each, which
+        // would compound: 0.12*0.12) clamps the edge to readable grey instead, so
+        // explored terrain stays legible; current vs remembered state is still
+        // governed upstream (memory tiles take the tint=1.0 path, not this block).
+        // vis_floor = 0 restores the old hard-black behaviour for bisecting.
+        const float vis_floor = 0.12;
+        float vis_mul = 1.0;
         // (a) Vision-edge falloff from seen_cache (softens the rim).
         if(vis_curve > 0.0001) {
-            final_rgb *= pow(saturate(vis_bilinear(i.light_pos)), vis_curve);
+            vis_mul *= pow(saturate(vis_bilinear(i.light_pos)), vis_curve);
         }
         // (b) Radial player-distance falloff — the torch-bubble gradient that
         // seen_cache can't give (it's saturated ≈1 across the open interior).
@@ -558,8 +568,9 @@ float4 main(VS_OUT i) : SV_Target0 {
         if(vis_radius > 0.01) {
             const float d = length(i.light_pos - float2(player_x, player_y));
             const float r = saturate(1.0 - d / vis_radius);
-            final_rgb *= r * r * (3.0 - 2.0 * r); // smoothstep: bright centre, eased edge
+            vis_mul *= r * r * (3.0 - 2.0 * r); // smoothstep: bright centre, eased edge
         }
+        final_rgb *= max(vis_floor, vis_mul);
         // (c) Tone grade (Stoneshard wash): desaturate → cool tint → dim.
         const float luma = dot(final_rgb, float3(0.299, 0.587, 0.114));
         final_rgb = lerp(final_rgb, float3(luma, luma, luma), saturate(grade_desat));
