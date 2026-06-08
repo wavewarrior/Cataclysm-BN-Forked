@@ -3,12 +3,11 @@
 // imgui_layer.cpp includes imgui.h before debug.h).
 #include "imgui.h"
 
-#include "sdl_render_frame.h"
-
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -18,6 +17,7 @@
 #include "cata_tiles.h"
 #include "debug.h"
 #include "game.h"
+#include "output.h"
 #include "point.h"
 #include "sdl_display.h"
 #include "sdl_font.h"
@@ -51,6 +51,25 @@ static lighting::sprite_instance fullscreen_quad( float w, float h )
     q.tint_r = 1.f;   q.tint_g = 1.f;   q.tint_b = 1.f;   q.tint_a = 1.f;
     return q;
 }
+
+// Frame phase helpers — file-local, orchestrated by refresh_display (end of file).
+// Forward-declared (static) so calls resolve regardless of definition order and
+// the definitions below take internal linkage.
+static auto begin_frame( lighting::render_state &rs ) -> std::optional<lighting::frame_context>;
+static auto build_lighting( lighting::render_state &rs ) -> bool;
+static auto flush_and_gather_rc( lighting::render_state &rs, lighting::frame_context &ctx,
+                                 bool rc_rebuild ) -> void;
+static auto assemble_light_inputs( lighting::render_state &rs, lighting::frame_context &ctx ) -> void;
+static auto maybe_push_menu_background( lighting::render_state &rs,
+                                        lighting::frame_context &ctx ) -> void;
+static auto draw_lighting_overlays( lighting::render_state &rs, lighting::frame_context &ctx ) -> void;
+static auto composite_ui_pass_a( lighting::render_state &rs, lighting::frame_context &ctx,
+                                 int proj_w, int proj_h ) -> void;
+static auto render_world_pass_w( lighting::render_state &rs, lighting::frame_context &ctx,
+                                 int proj_w, int proj_h ) -> void;
+static auto tonemap_pass_t( lighting::render_state &rs, lighting::frame_context &ctx ) -> void;
+static auto composite_swapchain_pass_b( lighting::render_state &rs, lighting::frame_context &ctx,
+                                        int proj_w, int proj_h ) -> void;
 
 auto begin_frame( lighting::render_state &rs ) -> std::optional<lighting::frame_context>
 {
@@ -543,4 +562,36 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
         : lighting::sprite_batcher::pass_overlay_fn{} );
 
     rs.device().submit_frame( ctx );
+}
+
+void refresh_display()
+{
+    g_display.needupdate = false;
+    g_display.lastupdate = SDL_GetTicks();
+
+    auto &rs = lighting::get_render_state();
+
+    auto ctx = begin_frame( rs );
+    if( !ctx ) {
+        return;
+    }
+
+    const bool rc_rebuild = build_lighting( rs );
+    flush_and_gather_rc( rs, *ctx, rc_rebuild );
+    assemble_light_inputs( rs, *ctx );
+    maybe_push_menu_background( rs, *ctx );
+
+    int proj_w = 0;
+    int proj_h = 0;
+    SDL_GetWindowSize( g_display.window.get(), &proj_w, &proj_h );
+    if( proj_w <= 0 || proj_h <= 0 ) {
+        proj_w = static_cast<int>( ctx->swapchain_w );
+        proj_h = static_cast<int>( ctx->swapchain_h );
+    }
+
+    draw_lighting_overlays( rs, *ctx );
+    composite_ui_pass_a( rs, *ctx, proj_w, proj_h );
+    render_world_pass_w( rs, *ctx, proj_w, proj_h );
+    tonemap_pass_t( rs, *ctx );
+    composite_swapchain_pass_b( rs, *ctx, proj_w, proj_h );
 }

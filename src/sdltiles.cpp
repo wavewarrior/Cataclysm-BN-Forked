@@ -60,7 +60,6 @@
 #include "sdl_utils.h"
 #include "sdl_font.h"
 #include "sdl_lighting_devui.h"
-#include "sdl_render_frame.h"
 #include "sdl_window.h"
 #include "sdlsound.h"
 #include "lighting/emitter_collector.h"
@@ -103,8 +102,6 @@ int fontheight;         //the height of the font, background is always this size
 // transparently reach g_display.member.  Each later extraction step
 // batch-migrates its domain's refs into the extracted module and drops
 // the alias.
-static Uint64 &lastupdate = g_display.lastupdate;
-static bool &needupdate = g_display.needupdate;
 static SDL_Window_Ptr &window = g_display.window;
 // Phase 2i-B-1: SDL_Renderer no longer claims the visible window — that
 // belongs to the SDL_GPU device now (lighting::render_state). The legacy
@@ -117,38 +114,6 @@ static SDL_Renderer_Ptr &renderer = g_display.renderer;
 static GeometryRenderer_Ptr &geometry = g_display.geometry;
 static int &WindowWidth = g_display.WindowWidth;        //Width of the actual window, not the curses window
 static int &WindowHeight = g_display.WindowHeight;       //Height of the actual window, not the curses window
-
-void refresh_display()
-{
-    needupdate = false;
-    lastupdate = SDL_GetTicks();
-
-    auto &rs = lighting::get_render_state();
-
-    auto ctx = begin_frame( rs );
-    if( !ctx ) {
-        return;
-    }
-
-    const bool rc_rebuild = build_lighting( rs );
-    flush_and_gather_rc( rs, *ctx, rc_rebuild );
-    assemble_light_inputs( rs, *ctx );
-    maybe_push_menu_background( rs, *ctx );
-
-    int proj_w = 0;
-    int proj_h = 0;
-    SDL_GetWindowSize( ::window.get(), &proj_w, &proj_h );
-    if( proj_w <= 0 || proj_h <= 0 ) {
-        proj_w = static_cast<int>( ctx->swapchain_w );
-        proj_h = static_cast<int>( ctx->swapchain_h );
-    }
-
-    draw_lighting_overlays( rs, *ctx );
-    composite_ui_pass_a( rs, *ctx, proj_w, proj_h );
-    render_world_pass_w( rs, *ctx, proj_w, proj_h );
-    tonemap_pass_t( rs, *ctx );
-    composite_swapchain_pass_b( rs, *ctx, proj_w, proj_h );
-}
 
 // only update if the set interval has elapsed
 // No-op: display_buffer removed. Remains until atlas lookup uses GPU-native
