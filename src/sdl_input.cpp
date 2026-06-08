@@ -22,6 +22,7 @@
 #include "runtime_handlers.h"
 #include "sdltiles.h"  // handle_resize
 #include "ui_manager.h" // ui_manager::invalidate, ui_manager::redraw_invalidated
+#include "sdl_lighting_devui.h"
 
 // File-scope state for ALT+nnnn code entry and arrow-key combos.
 // These were file-scope statics in sdltiles.cpp and stay file-scope here.
@@ -358,28 +359,6 @@ auto gamepad_available( const display_context &d ) -> bool
 }
 
 } // namespace sdl_input
-
-// ---------------------------------------------------------------------------
-// Debug/tuning globals — defined in sdltiles.cpp (owned by the lighting/dev-
-// UI rendering path).  Only CheckMessages writes them (F-key handlers below);
-// the rendering code in sdltiles.cpp reads them.  The extern declarations keep
-// the linker happy without moving the definitions.
-// ---------------------------------------------------------------------------
-extern bool g_dbg_lighting;
-extern bool g_dbg_lighting_shader;
-extern uint32_t g_current_dbg_mode;
-extern lighting::debug_params g_dbg_params;
-extern float g_emitter_scale;
-extern float g_sun_scale;
-extern float g_sky_scale;
-
-namespace menu_emitter_tuning {
-extern float radius_input;
-extern float pos_x;
-extern float pos_y;
-extern int   pos_preset;
-extern bool  blue_backdrop;
-} // namespace menu_emitter_tuning
 
 namespace sdl_input {
 
