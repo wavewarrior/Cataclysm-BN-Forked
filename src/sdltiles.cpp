@@ -123,12 +123,6 @@ int fontheight;         //the height of the font, background is always this size
 // the alias.
 static Uint64 &lastupdate = g_display.lastupdate;
 static bool &needupdate = g_display.needupdate;
-static bool &need_invalidate_framebuffers = g_display.need_invalidate_framebuffers;
-
-static Font_Ptr &font = g_display.font;
-static Font_Ptr &map_font = g_display.map_font;
-static Font_Ptr &overmap_font = g_display.overmap_font;
-
 static SDL_Window_Ptr &window = g_display.window;
 // Phase 2i-B-1: SDL_Renderer no longer claims the visible window — that
 // belongs to the SDL_GPU device now (lighting::render_state). The legacy
@@ -137,25 +131,10 @@ static SDL_Window_Ptr &window = g_display.window;
 // cache, pixel_minimap, vehicle_preview …) compiles and executes
 // unchanged; its output is just invisible. Subsequent 2i-B-N commits port
 // those call sites to the GPU stack and drop the hidden window.
-static SDL_Window_Ptr &legacy_window = g_display.legacy_window;
 static SDL_Renderer_Ptr &renderer = g_display.renderer;
-static SDL_PixelFormat &format = g_display.format;
 static GeometryRenderer_Ptr &geometry = g_display.geometry;
 static int &WindowWidth = g_display.WindowWidth;        //Width of the actual window, not the curses window
 static int &WindowHeight = g_display.WindowHeight;       //Height of the actual window, not the curses window
-// input from various input sources. Each input source sets the type and
-// the actual input value (key pressed, mouse button clicked, ...)
-// This value is finally returned by input_manager::get_input_event.
-static input_event &last_input = g_display.last_input;
-
-static int &inputdelay = g_display.inputdelay;         //How long getch will wait for a character to be typed
-
-static int &TERMINAL_WIDTH = g_display.TERMINAL_WIDTH;
-static int &TERMINAL_HEIGHT = g_display.TERMINAL_HEIGHT;
-bool &fullscreen = g_display.fullscreen;
-int &scaling_factor = g_display.scaling_factor;
-
-static SDL_Joystick *&joystick = g_display.joystick; // Only one joystick for now.
 
 void refresh_display()
 {
