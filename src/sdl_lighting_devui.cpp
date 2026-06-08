@@ -18,7 +18,6 @@
 #include "lighting/render_state.h"
 #include "lighting/sdf_pass.h"
 #include "lighting/sprite_batcher.h"
-#include "lighting/volumetric_pass.h"
 #include "mapdata.h"
 #include "weather.h"
 #include "worldfactory.h"
@@ -44,7 +43,6 @@ float  g_vol_density   = 0.3f;
 float  g_vol_intensity = 1.0f;
 float  g_vol_shadow    = 0.0f;
 float  g_vol_reach     = 8.0f;
-lighting::vol_params g_vol_params;
 bool   g_shadow_debug = false;
 uint32_t g_current_dbg_mode = 0u;
 float g_emitter_scale = 1.0f;
@@ -85,12 +83,12 @@ void draw()
     ImGui::SameLine();
     ImGui::Checkbox( "Shader heatmap (F6)", &g_dbg_lighting_shader );
 
-    static const char *mode_names[12] = {
+    static const char *mode_names[] = {
         "off", "ambient", "emitter", "sun", "sky", "total", "SDF", "sky_vis", "emit_bw",
         "normal", "AO", "shadow mask"
     };
     int mode = static_cast<int>( g_current_dbg_mode );
-    if( ImGui::Combo( "mode (F7)", &mode, mode_names, 12 ) ) {
+    if( ImGui::Combo( "mode (F7)", &mode, mode_names, static_cast<int>( std::size( mode_names ) ) ) ) {
         g_current_dbg_mode = static_cast<uint32_t>( mode );
         g_dbg_params.debug_mode = g_current_dbg_mode;
     }

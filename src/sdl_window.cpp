@@ -27,6 +27,7 @@
 #include "sdl_wrappers.h"
 #include "sdlsound.h"
 #include "string_formatter.h"
+#include "string_utils.h"
 #include "ui_manager.h"
 #include "widget_icon.h"
 #include "lighting/render_state.h"
@@ -166,12 +167,7 @@ static void WinCreate()
     // fallback. The user-facing RENDERER option only matters for the
     // bridge readback texture format, which is the same regardless.
     if( !software_renderer ) {
-        const std::string lower_name = []( std::string s ) {
-            for( char &c : s ) {
-                c = static_cast<char>( std::tolower( static_cast<unsigned char>( c ) ) );
-            }
-            return s;
-        }( renderer_name );
+        const std::string lower_name = to_lower_case( renderer_name );
         if( lower_name == "direct3d12" || lower_name == "gpu" ) {
             const std::array<const char *, 3> alt_priorities{ "direct3d11", "direct3d", "opengl" };
             const int num_drivers = SDL_GetNumRenderDrivers();

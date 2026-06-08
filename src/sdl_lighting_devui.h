@@ -10,7 +10,6 @@ namespace lighting
 
 struct debug_params;
 struct gpu_emitter;
-struct vol_params;
 
 }  // namespace lighting
 
@@ -64,7 +63,6 @@ extern float  g_vol_density;
 extern float  g_vol_intensity;
 extern float  g_vol_shadow;
 extern float  g_vol_reach;
-extern lighting::vol_params g_vol_params;
 // Silhouette sun-shadow mask kill-gate.
 extern bool g_shadow_debug;
 // Current debug mode display (0-7, cycles through modes).

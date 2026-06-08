@@ -37,6 +37,21 @@
 
 using namespace std::literals;
 
+// Per-frame volumetric inputs: written in assemble_light_inputs, consumed in
+// render_world_pass_w. Both live in this TU, so file-local (was a dev-UI global).
+static lighting::vol_params g_vol_params;
+
+// Full-screen identity-blit quad (origin, full UV, white tint, no rotation).
+// Callers override tint as needed (e.g. the menu backdrop).
+static lighting::sprite_instance fullscreen_quad( float w, float h )
+{
+    lighting::sprite_instance q{};
+    q.dst_w  = w;     q.dst_h  = h;
+    q.src_uw = 1.f;   q.src_vh = 1.f;
+    q.tint_r = 1.f;   q.tint_g = 1.f;   q.tint_b = 1.f;   q.tint_a = 1.f;
+    return q;
+}
+
 auto begin_frame( lighting::render_state &rs ) -> std::optional<lighting::frame_context>
 {
     if( test_mode ) {
@@ -268,20 +283,12 @@ auto maybe_push_menu_background( lighting::render_state &rs,
 {
     const bool no_world = !g || !world_generator || !world_generator->active_world;
     if( no_world && rs.tile_sprites_empty() && rs.geometry().white_texture() ) {
-        lighting::sprite_instance bg{};
-        bg.dst_x  = 0.f;
-        bg.dst_y  = 0.f;
-        bg.dst_w  = static_cast<float>( ctx.swapchain_w );
-        bg.dst_h  = static_cast<float>( ctx.swapchain_h );
-        bg.src_u  = 0.f;  bg.src_v  = 0.f;
-        bg.src_uw = 1.f;  bg.src_vh = 1.f;
-        if( menu_emitter_tuning::blue_backdrop ) {
-            bg.tint_r = 0.0f;  bg.tint_g = 0.0f;  bg.tint_b = 0.3f;
-        } else {
-            bg.tint_r = 0.0f;  bg.tint_g = 0.0f;  bg.tint_b = 0.0f;
-        }
-        bg.tint_a = 1.f;
-        bg.rotation = 0.f;
+        lighting::sprite_instance bg = fullscreen_quad(
+                static_cast<float>( ctx.swapchain_w ),
+                static_cast<float>( ctx.swapchain_h ) );
+        bg.tint_r = 0.0f;
+        bg.tint_g = 0.0f;
+        bg.tint_b = menu_emitter_tuning::blue_backdrop ? 0.3f : 0.0f;
         rs.queue_tile_sprite( rs.geometry().white_texture(), bg );
     }
 }
@@ -514,15 +521,8 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
         if( !layer || !layer->texture() || !rs.gpu_sampler() ) {
             return;
         }
-        lighting::sprite_instance quad{};
-        quad.dst_x  = 0.f;          quad.dst_y  = 0.f;
-        quad.dst_w  = static_cast<float>( proj_w );
-        quad.dst_h  = static_cast<float>( proj_h );
-        quad.src_u  = 0.f;  quad.src_v  = 0.f;
-        quad.src_uw = 1.f;  quad.src_vh = 1.f;
-        quad.tint_r = 1.f;  quad.tint_g = 1.f;
-        quad.tint_b = 1.f;  quad.tint_a = 1.f;
-        quad.rotation = 0.f;
+        const lighting::sprite_instance quad = fullscreen_quad(
+                static_cast<float>( proj_w ), static_cast<float>( proj_h ) );
         rs.tile_batcher().set_texture( layer->texture(), rs.gpu_sampler(),
                                        /*is_lit=*/false );
         rs.tile_batcher().draw( quad );
