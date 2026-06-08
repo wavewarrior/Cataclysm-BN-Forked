@@ -45,9 +45,6 @@ float  g_vol_shadow    = 0.0f;
 float  g_vol_reach     = 8.0f;
 bool   g_shadow_debug = false;
 uint32_t g_current_dbg_mode = 0u;
-float g_emitter_scale = 1.0f;
-float g_sun_scale = 1.0f;
-float g_sky_scale = 1.0f;
 float g_skylight_bleed = 0.5f;
 float g_vision_blur = 1.5f;
 
@@ -104,15 +101,10 @@ void draw()
     ImGui::SliderFloat( "normal elev (grazing)", &g_dbg_params.nrm_elev, 0.05f, 1.5f );
 
     ImGui::SeparatorText( "Light scales" );
-    if( ImGui::SliderFloat( "emitter", &g_emitter_scale, 0.0f, 10.0f ) ) {
-        g_dbg_params.emitter_scale = g_emitter_scale;
-    }
-    if( ImGui::SliderFloat( "sun", &g_sun_scale, 0.0f, 10.0f ) ) {
-        g_dbg_params.sun_scale = g_sun_scale;
-    }
-    if( ImGui::SliderFloat( "sky", &g_sky_scale, 0.0f, 10.0f ) ) {
-        g_dbg_params.sky_scale = g_sky_scale;
-    }
+    using namespace lighting_dbg_range;
+    ImGui::SliderFloat( "emitter", &g_dbg_params.emitter_scale, SCALE_MIN, SCALE_MAX );
+    ImGui::SliderFloat( "sun", &g_dbg_params.sun_scale, SCALE_MIN, SCALE_MAX );
+    ImGui::SliderFloat( "sky", &g_dbg_params.sky_scale, SCALE_MIN, SCALE_MAX );
     ImGui::SliderFloat( "indoor sky bleed", &g_skylight_bleed, 0.0f, 1.0f );
     ImGui::SliderFloat( "vision blur (tiles)", &g_vision_blur, 0.0f, 6.0f );
 
@@ -136,9 +128,9 @@ void draw()
     ImGui::SliderFloat( "shadow mask strength", &g_dbg_params.shadow_mask_str, 0.0f, 1.0f );
 
     ImGui::SeparatorText( "Dither / GI / shadow" );
-    ImGui::SliderFloat( "dither amt", &g_dbg_params.dither_amt, 0.0f, 1.0f );
-    ImGui::SliderFloat( "dither bands", &g_dbg_params.dither_bands, 1.0f, 16.0f, "%.0f" );
-    ImGui::SliderFloat( "GI strength", &g_dbg_params.gi_strength, 0.0f, 2.0f );
+    ImGui::SliderFloat( "dither amt", &g_dbg_params.dither_amt, DAMT_MIN, DAMT_MAX );
+    ImGui::SliderFloat( "dither bands", &g_dbg_params.dither_bands, DBND_MIN, DBND_MAX, "%.0f" );
+    ImGui::SliderFloat( "GI strength", &g_dbg_params.gi_strength, GI_MIN, GI_MAX );
     if( ImGui::Button( "RC cascade readback (log stats)" ) ) {
         g_rc_readback = true;
     }

@@ -469,43 +469,45 @@ void CheckMessages( display_context &d )
                 } else if( lc == KEY_F( 8 ) ) {
                     // F8: decrease emitter/sun/sky scales.
                     // Shift+F8: less dither.  Ctrl+F8: fewer dither bands.
+                    using namespace lighting_dbg_range;
                     if( ev.key.mod & SDL_KMOD_ALT ) {
                         g_dbg_params.gi_strength =
-                            std::max( 0.0f, g_dbg_params.gi_strength - 0.05f );
+                            std::max( GI_MIN, g_dbg_params.gi_strength - GI_STEP );
                     } else if( ev.key.mod & SDL_KMOD_CTRL ) {
                         g_dbg_params.dither_bands =
-                            std::max( 1.0f, g_dbg_params.dither_bands - 1.0f );
+                            std::max( DBND_MIN, g_dbg_params.dither_bands - DBND_STEP );
                     } else if( ev.key.mod & SDL_KMOD_SHIFT ) {
                         g_dbg_params.dither_amt =
-                            std::max( 0.0f, g_dbg_params.dither_amt - 0.1f );
+                            std::max( DAMT_MIN, g_dbg_params.dither_amt - DAMT_STEP );
                     } else {
-                        g_emitter_scale = std::max( 0.0f, g_emitter_scale - 0.1f );
-                        g_sun_scale = std::max( 0.0f, g_sun_scale - 0.1f );
-                        g_sky_scale = std::max( 0.0f, g_sky_scale - 0.1f );
-                        g_dbg_params.emitter_scale = g_emitter_scale;
-                        g_dbg_params.sun_scale = g_sun_scale;
-                        g_dbg_params.sky_scale = g_sky_scale;
+                        g_dbg_params.emitter_scale =
+                            std::max( SCALE_MIN, g_dbg_params.emitter_scale - SCALE_STEP );
+                        g_dbg_params.sun_scale =
+                            std::max( SCALE_MIN, g_dbg_params.sun_scale - SCALE_STEP );
+                        g_dbg_params.sky_scale =
+                            std::max( SCALE_MIN, g_dbg_params.sky_scale - SCALE_STEP );
                     }
                     break;
                 } else if( lc == KEY_F( 9 ) ) {
                     // F9: increase emitter/sun/sky scales.
                     // Shift+F9: more dither.  Ctrl+F9: more dither bands.
+                    using namespace lighting_dbg_range;
                     if( ev.key.mod & SDL_KMOD_ALT ) {
                         g_dbg_params.gi_strength =
-                            std::min( 2.0f, g_dbg_params.gi_strength + 0.05f );
+                            std::min( GI_MAX, g_dbg_params.gi_strength + GI_STEP );
                     } else if( ev.key.mod & SDL_KMOD_CTRL ) {
                         g_dbg_params.dither_bands =
-                            std::min( 16.0f, g_dbg_params.dither_bands + 1.0f );
+                            std::min( DBND_MAX, g_dbg_params.dither_bands + DBND_STEP );
                     } else if( ev.key.mod & SDL_KMOD_SHIFT ) {
                         g_dbg_params.dither_amt =
-                            std::min( 1.0f, g_dbg_params.dither_amt + 0.1f );
+                            std::min( DAMT_MAX, g_dbg_params.dither_amt + DAMT_STEP );
                     } else {
-                        g_emitter_scale = std::min( 10.0f, g_emitter_scale + 0.1f );
-                        g_sun_scale = std::min( 10.0f, g_sun_scale + 0.1f );
-                        g_sky_scale = std::min( 10.0f, g_sky_scale + 0.1f );
-                        g_dbg_params.emitter_scale = g_emitter_scale;
-                        g_dbg_params.sun_scale = g_sun_scale;
-                        g_dbg_params.sky_scale = g_sky_scale;
+                        g_dbg_params.emitter_scale =
+                            std::min( SCALE_MAX, g_dbg_params.emitter_scale + SCALE_STEP );
+                        g_dbg_params.sun_scale =
+                            std::min( SCALE_MAX, g_dbg_params.sun_scale + SCALE_STEP );
+                        g_dbg_params.sky_scale =
+                            std::min( SCALE_MAX, g_dbg_params.sky_scale + SCALE_STEP );
                     }
                     break;
                 } else if( lc == KEY_F( 10 ) ) {

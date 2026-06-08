@@ -41,6 +41,16 @@ struct EmitterOverlayState {
 
 extern EmitterOverlayState s_emo;
 
+// Clamp ranges + key-step sizes for the F8/F9 handlers and the F4 sliders.
+// Single source so the two input paths can't drift.
+namespace lighting_dbg_range
+{
+inline constexpr float SCALE_MIN = 0.0f, SCALE_MAX = 10.0f, SCALE_STEP = 0.1f;
+inline constexpr float GI_MIN    = 0.0f, GI_MAX    = 2.0f,  GI_STEP    = 0.05f;
+inline constexpr float DAMT_MIN  = 0.0f, DAMT_MAX  = 1.0f,  DAMT_STEP  = 0.1f;
+inline constexpr float DBND_MIN  = 1.0f, DBND_MAX  = 16.0f, DBND_STEP  = 1.0f;
+}  // namespace lighting_dbg_range
+
 // Master toggle for the lighting debug HUD.
 extern bool g_dbg_lighting;
 // When true, the fragment shader replaces lighting output with a heatmap.
@@ -67,10 +77,8 @@ extern float  g_vol_reach;
 extern bool g_shadow_debug;
 // Current debug mode display (0-7, cycles through modes).
 extern uint32_t g_current_dbg_mode;
-// Scale factors for individual light contributions.
-extern float g_emitter_scale;
-extern float g_sun_scale;
-extern float g_sky_scale;
+// Per-contribution scales live in g_dbg_params.{emitter,sun,sky}_scale (single
+// source of truth, consumed by the renderer); no standalone copies.
 // Indoor daylight bleed strength.
 extern float g_skylight_bleed;
 // Vision-mask blur (tiles).
