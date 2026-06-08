@@ -156,27 +156,16 @@ int &scaling_factor = g_display.scaling_factor;
 
 static SDL_Joystick *&joystick = g_display.joystick; // Only one joystick for now.
 
-void refresh_display()
+// ── refresh_display phase helpers ──────────────────────────────
+
+static auto begin_frame( lighting::render_state &rs ) -> std::optional<lighting::frame_context>
 {
-    needupdate = false;
-    lastupdate = SDL_GetTicks();
-
     if( test_mode ) {
-        return;
+        return std::nullopt;
     }
-
-    // All rendering is GPU-direct. Single pass: clear black, tile sprites,
-    // UI rects, font glyphs. D3D12 requires one pass per swapchain texture;
-    // set_texture() flushes segments inside the pass so all draw kinds coexist.
-    auto &rs = lighting::get_render_state();
-
     if( !rs.ready() ) {
-        return;
+        return std::nullopt;
     }
-
-    // One-time Dear ImGui init: the first frame the GPU device is actually
-    // ready. Device readiness is NOT guaranteed at WinCreate time, so init must
-    // be lazy here. No-op once ready(); fail-safe (a failure just means no dev UI).
     if( !imgui_layer::ready() ) {
         imgui_layer::init( rs.device().window_ptr(), rs.device().raw() );
         imgui_layer::set_dev_ui( sdl_lighting_devui::draw );
@@ -188,104 +177,80 @@ void refresh_display()
 
     lighting::frame_context ctx = rs.device().begin_frame();
     if( !ctx.valid() ) {
-        return;
+        return std::nullopt;
     }
     if( !ctx.swapchain_tex ) {
         rs.device().submit_frame( ctx );
-        return;
+        return std::nullopt;
     }
+    return ctx;
+}
 
-    // Step-3 Phase 2: did the per-tile lighting rebuild this frame? Drives the
-    // radiance-cascade gather under the same dirty gate (retain cascade on skip).
+static auto build_lighting( lighting::render_state &rs ) -> bool
+{
     bool rc_rebuild = false;
-    // Phase 3+4: build emitter snapshot + per-tile SDF/sky-vis/GI/vision and
-    // submit to the collector, THEN flush below onto this same frame's render
-    // CB. Built at the frame head (not the tail) so the light data matches this
-    // frame's sprites + camera; tail-building left lighting one frame stale (a
-    // visible one-frame "snap" on a step). The build itself now lives in
-    // lighting/frame_build.cpp (LIGHTING_REWORK_PLAN.md step 0).
-    if( rs.collector() ) {
-        // Dirty-gate the expensive per-tile build (CPU SDF BFS + GI diffusion +
-        // big GPU upload). The per-tile data (transparency/sdf/sky_vis/seen)
-        // only changes on a turn tick, a Z change, or a camera pan/scroll — so
-        // key on {turn, z, camera-origin} and skip the rebuild when unchanged.
-        // The emitter snapshot is built every frame regardless (transient
-        // flashes age per-frame); when we skip the per-tile rebuild,
-        // build_and_submit_lighting submits empty per-tile vectors and
-        // flush_to_render_cb leaves last frame's GPU buffers resident.
-        // Busted while the F4 dev panel is visible so live knob tuning stays
-        // realtime. NOTE(verify): camera_cache (remote-view consoles) feeds
-        // `vis`; if a console updates it without a turn/origin change the gate
-        // could show stale vision — confirm in-game, add to the key if so.
-        static time_point last_turn = calendar::before_time_starts;
-        static int        last_z = INT_MIN;
-        static point      last_origin{ INT_MIN, INT_MIN };
-        bool rebuild_pertile = true;
-        if( g && world_generator && world_generator->active_world ) {
-            const time_point now = calendar::turn;
-            const int z = g->u.bub_pos().z();
-            const point origin = tilecontext
-                                 ? tilecontext->get_tile_map_origin().raw()
-                                 : point{ INT_MIN, INT_MIN };
-            rebuild_pertile = imgui_layer::visible()
-                              || now != last_turn || z != last_z
-                              || origin != last_origin;
-            if( rebuild_pertile ) {
-                last_turn = now;
-                last_z = z;
-                last_origin = origin;
-            }
-        }
-        // Dev cursor light (F4): translate the mouse pixel into the shader's
-        // world-tile space so the snapshot can pin an omni emitter under it.
-        // Inverse of the sprite vertex's tile→screen map: world = (mouse_px -
-        // draw_offset)/tile_dim + tile_map_origin. Mouse, draw_offset and tile
-        // dims are all in LOGICAL window pixels (the projection space the tiles
-        // draw in; see the proj_w/h note below), so no HiDPI density scaling.
-        if( cursor_light_emitter::enabled && g && tilecontext
-            && world_generator && world_generator->active_world ) {
-            float msx = 0.0f, msy = 0.0f;
-            SDL_GetMouseState( &msx, &msy );
-            const point o  = tilecontext->get_tile_map_origin().raw();
-            const point op = tilecontext->get_drawing_pixel_offset();
-            const int   tw = std::max( 1, tilecontext->get_tile_width() );
-            const int   th = std::max( 1, tilecontext->get_tile_height() );
-            cursor_light_emitter::wx = ( msx - static_cast<float>( op.x ) )
-                                       / static_cast<float>( tw ) + static_cast<float>( o.x );
-            cursor_light_emitter::wy = ( msy - static_cast<float>( op.y ) )
-                                       / static_cast<float>( th ) + static_cast<float>( o.y );
-            cursor_light_emitter::wz = static_cast<float>( g->u.bub_pos().z() );
-        }
-        lighting::frame_lighting_result fr =
-            lighting::build_and_submit_lighting( rs, rebuild_pertile, g_dbg_lighting,
-                                                 g_skylight_bleed, g_vision_blur );
-        rc_rebuild = fr.built_pertile;
-        if( fr.built_pertile ) {
-            s_emo.sdf_at_player      = fr.sdf_at_player;
-            s_emo.trans_at_player    = fr.trans_at_player;
-            s_emo.sdf_W_at_submit    = fr.sdf_W;
-            s_emo.sdf_size_at_submit = fr.sdf_size;
-        }
-        if( g_dbg_lighting ) {
-            s_emo.snap = std::move( fr.snapshot_copy );
+    if( !rs.collector() ) {
+        return rc_rebuild;
+    }
+
+    static time_point last_turn = calendar::before_time_starts;
+    static int        last_z = INT_MIN;
+    static point      last_origin{ INT_MIN, INT_MIN };
+    bool rebuild_pertile = true;
+    if( g && world_generator && world_generator->active_world ) {
+        const time_point now = calendar::turn;
+        const int z = g->u.bub_pos().z();
+        const point origin = tilecontext
+                             ? tilecontext->get_tile_map_origin().raw()
+                             : point{ INT_MIN, INT_MIN };
+        rebuild_pertile = imgui_layer::visible()
+                          || now != last_turn || z != last_z
+                          || origin != last_origin;
+        if( rebuild_pertile ) {
+            last_turn = now;
+            last_z = z;
+            last_origin = origin;
         }
     }
 
-    // Drain this frame's pending emitter/SDF/transparency/sky_vis upload onto
-    // THIS frame's render command buffer. Single CB = ordered: copy pass runs
-    // before the render pass on the GPU, so the fragment shader samples freshly
-    // uploaded textures instead of racing a worker-thread CB. Was the root
-    // cause of the empty EmitterTex / corrupted SkyVisTex observed earlier.
+    if( cursor_light_emitter::enabled && g && tilecontext
+        && world_generator && world_generator->active_world ) {
+        float msx = 0.0f, msy = 0.0f;
+        SDL_GetMouseState( &msx, &msy );
+        const point o  = tilecontext->get_tile_map_origin().raw();
+        const point op = tilecontext->get_drawing_pixel_offset();
+        const int   tw = std::max( 1, tilecontext->get_tile_width() );
+        const int   th = std::max( 1, tilecontext->get_tile_height() );
+        cursor_light_emitter::wx = ( msx - static_cast<float>( op.x ) )
+                                   / static_cast<float>( tw ) + static_cast<float>( o.x );
+        cursor_light_emitter::wy = ( msy - static_cast<float>( op.y ) )
+                                   / static_cast<float>( th ) + static_cast<float>( o.y );
+        cursor_light_emitter::wz = static_cast<float>( g->u.bub_pos().z() );
+    }
+
+    lighting::frame_lighting_result fr =
+        lighting::build_and_submit_lighting( rs, rebuild_pertile, g_dbg_lighting,
+                                             g_skylight_bleed, g_vision_blur );
+    rc_rebuild = fr.built_pertile;
+    if( fr.built_pertile ) {
+        s_emo.sdf_at_player      = fr.sdf_at_player;
+        s_emo.trans_at_player    = fr.trans_at_player;
+        s_emo.sdf_W_at_submit    = fr.sdf_W;
+        s_emo.sdf_size_at_submit = fr.sdf_size;
+    }
+    if( g_dbg_lighting ) {
+        s_emo.snap = std::move( fr.snapshot_copy );
+    }
+    return rc_rebuild;
+}
+
+static auto flush_and_gather_rc( lighting::render_state &rs,
+                                 lighting::frame_context &ctx, bool rc_rebuild ) -> void
+{
     if( rs.collector() ) {
         rs.collector()->flush_to_render_cb( ctx.cmd_buffer );
     }
 
-    // Step-3 Phase 2: gather the radiance cascade into rs.rc().cascade_texture()
-    // on THIS frame's render CB — after the emitter/SDF upload (its inputs) and
-    // before Pass W (its consumer). Rides the per-tile dirty gate (rc_rebuild):
-    // on skip frames the pass is not re-run and the cascade texture is retained,
-    // exactly like world_target. The sprite reads it as IndirectTex when the F4
-    // GI source is RC (the default).
     if( rc_rebuild && rs.sdf().populated() && rs.rc().ready()
         && rs.collector() && rs.sdf().sdf_buffer() ) {
         lighting::rc_params rp{};
@@ -300,9 +265,6 @@ void refresh_display()
                         rp.map_w, rp.map_h, rp );
     }
 
-    // Dev oracle (one-shot, F4 button): read back the RC cascade and log stats.
-    // Reads the last fully-submitted cascade (this frame's gather is still on the
-    // unsubmitted render CB) — fine on a held-still scene, which is when it's used.
     if( g_rc_readback ) {
         g_rc_readback = false;
         if( rs.rc().ready() && rs.sdf().populated() ) {
@@ -310,173 +272,121 @@ void refresh_display()
                                      static_cast<std::uint32_t>( rs.sdf().map_h() ) );
         }
     }
+}
 
-    // Phase 6/6b: stamp the per-frame lighting params onto the tile_batcher
-    // BEFORE begin_pass. end_pass() reads impl.lp / impl.lp_emitter_buf when
-    // it records SDL_BindGPUFragmentSamplers + SDL_BindGPUFragmentStorageBuffers
-    // + SDL_PushGPU*UniformData onto the command buffer; doing this AFTER
-    // end_pass means the recorded values are one frame stale (camera-drift
-    // on motion; frame 0 fully black).
-    if( rs.collector() ) {
-        // Q10 refactor: assemble the per-frame lighting inputs the caller
-        // alone knows (camera + tile geometry + time-of-day + ambient).
-        // render_state::begin_lighting_frame() resolves the textures,
-        // sampler, emitter count, and SDF dimensions internally from its
-        // own subsystems — caller no longer threads those by hand.
-        lighting::render_state::frame_light_inputs in{};
-        in.tile_pixel_size = tilecontext
-                             ? static_cast<float>( tilecontext->get_tile_width() )
-                             : 32.0f;
-        in.z_level         = g ? static_cast<float>( g->u.bub_pos().z() ) : 0.0f;
-        // Restored to 0.05 (was 0.5 as band-aid for stale D3D12 emitter
-        // sampler issue — band-aid pre-dates the single-CB
-        // flush_to_render_cb rewrite and may no longer be needed. If
-        // in-game lighting is broken after this, revert to 0.5 and
-        // investigate sampler binding properly.
-        in.ambient         = 0.05f;
-
-        // Camera offset converts screen tile units → map tile coords:
-        //   map_pos = tile_tu - camera_offset   (see sdf_pass.h comment)
-        // On the main menu (g==nullptr) keep cam_off=(0,0) so the
-        // decorative emitter coordinates stay consistent with the
-        // screen-tile world_pos used by the background sprite.
-        if( g && tilecontext && in.tile_pixel_size > 0.0f ) {
-            const point map_origin  = tilecontext->get_tile_map_origin().raw();
-            const point draw_offset = tilecontext->get_drawing_pixel_offset();
-            in.camera_off_x = static_cast<float>( draw_offset.x ) / in.tile_pixel_size
-                              - static_cast<float>( map_origin.x );
-            in.camera_off_y = static_cast<float>( draw_offset.y ) / in.tile_pixel_size
-                              - static_cast<float>( map_origin.y );
-            if( g_dbg_lighting ) {
-                s_emo.cam_off_x = in.camera_off_x;
-                s_emo.cam_off_y = in.camera_off_y;
-                s_emo.tile_px   = in.tile_pixel_size;
-                s_emo.op_x      = static_cast<float>( draw_offset.x );
-                s_emo.op_y      = static_cast<float>( draw_offset.y );
-                s_emo.player_x  = g->u.bub_pos().x();
-                s_emo.player_y  = g->u.bub_pos().y();
-                s_emo.player_z  = g->u.bub_pos().z();
-                s_emo.screen_w  = static_cast<int>( ctx.swapchain_w );
-                s_emo.screen_h  = static_cast<int>( ctx.swapchain_h );
-                s_emo.map_origin_x = map_origin.x;
-                s_emo.map_origin_y = map_origin.y;
-                s_emo.draw_off_px_x = draw_offset.x;
-                s_emo.draw_off_px_y = draw_offset.y;
-            }
-        } else if( g_dbg_lighting ) {
-            // Main menu / no-game path: still update the screen size so
-            // the HUD shows a non-zero center cross and the emitter count
-            // line reflects the collector state. Player / map-origin /
-            // draw-offset all stay zero (no map loaded).
-            s_emo.cam_off_x = 0.f;
-            s_emo.cam_off_y = 0.f;
-            s_emo.tile_px   = in.tile_pixel_size;
-            s_emo.op_x      = 0.f;
-            s_emo.op_y      = 0.f;
-            s_emo.player_x  = 0;
-            s_emo.player_y  = 0;
-            s_emo.player_z  = 0;
-            s_emo.screen_w  = static_cast<int>( ctx.swapchain_w );
-            s_emo.screen_h  = static_cast<int>( ctx.swapchain_h );
-            s_emo.map_origin_x = 0;
-            s_emo.map_origin_y = 0;
-            s_emo.draw_off_px_x = 0;
-            s_emo.draw_off_px_y = 0;
-        }
-
-        // Compute sun/sky params from time-of-day (24h LUT). sun_hour is
-        // renamed to avoid shadowing the hour_of_day<T>() template.
-        const float sun_hour = g ? hour_of_day<float>( calendar::turn ) : 12.f;
-        in.sun = lighting::make_sun_params( sun_hour );
-        // Weather multiplier on sun + sky intensity (Bucket A / A3). Reuses the
-        // sim's own light model: incident sunlight = clear-sky sunlight() plus the
-        // weather type's light_modifier (negative for clouds/rain/storm; see
-        // incident_sunlight() in weather.cpp). Normalised against the clear-sky
-        // baseline so it is 1.0 in clear weather and dims under overcast, keeping
-        // the GPU sun/sky in step with gameplay light. CPU-side multiply only —
-        // no shader, wire, or uniform change.
-        float weather_mult = 1.0f;
-        if( g ) {
-            const float base = sunlight( calendar::turn, false );
-            // weather_id can be a stale/unregistered id on the main menu after
-            // quit-to-menu (the world's weather_type JSON is unloaded but g and
-            // the weather_manager survive). is_valid() guards the factory lookup
-            // so the dangling "clear" id no longer triggers a debugmsg storm.
-            const weather_type_id wid = get_weather().weather_id;
-            if( base > 1.0f && wid.is_valid() ) {
-                const int mod = wid->light_modifier;
-                weather_mult = std::clamp( ( base + static_cast<float>( mod ) ) / base,
-                                           0.0f, 1.0f );
-            }
-            in.sun.sun_intensity *= weather_mult;
-            in.sun.sky_intensity *= weather_mult;
-        }
-        // Repurpose sun.sp_pad as the shader debug-heatmap sentinel.
-        in.sun.sp_pad = g_dbg_lighting_shader ? 1.0f : 0.0f;
-
-        // Stash the per-frame volumetric inputs (Step-6 / C2). Consumed at the
-        // Pass-W record site, where `in` is out of scope. Sun dir/colour/intensity
-        // already carry the A3 weather multiplier; cam_off/tile_px are the SAME
-        // values the sprite vtx uses (single source of truth for the world_pos
-        // reconstruction in vol.frag). shadow_k/steps reuse the sprite knobs so
-        // shafts match the surface-shadow softness. The density/intensity/reach
-        // knobs are merged in at record time.
-        g_vol_params.tile_pixel_size = in.tile_pixel_size;
-        g_vol_params.camera_off_x    = in.camera_off_x;
-        g_vol_params.camera_off_y    = in.camera_off_y;
-        g_vol_params.current_z       = in.z_level;
-        g_vol_params.sun_dir_x       = in.sun.sun_dir_x;
-        g_vol_params.sun_dir_y       = in.sun.sun_dir_y;
-        g_vol_params.sun_intensity   = in.sun.sun_intensity;
-        g_vol_params.sun_r           = in.sun.sun_r;
-        g_vol_params.sun_g           = in.sun.sun_g;
-        g_vol_params.sun_b           = in.sun.sun_b;
-        g_vol_params.shadow_k        = in.debug.shadow_k;
-        g_vol_params.shadow_steps    = in.debug.shadow_steps;
-        g_vol_params.sdf_map_w       = static_cast<std::uint32_t>( rs.sdf().map_w() );
-        g_vol_params.sdf_map_h       = static_cast<std::uint32_t>( rs.sdf().map_h() );
-
-        // Runtime debug tuning: wire the globally controlled debug_params into
-        // frame_light_inputs. shader uses these for debug visualization (F7 cycles
-        // modes, F8/F9 adjust scales). Defaults are all zeroed (no-op).
-        in.debug = g_dbg_params;
-        // Feed a live wall-clock seconds (wrapped to keep float32 phase precision)
-        // so the foliage sway shader has a non-zero anim_time → sin oscillates.
-        in.debug.anim_time = std::fmod( static_cast<float>( SDL_GetTicks() ) / 1000.0f, 1000.0f );
-        // Inject the player map-tile centre as the radial vision-bubble origin
-        // (DATA, not a knob — overwrites the unused g_dbg_params slots). Matches
-        // the shader world_pos space (= map tile index). Main menu (g==null)
-        // leaves it at 0 with vis_radius gating on sdf_map_w>0 anyway.
-        if( g ) {
-            in.debug.player_x = static_cast<float>( g->u.bub_pos().x() ) + 0.5f;
-            in.debug.player_y = static_cast<float>( g->u.bub_pos().y() ) + 0.5f;
-        }
-
-        // Debug: log emitter count, texture state, and first emitter data every ~120 frames.
-        static int emit_dbg_frame = 0;
-        if( ++emit_dbg_frame >= 120 ) {
-            emit_dbg_frame = 0;
-            dbg( DL::Debug ) << "lighting: n_emit=" << rs.collector()->last_count()
-                             << " emitter_buf=" << ( rs.collector()->emitter_buffer() ? "ok" : "NULL" )
-                             << " sdf_tex=" << ( rs.sdf().sdf_texture() ? "ok" : "NULL" )
-                             << " sampler=" << ( rs.gpu_sampler() ? "ok" : "NULL" )
-                             << " cam_off=(" << in.camera_off_x << "," << in.camera_off_y << ")"
-                             << " sdf=" << rs.sdf().map_w() << "x" << rs.sdf().map_h()
-                             << " z=" << in.z_level
-                             << " ambient=" << in.ambient
-                             << " tile_px=" << in.tile_pixel_size;
-        }
-        s_emo.last_n_emit_pushed = static_cast<Uint32>( rs.collector()->last_count() );
-
-        rs.begin_lighting_frame( in );
+static auto assemble_light_inputs( lighting::render_state &rs,
+                                   lighting::frame_context &ctx ) -> void
+{
+    if( !rs.collector() ) {
+        return;
     }
 
-    // Phase 8 main-menu background: when no world is loaded, inject a fullscreen
-    // tile sprite (tint=0, game-tile mode) so the warm amber decorative emitter
-    // shows as a lit gradient behind the UI text.  Added only when the tile queue
-    // is empty (once per redraw cycle) to prevent stacking across frames.
-    // Gate on active_world rather than !g: g is created before the main menu is
-    // shown, so !g misses the menu state — must match snapshot.cpp:207.
+    lighting::render_state::frame_light_inputs in{};
+    in.tile_pixel_size = tilecontext
+                         ? static_cast<float>( tilecontext->get_tile_width() )
+                         : 32.0f;
+    in.z_level         = g ? static_cast<float>( g->u.bub_pos().z() ) : 0.0f;
+    in.ambient         = 0.05f;
+
+    if( g && tilecontext && in.tile_pixel_size > 0.0f ) {
+        const point map_origin  = tilecontext->get_tile_map_origin().raw();
+        const point draw_offset = tilecontext->get_drawing_pixel_offset();
+        in.camera_off_x = static_cast<float>( draw_offset.x ) / in.tile_pixel_size
+                          - static_cast<float>( map_origin.x );
+        in.camera_off_y = static_cast<float>( draw_offset.y ) / in.tile_pixel_size
+                          - static_cast<float>( map_origin.y );
+        if( g_dbg_lighting ) {
+            s_emo.cam_off_x = in.camera_off_x;
+            s_emo.cam_off_y = in.camera_off_y;
+            s_emo.tile_px   = in.tile_pixel_size;
+            s_emo.op_x      = static_cast<float>( draw_offset.x );
+            s_emo.op_y      = static_cast<float>( draw_offset.y );
+            s_emo.player_x  = g->u.bub_pos().x();
+            s_emo.player_y  = g->u.bub_pos().y();
+            s_emo.player_z  = g->u.bub_pos().z();
+            s_emo.screen_w  = static_cast<int>( ctx.swapchain_w );
+            s_emo.screen_h  = static_cast<int>( ctx.swapchain_h );
+            s_emo.map_origin_x = map_origin.x;
+            s_emo.map_origin_y = map_origin.y;
+            s_emo.draw_off_px_x = draw_offset.x;
+            s_emo.draw_off_px_y = draw_offset.y;
+        }
+    } else if( g_dbg_lighting ) {
+        s_emo.cam_off_x = 0.f;
+        s_emo.cam_off_y = 0.f;
+        s_emo.tile_px   = in.tile_pixel_size;
+        s_emo.op_x      = 0.f;
+        s_emo.op_y      = 0.f;
+        s_emo.player_x  = 0;
+        s_emo.player_y  = 0;
+        s_emo.player_z  = 0;
+        s_emo.screen_w  = static_cast<int>( ctx.swapchain_w );
+        s_emo.screen_h  = static_cast<int>( ctx.swapchain_h );
+        s_emo.map_origin_x = 0;
+        s_emo.map_origin_y = 0;
+        s_emo.draw_off_px_x = 0;
+        s_emo.draw_off_px_y = 0;
+    }
+
+    const float sun_hour = g ? hour_of_day<float>( calendar::turn ) : 12.f;
+    in.sun = lighting::make_sun_params( sun_hour );
+    float weather_mult = 1.0f;
+    if( g ) {
+        const float base = sunlight( calendar::turn, false );
+        const weather_type_id wid = get_weather().weather_id;
+        if( base > 1.0f && wid.is_valid() ) {
+            const int mod = wid->light_modifier;
+            weather_mult = std::clamp( ( base + static_cast<float>( mod ) ) / base,
+                                       0.0f, 1.0f );
+        }
+        in.sun.sun_intensity *= weather_mult;
+        in.sun.sky_intensity *= weather_mult;
+    }
+    in.sun.sp_pad = g_dbg_lighting_shader ? 1.0f : 0.0f;
+
+    g_vol_params.tile_pixel_size = in.tile_pixel_size;
+    g_vol_params.camera_off_x    = in.camera_off_x;
+    g_vol_params.camera_off_y    = in.camera_off_y;
+    g_vol_params.current_z       = in.z_level;
+    g_vol_params.sun_dir_x       = in.sun.sun_dir_x;
+    g_vol_params.sun_dir_y       = in.sun.sun_dir_y;
+    g_vol_params.sun_intensity   = in.sun.sun_intensity;
+    g_vol_params.sun_r           = in.sun.sun_r;
+    g_vol_params.sun_g           = in.sun.sun_g;
+    g_vol_params.sun_b           = in.sun.sun_b;
+    g_vol_params.shadow_k        = in.debug.shadow_k;
+    g_vol_params.shadow_steps    = in.debug.shadow_steps;
+    g_vol_params.sdf_map_w       = static_cast<std::uint32_t>( rs.sdf().map_w() );
+    g_vol_params.sdf_map_h       = static_cast<std::uint32_t>( rs.sdf().map_h() );
+
+    in.debug = g_dbg_params;
+    in.debug.anim_time = std::fmod( static_cast<float>( SDL_GetTicks() ) / 1000.0f, 1000.0f );
+    if( g ) {
+        in.debug.player_x = static_cast<float>( g->u.bub_pos().x() ) + 0.5f;
+        in.debug.player_y = static_cast<float>( g->u.bub_pos().y() ) + 0.5f;
+    }
+
+    static int emit_dbg_frame = 0;
+    if( ++emit_dbg_frame >= 120 ) {
+        emit_dbg_frame = 0;
+        dbg( DL::Debug ) << "lighting: n_emit=" << rs.collector()->last_count()
+                         << " emitter_buf=" << ( rs.collector()->emitter_buffer() ? "ok" : "NULL" )
+                         << " sdf_tex=" << ( rs.sdf().sdf_texture() ? "ok" : "NULL" )
+                         << " sampler=" << ( rs.gpu_sampler() ? "ok" : "NULL" )
+                         << " cam_off=(" << in.camera_off_x << "," << in.camera_off_y << ")"
+                         << " sdf=" << rs.sdf().map_w() << "x" << rs.sdf().map_h()
+                         << " z=" << in.z_level
+                         << " ambient=" << in.ambient
+                         << " tile_px=" << in.tile_pixel_size;
+    }
+    s_emo.last_n_emit_pushed = static_cast<Uint32>( rs.collector()->last_count() );
+
+    rs.begin_lighting_frame( in );
+}
+
+static auto maybe_push_menu_background( lighting::render_state &rs,
+                                        lighting::frame_context &ctx ) -> void
+{
     const bool no_world = !g || !world_generator || !world_generator->active_world;
     if( no_world && rs.tile_sprites_empty() && rs.geometry().white_texture() ) {
         lighting::sprite_instance bg{};
@@ -486,11 +396,6 @@ void refresh_display()
         bg.dst_h  = static_cast<float>( ctx.swapchain_h );
         bg.src_u  = 0.f;  bg.src_v  = 0.f;
         bg.src_uw = 1.f;  bg.src_vh = 1.f;
-        // Debug backdrop (F12): bright blue floor — proves the bg sprite reaches
-        // the swapchain and that the fragment shader can light a non-tile sprite.
-        // Shader composites via max(tint, gpu_total), so a blue floor keeps the
-        // bg visible AND any emitter contribution >0.3 in R/G shines through.
-        // When toggled off, tint=0 ("game-tile mode") yields pure lit output.
         if( menu_emitter_tuning::blue_backdrop ) {
             bg.tint_r = 0.0f;  bg.tint_g = 0.0f;  bg.tint_b = 0.3f;
         } else {
@@ -500,36 +405,11 @@ void refresh_display()
         bg.rotation = 0.f;
         rs.queue_tile_sprite( rs.geometry().white_texture(), bg );
     }
+}
 
-    constexpr float clear_black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
-    // HiDPI: viewport (target_w/h) = physical swapchain so the rasterizer
-    // fills the full framebuffer; projection (proj_w/h) = logical window
-    // size so the shader's pixel→NDC math matches the logical coords the
-    // UI / fonts queue draws at. GPU stretches logical → physical.
-    int proj_w = 0;
-    int proj_h = 0;
-    SDL_GetWindowSize( ::window.get(), &proj_w, &proj_h );
-    if( proj_w <= 0 || proj_h <= 0 ) {
-        proj_w = static_cast<int>( ctx.swapchain_w );
-        proj_h = static_cast<int>( ctx.swapchain_h );
-    }
-
-    // Phase 3: the UI compositor Pass A, the swapchain pass, and the composite
-    // blit now run AFTER the transient LIGHT-DBG HUD is generated (below), so
-    // Pass A can drain the transient queues into the compositor. The HUD block
-    // is pure queue pushes (no open pass required), so it runs here first.
-    // Lighting debug HUD. Tiers:
-    //   1: top-left text strip (screen dims, tile_px, cam_off, player, op, n_emit)
-    //   2: emitter markers + player + screen-center crosses
-    //   3: per-tile (x,y) coord labels — cached, rebuilt on player/camera change
-    //   4: tile grid lines (1px) at every tile boundary
-    //
-    // Route all overlay pushes (this block + the tuning widget below) into
-    // render_state's per-frame transient queues. refresh_display runs every
-    // frame, but ui_manager's clear_ui_queues() only fires on a redraw
-    // cycle — without transient routing these pushes would accumulate on
-    // no-input frames and ghost over composited UI slices. RAII guard
-    // ensures the flag clears even if a push path throws.
+static auto draw_lighting_overlays( lighting::render_state &rs,
+                                    lighting::frame_context &ctx ) -> void
+{
     struct transient_routing_guard {
         lighting::render_state &rs;
         ~transient_routing_guard()
@@ -539,9 +419,6 @@ void refresh_display()
     } _t_route{ rs };
     rs.set_transient_routing( true );
 
-    // Render the HUD on the main menu too so we can verify the decorative
-    // amber emitter is being collected/uploaded. Player / tile-coord tiers
-    // are skipped when no game is loaded (gated below on `g`).
     if( g_dbg_lighting ) {
         constexpr float OL_PI = 3.14159265358979323846f;
         const float tp  = s_emo.tile_px > 0.f ? s_emo.tile_px : 32.f;
@@ -549,8 +426,6 @@ void refresh_display()
         const float sh  = static_cast<float>( ctx.swapchain_h );
 
         // ── Tier 4: grid lines ─────────────────────────────────────────────
-        // Vertical and horizontal 1px lines aligned to the tile lattice.
-        // Anchor on op (drawing pixel offset) so lines coincide with sprite edges.
         {
             const float anchor_x = std::fmod( s_emo.op_x, tp );
             const float anchor_y = std::fmod( s_emo.op_y, tp );
@@ -562,7 +437,7 @@ void refresh_display()
             }
         }
 
-        // ── Tier 2: emitter markers (solid dot + dotted ring) ──────────────
+        // ── Tier 2: emitter markers ────────────────────────────────────────
         static bool emo_cam_logged = false;
         if( !emo_cam_logged ) {
             emo_cam_logged = true;
@@ -578,9 +453,7 @@ void refresh_display()
             const float cr  = e.r > 0.01f ? e.r : 1.0f;
             const float cg  = e.g > 0.01f ? e.g : 1.0f;
             const float cb  = e.b > 0.01f ? e.b : 1.0f;
-            // Bright filled core.
             rs.queue_ui_rect( sx - 4.f, sy - 4.f, 8.f, 8.f, cr, cg, cb, 1.0f );
-            // Dotted ring at radius.
             for( int i = 0; i < 48; ++i ) {
                 const float a = 2.0f * OL_PI * static_cast<float>( i ) / 48.0f;
                 rs.queue_ui_rect( sx + std::cos( a ) * rpx - 2.f,
@@ -604,12 +477,9 @@ void refresh_display()
             rs.queue_ui_rect( cx - 1.f, cy - 10.f, 2.f, 20.f, 0.f, 1.f, 1.f, 0.9f );
         }
 
-        // ── Tier 3: per-tile (x,y) coord labels, cached on player move ─────
-        // Labels span ~5–6 glyphs at small font width and easily exceed a 32px
-        // tile, smearing horizontally. Restrict to a small box around the
-        // player and label every other tile so they stay legible.
-        constexpr int TIER3_RADIUS = 6;   // tiles each side of player
-        constexpr int TIER3_STEP   = 2;   // every Nth tile
+        // ── Tier 3: per-tile (x,y) coord labels ────────────────────────────
+        constexpr int TIER3_RADIUS = 6;
+        constexpr int TIER3_STEP   = 2;
         const bool cache_stale =
             s_emo.player_x != s_emo.cached_player_x ||
             s_emo.player_y != s_emo.cached_player_y ||
@@ -644,7 +514,6 @@ void refresh_display()
         }
         if( font ) {
             for( const TileCoordGlyph &g_lbl : s_emo.tile_labels ) {
-                // Tiny dark backdrop so labels remain readable over sprites.
                 const float lw = static_cast<float>( g_lbl.text.size() ) *
                                  static_cast<float>( font->width );
                 rs.queue_ui_rect( g_lbl.x - 1.f, g_lbl.y - 1.f,
@@ -653,152 +522,88 @@ void refresh_display()
                 draw_string( *font, renderer, geometry, g_lbl.text,
                              point( static_cast<int>( g_lbl.x ),
                                     static_cast<int>( g_lbl.y ) ),
-                             14 ); // 14 = yellow
+                             14 );
             }
         }
-
-        // ── Tier 1: top-left HUD strip — MIGRATED to the F4 ImGui panel ────
-        // The text readout now lives in draw_lighting_dev_ui() under the
-        // "Diagnostics" header (reads the same s_emo). Removed here to stop the
-        // double-render: the spatial overlays above (grid/markers/crosses/
-        // labels) stay because they are world-aligned, not a top-left panel.
     }
+}
 
-    // Lighting tuning widget (F-key text+bar HUD) — REMOVED, fully migrated to
-    // the F4 ImGui panel (draw_lighting_dev_ui). All its knobs are now interactive
-    // sliders/combo there. The raw F-key handlers (F5–F12) still mutate the globals
-    // for users without the ImGui panel; only the on-screen text widget is gone.
-
-    // The transient LIGHT-DBG HUD (above) is re-pushed every frame and animates
-    // (emitter markers + crosses track the camera), so force a recomposite
-    // whenever it is active. clear_ui_queues() only invalidates on a ui_manager
-    // redraw cycle, which the HUD does not go through.
+static auto composite_ui_pass_a( lighting::render_state &rs,
+                                 lighting::frame_context &ctx, int proj_w, int proj_h ) -> void
+{
+    constexpr float clear_transparent[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
     lighting::ui_composite_target *uct = rs.ui_target();
     if( uct && g_dbg_lighting ) {
         uct->invalidate();
     }
 
-    // ── UI compositor Pass A (phase 4: dirty-gated) ────────────────────────
-    // Re-render the UI into the compositor ONLY when something invalidated it
-    // (a ui_manager redraw cycle via clear_ui_queues, the resize hook, or the
-    // HUD above). On a clean frame Pass A is skipped and Pass B reuses the
-    // persistent compositor texture from the last composite — this is the
-    // partial-redraw flicker fix (no black sidebar when only a tooltip redrew).
-    //
-    // STICKY: the pass runs only when dirty AND there is UI to draw. A
-    // transient-empty queue does NOT clear the compositor — the last composite
-    // is retained and reused by the Pass B blit. consume_dirty() is guarded
-    // behind any_ui (short-circuit) so the dirty flag is preserved across empty
-    // frames and the composite happens once content returns. (An always-clear
-    // variant blanked the whole UI on any frame the queue briefly emptied.)
-    //
-    // Two begin_pass/end_pass cycles on one batcher in one command buffer is
-    // safe: end_pass uploads instances with cycle=true (fresh backing per pass)
-    // and Pass A targets the compositor texture, not the swapchain.
     const bool any_ui = !rs.ui_rects_empty() || !rs.font_glyphs_empty();
     if( uct && uct->texture() && any_ui && uct->consume_dirty() ) {
-        constexpr float clear_transparent[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
         rs.tile_batcher().begin_pass( ctx.cmd_buffer, uct->texture(),
                                       uct->width(), uct->height(),
                                       clear_transparent,
                                       static_cast<std::uint32_t>( proj_w ),
                                       static_cast<std::uint32_t>( proj_h ) );
-        // Per-slice ordered flush: each ui_adaptor slice draws rects-then-glyphs
-        // in z-order so overlapping windows occlude correctly. flush_ui binds the
-        // white (rect) and per-glyph textures itself.
         rs.flush_ui( rs.tile_batcher(), rs.gpu_sampler() );
         rs.tile_batcher().end_pass();
     }
+}
 
-    // ── Pass W: world accumulation ─────────────────────────────────────────
-    // Render the lit-world tile sprites into the PERSISTENT world_target.
-    //
-    // Retention comes from SKIPPING the pass, not from the load-op: a frame that
-    // enqueues no tiles (partial UI redraw → tile queue head-cleared in
-    // redraw_invalidated, map adaptor not re-invalidated) doesn't run the pass
-    // at all, so the last world is RETAINED instead of flashing black — the
-    // in-game whole-screen-black flicker fix.
-    //
-    // When the pass DOES run it always LOADOP_CLEARs (like the old swapchain
-    // tile pass), then repaints the full tile set. LOADOP_LOAD here would buy no
-    // retention (the skip already does that) and would smear stale pixels wher-
-    // ever a frame lacks full opaque coverage (unseen tiles, scroll edges,
-    // overlay-only frames). needs_clear (the target's dirty flag, init + resize)
-    // forces the pass to run at least once so the texture starts defined / resize
-    // garbage is wiped even before any tiles exist. Lighting is already stamped
-    // (begin_lighting_frame above); end_pass binds it for the lit tile segments.
+static auto render_world_pass_w( lighting::render_state &rs,
+                                 lighting::frame_context &ctx, int proj_w, int proj_h ) -> void
+{
+    constexpr float clear_black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
     lighting::ui_composite_target *wt = rs.world_target();
-    if( wt && wt->texture() ) {
-        const bool needs_clear = wt->consume_dirty();
-        const bool have_tiles  = !rs.tile_sprites_empty() && rs.gpu_sampler();
-        if( needs_clear || have_tiles ) {
-            // Silhouette sun-shadow mask (Phase 1). Render the TALL subset of
-            // the tile queue as sheared coverage into shadow_mask_ BEFORE Pass W
-            // (own batcher + pass; the queue is still populated and re-drained by
-            // Pass W below). Phase 1 only debug-blits the mask — no sprite wiring
-            // yet. Gated with Pass W so the mask is rebuilt on the same frames
-            // the world is.
-            rs.flush_shadow_casters( ctx.cmd_buffer,
-                                     static_cast<std::uint32_t>( proj_w ),
-                                     static_cast<std::uint32_t>( proj_h ) );
-
-            // target_format = wt->format() selects the batcher's pipeline for
-            // this target. Swapchain 8-bit in step 1a; RGBA16F once 1b flips
-            // world_target — the per-format pipeline cache builds the HDR
-            // variant on first use.
-            rs.tile_batcher().begin_pass( ctx.cmd_buffer, wt->texture(),
-                                          wt->width(), wt->height(),
-                                          clear_black,
-                                          static_cast<std::uint32_t>( proj_w ),
-                                          static_cast<std::uint32_t>( proj_h ),
-                                          wt->format() );
-            if( have_tiles ) {
-                rs.flush_tile_sprites( rs.tile_batcher(), rs.gpu_sampler() );
-            }
-            rs.tile_batcher().end_pass();
-
-            // Step-6 C2 volumetric sun shafts: composite occlusion-gated lit-fog
-            // additively into world_target after it is freshly drawn, BEFORE
-            // bloom (so shafts bloom too). Same Pass-W-ran gate as bloom
-            // (additive → must not re-add on a retained frame). Off by default
-            // (legibility kill-gate); F4 knobs merged onto the stashed per-frame
-            // params.
-            if( g_vol_enable && rs.volumetric().ready() ) {
-                lighting::vol_params vp = g_vol_params;
-                vp.vol_density   = g_vol_density;
-                vp.vol_intensity = g_vol_intensity;
-                vp.vol_reach     = g_vol_reach;
-                vp.vol_shadow    = g_vol_shadow;
-                // proj-space (game-view) size: vol.frag reconstructs world_pos as
-                // uv*proj_size/tile_px - camera_off, because the sprite pass
-                // stretches proj-space into the full world_target texture.
-                vp.proj_w = static_cast<float>( proj_w );
-                vp.proj_h = static_cast<float>( proj_h );
-                rs.volumetric().record( ctx.cmd_buffer, wt->texture(),
-                                        wt->width(), wt->height(),
-                                        rs.sdf().sdf_buffer(), rs.sdf().sky_vis_buffer(),
-                                        vp );
-            }
-
-            // Step-4 bloom: add glow into world_target AFTER it is freshly drawn
-            // this frame (only when Pass W ran — bloom mutates the target in
-            // place, so running it on a retained frame would accumulate glow).
-            // The tonemap (Pass T) then resolves the augmented HDR target.
-            if( g_bloom_enable && rs.bloom().ready() ) {
-                rs.bloom().record( ctx.cmd_buffer, wt->texture(),
-                                   wt->width(), wt->height(),
-                                   g_bloom_threshold, g_bloom_intensity );
-            }
-        }
+    if( !wt || !wt->texture() ) {
+        return;
     }
 
-    // ── Pass T: tonemap resolve ────────────────────────────────────────────
-    // Resolve the (HDR, once 1b lands) world_target through the tonemap pass
-    // into the LDR world_ldr_target that Pass B blits. wt persists across
-    // partial-redraw frames, so running this every frame keeps the LDR copy in
-    // sync without coupling to whether Pass W ran. Identity shader in 1a/1b →
-    // pixel-identical; AgX in 1c. Self-contained pass on world_ldr (no swapchain
-    // pass conflict).
+    const bool needs_clear = wt->consume_dirty();
+    const bool have_tiles  = !rs.tile_sprites_empty() && rs.gpu_sampler();
+    if( !needs_clear && !have_tiles ) {
+        return;
+    }
+
+    rs.flush_shadow_casters( ctx.cmd_buffer,
+                             static_cast<std::uint32_t>( proj_w ),
+                             static_cast<std::uint32_t>( proj_h ) );
+
+    rs.tile_batcher().begin_pass( ctx.cmd_buffer, wt->texture(),
+                                  wt->width(), wt->height(),
+                                  clear_black,
+                                  static_cast<std::uint32_t>( proj_w ),
+                                  static_cast<std::uint32_t>( proj_h ),
+                                  wt->format() );
+    if( have_tiles ) {
+        rs.flush_tile_sprites( rs.tile_batcher(), rs.gpu_sampler() );
+    }
+    rs.tile_batcher().end_pass();
+
+    if( g_vol_enable && rs.volumetric().ready() ) {
+        lighting::vol_params vp = g_vol_params;
+        vp.vol_density   = g_vol_density;
+        vp.vol_intensity = g_vol_intensity;
+        vp.vol_reach     = g_vol_reach;
+        vp.vol_shadow    = g_vol_shadow;
+        vp.proj_w = static_cast<float>( proj_w );
+        vp.proj_h = static_cast<float>( proj_h );
+        rs.volumetric().record( ctx.cmd_buffer, wt->texture(),
+                                wt->width(), wt->height(),
+                                rs.sdf().sdf_buffer(), rs.sdf().sky_vis_buffer(),
+                                vp );
+    }
+
+    if( g_bloom_enable && rs.bloom().ready() ) {
+        rs.bloom().record( ctx.cmd_buffer, wt->texture(),
+                           wt->width(), wt->height(),
+                           g_bloom_threshold, g_bloom_intensity );
+    }
+}
+
+static auto tonemap_pass_t( lighting::render_state &rs,
+                            lighting::frame_context &ctx ) -> void
+{
+    lighting::ui_composite_target *wt   = rs.world_target();
     lighting::ui_composite_target *wldr = rs.world_ldr_target();
     if( wt && wt->texture() && wldr && wldr->texture() && rs.gpu_sampler()
         && rs.tonemap().ready() ) {
@@ -806,21 +611,19 @@ void refresh_display()
                              wldr->texture(), wldr->width(), wldr->height(),
                              g_tonemap_exposure, g_tonemap_min_ev, g_tonemap_max_ev );
     }
+}
 
-    // Dear ImGui dev UI: build the frame and upload its vertex/index buffers
-    // OUTSIDE any render pass (prepare opens its own GPU copy pass), then draw
-    // it as the LAST thing inside Pass B via the end_pass overlay so it shares
-    // the single swapchain pass (D3D12 drops a 2nd pass on the same target).
+static auto composite_swapchain_pass_b( lighting::render_state &rs,
+                                        lighting::frame_context &ctx, int proj_w, int proj_h ) -> void
+{
+    constexpr float clear_black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+
     const bool imgui_active = imgui_layer::ready() && imgui_layer::visible();
     if( imgui_active ) {
         imgui_layer::new_frame();
         imgui_layer::prepare( ctx.cmd_buffer );
     }
 
-    // ── Pass B: swapchain composite ────────────────────────────────────────
-    // World (opaque) then UI (straight-alpha) blitted over the swapchain as
-    // fullscreen quads. No direct tile/UI flush here — both layers are
-    // persistent textures, so a partial redraw never blanks either layer.
     rs.tile_batcher().begin_pass( ctx.cmd_buffer, ctx.swapchain_tex,
                                   ctx.swapchain_w, ctx.swapchain_h,
                                   clear_black,
@@ -845,13 +648,11 @@ void refresh_display()
         rs.tile_batcher().draw( quad );
     };
     if( g_shadow_debug && rs.shadow_mask() && rs.shadow_mask()->texture() ) {
-        // Phase-1 kill-gate: show the silhouette-shadow mask instead of the
-        // world. Opaque (mask alpha=1) → clean grey shadows on black.
         blit_layer( rs.shadow_mask() );
     } else {
-        blit_layer( rs.world_ldr_target() ); // tonemapped world (opaque base)
+        blit_layer( rs.world_ldr_target() );
     }
-    blit_layer( uct );                   // UI over the world (straight alpha)
+    blit_layer( rs.ui_target() );
 
     rs.tile_batcher().end_pass(
         imgui_active
@@ -862,6 +663,40 @@ void refresh_display()
         : lighting::sprite_batcher::pass_overlay_fn{} );
 
     rs.device().submit_frame( ctx );
+}
+
+// ───────────────────────────────────────────────────────────────
+
+void refresh_display()
+{
+    needupdate = false;
+    lastupdate = SDL_GetTicks();
+
+    auto &rs = lighting::get_render_state();
+
+    auto ctx = begin_frame( rs );
+    if( !ctx ) {
+        return;
+    }
+
+    const bool rc_rebuild = build_lighting( rs );
+    flush_and_gather_rc( rs, *ctx, rc_rebuild );
+    assemble_light_inputs( rs, *ctx );
+    maybe_push_menu_background( rs, *ctx );
+
+    int proj_w = 0;
+    int proj_h = 0;
+    SDL_GetWindowSize( ::window.get(), &proj_w, &proj_h );
+    if( proj_w <= 0 || proj_h <= 0 ) {
+        proj_w = static_cast<int>( ctx->swapchain_w );
+        proj_h = static_cast<int>( ctx->swapchain_h );
+    }
+
+    draw_lighting_overlays( rs, *ctx );
+    composite_ui_pass_a( rs, *ctx, proj_w, proj_h );
+    render_world_pass_w( rs, *ctx, proj_w, proj_h );
+    tonemap_pass_t( rs, *ctx );
+    composite_swapchain_pass_b( rs, *ctx, proj_w, proj_h );
 }
 
 // only update if the set interval has elapsed
