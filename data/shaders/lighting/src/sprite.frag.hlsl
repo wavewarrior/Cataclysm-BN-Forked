@@ -348,9 +348,17 @@ float3 surface_normal(float2 uv) {
 float4 main(VS_OUT i) : SV_Target0 {
     const float4 texel = Atlas.Sample(AtlasSmp, i.uv);
     if(texel.a < 0.01) discard;
-    // Per-pixel surface normal from inline alpha-aware Sobel (Bucket A / A1).
-    // Replaces the old hardcoded flat normal; drives the emitter + sun Lambert.
-    const float3 normal = surface_normal(i.uv);
+    // Per-pixel surface normal from inline alpha-aware Sobel (Bucket A / A1),
+    // driving the emitter + sun Lambert. TALL sprites (creatures, trees, walls,
+    // tall furniture — light_pos != world_pos) use a FLAT normal instead: the
+    // albedo-Sobel relief is meant for GROUND terrain shape, but on busy entity
+    // sprites it tilts per-pixel and — with saturate() clipping the dark side —
+    // averages BELOW flat, crushing dark art (survivors/zombies rendered near-
+    // black while the lit ground stays bright = the "weird toning" on dynamic
+    // tiles). Ground terrain (light_pos == world_pos) keeps the full tuned relief.
+    const bool   frag_is_tall_n = ( i.light_pos.x != i.world_pos.x )
+                                  || ( i.light_pos.y != i.world_pos.y );
+    const float3 normal = frag_is_tall_n ? float3( 0.0, 0.0, 1.0 ) : surface_normal( i.uv );
     // emitter_light accumulates GPU point-light contributions (starts at zero).
     // Combined with CPU tint ADDITIVELY so colored emitter glow is visible on
     // top of the CPU-shadowcasting result, not suppressed by max().
