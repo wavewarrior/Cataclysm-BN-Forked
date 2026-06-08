@@ -5,6 +5,7 @@
 
 #include "cursesdef.h" // IWYU pragma: associated
 #include "sdltiles.h" // IWYU pragma: associated
+#include "sdl_input.h"
 
 #include <algorithm>
 #include <array>
@@ -104,25 +105,35 @@
 
 #define dbg(x) DebugLogFL((x),DC::SDL)
 
+display_context g_display;
+
 //***********************************
 //Globals                           *
 //***********************************
 
 std::shared_ptr<cata_tiles> tilecontext;
 std::shared_ptr<cata_tiles> overmap_tilecontext;
-static Uint64 lastupdate = 0;
-static uint32_t interval = 25;
-static bool needupdate = false;
-static bool need_invalidate_framebuffers = false;
 static const std::string empty_string;
 
 palette_array windowsPalette;
 
-static Font_Ptr font;
-static Font_Ptr map_font;
-static Font_Ptr overmap_font;
+int fontwidth;          //the width of the font, background is always this size
+int fontheight;         //the height of the font, background is always this size
 
-static SDL_Window_Ptr window;
+// Reference aliases — existing code reads/writes these names and they
+// transparently reach g_display.member.  Each later extraction step
+// batch-migrates its domain's refs into the extracted module and drops
+// the alias.
+static Uint64 &lastupdate = g_display.lastupdate;
+static uint32_t &interval = g_display.interval;
+static bool &needupdate = g_display.needupdate;
+static bool &need_invalidate_framebuffers = g_display.need_invalidate_framebuffers;
+
+static Font_Ptr &font = g_display.font;
+static Font_Ptr &map_font = g_display.map_font;
+static Font_Ptr &overmap_font = g_display.overmap_font;
+
+static SDL_Window_Ptr &window = g_display.window;
 // Phase 2i-B-1: SDL_Renderer no longer claims the visible window — that
 // belongs to the SDL_GPU device now (lighting::render_state). The legacy
 // renderer keeps running on a hidden mirror window so every call site that
@@ -130,41 +141,32 @@ static SDL_Window_Ptr window;
 // cache, pixel_minimap, vehicle_preview …) compiles and executes
 // unchanged; its output is just invisible. Subsequent 2i-B-N commits port
 // those call sites to the GPU stack and drop the hidden window.
-static SDL_Window_Ptr legacy_window;
-static SDL_Renderer_Ptr renderer;
-static SDL_PixelFormat format = SDL_PIXELFORMAT_UNKNOWN;
-static GeometryRenderer_Ptr geometry;
-static int WindowWidth;        //Width of the actual window, not the curses window
-static int WindowHeight;       //Height of the actual window, not the curses window
+static SDL_Window_Ptr &legacy_window = g_display.legacy_window;
+static SDL_Renderer_Ptr &renderer = g_display.renderer;
+static SDL_PixelFormat &format = g_display.format;
+static GeometryRenderer_Ptr &geometry = g_display.geometry;
+static int &WindowWidth = g_display.WindowWidth;        //Width of the actual window, not the curses window
+static int &WindowHeight = g_display.WindowHeight;       //Height of the actual window, not the curses window
 // input from various input sources. Each input source sets the type and
 // the actual input value (key pressed, mouse button clicked, ...)
 // This value is finally returned by input_manager::get_input_event.
-static input_event last_input;
+static input_event &last_input = g_display.last_input;
 
-static constexpr int ERR = -1;
-static int inputdelay;         //How long getch will wait for a character to be typed
-static Uint64 delaydpad =
-    std::numeric_limits<Uint64>::max();     // Used for entering diagonal directions with d-pad.
-static Uint64 dpad_delay =
-    100;   // Delay in milliseconds between registering a d-pad event and processing it.
-static bool dpad_continuous = false;  // Whether we're currently moving continuously with the dpad.
-static int lastdpad = ERR;      // Keeps track of the last dpad press.
-static int queued_dpad = ERR;   // Queued dpad press, for individual button presses.
-int fontwidth;          //the width of the font, background is always this size
-int fontheight;         //the height of the font, background is always this size
-static int TERMINAL_WIDTH;
-static int TERMINAL_HEIGHT;
-bool fullscreen;
-int scaling_factor;
+static int &inputdelay = g_display.inputdelay;         //How long getch will wait for a character to be typed
 
-static SDL_Joystick *joystick; // Only one joystick for now.
+static int &TERMINAL_WIDTH = g_display.TERMINAL_WIDTH;
+static int &TERMINAL_HEIGHT = g_display.TERMINAL_HEIGHT;
+bool &fullscreen = g_display.fullscreen;
+int &scaling_factor = g_display.scaling_factor;
+
+static SDL_Joystick *&joystick = g_display.joystick; // Only one joystick for now.
 
 using cata_cursesport::curseline;
 using cata_cursesport::cursecell;
-static std::vector<curseline> oversized_framebuffer;
-static std::vector<curseline> terminal_framebuffer;
-static std::weak_ptr<void> winBuffer; //tracking last drawn window to fix the framebuffer
-static int fontScaleBuffer; //tracking zoom levels to fix framebuffer w/tiles
+static std::vector<curseline> &oversized_framebuffer = g_display.oversized_framebuffer;
+static std::vector<curseline> &terminal_framebuffer = g_display.terminal_framebuffer;
+static std::weak_ptr<void> &winBuffer = g_display.winBuffer; //tracking last drawn window to fix the framebuffer
+static int &fontScaleBuffer = g_display.fontScaleBuffer; //tracking zoom levels to fix framebuffer w/tiles
 
 //***********************************
 //Non-curses, Window functions      *
@@ -2871,333 +2873,6 @@ void cata_cursesport::curses_drawwindow( const catacurses::window &w )
     }
 }
 
-static int alt_buffer = 0;
-static bool alt_down = false;
-
-static void begin_alt_code()
-{
-    alt_buffer = 0;
-    alt_down = true;
-}
-
-static bool add_alt_code( char c )
-{
-    if( alt_down ) {
-        if( c >= '0' && c <= '9' ) {
-            alt_buffer = alt_buffer * 10 + ( c - '0' );
-        }
-
-        // Hardcoded alt-tab check. TODO: Handle alt keys properly
-        if( c == '\t' ) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static int end_alt_code()
-{
-    alt_down = false;
-    return alt_buffer;
-}
-
-static int HandleDPad()
-{
-    // Check if we have a gamepad d-pad event.
-    if( SDL_GetJoystickHat( joystick, 0 ) != SDL_HAT_CENTERED ) {
-        // When someone tries to press a diagonal, they likely will
-        // press a single direction first. Wait a few milliseconds to
-        // give them time to press both of the buttons for the diagonal.
-        int button = SDL_GetJoystickHat( joystick, 0 );
-        int lc = ERR;
-        if( button == SDL_HAT_LEFT ) {
-            lc = JOY_LEFT;
-        } else if( button == SDL_HAT_DOWN ) {
-            lc = JOY_DOWN;
-        } else if( button == SDL_HAT_RIGHT ) {
-            lc = JOY_RIGHT;
-        } else if( button == SDL_HAT_UP ) {
-            lc = JOY_UP;
-        } else if( button == SDL_HAT_LEFTUP ) {
-            lc = JOY_LEFTUP;
-        } else if( button == SDL_HAT_LEFTDOWN ) {
-            lc = JOY_LEFTDOWN;
-        } else if( button == SDL_HAT_RIGHTUP ) {
-            lc = JOY_RIGHTUP;
-        } else if( button == SDL_HAT_RIGHTDOWN ) {
-            lc = JOY_RIGHTDOWN;
-        }
-
-        if( delaydpad == std::numeric_limits<Uint64>::max() ) {
-            delaydpad = SDL_GetTicks() + dpad_delay;
-            queued_dpad = lc;
-        }
-
-        // Okay it seems we're ready to process.
-        if( SDL_GetTicks() > delaydpad ) {
-
-            if( lc != ERR ) {
-                if( dpad_continuous && ( lc & lastdpad ) == 0 ) {
-                    // Continuous movement should only work in the same or similar directions.
-                    dpad_continuous = false;
-                    lastdpad = lc;
-                    return 0;
-                }
-
-                last_input = input_event( lc, input_event_t::gamepad );
-                lastdpad = lc;
-                queued_dpad = ERR;
-
-                if( !dpad_continuous ) {
-                    delaydpad = SDL_GetTicks() + 200;
-                    dpad_continuous = true;
-                } else {
-                    delaydpad = SDL_GetTicks() + 60;
-                }
-                return 1;
-            }
-        }
-    } else {
-        dpad_continuous = false;
-        delaydpad = std::numeric_limits<Uint64>::max();
-
-        // If we didn't hold it down for a while, just
-        // fire the last registered press.
-        if( queued_dpad != ERR ) {
-            last_input = input_event( queued_dpad, input_event_t::gamepad );
-            queued_dpad = ERR;
-            return 1;
-        }
-    }
-
-    return 0;
-}
-
-static SDL_Keycode sdl_keycode_opposite_arrow( SDL_Keycode key )
-{
-    switch( key ) {
-        case SDLK_UP:
-            return SDLK_DOWN;
-        case SDLK_DOWN:
-            return SDLK_UP;
-        case SDLK_LEFT:
-            return SDLK_RIGHT;
-        case SDLK_RIGHT:
-            return SDLK_LEFT;
-    }
-    return 0;
-}
-
-static bool sdl_keycode_is_arrow( SDL_Keycode key )
-{
-    return static_cast<bool>( sdl_keycode_opposite_arrow( key ) );
-}
-
-static int arrow_combo_to_numpad( SDL_Keycode mod, SDL_Keycode key )
-{
-    if( ( mod == SDLK_UP    && key == SDLK_RIGHT ) ||
-        ( mod == SDLK_RIGHT && key == SDLK_UP ) ) {
-        return KEY_NUM( 9 );
-    }
-    if( ( mod == SDLK_UP    && key == SDLK_UP ) ) {
-        return KEY_NUM( 8 );
-    }
-    if( ( mod == SDLK_UP    && key == SDLK_LEFT ) ||
-        ( mod == SDLK_LEFT  && key == SDLK_UP ) ) {
-        return KEY_NUM( 7 );
-    }
-    if( ( mod == SDLK_RIGHT && key == SDLK_RIGHT ) ) {
-        return KEY_NUM( 6 );
-    }
-    if( mod == sdl_keycode_opposite_arrow( key ) ) {
-        return KEY_NUM( 5 );
-    }
-    if( ( mod == SDLK_LEFT  && key == SDLK_LEFT ) ) {
-        return KEY_NUM( 4 );
-    }
-    if( ( mod == SDLK_DOWN  && key == SDLK_RIGHT ) ||
-        ( mod == SDLK_RIGHT && key == SDLK_DOWN ) ) {
-        return KEY_NUM( 3 );
-    }
-    if( ( mod == SDLK_DOWN  && key == SDLK_DOWN ) ) {
-        return KEY_NUM( 2 );
-    }
-    if( ( mod == SDLK_DOWN  && key == SDLK_LEFT ) ||
-        ( mod == SDLK_LEFT  && key == SDLK_DOWN ) ) {
-        return KEY_NUM( 1 );
-    }
-    return 0;
-}
-
-static int arrow_combo_modifier = 0;
-
-static int handle_arrow_combo( SDL_Keycode key )
-{
-    if( !arrow_combo_modifier ) {
-        arrow_combo_modifier = key;
-        return 0;
-    }
-    return arrow_combo_to_numpad( arrow_combo_modifier, key );
-}
-
-static void end_arrow_combo()
-{
-    arrow_combo_modifier = 0;
-}
-
-/**
- * Translate SDL key codes to key identifiers used by ncurses, this
- * allows the input_manager to only consider those.
- * @return 0 if the input can not be translated (unknown key?),
- * -1 when a ALT+number sequence has been started,
- * or something that a call to ncurses getch would return.
- */
-static int sdl_keysym_to_curses( const SDL_Keycode sym, const SDL_Keymod mod )
-{
-    if( sym >= SDLK_KP_1 && sym <= SDLK_KP_0 ) {
-        return 0;
-    }
-
-    const std::string diag_mode = get_option<std::string>( "DIAG_MOVE_WITH_MODIFIERS_MODE" );
-
-    if( diag_mode == "mode1" ) {
-        if( mod & SDL_KMOD_CTRL && sdl_keycode_is_arrow( sym ) ) {
-            return handle_arrow_combo( sym );
-        } else {
-            end_arrow_combo();
-        }
-    }
-
-    if( diag_mode == "mode2" ) {
-        //Shift + Cursor Arrow (diagonal clockwise)
-        if( mod & SDL_KMOD_SHIFT ) {
-            switch( sym ) {
-                case SDLK_LEFT:
-                    return inp_mngr.get_first_char_for_action( "LEFTUP" );
-                case SDLK_RIGHT:
-                    return inp_mngr.get_first_char_for_action( "RIGHTDOWN" );
-                case SDLK_UP:
-                    return inp_mngr.get_first_char_for_action( "RIGHTUP" );
-                case SDLK_DOWN:
-                    return inp_mngr.get_first_char_for_action( "LEFTDOWN" );
-            }
-        }
-        //Ctrl + Cursor Arrow (diagonal counter-clockwise)
-        if( mod & SDL_KMOD_CTRL ) {
-            switch( sym ) {
-                case SDLK_LEFT:
-                    return inp_mngr.get_first_char_for_action( "LEFTDOWN" );
-                case SDLK_RIGHT:
-                    return inp_mngr.get_first_char_for_action( "RIGHTUP" );
-                case SDLK_UP:
-                    return inp_mngr.get_first_char_for_action( "LEFTUP" );
-                case SDLK_DOWN:
-                    return inp_mngr.get_first_char_for_action( "RIGHTDOWN" );
-            }
-        }
-    }
-
-    if( diag_mode == "mode3" ) {
-        //Shift + Cursor Left/RightArrow
-        if( mod & SDL_KMOD_SHIFT ) {
-            switch( sym ) {
-                case SDLK_LEFT:
-                    return inp_mngr.get_first_char_for_action( "LEFTUP" );
-                case SDLK_RIGHT:
-                    return inp_mngr.get_first_char_for_action( "RIGHTUP" );
-            }
-        }
-        //Ctrl + Cursor Left/Right Arrow
-        if( mod & SDL_KMOD_CTRL ) {
-            switch( sym ) {
-                case SDLK_LEFT:
-                    return inp_mngr.get_first_char_for_action( "LEFTDOWN" );
-                case SDLK_RIGHT:
-                    return inp_mngr.get_first_char_for_action( "RIGHTDOWN" );
-            }
-        }
-    }
-
-    if( mod & SDL_KMOD_CTRL && sym >= 'a' && sym <= 'z' ) {
-        // ASCII ctrl codes, ^A through ^Z.
-        return sym - 'a' + '\1';
-    }
-    switch( sym ) {
-        // This is special: allow entering a Unicode character with ALT+number
-        case SDLK_RALT:
-        case SDLK_LALT:
-            begin_alt_code();
-            return -1;
-        // The following are simple translations:
-        case SDLK_KP_ENTER:
-        case SDLK_RETURN:
-        case SDLK_RETURN2:
-            return '\n';
-        case SDLK_BACKSPACE:
-        case SDLK_KP_BACKSPACE:
-            return KEY_BACKSPACE;
-        case SDLK_DELETE:
-            return KEY_DC;
-        case SDLK_ESCAPE:
-            return KEY_ESCAPE;
-        case SDLK_TAB:
-            if( mod & SDL_KMOD_SHIFT ) {
-                return KEY_BTAB;
-            }
-            return '\t';
-        case SDLK_LEFT:
-            return KEY_LEFT;
-        case SDLK_RIGHT:
-            return KEY_RIGHT;
-        case SDLK_UP:
-            return KEY_UP;
-        case SDLK_DOWN:
-            return KEY_DOWN;
-        case SDLK_PAGEUP:
-            return KEY_PPAGE;
-        case SDLK_PAGEDOWN:
-            return KEY_NPAGE;
-        case SDLK_HOME:
-            return KEY_HOME;
-        case SDLK_END:
-            return KEY_END;
-        case SDLK_F1:
-            return KEY_F( 1 );
-        case SDLK_F2:
-            return KEY_F( 2 );
-        case SDLK_F3:
-            return KEY_F( 3 );
-        case SDLK_F4:
-            return KEY_F( 4 );
-        case SDLK_F5:
-            return KEY_F( 5 );
-        case SDLK_F6:
-            return KEY_F( 6 );
-        case SDLK_F7:
-            return KEY_F( 7 );
-        case SDLK_F8:
-            return KEY_F( 8 );
-        case SDLK_F9:
-            return KEY_F( 9 );
-        case SDLK_F10:
-            return KEY_F( 10 );
-        case SDLK_F11:
-            return KEY_F( 11 );
-        case SDLK_F12:
-            return KEY_F( 12 );
-        case SDLK_F13:
-            return KEY_F( 13 );
-        case SDLK_F14:
-            return KEY_F( 14 );
-        case SDLK_F15:
-            return KEY_F( 15 );
-        // Every other key is ignored as there is no curses constant for it.
-        // TODO: add more if you find more.
-        default:
-            return 0;
-    }
-}
-
 bool handle_resize( int w, int h )
 {
     if( ( w != WindowWidth ) || ( h != WindowHeight ) ) {
@@ -3282,13 +2957,14 @@ void toggle_fullscreen_window()
 }
 
 //Check for any window messages (keypress, paint, mousemove, etc)
-static void CheckMessages()
+namespace sdl_input {
+void CheckMessages( display_context & )
 {
     SDL_Event ev;
     bool quit = false;
     bool text_refresh = false;
     bool is_repeat = false;
-    if( HandleDPad() ) {
+    if( sdl_input::handle_dpad( g_display ) ) {
         return;
     }
 
@@ -3336,7 +3012,7 @@ static void CheckMessages()
                 if( get_option<std::string>( "HIDE_CURSOR" ) != "show" && SDL_CursorVisible() ) {
                     SDL_HideCursor();
                 }
-                const int lc = sdl_keysym_to_curses( ev.key.key, ev.key.mod );
+                const int lc = sdl_input::keysym_to_curses( ev.key.key, ev.key.mod );
                 // Debug/tuning F-key handlers
                 if( lc == KEY_F( 5 ) ) {
                     // F5: toggle debug HUD display
@@ -3435,7 +3111,7 @@ static void CheckMessages()
                         // a key we don't know in curses and won't handle.
                         break;
                     }
-                } else if( add_alt_code( lc ) ) {
+                } else if( sdl_input::add_alt_code( lc ) ) {
                     // key was handled
                 } else {
                     last_input = input_event( lc, input_event_t::keyboard );
@@ -3445,7 +3121,7 @@ static void CheckMessages()
             case SDL_EVENT_KEY_UP: {
                 is_repeat = ev.key.repeat;
                 if( ev.key.key == SDLK_LALT || ev.key.key == SDLK_RALT ) {
-                    int code = end_alt_code();
+                    int code = sdl_input::end_alt_code();
                     if( code ) {
                         last_input = input_event( code, input_event_t::keyboard );
                         last_input.text = utf32_to_utf8( code );
@@ -3454,7 +3130,7 @@ static void CheckMessages()
             }
             break;
             case SDL_EVENT_TEXT_INPUT:
-                if( !add_alt_code( *ev.text.text ) ) {
+                if( !sdl_input::add_alt_code( *ev.text.text ) ) {
                     if( strlen( ev.text.text ) > 0 ) {
                         const unsigned lc = UTF8_getch( ev.text.text );
                         last_input = input_event( lc, input_event_t::keyboard );
@@ -3580,6 +3256,7 @@ static void CheckMessages()
         exit_handler( 0 );
     }
 }
+} // namespace sdl_input
 
 //***********************************
 //Pseudo-Curses Functions           *
@@ -3880,84 +3557,9 @@ SDL_Color color_loader<SDL_Color>::from_rgb( const int r, const int g, const int
     return result;
 }
 
-void input_manager::set_timeout( const int t )
-{
-    input_timeout = t;
-    inputdelay = t;
-}
-
-void input_manager::pump_events()
-{
-    if( test_mode ) {
-        return;
-    }
-
-    // Handle all events, but ignore any keypress
-    CheckMessages();
-
-    last_input = input_event();
-    previously_pressed_key = 0;
-}
-
-// This is how we're actually going to handle input events, SDL getch
-// is simply a wrapper around this.
-input_event input_manager::get_input_event()
-{
-    previously_pressed_key = 0;
-
-    // standards note: getch is sometimes required to call refresh
-    // see, e.g., http://linux.die.net/man/3/getch
-    // so although it's non-obvious, that refresh() call (and maybe InvalidateRect?) IS supposed to be there
-    // however, the refresh call has not effect when nothing has been drawn, so
-    // we can skip it if `needupdate` is false to improve performance during mouse
-    // move events.
-    if( needupdate ) {
-        wrefresh( catacurses::stdscr );
-    }
-
-    if( inputdelay < 0 ) {
-        do {
-            CheckMessages();
-            if( last_input.type != input_event_t::error ) {
-                break;
-            }
-            SDL_Delay( 1 );
-        } while( last_input.type == input_event_t::error );
-    } else if( inputdelay > 0 ) {
-        Uint64 starttime = SDL_GetTicks();
-        Uint64 endtime = 0;
-        bool timedout = false;
-        do {
-            CheckMessages();
-            endtime = SDL_GetTicks();
-            if( last_input.type != input_event_t::error ) {
-                break;
-            }
-            SDL_Delay( 1 );
-            timedout = endtime >= starttime + inputdelay;
-            if( timedout ) {
-                last_input.type = input_event_t::timeout;
-            }
-        } while( !timedout );
-    } else {
-        CheckMessages();
-    }
-
-    if( last_input.type == input_event_t::mouse ) {
-        float mx, my;
-        SDL_GetMouseState( &mx, &my );
-        last_input.mouse_pos.x = static_cast<int>( mx );
-        last_input.mouse_pos.y = static_cast<int>( my );
-    } else if( last_input.type == input_event_t::keyboard ) {
-        previously_pressed_key = last_input.get_first_input();
-    }
-
-    return last_input;
-}
-
 bool gamepad_available()
 {
-    return joystick != nullptr;
+    return sdl_input::gamepad_available( g_display );
 }
 
 void rescale_tileset( float size )
