@@ -58,15 +58,8 @@
 #include "npc.h"
 #include "options.h"
 #include "output.h"
-#include "overmap_location.h"
-#include "overmap_label.h"
-#include "overmap_label_note.h"
-#include "note_label_utils.h"
-#include "overmap_special.h"
 #include "overmap_ui.h"
 #include "overmapbuffer.h"
-#include "regional_settings.h"
-#include "mongroup.h"
 #include "path_info.h"
 #include "point.h"
 #include "rng.h"
@@ -126,7 +119,6 @@ int fontheight;         //the height of the font, background is always this size
 // batch-migrates its domain's refs into the extracted module and drops
 // the alias.
 static Uint64 &lastupdate = g_display.lastupdate;
-static uint32_t &interval = g_display.interval;
 static bool &needupdate = g_display.needupdate;
 static bool &need_invalidate_framebuffers = g_display.need_invalidate_framebuffers;
 
@@ -2037,6 +2029,11 @@ bool save_screenshot( const std::string &file_path )
 
     SDL_ReleaseGPUTexture( rs.device().raw(), offscreen );
     return ok;
+}
+
+void rescale_tileset( float size )
+{
+    tilecontext->set_draw_scale( size );
 }
 
 void repoint_overmap_tilecontext()

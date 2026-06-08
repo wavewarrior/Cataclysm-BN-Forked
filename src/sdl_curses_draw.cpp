@@ -1,6 +1,5 @@
-#include "sdl_curses_draw.h"
 #include "sdl_framebuffer.h" // cache_should_skip, cache_update, …
-#include "sdl_input.h"       // g_display, display_context
+#include "sdl_display.h"     // g_display, display_context, fontwidth, fontheight
 #include "sdl_font.h"        // Font_Ptr
 
 #include "avatar.h"          // g->u
@@ -28,10 +27,6 @@
 #include "sdltiles.h"       // ::tilecontext, ::overmap_tilecontext, ::fontwidth, …
 #include "wcwidth.h"
 
-// Declared in sdltiles.cpp
-extern int fontwidth;
-extern int fontheight;
-
 // ---------------------------------------------------------------------------
 // File-scope reference aliases for globals
 // ---------------------------------------------------------------------------
@@ -46,7 +41,7 @@ static int &WindowWidth = g_display.WindowWidth;
 static int &WindowHeight = g_display.WindowHeight;
 static int &scaling_factor = g_display.scaling_factor;
 static bool &needupdate = g_display.needupdate;
-static std::weak_ptr<void> &winBuffer = g_display.winBuffer;
+static std::weak_ptr<void> winBuffer;
 
 
 

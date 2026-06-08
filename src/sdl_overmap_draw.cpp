@@ -1,6 +1,6 @@
 #include "cata_tiles.h"   // cata_tiles member declarations
 #include "sdltiles.h"     // tilecontext, overmap_tilecontext, rescale_tileset
-#include "sdl_input.h"    // g_display, display_context
+#include "sdl_display.h"  // g_display, display_context, fontwidth, fontheight
 #include "sdl_font.h"     // Font, Font_Ptr
 #include "sdl_fonts.h"    // draw_string
 
@@ -56,10 +56,6 @@
 #include "weather.h"
 #include "weather_type.h"
 #include "lighting/render_state.h"
-
-// fontwidth/fontheight are defined in sdltiles.cpp — declare local extern.
-extern int fontwidth;
-extern int fontheight;
 
 // Reference aliases matching sdltiles.cpp names for the extracted code.
 // These let the moved functions read g_display members using the same short
@@ -797,11 +793,4 @@ void cata_tiles::draw_om( point dest, const tripoint_abs_omt &center_abs_omt, bo
     lighting::get_render_state().clear_tile_scissor();
 }
 
-// -----------------------------------------------------------------------
-// rescale_tileset
-// -----------------------------------------------------------------------
 
-void rescale_tileset( float size )
-{
-    tilecontext->set_draw_scale( size );
-}

@@ -11,14 +11,9 @@
 #include "game_ui.h"         // to_map_font_dim_*, from_map_font_dimension
 #include "sdl_font.h"        // Font, FontFallbackList
 #include "sdl_geometry.h"    // GeometryRenderer
-#include "sdl_input.h"       // display_context, g_display
+#include "sdl_display.h"     // display_context, g_display, fontwidth, fontheight
 #include "sdl_wrappers.h"    // SDL_Renderer_Ptr, GeometryRenderer_Ptr
 #include "wcwidth.h"         // mk_wcwidth
-
-// fontwidth/fontheight are defined in sdltiles.cpp with external linkage but
-// no header declaration — declare local extern like cata_tiles.cpp does.
-extern int fontwidth;
-extern int fontheight;
 
 // ---------------------------------------------------------------------------
 // Font dimension helpers — used by the to/from functions below

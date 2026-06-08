@@ -1,5 +1,5 @@
 #include "sdl_framebuffer.h"
-#include "sdl_input.h"     // g_display, display_context
+#include "sdl_display.h"   // g_display, display_context
 #include "sdl_font.h"      // Font_Ptr
 
 #include <algorithm>

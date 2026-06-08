@@ -3,11 +3,6 @@
 #include <algorithm>
 #include <optional>
 
-// fontwidth/fontheight are defined in sdltiles.cpp with external linkage but
-// no header declaration — declare local extern like cata_tiles.cpp does.
-extern int fontwidth;
-extern int fontheight;
-
 #include "cached_options.h"  // use_tiles, use_tiles_overmap, tile_iso
 #include "cata_tiles.h"      // tilecontext, overmap_tilecontext, get_tile_width/height
 #include "cursesport.h"      // cata_cursesport::WINDOW, projected_window_width/height, get_scaling_factor
@@ -18,7 +13,7 @@ extern int fontheight;
 #include "point.h"           // point, point_bub_ms, tripoint_bub_ms, point_rel_ms
 #include "cuboid_rectangle.h" // inclusive_rectangle
 #include "sdl_font.h"        // Font::width/height
-#include "sdl_input.h"       // display_context g_display
+#include "sdl_display.h"     // display_context g_display, fontwidth, fontheight
 
 //***********************************
 // Projected window dimensions      *
