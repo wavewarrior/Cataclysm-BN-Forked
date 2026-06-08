@@ -203,10 +203,10 @@ void update_animation_state( animation_state &s, const animation_tuning &t, doub
             const float frac = std::min( 1.f, dt / slide_dur );
             const float remain = 1.f - frac;                 // 1 at start, 0 arrived
             s.slide_offset_x = -s.move_dir_x * remain;
-            // No vertical positional slide: displacing a (tile-taller, bottom-anchored)
-            // sprite downward draws it over the floor below and reads as clipping into it —
-            // unavoidable for one direction with any sign. Vertical moves use the up-hop bob.
-            s.slide_offset_y = 0.f;
+            // Vertical slide is now safe: the y-sort entity pass sorts creatures by
+            // feet anchor including the animation offset, so a downward slide no longer
+            // clips into the terrain painted over the cell below.
+            s.slide_offset_y = -s.move_dir_y * remain;
         } else {
             s.slide_offset_x = 0.f;
             s.slide_offset_y = 0.f;

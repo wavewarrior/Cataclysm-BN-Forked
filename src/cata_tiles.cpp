@@ -3625,17 +3625,8 @@ void cata_tiles::draw( point dest, const tripoint_bub_ms &center, int width, int
 
     }
 
-    struct zlevel_layer {
-        bool hide_unseen;
-        decltype( &cata_tiles::draw_furniture ) function;
-    };
     const auto base_drawing_layers = std::array{
         &cata_tiles::draw_furniture, &cata_tiles::draw_graffiti, &cata_tiles::draw_trap
-    };
-    const auto zlevel_drawing_layers = std::array{
-        zlevel_layer{ true, &cata_tiles::draw_field_or_item },
-        zlevel_layer{ false, &cata_tiles::draw_vpart },
-        zlevel_layer{ true, &cata_tiles::draw_critter_at }
     };
     const auto final_drawing_layers = std::array{
         &cata_tiles::draw_zone_mark, &cata_tiles::draw_zombie_revival_indicators
@@ -3683,6 +3674,7 @@ void cata_tiles::draw( point dest, const tripoint_bub_ms &center, int width, int
 
     if( !draw_points.empty() ) {
         for( const auto z : std::views::iota( min_z, center.z() + 1 ) ) {
+            // ---- Pass 1: per-row terrain + base layers (unchanged) ----
             auto row_begin = draw_points.begin();
             while( row_begin != draw_points.end() ) {
                 const auto row = row_begin->screen_row;
@@ -3704,26 +3696,90 @@ void cata_tiles::draw( point dest, const tripoint_bub_ms &center, int width, int
                         }
                     }
                 }
-                const auto &ch = here.access_cache( z );
-                for( tile_render_info &p : row_points ) {
+                row_begin = row_end;
+            }
+            // ---- Pass 2: ground entities (field_or_item, vpart, in row order) + creature collection ----
+            const auto &ch = here.access_cache( z );
+            std::vector<creature_draw_job> entity_jobs;
+            auto gr_begin = draw_points.begin();
+            while( gr_begin != draw_points.end() ) {
+                const auto gr_row = gr_begin->screen_row;
+                const auto gr_end = std::find_if_not( gr_begin, draw_points.end(),
+                [gr_row]( const tile_render_info & info ) {
+                    return info.screen_row == gr_row;
+                } );
+                const auto gr_points = std::ranges::subrange( gr_begin, gr_end );
+                for( tile_render_info &p : gr_points ) {
                     if( p.pos.z() > z ) {
                         continue;
                     }
-                    for( const zlevel_layer &f : zlevel_drawing_layers ) {
-                        if( here.inbounds( p.pos ) && z != p.pos.z() ) {
-                            const auto z_ll = ch.inbounds( { p.pos.x(), p.pos.y() } )
-                                              ? ch.visibility_cache[ch.idx( p.pos.x(), p.pos.y() )]
-                                              : lit_level::BLANK;
-                            if( !f.hide_unseen || z_ll != lit_level::BLANK ) {
-                                const bool ( invis )[5] = {false, false, false, false, false};
-                                ( this->*( f.function ) )( { p.pos.xy(), z}, z_ll, p.height_3d, invis, center.z() - z );
-                            }
-                        } else {
-                            ( this->*( f.function ) )( { p.pos.xy(), z}, p.ll, p.height_3d, p.invisible, center.z() - z );
+                    const auto draw_at = tripoint_bub_ms( p.pos.xy(), z );
+                    const bool cross_z = here.inbounds( p.pos ) && z != p.pos.z();
+                    lit_level z_ll = p.ll;
+                    bool ( invis )[5];
+                    std::copy( p.invisible, p.invisible + 5, invis );
+                    if( cross_z ) {
+                        z_ll = ch.inbounds( { p.pos.x(), p.pos.y() } )
+                               ? ch.visibility_cache[ch.idx( p.pos.x(), p.pos.y() )]
+                               : lit_level::BLANK;
+                        std::fill_n( invis, 5, false );
+                    }
+                    // draw_field_or_item (gated: hide_unseen)
+                    if( !cross_z || z_ll != lit_level::BLANK ) {
+                        draw_field_or_item( draw_at, z_ll, p.height_3d, invis, center.z() - z );
+                    }
+                    // draw_vpart (ungated)
+                    draw_vpart( draw_at, z_ll, p.height_3d, invis, center.z() - z );
+                    // Collect creature (if present at this draw position)
+                    const auto override = monster_override.find( draw_at );
+                    if( override != monster_override.end() ) {
+                        const mtype_id id = std::get<0>( override->second );
+                        if( id ) {
+                            const point screen_pt = player_to_screen( draw_at.xy() );
+                            entity_jobs.push_back( creature_draw_job{
+                                .pos = draw_at,
+                                .ll = z_ll,
+                                .height_3d = &p.height_3d,
+                                .invisible = {invis[0], invis[1], invis[2], invis[3], invis[4]},
+                                .z_drop = center.z() - z,
+                                .creature = nullptr,
+                                .xform = {},
+                                .sort_key = static_cast<float>( screen_pt.y + tile_height )
+                            } );
+                        }
+                    } else {
+                        const Creature *pcritter = g->critter_at( draw_at, true );
+                        if( pcritter ) {
+                            const sprite_xform xform = compute_anim_xform( *pcritter );
+                            const point screen_pt = player_to_screen( draw_at.xy() );
+                            entity_jobs.push_back( creature_draw_job{
+                                .pos = draw_at,
+                                .ll = z_ll,
+                                .height_3d = &p.height_3d,
+                                .invisible = {invis[0], invis[1], invis[2], invis[3], invis[4]},
+                                .z_drop = center.z() - z,
+                                .creature = pcritter,
+                                .xform = xform,
+                                .sort_key = static_cast<float>( screen_pt.y + tile_height ) + xform.off_y
+                            } );
                         }
                     }
                 }
-                row_begin = row_end;
+                gr_begin = gr_end;
+            }
+            // ---- Pass 3: y-sort and draw creatures (GROUND_ENTITIES → sorted ENTITIES) ----
+            std::stable_sort( entity_jobs.begin(), entity_jobs.end(),
+            []( const creature_draw_job &a, const creature_draw_job &b ) {
+                return a.sort_key < b.sort_key;
+            } );
+            for( auto &job : entity_jobs ) {
+                if( job.creature ) {
+                    prefetch_critter_ = job.creature;
+                    prefetch_xform_ = job.xform;
+                    prefetch_valid_ = true;
+                }
+                draw_critter_at( job.pos, job.ll, *job.height_3d, job.invisible, job.z_drop );
+                prefetch_valid_ = false;
             }
         }
     }
@@ -5753,7 +5809,11 @@ bool cata_tiles::draw_critter_at( const tripoint_bub_ms &p, lit_level ll, int &h
                                   const bool ( &invisible )[5], int z_drop )
 {
     // Don't let a leftover tile bash-shake bleed onto creature sprites.
-    active_anim_xform_ = {};
+    // (When the deferred y-sort pass prefetches the creature + xform, skip the wipe
+    //  so the prefetched xform isn't discarded before the monster/player draw.)
+    if( !prefetch_valid_ ) {
+        active_anim_xform_ = {};
+    }
     if( ( !fov_3d && z_drop > 0 ) || fov_3d_z_range < z_drop ) {
         return false;
     }
@@ -5778,7 +5838,7 @@ bool cata_tiles::draw_critter_at( const tripoint_bub_ms &p, lit_level ll, int &h
                      tile, p, std::nullopt, std::nullopt,
                      lit_level::LIT, false, z_drop, false, height_3d );
     } else if( !invisible[0] ) {
-        const Creature *pcritter = g->critter_at( p, true );
+        const Creature *pcritter = prefetch_valid_ ? prefetch_critter_ : g->critter_at( p, true );
         if( pcritter == nullptr ) {
             return false;
         }
@@ -5833,7 +5893,8 @@ bool cata_tiles::draw_critter_at( const tripoint_bub_ms &p, lit_level ll, int &h
 
                 const tile_search_params tile { chosen_id, ent_category, ent_subcategory, subtile, rot_facing };
                 // Sprite-animation transform for this monster (and its z-overlay).
-                active_anim_xform_ = compute_anim_xform( critter );
+                // When deferred y-sort prefetched the xform, use that instead.
+                active_anim_xform_ = prefetch_valid_ ? prefetch_xform_ : compute_anim_xform( critter );
                 result = draw_from_id_string(
                              tile, p, bgCol, fgCol,
                              ll, false, z_drop, false, height_3d );
@@ -5855,7 +5916,7 @@ bool cata_tiles::draw_critter_at( const tripoint_bub_ms &p, lit_level ll, int &h
         }
     } else {
         // invisible
-        const Creature *critter = g->critter_at( p, true );
+        const Creature *critter = prefetch_valid_ ? prefetch_critter_ : g->critter_at( p, true );
         if( critter && ( g->u.sees_with_infrared( *critter ) || g->u.sees_with_specials( *critter ) ) ) {
             // try drawing infrared creature if invisible and not overridden
             // return directly without drawing overlay
@@ -6178,7 +6239,8 @@ void cata_tiles::draw_entity_with_overlays( const Character &ch, const tripoint_
     }
     active_warp_hash = base_warp_hash;
     // Sprite-animation transform for this character + all its overlays (rigid body).
-    active_anim_xform_ = compute_anim_xform( ch );
+    // When deferred y-sort prefetched the xform, use that instead.
+    active_anim_xform_ = prefetch_valid_ ? prefetch_xform_ : compute_anim_xform( ch );
 
     // first draw the character itself(i guess this means a tileset that
     // takes this seriously needs a naked sprite)

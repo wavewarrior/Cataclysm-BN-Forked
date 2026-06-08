@@ -784,6 +784,20 @@ struct tile_hit_state {
     float dir_y = 0.f;
 };
 
+// Deferred creature-draw job: collected during the per-row pass, then y-sorted and
+// drawn after all rows for the current z-level. The prefetch avoids a redundant
+// critter_at + compute_anim_xform per creature per frame.
+struct creature_draw_job {
+    tripoint_bub_ms pos;
+    lit_level ll;
+    int *height_3d = nullptr;
+    bool invisible[5] = {};
+    int z_drop = 0;
+    const Creature *creature = nullptr;
+    sprite_xform xform;
+    float sort_key = 0.f;
+};
+
 class cata_tiles
 {
     public:
@@ -1335,6 +1349,13 @@ class cata_tiles
         // True if any sprite animation produced motion this frame (breathing, a decaying
         // event reaction, or a live tile-hit). Drives the redraw pump. Reset each draw().
         mutable bool creatures_anim_active_ = false;
+        // Prefetch state for deferred creature draws: set before each draw_critter_at
+        // call from the sorted creature pass, read inside draw_critter_at /
+        // draw_entity_with_overlays to skip redundant resolution + xform computation.
+        const Creature *prefetch_critter_ = nullptr;
+        sprite_xform prefetch_xform_;
+        bool prefetch_valid_ = false;
+
         // Refresh anim_wall_now_/anim_enabled_ and the file-scope tuning from options.
         void refresh_anim_frame();
         // Run update_animation_state for `c` and composite its outputs into a transform.
