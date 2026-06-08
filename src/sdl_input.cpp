@@ -1,12 +1,27 @@
 #include "sdl_input.h"
 
 #include <algorithm>
+#include <climits>
+#include <cstdint>
+#include <cstring>
 #include <limits>
+#include <memory>
+#include <optional>
 #include <string>
 
 #include "cached_options.h" // test_mode
+#include "catacharset.h"
+#include "cata_utility.h"   // restore_on_out_of_scope
+#include "cuboid_rectangle.h"
 #include "cursesdef.h" // KEY_*, KEY_F, KEY_NUM, catacurses::stdscr, wrefresh
+#include "game_ui.h"    // reinitialize_framebuffer
+#include "lighting/imgui_layer.h"
+#include "lighting/sprite_batcher.h" // lighting::debug_params
 #include "options.h"   // get_option
+#include "output.h"    // refresh_display
+#include "runtime_handlers.h"
+#include "sdltiles.h"  // handle_resize
+#include "ui_manager.h" // ui_manager::invalidate, ui_manager::redraw_invalidated
 
 // File-scope state for ALT+nnnn code entry and arrow-key combos.
 // These were file-scope statics in sdltiles.cpp and stay file-scope here.
@@ -340,6 +355,361 @@ void end_arrow_combo()
 auto gamepad_available( const display_context &d ) -> bool
 {
     return d.joystick != nullptr;
+}
+
+} // namespace sdl_input
+
+// ---------------------------------------------------------------------------
+// Debug/tuning globals — defined in sdltiles.cpp (owned by the lighting/dev-
+// UI rendering path).  Only CheckMessages writes them (F-key handlers below);
+// the rendering code in sdltiles.cpp reads them.  The extern declarations keep
+// the linker happy without moving the definitions.
+// ---------------------------------------------------------------------------
+extern bool g_dbg_lighting;
+extern bool g_dbg_lighting_shader;
+extern uint32_t g_current_dbg_mode;
+extern lighting::debug_params g_dbg_params;
+extern float g_emitter_scale;
+extern float g_sun_scale;
+extern float g_sky_scale;
+
+namespace menu_emitter_tuning {
+extern float radius_input;
+extern float pos_x;
+extern float pos_y;
+extern int   pos_preset;
+extern bool  blue_backdrop;
+} // namespace menu_emitter_tuning
+
+namespace sdl_input {
+
+// ---------------------------------------------------------------------------
+// try_sdl_update — throttle display refreshes to the framerate interval.
+// These were file-scope statics in sdltiles.cpp.  lastupdate / interval are in
+// display_context; refresh_display is declared in output.h.
+// ---------------------------------------------------------------------------
+static void try_sdl_update( display_context &d )
+{
+    const Uint64 now = SDL_GetTicks();
+    if( now - d.lastupdate >= d.interval ) {
+        refresh_display();
+    } else {
+        d.needupdate = true;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// CheckMessages — main SDL event loop.
+//
+// CheckMessages — main SDL event loop.
+//
+// Polls SDL_PollEvent, dispatches input to the ImGui dev layer first (so
+// the F4 tuning panel catches mouse/keyboard before the game does), then
+// routes to the curses / game input pipeline.  Also handles window resize,
+// render-target reset, debug F-key toggles (F5–F12), and Android text input.
+//
+// Defined here because the input pipeline (pump_events / get_input_event in
+// this same file) is the sole caller.  The debug F-key coupling and ImGui
+// dependency are acceptable for now; a future extraction could introduce a
+// callback-based hook for the ~30 lines of F-key logic.
+// ---------------------------------------------------------------------------
+void CheckMessages( display_context &d )
+{
+    SDL_Event ev;
+    bool quit = false;
+    bool text_refresh = false;
+    bool is_repeat = false;
+    if( handle_dpad( d ) ) {
+        return;
+    }
+
+    d.last_input = input_event();
+
+    std::optional<point> resize_dims;
+    bool render_target_reset = false;
+
+    while( SDL_PollEvent( &ev ) ) {
+        // Dear ImGui dev UI sees every event first. While a tool is open keep
+        // producing frames (this event-driven loop has no vsync tick) so
+        // hover/drag stay responsive.
+        const bool imgui_capture = imgui_layer::process_event( ev );
+        // Open/close toggle (F4) — handled BEFORE the capture gate so the panel
+        // can always be closed even while ImGui holds keyboard focus. P0 dev
+        // key; revisit for collisions when promoting past P0.
+        if( ev.type == SDL_EVENT_KEY_DOWN && !ev.key.repeat && ev.key.key == SDLK_F4 ) {
+            imgui_layer::visible() = !imgui_layer::visible();
+            d.needupdate = true;
+            continue;
+        }
+        // ImGui consumed this mouse/keyboard event — keep it out of game input.
+        if( imgui_capture ) {
+            continue;
+        }
+        switch( ev.type ) {
+            case SDL_EVENT_WINDOW_SHOWN:
+            case SDL_EVENT_WINDOW_MINIMIZED:
+            case SDL_EVENT_WINDOW_FOCUS_GAINED:
+                break;
+            case SDL_EVENT_WINDOW_EXPOSED:
+                d.needupdate = true;
+                break;
+            case SDL_EVENT_WINDOW_RESTORED:
+                break;
+            case SDL_EVENT_WINDOW_RESIZED:
+                resize_dims = point( ev.window.data1, ev.window.data2 );
+                break;
+            case SDL_EVENT_RENDER_TARGETS_RESET:
+                render_target_reset = true;
+                break;
+            case SDL_EVENT_KEY_DOWN: {
+                is_repeat = ev.key.repeat;
+                //hide mouse cursor on keyboard input
+                if( get_option<std::string>( "HIDE_CURSOR" ) != "show" && SDL_CursorVisible() ) {
+                    SDL_HideCursor();
+                }
+                const int lc = keysym_to_curses( ev.key.key, ev.key.mod );
+                // Debug/tuning F-key handlers
+                if( lc == KEY_F( 5 ) ) {
+                    // F5: toggle debug HUD display
+                    g_dbg_lighting = !g_dbg_lighting;
+                    break;
+                } else if( lc == KEY_F( 6 ) ) {
+                    // F6: toggle shader debug visualization
+                    g_dbg_lighting_shader = !g_dbg_lighting_shader;
+                    break;
+                } else if( lc == KEY_F( 7 ) ) {
+                    // F7: cycle debug visualization mode (0-10). Mode 8 is the
+                    // B/W emitter-only diagnostic — bypasses tint gating so it
+                    // works on the main-menu blue backdrop. Mode 9 = surface
+                    // normal (Sobel) as RGB; mode 10 = ambient occlusion
+                    // (grayscale openness); mode 11 = silhouette shadow mask
+                    // (.Load at screen pixel); all game tiles only.
+                    g_current_dbg_mode = ( g_current_dbg_mode + 1 ) % 12u;
+                    g_dbg_params.debug_mode = g_current_dbg_mode;
+                    break;
+                } else if( lc == KEY_F( 8 ) ) {
+                    // F8: decrease emitter/sun/sky scales.
+                    // Shift+F8: less dither.  Ctrl+F8: fewer dither bands.
+                    if( ev.key.mod & SDL_KMOD_ALT ) {
+                        g_dbg_params.gi_strength =
+                            std::max( 0.0f, g_dbg_params.gi_strength - 0.05f );
+                    } else if( ev.key.mod & SDL_KMOD_CTRL ) {
+                        g_dbg_params.dither_bands =
+                            std::max( 1.0f, g_dbg_params.dither_bands - 1.0f );
+                    } else if( ev.key.mod & SDL_KMOD_SHIFT ) {
+                        g_dbg_params.dither_amt =
+                            std::max( 0.0f, g_dbg_params.dither_amt - 0.1f );
+                    } else {
+                        g_emitter_scale = std::max( 0.0f, g_emitter_scale - 0.1f );
+                        g_sun_scale = std::max( 0.0f, g_sun_scale - 0.1f );
+                        g_sky_scale = std::max( 0.0f, g_sky_scale - 0.1f );
+                        g_dbg_params.emitter_scale = g_emitter_scale;
+                        g_dbg_params.sun_scale = g_sun_scale;
+                        g_dbg_params.sky_scale = g_sky_scale;
+                    }
+                    break;
+                } else if( lc == KEY_F( 9 ) ) {
+                    // F9: increase emitter/sun/sky scales.
+                    // Shift+F9: more dither.  Ctrl+F9: more dither bands.
+                    if( ev.key.mod & SDL_KMOD_ALT ) {
+                        g_dbg_params.gi_strength =
+                            std::min( 2.0f, g_dbg_params.gi_strength + 0.05f );
+                    } else if( ev.key.mod & SDL_KMOD_CTRL ) {
+                        g_dbg_params.dither_bands =
+                            std::min( 16.0f, g_dbg_params.dither_bands + 1.0f );
+                    } else if( ev.key.mod & SDL_KMOD_SHIFT ) {
+                        g_dbg_params.dither_amt =
+                            std::min( 1.0f, g_dbg_params.dither_amt + 0.1f );
+                    } else {
+                        g_emitter_scale = std::min( 10.0f, g_emitter_scale + 0.1f );
+                        g_sun_scale = std::min( 10.0f, g_sun_scale + 0.1f );
+                        g_sky_scale = std::min( 10.0f, g_sky_scale + 0.1f );
+                        g_dbg_params.emitter_scale = g_emitter_scale;
+                        g_dbg_params.sun_scale = g_sun_scale;
+                        g_dbg_params.sky_scale = g_sky_scale;
+                    }
+                    break;
+                } else if( lc == KEY_F( 10 ) ) {
+                    // F10: menu emitter radius input ± 100 (Shift = down).
+                    // Input feeds make_omni; HUD shows 3·√r as actual radius.
+                    const bool shift = ( ev.key.mod & SDL_KMOD_SHIFT ) != 0;
+                    const float step = shift ? -100.0f : 100.0f;
+                    menu_emitter_tuning::radius_input = std::clamp(
+                        menu_emitter_tuning::radius_input + step, 1.0f, 10000.0f );
+                    break;
+                } else if( lc == KEY_F( 11 ) ) {
+                    // F11: cycle menu emitter position preset.
+                    // 0 top-left (8.5, 4.5) — current default
+                    // 1 screen centre (~40, 22) for a 80×45 tile viewport
+                    // 2 bottom-right (~70, 38)
+                    menu_emitter_tuning::pos_preset =
+                        ( menu_emitter_tuning::pos_preset + 1 ) % 3;
+                    switch( menu_emitter_tuning::pos_preset ) {
+                        case 0: menu_emitter_tuning::pos_x = 8.5f;
+                                menu_emitter_tuning::pos_y = 4.5f;  break;
+                        case 1: menu_emitter_tuning::pos_x = 40.0f;
+                                menu_emitter_tuning::pos_y = 22.0f; break;
+                        case 2: menu_emitter_tuning::pos_x = 70.0f;
+                                menu_emitter_tuning::pos_y = 38.0f; break;
+                    }
+                    break;
+                } else if( lc == KEY_F( 12 ) ) {
+                    // F12: toggle bright-blue debug backdrop.
+                    menu_emitter_tuning::blue_backdrop =
+                        !menu_emitter_tuning::blue_backdrop;
+                    break;
+                }
+                if( lc <= 0 ) {
+                    if( ev.key.key >= SDLK_KP_1 && ev.key.key <= SDLK_KP_0 ) {
+                        d.last_input = input_event( ev.key.key - SDLK_KP_1 + NUMPAD_1, input_event_t::keyboard );
+                    } else {
+                        // a key we don't know in curses and won't handle.
+                        break;
+                    }
+                } else if( add_alt_code( lc ) ) {
+                    // key was handled
+                } else {
+                    d.last_input = input_event( lc, input_event_t::keyboard );
+                }
+            }
+            break;
+            case SDL_EVENT_KEY_UP: {
+                is_repeat = ev.key.repeat;
+                if( ev.key.key == SDLK_LALT || ev.key.key == SDLK_RALT ) {
+                    int code = end_alt_code();
+                    if( code ) {
+                        d.last_input = input_event( code, input_event_t::keyboard );
+                        d.last_input.text = utf32_to_utf8( code );
+                    }
+                }
+            }
+            break;
+            case SDL_EVENT_TEXT_INPUT:
+                if( !add_alt_code( *ev.text.text ) ) {
+                    if( strlen( ev.text.text ) > 0 ) {
+                        const unsigned lc = UTF8_getch( ev.text.text );
+                        d.last_input = input_event( lc, input_event_t::keyboard );
+#if defined(SDL_PLATFORM_ANDROID)
+                        if( !android_is_hardware_keyboard_available() ) {
+                            if( !is_string_input( touch_input_context ) && !touch_input_context.allow_text_entry ) {
+                                if( get_option<bool>( "ANDROID_AUTO_KEYBOARD" ) ) {
+                                    SDL_StopTextInput( d.window.get() );
+                                }
+
+                                quick_shortcuts_t &qsl = quick_shortcuts_map[get_quick_shortcut_name(
+                                                              touch_input_context.get_category() )];
+                                qsl.remove( d.last_input );
+                                add_quick_shortcut( qsl, d.last_input, false, true );
+                                refresh_display();
+                            } else if( lc == '\n' || lc == KEY_ESCAPE ) {
+                                if( get_option<bool>( "ANDROID_AUTO_KEYBOARD" ) ) {
+                                    SDL_StopTextInput( d.window.get() );
+                                }
+                            }
+                        }
+#endif
+                    } else {
+                        // no key pressed in this event
+                        d.last_input = input_event();
+                        d.last_input.type = input_event_t::keyboard;
+                    }
+                    d.last_input.text = ev.text.text;
+                    text_refresh = true;
+                }
+                break;
+            case SDL_EVENT_TEXT_EDITING: {
+                if( strlen( ev.edit.text ) > 0 ) {
+                    const unsigned lc = UTF8_getch( ev.edit.text );
+                    d.last_input = input_event( lc, input_event_t::keyboard );
+                } else {
+                    // no key pressed in this event
+                    d.last_input = input_event();
+                    d.last_input.type = input_event_t::keyboard;
+                }
+                d.last_input.edit = ev.edit.text;
+                d.last_input.edit_refresh = true;
+                text_refresh = true;
+            }
+            break;
+            case SDL_EVENT_JOYSTICK_BUTTON_DOWN:
+                d.last_input = input_event( ev.jbutton.button, input_event_t::keyboard );
+                break;
+            case SDL_EVENT_JOYSTICK_AXIS_MOTION:
+                // on gamepads, the axes are the analog sticks
+                // TODO: somehow get the "digipad" values from the axes
+                break;
+            case SDL_EVENT_MOUSE_MOTION:
+                if( get_option<std::string>( "HIDE_CURSOR" ) == "show" ||
+                    get_option<std::string>( "HIDE_CURSOR" ) == "hidekb" ) {
+                    if( !SDL_CursorVisible() ) {
+                        SDL_ShowCursor();
+                    }
+
+                    // Only monitor motion when cursor is visible
+                    d.last_input = input_event( MOUSE_MOVE, input_event_t::mouse );
+                }
+                break;
+
+            case SDL_EVENT_MOUSE_BUTTON_UP:
+                switch( ev.button.button ) {
+                    case SDL_BUTTON_LEFT:
+                        d.last_input = input_event( MOUSE_BUTTON_LEFT, input_event_t::mouse );
+                        break;
+                    case SDL_BUTTON_RIGHT:
+                        d.last_input = input_event( MOUSE_BUTTON_RIGHT, input_event_t::mouse );
+                        break;
+                }
+                break;
+
+            case SDL_EVENT_MOUSE_WHEEL:
+                if( ev.wheel.y > 0 ) {
+                    d.last_input = input_event( SCROLLWHEEL_UP, input_event_t::mouse );
+                } else if( ev.wheel.y < 0 ) {
+                    d.last_input = input_event( SCROLLWHEEL_DOWN, input_event_t::mouse );
+                }
+                break;
+
+            case SDL_EVENT_QUIT:
+                quit = true;
+                break;
+        }
+        if( text_refresh && !is_repeat ) {
+            break;
+        }
+    }
+
+    // While the ImGui dev panel is open, repaint every CheckMessages tick — not
+    // only on input events — so it animates/updates continuously. get_input_event
+    // spins CheckMessages ~1 kHz while waiting; vsync on submit_frame caps actual
+    // redraws to the display rate. Without this an idle panel (no mouse motion)
+    // looks frozen.
+    if( imgui_layer::visible() ) {
+        d.needupdate = true;
+    }
+
+    bool resized = false;
+    if( resize_dims.has_value() ) {
+        restore_on_out_of_scope<input_event> prev_last_input( d.last_input );
+        d.needupdate = resized = handle_resize( resize_dims.value().x, resize_dims.value().y );
+    }
+    if( !resized && render_target_reset ) {
+        reinitialize_framebuffer( true );
+        d.needupdate = true;
+        restore_on_out_of_scope<input_event> prev_last_input( d.last_input );
+        // FIXME: SDL_RENDER_TARGETS_RESET only seems to be fired after the first redraw
+        // when restoring the window after system sleep, rather than immediately
+        // on focus gain. This seems to mess up the first redraw and
+        // causes black screen that lasts ~0.5 seconds before the screen
+        // contents are redrawn in the following code.
+        ui_manager::invalidate( rectangle<point>( point_zero, point( d.WindowWidth, d.WindowHeight ) ), false );
+        ui_manager::redraw_invalidated();
+    }
+    if( d.needupdate ) {
+        try_sdl_update( d );
+    }
+    if( quit ) {
+        exit_handler( 0 );
+    }
 }
 
 // Dispatch overrides — these are declared in input.h as input_manager member

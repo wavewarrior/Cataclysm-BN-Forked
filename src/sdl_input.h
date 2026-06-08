@@ -5,7 +5,6 @@
 #include <cstdint>
 #include <memory>
 #include <string>
-#include <vector>
 
 #include "input.h"
 #include "sdl_wrappers.h"
@@ -60,10 +59,7 @@ struct display_context {
     std::unique_ptr<Font> overmap_font;
 
     // Curses dispatch / framebuffer caches
-    std::vector<cata_cursesport::curseline> oversized_framebuffer;
-    std::vector<cata_cursesport::curseline> terminal_framebuffer;
     std::weak_ptr<void> winBuffer;
-    int fontScaleBuffer = 0;
 };
 
 /// The single display_context instance — defined in sdltiles.cpp.
