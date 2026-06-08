@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdint>
 #include <cstring>
 
 #define dbg( x ) DebugLogFL( ( x ), DC::SDL )
@@ -775,6 +776,64 @@ void render_state::flush_shadow_casters( SDL_GPUCommandBuffer *cb,
     }
 
     shadow_batcher_.end_pass();
+}
+
+
+auto render_state::capture_texture_to_rgba( SDL_GPUTexture *tex, int w, int h,
+        std::vector<uint8_t> &pixels ) -> bool
+{
+    if( !device_.ready() || !tex || w <= 0 || h <= 0 ) {
+        return false;
+    }
+    SDL_GPUDevice *d = device_.raw();
+    const Uint32 row_pitch = static_cast<Uint32>( w ) * 4;
+    const Uint32 buf_size  = row_pitch * static_cast<Uint32>( h );
+
+    SDL_GPUTransferBufferCreateInfo tbci{};
+    tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD;
+    tbci.size  = buf_size;
+    SDL_GPUTransferBuffer *tb = SDL_CreateGPUTransferBuffer( d, &tbci );
+    if( !tb ) {
+        return false;
+    }
+
+    SDL_GPUCommandBuffer *cb = SDL_AcquireGPUCommandBuffer( d );
+    if( !cb ) {
+        SDL_ReleaseGPUTransferBuffer( d, tb );
+        return false;
+    }
+
+    SDL_GPUCopyPass *cp = SDL_BeginGPUCopyPass( cb );
+    SDL_GPUTextureTransferInfo dst{};
+    dst.transfer_buffer = tb;
+    dst.pixels_per_row  = static_cast<Uint32>( w );
+    SDL_GPUTextureRegion region{};
+    region.texture = tex;
+    region.w       = static_cast<Uint32>( w );
+    region.h       = static_cast<Uint32>( h );
+    region.d       = 1;
+    SDL_DownloadFromGPUTexture( cp, &region, &dst );
+    SDL_EndGPUCopyPass( cp );
+
+    SDL_SubmitGPUCommandBuffer( cb );
+    SDL_WaitForGPUIdle( d );
+
+    const auto *mapped = static_cast<const uint8_t *>(
+                             SDL_MapGPUTransferBuffer( d, tb, false ) );
+    if( !mapped ) {
+        SDL_ReleaseGPUTransferBuffer( d, tb );
+        return false;
+    }
+
+    pixels.resize( buf_size );
+    // The GPU texture uses the native swapchain format (RGBA or BGRA); the
+    // caller is responsible for format conversion if needed. Copy the raw
+    // bytes verbatim — the host-side row layout matches the transfer pitch.
+    std::memcpy( pixels.data(), mapped, buf_size );
+
+    SDL_UnmapGPUTransferBuffer( d, tb );
+    SDL_ReleaseGPUTransferBuffer( d, tb );
+    return true;
 }
 
 

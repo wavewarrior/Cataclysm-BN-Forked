@@ -4215,53 +4215,29 @@ bool save_screenshot( const std::string &file_path )
     rs.flush_ui( rs.tile_batcher(), rs.gpu_sampler() );
     rs.tile_batcher().end_pass();
 
-    // Download the rendered pixels to a CPU-accessible transfer buffer.
-    const Uint32 row_pitch = static_cast<Uint32>( w ) * 4;
-    const Uint32 buf_size  = row_pitch * static_cast<Uint32>( h );
-
-    SDL_GPUTransferBufferCreateInfo tbci{};
-    tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD;
-    tbci.size  = buf_size;
-    SDL_GPUTransferBuffer *tb = SDL_CreateGPUTransferBuffer( rs.device().raw(), &tbci );
-    if( !tb ) {
-        SDL_CancelGPUCommandBuffer( cb );
-        SDL_ReleaseGPUTexture( rs.device().raw(), offscreen );
-        return false;
-    }
-
-    SDL_GPUCopyPass *cp = SDL_BeginGPUCopyPass( cb );
-    SDL_GPUTextureTransferInfo dst_info{};
-    dst_info.transfer_buffer = tb;
-    dst_info.pixels_per_row  = static_cast<Uint32>( w );
-    SDL_GPUTextureRegion region{};
-    region.texture = offscreen;
-    region.w       = static_cast<Uint32>( w );
-    region.h       = static_cast<Uint32>( h );
-    region.d       = 1;
-    SDL_DownloadFromGPUTexture( cp, &region, &dst_info );
-    SDL_EndGPUCopyPass( cp );
-
+    // Submit the render CB, then read back through the reusable
+    // capture_texture_to_rgba helper (DRY, byte-identical to the old
+    // inline path — verified at extraction time).
     SDL_SubmitGPUCommandBuffer( cb );
     SDL_WaitForGPUIdle( rs.device().raw() );
 
+    std::vector<uint8_t> pixels;
     bool ok = false;
-    void *mapped = SDL_MapGPUTransferBuffer( rs.device().raw(), tb, false );
-    if( mapped ) {
+    if( rs.capture_texture_to_rgba( offscreen, w, h, pixels ) ) {
         // Swapchain is typically BGRA8 on D3D12; map to SDL_PIXELFORMAT_ARGB8888
         // (little-endian BGRA byte order) so IMG_SavePNG writes correct colours.
+        const Uint32 row_pitch = static_cast<Uint32>( w ) * 4;
         SDL_Surface *surf = SDL_CreateSurfaceFrom(
             w, h, SDL_PIXELFORMAT_ARGB8888,
-            mapped, static_cast<int>( row_pitch ) );
+            pixels.data(), static_cast<int>( row_pitch ) );
         if( surf ) {
             ok = !printErrorIf(
                      !IMG_SavePNG( surf, file_path.c_str() ),
                      ( std::string( "save_screenshot: cannot save file: " ) + file_path ).c_str() );
             SDL_DestroySurface( surf );
         }
-        SDL_UnmapGPUTransferBuffer( rs.device().raw(), tb );
     }
 
-    SDL_ReleaseGPUTransferBuffer( rs.device().raw(), tb );
     SDL_ReleaseGPUTexture( rs.device().raw(), offscreen );
     return ok;
 }

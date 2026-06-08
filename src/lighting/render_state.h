@@ -316,9 +316,16 @@ class render_state
 
         // Silhouette sun-shadow mask (Phase 1). Screen-space coverage texture
         // (swapchain format) the shadow_batcher_ renders sheared caster
-        // silhouettes into; sized to world_target. Phase 1 debug-blits it;
-        // Phase 2 will sample it in the sun term. nullptr until init() succeeds.
+        // silhouettes into; sized to world_target. nullptr until init() succeeds.
         ui_composite_target *shadow_mask() noexcept { return shadow_mask_.get(); }
+
+        // Synchronous GPU→CPU readback of an RGBA GPU texture. Downloads the
+        // given texture into `pixels` (resized to w*h*4 bytes, RGBA order).
+        // The texture must be SAMPLER | COLOR_TARGET and sized to (w,h).
+        // Returns true on success. Used by save_screenshot and the render
+        // regression test harness.
+        auto capture_texture_to_rgba( SDL_GPUTexture *tex, int w, int h,
+                                      std::vector<uint8_t> &pixels ) -> bool;
 
     private:
         gpu_device     device_;
