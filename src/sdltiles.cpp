@@ -6,6 +6,7 @@
 #include "cursesdef.h" // IWYU pragma: associated
 #include "sdltiles.h" // IWYU pragma: associated
 #include "sdl_input.h"
+#include "sdl_fonts.h"
 
 #include <algorithm>
 #include <array>
@@ -454,13 +455,6 @@ static void WinDestroy()
     ::legacy_window.reset();
     ::window.reset();
 }
-
-static point draw_string( Font &font,
-                          const SDL_Renderer_Ptr &renderer,
-                          const GeometryRenderer_Ptr &geometry,
-                          const std::string &str,
-                          point p,
-                          unsigned char color );
 
 /// Converts a color from colorscheme to SDL_Color.
 inline const SDL_Color &color_as_sdl( const unsigned char color )
@@ -1867,41 +1861,6 @@ std::string cata_tiles::get_omt_id_rotation_and_subtile(
     }
 
     return ot_type_id.id().str();
-}
-
-static point draw_string( Font &font,
-                          const SDL_Renderer_Ptr &renderer,
-                          const GeometryRenderer_Ptr &geometry,
-                          const std::string &str,
-                          point p,
-                          const unsigned char color )
-{
-    const char *cstr = str.c_str();
-    int len = str.length();
-    while( len > 0 ) {
-        const uint32_t ch32 = UTF8_getch( &cstr, &len );
-        const std::string ch = utf32_to_utf8( ch32 );
-        font.OutputChar( renderer, geometry, ch, p, color );
-        p.x += mk_wcwidth( ch32 ) * font.width;
-    }
-    return p;
-}
-
-void draw_sdl_text_outlined( const sdl_text_outline_options &opts )
-{
-    if( !font || !renderer || opts.text.empty() ) { return; }
-
-    const auto outline_thickness = std::max( 0, opts.outline_thickness );
-    for( auto y = -outline_thickness; y <= outline_thickness; ++y ) {
-        for( auto x = -outline_thickness; x <= outline_thickness; ++x ) {
-            if( x != 0 || y != 0 ) {
-                draw_string( *font, renderer, geometry, opts.text, opts.pos_pixel + point( x, y ),
-                             static_cast<unsigned char>( opts.outline_color ) );
-            }
-        }
-    }
-    draw_string( *font, renderer, geometry, opts.text, opts.pos_pixel,
-                 static_cast<unsigned char>( opts.text_color ) );
 }
 
 void cata_tiles::draw_om( point dest, const tripoint_abs_omt &center_abs_omt, bool blink )
@@ -3553,66 +3512,6 @@ bool gamepad_available()
 void rescale_tileset( float size )
 {
     tilecontext->set_draw_scale( size );
-}
-
-static int map_font_width()
-{
-    if( use_tiles && tilecontext ) {
-        return tilecontext->get_tile_width();
-    }
-    return ( map_font ? map_font.get() : font.get() )->width;
-}
-
-static int map_font_height()
-{
-    if( use_tiles && tilecontext ) {
-        return tilecontext->get_tile_height();
-    }
-    return ( map_font ? map_font.get() : font.get() )->height;
-}
-
-static int overmap_font_width()
-{
-    if( use_tiles && overmap_tilecontext && use_tiles_overmap ) {
-        return overmap_tilecontext->get_tile_width();
-    }
-    return ( overmap_font ? overmap_font.get() : font.get() )->width;
-}
-
-static int overmap_font_height()
-{
-    if( use_tiles && overmap_tilecontext && use_tiles_overmap ) {
-        return overmap_tilecontext->get_tile_height();
-    }
-    return ( overmap_font ? overmap_font.get() : font.get() )->height;
-}
-
-void to_map_font_dim_width( int &w )
-{
-    w = ( w * fontwidth ) / map_font_width();
-}
-
-void to_map_font_dim_height( int &h )
-{
-    h = ( h * fontheight ) / map_font_height();
-}
-
-void to_map_font_dimension( int &w, int &h )
-{
-    to_map_font_dim_width( w );
-    to_map_font_dim_height( h );
-}
-
-void from_map_font_dimension( int &w, int &h )
-{
-    w = ( w * map_font_width() + fontwidth - 1 ) / fontwidth;
-    h = ( h * map_font_height() + fontheight - 1 ) / fontheight;
-}
-
-void to_overmap_font_dimension( int &w, int &h )
-{
-    w = ( w * fontwidth ) / overmap_font_width();
-    h = ( h * fontheight ) / overmap_font_height();
 }
 
 bool is_draw_tiles_mode()
