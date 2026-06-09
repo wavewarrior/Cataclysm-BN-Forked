@@ -745,6 +745,45 @@ else ()
     target_compile_options(imgui PRIVATE -w)
 endif ()
 
+# --- RmlUi (player-facing menu UI layer — spike) ---
+# Unlike ImGui (ships no CMake), RmlUi ships its own CMake, so we just
+# FetchContent_MakeAvailable it and link the `rmlui` interface target (which
+# aggregates rmlui_core + rmlui_debugger). Pinned to release 6.2 so Mac/Metal
+# and Win11/D3D12 build identical code; bump deliberately + re-run D3D12 smoke.
+#
+# Font engine = freetype (RmlUi default). RmlUi does NOT fetch FreeType — it
+# calls find_package(Freetype REQUIRED) itself. On the mac dev machine that
+# resolves via brew (/opt/homebrew/opt/freetype); Win11 provisioning is a
+# Phase-5 concern, not gold-plated here.
+#
+# Static for the spike: RmlUi obeys the global BUILD_SHARED_LIBS (default ON);
+# force OFF here and restore the prior value, so the throwaway spike links
+# statically and needs no runtime-DLL/rpath wiring.
+set(RMLUI_SAMPLES OFF CACHE BOOL "" FORCE)
+set(RMLUI_LUA_BINDINGS OFF CACHE BOOL "" FORCE)
+set(_cata_saved_build_shared "${BUILD_SHARED_LIBS}")
+set(BUILD_SHARED_LIBS OFF)
+FetchContent_Declare(
+    RmlUi
+    GIT_REPOSITORY https://github.com/mikke89/RmlUi.git
+    GIT_TAG 6.2
+    GIT_PROGRESS TRUE
+    EXCLUDE_FROM_ALL
+)
+FetchContent_MakeAvailable(RmlUi)
+set(BUILD_SHARED_LIBS "${_cata_saved_build_shared}")
+unset(_cata_saved_build_shared)
+# Vendored third-party: silence warnings so the fork's -Werror/​/WX can't trip.
+foreach (_rml_tgt rmlui_core rmlui_debugger)
+    if (TARGET ${_rml_tgt})
+        if (MSVC)
+            target_compile_options(${_rml_tgt} PRIVATE /w)
+        else ()
+            target_compile_options(${_rml_tgt} PRIVATE -w)
+        endif ()
+    endif ()
+endforeach ()
+
 add_subdirectory(src)
 add_subdirectory(data)
 

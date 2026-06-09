@@ -175,6 +175,12 @@ target_link_libraries(cataclysm-bn-tiles-common PUBLIC SDL3_shadercross::SDL3_sh
 # real window (gated like render_state::ready()).
 target_link_libraries(cataclysm-bn-tiles-common PUBLIC imgui)
 
+# RmlUi player-facing UI layer (spike). PUBLIC like imgui so the executable and
+# cata_test both link it; inert at runtime until rmlui_layer init succeeds.
+# Linked now with no caller yet so Phase 0 genuinely compiles RmlUi + resolves
+# FreeType — declare-without-link would build green and prove nothing.
+target_link_libraries(cataclysm-bn-tiles-common PUBLIC rmlui)
+
 # Ship the runtime DLLs next to the executable so a fresh-checkout dev build
 # on Windows 11 (NVIDIA RTX 4090 target) has the shadercross DLL + DXC
 # sidecars (dxcompiler.dll / dxil.dll) resolvable at launch. Windows-only:

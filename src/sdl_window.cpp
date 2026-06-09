@@ -32,6 +32,7 @@
 #include "widget_icon.h"
 #include "lighting/render_state.h"
 #include "lighting/imgui_layer.h"
+#include "lighting/rmlui_layer.h"
 
 #define dbg(x) DebugLogFL((x), DC::SDL)
 
@@ -286,6 +287,8 @@ static void WinDestroy()
     // ImGui holds GPU resources on the shared device — tear it down BEFORE the
     // device is destroyed by shutdown_render_state(). No-op if never inited.
     imgui_layer::shutdown();
+    // Same ordering for the RmlUi spike layer. No-op if never inited.
+    rmlui_layer::shutdown();
 
     // Tear the SDL_GPU lighting stack down before SDL_Quit. Idempotent;
     // safe even if try_init_render_state() never succeeded.

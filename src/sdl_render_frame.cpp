@@ -27,6 +27,7 @@
 #include "sdl_wrappers.h"
 #include "lighting/frame_build.h"
 #include "lighting/imgui_layer.h"
+#include "lighting/rmlui_layer.h"
 #include "lighting/render_state.h"
 #include "lighting/sdf_pass.h"
 #include "weather.h"
@@ -82,6 +83,11 @@ auto begin_frame( lighting::render_state &rs ) -> std::optional<lighting::frame_
     if( !imgui_layer::ready() ) {
         imgui_layer::init( rs.device().window_ptr(), rs.device().raw() );
         imgui_layer::set_dev_ui( sdl_lighting_devui::draw );
+    }
+    // RmlUi spike (Phase 1): lazy init beside ImGui; init() self-guards so this
+    // only truly attempts once. Render/input not wired yet.
+    if( !rmlui_layer::ready() ) {
+        rmlui_layer::init( rs.device().window_ptr(), rs.device().raw() );
     }
 
     rs.tile_batcher().begin_frame();
