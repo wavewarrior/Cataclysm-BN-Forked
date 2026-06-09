@@ -11,7 +11,7 @@
             top: 80px;
             left: 80px;
             width: 320px;
-            font-family: Terminus;
+            font-family: "Terminus (TTF)";
             font-size: 18px;
             background-color: #1e1e28f2;
             border: 2px #5a5a78;
@@ -47,6 +47,19 @@
             background-color: #ffcc66;
             color: #1e1e28;
         }
+
+        /* Dynamic element: typing exercises caret + on-demand glyph generation,
+           the moving parts the Phase-5 D3D12 upload-timing gate must stress. */
+        input.text {
+            display: block;
+            margin-top: 10px;
+            padding: 6px 10px;
+            color: #1e1e28;
+            background-color: #cfcfe0;
+            border-radius: 4px;
+            tab-index: auto;
+            cursor: text;
+        }
     </style>
 </head>
 <body>
@@ -56,5 +69,6 @@
     <div class="item">Options</div>
     <div class="item">Help</div>
     <div class="item">Quit</div>
+    <input type="text" class="text" value="type here"/>
 </body>
 </rml>

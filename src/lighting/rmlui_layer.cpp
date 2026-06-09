@@ -95,8 +95,11 @@ bool init( lighting::gpu_device &dev )
         return false;
     }
 
+    // Registered as a fallback (second arg) so glyphs still resolve even if a
+    // document's font-family doesn't match. Family name embedded in the TTF is
+    // "Terminus (TTF)" — the RCSS must use that exact string.
     const std::string font = PATH_INFO::fontdir() + "Terminus.ttf";
-    if( !Rml::LoadFontFace( font ) ) {
+    if( !Rml::LoadFontFace( font, true ) ) {
         // Non-fatal — boxes/colours still render; only text would be missing.
         dbg( DL::Warn ) << "rmlui_layer: LoadFontFace failed for " << font;
     }
@@ -316,6 +319,22 @@ void render_in_pass( SDL_GPURenderPass *rp, SDL_GPUCommandBuffer *cb )
         g_context->Render();
     }
     g_render->end_render_pass();
+
+    // Phase-5 D3D12 gate: surface any upload that fired while the pass was open
+    // (the in-pass-upload hazard). Logs only on change. Geometry is deferred so
+    // a non-zero compiles count is safe; a non-zero textures count means a glyph
+    // atlas uploaded mid-pass — the path to watch on D3D12.
+    static std::uint32_t last_c = 0;
+    static std::uint32_t last_t = 0;
+    const std::uint32_t c = g_render->compiles_in_pass();
+    const std::uint32_t t = g_render->textures_in_pass();
+    if( c != last_c || t != last_t ) {
+        last_c = c;
+        last_t = t;
+        DebugLogFL( DL::Info, DC::Main )
+                << "rmlui in-pass uploads: compiles=" << c << " textures=" << t
+                << " (0 = safe; geometry deferred, textures are the D3D12 watch)";
+    }
 }
 
 }  // namespace rmlui_layer
