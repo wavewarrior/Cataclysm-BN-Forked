@@ -1,0 +1,60 @@
+<rml>
+<head>
+    <title>RmlUi Spike Menu</title>
+    <style>
+        /* Single-file PoC: exercises flexbox, colours, rounded borders, a web
+           font, and :hover/:focus state — the "easy to style" half of the ask.
+           Boxes/colours render even if the font family does not resolve, so the
+           styling proof does not hinge on the font. */
+        body {
+            position: absolute;
+            top: 80px;
+            left: 80px;
+            width: 320px;
+            font-family: Terminus;
+            font-size: 18px;
+            background-color: #1e1e28f2;
+            border: 2px #5a5a78;
+            border-radius: 8px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        h1 {
+            color: #ffcc66;
+            font-size: 22px;
+            margin-bottom: 12px;
+        }
+
+        .item {
+            display: block;
+            padding: 8px 12px;
+            margin-bottom: 6px;
+            color: #cfcfe0;
+            background-color: #2a2a3a;
+            border-radius: 4px;
+            tab-index: auto;
+            nav: auto;
+        }
+
+        .item:hover {
+            background-color: #3a3a55;
+            color: #ffffff;
+        }
+
+        .item:focus {
+            background-color: #ffcc66;
+            color: #1e1e28;
+        }
+    </style>
+</head>
+<body>
+    <h1>RmlUi Spike</h1>
+    <div id="first" class="item">New Game</div>
+    <div class="item">Load Game</div>
+    <div class="item">Options</div>
+    <div class="item">Help</div>
+    <div class="item">Quit</div>
+</body>
+</rml>

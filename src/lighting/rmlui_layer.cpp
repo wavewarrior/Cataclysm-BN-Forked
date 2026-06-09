@@ -24,16 +24,17 @@ namespace
 {
 
 bool g_ready = false;
-// Phase 2: default visible so the self-test quad shows without input wiring
-// (Phase 3 adds a toggle key). Phase 4 flips the self-test off for documents.
-bool g_visible = true;
+// Phase 4: the spike menu is a player UI — hidden by default, toggled with F10.
+bool g_visible = false;
 // init() tried once (success or failure); don't re-attempt every frame.
 bool g_attempted = false;
-// Phase 2: draw the render-interface self-test quad instead of Context::Render()
-// (no document loaded yet). Phase 4 sets this false.
-bool g_self_test = true;
+// Phase 2 self-test quad path. Off now that a real document is loaded; flip true
+// to isolate the pipeline from RmlUi layout/font if a document misbehaves.
+bool g_self_test = false;
 // Window kept for per-frame context sizing + the render-pass projection.
 SDL_Window *g_window = nullptr;
+// Loaded spike document (owned by the RmlUi context; not deleted manually).
+Rml::ElementDocument *g_document = nullptr;
 
 // Interfaces are held by raw pointer inside RmlUi, so they must outlive
 // Rml::Shutdown(). Owned here; destroyed AFTER Rml::Shutdown() in shutdown().
@@ -96,9 +97,22 @@ bool init( lighting::gpu_device &dev )
 
     const std::string font = PATH_INFO::fontdir() + "Terminus.ttf";
     if( !Rml::LoadFontFace( font ) ) {
-        // Non-fatal for the skeleton, but log it — a missing font means no text
-        // will render once documents are loaded in Phase 4.
+        // Non-fatal — boxes/colours still render; only text would be missing.
         dbg( DL::Warn ) << "rmlui_layer: LoadFontFace failed for " << font;
+    }
+
+    // Phase 4: load + show the styled spike menu. Non-fatal if missing (the
+    // self-test path remains available by flipping g_self_test).
+    const std::string doc = PATH_INFO::datadir() + "gui/spike_menu.rml";
+    g_document = g_context->LoadDocument( doc );
+    if( g_document != nullptr ) {
+        g_document->Show();
+        if( Rml::Element *first = g_document->GetElementById( "first" ) ) {
+            first->Focus();  // so arrow-key (nav:auto) navigation has a start point
+        }
+        dbg( DL::Info ) << "rmlui_layer: loaded document " << doc;
+    } else {
+        dbg( DL::Warn ) << "rmlui_layer: LoadDocument failed for " << doc;
     }
 
     g_ready = true;
@@ -116,6 +130,7 @@ void shutdown()
     if( g_ready ) {
         Rml::Shutdown();
     }
+    g_document = nullptr;
     g_context = nullptr;
     if( g_render ) {
         g_render->shutdown();
@@ -142,19 +157,129 @@ bool active()
     return g_ready && g_visible;
 }
 
-bool process_event( const SDL_Event & /*ev*/ )
+namespace
 {
-    // PHASE 3: translate SDL -> Rml input and return whether RmlUi consumed it.
-    return false;
+Rml::Input::KeyIdentifier map_key( SDL_Keycode k )
+{
+    switch( k ) {
+        case SDLK_UP:
+            return Rml::Input::KI_UP;
+        case SDLK_DOWN:
+            return Rml::Input::KI_DOWN;
+        case SDLK_LEFT:
+            return Rml::Input::KI_LEFT;
+        case SDLK_RIGHT:
+            return Rml::Input::KI_RIGHT;
+        case SDLK_RETURN:
+        case SDLK_KP_ENTER:
+            return Rml::Input::KI_RETURN;
+        case SDLK_ESCAPE:
+            return Rml::Input::KI_ESCAPE;
+        case SDLK_TAB:
+            return Rml::Input::KI_TAB;
+        case SDLK_BACKSPACE:
+            return Rml::Input::KI_BACK;
+        case SDLK_SPACE:
+            return Rml::Input::KI_SPACE;
+        default:
+            return Rml::Input::KI_UNKNOWN;
+    }
+}
+
+int mod_state()
+{
+    const SDL_Keymod m = SDL_GetModState();
+    int s = 0;
+    if( m & SDL_KMOD_CTRL ) {
+        s |= Rml::Input::KM_CTRL;
+    }
+    if( m & SDL_KMOD_SHIFT ) {
+        s |= Rml::Input::KM_SHIFT;
+    }
+    if( m & SDL_KMOD_ALT ) {
+        s |= Rml::Input::KM_ALT;
+    }
+    if( m & SDL_KMOD_GUI ) {
+        s |= Rml::Input::KM_META;
+    }
+    return s;
+}
+}  // namespace
+
+bool process_event( const SDL_Event &ev )
+{
+    if( !g_ready || !g_visible || g_context == nullptr ) {
+        return false;
+    }
+    // Context is sized in physical pixels; SDL mouse coords are in window points.
+    float sx = 1.f;
+    float sy = 1.f;
+    if( g_window != nullptr ) {
+        int pw = 0;
+        int ph = 0;
+        int ww = 0;
+        int wh = 0;
+        SDL_GetWindowSizeInPixels( g_window, &pw, &ph );
+        SDL_GetWindowSize( g_window, &ww, &wh );
+        if( ww > 0 ) {
+            sx = static_cast<float>( pw ) / ww;
+        }
+        if( wh > 0 ) {
+            sy = static_cast<float>( ph ) / wh;
+        }
+    }
+    const int mods = mod_state();
+    switch( ev.type ) {
+        case SDL_EVENT_MOUSE_MOTION:
+            g_context->ProcessMouseMove( static_cast<int>( ev.motion.x * sx ),
+                                         static_cast<int>( ev.motion.y * sy ), mods );
+            return true;
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        case SDL_EVENT_MOUSE_BUTTON_UP: {
+            const int btn = ev.button.button == SDL_BUTTON_LEFT ? 0
+                            : ev.button.button == SDL_BUTTON_RIGHT ? 1
+                            : ev.button.button == SDL_BUTTON_MIDDLE ? 2 : 3;
+            if( ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN ) {
+                g_context->ProcessMouseButtonDown( btn, mods );
+            } else {
+                g_context->ProcessMouseButtonUp( btn, mods );
+            }
+            return true;
+        }
+        case SDL_EVENT_MOUSE_WHEEL:
+            // SDL: +y scrolls up; RmlUi: +delta scrolls down.
+            g_context->ProcessMouseWheel( -ev.wheel.y, mods );
+            return true;
+        case SDL_EVENT_KEY_DOWN: {
+            const Rml::Input::KeyIdentifier k = map_key( ev.key.key );
+            if( k != Rml::Input::KI_UNKNOWN ) {
+                g_context->ProcessKeyDown( k, mods );
+            }
+            return true;
+        }
+        case SDL_EVENT_KEY_UP: {
+            const Rml::Input::KeyIdentifier k = map_key( ev.key.key );
+            if( k != Rml::Input::KI_UNKNOWN ) {
+                g_context->ProcessKeyUp( k, mods );
+            }
+            return true;
+        }
+        case SDL_EVENT_TEXT_INPUT:
+            g_context->ProcessTextInput( Rml::String( ev.text.text ) );
+            return true;
+        default:
+            return false;
+    }
 }
 
 void new_frame()
 {
-    if( !g_ready || !g_visible ) {
+    if( !g_ready ) {
         return;
     }
+    // Drain deferred GPU-resource frees every frame, even while hidden.
     g_render->begin_frame();
-    if( g_context != nullptr && g_window != nullptr ) {
+    if( g_visible && g_context != nullptr && g_window != nullptr ) {
         int w = 0;
         int h = 0;
         SDL_GetWindowSizeInPixels( g_window, &w, &h );
