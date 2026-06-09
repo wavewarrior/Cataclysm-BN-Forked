@@ -2,6 +2,9 @@
 
 #include <SDL3/SDL.h>
 
+#include <algorithm>
+#include <utility>
+
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_sdlgpu3.h"
@@ -23,11 +26,43 @@ bool g_visible = false;
 bool g_attempted = false;
 // Dev-UI draw callback (lighting HUD). Owns no ImGui state itself.
 std::function<void()> g_dev_ui;
+
+// Registry of player-facing ImGui draw callbacks (e.g. uilist).
+// Each entry has a unique integer handle for removal.
+struct callback_entry {
+    int handle;
+    std::function<void()> fn;
+};
+std::vector<callback_entry> g_draw_callbacks;
+int g_next_handle = 1;
 }  // namespace
 
 void set_dev_ui( std::function<void()> fn )
 {
     g_dev_ui = std::move( fn );
+}
+
+auto push_draw_callback( std::function<void()> fn ) -> int
+{
+    const int handle = g_next_handle++;
+    g_draw_callbacks.push_back( { handle, std::move( fn ) } );
+    return handle;
+}
+
+void remove_draw_callback( int handle )
+{
+    const auto it = std::find_if( g_draw_callbacks.begin(), g_draw_callbacks.end(),
+    [handle]( const callback_entry &e ) {
+        return e.handle == handle;
+    } );
+    if( it != g_draw_callbacks.end() ) {
+        g_draw_callbacks.erase( it );
+    }
+}
+
+static auto has_active_menus() -> bool
+{
+    return g_visible || !g_draw_callbacks.empty();
 }
 
 bool init( SDL_Window *window, SDL_GPUDevice *device )
@@ -110,17 +145,26 @@ bool &visible()
     return g_visible;
 }
 
+bool active()
+{
+    return g_ready && has_active_menus();
+}
+
 bool process_event( const SDL_Event &ev )
 {
-    // Gate on visible(), NOT just ready(): WantCapture* is only recomputed in
-    // new_frame(), which doesn't run while the panel is hidden. Without this,
-    // closing the panel while hovering it leaves the flags stuck true and every
-    // event keeps getting captured → game input frozen until reopened.
-    if( !g_ready || !g_visible ) {
+    // Gate on visible() OR non-empty menu registry: WantCapture* is only
+    // recomputed inside new_frame(), which doesn't run while no menu is open.
+    // Without a menu, skip feeding events to avoid dangling WantCapture flags.
+    if( !g_ready || !has_active_menus() ) {
         return false;
     }
     ImGui_ImplSDL3_ProcessEvent( &ev );
     const ImGuiIO &io = ImGui::GetIO();
+    // For player-facing menus (registry) ImGui should only capture mouse,
+    // not keyboard — game owns keyboard navigation.
+    if( !g_draw_callbacks.empty() ) {
+        return io.WantCaptureMouse;
+    }
     return io.WantCaptureMouse || io.WantCaptureKeyboard;
 }
 
@@ -139,6 +183,14 @@ void new_frame()
         } else {
             // Fallback when no dev tool is registered yet (proves the stack).
             ImGui::ShowDemoWindow( &g_visible );
+        }
+    }
+
+    // Run player-facing menu callbacks (e.g. uilist).
+    // These use ImGuiWindowFlags_NoNav to keep keyboard with the game.
+    for( auto &entry : g_draw_callbacks ) {
+        if( entry.fn ) {
+            entry.fn();
         }
     }
 }

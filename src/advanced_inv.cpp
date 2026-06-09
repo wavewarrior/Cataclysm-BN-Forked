@@ -1,3 +1,10 @@
+#pragma push_macro( "DebugLog" )
+#undef DebugLog
+#include "imgui.h"
+#pragma pop_macro( "DebugLog" )
+
+#include "cata_imgui.h"
+
 #include "advanced_inv.h"
 
 #include <algorithm>
@@ -1580,6 +1587,32 @@ class query_destination_callback : public uilist_callback
         query_destination_callback( advanced_inventory &adv_inv ) : _adv_inv( adv_inv ) {}
         void refresh( uilist *menu ) override {
             draw_squares( menu );
+        }
+        void draw_imgui( uilist *menu ) override {
+            int sel = 0;
+            if( menu->selected >= 0 && static_cast<size_t>( menu->selected ) < menu->entries.size() ) {
+                sel = _adv_inv.screen_relative_location(
+                          static_cast<aim_location>( menu->selected + 1 ) );
+            }
+            ImGui::Separator();
+            for( int i = 1; i < 10; i++ ) {
+                aim_location loc = _adv_inv.screen_relative_location( static_cast<aim_location>( i ) );
+                std::string key = _adv_inv.get_location_key( loc );
+                advanced_inv_area &square = _adv_inv.get_one_square( loc );
+                bool in_vehicle = square.can_store_in_vehicle();
+                const char *bracket = in_vehicle ? "<>" : "[]";
+                bool canputitems = menu->entries[i - 1].enabled && square.canputitems();
+                nc_color bcolor = canputitems ? sel == loc ? h_white : c_light_gray : c_dark_gray;
+                nc_color kcolor = canputitems ? sel == loc ? h_white : c_light_gray : c_dark_gray;
+                cataimgui::text_colored( bcolor, std::string( 1, bracket[0] ) );
+                ImGui::SameLine( 0, 0 );
+                cataimgui::text_colored( kcolor, key );
+                ImGui::SameLine( 0, 0 );
+                cataimgui::text_colored( bcolor, std::string( 1, bracket[1] ) );
+                if( i % 3 != 0 ) {
+                    ImGui::SameLine( 0, 4 );
+                }
+            }
         }
 };
 

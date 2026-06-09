@@ -1,3 +1,10 @@
+#pragma push_macro( "DebugLog" )
+#undef DebugLog
+#include "imgui.h"
+#pragma pop_macro( "DebugLog" )
+
+#include "cata_imgui.h"
+
 #include "magic.h"
 
 #include <algorithm>
@@ -1884,6 +1891,8 @@ class spellcasting_callback : public uilist_callback
             }
             wnoutrefresh( menu->window );
         }
+
+        void draw_imgui( uilist *menu ) override;
 };
 
 static bool casting_time_encumbered( const spell &sp, const Character &guy )
@@ -2257,6 +2266,129 @@ void known_magic::on_mutation_loss( const trait_id &mid )
     }
 }
 
+void spellcasting_callback::draw_imgui( uilist *menu )
+{
+    ImGui::Separator();
+    std::string ignore_string = casting_ignore ? _( "Ignore Distractions" ) :
+                                _( "Popup Distractions" );
+    cataimgui::text_colored( casting_ignore ? c_red : c_light_green,
+                             string_format( "%s %s", "[I]", ignore_string ) );
+    ImGui::SameLine();
+    cataimgui::text_colored( c_yellow, _( "Assign Hotkey [=]" ) );
+
+    if( menu->selected >= 0 && static_cast<size_t>( menu->selected ) < known_spells.size() ) {
+        const spell &sp = *known_spells[menu->selected];
+        const std::string fx = sp.effect();
+        nc_color gray = c_light_gray;
+        nc_color light_green = c_light_green;
+        nc_color yellow = c_yellow;
+
+        cataimgui::text_colored( yellow,
+                                 sp.spell_class() == trait_NONE ? _( "Classless" ) : sp.spell_class()->name() );
+
+        cataimgui::draw_colored_text( sp.description() );
+
+        cataimgui::draw_colored_text( enumerate_spell_data( sp ) );
+
+        cataimgui::text_colored( gray,
+                                 string_format( "%s: %s", _( "Blocker mutations" ),
+                                         enumerate_traits( sp.get_blocker_muts() ) ) );
+
+        cataimgui::text_colored( gray, string_format( "%s: %s", _( "Skill" ), sp.skill() ) );
+
+        cataimgui::text_colored( gray,
+                                 string_format( "%s: %d %s", _( "Spell Level" ), sp.get_level(),
+                                         sp.is_max_level() ? _( "(MAX)" ) : "" ) );
+        ImGui::SameLine( 200 );
+        cataimgui::text_colored( gray,
+                                 string_format( "%s: %d", _( "Max Level" ), sp.get_max_level() ) );
+
+        cataimgui::draw_colored_text( sp.colorized_fail_percent( g->u ) );
+        ImGui::SameLine( 200 );
+        cataimgui::text_colored( gray, string_format( "%s: %d", _( "Difficulty" ), sp.get_difficulty() ) );
+
+        cataimgui::text_colored( gray,
+                                 string_format( "%s: %s", _( "Current Exp" ),
+                                         colorize( std::to_string( sp.xp() ), light_green ) ) );
+        ImGui::SameLine( 200 );
+        cataimgui::text_colored( gray,
+                                 string_format( "%s: %s", _( "to Next Level" ),
+                                         colorize( std::to_string( sp.exp_to_next_level() ), light_green ) ) );
+
+        const bool cost_encumb = energy_cost_encumbered( sp, g->u );
+        std::string cost_string = cost_encumb ? _( "Casting Cost (impeded)" ) : _( "Casting Cost" );
+        std::string energy_cur = sp.energy_source() == hp_energy ? "" : string_format( _( " (%s current)" ),
+                                sp.energy_cur_string( g->u ) );
+        if( !sp.can_cast( g->u ) ) {
+            cost_string = colorize( _( "Not Enough Energy" ), c_red );
+            energy_cur = "";
+        }
+        cataimgui::draw_colored_text( string_format( "%s: %s %s%s", cost_string,
+                                      sp.energy_cost_string( g->u ), sp.energy_string(), energy_cur ) );
+
+        const bool c_t_encumb = casting_time_encumbered( sp, g->u );
+        cataimgui::text_colored( c_t_encumb ? c_red : gray,
+                                 string_format( "%s: %s",
+                                         c_t_encumb ? _( "Casting Time (impeded)" ) : _( "Casting Time" ),
+                                         moves_to_string( sp.casting_time( g->u ) ) ) );
+
+        std::string targets;
+        if( sp.is_valid_target( target_none ) ) {
+            targets = _( "self" );
+        } else {
+            targets = sp.enumerate_targets();
+        }
+        cataimgui::text_colored( gray, string_format( "%s: %s", _( "Valid Targets" ), targets ) );
+
+        std::string target_ids = sp.list_targeted_monster_names();
+        if( !target_ids.empty() ) {
+            cataimgui::text_colored( gray,
+                                     string_format( _( "Only affects the monsters: %s" ), target_ids ) );
+        }
+
+        const int damage = sp.damage_as_character( g->u );
+        std::string damage_string;
+        std::string aoe_string;
+        if( fx == "target_attack" || fx == "projectile_attack" || fx == "cone_attack" ||
+            fx == "line_attack" ) {
+            if( damage > 0 ) {
+                damage_string = string_format( "%s: %s %s", _( "Damage" ),
+                                               colorize( sp.damage_string( g->u ), sp.damage_type_color() ),
+                                               colorize( sp.damage_type_string(), sp.damage_type_color() ) );
+            } else if( damage < 0 ) {
+                damage_string = string_format( "%s: %s", _( "Healing" ),
+                                               colorize( sp.damage_string( g->u ), light_green ) );
+            }
+            if( sp.aoe() > 0 ) {
+                aoe_string = string_format( "%s: %d", _( "AoE" ), sp.aoe() );
+            }
+        } else if( fx == "spawn_item" ) {
+            damage_string = string_format( "%s: %s", _( "Spawned" ),
+                                           colorize( sp.damage_string( g->u ), c_light_green ) );
+        } else if( fx == "teleport_random" ) {
+            aoe_string = string_format( "%s: %d", _( "Variance" ), sp.aoe() );
+        } else if( fx == "recover_energy" ) {
+            damage_string = string_format( "%s: %s", _( "Recover" ),
+                                           colorize( sp.damage_string( g->u ), c_light_green ) );
+        } else if( fx == "area_pull" || fx == "area_push" || fx == "ter_transform" ) {
+            aoe_string = string_format( "%s: %d", _( "AoE" ), sp.aoe() );
+        }
+
+        if( !damage_string.empty() ) {
+            cataimgui::draw_colored_text( damage_string );
+        }
+        if( !aoe_string.empty() ) {
+            cataimgui::draw_colored_text( aoe_string );
+        }
+
+        cataimgui::text_colored( gray, string_format( "%s: %d", _( "Range" ), sp.range() ) );
+
+        cataimgui::text_colored( gray,
+                                 string_format( "%s: %s", _( "Duration" ),
+                                         sp.duration() <= 0 ? "" : moves_to_string( sp.duration() ) ) );
+    }
+}
+
 void spellbook_callback::add_spell( const spell_id &sp )
 {
     spells.emplace_back( sp.obj() );
@@ -2397,6 +2529,88 @@ void spellbook_callback::refresh( uilist *menu )
         draw_spellbook_info( spells[menu->selected], menu );
     }
     wnoutrefresh( menu->window );
+}
+
+void spellbook_callback::draw_imgui( uilist *menu )
+{
+    ImGui::Separator();
+    if( menu->selected >= 0 && static_cast<size_t>( menu->selected ) < spells.size() ) {
+        const spell_type &sp = spells[menu->selected];
+        nc_color gray = c_light_gray;
+        nc_color yellow = c_yellow;
+        const spell fake_spell( sp.id );
+
+        // Spell name + class
+        cataimgui::draw_colored_text( colorize( sp.name, c_light_green ) );
+        ImGui::SameLine();
+        cataimgui::text_colored( yellow,
+                                 sp.spell_class == trait_NONE ? _( "Classless" ) : sp.spell_class->name() );
+
+        // Description
+        cataimgui::draw_colored_text( sp.description.translated() );
+
+        // Difficulty / Max Level
+        cataimgui::text_colored( gray, string_format( "%s: %d", _( "Difficulty" ), sp.difficulty ) );
+        ImGui::SameLine( 200 );
+        cataimgui::text_colored( gray, string_format( "%s: %d", _( "Max Level" ), sp.max_level ) );
+
+        // Damage type
+        const std::string fx = sp.effect_name;
+        bool has_damage_type = false;
+        if( fx == "target_attack" || fx == "projectile_attack" || fx == "cone_attack" ||
+            fx == "line_attack" ) {
+            has_damage_type = sp.min_damage > 0 && sp.max_damage > 0;
+        }
+        if( has_damage_type ) {
+            cataimgui::text_colored( gray,
+                                     string_format( "%s: %s", _( "Damage Type" ),
+                                             colorize( fake_spell.damage_type_string(),
+                                                     fake_spell.damage_type_color() ) ) );
+        }
+
+        // Stat Gain table
+        cataimgui::text_colored( gray,
+                                 string_format( "%s  %s  %s  %s",
+                                         _( "Stat Gain" ), _( "lvl 0" ), _( "per lvl" ), _( "max lvl" ) ) );
+
+        // Build rows
+        struct stat_row {
+            std::string name;
+            int min_val;
+            float per_lvl;
+            int max_val;
+        };
+        std::vector<stat_row> rows;
+
+        auto add_if = [&]( bool cond, const std::string &name, int min, float per, int max ) {
+            if( cond ) {
+                rows.push_back( { name, min, per, max } );
+            }
+        };
+
+        add_if( sp.max_damage != 0 && sp.min_damage != 0, _( "Damage" ),
+                sp.min_damage, sp.damage_increment, sp.max_damage );
+        add_if( sp.max_range != 0 && sp.min_range != 0, _( "Range" ),
+                sp.min_range, sp.range_increment, sp.max_range );
+        add_if( sp.min_aoe != 0 && sp.max_aoe != 0, _( "AoE" ),
+                sp.min_aoe, sp.aoe_increment, sp.max_aoe );
+        add_if( sp.min_duration != 0 && sp.max_duration != 0, _( "Duration" ),
+                sp.min_duration, sp.duration_increment, sp.max_duration );
+        rows.push_back( { _( "Cast Cost" ), sp.base_energy_cost, sp.energy_increment,
+                          sp.final_energy_cost } );
+        rows.push_back( { _( "Cast Time" ), sp.base_casting_time,
+                          sp.casting_time_increment, sp.final_casting_time } );
+
+        for( const stat_row &row : rows ) {
+            cataimgui::text_colored( gray, row.name );
+            ImGui::SameLine( 100 );
+            cataimgui::draw_colored_text( color_number( row.min_val ) );
+            ImGui::SameLine( 180 );
+            cataimgui::draw_colored_text( color_number( row.per_lvl ) );
+            ImGui::SameLine( 260 );
+            cataimgui::draw_colored_text( color_number( row.max_val ) );
+        }
+    }
 }
 
 void fake_spell::load( const JsonObject &jo )

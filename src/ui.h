@@ -178,6 +178,12 @@ class uilist_callback
             return false;
         }
         virtual void refresh( uilist * ) {}
+
+        /// ImGui equivalent of refresh().  Default calls refresh() for backward compat.
+        virtual void draw_imgui( uilist *menu ) {
+            refresh( menu );
+        }
+
         virtual ~uilist_callback() = default;
 };
 /*@}*/
@@ -319,6 +325,10 @@ class uilist // NOLINT(cata-xy)
         // not be made public.
         void inputfilter();
 
+        // ImGui rendering for this menu.  Called from the draw callback
+        // registered in query() while imgui_layer is ready.
+        void draw_imgui();
+
     public:
         // Parameters
         // TODO change to setters
@@ -412,6 +422,11 @@ class uilist // NOLINT(cata-xy)
         int desc_lines;
 
         bool started = false;
+
+        // Set by scrollby() (keyboard navigation) so draw_imgui() scrolls the
+        // selected row into view. Not set on mouse hover, so the wheel can
+        // scroll freely without the selection snapping back.
+        bool imgui_scroll_to_selected = false;
 
     public:
         // Results

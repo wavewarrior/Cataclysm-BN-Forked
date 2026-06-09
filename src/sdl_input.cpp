@@ -659,12 +659,12 @@ void CheckMessages( display_context &d )
         }
     }
 
-    // While the ImGui dev panel is open, repaint every CheckMessages tick — not
-    // only on input events — so it animates/updates continuously. get_input_event
-    // spins CheckMessages ~1 kHz while waiting; vsync on submit_frame caps actual
-    // redraws to the display rate. Without this an idle panel (no mouse motion)
-    // looks frozen.
-    if( imgui_layer::visible() ) {
+    // While the ImGui dev panel is open OR menus are in the registry, repaint
+    // every CheckMessages tick — not only on input events — so it animates/
+    // updates continuously.  get_input_event spins CheckMessages ~1 kHz while
+    // waiting; vsync on submit_frame caps actual redraws to the display rate.
+    // Without this an idle panel (no mouse motion) looks frozen.
+    if( imgui_layer::active() ) {
         d.needupdate = true;
     }
 

@@ -524,7 +524,7 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
 {
     constexpr float clear_black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 
-    const bool imgui_active = imgui_layer::ready() && imgui_layer::visible();
+    const bool imgui_active = imgui_layer::active();
     if( imgui_active ) {
         imgui_layer::new_frame();
         imgui_layer::prepare( ctx.cmd_buffer );

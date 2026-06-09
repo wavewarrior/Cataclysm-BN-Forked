@@ -4,12 +4,12 @@
 
 #include <functional>
 
-// Dear ImGui dev/debug-only UI layer.
+// Dear ImGui UI layer.
 //
 // A PARALLEL UI stack bolted beside the SDL_GPU renderer — own pipeline, own
 // font atlas, own (prebaked) shaders, own input. NOT a layer over sprite_batcher.
-// Allowed ONLY for dev/debug/author-facing surfaces with no existing catacurses
-// screen (see memory: plan-imgui-dev-ui). Player-facing UI stays catacurses.
+// Originally dev/debug-only (F4 lighting panel); extended in 2026-06 to support
+// player-facing ImGui menus (uilist pilot) via a draw-callback registry.
 //
 // Inert until init() succeeds on a real window+device (gated like
 // render_state::ready()), so the test binary links it but never runs it.
@@ -40,14 +40,24 @@ bool ready();
 // frame must be produced). Reference so callers can toggle it.
 bool &visible();
 
+// True when any ImGui content is active (dev panel visible OR menu registry
+// non-empty).  Used by sdl_render_frame to decide whether to run new_frame().
+bool active();
+
 // Feed one SDL event to ImGui. Returns true if ImGui wants to consume it
 // (io.WantCaptureMouse/Keyboard) — caller must then NOT translate it to a game
 // input event.
 bool process_event( const SDL_Event &ev );
 
 // Register the dev-UI draw callback — invoked by new_frame() while visible().
-// One slot for now (lighting HUD); becomes the dev_tools registry in P2.
 void set_dev_ui( std::function<void()> fn );
+
+// Push/remove draw callbacks for player-facing ImGui menus.
+// These run each frame in addition to the dev UI while the registry is non-empty.
+// Returns an integer handle that can be passed to remove_draw_callback to
+// unregister.  Any callable (lambda, bind, etc.) works as the callback.
+auto push_draw_callback( std::function<void()> fn ) -> int;
+void remove_draw_callback( int handle );
 
 // Begin an ImGui frame and build this frame's dev widgets. Must be paired with
 // prepare()+render_in_pass() the same frame (ImGui asserts otherwise).

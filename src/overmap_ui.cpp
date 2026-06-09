@@ -1,5 +1,10 @@
 #include "overmap_ui.h"
 
+#pragma push_macro( "DebugLog" )
+#undef DebugLog
+#include "imgui.h"
+#pragma pop_macro( "DebugLog" )
+
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -23,6 +28,7 @@
 #include "avatar.h"
 #include "cached_options.h"
 #include "calendar.h"
+#include "cata_imgui.h"
 #include "cata_tiles.h"
 #include "cata_utility.h"
 #include "catacharset.h"
@@ -647,6 +653,60 @@ class map_notes_callback : public uilist_callback
         void select( uilist *menu ) override {
             _selected = menu->selected;
             ui.invalidate_ui();
+        }
+
+        void draw_imgui( uilist *menu ) override {
+            _selected = menu->selected;
+            if( _selected < 0 || static_cast<size_t>( _selected ) >= _notes->size() ) {
+                return;
+            }
+
+            const tripoint_abs_omt note_pos = note_location();
+            const auto map_around = get_overmap_neighbors( note_pos );
+            const std::string note = ACTIVE_OVERMAP_BUFFER.note( note_pos );
+
+            const auto om_symbol_info = get_note_display_info( note );
+            const nc_color note_color = std::get<1>( om_symbol_info );
+            const char        symbol  = std::get<0>( om_symbol_info );
+            const size_t prefix_len = std::get<2>( om_symbol_info );
+            const std::string note_text = note.substr( prefix_len );
+            // Don't strip label commands in draw_imgui since draw_colored_text handles
+            // color tags natively.
+            const std::string visible_note_text =
+                note_label_utils::strip_label_commands( note_text );
+
+            ImGui::Spacing();
+            ImGui::Separator();
+
+            // Note preview header
+            cataimgui::text_colored( c_white, _( "Note preview:" ) );
+
+            // Render the note text with its color
+            cataimgui::draw_colored_text( colorize( visible_note_text, note_color ) );
+
+            ImGui::Spacing();
+
+            // Overmap 3x3 grid
+            cataimgui::text_colored( c_white, _( "Overmap:" ) );
+
+            if( ImGui::BeginTable( "omap", npm_width, ImGuiTableFlags_Borders ) ) {
+                for( int i = 0; i < npm_height; i++ ) {
+                    ImGui::TableNextRow();
+                    for( int j = 0; j < npm_width; j++ ) {
+                        ImGui::TableSetColumnIndex( j );
+
+                        const auto &ter = map_around[i * npm_width + j];
+                        if( i == npm_height / 2 && j == npm_width / 2 ) {
+                            // Center tile: show note symbol instead of terrain
+                            cataimgui::text_colored( note_color,
+                                                     std::string( 1, symbol ) );
+                        } else {
+                            cataimgui::text_colored( ter.first, ter.second );
+                        }
+                    }
+                }
+                ImGui::EndTable();
+            }
         }
 };
 

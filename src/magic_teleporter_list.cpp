@@ -1,3 +1,10 @@
+#pragma push_macro( "DebugLog" )
+#undef DebugLog
+#include "imgui.h"
+#pragma pop_macro( "DebugLog" )
+
+#include "cata_imgui.h"
+
 #include "magic_teleporter_list.h"
 
 #include <cstddef>
@@ -185,6 +192,18 @@ class teleporter_callback : public uilist_callback
                                           index_pairs[entnum].to_string() ) );
             }
             wnoutrefresh( menu->window );
+        }
+
+        void draw_imgui( uilist *menu ) override {
+            ImGui::Separator();
+            const int entnum = menu->selected;
+            if( entnum >= 0 && static_cast<size_t>( entnum ) < index_pairs.size() ) {
+                avatar &player_character = get_avatar();
+                int dist = rl_dist( player_character.abs_omt_pos(), index_pairs[entnum] );
+                cataimgui::text_colored( c_white,
+                                         string_format( _( "Distance: %d %s" ), dist,
+                                                 index_pairs[entnum].to_string() ) );
+            }
         }
 };
 

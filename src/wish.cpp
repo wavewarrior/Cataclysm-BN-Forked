@@ -1,3 +1,10 @@
+#pragma push_macro( "DebugLog" )
+#undef DebugLog
+#include "imgui.h"
+#pragma pop_macro( "DebugLog" )
+
+#include "cata_imgui.h"
+
 #include "debug_menu.h" // IWYU pragma: associated
 
 #include <algorithm>
@@ -271,6 +278,117 @@ class wish_mutate_callback: public uilist_callback
                        ctxt.get_desc( "FILTER" ), ctxt.get_desc( "QUIT" ) );
 
             wnoutrefresh( menu->window );
+        }
+
+        void draw_imgui( uilist *menu ) override {
+            if( !started ) {
+                started = true;
+                for( auto &traits_iter : mutation_branch::get_all() ) {
+                    vTraits.push_back( traits_iter.id );
+                    pTraits[traits_iter.id] = p->has_trait( traits_iter.id );
+                    for( auto &category : traits_iter.category ) {
+                        if( !category_mutations.contains( category ) ) {
+                            category_mutations[category] = std::set<mutation_branch>();
+                        }
+                        category_mutations[category].insert( traits_iter );
+                    }
+                }
+            }
+
+            ImGui::Separator();
+
+            if( menu->selected >= 0 && static_cast<size_t>( menu->selected ) < vTraits.size() ) {
+                const mutation_branch &mdata = vTraits[menu->selected].obj();
+
+                cataimgui::text_colored( c_light_gray,
+                                         mdata.valid ? _( "Valid" ) : _( "Nonvalid" ) );
+
+                cataimgui::text_colored( c_light_gray, _( "Id:" ) );
+                ImGui::SameLine( 80 );
+                ImGui::Text( "%s", mdata.id.str().c_str() );
+
+                if( !mdata.prereqs.empty() ) {
+                    cataimgui::text_colored( c_light_gray, _( "Prereqs:" ) );
+                    for( const trait_id &j : mdata.prereqs ) {
+                        ImGui::SameLine( 80 );
+                        cataimgui::text_colored( mcolor( j ),
+                                                 mutation_branch::get_name( j ) );
+                    }
+                }
+
+                if( !mdata.prereqs2.empty() ) {
+                    cataimgui::text_colored( c_light_gray, _( "Prereqs, 2d:" ) );
+                    for( const trait_id &j : mdata.prereqs2 ) {
+                        ImGui::SameLine( 80 );
+                        cataimgui::text_colored( mcolor( j ),
+                                                 mutation_branch::get_name( j ) );
+                    }
+                }
+
+                if( mdata.threshold_tier != 0 ) {
+                    cataimgui::text_colored( c_light_gray,
+                                             string_format( _( "Threshold tier: %d" ),
+                                                     mdata.threshold_tier ) );
+                }
+
+                if( !mdata.cancels.empty() ) {
+                    cataimgui::text_colored( c_light_gray, _( "Cancels:" ) );
+                    for( const trait_id &j : mdata.cancels ) {
+                        ImGui::SameLine( 80 );
+                        cataimgui::text_colored( mcolor( j ),
+                                                 mutation_branch::get_name( j ) );
+                    }
+                }
+
+                if( !mdata.replacements.empty() ) {
+                    cataimgui::text_colored( c_light_gray, _( "Becomes:" ) );
+                    for( const trait_id &j : mdata.replacements ) {
+                        ImGui::SameLine( 80 );
+                        cataimgui::text_colored( mcolor( j ),
+                                                 mutation_branch::get_name( j ) );
+                    }
+                }
+
+                if( !mdata.additions.empty() ) {
+                    cataimgui::text_colored( c_light_gray, _( "Add-ons:" ) );
+                    for( auto &j : mdata.additions ) {
+                        ImGui::SameLine( 80 );
+                        cataimgui::text_colored( mcolor( j ),
+                                                 mutation_branch::get_name( j ) );
+                    }
+                }
+
+                if( !mdata.types.empty() ) {
+                    cataimgui::text_colored( c_light_gray, _( "Type:" ) );
+                    for( auto &j : mdata.types ) {
+                        ImGui::SameLine( 80 );
+                        ImGui::Text( "%s", j.c_str() );
+                    }
+                }
+
+                if( !mdata.category.empty() ) {
+                    cataimgui::text_colored( c_light_gray, _( "Category:" ) );
+                    for( const mutation_category_id &j : mdata.category ) {
+                        ImGui::SameLine( 80 );
+                        ImGui::Text( "%s", j.str().c_str() );
+                    }
+                }
+
+                cataimgui::text_colored( c_light_gray,
+                                         string_format( _( "pts: %d vis: %d ugly: %d" ),
+                                                 mdata.points, mdata.visibility,
+                                                 mdata.ugliness ) );
+
+                cataimgui::draw_colored_text( mdata.desc() );
+            }
+
+            if( !msg.empty() ) {
+                cataimgui::text_colored( c_green, msg );
+                msg.clear();
+            }
+            input_context ctxt( menu->input_category );
+            ImGui::Text( _( "[%s] find, [%s] quit, [t] toggle base trait, [c] mutation categories menu" ),
+                         ctxt.get_desc( "FILTER" ).c_str(), ctxt.get_desc( "QUIT" ).c_str() );
         }
 
         ~wish_mutate_callback() override = default;
@@ -572,10 +690,70 @@ class wish_monster_callback: public uilist_callback
             wnoutrefresh( w_info );
         }
 
-        ~wish_monster_callback() override = default;
-};
+        void draw_imgui( uilist *menu ) override {
+            const int entnum = menu->selected;
+            const bool valid_entnum = entnum >= 0 && static_cast<size_t>( entnum ) < mtypes.size();
+            if( entnum != lastent ) {
+                lastent = entnum;
+                if( valid_entnum ) {
+                    tmp = std::make_unique<monster>( mtypes[entnum]->id );
+                    if( friendly ) {
+                        tmp->friendly = -1;
+                    }
+                } else {
+                    tmp = std::make_unique<monster>();
+                }
+            }
 
-void debug_menu::wishmonster( const std::optional<tripoint_bub_ms> &p )
+            ImGui::Separator();
+
+            if( valid_entnum ) {
+                std::string header = string_format( "#%d: %s (%d)%s%s", entnum, tmp->type->nname(),
+                                                    group, friendly ? _( " (friendly)" ) : "",
+                                                    hallucination ? _( " (hallucination)" ) : "" );
+                cataimgui::text_colored( c_cyan, header );
+
+                // HP bar
+                nc_color hp_color = c_white;
+                std::string bar_str;
+                tmp->get_HP_Bar( hp_color, bar_str );
+                cataimgui::text_colored( hp_color, bar_str );
+                ImGui::SameLine();
+                cataimgui::text_colored( tmp->basic_symbol_color(), tmp->name() );
+
+                // Attitude
+                const auto att = tmp->get_attitude();
+                ImGui::SameLine();
+                cataimgui::text_colored( att.second, att.first );
+
+                // Effects
+                std::string eff_str = tmp->get_effect_status();
+                if( !eff_str.empty() ) {
+                    ImGui::SameLine();
+                    cataimgui::text_colored( h_white, eff_str );
+                }
+
+                // Difficulty
+                cataimgui::text_colored( c_light_gray,
+                                         string_format( _( "Difficulty %d" ), tmp->type->difficulty ) );
+
+                // Description
+                cataimgui::draw_colored_text( colorize( tmp->type->get_description(), c_light_gray ) );
+            }
+
+            if( !msg.empty() ) {
+                cataimgui::text_colored( c_green, msg );
+                msg.clear();
+            }
+            input_context ctxt( menu->input_category );
+            ImGui::Text( _( "[%s] find, [f]riendly, [h]allucination, [i]ncrease group, [d]ecrease group, [%s] quit" ),
+                         ctxt.get_desc( "FILTER" ).c_str(), ctxt.get_desc( "QUIT" ).c_str() );
+        }
+
+        ~wish_monster_callback() override = default;
+    };
+
+    void debug_menu::wishmonster( const std::optional<tripoint_bub_ms> &p )
 {
     std::vector<const mtype *> mtypes;
 
@@ -725,6 +903,35 @@ class wish_item_callback: public uilist_callback
                        _( "[%s] find, [f] container, [F] flag, [E] everything, [%s] quit" ),
                        ctxt.get_desc( "FILTER" ), ctxt.get_desc( "QUIT" ) );
             wnoutrefresh( menu->window );
+        }
+
+        void draw_imgui( uilist *menu ) override {
+            ImGui::Separator();
+            const int entnum = menu->selected;
+            if( entnum >= 0 && static_cast<size_t>( entnum ) < standard_itype_ids.size() ) {
+                item &tmp = *item::spawn_temporary( standard_itype_ids[entnum], calendar::turn );
+                const std::string header = string_format( "#%d: %s%s%s", entnum,
+                                           standard_itype_ids[entnum]->get_id().c_str(),
+                                           incontainer ? _( " (contained)" ) : "",
+                                           has_flag ? _( " (flagged)" ) : "" );
+                cataimgui::text_colored( c_cyan, header );
+
+                std::vector<iteminfo> info = tmp.info();
+                std::string info_string = format_item_info( info, {} );
+                cataimgui::draw_colored_text( info_string );
+            }
+
+            if( spawn_everything ) {
+                cataimgui::text_colored( c_green,
+                                         _( "Select any item to spawn everything (ignores filters)." ) );
+            }
+            if( !msg.empty() ) {
+                cataimgui::text_colored( c_green, msg );
+                msg.erase();
+            }
+            input_context ctxt( menu->input_category );
+            ImGui::Text( _( "[%s] find, [f] container, [F] flag, [E] everything, [%s] quit" ),
+                         ctxt.get_desc( "FILTER" ).c_str(), ctxt.get_desc( "QUIT" ).c_str() );
         }
 };
 
