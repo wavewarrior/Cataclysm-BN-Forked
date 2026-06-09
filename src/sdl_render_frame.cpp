@@ -87,7 +87,7 @@ auto begin_frame( lighting::render_state &rs ) -> std::optional<lighting::frame_
     // RmlUi spike (Phase 1): lazy init beside ImGui; init() self-guards so this
     // only truly attempts once. Render/input not wired yet.
     if( !rmlui_layer::ready() ) {
-        rmlui_layer::init( rs.device().window_ptr(), rs.device().raw() );
+        rmlui_layer::init( rs.device() );
     }
 
     rs.tile_batcher().begin_frame();
@@ -531,9 +531,16 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
     constexpr float clear_black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 
     const bool imgui_active = imgui_layer::active();
+    const bool rmlui_active = rmlui_layer::active();
     if( imgui_active ) {
         imgui_layer::new_frame();
         imgui_layer::prepare( ctx.cmd_buffer );
+    }
+    if( rmlui_active ) {
+        // new_frame()=Update() + prepare()=geometry upload, both BEFORE begin_pass
+        // (D3D12: uploads must not land inside the open render pass).
+        rmlui_layer::new_frame();
+        rmlui_layer::prepare( ctx.cmd_buffer );
     }
 
     rs.tile_batcher().begin_pass( ctx.cmd_buffer, ctx.swapchain_tex,
@@ -559,11 +566,18 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
     }
     blit_layer( rs.ui_target() );
 
+    // Both overlays share the single swapchain pass (D3D12 single-pass rule).
+    // RmlUi (player menus) draws first, ImGui (dev UI) on top.
     rs.tile_batcher().end_pass(
-        imgui_active
+        ( imgui_active || rmlui_active )
         ? lighting::sprite_batcher::pass_overlay_fn(
-    []( SDL_GPURenderPass * rp, SDL_GPUCommandBuffer * cb ) {
-        imgui_layer::render_in_pass( rp, cb );
+    [imgui_active, rmlui_active]( SDL_GPURenderPass * rp, SDL_GPUCommandBuffer * cb ) {
+        if( rmlui_active ) {
+            rmlui_layer::render_in_pass( rp, cb );
+        }
+        if( imgui_active ) {
+            imgui_layer::render_in_pass( rp, cb );
+        }
     } )
         : lighting::sprite_batcher::pass_overlay_fn{} );
 

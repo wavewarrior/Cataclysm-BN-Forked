@@ -11,20 +11,24 @@
 // in Phases 2-3. Fail-safe like imgui_layer: any init failure leaves
 // ready()==false and the game runs without it.
 
-struct SDL_Window;
-struct SDL_GPUDevice;
 struct SDL_GPUCommandBuffer;
 struct SDL_GPURenderPass;
 union SDL_Event;
+
+namespace lighting
+{
+class gpu_device;
+}  // namespace lighting
 
 // Top-level namespace to mirror imgui_layer (call sites read `rmlui_layer::init`
 // next to `imgui_layer::init`).
 namespace rmlui_layer
 {
 
-// Initialise RmlUi + interfaces + a window-sized context + a font. Idempotent
-// via ready(); any failure degrades to ready()==false (no crash).
-bool init( SDL_Window *window, SDL_GPUDevice *device );
+// Initialise RmlUi + interfaces + a window-sized context + a font. Takes the
+// live render_state gpu_device (window + swapchain format come from it).
+// Idempotent via ready(); any failure degrades to ready()==false (no crash).
+bool init( lighting::gpu_device &device );
 
 // Destroy the context, interfaces and RmlUi core. Safe when not ready.
 void shutdown();
