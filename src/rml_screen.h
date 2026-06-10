@@ -18,4 +18,7 @@
 // game::list_missions() RmlUi render path.
 bool &missions_rmlui_enabled();
 
+// show_scores_ui() RmlUi render path (achievements/scores/kills tabs).
+bool &scores_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

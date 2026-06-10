@@ -1,0 +1,24 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="scores.rcss"/>
+</head>
+<body data-model="scores">
+    <!-- Tier 1 screen #2 (show_scores_ui). Tab bar reused from the missions
+         pattern; the body is a SINGLE scrolling text pane (vs missions' list+
+         detail) — the seed of the F.2 scrolling-text-view component. Keyboard
+         stays on input_context: LEFT/RIGHT switch tabs, UP/DOWN/PAGE_* scroll the
+         #scores-body element (driven from C++ via SetScrollTop — RmlUi handles
+         mouse-wheel on its own). body_rml carries colour spans from
+         cata_text_to_rml() and the layout engine wraps it (NO manual fold). -->
+    <div class="panel scores-panel">
+        <div class="scores-tabs">
+            <div class="item scores-tab" data-for="tab : tabs"
+                 data-class-selected="tab.selected"
+                 data-event-click="on_tab(it_index)">{{ tab.name }}</div>
+        </div>
+
+        <div id="scores-body" class="scores-body" data-rml="body_rml"></div>
+    </div>
+</body>
+</rml>

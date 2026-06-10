@@ -1,0 +1,52 @@
+/* Layout for the scores screen (Tier 1, screen #2: show_scores_ui).
+   Palette/border/scrollbar come from theme.rcss (linked first in scores.rml);
+   this file owns only the screen's own layout. Lengths in dp (see theme.rcss).
+
+   Two RmlUi-6.2 gotchas that bit the missions screen are pre-empted here (both
+   documented in uilist.rcss / missions.rcss):
+     (1) body needs a DEFINITE height:100% or the height:90% panel shrink-wraps
+         to just the tab bar;
+     (2) the scroll child needs an explicit vh max-height or its overflow region
+         collapses to height 0 and the text is clipped invisible. */
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.scores-panel {
+    width: 90%;
+    height: 90%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Tab row across the top — same triad/states as the missions tabs. */
+.scores-tabs {
+    display: flex;
+    flex-direction: row;
+    margin-bottom: 8dp;
+}
+.scores-tab {
+    /* Reuse the .item triad (bg / :hover / .selected); this owns only layout. */
+    flex: 1;
+    padding: 4dp 10dp;
+    margin-right: 6dp;
+    text-align: center;
+}
+.scores-tab.selected {
+    font-weight: bold;
+}
+
+/* The single scrolling text pane. flex:1 fills below the tabs; the explicit vh
+   max-height is the actual scroll bound (RmlUi 6.2 won't constrain a flex child's
+   height by its parent alone) — without it the overflow region collapses. */
+.scores-body {
+    flex: 1;
+    min-height: 0;
+    max-height: 84vh;
+    overflow-y: auto;
+    padding: 4dp 8dp;
+}

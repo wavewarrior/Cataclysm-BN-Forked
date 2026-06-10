@@ -89,6 +89,7 @@ void draw()
     ImGui::Checkbox( "query_popup via RmlUi", &query_popup_rmlui_enabled() );
     ImGui::Checkbox( "string_input via RmlUi", &string_input_rmlui_enabled() );
     ImGui::Checkbox( "missions via RmlUi", &missions_rmlui_enabled() );
+    ImGui::Checkbox( "scores via RmlUi", &scores_rmlui_enabled() );
 
     static const char *mode_names[] = {
         "off", "ambient", "emitter", "sun", "sky", "total", "SDF", "sky_vis", "emit_bw",
