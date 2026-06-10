@@ -1,0 +1,17 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="string_input.rcss"/>
+</head>
+<body data-model="string_input">
+    <div class="panel string-input-panel">
+        <div class="string-input-title" data-if="has_title" data-rml="title_rml"></div>
+        <div class="string-input-desc" data-if="has_description" data-rml="desc_rml"></div>
+        <div class="string-input-field-wrapper">
+            <span class="string-input-before">{{ before }}</span>
+            <span class="string-input-caret"/>
+            <span class="string-input-after">{{ after }}</span>
+        </div>
+    </div>
+</body>
+</rml>

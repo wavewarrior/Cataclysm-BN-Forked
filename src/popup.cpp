@@ -4,13 +4,38 @@
 #include <array>
 #include <memory>
 
+#include <RmlUi/Core.h>
+
 #include "cached_options.h"
 #include "catacharset.h"
 #include "ime.h"
 #include "input.h"
+#include "lighting/rmlui_layer.h"
 #include "output.h"
+#include "path_info.h"
 #include "sdl_wrappers.h"
+#include "ui.h"
 #include "ui_manager.h"
+
+// ---- RmlUi query_popup render session ---------------------------------------
+struct query_popup::rml_session_t {
+    struct button {
+        Rml::String text;
+        bool selected = false;
+    };
+
+    Rml::String message_rml;
+    Rml::Vector<button> buttons;
+    bool has_buttons = false;
+
+    Rml::DataModelHandle handle;
+    Rml::ElementDocument *doc = nullptr;
+};
+
+static bool g_rml_query_popup_types_registered = false;
+static bool g_rml_query_popup_model_active = false;
+
+query_popup::~query_popup() = default;
 
 query_popup::query_popup()
     : cur( 0 ), default_text_color( c_white ), anykey( false ), cancel( false ), ontop( false ),
@@ -250,7 +275,11 @@ std::shared_ptr<ui_adaptor> query_popup::create_or_get_adaptor( bool disable_bel
         }
         adaptor = ui;
         ui->on_redraw( [this]( const ui_adaptor & ) {
-            show();
+            if( rml_session ) {
+                rml_sync();
+            } else {
+                show();
+            }
         } );
         ui->on_screen_resize( [this]( ui_adaptor & ) {
             init();
@@ -268,6 +297,14 @@ query_popup::result query_popup::query_once()
 
     if( test_mode ) {
         return { false, "ERROR", {} };
+    }
+
+    // Handle a pending RmlUi mouse-click result (set by rml_on_click) before
+    // blocking for input.
+    if( rml_pending_result.has_value() ) {
+        result r = std::move( *rml_pending_result );
+        rml_pending_result.reset();
+        return r;
     }
 
     std::shared_ptr<ui_adaptor> ui = create_or_get_adaptor();
@@ -299,7 +336,9 @@ query_popup::result query_popup::query_once()
     // Assign outside construction of `res` to ensure execution order
     res.wait_input = !anykey;
     do {
-        res.action = ctxt.handle_input();
+        // When RmlUi is active, use a 16 ms timeout so the document updates on
+        // mouse hover and animations stay responsive between input events.
+        res.action = rml_session ? ctxt.handle_input( 16 ) : ctxt.handle_input();
         res.evt = ctxt.get_raw_input();
     } while(
         // Always ignore mouse movement
@@ -307,6 +346,11 @@ query_popup::result query_popup::query_once()
         // Ignore window losing focus in SDL
         ( res.evt.type == input_event_t::keyboard && res.evt.sequence.empty() )
     );
+
+    if( rml_session && res.action == "TIMEOUT" ) {
+        // Internal frame tick — keep looping (wait_input stays !anykey).
+        return res;
+    }
 
     if( cancel && res.action == "QUIT" ) {
         res.wait_input = false;
@@ -351,10 +395,17 @@ query_popup::result query_popup::query()
 
     std::shared_ptr<ui_adaptor> ui = create_or_get_adaptor();
 
+    const bool use_rmlui = rml_open();
+
     result res;
     do {
         res = query_once();
     } while( res.wait_input );
+
+    if( use_rmlui ) {
+        rml_close();
+    }
+
     return res;
 }
 
@@ -415,4 +466,119 @@ void throbber_popup::refresh()
         last_update = now;
         SDL_PumpEvents();
     }
+}
+
+// ---- RmlUi session ----------------------------------------------------------
+
+bool query_popup::rml_open()
+{
+    if( !query_popup_rmlui_enabled() || !rmlui_layer::ready() ) {
+        return false;
+    }
+    Rml::Context *ctx = rmlui_layer::context();
+    if( ctx == nullptr || g_rml_query_popup_model_active ) {
+        return false;
+    }
+    Rml::DataModelConstructor c = ctx->CreateDataModel( "query_popup" );
+    if( !c ) {
+        return false;
+    }
+    rml_session = std::make_unique<rml_session_t>();
+
+    if( !g_rml_query_popup_types_registered ) {
+        using btn_t = rml_session_t::button;
+        auto bh = c.RegisterStruct<btn_t>();
+        bh.RegisterMember( "text", &btn_t::text );
+        bh.RegisterMember( "selected", &btn_t::selected );
+        c.RegisterArray<Rml::Vector<btn_t>>();
+        g_rml_query_popup_types_registered = true;
+    }
+
+    c.Bind( "message_rml", &rml_session->message_rml );
+    c.Bind( "buttons", &rml_session->buttons );
+    c.Bind( "has_buttons", &rml_session->has_buttons );
+    c.BindEventCallback( "on_button",
+    [this]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+        int idx = -1;
+        if( !args.empty() ) {
+            args[0].GetInto( idx );
+        }
+        rml_on_click( idx );
+    } );
+    rml_session->handle = c.GetModelHandle();
+
+    rml_session->doc = rmlui_layer::open_document( PATH_INFO::datadir() +
+                         "gui/query_popup.rml" );
+    if( rml_session->doc == nullptr ) {
+        ctx->RemoveDataModel( "query_popup" );
+        rml_session.reset();
+        return false;
+    }
+    g_rml_query_popup_model_active = true;
+    rml_sync();
+    ctx->Update();
+    return true;
+}
+
+void query_popup::rml_sync()
+{
+    if( !rml_session ) {
+        return;
+    }
+    rml_session_t &s = *rml_session;
+
+    s.message_rml = cata_text_to_rml( text );
+
+    s.buttons.clear();
+    if( !options.empty() ) {
+        // Generate button text the same way fold_query does: input_context with
+        // all registered option actions to get keybinding-hint descriptions.
+        input_context ctxt( category );
+        for( const auto &opt : options ) {
+            ctxt.register_action( opt.action );
+        }
+        for( size_t i = 0; i < options.size(); ++i ) {
+            const auto &name = ctxt.get_action_name( options[i].action );
+            const auto &desc = ctxt.get_desc( options[i].action, name, options[i].filter );
+            rml_session_t::button btn;
+            btn.text = desc;
+            btn.selected = ( i == cur );
+            s.buttons.emplace_back( std::move( btn ) );
+        }
+    }
+    s.has_buttons = !s.buttons.empty();
+
+    Rml::DataModelHandle h = s.handle;
+    h.DirtyVariable( "message_rml" );
+    h.DirtyVariable( "buttons" );
+    h.DirtyVariable( "has_buttons" );
+}
+
+void query_popup::rml_close()
+{
+    if( !rml_session ) {
+        return;
+    }
+    if( rml_session->doc != nullptr ) {
+        rmlui_layer::close_document( rml_session->doc );
+    }
+    if( Rml::Context *ctx = rmlui_layer::context() ) {
+        ctx->RemoveDataModel( "query_popup" );
+    }
+    g_rml_query_popup_model_active = false;
+    rml_session.reset();
+}
+
+void query_popup::rml_on_click( int window_index )
+{
+    if( !rml_session || window_index < 0 ||
+        static_cast<size_t>( window_index ) >= options.size() ) {
+        return;
+    }
+    cur = window_index;
+    rml_pending_result = result{
+        false,
+        options[cur].action,
+        input_event{}
+    };
 }

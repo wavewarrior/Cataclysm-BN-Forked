@@ -1,0 +1,34 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="missions.rcss"/>
+</head>
+<body data-model="missions">
+    <!-- First migrated full-screen modal (game::list_missions). Keyboard stays on
+         input_context (LEFT/RIGHT tabs, UP/DOWN select, CONFIRM, QUIT); RmlUi
+         renders + handles mouse only. data-rml fields carry colour spans built by
+         cata_text_to_rml(); the detail pane lets the layout engine wrap (NO
+         manual fold). -->
+    <div class="panel missions-panel">
+        <div class="missions-tabs">
+            <div class="item missions-tab" data-for="tab : tabs"
+                 data-class-selected="tab.selected"
+                 data-event-click="on_tab(it_index)">{{ tab.name }}</div>
+        </div>
+
+        <div class="missions-body">
+            <div class="missions-list">
+                <div class="item missions-row" data-for="row : rows"
+                     data-class-selected="row.selected"
+                     data-event-mouseover="on_select(it_index)"
+                     data-event-click="on_select(it_index)">
+                    <span data-rml="row.text_rml"></span>
+                </div>
+                <div class="missions-empty" data-if="!has_rows" data-rml="empty_rml"></div>
+            </div>
+
+            <div class="missions-detail" data-if="has_rows" data-rml="detail_rml"></div>
+        </div>
+    </div>
+</body>
+</rml>

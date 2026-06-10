@@ -3,11 +3,15 @@
 #include <cctype>
 #include <optional>
 
+#include <RmlUi/Core.h>
+
 #include "catacharset.h"
 #include "char_validity_check.h"
 #include "ime.h"
 #include "input.h"
+#include "lighting/rmlui_layer.h"
 #include "output.h"
+#include "path_info.h"
 #include "point.h"
 #include "translations.h"
 #include "ui.h"
@@ -24,7 +28,7 @@
 
 string_input_popup::string_input_popup() = default;
 
-string_input_popup::~string_input_popup() = default;
+// ~string_input_popup is defined after rml_session_t (see bottom of file).
 
 void string_input_popup::create_window()
 {
@@ -378,6 +382,8 @@ const std::string &string_input_popup::query_string( const bool loop, const bool
 
     int ch = 0;
 
+    const bool use_rmlui = !draw_only && rml_open();
+
     _canceled = false;
     _confirmed = false;
     do {
@@ -413,6 +419,11 @@ const std::string &string_input_popup::query_string( const bool loop, const bool
             shift = width_before_start + width_at_start;
         }
 
+        if( use_rmlui ) {
+            _text = ret.str();
+            rml_sync();
+        }
+
         if( ui ) {
             ui_manager::redraw();
         } else {
@@ -420,10 +431,11 @@ const std::string &string_input_popup::query_string( const bool loop, const bool
         }
 
         if( draw_only ) {
-            return _text;
+            break;
         }
 
-        const std::string action = ctxt->handle_input();
+        const std::string action = use_rmlui ? ctxt->handle_input( 16 )
+                                   : ctxt->handle_input();
         const input_event ev = ctxt->get_raw_input();
         ch = ev.type == input_event_t::keyboard ? ev.get_first_input() : 0;
         _handled = true;
@@ -434,11 +446,20 @@ const std::string &string_input_popup::query_string( const bool loop, const bool
             }
         }
 
+        if( use_rmlui && action == "TIMEOUT" ) {
+            if( loop ) {
+                // Internal frame tick — redraw and keep looping.
+                // Mouse hover / caret animation updates without input.
+                continue;
+            }
+            // draw_only or single-shot; fall through to exit.
+        }
+
         if( action == "TEXT.QUIT" ) {
             _text.clear();
             _position = -1;
             _canceled = true;
-            return _text;
+            break;
         } else if( action == "TEXT.CONFIRM" || ( action == "TEXT.RIGHT" && !( edit.empty() &&
                    _position + 1 <= static_cast<int>( ret.size() ) ) ) ) {
             add_to_history( ret.str() );
@@ -448,7 +469,7 @@ const std::string &string_input_popup::query_string( const bool loop, const bool
                 _hist_str_ind = 0;
                 _session_str_entered.erase( 0 );
             }
-            return _text;
+            break;
         } else if( action == "HISTORY_UP" ) {
             if( !_identifier.empty() ) {
                 if( edit.empty() ) {
@@ -571,7 +592,10 @@ const std::string &string_input_popup::query_string( const bool loop, const bool
         } else {
             _handled = false;
         }
-    } while( loop );
+    } while( loop && !_canceled && !_confirmed );
+    if( use_rmlui ) {
+        rml_close();
+    }
     _text = ret.str();
     return _text;
 }
@@ -638,4 +662,109 @@ string_input_popup &string_input_popup::text( const std::string &value )
         _position = u8size;
     }
     return *this;
+}
+
+// ---- RmlUi session ----------------------------------------------------------
+
+struct string_input_popup::rml_session_t {
+    Rml::String title_rml;
+    Rml::String desc_rml;
+    bool has_title = false;
+    bool has_description = false;
+    Rml::String before;
+    Rml::String after;
+    Rml::DataModelHandle handle;
+    Rml::ElementDocument *doc = nullptr;
+};
+
+static bool g_rml_string_input_types_registered = false;
+static bool g_rml_string_input_model_active = false;
+
+string_input_popup::~string_input_popup()
+{
+    delete rml_session;
+}
+
+bool string_input_popup::rml_open()
+{
+    if( custom_window || !string_input_rmlui_enabled() || !rmlui_layer::ready() ) {
+        return false;
+    }
+    Rml::Context *ctx = rmlui_layer::context();
+    if( ctx == nullptr || g_rml_string_input_model_active ) {
+        return false;
+    }
+    Rml::DataModelConstructor c = ctx->CreateDataModel( "string_input" );
+    if( !c ) {
+        return false;
+    }
+    rml_session = new rml_session_t();
+
+    if( !g_rml_string_input_types_registered ) {
+        c.RegisterArray<Rml::Vector<Rml::String>>();
+        g_rml_string_input_types_registered = true;
+    }
+
+    c.Bind( "title_rml", &rml_session->title_rml );
+    c.Bind( "desc_rml", &rml_session->desc_rml );
+    c.Bind( "has_title", &rml_session->has_title );
+    c.Bind( "has_description", &rml_session->has_description );
+    c.Bind( "before", &rml_session->before );
+    c.Bind( "after", &rml_session->after );
+    rml_session->handle = c.GetModelHandle();
+
+    rml_session->doc = rmlui_layer::open_document( PATH_INFO::datadir() +
+                         "gui/string_input.rml" );
+    if( rml_session->doc == nullptr ) {
+        ctx->RemoveDataModel( "string_input" );
+        delete rml_session;
+        rml_session = nullptr;
+        return false;
+    }
+    g_rml_string_input_model_active = true;
+    rml_sync();
+    ctx->Update();
+    return true;
+}
+
+void string_input_popup::rml_sync()
+{
+    if( !rml_session ) {
+        return;
+    }
+    rml_session_t &s = *rml_session;
+
+    s.title_rml = cata_text_to_rml( _title );
+    s.desc_rml = cata_text_to_rml( _description );
+    s.has_title = !_title.empty();
+    s.has_description = !_description.empty();
+
+    utf8_wrapper uw( _text );
+    const size_t pos = std::min( static_cast<size_t>( _position ), uw.length() );
+    s.before = uw.substr( 0, pos ).str();
+    s.after = uw.substr( pos ).str();
+
+    Rml::DataModelHandle h = s.handle;
+    h.DirtyVariable( "title_rml" );
+    h.DirtyVariable( "desc_rml" );
+    h.DirtyVariable( "has_title" );
+    h.DirtyVariable( "has_description" );
+    h.DirtyVariable( "before" );
+    h.DirtyVariable( "after" );
+}
+
+void string_input_popup::rml_close()
+{
+    if( !rml_session ) {
+        return;
+    }
+    if( rml_session->doc != nullptr ) {
+        rmlui_layer::close_document( rml_session->doc );
+    }
+    if( Rml::Context *ctx = rmlui_layer::context() ) {
+        ctx->RemoveDataModel( "string_input" );
+    }
+    g_rml_string_input_model_active = false;
+    delete rml_session;
+    rml_session = nullptr;
 }

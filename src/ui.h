@@ -34,8 +34,34 @@ class input_context;
 class string_input_popup;
 class ui_adaptor;
 struct input_event;
+class uilist_rml_session;
+
+namespace Rml
+{
+class ElementDocument;
+}  // namespace Rml
 
 catacurses::window new_centered_win( int nlines, int ncols );
+
+
+// Master switch for the RmlUi uilist render path. Default OFF — RmlUi is the
+// new, in-game-unproven renderer; while off, uilist uses the existing
+// ImGui/curses path. Flipped live from the F4 dev panel. Returns a reference so
+// ImGui::Checkbox can bind it directly.
+bool &uilist_rmlui_enabled();
+
+// Independent master switches for the query_popup and string_input_popup RmlUi
+// render paths. Kept separate from uilist (and each other) so each menu type can
+// be A/B'd in isolation from the F4 panel — in particular string_input, the
+// highest-risk text-entry path, can stay OFF while the others are exercised.
+// Default OFF. Returns a reference so ImGui::Checkbox can bind it directly.
+bool &query_popup_rmlui_enabled();
+bool &string_input_rmlui_enabled();
+
+// cata_text_to_rml / nc_color_to_hex / rml_escape now live in rml_util.h
+// (promoted out of ui.cpp). Included here so existing includers of ui.h keep
+// seeing cata_text_to_rml without change.
+#include "rml_util.h"
 
 /**
  * mvwzstr: line of text with horizontal offset and color
@@ -184,6 +210,15 @@ class uilist_callback
             refresh( menu );
         }
 
+        /// RmlUi equivalent of draw_imgui(). Called once per tick while the
+        /// RmlUi path renders this menu, with the menu's live document so a
+        /// callback can inject/update elements. Default no-op: plain lists need
+        /// nothing, and select()/key() (paradigm-agnostic) keep working.
+        virtual void draw_rml( uilist *menu, Rml::ElementDocument *doc ) {
+            ( void )menu;
+            ( void )doc;
+        }
+
         virtual ~uilist_callback() = default;
 };
 /*@}*/
@@ -329,6 +364,19 @@ class uilist // NOLINT(cata-xy)
         // registered in query() while imgui_layer is ready.
         void draw_imgui();
 
+        // RmlUi path (sibling of the ImGui path). rml_open() loads the menu's
+        // document + data-model from current state (false if RmlUi isn't ready
+        // or the model name is already taken by a nested menu -> caller falls
+        // back to ImGui/curses); rml_sync() pushes state to the model each tick;
+        // rml_close() tears it down. The on_* handlers are bound into the model
+        // and fire from RmlUi mouse events (window_index = row index within the
+        // bound visible window).
+        bool rml_open();
+        void rml_sync();
+        void rml_close();
+        void rml_on_click( int window_index );
+        void rml_on_hover( int window_index );
+
     public:
         // Parameters
         // TODO change to setters
@@ -349,6 +397,11 @@ class uilist // NOLINT(cata-xy)
         nc_color disabled_color;
 
         uilist_callback *callback;
+
+        // RmlUi look variant ("" = default full-width stacked list; "save" =
+        // narrow centered dialog; "info"/"grid" = two-column with right panel).
+        // Read only on the RmlUi render path; ignored by ImGui/curses.
+        std::string menu_style;
 
         pos_scalar w_x_setup;
         pos_scalar w_y_setup;
@@ -427,6 +480,12 @@ class uilist // NOLINT(cata-xy)
         // selected row into view. Not set on mouse hover, so the wheel can
         // scroll freely without the selection snapping back.
         bool imgui_scroll_to_selected = false;
+
+        // RmlUi render session (document + data-model handles + bound model
+        // storage). Non-null only while the RmlUi path is active for this menu.
+        // Opaque here; defined in ui.cpp (~uilist lives there too, so the
+        // unique_ptr<incomplete> member is fine). Mirrors filter_popup.
+        std::unique_ptr<uilist_rml_session> rml_session;
 
     public:
         // Results

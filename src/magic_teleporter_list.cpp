@@ -5,6 +5,8 @@
 
 #include "cata_imgui.h"
 
+#include <RmlUi/Core.h>
+
 #include "magic_teleporter_list.h"
 
 #include <cstddef>
@@ -205,6 +207,22 @@ class teleporter_callback : public uilist_callback
                                                  index_pairs[entnum].to_string() ) );
             }
         }
+        void draw_rml( uilist *menu, Rml::ElementDocument *doc ) override {
+            Rml::Element *cb = doc->GetElementById( "callback" );
+            if( !cb ) {
+                return;
+            }
+            const int entnum = menu->selected;
+            if( entnum >= 0 && static_cast<size_t>( entnum ) < index_pairs.size() ) {
+                avatar &player_character = get_avatar();
+                int dist = rl_dist( player_character.abs_omt_pos(), index_pairs[entnum] );
+                std::string text = string_format( _( "Distance: %d %s" ), dist,
+                                                  index_pairs[entnum].to_string() );
+                cb->SetInnerRML( cata_text_to_rml( colorize( text, c_white ) ) );
+            } else {
+                cb->SetInnerRML( "" );
+            }
+        }
 };
 
 std::optional<tripoint_abs_omt> teleporter_list::choose_teleport_location()
@@ -225,6 +243,7 @@ std::optional<tripoint_abs_omt> teleporter_list::choose_teleport_location()
     }
     teleporter_callback cb( index_pairs );
     teleport_selector.callback = &cb;
+    teleport_selector.menu_style = "info";   // RmlUi: two-column with destination panel
     teleport_selector.w_width_setup = 38 + column_width;
     teleport_selector.pad_right_setup = 33;
     teleport_selector.title = _( "Choose Translocator Gate" );

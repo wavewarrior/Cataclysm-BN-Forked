@@ -1,0 +1,57 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="uilist.rcss"/>
+</head>
+<body data-model="uilist">
+    <!-- data-rml fields carry <span style="color:…"> markup for per-entry
+         colour support (converted from <color_xxx> tags).  {{ }} fields are
+         auto-escaped; data-rml text is pre-escaped in cata_text_to_rml(). -->
+    <!-- menu_style (from uilist::menu_style) selects the look: "" = default
+         full-width stacked list; "save" = narrow centred dialog; "info"/"grid"
+         = two-column with a right-hand info panel. See uilist.rcss. -->
+    <div class="panel uilist-panel"
+         data-class-save="menu_style == 'save'"
+         data-class-info="menu_style == 'info'"
+         data-class-grid="menu_style == 'grid'">
+        <h1 class="uilist-title" data-if="has_title">{{ title }}</h1>
+
+        <div class="uilist-header" data-for="line : header">{{ line }}</div>
+
+        <!-- Body is column by default → list, then the side region (desc +
+             #callback) stacked below. Panel styles (info/grid) flip it to a row
+             so the side becomes the right column (see uilist.rcss). -->
+        <div class="uilist-body">
+            <!-- Virtualized list: only a window of rows around the viewport is
+                 bound (data-for "rows"); the two spacers are sized imperatively
+                 in rml_sync to (win_top × row_pitch) and (rows_below × pitch) so
+                 the total scroll height equals the FULL list and the scrollbar is
+                 proportional + fully reachable. it_index is the in-window index;
+                 rml_on_click/hover add win_top to recover the real entry. -->
+            <div id="list" class="uilist-list">
+                <div id="spacer_top" class="uilist-spacer"></div>
+                <div class="item uilist-row" data-for="row : rows"
+                     data-class-selected="row.selected"
+                     data-class-disabled="!row.enabled"
+                     data-event-mouseover="on_hover(it_index)"
+                     data-event-click="on_click(it_index)">
+                    <span class="uilist-hotkey" data-if="row.hotkey != ''">{{ row.hotkey }}</span>
+                    <span class="uilist-text" data-rml="row.text_rml"></span>
+                    <span class="uilist-col" data-if="row.col != ''">{{ row.col }}</span>
+                </div>
+                <div id="spacer_bottom" class="uilist-spacer"></div>
+            </div>
+
+            <div class="uilist-side" data-if="has_side">
+                <div class="uilist-desc" data-if="has_desc" data-rml="desc_rml"></div>
+
+                <!-- Callback content div; populated by uilist_callback::draw_rml()
+                     overrides per-tick for custom info panels (e.g. wish, magic). -->
+                <div id="callback"></div>
+            </div>
+        </div>
+
+        <div class="uilist-filter" data-if="has_filter or filter_active">&lt; {{ filter }} &gt;</div>
+    </div>
+</body>
+</rml>

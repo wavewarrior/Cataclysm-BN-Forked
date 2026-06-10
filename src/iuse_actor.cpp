@@ -2687,6 +2687,7 @@ int learn_spell_actor::use( player &p, item &, bool, const tripoint_bub_ms & ) c
     spellbook_uilist.w_height_setup = 24;
     spellbook_uilist.w_width_setup = 80;
     spellbook_uilist.callback = &sp_cb;
+    spellbook_uilist.menu_style = "info";   // RmlUi: two-column with spell description panel
     spellbook_uilist.title = _( "Study a spell:" );
     spellbook_uilist.pad_left_setup = 38;
     spellbook_uilist.query();

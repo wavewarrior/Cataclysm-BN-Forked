@@ -19,6 +19,8 @@
 #include "lighting/sdf_pass.h"
 #include "lighting/sprite_batcher.h"
 #include "mapdata.h"
+#include "ui.h"
+#include "rml_screen.h"
 #include "weather.h"
 #include "worldfactory.h"
 
@@ -79,6 +81,14 @@ void draw()
     ImGui::Checkbox( "Debug HUD active (F5)", &g_dbg_lighting );
     ImGui::SameLine();
     ImGui::Checkbox( "Shader heatmap (F6)", &g_dbg_lighting_shader );
+
+    ImGui::SeparatorText( "Player menus (RmlUi migration)" );
+    // Master switch for routing uilist through RmlUi. Default OFF; flip to test
+    // the new renderer in-game. Off = existing ImGui/curses menus.
+    ImGui::Checkbox( "uilist via RmlUi", &uilist_rmlui_enabled() );
+    ImGui::Checkbox( "query_popup via RmlUi", &query_popup_rmlui_enabled() );
+    ImGui::Checkbox( "string_input via RmlUi", &string_input_rmlui_enabled() );
+    ImGui::Checkbox( "missions via RmlUi", &missions_rmlui_enabled() );
 
     static const char *mode_names[] = {
         "off", "ambient", "emitter", "sun", "sky", "total", "SDF", "sky_vis", "emit_bw",

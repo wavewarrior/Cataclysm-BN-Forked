@@ -413,19 +413,13 @@ void CheckMessages( display_context &d )
         // producing frames (this event-driven loop has no vsync tick) so
         // hover/drag stay responsive.
         const bool imgui_capture = imgui_layer::process_event( ev );
-        // RmlUi spike layer sees events too; captures mouse/keyboard while shown.
+        // RmlUi layer sees events too; captures mouse (only) while a menu is open.
         const bool rmlui_capture = rmlui_layer::process_event( ev );
         // Open/close toggle (F4) — handled BEFORE the capture gate so the panel
         // can always be closed even while ImGui holds keyboard focus. P0 dev
         // key; revisit for collisions when promoting past P0.
         if( ev.type == SDL_EVENT_KEY_DOWN && !ev.key.repeat && ev.key.key == SDLK_F4 ) {
             imgui_layer::visible() = !imgui_layer::visible();
-            d.needupdate = true;
-            continue;
-        }
-        // RmlUi spike menu toggle (F10), likewise before its capture gate.
-        if( ev.type == SDL_EVENT_KEY_DOWN && !ev.key.repeat && ev.key.key == SDLK_F10 ) {
-            rmlui_layer::visible() = !rmlui_layer::visible();
             d.needupdate = true;
             continue;
         }

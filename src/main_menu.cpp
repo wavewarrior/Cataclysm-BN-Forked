@@ -905,6 +905,7 @@ bool main_menu::new_character_tab()
             mmenu.hotkey_color = c_yellow;
             sound_on_move_uilist_callback cb( this );
             mmenu.callback = &cb;
+            mmenu.menu_style = "save";   // RmlUi: compact centred dialog
 
             int opt_val = 0;
             for( const std::string &tmpl : templates ) {
@@ -1036,6 +1037,7 @@ bool main_menu::load_character_tab( const std::string &worldname )
     mmenu.hotkey_color = c_yellow;
     sound_on_move_uilist_callback cb( this );
     mmenu.callback = &cb;
+    mmenu.menu_style = "save";   // RmlUi: compact centred dialog
     int opt_val = 0;
     for( const save_t &s : savegames ) {
         mmenu.entries.emplace_back( opt_val++, true, MENU_AUTOASSIGN,
@@ -1091,6 +1093,7 @@ void main_menu::world_tab( const std::string &worldname )
     mmenu.hotkey_color = c_yellow;
     sound_on_move_uilist_callback cb( this );
     mmenu.callback = &cb;
+    mmenu.menu_style = "save";   // RmlUi: compact centred dialog
     for( size_t i = 0; i < vWorldSubItems.size(); i++ ) {
         const auto enabled = !( i == 6 && is_v2_world );
         mmenu.entries.emplace_back( static_cast<int>( i ), enabled, vWorldHotkeys[i], vWorldSubItems[i] );

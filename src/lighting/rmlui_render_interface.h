@@ -53,10 +53,6 @@ class rmlui_render_interface : public Rml::RenderInterface
                                 std::uint32_t proj_w, std::uint32_t proj_h );
         void end_render_pass();
 
-        // Phase-2 isolation check: draw one hardcoded quad (no document needed),
-        // proving the pipeline/buffers/white-texture path on Metal.
-        void draw_self_test();
-
         // Phase-5 D3D12 gate instrumentation: counts of compiles / texture
         // generations that fired while a render pass was open (the upload-in-pass
         // hazard). Zero is the pass condition.

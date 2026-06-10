@@ -5,6 +5,8 @@
 #include "imgui.h"
 #pragma pop_macro( "DebugLog" )
 
+#include <RmlUi/Core.h>
+
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -708,7 +710,56 @@ class map_notes_callback : public uilist_callback
                 ImGui::EndTable();
             }
         }
-};
+        void draw_rml( uilist *menu, Rml::ElementDocument *doc ) override {
+            Rml::Element *cb = doc->GetElementById( "callback" );
+            if( !cb ) {
+                return;
+            }
+            _selected = menu->selected;
+            if( _selected < 0 || static_cast<size_t>( _selected ) >= _notes->size() ) {
+                cb->SetInnerRML( "" );
+                return;
+            }
+
+            const tripoint_abs_omt note_pos = note_location();
+            const auto map_around = get_overmap_neighbors( note_pos );
+            const std::string note = ACTIVE_OVERMAP_BUFFER.note( note_pos );
+
+            const auto om_symbol_info = get_note_display_info( note );
+            const nc_color note_color = std::get<1>( om_symbol_info );
+            const char        symbol  = std::get<0>( om_symbol_info );
+            const size_t prefix_len = std::get<2>( om_symbol_info );
+            const std::string note_text = note.substr( prefix_len );
+            const std::string visible_note_text =
+                note_label_utils::strip_label_commands( note_text );
+
+            std::string rml;
+            rml += "<div class=\"cb-text\">";
+            rml += cata_text_to_rml( colorize( "Note preview:", c_white ) );
+            rml += "<br/>";
+            rml += cata_text_to_rml( colorize( visible_note_text, note_color ) );
+            rml += "<br/><br/>";
+            rml += cata_text_to_rml( colorize( "Overmap:", c_white ) );
+            rml += "<table style=\"border-collapse:collapse;margin-top:4px\">";
+            for( int i = 0; i < npm_height; i++ ) {
+                rml += "<tr>";
+                for( int j = 0; j < npm_width; j++ ) {
+                    const auto &ter = map_around[i * npm_width + j];
+                    rml += "<td style=\"border:1px solid #5a5a78;padding:2px 6px;text-align:center;font-family:monospace\">";
+                    if( i == npm_height / 2 && j == npm_width / 2 ) {
+                        rml += cata_text_to_rml( colorize( std::string( 1, symbol ),
+                                                           note_color ) );
+                    } else {
+                        rml += cata_text_to_rml( colorize( ter.second, ter.first ) );
+                    }
+                    rml += "</td>";
+                }
+                rml += "</tr>";
+            }
+            rml += "</table></div>";
+            cb->SetInnerRML( rml );
+        }
+    };
 
 enum class sort_mode_t : int {
     name,
@@ -873,6 +924,7 @@ static tripoint_abs_omt show_notes_manager( const tripoint_abs_omt &origin )
         map_notes_callback cb( &notes );
         cb.ask_when_deleting = ask_when_deleting;
         nmenu.callback = &cb;
+        nmenu.menu_style = "info";   // RmlUi: two-column with note detail panel
         nmenu.query();
 
         if( nmenu.ret == UILIST_CHANGE_SORT ) {

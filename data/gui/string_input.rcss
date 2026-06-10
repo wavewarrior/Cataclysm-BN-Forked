@@ -1,0 +1,72 @@
+/* string_input_popup dialog layout (RmlUi migration, Phase 4). */
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.string-input-panel {
+    min-width: 320dp;
+    max-width: 80%;
+    display: flex;
+    flex-direction: column;
+}
+
+.string-input-title {
+    color: #ff6666ff;
+    margin-bottom: 6dp;
+    font-size: 18dp;
+}
+
+.string-input-desc {
+    color: #66ff66ff;
+    margin-bottom: 8dp;
+    font-size: 16dp;
+}
+
+/* The input field: a bottom-bordered area showing the text + caret. */
+.string-input-field-wrapper {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 6dp 8dp;
+    margin-top: 4dp;
+    border-bottom: 2dp solid #5a5a78ff;
+    /* Inherit text-primary from body for the typed text */
+    color: #ff66ffff;
+    font-size: 18dp;
+    overflow: hidden;
+    white-space: pre;
+}
+
+/* Text spans — inline so the caret sits between them. */
+.string-input-before {
+    flex-shrink: 0;
+}
+
+.string-input-after {
+    flex-shrink: 1;
+    min-width: 0;
+    opacity: 0.7;
+}
+
+/* Blinking caret — a vertical bar using a decorator. */
+.string-input-caret {
+    display: inline-block;
+    width: 2dp;
+    height: 1.1em;
+    margin: 0 1dp;
+    background-color: #ffffffff;
+    animation: none;
+}
+
+.string-input-field-wrapper:focus-within .string-input-caret {
+    /* Simulate blink via a decorator animation (RmlUi 6.2 supports
+       @keyframes only on decorator-driven properties — this class-based
+       approach gives a static caret that doesn't blink for now, which is
+       already better than the curses underscore. Spritesheet-driven blink
+       can be added after the basic path is green.) */
+}

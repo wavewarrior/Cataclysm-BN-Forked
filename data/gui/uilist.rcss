@@ -1,0 +1,177 @@
+/* uilist menu layout (RmlUi migration, Phase 2). Imports theme.rcss for the
+   shared panel/font. Row state (selected/disabled/hover) is driven by
+   data-class bindings set from the uilist's state each tick. */
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+/* Fixed WIDTH is essential: rml_sync() binds only a sliding 80-row window, so a
+   content-fit panel would reflow its width every time the window slides (the
+   widest visible row changes) — the "width jitter". Height is content-fit so the
+   panel shrink-wraps (short menus stay small); the list/side cap their own
+   height with a vh max-height + overflow (RmlUi 6.2 won't bound a flex child by
+   its parent's height alone, so the cap must be explicit). */
+.uilist-panel {
+    width: 85%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Variant: a compact, centred "pick one" dialog (save/load, character template).
+   Narrower than the full-width default; the panel is already centred by the
+   body flex. Width stays definite (anti-jitter). */
+.uilist-panel.save {
+    width: 25%;
+}
+.uilist-panel.save .uilist-title {
+    text-align: center;
+}
+
+.uilist-title {
+    color: #ffcc66ff;
+    font-size: 22dp;
+    margin-bottom: 8dp;
+}
+
+/* text-primary (#cfcfe0ff) inherits from body — see theme.rcss palette. */
+.uilist-header {
+    margin-bottom: 6dp;
+}
+
+/* Body holds the list and (when has_side) the desc/#callback region. Fills the
+   remaining panel height between header and filter. min-height:0 lets the flex
+   children own the overflow instead of the body growing past the panel.
+   Default direction is COLUMN: the side region stacks BELOW the list (the
+   plain-menu look). Panel styles flip it to a row below. */
+.uilist-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/* The scrolling list region. The vh max-height is the actual scroll bound (a
+   flex parent height won't constrain it in RmlUi 6.2); overflow then scrolls and
+   the scrollbar appears. BLOCK flow (not flex column): the virtualized rows and
+   the two spacer divs stack with deterministic, additive heights — flex would
+   try to shrink the spacers and break the fixed-pitch scroll math. */
+.uilist-list {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-height: 75vh;
+    overflow-y: auto;
+    display: block;
+}
+
+/* Virtual-scroll spacers above/below the bound window. Height is set imperatively
+   each tick in uilist::rml_sync (win_top × pitch, rows_below × pitch); the rule
+   only resets any inherited box styling. */
+.uilist-spacer {
+    display: block;
+    flex: 0 0 auto;
+}
+
+/* Side region (desc + #callback). Only present when has_side (data-if), so an
+   empty plain menu draws no stray divider. Stacked default: sits below the list
+   with a top divider, own scroll. Panel styles override to a right column. */
+.uilist-side {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    max-height: 40vh;
+    overflow-y: auto;
+    margin-top: 8dp;
+    padding-top: 6dp;
+    border-top: 1dp #5a5a78ff;
+}
+
+/* Panel styles: two-column. List left, side becomes the right column with a
+   left divider instead of the stacked top divider. */
+.uilist-panel.info .uilist-body,
+.uilist-panel.grid .uilist-body {
+    flex-direction: row;
+}
+.uilist-panel.info .uilist-side,
+.uilist-panel.grid .uilist-side {
+    flex: 0 0 42%;
+    min-width: 0;
+    max-height: 75vh;
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+    margin-left: 12dp;
+    padding-left: 12dp;
+    border-left: 1dp #5a5a78ff;
+}
+/* Grid (advanced inventory destination): the 3x3 square is small — size the
+   side to its content instead of a wide text column. */
+.uilist-panel.grid .uilist-side {
+    flex: 0 0 auto;
+}
+
+/* Layout only — background/hover/selected come from the shared .item class
+   (theme.rcss); rows carry both classes ("item uilist-row").
+   FIXED PITCH for virtual scrolling: outer pitch = height(28dp) + margin(2dp) =
+   30dp, which MUST equal ROW_H_DP in ui.cpp::rml_sync (the spacer/scroll math
+   relies on a row-height known on frame 0, before RmlUi's first layout). Single
+   line (nowrap) + vertical-centre so the pitch can't grow from wrapping. */
+.uilist-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    height: 28dp;
+    padding: 0 10dp;
+    margin-bottom: 2dp;
+    white-space: nowrap;
+}
+
+/* Disabled is uilist-only (buttons have no disabled state), so it stays here. */
+.uilist-row.disabled {
+    color: #6a6a7aff;
+}
+
+.uilist-hotkey {
+    color: #ffcc66ff;
+    margin-right: 8dp;
+}
+.uilist-row.selected .uilist-hotkey {
+    color: #1e1e28ff;
+}
+
+.uilist-text {
+    flex: 1 1 auto;
+}
+
+.uilist-col {
+    margin-left: 16dp;
+    color: #9a9ab0ff;
+}
+.uilist-row.selected .uilist-col {
+    color: #1e1e28ff;
+}
+.uilist-row.disabled .uilist-col {
+    color: #6a6a7aff;
+}
+
+/* desc + #callback now live in the side column, which owns the divider and
+   scrolling — so no top border / height cap here (would double the divider and
+   fight the column's own overflow). */
+.uilist-desc {
+    margin-bottom: 8dp;
+}
+
+.uilist-filter {
+    margin-top: 6dp;
+    color: #9a9ab0ff;
+}
+
+/* Callback content area — populated per-tick by uilist_callback subclasses.
+   text-primary inherits from body. */
+#callback {
+    font-size: 14dp;
+}

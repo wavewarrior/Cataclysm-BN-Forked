@@ -1,0 +1,16 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="query_popup.rcss"/>
+</head>
+<body data-model="query_popup">
+    <div class="panel query-popup-panel">
+        <div class="query-popup-message" data-rml="message_rml"></div>
+        <div class="query-popup-buttons" data-if="has_buttons">
+            <span class="item query-popup-button" data-for="btn : buttons"
+                  data-class-selected="btn.selected"
+                  data-event-click="on_button(it_index)">{{ btn.text }}</span>
+        </div>
+    </div>
+</body>
+</rml>

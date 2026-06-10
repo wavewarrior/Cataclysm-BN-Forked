@@ -17,6 +17,10 @@
 #include "imgui.h"
 #pragma pop_macro( "DebugLog" )
 
+// Third-party retained-mode UI. Included before debug.h so its headers can't
+// collide with the DebugLog macro.
+#include <RmlUi/Core.h>
+
 #include "avatar.h"
 #include "cata_imgui.h"
 #include "cata_utility.h"
@@ -26,7 +30,9 @@
 #include "ime.h"
 #include "input.h"
 #include "lighting/imgui_layer.h"
+#include "lighting/rmlui_layer.h"
 #include "output.h"
+#include "path_info.h"
 #include "player.h"
 #include "string_input_popup.h"
 #include "string_utils.h"
@@ -40,6 +46,108 @@ catacurses::window new_centered_win( int nlines, int ncols )
     return catacurses::newwin( height, width, pos );
 }
 
+// ---- RmlUi uilist render session -------------------------------------------
+// One row in the bound visible window. `text` is plain (stripped of color tags)
+// for dirty-comparison; `text_rml` carries <span style="color:…"> markup for
+// data-rml rendering.
+struct uilist_rml_row {
+    Rml::String text;
+    Rml::String text_rml;
+    Rml::String hotkey;
+    Rml::String col;
+    bool selected = false;
+    bool enabled = true;
+};
+
+// Holds the document + data-model handle + the storage the model is bound to.
+// Defined here (before ~uilist) so uilist's unique_ptr<uilist_rml_session>
+// member has a complete type for its deleter. Owned by uilist::rml_session.
+class uilist_rml_session
+{
+    public:
+        // Bound model storage (pointers handed to RmlUi must stay valid for the
+        // session's whole life — they live here, not on a stack frame).
+        Rml::String title;
+        bool has_title = false;
+        Rml::Vector<Rml::String> header;
+        Rml::Vector<uilist_rml_row> rows;
+        Rml::String desc;
+        Rml::String desc_rml;
+        bool has_desc = false;
+        // Raw (still color-tagged) source the desc/desc_rml were built from, kept
+        // so rml_sync only re-runs the expensive cata_text_to_rml when it changes.
+        Rml::String desc_src;
+        Rml::String filter;
+        bool has_filter = false;
+        bool filter_active = false;
+        // Per-menu look variant (mirrors uilist::menu_style), applied as a class
+        // on .uilist-panel to drive width/alignment + single-vs-two-column.
+        Rml::String menu_style;
+        // Whether the side region (desc + #callback) has content worth showing.
+        // Gates the side div so empty stacked menus draw no stray divider; true
+        // when there's a description OR the style is a panel style (info/grid).
+        bool has_side = false;
+
+        Rml::DataModelHandle handle;
+        Rml::ElementDocument *doc = nullptr;
+        // The window of fentries currently bound into `rows`: [win_top, win_top+win_len).
+        int win_top = 0;
+        int win_len = 0;
+        // First fentry at the top of the viewport — the single source of truth for
+        // scroll position (virtual scrolling). Keyboard nav updates it; mouse/idle
+        // frames read it back from the list's scroll offset. See rml_sync.
+        int scroll_row = 0;
+};
+
+bool &uilist_rmlui_enabled()
+{
+    // Default OFF — see ui.h. Opt in via the F4 panel.
+    static bool enabled = false;
+    return enabled;
+}
+
+bool &query_popup_rmlui_enabled()
+{
+    // Default OFF — see ui.h. Opt in via the F4 panel.
+    static bool enabled = false;
+    return enabled;
+}
+
+bool &string_input_rmlui_enabled()
+{
+    // Default OFF — see ui.h. Opt in via the F4 panel.
+    static bool enabled = false;
+    return enabled;
+}
+
+// Rml colour/text helpers (rml_escape, nc_color_to_hex, cata_text_to_rml) were
+// promoted to rml_util.{h,cpp} so every migrated screen + the world-text layer
+// share one path. Included via ui.h.
+
+// Row struct + array type registration is context-global and persists for the
+// context's life, so it's done once. The model NAME "uilist" allows a single
+// RmlUi uilist at a time; a nested one finds the name taken and falls back.
+bool g_rml_uilist_types_registered = false;
+bool g_rml_uilist_model_active = false;
+
+void register_uilist_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_rml_uilist_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<uilist_rml_row> rh = c.RegisterStruct<uilist_rml_row>();
+    rh.RegisterMember( "text", &uilist_rml_row::text );
+    rh.RegisterMember( "text_rml", &uilist_rml_row::text_rml );
+    rh.RegisterMember( "hotkey", &uilist_rml_row::hotkey );
+    rh.RegisterMember( "col", &uilist_rml_row::col );
+    rh.RegisterMember( "selected", &uilist_rml_row::selected );
+    rh.RegisterMember( "enabled", &uilist_rml_row::enabled );
+    c.RegisterArray<Rml::Vector<uilist_rml_row>>();
+    // The header is a plain string array (data-for over `header`); its array
+    // type needs registering too, even though String itself is a built-in.
+    c.RegisterArray<Rml::Vector<Rml::String>>();
+    g_rml_uilist_types_registered = true;
+}
 /**
 * \defgroup UI "The UI Menu."
 * @{
@@ -370,6 +478,9 @@ void uilist::inputfilter()
     .max_length( 256 )
     .window( window, point( 4, w_height - 1 ), w_width - 4 );
     ime_sentry sentry;
+    if( rml_session ) {
+        rml_session->filter_active = true;
+    }
     do {
         ui_manager::redraw();
         filter = filter_popup->query_string( false );
@@ -380,6 +491,10 @@ void uilist::inputfilter()
             }
         }
     } while( !filter_popup->confirmed() && !filter_popup->canceled() );
+
+    if( rml_session ) {
+        rml_session->filter_active = false;
+    }
 
     if( filter_popup->canceled() ) {
         filterlist();
@@ -904,11 +1019,18 @@ shared_ptr_fast<ui_adaptor> uilist::create_or_get_ui_adaptor()
     if( !current_ui ) {
         ui = current_ui = make_shared_fast<ui_adaptor>();
         current_ui->on_redraw( [this]( ui_adaptor & ui ) {
-            // When the ImGui layer is live, draw_imgui() (registered as an ImGui
-            // draw callback in query()) is the sole renderer. Skip the curses
-            // show() so the old terminal-font menu doesn't draw alongside it.
-            // setup() (→ vmax for scrollby) still runs via reposition()/resize.
-            if( !imgui_layer::ready() ) {
+            // Renderer priority: RmlUi (when this menu opened a document) >
+            // ImGui (drawn via the callback registered in query()) > curses
+            // show(). For the RmlUi path, push current state into the data-model
+            // here — this runs on every redraw, including the ~60Hz ticks — and
+            // let any callback touch the live document. setup() (→ vmax for
+            // scrollby) still runs via reposition()/resize for all paths.
+            if( rml_session ) {
+                rml_sync();
+                if( callback != nullptr && rml_session->doc != nullptr ) {
+                    callback->draw_rml( this, rml_session->doc );
+                }
+            } else if( !imgui_layer::ready() ) {
                 show( ui );
             }
         } );
@@ -942,8 +1064,18 @@ void uilist::query( bool loop, int timeout )
 
     shared_ptr_fast<ui_adaptor> ui = create_or_get_ui_adaptor();
 
+    // Renderer priority: RmlUi first (when it can open a document), else ImGui,
+    // else curses. rml_open() returns false (and is a no-op) when RmlUi isn't
+    // ready or the model name is already taken by a nested menu.
+    // Ensure fentries is populated before the RmlUi document opens, so the
+    // data model starts with the correct row data instead of an empty list
+    // that may not visually update on the first dirty-variable pass.
+    if( !started ) {
+        setup();
+    }
+    const bool use_rmlui = rml_open();
     // Register ImGui draw callback for this menu
-    const bool use_imgui = imgui_layer::ready();
+    const bool use_imgui = !use_rmlui && imgui_layer::ready();
     int imgui_handle = -1;
     if( use_imgui ) {
         imgui_handle = imgui_layer::push_draw_callback( [this]() {
@@ -983,7 +1115,7 @@ void uilist::query( bool loop, int timeout )
         // When ImGui is active, drive ~60 Hz frame ticks so mouse hover and
         // transition animations stay responsive.  The caller-requested timeout
         // is handled below: internal ticks loop; caller timeouts return.
-        const int actual_timeout = ( use_imgui && loop ) ? 16 : timeout;
+        const int actual_timeout = ( ( use_imgui || use_rmlui ) && loop ) ? 16 : timeout;
         ret_act = ctxt.handle_input( actual_timeout );
         const auto event = ctxt.get_raw_input();
         keypress = event.get_first_input();
@@ -1023,7 +1155,7 @@ void uilist::query( bool loop, int timeout )
         } else if( allow_cancel && ret_act == "QUIT" ) {
             ret = UILIST_CANCEL;
         } else if( ret_act == "TIMEOUT" ) {
-            if( use_imgui && loop ) {
+            if( ( use_imgui || use_rmlui ) && loop ) {
                 // Internal frame tick — redraw and keep looping.
                 // (Caller-requested timeout with loop==false falls through below.)
                 ui_manager::redraw();
@@ -1055,6 +1187,304 @@ void uilist::query( bool loop, int timeout )
     // Clean up ImGui draw callback
     if( imgui_handle >= 0 ) {
         imgui_layer::remove_draw_callback( imgui_handle );
+    }
+    if( use_rmlui ) {
+        rml_close();
+    }
+}
+
+bool uilist::rml_open()
+{
+    if( !uilist_rmlui_enabled() || !rmlui_layer::ready() ) {
+        return false;
+    }
+    Rml::Context *ctx = rmlui_layer::context();
+    if( ctx == nullptr || g_rml_uilist_model_active ) {
+        return false;  // not ready, or a nested uilist already owns the model name
+    }
+    Rml::DataModelConstructor c = ctx->CreateDataModel( "uilist" );
+    if( !c ) {
+        return false;
+    }
+    rml_session = std::make_unique<uilist_rml_session>();
+    register_uilist_rml_types( c );
+
+    c.Bind( "title", &rml_session->title );
+    c.Bind( "has_title", &rml_session->has_title );
+    c.Bind( "header", &rml_session->header );
+    c.Bind( "rows", &rml_session->rows );
+    c.Bind( "desc", &rml_session->desc );
+    c.Bind( "desc_rml", &rml_session->desc_rml );
+    c.Bind( "has_desc", &rml_session->has_desc );
+    c.Bind( "filter", &rml_session->filter );
+    c.Bind( "has_filter", &rml_session->has_filter );
+    c.Bind( "filter_active", &rml_session->filter_active );
+    c.Bind( "menu_style", &rml_session->menu_style );
+    c.Bind( "has_side", &rml_session->has_side );
+    c.BindEventCallback( "on_click",
+    [this]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+        int idx = -1;
+        if( !args.empty() ) {
+            args[0].GetInto( idx );
+        }
+        rml_on_click( idx );
+    } );
+    c.BindEventCallback( "on_hover",
+    [this]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+        int idx = -1;
+        if( !args.empty() ) {
+            args[0].GetInto( idx );
+        }
+        rml_on_hover( idx );
+    } );
+    rml_session->handle = c.GetModelHandle();
+
+    rml_session->doc = rmlui_layer::open_document( PATH_INFO::datadir() + "gui/uilist.rml" );
+    if( rml_session->doc == nullptr ) {
+        ctx->RemoveDataModel( "uilist" );
+        rml_session.reset();
+        return false;
+    }
+    g_rml_uilist_model_active = true;
+    // Open scrolled to the preselected entry: the first sync takes the keyboard
+    // branch (scroll_row follows fselected) instead of the mouse branch (top 0).
+    imgui_scroll_to_selected = true;
+    rml_sync();
+    // Force RmlUi to process dirty variables immediately so the document DOM
+    // is built/updated before the first frame render.
+    ctx->Update();
+    return true;
+}
+
+void uilist::rml_sync()
+{
+    if( !rml_session ) {
+        return;
+    }
+    uilist_rml_session &s = *rml_session;
+
+    s.title = title;
+    s.has_title = !title.empty();
+
+    // Header is static for the menu's life; rebuild a candidate and only swap
+    // (and dirty, below) when it actually differs, so the data-for DOM isn't
+    // recreated every ~60Hz tick.
+    Rml::Vector<Rml::String> new_header;
+    new_header.reserve( textformatted.size() );
+    for( const std::string &line : textformatted ) {
+        new_header.push_back( remove_color_tags( line ) );
+    }
+    const bool header_changed = new_header != s.header;
+    if( header_changed ) {
+        s.header = std::move( new_header );
+    }
+
+    // desc_rml runs the expensive cata_text_to_rml; only rebuild when the source
+    // text changes (same dirty-proxy discipline as rows below).
+    std::string new_desc_src;
+    if( desc_enabled && selected >= 0 && static_cast<size_t>( selected ) < entries.size() ) {
+        new_desc_src = footer_text.empty() ? entries[selected].desc : footer_text;
+    }
+    const bool desc_changed = new_desc_src != s.desc_src;
+    if( desc_changed ) {
+        s.desc_src = new_desc_src;
+        s.desc = remove_color_tags( new_desc_src );
+        s.desc_rml = new_desc_src.empty() ? Rml::String() : cata_text_to_rml( new_desc_src );
+        s.has_desc = !s.desc.empty();
+    }
+
+    s.filter = filter;
+    s.has_filter = !filter.empty();
+
+    // Look variant + side-region visibility. Both are static for the menu's
+    // life, so they ride the unconditionally-dirtied scalars below. Panel
+    // styles always show the side (their #callback is filled imperatively by
+    // draw_rml, which the data model can't observe); other styles show it only
+    // when there's a description.
+    s.menu_style = menu_style;
+    const bool panel_style = ( menu_style == "info" || menu_style == "grid" );
+    s.has_side = s.has_desc || panel_style;
+
+    // ── Virtual scrolling ────────────────────────────────────────────────────
+    // Binding every row of a thousands-long menu (e.g. the wish item list) is too
+    // slow: RmlUi lays out and re-submits each bound row every frame. Instead bind
+    // only a window around the viewport and fake the rest of the scroll height
+    // with two spacer divs, so the scrollbar stays proportional and fully
+    // reachable — the standard list virtualization the OS toolkits all use.
+    //
+    // Row pitch is fixed by CSS so it's known on frame 0: rml_sync runs in
+    // on_redraw, BEFORE RmlUi's layout pass, so a laid-out row can't be measured
+    // this frame. ROW_H_DP MUST match .uilist-row (height 28dp + margin 2dp); dp
+    // are scaled to layout px by the context density ratio.
+    constexpr float ROW_H_DP = 30.0f;
+    constexpr int BUFFER = 6;  // off-screen rows kept bound on each side
+    const float H = ROW_H_DP * rmlui_layer::density_ratio();
+    const int n = static_cast<int>( fentries.size() );
+
+    Rml::Element *list = s.doc != nullptr ? s.doc->GetElementById( "list" ) : nullptr;
+    // Rows that fit the viewport (>0 once laid out; a sane default on frame 0).
+    const float viewport = list != nullptr ? list->GetClientHeight() : 0.0f;
+    const int vis = viewport > 1.0f ? std::max( 1, static_cast<int>( viewport / H ) ) : 20;
+    const int len = std::min( n, vis + 2 * BUFFER );
+
+    // scroll_row = the first fentry at the top of the viewport (the scroll
+    // position). Keyboard nav keeps fselected visible with minimal scroll; the
+    // mouse wheel / scrollbar drag move RmlUi's own offset, which we read back on
+    // the next (non-keyboard) tick. We NEVER read GetScrollTop on the same frame
+    // we SetScrollTop (the write may not lay out until Update) — both branches
+    // drive the integer scroll_row, and only the keyboard branch writes the offset.
+    int sr = s.scroll_row;
+    const bool kb = imgui_scroll_to_selected;
+    if( kb ) {
+        if( fselected < sr ) {
+            sr = fselected;
+        } else if( fselected >= sr + vis ) {
+            sr = fselected - vis + 1;
+        }
+    } else if( list != nullptr && H > 0.0f ) {
+        sr = static_cast<int>( list->GetScrollTop() / H );
+    }
+    sr = std::max( 0, std::min( sr, std::max( 0, n - vis ) ) );
+    s.scroll_row = sr;
+
+    const int top = std::max( 0, std::min( sr - BUFFER, std::max( 0, n - len ) ) );
+    // Re-dirty "rows" (and resize the spacers) when the window moves or resizes.
+    const bool window_moved = top != s.win_top
+                              || static_cast<int>( s.rows.size() ) != len;
+    s.win_top = top;
+    s.win_len = len;
+
+    // Resize in-place instead of clearing/rebuilding so RmlUi keeps the
+    // same DOM elements (and their compiled geometry handles) across frames.
+    // data-for recreates elements when it detects a different array, which
+    // defeats geometry caching and keeps geometry perpetually deferred.
+    //
+    // rml_sync() runs on every redraw, including idle ~60Hz ticks. Dirtying
+    // "rows" rebuilds the data-for DOM and recompiles its geometry, so only
+    // dirty it when the visible window's contents actually change — otherwise
+    // row geometry recompiles every frame and never leaves the deferred path.
+    bool rows_changed = window_moved;
+    s.rows.resize( len );
+    for( int i = 0; i < len; ++i ) {
+        const int ei = fentries[top + i];
+        const uilist_entry &e = entries[ei];
+        uilist_rml_row &r = s.rows[i];
+        Rml::String text = remove_color_tags( e.txt );
+        Rml::String hotkey;
+        if( e.hotkey >= 33 && e.hotkey < 126 ) {
+            hotkey = std::string( 1, static_cast<char>( e.hotkey ) );
+        }
+        Rml::String col = remove_color_tags( e.ctxt );
+        const bool sel = ( ei == selected );
+        if( r.text != text || r.hotkey != hotkey || r.col != col
+            || r.enabled != e.enabled || r.selected != sel ) {
+            // text_rml is the expensive conversion; only rebuild when the row
+            // actually changed (text is the cheap dirty proxy — same source).
+            r.text_rml = cata_text_to_rml( e.txt );
+            r.text = std::move( text );
+            r.hotkey = std::move( hotkey );
+            r.col = std::move( col );
+            r.enabled = e.enabled;
+            r.selected = sel;
+            rows_changed = true;
+        }
+    }
+
+    Rml::DataModelHandle h = s.handle;
+    h.DirtyVariable( "title" );
+    h.DirtyVariable( "has_title" );
+    if( header_changed ) {
+        h.DirtyVariable( "header" );
+    }
+    if( rows_changed ) {
+        h.DirtyVariable( "rows" );
+    }
+    if( desc_changed ) {
+        h.DirtyVariable( "desc" );
+        h.DirtyVariable( "desc_rml" );
+        h.DirtyVariable( "has_desc" );
+    }
+    h.DirtyVariable( "filter" );
+    h.DirtyVariable( "has_filter" );
+    h.DirtyVariable( "filter_active" );
+    h.DirtyVariable( "menu_style" );
+    h.DirtyVariable( "has_side" );
+
+    // Size the virtual-scroll spacers so total content height == n * H (keeps the
+    // scrollbar proportional and the scroll offset stable across rebinds). Then,
+    // only on keyboard frames, drive the actual scroll offset to scroll_row —
+    // flushing layout first so SetScrollTop clamps against the full (post-spacer)
+    // scroll height instead of the stale one (otherwise big jumps clamp short).
+    if( list != nullptr && H > 0.0f ) {
+        if( window_moved ) {
+            const int below = std::max( 0, n - top - len );
+            if( Rml::Element *sp = s.doc->GetElementById( "spacer_top" ) ) {
+                sp->SetProperty( "height",
+                                 std::to_string( static_cast<int>( top * H ) ) + "px" );
+            }
+            if( Rml::Element *sp = s.doc->GetElementById( "spacer_bottom" ) ) {
+                sp->SetProperty( "height",
+                                 std::to_string( static_cast<int>( below * H ) ) + "px" );
+            }
+        }
+        if( kb ) {
+            s.doc->UpdateDocument();
+            list->SetScrollTop( static_cast<float>( sr ) * H );
+        }
+    }
+    imgui_scroll_to_selected = false;
+}
+
+void uilist::rml_close()
+{
+    if( !rml_session ) {
+        return;
+    }
+    if( rml_session->doc != nullptr ) {
+        rmlui_layer::close_document( rml_session->doc );
+    }
+    if( Rml::Context *ctx = rmlui_layer::context() ) {
+        ctx->RemoveDataModel( "uilist" );
+    }
+    g_rml_uilist_model_active = false;
+    rml_session.reset();
+}
+
+void uilist::rml_on_click( int window_index )
+{
+    if( !rml_session || window_index < 0 ) {
+        return;
+    }
+    const int fe = rml_session->win_top + window_index;
+    if( fe < 0 || fe >= static_cast<int>( fentries.size() ) ) {
+        return;
+    }
+    const int ei = fentries[fe];
+    const uilist_entry &e = entries[ei];
+    if( e.enabled || allow_disabled ) {
+        fselected = fe;
+        selected = ei;
+        ret = e.retval;  // confirm; query loop notices ret changed and exits
+    }
+}
+
+void uilist::rml_on_hover( int window_index )
+{
+    if( !rml_session || window_index < 0 ) {
+        return;
+    }
+    const int fe = rml_session->win_top + window_index;
+    if( fe < 0 || fe >= static_cast<int>( fentries.size() ) ) {
+        return;
+    }
+    const int ei = fentries[fe];
+    if( ei == selected ) {
+        return;
+    }
+    fselected = fe;
+    selected = ei;
+    if( callback != nullptr ) {
+        callback->select( this );
     }
 }
 

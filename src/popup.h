@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -73,6 +74,7 @@ class query_popup
          * default construction will return { false, "ERROR", {} }.
          **/
         query_popup();
+        ~query_popup();
 
         /**
          * Specify the input context. In addition to being used to handle input
@@ -247,6 +249,16 @@ class query_popup
 
         static std::string wait_text( const std::string &text, const nc_color &bar_color );
         static std::string wait_text( const std::string &text );
+
+        // RmlUi session (opaque — defined in popup.cpp)
+        struct rml_session_t;
+        std::unique_ptr<rml_session_t> rml_session;
+        std::optional<result> rml_pending_result;
+
+        bool rml_open();
+        void rml_sync();
+        void rml_close();
+        void rml_on_click( int window_index );
 };
 
 /**

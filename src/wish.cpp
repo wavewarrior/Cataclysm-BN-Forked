@@ -5,6 +5,8 @@
 
 #include "cata_imgui.h"
 
+#include <RmlUi/Core.h>
+
 #include "debug_menu.h" // IWYU pragma: associated
 
 #include <algorithm>
@@ -391,6 +393,98 @@ class wish_mutate_callback: public uilist_callback
                          ctxt.get_desc( "FILTER" ).c_str(), ctxt.get_desc( "QUIT" ).c_str() );
         }
 
+        void draw_rml( uilist *menu, Rml::ElementDocument *doc ) override {
+            Rml::Element *cb = doc->GetElementById( "callback" );
+            if( !cb ) {
+                return;
+            }
+            if( !started ) {
+                started = true;
+                for( auto &traits_iter : mutation_branch::get_all() ) {
+                    vTraits.push_back( traits_iter.id );
+                    pTraits[traits_iter.id] = p->has_trait( traits_iter.id );
+                    for( auto &category : traits_iter.category ) {
+                        if( !category_mutations.contains( category ) ) {
+                            category_mutations[category] = std::set<mutation_branch>();
+                        }
+                        category_mutations[category].insert( traits_iter );
+                    }
+                }
+            }
+
+            std::string rml;
+            rml += "<div class=\"cb-text\">";
+            if( menu->selected >= 0 && static_cast<size_t>( menu->selected ) < vTraits.size() ) {
+                const mutation_branch &mdata = vTraits[menu->selected].obj();
+
+                rml += cata_text_to_rml( colorize( mdata.valid ? _( "Valid" ) : _( "Nonvalid" ),
+                                                   c_light_gray ) );
+                rml += "<br/>";
+
+                rml += cata_text_to_rml( colorize( _( "Id:" ), c_light_gray ) );
+                rml += " " + cata_text_to_rml( mdata.id.str() ) + "<br/>";
+
+                auto list_item = [&]( const std::string &label, const auto &items ) {
+                    if( items.empty() ) {
+                        return;
+                    }
+                    rml += cata_text_to_rml( colorize( _( label ), c_light_gray ) );
+                    for( const trait_id &id : items ) {
+                        rml += "<br/>";
+                        rml += cata_text_to_rml( colorize( mutation_branch::get_name( id ),
+                                                           mcolor( id ) ) );
+                    }
+                };
+
+                list_item( "Prereqs:", mdata.prereqs );
+                list_item( "Prereqs, 2d:", mdata.prereqs2 );
+
+                if( mdata.threshold_tier != 0 ) {
+                    rml += cata_text_to_rml( colorize(
+                                                 string_format( _( "Threshold tier: %d" ), mdata.threshold_tier ),
+                                                 c_light_gray ) ) + "<br/>";
+                }
+
+                list_item( "Cancels:", mdata.cancels );
+                list_item( "Becomes:", mdata.replacements );
+                list_item( "Add-ons:", mdata.additions );
+
+                if( !mdata.types.empty() ) {
+                    rml += cata_text_to_rml( colorize( _( "Type:" ), c_light_gray ) );
+                    for( auto &j : mdata.types ) {
+                        rml += "<br/>" + cata_text_to_rml( j );
+                    }
+                }
+
+                if( !mdata.category.empty() ) {
+                    rml += cata_text_to_rml( colorize( _( "Category:" ), c_light_gray ) );
+                    for( const mutation_category_id &j : mdata.category ) {
+                        rml += "<br/>" + cata_text_to_rml( j.str() );
+                    }
+                }
+
+                rml += "<br/>";
+                rml += cata_text_to_rml( colorize(
+                                             string_format( _( "pts: %d vis: %d ugly: %d" ),
+                                                     mdata.points, mdata.visibility,
+                                                     mdata.ugliness ), c_light_gray ) );
+                rml += "<br/>";
+                rml += cata_text_to_rml( colorize( mdata.desc(), c_light_gray ) );
+            }
+
+            if( !msg.empty() ) {
+                rml += "<br/>" + cata_text_to_rml( colorize( msg, c_green ) );
+                msg.clear();
+            }
+
+            input_context ctxt( menu->input_category );
+            rml += "<br/>" + cata_text_to_rml( string_format(
+                _( "[%s] find, [%s] quit, [t] toggle base trait, [c] mutation categories menu" ),
+                ctxt.get_desc( "FILTER" ), ctxt.get_desc( "QUIT" ) ) );
+            rml += "</div>";
+            cb->SetInnerRML( rml );
+        }
+
         ~wish_mutate_callback() override = default;
 };
 
@@ -425,6 +519,8 @@ void debug_menu::wishmutate( Character *who )
     wish_mutate_callback cb;
     cb.p = who;
     wmenu.callback = &cb;
+    wmenu.title = _( "Wish for a mutation" );
+    wmenu.menu_style = "info";   // RmlUi: two-column with mutation detail panel
     do {
         wmenu.query();
         if( wmenu.ret >= 0 ) {
@@ -750,6 +846,78 @@ class wish_monster_callback: public uilist_callback
                          ctxt.get_desc( "FILTER" ).c_str(), ctxt.get_desc( "QUIT" ).c_str() );
         }
 
+        void draw_rml( uilist *menu, Rml::ElementDocument *doc ) override {
+            Rml::Element *cb = doc->GetElementById( "callback" );
+            if( !cb ) {
+                return;
+            }
+            const int entnum = menu->selected;
+            const bool valid_entnum = entnum >= 0 && static_cast<size_t>( entnum ) < mtypes.size();
+            if( entnum != lastent ) {
+                lastent = entnum;
+                if( valid_entnum ) {
+                    tmp = std::make_unique<monster>( mtypes[entnum]->id );
+                    if( friendly ) {
+                        tmp->friendly = -1;
+                    }
+                } else {
+                    tmp = std::make_unique<monster>();
+                }
+            }
+
+            std::string rml;
+            rml += "<div class=\"cb-text\">";
+
+            if( valid_entnum ) {
+                std::string header = string_format( "#%d: %s (%d)%s%s", entnum, tmp->type->nname(),
+                                                    group, friendly ? _( " (friendly)" ) : "",
+                                                    hallucination ? _( " (hallucination)" ) : "" );
+                rml += cata_text_to_rml( colorize( header, c_cyan ) );
+                rml += "<br/>";
+
+                // HP bar
+                nc_color hp_color = c_white;
+                std::string bar_str;
+                tmp->get_HP_Bar( hp_color, bar_str );
+                rml += cata_text_to_rml( colorize( bar_str, hp_color ) );
+                rml += " ";
+                rml += cata_text_to_rml( colorize( tmp->name(), tmp->basic_symbol_color() ) );
+                rml += " ";
+
+                // Attitude
+                const auto att = tmp->get_attitude();
+                rml += cata_text_to_rml( colorize( att.first, att.second ) );
+
+                // Effects
+                std::string eff_str = tmp->get_effect_status();
+                if( !eff_str.empty() ) {
+                    rml += " ";
+                    rml += cata_text_to_rml( colorize( eff_str, h_white ) );
+                }
+
+                // Difficulty
+                rml += "<br/>";
+                rml += cata_text_to_rml( colorize(
+                                             string_format( _( "Difficulty %d" ), tmp->type->difficulty ),
+                                             c_light_gray ) );
+
+                // Description
+                rml += "<br/>";
+                rml += cata_text_to_rml( colorize( tmp->type->get_description(), c_light_gray ) );
+            }
+
+            if( !msg.empty() ) {
+                rml += "<br/>" + cata_text_to_rml( colorize( msg, c_green ) );
+                msg.clear();
+            }
+            input_context ctxt( menu->input_category );
+            rml += "<br/>" + cata_text_to_rml( string_format(
+                _( "[%s] find, [f]riendly, [h]allucination, [i]ncrease group, [d]ecrease group, [%s] quit" ),
+                ctxt.get_desc( "FILTER" ), ctxt.get_desc( "QUIT" ) ) );
+            rml += "</div>";
+            cb->SetInnerRML( rml );
+        }
+
         ~wish_monster_callback() override = default;
     };
 
@@ -768,6 +936,8 @@ class wish_monster_callback: public uilist_callback
     wmenu.selected = uistate.wishmonster_selected;
     wish_monster_callback cb( mtypes );
     wmenu.callback = &cb;
+    wmenu.title = _( "Wish for a monster" );
+    wmenu.menu_style = "info";   // RmlUi: two-column with monster info panel
 
     int i = 0;
     for( const mtype &montype : MonsterGenerator::generator().get_all_mtypes() ) {
@@ -933,7 +1103,45 @@ class wish_item_callback: public uilist_callback
             ImGui::Text( _( "[%s] find, [f] container, [F] flag, [E] everything, [%s] quit" ),
                          ctxt.get_desc( "FILTER" ).c_str(), ctxt.get_desc( "QUIT" ).c_str() );
         }
-};
+
+        void draw_rml( uilist *menu, Rml::ElementDocument *doc ) override {
+            Rml::Element *cb = doc->GetElementById( "callback" );
+            if( !cb ) {
+                return;
+            }
+            std::string rml;
+            rml += "<div class=\"cb-text\">";
+            const int entnum = menu->selected;
+            if( entnum >= 0 && static_cast<size_t>( entnum ) < standard_itype_ids.size() ) {
+                item &tmp = *item::spawn_temporary( standard_itype_ids[entnum], calendar::turn );
+                const std::string header = string_format( "#%d: %s%s%s", entnum,
+                                           standard_itype_ids[entnum]->get_id().c_str(),
+                                           incontainer ? _( " (contained)" ) : "",
+                                           has_flag ? _( " (flagged)" ) : "" );
+                rml += cata_text_to_rml( colorize( header, c_cyan ) );
+                rml += "<br/>";
+
+                std::vector<iteminfo> info = tmp.info();
+                std::string info_string = format_item_info( info, {} );
+                rml += cata_text_to_rml( info_string );
+            }
+
+            if( spawn_everything ) {
+                rml += "<br/>" + cata_text_to_rml( colorize(
+                    _( "Select any item to spawn everything (ignores filters)." ), c_green ) );
+            }
+            if( !msg.empty() ) {
+                rml += "<br/>" + cata_text_to_rml( colorize( msg, c_green ) );
+                msg.erase();
+            }
+            input_context ctxt( menu->input_category );
+            rml += "<br/>" + cata_text_to_rml( string_format(
+                _( "[%s] find, [f] container, [F] flag, [E] everything, [%s] quit" ),
+                ctxt.get_desc( "FILTER" ), ctxt.get_desc( "QUIT" ) ) );
+            rml += "</div>";
+            cb->SetInnerRML( rml );
+        }
+    };
 
 void debug_menu::wishitem( Character *who )
 {
@@ -975,6 +1183,8 @@ void debug_menu::wishitem( Character *who, const tripoint_bub_ms &pos )
     wmenu.selected = uistate.wishitem_selected;
     wish_item_callback cb( itypes );
     wmenu.callback = &cb;
+    wmenu.title = _( "Wish for an item" );
+    wmenu.menu_style = "info";   // RmlUi: two-column with item detail panel
 
     for( size_t i = 0; i < opts.size(); i++ ) {
         //TODO!: push up

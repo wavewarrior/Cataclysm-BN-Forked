@@ -1,0 +1,77 @@
+/* Layout for the missions screen (Tier 1, first migrated full-screen modal).
+   Palette/border/scrollbar come from theme.rcss (linked first in missions.rml);
+   this file owns only the screen's own layout. Lengths in dp (see theme.rcss). */
+
+/* The context body must have a DEFINITE size or the panel's height:90% resolves
+   against auto height and the whole body below the tabs collapses to zero (the
+   panel shrink-wraps to just the tab bar). Mirrors uilist.rcss. */
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.missions-panel {
+    /* Fill most of the screen; centred by the body flex above. */
+    width: 90%;
+    height: 90%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Tab row across the top. */
+.missions-tabs {
+    display: flex;
+    flex-direction: row;
+    margin-bottom: 8dp;
+}
+.missions-tab {
+    /* Reuse the .item triad (bg / :hover / .selected) for tab states; this owns
+       only layout. .item is declared in theme.rcss. */
+    flex: 1;
+    padding: 4dp 10dp;
+    margin-right: 6dp;
+    text-align: center;
+}
+.missions-tab.selected {
+    /* .item.selected already paints accent bg + on-accent text. */
+    font-weight: bold;
+}
+
+/* Body splits into the list (left) and the detail pane (right). */
+.missions-body {
+    display: flex;
+    flex-direction: row;
+    flex: 1;
+    min-height: 0;       /* allow the list to scroll instead of growing */
+}
+/* max-height is the ACTUAL scroll bound: RmlUi 6.2 won't constrain a flex child's
+   height by its parent alone (see uilist.rcss), so an explicit vh cap is required
+   or the overflow region collapses to height 0 and the rows are clipped invisible. */
+.missions-list {
+    width: 34%;
+    max-height: 80vh;
+    overflow-y: auto;
+    border-right: 1dp #5a5a78ff;   /* divider, replaces the LINE_XOXO column */
+    padding-right: 6dp;
+}
+.missions-detail {
+    flex: 1;
+    max-height: 80vh;
+    padding-left: 12dp;
+    overflow-y: auto;
+}
+
+/* A selectable mission row — layout only; .item owns the state colours. */
+.missions-row {
+    padding: 2dp 6dp;
+    margin-bottom: 2dp;
+}
+
+/* "You have no … missions!" placeholder. */
+.missions-empty {
+    color: #ff6b6bff;   /* c_light_red-ish */
+    padding: 6dp;
+}

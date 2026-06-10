@@ -73,8 +73,6 @@ struct rmlui_render_interface::impl {
     bool scissor_enabled = false;
     Rml::Rectanglei scissor{};
 
-    std::uint64_t self_test = 0;  // self-test quad handle (0 = not yet compiled)
-
     std::uint32_t compiles_in_pass = 0;
     std::uint32_t textures_in_pass = 0;
 
@@ -328,23 +326,6 @@ void rmlui_render_interface::begin_frame()
 
 void rmlui_render_interface::upload_pending( SDL_GPUCommandBuffer *cb )
 {
-    // Lazily compile the self-test quad so it rides this frame's upload.
-    if( p->self_test == 0 ) {
-        const Rml::ColourbPremultiplied magenta( 255, 0, 255, 255 );
-        Rml::Vertex verts[4];
-        verts[0].position = Rml::Vector2f( 80.f, 80.f );
-        verts[1].position = Rml::Vector2f( 360.f, 80.f );
-        verts[2].position = Rml::Vector2f( 360.f, 260.f );
-        verts[3].position = Rml::Vector2f( 80.f, 260.f );
-        for( Rml::Vertex &vx : verts ) {
-            vx.colour = magenta;
-            vx.tex_coord = Rml::Vector2f( 0.f, 0.f );
-        }
-        const int indices[6] = { 0, 1, 2, 0, 2, 3 };
-        p->self_test = CompileGeometry( Rml::Span<const Rml::Vertex>( verts, 4 ),
-                                        Rml::Span<const int>( indices, 6 ) );
-    }
-
     if( p->pending.empty() || !cb ) {
         return;
     }
@@ -435,13 +416,6 @@ void rmlui_render_interface::end_render_pass()
 {
     p->rp = nullptr;
     p->cb = nullptr;
-}
-
-void rmlui_render_interface::draw_self_test()
-{
-    if( p->self_test != 0 ) {
-        RenderGeometry( p->self_test, Rml::Vector2f( 0.f, 0.f ), 0 );
-    }
 }
 
 std::uint32_t rmlui_render_interface::compiles_in_pass() const noexcept

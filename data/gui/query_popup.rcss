@@ -1,0 +1,36 @@
+/* query_popup dialog layout (RmlUi migration, Phase 3). */
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.query-popup-panel {
+    min-width: 220dp;
+    max-width: 75%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* text-primary (#cfcfe0ff) inherits from body — see theme.rcss palette. */
+.query-popup-message {
+    margin-bottom: 10dp;
+}
+
+.query-popup-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8dp;
+    margin-top: 4dp;
+}
+
+/* Layout only — background/hover/selected come from the shared .item class
+   (theme.rcss); buttons carry both classes ("item query-popup-button"). */
+.query-popup-button {
+    padding: 4dp 10dp;
+    cursor: pointer;
+}

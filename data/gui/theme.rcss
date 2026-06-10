@@ -1,0 +1,76 @@
+/* Shared RmlUi theme for player-facing menus (RmlUi migration, Phase 1).
+   Base look + font, imported by each menu's own .rcss.
+
+   ── PALETTE (single source of truth) ──────────────────────────────────────
+   RCSS in RmlUi 6.2 has NO var()/custom properties (only @keyframes, @decorator,
+   @spritesheet, @media), so these values cannot be deduplicated into tokens —
+   they must be repeated literally wherever used. This block is the canonical
+   reference: when a menu's .rcss needs one of these roles, copy the hex from
+   here, and when a colour changes, change every copy to match this table.
+
+     role               hex          used for
+     ----------------   ----------   --------------------------------------
+     panel-bg           #1e1e28f2    .panel background
+     border / divider   #5a5a78ff    panel border, separators, scrollbar
+     scrollbar-hover    #7a7a98ff    scrollbar sliderbar :hover
+     text-primary       #cfcfe0ff    body text (cascades — don't re-declare)
+     text-muted         #9a9ab0ff    secondary columns, filter line
+     text-disabled      #6a6a7aff    disabled rows
+     text-bright        #ffffffff    hovered item text
+     accent             #ffcc66ff    titles, hotkeys, selected-item background
+     on-accent          #1e1e28ff    text on an accent background
+     item-bg            #2a2a3aff    selectable row / button background
+     item-hover-bg      #3a3a55ff    selectable row / button :hover background
+
+   The item-bg/hover/accent "selectable item" triad is shared by uilist rows
+   and query_popup buttons via the .item class below — change those states
+   there, not per-component. */
+
+/* Lengths are in `dp` (density-independent px), not `px`: the RmlUi context is
+   sized in physical pixels, so dp + the context density ratio (set in
+   rmlui_layer::new_frame) keeps fonts/spacing the intended size on HiDPI. */
+body {
+    font-family: "Terminus (TTF)";
+    font-size: 18dp;
+    color: #cfcfe0ff;
+}
+
+/* Dark rounded panel shared by all menus. */
+.panel {
+    background-color: #1e1e28f2;
+    border: 2dp #5a5a78ff;
+    border-radius: 8dp;
+    padding: 12dp;
+}
+
+/* Selectable item — shared by uilist rows and query_popup buttons. The
+   component keeps its own layout (padding/flex/margin); this owns the palette
+   and the interactive states. :hover is declared before .selected so keyboard
+   selection wins when a selected item is also hovered (equal specificity →
+   source order). Base text colour inherits text-primary from body. */
+.item {
+    background-color: #2a2a3aff;
+    border-radius: 4dp;
+}
+.item:hover {
+    background-color: #3a3a55ff;
+    color: #ffffffff;
+}
+.item.selected {
+    background-color: #ffcc66ff;
+    color: #1e1e28ff;
+}
+
+/* Scrollbars for any overflowing list. */
+scrollbarvertical {
+    width: 10dp;
+    margin-left: 4dp;
+}
+scrollbarvertical sliderbar {
+    background-color: #5a5a78ff;
+    border-radius: 4dp;
+    min-height: 24dp;
+}
+scrollbarvertical sliderbar:hover {
+    background-color: #7a7a98ff;
+}

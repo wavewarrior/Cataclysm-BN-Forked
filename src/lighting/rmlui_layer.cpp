@@ -1,8 +1,10 @@
 #include "rmlui_layer.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include <SDL3/SDL.h>
 
@@ -24,17 +26,10 @@ namespace
 {
 
 bool g_ready = false;
-// Phase 4: the spike menu is a player UI — hidden by default, toggled with F10.
-bool g_visible = false;
 // init() tried once (success or failure); don't re-attempt every frame.
 bool g_attempted = false;
-// Phase 2 self-test quad path. Off now that a real document is loaded; flip true
-// to isolate the pipeline from RmlUi layout/font if a document misbehaves.
-bool g_self_test = false;
 // Window kept for per-frame context sizing + the render-pass projection.
 SDL_Window *g_window = nullptr;
-// Loaded spike document (owned by the RmlUi context; not deleted manually).
-Rml::ElementDocument *g_document = nullptr;
 
 // Interfaces are held by raw pointer inside RmlUi, so they must outlive
 // Rml::Shutdown(). Owned here; destroyed AFTER Rml::Shutdown() in shutdown().
@@ -43,6 +38,19 @@ std::unique_ptr<lighting::rmlui_system_interface> g_system;
 
 // Owned by RmlUi core; destroyed by Rml::Shutdown(). Not deleted manually.
 Rml::Context *g_context = nullptr;
+
+// Last physical/logical pixel ratio applied to the context (HiDPI density).
+float g_density_ratio = 1.0f;
+
+// Documents currently open (shown) via open_document(), in open order. The
+// layer is "active" while this is non-empty. Documents are owned by g_context;
+// this only tracks which are live so active()/the frame gates can see them.
+std::vector<Rml::ElementDocument *> g_open_docs;
+
+bool any_open()
+{
+    return !g_open_docs.empty();
+}
 
 }  // namespace
 
@@ -104,20 +112,6 @@ bool init( lighting::gpu_device &dev )
         dbg( DL::Warn ) << "rmlui_layer: LoadFontFace failed for " << font;
     }
 
-    // Phase 4: load + show the styled spike menu. Non-fatal if missing (the
-    // self-test path remains available by flipping g_self_test).
-    const std::string doc = PATH_INFO::datadir() + "gui/spike_menu.rml";
-    g_document = g_context->LoadDocument( doc );
-    if( g_document != nullptr ) {
-        g_document->Show();
-        if( Rml::Element *first = g_document->GetElementById( "first" ) ) {
-            first->Focus();  // so arrow-key (nav:auto) navigation has a start point
-        }
-        dbg( DL::Info ) << "rmlui_layer: loaded document " << doc;
-    } else {
-        dbg( DL::Warn ) << "rmlui_layer: LoadDocument failed for " << doc;
-    }
-
     g_ready = true;
     dbg( DL::Info ) << "rmlui_layer: init ok (" << win_w << "x" << win_h << ")";
     return true;
@@ -133,7 +127,7 @@ void shutdown()
     if( g_ready ) {
         Rml::Shutdown();
     }
-    g_document = nullptr;
+    g_open_docs.clear();
     g_context = nullptr;
     if( g_render ) {
         g_render->shutdown();
@@ -150,45 +144,54 @@ bool ready()
     return g_ready;
 }
 
-bool &visible()
-{
-    return g_visible;
-}
-
 bool active()
 {
-    return g_ready && g_visible;
+    return g_ready && any_open();
+}
+
+Rml::Context *context()
+{
+    return g_ready ? g_context : nullptr;
+}
+
+float density_ratio()
+{
+    return g_density_ratio;
+}
+
+Rml::ElementDocument *open_document( const std::string &rml_path )
+{
+    if( !g_ready || g_context == nullptr ) {
+        return nullptr;
+    }
+    Rml::ElementDocument *doc = g_context->LoadDocument( rml_path );
+    if( doc == nullptr ) {
+        dbg( DL::Warn ) << "rmlui_layer: LoadDocument failed for " << rml_path;
+        return nullptr;
+    }
+    doc->Show();
+    g_open_docs.push_back( doc );
+    dbg( DL::Info ) << "rmlui_layer: opened document " << rml_path
+                    << " (" << g_open_docs.size() << " open)";
+    return doc;
+}
+
+void close_document( Rml::ElementDocument *doc )
+{
+    if( doc == nullptr || g_context == nullptr ) {
+        return;
+    }
+    const auto it = std::find( g_open_docs.begin(), g_open_docs.end(), doc );
+    if( it == g_open_docs.end() ) {
+        return;  // already closed / not ours
+    }
+    g_open_docs.erase( it );
+    doc->Hide();
+    g_context->UnloadDocument( doc );
 }
 
 namespace
 {
-Rml::Input::KeyIdentifier map_key( SDL_Keycode k )
-{
-    switch( k ) {
-        case SDLK_UP:
-            return Rml::Input::KI_UP;
-        case SDLK_DOWN:
-            return Rml::Input::KI_DOWN;
-        case SDLK_LEFT:
-            return Rml::Input::KI_LEFT;
-        case SDLK_RIGHT:
-            return Rml::Input::KI_RIGHT;
-        case SDLK_RETURN:
-        case SDLK_KP_ENTER:
-            return Rml::Input::KI_RETURN;
-        case SDLK_ESCAPE:
-            return Rml::Input::KI_ESCAPE;
-        case SDLK_TAB:
-            return Rml::Input::KI_TAB;
-        case SDLK_BACKSPACE:
-            return Rml::Input::KI_BACK;
-        case SDLK_SPACE:
-            return Rml::Input::KI_SPACE;
-        default:
-            return Rml::Input::KI_UNKNOWN;
-    }
-}
-
 int mod_state()
 {
     const SDL_Keymod m = SDL_GetModState();
@@ -211,9 +214,11 @@ int mod_state()
 
 bool process_event( const SDL_Event &ev )
 {
-    if( !g_ready || !g_visible || g_context == nullptr ) {
+    if( !g_ready || !any_open() || g_context == nullptr ) {
         return false;
     }
+    // Mouse only: keyboard belongs to the game's input_context, which drives
+    // menu navigation. We forward mouse so :hover and row click events work.
     // Context is sized in physical pixels; SDL mouse coords are in window points.
     float sx = 1.f;
     float sy = 1.f;
@@ -253,24 +258,8 @@ bool process_event( const SDL_Event &ev )
             // SDL: +y scrolls up; RmlUi: +delta scrolls down.
             g_context->ProcessMouseWheel( -ev.wheel.y, mods );
             return true;
-        case SDL_EVENT_KEY_DOWN: {
-            const Rml::Input::KeyIdentifier k = map_key( ev.key.key );
-            if( k != Rml::Input::KI_UNKNOWN ) {
-                g_context->ProcessKeyDown( k, mods );
-            }
-            return true;
-        }
-        case SDL_EVENT_KEY_UP: {
-            const Rml::Input::KeyIdentifier k = map_key( ev.key.key );
-            if( k != Rml::Input::KI_UNKNOWN ) {
-                g_context->ProcessKeyUp( k, mods );
-            }
-            return true;
-        }
-        case SDL_EVENT_TEXT_INPUT:
-            g_context->ProcessTextInput( Rml::String( ev.text.text ) );
-            return true;
         default:
+            // Keyboard / text / everything else: let the game handle it.
             return false;
     }
 }
@@ -280,14 +269,26 @@ void new_frame()
     if( !g_ready ) {
         return;
     }
-    // Drain deferred GPU-resource frees every frame, even while hidden.
+    // Drain deferred GPU-resource frees every frame, even with nothing open.
     g_render->begin_frame();
-    if( g_visible && g_context != nullptr && g_window != nullptr ) {
+    if( any_open() && g_context != nullptr && g_window != nullptr ) {
         int w = 0;
         int h = 0;
         SDL_GetWindowSizeInPixels( g_window, &w, &h );
         if( w > 0 && h > 0 ) {
             g_context->SetDimensions( Rml::Vector2i( w, h ) );
+            // Context is sized in PHYSICAL pixels so the GPU projection matches
+            // the framebuffer. Set the density ratio = physical / logical so RCSS
+            // `dp` units scale with HiDPI — without this, px-sized fonts render at
+            // half the intended size on a 2x retina display (the "tiny font"). The
+            // mouse sx/sy scaling in process_event handles the inverse for input.
+            int lw = 0;
+            int lh = 0;
+            SDL_GetWindowSize( g_window, &lw, &lh );
+            if( lw > 0 ) {
+                g_density_ratio = static_cast<float>( w ) / static_cast<float>( lw );
+                g_context->SetDensityIndependentPixelRatio( g_density_ratio );
+            }
         }
         g_context->Update();
     }
@@ -295,15 +296,19 @@ void new_frame()
 
 void prepare( SDL_GPUCommandBuffer *cb )
 {
-    if( g_ready && g_visible ) {
-        // Upload geometry compiled this frame OUTSIDE the render pass (D3D12).
+    if( g_ready && any_open() && g_context != nullptr ) {
+        // Pre-render OUTSIDE the render pass so geometry compiles immediately
+        // (not deferred by begin_render_pass). Then upload_pending uploads the
+        // compiled data to GPU buffers. The real render pass's ctx->Render()
+        // reuses the cached handles and successfully renders on this same frame.
+        g_context->Render();
         g_render->upload_pending( cb );
     }
 }
 
 void render_in_pass( SDL_GPURenderPass *rp, SDL_GPUCommandBuffer *cb )
 {
-    if( !g_ready || !g_visible || g_window == nullptr ) {
+    if( !g_ready || !any_open() || g_window == nullptr || g_context == nullptr ) {
         return;
     }
     int w = 0;
@@ -313,17 +318,12 @@ void render_in_pass( SDL_GPURenderPass *rp, SDL_GPUCommandBuffer *cb )
     const auto uh = static_cast<std::uint32_t>( h > 0 ? h : 1 );
     // RmlUi context is sized in physical pixels, so projection == target.
     g_render->begin_render_pass( rp, cb, uw, uh, uw, uh );
-    if( g_self_test ) {
-        g_render->draw_self_test();  // Phase 2: prove the pipeline without a document
-    } else if( g_context != nullptr ) {
-        g_context->Render();
-    }
+    g_context->Render();  // renders all shown documents, z-ordered by open order
     g_render->end_render_pass();
 
-    // Phase-5 D3D12 gate: surface any upload that fired while the pass was open
-    // (the in-pass-upload hazard). Logs only on change. Geometry is deferred so
-    // a non-zero compiles count is safe; a non-zero textures count means a glyph
-    // atlas uploaded mid-pass — the path to watch on D3D12.
+    // D3D12 in-pass-upload watch: a non-zero textures count means a glyph atlas
+    // uploaded mid-pass (the documented hazard). Geometry is deferred so a
+    // non-zero compiles count is safe. Logs only on change.
     static std::uint32_t last_c = 0;
     static std::uint32_t last_t = 0;
     const std::uint32_t c = g_render->compiles_in_pass();

@@ -5,6 +5,8 @@
 
 #include "cata_imgui.h"
 
+#include <RmlUi/Core.h>
+
 #include "advanced_inv.h"
 
 #include <algorithm>
@@ -1614,7 +1616,37 @@ class query_destination_callback : public uilist_callback
                 }
             }
         }
-};
+        void draw_rml( uilist *menu, Rml::ElementDocument *doc ) override {
+            Rml::Element *cb = doc->GetElementById( "callback" );
+            if( !cb ) {
+                return;
+            }
+            int sel = 0;
+            if( menu->selected >= 0 && static_cast<size_t>( menu->selected ) < menu->entries.size() ) {
+                sel = _adv_inv.screen_relative_location(
+                          static_cast<aim_location>( menu->selected + 1 ) );
+            }
+            std::string rml;
+            for( int i = 1; i < 10; i++ ) {
+                aim_location loc = _adv_inv.screen_relative_location( static_cast<aim_location>( i ) );
+                std::string key = _adv_inv.get_location_key( loc );
+                advanced_inv_area &square = _adv_inv.get_one_square( loc );
+                bool in_vehicle = square.can_store_in_vehicle();
+                const char *bracket = in_vehicle ? "<>" : "[]";
+                bool canputitems = menu->entries[i - 1].enabled && square.canputitems();
+                nc_color color = canputitems ? sel == loc ? h_white : c_light_gray : c_dark_gray;
+                rml += colorize( std::string( 1, bracket[0] ), color );
+                rml += colorize( key, color );
+                rml += colorize( std::string( 1, bracket[1] ), color );
+                if( i % 3 == 0 && i < 9 ) {
+                    rml += "\n";
+                } else if( i < 9 ) {
+                    rml += "  ";
+                }
+            }
+            cb->SetInnerRML( cata_text_to_rml( rml ) );
+        }
+    };
 
 void query_destination_callback::draw_squares( const uilist *menu )
 {
@@ -1659,6 +1691,7 @@ bool advanced_inventory::query_destination( aim_location &def )
     menu.pad_left_setup = 9;
     query_destination_callback cb( *this );
     menu.callback = &cb;
+    menu.menu_style = "grid";   // RmlUi: compact side panel for the 3x3 square grid
 
     {
         std::vector <aim_location> ordered_locs;

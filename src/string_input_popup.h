@@ -92,6 +92,14 @@ class string_input_popup // NOLINT(cata-xy)
         bool _confirmed = false;
         bool _handled = false;
 
+        // RmlUi session (opaque — defined in string_input_popup.cpp)
+        struct rml_session_t;
+        rml_session_t *rml_session = nullptr;
+
+        bool rml_open();
+        void rml_sync();
+        void rml_close();
+
         void create_window();
         void create_context();
 
