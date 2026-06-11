@@ -31,10 +31,76 @@
 #include "ui_manager.h"
 #include "world.h"
 
+#include <RmlUi/Core.h>
+
+#include "rml_screen.h"
+#include "rml_util.h"
+
 safemode &get_safemode()
 {
     static safemode single_instance;
     return single_instance;
+}
+
+// ── RmlUi render path (full UI→RmlUi migration, Tier 2 screen #3) ─────────────
+// 5th rml_doc consumer. Global/Character tabs (shared theme .tabs/.tab) over a
+// 5-column rules table (#/Rule/Attitude/Dist/B-W/Cat). The cursor is 2D
+// (line + column): the active CELL is highlighted, not the whole row. All editing
+// (add/remove/copy/move/enable/disable/edit-via-popup) stays on input_context —
+// the RmlUi job is rendering the table read-only + the cell highlight; rule text
+// editing uses the already-migrated string_input_popup. Per-cell colour baked via
+// cata_text_to_rml; the active cell is marked by sel_col (== column when the
+// row is the cursor line, else -1) so RCSS can highlight exactly one cell.
+namespace
+{
+struct safemode_rml_row {
+    Rml::String num_rml;
+    Rml::String rule_rml;
+    Rml::String attitude_rml;
+    Rml::String proximity_rml;
+    Rml::String wblist_rml;
+    Rml::String category_rml;
+    bool selected = false;   // this row is the cursor line
+    int sel_col = -1;        // active column on this row (-1 = none)
+};
+struct safemode_rml_session {
+    Rml::Vector<safemode_rml_row> rows;
+    bool global_tab = false;          // tab == GLOBAL_TAB
+    Rml::String global_tab_label_rml;
+    Rml::String character_tab_label_rml;
+    Rml::String status_rml;           // "Safe Mode enabled: True/False" (safemode use only)
+    Rml::String hints_rml;            // hotkey hints
+    bool empty = false;
+    Rml::String empty_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_safemode_types_registered = false;
+
+void register_safemode_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_safemode_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<safemode_rml_row> rh = c.RegisterStruct<safemode_rml_row>();
+    rh.RegisterMember( "num_rml", &safemode_rml_row::num_rml );
+    rh.RegisterMember( "rule_rml", &safemode_rml_row::rule_rml );
+    rh.RegisterMember( "attitude_rml", &safemode_rml_row::attitude_rml );
+    rh.RegisterMember( "proximity_rml", &safemode_rml_row::proximity_rml );
+    rh.RegisterMember( "wblist_rml", &safemode_rml_row::wblist_rml );
+    rh.RegisterMember( "category_rml", &safemode_rml_row::category_rml );
+    rh.RegisterMember( "selected", &safemode_rml_row::selected );
+    rh.RegisterMember( "sel_col", &safemode_rml_row::sel_col );
+    c.RegisterArray<Rml::Vector<safemode_rml_row>>();
+    g_safemode_types_registered = true;
+}
+} // namespace
+
+bool &safemode_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = false;
+    return enabled;
 }
 
 void safemode::show()
@@ -123,7 +189,140 @@ void safemode::show( const std::string &custom_name_in, bool is_safemode_in )
         ctxt.register_action( "SWAP_RULE_GLOBAL_CHAR" );
     }
 
+    // ---- RmlUi render path (F.3 rml_doc harness) ----------------------------
+    // rml_doc owns the open/guard/16ms-tick/close lifecycle; only the model + this
+    // live sync stay here. sync_rml() runs in on_redraw, so the tabs, the table,
+    // the cell highlight, and the status all track the 2D cursor (line/column).
+    // All editing stays in the loop below (keyboard + string_input_popup); the
+    // RmlUi doc is render-only. Model storage declared BEFORE rml so it outlives
+    // the document.
+    std::unique_ptr<safemode_rml_session> data;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml ) {
+            return;
+        }
+        auto &cur = ( tab == GLOBAL_TAB ) ? global_rules : character_rules;
+
+        data->global_tab = ( tab == GLOBAL_TAB );
+        data->global_tab_label_rml = cata_text_to_rml( _( "Global" ) );
+        data->character_tab_label_rml = cata_text_to_rml( _( "Character" ) );
+
+        // Hotkey hints (shortcut_text colourises the bracketed letter, matching
+        // the legacy shortcut_print header).
+        std::string hints;
+        for( const std::string &hk : {
+                 translate_marker( "<A>dd" ), translate_marker( "<R>emove" ), translate_marker( "<C>opy" ),
+                 translate_marker( "<M>ove" ), translate_marker( "<E>nable" ), translate_marker( "<D>isable" ),
+                 translate_marker( "<T>est" )
+             } ) {
+            hints += shortcut_text( c_light_green, _( hk ) ) + "  ";
+        }
+        hints += shortcut_text( c_light_green, _( "<+-> Move up/down" ) ) + "  ";
+        hints += shortcut_text( c_light_green, _( "<Enter>-Edit" ) ) + "  ";
+        hints += shortcut_text( c_light_green, _( "<Tab>-Switch Page" ) );
+        data->hints_rml = cata_text_to_rml( hints );
+
+        if( is_safemode_in ) {
+            const bool on = get_option<bool>( "SAFEMODE" );
+            data->status_rml = cata_text_to_rml( string_format( _( "Safe Mode enabled: %s  %s" ),
+                                                 colorize( on ? _( "True" ) : _( "False" ), on ? c_light_green : c_light_red ),
+                                                 shortcut_text( c_light_green, _( "<S>witch" ) ) ) );
+        } else {
+            data->status_rml.clear();
+        }
+
+        const bool char_no_name = ( tab == CHARACTER_TAB && g->u.name.empty() );
+        data->empty = char_no_name || cur.empty();
+        if( char_no_name ) {
+            data->empty_rml = cata_text_to_rml(
+                                  _( "Please load a character first to use this page!" ) );
+        } else if( cur.empty() ) {
+            data->empty_rml = cata_text_to_rml( string_format( "%s\n%s\n%s",
+                                                _( "Safe Mode manager currently inactive." ),
+                                                _( "Default rules are used.  Add a rule to activate." ),
+                                                _( "Press ~ to add a default ruleset to get started." ) ) );
+        }
+
+        data->rows.clear();
+        for( int i = 0; i < static_cast<int>( cur.size() ); ++i ) {
+            const auto &rule = cur[i];
+            const nc_color col = rule.active ? c_white : c_light_gray;
+            safemode_rml_row r;
+            r.num_rml = cata_text_to_rml( colorize( string_format( "%d", i + 1 ), col ) );
+            r.rule_rml = cata_text_to_rml( colorize(
+                                               rule.rule.empty() ? _( "<empty rule>" ) : rule.rule, col ) );
+            r.attitude_rml = cata_text_to_rml( colorize(
+                                                   rule.category == Categories::HOSTILE_SPOTTED
+                                                   ? Creature::get_attitude_ui_data( rule.attitude ).first.translated() : "---", col ) );
+            r.proximity_rml = cata_text_to_rml( colorize(
+                                                    ( rule.category == Categories::SOUND || !rule.whitelist )
+                                                    ? std::to_string( rule.proximity ) : "---", col ) );
+            r.wblist_rml = cata_text_to_rml( colorize(
+                                                 rule.whitelist ? _( "Whitelist" ) : _( "Blacklist" ), col ) );
+            r.category_rml = cata_text_to_rml( colorize(
+                                                   rule.category == Categories::SOUND ? _( "Sound" ) : _( "Hostile" ), col ) );
+            r.selected = ( line == i );
+            r.sel_col = ( line == i ) ? column : -1;
+            data->rows.push_back( r );
+        }
+
+        data->handle.DirtyVariable( "rows" );
+        data->handle.DirtyVariable( "global_tab" );
+        data->handle.DirtyVariable( "global_tab_label_rml" );
+        data->handle.DirtyVariable( "character_tab_label_rml" );
+        data->handle.DirtyVariable( "status_rml" );
+        data->handle.DirtyVariable( "hints_rml" );
+        data->handle.DirtyVariable( "empty" );
+        data->handle.DirtyVariable( "empty_rml" );
+    };
+
+    rml.open( safemode_rmlui_enabled(), "safemode", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        data = std::make_unique<safemode_rml_session>();
+        register_safemode_rml_types( c );
+        c.Bind( "rows", &data->rows );
+        c.Bind( "global_tab", &data->global_tab );
+        c.Bind( "global_tab_label_rml", &data->global_tab_label_rml );
+        c.Bind( "character_tab_label_rml", &data->character_tab_label_rml );
+        c.Bind( "status_rml", &data->status_rml );
+        c.Bind( "hints_rml", &data->hints_rml );
+        c.Bind( "empty", &data->empty );
+        c.Bind( "empty_rml", &data->empty_rml );
+        // Click a tab to switch it (resets the cursor line); click/hover a row to
+        // select it. Column navigation + all editing stay on the keyboard.
+        c.BindEventCallback( "on_tab",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            const int want = ( idx == 0 ) ? GLOBAL_TAB : CHARACTER_TAB;
+            if( want != tab ) {
+                tab = want;
+                line = 0;
+            }
+        } );
+        c.BindEventCallback( "on_select",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            auto &curl = ( tab == GLOBAL_TAB ) ? global_rules : character_rules;
+            if( idx >= 0 && idx < static_cast<int>( curl.size() ) ) {
+                line = idx;
+            }
+        } );
+        data->handle = c.GetModelHandle();
+    } );
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        // RmlUi path owns the screen — sync the model and skip curses drawing.
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         draw_border( w_border, BORDER_COLOR, custom_name_in );
 
         mvwputch( w_border, point( 0, 3 ), c_light_gray, LINE_XXXO ); // |-
@@ -463,6 +662,11 @@ void safemode::show( const std::string &custom_name_in, bool is_safemode_in )
             get_options().save();
         }
     }
+
+    // Tear down the RmlUi document while the bound `data` is still alive. close()
+    // is idempotent and a no-op when the curses path ran; safe before the early
+    // no-changes return below.
+    rml.close();
 
     if( !changes_made ) {
         return;

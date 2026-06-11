@@ -108,4 +108,7 @@ bool &mutations_rmlui_enabled();
 // show_bionics_ui() RmlUi render path (Tier 2 #2: tabs + list + examine pane).
 bool &bionics_rmlui_enabled();
 
+// safemode::show() RmlUi render path (Tier 2 #3: tabs + 5-column rules table).
+bool &safemode_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

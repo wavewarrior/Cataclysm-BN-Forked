@@ -96,6 +96,7 @@ void draw()
     ImGui::Checkbox( "diary via RmlUi", &diary_rmlui_enabled() );
     ImGui::Checkbox( "mutations via RmlUi", &mutations_rmlui_enabled() );
     ImGui::Checkbox( "bionics via RmlUi", &bionics_rmlui_enabled() );
+    ImGui::Checkbox( "safemode via RmlUi", &safemode_rmlui_enabled() );
 
     static const char *mode_names[] = {
         "off", "ambient", "emitter", "sun", "sky", "total", "SDF", "sky_vis", "emit_bw",

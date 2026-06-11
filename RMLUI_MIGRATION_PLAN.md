@@ -268,6 +268,35 @@
   hover/click selects; empty tab shows the right "No … installed" message.
   **WATCH:** long bionic list → no auto-scroll-into-view (same as mutations; remedy
   = the staged ScrollIntoView one-liner if cursor-lost).
+
+- **Tier 2 screen #3: safemode (safemode::show) — CODE-COMPLETE + BUILD-GREEN
+  (safemode_ui.cpp + devui compile clean), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.**
+  5th `rml_doc` consumer; 2nd `.tabs`/`.tab` user. HARDEST Tier-2 so far: a
+  5-column rules table (#/Rule/Attitude/Dist/B-W/Cat) with Global/Character tabs
+  and a **2D cursor (line + column)** — the active CELL is highlighted, not the
+  whole row. `data/gui/safemode.{rml,rcss}` + safemode_ui.cpp RmlUi path. KEY
+  POINT: **all editing stays keyboard + the migrated string_input_popup** — the
+  RmlUi doc is RENDER-ONLY (table + cell highlight + status); add/remove/copy/
+  move/enable/disable/edit/test/switch-option are untouched in the loop. Per-cell
+  colour baked via cata_text_to_rml (rule.active → white/grey); the active cell is
+  marked by `row.sel_col` (== column on the cursor line, else -1). Hotkey hints
+  reuse `shortcut_text` (same as help). Column headers are literal English (same
+  i18n gap as auto_note — §8/F.1 sweep). F4 toggle "safemode via RmlUi" (OFF).
+  **EYEBALL CHECK (user, A/B via F4):** Global/Character tabs switch the table
+  (bold-marks active tab); rows show #/rule/attitude/dist/B-W/category with
+  inactive rules greyed; **the single active CELL highlights and moves with
+  LEFT/RIGHT/UP/DOWN** (this is the make-or-break check); Add/Remove/Copy/Move/
+  Enable/Disable/Test + Enter-edit (string_input_popup) all still work and the
+  table updates; "Safe Mode enabled: True/False" + <S>witch reflect the option;
+  empty/char-no-name states show the right message; mouse hover/click selects a row.
+  **RISK (advisor-class, the one novel bit): the per-cell highlight uses an RmlUi
+  data-binding comparison `row.sel_col == N` in `data-class`.** If RmlUi 6.2
+  doesn't evaluate `== <int>` in a data-class expression, NO cell will highlight
+  (rows still render fine). FALLBACK if so: give each row 5 explicit bools
+  (cell0_sel..cell4_sel) instead of the int compare. Flag on eyeball if the cell
+  highlight is missing/stuck.
+  **(Tier-2 #4 auto_pickup is the near-free twin once this is confirmed — same
+  tabbed rules-table shape.)**
   - **THE DECIDING FACT (rip-out reality, was missing):** the payoff is §8 Tier-10
     rip-out (delete curses + ImGui), which is ALL-OR-NOTHING — it needs EVERY
     screen migrated. So deferring/skipping the giants means the rip-out never
