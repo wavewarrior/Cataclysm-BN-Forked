@@ -693,7 +693,6 @@ struct craft_rml_session {
     Rml::String keybinds_rml;           // footer key tips
     bool wide = false;                  // isWide → show right pane
     bool show_subcats = true;           // NORMAL mode → show subcat row
-    bool empty = false;                 // no recipes in this list
     Rml::DataModelHandle handle;
 };
 
@@ -1041,7 +1040,6 @@ const recipe *select_crafting_recipe( int &batch_size_out, Character &crafter )
             r.selected = ( static_cast<int>( i ) == line );
             data->rows.push_back( r );
         }
-        data->empty = current.empty();
 
         // info panes + can-craft status
         data->info.clear();
@@ -1160,7 +1158,6 @@ const recipe *select_crafting_recipe( int &batch_size_out, Character &crafter )
         data->handle.DirtyVariable( "keybinds_rml" );
         data->handle.DirtyVariable( "wide" );
         data->handle.DirtyVariable( "show_subcats" );
-        data->handle.DirtyVariable( "empty" );
     };
 
     rml.open( crafting_rmlui_enabled(), "crafting", ctxt,
@@ -1177,7 +1174,6 @@ const recipe *select_crafting_recipe( int &batch_size_out, Character &crafter )
         c.Bind( "keybinds_rml", &data->keybinds_rml );
         c.Bind( "wide", &data->wide );
         c.Bind( "show_subcats", &data->show_subcats );
-        c.Bind( "empty", &data->empty );
         // Click a category/subcategory tab → switch (recalc; resets subtab on cat
         // change, mirroring PREV_TAB/NEXT_TAB). Click/hover a row → select it.
         c.BindEventCallback( "on_cat",

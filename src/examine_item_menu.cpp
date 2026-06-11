@@ -350,7 +350,9 @@ bool run(
         if( !rml_sess ) {
             return;
         }
-        rml_sess->title_rml = cata_text_to_rml( colorize( itm.tname(), c_white ) );
+        // Only the action cursor changes per frame; title + item-info are fixed
+        // for the screen's lifetime (the examined item never changes) and are
+        // built once in open() below, not rebuilt here every frame.
         rml_sess->actions.clear();
         for( int i = 0; i < num_actions; i++ ) {
             const uilist_entry &e = action_list.entries[i];
@@ -361,15 +363,7 @@ bool run(
             a.selected = ( i == selected_action );
             rml_sess->actions.push_back( a );
         }
-        rml_sess->info.clear();
-        for( const std::string &l : item_info_rml_lines( data ) ) {
-            ei_line ln;
-            ln.text_rml = l;   // item_info_rml_lines already returns RML markup
-            rml_sess->info.push_back( ln );
-        }
-        rml_sess->handle.DirtyVariable( "title_rml" );
         rml_sess->handle.DirtyVariable( "actions" );
-        rml_sess->handle.DirtyVariable( "info" );
     };
 
     rml.open( examine_item_rmlui_enabled(), "examineitem", ctxt,
@@ -379,6 +373,15 @@ bool run(
         c.Bind( "title_rml", &rml_sess->title_rml );
         c.Bind( "actions", &rml_sess->actions );
         c.Bind( "info", &rml_sess->info );
+        // Title + item-info are invariant for the screen's lifetime — build once
+        // here (not every frame in sync_rml). item_info_rml_lines already returns
+        // RML markup per line.
+        rml_sess->title_rml = cata_text_to_rml( colorize( itm.tname(), c_white ) );
+        for( const std::string &l : item_info_rml_lines( data ) ) {
+            ei_line ln;
+            ln.text_rml = l;
+            rml_sess->info.push_back( ln );
+        }
         // Mouse selects an action (keyboard CONFIRM/hotkey runs it).
         c.BindEventCallback( "on_action",
         [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
@@ -404,6 +407,16 @@ bool run(
         action_list.show( ui );
     } );
 
+    // Scroll the RmlUi item-info pane by ~one page (dir: -1 up, +1 down).
+    const auto scroll_info = [&]( int dir ) {
+        if( !rml ) {
+            return;
+        }
+        if( Rml::Element *el = rml.document()->GetElementById( "examine-info" ) ) {
+            el->SetScrollTop( el->GetScrollTop() + dir * el->GetClientHeight() * 0.85f );
+        }
+    };
+
     bool exit = false;
     bool ret_val = true;
     while( !exit ) {
@@ -421,18 +434,10 @@ bool run(
             exit = true;
         } else if( action == "PAGE_UP" ) {
             info_area_scroll_pos -= info_area_scroll_step;
-            if( rml ) {
-                if( Rml::Element *el = rml.document()->GetElementById( "examine-info" ) ) {
-                    el->SetScrollTop( el->GetScrollTop() - el->GetClientHeight() * 0.85f );
-                }
-            }
+            scroll_info( -1 );
         } else if( action == "PAGE_DOWN" ) {
             info_area_scroll_pos += info_area_scroll_step;
-            if( rml ) {
-                if( Rml::Element *el = rml.document()->GetElementById( "examine-info" ) ) {
-                    el->SetScrollTop( el->GetScrollTop() + el->GetClientHeight() * 0.85f );
-                }
-            }
+            scroll_info( 1 );
         } else if( action == "SCROLL_UP" || action == "UP" ) {
             selected_action = ( selected_action - 1 + num_actions ) % num_actions;
             action_list.set_selected( selected_action );

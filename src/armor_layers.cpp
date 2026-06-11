@@ -754,27 +754,28 @@ void show_armor_layers_ui( Character &who )
             data->protect_rml = cata_text_to_rml( p );
         }
 
+        // Append one colour-tagged line to a pane vector.
+        const auto push_line = [&]( Rml::Vector<al_line> &v, const std::string &s ) {
+            al_line ln;
+            ln.text_rml = cata_text_to_rml( s );
+            v.push_back( ln );
+        };
+
         // MIDDLE item detail (mid_pane_lines) or the empty hint
         data->mid.clear();
         if( leftListSize > 0 ) {
             for( const std::string &l : mid_pane_lines( access_tmp_worn( leftListIndex ), who, bp ) ) {
-                al_line ln;
-                ln.text_rml = cata_text_to_rml( l );
-                data->mid.push_back( ln );
+                push_line( data->mid, l );
             }
         } else {
-            al_line ln;
-            ln.text_rml = cata_text_to_rml( _( "Nothing to see here!" ) );
-            data->mid.push_back( ln );
+            push_line( data->mid, _( "Nothing to see here!" ) );
         }
 
         // Encumbrance + warmth table (shared builder)
         data->encumb.clear();
         const item *sel_clothing = leftListSize > 0 ? *access_tmp_worn( leftListIndex ) : nullptr;
         for( const std::string &l : character_display::encumbrance_lines( who, sel_clothing ) ) {
-            al_line ln;
-            ln.text_rml = cata_text_to_rml( l );
-            data->encumb.push_back( ln );
+            push_line( data->encumb, l );
         }
 
         // RIGHT per-bodypart layering (combine logic mirrors the curses path)
@@ -796,18 +797,14 @@ void show_armor_layers_ui( Character &who )
             }
             const bool is_highlighted = cover == bp || ( combine_bp( cover ) &&
                                         static_cast<bodypart_id>( cover.obj().opposite_part ) == bp );
-            al_line head;
-            head.text_rml = cata_text_to_rml( colorize( string_format( "%s:",
-                            body_part_name_as_heading( cover, combine_bp( cover ) ? 2 : 1 ) ),
-                            is_highlighted ? c_yellow : c_white ) );
-            data->right.push_back( head );
+            push_line( data->right, colorize( string_format( "%s:",
+                                              body_part_name_as_heading( cover, combine_bp( cover ) ? 2 : 1 ) ),
+                                              is_highlighted ? c_yellow : c_white ) );
             for( layering_item_info &elem : items_cover_bp( who, cover ) ) {
                 const char plus = elem.penalties.badness() > 0 ? '+' : ' ';
-                al_line ln;
-                ln.text_rml = cata_text_to_rml( "  " +
-                              colorize( elem.name, elem.penalties.color_for_stacking_badness() ) +
-                              "  " + colorize( string_format( "%3d%c", elem.encumber, plus ), c_light_gray ) );
-                data->right.push_back( ln );
+                push_line( data->right, "  " +
+                           colorize( elem.name, elem.penalties.color_for_stacking_badness() ) +
+                           "  " + colorize( string_format( "%3d%c", elem.encumber, plus ), c_light_gray ) );
             }
         }
 
