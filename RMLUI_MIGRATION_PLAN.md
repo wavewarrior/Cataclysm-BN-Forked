@@ -373,9 +373,10 @@
   buffer is folded to the old curses width (cosmetic; lines may not fill the RmlUi
   pane width — left as-is per advisor).
 
-- **Tier 2 screen #7: crafting (select_crafting_recipe) — CODE-COMPLETE +
-  BUILD-GREEN (crafting_gui.cpp + devui compile + LINK clean), TOGGLE OFF, EYEBALL
-  OWED, UNCOMMITTED.** 9th `rml_doc` consumer; PEER of construction (the cadence
+- **Tier 2 screen #7: crafting (select_crafting_recipe) — DONE + EYEBALLED CLEAN
+  ("all works", user 2026-06-11), COMMITTED `8f7ca0d0e6`. TOGGLE OFF** (matches all
+  prior Tier-2 — mass flip-ON deferred to §8; toggle is the A/B control).** 9th
+  `rml_doc` consumer; PEER of construction (the cadence
   note's "tabs+list+lines", budgeted as its own ~2000-line screen). HEAVIEST Tier-2
   yet — diverges from the construction template in 4 ways (all advisor-flagged
   pre-write): (1) **TWO tab rows** (category + subcategory), both string
