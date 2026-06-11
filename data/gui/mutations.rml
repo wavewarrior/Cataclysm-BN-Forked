@@ -1,0 +1,50 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="mutations.rcss"/>
+</head>
+<body data-model="mutations">
+    <!-- Tier 2 screen #1 (show_mutations_ui). Two-column grid: passive mutations
+         (left) and active mutations (right), each "<key> <name>" with the legacy
+         per-state colour baked into the bound string. A single cursor moves
+         within the FOCUSED column (NEXT_TAB switches focus); the selected-row
+         highlight shows ONLY in the focused column (cf. diary's active pane). The
+         titlebar shows the current mode (Activating / Examining / Reassigning /
+         Hiding) + keybinding hints; the examine pane at the bottom appears only in
+         examine mode. Modes + activation + reassign stay on input_context
+         (keyboard); RmlUi renders + handles mouse only. -->
+    <div class="panel mut-panel">
+        <div class="mut-title" data-rml="title_rml"></div>
+
+        <div class="mut-main">
+            <div class="mut-col">
+                <div class="mut-colhead" data-rml="passive_head_rml"></div>
+                <div class="mut-pane scroll-pane" data-class-active="passive_focus">
+                    <div class="mut-none" data-if="passive_empty" data-rml="none_rml"></div>
+                    <div class="mut-line" data-for="row : passive"
+                         data-class-selected="row.selected"
+                         data-event-mouseover="on_passive(it_index)"
+                         data-event-click="on_passive(it_index)">
+                        <span data-rml="row.text_rml"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mut-col">
+                <div class="mut-colhead" data-rml="active_head_rml"></div>
+                <div class="mut-pane scroll-pane" data-class-active="active_focus">
+                    <div class="mut-none" data-if="active_empty" data-rml="none_rml"></div>
+                    <div class="mut-line" data-for="row : active"
+                         data-class-selected="row.selected"
+                         data-event-mouseover="on_active(it_index)"
+                         data-event-click="on_active(it_index)">
+                        <span data-rml="row.text_rml"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mut-examine" data-if="examining" data-rml="examine_rml"></div>
+    </div>
+</body>
+</rml>

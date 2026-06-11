@@ -129,17 +129,134 @@
   over the still-rendered RmlUi diary doc — editor composites on top; usable but the
   diary text shows behind it. Acceptable per per-screen migration (nested editor is
   its own screen); flag if it reads badly.
-- **NEXT:** finish the 2 remaining Tier 1 screens THEN hit the ★ RE-SCOPE GATE.
-  Remaining: loading_ui / mod_manager_ui. **ADVISOR NOTE (cost-sample de-bias):**
-  the harness-amortized per-screen cost measured so far (~220–340 insertions) is
-  100% harness-CONFORMING screens; the gate's job is to estimate the
-  NON-conforming 130–180K giants, so that sample is optimism-biased.
-  **mod_manager_ui is the cheapest non-conforming proxy** (grep: no in-file
-  on_redraw / while / ui_adaptor) → do it (or at least scope WHY it has no
-  on_redraw + record its cost separately) BEFORE sitting at the gate. Stale-caveat
-  corrections: diary HAD 4 on_redraws (done, above); **loading_ui uses a uilist-style
-  menu (`menu->show(ui)`) + a `while` loop — likely near-free** (already routes
-  through migrated Tier-0 uilist), check before budgeting it as a full screen.
+  - **REGRESSION FOUND + FIXED (2026-06-11, uncommitted):** the prior "eyeballed
+    clean" was editor-focused and MISSED that the pages/changes/text lists were
+    flowing HORIZONTALLY — same `display: inline` default bug as mutations (the
+    `.diary-line` rows had no `display`, and `.diary-pane` is a `.scroll-pane` block
+    container). Fixed `.diary-line { display: block }`. **DIARY NEEDS RE-EYEBALL**
+    (the three panes should now be vertical lists); the committed diary screen is
+    one rcss line behind — commit this fix once confirmed.
+- **Tier 1 screen: loading_ui — NO BESPOKE MIGRATION NEEDED (covered by Tier 0).**
+  Investigated: `loading_ui::menu` IS a `uilist` (loading_ui.cpp:476); its sole
+  on_redraw calls `menu->show(ui)` (loading_ui.cpp:508) → renders via RmlUi
+  automatically whenever the Tier-0 uilist toggle is ON. It rides the uilist
+  toggle, needs no own screen/toggle. The other half of the file
+  (`loading_image_splash`) is an SDL splash IMAGE + author-text overlay drawn via
+  `background_pane`/RenderCopy — not curses text UI, out of scope like the map
+  tile path. So loading is done-by-coverage; nothing diary-style to do. (Confirms
+  the F.0 census flag "loading_ui may be a no-loop progress display.")
+- **Tier 1 "screen": mod_manager_ui — NOT A SCREEN (mislabel). NO MIGRATION.**
+  Read in full: `mod_manager_ui.cpp` is the `mod_ui` LOGIC class — try_add /
+  try_rem / try_shift / can_shift_up/down (dependency + conflict resolution) plus
+  `get_information()`, a colour-tagged info-STRING builder. Zero draw code (no
+  mvwprintz / on_redraw / curses window — that's why the grep found none). The
+  actual interactive mod-selection SCREEN (`draw_mod_list`, the available/active
+  panes, the info popup that consumes `get_information`) lives entirely in
+  **worldfactory.cpp** (worldfactory.cpp:551/715/1035/1080/1084/1213) → it migrates
+  as part of **Tier 4 (worldfactory)**. `get_information()`'s colour string flows
+  through `cata_text_to_rml` when that host screen migrates; the logic file is
+  untouched. **Consequence: there is NO cheap non-conforming proxy in Tier 1 — the
+  first non-conforming-screen cost is only paid on a Tier-4/5/7 giant, which is
+  exactly what the gate decides.**
+- **★ RE-SCOPE GATE — REACHED (2026-06-11). Tier 1 COMPLETE.** Real screens done +
+  eyeballed: missions / scores / help / distraction / auto_note / diary (6).
+  loading = covered by Tier-0 uilist (no bespoke work). mod_manager_ui = logic, not
+  a screen (surfaces at Tier 4). **Measured per-screen cost (harness-amortized,
+  post-Foundation), all CONFORMING modal screens:** scores 223 ins/5 files · help
+  341/6 · distraction 228/5 · auto_note(+F.3 harness) 405/6 · diary(multi-pane)
+  409/6 → steady-state ≈ **220–410 insertions, 5–6 files** each (1 cpp path-edit +
+  .rml + .rcss + header toggle + F4 checkbox), plus build-blind + one user A/B
+  eyeball cycle. **GATE CAVEAT (carry into the decision):** every datapoint is a
+  harness-conforming open→sync→close modal; the remaining ~39 screens include the
+  Tiers 4/5/7 giants (worldfactory, options ~172K, newcharacter ~177K, npctalk
+  ~170K, sidebar HUD) which are tab-forms / live-overlay / continuous-HUD — a
+  DIFFERENT shape the conforming sample cannot price. Any effort estimate for the
+  giants is optimism-biased until one is actually cut. **DECISION IS THE USER'S:**
+  go at current scope / re-scope (lighter treatment or defer the giants) / adjust
+  cadence. **DECIDED 2026-06-11: GO AT FULL SCOPE — rip-out is the goal.** User
+  committed to all ~45 screens incl. the giants (multi-month), because only 100%
+  coverage unlocks the curses+ImGui deletion. Sequence stays conforming-first
+  (Tier 2 → giants → Tier 10 rip-out): clear the priced Tier-2 screens to mature
+  the F.2 component library, THEN cut the giants with a battle-tested library, at
+  the established one-screen-at-a-time eyeball cadence. **ACTIVE PHASE: Tier 2.**
+
+### Tier 2 progress
+
+- **Tier 2 screen #1: mutations (show_mutations_ui) — CODE-COMPLETE + BUILD-GREEN
+  (mutation_ui.cpp + devui compile clean), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.**
+  First Tier-2 screen; 3rd `rml_doc` consumer. TWO-COLUMN GRID shape (passive | active
+  mutations), each row "<key> <name>" with legacy per-state colour baked into the
+  bound string via cata_text_to_rml (passive base-trait cyan/light-cyan; active
+  powered green/red, base/light variants) + active rows append cost/cooldown/Active.
+  Single shared cursor moves within the FOCUSED column (tab_mode); selected-row
+  highlight scoped under `.mut-pane.active` so the unfocused column shows no cursor
+  (reuses diary's active-pane pattern; the legacy `c_*_yellow` highlight variants
+  are dropped in favour of the CSS .selected accent). `data/gui/mutations.{rml,rcss}`
+  + mutation_ui.cpp RmlUi path via `rml_doc rml; rml.open(...)` + sync in on_redraw.
+  STRUCTURAL POINTS: (1) extracted `mutation_titlebar_desc(menu_mode,ctxt)` so the
+  RmlUi titlebar + the curses `show_mutations_titlebar` share ONE text builder (no
+  drift). (2) menu modes (examine/reassign/hide) + activation stay on input_context
+  (keyboard owns) — the model only reflects the titlebar text + examine pane; the
+  reassign/activate popups are already Tier-0 query_popup. (3) RmlUi renders ALL
+  rows + scrolls natively → legacy scroll_position windowing is curses-only, not
+  ported. (4) column heads "Passive"/"Active" are BOUND+translated+coloured (better
+  than auto_note's hardcoded-English heads). F4 toggle "mutations via RmlUi" (OFF).
+  **EYEBALL CHECK (user, A/B via F4):** two columns populated, colours match curses
+  (cyan passive, green=powered/red=off active); NEXT_TAB switches focused column
+  (border→accent), cursor highlight only in focused column; UP/DOWN moves cursor;
+  TOGGLE_EXAMINE shows the examine pane with the mutation desc + titlebar says
+  "Examining"; REASSIGN→letter popup works; activate (CONFIRM / invlet) still
+  activates+exits; mouse hover/click focuses a column + selects + sets examine.
+  **WATCH (advisor-class):** (a) LONG mutation list — keyboard UP/DOWN past the
+  viewport does NOT auto-scroll the selected row into view (RmlUi native scroll
+  only; matches auto_note, but mutations can be long → flag if cursor gets lost).
+  **REMEDY PRE-STAGED (advisor — auto_note precedent is weak here: a mutated
+  character runs 20-40 traits vs auto_note's short list, and legacy ALWAYS kept the
+  cursor in view, so this is a more real regression):** if the user reports
+  cursor-lost on a long list, add `doc->GetElementById(<selected row>)->
+  ScrollIntoView()` in sync_rml (or scroll the focused `.mut-pane` to its selected
+  child). Don't add preemptively; it's the known one-liner fix.
+  (b) empty column shows translated "None". (c) invlet keys still work while the
+  RmlUi doc is up (keyboard fall-through).
+  - **LAYOUT FIX after 1st eyeball (2026-06-11):** rows were flowing HORIZONTALLY
+    (one wrapped paragraph) — root cause: RmlUi elements default to `display:
+    inline`; the `div{display:block}` default lives in RmlUi's SAMPLE rml.rcss
+    which we don't link, and `.mut-pane` is a `.scroll-pane` block container (not a
+    flex-column), so the rows need their own `display`. Fixed `.mut-line {
+    display: block }`. ALSO per user request the rows are now an unordered list:
+    "• " prefix on every row, "> " on the current item of the FOCUSED column
+    (baked into the bound text in sync_rml — RCSS has no ::before/content). Gotcha
+    documented in theme.rcss so it can't recur. **RE-EYEBALL after this fix.**
+  - **D3D12 (Win11) FIRST-OF-TIER CHECK (Windows-side, owed):** mutations is the
+    FIRST Tier-2 screen, so the plan's standing risk-item ("D3D12 cross-check each
+    tier's first screen — Metal-green ≠ D3D12-green for new dynamic docs") applies
+    HERE. The Metal A/B above does NOT cover it. Tier 2 is not "structurally proven
+    on the primary target" until a Win11/D3D12 run confirms the mutations doc
+    uploads/renders with sane in-pass counters. (Can't be run from the Metal dev
+    box — flagged so it doesn't silently fall off.)
+  - **THE DECIDING FACT (rip-out reality, was missing):** the payoff is §8 Tier-10
+    rip-out (delete curses + ImGui), which is ALL-OR-NOTHING — it needs EVERY
+    screen migrated. So deferring/skipping the giants means the rip-out never
+    fires and BOTH renderers stay compiled + live: that is MORE maintenance surface
+    than today (an RmlUi path was ADDED alongside curses, not replacing it). The
+    giants are not optional polish — they are load-bearing for the only payoff. The
+    measured 220–410 LOC/screen is the cheap, de-risked part; the real question is
+    binary: **is the user in for finishing the giants (multi-month), or not?**
+  - **Remainder bucketed by risk (~39 screens):**
+    - **PRICED** (Tier-1 data extrapolates — same open→sync→close modal shape):
+      Tier 2 (bionics / mutation / safemode / auto_pickup / construction /
+      armor_layers / computer_session / faction / crafting), most of Tier 3,
+      Tier 6 static labels, Tier 9 minigames → ~25–30 screens at known cadence.
+    - **UNPRICED structural risk** (different shape, no sample): Tiers 4/5/7 giants
+      (worldfactory / options / newcharacter / npctalk / ranged) + advanced_inv +
+      sidebar HUD. Risk is concentrated HERE, not across the whole remainder.
+  - **RECOMMENDATION (if committed to rip-out):** conforming-first — clear Tier 2
+    (also matures the F.2 component library the giants will need), THEN re-gate on
+    the giants with a battle-tested library. Tier 2 is the "keep moving while you
+    decide the giants" path: priced, builds the library, commits to nothing. Do
+    NOT solo-charge worldfactory. If multi-month giant work is in doubt, decide
+    THAT now — every conforming screen added while the giants stay on curses is
+    effort toward an endgame that won't arrive.
 
 ## Load-bearing architecture facts (verified this session)
 

@@ -43,6 +43,14 @@ body {
     padding: 12dp;
 }
 
+/* GOTCHA (bit diary + mutations): RmlUi elements default to `display: inline`.
+   The familiar `div { display: block }` lives in RmlUi's SAMPLE rml.rcss, which
+   we do NOT link — so a bare `<div>` row flows inline and a list renders as one
+   wrapped paragraph. A list row must EITHER set `display: block`/`flex` itself,
+   OR be a child of a `display: flex; flex-direction: column` container (flex
+   items get blockified). The `.item` class below does NOT set display — set it
+   on your row class (see .diary-line / .mut-line, or uilist .item). */
+
 /* Selectable item — shared by uilist rows and query_popup buttons. The
    component keeps its own layout (padding/flex/margin); this owns the palette
    and the interactive states. :hover is declared before .selected so keyboard

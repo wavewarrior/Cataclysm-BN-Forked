@@ -102,4 +102,7 @@ bool &auto_note_rmlui_enabled();
 // diary::show_diary_ui() RmlUi render path (4-pane: pages/changes/text/info).
 bool &diary_rmlui_enabled();
 
+// show_mutations_ui() RmlUi render path (Tier 2 #1: 2-column active/passive grid).
+bool &mutations_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H
