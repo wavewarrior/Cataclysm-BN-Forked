@@ -1,0 +1,58 @@
+/* Layout for the distraction manager (Tier 1, screen #4:
+   distraction_manager_gui::show). Palette/border/scrollbar/.item/.scroll-pane
+   come from theme.rcss (linked first in distraction.rml); this file owns only
+   the screen's own layout. Lengths in dp (see theme.rcss).
+
+   Both missions gotchas apply (documented in uilist.rcss): body needs a
+   definite height or the panel shrink-wraps; the list child needs the vh
+   max-height that .scroll-pane carries. */
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.dm-panel {
+    width: 70%;
+    height: 80%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Description of the currently selected distraction (mirrors the legacy header
+   pane fed by distraction_desc.at(cur).second). Fixed band above the list,
+   divided from it by a bottom border (the legacy horizontal table rule). */
+.dm-header {
+    flex: 0 0 auto;
+    min-height: 48dp;
+    padding-bottom: 8dp;
+    margin-bottom: 8dp;
+    border-bottom: 1dp #5a5a78ff;
+    color: #cfcfe0ff;
+}
+
+/* The toggle list fills the rest and scrolls its own overflow (.scroll-pane). */
+.dm-list {
+    flex: 1;
+    min-height: 0;
+}
+
+/* Each row: name on the left, Enabled/Disabled status on the right (the legacy
+   two-column table split at curses col 60). .item supplies bg/:hover/.selected. */
+.dm-row {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4dp 10dp;
+    margin-bottom: 4dp;
+}
+.dm-name {
+    flex: 1;
+}
+.dm-status {
+    flex: 0 0 auto;
+    margin-left: 16dp;
+}

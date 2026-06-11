@@ -24,4 +24,7 @@ bool &scores_rmlui_enabled();
 // help::display_help() RmlUi render path (topic menu + scrolling article).
 bool &help_rmlui_enabled();
 
+// distraction_manager_gui::show() RmlUi render path (toggle-list + description).
+bool &distraction_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

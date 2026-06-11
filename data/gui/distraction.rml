@@ -1,0 +1,31 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="distraction.rcss"/>
+</head>
+<body data-model="distraction">
+    <!-- Tier 1 screen #4 (distraction_manager_gui::show). The first toggle-list
+         shape: a moving-cursor list whose rows mutate in place (CONFIRM flips
+         Enabled/Disabled), plus a description header that re-renders as the
+         cursor moves. Keyboard stays on input_context (UP/DOWN move, CONFIRM
+         toggles, QUIT saves+exits); RmlUi renders + handles mouse only. The
+         model is live-synced every redraw (see sync_rml in the .cpp), so the
+         cursor highlight + per-row status + header description all track the
+         selection without per-branch DirtyVariable calls. Selection highlight
+         via .item.selected (theme); status colour rides inside status_rml via
+         cata_text_to_rml. -->
+    <div class="panel dm-panel">
+        <div class="dm-header" data-rml="desc_rml"></div>
+
+        <div class="dm-list scroll-pane">
+            <div class="item dm-row" data-for="row : rows"
+                 data-class-selected="row.selected"
+                 data-event-mouseover="on_select(it_index)"
+                 data-event-click="on_select(it_index)">
+                <span class="dm-name" data-rml="row.name_rml"></span>
+                <span class="dm-status" data-rml="row.status_rml"></span>
+            </div>
+        </div>
+    </div>
+</body>
+</rml>
