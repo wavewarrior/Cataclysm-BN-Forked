@@ -74,9 +74,14 @@ body {
     white-space: pre-wrap;
 }
 
-/* A single list row. Transparent by default; hover always lightly highlights,
-   but the selected-row accent applies ONLY inside the active pane (see header). */
+/* A single list row. display:block so each is its own line — RmlUi elements
+   default to inline (the bundled div{display:block} lives in the sample rml.rcss
+   we don't link), and .diary-pane is a .scroll-pane block container, not a
+   flex-column, so without this the rows flow horizontally as one paragraph.
+   Transparent by default; hover always lightly highlights, but the selected-row
+   accent applies ONLY inside the active pane (see header). */
 .diary-line {
+    display: block;
     padding: 2dp 6dp;
     border-radius: 4dp;
 }
