@@ -52,6 +52,54 @@
 #include "ui.h"
 #include "ui_manager.h"
 
+#include <RmlUi/Core.h>
+
+#include "rml_screen.h"
+#include "rml_util.h"
+
+// ── RmlUi render path (full UI→RmlUi migration, Tier 2 screen #5) ─────────────
+// 7th rml_doc consumer. The computer terminal is a scrolling text PANE: print_*
+// append (indent, colour-tagged text) to the `lines` buffer and refresh() draws
+// it. The RmlUi path renders that same buffer as a text pane (one element per
+// line, indent → left padding, colour via cata_text_to_rml). The root-menu
+// (uilist) and the prompts (query_any/query_ynq/query_bool) are already migrated
+// (Tier 0), so the terminal doc is a persistent BACKDROP they render over — there
+// is no input loop of its own here, so a throwaway input_context is passed to
+// open() only for the harness tick, and teardown rides the rml_doc destructor
+// (use() has many early returns). Render-only: no model writes back to the game.
+namespace
+{
+struct computer_rml_line {
+    Rml::String text_rml;
+    bool indented = false;
+};
+struct computer_rml_session {
+    Rml::Vector<computer_rml_line> lines;
+    Rml::DataModelHandle handle;
+};
+
+bool g_computer_types_registered = false;
+
+void register_computer_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_computer_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<computer_rml_line> lh = c.RegisterStruct<computer_rml_line>();
+    lh.RegisterMember( "text_rml", &computer_rml_line::text_rml );
+    lh.RegisterMember( "indented", &computer_rml_line::indented );
+    c.RegisterArray<Rml::Vector<computer_rml_line>>();
+    g_computer_types_registered = true;
+}
+} // namespace
+
+bool &computer_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = false;
+    return enabled;
+}
+
 static const efftype_id effect_amigara( "amigara" );
 
 static const itype_id itype_black_box( "black_box" );
@@ -100,7 +148,45 @@ void computer_session::use()
         ui.position_from_window( win );
     } );
     ui.mark_resize();
-    ui.on_redraw( [this]( const ui_adaptor & ) {
+
+    // ---- RmlUi render path (F.3 rml_doc harness) ----------------------------
+    // The terminal text pane (see the file-top note). `term_ctxt` is a throwaway
+    // input_context passed only because open() sets the harness tick on it — this
+    // screen has no input loop of its own (the uilist menu + query_* prompts own
+    // input), so the doc is a persistent backdrop the RmlUi context ticks each
+    // frame. Teardown rides the rml_doc destructor: use() has ~10 early returns,
+    // and `data` is declared before `rml` so the doc tears down while the bound
+    // buffer is still alive.
+    input_context term_ctxt( "COMPUTER_TERMINAL" );
+    std::unique_ptr<computer_rml_session> data;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml ) {
+            return;
+        }
+        data->lines.clear();
+        for( const std::pair<int, std::string> &ln : lines ) {
+            computer_rml_line l;
+            l.text_rml = cata_text_to_rml( ln.second );
+            l.indented = ( ln.first > 0 );
+            data->lines.push_back( l );
+        }
+        data->handle.DirtyVariable( "lines" );
+    };
+    rml.open( computer_rmlui_enabled(), "computer", term_ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        data = std::make_unique<computer_rml_session>();
+        register_computer_rml_types( c );
+        c.Bind( "lines", &data->lines );
+        data->handle = c.GetModelHandle();
+    } );
+
+    ui.on_redraw( [&]( const ui_adaptor & ) {
+        // RmlUi path owns the terminal pane — sync the buffer and skip curses.
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         refresh();
     } );
 

@@ -319,6 +319,44 @@
   inactive rules greyed; active CELL highlights + moves with LEFT/RIGHT (Rule↔I/E)
   + UP/DOWN; Add/Remove/Copy/Move/Enable/Disable/Test + Enter-edit popup work;
   "Auto pickup enabled: T/F" + <S>witch; mouse hover/click selects a row.
+
+- **Tier 2 screen #5: computer terminal (computer_session::use) — CODE-COMPLETE +
+  BUILD-GREEN (computer_session.cpp + devui compile clean), TOGGLE OFF, EYEBALL
+  OWED, UNCOMMITTED.** 7th `rml_doc` consumer; the genuinely-clean one (advisor-
+  picked over faction). The terminal is a scrolling text PANE backed by the
+  existing `lines` buffer (`vector<pair<int,string>>` = indent + colour-tagged
+  text that print_* append and refresh() draws). RmlUi path renders that buffer:
+  one `.comp-line` per entry, indent→left-pad, colour via cata_text_to_rml
+  (untagged → terminal-green default matching the legacy c_green base). `data/gui/
+  computer.{rml,rcss}`. STRUCTURAL NOTES: (1) the root menu (uilist) + prompts
+  (query_any/ynq/bool) are ALREADY Tier-0 → the terminal doc is a persistent
+  BACKDROP they render over; no bespoke menu work. (2) use() has NO input_context
+  of its own (input is on the menu/prompts) → a throwaway `term_ctxt` is passed to
+  open() only for the harness tick; the RmlUi context is ticked each frame by the
+  menu/prompt loops. (3) ~10 early returns (login failures) → teardown rides the
+  rml_doc DESTRUCTOR (data declared before rml); no explicit close(). Render-only.
+  F4 toggle "computer terminal via RmlUi" (OFF). **EYEBALL CHECK (user, A/B via
+  F4):** use a computer (console) in-game — terminal text shows green, errors red,
+  gibberish yellow; print_text body lines indented; the root menu (uilist) + the
+  "Press any key" prompts appear over the terminal; multi-step actions (hack,
+  open/lock, sample, etc.) show their output accumulating; scrolls when long.
+  **WATCH:** the default green is CSS `#5fdd5f` (approximation of c_green) — if it
+  reads off vs the curses terminal, tweak `.comp-screen color` in computer.rcss.
+
+- **★ TIER-2 CADENCE NOTE (advisor, 2026-06-11):** the 5 Tier-2 screens shipped so
+  far (mutations/bionics/safemode/auto_pickup/computer) were CLEAN COMPOSITIONS of
+  proven primitives (lists/tabs/colored-rows/text-pane). The REMAINING Tier-2 are
+  a heavier class — **component-builds / interface-refactors**, not quick
+  compositions: **construction + crafting_gui** share a **requirement-data pane**
+  (components/tools/skills) — build that ONE F.2 fragment and it serves both
+  ~2000-line screens (highest-leverage next if staying in Tier 2). **faction** is
+  DEFERRED: its detail panes are the Tier-3-era `Creature::print_info`/npc-info
+  F.2 component (should ride that, not precede it) AND its detail render returns
+  interactability flags the input loop consumes → needs an interface refactor of
+  `npc::faction_display` (split draw from state). **armor_layers** has drag-reorder
+  (new interaction). So: the quick-win streak is over; the next unit is real F.2
+  component work. Recommended order: requirement-pane (construction+crafting) →
+  armor_layers → faction (after creature/npc-info F.2 lands).
   - **THE DECIDING FACT (rip-out reality, was missing):** the payoff is §8 Tier-10
     rip-out (delete curses + ImGui), which is ALL-OR-NOTHING — it needs EVERY
     screen migrated. So deferring/skipping the giants means the rip-out never
