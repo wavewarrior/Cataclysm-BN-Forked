@@ -61,6 +61,22 @@ body {
     color: #1e1e28ff;
 }
 
+/* F.2 scrolling-text-view seed (extracted at Tier-1 screen #3 = help, where the
+   overflow text-pane recurs a 3rd time after missions' .missions-detail and
+   scores' .scores-body). A flex child that scrolls its own overflow. The
+   explicit `vh` max-height is the ACTUAL scroll bound — RmlUi 6.2 won't constrain
+   a flex child's height by its parent alone, so without it the overflow region
+   collapses to height 0 and the text is clipped invisible (missions gotcha #1).
+   Already-committed screens keep their own copies; adopt this on their next touch
+   rather than retrofitting (avoids regressing eyeballed screens for no gain). */
+.scroll-pane {
+    flex: 1;
+    min-height: 0;
+    max-height: 84vh;
+    overflow-y: auto;
+    padding: 4dp 8dp;
+}
+
 /* Scrollbars for any overflowing list. */
 scrollbarvertical {
     width: 10dp;
