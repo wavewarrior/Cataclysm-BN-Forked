@@ -47,6 +47,11 @@
 #include "requirements.h"
 #include "string_formatter.h"
 #include "string_input_popup.h"
+
+#include <RmlUi/Core.h>
+
+#include "rml_screen.h"
+#include "rml_util.h"
 #include "string_utils.h"
 #include "translations.h"
 #include "type_id.h"
@@ -653,6 +658,75 @@ static input_context make_crafting_context( bool highlight_unread_recipes )
     return ctxt;
 }
 
+// ── RmlUi render path (full UI→RmlUi migration, Tier 2: crafting GUI) ──────────
+// 9th rml_doc consumer; PEER of construction (tabs+list+lines) but heavier: TWO
+// string-circularizer tab rows (category + subcategory), a recipe list, a
+// recipe-info lines pane (cached_recipe_info), and a wide-mode item-info pane
+// (nested-category text block OR format_item_info of the result — AD-HOC TEXT
+// pending the Tier-3 item-info F.2 component; see RMLUI_MIGRATION_PLAN §8). The
+// curses tab-overflow windowing + breakpoint paging are dropped for native
+// scroll; PAGE/SCROLL_RECIPE_INFO scroll both info panes in lockstep. Render-only:
+// filtering/batch/favorite/build stay on input_context + popups. Colour baked via
+// cata_text_to_rml; CSS .selected does the highlight.
+namespace
+{
+struct craft_rml_tab {
+    Rml::String name_rml;
+    bool selected = false;
+    bool empty = false;   // subcategory with no recipes → greyed
+};
+struct craft_rml_row {
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct craft_rml_line {
+    Rml::String text_rml;
+};
+struct craft_rml_session {
+    Rml::Vector<craft_rml_tab> cats;
+    Rml::Vector<craft_rml_tab> subcats;
+    Rml::Vector<craft_rml_row> rows;
+    Rml::Vector<craft_rml_line> info;   // middle recipe-info pane
+    Rml::Vector<craft_rml_line> item;   // right item-info pane (wide mode)
+    Rml::String craft_status_rml;       // can-craft indicator
+    Rml::String hidden_rml;             // hidden-recipe amount
+    Rml::String keybinds_rml;           // footer key tips
+    bool wide = false;                  // isWide → show right pane
+    bool show_subcats = true;           // NORMAL mode → show subcat row
+    bool empty = false;                 // no recipes in this list
+    Rml::DataModelHandle handle;
+};
+
+bool g_craft_types_registered = false;
+
+void register_craft_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_craft_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<craft_rml_tab> th = c.RegisterStruct<craft_rml_tab>();
+    th.RegisterMember( "name_rml", &craft_rml_tab::name_rml );
+    th.RegisterMember( "selected", &craft_rml_tab::selected );
+    th.RegisterMember( "empty", &craft_rml_tab::empty );
+    c.RegisterArray<Rml::Vector<craft_rml_tab>>();
+    Rml::StructHandle<craft_rml_row> rh = c.RegisterStruct<craft_rml_row>();
+    rh.RegisterMember( "name_rml", &craft_rml_row::name_rml );
+    rh.RegisterMember( "selected", &craft_rml_row::selected );
+    c.RegisterArray<Rml::Vector<craft_rml_row>>();
+    Rml::StructHandle<craft_rml_line> lh = c.RegisterStruct<craft_rml_line>();
+    lh.RegisterMember( "text_rml", &craft_rml_line::text_rml );
+    c.RegisterArray<Rml::Vector<craft_rml_line>>();
+    g_craft_types_registered = true;
+}
+} // namespace
+
+bool &crafting_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = false;
+    return enabled;
+}
+
 const recipe *select_crafting_recipe( int &batch_size_out, Character &crafter )
 {
     struct {
@@ -900,7 +974,275 @@ const recipe *select_crafting_recipe( int &batch_size_out, Character &crafter )
     const auto &all_recipes = recipe_subset( {}, all_recipes_flat );
 
     int recipe_scroll_window_min = 0;
+
+    // RmlUi render path (Tier 2: crafting). data/doc declared before on_redraw so
+    // the redraw can sync; opened after ctxt is built (harness 16ms tick).
+    std::unique_ptr<craft_rml_session> data;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !data ) {
+            return;
+        }
+        const TAB_MODE m = ( batch ) ? BATCH : ( filterstring.empty() ) ? NORMAL : FILTERED;
+        const recipe_subset &shown_recipes = show_unavailable ? all_recipes : available_recipes;
+
+        // category tab bar
+        data->cats.clear();
+        if( m == NORMAL ) {
+            for( const std::string &cat : craft_cat_list ) {
+                craft_rml_tab t;
+                std::string nm = normalized_names[cat];
+                if( is_cat_unread[cat] ) {
+                    nm += " ⁺";
+                }
+                t.name_rml = cata_text_to_rml( nm );
+                t.selected = ( cat == tab.cur() );
+                data->cats.push_back( t );
+            }
+        } else {
+            craft_rml_tab t;
+            t.name_rml = cata_text_to_rml( m == BATCH ? _( "Batch" ) : _( "Searched" ) );
+            t.selected = true;
+            data->cats.push_back( t );
+        }
+
+        // subcategory tab bar (NORMAL only)
+        data->show_subcats = ( m == NORMAL );
+        data->subcats.clear();
+        if( m == NORMAL ) {
+            for( const std::string &stt : craft_subcat_list[tab.cur()] ) {
+                craft_rml_tab t;
+                t.name_rml = cata_text_to_rml( normalized_names[stt] );
+                t.selected = ( stt == subtab.cur() );
+                t.empty = shown_recipes.empty_category( tab.cur(), stt != "CSC_ALL" ? stt : "" );
+                data->subcats.push_back( t );
+            }
+        }
+
+        // recipe list rows (colour baked; CSS .selected does the highlight)
+        data->rows.clear();
+        for( size_t i = 0; i < current.size(); ++i ) {
+            craft_rml_row r;
+            std::string tmp_name;
+            if( batch ) {
+                tmp_name = string_format( _( "%2dx %s" ), static_cast<int>( i ) + 1,
+                                          current[i]->result_name( true ) );
+            } else {
+                tmp_name = std::string( indent[i], ' ' ) + current[i]->result_name( true );
+            }
+            std::string coloured = colorize( tmp_name, available[i].color() );
+            const bool rcp_known = available_recipes.contains( *current[i] );
+            const bool rcp_read = !highlight_unread_recipes || !rcp_known ||
+                                  uistate.read_recipes.count( current[i]->ident() );
+            if( !rcp_read ) {
+                coloured += " " + colorize( new_recipe_str, new_recipe_str_col );
+            }
+            r.name_rml = cata_text_to_rml( coloured );
+            r.selected = ( static_cast<int>( i ) == line );
+            data->rows.push_back( r );
+        }
+        data->empty = current.empty();
+
+        // info panes + can-craft status
+        data->info.clear();
+        data->item.clear();
+        data->wide = isWide;
+        data->craft_status_rml.clear();
+        const bool sel_ok = !current.empty() && line >= 0 &&
+                            line < static_cast<int>( current.size() );
+        if( sel_ok ) {
+            const recipe &recp = *current[line];
+            const int batch_size = batch ? line + 1 : 1;
+
+            // can-craft indicator (mirrors draw_can_craft_indicator)
+            nc_color cc_col = c_green;
+            std::string cc_text;
+            if( lighting_crafting_speed_multiplier( crafter, recp ) <= 0.0f ) {
+                cc_col = c_red;
+                cc_text = _( "too dark to craft" );
+            } else if( crafting_speed_multiplier( crafter, recp, false ) <= 0.0f ) {
+                cc_col = c_red;
+                cc_text = _( "too sad to craft" );
+            } else if( crafting_speed_multiplier( crafter, recp, false ) < 1.0f ) {
+                cc_col = c_yellow;
+                cc_text = string_format( _( "crafting is slow %d%%" ),
+                          static_cast<int>( crafting_speed_multiplier( crafter, recp, false ) * 100 ) );
+            } else {
+                cc_text = _( "craftable" );
+            }
+            data->craft_status_rml = cata_text_to_rml( colorize( cc_text, cc_col ) );
+
+            // middle recipe-info pane (non-nested only); pre-folded to the curses
+            // width (cosmetic — RmlUi pre-wrap does final wrap). 27 = the curses
+            // max_recipe_name_width.
+            if( !recp.is_nested() ) {
+                const availability &avail = available[line];
+                const int xpos = 1 + 1 + 27 + 3;
+                const int fold_width = FULL_SCREEN_WIDTH - xpos - 2;
+                const nc_color color = avail.color( true );
+                const std::string qry = trim( filterstring );
+                std::string qry_comps;
+                if( qry.starts_with( "c:" ) ) {
+                    qry_comps = qry.substr( 2 );
+                }
+                const std::vector<std::string> &info = cached_recipe_info(
+                        recp, avail, crafter, show_unavailable, qry_comps, batch_size, fold_width, color );
+                for( const std::string &l : info ) {
+                    craft_rml_line cl;
+                    cl.text_rml = cata_text_to_rml( l );
+                    data->info.push_back( cl );
+                }
+            }
+
+            // right item-info pane (wide mode): nested-category block OR the
+            // result item's format_item_info text (ad-hoc, pending Tier-3 F.2).
+            if( isWide ) {
+                if( recp.is_nested() ) {
+                    const auto push = [&]( const std::string & s ) {
+                        craft_rml_line cl;
+                        cl.text_rml = cata_text_to_rml( s );
+                        data->item.push_back( cl );
+                    };
+                    const long known_items = std::ranges::count_if(
+                    recp.nested_category_data, [&]( const recipe_id & nested_id ) {
+                        return available_recipes.contains( nested_id.obj() );
+                    } );
+                    const std::string category_name = normalized_names.contains( recp.category )
+                            ? normalized_names[recp.category] : recp.category;
+                    push( recp.result_name( false ) );
+                    push( string_format( _( "Category: <color_magenta>%s</color>" ), category_name ) );
+                    push( recp.description.translated() );
+                    push( string_format( _( "Known recipes: <color_light_blue>%d</color>" ),
+                                         static_cast<int>( known_items ) ) );
+                } else {
+                    item_info_data d = item_info_data_from_recipe( current[line], batch_size,
+                                       item_info_scroll );
+                    const std::string s = format_item_info( d.get_item_display(), d.get_item_compare() );
+                    for( const std::string &l : foldstring( s, 100000 ) ) {
+                        craft_rml_line cl;
+                        cl.text_rml = cata_text_to_rml( l );
+                        data->item.push_back( cl );
+                    }
+                }
+            }
+        }
+
+        // hidden-recipe amount (mirrors draw_hidden_amount)
+        data->hidden_rml.clear();
+        if( !show_hidden ) {
+            const int amt = static_cast<int>( num_hidden );
+            std::string h;
+            if( amt >= 1 ) {
+                h = string_format( _( "* %d hidden recipes - %d in category *" ), amt, num_recipe );
+            } else {
+                h = string_format( _( "* No hidden recipes - %d in category *" ), num_recipe );
+            }
+            data->hidden_rml = cata_text_to_rml( colorize( h, amt >= 1 ? c_red : c_green ) );
+        }
+
+        // footer key tips (one line per tip)
+        std::string tips;
+        for( const std::string &t : keybinding_tips ) {
+            if( !tips.empty() ) {
+                tips += "\n";
+            }
+            tips += t;
+        }
+        data->keybinds_rml = cata_text_to_rml( tips );
+
+        data->handle.DirtyVariable( "cats" );
+        data->handle.DirtyVariable( "subcats" );
+        data->handle.DirtyVariable( "rows" );
+        data->handle.DirtyVariable( "info" );
+        data->handle.DirtyVariable( "item" );
+        data->handle.DirtyVariable( "craft_status_rml" );
+        data->handle.DirtyVariable( "hidden_rml" );
+        data->handle.DirtyVariable( "keybinds_rml" );
+        data->handle.DirtyVariable( "wide" );
+        data->handle.DirtyVariable( "show_subcats" );
+        data->handle.DirtyVariable( "empty" );
+    };
+
+    rml.open( crafting_rmlui_enabled(), "crafting", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        data = std::make_unique<craft_rml_session>();
+        register_craft_rml_types( c );
+        c.Bind( "cats", &data->cats );
+        c.Bind( "subcats", &data->subcats );
+        c.Bind( "rows", &data->rows );
+        c.Bind( "info", &data->info );
+        c.Bind( "item", &data->item );
+        c.Bind( "craft_status_rml", &data->craft_status_rml );
+        c.Bind( "hidden_rml", &data->hidden_rml );
+        c.Bind( "keybinds_rml", &data->keybinds_rml );
+        c.Bind( "wide", &data->wide );
+        c.Bind( "show_subcats", &data->show_subcats );
+        c.Bind( "empty", &data->empty );
+        // Click a category/subcategory tab → switch (recalc; resets subtab on cat
+        // change, mirroring PREV_TAB/NEXT_TAB). Click/hover a row → select it.
+        c.BindEventCallback( "on_cat",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            if( batch || !filterstring.empty() ) {
+                return;
+            }
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            if( idx >= 0 && idx < static_cast<int>( craft_cat_list.size() ) ) {
+                tab.set_index( idx );
+                subtab = list_circularizer<std::string>( craft_subcat_list[tab.cur()] );
+                recalc = true;
+            }
+        } );
+        c.BindEventCallback( "on_subcat",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            if( batch || !filterstring.empty() ) {
+                return;
+            }
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            if( idx >= 0 && idx < static_cast<int>( craft_subcat_list[tab.cur()].size() ) ) {
+                subtab.set_index( idx );
+                recalc = true;
+            }
+        } );
+        c.BindEventCallback( "on_select",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            if( idx >= 0 && idx < static_cast<int>( current.size() ) ) {
+                line = idx;
+            }
+        } );
+        data->handle = c.GetModelHandle();
+    } );
+
+    // Scroll both info panes in lockstep (curses scrolls recipe_info_scroll +
+    // item_info_scroll together; RmlUi scrolls the elements). dir: -1 up, +1 down.
+    const auto rml_scroll_info = [&]( int dir ) {
+        if( !rml ) {
+            return;
+        }
+        for( const char *id : {
+                 "recipe-info", "item-info"
+             } ) {
+            if( Rml::Element *el = rml.document()->GetElementById( id ) ) {
+                el->SetScrollTop( el->GetScrollTop() + dir * el->GetClientHeight() * 0.85f );
+            }
+        }
+    };
+
     ui.on_redraw( [&]( ui_adaptor & ui ) {
+        // RmlUi path owns the screen — sync the model and skip curses drawing.
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         const TAB_MODE m = ( batch ) ? BATCH : ( filterstring.empty() ) ? NORMAL : FILTERED;
         draw_recipe_tabs( w_head, tab.cur(), m, is_filtered_unread, is_cat_unread );
         const auto &shown_recipes = show_unavailable ? all_recipes : available_recipes;
@@ -1363,15 +1705,19 @@ const recipe *select_crafting_recipe( int &batch_size_out, Character &crafter )
         if( action == "SCROLL_RECIPE_INFO_UP" ) {
             recipe_info_scroll -= dataLines;
             item_info_scroll -= dataLines;
+            rml_scroll_info( -1 );
         } else if( action == "SCROLL_RECIPE_INFO_DOWN" ) {
             recipe_info_scroll += dataLines;
             item_info_scroll += dataLines;
+            rml_scroll_info( 1 );
         } else if( action == "PAGE_UP" ) {
             recipe_info_scroll -= scroll_recipe_info_lines;
             item_info_scroll -= scroll_recipe_info_lines;
+            rml_scroll_info( -1 );
         } else if( action == "PAGE_DOWN" ) {
             recipe_info_scroll += scroll_recipe_info_lines;
             item_info_scroll += scroll_recipe_info_lines;
+            rml_scroll_info( 1 );
         } else if( action == "LEFT" ) {
             if( batch || !filterstring.empty() ) {
                 continue;
@@ -1742,6 +2088,7 @@ const recipe *select_crafting_recipe( int &batch_size_out, Character &crafter )
         }
     } while( !done );
 
+    rml.close();
     return chosen;
 }
 

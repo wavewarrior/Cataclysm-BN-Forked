@@ -373,6 +373,58 @@
   buffer is folded to the old curses width (cosmetic; lines may not fill the RmlUi
   pane width — left as-is per advisor).
 
+- **Tier 2 screen #7: crafting (select_crafting_recipe) — CODE-COMPLETE +
+  BUILD-GREEN (crafting_gui.cpp + devui compile + LINK clean), TOGGLE OFF, EYEBALL
+  OWED, UNCOMMITTED.** 9th `rml_doc` consumer; PEER of construction (the cadence
+  note's "tabs+list+lines", budgeted as its own ~2000-line screen). HEAVIEST Tier-2
+  yet — diverges from the construction template in 4 ways (all advisor-flagged
+  pre-write): (1) **TWO tab rows** (category + subcategory), both string
+  `list_circularizer`s NOT int-indexed → `selected` is string-equality vs
+  `tab.cur()`/`subtab.cur()`; clicks map index→string via `set_index()` then (cat
+  click) rebuild the subtab circularizer + `recalc=true`, mirroring PREV/NEXT_TAB.
+  (2) **Dual lockstep scroll** — PAGE_UP/DOWN + SCROLL_RECIPE_INFO_UP/DOWN scroll
+  BOTH `#recipe-info` and `#item-info` (a `rml_scroll_info(dir)` lambda doing
+  SetScrollTop on both, alongside the curses recipe_info_scroll/item_info_scroll).
+  (3) **Three TAB_MODEs** (NORMAL/FILTERED/BATCH) — cat bar shows categories OR a
+  single "Searched"/"Batch" tab; subcat row hidden (data-if `show_subcats`) +
+  tab-clicks disabled outside NORMAL; batch rows are "Nx recipe". (4) **Heavier
+  sync** — no prebuilt buffer; sync_rml computes the middle pane each frame via
+  `cached_recipe_info(...fold_width=46...)` (non-nested only) and the right pane
+  (wide mode) via either a nested-category text block OR `format_item_info` of the
+  result item split through `foldstring`. `data/gui/crafting.{rml,rcss}` +
+  crafting_gui.cpp RmlUi path. STRUCTURAL POINTS: (a) the RIGHT item-info pane is
+  **AD-HOC TEXT (format_item_info → cata_text_to_rml lines), PENDING the Tier-3
+  item-info F.2 component** — gets crafting off curses now (what §8 rip-out needs);
+  the reusable-component adoption is a later refactor, NOT a migration blocker (§8
+  sweep must NOT assume this pane already uses the component). (b) can-craft
+  indicator + hidden-recipe amount reproduced as bound colour strings (mirrors
+  draw_can_craft_indicator / draw_hidden_amount; curses keeps its own right_print
+  positioning). (c) keybinding tips → bound footer string. (d) `on_select` sets
+  `line` only (no update flag — inherits construction's proven click→redraw→sync).
+  (e) single loop exit → `rml.close()` before `return chosen`. F4 toggle "crafting
+  via RmlUi" (OFF). **EYEBALL CHECK (user, A/B via F4) — exercise the NOVEL surface,
+  not the happy path (this screen exceeds anything prior):** (1) **★ LONG-LIST
+  KEYBOARD CURSOR** (crafting has the longest lists, 30-80 recipes — cursor leaves
+  viewport on UP/DOWN with NO auto-scroll; advisor: near-CERTAIN regression here).
+  REMEDY (staged, NOT shipped blind — has RmlUi-6.2 data-for-child-index + DOM-
+  update-timing subtlety I can't verify build-blind): set a `scroll_to_sel` flag in
+  the **keyboard UP/DOWN handlers ONLY** (never on_select — mouse select must not
+  force-scroll), and in sync_rml ScrollIntoView the selected list child + clear the
+  flag. Do NOT ship the unconditional one-liner (it fights native scroll/wheel).
+  (2) click a CATEGORY tab → subtab resets + list rebuilds; (3) BATCH mode (single
+  "Batch" tab, "Nx recipe" rows, no subtabs, cat-click disabled); (4) FILTER mode
+  ("Searched"); (5) enter a NESTED category + back — **A/B the nested right pane
+  specifically: it's a RECONSTRUCTION (the original ≈1016-1059 block kept coming
+  back stale; identifiers grep-confirmed but exact rendering unseen) MISSING the
+  "Origin:" + subcategory lines** (shows name/Category/description/Known-recipes
+  only); (6) PAGE_UP/DOWN scrolls BOTH info panes; (7) click-to-select moves
+  highlight + info (the one place diverged from the template without a flag).
+  **KNOWN FIDELITY GAPS (flag for §8, harmless):** subcategory unread "⁺" markers
+  added to cats only (not subcats); `empty` bound+dirtied but unreferenced in RML
+  (empty category renders blank, no message). **WATCH:** middle pane pre-folded to
+  curses width 46 (cosmetic, may not fill the RmlUi pane — left as-is per the
+  construction precedent).
+
 - **★ TIER-2 CADENCE NOTE (advisor, 2026-06-11):** the 5 Tier-2 screens shipped so
   far (mutations/bionics/safemode/auto_pickup/computer) were CLEAN COMPOSITIONS of
   proven primitives (lists/tabs/colored-rows/text-pane). The REMAINING Tier-2 are

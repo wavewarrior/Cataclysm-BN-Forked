@@ -120,4 +120,7 @@ bool &computer_rmlui_enabled();
 // construction_menu() RmlUi render path (Tier 2 #6: tabs + list + detail buffer).
 bool &construction_rmlui_enabled();
 
+// select_crafting_recipe() RmlUi render path (Tier 2: 2 tab rows + list + 2 info panes).
+bool &crafting_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H
