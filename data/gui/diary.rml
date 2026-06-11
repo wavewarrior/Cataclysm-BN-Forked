@@ -1,0 +1,53 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="diary.rcss"/>
+</head>
+<body data-model="diary">
+    <!-- Tier 1 screen #6 (diary::show_diary_ui). FIRST multi-pane shape: three
+         simultaneous scroll lists (pages / changes / page-text) with a moving
+         focus, plus a title bar, a keybinding-hint bar, and a bottom info pane.
+         Unlike the toggle-lists, only ONE pane is "active" at a time (LEFT/RIGHT
+         cycle currwin); the selected-row highlight shows ONLY in the active pane
+         (mirrors the legacy `active` flag on print_list_scrollable, which gated
+         the hilite). The decorative ASCII book border (draw_diary_border) is
+         intentionally dropped — semantic rewrite keeps the meaning, not the art.
+         Live-synced every redraw (sync_rml in diary_ui.cpp); keyboard stays on
+         input_context, RmlUi renders + handles mouse only. -->
+    <div class="panel diary-panel">
+        <div class="diary-title" data-rml="title_rml"></div>
+        <div class="diary-desc" data-rml="desc_rml"></div>
+
+        <div class="diary-main">
+            <div class="diary-pane diary-pages scroll-pane" data-class-active="pages_active">
+                <div class="diary-line" data-for="row : pages"
+                     data-class-selected="row.selected"
+                     data-event-mouseover="on_pages(it_index)"
+                     data-event-click="on_pages(it_index)">
+                    <span data-rml="row.text_rml"></span>
+                </div>
+            </div>
+
+            <div class="diary-pane diary-changes scroll-pane" data-class-active="changes_active">
+                <div class="diary-line" data-for="row : changes"
+                     data-class-selected="row.selected"
+                     data-event-mouseover="on_changes(it_index)"
+                     data-event-click="on_changes(it_index)">
+                    <span data-rml="row.text_rml"></span>
+                </div>
+            </div>
+
+            <div class="diary-pane diary-text scroll-pane" data-class-active="text_active">
+                <div class="diary-line" data-for="row : text"
+                     data-class-selected="row.selected"
+                     data-event-mouseover="on_text(it_index)"
+                     data-event-click="on_text(it_index)">
+                    <span data-rml="row.text_rml"></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="diary-info" data-rml="info_rml"></div>
+    </div>
+</body>
+</rml>

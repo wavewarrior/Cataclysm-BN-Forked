@@ -95,13 +95,51 @@
   the <S>witch option; mouse selects; empty-save case ("discover more" hint when no
   extras discovered) — AND the harness behaves (open once, scroll/tick live, clean
   close, reopen works = guard released).
-- **NEXT:** the ★ RE-SCOPE GATE is reachable (5 screens eyeballed + `rml_doc`
-  harness in hand → per-screen cost is now harness-amortized; measure it and decide
-  scope on the 130-180K-LOC giants with the user). Remaining Tier 1 (harness-backed
-  via `rml_doc`): diary_ui / loading_ui / mod_manager_ui. NOTE F.0: loading_ui may be
-  a no-loop progress display (not the open→sync→close shape) — verify before treating
-  it as a standard harness screen; mod_manager_ui/diary lack an in-file on_redraw
-  (check their draw path too).
+- **Tier 1 screen #6: diary (diary::show_diary_ui) — CODE-COMPLETE + BUILD-GREEN
+  (diary_ui.cpp + devui TUs compile clean), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.**
+  FIRST MULTI-PANE shape (5th distinct family: vs missions list+detail, scores
+  tabs+pane, help menu+article, distraction/auto_note toggle-list): THREE
+  simultaneous scroll lists (pages / changes / page-text) + title bar + keybinding
+  bar + bottom info pane, with a single moving FOCUS — only the active pane shows
+  its selected-row highlight (mirrors legacy `active` flag on print_list_scrollable
+  that gated the hilite). `data/gui/diary.{rml,rcss}` + diary_ui.cpp RmlUi path via
+  `rml_doc rml; rml.open(...)` + 2nd `rml_doc` consumer. KEY STRUCTURAL POINTS: (1)
+  4 separate `ui_adaptor`s — `if(rml)return;` early-out added to all 4 on_redraws;
+  sync_rml() lives in ONLY ui_diary's (invalidated every loop iter) so the doc
+  syncs once/frame, other 3 cheap-return. (2) Rows use a custom `.diary-line` (NOT
+  theme `.item`, whose `.selected` is always accent) so the selected accent is
+  scoped under `.diary-pane.active` → inactive panes show no cursor, matching curses.
+  (3) Decorative ASCII book border (draw_diary_border) DROPPED — semantic rewrite
+  keeps meaning not art. (4) page text split into lines via `foldstring(...,1e6)`
+  (split on \n, no hard wrap) + CSS `white-space:pre-wrap` for visual wrap. Mouse
+  on_pages/on_changes/on_text focus the pane + move its cursor; 16ms tick rebuilds.
+  F4 toggle "diary via RmlUi" (OFF). **EYEBALL CHECK (user, A/B via F4):** LEFT/RIGHT
+  moves focus (active pane border brightens to accent); UP/DOWN moves cursor in the
+  active pane (highlight ONLY there); page list ↔ change list ↔ text track selection;
+  bottom info shows the selected change's description when changes/text focused;
+  mouse hover/click focuses a pane + selects; New page / Edit (CONFIRM→nested curses
+  editor, see caveat) / Delete / Export still work; ESC exits. **TWO EDGE CHECKS
+  (advisor — not obvious):** (a) EMPTY DIARY (brand-new character, zero pages) —
+  same getters the curses path survived, but the likeliest crash/garbage case; open
+  it on a fresh save. (b) MOUSE-vs-KEYBOARD FOCUS FIGHT (new to multi-pane, mouseover
+  steals `currwin`) — keyboard LEFT/RIGHT focus while the mouse sits PARKED over a
+  different pane; if focus snaps back to the parked pane, switch the panes from
+  mouseover→click-only. **KNOWN INTERACTION
+  TO JUDGE:** CONFIRM opens the legacy `string_editor_window` (curses, NOT migrated)
+  over the still-rendered RmlUi diary doc — editor composites on top; usable but the
+  diary text shows behind it. Acceptable per per-screen migration (nested editor is
+  its own screen); flag if it reads badly.
+- **NEXT:** finish the 2 remaining Tier 1 screens THEN hit the ★ RE-SCOPE GATE.
+  Remaining: loading_ui / mod_manager_ui. **ADVISOR NOTE (cost-sample de-bias):**
+  the harness-amortized per-screen cost measured so far (~220–340 insertions) is
+  100% harness-CONFORMING screens; the gate's job is to estimate the
+  NON-conforming 130–180K giants, so that sample is optimism-biased.
+  **mod_manager_ui is the cheapest non-conforming proxy** (grep: no in-file
+  on_redraw / while / ui_adaptor) → do it (or at least scope WHY it has no
+  on_redraw + record its cost separately) BEFORE sitting at the gate. Stale-caveat
+  corrections: diary HAD 4 on_redraws (done, above); **loading_ui uses a uilist-style
+  menu (`menu->show(ui)`) + a `while` loop — likely near-free** (already routes
+  through migrated Tier-0 uilist), check before budgeting it as a full screen.
 
 ## Load-bearing architecture facts (verified this session)
 

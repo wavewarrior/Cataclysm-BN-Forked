@@ -99,4 +99,7 @@ bool &distraction_rmlui_enabled();
 // auto_note_manager_gui::show() RmlUi render path (toggle-list; first rml_doc user).
 bool &auto_note_rmlui_enabled();
 
+// diary::show_diary_ui() RmlUi render path (4-pane: pages/changes/text/info).
+bool &diary_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H
