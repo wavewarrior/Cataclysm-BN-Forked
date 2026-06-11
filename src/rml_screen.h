@@ -117,4 +117,7 @@ bool &autopickup_rmlui_enabled();
 // computer_session::use() RmlUi render path (Tier 2 #5: terminal text pane).
 bool &computer_rmlui_enabled();
 
+// construction_menu() RmlUi render path (Tier 2 #6: tabs + list + detail buffer).
+bool &construction_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

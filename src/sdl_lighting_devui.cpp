@@ -99,6 +99,7 @@ void draw()
     ImGui::Checkbox( "safemode via RmlUi", &safemode_rmlui_enabled() );
     ImGui::Checkbox( "auto pickup via RmlUi", &autopickup_rmlui_enabled() );
     ImGui::Checkbox( "computer terminal via RmlUi", &computer_rmlui_enabled() );
+    ImGui::Checkbox( "construction via RmlUi", &construction_rmlui_enabled() );
 
     static const char *mode_names[] = {
         "off", "ambient", "emitter", "sun", "sky", "total", "SDF", "sky_vis", "emit_bw",

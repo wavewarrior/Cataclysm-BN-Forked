@@ -227,13 +227,13 @@
     "• " prefix on every row, "> " on the current item of the FOCUSED column
     (baked into the bound text in sync_rml — RCSS has no ::before/content). Gotcha
     documented in theme.rcss so it can't recur. **RE-EYEBALL after this fix.**
-  - **D3D12 (Win11) FIRST-OF-TIER CHECK (Windows-side, owed):** mutations is the
-    FIRST Tier-2 screen, so the plan's standing risk-item ("D3D12 cross-check each
-    tier's first screen — Metal-green ≠ D3D12-green for new dynamic docs") applies
-    HERE. The Metal A/B above does NOT cover it. Tier 2 is not "structurally proven
-    on the primary target" until a Win11/D3D12 run confirms the mutations doc
-    uploads/renders with sane in-pass counters. (Can't be run from the Metal dev
-    box — flagged so it doesn't silently fall off.)
+  - **D3D12 (Win11) FIRST-OF-TIER CHECK — CONFIRMED CLEAN (2026-06-11, user).**
+    Tier-2 RmlUi docs render perfectly on Win11/D3D12 (the primary target), not
+    just Metal. The "Metal-green ≠ D3D12-green for new dynamic docs" risk is
+    RETIRED for the Tier-2 screen shape (dynamic per-screen data-model docs over
+    the shared Rml context). Tier 2 is now structurally proven on the primary
+    target; later tiers' first screens still warrant a glance but the core dynamic-
+    doc path is validated cross-backend.
 
 - **Tier 2 screen #2: bionics (show_bionics_ui) — CODE-COMPLETE + BUILD-GREEN
   (bionics_ui.cpp + devui compile clean), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.**
@@ -343,13 +343,47 @@
   **WATCH:** the default green is CSS `#5fdd5f` (approximation of c_green) — if it
   reads off vs the curses terminal, tweak `.comp-screen color` in computer.rcss.
 
+- **Tier 2 screen #6: construction (construction_menu) — CODE-COMPLETE +
+  BUILD-GREEN (construction.cpp + devui compile clean), TOGGLE OFF, EYEBALL OWED,
+  UNCOMMITTED.** 8th `rml_doc` consumer; LARGEST screen so far (2497-line file).
+  Category tabs (dynamic Vector, shared theme `.tabs/.tab`) + construct list (left)
+  + detail pane (right) rendering the existing `full_construct_buffer` (folded
+  colour-tagged lines built by `recalc_buffer` from `requirement_data::get_folded_*`
+  — confirming the "requirement pane" is just the lines-pane, no new widget).
+  `data/gui/construction.{rml,rcss}`. STRUCTURAL POINTS: (1) curses tab-overflow
+  windowing + detail breakpoint-paging DROPPED for native scroll — but PAGE_UP/DOWN
+  are repurposed (rml mode) to `SetScrollTop` on `#construct-detail` so they aren't
+  dead keys (advisor catch; cf. scores). UP/DOWN still move the list cursor. (2)
+  list colour via `construction_color(group,false)` + CSS `.selected`; favorites
+  keep the `* ` prefix. (3) separator lines in the buffer → a thin `.cm-line.sep`
+  rule. (4) speed%/status hints + notes reproduced as bound strings. (5) sync
+  guards `select` bounds (sync may read `constructs[select]` before the loop's
+  own reset — advisor). (6) loop is exit-flag-only → `close()` before `return ret`.
+  All build/editing + the FILTER popup (string_input_popup, Tier-0) stay in the
+  loop; render-only doc. F4 toggle "construction via RmlUi" (OFF). **EYEBALL CHECK
+  (user, A/B via F4) — hit the edge states, not just the happy path (advisor):**
+  (a) normal: tabs switch category, list coloured by buildability + `*` favorites,
+  detail shows stages/components/tools/skills/time matching curses, UP/DOWN move
+  cursor, **PAGE_UP/DOWN scroll the detail** (the make-or-break key check); (b)
+  EMPTY category (a tab with 0 constructs — no crash, blank list/detail); (c)
+  FILTER mode (press filter → tab becomes "Searched", single tab); (d) FAVORITES
+  (toggle ★ → `*` prefix + the FAVORITE tab lists it); (e) a LONG multi-stage
+  construction (detail overflows → scrolls). CONFIRM builds as before; mouse
+  hover/click selects a row, click a tab switches category. **WATCH:** pre-folded
+  buffer is folded to the old curses width (cosmetic; lines may not fill the RmlUi
+  pane width — left as-is per advisor).
+
 - **★ TIER-2 CADENCE NOTE (advisor, 2026-06-11):** the 5 Tier-2 screens shipped so
   far (mutations/bionics/safemode/auto_pickup/computer) were CLEAN COMPOSITIONS of
   proven primitives (lists/tabs/colored-rows/text-pane). The REMAINING Tier-2 are
   a heavier class — **component-builds / interface-refactors**, not quick
-  compositions: **construction + crafting_gui** share a **requirement-data pane**
-  (components/tools/skills) — build that ONE F.2 fragment and it serves both
-  ~2000-line screens (highest-leverage next if staying in Tier 2). **faction** is
+  compositions. **CORRECTION (post-construction):** the "construction + crafting
+  share a requirement-data pane, build once serves both" framing was WEAKER than it
+  sounded — the sharing is at the C++ `requirement_data::get_folded_*` level (which
+  already exists), and the RmlUi render is just the trivial lines-pane. So
+  **crafting_gui is a PEER ~2000-line full tabs+list+lines migration, not a cheap
+  follow-on** — construction is its template, but budget it as its own screen.
+  **faction** is
   DEFERRED: its detail panes are the Tier-3-era `Creature::print_info`/npc-info
   F.2 component (should ride that, not precede it) AND its detail render returns
   interactability flags the input loop consumes → needs an interface refactor of

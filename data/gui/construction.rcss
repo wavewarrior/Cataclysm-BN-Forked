@@ -1,0 +1,106 @@
+/* Layout for the construction menu (Tier 2, screen #6: construction_menu).
+   Palette/border/scrollbar/.scroll-pane AND the .tabs/.tab bar come from
+   theme.rcss (linked first in construction.rml); this file owns only the screen's
+   own layout. Lengths in dp.
+
+   Rows + detail lines are display:block (RmlUi divs default to inline — see the
+   theme.rcss gotcha) so they stack. The detail pane (#construct-detail) renders
+   the pre-folded full_construct_buffer; separator lines (cm-line.sep) become a
+   thin rule. */
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.cm-panel {
+    width: 92%;
+    height: 92%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Tab row + right-aligned speed/status hints. */
+.cm-tabrow {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+}
+.cm-tabs {
+    flex: 1;
+    margin-bottom: 0;
+}
+.cm-speed {
+    flex: 0 0 auto;
+    margin-left: 8dp;
+}
+.cm-status {
+    flex: 0 0 auto;
+    margin-left: 8dp;
+    color: #5fd75fff;
+}
+
+/* List (left) + detail (right). */
+.cm-main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+    margin-top: 6dp;
+}
+
+.cm-list {
+    flex: 0 0 32%;
+    border-right: 1dp #5a5a78ff;
+    margin-right: 8dp;
+}
+.cm-row {
+    display: block;
+    padding: 1dp 6dp;
+    border-radius: 4dp;
+}
+.cm-row:hover {
+    background-color: #3a3a55ff;
+    color: #ffffffff;
+}
+.cm-row.selected {
+    background-color: #ffcc66ff;
+    color: #1e1e28ff;
+}
+
+/* Detail column: name header / scrolling buffer / notes. */
+.cm-detailwrap {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+.cm-group {
+    flex: 0 0 auto;
+    color: #ffffffff;
+    margin-bottom: 4dp;
+}
+.cm-detail {
+    flex: 1;
+    min-height: 0;
+}
+.cm-line {
+    display: block;
+    white-space: pre-wrap;
+}
+/* Separator line in the buffer → a thin horizontal rule. */
+.cm-line.sep {
+    border-bottom: 1dp #5a5a78ff;
+    margin: 3dp 0;
+    height: 1dp;
+}
+.cm-notes {
+    flex: 0 0 auto;
+    margin-top: 4dp;
+    padding-top: 4dp;
+    border-top: 1dp #5a5a78ff;
+    color: #cfcfe0ff;
+}
