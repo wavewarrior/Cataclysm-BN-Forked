@@ -239,6 +239,40 @@ void character_display::print_encumbrance( ui_adaptor &ui, const catacurses::win
     }
 }
 
+std::vector<std::string> character_display::encumbrance_lines( const Character &ch,
+        const item *selected_clothing )
+{
+    // Mirrors the per-row content of print_encumbrance (name / enc+layer / warmth)
+    // as colour-tagged strings; RmlUi handles wrapping + scroll so there is no
+    // column positioning, scrollbar, or line-highlight (armor_layers passes
+    // line = -1 — only the green "covered by selected item" highlight applies).
+    const std::vector<std::pair<bodypart_str_id, bool>> bps =
+        list_and_combine_bps( ch, selected_clothing );
+    const char_encumbrance_data enc_data = ch.get_encumbrance();
+    std::vector<std::string> out;
+    out.reserve( bps.size() );
+    for( const std::pair<bodypart_str_id, bool> &entry : bps ) {
+        const bodypart_str_id &bp = entry.first;
+        const bool combine = entry.second;
+        const encumbrance_data &e = enc_data.elems.at( bp );
+        const bool highlighted = selected_clothing ? selected_clothing->covers( bp.id() ) : false;
+        std::string name = body_part_name_as_heading( bp, combine ? 2 : 1 );
+        if( utf8_width( name ) > 7 ) {
+            name = utf8_truncate( name, 7 );
+        }
+        const nc_color limb_color = highlighted ? c_green : c_light_gray;
+        const nc_color enc_col = encumb_color( e.encumbrance );
+        std::string row = colorize( string_format( "%-7s", name ), limb_color );
+        row += " " + colorize( string_format( "%3d", e.encumbrance - e.layer_penalty ), enc_col );
+        row += colorize( "+", c_light_gray ) + colorize( string_format( "%-3d", e.layer_penalty ), enc_col );
+        row += "  " + colorize( string_format( "(% 3d)",
+                                temperature_print_rescaling( get_temp_conv( ch, bp ) ) ),
+                                warmth::bodytemp_color( ch, bp ) );
+        out.push_back( row );
+    }
+    return out;
+}
+
 static std::string swim_cost_text( int moves )
 {
     return string_format( _( "Swimming movement point cost: <color_white>%+d</color>\n" ), moves );

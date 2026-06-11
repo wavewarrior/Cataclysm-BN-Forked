@@ -426,6 +426,52 @@
   curses width 46 (cosmetic, may not fill the RmlUi pane — left as-is per the
   construction precedent).
 
+- **Tier 2 screen #8: armor_layers (show_armor_layers_ui) — CODE-COMPLETE +
+  BUILD-GREEN (armor_layers.cpp + character_display.cpp + devui compile + LINK
+  clean), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.** 10th `rml_doc` consumer;
+  BIGGEST Tier-2 yet — a **4-pane render-only doc** (cat header / left worn-list +
+  Total-Protection / mid item-detail + encumbrance-warmth table / right
+  per-bodypart layering). First screen with a "drag/move mode" — but that's
+  KEYBOARD (MOVE_ARMOR picks an item up, UP/DOWN swap it); RmlUi just renders the
+  picked-item marker, so it's still render-behind-frozen-API, NOT a new mouse-drag
+  interaction. `data/gui/sortarmor.{rml,rcss}` + armor_layers.cpp RmlUi path.
+  STRUCTURAL POINTS: (1) **TWO contained reconstructions reuse helpers WITHOUT
+  touching the curses paths** (kept pristine for the A/B, advisor-chosen over
+  editing shared/curses code build-blind): `mid_pane_lines()` (new, this file,
+  parallel to `draw_mid_pane`, reuses the in-TU clothing_*/penalty helpers) and
+  **`character_display::encumbrance_lines()`** (NEW non-invasive fn in
+  character_display.cpp — reuses that TU's file-local statics list_and_combine_bps/
+  encumb_color/temperature_print_rescaling/get_temp_conv; `print_encumbrance`
+  UNTOUCHED so the '@' char sheet stays byte-identical; **converge when the char
+  sheet migrates, Tier 7**). (2) all actions (move/equip/remove/change-side/hide/
+  sort/assign-invlets/help) stay on input_context + popups; render-only doc.
+  (3) **mouse `on_left` is GATED to `selected < 0`** (NOT move-mode) — else a click
+  would jump the cursor without the keyboard swap, desyncing the cursor vs the
+  picked-item marker (advisor catch; the crafting on_select pattern is wrong here).
+  (4) `<< / >>` cat arrows are clickable (on_prev_bp/on_next_bp mirror LEFT/RIGHT:
+  cycle tabindex + reset leftListIndex/offset/selected); bodypart cycler stays a
+  header, NOT a 14-tab bar (faithful to curses). (5) curses windowing
+  (leftListOffset / right-list offset / breakpoint) DROPPED for native scroll.
+  (6) multiple early `return`s (npc / activity) → rml_doc DESTRUCTOR tears down (no
+  explicit close). (7) static labels (Innermost/Outermost/Storage/Encumbrance and
+  Warmth) literal English (i18n gap, §8/F.1 sweep). F4 toggle "armor layers via
+  RmlUi" (OFF). **EYEBALL CHECK (user, A/B via F4) — DIFF THE NUMBERS, not just the
+  layout (advisor: silent wrong-number bugs live in the reconstructions, none
+  crash):** (1) **★ ENCUMBRANCE/WARMTH pane** — every bodypart row's "enc+penalty
+  (warmth)" matches the curses table EXACTLY (this is the #1 from-scratch
+  reconstruction); covered-by-selected-item bps turn green. (2) right-pane per-bp
+  layering: bodypart MERGING reads right ("Arms" combined vs "L. Arm"/"R. Arm"
+  split) + per-item encumber numbers match. (3) left list: stacking-penalty
+  colours, "H" hidden badge, storage volume, cursor highlight. (4) move-mode:
+  MOVE_ARMOR picks an item (pink marker), UP/DOWN reorder it, and a **mouse click
+  during move-mode does NOT move the cursor** (the gated on_left); ESC/MOVE_ARMOR
+  drops it. (5) Total Protection block shows on a specific bodypart (Bash/Cut/Stab/
+  Ballistic), hidden on "All". (6) `<< / >>` clicks + LEFT/RIGHT both cycle
+  bodypart. (7) mid pane shows item detail / "Nothing to see here!" when empty.
+  **WATCH:** mid-pane + right-pane pre-folded to fixed widths (cosmetic, native
+  pre-wrap re-wraps); `items_cover_bp` recomputed a few times per frame (matches
+  curses, not a perf concern at this list size).
+
 - **★ TIER-2 CADENCE NOTE (advisor, 2026-06-11):** the 5 Tier-2 screens shipped so
   far (mutations/bionics/safemode/auto_pickup/computer) were CLEAN COMPOSITIONS of
   proven primitives (lists/tabs/colored-rows/text-pane). The REMAINING Tier-2 are
