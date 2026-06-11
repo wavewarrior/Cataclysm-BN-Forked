@@ -1,0 +1,34 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="examineitem.rcss"/>
+</head>
+<body data-model="examineitem">
+    <!-- Tier 3 entry (examine_item_menu). First consumer of the F.2 item-info
+         component (rml_util::item_info_rml_lines). Title (item name) + a left
+         action list (the existing add_entry actions: hotkey + name, hint colour,
+         cursor) + the right item-info pane (#examine-info) rendering the shared
+         item-info lines. The legacy is a contextual SIDE PANEL beside the parent
+         inventory; this is a FULL-SCREEN doc that covers the parent instead
+         (conscious simplification — the item is already chosen). It is the FIRST
+         RmlUi modal opened NESTED over a still-active curses parent. Actions stay
+         on input_context: keyboard UP/DOWN select + CONFIRM/hotkey run; mouse
+         SELECTS an action (run via Enter — click-to-run not supported, per the
+         mouse-selects/keyboard-acts invariant). PAGE_UP/DOWN scroll #examine-info. -->
+    <div class="panel ei-panel">
+        <div class="ei-title" data-rml="title_rml"></div>
+        <div class="ei-main">
+            <div class="ei-actions scroll-pane">
+                <div class="ei-action" data-for="a : actions"
+                     data-class-selected="a.selected"
+                     data-event-mouseover="on_action(it_index)"
+                     data-event-click="on_action(it_index)"
+                     data-rml="a.name_rml"></div>
+            </div>
+            <div id="examine-info" class="ei-info scroll-pane">
+                <div class="ei-line" data-for="ln : info" data-rml="ln.text_rml"></div>
+            </div>
+        </div>
+    </div>
+</body>
+</rml>

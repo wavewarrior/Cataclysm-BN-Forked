@@ -514,6 +514,53 @@
     THAT now — every conforming screen added while the giants stay on curses is
     effort toward an endgame that won't arrive.
 
+### Tier 2 status (2026-06-11): COMPLETE except faction (deferred)
+
+8 of 9 Tier-2 screens DONE: mutations / bionics / safemode / auto_pickup /
+computer terminal / construction / crafting (eyeballed) / armor_layers. **faction
+DEFERRED** — its detail panes ride the Tier-3-era creature/npc-info F.2 component
+AND it needs an interface refactor of `npc::faction_display` (split draw from
+state); do it after that component lands, not before.
+
+### Tier 3 progress (item-info family)
+
+- **F.2 item-info component — LANDED (additive), COMMITTED.** `rml_util::
+  item_info_rml_lines(item_info_data&)` → `format_item_info` → `foldstring(s,1e5)`
+  → `cata_text_to_rml` per line (the exact shape crafting's ad-hoc right pane
+  already runs). Additive: touches no existing code; the shared `draw_item_info`
+  curses core (output.cpp:954, one flag-driven loop behind ~10 callsites) is
+  UNTOUCHED. Host screens migrate render-behind and feed their `item_info_data`
+  here. **Structural finding:** there is NO separable "modal overload" — all 3
+  `draw_item_info` overloads funnel into the one core loop, so full-screen modal
+  callers (no own ui_adaptor) can't be migrated without touching the shared core.
+  The clean consumers are screens that own a ui_adaptor + embed
+  `draw_item_info(without_getch)`.
+- **Tier 3 screen #1: examine_item_menu (examine_item_menu::run) — CODE-COMPLETE +
+  BUILD-GREEN (examine_item_menu.cpp + rml_util + devui compile + LINK clean),
+  TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.** 11th `rml_doc` consumer; FIRST consumer
+  of the F.2 item-info component AND the **FIRST RmlUi modal opened NESTED over a
+  still-active curses parent** (the inventory/pickup it launches from). One
+  full-screen doc: title (item name) + left action list (rows from
+  `action_list.entries` — hotkey + txt + text_color, cursor) + right item-info pane
+  (#examine-info, the F.2 lines). `data/gui/examineitem.{rml,rcss}`. STRUCTURAL
+  POINTS: (1) the legacy is a contextual SIDE PANEL beside the parent; this is a
+  full-screen doc that COVERS the parent (CONSCIOUS simplification — item already
+  chosen; flagged for eyeball). (2) shared `draw_item_info` core + the action
+  uilist UNTOUCHED (curses path unchanged). (3) keyboard owns action select/run
+  (existing loop: UP/DOWN + CONFIRM/hotkey); mouse `on_action` SELECTS only (run
+  via Enter — click-to-run not supported, per the mouse-selects/keyboard-acts
+  invariant). (4) PAGE_UP/DOWN scroll #examine-info (SetScrollTop). (5) single
+  exit → explicit `rml.close()`. F4 toggle "examine item via RmlUi" (OFF).
+  **EYEBALL CHECK (user, A/B via F4):** (1) **★ NESTED-MODAL (the novel surface):**
+  open examine-item FROM the inventory (examine an item) — the RmlUi doc renders
+  cleanly over the parent, and the inventory is INTACT after close (this is the
+  first nested RmlUi-over-curses modal). (2) item-info content matches curses
+  (props/protection/flags/description, colours). (3) action list shows hotkey +
+  name with hint colours; UP/DOWN move cursor, Enter/hotkey runs the action; mouse
+  click selects (then Enter runs). (4) PAGE_UP/DOWN scroll the info pane.
+  **UNPROVEN:** `item_compare` is empty here → `format_item_info`'s +/- compare-
+  delta colouring is NOT exercised (the first COMPARING consumer earns that later).
+
 ## Load-bearing architecture facts (verified this session)
 
 - **Single curses chokepoint:** every non-map window renders through

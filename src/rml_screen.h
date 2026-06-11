@@ -126,4 +126,8 @@ bool &crafting_rmlui_enabled();
 // show_armor_layers_ui() RmlUi render path (Tier 2: 4-pane sort-armor).
 bool &armor_layers_rmlui_enabled();
 
+// examine_item_menu::run() RmlUi render path (Tier 3 entry: item-info component +
+// action list). First consumer of rml_util::item_info_rml_lines.
+bool &examine_item_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

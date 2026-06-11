@@ -89,3 +89,16 @@ std::string cata_text_to_rml( const std::string &s )
     }
     return result;
 }
+
+std::vector<std::string> item_info_rml_lines( item_info_data &data )
+{
+    // format_item_info builds the colour-tagged body (incl. the +/- compare
+    // deltas when item_compare is non-empty); split on '\n' without re-wrapping
+    // (RmlUi's pre-wrap handles visual wrap) and convert each line to markup.
+    const std::string body = format_item_info( data.get_item_display(), data.get_item_compare() );
+    std::vector<std::string> out;
+    for( const std::string &line : foldstring( body, 100000 ) ) {
+        out.push_back( cata_text_to_rml( line ) );
+    }
+    return out;
+}

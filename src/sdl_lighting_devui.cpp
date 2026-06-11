@@ -102,6 +102,7 @@ void draw()
     ImGui::Checkbox( "construction via RmlUi", &construction_rmlui_enabled() );
     ImGui::Checkbox( "crafting via RmlUi", &crafting_rmlui_enabled() );
     ImGui::Checkbox( "armor layers via RmlUi", &armor_layers_rmlui_enabled() );
+    ImGui::Checkbox( "examine item via RmlUi", &examine_item_rmlui_enabled() );
 
     static const char *mode_names[] = {
         "off", "ambient", "emitter", "sun", "sky", "total", "SDF", "sky_vis", "emit_bw",

@@ -25,10 +25,64 @@
 #include "options.h"
 #include "ui.h"
 
+#include <RmlUi/Core.h>
+
+#include "rml_screen.h"
+#include "rml_util.h"
+
 struct action_entry {
     std::string action;
     std::function<bool()> on_select;
 };
+
+// ── RmlUi render path (Tier 3 entry: examine_item_menu) ───────────────────────
+// 11th rml_doc consumer; FIRST consumer of the F.2 item-info component
+// (rml_util::item_info_rml_lines) and the FIRST RmlUi modal opened NESTED over a
+// still-active curses parent (the inventory/pickup screen it launched from). The
+// legacy is a contextual SIDE PANEL; this is a full-screen doc that COVERS the
+// parent (conscious — the item is already chosen). Render-only: keyboard owns
+// action select/run (the existing loop); mouse SELECTS an action (run via Enter).
+// The shared draw_item_info core + the action uilist are untouched.
+namespace
+{
+struct ei_action {
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct ei_line {
+    Rml::String text_rml;
+};
+struct ei_session {
+    Rml::String title_rml;
+    Rml::Vector<ei_action> actions;
+    Rml::Vector<ei_line> info;
+    Rml::DataModelHandle handle;
+};
+
+bool g_ei_types_registered = false;
+
+void register_ei_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_ei_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<ei_action> ah = c.RegisterStruct<ei_action>();
+    ah.RegisterMember( "name_rml", &ei_action::name_rml );
+    ah.RegisterMember( "selected", &ei_action::selected );
+    c.RegisterArray<Rml::Vector<ei_action>>();
+    Rml::StructHandle<ei_line> lh = c.RegisterStruct<ei_line>();
+    lh.RegisterMember( "text_rml", &ei_line::text_rml );
+    c.RegisterArray<Rml::Vector<ei_line>>();
+    g_ei_types_registered = true;
+}
+} // namespace
+
+bool &examine_item_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = false;
+    return enabled;
+}
 
 namespace examine_item_menu
 {
@@ -286,7 +340,66 @@ bool run(
         }
     };
     ui->mark_resize();
+
+    // RmlUi render path. data/doc declared here so the redraw can sync; the
+    // shared item-info core (draw_item_info) + the action uilist stay for the
+    // curses path. Single exit (return ret_val) → explicit rml.close() there.
+    std::unique_ptr<ei_session> rml_sess;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml_sess ) {
+            return;
+        }
+        rml_sess->title_rml = cata_text_to_rml( colorize( itm.tname(), c_white ) );
+        rml_sess->actions.clear();
+        for( int i = 0; i < num_actions; i++ ) {
+            const uilist_entry &e = action_list.entries[i];
+            ei_action a;
+            const std::string key = e.hotkey > 0
+                                    ? string_format( "%c ", static_cast<char>( e.hotkey ) ) : "  ";
+            a.name_rml = cata_text_to_rml( colorize( key + e.txt, e.text_color ) );
+            a.selected = ( i == selected_action );
+            rml_sess->actions.push_back( a );
+        }
+        rml_sess->info.clear();
+        for( const std::string &l : item_info_rml_lines( data ) ) {
+            ei_line ln;
+            ln.text_rml = l;   // item_info_rml_lines already returns RML markup
+            rml_sess->info.push_back( ln );
+        }
+        rml_sess->handle.DirtyVariable( "title_rml" );
+        rml_sess->handle.DirtyVariable( "actions" );
+        rml_sess->handle.DirtyVariable( "info" );
+    };
+
+    rml.open( examine_item_rmlui_enabled(), "examineitem", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        rml_sess = std::make_unique<ei_session>();
+        register_ei_rml_types( c );
+        c.Bind( "title_rml", &rml_sess->title_rml );
+        c.Bind( "actions", &rml_sess->actions );
+        c.Bind( "info", &rml_sess->info );
+        // Mouse selects an action (keyboard CONFIRM/hotkey runs it).
+        c.BindEventCallback( "on_action",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            if( idx >= 0 && idx < num_actions ) {
+                selected_action = idx;
+                action_list.set_selected( selected_action );
+            }
+        } );
+        rml_sess->handle = c.GetModelHandle();
+    } );
+
     ui->on_redraw( [&]( ui_adaptor & ui ) {
+        // RmlUi path owns the screen — sync the model and skip curses drawing.
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         draw_item_info( w_info, data );
         action_list.show( ui );
     } );
@@ -308,8 +421,18 @@ bool run(
             exit = true;
         } else if( action == "PAGE_UP" ) {
             info_area_scroll_pos -= info_area_scroll_step;
+            if( rml ) {
+                if( Rml::Element *el = rml.document()->GetElementById( "examine-info" ) ) {
+                    el->SetScrollTop( el->GetScrollTop() - el->GetClientHeight() * 0.85f );
+                }
+            }
         } else if( action == "PAGE_DOWN" ) {
             info_area_scroll_pos += info_area_scroll_step;
+            if( rml ) {
+                if( Rml::Element *el = rml.document()->GetElementById( "examine-info" ) ) {
+                    el->SetScrollTop( el->GetScrollTop() + el->GetClientHeight() * 0.85f );
+                }
+            }
         } else if( action == "SCROLL_UP" || action == "UP" ) {
             selected_action = ( selected_action - 1 + num_actions ) % num_actions;
             action_list.set_selected( selected_action );
@@ -326,6 +449,7 @@ bool run(
             }
         }
     }
+    rml.close();
     return ret_val;
 }
 
