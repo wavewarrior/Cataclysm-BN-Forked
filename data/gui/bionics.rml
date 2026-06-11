@@ -1,0 +1,42 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="bionics.rcss"/>
+</head>
+<body data-model="bionics">
+    <!-- Tier 2 screen #2 (show_bionics_ui). Tab bar (ACTIVE/PASSIVE, lifted into
+         theme.rcss as the shared .tabs/.tab component) over a SINGLE list showing
+         the current tab's bionics — each row "<key> <name>, <power props>" with
+         the legacy colour baked in. A titlebar line shows bionic power + fuel +
+         mode hints; the examine pane (right) appears only in EXAMINING mode.
+         Single visible list → the selected-row accent + "> " marker just track
+         the cursor (no focused-column gating like mutations). The CBM-slot
+         connector graphic (CBM_SLOTS_ENABLED, default off) is dropped — semantic
+         rewrite. Modes/toggles (examine/reassign/fuel/auto-start/sprite/sort) +
+         activation stay on input_context; RmlUi renders + handles mouse only. -->
+    <div class="panel bio-panel">
+        <div class="bio-title" data-rml="title_rml"></div>
+
+        <div class="tabs bio-tabs">
+            <div class="item tab" data-class-selected="active_tab"
+                 data-event-click="on_tab(0)" data-rml="active_tab_label_rml"></div>
+            <div class="item tab" data-class-selected="!active_tab"
+                 data-event-click="on_tab(1)" data-rml="passive_tab_label_rml"></div>
+        </div>
+
+        <div class="bio-main">
+            <div class="bio-pane scroll-pane">
+                <div class="bio-none" data-if="empty" data-rml="empty_rml"></div>
+                <div class="bio-line" data-for="row : rows"
+                     data-class-selected="row.selected"
+                     data-event-mouseover="on_select(it_index)"
+                     data-event-click="on_select(it_index)">
+                    <span data-rml="row.text_rml"></span>
+                </div>
+            </div>
+
+            <div class="bio-examine scroll-pane" data-if="examining" data-rml="examine_rml"></div>
+        </div>
+    </div>
+</body>
+</rml>

@@ -26,6 +26,11 @@
 #include "uistate.h"
 #include "units.h"
 
+#include <RmlUi/Core.h>
+
+#include "rml_screen.h"
+#include "rml_util.h"
+
 static const std::string flag_SAFE_FUEL_OFF( "SAFE_FUEL_OFF" );
 static const flag_id flag_MULTIINSTALL( "MULTIINSTALL" );
 
@@ -187,16 +192,16 @@ char get_free_invlet( bionic_collection &bionics )
     return ' ';
 }
 
-static void draw_bionics_titlebar( const catacurses::window &window, Character *who,
-                                   bionic_menu_mode mode )
-{
-    input_context ctxt( "BIONICS" );
-    static const flag_id json_flag_PERPETUAL( "PERPETUAL" );
+// ── Titlebar text builders ────────────────────────────────────────────────
+// Pure text, extracted so the RmlUi render path and the curses titlebar share
+// ONE source of truth (no drift). The curses draw_bionics_titlebar keeps its own
+// border-glyph drawing + positioning and just sources its text from these.
 
-    werase( window );
-    std::string fuel_string;
+static std::string bionics_fuel_text( Character *who )
+{
+    static const flag_id json_flag_PERPETUAL( "PERPETUAL" );
+    std::string fuel_string = _( "Available Fuel: " );
     bool found_fuel = false;
-    fuel_string = _( "Available Fuel: " );
     for( const bionic &bio : *who->my_bionics ) {
         for( const itype_id &fuel : who->get_fuel_available( bio.id ) ) {
             found_fuel = true;
@@ -226,9 +231,11 @@ static void draw_bionics_titlebar( const catacurses::window &window, Character *
             }
         }
     }
-    if( !found_fuel ) {
-        fuel_string.clear();
-    }
+    return found_fuel ? fuel_string : std::string();
+}
+
+static std::string bionics_power_markup( Character *who )
+{
     std::string power_string;
     const int curr_power = units::to_joule( who->get_power_level() );
     const int kilo = curr_power / units::to_joule( 1_kJ );
@@ -243,10 +250,47 @@ static void draw_bionics_titlebar( const catacurses::window &window, Character *
         power_string = std::to_string( joule );
         power_string += pgettext( "energy unit: joule", "J" );
     }
+    return string_format(
+               _( "Bionic Power: <color_light_blue>%s</color>/<color_light_blue>%ikJ</color>" ),
+               power_string, units::to_kilojoule( who->get_max_power_level() ) );
+}
 
-    const int pwr_str_pos = right_print( window, 1, 1, c_white,
-                                         string_format( _( "Bionic Power: <color_light_blue>%s</color>/<color_light_blue>%ikJ</color>" ),
-                                                 power_string, units::to_kilojoule( who->get_max_power_level() ) ) );
+static std::string bionics_hints_text( bionic_menu_mode mode, const input_context &ctxt )
+{
+    std::string desc_append = string_format(
+                                  _( "[<color_yellow>%s</color>] Reassign, [<color_yellow>%s</color>] Switch tabs, "
+                                     "[<color_yellow>%s</color>] Toggle fuel saving mode, "
+                                     "[<color_yellow>%s</color>] Toggle sprite visibility, "
+                                     "[<color_yellow>%s</color>] Toggle auto start mode." ),
+                                  ctxt.get_desc( "REASSIGN" ), ctxt.get_desc( "NEXT_TAB" ), ctxt.get_desc( "TOGGLE_SAFE_FUEL" ),
+                                  ctxt.get_desc( "TOGGLE_SPRITE" ),
+                                  ctxt.get_desc( "TOGGLE_AUTO_START" ) );
+    desc_append += string_format( _( " [<color_yellow>%s</color>] Sort: %s" ), ctxt.get_desc( "SORT" ),
+                                  sort_mode_str( uistate.bionic_sort_mode ) );
+    if( mode == REASSIGNING ) {
+        return _( "Reassigning.  Select a bionic to reassign or press [<color_yellow>SPACE</color>] to cancel." );
+    } else if( mode == ACTIVATING ) {
+        return string_format( _( "<color_green>Activating</color>  "
+                                 "[<color_yellow>%s</color>] Examine, %s" ),
+                              ctxt.get_desc( "TOGGLE_EXAMINE" ), desc_append );
+    } else if( mode == EXAMINING ) {
+        return string_format( _( "<color_light_blue>Examining</color>  "
+                                 "[<color_yellow>%s</color>] Activate, %s" ),
+                              ctxt.get_desc( "TOGGLE_EXAMINE" ), desc_append );
+    }
+    return std::string();
+}
+
+static void draw_bionics_titlebar( const catacurses::window &window, Character *who,
+                                   bionic_menu_mode mode )
+{
+    input_context ctxt( "BIONICS" );
+
+    werase( window );
+    // Fuel is hidden while reassigning (matches the hint text's mode).
+    std::string fuel_string = ( mode == REASSIGNING ) ? std::string() : bionics_fuel_text( who );
+
+    const int pwr_str_pos = right_print( window, 1, 1, c_white, bionics_power_markup( who ) );
 
     mvwputch( window, point( pwr_str_pos - 1, 1 ), BORDER_COLOR, LINE_XOXO ); // |
     mvwputch( window, point( pwr_str_pos - 1, 2 ), BORDER_COLOR, LINE_XXOO ); // |_
@@ -259,32 +303,9 @@ static void draw_bionics_titlebar( const catacurses::window &window, Character *
     mvwputch( window, point( pwr_str_pos - 1, 0 ), BORDER_COLOR, LINE_OXXX ); // ^|^
     center_print( window, 0, c_light_red, _( " BIONICS " ) );
 
-    std::string desc_append = string_format(
-                                  _( "[<color_yellow>%s</color>] Reassign, [<color_yellow>%s</color>] Switch tabs, "
-                                     "[<color_yellow>%s</color>] Toggle fuel saving mode, "
-                                     "[<color_yellow>%s</color>] Toggle sprite visibility, "
-                                     "[<color_yellow>%s</color>] Toggle auto start mode." ),
-                                  ctxt.get_desc( "REASSIGN" ), ctxt.get_desc( "NEXT_TAB" ), ctxt.get_desc( "TOGGLE_SAFE_FUEL" ),
-                                  ctxt.get_desc( "TOGGLE_SPRITE" ),
-                                  ctxt.get_desc( "TOGGLE_AUTO_START" ) );
-    desc_append += string_format( _( " [<color_yellow>%s</color>] Sort: %s" ), ctxt.get_desc( "SORT" ),
-                                  sort_mode_str( uistate.bionic_sort_mode ) );
-    std::string desc;
-    if( mode == REASSIGNING ) {
-        desc = _( "Reassigning.  Select a bionic to reassign or press [<color_yellow>SPACE</color>] to cancel." );
-        fuel_string.clear();
-    } else if( mode == ACTIVATING ) {
-        desc = string_format( _( "<color_green>Activating</color>  "
-                                 "[<color_yellow>%s</color>] Examine, %s" ),
-                              ctxt.get_desc( "TOGGLE_EXAMINE" ), desc_append );
-    } else if( mode == EXAMINING ) {
-        desc = string_format( _( "<color_light_blue>Examining</color>  "
-                                 "[<color_yellow>%s</color>] Activate, %s" ),
-                              ctxt.get_desc( "TOGGLE_EXAMINE" ), desc_append );
-    }
-
     // NOLINTNEXTLINE(cata-use-named-point-constants)
-    int lines_count = fold_and_print( window, point( 1, 1 ), pwr_str_pos - 2, c_white, desc );
+    int lines_count = fold_and_print( window, point( 1, 1 ), pwr_str_pos - 2, c_white,
+                                      bionics_hints_text( mode, ctxt ) );
     fold_and_print( window, point( 1, ++lines_count ), pwr_str_pos - 2, c_white, fuel_string );
     wnoutrefresh( window );
 }
@@ -552,6 +573,53 @@ nc_color get_bionic_text_color( const bionic &bio, const bool isHighlightedBioni
     return type;
 }
 
+// ── RmlUi render path (full UI→RmlUi migration, Tier 2 screen #2) ─────────────
+// Tabs (ACTIVE/PASSIVE) + a single list of the current tab's bionics + an examine
+// pane, via the F.3 rml_doc harness. 4th rml_doc consumer; first user of the
+// shared theme .tabs/.tab component. Row colour + "> "/"• " marker baked into the
+// bound text; the titlebar (power + fuel + hints) reuses the bionics_*_text
+// builders. Modes/toggles + activation stay on input_context (keyboard).
+namespace
+{
+struct bionic_rml_row {
+    Rml::String text_rml;
+    bool selected = false;
+};
+struct bionic_rml_session {
+    Rml::Vector<bionic_rml_row> rows;     // current tab's list
+    bool active_tab = false;              // tab_mode == TAB_ACTIVE
+    Rml::String active_tab_label_rml;     // "ACTIVE (n)"
+    Rml::String passive_tab_label_rml;    // "PASSIVE (n)"
+    bool empty = false;
+    Rml::String empty_rml;
+    Rml::String title_rml;                // power + fuel + mode hints
+    bool examining = false;
+    Rml::String examine_rml;              // bionic description (examine mode)
+    Rml::DataModelHandle handle;
+};
+
+bool g_bionics_types_registered = false;
+
+void register_bionics_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_bionics_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<bionic_rml_row> rh = c.RegisterStruct<bionic_rml_row>();
+    rh.RegisterMember( "text_rml", &bionic_rml_row::text_rml );
+    rh.RegisterMember( "selected", &bionic_rml_row::selected );
+    c.RegisterArray<Rml::Vector<bionic_rml_row>>();
+    g_bionics_types_registered = true;
+}
+} // namespace
+
+bool &bionics_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = false;
+    return enabled;
+}
+
 void show_bionics_ui( Character &who )
 {
     bionic_collection &bionics = *who.my_bionics;
@@ -649,7 +717,139 @@ void show_bionics_ui( Character &who )
     ctxt.register_action( "TOGGLE_AUTO_START" );
     ctxt.register_action( "SORT" );
 
+    // ---- RmlUi render path (F.3 rml_doc harness) ----------------------------
+    // rml_doc owns the open/guard/16ms-tick/close lifecycle; only the model + this
+    // live sync stay here. sync_rml() runs in on_redraw, so the tabs, the current
+    // tab's list, the titlebar, and the examine pane track the loop state. Model
+    // storage declared BEFORE rml so it outlives the document. RmlUi renders all
+    // rows + scrolls natively, so the legacy scroll_position windowing stays a
+    // curses-only concern.
+    std::unique_ptr<bionic_rml_session> data;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml ) {
+            return;
+        }
+        sorted_bionics *cur = ( tab_mode == TAB_ACTIVE ? &active : &passive );
+
+        data->active_tab = ( tab_mode == TAB_ACTIVE );
+        data->active_tab_label_rml = cata_text_to_rml( string_format( _( "ACTIVE (%i)" ),
+                                     active.size() ) );
+        data->passive_tab_label_rml = cata_text_to_rml( string_format( _( "PASSIVE (%i)" ),
+                                      passive.size() ) );
+
+        // Titlebar: power + mode hints + fuel (fuel hidden while reassigning).
+        std::string fuel = ( menu_mode == REASSIGNING ) ? std::string() : bionics_fuel_text( &who );
+        std::string title = bionics_power_markup( &who ) + "\n" + bionics_hints_text( menu_mode, ctxt );
+        if( !fuel.empty() ) {
+            title += "\n" + fuel;
+        }
+        data->title_rml = cata_text_to_rml( title );
+
+        data->empty = cur->empty();
+        if( cur->empty() ) {
+            data->empty_rml = cata_text_to_rml( colorize(
+                                  tab_mode == TAB_ACTIVE ? _( "No activatable bionics installed." )
+                                  : _( "No passive bionics installed." ), c_light_gray ) );
+        }
+
+        data->rows.clear();
+        for( int i = 0; i < static_cast<int>( cur->size() ); ++i ) {
+            const bionic &bio = *( *cur )[i];
+            const nc_color col = get_bionic_text_color( bio, false );
+            const std::string marker = ( i == cursor ) ? "> " : "• ";
+            const std::string desc = string_format( "%c %s", ( *cur )[i]->invlet,
+                                     build_bionic_powerdesc_string( bio ) );
+            bionic_rml_row r;
+            r.text_rml = cata_text_to_rml( marker + colorize( desc, col ) );
+            r.selected = ( i == cursor );
+            data->rows.push_back( r );
+        }
+
+        data->examining = ( menu_mode == EXAMINING );
+        if( data->examining && cursor >= 0 && cursor < static_cast<int>( cur->size() ) ) {
+            const bionic &bio = *( *cur )[cursor];
+            std::string ex = colorize( string_format( "%s", bio.id->name ), c_white ) + "\n";
+            const std::string poweronly = build_bionic_poweronly_string( bio );
+            if( !poweronly.empty() ) {
+                ex += colorize( string_format( _( "Power usage: %s" ), poweronly ), c_light_gray ) + "\n";
+            }
+            ex += colorize( string_format( "%s", bio.id->description ), c_light_blue );
+            if( bio.info().has_flag( flag_MULTIINSTALL ) ) {
+                const int count = who.count_bionic_of_type( bio.id );
+                if( count != 1 ) {
+                    ex += "\n" + colorize( string_format(
+                            "You have %s instances of this bionic installed.", count ), c_magenta );
+                }
+            }
+            data->examine_rml = cata_text_to_rml( ex );
+        } else {
+            data->examine_rml.clear();
+        }
+
+        data->handle.DirtyVariable( "rows" );
+        data->handle.DirtyVariable( "active_tab" );
+        data->handle.DirtyVariable( "active_tab_label_rml" );
+        data->handle.DirtyVariable( "passive_tab_label_rml" );
+        data->handle.DirtyVariable( "empty" );
+        data->handle.DirtyVariable( "empty_rml" );
+        data->handle.DirtyVariable( "title_rml" );
+        data->handle.DirtyVariable( "examining" );
+        data->handle.DirtyVariable( "examine_rml" );
+    };
+
+    rml.open( bionics_rmlui_enabled(), "bionics", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        data = std::make_unique<bionic_rml_session>();
+        register_bionics_rml_types( c );
+        c.Bind( "rows", &data->rows );
+        c.Bind( "active_tab", &data->active_tab );
+        c.Bind( "active_tab_label_rml", &data->active_tab_label_rml );
+        c.Bind( "passive_tab_label_rml", &data->passive_tab_label_rml );
+        c.Bind( "empty", &data->empty );
+        c.Bind( "empty_rml", &data->empty_rml );
+        c.Bind( "title_rml", &data->title_rml );
+        c.Bind( "examining", &data->examining );
+        c.Bind( "examine_rml", &data->examine_rml );
+        // Clicking a tab switches it (resets cursor/scroll, like NEXT_TAB);
+        // clicking/hovering a row moves the cursor. Keyboard nav unchanged.
+        c.BindEventCallback( "on_tab",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            const bionic_tab_mode want = ( idx == 0 ) ? TAB_ACTIVE : TAB_PASSIVE;
+            if( want != tab_mode ) {
+                tab_mode = want;
+                cursor = 0;
+                scroll_position = 0;
+            }
+        } );
+        c.BindEventCallback( "on_select",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            sorted_bionics *curl = ( tab_mode == TAB_ACTIVE ? &active : &passive );
+            if( idx >= 0 && idx < static_cast<int>( curl->size() ) ) {
+                cursor = idx;
+            }
+        } );
+        data->handle = c.GetModelHandle();
+    } );
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            // Hide the doc during transient activation/targeting (matches the
+            // curses `hide` early-return) instead of leaving a stale overlay.
+            rml.document()->SetProperty( "visibility", hide ? "hidden" : "visible" );
+            if( !hide ) {
+                sync_rml();
+            }
+            return;
+        }
         if( hide ) {
             return;
         }
@@ -955,4 +1155,10 @@ void show_bionics_ui( Character &who )
             break;
         }
     }
+
+    // Tear down the RmlUi document while the bound `data` is still alive. close()
+    // is idempotent and a no-op when the curses path ran; the early `return` on a
+    // bionic that spends moves is covered by the rml_doc destructor (rml is
+    // declared after data, so it tears down first, while data is still alive).
+    rml.close();
 }

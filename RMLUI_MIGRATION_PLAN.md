@@ -129,13 +129,12 @@
   over the still-rendered RmlUi diary doc — editor composites on top; usable but the
   diary text shows behind it. Acceptable per per-screen migration (nested editor is
   its own screen); flag if it reads badly.
-  - **REGRESSION FOUND + FIXED (2026-06-11, uncommitted):** the prior "eyeballed
-    clean" was editor-focused and MISSED that the pages/changes/text lists were
-    flowing HORIZONTALLY — same `display: inline` default bug as mutations (the
-    `.diary-line` rows had no `display`, and `.diary-pane` is a `.scroll-pane` block
-    container). Fixed `.diary-line { display: block }`. **DIARY NEEDS RE-EYEBALL**
-    (the three panes should now be vertical lists); the committed diary screen is
-    one rcss line behind — commit this fix once confirmed.
+  - **REGRESSION FOUND + FIXED + RE-EYEBALLED CLEAN, COMMITTED `21c2664314`:** the
+    prior "eyeballed clean" was editor-focused and MISSED that the pages/changes/
+    text lists were flowing HORIZONTALLY — same `display: inline` default bug as
+    mutations (`.diary-line` had no `display`, `.diary-pane` is a `.scroll-pane`
+    block container). Fixed `.diary-line { display: block }`; gotcha documented in
+    theme.rcss.
 - **Tier 1 screen: loading_ui — NO BESPOKE MIGRATION NEEDED (covered by Tier 0).**
   Investigated: `loading_ui::menu` IS a `uilist` (loading_ui.cpp:476); its sole
   on_redraw calls `menu->show(ui)` (loading_ui.cpp:508) → renders via RmlUi
@@ -182,8 +181,9 @@
 
 ### Tier 2 progress
 
-- **Tier 2 screen #1: mutations (show_mutations_ui) — CODE-COMPLETE + BUILD-GREEN
-  (mutation_ui.cpp + devui compile clean), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.**
+- **Tier 2 screen #1: mutations (show_mutations_ui) — DONE + EYEBALLED CLEAN,
+  COMMITTED `c93c05b550`** (layout fix `21c2664314`-class included; diary inline
+  fix `21c2664314`). TOGGLE OFF.
   First Tier-2 screen; 3rd `rml_doc` consumer. TWO-COLUMN GRID shape (passive | active
   mutations), each row "<key> <name>" with legacy per-state colour baked into the
   bound string via cata_text_to_rml (passive base-trait cyan/light-cyan; active
@@ -234,6 +234,40 @@
     on the primary target" until a Win11/D3D12 run confirms the mutations doc
     uploads/renders with sane in-pass counters. (Can't be run from the Metal dev
     box — flagged so it doesn't silently fall off.)
+
+- **Tier 2 screen #2: bionics (show_bionics_ui) — CODE-COMPLETE + BUILD-GREEN
+  (bionics_ui.cpp + devui compile clean), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.**
+  4th `rml_doc` consumer; **first user of the shared `.tabs`/`.tab` component**
+  (LIFTED into theme.rcss at this 3rd tab use, after missions + scores shipped
+  their own — they keep their copies, adopt on next touch). Shape = TAB BAR
+  (ACTIVE/PASSIVE) over a SINGLE list of the current tab's bionics + an examine
+  pane (right, examine mode only) + a titlebar (power + fuel + mode hints). Single
+  visible list → selected accent + "> "/"• " marker just track the cursor (no
+  focused-column gating). `data/gui/bionics.{rml,rcss}` + bionics_ui.cpp RmlUi path.
+  STRUCTURAL POINTS: (1) extracted 3 titlebar TEXT builders (`bionics_fuel_text` /
+  `bionics_power_markup` / `bionics_hints_text`) shared by the RmlUi title + the
+  curses `draw_bionics_titlebar` (which keeps its own border-glyph drawing — text
+  only, per advisor: the curses fn interleaves glyphs with text so only the text
+  was lifted). (2) Row text reuses `build_bionic_powerdesc_string` +
+  `get_bionic_text_color(bio,false)` (base colour; CSS does highlight). (3) the
+  `hide` flag (transient during a bionic that spends moves / targets) is honoured
+  by toggling the doc's `visibility` property (curses just early-returns; RmlUi
+  would leave a stale overlay otherwise). (4) early `return` (moves spent) is
+  covered by the rml_doc dtor (rml declared after data). (5) SORT only sets
+  `uistate.bionic_sort_mode` and the active/passive vectors are built once at
+  entry → neither curses nor RmlUi reorders live (behaviour-identical, verified).
+  (6) CBM-slot connector graphic (CBM_SLOTS_ENABLED, default off) DROPPED — semantic
+  rewrite (like diary's ASCII border). F4 toggle "bionics via RmlUi" (OFF).
+  **EYEBALL CHECK (user, A/B via F4):** ACTIVE/PASSIVE tabs (counts correct), click
+  or NEXT_TAB switches the visible list + bold-marks the tab; rows show "<key>
+  <name>, <power props>" with colours matching curses (ON/OFF, fuel-saving, hidden,
+  etc.); "> " on the cursor row + "• " elsewhere; UP/DOWN moves cursor; titlebar
+  shows Bionic Power + Available Fuel + mode hints; TOGGLE_EXAMINE → examine pane
+  with name/power-usage/description; REASSIGN letter popup; activate (Enter/invlet)
+  works (incl. a targeting bionic → screen hides cleanly, no stale overlay); mouse
+  hover/click selects; empty tab shows the right "No … installed" message.
+  **WATCH:** long bionic list → no auto-scroll-into-view (same as mutations; remedy
+  = the staged ScrollIntoView one-liner if cursor-lost).
   - **THE DECIDING FACT (rip-out reality, was missing):** the payoff is §8 Tier-10
     rip-out (delete curses + ImGui), which is ALL-OR-NOTHING — it needs EVERY
     screen migrated. So deferring/skipping the giants means the rip-out never

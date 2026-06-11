@@ -105,4 +105,7 @@ bool &diary_rmlui_enabled();
 // show_mutations_ui() RmlUi render path (Tier 2 #1: 2-column active/passive grid).
 bool &mutations_rmlui_enabled();
 
+// show_bionics_ui() RmlUi render path (Tier 2 #2: tabs + list + examine pane).
+bool &bionics_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

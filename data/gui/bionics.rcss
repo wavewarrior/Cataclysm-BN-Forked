@@ -1,0 +1,82 @@
+/* Layout for the bionics screen (Tier 2, screen #2: show_bionics_ui).
+   Palette/border/scrollbar/.scroll-pane AND the .tabs/.tab tab bar come from
+   theme.rcss (linked first in bionics.rml); this file owns only the screen's own
+   layout. Lengths in dp.
+
+   Both missions gotchas apply: body needs a definite height or the panel
+   shrink-wraps; each scroll list carries .scroll-pane's vh max-height. Rows use a
+   custom .bio-line (display:block — RmlUi divs default to inline, see theme.rcss)
+   so each is its own line and the selected accent is the screen's own (only one
+   list is visible, so no focused-column gating is needed). */
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.bio-panel {
+    width: 88%;
+    height: 90%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Titlebar line: bionic power + available fuel + mode hints. */
+.bio-title {
+    flex: 0 0 auto;
+    padding-bottom: 6dp;
+    margin-bottom: 6dp;
+    border-bottom: 1dp #5a5a78ff;
+}
+
+/* List (+ examine pane when examining) fill the rest, side by side. */
+.bio-main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+}
+
+.bio-pane {
+    flex: 1;
+    min-height: 0;
+    border: 1dp #5a5a78ff;
+    border-radius: 4dp;
+}
+
+/* Examine description (examine mode only); shares the row's space on the right. */
+.bio-examine {
+    flex: 1;
+    min-height: 0;
+    margin-left: 8dp;
+    padding: 4dp 8dp;
+    border: 1dp #5a5a78ff;
+    border-radius: 4dp;
+    color: #cfcfe0ff;
+    white-space: pre-wrap;
+}
+
+.bio-none {
+    padding: 2dp 6dp;
+    color: #9a9ab0ff;
+}
+
+/* A single bionic row. display:block so each is its own line (see theme.rcss
+   gotcha). The "• "/"> " list marker is baked into the bound text in sync_rml.
+   Transparent by default; hover lightly highlights; the selected row gets the
+   accent. */
+.bio-line {
+    display: block;
+    padding: 2dp 6dp;
+    border-radius: 4dp;
+}
+.bio-line:hover {
+    background-color: #3a3a55ff;
+    color: #ffffffff;
+}
+.bio-line.selected {
+    background-color: #ffcc66ff;
+    color: #1e1e28ff;
+}

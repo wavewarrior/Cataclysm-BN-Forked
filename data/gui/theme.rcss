@@ -69,6 +69,28 @@ body {
     color: #1e1e28ff;
 }
 
+/* F.2 tab bar (lifted at the 3rd tab use = bionics, after missions + scores both
+   shipped a content-switching tab row). A horizontal row of `.tab` items, each a
+   `.item` (so it inherits the bg/:hover/.selected triad); `.tab.selected` adds
+   bold. Bind tabs as a Vector of {name, selected} and switch the active one from
+   C++ on click (keyboard owns LEFT/RIGHT). missions/scores keep their own copies
+   (.missions-tab / .scores-tab) — adopt this on their next touch, don't retrofit
+   eyeballed screens. */
+.tabs {
+    display: flex;
+    flex-direction: row;
+    margin-bottom: 8dp;
+}
+.tab {
+    flex: 1;
+    padding: 4dp 10dp;
+    margin-right: 6dp;
+    text-align: center;
+}
+.tab.selected {
+    font-weight: bold;
+}
+
 /* F.2 scrolling-text-view seed (extracted at Tier-1 screen #3 = help, where the
    overflow text-pane recurs a 3rd time after missions' .missions-detail and
    scores' .scores-body). A flex child that scrolls its own overflow. The
