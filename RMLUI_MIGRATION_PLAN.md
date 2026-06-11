@@ -297,6 +297,28 @@
   highlight is missing/stuck.
   **(Tier-2 #4 auto_pickup is the near-free twin once this is confirmed — same
   tabbed rules-table shape.)**
+  - **SAFEMODE EYEBALLED CLEAN, COMMITTED `06b16872aa`** (the `row.sel_col == N`
+    cell-highlight data-expression WORKS in RmlUi 6.2 — proven here, de-risks
+    auto_pickup's identical approach; no bool fallback needed).
+
+- **Tier 2 screen #4: auto_pickup (auto_pickup user_interface::show) —
+  CODE-COMPLETE + BUILD-GREEN (auto_pickup.cpp + devui compile clean), TOGGLE OFF,
+  EYEBALL OWED, UNCOMMITTED.** 6th `rml_doc` consumer; near-free twin of safemode.
+  DYNAMIC tabs (Global/Character) rendered as a BOUND VECTOR `data-for` over the
+  shared theme `.tabs/.tab` (first dynamic-count tab bar — vs bionics/safemode's
+  fixed 2). 2-column rules table (Rule / I/E) with the same 2D-cursor cell
+  highlight (`row.sel_col == 1|2`, proven by safemode). `data/gui/autopickup.{rml,
+  rcss}` + auto_pickup.cpp RmlUi path. STRUCTURAL NOTE: on_redraw is registered
+  ABOVE the input_context in this file, so the rml decls + sync_rml lambda sit
+  before on_redraw and `rml.open()` runs AFTER ctxt is built (open needs ctxt for
+  the 16ms tick; sync_rml needs no ctxt). All editing stays keyboard +
+  string_input_popup; render-only doc; `bActive`→grey; hints via `shortcut_text`;
+  column heads literal English (i18n gap, §8/F.1). F4 toggle "auto pickup via
+  RmlUi" (OFF). **EYEBALL CHECK (user, A/B via F4):** tabs (Global/Character if a
+  character is loaded) switch the table + bold-mark active; rows #/rule/I-E with
+  inactive rules greyed; active CELL highlights + moves with LEFT/RIGHT (Rule↔I/E)
+  + UP/DOWN; Add/Remove/Copy/Move/Enable/Disable/Test + Enter-edit popup work;
+  "Auto pickup enabled: T/F" + <S>witch; mouse hover/click selects a row.
   - **THE DECIDING FACT (rip-out reality, was missing):** the payoff is §8 Tier-10
     rip-out (delete curses + ImGui), which is ALL-OR-NOTHING — it needs EVERY
     screen migrated. So deferring/skipping the giants means the rip-out never

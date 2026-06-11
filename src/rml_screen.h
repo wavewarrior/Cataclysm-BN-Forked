@@ -111,4 +111,7 @@ bool &bionics_rmlui_enabled();
 // safemode::show() RmlUi render path (Tier 2 #3: tabs + 5-column rules table).
 bool &safemode_rmlui_enabled();
 
+// auto_pickup user_interface::show() RmlUi render path (Tier 2 #4: tabs + rules).
+bool &autopickup_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H
