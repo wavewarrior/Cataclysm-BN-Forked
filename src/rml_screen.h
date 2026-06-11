@@ -2,18 +2,87 @@
 #ifndef CATA_SRC_RML_SCREEN_H
 #define CATA_SRC_RML_SCREEN_H
 
-// F.3 — per-screen RmlUi migration support (full UI→RmlUi migration plan).
+// F.3 — per-screen RmlUi migration harness (full UI→RmlUi migration plan).
 //
-// THIN + PROVISIONAL: this currently holds only the per-screen enable toggles
-// (mirroring the uilist/query_popup/string_input toggles in ui.h). A shared
-// open/sync/close/tick harness is deliberately NOT extracted yet — one screen
-// (missions) is N=1 and the common shape across differently-structured screens
-// (list+detail vs tab-page forms vs the continuous sidebar) is not yet visible.
-// Extract the harness here once 2-3 dissimilar screens agree on the pattern.
+// `rml_doc` owns the boilerplate lifecycle every migrated modal screen repeats
+// identically (proven byte-for-byte across missions/scores/help/distraction):
+// the single-instance guard, data-model creation, document load, the 16ms input
+// tick, and teardown ordering. Centralizing those correctness-critical bits is
+// the point — screens 5–45 can't each re-introduce a subtle guard/teardown bug.
+//
+// What stays in the screen (irreducibly screen-specific, NOT shared): the
+// data-model struct, its type registration, the variable Binds + event
+// callbacks (all done in the `bind` lambda passed to open()), and the
+// sync-on-redraw that DirtyVariables the model. There is intentionally no
+// rml_sync() helper — sync has no shared content (cf. the plan's
+// rml_open/rml_sync/rml_close; only open/close are shared).
+//
+// The 3 already-committed screens are deliberately NOT retrofitted onto this
+// (the master plan forbids regressing eyeballed screens for no gain); they keep
+// their inline boilerplate. New screens use rml_doc.
 //
 // Each migrated screen gets an OFF-by-default toggle so it can be A/B'd in
-// isolation from the F4 dev panel; flip the default ON once eyeballed, and the
-// whole toggle layer is deleted at the final curses rip-out.
+// isolation from the F4 dev panel; the whole toggle layer is deleted at the
+// final curses rip-out.
+
+#include <functional>
+#include <string>
+
+namespace Rml
+{
+class DataModelConstructor;
+class ElementDocument;
+} // namespace Rml
+class input_context;
+
+// Owns one per-screen RmlUi document + its data model. Move-free, single-owner;
+// declare it as a local in the screen's draw function alongside the screen's own
+// data-model `unique_ptr`. IMPORTANT: declare the data-model storage BEFORE this
+// (so it outlives the document) and call close() while that data is still alive
+// — RmlUi holds raw pointers into the bound members until RemoveDataModel.
+class rml_doc
+{
+    public:
+        // Open data/gui/<model_name>.rml bound to a fresh data model named
+        // <model_name>. No-op returning false when `enabled` is false, RmlUi is
+        // not ready, or a document with the same model_name is already open
+        // (single-instance guard). `bind` runs after the model is created and
+        // before the document loads: register structs, Bind members,
+        // BindEventCallback, and capture c.GetModelHandle() into the screen's
+        // session for later DirtyVariable calls. On success the 16ms tick is set
+        // on `ctx` (so RmlUi hover/mouse-wheel stay live between keystrokes) and
+        // the single-instance guard is taken — and it is taken ONLY on full
+        // success, so every failure path leaves the guard clean (a stuck guard
+        // would stop the screen from ever reopening).
+        bool open( bool enabled, const std::string &model_name, input_context &ctx,
+                   const std::function<void( Rml::DataModelConstructor & )> &bind );
+        // Close the document, remove the data model, and release the guard.
+        // Idempotent and a no-op when the curses path ran (nothing opened). Safe
+        // to call on any exit path (including an early return); the destructor
+        // also calls it as a safety net.
+        void close();
+        bool active() const {
+            return doc_ != nullptr;
+        }
+        explicit operator bool() const {
+            return doc_ != nullptr;
+        }
+        Rml::ElementDocument *document() const {
+            return doc_;
+        }
+
+        rml_doc() = default;
+        ~rml_doc();
+        rml_doc( const rml_doc & ) = delete;
+        rml_doc &operator=( const rml_doc & ) = delete;
+
+    private:
+        std::string model_name_;
+        Rml::ElementDocument *doc_ = nullptr;
+};
+
+// ── Per-screen enable toggles ────────────────────────────────────────────────
+// (definitions live next to each screen; defaults OFF — opt in via the F4 panel)
 
 // game::list_missions() RmlUi render path.
 bool &missions_rmlui_enabled();
@@ -26,5 +95,8 @@ bool &help_rmlui_enabled();
 
 // distraction_manager_gui::show() RmlUi render path (toggle-list + description).
 bool &distraction_rmlui_enabled();
+
+// auto_note_manager_gui::show() RmlUi render path (toggle-list; first rml_doc user).
+bool &auto_note_rmlui_enabled();
 
 #endif // CATA_SRC_RML_SCREEN_H
