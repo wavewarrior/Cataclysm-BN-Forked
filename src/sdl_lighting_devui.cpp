@@ -45,6 +45,8 @@ float  g_vol_density   = 0.3f;
 float  g_vol_intensity = 1.0f;
 float  g_vol_shadow    = 0.0f;
 float  g_vol_reach     = 8.0f;
+bool   g_rain_enable   = true;
+float  g_rain_intensity = 0.5f;
 bool   g_shadow_debug = false;
 uint32_t g_current_dbg_mode = 0u;
 float g_skylight_bleed = 0.5f;
@@ -132,6 +134,10 @@ void draw()
     ImGui::SliderFloat( "vol intensity", &g_vol_intensity, 0.0f, 4.0f );
     ImGui::SliderFloat( "vol reach (tiles)", &g_vol_reach, 1.0f, 24.0f );
     ImGui::SliderFloat( "vol shadow (lanes)", &g_vol_shadow, 0.0f, 1.0f );
+
+    ImGui::SeparatorText( "High-fidelity rain" );
+    ImGui::Checkbox( "rain", &g_rain_enable );
+    ImGui::SliderFloat( "rain intensity", &g_rain_intensity, 0.0f, 1.0f );
 
     ImGui::SeparatorText( "Silhouette sun shadows (Phase 1/2)" );
     ImGui::Checkbox( "show shadow mask (debug blit)", &g_shadow_debug );

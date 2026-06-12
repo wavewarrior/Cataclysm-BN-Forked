@@ -194,6 +194,11 @@ void render_state::init( SDL_Window *host_window )
         // pass into world_target (world_fmt), driven before bloom. Owns no
         // textures, so no resize hook is needed.
         volumetric_.init( device_, world_fmt );
+
+        // High-fidelity rain effect: droplet particles + splat map ping-pong.
+        rain_.init( device_, world_fmt,
+                    static_cast<std::uint32_t>( pw ),
+                    static_cast<std::uint32_t>( ph ) );
     }
 }
 
@@ -211,6 +216,7 @@ void render_state::shutdown() noexcept
     rc_.shutdown();
     bloom_.shutdown();
     volumetric_.shutdown();
+    rain_.shutdown();
 
     // Phase 4: release SDF textures.
     sdf_.shutdown( device_ );

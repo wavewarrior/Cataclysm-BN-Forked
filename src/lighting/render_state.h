@@ -28,6 +28,7 @@
 #include "radiance_cascade_pass.h"
 #include "bloom_pass.h"
 #include "volumetric_pass.h"
+#include "rain_effect.h"
 
 #include <memory>
 
@@ -314,6 +315,11 @@ class render_state
         // refresh_display inside the Pass-W-ran block, before bloom.
         volumetric_pass &volumetric() noexcept { return volumetric_; }
 
+        // High-fidelity rain effect (droplets + splat map). Driven from
+        // refresh_display between world pass and tonemap; draws droplets onto
+        // world_target then runs a fullscreen splat fade/accumulate pass.
+        rain_effect &rain() noexcept { return rain_; }
+
         // Silhouette sun-shadow mask (Phase 1). Screen-space coverage texture
         // (swapchain format) the shadow_batcher_ renders sheared caster
         // silhouettes into; sized to world_target. nullptr until init() succeeds.
@@ -404,6 +410,7 @@ class render_state
         radiance_cascade_pass                rc_;
         bloom_pass                           bloom_;
         volumetric_pass                      volumetric_;
+        rain_effect                          rain_;
 };
 
 // Process-wide accessor. The object is constructed in init() and torn down

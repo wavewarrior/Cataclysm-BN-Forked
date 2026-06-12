@@ -510,6 +510,17 @@ auto render_world_pass_w( lighting::render_state &rs,
                            wt->width(), wt->height(),
                            g_bloom_threshold, g_bloom_intensity );
     }
+
+    // High-fidelity rain effect: droplets + splat map fade/accumulate.
+    if( g_rain_enable && rs.rain().ready() ) {
+        lighting::rain_params rp{};
+        rp.active     = true;
+        rp.intensity  = std::clamp( g_rain_intensity, 0.f, 1.f );
+        rp.wind_angle = 270.f; // default: wind from west (left-to-right on screen)
+        rp.fade_rate  = 0.98f; // wetness decay per frame (~50% in ~35 frames)
+        rs.rain().record( ctx.cmd_buffer, wt->texture(),
+                          wt->width(), wt->height(), rp );
+    }
 }
 
 auto tonemap_pass_t( lighting::render_state &rs,
