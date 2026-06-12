@@ -561,6 +561,50 @@ state); do it after that component lands, not before.
   **UNPROVEN:** `item_compare` is empty here → `format_item_info`'s +/- compare-
   delta colouring is NOT exercised (the first COMPARING consumer earns that later).
 
+### Tier 3: inventory framework (inventory_ui) — MULTI-SESSION SUB-PROJECT (user GO, 2026-06-12)
+
+**Why it's different from every prior unit:** `inventory_ui.cpp` (2640) is NOT a
+screen — it's the `inventory_selector` FRAMEWORK. One shared
+`refresh_window()` (inventory_ui.cpp:1636 = frame + `draw_header` + `draw_columns`
++ `draw_footer`) is the single render for ALL SIX selector subclasses
+(`inventory_pick_selector` / `inventory_multiselector` / `inventory_compare_selector`
+/ `inventory_iuse_selector` / `inventory_drop_selector` / `inventory_pickup_selector`),
+each with its own `execute()` loop (`ui_manager::redraw()` → base `on_redraw`
+[1471] → `refresh_window`). It **gates the whole inventory family**: `game_inventory`
+has NO independent render (it just builds a selector + calls `execute()`), and
+advanced_inv is the multi-pane variant — neither moves until this framework does.
+Data model = the most complex in the migration: multi-COLUMN cell-grid
+(`inventory_column::draw` [924] + the preset's `get_cells_count`/`get_cell_text`
+interface + category headers + invlets + multiselect marks), NOT a list/tab/pane.
+
+**Cadence-preserving gate (advisor's key move):** do NOT migrate all 6 at once.
+Gate the RmlUi path in `refresh_window` per SELECTOR SUBCLASS — `inventory_rmlui_enabled()`
+(global toggle) **AND** a per-subclass flag (a virtual `use_rml()` or a member each
+ctor sets). Light ONE subclass at a time; the other 5 stay curses even with the
+toggle on. This restores the exact toggle→eyeball-ONE→commit→light-next rhythm.
+
+**Slice decomposition (each its own commit + eyeball; increasing complexity):**
+1. **Slice 1 — `inventory_pick_selector` only** (the simplest, single-select). Regular
+   columns + simplest preset + header (title/hint) + footer. The F.2-style RmlUi doc
+   (`inventory.{rml,rcss}`, "inventory" model): header text, a column of entry rows
+   (invlet + cell text, category headers, selected highlight), footer (mode hint).
+   The shared cell/preset model is built + proven HERE. DEFER everything below.
+2. **Slice 2** — stats header (`display_stats` / `get_stats()` right-aligned block).
+3. **Slice 3** — `inventory_multiselector` + the `selection_column` + multiselect
+   marks + `query_count`.
+4. **Slice 4** — `inventory_compare_selector` (two-selection state).
+5. **Slice 5** — `inventory_iuse_selector` / `inventory_drop_selector` /
+   `inventory_pickup_selector` (count/drop-location state).
+6. **Slice 6** — multi-column layout fidelity + filter popup coexistence
+   (string_input already Tier-0) + nav modes.
+Only after all slices ON + eyeballed does the family (game_inventory, then
+advanced_inv) follow.
+
+**Discipline:** the cell/preset model is load-bearing and this file is 2640 lines
+under the stale-read hook — every model field MUST be verified against fetched
+source (the armor near-miss is the warning). Per-subclass gate means each slice
+is independently bisectable + revertible.
+
 ## Load-bearing architecture facts (verified this session)
 
 - **Single curses chokepoint:** every non-map window renders through
