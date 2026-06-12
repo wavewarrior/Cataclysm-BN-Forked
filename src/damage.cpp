@@ -500,7 +500,7 @@ damage_instance load_damage_instance_inherit( const JsonArray &jarr, const damag
 namespace
 {
 
-struct DamageMapping { std::string name; damage_type type; };
+struct DamageMapping { const char* name; damage_type type; };
 
 constexpr auto physical_damage_mappings = std::array<DamageMapping, 4>
 {{
