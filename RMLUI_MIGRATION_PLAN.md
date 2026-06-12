@@ -619,14 +619,21 @@ FLATTENS visible columns into one row list. `data/gui/inventory.{rml,rcss}` mode
 slices (NOT bugs):** stats header (slice 2), true multi-column side-by-side
 (flattened for now), MOUSE-select (keyboard-only this slice — with curses not drawn
 the legacy screen-coord mouse mapping is dead in RmlUi mode; a row-click callback
-comes in a later slice), multiselect/compare/count/drop. **EYEBALL CHECK (user, A/B
-via F4):** open a single-select inventory (e.g. an `i`nspect/activate picker that
-uses inventory_pick_selector) — items list with invlets + colours matching curses,
-category headers, the cursor row highlighted, UP/DOWN/PAGE move the cursor, title/
-hint/footer present, CONFIRM picks + QUIT cancels. The OTHER inventory screens
-(drop/multidrop/compare/etc.) MUST still be curses (gate proof). **WATCH:** flattened
-columns (character vs map items stack instead of side-by-side — expected this slice);
-keyboard-only (mouse won't select — expected).
+comes in a later slice), multiselect/compare/count/drop. **EYEBALL CHECK (user, A/B via F4):**
+(0) **★ REOPEN (advisor's #1 — structural, recurs in every later slice):** open a
+pick inventory, close it (QUIT), open it AGAIN in the same session — the 2nd open
+must render rows, NOT empty. The model-name "inventory" is shared + the rml_doc
+single-instance guard is the known "type-register reuse / per-instance name" risk
+in this plan; if open #2 is blank, the guard is biting. (1) single-select inventory
+(an `i`nspect/activate picker using inventory_pick_selector): items list with invlet
++ item SYMBOL glyph + colours matching curses, category headers, cursor row
+highlighted, UP/DOWN/PAGE move cursor, title/hint/footer present, CONFIRM picks +
+QUIT cancels. (2) the OTHER inventory screens (drop/multidrop/compare/etc.) MUST
+still be curses (gate proof). **POST-COMMIT FIXES (advisor, applied before handoff):**
+item symbol glyph now included (identifying content, not cosmetic); denied items
+show only cell[0] + red reason (matches curses `count=1`, avoids layout collision).
+**WATCH:** flattened columns (character vs map items stack instead of side-by-side —
+expected this slice); keyboard-only (mouse won't select — expected).
 
 **Discipline:** the cell/preset model is load-bearing and this file is 2640 lines
 under the stale-read hook — every model field MUST be verified against fetched

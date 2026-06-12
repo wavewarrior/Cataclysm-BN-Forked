@@ -1130,15 +1130,22 @@ std::vector<inv_rml_row> inventory_column::rml_rows() const
                                 entry.get_invlet_color() );
         }
         markup += " ";
+        // Item symbol glyph (identifying content — matches draw(): item color).
+        if( entry.any_item() ) {
+            markup += colorize( entry.any_item()->symbol(), entry.any_item()->color() ) + " ";
+        }
+        // When denied, curses shows only the first cell to make room for the red
+        // denial reason (count = 1); match that so the layout can't collide.
         std::string body;
-        for( const std::string &cell : cache.text ) {
-            if( cell.empty() ) {
+        const size_t cell_count = denied ? 1 : cache.text.size();
+        for( size_t ci = 0; ci < cell_count && ci < cache.text.size(); ++ci ) {
+            if( cache.text[ci].empty() ) {
                 continue;
             }
             if( !body.empty() ) {
                 body += "  ";
             }
-            body += cell;
+            body += cache.text[ci];
         }
         markup += colorize( body, denied ? c_dark_gray : cache.color );
         if( denied ) {
