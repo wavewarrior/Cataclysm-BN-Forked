@@ -109,7 +109,7 @@ class rain_effect
         std::uint32_t            splat_h_ = 512u;
 
         // Persistent GPU buffers for droplet instance upload (reused each frame).
-        SDL_GPUBuffer           *inst_transfer_buf_ = nullptr;
+        SDL_GPUTransferBuffer   *inst_transfer_buf_ = nullptr;
         SDL_GPUBuffer           *inst_storage_buf_  = nullptr;
         std::size_t              inst_capacity_      = 0u;
 

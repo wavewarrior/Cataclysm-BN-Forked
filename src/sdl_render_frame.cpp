@@ -512,6 +512,8 @@ auto render_world_pass_w( lighting::render_state &rs,
     }
 
     // High-fidelity rain effect: droplets + splat map fade/accumulate.
+    dbg( DL::Info ) << "rain_effect: g_rain_enable=" << g_rain_enable
+                    << ", rs.rain().ready()=" << ( rs.rain().ready() ? 1 : 0 );
     if( g_rain_enable && rs.rain().ready() ) {
         lighting::rain_params rp{};
         rp.active     = true;

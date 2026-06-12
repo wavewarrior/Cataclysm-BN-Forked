@@ -42,7 +42,7 @@ float4 main( PS_IN i ) : SV_Target
 
     // Accumulate splash contributions from uniform data.
     for( uint s = 0u; s < splash_count && s < 512u; ++s ) {
-        const float dist = length( i.xy - float2( splash_x[ s ], splash_y[ s ] ) );
+        const float dist = length( i.pos.xy - float2( splash_x[ s ], splash_y[ s ] ) );
         const float radius = 8.0f; // splash spread in pixels
 
         if( dist < radius ) {

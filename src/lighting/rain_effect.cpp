@@ -63,6 +63,7 @@ bool rain_effect::init( gpu_device &dev, SDL_GPUTextureFormat hdr_format,
         return false;
     }
 
+    dbg( DL::Info ) << "rain_effect: init called (screen=" << screen_w << "x" << screen_h << ")";
     init_shader_compiler();
 
     // ---- Droplet pipeline ------------------------------------------------
@@ -93,8 +94,12 @@ bool rain_effect::init( gpu_device &dev, SDL_GPUTextureFormat hdr_format,
     blend.src_alpha_blendfactor  = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
     blend.dst_alpha_blendfactor  = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
     blend.alpha_blend_op         = SDL_GPU_BLENDOP_ADD;
-    blend.color_write_mask       = SDL_GPU_COLORCOMPONENT_R | SDL_GPU_COLORCOMPONENT_G |
+    blend.color_write_mask       = SDL_GPU_COLORCOMPONENT_R | SDL_GPU_COLORCOMPONENT_G |\
                                    SDL_GPU_COLORCOMPONENT_B | SDL_GPU_COLORCOMPONENT_A;
+
+    SDL_GPUColorTargetDescription ctd{};
+    ctd.format   = hdr_format_;
+    ctd.blend_state = blend;
 
     SDL_GPUGraphicsPipelineCreateInfo dpi{};
     dpi.vertex_shader   = v.shader;
@@ -105,7 +110,7 @@ bool rain_effect::init( gpu_device &dev, SDL_GPUTextureFormat hdr_format,
     dpi.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
     dpi.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
     dpi.target_info.num_color_targets = 1;
-    dpi.target_info.color_target_descriptions = &blend;
+    dpi.target_info.color_target_descriptions = &ctd;
     dpi.target_info.has_depth_stencil_target = false;
 
     droplet_vert_   = v.shader;
@@ -138,8 +143,12 @@ bool rain_effect::init( gpu_device &dev, SDL_GPUTextureFormat hdr_format,
     // Splat pipeline: DONT_CARE load (fully covered by fullscreen tri), no blend.
     SDL_GPUColorTargetBlendState splat_blend{};
     splat_blend.enable_blend = false;
-    splat_blend.color_write_mask = SDL_GPU_COLORCOMPONENT_R | SDL_GPU_COLORCOMPONENT_G |
+    splat_blend.color_write_mask = SDL_GPU_COLORCOMPONENT_R | SDL_GPU_COLORCOMPONENT_G |\
                                    SDL_GPU_COLORCOMPONENT_B | SDL_GPU_COLORCOMPONENT_A;
+
+    SDL_GPUColorTargetDescription ctd_splat{};
+    ctd_splat.format   = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    ctd_splat.blend_state = splat_blend;
 
     SDL_GPUGraphicsPipelineCreateInfo spi{};
     spi.vertex_shader   = sv.shader;
@@ -150,7 +159,7 @@ bool rain_effect::init( gpu_device &dev, SDL_GPUTextureFormat hdr_format,
     spi.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
     spi.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
     spi.target_info.num_color_targets = 1;
-    spi.target_info.color_target_descriptions = &splat_blend;
+    spi.target_info.color_target_descriptions = &ctd_splat;
     spi.target_info.has_depth_stencil_target = false;
 
     splat_vert_   = sv.shader;
@@ -188,16 +197,20 @@ bool rain_effect::init( gpu_device &dev, SDL_GPUTextureFormat hdr_format,
     droplets_.reserve( MAX_DROPLETS );
     splashes_.reserve( MAX_SPLASHES );
 
-    // ---- Persistent droplet instance buffer (mapped each frame) ----------
+    // ---- Persistent droplet instance buffers (transfer + storage, reused each frame) --
     inst_capacity_ = static_cast<std::size_t>( MAX_DROPLETS ) * sizeof( droplet_instance );
     {
         SDL_GPUBufferCreateInfo bci{};
-        bci.usage     = SDL_GPU_BUFFERUSAGE_STORAGE_READ | SDL_GPU_BUFFERUSAGE_MAP_WRITE;
-        bci.size      = static_cast<int>( inst_capacity_ );
-        bci.debug_label = "rain_droplet_instances";
+        bci.usage  = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ;
+        bci.size   = static_cast<Uint32>( inst_capacity_ );
         inst_storage_buf_ = SDL_CreateGPUBuffer( dev.raw(), &bci );
+
+        SDL_GPUTransferBufferCreateInfo tci{};
+        tci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+        tci.size  = static_cast<Uint32>( inst_capacity_ );
+        inst_transfer_buf_ = SDL_CreateGPUTransferBuffer( dev.raw(), &tci );
     }
-    if( !inst_storage_buf_ ) {
+    if( !inst_storage_buf_ || !inst_transfer_buf_ ) {
         dbg( DL::Error ) << "rain_effect: instance buffer create failed";
         return false;
     }
@@ -239,6 +252,7 @@ void rain_effect::shutdown() noexcept
         SDL_ReleaseGPUShader( dev_->raw(), splat_vert_ );
         SDL_ReleaseGPUShader( dev_->raw(), splat_frag_ );
         SDL_ReleaseGPUBuffer( dev_->raw(), inst_storage_buf_ );
+        SDL_ReleaseGPUTransferBuffer( dev_->raw(), inst_transfer_buf_ );
         SDL_ReleaseGPUSampler( dev_->raw(), splat_sampler_ );
     }
 
@@ -250,7 +264,8 @@ void rain_effect::shutdown() noexcept
     splat_frag_       = nullptr;
     splat_a_          = nullptr;
     splat_b_          = nullptr;
-    inst_storage_buf_  = nullptr;
+    inst_storage_buf_   = nullptr;
+    inst_transfer_buf_  = nullptr;
     inst_capacity_     = 0u;
     splat_sampler_     = nullptr;
     dev_              = nullptr;
@@ -368,6 +383,9 @@ void rain_effect::record( SDL_GPUCommandBuffer *cb, SDL_GPUTexture *world_tex,
         return;
     }
 
+    dbg( DL::Info ) << "rain_effect: record called (active=" << params.active
+                    << ", intensity=" << params.intensity << ")";
+
     // ---- Update particles (CPU) ------------------------------------------
     if( params.active && params.intensity > 0.f ) {
         spawn_droplets( params.intensity, params.wind_angle, screen_w_, screen_h_ );
@@ -379,6 +397,9 @@ void rain_effect::record( SDL_GPUCommandBuffer *cb, SDL_GPUTexture *world_tex,
         spawn_splashes();
     }
     update_splashes();
+
+    dbg( DL::Info ) << "rain_effect: particles (droplets=" << droplets_.size()
+                    << ", splashes=" << splashes_.size() << ")";
 
     // ---- Draw droplets onto world_target ---------------------------------
     if( !droplets_.empty() && droplet_pipeline_ ) {
@@ -413,13 +434,33 @@ void rain_effect::record( SDL_GPUCommandBuffer *cb, SDL_GPUTexture *world_tex,
             } );
         }
 
-        // Upload instances via direct buffer map (no transfer buffer needed).
-        void *map = SDL_MapGPUBuffer( dev_->raw(), inst_storage_buf_, 0 );
-        if( map ) {
-            std::memcpy( map, instances.data(),
-                         n * sizeof( droplet_instance ) );
+        // Upload instances via transfer buffer (SDL3 no longer supports direct GPU buffer mapping).
+        {
+            const Uint32 byte_size = static_cast<Uint32>( n * sizeof( droplet_instance ) );
+            void *mapped = SDL_MapGPUTransferBuffer( dev_->raw(), inst_transfer_buf_,
+                                                     /*cycle=*/true );
+            if( mapped ) {
+                std::memcpy( mapped, instances.data(), byte_size );
+                SDL_UnmapGPUTransferBuffer( dev_->raw(), inst_transfer_buf_ );
+
+                SDL_GPUCopyPass *cp = SDL_BeginGPUCopyPass( cb );
+                if( cp ) {
+                    SDL_GPUTransferBufferLocation src{};
+                    src.transfer_buffer = inst_transfer_buf_;
+                    src.offset = 0;
+                    SDL_GPUBufferRegion dst{};
+                    dst.buffer   = inst_storage_buf_;
+                    dst.offset   = 0;
+                    dst.size     = byte_size;
+                    SDL_UploadToGPUBuffer( cp, &src, &dst, /*cycle=*/true );
+                    SDL_EndGPUCopyPass( cp );
+                } else {
+                    dbg( DL::Error ) << "rain_effect: copy pass begin failed";
+                }
+            } else {
+                dbg( DL::Error ) << "MapGPUTransferBuffer failed: " << SDL_GetError();
+            }
         }
-        SDL_UnmapGPUBuffer( dev_->raw(), inst_storage_buf_ );
 
         // Begin render pass on world_target.
         SDL_GPUColorTargetInfo ct{};
@@ -431,27 +472,27 @@ void rain_effect::record( SDL_GPUCommandBuffer *cb, SDL_GPUTexture *world_tex,
             SDL_BindGPUGraphicsPipeline( rp, droplet_pipeline_ );
 
             // Push frame params (target size + instance base).
-            struct { float2 target_size; uint32_t instance_base; uint32_t fp_pad; } fp;
-            fp.target_size = { static_cast<float>( world_w ),
-                               static_cast<float>( world_h ) };
+            struct { float target_size_w; float target_size_h; uint32_t instance_base; uint32_t fp_pad; } fp;
+            fp.target_size_w = static_cast<float>( world_w );
+            fp.target_size_h = static_cast<float>( world_h );
             fp.instance_base = 0u;
             fp.fp_pad = 0u;
             SDL_PushGPUVertexUniformData( cb, 0, &fp, sizeof( fp ) );
 
             // Bind instance storage buffer.
-            SDL_GPUBufferBinding inst_bind{};
-            inst_bind.buffer   = inst_storage_buf_;
-            inst_bind.offset   = 0;
-            inst_bind.stride   = sizeof( droplet_instance );
-            SDL_BindGPUStorageBuffers( rp, /*first_slot=*/0, &inst_bind, 1 );
+            SDL_BindGPUVertexStorageBuffers( rp, /*first_slot=*/0, &inst_storage_buf_, 1 );
 
             // Draw all instances (6 vertices per quad: 2 triangles).
             SDL_DrawGPUPrimitives( rp, 6, n, 0, 0 );
+
+            dbg( DL::Info ) << "rain_effect: drew " << n << " droplet quads";
 
             SDL_EndGPURenderPass( rp );
         } else {
             dbg( DL::Error ) << "rain_effect: droplet render pass begin failed";
         }
+    } else if( !droplets_.empty() ) {
+        dbg( DL::Warn ) << "rain_effect: no droplet_pipeline_ or empty droplets";
     }
 
     // ---- Splat fade + splash accumulation --------------------------------
@@ -461,7 +502,7 @@ void rain_effect::record( SDL_GPUCommandBuffer *cb, SDL_GPUTexture *world_tex,
         SDL_GPUTexture *splat_out = splat_b_;
 
         // Push splash params uniform (fade_rate + count).
-        struct { float fade_rate; uint splash_count; float pad0, pad1; } sp;
+        struct { float fade_rate; uint32_t splash_count; float pad0, pad1; } sp;
         sp.fade_rate     = params.fade_rate;
         sp.splash_count  = static_cast<uint32_t>( splashes_.size() );
         sp.pad0          = 0.f;
@@ -512,12 +553,17 @@ void rain_effect::record( SDL_GPUCommandBuffer *cb, SDL_GPUTexture *world_tex,
             // Draw fullscreen triangle.
             SDL_DrawGPUPrimitives( rp, 3, 1, 0, 0 );
             SDL_EndGPURenderPass( rp );
+
+            dbg( DL::Info ) << "rain_effect: splat pass completed (fade=" << params.fade_rate
+                            << ", splash_count=" << sp.splash_count << ")";
         } else {
             dbg( DL::Error ) << "rain_effect: splat render pass begin failed";
         }
 
         // Swap ping-pong textures for next frame.
         std::swap( splat_a_, splat_b_ );
+    } else if( !splashes_.empty() ) {
+        dbg( DL::Warn ) << "rain_effect: no splat pipeline or textures (splash_count=" << splashes_.size() << ")";
     }
 }
 

@@ -861,6 +861,8 @@ bool init_render_state_on( SDL_Window *visible_window )
         return false;
     }
 
+    dbg( DL::Info ) << "lighting: init_render_state_on called (window=" << visible_window << ")";
+
     try {
         get_render_state().init( visible_window );
         dbg( DL::Info ) << "lighting: render_state up on visible window.";
