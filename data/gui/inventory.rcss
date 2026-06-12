@@ -1,0 +1,60 @@
+/* Layout for the inventory selector (Tier 3 framework, slice 1). Palette/border/
+   scrollbar/.scroll-pane come from theme.rcss (linked first). Rows are
+   display:block (RmlUi divs default to inline — theme.rcss gotcha). */
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.inv-panel {
+    width: 80%;
+    height: 90%;
+    display: flex;
+    flex-direction: column;
+}
+
+.inv-title {
+    flex: 0 0 auto;
+    color: #ffffffff;
+}
+.inv-hint {
+    flex: 0 0 auto;
+    color: #9a9ab0ff;
+    margin-bottom: 4dp;
+    padding-bottom: 4dp;
+    border-bottom: 1dp #5a5a78ff;
+}
+
+.inv-list {
+    flex: 1;
+    min-height: 0;
+}
+.inv-row {
+    display: block;
+    white-space: pre;
+    padding: 0 6dp;
+    border-radius: 4dp;
+}
+.inv-row:hover {
+    background-color: #3a3a55ff;
+}
+.inv-row.selected {
+    background-color: #ffcc66ff;
+    color: #1e1e28ff;
+}
+/* Category header rows: a separating band, not selectable. */
+.inv-row.category {
+    margin-top: 4dp;
+    border-bottom: 1dp #5a5a78ff;
+    color: #d76fd7ff;
+}
+
+.inv-footer {
+    flex: 0 0 auto;
+    margin-top: 4dp;
+    padding-top: 4dp;
+    border-top: 1dp #5a5a78ff;
+}

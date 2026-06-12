@@ -130,4 +130,8 @@ bool &armor_layers_rmlui_enabled();
 // action list). First consumer of rml_util::item_info_rml_lines.
 bool &examine_item_rmlui_enabled();
 
+// inventory_selector framework RmlUi path (Tier 3, sliced). Gated per selector
+// subclass via inventory_selector::uses_rml(); slice 1 lights inventory_pick_selector.
+bool &inventory_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

@@ -600,6 +600,34 @@ toggle on. This restores the exact toggle→eyeball-ONE→commit→light-next rh
 Only after all slices ON + eyeballed does the family (game_inventory, then
 advanced_inv) follow.
 
+**SLICE 1 — CODE-COMPLETE + BUILD-GREEN (inventory_ui.{h,cpp} + devui compile +
+LINK clean), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED→committed.** Mechanism shipped:
+(1) **per-subclass gate** — `virtual inventory_selector::uses_rml()` (default false;
+private virtual, override-able), overridden by `inventory_pick_selector::uses_rml()`
+→ `inventory_rmlui_enabled()`. The other 5 selectors stay curses even with the
+toggle on. (2) **pImpl** `inventory_rml_state` (rml_doc + Rml model) defined in the
+.cpp, forward-declared in the header → RmlUi stays out of inventory_ui.h. (3)
+`refresh_window()` (the shared render) gains `if(uses_rml()&&rml_state_){rml_sync();
+return;}` at the top — one guard covers all 6 selectors, lit one at a time. (4)
+doc opened once in `create_or_get_ui_adaptor` (toggle read there); torn down by the
+pImpl's rml_doc dtor in `~inventory_selector`. (5) `inventory_column::rml_rows()`
+(new public method) mirrors `draw()` + REUSES the per-entry cell cache
+(`get_entry_cell_cache`) → category rows (cache.color header) + item rows (invlet +
+joined cell text, denial→grey+red). (6) `rml_sync()` builds title/hint/footer +
+FLATTENS visible columns into one row list. `data/gui/inventory.{rml,rcss}` model
+"inventory". F4 toggle "inventory (pick) via RmlUi" (OFF). **DEFERRED to later
+slices (NOT bugs):** stats header (slice 2), true multi-column side-by-side
+(flattened for now), MOUSE-select (keyboard-only this slice — with curses not drawn
+the legacy screen-coord mouse mapping is dead in RmlUi mode; a row-click callback
+comes in a later slice), multiselect/compare/count/drop. **EYEBALL CHECK (user, A/B
+via F4):** open a single-select inventory (e.g. an `i`nspect/activate picker that
+uses inventory_pick_selector) — items list with invlets + colours matching curses,
+category headers, the cursor row highlighted, UP/DOWN/PAGE move the cursor, title/
+hint/footer present, CONFIRM picks + QUIT cancels. The OTHER inventory screens
+(drop/multidrop/compare/etc.) MUST still be curses (gate proof). **WATCH:** flattened
+columns (character vs map items stack instead of side-by-side — expected this slice);
+keyboard-only (mouse won't select — expected).
+
 **Discipline:** the cell/preset model is load-bearing and this file is 2640 lines
 under the stale-read hook — every model field MUST be verified against fetched
 source (the armor near-miss is the warning). Per-subclass gate means each slice

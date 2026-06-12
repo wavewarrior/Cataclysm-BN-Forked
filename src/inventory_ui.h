@@ -225,6 +225,16 @@ class pickup_inventory_preset : public inventory_selector_preset
         const player &p;
 };
 
+// One rendered row of an inventory column for the RmlUi inventory path. `text`
+// is finished RML markup (invlet + cell text, colour-tagged via cata_text_to_rml);
+// category rows render as a header; the selected row gets the cursor highlight via
+// CSS. RmlUi-free so the header stays clean (the selector converts to Rml::String).
+struct inv_rml_row {
+    std::string text;
+    bool is_category = false;
+    bool selected = false;
+};
+
 class inventory_column
 {
     public:
@@ -283,6 +293,10 @@ class inventory_column
         inventory_entry *find_by_invlet( int invlet ) const;
 
         void draw( const catacurses::window &win, point pos ) const;
+
+        /** Build this column's entries as RmlUi rows (mirrors draw(), reuses the
+         *  cell cache). All entries — RmlUi scrolls, no page windowing. */
+        std::vector<inv_rml_row> rml_rows() const;
 
         void add_entry( const inventory_entry &entry );
         void move_entries_to( inventory_column &dest );
@@ -447,6 +461,9 @@ class selection_column : public inventory_column
         inventory_entry last_changed;
 };
 
+// RmlUi inventory-path state (data model + document); defined in inventory_ui.cpp.
+struct inventory_rml_state;
+
 class inventory_selector
 {
     public:
@@ -570,6 +587,17 @@ class inventory_selector
         void resize_window( int width, int height );
         void refresh_window() const;
 
+        // RmlUi inventory path (Tier 3 framework migration). Gated per selector
+        // subclass: uses_rml() defaults false; a subclass overrides it to opt in
+        // (e.g. inventory_pick_selector when inventory_rmlui_enabled()). pImpl
+        // (inventory_rml_state, defined in the .cpp) keeps RmlUi out of this header.
+        virtual bool uses_rml() const {
+            return false;
+        }
+        void rml_open();
+        void rml_sync() const;
+        std::unique_ptr<inventory_rml_state> rml_state_;
+
         void draw_header( const catacurses::window &w ) const;
         void draw_footer( const catacurses::window &w ) const;
         void draw_columns( const catacurses::window &w ) const;
@@ -683,6 +711,8 @@ class inventory_pick_selector : public inventory_selector
         virtual auto handle_action( const std::string &/*action*/ ) -> bool {
             return false;
         }
+        // Tier 3 slice 1: the first (and so far only) selector lit for RmlUi.
+        bool uses_rml() const override;
 };
 
 class inventory_multiselector : public inventory_selector
