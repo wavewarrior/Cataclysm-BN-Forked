@@ -1,0 +1,99 @@
+/* Layout for the mutations screen (Tier 2, screen #1: show_mutations_ui).
+   Palette/border/scrollbar/.scroll-pane come from theme.rcss (linked first in
+   mutations.rml); this file owns only the screen's own layout. Lengths in dp.
+
+   Both missions gotchas apply (documented in uilist.rcss): body needs a definite
+   height or the panel shrink-wraps; each column carries .scroll-pane's vh
+   max-height (the actual scroll bound).
+
+   Same focus model as diary: rows use a custom .mut-line (NOT theme .item, whose
+   .selected is always the accent) so the selected-row accent is scoped under the
+   focused column (.mut-pane.active) — the unfocused column shows no cursor,
+   matching the legacy `is_highlighted && tab_mode==column` gate. */
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.mut-panel {
+    width: 85%;
+    height: 88%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Titlebar: mode label (Activating / Examining / …) + keybinding hints. */
+.mut-title {
+    flex: 0 0 auto;
+    padding-bottom: 6dp;
+    margin-bottom: 6dp;
+    border-bottom: 1dp #5a5a78ff;
+}
+
+/* The two side-by-side columns. */
+.mut-main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+}
+
+.mut-col {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    margin: 0 4dp;
+}
+
+/* "Passive" / "Active" caption (legacy c_light_blue, baked into the bound rml). */
+.mut-colhead {
+    flex: 0 0 auto;
+    margin-bottom: 4dp;
+}
+
+/* Each column's scroll list; border brightens to accent when focused. */
+.mut-pane {
+    border: 1dp #5a5a78ff;
+    border-radius: 4dp;
+}
+.mut-pane.active {
+    border-color: #ffcc66ff;
+}
+
+.mut-none {
+    padding: 2dp 6dp;
+}
+
+/* A single mutation row. display:block so each is its own line (RmlUi elements
+   default to inline — without this the rows flow horizontally and wrap as one
+   paragraph). The "• " / "> " list marker is baked into the bound text in
+   sync_rml (RCSS has no ::before/content). Transparent by default; hover always
+   lightly highlights, but the selected-row accent applies ONLY in the focused
+   column. */
+.mut-line {
+    display: block;
+    padding: 2dp 6dp;
+    border-radius: 4dp;
+}
+.mut-line:hover {
+    background-color: #3a3a55ff;
+    color: #ffffffff;
+}
+.mut-pane.active .mut-line.selected {
+    background-color: #ffcc66ff;
+    color: #1e1e28ff;
+}
+
+/* Examine pane (examine mode only): folded mutation description. */
+.mut-examine {
+    flex: 0 0 auto;
+    margin-top: 6dp;
+    padding-top: 6dp;
+    border-top: 1dp #5a5a78ff;
+    min-height: 60dp;
+    white-space: pre-wrap;
+}

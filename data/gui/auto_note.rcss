@@ -1,0 +1,77 @@
+/* Layout for the auto notes manager (Tier 1, screen #5:
+   auto_note_manager_gui::show; first F.3 rml_doc consumer). Palette/border/
+   scrollbar/.item/.scroll-pane come from theme.rcss (linked first in
+   auto_note.rml); this file owns only the screen's own layout. Lengths in dp.
+
+   Both missions gotchas apply (documented in uilist.rcss): body needs a definite
+   height or the panel shrink-wraps; the list child needs the vh max-height that
+   .scroll-pane carries.
+
+   The three columns share one flex template (.an-name / .an-symbol / .an-status)
+   between the column-head row and the data rows so they line up — name flexes to
+   fill, symbol + status are fixed-width on the right (mirrors the legacy curses
+   table split at columns 51/60). */
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.an-panel {
+    width: 80%;
+    height: 85%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* "Auto notes enabled: True/False" — global AUTO_NOTES option state. */
+.an-header {
+    flex: 0 0 auto;
+    margin-bottom: 6dp;
+    color: #cfcfe0ff;
+}
+
+/* Static column titles; same column template as the rows (sans .item bg). */
+.an-colheads {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    padding: 0 10dp 4dp 10dp;
+    margin-bottom: 4dp;
+    border-bottom: 1dp #5a5a78ff;
+    color: #9a9ab0ff;
+}
+
+/* "Discover more…" placeholder shown when no map extras are discovered yet. */
+.an-empty {
+    flex: 1;
+    padding: 8dp 10dp;
+}
+
+.an-list {
+    flex: 1;
+    min-height: 0;
+}
+
+.an-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 4dp 10dp;
+    margin-bottom: 4dp;
+}
+
+/* Shared 3-column template (used by both .an-colheads and .an-row). */
+.an-name {
+    flex: 1;
+}
+.an-symbol {
+    flex: 0 0 80dp;
+    text-align: center;
+}
+.an-status {
+    flex: 0 0 80dp;
+    text-align: right;
+}

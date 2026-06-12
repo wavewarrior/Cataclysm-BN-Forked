@@ -1,0 +1,34 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="help.rcss"/>
+</head>
+<body data-model="help">
+    <!-- Tier 1 screen #3 (help::display_help). Two regions in one document,
+         mutually exclusive via data-if on `showing_article`, mirroring the
+         legacy two-phase flow (topic menu, then a blocking article view):
+           - MENU: a 2-column clickable topic list. Selection stays on
+             input_context (hotkeys); the mouse on_topic click is a bonus path
+             that sets pending_topic in C++. Each name carries its hotkey
+             highlight span built C++-side via shortcut_text()+cata_text_to_rml().
+           - ARTICLE: a single scrolling text pane (the F.2 .scroll-pane seed,
+             white-space:pre-wrap so the embedded movement ASCII diagram keeps
+             its alignment). UP/DOWN/PAGE_* scroll it from C++ via SetScrollTop;
+             RmlUi handles the mouse wheel. -->
+    <div class="panel help-panel">
+        <div class="help-menu" data-if="!showing_article">
+            <div class="help-intro" data-rml="intro_rml"></div>
+            <div class="help-topics">
+                <div class="item help-topic" data-for="t : topics"
+                     data-event-click="on_topic(it_index)"
+                     data-rml="t.name_rml"></div>
+            </div>
+        </div>
+
+        <div class="help-article" data-if="showing_article">
+            <div id="help-article-body" class="scroll-pane help-article-body"
+                 data-rml="article_body"></div>
+        </div>
+    </div>
+</body>
+</rml>

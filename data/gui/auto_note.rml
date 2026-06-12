@@ -1,0 +1,38 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="auto_note.rcss"/>
+</head>
+<body data-model="auto_note">
+    <!-- Tier 1 screen #5 (auto_note_manager_gui::show) AND the first consumer of
+         the F.3 rml_doc harness. Toggle-list family (cf. distraction.rml): a
+         moving-cursor list whose rows toggle Enabled in place, but with three
+         columns (map-extra name / coloured map symbol / yes-no status) and a
+         header showing the global AUTO_NOTES option state. emptyMode swaps the
+         list for a "discover more" hint (the player has found no map extras yet).
+         Live-synced every redraw (sync_rml in the .cpp); keyboard stays on
+         input_context, RmlUi renders + handles mouse only. -->
+    <div class="panel an-panel">
+        <div class="an-header" data-rml="header_rml"></div>
+
+        <div class="an-colheads">
+            <span class="an-name">Map Extra</span>
+            <span class="an-symbol">Symbol</span>
+            <span class="an-status">Enabled</span>
+        </div>
+
+        <div class="an-empty" data-if="empty" data-rml="empty_rml"></div>
+
+        <div class="an-list scroll-pane" data-if="!empty">
+            <div class="item an-row" data-for="row : rows"
+                 data-class-selected="row.selected"
+                 data-event-mouseover="on_select(it_index)"
+                 data-event-click="on_select(it_index)">
+                <span class="an-name" data-rml="row.name_rml"></span>
+                <span class="an-symbol" data-rml="row.symbol_rml"></span>
+                <span class="an-status" data-rml="row.status_rml"></span>
+            </div>
+        </div>
+    </div>
+</body>
+</rml>

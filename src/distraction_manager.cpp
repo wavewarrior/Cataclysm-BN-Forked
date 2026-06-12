@@ -18,6 +18,13 @@
 #include "uistate.h"
 #include "fstream_utils.h"
 
+#include <RmlUi/Core.h>
+#include <memory>
+
+#include "lighting/rmlui_layer.h"
+#include "rml_screen.h"
+#include "rml_util.h"
+
 namespace io
 {
 template<>
@@ -42,6 +49,56 @@ std::string enum_to_string<distraction_type>( distraction_type data )
     abort();
 }
 } // namespace io
+
+namespace
+{
+// RmlUi render path for the distraction manager (full UI→RmlUi migration, Tier 1
+// screen #4). The first toggle-list shape: one document, a moving-cursor list
+// whose rows mutate in place (CONFIRM flips Enabled↔Disabled) plus a description
+// header that re-renders as the cursor moves. Unlike the sync-once screens
+// (help), this is LIVE-SYNC: sync_rml() runs in on_redraw, so every
+// ui_manager::redraw() (top of the input loop, after each keystroke) rebuilds
+// the rows + header from the current selection — no per-branch DirtyVariable.
+// Selection highlight rides .item.selected (theme); status colour rides inside
+// status_rml via cata_text_to_rml. Keyboard stays on input_context.
+struct distraction_rml_row {
+    Rml::String name_rml;
+    Rml::String status_rml;
+    bool selected = false;
+};
+struct distraction_rml_session {
+    Rml::Vector<distraction_rml_row> rows;
+    Rml::String desc_rml;   // description of the selected distraction (header pane)
+    Rml::DataModelHandle handle;
+    Rml::ElementDocument *doc = nullptr;
+};
+
+// Type registration is context-global and persists for the context's life, so
+// guard it once. Model NAME "distraction" allows one such screen at a time (it
+// can't nest itself), matching the uilist single-instance guard pattern.
+bool g_distraction_types_registered = false;
+bool g_distraction_model_active = false;
+
+void register_distraction_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_distraction_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<distraction_rml_row> rh = c.RegisterStruct<distraction_rml_row>();
+    rh.RegisterMember( "name_rml", &distraction_rml_row::name_rml );
+    rh.RegisterMember( "status_rml", &distraction_rml_row::status_rml );
+    rh.RegisterMember( "selected", &distraction_rml_row::selected );
+    c.RegisterArray<Rml::Vector<distraction_rml_row>>();
+    g_distraction_types_registered = true;
+}
+} // namespace
+
+bool &distraction_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = false;
+    return enabled;
+}
 
 namespace distraction_manager
 {
@@ -103,7 +160,40 @@ void distraction_manager_gui::show()
     ctx.register_action( "HELP_KEYBINDINGS" );
     ctx.register_action( "CONFIRM" );
 
+    // ---- RmlUi render path --------------------------------------------------
+    // Live-synced into a "distraction" data model: sync_rml() runs in on_redraw,
+    // so the cursor highlight, per-row Enabled/Disabled status, and header
+    // description all track the selection without per-branch DirtyVariable. The
+    // existing input loop (UP/DOWN/CONFIRM/QUIT) is untouched.
+    std::unique_ptr<distraction_rml_session> rml;
+    const auto sync_rml = [&]() {
+        if( !rml ) {
+            return;
+        }
+        rml->rows.clear();
+        for( int i = 0; i < num_distractions; ++i ) {
+            const distraction_type d = distractions_status[i];
+            const bool ignored = distractions.contains( d ) && distractions.at( d );
+            const nc_color status_color = ignored ? c_red : c_light_green;
+            const std::string status_string = ignored ? _( "Disabled" ) : _( "Enabled" );
+            distraction_rml_row r;
+            r.name_rml = cata_text_to_rml( _( distraction_desc.at( d ).first.c_str() ) );
+            r.status_rml = cata_text_to_rml( colorize( status_string, status_color ) );
+            r.selected = ( i == currentLine );
+            rml->rows.push_back( r );
+        }
+        rml->desc_rml = cata_text_to_rml( _( distraction_desc.at( cur_distraction ).second.c_str() ) );
+        rml->handle.DirtyVariable( "rows" );
+        rml->handle.DirtyVariable( "desc_rml" );
+    };
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        // When the RmlUi path owns the screen, sync the model and skip all curses
+        // drawing (mirrors the uilist/missions dual-path).
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         // Draw border
         draw_border( w_border, BORDER_COLOR, _( "Distractions manager" ) );
         mvwputch( w_border, point( 0, iHeaderHeight - 1 ), c_light_gray, LINE_XXXO );
@@ -169,6 +259,39 @@ void distraction_manager_gui::show()
         wnoutrefresh( w );
     } );
 
+    if( distraction_rmlui_enabled() && rmlui_layer::ready() && !g_distraction_model_active ) {
+        if( Rml::Context *rctx = rmlui_layer::context() ) {
+            Rml::DataModelConstructor c = rctx->CreateDataModel( "distraction" );
+            if( c ) {
+                rml = std::make_unique<distraction_rml_session>();
+                register_distraction_rml_types( c );
+                c.Bind( "rows", &rml->rows );
+                c.Bind( "desc_rml", &rml->desc_rml );
+                c.BindEventCallback( "on_select",
+                [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+                    int idx = -1;
+                    if( !args.empty() ) {
+                        args[0].GetInto( idx );
+                    }
+                    if( idx >= 0 && idx < num_distractions ) {
+                        currentLine = idx;
+                        cur_distraction = distractions_status[currentLine];
+                    }
+                } );
+                rml->handle = c.GetModelHandle();
+                rml->doc = rmlui_layer::open_document( PATH_INFO::datadir() + "gui/distraction.rml" );
+                if( rml->doc == nullptr ) {
+                    rctx->RemoveDataModel( "distraction" );
+                    rml.reset();
+                } else {
+                    g_distraction_model_active = true;
+                    // Tick at 16ms so RmlUi hover/mouse stay live between keys.
+                    ctx.set_timeout( 16 );
+                }
+            }
+        }
+    }
+
     while( true ) {
         ui_manager::redraw();
 
@@ -189,6 +312,18 @@ void distraction_manager_gui::show()
             // This will change status color and status text
             distractions[cur_distraction] = !distractions[cur_distraction];
         }
+    }
+
+    // Tear down the RmlUi document + data model (no-op if the curses path ran).
+    if( rml ) {
+        if( rml->doc != nullptr ) {
+            rmlui_layer::close_document( rml->doc );
+        }
+        if( Rml::Context *rctx = rmlui_layer::context() ) {
+            rctx->RemoveDataModel( "distraction" );
+        }
+        g_distraction_model_active = false;
+        rml.reset();
     }
 }
 

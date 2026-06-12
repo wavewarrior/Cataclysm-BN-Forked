@@ -1,0 +1,72 @@
+/* Layout for the auto pickup manager (Tier 2, screen #4:
+   auto_pickup user_interface::show). Palette/border/scrollbar/.scroll-pane AND
+   the .tabs/.tab bar come from theme.rcss (linked first in autopickup.rml); this
+   file owns only the screen's own layout. Lengths in dp.
+
+   3-column template (.ap-num/.ap-rule/.ap-ie) shared between the column-head row
+   and the data rows so they line up. Rows are .ap-row flex containers (block-
+   level → stack); the active CELL — not the row — gets the accent via
+   .ap-cell.cellsel (driven by row.sel_col == 1|2 in the rml; cf. safemode). */
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.ap-panel {
+    width: 86%;
+    height: 88%;
+    display: flex;
+    flex-direction: column;
+}
+
+.ap-hints {
+    flex: 0 0 auto;
+}
+.ap-status {
+    flex: 0 0 auto;
+    margin-bottom: 4dp;
+}
+
+.ap-colheads {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    padding: 0 6dp 4dp 6dp;
+    border-bottom: 1dp #5a5a78ff;
+    color: #9a9ab0ff;
+}
+
+.ap-list {
+    flex: 1;
+    min-height: 0;
+}
+
+.ap-row {
+    display: flex;
+    flex-direction: row;
+    padding: 2dp 6dp;
+    border-radius: 4dp;
+}
+.ap-row:hover {
+    background-color: #3a3a55ff;
+}
+
+.ap-cell.cellsel {
+    background-color: #ffcc66ff;
+    color: #1e1e28ff;
+    border-radius: 2dp;
+}
+
+/* Shared 3-column template (used by .ap-colheads and .ap-row). */
+.ap-num {
+    flex: 0 0 40dp;
+}
+.ap-rule {
+    flex: 1;
+}
+.ap-ie {
+    flex: 0 0 110dp;
+}

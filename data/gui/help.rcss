@@ -1,0 +1,64 @@
+/* Layout for the help screen (Tier 1, screen #3: help::display_help).
+   Palette/border/scrollbar/.item/.scroll-pane come from theme.rcss (linked
+   first in help.rml); this file owns only the screen's own layout. Lengths in
+   dp (see theme.rcss).
+
+   Both missions gotchas apply (documented in uilist.rcss): body needs a
+   definite height or the panel shrink-wraps; the scroll child needs the vh
+   max-height that .scroll-pane carries. */
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.help-panel {
+    width: 90%;
+    height: 90%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* The two regions are toggled by data-if; the visible one fills the panel.
+   display:flex here is the value data-if restores when its condition is true. */
+.help-menu,
+.help-article {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+/* "Press one of the following…" preamble above the topic grid. */
+.help-intro {
+    margin-bottom: 12dp;
+    color: #cfcfe0ff;
+}
+
+/* Topic list as two wrapping columns (matches the legacy 2-column draw_menu). */
+.help-topics {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-content: flex-start;
+}
+.help-topic {
+    /* Reuse the .item triad (bg / :hover / .selected) for click affordance;
+       this owns only layout. Two per row: border-box folds the 10dp padding into
+       the 48% basis, + 1% margin each side = 50% footprint → exactly 2 columns.
+       (content-box would push 48%+padding+margin past 50% and collapse to 1 col.)
+       flex:0 0 fixes the basis with no grow/shrink so it can't reflow. */
+    box-sizing: border-box;
+    flex: 0 0 48%;
+    margin: 0 1% 6dp 1%;
+    padding: 4dp 10dp;
+}
+
+/* Single scrolling article pane. .scroll-pane (theme) provides flex/overflow/
+   max-height; pre-wrap preserves the movement ASCII diagram's space alignment
+   (Terminus is monospace) while long prose lines still wrap at the edge. */
+.help-article-body {
+    white-space: pre-wrap;
+}

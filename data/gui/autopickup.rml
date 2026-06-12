@@ -1,0 +1,43 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="autopickup.rcss"/>
+</head>
+<body data-model="autopickup">
+    <!-- Tier 2 screen #4 (auto_pickup user_interface::show). Near-free twin of
+         safemode: dynamic tabs (Global/Character) rendered as a bound Vector over
+         the shared theme .tabs/.tab, over a 2-column rules table (Rule / I/E)
+         with a 2D cursor — the active CELL is highlighted via row.sel_col
+         (1 = Rule, 2 = I/E; else -1), not the whole row. All editing stays on
+         input_context + the migrated string_input_popup; RmlUi is render-only and
+         handles mouse selection. Column headers are literal English (same i18n
+         gap as auto_note's heads, for the §8/F.1 sweep). -->
+    <div class="panel ap-panel">
+        <div class="ap-hints" data-rml="hints_rml"></div>
+        <div class="ap-status" data-rml="status_rml"></div>
+
+        <div class="tabs ap-tabs">
+            <div class="item tab" data-for="t : tabs"
+                 data-class-selected="t.selected"
+                 data-event-click="on_tab(it_index)" data-rml="t.name_rml"></div>
+        </div>
+
+        <div class="ap-colheads">
+            <span class="ap-num">#</span>
+            <span class="ap-rule">Rules</span>
+            <span class="ap-ie">I/E</span>
+        </div>
+
+        <div class="ap-list scroll-pane">
+            <div class="ap-row" data-for="row : rows"
+                 data-class-selected="row.selected"
+                 data-event-mouseover="on_select(it_index)"
+                 data-event-click="on_select(it_index)">
+                <span class="ap-num" data-rml="row.num_rml"></span>
+                <span class="ap-cell ap-rule" data-class-cellsel="row.sel_col == 1" data-rml="row.rule_rml"></span>
+                <span class="ap-cell ap-ie" data-class-cellsel="row.sel_col == 2" data-rml="row.ie_rml"></span>
+            </div>
+        </div>
+    </div>
+</body>
+</rml>

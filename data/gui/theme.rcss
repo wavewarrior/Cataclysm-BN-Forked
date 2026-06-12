@@ -43,6 +43,14 @@ body {
     padding: 12dp;
 }
 
+/* GOTCHA (bit diary + mutations): RmlUi elements default to `display: inline`.
+   The familiar `div { display: block }` lives in RmlUi's SAMPLE rml.rcss, which
+   we do NOT link — so a bare `<div>` row flows inline and a list renders as one
+   wrapped paragraph. A list row must EITHER set `display: block`/`flex` itself,
+   OR be a child of a `display: flex; flex-direction: column` container (flex
+   items get blockified). The `.item` class below does NOT set display — set it
+   on your row class (see .diary-line / .mut-line, or uilist .item). */
+
 /* Selectable item — shared by uilist rows and query_popup buttons. The
    component keeps its own layout (padding/flex/margin); this owns the palette
    and the interactive states. :hover is declared before .selected so keyboard
@@ -59,6 +67,44 @@ body {
 .item.selected {
     background-color: #ffcc66ff;
     color: #1e1e28ff;
+}
+
+/* F.2 tab bar (lifted at the 3rd tab use = bionics, after missions + scores both
+   shipped a content-switching tab row). A horizontal row of `.tab` items, each a
+   `.item` (so it inherits the bg/:hover/.selected triad); `.tab.selected` adds
+   bold. Bind tabs as a Vector of {name, selected} and switch the active one from
+   C++ on click (keyboard owns LEFT/RIGHT). missions/scores keep their own copies
+   (.missions-tab / .scores-tab) — adopt this on their next touch, don't retrofit
+   eyeballed screens. */
+.tabs {
+    display: flex;
+    flex-direction: row;
+    margin-bottom: 8dp;
+}
+.tab {
+    flex: 1;
+    padding: 4dp 10dp;
+    margin-right: 6dp;
+    text-align: center;
+}
+.tab.selected {
+    font-weight: bold;
+}
+
+/* F.2 scrolling-text-view seed (extracted at Tier-1 screen #3 = help, where the
+   overflow text-pane recurs a 3rd time after missions' .missions-detail and
+   scores' .scores-body). A flex child that scrolls its own overflow. The
+   explicit `vh` max-height is the ACTUAL scroll bound — RmlUi 6.2 won't constrain
+   a flex child's height by its parent alone, so without it the overflow region
+   collapses to height 0 and the text is clipped invisible (missions gotcha #1).
+   Already-committed screens keep their own copies; adopt this on their next touch
+   rather than retrofitting (avoids regressing eyeballed screens for no gain). */
+.scroll-pane {
+    flex: 1;
+    min-height: 0;
+    max-height: 84vh;
+    overflow-y: auto;
+    padding: 4dp 8dp;
 }
 
 /* Scrollbars for any overflowing list. */

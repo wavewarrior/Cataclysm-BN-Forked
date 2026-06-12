@@ -1,0 +1,22 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="computer.rcss"/>
+</head>
+<body data-model="computer">
+    <!-- Tier 2 screen #5 (computer_session::use). The computer terminal output
+         pane: one line per entry in the `lines` buffer (print_* appends them),
+         indent → left padding, colour via cata_text_to_rml (untagged text falls
+         back to the terminal-green default, matching the legacy c_green base; red
+         errors / yellow gibberish carry their own spans). This doc is a
+         persistent BACKDROP — the root menu (uilist) and prompts (query_*) are
+         already migrated (Tier 0) and render over it. Non-interactive: input is
+         entirely on those menus/prompts. -->
+    <div class="panel comp-panel">
+        <div class="comp-screen scroll-pane">
+            <div class="comp-line" data-for="ln : lines"
+                 data-class-indent="ln.indented" data-rml="ln.text_rml"></div>
+        </div>
+    </div>
+</body>
+</rml>

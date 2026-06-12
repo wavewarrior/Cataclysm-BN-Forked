@@ -16,9 +16,63 @@
 #include "options.h"
 #include "output.h"
 #include "point.h"
+#include "string_formatter.h"
 #include "translations.h"
 #include "ui_manager.h"
 #include "world.h"
+
+#include <RmlUi/Core.h>
+
+#include "rml_screen.h"
+#include "rml_util.h"
+
+namespace
+{
+// RmlUi render path for the auto notes manager (full UI→RmlUi migration, Tier 1
+// screen #5) and the FIRST consumer of the F.3 rml_doc harness — the
+// open/close/guard/16ms-tick lifecycle now lives in rml_doc; only the data model
+// + this sync stay here. Toggle-list family (cf. distraction): live-synced via
+// sync_rml() in on_redraw, so the cursor highlight + per-row status + header all
+// track the selection without per-branch DirtyVariable. Status/symbol colour
+// rides inside the bound strings via cata_text_to_rml.
+struct auto_note_rml_row {
+    Rml::String name_rml;
+    Rml::String symbol_rml;   // map symbol char, coloured
+    Rml::String status_rml;   // yes(green)/no(red)
+    bool selected = false;
+};
+struct auto_note_rml_session {
+    Rml::Vector<auto_note_rml_row> rows;
+    Rml::String header_rml;   // "Auto notes enabled: True/False"
+    bool empty = false;       // no discovered map extras → show the hint instead
+    Rml::String empty_rml;
+    Rml::DataModelHandle handle;
+};
+
+// Context-global type registration, guarded once (see uilist pattern).
+bool g_auto_note_types_registered = false;
+
+void register_auto_note_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_auto_note_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<auto_note_rml_row> rh = c.RegisterStruct<auto_note_rml_row>();
+    rh.RegisterMember( "name_rml", &auto_note_rml_row::name_rml );
+    rh.RegisterMember( "symbol_rml", &auto_note_rml_row::symbol_rml );
+    rh.RegisterMember( "status_rml", &auto_note_rml_row::status_rml );
+    rh.RegisterMember( "selected", &auto_note_rml_row::selected );
+    c.RegisterArray<Rml::Vector<auto_note_rml_row>>();
+    g_auto_note_types_registered = true;
+}
+} // namespace
+
+bool &auto_note_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = false;
+    return enabled;
+}
 
 namespace auto_notes
 {
@@ -222,7 +276,76 @@ void auto_note_manager_gui::show()
         ctx.register_action( "CHANGE_MAPEXTRA_CHARACTER" );
     }
 
+    // ---- RmlUi render path (F.3 rml_doc harness) ----------------------------
+    // rml_doc owns the open/guard/16ms-tick/close lifecycle; only the model +
+    // this live sync stay here. sync_rml() runs in on_redraw, so the cursor
+    // highlight, per-row status, and header all track the selection without
+    // per-branch DirtyVariable. The data model storage is declared BEFORE rml so
+    // it outlives the document (RmlUi holds raw pointers into it until close).
+    std::unique_ptr<auto_note_rml_session> data;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml ) {
+            return;
+        }
+        const bool an = get_option<bool>( "AUTO_NOTES" );
+        data->header_rml = cata_text_to_rml( string_format( _( "Auto notes enabled: %s" ),
+                           colorize( an ? _( "True" ) : _( "False" ), an ? c_light_green : c_light_red ) ) );
+        data->empty = emptyMode;
+        data->rows.clear();
+        if( emptyMode ) {
+            data->empty_rml = cata_text_to_rml( colorize(
+                    _( "Discover more special encounters to populate this list" ), c_light_gray ) );
+        } else {
+            for( int i = 0; i < cacheSize; ++i ) {
+                const string_id<map_extra> &id = displayCache[i];
+                const auto &cacheEntry = mapExtraCache[id];
+                const bool en = cacheEntry.second;
+                auto_note_rml_row r;
+                r.name_rml = cata_text_to_rml( cacheEntry.first.name() );
+                r.symbol_rml = cata_text_to_rml( colorize( cacheEntry.first.get_symbol(),
+                                                 cacheEntry.first.color ) );
+                r.status_rml = cata_text_to_rml( colorize(
+                        en ? pgettext( "auto notes status value", "yes" )
+                        : pgettext( "auto notes status value", "no" ),
+                        en ? c_green : c_red ) );
+                r.selected = ( i == currentLine );
+                data->rows.push_back( r );
+            }
+        }
+        data->handle.DirtyVariable( "header_rml" );
+        data->handle.DirtyVariable( "empty" );
+        data->handle.DirtyVariable( "empty_rml" );
+        data->handle.DirtyVariable( "rows" );
+    };
+
+    rml.open( auto_note_rmlui_enabled(), "auto_note", ctx,
+    [&]( Rml::DataModelConstructor & c ) {
+        data = std::make_unique<auto_note_rml_session>();
+        register_auto_note_rml_types( c );
+        c.Bind( "rows", &data->rows );
+        c.Bind( "header_rml", &data->header_rml );
+        c.Bind( "empty", &data->empty );
+        c.Bind( "empty_rml", &data->empty_rml );
+        c.BindEventCallback( "on_select",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            if( idx >= 0 && idx < cacheSize ) {
+                currentLine = idx;
+            }
+        } );
+        data->handle = c.GetModelHandle();
+    } );
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        // RmlUi path owns the screen — sync the model and skip curses drawing.
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         // == Draw border
         draw_border( w_border, BORDER_COLOR, _( " AUTO NOTES MANAGER " ) );
         mvwputch( w_border, point( 0, 2 ), c_light_gray, LINE_XXXO );
@@ -368,6 +491,11 @@ void auto_note_manager_gui::show()
             wasChanged = true;
         }
     }
+
+    // Tear down the RmlUi document on every exit path (incl. the early return
+    // below) while the bound `data` is still alive. close() is idempotent and a
+    // no-op when the curses path ran.
+    rml.close();
 
     if( !was_changed() ) {
         return;

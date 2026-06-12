@@ -1,0 +1,53 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="safemode.rcss"/>
+</head>
+<body data-model="safemode">
+    <!-- Tier 2 screen #3 (safemode::show). Global/Character tabs (shared
+         theme .tabs/.tab) over a 5-column rules table. The cursor is 2D
+         (line + column): the active CELL is highlighted via row.sel_col (the
+         active column index on the cursor row, else -1), NOT the whole row. All
+         editing (add/remove/copy/move/enable/disable/edit) stays on
+         input_context + the migrated string_input_popup; RmlUi renders the table
+         read-only + the cell highlight, and handles mouse selection only.
+         Column headers are literal (English) — same i18n gap as auto_note's
+         column heads, to be closed in the §8/F.1 sweep. -->
+    <div class="panel sm-panel">
+        <div class="sm-hints" data-rml="hints_rml"></div>
+        <div class="sm-status" data-rml="status_rml"></div>
+
+        <div class="tabs sm-tabs">
+            <div class="item tab" data-class-selected="global_tab"
+                 data-event-click="on_tab(0)" data-rml="global_tab_label_rml"></div>
+            <div class="item tab" data-class-selected="!global_tab"
+                 data-event-click="on_tab(1)" data-rml="character_tab_label_rml"></div>
+        </div>
+
+        <div class="sm-colheads">
+            <span class="sm-num">#</span>
+            <span class="sm-rule">Rules</span>
+            <span class="sm-att">Attitude</span>
+            <span class="sm-dist">Dist</span>
+            <span class="sm-wb">B/W</span>
+            <span class="sm-cat">Cat</span>
+        </div>
+
+        <div class="sm-empty" data-if="empty" data-rml="empty_rml"></div>
+
+        <div class="sm-list scroll-pane" data-if="!empty">
+            <div class="sm-row" data-for="row : rows"
+                 data-class-selected="row.selected"
+                 data-event-mouseover="on_select(it_index)"
+                 data-event-click="on_select(it_index)">
+                <span class="sm-num" data-rml="row.num_rml"></span>
+                <span class="sm-cell sm-rule" data-class-cellsel="row.sel_col == 0" data-rml="row.rule_rml"></span>
+                <span class="sm-cell sm-att" data-class-cellsel="row.sel_col == 1" data-rml="row.attitude_rml"></span>
+                <span class="sm-cell sm-dist" data-class-cellsel="row.sel_col == 2" data-rml="row.proximity_rml"></span>
+                <span class="sm-cell sm-wb" data-class-cellsel="row.sel_col == 3" data-rml="row.wblist_rml"></span>
+                <span class="sm-cell sm-cat" data-class-cellsel="row.sel_col == 4" data-rml="row.category_rml"></span>
+            </div>
+        </div>
+    </div>
+</body>
+</rml>

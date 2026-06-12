@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <map>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -21,6 +22,11 @@
 #include "ui.h"
 #include "ui_manager.h"
 #include "wcwidth.h"
+
+#include <RmlUi/Core.h>
+
+#include "rml_screen.h"
+#include "rml_util.h"
 
 namespace
 {
@@ -148,7 +154,54 @@ void draw_diary_border( catacurses::window *win, const nc_color &color = c_white
     mvwprintw( *win, point( midx, max.y - 0 ), "___" );
     wattroff( *win, color );
 }
+
+// RmlUi render path for the diary (full UI→RmlUi migration, Tier 1 screen #6) via
+// the F.3 rml_doc harness. FIRST multi-pane shape: three simultaneous scroll
+// lists (pages / changes / page-text) plus a title bar and a bottom info pane.
+// Only ONE pane is active at a time (LEFT/RIGHT cycle currwin); the selected-row
+// highlight shows only in the active pane (the `*_active` bools drive a CSS
+// class, see diary.rcss). Live-synced via sync_rml() in ui_diary's on_redraw, so
+// the cursor + active-pane + info all track the loop state without per-branch
+// DirtyVariable. Colour rides inside the bound strings via cata_text_to_rml.
+struct diary_rml_line {
+    Rml::String text_rml;
+    bool selected = false;
+};
+struct diary_rml_session {
+    Rml::String title_rml;   // "<owner>'s Diary"
+    Rml::String desc_rml;    // keybinding hints
+    Rml::Vector<diary_rml_line> pages;
+    Rml::Vector<diary_rml_line> changes;
+    Rml::Vector<diary_rml_line> text;
+    Rml::String info_rml;    // description of the selected change
+    bool pages_active = false;
+    bool changes_active = false;
+    bool text_active = false;
+    Rml::DataModelHandle handle;
+};
+
+// Context-global type registration, guarded once (see uilist pattern).
+bool g_diary_types_registered = false;
+
+void register_diary_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_diary_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<diary_rml_line> lh = c.RegisterStruct<diary_rml_line>();
+    lh.RegisterMember( "text_rml", &diary_rml_line::text_rml );
+    lh.RegisterMember( "selected", &diary_rml_line::selected );
+    c.RegisterArray<Rml::Vector<diary_rml_line>>();
+    g_diary_types_registered = true;
+}
 } // namespace
+
+bool &diary_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = false;
+    return enabled;
+}
 
 static std::pair<point, point> diary_window_position()
 {
@@ -190,6 +243,140 @@ void diary::show_diary_ui( diary *c_diary )
     ctxt.register_action( "EXPORT_DIARY" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
 
+    // ---- RmlUi render path (F.3 rml_doc harness) ----------------------------
+    // rml_doc owns the open/guard/16ms-tick/close lifecycle; only the model + this
+    // live sync stay here. sync_rml() runs in ui_diary's on_redraw (invalidated
+    // every loop iteration), so the three lists, the active-pane focus, and the
+    // info pane all track currwin/selected without per-branch DirtyVariable. The
+    // model storage is declared BEFORE rml so it outlives the document (RmlUi
+    // holds raw pointers into it until close).
+    std::unique_ptr<diary_rml_session> data;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml ) {
+            return;
+        }
+        data->title_rml = cata_text_to_rml( string_format( _( "%s's Diary" ), c_diary->owner ) );
+        data->desc_rml = cata_text_to_rml( string_format( _( "%s, %s, %s, %s" ),
+                                           ctxt.get_desc( "NEW_PAGE", _( "New page" ), input_context::allow_all_keys ),
+                                           ctxt.get_desc( "CONFIRM", _( "Edit text" ), input_context::allow_all_keys ),
+                                           ctxt.get_desc( "DELETE PAGE", _( "Delete page" ), input_context::allow_all_keys ),
+                                           ctxt.get_desc( "EXPORT_DIARY", _( "Export diary" ),
+                                                   input_context::allow_all_keys ) ) );
+
+        // pages list (left)
+        data->pages.clear();
+        {
+            const std::vector<std::string> pages_list = c_diary->get_pages_list();
+            for( int i = 0; i < static_cast<int>( pages_list.size() ); ++i ) {
+                diary_rml_line ln;
+                ln.text_rml = cata_text_to_rml( pages_list[i] );
+                ln.selected = ( i == selected[window_mode::PAGE_WIN] );
+                data->pages.push_back( ln );
+            }
+        }
+
+        // changes list (centre-left): head text followed by the change list
+        data->changes.clear();
+        {
+            std::vector<std::string> change_lines = c_diary->get_head_text();
+            const std::vector<std::string> change_list = c_diary->get_change_list();
+            change_lines.insert( change_lines.end(), change_list.begin(), change_list.end() );
+            for( int i = 0; i < static_cast<int>( change_lines.size() ); ++i ) {
+                diary_rml_line ln;
+                ln.text_rml = cata_text_to_rml( change_lines[i] );
+                ln.selected = ( i == selected[window_mode::CHANGE_WIN] );
+                data->changes.push_back( ln );
+            }
+        }
+
+        // page text (centre-right): one row per line so the cursor can scroll it
+        data->text.clear();
+        {
+            const std::vector<std::string> text_lines = foldstring( c_diary->get_page_text(), 1000000 );
+            for( int i = 0; i < static_cast<int>( text_lines.size() ); ++i ) {
+                diary_rml_line ln;
+                ln.text_rml = cata_text_to_rml( text_lines[i] );
+                ln.selected = ( i == selected[window_mode::TEXT_WIN] );
+                data->text.push_back( ln );
+            }
+        }
+
+        // bottom info pane: description of the selected change (legacy showed this
+        // only while the change or text pane was focused)
+        if( currwin == window_mode::CHANGE_WIN || currwin == window_mode::TEXT_WIN ) {
+            data->info_rml = cata_text_to_rml( c_diary->get_desc_map()[selected[window_mode::CHANGE_WIN]] );
+        } else {
+            data->info_rml.clear();
+        }
+
+        data->pages_active = ( currwin == window_mode::PAGE_WIN );
+        data->changes_active = ( currwin == window_mode::CHANGE_WIN );
+        data->text_active = ( currwin == window_mode::TEXT_WIN );
+
+        data->handle.DirtyVariable( "title_rml" );
+        data->handle.DirtyVariable( "desc_rml" );
+        data->handle.DirtyVariable( "pages" );
+        data->handle.DirtyVariable( "changes" );
+        data->handle.DirtyVariable( "text" );
+        data->handle.DirtyVariable( "info_rml" );
+        data->handle.DirtyVariable( "pages_active" );
+        data->handle.DirtyVariable( "changes_active" );
+        data->handle.DirtyVariable( "text_active" );
+    };
+
+    rml.open( diary_rmlui_enabled(), "diary", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        data = std::make_unique<diary_rml_session>();
+        register_diary_rml_types( c );
+        c.Bind( "title_rml", &data->title_rml );
+        c.Bind( "desc_rml", &data->desc_rml );
+        c.Bind( "pages", &data->pages );
+        c.Bind( "changes", &data->changes );
+        c.Bind( "text", &data->text );
+        c.Bind( "info_rml", &data->info_rml );
+        c.Bind( "pages_active", &data->pages_active );
+        c.Bind( "changes_active", &data->changes_active );
+        c.Bind( "text_active", &data->text_active );
+        // Clicking/hovering a pane focuses it and moves that pane's cursor; the
+        // next 16ms loop tick rebuilds via sync_rml (and re-opens the page for
+        // PAGE_WIN at the loop top). Keyboard navigation is unchanged.
+        c.BindEventCallback( "on_pages",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            if( idx >= 0 ) {
+                currwin = window_mode::PAGE_WIN;
+                selected[window_mode::PAGE_WIN] = idx;
+            }
+        } );
+        c.BindEventCallback( "on_changes",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            if( idx >= 0 ) {
+                currwin = window_mode::CHANGE_WIN;
+                selected[window_mode::CHANGE_WIN] = idx;
+            }
+        } );
+        c.BindEventCallback( "on_text",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            if( idx >= 0 ) {
+                currwin = window_mode::TEXT_WIN;
+                selected[window_mode::TEXT_WIN] = idx;
+            }
+        } );
+        data->handle = c.GetModelHandle();
+    } );
+
     ui_adaptor ui_diary;
     ui_diary.on_screen_resize( [&]( ui_adaptor & ui ) {
         const std::pair<point, point> beg_and_max = diary_window_position();
@@ -207,6 +394,13 @@ void diary::show_diary_ui( diary *c_diary )
     } );
     ui_diary.mark_resize();
     ui_diary.on_redraw( [&]( const ui_adaptor & ) {
+        // RmlUi path owns the screen — sync the model and skip curses drawing.
+        // sync lives only here (ui_diary is invalidated every loop iteration);
+        // the other three panes early-return so the doc renders once per frame.
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         werase( w_changes );
         werase( w_text );
         werase( w_border );
@@ -242,6 +436,9 @@ void diary::show_diary_ui( diary *c_diary )
     } );
     ui_pages.mark_resize();
     ui_pages.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            return;
+        }
         werase( w_pages );
 
         print_list_scrollable( &w_pages, c_diary->get_pages_list(), &selected[window_mode::PAGE_WIN],
@@ -263,6 +460,9 @@ void diary::show_diary_ui( diary *c_diary )
     } );
     ui_desc.mark_resize();
     ui_desc.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            return;
+        }
         werase( w_desc );
 
         draw_border( w_desc );
@@ -291,6 +491,9 @@ void diary::show_diary_ui( diary *c_diary )
     } );
     ui_info.mark_resize();
     ui_info.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            return;
+        }
         werase( w_info );
 
         draw_border( w_info );
@@ -369,6 +572,10 @@ void diary::show_diary_ui( diary *c_diary )
         }
 
     }
+
+    // Tear down the RmlUi document while the bound `data` is still alive.
+    // close() is idempotent and a no-op when the curses path ran.
+    rml.close();
 }
 
 void diary::edit_page_ui( const std::function<catacurses::window()> &create_window )

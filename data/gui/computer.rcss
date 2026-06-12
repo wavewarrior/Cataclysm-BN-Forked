@@ -1,0 +1,40 @@
+/* Layout for the computer terminal (Tier 2, screen #5: computer_session::use).
+   Palette/border/scrollbar/.scroll-pane come from theme.rcss (linked first in
+   computer.rml); this file owns only the screen's own layout. Lengths in dp.
+
+   The terminal text is monospace + green by default (matching the legacy c_green
+   base passed to print_colored_text); lines with their own colour tags (red
+   errors, yellow gibberish) carry spans from cata_text_to_rml that override it.
+   Each .comp-line is display:block (RmlUi divs default to inline — see the
+   theme.rcss gotcha) so the output stacks one line per entry. */
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.comp-panel {
+    width: 80%;
+    height: 80%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* The scrolling terminal output. Green monospace, like a CRT. */
+.comp-screen {
+    flex: 1;
+    min-height: 0;
+    color: #5fdd5fff;
+}
+
+.comp-line {
+    display: block;
+    white-space: pre-wrap;
+}
+
+/* print_text() indents its body by one column. */
+.comp-line.indent {
+    padding-left: 14dp;
+}

@@ -18,6 +18,11 @@
 #include "ui_manager.h"
 #include "value_ptr.h"
 
+#include <RmlUi/Core.h>
+
+#include "rml_screen.h"
+#include "rml_util.h"
+
 // '!' and '=' are uses as default bindings in the menu
 const invlet_wrapper
 mutation_chars( "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\"#&()*+./:;@[\\]^_{|}" );
@@ -60,10 +65,12 @@ static trait_id GetTrait( std::vector<trait_id> active, std::vector<trait_id> pa
     return mut_id;
 }
 
-static void show_mutations_titlebar( const catacurses::window &window,
-                                     const mutation_menu_mode menu_mode, const input_context &ctxt )
+// Build the titlebar hint string (mode label + keybinding hints). Extracted so
+// the RmlUi render path (sync_rml) and the curses titlebar share ONE source of
+// truth for the text — no drift between the two.
+static std::string mutation_titlebar_desc( const mutation_menu_mode menu_mode,
+        const input_context &ctxt )
 {
-    werase( window );
     std::string desc;
     if( menu_mode == mutation_menu_mode::reassigning ) {
         desc += std::string( _( "Reassigning." ) ) + "  " +
@@ -88,8 +95,16 @@ static void show_mutations_titlebar( const catacurses::window &window,
     }
     desc += shortcut_desc( _( "%s to toggle sprite visibility, " ), ctxt.get_desc( "TOGGLE_SPRITE" ) );
     desc += shortcut_desc( _( "%s to change keybindings." ), ctxt.get_desc( "HELP_KEYBINDINGS" ) );
+    return desc;
+}
+
+static void show_mutations_titlebar( const catacurses::window &window,
+                                     const mutation_menu_mode menu_mode, const input_context &ctxt )
+{
+    werase( window );
     // NOLINTNEXTLINE(cata-use-named-point-constants)
-    fold_and_print( window, point( 1, 0 ), getmaxx( window ) - 1, c_white, desc );
+    fold_and_print( window, point( 1, 0 ), getmaxx( window ) - 1, c_white,
+                    mutation_titlebar_desc( menu_mode, ctxt ) );
     wnoutrefresh( window );
 }
 
@@ -101,6 +116,55 @@ static std::optional<trait_id> trait_by_invlet( const mutation_collection &mutat
         }
     }
     return std::nullopt;
+}
+
+// ── RmlUi render path (full UI→RmlUi migration, Tier 2 screen #1) ─────────────
+// 2-column active/passive mutation grid via the F.3 rml_doc harness. Each row is
+// "<key> <name>" with the legacy per-state colour baked in via cata_text_to_rml
+// (base-trait cyan vs active green/red), and the cursor highlight shown by CSS
+// ONLY in the focused column (cf. diary's active-pane highlight; the legacy
+// `c_*_yellow` highlight variants are replaced by the .selected background). The
+// menu modes (examine/reassign/hide) and activation stay on input_context
+// (keyboard owns); the model just reflects the titlebar text + the examine pane.
+struct mutation_rml_row {
+    Rml::String text_rml;
+    bool selected = false;
+};
+struct mutation_rml_session {
+    Rml::Vector<mutation_rml_row> passive;
+    Rml::Vector<mutation_rml_row> active;
+    bool passive_focus = false;   // tab_mode == passive
+    bool active_focus = false;    // tab_mode == active
+    bool passive_empty = false;
+    bool active_empty = false;
+    Rml::String passive_head_rml;
+    Rml::String active_head_rml;
+    Rml::String none_rml;
+    Rml::String title_rml;        // titlebar (mode label + keybinding hints)
+    bool examining = false;
+    Rml::String examine_rml;      // mutation description (examine mode only)
+    Rml::DataModelHandle handle;
+};
+
+static bool g_mutations_types_registered = false;
+
+static void register_mutations_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_mutations_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<mutation_rml_row> rh = c.RegisterStruct<mutation_rml_row>();
+    rh.RegisterMember( "text_rml", &mutation_rml_row::text_rml );
+    rh.RegisterMember( "selected", &mutation_rml_row::selected );
+    c.RegisterArray<Rml::Vector<mutation_rml_row>>();
+    g_mutations_types_registered = true;
+}
+
+bool &mutations_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = false;
+    return enabled;
 }
 
 void show_mutations_ui( Character &who )
@@ -250,7 +314,150 @@ detail::mutations_ui_result detail::show_mutations_ui_internal( Character &who )
 
     std::optional<trait_id> examine_id;
 
+    // ---- RmlUi render path (F.3 rml_doc harness) ----------------------------
+    // rml_doc owns the open/guard/16ms-tick/close lifecycle; only the model + this
+    // live sync stay here. sync_rml() runs in on_redraw, so the two columns, the
+    // focused-column highlight, the titlebar, and the examine pane track the loop
+    // state without per-branch DirtyVariable. Model storage is declared BEFORE rml
+    // so it outlives the document (RmlUi holds raw pointers into it until close).
+    // NOTE: the RmlUi list renders ALL rows and scrolls natively (mouse wheel /
+    // scrollbar) — the legacy scroll_position windowing is a curses-only concern.
+    std::unique_ptr<mutation_rml_session> data;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml ) {
+            return;
+        }
+        data->passive_head_rml = cata_text_to_rml( colorize( _( "Passive" ), c_light_blue ) );
+        data->active_head_rml = cata_text_to_rml( colorize( _( "Active" ), c_light_blue ) );
+        data->none_rml = cata_text_to_rml( colorize( _( "None" ), c_light_gray ) );
+        data->title_rml = cata_text_to_rml( mutation_titlebar_desc( menu_mode, ctxt ) );
+
+        // List marker: "> " on the current item of the FOCUSED column, "• "
+        // otherwise (RCSS has no ::before/content, so the marker is baked here).
+        const bool passive_focused = ( tab_mode == mutation_tab_mode::passive );
+        const bool active_focused = ( tab_mode == mutation_tab_mode::active );
+
+        data->passive.clear();
+        for( int i = 0; i < static_cast<int>( passive.size() ); ++i ) {
+            const mutation_branch &md = passive[i].obj();
+            const char_trait_data &td = who.my_mutations[passive[i]];
+            const nc_color col = who.has_base_trait( passive[i] ) ? c_cyan : c_light_cyan;
+            const std::string marker = ( passive_focused && i == cursor ) ? "> " : "• ";
+            std::string s = marker + colorize( string_format( "%c %s", td.key, md.name() ), col );
+            if( !td.show_sprite ) {
+                //~ Hint: Letter to show which mutation is Hidden in the mutation menu
+                s += colorize( _( " H" ), c_cyan );
+            }
+            mutation_rml_row r;
+            r.text_rml = cata_text_to_rml( s );
+            r.selected = ( i == cursor );
+            data->passive.push_back( r );
+        }
+
+        data->active.clear();
+        for( int i = 0; i < static_cast<int>( active.size() ); ++i ) {
+            const mutation_branch &md = active[i].obj();
+            const char_trait_data &td = who.my_mutations[active[i]];
+            const nc_color col = td.powered
+                                 ? ( who.has_base_trait( active[i] ) ? c_green : c_light_green )
+                                 : ( who.has_base_trait( active[i] ) ? c_red : c_light_red );
+            std::string mut_desc = md.name();
+            if( md.cost > 0 && md.cooldown > 0 ) {
+                //~ RU means Resource Units
+                mut_desc += string_format( _( " - %d RU / %d turns" ), md.cost, md.cooldown );
+            } else if( md.cost > 0 ) {
+                //~ RU means Resource Units
+                mut_desc += string_format( _( " - %d RU" ), md.cost );
+            } else if( md.cooldown > 0 ) {
+                mut_desc += string_format( _( " - %d turns" ), md.cooldown );
+            }
+            if( td.powered ) {
+                mut_desc += _( " - Active" );
+            }
+            const std::string marker = ( active_focused && i == cursor ) ? "> " : "• ";
+            mutation_rml_row r;
+            r.text_rml = cata_text_to_rml(
+                             marker + colorize( string_format( "%c %s", td.key, mut_desc ), col ) );
+            r.selected = ( i == cursor );
+            data->active.push_back( r );
+        }
+
+        data->passive_empty = passive.empty();
+        data->active_empty = active.empty();
+        data->passive_focus = ( tab_mode == mutation_tab_mode::passive );
+        data->active_focus = ( tab_mode == mutation_tab_mode::active );
+        data->examining = ( menu_mode == mutation_menu_mode::examining );
+        data->examine_rml = ( data->examining && examine_id.has_value() )
+                            ? cata_text_to_rml( colorize( examine_id.value()->desc(), c_light_blue ) )
+                            : Rml::String();
+
+        data->handle.DirtyVariable( "passive" );
+        data->handle.DirtyVariable( "active" );
+        data->handle.DirtyVariable( "passive_head_rml" );
+        data->handle.DirtyVariable( "active_head_rml" );
+        data->handle.DirtyVariable( "none_rml" );
+        data->handle.DirtyVariable( "passive_empty" );
+        data->handle.DirtyVariable( "active_empty" );
+        data->handle.DirtyVariable( "passive_focus" );
+        data->handle.DirtyVariable( "active_focus" );
+        data->handle.DirtyVariable( "title_rml" );
+        data->handle.DirtyVariable( "examining" );
+        data->handle.DirtyVariable( "examine_rml" );
+    };
+
+    rml.open( mutations_rmlui_enabled(), "mutations", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        data = std::make_unique<mutation_rml_session>();
+        register_mutations_rml_types( c );
+        c.Bind( "passive", &data->passive );
+        c.Bind( "active", &data->active );
+        c.Bind( "passive_head_rml", &data->passive_head_rml );
+        c.Bind( "active_head_rml", &data->active_head_rml );
+        c.Bind( "none_rml", &data->none_rml );
+        c.Bind( "passive_empty", &data->passive_empty );
+        c.Bind( "active_empty", &data->active_empty );
+        c.Bind( "passive_focus", &data->passive_focus );
+        c.Bind( "active_focus", &data->active_focus );
+        c.Bind( "title_rml", &data->title_rml );
+        c.Bind( "examining", &data->examining );
+        c.Bind( "examine_rml", &data->examine_rml );
+        // Clicking/hovering a row focuses that column + moves the cursor there and
+        // sets the examine target; the next 16ms tick rebuilds via sync_rml.
+        // Keyboard navigation + activation/examine/reassign are unchanged.
+        c.BindEventCallback( "on_passive",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            if( idx >= 0 && idx < static_cast<int>( passive.size() ) ) {
+                tab_mode = mutation_tab_mode::passive;
+                cursor = idx;
+                examine_id = passive[idx];
+            }
+        } );
+        c.BindEventCallback( "on_active",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            if( idx >= 0 && idx < static_cast<int>( active.size() ) ) {
+                tab_mode = mutation_tab_mode::active;
+                cursor = idx;
+                examine_id = active[idx];
+            }
+        } );
+        data->handle = c.GetModelHandle();
+    } );
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        // RmlUi path owns the screen — sync the model and skip curses drawing.
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         werase( wBio );
         draw_border( wBio, BORDER_COLOR, _( " MUTATIONS " ) );
         // Draw line under title
@@ -630,6 +837,10 @@ detail::mutations_ui_result detail::show_mutations_ui_internal( Character &who )
             }
         }
     }
+
+    // Tear down the RmlUi document while the bound `data` is still alive.
+    // close() is idempotent and a no-op when the curses path ran.
+    rml.close();
 
     return ret;
 }

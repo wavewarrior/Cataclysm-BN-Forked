@@ -21,6 +21,14 @@
 #include "ui.h"
 #include "ui_manager.h"
 
+#include <RmlUi/Core.h>
+#include <memory>
+
+#include "lighting/rmlui_layer.h"
+#include "path_info.h"
+#include "rml_screen.h"
+#include "rml_util.h"
+
 static std::string get_achievements_text( const achievements_tracker &achievements )
 {
     std::string os;
@@ -66,6 +74,48 @@ static std::string get_scores_text( stats_tracker &stats )
     return os;
 }
 
+namespace
+{
+// RmlUi render path for the scores screen (full UI→RmlUi migration, Tier 1
+// screen #2). Tab bar mirrors the missions pattern; the body is a SINGLE
+// scrolling text pane (the F.2 scrolling-text-view seed). Keyboard stays on
+// input_context — LEFT/RIGHT switch tabs, UP/DOWN/PAGE_* scroll the #scores-body
+// element via SetScrollTop (RmlUi handles the mouse wheel itself).
+struct scores_rml_tab {
+    Rml::String name;
+    bool selected = false;
+};
+struct scores_rml_session {
+    Rml::Vector<scores_rml_tab> tabs;
+    Rml::String body_rml;   // colour-tagged text; RmlUi wraps (data-rml)
+    Rml::DataModelHandle handle;
+    Rml::ElementDocument *doc = nullptr;
+    Rml::Element *scroll = nullptr;  // #scores-body, scrolled from C++
+};
+
+bool g_scores_types_registered = false;
+bool g_scores_model_active = false;
+
+void register_scores_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_scores_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<scores_rml_tab> th = c.RegisterStruct<scores_rml_tab>();
+    th.RegisterMember( "name", &scores_rml_tab::name );
+    th.RegisterMember( "selected", &scores_rml_tab::selected );
+    c.RegisterArray<Rml::Vector<scores_rml_tab>>();
+    g_scores_types_registered = true;
+}
+} // namespace
+
+bool &scores_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = false;
+    return enabled;
+}
+
 void show_scores_ui( const achievements_tracker &achievements, stats_tracker &stats,
                      const kill_tracker &kills )
 {
@@ -93,6 +143,22 @@ void show_scores_ui( const achievements_tracker &achievements, stats_tracker &st
     scrolling_text_view view( w_view );
     bool new_tab = true;
 
+    // ---- RmlUi render path ---------------------------------------------------
+    // When active, the curses on_redraw is skipped and the model is synced in the
+    // tab-change block below (NOT every 16ms tick — that would reset the scroll
+    // offset). Keyboard scroll drives #scores-body directly via SetScrollTop.
+    std::unique_ptr<scores_rml_session> rml;
+    const auto scroll_rml = [&]( float frac ) {
+        if( !rml || rml->scroll == nullptr ) {
+            return;
+        }
+        Rml::Element *e = rml->scroll;
+        const float ch = e->GetClientHeight();
+        const float max_top = std::max( 0.0f, e->GetScrollHeight() - ch );
+        const float t = std::clamp( e->GetScrollTop() + frac * ch, 0.0f, max_top );
+        e->SetScrollTop( t );
+    };
+
     ui_adaptor ui;
     const auto &init_windows = [&]( ui_adaptor & ui ) {
         w = new_centered_win( TERMY - 2, FULL_SCREEN_WIDTH );
@@ -110,7 +176,50 @@ void show_scores_ui( const achievements_tracker &achievements, stats_tracker &st
         { tab_mode::kills, _( "KILLS" ) },
     };
 
+    // Open the RmlUi document if the toggle is on and the layer is ready. On
+    // failure (or toggle off) `rml` stays null and the curses path runs.
+    if( scores_rmlui_enabled() && rmlui_layer::ready() && !g_scores_model_active ) {
+        if( Rml::Context *ctx = rmlui_layer::context() ) {
+            Rml::DataModelConstructor c = ctx->CreateDataModel( "scores" );
+            if( c ) {
+                rml = std::make_unique<scores_rml_session>();
+                register_scores_rml_types( c );
+                c.Bind( "tabs", &rml->tabs );
+                c.Bind( "body_rml", &rml->body_rml );
+                c.BindEventCallback( "on_tab",
+                [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+                    int idx = -1;
+                    if( !args.empty() ) {
+                        args[0].GetInto( idx );
+                    }
+                    if( idx >= 0 && idx < static_cast<int>( tab_mode::num_tabs ) ) {
+                        tab = static_cast<tab_mode>( idx );
+                        // Force the tab-change block to rebuild + reset scroll
+                        // (mouse path; the keyboard path sets this directly).
+                        new_tab = true;
+                    }
+                } );
+                rml->handle = c.GetModelHandle();
+                rml->doc = rmlui_layer::open_document( PATH_INFO::datadir() + "gui/scores.rml" );
+                if( rml->doc == nullptr ) {
+                    ctx->RemoveDataModel( "scores" );
+                    rml.reset();
+                } else {
+                    rml->scroll = rml->doc->GetElementById( "scores-body" );
+                    g_scores_model_active = true;
+                    // Tick at 16ms so RmlUi hover/mouse-wheel stay live between keys.
+                    ctxt.set_timeout( 16 );
+                }
+            }
+        }
+    }
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        // When the RmlUi path owns the screen, the model is synced in the
+        // tab-change block; skip all curses drawing (w/w_view left un-refreshed).
+        if( rml ) {
+            return;
+        }
         werase( w );
         draw_tabs( w, tabs, tab );
         draw_border_below_tabs( w );
@@ -121,19 +230,34 @@ void show_scores_ui( const achievements_tracker &achievements, stats_tracker &st
 
     while( true ) {
         if( new_tab ) {
+            std::string text;
             switch( tab ) {
                 case tab_mode::achievements:
-                    view.set_text( get_achievements_text( achievements ) );
+                    text = get_achievements_text( achievements );
                     break;
                 case tab_mode::scores:
-                    view.set_text( get_scores_text( stats ) );
+                    text = get_scores_text( stats );
                     break;
                 case tab_mode::kills:
-                    view.set_text( kills.get_kills_text() );
+                    text = kills.get_kills_text();
                     break;
                 case tab_mode::num_tabs:
                     assert( false );
                     break;
+            }
+            view.set_text( text );
+            if( rml ) {
+                rml->tabs.clear();
+                for( const auto &t : tabs ) {
+                    rml->tabs.push_back( { t.second, t.first == tab } );
+                }
+                rml->body_rml = cata_text_to_rml( text );
+                rml->handle.DirtyVariable( "tabs" );
+                rml->handle.DirtyVariable( "body_rml" );
+                // New tab starts at the top, mirroring curses set_text.
+                if( rml->scroll != nullptr ) {
+                    rml->scroll->SetScrollTop( 0.0f );
+                }
             }
         }
 
@@ -153,16 +277,28 @@ void show_scores_ui( const achievements_tracker &achievements, stats_tracker &st
             }
             new_tab = true;
         } else if( action == "DOWN" ) {
-            view.scroll_down();
+            rml ? scroll_rml( 0.1f ) : view.scroll_down();
         } else if( action == "UP" ) {
-            view.scroll_up();
+            rml ? scroll_rml( -0.1f ) : view.scroll_up();
         } else if( action == "PAGE_DOWN" ) {
-            view.page_down();
+            rml ? scroll_rml( 0.9f ) : view.page_down();
         } else if( action == "PAGE_UP" ) {
-            view.page_up();
+            rml ? scroll_rml( -0.9f ) : view.page_up();
         } else if( action == "CONFIRM" || action == "QUIT" ) {
             break;
         }
+    }
+
+    // Tear down the RmlUi document + data model (no-op if the curses path ran).
+    if( rml ) {
+        if( rml->doc != nullptr ) {
+            rmlui_layer::close_document( rml->doc );
+        }
+        if( Rml::Context *ctx = rmlui_layer::context() ) {
+            ctx->RemoveDataModel( "scores" );
+        }
+        g_scores_model_active = false;
+        rml.reset();
     }
 }
 

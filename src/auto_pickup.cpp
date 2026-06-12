@@ -31,6 +31,68 @@
 #include "ui_manager.h"
 #include "world.h"
 
+#include <RmlUi/Core.h>
+
+#include "rml_screen.h"
+#include "rml_util.h"
+
+// ── RmlUi render path (full UI→RmlUi migration, Tier 2 screen #4) ─────────────
+// 6th rml_doc consumer; the near-free twin of safemode (same tabbed rules-table
+// shape). Dynamic tab count (Global/Character) rendered as a bound Vector over
+// the shared theme .tabs/.tab; a 2-column table (Rule / I/E) with a 2D cursor
+// (iLine + iColumn ∈ {1,2}) where the active CELL is highlighted via row.sel_col.
+// All editing stays on input_context + the migrated string_input_popup; the doc
+// is render-only. Per-row colour baked via cata_text_to_rml (bActive → grey).
+namespace
+{
+struct autopickup_rml_tab {
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct autopickup_rml_row {
+    Rml::String num_rml;
+    Rml::String rule_rml;
+    Rml::String ie_rml;
+    bool selected = false;   // iLine == i
+    int sel_col = -1;        // active column (1 = rule, 2 = I/E), else -1
+};
+struct autopickup_rml_session {
+    Rml::Vector<autopickup_rml_tab> tabs;
+    Rml::Vector<autopickup_rml_row> rows;
+    Rml::String status_rml;   // "Auto pickup enabled: True/False  <S>witch"
+    Rml::String hints_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_autopickup_types_registered = false;
+
+void register_autopickup_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_autopickup_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<autopickup_rml_tab> th = c.RegisterStruct<autopickup_rml_tab>();
+    th.RegisterMember( "name_rml", &autopickup_rml_tab::name_rml );
+    th.RegisterMember( "selected", &autopickup_rml_tab::selected );
+    c.RegisterArray<Rml::Vector<autopickup_rml_tab>>();
+    Rml::StructHandle<autopickup_rml_row> rh = c.RegisterStruct<autopickup_rml_row>();
+    rh.RegisterMember( "num_rml", &autopickup_rml_row::num_rml );
+    rh.RegisterMember( "rule_rml", &autopickup_rml_row::rule_rml );
+    rh.RegisterMember( "ie_rml", &autopickup_rml_row::ie_rml );
+    rh.RegisterMember( "selected", &autopickup_rml_row::selected );
+    rh.RegisterMember( "sel_col", &autopickup_rml_row::sel_col );
+    c.RegisterArray<Rml::Vector<autopickup_rml_row>>();
+    g_autopickup_types_registered = true;
+}
+} // namespace
+
+bool &autopickup_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = false;
+    return enabled;
+}
+
 using namespace auto_pickup;
 
 static bool check_special_rule( const std::vector<material_id> &materials,
@@ -80,7 +142,78 @@ void user_interface::show()
     int iColumn = 1;
     int iStartPos = 0;
 
+    // ---- RmlUi render path (F.3 rml_doc harness) ----------------------------
+    // Declarations + sync live here (on_redraw is registered just below); the
+    // open() call is AFTER the input_context is built further down (open needs the
+    // ctxt for the 16ms tick). sync_rml() does NOT need ctxt (hints use
+    // shortcut_text), so it is safe to define before ctxt exists. The doc is
+    // render-only: all editing stays in the loop. Model storage declared BEFORE
+    // rml so it outlives the document.
+    std::unique_ptr<autopickup_rml_session> data;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml ) {
+            return;
+        }
+        data->tabs.clear();
+        for( size_t i = 0; i < tabs.size(); ++i ) {
+            autopickup_rml_tab t;
+            t.name_rml = cata_text_to_rml( tabs[i].title );
+            t.selected = ( iTab == i );
+            data->tabs.push_back( t );
+        }
+
+        std::string hints;
+        hints += shortcut_text( c_light_green, _( "<A>dd" ) ) + "  ";
+        hints += shortcut_text( c_light_green, _( "<R>emove" ) ) + "  ";
+        hints += shortcut_text( c_light_green, _( "<C>opy" ) ) + "  ";
+        hints += shortcut_text( c_light_green, _( "<M>ove" ) ) + "  ";
+        hints += shortcut_text( c_light_green, _( "<E>nable" ) ) + "  ";
+        hints += shortcut_text( c_light_green, _( "<D>isable" ) ) + "  ";
+        if( !g->u.name.empty() ) {
+            hints += shortcut_text( c_light_green, _( "<T>est" ) ) + "  ";
+        }
+        hints += shortcut_text( c_light_green, _( "<+-> Move up/down" ) ) + "  ";
+        hints += shortcut_text( c_light_green, _( "<Enter>-Edit" ) ) + "  ";
+        hints += shortcut_text( c_light_green, _( "<Tab>-Switch Page" ) );
+        data->hints_rml = cata_text_to_rml( hints );
+
+        if( is_autopickup ) {
+            const bool on = get_option<bool>( "AUTO_PICKUP" );
+            data->status_rml = cata_text_to_rml( string_format( _( "Auto pickup enabled: %s  %s" ),
+                                                 colorize( on ? _( "True" ) : _( "False" ), on ? c_light_green : c_light_red ),
+                                                 shortcut_text( c_light_green, _( "<S>witch" ) ) ) );
+        } else {
+            data->status_rml.clear();
+        }
+
+        const rule_list &cur = tabs[iTab].new_rules;
+        data->rows.clear();
+        for( int i = 0; i < static_cast<int>( cur.size() ); ++i ) {
+            const nc_color col = cur[i].bActive ? c_white : c_light_gray;
+            autopickup_rml_row r;
+            r.num_rml = cata_text_to_rml( colorize( string_format( "%d", i + 1 ), col ) );
+            r.rule_rml = cata_text_to_rml( colorize(
+                                               cur[i].sRule.empty() ? _( "<empty rule>" ) : cur[i].sRule, col ) );
+            r.ie_rml = cata_text_to_rml( colorize(
+                                             cur[i].bExclude ? _( "Exclude" ) : _( "Include" ), col ) );
+            r.selected = ( iLine == i );
+            r.sel_col = ( iLine == i ) ? iColumn : -1;
+            data->rows.push_back( r );
+        }
+
+        data->handle.DirtyVariable( "tabs" );
+        data->handle.DirtyVariable( "rows" );
+        data->handle.DirtyVariable( "status_rml" );
+        data->handle.DirtyVariable( "hints_rml" );
+    };
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        // RmlUi path owns the screen — sync the model and skip curses drawing.
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         // Redraw the border
         draw_border( w_border, BORDER_COLOR, title );
         // |-
@@ -213,6 +346,40 @@ void user_interface::show()
     if( is_autopickup ) {
         ctxt.register_action( "SWITCH_AUTO_PICKUP_OPTION" );
     }
+
+    rml.open( autopickup_rmlui_enabled(), "autopickup", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        data = std::make_unique<autopickup_rml_session>();
+        register_autopickup_rml_types( c );
+        c.Bind( "tabs", &data->tabs );
+        c.Bind( "rows", &data->rows );
+        c.Bind( "status_rml", &data->status_rml );
+        c.Bind( "hints_rml", &data->hints_rml );
+        // Click a tab to switch it (resets the cursor line); click/hover a row to
+        // select it. Column navigation + all editing stay on the keyboard.
+        c.BindEventCallback( "on_tab",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            if( idx >= 0 && idx < static_cast<int>( tabs.size() ) ) {
+                iTab = idx;
+                iLine = 0;
+            }
+        } );
+        c.BindEventCallback( "on_select",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            if( idx >= 0 && idx < static_cast<int>( tabs[iTab].new_rules.size() ) ) {
+                iLine = idx;
+            }
+        } );
+        data->handle = c.GetModelHandle();
+    } );
 
     while( true ) {
         rule_list &cur_rules = tabs[iTab].new_rules;
@@ -378,6 +545,11 @@ void user_interface::show()
             get_options().save();
         }
     }
+
+    // Tear down the RmlUi document while the bound `data` is still alive. close()
+    // is idempotent and a no-op when the curses path ran; safe before the early
+    // returns below.
+    rml.close();
 
     if( !bStuffChanged ) {
         return;
