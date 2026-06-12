@@ -7,7 +7,6 @@
 #include <cstdlib>
 #include <iterator>
 #include <memory>
-#include <fmt/format.h>
 
 // imgui.h declares ImGui::DebugLog; the game's DebugLog macro would
 // expand it, breaking the declaration.  Undef the macro for the imgui

@@ -538,6 +538,9 @@ if (NOT TARGET SDL3_shadercross::SDL3_shadercross)
         set(_CATA_SAVED_C_FLAGS   "${CMAKE_C_FLAGS}")
         string(REPLACE "${CATA_WARNINGS}"    "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
         string(REPLACE "${CATA_OTHER_FLAGS}" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+        # Force vendored deps (spirv-cross, SPIRV-Tools, DXC) to use /MDd like the
+        # rest of the project. Without this they default to /MTd and the linker dies.
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL" CACHE STRING "" FORCE)
         FetchContent_Declare(
             SDL3_SHADERCROSS
             GIT_REPOSITORY https://github.com/libsdl-org/SDL_shadercross.git
