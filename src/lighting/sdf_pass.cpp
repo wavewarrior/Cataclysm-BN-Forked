@@ -8,6 +8,7 @@
 
 #include "debug.h"
 #include "lighting/gpu_device.h"
+#include "profile.h"
 #include "sdl_wrappers.h"
 
 #define dbg(x) DebugLogFL((x),DC::SDL)
@@ -28,6 +29,7 @@ namespace lighting
 // SDF unchanged, so shadows improve for free). Layout is x-major (idx = x*h+y).
 std::vector<float> compute_sdf_cpu( const float *trans, int w, int h )
 {
+    ZoneScopedN( "light_sdf_dt" );
     const int total = w * h;
     constexpr float INF = 1e20f;
 
