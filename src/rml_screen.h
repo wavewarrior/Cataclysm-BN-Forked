@@ -138,4 +138,8 @@ bool &inventory_rmlui_enabled();
 // comparison display; first compare-delta consumer of item_info_rml_lines).
 bool &compare_items_rmlui_enabled();
 
+// advanced_inventory::display() RmlUi path (Tier 3 sub-project: dual-pane AIM).
+// One toggle lights the whole doc; the work is sliced (slice 1 = dual item lists).
+bool &advanced_inv_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

@@ -819,8 +819,9 @@ automatically once the toggle's on; mostly a verification pass) → then **advan
   migration.
 - **EXCEPTION — `game_menus::inv::compare(l, r)` — MIGRATED (CODE-COMPLETE + BUILD-GREEN,
   game_inventory.cpp + devui compile + LINK clean, fresh obj+bin mtime), TOGGLE OFF,
-  EYEBALL OWED, UNCOMMITTED.** This is the ONE game_inventory function with its own
-  render: the comparison RESULT display (after `inventory_compare_selector` picks two
+  EYEBALLED CLEAN (user 2026-06-15; compare-delta colouring + lockstep scroll
+  confirmed), COMMITTED `c376c1c305`, TOGGLE OFF.** This is the ONE game_inventory
+  function with its own render: the comparison RESULT display (after `inventory_compare_selector` picks two
   items) — a `ui_adaptor` with two side-by-side `draw_item_info` panes + synced scroll.
   Migrated via the F.2 item-info component (`item_info_rml_lines`). **It is the FIRST
   compare-delta consumer** (the gap flagged at examine_item_menu): each pane's
@@ -840,8 +841,71 @@ automatically once the toggle's on; mostly a verification pass) → then **advan
   exits. **WATCH:** (a) the compare-delta colouring is the first real test of
   `format_item_info`'s compare path through `item_info_rml_lines` — confirm deltas show
   and are coloured, not flat. (b) both panes scroll in lockstep (not independently).
-- **NEXT FOLLOWER: advanced_inv** (the multi-pane dual-list variant — its own sub-project,
-  scope its panes individually).
+### Tier 3 — advanced_inv (AIM) — MULTI-SESSION SUB-PROJECT
+
+**Why it's the hardest inventory unit:** `advanced_inv.cpp` (1992) is the dual-pane
+item-management screen (`/`). Unlike `inventory_selector` (one shared `refresh_window`
++ a cell cache + an `rml_rows()` helper), AIM draws each pane with **positioned
+`mvwprintz` at absolute columns** (`print_items` :216 — name_startpos/amt_startpos/
+weight_startpos/vol_startpos), no row-builder helper. It is ONE screen rendered as ONE
+RmlUi doc (both panes + the middle sidebar), so the gate is a single
+`advanced_inv_rmlui_enabled()` toggle lighting the whole doc — the WORK is sliced, but
+runtime is all-or-nothing (flip ON for eyeball only when a slice is presentable).
+Row data = `advanced_inv_listitem` (name/stacks/weight/volume/cat/area/from_vehicle/
+autopickup; category-header vs item-entry). Columns: name (+ITEM_SYMBOLS glyph + stolen
+`!` + money), src (AIM_ALL only), amt (>1), weight, vol. Active pane's cursor = `>>`+
+hilite; inactive pane no cursor. `compact` when TERMX<=100.
+
+**Slices (each its own commit + eyeball):**
+1. **Slice 1 — dual-pane item lists + pane head.** Both panes side-by-side; each =
+   area-name title + weight/volume capacity head (top-right) + a column-header row +
+   the item list (category `[Name]` rows + item rows with name/amt/weight/vol cells,
+   per-item colour, `.selected` highlight on the active pane's cursor). New
+   `pane_rml_html(pane,active)` helper mirrors print_items' per-item logic but emits a
+   baked markup string (flat data-rml per pane, like inventory slice 2b — cells are
+   flex columns via CSS, not absolute positions). DEFER: AIM_ALL `src` column, compact
+   mode, autopickup marker, the middle sidebar, the footer.
+2. **Slice 2 — sidebar + per-pane area header.** `redraw_sidebar` (:1053, the middle
+   minimap + info) + `print_header` (:529, the in-pane area-selection grid line).
+3. **Slice 3 — footer + interactions.** Sort/filter/move hints footer; filter popup
+   (string_input Tier-0) coexistence; examine (item-info component); move-item feedback;
+   AIM_ALL src column; compact mode; autopickup marker. All editing/move stays keyboard.
+
+**SLICE 1 — dual-pane item lists + pane head — CODE-COMPLETE + BUILD-GREEN
+(advanced_inv.cpp + devui compile + LINK clean, fresh obj+bin mtime), TOGGLE OFF,
+EYEBALL OWED, UNCOMMITTED.** One RmlUi doc ("advinv") for the whole screen; all-scalar
+model (six baked strings — per pane: title / weight-vol head / rows_html), NO struct/
+array registration. Two free builders in an anon namespace mirror print_items:
+`aim_pane_rows_html(pane,active)` (column-header row + category `[Name]` rows + item
+rows, each a `.aim-row` of name/amt/weight/vol `<span>` cells — CSS flex columns, not
+absolute x; per-item colour via `it.color_in_inventory()`, inactive pane greyed; name
+reproduces stolen `!`/money/ITEM_SYMBOLS; amt/weight/vol reproduce the precision +
+red-overflow rules; `.selected` highlight on the active (`src`) pane's cursor row) and
+`aim_pane_head_html(pane,active,squares)` (the INVENTORY/WORN carried-vs-capacity head
+OR the square weight/vol head incl. AIM_ALL + container/vehicle/map maxvolume). Opened
+in `display()` under `if(!is_processing())`; `sync_rml()` rebuilds all six strings each
+redraw (active pane = `src`); on_redraw `if(rml){sync_rml();return;}` else curses.
+`advinv.{rml,rcss}`: `.panel` root → flex row of two `.aim-pane` (divider between) →
+phead (title left / capacity right) + `.aim-list` scroll-pane (data-rml the baked rows).
+New toggle `advanced_inv_rmlui_enabled()` + F4 "advanced inventory via RmlUi". rml_doc
+dtor tears down at display() exit. **DEFERRED (later slices, NOT bugs):** AIM_ALL `src`
+column, compact mode (TERMX<=100), autopickup magenta marker, the middle SIDEBAR
+(minimap + area grid), per-pane area-selection header, the FOOTER (sort/filter/move
+hints), filter popup, examine, move-item — all still curses-less in RmlUi mode this
+slice (the doc shows only the two lists + heads). Keyboard still drives everything
+(move/sort/filter/examine work; only their on-screen FEEDBACK is partial until later
+slices). **EYEBALL CHECK (user, A/B via F4 "advanced inventory via RmlUi"):** open AIM
+(`/`) → two panes side-by-side, each with its area name (active pane's brighter) +
+weight/volume head top-right, a "Name (charges) … amt weight vol" column header, then
+the items with category `[headers]`, per-item colours matching curses, amt/weight/vol
+right-aligned in their columns; the ACTIVE pane's cursor row highlights (inactive pane
+no cursor); TAB swaps active pane (highlight + title brightness move); UP/DOWN move the
+cursor; moving items between panes still works (keyboard) and the lists update.
+**WATCH:** (a) the lists scroll natively but the keyboard cursor past the viewport has
+no scroll-into-view yet (same class as inventory; a later slice). (b) NO sidebar/footer
+yet — screen looks sparser than curses (expected this slice). (c) long item names
+truncate (`.aim-c-name` overflow:hidden) — confirm they don't overflow into the numeric
+columns.
 
 **Discipline:** the cell/preset model is load-bearing and this file is 2640 lines
 under the stale-read hook — every model field MUST be verified against fetched

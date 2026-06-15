@@ -1,0 +1,30 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="advinv.rcss"/>
+</head>
+<body data-model="advinv">
+    <!-- Tier 3 sub-project (advanced inventory / AIM), SLICE 1: dual-pane item lists.
+         Two panes side-by-side; each = area-name title + weight/volume capacity head
+         + a baked rows string (column-header row + category [Name] rows + item rows
+         with name/amt/weight/vol cells; .selected highlight on the active pane's
+         cursor). Sidebar / footer / interactions land in later slices; keyboard owns
+         all input. The active pane is `src` (its title brightens + cursor shows). -->
+    <div class="panel aim-root">
+        <div class="aim-pane">
+            <div class="aim-phead">
+                <span class="aim-title" data-rml="left_title_rml"></span>
+                <span class="aim-cap" data-rml="left_head_rml"></span>
+            </div>
+            <div class="aim-list scroll-pane" data-rml="left_rows_html"></div>
+        </div>
+        <div class="aim-pane">
+            <div class="aim-phead">
+                <span class="aim-title" data-rml="right_title_rml"></span>
+                <span class="aim-cap" data-rml="right_head_rml"></span>
+            </div>
+            <div class="aim-list scroll-pane" data-rml="right_rows_html"></div>
+        </div>
+    </div>
+</body>
+</rml>
