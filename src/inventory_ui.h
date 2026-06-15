@@ -780,6 +780,9 @@ class inventory_drop_selector : public inventory_multiselector
         /** Toggle item dropping */
         void set_chosen_count( inventory_entry &entry, size_t count );
         void process_selected( int &count, const std::vector<inventory_entry *> &selected );
+        // Tier 3 slice 3: first multiselect family member lit for RmlUi (marks +
+        // selection column + query_count). Shares the global inventory toggle.
+        bool uses_rml() const override;
 
     private:
         excluded_stacks dropping;

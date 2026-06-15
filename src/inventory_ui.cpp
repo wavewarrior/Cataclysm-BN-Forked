@@ -1147,6 +1147,19 @@ std::vector<inv_rml_row> inventory_column::rml_rows() const
         if( entry.any_item() ) {
             markup += colorize( entry.any_item()->symbol(), entry.any_item()->color() ) + " ";
         }
+        // Multiselect mark (matches draw(): '-' none / '+' all / '#' partial), only
+        // for multiselect columns. The selection column has multiselect=false so it
+        // shows no mark — same as curses.
+        if( allows_selecting() && activatable() && multiselect ) {
+            if( entry.chosen_count == 0 ) {
+                markup += colorize( "-", c_dark_gray );
+            } else if( entry.chosen_count >= entry.get_available_count() ) {
+                markup += colorize( "+", c_light_green );
+            } else {
+                markup += colorize( "#", c_light_green );
+            }
+            markup += " ";
+        }
         // When denied, curses shows only the first cell to make room for the red
         // denial reason (count = 1); match that so the layout can't collide.
         std::string body;
@@ -2261,6 +2274,13 @@ std::vector<char> inventory_selector::all_bound_keys() const
 bool inventory_pick_selector::uses_rml() const
 {
     // Tier 3 slice 1: the single-select picker is the first selector lit for RmlUi.
+    return inventory_rmlui_enabled();
+}
+
+bool inventory_drop_selector::uses_rml() const
+{
+    // Tier 3 slice 3: the multiselect mechanism (marks + selection column +
+    // query_count) is proven through the drop selector. Shares the global toggle.
     return inventory_rmlui_enabled();
 }
 

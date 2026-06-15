@@ -590,11 +590,14 @@ toggle on. This restores the exact toggle→eyeball-ONE→commit→light-next rh
    (invlet + cell text, category headers, selected highlight), footer (mode hint).
    The shared cell/preset model is built + proven HERE. DEFER everything below.
 2. **Slice 2** — stats header (`display_stats` / `get_stats()` right-aligned block).
-3. **Slice 3** — `inventory_multiselector` + the `selection_column` + multiselect
-   marks + `query_count`.
+3. **Slice 3** — `inventory_multiselector` mechanism (the `selection_column` +
+   multiselect marks + `query_count`). NOTE: `inventory_multiselector` is never
+   instantiated directly (always a subclass), and "marks + query_count" needs a
+   count-bearing selector — so the vehicle is **`inventory_drop_selector`** (moved
+   up from slice 5; exercises all three named items + is easy to open).
 4. **Slice 4** — `inventory_compare_selector` (two-selection state).
-5. **Slice 5** — `inventory_iuse_selector` / `inventory_drop_selector` /
-   `inventory_pickup_selector` (count/drop-location state).
+5. **Slice 5** — `inventory_iuse_selector` / `inventory_pickup_selector`
+   (count/stats state; `drop` already lit in slice 3).
 6. **Slice 6** — multi-column layout fidelity + filter popup coexistence
    (string_input already Tier-0) + nav modes.
 Only after all slices ON + eyeballed does the family (game_inventory, then
@@ -691,6 +694,36 @@ selectors come in later slices, but if any pick path has 3 columns they should a
 sit side-by-side, sizing to content — flag if they overflow/clip horizontally, since
 scroll-pane only sets overflow-y). (b) a column whose rows are wider than its share
 → horizontal clip (no overflow-x set; left as-is, cosmetic).
+
+**SLICE 3 — multiselect mechanism (via `inventory_drop_selector`) — CODE-COMPLETE +
+BUILD-GREEN (inventory_ui.{h,cpp} + devui compile + LINK clean, fresh obj+bin mtime),
+TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.** Lights the multiselect render path. Tiny,
+because slice-2b already does the heavy lifting: (1) the `selection_column` is just
+another visible `inventory_column` (appended in the multiselector ctor) → slice-2b's
+side-by-side render shows it as a column FOR FREE; its "N of M" / count caption is
+cell text (`selection_column_preset::get_caption`) already captured by the cell
+cache. (2) the only thing `rml_rows()` missed = the **multiselect mark glyph** drawn
+SEPARATELY by `draw()` via `mvwputch` (not in cell text): `-` none (dark_gray) / `+`
+all (light_green) / `#` partial (light_green). Added it to `rml_rows()` after the
+symbol, gated by the SAME `allows_selecting() && activatable() && multiselect` as
+draw() — so it renders ONLY for multiselect columns and the selection_column
+(multiselect=false, appended after the set_multiselect loop) shows no mark, matching
+curses. (3) gate: `inventory_drop_selector::uses_rml()` override → the shared
+`inventory_rmlui_enabled()` (the per-subclass-override mechanism from slice 1; compare/
+iuse/pickup stay curses). (4) `query_count` is a `string_input_popup` (Tier-0,
+migrated) over the still-rendered inventory doc — no bespoke work, same as `set_filter`.
+F4 label renamed "inventory (pick+drop) via RmlUi" (one global toggle now lights both
+proven selectors). **EYEBALL CHECK (user, A/B via F4):** open the DROP screen (drop
+items) — items list shows the multiselect mark (`-`/`+`/`#`) after the symbol, marks
+flip as you RIGHT/select, a SEPARATE selection column on the right lists chosen items
+with "N of M" counts, query_count popup (enter a number) sets the count + the mark
+goes `#`/`+`; weight/volume stats track; the actual drop happens on CONFIRM. The PICK
+inventory still renders correctly (shared toggle, slice 1/2 unaffected). **WATCH:**
+(a) `query_count`'s string_input_popup must render + tick over the inventory doc (16ms
+tick; same path as set_filter, untested in slices 1-2 — flag if the popup is frozen or
+the doc vanishes behind it). (b) selection column appears/hides on narrow widths
+(`rearrange_columns` sets its visibility by overflow) — at small terminal sizes it may
+not show (matches curses). (c) the mark color (`#`/`+` light_green) should match curses.
 
 **Discipline:** the cell/preset model is load-bearing and this file is 2640 lines
 under the stale-read hook — every model field MUST be verified against fetched
