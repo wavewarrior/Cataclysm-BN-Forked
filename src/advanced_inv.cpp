@@ -1588,8 +1588,19 @@ void advanced_inventory::display()
 
         ui->on_redraw( [&]( const ui_adaptor & ) {
             // RmlUi owns the screen when active (slice 1: dual item lists + heads;
-            // sidebar/footer/interactions land in later slices).
+            // sidebar/footer/interactions land in later slices). redraw_pane is
+            // skipped, so the per-pane prep it does (recalc + fix_index) must run
+            // here or pane.items stays empty.
             if( rml ) {
+                for( side p : {
+                         left, right
+                     } ) {
+                    advanced_inventory_pane &pane = panes[p];
+                    if( recalc || pane.recalc ) {
+                        recalc_pane( p );
+                    }
+                    pane.fix_index();
+                }
                 sync_rml();
                 return;
             }
