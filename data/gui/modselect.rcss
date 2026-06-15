@@ -1,0 +1,105 @@
+/* Layout for the mod selector (Tier 4 #2 slice 4). Two side-by-side mod lists + tabs +
+   description + filter. body must be sized + centered (the missions gotcha). */
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.ms-panel {
+    width: 92%;
+    height: 94%;
+    display: flex;
+    flex-direction: column;
+}
+
+.ms-wtabs {
+    flex: 0 0 auto;
+}
+
+.ms-wtabs .tab {
+    flex: 0 0 auto;
+}
+
+.ms-cats {
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    margin-top: 4dp;
+}
+
+.ms-cats .tab {
+    flex: 0 0 auto;
+}
+
+/* Two columns side by side. */
+.ms-main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+}
+
+.ms-col {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    margin: 0 6dp;
+}
+
+.ms-head {
+    flex: 0 0 auto;
+    margin-bottom: 4dp;
+}
+
+.ms-list {
+    flex: 1;
+    min-height: 0;
+}
+
+.ms-row {
+    display: flex;
+    flex-direction: row;
+    padding: 1dp 4dp;
+    border-radius: 4dp;
+    white-space: nowrap;
+}
+
+.ms-row.category {
+    margin-top: 4dp;
+}
+
+.ms-row.selected {
+    background-color: #ffcc66ff;
+    color: #1e1e28ff;
+}
+
+/* Reorder (+/-) indicators on the active list. */
+.ms-shift {
+    flex: 0 0 auto;
+    width: 40dp;
+}
+
+.ms-text {
+    flex: 1;
+}
+
+/* Selected-mod info preview (full text via VIEW_MOD_DESCRIPTION popup). */
+.ms-desc {
+    flex: 0 0 auto;
+    height: 120dp;
+    margin-top: 6dp;
+    padding-top: 6dp;
+    border-top: 1dp #5a5a78ff;
+    white-space: pre-wrap;
+    overflow-y: auto;
+    color: #cfcfe0ff;
+}
+
+.ms-filter {
+    flex: 0 0 auto;
+    margin-top: 4dp;
+}

@@ -120,6 +120,148 @@ void register_wf_pick_rml_types( Rml::DataModelConstructor &c )
 
     g_wf_pick_types_registered = true;
 }
+
+// Shared mod-row builder (mirrors draw_mod_list): a flat list of category headers +
+// mod entries, colour baked into rml markup. Returned as a neutral POD so each model
+// (worldmods slice 3, modselect slice 4) copies into its OWN Rml struct — distinct
+// per-model struct types avoid re-registering one C++ type on two data models.
+struct plain_mod_row {
+    std::string text_rml;
+    std::string shift_rml;
+    bool is_category = false;
+    bool selected = false;
+};
+
+// shift_fn (optional): given a mod index, returns the colour-tagged "+ -" shift markup
+// for the active list (empty for the available/read-only list). out_sel ← the flat row
+// index of the selected mod (or -1).
+std::vector<plain_mod_row> build_wf_mod_rows(
+    const std::vector<mod_id> &mods, size_t cursor, const std::string &text_if_empty,
+    const std::function<std::string( size_t )> &shift_fn, int &out_sel )
+{
+    std::vector<plain_mod_row> rows;
+    out_sel = -1;
+    if( mods.empty() ) {
+        plain_mod_row r;
+        r.text_rml = cata_text_to_rml( colorize( text_if_empty, c_red ) );
+        r.is_category = true;
+        rows.push_back( r );
+        return rows;
+    }
+    std::string last_cat;
+    bool have_cat = false;
+    for( size_t i = 0; i < mods.size(); ++i ) {
+        const mod_id &id = mods[i];
+        std::string cat = id.is_valid() ? _( id->category.second ) : _( "MISSING MODS" );
+        if( !have_cat || cat != last_cat ) {
+            have_cat = true;
+            last_cat = cat;
+            plain_mod_row c;
+            c.text_rml = cata_text_to_rml( colorize( cat, c_magenta ) );
+            c.is_category = true;
+            rows.push_back( c );
+        }
+        std::string entry = string_format( _( " [%s]" ), id.str() );
+        nc_color col = c_white;
+        if( id.is_valid() ) {
+            entry = id->name() + entry;
+            if( id->obsolete ) {
+                col = c_dark_gray;
+                entry = remove_color_tags( entry ) + "*";
+            }
+        } else {
+            col = c_light_red;
+            entry = _( "N/A" ) + entry;
+        }
+        const bool sel = i == cursor;
+        plain_mod_row r;
+        r.text_rml = cata_text_to_rml( colorize( sel ? ">> " + entry : entry, col ) );
+        r.selected = sel;
+        if( shift_fn ) {
+            r.shift_rml = cata_text_to_rml( shift_fn( i ) );
+        }
+        if( sel ) {
+            out_sel = static_cast<int>( rows.size() );
+        }
+        rows.push_back( r );
+    }
+    return rows;
+}
+
+// show_active_world_mods (slice 3): read-only mod list. Own struct type + guard.
+struct wf_amod_row {
+    Rml::String text_rml;
+    bool is_category = false;
+    bool selected = false;
+};
+struct wf_amod_session {
+    Rml::Vector<wf_amod_row> rows;
+    Rml::String title_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_wf_amod_types_registered = false;
+
+void register_wf_amod_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_wf_amod_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<wf_amod_row> rh = c.RegisterStruct<wf_amod_row>();
+    rh.RegisterMember( "text_rml", &wf_amod_row::text_rml );
+    rh.RegisterMember( "is_category", &wf_amod_row::is_category );
+    rh.RegisterMember( "selected", &wf_amod_row::selected );
+    c.RegisterArray<Rml::Vector<wf_amod_row>>();
+
+    g_wf_amod_types_registered = true;
+}
+
+// show_modselection_window (slice 4): worldgen steps + category tabs + two mod lists
+// (available / active-with-shift) + description + filter. Own struct types + guard.
+struct wf_ms_tab {
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct wf_mod_row {
+    Rml::String text_rml;
+    Rml::String shift_rml;
+    bool is_category = false;
+    bool selected = false;
+};
+struct wf_ms_session {
+    Rml::Vector<wf_ms_tab> wtabs;   // worldgen steps (empty + hidden when standalone)
+    Rml::Vector<wf_ms_tab> cats;    // category tabs (left pane)
+    Rml::Vector<wf_mod_row> avail;  // available mods
+    Rml::Vector<wf_mod_row> active; // active load order (shift_rml populated)
+    Rml::String avail_head_rml;
+    Rml::String active_head_rml;
+    Rml::String desc_rml;
+    Rml::String filter_rml;
+    bool show_wtabs = false;
+    Rml::DataModelHandle handle;
+};
+
+bool g_wf_ms_types_registered = false;
+
+void register_wf_ms_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_wf_ms_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<wf_ms_tab> th = c.RegisterStruct<wf_ms_tab>();
+    th.RegisterMember( "name_rml", &wf_ms_tab::name_rml );
+    th.RegisterMember( "selected", &wf_ms_tab::selected );
+    c.RegisterArray<Rml::Vector<wf_ms_tab>>();
+
+    Rml::StructHandle<wf_mod_row> rh = c.RegisterStruct<wf_mod_row>();
+    rh.RegisterMember( "text_rml", &wf_mod_row::text_rml );
+    rh.RegisterMember( "shift_rml", &wf_mod_row::shift_rml );
+    rh.RegisterMember( "is_category", &wf_mod_row::is_category );
+    rh.RegisterMember( "selected", &wf_mod_row::selected );
+    c.RegisterArray<Rml::Vector<wf_mod_row>>();
+
+    g_wf_ms_types_registered = true;
+}
 } // namespace
 
 bool &worldfactory_rmlui_enabled()
@@ -870,7 +1012,54 @@ void worldfactory::show_active_world_mods( const std::vector<mod_id> &world_mods
     ctxt.register_action( "CONFIRM" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
 
+    // RmlUi render path (Tier 4 #2 slice 3). Render-only read-only mod list.
+    std::unique_ptr<wf_amod_session> data;
+    bool rml_scroll_pending = false;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml ) {
+            return;
+        }
+        int sel_child = -1;
+        std::vector<plain_mod_row> built = build_wf_mod_rows(
+                world_mods, static_cast<size_t>( cursor ), _( "--NO ACTIVE MODS--" ),
+                nullptr, sel_child );
+        data->rows.clear();
+        for( const plain_mod_row &p : built ) {
+            wf_amod_row r;
+            r.text_rml = p.text_rml;
+            r.is_category = p.is_category;
+            r.selected = p.selected;
+            data->rows.push_back( r );
+        }
+        data->title_rml = cata_text_to_rml( colorize( _( "ACTIVE WORLD MODS" ), c_white ) );
+        data->handle.DirtyVariable( "rows" );
+        data->handle.DirtyVariable( "title_rml" );
+
+        if( rml_scroll_pending && sel_child >= 0 ) {
+            rml_scroll_pending = false;
+            if( Rml::Element *list = rml.document()->GetElementById( "wm-list" ) ) {
+                if( sel_child < list->GetNumChildren() ) {
+                    list->GetChild( sel_child )->ScrollIntoView(
+                        Rml::ScrollIntoViewOptions( Rml::ScrollAlignment::Nearest ) );
+                }
+            }
+        }
+    };
+    rml.open( worldfactory_rmlui_enabled(), "worldmods", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        data = std::make_unique<wf_amod_session>();
+        register_wf_amod_rml_types( c );
+        c.Bind( "rows", &data->rows );
+        c.Bind( "title_rml", &data->title_rml );
+        data->handle = c.GetModelHandle();
+    } );
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         draw_border( w_border, BORDER_COLOR, _( " ACTIVE WORLD MODS " ) );
         wnoutrefresh( w_border );
 
@@ -885,6 +1074,7 @@ void worldfactory::show_active_world_mods( const std::vector<mod_id> &world_mods
         const std::string action = ctxt.handle_input();
 
         if( action == "UP" ) {
+            rml_scroll_pending = true;
             cursor--;
             // If it went under 0, loop back to the end of the list.
             if( cursor < 0 ) {
@@ -892,6 +1082,7 @@ void worldfactory::show_active_world_mods( const std::vector<mod_id> &world_mods
             }
 
         } else if( action == "DOWN" ) {
+            rml_scroll_pending = true;
             cursor++;
             // If it went over the end of the list, loop back to the start of the list.
             if( cursor > static_cast<int>( num_mods - 1 ) ) {
@@ -1165,7 +1356,143 @@ int worldfactory::show_modselection_window( const catacurses::window &win,
         }
     };
 
+    // RmlUi render path (Tier 4 #2 slice 4 — the mod selector). Render-only; the loop
+    // owns all add/remove/reorder/filter/tab logic. Keyboard-only this slice (no mouse).
+    std::unique_ptr<wf_ms_session> data;
+    bool rml_scroll_pending = false;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml ) {
+            return;
+        }
+        // Worldgen wizard steps (hidden when standalone = edit-active-mods).
+        data->show_wtabs = !standalone;
+        data->wtabs.clear();
+        if( !standalone ) {
+            const std::vector<std::string> steps = {
+                _( "World Mods" ), _( "World Options" ), _( "Finalize World" )
+            };
+            for( size_t i = 0; i < steps.size(); ++i ) {
+                wf_ms_tab t;
+                t.name_rml = cata_text_to_rml( colorize( steps[i], c_light_green ) );
+                t.selected = i == 0;
+                data->wtabs.push_back( t );
+            }
+        }
+        // Category tabs (left pane).
+        data->cats.clear();
+        const std::vector<std::pair<std::string, std::string>> &mtabs = get_mod_list_tabs();
+        for( size_t i = 0; i < mtabs.size(); ++i ) {
+            wf_ms_tab t;
+            t.name_rml = cata_text_to_rml( colorize( _( mtabs[i].second ), c_light_green ) );
+            t.selected = i == iCurrentTab;
+            data->cats.push_back( t );
+        }
+        // Available list.
+        int sel_avail = -1;
+        int sel_active = -1;
+        const mod_tab &cur = all_tabs[iCurrentTab];
+        const std::string amsg = cur.mods_unfiltered.empty() ? _( "--NO AVAILABLE MODS--" ) :
+                                 _( "--NO MATCHES--" );
+        std::vector<plain_mod_row> av = build_wf_mod_rows( cur.mods, cursel[0], amsg, nullptr, sel_avail );
+        data->avail.clear();
+        for( const plain_mod_row &p : av ) {
+            wf_mod_row r;
+            r.text_rml = p.text_rml;
+            r.is_category = p.is_category;
+            r.selected = p.selected;
+            data->avail.push_back( r );
+        }
+        // Active load order (with shift indicators).
+        const auto shift_fn = [&]( size_t i ) -> std::string {
+            const bool up = mman_ui->can_shift_up( i, active_mod_order );
+            const bool down = mman_ui->can_shift_down( i, active_mod_order );
+            std::string s = up ? "<color_blue>+</color>" : "<color_dark_gray>+</color>";
+            s += " ";
+            s += down ? "<color_blue>-</color>" : "<color_dark_gray>-</color>";
+            return s;
+        };
+        std::vector<plain_mod_row> ac = build_wf_mod_rows( active_mod_order, cursel[1],
+                _( "--NO ACTIVE MODS--" ), shift_fn, sel_active );
+        data->active.clear();
+        for( const plain_mod_row &p : ac ) {
+            wf_mod_row r;
+            r.text_rml = p.text_rml;
+            r.shift_rml = p.shift_rml;
+            r.is_category = p.is_category;
+            r.selected = p.selected;
+            data->active.push_back( r );
+        }
+        // Headers (focused list marked with < >).
+        data->avail_head_rml = cata_text_to_rml( colorize(
+                active_header == 0 ? std::string( "< " ) + _( "Mod List" ) + " >" : _( "Mod List" ), c_cyan ) );
+        data->active_head_rml = cata_text_to_rml( colorize(
+                active_header == 1 ? std::string( "< " ) + _( "Mod Load Order" ) + " >" :
+                _( "Mod Load Order" ), c_cyan ) );
+        // Description of the selected mod.
+        if( const MOD_INFORMATION *selmod = get_selected_mod() ) {
+            data->desc_rml = cata_text_to_rml( mman_ui->get_information( selmod ) );
+        } else {
+            data->desc_rml = "";
+        }
+        // Filter line (live while the popup is open).
+        if( fpopup ) {
+            data->filter_rml = cata_text_to_rml( colorize( string_format( "< %s >", fpopup->text() ), c_cyan ) );
+        } else {
+            std::string line = colorize( string_format( current_filter.empty() ? _( "[%s] Filter" ) :
+                                         _( "[%s] Filter: " ), ctxt.get_desc( "FILTER" ) ), c_light_gray );
+            if( !current_filter.empty() ) {
+                line += colorize( current_filter, c_white );
+            }
+            data->filter_rml = cata_text_to_rml( line );
+        }
+
+        data->handle.DirtyVariable( "wtabs" );
+        data->handle.DirtyVariable( "cats" );
+        data->handle.DirtyVariable( "avail" );
+        data->handle.DirtyVariable( "active" );
+        data->handle.DirtyVariable( "avail_head_rml" );
+        data->handle.DirtyVariable( "active_head_rml" );
+        data->handle.DirtyVariable( "desc_rml" );
+        data->handle.DirtyVariable( "filter_rml" );
+        data->handle.DirtyVariable( "show_wtabs" );
+
+        // Follow the keyboard cursor in the focused list.
+        if( rml_scroll_pending ) {
+            rml_scroll_pending = false;
+            const int sel = active_header == 0 ? sel_avail : sel_active;
+            const char *id = active_header == 0 ? "ms-avail" : "ms-active";
+            if( sel >= 0 ) {
+                if( Rml::Element *list = rml.document()->GetElementById( id ) ) {
+                    if( sel < list->GetNumChildren() ) {
+                        list->GetChild( sel )->ScrollIntoView(
+                            Rml::ScrollIntoViewOptions( Rml::ScrollAlignment::Nearest ) );
+                    }
+                }
+            }
+        }
+    };
+    rml.open( worldfactory_rmlui_enabled(), "modselect", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        data = std::make_unique<wf_ms_session>();
+        register_wf_ms_rml_types( c );
+        c.Bind( "wtabs", &data->wtabs );
+        c.Bind( "cats", &data->cats );
+        c.Bind( "avail", &data->avail );
+        c.Bind( "active", &data->active );
+        c.Bind( "avail_head_rml", &data->avail_head_rml );
+        c.Bind( "active_head_rml", &data->active_head_rml );
+        c.Bind( "desc_rml", &data->desc_rml );
+        c.Bind( "filter_rml", &data->filter_rml );
+        c.Bind( "show_wtabs", &data->show_wtabs );
+        data->handle = c.GetModelHandle();
+    } );
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         if( standalone ) {
             draw_empty_worldgen_tabs( win );
         } else {
@@ -1301,8 +1628,10 @@ int worldfactory::show_modselection_window( const catacurses::window &win,
         const std::string action = ctxt.handle_input();
 
         if( action == "DOWN" ) {
+            rml_scroll_pending = true;
             selection = next_selection;
         } else if( action == "UP" ) {
+            rml_scroll_pending = true;
             selection = prev_selection;
         } else if( action == "RIGHT" ) {
             active_header = next_header;

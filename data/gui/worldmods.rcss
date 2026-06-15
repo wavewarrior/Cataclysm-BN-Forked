@@ -1,0 +1,48 @@
+/* Layout for the read-only active-world-mods list (Tier 4 #2 slice 3). Shared mod-row
+   styling (.wm-row / .wm-row.category) is reused conceptually by the slice-4 selector.
+   body must be sized + centered (the missions gotcha). */
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.wm-panel {
+    width: 60%;
+    min-width: 600dp;
+    height: 88%;
+    display: flex;
+    flex-direction: column;
+}
+
+.wm-title {
+    flex: 0 0 auto;
+    margin-bottom: 6dp;
+    padding-bottom: 6dp;
+    border-bottom: 1dp #5a5a78ff;
+}
+
+.wm-list {
+    flex: 1;
+    min-height: 0;
+}
+
+.wm-row {
+    display: block;
+    padding: 1dp 6dp;
+    border-radius: 4dp;
+    white-space: nowrap;
+}
+
+/* Category headers are not selectable; give them breathing room. */
+.wm-row.category {
+    margin-top: 4dp;
+}
+
+.wm-row.selected {
+    background-color: #ffcc66ff;
+    color: #1e1e28ff;
+}

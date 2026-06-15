@@ -1222,6 +1222,48 @@ QUIT cancels; mouse click selects a row / a page tab. **WATCH:** (a) the auto-re
 single-world case (line ~359, `pick_world` returns before opening any UI) is unchanged;
 (b) >1 page needs many worlds (>content height) — page tabs appear then.
 
+**SLICE 3 (show_active_world_mods) — CODE-COMPLETE + BUILD-GREEN (binary 15:45), TOGGLE
+OFF, EYEBALL OWED, UNCOMMITTED.** Read-only mod list. Introduces the **shared mod-row
+builder** `build_wf_mod_rows()` (anon ns): mirrors `draw_mod_list` — flat list of
+category headers (magenta) + mod entries ("name [id]", obsolete→dark_gray+`*`,
+invalid→red `N/A`, `>> ` cursor) baked to rml markup, returned as a neutral POD
+`plain_mod_row` so each model copies into its OWN Rml struct (distinct per-model types
+avoid re-registering one C++ type on two models). Model "worldmods" = `wf_amod_row`
+rows + title; render-only, keyboard-only (DEFAULT UP/DOWN/QUIT); scroll-into-view on
+UP/DOWN (`ScrollAlignment::Nearest`, `#wm-list` child). `worldmods.{rml,rcss}`.
+**EYEBALL:** in-game world-mods viewer → active mods with category headers + colours +
+cursor; UP/DOWN scroll-follow; QUIT.
+
+**SLICE 4 (show_modselection_window — THE GIANT) — CODE-COMPLETE + BUILD-GREEN
+(worldfactory.cpp.o 15:52:30 + binary 15:52:32, 0 warnings), TOGGLE OFF, EYEBALL OWED,
+UNCOMMITTED.** The dual-pane mod selector. Model "modselect": worldgen steps (`wtabs`,
+`data-if="show_wtabs"` — hidden when standalone) + category tabs (`cats`) + available
+list (`avail`) + active load-order (`active`, with `shift_rml` `+`/`-` from
+`mman_ui->can_shift_up/down`) + 2 headers (focused list marked `< >`) + description pane
+(`mman_ui->get_information(selected)` → cata_text_to_rml, scrollable preview; full text
+still via the VIEW_MOD_DESCRIPTION popup) + filter line (live `fpopup->text()` while
+editing). Both lists reuse `build_wf_mod_rows` (own struct `wf_mod_row` with shift).
+**Render-only, KEYBOARD-ONLY this slice** — all add/remove/reorder (dependency+conflict
+resolution via `mman_ui->try_add/try_rem/try_shift`), category-tab cycling, FILTER
+(string_input Tier-0), TOGGLE_SHOW_OBSOLETE, SAVE_DEFAULT_MODS, VIEW_MOD_DESCRIPTION,
+NEXT/PREV_TAB stay in the loop untouched (no mouse this slice — the index↔mod mapping
+through category headers is deferred). Scroll-into-view on UP/DOWN for the FOCUSED list
+(`ms-avail`/`ms-active`). `modselect.{rml,rcss}`. **Lighting this ALSO lights
+`edit_active_world_mods` (delegates, standalone=true → wtabs hidden) + the wizard Mods
+step (`show_worldgen_tab_modselection` delegates).** **EYEBALL (hit edges):** New World →
+Mods step: two panes (available category-tabbed | active load order), CONFIRM adds (deps
+pulled in), `+`/`-` shift cues on active rows, ADD_MOD/REMOVE_MOD reorders (respecting
+can_shift), description pane tracks selection, FILTER narrows + live query, obsolete
+toggle, category tabs switch, NEXT_TAB→Finalize; ALSO standalone edit-world-mods (no
+worldgen strip) + the conflict/dependency error popups (Tier-0). **WATCH:** keyboard-only
+(mouse won't select — expected); the worldgen strip + headers + filter are render-only.
+
+**WORLDFACTORY (Tier 4 #2) = CODE-COMPLETE (all 4 slices, build-green, EYEBALL OWED, one
+shared `worldfactory_rmlui_enabled()` toggle).** Wizard fully on RmlUi when the toggle is
+on (Mods=slice4, Options=screen#1 slice2, Finalize=slice1) + pick_world (slice2) +
+active-mods view (slice3) + edit-mods (slice4 delegate). Next Tier-4: main_menu (#3),
+then newcharacter (#4).
+
 ## Load-bearing architecture facts (verified this session)
 
 - **Single curses chokepoint:** every non-map window renders through
