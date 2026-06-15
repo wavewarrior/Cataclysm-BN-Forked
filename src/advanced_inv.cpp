@@ -562,6 +562,57 @@ int advanced_inventory::print_header( advanced_inventory_pane &pane, aim_locatio
     return min_x;
 }
 
+std::string advanced_inventory::aim_area_grid_html( advanced_inventory_pane &pane, aim_location sel )
+{
+    const int area = pane.get_area();
+    // One [key] cell, coloured by state — mirrors print_header (540-557).
+    const auto cell = [&]( aim_location loc ) -> std::string {
+        const aim_location data_location = screen_relative_location( loc );
+        const char *bracket = squares[data_location].can_store_in_vehicle() ? "<>" : "[]";
+        const bool in_vehicle = pane.in_vehicle() && squares[data_location].id == area &&
+                                sel == area && area != AIM_ALL;
+        const bool all_brackets = area == AIM_ALL &&
+                                  ( data_location >= AIM_SOUTHWEST && data_location <= AIM_NORTHEAST );
+        nc_color bcolor = c_red;
+        nc_color kcolor = c_red;
+        if( squares[data_location].canputitems( pane.get_cur_item_ptr() ) ) {
+            bcolor = in_vehicle ? c_light_blue
+                     : ( area == data_location || all_brackets ? c_light_gray : c_dark_gray );
+            kcolor = area == data_location ? c_white
+                     : ( sel == data_location ? c_light_gray : c_dark_gray );
+        }
+        const std::string key = in_vehicle && sel != AIM_DRAGGED ? std::string( "V" )
+                                : get_location_key( loc );
+        return "<span class=\"aim-gcell\">" + cata_text_to_rml(
+                   colorize( std::string( 1, bracket[0] ), bcolor ) +
+                   colorize( key, kcolor ) +
+                   colorize( std::string( 1, bracket[1] ), bcolor ) ) + "</span>";
+    };
+    const aim_location rows[3][3] = {
+        { AIM_NORTHWEST, AIM_NORTH, AIM_NORTHEAST },
+        { AIM_WEST, AIM_CENTER, AIM_EAST },
+        { AIM_SOUTHWEST, AIM_SOUTH, AIM_SOUTHEAST }
+    };
+    std::string out = "<div class=\"aim-grid\">";
+    for( const aim_location *r : {
+             rows[0], rows[1], rows[2]
+         } ) {
+        out += "<div class=\"aim-grow\">";
+        for( int i = 0; i < 3; i++ ) {
+            out += cell( r[i] );
+        }
+        out += "</div>";
+    }
+    out += "</div><div class=\"aim-grow aim-specials\">";
+    for( const aim_location loc : {
+             AIM_INVENTORY, AIM_WORN, AIM_ALL, AIM_DRAGGED, AIM_CONTAINER
+         } ) {
+        out += cell( loc );
+    }
+    out += "</div>";
+    return out;
+}
+
 void advanced_inventory::recalc_pane( side p )
 {
     auto &pane = panes[p];
@@ -1359,6 +1410,9 @@ namespace
 struct aim_session {
     Rml::String left_title_rml, left_head_rml, left_rows_html;
     Rml::String right_title_rml, right_head_rml, right_rows_html;
+    // Slice 2: per-pane area-selection grid + the top-bar clock/hints.
+    Rml::String left_grid_rml, right_grid_rml;
+    Rml::String clock_rml, hints_rml;
     Rml::DataModelHandle handle;
 };
 
@@ -1528,12 +1582,33 @@ void advanced_inventory::display()
         rml_sess->right_head_rml = aim_pane_head_html( rp, !l_active, squares );
         rml_sess->left_rows_html = aim_pane_rows_html( lp, l_active );
         rml_sess->right_rows_html = aim_pane_rows_html( rp, !l_active );
+        // Per-pane area-selection grid (sel = current item's area, else pane area).
+        const auto pane_sel = []( advanced_inventory_pane & p ) -> aim_location {
+            const advanced_inv_listitem *cur = p.get_cur_item_ptr();
+            return cur != nullptr ? cur->area : p.get_area();
+        };
+        rml_sess->left_grid_rml = aim_area_grid_html( lp, pane_sel( lp ) );
+        rml_sess->right_grid_rml = aim_area_grid_html( rp, pane_sel( rp ) );
+        // Top bar: clock (if the avatar has a watch) + keybinding/reset-filter hints.
+        rml_sess->clock_rml = g->u.has_watch()
+                              ? cata_text_to_rml( colorize( to_string_time_of_day( calendar::turn ), c_white ) )
+                              : Rml::String();
+        std::string hints = string_format( _( "< [<color_yellow>%s</color>] keybindings >" ),
+                                           ctxt.get_desc( "HELP_KEYBINDINGS" ) ) + "   ";
+        hints += get_option<bool>( "AIM_AUTORESET_FILTER" )
+                 ? _( "Reset Filter On Close [<color_light_green>ON</color>|<color_dark_gray>OFF</color>]" )
+                 : _( "Reset Filter On Close [<color_dark_gray>ON</color>|<color_light_green>OFF</color>]" );
+        rml_sess->hints_rml = cata_text_to_rml( colorize( hints, c_white ) );
         rml_sess->handle.DirtyVariable( "left_title_rml" );
         rml_sess->handle.DirtyVariable( "right_title_rml" );
         rml_sess->handle.DirtyVariable( "left_head_rml" );
         rml_sess->handle.DirtyVariable( "right_head_rml" );
         rml_sess->handle.DirtyVariable( "left_rows_html" );
         rml_sess->handle.DirtyVariable( "right_rows_html" );
+        rml_sess->handle.DirtyVariable( "left_grid_rml" );
+        rml_sess->handle.DirtyVariable( "right_grid_rml" );
+        rml_sess->handle.DirtyVariable( "clock_rml" );
+        rml_sess->handle.DirtyVariable( "hints_rml" );
     };
 
     if( !is_processing() ) {
@@ -1583,6 +1658,10 @@ void advanced_inventory::display()
             c.Bind( "right_head_rml", &rml_sess->right_head_rml );
             c.Bind( "left_rows_html", &rml_sess->left_rows_html );
             c.Bind( "right_rows_html", &rml_sess->right_rows_html );
+            c.Bind( "left_grid_rml", &rml_sess->left_grid_rml );
+            c.Bind( "right_grid_rml", &rml_sess->right_grid_rml );
+            c.Bind( "clock_rml", &rml_sess->clock_rml );
+            c.Bind( "hints_rml", &rml_sess->hints_rml );
             rml_sess->handle = c.GetModelHandle();
         } );
 

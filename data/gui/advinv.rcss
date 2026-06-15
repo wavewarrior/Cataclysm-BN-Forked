@@ -10,9 +10,33 @@ body {
     height: 100%;
 }
 
-.aim-root {
+.aim-outer {
     width: 96%;
     height: 94%;
+    display: flex;
+    flex-direction: column;
+}
+/* Top bar: clock left, keybinding/reset-filter hints right. */
+.aim-topbar {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4dp;
+    padding-bottom: 4dp;
+    border-bottom: 1dp #5a5a78ff;
+}
+.aim-clock {
+    color: #ffffffff;
+}
+.aim-hints {
+    color: #9a9ab0ff;
+    text-align: right;
+}
+.aim-root {
+    flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: row;
 }
@@ -106,4 +130,26 @@ body {
     width: 50dp;
     text-align: right;
     white-space: pre;
+}
+
+/* Area-selection grid (slice 2): semantic compass 3x3 + a specials row, right-
+   aligned in the pane header. Each cell is a [key] coloured by state. */
+.aim-areagrid {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    margin-bottom: 4dp;
+}
+.aim-grow {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+}
+.aim-gcell {
+    white-space: pre;
+    padding: 0 1dp;
+}
+.aim-specials {
+    margin-top: 2dp;
 }

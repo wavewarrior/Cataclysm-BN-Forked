@@ -871,9 +871,9 @@ hilite; inactive pane no cursor. `compact` when TERMX<=100.
    (string_input Tier-0) coexistence; examine (item-info component); move-item feedback;
    AIM_ALL src column; compact mode; autopickup marker. All editing/move stays keyboard.
 
-**SLICE 1 — dual-pane item lists + pane head — CODE-COMPLETE + BUILD-GREEN
-(advanced_inv.cpp + devui compile + LINK clean, fresh obj+bin mtime), TOGGLE OFF,
-EYEBALL OWED, UNCOMMITTED.** One RmlUi doc ("advinv") for the whole screen; all-scalar
+**SLICE 1 — dual-pane item lists + pane head — DONE + EYEBALLED CLEAN (user
+2026-06-15; after the recalc fix both lists populate, "perfect"), COMMITTED
+`1f8fbba979` + fix `0f42b65261`. TOGGLE OFF.** One RmlUi doc ("advinv") for the whole screen; all-scalar
 model (six baked strings — per pane: title / weight-vol head / rows_html), NO struct/
 array registration. Two free builders in an anon namespace mirror print_items:
 `aim_pane_rows_html(pane,active)` (column-header row + category `[Name]` rows + item
@@ -910,6 +910,35 @@ no scroll-into-view yet (same class as inventory; a later slice). (b) NO sidebar
 yet — screen looks sparser than curses (expected this slice). (c) long item names
 truncate (`.aim-c-name` overflow:hidden) — confirm they don't overflow into the numeric
 columns.
+
+**SLICE 2 — top bar + per-pane area-selection grid — CODE-COMPLETE + BUILD-GREEN
+(advanced_inv.{h,cpp} compile + LINK clean, fresh obj+bin mtime), TOGGLE OFF, EYEBALL
+OWED, UNCOMMITTED.** Adds the two chrome pieces that read as "missing" after slice 1:
+(1) **Top bar** — clock (if the avatar has a watch, `to_string_time_of_day`) on the
+left + the keybinding hint (`< [key] keybindings >`, yellow key) and reset-filter
+indicator (`Reset Filter On Close [ON|OFF]`, AIM_AUTORESET_FILTER) on the right; built
+inline in sync_rml as two bound strings (`clock_rml`/`hints_rml`). (2) **Area-selection
+grid** — new member `aim_area_grid_html(pane,sel)` mirrors `print_header`'s per-location
+colour state (canputitems → current=white / selectable=gray / can't=red; vehicle=blue;
+`<>` vs `[]` brackets; `V` when in-vehicle) but lays the 9 directional locations out as
+a SEMANTIC compass 3x3 (NW/N/NE · W/C/E · SW/S/SE) + a specials row (Inventory/Worn/All/
+Dragged/Container), instead of the absolute `hscreen` positions (semantic rewrite). Per
+pane (`left_grid_rml`/`right_grid_rml`), sel = current item's area else pane area (mirrors
+the print_header call site). `advinv.{rml,rcss}` restructured: `.panel` → `.aim-outer`
+column = `.aim-topbar` + `.aim-root` (the two panes); each pane gains `.aim-areagrid`
+(compass rows right-aligned in the header). **DEFERRED to slice 3:** the message log
+(`Messages::display_messages`), the graphical MINIMAP (`draw_minimap` — overmap tiles,
+hard in RmlUi; its own effort), the footer, filter popup, examine, move feedback,
+AIM_ALL src column, compact mode, autopickup marker. **EYEBALL CHECK (user, A/B via F4):**
+open AIM → top bar shows the clock (if watch) + keybinding + reset-filter hints; each
+pane shows the area-selection grid (compass of `[key]` cells, the pane's CURRENT area
+white, selectable gray, unreachable red, vehicle-capable `<>`); switching a pane's area
+(move/`[`/`]` etc.) updates which cell is highlighted; TAB still swaps the active pane.
+**WATCH:** (a) the grid is a SEMANTIC compass, NOT the curses `hscreen` pixel layout —
+confirm the directions read right (NW top-left … SE bottom-right) and the current area
+highlights. (b) rotation/iso (`screen_relative_location`) is honoured via the same call
+print_header uses, but only matters on iso tilesets. (c) no minimap/messages yet
+(slice 3) — top-right where the minimap sat is empty.
 
 **Discipline:** the cell/preset model is load-bearing and this file is 2640 lines
 under the stale-read hook — every model field MUST be verified against fetched
