@@ -195,7 +195,7 @@ void render_state::init( SDL_Window *host_window )
         // textures, so no resize hook is needed.
         volumetric_.init( device_, world_fmt );
 
-        // High-fidelity rain effect: droplet particles + splat map ping-pong.
+        // High-fidelity rain effect: world-targeted falling droplets + splashes.
         rain_.init( device_, world_fmt,
                     static_cast<std::uint32_t>( pw ),
                     static_cast<std::uint32_t>( ph ) );

@@ -71,7 +71,7 @@ cbuffer DebugParams : register(b2, space1) {
     float sway_amp;     // wind displacement amplitude (pixels); 0 = sway off
     float sway_freq;    // wind oscillation frequency
     float anim_time;    // wrapped render seconds (per-frame data)
-    float sway_pad;
+    float spec_strength; // fragment-stage only (declared here for cbuffer layout parity)
 };
 
 struct VS_OUT {

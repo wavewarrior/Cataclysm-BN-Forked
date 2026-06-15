@@ -110,6 +110,12 @@ cbuffer DebugParams : register(b2, space3) {
     float sdf_sharp;           // SDF sample sharpness: 0=bilinear(smooth) .. 1=nearest(tight, grid-snapped)
     float ao_strength;         // A4 ambient occlusion: 0=off .. 1=full SDF-cavity darkening of the ambient fills
     float shadow_mask_str;     // Phase 2: silhouette sun-shadow mask strength on ground (0=off/default .. 1=full)
+    // Tail mirrors the C++ debug_params layout. sway_* / anim_time are vertex-stage
+    // only — declared here purely so spec_strength lands at the right cbuffer offset.
+    float sway_amp;            // (vertex-only padding here)
+    float sway_freq;           // (vertex-only padding here)
+    float anim_time;           // (vertex-only padding here)
+    float spec_strength;       // wet specular glint strength (0=off; CPU-folded with rain intensity)
 };
 struct VS_OUT {
     float4 pos      : SV_Position;
@@ -345,6 +351,18 @@ float3 surface_normal(float2 uv) {
     const float edge = min(min(sL.a, sR.a), min(sU.a, sD.a));
     return normalize(lerp(float3(0.0, 0.0, 1.0), n, saturate(edge)));
 }
+// Wet specular glint (Blinn-Phong). View dir is +Z (top-down ortho). The albedo-
+// Sobel normal is too high-frequency for a tight specular lobe (it fireflies), so
+// flatten it toward up by SPEC_FLATTEN for the spec term ONLY. SPEC_SHININESS sets
+// the lobe tightness. Caller scales the result by spec_strength (× sky_vis).
+static const float SPEC_SHININESS = 24.0;
+static const float SPEC_FLATTEN   = 0.5;
+float wet_spec(float3 n, float3 L) {
+    const float3 V  = float3(0.0, 0.0, 1.0);
+    const float3 ns = normalize(lerp(n, float3(0.0, 0.0, 1.0), SPEC_FLATTEN));
+    const float3 H  = normalize(L + V);
+    return pow(saturate(dot(ns, H)), SPEC_SHININESS);
+}
 float4 main(VS_OUT i) : SV_Target0 {
     const float4 texel = Atlas.Sample(AtlasSmp, i.uv);
     if(texel.a < 0.01) discard;
@@ -359,6 +377,10 @@ float4 main(VS_OUT i) : SV_Target0 {
     const bool   frag_is_tall_n = ( i.light_pos.x != i.world_pos.x )
                                   || ( i.light_pos.y != i.world_pos.y );
     const float3 normal = frag_is_tall_n ? float3( 0.0, 0.0, 1.0 ) : surface_normal( i.uv );
+    // Sky exposure (0 roofed .. 1 open), hoisted above the emitter loop so the
+    // wet-specular term can gate on it (no indoor glint). SkyVisBuf is x-major
+    // (skyvis[x*H+y]); bilinear so the indoor daylight-bleed gradient reads smooth.
+    const float sky_vis = (sdf_map_w > 0u) ? saturate(skyvis_bilinear(i.light_pos)) : 0.0;
     // emitter_light accumulates GPU point-light contributions (starts at zero).
     // Combined with CPU tint ADDITIVELY so colored emitter glow is visible on
     // top of the CPU-shadowcasting result, not suppressed by max().
@@ -410,12 +432,17 @@ float4 main(VS_OUT i) : SV_Target0 {
         }
         const float3 rgb = (e_color.x < 0.01 && e_color.y < 0.01 && e_color.z < 0.01)
                            ? float3(1, 1, 1) : e_color;
-        emitter_light += rgb * atten * lambert * shadow * cone;
+        // Wet specular glint on top of diffuse. Reuses the emitter direction +
+        // atten/shadow/cone so the glint only appears where the light reaches;
+        // gated by sky_vis (no indoor sheen) and the CPU-folded spec_strength
+        // (0 while not raining → exact no-op).
+        const float e_spec = (spec_strength > 0.001)
+                             ? spec_strength * sky_vis *
+                               wet_spec(normal, normalize(float3(sh_dir, nrm_elev)))
+                             : 0.0;
+        emitter_light += rgb * atten * shadow * cone * (lambert + e_spec);
     }
-    // Phase 8: sky ambient + directional sun contribution.
-    // SkyVisBuf is x-major (skyvis[x*H+y]). Bilinear so the indoor daylight-bleed
-    // gradient (frame_build) reads smoothly instead of per-tile blocky.
-    float sky_vis = (sdf_map_w > 0u) ? saturate(skyvis_bilinear(i.light_pos)) : 0.0;
+    // Phase 8: sky ambient + directional sun contribution. (sky_vis hoisted above.)
     // Sky ambient: soft, no shadowing needed.
     float3 sky_contrib = float3(sky_r, sky_g, sky_b) * sky_intensity * sky_vis;
     // Sun direct: directional soft shadow via the SAME shared trace as
@@ -464,6 +491,10 @@ float4 main(VS_OUT i) : SV_Target0 {
                                 : saturate(1.0 - sun_mask_cov * shadow_mask_str);
         sun_contrib = float3(sun_r, sun_g, sun_b) * sun_intensity * sun_lambert
                       * sun_shadow * sky_vis * mask_term;
+        // Wet specular glint from the sun (same gating: sky_vis + shadow + mask).
+        const float sun_spec = (spec_strength > 0.001) ? spec_strength * wet_spec(normal, sun_L) : 0.0;
+        sun_contrib += float3(sun_r, sun_g, sun_b) * sun_intensity
+                       * sun_shadow * sky_vis * mask_term * sun_spec;
     }
 
     // Apply runtime tuning scales BEFORE compositing. emitter_scale tunes

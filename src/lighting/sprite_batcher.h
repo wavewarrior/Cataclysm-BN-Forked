@@ -163,7 +163,11 @@ struct debug_params {
     float    sway_amp      = 3.0f;   // wind displacement amplitude in pixels (0=off)
     float    sway_freq     = 1.2f;   // wind oscillation frequency (Hz-ish)
     float    anim_time     = 0.0f;   // DATA (not a knob): wrapped render seconds, injected per-frame
-    float    sway_pad      = 0.0f;   // pad to 16-byte multiple (128 B)
+    // Wet specular glint strength. DATA (not a slider): the frame code folds the
+    // user knob g_spec_strength with rain intensity per-frame so the sheen only
+    // shows while raining. 0 = off. Repurposed the old sway_pad alignment filler
+    // (struct stays 128 B). sprite.frag reads it; sprite.vert keeps it as pad.
+    float    spec_strength = 0.0f;
 };
 
 // Returns sun/sky params interpolated from a 24h LUT for the given hour (0..24).

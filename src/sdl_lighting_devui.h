@@ -76,6 +76,8 @@ extern float  g_vol_reach;
 // High-fidelity rain effect controls.
 extern bool   g_rain_enable;
 extern float  g_rain_intensity;
+// Wet specular glint strength (max; folded with rain intensity per-frame). 0 = off.
+extern float  g_spec_strength;
 // Silhouette sun-shadow mask kill-gate.
 extern bool g_shadow_debug;
 // Current debug mode display (0-7, cycles through modes).
