@@ -16,6 +16,7 @@
 #include "lighting/gpu_emitter.h"
 #include "lighting/imgui_layer.h"
 #include "lighting/render_state.h"
+#include "lighting/rmlui_layer.h"
 #include "lighting/sdf_pass.h"
 #include "lighting/sprite_batcher.h"
 #include "mapdata.h"
@@ -86,6 +87,8 @@ void draw()
     ImGui::Checkbox( "Shader heatmap (F6)", &g_dbg_lighting_shader );
 
     ImGui::SeparatorText( "Player menus (RmlUi migration)" );
+    // Global UI scale for ALL RmlUi panels (font + dp spacing). <1 shrinks the UI.
+    ImGui::SliderFloat( "RmlUi UI scale", &rmlui_layer::ui_scale(), 0.5f, 1.5f, "%.2f" );
     // Master switch for routing uilist through RmlUi. Default OFF; flip to test
     // the new renderer in-game. Off = existing ImGui/curses menus.
     ImGui::Checkbox( "uilist via RmlUi", &uilist_rmlui_enabled() );
@@ -109,6 +112,7 @@ void draw()
     ImGui::Checkbox( "inventory via RmlUi (all selectors)", &inventory_rmlui_enabled() );
     ImGui::Checkbox( "compare items via RmlUi", &compare_items_rmlui_enabled() );
     ImGui::Checkbox( "advanced inventory via RmlUi", &advanced_inv_rmlui_enabled() );
+    ImGui::Checkbox( "options via RmlUi", &options_rmlui_enabled() );
 
     static const char *mode_names[] = {
         "off", "ambient", "emitter", "sun", "sky", "total", "SDF", "sky_vis", "emit_bw",

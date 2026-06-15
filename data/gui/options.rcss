@@ -1,0 +1,92 @@
+/* Layout for the options menu (Tier 4, screen #1: options_manager::show, standalone
+   mode). Lengths in dp. Reuses theme .panel / .tabs / .tab / .item / .scroll-pane.
+   Row layout: each .opt-row is a flex ROW of three cells (number | name | value) so the
+   value column lines up like the curses value_col. .opt-row MUST set display (RmlUi divs
+   default to display:inline — the theme.rcss gotcha); flex blockifies its span children. */
+
+/* Center the panel + give body a definite size, else the panel shrink-wraps to its
+   tab content (width shifts per tab) and the flex:1 list collapses to height 0 (the
+   missions gotcha). Mirrors construction.rcss. */
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.opt-panel {
+    width: 80%;
+    min-width: 720dp;
+    height: 92%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Page tabs size to their content (theme .tab is flex:1, which equal-width-squeezes
+   and truncates long page names like "World Defaults"). Content-width + wrap keeps a
+   stable, untruncated tab row on the fixed-width panel. */
+.opt-tabs .tab {
+    flex: 0 0 auto;
+}
+
+/* Folded help text for the selected entry (top). */
+.opt-tooltip {
+    flex: 0 0 auto;
+    min-height: 76dp;
+    margin-bottom: 6dp;
+    padding-bottom: 6dp;
+    border-bottom: 1dp #5a5a78ff;
+    white-space: pre-wrap;
+    color: #cfcfe0ff;
+}
+
+/* Page tab bar — many pages, allow wrap so they never clip. */
+.opt-tabs {
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+}
+
+.opt-list {
+    flex: 1;
+    min-height: 0;
+}
+
+.opt-row {
+    display: flex;
+    flex-direction: row;
+    padding: 1dp 6dp;
+    border-radius: 4dp;
+}
+
+.opt-row:hover {
+    background-color: #3a3a55ff;
+    color: #ffffffff;
+}
+
+.opt-row.selected {
+    background-color: #ffcc66ff;
+    color: #1e1e28ff;
+}
+
+/* Number column (curses drew the 1-based entry index at the left). */
+.opt-num {
+    flex: 0 0 auto;
+    width: 34dp;
+    color: #9a9ab0ff;
+}
+
+/* Name column — grows; truncate rather than push the value column. */
+.opt-name {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+/* Value column — fixed width so values align down the screen (curses value_col). */
+.opt-value {
+    flex: 0 0 auto;
+    width: 240dp;
+    white-space: nowrap;
+    overflow: hidden;
+}

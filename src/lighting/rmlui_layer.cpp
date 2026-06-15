@@ -42,6 +42,11 @@ Rml::Context *g_context = nullptr;
 // Last physical/logical pixel ratio applied to the context (HiDPI density).
 float g_density_ratio = 1.0f;
 
+// User UI-scale multiplier (F4 dev slider). Multiplies the HiDPI ratio applied to
+// the context's dp lengths, scaling font + all dp spacing across every RmlUi panel.
+// Does NOT touch g_density_ratio (input mapping keeps the true physical/logical ratio).
+float g_ui_scale = 1.0f;
+
 // Documents currently open (shown) via open_document(), in open order. The
 // layer is "active" while this is non-empty. Documents are owned by g_context;
 // this only tracks which are live so active()/the frame gates can see them.
@@ -157,6 +162,11 @@ Rml::Context *context()
 float density_ratio()
 {
     return g_density_ratio;
+}
+
+float &ui_scale()
+{
+    return g_ui_scale;
 }
 
 Rml::ElementDocument *open_document( const std::string &rml_path )
@@ -287,7 +297,7 @@ void new_frame()
             SDL_GetWindowSize( g_window, &lw, &lh );
             if( lw > 0 ) {
                 g_density_ratio = static_cast<float>( w ) / static_cast<float>( lw );
-                g_context->SetDensityIndependentPixelRatio( g_density_ratio );
+                g_context->SetDensityIndependentPixelRatio( g_density_ratio * g_ui_scale );
             }
         }
         g_context->Update();

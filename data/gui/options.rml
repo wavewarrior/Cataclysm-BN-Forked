@@ -1,0 +1,39 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="options.rcss"/>
+</head>
+<body data-model="options">
+    <!-- Tier 4 screen #1 (options_manager::show, standalone mode = world_options_only
+         false: main-menu Options + in-game Options). The canonical tabbed FORM — this
+         screen matures the form/tab-page sub-pattern the other Tier-4 giants reuse.
+         Page tabs (shared theme .tabs/.tab, dynamic Vector) over a grouped two-column
+         list: each row = number + name + value, with collapsible group-header rows.
+         A tooltip pane (top) renders the selected entry's folded help text. The curses
+         scrollbar + iStartPos windowing are dropped for native RmlUi scroll. All editing
+         stays on input_context (LEFT/RIGHT/CONFIRM change values, int/float open a
+         string_input popup, CONFIRM on a header collapses it); the doc is render-only and
+         handles mouse selection (click only — no mouseover, so a parked mouse can't steal
+         the keyboard cursor). world_options_only mode (worldgen tabs) is slice 2. -->
+    <div class="panel opt-panel">
+        <div class="opt-tooltip" data-rml="tooltip_rml"></div>
+
+        <div class="tabs opt-tabs">
+            <div class="item tab" data-for="t : tabs"
+                 data-class-selected="t.selected"
+                 data-event-click="on_tab(it_index)" data-rml="t.name_rml"></div>
+        </div>
+
+        <div id="opt-list" class="opt-list scroll-pane">
+            <div class="opt-row" data-for="r : rows"
+                 data-class-header="r.is_header"
+                 data-class-selected="r.selected"
+                 data-event-click="on_select(it_index)">
+                <span class="opt-num" data-rml="r.num_rml"></span>
+                <span class="opt-name" data-rml="r.name_rml"></span>
+                <span class="opt-value" data-rml="r.value_rml"></span>
+            </div>
+        </div>
+    </div>
+</body>
+</rml>

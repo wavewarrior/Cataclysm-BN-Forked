@@ -978,6 +978,75 @@ under the stale-read hook — every model field MUST be verified against fetched
 source (the armor near-miss is the warning). Per-subclass gate means each slice
 is independently bisectable + revertible.
 
+## Tier 4 — big bespoke menus (worldfactory / main_menu / options / newcharacter)
+
+ACTIVE PHASE (2026-06-15). The giant tier. LOC: main_menu 1219 < worldfactory 1641 <
+options 4196 < newcharacter 4337 (the plan's "~172K/177K" were file BYTE sizes). Plan
+mandate: *"build a form/tab-page sub-pattern HERE"* + *"Do NOT solo-charge worldfactory"*
++ budget as multi-screen sub-projects.
+
+**Dependency-aware order: options → worldfactory → main_menu → newcharacter.** Options
+first because (a) it's the canonical tabbed FORM → matures the reusable form/tab-page
+pattern the others need; (b) zero coupled game state → testable anytime;
+(c) **worldfactory depends on it** — `worldfactory.cpp:536` calls
+`get_options().show(false, true, on_quit)` (world-options-only mode). newcharacter
+(biggest + most coupled: points/scenario/profession interplay) goes LAST on the matured
+pattern.
+
+### Tier 4 screen #1: options (`options_manager::show`)
+
+Anatomy (`options.cpp:3457`): ONE `ui_adaptor` + ONE `on_redraw` + ONE input loop; 4
+curses windows. Shape = **page tabs + grouped two-column (name/value) list + tooltip**.
+Rows = `pages_[iCurrentPage].items_` (`PageItem{type,group,data}`,
+`ItemType{GroupHeader,BlankLine,Option}`); collapsible groups via `groups_state[id]`.
+3 callers: `main_menu.cpp:844` `show(false)`, `handle_action.cpp:2639` `show(true)`,
+`worldfactory.cpp:536` `show(false,true,on_quit)`. Editing stays keyboard
+(setPrev/setNext; int/float → `string_input_popup` Tier-0; CONFIRM on a header toggles
+collapse).
+
+**Slices:**
+1. **Slice 1 — standalone mode (`world_options_only==false`):** covers BOTH `show(false)`
+   (main menu) and `show(true)` (in-game, incl. the "Current world" tab relabel +
+   world-options note + `ACTIVE_WORLD_OPTIONS`). Page tabs + grouped list + tooltip,
+   render-only doc.
+2. **Slice 2 — `world_options_only==true`:** worldgen-tab chrome
+   (`worldfactory::draw_worldgen_tabs`) + `on_quit`; the piece worldfactory reuses.
+
+**SLICE 1 — CODE-COMPLETE + BUILD-GREEN (options.cpp + rml_screen.h + devui compile +
+LINK clean; options.cpp.o + binary fresh-relinked 12:16), TOGGLE OFF, EYEBALL OWED,
+UNCOMMITTED.** 12th `rml_doc`-style consumer; first Tier-4 screen. Adapts the
+`construction` template (tabs+list+detail). `data/gui/options.{rml,rcss}` model
+"options". STRUCTURAL POINTS: (1) gate = `options_rmlui_enabled() && !world_options_only`
+→ slice 1 lights ONLY standalone; world-options-only stays curses (slice 2). (2)
+**`fmt_name_value` HOISTED** out of on_redraw to show() scope + parameterized with
+`cOPTIONS` → the curses on_redraw AND `sync_rml` share ONE formatter (no colour-rule
+drift; the plan's "share one formatter" instruction). (3) model = `opt_rml_tab{name_rml,
+selected}` (page bar) + `opt_rml_row{num_rml,name_rml,value_rml,is_header,selected}` +
+`tooltip_rml`; `sync_rml` rebuilds all three each redraw, flattening collapsed-group
+visibility into the flat row list and keeping `rml_visible[row]→page_items` for the
+click callback. (4) cursor `>> ` baked into the selected row's name (RCSS has no ::before
+content — the AIM/mutations idiom); value passed `is_selected=false` for BASE colour
+(CSS `.selected` does the highlight). (5) MOUSE = click-only select (no mouseover — a
+parked mouse can't steal the keyboard cursor); `on_tab(idx)` sets page+resets line/scroll
+(mirrors NEXT_TAB), `on_select(idx)` → `iCurrentLine=rml_visible[idx]`. (6) doc opened
+before the loop; `rml_doc` dtor tears down at the single function exit (the post-loop
+save/apply block runs `query_yn` over the still-rendered doc — behaviour-identical to
+curses, which also redraws options behind that prompt). F4 toggle "options via RmlUi"
+(OFF). **DEFERRED (NOT bugs):** native scroll has no keyboard scroll-into-view yet (long
+pages — the staged ScrollIntoView one-liner if eyeball shows cursor-lost);
+world_options_only chrome (slice 2). **EYEBALL CHECK (user, A/B via F4):** open Options
+from **main menu** AND **in-game** (Esc→Options) — page tabs across top (current
+hilited), rows show number + name + value with colours matching curses (green=on,
+red=off/disabled, grey=prereq-unmet), `>>` on the cursor row; group headers show
+`+`/`-` and CONFIRM collapses/expands (members hide/show); tooltip tracks selection;
+UP/DOWN + NEXT_TAB/PREV_TAB navigate; LEFT/RIGHT/CONFIRM change values; int/float opens
+the string_input popup over the doc; mouse click selects a row / a tab; QUIT saves +
+applies (terminal-size / tiles / language change paths still fire). **WATCH:** (a) value
+text keeps its baked colour over the yellow `.selected` bg — confirm readable (cursor
+`>>` is the backup selection cue). (b) **D3D12 (Win11) first-of-Tier-4 glance** — first
+Tier-4 dynamic doc on the primary target. (c) the world page (in-game `show(true)`)
+relabels to "Current world" + shows the red note.
+
 ## Load-bearing architecture facts (verified this session)
 
 - **Single curses chokepoint:** every non-map window renders through

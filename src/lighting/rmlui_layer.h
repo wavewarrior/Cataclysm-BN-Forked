@@ -64,6 +64,11 @@ Rml::Context *context();
 // virtualized-row pitch). See SetDensityIndependentPixelRatio in new_frame.
 float density_ratio();
 
+// User UI-scale multiplier (mutable; default 1.0). Multiplies the HiDPI dp ratio
+// applied to the context, scaling font + all dp spacing across every RmlUi panel.
+// Driven by an F4 dev slider; does not affect input mapping. <1 shrinks the UI.
+float &ui_scale();
+
 // Load + show an .rml document into the shared context, tracking it so active()
 // reports it. Returns the document (owned by the context) or nullptr on failure.
 // Pair with close_document() — typically via an RAII wrapper in the owner's

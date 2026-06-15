@@ -142,4 +142,8 @@ bool &compare_items_rmlui_enabled();
 // One toggle lights the whole doc; the work is sliced (slice 1 = dual item lists).
 bool &advanced_inv_rmlui_enabled();
 
+// options_manager::show() RmlUi path (Tier 4 screen #1: tabbed two-column form +
+// tooltip). Slice 1 lights standalone mode only (world_options_only stays curses).
+bool &options_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H
