@@ -725,9 +725,8 @@ the doc vanishes behind it). (b) selection column appears/hides on narrow widths
 (`rearrange_columns` sets its visibility by overflow) — at small terminal sizes it may
 not show (matches curses). (c) the mark color (`#`/`+` light_green) should match curses.
 
-**SLICE 4 — two-selection compare (`inventory_compare_selector`) — CODE-COMPLETE +
-BUILD-GREEN (inventory_ui.{h,cpp} + devui compile + LINK clean, fresh obj+bin mtime),
-TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.** The smallest slice — GATE ONLY. compare
+**SLICE 4 — two-selection compare (`inventory_compare_selector`) — DONE + EYEBALLED
+CLEAN (user 2026-06-15, "looks good"), COMMITTED `b1108ec7dc`. TOGGLE OFF.** GATE ONLY. compare
 inherits the multiselector ctor (selection column "ITEMS TO COMPARE" + marks) and
 overrides ONLY `toggle_entry` (input-side: sets `chosen_count` 0/1, tracks the
 `compared` pair) — grep-confirmed it has NO render override (no refresh_window/draw/
@@ -742,6 +741,28 @@ selecting an item marks it + adds to the "ITEMS TO COMPARE" selection column, pi
 a SECOND item triggers the comparison (returns the pair); selecting/deselecting works,
 the 2-item cap holds (can't mark a 3rd). Marks/colours match curses (chosen_count is
 0/1 → `+` if available==1 else `#`). Pick+drop still render (shared toggle).
+
+**SLICE 5 — iuse + pickup selectors — CODE-COMPLETE + BUILD-GREEN (inventory_ui.{h,cpp}
++ devui compile + LINK clean, fresh obj+bin mtime), TOGGLE OFF, EYEBALL OWED,
+UNCOMMITTED.** GATE ONLY (like slice 4). Both inherit the multiselector render;
+grep-confirmed NO render override. Their differences are `get_raw_stats` (custom stats
+— iuse builds them from its `GetStats` functor; both return the 2-elem `stats` type by
+signature, so they flow through slice-2's GENERIC stats header via virtual dispatch,
+no render change) and `set_chosen_count` (input-side). Added
+`inventory_iuse_selector::uses_rml()` + `inventory_pickup_selector::uses_rml()` → the
+shared `inventory_rmlui_enabled()`. **With this, ALL concrete selectors are lit**
+(pick s1, drop s3, compare s4, iuse+pickup s5; the `inventory_multiselector` base is
+never instantiated) → F4 label simplified to "inventory via RmlUi (all selectors)".
+**EYEBALL CHECK (user, A/B via F4):** (1) iuse = an "apply/use which items" action
+(e.g. the multi-item use flows) — marks + selection column + query_count work AND the
+custom stats header shows the iuse-specific stats (whatever the GetStats functor
+computes, not just weight/volume). (2) pickup = the pickup screen (walk onto a tile
+with items / `,`) — marks, selection column, counts, and its weight/volume(+capacity)
+stats. Both: CONFIRM applies the selection. Pick/drop/compare still render (shared
+toggle). **WATCH:** iuse's stats header is the first NON-weight/volume stats rendered
+via the RmlUi path (slices 1-4 all used the default weight/volume) — confirm the
+custom captions/values + right-alignment read correctly (the generic loop should
+handle it, but it's the one untested-shape bit of slice 5).
 
 **Discipline:** the cell/preset model is load-bearing and this file is 2640 lines
 under the stale-read hook — every model field MUST be verified against fetched

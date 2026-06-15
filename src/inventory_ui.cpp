@@ -2290,6 +2290,18 @@ bool inventory_compare_selector::uses_rml() const
     return inventory_rmlui_enabled();
 }
 
+bool inventory_iuse_selector::uses_rml() const
+{
+    // Tier 3 slice 5: same multiselect render; custom stats via get_raw_stats.
+    return inventory_rmlui_enabled();
+}
+
+bool inventory_pickup_selector::uses_rml() const
+{
+    // Tier 3 slice 5: same multiselect render as slice 3.
+    return inventory_rmlui_enabled();
+}
+
 item *inventory_pick_selector::execute()
 {
     shared_ptr_fast<ui_adaptor> ui = create_or_get_ui_adaptor();

@@ -759,6 +759,9 @@ class inventory_iuse_selector : public inventory_multiselector
     protected:
         stats get_raw_stats() const override;
         void set_chosen_count( inventory_entry &entry, size_t count );
+        // Tier 3 slice 5: same multiselect render as slice 3; custom stats flow
+        // through the generic stats header. Shares the global inventory toggle.
+        bool uses_rml() const override;
 
     private:
         GetStats get_stats;
@@ -799,6 +802,8 @@ class inventory_pickup_selector : public inventory_multiselector
         std::vector<pickup::pick_drop_selection> execute();
     protected:
         stats get_raw_stats() const override;
+        // Tier 3 slice 5: same multiselect render as slice 3. Shares the toggle.
+        bool uses_rml() const override;
 };
 
 
