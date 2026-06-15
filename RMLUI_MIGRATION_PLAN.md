@@ -1084,6 +1084,102 @@ options take effect on the new world. **WATCH:** (a) the worldgen tab strip is
 render-only — clicking a step does nothing (wizard is keyboard); (b) stepping
 RmlUi-options → curses-mods and back is clean (doc opens/closes per `show` call).
 
+### Tier 4 screen #2: worldfactory (`worldfactory.cpp`, 1641) — MULTI-SCREEN SUB-PROJECT
+
+**Why it's a sub-project (not one screen):** worldfactory is a world-creation WIZARD
+plus several standalone screens, each with its own `ui_adaptor` + `on_redraw` +
+`input_context` (so each fits the harness independently). Plan mandate: *"Do NOT
+solo-charge worldfactory; build a form/tab-page sub-pattern; budget as a multi-screen
+sub-project."*
+
+**Architecture (verified 2026-06-15 via explore):**
+- **Wizard driver = `make_new_world(bool,string)` (77-120).** Owns ONE `ui_adaptor`
+  whose on_redraw draws ONLY the worldgen tab strip (`draw_worldgen_tabs(wf_win,curtab)`,
+  102-105). Loop (108-113) calls `curtab += tabs[curtab](wf_win, world, on_quit)` over
+  the 3 tab fns built at 55-57; return codes +1 next / -1 prev / -999 quit / 0 stay;
+  `curtab<0` exits (abort). Each TAB FN owns its OWN `ui_adaptor` + nested input loop and
+  draws its own full-screen window OVER wf_win (so each tab re-draws its own worldgen tab
+  strip — that's why options slice 2 renders the strip itself; the driver's strip is
+  occluded and dies at rip-out). **Consequence: NO separate driver migration — each tab's
+  RmlUi doc renders its own strip (the options-slice-2 precedent); the worldgen strip is
+  3 render-only bound tabs per doc, not a shared component worth extracting yet.**
+- **The 3 wizard tabs:** Mods (`show_worldgen_tab_modselection`→`show_modselection_window`),
+  Options (`show_worldgen_tab_options`→`get_options().show(false,true,…)` — **DONE**,
+  options slice 2), Finalize (`show_worldgen_tab_confirm`).
+- **Standalone screens:** `pick_world` (world picker), `show_active_world_mods`
+  (read-only mod list), `edit_active_world_mods` (delegates to `show_modselection_window`
+  with `standalone=true`).
+
+**Gate:** ONE `worldfactory_rmlui_enabled()` toggle, lit PER-SCREEN (each on_redraw
+guards `if(rml){sync_rml();return;}`), exactly like the inventory framework. Light one
+screen per slice; the rest stay curses even with the toggle on.
+
+**Slices (conforming-first → giant last; each its own commit + eyeball):**
+
+1. **Slice 1 — Finalize (`show_worldgen_tab_confirm`, 1251-1394).** Smallest wizard
+   screen; proves the worldfactory toggle + the worldgen-tab-strip-in-doc consistency
+   with options slice 2. Shape = a small FORM: worldgen tab strip (3 steps, "Finalize
+   World" current = index 2) + "World Name:" + the live name text + save-format line
+   (V1 Legacy / V2 Current) + keybinding hints + a "NO NAME ENTERED!" error state.
+   **Name editing stays keyboard** — the inline `string_input_popup spopup` keeps
+   handling TEXT.* keys; the doc DISPLAYS `spopup.text()` live (the AIM/safemode
+   live-query idiom) with a caret cue. Model: `tabs` (3 worldgen steps) + bound strings
+   `name_rml` (live) / `format_rml` / `hints_rml` / `error_rml`. Reads/writes
+   `world->world_name` + `world->world_save_format` via the existing loop
+   (PICK_RANDOM_WORLDNAME / TOGGLE_V2_SAVE_FORMAT / NEXT_TAB-finalize / PREV_TAB / QUIT).
+   `data/gui/worldcreate.{rml,rcss}` (or `worldfinalize.*`). **EYEBALL:** New World →
+   Finalize step: tab strip shows Finalize current; type a name (shows live, caret);
+   random-name key fills it; V1/V2 toggle line updates; empty-name + NEXT_TAB shows the
+   error; NEXT_TAB with a valid name creates the world; PREV_TAB → Options.
+
+2. **Slice 2 — `pick_world` (263-476, PICK_WORLD_DIALOG).** Near-CLONE of the options
+   screen shape (4-window bordered: border/tooltip/header/content → tabs + list +
+   tooltip), so it reuses the options.rml pattern almost verbatim. Page tabs (`[Page N]`),
+   per-world row = number + `>>` cursor + `"name (charcount)"`, tooltip "Pick a world to
+   enter game". Pagination by content height → native scroll (drop `world_pages` paging,
+   one flat list, the options scroll-into-view remedy applies). Model: `tabs` (or drop
+   pages for one scrolling list — decide at build) + `rows{name_rml,selected}`. Input
+   unchanged (UP/DOWN, CONFIRM→return world, QUIT). `data/gui/pickworld.{rml,rcss}`.
+   **EYEBALL:** main menu → World (pick existing) → worlds list with char counts, cursor
+   highlight, CONFIRM enters, QUIT cancels; many worlds scroll.
+
+3. **Slice 3 — `show_active_world_mods` (681-743).** Small read-only mod list — proves
+   the **mod-row rendering** (the `draw_mod_list` shape: magenta category headers + mod
+   rows `"[id] name"`, obsolete→dark_gray+`*`, invalid→red `N/A`, cursor `>>`) in
+   isolation BEFORE the giant. A new `mod_rows_html`/builder mirrors `draw_mod_list`'s
+   per-row logic (reuse `MOD_INFORMATION` name/category/obsolete). Model: `rows` (category
+   header vs mod entry, colour baked). DEFAULT ctxt UP/DOWN/QUIT unchanged. Reuses a
+   `worldmods.{rml,rcss}` the giant will share. **EYEBALL:** in-game world-mods viewer →
+   active mods listed with category headers + colours + cursor; UP/DOWN scroll; QUIT.
+
+4. **Slice 4 — `show_modselection_window` (784-1249, MODMANAGER_DIALOG) — THE GIANT.**
+   Dual-pane: available (left, category-tabbed) | active load-order (right) + a `w_shift`
+   reorder-indicator strip (`+`/`-` can_shift_up/down) + a `w_description` info pane
+   (bottom) + category tabs (left) + filter. Reuses slice-3's mod-row builder for BOTH
+   panes; the shift `+`/`-` glyphs render per active row (gated like draw_mod_list); the
+   description pane renders `mod_ui::get_information()` (colour-tagged → `cata_text_to_rml`,
+   the item-info idiom) with the VIEW_MOD_DESCRIPTION full popup unchanged (Tier-0). Model:
+   `cat_tabs` + `avail_rows` + `active_rows` (with shift flags) + `desc_rml` + focused-pane
+   + filter footer. **ALL editing stays keyboard** — add/remove/reorder go through
+   `mod_ui::try_add/try_rem/try_shift` (dependency+conflict resolution) untouched; LEFT/
+   RIGHT switch pane, CONFIRM add/remove, ADD_MOD/REMOVE_MOD reorder, category-tab keys,
+   FILTER (string_input Tier-0), TOGGLE_SHOW_OBSOLETE, SAVE_DEFAULT_MODS, NEXT/PREV_TAB
+   (wizard, unless standalone). `data/gui/modselect.{rml,rcss}`. **Lighting this ALSO
+   lights `edit_active_world_mods` (delegates) + the wizard Mods step
+   (`show_worldgen_tab_modselection` delegates) for free.** Hardest screen in Tier 4 so
+   far — do it LAST, on the proven mod-row + tab + list + info-pane patterns. **EYEBALL
+   (hit edges):** New World → Mods step: two panes, available category-tabbed, CONFIRM
+   adds (deps pulled in), the active pane shows load order with `+`/`-` shift cues,
+   ADD_MOD/REMOVE_MOD reorders (respecting can_shift), description pane shows the selected
+   mod's info, FILTER narrows, obsolete toggle, NEXT_TAB→Finalize; ALSO the standalone
+   edit-world-mods + the conflict/dependency error popups.
+
+**Sequencing notes:** options (screen #1) done first matured the form/tab pattern; the
+worldgen tab strip is per-doc (no shared component yet — revisit if a 3rd consumer
+appears). After all 4 worldfactory slices + eyeball, the world-creation wizard is fully
+on RmlUi (Mods+Options+Finalize) and Tier 4 #2 is complete → next Tier-4 screens:
+main_menu (#3), then newcharacter (#4, the biggest/most-coupled, last).
+
 ## Load-bearing architecture facts (verified this session)
 
 - **Single curses chokepoint:** every non-map window renders through
