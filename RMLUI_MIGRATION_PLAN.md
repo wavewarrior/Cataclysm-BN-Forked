@@ -764,6 +764,51 @@ via the RmlUi path (slices 1-4 all used the default weight/volume) — confirm t
 custom captions/values + right-alignment read correctly (the generic loop should
 handle it, but it's the one untested-shape bit of slice 5).
 
+**SLICE 6 — framework completion (filter indicator + nav modes + multi-column
+fidelity) — CODE-COMPLETE + BUILD-GREEN (inventory_ui.cpp compile + LINK clean, fresh
+obj+bin mtime), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.** Investigated all three named
+items; only ONE needed code (avoided speculative fidelity work per the simplicity
+discipline):
+- **Filter coexistence (the one real gap) — DONE.** The filter APPLIES on confirm via
+  the existing `set_filter` (string_input_popup, Tier-0) → `col->set_filter()` →
+  `rml_sync` re-renders the filtered columns on the next redraw; popup-over-RmlUi-doc
+  is already proven (crafting/construction filter). BUT `draw_footer` also draws a
+  **filter INDICATOR** (`[F] Filter` / `[F] Filter: <text>`, draw_footer:2012-2021)
+  that the RmlUi footer (which only carried `get_footer(mode)`) omitted. Added a bound
+  `filter_rml` (built in rml_sync under the same `has_available_choices()||!filter`
+  guard, key via `ctxt.get_desc("INVENTORY_FILTER")`, label c_light_gray + filter text
+  c_white) and split the footer RML into a flex row: `.inv-filter` (left, content
+  width) + `.inv-mode` (`get_footer`, flex:1 centered) — mirroring draw_footer's
+  left-filter / centered-mode. ASCII `< >`/`─ ─` decoration dropped (semantic rewrite).
+- **Nav modes — NO CODE (rides existing).** The mode name/colour is `get_footer(mode)`
+  → `footer_rml` (now `.inv-mode`), dirtied every sync; switching `mode` updates it.
+  The active column's cursor highlight is `active && is_selected` in `rml_rows` → only
+  the focused column highlights (matches curses). Both already worked from slices 1-5.
+- **Multi-column fidelity — NO CODE (rides slice 2b).** Side-by-side columns shipped
+  in 2b (flex content-width + gap). Curses-exact centering/occupancy-ratio/variable
+  gaps deliberately NOT replicated (left-aligned flex is clean + readable; pixel-
+  faithful gap math is not worth the complexity).
+F4 toggle unchanged ("inventory via RmlUi (all selectors)"). **EYEBALL CHECK (user,
+A/B via F4):** (1) **filter** — press the filter key, type a query in the popup
+(renders over the doc, ticks), confirm → list narrows to matches AND the footer-left
+shows "[F] Filter: <query>"; clear it → indicator shows "[F] Filter" (or gone if no
+choices). (2) **nav modes** — cycle the nav mode (the mode key) → the centered footer
+hint changes; in a multi-column selector, the cursor highlight stays in the focused
+column only. (3) **multi-column** — open a selector with 2+ columns (e.g. a drop with
+worn + the selection column) → columns sit side-by-side, the active one's cursor
+highlights. **WATCH:** when the filter popup is OPEN, the inventory's own footer (filter
+indicator + mode) still renders behind the Tier-0 popup (curses replaced it with the
+input box inline) — harmless overlay, flag only if it reads badly.
+
+**INVENTORY_SELECTOR FRAMEWORK = CODE-COMPLETE (slices 1-6 + 2b).** All 5 concrete
+selectors lit; header/stats/multi-column/marks/selection-column/filter/nav all on the
+RmlUi path. **GATE before the followers:** a consolidated A/B eyeball of slices 5 + 6
+(iuse custom stats, pickup, filter indicator, nav modes, multi-column) — slices 1-4
+already eyeballed. Only after that do the FOLLOWERS migrate: `game_inventory` (builds a
+selector + calls execute — no independent render, so it rides the framework
+automatically once the toggle's on; mostly a verification pass) → then **advanced_inv**
+(the multi-pane dual-list variant — its own sub-project, scope its panes individually).
+
 **Discipline:** the cell/preset model is load-bearing and this file is 2640 lines
 under the stale-read hook — every model field MUST be verified against fetched
 source (the armor near-miss is the warning). Per-subclass gate means each slice

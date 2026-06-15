@@ -31,7 +31,12 @@
         <div class="inv-list scroll-pane">
             <div class="inv-col" data-for="col : columns" data-rml="col.html"></div>
         </div>
-        <div class="inv-footer" data-rml="footer_rml"></div>
+        <!-- SLICE 6: footer carries the filter indicator (left) + nav-mode hint
+             (centered), mirroring draw_footer. -->
+        <div class="inv-footer">
+            <span class="inv-filter" data-rml="filter_rml"></span>
+            <span class="inv-mode" data-rml="footer_rml"></span>
+        </div>
     </div>
 </body>
 </rml>

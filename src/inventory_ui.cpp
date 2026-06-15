@@ -93,6 +93,7 @@ struct inventory_rml_state {
     Rml::String title_rml;
     Rml::String hint_rml;
     Rml::String footer_rml;
+    Rml::String filter_rml;   // "[F] Filter: <text>" indicator (slice 6)
     // Visible columns laid out side-by-side; each holds its rows as baked markup.
     Rml::Vector<inv_col_model> columns;
     // Stats header lines (weight/volume), reusing the row model for its text_rml.
@@ -1805,6 +1806,7 @@ void inventory_selector::rml_open()
         c.Bind( "title_rml", &st->title_rml );
         c.Bind( "hint_rml", &st->hint_rml );
         c.Bind( "footer_rml", &st->footer_rml );
+        c.Bind( "filter_rml", &st->filter_rml );
         c.Bind( "columns", &st->columns );
         c.Bind( "stats", &st->stats );
         st->handle = c.GetModelHandle();
@@ -1821,6 +1823,17 @@ void inventory_selector::rml_sync() const
     st->hint_rml = cata_text_to_rml( colorize( hint, c_dark_gray ) );
     const std::pair<std::string, nc_color> f = get_footer( mode );
     st->footer_rml = cata_text_to_rml( colorize( f.first, f.second ) );
+    // Filter indicator (mirrors draw_footer): the filter key + current filter text.
+    // ASCII bracket/line decoration is dropped (semantic rewrite, like prior slices).
+    if( has_available_choices() || !filter.empty() ) {
+        const std::string label = string_format(
+                                       filter.empty() ? _( "[%s] Filter" ) : _( "[%s] Filter: " ),
+                                       ctxt.get_desc( "INVENTORY_FILTER" ) );
+        st->filter_rml = cata_text_to_rml( colorize( label, c_light_gray ) +
+                                           colorize( filter, c_white ) );
+    } else {
+        st->filter_rml = Rml::String();
+    }
     // Lay visible columns out side-by-side (slice 2b). Each column's rows are baked
     // into one markup string (a <div class="inv-row ..."> per row) so the RML is a
     // flat data-for over columns. The category/selected styling rides CSS classes;
@@ -1854,6 +1867,7 @@ void inventory_selector::rml_sync() const
     st->handle.DirtyVariable( "title_rml" );
     st->handle.DirtyVariable( "hint_rml" );
     st->handle.DirtyVariable( "footer_rml" );
+    st->handle.DirtyVariable( "filter_rml" );
     st->handle.DirtyVariable( "columns" );
     st->handle.DirtyVariable( "stats" );
 }

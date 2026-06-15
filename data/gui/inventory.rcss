@@ -98,4 +98,16 @@ body {
     margin-top: 4dp;
     padding-top: 4dp;
     border-top: 1dp #5a5a78ff;
+    display: flex;
+    align-items: center;
+}
+/* Filter indicator on the left (sizes to content); nav-mode hint fills the rest,
+   centered (mirrors draw_footer's left filter + centered mode). */
+.inv-filter {
+    flex: 0 0 auto;
+    color: #9a9ab0ff;
+}
+.inv-mode {
+    flex: 1;
+    text-align: center;
 }
