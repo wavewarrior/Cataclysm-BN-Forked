@@ -3747,7 +3747,11 @@ std::string options_manager::show( bool ingame, const bool world_options_only,
             }
         }
     };
-    rml.open( options_rmlui_enabled(), "options", ctxt,
+    // world_options_only is reached ONLY from the worldfactory wizard, so that step
+    // rides the worldfactory toggle (one switch lights the whole wizard). Standalone
+    // options (main menu / in-game) uses its own toggle.
+    rml.open( world_options_only ? worldfactory_rmlui_enabled() : options_rmlui_enabled(),
+              "options", ctxt,
     [&]( Rml::DataModelConstructor & c ) {
         data = std::make_unique<opt_rml_session>();
         register_options_rml_types( c );

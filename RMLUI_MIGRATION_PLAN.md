@@ -1264,6 +1264,18 @@ on (Mods=slice4, Options=screen#1 slice2, Finalize=slice1) + pick_world (slice2)
 active-mods view (slice3) + edit-mods (slice4 delegate). Next Tier-4: main_menu (#3),
 then newcharacter (#4).
 
+**WIZARD-BLEED FIX (eyeball #1 — user saw World Options as old curses + Finalize
+overlapping it):** two causes, both fixed. (1) The World Options step
+(`get_options().show(false,true,…)`) was gated by the OPTIONS toggle, so with only
+"worldfactory via RmlUi" on it drew curses → stale curses bled onto Finalize. Since
+`world_options_only==true` happens ONLY in the wizard, that step now rides
+`worldfactory_rmlui_enabled()` (options.cpp gate: `world_options_only ?
+worldfactory_rmlui_enabled() : options_rmlui_enabled()`) — one toggle lights the whole
+wizard. (2) The wizard driver (`make_new_world`) drew the curses worldgen-tab strip into
+`wf_win` every frame, bleeding through each step doc's transparent margins (theme `body`
+has no background; `.panel` is 80–92%); when `worldfactory_rmlui_enabled()` it now
+`werase`s wf_win instead (each step doc draws its own strip). Build-green 16:18.
+
 ## Load-bearing architecture facts (verified this session)
 
 - **Single curses chokepoint:** every non-map window renders through

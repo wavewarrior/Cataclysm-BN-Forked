@@ -323,6 +323,15 @@ WORLDINFO *worldfactory::make_new_world( bool show_prompt, const std::string &wo
         int curtab = 0;
 
         ui.on_redraw( [&]( const ui_adaptor & ) {
+            // When the wizard steps render via RmlUi, each step's doc draws its own
+            // worldgen tab strip; the curses strip here would bleed through the doc's
+            // transparent margins (doubling it). Erase wf_win instead so the backdrop
+            // behind the RmlUi docs is clean.
+            if( worldfactory_rmlui_enabled() ) {
+                werase( wf_win );
+                wnoutrefresh( wf_win );
+                return;
+            }
             draw_worldgen_tabs( wf_win, static_cast<size_t>( curtab ) );
             wnoutrefresh( wf_win );
         } );
