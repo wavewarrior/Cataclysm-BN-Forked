@@ -146,4 +146,8 @@ bool &advanced_inv_rmlui_enabled();
 // tooltip). Slice 1 lights standalone mode only (world_options_only stays curses).
 bool &options_rmlui_enabled();
 
+// worldfactory RmlUi path (Tier 4 screen #2, sliced). One toggle lights all
+// worldfactory docs, gated per-screen (slice 1 = the Finalize wizard step).
+bool &worldfactory_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

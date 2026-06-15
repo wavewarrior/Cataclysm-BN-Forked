@@ -36,6 +36,10 @@
 #include "ui_manager.h"
 #include "name.h"
 
+#include <RmlUi/Core.h>
+#include "rml_screen.h"
+#include "rml_util.h"
+
 using namespace std::placeholders;
 
 // single instance of world generator
@@ -46,6 +50,45 @@ std::unique_ptr<worldfactory> world_generator;
   * 0 index is inclusive.
   */
 static const int max_worldname_len = 32;
+
+// --- RmlUi render path (Tier 4 screen #2, sliced) ---------------------------
+// One toggle lights worldfactory's RmlUi docs; each screen guards its on_redraw
+// (slice 1 = the Finalize step, show_worldgen_tab_confirm).
+namespace
+{
+struct wf_rml_tab {
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct wf_finalize_session {
+    Rml::Vector<wf_rml_tab> tabs;
+    Rml::String name_rml;
+    Rml::String format_rml;
+    Rml::String hints_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_wf_finalize_types_registered = false;
+
+void register_wf_finalize_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_wf_finalize_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<wf_rml_tab> th = c.RegisterStruct<wf_rml_tab>();
+    th.RegisterMember( "name_rml", &wf_rml_tab::name_rml );
+    th.RegisterMember( "selected", &wf_rml_tab::selected );
+    c.RegisterArray<Rml::Vector<wf_rml_tab>>();
+
+    g_wf_finalize_types_registered = true;
+}
+} // namespace
+
+bool &worldfactory_rmlui_enabled()
+{
+    static bool enabled = false;
+    return enabled;
+}
 
 worldfactory::worldfactory()
     : active_world( nullptr )
@@ -1305,7 +1348,81 @@ int worldfactory::show_worldgen_tab_confirm( const catacurses::window &win, WORL
     // do not switch IME mode now, but restore previous mode on return
     ime_sentry sentry( ime_sentry::keep );
 
+    // RmlUi render path (Tier 4 #2 slice 1). Render-only: name editing stays on the
+    // spopup/input_context loop below; the doc displays the live worldname + caret.
+    // sync_rml re-seeds spopup.text(worldname) each frame exactly like the curses
+    // on_redraw, so PICK_RANDOM_WORLDNAME + the initial/copied name reach the editor.
+    std::unique_ptr<wf_finalize_session> data;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml ) {
+            return;
+        }
+        spopup.text( worldname );
+
+        data->tabs.clear();
+        const std::vector<std::string> steps = {
+            _( "World Mods" ), _( "World Options" ), _( "Finalize World" )
+        };
+        for( size_t i = 0; i < steps.size(); i++ ) {
+            wf_rml_tab t;
+            t.name_rml = cata_text_to_rml( colorize( steps[i], c_light_green ) );
+            t.selected = i == 2;
+            data->tabs.push_back( t );
+        }
+
+        std::string name_line = colorize( _( "World Name:" ), c_white ) + " ";
+        if( noname ) {
+            name_line += colorize( _( "NO NAME ENTERED!" ), c_light_red );
+        } else {
+            // trailing caret cue (editing is keyboard; the doc only displays the text)
+            name_line += worldname + "_";
+        }
+        data->name_rml = cata_text_to_rml( name_line );
+
+        const bool v2 = world->world_save_format == save_format::V2_COMPRESSED_SQLITE3;
+        data->format_rml = cata_text_to_rml( colorize(
+                v2 ? _( "Save Format: V2 (Current)" ) : _( "Save Format: V1 (Legacy)" ),
+                v2 ? c_white : c_light_gray ) );
+
+        std::string hints = string_format(
+                                _( "Press [<color_yellow>%s</color>] to pick a random name for your world." ),
+                                ctxt.get_desc( "PICK_RANDOM_WORLDNAME" ) );
+        hints += "\n\n";
+        hints += string_format(
+                     _( "Press [<color_yellow>%s</color>] to toggle save format.\n"
+                        "<color_light_blue>V2 format shrinks save files and reduces save corruption. "
+                        "V1 is the legacy format. You can convert existing V1 worlds to V2 from the main menu. "
+                        "V2 worlds cannot currently be converted back to V1.</color>" ),
+                     ctxt.get_desc( "TOGGLE_V2_SAVE_FORMAT" ) );
+        hints += "\n\n";
+        hints += string_format(
+                     _( "Press [<color_yellow>%s</color>] when you are satisfied with the world as it is and are ready "
+                        "to continue, or [<color_yellow>%s</color>] to go back and review your world." ),
+                     ctxt.get_desc( "NEXT_TAB" ), ctxt.get_desc( "PREV_TAB" ) );
+        data->hints_rml = cata_text_to_rml( hints );
+
+        data->handle.DirtyVariable( "tabs" );
+        data->handle.DirtyVariable( "name_rml" );
+        data->handle.DirtyVariable( "format_rml" );
+        data->handle.DirtyVariable( "hints_rml" );
+    };
+    rml.open( worldfactory_rmlui_enabled(), "worldfinalize", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        data = std::make_unique<wf_finalize_session>();
+        register_wf_finalize_rml_types( c );
+        c.Bind( "tabs", &data->tabs );
+        c.Bind( "name_rml", &data->name_rml );
+        c.Bind( "format_rml", &data->format_rml );
+        c.Bind( "hints_rml", &data->hints_rml );
+        data->handle = c.GetModelHandle();
+    } );
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         draw_worldgen_tabs( win, 2 );
         wnoutrefresh( win );
 

@@ -1180,6 +1180,28 @@ appears). After all 4 worldfactory slices + eyeball, the world-creation wizard i
 on RmlUi (Mods+Options+Finalize) and Tier 4 #2 is complete → next Tier-4 screens:
 main_menu (#3), then newcharacter (#4, the biggest/most-coupled, last).
 
+**SLICE 1 (Finalize) — CODE-COMPLETE + BUILD-GREEN (worldfactory.cpp + rml_screen.h +
+devui compile + LINK clean; worldfactory.cpp.o + binary fresh-relinked 15:27), TOGGLE
+OFF, EYEBALL OWED, UNCOMMITTED.** New `worldfactory_rmlui_enabled()` toggle (one for the
+whole sub-project, gated per-screen) + `data/gui/worldfinalize.{rml,rcss}` model
+"worldfinalize". `show_worldgen_tab_confirm` gets `if(rml){sync_rml();return;}` in
+on_redraw; rml_doc dtor tears down at the single return. sync_rml builds: worldgen tab
+strip (3 steps, "Finalize World"=idx2, render-only) + `name_rml` ("World Name: " + live
+`worldname` + `_` caret, or the red "NO NAME ENTERED!" when `noname`) + `format_rml`
+(V2 Current white / V1 Legacy gray) + `hints_rml` (random-name / format-toggle +
+explanation / nav, via `ctxt.get_desc`). **KEY POINT — editing stays keyboard:** the
+inline `string_input_popup spopup` still processes TEXT.* in the loop; sync_rml
+re-seeds `spopup.text(worldname)` each frame (mirrors the curses on_redraw) so
+PICK_RANDOM_WORLDNAME + an initial/copied name reach the editor and don't revert. F4
+toggle "worldfactory via RmlUi" (OFF). **EYEBALL CHECK (user, A/B via F4):** New World →
+Finalize step: tab strip shows the 3 worldgen steps with "Finalize World" current; type
+a name (shows live with trailing `_`); PICK_RANDOM key fills a random name (and it
+STICKS, not reverts — the seed check); V1/V2 toggle flips the format line; empty name +
+NEXT_TAB shows the red "NO NAME ENTERED!"; NEXT_TAB with a name creates the world;
+PREV_TAB → Options (RmlUi if its toggle on). **WATCH:** the name caret is a static `_`
+(no blink — editing is keyboard-only, render-behind); the worldgen tab strip is
+render-only (consistent with options slice 2).
+
 ## Load-bearing architecture facts (verified this session)
 
 - **Single curses chokepoint:** every non-map window renders through

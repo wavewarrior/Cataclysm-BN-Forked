@@ -1,0 +1,24 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="worldfinalize.rcss"/>
+</head>
+<body data-model="worldfinalize">
+    <!-- Tier 4 screen #2 (worldfactory) slice 1: the Finalize wizard step
+         (show_worldgen_tab_confirm). Worldgen tab strip (render-only — wizard nav is
+         keyboard PREV_TAB/NEXT_TAB) + the world-name line (live text from the inline
+         string_input_popup, which still owns editing) + the V1/V2 save-format line +
+         the keybinding hints. Render-only doc; the doc never edits the name. -->
+    <div class="panel wf-panel">
+        <div class="tabs wf-tabs">
+            <div class="item tab" data-for="t : tabs"
+                 data-class-selected="t.selected" data-rml="t.name_rml"></div>
+        </div>
+        <div class="wf-body">
+            <div class="wf-name" data-rml="name_rml"></div>
+            <div class="wf-format" data-rml="format_rml"></div>
+            <div class="wf-hints" data-rml="hints_rml"></div>
+        </div>
+    </div>
+</body>
+</rml>
