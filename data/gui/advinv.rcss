@@ -125,11 +125,31 @@ body {
     text-align: right;
     white-space: pre;
 }
+.aim-c-src {
+    flex: 0 0 auto;
+    width: 34dp;
+    text-align: right;
+    white-space: pre;
+}
 .aim-c-vol {
     flex: 0 0 auto;
     width: 50dp;
     text-align: right;
     white-space: pre;
+}
+
+/* Sort indicator (top of pane) + filter footer (bottom). */
+.aim-sort {
+    flex: 0 0 auto;
+    white-space: pre;
+    margin-bottom: 2dp;
+}
+.aim-filter {
+    flex: 0 0 auto;
+    white-space: pre;
+    margin-top: 4dp;
+    padding-top: 4dp;
+    border-top: 1dp #5a5a78ff;
 }
 
 /* Area-selection grid (slice 2): semantic compass 3x3 + a specials row, right-

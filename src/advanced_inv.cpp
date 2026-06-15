@@ -1413,18 +1413,26 @@ struct aim_session {
     // Slice 2: per-pane area-selection grid + the top-bar clock/hints.
     Rml::String left_grid_rml, right_grid_rml;
     Rml::String clock_rml, hints_rml;
+    // Slice 3: per-pane sort indicator + filter footer.
+    Rml::String left_sort_rml, right_sort_rml;
+    Rml::String left_filter_rml, right_filter_rml;
     Rml::DataModelHandle handle;
 };
 
 // One pane's rows as baked markup (column-header row + category/item rows). Mirrors
 // print_items' per-item logic but emits cells (CSS flex columns, not absolute x).
 // SLICE 1 defers: AIM_ALL src column, compact mode, autopickup marker.
-std::string aim_pane_rows_html( const advanced_inventory_pane &pane, bool active )
+std::string aim_pane_rows_html( const advanced_inventory_pane &pane, bool active,
+                                const std::array<advanced_inv_area, NUM_AIM_LOCATIONS> &squares )
 {
-    std::string out;
-    out += "<div class=\"aim-colhead\">"
-           "<span class=\"aim-c-name\">" + rml_escape( _( "Name (charges)" ) ) + "</span>"
-           "<span class=\"aim-c-amt\">" + rml_escape( _( "amt" ) ) + "</span>"
+    // AIM_ALL shows a per-item source-square column (matches print_items).
+    const bool show_src = pane.get_area() == AIM_ALL;
+    std::string out = "<div class=\"aim-colhead\">"
+                      "<span class=\"aim-c-name\">" + rml_escape( _( "Name (charges)" ) ) + "</span>";
+    if( show_src ) {
+        out += "<span class=\"aim-c-src\">" + rml_escape( _( "src" ) ) + "</span>";
+    }
+    out += "<span class=\"aim-c-amt\">" + rml_escape( _( "amt" ) ) + "</span>"
            "<span class=\"aim-c-wt\">" + rml_escape( _( "weight" ) ) + "</span>"
            "<span class=\"aim-c-vol\">" + rml_escape( _( "vol" ) ) + "</span>"
            "</div>";
@@ -1488,12 +1496,17 @@ std::string aim_pane_rows_html( const advanced_inventory_pane &pane, bool active
         const std::string vol_cell = colorize( vs, vcol );
 
         const std::string cls = selected ? "aim-row selected" : "aim-row";
-        out += "<div class=\"" + cls + "\">"
-               "<span class=\"aim-c-name\">" + cata_text_to_rml( colorize( item_name, base ) ) + "</span>"
-               "<span class=\"aim-c-amt\">" + cata_text_to_rml( amt_cell ) + "</span>"
+        std::string row = "<div class=\"" + cls + "\">"
+                          "<span class=\"aim-c-name\">" + cata_text_to_rml( colorize( item_name, base ) ) + "</span>";
+        if( show_src ) {
+            row += "<span class=\"aim-c-src\">" +
+                   cata_text_to_rml( colorize( squares[sitem.area].shortname, base ) ) + "</span>";
+        }
+        row += "<span class=\"aim-c-amt\">" + cata_text_to_rml( amt_cell ) + "</span>"
                "<span class=\"aim-c-wt\">" + cata_text_to_rml( wt_cell ) + "</span>"
                "<span class=\"aim-c-vol\">" + cata_text_to_rml( vol_cell ) + "</span>"
                "</div>";
+        out += row;
     }
     return out;
 }
@@ -1580,8 +1593,8 @@ void advanced_inventory::display()
                                         colorize( squares[rp.get_area()].name, !l_active ? c_white : c_dark_gray ) );
         rml_sess->left_head_rml = aim_pane_head_html( lp, l_active, squares );
         rml_sess->right_head_rml = aim_pane_head_html( rp, !l_active, squares );
-        rml_sess->left_rows_html = aim_pane_rows_html( lp, l_active );
-        rml_sess->right_rows_html = aim_pane_rows_html( rp, !l_active );
+        rml_sess->left_rows_html = aim_pane_rows_html( lp, l_active, squares );
+        rml_sess->right_rows_html = aim_pane_rows_html( rp, !l_active, squares );
         // Per-pane area-selection grid (sel = current item's area, else pane area).
         const auto pane_sel = []( advanced_inventory_pane & p ) -> aim_location {
             const advanced_inv_listitem *cur = p.get_cur_item_ptr();
@@ -1599,6 +1612,36 @@ void advanced_inventory::display()
                  ? _( "Reset Filter On Close [<color_light_green>ON</color>|<color_dark_gray>OFF</color>]" )
                  : _( "Reset Filter On Close [<color_dark_gray>ON</color>|<color_light_green>OFF</color>]" );
         rml_sess->hints_rml = cata_text_to_rml( colorize( hints, c_white ) );
+        // Per-pane sort indicator + item count (mirrors redraw_pane's top line).
+        const auto sort_str = [&]( advanced_inventory_pane & p ) -> Rml::String {
+            std::string s = string_format( _( "< [%s] Sort: %s >" ), ctxt.get_desc( "SORT" ),
+                                           get_sortname( p.sortby ) );
+            const advanced_inv_area &sq = squares[p.get_area()];
+            if( sq.max_size > 0 ) {
+                s += string_format( "  < %d/%d >", sq.get_item_count(), sq.max_size );
+            }
+            return cata_text_to_rml( colorize( s, c_light_gray ) );
+        };
+        // Per-pane filter footer (mirrors redraw_pane's bottom line); while editing
+        // the active pane shows the in-progress query from the popup.
+        const auto filter_str = [&]( advanced_inventory_pane & p, bool act ) -> Rml::String {
+            const std::string fprefix = string_format( _( "[%s] Filter" ), ctxt.get_desc( "FILTER" ) );
+            if( filter_edit && act && spopup ) {
+                return cata_text_to_rml( colorize( "< " + fprefix + ": ", c_light_gray ) +
+                                         colorize( spopup->text() + "_", c_white ) );
+            }
+            if( !p.filter.empty() ) {
+                const std::string fsuffix = string_format( _( "[%s] Reset" ), ctxt.get_desc( "RESET_FILTER" ) );
+                return cata_text_to_rml( colorize( "< " + fprefix + ": ", c_light_gray ) +
+                                         colorize( p.filter, c_white ) +
+                                         colorize( " >  " + fsuffix, c_light_gray ) );
+            }
+            return cata_text_to_rml( colorize( "< " + fprefix + " >", c_light_gray ) );
+        };
+        rml_sess->left_sort_rml = sort_str( lp );
+        rml_sess->right_sort_rml = sort_str( rp );
+        rml_sess->left_filter_rml = filter_str( lp, l_active );
+        rml_sess->right_filter_rml = filter_str( rp, !l_active );
         rml_sess->handle.DirtyVariable( "left_title_rml" );
         rml_sess->handle.DirtyVariable( "right_title_rml" );
         rml_sess->handle.DirtyVariable( "left_head_rml" );
@@ -1609,6 +1652,10 @@ void advanced_inventory::display()
         rml_sess->handle.DirtyVariable( "right_grid_rml" );
         rml_sess->handle.DirtyVariable( "clock_rml" );
         rml_sess->handle.DirtyVariable( "hints_rml" );
+        rml_sess->handle.DirtyVariable( "left_sort_rml" );
+        rml_sess->handle.DirtyVariable( "right_sort_rml" );
+        rml_sess->handle.DirtyVariable( "left_filter_rml" );
+        rml_sess->handle.DirtyVariable( "right_filter_rml" );
     };
 
     if( !is_processing() ) {
@@ -1662,6 +1709,10 @@ void advanced_inventory::display()
             c.Bind( "right_grid_rml", &rml_sess->right_grid_rml );
             c.Bind( "clock_rml", &rml_sess->clock_rml );
             c.Bind( "hints_rml", &rml_sess->hints_rml );
+            c.Bind( "left_sort_rml", &rml_sess->left_sort_rml );
+            c.Bind( "right_sort_rml", &rml_sess->right_sort_rml );
+            c.Bind( "left_filter_rml", &rml_sess->left_filter_rml );
+            c.Bind( "right_filter_rml", &rml_sess->right_filter_rml );
             rml_sess->handle = c.GetModelHandle();
         } );
 

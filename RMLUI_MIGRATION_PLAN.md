@@ -940,6 +940,39 @@ highlights. (b) rotation/iso (`screen_relative_location`) is honoured via the sa
 print_header uses, but only matters on iso tilesets. (c) no minimap/messages yet
 (slice 3) — top-right where the minimap sat is empty.
 
+**SLICE 3 — sort indicator + filter footer + AIM_ALL src column — CODE-COMPLETE +
+BUILD-GREEN (advanced_inv.cpp compile + LINK clean, fresh obj+bin mtime), TOGGLE OFF,
+EYEBALL OWED, UNCOMMITTED.** The functional finisher. Adds the three real remaining
+gaps from `redraw_pane`/`print_items`: (1) **Sort indicator** — per pane `< [SORT]
+Sort: <name> >` (via `get_sortname`) + item count `< n/max >` when the square has a
+max, top of pane (`*_sort_rml`). (2) **Filter footer** — per pane `< [F] Filter >` /
+`< [F] Filter: <text> >  [R] Reset`, bottom of pane (`*_filter_rml`); while editing,
+the ACTIVE pane shows the live in-progress query from `spopup->text()` (the
+filter-popup coexistence — the rml branch skips the curses spopup draw, so the query
+is surfaced in the footer instead). (3) **AIM_ALL src column** — `aim_pane_rows_html`
+now takes `squares` and, when the pane area is AIM_ALL, emits a `src` cell
+(`squares[sitem.area].shortname`) + a `src` column header (matches print_items). Six
+new bound strings → 4 (sort/filter ×2) this slice. `advinv.{rml,rcss}`: each pane gains
+`.aim-sort` (top) + `.aim-filter` (bottom); new `.aim-c-src` cell. **AIM RmlUi path is
+now FUNCTIONALLY COMPLETE** (both panes: items + colours + columns + selection + area
+grid + sort + filter + heads + top bar). **DOCUMENTED REMAINING GAPS (minor / deferred,
+NOT blocking the slice — flag if any matters):** (a) the graphical **MINIMAP** (overmap
+tiles — genuinely hard in RmlUi; the top-right minimap area is empty in rml mode); (b)
+the **message log** (`Messages::display_messages` in the head bar — needs a text getter;
+not surfaced in rml mode); (c) **autopickup `>` marker** on auto-pickup rows; (d) area
+**desc/flags** sublines under the title (title shows the area name only); (e) **examine**
+(`action_examine`) renders via its own ui_adaptor over the doc — should composite fine
+(verify); (f) **compact mode** (TERMX<=100) — the flex layout adapts, the curses
+compact branch isn't reproduced. **EYEBALL CHECK (user, A/B via F4):** open AIM → each
+pane shows the sort indicator (`Sort: <mode>` + count) at top and the filter line at
+bottom; press the sort key → the indicator updates; press filter, TYPE a query → the
+active pane's filter footer shows it live, confirm → list narrows + footer shows
+`Filter: <q>  [R] Reset`; switch a pane to **All** (surrounding) → items gain a `src`
+column showing each item's source square (NW/S/etc.); move/sort/filter all still work.
+**WATCH:** (a) the live filter query in the footer (`spopup->text()`) updates as you
+type (the popup-draw is replaced by this). (b) src column only on AIM_ALL; the numeric
+columns stay aligned with/without it. (c) minimap + message log absent (documented gap).
+
 **Discipline:** the cell/preset model is load-bearing and this file is 2640 lines
 under the stale-read hook — every model field MUST be verified against fetched
 source (the armor near-miss is the warning). Per-subclass gate means each slice
