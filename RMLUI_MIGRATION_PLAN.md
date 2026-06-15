@@ -1202,6 +1202,26 @@ PREV_TAB → Options (RmlUi if its toggle on). **WATCH:** the name caret is a st
 (no blink — editing is keyboard-only, render-behind); the worldgen tab strip is
 render-only (consistent with options slice 2).
 
+**SLICE 2 (pick_world) — CODE-COMPLETE + BUILD-GREEN (worldfactory.cpp compile + LINK
+clean; worldfactory.cpp.o + binary fresh 15:36), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.**
+2nd worldfactory consumer (shared `worldfactory_rmlui_enabled()` toggle). Same shape as
+the options screen — page tabs + one-column world list + tooltip — so `pickworld.{rml,
+rcss}` (model "pickworld") closely mirrors options. Render-only: the PICK_WORLD_DIALOG
+loop owns `selpage`/`sel`; on_redraw gets `if(rml){sync_rml();return;}`; rml.open after
+the ctxt actions (auto_pickup ordering — on_redraw is above the input_context).
+STRUCTURAL: distinct struct types `wf_pick_tab`/`wf_pick_row` (NOT finalize's
+`wf_rml_tab` — RegisterStruct is context-global, a 2nd model must not re-register the
+same C++ type) under their own guard. sync_rml: page tabs (skip empty pages, `rml_pages`
+maps tab→real page index) + rows ("n  >> name (saves)", cursor on `sel`) + the "Pick a
+world to enter game" tooltip. Mouse: `on_tab`→selpage (+sel=0), `on_select`→sel (click
+only). Pages cap each list to a screen → no scroll-into-view needed. F4 toggle shared
+("worldfactory via RmlUi"). **EYEBALL CHECK (user, A/B via F4):** main menu → choose a
+world to play → world list with `name (saves)` per row, cursor highlight, UP/DOWN move,
+NEXT_TAB/PREV_TAB switch pages (only if >1 page of worlds), CONFIRM enters the world,
+QUIT cancels; mouse click selects a row / a page tab. **WATCH:** (a) the auto-return
+single-world case (line ~359, `pick_world` returns before opening any UI) is unchanged;
+(b) >1 page needs many worlds (>content height) — page tabs appear then.
+
 ## Load-bearing architecture facts (verified this session)
 
 - **Single curses chokepoint:** every non-map window renders through

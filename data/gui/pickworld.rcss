@@ -1,0 +1,59 @@
+/* Layout for the world-selection screen (Tier 4 #2 slice 2: pick_world). Mirrors the
+   options layout (tabs + list + tooltip). body must be sized + centered (the missions
+   gotcha) or the panel shrink-wraps / the flex:1 list collapses. */
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.pw-panel {
+    width: 80%;
+    min-width: 720dp;
+    height: 92%;
+    display: flex;
+    flex-direction: column;
+}
+
+.pw-tooltip {
+    flex: 0 0 auto;
+    min-height: 40dp;
+    margin-bottom: 6dp;
+    padding-bottom: 6dp;
+    border-bottom: 1dp #5a5a78ff;
+    color: #cfcfe0ff;
+}
+
+.pw-tabs {
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+}
+
+.pw-tabs .tab {
+    flex: 0 0 auto;
+}
+
+.pw-list {
+    flex: 1;
+    min-height: 0;
+}
+
+.pw-row {
+    display: block;
+    padding: 1dp 6dp;
+    border-radius: 4dp;
+    white-space: nowrap;
+}
+
+.pw-row:hover {
+    background-color: #3a3a55ff;
+    color: #ffffffff;
+}
+
+.pw-row.selected {
+    background-color: #ffcc66ff;
+    color: #1e1e28ff;
+}

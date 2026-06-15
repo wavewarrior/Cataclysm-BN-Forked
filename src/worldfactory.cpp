@@ -82,6 +82,44 @@ void register_wf_finalize_rml_types( Rml::DataModelConstructor &c )
 
     g_wf_finalize_types_registered = true;
 }
+
+// pick_world (slice 2): page tabs + a one-column world list + tooltip. Distinct struct
+// types from the finalize model (RegisterStruct is context-global — a separate model
+// must not re-register the same C++ type).
+struct wf_pick_tab {
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct wf_pick_row {
+    Rml::String text_rml;
+    bool selected = false;
+};
+struct wf_pick_session {
+    Rml::Vector<wf_pick_tab> tabs;
+    Rml::Vector<wf_pick_row> rows;
+    Rml::String tooltip_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_wf_pick_types_registered = false;
+
+void register_wf_pick_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_wf_pick_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<wf_pick_tab> th = c.RegisterStruct<wf_pick_tab>();
+    th.RegisterMember( "name_rml", &wf_pick_tab::name_rml );
+    th.RegisterMember( "selected", &wf_pick_tab::selected );
+    c.RegisterArray<Rml::Vector<wf_pick_tab>>();
+
+    Rml::StructHandle<wf_pick_row> rh = c.RegisterStruct<wf_pick_row>();
+    rh.RegisterMember( "text_rml", &wf_pick_row::text_rml );
+    rh.RegisterMember( "selected", &wf_pick_row::selected );
+    c.RegisterArray<Rml::Vector<wf_pick_row>>();
+
+    g_wf_pick_types_registered = true;
+}
 } // namespace
 
 bool &worldfactory_rmlui_enabled()
@@ -381,7 +419,57 @@ WORLDINFO *worldfactory::pick_world( bool show_prompt, bool empty_only )
     init_windows( ui );
     ui.on_screen_resize( init_windows );
 
+    // RmlUi render path (Tier 4 #2 slice 2). Render-only — the input loop below owns
+    // selpage/sel. Declared before on_redraw (which captures them); opened after ctxt
+    // (the auto_pickup ordering: on_redraw is registered above the input_context).
+    std::unique_ptr<wf_pick_session> data;
+    std::vector<int> rml_pages;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml ) {
+            return;
+        }
+        // Page tabs (skip empty pages; rml_pages maps a tab index → real page index).
+        data->tabs.clear();
+        rml_pages.clear();
+        for( size_t i = 0; i < num_pages; ++i ) {
+            if( world_pages[i].empty() ) {
+                continue;
+            }
+            wf_pick_tab t;
+            t.name_rml = cata_text_to_rml( colorize( string_format( _( "Page %lu" ), i + 1 ), c_white ) );
+            t.selected = selpage == i;
+            data->tabs.push_back( t );
+            rml_pages.push_back( static_cast<int>( i ) );
+        }
+
+        // World rows: "<n>  >> name (saves)" (cursor on the selected row).
+        data->rows.clear();
+        for( size_t i = 0; i < world_pages[selpage].size(); ++i ) {
+            const std::string &world_name = world_pages[selpage][i];
+            WORLDINFO *w = get_world( world_name );
+            size_t saves_num = w->world_saves.size();
+            std::string text = string_format( "%d  ", static_cast<int>( i + 1 ) );
+            text += ( i == sel ) ? ">> " : "   ";
+            text += string_format( "%s (%d)", world_name, saves_num );
+            wf_pick_row r;
+            r.text_rml = cata_text_to_rml( colorize( text, c_white ) );
+            r.selected = i == sel;
+            data->rows.push_back( r );
+        }
+
+        data->tooltip_rml = cata_text_to_rml( colorize( _( "Pick a world to enter game" ), c_white ) );
+
+        data->handle.DirtyVariable( "tabs" );
+        data->handle.DirtyVariable( "rows" );
+        data->handle.DirtyVariable( "tooltip_rml" );
+    };
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         draw_border( w_worlds_border, BORDER_COLOR, _( " WORLD SELECTION " ) );
         mvwputch( w_worlds_border, point( 0, 4 ), BORDER_COLOR, LINE_XXXO ); // |-
         mvwputch( w_worlds_border, point( iMinScreenWidth - 1, 4 ), BORDER_COLOR, LINE_XOXX ); // -|
@@ -470,6 +558,37 @@ WORLDINFO *worldfactory::pick_world( bool show_prompt, bool empty_only )
     ctxt.register_action( "NEXT_TAB" );
     ctxt.register_action( "PREV_TAB" );
     ctxt.register_action( "CONFIRM" );
+
+    rml.open( worldfactory_rmlui_enabled(), "pickworld", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        data = std::make_unique<wf_pick_session>();
+        register_wf_pick_rml_types( c );
+        c.Bind( "tabs", &data->tabs );
+        c.Bind( "rows", &data->rows );
+        c.Bind( "tooltip_rml", &data->tooltip_rml );
+        c.BindEventCallback( "on_tab",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            if( idx >= 0 && idx < static_cast<int>( rml_pages.size() ) ) {
+                selpage = static_cast<size_t>( rml_pages[idx] );
+                sel = 0;
+            }
+        } );
+        c.BindEventCallback( "on_select",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            if( idx >= 0 && idx < static_cast<int>( world_pages[selpage].size() ) ) {
+                sel = static_cast<size_t>( idx );
+            }
+        } );
+        data->handle = c.GetModelHandle();
+    } );
 
     while( true ) {
         ui_manager::redraw();
