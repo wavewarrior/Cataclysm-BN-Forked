@@ -1,0 +1,27 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="compare.rcss"/>
+</head>
+<body data-model="compare">
+    <!-- Tier 3 follower: game::compare two-pane item comparison. Two side-by-side
+         item-info panes (the F.2 component, item_info_rml_lines), each titled.
+         FIRST compare-delta consumer: each pane's item_info_data carries the OTHER
+         item as its compare set, so format_item_info renders the +/- deltas.
+         Keyboard owns scroll (UP/DOWN/PAGE scroll BOTH panes in lockstep). -->
+    <div class="panel cmp-panel">
+        <div class="cmp-pane">
+            <div class="cmp-title" data-rml="lhs_title_rml"></div>
+            <div id="cmp-lhs" class="cmp-info scroll-pane">
+                <div class="cmp-line" data-for="ln : lhs" data-rml="ln.text_rml"></div>
+            </div>
+        </div>
+        <div class="cmp-pane">
+            <div class="cmp-title" data-rml="rhs_title_rml"></div>
+            <div id="cmp-rhs" class="cmp-info scroll-pane">
+                <div class="cmp-line" data-for="ln : rhs" data-rml="ln.text_rml"></div>
+            </div>
+        </div>
+    </div>
+</body>
+</rml>

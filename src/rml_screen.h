@@ -134,4 +134,8 @@ bool &examine_item_rmlui_enabled();
 // subclass via inventory_selector::uses_rml(); slice 1 lights inventory_pick_selector.
 bool &inventory_rmlui_enabled();
 
+// game_menus::inv::compare() RmlUi path (Tier 3 follower: the two-pane item-info
+// comparison display; first compare-delta consumer of item_info_rml_lines).
+bool &compare_items_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

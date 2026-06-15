@@ -800,14 +800,48 @@ highlights. **WATCH:** when the filter popup is OPEN, the inventory's own footer
 indicator + mode) still renders behind the Tier-0 popup (curses replaced it with the
 input box inline) — harmless overlay, flag only if it reads badly.
 
-**INVENTORY_SELECTOR FRAMEWORK = CODE-COMPLETE (slices 1-6 + 2b).** All 5 concrete
-selectors lit; header/stats/multi-column/marks/selection-column/filter/nav all on the
-RmlUi path. **GATE before the followers:** a consolidated A/B eyeball of slices 5 + 6
-(iuse custom stats, pickup, filter indicator, nav modes, multi-column) — slices 1-4
-already eyeballed. Only after that do the FOLLOWERS migrate: `game_inventory` (builds a
+**INVENTORY_SELECTOR FRAMEWORK = DONE + FULLY EYEBALLED (slices 1-6 + 2b; slices 5+6
+confirmed clean by user 2026-06-15).** All 5 concrete selectors lit;
+header/stats/multi-column/marks/selection-column/filter/nav all on the RmlUi path. Only after that do the FOLLOWERS migrate: `game_inventory` (builds a
 selector + calls execute — no independent render, so it rides the framework
 automatically once the toggle's on; mostly a verification pass) → then **advanced_inv**
 (the multi-pane dual-list variant — its own sub-project, scope its panes individually).
+
+### Tier 3 followers — game_inventory
+
+- **game_inventory selectors = DONE BY COVERAGE (no code).** All of `game_inventory.cpp`'s
+  screens build an `inventory_*_selector` + call `execute()` with NO independent render
+  → they ride the now-complete framework automatically when the toggle is on. Verified:
+  `common_inventory_selector` (the only bespoke subclass, used by the main `i`nventory)
+  derives `inventory_pick_selector` and overrides ONLY `handle_action` (the `unload_all`
+  key) → inherits pick's `uses_rml()`, lit for free. So game_inventory's many entry
+  points (activate/consume/wield/wear/drop/pickup/etc.) are a verification pass, not a
+  migration.
+- **EXCEPTION — `game_menus::inv::compare(l, r)` — MIGRATED (CODE-COMPLETE + BUILD-GREEN,
+  game_inventory.cpp + devui compile + LINK clean, fresh obj+bin mtime), TOGGLE OFF,
+  EYEBALL OWED, UNCOMMITTED.** This is the ONE game_inventory function with its own
+  render: the comparison RESULT display (after `inventory_compare_selector` picks two
+  items) — a `ui_adaptor` with two side-by-side `draw_item_info` panes + synced scroll.
+  Migrated via the F.2 item-info component (`item_info_rml_lines`). **It is the FIRST
+  compare-delta consumer** (the gap flagged at examine_item_menu): each pane's
+  `item_info_data` carries the OTHER item as its compare set, so `format_item_info`
+  renders the +/- stat deltas — now exercised through the RmlUi path. New `compare.{rml,
+  rcss}` model "compare": two `.cmp-pane` (title + `#cmp-lhs`/`#cmp-rhs` scroll-pane of
+  the folded item-info lines). Lines/titles are STATIC for the screen's lifetime → built
+  once in `open()` (no per-frame sync); the on_redraw just `if(rml) return;` else the
+  curses two-pane draw. Scroll is native: UP/DOWN (±0.15 page) + PAGE_UP/DOWN (±0.85)
+  `SetScrollTop` BOTH panes in lockstep (the curses `lhs/rhs_scroll_pos` are kept for the
+  curses path). New toggle `compare_items_rmlui_enabled()` (rml_screen.h) + F4 "compare
+  items via RmlUi". rml_doc dtor tears down at the single function exit. **EYEBALL CHECK
+  (user, A/B via F4):** compare two items (inventory → compare action, pick two) → two
+  panes side-by-side, each item's info, **and the +/- compare deltas coloured** (the
+  novel bit — e.g. one item's higher stat shows green/+, lower red/-); UP/DOWN + PAGE
+  scroll BOTH panes together; QUIT returns to the compare selector (pick another pair) /
+  exits. **WATCH:** (a) the compare-delta colouring is the first real test of
+  `format_item_info`'s compare path through `item_info_rml_lines` — confirm deltas show
+  and are coloured, not flat. (b) both panes scroll in lockstep (not independently).
+- **NEXT FOLLOWER: advanced_inv** (the multi-pane dual-list variant — its own sub-project,
+  scope its panes individually).
 
 **Discipline:** the cell/preset model is load-bearing and this file is 2640 lines
 under the stale-read hook — every model field MUST be verified against fetched
