@@ -738,6 +738,9 @@ class inventory_compare_selector : public inventory_multiselector
         std::vector<const item *> compared;
 
         void toggle_entry( inventory_entry *entry );
+        // Tier 3 slice 4: two-selection compare. Same multiselect render as slice 3;
+        // only the execute() state differs. Shares the global inventory toggle.
+        bool uses_rml() const override;
 };
 
 // This and inventory_drop_selectors should probably both inherit from a higher-abstraction "action selector".

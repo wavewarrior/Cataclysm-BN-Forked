@@ -2284,6 +2284,12 @@ bool inventory_drop_selector::uses_rml() const
     return inventory_rmlui_enabled();
 }
 
+bool inventory_compare_selector::uses_rml() const
+{
+    // Tier 3 slice 4: two-selection compare. Same multiselect render as slice 3.
+    return inventory_rmlui_enabled();
+}
+
 item *inventory_pick_selector::execute()
 {
     shared_ptr_fast<ui_adaptor> ui = create_or_get_ui_adaptor();

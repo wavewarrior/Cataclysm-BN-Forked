@@ -695,9 +695,9 @@ sit side-by-side, sizing to content — flag if they overflow/clip horizontally,
 scroll-pane only sets overflow-y). (b) a column whose rows are wider than its share
 → horizontal clip (no overflow-x set; left as-is, cosmetic).
 
-**SLICE 3 — multiselect mechanism (via `inventory_drop_selector`) — CODE-COMPLETE +
-BUILD-GREEN (inventory_ui.{h,cpp} + devui compile + LINK clean, fresh obj+bin mtime),
-TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.** Lights the multiselect render path. Tiny,
+**SLICE 3 — multiselect mechanism (via `inventory_drop_selector`) — DONE + EYEBALLED
+CLEAN (user 2026-06-15, "looks good"), COMMITTED `948cfde8cd`. TOGGLE OFF.** Lights
+the multiselect render path. Tiny,
 because slice-2b already does the heavy lifting: (1) the `selection_column` is just
 another visible `inventory_column` (appended in the multiselector ctor) → slice-2b's
 side-by-side render shows it as a column FOR FREE; its "N of M" / count caption is
@@ -724,6 +724,24 @@ tick; same path as set_filter, untested in slices 1-2 — flag if the popup is f
 the doc vanishes behind it). (b) selection column appears/hides on narrow widths
 (`rearrange_columns` sets its visibility by overflow) — at small terminal sizes it may
 not show (matches curses). (c) the mark color (`#`/`+` light_green) should match curses.
+
+**SLICE 4 — two-selection compare (`inventory_compare_selector`) — CODE-COMPLETE +
+BUILD-GREEN (inventory_ui.{h,cpp} + devui compile + LINK clean, fresh obj+bin mtime),
+TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.** The smallest slice — GATE ONLY. compare
+inherits the multiselector ctor (selection column "ITEMS TO COMPARE" + marks) and
+overrides ONLY `toggle_entry` (input-side: sets `chosen_count` 0/1, tracks the
+`compared` pair) — grep-confirmed it has NO render override (no refresh_window/draw/
+rml_/get_raw_stats), so its render IS the multiselect path slice 3 already proved.
+So slice 4 = `inventory_compare_selector::uses_rml()` override → shared
+`inventory_rmlui_enabled()`; the "two-selection state" is execute()-loop logic
+(keyboard, untouched). F4 label → "inventory (pick+drop+compare) via RmlUi". The
+comparison RESULT screen (after execute returns the item pair) is a SEPARATE
+examine/compare display, not the selector — out of scope here. **EYEBALL CHECK (user,
+A/B via F4):** open compare (the inventory "compare items" action) — marks appear,
+selecting an item marks it + adds to the "ITEMS TO COMPARE" selection column, picking
+a SECOND item triggers the comparison (returns the pair); selecting/deselecting works,
+the 2-item cap holds (can't mark a 3rd). Marks/colours match curses (chosen_count is
+0/1 → `+` if available==1 else `#`). Pick+drop still render (shared toggle).
 
 **Discipline:** the cell/preset model is load-bearing and this file is 2640 lines
 under the stale-read hook — every model field MUST be verified against fetched
