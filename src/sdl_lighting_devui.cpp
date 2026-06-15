@@ -114,6 +114,7 @@ void draw()
     ImGui::Checkbox( "advanced inventory via RmlUi", &advanced_inv_rmlui_enabled() );
     ImGui::Checkbox( "options via RmlUi", &options_rmlui_enabled() );
     ImGui::Checkbox( "worldfactory via RmlUi", &worldfactory_rmlui_enabled() );
+    ImGui::Checkbox( "main menu via RmlUi", &main_menu_rmlui_enabled() );
 
     static const char *mode_names[] = {
         "off", "ambient", "emitter", "sun", "sky", "total", "SDF", "sky_vis", "emit_bw",

@@ -52,6 +52,11 @@
 #include "wcwidth.h"
 #include "worldfactory.h"
 #include "game_info.h"
+
+#include <RmlUi/Core.h>
+#include "rml_screen.h"
+#include "rml_util.h"
+
 enum class main_menu_opts : int {
     MOTD = 0,
     NEWCHAR = 1,
@@ -73,7 +78,45 @@ namespace
 {
 point prev_submenu_top_left;
 point prev_submenu_size;
+
+// --- RmlUi render path (Tier 4 screen #3: the title screen) -----------------
+struct mm_item {
+    Rml::String text_rml;
+    bool selected = false;
+};
+struct mm_session {
+    Rml::String logo_rml;
+    Rml::String version_rml;
+    Rml::String tips_rml;
+    Rml::Vector<mm_item> items;       // top horizontal menu
+    Rml::Vector<mm_item> submenu;     // sub-options for the selected item
+    Rml::Vector<mm_item> motd_lines;  // MOTD / Credits text (scrolled)
+    bool show_motd = false;
+    bool show_submenu = false;
+    Rml::DataModelHandle handle;
+};
+
+bool g_mm_types_registered = false;
+
+void register_mm_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_mm_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<mm_item> ih = c.RegisterStruct<mm_item>();
+    ih.RegisterMember( "text_rml", &mm_item::text_rml );
+    ih.RegisterMember( "selected", &mm_item::selected );
+    c.RegisterArray<Rml::Vector<mm_item>>();
+
+    g_mm_types_registered = true;
+}
 } // namespace
+
+bool &main_menu_rmlui_enabled()
+{
+    static bool enabled = false;
+    return enabled;
+}
 
 void main_menu::on_move() const
 {
@@ -700,8 +743,168 @@ bool main_menu::opening_screen()
 
     background_pane background;
 
+    // RmlUi render path (Tier 4 #3: the title screen). Render-only — the loop owns the
+    // 2-level keyboard nav (sel1/sel2/sel_line); the New/Load/World actions delegate.
+    std::unique_ptr<mm_session> data;
+    bool rml_scroll_pending = false;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml ) {
+            return;
+        }
+        // Logo (mmenu_title ASCII lines).
+        std::string logo;
+        for( size_t i = 0; i < mmenu_title.size(); ++i ) {
+            if( i ) {
+                logo += "\n";
+            }
+            logo += mmenu_title[i];
+        }
+        data->logo_rml = cata_text_to_rml( logo );
+        data->version_rml = cata_text_to_rml( colorize( string_format( _( "Version: %s" ),
+                                              getVersionString() ), c_light_blue ) );
+        // Top menu items.
+        data->items.clear();
+        for( size_t i = 0; i < vMenuItems.size(); ++i ) {
+            const bool s = static_cast<int>( i ) == sel1;
+            mm_item m;
+            m.text_rml = cata_text_to_rml( string_format( "[%s]",
+                                           shortcut_text( s ? hilite( c_yellow ) : c_yellow, vMenuItems[i] ) ) );
+            m.selected = s;
+            data->items.push_back( m );
+        }
+        // Submenu / MOTD-Credits text.
+        data->submenu.clear();
+        data->motd_lines.clear();
+        data->show_submenu = false;
+        data->show_motd = false;
+        const main_menu_opts sel_o = static_cast<main_menu_opts>( sel1 );
+        const auto push_sub = [&]( const std::string & s, bool sel ) {
+            mm_item m;
+            m.text_rml = cata_text_to_rml( s );
+            m.selected = sel;
+            data->submenu.push_back( m );
+        };
+        switch( sel_o ) {
+            case main_menu_opts::CREDITS:
+            case main_menu_opts::MOTD: {
+                data->show_motd = true;
+                const std::string &text = sel_o == main_menu_opts::CREDITS ? mmenu_credits : mmenu_motd;
+                for( const std::string &ln : foldstring( text, FULL_SCREEN_WIDTH - 2 ) ) {
+                    mm_item m;
+                    m.text_rml = cata_text_to_rml( ln );
+                    data->motd_lines.push_back( m );
+                }
+                break;
+            }
+            case main_menu_opts::SETTINGS:
+                data->show_submenu = true;
+                for( size_t i = 0; i < vSettingsSubItems.size(); ++i ) {
+                    push_sub( shortcut_text( static_cast<int>( i ) == sel2 ? hilite( c_yellow ) : c_yellow,
+                                             vSettingsSubItems[i] ), static_cast<int>( i ) == sel2 );
+                }
+                break;
+            case main_menu_opts::NEWCHAR:
+                data->show_submenu = true;
+                for( size_t i = 0; i < vNewGameSubItems.size(); ++i ) {
+                    push_sub( shortcut_text( static_cast<int>( i ) == sel2 ? hilite( c_yellow ) : c_yellow,
+                                             vNewGameSubItems[i] ), static_cast<int>( i ) == sel2 );
+                }
+                break;
+            case main_menu_opts::LOADCHAR:
+            case main_menu_opts::WORLD: {
+                data->show_submenu = true;
+                const bool extra_opt = sel1 == getopt( main_menu_opts::WORLD );
+                if( extra_opt ) {
+                    push_sub( colorize( _( "Create World" ), sel2 == 0 ? hilite( c_yellow ) : c_yellow ),
+                              sel2 == 0 );
+                }
+                const std::vector<std::string> all_worldnames = world_generator->all_worldnames();
+                for( size_t i = 0; i < all_worldnames.size(); ++i ) {
+                    WORLDINFO *world = world_generator->get_world( all_worldnames[i] );
+                    int savegames_count = world->world_saves.size();
+                    nc_color clr = ( all_worldnames[i] == "TUTORIAL" || all_worldnames[i] == "DEFENSE" ) ?
+                                   c_light_cyan : c_white;
+                    const bool sel = sel2 == static_cast<int>( i ) + ( extra_opt ? 1 : 0 );
+                    push_sub( colorize( string_format( "%s (%d)", all_worldnames[i], savegames_count ),
+                                        sel ? hilite( clr ) : clr ), sel );
+                }
+                break;
+            }
+            default:
+                break;
+        }
+        // Bottom tips line.
+        if( sel_o == main_menu_opts::NEWCHAR && sel2 >= 0 && sel2 < static_cast<int>( vNewGameHints.size() ) ) {
+            data->tips_rml = cata_text_to_rml( colorize( vNewGameHints[sel2], c_yellow ) );
+        } else {
+            std::string tips = _( "Bugs?  Suggestions?  Use links in MOTD to report them." );
+            tips += "\n";
+            tips += string_format( _( "Tip of the day: %s" ), vdaytip );
+            data->tips_rml = cata_text_to_rml( colorize( tips, c_white ) );
+        }
+        data->handle.DirtyVariable( "logo_rml" );
+        data->handle.DirtyVariable( "version_rml" );
+        data->handle.DirtyVariable( "items" );
+        data->handle.DirtyVariable( "submenu" );
+        data->handle.DirtyVariable( "motd_lines" );
+        data->handle.DirtyVariable( "tips_rml" );
+        data->handle.DirtyVariable( "show_motd" );
+        data->handle.DirtyVariable( "show_submenu" );
+        // MOTD/Credits keyboard scroll-follow.
+        if( rml_scroll_pending && data->show_motd ) {
+            rml_scroll_pending = false;
+            if( Rml::Element *list = rml.document()->GetElementById( "mm-motd" ) ) {
+                if( sel_line >= 0 && sel_line < list->GetNumChildren() ) {
+                    list->GetChild( sel_line )->ScrollIntoView(
+                        Rml::ScrollIntoViewOptions( Rml::ScrollAlignment::Start ) );
+                }
+            }
+        }
+    };
+    rml.open( main_menu_rmlui_enabled(), "mainmenu", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        data = std::make_unique<mm_session>();
+        register_mm_rml_types( c );
+        c.Bind( "logo_rml", &data->logo_rml );
+        c.Bind( "version_rml", &data->version_rml );
+        c.Bind( "tips_rml", &data->tips_rml );
+        c.Bind( "items", &data->items );
+        c.Bind( "submenu", &data->submenu );
+        c.Bind( "motd_lines", &data->motd_lines );
+        c.Bind( "show_motd", &data->show_motd );
+        c.Bind( "show_submenu", &data->show_submenu );
+        c.BindEventCallback( "on_item",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            if( idx >= 0 && idx < static_cast<int>( vMenuItems.size() ) ) {
+                sel1 = idx;
+                sel2 = 0;
+                sel_line = 0;
+            }
+        } );
+        c.BindEventCallback( "on_sub",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            if( idx >= 0 ) {
+                sel2 = idx;
+            }
+        } );
+        data->handle = c.GetModelHandle();
+    } );
+
     ui_adaptor ui;
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         print_menu( w_open, sel1, menu_offset, sel_line );
     } );
     ui.on_screen_resize( [this]( ui_adaptor & ui ) {
@@ -788,6 +991,7 @@ bool main_menu::opening_screen()
             switch( opt ) {
                 case main_menu_opts::MOTD:
                 case main_menu_opts::CREDITS:
+                    rml_scroll_pending = true;
                     if( action == "UP" || action == "PAGE_UP" || action == "SCROLL_UP" ) {
                         if( sel_line > 0 ) {
                             sel_line--;

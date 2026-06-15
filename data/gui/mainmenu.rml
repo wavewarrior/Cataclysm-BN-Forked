@@ -1,0 +1,37 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="mainmenu.rcss"/>
+</head>
+<body data-model="mainmenu">
+    <!-- Tier 4 screen #3: the title screen (main_menu::opening_screen / print_menu).
+         ASCII logo + version + horizontal menu items + submenu (sub-options for the
+         selected item) OR the scrolled MOTD/Credits text + bottom tips. Render-only;
+         the loop owns the 2-level keyboard nav (LEFT/RIGHT=item, UP/DOWN=sub or scroll,
+         CONFIRM acts). Mouse selects (click only). Submenu rendered inline below the
+         menu row (semantic; not the curses floating box). -->
+    <div class="panel mm-panel">
+        <div class="mm-logo" data-rml="logo_rml"></div>
+        <div class="mm-version" data-rml="version_rml"></div>
+
+        <div class="tabs mm-items">
+            <div class="item tab" data-for="it : items"
+                 data-class-selected="it.selected"
+                 data-event-click="on_item(it_index)" data-rml="it.text_rml"></div>
+        </div>
+
+        <div class="mm-sub" data-if="show_submenu">
+            <div class="mm-subrow" data-for="s : submenu"
+                 data-class-selected="s.selected"
+                 data-event-click="on_sub(it_index)" data-rml="s.text_rml"></div>
+        </div>
+
+        <div id="mm-motd" class="mm-motd scroll-pane" data-if="show_motd">
+            <div class="mm-motd-line" data-for="m : motd_lines" data-rml="m.text_rml"></div>
+        </div>
+
+        <div class="mm-tips" data-rml="tips_rml"></div>
+    </div>
+    <div class="crt"></div>
+</body>
+</rml>

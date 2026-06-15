@@ -1,0 +1,85 @@
+/* Layout for the title screen (Tier 4 #3: main_menu). Centered column: logo, version,
+   horizontal menu row, inline submenu / MOTD-credits scroll, bottom tips. body sized +
+   centered (the missions gotcha). */
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.mm-panel {
+    width: 80%;
+    min-width: 720dp;
+    height: 92%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* ASCII logo — monospace, preserve its spacing, centered. */
+.mm-logo {
+    flex: 0 0 auto;
+    white-space: pre;
+    text-align: center;
+    color: #cfcfe0ff;
+    margin-bottom: 8dp;
+}
+
+.mm-version {
+    flex: 0 0 auto;
+    margin-bottom: 12dp;
+}
+
+/* Horizontal menu items. */
+.mm-items {
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.mm-items .tab {
+    flex: 0 0 auto;
+}
+
+/* Inline submenu (sub-options for the selected item). */
+.mm-sub {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 8dp;
+}
+
+.mm-subrow {
+    display: block;
+    padding: 1dp 8dp;
+    border-radius: 4dp;
+}
+
+.mm-subrow.selected {
+    background-color: #ffcc66ff;
+    color: #1e1e28ff;
+}
+
+/* MOTD / Credits scrolling text. */
+.mm-motd {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    margin-top: 8dp;
+}
+
+.mm-motd-line {
+    display: block;
+    white-space: pre-wrap;
+}
+
+.mm-tips {
+    flex: 0 0 auto;
+    margin-top: 8dp;
+    white-space: pre-wrap;
+    text-align: center;
+}

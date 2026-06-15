@@ -1276,6 +1276,59 @@ wizard. (2) The wizard driver (`make_new_world`) drew the curses worldgen-tab st
 has no background; `.panel` is 80–92%); when `worldfactory_rmlui_enabled()` it now
 `werase`s wf_win instead (each step doc draws its own strip). Build-green 16:18.
 
+### Tier 4 screen #3: main_menu (`main_menu.cpp`, 1219) — the title screen
+
+**Anatomy (verified 2026-06-15):** `opening_screen()` (612) owns ONE `ui_adaptor` +
+`on_redraw`→`print_menu` (294) + the input loop (714). Two-level selection: `sel1` (top
+item: MOTD/NEWCHAR/LOADCHAR/WORLD/SETTINGS/HELP/CREDITS/QUIT via `main_menu_opts`), `sel2`
+(sub-option), `sel_line` (MOTD/CREDITS scroll). `print_menu` draws: holiday art + the
+`mmenu_title` ASCII logo + version + the horizontal menu row (`print_menu_items` (133):
+`[hotkey]label`, selected hilited, builds `main_menu_button_map` mouse hitboxes) +
+`display_sub_menu` (185: floating vertical sub-options for NEWCHAR/SETTINGS/WORLD/LOADCHAR,
+OR `display_text` (572) renders the scrolled MOTD/CREDITS text) + bottom tip/hints/bugs
+line. CONFIRM dispatches: HELP→display_help, QUIT→`query_yn`, SETTINGS→options/keybind/
+autopickup/safemode/distraction/colors (all migrated screens), WORLD→`world_tab`,
+LOADCHAR→`load_character_tab` (uilist, Tier-0), NEWCHAR→`new_character_tab` (→newcharacter,
+Tier 4 #4).
+
+**It's essentially ONE screen** — `display_text`/`display_sub_menu` are part of the title
+render; the New/Load/World actions DELEGATE (uilist Tier-0 / worldfactory / newcharacter),
+so they're not main_menu's render. → **one slice**, toggle `main_menu_rmlui_enabled()`.
+
+**Slice 1 — title screen (render-behind).** Model "mainmenu": `logo_rml` (mmenu_title
+ASCII, white, `white-space:pre`), `version_rml`, `items` (vMenuItems `[hotkey]label`,
+`selected`=sel1, horizontal flex), `submenu` (sel2 sub-options for NEWCHAR/SETTINGS/WORLD/
+LOADCHAR, vertical; empty for HELP/QUIT), `motd_rml` (scrolled MOTD/CREDITS text when those
+are selected, in a scroll-pane), `tips_rml` (bottom hints), `show_motd`/`show_submenu`
+flags. Keyboard owns the 2-level nav (LEFT/RIGHT→sel1, UP/DOWN→sel2 or sel_line); mouse
+click selects (on_item→sel1, on_sub→sel2). Submenu rendered inline below the menu row
+(semantic; NOT the curses floating box at the item's x). Holiday ASCII art + the per-char
+mouse hitbox maps dropped (semantic rewrite). `mainmenu.{rml,rcss}`. **VISUAL-FIDELITY
+RISK (eyeball-critical, flagged):** the ASCII logo centering/scale + menu spacing +
+submenu placement are the iconic title look — build-blind will get structure, expect
+layout iteration. **WATCH:** the in-progress theme.rcss CRT rework (uncommitted) will
+restyle this most of all.
+
+**SLICE 1 — CODE-COMPLETE + BUILD-GREEN (main_menu.cpp.o 16:53 + binary relinked,
+0 warnings), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.** `mainmenu.{rml,rcss}` model
+"mainmenu" + `main_menu_rmlui_enabled()` toggle + F4 "main menu via RmlUi".
+`opening_screen` on_redraw gets `if(rml){sync_rml();return;}`; rml_doc dtor tears down.
+sync_rml builds logo (mmenu_title pre joined) / version / `items` (vMenuItems
+shortcut_text, sel1) / `submenu` (replicates display_sub_menu for SETTINGS/NEWCHAR/
+LOADCHAR/WORLD incl. "Create World" + world saves count) / `motd_lines` (foldstring of
+mmenu_motd|credits) / `tips_rml` (NEWCHAR hint else bugs+tip-of-day). Keyboard owns the
+2-level nav; mouse `on_item`/`on_sub` select (click only). MOTD/Credits keyboard scroll
+via `rml_scroll_pending` → ScrollIntoView the sel_line child of `#mm-motd`. Submenu
+rendered INLINE below the menu row (semantic, not the curses floating box). Holiday art +
+per-char mouse hitboxes dropped. Includes the `<div class="crt">` overlay (user's CRT
+theme). **EYEBALL (visual-fidelity critical):** title screen → logo centered, version,
+horizontal menu (selected hilited), arrow into New Game/Settings/World/Load shows the
+inline submenu (sel2 highlight), MOTD/Credits show scrolling text (UP/DOWN scrolls),
+CONFIRM acts (New/Load/World/Settings/Help/Quit all still work), mouse click selects;
+QUIT→"Really quit?" (needs query_popup toggle, per invariant 6). **WATCH:** logo
+centering/scale + menu spacing + inline-submenu placement vs the curses floating box —
+expect layout iteration.
+
 ## Load-bearing architecture facts (verified this session)
 
 - **Single curses chokepoint:** every non-map window renders through
@@ -1329,6 +1382,14 @@ has no background; `.panel` is 80–92%); when `worldfactory_rmlui_enabled()` it
    in-game eyeball (A/B vs curses) → flip default ON → commit. **No phase starts
    until the prior screen's eyeball passes** (build-blind on RmlUi runtime).
 5. The map/world GPU tile render is out of scope and unchanged.
+6. **RmlUi screens REQUIRE RmlUi popups (verified 2026-06-15, worldfactory eyeball).**
+   RmlUi composites OVER the curses framebuffer, so a curses popup (`query_yn`/`popup`/
+   `query_int` family) opened by an RmlUi screen renders UNDERNEATH the screen's doc →
+   invisible → the loop blocks on an unseeable prompt ("can't exit" symptom). Therefore
+   any screen whose toggle is ON must also have the Tier-0 popup toggles ON
+   (`query_popup`/`string_input`) so popups stack as RmlUi docs on top. At the §8 mass
+   flip this is automatic; during per-screen A/B, enabling a screen toggle without the
+   popup toggles breaks its nested prompts (abort-confirm, filter, dependency errors).
 
 ---
 
