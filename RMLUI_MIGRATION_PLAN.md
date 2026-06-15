@@ -636,9 +636,8 @@ show only cell[0] + red reason (matches curses `count=1`, avoids layout collisio
 **WATCH:** flattened columns (character vs map items stack instead of side-by-side —
 expected this slice); keyboard-only (mouse won't select — expected).
 
-**SLICE 2 — stats header — CODE-COMPLETE + BUILD-GREEN (inventory_ui.cpp compile +
-LINK clean, verified fresh obj+bin mtime), TOGGLE OFF (rides slice-1 "inventory
-(pick) via RmlUi"), EYEBALL OWED, UNCOMMITTED.** Adds the weight/volume stats block
+**SLICE 2 — stats header — DONE + EYEBALLED CLEAN (user 2026-06-15, "looks great"),
+COMMITTED `739ca9b6e8`. TOGGLE OFF.** Adds the weight/volume stats block
 to the slice-1 doc. Additive + small: (1) model gains a 2nd `Rml::Vector<inv_rml_row_model>
 stats` (REUSES the slice-1 row struct for its `text_rml` — no new registered type),
 bound in `rml_open`. (2) `rml_sync` fills it from `get_stats()` under the same
@@ -661,6 +660,37 @@ the separator line spans the full header width; list/footer unchanged from slice
 **WATCH:** stats are space-padded internally for cell alignment (`get_stats()` pads to
 max cell width) → `white-space:pre` preserves it; if the two lines don't column-align
 vs curses, the monospace assumption broke.
+
+**SLICE 2b — side-by-side columns (multi-column layout, pulled forward from slice 6)
+— CODE-COMPLETE + BUILD-GREEN (inventory_ui.cpp compile + LINK clean, fresh obj+bin
+mtime), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.** The slice-2 eyeball surfaced that
+flattened columns read WRONG: "ITEMS WORN" (a separate `inventory_column`) stacked
+BELOW the main list instead of beside it (the slice-1 flatten). Fix = render each
+visible `inventory_column` as its own side-by-side column. **KEY DECISION — no nested
+data-for:** RmlUi 6.2's truly-nested `data-for="row : col.rows"` (member array on a
+loop alias) is UNPROVEN in this codebase + unverifiable build-blind (every migrated
+screen iterates flat vectors; the DataBinding unit test only proves single-struct
+`data-for="arrays.a"`, not array-of-struct-with-array). So each column's rows are
+BAKED into one finished-markup string (`<div class="inv-row [category|selected]">…
+</div>` per row) and the RML is a FLAT `data-for="col : columns" data-rml="col.html"`
+— the proven single-level primitive (crafting/sortarmor info-lines). `data-rml`→
+`DataViewRml::SetInnerRML` parses the string through the normal RML parser, so the
+`.inv-row`/`.category`/`.selected` CLASS rules still apply (verified in vendored
+DataViewDefault.cpp). New `inv_col_model{Rml::String html}` + registered array
+(`inv_rml_row_model` kept for stats). `.inv-list` becomes a flex ROW
+(`align-items:flex-start`); `.inv-col` is `flex:0 0 auto` content-width + 24dp gap;
+scroll-pane `overflow-y:auto` still scrolls the row vertically as a whole. **TRADE-OFF
+(acceptable, documented):** per-sync each column does a full `SetInnerRML` re-parse
+(vs slice-1's data-for array diff) — heavier per cursor-move but fine at inventory
+sizes; the selected-highlight now spans the COLUMN content width (was full pane),
+which matches curses better. **EYEBALL CHECK (user, A/B via F4):** worn items now sit
+in a SEPARATE column to the RIGHT of the main inventory list (not below); category
+headers + cursor highlight + colours intact within each column; both columns
+top-align; the list scrolls vertically when tall. **WATCH:** (a) >2 columns (map/multi
+selectors come in later slices, but if any pick path has 3 columns they should all
+sit side-by-side, sizing to content — flag if they overflow/clip horizontally, since
+scroll-pane only sets overflow-y). (b) a column whose rows are wider than its share
+→ horizontal clip (no overflow-x set; left as-is, cosmetic).
 
 **Discipline:** the cell/preset model is load-bearing and this file is 2640 lines
 under the stale-read hook — every model field MUST be verified against fetched

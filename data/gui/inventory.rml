@@ -25,11 +25,11 @@
                 <div class="inv-stat" data-for="s : stats" data-rml="s.text_rml"></div>
             </div>
         </div>
+        <!-- SLICE 2b: visible columns side-by-side. Each column's rows are baked
+             into col.html (one <div class="inv-row ..."> per row, category/selected
+             via class) so this stays a flat data-for; nested data-for is avoided. -->
         <div class="inv-list scroll-pane">
-            <div class="inv-row" data-for="row : rows"
-                 data-class-category="row.is_category"
-                 data-class-selected="row.selected"
-                 data-rml="row.text_rml"></div>
+            <div class="inv-col" data-for="col : columns" data-rml="col.html"></div>
         </div>
         <div class="inv-footer" data-rml="footer_rml"></div>
     </div>

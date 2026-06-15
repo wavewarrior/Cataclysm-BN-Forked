@@ -61,6 +61,13 @@ struct inv_rml_row_model {
     bool selected = false;
 };
 
+// One visible inventory_column, rendered side-by-side (slice 2b). The rows are
+// baked into a single finished-markup string (each row a <div class="inv-row ...">)
+// so the list is a flat data-for over columns — nested data-for is avoided.
+struct inv_col_model {
+    Rml::String html;
+};
+
 bool g_inv_rml_types_registered = false;
 
 void register_inv_rml_types( Rml::DataModelConstructor &c )
@@ -73,6 +80,9 @@ void register_inv_rml_types( Rml::DataModelConstructor &c )
     rh.RegisterMember( "is_category", &inv_rml_row_model::is_category );
     rh.RegisterMember( "selected", &inv_rml_row_model::selected );
     c.RegisterArray<Rml::Vector<inv_rml_row_model>>();
+    Rml::StructHandle<inv_col_model> ch = c.RegisterStruct<inv_col_model>();
+    ch.RegisterMember( "html", &inv_col_model::html );
+    c.RegisterArray<Rml::Vector<inv_col_model>>();
     g_inv_rml_types_registered = true;
 }
 } // namespace
@@ -83,7 +93,8 @@ struct inventory_rml_state {
     Rml::String title_rml;
     Rml::String hint_rml;
     Rml::String footer_rml;
-    Rml::Vector<inv_rml_row_model> rows;
+    // Visible columns laid out side-by-side; each holds its rows as baked markup.
+    Rml::Vector<inv_col_model> columns;
     // Stats header lines (weight/volume), reusing the row model for its text_rml.
     Rml::Vector<inv_rml_row_model> stats;
     Rml::DataModelHandle handle;
@@ -1781,7 +1792,7 @@ void inventory_selector::rml_open()
         c.Bind( "title_rml", &st->title_rml );
         c.Bind( "hint_rml", &st->hint_rml );
         c.Bind( "footer_rml", &st->footer_rml );
-        c.Bind( "rows", &st->rows );
+        c.Bind( "columns", &st->columns );
         c.Bind( "stats", &st->stats );
         st->handle = c.GetModelHandle();
     } );
@@ -1797,18 +1808,24 @@ void inventory_selector::rml_sync() const
     st->hint_rml = cata_text_to_rml( colorize( hint, c_dark_gray ) );
     const std::pair<std::string, nc_color> f = get_footer( mode );
     st->footer_rml = cata_text_to_rml( colorize( f.first, f.second ) );
-    // Flatten visible columns into one scrolling list (multi-column side-by-side
-    // layout is deferred to a later slice). Each column's selected row carries the
-    // cursor highlight (only the active column reports selected=true).
-    st->rows.clear();
+    // Lay visible columns out side-by-side (slice 2b). Each column's rows are baked
+    // into one markup string (a <div class="inv-row ..."> per row) so the RML is a
+    // flat data-for over columns. The category/selected styling rides CSS classes;
+    // only the active column reports selected=true (cursor highlight).
+    st->columns.clear();
     for( const inventory_column *col : get_visible_columns() ) {
+        inv_col_model cm;
         for( const inv_rml_row &r : col->rml_rows() ) {
-            inv_rml_row_model m;
-            m.text_rml = r.text;
-            m.is_category = r.is_category;
-            m.selected = r.selected;
-            st->rows.push_back( m );
+            std::string cls = "inv-row";
+            if( r.is_category ) {
+                cls += " category";
+            }
+            if( r.selected ) {
+                cls += " selected";
+            }
+            cm.html += "<div class=\"" + cls + "\">" + r.text + "</div>";
         }
+        st->columns.push_back( cm );
     }
     // Stats header (weight/volume), right-aligned — mirrors draw_header's
     // display_stats branch. Each get_stats() line already carries per-segment
@@ -1824,7 +1841,7 @@ void inventory_selector::rml_sync() const
     st->handle.DirtyVariable( "title_rml" );
     st->handle.DirtyVariable( "hint_rml" );
     st->handle.DirtyVariable( "footer_rml" );
-    st->handle.DirtyVariable( "rows" );
+    st->handle.DirtyVariable( "columns" );
     st->handle.DirtyVariable( "stats" );
 }
 
