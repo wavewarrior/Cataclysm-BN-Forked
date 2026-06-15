@@ -3670,15 +3670,29 @@ std::string options_manager::show( bool ingame, const bool world_options_only,
         const Page &page = pages_[iCurrentPage];
         const std::vector<PageItem> &page_items = page.items_;
 
-        // Page tabs (mirrors the curses header; ingame relabels the world page).
+        // Tab strip. World-options-only mode (worldfactory wizard) shows the 3 worldgen
+        // steps with "World Options" current (render-only — mirrors draw_worldgen_tabs;
+        // wizard nav is keyboard). Otherwise the page tabs (ingame relabels world page).
         data->tabs.clear();
-        for( int i = 0; i < static_cast<int>( pages_.size() ); i++ ) {
-            opt_rml_tab t;
-            std::string nm = ( ingame && i == iWorldOptPage ) ? _( "Current world" ) :
-                             pages_[i].name_.translated();
-            t.name_rml = cata_text_to_rml( colorize( nm, c_light_green ) );
-            t.selected = i == iCurrentPage;
-            data->tabs.push_back( t );
+        if( world_options_only ) {
+            const std::vector<std::string> steps = {
+                _( "World Mods" ), _( "World Options" ), _( "Finalize World" )
+            };
+            for( size_t i = 0; i < steps.size(); i++ ) {
+                opt_rml_tab t;
+                t.name_rml = cata_text_to_rml( colorize( steps[i], c_light_green ) );
+                t.selected = i == 1;
+                data->tabs.push_back( t );
+            }
+        } else {
+            for( int i = 0; i < static_cast<int>( pages_.size() ); i++ ) {
+                opt_rml_tab t;
+                std::string nm = ( ingame && i == iWorldOptPage ) ? _( "Current world" ) :
+                                 pages_[i].name_.translated();
+                t.name_rml = cata_text_to_rml( colorize( nm, c_light_green ) );
+                t.selected = i == iCurrentPage;
+                data->tabs.push_back( t );
+            }
         }
 
         // Visible entries (collapsed groups hide their members) → flat row list.
@@ -3733,7 +3747,7 @@ std::string options_manager::show( bool ingame, const bool world_options_only,
             }
         }
     };
-    rml.open( options_rmlui_enabled() && !world_options_only, "options", ctxt,
+    rml.open( options_rmlui_enabled(), "options", ctxt,
     [&]( Rml::DataModelConstructor & c ) {
         data = std::make_unique<opt_rml_session>();
         register_options_rml_types( c );
@@ -3742,6 +3756,12 @@ std::string options_manager::show( bool ingame, const bool world_options_only,
         c.Bind( "tooltip_rml", &data->tooltip_rml );
         c.BindEventCallback( "on_tab",
         [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            // In world_options_only mode the tab strip shows the worldgen wizard
+            // steps (render-only; navigation is keyboard PREV_TAB/NEXT_TAB → returns
+            // to worldfactory). Clicks must not switch options pages.
+            if( world_options_only ) {
+                return;
+            }
             int idx = -1;
             if( !args.empty() ) {
                 args[0].GetInto( idx );

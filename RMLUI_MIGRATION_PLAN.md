@@ -1012,9 +1012,21 @@ collapse).
 2. **Slice 2 — `world_options_only==true`:** worldgen-tab chrome
    (`worldfactory::draw_worldgen_tabs`) + `on_quit`; the piece worldfactory reuses.
 
-**SLICE 1 — CODE-COMPLETE + BUILD-GREEN (options.cpp + rml_screen.h + devui compile +
-LINK clean; options.cpp.o + binary fresh-relinked 12:16), TOGGLE OFF, EYEBALL OWED,
-UNCOMMITTED.** 12th `rml_doc`-style consumer; first Tier-4 screen. Adapts the
+**SLICE 1 — DONE + EYEBALLED CLEAN (user 2026-06-15, "great"), COMMITTED. TOGGLE OFF.**
+12th `rml_doc`-style consumer; first Tier-4 screen. Post-eyeball fixes folded into the
+commit: (a) **missing `body` rule** (the omission caused all 3 first-eyeball symptoms —
+no body width → panel shrink-wrapped to tab content (width shifted per tab); no body
+height → `.opt-list flex:1` collapsed to 0 → lists looked unpopulated; no centering)
+→ added `body{display:flex;justify-content:center;align-items:center;width/height:100%}`
+mirroring construction.rcss, panel `width:80%`+`min-width:720dp`; (b) `.opt-tabs .tab
+{flex:0 0 auto}` so page tabs size to content (theme `.tab` flex:1 truncated "World
+Defaults" etc.); (c) **keyboard scroll-follow** — UP/DOWN/tab set `rml_scroll_pending`
+→ sync_rml `ScrollIntoView(ScrollAlignment::Nearest)` on the selected `#opt-list` child
+(keyboard only — mouse/wheel not fought). ALSO shipped a **global F4 "RmlUi UI scale"
+slider** (`rmlui_layer::ui_scale`, 0.5–1.5, default 1.0) multiplying the context
+dp-ratio → scales font + dp spacing across ALL RmlUi panels live; `g_density_ratio`
+kept as the true physical/logical ratio so input/hit-testing is unaffected (the font
+was reported slightly too large). Adapts the
 `construction` template (tabs+list+detail). `data/gui/options.{rml,rcss}` model
 "options". STRUCTURAL POINTS: (1) gate = `options_rmlui_enabled() && !world_options_only`
 → slice 1 lights ONLY standalone; world-options-only stays curses (slice 2). (2)
@@ -1046,6 +1058,31 @@ text keeps its baked colour over the yellow `.selected` bg — confirm readable 
 `>>` is the backup selection cue). (b) **D3D12 (Win11) first-of-Tier-4 glance** — first
 Tier-4 dynamic doc on the primary target. (c) the world page (in-game `show(true)`)
 relabels to "Current world" + shows the red note.
+
+**SLICE 2 — world_options_only mode (worldfactory wizard step) — CODE-COMPLETE +
+BUILD-GREEN (options.cpp compile + LINK clean; options.cpp.o + binary fresh 15:03),
+TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.** Lights the `world_options_only==true` path
+(`worldfactory::show_worldgen_tab_options` → `get_options().show(false,true,on_quit)`).
+SMALL — the option list + tooltip already render the `world_default` page (sync_rml's
+`cOPTIONS` already keys `(ingame||world_options_only)&&iCurrentPage==iWorldOptPage` →
+`ACTIVE_WORLD_OPTIONS`). Three changes: (1) gate dropped the `&& !world_options_only`
+→ `rml.open(options_rmlui_enabled())` lights both modes (same toggle). (2) sync_rml tab
+strip branches: world mode renders the 3 worldgen wizard steps ("World Mods" / **"World
+Options"** current / "Finalize World"), mirroring `draw_worldgen_tabs(w,1)` — RENDER-ONLY
+(wizard nav is keyboard PREV_TAB/NEXT_TAB, which `show` returns to worldfactory at
+options.cpp's `world_options_only` early-return → `show_worldgen_tab_options` maps to
+-1/+1/-999). (3) `on_tab` no-ops in world mode (clicks must not switch options pages —
+there's one). No new toggle (the wizard step rides the options toggle). The OTHER wizard
+steps (mods / finalize / world-name) stay curses → they migrate with **worldfactory
+(Tier 4 #2)**, which will own the real worldgen-tab component; this slice just gets the
+options step onto RmlUi. **EYEBALL CHECK (user, A/B via F4 "options via RmlUi"):** New
+World → advance to the **World Options** wizard step — the option list + tooltip render
+in RmlUi (same two-column rows as standalone), the tab strip shows the 3 worldgen steps
+with "World Options" highlighted; LEFT/RIGHT/CONFIRM edit world options; PREV_TAB →
+back to Mods (curses), NEXT_TAB → Finalize (curses), QUIT aborts; the edited world
+options take effect on the new world. **WATCH:** (a) the worldgen tab strip is
+render-only — clicking a step does nothing (wizard is keyboard); (b) stepping
+RmlUi-options → curses-mods and back is clean (doc opens/closes per `show` call).
 
 ## Load-bearing architecture facts (verified this session)
 
