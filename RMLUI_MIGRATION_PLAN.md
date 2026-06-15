@@ -884,7 +884,11 @@ red-overflow rules; `.selected` highlight on the active (`src`) pane's cursor ro
 `aim_pane_head_html(pane,active,squares)` (the INVENTORY/WORN carried-vs-capacity head
 OR the square weight/vol head incl. AIM_ALL + container/vehicle/map maxvolume). Opened
 in `display()` under `if(!is_processing())`; `sync_rml()` rebuilds all six strings each
-redraw (active pane = `src`); on_redraw `if(rml){sync_rml();return;}` else curses.
+redraw (active pane = `src`); on_redraw `if(rml){<prep>;sync_rml();return;}` else curses.
+**FIX (`0f42b65261`, first eyeball: both lists rendered EMPTY):** the rml branch returned
+before `redraw_pane`, so its `recalc_pane` + `fix_index` prep never ran and `pane.items`
+stayed empty. The rml branch now runs that same per-pane prep (gated `recalc||pane.recalc`
++ `fix_index`) before `sync_rml`. Re-eyeball.
 `advinv.{rml,rcss}`: `.panel` root → flex row of two `.aim-pane` (divider between) →
 phead (title left / capacity right) + `.aim-list` scroll-pane (data-rml the baked rows).
 New toggle `advanced_inv_rmlui_enabled()` + F4 "advanced inventory via RmlUi". rml_doc
