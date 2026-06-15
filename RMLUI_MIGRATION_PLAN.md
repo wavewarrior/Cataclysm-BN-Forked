@@ -600,8 +600,9 @@ toggle on. This restores the exact toggle→eyeball-ONE→commit→light-next rh
 Only after all slices ON + eyeballed does the family (game_inventory, then
 advanced_inv) follow.
 
-**SLICE 1 — CODE-COMPLETE + BUILD-GREEN (inventory_ui.{h,cpp} + devui compile +
-LINK clean), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED→committed.** Mechanism shipped:
+**SLICE 1 — DONE + EYEBALLED CLEAN (user 2026-06-15; foundation confirmed —
+reopen-test + rows + colours all good), TOGGLE OFF, COMMITTED (`31d524a9db` +
+`bd913226e0`).** Mechanism shipped:
 (1) **per-subclass gate** — `virtual inventory_selector::uses_rml()` (default false;
 private virtual, override-able), overridden by `inventory_pick_selector::uses_rml()`
 → `inventory_rmlui_enabled()`. The other 5 selectors stay curses even with the
@@ -634,6 +635,32 @@ item symbol glyph now included (identifying content, not cosmetic); denied items
 show only cell[0] + red reason (matches curses `count=1`, avoids layout collision).
 **WATCH:** flattened columns (character vs map items stack instead of side-by-side —
 expected this slice); keyboard-only (mouse won't select — expected).
+
+**SLICE 2 — stats header — CODE-COMPLETE + BUILD-GREEN (inventory_ui.cpp compile +
+LINK clean, verified fresh obj+bin mtime), TOGGLE OFF (rides slice-1 "inventory
+(pick) via RmlUi"), EYEBALL OWED, UNCOMMITTED.** Adds the weight/volume stats block
+to the slice-1 doc. Additive + small: (1) model gains a 2nd `Rml::Vector<inv_rml_row_model>
+stats` (REUSES the slice-1 row struct for its `text_rml` — no new registered type),
+bound in `rml_open`. (2) `rml_sync` fills it from `get_stats()` under the same
+`display_stats` guard the curses `draw_header` uses; each line already carries
+per-segment colour tags so it's wrapped in the `c_dark_gray` base via
+`cata_text_to_rml(colorize(elem,c_dark_gray))` — the exact title/hint/footer idiom
++ DirtyVariable("stats"). Empty vector when `display_stats` off → right block
+collapses. (3) `inventory.rml`: header split into `.inv-header` (flex row) =
+`.inv-header-text` (title+hint, left) + `.inv-stats` (`data-for s : stats`
+`data-rml="s.text_rml"`, right). (4) `inventory.rcss`: `.inv-header` is the
+space-between flex row and now OWNS the full-width separator border (moved off
+`.inv-hint`, so it spans like the curses hline); `.inv-stats` is a right-aligned
+(`align-items:flex-end`) flex column; `.inv-stat` is `display:block white-space:pre
+text-align:right`. `display_stats=true` by default + pick selector doesn't override
+`get_raw_stats` → stats ALWAYS show on the pick path (slice 2 is testable). **EYEBALL
+CHECK (user, A/B via F4):** open a pick inventory — weight + volume stats appear
+TOP-RIGHT of the header (right-aligned), values coloured (red when over capacity,
+light-gray normal), matching the curses right_print block; title/hint still top-left;
+the separator line spans the full header width; list/footer unchanged from slice 1.
+**WATCH:** stats are space-padded internally for cell alignment (`get_stats()` pads to
+max cell width) → `white-space:pre` preserves it; if the two lines don't column-align
+vs curses, the monospace assumption broke.
 
 **Discipline:** the cell/preset model is load-bearing and this file is 2640 lines
 under the stale-read hook — every model field MUST be verified against fetched

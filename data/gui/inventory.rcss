@@ -16,6 +16,37 @@ body {
     flex-direction: column;
 }
 
+/* Header: title/hint left, weight/volume stats right (slice 2). The separator
+   line under the whole header lives here so it spans full width (curses hline). */
+.inv-header {
+    flex: 0 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 4dp;
+    padding-bottom: 4dp;
+    border-bottom: 1dp #5a5a78ff;
+}
+.inv-header-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+.inv-stats {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    margin-left: 12dp;
+}
+.inv-stat {
+    display: block;
+    white-space: pre;
+    text-align: right;
+    color: #9a9ab0ff;
+}
+
 .inv-title {
     flex: 0 0 auto;
     color: #ffffffff;
@@ -23,9 +54,6 @@ body {
 .inv-hint {
     flex: 0 0 auto;
     color: #9a9ab0ff;
-    margin-bottom: 4dp;
-    padding-bottom: 4dp;
-    border-bottom: 1dp #5a5a78ff;
 }
 
 .inv-list {

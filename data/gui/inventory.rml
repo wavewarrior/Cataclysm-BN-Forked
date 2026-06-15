@@ -12,8 +12,19 @@
          column's selected row gets the cursor highlight. Keyboard owns all input
          (the existing execute() loop); mouse-select is deferred to a later slice. -->
     <div class="panel inv-panel">
-        <div class="inv-title" data-rml="title_rml"></div>
-        <div class="inv-hint" data-rml="hint_rml"></div>
+        <!-- SLICE 2: stats header. Title/hint on the left, the weight/volume
+             stats block right-aligned on the right (mirrors draw_header's
+             display_stats right_print). Stats vector is empty when display_stats
+             is off, so the right block collapses. -->
+        <div class="inv-header">
+            <div class="inv-header-text">
+                <div class="inv-title" data-rml="title_rml"></div>
+                <div class="inv-hint" data-rml="hint_rml"></div>
+            </div>
+            <div class="inv-stats">
+                <div class="inv-stat" data-for="s : stats" data-rml="s.text_rml"></div>
+            </div>
+        </div>
         <div class="inv-list scroll-pane">
             <div class="inv-row" data-for="row : rows"
                  data-class-category="row.is_category"

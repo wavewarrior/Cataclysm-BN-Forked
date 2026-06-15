@@ -84,6 +84,8 @@ struct inventory_rml_state {
     Rml::String hint_rml;
     Rml::String footer_rml;
     Rml::Vector<inv_rml_row_model> rows;
+    // Stats header lines (weight/volume), reusing the row model for its text_rml.
+    Rml::Vector<inv_rml_row_model> stats;
     Rml::DataModelHandle handle;
 };
 
@@ -1780,6 +1782,7 @@ void inventory_selector::rml_open()
         c.Bind( "hint_rml", &st->hint_rml );
         c.Bind( "footer_rml", &st->footer_rml );
         c.Bind( "rows", &st->rows );
+        c.Bind( "stats", &st->stats );
         st->handle = c.GetModelHandle();
     } );
 }
@@ -1807,10 +1810,22 @@ void inventory_selector::rml_sync() const
             st->rows.push_back( m );
         }
     }
+    // Stats header (weight/volume), right-aligned — mirrors draw_header's
+    // display_stats branch. Each get_stats() line already carries per-segment
+    // colour tags; wrap in the c_dark_gray base like the curses right_print.
+    st->stats.clear();
+    if( display_stats ) {
+        for( const std::string &elem : get_stats() ) {
+            inv_rml_row_model m;
+            m.text_rml = cata_text_to_rml( colorize( elem, c_dark_gray ) );
+            st->stats.push_back( m );
+        }
+    }
     st->handle.DirtyVariable( "title_rml" );
     st->handle.DirtyVariable( "hint_rml" );
     st->handle.DirtyVariable( "footer_rml" );
     st->handle.DirtyVariable( "rows" );
+    st->handle.DirtyVariable( "stats" );
 }
 
 void inventory_selector::set_filter()
