@@ -56,6 +56,9 @@
 #include "ranged.h"
 #include "recipe.h"
 #include "recipe_dictionary.h"
+#include <RmlUi/Core.h>
+#include "rml_screen.h"
+#include "rml_util.h"
 #include "rng.h"
 #include "scenario.h"
 #include "sdltiles.h"
@@ -781,6 +784,73 @@ void draw_sorting_indicator( const catacurses::window &w_sorting, const input_co
     fold_and_print( w_sorting, point_zero, ( TERMX / 2 ), c_light_gray, sort_text );
 }
 
+// --- RmlUi render path (Tier 4 screen #4: new-character creator, sliced) -----
+// One toggle lights every character-creation tab; each tab's on_redraw guards
+// `if(rml){sync_rml();return;}` (slice 1 = the POINTS tab, set_points). Each tab
+// renders its own character-tab strip in its doc (the worldfactory precedent —
+// the strip is 3-render-only bound tabs per doc, no shared component yet).
+namespace
+{
+struct nc_rml_tab {
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct nc_points_opt {
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct nc_points_session {
+    Rml::Vector<nc_rml_tab> tabs;
+    Rml::String points_rml;
+    Rml::Vector<nc_points_opt> opts;
+    Rml::String desc_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_nc_points_types_registered = false;
+
+void register_nc_points_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_nc_points_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<nc_rml_tab> th = c.RegisterStruct<nc_rml_tab>();
+    th.RegisterMember( "name_rml", &nc_rml_tab::name_rml );
+    th.RegisterMember( "selected", &nc_rml_tab::selected );
+    c.RegisterArray<Rml::Vector<nc_rml_tab>>();
+    Rml::StructHandle<nc_points_opt> oh = c.RegisterStruct<nc_points_opt>();
+    oh.RegisterMember( "name_rml", &nc_points_opt::name_rml );
+    oh.RegisterMember( "selected", &nc_points_opt::selected );
+    c.RegisterArray<Rml::Vector<nc_points_opt>>();
+    g_nc_points_types_registered = true;
+}
+
+// The 8 character-creation tab captions (mirrors draw_character_tabs); `active`
+// is the index of the current tab (POINTS=0). name_rml is the escaped caption;
+// theme `.tab`/`.tab.selected` does the colouring.
+Rml::Vector<nc_rml_tab> build_nc_char_tabs( int active )
+{
+    const std::vector<std::string> caps = {
+        _( "POINTS" ), _( "SCENARIO" ), _( "PROFESSION" ), _( "STATS" ),
+        _( "TRAITS" ), _( "BIONICS" ), _( "SKILLS" ), _( "OVERVIEW" ),
+    };
+    Rml::Vector<nc_rml_tab> tabs;
+    for( int i = 0; i < static_cast<int>( caps.size() ); i++ ) {
+        nc_rml_tab t;
+        t.name_rml = cata_text_to_rml( caps[i] );
+        t.selected = ( i == active );
+        tabs.push_back( t );
+    }
+    return tabs;
+}
+} // namespace
+
+bool &newcharacter_rmlui_enabled()
+{
+    static bool enabled = false;
+    return enabled;
+}
+
 tab_direction set_points( avatar &, points_left &points )
 {
     tab_direction retval = tab_direction::NONE;
@@ -831,7 +901,39 @@ tab_direction set_points( avatar &, points_left &points )
 
     int highlighted = 0;
 
+    // RmlUi render path (render-only; keyboard still owns nav/confirm below).
+    auto data = std::make_unique<nc_points_session>();
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !data->handle ) {
+            return;
+        }
+        const int sel = std::max( 0, std::min( highlighted,
+                                  static_cast<int>( opts.size() ) - 1 ) );
+        data->tabs = build_nc_char_tabs( 0 ); // POINTS tab active
+        data->points_rml = cata_text_to_rml( points.to_string() );
+        data->opts.clear();
+        for( int i = 0; i < static_cast<int>( opts.size() ); i++ ) {
+            nc_points_opt o;
+            const bool chosen = ( points.limit == std::get<0>( opts[i] ) );
+            o.name_rml = cata_text_to_rml( colorize( std::get<1>( opts[i] ),
+                                           chosen ? COL_SKILL_USED : c_light_gray ) );
+            o.selected = ( sel == i );
+            data->opts.push_back( o );
+        }
+        data->desc_rml = cata_text_to_rml( colorize( std::get<2>( opts[sel] ),
+                                           COL_SKILL_USED ) );
+        data->handle.DirtyVariable( "tabs" );
+        data->handle.DirtyVariable( "points_rml" );
+        data->handle.DirtyVariable( "opts" );
+        data->handle.DirtyVariable( "desc_rml" );
+    };
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         draw_character_tabs( w, _( "POINTS" ) );
 
         const auto &cur_opt = opts[highlighted];
@@ -854,6 +956,16 @@ tab_direction set_points( avatar &, points_left &points )
 
         wnoutrefresh( w );
         wnoutrefresh( w_description );
+    } );
+
+    rml.open( newcharacter_rmlui_enabled(), "newcharpoints", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        register_nc_points_rml_types( c );
+        c.Bind( "tabs", &data->tabs );
+        c.Bind( "points_rml", &data->points_rml );
+        c.Bind( "opts", &data->opts );
+        c.Bind( "desc_rml", &data->desc_rml );
+        data->handle = c.GetModelHandle();
     } );
 
     do {

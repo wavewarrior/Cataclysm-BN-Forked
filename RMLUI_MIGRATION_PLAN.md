@@ -1329,6 +1329,70 @@ QUIT→"Really quit?" (needs query_popup toggle, per invariant 6). **WATCH:** lo
 centering/scale + menu spacing + inline-submenu placement vs the curses floating box —
 expect layout iteration.
 
+### Tier 4 screen #4: newcharacter (`newcharacter.cpp`, 4337) — MULTI-SCREEN SUB-PROJECT
+
+The biggest + most-coupled Tier-4 screen, plan's explicit LAST. **Architecture (verified
+2026-06-16):** the creator is a WIZARD of 8 tabs driven by `avatar::create` (486) — a
+`do/while` over `tab` (0-7) that calls each tab fn and steps on its returned
+`tab_direction` (FORWARD/BACKWARD/QUIT/NONE). Tab order (driver switch):
+0 set_points / 1 set_scenario / 2 set_profession / 3 set_stats / 4 set_traits /
+5 set_bionics / 6 set_skills / 7 set_description. **Each tab fn owns its OWN
+`ui_adaptor` + `on_redraw` + `input_context` + nested input loop** and draws the shared
+`draw_character_tabs(w, sTab)` strip (735) + the points line (`draw_points`, 757) + its
+body. So each tab fits the harness INDEPENDENTLY — exactly the worldfactory wizard
+shape: each tab's RmlUi doc renders its OWN character-tab strip (the worldfactory
+per-doc-strip precedent; no shared strip component yet — revisit if a cleaner 3rd
+consumer appears), the driver's own strip is occluded and dies at rip-out.
+
+**Gate:** ONE `newcharacter_rmlui_enabled()` toggle, lit PER-TAB (each on_redraw guards
+`if(rml){sync_rml();return;}`), like worldfactory/inventory. Light one tab per slice;
+the rest stay curses even with the toggle on. **Invariant 6 applies hard here** — every
+tab's PREV_TAB/QUIT fires a `query_yn("Return to main menu?")`, so A/B requires the
+query_popup toggle ON too, else the confirm is invisible.
+
+**Slices (simplest→hardest; each its own commit + eyeball):**
+1. **set_points** (POINTS tab) — char-tab strip + points line + 1-3 pool options
+   (Multiple/Single/Freeform; cursor + chosen-pool green) + description pane. Smallest;
+   proves the toggle + char-tab-strip-in-doc + points-line.
+2. **set_stats** — 4 stats with +/- and a live description/effects pane.
+3. **set_skills** — skills list (level +/-) + description.
+4. **set_traits** — good/bad trait columns + description + points interplay.
+5. **set_bionics** — CBM list + description.
+6. **set_scenario** — scenario list + description + flags/professions/start-location.
+7. **set_profession** — profession list + description + items/skills/addictions sub-panes
+   (heaviest list tab).
+8. **set_description** — the OVERVIEW form: name/gender/height/age/blood + scenario/
+   profession summary + reroll/save (most fields; last).
+
+**SLICE 1 (set_points) — CODE-COMPLETE + BUILD-GREEN (newcharacter.cpp.o 11:13:32 +
+binary relinked 11:13:35, 0 errors; 128 warnings = RmlUi vendored-header old-style-cast
+noise from `<RmlUi/Core.h>`, same as worldfactory), TOGGLE OFF, EYEBALL OWED,
+UNCOMMITTED.** New `newcharacter_rmlui_enabled()` toggle (one for the whole creator,
+gated per-tab) + `data/gui/newcharpoints.{rml,rcss}` model "newcharpoints" + F4 "new
+character" checkbox (System menus group). `set_points` gets a render-only RmlUi path:
+anon-ns `nc_points_session` (8-tab strip `tabs` + `points_rml` + `opts` + `desc_rml`) +
+`build_nc_char_tabs(active)` helper (the 8 translated captions, POINTS=0 selected,
+shared by later tabs) + `register_nc_points_rml_types` + `rml_doc rml` + `sync_rml`
+(rebuilds all four each redraw: points via `points.to_string()`, each opt name baked
+green when chosen via `colorize(...,COL_SKILL_USED)` else light_gray, `selected`=cursor,
+desc = highlighted opt's text). on_redraw `if(rml){sync_rml();return;}` else curses;
+`rml.open` after the ctxt/on_redraw, before the loop; rml_doc dtor tears down at the
+single return. STRUCTURAL POINTS: (1) clones the worldfinalize template (sized+centered
+body, `.tab{flex:0 0 auto}` so 8 captions size to content, `.nc-opt{display:block}` for
+the inline-row gotcha). (2) cursor `.selected` (CSS accent) + chosen-pool colour baked
+into the text — both cues, mirroring options/mutations. (3) keyboard still owns
+UP/DOWN/CONFIRM/NEXT_TAB/PREV_TAB/QUIT untouched; render-only doc. F4 toggle "new
+character" (OFF). **EYEBALL CHECK (user, A/B via F4 — needs query_popup toggle ON too,
+invariant 6):** New Game → Custom Character → POINTS tab: char-tab strip shows the 8
+steps with POINTS current; the points line shows the pool totals; the pool options
+(Multiple pools / Single pool / Freeform, per CHARACTER_POINT_POOLS) list with the
+CHOSEN pool green and the cursor row highlighted; UP/DOWN move the cursor; CONFIRM sets
+the pool (green moves); the description pane tracks the highlighted option; NEXT_TAB →
+Scenario (curses, until slice 6); PREV_TAB/QUIT → "Return to main menu?" confirm (RmlUi
+popup if query_popup ON). **WATCH:** (a) only ONE option exists when point_pool ==
+"multi_pool" (list shows a single row — expected). (b) the other 7 tabs stay curses
+(gate proof). (c) first newcharacter dynamic doc — D3D12 (Win11) glance warranted.
+
 ## Load-bearing architecture facts (verified this session)
 
 - **Single curses chokepoint:** every non-map window renders through

@@ -153,4 +153,9 @@ bool &worldfactory_rmlui_enabled();
 // main_menu::opening_screen() RmlUi path (Tier 4 screen #3: the title screen).
 bool &main_menu_rmlui_enabled();
 
+// avatar::create() new-character creator RmlUi path (Tier 4 screen #4, sliced).
+// One toggle lights all 8 character-creation tabs, gated per-tab (slice 1 = the
+// POINTS tab, set_points).
+bool &newcharacter_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H
