@@ -59,6 +59,15 @@ bool   g_shadow_debug = false;
 uint32_t g_current_dbg_mode = 0u;
 float g_skylight_bleed = 0.5f;
 float g_vision_blur = 1.5f;
+// Hover-outline (HOVER_OUTLINE_PLAN.md) — CPU-side, no shader cbuffer.
+bool  g_outline_enable    = true;
+float g_outline_thickness = 0.06f;   // ring radius as fraction of tile width
+float g_outline_alpha     = 1.0f;
+float g_outline_alpha_cut = 0.6f;    // silhouette mask cutoff (drops baked shadows)
+float g_outline_col_hostile[4]  = { 1.00f, 0.24f, 0.24f, 1.0f };
+float g_outline_col_neutral[4]  = { 1.00f, 0.86f, 0.24f, 1.0f };
+float g_outline_col_friendly[4] = { 0.31f, 0.90f, 0.31f, 1.0f };
+float g_outline_col_self[4]     = { 0.31f, 0.86f, 1.00f, 1.0f };
 
 namespace menu_emitter_tuning
 {
@@ -303,6 +312,17 @@ static void draw_effects_tab()
     ImGui::SeparatorText( "Foliage sway" );
     dbg_slider( "sway amplitude", &g_dbg_params.sway_amp, 0.0f, 8.0f, "%.1f px" );
     dbg_slider( "sway frequency", &g_dbg_params.sway_freq, 0.0f, 3.0f, "%.1f Hz" );
+
+    ImGui::SeparatorText( "Hover outline" );
+    ImGui::Checkbox( "outline enable", &g_outline_enable );
+    dbg_slider( "outline thickness", &g_outline_thickness, 0.0f, 0.25f, "%.3f" );
+    dbg_slider( "outline alpha", &g_outline_alpha, 0.0f, 1.0f );
+    dbg_slider( "outline mask cut", &g_outline_alpha_cut, 0.0f, 1.0f );
+    const ImGuiColorEditFlags ocf = ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoAlpha;
+    dbg_color( "hostile", g_outline_col_hostile, ocf );
+    dbg_color( "neutral", g_outline_col_neutral, ocf );
+    dbg_color( "friendly", g_outline_col_friendly, ocf );
+    dbg_color( "self (player)", g_outline_col_self, ocf );
 }
 
 // F4 "Animation" tab: live sprite-animation tuning (movement bob/slide, idle

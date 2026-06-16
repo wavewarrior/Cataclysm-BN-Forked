@@ -2978,6 +2978,10 @@ bool game::handle_mouseview( input_context &ctxt, std::string &action )
         action = ctxt.handle_input();
         if( action == "MOUSE_MOVE" ) {
             const std::optional<tripoint_bub_ms> mouse_pos = ctxt.get_coordinates( w_terrain );
+            // Hover-outline: the creature under the cursor (if any) gets a ring.
+            if( tilecontext ) {
+                tilecontext->set_hover_tile( mouse_pos );
+            }
             if( mouse_pos && ( !liveview_pos || *mouse_pos != *liveview_pos ) ) {
                 liveview_pos = mouse_pos;
                 liveview.show( *liveview_pos );
@@ -2992,6 +2996,10 @@ bool game::handle_mouseview( input_context &ctxt, std::string &action )
     if( action != "TIMEOUT" ) {
         // Keyboard event, break out of animation loop
         liveview.hide();
+        // Hover-outline: clear once the player switches to the keyboard.
+        if( tilecontext ) {
+            tilecontext->set_hover_tile( std::nullopt );
+        }
         return false;
     }
 

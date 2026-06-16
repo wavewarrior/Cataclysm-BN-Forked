@@ -70,6 +70,7 @@
 #include "player.h"
 #include "rect_range.h"
 #include "scent_map.h"
+#include "sdl_lighting_devui.h"
 #include "sdl_utils.h"
 #include "sdl_wrappers.h"
 #include "sdltiles.h"
@@ -2985,11 +2986,28 @@ static int divide_round_down( int a, int b )
 // (avoids re-reading 14 options per creature). File-scope keeps creature.h's
 // animation_tuning type out of cata_tiles.h.
 static animation_tuning s_anim_tuning;
+// When set by the F4 "Animation" tab, the panel owns s_anim_tuning and we stop
+// clobbering it with the option values each frame (and force animations on).
+static bool s_anim_override = false;
+
+animation_tuning &debug_anim_tuning()
+{
+    return s_anim_tuning;
+}
+
+bool &debug_anim_override()
+{
+    return s_anim_override;
+}
 
 void cata_tiles::refresh_anim_frame()
 {
     creatures_anim_active_ = false;   // re-evaluated as creatures/tiles draw this frame
     anim_wall_now_ = static_cast<double>( SDL_GetTicks() ) / 1000.0;
+    if( s_anim_override ) {           // F4 live-tuning owns the struct; don't re-read options
+        anim_enabled_ = true;
+        return;
+    }
     anim_enabled_ = get_option<bool>( "SPRITE_ANIMATIONS" );
     if( !anim_enabled_ ) {
         return;
@@ -3093,6 +3111,11 @@ void cata_tiles::draw( point dest, const tripoint_bub_ms &center, int width, int
     }
     // Refresh the sprite-animation frame context (wall-clock + option tuning) once.
     refresh_anim_frame();
+
+    // Hover-outline: holding Alt outlines ALL visible creatures (not just the one
+    // under the cursor). Polled here since a bare modifier press may not trigger a
+    // redraw on its own — it takes effect on the next animation-timeout redraw.
+    outline_all_ = ( SDL_GetModState() & SDL_KMOD_ALT ) != 0;
 
     // Clear only tile sprites. UI/font queues are NOT cleared here so
     // partial UI redraws (tooltip, mouse-hover) still see sidebar content
@@ -4695,6 +4718,36 @@ void cata_tiles::draw_om_tile_recursively( const tripoint_abs_omt omp, const std
         ll, false, base_z_offset, false );
 }
 
+// Hover-outline (HOVER_OUTLINE_PLAN.md): after a creature's sprites are queued,
+// render_state::build_outline_ring splices offset silhouette copies of the whole
+// range behind them — one clean composite ring around body + worn items. Ring
+// thickness, alpha, enable and per-attitude colours are live F4 knobs (g_outline_*).
+
+// Hover-outline colour by attitude (reads the live F4 knobs). Self = the avatar.
+static SDL_Color outline_color_for( Attitude att, bool is_self )
+{
+    const float *c = g_outline_col_neutral;
+    if( is_self ) {
+        c = g_outline_col_self;
+    } else {
+        switch( att ) {
+            case Attitude::A_HOSTILE:
+                c = g_outline_col_hostile;
+                break;
+            case Attitude::A_FRIENDLY:
+                c = g_outline_col_friendly;
+                break;
+            case Attitude::A_NEUTRAL:
+            default:
+                c = g_outline_col_neutral;
+                break;
+        }
+    }
+    return SDL_Color{ static_cast<Uint8>( c[0] * 255.0f ),
+                      static_cast<Uint8>( c[1] * 255.0f ),
+                      static_cast<Uint8>( c[2] * 255.0f ), 255 };
+}
+
 bool cata_tiles::draw_sprite_at( const tile_type &tile, point_bub_ms p,
                                  unsigned int loc_rand, bool is_fg, int rota,
                                  const tint_config &tint, lit_level ll,
@@ -5817,6 +5870,17 @@ bool cata_tiles::draw_critter_at( const tripoint_bub_ms &p, lit_level ll, int &h
     if( ( !fov_3d && z_drop > 0 ) || fov_3d_z_range < z_drop ) {
         return false;
     }
+    // Hover-outline: should this creature get a silhouette ring? want_outline_ is
+    // a one-shot latch consumed by the first fg sprite enqueue in draw_sprite_at
+    // (so only the base sprite is outlined, not worn overlays). Reset on entry to
+    // avoid leaking onto terrain if a previous creature drew no fg sprite.
+    want_outline_ = false;
+    const bool do_outline = g_outline_enable &&
+                            ( outline_all_ || ( hover_tile_ && *hover_tile_ == p ) );
+    // Mark where this creature's sprites start so build_outline_ring can splice a
+    // composite silhouette behind the whole range (body + worn items).
+    const std::size_t outline_start =
+        do_outline ? lighting::get_render_state().tile_sprite_count() : 0;
     bool result;
     bool is_player;
     bool sees_player;
@@ -5834,6 +5898,10 @@ bool cata_tiles::draw_critter_at( const tripoint_bub_ms &p, lit_level ll, int &h
         const std::string &ent_subcategory = id.obj().species.empty() ?
                                              empty_string : id.obj().species.begin()->str();
         const tile_search_params tile = { chosen_id, C_MONSTER, ent_subcategory, corner, 0 };
+        if( do_outline ) {
+            want_outline_ = true;
+            outline_color_ = outline_color_for( attitude, false );
+        }
         result = draw_from_id_string(
                      tile, p, std::nullopt, std::nullopt,
                      lit_level::LIT, false, z_drop, false, height_3d );
@@ -5895,6 +5963,10 @@ bool cata_tiles::draw_critter_at( const tripoint_bub_ms &p, lit_level ll, int &h
                 // Sprite-animation transform for this monster (and its z-overlay).
                 // When deferred y-sort prefetched the xform, use that instead.
                 active_anim_xform_ = prefetch_valid_ ? prefetch_xform_ : compute_anim_xform( critter );
+                if( do_outline ) {
+                    want_outline_ = true;
+                    outline_color_ = outline_color_for( m->attitude_to( g->u ), false );
+                }
                 result = draw_from_id_string(
                              tile, p, bgCol, fgCol,
                              ll, false, z_drop, false, height_3d );
@@ -5905,6 +5977,12 @@ bool cata_tiles::draw_critter_at( const tripoint_bub_ms &p, lit_level ll, int &h
         }
         const player *pl = dynamic_cast<const player *>( &critter );
         if( pl != nullptr ) {
+            if( do_outline ) {
+                const bool self = pl->is_player();
+                want_outline_ = true;
+                outline_color_ = outline_color_for(
+                                     self ? Attitude::A_ANY : pl->attitude_to( g->u ), self );
+            }
             draw_entity_with_overlays( *pl, p, ll, height_3d );
             result = true;
             if( pl->is_player() ) {
@@ -5928,6 +6006,19 @@ bool cata_tiles::draw_critter_at( const tripoint_bub_ms &p, lit_level ll, int &h
         return false;
     }
 
+    // Hover-outline: now that the creature's body + worn-item sprites are all
+    // queued (but BEFORE the attitude indicator below), splice the composite ring
+    // behind the whole range. One union silhouette, no per-item inner seams.
+    if( want_outline_ ) {
+        lighting::render_state &rs = lighting::get_render_state();
+        const float rad = std::max( 1.0f, tile_width * g_outline_thickness );
+        rs.build_outline_ring( outline_start, rs.tile_sprite_count(),
+                               outline_color_.r / 255.0f, outline_color_.g / 255.0f,
+                               outline_color_.b / 255.0f, g_outline_alpha, rad,
+                               g_outline_alpha_cut );
+        want_outline_ = false;
+    }
+
     if( result && !is_player ) {
         std::string draw_id = "overlay_" + Creature::attitude_raw_string( attitude );
         if( sees_player && !g->u.has_trait( trait_INATTENTIVE ) ) {
@@ -5940,6 +6031,8 @@ bool cata_tiles::draw_critter_at( const tripoint_bub_ms &p, lit_level ll, int &h
                 lit_level::LIT, false, z_drop, false, height_3d );
         }
     }
+    // Clear the latch in case no fg sprite consumed it (don't leak onto terrain).
+    want_outline_ = false;
     return result;
 
 }

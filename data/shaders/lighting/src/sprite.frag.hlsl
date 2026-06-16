@@ -124,6 +124,7 @@ struct VS_OUT {
     float2 world_pos: TEXCOORD2;
     float  light_mul: TEXCOORD3; // memory-fade marker (<0 = -(dist); else no-op)
     float2 light_pos: TEXCOORD4; // base-tile centre for tall sprites, else world_pos
+    float  outline  : TEXCOORD5; // >0.5 = silhouette mask mode (hover outline)
 };
 // SDF supersample factor — MUST match lighting::SDF_SUPERSAMPLE (sdf_pass.h).
 // SdfBuf is the SS-finer grid: dims (sdf_map_w*SDF_SS) x (sdf_map_h*SDF_SS),
@@ -366,6 +367,18 @@ float wet_spec(float3 n, float3 L) {
 float4 main(VS_OUT i) : SV_Target0 {
     const float4 texel = Atlas.Sample(AtlasSmp, i.uv);
     if(texel.a < 0.01) discard;
+    // Hover-outline silhouette mask (set per-instance via sprite_instance.pad2).
+    // Skip ALL lighting: emit the flat outline colour wherever the sprite is
+    // opaque. Offset copies of the sprite are drawn behind the real one, so the
+    // union forms a dilated ring around it (see HOVER_OUTLINE_PLAN.md).
+    if(i.outline > 0.5) {
+        // light_mul carries the alpha cutoff for outline instances (reused field;
+        // normal lighting is skipped here). Higher = drops translucent baked
+        // drop-shadows in the sprite art so the ring follows the body only.
+        const float cut = max(i.light_mul, 0.35);
+        if(texel.a < cut) discard;
+        return float4(i.tint.rgb, texel.a * i.tint.a);
+    }
     // Per-pixel surface normal from inline alpha-aware Sobel (Bucket A / A1),
     // driving the emitter + sun Lambert. TALL sprites (creatures, trees, walls,
     // tall furniture — light_pos != world_pos) use a FLAT normal instead: the

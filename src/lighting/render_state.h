@@ -168,6 +168,19 @@ class render_state
         bool tile_sprites_empty() const noexcept { return tile_sprite_queue_.empty(); }
         void flush_tile_sprites( sprite_batcher &dst, SDL_GPUSampler *sampler );
 
+        // Hover-outline (HOVER_OUTLINE_PLAN.md). Number of tile sprites queued so
+        // far — cata_tiles records this before/after a creature's sprites to mark
+        // the range to outline.
+        std::size_t tile_sprite_count() const noexcept { return tile_sprite_queue_.size(); }
+        // Read the tile sprites in [start,end), generate 8 offset silhouette copies
+        // of each (flat outline colour, outline flag set), and splice them in at
+        // `start` so they render BEHIND the originals. The union of the offset
+        // copies forms ONE clean composite ring around the whole creature (base
+        // body + every worn-item overlay), with no per-item inner seams.
+        void build_outline_ring( std::size_t start, std::size_t end,
+                                 float r, float g, float b, float a, float radius_px,
+                                 float alpha_cut );
+
         // Silhouette sun-shadow mask (Phase 1). Opens a pass on shadow_batcher_
         // into the shadow_mask_ target (LOADOP_CLEAR), stamps it with the cached
         // per-frame sun/geometry (vertex shear only — no lighting storage
