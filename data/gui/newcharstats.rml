@@ -1,0 +1,38 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="newcharstats.rcss"/>
+</head>
+<body data-model="newcharstats">
+    <!-- Tier 4 screen #4 (new-character creator) slice 2: the STATS tab
+         (set_stats). Character-tab strip (STATS current) + points line + the 4
+         stats (Str/Dex/Int/Per; active stat = cursor, COL_STAT_ACT + .selected)
+         + a per-stat effects/description pane + the HIGH_STAT cost warning +
+         keybinding hints. Render-only doc; keyboard owns UP/DOWN select,
+         LEFT/RIGHT dec/inc, RANDOMIZE, NEXT/PREV_TAB, QUIT. -->
+    <div class="panel nc-panel">
+        <div class="tabs nc-tabs">
+            <div class="item tab" data-for="t : tabs"
+                 data-class-selected="t.selected" data-rml="t.name_rml"></div>
+        </div>
+        <div class="nc-points" data-rml="points_rml"></div>
+        <div class="nc-body">
+            <div class="nc-stats-left">
+                <div class="nc-stats">
+                    <div class="item nc-stat" data-for="s : stats"
+                         data-class-selected="s.selected">
+                        <span class="nc-stat-name" data-rml="s.name_rml"></span>
+                        <span class="nc-stat-val" data-rml="s.val_rml"></span>
+                    </div>
+                </div>
+                <div class="nc-hints" data-rml="hints_rml"></div>
+            </div>
+            <div class="nc-stats-right">
+                <div class="nc-cost" data-rml="cost_rml"></div>
+                <div class="nc-desc scroll-pane" data-rml="desc_rml"></div>
+            </div>
+        </div>
+    </div>
+    <div id="crt-overlay" class="crt"></div>
+</body>
+</rml>

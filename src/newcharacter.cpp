@@ -826,17 +826,22 @@ void register_nc_points_rml_types( Rml::DataModelConstructor &c )
 }
 
 // The 8 character-creation tab captions (mirrors draw_character_tabs); `active`
-// is the index of the current tab (POINTS=0). name_rml is the escaped caption;
-// theme `.tab`/`.tab.selected` does the colouring.
-Rml::Vector<nc_rml_tab> build_nc_char_tabs( int active )
+// is the index of the current tab (POINTS=0, STATS=3, …). name_rml is the
+// escaped caption; theme `.tab`/`.tab.selected` does the colouring. Templated on
+// the tab struct so each tab's data-model uses its OWN registered C++ type
+// (RegisterStruct is context-global — distinct types avoid re-registering one
+// type on two models; the worldfactory precedent). Every tab struct has
+// {name_rml, selected}.
+template<typename TabT>
+Rml::Vector<TabT> build_nc_char_tabs( int active )
 {
     const std::vector<std::string> caps = {
         _( "POINTS" ), _( "SCENARIO" ), _( "PROFESSION" ), _( "STATS" ),
         _( "TRAITS" ), _( "BIONICS" ), _( "SKILLS" ), _( "OVERVIEW" ),
     };
-    Rml::Vector<nc_rml_tab> tabs;
+    Rml::Vector<TabT> tabs;
     for( int i = 0; i < static_cast<int>( caps.size() ); i++ ) {
-        nc_rml_tab t;
+        TabT t;
         t.name_rml = cata_text_to_rml( caps[i] );
         t.selected = ( i == active );
         tabs.push_back( t );
@@ -910,7 +915,7 @@ tab_direction set_points( avatar &, points_left &points )
         }
         const int sel = std::max( 0, std::min( highlighted,
                                   static_cast<int>( opts.size() ) - 1 ) );
-        data->tabs = build_nc_char_tabs( 0 ); // POINTS tab active
+        data->tabs = build_nc_char_tabs<nc_rml_tab>( 0 ); // POINTS tab active
         data->points_rml = cata_text_to_rml( points.to_string() );
         data->opts.clear();
         for( int i = 0; i < static_cast<int>( opts.size() ); i++ ) {
@@ -995,6 +1000,110 @@ tab_direction set_points( avatar &, points_left &points )
     return retval;
 }
 
+// RmlUi model for the STATS tab (slice 2). Distinct tab struct from the POINTS
+// tab (re-registering one C++ type on two models asserts — worldfactory precedent).
+namespace
+{
+struct nc_stats_tab {
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct nc_stat_row {
+    Rml::String name_rml;
+    Rml::String val_rml;
+    bool selected = false;
+};
+struct nc_stats_session {
+    Rml::Vector<nc_stats_tab> tabs;
+    Rml::String points_rml;
+    Rml::Vector<nc_stat_row> stats;
+    Rml::String cost_rml;   // red "Increasing X further costs 2 points." or empty
+    Rml::String desc_rml;   // selected stat's effects + blurb
+    Rml::String hints_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_nc_stats_types_registered = false;
+
+void register_nc_stats_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_nc_stats_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<nc_stats_tab> th = c.RegisterStruct<nc_stats_tab>();
+    th.RegisterMember( "name_rml", &nc_stats_tab::name_rml );
+    th.RegisterMember( "selected", &nc_stats_tab::selected );
+    c.RegisterArray<Rml::Vector<nc_stats_tab>>();
+    Rml::StructHandle<nc_stat_row> sh = c.RegisterStruct<nc_stat_row>();
+    sh.RegisterMember( "name_rml", &nc_stat_row::name_rml );
+    sh.RegisterMember( "val_rml", &nc_stat_row::val_rml );
+    sh.RegisterMember( "selected", &nc_stat_row::selected );
+    c.RegisterArray<Rml::Vector<nc_stat_row>>();
+    g_nc_stats_types_registered = true;
+}
+
+// Build the selected stat's effects + blurb as one colour-tagged string (mirrors
+// the per-stat curses block in set_stats' on_redraw). `u` is mutated as the
+// curses path does (recalc_hp for Str).
+std::string nc_stat_desc( avatar &u, int sel )
+{
+    std::vector<std::string> lines;
+    switch( sel ) {
+        case 1:
+            u.recalc_hp();
+            lines.push_back( colorize( string_format( _( "Base HP: %d" ),
+                                       u.get_part_hp_max( bodypart_id( "head" ) ) ), COL_STAT_NEUTRAL ) );
+            lines.push_back( colorize( string_format( _( "Carry weight: %.1f %s" ),
+                                       convert_weight( u.weight_capacity() ), weight_units() ), COL_STAT_NEUTRAL ) );
+            lines.push_back( colorize( string_format( _( "Melee damage bonus: +%.1f" ),
+                                       u.bonus_damage( false ) ), COL_STAT_BONUS ) );
+            lines.emplace_back();
+            lines.push_back( colorize( _( "Strength also makes you more resistant to many diseases and poisons, and makes actions which require brute force more effective." ),
+                                       COL_STAT_NEUTRAL ) );
+            break;
+        case 2:
+            lines.push_back( colorize( string_format( _( "Melee to-hit bonus: +%.2f" ),
+                                       u.get_hit_base() ), COL_STAT_BONUS ) );
+            lines.push_back( colorize( string_format( _( "Throwing penalty per target's dodge: +%d" ),
+                                       ranged::throw_dispersion_per_dodge( u, false ) ), COL_STAT_BONUS ) );
+            if( u.ranged_dex_mod() != 0 ) {
+                lines.push_back( colorize( string_format( _( "Ranged penalty: -%d" ),
+                                           std::abs( u.ranged_dex_mod() ) ), COL_STAT_PENALTY ) );
+            }
+            lines.emplace_back();
+            lines.push_back( colorize( _( "Dexterity also enhances many actions which require finesse." ),
+                                       COL_STAT_NEUTRAL ) );
+            break;
+        case 3: {
+            const int read_spd = u.read_speed( false );
+            lines.push_back( colorize( string_format( _( "Read times: %d%%" ), read_spd ),
+                                       ( read_spd == 100 ? COL_STAT_NEUTRAL :
+                                         ( read_spd < 100 ? COL_STAT_BONUS : COL_STAT_PENALTY ) ) ) );
+            lines.push_back( colorize( string_format( _( "Skill rust: %d%%" ), u.rust_rate() ),
+                                       COL_STAT_PENALTY ) );
+            lines.push_back( colorize( string_format( _( "Crafting bonus: +%d%%" ), u.get_int() ),
+                                       COL_STAT_BONUS ) );
+            lines.emplace_back();
+            lines.push_back( colorize( _( "Intelligence is also used when crafting, installing bionics, and interacting with NPCs." ),
+                                       COL_STAT_NEUTRAL ) );
+            break;
+        }
+        case 4:
+            if( u.ranged_per_mod() > 0 ) {
+                lines.push_back( colorize( string_format( _( "Aiming penalty: -%d" ),
+                                           u.ranged_per_mod() ), COL_STAT_PENALTY ) );
+            }
+            lines.push_back( colorize( string_format( _( "Night vision bonus: +%.1f" ),
+                                       vision::nv_range_from_per( u.per_max ) ), COL_STAT_BONUS ) );
+            lines.emplace_back();
+            lines.push_back( colorize( _( "Perception is also used for detecting traps and other things of interest." ),
+                                       COL_STAT_NEUTRAL ) );
+            break;
+    }
+    return join( lines, "\n" );
+}
+} // namespace
+
 tab_direction set_stats( avatar &u, points_left &points )
 {
     const int max_stat_points = points.is_freeform() ? 20 : MAX_STAT;
@@ -1038,7 +1147,73 @@ tab_direction set_stats( avatar &u, points_left &points )
     old_pos.x() = 0;
     u.setpos( old_pos );
 
+    // RmlUi render path (render-only; keyboard still owns nav/inc/dec below).
+    auto data = std::make_unique<nc_stats_session>();
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !data->handle ) {
+            return;
+        }
+        data->tabs = build_nc_char_tabs<nc_stats_tab>( 3 ); // STATS tab active
+        data->points_rml = cata_text_to_rml( points.to_string() );
+
+        data->stats.clear();
+        const auto add_stat = [&]( const std::string & label, int val, int idx ) {
+            nc_stat_row r;
+            const bool active = ( sel == idx );
+            const nc_color col = active ? COL_STAT_ACT : c_light_gray;
+            r.name_rml = cata_text_to_rml( colorize( label, col ) );
+            r.val_rml = cata_text_to_rml( colorize( string_format( "%2d", val ), col ) );
+            r.selected = active;
+            data->stats.push_back( r );
+        };
+        add_stat( _( "Strength:" ), u.str_max, 1 );
+        add_stat( _( "Dexterity:" ), u.dex_max, 2 );
+        add_stat( _( "Intelligence:" ), u.int_max, 3 );
+        add_stat( _( "Perception:" ), u.per_max, 4 );
+
+        // HIGH_STAT cost warning for the selected stat (exact curses strings).
+        std::string cost;
+        if( sel == 1 && u.str_max >= HIGH_STAT ) {
+            cost = _( "Increasing Str further costs 2 points." );
+        } else if( sel == 2 && u.dex_max >= HIGH_STAT ) {
+            cost = _( "Increasing Dex further costs 2 points." );
+        } else if( sel == 3 && u.int_max >= HIGH_STAT ) {
+            cost = _( "Increasing Int further costs 2 points." );
+        } else if( sel == 4 && u.per_max >= HIGH_STAT ) {
+            cost = _( "Increasing Per further costs 2 points." );
+        }
+        data->cost_rml = cost.empty() ? std::string()
+                         : cata_text_to_rml( colorize( cost, c_light_red ) );
+
+        data->desc_rml = cata_text_to_rml( nc_stat_desc( u, sel ) );
+
+        data->hints_rml = cata_text_to_rml( string_format(
+                _( "<color_light_green>%s</color> / <color_light_green>%s</color> to select a statistic.\n"
+                   "<color_light_green>%s</color> to increase the statistic.\n"
+                   "<color_light_green>%s</color> to decrease the statistic.\n"
+                   "\n"
+                   "<color_light_green>%s</color> lets you view and alter keybindings.\n"
+                   "<color_light_green>%s</color> takes you to the next tab.\n"
+                   "<color_light_green>%s</color> returns you to the main menu." ),
+                ctxt.get_desc( "UP" ), ctxt.get_desc( "DOWN" ),
+                ctxt.get_desc( "RIGHT" ), ctxt.get_desc( "LEFT" ),
+                ctxt.get_desc( "HELP_KEYBINDINGS" ), ctxt.get_desc( "NEXT_TAB" ),
+                ctxt.get_desc( "PREV_TAB" ) ) );
+
+        data->handle.DirtyVariable( "tabs" );
+        data->handle.DirtyVariable( "points_rml" );
+        data->handle.DirtyVariable( "stats" );
+        data->handle.DirtyVariable( "cost_rml" );
+        data->handle.DirtyVariable( "desc_rml" );
+        data->handle.DirtyVariable( "hints_rml" );
+    };
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         werase( w );
         draw_character_tabs( w, _( "STATS" ) );
         fold_and_print( w, point( 2, 16 ), getmaxx( w ) - 4, COL_NOTE_MINOR,
@@ -1155,6 +1330,18 @@ tab_direction set_stats( avatar &u, points_left &points )
 
         wnoutrefresh( w );
         wnoutrefresh( w_description );
+    } );
+
+    rml.open( newcharacter_rmlui_enabled(), "newcharstats", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        register_nc_stats_rml_types( c );
+        c.Bind( "tabs", &data->tabs );
+        c.Bind( "points_rml", &data->points_rml );
+        c.Bind( "stats", &data->stats );
+        c.Bind( "cost_rml", &data->cost_rml );
+        c.Bind( "desc_rml", &data->desc_rml );
+        c.Bind( "hints_rml", &data->hints_rml );
+        data->handle = c.GetModelHandle();
     } );
 
     do {

@@ -1364,10 +1364,8 @@ query_popup toggle ON too, else the confirm is invisible.
 8. **set_description** — the OVERVIEW form: name/gender/height/age/blood + scenario/
    profession summary + reroll/save (most fields; last).
 
-**SLICE 1 (set_points) — CODE-COMPLETE + BUILD-GREEN (newcharacter.cpp.o 11:13:32 +
-binary relinked 11:13:35, 0 errors; 128 warnings = RmlUi vendored-header old-style-cast
-noise from `<RmlUi/Core.h>`, same as worldfactory), TOGGLE OFF, EYEBALL OWED,
-UNCOMMITTED.** New `newcharacter_rmlui_enabled()` toggle (one for the whole creator,
+**SLICE 1 (set_points) — DONE + EYEBALLED CLEAN (user 2026-06-16, "looks great"),
+COMMITTED. TOGGLE OFF.** New `newcharacter_rmlui_enabled()` toggle (one for the whole creator,
 gated per-tab) + `data/gui/newcharpoints.{rml,rcss}` model "newcharpoints" + F4 "new
 character" checkbox (System menus group). `set_points` gets a render-only RmlUi path:
 anon-ns `nc_points_session` (8-tab strip `tabs` + `points_rml` + `opts` + `desc_rml`) +
@@ -1392,6 +1390,35 @@ Scenario (curses, until slice 6); PREV_TAB/QUIT → "Return to main menu?" confi
 popup if query_popup ON). **WATCH:** (a) only ONE option exists when point_pool ==
 "multi_pool" (list shows a single row — expected). (b) the other 7 tabs stay curses
 (gate proof). (c) first newcharacter dynamic doc — D3D12 (Win11) glance warranted.
+
+**SLICE 2 (set_stats) — CODE-COMPLETE + BUILD-GREEN (newcharacter.cpp.o 11:31:51 +
+binary relinked 11:31:54, 0 errors), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.** The STATS
+tab on the shared `newcharacter_rmlui_enabled()` toggle (2nd tab lit; the other 6 stay
+curses). `data/gui/newcharstats.{rml,rcss}` model "newcharstats". REFACTOR: lifted
+`build_nc_char_tabs` to a TEMPLATE on the tab struct so each tab's model uses its OWN
+registered C++ type (`nc_stats_tab` distinct from slice-1's `nc_rml_tab`) — distinct
+types avoid re-registering one struct on two models (worldfactory precedent); the
+caption logic is shared. Render-only doc: char-tab strip (STATS=idx3) + points line +
+the 4 stats (Str/Dex/Int/Per as `nc_stat_row{name,val,selected}`, active stat coloured
+COL_STAT_ACT + `.selected`, others light_gray) + per-stat effects/description
+(`nc_stat_desc(u,sel)` — a free builder mirroring the curses per-stat block verbatim,
+incl. the `u.recalc_hp()` side-effect for Str; joined colour-tagged lines via `join`) +
+the HIGH_STAT cost warning (exact curses strings, red, selected stat only) + keybinding
+hints. on_redraw `if(rml){sync_rml();return;}` else curses; `rml.open` after on_redraw;
+rml_doc dtor tears down at each `return` (the loop returns directly). Keyboard owns
+UP/DOWN select, LEFT/RIGHT dec/inc (incl. the >HIGH_STAT 2-point cost), RANDOMIZE,
+NEXT/PREV_TAB, QUIT — all untouched. F4 toggle "new character" (shared). **EYEBALL CHECK
+(user, A/B via F4 — query_popup toggle ON too, invariant 6):** New Game → Custom →
+STATS tab: char-tab strip (STATS current), points line, the 4 stats with the SELECTED
+one highlighted (COL_STAT_ACT) + cursor accent; UP/DOWN move selection; LEFT/RIGHT
+decrease/increase the selected stat (value + points update); RANDOMIZE jumps selection;
+the description pane shows the selected stat's effects (HP/carry/melee for Str,
+to-hit/throw/ranged for Dex, read/rust/craft for Int, aim/nightvis for Per) matching
+curses; raising a stat past HIGH_STAT shows the red "Increasing X further costs 2
+points." line + costs 2; NEXT_TAB → Profession (curses), PREV_TAB → Points (RmlUi).
+**WATCH:** (a) the effects NUMBERS must match curses exactly (the desc is a from-scratch
+reconstruction — diff a few values). (b) value column right-alignment. (c) the cost
+warning only shows for the selected stat at/above HIGH_STAT.
 
 ## Load-bearing architecture facts (verified this session)
 
