@@ -87,6 +87,10 @@
 #include "vpart_position.h"
 #include "vpart_range.h"
 
+#include <RmlUi/Core.h>
+#include "rml_screen.h"
+#include "rml_util.h"
+
 static const activity_id ACT_AIM( "ACT_AIM" );
 static const activity_id ACT_SOCIALIZE( "ACT_SOCIALIZE" );
 static const activity_id ACT_TRAIN( "ACT_TRAIN" );
@@ -2057,6 +2061,45 @@ const talk_topic &special_talk( char ch )
     return no_topic;
 }
 
+// Tier 5: the NPC dialogue screen RmlUi render path (dialogue_window, driven from
+// dialogue::opt). Render-only doc: header (npc name) + history pane (exchanged
+// words, last two highlighted) + response list (lettered options, selected
+// highlighted) + keybinding hints. Keyboard owns nav/select (raw input loop).
+bool &dialogue_rmlui_enabled()
+{
+    static bool enabled = false;
+    return enabled;
+}
+
+namespace
+{
+struct dlg_resp_row {
+    Rml::String text_rml;
+    bool selected = false;
+};
+struct dlg_session {
+    Rml::String name_rml;
+    Rml::String history_rml;
+    Rml::String keybinds_rml;
+    Rml::Vector<dlg_resp_row> responses;
+    Rml::DataModelHandle handle;
+};
+
+bool g_dlg_types_registered = false;
+
+void register_dlg_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_dlg_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<dlg_resp_row> rh = c.RegisterStruct<dlg_resp_row>();
+    rh.RegisterMember( "text_rml", &dlg_resp_row::text_rml );
+    rh.RegisterMember( "selected", &dlg_resp_row::selected );
+    c.RegisterArray<Rml::Vector<dlg_resp_row>>();
+    g_dlg_types_registered = true;
+}
+} // namespace
+
 talk_topic dialogue::opt( dialogue_window &d_win, const std::string &npc_name,
                           const talk_topic &topic )
 {
@@ -2095,6 +2138,33 @@ talk_topic dialogue::opt( dialogue_window &d_win, const std::string &npc_name,
     }
     auto selected_response = size_t{ 0 };
 
+    // RmlUi render path (render-only; the raw input loop below still owns keys).
+    auto rml_data = std::make_unique<dlg_session>();
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml_data->handle ) {
+            return;
+        }
+        rml_data->name_rml = cata_text_to_rml( colorize( _( "Dialogue:" ), c_white ) + " " +
+                             colorize( npc_name, c_light_green ) );
+        rml_data->history_rml = cata_text_to_rml( d_win.history_markup() );
+        rml_data->responses.clear();
+        for( size_t i = 0; i < response_lines.size(); i++ ) {
+            const talk_data &resp = response_lines[i];
+            const nc_color base_col = resp.col == c_white ? c_light_gray : resp.col;
+            dlg_resp_row r;
+            r.text_rml = cata_text_to_rml(
+                             colorize( string_format( " %c  ", resp.letter ), c_light_green ) +
+                             colorize( resp.text, base_col ) );
+            r.selected = ( i == selected_response );
+            rml_data->responses.push_back( r );
+        }
+        rml_data->keybinds_rml = cata_text_to_rml( colorize(
+                                     _( "[L] Look at   [S] Size up stats   [Y] Yell   [O] Check opinion" ),
+                                     c_light_gray ) );
+        rml_data->handle.DirtyAllVariables();
+    };
+
     ui_adaptor ui;
     ui.on_screen_resize( [&]( ui_adaptor & ui ) {
         d_win.resize_dialogue( ui );
@@ -2102,8 +2172,26 @@ talk_topic dialogue::opt( dialogue_window &d_win, const std::string &npc_name,
     ui.mark_resize();
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         d_win.print_header( npc_name );
         d_win.display_responses( response_lines, selected_response );
+    } );
+
+    // dialogue::opt drives input via the raw inp_mngr (no input_context); the
+    // harness only needs a ctxt for the 16ms tick, so pass a throwaway one
+    // (computer_session precedent — render-only, keyboard handled elsewhere).
+    input_context dlg_ctxt( "DIALOGUE" );
+    rml.open( dialogue_rmlui_enabled(), "dialogue", dlg_ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        register_dlg_rml_types( c );
+        c.Bind( "name_rml", &rml_data->name_rml );
+        c.Bind( "history_rml", &rml_data->history_rml );
+        c.Bind( "keybinds_rml", &rml_data->keybinds_rml );
+        c.Bind( "responses", &rml_data->responses );
+        rml_data->handle = c.GetModelHandle();
     } );
 
     int ch;

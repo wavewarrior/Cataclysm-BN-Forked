@@ -72,6 +72,20 @@ void dialogue_window::add_to_history( const std::string &msg )
     cache_msg( msg, idx );
 }
 
+std::string dialogue_window::history_markup() const
+{
+    std::string out;
+    for( size_t i = 0; i < history.size(); i++ ) {
+        // Highlight the last two messages (the most recent exchange), like print_history.
+        const nc_color base = ( i + 2 >= history.size() ) ? c_white : c_light_gray;
+        if( i != 0 ) {
+            out += "\n\n";
+        }
+        out += colorize( history[i], base );
+    }
+    return out;
+}
+
 void dialogue_window::print_history()
 {
     if( history.empty() ) {

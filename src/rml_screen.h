@@ -166,4 +166,8 @@ bool &trade_rmlui_enabled();
 // + item-info pane).
 bool &vending_rmlui_enabled();
 
+// dialogue::opt() RmlUi path (Tier 5: the NPC dialogue window — history pane +
+// lettered response list + keybind hints).
+bool &dialogue_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

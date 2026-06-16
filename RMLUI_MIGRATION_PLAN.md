@@ -1667,11 +1667,46 @@ and the per-slice eyeball debt.
   the selected item's name/price + description, CONFIRM buys (money drops, item leaves;
   "can't afford" popup when broke), empty machine shuts down.
 
-### Tier 5 status: trade + vending done; ranged DEFERRED to Tier 6; npctalk next
+- **Tier 5 screen #3: npc dialogue (dialogue::opt / dialogue_window) — CODE-COMPLETE +
+  BUILD-GREEN (npctalk.cpp.o 14:01:05 + dialogue_win.cpp.o 13:58:33 + binary relinked
+  14:01:10, 0 errors, fresh mtime), TOGGLE OFF, EYEBALL OWED, COMMITTED.** The Tier-5
+  modal giant (the talk tree). `data/gui/dialogue.{rml,rcss}` model "dialogue" +
+  `dialogue_rmlui_enabled()` toggle + F4 "npc dialogue" checkbox. Render-only doc:
+  header (Dialogue: <name>) + left history pane (the exchanged words, last two messages
+  white / rest grey) + right response pane ("Your response:" + lettered option list,
+  selected option `.selected`) + keybind hints ([L]ook/[S]ize/[Y]ell/[O]pinion).
+  STRUCTURAL POINTS: (1) **dialogue::opt drives input via the RAW `inp_mngr`, NOT an
+  input_context** — so a THROWAWAY `input_context dlg_ctxt` is passed to `rml.open()`
+  only for the harness 16ms tick (computer_session precedent); the real keys stay on the
+  raw loop, the doc is render-only so the tick not driving input is harmless. (2) the doc
+  is local to `opt()` → opened + torn down PER dialogue line (each topic is a fresh
+  opt() call); the single-instance guard releases on the rml_doc dtor each return, so
+  reopen is clean. (3) history is private to `dialogue_window` → added a public
+  `history_markup()` getter (mirrors print_history's last-two-white highlight) that the
+  sync feeds through cata_text_to_rml; the curses path (print_header/display_responses)
+  is left intact for the A/B. (4) curses paging of responses → native scroll (all
+  responses shown, selected highlighted; UP/DOWN still wrap via the raw loop, PAGE keys
+  still work). F4 toggle "npc dialogue" (OFF). **EYEBALL CHECK (user, A/B via F4 —
+  query_popup ON for the hostile/helpless confirms, invariant 6):** talk to an NPC: the
+  header shows "Dialogue: <name>", the left pane shows the conversation history (newest
+  exchange brighter), the right pane lists lettered responses with the selected one
+  highlighted; UP/DOWN move the selection (wrap), letter keys + Enter pick, PAGE_UP/DOWN
+  scroll long response sets, [L]/[S]/[Y]/[O] special actions still fire; a response with
+  a hostile/helpless consequence shows the curses confirm (needs query_popup ON).
+  **WATCH:** (a) doc reopens each dialogue line — confirm no flicker / stuck guard across
+  a multi-line conversation (the reopen-per-topic path). (b) history grows correctly as
+  the conversation proceeds (newest at the bottom; scroll if long). (c) first dialogue
+  dynamic doc → D3D12 (Win11) glance.
 
-ranged/targeting is a live map overlay → the plan sequences it AFTER the §7 world-text
-/ Tier-6 overlay layer exists; it is NOT done in Tier 5. Remaining Tier-5 modal:
-**npctalk** (the dialogue window — `dialogue_window` rendered from `dialogue::opt`).
+### Tier 5 status: COMPLETE (modal screens); ranged DEFERRED to Tier 6
+
+trade + vending + npc dialogue all CODE-COMPLETE + build-green + committed (eyeball owed,
+batched). **ranged/targeting is the ONLY remaining Tier-5 screen and is intentionally
+DEFERRED to Tier 6** — it is a live overlay tied to the map (world→screen projection),
+which the plan sequences AFTER the §7 world-text / Tier-6 overlay layer exists. So the
+modal Tier-5 work is done; ranged rides Tier 6. Next plan unit: Tier 6 (overmap_ui +
+on-map static labels + the §7 world-text layer), or the deferred faction (Tier 2, needs
+the creature/npc-info F.2 component).
 
 ## Load-bearing architecture facts (verified this session)
 

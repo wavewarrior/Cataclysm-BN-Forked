@@ -412,6 +412,7 @@ static void draw_rmlui_tab()
         ImGui::Checkbox( "safemode", &safemode_rmlui_enabled() );
         ImGui::Checkbox( "trade", &trade_rmlui_enabled() );
         ImGui::Checkbox( "vending", &vending_rmlui_enabled() );
+        ImGui::Checkbox( "npc dialogue", &dialogue_rmlui_enabled() );
     }
     if( ImGui::CollapsingHeader( "System menus" ) ) {
         ImGui::Checkbox( "options", &options_rmlui_enabled() );
