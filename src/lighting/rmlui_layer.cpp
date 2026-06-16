@@ -1,7 +1,9 @@
 #include "rmlui_layer.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <memory>
 #include <string>
 #include <vector>
@@ -46,6 +48,9 @@ float g_density_ratio = 1.0f;
 // the context's dp lengths, scaling font + all dp spacing across every RmlUi panel.
 // Does NOT touch g_density_ratio (input mapping keeps the true physical/logical ratio).
 float g_ui_scale = 1.0f;
+
+// CRT post-effect knobs (F4 sliders). See crt() / apply_crt().
+crt_params g_crt;
 
 // Documents currently open (shown) via open_document(), in open order. The
 // layer is "active" while this is non-empty. Documents are owned by g_context;
@@ -169,6 +174,11 @@ float &ui_scale()
     return g_ui_scale;
 }
 
+crt_params &crt()
+{
+    return g_crt;
+}
+
 Rml::ElementDocument *open_document( const std::string &rml_path )
 {
     if( !g_ready || g_context == nullptr ) {
@@ -274,6 +284,101 @@ bool process_event( const SDL_Event &ev )
     }
 }
 
+namespace
+{
+// Authentic non-uniform CRT flicker — the aleclownes.com/2017 reference opacity
+// table (20 steps, random-ish). Stepped (not interpolated) for the stutter; the
+// `flicker` slider lerps from 1.0 (off) toward these values (mean ~0.5).
+constexpr float CRT_FLICKER[20] = {
+    0.27861f, 0.34769f, 0.23604f, 0.90626f, 0.18128f,
+    0.83891f, 0.65583f, 0.67807f, 0.26559f, 0.84693f,
+    0.96019f, 0.08594f, 0.20313f, 0.71988f, 0.53455f,
+    0.37288f, 0.71428f, 0.70419f, 0.70030f, 0.24387f,
+};
+
+// 0..1 -> 0..255 alpha byte for an #rrggbbaa colour.
+unsigned crt_a255( float a01 )
+{
+    return static_cast<unsigned>( std::lround( std::clamp( a01, 0.0f, 1.0f ) * 255.0f ) );
+}
+
+// Apply the F4 CRT knobs to every open document as inline RCSS gradient decorators,
+// before Update() so they lay out this frame. Scanlines = repeating-linear-gradient
+// on #crt-overlay (drawn on top, sized to the window in explicit px since an abspos
+// width/height:100% resolves to zero here); the scroll is baked into the stop
+// offsets (phase). Vignette = radial-gradient on every .panel.
+void apply_crt()
+{
+    const double t = g_system ? g_system->GetElapsedTime() : 0.0;
+
+    char vignette[160];
+    if( g_crt.enabled ) {
+        ( void )std::snprintf( vignette, sizeof( vignette ),
+                               "radial-gradient( farthest-corner, #00000000, #000000%02x )",
+                               crt_a255( g_crt.vignette_alpha ) );
+    } else {
+        ( void )std::snprintf( vignette, sizeof( vignette ), "none" );
+    }
+
+    for( Rml::ElementDocument *doc : g_open_docs ) {
+        if( doc == nullptr ) {
+            continue;
+        }
+        Rml::ElementList panels;
+        doc->GetElementsByClassName( panels, "panel" );
+        for( Rml::Element *pe : panels ) {
+            pe->SetProperty( "decorator", vignette );
+        }
+        Rml::Element *overlay = doc->GetElementById( "crt-overlay" );
+        if( overlay == nullptr ) {
+            continue;
+        }
+        // Mask the scanlines to the active panel (the "device screen"): size the
+        // overlay to the panel's border-box rect, not the whole window. Geometry is
+        // from the previous frame's layout (apply runs before Update), but panels
+        // don't move so the 1-frame lag is invisible; a zero box (first frame /
+        // unlaid-out) just hides the overlay until it settles.
+        Rml::Element *panel = panels.empty() ? nullptr : panels.front();
+        Rml::Vector2f poff;
+        Rml::Vector2f psz;
+        if( panel != nullptr ) {
+            poff = panel->GetAbsoluteOffset( Rml::BoxArea::Border );
+            psz = panel->GetBox().GetSize( Rml::BoxArea::Border );
+        }
+        if( !g_crt.enabled || panel == nullptr || psz.x <= 0.f || psz.y <= 0.f ) {
+            overlay->SetProperty( "display", "none" );
+            continue;
+        }
+        const float pitch = std::max( 2.0f, g_crt.scanline_pitch );
+        const float thick = std::clamp( g_crt.scanline_thickness, 0.5f, pitch - 0.5f );
+        const float gap = pitch - thick;
+        const float phase = static_cast<float>( std::fmod( t * g_crt.roll_speed, pitch ) );
+        const unsigned sa = crt_a255( g_crt.scanline_alpha );
+        // Flicker = a uniform black layer (under the scanlines) whose alpha pulses
+        // per the random table. Modulating a thin scanline's opacity is invisible;
+        // pulsing a full-panel tint reads as whole-screen CRT flicker. 0 -> no pulse.
+        const int idx = static_cast<int>( std::fmod( t * 24.0, 20.0 ) );
+        const float ftab = CRT_FLICKER[std::clamp( idx, 0, 19 )];
+        const unsigned fa = crt_a255( g_crt.flicker * ( 1.0f - ftab ) );
+        char dec[320];
+        ( void )std::snprintf( dec, sizeof( dec ),
+                               "linear-gradient( 0deg, #000000%02x, #000000%02x ), "
+                               "repeating-linear-gradient( 0deg, "
+                               "#00000000 %.2fpx, #00000000 %.2fpx, "
+                               "#000000%02x %.2fpx, #000000%02x %.2fpx )",
+                               fa, fa, phase, phase + gap, sa, phase + gap, sa, phase + pitch );
+        overlay->SetProperty( "display", "block" );
+        overlay->SetProperty( "position", "absolute" );
+        overlay->SetProperty( "left", std::to_string( poff.x ) + "px" );
+        overlay->SetProperty( "top", std::to_string( poff.y ) + "px" );
+        overlay->SetProperty( "width", std::to_string( psz.x ) + "px" );
+        overlay->SetProperty( "height", std::to_string( psz.y ) + "px" );
+        overlay->SetProperty( "decorator", dec );
+        overlay->SetProperty( "opacity", "1.0" );
+    }
+}
+}  // namespace
+
 void new_frame()
 {
     if( !g_ready ) {
@@ -300,6 +405,7 @@ void new_frame()
                 g_context->SetDensityIndependentPixelRatio( g_density_ratio * g_ui_scale );
             }
         }
+        apply_crt();
         g_context->Update();
     }
 }

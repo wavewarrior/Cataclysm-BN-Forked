@@ -69,6 +69,27 @@ float density_ratio();
 // Driven by an F4 dev slider; does not affect input mapping. <1 shrinks the UI.
 float &ui_scale();
 
+// CRT post-effect knobs (F4 dev sliders). Applied every frame in new_frame() to
+// each open document as inline RCSS GRADIENT decorators — the render interface now
+// implements the shader API (CompileShader/RenderShader), so gradients render:
+//   - scanlines -> repeating-linear-gradient on the #crt-overlay element (a bare
+//                  click-through <div> opted into, drawn ON TOP so the lines cross
+//                  the bright text). Fully parametric: pitch/thickness/darkness are
+//                  the gradient stops; scroll shifts the stop offsets each frame.
+//   - vignette  -> radial-gradient on every .panel, behind content.
+// Tune in F4, then bake the chosen gradient strings into theme.rcss for the ship
+// look (they are ordinary RCSS once the values are fixed).
+struct crt_params {
+    bool enabled = true;
+    float scanline_alpha = 0.35f;     // line darkness (0..1)
+    float scanline_pitch = 4.0f;      // px, line + gap pitch
+    float scanline_thickness = 1.0f;  // px, dark-line height within the pitch
+    float roll_speed = 8.0f;          // px/sec downward scroll (0 = static)
+    float flicker = 0.05f;            // opacity-pulse amplitude (0..1)
+    float vignette_alpha = 0.5f;      // corner darkness on .panel (0..1)
+};
+crt_params &crt();
+
 // Load + show an .rml document into the shared context, tracking it so active()
 // reports it. Returns the document (owned by the context) or nullptr on failure.
 // Pair with close_document() — typically via an RAII wrapper in the owner's

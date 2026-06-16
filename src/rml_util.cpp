@@ -35,6 +35,11 @@ std::string rml_escape( const std::string &s )
 }
 
 // Cache an nc_color → "#rrggbbaa" hex string so repeated lookups are cheap.
+//
+// Common foreground colours are remapped to the gruvbox palette so RmlUi menus
+// match theme.rcss (the raw curses RGB is a harsh pure green/red that clashes).
+// This is scoped to RmlUi text only — the tile/world render path doesn't use this
+// function. Unmapped colours (backgrounds, attrs) fall back to the curses RGB.
 std::string nc_color_to_hex( const nc_color &color )
 {
     static std::unordered_map<int, std::string> cache;
@@ -43,9 +48,34 @@ std::string nc_color_to_hex( const nc_color &color )
     if( it != cache.end() ) {
         return it->second;
     }
-    const SDL_Color sdl = curses_color_to_SDL( color );
-    // Format as #rrggbbaa (alpha always 255 for terminal colours).
-    std::string hex = string_format( "#%02x%02x%02x%02x", sdl.r, sdl.g, sdl.b, 255 );
+    // Lazy-built (the c_* macros resolve colours at runtime, after colour load).
+    static const std::unordered_map<int, std::string> gruvbox = {
+        { int( c_black ),       "#1d2021ff" },
+        { int( c_dark_gray ),   "#928374ff" },
+        { int( c_light_gray ),  "#ebdbb2ff" },
+        { int( c_white ),       "#fbf1c7ff" },
+        { int( c_red ),         "#cc241dff" },
+        { int( c_light_red ),   "#fb4934ff" },
+        { int( c_green ),       "#98971aff" },
+        { int( c_light_green ), "#b8bb26ff" },
+        { int( c_brown ),       "#d79921ff" },
+        { int( c_yellow ),      "#fabd2fff" },
+        { int( c_blue ),        "#458588ff" },
+        { int( c_light_blue ),  "#83a598ff" },
+        { int( c_cyan ),        "#689d6aff" },
+        { int( c_light_cyan ),  "#8ec07cff" },
+        { int( c_magenta ),     "#b16286ff" },
+        { int( c_pink ),        "#d3869bff" },
+    };
+    std::string hex;
+    const auto git = gruvbox.find( key );
+    if( git != gruvbox.end() ) {
+        hex = git->second;
+    } else {
+        const SDL_Color sdl = curses_color_to_SDL( color );
+        // Format as #rrggbbaa (alpha always 255 for terminal colours).
+        hex = string_format( "#%02x%02x%02x%02x", sdl.r, sdl.g, sdl.b, 255 );
+    }
     cache[key] = hex;
     return hex;
 }

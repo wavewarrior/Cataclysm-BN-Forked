@@ -89,6 +89,19 @@ void draw()
     ImGui::SeparatorText( "Player menus (RmlUi migration)" );
     // Global UI scale for ALL RmlUi panels (font + dp spacing). <1 shrinks the UI.
     ImGui::SliderFloat( "RmlUi UI scale", &rmlui_layer::ui_scale(), 0.5f, 1.5f, "%.2f" );
+    // CRT post-effects (scanlines + vignette), applied live to any open RmlUi doc
+    // that has a #crt-overlay element (options, worldfinalize). Tune here, then
+    // bake the final values into theme.rcss.
+    {
+        rmlui_layer::crt_params &c = rmlui_layer::crt();
+        ImGui::Checkbox( "CRT effect (scanlines + vignette)", &c.enabled );
+        ImGui::SliderFloat( "  scanline darkness", &c.scanline_alpha, 0.0f, 1.0f, "%.2f" );
+        ImGui::SliderFloat( "  scanline pitch (px)", &c.scanline_pitch, 2.0f, 64.0f, "%.1f" );
+        ImGui::SliderFloat( "  scanline thickness (px)", &c.scanline_thickness, 0.5f, 32.0f, "%.1f" );
+        ImGui::SliderFloat( "  roll speed (px/s)", &c.roll_speed, 0.0f, 300.0f, "%.0f" );
+        ImGui::SliderFloat( "  flicker", &c.flicker, 0.0f, 1.0f, "%.2f" );
+        ImGui::SliderFloat( "  vignette", &c.vignette_alpha, 0.0f, 1.0f, "%.2f" );
+    }
     // Master switch for routing uilist through RmlUi. Default OFF; flip to test
     // the new renderer in-game. Off = existing ImGui/curses menus.
     ImGui::Checkbox( "uilist via RmlUi", &uilist_rmlui_enabled() );

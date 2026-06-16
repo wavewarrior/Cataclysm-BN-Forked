@@ -1,26 +1,36 @@
 /* Shared RmlUi theme for player-facing menus (RmlUi migration, Phase 1).
    Base look + font, imported by each menu's own .rcss.
 
-   ── PALETTE (single source of truth) ──────────────────────────────────────
+   ── AESTHETIC ─────────────────────────────────────────────────────────────
+   Gruvbox-dark palette (warm cream text on dark brown-grey, yellow accent),
+   squared corners, weathered-brown frame, plus subtle CRT post-effects (text
+   glow + scanlines + vignette). The ornate riveted frame is a Phase-4 ninepatch
+   drop-in (see .panel); the CSS here approximates it with a squared border + a
+   recessed vignette. Scanlines/vignette are driven from C++ (see .crt).
+
+   ── PALETTE (single source of truth, gruvbox) ─────────────────────────────
    RCSS in RmlUi 6.2 has NO var()/custom properties (only @keyframes, @decorator,
    @spritesheet, @media), so these values cannot be deduplicated into tokens —
    they must be repeated literally wherever used. This block is the canonical
    reference: when a menu's .rcss needs one of these roles, copy the hex from
    here, and when a colour changes, change every copy to match this table.
 
-     role               hex          used for
-     ----------------   ----------   --------------------------------------
-     panel-bg           #1e1e28f2    .panel background
-     border / divider   #5a5a78ff    panel border, separators, scrollbar
-     scrollbar-hover    #7a7a98ff    scrollbar sliderbar :hover
-     text-primary       #cfcfe0ff    body text (cascades — don't re-declare)
-     text-muted         #9a9ab0ff    secondary columns, filter line
-     text-disabled      #6a6a7aff    disabled rows
-     text-bright        #ffffffff    hovered item text
-     accent             #ffcc66ff    titles, hotkeys, selected-item background
-     on-accent          #1e1e28ff    text on an accent background
-     item-bg            #2a2a3aff    selectable row / button background
-     item-hover-bg      #3a3a55ff    selectable row / button :hover background
+     role               hex          gruvbox      used for
+     ----------------   ----------   ----------   --------------------------------
+     panel-bg           #1d2021f2    bg0_h        .panel background
+     frame / border     #7c6f64ff    bg4          panel border, separators
+     frame-inner        #504945ff    bg2          inner double-border line (Phase-4)
+     scrollbar          #665c54ff    bg3          scrollbar sliderbar
+     scrollbar-hover    #928374ff    gray         scrollbar sliderbar :hover
+     text-primary       #ebdbb2ff    fg1          body text (cascades — don't re-declare)
+     text-muted         #a89984ff    fg4          secondary columns, filter line
+     text-disabled      #665c54ff    bg3          disabled rows
+     text-bright        #fbf1c7ff    fg0          hovered item text
+     accent             #fabd2fff    yellow       titles, hotkeys, selected-item background
+     on-accent          #1d2021ff    bg0_h        text on an accent background
+     item-bg            #3c3836ff    bg1          selectable row / button background
+     item-hover-bg      #504945ff    bg2          selectable row / button :hover background
+     danger / hp-red    #fb4934ff    red          HP bar fill, failures (domain colour, per-screen)
 
    The item-bg/hover/accent "selectable item" triad is shared by uilist rows
    and query_popup buttons via the .item class below — change those states
@@ -32,15 +42,50 @@
 body {
     font-family: "Terminus (TTF)";
     font-size: 18dp;
-    color: #cfcfe0ff;
+    color: #ebdbb2ff;
 }
 
-/* Dark rounded panel shared by all menus. */
+/* Title / header role — yellow accent with a CRT glow. Opt-in (screens that want
+   it add class="title"); not forced, so eyeballed screens don't regress. Glow is
+   kept off body text on purpose: a glow under dense lists muddies them (see
+   advinv/inventory). Tune the glow radius/alpha here. */
+.title {
+    color: #fabd2fff;
+    font-effect: glow( 2dp #fabd2faa );
+}
+
+/* Dark squared panel shared by all menus. Gruvbox bg + squared brown border + a
+   recessed vignette. The vignette (and scanlines) are radial/linear GRADIENT
+   decorators, driven live from C++ (rmlui_layer::apply_crt) on every .panel and
+   the .crt overlay — gradients render via the interface's CompileShader pipeline.
+   The static decorator below is the fallback when C++ isn't driving it.
+
+   Scanlines are NOT here: a decorator paints behind the element's own content, so
+   they'd never cross the text. They go on the `.crt` overlay (drawn on top).
+
+   Phase-4 drop-in (ornate riveted frame): slice assets/frame.png as a 9-patch
+   and replace `border` with, e.g.:
+       decorator: ninepatch( "assets/frame.png", 16px 16px / 16px 16px ); */
 .panel {
-    background-color: #1e1e28f2;
-    border: 2dp #5a5a78ff;
-    border-radius: 8dp;
+    background-color: #1d2021f2;
+    border: 2dp #7c6f64ff;
+    border-radius: 0;
     padding: 12dp;
+    decorator: radial-gradient( farthest-corner, #00000000, #00000077 );
+}
+
+/* CRT overlay — a click-through layer drawn ON TOP, masked to the active panel so
+   its scanlines cross the bright text. Opt-in: add a bare
+   <div id="crt-overlay" class="crt"/> as the last child of a screen's <body>.
+
+   Geometry (sized to the panel rect), the scanline gradient, the scroll and the
+   flicker are driven LIVE from C++ each frame (rmlui_layer::apply_crt, fed by the
+   F4 "CRT" sliders), set as inline RCSS — so they tune in-game without a reload.
+   This rule only owns click-through + stacking. Once dialled in, bake the chosen
+   gradient strings back here as a static decorator. */
+.crt {
+    pointer-events: none;
+    z-index: 10;
 }
 
 /* GOTCHA (bit diary + mutations): RmlUi elements default to `display: inline`.
@@ -57,16 +102,16 @@ body {
    selection wins when a selected item is also hovered (equal specificity →
    source order). Base text colour inherits text-primary from body. */
 .item {
-    background-color: #2a2a3aff;
-    border-radius: 4dp;
+    background-color: #3c3836ff;
+    border-radius: 0;
 }
 .item:hover {
-    background-color: #3a3a55ff;
-    color: #ffffffff;
+    background-color: #504945ff;
+    color: #fbf1c7ff;
 }
 .item.selected {
-    background-color: #ffcc66ff;
-    color: #1e1e28ff;
+    background-color: #fabd2fff;
+    color: #1d2021ff;
 }
 
 /* F.2 tab bar (lifted at the 3rd tab use = bionics, after missions + scores both
@@ -75,7 +120,7 @@ body {
    bold. Bind tabs as a Vector of {name, selected} and switch the active one from
    C++ on click (keyboard owns LEFT/RIGHT). missions/scores keep their own copies
    (.missions-tab / .scores-tab) — adopt this on their next touch, don't retrofit
-   eyeballed screens. */
+   eyeballed screens. The 1dp brown border gives each tab a squared bracket box. */
 .tabs {
     display: flex;
     flex-direction: row;
@@ -86,6 +131,7 @@ body {
     padding: 4dp 10dp;
     margin-right: 6dp;
     text-align: center;
+    border: 1dp #7c6f64ff;
 }
 .tab.selected {
     font-weight: bold;
@@ -113,10 +159,10 @@ scrollbarvertical {
     margin-left: 4dp;
 }
 scrollbarvertical sliderbar {
-    background-color: #5a5a78ff;
-    border-radius: 4dp;
+    background-color: #665c54ff;
+    border-radius: 0;
     min-height: 24dp;
 }
 scrollbarvertical sliderbar:hover {
-    background-color: #7a7a98ff;
+    background-color: #928374ff;
 }

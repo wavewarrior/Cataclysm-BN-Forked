@@ -1,5 +1,7 @@
 #include "rmlui_render_interface.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstring>
 #include <functional>
@@ -8,6 +10,9 @@
 
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
+
+#include <RmlUi/Core/DecorationTypes.h>
+#include <RmlUi/Core/Variant.h>
 
 #include "debug.h"
 #include "gpu_device.h"
@@ -32,6 +37,22 @@ struct vert_params {
     float viewport_w;
     float viewport_h;
 };
+
+// Gradient fragment uniform (register b0, space3 in rmlui_gradient.frag.hlsl).
+// Doubles as the CompiledShaderHandle backing store (heap-allocated in
+// CompileShader, pushed verbatim in RenderShader). Layout MUST match the HLSL
+// cbuffer's 16-byte packing exactly — see the static_assert.
+constexpr int RMLUI_MAX_STOPS = 16;
+struct grad_params {
+    std::int32_t func = 0;            // 0 lin,1 rad,2 conic,3 rep-lin,4 rep-rad,5 rep-conic
+    std::int32_t num_stops = 0;
+    float p0 = 0.f, p1 = 0.f;         // g_p
+    float v0 = 0.f, v1 = 0.f;         // g_v
+    float pad0 = 0.f, pad1 = 0.f;
+    float colors[RMLUI_MAX_STOPS * 4] = {};   // float4[16], premultiplied 0..1
+    float positions[RMLUI_MAX_STOPS] = {};    // packed into float4[4] in the shader
+};
+static_assert( sizeof( grad_params ) == 352, "grad_params must match the HLSL cbuffer layout" );
 }  // namespace
 
 struct rmlui_render_interface::impl {
@@ -43,6 +64,10 @@ struct rmlui_render_interface::impl {
     SDL_GPUShader *frag = nullptr;
     SDL_GPUSampler *sampler = nullptr;
     SDL_GPUTexture *white_tex = nullptr;
+
+    // Gradient decorator pipeline: same vertex shader + layout, gradient frag.
+    SDL_GPUGraphicsPipeline *grad_pipeline = nullptr;
+    SDL_GPUShader *grad_frag = nullptr;
 
     // CPU-side compiled geometry; GPU buffers filled lazily in upload_pending.
     struct geom {
@@ -234,13 +259,43 @@ bool rmlui_render_interface::init( gpu_device &dev )
         return false;
     }
 
-    // Linear sampler with clamp — fonts/decorators want smooth scaling.
+    // Gradient pipeline: identical vertex layout/blend/target, gradient fragment
+    // shader (enables RmlUi gradient decorators via CompileShader/RenderShader).
+    // NON-FATAL: if this fails, gradient decorators just no-op (RenderShader guards
+    // on grad_pipeline); the rest of the UI still renders, so don't abort init.
+    const std::string gsrc = load_lighting_shader_source( "rmlui_gradient.frag.hlsl" );
+    compiled_shader gf = compile_graphics_shader( dev, gsrc, "main",
+                         SDL_SHADERCROSS_SHADERSTAGE_FRAGMENT, "rmlui_gradient.frag" );
+    if( !gf ) {
+        dbg( DL::Error ) << "rmlui: gradient frag compile failed (gradients disabled)";
+    } else {
+        p->grad_frag = gf.shader;
+        DebugLogFL( DL::Info, DC::Main )
+                << "rmlui_gradient.frag reflection: samplers=" << gf.resources.num_samplers
+                << " storage_buffers=" << gf.resources.num_storage_buffers
+                << " (expect samplers=0 sb=0; 1 uniform buffer at b0/space3)";
+        SDL_GPUGraphicsPipelineCreateInfo gpci = pci;  // same layout/blend/target
+        gpci.fragment_shader = p->grad_frag;
+        p->grad_pipeline = SDL_CreateGPUGraphicsPipeline( p->raw, &gpci );
+        if( !p->grad_pipeline ) {
+            dbg( DL::Error ) << "rmlui: gradient pipeline create failed (gradients disabled): "
+                             << SDL_GetError();
+        } else {
+            DebugLogFL( DL::Info, DC::Main ) << "rmlui: gradient pipeline ready";
+        }
+    }
+
+    // Linear sampler, REPEAT wrap on U/V. Repeat is required for RmlUi's tiled
+    // `repeat` image decorator (it emits UVs > 1 and relies on sampler wrap to
+    // tile, e.g. the CRT scanline overlay). Safe for everything else: glyph-atlas
+    // sub-rects and `fill`/`scale-none` decorators keep UVs within [0,1], where
+    // REPEAT and CLAMP are identical.
     SDL_GPUSamplerCreateInfo si{};
     si.min_filter = SDL_GPU_FILTER_LINEAR;
     si.mag_filter = SDL_GPU_FILTER_LINEAR;
     si.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_LINEAR;
-    si.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
-    si.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    si.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_REPEAT;
+    si.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_REPEAT;
     si.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
     p->sampler = SDL_CreateGPUSampler( p->raw, &si );
     if( !p->sampler ) {
@@ -304,6 +359,14 @@ void rmlui_render_interface::shutdown()
     if( p->frag ) {
         SDL_ReleaseGPUShader( p->raw, p->frag );
         p->frag = nullptr;
+    }
+    if( p->grad_pipeline ) {
+        SDL_ReleaseGPUGraphicsPipeline( p->raw, p->grad_pipeline );
+        p->grad_pipeline = nullptr;
+    }
+    if( p->grad_frag ) {
+        SDL_ReleaseGPUShader( p->raw, p->grad_frag );
+        p->grad_frag = nullptr;
     }
     p->raw = nullptr;
     p->dev = nullptr;
@@ -527,6 +590,134 @@ void rmlui_render_interface::ReleaseGeometry( Rml::CompiledGeometryHandle geomet
         } );
     }
     p->geoms.erase( it );
+}
+
+Rml::CompiledShaderHandle rmlui_render_interface::CompileShader(
+    const Rml::String &name, const Rml::Dictionary &parameters )
+{
+    const auto get_v2 = [&]( const char *key, Rml::Vector2f def ) -> Rml::Vector2f {
+        auto i = parameters.find( key );
+        if( i != parameters.end() ) {
+            i->second.GetInto( def );
+        }
+        return def;
+    };
+    const auto get_bool = [&]( const char *key, bool def ) -> bool {
+        auto i = parameters.find( key );
+        if( i != parameters.end() ) {
+            i->second.GetInto( def );
+        }
+        return def;
+    };
+    const auto get_float = [&]( const char *key, float def ) -> float {
+        auto i = parameters.find( key );
+        if( i != parameters.end() ) {
+            i->second.GetInto( def );
+        }
+        return def;
+    };
+
+    grad_params gp;
+    if( name == "linear-gradient" ) {
+        gp.func = get_bool( "repeating", false ) ? 3 : 0;
+        const Rml::Vector2f a = get_v2( "p0", Rml::Vector2f( 0.f ) );
+        const Rml::Vector2f b = get_v2( "p1", Rml::Vector2f( 0.f ) );
+        gp.p0 = a.x;
+        gp.p1 = a.y;
+        gp.v0 = b.x - a.x;
+        gp.v1 = b.y - a.y;
+    } else if( name == "radial-gradient" ) {
+        gp.func = get_bool( "repeating", false ) ? 4 : 1;
+        const Rml::Vector2f c = get_v2( "center", Rml::Vector2f( 0.f ) );
+        const Rml::Vector2f r = get_v2( "radius", Rml::Vector2f( 1.f ) );
+        gp.p0 = c.x;
+        gp.p1 = c.y;
+        gp.v0 = r.x != 0.f ? 1.f / r.x : 0.f;
+        gp.v1 = r.y != 0.f ? 1.f / r.y : 0.f;
+    } else if( name == "conic-gradient" ) {
+        gp.func = get_bool( "repeating", false ) ? 5 : 2;
+        const Rml::Vector2f c = get_v2( "center", Rml::Vector2f( 0.f ) );
+        const float ang = get_float( "angle", 0.f );
+        gp.p0 = c.x;
+        gp.p1 = c.y;
+        gp.v0 = std::cos( ang );
+        gp.v1 = std::sin( ang );
+    } else {
+        dbg( DL::Warn ) << "rmlui: unsupported shader '" << name << "'";
+        return {};
+    }
+
+    auto sit = parameters.find( "color_stop_list" );
+    if( sit != parameters.end() && sit->second.GetType() == Rml::Variant::COLORSTOPLIST ) {
+        const Rml::ColorStopList &stops = sit->second.GetReference<Rml::ColorStopList>();
+        const int n = std::min( static_cast<int>( stops.size() ), RMLUI_MAX_STOPS );
+        gp.num_stops = n;
+        for( int i = 0; i < n; i++ ) {
+            const auto c = stops[i].color;  // ColourbPremultiplied, 0..255
+            gp.colors[i * 4 + 0] = c.red / 255.f;
+            gp.colors[i * 4 + 1] = c.green / 255.f;
+            gp.colors[i * 4 + 2] = c.blue / 255.f;
+            gp.colors[i * 4 + 3] = c.alpha / 255.f;
+            gp.positions[i] = stops[i].position.number;
+        }
+    }
+    return reinterpret_cast<Rml::CompiledShaderHandle>( new grad_params( gp ) );
+}
+
+void rmlui_render_interface::RenderShader( Rml::CompiledShaderHandle shader,
+        Rml::CompiledGeometryHandle geometry, Rml::Vector2f translation,
+        Rml::TextureHandle /*texture*/ )
+{
+    if( !p->rp || !p->cb || !p->grad_pipeline || shader == 0 ) {
+        return;
+    }
+    auto it = p->geoms.find( static_cast<std::uint64_t>( geometry ) );
+    if( it == p->geoms.end() ) {
+        return;
+    }
+    impl::geom &g = it->second;
+    if( !g.uploaded || g.idx_count == 0 || !g.vbuf || !g.ibuf ) {
+        return;  // 1-frame pop-in (same as RenderGeometry)
+    }
+    const grad_params &gp = *reinterpret_cast<const grad_params *>( shader );
+
+    SDL_BindGPUGraphicsPipeline( p->rp, p->grad_pipeline );
+
+    SDL_GPUBufferBinding vb{};
+    vb.buffer = g.vbuf;
+    SDL_BindGPUVertexBuffers( p->rp, 0, &vb, 1 );
+    SDL_GPUBufferBinding ib{};
+    ib.buffer = g.ibuf;
+    SDL_BindGPUIndexBuffer( p->rp, &ib, SDL_GPU_INDEXELEMENTSIZE_32BIT );
+
+    // No fragment sampler: the gradient shader declares none.
+    const float sx = p->proj_w ? static_cast<float>( p->target_w ) / p->proj_w : 1.f;
+    const float sy = p->proj_h ? static_cast<float>( p->target_h ) / p->proj_h : 1.f;
+    SDL_Rect sc;
+    if( p->scissor_enabled ) {
+        sc.x = static_cast<int>( p->scissor.Left() * sx );
+        sc.y = static_cast<int>( p->scissor.Top() * sy );
+        sc.w = static_cast<int>( p->scissor.Width() * sx );
+        sc.h = static_cast<int>( p->scissor.Height() * sy );
+    } else {
+        sc.x = 0;
+        sc.y = 0;
+        sc.w = static_cast<int>( p->target_w );
+        sc.h = static_cast<int>( p->target_h );
+    }
+    SDL_SetGPUScissor( p->rp, &sc );
+
+    const vert_params vp{ translation.x, translation.y,
+                          static_cast<float>( p->proj_w ), static_cast<float>( p->proj_h ) };
+    SDL_PushGPUVertexUniformData( p->cb, 0, &vp, sizeof( vp ) );
+    SDL_PushGPUFragmentUniformData( p->cb, 0, &gp, sizeof( gp ) );
+
+    SDL_DrawGPUIndexedPrimitives( p->rp, g.idx_count, 1, 0, 0, 0 );
+}
+
+void rmlui_render_interface::ReleaseShader( Rml::CompiledShaderHandle shader )
+{
+    delete reinterpret_cast<grad_params *>( shader );
 }
 
 Rml::TextureHandle rmlui_render_interface::LoadTexture(

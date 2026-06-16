@@ -20,5 +20,6 @@
             <div class="wf-hints" data-rml="hints_rml"></div>
         </div>
     </div>
+    <div id="crt-overlay" class="crt"></div>
 </body>
 </rml>
