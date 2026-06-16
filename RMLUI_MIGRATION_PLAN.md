@@ -1608,6 +1608,49 @@ Tier 5 (npctalk/ranged/iexamine/trade), Tier 6 (overmap + on-map text §7), Tier
 (sidebar HUD), Tier 8 (F4→RmlUi), Tier 9 (minigames), plus the deferred faction (Tier 2)
 and the per-slice eyeball debt.
 
+### Tier 5 progress (interaction dialogs)
+
+- **Tier 5 screen #1: trade (trading_window::perform_trade) — CODE-COMPLETE +
+  BUILD-GREEN (trade_win.cpp.o 13:07:51 + binary relinked 13:08:28, 0 errors, fresh
+  mtime verified), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.** First Tier-5 screen; the
+  NPC trade dialog. `data/gui/trade.{rml,rcss}` model "trade" + `trade_rmlui_enabled()`
+  toggle (rml_screen.h decl + def in trade_win.cpp) + F4 "trade" checkbox (World
+  interaction group). Render-only doc mirroring `update_win`: head bar (title /
+  credit-debt cost coloured green=accept|red / category ON|OFF toggle / keybind hints)
+  + TWO item panes (theirs left | yours right) each with an inventory header +
+  weight/volume used/max stats line + column header + a row list + filter/page footer;
+  an item-info pane shows below when TOGGLE_ITEM_INFO is on; the focused pane border
+  brightens to accent (`data-class-active` on `them_focus`/`you_focus`). STRUCTURAL
+  POINTS: (1) **renders the SAME visible page as curses, NOT a native-scroll-all list**
+  — trade uses page-relative single-char hotkeys (a-z A-Z per page) that the input loop
+  reads, so showing all rows would desync the displayed letters; the doc renders
+  `[offset, offset+entries_per_page)` and the cursor is always on-page (also sidesteps
+  the scroll-follow problem). (2) each row is ONE monospace-aligned colour-tagged string
+  (Terminus font → space-padding aligns columns): `keychar selmark name | amt weight vol
+  price`, name/qty/weight/vol in the item colour, price in its own ratio colour
+  (green/red by buy/sell delta); category headers are `header`-flagged rows (magenta, no
+  accent). (3) cursor + category-mode hilite → `.trade-row.selected` (CSS accent), NOT
+  baked `hilite()`. (4) `sync_rml` recomputes both panes each redraw mirroring
+  update_win's column-width / category / stats logic (curses `update_win` left intact for
+  the A/B — armor_layers precedent). (5) ALL interaction stays keyboard + the migrated
+  string_input_popup (filter) — render-only doc; on_redraw guards `if(rml){sync_rml();
+  return;}`, `rml.open` after on_redraw before the first redraw, rml_doc dtor tears down.
+  F4 toggle "trade" (OFF). **EYEBALL CHECK (user, A/B via F4 — string_input toggle ON for
+  the filter, invariant 6):** trade with an NPC (or shopkeeper): two panes (their inv /
+  yours), each row shows hotkey + selection mark (-/#/+) + name + amt/weight/vol/price
+  with prices coloured by deal quality; the head shows "Trading with <npc>" + the
+  Credit/Debt/Exchange cost (green if they'll accept, red if not) + category toggle;
+  SWITCH_LISTS moves focus (border accent flips), UP/DOWN move the cursor (page-relative
+  letters stay correct), letter hotkeys + LEFT/RIGHT adjust quantities, CONFIRM trades,
+  AUTOBALANCE, FILTER (popup narrows the pane + the footer shows the filter + Page x/y),
+  CATEGORY_SELECTION highlights a whole category, TOGGLE_ITEM_INFO shows the description
+  pane. **WATCH:** (a) column alignment depends on the monospace font — if a pane's
+  numbers don't line up, the baked padding is off. (b) per-pane stats (weight/vol
+  used/max) match curses; shopkeeper's own pane hides them. (c) the EXAMINE popup
+  (`show_item_data`) is a separate nested curses screen — still its own path this slice
+  (flag if it reads badly over the doc). (d) first Tier-5 dynamic doc → D3D12 (Win11)
+  glance warranted.
+
 ## Load-bearing architecture facts (verified this session)
 
 - **Single curses chokepoint:** every non-map window renders through

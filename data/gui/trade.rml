@@ -1,0 +1,52 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="trade.rcss"/>
+</head>
+<body data-model="trade">
+    <!-- Tier 5 (interaction dialogs): the NPC trade screen (trading_window::
+         perform_trade). Render-only doc mirroring update_win. Head bar (title /
+         credit-debt / category toggle / keybind hints) + two item panes (theirs
+         left | yours right), each with an inventory header, a weight/volume stats
+         line, a column header, a scrolling row list (one page's worth, matching
+         the curses page-relative letter hotkeys) and a filter/page footer. An
+         item-info pane shows below when toggled. The focused pane border brightens
+         to accent. Keyboard owns all nav/select/confirm/filter/category. -->
+    <div class="panel trade-panel">
+        <div class="trade-head">
+            <div class="trade-head-row">
+                <span class="trade-title" data-rml="title_rml"></span>
+                <span class="trade-cost" data-rml="cost_rml"></span>
+                <span class="trade-category" data-rml="category_rml"></span>
+            </div>
+            <div class="trade-hints" data-rml="hints_rml"></div>
+        </div>
+        <div class="trade-body">
+            <div class="trade-pane" data-class-active="them_focus">
+                <div class="trade-pane-name" data-rml="them_name_rml"></div>
+                <div class="trade-pane-stats" data-rml="them_stats_rml"></div>
+                <div class="trade-col-header" data-rml="them_header_rml"></div>
+                <div class="trade-list scroll-pane">
+                    <div class="trade-row" data-for="r : them_rows"
+                         data-class-selected="r.selected" data-class-header="r.header"
+                         data-rml="r.text_rml"></div>
+                </div>
+                <div class="trade-pane-foot" data-rml="them_foot_rml"></div>
+            </div>
+            <div class="trade-pane" data-class-active="you_focus">
+                <div class="trade-pane-name" data-rml="you_name_rml"></div>
+                <div class="trade-pane-stats" data-rml="you_stats_rml"></div>
+                <div class="trade-col-header" data-rml="you_header_rml"></div>
+                <div class="trade-list scroll-pane">
+                    <div class="trade-row" data-for="r : you_rows"
+                         data-class-selected="r.selected" data-class-header="r.header"
+                         data-rml="r.text_rml"></div>
+                </div>
+                <div class="trade-pane-foot" data-rml="you_foot_rml"></div>
+            </div>
+        </div>
+        <div class="trade-info" data-if="show_info" data-rml="info_rml"></div>
+    </div>
+    <div id="crt-overlay" class="crt"></div>
+</body>
+</rml>

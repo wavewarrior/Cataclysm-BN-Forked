@@ -14,6 +14,7 @@
 
 #include "avatar.h"
 #include "cata_tiles.h"
+#include "creature.h"
 #include "game.h"
 #include "map.h"
 #include "lighting/gpu_emitter.h"
@@ -304,6 +305,57 @@ static void draw_effects_tab()
     dbg_slider( "sway frequency", &g_dbg_params.sway_freq, 0.0f, 3.0f, "%.1f Hz" );
 }
 
+// F4 "Animation" tab: live sprite-animation tuning (movement bob/slide, idle
+// sway, hit reaction, attack lunge). "Live override" makes the panel own the
+// tuning so edits aren't overwritten by the in-game options each frame.
+static void draw_animation_tab()
+{
+    ImGui::TextWrapped( "Live override lets these knobs win over the in-game options "
+                        "(and forces animations on). With it off the panel mirrors the "
+                        "options, but edits get overwritten each frame." );
+    ImGui::Checkbox( "live override (ignore options)", &debug_anim_override() );
+
+    animation_tuning &t = debug_anim_tuning();
+
+    ImGui::SeparatorText( "Effects on/off" );
+    ImGui::Checkbox( "move bob/slide", &t.move_bob );
+    ImGui::SameLine();
+    ImGui::Checkbox( "idle sway", &t.breathing );
+    ImGui::Checkbox( "hit reaction", &t.hit_reaction );
+    ImGui::SameLine();
+    ImGui::Checkbox( "attack lunge", &t.attack_lunge );
+
+    ImGui::SeparatorText( "Movement" );
+    dbg_slider( "bob amplitude (px)", &t.bob_amplitude, 0.f, 16.f );
+    dbg_slider( "bob duration (s)", &t.bob_duration, 0.05f, 1.0f );
+    dbg_slider( "bob frequency", &t.move_bob_freq, 1.f, 60.f );
+    dbg_slider( "move tilt (deg)", &t.move_tilt_deg, 0.f, 15.f );
+    dbg_slider( "slide duration (s)", &t.move_slide_dur, 0.02f, 0.5f );
+
+    ImGui::SeparatorText( "Idle sway" );
+    dbg_slider( "idle sway (px)", &t.idle_sway, 0.f, 6.f );
+    dbg_slider( "idle frequency", &t.idle_freq, 0.f, 6.f );
+    dbg_slider( "idle tilt (deg)", &t.idle_tilt_deg, 0.f, 6.f );
+    dbg_slider( "idle vbob mult", &t.idle_vbob_mult, 0.f, 2.f );
+
+    ImGui::SeparatorText( "Hit reaction" );
+    dbg_slider( "hit push (px)", &t.hit_push, 0.f, 24.f );
+    dbg_slider( "hit duration (s)", &t.hit_duration, 0.05f, 1.0f );
+    dbg_slider( "hit burst total (s)", &t.hit_burst_total, 0.1f, 1.5f );
+    dbg_slider( "hit flash intensity", &t.hit_flash_intensity, 0.f, 2.f );
+    dbg_slider( "hit flash frac", &t.hit_flash_frac, 0.f, 1.f );
+    dbg_slider( "hit frequency", &t.hit_freq, 1.f, 60.f );
+    dbg_slider( "hit tilt (deg)", &t.hit_tilt_deg, 0.f, 20.f );
+
+    ImGui::SeparatorText( "Attack lunge" );
+    dbg_slider( "attack amplitude (px)", &t.attack_amplitude, 0.f, 16.f );
+    dbg_slider( "attack duration (s)", &t.attack_duration, 0.05f, 1.0f );
+    dbg_slider( "attack frequency", &t.attack_freq, 1.f, 60.f );
+    dbg_slider( "ranged amp mult (signed)", &t.attack_ranged_mult, -2.f, 2.f );
+    dbg_slider( "melee tilt (deg)", &t.attack_tilt_melee_deg, -15.f, 15.f );
+    dbg_slider( "ranged tilt (deg)", &t.attack_tilt_ranged_deg, -15.f, 15.f );
+}
+
 // F4 "RmlUi" tab: global UI scale, CRT post-effects, and the per-screen
 // migration toggles (grouped by screen category in collapsing headers).
 static void draw_rmlui_tab()
@@ -358,6 +410,7 @@ static void draw_rmlui_tab()
         ImGui::Checkbox( "construction", &construction_rmlui_enabled() );
         ImGui::Checkbox( "crafting", &crafting_rmlui_enabled() );
         ImGui::Checkbox( "safemode", &safemode_rmlui_enabled() );
+        ImGui::Checkbox( "trade", &trade_rmlui_enabled() );
     }
     if( ImGui::CollapsingHeader( "System menus" ) ) {
         ImGui::Checkbox( "options", &options_rmlui_enabled() );
@@ -472,6 +525,10 @@ void draw()
     }
     if( ImGui::BeginTabItem( "Effects" ) ) {
         draw_effects_tab();
+        ImGui::EndTabItem();
+    }
+    if( ImGui::BeginTabItem( "Animation" ) ) {
+        draw_animation_tab();
         ImGui::EndTabItem();
     }
     if( ImGui::BeginTabItem( "RmlUi" ) ) {

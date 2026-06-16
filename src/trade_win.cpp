@@ -32,8 +32,68 @@
 #include "ui_manager.h"
 #include "units_utility.h"
 
+#include <RmlUi/Core.h>
+#include "rml_screen.h"
+#include "rml_util.h"
+
+// Tier 5 (interaction dialogs): the NPC trade screen RmlUi render path. Render-
+// only doc mirroring update_win — two item panes (theirs | yours) + head bar
+// (title / credit-debt / category toggle / hints) + per-pane stats + info pane.
+// Keyboard owns all of it (page-relative letter hotkeys preserved → the RmlUi
+// path renders the SAME visible page as curses, not a native-scroll-all list).
+bool &trade_rmlui_enabled()
+{
+    static bool enabled = false;
+    return enabled;
+}
+
 namespace
 {
+// RmlUi data-model for the trade screen. Each pane is a Vector of baked rows
+// (one colour-tagged monospace-aligned string per row + a selected flag for the
+// cursor / category hilite). Distinct registered row type; single registration.
+struct trade_row {
+    Rml::String text_rml;
+    bool selected = false;
+    bool header = false;
+};
+struct trade_session {
+    Rml::String title_rml;
+    Rml::String cost_rml;
+    Rml::String category_rml;
+    Rml::String hints_rml;
+    Rml::String them_name_rml;
+    Rml::String you_name_rml;
+    Rml::String them_stats_rml;
+    Rml::String you_stats_rml;
+    Rml::String them_header_rml;
+    Rml::String you_header_rml;
+    Rml::String them_foot_rml;
+    Rml::String you_foot_rml;
+    bool them_focus = true;
+    bool you_focus = false;
+    Rml::Vector<trade_row> them_rows;
+    Rml::Vector<trade_row> you_rows;
+    bool show_info = false;
+    Rml::String info_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_trade_types_registered = false;
+
+void register_trade_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_trade_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<trade_row> rh = c.RegisterStruct<trade_row>();
+    rh.RegisterMember( "text_rml", &trade_row::text_rml );
+    rh.RegisterMember( "selected", &trade_row::selected );
+    rh.RegisterMember( "header", &trade_row::header );
+    c.RegisterArray<Rml::Vector<trade_row>>();
+    g_trade_types_registered = true;
+}
+
 constexpr auto trade_head_height = 4;
 constexpr auto trade_info_height = 4;
 constexpr auto trade_header_rows = 4;
@@ -807,8 +867,316 @@ auto trading_window::perform_trade( npc &np, const std::string &deal ) -> bool
     } );
     ui.mark_resize();
 
+    // RmlUi render path (render-only; keyboard owns nav/select/confirm below).
+    // Renders the SAME visible page as curses (page-relative letter hotkeys),
+    // not a native-scroll-all list, so the displayed hotkeys match the input loop.
+    auto rml_data = std::make_unique<trade_session>();
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml_data->handle ) {
+            return;
+        }
+        const auto trade_accept = npc_trading::npc_will_accept_trade( state, np );
+
+        // ── Head bar ──────────────────────────────────────────────────────
+        const std::string title_label =
+            deal == _( "Pay:" ) ? _( "Paying" )
+            : deal == _( "Reward" ) ? _( "Accepting a reward from" )
+            : _( "Trading with" );
+        rml_data->title_rml = cata_text_to_rml(
+                                  colorize( title_label, c_white ) + " " +
+                                  colorize( np.disp_name(), c_light_green ) );
+
+        std::string cost_str = _( "Exchange" );
+        if( !np.will_exchange_items_freely() ) {
+            cost_str = string_format( state.your_balance >= 0 ? _( "Credit %s" ) : _( "Debt %s" ),
+                                      format_money( std::abs( state.your_balance ) ) );
+        }
+        rml_data->cost_rml = cata_text_to_rml( colorize( cost_str, trade_accept ? c_green : c_red ) );
+        rml_data->category_rml = cata_text_to_rml(
+                                     _( "Category select: " ) +
+                                     colorize( _( "ON" ), category_mode ? c_light_green : c_dark_gray ) +
+                                     colorize( "|", c_white ) +
+                                     colorize( _( "OFF" ), category_mode ? c_dark_gray : c_light_green ) );
+        {
+            const auto hint = [&]( const std::string & act, const std::string & label ) -> std::string {
+                return colorize( "[" + ctxt.get_desc( act, 1 ) + "]", c_yellow ) + " " +
+                       colorize( label, c_light_gray ) + "   ";
+            };
+            rml_data->hints_rml = cata_text_to_rml(
+                                      hint( "EXAMINE", _( "examine" ) ) + hint( "SWITCH_LISTS", _( "switch panes" ) ) +
+                                      hint( "CONFIRM", _( "confirm trade" ) ) + hint( "AUTOBALANCE", _( "autobalance" ) ) +
+                                      hint( "FILTER", _( "filter" ) ) + hint( "CATEGORY_SELECTION", _( "category" ) ) );
+        }
+
+        them_filtered = build_filtered_indices( state.theirs, them_filter );
+        you_filtered = build_filtered_indices( state.yours, you_filter );
+
+        // Player free capacity (mirrors update_win) for the YOU pane stats.
+        const auto sel_amount = []( const item_pricing & ip, bool is_theirs ) -> int {
+            if( ip.charges > 0 )
+            {
+                return is_theirs ? ip.u_charges : ip.npc_charges;
+            }
+            return is_theirs ? ip.u_has : ip.npc_has;
+        };
+        units::volume your_sel_vol = 0_ml, their_sel_vol = 0_ml;
+        units::mass your_sel_wt = 0_gram, their_sel_wt = 0_gram;
+        for( const item_pricing &ip : state.yours ) {
+            const int a = sel_amount( ip, false );
+            your_sel_vol += ip.vol * a;
+            your_sel_wt += ip.weight * a;
+        }
+        for( const item_pricing &ip : state.theirs ) {
+            const int a = sel_amount( ip, true );
+            their_sel_vol += ip.vol * a;
+            their_sel_wt += ip.weight * a;
+        }
+        const auto player_free_volume = g->u.volume_capacity() - g->u.volume_carried() +
+                                        your_sel_vol - their_sel_vol;
+        const auto player_free_weight = g->u.weight_capacity() - g->u.weight_carried() +
+                                        your_sel_wt - their_sel_wt;
+
+        const auto align_left = []( const std::string & t, int w ) -> std::string {
+            return t + std::string( std::max<int>( w - utf8_width( t ), 0 ), ' ' );
+        };
+        const auto align_right = []( const std::string & t, int w ) -> std::string {
+            return std::string( std::max<int>( w - utf8_width( t ), 0 ), ' ' ) + t;
+        };
+
+        // ── Per-pane fill ─────────────────────────────────────────────────
+        const auto fill_pane = [&]( bool they ) {
+            const auto &list = they ? state.theirs : state.yours;
+            const auto &filtered = they ? them_filtered : you_filtered;
+            const size_t offset = they ? them_off : you_off;
+            const size_t cursor = they ? them_cursor : you_cursor;
+            const player &person = they ? static_cast<player &>( np ) : static_cast<player &>( g->u );
+            Rml::Vector<trade_row> &out = they ? rml_data->them_rows : rml_data->you_rows;
+            Rml::String &name_out = they ? rml_data->them_name_rml : rml_data->you_name_rml;
+            Rml::String &stats_out = they ? rml_data->them_stats_rml : rml_data->you_stats_rml;
+            Rml::String &header_out = they ? rml_data->them_header_rml : rml_data->you_header_rml;
+            Rml::String &foot_out = they ? rml_data->them_foot_rml : rml_data->you_foot_rml;
+            out.clear();
+
+            name_out = cata_text_to_rml( colorize( _( "Inventory:" ), c_white ) + " " +
+                                         colorize( they ? np.name : _( "You" ), c_light_green ) );
+
+            // Per-pane weight/volume used/max (skipped for shopkeepers' own pane).
+            if( !they || !np.is_shopkeeper() ) {
+                const auto free_vol = they ? state.volume_left : player_free_volume;
+                const auto free_wt = they ? state.weight_left : player_free_weight;
+                const auto max_vol = they ? np.volume_capacity() : g->u.volume_capacity();
+                const auto max_wt = they ? np.weight_capacity() : g->u.weight_capacity();
+                const auto used_vol = max_vol - free_vol;
+                const auto used_wt = max_wt - free_wt;
+                const auto wt_col = used_wt > max_wt ? c_light_red : c_light_green;
+                const auto vol_col = used_vol > max_vol ? c_light_red : c_light_green;
+                stats_out = cata_text_to_rml(
+                                colorize( string_format( "%.2f", convert_weight( used_wt ) ), wt_col ) +
+                                string_format( _( "/%s %s  " ), string_format( "%.2f", convert_weight( max_wt ) ),
+                                               weight_units() ) +
+                                colorize( string_format( "%.2f", convert_volume( to_milliliter( used_vol ) ) ), vol_col ) +
+                                string_format( _( "/%s %s" ), string_format( "%.2f",
+                                               convert_volume( to_milliliter( max_vol ) ) ), volume_units_abbr() ) );
+            } else {
+                stats_out.clear();
+            }
+
+            // Column widths over the visible window (monospace grid).
+            const size_t end = std::min( filtered.size(), offset + entries_per_page );
+            int name_w = utf8_width( _( "Name (charges)" ) );
+            int qty_w = utf8_width( _( "amt" ) );
+            int weight_w = utf8_width( _( "weight" ) );
+            int vol_w = utf8_width( _( "vol" ) );
+            int price_w = utf8_width( _( "unit price" ) );
+            for( size_t i = offset; i < end; i++ ) {
+                const item_pricing &ip = list[filtered[i]];
+                const int amt = ip.charges > 0 ? ip.charges : std::max( ip.count, 1 );
+                name_w = std::max( name_w, utf8_width( ip.locs.front()->display_name() ) );
+                if( ( ip.charges > 0 ? ip.charges : ip.count ) > 1 ) {
+                    qty_w = std::max( qty_w, utf8_width( string_format( "%d",
+                                      ip.charges > 0 ? ip.charges : ip.count ) ) );
+                }
+                weight_w = std::max( weight_w, utf8_width( string_format( "%.2f", convert_weight( ip.weight * amt ) ) ) );
+                vol_w = std::max( vol_w, utf8_width( string_format( "%.2f",
+                                  convert_volume( to_milliliter( ip.vol * amt ) ) ) ) );
+                price_w = std::max( price_w, utf8_width( format_money( ip.price ) ) );
+            }
+            name_w = std::min( name_w, 40 );
+
+            header_out = cata_text_to_rml( colorize(
+                             align_left( _( "Name (charges)" ), name_w + 4 ) + " " +
+                             align_left( _( "amt" ), qty_w ) + " " +
+                             align_left( _( "weight" ), weight_w ) + " " +
+                             align_left( _( "vol" ), vol_w ) + " " +
+                             align_left( _( "unit price" ), price_w ), c_light_gray ) );
+
+            const bool is_focused = ( they && focus_them ) || ( !they && !focus_them );
+            const auto category_ranges = build_category_ranges( list, filtered );
+            std::optional<item_category_id> active_category;
+            if( category_mode && is_focused && !category_ranges.empty() ) {
+                const size_t cc = they ? them_category_cursor : you_category_cursor;
+                if( cc < category_ranges.size() ) {
+                    active_category = category_ranges[cc].id;
+                }
+            }
+
+            const std::string hotkeys =
+                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+            auto last_category = std::optional<item_category_id> {};
+            size_t row = 0;
+            for( size_t i = offset; i < filtered.size() && row < entries_per_page; i++ ) {
+                const item_pricing &ip = list[filtered[i]];
+                const item *it = ip.locs.front();
+                const auto category_id = it->get_category().get_id();
+                if( !last_category || *last_category != category_id ) {
+                    trade_row h;
+                    h.header = true;
+                    h.text_rml = cata_text_to_rml( colorize( to_upper_case( it->get_category().name() ),
+                                                   c_magenta ) );
+                    out.push_back( h );
+                    row++;
+                    if( row >= entries_per_page ) {
+                        break;
+                    }
+                }
+                nc_color color = it == &person.primary_weapon() ? c_yellow : c_light_gray;
+                std::string itname = it->display_name();
+                if( np.will_exchange_items_freely() &&
+                    ip.locs.front()->where() != item_location_type::character ) {
+                    itname += " (" + ip.locs.front()->describe_location( &g->u ) + ")";
+                    color = c_light_blue;
+                }
+                if( ip.selected ) {
+                    color = c_white;
+                }
+                const bool is_cursor = is_focused && i == cursor;
+                const bool is_cat_sel = active_category && *active_category == category_id;
+
+                const int owner_sells = they ? ip.u_has : ip.npc_has;
+                const int owner_sells_charge = they ? ip.u_charges : ip.npc_charges;
+                const int total_amount = ip.charges > 0 ? ip.charges : std::max( ip.count, 1 );
+                const int selected_amount = ip.charges > 0 ? owner_sells_charge : owner_sells;
+                char selection_mark = '-';
+                if( selected_amount >= total_amount && total_amount > 0 ) {
+                    selection_mark = '+';
+                } else if( selected_amount > 0 ) {
+                    selection_mark = '#';
+                }
+                const size_t hotkey_index = i - offset;
+                const char keychar = hotkey_index < hotkeys.size() ? hotkeys[hotkey_index] : ' ';
+
+                const int available_amount = ip.charges > 0 ? ip.charges : ip.count;
+                const std::string qty_str = available_amount > 1 ? string_format( "%d", available_amount ) :
+                                            std::string{};
+                const std::string weight_str = string_format( "%.2f",
+                                               convert_weight( ip.weight * available_amount ) );
+                const std::string vol_str = string_format( "%.2f",
+                                            convert_volume( to_milliliter( ip.vol * available_amount ) ) );
+
+                std::string price_str = format_money( ip.price );
+                nc_color price_color = c_light_gray;
+                if( !np.will_exchange_items_freely() ) {
+                    const auto base_price = it->price( true );
+                    if( base_price > 0 ) {
+                        const double ratio = static_cast<double>( ip.price ) / base_price;
+                        if( ratio < 0.95 ) {
+                            price_color = they ? c_light_green : c_light_red;
+                        } else if( ratio > 1.05 ) {
+                            price_color = they ? c_light_red : c_light_green;
+                        }
+                    }
+                } else {
+                    price_color = c_dark_gray;
+                    price_str.clear();
+                }
+
+                const std::string namecell = align_left(
+                                                 string_format( "%c %c %s", keychar, selection_mark,
+                                                         trim_by_length( itname, name_w ).c_str() ), name_w + 4 );
+                trade_row r;
+                r.selected = is_cursor || is_cat_sel;
+                r.text_rml = cata_text_to_rml(
+                                 colorize( namecell, color ) + " " +
+                                 colorize( align_left( qty_str, qty_w ), color ) + " " +
+                                 colorize( align_left( weight_str, weight_w ), color ) + " " +
+                                 colorize( align_left( vol_str, vol_w ), color ) + " " +
+                                 colorize( align_right( price_str, price_w ), price_color ) );
+                out.push_back( r );
+                last_category = category_id;
+                row++;
+            }
+
+            // Footer: filter indicator + page label.
+            const auto &pane_filter = they ? them_filter : you_filter;
+            const bool editing_here = filter_edit && ( filter_edit_theirs == they );
+            std::string foot;
+            if( editing_here || !pane_filter.empty() ) {
+                const std::string &ftext = editing_here && filter_popup ? filter_popup->text() : pane_filter;
+                foot += colorize( _( "filter: " ) + ftext, editing_here ? c_white : c_magenta ) + "   ";
+            }
+            const auto page_starts = build_page_starts( list, filtered, entries_per_page );
+            const auto total_pages = std::max( page_starts.size(), size_t{1} );
+            const auto current_page = page_index_for_offset( page_starts, offset ) + 1;
+            foot += colorize( string_format( _( "Page %d/%d" ), static_cast<int>( current_page ),
+                                             static_cast<int>( total_pages ) ), c_light_gray );
+            foot_out = cata_text_to_rml( foot );
+        };
+        fill_pane( true );
+        fill_pane( false );
+        rml_data->them_focus = focus_them;
+        rml_data->you_focus = !focus_them;
+
+        // ── Info pane ─────────────────────────────────────────────────────
+        rml_data->show_info = show_item_info;
+        if( show_item_info ) {
+            const auto &info_list = focus_them ? state.theirs : state.yours;
+            const auto &info_filtered = focus_them ? them_filtered : you_filtered;
+            const size_t info_cursor = focus_them ? them_cursor : you_cursor;
+            if( !category_mode && !info_filtered.empty() && info_cursor < info_filtered.size() ) {
+                const item &info_item = *info_list[info_filtered[info_cursor]].locs.front();
+                rml_data->info_rml = cata_text_to_rml( colorize(
+                                         info_item.type->description.translated(), c_light_gray ) );
+            } else {
+                rml_data->info_rml = cata_text_to_rml( colorize( _( "No item selected." ), c_dark_gray ) );
+            }
+        } else {
+            rml_data->info_rml.clear();
+        }
+
+        rml_data->handle.DirtyAllVariables();
+    };
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         update_win( np, deal );
+    } );
+
+    rml.open( trade_rmlui_enabled(), "trade", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        register_trade_rml_types( c );
+        c.Bind( "title_rml", &rml_data->title_rml );
+        c.Bind( "cost_rml", &rml_data->cost_rml );
+        c.Bind( "category_rml", &rml_data->category_rml );
+        c.Bind( "hints_rml", &rml_data->hints_rml );
+        c.Bind( "them_name_rml", &rml_data->them_name_rml );
+        c.Bind( "you_name_rml", &rml_data->you_name_rml );
+        c.Bind( "them_stats_rml", &rml_data->them_stats_rml );
+        c.Bind( "you_stats_rml", &rml_data->you_stats_rml );
+        c.Bind( "them_header_rml", &rml_data->them_header_rml );
+        c.Bind( "you_header_rml", &rml_data->you_header_rml );
+        c.Bind( "them_foot_rml", &rml_data->them_foot_rml );
+        c.Bind( "you_foot_rml", &rml_data->you_foot_rml );
+        c.Bind( "them_focus", &rml_data->them_focus );
+        c.Bind( "you_focus", &rml_data->you_focus );
+        c.Bind( "them_rows", &rml_data->them_rows );
+        c.Bind( "you_rows", &rml_data->you_rows );
+        c.Bind( "show_info", &rml_data->show_info );
+        c.Bind( "info_rml", &rml_data->info_rml );
+        rml_data->handle = c.GetModelHandle();
     } );
 
     auto confirm = false;

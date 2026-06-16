@@ -158,4 +158,8 @@ bool &main_menu_rmlui_enabled();
 // POINTS tab, set_points).
 bool &newcharacter_rmlui_enabled();
 
+// trading_window::perform_trade() RmlUi path (Tier 5: the NPC trade screen —
+// dual item panes + credit/debt head + per-pane stats + item-info pane).
+bool &trade_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H
