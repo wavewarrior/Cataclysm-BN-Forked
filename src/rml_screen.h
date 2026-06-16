@@ -162,4 +162,8 @@ bool &newcharacter_rmlui_enabled();
 // dual item panes + credit/debt head + per-pane stats + item-info pane).
 bool &trade_rmlui_enabled();
 
+// iexamine::vending() RmlUi path (Tier 5: the vending-machine screen — item list
+// + item-info pane).
+bool &vending_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

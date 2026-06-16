@@ -1651,6 +1651,28 @@ and the per-slice eyeball debt.
   (flag if it reads badly over the doc). (d) first Tier-5 dynamic doc → D3D12 (Win11)
   glance warranted.
 
+- **Tier 5 screen #2: vending machine (iexamine::vending) — CODE-COMPLETE +
+  BUILD-GREEN (iexamine.cpp.o 13:37:30 + binary relinked 13:46:40, user-confirmed
+  clean), TOGGLE OFF, EYEBALL OWED, COMMITTED.** The ONE bespoke iexamine screen (the
+  rest of iexamine.cpp is popups/uilists, Tier-0 covered). `data/gui/vending.{rml,rcss}`
+  model "vending" + `vending_rmlui_enabled()` toggle + F4 "vending" checkbox.
+  Render-only doc: left pane = "Money left: $X" header + item list (count digit + name,
+  coloured via color_in_inventory, cursor `.selected`); right pane = item-info
+  (name+price header + `info_string()` folded description). Curses path (paged,
+  cursor-centered, scrollbar) left intact; the RmlUi list shows all items + native
+  scroll (the list is short — a vending machine — so no page/scroll-follow needed).
+  Keyboard owns UP/DOWN (wrap), CONFIRM (buy, afford-check popup), QUIT. **EYEBALL
+  CHECK (user, A/B via F4):** examine a vending machine: money header, item list with
+  count+name coloured + cursor highlight, UP/DOWN wrap the cursor, the info pane shows
+  the selected item's name/price + description, CONFIRM buys (money drops, item leaves;
+  "can't afford" popup when broke), empty machine shuts down.
+
+### Tier 5 status: trade + vending done; ranged DEFERRED to Tier 6; npctalk next
+
+ranged/targeting is a live map overlay → the plan sequences it AFTER the §7 world-text
+/ Tier-6 overlay layer exists; it is NOT done in Tier 5. Remaining Tier-5 modal:
+**npctalk** (the dialogue window — `dialogue_window` rendered from `dialogue::opt`).
+
 ## Load-bearing architecture facts (verified this session)
 
 - **Single curses chokepoint:** every non-map window renders through

@@ -1,0 +1,26 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="vending.rcss"/>
+</head>
+<body data-model="vending">
+    <!-- Tier 5: the vending-machine screen (iexamine::vending). Render-only doc:
+         left pane = money header + item list (count + name, coloured, cursor
+         highlighted); right pane = item-info (name/price header + folded
+         description). Keyboard owns UP/DOWN (wrap), CONFIRM (buy), QUIT. -->
+    <div class="panel vend-panel">
+        <div class="vend-list-pane">
+            <div class="vend-money" data-rml="money_rml"></div>
+            <div class="vend-list scroll-pane">
+                <div class="item vend-row" data-for="r : rows"
+                     data-class-selected="r.selected" data-rml="r.text_rml"></div>
+            </div>
+        </div>
+        <div class="vend-info-pane">
+            <div class="vend-info-header" data-rml="info_header_rml"></div>
+            <div class="vend-info scroll-pane" data-rml="info_rml"></div>
+        </div>
+    </div>
+    <div id="crt-overlay" class="crt"></div>
+</body>
+</rml>
