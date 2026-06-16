@@ -1502,6 +1502,32 @@ curses; LEFT/RIGHT switch column, UP/DOWN move, CONFIRM toggles a CBM (conflict/
 popups), NEXT_TAB → Skills (RmlUi), PREV_TAB → Traits (RmlUi). Same deferred gaps as
 Traits (no tile preview, no long-list scroll-follow).
 
+**SLICE 6 (set_scenario) — CODE-COMPLETE + BUILD-GREEN (binary relinked 12:09:44, 0
+errors), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.** The SCENARIO tab (6th lit).
+`data/gui/newcharscenario.{rml,rcss}` model "newcharscenario". Single scenario list
+(left, `data-for` rows + scroll-follow via the proven options ScrollIntoView idiom) + a
+right info pane combining sort indicator + professions (count + default w/ point cost) +
+location + vehicle + flags (all rebuilt as one colour-tagged `info_rml` string mirroring
+the curses w_profession/w_location/w_vehicle/w_flags blocks verbatim) + a top bar (points
+w/ netPointCost +/- + the scenario cost line, green if can_pick else red) + a description
+footer (green desc, red CITY_START-unavailable note) + a filter indicator footer.
+Per-row colour: current scenario COL_SKILL_USED, CITY_START-unavailable c_dark_gray, else
+c_light_gray; cursor = `.selected`. on_redraw `if(rml){sync_rml();return;}` else curses;
+`rml.open` after on_redraw; rml_doc dtor at the single return. Keyboard owns UP/DOWN,
+CONFIRM (pick scenario → resets profession), SORT (points/name), FILTER (string_input
+Tier-0 popup → recalc), RANDOMIZE, NEXT/PREV_TAB, QUIT. F4 toggle "new character"
+(shared). **EYEBALL CHECK (user, A/B via F4 — query_popup ON):** New Game → Custom →
+SCENARIO: char-tab strip (SCENARIO current), scenario list (current scenario green,
+city-locked greyed), cursor scroll-follows UP/DOWN; the right pane shows sort + default
+profession (+cost) + location (N locations, M variants) + vehicle + flag lines matching
+curses; the cost line is green/red by affordability; the description shows below (red
+note for city-locked); SORT toggles points/name + re-sorts; FILTER popup narrows the list
++ the `<filter>` indicator updates; CONFIRM picks; NEXT_TAB → Profession (curses),
+PREV_TAB → Points (RmlUi). **WATCH:** (a) info pane is a from-scratch reconstruction —
+spot-check professions/location/vehicle/flags vs curses. (b) FILTER popup renders over
+the doc + the empty-result "Nothing found." popup (invariant 6). (c) cursor scroll-follow
+on a long scenario list.
+
 ## Load-bearing architecture facts (verified this session)
 
 - **Single curses chokepoint:** every non-map window renders through

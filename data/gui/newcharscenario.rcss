@@ -1,0 +1,95 @@
+/* Layout for the new-character SCENARIO tab (Tier 4 #4 slice 6). Reuses theme
+   .panel / .tabs / .tab / .item / .scroll-pane. */
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.nc-panel {
+    width: 80%;
+    min-width: 720dp;
+    height: 92%;
+    display: flex;
+    flex-direction: column;
+}
+
+.nc-tabs {
+    flex: 0 0 auto;
+}
+
+.nc-tabs .tab {
+    flex: 0 0 auto;
+}
+
+.nc-scen-top {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    padding: 6dp 8dp;
+}
+
+.nc-scen-points {
+    display: block;
+    flex: 0 0 auto;
+    margin-right: 16dp;
+}
+
+.nc-scen-cost {
+    display: block;
+    flex: 1;
+}
+
+.nc-scen-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+}
+
+.nc-scen-list {
+    flex: 1;
+    min-width: 0;
+    border-right: 1dp {{bg4}};
+    padding-right: 8dp;
+}
+
+.nc-scen-row {
+    display: block;
+}
+
+.nc-scen-info {
+    flex: 1;
+    min-width: 0;
+    padding-left: 8dp;
+}
+
+.nc-scen-sort {
+    display: block;
+    margin-bottom: 8dp;
+}
+
+.nc-scen-detail {
+    display: block;
+    white-space: pre-wrap;
+}
+
+.nc-scen-desc {
+    flex: 0 0 auto;
+    max-height: 80dp;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    padding: 6dp 8dp;
+    border-top: 1dp {{bg4}};
+    color: {{fg}};
+}
+
+.nc-scen-filter {
+    display: block;
+    flex: 0 0 auto;
+    padding: 2dp 8dp;
+    color: {{gray}};
+}

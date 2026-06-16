@@ -3611,6 +3611,49 @@ struct {
     }
 } scenario_sorter;
 
+// RmlUi model for the SCENARIO tab (slice 6). Single list + a combined right
+// info pane (professions/location/vehicle/flags). Distinct per-model types.
+namespace
+{
+struct nc_scen_tab {
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct nc_scen_row {
+    Rml::String text_rml;
+    bool selected = false;
+};
+struct nc_scen_session {
+    Rml::Vector<nc_scen_tab> tabs;
+    Rml::String points_rml;
+    Rml::String cost_rml;
+    Rml::Vector<nc_scen_row> rows;
+    Rml::String desc_rml;
+    Rml::String info_rml;
+    Rml::String sort_rml;
+    Rml::String filter_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_nc_scen_types_registered = false;
+
+void register_nc_scen_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_nc_scen_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<nc_scen_tab> th = c.RegisterStruct<nc_scen_tab>();
+    th.RegisterMember( "name_rml", &nc_scen_tab::name_rml );
+    th.RegisterMember( "selected", &nc_scen_tab::selected );
+    c.RegisterArray<Rml::Vector<nc_scen_tab>>();
+    Rml::StructHandle<nc_scen_row> rh = c.RegisterStruct<nc_scen_row>();
+    rh.RegisterMember( "text_rml", &nc_scen_row::text_rml );
+    rh.RegisterMember( "selected", &nc_scen_row::selected );
+    c.RegisterArray<Rml::Vector<nc_scen_row>>();
+    g_nc_scen_types_registered = true;
+}
+} // namespace
+
 tab_direction set_scenario( avatar &u, points_left &points,
                             const tab_direction direction )
 {
@@ -3663,7 +3706,175 @@ tab_direction set_scenario( avatar &u, points_left &points,
         points.skill_points += u.prof->point_cost();
     }
 
+    // RmlUi render path (render-only; keyboard owns nav/confirm/sort/filter below).
+    auto data = std::make_unique<nc_scen_session>();
+    rml_doc rml;
+    bool rml_scroll_pending = false;
+    const auto sync_rml = [&]() {
+        if( !data->handle ) {
+            return;
+        }
+        data->tabs = build_nc_char_tabs<nc_scen_tab>( 1 ); // SCENARIO tab active
+        const bool valid = cur_id >= 0 && static_cast<size_t>( cur_id ) < sorted_scens.size();
+
+        std::string pmsg = points.to_string();
+        if( valid ) {
+            const int netPointCost = sorted_scens[cur_id]->point_cost() - g->scen->point_cost();
+            if( netPointCost > 0 ) {
+                pmsg += colorize( string_format( " (-%d)", std::abs( netPointCost ) ), c_red );
+            } else if( netPointCost < 0 ) {
+                pmsg += colorize( string_format( " (+%d)", std::abs( netPointCost ) ), c_green );
+            }
+        }
+        data->points_rml = cata_text_to_rml( pmsg );
+
+        if( valid ) {
+            const scenario *s = sorted_scens[cur_id];
+            const bool can_pick = s->can_pick( *g->scen, points.skill_points_left() );
+            int pts = s->point_cost();
+            const bool neg = pts < 0;
+            if( neg ) {
+                pts *= -1;
+            }
+            const std::string msg = neg
+                                    ? vgettext( "Scenario %1$s earns %2$d point",
+                                            "Scenario %1$s earns %2$d points", pts )
+                                    : vgettext( "Scenario %1$s costs %2$d point",
+                                            "Scenario %1$s cost %2$d points", pts );
+            data->cost_rml = cata_text_to_rml( colorize( string_format( msg,
+                             s->gender_appropriate_name( u.male ), pts ),
+                             can_pick ? c_green : c_light_red ) );
+
+            std::string desc;
+            if( s->has_flag( "CITY_START" ) && !scenario_sorter.cities_enabled ) {
+                desc = colorize(
+                           _( "This scenario is not available in this world due to city size settings." ),
+                           c_red ) + "\n" + colorize( s->description( u.male ), c_green );
+            } else {
+                desc = colorize( s->description( u.male ), c_green );
+            }
+            data->desc_rml = cata_text_to_rml( desc );
+
+            std::string info;
+            info += colorize( _( "Professions:" ), COL_HEADER );
+            info += string_format( _( "\n%s" ), s->prof_count_str() );
+            info += _( ", default:\n" );
+            auto psorter = profession_sorter;
+            psorter.sort_by_points = true;
+            const auto permitted = s->permitted_professions();
+            const auto default_prof = *std::min_element( permitted.begin(), permitted.end(), psorter );
+            const int prof_points = default_prof->point_cost();
+            info += default_prof->gender_appropriate_name( u.male );
+            if( prof_points > 0 ) {
+                info += colorize( string_format( " (-%d)", prof_points ), c_red );
+            } else if( prof_points < 0 ) {
+                info += colorize( string_format( " (+%d)", -prof_points ), c_green );
+            }
+            info += "\n\n";
+            info += colorize( _( "Scenario Location:" ), COL_HEADER );
+            info += "\n";
+            info += string_format( _( "%s (%d locations, %d variants)" ), s->start_name(),
+                                   s->start_location_count(), s->start_location_targets_count() );
+            info += "\n\n";
+            info += colorize( _( "Scenario Vehicle:" ), COL_HEADER );
+            info += "\n";
+            if( s->vehicle() ) {
+                info += s->vehicle()->name;
+            }
+            info += "\n\n";
+            info += colorize( _( "Scenario Flags:" ), COL_HEADER );
+            info += "\n";
+            if( s->has_flag( "SPR_START" ) ) {
+                info += std::string( _( "Spring start" ) ) + "\n";
+            } else if( s->has_flag( "SUM_START" ) ) {
+                info += std::string( _( "Summer start" ) ) + "\n";
+            } else if( s->has_flag( "AUT_START" ) ) {
+                info += std::string( _( "Autumn start" ) ) + "\n";
+            } else if( s->has_flag( "WIN_START" ) ) {
+                info += std::string( _( "Winter start" ) ) + "\n";
+            } else if( s->has_flag( "SUM_ADV_START" ) ) {
+                info += std::string( _( "Next summer start" ) ) + "\n";
+            }
+            if( s->has_flag( "INFECTED" ) ) {
+                info += std::string( _( "Infected player" ) ) + "\n";
+            }
+            if( s->has_flag( "BAD_DAY" ) ) {
+                info += std::string( _( "Drunk and sick player" ) ) + "\n";
+            }
+            if( s->has_flag( "FIRE_START" ) ) {
+                info += std::string( _( "Fire nearby" ) ) + "\n";
+            }
+            if( s->has_flag( "SUR_START" ) ) {
+                info += std::string( _( "Zombies nearby" ) ) + "\n";
+            }
+            if( s->has_flag( "HELI_CRASH" ) ) {
+                info += std::string( _( "Various limb wounds" ) ) + "\n";
+            }
+            if( get_option<std::string>( "STARTING_NPC" ) == "scenario" &&
+                s->has_flag( "LONE_START" ) ) {
+                info += std::string( _( "No starting NPC" ) ) + "\n";
+            }
+            if( s->has_flag( "BORDERED" ) ) {
+                info += std::string( _( "Starting location is bordered by an immense wall" ) ) + "\n";
+            }
+            data->info_rml = cata_text_to_rml( info );
+        } else {
+            data->cost_rml.clear();
+            data->desc_rml.clear();
+            data->info_rml.clear();
+        }
+
+        data->rows.clear();
+        for( int i = 0; i < static_cast<int>( sorted_scens.size() ); i++ ) {
+            const scenario *s = sorted_scens[i];
+            nc_color col;
+            if( g->scen != s ) {
+                if( s->has_flag( "CITY_START" ) && !scenario_sorter.cities_enabled ) {
+                    col = c_dark_gray;
+                } else {
+                    col = c_light_gray;
+                }
+            } else {
+                col = COL_SKILL_USED;
+            }
+            nc_scen_row r;
+            r.text_rml = cata_text_to_rml( colorize( s->gender_appropriate_name( u.male ), col ) );
+            r.selected = ( i == cur_id );
+            data->rows.push_back( r );
+        }
+
+        data->sort_rml = cata_text_to_rml( string_format(
+                _( "<color_white>Sort by:</color> %1$s (Press <color_light_green>%2$s</color> to change sorting.)" ),
+                scenario_sorter.sort_by_points ? _( "points" ) : _( "name" ),
+                ctxt.get_desc( "SORT" ) ) );
+        data->filter_rml = cata_text_to_rml( string_format( "<%s>",
+                                             filterstring.empty() ? _( "no filter" ) : filterstring ) );
+
+        data->handle.DirtyVariable( "tabs" );
+        data->handle.DirtyVariable( "points_rml" );
+        data->handle.DirtyVariable( "cost_rml" );
+        data->handle.DirtyVariable( "rows" );
+        data->handle.DirtyVariable( "desc_rml" );
+        data->handle.DirtyVariable( "info_rml" );
+        data->handle.DirtyVariable( "sort_rml" );
+        data->handle.DirtyVariable( "filter_rml" );
+
+        if( rml_scroll_pending && valid ) {
+            rml_scroll_pending = false;
+            if( Rml::Element *list = rml.document()->GetElementById( "nc-scen-list" ) ) {
+                if( cur_id < list->GetNumChildren() ) {
+                    list->GetChild( cur_id )->ScrollIntoView(
+                        Rml::ScrollIntoViewOptions( Rml::ScrollAlignment::Nearest ) );
+                }
+            }
+        }
+    };
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         werase( w );
         draw_character_tabs( w, _( "SCENARIO" ) );
 
@@ -3861,6 +4072,20 @@ tab_direction set_scenario( avatar &u, points_left &points,
         wnoutrefresh( w_flags );
     } );
 
+    rml.open( newcharacter_rmlui_enabled(), "newcharscenario", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        register_nc_scen_rml_types( c );
+        c.Bind( "tabs", &data->tabs );
+        c.Bind( "points_rml", &data->points_rml );
+        c.Bind( "cost_rml", &data->cost_rml );
+        c.Bind( "rows", &data->rows );
+        c.Bind( "desc_rml", &data->desc_rml );
+        c.Bind( "info_rml", &data->info_rml );
+        c.Bind( "sort_rml", &data->sort_rml );
+        c.Bind( "filter_rml", &data->filter_rml );
+        data->handle = c.GetModelHandle();
+    } );
+
     do {
         if( recalc_scens ) {
             sorted_scens.clear();
@@ -3915,13 +4140,16 @@ tab_direction set_scenario( avatar &u, points_left &points,
             if( cur_id > scens_length - 1 ) {
                 cur_id = 0;
             }
+            rml_scroll_pending = true;
         } else if( action == "UP" ) {
             cur_id--;
             if( cur_id < 0 ) {
                 cur_id = scens_length - 1;
             }
+            rml_scroll_pending = true;
         } else if( action == "RANDOMIZE" ) {
             cur_id = rng( 0, scens_length - 1 );
+            rml_scroll_pending = true;
         } else if( action == "CONFIRM" ) {
             if( sorted_scens[cur_id]->has_flag( "CITY_START" ) && !scenario_sorter.cities_enabled ) {
                 continue;
