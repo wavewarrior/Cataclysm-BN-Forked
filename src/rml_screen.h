@@ -170,4 +170,8 @@ bool &vending_rmlui_enabled();
 // lettered response list + keybind hints).
 bool &dialogue_rmlui_enabled();
 
+// overmap_ui::display() RmlUi path (Tier 6 slice 1: the overmap legend sidebar —
+// tile description + keybind hints + coordinates. The map tile grid stays GPU/ASCII).
+bool &overmap_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

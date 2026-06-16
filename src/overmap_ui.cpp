@@ -87,6 +87,8 @@
 #include "weather.h"
 #include "weather_gen.h"
 #include "world_type.h"
+#include "rml_screen.h"
+#include "rml_util.h"
 
 static const activity_id ACT_TRAVELLING( "ACT_TRAVELLING" );
 
@@ -106,6 +108,15 @@ static constexpr int max_note_display_length = 45;
 static const int npm_width = 3;
 /** Note preview map height without borders. Odd number. */
 static const int npm_height = 3;
+
+// Tier 6: the overmap legend sidebar RmlUi render path (the text panel beside the
+// overmap tile grid). Render-only doc; the overmap tile view itself stays on its
+// GPU/ASCII map path. Keyboard owns all navigation.
+bool &overmap_rmlui_enabled()
+{
+    static bool enabled = false;
+    return enabled;
+}
 
 namespace overmap_ui
 {
@@ -1498,11 +1509,202 @@ static void draw_ascii( ui_adaptor &ui,
     ui.set_cursor( w, point( om_half_width, om_half_height ) );
 }
 
+// RmlUi model for the overmap legend sidebar (Tier 6 slice 1). Flat strings only
+// (no row vectors) → nothing to register; bound directly in display().
+namespace
+{
+struct om_sidebar_session {
+    Rml::String info_rml;
+    Rml::String hints_rml;
+    Rml::String footer_rml;
+    Rml::DataModelHandle handle;
+};
+
+// Mirror of draw_om_sidebar's content into the RmlUi model (the curses path below
+// stays intact for the A/B). Built each redraw with the current cursor/toggles.
+void build_om_sidebar_rml( om_sidebar_session &s, const tripoint_abs_omt &center,
+                           const tripoint_abs_omt &orig, bool fast_scroll,
+                           input_context *inp_ctxt, const draw_data_t &data )
+{
+    avatar &player_character = get_avatar();
+    const bool has_debug_vision = player_character.has_trait( trait_DEBUG_NIGHTVISION );
+    const int sight_points = !has_debug_vision ?
+                             player_character.overmap_sight_range( g->light_level( player_character.bub_pos().z() ) ) :
+                             100;
+    const bool center_seen = has_debug_vision || ACTIVE_OVERMAP_BUFFER.seen( center );
+    const tripoint_abs_omt target = player_character.get_active_mission_target();
+    const bool has_target = target != overmap::invalid_tripoint;
+    const bool viewing_weather = uistate.overmap_debug_weather || uistate.overmap_visible_weather;
+
+    std::vector<mongroup *> mgroups;
+    if( uistate.overmap_debug_mongroup ) {
+        mgroups = ACTIVE_OVERMAP_BUFFER.monsters_at( center );
+        for( const auto &mgp : mgroups ) {
+            if( mgp->horde ) {
+                break;
+            }
+        }
+    }
+
+    // info block (tile description / weather / mission distance)
+    std::string info;
+    if( center_seen ) {
+        if( !mgroups.empty() ) {
+            for( const auto &mgroup : mgroups ) {
+                info += colorize( string_format( "Species: %s", mgroup->type.c_str() ), c_blue ) + "\n";
+                info += colorize( string_format( "# monsters: %d",
+                                                 mgroup->population + mgroup->monsters.size() ), c_blue ) + "\n";
+                if( !mgroup->horde ) {
+                    continue;
+                }
+                info += colorize( string_format( "Interest: %d", mgroup->interest ), c_blue ) + "\n";
+                info += colorize( string_format( "Behaviour: %s", mgroup->horde_behaviour ), c_blue ) + "\n";
+                info += colorize( string_format( "Target: %s", mgroup->target.to_string() ), c_blue ) + "\n";
+            }
+        } else {
+            const oter_id cur_oter_id = ACTIVE_OVERMAP_BUFFER.ter( center );
+            const regional_settings &sidebar_region = ACTIVE_OVERMAP_BUFFER.get_settings( center );
+            const bool sidebar_has_display = !sidebar_region.display_oter.is_empty();
+            const oter_id default_oter_id = sidebar_region.default_oter.id();
+            const oter_id render_oter_id = ( sidebar_has_display && cur_oter_id == default_oter_id )
+                                           ? sidebar_region.display_oter.id()
+                                           : cur_oter_id;
+            const oter_t &ter = render_oter_id.obj();
+            const auto sm_pos = project_to<coords::sm>( center );
+            const std::string desc = sidebar_has_display && cur_oter_id == default_oter_id
+                                     ? ter.get_name()
+                                     : ACTIVE_OVERMAP_BUFFER.get_description_at( sm_pos );
+            info += colorize( ter.get_symbol(), ter.get_color() ) + " " + colorize( desc, c_light_gray );
+        }
+    } else {
+        info += colorize( _( "# Unexplored" ), c_dark_gray );
+    }
+    if( viewing_weather ) {
+        const bool weather_is_visible = center.z() >= 0 && ( uistate.overmap_debug_weather ||
+                                        player_character.overmap_los( tripoint_abs_omt( center.xy(), OVERMAP_HEIGHT ),
+                                                sight_points * 2 ) );
+        info += "\n";
+        if( weather_is_visible ) {
+            info += colorize( get_weather_at_point( center.xy() )->name.translated(),
+                              get_weather_at_point( center.xy() )->color );
+        } else {
+            info += colorize( _( "# Weather unknown" ), c_dark_gray );
+        }
+    }
+    if( data.debug_editor && center_seen ) {
+        const oter_t &oter = ACTIVE_OVERMAP_BUFFER.ter( center ).obj();
+        info += "\n" + colorize( string_format( _( "oter: %s (rot %d)" ), oter.id.str(),
+                                 oter.get_rotation() ), c_white );
+        info += "\n" + colorize( string_format( _( "oter_type: %s" ), oter.get_type_id().str() ), c_white );
+        for( cube_direction dir : all_enum_values<cube_direction>() ) {
+            if( std::string *join = ACTIVE_OVERMAP_BUFFER.join_used_at( { center, dir } ) ) {
+                info += "\n" + colorize( string_format( _( "join %s: %s" ), io::enum_to_string( dir ), *join ),
+                                         c_white );
+            }
+        }
+        std::optional<mapgen_arguments> *args = ACTIVE_OVERMAP_BUFFER.mapgen_args( center );
+        if( args ) {
+            if( *args ) {
+                for( const std::pair<const std::string, cata_variant> &arg : ( **args ).map ) {
+                    info += "\n" + colorize( string_format( "%s = %s", arg.first, arg.second.get_string() ),
+                                             c_white );
+                }
+            } else {
+                info += "\n" + colorize( _( "args not yet set" ), c_white );
+            }
+        }
+    }
+    if( has_target ) {
+        const int distance = rl_dist( center, target );
+        info += "\n" + colorize( _( "Distance to active mission:" ), c_white );
+        info += "\n" + colorize( string_format( _( "%d tiles" ), distance ), c_white );
+        const int above_below = target.z() - orig.z();
+        std::string msg;
+        if( above_below > 0 ) {
+            msg = _( "Above us" );
+        } else if( above_below < 0 ) {
+            msg = _( "Below us" );
+        }
+        if( above_below != 0 ) {
+            info += "\n" + colorize( msg, c_white );
+        }
+    }
+    for( auto &mission : player_character.get_active_missions() ) {
+        if( mission->get_target() == center ) {
+            info += "\n" + colorize( mission->name(), c_white );
+        }
+    }
+    s.info_rml = cata_text_to_rml( info );
+
+    // hints block (pan hints + the keybinding list, coloured pink when toggled on)
+    std::string hints = colorize( _( "Use movement keys to pan." ), c_magenta ) + "\n";
+    hints += colorize( _( "Press W to preview route." ), c_magenta ) + "\n";
+    hints += colorize( _( "Press again to confirm." ), c_magenta );
+    if( inp_ctxt != nullptr ) {
+        const auto print_hint = [&]( const std::string & action, nc_color color = c_magenta ) {
+            hints += "\n" + colorize( string_format( _( "%s - %s" ), inp_ctxt->get_desc( action ),
+                                      inp_ctxt->get_action_name( action ) ), color );
+        };
+        if( data.debug_editor ) {
+            print_hint( "PLACE_TERRAIN", c_light_blue );
+            print_hint( "PLACE_SPECIAL", c_light_blue );
+            print_hint( "SET_SPECIAL_ARGS", c_light_blue );
+        }
+        const bool show_overlays = uistate.overmap_show_overlays || uistate.overmap_blinking;
+        const bool is_explored = ACTIVE_OVERMAP_BUFFER.is_explored( center );
+        const bool is_path = ACTIVE_OVERMAP_BUFFER.is_path( center );
+        print_hint( "LEVEL_UP" );
+        print_hint( "LEVEL_DOWN" );
+        print_hint( "CENTER" );
+        print_hint( "SEARCH" );
+        print_hint( "CREATE_NOTE" );
+        print_hint( "DELETE_NOTE" );
+        print_hint( "LIST_NOTES" );
+        print_hint( "MISSIONS" );
+        print_hint( "TOGGLE_MAP_NOTES", uistate.overmap_show_map_notes ? c_pink : c_magenta );
+        print_hint( "TOGGLE_BLINKING", uistate.overmap_blinking ? c_pink : c_magenta );
+        print_hint( "TOGGLE_OVERLAYS", show_overlays ? c_pink : c_magenta );
+        print_hint( "TOGGLE_LAND_USE_CODES", uistate.overmap_show_land_use_codes ? c_pink : c_magenta );
+        print_hint( "TOGGLE_CITY_LABELS", uistate.overmap_show_city_labels ? c_pink : c_magenta );
+        print_hint( "TOGGLE_HORDES", uistate.overmap_show_hordes ? c_pink : c_magenta );
+        print_hint( "TOGGLE_EXPLORED", is_explored ? c_pink : c_magenta );
+        print_hint( "TOGGLE_MARK_PATH", is_path ? c_pink : c_magenta );
+        print_hint( "TOGGLE_FAST_SCROLL", fast_scroll ? c_pink : c_magenta );
+        print_hint( "TOGGLE_FOREST_TRAILS", uistate.overmap_show_forest_trails ? c_pink : c_magenta );
+        print_hint( "TOGGLE_OVERMAP_WEATHER", uistate.overmap_visible_weather ? c_pink : c_magenta );
+        print_hint( "TOGGLE_DEFAULT_0", uistate.overmap_default_0 ? c_pink : c_magenta );
+        print_hint( "SET_CUSTOM_WAYPOINT", player_character.custom_waypoint ? c_pink : c_magenta );
+        print_hint( "HELP_KEYBINDINGS" );
+        print_hint( "QUIT" );
+    }
+    s.hints_rml = cata_text_to_rml( hints );
+
+    // footer (dimension name + level/coordinates)
+    std::string dim_name;
+    if( const dimension_info *dim = g->get_current_dimension_info() ) {
+        dim_name = dim->display_name.empty()
+                   ? ( dim->world_type.is_valid() ? dim->world_type.obj().name.translated() : dim->dimension_id )
+                   : dim->display_name;
+    }
+    std::string footer = colorize( dim_name, c_cyan );
+    footer += "\n" + colorize( string_format( _( "LEVEL %i, %s" ), center.z(),
+                               fmt_omt_coords( center ) ), c_red );
+    s.footer_rml = cata_text_to_rml( footer );
+
+    s.handle.DirtyAllVariables();
+}
+} // namespace
+
 static void draw_om_sidebar(
     const catacurses::window &wbar, const tripoint_abs_omt &center,
     const tripoint_abs_omt &orig, bool /* blink */, bool fast_scroll,
-    input_context *inp_ctxt, const draw_data_t &data )
+    input_context *inp_ctxt, const draw_data_t &data, om_sidebar_session *rml = nullptr )
 {
+    // RmlUi render path: skip the curses legend draw, sync the model instead.
+    if( rml && rml->handle ) {
+        build_om_sidebar_rml( *rml, center, orig, fast_scroll, inp_ctxt, data );
+        return;
+    }
     avatar &player_character = get_avatar();
     // Debug vision allows seeing everything
     const bool has_debug_vision = player_character.has_trait( trait_DEBUG_NIGHTVISION );
@@ -1722,9 +1924,10 @@ static void draw(
     bool fast_scroll,
     input_context *inp_ctxt,
     const draw_data_t &data,
-    grids_draw_data &grids_data )
+    grids_draw_data &grids_data,
+    om_sidebar_session *rml = nullptr )
 {
-    draw_om_sidebar( g->w_omlegend, center, orig, blink, fast_scroll, inp_ctxt, data );
+    draw_om_sidebar( g->w_omlegend, center, orig, blink, fast_scroll, inp_ctxt, data, rml );
     if( !use_tiles || !use_tiles_overmap ) {
         draw_ascii( ui, g->w_overmap, center, orig, blink, show_explored, fast_scroll, inp_ctxt, data,
                     grids_data );
@@ -2310,9 +2513,20 @@ static tripoint_abs_omt display( const tripoint_abs_omt &orig,
         curs.z() = 0;
     }
 
+    auto sidebar = std::make_unique<om_sidebar_session>();
+    rml_doc rml;
     ui.on_redraw( [&]( ui_adaptor & ui ) {
         draw( ui, curs, orig, uistate.overmap_show_overlays,
-              show_explored, fast_scroll, &ictxt, data, grids_data );
+              show_explored, fast_scroll, &ictxt, data, grids_data,
+              rml ? sidebar.get() : nullptr );
+    } );
+
+    rml.open( overmap_rmlui_enabled(), "overmap", ictxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        c.Bind( "info_rml", &sidebar->info_rml );
+        c.Bind( "hints_rml", &sidebar->hints_rml );
+        c.Bind( "footer_rml", &sidebar->footer_rml );
+        sidebar->handle = c.GetModelHandle();
     } );
 
     do {

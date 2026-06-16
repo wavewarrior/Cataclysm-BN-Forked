@@ -1704,9 +1704,57 @@ trade + vending + npc dialogue all CODE-COMPLETE + build-green + committed (eyeb
 batched). **ranged/targeting is the ONLY remaining Tier-5 screen and is intentionally
 DEFERRED to Tier 6** — it is a live overlay tied to the map (world→screen projection),
 which the plan sequences AFTER the §7 world-text / Tier-6 overlay layer exists. So the
-modal Tier-5 work is done; ranged rides Tier 6. Next plan unit: Tier 6 (overmap_ui +
-on-map static labels + the §7 world-text layer), or the deferred faction (Tier 2, needs
-the creature/npc-info F.2 component).
+modal Tier-5 work is done; ranged rides Tier 6.
+
+### Tier 6 progress (overmap_ui + on-map text + §7 world-text layer)
+
+**Tier 6 decomposition (multi-slice sub-project; architecturally the hardest tier):**
+1. **overmap legend sidebar** (`draw_om_sidebar`) — the text panel beside the overmap
+   tile grid. Conforming side-panel; the priced first slice. **← DONE (slice 1).**
+2. **overmap sub-screens** — search popup, note editor (already has a `draw_rml` path),
+   place-terrain/special editor. Mostly small / partly Tier-0.
+3. **on-map static labels** — city labels (`draw_city_labels`) + zone labels + static
+   `overlay_strings` → an RmlUi DOM overlay positioned via world→screen projection
+   (reuse sprite.vert constants: `SV_Position/tile_px − camera_off`). NOVEL.
+4. **§7 world-text layer** — transient/animated text (SCT now, floating damage later):
+   an imperative pooled text layer reusing the RmlUi glyph atlas/render-interface (not
+   DOM, to avoid layout thrash). FOUNDATIONAL + hardest. **Unblocks Tier-5 ranged.**
+
+NOTE: the ASCII overmap grid (`draw_ascii`, used when `!use_tiles_overmap`) is curses
+cell-text but is the MAP VIEW (like `w_terrain`) — its disposition (GPU-only vs migrate)
+is a §8 rip-out question, not slice work here.
+
+- **Tier 6 slice 1: overmap legend sidebar (overmap_ui::display / draw_om_sidebar) —
+  CODE-COMPLETE + BUILD-GREEN (overmap_ui.cpp.o 14:17:47 + binary relinked 14:18:10, 0
+  errors, fresh mtime), TOGGLE OFF, EYEBALL OWED, COMMITTED.** `data/gui/overmap.{rml,
+  rcss}` model "overmap" + `overmap_rmlui_enabled()` toggle + F4 "overmap legend"
+  checkbox. The legend is a RIGHT-SIDE panel only — the doc body is **transparent +
+  right-anchored** so the overmap tile grid (drawn underneath by the GPU/ASCII map path,
+  UNCHANGED) shows through on the left. Render-only doc, 3 flat bound strings (no row
+  vectors → nothing to register): `info_rml` (tile symbol+description / weather / debug
+  oter info / mission distance), `hints_rml` (pan hints + the ~24 keybinding hints,
+  each coloured pink when its toggle is active else magenta — scroll-pane), `footer_rml`
+  (dimension name + LEVEL/coordinates). STRUCTURAL POINTS: (1) the session ptr is
+  THREADED through `draw()` → `draw_om_sidebar` (both file-static, only called here) —
+  draw_om_sidebar early-returns into `build_om_sidebar_rml` when the ptr+handle are set,
+  else draws curses (intact for A/B); cleaner than a file-global. (2) `build_om_sidebar_rml`
+  mirrors the curses content verbatim into the 3 strings. (3) doc owned in display()
+  (local unique_ptr + rml_doc), opened on the screen's own `ictxt` (real input_context,
+  unlike dialogue), torn down by the rml_doc dtor at the single `return`. (4) the on_redraw
+  passes `rml ? sidebar.get() : nullptr` so curses runs when the toggle is off. F4 toggle
+  "overmap legend" (OFF). **EYEBALL CHECK (user, A/B via F4):** open the overmap ('m'):
+  the right legend panel shows the tile description at the cursor (symbol + name), weather
+  if visible, mission distance, the full keybinding list (toggled actions pink), and the
+  dimension + "LEVEL z, coords" footer; moving the cursor updates the description; the
+  toggle hints flip pink/magenta as you press them; the map tiles still render on the left
+  (panel doesn't cover them). **WATCH:** (a) the panel is transparent-bg right-anchored —
+  confirm the map shows through (no full-screen cover). (b) the hint list is long → it
+  scrolls in its pane. (c) first Tier-6 doc over the live map → D3D12 (Win11) glance. (d)
+  the ASCII (non-tiles) overmap still renders underneath when use_tiles_overmap is off.
+
+Next Tier-6 units: slice 2 (sub-screens) / slice 3 (on-map labels) / slice 4 (§7
+world-text layer, which also unblocks ranged). The deferred faction (Tier 2) also remains
+(needs the creature/npc-info F.2 component).
 
 ## Load-bearing architecture facts (verified this session)
 
