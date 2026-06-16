@@ -1420,8 +1420,8 @@ points." line + costs 2; NEXT_TAB → Profession (curses), PREV_TAB → Points (
 reconstruction — diff a few values). (b) value column right-alignment. (c) the cost
 warning only shows for the selected stat at/above HIGH_STAT.
 
-**SLICE 3 (set_skills) — CODE-COMPLETE + BUILD-GREEN (newcharacter.cpp.o 11:50:32 +
-binary relinked 11:50:34, 0 errors), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.** The SKILLS
+**SLICE 3 (set_skills) — DONE + EYEBALLED CLEAN (user 2026-06-16, "looks great"),
+COMMITTED. TOGGLE OFF.** The SKILLS
 tab on the shared `newcharacter_rmlui_enabled()` toggle (3rd tab lit; the other 5 stay
 curses). HEAVIEST newcharacter tab so far. `data/gui/newcharskills.{rml,rcss}` model
 "newcharskills". Render-only doc: char-tab strip (SKILLS=idx6) + points line +
@@ -1456,6 +1456,37 @@ curses. (b) RANDOMIZE in curses does NOT refresh `currentSkill` until the next U
 (latent curses quirk preserved for A/B — the desc/cost may lag one keypress after
 randomize in BOTH paths). (c) cursor-follow on the long list (if it doesn't track, the
 staged ScrollIntoView is already wired — flag if it over/under-scrolls).
+
+**SLICE 4 (set_traits) — CODE-COMPLETE + BUILD-GREEN (newcharacter.cpp.o 12:00:57 +
+binary relinked 12:00:59, 0 errors), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.** The TRAITS
+tab (4th tab lit). `data/gui/newchartraits.{rml,rcss}` model "newchartraits". 3-COLUMN
+multi-pane (good/bad/neutral; neutral hides when empty via `data-if="show_col2"`) — each
+column's rows BAKED as a markup string (the advinv-2b "no nested data-for" primitive,
+because the row struct `trait_entry` is function-local) and emitted via flat `data-rml`
+per column. Only the WORKING column's cursor row gets `.selected`. Render-only doc:
+char-tab strip (TRAITS=idx4) + top bar (points + good/bad budget `G/max B/-max` when
+non-freeform + the working trait's `costs/earns N points` line in the trait colour) +
+the 3 columns + a description footer (working trait desc). Per-trait colour replicates
+the curses on/off × active/passive × conflict/forbidden matrix (COL_TR_* consts) inline
+in sync (the colour state is function-local). num_good/num_bad update live on CONFIRM.
+on_redraw `if(rml){sync_rml();return;}` else curses; `rml.open` before on_redraw (anchor
+uniqueness); rml_doc dtor tears down at each `return`. Keyboard owns LEFT/RIGHT (switch
+column), UP/DOWN, CONFIRM (toggle, with all the dependency/conflict/budget `popup()`
+errors — curses popups, invariant 6), RANDOMIZE, REROLL_*, NEXT/PREV_TAB, QUIT.
+**DEFERRED (NOT bugs):** (1) the tile `character_preview` overlay is NOT drawn in rml
+mode (out of scope like the AIM minimap; zoom/clothes keys still no-op safely). (2) NO
+keyboard scroll-into-view on long columns (the mutations multi-column precedent — baked
+`data-rml` columns make per-row ScrollIntoView timing unproven; flag if cursor gets lost
+on a long good/bad list). F4 toggle "new character" (shared). **EYEBALL CHECK (user, A/B
+via F4 — query_popup toggle ON too):** New Game → Custom → TRAITS: char-tab strip
+(TRAITS current), points + good/bad budget, 3 columns (good/bad/neutral) with per-trait
+colours matching curses (taken traits brighter, conflicting/forbidden greyed); LEFT/RIGHT
+switch the working column (only its cursor highlights), UP/DOWN move, CONFIRM toggles a
+trait (budget + colours update; conflict/forbidden/over-budget show the curses popup),
+the cost line + description track the working trait; NEXT_TAB → Bionics (curses),
+PREV_TAB → Skills (RmlUi). **WATCH:** (a) no character preview in rml mode (expected).
+(b) long column cursor-follow (deferred — flag if lost). (c) the neutral column appears
+only when traits with 0 points exist.
 
 ## Load-bearing architecture facts (verified this session)
 

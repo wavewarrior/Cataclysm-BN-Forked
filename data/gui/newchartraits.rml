@@ -1,0 +1,36 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="newchartraits.rcss"/>
+</head>
+<body data-model="newchartraits">
+    <!-- Tier 4 screen #4 (new-character creator) slice 4: the TRAITS tab
+         (set_traits). Character-tab strip (TRAITS current) + a top bar (points +
+         good/bad budget + the working trait's cost line) + three side-by-side
+         columns (good / bad / neutral; the neutral column hides when empty) +
+         a description footer for the working trait. Only the working column's
+         cursor row is highlighted. Render-only doc; keyboard owns LEFT/RIGHT
+         (switch column), UP/DOWN (move), CONFIRM (toggle trait), RANDOMIZE,
+         REROLL_*, NEXT/PREV_TAB, QUIT. The tile character preview is not drawn
+         in rml mode this slice. -->
+    <div class="panel nc-panel">
+        <div class="tabs nc-tabs">
+            <div class="item tab" data-for="t : tabs"
+                 data-class-selected="t.selected" data-rml="t.name_rml"></div>
+        </div>
+        <div class="nc-trait-top">
+            <span class="nc-trait-points" data-rml="points_rml"></span>
+            <span class="nc-trait-budget" data-rml="budget_rml"></span>
+            <span class="nc-trait-cost" data-rml="cost_rml"></span>
+        </div>
+        <div class="nc-trait-cols">
+            <div id="nc-trait-col0" class="nc-trait-col scroll-pane" data-rml="col0_html"></div>
+            <div id="nc-trait-col1" class="nc-trait-col scroll-pane" data-rml="col1_html"></div>
+            <div id="nc-trait-col2" class="nc-trait-col scroll-pane" data-rml="col2_html"
+                 data-if="show_col2"></div>
+        </div>
+        <div class="nc-trait-desc" data-rml="desc_rml"></div>
+    </div>
+    <div id="crt-overlay" class="crt"></div>
+</body>
+</rml>
