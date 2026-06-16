@@ -29,10 +29,10 @@ body {
 
 .cmp-title {
     flex: 0 0 auto;
-    color: #fbf1c7ff;
+    color: {{fg0}};
     margin-bottom: 6dp;
     padding-bottom: 4dp;
-    border-bottom: 1dp #7c6f64ff;
+    border-bottom: 1dp {{bg4}};
 }
 
 .cmp-info {

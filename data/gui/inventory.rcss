@@ -25,7 +25,7 @@ body {
     align-items: flex-start;
     margin-bottom: 4dp;
     padding-bottom: 4dp;
-    border-bottom: 1dp #7c6f64ff;
+    border-bottom: 1dp {{bg4}};
 }
 .inv-header-text {
     flex: 1;
@@ -44,16 +44,16 @@ body {
     display: block;
     white-space: pre;
     text-align: right;
-    color: #a89984ff;
+    color: {{fg4}};
 }
 
 .inv-title {
     flex: 0 0 auto;
-    color: #fbf1c7ff;
+    color: {{fg0}};
 }
 .inv-hint {
     flex: 0 0 auto;
-    color: #a89984ff;
+    color: {{fg4}};
 }
 
 /* The list is a horizontal row of columns (slice 2b); it scrolls vertically as a
@@ -80,24 +80,24 @@ body {
     border-radius: 4dp;
 }
 .inv-row:hover {
-    background-color: #504945ff;
+    background-color: {{bg2}};
 }
 .inv-row.selected {
-    background-color: #fabd2fff;
-    color: #1d2021ff;
+    background-color: {{yellow}};
+    color: {{bg-hard}};
 }
 /* Category header rows: a separating band, not selectable. */
 .inv-row.category {
     margin-top: 4dp;
-    border-bottom: 1dp #7c6f64ff;
-    color: #d3869bff;
+    border-bottom: 1dp {{bg4}};
+    color: {{purple}};
 }
 
 .inv-footer {
     flex: 0 0 auto;
     margin-top: 4dp;
     padding-top: 4dp;
-    border-top: 1dp #7c6f64ff;
+    border-top: 1dp {{bg4}};
     display: flex;
     align-items: center;
 }
@@ -105,7 +105,7 @@ body {
    centered (mirrors draw_footer's left filter + centered mode). */
 .inv-filter {
     flex: 0 0 auto;
-    color: #a89984ff;
+    color: {{fg4}};
 }
 .inv-mode {
     flex: 1;

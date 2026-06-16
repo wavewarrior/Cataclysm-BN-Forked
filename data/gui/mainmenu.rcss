@@ -24,7 +24,7 @@ body {
     flex: 0 0 auto;
     white-space: pre;
     text-align: center;
-    color: #ebdbb2ff;
+    color: {{fg}};
     margin-bottom: 8dp;
 }
 
@@ -60,8 +60,8 @@ body {
 }
 
 .mm-subrow.selected {
-    background-color: #fabd2fff;
-    color: #1d2021ff;
+    background-color: {{yellow}};
+    color: {{bg-hard}};
 }
 
 /* MOTD / Credits scrolling text. */

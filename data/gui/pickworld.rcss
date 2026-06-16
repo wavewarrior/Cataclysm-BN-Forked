@@ -23,8 +23,8 @@ body {
     min-height: 40dp;
     margin-bottom: 6dp;
     padding-bottom: 6dp;
-    border-bottom: 1dp #7c6f64ff;
-    color: #ebdbb2ff;
+    border-bottom: 1dp {{bg4}};
+    color: {{fg}};
 }
 
 .pw-tabs {
@@ -49,11 +49,11 @@ body {
 }
 
 .pw-row:hover {
-    background-color: #504945ff;
-    color: #fbf1c7ff;
+    background-color: {{bg2}};
+    color: {{fg0}};
 }
 
 .pw-row.selected {
-    background-color: #fabd2fff;
-    color: #1d2021ff;
+    background-color: {{yellow}};
+    color: {{bg-hard}};
 }

@@ -46,5 +46,5 @@ body {
 .wf-hints {
     display: block;
     white-space: pre-wrap;
-    color: #ebdbb2ff;
+    color: {{fg}};
 }

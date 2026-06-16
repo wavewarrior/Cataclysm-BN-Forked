@@ -17,20 +17,20 @@
 
      role               hex          gruvbox      used for
      ----------------   ----------   ----------   --------------------------------
-     panel-bg           #1d2021f2    bg0_h        .panel background
-     frame / border     #7c6f64ff    bg4          panel border, separators
-     frame-inner        #504945ff    bg2          inner double-border line (Phase-4)
-     scrollbar          #665c54ff    bg3          scrollbar sliderbar
-     scrollbar-hover    #928374ff    gray         scrollbar sliderbar :hover
-     text-primary       #ebdbb2ff    fg1          body text (cascades — don't re-declare)
-     text-muted         #a89984ff    fg4          secondary columns, filter line
-     text-disabled      #665c54ff    bg3          disabled rows
-     text-bright        #fbf1c7ff    fg0          hovered item text
-     accent             #fabd2fff    yellow       titles, hotkeys, selected-item background
-     on-accent          #1d2021ff    bg0_h        text on an accent background
-     item-bg            #3c3836ff    bg1          selectable row / button background
-     item-hover-bg      #504945ff    bg2          selectable row / button :hover background
-     danger / hp-red    #fb4934ff    red          HP bar fill, failures (domain colour, per-screen)
+     panel-bg           {{bg}}    bg0_h        .panel background
+     frame / border     {{bg4}}    bg4          panel border, separators
+     frame-inner        {{bg2}}    bg2          inner double-border line (Phase-4)
+     scrollbar          {{bg3}}    bg3          scrollbar sliderbar
+     scrollbar-hover    {{gray}}    gray         scrollbar sliderbar :hover
+     text-primary       {{fg}}    fg1          body text (cascades — don't re-declare)
+     text-muted         {{fg4}}    fg4          secondary columns, filter line
+     text-disabled      {{bg3}}    bg3          disabled rows
+     text-bright        {{fg0}}    fg0          hovered item text
+     accent             {{yellow}}    yellow       titles, hotkeys, selected-item background
+     on-accent          {{bg-hard}}    bg0_h        text on an accent background
+     item-bg            {{bg1}}    bg1          selectable row / button background
+     item-hover-bg      {{bg2}}    bg2          selectable row / button :hover background
+     danger / hp-red    {{red}}    red          HP bar fill, failures (domain colour, per-screen)
 
    The item-bg/hover/accent "selectable item" triad is shared by uilist rows
    and query_popup buttons via the .item class below — change those states
@@ -42,7 +42,7 @@
 body {
     font-family: "Terminus (TTF)";
     font-size: 18dp;
-    color: #ebdbb2ff;
+    color: {{fg}};
 }
 
 /* Title / header role — yellow accent with a CRT glow. Opt-in (screens that want
@@ -50,8 +50,8 @@ body {
    kept off body text on purpose: a glow under dense lists muddies them (see
    advinv/inventory). Tune the glow radius/alpha here. */
 .title {
-    color: #fabd2fff;
-    font-effect: glow( 2dp #fabd2faa );
+    color: {{yellow}};
+    font-effect: glow( 2dp {{yellow-glow}} );
 }
 
 /* Dark squared panel shared by all menus. Gruvbox bg + squared brown border + a
@@ -67,8 +67,8 @@ body {
    and replace `border` with, e.g.:
        decorator: ninepatch( "assets/frame.png", 16px 16px / 16px 16px ); */
 .panel {
-    background-color: #1d2021f2;
-    border: 2dp #7c6f64ff;
+    background-color: {{bg}};
+    border: 2dp {{bg4}};
     border-radius: 0;
     padding: 12dp;
     decorator: radial-gradient( farthest-corner, #00000000, #00000077 );
@@ -102,16 +102,16 @@ body {
    selection wins when a selected item is also hovered (equal specificity →
    source order). Base text colour inherits text-primary from body. */
 .item {
-    background-color: #3c3836ff;
+    background-color: {{bg1}};
     border-radius: 0;
 }
 .item:hover {
-    background-color: #504945ff;
-    color: #fbf1c7ff;
+    background-color: {{bg2}};
+    color: {{fg0}};
 }
 .item.selected {
-    background-color: #fabd2fff;
-    color: #1d2021ff;
+    background-color: {{yellow}};
+    color: {{bg-hard}};
 }
 
 /* F.2 tab bar (lifted at the 3rd tab use = bionics, after missions + scores both
@@ -131,7 +131,7 @@ body {
     padding: 4dp 10dp;
     margin-right: 6dp;
     text-align: center;
-    border: 1dp #7c6f64ff;
+    border: 1dp {{bg4}};
 }
 .tab.selected {
     font-weight: bold;
@@ -159,10 +159,10 @@ scrollbarvertical {
     margin-left: 4dp;
 }
 scrollbarvertical sliderbar {
-    background-color: #665c54ff;
+    background-color: {{bg3}};
     border-radius: 0;
     min-height: 24dp;
 }
 scrollbarvertical sliderbar:hover {
-    background-color: #928374ff;
+    background-color: {{gray}};
 }

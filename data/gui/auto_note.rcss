@@ -30,7 +30,7 @@ body {
 .an-header {
     flex: 0 0 auto;
     margin-bottom: 6dp;
-    color: #ebdbb2ff;
+    color: {{fg}};
 }
 
 /* Static column titles; same column template as the rows (sans .item bg). */
@@ -40,8 +40,8 @@ body {
     flex-direction: row;
     padding: 0 10dp 4dp 10dp;
     margin-bottom: 4dp;
-    border-bottom: 1dp #7c6f64ff;
-    color: #a89984ff;
+    border-bottom: 1dp {{bg4}};
+    color: {{fg4}};
 }
 
 /* "Discover more…" placeholder shown when no map extras are discovered yet. */

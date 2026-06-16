@@ -4,8 +4,10 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <memory>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include <SDL3/SDL.h>
@@ -17,6 +19,7 @@
 #include "path_info.h"
 #include "rmlui_render_interface.h"
 #include "rmlui_system_interface.h"
+#include "ui_theme.h"
 
 // Lighting/ files must define dbg themselves (not globally available).
 #define dbg( x ) DebugLogFL( ( x ), DC::SDL )
@@ -62,6 +65,95 @@ bool any_open()
     return !g_open_docs.empty();
 }
 
+// Stylesheet preprocessor: a FileInterface that substitutes {{theme-tokens}} in
+// .rcss content at load (RmlUi 6.2 has no native CSS variables). Other files pass
+// through to plain fopen, exactly like RmlUi's default interface. In-memory .rcss
+// handles are tagged in `mem_handles` so the stream methods serve the substituted
+// buffer instead of the FILE*.
+struct mem_file {
+    std::string data;
+    std::size_t pos = 0;
+};
+
+class theme_file_interface : public Rml::FileInterface
+{
+    public:
+        Rml::FileHandle Open( const Rml::String &path ) override {
+            std::FILE *fp = std::fopen( path.c_str(), "rb" );
+            if( fp == nullptr ) {
+                return 0;
+            }
+            const bool is_rcss = path.size() >= 5 &&
+                                 path.compare( path.size() - 5, 5, ".rcss" ) == 0;
+            if( !is_rcss ) {
+                return reinterpret_cast<Rml::FileHandle>( fp );
+            }
+            std::string buf;
+            std::fseek( fp, 0, SEEK_END );
+            const long len = std::ftell( fp );
+            std::fseek( fp, 0, SEEK_SET );
+            if( len > 0 ) {
+                buf.resize( static_cast<std::size_t>( len ) );
+                const std::size_t rd = std::fread( &buf[0], 1, buf.size(), fp );
+                buf.resize( rd );
+            }
+            std::fclose( fp );
+            ui_theme::substitute_tokens( buf );
+            mem_file *mf = new mem_file{ std::move( buf ), 0 };
+            const Rml::FileHandle h = reinterpret_cast<Rml::FileHandle>( mf );
+            mem_handles.insert( h );
+            return h;
+        }
+        void Close( Rml::FileHandle file ) override {
+            const auto it = mem_handles.find( file );
+            if( it != mem_handles.end() ) {
+                mem_handles.erase( it );
+                delete reinterpret_cast<mem_file *>( file );
+            } else {
+                std::fclose( reinterpret_cast<std::FILE *>( file ) );
+            }
+        }
+        std::size_t Read( void *buffer, std::size_t size, Rml::FileHandle file ) override {
+            if( is_mem( file ) ) {
+                mem_file *mf = reinterpret_cast<mem_file *>( file );
+                const std::size_t n = std::min( size, mf->data.size() - mf->pos );
+                std::memcpy( buffer, mf->data.data() + mf->pos, n );
+                mf->pos += n;
+                return n;
+            }
+            return std::fread( buffer, 1, size, reinterpret_cast<std::FILE *>( file ) );
+        }
+        bool Seek( Rml::FileHandle file, long offset, int origin ) override {
+            if( is_mem( file ) ) {
+                mem_file *mf = reinterpret_cast<mem_file *>( file );
+                long base = 0;
+                if( origin == SEEK_CUR ) {
+                    base = static_cast<long>( mf->pos );
+                } else if( origin == SEEK_END ) {
+                    base = static_cast<long>( mf->data.size() );
+                }
+                const long np = base + offset;
+                if( np < 0 || np > static_cast<long>( mf->data.size() ) ) {
+                    return false;
+                }
+                mf->pos = static_cast<std::size_t>( np );
+                return true;
+            }
+            return std::fseek( reinterpret_cast<std::FILE *>( file ), offset, origin ) == 0;
+        }
+        std::size_t Tell( Rml::FileHandle file ) override {
+            if( is_mem( file ) ) {
+                return reinterpret_cast<mem_file *>( file )->pos;
+            }
+            return static_cast<std::size_t>( std::ftell( reinterpret_cast<std::FILE *>( file ) ) );
+        }
+    private:
+        std::unordered_set<Rml::FileHandle> mem_handles;
+        bool is_mem( Rml::FileHandle f ) const {
+            return mem_handles.count( f ) > 0;
+        }
+};
+
 }  // namespace
 
 bool init( lighting::gpu_device &dev )
@@ -91,6 +183,12 @@ bool init( lighting::gpu_device &dev )
 
     Rml::SetRenderInterface( g_render.get() );
     Rml::SetSystemInterface( g_system.get() );
+
+    // Load the theme tokens and install the stylesheet preprocessor BEFORE
+    // Initialise, so the very first document's .rcss gets {{token}} substitution.
+    ui_theme::load();
+    static theme_file_interface g_file_iface;
+    Rml::SetFileInterface( &g_file_iface );
 
     if( !Rml::Initialise() ) {
         dbg( DL::Error ) << "rmlui_layer: Rml::Initialise failed";
@@ -177,6 +275,16 @@ float &ui_scale()
 crt_params &crt()
 {
     return g_crt;
+}
+
+void reload_theme()
+{
+    Rml::Factory::ClearStyleSheetCache();
+    for( Rml::ElementDocument *doc : g_open_docs ) {
+        if( doc != nullptr ) {
+            doc->ReloadStyleSheet();
+        }
+    }
 }
 
 Rml::ElementDocument *open_document( const std::string &rml_path )

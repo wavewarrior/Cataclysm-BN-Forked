@@ -25,13 +25,13 @@ body {
     align-items: center;
     margin-bottom: 4dp;
     padding-bottom: 4dp;
-    border-bottom: 1dp #7c6f64ff;
+    border-bottom: 1dp {{bg4}};
 }
 .aim-clock {
-    color: #fbf1c7ff;
+    color: {{fg0}};
 }
 .aim-hints {
-    color: #a89984ff;
+    color: {{fg4}};
     text-align: right;
 }
 .aim-root {
@@ -51,7 +51,7 @@ body {
 .aim-pane:first-child {
     margin-right: 6dp;
     padding-right: 6dp;
-    border-right: 1dp #7c6f64ff;
+    border-right: 1dp {{bg4}};
 }
 
 /* Pane header: area name left, weight/volume capacity right. */
@@ -62,13 +62,13 @@ body {
     align-items: center;
     margin-bottom: 4dp;
     padding-bottom: 4dp;
-    border-bottom: 1dp #7c6f64ff;
+    border-bottom: 1dp {{bg4}};
 }
 .aim-title {
-    color: #fbf1c7ff;
+    color: {{fg0}};
 }
 .aim-cap {
-    color: #a89984ff;
+    color: {{fg4}};
     white-space: pre;
     text-align: right;
 }
@@ -82,8 +82,8 @@ body {
 .aim-colhead {
     display: flex;
     flex-direction: row;
-    color: #a89984ff;
-    border-bottom: 1dp #7c6f64ff;
+    color: {{fg4}};
+    border-bottom: 1dp {{bg4}};
     margin-bottom: 2dp;
 }
 .aim-row {
@@ -93,16 +93,16 @@ body {
     border-radius: 3dp;
 }
 .aim-row:hover {
-    background-color: #504945ff;
+    background-color: {{bg2}};
 }
 .aim-row.selected {
-    background-color: #fabd2fff;
-    color: #1d2021ff;
+    background-color: {{yellow}};
+    color: {{bg-hard}};
 }
 .aim-cat {
     display: block;
     text-align: center;
-    color: #d3869bff;
+    color: {{purple}};
     margin-top: 2dp;
 }
 
@@ -149,7 +149,7 @@ body {
     white-space: pre;
     margin-top: 4dp;
     padding-top: 4dp;
-    border-top: 1dp #7c6f64ff;
+    border-top: 1dp {{bg4}};
 }
 
 /* Area-selection grid (slice 2): semantic compass 3x3 + a specials row, right-

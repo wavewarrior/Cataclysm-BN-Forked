@@ -28,7 +28,7 @@ body {
     flex: 0 0 auto;
     padding-bottom: 6dp;
     margin-bottom: 6dp;
-    border-bottom: 1dp #7c6f64ff;
+    border-bottom: 1dp {{bg4}};
 }
 
 /* List (+ examine pane when examining) fill the rest, side by side. */
@@ -42,7 +42,7 @@ body {
 .bio-pane {
     flex: 1;
     min-height: 0;
-    border: 1dp #7c6f64ff;
+    border: 1dp {{bg4}};
     border-radius: 4dp;
 }
 
@@ -52,15 +52,15 @@ body {
     min-height: 0;
     margin-left: 8dp;
     padding: 4dp 8dp;
-    border: 1dp #7c6f64ff;
+    border: 1dp {{bg4}};
     border-radius: 4dp;
-    color: #ebdbb2ff;
+    color: {{fg}};
     white-space: pre-wrap;
 }
 
 .bio-none {
     padding: 2dp 6dp;
-    color: #a89984ff;
+    color: {{fg4}};
 }
 
 /* A single bionic row. display:block so each is its own line (see theme.rcss
@@ -73,10 +73,10 @@ body {
     border-radius: 4dp;
 }
 .bio-line:hover {
-    background-color: #504945ff;
-    color: #fbf1c7ff;
+    background-color: {{bg2}};
+    color: {{fg0}};
 }
 .bio-line.selected {
-    background-color: #fabd2fff;
-    color: #1d2021ff;
+    background-color: {{yellow}};
+    color: {{bg-hard}};
 }

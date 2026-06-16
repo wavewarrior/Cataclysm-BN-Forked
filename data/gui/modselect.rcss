@@ -73,8 +73,8 @@ body {
 }
 
 .ms-row.selected {
-    background-color: #fabd2fff;
-    color: #1d2021ff;
+    background-color: {{yellow}};
+    color: {{bg-hard}};
 }
 
 /* Reorder (+/-) indicators on the active list. */
@@ -93,10 +93,10 @@ body {
     height: 120dp;
     margin-top: 6dp;
     padding-top: 6dp;
-    border-top: 1dp #7c6f64ff;
+    border-top: 1dp {{bg4}};
     white-space: pre-wrap;
     overflow-y: auto;
-    color: #ebdbb2ff;
+    color: {{fg}};
 }
 
 .ms-filter {

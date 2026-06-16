@@ -90,6 +90,11 @@ struct crt_params {
 };
 crt_params &crt();
 
+// Re-apply the current ui_theme to all open documents: clears RmlUi's stylesheet
+// cache and reloads each document's stylesheet, so the FileInterface re-substitutes
+// {{tokens}} with the latest values. Call after editing theme colours live (F4).
+void reload_theme();
+
 // Load + show an .rml document into the shared context, tracking it so active()
 // reports it. Returns the document (owned by the context) or nullptr on failure.
 // Pair with close_document() — typically via an RAII wrapper in the owner's

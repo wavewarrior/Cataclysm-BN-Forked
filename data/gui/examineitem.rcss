@@ -19,10 +19,10 @@ body {
 
 .ei-title {
     flex: 0 0 auto;
-    color: #fbf1c7ff;
+    color: {{fg0}};
     margin-bottom: 6dp;
     padding-bottom: 4dp;
-    border-bottom: 1dp #7c6f64ff;
+    border-bottom: 1dp {{bg4}};
 }
 
 .ei-main {
@@ -36,7 +36,7 @@ body {
 .ei-actions {
     flex: 0 0 34%;
     min-height: 0;
-    border-right: 1dp #7c6f64ff;
+    border-right: 1dp {{bg4}};
     margin-right: 8dp;
 }
 .ei-action {
@@ -45,12 +45,12 @@ body {
     border-radius: 4dp;
 }
 .ei-action:hover {
-    background-color: #504945ff;
-    color: #fbf1c7ff;
+    background-color: {{bg2}};
+    color: {{fg0}};
 }
 .ei-action.selected {
-    background-color: #fabd2fff;
-    color: #1d2021ff;
+    background-color: {{yellow}};
+    color: {{bg-hard}};
 }
 
 /* Right: shared item-info pane. */

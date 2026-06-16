@@ -18,9 +18,13 @@ struct item_info_data;
 // does NOT need this.
 std::string rml_escape( const std::string &s );
 
-// Map an nc_color to an "#rrggbbaa" hex string (alpha 255), cached. Uses the same
-// SDL palette the tile renderer uses, so RmlUi colours match in-game text exactly.
+// Map an nc_color to an "#rrggbbaa" hex string (alpha 255), cached. Honors
+// data/gui/theme.json "game_colors" overrides, else uses the curses SDL palette.
 std::string nc_color_to_hex( const nc_color &color );
+
+// Drop the nc_color_to_hex cache (call after a live theme edit so reopened menus
+// pick up new game-colour overrides).
+void clear_nc_color_cache();
 
 // Convert a Cataclysm color-tagged string (e.g. "<color_red>foo</color>") into
 // RML markup with <span style="color:…"> spans; plain segments are rml_escape'd.

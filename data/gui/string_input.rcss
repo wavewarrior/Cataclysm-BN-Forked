@@ -16,13 +16,13 @@ body {
 }
 
 .string-input-title {
-    color: #fb4934ff;
+    color: {{red}};
     margin-bottom: 6dp;
     font-size: 18dp;
 }
 
 .string-input-desc {
-    color: #b8bb26ff;
+    color: {{green}};
     margin-bottom: 8dp;
     font-size: 16dp;
 }
@@ -34,9 +34,9 @@ body {
     align-items: center;
     padding: 6dp 8dp;
     margin-top: 4dp;
-    border-bottom: 2dp solid #7c6f64ff;
+    border-bottom: 2dp solid {{bg4}};
     /* Inherit text-primary from body for the typed text */
-    color: #d3869bff;
+    color: {{purple}};
     font-size: 18dp;
     overflow: hidden;
     white-space: pre;
@@ -59,7 +59,7 @@ body {
     width: 2dp;
     height: 1.1em;
     margin: 0 1dp;
-    background-color: #fbf1c7ff;
+    background-color: {{fg0}};
     animation: none;
 }
 
