@@ -1391,8 +1391,8 @@ popup if query_popup ON). **WATCH:** (a) only ONE option exists when point_pool 
 "multi_pool" (list shows a single row — expected). (b) the other 7 tabs stay curses
 (gate proof). (c) first newcharacter dynamic doc — D3D12 (Win11) glance warranted.
 
-**SLICE 2 (set_stats) — CODE-COMPLETE + BUILD-GREEN (newcharacter.cpp.o 11:31:51 +
-binary relinked 11:31:54, 0 errors), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.** The STATS
+**SLICE 2 (set_stats) — DONE + EYEBALLED CLEAN (user 2026-06-16, "looks great"),
+COMMITTED. TOGGLE OFF.** The STATS
 tab on the shared `newcharacter_rmlui_enabled()` toggle (2nd tab lit; the other 6 stay
 curses). `data/gui/newcharstats.{rml,rcss}` model "newcharstats". REFACTOR: lifted
 `build_nc_char_tabs` to a TEMPLATE on the tab struct so each tab's model uses its OWN
@@ -1419,6 +1419,43 @@ points." line + costs 2; NEXT_TAB → Profession (curses), PREV_TAB → Points (
 **WATCH:** (a) the effects NUMBERS must match curses exactly (the desc is a from-scratch
 reconstruction — diff a few values). (b) value column right-alignment. (c) the cost
 warning only shows for the selected stat at/above HIGH_STAT.
+
+**SLICE 3 (set_skills) — CODE-COMPLETE + BUILD-GREEN (newcharacter.cpp.o 11:50:32 +
+binary relinked 11:50:34, 0 errors), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.** The SKILLS
+tab on the shared `newcharacter_rmlui_enabled()` toggle (3rd tab lit; the other 5 stay
+curses). HEAVIEST newcharacter tab so far. `data/gui/newcharskills.{rml,rcss}` model
+"newcharskills". Render-only doc: char-tab strip (SKILLS=idx6) + points line +
+upgrade-cost hint (`Upgrading X by N level(s) costs M point(s)`, green if affordable
+else red) + a CATEGORY-GROUPED skill list (`nc_skill_row{text,is_header,selected}`:
+yellow category headers + skill rows showing name + `(level)` if >0 + `(+prof)` bonus,
+COL_SKILL_USED when level>0 else light_gray, cursor = `.selected`) + a scrollable
+description pane (the selected skill's description + the recipes it unlocks). STRUCTURAL
+POINTS: (1) the recipe-desc is a parallel free builder `nc_skill_recipes_desc(u,skill,
+prof_skills)` mirroring the curses recipe-gathering block VERBATIM (brown for the skill's
+own recipes, gray for cross-skill) — curses path left intact for the A/B (armor_layers
+precedent). (2) **list scroll-follow** reuses the PROVEN options idiom: UP/DOWN/RANDOMIZE
+set `rml_scroll_pending`, sync_rml `ScrollIntoView(Nearest)` the cursor skill's flattened
+row (`rml_sel_child`) in `#nc-skill-list` — needed because the skill list is long and
+curses always kept the cursor in view. (3) **desc-pane scroll**: SCROLL_UP/DOWN branch
+to `SetScrollTop` on `#nc-skill-desc` (±0.15 page) in rml mode vs the curses fold offset.
+(4) skill rows reuse theme `.item`/`.item.selected` (yellow accent); headers add a
+`.header` class that neutralizes the `.item` background (plain coloured label, matching
+curses). on_redraw `if(rml){sync_rml();return;}` else curses; `rml.open` after on_redraw;
+rml_doc dtor tears down at each `return`. Keyboard owns all nav/inc/dec/randomize/scroll.
+F4 toggle "new character" (shared). **EYEBALL CHECK (user, A/B via F4 — query_popup
+toggle ON too):** New Game → Custom → SKILLS tab: char-tab strip (SKILLS current), points
+line, upgrade-cost hint (green/red by affordability), the skill list grouped under yellow
+category headers, each skill with its level + profession `(+N)` bonus; UP/DOWN move the
+cursor (**list scrolls to follow — the make-or-break check on this long list**); LEFT/
+RIGHT raise/lower the selected skill (level + cost + points update; remember level-0→1
+gives 2 free levels); RANDOMIZE jumps; the desc pane shows the skill's description +
+unlockable recipes (brown for its own, gray for cross-skill); SCROLL_UP/DOWN scroll the
+desc pane; NEXT_TAB → Traits (curses), PREV_TAB → Stats (RmlUi). **WATCH:** (a) the
+recipe list is a from-scratch reconstruction — spot-check a skill's unlocked recipes vs
+curses. (b) RANDOMIZE in curses does NOT refresh `currentSkill` until the next UP/DOWN
+(latent curses quirk preserved for A/B — the desc/cost may lag one keypress after
+randomize in BOTH paths). (c) cursor-follow on the long list (if it doesn't track, the
+staged ScrollIntoView is already wired — flag if it over/under-scrolls).
 
 ## Load-bearing architecture facts (verified this session)
 

@@ -2803,6 +2803,100 @@ static int skill_increment_cost( const Character &u, const skill_id &skill )
     return std::max( 1, ( u.get_skill_level( skill ) + 1 ) / 2 );
 }
 
+// RmlUi model for the SKILLS tab (slice 3). Distinct tab struct (per-model type).
+namespace
+{
+struct nc_skills_tab {
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct nc_skill_row {
+    Rml::String text_rml;
+    bool is_header = false;
+    bool selected = false;
+};
+struct nc_skills_session {
+    Rml::Vector<nc_skills_tab> tabs;
+    Rml::String points_rml;
+    Rml::String cost_rml;
+    Rml::Vector<nc_skill_row> rows;
+    Rml::String desc_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_nc_skills_types_registered = false;
+
+void register_nc_skills_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_nc_skills_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<nc_skills_tab> th = c.RegisterStruct<nc_skills_tab>();
+    th.RegisterMember( "name_rml", &nc_skills_tab::name_rml );
+    th.RegisterMember( "selected", &nc_skills_tab::selected );
+    c.RegisterArray<Rml::Vector<nc_skills_tab>>();
+    Rml::StructHandle<nc_skill_row> rh = c.RegisterStruct<nc_skill_row>();
+    rh.RegisterMember( "text_rml", &nc_skill_row::text_rml );
+    rh.RegisterMember( "is_header", &nc_skill_row::is_header );
+    rh.RegisterMember( "selected", &nc_skill_row::selected );
+    c.RegisterArray<Rml::Vector<nc_skill_row>>();
+    g_nc_skills_types_registered = true;
+}
+
+// The selected skill's description + the recipes it unlocks, as one colour-tagged
+// string. Mirrors the recipe-gathering block in set_skills' curses on_redraw
+// verbatim (curses path left intact for the A/B; this is a parallel builder, the
+// armor_layers precedent). Brown for the current skill's own recipes, gray for
+// recipes that merely require it.
+std::string nc_skill_recipes_desc( avatar &u, const Skill *currentSkill,
+                                   const std::map<skill_id, int> &prof_skills )
+{
+    SkillLevelMap with_prof_skills = u.get_all_skills();
+    for( const auto &sk : prof_skills ) {
+        with_prof_skills.mod_skill_level( sk.first, sk.second );
+    }
+    std::map<std::string, std::vector<std::pair<std::string, int>>> recipes;
+    for( const auto &e : recipe_dict ) {
+        const auto &r = e.second;
+        if( r.has_flag( "SECRET" ) ) {
+            continue;
+        }
+        auto req_skill = r.required_skills.find( currentSkill->ident() );
+        int skill = req_skill != r.required_skills.end() ? req_skill->second : 0;
+        bool would_autolearn_recipe =
+            recipe_dict.all_autolearn().contains( &r ) &&
+            with_prof_skills.meets_skill_requirements( r.autolearn_requirements );
+        if( !would_autolearn_recipe && !r.never_learn &&
+            ( r.skill_used == currentSkill->ident() || skill > 0 ) &&
+            with_prof_skills.has_recipe_requirements( r ) ) {
+            recipes[r.skill_used->name()].emplace_back(
+                r.result_name( /*decorated=*/true ),
+                ( skill > 0 ) ? skill : r.difficulty );
+        }
+    }
+    std::string rec_disp;
+    for( auto &elem : recipes ) {
+        std::sort( elem.second.begin(), elem.second.end(),
+                   []( const std::pair<std::string, int> &lhs,
+        const std::pair<std::string, int> &rhs ) {
+            return localized_compare( std::make_pair( lhs.second, lhs.first ),
+                                      std::make_pair( rhs.second, rhs.first ) );
+        } );
+        const std::string rec_temp = enumerate_as_string( elem.second.begin(), elem.second.end(),
+        []( const std::pair<std::string, int> &rec ) {
+            return string_format( "%s (%d)", rec.first, rec.second );
+        } );
+        if( elem.first == currentSkill->name() ) {
+            rec_disp = "\n\n" + colorize( rec_temp, c_brown ) + rec_disp;
+        } else {
+            rec_disp += "\n\n" + colorize( "[" + elem.first + "]\n" + rec_temp, c_light_gray );
+        }
+    }
+    rec_disp = currentSkill->description() + rec_disp;
+    return rec_disp;
+}
+} // namespace
+
 tab_direction set_skills( avatar &u, points_left &points )
 {
     ui_adaptor ui;
@@ -2860,7 +2954,100 @@ tab_direction set_skills( avatar &u, points_left &points )
 
     const int remaining_points_length = utf8_width( points.to_string(), true );
 
+    // RmlUi render path (render-only; keyboard owns nav/inc/dec/scroll below).
+    auto data = std::make_unique<nc_skills_session>();
+    rml_doc rml;
+    int rml_sel_child = -1;       // flattened-row index of the cursor skill
+    bool rml_scroll_pending = false; // follow the keyboard cursor in the list
+    const auto sync_rml = [&]() {
+        if( !data->handle ) {
+            return;
+        }
+        data->tabs = build_nc_char_tabs<nc_skills_tab>( 6 ); // SKILLS tab active
+        data->points_rml = cata_text_to_rml( points.to_string() );
+
+        const int cost = skill_increment_cost( u, currentSkill->ident() );
+        const int level = u.get_skill_level( currentSkill->ident() );
+        const int upgrade_levels = level == 0 ? 2 : 1;
+        const std::string upgrade_levels_s = string_format(
+                vgettext( "%d level", "%d levels", upgrade_levels ), upgrade_levels );
+        const nc_color ccol = points.skill_points_left() >= cost ? COL_SKILL_USED : c_light_red;
+        data->cost_rml = cata_text_to_rml( colorize( string_format(
+                vgettext( "Upgrading %s by %s costs %d point",
+                          "Upgrading %s by %s costs %d points", cost ),
+                currentSkill->name(), upgrade_levels_s, cost ), ccol ) );
+
+        data->rows.clear();
+        rml_sel_child = -1;
+        skill_displayType_id cat = skill_displayType_id::NULL_ID();
+        for( int i = 0; i < num_skills; i++ ) {
+            const Skill *sk = skill_list[i].first;
+            const skill_displayType_id &dt = sk->display_category();
+            if( cat != dt ) {
+                cat = dt;
+                nc_skill_row h;
+                h.is_header = true;
+                h.text_rml = cata_text_to_rml( colorize( dt->display_string(), c_yellow ) );
+                data->rows.push_back( h );
+            }
+            const int lvl = u.get_skill_level( sk->ident() );
+            const nc_color col = lvl > 0 ? COL_SKILL_USED : c_light_gray;
+            std::string line = colorize( sk->name(), col );
+            if( lvl > 0 ) {
+                line += colorize( string_format( " (%d)", lvl ), col );
+            }
+            for( const auto &ps : u.prof->skills() ) {
+                if( ps.first == sk->ident() ) {
+                    line += colorize( string_format( " (+%d)",
+                                                     static_cast<int>( ps.second ) ), c_white );
+                    break;
+                }
+            }
+            nc_skill_row r;
+            r.text_rml = cata_text_to_rml( line );
+            r.selected = ( i == cur_pos );
+            if( i == cur_pos ) {
+                rml_sel_child = static_cast<int>( data->rows.size() );
+            }
+            data->rows.push_back( r );
+        }
+
+        data->desc_rml = cata_text_to_rml( nc_skill_recipes_desc( u, currentSkill, prof_skills ) );
+
+        data->handle.DirtyVariable( "tabs" );
+        data->handle.DirtyVariable( "points_rml" );
+        data->handle.DirtyVariable( "cost_rml" );
+        data->handle.DirtyVariable( "rows" );
+        data->handle.DirtyVariable( "desc_rml" );
+
+        // Follow the keyboard cursor with native scroll (keyboard nav only).
+        if( rml_scroll_pending && rml_sel_child >= 0 ) {
+            rml_scroll_pending = false;
+            if( Rml::Element *list = rml.document()->GetElementById( "nc-skill-list" ) ) {
+                if( rml_sel_child < list->GetNumChildren() ) {
+                    list->GetChild( rml_sel_child )->ScrollIntoView(
+                        Rml::ScrollIntoViewOptions( Rml::ScrollAlignment::Nearest ) );
+                }
+            }
+        }
+    };
+    // SCROLL_UP/DOWN scroll the description pane (vs the curses fold offset).
+    const auto scroll_desc = [&]( int dir ) {
+        if( !rml ) {
+            return;
+        }
+        if( Rml::Element *e = rml.document()->GetElementById( "nc-skill-desc" ) ) {
+            const float page = e->GetClientHeight();
+            const float maxtop = std::max( 0.0f, e->GetScrollHeight() - page );
+            e->SetScrollTop( std::clamp( e->GetScrollTop() + dir * page * 0.15f, 0.0f, maxtop ) );
+        }
+    };
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         draw_character_tabs( w, _( "SKILLS" ) );
 
         draw_points( w, points );
@@ -3007,17 +3194,31 @@ tab_direction set_skills( avatar &u, points_left &points )
         wnoutrefresh( w_description );
     } );
 
+    rml.open( newcharacter_rmlui_enabled(), "newcharskills", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        register_nc_skills_rml_types( c );
+        c.Bind( "tabs", &data->tabs );
+        c.Bind( "points_rml", &data->points_rml );
+        c.Bind( "cost_rml", &data->cost_rml );
+        c.Bind( "rows", &data->rows );
+        c.Bind( "desc_rml", &data->desc_rml );
+        data->handle = c.GetModelHandle();
+    } );
+
     do {
         ui_manager::redraw();
         const std::string action = ctxt.handle_input();
         if( action == "DOWN" ) {
             cur_pos = modulo( cur_pos + 1, num_skills );
             currentSkill = skill_list[cur_pos].first;
+            rml_scroll_pending = true;
         } else if( action == "UP" ) {
             cur_pos = modulo( cur_pos - 1, num_skills );
             currentSkill = skill_list[cur_pos].first;
+            rml_scroll_pending = true;
         } else if( action == "RANDOMIZE" ) {
             cur_pos = modulo( rng( 0, num_skills - 1 ), num_skills );
+            rml_scroll_pending = true;
         } else if( action == "LEFT" ) {
             const int level = u.get_skill_level( currentSkill->ident() );
             if( level > 0 ) {
@@ -3035,9 +3236,17 @@ tab_direction set_skills( avatar &u, points_left &points )
                 u.mod_skill_level( currentSkill->ident(), level == 0 ? +2 : +1 );
             }
         } else if( action == "SCROLL_DOWN" ) {
-            selected++;
+            if( rml ) {
+                scroll_desc( +1 );
+            } else {
+                selected++;
+            }
         } else if( action == "SCROLL_UP" ) {
-            selected--;
+            if( rml ) {
+                scroll_desc( -1 );
+            } else {
+                selected--;
+            }
         } else if( action == "PREV_TAB" ) {
             return tab_direction::BACKWARD;
         } else if( action == "NEXT_TAB" ) {
