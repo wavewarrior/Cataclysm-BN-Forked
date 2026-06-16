@@ -1776,10 +1776,71 @@ debug PLACE_TERRAIN/SPECIAL editor (debug-only) — are LOW-VALUE / map-adjacent
 DEFERRED (the note's color menu + text entry are already Tier-0 uilist/string_input).
 Revisit at the §8 rip-out sweep if they keep curses alive.
 
-Next Tier-6 units: slice 3 (on-map static labels — city/zone labels + overlay_strings
-via world→screen DOM overlay) / slice 4 (§7 world-text layer, also unblocks ranged).
-Both are the architectural/novel part of the tier (not conforming screen migrations).
-The deferred faction (Tier 2) also remains (needs the creature/npc-info F.2 component).
+- **Tier 6 slice 4.1: §7 world-text layer (FIRST vertical slice — SCT through RmlUi's
+  own FontEngine) — DONE + EYEBALLED WORKING (user 2026-06-16: "SCT shows as rmlui
+  text"), TOGGLE OFF, COMMITTED.** Position/size left at defaults (px=24, dx=dy=0) —
+  user will tune the live F4 sliders later. The
+  foundational/hardest tier-6 unit, started at its cheapest real consumer. Renders the
+  tile-path scrolling combat text (SCT) through RmlUi's **own** font engine (the glyph
+  path that survives the §8 curses rip-out) instead of the curses `overlay_strings` →
+  `map_font->OutputChar` path. **KEY DESIGN FINDING (refines §7):** §7's wording "reuse
+  RmlUi render interface for raw glyphs" was imprecise — RmlUi 6.x routes font geometry
+  through `RenderManager` (managed layer), NOT the bare `RenderInterface` the project
+  wraps. The reachable native path (all public API, confirmed): `ctx->GetRenderManager()`
+  → `GetFontEngineInterface()->GetFontFaceHandle("Terminus (TTF)",…)` +
+  `GenerateString(rm, face, 0, str, {0,0}, ColourbPremultiplied, 1, shaping, meshes)` →
+  per `TexturedMesh`: `rm.MakeGeometry(mesh)` → `Geometry::Render(translation, texture)`.
+  STRUCTURAL POINTS: (1) new `rmlui_layer::world_text_begin/add/active` (rmlui_layer.{h,
+  cpp}): items submitted per frame (physical-px top-left + utf8 + 0xRRGGBBAA), COMPILED
+  in `prepare()` (Render with no open pass = compile-only, uploaded by `upload_pending`),
+  DRAWN in `render_in_pass()` UNDER the menu docs (so SCT sits on the map, under any open
+  UI). Mirrors the doc two-phase render exactly. (2) `world_text_active()` is kept OUT of
+  `active()` (which gates input) so SCT showing with no menu open does NOT steal mouse;
+  `sdl_render_frame.cpp` gates the overlay pass on `active() || world_text_active()`.
+  (3) `cata_tiles::draw_sct_frame`: toggle ON → `world_text_begin()` + `world_text_add()`
+  per SCT entry (color = `windowsPalette[FG]`, the SAME index the curses overlay path
+  feeds `windowsPalette[]` → exact A/B colour fidelity; pos = `player_to_screen`), and
+  SKIPS the `overlay_strings.emplace` (no double-draw). (4) context is sized in PHYSICAL
+  px so `player_to_screen`'s physical-px output is the translation directly (no density
+  division). F4 toggle "world text (SCT)" (OFF). **EYEBALL CHECK (user, A/B via F4):**
+  enter combat (melee a monster) so damage SCT rises off it — with the toggle ON the
+  numbers render as crisp RmlUi-font text at the right map position, colours matching the
+  curses path (toggle OFF), animate/rise + fade as before, and clear when combat ends;
+  with a menu open over combat, SCT draws UNDER the menu. **WATCH / known flags (build-
+  blind on the RmlUi runtime):** (a) **font size hardcoded `g_world_text_px=16`** — may
+  not match the curses SCT size; tunable (TODO: promote to F4 slider). (b) **HiDPI:** the
+  font size is NOT scaled by `density_ratio` (the translation is physical-px and matches,
+  but the glyph size may read small on a HiDPI display) — flag if text is too small. (c)
+  **baseline offset:** GenerateString lays on the baseline at y=0; I nudge +font_px so
+  screen_y reads as the top edge — vertical position may be slightly off, flag. (d)
+  alignment: left/center/right per-direction offset of the curses path is approximated by
+  the start position only — minor horizontal drift possible. (e) the two-phase
+  compile→draw on ad-hoc `Geometry` (vs documents) is the core unproven mechanism — if
+  SCT renders NOTHING with the toggle on (but the overlay pass fires), the deferred-
+  upload reuse on ad-hoc geometry is the suspect. (f) D3D12 (Win11) glance — first
+  non-document RmlUi geometry path.
+  **★ KEY LEARNING (cost a long debug session — carry to any future imperative
+  RmlUi-font work): `FontEngineInterface::GetFontFaceHandle(family,…)` does a DIRECT
+  family lookup with NO fallback resolution.** The shared context's font is loaded via
+  `Rml::LoadFontFace(path, /*fallback=*/true)`, which registers under the TTF's embedded
+  family AND as the fallback — document text resolves ANY family via that fallback, so
+  RCSS "just works" and HIDES whether a direct lookup would. A direct
+  `GetFontFaceHandle("Terminus (TTF)", …)` returned **0** (font not found) → no geometry
+  → nothing rendered, SILENTLY. Fix: register the font from memory under an explicit
+  family we own (`Rml::LoadFontFace(bytes, "cata-world-text", …)`, bytes retained until
+  Shutdown) and look THAT up, with `FontWeight::Auto` (bundled Terminus is weight
+  "Medium"/500, so `FontWeight::Normal`/400 also misses). SECONDARY time-sink: the
+  project's debug.log filters by DEBUG CLASS — `DC::SDL` is filtered OFF, `DC::Main`
+  shows; all diagnostics MUST use `DC::Main` or they're invisible even while the code
+  runs. The render mechanism (two-phase compile-in-prepare / draw-in-render_in_pass on
+  ad-hoc `RenderManager::MakeGeometry`+`Geometry::Render`) is now PROVEN.
+
+Next Tier-6 units: slice 4.1 eyeball → (slice 4.2) generalize the layer into a pooled
+animated text layer (own lifetime/motion, floating damage numbers) + route the other
+`overlay_strings` debug/zone text; slice 3 (on-map static labels — city/zone labels via
+world→screen DOM overlay). Both remain the architectural/novel part of the tier. §7
+world-text unblocks Tier-5 ranged. The deferred faction (Tier 2) also remains (needs the
+creature/npc-info F.2 component).
 
 ## Load-bearing architecture facts (verified this session)
 

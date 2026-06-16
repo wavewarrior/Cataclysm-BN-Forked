@@ -440,6 +440,12 @@ static void draw_rmlui_tab()
         ImGui::Checkbox( "main menu", &main_menu_rmlui_enabled() );
         ImGui::Checkbox( "new character", &newcharacter_rmlui_enabled() );
         ImGui::Checkbox( "overmap legend", &overmap_rmlui_enabled() );
+        ImGui::Checkbox( "world text (SCT)", &world_text_rmlui_enabled() );
+        if( world_text_rmlui_enabled() ) {
+            ImGui::SliderInt( "wt font px", &rmlui_layer::world_text_px(), 8, 64 );
+            ImGui::SliderFloat( "wt x offset", &rmlui_layer::world_text_dx(), -64.f, 64.f );
+            ImGui::SliderFloat( "wt y offset", &rmlui_layer::world_text_dy(), -64.f, 64.f );
+        }
     }
 }
 

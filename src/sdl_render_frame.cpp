@@ -596,7 +596,11 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
     constexpr float clear_black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 
     const bool imgui_active = imgui_layer::active();
-    const bool rmlui_active = rmlui_layer::active();
+    // World text (§7, e.g. SCT) renders through the RmlUi layer even with no menu
+    // open, so the overlay pass must run when either a document OR world text is
+    // present. world_text_active() is kept OUT of rmlui_layer::active() so it does
+    // not steal mouse input (active() gates input in sdl_input).
+    const bool rmlui_active = rmlui_layer::active() || rmlui_layer::world_text_active();
     if( imgui_active ) {
         imgui_layer::new_frame();
         imgui_layer::prepare( ctx.cmd_buffer );

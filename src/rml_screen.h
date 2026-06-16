@@ -174,4 +174,9 @@ bool &dialogue_rmlui_enabled();
 // tile description + keybind hints + coordinates. The map tile grid stays GPU/ASCII).
 bool &overmap_rmlui_enabled();
 
+// §7 world-space text layer (Tier 6 slice 4): on-map scrolling combat text rendered
+// through RmlUi's own font engine instead of the curses overlay_strings path. The
+// rip-out-surviving glyph path; foundation for future floating damage numbers.
+bool &world_text_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H
