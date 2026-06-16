@@ -25,7 +25,7 @@ body {
     align-items: flex-start;
     margin-bottom: 4dp;
     padding-bottom: 4dp;
-    border-bottom: 1dp #5a5a78ff;
+    border-bottom: 1dp #7c6f64ff;
 }
 .inv-header-text {
     flex: 1;
@@ -44,16 +44,16 @@ body {
     display: block;
     white-space: pre;
     text-align: right;
-    color: #9a9ab0ff;
+    color: #a89984ff;
 }
 
 .inv-title {
     flex: 0 0 auto;
-    color: #ffffffff;
+    color: #fbf1c7ff;
 }
 .inv-hint {
     flex: 0 0 auto;
-    color: #9a9ab0ff;
+    color: #a89984ff;
 }
 
 /* The list is a horizontal row of columns (slice 2b); it scrolls vertically as a
@@ -80,24 +80,24 @@ body {
     border-radius: 4dp;
 }
 .inv-row:hover {
-    background-color: #3a3a55ff;
+    background-color: #504945ff;
 }
 .inv-row.selected {
-    background-color: #ffcc66ff;
-    color: #1e1e28ff;
+    background-color: #fabd2fff;
+    color: #1d2021ff;
 }
 /* Category header rows: a separating band, not selectable. */
 .inv-row.category {
     margin-top: 4dp;
-    border-bottom: 1dp #5a5a78ff;
-    color: #d76fd7ff;
+    border-bottom: 1dp #7c6f64ff;
+    color: #d3869bff;
 }
 
 .inv-footer {
     flex: 0 0 auto;
     margin-top: 4dp;
     padding-top: 4dp;
-    border-top: 1dp #5a5a78ff;
+    border-top: 1dp #7c6f64ff;
     display: flex;
     align-items: center;
 }
@@ -105,7 +105,7 @@ body {
    centered (mirrors draw_footer's left filter + centered mode). */
 .inv-filter {
     flex: 0 0 auto;
-    color: #9a9ab0ff;
+    color: #a89984ff;
 }
 .inv-mode {
     flex: 1;

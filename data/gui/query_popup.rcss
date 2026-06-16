@@ -15,7 +15,7 @@ body {
     flex-direction: column;
 }
 
-/* text-primary (#cfcfe0ff) inherits from body — see theme.rcss palette. */
+/* text-primary (#ebdbb2ff) inherits from body — see theme.rcss palette. */
 .query-popup-message {
     margin-bottom: 10dp;
 }

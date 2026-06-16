@@ -30,7 +30,7 @@ body {
     flex: 0 0 auto;
     padding-bottom: 6dp;
     margin-bottom: 6dp;
-    border-bottom: 1dp #5a5a78ff;
+    border-bottom: 1dp #7c6f64ff;
 }
 
 /* The two side-by-side columns. */
@@ -57,11 +57,11 @@ body {
 
 /* Each column's scroll list; border brightens to accent when focused. */
 .mut-pane {
-    border: 1dp #5a5a78ff;
+    border: 1dp #7c6f64ff;
     border-radius: 4dp;
 }
 .mut-pane.active {
-    border-color: #ffcc66ff;
+    border-color: #fabd2fff;
 }
 
 .mut-none {
@@ -80,12 +80,12 @@ body {
     border-radius: 4dp;
 }
 .mut-line:hover {
-    background-color: #3a3a55ff;
-    color: #ffffffff;
+    background-color: #504945ff;
+    color: #fbf1c7ff;
 }
 .mut-pane.active .mut-line.selected {
-    background-color: #ffcc66ff;
-    color: #1e1e28ff;
+    background-color: #fabd2fff;
+    color: #1d2021ff;
 }
 
 /* Examine pane (examine mode only): folded mutation description. */
@@ -93,7 +93,7 @@ body {
     flex: 0 0 auto;
     margin-top: 6dp;
     padding-top: 6dp;
-    border-top: 1dp #5a5a78ff;
+    border-top: 1dp #7c6f64ff;
     min-height: 60dp;
     white-space: pre-wrap;
 }

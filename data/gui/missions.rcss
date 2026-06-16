@@ -54,7 +54,7 @@ body {
     width: 34%;
     max-height: 80vh;
     overflow-y: auto;
-    border-right: 1dp #5a5a78ff;   /* divider, replaces the LINE_XOXO column */
+    border-right: 1dp #7c6f64ff;   /* divider, replaces the LINE_XOXO column */
     padding-right: 6dp;
 }
 .missions-detail {
@@ -72,6 +72,6 @@ body {
 
 /* "You have no … missions!" placeholder. */
 .missions-empty {
-    color: #ff6b6bff;   /* c_light_red-ish */
+    color: #fb4934ff;   /* c_light_red-ish */
     padding: 6dp;
 }

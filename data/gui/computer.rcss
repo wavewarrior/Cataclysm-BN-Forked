@@ -26,7 +26,7 @@ body {
 .comp-screen {
     flex: 1;
     min-height: 0;
-    color: #5fdd5fff;
+    color: #b8bb26ff;
 }
 
 .comp-line {

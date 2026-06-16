@@ -25,13 +25,13 @@ body {
     align-items: center;
     margin-bottom: 4dp;
     padding-bottom: 4dp;
-    border-bottom: 1dp #5a5a78ff;
+    border-bottom: 1dp #7c6f64ff;
 }
 .aim-clock {
-    color: #ffffffff;
+    color: #fbf1c7ff;
 }
 .aim-hints {
-    color: #9a9ab0ff;
+    color: #a89984ff;
     text-align: right;
 }
 .aim-root {
@@ -51,7 +51,7 @@ body {
 .aim-pane:first-child {
     margin-right: 6dp;
     padding-right: 6dp;
-    border-right: 1dp #5a5a78ff;
+    border-right: 1dp #7c6f64ff;
 }
 
 /* Pane header: area name left, weight/volume capacity right. */
@@ -62,13 +62,13 @@ body {
     align-items: center;
     margin-bottom: 4dp;
     padding-bottom: 4dp;
-    border-bottom: 1dp #5a5a78ff;
+    border-bottom: 1dp #7c6f64ff;
 }
 .aim-title {
-    color: #ffffffff;
+    color: #fbf1c7ff;
 }
 .aim-cap {
-    color: #9a9ab0ff;
+    color: #a89984ff;
     white-space: pre;
     text-align: right;
 }
@@ -82,8 +82,8 @@ body {
 .aim-colhead {
     display: flex;
     flex-direction: row;
-    color: #9a9ab0ff;
-    border-bottom: 1dp #5a5a78ff;
+    color: #a89984ff;
+    border-bottom: 1dp #7c6f64ff;
     margin-bottom: 2dp;
 }
 .aim-row {
@@ -93,16 +93,16 @@ body {
     border-radius: 3dp;
 }
 .aim-row:hover {
-    background-color: #3a3a55ff;
+    background-color: #504945ff;
 }
 .aim-row.selected {
-    background-color: #ffcc66ff;
-    color: #1e1e28ff;
+    background-color: #fabd2fff;
+    color: #1d2021ff;
 }
 .aim-cat {
     display: block;
     text-align: center;
-    color: #d76fd7ff;
+    color: #d3869bff;
     margin-top: 2dp;
 }
 
@@ -149,7 +149,7 @@ body {
     white-space: pre;
     margin-top: 4dp;
     padding-top: 4dp;
-    border-top: 1dp #5a5a78ff;
+    border-top: 1dp #7c6f64ff;
 }
 
 /* Area-selection grid (slice 2): semantic compass 3x3 + a specials row, right-

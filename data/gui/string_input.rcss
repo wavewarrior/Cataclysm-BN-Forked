@@ -16,13 +16,13 @@ body {
 }
 
 .string-input-title {
-    color: #ff6666ff;
+    color: #fb4934ff;
     margin-bottom: 6dp;
     font-size: 18dp;
 }
 
 .string-input-desc {
-    color: #66ff66ff;
+    color: #b8bb26ff;
     margin-bottom: 8dp;
     font-size: 16dp;
 }
@@ -34,9 +34,9 @@ body {
     align-items: center;
     padding: 6dp 8dp;
     margin-top: 4dp;
-    border-bottom: 2dp solid #5a5a78ff;
+    border-bottom: 2dp solid #7c6f64ff;
     /* Inherit text-primary from body for the typed text */
-    color: #ff66ffff;
+    color: #d3869bff;
     font-size: 18dp;
     overflow: hidden;
     white-space: pre;
@@ -59,7 +59,7 @@ body {
     width: 2dp;
     height: 1.1em;
     margin: 0 1dp;
-    background-color: #ffffffff;
+    background-color: #fbf1c7ff;
     animation: none;
 }
 

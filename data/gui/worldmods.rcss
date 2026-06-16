@@ -22,7 +22,7 @@ body {
     flex: 0 0 auto;
     margin-bottom: 6dp;
     padding-bottom: 6dp;
-    border-bottom: 1dp #5a5a78ff;
+    border-bottom: 1dp #7c6f64ff;
 }
 
 .wm-list {
@@ -43,6 +43,6 @@ body {
 }
 
 .wm-row.selected {
-    background-color: #ffcc66ff;
-    color: #1e1e28ff;
+    background-color: #fabd2fff;
+    color: #1d2021ff;
 }

@@ -40,7 +40,7 @@ body {
 .cm-status {
     flex: 0 0 auto;
     margin-left: 8dp;
-    color: #5fd75fff;
+    color: #b8bb26ff;
 }
 
 /* List (left) + detail (right). */
@@ -54,7 +54,7 @@ body {
 
 .cm-list {
     flex: 0 0 32%;
-    border-right: 1dp #5a5a78ff;
+    border-right: 1dp #7c6f64ff;
     margin-right: 8dp;
 }
 .cm-row {
@@ -63,12 +63,12 @@ body {
     border-radius: 4dp;
 }
 .cm-row:hover {
-    background-color: #3a3a55ff;
-    color: #ffffffff;
+    background-color: #504945ff;
+    color: #fbf1c7ff;
 }
 .cm-row.selected {
-    background-color: #ffcc66ff;
-    color: #1e1e28ff;
+    background-color: #fabd2fff;
+    color: #1d2021ff;
 }
 
 /* Detail column: name header / scrolling buffer / notes. */
@@ -80,7 +80,7 @@ body {
 }
 .cm-group {
     flex: 0 0 auto;
-    color: #ffffffff;
+    color: #fbf1c7ff;
     margin-bottom: 4dp;
 }
 .cm-detail {
@@ -93,7 +93,7 @@ body {
 }
 /* Separator line in the buffer → a thin horizontal rule. */
 .cm-line.sep {
-    border-bottom: 1dp #5a5a78ff;
+    border-bottom: 1dp #7c6f64ff;
     margin: 3dp 0;
     height: 1dp;
 }
@@ -101,6 +101,6 @@ body {
     flex: 0 0 auto;
     margin-top: 4dp;
     padding-top: 4dp;
-    border-top: 1dp #5a5a78ff;
-    color: #cfcfe0ff;
+    border-top: 1dp #7c6f64ff;
+    color: #ebdbb2ff;
 }

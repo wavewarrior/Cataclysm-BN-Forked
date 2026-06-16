@@ -36,9 +36,9 @@ body {
     min-height: 76dp;
     margin-bottom: 6dp;
     padding-bottom: 6dp;
-    border-bottom: 1dp #5a5a78ff;
+    border-bottom: 1dp #7c6f64ff;
     white-space: pre-wrap;
-    color: #cfcfe0ff;
+    color: #ebdbb2ff;
 }
 
 /* Page tab bar — many pages, allow wrap so they never clip. */
@@ -60,20 +60,20 @@ body {
 }
 
 .opt-row:hover {
-    background-color: #3a3a55ff;
-    color: #ffffffff;
+    background-color: #504945ff;
+    color: #fbf1c7ff;
 }
 
 .opt-row.selected {
-    background-color: #ffcc66ff;
-    color: #1e1e28ff;
+    background-color: #fabd2fff;
+    color: #1d2021ff;
 }
 
 /* Number column (curses drew the 1-based entry index at the left). */
 .opt-num {
     flex: 0 0 auto;
     width: 34dp;
-    color: #9a9ab0ff;
+    color: #a89984ff;
 }
 
 /* Name column — grows; truncate rather than push the value column. */

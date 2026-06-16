@@ -35,12 +35,12 @@ body {
 .cg-craft {
     flex: 0 0 auto;
     margin-left: 8dp;
-    color: #5fd75fff;
+    color: #b8bb26ff;
 }
 .cg-hidden {
     flex: 0 0 auto;
     margin-left: 8dp;
-    color: #ff5f5fff;
+    color: #fb4934ff;
 }
 
 /* Subcategory tab row (NORMAL mode only). Empty categories greyed. */
@@ -50,7 +50,7 @@ body {
     margin-bottom: 0;
 }
 .cg-subtabs .tab.cg-empty {
-    color: #6a6a80ff;
+    color: #928374ff;
 }
 
 /* List | recipe-info | item-info. */
@@ -64,7 +64,7 @@ body {
 
 .cg-list {
     flex: 0 0 28%;
-    border-right: 1dp #5a5a78ff;
+    border-right: 1dp #7c6f64ff;
     margin-right: 8dp;
 }
 .cg-row {
@@ -74,12 +74,12 @@ body {
     white-space: pre;   /* preserve nested-recipe indent */
 }
 .cg-row:hover {
-    background-color: #3a3a55ff;
-    color: #ffffffff;
+    background-color: #504945ff;
+    color: #fbf1c7ff;
 }
 .cg-row.selected {
-    background-color: #ffcc66ff;
-    color: #1e1e28ff;
+    background-color: #fabd2fff;
+    color: #1d2021ff;
 }
 
 .cg-info {
@@ -90,7 +90,7 @@ body {
 .cg-item {
     flex: 0 0 38%;
     min-height: 0;
-    border-left: 1dp #5a5a78ff;
+    border-left: 1dp #7c6f64ff;
     padding-left: 8dp;
 }
 .cg-line {
@@ -102,7 +102,7 @@ body {
     flex: 0 0 auto;
     margin-top: 4dp;
     padding-top: 4dp;
-    border-top: 1dp #5a5a78ff;
-    color: #cfcfe0ff;
+    border-top: 1dp #7c6f64ff;
+    color: #ebdbb2ff;
     white-space: pre-wrap;
 }
