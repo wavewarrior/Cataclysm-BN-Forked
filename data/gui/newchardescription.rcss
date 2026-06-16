@@ -1,0 +1,83 @@
+/* Layout for the new-character OVERVIEW tab (Tier 4 #4 slice 8). Reuses theme
+   .panel / .tabs / .tab / .item / .scroll-pane. The six summary panes flow in a
+   wrapping row; each scrolls independently. */
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.nc-panel {
+    width: 92%;
+    min-width: 720dp;
+    height: 94%;
+    display: flex;
+    flex-direction: column;
+}
+
+.nc-tabs {
+    flex: 0 0 auto;
+}
+
+.nc-tabs .tab {
+    flex: 0 0 auto;
+}
+
+.nc-desc-points {
+    display: block;
+    flex: 0 0 auto;
+    padding: 4dp 8dp;
+}
+
+.nc-desc-editrow {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    padding: 2dp 8dp;
+    border-bottom: 1dp {{bg4}};
+}
+
+.nc-desc-sp {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    padding: 2dp 8dp;
+}
+
+.nc-desc-field {
+    display: block;
+    margin-right: 24dp;
+    white-space: pre;
+}
+
+.nc-desc-panes {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    padding: 4dp 8dp;
+}
+
+.nc-desc-pane {
+    flex: 1;
+    min-width: 180dp;
+    min-height: 0;
+    margin: 0 8dp 8dp 0;
+    white-space: pre-wrap;
+}
+
+.nc-desc-guide {
+    flex: 0 0 auto;
+    max-height: 110dp;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    padding: 6dp 8dp;
+    border-top: 1dp {{bg4}};
+    color: {{fg}};
+}

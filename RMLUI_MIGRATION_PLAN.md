@@ -1551,6 +1551,63 @@ buffer is a big from-scratch reconstruction — spot-check items/skills/bionics 
 (b) LEFT/RIGHT scroll the buffer (not move the list). (c) cursor scroll-follow on a long
 profession list. (d) FILTER + "Nothing found" popups over the doc (invariant 6).
 
+**SLICE 8 (set_description) — DONE + EYEBALLED CLEAN (user 2026-06-16), COMMITTED.
+TOGGLE OFF. The LAST newcharacter tab → newcharacter (Tier 4 #4, the last giant) is now
+COMPLETE across all 8 slices.** (Build note: fresh mtime verified — newcharacter.cpp.o
+12:31:49 / bin 12:31:52; the first `cmake --build | rtk err` falsely reported success
+without recompiling, caught via the build-verify-mtime gotcha.) The OVERVIEW tab (8th
+lit) — the final summary form. `data/gui/newchardescription.{rml,rcss}` model
+"newchardescription". RENDER-ONLY doc: char-tab strip (OVERVIEW=idx7) + points line + an
+edit row (name / gender / height / age / location) + scenario/profession lines + SIX
+read-only summary panes (stats / skills / traits / bionics+spells / misc / gear, flex-wrap
+row, each its own `.scroll-pane`) + a keybinding guide footer. STRUCTURAL POINTS: (1) every
+pane is ONE colour-tagged string built by mirroring the curses block verbatim then
+`cata_text_to_rml` (the profession `info_rml` approach, replicated per-pane — no row
+structs; the only registered type is the shared `nc_desc_tab` for the strip). (2) the
+three EDITABLE fields (name/height/age) bake their selector highlight into the string: a
+`> ` marker + bright `c_white` label when `current_selector` points at them, `  `/
+`c_light_gray` otherwise (no extra bound bools/CSS — mirrors the curses `h_light_gray`
+cue). (3) bionics pane built ONCE (curses draws it twice — a latent curses quirk; the
+semantic rewrite drops the redundant second draw). (4) `sync_rml` uses
+`DirtyAllVariables()` (many panes; cheaper to write than 16 per-var dirties). (5) all
+editing stays keyboard + the migrated string_input_popup (name/age/height edit) +
+select_location uilist (Tier-0) + the curses popups; render-only doc, `rml.open` after
+on_redraw, rml_doc dtor tears down at each `return` (the loop returns directly).
+(6) character_preview tile overlay NOT drawn in rml mode (out of scope, like prior tabs;
+zoom/clothes keys no-op safely). F4 toggle "new character" (shared). **EYEBALL CHECK
+(user, A/B via F4 — query_popup toggle ON too, invariant 6):** New Game → Custom →
+OVERVIEW (the last tab, reached via NEXT_TAB from Skills or by completing the wizard):
+char-tab strip (OVERVIEW current), points line; the edit row shows Name / Gender (Male
+cyan / Female pink per sex) / Height / Age / Starting location; LEFT/RIGHT cycle the
+active field (the `> ` marker + bright label move between Name → Height → Age), UP/DOWN
+change height/age, CONFIRM opens the edit popup (name string / age+height int), CHANGE_GENDER
+flips Male/Female, CHOOSE_LOCATION opens the uilist; the six panes show
+stats/skills(category-grouped)/traits(display colours)/bionics+spells/misc(vehicle/
+companions/cash/pets/addictions)/gear(wielded/worn/inventory) matching curses;
+RANDOMIZE_CHAR_DESCRIPTION rerolls name/age/height/sex; SAVE_TEMPLATE + REROLL_* work;
+NEXT_TAB → "Are you SURE you're finished?" confirm (RmlUi popup if query_popup ON) →
+finishes creation, PREV_TAB → Skills (RmlUi). **WATCH:** (a) the six panes are from-scratch
+reconstructions — spot-check stats numbers, skill levels (+prof bonus), trait/bionic lists,
+gear groups vs curses. (b) the editable-field highlight (`> ` marker) tracks LEFT/RIGHT.
+(c) empty cases (no traits/bionics/skills/items → "None!"). (d) the finish/abort popups
+render over the doc (invariant 6). (e) first time the OVERVIEW dynamic doc renders —
+D3D12 (Win11) glance warranted (last-tier-first cross-check).
+
+### Tier 4 #4 (newcharacter) status (2026-06-16): CODE-COMPLETE, all 8 slices
+
+Slices 1-3 (points/stats/skills) eyeballed-clean + committed. Slices 4-7
+(traits/bionics/scenario/profession) committed build-blind (git
+`20dc0dd2c2`..`996bbafa6c`); slice 8 (description) committed this session.
+**EYEBALL: cleared 2026-06-16** — the user reached the OVERVIEW tab (idx7, last in the
+wizard) with the shared toggle ON, walking the full creator (scenario→profession→stats→
+traits→bionics→skills→overview all rendering RmlUi en route) and confirmed clean. With
+newcharacter done, **all four Tier-4 giants
+(worldfactory / main_menu / options / newcharacter) are CODE-COMPLETE** — the largest
+unpriced-risk bucket from the re-scope gate is cleared. Remaining toward the §8 rip-out:
+Tier 5 (npctalk/ranged/iexamine/trade), Tier 6 (overmap + on-map text §7), Tier 7
+(sidebar HUD), Tier 8 (F4→RmlUi), Tier 9 (minigames), plus the deferred faction (Tier 2)
+and the per-slice eyeball debt.
+
 ## Load-bearing architecture facts (verified this session)
 
 - **Single curses chokepoint:** every non-map window renders through

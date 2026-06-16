@@ -1,0 +1,45 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="newchardescription.rcss"/>
+</head>
+<body data-model="newchardescription">
+    <!-- Tier 4 screen #4 (new-character creator) slice 8: the OVERVIEW tab
+         (set_description) — the final summary form. Char-tab strip (OVERVIEW
+         current) + points line + an edit row (name/gender/height/age/location,
+         the editable fields selector-highlighted via a baked "> " marker) +
+         scenario/profession lines + six read-only summary panes (stats / skills /
+         traits / bionics / misc / gear) + a keybinding guide footer. Render-only
+         doc; keyboard owns LEFT/RIGHT (cycle field), UP/DOWN (height/age),
+         CONFIRM (edit popup), CHANGE_GENDER, CHOOSE_LOCATION, RANDOMIZE,
+         SAVE_TEMPLATE, REROLL_*, NEXT/PREV_TAB, QUIT. Tile preview not drawn. -->
+    <div class="panel nc-panel">
+        <div class="tabs nc-tabs">
+            <div class="item tab" data-for="t : tabs"
+                 data-class-selected="t.selected" data-rml="t.name_rml"></div>
+        </div>
+        <div class="nc-desc-points" data-rml="points_rml"></div>
+        <div class="nc-desc-editrow">
+            <span class="nc-desc-field" data-rml="name_rml"></span>
+            <span class="nc-desc-field" data-rml="gender_rml"></span>
+            <span class="nc-desc-field" data-rml="height_rml"></span>
+            <span class="nc-desc-field" data-rml="age_rml"></span>
+            <span class="nc-desc-field" data-rml="location_rml"></span>
+        </div>
+        <div class="nc-desc-sp">
+            <span class="nc-desc-field" data-rml="scenario_rml"></span>
+            <span class="nc-desc-field" data-rml="profession_rml"></span>
+        </div>
+        <div class="nc-desc-panes">
+            <div class="nc-desc-pane scroll-pane" data-rml="stats_rml"></div>
+            <div class="nc-desc-pane scroll-pane" data-rml="skills_rml"></div>
+            <div class="nc-desc-pane scroll-pane" data-rml="traits_rml"></div>
+            <div class="nc-desc-pane scroll-pane" data-rml="bionics_rml"></div>
+            <div class="nc-desc-pane scroll-pane" data-rml="misc_rml"></div>
+            <div class="nc-desc-pane scroll-pane" data-rml="gear_rml"></div>
+        </div>
+        <div class="nc-desc-guide" data-rml="guide_rml"></div>
+    </div>
+    <div id="crt-overlay" class="crt"></div>
+</body>
+</rml>

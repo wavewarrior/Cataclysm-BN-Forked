@@ -4506,6 +4506,54 @@ static void draw_age( const catacurses::window &w_age, const avatar &you, const 
 }
 } // namespace char_creation
 
+// RmlUi model for the OVERVIEW tab (slice 8, the last newcharacter tab). The
+// final summary form: editable name/height/age (selector-highlighted) + gender +
+// location + scenario/profession + the six read-only summary panes (stats /
+// skills / traits / bionics / misc / gear). Render-only doc; each pane is one
+// colour-tagged string mirroring the curses block verbatim (the profession
+// info_rml approach). Distinct per-model tab struct (RegisterStruct is
+// context-global; worldfactory precedent).
+namespace
+{
+struct nc_desc_tab {
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct nc_desc_session {
+    Rml::Vector<nc_desc_tab> tabs;
+    Rml::String points_rml;
+    Rml::String name_rml;
+    Rml::String gender_rml;
+    Rml::String height_rml;
+    Rml::String age_rml;
+    Rml::String location_rml;
+    Rml::String scenario_rml;
+    Rml::String profession_rml;
+    Rml::String stats_rml;
+    Rml::String skills_rml;
+    Rml::String traits_rml;
+    Rml::String bionics_rml;
+    Rml::String misc_rml;
+    Rml::String gear_rml;
+    Rml::String guide_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_nc_desc_types_registered = false;
+
+void register_nc_desc_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_nc_desc_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<nc_desc_tab> th = c.RegisterStruct<nc_desc_tab>();
+    th.RegisterMember( "name_rml", &nc_desc_tab::name_rml );
+    th.RegisterMember( "selected", &nc_desc_tab::selected );
+    c.RegisterArray<Rml::Vector<nc_desc_tab>>();
+    g_nc_desc_types_registered = true;
+}
+} // namespace
+
 tab_direction set_description( avatar &you, const bool allow_reroll,
                                points_left &points )
 {
@@ -4639,7 +4687,291 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
     char_creation::description_selector current_selector = char_creation::NAME;
 
     bool no_name_entered = false;
+
+    // RmlUi render path (render-only; keyboard still owns nav/edit/confirm below).
+    auto data = std::make_unique<nc_desc_session>();
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !data->handle ) {
+            return;
+        }
+        data->tabs = build_nc_char_tabs<nc_desc_tab>( 7 ); // OVERVIEW tab active
+        data->points_rml = cata_text_to_rml( points.to_string() );
+
+        // Name (selector-highlighted). value mirrors the curses three-way state.
+        {
+            const bool sel = current_selector == char_creation::NAME;
+            std::string val;
+            nc_color val_col = c_white;
+            if( no_name_entered ) {
+                val = _( "--- NO NAME ENTERED ---" );
+            } else if( you.name.empty() ) {
+                val = _( "--- RANDOM NAME ---" );
+            } else {
+                val = you.name;
+            }
+            data->name_rml = cata_text_to_rml( std::string( sel ? "> " : "  " ) +
+                                               colorize( _( "Name:" ), sel ? c_white : c_light_gray ) +
+                                               " " + colorize( val, val_col ) );
+        }
+
+        data->gender_rml = cata_text_to_rml(
+                               colorize( _( "Gender:" ), c_light_gray ) + " " +
+                               colorize( _( "Male" ), you.male ? c_light_cyan : c_light_gray ) + " " +
+                               colorize( _( "Female" ), you.male ? c_light_gray : c_pink ) );
+
+        {
+            const bool sel = current_selector == char_creation::HEIGHT;
+            data->height_rml = cata_text_to_rml( std::string( sel ? "> " : "  " ) +
+                                                 colorize( _( "Height:" ), sel ? c_white : c_light_gray ) + " " +
+                                                 colorize( string_format( "%d cm", you.base_height() ), c_white ) );
+        }
+        {
+            const bool sel = current_selector == char_creation::AGE;
+            data->age_rml = cata_text_to_rml( std::string( sel ? "> " : "  " ) +
+                                              colorize( _( "Age:" ), sel ? c_white : c_light_gray ) + " " +
+                                              colorize( string_format( "%d", you.base_age() ), c_white ) );
+        }
+
+        {
+            const std::string locval = you.random_start_location
+                                       ? remove_color_tags( random_start_location_text )
+                                       : string_format( remove_color_tags( START_LOC_TEXT_TEMPLATE ),
+                                               you.start_location.obj().name(),
+                                               you.start_location.obj().targets_count() );
+            data->location_rml = cata_text_to_rml(
+                                     colorize( _( "Starting location:" ), c_light_gray ) + " " +
+                                     colorize( locval, you.random_start_location ? c_red : c_white ) );
+        }
+
+        data->scenario_rml = cata_text_to_rml(
+                                 colorize( _( "Scenario: " ), COL_HEADER ) +
+                                 colorize( g->scen->gender_appropriate_name( you.male ), c_light_gray ) );
+        data->profession_rml = cata_text_to_rml(
+                                   colorize( _( "Profession: " ), COL_HEADER ) +
+                                   colorize( you.prof->gender_appropriate_name( you.male ), c_light_gray ) );
+
+        // Stats pane.
+        {
+            std::string s = colorize( _( "Stats:" ), COL_HEADER );
+            s += "\n" + colorize( string_format( "%s %d", _( "Strength:" ), you.str_max ), c_light_gray );
+            s += "\n" + colorize( string_format( "%s %d", _( "Dexterity:" ), you.dex_max ), c_light_gray );
+            s += "\n" + colorize( string_format( "%s %d", _( "Intelligence:" ), you.int_max ), c_light_gray );
+            s += "\n" + colorize( string_format( "%s %d", _( "Perception:" ), you.per_max ), c_light_gray );
+            data->stats_rml = cata_text_to_rml( s );
+        }
+
+        // Traits pane.
+        {
+            std::string s = colorize( _( "Traits:" ), COL_HEADER );
+            std::vector<trait_id> current_traits = points.limit == points_left::TRANSFER ?
+                                                   you.get_mutations() : you.get_base_traits();
+            std::sort( current_traits.begin(), current_traits.end(), trait_display_sort );
+            if( current_traits.empty() ) {
+                s += " " + colorize( _( "None!" ), c_light_red );
+            } else {
+                for( const trait_id &tr : current_traits ) {
+                    s += "\n" + colorize( tr->name(), tr->get_display_color() );
+                }
+            }
+            data->traits_rml = cata_text_to_rml( s );
+        }
+
+        // Bionics + Spells pane (built once; curses draws it twice).
+        {
+            std::vector<bionic_id> current_bionics;
+            for( const bionic_id &id : you.prof->CBMs() ) {
+                current_bionics.push_back( id );
+            }
+            for( const bionic &bio : you.get_bionic_collection() ) {
+                current_bionics.push_back( bio.id );
+            }
+            std::sort( current_bionics.begin(), current_bionics.end(),
+            []( const bionic_id & a, const bionic_id & b ) {
+                return localized_compare( a->name.translated(), b->name.translated() );
+            } );
+            std::string s = colorize( _( "Bionics: " ), COL_HEADER );
+            if( current_bionics.empty() ) {
+                s += colorize( _( "None!" ), c_light_red );
+            } else {
+                for( const bionic_id &bio : current_bionics ) {
+                    s += "\n" + colorize( bio->name.translated(), c_white );
+                }
+            }
+            s += "\n" + colorize( _( "Spells: " ), COL_HEADER );
+            if( you.prof->spells().empty() ) {
+                s += colorize( _( "None!" ), c_light_red );
+            } else {
+                for( const std::pair<spell_id, int> &sp : you.prof->spells() ) {
+                    s += "\n" + colorize( string_format( _( "%s level %d" ), sp.first->name, sp.second ), c_white );
+                }
+            }
+            data->bionics_rml = cata_text_to_rml( s );
+        }
+
+        // Skills pane (category-grouped, only levels > 0).
+        {
+            std::string s = colorize( _( "Skills:" ), COL_HEADER );
+            auto skillslist = Skill::get_skills_sorted_by( [&]( const Skill & a, const Skill & b ) {
+                return localized_compare( std::make_pair( a.display_category(), a.name() ),
+                                          std::make_pair( b.display_category(), b.name() ) );
+            } );
+            bool has_skills = false;
+            skill_displayType_id last_category = skill_displayType_id::NULL_ID();
+            for( const Skill *elem : skillslist ) {
+                int level = you.get_skill_level( elem->ident() );
+                if( points.limit != points_left::TRANSFER ) {
+                    for( const auto &prof_skill : you.prof->skills() ) {
+                        if( prof_skill.first == elem->ident() ) {
+                            level += static_cast<int>( prof_skill.second );
+                            break;
+                        }
+                    }
+                }
+                if( level > 0 ) {
+                    if( last_category != elem->display_category() ) {
+                        last_category = elem->display_category();
+                        s += "\n" + colorize( elem->display_category()->display_string(), c_yellow );
+                    }
+                    s += "\n" + colorize( string_format( "%s: %d", elem->name(), level ), c_light_gray );
+                    has_skills = true;
+                }
+            }
+            if( !has_skills ) {
+                s += " " + colorize( _( "None!" ), c_light_red );
+            }
+            data->skills_rml = cata_text_to_rml( s );
+        }
+
+        // Misc pane: Vehicle / Companions / Cash / Pets / Addictions.
+        {
+            std::string s = colorize( _( "Vehicle: " ), c_white );
+            const vproto_id scen_veh = g->scen->vehicle();
+            const vproto_id prof_veh = you.prof->vehicle();
+            if( !scen_veh && !prof_veh ) {
+                s += colorize( _( "None!" ), c_light_red );
+            }
+            if( scen_veh ) {
+                s += "\n" + colorize( scen_veh->name, c_white );
+            }
+            if( prof_veh ) {
+                s += "\n" + colorize( prof_veh->name, c_white );
+            }
+            s += "\n" + colorize( _( "Companions: " ), c_white );
+            const std::vector<npc_class_id> npcs = you.prof->npcs();
+            if( npcs.empty() ) {
+                s += colorize( _( "None!" ), c_light_red );
+            } else {
+                for( const npc_class_id &id : npcs ) {
+                    if( id.is_valid() ) {
+                        s += "\n" + colorize( id.obj().get_name(), c_white );
+                    }
+                }
+            }
+            s += "\n" + colorize( _( "Cash: " ), c_white );
+            if( !you.prof->starting_cash() ) {
+                s += colorize( _( "Random!" ), c_white );
+            } else {
+                s += colorize( format_money( you.prof->starting_cash().value() ), c_white );
+            }
+            s += "\n" + colorize( _( "Pets: " ), c_white );
+            if( you.prof->pets().empty() ) {
+                s += colorize( _( "None!" ), c_light_red );
+            } else {
+                for( const mtype_id &id : you.prof->pets() ) {
+                    if( id.is_valid() ) {
+                        monster pet( id );
+                        s += "\n" + colorize( pet.get_name(), c_white );
+                    }
+                }
+            }
+            s += "\n" + colorize( _( "Addictions: " ), c_white );
+            if( you.prof->addictions().empty() ) {
+                s += colorize( _( "None!" ), c_light_red );
+            } else {
+                for( addiction &addict : you.prof->addictions() ) {
+                    s += "\n" + colorize( addiction_name( addict ), c_white );
+                }
+            }
+            data->misc_rml = cata_text_to_rml( s );
+        }
+
+        // Gear pane: Items split into wielded / worn / inventory.
+        {
+            std::string s = colorize( _( "Items: " ), c_white );
+            const auto prof_items = you.prof->items( you.male, you.get_mutations() );
+            if( prof_items.empty() ) {
+                s += colorize( _( "None!" ), c_light_red );
+            } else {
+                std::vector<std::string> wielded;
+                std::vector<std::string> worn;
+                std::vector<std::string> inventory;
+                for( const auto &it : prof_items ) {
+                    if( it->has_flag( json_flag_no_auto_equip ) ) {
+                        inventory.push_back( it->display_name() );
+                    } else if( it->has_flag( json_flag_auto_wield ) ) {
+                        wielded.push_back( it->display_name() );
+                    } else if( it->is_armor() ) {
+                        worn.push_back( it->display_name() );
+                    } else {
+                        inventory.push_back( it->display_name() );
+                    }
+                }
+                const auto add_group = [&]( const std::string & head,
+                const std::vector<std::string> &names ) {
+                    s += "\n" + colorize( head, c_yellow );
+                    if( names.empty() ) {
+                        s += " " + colorize( _( "None!" ), c_light_red );
+                    } else {
+                        for( const std::string &name : names ) {
+                            s += "\n" + colorize( name, c_white );
+                        }
+                    }
+                };
+                add_group( _( "Wielded: " ), wielded );
+                add_group( _( "Worn: " ), worn );
+                add_group( _( "Inventory: " ), inventory );
+            }
+            data->gear_rml = cata_text_to_rml( s );
+        }
+
+        // Keybinding guide footer (green keys).
+        {
+            std::string s = string_format(
+                                _( "Press <color_light_green>%s</color> or <color_light_green>%s</color> to cycle through name, height, and age." ),
+                                ctxt.get_desc( "LEFT" ), ctxt.get_desc( "RIGHT" ) );
+            s += "\n" + string_format(
+                     _( "Press <color_light_green>%s</color> and <color_light_green>%s</color> to change height and age." ),
+                     ctxt.get_desc( "UP" ), ctxt.get_desc( "DOWN" ) );
+            s += "\n" + string_format( _( "Press <color_light_green>%s</color> to edit the selected field." ),
+                                       ctxt.get_desc( "CONFIRM" ) );
+            s += "\n" + string_format( _( "Press <color_light_green>%s</color> to switch gender." ),
+                                       ctxt.get_desc( "CHANGE_GENDER" ) );
+            s += "\n" + string_format( _( "Press <color_light_green>%s</color> to select location." ),
+                                       ctxt.get_desc( "CHOOSE_LOCATION" ) );
+            if( allow_reroll ) {
+                s += "\n" + string_format(
+                         _( "Press <color_light_green>%s</color> to save template, <color_light_green>%s</color> to re-roll or <color_light_green>%s</color> for random scenario." ),
+                         ctxt.get_desc( "SAVE_TEMPLATE" ), ctxt.get_desc( "REROLL_CHARACTER" ),
+                         ctxt.get_desc( "REROLL_CHARACTER_WITH_SCENARIO" ) );
+            } else {
+                s += "\n" + string_format( _( "Press <color_light_green>%s</color> to save a template of this character." ),
+                                           ctxt.get_desc( "SAVE_TEMPLATE" ) );
+            }
+            s += "\n" + string_format(
+                     _( "Press <color_light_green>%s</color> to finish or <color_light_green>%s</color> to go back." ),
+                     ctxt.get_desc( "NEXT_TAB" ), ctxt.get_desc( "PREV_TAB" ) );
+            data->guide_rml = cata_text_to_rml( s );
+        }
+
+        data->handle.DirtyAllVariables();
+    };
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         draw_character_tabs( w, _( "OVERVIEW" ) );
 
         draw_points( w, points );
@@ -5027,6 +5359,28 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
         if( use_character_preview ) {
             character_preview.display();
         }
+    } );
+
+    rml.open( newcharacter_rmlui_enabled(), "newchardescription", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        register_nc_desc_rml_types( c );
+        c.Bind( "tabs", &data->tabs );
+        c.Bind( "points_rml", &data->points_rml );
+        c.Bind( "name_rml", &data->name_rml );
+        c.Bind( "gender_rml", &data->gender_rml );
+        c.Bind( "height_rml", &data->height_rml );
+        c.Bind( "age_rml", &data->age_rml );
+        c.Bind( "location_rml", &data->location_rml );
+        c.Bind( "scenario_rml", &data->scenario_rml );
+        c.Bind( "profession_rml", &data->profession_rml );
+        c.Bind( "stats_rml", &data->stats_rml );
+        c.Bind( "skills_rml", &data->skills_rml );
+        c.Bind( "traits_rml", &data->traits_rml );
+        c.Bind( "bionics_rml", &data->bionics_rml );
+        c.Bind( "misc_rml", &data->misc_rml );
+        c.Bind( "gear_rml", &data->gear_rml );
+        c.Bind( "guide_rml", &data->guide_rml );
+        data->handle = c.GetModelHandle();
     } );
 
     // do not switch IME mode now, but restore previous mode on return
