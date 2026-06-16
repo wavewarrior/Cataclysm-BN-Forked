@@ -1,0 +1,40 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="newcharprofession.rcss"/>
+</head>
+<body data-model="newcharprofession">
+    <!-- Tier 4 screen #4 (new-character creator) slice 7: the PROFESSION tab
+         (set_profession). Char-tab strip (PROFESSION current) + top bar (points +
+         profession cost) + body split (profession list left / right column: sort +
+         gender-swap + a big scrollable info buffer with items/skills/traits/bionics/
+         pets/vehicle/spells/money/companions) + description footer + filter. Render-
+         only doc; keyboard owns UP/DOWN (list, scroll-follow), LEFT/RIGHT (scroll
+         the info buffer), CONFIRM (pick), CHANGE_GENDER, SORT, FILTER, RANDOMIZE,
+         NEXT/PREV_TAB, QUIT. Tile preview not drawn in rml mode this slice. -->
+    <div class="panel nc-panel">
+        <div class="tabs nc-tabs">
+            <div class="item tab" data-for="t : tabs"
+                 data-class-selected="t.selected" data-rml="t.name_rml"></div>
+        </div>
+        <div class="nc-prof-top">
+            <span class="nc-prof-points" data-rml="points_rml"></span>
+            <span class="nc-prof-cost" data-rml="cost_rml"></span>
+        </div>
+        <div class="nc-prof-body">
+            <div id="nc-prof-list" class="nc-prof-list scroll-pane">
+                <div class="item nc-prof-row" data-for="r : rows"
+                     data-class-selected="r.selected" data-rml="r.text_rml"></div>
+            </div>
+            <div class="nc-prof-right">
+                <div class="nc-prof-sort" data-rml="sort_rml"></div>
+                <div class="nc-prof-gender" data-rml="gender_rml"></div>
+                <div id="nc-prof-info" class="nc-prof-info scroll-pane" data-rml="info_rml"></div>
+            </div>
+        </div>
+        <div class="nc-prof-desc" data-rml="desc_rml"></div>
+        <div class="nc-prof-filter" data-rml="filter_rml"></div>
+    </div>
+    <div id="crt-overlay" class="crt"></div>
+</body>
+</rml>

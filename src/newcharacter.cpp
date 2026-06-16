@@ -2674,6 +2674,50 @@ struct {
 
 
 /** Handle the profession tab of the character generation menu */
+// RmlUi model for the PROFESSION tab (slice 7). Single list + a big scrollable
+// info buffer (items/skills/traits/bionics/...). Distinct per-model types.
+namespace
+{
+struct nc_prof_tab {
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct nc_prof_row {
+    Rml::String text_rml;
+    bool selected = false;
+};
+struct nc_prof_session {
+    Rml::Vector<nc_prof_tab> tabs;
+    Rml::String points_rml;
+    Rml::String cost_rml;
+    Rml::Vector<nc_prof_row> rows;
+    Rml::String desc_rml;
+    Rml::String info_rml;
+    Rml::String sort_rml;
+    Rml::String gender_rml;
+    Rml::String filter_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_nc_prof_types_registered = false;
+
+void register_nc_prof_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_nc_prof_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<nc_prof_tab> th = c.RegisterStruct<nc_prof_tab>();
+    th.RegisterMember( "name_rml", &nc_prof_tab::name_rml );
+    th.RegisterMember( "selected", &nc_prof_tab::selected );
+    c.RegisterArray<Rml::Vector<nc_prof_tab>>();
+    Rml::StructHandle<nc_prof_row> rh = c.RegisterStruct<nc_prof_row>();
+    rh.RegisterMember( "text_rml", &nc_prof_row::text_rml );
+    rh.RegisterMember( "selected", &nc_prof_row::selected );
+    c.RegisterArray<Rml::Vector<nc_prof_row>>();
+    g_nc_prof_types_registered = true;
+}
+} // namespace
+
 tab_direction set_profession( avatar &u, points_left &points,
                               const tab_direction direction )
 {
@@ -2745,7 +2789,239 @@ tab_direction set_profession( avatar &u, points_left &points,
 
     int iheight = 0;
 
+    // RmlUi render path (render-only; keyboard owns nav/scroll/confirm/sort/gender/
+    // filter below). Tile character_preview not drawn in rml mode this slice.
+    auto data = std::make_unique<nc_prof_session>();
+    rml_doc rml;
+    bool rml_scroll_pending = false;
+    const auto sync_rml = [&]() {
+        if( !data->handle ) {
+            return;
+        }
+        data->tabs = build_nc_char_tabs<nc_prof_tab>( 2 ); // PROFESSION tab active
+        const bool valid = cur_id >= 0 && static_cast<size_t>( cur_id ) < sorted_profs.size();
+
+        std::string pmsg = points.to_string();
+        if( valid ) {
+            const int netPointCost = sorted_profs[cur_id]->point_cost() - u.prof->point_cost();
+            if( netPointCost > 0 ) {
+                pmsg += colorize( string_format( " (-%d)", std::abs( netPointCost ) ), c_red );
+            } else if( netPointCost < 0 ) {
+                pmsg += colorize( string_format( " (+%d)", std::abs( netPointCost ) ), c_green );
+            }
+        }
+        data->points_rml = cata_text_to_rml( pmsg );
+
+        if( valid ) {
+            const string_id<profession> &pid = sorted_profs[cur_id];
+            const bool can_pick = can_pick_prof( *pid, u, points.skill_points_left() );
+            int pts = pid->point_cost();
+            const bool neg = pts < 0;
+            if( neg ) {
+                pts *= -1;
+            }
+            const std::string msg = neg
+                                    ? vgettext( "Profession %1$s earns %2$d point",
+                                            "Profession %1$s earns %2$d points", pts )
+                                    : vgettext( "Profession %1$s costs %2$d point",
+                                            "Profession %1$s costs %2$d points", pts );
+            data->cost_rml = cata_text_to_rml( colorize( string_format( msg,
+                             pid->gender_appropriate_name( u.male ), pts ),
+                             can_pick ? c_green : c_light_red ) );
+            data->desc_rml = cata_text_to_rml( colorize( pid->description( u.male ), c_green ) );
+
+            // The big info buffer (mirrors the curses w_items buffer verbatim).
+            std::string buf;
+            const auto prof_addictions = pid->addictions();
+            if( !prof_addictions.empty() ) {
+                buf += colorize( _( "Addictions:" ), c_light_blue ) + "\n";
+                for( const auto &a : prof_addictions ) {
+                    buf += string_format( pgettext( "set_profession_addictions", "%1$s (%2$d)" ),
+                                          addiction_name( a ), a.intensity ) + "\n";
+                }
+            }
+            const auto prof_traits = pid->get_locked_traits();
+            buf += colorize( _( "Traits:" ), c_light_blue ) + "\n";
+            if( prof_traits.empty() ) {
+                buf += pgettext( "set_profession_trait", "None" ) + std::string( "\n" );
+            } else {
+                for( const auto &t : prof_traits ) {
+                    buf += mutation_branch::get_name( t ) + "\n";
+                }
+            }
+            std::vector<std::pair<skill_id, int>> prof_skills = pid->skills();
+            std::stable_sort( prof_skills.begin(), prof_skills.end(),
+            []( const std::pair<skill_id, int> &a, const std::pair<skill_id, int> &b ) {
+                return localized_compare( std::make_pair( a.first->display_category(), a.first->name() ),
+                                          std::make_pair( b.first->display_category(), b.first->name() ) );
+            } );
+            buf += colorize( _( "Skills:" ), c_light_blue ) + "\n";
+            if( prof_skills.empty() ) {
+                buf += pgettext( "set_profession_skill", "None" ) + std::string( "\n" );
+            } else {
+                skill_displayType_id cur_category = skill_displayType_id::NULL_ID();
+                for( const auto &sl : prof_skills ) {
+                    if( cur_category != sl.first->display_category() ) {
+                        cur_category = sl.first->display_category();
+                        buf += colorize( string_format( sl.first->display_category()->display_string() ),
+                                         c_yellow ) + "\n";
+                    }
+                    buf += "  " + string_format( pgettext( "set_profession_skill", "%1$s (%2$d)" ),
+                                                 sl.first.obj().name(), sl.second ) + "\n";
+                }
+            }
+            const auto prof_items = pid->items( u.male, u.get_mutations() );
+            buf += colorize( _( "Items:" ), c_light_blue ) + "\n";
+            if( prof_items.empty() ) {
+                buf += pgettext( "set_profession_item", "None" ) + std::string( "\n" );
+            } else {
+                std::string buffer_wielded;
+                std::string buffer_worn;
+                std::string buffer_inventory;
+                for( const auto &it : prof_items ) {
+                    if( it->has_flag( json_flag_no_auto_equip ) ) {
+                        buffer_inventory += it->display_name() + "\n";
+                    } else if( it->has_flag( json_flag_auto_wield ) ) {
+                        buffer_wielded += it->display_name() + "\n";
+                    } else if( it->is_armor() ) {
+                        buffer_worn += it->display_name() + "\n";
+                    } else {
+                        buffer_inventory += it->display_name() + "\n";
+                    }
+                }
+                buf += colorize( _( "Wielded:" ), c_cyan ) + "\n";
+                buf += !buffer_wielded.empty() ? buffer_wielded
+                       : pgettext( "set_profession_item_wielded", "None\n" );
+                buf += colorize( _( "Worn:" ), c_cyan ) + "\n";
+                buf += !buffer_worn.empty() ? buffer_worn
+                       : pgettext( "set_profession_item_worn", "None\n" );
+                buf += colorize( _( "Inventory:" ), c_cyan ) + "\n";
+                buf += !buffer_inventory.empty() ? buffer_inventory
+                       : pgettext( "set_profession_item_inventory", "None\n" );
+            }
+            auto prof_CBMs = pid->CBMs();
+            std::sort( begin( prof_CBMs ), end( prof_CBMs ), []( const bionic_id & a,
+            const bionic_id & b ) {
+                return a->activated && !b->activated;
+            } );
+            buf += colorize( _( "Bionics:" ), c_light_blue ) + "\n";
+            if( prof_CBMs.empty() ) {
+                buf += pgettext( "set_profession_bionic", "None" ) + std::string( "\n" );
+            } else {
+                for( const auto &b : prof_CBMs ) {
+                    const auto &cbm = b.obj();
+                    if( cbm.activated && cbm.has_flag( STATIC( flag_id( "BIONIC_TOGGLED" ) ) ) ) {
+                        buf += string_format( _( "%s (toggled)" ), cbm.name ) + "\n";
+                    } else if( cbm.activated ) {
+                        buf += string_format( _( "%s (activated)" ), cbm.name ) + "\n";
+                    } else {
+                        buf += cbm.name + "\n";
+                    }
+                }
+            }
+            if( !pid->pets().empty() ) {
+                buf += colorize( _( "Pets:" ), c_light_blue ) + "\n";
+                for( auto elem : pid->pets() ) {
+                    monster mon( elem );
+                    buf += mon.get_name() + "\n";
+                }
+            }
+            if( pid->vehicle() ) {
+                buf += colorize( _( "Vehicle:" ), c_light_blue ) + "\n";
+                vproto_id veh_id = pid->vehicle();
+                buf += veh_id->name + "\n";
+            }
+            if( !pid->spells().empty() ) {
+                buf += colorize( _( "Spells:" ), c_light_blue ) + "\n";
+                for( const std::pair<spell_id, int> spell_pair : pid->spells() ) {
+                    buf += string_format( _( "%s level %d" ), spell_pair.first->name,
+                                          spell_pair.second ) + "\n";
+                }
+            }
+            std::optional<int> cash = pid->starting_cash();
+            if( cash.has_value() ) {
+                buf += colorize( _( "Money:" ), c_light_blue ) + "\n";
+                buf += format_money( cash.value() ) + "\n";
+            }
+            std::vector<npc_class_id> npcs = pid->npcs();
+            if( !npcs.empty() ) {
+                buf += "\n" + colorize( _( "Companions:" ), c_light_blue ) + "\n";
+                for( const npc_class_id &id : npcs ) {
+                    if( id.is_valid() ) {
+                        buf += id.obj().get_name() + "\n";
+                    }
+                }
+            }
+            data->info_rml = cata_text_to_rml( buf );
+
+            data->sort_rml = cata_text_to_rml( string_format(
+                    _( "<color_white>Sort by:</color> %1$s (Press <color_light_green>%2$s</color> to change sorting.)" ),
+                    profession_sorter.sort_by_points ? _( "points" ) : _( "name" ),
+                    ctxt.get_desc( "SORT" ) ) );
+            const std::string g_switch_msg = u.male ?
+                                             _( "Press <color_light_green>%1$s</color> to switch to <color_magenta>%2$s</color> (<color_pink>female</color>)." )
+                                             :
+                                             _( "Press <color_light_green>%1$s</color> to switch to <color_magenta>%2$s</color> (<color_light_cyan>male</color>)." );
+            data->gender_rml = cata_text_to_rml( string_format( g_switch_msg,
+                               ctxt.get_desc( "CHANGE_GENDER" ),
+                               pid->gender_appropriate_name( !u.male ) ) );
+        } else {
+            data->cost_rml.clear();
+            data->desc_rml.clear();
+            data->info_rml.clear();
+            data->sort_rml.clear();
+            data->gender_rml.clear();
+        }
+
+        data->rows.clear();
+        for( int i = 0; i < static_cast<int>( sorted_profs.size() ); i++ ) {
+            const nc_color col = ( u.prof != sorted_profs[i] ) ? c_light_gray : COL_SKILL_USED;
+            nc_prof_row r;
+            r.text_rml = cata_text_to_rml( colorize(
+                                               sorted_profs[i]->gender_appropriate_name( u.male ), col ) );
+            r.selected = ( i == cur_id );
+            data->rows.push_back( r );
+        }
+
+        data->filter_rml = cata_text_to_rml( string_format( "<%s>",
+                                             filterstring.empty() ? _( "no filter" ) : filterstring ) );
+
+        data->handle.DirtyVariable( "tabs" );
+        data->handle.DirtyVariable( "points_rml" );
+        data->handle.DirtyVariable( "cost_rml" );
+        data->handle.DirtyVariable( "rows" );
+        data->handle.DirtyVariable( "desc_rml" );
+        data->handle.DirtyVariable( "info_rml" );
+        data->handle.DirtyVariable( "sort_rml" );
+        data->handle.DirtyVariable( "gender_rml" );
+        data->handle.DirtyVariable( "filter_rml" );
+
+        if( rml_scroll_pending && valid ) {
+            rml_scroll_pending = false;
+            if( Rml::Element *list = rml.document()->GetElementById( "nc-prof-list" ) ) {
+                if( cur_id < list->GetNumChildren() ) {
+                    list->GetChild( cur_id )->ScrollIntoView(
+                        Rml::ScrollIntoViewOptions( Rml::ScrollAlignment::Nearest ) );
+                }
+            }
+        }
+    };
+    const auto scroll_info = [&]( int dir ) {
+        if( !rml ) {
+            return;
+        }
+        if( Rml::Element *e = rml.document()->GetElementById( "nc-prof-info" ) ) {
+            const float page = e->GetClientHeight();
+            const float maxtop = std::max( 0.0f, e->GetScrollHeight() - page );
+            e->SetScrollTop( std::clamp( e->GetScrollTop() + dir * page * 0.15f, 0.0f, maxtop ) );
+        }
+    };
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         werase( w );
         draw_character_tabs( w, _( "PROFESSION" ) );
 
@@ -3013,6 +3289,21 @@ tab_direction set_profession( avatar &u, points_left &points,
         }
     } );
 
+    rml.open( newcharacter_rmlui_enabled(), "newcharprofession", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        register_nc_prof_rml_types( c );
+        c.Bind( "tabs", &data->tabs );
+        c.Bind( "points_rml", &data->points_rml );
+        c.Bind( "cost_rml", &data->cost_rml );
+        c.Bind( "rows", &data->rows );
+        c.Bind( "desc_rml", &data->desc_rml );
+        c.Bind( "info_rml", &data->info_rml );
+        c.Bind( "sort_rml", &data->sort_rml );
+        c.Bind( "gender_rml", &data->gender_rml );
+        c.Bind( "filter_rml", &data->filter_rml );
+        data->handle = c.GetModelHandle();
+    } );
+
     do {
         if( recalc_profs ) {
             sorted_profs = g->scen->permitted_professions();
@@ -3055,6 +3346,7 @@ tab_direction set_profession( avatar &u, points_left &points,
                 cur_id = 0;
             }
             desc_offset = 0;
+            rml_scroll_pending = true;
             // Update preview immediately when moving selection
             if( use_character_preview ) {
                 ui_manager::redraw();
@@ -3065,17 +3357,23 @@ tab_direction set_profession( avatar &u, points_left &points,
                 cur_id = profs_length - 1;
             }
             desc_offset = 0;
+            rml_scroll_pending = true;
             if( use_character_preview ) {
                 ui_manager::redraw();
             }
         } else if( action == "LEFT" ) {
-            if( desc_offset > 0 ) {
+            if( rml ) {
+                scroll_info( -1 );
+            } else if( desc_offset > 0 ) {
                 desc_offset--;
             }
         } else if( action == "RANDOMIZE" ) {
             cur_id = rng( 0, profs_length - 1 );
+            rml_scroll_pending = true;
         } else if( action == "RIGHT" ) {
-            if( desc_offset < iheight ) {
+            if( rml ) {
+                scroll_info( +1 );
+            } else if( desc_offset < iheight ) {
                 desc_offset++;
             }
         } else if( action == "CONFIRM" ) {

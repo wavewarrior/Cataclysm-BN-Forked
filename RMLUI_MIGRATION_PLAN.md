@@ -1528,6 +1528,29 @@ spot-check professions/location/vehicle/flags vs curses. (b) FILTER popup render
 the doc + the empty-result "Nothing found." popup (invariant 6). (c) cursor scroll-follow
 on a long scenario list.
 
+**SLICE 7 (set_profession) — CODE-COMPLETE + BUILD-GREEN (binary relinked 12:14:42, 0
+errors), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.** The PROFESSION tab (7th lit; heaviest
+list tab). `data/gui/newcharprofession.{rml,rcss}` model "newcharprofession". Same shape
+as SCENARIO (list left + scroll-follow, top bar points/cost, desc footer, filter, sort)
+PLUS: (1) a big scrollable INFO BUFFER (`info_rml`, `#nc-prof-info`) rebuilt verbatim
+from the curses `w_items` buffer — addictions/traits/skills(category-grouped)/items
+(wielded/worn/inventory)/bionics/pets/vehicle/spells/money/companions; LEFT/RIGHT scroll
+it via `SetScrollTop` (vs the curses `desc_offset`/print_scrollable). (2) a gender-swap
+line (`gender_rml`, CHANGE_GENDER). Per-row colour: current profession COL_SKILL_USED
+else c_light_gray; cursor `.selected`. Keyboard owns UP/DOWN (list, resets scroll +
+scroll-follow), LEFT/RIGHT (buffer scroll), CONFIRM (pick → swaps traits/age), SORT,
+FILTER (Tier-0 popup), CHANGE_GENDER (re-sorts), RANDOMIZE, NEXT/PREV_TAB, QUIT. Tile
+preview not drawn in rml mode. F4 toggle "new character" (shared). **EYEBALL CHECK (user,
+A/B via F4 — query_popup ON):** New Game → Custom → PROFESSION: char-tab strip
+(PROFESSION current), profession list (current green, cursor scroll-follows), cost line
+green/red; the right buffer shows items/skills/traits/bionics/etc matching curses,
+LEFT/RIGHT scroll it; sort + gender-swap lines present; CONFIRM picks (description +
+points update), CHANGE_GENDER flips gender + re-sorts + relabels, SORT toggles, FILTER
+narrows; NEXT_TAB → Stats (curses), PREV_TAB → Scenario (RmlUi). **WATCH:** (a) the info
+buffer is a big from-scratch reconstruction — spot-check items/skills/bionics vs curses.
+(b) LEFT/RIGHT scroll the buffer (not move the list). (c) cursor scroll-follow on a long
+profession list. (d) FILTER + "Nothing found" popups over the doc (invariant 6).
+
 ## Load-bearing architecture facts (verified this session)
 
 - **Single curses chokepoint:** every non-map window renders through
