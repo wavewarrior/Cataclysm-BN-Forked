@@ -1488,6 +1488,20 @@ PREV_TAB → Skills (RmlUi). **WATCH:** (a) no character preview in rml mode (ex
 (b) long column cursor-follow (deferred — flag if lost). (c) the neutral column appears
 only when traits with 0 points exist.
 
+**SLICE 5 (set_bionics) — CODE-COMPLETE + BUILD-GREEN (binary relinked 12:04:41, 0
+errors), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.** The BIONICS tab (5th lit). STRUCTURAL
+CLONE of slice 4 (set_bionics is line-for-line the TRAITS tab with bionic data) —
+`data/gui/newcharbionics.{rml,rcss}` model "newcharbionics" (distinct `nc_bionics_tab`
+type; rml/rcss reuse the `nc-trait-*` classes). Same 3-column baked-markup render +
+budget + cost line + desc footer; per-bionic colour via the same COL_TR_* matrix; row
+text `bio.name.translated()`, desc `bio.description.translated()`. Keyboard owns all
+toggle/nav/reroll; tile preview not drawn in rml. F4 toggle "new character" (shared).
+**EYEBALL CHECK (user, A/B via F4 — query_popup ON):** New Game → Custom → BIONICS: same
+3-column shape as Traits but bionics (good/bad/neutral), colours/budget/cost/desc match
+curses; LEFT/RIGHT switch column, UP/DOWN move, CONFIRM toggles a CBM (conflict/forbidden
+popups), NEXT_TAB → Skills (RmlUi), PREV_TAB → Traits (RmlUi). Same deferred gaps as
+Traits (no tile preview, no long-list scroll-follow).
+
 ## Load-bearing architecture facts (verified this session)
 
 - **Single curses chokepoint:** every non-map window renders through

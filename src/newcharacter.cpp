@@ -2022,6 +2022,42 @@ tab_direction set_traits( avatar &u, points_left &points )
     } while( true );
 }
 
+// RmlUi model for the BIONICS tab (slice 5). Structurally identical to TRAITS:
+// 3 columns baked as markup strings, distinct per-model tab struct.
+namespace
+{
+struct nc_bionics_tab {
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct nc_bionics_session {
+    Rml::Vector<nc_bionics_tab> tabs;
+    Rml::String points_rml;
+    Rml::String budget_rml;
+    Rml::String cost_rml;
+    Rml::String col0_html;
+    Rml::String col1_html;
+    Rml::String col2_html;
+    bool show_col2 = false;
+    Rml::String desc_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_nc_bionics_types_registered = false;
+
+void register_nc_bionics_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_nc_bionics_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<nc_bionics_tab> th = c.RegisterStruct<nc_bionics_tab>();
+    th.RegisterMember( "name_rml", &nc_bionics_tab::name_rml );
+    th.RegisterMember( "selected", &nc_bionics_tab::selected );
+    c.RegisterArray<Rml::Vector<nc_bionics_tab>>();
+    g_nc_bionics_types_registered = true;
+}
+} // namespace
+
 tab_direction set_bionics( avatar &u, points_left &points )
 {
     const int max_trait_points = get_option<int>( "MAX_TRAIT_POINTS" );
@@ -2169,8 +2205,134 @@ tab_direction set_bionics( avatar &u, points_left &points )
     ctxt.register_action( "zoom_out" );
     ctxt.register_action( "TOGGLE_CHARACTER_PREVIEW_CLOTHES" );
 
+    // RmlUi render path (render-only; keyboard owns nav/confirm/reroll below).
+    // Structurally the TRAITS tab with bionic data. Tile preview not drawn in rml.
+    auto data = std::make_unique<nc_bionics_session>();
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !data->handle ) {
+            return;
+        }
+        data->tabs = build_nc_char_tabs<nc_bionics_tab>( 5 ); // BIONICS tab active
+        data->points_rml = cata_text_to_rml( points.to_string() );
+        if( !points.is_freeform() ) {
+            data->budget_rml = cata_text_to_rml( string_format(
+                    "<color_light_green>%2d/%-2d</color> <color_light_red>%3d/-%-2d</color>",
+                    num_good, max_trait_points, num_bad, max_trait_points ) );
+        } else {
+            data->budget_rml.clear();
+        }
+        const auto build_col = [&]( int page ) -> std::string {
+            nc_color on_act;
+            nc_color off_act;
+            nc_color on_pas;
+            nc_color off_pas;
+            switch( page ) {
+                case 0:
+                    on_act = COL_TR_GOOD_ON_ACT;
+                    off_act = COL_TR_GOOD_OFF_ACT;
+                    on_pas = COL_TR_GOOD_ON_PAS;
+                    off_pas = COL_TR_GOOD_OFF_PAS;
+                    break;
+                case 1:
+                    on_act = COL_TR_BAD_ON_ACT;
+                    off_act = COL_TR_BAD_OFF_ACT;
+                    on_pas = COL_TR_BAD_ON_PAS;
+                    off_pas = COL_TR_BAD_OFF_PAS;
+                    break;
+                default:
+                    on_act = COL_TR_NEUT_ON_ACT;
+                    off_act = COL_TR_NEUT_OFF_ACT;
+                    on_pas = COL_TR_NEUT_ON_PAS;
+                    off_pas = COL_TR_NEUT_OFF_PAS;
+                    break;
+            }
+            const int cur = iCurrentLine[page];
+            std::string html;
+            for( size_t i = 0; i < vStartingBionics[page].size(); i++ ) {
+                const bionic_entry &e = vStartingBionics[page][i];
+                nc_color col;
+                if( iCurWorkingPage == page ) {
+                    if( e.avatar_has ) {
+                        col = on_act;
+                    } else if( e.conflicts || e.forbidden ) {
+                        col = c_dark_gray;
+                    } else {
+                        col = off_act;
+                    }
+                } else {
+                    if( e.avatar_has ) {
+                        col = on_pas;
+                    } else if( e.conflicts || e.forbidden ) {
+                        col = c_light_gray;
+                    } else {
+                        col = off_pas;
+                    }
+                }
+                const bool sel = ( iCurWorkingPage == page && static_cast<int>( i ) == cur );
+                html += sel ? "<div class=\"item nc-trait-row selected\">"
+                        : "<div class=\"item nc-trait-row\">";
+                html += cata_text_to_rml( colorize( e.id.obj().name.translated(), col ) );
+                html += "</div>";
+            }
+            return html;
+        };
+        data->col0_html = build_col( 0 );
+        data->col1_html = build_col( 1 );
+        data->show_col2 = ( used_pages == 3 );
+        data->col2_html = data->show_col2 ? build_col( 2 ) : std::string();
+
+        const int wp = iCurWorkingPage;
+        if( !vStartingBionics[wp].empty() ) {
+            const int wl = std::min( iCurrentLine[wp],
+                                     static_cast<int>( vStartingBionics[wp].size() ) - 1 );
+            const bionic_data &wb = vStartingBionics[wp][wl].id.obj();
+            const nc_color col_tr = wp == 0 ? COL_TR_GOOD : ( wp == 1 ? COL_TR_BAD : COL_TR_NEUT );
+            int pts = wb.points;
+            const bool neg = pts < 0;
+            if( neg ) {
+                pts *= -1;
+            }
+            data->cost_rml = cata_text_to_rml( colorize( string_format(
+                    vgettext( "%s %s %d point", "%s %s %d points", pts ),
+                    wb.name.translated(), neg ? _( "earns" ) : _( "costs" ), pts ), col_tr ) );
+            data->desc_rml = cata_text_to_rml( colorize( wb.description.translated(), col_tr ) );
+        } else {
+            data->cost_rml.clear();
+            data->desc_rml.clear();
+        }
+
+        data->handle.DirtyVariable( "tabs" );
+        data->handle.DirtyVariable( "points_rml" );
+        data->handle.DirtyVariable( "budget_rml" );
+        data->handle.DirtyVariable( "cost_rml" );
+        data->handle.DirtyVariable( "col0_html" );
+        data->handle.DirtyVariable( "col1_html" );
+        data->handle.DirtyVariable( "col2_html" );
+        data->handle.DirtyVariable( "show_col2" );
+        data->handle.DirtyVariable( "desc_rml" );
+    };
+
+    rml.open( newcharacter_rmlui_enabled(), "newcharbionics", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        register_nc_bionics_rml_types( c );
+        c.Bind( "tabs", &data->tabs );
+        c.Bind( "points_rml", &data->points_rml );
+        c.Bind( "budget_rml", &data->budget_rml );
+        c.Bind( "cost_rml", &data->cost_rml );
+        c.Bind( "col0_html", &data->col0_html );
+        c.Bind( "col1_html", &data->col1_html );
+        c.Bind( "col2_html", &data->col2_html );
+        c.Bind( "show_col2", &data->show_col2 );
+        c.Bind( "desc_rml", &data->desc_rml );
+        data->handle = c.GetModelHandle();
+    } );
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         werase( w );
         werase( w_description );
 

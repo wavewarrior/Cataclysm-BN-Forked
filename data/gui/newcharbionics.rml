@@ -1,0 +1,32 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="newcharbionics.rcss"/>
+</head>
+<body data-model="newcharbionics">
+    <!-- Tier 4 screen #4 (new-character creator) slice 5: the BIONICS tab
+         (set_bionics). Structurally identical to TRAITS: char-tab strip (BIONICS
+         current) + top bar (points + good/bad budget + working bionic cost) + 3
+         columns (good/bad/neutral) + description footer. Render-only doc; keyboard
+         owns column-switch/move/toggle/randomize/reroll/nav. Tile preview not drawn
+         in rml mode this slice. -->
+    <div class="panel nc-panel">
+        <div class="tabs nc-tabs">
+            <div class="item tab" data-for="t : tabs"
+                 data-class-selected="t.selected" data-rml="t.name_rml"></div>
+        </div>
+        <div class="nc-trait-top">
+            <span class="nc-trait-points" data-rml="points_rml"></span>
+            <span class="nc-trait-budget" data-rml="budget_rml"></span>
+            <span class="nc-trait-cost" data-rml="cost_rml"></span>
+        </div>
+        <div class="nc-trait-cols">
+            <div class="nc-trait-col scroll-pane" data-rml="col0_html"></div>
+            <div class="nc-trait-col scroll-pane" data-rml="col1_html"></div>
+            <div class="nc-trait-col scroll-pane" data-rml="col2_html" data-if="show_col2"></div>
+        </div>
+        <div class="nc-trait-desc" data-rml="desc_rml"></div>
+    </div>
+    <div id="crt-overlay" class="crt"></div>
+</body>
+</rml>

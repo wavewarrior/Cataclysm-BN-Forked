@@ -1,0 +1,77 @@
+/* Layout for the new-character BIONICS tab (Tier 4 #4 slice 5). Identical to the
+   TRAITS layout. Reuses theme .panel / .tabs / .tab / .item / .scroll-pane. */
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.nc-panel {
+    width: 80%;
+    min-width: 720dp;
+    height: 92%;
+    display: flex;
+    flex-direction: column;
+}
+
+.nc-tabs {
+    flex: 0 0 auto;
+}
+
+.nc-tabs .tab {
+    flex: 0 0 auto;
+}
+
+.nc-trait-top {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    padding: 6dp 8dp;
+}
+
+.nc-trait-points {
+    display: block;
+    flex: 0 0 auto;
+    margin-right: 16dp;
+}
+
+.nc-trait-budget {
+    display: block;
+    flex: 0 0 auto;
+    margin-right: 16dp;
+}
+
+.nc-trait-cost {
+    display: block;
+    flex: 1;
+}
+
+.nc-trait-cols {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+}
+
+.nc-trait-col {
+    flex: 1;
+    min-width: 0;
+    margin-right: 8dp;
+}
+
+.nc-trait-row {
+    display: block;
+}
+
+.nc-trait-desc {
+    flex: 0 0 auto;
+    max-height: 96dp;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    padding: 6dp 8dp;
+    border-top: 1dp {{bg4}};
+    color: {{fg}};
+}
