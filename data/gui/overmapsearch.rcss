@@ -1,0 +1,36 @@
+/* Layout for the overmap search result box (Tier 6 slice 2). A compact box pinned
+   top-right, over the legend; transparent body so the overmap shows through. */
+
+body {
+    background-color: transparent;
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+    align-items: flex-start;
+    width: 100%;
+    height: 100%;
+}
+
+.oms-box {
+    width: 22%;
+    min-width: 240dp;
+    max-width: 420dp;
+    margin-top: 48dp;
+    margin-right: 8dp;
+    display: flex;
+    flex-direction: column;
+}
+
+.oms-body {
+    display: block;
+    white-space: pre-wrap;
+    margin-bottom: 6dp;
+    border-bottom: 1dp {{bg4}};
+    padding-bottom: 4dp;
+}
+
+.oms-hints {
+    display: block;
+    white-space: pre-wrap;
+    color: {{fg}};
+}

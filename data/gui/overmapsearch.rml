@@ -1,0 +1,18 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="overmapsearch.rcss"/>
+</head>
+<body data-model="overmapsearch">
+    <!-- Tier 6 slice 2: the overmap search result box (overmap_ui::search). A small
+         top-right box stacked over the legend doc; the body is transparent so the
+         overmap shows through. Render-only: search term / result count / direction
+         (top) + cycle/confirm/quit hints (bottom). Keyboard owns NEXT/PREV/CONFIRM/
+         QUIT. The search term itself is entered via a Tier-0 string_input popup. -->
+    <div class="panel oms-box">
+        <div class="oms-body" data-rml="body_rml"></div>
+        <div class="oms-hints" data-rml="hints_rml"></div>
+    </div>
+    <div id="crt-overlay" class="crt"></div>
+</body>
+</rml>

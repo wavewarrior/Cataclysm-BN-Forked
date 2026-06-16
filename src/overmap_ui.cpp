@@ -2025,6 +2025,17 @@ static void create_note( const tripoint_abs_omt &curs )
     }
 }
 
+// RmlUi model for the overmap search result box (Tier 6 slice 2; shares the
+// overmap_rmlui_enabled() toggle — one overmap family, gated per sub-screen).
+namespace
+{
+struct om_search_session {
+    Rml::String body_rml;
+    Rml::String hints_rml;
+    Rml::DataModelHandle handle;
+};
+} // namespace
+
 // if false, search yielded no results
 static bool search( const ui_adaptor &om_ui, tripoint_abs_omt &curs, const tripoint_abs_omt &orig )
 {
@@ -2097,7 +2108,42 @@ static bool search( const ui_adaptor &om_ui, tripoint_abs_omt &curs, const tripo
     ctxt.register_action( "HELP_KEYBINDINGS" );
     ctxt.register_action( "ANY_INPUT" );
 
+    auto rml_data = std::make_unique<om_search_session>();
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml_data->handle ) {
+            return;
+        }
+        std::string body = colorize( _( "Search:" ), c_light_blue ) + " " +
+                           colorize( term, c_light_red );
+        body += "\n" + colorize( locations.size() == 1 ? _( "Result:" ) : _( "Results:" ), c_light_blue ) +
+                " " + colorize( string_format( "%d/%d", i + 1, static_cast<int>( locations.size() ) ),
+                                c_light_red );
+        body += "\n" + colorize( _( "Direction:" ), c_light_blue ) + " " +
+                colorize( string_format( "%d %s",
+                                         trig_dist( orig, tripoint_abs_omt( locations[i], orig.z() ) ),
+                                         direction_name_short( direction_from( orig,
+                                                 tripoint_abs_omt( locations[i], orig.z() ) ) ) ), c_light_red );
+        rml_data->body_rml = cata_text_to_rml( body );
+        std::string hints;
+        if( locations.size() > 1 ) {
+            hints += string_format(
+                         _( "Press [<color_yellow>%s</color>] or [<color_yellow>%s</color>] to cycle through search results." ),
+                         ctxt.get_desc( "NEXT_TAB" ), ctxt.get_desc( "PREV_TAB" ) ) + "\n";
+        }
+        hints += string_format( _( "Press [<color_yellow>%s</color>] to confirm." ),
+                                ctxt.get_desc( "CONFIRM" ) ) + "\n";
+        hints += string_format( _( "Press [<color_yellow>%s</color>] to quit." ),
+                                ctxt.get_desc( "QUIT" ) );
+        rml_data->hints_rml = cata_text_to_rml( hints );
+        rml_data->handle.DirtyAllVariables();
+    };
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         //Draw search box
 
         int a = utf8_width( _( "Search:" ) );
@@ -2138,6 +2184,13 @@ static bool search( const ui_adaptor &om_ui, tripoint_abs_omt &curs, const tripo
                         _( "Press [<color_yellow>%s</color>] to quit." ), ctxt.get_desc( "QUIT" ) );
         draw_border( w_search );
         wnoutrefresh( w_search );
+    } );
+
+    rml.open( overmap_rmlui_enabled(), "overmapsearch", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        c.Bind( "body_rml", &rml_data->body_rml );
+        c.Bind( "hints_rml", &rml_data->hints_rml );
+        rml_data->handle = c.GetModelHandle();
     } );
 
     std::string action;

@@ -1752,9 +1752,34 @@ is a §8 rip-out question, not slice work here.
   scrolls in its pane. (c) first Tier-6 doc over the live map → D3D12 (Win11) glance. (d)
   the ASCII (non-tiles) overmap still renders underneath when use_tiles_overmap is off.
 
-Next Tier-6 units: slice 2 (sub-screens) / slice 3 (on-map labels) / slice 4 (§7
-world-text layer, which also unblocks ranged). The deferred faction (Tier 2) also remains
-(needs the creature/npc-info F.2 component).
+- **Tier 6 slice 2: overmap search box (overmap_ui::search) — CODE-COMPLETE +
+  BUILD-GREEN (overmap_ui.cpp.o 14:41:52 + binary relinked 14:41:54, 0 errors, fresh
+  mtime), TOGGLE OFF (shares overmap_rmlui_enabled()), EYEBALL OWED, COMMITTED.**
+  `data/gui/overmapsearch.{rml,rcss}` model "overmapsearch" — **reuses the overmap
+  toggle** (one overmap family gated per sub-screen; worldfactory precedent), no new
+  toggle/checkbox. Small top-right box (transparent right-anchored body) stacked OVER
+  the legend doc: `body_rml` (Search term / Result i/N / Direction dist+name, label
+  light_blue + value light_red) + `hints_rml` (cycle/confirm/quit, yellow keys). The
+  search TERM is entered via the Tier-0 string_input popup (unchanged); this migrates
+  the result box (the on_redraw). Inline rml_doc + sync_rml in search() (its own
+  ui_adaptor/ctxt — not threaded like the legend). NEXT/PREV cycle, CONFIRM, QUIT stay
+  on the loop. **EYEBALL CHECK (user, A/B via the overmap toggle, string_input ON):**
+  open overmap → SEARCH → type a term → the result box (top-right, over the legend)
+  shows the term, "Result 1/N", direction+distance, and cycle/confirm/quit hints;
+  NEXT/PREV cycle results (the map cursor jumps), CONFIRM jumps there, QUIT cancels.
+  **WATCH:** two RmlUi docs stacked (legend "overmap" + "overmapsearch") — confirm the
+  box sits cleanly over the legend, both render.
+
+**Tier 6 slice 2 scope note:** the remaining overmap sub-screens — the note-create
+TERRAIN PREVIEW (a 3×3 oter-symbol mini-grid, borderline map-view not text-UI) and the
+debug PLACE_TERRAIN/SPECIAL editor (debug-only) — are LOW-VALUE / map-adjacent and
+DEFERRED (the note's color menu + text entry are already Tier-0 uilist/string_input).
+Revisit at the §8 rip-out sweep if they keep curses alive.
+
+Next Tier-6 units: slice 3 (on-map static labels — city/zone labels + overlay_strings
+via world→screen DOM overlay) / slice 4 (§7 world-text layer, also unblocks ranged).
+Both are the architectural/novel part of the tier (not conforming screen migrations).
+The deferred faction (Tier 2) also remains (needs the creature/npc-info F.2 component).
 
 ## Load-bearing architecture facts (verified this session)
 
