@@ -41,6 +41,14 @@ tell; the whole Tier-4 giant tier is the same).
 - Tier 5: npctalk (`dialogue`) / trade / vending.
 - Tier 6: overmap (+ search) / `world_text` §7 on-map text layer.
 
+**VERIFICATION EVIDENCE (reproduce before doubting any "done" claim):**
+`grep -oE '[a-z_]+_rmlui_enabled' src/rml_screen.h | sort -u` → 29 toggles;
+`ls data/gui/*.rml` → ~44 docs; `git status --short` → clean (all committed). The
+four giants are WIRED, not stub toggles — `grep -c 'rml\.open\|rml_doc ' src/<f>.cpp`:
+options=2, **newcharacter=16 (8 slices)**, main_menu=2, worldfactory=4 sessions;
+**ranged.cpp=0** (the proof it is genuinely unstarted). Worldfactory commits:
+`07d6d6aa53` / `6a7f93a194` / `d689e9acb4` / `2eedac603e`.
+
 **GENUINELY REMAINING (no toggle, confirmed unstarted in code):**
 1. **ranged** (targeting UI, `ranged.cpp`) — the last interactive modal; was deferred.
 2. **Tier 7 — sidebar HUD** (the 53 `draw_*` panels) — architecturally hardest.
