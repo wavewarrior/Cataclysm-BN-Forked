@@ -41,7 +41,7 @@ void gpu_texture_deleter::operator()( SDL_GPUTexture *t ) const noexcept
 
 void render_state::init( SDL_Window *host_window )
 {
-    device_.init( host_window, /*debug=*/false, /*vsync=*/false );
+    device_.init( host_window, /*debug=*/true, /*vsync=*/false );
 
     init_shader_compiler();
 
