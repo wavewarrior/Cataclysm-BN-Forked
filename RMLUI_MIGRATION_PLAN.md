@@ -1859,6 +1859,27 @@ rendered per frame → NOT section-sliceable by toggle (all-or-nothing, like fac
 careful build-blind pass (faction precedent: parallel `_lines()` producers, curses
 `print_info`/`panel_*` left pristine for A/B). Sized ≈ faction-plus.
 
+**RANGED PROGRESS (2026-06-17):**
+- **PIECE 1 — generic `Creature::print_info_text()` lines component — DONE + COMMITTED
+  `228d962992`, build-green.** Virtual on Creature (empty default) + monster/npc overrides
+  (Character not a target → inherits empty). Faithful to each curses `print_info` (verified
+  against source incl. npc's visibility_cap formula); curses paths pristine. No consumer
+  yet — foundation for piece 2 + later look-around.
+- **PIECE 2 — the `w_target` panel (`draw_ui_window`) — NOT STARTED (next ranged unit).**
+  Bigger than faction: `draw_ui_window` (ranged.cpp:3905) = border + `draw_window_title` +
+  `draw_help_notice` + ~7 CONDITIONAL positional sections tracked by `text_y`:
+  `panel_cursor_info`; then per-mode `panel_gun_info`+`panel_recoil` (Fire/TurretManual/
+  Shape-gun) OR `panel_spell_info` (Spell); `panel_target_info` (→ now `print_info_text`);
+  then `panel_turret_list` (Turrets) OR `panel_fire_mode_aim` (Fire) OR `draw_throw_aim`
+  (Throw); `draw_controls_list` (unless narrow). Three layout variants (`compact`/`narrow`/
+  `tiny`) + 7 TargetModes. The sub-panels (`panel_fire_mode_aim`, `draw_throw_aim`,
+  `panel_turret_list`) carry their own intricate logic → each needs a faithful text
+  producer. This is a dedicated session-sized reproduction; piece 1 deliberately landed
+  first so piece 2 starts from a proven, green foundation. Approach when resumed: parallel
+  `*_text()`/lines producers per panel section, curses `panel_*` pristine, one RmlUi doc
+  (`ranged.{rml,rcss}`) + `ranged_rmlui_enabled()` toggle + F4, render-only (keyboard owns
+  aim/fire loop; the map overlay `draw_terrain_overlay` stays curses/sprite).
+
 ### Tier 6 progress (overmap_ui + on-map text + §7 world-text layer)
 
 **Tier 6 decomposition (multi-slice sub-project; architecturally the hardest tier):**
