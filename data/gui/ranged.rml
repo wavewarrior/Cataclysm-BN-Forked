@@ -1,0 +1,20 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="ranged.rcss"/>
+</head>
+<body data-model="ranged">
+    <!-- target_ui::run → the w_target targeting side panel. Slice 2a: the host
+         builds draw_ui_window's shallow sections (title / cursor / gun+recoil or
+         spell / target info / turret list / controls) into one colour-tagged
+         `body_rml` string via target_ui::panel_text(), run through cata_text_to_rml
+         (\n → <br/>). The aim / hit-chance readout is a WIP stub here (slice 2b).
+         Render-only: the keyboard aim/fire loop is unchanged; the map aim overlay
+         stays on the sprite path. -->
+    <div class="panel ranged-panel">
+        <div class="ranged-body scroll-pane">
+            <div class="ranged-text" data-rml="body_rml"></div>
+        </div>
+    </div>
+</body>
+</rml>

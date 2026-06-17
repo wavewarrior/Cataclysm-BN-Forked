@@ -1,0 +1,33 @@
+/* Layout for the ranged targeting panel (target_ui, slice 2a). Palette / border /
+   scrollbar / .scroll-pane come from theme.rcss (linked first in ranged.rml); this
+   file owns only the screen's own layout. Lengths in dp.
+
+   The legacy w_target is a single bordered side panel of stacked lines. Here it's one
+   scrolling colour-text body; .ranged-text is display:block (RmlUi divs default to
+   inline — see the theme.rcss gotcha) and pre-wrap so the section lines stack and
+   wrap like the curses panel. */
+body {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+}
+
+.ranged-panel {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.ranged-body {
+    flex: 1;
+    min-height: 0;
+    padding: 4dp 8dp;
+    color: {{light_gray}};
+}
+
+.ranged-text {
+    display: block;
+    white-space: pre-wrap;
+}

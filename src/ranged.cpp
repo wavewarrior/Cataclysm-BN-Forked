@@ -77,6 +77,11 @@
 #include "type_id.h"
 #include "ui_manager.h"
 #include "units.h"
+
+#include <RmlUi/Core.h>
+
+#include "rml_screen.h"
+#include "rml_util.h"
 #include "units_angle.h"
 #include "units_utility.h"
 #include "value_ptr.h"
@@ -633,6 +638,12 @@ class target_ui
         void panel_target_info( int &text_y, bool fill_with_blank_if_no_target );
         void panel_fire_mode_aim( int &text_y );
         void panel_turret_list( int &text_y );
+
+        // RmlUi (slice 2a): colour-tagged text equivalent of draw_ui_window's
+        // shallow sections (title/cursor/gun/recoil/spell/target/turret/controls).
+        // The aim readout (print_aim / draw_throw_aim) is a WIP stub here — wired in
+        // slice 2b. Curses panel_* left pristine for the A/B toggle.
+        std::string panel_text();
 
         // On-selected-as-target checks that act as if they are on-hit checks.
         // `harmful` is `false` if using a non-damaging spell
@@ -2813,6 +2824,27 @@ int burst_penalty( const Character &p, const item &gun, int gun_recoil )
 
 } // namespace ranged
 
+// ── RmlUi render path (full UI→RmlUi migration, ranged piece 2) ──────────────
+// The w_target targeting panel. Slice 2a renders draw_ui_window's shallow sections
+// (title/cursor/gun/recoil/spell/target/turret/controls) as one colour-tagged
+// `body_rml` string via target_ui::panel_text(); the aim/hit-chance readout
+// (print_aim / draw_throw_aim) is a WIP stub here and lands in slice 2b. Render-only:
+// the keyboard aim/fire loop is unchanged, and the map aim overlay (draw_terrain_overlay)
+// stays on the sprite path. Curses panel_* are left pristine for the A/B toggle.
+namespace
+{
+struct target_rml_session {
+    std::string body_rml;
+    Rml::DataModelHandle handle;
+};
+} // namespace
+
+bool &ranged_rmlui_enabled()
+{
+    static bool enabled = false;
+    return enabled;
+}
+
 target_handler::trajectory target_ui::run()
 {
     if( mode == TargetMode::Spell && !no_mana && !casting->can_cast( *you ) ) {
@@ -2855,7 +2887,28 @@ target_handler::trajectory target_ui::run()
     } );
     ui.mark_resize();
 
+    // RmlUi render path (slice 2a). ctxt is built by init_window_and_input (via
+    // mark_resize above), so it is ready to pass to open() for the tick.
+    target_rml_session rml_data;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml ) {
+            return;
+        }
+        rml_data.body_rml = cata_text_to_rml( panel_text() );
+        rml_data.handle.DirtyVariable( "body_rml" );
+    };
+    rml.open( ranged_rmlui_enabled(), "ranged", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        c.Bind( "body_rml", &rml_data.body_rml );
+        rml_data.handle = c.GetModelHandle();
+    } );
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         draw_ui_window();
     } );
 
@@ -3900,6 +3953,176 @@ void target_ui::draw_terrain_overlay()
             }
         }
     }
+}
+
+std::string target_ui::panel_text()
+{
+    // Mirrors draw_ui_window's section order, producing colour-tagged text. The aim
+    // readout is a WIP stub (slice 2b). Curses panel_* are untouched.
+    std::vector<std::string> L;
+
+    L.push_back( colorize( uitext_title(), c_red ) );
+
+    {
+        std::string label_range = ( src == dst )
+                                  ? string_format( "Range: %d", range )
+                                  : string_format( "Range: %d/%d", dist_fn( dst ), range );
+        if( status == Status::OutOfRange && mode != TargetMode::Turrets ) {
+            label_range = colorize( label_range, c_red );
+        }
+        std::string row = label_range;
+        if( allow_zlevel_shift ) {
+            row += "  " + string_format( _( "Elevation: %d" ), dst.z() - src.z() );
+        }
+        row += "  " + string_format( _( "Targets: %d" ), targets.size() );
+        L.push_back( row );
+    }
+
+    if( mode == TargetMode::Fire || mode == TargetMode::TurretManual ||
+        ( mode == TargetMode::Shape && relevant->is_gun() ) ) {
+        gun_mode m = relevant->gun_current_mode();
+        const std::string gunmod_name = ( m.target != relevant ) ? m->tname() + " " : std::string();
+        L.push_back( string_format( _( "Firing mode: <color_cyan>%s%s (%d)</color>" ),
+                                    gunmod_name, m.tname(), m.qty ) );
+        if( status == Status::OutOfAmmo ) {
+            L.push_back( colorize( _( "OUT OF AMMO" ), c_red ) );
+        } else if( ammo ) {
+            L.push_back( string_format( m->ammo_remaining() ? _( "Ammo: %s (%d/%d)" ) : _( "Ammo: %s" ),
+                                        colorize( ammo->nname( std::max( m->ammo_remaining(), 1 ) ), ammo->color ),
+                                        m->ammo_remaining(), m->ammo_capacity() ) );
+        }
+        const int val = ranged::recoil_total( *you );
+        const int min_recoil = ranged::effective_dispersion( *you, relevant->sight_dispersion() );
+        const int recoil_range = MAX_RECOIL - min_recoil;
+        std::string rc;
+        if( val >= min_recoil + ( recoil_range * 2 / 3 ) ) {
+            rc = pgettext( "amount of backward momentum", "<color_red>High</color>" );
+        } else if( val >= min_recoil + ( recoil_range / 2 ) ) {
+            rc = pgettext( "amount of backward momentum", "<color_yellow>Medium</color>" );
+        } else if( val >= min_recoil + ( recoil_range / 4 ) ) {
+            rc = pgettext( "amount of backward momentum", "<color_light_green>Low</color>" );
+        } else {
+            rc = pgettext( "amount of backward momentum", "<color_cyan>None</color>" );
+        }
+        L.push_back( string_format( _( "Recoil: %s" ), rc ) );
+    } else if( mode == TargetMode::Spell ) {
+        L.push_back( colorize( string_format( _( "Casting: %s (Level %u)" ), casting->name(),
+                                              casting->get_level() ), c_light_green ) );
+        if( !no_mana || casting->energy_source() == energy_type::none_energy ) {
+            if( casting->energy_source() == energy_type::hp_energy ) {
+                L.push_back( string_format( _( "Cost: %s %s" ), casting->energy_cost_string( *you ),
+                                            casting->energy_string() ) );
+            } else {
+                L.push_back( string_format( _( "Cost: %s %s (Current: %s)" ),
+                                            casting->energy_cost_string( *you ), casting->energy_string(),
+                                            casting->energy_cur_string( *you ) ) );
+            }
+        }
+        if( no_fail ) {
+            L.push_back( colorize( _( "0.0 % Failure Chance" ), c_light_green ) );
+        } else {
+            L.push_back( casting->colorized_fail_percent( *you ) );
+        }
+        if( casting->aoe() > 0 ) {
+            const std::string fx = casting->effect();
+            const std::string aoes = casting->aoe_string();
+            if( fx == "projectile_attack" || fx == "target_attack" || fx == "area_pull" ||
+                fx == "area_push" || fx == "ter_transform" ) {
+                L.push_back( string_format( _( "Effective Spell Radius: %s%s" ), aoes,
+                                            casting->in_aoe( src, dst ) ? colorize( _( " WARNING!  IN RANGE" ), c_red ) :
+                                            std::string() ) );
+            } else if( fx == "cone_attack" ) {
+                L.push_back( string_format( _( "Cone Arc: %s degrees" ), aoes ) );
+            } else if( fx == "line_attack" ) {
+                L.push_back( string_format( _( "Line width: %s" ), aoes ) );
+            }
+        }
+        L.push_back( colorize( string_format( _( "Damage: %s" ), casting->damage_string( *you ) ),
+                               c_light_red ) );
+        L.push_back( casting->description() );
+    }
+
+    if( dst_critter ) {
+        if( you->sees( *dst_critter ) ) {
+            const std::string info = dst_critter->print_info_text();
+            if( !info.empty() ) {
+                L.push_back( info );
+            }
+        } else {
+            std::vector<std::string> buf;
+            if( you->sees_with_infrared( *dst_critter ) ) {
+                dst_critter->describe_infrared( buf );
+            } else if( you->sees_with_specials( *dst_critter ) ) {
+                dst_critter->describe_specials( buf );
+            }
+            for( const std::string &b : buf ) {
+                L.push_back( b );
+            }
+        }
+    }
+
+    if( mode == TargetMode::Turrets ) {
+        L.push_back( string_format( _( "Turrets in range: %d/%d" ), turrets_in_range.size(),
+                                    vturrets->size() ) );
+        for( const turret_with_lof &it : turrets_in_range ) {
+            L.push_back( string_format( "* %s", it.turret->name() ) );
+        }
+    } else if( status == Status::Good &&
+               ( mode == TargetMode::Fire || mode == TargetMode::Throw ||
+                 mode == TargetMode::ThrowBlind ) ) {
+        // WIP: the aim/hit-chance readout (print_aim / draw_throw_aim) lands in slice 2b.
+        L.push_back( colorize( _( "[aim / hit-chance readout: pending RmlUi slice 2b]" ),
+                               c_dark_gray ) );
+    }
+
+    {
+        const auto bound_key = [this]( const std::string & s ) -> char {
+            const std::vector<char> keys = ctxt.keys_bound_to( s );
+            return keys.empty() ? ' ' : keys.front();
+        };
+        L.push_back( shifting_view ? _( "Shift view with directional keys" )
+                     : _( "Move cursor with directional keys" ) );
+        if( is_mouse_enabled() ) {
+            L.push_back( std::string( _( "Mouse: LMB: Target, Wheel: Cycle," ) ) + " " +
+                         _( "RMB: Fire" ) );
+        }
+        L.push_back( string_format( _( "[%s] Cycle targets;" ), ctxt.get_desc( "NEXT_TARGET", 1 ) ) +
+                     " " + string_format( _( "[%c] %s." ), bound_key( "FIRE" ), uitext_fire() ) );
+        L.push_back( string_format( _( "[%c] target self; [%c] toggle snap-to-target" ),
+                                    bound_key( "CENTER" ), bound_key( "TOGGLE_SNAP_TO_TARGET" ) ) );
+        if( mode == TargetMode::Fire ) {
+            std::string aim_and_fire;
+            for( const ranged::aim_type &e : aim_types ) {
+                if( e.has_threshold ) {
+                    aim_and_fire += string_format( "[%c] ", bound_key( e.action ) );
+                }
+            }
+            aim_and_fire += _( "to aim and fire." );
+            L.push_back( string_format( _( "[%c] to steady your aim.  (10 moves)" ),
+                                        bound_key( "AIM" ) ) );
+            L.push_back( aim_and_fire );
+        }
+        if( mode == TargetMode::Fire || mode == TargetMode::TurretManual ||
+            ( mode == TargetMode::Shape && relevant->is_gun() ) ) {
+            L.push_back( string_format( _( "[%c] to switch firing modes." ),
+                                        bound_key( "SWITCH_MODE" ) ) );
+            L.push_back( string_format( _( "[%c] to switch ammo." ), bound_key( "SWITCH_AMMO" ) ) );
+        }
+        if( mode == TargetMode::Turrets ) {
+            const std::string label = draw_turret_lines ? _( "[%c] Hide lines of fire" )
+                                      : _( "[%c] Show lines of fire" );
+            L.push_back( string_format( label, bound_key( "TOGGLE_TURRET_LINES" ) ) );
+        }
+    }
+
+    std::string out;
+    for( size_t i = 0; i < L.size(); i++ ) {
+        if( i > 0 ) {
+            out += '\n';
+        }
+        out += L[i];
+    }
+    return out;
 }
 
 void target_ui::draw_ui_window()

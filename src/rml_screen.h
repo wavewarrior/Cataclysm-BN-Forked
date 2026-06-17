@@ -187,4 +187,8 @@ bool &description_view_rmlui_enabled();
 // (followers / factions / lore / creatures). Render-only RmlUi doc.
 bool &faction_rmlui_enabled();
 
+// Ranged targeting panel (target_ui::run → the w_target side panel). Slice 2a:
+// shallow sections; aim/hit-chance readout WIP. Render-only RmlUi doc.
+bool &ranged_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

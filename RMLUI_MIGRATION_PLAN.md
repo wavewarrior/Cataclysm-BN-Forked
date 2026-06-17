@@ -1894,7 +1894,16 @@ careful build-blind pass (faction precedent: parallel `_lines()` producers, curs
     `draw_throw_aim` (ranged.cpp:2205, the parallel Throw tree). Shared static drawing fns
     with intricate bar/table layout + confidence math — each needs its own lines-extraction,
     and the hit-chance/confidence numbers are the whole point.
-  **RECOMMENDED SLICES:** (2a) shallow sections + panel scaffold + doc/toggle/F4, aim section
+  **SLICE 2a — DONE + BUILD-GREEN (ranged.cpp.o 10:41:18 newer than source; binary relinked
+  10:41:21), TOGGLE OFF, EYEBALL OWED (partial — aim readout stubbed), UNCOMMITTED.**
+  `target_ui::panel_text()` builds draw_ui_window's shallow sections (title / cursor /
+  gun+recoil OR spell / target-info via `print_info_text` / turret list / controls) as one
+  colour-tagged `body_rml` string (→ cata_text_to_rml in sync). New `data/gui/ranged.{rml,rcss}`,
+  `ranged_rmlui_enabled()` toggle + F4 "ranged targeting (2a)". Render-only: branch in run()'s
+  on_redraw (`if(rml){sync;return;}`); curses `draw_ui_window`/`panel_*` pristine; map overlay
+  untouched. The aim/hit-chance readout is a WIP stub line (slice 2b). **NOT yet eyeball-complete
+  — 2b must land the aim readout before a real A/B; 2a only de-risks the scaffold + shallow text.**
+  **RECOMMENDED SLICES:** (2a ✓) shallow sections + panel scaffold + doc/toggle/F4, aim section
   stubbed to a clearly-marked WIP line (toggle OFF → safe) = first buildable commit;
   (2b) extract `print_steadiness`+`print_ranged_chance`→lines + wire the Fire aim readout =
   the keystone eyeball (hit-chance numbers vs curses, number-for-number); (2c) `draw_throw_aim`
