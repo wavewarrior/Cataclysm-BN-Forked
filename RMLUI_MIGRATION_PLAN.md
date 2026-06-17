@@ -1839,7 +1839,7 @@ Revisit at the §8 rip-out sweep if they keep curses alive.
   RmlUi font) — CODE-COMPLETE + BUILD-GREEN (cata_tiles.cpp.o 06:24:44 +
   sdl_curses_draw.cpp.o 06:24:34 both newer than source; binary relinked 06:24:47,
   fresh mtime), TOGGLE OFF (shares `world_text_rmlui_enabled()`), EYEBALL OWED,
-  COMMITTED `edfcd9a828`.** Moves the RmlUi world-text routing from the SCT-specific
+  COMMITTED `9167f978b7`.** Moves the RmlUi world-text routing from the SCT-specific
   `cata_tiles::draw_sct_frame` (slice 4.1) UP to the GENERIC `overlay_strings`
   render loop in `cata_cursesport::curses_drawwindow` (sdl_curses_draw.cpp:343/380,
   inside the `w == g->w_terrain && use_tiles` block ONLY → clears + refills once per
@@ -1872,11 +1872,30 @@ Revisit at the §8 rip-out sweep if they keep curses alive.
   labels aren't horizontally drifted. (b) SCT in tile-mode no longer appears in the
   RmlUi layer (the behavior delta above) — confirm that's acceptable.
 
-Next Tier-6 units: slice 4.2a eyeball → (slice 4.2b) the actual pooled animated text
-layer (own lifetime/motion, floating damage numbers — the architectural/novel half,
-NOT done by 4.2a which only generalized routing); slice 3 (on-map static labels —
-city/zone labels via world→screen DOM overlay). Both remain the architectural/novel
-part of the tier. §7
+**§7 ON-MAP TEXT — FUNCTIONALLY COMPLETE as of slice 4.2a (pending eyeball)
+(2026-06-17).** AUDIT FINDING that collapses the remaining §7 work: ALL on-map
+overlay text flows through ONE indivisible path — 14 producer emit-sites in
+cata_tiles (zone labels, zone-dim, vehicle-AI, scent, scent-type, rad/temp, SCT) →
+the SINGLE drain loop at `sdl_curses_draw.cpp:343-412`. `formatted_text` carries no
+source tag, so the loop is indivisible — "the whole render moves as one slice." Slice
+4.2a gated that ENTIRE loop, so **every** on-map overlay-text source already routes
+through the RmlUi FontEngine layer when the toggle is ON. Grep-confirmed: no other
+overlay_strings consumer, and no direct text-draw in cata_tiles that bypasses the
+drain (only sprite/texture blits). Consequences:
+- **Slice 3 (zone/city labels) is SUBSUMED — no separate work.** Those labels were
+  always in this same drain loop; 4.2a migrated them. There are no main-map static
+  labels outside overlay_strings (overmap city labels are Tier-6 slices 1-2, done).
+- **Slice 4.2b (pooled animated layer / floating damage numbers) DEFERRED as
+  speculative polish.** SCT already IS the floating-number system (own lifetime/motion
+  via `vSCT` steps) and already animates THROUGH the layer post-4.2a. 4.2b would only
+  reimplement that for smoother sub-pixel motion — it does NOT advance the §8 rip-out
+  (the curses `OutputChar` overlay consumer is already fully bypassable). Revisit only
+  if/when the turn-stepped SCT motion is judged too coarse. One-line revert to pick up.
+- **Rip-out banked:** the `OutputChar` overlay-text drain (a curses font consumer §8
+  must delete) is now end-to-end bypassable via `world_text_rmlui_enabled()`. At §8
+  it's force-ON + deleted.
+
+§7
 world-text unblocks Tier-5 ranged. The deferred faction (Tier 2) also remains (needs the
 creature/npc-info F.2 component).
 
