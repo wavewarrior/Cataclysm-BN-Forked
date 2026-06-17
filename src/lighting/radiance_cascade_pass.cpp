@@ -128,13 +128,12 @@ bool radiance_cascade_pass::init( gpu_device &dev, std::uint32_t tex_w, std::uin
             << " storage_buffers=" << bf.resources.num_storage_buffers
             << " (expects storage_textures=1 storage_buffers=1)";
 
-    field_pipeline_  = make_pipeline( dev.raw(), vert_, field_frag_ );
-    bounce_pipeline_ = make_pipeline( dev.raw(), vert_, bounce_frag_ );
-    if( !field_pipeline_ || !bounce_pipeline_ ) {
-        DebugLogFL( DL::Error, DC::Main ) << "radiance_cascade_pass pipeline: " << SDL_GetError();
-        return false;
-    }
-
+    // Allocate the cascade textures FIRST, before the pipelines. Consumers
+    // (sprite.frag IndirectTex) bind cascade_texture() unconditionally and the
+    // shader expects a valid storage texture every frame; if pipeline creation
+    // later fails on a backend (e.g. D3D12 0x80070057) we must STILL hand back a
+    // valid cleared-black cascade so the bind never sees null. ready() gates
+    // record(), so a failed pipeline just leaves the cascade cleared = GI off.
     radiance_field_tex_ = create_texture( tex_w, tex_h );
     cascade_tex_        = create_texture( tex_w, tex_h );
     if( !radiance_field_tex_ || !cascade_tex_ ) {
@@ -144,6 +143,15 @@ bool radiance_cascade_pass::init( gpu_device &dev, std::uint32_t tex_w, std::uin
     tex_h_ = tex_h;
     clear_texture( radiance_field_tex_ );
     clear_texture( cascade_tex_ );
+
+    field_pipeline_  = make_pipeline( dev.raw(), vert_, field_frag_ );
+    bounce_pipeline_ = make_pipeline( dev.raw(), vert_, bounce_frag_ );
+    if( !field_pipeline_ || !bounce_pipeline_ ) {
+        DebugLogFL( DL::Error, DC::Main )
+                << "radiance_cascade_pass pipeline: " << SDL_GetError()
+                << " — GI disabled, cascade bound as cleared black";
+        return false;
+    }
     return true;
 }
 

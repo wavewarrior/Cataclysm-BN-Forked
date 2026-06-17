@@ -288,6 +288,11 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
         // it for them. Persists across frames until re-set.
         void set_shadow_mask( SDL_GPUTexture *tex ) noexcept { lp_shadow_mask = tex; }
 
+        // Indirect/GI cascade (sprite.frag storage-tex slot 0). Exposed so the UI
+        // batcher can be fed a valid storage texture too (D3D12 needs every
+        // declared pipeline resource bound). Persists across frames until re-set.
+        void set_indirect_tex( SDL_GPUTexture *tex ) noexcept { lp_indirect_tex = tex; }
+
         // ---- lifecycle -------------------------------------------------
 
         // Build a graphics pipeline for a specific color-target format. Shaders
@@ -842,15 +847,17 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
             // unconditionally) so a later bind can't zero an earlier slot. The
             // shadow/UI batchers leave both null → nothing bound (they declare no
             // storage textures). Shader gates reads (gi_strength>0, etc.).
+            // Both-or-none. The sprite pipeline declares BOTH storage textures
+            // (IndirectTex t1, ShadowMask t2); on D3D12 leaving a declared SRV
+            // slot unbound corrupts the command list → device removed (crash on
+            // the next pass, e.g. when an SDF rebuild re-records the lit segment).
+            // So never bind just one: producers guarantee both are non-null at
+            // init (RC creates cascade_tex_ even when its pipeline fails; the
+            // shadow mask is created unconditionally). The shadow/UI batchers
+            // declare no storage textures and leave both null → bind nothing.
             if( lp_indirect_tex && lp_shadow_mask ) {
                 SDL_GPUTexture *stex[2] = { lp_indirect_tex, lp_shadow_mask };
                 SDL_BindGPUFragmentStorageTextures( rp, /*first_slot=*/0, stex, 2 );
-            } else if( lp_indirect_tex ) {
-                SDL_BindGPUFragmentStorageTextures( rp, /*first_slot=*/0,
-                                                    &lp_indirect_tex, 1 );
-            } else if( lp_shadow_mask ) {
-                SDL_BindGPUFragmentStorageTextures( rp, /*first_slot=*/1,
-                                                    &lp_shadow_mask, 1 );
             }
             // Storage BUFFER slots 0..4 → t3..t7 (after the 2 storage textures).
             // One call so a later bind can't zero an earlier slot; rungs preserve
@@ -899,6 +906,11 @@ void sprite_batcher::shutdown() noexcept
 void sprite_batcher::set_shadow_mask( SDL_GPUTexture *tex )
 {
     p->set_shadow_mask( tex );
+}
+
+void sprite_batcher::set_indirect_tex( SDL_GPUTexture *tex )
+{
+    p->set_indirect_tex( tex );
 }
 
 void sprite_batcher::begin_pass( SDL_GPUCommandBuffer *cb,

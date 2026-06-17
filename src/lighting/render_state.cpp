@@ -308,7 +308,13 @@ void render_state::begin_lighting_frame( const frame_light_inputs &in )
     // (Step-3 Phases 2/3, single-bounce). The CPU diffusion path was retired in
     // Phase 4 — RC is the sole GI now. cascade_tex_ is cleared at init, so it is
     // safe to bind before the first gather (reads as no-GI).
-    SDL_GPUTexture *itex = ( sdf_ready && rc_.ready() ) ? rc_.cascade_texture() : nullptr;
+    // Bound unconditionally: cascade_tex_ is always allocated + cleared at init
+    // (even if the RC pipelines failed on this backend), so the sprite.frag
+    // IndirectTex slot always has a valid storage texture. When RC is disabled or
+    // the SDF isn't ready the cascade reads as cleared black (no GI); the shader
+    // also gates the GI term by gi_strength / sdf_map_w. A null here would leave
+    // a declared fragment storage-texture slot unbound → D3D12 "missing binding".
+    SDL_GPUTexture *itex = rc_.cascade_texture();
     const Uint32 ne = collector_
                       ? static_cast<Uint32>( collector_->last_count() )
                       : 0u;

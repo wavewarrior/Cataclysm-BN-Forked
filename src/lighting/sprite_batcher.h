@@ -273,6 +273,14 @@ class sprite_batcher
         // lighting god-call; only the tile batcher uses it. Persists until re-set.
         void set_shadow_mask( SDL_GPUTexture *tex );
 
+        // Indirect/GI cascade texture (sprite.frag storage-tex slot 0, t1/space2).
+        // Normally set via the lighting god-call for the tile batcher; exposed
+        // standalone so the UI batcher (same sprite.frag pipeline) can also be fed
+        // a valid storage texture. D3D12 requires every declared pipeline resource
+        // bound, so a sprite.frag batcher must have BOTH storage textures or it
+        // trips a "missing binding" error. Persists until re-set.
+        void set_indirect_tex( SDL_GPUTexture *tex );
+
         // Append one sprite to the pending batch. Triggers an automatic
         // flush when the per-frame instance budget is reached so callers can
         // ignore buffer overflow.
