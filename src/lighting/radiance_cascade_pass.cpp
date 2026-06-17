@@ -97,7 +97,7 @@ bool radiance_cascade_pass::init( gpu_device &dev, std::uint32_t tex_w, std::uin
     // the shader.
     DebugLogFL( DL::Info, DC::Main )
             << "rc.frag liveness: field_src len=" << field_src.size()
-            << " has_tag_b=" << ( field_src.find( "rc_field_tag_b" ) != std::string::npos ? 1 : 0 );
+            << " has_tag_e=" << ( field_src.find( "rc_field_tag_e" ) != std::string::npos ? 1 : 0 );
 
     auto v  = compile_graphics_shader( dev, vert_src, "main",
                                        SDL_SHADERCROSS_SHADERSTAGE_VERTEX, "rc.vert" );
