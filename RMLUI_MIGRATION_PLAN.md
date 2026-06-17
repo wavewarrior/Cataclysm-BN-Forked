@@ -522,7 +522,7 @@ computer terminal / construction / crafting (eyeballed) / armor_layers / **facti
 - **Tier 2 screen #9: faction manager (faction_manager::display) — CODE-COMPLETE +
   BUILD-GREEN (faction.cpp.o 08:33 / mtype.cpp.o 08:36 / npc.cpp.o 08:37 all newer
   than source; binary relinked 08:39:47, fresh mtime), TOGGLE OFF, EYEBALL OWED,
-  UNCOMMITTED.** The long-deferred Tier-2 screen, unblocked by doing the refactor +
+  COMMITTED `a37612b35a`.** The long-deferred Tier-2 screen, unblocked by doing the refactor +
   the npc-info text inline (the "creature/npc-info F.2 component" the deferral waited
   on turned out to split: the `extended_description()` half shipped as Tier-3 #2's
   examine screen; this screen needs the COMPACT `*_faction_display` text, produced
@@ -1150,6 +1150,22 @@ render-only — clicking a step does nothing (wizard is keyboard); (b) stepping
 RmlUi-options → curses-mods and back is clean (doc opens/closes per `show` call).
 
 ### Tier 4 screen #2: worldfactory (`worldfactory.cpp`, 1641) — MULTI-SCREEN SUB-PROJECT
+
+> **STATUS (2026-06-17): ALL 4 SLICES CODE-COMPLETE + COMMITTED, EYEBALL OWED.**
+> The per-slice blocks below were written PRE-commit (they say "UNCOMMITTED") — that
+> is stale; git history confirms all four landed (Jun 15):
+> - slice 1 Finalize — `07d6d6aa53`
+> - slice 2 pick_world — `6a7f93a194`
+> - slices 3+4 active-mods + mod-selector — `d689e9acb4`
+> - wizard-renders-fully-under-one-toggle fix — `2eedac603e`
+>
+> All 4 RmlUi screens (`pickworld` / `worldmods` / `modselect` / `worldfinalize`)
+> + their `data/gui/*.{rml,rcss}` exist, gated by the single `worldfactory_rmlui_enabled()`
+> toggle (F4 "worldfactory via RmlUi", OFF). The wizard Mods step + `edit_active_world_mods`
+> ride slice 4 (delegates); the Options step rides options slice 2; the driver tab-strip is
+> occluded (no migration, dies at rip-out). **So worldfactory itself is functionally
+> complete — the only remaining work is the user A/B eyeball of the 4 screens.** Detail
+> blocks below retained as the per-slice record.
 
 **Why it's a sub-project (not one screen):** worldfactory is a world-creation WIZARD
 plus several standalone screens, each with its own `ui_adaptor` + `on_redraw` +
