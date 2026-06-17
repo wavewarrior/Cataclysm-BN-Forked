@@ -278,7 +278,7 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
         }
         out.push_back( make_omni( pos.x(), pos.y(), pos.z(), lum, 0, 0, 0 ) );
         if( c.has_effect( snapshot_effect_onfire ) ) {
-            out.push_back( make_omni( pos.x(), pos.y(), pos.z(), 8.0f, 1.0f, 0.5f, 0.0f ) );
+            out.push_back( make_omni( pos.x(), pos.y(), pos.z(), 6.0f, 1.0f, 0.5f, 0.0f ) );
         }
     };
 
