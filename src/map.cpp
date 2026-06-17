@@ -452,7 +452,9 @@ void map::on_submap_unloaded( const tripoint_abs_sm &pos, const std::string &dim
 void map::set_transparency_cache_dirty( const int zlev )
 {
     if( inbounds_z( zlev ) ) {
-        get_cache( zlev ).transparency_cache_dirty.set();
+        auto &cache = get_cache( zlev );
+        cache.transparency_cache_dirty.set();
+        ++cache.transparency_generation;
         for( const auto p : bubble_submaps() ) {
             auto *sm = get_submap_at_grid( tripoint_bub_sm( p, zlev ) );
             if( sm ) { sm->transparency_dirty = true; }
@@ -581,6 +583,7 @@ void map::set_transparency_cache_dirty( const tripoint_bub_ms &p )
         const auto smp = project_to<coords::sm>( p );
         level_cache &ch = get_cache( smp.z() );
         ch.transparency_cache_dirty.set( static_cast<size_t>( ch.bidx( smp.x(), smp.y() ) ) );
+        ++ch.transparency_generation;
         auto *sm = get_submap_at_grid( smp );
         if( sm ) { sm->transparency_dirty = true; }
     }

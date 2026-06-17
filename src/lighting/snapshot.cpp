@@ -301,7 +301,7 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
             continue;
         }
         if( critter.has_effect( snapshot_effect_onfire ) ) {
-            out.push_back( make_omni( mp.x(), mp.y(), mp.z(), 8.0f, 1.0f, 0.5f, 0.0f ) );
+            out.push_back( make_omni( mp.x(), mp.y(), mp.z(), 6.0f, 1.0f, 0.5f, 0.0f ) );
         }
         if( critter.type->luminance > 0 ) {
             out.push_back( make_omni( mp.x(), mp.y(), mp.z(),
@@ -324,7 +324,7 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
         }
         if( pc.has_effect( snapshot_effect_onfire ) ) {
             out.push_back( make_omni( pp.x, pp.y, pp.z,
-                                      8.0f, 1.0f, 0.5f, 0.0f ) );
+                                      6.0f, 1.0f, 0.5f, 0.0f ) );
         }
     }
 

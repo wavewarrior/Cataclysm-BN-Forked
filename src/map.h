@@ -335,6 +335,11 @@ struct level_cache {
 
     // ---- per-submap dirty bitsets (size: cache_mapsize²) ----
     cata_dynamic_bitset transparency_cache_dirty;
+    // P3: monotonically-increasing generation counter, bumped whenever
+    // set_transparency_cache_dirty is called. Render code compares against
+    // its last-seen value to decide whether the SDF needs rebuilding — avoids
+    // rebuilding on every combat turn when terrain hasn't actually changed.
+    std::uint64_t transparency_generation = 0;
     cata_dynamic_bitset outside_cache_dirty;
     cata_dynamic_bitset floor_cache_dirty;
     bool seen_cache_dirty = false;

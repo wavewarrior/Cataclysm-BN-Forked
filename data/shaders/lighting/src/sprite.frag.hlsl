@@ -116,6 +116,8 @@ cbuffer DebugParams : register(b2, space3) {
     float sway_freq;           // (vertex-only padding here)
     float anim_time;           // (vertex-only padding here)
     float spec_strength;       // wet specular glint strength (0=off; CPU-folded with rain intensity)
+    float light_eps;           // P1: contribution epsilon for shadow march gating (default 0.004)
+    float max_shadow_k;        // P2: max emitters per pixel that get full shadow trace (default 16)
 };
 struct VS_OUT {
     float4 pos      : SV_Position;
@@ -131,6 +133,12 @@ struct VS_OUT {
 // x-major (stride = sdf_map_h*SDF_SS). Stored distances are already in TILE
 // units (the CPU ÷SS), so the cone trace below is unchanged.
 static const int SDF_SS = 4;
+// P1: contribution epsilon — skip shadow march when atten*lambert is negligible.
+// Edge-of-radius overlapping emitters dominate count but add ~0 brightness.
+static const float LIGHT_EPS_DEFAULT = 0.004;
+// P2: maximum number of emitters that get full shadow tracing per pixel.
+// Weaker in-range lights still contribute unshadowed. Default 16 covers most scenes.
+static const int MAX_SHADOW_K_DEFAULT = 16;
 // Clamped raw SDF fetch; (x,y) are SS-GRID coords.
 float sdf_texel(int x, int y) {
     const int gw = (int)sdf_map_w * SDF_SS;
@@ -399,56 +407,95 @@ float4 main(VS_OUT i) : SV_Target0 {
     // top of the CPU-shadowcasting result, not suppressed by max().
     float3 emitter_light = float3(0.0, 0.0, 0.0);
     const uint me = min(emitter_count, 8192u);
+    // P1: use runtime light_eps from cbuffer (falls back to default when 0).
+    const float eps = max(light_eps, LIGHT_EPS_DEFAULT);
+    // P2: K-max shadow budget — track strongest emitters for full shadow trace.
+    const int   k_max = (int)max(max_shadow_k, MAX_SHADOW_K_DEFAULT);
+    // Tracking arrays for K-strongest by atten*lambert. 64 covers extreme horde density.
+    uint   top_idx[64];
+    float  top_val[64];
+    int    top_n = 0;
+
+    // --- PASS 1: accumulate unshadowed light + track K-max candidates ---
     for(uint ei = 0u; ei < me; ++ei) {
         const GpuEmitter e = Emitters[ei];
         const float3 e_pos    = e.pos_radius.xyz;
         const float  e_radius = e.pos_radius.w;
         const float3 e_color  = e.color_falloff.xyz;
         const float  e_falloff= e.color_falloff.w;
-        const float2 e_cone_dir = e.cone_shape.xy;          // normalized beam axis
-        const float  e_cone_ha  = e.cone_shape.z;           // half-angle (rad; π = omni)
-        const uint   e_shape    = asuint(e.cone_shape.w);   // emitter_shape enum
         if(abs(e_pos.z - current_z) > 0.5) continue;
         const float2 dv   = e_pos.xy - i.light_pos;
         const float  dist = length(dv);
         if(dist >= e_radius || dist < 0.01) continue;
-        const float  atten   = 1.0 - pow(saturate(dist / e_radius), e_falloff);
-        // Per-pixel Lambert against this emitter (Bucket A / A1). The light's
-        // in-plane direction is sh_dir (fragment→light); NRM_ELEV lifts it off
-        // the tile plane so relief tilts catch it. Blended with NRM_AMOUNT so
-        // flat surfaces stay near full brightness (0 = old omni lambert=1).
+        const float  atten = 1.0 - pow(saturate(dist / e_radius), e_falloff);
+
+        // Per-pixel Lambert against this emitter (Bucket A / A1).
         const float2 sh_dir = dv / max(dist, 0.001);
-        // saturate() guards nrm_amount>1: the lerp extrapolates past full Lambert
-        // (a strong contrast knob) but must not go negative and subtract light.
         const float  lambert = saturate(lerp(1.0,
                                     saturate(dot(normal, normalize(float3(sh_dir, nrm_elev)))),
                                     nrm_amount));
-        // Per-emitter soft shadow via the shared SDF sphere trace (bilinear,
-        // shadow_k / shadow_steps tunable). See trace_shadow above. sh_dir is
-        // declared above (the A1 Lambert reuses it).
+
+        // P1: skip negligible contributions entirely — no shadow march needed.
+        if(atten * lambert <= eps) continue;
+
+        const float3 rgb = (e_color.x < 0.01 && e_color.y < 0.01 && e_color.z < 0.01)
+                           ? float3(1, 1, 1) : e_color;
+        // Unshadowed contribution (always added — weaker lights still illuminate).
+        emitter_light += rgb * atten * lambert;
+
+        // P2: track K-strongest for full shadow trace (inline selection, no sort).
+        if(top_n < k_max) {
+            top_idx[top_n] = ei;
+            top_val[top_n] = atten * lambert;
+            ++top_n;
+        } else if(atten * lambert > top_val[0]) {
+            // Replace weakest tracked entry.
+            int min_i = 0;
+            for(int mi = 1; mi < top_n; ++mi) {
+                if(top_val[mi] < top_val[min_i]) min_i = mi;
+            }
+            top_idx[min_i] = ei;
+            top_val[min_i] = atten * lambert;
+        }
+    }
+
+    // --- PASS 2: full shadow trace for K strongest candidates ---
+    for(int ti = 0; ti < top_n; ++ti) {
+        const uint ei = top_idx[ti];
+        const GpuEmitter e = Emitters[ei];
+        const float3 e_pos    = e.pos_radius.xyz;
+        const float  e_radius = e.pos_radius.w;
+        const float3 e_color  = e.color_falloff.xyz;
+        const float  e_falloff= e.color_falloff.w;
+        const float2 e_cone_dir = e.cone_shape.xy;
+        const float  e_cone_ha  = e.cone_shape.z;
+        const uint   e_shape    = asuint(e.cone_shape.w);
+
+        const float2 dv   = e_pos.xy - i.light_pos;
+        const float  dist = length(dv);
+        const float  atten = 1.0 - pow(saturate(dist / e_radius), e_falloff);
+        const float2 sh_dir = dv / max(dist, 0.001);
+        const float  lambert = saturate(lerp(1.0,
+                                    saturate(dot(normal, normalize(float3(sh_dir, nrm_elev)))),
+                                    nrm_amount));
+
+        // Subtract unshadowed contribution (added in pass 1) and re-add with shadow.
+        const float3 rgb = (e_color.x < 0.01 && e_color.y < 0.01 && e_color.z < 0.01)
+                           ? float3(1, 1, 1) : e_color;
+        emitter_light -= rgb * atten * lambert;
+
         const float  shadow = trace_shadow(i.light_pos, sh_dir, dist,
                                             shadow_k, (int)shadow_steps,
                                             /*directional=*/false, /*use_sun=*/false);
-        // Cone / spotlight angular falloff (Bucket A / A2). Held flashlights and
-        // vehicle headlights are tagged CONE by build_emitter_snapshot with a
-        // normalized beam direction (cone_dir) and half-angle; OMNI emitters keep
-        // cone=1. sh_dir points fragment→light, so the light→fragment ray is
-        // -sh_dir; both the beam axis and that ray live in world tile space
-        // (x, y-down) matching the CPU cos/sin(idir) / v->face.dir() convention.
-        // Soft edge: full intensity within ~0.6 of the half-angle, smoothstep to
-        // zero at the rim (cos is monotone-decreasing in angle, so the inner
-        // threshold cos(0.6·ha) > the rim threshold cos(ha)).
+
+        // Cone / spotlight angular falloff.
         float cone = 1.0;
         if(e_shape == 1u) {            // emitter_shape::CONE
             const float cosang = dot(normalize(e_cone_dir), -sh_dir);
             cone = smoothstep(cos(e_cone_ha), cos(e_cone_ha * 0.6), cosang);
         }
-        const float3 rgb = (e_color.x < 0.01 && e_color.y < 0.01 && e_color.z < 0.01)
-                           ? float3(1, 1, 1) : e_color;
-        // Wet specular glint on top of diffuse. Reuses the emitter direction +
-        // atten/shadow/cone so the glint only appears where the light reaches;
-        // gated by sky_vis (no indoor sheen) and the CPU-folded spec_strength
-        // (0 while not raining → exact no-op).
+
+        // Wet specular glint on top of diffuse.
         const float e_spec = (spec_strength > 0.001)
                              ? spec_strength * sky_vis *
                                wet_spec(normal, normalize(float3(sh_dir, nrm_elev)))

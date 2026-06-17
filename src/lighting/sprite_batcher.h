@@ -168,6 +168,10 @@ struct debug_params {
     // shows while raining. 0 = off. Repurposed the old sway_pad alignment filler
     // (struct stays 128 B). sprite.frag reads it; sprite.vert keeps it as pad.
     float    spec_strength = 0.0f;
+    // P1: contribution epsilon for shadow march gating. 0 means use shader default.
+    float    light_eps     = 0.0f;
+    // P2: max emitters per pixel that get full shadow trace (cast as uint in HLSL).
+    float    max_shadow_k  = 16.0f;
 };
 
 // Returns sun/sky params interpolated from a 24h LUT for the given hour (0..24).

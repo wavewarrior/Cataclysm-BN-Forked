@@ -22,6 +22,8 @@ struct GpuEmitter {
 
 StructuredBuffer<GpuEmitter> Emitters : register(t0, space2);
 StructuredBuffer<float>      SdfBuf   : register(t1, space2);
+// P1: contribution epsilon — skip shadow march when atten is negligible.
+static const float LIGHT_EPS = 0.004;
 
 cbuffer RcParams : register(b0, space3) {
     uint  emitter_count;
@@ -99,6 +101,8 @@ float4 main(VS_OUT i) : SV_Target0 {
         const float  dist = length(dv);
         if(dist >= e_radius || dist < 0.01) continue;
         const float  atten  = 1.0 - pow(saturate(dist / e_radius), e_falloff);
+        // P1: skip shadow march when contribution is negligible.
+        if(atten <= LIGHT_EPS) continue;
         const float2 dir    = dv / max(dist, 0.001);
         const float  shadow = trace_shadow(probe, dir, dist, shadow_k, (int)shadow_steps);
         const float3 rgb = (e_color.x < 0.01 && e_color.y < 0.01 && e_color.z < 0.01)

@@ -117,21 +117,29 @@ auto build_lighting( lighting::render_state &rs ) -> bool
         return rc_rebuild;
     }
 
-    static time_point last_turn = calendar::before_time_starts;
-    static int        last_z = INT_MIN;
-    static point      last_origin{ INT_MIN, INT_MIN };
+    // P3: gate SDF rebuild on transparency_generation change, not turn.
+    // Creatures moving don't change the SDF (they're emitters only, not occluders).
+    // Only terrain/furniture/field/vehicle transparency changes matter.
+    static std::uint64_t last_gen = 0;
+    static int           last_z = INT_MIN;
+    static point         last_origin{ INT_MIN, INT_MIN };
     bool rebuild_pertile = true;
     if( g && world_generator && world_generator->active_world ) {
-        const time_point now = calendar::turn;
         const int z = g->u.bub_pos().z();
         const point origin = tilecontext
                              ? tilecontext->get_tile_map_origin().raw()
                              : point{ INT_MIN, INT_MIN };
+        // Read generation from the current level's cache.
+        std::uint64_t gen = 0;
+        if( g->m() ) {
+            const auto &cache = g->m()->get_cache( z );
+            gen = cache.transparency_generation;
+        }
         rebuild_pertile = imgui_layer::visible()
-                          || now != last_turn || z != last_z
+                          || gen != last_gen || z != last_z
                           || origin != last_origin;
         if( rebuild_pertile ) {
-            last_turn = now;
+            last_gen = gen;
             last_z = z;
             last_origin = origin;
         }

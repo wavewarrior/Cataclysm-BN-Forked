@@ -259,6 +259,12 @@ static void draw_lighting_tab()
     if( dbg_slider_int( "shadow steps", &steps, 1, 64 ) ) {
         g_dbg_params.shadow_steps = static_cast<uint32_t>( std::max( 1, steps ) );
     }
+    // P1/P2: emitter density optimization knobs.
+    dbg_slider( "light eps (march gate)", &g_dbg_params.light_eps, 0.0f, 0.05f, "%.4f" );
+    int max_k = static_cast<int>( g_dbg_params.max_shadow_k );
+    if( dbg_slider_int( "max shadow K/pixel", &max_k, 1, 64 ) ) {
+        g_dbg_params.max_shadow_k = static_cast<float>( std::max( 1, max_k ) );
+    }
     dbg_slider( "SDF sharpness", &g_dbg_params.sdf_sharp, 0.0f, 1.0f );
     dbg_slider( "ambient occlusion", &g_dbg_params.ao_strength, 0.0f, 1.0f );
 

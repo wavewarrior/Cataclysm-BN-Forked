@@ -716,33 +716,6 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                     tsb.sampler = s.sampler;
                     SDL_BindGPUFragmentSamplers( rp, /*first_slot=*/0, &tsb, 1 );
 
-                    // Diagnostic: log the first LIT segment per frame so we
-                    // can see, on the CPU, what state actually reaches the
-                    // GPU draw. Confirms is_lit, emitter texture binding,
-                    // emitter_count uniform, and debug_mode without
-                    // depending on screen-colour interpretation.
-                    {
-                        static int sb_dbg_frame = 0;
-                        static bool sb_dbg_logged_this_frame = false;
-                        // Reset the per-frame guard once per 60 frames.
-                        if( ++sb_dbg_frame % 60 == 0 ) {
-                            sb_dbg_logged_this_frame = false;
-                        }
-                        if( s.is_lit && !sb_dbg_logged_this_frame ) {
-                            sb_dbg_logged_this_frame = true;
-                            DebugLogFL( DL::Info, DC::Main )
-                                    << "sprite_batcher lit_seg: tex=" << static_cast<const void *>( s.tex )
-                                    << " emitter_buf=" << static_cast<const void *>( lp_emitter_buf )
-                                    << " ec=" << lp.emitter_count
-                                    << " tile_px=" << lp.tile_pixel_size
-                                    << " cam_off=(" << lp.camera_off_x << ","
-                                    << lp.camera_off_y << ")"
-                                    << " sdf_map_w=" << lp.sdf_map_w
-                                    << " sdf_buf=" << ( lp_sdf_buf ? "ok" : "NULL" )
-                                    << " skyvis_buf=" << ( lp_sky_vis_buf ? "ok" : "NULL" )
-                                    << " dbg_mode=" << lp_debug.debug_mode;
-                        }
-                    }
 
                     // Re-bind the lighting storage texture + buffers each lit
                     // segment. SDL_BindGPUFragmentStorage* can rebuild the
