@@ -348,7 +348,7 @@ message(STATUS "Searching for SDL3 library --")
             # Install via FetchContent
             FetchContent_Declare(
                     SDL3
-                    URL https://github.com/libsdl-org/SDL/archive/refs/tags/release-3.4.8.tar.gz
+                    URL https://github.com/libsdl-org/SDL/archive/refs/tags/release-3.4.10.tar.gz
                     EXCLUDE_FROM_ALL
             )
             FetchContent_MakeAvailable(SDL3)
@@ -509,8 +509,14 @@ if (NOT TARGET SDL3_shadercross::SDL3_shadercross)
             set(_CATA_SHADERCROSS_SHARED OFF)
             set(_CATA_SHADERCROSS_STATIC ON)
         endif ()
-        # Pin to a known-good main SHA (libsdl-org/SDL_shadercross has no
-        # tagged release as of 2026-05-20). Bump deliberately.
+        # Pin to a known-good main SHA (libsdl-org/SDL_shadercross has NO tagged
+        # releases — SHA pinning is the only option). Bump deliberately.
+        # 2026-06-17: bumped 6b06e55c → 9a461644 to pick up the 2026-05-30
+        # toolchain bumps (DirectXShaderCompiler → 2026-02 release, vkd3d 2.0,
+        # SPIRV vulkan-sdk-1.4.350). The old DXC generated DXIL that the Win11
+        # D3D12 driver rejected at pipeline creation (E_INVALIDARG) for the
+        # radiance-cascade lighting shaders — see src/lighting/CLAUDE.md. Paired
+        # with SDL release-3.4.10 (this shadercross was developed against it).
         set(SDLSHADERCROSS_DXC          ON  CACHE BOOL "" FORCE)
         set(SDLSHADERCROSS_VENDORED     ON  CACHE BOOL "" FORCE)
         set(SDLSHADERCROSS_SHARED       ${_CATA_SHADERCROSS_SHARED} CACHE BOOL "" FORCE)
@@ -544,7 +550,7 @@ if (NOT TARGET SDL3_shadercross::SDL3_shadercross)
         FetchContent_Declare(
             SDL3_SHADERCROSS
             GIT_REPOSITORY https://github.com/libsdl-org/SDL_shadercross.git
-            GIT_TAG        6b06e55c7c5d7e7a09a8a14f76e866dcfad5ab99
+            GIT_TAG        9a461644308366b50f0c364069d762be8e3b3443
             EXCLUDE_FROM_ALL
         )
         FetchContent_MakeAvailable(SDL3_SHADERCROSS)

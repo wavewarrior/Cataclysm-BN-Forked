@@ -2251,6 +2251,170 @@ static int draw_throw_aim( const player &p, const catacurses::window &w, int lin
                                 dispersion_fun, cost_fun, confidence_config, range, target_size );
 }
 
+// --- RmlUi slice 2b: parallel lines-producers for the aim/hit-chance readout. ---
+// These mirror print_steadiness / print_ranged_chance / print_aim / draw_throw_aim
+// number-for-number but RETURN colour-tagged lines instead of drawing into a curses
+// window. The curses fns above are left pristine for the F4 A/B toggle. Semantic
+// rewrite: always the readable wide form (the compact insert_table positional layout
+// is dropped) — the displayed NUMBERS are identical, only the layout is semantic.
+static std::string steadiness_line( int bar_width, double steadiness )
+{
+    if( get_option<std::string>( "ACCURACY_DISPLAY" ) == "numbers" ) {
+        return string_format( "%s: %d%%", _( "Steadiness" ),
+                              static_cast<int>( 100.0 * steadiness ) );
+    }
+    return get_labeled_bar( steadiness, bar_width, _( "Steadiness" ), '*' );
+}
+
+static std::vector<std::string> ranged_chance_lines(
+    input_context &ctxt, int bar_width,
+    const std::vector<ranged::aim_type> &aim_types,
+    const std::function<dispersion_sources( const ranged::aim_type & )> &dispersion_fun,
+    const std::function<int( const ranged::aim_type & )> &cost_fun,
+    const std::vector<confidence_rating> &confidence_config,
+    double range, double target_size )
+{
+    std::vector<std::string> out;
+    const std::string display_type = get_option<std::string>( "ACCURACY_DISPLAY" );
+
+    const auto front_or = [&]( const std::string & s, const char fallback ) {
+        const auto keys = ctxt.keys_bound_to( s );
+        return keys.empty() ? fallback : keys.front();
+    };
+
+    // Symbols legend (bars mode only) — mirrors the wide "Symbols:" header line.
+    if( display_type != "numbers" ) {
+        std::string symbols = _( "Symbols:" );
+        for( const confidence_rating &cr : confidence_config ) {
+            symbols += string_format( " <color_%s>%s</color> = %s", cr.color, cr.symbol,
+                                      pgettext( "aim_confidence", cr.label.c_str() ) );
+        }
+        out.push_back( symbols );
+    }
+
+    for( const ranged::aim_type &type : aim_types ) {
+        dispersion_sources current_dispersion = dispersion_fun( type );
+        std::string label = _( "Current" );
+        std::string aim_l = _( "Aim" );
+        if( type.has_threshold ) {
+            label = type.name;
+        }
+
+        int moves_to_fire = cost_fun( type );
+        auto hotkey = front_or( type.action.empty() ? "FIRE" : type.action, ' ' );
+
+        out.push_back( string_format( _( "<color_white>[%s]</color> %s %s: Moves to fire: "
+                                         "<color_light_blue>%d</color>" ),
+                                      hotkey, label, aim_l, moves_to_fire ) );
+
+        double confidence = confidence_estimate( range, target_size, current_dispersion );
+
+        if( display_type == "numbers" ) {
+            int last_chance = 0;
+            std::string confidence_s = enumerate_as_string( confidence_config.begin(),
+            confidence_config.end(), [&]( const confidence_rating & config ) {
+                int chance = std::min<int>( 100, 100.0 * ( config.aim_level * confidence ) ) - last_chance;
+                last_chance += chance;
+                return string_format( "%s: <color_%s>%3d%%</color>", pgettext( "aim_confidence",
+                                      config.label.c_str() ), config.color, chance );
+            }, enumeration_conjunction::none );
+            out.push_back( confidence_s );
+        } else {
+            std::vector<std::tuple<double, char, std::string>> confidence_ratings;
+            std::transform( confidence_config.begin(), confidence_config.end(),
+                            std::back_inserter( confidence_ratings ),
+            [&]( const confidence_rating & config ) {
+                return std::make_tuple( config.aim_level, config.symbol, config.color );
+            } );
+            out.push_back( get_colored_bar( confidence, bar_width, "",
+                                            confidence_ratings.begin(),
+                                            confidence_ratings.end() ) );
+        }
+    }
+    return out;
+}
+
+static std::vector<std::string> aim_lines( const Character &p, int bar_width,
+        input_context &ctxt, item &weapon,
+        const double target_size, const tripoint_bub_ms &pos, double predicted_recoil,
+        item *load_loc )
+{
+    dispersion_sources dispersion = ranged::get_weapon_dispersion( p, weapon );
+    dispersion.add_range( ranged::recoil_vehicle( p ) );
+
+    const double min_recoil = calculate_aim_cap( p, pos );
+    const double effective_recoil = ranged::effective_dispersion( p,
+                                    p.primary_weapon().sight_dispersion() );
+    const double min_dispersion = std::max( min_recoil, effective_recoil );
+    const double steadiness_range = MAX_RECOIL - min_dispersion;
+    const double steady_score = std::max( 0.0, predicted_recoil - min_dispersion );
+    const double steadiness = 1.0 - ( steady_score / steadiness_range );
+
+    static const std::vector<confidence_rating> confidence_config = {{
+            { accuracy_critical, '*', "green", translate_marker_context( "aim_confidence", "Great" ) },
+            { accuracy_standard, '+', "light_gray", translate_marker_context( "aim_confidence", "Normal" ) },
+            { accuracy_grazing, '|', "magenta", translate_marker_context( "aim_confidence", "Graze" ) }
+        }
+    };
+
+    int shots = std::max( 1, weapon.gun_current_mode().qty );
+    const auto dispersion_fun = [&]( const ranged::aim_type & at ) {
+        int at_recoil = at.has_threshold ? at.threshold : static_cast<int>( predicted_recoil );
+        return calculate_dispersion( get_map(), p, weapon, at_recoil, shots > 1 );
+    };
+    const auto cost_fun = [&]( const ranged::aim_type & at ) {
+        int at_recoil = at.has_threshold ? at.threshold : static_cast<int>( predicted_recoil );
+        return ranged::gun_engagement_moves( p, weapon, at_recoil, p.recoil ) +
+               ranged::time_to_attack( p, weapon, load_loc );
+    };
+    const double range = rl_dist( p.bub_pos(), pos );
+
+    std::vector<std::string> out;
+    out.push_back( steadiness_line( bar_width, steadiness ) );
+    std::vector<std::string> chance = ranged_chance_lines( ctxt, bar_width,
+            ranged::get_aim_types( p, weapon ), dispersion_fun, cost_fun,
+            confidence_config, range, target_size );
+    out.insert( out.end(), chance.begin(), chance.end() );
+    return out;
+}
+
+static std::vector<std::string> throw_aim_lines( const player &p, int bar_width,
+        input_context &ctxt, const item &weapon, const tripoint_bub_ms &target_pos,
+        bool is_blind_throw )
+{
+    Creature *target = g->critter_at( target_pos, true );
+    if( target != nullptr && !p.sees( *target ) ) {
+        target = nullptr;
+    }
+
+    const dispersion_sources dispersion(
+        ranged::throwing_dispersion( p, weapon, target, is_blind_throw ) );
+    const double range = rl_dist( p.bub_pos(), target_pos );
+    const double target_size = target != nullptr ? target->ranged_target_size() : 1.0f;
+
+    static const std::vector<confidence_rating> confidence_config_critter = {{
+            { accuracy_critical, '*', "green", translate_marker_context( "aim_confidence", "Great" ) },
+            { accuracy_standard, '+', "light_gray", translate_marker_context( "aim_confidence", "Normal" ) },
+            { accuracy_grazing, '|', "magenta", translate_marker_context( "aim_confidence", "Graze" ) }
+        }
+    };
+    static const std::vector<confidence_rating> confidence_config_object = {{
+            { accuracy_grazing, '*', "white", translate_marker_context( "aim_confidence", "Hit" ) }
+        }
+    };
+    const auto &confidence_config = target != nullptr ?
+                                    confidence_config_critter : confidence_config_object;
+
+    const auto dispersion_fun = [&]( const ranged::aim_type & ) {
+        return dispersion;
+    };
+    const auto cost_fun = [&]( const ranged::aim_type & ) {
+        return ranged::throw_cost( p, weapon );
+    };
+    return ranged_chance_lines( ctxt, bar_width, get_default_aim_type(),
+                                dispersion_fun, cost_fun, confidence_config, range, target_size );
+}
+
 std::vector<ranged::aim_type> ranged::get_aim_types( const Character &who, const item &gun )
 {
     std::vector<aim_type> aim_types = get_default_aim_type();
@@ -4070,9 +4234,42 @@ std::string target_ui::panel_text()
     } else if( status == Status::Good &&
                ( mode == TargetMode::Fire || mode == TargetMode::Throw ||
                  mode == TargetMode::ThrowBlind ) ) {
-        // WIP: the aim/hit-chance readout (print_aim / draw_throw_aim) lands in slice 2b.
-        L.push_back( colorize( _( "[aim / hit-chance readout: pending RmlUi slice 2b]" ),
-                               c_dark_gray ) );
+        // Slice 2b: the aim / hit-chance readout. Bars use the same char width as the
+        // curses w_target panel (34/55 minus borders) so they read identically.
+        const int bar_width = getmaxx( w_target ) - 2;
+        std::vector<std::string> aim;
+        if( mode == TargetMode::Fire ) {
+            // Mirrors panel_fire_mode_aim: simulate predicted recoil + aim delay.
+            const double saved_pc_recoil = you->recoil;
+            you->recoil = predicted_recoil;
+            double pred_recoil = you->recoil;
+            int predicted_delay = 0;
+            if( aim_mode->has_threshold && aim_mode->threshold < you->recoil ) {
+                do {
+                    const double aim_amount = ranged::aim_per_move( *you, *relevant, pred_recoil );
+                    if( aim_amount > 0 ) {
+                        predicted_delay++;
+                        pred_recoil = std::max( pred_recoil - aim_amount, 0.0 );
+                    }
+                } while( pred_recoil > aim_mode->threshold &&
+                         pred_recoil - sight_dispersion > 0 );
+            } else {
+                pred_recoil = you->recoil;
+            }
+            const double target_size = dst_critter ? dst_critter->ranged_target_size() :
+                                       occupied_tile_fraction( creature_size::medium );
+            item *load_loc = activity->reload_loc ? &*activity->reload_loc : nullptr;
+            aim = aim_lines( *you, bar_width, ctxt, *relevant->gun_current_mode(),
+                             target_size, dst, pred_recoil, load_loc );
+            if( aim_mode->has_threshold ) {
+                aim.push_back( string_format( _( "%s Delay: %i" ), aim_mode->name, predicted_delay ) );
+            }
+            you->recoil = saved_pc_recoil;
+        } else {
+            const bool blind = ( mode == TargetMode::ThrowBlind );
+            aim = throw_aim_lines( *you, bar_width, ctxt, *relevant, dst, blind );
+        }
+        L.insert( L.end(), aim.begin(), aim.end() );
     }
 
     {

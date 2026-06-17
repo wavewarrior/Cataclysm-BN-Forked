@@ -1909,6 +1909,30 @@ careful build-blind pass (faction precedent: parallel `_lines()` producers, curs
   the keystone eyeball (hit-chance numbers vs curses, number-for-number); (2c) `draw_throw_aim`
   readout for Throw/ThrowBlind. **Most eyeball-sensitive screen in the migration — do NOT
   land the aim readout build-blind without a number-for-number A/B.**
+  **SLICE 2b — CODE-COMPLETE + COMPILE-VERIFIED (ranged.cpp.o built clean 20:39, 0 errors;
+  isolated object compile — full link NOT run because the working tree carries unrelated
+  in-flight lighting changes, rc.frag.hlsl + radiance_cascade_pass.cpp), TOGGLE OFF,
+  EYEBALL OWED (the keystone A/B), UNCOMMITTED.** Added 4 parallel `*_lines()` producers
+  right after `draw_throw_aim` (curses `print_steadiness`/`print_ranged_chance`/`print_aim`/
+  `draw_throw_aim` left PRISTINE for the A/B): `steadiness_line(bar_width,steadiness)`,
+  `ranged_chance_lines(ctxt,bar_width,aim_types,dispersion_fun,cost_fun,confidence_config,
+  range,target_size)`, `aim_lines(...)` (mirrors print_aim's steadiness+dispersion+cost math),
+  `throw_aim_lines(...)` (mirrors draw_throw_aim incl. the critter-vs-object confidence_config
+  fork). They reuse the EXACT math + `get_labeled_bar`/`get_colored_bar`/`confidence_estimate`/
+  `confidence_config` so the displayed numbers are identical; only the layout is semantic.
+  `panel_text()`'s WIP stub replaced with a Fire/Throw dispatch: Fire inlines
+  `panel_fire_mode_aim`'s predicted-recoil + aim-delay simulation (saving/restoring
+  `you->recoil`) then `aim_lines(...)` + the "<mode> Delay: N" line; Throw/ThrowBlind →
+  `throw_aim_lines(...)`. `bar_width = getmaxx(w_target)-2` (34/55−2, identical to curses).
+  **SEMANTIC SIMPLIFICATION (flag for §8):** the compact/labels-narrow `insert_table`
+  positional layout + the `bars_pad=3` narrowing are DROPPED — always the readable wide form;
+  ACCURACY_DISPLAY (numbers vs bars) IS honoured. Numbers match number-for-number; only the
+  compact-table arrangement differs. **EYEBALL CHECK (user, A/B via F4 "ranged targeting"):**
+  aim a GUN at a critter — Steadiness bar/% + per-aim-type "[hotkey] … Moves to fire: N" +
+  the `*`/`+`/`|` confidence bar (or Great/Normal/Graze %) match curses **number-for-number**
+  across ACCURACY_DISPLAY=bars AND =numbers; aim-threshold modes show the "Delay" line;
+  THROW an item (and a blind throw) shows the throw confidence (critter → 3-tier, object →
+  single "Hit"). **(2c folds into 2b — both Fire and Throw readouts landed together.)**
 
 ### Tier 6 progress (overmap_ui + on-map text + §7 world-text layer)
 
