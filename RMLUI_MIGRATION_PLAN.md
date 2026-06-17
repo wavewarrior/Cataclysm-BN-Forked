@@ -1835,10 +1835,48 @@ Revisit at the §8 rip-out sweep if they keep curses alive.
   runs. The render mechanism (two-phase compile-in-prepare / draw-in-render_in_pass on
   ad-hoc `RenderManager::MakeGeometry`+`Geometry::Render`) is now PROVEN.
 
-Next Tier-6 units: slice 4.1 eyeball → (slice 4.2) generalize the layer into a pooled
-animated text layer (own lifetime/motion, floating damage numbers) + route the other
-`overlay_strings` debug/zone text; slice 3 (on-map static labels — city/zone labels via
-world→screen DOM overlay). Both remain the architectural/novel part of the tier. §7
+- **Tier 6 slice 4.2a: generalize the world-text ROUTING (all `overlay_strings` →
+  RmlUi font) — CODE-COMPLETE + BUILD-GREEN (cata_tiles.cpp.o 06:24:44 +
+  sdl_curses_draw.cpp.o 06:24:34 both newer than source; binary relinked 06:24:47,
+  fresh mtime), TOGGLE OFF (shares `world_text_rmlui_enabled()`), EYEBALL OWED,
+  COMMITTED `edfcd9a828`.** Moves the RmlUi world-text routing from the SCT-specific
+  `cata_tiles::draw_sct_frame` (slice 4.1) UP to the GENERIC `overlay_strings`
+  render loop in `cata_cursesport::curses_drawwindow` (sdl_curses_draw.cpp:343/380,
+  inside the `w == g->w_terrain && use_tiles` block ONLY → clears + refills once per
+  terrain draw, not per window). NET EFFECT: the world-text layer now catches ALL
+  on-map text that reaches `overlay_strings` — SCT (font mode) + zone labels + debug
+  overlays (scent/rad/temp/vis) — in ONE place, replacing the curses `OutputChar`
+  cell loop for the whole overlay, not just SCT. STRUCTURAL POINTS: (1) the slice-4.1
+  SCT-special-case in cata_tiles.cpp is REMOVED (-29 lines: the `world_text_begin()`
+  in `draw()`, the `world_text_add` branch + skip-emplace in `draw_sct_frame`, the
+  `rmlui_layer.h` include); `draw_sct_frame` now ALWAYS emplaces SCT into
+  `overlay_strings` (font mode) so the generic path picks it up — no double-draw. (2)
+  start pixel mirrors the curses path exactly: `win->pos*font + (x_offset −
+  alignment_offset)*map_font->width + coord` (coord is already physical-px from
+  `player_to_screen`; world-text context is physical-px → translation is direct). (3)
+  colour via `windowsPalette[ft.color]` (same index the curses overlay fed) → exact
+  A/B fidelity. **BEHAVIOR DELTA vs 4.1 (intentional, arguably more correct):** with
+  `ANIMATION_SCT_USE_FONT=off`, SCT draws as TILES (never enters `overlay_strings`) so
+  it no longer force-routes to RmlUi — the world-text layer replaces the FONT path,
+  not the tile path. **NOT in this slice (deferred):** the pooled animated layer with
+  its own lifetime/motion (floating damage numbers) — animation still rides the
+  existing per-frame `overlay_strings` rebuild. F4 toggle "world text (SCT)" (OFF).
+  **EYEBALL CHECK (user, A/B via F4):** (1) combat SCT renders as RmlUi-font text,
+  colours/positions matching curses (toggle OFF), under any open menu. (2) **NEW
+  coverage — ZONE LABELS** (zone-manager labels on the map) render as RmlUi text with
+  the toggle ON. (3) **NEW coverage — DEBUG OVERLAYS** (enable scent/temp/vis debug
+  display) route through RmlUi too. (4) toggle OFF → all three fall back to the curses
+  `OutputChar` path identically. **WATCH:** (a) any `overlay_strings` source with a
+  per-entry alignment/multi-segment layout the simplified start-pixel approximates
+  (left/center/right offset is start-position only, per 4.1 flag (d)) — check zone
+  labels aren't horizontally drifted. (b) SCT in tile-mode no longer appears in the
+  RmlUi layer (the behavior delta above) — confirm that's acceptable.
+
+Next Tier-6 units: slice 4.2a eyeball → (slice 4.2b) the actual pooled animated text
+layer (own lifetime/motion, floating damage numbers — the architectural/novel half,
+NOT done by 4.2a which only generalized routing); slice 3 (on-map static labels —
+city/zone labels via world→screen DOM overlay). Both remain the architectural/novel
+part of the tier. §7
 world-text unblocks Tier-5 ranged. The deferred faction (Tier 2) also remains (needs the
 creature/npc-info F.2 component).
 
@@ -2038,6 +2076,20 @@ The answer to "will it look clean + support future floating damage numbers."
 - **Build:** in Tier 6, alongside migrating `overlay_strings`. Reuses the existing
   `rmlui_render_interface` GPU path; no new font system. Debug overlays
   (scent/rad/temp/vis) route through the same layer (dev-only emitters).
+
+- **MECHANISM PROVEN + RECONCILED (2026-06-16/17, supersedes a mid-course detour):**
+  the imperative layer is REAL, not the raw-atlas access the §7 wording first implied.
+  RmlUi 6.x exposes glyph layout through `FontEngineInterface::GenerateString` +
+  `RenderManager::MakeGeometry`/`Geometry::Render` (managed layer) — slice 4.1 proved
+  this end-to-end (SCT through `rmlui_layer::world_text_*`, eyeballed working), 4.2a
+  generalized it to ALL `overlay_strings`. **TOMBSTONE:** a mid-course plan
+  (`~/.claude/plans/continue-rmlui-migration-plan-md-drifting-river.md`) declared the
+  imperative path "infeasible — no imperative glyph access" and prescribed a DOM
+  overlay (`map_text_overlay.{h,cpp}` + `mapoverlay.rml`) re-synced per frame. That
+  infeasibility claim was WRONG (it predates the FontEngine discovery) — the DOM
+  module was NEVER built; on-map text is the imperative world-text layer. The DOM
+  approach stays only as a deferred fallback IF per-frame churn ever bites (it has
+  not). Do not resurrect the DOM plan.
 
 ---
 

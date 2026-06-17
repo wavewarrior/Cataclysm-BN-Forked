@@ -64,7 +64,6 @@
 #include "options.h"
 #include "output.h"
 #include "rml_screen.h"
-#include "lighting/rmlui_layer.h"
 #include "overlay_ordering.h"
 #include "overmap_location.h"
 #include "path_info.h"
@@ -3113,13 +3112,6 @@ void cata_tiles::draw( point dest, const tripoint_bub_ms &center, int width, int
     }
     // Refresh the sprite-animation frame context (wall-clock + option tuning) once.
     refresh_anim_frame();
-
-    // §7 world-text layer: clear last frame's on-map text every frame so it does
-    // not linger after an SCT animation ends. draw_sct_frame() re-adds the current
-    // SCT below (only while do_draw_sct). OFF unless the toggle is on.
-    if( world_text_rmlui_enabled() ) {
-        rmlui_layer::world_text_begin();
-    }
 
     // Hover-outline: holding Alt outlines ALL visible creatures (not just the one
     // under the cursor). Polled here since a bare modifier press may not trigger a
@@ -7064,13 +7056,7 @@ bool &world_text_rmlui_enabled()
 
 void cata_tiles::draw_sct_frame( std::multimap<point, formatted_text> &overlay_strings )
 {
-    const bool rml = world_text_rmlui_enabled();
-    // RmlUi world text always lays glyphs with the font engine; the curses path
-    // honours the ANIMATION_SCT_USE_FONT option for its font-vs-tile rendering.
-    const bool use_font = rml ? true : get_option<bool>( "ANIMATION_SCT_USE_FONT" );
-
-    // NOTE: world_text_begin() is called once per frame in cata_tiles::draw()
-    // (clears stale text after an SCT animation ends); here we only add.
+    const bool use_font = get_option<bool>( "ANIMATION_SCT_USE_FONT" );
 
     for( auto iter = SCT.vSCT.begin(); iter != SCT.vSCT.end(); ++iter ) {
         const point_bub_ms iD( iter->getPosX(), iter->getPosY() );
@@ -7084,20 +7070,7 @@ void cata_tiles::draw_sct_frame( std::multimap<point, formatted_text> &overlay_s
             int FG = msgtype_to_tilecolor( iter->getMsgType( ( j == 0 ) ? "first" : "second" ),
                                            iter->getStep() >= scrollingcombattext::iMaxSteps / 2 );
 
-            if( rml ) {
-                const auto direction = iter->getDirecton();
-                // Same start-position offset as the curses font path below.
-                const int direction_offset = ( -displace_XY( direction ).x + 1 ) * full_text_length / 2;
-                const point scr = player_to_screen( iD + point( direction_offset, 0 ) );
-                // FG is a windowsPalette index (same value the curses overlay path
-                // feeds windowsPalette[]) -> exact A/B colour fidelity.
-                const SDL_Color c = windowsPalette[FG];
-                const unsigned int rgba = ( static_cast<unsigned>( c.r ) << 24 ) |
-                                          ( static_cast<unsigned>( c.g ) << 16 ) |
-                                          ( static_cast<unsigned>( c.b ) << 8 ) | 0xFFu;
-                rmlui_layer::world_text_add( static_cast<float>( scr.x ),
-                                             static_cast<float>( scr.y ), sText, rgba );
-            } else if( use_font ) {
+            if( use_font ) {
                 const auto direction = iter->getDirecton();
                 // Compensate for string length offset added at SCT creation
                 // (it will be readded using font size and proper encoding later).

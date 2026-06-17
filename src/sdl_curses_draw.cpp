@@ -22,8 +22,10 @@
 #include "output.h"
 #include "overmap_ui.h"
 #include "point.h"
+#include "rml_screen.h"
 #include "sdl_geometry.h"
 #include "sdl_wrappers.h"
+#include "lighting/rmlui_layer.h"
 #include "sdltiles.h"       // ::tilecontext, ::overmap_tilecontext, ::fontwidth, …
 #include "wcwidth.h"
 
@@ -341,6 +343,13 @@ void cata_cursesport::curses_drawwindow( const catacurses::window &w )
         }
 
         // overlay strings
+        // §7 world-text layer: when enabled, route on-map overlay text (SCT, zone
+        // labels, debug overlays) through RmlUi's font engine instead of the curses
+        // OutputChar path below. Cleared once here, refilled from overlay_strings.
+        const bool wt_rml = world_text_rmlui_enabled();
+        if( wt_rml ) {
+            rmlui_layer::world_text_begin();
+        }
         point prev_coord;
         int x_offset = 0;
         int alignment_offset = 0;
@@ -369,6 +378,25 @@ void cata_cursesport::curses_drawwindow( const catacurses::window &w )
                 } else if( ft.alignment == text_alignment::right ) {
                     alignment_offset = full_text_length - 1;
                 }
+            }
+
+            if( wt_rml ) {
+                // Emit the whole string once (GenerateString lays out per-glyph
+                // advance); start pixel mirrors the curses path: window origin +
+                // alignment + the entry's map-pixel coord.
+                const int x0 = win->pos.x * ::fontwidth;
+                const int y0 = win->pos.y * ::fontheight;
+                const int x = x0 + ( x_offset - alignment_offset ) * map_font->width + coord.x;
+                const int y = y0 + coord.y;
+                const SDL_Color c = windowsPalette[ft.color];
+                const unsigned int rgba = ( static_cast<unsigned>( c.r ) << 24 ) |
+                                          ( static_cast<unsigned>( c.g ) << 16 ) |
+                                          ( static_cast<unsigned>( c.b ) << 8 ) | 0xFFu;
+                rmlui_layer::world_text_add( static_cast<float>( x ), static_cast<float>( y ),
+                                             ft.text, rgba );
+                prev_coord = coord;
+                x_offset = text.display_width();
+                continue;
             }
 
             int width = 0;
