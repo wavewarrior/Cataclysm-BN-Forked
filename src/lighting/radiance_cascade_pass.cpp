@@ -144,11 +144,20 @@ bool radiance_cascade_pass::init( gpu_device &dev, std::uint32_t tex_w, std::uin
     clear_texture( radiance_field_tex_ );
     clear_texture( cascade_tex_ );
 
-    field_pipeline_  = make_pipeline( dev.raw(), vert_, field_frag_ );
-    bounce_pipeline_ = make_pipeline( dev.raw(), vert_, bounce_frag_ );
-    if( !field_pipeline_ || !bounce_pipeline_ ) {
+    // Create + check each pipeline separately: a second SDL_CreateGPU* call
+    // clobbers the first's SDL_GetError(), so a combined check can't tell field
+    // from bounce. Both are needed; log whichever fails with its own error.
+    field_pipeline_ = make_pipeline( dev.raw(), vert_, field_frag_ );
+    if( !field_pipeline_ ) {
         DebugLogFL( DL::Error, DC::Main )
-                << "radiance_cascade_pass pipeline: " << SDL_GetError()
+                << "radiance_cascade_pass FIELD pipeline (st=0 sb=2): " << SDL_GetError()
+                << " — GI disabled, cascade bound as cleared black";
+        return false;
+    }
+    bounce_pipeline_ = make_pipeline( dev.raw(), vert_, bounce_frag_ );
+    if( !bounce_pipeline_ ) {
+        DebugLogFL( DL::Error, DC::Main )
+                << "radiance_cascade_pass BOUNCE pipeline (st=1 sb=1): " << SDL_GetError()
                 << " — GI disabled, cascade bound as cleared black";
         return false;
     }
