@@ -20,6 +20,42 @@
 | **Minigames** | One **narrow reusable char-grid RML widget** used only by the 5 minigames (they are literally grid games) — contained, not a general backend. |
 | **On-map text** | Migrate to an RmlUi-backed overlay. Architected as a **world-space text layer** (see §7) so it stays clean AND is the foundation for future floating damage numbers / world text. |
 
+## ★ ACTUAL FRONTIER — full code audit (2026-06-17)
+
+**The per-tier blocks below LAG the code badly — trust this banner + the ground
+truth, not the prose.** GROUND TRUTH = the `*_rmlui_enabled()` toggles in
+`src/rml_screen.h` (one per migrated screen) + `data/gui/*.{rml,rcss}` assets + git.
+Audit method: cross-referenced all 29 toggles + ~44 doc assets against a CLEAN working
+tree (everything committed). Repeatedly the prose said "in flight / deferred /
+uncommitted" for screens that are actually DONE + committed (worldfactory was the
+tell; the whole Tier-4 giant tier is the same).
+
+**DONE + COMMITTED (29 screens, through Tier 6):**
+- Tier 0 generics: uilist / query_popup / string_input (always-on, no toggle).
+- Tier 1: missions / scores / help / distraction / auto_note / diary.
+- Tier 2 (all 9): mutations / bionics / safemode / auto_pickup / computer /
+  construction / crafting / armor_layers / **faction**.
+- Tier 3: examine_item / inventory / advanced_inv / compare_items / description_view
+  (examine-tile).
+- **Tier 4 (ALL FOUR giants): options / worldfactory / main_menu / newcharacter.**
+- Tier 5: npctalk (`dialogue`) / trade / vending.
+- Tier 6: overmap (+ search) / `world_text` §7 on-map text layer.
+
+**GENUINELY REMAINING (no toggle, confirmed unstarted in code):**
+1. **ranged** (targeting UI, `ranged.cpp`) — the last interactive modal; was deferred.
+2. **Tier 7 — sidebar HUD** (the 53 `draw_*` panels) — architecturally hardest.
+3. **Tier 8 — F4 dev panel** (ImGui → RmlUi; still ImGui in `sdl_lighting_devui.cpp`).
+4. **Tier 9 — minigames** char-grid widget.
+5. **Tier 10 — RIP OUT** curses-SDL + ImGui — gated on 100% coverage (i.e. 1-4 above).
+
+**EYEBALL DEBT (committed, toggle OFF, user A/B owed):** most of the above DONE set
+shipped build-blind. The newest unverified: world_text 4.1/4.2a, description_view,
+faction, and the Tier-4 giants (options / newcharacter / main_menu / worldfactory).
+
+So the migration is ~90% by screen count; the remaining effort is **ranged + the
+three hard architectural tiers (7/8/9) + the rip-out** — NOT the modal/giant screens
+the prose still frames as open.
+
 ## Status / progress (2026-06-10)
 
 - **Tier 0 (uilist/query_popup/string_input) — DONE + eyeballed clean.** Toggles
@@ -1045,6 +1081,12 @@ is independently bisectable + revertible.
 
 ## Tier 4 — big bespoke menus (worldfactory / main_menu / options / newcharacter)
 
+> **STATUS (2026-06-17 audit): ALL FOUR GIANTS DONE + COMMITTED, eyeball owed.**
+> options / worldfactory / main_menu / newcharacter each have a committed
+> `*_rmlui_enabled()` toggle + assets (clean tree). The "ACTIVE PHASE" framing below
+> and any "in flight / uncommitted" per-screen notes are STALE — see the top frontier
+> banner. The tier is functionally complete; only the user A/B eyeball remains.
+
 ACTIVE PHASE (2026-06-15). The giant tier. LOC: main_menu 1219 < worldfactory 1641 <
 options 4196 < newcharacter 4337 (the plan's "~172K/177K" were file BYTE sizes). Plan
 mandate: *"build a form/tab-page sub-pattern HERE"* + *"Do NOT solo-charge worldfactory"*
@@ -1786,6 +1828,10 @@ batched). **ranged/targeting is the ONLY remaining Tier-5 screen and is intentio
 DEFERRED to Tier 6** — it is a live overlay tied to the map (world→screen projection),
 which the plan sequences AFTER the §7 world-text / Tier-6 overlay layer exists. So the
 modal Tier-5 work is done; ranged rides Tier 6.
+**UPDATE (2026-06-17): the §7 world-text layer now EXISTS (slices 4.1/4.2a committed),
+so ranged is UNBLOCKED.** It is the last interactive modal still on curses (no
+`*_rmlui_enabled` toggle, `ranged.cpp` has zero rml wiring) — see the top frontier
+banner. It is the natural next migration unit before the Tier 7/8/9 architectural tiers.
 
 ### Tier 6 progress (overmap_ui + on-map text + §7 world-text layer)
 
