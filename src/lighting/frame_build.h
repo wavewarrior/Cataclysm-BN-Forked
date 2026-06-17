@@ -36,9 +36,18 @@ struct frame_lighting_result {
     std::vector<gpu_emitter> snapshot_copy;
 };
 
+// Rebuild flags for decoupled per-tile buffer updates. Each buffer only
+// rebuilds when its actual dependency changed:
+//   structure — SDF, sun_sdf, sky_vis (depends on transparency_generation)
+//   vis       — FOV visibility mask (depends on player position / seen_cache)
+struct lighting_rebuild_flags {
+    bool structure = true;
+    bool vis = true;
+};
+
 // 1-bounce GI is computed on the GPU (radiance_cascade_pass); this only builds
-// + submits the emitter snapshot and per-tile SDF / sky-vis / vis (the latter
-// when rebuild_pertile). The HUD snapshot is filled when want_hud_snapshot.
+// + submits the emitter snapshot and per-tile SDF / sky-vis / vis. The HUD
+// snapshot is filled when want_hud_snapshot.
 //
 // skylight_bleed (0..1): indoor daylight bleed strength. 0 = the old binary
 // sky-vis (open sky 1.0 / roofed 0.0). >0 runs a wall-aware flood-fill that
@@ -54,7 +63,7 @@ struct frame_lighting_result {
 // diagonal (Stoneshard's mask-blur technique). Render-only (modulates final_rgb),
 // so gameplay LOS is untouched.
 frame_lighting_result build_and_submit_lighting( render_state &rs,
-        bool rebuild_pertile, bool want_hud_snapshot, float skylight_bleed = 0.0f,
+        lighting_rebuild_flags rebuild, bool want_hud_snapshot, float skylight_bleed = 0.0f,
         float vision_blur = 0.0f );
 
 } // namespace lighting

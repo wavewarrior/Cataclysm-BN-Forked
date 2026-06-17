@@ -129,23 +129,50 @@ auto build_lighting( lighting::render_state &rs ) -> bool
     // recompute every walk-step (the horde walk-lag); the bubble origin fires only on
     // an actual shift. Emitters refresh every frame outside this gate, so decoupling
     // from camera scroll does not freeze moving lights.
+    //
+    // P4: split rebuild_pertile into two independent gates so each buffer only
+    // rebuilds when its actual dependency changed:
+    //   rebuild_structure — SDF, sun_sdf, sky_vis (transparency_generation + z + origin)
+    //   rebuild_vis       — FOV visibility mask (player position change)
+    // When a door opens (structure++), vis does NOT need to rebuild. When the player
+    // walks in static terrain, only vis rebuilds — SDF/sun_sdf/sky_vis are skipped.
     static std::uint64_t last_gen = 0;
     static int           last_z = INT_MIN;
     static point         last_origin{ INT_MIN, INT_MIN };
-    bool rebuild_pertile = true;
+    static int           last_player_x = INT_MIN;
+    static int           last_player_y = INT_MIN;
+
+    lighting::lighting_rebuild_flags rebuild{};
     if( g && world_generator && world_generator->active_world ) {
         const int z = g->u.bub_pos().z();
         const point origin = g->m.get_abs_sub().raw().xy();
         // Read generation from the current level's cache.
         const auto &cache = g->m.get_cache_ref( z );
         const std::uint64_t gen = cache.transparency_generation;
-        rebuild_pertile = imgui_layer::visible()
-                          || gen != last_gen || z != last_z
-                          || origin != last_origin;
-        if( rebuild_pertile ) {
+
+        rebuild.structure = imgui_layer::visible()
+                            || gen != last_gen || z != last_z
+                            || origin != last_origin;
+
+        // vis depends on player position — the seen_cache shadowcast origin.
+        // When the player moves, FOV changes even if terrain hasn't.
+        // When terrain changes (structure rebuild), vis is already covered by
+        // rebuild.structure because seen_cache is rebuilt alongside transparency_cache.
+        const int px = g->u.bub_pos().x();
+        const int py = g->u.bub_pos().y();
+        rebuild.vis = imgui_layer::visible()
+                      || px != last_player_x || py != last_player_y
+                      || z != last_z;
+
+        if( rebuild.structure ) {
             last_gen = gen;
             last_z = z;
             last_origin = origin;
+        }
+        if( rebuild.vis ) {
+            last_player_x = px;
+            last_player_y = py;
+            last_z = z;
         }
     }
 
@@ -164,9 +191,11 @@ auto build_lighting( lighting::render_state &rs ) -> bool
         cursor_light_emitter::wz = static_cast<float>( g->u.bub_pos().z() );
     }
 
+    dbg( DL::Debug ) << "[render] build_and_submit_lighting START";
     lighting::frame_lighting_result fr =
-        lighting::build_and_submit_lighting( rs, rebuild_pertile, g_dbg_lighting,
+        lighting::build_and_submit_lighting( rs, rebuild, g_dbg_lighting,
                                              g_skylight_bleed, g_vision_blur );
+    dbg( DL::Debug ) << "[render] build_and_submit_lighting DONE, built_pertile=" << fr.built_pertile;
     rc_rebuild = fr.built_pertile;
     if( fr.built_pertile ) {
         s_emo.sdf_at_player      = fr.sdf_at_player;
@@ -667,19 +696,24 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
 
 void refresh_display()
 {
+    dbg( DL::Debug ) << "[render] refresh_display START";
     g_display.needupdate = false;
     g_display.lastupdate = SDL_GetTicks();
 
     auto &rs = lighting::get_render_state();
 
+    dbg( DL::Debug ) << "[render] begin_frame";
     auto ctx = begin_frame( rs );
     if( !ctx ) {
         return;
     }
 
     const bool rc_rebuild = build_lighting( rs );
+    dbg( DL::Debug ) << "[render] flush_and_gather_rc";
     flush_and_gather_rc( rs, *ctx, rc_rebuild );
+    dbg( DL::Debug ) << "[render] assemble_light_inputs";
     assemble_light_inputs( rs, *ctx );
+    dbg( DL::Debug ) << "[render] maybe_push_menu_background";
     maybe_push_menu_background( rs, *ctx );
 
     int proj_w = 0;
@@ -690,9 +724,15 @@ void refresh_display()
         proj_h = static_cast<int>( ctx->swapchain_h );
     }
 
+    dbg( DL::Debug ) << "[render] draw_lighting_overlays";
     draw_lighting_overlays( rs, *ctx );
+    dbg( DL::Debug ) << "[render] composite_ui_pass_a";
     composite_ui_pass_a( rs, *ctx, proj_w, proj_h );
+    dbg( DL::Debug ) << "[render] render_world_pass_w";
     render_world_pass_w( rs, *ctx, proj_w, proj_h );
+    dbg( DL::Debug ) << "[render] tonemap_pass_t";
     tonemap_pass_t( rs, *ctx );
+    dbg( DL::Debug ) << "[render] composite_swapchain_pass_b";
     composite_swapchain_pass_b( rs, *ctx, proj_w, proj_h );
+    dbg( DL::Debug ) << "[render] refresh_display COMPLETE";
 }

@@ -71,7 +71,7 @@ void gaussian_blur_tilefield( std::vector<float> &f, int W, int H, float sigma )
 } // namespace
 
 frame_lighting_result build_and_submit_lighting( render_state &rs,
-        bool rebuild_pertile, bool want_hud_snapshot, float skylight_bleed,
+        lighting_rebuild_flags rebuild, bool want_hud_snapshot, float skylight_bleed,
         float vision_blur )
 {
     ZoneScoped;
@@ -100,9 +100,15 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
     std::vector<float>   vis;      // per-tile visibility for soft vision falloff (x-major)
     int sdf_runtime_w = 0;
     int sdf_runtime_h = 0;
-    if( rebuild_pertile && g && world_generator && world_generator->active_world
-        && rs.sdf().ready() ) {
-        ZoneScopedN( "light_pertile_rebuild" );
+
+    const bool have_world = g && world_generator && world_generator->active_world
+                            && rs.sdf().ready();
+
+    if( !have_world ) {
+        // No active map — skip all per-tile computation. Emitters still update
+        // (main menu decorative emitter) but no SDF/vis/sky_vis buffers upload.
+        dbg( DL::Debug ) << "[lighting] have_world=false, skipping per-tile";
+    } else {
         map &m = get_map(); // non-const for i_at etc.
         const int zlev = g->u.bub_pos().z();
         const level_cache &mc = m.access_cache( zlev );
@@ -111,10 +117,41 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
         const int H = mapsize * SEEY;
         const int total = W * H;
 
-        // Guard transparency loop too — pre-fix this was UB if the cache
-        // hadn't been built yet (size 0). sdf+transparency now share one
-        // gate; either both populate or neither.
-        if( static_cast<int>( mc.transparency_cache.size() ) >= total ) {
+        dbg( DL::Debug ) << "[lighting] have_world=true, z=" << zlev
+                          << " mapsize=" << mapsize << " W=" << W << " H=" << H
+                          << " total=" << total
+                          << " rebuild.structure=" << rebuild.structure
+                          << " rebuild.vis=" << rebuild.vis;
+
+        // Sanity: check cache sizes before proceeding.
+        const auto trans_sz = mc.transparency_cache.size();
+        const auto seen_sz  = mc.seen_cache.size();
+        const auto cam_sz   = mc.camera_cache.size();
+        const auto out_sz   = mc.outside_cache.size();
+
+        if( trans_sz < static_cast<size_t>( total ) ) {
+            dbg( DL::Warn ) << "[lighting] transparency_cache undersized! "
+                               << "have=" << trans_sz << " need=" << total;
+        }
+        if( seen_sz < static_cast<size_t>( total ) ) {
+            dbg( DL::Warn ) << "[lighting] seen_cache undersized! "
+                               << "have=" << seen_sz << " need=" << total;
+        }
+
+        // Common supersample dimensions — needed by both structure and vis paths.
+        constexpr int ss = lighting::SDF_SUPERSAMPLE;
+        const int SW = W * ss;
+        const int SH = H * ss;
+
+        // ── Structure rebuild: SDF, sun_sdf, sky_vis ───────────────────────
+        if( rebuild.structure
+            && static_cast<int>( mc.transparency_cache.size() ) >= total ) {
+            ZoneScopedN( "light_pertile_rebuild" );
+
+            dbg( DL::Debug ) << "[lighting] structure_rebuild: trans=" << mc.transparency_cache.size()
+                              << " out=" << mc.outside_cache.size()
+                              << " total=" << total;
+
             // Pack float transparency_cache → uint8 (0=opaque, 255=transparent).
             transparency.resize( total );
             for( int i = 0; i < total; ++i ) {
@@ -122,14 +159,12 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
                 transparency[i] = static_cast<uint8_t>(
                     std::min( 255.0f, std::max( 0.0f, t * 255.0f ) ) );
             }
+
             // CPU Euclidean distance transform on an SDF_SUPERSAMPLE× finer grid:
             // replicate each tile's transparency into its SS×SS subcells (occluder
             // edges stay tile-aligned — correct for tile-walls), run the same DT,
             // then rescale subcell distances to TILE units (÷SS) so the shader's
             // cone trace is unchanged. Sub-tile-fine penumbra → tight + smooth.
-            const int ss = lighting::SDF_SUPERSAMPLE;
-            const int SW = W * ss;
-            const int SH = H * ss;
             std::vector<float> trans_ss( static_cast<size_t>( SW ) * SH );
             for( int x = 0; x < W; ++x ) {
                 for( int y = 0; y < H; ++y ) {
@@ -203,8 +238,9 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
             // DIRECT term is decoupled (shader gate sky_vis>0.99) so this never
             // fakes a sunbeam; artificial light is GPU-side, so no double-count.
             // strength==0 → exact binary behaviour (off / bisect). Runs under the
-            // rebuild_pertile gate, alongside the SDF DT.
-            if( skylight_bleed > 0.001f
+            // rebuild.structure gate, alongside the SDF DT.
+            // Gated on outside_cache_dirty: skip flood-fill when outside data hasn't changed.
+            if( skylight_bleed > 0.001f && mc.outside_cache_dirty.any()
                 && static_cast<int>( transparency.size() ) >= total ) {
                 constexpr int   K     = 8;      // bleed radius in tiles
                 constexpr float decay = 0.80f;  // per-step falloff
@@ -271,6 +307,35 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
                 }
             }
 
+            // Snapshot for HUD: what's the SDF / transparency at the player tile?
+            // sdf is SS-grid indexed now → sample the player tile's centre subcell.
+            const int ss_hud = lighting::SDF_SUPERSAMPLE;
+            const int pi = ( g->u.bub_pos().x() * ss_hud + ss_hud / 2 ) * ( H * ss_hud )
+                           + ( g->u.bub_pos().y() * ss_hud + ss_hud / 2 );
+            if( pi >= 0 && pi < static_cast<int>( sdf.size() ) ) {
+                result.sdf_at_player = sdf[pi];
+                dbg( DL::Debug ) << "sdf[player]: " << sdf[pi];
+            }
+            if( pi >= 0 && pi < static_cast<int>( mc.transparency_cache.size() ) ) {
+                result.trans_at_player = mc.transparency_cache[pi];
+            }
+            result.sdf_W    = W;
+            result.sdf_size = sdf.size();
+            result.built_pertile = true;
+        } // if rebuild.structure
+
+        // ── Vis rebuild: FOV visibility mask ───────────────────────────────
+        // Independent of structure — runs when player position changes even if
+        // terrain hasn't. The seen_cache shadowcast origin follows the player,
+        // so walking in static terrain only requires a vis rebuild.
+        if( rebuild.vis
+            && static_cast<int>( mc.seen_cache.size() ) >= total ) {
+            ZoneScopedN( "light_vis_build" );
+
+            dbg( DL::Debug ) << "[lighting] vis_rebuild: seen=" << mc.seen_cache.size()
+                              << " cam=" << mc.camera_cache.size()
+                              << " total=" << total;
+
             // Per-tile visibility for the soft vision falloff (effect 1+2).
             // Raw max(seen_cache, camera_cache) — the SAME float
             // apparent_light_helper reads, but the render path otherwise
@@ -284,65 +349,42 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
             // (tile-res bilinear smeared the rim ~1 tile; the SS grid sharpens
             // the inter-tile interpolation to ~1/SS tile). Per-tile value is
             // replicated into its SS×SS subcells (no sub-tile LOS data exists).
-            if( static_cast<int>( mc.seen_cache.size() ) >= total ) {
-                ZoneScopedN( "light_vis_build" );
-                // Per-tile visibility FIRST, so the blur radius is in tile units.
-                std::vector<float> vtile( total, 0.0f );
-                const bool have_cam =
-                    static_cast<int>( mc.camera_cache.size() ) >= total;
-                for( int x = 0; x < W; ++x ) {
-                    for( int y = 0; y < H; ++y ) {
-                        const float s = mc.seen_cache[ x * H + y ];
-                        const float c = have_cam ? mc.camera_cache[ x * H + y ] : 0.0f;
-                        vtile[ x * H + y ] = std::max( s, c );
-                    }
+
+            // Per-tile visibility FIRST, so the blur radius is in tile units.
+            std::vector<float> vtile( total, 0.0f );
+            const bool have_cam =
+                static_cast<int>( mc.camera_cache.size() ) >= total;
+            for( int x = 0; x < W; ++x ) {
+                for( int y = 0; y < H; ++y ) {
+                    const float s = mc.seen_cache[ x * H + y ];
+                    const float c = have_cam ? mc.camera_cache[ x * H + y ] : 0.0f;
+                    vtile[ x * H + y ] = std::max( s, c );
                 }
-                // Blur the FOV mask: shadowcasting through a narrow aperture
-                // (window) expands the visible cone in tile-sized jumps, so the
-                // beam is a hard staircase in the source. A tile-radius Gaussian
-                // smears the steps into a smooth diagonal (Stoneshard mask blur).
-                // Render-only — does not change gameplay LOS. vision_blur=0 = no-op.
-                gaussian_blur_tilefield( vtile, W, H, vision_blur );
-                // Replicate each (now-smoothed) tile value into its SS×SS subcells
-                // for the shader's SS-grid vis_bilinear (sub-tile interpolation on
-                // top of the blur).
-                vis.assign( static_cast<size_t>( SW ) * SH, 0.0f );
-                for( int x = 0; x < W; ++x ) {
-                    for( int y = 0; y < H; ++y ) {
-                        const float v  = vtile[ x * H + y ];
-                        const int   bx = x * ss;
-                        const int   by = y * ss;
-                        for( int sx = 0; sx < ss; ++sx ) {
-                            for( int sy = 0; sy < ss; ++sy ) {
-                                vis[ static_cast<size_t>( bx + sx ) * SH + ( by + sy ) ] = v;
-                            }
+            }
+            // Blur the FOV mask: shadowcasting through a narrow aperture
+            // (window) expands the visible cone in tile-sized jumps, so the
+            // beam is a hard staircase in the source. A tile-radius Gaussian
+            // smears the steps into a smooth diagonal (Stoneshard mask blur).
+            // Render-only — does not change gameplay LOS. vision_blur=0 = no-op.
+            gaussian_blur_tilefield( vtile, W, H, vision_blur );
+            // Replicate each (now-smoothed) tile value into its SS×SS subcells
+            // for the shader's SS-grid vis_bilinear (sub-tile interpolation on
+            // top of the blur).
+            vis.assign( static_cast<size_t>( SW ) * SH, 0.0f );
+            for( int x = 0; x < W; ++x ) {
+                for( int y = 0; y < H; ++y ) {
+                    const float v  = vtile[ x * H + y ];
+                    const int   bx = x * ss;
+                    const int   by = y * ss;
+                    for( int sx = 0; sx < ss; ++sx ) {
+                        for( int sy = 0; sy < ss; ++sy ) {
+                            vis[ static_cast<size_t>( bx + sx ) * SH + ( by + sy ) ] = v;
                         }
                     }
                 }
             }
-
-            // (1-bounce indirect light is now computed on the GPU by the
-            // radiance_cascade_pass — Step-3 Phase 2/3. The old CPU seed +
-            // wall-gated diffusion that filled `indirect` was removed in
-            // Phase 4; gi_strength still scales the GPU result in the sprite.)
-        }
-
-        // Snapshot for HUD: what's the SDF / transparency at the player tile?
-        // sdf is SS-grid indexed now → sample the player tile's centre subcell.
-        const int ss_hud = lighting::SDF_SUPERSAMPLE;
-        const int pi = ( g->u.bub_pos().x() * ss_hud + ss_hud / 2 ) * ( H * ss_hud )
-                       + ( g->u.bub_pos().y() * ss_hud + ss_hud / 2 );
-        if( pi >= 0 && pi < static_cast<int>( sdf.size() ) ) {
-            result.sdf_at_player = sdf[pi];
-            dbg( DL::Debug ) << "sdf[player]: " << sdf[pi];
-        }
-        if( pi >= 0 && pi < static_cast<int>( mc.transparency_cache.size() ) ) {
-            result.trans_at_player = mc.transparency_cache[pi];
-        }
-        result.sdf_W    = W;
-        result.sdf_size = sdf.size();
-        result.built_pertile = true;
-    }
+        } // if rebuild.vis
+    } // if have_world
 
     if( want_hud_snapshot ) {
         // Mirror snapshot to HUD on both in-game AND main menu so the
@@ -358,6 +400,8 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
                             sdf_runtime_w,
                             sdf_runtime_h,
                             std::move( sun_sdf ) );
+
+    dbg( DL::Debug ) << "[lighting] frame_build COMPLETE";
 
     return result;
 }
