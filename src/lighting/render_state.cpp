@@ -160,18 +160,20 @@ void render_state::init( SDL_Window *host_window )
         // blit, which then routes through the sprite.frag debug_mode) if the
         // combo is unsupported.
         {
+            // SDL_GPU forbids SAMPLER + GRAPHICS_STORAGE_READ on a single texture
+            // (D3D12 cannot express both; the Metal backend tolerates it, which is
+            // why this only crashed on Win11). sprite.frag reads the mask via
+            // .Load() as a fragment storage texture (the proven IndirectTex/rc
+            // path), so COLOR_TARGET | GRAPHICS_STORAGE_READ is all it needs; the
+            // Phase-1 debug blit routes through sprite.frag debug_mode instead.
             SDL_GPUTextureFormat mask_fmt = SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT;
-            const SDL_GPUTextureUsageFlags mask_usage_full =
-                SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER |
+            const SDL_GPUTextureUsageFlags mask_usage =
+                SDL_GPU_TEXTUREUSAGE_COLOR_TARGET |
                 SDL_GPU_TEXTUREUSAGE_GRAPHICS_STORAGE_READ;
-            SDL_GPUTextureUsageFlags mask_usage = mask_usage_full;
             if( !SDL_GPUTextureSupportsFormat( device_.raw(), mask_fmt,
-                    SDL_GPU_TEXTURETYPE_2D, mask_usage_full ) ) {
-                mask_usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET |
-                             SDL_GPU_TEXTUREUSAGE_GRAPHICS_STORAGE_READ;
-                dbg( DL::Warn ) << "render_state: shadow_mask RGBA16F COLOR|SAMPLER|"
-                                "STORAGE_READ unsupported; dropping SAMPLER (debug "
-                                "blit falls back to sprite.frag debug_mode).";
+                    SDL_GPU_TEXTURETYPE_2D, mask_usage ) ) {
+                dbg( DL::Warn ) << "render_state: shadow_mask RGBA16F "
+                                "COLOR|STORAGE_READ unsupported.";
             }
             shadow_mask_ = std::make_unique<ui_composite_target>();
             shadow_mask_->init( device_, pw, ph, mask_fmt, mask_usage );
