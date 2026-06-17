@@ -120,15 +120,22 @@ auto build_lighting( lighting::render_state &rs ) -> bool
     // P3: gate SDF rebuild on transparency_generation change, not turn.
     // Creatures moving don't change the SDF (they're emitters only, not occluders).
     // Only terrain/furniture/field/vehicle transparency changes matter.
+    //
+    // Origin term tracks the BUBBLE (abs-sub) origin, NOT the camera. The SDF/vis/
+    // skyvis are bubble-indexed (W=H=mapsize*SEEX, transparency_cache[x*H+y]), and
+    // light_pos reaches the shader in bubble-tile coords, so panning the camera one
+    // tile per step does NOT change their content — only the reality bubble shifting
+    // (map reload) does. The old camera-origin term forced a full 2x supersampled DT
+    // recompute every walk-step (the horde walk-lag); the bubble origin fires only on
+    // an actual shift. Emitters refresh every frame outside this gate, so decoupling
+    // from camera scroll does not freeze moving lights.
     static std::uint64_t last_gen = 0;
     static int           last_z = INT_MIN;
     static point         last_origin{ INT_MIN, INT_MIN };
     bool rebuild_pertile = true;
     if( g && world_generator && world_generator->active_world ) {
         const int z = g->u.bub_pos().z();
-        const point origin = tilecontext
-                             ? tilecontext->get_tile_map_origin().raw()
-                             : point{ INT_MIN, INT_MIN };
+        const point origin = g->m.get_abs_sub().raw().xy();
         // Read generation from the current level's cache.
         const auto &cache = g->m.get_cache_ref( z );
         const std::uint64_t gen = cache.transparency_generation;

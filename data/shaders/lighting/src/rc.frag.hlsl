@@ -24,6 +24,11 @@ StructuredBuffer<GpuEmitter> Emitters : register(t0, space2);
 StructuredBuffer<float>      SdfBuf   : register(t1, space2);
 // P1: contribution epsilon — skip shadow march when atten is negligible.
 static const float LIGHT_EPS = 0.004;
+// P2: per-probe shadow-march budget. Only the RC_K strongest in-range emitters
+// (by atten) get a full trace_shadow; weaker ones add unshadowed. Bounds this
+// pass at probes*RC_K*steps regardless of horde size — the horde-TDR fix. GI is
+// indirect, so fewer shadow-casters than the direct (sprite) K is invisible.
+static const int RC_K = 8;
 
 cbuffer RcParams : register(b0, space3) {
     uint  emitter_count;
@@ -90,6 +95,14 @@ float4 main(VS_OUT i) : SV_Target0 {
 
     float3 gi = float3(0.0, 0.0, 0.0);
     const uint me = min(emitter_count, 8192u);
+
+    // P2: K-strongest budget — track the RC_K strongest in-range emitters by
+    // atten. 64 slots cover extreme horde density (RC_K is the active cap).
+    uint  top_idx[64];
+    float top_val[64];
+    int   top_n = 0;
+
+    // --- PASS 1: accumulate unshadowed GI + track K-max candidates ---
     [loop] for(uint ei = 0u; ei < me; ++ei) {
         const GpuEmitter e = Emitters[ei];
         const float3 e_pos     = e.pos_radius.xyz;
@@ -101,12 +114,45 @@ float4 main(VS_OUT i) : SV_Target0 {
         const float  dist = length(dv);
         if(dist >= e_radius || dist < 0.01) continue;
         const float  atten  = 1.0 - pow(saturate(dist / e_radius), e_falloff);
-        // P1: skip shadow march when contribution is negligible.
+        // P1: skip negligible contributions entirely — no shadow march needed.
         if(atten <= LIGHT_EPS) continue;
-        const float2 dir    = dv / max(dist, 0.001);
-        const float  shadow = trace_shadow(probe, dir, dist, shadow_k, (int)shadow_steps);
         const float3 rgb = (e_color.x < 0.01 && e_color.y < 0.01 && e_color.z < 0.01)
                            ? float3(1.0, 1.0, 1.0) : e_color;
+        // Unshadowed contribution (always added — weaker lights still fill GI).
+        gi += rgb * atten;
+
+        // Track K-strongest for full shadow trace (inline selection, no sort).
+        if(top_n < RC_K) {
+            top_idx[top_n] = ei;
+            top_val[top_n] = atten;
+            ++top_n;
+        } else if(atten > top_val[0]) {
+            int min_i = 0;
+            for(int mi = 1; mi < top_n; ++mi) {
+                if(top_val[mi] < top_val[min_i]) min_i = mi;
+            }
+            top_idx[min_i] = ei;
+            top_val[min_i] = atten;
+        }
+    }
+
+    // --- PASS 2: full shadow trace for the K strongest candidates ---
+    [loop] for(int ti = 0; ti < top_n; ++ti) {
+        const uint ei = top_idx[ti];
+        const GpuEmitter e = Emitters[ei];
+        const float3 e_pos     = e.pos_radius.xyz;
+        const float  e_radius  = e.pos_radius.w;
+        const float3 e_color   = e.color_falloff.xyz;
+        const float  e_falloff = e.color_falloff.w;
+        const float2 dv   = e_pos.xy - probe;
+        const float  dist = length(dv);
+        const float  atten  = 1.0 - pow(saturate(dist / e_radius), e_falloff);
+        const float3 rgb = (e_color.x < 0.01 && e_color.y < 0.01 && e_color.z < 0.01)
+                           ? float3(1.0, 1.0, 1.0) : e_color;
+        // Subtract unshadowed (added in pass 1) and re-add with shadow.
+        gi -= rgb * atten;
+        const float2 dir    = dv / max(dist, 0.001);
+        const float  shadow = trace_shadow(probe, dir, dist, shadow_k, (int)shadow_steps);
         gi += rgb * atten * shadow;
     }
     return float4(gi, 1.0);
