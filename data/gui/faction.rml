@@ -1,0 +1,27 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="faction.rcss"/>
+</head>
+<body data-model="faction">
+    <!-- faction_manager::display: a 4-tab list+detail screen (Followers / Other
+         factions / Lore / Creatures). Tab bar (bound vector) over the shared
+         theme .tabs/.tab; left list of the current tab's entries; right detail
+         pane = the selected entry's *_faction_info_text() (or the lore snippet)
+         run through cata_text_to_rml. Render-only — the keyboard loop owns
+         navigation, CONFIRM (talk) and SWAPTONPC. -->
+    <div class="panel fac-panel">
+        <div class="tabs">
+            <div class="tab" data-for="t : tabs" data-class-active="t.selected"
+                 data-rml="t.label_rml"></div>
+        </div>
+        <div class="fac-cols">
+            <div class="fac-list scroll-pane">
+                <div class="item" data-for="row : rows" data-class-selected="row.selected"
+                     data-rml="row.text_rml"></div>
+            </div>
+            <div class="fac-detail scroll-pane" data-rml="detail_rml"></div>
+        </div>
+    </div>
+</body>
+</rml>

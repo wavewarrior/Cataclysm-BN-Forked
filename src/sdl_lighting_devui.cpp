@@ -434,6 +434,7 @@ static void draw_rmlui_tab()
         ImGui::Checkbox( "vending", &vending_rmlui_enabled() );
         ImGui::Checkbox( "npc dialogue", &dialogue_rmlui_enabled() );
         ImGui::Checkbox( "examine description", &description_view_rmlui_enabled() );
+        ImGui::Checkbox( "faction manager", &faction_rmlui_enabled() );
     }
     if( ImGui::CollapsingHeader( "System menus" ) ) {
         ImGui::Checkbox( "options", &options_rmlui_enabled() );

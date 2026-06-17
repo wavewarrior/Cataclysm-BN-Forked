@@ -514,13 +514,45 @@
     THAT now — every conforming screen added while the giants stay on curses is
     effort toward an endgame that won't arrive.
 
-### Tier 2 status (2026-06-11): COMPLETE except faction (deferred)
+### Tier 2 status (2026-06-17): COMPLETE (all 9, faction included)
 
-8 of 9 Tier-2 screens DONE: mutations / bionics / safemode / auto_pickup /
-computer terminal / construction / crafting (eyeballed) / armor_layers. **faction
-DEFERRED** — its detail panes ride the Tier-3-era creature/npc-info F.2 component
-AND it needs an interface refactor of `npc::faction_display` (split draw from
-state); do it after that component lands, not before.
+9 of 9 Tier-2 screens DONE: mutations / bionics / safemode / auto_pickup /
+computer terminal / construction / crafting (eyeballed) / armor_layers / **faction**.
+
+- **Tier 2 screen #9: faction manager (faction_manager::display) — CODE-COMPLETE +
+  BUILD-GREEN (faction.cpp.o 08:33 / mtype.cpp.o 08:36 / npc.cpp.o 08:37 all newer
+  than source; binary relinked 08:39:47, fresh mtime), TOGGLE OFF, EYEBALL OWED,
+  UNCOMMITTED.** The long-deferred Tier-2 screen, unblocked by doing the refactor +
+  the npc-info text inline (the "creature/npc-info F.2 component" the deferral waited
+  on turned out to split: the `extended_description()` half shipped as Tier-3 #2's
+  examine screen; this screen needs the COMPACT `*_faction_display` text, produced
+  here as parallel `faction_info_text()` methods). 4-tab (Followers / Other factions
+  / Lore / Creatures) list+detail screen — bionics shape. `data/gui/faction.{rml,rcss}`.
+  STRUCTURAL POINTS: (1) **the flagged refactor, done:** `npc::faction_display`
+  computed `retval` (radio/interaction-range flags the input loop consumes) DURING the
+  curses draw → extracted `npc::follower_interaction_flag()` and now set the flags in
+  the input LOOP (after `guy = followers[selection]`), so CONFIRM/SWAPTONPC keep
+  working when the RmlUi path skips the draw. The curses draw still draws (its retval
+  capture dropped, flags now loop-set) — behaviour-preserving. (2) **3 parallel text
+  producers** (`npc::faction_info_text` / `faction::faction_info_text` /
+  `mtype::faction_info_text`) reproduce the per-tab detail as colour-tagged strings;
+  the curses `*_faction_display` draw fns are LEFT PRISTINE (armor_layers/
+  character_display precedent — duplicated content, byte-faithful A/B). (3) lore tab =
+  the snippet translated string directly. (4) render-only doc; keyboard owns nav +
+  CONFIRM/SWAPTONPC; rml_data before rml for teardown. (5) **latent curses bug found,
+  NOT fixed (surgical):** `npc::faction_display` indexes `skill_strs[1]/[2]`
+  unconditionally → would crash a follower with <3 non-combat skills; the new
+  `faction_info_text` GUARDS it (emits only present entries). F4 toggle "faction
+  manager" (OFF). **EYEBALL CHECK (user, A/B via F4) — DIFF THE TEXT per tab (the
+  producers are from-scratch reconstructions):** (1) **★ FOLLOWERS** — the detail pane
+  matches curses (Attitude/Status/Condition/Hunger/Thirst/Fatigue/Wielding/skills + the
+  can-see line: "Within interaction range" / radio variants) AND **CONFIRM (talk) +
+  SWAPTONPC still work** (the refactor's make-or-break: the flag is loop-set now).
+  (2) OTHER FACTIONS — attitude/strength/desc. (3) LORE — snippet text. (4) CREATURES
+  — symbol+name list, detail = difficulty/origin/size/species/senses/abilities/desc.
+  (5) tabs switch (NEXT_TAB / click), list cursor moves, empty tabs show the right
+  "You have no…" message. **WATCH:** long lists → no auto-scroll-into-view (same as
+  prior screens); creature/faction detail pre-folded width is gone (native wrap).
 
 ### Tier 3 progress (item-info family)
 
@@ -563,8 +595,8 @@ state); do it after that component lands, not before.
 
 - **Tier 3 screen #2: examine-tile description view (game::extended_description) —
   CODE-COMPLETE + BUILD-GREEN (descriptions.cpp.o 07:58:48 newer than source 07:57:06;
-  binary relinked 07:59:47, fresh mtime), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.**
-  The "examine surroundings → describe this tile" screen ([c] creatures / [f]
+  binary relinked 07:59:47, fresh mtime), TOGGLE OFF, EYEBALL OWED, COMMITTED
+  `a42d96a8e9`.** The "examine surroundings → describe this tile" screen ([c] creatures / [f]
   furniture / [t] terrain / close). **SCOPE CLARIFICATION (research finding — the
   cadence note's "creature/npc-info F.2 component" splits in two):** this screen uses
   `Creature/furn/ter::extended_description()` — a finished `colorize()` STRING — so it

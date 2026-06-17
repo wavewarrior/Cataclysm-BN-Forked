@@ -183,4 +183,8 @@ bool &world_text_rmlui_enabled();
 // furniture / terrain extended_description() text pane. Render-only RmlUi doc.
 bool &description_view_rmlui_enabled();
 
+// Faction manager (faction_manager::display): 4-tab list+detail screen
+// (followers / factions / lore / creatures). Render-only RmlUi doc.
+bool &faction_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H
