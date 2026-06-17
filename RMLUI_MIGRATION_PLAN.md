@@ -1895,7 +1895,7 @@ careful build-blind pass (faction precedent: parallel `_lines()` producers, curs
     with intricate bar/table layout + confidence math — each needs its own lines-extraction,
     and the hit-chance/confidence numbers are the whole point.
   **SLICE 2a — DONE + BUILD-GREEN (ranged.cpp.o 10:41:18 newer than source; binary relinked
-  10:41:21), TOGGLE OFF, EYEBALL OWED (partial — aim readout stubbed), UNCOMMITTED.**
+  10:41:21), TOGGLE OFF, EYEBALL OWED (partial — aim readout stubbed), COMMITTED `3109aa26b4`.**
   `target_ui::panel_text()` builds draw_ui_window's shallow sections (title / cursor /
   gun+recoil OR spell / target-info via `print_info_text` / turret list / controls) as one
   colour-tagged `body_rml` string (→ cata_text_to_rml in sync). New `data/gui/ranged.{rml,rcss}`,

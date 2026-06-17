@@ -292,18 +292,22 @@ void render_state::begin_lighting_frame( const frame_light_inputs &in )
     // from the sdf_pass, sampler from this object. Caller only provides
     // what it alone knows (camera, time, tile geometry, ambient).
     SDL_GPUBuffer  *ebuf = collector_ ? collector_->emitter_buffer() : nullptr;
-    // SDF buffer / sky_vis texture only get exposed to the shader once at
-    // least one upload has populated them. Until then, the bytes are
-    // undefined → the shader's shadow march would read s≈0 → shadow=0 and
-    // zero out all emitter contribution past ~1 tile. Surface as null +
-    // sdf_map_w/h=0 to take the no-SDF code path in the shader.
-    // SDF + sky_vis are fragment storage buffers now (Metal mis-binds
-    // sampler-texture Load → returned 0 for every fragment).
+    // The four SDF-family storage buffers are allocated unconditionally in
+    // sdf_pass::init (non-null regardless of populated()). Bind them ALWAYS so
+    // every declared fragment storage-buffer slot is filled: the sprite pipeline
+    // reflects 5 storage buffers, and on D3D12 leaving a declared SRV slot
+    // unbound trips "Missing fragment storage buffer binding!" → device removed
+    // (this was the crash — !sdf_ready frames nulled these, so a lit segment
+    // bound <5). Read-safety is handled SEPARATELY: sw/sh below stay 0 until
+    // populated, so the shader's sdf_map_w>0 gate never reads the (until then
+    // undefined) bytes. So do NOT null these on !sdf_ready.
+    // SDF + sky_vis are fragment storage buffers (Metal mis-binds sampler-texture
+    // Load → returned 0 for every fragment).
     const bool      sdf_ready = sdf_.populated();
-    SDL_GPUBuffer  *sbuf = sdf_ready ? sdf_.sdf_buffer()      : nullptr;
-    SDL_GPUBuffer  *ssun = sdf_ready ? sdf_.sun_sdf_buffer()  : nullptr; // Phase 2.3 wall-only sun SDF
-    SDL_GPUBuffer  *kvis = sdf_ready ? sdf_.sky_vis_buffer()  : nullptr;
-    SDL_GPUBuffer  *vbuf = sdf_ready ? sdf_.vis_buffer()      : nullptr;
+    SDL_GPUBuffer  *sbuf = sdf_.sdf_buffer();
+    SDL_GPUBuffer  *ssun = sdf_.sun_sdf_buffer();  // Phase 2.3 wall-only sun SDF
+    SDL_GPUBuffer  *kvis = sdf_.sky_vis_buffer();
+    SDL_GPUBuffer  *vbuf = sdf_.vis_buffer();
     // GI source for the sprite's IndirectTex: the GPU radiance-cascade gather
     // (Step-3 Phases 2/3, single-bounce). The CPU diffusion path was retired in
     // Phase 4 — RC is the sole GI now. cascade_tex_ is cleared at init, so it is

@@ -666,16 +666,19 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                                                  &storage_binding.buffer, 1 );
 
                 // Fragment resource layout (space2), t-order sampled → storage
-                // textures → storage buffers (Step-3 Phase 1b):
+                // textures → storage buffers (Step-3 Phase 1b + shadow mask):
                 //   sampler slot 0  → Atlas       (t0, per-segment)
                 //   stor-tex slot 0 → IndirectTex (t1, 1-bounce GI texture)
-                //   stor-buf slot 0 → Emitters    (t2)
-                //   stor-buf slot 1 → SdfBuf       (t3)
-                //   stor-buf slot 2 → SkyVisBuf    (t4)
-                //   stor-buf slot 3 → VisBuf       (t5)
+                //   stor-tex slot 1 → ShadowMask  (t2, silhouette sun shadow)
+                //   stor-buf slot 0 → Emitters    (t3)
+                //   stor-buf slot 1 → SdfBuf       (t4)
+                //   stor-buf slot 2 → SkyVisBuf    (t5)
+                //   stor-buf slot 3 → VisBuf       (t6)
+                //   stor-buf slot 4 → SunSdfBuf    (t7)
                 // Textures and buffers are SEPARATE SDL binding arrays. All
-                // per-tile reads are gated by sdf_map_w>0 in the shader, so a
-                // not-yet-ready (null) resource is safe to leave unbound.
+                // per-tile reads are gated by sdf_map_w>0 in the shader; the
+                // declared slots must still be bound on D3D12 (see
+                // bind_lighting_resources).
                 bind_lighting_resources( rp );
 
                 const SDL_GPUViewport vp{
@@ -859,21 +862,22 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                 SDL_GPUTexture *stex[2] = { lp_indirect_tex, lp_shadow_mask };
                 SDL_BindGPUFragmentStorageTextures( rp, /*first_slot=*/0, stex, 2 );
             }
-            // Storage BUFFER slots 0..4 → t3..t7 (after the 2 storage textures).
-            // One call so a later bind can't zero an earlier slot; rungs preserve
-            // not-ready (no-SDF) frames. Slot 4 = SunSdfBuf (Phase 2.3), gated in
-            // lockstep with lp_sdf_buf (both null on not-ready frames → shader's
-            // sdf_map_w==0 path skips the reads).
+            // Storage BUFFER slots 0..4 → t3..t7 (after the 2 storage textures):
+            // Emitters, SdfBuf, SkyVisBuf, VisBuf, SunSdfBuf. The sprite pipeline
+            // declares ALL FIVE, so this is strictly all-or-none: a PARTIAL bind
+            // (the old 3- or 1-buffer fallbacks) leaves declared SRV slots unbound
+            // → D3D12 "Missing fragment storage buffer binding!" → device removed.
+            // All five producers allocate their buffer unconditionally at init
+            // (emitter_collector ctor + sdf_pass::init), so on the tile batcher
+            // they are non-null whenever render_state is ready; the shader gates
+            // every per-tile read on sdf_map_w>0 / emitter_count>0, so binding an
+            // unpopulated buffer is read-safe. The shadow/UI batchers leave them
+            // null → bind nothing (they declare no storage buffers). Bound in ONE
+            // call so a later bind can't zero an earlier slot.
             if( lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf && lp_vis_buf && lp_sun_sdf_buf ) {
                 SDL_GPUBuffer *sbufs[5] = { lp_emitter_buf, lp_sdf_buf, lp_sky_vis_buf,
                                             lp_vis_buf, lp_sun_sdf_buf };
                 SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0, sbufs, 5 );
-            } else if( lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf ) {
-                SDL_GPUBuffer *sbufs[3] = { lp_emitter_buf, lp_sdf_buf, lp_sky_vis_buf };
-                SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0, sbufs, 3 );
-            } else if( lp_emitter_buf ) {
-                SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0,
-                                                   &lp_emitter_buf, 1 );
             }
         }
 };
