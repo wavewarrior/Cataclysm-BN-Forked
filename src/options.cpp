@@ -2363,6 +2363,26 @@ void options_manager::add_options_graphics()
          translate_marker( "Set which renderer to use.  Requires restart." ), renderer_list,
          default_renderer, COPT_CURSES_HIDE );
 
+    // SDL_GPU backend for the lighting renderer (distinct from RENDERER above,
+    // which is the legacy 2D mirror SDL_Renderer). "auto" lets SDL pick the
+    // platform default (Direct3D 12 on Windows, Metal on macOS). Windows defaults
+    // to Vulkan because some Direct3D 12 drivers reject the lighting shaders'
+    // pipelines (SDL_shadercross reflection / root-signature mismatch); Vulkan is
+    // unaffected. An unavailable choice (e.g. Vulkan on macOS) falls back to auto.
+    std::string gpu_driver_default = "auto";
+#   if defined(_WIN32)
+    gpu_driver_default = "vulkan";
+#   endif
+    add( "GPU_DRIVER", graphics, translate_marker( "GPU rendering backend" ),
+         translate_marker( "Backend for the SDL_GPU lighting renderer.  'auto' lets SDL choose.  Vulkan avoids some Direct3D 12 driver issues on Windows.  Requires restart." ),
+    {
+        { "auto", translate_marker( "Auto" ) },
+        { "vulkan", translate_marker( "Vulkan" ) },
+        { "direct3d12", translate_marker( "Direct3D 12" ) },
+        { "metal", translate_marker( "Metal" ) },
+    },
+    gpu_driver_default, COPT_CURSES_HIDE );
+
 #if defined(SDL_HINT_RENDER_BATCHING)
     add( "RENDER_BATCHING", graphics, translate_marker( "Allow render batching" ),
          translate_marker( "Use render batching for 2D render API to make it more efficient.  Requires restart." ),

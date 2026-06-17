@@ -91,14 +91,6 @@ bool radiance_cascade_pass::init( gpu_device &dev, std::uint32_t tex_w, std::uin
     const std::string vert_src   = load_lighting_shader_source( "tonemap.vert.hlsl" );
     const std::string field_src  = load_lighting_shader_source( "rc.frag.hlsl" );
     const std::string bounce_src = load_lighting_shader_source( "rc_bounce.frag.hlsl" );
-    // Liveness probe: confirms the running game actually loaded THIS edited
-    // rc.frag from datadir (vs a stale synced/copied data/ dir). If this tag is
-    // absent, the shader edits are not reaching the binary — fix deployment, not
-    // the shader.
-    DebugLogFL( DL::Info, DC::Main )
-            << "rc.frag liveness: field_src len=" << field_src.size()
-            << " has_tag_j=" << ( field_src.find( "rc_field_tag_j" ) != std::string::npos ? 1 : 0 );
-
     auto v  = compile_graphics_shader( dev, vert_src, "main",
                                        SDL_SHADERCROSS_SHADERSTAGE_VERTEX, "rc.vert" );
     auto ff = compile_graphics_shader( dev, field_src, "main",

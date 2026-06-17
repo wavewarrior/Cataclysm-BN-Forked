@@ -4,6 +4,7 @@
 #include <string>
 
 #include "debug.h"
+#include "options.h"
 
 #define dbg(x) DebugLogFL((x), DC::SDL)
 
@@ -41,7 +42,20 @@ void gpu_device::init( SDL_Window *window, bool debug, bool vsync )
         SDL_GPU_SHADERFORMAT_DXIL  |
         SDL_GPU_SHADERFORMAT_MSL;
 
-    device.reset( SDL_CreateGPUDevice( formats, debug, /*name=*/nullptr ) );
+    // Backend chosen by the GPU_DRIVER option ("auto" → nullptr → SDL picks the
+    // platform default). Windows defaults to "vulkan" (some D3D12 drivers reject
+    // the lighting pipelines — SDL_shadercross root-signature mismatch). If the
+    // requested driver is unavailable (e.g. "vulkan" on macOS, where only Metal
+    // exists), fall back to auto so we never hard-fail to a black window.
+    const std::string gpu_driver = get_option<std::string>( "GPU_DRIVER" );
+    const char *driver_name = ( gpu_driver.empty() || gpu_driver == "auto" )
+                              ? nullptr : gpu_driver.c_str();
+    device.reset( SDL_CreateGPUDevice( formats, debug, driver_name ) );
+    if( !device && driver_name ) {
+        dbg( DL::Warn ) << "SDL_CreateGPUDevice(driver='" << gpu_driver << "') failed: "
+                        << SDL_GetError() << " — falling back to auto driver";
+        device.reset( SDL_CreateGPUDevice( formats, debug, /*name=*/nullptr ) );
+    }
     if( !device ) {
         const std::string msg = std::string( "SDL_CreateGPUDevice failed: " ) + SDL_GetError();
         dbg( DL::Error ) << msg;
