@@ -1,3 +1,4 @@
+// SHADER_BUILD_TAG: rc_field_tag_b
 // Radiance-cascade GI gather — Step-3 Phase 2 (single cascade).
 //
 // One fragment = one probe = one map tile. For its tile centre, gather occluded
