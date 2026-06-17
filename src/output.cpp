@@ -1851,6 +1851,32 @@ void scrollingcombattext::add( point pos, direction p_oDir,
             }
         }
 
+        // Phase 1: Radial position jitter in screen-space pixels.
+        // Count entries near this position and compute a radial offset.
+        const int proximity_radius = 3;
+        int nearby_count = 0;
+        for( const auto &entry : vSCT ) {
+            if( std::abs( entry.getInitPosX() - pos.x ) <= proximity_radius &&
+                std::abs( entry.getInitPosY() - pos.y ) <= proximity_radius ) {
+                ++nearby_count;
+            }
+        }
+
+        point jitter{ 0, 0 };
+        if( nearby_count > 0 ) {
+            // Radial distribution: angle = count * 45 degrees, radius ~2 pixels.
+            constexpr double pi_over_four = 3.14159265358979323846 / 4.0;
+            const double angle = nearby_count * pi_over_four;
+            jitter.x = static_cast<int>( std::cos( angle ) * 2 );
+            jitter.y = static_cast<int>( std::sin( angle ) * 2 );
+        }
+
+        // Phase 1: FIFO eviction — enforce max entries (readable from options).
+        const int max_sct_entries = get_option<int>( "ANIMATION_SCT_MAX_ENTRIES" );
+        while( static_cast<int>( vSCT.size() ) >= max_sct_entries && !vSCT.empty() ) {
+            vSCT.erase( vSCT.begin() );
+        }
+
         // in tiles, SCT that scroll downwards are inserted at the beginning of the vector to prevent
         // oversize ASCII tiles overdrawing messages below them.
         if( tiled && ( p_oDir == direction::SOUTHWEST || p_oDir == direction::SOUTH ||
@@ -1863,8 +1889,9 @@ void scrollingcombattext::add( point pos, direction p_oDir,
                     iter.advanceStepOffset();
                 }
             }
-            vSCT.insert( vSCT.begin(), cSCT( pos, p_oDir, p_sText, p_gmt, p_sText2, p_gmt2,
-                                             p_sType ) );
+            cSCT new_entry( pos, p_oDir, p_sText, p_gmt, p_sText2, p_gmt2, p_sType );
+            new_entry.set_jitter_offset( jitter );
+            vSCT.insert( vSCT.begin(), std::move( new_entry ) );
 
         } else {
             //Message offset: this time in reverse.
@@ -1874,7 +1901,9 @@ void scrollingcombattext::add( point pos, direction p_oDir,
                     iter->advanceStepOffset();
                 }
             }
-            vSCT.emplace_back( pos, p_oDir, p_sText, p_gmt, p_sText2, p_gmt2, p_sType );
+            cSCT new_entry( pos, p_oDir, p_sText, p_gmt, p_sText2, p_gmt2, p_sType );
+            new_entry.set_jitter_offset( jitter );
+            vSCT.emplace_back( std::move( new_entry ) );
         }
 
     }
@@ -1996,6 +2025,67 @@ void scrollingcombattext::removeCreatureHP()
             vSCT.erase( iter );
             break;
         }
+    }
+}
+
+sct_damage_type scrollingcombattext::from_game_dt( damage_type dt )
+{
+    switch( dt ) {
+        case DT_BASH:
+            return sct_damage_type::bash;
+        case DT_CUT:
+            return sct_damage_type::cut;
+        case DT_STAB:
+            return sct_damage_type::stab;
+        case DT_ACID:
+            return sct_damage_type::acid;
+        case DT_HEAT:
+            return sct_damage_type::heat;
+        case DT_COLD:
+            return sct_damage_type::cold;
+        case DT_DARK:
+            return sct_damage_type::dark;
+        case DT_LIGHT:
+            return sct_damage_type::light;
+        case DT_PSI:
+            return sct_damage_type::psi;
+        case DT_ELECTRIC:
+            return sct_damage_type::electric;
+        case DT_BULLET:
+            return sct_damage_type::bullet;
+        default:
+            return sct_damage_type::none;
+    }
+}
+
+/// Map SCT damage type to a game_message_type for color rendering.
+static game_message_type sct_damage_type_to_color( sct_damage_type dt )
+{
+    switch( dt ) {
+        case sct_damage_type::bash:
+            return m_neutral; // white/gray - blunt, neutral impact
+        case sct_damage_type::cut:
+            return m_info; // cyan/light blue - sharp, slicing
+        case sct_damage_type::stab:
+            return m_bad; // red-orange - piercing, aggressive
+        case sct_damage_type::acid:
+            return m_good; // green-yellow - corrosive
+        case sct_damage_type::heat:
+            return m_warning; // orange/red - fire, heat
+        case sct_damage_type::cold:
+            return m_info; // light blue/cyan - ice, cold
+        case sct_damage_type::dark:
+            return m_mixed; // purple/magenta - eldritch
+        case sct_damage_type::light:
+            return m_critical; // yellow/gold - holy, radiant
+        case sct_damage_type::psi:
+            return m_info; // blue/violet - mental, psychic
+        case sct_damage_type::electric:
+            return m_warning; // bright yellow - lightning
+        case sct_damage_type::bullet:
+            return m_neutral; // white - fast projectile
+        default:
+            return m_bad; // fallback red for unknown types
     }
 }
 

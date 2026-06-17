@@ -14,6 +14,7 @@
 #include "catalua_sol.h"
 #include "character.h"
 #include "creature_tracker.h"
+#include "combat_feedback.h"
 #include "cursesdef.h"
 #include "debug.h"
 #include "effect.h"
@@ -2123,7 +2124,13 @@ void monster::melee_attack( Creature &target, float accuracy )
     dealt_damage_instance dealt_dam;
 
     if( attack_success ) {
-        target.deal_melee_hit( this, hitspread, false, damage, dealt_dam );
+        // Compute monster crit chance based on hitspread margin.
+        // Base 5% crit chance, scaling up with how comfortably the hit connects.
+        // At hitspread >= 20, maxes out at ~15% crit chance.
+        const double monster_crit_chance = std::min( 0.15, 0.05 + ( hitspread * 0.005 ) );
+        const bool critical_hit = one_in( 1.0 / monster_crit_chance );
+
+        target.deal_melee_hit( this, hitspread, critical_hit, false, damage, dealt_dam );
     }
     const bodypart_str_id bp_hit = dealt_dam.bp_hit;
 
@@ -2264,44 +2271,29 @@ void monster::melee_attack( Creature &target, float accuracy )
     }
 }
 
-void monster::deal_projectile_attack( Creature *source, dealt_projectile_attack &attack )
+void monster::deal_projectile_attack( Creature *source, dealt_projectile_attack &attack, bool is_graze )
 {
-    this->deal_projectile_attack( source, nullptr, attack, false );
+    deal_projectile_attack( source, nullptr, attack, is_graze );
 }
 
 void monster::deal_projectile_attack( Creature *source, item *source_weapon,
-                                      dealt_projectile_attack &attack )
-{
-    this->deal_projectile_attack( source, source_weapon,  attack, false );
-}
-
-void monster::deal_projectile_attack( Creature *source, item *source_weapon,
-                                      dealt_projectile_attack &attack, bool manual_retaliation )
+                                      dealt_projectile_attack &attack, bool is_graze )
 {
     const auto &proj = attack.proj;
-    double &missed_by = attack.missed_by; // We can change this here
+    double &missed_by = attack.missed_by;
 
-    // Whip has a chance to scare wildlife even if it misses
     if( proj.has_effect( ammo_effect_WHIP ) && type->in_category( "WILDLIFE" ) && one_in( 3 ) ) {
         add_effect( effect_run, rng( 3_turns, 5_turns ) );
     }
 
     if( missed_by > 1.0 ) {
-        // Total miss
         return;
     }
 
-    // Handled in creature::deal_projectile_attack now, so that not having a head does not make it somehow less likely to hit the torso.
-    //// No head = immune to ranged crits
-    //if( missed_by < accuracy_critical && has_flag( MF_NOHEAD ) ) {
-    //    missed_by = accuracy_critical;
-    //}
-
-    Creature::deal_projectile_attack( source, source_weapon, attack );
+    Creature::deal_projectile_attack( source, source_weapon, attack, is_graze );
 
     if( !is_hallucination() && attack.hit_critter == this ) {
-        // Maybe TODO: Get difficulty from projectile speed/size/missed_by
-        on_hit( source, bodypart_id( "torso" ), &attack, manual_retaliation );
+        on_hit( source, bodypart_id( "torso" ), &attack, false );
     }
 }
 

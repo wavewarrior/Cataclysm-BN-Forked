@@ -152,6 +152,14 @@ bool rain_effect::init( gpu_device &dev, SDL_GPUTextureFormat hdr_format,
     if( !make_buffers( droplet_xfer_, droplet_storage_, MAX_DROPLETS ) ||
         !make_buffers( splash_xfer_,  splash_storage_,  MAX_SPLASHES ) ) {
         dbg( DL::Error ) << "rain_effect: instance buffer create failed";
+        if( inst_storage_buf_ ) {
+            SDL_ReleaseGPUBuffer( dev.raw(), inst_storage_buf_ );
+            inst_storage_buf_ = nullptr;
+        }
+        if( inst_transfer_buf_ ) {
+            SDL_ReleaseGPUTransferBuffer( dev.raw(), inst_transfer_buf_ );
+            inst_transfer_buf_ = nullptr;
+        }
         return false;
     }
 

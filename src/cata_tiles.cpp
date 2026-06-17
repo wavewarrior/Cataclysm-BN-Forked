@@ -12,6 +12,7 @@
 #include <fstream>
 #include <iterator>
 #include <limits>
+#include <map>
 #include <optional>
 #include <set>
 #include <stdexcept>
@@ -7056,46 +7057,87 @@ bool &world_text_rmlui_enabled()
 
 void cata_tiles::draw_sct_frame( std::multimap<point, formatted_text> &overlay_strings )
 {
-    const bool use_font = get_option<bool>( "ANIMATION_SCT_USE_FONT" );
+    // Phase 2: Font-only rendering path for SCT.
+    // Drop ASCII fallback — tiles-focused scope; accept edge cases with non-Latin scripts or custom tilesets.
+    // Apply damage-type color mapping, size scaling hints, and crit effects.
+
+    const bool show_damage = get_option<bool>( "ANIMATION_SCT_DAMAGE" );
+    const bool type_colors = get_option<bool>( "ANIMATION_SCT_TYPE_COLORS" );
+    const bool show_criticals = get_option<bool>( "ANIMATION_SCT_CRITICALS" );
 
     for( auto iter = SCT.vSCT.begin(); iter != SCT.vSCT.end(); ++iter ) {
+        // Gate damage numbers by option, but always show outcome indicators (MISS/DODGE/PARRY/BLOCK/GRAZE).
+        if( !show_damage && iter->getFeedbackType() == sct_feedback_type::damage ) {
+            continue;
+        }
+
         const point_bub_ms iD( iter->getPosX(), iter->getPosY() );
         const int full_text_length = utf8_width( iter->getText() );
 
-        int iOffsetX = 0;
-        int iOffsetY = 0;
+        // Apply jitter offset (screen-space pixel offsets from radial distribution).
+        const auto jitter = iter->getJitterOffset();
 
         for( int j = 0; j < 2; ++j ) {
             std::string sText = iter->getText( ( j == 0 ) ? "first" : "second" );
-            int FG = msgtype_to_tilecolor( iter->getMsgType( ( j == 0 ) ? "first" : "second" ),
-                                           iter->getStep() >= scrollingcombattext::iMaxSteps / 2 );
+            if( sText.empty() ) {
+                continue;
+            }
 
-            if( use_font ) {
-                const auto direction = iter->getDirecton();
-                // Compensate for string length offset added at SCT creation
-                // (it will be readded using font size and proper encoding later).
-                const int direction_offset = ( -displace_XY( direction ).x + 1 ) * full_text_length / 2;
-
-                overlay_strings.emplace(
-                    player_to_screen( iD + point( direction_offset, 0 ) ),
-                    formatted_text( sText, FG, direction ) );
+            // Determine color: use damage-type-specific mapping when enabled.
+            int FG;
+            if( type_colors && !iter->getText().empty() && iter->getDamageType() != sct_damage_type::none ) {
+                // Map SCT damage type to a game_message_type, then to tile color.
+                static const std::map<sct_damage_type, game_message_type> dt_color_map {
+                    { sct_damage_type::bash,    m_neutral },   // white/gray - blunt impact
+                    { sct_damage_type::cut,     m_info },      // cyan/light blue - sharp slicing
+                    { sct_damage_type::stab,    m_bad },       // red-orange - piercing
+                    { sct_damage_type::acid,    m_good },      // green-yellow - corrosive
+                    { sct_damage_type::heat,    m_warning },   // orange/red - fire
+                    { sct_damage_type::cold,    m_info },      // light blue/cyan - ice
+                    { sct_damage_type::dark,    m_mixed },     // purple/magenta - eldritch
+                    { sct_damage_type::light,   m_critical },  // yellow/gold - holy radiant
+                    { sct_damage_type::psi,     m_info },      // blue/violet - psychic
+                    { sct_damage_type::electric, m_warning },  // bright yellow - lightning
+                    { sct_damage_type::bullet,  m_neutral },   // white - fast projectile
+                };
+                const auto color_it = dt_color_map.find( iter->getDamageType() );
+                game_message_type gmt = ( color_it != dt_color_map.end() ) ? color_it->second : m_bad;
+                FG = msgtype_to_tilecolor( gmt, iter->getStep() >= scrollingcombattext::iMaxSteps / 2 );
             } else {
-                for( auto &it : sText ) {
-                    const std::string generic_id = get_ascii_tile_id( it, FG, -1 );
+                // Fall back to original behavior: use the stored message type.
+                FG = msgtype_to_tilecolor( iter->getMsgType( ( j == 0 ) ? "first" : "second" ),
+                                           iter->getStep() >= scrollingcombattext::iMaxSteps / 2 );
+            }
 
-                    if( tileset_ptr->find_tile_type( generic_id ) ) {
-                        draw_from_id_string(
-                        {generic_id, C_NONE, empty_string, 0, 0},
-                        iD + tripoint_rel_ms( iOffsetX, iOffsetY, g->u.bub_pos().z() ), std::nullopt, std::nullopt,
-                        lit_level::LIT, false, 0, false
-                        );
-                    }
-
-                    if( tile_iso ) {
-                        iOffsetY++;
-                    }
-                    iOffsetX++;
+            // Critical hit visual effects: gold/yellow overlay for crits.
+            // Gate behind ANIMATION_SCT_CRITICALS option.
+            if( show_criticals ) {
+                if( iter->isCrit() && !iter->isTripleCrit() ) {
+                    FG = msgtype_to_tilecolor( m_critical, false ); // bright yellow/gold
+                } else if( iter->isTripleCrit() ) {
+                    // Triple crit: extra-bright magenta/red for maximum impact.
+                    FG = msgtype_to_tilecolor( m_headshot, false ); // bright pink/magenta
                 }
+            }
+
+            const auto direction = iter->getDirecton();
+            // Compensate for string length offset added at SCT creation
+            // (it will be readded using font size and proper encoding later).
+            const int direction_offset = ( -displace_XY( direction ).x + 1 ) * full_text_length / 2;
+
+            // Apply jitter offset to the screen position.
+            const point screen_pos = player_to_screen( iD + point( direction_offset, 0 ) ) + jitter;
+
+            overlay_strings.emplace(
+                screen_pos,
+                formatted_text( sText, FG, direction ) );
+
+            // Triple crit flash effect: render text twice with slight offset on frame 0.
+            if( iter->isTripleCrit() && iter->getStep() == 0 ) {
+                const point flash_offset = jitter + point( 1, -1 );
+                overlay_strings.emplace(
+                    player_to_screen( iD + point( direction_offset, 0 ) ) + flash_offset,
+                    formatted_text( sText, FG, direction ) );
             }
         }
     }

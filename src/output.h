@@ -15,6 +15,7 @@
 
 #include "catacharset.h"
 #include "color.h"
+#include "damage.h"
 #include "debug.h"
 #include "enums.h"
 #include "line.h"
@@ -883,6 +884,12 @@ class scrolling_text_view
         int offset_ = 0;
 };
 
+/// Maps game damage types to SCT-specific damage type categories for color coding.
+enum class sct_damage_type : int { none, bash, cut, stab, acid, heat, cold, dark, light, psi, electric, bullet };
+
+/// High-level category for SCT entries — distinguishes damage numbers from outcome indicators.
+enum class sct_feedback_type : int { none, damage, outcome };
+
 class scrollingcombattext
 {
     public:
@@ -912,6 +919,14 @@ class scrollingcombattext
                 game_message_type gmt2;
                 std::string sType;
                 bool iso_mode;
+
+                // Floating combat text enhancements (Phase 1-2)
+                sct_damage_type damage_type = sct_damage_type::none;
+                float size_multiplier = 1.0f;
+                bool is_critical = false;
+                bool is_triple_crit = false;
+                point jitter_offset{ 0, 0 };
+                sct_feedback_type feedback_type = sct_feedback_type::none;
 
             public:
                 cSCT( point pos, direction p_oDir,
@@ -947,6 +962,46 @@ class scrollingcombattext
                 }
                 std::string getText( const std::string &type = "full" ) const;
                 game_message_type getMsgType( const std::string &type = "first" ) const;
+
+                // Floating combat text accessors (Phase 1)
+                sct_damage_type getDamageType() const {
+                    return damage_type;
+                }
+                float getSizeMultiplier() const {
+                    return size_multiplier;
+                }
+                bool isCrit() const {
+                    return is_critical;
+                }
+                bool isTripleCrit() const {
+                    return is_triple_crit;
+                }
+                point getJitterOffset() const {
+                    return jitter_offset;
+                }
+
+                // Floating combat text mutators (Phase 1)
+                void set_damage_type( sct_damage_type dt ) {
+                    damage_type = dt;
+                }
+                void set_size_multiplier( float sz ) {
+                    size_multiplier = sz;
+                }
+                void set_is_critical( bool c ) {
+                    is_critical = c;
+                }
+                void set_is_triple_crit( bool tc ) {
+                    is_triple_crit = tc;
+                }
+                void set_jitter_offset( point j ) {
+                    jitter_offset = j;
+                }
+                sct_feedback_type getFeedbackType() const {
+                    return feedback_type;
+                }
+                void set_feedback_type( sct_feedback_type ft ) {
+                    feedback_type = ft;
+                }
         };
 
         std::vector<cSCT> vSCT;
@@ -957,6 +1012,9 @@ class scrollingcombattext
                   const std::string &p_sType = "" );
         void advanceAllSteps();
         void removeCreatureHP();
+
+        /// Convert a game damage_type to an SCT damage type for color mapping.
+        static sct_damage_type from_game_dt( damage_type dt );
 };
 
 extern scrollingcombattext SCT;
