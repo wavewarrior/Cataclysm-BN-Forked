@@ -1,0 +1,43 @@
+/* Layout for the examine-tile description view (game::extended_description).
+   Palette/border/scrollbar/.scroll-pane come from theme.rcss (linked first in
+   descriptionview.rml); this file owns only the screen's own layout. Lengths in dp.
+
+   Two stacked regions mirroring the legacy w_head + w_main: a one-line key-hint
+   bar on top, then a scrolling colour-text body. The body is a single element
+   whose markup carries <br/> line breaks (cata_text_to_rml converts \n → <br/>);
+   pre-wrap lets long lines wrap visually like the legacy fold_and_print_from. */
+body {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+}
+
+.desc-panel {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Key-hint bar (legacy w_head). White, single line, with the underline rule the
+   curses path drew via LINE_OXOX below it. */
+.desc-head {
+    color: {{white}};
+    padding: 4dp 8dp;
+    border-bottom: 1dp {{white}};
+    white-space: pre-wrap;
+}
+
+/* The scrolling description body (legacy w_main). */
+.desc-body {
+    flex: 1;
+    min-height: 0;
+    padding: 4dp 8dp;
+    color: {{light_gray}};
+}
+
+.desc-text {
+    display: block;
+    white-space: pre-wrap;
+}

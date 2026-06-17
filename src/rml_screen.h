@@ -179,4 +179,8 @@ bool &overmap_rmlui_enabled();
 // rip-out-surviving glyph path; foundation for future floating damage numbers.
 bool &world_text_rmlui_enabled();
 
+// Examine-tile description view (game::extended_description): the creature /
+// furniture / terrain extended_description() text pane. Render-only RmlUi doc.
+bool &description_view_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

@@ -561,6 +561,39 @@ state); do it after that component lands, not before.
   **UNPROVEN:** `item_compare` is empty here → `format_item_info`'s +/- compare-
   delta colouring is NOT exercised (the first COMPARING consumer earns that later).
 
+- **Tier 3 screen #2: examine-tile description view (game::extended_description) —
+  CODE-COMPLETE + BUILD-GREEN (descriptions.cpp.o 07:58:48 newer than source 07:57:06;
+  binary relinked 07:59:47, fresh mtime), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.**
+  The "examine surroundings → describe this tile" screen ([c] creatures / [f]
+  furniture / [t] terrain / close). **SCOPE CLARIFICATION (research finding — the
+  cadence note's "creature/npc-info F.2 component" splits in two):** this screen uses
+  `Creature/furn/ter::extended_description()` — a finished `colorize()` STRING — so it
+  migrates trivially via the EXISTING primitives (`.scroll-pane` + `cata_text_to_rml`),
+  NO new rml_util component. The COMPACT look-around side panel + faction use the
+  harder positional `print_info(catacurses::window&, vStart, vLines, column)` (HP bar +
+  right-aligned attitude + paginated) — a DIFFERENT shape that needs a parallel
+  `_lines()` extraction and rides its host screens (look-around giant / faction), NOT
+  this unit. So this lands the EXAMINE half cleanly; the compact-pane component is
+  still owed for faction. `data/gui/descriptionview.{rml,rcss}` + descriptions.cpp
+  RmlUi path. STRUCTURAL POINTS: (1) extracted `build_hint()` + `build_desc()` lambdas
+  so the curses path and the RmlUi sync render ONE source (no drift); on_redraw
+  branches `if(rml){sync_rml();return;}` else curses. (2) the WHOLE `desc` runs through
+  `cata_text_to_rml` in one pass → correct colour-tag matching across newlines + `\n`→
+  `<br/>`, bound as a single `body_rml` string (no per-line split → no mid-tag cut
+  risk; simpler than computer's line vector — plain `Bind`, no RegisterStruct/Array).
+  (3) render-only doc; keyboard owns CREATURE/FURNITURE/TERRAIN/QUIT; the screen's own
+  `ctxt` is passed to open() for the tick (standard live-screen sharing, cf. mutations
+  /distraction). (4) `rml_data` declared before `rml` so the doc tears down while the
+  bound buffer is alive; single loop → rml_doc dtor handles teardown. F4 toggle
+  "examine description" (OFF). **EYEBALL CHECK (user, A/B via F4):** (1) examine a tile
+  (the look-around "describe" key) — creature/furniture/terrain text matches curses
+  (colours, layout, multi-line), [c]/[f]/[t] switch the target, the hint bar shows the
+  keybinds, QUIT/close exits; long descriptions scroll. (2) signage tiles show the
+  "Sign: …" line (and "Sign: ???" when illiterate). (3) debug `display_mod_source`/
+  `display_object_ids` Origin/[id] lines render if those debug flags are on. **WATCH:**
+  the doc covers the parent look-around view (full-screen, like examine_item_menu's
+  conscious simplification) — confirm the parent is intact after close.
+
 ### Tier 3: inventory framework (inventory_ui) — MULTI-SESSION SUB-PROJECT (user GO, 2026-06-12)
 
 **Why it's different from every prior unit:** `inventory_ui.cpp` (2640) is NOT a
