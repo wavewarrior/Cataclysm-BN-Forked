@@ -1841,6 +1841,24 @@ so ranged is UNBLOCKED.** It is the last interactive modal still on curses (no
 `*_rmlui_enabled` toggle, `ranged.cpp` has zero rml wiring) — see the top frontier
 banner. It is the natural next migration unit before the Tier 7/8/9 architectural tiers.
 
+**RANGED SCOPING (2026-06-17, pre-build):** bigger than a clean modal — it is
+giant-class. `target_ui` (ranged.cpp:387) has TWO render parts: (a) `draw_terrain_overlay()`
+via a `game::draw_callback_t` — the aim line / cursor / trajectory drawn ON the map
+(world→screen); this is SPRITE-PATH rendering, OUT OF SCOPE (stays like §7, dies/stays
+with the map path, not curses-text UI). (b) **`draw_ui_window()` (3905) → the `w_target`
+side info panel — the RmlUi target.** It composes ~10 `panel_*` helpers (draw_window_title /
+draw_help_notice / draw_controls_list / panel_cursor_info / panel_gun_info / panel_recoil /
+panel_spell_info / target-info…) with per-TargetMode variation (Fire / Throw / Reach /
+TurretManual / Turrets / Spell / Shape). The target-info section calls the GENERIC
+`Creature::print_info(w_target,…)` (ranged.cpp:4254) → so ranged needs the deferred
+**generic `Creature::print_info` → lines component** (3 overrides: Character / monster /
+npc), the same one faction wanted (faction used the faction-specific `*_faction_display`
+text instead; ranged uses the generic compact print_info). The panel is ONE window
+rendered per frame → NOT section-sliceable by toggle (all-or-nothing, like faction).
+**Unit = the whole `draw_ui_window` panel + the print_info lines component**, done as one
+careful build-blind pass (faction precedent: parallel `_lines()` producers, curses
+`print_info`/`panel_*` left pristine for A/B). Sized ≈ faction-plus.
+
 ### Tier 6 progress (overmap_ui + on-map text + §7 world-text layer)
 
 **Tier 6 decomposition (multi-slice sub-project; architecturally the hardest tier):**
