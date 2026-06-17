@@ -63,8 +63,9 @@ class rain_effect
         void shutdown() noexcept;
 
         bool ready() const noexcept {
-            return droplet_pipeline_ != nullptr && splat_pipeline_
-                   && splat_a_ && splat_b_;
+            return dev_ != nullptr && droplet_pipeline_ != nullptr && splat_pipeline_
+                   && splat_a_ && splat_b_
+                   && inst_storage_buf_ && inst_transfer_buf_ && splat_sampler_;
         }
 
         // Update internal particle state and record all rain draws.

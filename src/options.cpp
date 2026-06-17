@@ -1946,6 +1946,53 @@ void options_manager::add_options_graphics()
 
     get_option( "ANIMATION_SCT_USE_FONT" ).setPrerequisite( "ANIMATION_SCT" );
 
+    add( "ANIMATION_SCT_DAMAGE", graphics, translate_marker( "SCT damage numbers" ),
+         translate_marker( "If true, will display floating damage numbers on hits." ),
+         true
+       );
+    get_option( "ANIMATION_SCT_DAMAGE" ).setPrerequisite( "ANIMATION_SCT" );
+
+    add( "ANIMATION_SCT_OUTCOMES", graphics, translate_marker( "SCT outcome indicators" ),
+         translate_marker( "If true, will display MISS/DODGE/PARRY/BLOCK text on defensive outcomes." ),
+         true
+       );
+    get_option( "ANIMATION_SCT_OUTCOMES" ).setPrerequisite( "ANIMATION_SCT" );
+
+    add( "ANIMATION_SCT_CRITICALS", graphics, translate_marker( "SCT critical highlights" ),
+         translate_marker( "If true, critical hits will be highlighted with larger size and gold color." ),
+         true
+       );
+    get_option( "ANIMATION_SCT_CRITICALS" ).setPrerequisite( "ANIMATION_SCT" );
+
+    add( "ANIMATION_SCT_TYPE_COLORS", graphics, translate_marker( "SCT damage type colors" ),
+         translate_marker( "If true, damage numbers will be colored by damage type (bash=white, cut=cyan, stab=red-orange, etc.)." ),
+         true
+       );
+    get_option( "ANIMATION_SCT_TYPE_COLORS" ).setPrerequisite( "ANIMATION_SCT" );
+
+    add( "ANIMATION_SCT_COLORBLIND", graphics, translate_marker( "SCT colorblind mode" ),
+         translate_marker( "If true, adds small damage type abbreviations next to numbers for colorblind accessibility." ),
+         false
+       );
+    get_option( "ANIMATION_SCT_COLORBLIND" ).setPrerequisite( "ANIMATION_SCT" );
+
+    add( "ANIMATION_SCT_MAX_ENTRIES", graphics, translate_marker( "SCT max entries" ),
+         translate_marker( "Maximum simultaneous SCT entries. Oldest are removed first when exceeded." ),
+         5, 30, 15
+       );
+
+    add( "ANIMATION_SCT_JITTER", graphics, translate_marker( "SCT position jitter range" ),
+         translate_marker( "Position jitter range in tiles for SCT entries (0 = none). Higher values spread entries apart." ),
+         0, 4, 2
+       );
+    get_option( "ANIMATION_SCT_JITTER" ).setPrerequisite( "ANIMATION_SCT" );
+
+    add( "ANIMATION_SCT_SPEED", graphics, translate_marker( "SCT animation speed" ),
+         translate_marker( "Animation speed multiplier for SCT entries (5-20). Higher values scroll faster." ),
+         5, 20, 10
+       );
+    get_option( "ANIMATION_SCT_SPEED" ).setPrerequisite( "ANIMATION_SCT" );
+
     add( "ANIMATION_DELAY", graphics, translate_marker( "Animation delay" ),
          translate_marker( "The amount of time to pause between animation frames in ms." ),
          0, 100, 10

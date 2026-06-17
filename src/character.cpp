@@ -1,6 +1,7 @@
 #include "character.h"
 #include "calendar.h"
 #include "character_encumbrance.h"
+#include "combat_feedback.h"
 
 #include <algorithm>
 #include <cctype>
@@ -9162,9 +9163,7 @@ void Character::absorb_hit( const bodypart_id &bp, damage_instance &dam )
 
             if( destroy ) {
                 if( g->u.sees( *this ) ) {
-                    SCT.add( point( bub_pos().x(), bub_pos().y() ), direction::NORTH,
-                             remove_color_tags( pre_damage_name ),
-                             m_neutral, _( "destroyed" ), m_info );
+                    spawn_armor_feedback( *this, remove_color_tags( pre_damage_name ), _( "destroyed" ), m_info, true );
                 }
                 destroyed_armor_msg( *this, pre_damage_name, armor.contents.empty(), armor.weight(),
                                      armor.volume() );
@@ -9269,10 +9268,7 @@ bool Character::armor_absorb( damage_unit &du, item &armor, const bodypart_id &b
     add_msg_if_player( m_bad, format_string, pre_damage_name, damage_verb );
     //item is damaged
     if( is_player() ) {
-        SCT.add( point( bub_pos().x(), bub_pos().y() ), direction::NORTH,
-                 remove_color_tags( pre_damage_name ), m_neutral,
-                 damage_verb,
-                 m_info );
+        spawn_armor_feedback( *this, remove_color_tags( pre_damage_name ), damage_verb, m_info );
     }
 
     return armor.mod_damage( armor.has_flag( flag_FRAGILE ) ?
@@ -9560,7 +9556,8 @@ void Character::apply_damage( Creature *source, bodypart_id hurt,
 }
 
 dealt_damage_instance Character::deal_damage( Creature *source, bodypart_id bp,
-        const damage_instance &d, item *source_weapon, item *source_projectile )
+        const damage_instance &d, item *source_weapon, item *source_projectile,
+        bool is_crit, bool is_graze )
 {
     if( has_trait( trait_DEBUG_NODMG ) ) {
         return dealt_damage_instance();
@@ -9573,21 +9570,13 @@ dealt_damage_instance Character::deal_damage( Creature *source, bodypart_id bp,
 
     //damage applied here
     dealt_damage_instance dealt_dams = Creature::deal_damage( source, bp, d, source_weapon,
-                                       source_projectile );
+                                       source_projectile, is_crit, is_graze );
     //block reduction should be by applied this point
     int dam = dealt_dams.total_damage();
 
     // TODO: Pre or post blit hit tile onto "this"'s location here
     if( dam > 0 && g->u.sees( bub_pos() ) ) {
         g->draw_hit_player( *this, dam );
-
-        if( is_player() && source ) {
-            //monster hits player melee
-            SCT.add( point( bub_pos().x(), bub_pos().y() ),
-                     direction_from( point_zero, point( bub_pos().x() - source->bub_pos().x(),
-                                     bub_pos().y() - source->bub_pos().y() ) ),
-                     get_hp_bar( dam, get_hp_max( bp ) ).first, m_bad, body_part_name( bp ), m_neutral );
-        }
     }
 
     // handle snake artifacts
@@ -9689,14 +9678,16 @@ dealt_damage_instance Character::deal_damage( Creature *source, bodypart_id bp,
     return dealt_dams;
 }
 dealt_damage_instance Character::deal_damage( Creature *source, bodypart_id bp,
-        const damage_instance &d, item *source_weapon )
+        const damage_instance &d, item *source_weapon,
+        bool is_crit, bool is_graze )
 {
-    return deal_damage( source, bp, d, source_weapon, nullptr );
+    return deal_damage( source, bp, d, source_weapon, nullptr, is_crit, is_graze );
 }
 dealt_damage_instance Character::deal_damage( Creature *source, bodypart_id bp,
-        const damage_instance &d )
+        const damage_instance &d,
+        bool is_crit, bool is_graze )
 {
-    return deal_damage( source, bp, d, nullptr, nullptr );
+    return deal_damage( source, bp, d, nullptr, nullptr, is_crit, is_graze );
 }
 
 int Character::reduce_healing_effect( const efftype_id &eff_id, int remove_med,

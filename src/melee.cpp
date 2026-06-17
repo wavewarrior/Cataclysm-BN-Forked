@@ -27,6 +27,7 @@
 #include "character.h"
 #include "character_functions.h"
 #include "character_martial_arts.h"
+#include "combat_feedback.h"
 #include "creature.h"
 #include "damage.h"
 #include "debug.h"
@@ -537,6 +538,15 @@ void Character::melee_attack( Creature &t, bool allow_special, const matec_id *f
 
         int stumble_pen = stumble( *this, cur_weapon );
         sfx::generate_melee_sound( bub_pos(), t.bub_pos(), false, false );
+
+        // Spawn MISS SCT for the attacker (if player) or target (if NPC attacking player).
+        if( is_player() ) {
+            spawn_combat_feedback( t, combat_feedback_options{ .type = combat_feedback_type::miss } );
+        } else if( g->u.sees( *this ) && g->u.is_player() ) {
+            // When an NPC misses the player, show MISS at the NPC's position.
+            spawn_combat_feedback( *this, combat_feedback_options{ .type = combat_feedback_type::miss } );
+        }
+
         if( is_player() ) { // Only display messages if this is the player
 
             if( one_in( 2 ) ) {
@@ -589,6 +599,10 @@ void Character::melee_attack( Creature &t, bool allow_special, const matec_id *f
         if( critical_hit ) {
             melee::melee_stats.actual_crit_count += 1;
         }
+        // Graze detection: marginal hits (small positive hit_spread) deal reduced damage.
+        // A graze means the attack barely connected — the hitroll was only slightly above
+        // the target's dodge_roll + size penalty. Threshold tuned to feel right in practice.
+        const bool is_graze = hit_spread > 0 && hit_spread <= 5;
         const bool has_force_technique = force_technique;
 
         // Pick one or more special attacks
@@ -646,7 +660,7 @@ void Character::melee_attack( Creature &t, bool allow_special, const matec_id *f
                 perform_special_attacks( t, dealt_special_dam );
             }
             t.deal_melee_hit( this, use_weapon ? &cur_weapon : &null_item_reference(), hit_spread, critical_hit,
-                              d, dealt_dam );
+                              is_graze, d, dealt_dam );
 
             if( use_weapon ) {
                 // Lua imelee on_hit callback
@@ -2075,6 +2089,14 @@ bool Character::block_hit( Creature *source, bodypart_id &bp_hit, damage_instanc
         params["damage_blocked"] = damage_blocked;
     } );
 
+    // Spawn BLOCK SCT for the blocker (if player) or attacker (if NPC blocking).
+    if( is_player() ) {
+        spawn_combat_feedback( *this, combat_feedback_options{ .type = combat_feedback_type::block } );
+    } else if( source && g->u.sees( *source ) && g->u.is_player() ) {
+        // When an NPC blocks the player's attack, show BLOCK at the NPC's position.
+        spawn_combat_feedback( *this, combat_feedback_options{ .type = combat_feedback_type::block } );
+    }
+
     return true;
 }
 
@@ -2093,7 +2115,7 @@ void Character::perform_special_attacks( Creature &t, dealt_damage_instance &dea
         // TODO: Make this hit roll use unarmed skill, not weapon skill + weapon to_hit
         int hit_spread = t.deal_melee_attack( this, hit_roll( cur_weapon, attack ) * 0.8 );
         if( hit_spread >= 0 ) {
-            t.deal_melee_hit( this, hit_spread, false, att.damage, dealt_dam );
+            t.deal_melee_hit( this, hit_spread, false, false, att.damage, dealt_dam );
             if( !practiced ) {
                 // Practice unarmed, at most once per combo
                 practiced = true;
@@ -2504,27 +2526,6 @@ void player_hit_message( Character *attacker, const std::string &message,
         } else {
             //~ someone hits something for %d damage
             msg = string_format( _( "%s for %d damage." ), message, dam );
-        }
-    }
-
-    if( dam > 0 && attacker->is_player() ) {
-        //player hits monster melee
-        SCT.add( point( t.bub_pos().x(), t.bub_pos().y() ),
-                 direction_from( point_zero, point( t.bub_pos().x() - attacker->bub_pos().x(),
-                                 t.bub_pos().y() - attacker->bub_pos().y() ) ),
-                 get_hp_bar( dam, t.get_hp_max(), true ).first, m_good,
-                 sSCTmod, gmtSCTcolor );
-
-        if( t.get_hp() > 0 ) {
-            SCT.add( point( t.bub_pos().x(), t.bub_pos().y() ),
-                     direction_from( point_zero, point( t.bub_pos().x() - attacker->bub_pos().x(),
-                                     t.bub_pos().y() - attacker->bub_pos().y() ) ),
-                     get_hp_bar( t.get_hp(), t.get_hp_max(), true ).first, m_good,
-                     //~ "hit points", used in scrolling combat text
-                     _( "hp" ), m_neutral,
-                     "hp" );
-        } else {
-            SCT.removeCreatureHP();
         }
     }
 

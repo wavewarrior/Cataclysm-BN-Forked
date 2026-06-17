@@ -470,16 +470,18 @@ class Creature
         // completes a melee attack against the creature
         // dealt_dam is overwritten with the values of the damage dealt
         virtual void deal_melee_hit( Creature *source, item *source_weapon, int hit_spread,
-                                     bool critical_hit,
+                                     bool critical_hit, bool is_graze,
                                      const damage_instance &dam, dealt_damage_instance &dealt_dam );
         virtual void deal_melee_hit( Creature *source, int hit_spread, bool critical_hit,
+                                     bool is_graze,
                                      const damage_instance &dam, dealt_damage_instance &dealt_dam );
 
         // Makes a ranged projectile attack against the creature
         // Sets relevant values in `attack`.
         virtual void deal_projectile_attack( Creature *source, item *source_weapon,
-                                             dealt_projectile_attack &attack );
-        virtual void deal_projectile_attack( Creature *source, dealt_projectile_attack &attack );
+                                             dealt_projectile_attack &attack, bool is_graze = false );
+        virtual void deal_projectile_attack( Creature *source, dealt_projectile_attack &attack,
+                                             bool is_graze = false );
 
         /**
          * Deals the damage via an attack. Allows armor mitigation etc.
@@ -496,11 +498,14 @@ class Creature
          * @param source_projectile The projectile fired in the attack, optional
          */
         virtual dealt_damage_instance deal_damage( Creature *source, bodypart_id bp,
-                const damage_instance &dam, item *source_weapon, item *source_projectile );
+                const damage_instance &dam, item *source_weapon, item *source_projectile,
+                bool is_crit = false, bool is_graze = false );
         virtual dealt_damage_instance deal_damage( Creature *source, bodypart_id bp,
-                const damage_instance &dam, item *source_weapon );
+                const damage_instance &dam, item *source_weapon,
+                bool is_crit = false, bool is_graze = false );
         virtual dealt_damage_instance deal_damage( Creature *source, bodypart_id bp,
-                const damage_instance &dam );
+                const damage_instance &dam,
+                bool is_crit = false, bool is_graze = false );
 
         // for each damage type, how much gets through and how much pain do we
         // accrue? mutates damage and pain

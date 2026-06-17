@@ -11,6 +11,7 @@
 #include "anatomy.h"
 #include "avatar.h"
 #include "calendar.h"
+#include "combat_feedback.h"
 #include "catalua_hooks.h"
 #include "catalua_sol.h"
 #include "character.h"
@@ -40,6 +41,7 @@
 #include "monster.h"
 #include "mtype.h"
 #include "npc.h"
+#include "options.h"
 #include "output.h"
 #include "player.h"
 #include "point.h"
@@ -810,13 +812,21 @@ int Creature::deal_melee_attack( Creature *source, int hitroll )
 }
 
 void Creature::deal_melee_hit( Creature *source, item *source_weapon, int hit_spread,
-                               bool critical_hit,
+                               bool critical_hit, bool is_graze,
                                const damage_instance &dam, dealt_damage_instance &dealt_dam )
 {
     if( source == nullptr || source->is_hallucination() ) {
         dealt_dam.bp_hit = anatomy_id( "human_anatomy" )->random_body_part().id();
         return;
     }
+
+    // Spawn DODGE SCT when the target actively dodges (hit_spread <= 0 means dodge, not miss).
+    // A negative hit_spread means the target's dodge_roll exceeded the attacker's hitroll.
+    if( hit_spread < 0 && source != nullptr ) {
+        spawn_combat_feedback( *this, combat_feedback_options{ .type = combat_feedback_type::dodge } );
+        return;
+    }
+
     // If carrying a rider, there is a chance the hits may hit rider instead.
     // melee attack will start off as targeted at mount
     if( has_effect( effect_ridden ) ) {
@@ -824,8 +834,8 @@ void Creature::deal_melee_hit( Creature *source, item *source_weapon, int hit_sp
         if( mons && mons->mounted_player ) {
             if( !mons->has_flag( MF_MECH_DEFENSIVE ) &&
                 one_in( std::max( 2, mons->get_size() - mons->mounted_player->get_size() ) ) ) {
-                mons->mounted_player->deal_melee_hit( source, source_weapon, hit_spread, critical_hit, dam,
-                                                      dealt_dam );
+                mons->mounted_player->deal_melee_hit( source, source_weapon, hit_spread, critical_hit,
+                                                      is_graze, dam, dealt_dam );
                 return;
             }
         }
@@ -834,14 +844,15 @@ void Creature::deal_melee_hit( Creature *source, item *source_weapon, int hit_sp
     bodypart_id bp_hit = select_body_part( source, hit_spread ).id();
     block_hit( source, bp_hit, d );
 
-    dealt_dam = deal_damage( source, bp_hit, d, source_weapon );
+    dealt_dam = deal_damage( source, bp_hit, d, source_weapon, nullptr, critical_hit, is_graze );
     dealt_dam.bp_hit = bp_hit.id();
     on_hit( source, bp_hit ); // trigger on-gethit events
 }
 void Creature::deal_melee_hit( Creature *source, int hit_spread, bool critical_hit,
+                               bool is_graze,
                                const damage_instance &dam, dealt_damage_instance &dealt_dam )
 {
-    deal_melee_hit( source, nullptr, hit_spread, critical_hit, dam, dealt_dam );
+    deal_melee_hit( source, nullptr, hit_spread, critical_hit, is_graze, dam, dealt_dam );
 }
 
 namespace ranged
@@ -883,22 +894,6 @@ void print_dmg_msg( Creature &target, Creature *source, const dealt_damage_insta
         }
     } else if( source != nullptr ) {
         if( source->is_player() ) {
-            //player hits monster ranged
-            SCT.add( target.bub_pos().xy().raw(),
-                     direction_from( point_rel_ms::zero(), target.bub_pos().xy() - source->bub_pos().xy() ),
-                     get_hp_bar( dealt_dam.total_damage(), target.get_hp_max(), true ).first,
-                     m_good, message, sct_color );
-
-            if( target.get_hp() > 0 ) {
-                SCT.add( target.bub_pos().xy().raw(),
-                         direction_from( point_rel_ms::zero(), target.bub_pos().xy() - source->bub_pos().xy() ),
-                         get_hp_bar( target.get_hp(), target.get_hp_max(), true ).first, m_good,
-                         //~ "hit points", used in scrolling combat text
-                         _( "hp" ), m_neutral, "hp" );
-            } else {
-                SCT.removeCreatureHP();
-            }
-
             //~ %1$s: creature name, %2$d: damage value
             add_msg( m_good, _( "You hit %1$s for %2$d damage." ),
                      target.disp_name(), dealt_dam.total_damage() );
@@ -946,12 +941,17 @@ auto get_stun_srength( const projectile &proj, creature_size size ) -> int
  * @param print_messages enables message printing by default.
  */
 void Creature::deal_projectile_attack( Creature *source, item *source_weapon,
-                                       dealt_projectile_attack &attack )
+                                       dealt_projectile_attack &attack, bool is_graze )
 {
 
     const double missed_by = attack.missed_by;
     if( missed_by >= 1.0 ) {
-        // Total miss.
+        // Total miss — spawn MISS SCT at target position.
+        if( source != nullptr && get_option<bool>( "ANIMATION_SCT" ) &&
+            get_option<bool>( "ANIMATION_SCT_OUTCOMES" ) ) {
+            direction dir = direction_from( source->bub_pos().xy(), bub_pos().xy() );
+            spawn_combat_feedback( *this, combat_feedback_options{ .type = combat_feedback_type::miss, .dir = dir } );
+        }
         // If a magic projectile somehow has a missed_by of 1 or more, it also misses.
         return;
     }
@@ -976,7 +976,7 @@ void Creature::deal_projectile_attack( Creature *source, item *source_weapon,
         if( mons && mons->mounted_player ) {
             if( !mons->has_flag( MF_MECH_DEFENSIVE ) &&
                 one_in( std::max( 2, mons->get_size() - mons->mounted_player->get_size() ) ) ) {
-                mons->mounted_player->deal_projectile_attack( source, source_weapon, attack );
+                mons->mounted_player->deal_projectile_attack( source, source_weapon, attack, is_graze );
                 return;
             }
         }
@@ -1004,8 +1004,19 @@ void Creature::deal_projectile_attack( Creature *source, item *source_weapon,
     // Headshot < 0.1, Crit < 0.2, Goodhit < 0.5, Normal < 0.8, 0.8 =< Graze
     const double goodhit = missed_by + std::max( 0.0, std::min( 1.0, dodge_rescaled ) );
 
+    // Compute graze detection: marginal hits (goodhit > accuracy_standard) are grazes.
+    if( !is_graze && !magic ) {
+        is_graze = goodhit > accuracy_standard;
+    }
+
     if( goodhit >= 1.0 ) {
         attack.missed_by = 1.0; // Arbitrary value
+        // Spawn DODGE SCT at target position.
+        if( source != nullptr && get_option<bool>( "ANIMATION_SCT" ) &&
+            get_option<bool>( "ANIMATION_SCT_OUTCOMES" ) ) {
+            direction dir = direction_from( source->bub_pos().xy(), bub_pos().xy() );
+            spawn_combat_feedback( *this, combat_feedback_options{ .type = combat_feedback_type::dodge, .dir = dir } );
+        }
         // "Avoid" rather than "dodge", because it includes removing self from the line of fire
         //  rather than just Matrix-style bullet dodging
         if( source != nullptr && g->u.sees( *source ) ) {
@@ -1231,7 +1242,7 @@ void Creature::deal_projectile_attack( Creature *source, item *source_weapon,
     // If we have a shield, it might passively block ranged impacts
     block_ranged_hit( source, bp_hit, impact );
     // If the projectile survives, both it and the launcher get credit for the kill.
-    dealt_dam = deal_damage( source, bp_hit, impact, source_weapon, attack.proj.get_drop() );
+    dealt_dam = deal_damage( source, bp_hit, impact, source_weapon, attack.proj.get_drop(), false, is_graze );
     dealt_dam.bp_hit = bp_hit.id();
 
     float dmg_after_armor = dealt_dam.total_damage();
@@ -1349,13 +1360,14 @@ void Creature::deal_projectile_attack( Creature *source, item *source_weapon,
     attack.missed_by = goodhit;
 }
 
-void Creature::deal_projectile_attack( Creature *source, dealt_projectile_attack &attack )
+void Creature::deal_projectile_attack( Creature *source, dealt_projectile_attack &attack, bool is_graze )
 {
-    deal_projectile_attack( source, nullptr, attack );
+    deal_projectile_attack( source, nullptr, attack, is_graze );
 }
 
 dealt_damage_instance Creature::deal_damage( Creature *source, bodypart_id bp,
-        const damage_instance &dam, item *source_weapon, item *source_projectile )
+        const damage_instance &dam, item *source_weapon, item *source_projectile,
+        bool is_crit, bool is_graze )
 {
     if( is_dead_state() ) {
         return dealt_damage_instance();
@@ -1383,18 +1395,32 @@ dealt_damage_instance Creature::deal_damage( Creature *source, bodypart_id bp,
     if( total_damage > 0 ) {
         // Sprite hit-reaction trigger (covers melee/ranged/environmental — all route here).
         anim_on_hit( source, static_cast<float>( total_damage ) / 50.f );
+
+        // Spawn floating combat text for damage numbers.
+        // Only spawn when there's an attacker (not environmental damage) and SCT is enabled.
+        if( source != nullptr && get_option<bool>( "ANIMATION_SCT_DAMAGE" ) ) {
+            direction dir = direction_from( source->bub_pos().xy(), bub_pos().xy() );
+            // Use the primary damage type for color mapping (first unit in the instance).
+            int dt = 0;
+            if( !d.damage_units.empty() ) {
+                dt = static_cast<int>( d.damage_units.front().type );
+            }
+            spawn_damage_number( *this, total_damage, dir, is_crit, false, dt, is_graze );
+        }
     }
     return dealt_dams;
 }
 dealt_damage_instance Creature::deal_damage( Creature *source, bodypart_id bp,
-        const damage_instance &dam, item *source_weapon )
+        const damage_instance &dam, item *source_weapon,
+        bool is_crit, bool is_graze )
 {
-    return deal_damage( source, bp, dam, source_weapon, nullptr );
+    return deal_damage( source, bp, dam, source_weapon, nullptr, is_crit, is_graze );
 }
 dealt_damage_instance Creature::deal_damage( Creature *source, bodypart_id bp,
-        const damage_instance &dam )
+        const damage_instance &dam,
+        bool is_crit, bool is_graze )
 {
-    return deal_damage( source, bp, dam, nullptr, nullptr );
+    return deal_damage( source, bp, dam, nullptr, nullptr, is_crit, is_graze );
 }
 void Creature::deal_damage_handle_type( const damage_unit &du, bodypart_id bp, int &damage,
                                         int &pain )

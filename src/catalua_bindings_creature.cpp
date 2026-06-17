@@ -94,8 +94,11 @@ void cata::detail::reg_creature( sol::state &lua )
 
         SET_FX_T( knock_back_to, void( const tripoint_bub_ms & ) );
 
-        SET_FX_T( deal_damage, dealt_damage_instance( Creature * source, bodypart_id bp,
-                  const damage_instance & dam ) );
+        luna::set_fx( ut, "deal_damage", sol::overload(
+                          sol::resolve<dealt_damage_instance( Creature *, bodypart_id, const damage_instance &, item *, item *, bool, bool )>( &UT_CLASS::deal_damage ),
+                          sol::resolve<dealt_damage_instance( Creature *, bodypart_id, const damage_instance &, item *, bool, bool )>( &UT_CLASS::deal_damage ),
+                          sol::resolve<dealt_damage_instance( Creature *, bodypart_id, const damage_instance &, bool, bool )>( &UT_CLASS::deal_damage )
+                      ) );
 
         SET_FX_T( apply_damage, void( Creature * source, bodypart_id bp, int amount,
                                       bool bypass_med ) );
