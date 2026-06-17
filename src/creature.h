@@ -853,6 +853,14 @@ class Creature
          */
         virtual int print_info( const catacurses::window &w, int vStart, int vLines, int column ) const = 0;
 
+        /**
+         * Colour-tagged multi-line text equivalent of print_info, for RmlUi info
+         * panes (e.g. the ranged targeting panel). Parallel to print_info's drawing;
+         * the curses print_info is left untouched for an A/B-faithful toggle. Base
+         * default is empty (only the targetable subclasses — monster, npc — override).
+         */
+        virtual std::string print_info_text() const;
+
         /** Describe this creature as seen by the avatar via infrared vision. */
         void describe_infrared( std::vector<std::string> &buf ) const;
 

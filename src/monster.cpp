@@ -889,6 +889,68 @@ int monster::print_info( const catacurses::window &w, int vStart, int vLines, in
     return ++vStart;
 }
 
+std::string monster::print_info_text() const
+{
+    // Parallel to monster::print_info, producing the same content as one
+    // colour-tagged string for RmlUi info panes (curses print_info untouched).
+    std::vector<std::string> lines;
+
+    nc_color hp_color = c_white;
+    std::string bar_str;
+    get_HP_Bar( hp_color, bar_str );
+    const std::pair<std::string, nc_color> att = get_attitude();
+    std::string head = colorize( bar_str, hp_color ) + " " +
+                       colorize( name(), basic_symbol_color() );
+    const std::string effect_status = get_effect_status();
+    if( !effect_status.empty() ) {
+        head += "  " + colorize( effect_status, h_white );
+    }
+    head += "  " + colorize( att.first, att.second );
+    lines.emplace_back( head );
+
+    lines.emplace_back( colorize( sees( g->u ) ? _( "Can see to your current location" ) :
+                                  _( "Can't see to your current location" ),
+                                  sees( g->u ) ? c_red : c_green ) );
+
+    const auto speed_desc = speed_description( speed_rating(), has_flag( MF_IMMOBILE ) );
+    lines.emplace_back( colorize( speed_desc.first, speed_desc.second ) );
+
+    if( debug_mode ) {
+        lines.emplace_back( colorize( _( " Difficulty " ) + std::to_string( type->difficulty ),
+                                      c_light_gray ) );
+    }
+    if( display_mod_source ) {
+        const std::string mod_src = enumerate_as_string( type->src.begin(),
+        type->src.end(), []( const std::pair<mtype_id, mod_id> &source ) {
+            return string_format( "'%s'", source.second->name() );
+        }, enumeration_conjunction::arrow );
+        lines.emplace_back( colorize( string_format( _( "Origin: %s" ), mod_src ), c_cyan ) );
+    }
+    if( display_object_ids ) {
+        lines.emplace_back( colorize( string_format( "[%s]", type->id.str() ), c_light_blue ) );
+    }
+
+    lines.emplace_back( colorize( type->get_description(), c_light_gray ) );
+
+    if( has_effect( effect_ridden ) && mounted_player ) {
+        lines.emplace_back( colorize( string_format( _( "Rider: %s" ), mounted_player->disp_name() ),
+                                      c_white ) );
+    }
+    if( size_bonus > 0 ) {
+        lines.emplace_back( colorize( string_format( _( "It is %s." ), size_names.at( get_size() ) ),
+                                      c_light_gray ) );
+    }
+
+    std::string out;
+    for( size_t i = 0; i < lines.size(); i++ ) {
+        if( i > 0 ) {
+            out += '\n';
+        }
+        out += lines[i];
+    }
+    return out;
+}
+
 std::string monster::extended_description() const
 {
     std::string ss;

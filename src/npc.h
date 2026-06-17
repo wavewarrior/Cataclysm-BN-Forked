@@ -803,6 +803,7 @@ class npc : public player
 
         nc_color basic_symbol_color() const override;
         int print_info( const catacurses::window &w, int line, int vLines, int column ) const override;
+        std::string print_info_text() const override;
         std::string opinion_text() const;
         int faction_display( const catacurses::window &fac_w, int width ) const;
         // State half of faction_display, callable without drawing: the RmlUi

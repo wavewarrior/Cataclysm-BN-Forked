@@ -158,6 +158,7 @@ class monster : public Creature, public location_visitable<monster>
         void get_HP_Bar( nc_color &color, std::string &text ) const;
         std::pair<std::string, nc_color> get_attitude() const;
         int print_info( const catacurses::window &w, int vStart, int vLines, int column ) const override;
+        std::string print_info_text() const override;
 
         nc_color basic_symbol_color() const override;
         nc_color symbol_color() const override;

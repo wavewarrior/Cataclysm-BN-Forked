@@ -2670,6 +2670,11 @@ void Creature::reset_hit_range()
     dispersion_for_even_chance_of_good_hit = default_dispersion_for_ecogh;
 }
 
+std::string Creature::print_info_text() const
+{
+    return std::string();
+}
+
 void Creature::describe_infrared( std::vector<std::string> &buf ) const
 {
     std::string size_str;
