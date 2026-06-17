@@ -1880,6 +1880,27 @@ careful build-blind pass (faction precedent: parallel `_lines()` producers, curs
   (`ranged.{rml,rcss}`) + `ranged_rmlui_enabled()` toggle + F4, render-only (keyboard owns
   aim/fire loop; the map overlay `draw_terrain_overlay` stays curses/sprite).
 
+  **DEEP DECOMPOSITION (mapped 2026-06-17 — piece 2 is itself a multi-commit sub-project,
+  NOT one pass):** `draw_ui_window` orchestrates section producers, of which the AIM READOUT
+  is a 4-deep drawing-function tree and the rest are shallow:
+  - **Shallow (direct `*_text()` producers, low risk):** `uitext_title` (already a string
+    fn), `draw_help_notice`, `panel_cursor_info` (range/elev/targets), `panel_gun_info`
+    (firing mode + ammo), `panel_recoil`, `panel_spell_info` (cost/fail/aoe/damage/desc),
+    `panel_target_info` (→ `print_info_text` ✓ done; + the infrared/specials `describe_*`
+    buf branches), `panel_turret_list`, `draw_controls_list` (keybinds).
+  - **DEEP — the aim readout (numerically critical, MUST be eyeballed):**
+    `panel_fire_mode_aim` → `print_aim` (ranged.cpp:2157) → **`print_steadiness`** (bar) +
+    **`print_ranged_chance`** (the `*`/`+`/`|` confidence + hit-chance table); plus
+    `draw_throw_aim` (ranged.cpp:2205, the parallel Throw tree). Shared static drawing fns
+    with intricate bar/table layout + confidence math — each needs its own lines-extraction,
+    and the hit-chance/confidence numbers are the whole point.
+  **RECOMMENDED SLICES:** (2a) shallow sections + panel scaffold + doc/toggle/F4, aim section
+  stubbed to a clearly-marked WIP line (toggle OFF → safe) = first buildable commit;
+  (2b) extract `print_steadiness`+`print_ranged_chance`→lines + wire the Fire aim readout =
+  the keystone eyeball (hit-chance numbers vs curses, number-for-number); (2c) `draw_throw_aim`
+  readout for Throw/ThrowBlind. **Most eyeball-sensitive screen in the migration — do NOT
+  land the aim readout build-blind without a number-for-number A/B.**
+
 ### Tier 6 progress (overmap_ui + on-map text + §7 world-text layer)
 
 **Tier 6 decomposition (multi-slice sub-project; architecturally the hardest tier):**
