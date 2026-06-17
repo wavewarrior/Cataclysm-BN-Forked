@@ -1,0 +1,29 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="newcharpoints.rcss"/>
+</head>
+<body data-model="newcharpoints">
+    <!-- Tier 4 screen #4 (new-character creator) slice 1: the POINTS tab
+         (set_points). Character-tab strip (8 steps, render-only — tab nav is
+         keyboard NEXT_TAB/PREV_TAB) + the points line + the point-pool option
+         list (cursor = .selected; chosen pool baked green into the text) + a
+         description pane for the highlighted option. Render-only doc; keyboard
+         still owns UP/DOWN/CONFIRM/NEXT_TAB/PREV_TAB/QUIT. -->
+    <div class="panel nc-panel">
+        <div class="tabs nc-tabs">
+            <div class="item tab" data-for="t : tabs"
+                 data-class-selected="t.selected" data-rml="t.name_rml"></div>
+        </div>
+        <div class="nc-points" data-rml="points_rml"></div>
+        <div class="nc-body">
+            <div class="nc-opts scroll-pane">
+                <div class="item nc-opt" data-for="o : opts"
+                     data-class-selected="o.selected" data-rml="o.name_rml"></div>
+            </div>
+            <div class="nc-desc scroll-pane" data-rml="desc_rml"></div>
+        </div>
+    </div>
+    <div id="crt-overlay" class="crt"></div>
+</body>
+</rml>

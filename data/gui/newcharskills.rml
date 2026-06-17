@@ -1,0 +1,32 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="newcharskills.rcss"/>
+</head>
+<body data-model="newcharskills">
+    <!-- Tier 4 screen #4 (new-character creator) slice 3: the SKILLS tab
+         (set_skills). Character-tab strip (SKILLS current) + points line +
+         upgrade-cost hint + a category-grouped skill list (yellow headers; each
+         skill shows level + profession bonus; cursor = .selected) + a scrollable
+         description pane (skill description + the recipes it unlocks). Render-only
+         doc; keyboard owns UP/DOWN select, LEFT/RIGHT dec/inc, RANDOMIZE,
+         SCROLL_UP/DOWN (desc pane), NEXT/PREV_TAB, QUIT. -->
+    <div class="panel nc-panel">
+        <div class="tabs nc-tabs">
+            <div class="item tab" data-for="t : tabs"
+                 data-class-selected="t.selected" data-rml="t.name_rml"></div>
+        </div>
+        <div class="nc-points" data-rml="points_rml"></div>
+        <div class="nc-cost" data-rml="cost_rml"></div>
+        <div class="nc-body">
+            <div id="nc-skill-list" class="nc-skill-list scroll-pane">
+                <div class="item nc-skill-row" data-for="r : rows"
+                     data-class-header="r.is_header" data-class-selected="r.selected"
+                     data-rml="r.text_rml"></div>
+            </div>
+            <div id="nc-skill-desc" class="nc-skill-desc scroll-pane" data-rml="desc_rml"></div>
+        </div>
+    </div>
+    <div id="crt-overlay" class="crt"></div>
+</body>
+</rml>

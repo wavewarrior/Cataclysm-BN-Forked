@@ -1,0 +1,27 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="pickworld.rcss"/>
+</head>
+<body data-model="pickworld">
+    <!-- Tier 4 screen #2 (worldfactory) slice 2: pick_world (world selection). Same
+         shape as the options screen — page tabs + a one-column world list ("n  name
+         (saves)") + a tooltip. Render-only: the PICK_WORLD_DIALOG loop owns selpage/sel;
+         mouse selects (click only). -->
+    <div class="panel pw-panel">
+        <div class="pw-tooltip" data-rml="tooltip_rml"></div>
+
+        <div class="tabs pw-tabs">
+            <div class="item tab" data-for="t : tabs"
+                 data-class-selected="t.selected"
+                 data-event-click="on_tab(it_index)" data-rml="t.name_rml"></div>
+        </div>
+
+        <div id="pw-list" class="pw-list scroll-pane">
+            <div class="pw-row" data-for="r : rows"
+                 data-class-selected="r.selected"
+                 data-event-click="on_select(it_index)" data-rml="r.text_rml"></div>
+        </div>
+    </div>
+</body>
+</rml>

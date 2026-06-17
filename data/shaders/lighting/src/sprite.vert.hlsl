@@ -71,7 +71,7 @@ cbuffer DebugParams : register(b2, space1) {
     float sway_amp;     // wind displacement amplitude (pixels); 0 = sway off
     float sway_freq;    // wind oscillation frequency
     float anim_time;    // wrapped render seconds (per-frame data)
-    float sway_pad;
+    float spec_strength; // fragment-stage only (declared here for cbuffer layout parity)
 };
 
 struct VS_OUT {
@@ -82,6 +82,7 @@ struct VS_OUT {
     float  light_mul: TEXCOORD3; // memory-fade marker (<0 = -(dist); else no-op)
     float2 light_pos: TEXCOORD4; // lighting sample pos: base-tile centre for tall
                                  // sprites (uniform), else == world_pos (per-pixel)
+    float  outline  : TEXCOORD5; // >0.5 = silhouette mask mode (hover outline)
 };
 static const float2 quad_uv[6] = {
     float2(0.0,0.0), float2(1.0,0.0), float2(0.0,1.0),
@@ -154,5 +155,6 @@ VS_OUT main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
     o.world_pos = map_pos;
     o.light_mul = s.light_mul;
     o.light_pos = is_tall ? base_tile : map_pos;
+    o.outline   = s.pad2;
     return o;
 }

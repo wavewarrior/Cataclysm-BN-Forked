@@ -36,6 +36,11 @@
 #include "vpart_position.h"
 #include "game_inventory.h"
 
+#include <RmlUi/Core.h>
+
+#include "rml_screen.h"
+#include "rml_util.h"
+
 #include <algorithm>
 #include <iterator>
 #include <limits>
@@ -46,6 +51,62 @@
 #include <string>
 #include <type_traits>
 #include <vector>
+
+// ── RmlUi inventory path (Tier 3 framework migration, slice 1) ────────────────
+namespace
+{
+struct inv_rml_row_model {
+    Rml::String text_rml;   // finished markup (invlet + cell text); category = header
+    bool is_category = false;
+    bool selected = false;
+};
+
+// One visible inventory_column, rendered side-by-side (slice 2b). The rows are
+// baked into a single finished-markup string (each row a <div class="inv-row ...">)
+// so the list is a flat data-for over columns — nested data-for is avoided.
+struct inv_col_model {
+    Rml::String html;
+};
+
+bool g_inv_rml_types_registered = false;
+
+void register_inv_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_inv_rml_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<inv_rml_row_model> rh = c.RegisterStruct<inv_rml_row_model>();
+    rh.RegisterMember( "text_rml", &inv_rml_row_model::text_rml );
+    rh.RegisterMember( "is_category", &inv_rml_row_model::is_category );
+    rh.RegisterMember( "selected", &inv_rml_row_model::selected );
+    c.RegisterArray<Rml::Vector<inv_rml_row_model>>();
+    Rml::StructHandle<inv_col_model> ch = c.RegisterStruct<inv_col_model>();
+    ch.RegisterMember( "html", &inv_col_model::html );
+    c.RegisterArray<Rml::Vector<inv_col_model>>();
+    g_inv_rml_types_registered = true;
+}
+} // namespace
+
+// pImpl (forward-declared in inventory_ui.h) — keeps RmlUi types out of the header.
+struct inventory_rml_state {
+    rml_doc rml;
+    Rml::String title_rml;
+    Rml::String hint_rml;
+    Rml::String footer_rml;
+    Rml::String filter_rml;   // "[F] Filter: <text>" indicator (slice 6)
+    // Visible columns laid out side-by-side; each holds its rows as baked markup.
+    Rml::Vector<inv_col_model> columns;
+    // Stats header lines (weight/volume), reusing the row model for its text_rml.
+    Rml::Vector<inv_rml_row_model> stats;
+    Rml::DataModelHandle handle;
+};
+
+bool &inventory_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = false;
+    return enabled;
+}
 
 /** The maximum distance from the screen edge, to snap a window to it */
 static const size_t max_win_snap_distance = 4;
@@ -1051,6 +1112,78 @@ selection_column::selection_column( const std::string &id, const std::string &na
 
 selection_column::~selection_column() = default;
 
+std::vector<inv_rml_row> inventory_column::rml_rows() const
+{
+    // Mirrors draw() but emits data rows; reuses the per-entry cell cache. All
+    // entries (RmlUi scrolls — no page windowing). Colours baked via the cache;
+    // the selected row + category styling are handled by CSS classes.
+    std::vector<inv_rml_row> out;
+    if( !visible() ) {
+        return out;
+    }
+    for( size_t i = 0; i < entries.size(); ++i ) {
+        const inventory_entry &entry = entries[i];
+        const entry_cell_cache_t &cache = get_entry_cell_cache( i );
+        if( entry.is_category() ) {
+            inv_rml_row r;
+            r.is_category = true;
+            r.text = cata_text_to_rml( colorize( cache.text.empty() ? std::string() : cache.text[0],
+                                       cache.color ) );
+            out.push_back( r );
+            continue;
+        }
+        if( !entry.is_item() ) {
+            continue;   // blank spacer row
+        }
+        inv_rml_row r;
+        r.selected = active && is_selected( entry );
+        const bool denied = !cache.denial.empty();
+        std::string markup;
+        if( entry.get_invlet() != '\0' ) {
+            markup += colorize( std::string( 1, static_cast<char>( entry.get_invlet() ) ),
+                                entry.get_invlet_color() );
+        }
+        markup += " ";
+        // Item symbol glyph (identifying content — matches draw(): item color).
+        if( entry.any_item() ) {
+            markup += colorize( entry.any_item()->symbol(), entry.any_item()->color() ) + " ";
+        }
+        // Multiselect mark (matches draw(): '-' none / '+' all / '#' partial), only
+        // for multiselect columns. The selection column has multiselect=false so it
+        // shows no mark — same as curses.
+        if( allows_selecting() && activatable() && multiselect ) {
+            if( entry.chosen_count == 0 ) {
+                markup += colorize( "-", c_dark_gray );
+            } else if( entry.chosen_count >= entry.get_available_count() ) {
+                markup += colorize( "+", c_light_green );
+            } else {
+                markup += colorize( "#", c_light_green );
+            }
+            markup += " ";
+        }
+        // When denied, curses shows only the first cell to make room for the red
+        // denial reason (count = 1); match that so the layout can't collide.
+        std::string body;
+        const size_t cell_count = denied ? 1 : cache.text.size();
+        for( size_t ci = 0; ci < cell_count && ci < cache.text.size(); ++ci ) {
+            if( cache.text[ci].empty() ) {
+                continue;
+            }
+            if( !body.empty() ) {
+                body += "  ";
+            }
+            body += cache.text[ci];
+        }
+        markup += colorize( body, denied ? c_dark_gray : cache.color );
+        if( denied ) {
+            markup += "  " + colorize( cache.denial, c_red );
+        }
+        r.text = cata_text_to_rml( markup );
+        out.push_back( r );
+    }
+    return out;
+}
+
 void selection_column::reset_width( const std::vector<inventory_column *> &all_columns )
 {
     inventory_column::reset_width( all_columns );
@@ -1471,6 +1604,11 @@ shared_ptr_fast<ui_adaptor> inventory_selector::create_or_get_ui_adaptor()
         current_ui->on_redraw( [this]( const ui_adaptor & ) {
             refresh_window();
         } );
+
+        // Open the RmlUi doc once, for a subclass that opted in (toggle read here).
+        if( uses_rml() ) {
+            rml_open();
+        }
     }
     return current_ui;
 }
@@ -1635,6 +1773,14 @@ void inventory_selector::resize_window( int width, int height )
 
 void inventory_selector::refresh_window() const
 {
+    // RmlUi path (only for a selector subclass that opted in via uses_rml() AND
+    // whose doc was opened in create_or_get_ui_adaptor) — sync the model, skip
+    // curses. Other subclasses / toggle-off fall through to the curses render.
+    if( uses_rml() && rml_state_ ) {
+        rml_sync();
+        return;
+    }
+
     assert( w_inv );
 
     werase( w_inv );
@@ -1645,6 +1791,85 @@ void inventory_selector::refresh_window() const
     draw_footer( w_inv );
 
     wnoutrefresh( w_inv );
+}
+
+void inventory_selector::rml_open()
+{
+    if( rml_state_ ) {
+        return;
+    }
+    rml_state_ = std::make_unique<inventory_rml_state>();
+    inventory_rml_state *st = rml_state_.get();
+    st->rml.open( inventory_rmlui_enabled(), "inventory", ctxt,
+    [st]( Rml::DataModelConstructor & c ) {
+        register_inv_rml_types( c );
+        c.Bind( "title_rml", &st->title_rml );
+        c.Bind( "hint_rml", &st->hint_rml );
+        c.Bind( "footer_rml", &st->footer_rml );
+        c.Bind( "filter_rml", &st->filter_rml );
+        c.Bind( "columns", &st->columns );
+        c.Bind( "stats", &st->stats );
+        st->handle = c.GetModelHandle();
+    } );
+}
+
+void inventory_selector::rml_sync() const
+{
+    inventory_rml_state *st = rml_state_.get();
+    if( !st ) {
+        return;
+    }
+    st->title_rml = cata_text_to_rml( colorize( title, c_white ) );
+    st->hint_rml = cata_text_to_rml( colorize( hint, c_dark_gray ) );
+    const std::pair<std::string, nc_color> f = get_footer( mode );
+    st->footer_rml = cata_text_to_rml( colorize( f.first, f.second ) );
+    // Filter indicator (mirrors draw_footer): the filter key + current filter text.
+    // ASCII bracket/line decoration is dropped (semantic rewrite, like prior slices).
+    if( has_available_choices() || !filter.empty() ) {
+        const std::string label = string_format(
+                                       filter.empty() ? _( "[%s] Filter" ) : _( "[%s] Filter: " ),
+                                       ctxt.get_desc( "INVENTORY_FILTER" ) );
+        st->filter_rml = cata_text_to_rml( colorize( label, c_light_gray ) +
+                                           colorize( filter, c_white ) );
+    } else {
+        st->filter_rml = Rml::String();
+    }
+    // Lay visible columns out side-by-side (slice 2b). Each column's rows are baked
+    // into one markup string (a <div class="inv-row ..."> per row) so the RML is a
+    // flat data-for over columns. The category/selected styling rides CSS classes;
+    // only the active column reports selected=true (cursor highlight).
+    st->columns.clear();
+    for( const inventory_column *col : get_visible_columns() ) {
+        inv_col_model cm;
+        for( const inv_rml_row &r : col->rml_rows() ) {
+            std::string cls = "inv-row";
+            if( r.is_category ) {
+                cls += " category";
+            }
+            if( r.selected ) {
+                cls += " selected";
+            }
+            cm.html += "<div class=\"" + cls + "\">" + r.text + "</div>";
+        }
+        st->columns.push_back( cm );
+    }
+    // Stats header (weight/volume), right-aligned — mirrors draw_header's
+    // display_stats branch. Each get_stats() line already carries per-segment
+    // colour tags; wrap in the c_dark_gray base like the curses right_print.
+    st->stats.clear();
+    if( display_stats ) {
+        for( const std::string &elem : get_stats() ) {
+            inv_rml_row_model m;
+            m.text_rml = cata_text_to_rml( colorize( elem, c_dark_gray ) );
+            st->stats.push_back( m );
+        }
+    }
+    st->handle.DirtyVariable( "title_rml" );
+    st->handle.DirtyVariable( "hint_rml" );
+    st->handle.DirtyVariable( "footer_rml" );
+    st->handle.DirtyVariable( "filter_rml" );
+    st->handle.DirtyVariable( "columns" );
+    st->handle.DirtyVariable( "stats" );
 }
 
 void inventory_selector::set_filter()
@@ -2058,6 +2283,37 @@ std::vector<char> inventory_selector::all_bound_keys() const
         retv.insert( retv.end(), to_add.begin(), to_add.end() );
     }
     return retv;
+}
+
+bool inventory_pick_selector::uses_rml() const
+{
+    // Tier 3 slice 1: the single-select picker is the first selector lit for RmlUi.
+    return inventory_rmlui_enabled();
+}
+
+bool inventory_drop_selector::uses_rml() const
+{
+    // Tier 3 slice 3: the multiselect mechanism (marks + selection column +
+    // query_count) is proven through the drop selector. Shares the global toggle.
+    return inventory_rmlui_enabled();
+}
+
+bool inventory_compare_selector::uses_rml() const
+{
+    // Tier 3 slice 4: two-selection compare. Same multiselect render as slice 3.
+    return inventory_rmlui_enabled();
+}
+
+bool inventory_iuse_selector::uses_rml() const
+{
+    // Tier 3 slice 5: same multiselect render; custom stats via get_raw_stats.
+    return inventory_rmlui_enabled();
+}
+
+bool inventory_pickup_selector::uses_rml() const
+{
+    // Tier 3 slice 5: same multiselect render as slice 3.
+    return inventory_rmlui_enabled();
 }
 
 item *inventory_pick_selector::execute()

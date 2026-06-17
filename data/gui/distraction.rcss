@@ -29,8 +29,8 @@ body {
     min-height: 48dp;
     padding-bottom: 8dp;
     margin-bottom: 8dp;
-    border-bottom: 1dp #5a5a78ff;
-    color: #cfcfe0ff;
+    border-bottom: 1dp {{bg4}};
+    color: {{fg}};
 }
 
 /* The toggle list fills the rest and scrolls its own overflow (.scroll-pane). */

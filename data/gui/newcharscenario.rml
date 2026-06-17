@@ -1,0 +1,38 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="newcharscenario.rcss"/>
+</head>
+<body data-model="newcharscenario">
+    <!-- Tier 4 screen #4 (new-character creator) slice 6: the SCENARIO tab
+         (set_scenario). Char-tab strip (SCENARIO current) + top bar (points +
+         the selected scenario's cost line) + a body split (scenario list left /
+         a right info pane: sort indicator + professions / location / vehicle /
+         flags) + a description footer + a filter indicator. Render-only doc;
+         keyboard owns UP/DOWN, CONFIRM (pick), SORT, FILTER (string_input popup),
+         RANDOMIZE, NEXT/PREV_TAB, QUIT. -->
+    <div class="panel nc-panel">
+        <div class="tabs nc-tabs">
+            <div class="item tab" data-for="t : tabs"
+                 data-class-selected="t.selected" data-rml="t.name_rml"></div>
+        </div>
+        <div class="nc-scen-top">
+            <span class="nc-scen-points" data-rml="points_rml"></span>
+            <span class="nc-scen-cost" data-rml="cost_rml"></span>
+        </div>
+        <div class="nc-scen-body">
+            <div id="nc-scen-list" class="nc-scen-list scroll-pane">
+                <div class="item nc-scen-row" data-for="r : rows"
+                     data-class-selected="r.selected" data-rml="r.text_rml"></div>
+            </div>
+            <div class="nc-scen-info scroll-pane">
+                <div class="nc-scen-sort" data-rml="sort_rml"></div>
+                <div class="nc-scen-detail" data-rml="info_rml"></div>
+            </div>
+        </div>
+        <div class="nc-scen-desc" data-rml="desc_rml"></div>
+        <div class="nc-scen-filter" data-rml="filter_rml"></div>
+    </div>
+    <div id="crt-overlay" class="crt"></div>
+</body>
+</rml>

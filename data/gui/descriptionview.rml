@@ -1,0 +1,22 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="descriptionview.rcss"/>
+</head>
+<body data-model="descriptionview">
+    <!-- game::extended_description (examine-tile description view). A clean text
+         pane: the host builds one colour-tagged `desc` string per frame from the
+         creature / furniture / terrain extended_description() (+ signage), and
+         this doc renders it. The whole `desc` is run through cata_text_to_rml in
+         one pass (so colour tags match correctly across newlines and \n becomes
+         <br/>), bound as `body_rml`. `hint_rml` is the top key-hint bar
+         ([c] creatures / [f] furniture / [t] terrain / [close]). Render-only:
+         keyboard owns the CREATURE/FURNITURE/TERRAIN/QUIT actions. -->
+    <div class="panel desc-panel">
+        <div class="desc-head" data-rml="hint_rml"></div>
+        <div class="desc-body scroll-pane">
+            <div class="desc-text" data-rml="body_rml"></div>
+        </div>
+    </div>
+</body>
+</rml>

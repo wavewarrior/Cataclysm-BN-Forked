@@ -1,0 +1,20 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="worldmods.rcss"/>
+</head>
+<body data-model="worldmods">
+    <!-- Tier 4 screen #2 (worldfactory) slice 3: show_active_world_mods (read-only mod
+         list). Category headers (magenta) + mod rows ("name [id]", obsolete dark-gray*,
+         invalid red N/A) + cursor. Render-only, keyboard-only (DEFAULT ctxt UP/DOWN/QUIT).
+         The mod-row markup is shared with the slice-4 mod selector via build_wf_mod_rows. -->
+    <div class="panel wm-panel">
+        <div class="wm-title" data-rml="title_rml"></div>
+        <div id="wm-list" class="wm-list scroll-pane">
+            <div class="wm-row" data-for="r : rows"
+                 data-class-category="r.is_category"
+                 data-class-selected="r.selected" data-rml="r.text_rml"></div>
+        </div>
+    </div>
+</body>
+</rml>

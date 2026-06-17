@@ -34,7 +34,7 @@ body {
 /* "Press one of the following…" preamble above the topic grid. */
 .help-intro {
     margin-bottom: 12dp;
-    color: #cfcfe0ff;
+    color: {{fg}};
 }
 
 /* Topic list as two wrapping columns (matches the legacy 2-column draw_menu). */

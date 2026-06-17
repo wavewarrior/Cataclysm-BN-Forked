@@ -1,0 +1,30 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="dialogue.rcss"/>
+</head>
+<body data-model="dialogue">
+    <!-- Tier 5: the NPC dialogue window (dialogue_window, driven from
+         dialogue::opt). Render-only doc: header (Dialogue: <name>) + body split
+         into a left history pane (the exchanged words, last two highlighted) and
+         a right response pane ("Your response:" + lettered option list, selected
+         option highlighted + keybinding hints). Keyboard owns nav/select via the
+         raw input loop; responses are pre-coloured strings, selection via
+         .selected. -->
+    <div class="panel dlg-panel">
+        <div class="dlg-header" data-rml="name_rml"></div>
+        <div class="dlg-body">
+            <div class="dlg-history scroll-pane" data-rml="history_rml"></div>
+            <div class="dlg-resp-pane">
+                <div class="dlg-resp-label">Your response:</div>
+                <div class="dlg-resp-list scroll-pane">
+                    <div class="item dlg-resp" data-for="r : responses"
+                         data-class-selected="r.selected" data-rml="r.text_rml"></div>
+                </div>
+                <div class="dlg-keybinds" data-rml="keybinds_rml"></div>
+            </div>
+        </div>
+    </div>
+    <div id="crt-overlay" class="crt"></div>
+</body>
+</rml>

@@ -328,6 +328,9 @@ struct mtype {
         bool regen_morale = false;
 
         void faction_display( catacurses::window &w, const point &top_left, const int width ) const;
+        // Colour-tagged text for the faction manager's creature detail pane
+        // (parallel to faction_display; curses path untouched for the A/B toggle).
+        std::string faction_info_text() const;
 
         // mountable ratio for rider weight vs. mount weight, default 0.3
         float mountable_weight_ratio = 0.3;

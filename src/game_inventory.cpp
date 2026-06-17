@@ -49,6 +49,9 @@
 #include "player_activity.h"
 #include "point.h"
 #include "recipe.h"
+#include <RmlUi/Core.h>
+#include "rml_screen.h"
+#include "rml_util.h"
 #include "recipe_dictionary.h"
 #include "requirements.h"
 #include "ret_val.h"
@@ -1773,6 +1776,40 @@ void game_menus::inv::compare( player &p, const std::optional<tripoint_rel_ms> &
     } while( true );
 }
 
+namespace
+{
+// RmlUi compare-display model (Tier 3 follower). One markup line per folded
+// item-info line; two panes (lhs/rhs) each carrying its own line list + title.
+struct cmp_line {
+    Rml::String text_rml;
+};
+struct cmp_session {
+    Rml::String lhs_title_rml;
+    Rml::String rhs_title_rml;
+    Rml::Vector<cmp_line> lhs;
+    Rml::Vector<cmp_line> rhs;
+    Rml::DataModelHandle handle;
+};
+bool g_cmp_types_registered = false;
+void register_cmp_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_cmp_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<cmp_line> lh = c.RegisterStruct<cmp_line>();
+    lh.RegisterMember( "text_rml", &cmp_line::text_rml );
+    c.RegisterArray<Rml::Vector<cmp_line>>();
+    g_cmp_types_registered = true;
+}
+} // namespace
+
+bool &compare_items_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = false;
+    return enabled;
+}
+
 void game_menus::inv::compare( const item &l, const item &r )
 {
     std::string action;
@@ -1812,22 +1849,76 @@ void game_menus::inv::compare( const item &l, const item &r )
     } );
     ui.mark_resize();
 
+    // RmlUi render path: two side-by-side item-info panes via the F.2 component.
+    // The compare-delta colouring (each pane's item_info_data carries the OTHER as
+    // its compare set) is exercised here — the first compare consumer of
+    // item_info_rml_lines. Lines/titles are fixed for the screen's lifetime, so
+    // they are built once in open(); scrolling is native (SetScrollTop on both).
+    std::unique_ptr<cmp_session> rml_sess;
+    rml_doc rml;
+    rml.open( compare_items_rmlui_enabled(), "compare", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        rml_sess = std::make_unique<cmp_session>();
+        register_cmp_rml_types( c );
+        c.Bind( "lhs_title_rml", &rml_sess->lhs_title_rml );
+        c.Bind( "rhs_title_rml", &rml_sess->rhs_title_rml );
+        c.Bind( "lhs", &rml_sess->lhs );
+        c.Bind( "rhs", &rml_sess->rhs );
+        rml_sess->lhs_title_rml = cata_text_to_rml( colorize( lhs_tname, c_white ) );
+        rml_sess->rhs_title_rml = cata_text_to_rml( colorize( rhs_tname, c_white ) );
+        for( const std::string &ln : item_info_rml_lines( lhs_item_info ) ) {
+            rml_sess->lhs.push_back( cmp_line{ ln } );
+        }
+        for( const std::string &ln : item_info_rml_lines( rhs_item_info ) ) {
+            rml_sess->rhs.push_back( cmp_line{ ln } );
+        }
+        rml_sess->handle = c.GetModelHandle();
+    } );
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        // RmlUi owns the screen when active; the model is static so nothing to sync.
+        if( rml ) {
+            return;
+        }
         draw_item_info( w_lhs_item_info, lhs_item_info );
         draw_item_info( w_rhs_item_info, rhs_item_info );
     } );
+
+    // Scroll BOTH panes in lockstep (dir<0 up, dir>0 down; frac of a client page).
+    const auto scroll_both = [&]( float frac ) {
+        if( !rml ) {
+            return;
+        }
+        for( const char *id : {
+                 "cmp-lhs", "cmp-rhs"
+             } ) {
+            if( Rml::Element *el = rml.document()->GetElementById( id ) ) {
+                el->SetScrollTop( el->GetScrollTop() + frac * el->GetClientHeight() );
+            }
+        }
+    };
 
     do {
         ui_manager::redraw();
 
         action = ctxt.handle_input();
 
-        if( action == "UP" || action == "PAGE_UP" ) {
+        if( action == "UP" ) {
             lhs_scroll_pos--;
             rhs_scroll_pos--;
-        } else if( action == "DOWN" || action == "PAGE_DOWN" ) {
+            scroll_both( -0.15f );
+        } else if( action == "DOWN" ) {
             lhs_scroll_pos++;
             rhs_scroll_pos++;
+            scroll_both( 0.15f );
+        } else if( action == "PAGE_UP" ) {
+            lhs_scroll_pos--;
+            rhs_scroll_pos--;
+            scroll_both( -0.85f );
+        } else if( action == "PAGE_DOWN" ) {
+            lhs_scroll_pos++;
+            rhs_scroll_pos++;
+            scroll_both( 0.85f );
         }
 
     } while( action != "QUIT" );

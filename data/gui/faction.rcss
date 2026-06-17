@@ -1,0 +1,51 @@
+/* Layout for the faction manager (faction_manager::display). Palette / border /
+   scrollbar / .scroll-pane / .tabs / .tab / .item come from theme.rcss (linked
+   first in faction.rml); this file owns only the screen's own layout. Lengths in dp.
+
+   Tab bar on top, then two columns: a narrow entry list on the left and a wider
+   detail pane on the right (mirrors the legacy 28-wide list + col-31 detail).
+   .item and .fac-detail are display:block (RmlUi divs default to inline — see the
+   theme.rcss gotcha) and the detail is pre-wrap so the colour-text body wraps like
+   the legacy fold_and_print. */
+body {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+}
+
+.fac-panel {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.fac-cols {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+}
+
+/* Left entry list — fixed-ish narrow column, mirrors the legacy 28-cell list. */
+.fac-list {
+    width: 30%;
+    min-width: 220dp;
+    border-right: 1dp {{gray}};
+    padding: 4dp 8dp;
+}
+
+.fac-list .item {
+    display: block;
+}
+
+/* Right detail pane — the selected entry's colour-text. */
+.fac-detail {
+    flex: 1;
+    min-width: 0;
+    display: block;
+    padding: 4dp 8dp;
+    color: {{light_gray}};
+    white-space: pre-wrap;
+}

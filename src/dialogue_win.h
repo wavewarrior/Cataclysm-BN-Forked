@@ -31,6 +31,9 @@ class dialogue_window
         void refresh_response_display();
         /** Adds message to history. It must be already translated. */
         void add_to_history( const std::string &msg );
+        /** History as one colour-tagged string (last two messages white, rest
+         *  grey) for the RmlUi render path — mirrors print_history's highlight. */
+        std::string history_markup() const;
 
     private:
         catacurses::window d_win;

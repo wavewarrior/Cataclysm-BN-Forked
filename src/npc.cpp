@@ -2528,6 +2528,69 @@ auto npc::print_info( const catacurses::window &w, int line, int vLines, int col
     return line;
 }
 
+std::string npc::print_info_text() const
+{
+    // Parallel to npc::print_info, producing the same content as one colour-tagged
+    // string for RmlUi info panes (curses print_info untouched; the positional
+    // right-alignment of attitude becomes sequential here).
+    std::vector<std::string> lines;
+
+    const auto bar = get_hp_bar( hp_percentage(), 100 );
+    std::string head = colorize( bar.first, bar.second ) + " " +
+                       colorize( name, basic_symbol_color() );
+    const std::string att_goal = npc_attitude_name( get_attitude() );
+    if( !att_goal.empty() ) {
+        head += "  " + colorize( att_goal, basic_symbol_color() );
+    }
+    lines.emplace_back( head );
+
+    const Attitude att = attitude_to( g->u );
+    const std::pair<translation, nc_color> res = Creature::get_attitude_ui_data( att );
+    const std::string senses_str = sees( g->u ) ? _( "Aware of your presence" ) :
+                                   _( "Unaware of you" );
+    lines.emplace_back( colorize( senses_str, sees( g->u ) ? c_yellow : c_green ) + "  " +
+                        colorize( res.first.translated(), res.second ) );
+
+    if( display_object_ids ) {
+        lines.emplace_back( colorize( string_format( "[%s]", myclass ), c_light_blue ) );
+    }
+
+    if( is_armed() ) {
+        lines.emplace_back( colorize( _( "Wielding: " ), c_light_gray ) +
+                            colorize( primary_weapon().tname(), c_red ) );
+    }
+
+    const std::string worn_str = enumerate_as_string( worn.begin(),
+    worn.end(), []( const item * const & it ) {
+        return it->tname();
+    } );
+    if( !worn_str.empty() ) {
+        lines.emplace_back( colorize( _( "Wearing: " ) + worn_str, c_light_gray ) );
+    }
+
+    const int per = g->u.get_per();
+    const int dist = rl_dist( g->u.bub_pos(), bub_pos() );
+    int visibility_cap;
+    if( per <= 1 ) {
+        visibility_cap = INT_MAX;
+    } else {
+        visibility_cap = std::round( dist * dist / 20.0 / ( per - 1 ) );
+    }
+    const std::string trait_str = visible_mutations( visibility_cap );
+    if( !trait_str.empty() ) {
+        lines.emplace_back( colorize( _( "Traits: " ) + trait_str, c_light_gray ) );
+    }
+
+    std::string out;
+    for( size_t i = 0; i < lines.size(); i++ ) {
+        if( i > 0 ) {
+            out += '\n';
+        }
+        out += lines[i];
+    }
+    return out;
+}
+
 std::string npc::opinion_text() const
 {
     std::string ret;

@@ -22,6 +22,11 @@
 #include "item_group.h"
 #include "itype.h"
 
+#include <RmlUi/Core.h>
+
+#include "rml_screen.h"
+#include "rml_util.h"
+
 static const skill_id skill_survival( "survival" );
 
 static const trait_id trait_ILLITERATE( "ILLITERATE" );
@@ -46,6 +51,27 @@ static const Creature *seen_critter( const game &g, const tripoint_bub_ms &p )
     }
 
     return nullptr;
+}
+
+// ── RmlUi render path (full UI→RmlUi migration) ──────────────────────────────
+// game::extended_description is a clean text pane (legacy w_head key-hint bar +
+// w_main folded colour-text). The host builds one colour-tagged `desc` string per
+// frame from the creature / furniture / terrain extended_description() (+ signage);
+// the RmlUi path runs that whole string through cata_text_to_rml in one pass
+// (correct tag matching across newlines, \n → <br/>) and binds it as `body_rml`,
+// plus the key-hint bar as `hint_rml`. Render-only: keyboard owns the
+// CREATURE/FURNITURE/TERRAIN/QUIT actions — the doc is a backdrop the RmlUi context
+// ticks each frame (open() sets that tick on the screen's own ctxt).
+struct description_rml_session {
+    std::string hint_rml;
+    std::string body_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool &description_view_rmlui_enabled()
+{
+    static bool enabled = false;
+    return enabled;
 }
 
 void game::extended_description( const tripoint_bub_ms &p )
@@ -84,21 +110,17 @@ void game::extended_description( const tripoint_bub_ms &p )
     ctxt.register_action( "QUIT" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
 
-    ui.on_redraw( [&]( const ui_adaptor & ) {
-        werase( w_head );
-        mvwprintz( w_head, point_zero, c_white,
+    // Shared text builders so the curses path and the RmlUi path render the same
+    // content (no drift). build_hint = the key-hint bar; build_desc = the folded
+    // colour-text body for the current target (+ signage).
+    const auto build_hint = [&]() -> std::string {
+        return string_format(
                    _( "[%s] describe creatures, [%s] describe furniture, "
                       "[%s] describe terrain, [%s] close." ),
                    ctxt.get_desc( "CREATURE" ), ctxt.get_desc( "FURNITURE" ),
                    ctxt.get_desc( "TERRAIN" ), ctxt.get_desc( "QUIT" ) );
-
-        // Set up line drawings
-        for( int i = 0; i < TERMX; i++ ) {
-            mvwputch( w_head, point( i, top - 1 ), c_white, LINE_OXOX );
-        }
-
-        wnoutrefresh( w_head );
-
+    };
+    const auto build_desc = [&]() -> std::string {
         std::string desc;
         // Allow looking at invisible tiles - player may want to examine hallucinations etc.
         switch( cur_target ) {
@@ -149,15 +171,54 @@ void game::extended_description( const tripoint_bub_ms &p )
                 break;
         }
 
-        std::string signage = m.get_signage( p );
+        const std::string signage = m.get_signage( p );
         if( !signage.empty() ) {
             // NOLINTNEXTLINE(cata-text-style): the question mark does not end a sentence
             desc += u.has_trait( trait_ILLITERATE ) ? _( "\nSign: ???" ) : string_format( _( "\nSign: %s" ),
                     signage );
         }
+        return desc;
+    };
+
+    // ---- RmlUi render path (F.3 rml_doc harness) ----------------------------
+    // Render-only text pane; keyboard owns the action loop below. `rml_data` is
+    // declared before `rml` so the doc tears down while the bound buffer is alive.
+    description_rml_session rml_data;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml ) {
+            return;
+        }
+        rml_data.hint_rml = cata_text_to_rml( build_hint() );
+        rml_data.body_rml = cata_text_to_rml( build_desc() );
+        rml_data.handle.DirtyVariable( "hint_rml" );
+        rml_data.handle.DirtyVariable( "body_rml" );
+    };
+    rml.open( description_view_rmlui_enabled(), "descriptionview", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        c.Bind( "hint_rml", &rml_data.hint_rml );
+        c.Bind( "body_rml", &rml_data.body_rml );
+        rml_data.handle = c.GetModelHandle();
+    } );
+
+    ui.on_redraw( [&]( const ui_adaptor & ) {
+        // RmlUi path owns the panes — sync the bound strings and skip curses.
+        if( rml ) {
+            sync_rml();
+            return;
+        }
+        werase( w_head );
+        mvwprintz( w_head, point_zero, c_white, "%s", build_hint() );
+
+        // Set up line drawings
+        for( int i = 0; i < TERMX; i++ ) {
+            mvwputch( w_head, point( i, top - 1 ), c_white, LINE_OXOX );
+        }
+
+        wnoutrefresh( w_head );
 
         werase( w_main );
-        fold_and_print_from( w_main, point_zero, width, 0, c_light_gray, desc );
+        fold_and_print_from( w_main, point_zero, width, 0, c_light_gray, build_desc() );
         wnoutrefresh( w_main );
     } );
 

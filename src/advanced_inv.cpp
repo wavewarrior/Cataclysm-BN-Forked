@@ -52,6 +52,8 @@
 #include "player_activity.h"
 #include "point.h"
 #include "ret_val.h"
+#include "rml_screen.h"
+#include "rml_util.h"
 #include "string_formatter.h"
 #include "string_input_popup.h"
 #include "translations.h"
@@ -558,6 +560,57 @@ int advanced_inventory::print_header( advanced_inventory_pane &pane, aim_locatio
         }
     }
     return min_x;
+}
+
+std::string advanced_inventory::aim_area_grid_html( advanced_inventory_pane &pane, aim_location sel )
+{
+    const int area = pane.get_area();
+    // One [key] cell, coloured by state — mirrors print_header (540-557).
+    const auto cell = [&]( aim_location loc ) -> std::string {
+        const aim_location data_location = screen_relative_location( loc );
+        const char *bracket = squares[data_location].can_store_in_vehicle() ? "<>" : "[]";
+        const bool in_vehicle = pane.in_vehicle() && squares[data_location].id == area &&
+                                sel == area && area != AIM_ALL;
+        const bool all_brackets = area == AIM_ALL &&
+                                  ( data_location >= AIM_SOUTHWEST && data_location <= AIM_NORTHEAST );
+        nc_color bcolor = c_red;
+        nc_color kcolor = c_red;
+        if( squares[data_location].canputitems( pane.get_cur_item_ptr() ) ) {
+            bcolor = in_vehicle ? c_light_blue
+                     : ( area == data_location || all_brackets ? c_light_gray : c_dark_gray );
+            kcolor = area == data_location ? c_white
+                     : ( sel == data_location ? c_light_gray : c_dark_gray );
+        }
+        const std::string key = in_vehicle && sel != AIM_DRAGGED ? std::string( "V" )
+                                : get_location_key( loc );
+        return "<span class=\"aim-gcell\">" + cata_text_to_rml(
+                   colorize( std::string( 1, bracket[0] ), bcolor ) +
+                   colorize( key, kcolor ) +
+                   colorize( std::string( 1, bracket[1] ), bcolor ) ) + "</span>";
+    };
+    const aim_location rows[3][3] = {
+        { AIM_NORTHWEST, AIM_NORTH, AIM_NORTHEAST },
+        { AIM_WEST, AIM_CENTER, AIM_EAST },
+        { AIM_SOUTHWEST, AIM_SOUTH, AIM_SOUTHEAST }
+    };
+    std::string out = "<div class=\"aim-grid\">";
+    for( const aim_location *r : {
+             rows[0], rows[1], rows[2]
+         } ) {
+        out += "<div class=\"aim-grow\">";
+        for( int i = 0; i < 3; i++ ) {
+            out += cell( r[i] );
+        }
+        out += "</div>";
+    }
+    out += "</div><div class=\"aim-grow aim-specials\">";
+    for( const aim_location loc : {
+             AIM_INVENTORY, AIM_WORN, AIM_ALL, AIM_DRAGGED, AIM_CONTAINER
+         } ) {
+        out += cell( loc );
+    }
+    out += "</div>";
+    return out;
 }
 
 void advanced_inventory::recalc_pane( side p )
@@ -1350,6 +1403,165 @@ void advanced_inventory::action_examine( advanced_inv_listitem *sitem,
     }
 }
 
+// ── RmlUi AIM path (Tier 3 sub-project, slice 1: dual-pane item lists) ──────────
+namespace
+{
+// All-scalar model (six baked strings, two panes) — no struct/array registration.
+struct aim_session {
+    Rml::String left_title_rml, left_head_rml, left_rows_html;
+    Rml::String right_title_rml, right_head_rml, right_rows_html;
+    // Slice 2: per-pane area-selection grid + the top-bar clock/hints.
+    Rml::String left_grid_rml, right_grid_rml;
+    Rml::String clock_rml, hints_rml;
+    // Slice 3: per-pane sort indicator + filter footer.
+    Rml::String left_sort_rml, right_sort_rml;
+    Rml::String left_filter_rml, right_filter_rml;
+    Rml::DataModelHandle handle;
+};
+
+// One pane's rows as baked markup (column-header row + category/item rows). Mirrors
+// print_items' per-item logic but emits cells (CSS flex columns, not absolute x).
+// SLICE 1 defers: AIM_ALL src column, compact mode, autopickup marker.
+std::string aim_pane_rows_html( const advanced_inventory_pane &pane, bool active,
+                                const std::array<advanced_inv_area, NUM_AIM_LOCATIONS> &squares )
+{
+    // AIM_ALL shows a per-item source-square column (matches print_items).
+    const bool show_src = pane.get_area() == AIM_ALL;
+    std::string out = "<div class=\"aim-colhead\">"
+                      "<span class=\"aim-c-name\">" + rml_escape( _( "Name (charges)" ) ) + "</span>";
+    if( show_src ) {
+        out += "<span class=\"aim-c-src\">" + rml_escape( _( "src" ) ) + "</span>";
+    }
+    out += "<span class=\"aim-c-amt\">" + rml_escape( _( "amt" ) ) + "</span>"
+           "<span class=\"aim-c-wt\">" + rml_escape( _( "weight" ) ) + "</span>"
+           "<span class=\"aim-c-vol\">" + rml_escape( _( "vol" ) ) + "</span>"
+           "</div>";
+    const std::vector<advanced_inv_listitem> &items = pane.items;
+    for( size_t i = 0; i < items.size(); i++ ) {
+        const advanced_inv_listitem &sitem = items[i];
+        if( sitem.is_category_header() ) {
+            out += "<div class=\"aim-cat\">[" + rml_escape( sitem.name ) + "]</div>";
+            continue;
+        }
+        if( !sitem.is_item_entry() ) {
+            continue;
+        }
+        const item &it = *sitem.items.front();
+        const bool selected = active && pane.index == static_cast<int>( i );
+        const nc_color base = active ? it.color_in_inventory() : c_dark_gray;
+
+        const bool stolen = !it.is_owned_by( g->u, true );
+        const std::string stolen_pre = stolen ? "<color_light_red>!</color> " : std::string();
+        std::string item_name;
+        if( it.is_money() ) {
+            unsigned int charges_total = 0;
+            for( const item *m : sitem.items ) {
+                charges_total += m->charges;
+            }
+            item_name = stolen_pre + it.display_money( sitem.items.size(), charges_total );
+        } else {
+            item_name = stolen_pre + it.display_name();
+        }
+        if( get_option<bool>( "ITEM_SYMBOLS" ) ) {
+            item_name = string_format( "%s %s", it.symbol(), item_name );
+        }
+
+        std::string amt_cell;
+        if( sitem.stacks > 1 ) {
+            const int a = std::min( sitem.stacks, 9999 );
+            amt_cell = colorize( string_format( "%d", a ), sitem.stacks > 9999 ? c_red : base );
+        }
+
+        double w = convert_weight( sitem.weight );
+        nc_color wcol = w > 0 ? base : c_dark_gray;
+        int prec;
+        if( w >= 1000.0 ) {
+            if( w >= 10000.0 ) {
+                wcol = c_red;
+                w = 9999.0;
+            }
+            prec = 0;
+        } else if( w >= 100.0 ) {
+            prec = 1;
+        } else {
+            prec = 2;
+        }
+        const std::string wt_cell = colorize( string_format( "%.*f", prec, w ), wcol );
+
+        bool vtr = false;
+        double vv = 0.0;
+        const std::string vs = format_volume( sitem.volume, 5, &vtr, &vv );
+        const nc_color vcol = ( vtr && vv > 0.0 ) ? c_red
+                              : ( sitem.volume.value() > 0 ? base : c_dark_gray );
+        const std::string vol_cell = colorize( vs, vcol );
+
+        const std::string cls = selected ? "aim-row selected" : "aim-row";
+        std::string row = "<div class=\"" + cls + "\">"
+                          "<span class=\"aim-c-name\">" + cata_text_to_rml( colorize( item_name, base ) ) + "</span>";
+        if( show_src ) {
+            row += "<span class=\"aim-c-src\">" +
+                   cata_text_to_rml( colorize( squares[sitem.area].shortname, base ) ) + "</span>";
+        }
+        row += "<span class=\"aim-c-amt\">" + cata_text_to_rml( amt_cell ) + "</span>"
+               "<span class=\"aim-c-wt\">" + cata_text_to_rml( wt_cell ) + "</span>"
+               "<span class=\"aim-c-vol\">" + cata_text_to_rml( vol_cell ) + "</span>"
+               "</div>";
+        out += row;
+    }
+    return out;
+}
+
+// One pane's weight/volume capacity head (mirrors print_items' formatted_head).
+// squares is non-const because get_container() (AIM_CONTAINER) is non-const.
+std::string aim_pane_head_html( const advanced_inventory_pane &pane, bool active,
+                                std::array<advanced_inv_area, NUM_AIM_LOCATIONS> &squares )
+{
+    const aim_location area = pane.get_area();
+    const nc_color norm = active ? c_white : c_dark_gray;
+    if( area == AIM_INVENTORY || area == AIM_WORN ) {
+        const double wcar = convert_weight( g->u.weight_carried() );
+        const double wcap = convert_weight( g->u.weight_capacity() );
+        const std::string vcar = format_volume( g->u.volume_carried() );
+        const std::string vcap = format_volume( g->u.volume_capacity() );
+        const nc_color wc = g->u.weight_carried() > g->u.weight_capacity() ? c_red : c_light_green;
+        const nc_color vc = g->u.volume_carried() > g->u.volume_capacity() ? c_red : c_light_green;
+        return cata_text_to_rml(
+                   colorize( string_format( "%.1f", wcar ), wc ) +
+                   colorize( string_format( "/%.1f %s  ", wcap, weight_units() ), c_light_gray ) +
+                   colorize( vcar, vc ) +
+                   colorize( string_format( "/%s %s", vcap, volume_units_abbr() ), c_light_gray ) );
+    }
+    std::string head;
+    if( area == AIM_ALL ) {
+        head = string_format( "%3.1f %s  %s %s",
+                              convert_weight( squares[area].weight ), weight_units(),
+                              format_volume( squares[area].volume ), volume_units_abbr() );
+    } else {
+        units::volume maxvolume = 0_ml;
+        advanced_inv_area &s = squares[area];
+        if( area == AIM_CONTAINER && s.get_container( pane.in_vehicle() ) != nullptr ) {
+            maxvolume = s.get_container( pane.in_vehicle() )->get_container_capacity();
+        } else if( pane.in_vehicle() ) {
+            maxvolume = s.veh->max_volume( s.vstor );
+        } else {
+            maxvolume = get_map().max_volume( s.pos );
+        }
+        head = string_format( "%3.1f %s  %s/%s %s",
+                              convert_weight( s.weight ), weight_units(),
+                              format_volume( s.volume ), format_volume( maxvolume ),
+                              volume_units_abbr() );
+    }
+    return cata_text_to_rml( colorize( head, norm ) );
+}
+} // namespace
+
+bool &advanced_inv_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = false;
+    return enabled;
+}
+
 void advanced_inventory::display()
 {
     init();
@@ -1363,6 +1575,89 @@ void advanced_inventory::display()
 
     std::unique_ptr<string_input_popup> spopup;
     std::unique_ptr<ui_adaptor> ui;
+
+    // RmlUi dual-pane render (slice 1). All-scalar model; both panes' rows + heads
+    // are baked into markup strings each sync. The active pane is `src`.
+    std::unique_ptr<aim_session> rml_sess;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml_sess ) {
+            return;
+        }
+        advanced_inventory_pane &lp = panes[left];
+        advanced_inventory_pane &rp = panes[right];
+        const bool l_active = ( src == left );
+        rml_sess->left_title_rml = cata_text_to_rml(
+                                       colorize( squares[lp.get_area()].name, l_active ? c_white : c_dark_gray ) );
+        rml_sess->right_title_rml = cata_text_to_rml(
+                                        colorize( squares[rp.get_area()].name, !l_active ? c_white : c_dark_gray ) );
+        rml_sess->left_head_rml = aim_pane_head_html( lp, l_active, squares );
+        rml_sess->right_head_rml = aim_pane_head_html( rp, !l_active, squares );
+        rml_sess->left_rows_html = aim_pane_rows_html( lp, l_active, squares );
+        rml_sess->right_rows_html = aim_pane_rows_html( rp, !l_active, squares );
+        // Per-pane area-selection grid (sel = current item's area, else pane area).
+        const auto pane_sel = []( advanced_inventory_pane & p ) -> aim_location {
+            const advanced_inv_listitem *cur = p.get_cur_item_ptr();
+            return cur != nullptr ? cur->area : p.get_area();
+        };
+        rml_sess->left_grid_rml = aim_area_grid_html( lp, pane_sel( lp ) );
+        rml_sess->right_grid_rml = aim_area_grid_html( rp, pane_sel( rp ) );
+        // Top bar: clock (if the avatar has a watch) + keybinding/reset-filter hints.
+        rml_sess->clock_rml = g->u.has_watch()
+                              ? cata_text_to_rml( colorize( to_string_time_of_day( calendar::turn ), c_white ) )
+                              : Rml::String();
+        std::string hints = string_format( _( "< [<color_yellow>%s</color>] keybindings >" ),
+                                           ctxt.get_desc( "HELP_KEYBINDINGS" ) ) + "   ";
+        hints += get_option<bool>( "AIM_AUTORESET_FILTER" )
+                 ? _( "Reset Filter On Close [<color_light_green>ON</color>|<color_dark_gray>OFF</color>]" )
+                 : _( "Reset Filter On Close [<color_dark_gray>ON</color>|<color_light_green>OFF</color>]" );
+        rml_sess->hints_rml = cata_text_to_rml( colorize( hints, c_white ) );
+        // Per-pane sort indicator + item count (mirrors redraw_pane's top line).
+        const auto sort_str = [&]( advanced_inventory_pane & p ) -> Rml::String {
+            std::string s = string_format( _( "< [%s] Sort: %s >" ), ctxt.get_desc( "SORT" ),
+                                           get_sortname( p.sortby ) );
+            const advanced_inv_area &sq = squares[p.get_area()];
+            if( sq.max_size > 0 ) {
+                s += string_format( "  < %d/%d >", sq.get_item_count(), sq.max_size );
+            }
+            return cata_text_to_rml( colorize( s, c_light_gray ) );
+        };
+        // Per-pane filter footer (mirrors redraw_pane's bottom line); while editing
+        // the active pane shows the in-progress query from the popup.
+        const auto filter_str = [&]( advanced_inventory_pane & p, bool act ) -> Rml::String {
+            const std::string fprefix = string_format( _( "[%s] Filter" ), ctxt.get_desc( "FILTER" ) );
+            if( filter_edit && act && spopup ) {
+                return cata_text_to_rml( colorize( "< " + fprefix + ": ", c_light_gray ) +
+                                         colorize( spopup->text() + "_", c_white ) );
+            }
+            if( !p.filter.empty() ) {
+                const std::string fsuffix = string_format( _( "[%s] Reset" ), ctxt.get_desc( "RESET_FILTER" ) );
+                return cata_text_to_rml( colorize( "< " + fprefix + ": ", c_light_gray ) +
+                                         colorize( p.filter, c_white ) +
+                                         colorize( " >  " + fsuffix, c_light_gray ) );
+            }
+            return cata_text_to_rml( colorize( "< " + fprefix + " >", c_light_gray ) );
+        };
+        rml_sess->left_sort_rml = sort_str( lp );
+        rml_sess->right_sort_rml = sort_str( rp );
+        rml_sess->left_filter_rml = filter_str( lp, l_active );
+        rml_sess->right_filter_rml = filter_str( rp, !l_active );
+        rml_sess->handle.DirtyVariable( "left_title_rml" );
+        rml_sess->handle.DirtyVariable( "right_title_rml" );
+        rml_sess->handle.DirtyVariable( "left_head_rml" );
+        rml_sess->handle.DirtyVariable( "right_head_rml" );
+        rml_sess->handle.DirtyVariable( "left_rows_html" );
+        rml_sess->handle.DirtyVariable( "right_rows_html" );
+        rml_sess->handle.DirtyVariable( "left_grid_rml" );
+        rml_sess->handle.DirtyVariable( "right_grid_rml" );
+        rml_sess->handle.DirtyVariable( "clock_rml" );
+        rml_sess->handle.DirtyVariable( "hints_rml" );
+        rml_sess->handle.DirtyVariable( "left_sort_rml" );
+        rml_sess->handle.DirtyVariable( "right_sort_rml" );
+        rml_sess->handle.DirtyVariable( "left_filter_rml" );
+        rml_sess->handle.DirtyVariable( "right_filter_rml" );
+    };
+
     if( !is_processing() ) {
         ui = std::make_unique<ui_adaptor>();
         ui->on_screen_resize( [&]( ui_adaptor & ui ) {
@@ -1401,7 +1696,44 @@ void advanced_inventory::display()
         } );
         ui->mark_resize();
 
+        rml.open( advanced_inv_rmlui_enabled(), "advinv", ctxt,
+        [&]( Rml::DataModelConstructor & c ) {
+            rml_sess = std::make_unique<aim_session>();
+            c.Bind( "left_title_rml", &rml_sess->left_title_rml );
+            c.Bind( "right_title_rml", &rml_sess->right_title_rml );
+            c.Bind( "left_head_rml", &rml_sess->left_head_rml );
+            c.Bind( "right_head_rml", &rml_sess->right_head_rml );
+            c.Bind( "left_rows_html", &rml_sess->left_rows_html );
+            c.Bind( "right_rows_html", &rml_sess->right_rows_html );
+            c.Bind( "left_grid_rml", &rml_sess->left_grid_rml );
+            c.Bind( "right_grid_rml", &rml_sess->right_grid_rml );
+            c.Bind( "clock_rml", &rml_sess->clock_rml );
+            c.Bind( "hints_rml", &rml_sess->hints_rml );
+            c.Bind( "left_sort_rml", &rml_sess->left_sort_rml );
+            c.Bind( "right_sort_rml", &rml_sess->right_sort_rml );
+            c.Bind( "left_filter_rml", &rml_sess->left_filter_rml );
+            c.Bind( "right_filter_rml", &rml_sess->right_filter_rml );
+            rml_sess->handle = c.GetModelHandle();
+        } );
+
         ui->on_redraw( [&]( const ui_adaptor & ) {
+            // RmlUi owns the screen when active (slice 1: dual item lists + heads;
+            // sidebar/footer/interactions land in later slices). redraw_pane is
+            // skipped, so the per-pane prep it does (recalc + fix_index) must run
+            // here or pane.items stays empty.
+            if( rml ) {
+                for( side p : {
+                         left, right
+                     } ) {
+                    advanced_inventory_pane &pane = panes[p];
+                    if( recalc || pane.recalc ) {
+                        recalc_pane( p );
+                    }
+                    pane.fix_index();
+                }
+                sync_rml();
+                return;
+            }
             redraw_pane( advanced_inventory::side::left );
             redraw_pane( advanced_inventory::side::right );
             redraw_sidebar();

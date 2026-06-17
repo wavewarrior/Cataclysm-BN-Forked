@@ -36,6 +36,10 @@
 #include "ui_manager.h"
 #include "name.h"
 
+#include <RmlUi/Core.h>
+#include "rml_screen.h"
+#include "rml_util.h"
+
 using namespace std::placeholders;
 
 // single instance of world generator
@@ -46,6 +50,225 @@ std::unique_ptr<worldfactory> world_generator;
   * 0 index is inclusive.
   */
 static const int max_worldname_len = 32;
+
+// --- RmlUi render path (Tier 4 screen #2, sliced) ---------------------------
+// One toggle lights worldfactory's RmlUi docs; each screen guards its on_redraw
+// (slice 1 = the Finalize step, show_worldgen_tab_confirm).
+namespace
+{
+struct wf_rml_tab {
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct wf_finalize_session {
+    Rml::Vector<wf_rml_tab> tabs;
+    Rml::String name_rml;
+    Rml::String format_rml;
+    Rml::String hints_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_wf_finalize_types_registered = false;
+
+void register_wf_finalize_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_wf_finalize_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<wf_rml_tab> th = c.RegisterStruct<wf_rml_tab>();
+    th.RegisterMember( "name_rml", &wf_rml_tab::name_rml );
+    th.RegisterMember( "selected", &wf_rml_tab::selected );
+    c.RegisterArray<Rml::Vector<wf_rml_tab>>();
+
+    g_wf_finalize_types_registered = true;
+}
+
+// pick_world (slice 2): page tabs + a one-column world list + tooltip. Distinct struct
+// types from the finalize model (RegisterStruct is context-global — a separate model
+// must not re-register the same C++ type).
+struct wf_pick_tab {
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct wf_pick_row {
+    Rml::String text_rml;
+    bool selected = false;
+};
+struct wf_pick_session {
+    Rml::Vector<wf_pick_tab> tabs;
+    Rml::Vector<wf_pick_row> rows;
+    Rml::String tooltip_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_wf_pick_types_registered = false;
+
+void register_wf_pick_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_wf_pick_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<wf_pick_tab> th = c.RegisterStruct<wf_pick_tab>();
+    th.RegisterMember( "name_rml", &wf_pick_tab::name_rml );
+    th.RegisterMember( "selected", &wf_pick_tab::selected );
+    c.RegisterArray<Rml::Vector<wf_pick_tab>>();
+
+    Rml::StructHandle<wf_pick_row> rh = c.RegisterStruct<wf_pick_row>();
+    rh.RegisterMember( "text_rml", &wf_pick_row::text_rml );
+    rh.RegisterMember( "selected", &wf_pick_row::selected );
+    c.RegisterArray<Rml::Vector<wf_pick_row>>();
+
+    g_wf_pick_types_registered = true;
+}
+
+// Shared mod-row builder (mirrors draw_mod_list): a flat list of category headers +
+// mod entries, colour baked into rml markup. Returned as a neutral POD so each model
+// (worldmods slice 3, modselect slice 4) copies into its OWN Rml struct — distinct
+// per-model struct types avoid re-registering one C++ type on two data models.
+struct plain_mod_row {
+    std::string text_rml;
+    std::string shift_rml;
+    bool is_category = false;
+    bool selected = false;
+};
+
+// shift_fn (optional): given a mod index, returns the colour-tagged "+ -" shift markup
+// for the active list (empty for the available/read-only list). out_sel ← the flat row
+// index of the selected mod (or -1).
+std::vector<plain_mod_row> build_wf_mod_rows(
+    const std::vector<mod_id> &mods, size_t cursor, const std::string &text_if_empty,
+    const std::function<std::string( size_t )> &shift_fn, int &out_sel )
+{
+    std::vector<plain_mod_row> rows;
+    out_sel = -1;
+    if( mods.empty() ) {
+        plain_mod_row r;
+        r.text_rml = cata_text_to_rml( colorize( text_if_empty, c_red ) );
+        r.is_category = true;
+        rows.push_back( r );
+        return rows;
+    }
+    std::string last_cat;
+    bool have_cat = false;
+    for( size_t i = 0; i < mods.size(); ++i ) {
+        const mod_id &id = mods[i];
+        std::string cat = id.is_valid() ? _( id->category.second ) : _( "MISSING MODS" );
+        if( !have_cat || cat != last_cat ) {
+            have_cat = true;
+            last_cat = cat;
+            plain_mod_row c;
+            c.text_rml = cata_text_to_rml( colorize( cat, c_magenta ) );
+            c.is_category = true;
+            rows.push_back( c );
+        }
+        std::string entry = string_format( _( " [%s]" ), id.str() );
+        nc_color col = c_white;
+        if( id.is_valid() ) {
+            entry = id->name() + entry;
+            if( id->obsolete ) {
+                col = c_dark_gray;
+                entry = remove_color_tags( entry ) + "*";
+            }
+        } else {
+            col = c_light_red;
+            entry = _( "N/A" ) + entry;
+        }
+        const bool sel = i == cursor;
+        plain_mod_row r;
+        r.text_rml = cata_text_to_rml( colorize( sel ? ">> " + entry : entry, col ) );
+        r.selected = sel;
+        if( shift_fn ) {
+            r.shift_rml = cata_text_to_rml( shift_fn( i ) );
+        }
+        if( sel ) {
+            out_sel = static_cast<int>( rows.size() );
+        }
+        rows.push_back( r );
+    }
+    return rows;
+}
+
+// show_active_world_mods (slice 3): read-only mod list. Own struct type + guard.
+struct wf_amod_row {
+    Rml::String text_rml;
+    bool is_category = false;
+    bool selected = false;
+};
+struct wf_amod_session {
+    Rml::Vector<wf_amod_row> rows;
+    Rml::String title_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_wf_amod_types_registered = false;
+
+void register_wf_amod_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_wf_amod_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<wf_amod_row> rh = c.RegisterStruct<wf_amod_row>();
+    rh.RegisterMember( "text_rml", &wf_amod_row::text_rml );
+    rh.RegisterMember( "is_category", &wf_amod_row::is_category );
+    rh.RegisterMember( "selected", &wf_amod_row::selected );
+    c.RegisterArray<Rml::Vector<wf_amod_row>>();
+
+    g_wf_amod_types_registered = true;
+}
+
+// show_modselection_window (slice 4): worldgen steps + category tabs + two mod lists
+// (available / active-with-shift) + description + filter. Own struct types + guard.
+struct wf_ms_tab {
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct wf_mod_row {
+    Rml::String text_rml;
+    Rml::String shift_rml;
+    bool is_category = false;
+    bool selected = false;
+};
+struct wf_ms_session {
+    Rml::Vector<wf_ms_tab> wtabs;   // worldgen steps (empty + hidden when standalone)
+    Rml::Vector<wf_ms_tab> cats;    // category tabs (left pane)
+    Rml::Vector<wf_mod_row> avail;  // available mods
+    Rml::Vector<wf_mod_row> active; // active load order (shift_rml populated)
+    Rml::String avail_head_rml;
+    Rml::String active_head_rml;
+    Rml::String desc_rml;
+    Rml::String filter_rml;
+    bool show_wtabs = false;
+    Rml::DataModelHandle handle;
+};
+
+bool g_wf_ms_types_registered = false;
+
+void register_wf_ms_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_wf_ms_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<wf_ms_tab> th = c.RegisterStruct<wf_ms_tab>();
+    th.RegisterMember( "name_rml", &wf_ms_tab::name_rml );
+    th.RegisterMember( "selected", &wf_ms_tab::selected );
+    c.RegisterArray<Rml::Vector<wf_ms_tab>>();
+
+    Rml::StructHandle<wf_mod_row> rh = c.RegisterStruct<wf_mod_row>();
+    rh.RegisterMember( "text_rml", &wf_mod_row::text_rml );
+    rh.RegisterMember( "shift_rml", &wf_mod_row::shift_rml );
+    rh.RegisterMember( "is_category", &wf_mod_row::is_category );
+    rh.RegisterMember( "selected", &wf_mod_row::selected );
+    c.RegisterArray<Rml::Vector<wf_mod_row>>();
+
+    g_wf_ms_types_registered = true;
+}
+} // namespace
+
+bool &worldfactory_rmlui_enabled()
+{
+    static bool enabled = false;
+    return enabled;
+}
 
 worldfactory::worldfactory()
     : active_world( nullptr )
@@ -100,6 +323,15 @@ WORLDINFO *worldfactory::make_new_world( bool show_prompt, const std::string &wo
         int curtab = 0;
 
         ui.on_redraw( [&]( const ui_adaptor & ) {
+            // When the wizard steps render via RmlUi, each step's doc draws its own
+            // worldgen tab strip; the curses strip here would bleed through the doc's
+            // transparent margins (doubling it). Erase wf_win instead so the backdrop
+            // behind the RmlUi docs is clean.
+            if( worldfactory_rmlui_enabled() ) {
+                werase( wf_win );
+                wnoutrefresh( wf_win );
+                return;
+            }
             draw_worldgen_tabs( wf_win, static_cast<size_t>( curtab ) );
             wnoutrefresh( wf_win );
         } );
@@ -338,7 +570,57 @@ WORLDINFO *worldfactory::pick_world( bool show_prompt, bool empty_only )
     init_windows( ui );
     ui.on_screen_resize( init_windows );
 
+    // RmlUi render path (Tier 4 #2 slice 2). Render-only — the input loop below owns
+    // selpage/sel. Declared before on_redraw (which captures them); opened after ctxt
+    // (the auto_pickup ordering: on_redraw is registered above the input_context).
+    std::unique_ptr<wf_pick_session> data;
+    std::vector<int> rml_pages;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml ) {
+            return;
+        }
+        // Page tabs (skip empty pages; rml_pages maps a tab index → real page index).
+        data->tabs.clear();
+        rml_pages.clear();
+        for( size_t i = 0; i < num_pages; ++i ) {
+            if( world_pages[i].empty() ) {
+                continue;
+            }
+            wf_pick_tab t;
+            t.name_rml = cata_text_to_rml( colorize( string_format( _( "Page %lu" ), i + 1 ), c_white ) );
+            t.selected = selpage == i;
+            data->tabs.push_back( t );
+            rml_pages.push_back( static_cast<int>( i ) );
+        }
+
+        // World rows: "<n>  >> name (saves)" (cursor on the selected row).
+        data->rows.clear();
+        for( size_t i = 0; i < world_pages[selpage].size(); ++i ) {
+            const std::string &world_name = world_pages[selpage][i];
+            WORLDINFO *w = get_world( world_name );
+            size_t saves_num = w->world_saves.size();
+            std::string text = string_format( "%d  ", static_cast<int>( i + 1 ) );
+            text += ( i == sel ) ? ">> " : "   ";
+            text += string_format( "%s (%d)", world_name, saves_num );
+            wf_pick_row r;
+            r.text_rml = cata_text_to_rml( colorize( text, c_white ) );
+            r.selected = i == sel;
+            data->rows.push_back( r );
+        }
+
+        data->tooltip_rml = cata_text_to_rml( colorize( _( "Pick a world to enter game" ), c_white ) );
+
+        data->handle.DirtyVariable( "tabs" );
+        data->handle.DirtyVariable( "rows" );
+        data->handle.DirtyVariable( "tooltip_rml" );
+    };
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         draw_border( w_worlds_border, BORDER_COLOR, _( " WORLD SELECTION " ) );
         mvwputch( w_worlds_border, point( 0, 4 ), BORDER_COLOR, LINE_XXXO ); // |-
         mvwputch( w_worlds_border, point( iMinScreenWidth - 1, 4 ), BORDER_COLOR, LINE_XOXX ); // -|
@@ -427,6 +709,37 @@ WORLDINFO *worldfactory::pick_world( bool show_prompt, bool empty_only )
     ctxt.register_action( "NEXT_TAB" );
     ctxt.register_action( "PREV_TAB" );
     ctxt.register_action( "CONFIRM" );
+
+    rml.open( worldfactory_rmlui_enabled(), "pickworld", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        data = std::make_unique<wf_pick_session>();
+        register_wf_pick_rml_types( c );
+        c.Bind( "tabs", &data->tabs );
+        c.Bind( "rows", &data->rows );
+        c.Bind( "tooltip_rml", &data->tooltip_rml );
+        c.BindEventCallback( "on_tab",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            if( idx >= 0 && idx < static_cast<int>( rml_pages.size() ) ) {
+                selpage = static_cast<size_t>( rml_pages[idx] );
+                sel = 0;
+            }
+        } );
+        c.BindEventCallback( "on_select",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            if( idx >= 0 && idx < static_cast<int>( world_pages[selpage].size() ) ) {
+                sel = static_cast<size_t>( idx );
+            }
+        } );
+        data->handle = c.GetModelHandle();
+    } );
 
     while( true ) {
         ui_manager::redraw();
@@ -708,7 +1021,54 @@ void worldfactory::show_active_world_mods( const std::vector<mod_id> &world_mods
     ctxt.register_action( "CONFIRM" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
 
+    // RmlUi render path (Tier 4 #2 slice 3). Render-only read-only mod list.
+    std::unique_ptr<wf_amod_session> data;
+    bool rml_scroll_pending = false;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml ) {
+            return;
+        }
+        int sel_child = -1;
+        std::vector<plain_mod_row> built = build_wf_mod_rows(
+                world_mods, static_cast<size_t>( cursor ), _( "--NO ACTIVE MODS--" ),
+                nullptr, sel_child );
+        data->rows.clear();
+        for( const plain_mod_row &p : built ) {
+            wf_amod_row r;
+            r.text_rml = p.text_rml;
+            r.is_category = p.is_category;
+            r.selected = p.selected;
+            data->rows.push_back( r );
+        }
+        data->title_rml = cata_text_to_rml( colorize( _( "ACTIVE WORLD MODS" ), c_white ) );
+        data->handle.DirtyVariable( "rows" );
+        data->handle.DirtyVariable( "title_rml" );
+
+        if( rml_scroll_pending && sel_child >= 0 ) {
+            rml_scroll_pending = false;
+            if( Rml::Element *list = rml.document()->GetElementById( "wm-list" ) ) {
+                if( sel_child < list->GetNumChildren() ) {
+                    list->GetChild( sel_child )->ScrollIntoView(
+                        Rml::ScrollIntoViewOptions( Rml::ScrollAlignment::Nearest ) );
+                }
+            }
+        }
+    };
+    rml.open( worldfactory_rmlui_enabled(), "worldmods", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        data = std::make_unique<wf_amod_session>();
+        register_wf_amod_rml_types( c );
+        c.Bind( "rows", &data->rows );
+        c.Bind( "title_rml", &data->title_rml );
+        data->handle = c.GetModelHandle();
+    } );
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         draw_border( w_border, BORDER_COLOR, _( " ACTIVE WORLD MODS " ) );
         wnoutrefresh( w_border );
 
@@ -723,6 +1083,7 @@ void worldfactory::show_active_world_mods( const std::vector<mod_id> &world_mods
         const std::string action = ctxt.handle_input();
 
         if( action == "UP" ) {
+            rml_scroll_pending = true;
             cursor--;
             // If it went under 0, loop back to the end of the list.
             if( cursor < 0 ) {
@@ -730,6 +1091,7 @@ void worldfactory::show_active_world_mods( const std::vector<mod_id> &world_mods
             }
 
         } else if( action == "DOWN" ) {
+            rml_scroll_pending = true;
             cursor++;
             // If it went over the end of the list, loop back to the start of the list.
             if( cursor > static_cast<int>( num_mods - 1 ) ) {
@@ -1003,7 +1365,143 @@ int worldfactory::show_modselection_window( const catacurses::window &win,
         }
     };
 
+    // RmlUi render path (Tier 4 #2 slice 4 — the mod selector). Render-only; the loop
+    // owns all add/remove/reorder/filter/tab logic. Keyboard-only this slice (no mouse).
+    std::unique_ptr<wf_ms_session> data;
+    bool rml_scroll_pending = false;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml ) {
+            return;
+        }
+        // Worldgen wizard steps (hidden when standalone = edit-active-mods).
+        data->show_wtabs = !standalone;
+        data->wtabs.clear();
+        if( !standalone ) {
+            const std::vector<std::string> steps = {
+                _( "World Mods" ), _( "World Options" ), _( "Finalize World" )
+            };
+            for( size_t i = 0; i < steps.size(); ++i ) {
+                wf_ms_tab t;
+                t.name_rml = cata_text_to_rml( colorize( steps[i], c_light_green ) );
+                t.selected = i == 0;
+                data->wtabs.push_back( t );
+            }
+        }
+        // Category tabs (left pane).
+        data->cats.clear();
+        const std::vector<std::pair<std::string, std::string>> &mtabs = get_mod_list_tabs();
+        for( size_t i = 0; i < mtabs.size(); ++i ) {
+            wf_ms_tab t;
+            t.name_rml = cata_text_to_rml( colorize( _( mtabs[i].second ), c_light_green ) );
+            t.selected = i == iCurrentTab;
+            data->cats.push_back( t );
+        }
+        // Available list.
+        int sel_avail = -1;
+        int sel_active = -1;
+        const mod_tab &cur = all_tabs[iCurrentTab];
+        const std::string amsg = cur.mods_unfiltered.empty() ? _( "--NO AVAILABLE MODS--" ) :
+                                 _( "--NO MATCHES--" );
+        std::vector<plain_mod_row> av = build_wf_mod_rows( cur.mods, cursel[0], amsg, nullptr, sel_avail );
+        data->avail.clear();
+        for( const plain_mod_row &p : av ) {
+            wf_mod_row r;
+            r.text_rml = p.text_rml;
+            r.is_category = p.is_category;
+            r.selected = p.selected;
+            data->avail.push_back( r );
+        }
+        // Active load order (with shift indicators).
+        const auto shift_fn = [&]( size_t i ) -> std::string {
+            const bool up = mman_ui->can_shift_up( i, active_mod_order );
+            const bool down = mman_ui->can_shift_down( i, active_mod_order );
+            std::string s = up ? "<color_blue>+</color>" : "<color_dark_gray>+</color>";
+            s += " ";
+            s += down ? "<color_blue>-</color>" : "<color_dark_gray>-</color>";
+            return s;
+        };
+        std::vector<plain_mod_row> ac = build_wf_mod_rows( active_mod_order, cursel[1],
+                _( "--NO ACTIVE MODS--" ), shift_fn, sel_active );
+        data->active.clear();
+        for( const plain_mod_row &p : ac ) {
+            wf_mod_row r;
+            r.text_rml = p.text_rml;
+            r.shift_rml = p.shift_rml;
+            r.is_category = p.is_category;
+            r.selected = p.selected;
+            data->active.push_back( r );
+        }
+        // Headers (focused list marked with < >).
+        data->avail_head_rml = cata_text_to_rml( colorize(
+                active_header == 0 ? std::string( "< " ) + _( "Mod List" ) + " >" : _( "Mod List" ), c_cyan ) );
+        data->active_head_rml = cata_text_to_rml( colorize(
+                active_header == 1 ? std::string( "< " ) + _( "Mod Load Order" ) + " >" :
+                _( "Mod Load Order" ), c_cyan ) );
+        // Description of the selected mod.
+        if( const MOD_INFORMATION *selmod = get_selected_mod() ) {
+            data->desc_rml = cata_text_to_rml( mman_ui->get_information( selmod ) );
+        } else {
+            data->desc_rml = "";
+        }
+        // Filter line (live while the popup is open).
+        if( fpopup ) {
+            data->filter_rml = cata_text_to_rml( colorize( string_format( "< %s >", fpopup->text() ), c_cyan ) );
+        } else {
+            std::string line = colorize( string_format( current_filter.empty() ? _( "[%s] Filter" ) :
+                                         _( "[%s] Filter: " ), ctxt.get_desc( "FILTER" ) ), c_light_gray );
+            if( !current_filter.empty() ) {
+                line += colorize( current_filter, c_white );
+            }
+            data->filter_rml = cata_text_to_rml( line );
+        }
+
+        data->handle.DirtyVariable( "wtabs" );
+        data->handle.DirtyVariable( "cats" );
+        data->handle.DirtyVariable( "avail" );
+        data->handle.DirtyVariable( "active" );
+        data->handle.DirtyVariable( "avail_head_rml" );
+        data->handle.DirtyVariable( "active_head_rml" );
+        data->handle.DirtyVariable( "desc_rml" );
+        data->handle.DirtyVariable( "filter_rml" );
+        data->handle.DirtyVariable( "show_wtabs" );
+
+        // Follow the keyboard cursor in the focused list.
+        if( rml_scroll_pending ) {
+            rml_scroll_pending = false;
+            const int sel = active_header == 0 ? sel_avail : sel_active;
+            const char *id = active_header == 0 ? "ms-avail" : "ms-active";
+            if( sel >= 0 ) {
+                if( Rml::Element *list = rml.document()->GetElementById( id ) ) {
+                    if( sel < list->GetNumChildren() ) {
+                        list->GetChild( sel )->ScrollIntoView(
+                            Rml::ScrollIntoViewOptions( Rml::ScrollAlignment::Nearest ) );
+                    }
+                }
+            }
+        }
+    };
+    rml.open( worldfactory_rmlui_enabled(), "modselect", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        data = std::make_unique<wf_ms_session>();
+        register_wf_ms_rml_types( c );
+        c.Bind( "wtabs", &data->wtabs );
+        c.Bind( "cats", &data->cats );
+        c.Bind( "avail", &data->avail );
+        c.Bind( "active", &data->active );
+        c.Bind( "avail_head_rml", &data->avail_head_rml );
+        c.Bind( "active_head_rml", &data->active_head_rml );
+        c.Bind( "desc_rml", &data->desc_rml );
+        c.Bind( "filter_rml", &data->filter_rml );
+        c.Bind( "show_wtabs", &data->show_wtabs );
+        data->handle = c.GetModelHandle();
+    } );
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         if( standalone ) {
             draw_empty_worldgen_tabs( win );
         } else {
@@ -1139,8 +1637,10 @@ int worldfactory::show_modselection_window( const catacurses::window &win,
         const std::string action = ctxt.handle_input();
 
         if( action == "DOWN" ) {
+            rml_scroll_pending = true;
             selection = next_selection;
         } else if( action == "UP" ) {
+            rml_scroll_pending = true;
             selection = prev_selection;
         } else if( action == "RIGHT" ) {
             active_header = next_header;
@@ -1305,7 +1805,81 @@ int worldfactory::show_worldgen_tab_confirm( const catacurses::window &win, WORL
     // do not switch IME mode now, but restore previous mode on return
     ime_sentry sentry( ime_sentry::keep );
 
+    // RmlUi render path (Tier 4 #2 slice 1). Render-only: name editing stays on the
+    // spopup/input_context loop below; the doc displays the live worldname + caret.
+    // sync_rml re-seeds spopup.text(worldname) each frame exactly like the curses
+    // on_redraw, so PICK_RANDOM_WORLDNAME + the initial/copied name reach the editor.
+    std::unique_ptr<wf_finalize_session> data;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml ) {
+            return;
+        }
+        spopup.text( worldname );
+
+        data->tabs.clear();
+        const std::vector<std::string> steps = {
+            _( "World Mods" ), _( "World Options" ), _( "Finalize World" )
+        };
+        for( size_t i = 0; i < steps.size(); i++ ) {
+            wf_rml_tab t;
+            t.name_rml = cata_text_to_rml( colorize( steps[i], c_light_green ) );
+            t.selected = i == 2;
+            data->tabs.push_back( t );
+        }
+
+        std::string name_line = colorize( _( "World Name:" ), c_white ) + " ";
+        if( noname ) {
+            name_line += colorize( _( "NO NAME ENTERED!" ), c_light_red );
+        } else {
+            // trailing caret cue (editing is keyboard; the doc only displays the text)
+            name_line += worldname + "_";
+        }
+        data->name_rml = cata_text_to_rml( name_line );
+
+        const bool v2 = world->world_save_format == save_format::V2_COMPRESSED_SQLITE3;
+        data->format_rml = cata_text_to_rml( colorize(
+                v2 ? _( "Save Format: V2 (Current)" ) : _( "Save Format: V1 (Legacy)" ),
+                v2 ? c_white : c_light_gray ) );
+
+        std::string hints = string_format(
+                                _( "Press [<color_yellow>%s</color>] to pick a random name for your world." ),
+                                ctxt.get_desc( "PICK_RANDOM_WORLDNAME" ) );
+        hints += "\n\n";
+        hints += string_format(
+                     _( "Press [<color_yellow>%s</color>] to toggle save format.\n"
+                        "<color_light_blue>V2 format shrinks save files and reduces save corruption. "
+                        "V1 is the legacy format. You can convert existing V1 worlds to V2 from the main menu. "
+                        "V2 worlds cannot currently be converted back to V1.</color>" ),
+                     ctxt.get_desc( "TOGGLE_V2_SAVE_FORMAT" ) );
+        hints += "\n\n";
+        hints += string_format(
+                     _( "Press [<color_yellow>%s</color>] when you are satisfied with the world as it is and are ready "
+                        "to continue, or [<color_yellow>%s</color>] to go back and review your world." ),
+                     ctxt.get_desc( "NEXT_TAB" ), ctxt.get_desc( "PREV_TAB" ) );
+        data->hints_rml = cata_text_to_rml( hints );
+
+        data->handle.DirtyVariable( "tabs" );
+        data->handle.DirtyVariable( "name_rml" );
+        data->handle.DirtyVariable( "format_rml" );
+        data->handle.DirtyVariable( "hints_rml" );
+    };
+    rml.open( worldfactory_rmlui_enabled(), "worldfinalize", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        data = std::make_unique<wf_finalize_session>();
+        register_wf_finalize_rml_types( c );
+        c.Bind( "tabs", &data->tabs );
+        c.Bind( "name_rml", &data->name_rml );
+        c.Bind( "format_rml", &data->format_rml );
+        c.Bind( "hints_rml", &data->hints_rml );
+        data->handle = c.GetModelHandle();
+    } );
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         draw_worldgen_tabs( win, 2 );
         wnoutrefresh( win );
 

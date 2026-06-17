@@ -6,6 +6,7 @@
 #include "output.h"
 #include "sdl_utils.h"
 #include "string_formatter.h"
+#include "ui_theme.h"
 
 // Escape &, < and > so raw text is safe inside data-rml (which parses markup).
 std::string rml_escape( const std::string &s )
@@ -35,19 +36,33 @@ std::string rml_escape( const std::string &s )
 }
 
 // Cache an nc_color → "#rrggbbaa" hex string so repeated lookups are cheap.
+//
+// Colours with a "game_colors" override in data/gui/theme.json render at the
+// themed hex so RmlUi menus match the theme (the raw curses RGB is a harsh pure
+// green/red); everything else falls back to the curses RGB. Scoped to RmlUi text
+// only — the tile/world render path doesn't use this function.
+static std::unordered_map<int, std::string> g_hex_cache;
+
 std::string nc_color_to_hex( const nc_color &color )
 {
-    static std::unordered_map<int, std::string> cache;
     const int key = color;
-    const auto it = cache.find( key );
-    if( it != cache.end() ) {
+    const auto it = g_hex_cache.find( key );
+    if( it != g_hex_cache.end() ) {
         return it->second;
     }
-    const SDL_Color sdl = curses_color_to_SDL( color );
-    // Format as #rrggbbaa (alpha always 255 for terminal colours).
-    std::string hex = string_format( "#%02x%02x%02x%02x", sdl.r, sdl.g, sdl.b, 255 );
-    cache[key] = hex;
+    std::string hex;
+    if( !ui_theme::game_color_hex( color, hex ) ) {
+        const SDL_Color sdl = curses_color_to_SDL( color );
+        // Format as #rrggbbaa (alpha always 255 for terminal colours).
+        hex = string_format( "#%02x%02x%02x%02x", sdl.r, sdl.g, sdl.b, 255 );
+    }
+    g_hex_cache[key] = hex;
     return hex;
+}
+
+void clear_nc_color_cache()
+{
+    g_hex_cache.clear();
 }
 
 // Convert a game string with <color_xxx> tags to RML markup with
@@ -88,4 +103,17 @@ std::string cata_text_to_rml( const std::string &s )
         }
     }
     return result;
+}
+
+std::vector<std::string> item_info_rml_lines( item_info_data &data )
+{
+    // format_item_info builds the colour-tagged body (incl. the +/- compare
+    // deltas when item_compare is non-empty); split on '\n' without re-wrapping
+    // (RmlUi's pre-wrap handles visual wrap) and convert each line to markup.
+    const std::string body = format_item_info( data.get_item_display(), data.get_item_compare() );
+    std::vector<std::string> out;
+    for( const std::string &line : foldstring( body, 100000 ) ) {
+        out.push_back( cata_text_to_rml( line ) );
+    }
+    return out;
 }

@@ -76,6 +76,8 @@ extern float  g_vol_reach;
 // High-fidelity rain effect controls.
 extern bool   g_rain_enable;
 extern float  g_rain_intensity;
+// Wet specular glint strength (max; folded with rain intensity per-frame). 0 = off.
+extern float  g_spec_strength;
 // Silhouette sun-shadow mask kill-gate.
 extern bool g_shadow_debug;
 // Current debug mode display (0-7, cycles through modes).
@@ -84,6 +86,15 @@ extern uint32_t g_current_dbg_mode;
 // source of truth, consumed by the renderer); no standalone copies.
 // Indoor daylight bleed strength.
 extern float g_skylight_bleed;
+// Hover-outline controls (CPU-side; see HOVER_OUTLINE_PLAN.md).
+extern bool  g_outline_enable;
+extern float g_outline_thickness;
+extern float g_outline_alpha;
+extern float g_outline_alpha_cut;
+extern float g_outline_col_hostile[4];
+extern float g_outline_col_neutral[4];
+extern float g_outline_col_friendly[4];
+extern float g_outline_col_self[4];
 // Vision-mask blur (tiles).
 extern float g_vision_blur;
 

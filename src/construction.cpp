@@ -63,6 +63,11 @@
 #include "ui_manager.h"
 #include "uistate.h"
 #include "units.h"
+
+#include <RmlUi/Core.h>
+
+#include "rml_screen.h"
+#include "rml_util.h"
 #include "units_serde.h"
 #include "veh_type.h"
 #include "vehicle.h"
@@ -410,6 +415,71 @@ static void favorite_add( const construction_group_str_id &c )
 static void favorite_remove( const construction_group_str_id &c )
 {
     uistate.favorite_construct_recipes.erase( c );
+}
+
+// ── RmlUi render path (full UI→RmlUi migration, Tier 2 screen #6) ─────────────
+// 8th rml_doc consumer. Category tabs + a construct list + a detail pane that
+// renders the existing `full_construct_buffer` (folded colour-tagged lines built
+// by recalc_buffer from requirement_data::get_folded_*). Proven patterns at
+// scale: dynamic tab Vector, colour-baked list rows, a lines detail pane. The
+// curses tab-overflow windowing and detail breakpoint-paging are dropped for
+// native RmlUi scroll (UP/DOWN move the list cursor; PAGE_UP/DOWN scroll the
+// detail element via SetScrollTop, cf. scores). Render-only: editing/build stays
+// in the loop. Colour via construction_color(group,false) + CSS .selected.
+namespace
+{
+struct construct_rml_tab {
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct construct_rml_row {
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct construct_rml_line {
+    Rml::String text_rml;
+    bool separator = false;
+};
+struct construct_rml_session {
+    Rml::Vector<construct_rml_tab> tabs;
+    Rml::Vector<construct_rml_row> rows;
+    Rml::Vector<construct_rml_line> detail;
+    Rml::String group_name_rml;   // detail header (selected construction name)
+    Rml::String notes_rml;        // bottom hint line(s)
+    Rml::String speed_rml;        // "Construction speed %d%%" (optional)
+    Rml::String status_rml;       // "* No hidden recipe … *" (optional)
+    bool empty = false;           // no constructs in this category/filter
+    Rml::DataModelHandle handle;
+};
+
+bool g_construct_types_registered = false;
+
+void register_construct_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_construct_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<construct_rml_tab> th = c.RegisterStruct<construct_rml_tab>();
+    th.RegisterMember( "name_rml", &construct_rml_tab::name_rml );
+    th.RegisterMember( "selected", &construct_rml_tab::selected );
+    c.RegisterArray<Rml::Vector<construct_rml_tab>>();
+    Rml::StructHandle<construct_rml_row> rh = c.RegisterStruct<construct_rml_row>();
+    rh.RegisterMember( "name_rml", &construct_rml_row::name_rml );
+    rh.RegisterMember( "selected", &construct_rml_row::selected );
+    c.RegisterArray<Rml::Vector<construct_rml_row>>();
+    Rml::StructHandle<construct_rml_line> lh = c.RegisterStruct<construct_rml_line>();
+    lh.RegisterMember( "text_rml", &construct_rml_line::text_rml );
+    lh.RegisterMember( "separator", &construct_rml_line::separator );
+    c.RegisterArray<Rml::Vector<construct_rml_line>>();
+    g_construct_types_registered = true;
+}
+} // namespace
+
+bool &construction_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = false;
+    return enabled;
 }
 
 std::optional<construction_id> construction_menu( const bool blueprint )
@@ -905,7 +975,149 @@ std::optional<construction_id> construction_menu( const bool blueprint )
     } );
     ui.mark_resize();
 
+    // ---- RmlUi render path (F.3 rml_doc harness) ----------------------------
+    // rml_doc owns the open/guard/16ms-tick/close lifecycle; only the model + this
+    // sync stay here. sync_rml() runs in on_redraw (after recalc_buffer has
+    // rebuilt full_construct_buffer/constructs), capturing tabs/list/detail/notes.
+    // Render-only; the curses tab-overflow + detail breakpoint windowing are not
+    // ported (native scroll). Model storage declared BEFORE rml so it outlives the
+    // document.
+    std::unique_ptr<construct_rml_session> data;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml ) {
+            return;
+        }
+        // tabs
+        data->tabs.clear();
+        if( filter_mode ) {
+            construct_rml_tab t;
+            t.name_rml = cata_text_to_rml( _( "Searched" ) );
+            t.selected = true;
+            data->tabs.push_back( t );
+        } else {
+            for( size_t i = 0; i < construct_cat_order.size(); ++i ) {
+                construct_rml_tab t;
+                t.name_rml = cata_text_to_rml( construct_cat[construct_cat_order[i]].name() );
+                t.selected = ( static_cast<int>( i ) == tabindex );
+                data->tabs.push_back( t );
+            }
+        }
+        // list rows (favorite "* " prefix; base colour, CSS does the highlight)
+        data->rows.clear();
+        for( size_t i = 0; i < constructs.size(); ++i ) {
+            const construction_group_str_id &group = constructs[i];
+            const std::string name = is_favorite( group ) ? "* " + group->name() : group->name();
+            construct_rml_row r;
+            r.name_rml = cata_text_to_rml( colorize( name, construction_color( group, false ) ) );
+            r.selected = ( static_cast<int>( i ) == select );
+            data->rows.push_back( r );
+        }
+        data->empty = constructs.empty();
+        // detail buffer (render all; separator lines → a rule)
+        data->detail.clear();
+        for( const std::string &line : full_construct_buffer ) {
+            construct_rml_line l;
+            if( !construct_separator_line.empty() && line == construct_separator_line ) {
+                l.separator = true;
+            } else {
+                l.text_rml = cata_text_to_rml( line );
+            }
+            data->detail.push_back( l );
+        }
+        // guard select bounds (sync may read constructs[select] before the loop's
+        // own select-reset fires on the same frame — advisor)
+        const bool sel_ok = !constructs.empty() && select >= 0 &&
+                            select < static_cast<int>( constructs.size() );
+        data->group_name_rml = sel_ok ? cata_text_to_rml( constructs[select]->name() ) : Rml::String();
+        // notes
+        if( notes.empty() ) {
+            data->notes_rml.clear();
+        } else {
+            std::string n;
+            for( const std::string &note : notes ) {
+                if( !n.empty() ) {
+                    n += ", ";
+                }
+                n += note;
+            }
+            data->notes_rml = cata_text_to_rml( n );
+        }
+        // construction speed % (optional)
+        data->speed_rml.clear();
+        if( sel_ok ) {
+            const std::vector<const construction *> opts = constructions_by_group( constructs[select] );
+            if( !opts.empty() ) {
+                const construction *first_option = opts.front();
+                const int base_time = to_moves<int>( first_option->time );
+                const int adjusted_time = first_option->adjusted_time();
+                if( base_time > 0 && adjusted_time > 0 ) {
+                    const int pct = static_cast<int>( std::round( 100.0f * base_time /
+                                    static_cast<float>( adjusted_time ) ) );
+                    data->speed_rml = cata_text_to_rml( colorize(
+                            string_format( _( "Construction speed %d%%" ), pct ),
+                            pct < 100 ? c_yellow : c_green ) );
+                }
+            }
+        }
+        data->status_rml = tab_status_line.empty() ? Rml::String() : cata_text_to_rml( tab_status_line );
+
+        data->handle.DirtyVariable( "tabs" );
+        data->handle.DirtyVariable( "rows" );
+        data->handle.DirtyVariable( "detail" );
+        data->handle.DirtyVariable( "group_name_rml" );
+        data->handle.DirtyVariable( "notes_rml" );
+        data->handle.DirtyVariable( "speed_rml" );
+        data->handle.DirtyVariable( "status_rml" );
+        data->handle.DirtyVariable( "empty" );
+    };
+
+    rml.open( construction_rmlui_enabled(), "construction", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        data = std::make_unique<construct_rml_session>();
+        register_construct_rml_types( c );
+        c.Bind( "tabs", &data->tabs );
+        c.Bind( "rows", &data->rows );
+        c.Bind( "detail", &data->detail );
+        c.Bind( "group_name_rml", &data->group_name_rml );
+        c.Bind( "notes_rml", &data->notes_rml );
+        c.Bind( "speed_rml", &data->speed_rml );
+        c.Bind( "status_rml", &data->status_rml );
+        c.Bind( "empty", &data->empty );
+        // Click a tab → switch category (recalc); click/hover a row → select it.
+        // Keyboard (incl. PAGE_UP/DOWN detail scroll) is unchanged.
+        c.BindEventCallback( "on_tab",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            if( idx >= 0 && idx < tabcount ) {
+                tabindex = idx;
+                update_info = true;
+                update_cat = true;
+            }
+        } );
+        c.BindEventCallback( "on_select",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            if( idx >= 0 && idx < static_cast<int>( constructs.size() ) ) {
+                select = idx;
+                update_info = true;
+            }
+        } );
+        data->handle = c.GetModelHandle();
+    } );
+
     ui.on_redraw( [&]( ui_adaptor & ui ) {
+        // RmlUi path owns the screen — sync the model and skip curses drawing.
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         draw_grid( w_con, w_list_width + w_list_x0 );
 
         // Erase existing tab selection & list of constructions
@@ -1441,18 +1653,32 @@ std::optional<construction_id> construction_menu( const bool blueprint )
             update_cat = true;
             tabindex = ( tabindex + 1 ) % tabcount;
         } else if( action == "PAGE_UP" ) {
-            if( current_construct_breakpoint > 0 ) {
-                current_construct_breakpoint--;
-            }
-            if( current_construct_breakpoint < 0 ) {
-                current_construct_breakpoint = 0;
+            // RmlUi renders the whole buffer in a scroll-pane (no breakpoint
+            // paging), so PAGE keys scroll the detail element instead.
+            if( rml ) {
+                if( Rml::Element *el = rml.document()->GetElementById( "construct-detail" ) ) {
+                    el->SetScrollTop( el->GetScrollTop() - el->GetClientHeight() * 0.85f );
+                }
+            } else {
+                if( current_construct_breakpoint > 0 ) {
+                    current_construct_breakpoint--;
+                }
+                if( current_construct_breakpoint < 0 ) {
+                    current_construct_breakpoint = 0;
+                }
             }
         } else if( action == "PAGE_DOWN" ) {
-            if( current_construct_breakpoint < total_project_breakpoints - 1 ) {
-                current_construct_breakpoint++;
-            }
-            if( current_construct_breakpoint >= total_project_breakpoints ) {
-                current_construct_breakpoint = total_project_breakpoints - 1;
+            if( rml ) {
+                if( Rml::Element *el = rml.document()->GetElementById( "construct-detail" ) ) {
+                    el->SetScrollTop( el->GetScrollTop() + el->GetClientHeight() * 0.85f );
+                }
+            } else {
+                if( current_construct_breakpoint < total_project_breakpoints - 1 ) {
+                    current_construct_breakpoint++;
+                }
+                if( current_construct_breakpoint >= total_project_breakpoints ) {
+                    current_construct_breakpoint = total_project_breakpoints - 1;
+                }
             }
         } else if( action == "QUIT" ) {
             exit = true;
@@ -1508,6 +1734,11 @@ std::optional<construction_id> construction_menu( const bool blueprint )
 
     const auto tab_to_store = filter_mode ? saved_tabindex : tabindex;
     uistate.construction_tab = int_id<construction_category>( construct_cat_order[tab_to_store] ).id();
+
+    // Tear down the RmlUi document while the bound `data` is still alive. close()
+    // is idempotent and a no-op when the curses path ran (the loop is exit-flag
+    // only, no early returns past open()).
+    rml.close();
 
     return ret;
 }

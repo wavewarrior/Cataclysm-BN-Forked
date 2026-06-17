@@ -370,3 +370,95 @@ void mtype::faction_display( catacurses::window &w, const point &top_left, const
     // Description
     fold_and_print( w, top_left + point( 0, y + 2 ), width, c_light_gray, get_description() );
 }
+
+std::string mtype::faction_info_text() const
+{
+    // Parallel to mtype::faction_display, producing the same content as one
+    // colour-tagged string for the RmlUi faction detail pane (curses untouched).
+    std::vector<std::string> lines;
+    lines.emplace_back( string_format( "%s  %s", colorize( sym, color ), nname() ) );
+
+    std::string diff_str;
+    if( difficulty < 3 ) {
+        diff_str = _( "<color_light_gray>Minimal threat.</color>" );
+    } else if( difficulty < 10 ) {
+        diff_str = _( "<color_light_gray>Mildly dangerous.</color>" );
+    } else if( difficulty < 20 ) {
+        diff_str = _( "<color_light_red>Dangerous.</color>" );
+    } else if( difficulty < 30 ) {
+        diff_str = _( "<color_red>Very dangerous.</color>" );
+    } else if( difficulty < 50 ) {
+        diff_str = _( "<color_red>Extremely dangerous.</color>" );
+    } else {
+        diff_str = _( "<color_red>Fatally dangerous!</color>" );
+    }
+    lines.emplace_back( string_format( "%s: %s", colorize( _( "Difficulty" ), c_white ), diff_str ) );
+
+    lines.emplace_back( string_format( "%s: %s", colorize( _( "Origin" ), c_white ),
+                                       enumerate_as_string( src.begin(), src.end(),
+    []( const std::pair<mtype_id, mod_id> &source ) {
+        return string_format( "'%s'", source.second->name() );
+    }, enumeration_conjunction::arrow ) ) );
+
+    const std::map<creature_size, std::string> size_map = {
+        {creature_size::tiny, translate_marker( "Tiny" )},
+        {creature_size::small, translate_marker( "Small" )},
+        {creature_size::medium, translate_marker( "Medium" )},
+        {creature_size::large, translate_marker( "Large" )},
+        {creature_size::huge, translate_marker( "Huge" )}
+    };
+    auto size_iter = size_map.find( size );
+    lines.emplace_back( string_format( "%s: %s", colorize( _( "Size" ), c_white ),
+                                       size_iter == size_map.end() ? _( "Unknown" ) : _( size_iter->second ) ) );
+
+    lines.emplace_back( string_format( "%s: %s", colorize( _( "Species" ), c_white ),
+    enumerate_as_string( species_descriptions(), []( const std::string & sp ) {
+        return colorize( sp, c_yellow );
+    } ) ) );
+
+    std::vector<std::string> senses_str;
+    if( has_flag( MF_HEARS ) ) {
+        senses_str.emplace_back( colorize( _( "hearing" ), c_yellow ) );
+    }
+    if( has_flag( MF_SEES ) ) {
+        senses_str.emplace_back( colorize( _( "sight" ), c_yellow ) );
+    }
+    if( has_flag( MF_SMELLS ) ) {
+        senses_str.emplace_back( colorize( _( "smell" ), c_yellow ) );
+    }
+    lines.emplace_back( string_format( "%s: %s", colorize( _( "Senses" ), c_white ),
+                                       enumerate_as_string( senses_str ) ) );
+
+    if( has_flag( MF_SWIMS ) ) {
+        lines.emplace_back( _( "It can swim." ) );
+    }
+    if( has_flag( MF_FLIES ) ) {
+        lines.emplace_back( _( "It can fly." ) );
+    }
+    if( has_flag( MF_DIGS ) ) {
+        lines.emplace_back( _( "It can burrow underground." ) );
+    }
+    if( has_flag( MF_CLIMBS ) ) {
+        lines.emplace_back( _( "It can climb." ) );
+    }
+    if( has_flag( MF_GRABS ) ) {
+        lines.emplace_back( _( "It can grab." ) );
+    }
+    if( has_flag( MF_VENOM ) ) {
+        lines.emplace_back( _( "It can inflict poison." ) );
+    }
+    if( has_flag( MF_PARALYZE ) ) {
+        lines.emplace_back( _( "It can inflict paralysis." ) );
+    }
+
+    lines.emplace_back( get_description() );
+
+    std::string out;
+    for( size_t i = 0; i < lines.size(); i++ ) {
+        if( i > 0 ) {
+            out += '\n';
+        }
+        out += lines[i];
+    }
+    return out;
+}

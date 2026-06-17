@@ -1,0 +1,64 @@
+/* Layout for the new-character POINTS tab (Tier 4 #4 slice 1). Reuses theme
+   .panel / .tabs / .tab / .item / .scroll-pane. body must be sized + centered
+   (the missions gotcha — otherwise the panel shrink-wraps / collapses), and
+   .nc-opt needs display:block (RmlUi elements default to display:inline; the
+   mutations/diary gotcha — rows would flow horizontally otherwise). */
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.nc-panel {
+    width: 80%;
+    min-width: 720dp;
+    height: 92%;
+    display: flex;
+    flex-direction: column;
+}
+
+.nc-tabs {
+    flex: 0 0 auto;
+}
+
+/* Character-creation steps size to content (theme .tab is flex:1, which would
+   truncate the 8 captions). */
+.nc-tabs .tab {
+    flex: 0 0 auto;
+}
+
+.nc-points {
+    display: block;
+    flex: 0 0 auto;
+    padding: 8dp;
+    color: {{fg}};
+}
+
+.nc-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+}
+
+.nc-opts {
+    flex: 0 0 auto;
+    min-width: 280dp;
+    border-right: 1dp {{bg4}};
+    padding-right: 8dp;
+}
+
+.nc-opt {
+    display: block;
+}
+
+.nc-desc {
+    flex: 1;
+    min-width: 0;
+    white-space: pre-wrap;
+    padding: 8dp;
+    color: {{fg}};
+}

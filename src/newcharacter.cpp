@@ -56,6 +56,9 @@
 #include "ranged.h"
 #include "recipe.h"
 #include "recipe_dictionary.h"
+#include <RmlUi/Core.h>
+#include "rml_screen.h"
+#include "rml_util.h"
 #include "rng.h"
 #include "scenario.h"
 #include "sdltiles.h"
@@ -781,6 +784,78 @@ void draw_sorting_indicator( const catacurses::window &w_sorting, const input_co
     fold_and_print( w_sorting, point_zero, ( TERMX / 2 ), c_light_gray, sort_text );
 }
 
+// --- RmlUi render path (Tier 4 screen #4: new-character creator, sliced) -----
+// One toggle lights every character-creation tab; each tab's on_redraw guards
+// `if(rml){sync_rml();return;}` (slice 1 = the POINTS tab, set_points). Each tab
+// renders its own character-tab strip in its doc (the worldfactory precedent —
+// the strip is 3-render-only bound tabs per doc, no shared component yet).
+namespace
+{
+struct nc_rml_tab {
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct nc_points_opt {
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct nc_points_session {
+    Rml::Vector<nc_rml_tab> tabs;
+    Rml::String points_rml;
+    Rml::Vector<nc_points_opt> opts;
+    Rml::String desc_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_nc_points_types_registered = false;
+
+void register_nc_points_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_nc_points_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<nc_rml_tab> th = c.RegisterStruct<nc_rml_tab>();
+    th.RegisterMember( "name_rml", &nc_rml_tab::name_rml );
+    th.RegisterMember( "selected", &nc_rml_tab::selected );
+    c.RegisterArray<Rml::Vector<nc_rml_tab>>();
+    Rml::StructHandle<nc_points_opt> oh = c.RegisterStruct<nc_points_opt>();
+    oh.RegisterMember( "name_rml", &nc_points_opt::name_rml );
+    oh.RegisterMember( "selected", &nc_points_opt::selected );
+    c.RegisterArray<Rml::Vector<nc_points_opt>>();
+    g_nc_points_types_registered = true;
+}
+
+// The 8 character-creation tab captions (mirrors draw_character_tabs); `active`
+// is the index of the current tab (POINTS=0, STATS=3, …). name_rml is the
+// escaped caption; theme `.tab`/`.tab.selected` does the colouring. Templated on
+// the tab struct so each tab's data-model uses its OWN registered C++ type
+// (RegisterStruct is context-global — distinct types avoid re-registering one
+// type on two models; the worldfactory precedent). Every tab struct has
+// {name_rml, selected}.
+template<typename TabT>
+Rml::Vector<TabT> build_nc_char_tabs( int active )
+{
+    const std::vector<std::string> caps = {
+        _( "POINTS" ), _( "SCENARIO" ), _( "PROFESSION" ), _( "STATS" ),
+        _( "TRAITS" ), _( "BIONICS" ), _( "SKILLS" ), _( "OVERVIEW" ),
+    };
+    Rml::Vector<TabT> tabs;
+    for( int i = 0; i < static_cast<int>( caps.size() ); i++ ) {
+        TabT t;
+        t.name_rml = cata_text_to_rml( caps[i] );
+        t.selected = ( i == active );
+        tabs.push_back( t );
+    }
+    return tabs;
+}
+} // namespace
+
+bool &newcharacter_rmlui_enabled()
+{
+    static bool enabled = false;
+    return enabled;
+}
+
 tab_direction set_points( avatar &, points_left &points )
 {
     tab_direction retval = tab_direction::NONE;
@@ -831,7 +906,39 @@ tab_direction set_points( avatar &, points_left &points )
 
     int highlighted = 0;
 
+    // RmlUi render path (render-only; keyboard still owns nav/confirm below).
+    auto data = std::make_unique<nc_points_session>();
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !data->handle ) {
+            return;
+        }
+        const int sel = std::max( 0, std::min( highlighted,
+                                  static_cast<int>( opts.size() ) - 1 ) );
+        data->tabs = build_nc_char_tabs<nc_rml_tab>( 0 ); // POINTS tab active
+        data->points_rml = cata_text_to_rml( points.to_string() );
+        data->opts.clear();
+        for( int i = 0; i < static_cast<int>( opts.size() ); i++ ) {
+            nc_points_opt o;
+            const bool chosen = ( points.limit == std::get<0>( opts[i] ) );
+            o.name_rml = cata_text_to_rml( colorize( std::get<1>( opts[i] ),
+                                           chosen ? COL_SKILL_USED : c_light_gray ) );
+            o.selected = ( sel == i );
+            data->opts.push_back( o );
+        }
+        data->desc_rml = cata_text_to_rml( colorize( std::get<2>( opts[sel] ),
+                                           COL_SKILL_USED ) );
+        data->handle.DirtyVariable( "tabs" );
+        data->handle.DirtyVariable( "points_rml" );
+        data->handle.DirtyVariable( "opts" );
+        data->handle.DirtyVariable( "desc_rml" );
+    };
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         draw_character_tabs( w, _( "POINTS" ) );
 
         const auto &cur_opt = opts[highlighted];
@@ -854,6 +961,16 @@ tab_direction set_points( avatar &, points_left &points )
 
         wnoutrefresh( w );
         wnoutrefresh( w_description );
+    } );
+
+    rml.open( newcharacter_rmlui_enabled(), "newcharpoints", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        register_nc_points_rml_types( c );
+        c.Bind( "tabs", &data->tabs );
+        c.Bind( "points_rml", &data->points_rml );
+        c.Bind( "opts", &data->opts );
+        c.Bind( "desc_rml", &data->desc_rml );
+        data->handle = c.GetModelHandle();
     } );
 
     do {
@@ -882,6 +999,110 @@ tab_direction set_points( avatar &, points_left &points )
 
     return retval;
 }
+
+// RmlUi model for the STATS tab (slice 2). Distinct tab struct from the POINTS
+// tab (re-registering one C++ type on two models asserts — worldfactory precedent).
+namespace
+{
+struct nc_stats_tab {
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct nc_stat_row {
+    Rml::String name_rml;
+    Rml::String val_rml;
+    bool selected = false;
+};
+struct nc_stats_session {
+    Rml::Vector<nc_stats_tab> tabs;
+    Rml::String points_rml;
+    Rml::Vector<nc_stat_row> stats;
+    Rml::String cost_rml;   // red "Increasing X further costs 2 points." or empty
+    Rml::String desc_rml;   // selected stat's effects + blurb
+    Rml::String hints_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_nc_stats_types_registered = false;
+
+void register_nc_stats_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_nc_stats_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<nc_stats_tab> th = c.RegisterStruct<nc_stats_tab>();
+    th.RegisterMember( "name_rml", &nc_stats_tab::name_rml );
+    th.RegisterMember( "selected", &nc_stats_tab::selected );
+    c.RegisterArray<Rml::Vector<nc_stats_tab>>();
+    Rml::StructHandle<nc_stat_row> sh = c.RegisterStruct<nc_stat_row>();
+    sh.RegisterMember( "name_rml", &nc_stat_row::name_rml );
+    sh.RegisterMember( "val_rml", &nc_stat_row::val_rml );
+    sh.RegisterMember( "selected", &nc_stat_row::selected );
+    c.RegisterArray<Rml::Vector<nc_stat_row>>();
+    g_nc_stats_types_registered = true;
+}
+
+// Build the selected stat's effects + blurb as one colour-tagged string (mirrors
+// the per-stat curses block in set_stats' on_redraw). `u` is mutated as the
+// curses path does (recalc_hp for Str).
+std::string nc_stat_desc( avatar &u, int sel )
+{
+    std::vector<std::string> lines;
+    switch( sel ) {
+        case 1:
+            u.recalc_hp();
+            lines.push_back( colorize( string_format( _( "Base HP: %d" ),
+                                       u.get_part_hp_max( bodypart_id( "head" ) ) ), COL_STAT_NEUTRAL ) );
+            lines.push_back( colorize( string_format( _( "Carry weight: %.1f %s" ),
+                                       convert_weight( u.weight_capacity() ), weight_units() ), COL_STAT_NEUTRAL ) );
+            lines.push_back( colorize( string_format( _( "Melee damage bonus: +%.1f" ),
+                                       u.bonus_damage( false ) ), COL_STAT_BONUS ) );
+            lines.emplace_back();
+            lines.push_back( colorize( _( "Strength also makes you more resistant to many diseases and poisons, and makes actions which require brute force more effective." ),
+                                       COL_STAT_NEUTRAL ) );
+            break;
+        case 2:
+            lines.push_back( colorize( string_format( _( "Melee to-hit bonus: +%.2f" ),
+                                       u.get_hit_base() ), COL_STAT_BONUS ) );
+            lines.push_back( colorize( string_format( _( "Throwing penalty per target's dodge: +%d" ),
+                                       ranged::throw_dispersion_per_dodge( u, false ) ), COL_STAT_BONUS ) );
+            if( u.ranged_dex_mod() != 0 ) {
+                lines.push_back( colorize( string_format( _( "Ranged penalty: -%d" ),
+                                           std::abs( u.ranged_dex_mod() ) ), COL_STAT_PENALTY ) );
+            }
+            lines.emplace_back();
+            lines.push_back( colorize( _( "Dexterity also enhances many actions which require finesse." ),
+                                       COL_STAT_NEUTRAL ) );
+            break;
+        case 3: {
+            const int read_spd = u.read_speed( false );
+            lines.push_back( colorize( string_format( _( "Read times: %d%%" ), read_spd ),
+                                       ( read_spd == 100 ? COL_STAT_NEUTRAL :
+                                         ( read_spd < 100 ? COL_STAT_BONUS : COL_STAT_PENALTY ) ) ) );
+            lines.push_back( colorize( string_format( _( "Skill rust: %d%%" ), u.rust_rate() ),
+                                       COL_STAT_PENALTY ) );
+            lines.push_back( colorize( string_format( _( "Crafting bonus: +%d%%" ), u.get_int() ),
+                                       COL_STAT_BONUS ) );
+            lines.emplace_back();
+            lines.push_back( colorize( _( "Intelligence is also used when crafting, installing bionics, and interacting with NPCs." ),
+                                       COL_STAT_NEUTRAL ) );
+            break;
+        }
+        case 4:
+            if( u.ranged_per_mod() > 0 ) {
+                lines.push_back( colorize( string_format( _( "Aiming penalty: -%d" ),
+                                           u.ranged_per_mod() ), COL_STAT_PENALTY ) );
+            }
+            lines.push_back( colorize( string_format( _( "Night vision bonus: +%.1f" ),
+                                       vision::nv_range_from_per( u.per_max ) ), COL_STAT_BONUS ) );
+            lines.emplace_back();
+            lines.push_back( colorize( _( "Perception is also used for detecting traps and other things of interest." ),
+                                       COL_STAT_NEUTRAL ) );
+            break;
+    }
+    return join( lines, "\n" );
+}
+} // namespace
 
 tab_direction set_stats( avatar &u, points_left &points )
 {
@@ -926,7 +1147,73 @@ tab_direction set_stats( avatar &u, points_left &points )
     old_pos.x() = 0;
     u.setpos( old_pos );
 
+    // RmlUi render path (render-only; keyboard still owns nav/inc/dec below).
+    auto data = std::make_unique<nc_stats_session>();
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !data->handle ) {
+            return;
+        }
+        data->tabs = build_nc_char_tabs<nc_stats_tab>( 3 ); // STATS tab active
+        data->points_rml = cata_text_to_rml( points.to_string() );
+
+        data->stats.clear();
+        const auto add_stat = [&]( const std::string & label, int val, int idx ) {
+            nc_stat_row r;
+            const bool active = ( sel == idx );
+            const nc_color col = active ? COL_STAT_ACT : c_light_gray;
+            r.name_rml = cata_text_to_rml( colorize( label, col ) );
+            r.val_rml = cata_text_to_rml( colorize( string_format( "%2d", val ), col ) );
+            r.selected = active;
+            data->stats.push_back( r );
+        };
+        add_stat( _( "Strength:" ), u.str_max, 1 );
+        add_stat( _( "Dexterity:" ), u.dex_max, 2 );
+        add_stat( _( "Intelligence:" ), u.int_max, 3 );
+        add_stat( _( "Perception:" ), u.per_max, 4 );
+
+        // HIGH_STAT cost warning for the selected stat (exact curses strings).
+        std::string cost;
+        if( sel == 1 && u.str_max >= HIGH_STAT ) {
+            cost = _( "Increasing Str further costs 2 points." );
+        } else if( sel == 2 && u.dex_max >= HIGH_STAT ) {
+            cost = _( "Increasing Dex further costs 2 points." );
+        } else if( sel == 3 && u.int_max >= HIGH_STAT ) {
+            cost = _( "Increasing Int further costs 2 points." );
+        } else if( sel == 4 && u.per_max >= HIGH_STAT ) {
+            cost = _( "Increasing Per further costs 2 points." );
+        }
+        data->cost_rml = cost.empty() ? std::string()
+                         : cata_text_to_rml( colorize( cost, c_light_red ) );
+
+        data->desc_rml = cata_text_to_rml( nc_stat_desc( u, sel ) );
+
+        data->hints_rml = cata_text_to_rml( string_format(
+                _( "<color_light_green>%s</color> / <color_light_green>%s</color> to select a statistic.\n"
+                   "<color_light_green>%s</color> to increase the statistic.\n"
+                   "<color_light_green>%s</color> to decrease the statistic.\n"
+                   "\n"
+                   "<color_light_green>%s</color> lets you view and alter keybindings.\n"
+                   "<color_light_green>%s</color> takes you to the next tab.\n"
+                   "<color_light_green>%s</color> returns you to the main menu." ),
+                ctxt.get_desc( "UP" ), ctxt.get_desc( "DOWN" ),
+                ctxt.get_desc( "RIGHT" ), ctxt.get_desc( "LEFT" ),
+                ctxt.get_desc( "HELP_KEYBINDINGS" ), ctxt.get_desc( "NEXT_TAB" ),
+                ctxt.get_desc( "PREV_TAB" ) ) );
+
+        data->handle.DirtyVariable( "tabs" );
+        data->handle.DirtyVariable( "points_rml" );
+        data->handle.DirtyVariable( "stats" );
+        data->handle.DirtyVariable( "cost_rml" );
+        data->handle.DirtyVariable( "desc_rml" );
+        data->handle.DirtyVariable( "hints_rml" );
+    };
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         werase( w );
         draw_character_tabs( w, _( "STATS" ) );
         fold_and_print( w, point( 2, 16 ), getmaxx( w ) - 4, COL_NOTE_MINOR,
@@ -1045,6 +1332,18 @@ tab_direction set_stats( avatar &u, points_left &points )
         wnoutrefresh( w_description );
     } );
 
+    rml.open( newcharacter_rmlui_enabled(), "newcharstats", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        register_nc_stats_rml_types( c );
+        c.Bind( "tabs", &data->tabs );
+        c.Bind( "points_rml", &data->points_rml );
+        c.Bind( "stats", &data->stats );
+        c.Bind( "cost_rml", &data->cost_rml );
+        c.Bind( "desc_rml", &data->desc_rml );
+        c.Bind( "hints_rml", &data->hints_rml );
+        data->handle = c.GetModelHandle();
+    } );
+
     do {
         ui_manager::redraw();
         const std::string action = ctxt.handle_input();
@@ -1123,6 +1422,43 @@ tab_direction set_stats( avatar &u, points_left &points )
         }
     } while( true );
 }
+
+// RmlUi model for the TRAITS tab (slice 4). 3 columns (good/bad/neutral) baked as
+// markup strings (the advinv-2b "no nested data-for" primitive) since the row
+// struct (trait_entry) is function-local. Distinct tab struct (per-model type).
+namespace
+{
+struct nc_traits_tab {
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct nc_traits_session {
+    Rml::Vector<nc_traits_tab> tabs;
+    Rml::String points_rml;
+    Rml::String budget_rml;   // good/bad point counters (non-freeform only)
+    Rml::String cost_rml;     // "<trait> costs/earns N points" for the working trait
+    Rml::String col0_html;    // good column (baked rows)
+    Rml::String col1_html;    // bad column
+    Rml::String col2_html;    // neutral column (empty unless used_pages==3)
+    bool show_col2 = false;
+    Rml::String desc_rml;     // working trait description
+    Rml::DataModelHandle handle;
+};
+
+bool g_nc_traits_types_registered = false;
+
+void register_nc_traits_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_nc_traits_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<nc_traits_tab> th = c.RegisterStruct<nc_traits_tab>();
+    th.RegisterMember( "name_rml", &nc_traits_tab::name_rml );
+    th.RegisterMember( "selected", &nc_traits_tab::selected );
+    c.RegisterArray<Rml::Vector<nc_traits_tab>>();
+    g_nc_traits_types_registered = true;
+}
+} // namespace
 
 tab_direction set_traits( avatar &u, points_left &points )
 {
@@ -1284,8 +1620,136 @@ tab_direction set_traits( avatar &u, points_left &points )
     ctxt.register_action( "zoom_out" );
     ctxt.register_action( "TOGGLE_CHARACTER_PREVIEW_CLOTHES" );
 
+    // RmlUi render path (render-only; keyboard owns nav/confirm/reroll below).
+    // The tile character_preview overlay is NOT drawn in rml mode this slice
+    // (out of scope like the AIM minimap; flagged deferred).
+    auto data = std::make_unique<nc_traits_session>();
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !data->handle ) {
+            return;
+        }
+        data->tabs = build_nc_char_tabs<nc_traits_tab>( 4 ); // TRAITS tab active
+        data->points_rml = cata_text_to_rml( points.to_string() );
+        if( !points.is_freeform() ) {
+            data->budget_rml = cata_text_to_rml( string_format(
+                    "<color_light_green>%2d/%-2d</color> <color_light_red>%3d/-%-2d</color>",
+                    num_good, max_trait_points, num_bad, max_trait_points ) );
+        } else {
+            data->budget_rml.clear();
+        }
+        const auto build_col = [&]( int page ) -> std::string {
+            nc_color on_act;
+            nc_color off_act;
+            nc_color on_pas;
+            nc_color off_pas;
+            switch( page ) {
+                case 0:
+                    on_act = COL_TR_GOOD_ON_ACT;
+                    off_act = COL_TR_GOOD_OFF_ACT;
+                    on_pas = COL_TR_GOOD_ON_PAS;
+                    off_pas = COL_TR_GOOD_OFF_PAS;
+                    break;
+                case 1:
+                    on_act = COL_TR_BAD_ON_ACT;
+                    off_act = COL_TR_BAD_OFF_ACT;
+                    on_pas = COL_TR_BAD_ON_PAS;
+                    off_pas = COL_TR_BAD_OFF_PAS;
+                    break;
+                default:
+                    on_act = COL_TR_NEUT_ON_ACT;
+                    off_act = COL_TR_NEUT_OFF_ACT;
+                    on_pas = COL_TR_NEUT_ON_PAS;
+                    off_pas = COL_TR_NEUT_OFF_PAS;
+                    break;
+            }
+            const int cur = iCurrentLine[page];
+            std::string html;
+            for( size_t i = 0; i < vStartingTraits[page].size(); i++ ) {
+                const trait_entry &e = vStartingTraits[page][i];
+                nc_color col;
+                if( iCurWorkingPage == page ) {
+                    if( e.avatar_has ) {
+                        col = on_act;
+                    } else if( e.conflicts || e.forbidden ) {
+                        col = c_dark_gray;
+                    } else {
+                        col = off_act;
+                    }
+                } else {
+                    if( e.avatar_has ) {
+                        col = on_pas;
+                    } else if( e.conflicts || e.forbidden ) {
+                        col = c_light_gray;
+                    } else {
+                        col = off_pas;
+                    }
+                }
+                const bool sel = ( iCurWorkingPage == page && static_cast<int>( i ) == cur );
+                html += sel ? "<div class=\"item nc-trait-row selected\">"
+                        : "<div class=\"item nc-trait-row\">";
+                html += cata_text_to_rml( colorize( e.id.obj().name(), col ) );
+                html += "</div>";
+            }
+            return html;
+        };
+        data->col0_html = build_col( 0 );
+        data->col1_html = build_col( 1 );
+        data->show_col2 = ( used_pages == 3 );
+        data->col2_html = data->show_col2 ? build_col( 2 ) : std::string();
+
+        const int wp = iCurWorkingPage;
+        if( !vStartingTraits[wp].empty() ) {
+            const int wl = std::min( iCurrentLine[wp],
+                                     static_cast<int>( vStartingTraits[wp].size() ) - 1 );
+            const trait_entry &we = vStartingTraits[wp][wl];
+            const mutation_branch &wmd = we.id.obj();
+            const nc_color col_tr = wp == 0 ? COL_TR_GOOD : ( wp == 1 ? COL_TR_BAD : COL_TR_NEUT );
+            int pts = wmd.points;
+            const bool neg = pts < 0;
+            if( neg ) {
+                pts *= -1;
+            }
+            data->cost_rml = cata_text_to_rml( colorize( string_format(
+                    vgettext( "%s %s %d point", "%s %s %d points", pts ),
+                    wmd.name(), neg ? _( "earns" ) : _( "costs" ), pts ), col_tr ) );
+            data->desc_rml = cata_text_to_rml( colorize( wmd.desc(), col_tr ) );
+        } else {
+            data->cost_rml.clear();
+            data->desc_rml.clear();
+        }
+
+        data->handle.DirtyVariable( "tabs" );
+        data->handle.DirtyVariable( "points_rml" );
+        data->handle.DirtyVariable( "budget_rml" );
+        data->handle.DirtyVariable( "cost_rml" );
+        data->handle.DirtyVariable( "col0_html" );
+        data->handle.DirtyVariable( "col1_html" );
+        data->handle.DirtyVariable( "col2_html" );
+        data->handle.DirtyVariable( "show_col2" );
+        data->handle.DirtyVariable( "desc_rml" );
+    };
+
+    rml.open( newcharacter_rmlui_enabled(), "newchartraits", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        register_nc_traits_rml_types( c );
+        c.Bind( "tabs", &data->tabs );
+        c.Bind( "points_rml", &data->points_rml );
+        c.Bind( "budget_rml", &data->budget_rml );
+        c.Bind( "cost_rml", &data->cost_rml );
+        c.Bind( "col0_html", &data->col0_html );
+        c.Bind( "col1_html", &data->col1_html );
+        c.Bind( "col2_html", &data->col2_html );
+        c.Bind( "show_col2", &data->show_col2 );
+        c.Bind( "desc_rml", &data->desc_rml );
+        data->handle = c.GetModelHandle();
+    } );
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         werase( w );
         werase( w_description );
 
@@ -1558,6 +2022,42 @@ tab_direction set_traits( avatar &u, points_left &points )
     } while( true );
 }
 
+// RmlUi model for the BIONICS tab (slice 5). Structurally identical to TRAITS:
+// 3 columns baked as markup strings, distinct per-model tab struct.
+namespace
+{
+struct nc_bionics_tab {
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct nc_bionics_session {
+    Rml::Vector<nc_bionics_tab> tabs;
+    Rml::String points_rml;
+    Rml::String budget_rml;
+    Rml::String cost_rml;
+    Rml::String col0_html;
+    Rml::String col1_html;
+    Rml::String col2_html;
+    bool show_col2 = false;
+    Rml::String desc_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_nc_bionics_types_registered = false;
+
+void register_nc_bionics_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_nc_bionics_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<nc_bionics_tab> th = c.RegisterStruct<nc_bionics_tab>();
+    th.RegisterMember( "name_rml", &nc_bionics_tab::name_rml );
+    th.RegisterMember( "selected", &nc_bionics_tab::selected );
+    c.RegisterArray<Rml::Vector<nc_bionics_tab>>();
+    g_nc_bionics_types_registered = true;
+}
+} // namespace
+
 tab_direction set_bionics( avatar &u, points_left &points )
 {
     const int max_trait_points = get_option<int>( "MAX_TRAIT_POINTS" );
@@ -1705,8 +2205,134 @@ tab_direction set_bionics( avatar &u, points_left &points )
     ctxt.register_action( "zoom_out" );
     ctxt.register_action( "TOGGLE_CHARACTER_PREVIEW_CLOTHES" );
 
+    // RmlUi render path (render-only; keyboard owns nav/confirm/reroll below).
+    // Structurally the TRAITS tab with bionic data. Tile preview not drawn in rml.
+    auto data = std::make_unique<nc_bionics_session>();
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !data->handle ) {
+            return;
+        }
+        data->tabs = build_nc_char_tabs<nc_bionics_tab>( 5 ); // BIONICS tab active
+        data->points_rml = cata_text_to_rml( points.to_string() );
+        if( !points.is_freeform() ) {
+            data->budget_rml = cata_text_to_rml( string_format(
+                    "<color_light_green>%2d/%-2d</color> <color_light_red>%3d/-%-2d</color>",
+                    num_good, max_trait_points, num_bad, max_trait_points ) );
+        } else {
+            data->budget_rml.clear();
+        }
+        const auto build_col = [&]( int page ) -> std::string {
+            nc_color on_act;
+            nc_color off_act;
+            nc_color on_pas;
+            nc_color off_pas;
+            switch( page ) {
+                case 0:
+                    on_act = COL_TR_GOOD_ON_ACT;
+                    off_act = COL_TR_GOOD_OFF_ACT;
+                    on_pas = COL_TR_GOOD_ON_PAS;
+                    off_pas = COL_TR_GOOD_OFF_PAS;
+                    break;
+                case 1:
+                    on_act = COL_TR_BAD_ON_ACT;
+                    off_act = COL_TR_BAD_OFF_ACT;
+                    on_pas = COL_TR_BAD_ON_PAS;
+                    off_pas = COL_TR_BAD_OFF_PAS;
+                    break;
+                default:
+                    on_act = COL_TR_NEUT_ON_ACT;
+                    off_act = COL_TR_NEUT_OFF_ACT;
+                    on_pas = COL_TR_NEUT_ON_PAS;
+                    off_pas = COL_TR_NEUT_OFF_PAS;
+                    break;
+            }
+            const int cur = iCurrentLine[page];
+            std::string html;
+            for( size_t i = 0; i < vStartingBionics[page].size(); i++ ) {
+                const bionic_entry &e = vStartingBionics[page][i];
+                nc_color col;
+                if( iCurWorkingPage == page ) {
+                    if( e.avatar_has ) {
+                        col = on_act;
+                    } else if( e.conflicts || e.forbidden ) {
+                        col = c_dark_gray;
+                    } else {
+                        col = off_act;
+                    }
+                } else {
+                    if( e.avatar_has ) {
+                        col = on_pas;
+                    } else if( e.conflicts || e.forbidden ) {
+                        col = c_light_gray;
+                    } else {
+                        col = off_pas;
+                    }
+                }
+                const bool sel = ( iCurWorkingPage == page && static_cast<int>( i ) == cur );
+                html += sel ? "<div class=\"item nc-trait-row selected\">"
+                        : "<div class=\"item nc-trait-row\">";
+                html += cata_text_to_rml( colorize( e.id.obj().name.translated(), col ) );
+                html += "</div>";
+            }
+            return html;
+        };
+        data->col0_html = build_col( 0 );
+        data->col1_html = build_col( 1 );
+        data->show_col2 = ( used_pages == 3 );
+        data->col2_html = data->show_col2 ? build_col( 2 ) : std::string();
+
+        const int wp = iCurWorkingPage;
+        if( !vStartingBionics[wp].empty() ) {
+            const int wl = std::min( iCurrentLine[wp],
+                                     static_cast<int>( vStartingBionics[wp].size() ) - 1 );
+            const bionic_data &wb = vStartingBionics[wp][wl].id.obj();
+            const nc_color col_tr = wp == 0 ? COL_TR_GOOD : ( wp == 1 ? COL_TR_BAD : COL_TR_NEUT );
+            int pts = wb.points;
+            const bool neg = pts < 0;
+            if( neg ) {
+                pts *= -1;
+            }
+            data->cost_rml = cata_text_to_rml( colorize( string_format(
+                    vgettext( "%s %s %d point", "%s %s %d points", pts ),
+                    wb.name.translated(), neg ? _( "earns" ) : _( "costs" ), pts ), col_tr ) );
+            data->desc_rml = cata_text_to_rml( colorize( wb.description.translated(), col_tr ) );
+        } else {
+            data->cost_rml.clear();
+            data->desc_rml.clear();
+        }
+
+        data->handle.DirtyVariable( "tabs" );
+        data->handle.DirtyVariable( "points_rml" );
+        data->handle.DirtyVariable( "budget_rml" );
+        data->handle.DirtyVariable( "cost_rml" );
+        data->handle.DirtyVariable( "col0_html" );
+        data->handle.DirtyVariable( "col1_html" );
+        data->handle.DirtyVariable( "col2_html" );
+        data->handle.DirtyVariable( "show_col2" );
+        data->handle.DirtyVariable( "desc_rml" );
+    };
+
+    rml.open( newcharacter_rmlui_enabled(), "newcharbionics", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        register_nc_bionics_rml_types( c );
+        c.Bind( "tabs", &data->tabs );
+        c.Bind( "points_rml", &data->points_rml );
+        c.Bind( "budget_rml", &data->budget_rml );
+        c.Bind( "cost_rml", &data->cost_rml );
+        c.Bind( "col0_html", &data->col0_html );
+        c.Bind( "col1_html", &data->col1_html );
+        c.Bind( "col2_html", &data->col2_html );
+        c.Bind( "show_col2", &data->show_col2 );
+        c.Bind( "desc_rml", &data->desc_rml );
+        data->handle = c.GetModelHandle();
+    } );
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         werase( w );
         werase( w_description );
 
@@ -2048,6 +2674,50 @@ struct {
 
 
 /** Handle the profession tab of the character generation menu */
+// RmlUi model for the PROFESSION tab (slice 7). Single list + a big scrollable
+// info buffer (items/skills/traits/bionics/...). Distinct per-model types.
+namespace
+{
+struct nc_prof_tab {
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct nc_prof_row {
+    Rml::String text_rml;
+    bool selected = false;
+};
+struct nc_prof_session {
+    Rml::Vector<nc_prof_tab> tabs;
+    Rml::String points_rml;
+    Rml::String cost_rml;
+    Rml::Vector<nc_prof_row> rows;
+    Rml::String desc_rml;
+    Rml::String info_rml;
+    Rml::String sort_rml;
+    Rml::String gender_rml;
+    Rml::String filter_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_nc_prof_types_registered = false;
+
+void register_nc_prof_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_nc_prof_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<nc_prof_tab> th = c.RegisterStruct<nc_prof_tab>();
+    th.RegisterMember( "name_rml", &nc_prof_tab::name_rml );
+    th.RegisterMember( "selected", &nc_prof_tab::selected );
+    c.RegisterArray<Rml::Vector<nc_prof_tab>>();
+    Rml::StructHandle<nc_prof_row> rh = c.RegisterStruct<nc_prof_row>();
+    rh.RegisterMember( "text_rml", &nc_prof_row::text_rml );
+    rh.RegisterMember( "selected", &nc_prof_row::selected );
+    c.RegisterArray<Rml::Vector<nc_prof_row>>();
+    g_nc_prof_types_registered = true;
+}
+} // namespace
+
 tab_direction set_profession( avatar &u, points_left &points,
                               const tab_direction direction )
 {
@@ -2119,7 +2789,239 @@ tab_direction set_profession( avatar &u, points_left &points,
 
     int iheight = 0;
 
+    // RmlUi render path (render-only; keyboard owns nav/scroll/confirm/sort/gender/
+    // filter below). Tile character_preview not drawn in rml mode this slice.
+    auto data = std::make_unique<nc_prof_session>();
+    rml_doc rml;
+    bool rml_scroll_pending = false;
+    const auto sync_rml = [&]() {
+        if( !data->handle ) {
+            return;
+        }
+        data->tabs = build_nc_char_tabs<nc_prof_tab>( 2 ); // PROFESSION tab active
+        const bool valid = cur_id >= 0 && static_cast<size_t>( cur_id ) < sorted_profs.size();
+
+        std::string pmsg = points.to_string();
+        if( valid ) {
+            const int netPointCost = sorted_profs[cur_id]->point_cost() - u.prof->point_cost();
+            if( netPointCost > 0 ) {
+                pmsg += colorize( string_format( " (-%d)", std::abs( netPointCost ) ), c_red );
+            } else if( netPointCost < 0 ) {
+                pmsg += colorize( string_format( " (+%d)", std::abs( netPointCost ) ), c_green );
+            }
+        }
+        data->points_rml = cata_text_to_rml( pmsg );
+
+        if( valid ) {
+            const string_id<profession> &pid = sorted_profs[cur_id];
+            const bool can_pick = can_pick_prof( *pid, u, points.skill_points_left() );
+            int pts = pid->point_cost();
+            const bool neg = pts < 0;
+            if( neg ) {
+                pts *= -1;
+            }
+            const std::string msg = neg
+                                    ? vgettext( "Profession %1$s earns %2$d point",
+                                            "Profession %1$s earns %2$d points", pts )
+                                    : vgettext( "Profession %1$s costs %2$d point",
+                                            "Profession %1$s costs %2$d points", pts );
+            data->cost_rml = cata_text_to_rml( colorize( string_format( msg,
+                             pid->gender_appropriate_name( u.male ), pts ),
+                             can_pick ? c_green : c_light_red ) );
+            data->desc_rml = cata_text_to_rml( colorize( pid->description( u.male ), c_green ) );
+
+            // The big info buffer (mirrors the curses w_items buffer verbatim).
+            std::string buf;
+            const auto prof_addictions = pid->addictions();
+            if( !prof_addictions.empty() ) {
+                buf += colorize( _( "Addictions:" ), c_light_blue ) + "\n";
+                for( const auto &a : prof_addictions ) {
+                    buf += string_format( pgettext( "set_profession_addictions", "%1$s (%2$d)" ),
+                                          addiction_name( a ), a.intensity ) + "\n";
+                }
+            }
+            const auto prof_traits = pid->get_locked_traits();
+            buf += colorize( _( "Traits:" ), c_light_blue ) + "\n";
+            if( prof_traits.empty() ) {
+                buf += pgettext( "set_profession_trait", "None" ) + std::string( "\n" );
+            } else {
+                for( const auto &t : prof_traits ) {
+                    buf += mutation_branch::get_name( t ) + "\n";
+                }
+            }
+            std::vector<std::pair<skill_id, int>> prof_skills = pid->skills();
+            std::stable_sort( prof_skills.begin(), prof_skills.end(),
+            []( const std::pair<skill_id, int> &a, const std::pair<skill_id, int> &b ) {
+                return localized_compare( std::make_pair( a.first->display_category(), a.first->name() ),
+                                          std::make_pair( b.first->display_category(), b.first->name() ) );
+            } );
+            buf += colorize( _( "Skills:" ), c_light_blue ) + "\n";
+            if( prof_skills.empty() ) {
+                buf += pgettext( "set_profession_skill", "None" ) + std::string( "\n" );
+            } else {
+                skill_displayType_id cur_category = skill_displayType_id::NULL_ID();
+                for( const auto &sl : prof_skills ) {
+                    if( cur_category != sl.first->display_category() ) {
+                        cur_category = sl.first->display_category();
+                        buf += colorize( string_format( sl.first->display_category()->display_string() ),
+                                         c_yellow ) + "\n";
+                    }
+                    buf += "  " + string_format( pgettext( "set_profession_skill", "%1$s (%2$d)" ),
+                                                 sl.first.obj().name(), sl.second ) + "\n";
+                }
+            }
+            const auto prof_items = pid->items( u.male, u.get_mutations() );
+            buf += colorize( _( "Items:" ), c_light_blue ) + "\n";
+            if( prof_items.empty() ) {
+                buf += pgettext( "set_profession_item", "None" ) + std::string( "\n" );
+            } else {
+                std::string buffer_wielded;
+                std::string buffer_worn;
+                std::string buffer_inventory;
+                for( const auto &it : prof_items ) {
+                    if( it->has_flag( json_flag_no_auto_equip ) ) {
+                        buffer_inventory += it->display_name() + "\n";
+                    } else if( it->has_flag( json_flag_auto_wield ) ) {
+                        buffer_wielded += it->display_name() + "\n";
+                    } else if( it->is_armor() ) {
+                        buffer_worn += it->display_name() + "\n";
+                    } else {
+                        buffer_inventory += it->display_name() + "\n";
+                    }
+                }
+                buf += colorize( _( "Wielded:" ), c_cyan ) + "\n";
+                buf += !buffer_wielded.empty() ? buffer_wielded
+                       : pgettext( "set_profession_item_wielded", "None\n" );
+                buf += colorize( _( "Worn:" ), c_cyan ) + "\n";
+                buf += !buffer_worn.empty() ? buffer_worn
+                       : pgettext( "set_profession_item_worn", "None\n" );
+                buf += colorize( _( "Inventory:" ), c_cyan ) + "\n";
+                buf += !buffer_inventory.empty() ? buffer_inventory
+                       : pgettext( "set_profession_item_inventory", "None\n" );
+            }
+            auto prof_CBMs = pid->CBMs();
+            std::sort( begin( prof_CBMs ), end( prof_CBMs ), []( const bionic_id & a,
+            const bionic_id & b ) {
+                return a->activated && !b->activated;
+            } );
+            buf += colorize( _( "Bionics:" ), c_light_blue ) + "\n";
+            if( prof_CBMs.empty() ) {
+                buf += pgettext( "set_profession_bionic", "None" ) + std::string( "\n" );
+            } else {
+                for( const auto &b : prof_CBMs ) {
+                    const auto &cbm = b.obj();
+                    if( cbm.activated && cbm.has_flag( STATIC( flag_id( "BIONIC_TOGGLED" ) ) ) ) {
+                        buf += string_format( _( "%s (toggled)" ), cbm.name ) + "\n";
+                    } else if( cbm.activated ) {
+                        buf += string_format( _( "%s (activated)" ), cbm.name ) + "\n";
+                    } else {
+                        buf += cbm.name + "\n";
+                    }
+                }
+            }
+            if( !pid->pets().empty() ) {
+                buf += colorize( _( "Pets:" ), c_light_blue ) + "\n";
+                for( auto elem : pid->pets() ) {
+                    monster mon( elem );
+                    buf += mon.get_name() + "\n";
+                }
+            }
+            if( pid->vehicle() ) {
+                buf += colorize( _( "Vehicle:" ), c_light_blue ) + "\n";
+                vproto_id veh_id = pid->vehicle();
+                buf += veh_id->name + "\n";
+            }
+            if( !pid->spells().empty() ) {
+                buf += colorize( _( "Spells:" ), c_light_blue ) + "\n";
+                for( const std::pair<spell_id, int> spell_pair : pid->spells() ) {
+                    buf += string_format( _( "%s level %d" ), spell_pair.first->name,
+                                          spell_pair.second ) + "\n";
+                }
+            }
+            std::optional<int> cash = pid->starting_cash();
+            if( cash.has_value() ) {
+                buf += colorize( _( "Money:" ), c_light_blue ) + "\n";
+                buf += format_money( cash.value() ) + "\n";
+            }
+            std::vector<npc_class_id> npcs = pid->npcs();
+            if( !npcs.empty() ) {
+                buf += "\n" + colorize( _( "Companions:" ), c_light_blue ) + "\n";
+                for( const npc_class_id &id : npcs ) {
+                    if( id.is_valid() ) {
+                        buf += id.obj().get_name() + "\n";
+                    }
+                }
+            }
+            data->info_rml = cata_text_to_rml( buf );
+
+            data->sort_rml = cata_text_to_rml( string_format(
+                    _( "<color_white>Sort by:</color> %1$s (Press <color_light_green>%2$s</color> to change sorting.)" ),
+                    profession_sorter.sort_by_points ? _( "points" ) : _( "name" ),
+                    ctxt.get_desc( "SORT" ) ) );
+            const std::string g_switch_msg = u.male ?
+                                             _( "Press <color_light_green>%1$s</color> to switch to <color_magenta>%2$s</color> (<color_pink>female</color>)." )
+                                             :
+                                             _( "Press <color_light_green>%1$s</color> to switch to <color_magenta>%2$s</color> (<color_light_cyan>male</color>)." );
+            data->gender_rml = cata_text_to_rml( string_format( g_switch_msg,
+                               ctxt.get_desc( "CHANGE_GENDER" ),
+                               pid->gender_appropriate_name( !u.male ) ) );
+        } else {
+            data->cost_rml.clear();
+            data->desc_rml.clear();
+            data->info_rml.clear();
+            data->sort_rml.clear();
+            data->gender_rml.clear();
+        }
+
+        data->rows.clear();
+        for( int i = 0; i < static_cast<int>( sorted_profs.size() ); i++ ) {
+            const nc_color col = ( u.prof != sorted_profs[i] ) ? c_light_gray : COL_SKILL_USED;
+            nc_prof_row r;
+            r.text_rml = cata_text_to_rml( colorize(
+                                               sorted_profs[i]->gender_appropriate_name( u.male ), col ) );
+            r.selected = ( i == cur_id );
+            data->rows.push_back( r );
+        }
+
+        data->filter_rml = cata_text_to_rml( string_format( "<%s>",
+                                             filterstring.empty() ? _( "no filter" ) : filterstring ) );
+
+        data->handle.DirtyVariable( "tabs" );
+        data->handle.DirtyVariable( "points_rml" );
+        data->handle.DirtyVariable( "cost_rml" );
+        data->handle.DirtyVariable( "rows" );
+        data->handle.DirtyVariable( "desc_rml" );
+        data->handle.DirtyVariable( "info_rml" );
+        data->handle.DirtyVariable( "sort_rml" );
+        data->handle.DirtyVariable( "gender_rml" );
+        data->handle.DirtyVariable( "filter_rml" );
+
+        if( rml_scroll_pending && valid ) {
+            rml_scroll_pending = false;
+            if( Rml::Element *list = rml.document()->GetElementById( "nc-prof-list" ) ) {
+                if( cur_id < list->GetNumChildren() ) {
+                    list->GetChild( cur_id )->ScrollIntoView(
+                        Rml::ScrollIntoViewOptions( Rml::ScrollAlignment::Nearest ) );
+                }
+            }
+        }
+    };
+    const auto scroll_info = [&]( int dir ) {
+        if( !rml ) {
+            return;
+        }
+        if( Rml::Element *e = rml.document()->GetElementById( "nc-prof-info" ) ) {
+            const float page = e->GetClientHeight();
+            const float maxtop = std::max( 0.0f, e->GetScrollHeight() - page );
+            e->SetScrollTop( std::clamp( e->GetScrollTop() + dir * page * 0.15f, 0.0f, maxtop ) );
+        }
+    };
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         werase( w );
         draw_character_tabs( w, _( "PROFESSION" ) );
 
@@ -2387,6 +3289,21 @@ tab_direction set_profession( avatar &u, points_left &points,
         }
     } );
 
+    rml.open( newcharacter_rmlui_enabled(), "newcharprofession", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        register_nc_prof_rml_types( c );
+        c.Bind( "tabs", &data->tabs );
+        c.Bind( "points_rml", &data->points_rml );
+        c.Bind( "cost_rml", &data->cost_rml );
+        c.Bind( "rows", &data->rows );
+        c.Bind( "desc_rml", &data->desc_rml );
+        c.Bind( "info_rml", &data->info_rml );
+        c.Bind( "sort_rml", &data->sort_rml );
+        c.Bind( "gender_rml", &data->gender_rml );
+        c.Bind( "filter_rml", &data->filter_rml );
+        data->handle = c.GetModelHandle();
+    } );
+
     do {
         if( recalc_profs ) {
             sorted_profs = g->scen->permitted_professions();
@@ -2429,6 +3346,7 @@ tab_direction set_profession( avatar &u, points_left &points,
                 cur_id = 0;
             }
             desc_offset = 0;
+            rml_scroll_pending = true;
             // Update preview immediately when moving selection
             if( use_character_preview ) {
                 ui_manager::redraw();
@@ -2439,17 +3357,23 @@ tab_direction set_profession( avatar &u, points_left &points,
                 cur_id = profs_length - 1;
             }
             desc_offset = 0;
+            rml_scroll_pending = true;
             if( use_character_preview ) {
                 ui_manager::redraw();
             }
         } else if( action == "LEFT" ) {
-            if( desc_offset > 0 ) {
+            if( rml ) {
+                scroll_info( -1 );
+            } else if( desc_offset > 0 ) {
                 desc_offset--;
             }
         } else if( action == "RANDOMIZE" ) {
             cur_id = rng( 0, profs_length - 1 );
+            rml_scroll_pending = true;
         } else if( action == "RIGHT" ) {
-            if( desc_offset < iheight ) {
+            if( rml ) {
+                scroll_info( +1 );
+            } else if( desc_offset < iheight ) {
                 desc_offset++;
             }
         } else if( action == "CONFIRM" ) {
@@ -2503,6 +3427,100 @@ static int skill_increment_cost( const Character &u, const skill_id &skill )
 {
     return std::max( 1, ( u.get_skill_level( skill ) + 1 ) / 2 );
 }
+
+// RmlUi model for the SKILLS tab (slice 3). Distinct tab struct (per-model type).
+namespace
+{
+struct nc_skills_tab {
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct nc_skill_row {
+    Rml::String text_rml;
+    bool is_header = false;
+    bool selected = false;
+};
+struct nc_skills_session {
+    Rml::Vector<nc_skills_tab> tabs;
+    Rml::String points_rml;
+    Rml::String cost_rml;
+    Rml::Vector<nc_skill_row> rows;
+    Rml::String desc_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_nc_skills_types_registered = false;
+
+void register_nc_skills_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_nc_skills_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<nc_skills_tab> th = c.RegisterStruct<nc_skills_tab>();
+    th.RegisterMember( "name_rml", &nc_skills_tab::name_rml );
+    th.RegisterMember( "selected", &nc_skills_tab::selected );
+    c.RegisterArray<Rml::Vector<nc_skills_tab>>();
+    Rml::StructHandle<nc_skill_row> rh = c.RegisterStruct<nc_skill_row>();
+    rh.RegisterMember( "text_rml", &nc_skill_row::text_rml );
+    rh.RegisterMember( "is_header", &nc_skill_row::is_header );
+    rh.RegisterMember( "selected", &nc_skill_row::selected );
+    c.RegisterArray<Rml::Vector<nc_skill_row>>();
+    g_nc_skills_types_registered = true;
+}
+
+// The selected skill's description + the recipes it unlocks, as one colour-tagged
+// string. Mirrors the recipe-gathering block in set_skills' curses on_redraw
+// verbatim (curses path left intact for the A/B; this is a parallel builder, the
+// armor_layers precedent). Brown for the current skill's own recipes, gray for
+// recipes that merely require it.
+std::string nc_skill_recipes_desc( avatar &u, const Skill *currentSkill,
+                                   const std::map<skill_id, int> &prof_skills )
+{
+    SkillLevelMap with_prof_skills = u.get_all_skills();
+    for( const auto &sk : prof_skills ) {
+        with_prof_skills.mod_skill_level( sk.first, sk.second );
+    }
+    std::map<std::string, std::vector<std::pair<std::string, int>>> recipes;
+    for( const auto &e : recipe_dict ) {
+        const auto &r = e.second;
+        if( r.has_flag( "SECRET" ) ) {
+            continue;
+        }
+        auto req_skill = r.required_skills.find( currentSkill->ident() );
+        int skill = req_skill != r.required_skills.end() ? req_skill->second : 0;
+        bool would_autolearn_recipe =
+            recipe_dict.all_autolearn().contains( &r ) &&
+            with_prof_skills.meets_skill_requirements( r.autolearn_requirements );
+        if( !would_autolearn_recipe && !r.never_learn &&
+            ( r.skill_used == currentSkill->ident() || skill > 0 ) &&
+            with_prof_skills.has_recipe_requirements( r ) ) {
+            recipes[r.skill_used->name()].emplace_back(
+                r.result_name( /*decorated=*/true ),
+                ( skill > 0 ) ? skill : r.difficulty );
+        }
+    }
+    std::string rec_disp;
+    for( auto &elem : recipes ) {
+        std::sort( elem.second.begin(), elem.second.end(),
+                   []( const std::pair<std::string, int> &lhs,
+        const std::pair<std::string, int> &rhs ) {
+            return localized_compare( std::make_pair( lhs.second, lhs.first ),
+                                      std::make_pair( rhs.second, rhs.first ) );
+        } );
+        const std::string rec_temp = enumerate_as_string( elem.second.begin(), elem.second.end(),
+        []( const std::pair<std::string, int> &rec ) {
+            return string_format( "%s (%d)", rec.first, rec.second );
+        } );
+        if( elem.first == currentSkill->name() ) {
+            rec_disp = "\n\n" + colorize( rec_temp, c_brown ) + rec_disp;
+        } else {
+            rec_disp += "\n\n" + colorize( "[" + elem.first + "]\n" + rec_temp, c_light_gray );
+        }
+    }
+    rec_disp = currentSkill->description() + rec_disp;
+    return rec_disp;
+}
+} // namespace
 
 tab_direction set_skills( avatar &u, points_left &points )
 {
@@ -2561,7 +3579,100 @@ tab_direction set_skills( avatar &u, points_left &points )
 
     const int remaining_points_length = utf8_width( points.to_string(), true );
 
+    // RmlUi render path (render-only; keyboard owns nav/inc/dec/scroll below).
+    auto data = std::make_unique<nc_skills_session>();
+    rml_doc rml;
+    int rml_sel_child = -1;       // flattened-row index of the cursor skill
+    bool rml_scroll_pending = false; // follow the keyboard cursor in the list
+    const auto sync_rml = [&]() {
+        if( !data->handle ) {
+            return;
+        }
+        data->tabs = build_nc_char_tabs<nc_skills_tab>( 6 ); // SKILLS tab active
+        data->points_rml = cata_text_to_rml( points.to_string() );
+
+        const int cost = skill_increment_cost( u, currentSkill->ident() );
+        const int level = u.get_skill_level( currentSkill->ident() );
+        const int upgrade_levels = level == 0 ? 2 : 1;
+        const std::string upgrade_levels_s = string_format(
+                vgettext( "%d level", "%d levels", upgrade_levels ), upgrade_levels );
+        const nc_color ccol = points.skill_points_left() >= cost ? COL_SKILL_USED : c_light_red;
+        data->cost_rml = cata_text_to_rml( colorize( string_format(
+                vgettext( "Upgrading %s by %s costs %d point",
+                          "Upgrading %s by %s costs %d points", cost ),
+                currentSkill->name(), upgrade_levels_s, cost ), ccol ) );
+
+        data->rows.clear();
+        rml_sel_child = -1;
+        skill_displayType_id cat = skill_displayType_id::NULL_ID();
+        for( int i = 0; i < num_skills; i++ ) {
+            const Skill *sk = skill_list[i].first;
+            const skill_displayType_id &dt = sk->display_category();
+            if( cat != dt ) {
+                cat = dt;
+                nc_skill_row h;
+                h.is_header = true;
+                h.text_rml = cata_text_to_rml( colorize( dt->display_string(), c_yellow ) );
+                data->rows.push_back( h );
+            }
+            const int lvl = u.get_skill_level( sk->ident() );
+            const nc_color col = lvl > 0 ? COL_SKILL_USED : c_light_gray;
+            std::string line = colorize( sk->name(), col );
+            if( lvl > 0 ) {
+                line += colorize( string_format( " (%d)", lvl ), col );
+            }
+            for( const auto &ps : u.prof->skills() ) {
+                if( ps.first == sk->ident() ) {
+                    line += colorize( string_format( " (+%d)",
+                                                     static_cast<int>( ps.second ) ), c_white );
+                    break;
+                }
+            }
+            nc_skill_row r;
+            r.text_rml = cata_text_to_rml( line );
+            r.selected = ( i == cur_pos );
+            if( i == cur_pos ) {
+                rml_sel_child = static_cast<int>( data->rows.size() );
+            }
+            data->rows.push_back( r );
+        }
+
+        data->desc_rml = cata_text_to_rml( nc_skill_recipes_desc( u, currentSkill, prof_skills ) );
+
+        data->handle.DirtyVariable( "tabs" );
+        data->handle.DirtyVariable( "points_rml" );
+        data->handle.DirtyVariable( "cost_rml" );
+        data->handle.DirtyVariable( "rows" );
+        data->handle.DirtyVariable( "desc_rml" );
+
+        // Follow the keyboard cursor with native scroll (keyboard nav only).
+        if( rml_scroll_pending && rml_sel_child >= 0 ) {
+            rml_scroll_pending = false;
+            if( Rml::Element *list = rml.document()->GetElementById( "nc-skill-list" ) ) {
+                if( rml_sel_child < list->GetNumChildren() ) {
+                    list->GetChild( rml_sel_child )->ScrollIntoView(
+                        Rml::ScrollIntoViewOptions( Rml::ScrollAlignment::Nearest ) );
+                }
+            }
+        }
+    };
+    // SCROLL_UP/DOWN scroll the description pane (vs the curses fold offset).
+    const auto scroll_desc = [&]( int dir ) {
+        if( !rml ) {
+            return;
+        }
+        if( Rml::Element *e = rml.document()->GetElementById( "nc-skill-desc" ) ) {
+            const float page = e->GetClientHeight();
+            const float maxtop = std::max( 0.0f, e->GetScrollHeight() - page );
+            e->SetScrollTop( std::clamp( e->GetScrollTop() + dir * page * 0.15f, 0.0f, maxtop ) );
+        }
+    };
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         draw_character_tabs( w, _( "SKILLS" ) );
 
         draw_points( w, points );
@@ -2708,17 +3819,31 @@ tab_direction set_skills( avatar &u, points_left &points )
         wnoutrefresh( w_description );
     } );
 
+    rml.open( newcharacter_rmlui_enabled(), "newcharskills", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        register_nc_skills_rml_types( c );
+        c.Bind( "tabs", &data->tabs );
+        c.Bind( "points_rml", &data->points_rml );
+        c.Bind( "cost_rml", &data->cost_rml );
+        c.Bind( "rows", &data->rows );
+        c.Bind( "desc_rml", &data->desc_rml );
+        data->handle = c.GetModelHandle();
+    } );
+
     do {
         ui_manager::redraw();
         const std::string action = ctxt.handle_input();
         if( action == "DOWN" ) {
             cur_pos = modulo( cur_pos + 1, num_skills );
             currentSkill = skill_list[cur_pos].first;
+            rml_scroll_pending = true;
         } else if( action == "UP" ) {
             cur_pos = modulo( cur_pos - 1, num_skills );
             currentSkill = skill_list[cur_pos].first;
+            rml_scroll_pending = true;
         } else if( action == "RANDOMIZE" ) {
             cur_pos = modulo( rng( 0, num_skills - 1 ), num_skills );
+            rml_scroll_pending = true;
         } else if( action == "LEFT" ) {
             const int level = u.get_skill_level( currentSkill->ident() );
             if( level > 0 ) {
@@ -2736,9 +3861,17 @@ tab_direction set_skills( avatar &u, points_left &points )
                 u.mod_skill_level( currentSkill->ident(), level == 0 ? +2 : +1 );
             }
         } else if( action == "SCROLL_DOWN" ) {
-            selected++;
+            if( rml ) {
+                scroll_desc( +1 );
+            } else {
+                selected++;
+            }
         } else if( action == "SCROLL_UP" ) {
-            selected--;
+            if( rml ) {
+                scroll_desc( -1 );
+            } else {
+                selected--;
+            }
         } else if( action == "PREV_TAB" ) {
             return tab_direction::BACKWARD;
         } else if( action == "NEXT_TAB" ) {
@@ -2775,6 +3908,49 @@ struct {
         }
     }
 } scenario_sorter;
+
+// RmlUi model for the SCENARIO tab (slice 6). Single list + a combined right
+// info pane (professions/location/vehicle/flags). Distinct per-model types.
+namespace
+{
+struct nc_scen_tab {
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct nc_scen_row {
+    Rml::String text_rml;
+    bool selected = false;
+};
+struct nc_scen_session {
+    Rml::Vector<nc_scen_tab> tabs;
+    Rml::String points_rml;
+    Rml::String cost_rml;
+    Rml::Vector<nc_scen_row> rows;
+    Rml::String desc_rml;
+    Rml::String info_rml;
+    Rml::String sort_rml;
+    Rml::String filter_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_nc_scen_types_registered = false;
+
+void register_nc_scen_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_nc_scen_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<nc_scen_tab> th = c.RegisterStruct<nc_scen_tab>();
+    th.RegisterMember( "name_rml", &nc_scen_tab::name_rml );
+    th.RegisterMember( "selected", &nc_scen_tab::selected );
+    c.RegisterArray<Rml::Vector<nc_scen_tab>>();
+    Rml::StructHandle<nc_scen_row> rh = c.RegisterStruct<nc_scen_row>();
+    rh.RegisterMember( "text_rml", &nc_scen_row::text_rml );
+    rh.RegisterMember( "selected", &nc_scen_row::selected );
+    c.RegisterArray<Rml::Vector<nc_scen_row>>();
+    g_nc_scen_types_registered = true;
+}
+} // namespace
 
 tab_direction set_scenario( avatar &u, points_left &points,
                             const tab_direction direction )
@@ -2828,7 +4004,175 @@ tab_direction set_scenario( avatar &u, points_left &points,
         points.skill_points += u.prof->point_cost();
     }
 
+    // RmlUi render path (render-only; keyboard owns nav/confirm/sort/filter below).
+    auto data = std::make_unique<nc_scen_session>();
+    rml_doc rml;
+    bool rml_scroll_pending = false;
+    const auto sync_rml = [&]() {
+        if( !data->handle ) {
+            return;
+        }
+        data->tabs = build_nc_char_tabs<nc_scen_tab>( 1 ); // SCENARIO tab active
+        const bool valid = cur_id >= 0 && static_cast<size_t>( cur_id ) < sorted_scens.size();
+
+        std::string pmsg = points.to_string();
+        if( valid ) {
+            const int netPointCost = sorted_scens[cur_id]->point_cost() - g->scen->point_cost();
+            if( netPointCost > 0 ) {
+                pmsg += colorize( string_format( " (-%d)", std::abs( netPointCost ) ), c_red );
+            } else if( netPointCost < 0 ) {
+                pmsg += colorize( string_format( " (+%d)", std::abs( netPointCost ) ), c_green );
+            }
+        }
+        data->points_rml = cata_text_to_rml( pmsg );
+
+        if( valid ) {
+            const scenario *s = sorted_scens[cur_id];
+            const bool can_pick = s->can_pick( *g->scen, points.skill_points_left() );
+            int pts = s->point_cost();
+            const bool neg = pts < 0;
+            if( neg ) {
+                pts *= -1;
+            }
+            const std::string msg = neg
+                                    ? vgettext( "Scenario %1$s earns %2$d point",
+                                            "Scenario %1$s earns %2$d points", pts )
+                                    : vgettext( "Scenario %1$s costs %2$d point",
+                                            "Scenario %1$s cost %2$d points", pts );
+            data->cost_rml = cata_text_to_rml( colorize( string_format( msg,
+                             s->gender_appropriate_name( u.male ), pts ),
+                             can_pick ? c_green : c_light_red ) );
+
+            std::string desc;
+            if( s->has_flag( "CITY_START" ) && !scenario_sorter.cities_enabled ) {
+                desc = colorize(
+                           _( "This scenario is not available in this world due to city size settings." ),
+                           c_red ) + "\n" + colorize( s->description( u.male ), c_green );
+            } else {
+                desc = colorize( s->description( u.male ), c_green );
+            }
+            data->desc_rml = cata_text_to_rml( desc );
+
+            std::string info;
+            info += colorize( _( "Professions:" ), COL_HEADER );
+            info += string_format( _( "\n%s" ), s->prof_count_str() );
+            info += _( ", default:\n" );
+            auto psorter = profession_sorter;
+            psorter.sort_by_points = true;
+            const auto permitted = s->permitted_professions();
+            const auto default_prof = *std::min_element( permitted.begin(), permitted.end(), psorter );
+            const int prof_points = default_prof->point_cost();
+            info += default_prof->gender_appropriate_name( u.male );
+            if( prof_points > 0 ) {
+                info += colorize( string_format( " (-%d)", prof_points ), c_red );
+            } else if( prof_points < 0 ) {
+                info += colorize( string_format( " (+%d)", -prof_points ), c_green );
+            }
+            info += "\n\n";
+            info += colorize( _( "Scenario Location:" ), COL_HEADER );
+            info += "\n";
+            info += string_format( _( "%s (%d locations, %d variants)" ), s->start_name(),
+                                   s->start_location_count(), s->start_location_targets_count() );
+            info += "\n\n";
+            info += colorize( _( "Scenario Vehicle:" ), COL_HEADER );
+            info += "\n";
+            if( s->vehicle() ) {
+                info += s->vehicle()->name;
+            }
+            info += "\n\n";
+            info += colorize( _( "Scenario Flags:" ), COL_HEADER );
+            info += "\n";
+            if( s->has_flag( "SPR_START" ) ) {
+                info += std::string( _( "Spring start" ) ) + "\n";
+            } else if( s->has_flag( "SUM_START" ) ) {
+                info += std::string( _( "Summer start" ) ) + "\n";
+            } else if( s->has_flag( "AUT_START" ) ) {
+                info += std::string( _( "Autumn start" ) ) + "\n";
+            } else if( s->has_flag( "WIN_START" ) ) {
+                info += std::string( _( "Winter start" ) ) + "\n";
+            } else if( s->has_flag( "SUM_ADV_START" ) ) {
+                info += std::string( _( "Next summer start" ) ) + "\n";
+            }
+            if( s->has_flag( "INFECTED" ) ) {
+                info += std::string( _( "Infected player" ) ) + "\n";
+            }
+            if( s->has_flag( "BAD_DAY" ) ) {
+                info += std::string( _( "Drunk and sick player" ) ) + "\n";
+            }
+            if( s->has_flag( "FIRE_START" ) ) {
+                info += std::string( _( "Fire nearby" ) ) + "\n";
+            }
+            if( s->has_flag( "SUR_START" ) ) {
+                info += std::string( _( "Zombies nearby" ) ) + "\n";
+            }
+            if( s->has_flag( "HELI_CRASH" ) ) {
+                info += std::string( _( "Various limb wounds" ) ) + "\n";
+            }
+            if( get_option<std::string>( "STARTING_NPC" ) == "scenario" &&
+                s->has_flag( "LONE_START" ) ) {
+                info += std::string( _( "No starting NPC" ) ) + "\n";
+            }
+            if( s->has_flag( "BORDERED" ) ) {
+                info += std::string( _( "Starting location is bordered by an immense wall" ) ) + "\n";
+            }
+            data->info_rml = cata_text_to_rml( info );
+        } else {
+            data->cost_rml.clear();
+            data->desc_rml.clear();
+            data->info_rml.clear();
+        }
+
+        data->rows.clear();
+        for( int i = 0; i < static_cast<int>( sorted_scens.size() ); i++ ) {
+            const scenario *s = sorted_scens[i];
+            nc_color col;
+            if( g->scen != s ) {
+                if( s->has_flag( "CITY_START" ) && !scenario_sorter.cities_enabled ) {
+                    col = c_dark_gray;
+                } else {
+                    col = c_light_gray;
+                }
+            } else {
+                col = COL_SKILL_USED;
+            }
+            nc_scen_row r;
+            r.text_rml = cata_text_to_rml( colorize( s->gender_appropriate_name( u.male ), col ) );
+            r.selected = ( i == cur_id );
+            data->rows.push_back( r );
+        }
+
+        data->sort_rml = cata_text_to_rml( string_format(
+                _( "<color_white>Sort by:</color> %1$s (Press <color_light_green>%2$s</color> to change sorting.)" ),
+                scenario_sorter.sort_by_points ? _( "points" ) : _( "name" ),
+                ctxt.get_desc( "SORT" ) ) );
+        data->filter_rml = cata_text_to_rml( string_format( "<%s>",
+                                             filterstring.empty() ? _( "no filter" ) : filterstring ) );
+
+        data->handle.DirtyVariable( "tabs" );
+        data->handle.DirtyVariable( "points_rml" );
+        data->handle.DirtyVariable( "cost_rml" );
+        data->handle.DirtyVariable( "rows" );
+        data->handle.DirtyVariable( "desc_rml" );
+        data->handle.DirtyVariable( "info_rml" );
+        data->handle.DirtyVariable( "sort_rml" );
+        data->handle.DirtyVariable( "filter_rml" );
+
+        if( rml_scroll_pending && valid ) {
+            rml_scroll_pending = false;
+            if( Rml::Element *list = rml.document()->GetElementById( "nc-scen-list" ) ) {
+                if( cur_id < list->GetNumChildren() ) {
+                    list->GetChild( cur_id )->ScrollIntoView(
+                        Rml::ScrollIntoViewOptions( Rml::ScrollAlignment::Nearest ) );
+                }
+            }
+        }
+    };
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         werase( w );
         draw_character_tabs( w, _( "SCENARIO" ) );
 
@@ -3026,6 +4370,20 @@ tab_direction set_scenario( avatar &u, points_left &points,
         wnoutrefresh( w_flags );
     } );
 
+    rml.open( newcharacter_rmlui_enabled(), "newcharscenario", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        register_nc_scen_rml_types( c );
+        c.Bind( "tabs", &data->tabs );
+        c.Bind( "points_rml", &data->points_rml );
+        c.Bind( "cost_rml", &data->cost_rml );
+        c.Bind( "rows", &data->rows );
+        c.Bind( "desc_rml", &data->desc_rml );
+        c.Bind( "info_rml", &data->info_rml );
+        c.Bind( "sort_rml", &data->sort_rml );
+        c.Bind( "filter_rml", &data->filter_rml );
+        data->handle = c.GetModelHandle();
+    } );
+
     do {
         if( recalc_scens ) {
             sorted_scens.clear();
@@ -3080,13 +4438,16 @@ tab_direction set_scenario( avatar &u, points_left &points,
             if( cur_id > scens_length - 1 ) {
                 cur_id = 0;
             }
+            rml_scroll_pending = true;
         } else if( action == "UP" ) {
             cur_id--;
             if( cur_id < 0 ) {
                 cur_id = scens_length - 1;
             }
+            rml_scroll_pending = true;
         } else if( action == "RANDOMIZE" ) {
             cur_id = rng( 0, scens_length - 1 );
+            rml_scroll_pending = true;
         } else if( action == "CONFIRM" ) {
             if( sorted_scens[cur_id]->has_flag( "CITY_START" ) && !scenario_sorter.cities_enabled ) {
                 continue;
@@ -3144,6 +4505,54 @@ static void draw_age( const catacurses::window &w_age, const avatar &you, const 
     wnoutrefresh( w_age );
 }
 } // namespace char_creation
+
+// RmlUi model for the OVERVIEW tab (slice 8, the last newcharacter tab). The
+// final summary form: editable name/height/age (selector-highlighted) + gender +
+// location + scenario/profession + the six read-only summary panes (stats /
+// skills / traits / bionics / misc / gear). Render-only doc; each pane is one
+// colour-tagged string mirroring the curses block verbatim (the profession
+// info_rml approach). Distinct per-model tab struct (RegisterStruct is
+// context-global; worldfactory precedent).
+namespace
+{
+struct nc_desc_tab {
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct nc_desc_session {
+    Rml::Vector<nc_desc_tab> tabs;
+    Rml::String points_rml;
+    Rml::String name_rml;
+    Rml::String gender_rml;
+    Rml::String height_rml;
+    Rml::String age_rml;
+    Rml::String location_rml;
+    Rml::String scenario_rml;
+    Rml::String profession_rml;
+    Rml::String stats_rml;
+    Rml::String skills_rml;
+    Rml::String traits_rml;
+    Rml::String bionics_rml;
+    Rml::String misc_rml;
+    Rml::String gear_rml;
+    Rml::String guide_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_nc_desc_types_registered = false;
+
+void register_nc_desc_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_nc_desc_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<nc_desc_tab> th = c.RegisterStruct<nc_desc_tab>();
+    th.RegisterMember( "name_rml", &nc_desc_tab::name_rml );
+    th.RegisterMember( "selected", &nc_desc_tab::selected );
+    c.RegisterArray<Rml::Vector<nc_desc_tab>>();
+    g_nc_desc_types_registered = true;
+}
+} // namespace
 
 tab_direction set_description( avatar &you, const bool allow_reroll,
                                points_left &points )
@@ -3278,7 +4687,291 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
     char_creation::description_selector current_selector = char_creation::NAME;
 
     bool no_name_entered = false;
+
+    // RmlUi render path (render-only; keyboard still owns nav/edit/confirm below).
+    auto data = std::make_unique<nc_desc_session>();
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !data->handle ) {
+            return;
+        }
+        data->tabs = build_nc_char_tabs<nc_desc_tab>( 7 ); // OVERVIEW tab active
+        data->points_rml = cata_text_to_rml( points.to_string() );
+
+        // Name (selector-highlighted). value mirrors the curses three-way state.
+        {
+            const bool sel = current_selector == char_creation::NAME;
+            std::string val;
+            nc_color val_col = c_white;
+            if( no_name_entered ) {
+                val = _( "--- NO NAME ENTERED ---" );
+            } else if( you.name.empty() ) {
+                val = _( "--- RANDOM NAME ---" );
+            } else {
+                val = you.name;
+            }
+            data->name_rml = cata_text_to_rml( std::string( sel ? "> " : "  " ) +
+                                               colorize( _( "Name:" ), sel ? c_white : c_light_gray ) +
+                                               " " + colorize( val, val_col ) );
+        }
+
+        data->gender_rml = cata_text_to_rml(
+                               colorize( _( "Gender:" ), c_light_gray ) + " " +
+                               colorize( _( "Male" ), you.male ? c_light_cyan : c_light_gray ) + " " +
+                               colorize( _( "Female" ), you.male ? c_light_gray : c_pink ) );
+
+        {
+            const bool sel = current_selector == char_creation::HEIGHT;
+            data->height_rml = cata_text_to_rml( std::string( sel ? "> " : "  " ) +
+                                                 colorize( _( "Height:" ), sel ? c_white : c_light_gray ) + " " +
+                                                 colorize( string_format( "%d cm", you.base_height() ), c_white ) );
+        }
+        {
+            const bool sel = current_selector == char_creation::AGE;
+            data->age_rml = cata_text_to_rml( std::string( sel ? "> " : "  " ) +
+                                              colorize( _( "Age:" ), sel ? c_white : c_light_gray ) + " " +
+                                              colorize( string_format( "%d", you.base_age() ), c_white ) );
+        }
+
+        {
+            const std::string locval = you.random_start_location
+                                       ? remove_color_tags( random_start_location_text )
+                                       : string_format( remove_color_tags( START_LOC_TEXT_TEMPLATE ),
+                                               you.start_location.obj().name(),
+                                               you.start_location.obj().targets_count() );
+            data->location_rml = cata_text_to_rml(
+                                     colorize( _( "Starting location:" ), c_light_gray ) + " " +
+                                     colorize( locval, you.random_start_location ? c_red : c_white ) );
+        }
+
+        data->scenario_rml = cata_text_to_rml(
+                                 colorize( _( "Scenario: " ), COL_HEADER ) +
+                                 colorize( g->scen->gender_appropriate_name( you.male ), c_light_gray ) );
+        data->profession_rml = cata_text_to_rml(
+                                   colorize( _( "Profession: " ), COL_HEADER ) +
+                                   colorize( you.prof->gender_appropriate_name( you.male ), c_light_gray ) );
+
+        // Stats pane.
+        {
+            std::string s = colorize( _( "Stats:" ), COL_HEADER );
+            s += "\n" + colorize( string_format( "%s %d", _( "Strength:" ), you.str_max ), c_light_gray );
+            s += "\n" + colorize( string_format( "%s %d", _( "Dexterity:" ), you.dex_max ), c_light_gray );
+            s += "\n" + colorize( string_format( "%s %d", _( "Intelligence:" ), you.int_max ), c_light_gray );
+            s += "\n" + colorize( string_format( "%s %d", _( "Perception:" ), you.per_max ), c_light_gray );
+            data->stats_rml = cata_text_to_rml( s );
+        }
+
+        // Traits pane.
+        {
+            std::string s = colorize( _( "Traits:" ), COL_HEADER );
+            std::vector<trait_id> current_traits = points.limit == points_left::TRANSFER ?
+                                                   you.get_mutations() : you.get_base_traits();
+            std::sort( current_traits.begin(), current_traits.end(), trait_display_sort );
+            if( current_traits.empty() ) {
+                s += " " + colorize( _( "None!" ), c_light_red );
+            } else {
+                for( const trait_id &tr : current_traits ) {
+                    s += "\n" + colorize( tr->name(), tr->get_display_color() );
+                }
+            }
+            data->traits_rml = cata_text_to_rml( s );
+        }
+
+        // Bionics + Spells pane (built once; curses draws it twice).
+        {
+            std::vector<bionic_id> current_bionics;
+            for( const bionic_id &id : you.prof->CBMs() ) {
+                current_bionics.push_back( id );
+            }
+            for( const bionic &bio : you.get_bionic_collection() ) {
+                current_bionics.push_back( bio.id );
+            }
+            std::sort( current_bionics.begin(), current_bionics.end(),
+            []( const bionic_id & a, const bionic_id & b ) {
+                return localized_compare( a->name.translated(), b->name.translated() );
+            } );
+            std::string s = colorize( _( "Bionics: " ), COL_HEADER );
+            if( current_bionics.empty() ) {
+                s += colorize( _( "None!" ), c_light_red );
+            } else {
+                for( const bionic_id &bio : current_bionics ) {
+                    s += "\n" + colorize( bio->name.translated(), c_white );
+                }
+            }
+            s += "\n" + colorize( _( "Spells: " ), COL_HEADER );
+            if( you.prof->spells().empty() ) {
+                s += colorize( _( "None!" ), c_light_red );
+            } else {
+                for( const std::pair<spell_id, int> &sp : you.prof->spells() ) {
+                    s += "\n" + colorize( string_format( _( "%s level %d" ), sp.first->name, sp.second ), c_white );
+                }
+            }
+            data->bionics_rml = cata_text_to_rml( s );
+        }
+
+        // Skills pane (category-grouped, only levels > 0).
+        {
+            std::string s = colorize( _( "Skills:" ), COL_HEADER );
+            auto skillslist = Skill::get_skills_sorted_by( [&]( const Skill & a, const Skill & b ) {
+                return localized_compare( std::make_pair( a.display_category(), a.name() ),
+                                          std::make_pair( b.display_category(), b.name() ) );
+            } );
+            bool has_skills = false;
+            skill_displayType_id last_category = skill_displayType_id::NULL_ID();
+            for( const Skill *elem : skillslist ) {
+                int level = you.get_skill_level( elem->ident() );
+                if( points.limit != points_left::TRANSFER ) {
+                    for( const auto &prof_skill : you.prof->skills() ) {
+                        if( prof_skill.first == elem->ident() ) {
+                            level += static_cast<int>( prof_skill.second );
+                            break;
+                        }
+                    }
+                }
+                if( level > 0 ) {
+                    if( last_category != elem->display_category() ) {
+                        last_category = elem->display_category();
+                        s += "\n" + colorize( elem->display_category()->display_string(), c_yellow );
+                    }
+                    s += "\n" + colorize( string_format( "%s: %d", elem->name(), level ), c_light_gray );
+                    has_skills = true;
+                }
+            }
+            if( !has_skills ) {
+                s += " " + colorize( _( "None!" ), c_light_red );
+            }
+            data->skills_rml = cata_text_to_rml( s );
+        }
+
+        // Misc pane: Vehicle / Companions / Cash / Pets / Addictions.
+        {
+            std::string s = colorize( _( "Vehicle: " ), c_white );
+            const vproto_id scen_veh = g->scen->vehicle();
+            const vproto_id prof_veh = you.prof->vehicle();
+            if( !scen_veh && !prof_veh ) {
+                s += colorize( _( "None!" ), c_light_red );
+            }
+            if( scen_veh ) {
+                s += "\n" + colorize( scen_veh->name, c_white );
+            }
+            if( prof_veh ) {
+                s += "\n" + colorize( prof_veh->name, c_white );
+            }
+            s += "\n" + colorize( _( "Companions: " ), c_white );
+            const std::vector<npc_class_id> npcs = you.prof->npcs();
+            if( npcs.empty() ) {
+                s += colorize( _( "None!" ), c_light_red );
+            } else {
+                for( const npc_class_id &id : npcs ) {
+                    if( id.is_valid() ) {
+                        s += "\n" + colorize( id.obj().get_name(), c_white );
+                    }
+                }
+            }
+            s += "\n" + colorize( _( "Cash: " ), c_white );
+            if( !you.prof->starting_cash() ) {
+                s += colorize( _( "Random!" ), c_white );
+            } else {
+                s += colorize( format_money( you.prof->starting_cash().value() ), c_white );
+            }
+            s += "\n" + colorize( _( "Pets: " ), c_white );
+            if( you.prof->pets().empty() ) {
+                s += colorize( _( "None!" ), c_light_red );
+            } else {
+                for( const mtype_id &id : you.prof->pets() ) {
+                    if( id.is_valid() ) {
+                        monster pet( id );
+                        s += "\n" + colorize( pet.get_name(), c_white );
+                    }
+                }
+            }
+            s += "\n" + colorize( _( "Addictions: " ), c_white );
+            if( you.prof->addictions().empty() ) {
+                s += colorize( _( "None!" ), c_light_red );
+            } else {
+                for( addiction &addict : you.prof->addictions() ) {
+                    s += "\n" + colorize( addiction_name( addict ), c_white );
+                }
+            }
+            data->misc_rml = cata_text_to_rml( s );
+        }
+
+        // Gear pane: Items split into wielded / worn / inventory.
+        {
+            std::string s = colorize( _( "Items: " ), c_white );
+            const auto prof_items = you.prof->items( you.male, you.get_mutations() );
+            if( prof_items.empty() ) {
+                s += colorize( _( "None!" ), c_light_red );
+            } else {
+                std::vector<std::string> wielded;
+                std::vector<std::string> worn;
+                std::vector<std::string> inventory;
+                for( const auto &it : prof_items ) {
+                    if( it->has_flag( json_flag_no_auto_equip ) ) {
+                        inventory.push_back( it->display_name() );
+                    } else if( it->has_flag( json_flag_auto_wield ) ) {
+                        wielded.push_back( it->display_name() );
+                    } else if( it->is_armor() ) {
+                        worn.push_back( it->display_name() );
+                    } else {
+                        inventory.push_back( it->display_name() );
+                    }
+                }
+                const auto add_group = [&]( const std::string & head,
+                const std::vector<std::string> &names ) {
+                    s += "\n" + colorize( head, c_yellow );
+                    if( names.empty() ) {
+                        s += " " + colorize( _( "None!" ), c_light_red );
+                    } else {
+                        for( const std::string &name : names ) {
+                            s += "\n" + colorize( name, c_white );
+                        }
+                    }
+                };
+                add_group( _( "Wielded: " ), wielded );
+                add_group( _( "Worn: " ), worn );
+                add_group( _( "Inventory: " ), inventory );
+            }
+            data->gear_rml = cata_text_to_rml( s );
+        }
+
+        // Keybinding guide footer (green keys).
+        {
+            std::string s = string_format(
+                                _( "Press <color_light_green>%s</color> or <color_light_green>%s</color> to cycle through name, height, and age." ),
+                                ctxt.get_desc( "LEFT" ), ctxt.get_desc( "RIGHT" ) );
+            s += "\n" + string_format(
+                     _( "Press <color_light_green>%s</color> and <color_light_green>%s</color> to change height and age." ),
+                     ctxt.get_desc( "UP" ), ctxt.get_desc( "DOWN" ) );
+            s += "\n" + string_format( _( "Press <color_light_green>%s</color> to edit the selected field." ),
+                                       ctxt.get_desc( "CONFIRM" ) );
+            s += "\n" + string_format( _( "Press <color_light_green>%s</color> to switch gender." ),
+                                       ctxt.get_desc( "CHANGE_GENDER" ) );
+            s += "\n" + string_format( _( "Press <color_light_green>%s</color> to select location." ),
+                                       ctxt.get_desc( "CHOOSE_LOCATION" ) );
+            if( allow_reroll ) {
+                s += "\n" + string_format(
+                         _( "Press <color_light_green>%s</color> to save template, <color_light_green>%s</color> to re-roll or <color_light_green>%s</color> for random scenario." ),
+                         ctxt.get_desc( "SAVE_TEMPLATE" ), ctxt.get_desc( "REROLL_CHARACTER" ),
+                         ctxt.get_desc( "REROLL_CHARACTER_WITH_SCENARIO" ) );
+            } else {
+                s += "\n" + string_format( _( "Press <color_light_green>%s</color> to save a template of this character." ),
+                                           ctxt.get_desc( "SAVE_TEMPLATE" ) );
+            }
+            s += "\n" + string_format(
+                     _( "Press <color_light_green>%s</color> to finish or <color_light_green>%s</color> to go back." ),
+                     ctxt.get_desc( "NEXT_TAB" ), ctxt.get_desc( "PREV_TAB" ) );
+            data->guide_rml = cata_text_to_rml( s );
+        }
+
+        data->handle.DirtyAllVariables();
+    };
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         draw_character_tabs( w, _( "OVERVIEW" ) );
 
         draw_points( w, points );
@@ -3666,6 +5359,28 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
         if( use_character_preview ) {
             character_preview.display();
         }
+    } );
+
+    rml.open( newcharacter_rmlui_enabled(), "newchardescription", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        register_nc_desc_rml_types( c );
+        c.Bind( "tabs", &data->tabs );
+        c.Bind( "points_rml", &data->points_rml );
+        c.Bind( "name_rml", &data->name_rml );
+        c.Bind( "gender_rml", &data->gender_rml );
+        c.Bind( "height_rml", &data->height_rml );
+        c.Bind( "age_rml", &data->age_rml );
+        c.Bind( "location_rml", &data->location_rml );
+        c.Bind( "scenario_rml", &data->scenario_rml );
+        c.Bind( "profession_rml", &data->profession_rml );
+        c.Bind( "stats_rml", &data->stats_rml );
+        c.Bind( "skills_rml", &data->skills_rml );
+        c.Bind( "traits_rml", &data->traits_rml );
+        c.Bind( "bionics_rml", &data->bionics_rml );
+        c.Bind( "misc_rml", &data->misc_rml );
+        c.Bind( "gear_rml", &data->gear_rml );
+        c.Bind( "guide_rml", &data->guide_rml );
+        data->handle = c.GetModelHandle();
     } );
 
     // do not switch IME mode now, but restore previous mode on return

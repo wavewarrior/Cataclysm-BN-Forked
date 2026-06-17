@@ -195,7 +195,7 @@ void render_state::init( SDL_Window *host_window )
         // textures, so no resize hook is needed.
         volumetric_.init( device_, world_fmt );
 
-        // High-fidelity rain effect: droplet particles + splat map ping-pong.
+        // High-fidelity rain effect: world-targeted falling droplets + splashes.
         rain_.init( device_, world_fmt,
                     static_cast<std::uint32_t>( pw ),
                     static_cast<std::uint32_t>( ph ) );
@@ -708,6 +708,41 @@ void render_state::queue_tile_sprite( SDL_GPUTexture *atlas_tex,
     tile_sprite_queue_.push_back( { atlas_tex, inst } );
 }
 
+void render_state::build_outline_ring( std::size_t start, std::size_t end,
+                                       float r, float g, float b, float a, float radius_px,
+                                       float alpha_cut )
+{
+    if( end <= start || end > tile_sprite_queue_.size() || radius_px <= 0.0f ) {
+        return;
+    }
+    static constexpr float dirs[8][2] = {
+        { -1.f, -1.f }, { 0.f, -1.f }, { 1.f, -1.f },
+        { -1.f,  0.f },                { 1.f,  0.f },
+        { -1.f,  1.f }, { 0.f,  1.f }, { 1.f,  1.f },
+    };
+    std::vector<tile_sprite_draw> ring;
+    ring.reserve( ( end - start ) * 8 );
+    for( std::size_t i = start; i < end; ++i ) {
+        const tile_sprite_draw &src = tile_sprite_queue_[i];
+        for( const auto &d : dirs ) {
+            tile_sprite_draw s = src;
+            s.inst.dst_x += d[0] * radius_px;
+            s.inst.dst_y += d[1] * radius_px;
+            s.inst.tint_r = r;
+            s.inst.tint_g = g;
+            s.inst.tint_b = b;
+            s.inst.tint_a = a;
+            s.inst.light_mul = alpha_cut; // outline branch reads this as alpha cutoff
+            s.inst.pad1 = 0.0f;        // no foliage sway
+            s.inst.pad2 = 1.0f;        // outline silhouette flag (sprite.frag)
+            ring.push_back( s );
+        }
+    }
+    tile_sprite_queue_.insert( tile_sprite_queue_.begin() +
+                               static_cast<std::ptrdiff_t>( start ),
+                               ring.begin(), ring.end() );
+}
+
 void render_state::flush_tile_sprites( sprite_batcher &dst, SDL_GPUSampler *sampler )
 {
     if( tile_sprite_queue_.empty() ) {
@@ -772,6 +807,11 @@ void render_state::flush_shadow_casters( SDL_GPUCommandBuffer *cb,
     SDL_GPUTexture *bound = nullptr;
     for( const tile_sprite_draw &s : tile_sprite_queue_ ) {
         if( s.inst.dst_h <= tall_threshold ) {
+            continue;
+        }
+        // Hover-outline silhouette copies (pad2 > 0.5) must NOT cast shadows —
+        // 8 offset casters would draw a black halo around the creature.
+        if( s.inst.pad2 > 0.5f ) {
             continue;
         }
         if( s.texture != bound ) {

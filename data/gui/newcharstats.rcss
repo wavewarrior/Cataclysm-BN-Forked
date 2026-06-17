@@ -1,0 +1,103 @@
+/* Layout for the new-character STATS tab (Tier 4 #4 slice 2). Reuses theme
+   .panel / .tabs / .tab / .item / .scroll-pane. body sized + centered (the
+   missions gotcha); rows need explicit display (the inline-row gotcha). */
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.nc-panel {
+    width: 80%;
+    min-width: 720dp;
+    height: 92%;
+    display: flex;
+    flex-direction: column;
+}
+
+.nc-tabs {
+    flex: 0 0 auto;
+}
+
+.nc-tabs .tab {
+    flex: 0 0 auto;
+}
+
+.nc-points {
+    display: block;
+    flex: 0 0 auto;
+    padding: 8dp;
+    color: {{fg}};
+}
+
+.nc-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+}
+
+.nc-stats-left {
+    flex: 0 0 auto;
+    min-width: 320dp;
+    display: flex;
+    flex-direction: column;
+    border-right: 1dp {{bg4}};
+    padding-right: 8dp;
+}
+
+.nc-stats {
+    display: block;
+    flex: 0 0 auto;
+    margin-bottom: 16dp;
+}
+
+/* One stat per line: label (fixed-width column) + right-aligned value. */
+.nc-stat {
+    display: flex;
+    flex-direction: row;
+}
+
+.nc-stat-name {
+    display: block;
+    flex: 0 0 auto;
+    min-width: 160dp;
+}
+
+.nc-stat-val {
+    display: block;
+    flex: 1;
+    text-align: right;
+}
+
+.nc-hints {
+    display: block;
+    flex: 1;
+    min-height: 0;
+    white-space: pre-wrap;
+    color: {{fg}};
+}
+
+.nc-stats-right {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    padding-left: 8dp;
+}
+
+.nc-cost {
+    display: block;
+    flex: 0 0 auto;
+    margin-bottom: 8dp;
+}
+
+.nc-desc {
+    flex: 1;
+    min-height: 0;
+    white-space: pre-wrap;
+    color: {{fg}};
+}

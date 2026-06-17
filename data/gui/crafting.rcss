@@ -1,0 +1,108 @@
+/* Layout for the crafting menu (Tier 2: select_crafting_recipe).
+   Palette/border/scrollbar/.scroll-pane AND the .tabs/.tab bar come from
+   theme.rcss (linked first in crafting.rml); this file owns only the screen's
+   own layout. Lengths in dp.
+
+   Rows + info lines are display:block (RmlUi divs default to inline — see the
+   theme.rcss gotcha) so they stack. Two info panes (#recipe-info middle,
+   #item-info right) render pre-folded colour-tagged lines and scroll natively. */
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.cg-panel {
+    width: 96%;
+    height: 96%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Category tab row + right-aligned craft/hidden status. */
+.cg-tabrow {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+}
+.cg-tabs {
+    flex: 1;
+    margin-bottom: 0;
+}
+.cg-craft {
+    flex: 0 0 auto;
+    margin-left: 8dp;
+    color: {{green}};
+}
+.cg-hidden {
+    flex: 0 0 auto;
+    margin-left: 8dp;
+    color: {{red}};
+}
+
+/* Subcategory tab row (NORMAL mode only). Empty categories greyed. */
+.cg-subtabs {
+    flex: 0 0 auto;
+    margin-top: 2dp;
+    margin-bottom: 0;
+}
+.cg-subtabs .tab.cg-empty {
+    color: {{gray}};
+}
+
+/* List | recipe-info | item-info. */
+.cg-main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+    margin-top: 6dp;
+}
+
+.cg-list {
+    flex: 0 0 28%;
+    border-right: 1dp {{bg4}};
+    margin-right: 8dp;
+}
+.cg-row {
+    display: block;
+    padding: 1dp 6dp;
+    border-radius: 4dp;
+    white-space: pre;   /* preserve nested-recipe indent */
+}
+.cg-row:hover {
+    background-color: {{bg2}};
+    color: {{fg0}};
+}
+.cg-row.selected {
+    background-color: {{yellow}};
+    color: {{bg-hard}};
+}
+
+.cg-info {
+    flex: 1;
+    min-height: 0;
+    margin-right: 8dp;
+}
+.cg-item {
+    flex: 0 0 38%;
+    min-height: 0;
+    border-left: 1dp {{bg4}};
+    padding-left: 8dp;
+}
+.cg-line {
+    display: block;
+    white-space: pre-wrap;
+}
+
+.cg-foot {
+    flex: 0 0 auto;
+    margin-top: 4dp;
+    padding-top: 4dp;
+    border-top: 1dp {{bg4}};
+    color: {{fg}};
+    white-space: pre-wrap;
+}

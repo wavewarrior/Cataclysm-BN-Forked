@@ -1,0 +1,72 @@
+/* Layout for the new-character SKILLS tab (Tier 4 #4 slice 3). Reuses theme
+   .panel / .tabs / .tab / .item / .scroll-pane. body sized + centered (the
+   missions gotcha); rows need explicit display (the inline-row gotcha). */
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.nc-panel {
+    width: 80%;
+    min-width: 720dp;
+    height: 92%;
+    display: flex;
+    flex-direction: column;
+}
+
+.nc-tabs {
+    flex: 0 0 auto;
+}
+
+.nc-tabs .tab {
+    flex: 0 0 auto;
+}
+
+.nc-points {
+    display: block;
+    flex: 0 0 auto;
+    padding: 8dp 8dp 0 8dp;
+    color: {{fg}};
+}
+
+.nc-cost {
+    display: block;
+    flex: 0 0 auto;
+    padding: 2dp 8dp 6dp 8dp;
+}
+
+.nc-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+}
+
+.nc-skill-list {
+    flex: 0 0 auto;
+    min-width: 320dp;
+    border-right: 1dp {{bg4}};
+    padding-right: 8dp;
+}
+
+.nc-skill-row {
+    display: block;
+}
+
+/* Category headers are plain coloured labels, not filled .item rows. */
+.nc-skill-row.header {
+    background-color: transparent;
+    margin-top: 6dp;
+}
+
+.nc-skill-desc {
+    flex: 1;
+    min-width: 0;
+    white-space: pre-wrap;
+    padding: 8dp;
+    color: {{fg}};
+}

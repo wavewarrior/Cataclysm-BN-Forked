@@ -35,8 +35,8 @@ body {
     display: flex;
     flex-direction: row;
     padding: 0 6dp 4dp 6dp;
-    border-bottom: 1dp #5a5a78ff;
-    color: #9a9ab0ff;
+    border-bottom: 1dp {{bg4}};
+    color: {{fg4}};
 }
 
 .ap-list {
@@ -51,12 +51,12 @@ body {
     border-radius: 4dp;
 }
 .ap-row:hover {
-    background-color: #3a3a55ff;
+    background-color: {{bg2}};
 }
 
 .ap-cell.cellsel {
-    background-color: #ffcc66ff;
-    color: #1e1e28ff;
+    background-color: {{yellow}};
+    color: {{bg-hard}};
     border-radius: 2dp;
 }
 

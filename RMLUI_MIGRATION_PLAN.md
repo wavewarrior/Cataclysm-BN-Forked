@@ -20,6 +20,50 @@
 | **Minigames** | One **narrow reusable char-grid RML widget** used only by the 5 minigames (they are literally grid games) — contained, not a general backend. |
 | **On-map text** | Migrate to an RmlUi-backed overlay. Architected as a **world-space text layer** (see §7) so it stays clean AND is the foundation for future floating damage numbers / world text. |
 
+## ★ ACTUAL FRONTIER — full code audit (2026-06-17)
+
+**The per-tier blocks below LAG the code badly — trust this banner + the ground
+truth, not the prose.** GROUND TRUTH = the `*_rmlui_enabled()` toggles in
+`src/rml_screen.h` (one per migrated screen) + `data/gui/*.{rml,rcss}` assets + git.
+Audit method: cross-referenced all 29 toggles + ~44 doc assets against a CLEAN working
+tree (everything committed). Repeatedly the prose said "in flight / deferred /
+uncommitted" for screens that are actually DONE + committed (worldfactory was the
+tell; the whole Tier-4 giant tier is the same).
+
+**DONE + COMMITTED (29 screens, through Tier 6):**
+- Tier 0 generics: uilist / query_popup / string_input (always-on, no toggle).
+- Tier 1: missions / scores / help / distraction / auto_note / diary.
+- Tier 2 (all 9): mutations / bionics / safemode / auto_pickup / computer /
+  construction / crafting / armor_layers / **faction**.
+- Tier 3: examine_item / inventory / advanced_inv / compare_items / description_view
+  (examine-tile).
+- **Tier 4 (ALL FOUR giants): options / worldfactory / main_menu / newcharacter.**
+- Tier 5: npctalk (`dialogue`) / trade / vending.
+- Tier 6: overmap (+ search) / `world_text` §7 on-map text layer.
+
+**VERIFICATION EVIDENCE (reproduce before doubting any "done" claim):**
+`grep -oE '[a-z_]+_rmlui_enabled' src/rml_screen.h | sort -u` → 29 toggles;
+`ls data/gui/*.rml` → ~44 docs; `git status --short` → clean (all committed). The
+four giants are WIRED, not stub toggles — `grep -c 'rml\.open\|rml_doc ' src/<f>.cpp`:
+options=2, **newcharacter=16 (8 slices)**, main_menu=2, worldfactory=4 sessions;
+**ranged.cpp=0** (the proof it is genuinely unstarted). Worldfactory commits:
+`07d6d6aa53` / `6a7f93a194` / `d689e9acb4` / `2eedac603e`.
+
+**GENUINELY REMAINING (no toggle, confirmed unstarted in code):**
+1. **ranged** (targeting UI, `ranged.cpp`) — the last interactive modal; was deferred.
+2. **Tier 7 — sidebar HUD** (the 53 `draw_*` panels) — architecturally hardest.
+3. **Tier 8 — F4 dev panel** (ImGui → RmlUi; still ImGui in `sdl_lighting_devui.cpp`).
+4. **Tier 9 — minigames** char-grid widget.
+5. **Tier 10 — RIP OUT** curses-SDL + ImGui — gated on 100% coverage (i.e. 1-4 above).
+
+**EYEBALL DEBT (committed, toggle OFF, user A/B owed):** most of the above DONE set
+shipped build-blind. The newest unverified: world_text 4.1/4.2a, description_view,
+faction, and the Tier-4 giants (options / newcharacter / main_menu / worldfactory).
+
+So the migration is ~90% by screen count; the remaining effort is **ranged + the
+three hard architectural tiers (7/8/9) + the rip-out** — NOT the modal/giant screens
+the prose still frames as open.
+
 ## Status / progress (2026-06-10)
 
 - **Tier 0 (uilist/query_popup/string_input) — DONE + eyeballed clean.** Toggles
@@ -227,13 +271,13 @@
     "• " prefix on every row, "> " on the current item of the FOCUSED column
     (baked into the bound text in sync_rml — RCSS has no ::before/content). Gotcha
     documented in theme.rcss so it can't recur. **RE-EYEBALL after this fix.**
-  - **D3D12 (Win11) FIRST-OF-TIER CHECK (Windows-side, owed):** mutations is the
-    FIRST Tier-2 screen, so the plan's standing risk-item ("D3D12 cross-check each
-    tier's first screen — Metal-green ≠ D3D12-green for new dynamic docs") applies
-    HERE. The Metal A/B above does NOT cover it. Tier 2 is not "structurally proven
-    on the primary target" until a Win11/D3D12 run confirms the mutations doc
-    uploads/renders with sane in-pass counters. (Can't be run from the Metal dev
-    box — flagged so it doesn't silently fall off.)
+  - **D3D12 (Win11) FIRST-OF-TIER CHECK — CONFIRMED CLEAN (2026-06-11, user).**
+    Tier-2 RmlUi docs render perfectly on Win11/D3D12 (the primary target), not
+    just Metal. The "Metal-green ≠ D3D12-green for new dynamic docs" risk is
+    RETIRED for the Tier-2 screen shape (dynamic per-screen data-model docs over
+    the shared Rml context). Tier 2 is now structurally proven on the primary
+    target; later tiers' first screens still warrant a glance but the core dynamic-
+    doc path is validated cross-backend.
 
 - **Tier 2 screen #2: bionics (show_bionics_ui) — CODE-COMPLETE + BUILD-GREEN
   (bionics_ui.cpp + devui compile clean), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.**
@@ -343,13 +387,146 @@
   **WATCH:** the default green is CSS `#5fdd5f` (approximation of c_green) — if it
   reads off vs the curses terminal, tweak `.comp-screen color` in computer.rcss.
 
+- **Tier 2 screen #6: construction (construction_menu) — CODE-COMPLETE +
+  BUILD-GREEN (construction.cpp + devui compile clean), TOGGLE OFF, EYEBALL OWED,
+  UNCOMMITTED.** 8th `rml_doc` consumer; LARGEST screen so far (2497-line file).
+  Category tabs (dynamic Vector, shared theme `.tabs/.tab`) + construct list (left)
+  + detail pane (right) rendering the existing `full_construct_buffer` (folded
+  colour-tagged lines built by `recalc_buffer` from `requirement_data::get_folded_*`
+  — confirming the "requirement pane" is just the lines-pane, no new widget).
+  `data/gui/construction.{rml,rcss}`. STRUCTURAL POINTS: (1) curses tab-overflow
+  windowing + detail breakpoint-paging DROPPED for native scroll — but PAGE_UP/DOWN
+  are repurposed (rml mode) to `SetScrollTop` on `#construct-detail` so they aren't
+  dead keys (advisor catch; cf. scores). UP/DOWN still move the list cursor. (2)
+  list colour via `construction_color(group,false)` + CSS `.selected`; favorites
+  keep the `* ` prefix. (3) separator lines in the buffer → a thin `.cm-line.sep`
+  rule. (4) speed%/status hints + notes reproduced as bound strings. (5) sync
+  guards `select` bounds (sync may read `constructs[select]` before the loop's
+  own reset — advisor). (6) loop is exit-flag-only → `close()` before `return ret`.
+  All build/editing + the FILTER popup (string_input_popup, Tier-0) stay in the
+  loop; render-only doc. F4 toggle "construction via RmlUi" (OFF). **EYEBALL CHECK
+  (user, A/B via F4) — hit the edge states, not just the happy path (advisor):**
+  (a) normal: tabs switch category, list coloured by buildability + `*` favorites,
+  detail shows stages/components/tools/skills/time matching curses, UP/DOWN move
+  cursor, **PAGE_UP/DOWN scroll the detail** (the make-or-break key check); (b)
+  EMPTY category (a tab with 0 constructs — no crash, blank list/detail); (c)
+  FILTER mode (press filter → tab becomes "Searched", single tab); (d) FAVORITES
+  (toggle ★ → `*` prefix + the FAVORITE tab lists it); (e) a LONG multi-stage
+  construction (detail overflows → scrolls). CONFIRM builds as before; mouse
+  hover/click selects a row, click a tab switches category. **WATCH:** pre-folded
+  buffer is folded to the old curses width (cosmetic; lines may not fill the RmlUi
+  pane width — left as-is per advisor).
+
+- **Tier 2 screen #7: crafting (select_crafting_recipe) — DONE + EYEBALLED CLEAN
+  ("all works", user 2026-06-11), COMMITTED `8f7ca0d0e6`. TOGGLE OFF** (matches all
+  prior Tier-2 — mass flip-ON deferred to §8; toggle is the A/B control).** 9th
+  `rml_doc` consumer; PEER of construction (the cadence
+  note's "tabs+list+lines", budgeted as its own ~2000-line screen). HEAVIEST Tier-2
+  yet — diverges from the construction template in 4 ways (all advisor-flagged
+  pre-write): (1) **TWO tab rows** (category + subcategory), both string
+  `list_circularizer`s NOT int-indexed → `selected` is string-equality vs
+  `tab.cur()`/`subtab.cur()`; clicks map index→string via `set_index()` then (cat
+  click) rebuild the subtab circularizer + `recalc=true`, mirroring PREV/NEXT_TAB.
+  (2) **Dual lockstep scroll** — PAGE_UP/DOWN + SCROLL_RECIPE_INFO_UP/DOWN scroll
+  BOTH `#recipe-info` and `#item-info` (a `rml_scroll_info(dir)` lambda doing
+  SetScrollTop on both, alongside the curses recipe_info_scroll/item_info_scroll).
+  (3) **Three TAB_MODEs** (NORMAL/FILTERED/BATCH) — cat bar shows categories OR a
+  single "Searched"/"Batch" tab; subcat row hidden (data-if `show_subcats`) +
+  tab-clicks disabled outside NORMAL; batch rows are "Nx recipe". (4) **Heavier
+  sync** — no prebuilt buffer; sync_rml computes the middle pane each frame via
+  `cached_recipe_info(...fold_width=46...)` (non-nested only) and the right pane
+  (wide mode) via either a nested-category text block OR `format_item_info` of the
+  result item split through `foldstring`. `data/gui/crafting.{rml,rcss}` +
+  crafting_gui.cpp RmlUi path. STRUCTURAL POINTS: (a) the RIGHT item-info pane is
+  **AD-HOC TEXT (format_item_info → cata_text_to_rml lines), PENDING the Tier-3
+  item-info F.2 component** — gets crafting off curses now (what §8 rip-out needs);
+  the reusable-component adoption is a later refactor, NOT a migration blocker (§8
+  sweep must NOT assume this pane already uses the component). (b) can-craft
+  indicator + hidden-recipe amount reproduced as bound colour strings (mirrors
+  draw_can_craft_indicator / draw_hidden_amount; curses keeps its own right_print
+  positioning). (c) keybinding tips → bound footer string. (d) `on_select` sets
+  `line` only (no update flag — inherits construction's proven click→redraw→sync).
+  (e) single loop exit → `rml.close()` before `return chosen`. F4 toggle "crafting
+  via RmlUi" (OFF). **EYEBALL CHECK (user, A/B via F4) — exercise the NOVEL surface,
+  not the happy path (this screen exceeds anything prior):** (1) **★ LONG-LIST
+  KEYBOARD CURSOR** (crafting has the longest lists, 30-80 recipes — cursor leaves
+  viewport on UP/DOWN with NO auto-scroll; advisor: near-CERTAIN regression here).
+  REMEDY (staged, NOT shipped blind — has RmlUi-6.2 data-for-child-index + DOM-
+  update-timing subtlety I can't verify build-blind): set a `scroll_to_sel` flag in
+  the **keyboard UP/DOWN handlers ONLY** (never on_select — mouse select must not
+  force-scroll), and in sync_rml ScrollIntoView the selected list child + clear the
+  flag. Do NOT ship the unconditional one-liner (it fights native scroll/wheel).
+  (2) click a CATEGORY tab → subtab resets + list rebuilds; (3) BATCH mode (single
+  "Batch" tab, "Nx recipe" rows, no subtabs, cat-click disabled); (4) FILTER mode
+  ("Searched"); (5) enter a NESTED category + back — **A/B the nested right pane
+  specifically: it's a RECONSTRUCTION (the original ≈1016-1059 block kept coming
+  back stale; identifiers grep-confirmed but exact rendering unseen) MISSING the
+  "Origin:" + subcategory lines** (shows name/Category/description/Known-recipes
+  only); (6) PAGE_UP/DOWN scrolls BOTH info panes; (7) click-to-select moves
+  highlight + info (the one place diverged from the template without a flag).
+  **KNOWN FIDELITY GAPS (flag for §8, harmless):** subcategory unread "⁺" markers
+  added to cats only (not subcats); `empty` bound+dirtied but unreferenced in RML
+  (empty category renders blank, no message). **WATCH:** middle pane pre-folded to
+  curses width 46 (cosmetic, may not fill the RmlUi pane — left as-is per the
+  construction precedent).
+
+- **Tier 2 screen #8: armor_layers (show_armor_layers_ui) — CODE-COMPLETE +
+  BUILD-GREEN (armor_layers.cpp + character_display.cpp + devui compile + LINK
+  clean), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.** 10th `rml_doc` consumer;
+  BIGGEST Tier-2 yet — a **4-pane render-only doc** (cat header / left worn-list +
+  Total-Protection / mid item-detail + encumbrance-warmth table / right
+  per-bodypart layering). First screen with a "drag/move mode" — but that's
+  KEYBOARD (MOVE_ARMOR picks an item up, UP/DOWN swap it); RmlUi just renders the
+  picked-item marker, so it's still render-behind-frozen-API, NOT a new mouse-drag
+  interaction. `data/gui/sortarmor.{rml,rcss}` + armor_layers.cpp RmlUi path.
+  STRUCTURAL POINTS: (1) **TWO contained reconstructions reuse helpers WITHOUT
+  touching the curses paths** (kept pristine for the A/B, advisor-chosen over
+  editing shared/curses code build-blind): `mid_pane_lines()` (new, this file,
+  parallel to `draw_mid_pane`, reuses the in-TU clothing_*/penalty helpers) and
+  **`character_display::encumbrance_lines()`** (NEW non-invasive fn in
+  character_display.cpp — reuses that TU's file-local statics list_and_combine_bps/
+  encumb_color/temperature_print_rescaling/get_temp_conv; `print_encumbrance`
+  UNTOUCHED so the '@' char sheet stays byte-identical; **converge when the char
+  sheet migrates, Tier 7**). (2) all actions (move/equip/remove/change-side/hide/
+  sort/assign-invlets/help) stay on input_context + popups; render-only doc.
+  (3) **mouse `on_left` is GATED to `selected < 0`** (NOT move-mode) — else a click
+  would jump the cursor without the keyboard swap, desyncing the cursor vs the
+  picked-item marker (advisor catch; the crafting on_select pattern is wrong here).
+  (4) `<< / >>` cat arrows are clickable (on_prev_bp/on_next_bp mirror LEFT/RIGHT:
+  cycle tabindex + reset leftListIndex/offset/selected); bodypart cycler stays a
+  header, NOT a 14-tab bar (faithful to curses). (5) curses windowing
+  (leftListOffset / right-list offset / breakpoint) DROPPED for native scroll.
+  (6) multiple early `return`s (npc / activity) → rml_doc DESTRUCTOR tears down (no
+  explicit close). (7) static labels (Innermost/Outermost/Storage/Encumbrance and
+  Warmth) literal English (i18n gap, §8/F.1 sweep). F4 toggle "armor layers via
+  RmlUi" (OFF). **EYEBALL CHECK (user, A/B via F4) — DIFF THE NUMBERS, not just the
+  layout (advisor: silent wrong-number bugs live in the reconstructions, none
+  crash):** (1) **★ ENCUMBRANCE/WARMTH pane** — every bodypart row's "enc+penalty
+  (warmth)" matches the curses table EXACTLY (this is the #1 from-scratch
+  reconstruction); covered-by-selected-item bps turn green. (2) right-pane per-bp
+  layering: bodypart MERGING reads right ("Arms" combined vs "L. Arm"/"R. Arm"
+  split) + per-item encumber numbers match. (3) left list: stacking-penalty
+  colours, "H" hidden badge, storage volume, cursor highlight. (4) move-mode:
+  MOVE_ARMOR picks an item (pink marker), UP/DOWN reorder it, and a **mouse click
+  during move-mode does NOT move the cursor** (the gated on_left); ESC/MOVE_ARMOR
+  drops it. (5) Total Protection block shows on a specific bodypart (Bash/Cut/Stab/
+  Ballistic), hidden on "All". (6) `<< / >>` clicks + LEFT/RIGHT both cycle
+  bodypart. (7) mid pane shows item detail / "Nothing to see here!" when empty.
+  **WATCH:** mid-pane + right-pane pre-folded to fixed widths (cosmetic, native
+  pre-wrap re-wraps); `items_cover_bp` recomputed a few times per frame (matches
+  curses, not a perf concern at this list size).
+
 - **★ TIER-2 CADENCE NOTE (advisor, 2026-06-11):** the 5 Tier-2 screens shipped so
   far (mutations/bionics/safemode/auto_pickup/computer) were CLEAN COMPOSITIONS of
   proven primitives (lists/tabs/colored-rows/text-pane). The REMAINING Tier-2 are
   a heavier class — **component-builds / interface-refactors**, not quick
-  compositions: **construction + crafting_gui** share a **requirement-data pane**
-  (components/tools/skills) — build that ONE F.2 fragment and it serves both
-  ~2000-line screens (highest-leverage next if staying in Tier 2). **faction** is
+  compositions. **CORRECTION (post-construction):** the "construction + crafting
+  share a requirement-data pane, build once serves both" framing was WEAKER than it
+  sounded — the sharing is at the C++ `requirement_data::get_folded_*` level (which
+  already exists), and the RmlUi render is just the trivial lines-pane. So
+  **crafting_gui is a PEER ~2000-line full tabs+list+lines migration, not a cheap
+  follow-on** — construction is its template, but budget it as its own screen.
+  **faction** is
   DEFERRED: its detail panes are the Tier-3-era `Creature::print_info`/npc-info
   F.2 component (should ride that, not precede it) AND its detail render returns
   interactability flags the input loop consumes → needs an interface refactor of
@@ -380,6 +557,1542 @@
     NOT solo-charge worldfactory. If multi-month giant work is in doubt, decide
     THAT now — every conforming screen added while the giants stay on curses is
     effort toward an endgame that won't arrive.
+
+### Tier 2 status (2026-06-17): COMPLETE (all 9, faction included)
+
+9 of 9 Tier-2 screens DONE: mutations / bionics / safemode / auto_pickup /
+computer terminal / construction / crafting (eyeballed) / armor_layers / **faction**.
+
+- **Tier 2 screen #9: faction manager (faction_manager::display) — CODE-COMPLETE +
+  BUILD-GREEN (faction.cpp.o 08:33 / mtype.cpp.o 08:36 / npc.cpp.o 08:37 all newer
+  than source; binary relinked 08:39:47, fresh mtime), TOGGLE OFF, EYEBALL OWED,
+  COMMITTED `a37612b35a`.** The long-deferred Tier-2 screen, unblocked by doing the refactor +
+  the npc-info text inline (the "creature/npc-info F.2 component" the deferral waited
+  on turned out to split: the `extended_description()` half shipped as Tier-3 #2's
+  examine screen; this screen needs the COMPACT `*_faction_display` text, produced
+  here as parallel `faction_info_text()` methods). 4-tab (Followers / Other factions
+  / Lore / Creatures) list+detail screen — bionics shape. `data/gui/faction.{rml,rcss}`.
+  STRUCTURAL POINTS: (1) **the flagged refactor, done:** `npc::faction_display`
+  computed `retval` (radio/interaction-range flags the input loop consumes) DURING the
+  curses draw → extracted `npc::follower_interaction_flag()` and now set the flags in
+  the input LOOP (after `guy = followers[selection]`), so CONFIRM/SWAPTONPC keep
+  working when the RmlUi path skips the draw. The curses draw still draws (its retval
+  capture dropped, flags now loop-set) — behaviour-preserving. (2) **3 parallel text
+  producers** (`npc::faction_info_text` / `faction::faction_info_text` /
+  `mtype::faction_info_text`) reproduce the per-tab detail as colour-tagged strings;
+  the curses `*_faction_display` draw fns are LEFT PRISTINE (armor_layers/
+  character_display precedent — duplicated content, byte-faithful A/B). (3) lore tab =
+  the snippet translated string directly. (4) render-only doc; keyboard owns nav +
+  CONFIRM/SWAPTONPC; rml_data before rml for teardown. (5) **latent curses bug found,
+  NOT fixed (surgical):** `npc::faction_display` indexes `skill_strs[1]/[2]`
+  unconditionally → would crash a follower with <3 non-combat skills; the new
+  `faction_info_text` GUARDS it (emits only present entries). F4 toggle "faction
+  manager" (OFF). **EYEBALL CHECK (user, A/B via F4) — DIFF THE TEXT per tab (the
+  producers are from-scratch reconstructions):** (1) **★ FOLLOWERS** — the detail pane
+  matches curses (Attitude/Status/Condition/Hunger/Thirst/Fatigue/Wielding/skills + the
+  can-see line: "Within interaction range" / radio variants) AND **CONFIRM (talk) +
+  SWAPTONPC still work** (the refactor's make-or-break: the flag is loop-set now).
+  (2) OTHER FACTIONS — attitude/strength/desc. (3) LORE — snippet text. (4) CREATURES
+  — symbol+name list, detail = difficulty/origin/size/species/senses/abilities/desc.
+  (5) tabs switch (NEXT_TAB / click), list cursor moves, empty tabs show the right
+  "You have no…" message. **WATCH:** long lists → no auto-scroll-into-view (same as
+  prior screens); creature/faction detail pre-folded width is gone (native wrap).
+
+### Tier 3 progress (item-info family)
+
+- **F.2 item-info component — LANDED (additive), COMMITTED.** `rml_util::
+  item_info_rml_lines(item_info_data&)` → `format_item_info` → `foldstring(s,1e5)`
+  → `cata_text_to_rml` per line (the exact shape crafting's ad-hoc right pane
+  already runs). Additive: touches no existing code; the shared `draw_item_info`
+  curses core (output.cpp:954, one flag-driven loop behind ~10 callsites) is
+  UNTOUCHED. Host screens migrate render-behind and feed their `item_info_data`
+  here. **Structural finding:** there is NO separable "modal overload" — all 3
+  `draw_item_info` overloads funnel into the one core loop, so full-screen modal
+  callers (no own ui_adaptor) can't be migrated without touching the shared core.
+  The clean consumers are screens that own a ui_adaptor + embed
+  `draw_item_info(without_getch)`.
+- **Tier 3 screen #1: examine_item_menu (examine_item_menu::run) — CODE-COMPLETE +
+  BUILD-GREEN (examine_item_menu.cpp + rml_util + devui compile + LINK clean),
+  TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.** 11th `rml_doc` consumer; FIRST consumer
+  of the F.2 item-info component AND the **FIRST RmlUi modal opened NESTED over a
+  still-active curses parent** (the inventory/pickup it launches from). One
+  full-screen doc: title (item name) + left action list (rows from
+  `action_list.entries` — hotkey + txt + text_color, cursor) + right item-info pane
+  (#examine-info, the F.2 lines). `data/gui/examineitem.{rml,rcss}`. STRUCTURAL
+  POINTS: (1) the legacy is a contextual SIDE PANEL beside the parent; this is a
+  full-screen doc that COVERS the parent (CONSCIOUS simplification — item already
+  chosen; flagged for eyeball). (2) shared `draw_item_info` core + the action
+  uilist UNTOUCHED (curses path unchanged). (3) keyboard owns action select/run
+  (existing loop: UP/DOWN + CONFIRM/hotkey); mouse `on_action` SELECTS only (run
+  via Enter — click-to-run not supported, per the mouse-selects/keyboard-acts
+  invariant). (4) PAGE_UP/DOWN scroll #examine-info (SetScrollTop). (5) single
+  exit → explicit `rml.close()`. F4 toggle "examine item via RmlUi" (OFF).
+  **EYEBALL CHECK (user, A/B via F4):** (1) **★ NESTED-MODAL (the novel surface):**
+  open examine-item FROM the inventory (examine an item) — the RmlUi doc renders
+  cleanly over the parent, and the inventory is INTACT after close (this is the
+  first nested RmlUi-over-curses modal). (2) item-info content matches curses
+  (props/protection/flags/description, colours). (3) action list shows hotkey +
+  name with hint colours; UP/DOWN move cursor, Enter/hotkey runs the action; mouse
+  click selects (then Enter runs). (4) PAGE_UP/DOWN scroll the info pane.
+  **UNPROVEN:** `item_compare` is empty here → `format_item_info`'s +/- compare-
+  delta colouring is NOT exercised (the first COMPARING consumer earns that later).
+
+- **Tier 3 screen #2: examine-tile description view (game::extended_description) —
+  CODE-COMPLETE + BUILD-GREEN (descriptions.cpp.o 07:58:48 newer than source 07:57:06;
+  binary relinked 07:59:47, fresh mtime), TOGGLE OFF, EYEBALL OWED, COMMITTED
+  `a42d96a8e9`.** The "examine surroundings → describe this tile" screen ([c] creatures / [f]
+  furniture / [t] terrain / close). **SCOPE CLARIFICATION (research finding — the
+  cadence note's "creature/npc-info F.2 component" splits in two):** this screen uses
+  `Creature/furn/ter::extended_description()` — a finished `colorize()` STRING — so it
+  migrates trivially via the EXISTING primitives (`.scroll-pane` + `cata_text_to_rml`),
+  NO new rml_util component. The COMPACT look-around side panel + faction use the
+  harder positional `print_info(catacurses::window&, vStart, vLines, column)` (HP bar +
+  right-aligned attitude + paginated) — a DIFFERENT shape that needs a parallel
+  `_lines()` extraction and rides its host screens (look-around giant / faction), NOT
+  this unit. So this lands the EXAMINE half cleanly; the compact-pane component is
+  still owed for faction. `data/gui/descriptionview.{rml,rcss}` + descriptions.cpp
+  RmlUi path. STRUCTURAL POINTS: (1) extracted `build_hint()` + `build_desc()` lambdas
+  so the curses path and the RmlUi sync render ONE source (no drift); on_redraw
+  branches `if(rml){sync_rml();return;}` else curses. (2) the WHOLE `desc` runs through
+  `cata_text_to_rml` in one pass → correct colour-tag matching across newlines + `\n`→
+  `<br/>`, bound as a single `body_rml` string (no per-line split → no mid-tag cut
+  risk; simpler than computer's line vector — plain `Bind`, no RegisterStruct/Array).
+  (3) render-only doc; keyboard owns CREATURE/FURNITURE/TERRAIN/QUIT; the screen's own
+  `ctxt` is passed to open() for the tick (standard live-screen sharing, cf. mutations
+  /distraction). (4) `rml_data` declared before `rml` so the doc tears down while the
+  bound buffer is alive; single loop → rml_doc dtor handles teardown. F4 toggle
+  "examine description" (OFF). **EYEBALL CHECK (user, A/B via F4):** (1) examine a tile
+  (the look-around "describe" key) — creature/furniture/terrain text matches curses
+  (colours, layout, multi-line), [c]/[f]/[t] switch the target, the hint bar shows the
+  keybinds, QUIT/close exits; long descriptions scroll. (2) signage tiles show the
+  "Sign: …" line (and "Sign: ???" when illiterate). (3) debug `display_mod_source`/
+  `display_object_ids` Origin/[id] lines render if those debug flags are on. **WATCH:**
+  the doc covers the parent look-around view (full-screen, like examine_item_menu's
+  conscious simplification) — confirm the parent is intact after close.
+
+### Tier 3: inventory framework (inventory_ui) — MULTI-SESSION SUB-PROJECT (user GO, 2026-06-12)
+
+**Why it's different from every prior unit:** `inventory_ui.cpp` (2640) is NOT a
+screen — it's the `inventory_selector` FRAMEWORK. One shared
+`refresh_window()` (inventory_ui.cpp:1636 = frame + `draw_header` + `draw_columns`
++ `draw_footer`) is the single render for ALL SIX selector subclasses
+(`inventory_pick_selector` / `inventory_multiselector` / `inventory_compare_selector`
+/ `inventory_iuse_selector` / `inventory_drop_selector` / `inventory_pickup_selector`),
+each with its own `execute()` loop (`ui_manager::redraw()` → base `on_redraw`
+[1471] → `refresh_window`). It **gates the whole inventory family**: `game_inventory`
+has NO independent render (it just builds a selector + calls `execute()`), and
+advanced_inv is the multi-pane variant — neither moves until this framework does.
+Data model = the most complex in the migration: multi-COLUMN cell-grid
+(`inventory_column::draw` [924] + the preset's `get_cells_count`/`get_cell_text`
+interface + category headers + invlets + multiselect marks), NOT a list/tab/pane.
+
+**Cadence-preserving gate (advisor's key move):** do NOT migrate all 6 at once.
+Gate the RmlUi path in `refresh_window` per SELECTOR SUBCLASS — `inventory_rmlui_enabled()`
+(global toggle) **AND** a per-subclass flag (a virtual `use_rml()` or a member each
+ctor sets). Light ONE subclass at a time; the other 5 stay curses even with the
+toggle on. This restores the exact toggle→eyeball-ONE→commit→light-next rhythm.
+
+**Slice decomposition (each its own commit + eyeball; increasing complexity):**
+1. **Slice 1 — `inventory_pick_selector` only** (the simplest, single-select). Regular
+   columns + simplest preset + header (title/hint) + footer. The F.2-style RmlUi doc
+   (`inventory.{rml,rcss}`, "inventory" model): header text, a column of entry rows
+   (invlet + cell text, category headers, selected highlight), footer (mode hint).
+   The shared cell/preset model is built + proven HERE. DEFER everything below.
+2. **Slice 2** — stats header (`display_stats` / `get_stats()` right-aligned block).
+3. **Slice 3** — `inventory_multiselector` mechanism (the `selection_column` +
+   multiselect marks + `query_count`). NOTE: `inventory_multiselector` is never
+   instantiated directly (always a subclass), and "marks + query_count" needs a
+   count-bearing selector — so the vehicle is **`inventory_drop_selector`** (moved
+   up from slice 5; exercises all three named items + is easy to open).
+4. **Slice 4** — `inventory_compare_selector` (two-selection state).
+5. **Slice 5** — `inventory_iuse_selector` / `inventory_pickup_selector`
+   (count/stats state; `drop` already lit in slice 3).
+6. **Slice 6** — multi-column layout fidelity + filter popup coexistence
+   (string_input already Tier-0) + nav modes.
+Only after all slices ON + eyeballed does the family (game_inventory, then
+advanced_inv) follow.
+
+**SLICE 1 — DONE + EYEBALLED CLEAN (user 2026-06-15; foundation confirmed —
+reopen-test + rows + colours all good), TOGGLE OFF, COMMITTED (`31d524a9db` +
+`bd913226e0`).** Mechanism shipped:
+(1) **per-subclass gate** — `virtual inventory_selector::uses_rml()` (default false;
+private virtual, override-able), overridden by `inventory_pick_selector::uses_rml()`
+→ `inventory_rmlui_enabled()`. The other 5 selectors stay curses even with the
+toggle on. (2) **pImpl** `inventory_rml_state` (rml_doc + Rml model) defined in the
+.cpp, forward-declared in the header → RmlUi stays out of inventory_ui.h. (3)
+`refresh_window()` (the shared render) gains `if(uses_rml()&&rml_state_){rml_sync();
+return;}` at the top — one guard covers all 6 selectors, lit one at a time. (4)
+doc opened once in `create_or_get_ui_adaptor` (toggle read there); torn down by the
+pImpl's rml_doc dtor in `~inventory_selector`. (5) `inventory_column::rml_rows()`
+(new public method) mirrors `draw()` + REUSES the per-entry cell cache
+(`get_entry_cell_cache`) → category rows (cache.color header) + item rows (invlet +
+joined cell text, denial→grey+red). (6) `rml_sync()` builds title/hint/footer +
+FLATTENS visible columns into one row list. `data/gui/inventory.{rml,rcss}` model
+"inventory". F4 toggle "inventory (pick) via RmlUi" (OFF). **DEFERRED to later
+slices (NOT bugs):** stats header (slice 2), true multi-column side-by-side
+(flattened for now), MOUSE-select (keyboard-only this slice — with curses not drawn
+the legacy screen-coord mouse mapping is dead in RmlUi mode; a row-click callback
+comes in a later slice), multiselect/compare/count/drop. **EYEBALL CHECK (user, A/B via F4):**
+(0) **★ REOPEN (advisor's #1 — structural, recurs in every later slice):** open a
+pick inventory, close it (QUIT), open it AGAIN in the same session — the 2nd open
+must render rows, NOT empty. The model-name "inventory" is shared + the rml_doc
+single-instance guard is the known "type-register reuse / per-instance name" risk
+in this plan; if open #2 is blank, the guard is biting. (1) single-select inventory
+(an `i`nspect/activate picker using inventory_pick_selector): items list with invlet
++ item SYMBOL glyph + colours matching curses, category headers, cursor row
+highlighted, UP/DOWN/PAGE move cursor, title/hint/footer present, CONFIRM picks +
+QUIT cancels. (2) the OTHER inventory screens (drop/multidrop/compare/etc.) MUST
+still be curses (gate proof). **POST-COMMIT FIXES (advisor, applied before handoff):**
+item symbol glyph now included (identifying content, not cosmetic); denied items
+show only cell[0] + red reason (matches curses `count=1`, avoids layout collision).
+**WATCH:** flattened columns (character vs map items stack instead of side-by-side —
+expected this slice); keyboard-only (mouse won't select — expected).
+
+**SLICE 2 — stats header — DONE + EYEBALLED CLEAN (user 2026-06-15, "looks great"),
+COMMITTED `739ca9b6e8`. TOGGLE OFF.** Adds the weight/volume stats block
+to the slice-1 doc. Additive + small: (1) model gains a 2nd `Rml::Vector<inv_rml_row_model>
+stats` (REUSES the slice-1 row struct for its `text_rml` — no new registered type),
+bound in `rml_open`. (2) `rml_sync` fills it from `get_stats()` under the same
+`display_stats` guard the curses `draw_header` uses; each line already carries
+per-segment colour tags so it's wrapped in the `c_dark_gray` base via
+`cata_text_to_rml(colorize(elem,c_dark_gray))` — the exact title/hint/footer idiom
++ DirtyVariable("stats"). Empty vector when `display_stats` off → right block
+collapses. (3) `inventory.rml`: header split into `.inv-header` (flex row) =
+`.inv-header-text` (title+hint, left) + `.inv-stats` (`data-for s : stats`
+`data-rml="s.text_rml"`, right). (4) `inventory.rcss`: `.inv-header` is the
+space-between flex row and now OWNS the full-width separator border (moved off
+`.inv-hint`, so it spans like the curses hline); `.inv-stats` is a right-aligned
+(`align-items:flex-end`) flex column; `.inv-stat` is `display:block white-space:pre
+text-align:right`. `display_stats=true` by default + pick selector doesn't override
+`get_raw_stats` → stats ALWAYS show on the pick path (slice 2 is testable). **EYEBALL
+CHECK (user, A/B via F4):** open a pick inventory — weight + volume stats appear
+TOP-RIGHT of the header (right-aligned), values coloured (red when over capacity,
+light-gray normal), matching the curses right_print block; title/hint still top-left;
+the separator line spans the full header width; list/footer unchanged from slice 1.
+**WATCH:** stats are space-padded internally for cell alignment (`get_stats()` pads to
+max cell width) → `white-space:pre` preserves it; if the two lines don't column-align
+vs curses, the monospace assumption broke.
+
+**SLICE 2b — side-by-side columns (multi-column layout, pulled forward from slice 6)
+— CODE-COMPLETE + BUILD-GREEN (inventory_ui.cpp compile + LINK clean, fresh obj+bin
+mtime), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.** The slice-2 eyeball surfaced that
+flattened columns read WRONG: "ITEMS WORN" (a separate `inventory_column`) stacked
+BELOW the main list instead of beside it (the slice-1 flatten). Fix = render each
+visible `inventory_column` as its own side-by-side column. **KEY DECISION — no nested
+data-for:** RmlUi 6.2's truly-nested `data-for="row : col.rows"` (member array on a
+loop alias) is UNPROVEN in this codebase + unverifiable build-blind (every migrated
+screen iterates flat vectors; the DataBinding unit test only proves single-struct
+`data-for="arrays.a"`, not array-of-struct-with-array). So each column's rows are
+BAKED into one finished-markup string (`<div class="inv-row [category|selected]">…
+</div>` per row) and the RML is a FLAT `data-for="col : columns" data-rml="col.html"`
+— the proven single-level primitive (crafting/sortarmor info-lines). `data-rml`→
+`DataViewRml::SetInnerRML` parses the string through the normal RML parser, so the
+`.inv-row`/`.category`/`.selected` CLASS rules still apply (verified in vendored
+DataViewDefault.cpp). New `inv_col_model{Rml::String html}` + registered array
+(`inv_rml_row_model` kept for stats). `.inv-list` becomes a flex ROW
+(`align-items:flex-start`); `.inv-col` is `flex:0 0 auto` content-width + 24dp gap;
+scroll-pane `overflow-y:auto` still scrolls the row vertically as a whole. **TRADE-OFF
+(acceptable, documented):** per-sync each column does a full `SetInnerRML` re-parse
+(vs slice-1's data-for array diff) — heavier per cursor-move but fine at inventory
+sizes; the selected-highlight now spans the COLUMN content width (was full pane),
+which matches curses better. **EYEBALL CHECK (user, A/B via F4):** worn items now sit
+in a SEPARATE column to the RIGHT of the main inventory list (not below); category
+headers + cursor highlight + colours intact within each column; both columns
+top-align; the list scrolls vertically when tall. **WATCH:** (a) >2 columns (map/multi
+selectors come in later slices, but if any pick path has 3 columns they should all
+sit side-by-side, sizing to content — flag if they overflow/clip horizontally, since
+scroll-pane only sets overflow-y). (b) a column whose rows are wider than its share
+→ horizontal clip (no overflow-x set; left as-is, cosmetic).
+
+**SLICE 3 — multiselect mechanism (via `inventory_drop_selector`) — DONE + EYEBALLED
+CLEAN (user 2026-06-15, "looks good"), COMMITTED `948cfde8cd`. TOGGLE OFF.** Lights
+the multiselect render path. Tiny,
+because slice-2b already does the heavy lifting: (1) the `selection_column` is just
+another visible `inventory_column` (appended in the multiselector ctor) → slice-2b's
+side-by-side render shows it as a column FOR FREE; its "N of M" / count caption is
+cell text (`selection_column_preset::get_caption`) already captured by the cell
+cache. (2) the only thing `rml_rows()` missed = the **multiselect mark glyph** drawn
+SEPARATELY by `draw()` via `mvwputch` (not in cell text): `-` none (dark_gray) / `+`
+all (light_green) / `#` partial (light_green). Added it to `rml_rows()` after the
+symbol, gated by the SAME `allows_selecting() && activatable() && multiselect` as
+draw() — so it renders ONLY for multiselect columns and the selection_column
+(multiselect=false, appended after the set_multiselect loop) shows no mark, matching
+curses. (3) gate: `inventory_drop_selector::uses_rml()` override → the shared
+`inventory_rmlui_enabled()` (the per-subclass-override mechanism from slice 1; compare/
+iuse/pickup stay curses). (4) `query_count` is a `string_input_popup` (Tier-0,
+migrated) over the still-rendered inventory doc — no bespoke work, same as `set_filter`.
+F4 label renamed "inventory (pick+drop) via RmlUi" (one global toggle now lights both
+proven selectors). **EYEBALL CHECK (user, A/B via F4):** open the DROP screen (drop
+items) — items list shows the multiselect mark (`-`/`+`/`#`) after the symbol, marks
+flip as you RIGHT/select, a SEPARATE selection column on the right lists chosen items
+with "N of M" counts, query_count popup (enter a number) sets the count + the mark
+goes `#`/`+`; weight/volume stats track; the actual drop happens on CONFIRM. The PICK
+inventory still renders correctly (shared toggle, slice 1/2 unaffected). **WATCH:**
+(a) `query_count`'s string_input_popup must render + tick over the inventory doc (16ms
+tick; same path as set_filter, untested in slices 1-2 — flag if the popup is frozen or
+the doc vanishes behind it). (b) selection column appears/hides on narrow widths
+(`rearrange_columns` sets its visibility by overflow) — at small terminal sizes it may
+not show (matches curses). (c) the mark color (`#`/`+` light_green) should match curses.
+
+**SLICE 4 — two-selection compare (`inventory_compare_selector`) — DONE + EYEBALLED
+CLEAN (user 2026-06-15, "looks good"), COMMITTED `b1108ec7dc`. TOGGLE OFF.** GATE ONLY. compare
+inherits the multiselector ctor (selection column "ITEMS TO COMPARE" + marks) and
+overrides ONLY `toggle_entry` (input-side: sets `chosen_count` 0/1, tracks the
+`compared` pair) — grep-confirmed it has NO render override (no refresh_window/draw/
+rml_/get_raw_stats), so its render IS the multiselect path slice 3 already proved.
+So slice 4 = `inventory_compare_selector::uses_rml()` override → shared
+`inventory_rmlui_enabled()`; the "two-selection state" is execute()-loop logic
+(keyboard, untouched). F4 label → "inventory (pick+drop+compare) via RmlUi". The
+comparison RESULT screen (after execute returns the item pair) is a SEPARATE
+examine/compare display, not the selector — out of scope here. **EYEBALL CHECK (user,
+A/B via F4):** open compare (the inventory "compare items" action) — marks appear,
+selecting an item marks it + adds to the "ITEMS TO COMPARE" selection column, picking
+a SECOND item triggers the comparison (returns the pair); selecting/deselecting works,
+the 2-item cap holds (can't mark a 3rd). Marks/colours match curses (chosen_count is
+0/1 → `+` if available==1 else `#`). Pick+drop still render (shared toggle).
+
+**SLICE 5 — iuse + pickup selectors — CODE-COMPLETE + BUILD-GREEN (inventory_ui.{h,cpp}
++ devui compile + LINK clean, fresh obj+bin mtime), TOGGLE OFF, EYEBALL OWED,
+UNCOMMITTED.** GATE ONLY (like slice 4). Both inherit the multiselector render;
+grep-confirmed NO render override. Their differences are `get_raw_stats` (custom stats
+— iuse builds them from its `GetStats` functor; both return the 2-elem `stats` type by
+signature, so they flow through slice-2's GENERIC stats header via virtual dispatch,
+no render change) and `set_chosen_count` (input-side). Added
+`inventory_iuse_selector::uses_rml()` + `inventory_pickup_selector::uses_rml()` → the
+shared `inventory_rmlui_enabled()`. **With this, ALL concrete selectors are lit**
+(pick s1, drop s3, compare s4, iuse+pickup s5; the `inventory_multiselector` base is
+never instantiated) → F4 label simplified to "inventory via RmlUi (all selectors)".
+**EYEBALL CHECK (user, A/B via F4):** (1) iuse = an "apply/use which items" action
+(e.g. the multi-item use flows) — marks + selection column + query_count work AND the
+custom stats header shows the iuse-specific stats (whatever the GetStats functor
+computes, not just weight/volume). (2) pickup = the pickup screen (walk onto a tile
+with items / `,`) — marks, selection column, counts, and its weight/volume(+capacity)
+stats. Both: CONFIRM applies the selection. Pick/drop/compare still render (shared
+toggle). **WATCH:** iuse's stats header is the first NON-weight/volume stats rendered
+via the RmlUi path (slices 1-4 all used the default weight/volume) — confirm the
+custom captions/values + right-alignment read correctly (the generic loop should
+handle it, but it's the one untested-shape bit of slice 5).
+
+**SLICE 6 — framework completion (filter indicator + nav modes + multi-column
+fidelity) — CODE-COMPLETE + BUILD-GREEN (inventory_ui.cpp compile + LINK clean, fresh
+obj+bin mtime), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.** Investigated all three named
+items; only ONE needed code (avoided speculative fidelity work per the simplicity
+discipline):
+- **Filter coexistence (the one real gap) — DONE.** The filter APPLIES on confirm via
+  the existing `set_filter` (string_input_popup, Tier-0) → `col->set_filter()` →
+  `rml_sync` re-renders the filtered columns on the next redraw; popup-over-RmlUi-doc
+  is already proven (crafting/construction filter). BUT `draw_footer` also draws a
+  **filter INDICATOR** (`[F] Filter` / `[F] Filter: <text>`, draw_footer:2012-2021)
+  that the RmlUi footer (which only carried `get_footer(mode)`) omitted. Added a bound
+  `filter_rml` (built in rml_sync under the same `has_available_choices()||!filter`
+  guard, key via `ctxt.get_desc("INVENTORY_FILTER")`, label c_light_gray + filter text
+  c_white) and split the footer RML into a flex row: `.inv-filter` (left, content
+  width) + `.inv-mode` (`get_footer`, flex:1 centered) — mirroring draw_footer's
+  left-filter / centered-mode. ASCII `< >`/`─ ─` decoration dropped (semantic rewrite).
+- **Nav modes — NO CODE (rides existing).** The mode name/colour is `get_footer(mode)`
+  → `footer_rml` (now `.inv-mode`), dirtied every sync; switching `mode` updates it.
+  The active column's cursor highlight is `active && is_selected` in `rml_rows` → only
+  the focused column highlights (matches curses). Both already worked from slices 1-5.
+- **Multi-column fidelity — NO CODE (rides slice 2b).** Side-by-side columns shipped
+  in 2b (flex content-width + gap). Curses-exact centering/occupancy-ratio/variable
+  gaps deliberately NOT replicated (left-aligned flex is clean + readable; pixel-
+  faithful gap math is not worth the complexity).
+F4 toggle unchanged ("inventory via RmlUi (all selectors)"). **EYEBALL CHECK (user,
+A/B via F4):** (1) **filter** — press the filter key, type a query in the popup
+(renders over the doc, ticks), confirm → list narrows to matches AND the footer-left
+shows "[F] Filter: <query>"; clear it → indicator shows "[F] Filter" (or gone if no
+choices). (2) **nav modes** — cycle the nav mode (the mode key) → the centered footer
+hint changes; in a multi-column selector, the cursor highlight stays in the focused
+column only. (3) **multi-column** — open a selector with 2+ columns (e.g. a drop with
+worn + the selection column) → columns sit side-by-side, the active one's cursor
+highlights. **WATCH:** when the filter popup is OPEN, the inventory's own footer (filter
+indicator + mode) still renders behind the Tier-0 popup (curses replaced it with the
+input box inline) — harmless overlay, flag only if it reads badly.
+
+**INVENTORY_SELECTOR FRAMEWORK = DONE + FULLY EYEBALLED (slices 1-6 + 2b; slices 5+6
+confirmed clean by user 2026-06-15).** All 5 concrete selectors lit;
+header/stats/multi-column/marks/selection-column/filter/nav all on the RmlUi path. Only after that do the FOLLOWERS migrate: `game_inventory` (builds a
+selector + calls execute — no independent render, so it rides the framework
+automatically once the toggle's on; mostly a verification pass) → then **advanced_inv**
+(the multi-pane dual-list variant — its own sub-project, scope its panes individually).
+
+### Tier 3 followers — game_inventory
+
+- **game_inventory selectors = DONE BY COVERAGE (no code).** All of `game_inventory.cpp`'s
+  screens build an `inventory_*_selector` + call `execute()` with NO independent render
+  → they ride the now-complete framework automatically when the toggle is on. Verified:
+  `common_inventory_selector` (the only bespoke subclass, used by the main `i`nventory)
+  derives `inventory_pick_selector` and overrides ONLY `handle_action` (the `unload_all`
+  key) → inherits pick's `uses_rml()`, lit for free. So game_inventory's many entry
+  points (activate/consume/wield/wear/drop/pickup/etc.) are a verification pass, not a
+  migration.
+- **EXCEPTION — `game_menus::inv::compare(l, r)` — MIGRATED (CODE-COMPLETE + BUILD-GREEN,
+  game_inventory.cpp + devui compile + LINK clean, fresh obj+bin mtime), TOGGLE OFF,
+  EYEBALLED CLEAN (user 2026-06-15; compare-delta colouring + lockstep scroll
+  confirmed), COMMITTED `c376c1c305`, TOGGLE OFF.** This is the ONE game_inventory
+  function with its own render: the comparison RESULT display (after `inventory_compare_selector` picks two
+  items) — a `ui_adaptor` with two side-by-side `draw_item_info` panes + synced scroll.
+  Migrated via the F.2 item-info component (`item_info_rml_lines`). **It is the FIRST
+  compare-delta consumer** (the gap flagged at examine_item_menu): each pane's
+  `item_info_data` carries the OTHER item as its compare set, so `format_item_info`
+  renders the +/- stat deltas — now exercised through the RmlUi path. New `compare.{rml,
+  rcss}` model "compare": two `.cmp-pane` (title + `#cmp-lhs`/`#cmp-rhs` scroll-pane of
+  the folded item-info lines). Lines/titles are STATIC for the screen's lifetime → built
+  once in `open()` (no per-frame sync); the on_redraw just `if(rml) return;` else the
+  curses two-pane draw. Scroll is native: UP/DOWN (±0.15 page) + PAGE_UP/DOWN (±0.85)
+  `SetScrollTop` BOTH panes in lockstep (the curses `lhs/rhs_scroll_pos` are kept for the
+  curses path). New toggle `compare_items_rmlui_enabled()` (rml_screen.h) + F4 "compare
+  items via RmlUi". rml_doc dtor tears down at the single function exit. **EYEBALL CHECK
+  (user, A/B via F4):** compare two items (inventory → compare action, pick two) → two
+  panes side-by-side, each item's info, **and the +/- compare deltas coloured** (the
+  novel bit — e.g. one item's higher stat shows green/+, lower red/-); UP/DOWN + PAGE
+  scroll BOTH panes together; QUIT returns to the compare selector (pick another pair) /
+  exits. **WATCH:** (a) the compare-delta colouring is the first real test of
+  `format_item_info`'s compare path through `item_info_rml_lines` — confirm deltas show
+  and are coloured, not flat. (b) both panes scroll in lockstep (not independently).
+### Tier 3 — advanced_inv (AIM) — MULTI-SESSION SUB-PROJECT
+
+**Why it's the hardest inventory unit:** `advanced_inv.cpp` (1992) is the dual-pane
+item-management screen (`/`). Unlike `inventory_selector` (one shared `refresh_window`
++ a cell cache + an `rml_rows()` helper), AIM draws each pane with **positioned
+`mvwprintz` at absolute columns** (`print_items` :216 — name_startpos/amt_startpos/
+weight_startpos/vol_startpos), no row-builder helper. It is ONE screen rendered as ONE
+RmlUi doc (both panes + the middle sidebar), so the gate is a single
+`advanced_inv_rmlui_enabled()` toggle lighting the whole doc — the WORK is sliced, but
+runtime is all-or-nothing (flip ON for eyeball only when a slice is presentable).
+Row data = `advanced_inv_listitem` (name/stacks/weight/volume/cat/area/from_vehicle/
+autopickup; category-header vs item-entry). Columns: name (+ITEM_SYMBOLS glyph + stolen
+`!` + money), src (AIM_ALL only), amt (>1), weight, vol. Active pane's cursor = `>>`+
+hilite; inactive pane no cursor. `compact` when TERMX<=100.
+
+**Slices (each its own commit + eyeball):**
+1. **Slice 1 — dual-pane item lists + pane head.** Both panes side-by-side; each =
+   area-name title + weight/volume capacity head (top-right) + a column-header row +
+   the item list (category `[Name]` rows + item rows with name/amt/weight/vol cells,
+   per-item colour, `.selected` highlight on the active pane's cursor). New
+   `pane_rml_html(pane,active)` helper mirrors print_items' per-item logic but emits a
+   baked markup string (flat data-rml per pane, like inventory slice 2b — cells are
+   flex columns via CSS, not absolute positions). DEFER: AIM_ALL `src` column, compact
+   mode, autopickup marker, the middle sidebar, the footer.
+2. **Slice 2 — sidebar + per-pane area header.** `redraw_sidebar` (:1053, the middle
+   minimap + info) + `print_header` (:529, the in-pane area-selection grid line).
+3. **Slice 3 — footer + interactions.** Sort/filter/move hints footer; filter popup
+   (string_input Tier-0) coexistence; examine (item-info component); move-item feedback;
+   AIM_ALL src column; compact mode; autopickup marker. All editing/move stays keyboard.
+
+**SLICE 1 — dual-pane item lists + pane head — DONE + EYEBALLED CLEAN (user
+2026-06-15; after the recalc fix both lists populate, "perfect"), COMMITTED
+`1f8fbba979` + fix `0f42b65261`. TOGGLE OFF.** One RmlUi doc ("advinv") for the whole screen; all-scalar
+model (six baked strings — per pane: title / weight-vol head / rows_html), NO struct/
+array registration. Two free builders in an anon namespace mirror print_items:
+`aim_pane_rows_html(pane,active)` (column-header row + category `[Name]` rows + item
+rows, each a `.aim-row` of name/amt/weight/vol `<span>` cells — CSS flex columns, not
+absolute x; per-item colour via `it.color_in_inventory()`, inactive pane greyed; name
+reproduces stolen `!`/money/ITEM_SYMBOLS; amt/weight/vol reproduce the precision +
+red-overflow rules; `.selected` highlight on the active (`src`) pane's cursor row) and
+`aim_pane_head_html(pane,active,squares)` (the INVENTORY/WORN carried-vs-capacity head
+OR the square weight/vol head incl. AIM_ALL + container/vehicle/map maxvolume). Opened
+in `display()` under `if(!is_processing())`; `sync_rml()` rebuilds all six strings each
+redraw (active pane = `src`); on_redraw `if(rml){<prep>;sync_rml();return;}` else curses.
+**FIX (`0f42b65261`, first eyeball: both lists rendered EMPTY):** the rml branch returned
+before `redraw_pane`, so its `recalc_pane` + `fix_index` prep never ran and `pane.items`
+stayed empty. The rml branch now runs that same per-pane prep (gated `recalc||pane.recalc`
++ `fix_index`) before `sync_rml`. Re-eyeball.
+`advinv.{rml,rcss}`: `.panel` root → flex row of two `.aim-pane` (divider between) →
+phead (title left / capacity right) + `.aim-list` scroll-pane (data-rml the baked rows).
+New toggle `advanced_inv_rmlui_enabled()` + F4 "advanced inventory via RmlUi". rml_doc
+dtor tears down at display() exit. **DEFERRED (later slices, NOT bugs):** AIM_ALL `src`
+column, compact mode (TERMX<=100), autopickup magenta marker, the middle SIDEBAR
+(minimap + area grid), per-pane area-selection header, the FOOTER (sort/filter/move
+hints), filter popup, examine, move-item — all still curses-less in RmlUi mode this
+slice (the doc shows only the two lists + heads). Keyboard still drives everything
+(move/sort/filter/examine work; only their on-screen FEEDBACK is partial until later
+slices). **EYEBALL CHECK (user, A/B via F4 "advanced inventory via RmlUi"):** open AIM
+(`/`) → two panes side-by-side, each with its area name (active pane's brighter) +
+weight/volume head top-right, a "Name (charges) … amt weight vol" column header, then
+the items with category `[headers]`, per-item colours matching curses, amt/weight/vol
+right-aligned in their columns; the ACTIVE pane's cursor row highlights (inactive pane
+no cursor); TAB swaps active pane (highlight + title brightness move); UP/DOWN move the
+cursor; moving items between panes still works (keyboard) and the lists update.
+**WATCH:** (a) the lists scroll natively but the keyboard cursor past the viewport has
+no scroll-into-view yet (same class as inventory; a later slice). (b) NO sidebar/footer
+yet — screen looks sparser than curses (expected this slice). (c) long item names
+truncate (`.aim-c-name` overflow:hidden) — confirm they don't overflow into the numeric
+columns.
+
+**SLICE 2 — top bar + per-pane area-selection grid — CODE-COMPLETE + BUILD-GREEN
+(advanced_inv.{h,cpp} compile + LINK clean, fresh obj+bin mtime), TOGGLE OFF, EYEBALL
+OWED, UNCOMMITTED.** Adds the two chrome pieces that read as "missing" after slice 1:
+(1) **Top bar** — clock (if the avatar has a watch, `to_string_time_of_day`) on the
+left + the keybinding hint (`< [key] keybindings >`, yellow key) and reset-filter
+indicator (`Reset Filter On Close [ON|OFF]`, AIM_AUTORESET_FILTER) on the right; built
+inline in sync_rml as two bound strings (`clock_rml`/`hints_rml`). (2) **Area-selection
+grid** — new member `aim_area_grid_html(pane,sel)` mirrors `print_header`'s per-location
+colour state (canputitems → current=white / selectable=gray / can't=red; vehicle=blue;
+`<>` vs `[]` brackets; `V` when in-vehicle) but lays the 9 directional locations out as
+a SEMANTIC compass 3x3 (NW/N/NE · W/C/E · SW/S/SE) + a specials row (Inventory/Worn/All/
+Dragged/Container), instead of the absolute `hscreen` positions (semantic rewrite). Per
+pane (`left_grid_rml`/`right_grid_rml`), sel = current item's area else pane area (mirrors
+the print_header call site). `advinv.{rml,rcss}` restructured: `.panel` → `.aim-outer`
+column = `.aim-topbar` + `.aim-root` (the two panes); each pane gains `.aim-areagrid`
+(compass rows right-aligned in the header). **DEFERRED to slice 3:** the message log
+(`Messages::display_messages`), the graphical MINIMAP (`draw_minimap` — overmap tiles,
+hard in RmlUi; its own effort), the footer, filter popup, examine, move feedback,
+AIM_ALL src column, compact mode, autopickup marker. **EYEBALL CHECK (user, A/B via F4):**
+open AIM → top bar shows the clock (if watch) + keybinding + reset-filter hints; each
+pane shows the area-selection grid (compass of `[key]` cells, the pane's CURRENT area
+white, selectable gray, unreachable red, vehicle-capable `<>`); switching a pane's area
+(move/`[`/`]` etc.) updates which cell is highlighted; TAB still swaps the active pane.
+**WATCH:** (a) the grid is a SEMANTIC compass, NOT the curses `hscreen` pixel layout —
+confirm the directions read right (NW top-left … SE bottom-right) and the current area
+highlights. (b) rotation/iso (`screen_relative_location`) is honoured via the same call
+print_header uses, but only matters on iso tilesets. (c) no minimap/messages yet
+(slice 3) — top-right where the minimap sat is empty.
+
+**SLICE 3 — sort indicator + filter footer + AIM_ALL src column — CODE-COMPLETE +
+BUILD-GREEN (advanced_inv.cpp compile + LINK clean, fresh obj+bin mtime), TOGGLE OFF,
+EYEBALL OWED, UNCOMMITTED.** The functional finisher. Adds the three real remaining
+gaps from `redraw_pane`/`print_items`: (1) **Sort indicator** — per pane `< [SORT]
+Sort: <name> >` (via `get_sortname`) + item count `< n/max >` when the square has a
+max, top of pane (`*_sort_rml`). (2) **Filter footer** — per pane `< [F] Filter >` /
+`< [F] Filter: <text> >  [R] Reset`, bottom of pane (`*_filter_rml`); while editing,
+the ACTIVE pane shows the live in-progress query from `spopup->text()` (the
+filter-popup coexistence — the rml branch skips the curses spopup draw, so the query
+is surfaced in the footer instead). (3) **AIM_ALL src column** — `aim_pane_rows_html`
+now takes `squares` and, when the pane area is AIM_ALL, emits a `src` cell
+(`squares[sitem.area].shortname`) + a `src` column header (matches print_items). Six
+new bound strings → 4 (sort/filter ×2) this slice. `advinv.{rml,rcss}`: each pane gains
+`.aim-sort` (top) + `.aim-filter` (bottom); new `.aim-c-src` cell. **AIM RmlUi path is
+now FUNCTIONALLY COMPLETE** (both panes: items + colours + columns + selection + area
+grid + sort + filter + heads + top bar). **DOCUMENTED REMAINING GAPS (minor / deferred,
+NOT blocking the slice — flag if any matters):** (a) the graphical **MINIMAP** (overmap
+tiles — genuinely hard in RmlUi; the top-right minimap area is empty in rml mode); (b)
+the **message log** (`Messages::display_messages` in the head bar — needs a text getter;
+not surfaced in rml mode); (c) **autopickup `>` marker** on auto-pickup rows; (d) area
+**desc/flags** sublines under the title (title shows the area name only); (e) **examine**
+(`action_examine`) renders via its own ui_adaptor over the doc — should composite fine
+(verify); (f) **compact mode** (TERMX<=100) — the flex layout adapts, the curses
+compact branch isn't reproduced. **EYEBALL CHECK (user, A/B via F4):** open AIM → each
+pane shows the sort indicator (`Sort: <mode>` + count) at top and the filter line at
+bottom; press the sort key → the indicator updates; press filter, TYPE a query → the
+active pane's filter footer shows it live, confirm → list narrows + footer shows
+`Filter: <q>  [R] Reset`; switch a pane to **All** (surrounding) → items gain a `src`
+column showing each item's source square (NW/S/etc.); move/sort/filter all still work.
+**WATCH:** (a) the live filter query in the footer (`spopup->text()`) updates as you
+type (the popup-draw is replaced by this). (b) src column only on AIM_ALL; the numeric
+columns stay aligned with/without it. (c) minimap + message log absent (documented gap).
+
+**Discipline:** the cell/preset model is load-bearing and this file is 2640 lines
+under the stale-read hook — every model field MUST be verified against fetched
+source (the armor near-miss is the warning). Per-subclass gate means each slice
+is independently bisectable + revertible.
+
+## Tier 4 — big bespoke menus (worldfactory / main_menu / options / newcharacter)
+
+> **STATUS (2026-06-17 audit): ALL FOUR GIANTS DONE + COMMITTED, eyeball owed.**
+> options / worldfactory / main_menu / newcharacter each have a committed
+> `*_rmlui_enabled()` toggle + assets (clean tree). The "ACTIVE PHASE" framing below
+> and any "in flight / uncommitted" per-screen notes are STALE — see the top frontier
+> banner. The tier is functionally complete; only the user A/B eyeball remains.
+
+ACTIVE PHASE (2026-06-15). The giant tier. LOC: main_menu 1219 < worldfactory 1641 <
+options 4196 < newcharacter 4337 (the plan's "~172K/177K" were file BYTE sizes). Plan
+mandate: *"build a form/tab-page sub-pattern HERE"* + *"Do NOT solo-charge worldfactory"*
++ budget as multi-screen sub-projects.
+
+**Dependency-aware order: options → worldfactory → main_menu → newcharacter.** Options
+first because (a) it's the canonical tabbed FORM → matures the reusable form/tab-page
+pattern the others need; (b) zero coupled game state → testable anytime;
+(c) **worldfactory depends on it** — `worldfactory.cpp:536` calls
+`get_options().show(false, true, on_quit)` (world-options-only mode). newcharacter
+(biggest + most coupled: points/scenario/profession interplay) goes LAST on the matured
+pattern.
+
+### Tier 4 screen #1: options (`options_manager::show`)
+
+Anatomy (`options.cpp:3457`): ONE `ui_adaptor` + ONE `on_redraw` + ONE input loop; 4
+curses windows. Shape = **page tabs + grouped two-column (name/value) list + tooltip**.
+Rows = `pages_[iCurrentPage].items_` (`PageItem{type,group,data}`,
+`ItemType{GroupHeader,BlankLine,Option}`); collapsible groups via `groups_state[id]`.
+3 callers: `main_menu.cpp:844` `show(false)`, `handle_action.cpp:2639` `show(true)`,
+`worldfactory.cpp:536` `show(false,true,on_quit)`. Editing stays keyboard
+(setPrev/setNext; int/float → `string_input_popup` Tier-0; CONFIRM on a header toggles
+collapse).
+
+**Slices:**
+1. **Slice 1 — standalone mode (`world_options_only==false`):** covers BOTH `show(false)`
+   (main menu) and `show(true)` (in-game, incl. the "Current world" tab relabel +
+   world-options note + `ACTIVE_WORLD_OPTIONS`). Page tabs + grouped list + tooltip,
+   render-only doc.
+2. **Slice 2 — `world_options_only==true`:** worldgen-tab chrome
+   (`worldfactory::draw_worldgen_tabs`) + `on_quit`; the piece worldfactory reuses.
+
+**SLICE 1 — DONE + EYEBALLED CLEAN (user 2026-06-15, "great"), COMMITTED. TOGGLE OFF.**
+12th `rml_doc`-style consumer; first Tier-4 screen. Post-eyeball fixes folded into the
+commit: (a) **missing `body` rule** (the omission caused all 3 first-eyeball symptoms —
+no body width → panel shrink-wrapped to tab content (width shifted per tab); no body
+height → `.opt-list flex:1` collapsed to 0 → lists looked unpopulated; no centering)
+→ added `body{display:flex;justify-content:center;align-items:center;width/height:100%}`
+mirroring construction.rcss, panel `width:80%`+`min-width:720dp`; (b) `.opt-tabs .tab
+{flex:0 0 auto}` so page tabs size to content (theme `.tab` flex:1 truncated "World
+Defaults" etc.); (c) **keyboard scroll-follow** — UP/DOWN/tab set `rml_scroll_pending`
+→ sync_rml `ScrollIntoView(ScrollAlignment::Nearest)` on the selected `#opt-list` child
+(keyboard only — mouse/wheel not fought). ALSO shipped a **global F4 "RmlUi UI scale"
+slider** (`rmlui_layer::ui_scale`, 0.5–1.5, default 1.0) multiplying the context
+dp-ratio → scales font + dp spacing across ALL RmlUi panels live; `g_density_ratio`
+kept as the true physical/logical ratio so input/hit-testing is unaffected (the font
+was reported slightly too large). Adapts the
+`construction` template (tabs+list+detail). `data/gui/options.{rml,rcss}` model
+"options". STRUCTURAL POINTS: (1) gate = `options_rmlui_enabled() && !world_options_only`
+→ slice 1 lights ONLY standalone; world-options-only stays curses (slice 2). (2)
+**`fmt_name_value` HOISTED** out of on_redraw to show() scope + parameterized with
+`cOPTIONS` → the curses on_redraw AND `sync_rml` share ONE formatter (no colour-rule
+drift; the plan's "share one formatter" instruction). (3) model = `opt_rml_tab{name_rml,
+selected}` (page bar) + `opt_rml_row{num_rml,name_rml,value_rml,is_header,selected}` +
+`tooltip_rml`; `sync_rml` rebuilds all three each redraw, flattening collapsed-group
+visibility into the flat row list and keeping `rml_visible[row]→page_items` for the
+click callback. (4) cursor `>> ` baked into the selected row's name (RCSS has no ::before
+content — the AIM/mutations idiom); value passed `is_selected=false` for BASE colour
+(CSS `.selected` does the highlight). (5) MOUSE = click-only select (no mouseover — a
+parked mouse can't steal the keyboard cursor); `on_tab(idx)` sets page+resets line/scroll
+(mirrors NEXT_TAB), `on_select(idx)` → `iCurrentLine=rml_visible[idx]`. (6) doc opened
+before the loop; `rml_doc` dtor tears down at the single function exit (the post-loop
+save/apply block runs `query_yn` over the still-rendered doc — behaviour-identical to
+curses, which also redraws options behind that prompt). F4 toggle "options via RmlUi"
+(OFF). **DEFERRED (NOT bugs):** native scroll has no keyboard scroll-into-view yet (long
+pages — the staged ScrollIntoView one-liner if eyeball shows cursor-lost);
+world_options_only chrome (slice 2). **EYEBALL CHECK (user, A/B via F4):** open Options
+from **main menu** AND **in-game** (Esc→Options) — page tabs across top (current
+hilited), rows show number + name + value with colours matching curses (green=on,
+red=off/disabled, grey=prereq-unmet), `>>` on the cursor row; group headers show
+`+`/`-` and CONFIRM collapses/expands (members hide/show); tooltip tracks selection;
+UP/DOWN + NEXT_TAB/PREV_TAB navigate; LEFT/RIGHT/CONFIRM change values; int/float opens
+the string_input popup over the doc; mouse click selects a row / a tab; QUIT saves +
+applies (terminal-size / tiles / language change paths still fire). **WATCH:** (a) value
+text keeps its baked colour over the yellow `.selected` bg — confirm readable (cursor
+`>>` is the backup selection cue). (b) **D3D12 (Win11) first-of-Tier-4 glance** — first
+Tier-4 dynamic doc on the primary target. (c) the world page (in-game `show(true)`)
+relabels to "Current world" + shows the red note.
+
+**SLICE 2 — world_options_only mode (worldfactory wizard step) — CODE-COMPLETE +
+BUILD-GREEN (options.cpp compile + LINK clean; options.cpp.o + binary fresh 15:03),
+TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.** Lights the `world_options_only==true` path
+(`worldfactory::show_worldgen_tab_options` → `get_options().show(false,true,on_quit)`).
+SMALL — the option list + tooltip already render the `world_default` page (sync_rml's
+`cOPTIONS` already keys `(ingame||world_options_only)&&iCurrentPage==iWorldOptPage` →
+`ACTIVE_WORLD_OPTIONS`). Three changes: (1) gate dropped the `&& !world_options_only`
+→ `rml.open(options_rmlui_enabled())` lights both modes (same toggle). (2) sync_rml tab
+strip branches: world mode renders the 3 worldgen wizard steps ("World Mods" / **"World
+Options"** current / "Finalize World"), mirroring `draw_worldgen_tabs(w,1)` — RENDER-ONLY
+(wizard nav is keyboard PREV_TAB/NEXT_TAB, which `show` returns to worldfactory at
+options.cpp's `world_options_only` early-return → `show_worldgen_tab_options` maps to
+-1/+1/-999). (3) `on_tab` no-ops in world mode (clicks must not switch options pages —
+there's one). No new toggle (the wizard step rides the options toggle). The OTHER wizard
+steps (mods / finalize / world-name) stay curses → they migrate with **worldfactory
+(Tier 4 #2)**, which will own the real worldgen-tab component; this slice just gets the
+options step onto RmlUi. **EYEBALL CHECK (user, A/B via F4 "options via RmlUi"):** New
+World → advance to the **World Options** wizard step — the option list + tooltip render
+in RmlUi (same two-column rows as standalone), the tab strip shows the 3 worldgen steps
+with "World Options" highlighted; LEFT/RIGHT/CONFIRM edit world options; PREV_TAB →
+back to Mods (curses), NEXT_TAB → Finalize (curses), QUIT aborts; the edited world
+options take effect on the new world. **WATCH:** (a) the worldgen tab strip is
+render-only — clicking a step does nothing (wizard is keyboard); (b) stepping
+RmlUi-options → curses-mods and back is clean (doc opens/closes per `show` call).
+
+### Tier 4 screen #2: worldfactory (`worldfactory.cpp`, 1641) — MULTI-SCREEN SUB-PROJECT
+
+> **STATUS (2026-06-17): ALL 4 SLICES CODE-COMPLETE + COMMITTED, EYEBALL OWED.**
+> The per-slice blocks below were written PRE-commit (they say "UNCOMMITTED") — that
+> is stale; git history confirms all four landed (Jun 15):
+> - slice 1 Finalize — `07d6d6aa53`
+> - slice 2 pick_world — `6a7f93a194`
+> - slices 3+4 active-mods + mod-selector — `d689e9acb4`
+> - wizard-renders-fully-under-one-toggle fix — `2eedac603e`
+>
+> All 4 RmlUi screens (`pickworld` / `worldmods` / `modselect` / `worldfinalize`)
+> + their `data/gui/*.{rml,rcss}` exist, gated by the single `worldfactory_rmlui_enabled()`
+> toggle (F4 "worldfactory via RmlUi", OFF). The wizard Mods step + `edit_active_world_mods`
+> ride slice 4 (delegates); the Options step rides options slice 2; the driver tab-strip is
+> occluded (no migration, dies at rip-out). **So worldfactory itself is functionally
+> complete — the only remaining work is the user A/B eyeball of the 4 screens.** Detail
+> blocks below retained as the per-slice record.
+
+**Why it's a sub-project (not one screen):** worldfactory is a world-creation WIZARD
+plus several standalone screens, each with its own `ui_adaptor` + `on_redraw` +
+`input_context` (so each fits the harness independently). Plan mandate: *"Do NOT
+solo-charge worldfactory; build a form/tab-page sub-pattern; budget as a multi-screen
+sub-project."*
+
+**Architecture (verified 2026-06-15 via explore):**
+- **Wizard driver = `make_new_world(bool,string)` (77-120).** Owns ONE `ui_adaptor`
+  whose on_redraw draws ONLY the worldgen tab strip (`draw_worldgen_tabs(wf_win,curtab)`,
+  102-105). Loop (108-113) calls `curtab += tabs[curtab](wf_win, world, on_quit)` over
+  the 3 tab fns built at 55-57; return codes +1 next / -1 prev / -999 quit / 0 stay;
+  `curtab<0` exits (abort). Each TAB FN owns its OWN `ui_adaptor` + nested input loop and
+  draws its own full-screen window OVER wf_win (so each tab re-draws its own worldgen tab
+  strip — that's why options slice 2 renders the strip itself; the driver's strip is
+  occluded and dies at rip-out). **Consequence: NO separate driver migration — each tab's
+  RmlUi doc renders its own strip (the options-slice-2 precedent); the worldgen strip is
+  3 render-only bound tabs per doc, not a shared component worth extracting yet.**
+- **The 3 wizard tabs:** Mods (`show_worldgen_tab_modselection`→`show_modselection_window`),
+  Options (`show_worldgen_tab_options`→`get_options().show(false,true,…)` — **DONE**,
+  options slice 2), Finalize (`show_worldgen_tab_confirm`).
+- **Standalone screens:** `pick_world` (world picker), `show_active_world_mods`
+  (read-only mod list), `edit_active_world_mods` (delegates to `show_modselection_window`
+  with `standalone=true`).
+
+**Gate:** ONE `worldfactory_rmlui_enabled()` toggle, lit PER-SCREEN (each on_redraw
+guards `if(rml){sync_rml();return;}`), exactly like the inventory framework. Light one
+screen per slice; the rest stay curses even with the toggle on.
+
+**Slices (conforming-first → giant last; each its own commit + eyeball):**
+
+1. **Slice 1 — Finalize (`show_worldgen_tab_confirm`, 1251-1394).** Smallest wizard
+   screen; proves the worldfactory toggle + the worldgen-tab-strip-in-doc consistency
+   with options slice 2. Shape = a small FORM: worldgen tab strip (3 steps, "Finalize
+   World" current = index 2) + "World Name:" + the live name text + save-format line
+   (V1 Legacy / V2 Current) + keybinding hints + a "NO NAME ENTERED!" error state.
+   **Name editing stays keyboard** — the inline `string_input_popup spopup` keeps
+   handling TEXT.* keys; the doc DISPLAYS `spopup.text()` live (the AIM/safemode
+   live-query idiom) with a caret cue. Model: `tabs` (3 worldgen steps) + bound strings
+   `name_rml` (live) / `format_rml` / `hints_rml` / `error_rml`. Reads/writes
+   `world->world_name` + `world->world_save_format` via the existing loop
+   (PICK_RANDOM_WORLDNAME / TOGGLE_V2_SAVE_FORMAT / NEXT_TAB-finalize / PREV_TAB / QUIT).
+   `data/gui/worldcreate.{rml,rcss}` (or `worldfinalize.*`). **EYEBALL:** New World →
+   Finalize step: tab strip shows Finalize current; type a name (shows live, caret);
+   random-name key fills it; V1/V2 toggle line updates; empty-name + NEXT_TAB shows the
+   error; NEXT_TAB with a valid name creates the world; PREV_TAB → Options.
+
+2. **Slice 2 — `pick_world` (263-476, PICK_WORLD_DIALOG).** Near-CLONE of the options
+   screen shape (4-window bordered: border/tooltip/header/content → tabs + list +
+   tooltip), so it reuses the options.rml pattern almost verbatim. Page tabs (`[Page N]`),
+   per-world row = number + `>>` cursor + `"name (charcount)"`, tooltip "Pick a world to
+   enter game". Pagination by content height → native scroll (drop `world_pages` paging,
+   one flat list, the options scroll-into-view remedy applies). Model: `tabs` (or drop
+   pages for one scrolling list — decide at build) + `rows{name_rml,selected}`. Input
+   unchanged (UP/DOWN, CONFIRM→return world, QUIT). `data/gui/pickworld.{rml,rcss}`.
+   **EYEBALL:** main menu → World (pick existing) → worlds list with char counts, cursor
+   highlight, CONFIRM enters, QUIT cancels; many worlds scroll.
+
+3. **Slice 3 — `show_active_world_mods` (681-743).** Small read-only mod list — proves
+   the **mod-row rendering** (the `draw_mod_list` shape: magenta category headers + mod
+   rows `"[id] name"`, obsolete→dark_gray+`*`, invalid→red `N/A`, cursor `>>`) in
+   isolation BEFORE the giant. A new `mod_rows_html`/builder mirrors `draw_mod_list`'s
+   per-row logic (reuse `MOD_INFORMATION` name/category/obsolete). Model: `rows` (category
+   header vs mod entry, colour baked). DEFAULT ctxt UP/DOWN/QUIT unchanged. Reuses a
+   `worldmods.{rml,rcss}` the giant will share. **EYEBALL:** in-game world-mods viewer →
+   active mods listed with category headers + colours + cursor; UP/DOWN scroll; QUIT.
+
+4. **Slice 4 — `show_modselection_window` (784-1249, MODMANAGER_DIALOG) — THE GIANT.**
+   Dual-pane: available (left, category-tabbed) | active load-order (right) + a `w_shift`
+   reorder-indicator strip (`+`/`-` can_shift_up/down) + a `w_description` info pane
+   (bottom) + category tabs (left) + filter. Reuses slice-3's mod-row builder for BOTH
+   panes; the shift `+`/`-` glyphs render per active row (gated like draw_mod_list); the
+   description pane renders `mod_ui::get_information()` (colour-tagged → `cata_text_to_rml`,
+   the item-info idiom) with the VIEW_MOD_DESCRIPTION full popup unchanged (Tier-0). Model:
+   `cat_tabs` + `avail_rows` + `active_rows` (with shift flags) + `desc_rml` + focused-pane
+   + filter footer. **ALL editing stays keyboard** — add/remove/reorder go through
+   `mod_ui::try_add/try_rem/try_shift` (dependency+conflict resolution) untouched; LEFT/
+   RIGHT switch pane, CONFIRM add/remove, ADD_MOD/REMOVE_MOD reorder, category-tab keys,
+   FILTER (string_input Tier-0), TOGGLE_SHOW_OBSOLETE, SAVE_DEFAULT_MODS, NEXT/PREV_TAB
+   (wizard, unless standalone). `data/gui/modselect.{rml,rcss}`. **Lighting this ALSO
+   lights `edit_active_world_mods` (delegates) + the wizard Mods step
+   (`show_worldgen_tab_modselection` delegates) for free.** Hardest screen in Tier 4 so
+   far — do it LAST, on the proven mod-row + tab + list + info-pane patterns. **EYEBALL
+   (hit edges):** New World → Mods step: two panes, available category-tabbed, CONFIRM
+   adds (deps pulled in), the active pane shows load order with `+`/`-` shift cues,
+   ADD_MOD/REMOVE_MOD reorders (respecting can_shift), description pane shows the selected
+   mod's info, FILTER narrows, obsolete toggle, NEXT_TAB→Finalize; ALSO the standalone
+   edit-world-mods + the conflict/dependency error popups.
+
+**Sequencing notes:** options (screen #1) done first matured the form/tab pattern; the
+worldgen tab strip is per-doc (no shared component yet — revisit if a 3rd consumer
+appears). After all 4 worldfactory slices + eyeball, the world-creation wizard is fully
+on RmlUi (Mods+Options+Finalize) and Tier 4 #2 is complete → next Tier-4 screens:
+main_menu (#3), then newcharacter (#4, the biggest/most-coupled, last).
+
+**SLICE 1 (Finalize) — CODE-COMPLETE + BUILD-GREEN (worldfactory.cpp + rml_screen.h +
+devui compile + LINK clean; worldfactory.cpp.o + binary fresh-relinked 15:27), TOGGLE
+OFF, EYEBALL OWED, UNCOMMITTED.** New `worldfactory_rmlui_enabled()` toggle (one for the
+whole sub-project, gated per-screen) + `data/gui/worldfinalize.{rml,rcss}` model
+"worldfinalize". `show_worldgen_tab_confirm` gets `if(rml){sync_rml();return;}` in
+on_redraw; rml_doc dtor tears down at the single return. sync_rml builds: worldgen tab
+strip (3 steps, "Finalize World"=idx2, render-only) + `name_rml` ("World Name: " + live
+`worldname` + `_` caret, or the red "NO NAME ENTERED!" when `noname`) + `format_rml`
+(V2 Current white / V1 Legacy gray) + `hints_rml` (random-name / format-toggle +
+explanation / nav, via `ctxt.get_desc`). **KEY POINT — editing stays keyboard:** the
+inline `string_input_popup spopup` still processes TEXT.* in the loop; sync_rml
+re-seeds `spopup.text(worldname)` each frame (mirrors the curses on_redraw) so
+PICK_RANDOM_WORLDNAME + an initial/copied name reach the editor and don't revert. F4
+toggle "worldfactory via RmlUi" (OFF). **EYEBALL CHECK (user, A/B via F4):** New World →
+Finalize step: tab strip shows the 3 worldgen steps with "Finalize World" current; type
+a name (shows live with trailing `_`); PICK_RANDOM key fills a random name (and it
+STICKS, not reverts — the seed check); V1/V2 toggle flips the format line; empty name +
+NEXT_TAB shows the red "NO NAME ENTERED!"; NEXT_TAB with a name creates the world;
+PREV_TAB → Options (RmlUi if its toggle on). **WATCH:** the name caret is a static `_`
+(no blink — editing is keyboard-only, render-behind); the worldgen tab strip is
+render-only (consistent with options slice 2).
+
+**SLICE 2 (pick_world) — CODE-COMPLETE + BUILD-GREEN (worldfactory.cpp compile + LINK
+clean; worldfactory.cpp.o + binary fresh 15:36), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.**
+2nd worldfactory consumer (shared `worldfactory_rmlui_enabled()` toggle). Same shape as
+the options screen — page tabs + one-column world list + tooltip — so `pickworld.{rml,
+rcss}` (model "pickworld") closely mirrors options. Render-only: the PICK_WORLD_DIALOG
+loop owns `selpage`/`sel`; on_redraw gets `if(rml){sync_rml();return;}`; rml.open after
+the ctxt actions (auto_pickup ordering — on_redraw is above the input_context).
+STRUCTURAL: distinct struct types `wf_pick_tab`/`wf_pick_row` (NOT finalize's
+`wf_rml_tab` — RegisterStruct is context-global, a 2nd model must not re-register the
+same C++ type) under their own guard. sync_rml: page tabs (skip empty pages, `rml_pages`
+maps tab→real page index) + rows ("n  >> name (saves)", cursor on `sel`) + the "Pick a
+world to enter game" tooltip. Mouse: `on_tab`→selpage (+sel=0), `on_select`→sel (click
+only). Pages cap each list to a screen → no scroll-into-view needed. F4 toggle shared
+("worldfactory via RmlUi"). **EYEBALL CHECK (user, A/B via F4):** main menu → choose a
+world to play → world list with `name (saves)` per row, cursor highlight, UP/DOWN move,
+NEXT_TAB/PREV_TAB switch pages (only if >1 page of worlds), CONFIRM enters the world,
+QUIT cancels; mouse click selects a row / a page tab. **WATCH:** (a) the auto-return
+single-world case (line ~359, `pick_world` returns before opening any UI) is unchanged;
+(b) >1 page needs many worlds (>content height) — page tabs appear then.
+
+**SLICE 3 (show_active_world_mods) — CODE-COMPLETE + BUILD-GREEN (binary 15:45), TOGGLE
+OFF, EYEBALL OWED, UNCOMMITTED.** Read-only mod list. Introduces the **shared mod-row
+builder** `build_wf_mod_rows()` (anon ns): mirrors `draw_mod_list` — flat list of
+category headers (magenta) + mod entries ("name [id]", obsolete→dark_gray+`*`,
+invalid→red `N/A`, `>> ` cursor) baked to rml markup, returned as a neutral POD
+`plain_mod_row` so each model copies into its OWN Rml struct (distinct per-model types
+avoid re-registering one C++ type on two models). Model "worldmods" = `wf_amod_row`
+rows + title; render-only, keyboard-only (DEFAULT UP/DOWN/QUIT); scroll-into-view on
+UP/DOWN (`ScrollAlignment::Nearest`, `#wm-list` child). `worldmods.{rml,rcss}`.
+**EYEBALL:** in-game world-mods viewer → active mods with category headers + colours +
+cursor; UP/DOWN scroll-follow; QUIT.
+
+**SLICE 4 (show_modselection_window — THE GIANT) — CODE-COMPLETE + BUILD-GREEN
+(worldfactory.cpp.o 15:52:30 + binary 15:52:32, 0 warnings), TOGGLE OFF, EYEBALL OWED,
+UNCOMMITTED.** The dual-pane mod selector. Model "modselect": worldgen steps (`wtabs`,
+`data-if="show_wtabs"` — hidden when standalone) + category tabs (`cats`) + available
+list (`avail`) + active load-order (`active`, with `shift_rml` `+`/`-` from
+`mman_ui->can_shift_up/down`) + 2 headers (focused list marked `< >`) + description pane
+(`mman_ui->get_information(selected)` → cata_text_to_rml, scrollable preview; full text
+still via the VIEW_MOD_DESCRIPTION popup) + filter line (live `fpopup->text()` while
+editing). Both lists reuse `build_wf_mod_rows` (own struct `wf_mod_row` with shift).
+**Render-only, KEYBOARD-ONLY this slice** — all add/remove/reorder (dependency+conflict
+resolution via `mman_ui->try_add/try_rem/try_shift`), category-tab cycling, FILTER
+(string_input Tier-0), TOGGLE_SHOW_OBSOLETE, SAVE_DEFAULT_MODS, VIEW_MOD_DESCRIPTION,
+NEXT/PREV_TAB stay in the loop untouched (no mouse this slice — the index↔mod mapping
+through category headers is deferred). Scroll-into-view on UP/DOWN for the FOCUSED list
+(`ms-avail`/`ms-active`). `modselect.{rml,rcss}`. **Lighting this ALSO lights
+`edit_active_world_mods` (delegates, standalone=true → wtabs hidden) + the wizard Mods
+step (`show_worldgen_tab_modselection` delegates).** **EYEBALL (hit edges):** New World →
+Mods step: two panes (available category-tabbed | active load order), CONFIRM adds (deps
+pulled in), `+`/`-` shift cues on active rows, ADD_MOD/REMOVE_MOD reorders (respecting
+can_shift), description pane tracks selection, FILTER narrows + live query, obsolete
+toggle, category tabs switch, NEXT_TAB→Finalize; ALSO standalone edit-world-mods (no
+worldgen strip) + the conflict/dependency error popups (Tier-0). **WATCH:** keyboard-only
+(mouse won't select — expected); the worldgen strip + headers + filter are render-only.
+
+**WORLDFACTORY (Tier 4 #2) = CODE-COMPLETE (all 4 slices, build-green, EYEBALL OWED, one
+shared `worldfactory_rmlui_enabled()` toggle).** Wizard fully on RmlUi when the toggle is
+on (Mods=slice4, Options=screen#1 slice2, Finalize=slice1) + pick_world (slice2) +
+active-mods view (slice3) + edit-mods (slice4 delegate). Next Tier-4: main_menu (#3),
+then newcharacter (#4).
+
+**WIZARD-BLEED FIX (eyeball #1 — user saw World Options as old curses + Finalize
+overlapping it):** two causes, both fixed. (1) The World Options step
+(`get_options().show(false,true,…)`) was gated by the OPTIONS toggle, so with only
+"worldfactory via RmlUi" on it drew curses → stale curses bled onto Finalize. Since
+`world_options_only==true` happens ONLY in the wizard, that step now rides
+`worldfactory_rmlui_enabled()` (options.cpp gate: `world_options_only ?
+worldfactory_rmlui_enabled() : options_rmlui_enabled()`) — one toggle lights the whole
+wizard. (2) The wizard driver (`make_new_world`) drew the curses worldgen-tab strip into
+`wf_win` every frame, bleeding through each step doc's transparent margins (theme `body`
+has no background; `.panel` is 80–92%); when `worldfactory_rmlui_enabled()` it now
+`werase`s wf_win instead (each step doc draws its own strip). Build-green 16:18.
+
+### Tier 4 screen #3: main_menu (`main_menu.cpp`, 1219) — the title screen
+
+**Anatomy (verified 2026-06-15):** `opening_screen()` (612) owns ONE `ui_adaptor` +
+`on_redraw`→`print_menu` (294) + the input loop (714). Two-level selection: `sel1` (top
+item: MOTD/NEWCHAR/LOADCHAR/WORLD/SETTINGS/HELP/CREDITS/QUIT via `main_menu_opts`), `sel2`
+(sub-option), `sel_line` (MOTD/CREDITS scroll). `print_menu` draws: holiday art + the
+`mmenu_title` ASCII logo + version + the horizontal menu row (`print_menu_items` (133):
+`[hotkey]label`, selected hilited, builds `main_menu_button_map` mouse hitboxes) +
+`display_sub_menu` (185: floating vertical sub-options for NEWCHAR/SETTINGS/WORLD/LOADCHAR,
+OR `display_text` (572) renders the scrolled MOTD/CREDITS text) + bottom tip/hints/bugs
+line. CONFIRM dispatches: HELP→display_help, QUIT→`query_yn`, SETTINGS→options/keybind/
+autopickup/safemode/distraction/colors (all migrated screens), WORLD→`world_tab`,
+LOADCHAR→`load_character_tab` (uilist, Tier-0), NEWCHAR→`new_character_tab` (→newcharacter,
+Tier 4 #4).
+
+**It's essentially ONE screen** — `display_text`/`display_sub_menu` are part of the title
+render; the New/Load/World actions DELEGATE (uilist Tier-0 / worldfactory / newcharacter),
+so they're not main_menu's render. → **one slice**, toggle `main_menu_rmlui_enabled()`.
+
+**Slice 1 — title screen (render-behind).** Model "mainmenu": `logo_rml` (mmenu_title
+ASCII, white, `white-space:pre`), `version_rml`, `items` (vMenuItems `[hotkey]label`,
+`selected`=sel1, horizontal flex), `submenu` (sel2 sub-options for NEWCHAR/SETTINGS/WORLD/
+LOADCHAR, vertical; empty for HELP/QUIT), `motd_rml` (scrolled MOTD/CREDITS text when those
+are selected, in a scroll-pane), `tips_rml` (bottom hints), `show_motd`/`show_submenu`
+flags. Keyboard owns the 2-level nav (LEFT/RIGHT→sel1, UP/DOWN→sel2 or sel_line); mouse
+click selects (on_item→sel1, on_sub→sel2). Submenu rendered inline below the menu row
+(semantic; NOT the curses floating box at the item's x). Holiday ASCII art + the per-char
+mouse hitbox maps dropped (semantic rewrite). `mainmenu.{rml,rcss}`. **VISUAL-FIDELITY
+RISK (eyeball-critical, flagged):** the ASCII logo centering/scale + menu spacing +
+submenu placement are the iconic title look — build-blind will get structure, expect
+layout iteration. **WATCH:** the in-progress theme.rcss CRT rework (uncommitted) will
+restyle this most of all.
+
+**SLICE 1 — CODE-COMPLETE + BUILD-GREEN (main_menu.cpp.o 16:53 + binary relinked,
+0 warnings), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.** `mainmenu.{rml,rcss}` model
+"mainmenu" + `main_menu_rmlui_enabled()` toggle + F4 "main menu via RmlUi".
+`opening_screen` on_redraw gets `if(rml){sync_rml();return;}`; rml_doc dtor tears down.
+sync_rml builds logo (mmenu_title pre joined) / version / `items` (vMenuItems
+shortcut_text, sel1) / `submenu` (replicates display_sub_menu for SETTINGS/NEWCHAR/
+LOADCHAR/WORLD incl. "Create World" + world saves count) / `motd_lines` (foldstring of
+mmenu_motd|credits) / `tips_rml` (NEWCHAR hint else bugs+tip-of-day). Keyboard owns the
+2-level nav; mouse `on_item`/`on_sub` select (click only). MOTD/Credits keyboard scroll
+via `rml_scroll_pending` → ScrollIntoView the sel_line child of `#mm-motd`. Submenu
+rendered INLINE below the menu row (semantic, not the curses floating box). Holiday art +
+per-char mouse hitboxes dropped. Includes the `<div class="crt">` overlay (user's CRT
+theme). **EYEBALL (visual-fidelity critical):** title screen → logo centered, version,
+horizontal menu (selected hilited), arrow into New Game/Settings/World/Load shows the
+inline submenu (sel2 highlight), MOTD/Credits show scrolling text (UP/DOWN scrolls),
+CONFIRM acts (New/Load/World/Settings/Help/Quit all still work), mouse click selects;
+QUIT→"Really quit?" (needs query_popup toggle, per invariant 6). **WATCH:** logo
+centering/scale + menu spacing + inline-submenu placement vs the curses floating box —
+expect layout iteration.
+
+### Tier 4 screen #4: newcharacter (`newcharacter.cpp`, 4337) — MULTI-SCREEN SUB-PROJECT
+
+The biggest + most-coupled Tier-4 screen, plan's explicit LAST. **Architecture (verified
+2026-06-16):** the creator is a WIZARD of 8 tabs driven by `avatar::create` (486) — a
+`do/while` over `tab` (0-7) that calls each tab fn and steps on its returned
+`tab_direction` (FORWARD/BACKWARD/QUIT/NONE). Tab order (driver switch):
+0 set_points / 1 set_scenario / 2 set_profession / 3 set_stats / 4 set_traits /
+5 set_bionics / 6 set_skills / 7 set_description. **Each tab fn owns its OWN
+`ui_adaptor` + `on_redraw` + `input_context` + nested input loop** and draws the shared
+`draw_character_tabs(w, sTab)` strip (735) + the points line (`draw_points`, 757) + its
+body. So each tab fits the harness INDEPENDENTLY — exactly the worldfactory wizard
+shape: each tab's RmlUi doc renders its OWN character-tab strip (the worldfactory
+per-doc-strip precedent; no shared strip component yet — revisit if a cleaner 3rd
+consumer appears), the driver's own strip is occluded and dies at rip-out.
+
+**Gate:** ONE `newcharacter_rmlui_enabled()` toggle, lit PER-TAB (each on_redraw guards
+`if(rml){sync_rml();return;}`), like worldfactory/inventory. Light one tab per slice;
+the rest stay curses even with the toggle on. **Invariant 6 applies hard here** — every
+tab's PREV_TAB/QUIT fires a `query_yn("Return to main menu?")`, so A/B requires the
+query_popup toggle ON too, else the confirm is invisible.
+
+**Slices (simplest→hardest; each its own commit + eyeball):**
+1. **set_points** (POINTS tab) — char-tab strip + points line + 1-3 pool options
+   (Multiple/Single/Freeform; cursor + chosen-pool green) + description pane. Smallest;
+   proves the toggle + char-tab-strip-in-doc + points-line.
+2. **set_stats** — 4 stats with +/- and a live description/effects pane.
+3. **set_skills** — skills list (level +/-) + description.
+4. **set_traits** — good/bad trait columns + description + points interplay.
+5. **set_bionics** — CBM list + description.
+6. **set_scenario** — scenario list + description + flags/professions/start-location.
+7. **set_profession** — profession list + description + items/skills/addictions sub-panes
+   (heaviest list tab).
+8. **set_description** — the OVERVIEW form: name/gender/height/age/blood + scenario/
+   profession summary + reroll/save (most fields; last).
+
+**SLICE 1 (set_points) — DONE + EYEBALLED CLEAN (user 2026-06-16, "looks great"),
+COMMITTED. TOGGLE OFF.** New `newcharacter_rmlui_enabled()` toggle (one for the whole creator,
+gated per-tab) + `data/gui/newcharpoints.{rml,rcss}` model "newcharpoints" + F4 "new
+character" checkbox (System menus group). `set_points` gets a render-only RmlUi path:
+anon-ns `nc_points_session` (8-tab strip `tabs` + `points_rml` + `opts` + `desc_rml`) +
+`build_nc_char_tabs(active)` helper (the 8 translated captions, POINTS=0 selected,
+shared by later tabs) + `register_nc_points_rml_types` + `rml_doc rml` + `sync_rml`
+(rebuilds all four each redraw: points via `points.to_string()`, each opt name baked
+green when chosen via `colorize(...,COL_SKILL_USED)` else light_gray, `selected`=cursor,
+desc = highlighted opt's text). on_redraw `if(rml){sync_rml();return;}` else curses;
+`rml.open` after the ctxt/on_redraw, before the loop; rml_doc dtor tears down at the
+single return. STRUCTURAL POINTS: (1) clones the worldfinalize template (sized+centered
+body, `.tab{flex:0 0 auto}` so 8 captions size to content, `.nc-opt{display:block}` for
+the inline-row gotcha). (2) cursor `.selected` (CSS accent) + chosen-pool colour baked
+into the text — both cues, mirroring options/mutations. (3) keyboard still owns
+UP/DOWN/CONFIRM/NEXT_TAB/PREV_TAB/QUIT untouched; render-only doc. F4 toggle "new
+character" (OFF). **EYEBALL CHECK (user, A/B via F4 — needs query_popup toggle ON too,
+invariant 6):** New Game → Custom Character → POINTS tab: char-tab strip shows the 8
+steps with POINTS current; the points line shows the pool totals; the pool options
+(Multiple pools / Single pool / Freeform, per CHARACTER_POINT_POOLS) list with the
+CHOSEN pool green and the cursor row highlighted; UP/DOWN move the cursor; CONFIRM sets
+the pool (green moves); the description pane tracks the highlighted option; NEXT_TAB →
+Scenario (curses, until slice 6); PREV_TAB/QUIT → "Return to main menu?" confirm (RmlUi
+popup if query_popup ON). **WATCH:** (a) only ONE option exists when point_pool ==
+"multi_pool" (list shows a single row — expected). (b) the other 7 tabs stay curses
+(gate proof). (c) first newcharacter dynamic doc — D3D12 (Win11) glance warranted.
+
+**SLICE 2 (set_stats) — DONE + EYEBALLED CLEAN (user 2026-06-16, "looks great"),
+COMMITTED. TOGGLE OFF.** The STATS
+tab on the shared `newcharacter_rmlui_enabled()` toggle (2nd tab lit; the other 6 stay
+curses). `data/gui/newcharstats.{rml,rcss}` model "newcharstats". REFACTOR: lifted
+`build_nc_char_tabs` to a TEMPLATE on the tab struct so each tab's model uses its OWN
+registered C++ type (`nc_stats_tab` distinct from slice-1's `nc_rml_tab`) — distinct
+types avoid re-registering one struct on two models (worldfactory precedent); the
+caption logic is shared. Render-only doc: char-tab strip (STATS=idx3) + points line +
+the 4 stats (Str/Dex/Int/Per as `nc_stat_row{name,val,selected}`, active stat coloured
+COL_STAT_ACT + `.selected`, others light_gray) + per-stat effects/description
+(`nc_stat_desc(u,sel)` — a free builder mirroring the curses per-stat block verbatim,
+incl. the `u.recalc_hp()` side-effect for Str; joined colour-tagged lines via `join`) +
+the HIGH_STAT cost warning (exact curses strings, red, selected stat only) + keybinding
+hints. on_redraw `if(rml){sync_rml();return;}` else curses; `rml.open` after on_redraw;
+rml_doc dtor tears down at each `return` (the loop returns directly). Keyboard owns
+UP/DOWN select, LEFT/RIGHT dec/inc (incl. the >HIGH_STAT 2-point cost), RANDOMIZE,
+NEXT/PREV_TAB, QUIT — all untouched. F4 toggle "new character" (shared). **EYEBALL CHECK
+(user, A/B via F4 — query_popup toggle ON too, invariant 6):** New Game → Custom →
+STATS tab: char-tab strip (STATS current), points line, the 4 stats with the SELECTED
+one highlighted (COL_STAT_ACT) + cursor accent; UP/DOWN move selection; LEFT/RIGHT
+decrease/increase the selected stat (value + points update); RANDOMIZE jumps selection;
+the description pane shows the selected stat's effects (HP/carry/melee for Str,
+to-hit/throw/ranged for Dex, read/rust/craft for Int, aim/nightvis for Per) matching
+curses; raising a stat past HIGH_STAT shows the red "Increasing X further costs 2
+points." line + costs 2; NEXT_TAB → Profession (curses), PREV_TAB → Points (RmlUi).
+**WATCH:** (a) the effects NUMBERS must match curses exactly (the desc is a from-scratch
+reconstruction — diff a few values). (b) value column right-alignment. (c) the cost
+warning only shows for the selected stat at/above HIGH_STAT.
+
+**SLICE 3 (set_skills) — DONE + EYEBALLED CLEAN (user 2026-06-16, "looks great"),
+COMMITTED. TOGGLE OFF.** The SKILLS
+tab on the shared `newcharacter_rmlui_enabled()` toggle (3rd tab lit; the other 5 stay
+curses). HEAVIEST newcharacter tab so far. `data/gui/newcharskills.{rml,rcss}` model
+"newcharskills". Render-only doc: char-tab strip (SKILLS=idx6) + points line +
+upgrade-cost hint (`Upgrading X by N level(s) costs M point(s)`, green if affordable
+else red) + a CATEGORY-GROUPED skill list (`nc_skill_row{text,is_header,selected}`:
+yellow category headers + skill rows showing name + `(level)` if >0 + `(+prof)` bonus,
+COL_SKILL_USED when level>0 else light_gray, cursor = `.selected`) + a scrollable
+description pane (the selected skill's description + the recipes it unlocks). STRUCTURAL
+POINTS: (1) the recipe-desc is a parallel free builder `nc_skill_recipes_desc(u,skill,
+prof_skills)` mirroring the curses recipe-gathering block VERBATIM (brown for the skill's
+own recipes, gray for cross-skill) — curses path left intact for the A/B (armor_layers
+precedent). (2) **list scroll-follow** reuses the PROVEN options idiom: UP/DOWN/RANDOMIZE
+set `rml_scroll_pending`, sync_rml `ScrollIntoView(Nearest)` the cursor skill's flattened
+row (`rml_sel_child`) in `#nc-skill-list` — needed because the skill list is long and
+curses always kept the cursor in view. (3) **desc-pane scroll**: SCROLL_UP/DOWN branch
+to `SetScrollTop` on `#nc-skill-desc` (±0.15 page) in rml mode vs the curses fold offset.
+(4) skill rows reuse theme `.item`/`.item.selected` (yellow accent); headers add a
+`.header` class that neutralizes the `.item` background (plain coloured label, matching
+curses). on_redraw `if(rml){sync_rml();return;}` else curses; `rml.open` after on_redraw;
+rml_doc dtor tears down at each `return`. Keyboard owns all nav/inc/dec/randomize/scroll.
+F4 toggle "new character" (shared). **EYEBALL CHECK (user, A/B via F4 — query_popup
+toggle ON too):** New Game → Custom → SKILLS tab: char-tab strip (SKILLS current), points
+line, upgrade-cost hint (green/red by affordability), the skill list grouped under yellow
+category headers, each skill with its level + profession `(+N)` bonus; UP/DOWN move the
+cursor (**list scrolls to follow — the make-or-break check on this long list**); LEFT/
+RIGHT raise/lower the selected skill (level + cost + points update; remember level-0→1
+gives 2 free levels); RANDOMIZE jumps; the desc pane shows the skill's description +
+unlockable recipes (brown for its own, gray for cross-skill); SCROLL_UP/DOWN scroll the
+desc pane; NEXT_TAB → Traits (curses), PREV_TAB → Stats (RmlUi). **WATCH:** (a) the
+recipe list is a from-scratch reconstruction — spot-check a skill's unlocked recipes vs
+curses. (b) RANDOMIZE in curses does NOT refresh `currentSkill` until the next UP/DOWN
+(latent curses quirk preserved for A/B — the desc/cost may lag one keypress after
+randomize in BOTH paths). (c) cursor-follow on the long list (if it doesn't track, the
+staged ScrollIntoView is already wired — flag if it over/under-scrolls).
+
+**SLICE 4 (set_traits) — CODE-COMPLETE + BUILD-GREEN (newcharacter.cpp.o 12:00:57 +
+binary relinked 12:00:59, 0 errors), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.** The TRAITS
+tab (4th tab lit). `data/gui/newchartraits.{rml,rcss}` model "newchartraits". 3-COLUMN
+multi-pane (good/bad/neutral; neutral hides when empty via `data-if="show_col2"`) — each
+column's rows BAKED as a markup string (the advinv-2b "no nested data-for" primitive,
+because the row struct `trait_entry` is function-local) and emitted via flat `data-rml`
+per column. Only the WORKING column's cursor row gets `.selected`. Render-only doc:
+char-tab strip (TRAITS=idx4) + top bar (points + good/bad budget `G/max B/-max` when
+non-freeform + the working trait's `costs/earns N points` line in the trait colour) +
+the 3 columns + a description footer (working trait desc). Per-trait colour replicates
+the curses on/off × active/passive × conflict/forbidden matrix (COL_TR_* consts) inline
+in sync (the colour state is function-local). num_good/num_bad update live on CONFIRM.
+on_redraw `if(rml){sync_rml();return;}` else curses; `rml.open` before on_redraw (anchor
+uniqueness); rml_doc dtor tears down at each `return`. Keyboard owns LEFT/RIGHT (switch
+column), UP/DOWN, CONFIRM (toggle, with all the dependency/conflict/budget `popup()`
+errors — curses popups, invariant 6), RANDOMIZE, REROLL_*, NEXT/PREV_TAB, QUIT.
+**DEFERRED (NOT bugs):** (1) the tile `character_preview` overlay is NOT drawn in rml
+mode (out of scope like the AIM minimap; zoom/clothes keys still no-op safely). (2) NO
+keyboard scroll-into-view on long columns (the mutations multi-column precedent — baked
+`data-rml` columns make per-row ScrollIntoView timing unproven; flag if cursor gets lost
+on a long good/bad list). F4 toggle "new character" (shared). **EYEBALL CHECK (user, A/B
+via F4 — query_popup toggle ON too):** New Game → Custom → TRAITS: char-tab strip
+(TRAITS current), points + good/bad budget, 3 columns (good/bad/neutral) with per-trait
+colours matching curses (taken traits brighter, conflicting/forbidden greyed); LEFT/RIGHT
+switch the working column (only its cursor highlights), UP/DOWN move, CONFIRM toggles a
+trait (budget + colours update; conflict/forbidden/over-budget show the curses popup),
+the cost line + description track the working trait; NEXT_TAB → Bionics (curses),
+PREV_TAB → Skills (RmlUi). **WATCH:** (a) no character preview in rml mode (expected).
+(b) long column cursor-follow (deferred — flag if lost). (c) the neutral column appears
+only when traits with 0 points exist.
+
+**SLICE 5 (set_bionics) — CODE-COMPLETE + BUILD-GREEN (binary relinked 12:04:41, 0
+errors), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.** The BIONICS tab (5th lit). STRUCTURAL
+CLONE of slice 4 (set_bionics is line-for-line the TRAITS tab with bionic data) —
+`data/gui/newcharbionics.{rml,rcss}` model "newcharbionics" (distinct `nc_bionics_tab`
+type; rml/rcss reuse the `nc-trait-*` classes). Same 3-column baked-markup render +
+budget + cost line + desc footer; per-bionic colour via the same COL_TR_* matrix; row
+text `bio.name.translated()`, desc `bio.description.translated()`. Keyboard owns all
+toggle/nav/reroll; tile preview not drawn in rml. F4 toggle "new character" (shared).
+**EYEBALL CHECK (user, A/B via F4 — query_popup ON):** New Game → Custom → BIONICS: same
+3-column shape as Traits but bionics (good/bad/neutral), colours/budget/cost/desc match
+curses; LEFT/RIGHT switch column, UP/DOWN move, CONFIRM toggles a CBM (conflict/forbidden
+popups), NEXT_TAB → Skills (RmlUi), PREV_TAB → Traits (RmlUi). Same deferred gaps as
+Traits (no tile preview, no long-list scroll-follow).
+
+**SLICE 6 (set_scenario) — CODE-COMPLETE + BUILD-GREEN (binary relinked 12:09:44, 0
+errors), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.** The SCENARIO tab (6th lit).
+`data/gui/newcharscenario.{rml,rcss}` model "newcharscenario". Single scenario list
+(left, `data-for` rows + scroll-follow via the proven options ScrollIntoView idiom) + a
+right info pane combining sort indicator + professions (count + default w/ point cost) +
+location + vehicle + flags (all rebuilt as one colour-tagged `info_rml` string mirroring
+the curses w_profession/w_location/w_vehicle/w_flags blocks verbatim) + a top bar (points
+w/ netPointCost +/- + the scenario cost line, green if can_pick else red) + a description
+footer (green desc, red CITY_START-unavailable note) + a filter indicator footer.
+Per-row colour: current scenario COL_SKILL_USED, CITY_START-unavailable c_dark_gray, else
+c_light_gray; cursor = `.selected`. on_redraw `if(rml){sync_rml();return;}` else curses;
+`rml.open` after on_redraw; rml_doc dtor at the single return. Keyboard owns UP/DOWN,
+CONFIRM (pick scenario → resets profession), SORT (points/name), FILTER (string_input
+Tier-0 popup → recalc), RANDOMIZE, NEXT/PREV_TAB, QUIT. F4 toggle "new character"
+(shared). **EYEBALL CHECK (user, A/B via F4 — query_popup ON):** New Game → Custom →
+SCENARIO: char-tab strip (SCENARIO current), scenario list (current scenario green,
+city-locked greyed), cursor scroll-follows UP/DOWN; the right pane shows sort + default
+profession (+cost) + location (N locations, M variants) + vehicle + flag lines matching
+curses; the cost line is green/red by affordability; the description shows below (red
+note for city-locked); SORT toggles points/name + re-sorts; FILTER popup narrows the list
++ the `<filter>` indicator updates; CONFIRM picks; NEXT_TAB → Profession (curses),
+PREV_TAB → Points (RmlUi). **WATCH:** (a) info pane is a from-scratch reconstruction —
+spot-check professions/location/vehicle/flags vs curses. (b) FILTER popup renders over
+the doc + the empty-result "Nothing found." popup (invariant 6). (c) cursor scroll-follow
+on a long scenario list.
+
+**SLICE 7 (set_profession) — CODE-COMPLETE + BUILD-GREEN (binary relinked 12:14:42, 0
+errors), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.** The PROFESSION tab (7th lit; heaviest
+list tab). `data/gui/newcharprofession.{rml,rcss}` model "newcharprofession". Same shape
+as SCENARIO (list left + scroll-follow, top bar points/cost, desc footer, filter, sort)
+PLUS: (1) a big scrollable INFO BUFFER (`info_rml`, `#nc-prof-info`) rebuilt verbatim
+from the curses `w_items` buffer — addictions/traits/skills(category-grouped)/items
+(wielded/worn/inventory)/bionics/pets/vehicle/spells/money/companions; LEFT/RIGHT scroll
+it via `SetScrollTop` (vs the curses `desc_offset`/print_scrollable). (2) a gender-swap
+line (`gender_rml`, CHANGE_GENDER). Per-row colour: current profession COL_SKILL_USED
+else c_light_gray; cursor `.selected`. Keyboard owns UP/DOWN (list, resets scroll +
+scroll-follow), LEFT/RIGHT (buffer scroll), CONFIRM (pick → swaps traits/age), SORT,
+FILTER (Tier-0 popup), CHANGE_GENDER (re-sorts), RANDOMIZE, NEXT/PREV_TAB, QUIT. Tile
+preview not drawn in rml mode. F4 toggle "new character" (shared). **EYEBALL CHECK (user,
+A/B via F4 — query_popup ON):** New Game → Custom → PROFESSION: char-tab strip
+(PROFESSION current), profession list (current green, cursor scroll-follows), cost line
+green/red; the right buffer shows items/skills/traits/bionics/etc matching curses,
+LEFT/RIGHT scroll it; sort + gender-swap lines present; CONFIRM picks (description +
+points update), CHANGE_GENDER flips gender + re-sorts + relabels, SORT toggles, FILTER
+narrows; NEXT_TAB → Stats (curses), PREV_TAB → Scenario (RmlUi). **WATCH:** (a) the info
+buffer is a big from-scratch reconstruction — spot-check items/skills/bionics vs curses.
+(b) LEFT/RIGHT scroll the buffer (not move the list). (c) cursor scroll-follow on a long
+profession list. (d) FILTER + "Nothing found" popups over the doc (invariant 6).
+
+**SLICE 8 (set_description) — DONE + EYEBALLED CLEAN (user 2026-06-16), COMMITTED.
+TOGGLE OFF. The LAST newcharacter tab → newcharacter (Tier 4 #4, the last giant) is now
+COMPLETE across all 8 slices.** (Build note: fresh mtime verified — newcharacter.cpp.o
+12:31:49 / bin 12:31:52; the first `cmake --build | rtk err` falsely reported success
+without recompiling, caught via the build-verify-mtime gotcha.) The OVERVIEW tab (8th
+lit) — the final summary form. `data/gui/newchardescription.{rml,rcss}` model
+"newchardescription". RENDER-ONLY doc: char-tab strip (OVERVIEW=idx7) + points line + an
+edit row (name / gender / height / age / location) + scenario/profession lines + SIX
+read-only summary panes (stats / skills / traits / bionics+spells / misc / gear, flex-wrap
+row, each its own `.scroll-pane`) + a keybinding guide footer. STRUCTURAL POINTS: (1) every
+pane is ONE colour-tagged string built by mirroring the curses block verbatim then
+`cata_text_to_rml` (the profession `info_rml` approach, replicated per-pane — no row
+structs; the only registered type is the shared `nc_desc_tab` for the strip). (2) the
+three EDITABLE fields (name/height/age) bake their selector highlight into the string: a
+`> ` marker + bright `c_white` label when `current_selector` points at them, `  `/
+`c_light_gray` otherwise (no extra bound bools/CSS — mirrors the curses `h_light_gray`
+cue). (3) bionics pane built ONCE (curses draws it twice — a latent curses quirk; the
+semantic rewrite drops the redundant second draw). (4) `sync_rml` uses
+`DirtyAllVariables()` (many panes; cheaper to write than 16 per-var dirties). (5) all
+editing stays keyboard + the migrated string_input_popup (name/age/height edit) +
+select_location uilist (Tier-0) + the curses popups; render-only doc, `rml.open` after
+on_redraw, rml_doc dtor tears down at each `return` (the loop returns directly).
+(6) character_preview tile overlay NOT drawn in rml mode (out of scope, like prior tabs;
+zoom/clothes keys no-op safely). F4 toggle "new character" (shared). **EYEBALL CHECK
+(user, A/B via F4 — query_popup toggle ON too, invariant 6):** New Game → Custom →
+OVERVIEW (the last tab, reached via NEXT_TAB from Skills or by completing the wizard):
+char-tab strip (OVERVIEW current), points line; the edit row shows Name / Gender (Male
+cyan / Female pink per sex) / Height / Age / Starting location; LEFT/RIGHT cycle the
+active field (the `> ` marker + bright label move between Name → Height → Age), UP/DOWN
+change height/age, CONFIRM opens the edit popup (name string / age+height int), CHANGE_GENDER
+flips Male/Female, CHOOSE_LOCATION opens the uilist; the six panes show
+stats/skills(category-grouped)/traits(display colours)/bionics+spells/misc(vehicle/
+companions/cash/pets/addictions)/gear(wielded/worn/inventory) matching curses;
+RANDOMIZE_CHAR_DESCRIPTION rerolls name/age/height/sex; SAVE_TEMPLATE + REROLL_* work;
+NEXT_TAB → "Are you SURE you're finished?" confirm (RmlUi popup if query_popup ON) →
+finishes creation, PREV_TAB → Skills (RmlUi). **WATCH:** (a) the six panes are from-scratch
+reconstructions — spot-check stats numbers, skill levels (+prof bonus), trait/bionic lists,
+gear groups vs curses. (b) the editable-field highlight (`> ` marker) tracks LEFT/RIGHT.
+(c) empty cases (no traits/bionics/skills/items → "None!"). (d) the finish/abort popups
+render over the doc (invariant 6). (e) first time the OVERVIEW dynamic doc renders —
+D3D12 (Win11) glance warranted (last-tier-first cross-check).
+
+### Tier 4 #4 (newcharacter) status (2026-06-16): CODE-COMPLETE, all 8 slices
+
+Slices 1-3 (points/stats/skills) eyeballed-clean + committed. Slices 4-7
+(traits/bionics/scenario/profession) committed build-blind (git
+`20dc0dd2c2`..`996bbafa6c`); slice 8 (description) committed this session.
+**EYEBALL: cleared 2026-06-16** — the user reached the OVERVIEW tab (idx7, last in the
+wizard) with the shared toggle ON, walking the full creator (scenario→profession→stats→
+traits→bionics→skills→overview all rendering RmlUi en route) and confirmed clean. With
+newcharacter done, **all four Tier-4 giants
+(worldfactory / main_menu / options / newcharacter) are CODE-COMPLETE** — the largest
+unpriced-risk bucket from the re-scope gate is cleared. Remaining toward the §8 rip-out:
+Tier 5 (npctalk/ranged/iexamine/trade), Tier 6 (overmap + on-map text §7), Tier 7
+(sidebar HUD), Tier 8 (F4→RmlUi), Tier 9 (minigames), plus the deferred faction (Tier 2)
+and the per-slice eyeball debt.
+
+### Tier 5 progress (interaction dialogs)
+
+- **Tier 5 screen #1: trade (trading_window::perform_trade) — CODE-COMPLETE +
+  BUILD-GREEN (trade_win.cpp.o 13:07:51 + binary relinked 13:08:28, 0 errors, fresh
+  mtime verified), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED.** First Tier-5 screen; the
+  NPC trade dialog. `data/gui/trade.{rml,rcss}` model "trade" + `trade_rmlui_enabled()`
+  toggle (rml_screen.h decl + def in trade_win.cpp) + F4 "trade" checkbox (World
+  interaction group). Render-only doc mirroring `update_win`: head bar (title /
+  credit-debt cost coloured green=accept|red / category ON|OFF toggle / keybind hints)
+  + TWO item panes (theirs left | yours right) each with an inventory header +
+  weight/volume used/max stats line + column header + a row list + filter/page footer;
+  an item-info pane shows below when TOGGLE_ITEM_INFO is on; the focused pane border
+  brightens to accent (`data-class-active` on `them_focus`/`you_focus`). STRUCTURAL
+  POINTS: (1) **renders the SAME visible page as curses, NOT a native-scroll-all list**
+  — trade uses page-relative single-char hotkeys (a-z A-Z per page) that the input loop
+  reads, so showing all rows would desync the displayed letters; the doc renders
+  `[offset, offset+entries_per_page)` and the cursor is always on-page (also sidesteps
+  the scroll-follow problem). (2) each row is ONE monospace-aligned colour-tagged string
+  (Terminus font → space-padding aligns columns): `keychar selmark name | amt weight vol
+  price`, name/qty/weight/vol in the item colour, price in its own ratio colour
+  (green/red by buy/sell delta); category headers are `header`-flagged rows (magenta, no
+  accent). (3) cursor + category-mode hilite → `.trade-row.selected` (CSS accent), NOT
+  baked `hilite()`. (4) `sync_rml` recomputes both panes each redraw mirroring
+  update_win's column-width / category / stats logic (curses `update_win` left intact for
+  the A/B — armor_layers precedent). (5) ALL interaction stays keyboard + the migrated
+  string_input_popup (filter) — render-only doc; on_redraw guards `if(rml){sync_rml();
+  return;}`, `rml.open` after on_redraw before the first redraw, rml_doc dtor tears down.
+  F4 toggle "trade" (OFF). **EYEBALL CHECK (user, A/B via F4 — string_input toggle ON for
+  the filter, invariant 6):** trade with an NPC (or shopkeeper): two panes (their inv /
+  yours), each row shows hotkey + selection mark (-/#/+) + name + amt/weight/vol/price
+  with prices coloured by deal quality; the head shows "Trading with <npc>" + the
+  Credit/Debt/Exchange cost (green if they'll accept, red if not) + category toggle;
+  SWITCH_LISTS moves focus (border accent flips), UP/DOWN move the cursor (page-relative
+  letters stay correct), letter hotkeys + LEFT/RIGHT adjust quantities, CONFIRM trades,
+  AUTOBALANCE, FILTER (popup narrows the pane + the footer shows the filter + Page x/y),
+  CATEGORY_SELECTION highlights a whole category, TOGGLE_ITEM_INFO shows the description
+  pane. **WATCH:** (a) column alignment depends on the monospace font — if a pane's
+  numbers don't line up, the baked padding is off. (b) per-pane stats (weight/vol
+  used/max) match curses; shopkeeper's own pane hides them. (c) the EXAMINE popup
+  (`show_item_data`) is a separate nested curses screen — still its own path this slice
+  (flag if it reads badly over the doc). (d) first Tier-5 dynamic doc → D3D12 (Win11)
+  glance warranted.
+
+- **Tier 5 screen #2: vending machine (iexamine::vending) — CODE-COMPLETE +
+  BUILD-GREEN (iexamine.cpp.o 13:37:30 + binary relinked 13:46:40, user-confirmed
+  clean), TOGGLE OFF, EYEBALL OWED, COMMITTED.** The ONE bespoke iexamine screen (the
+  rest of iexamine.cpp is popups/uilists, Tier-0 covered). `data/gui/vending.{rml,rcss}`
+  model "vending" + `vending_rmlui_enabled()` toggle + F4 "vending" checkbox.
+  Render-only doc: left pane = "Money left: $X" header + item list (count digit + name,
+  coloured via color_in_inventory, cursor `.selected`); right pane = item-info
+  (name+price header + `info_string()` folded description). Curses path (paged,
+  cursor-centered, scrollbar) left intact; the RmlUi list shows all items + native
+  scroll (the list is short — a vending machine — so no page/scroll-follow needed).
+  Keyboard owns UP/DOWN (wrap), CONFIRM (buy, afford-check popup), QUIT. **EYEBALL
+  CHECK (user, A/B via F4):** examine a vending machine: money header, item list with
+  count+name coloured + cursor highlight, UP/DOWN wrap the cursor, the info pane shows
+  the selected item's name/price + description, CONFIRM buys (money drops, item leaves;
+  "can't afford" popup when broke), empty machine shuts down.
+
+- **Tier 5 screen #3: npc dialogue (dialogue::opt / dialogue_window) — CODE-COMPLETE +
+  BUILD-GREEN (npctalk.cpp.o 14:01:05 + dialogue_win.cpp.o 13:58:33 + binary relinked
+  14:01:10, 0 errors, fresh mtime), TOGGLE OFF, EYEBALL OWED, COMMITTED.** The Tier-5
+  modal giant (the talk tree). `data/gui/dialogue.{rml,rcss}` model "dialogue" +
+  `dialogue_rmlui_enabled()` toggle + F4 "npc dialogue" checkbox. Render-only doc:
+  header (Dialogue: <name>) + left history pane (the exchanged words, last two messages
+  white / rest grey) + right response pane ("Your response:" + lettered option list,
+  selected option `.selected`) + keybind hints ([L]ook/[S]ize/[Y]ell/[O]pinion).
+  STRUCTURAL POINTS: (1) **dialogue::opt drives input via the RAW `inp_mngr`, NOT an
+  input_context** — so a THROWAWAY `input_context dlg_ctxt` is passed to `rml.open()`
+  only for the harness 16ms tick (computer_session precedent); the real keys stay on the
+  raw loop, the doc is render-only so the tick not driving input is harmless. (2) the doc
+  is local to `opt()` → opened + torn down PER dialogue line (each topic is a fresh
+  opt() call); the single-instance guard releases on the rml_doc dtor each return, so
+  reopen is clean. (3) history is private to `dialogue_window` → added a public
+  `history_markup()` getter (mirrors print_history's last-two-white highlight) that the
+  sync feeds through cata_text_to_rml; the curses path (print_header/display_responses)
+  is left intact for the A/B. (4) curses paging of responses → native scroll (all
+  responses shown, selected highlighted; UP/DOWN still wrap via the raw loop, PAGE keys
+  still work). F4 toggle "npc dialogue" (OFF). **EYEBALL CHECK (user, A/B via F4 —
+  query_popup ON for the hostile/helpless confirms, invariant 6):** talk to an NPC: the
+  header shows "Dialogue: <name>", the left pane shows the conversation history (newest
+  exchange brighter), the right pane lists lettered responses with the selected one
+  highlighted; UP/DOWN move the selection (wrap), letter keys + Enter pick, PAGE_UP/DOWN
+  scroll long response sets, [L]/[S]/[Y]/[O] special actions still fire; a response with
+  a hostile/helpless consequence shows the curses confirm (needs query_popup ON).
+  **WATCH:** (a) doc reopens each dialogue line — confirm no flicker / stuck guard across
+  a multi-line conversation (the reopen-per-topic path). (b) history grows correctly as
+  the conversation proceeds (newest at the bottom; scroll if long). (c) first dialogue
+  dynamic doc → D3D12 (Win11) glance.
+
+### Tier 5 status: COMPLETE (modal screens); ranged DEFERRED to Tier 6
+
+trade + vending + npc dialogue all CODE-COMPLETE + build-green + committed (eyeball owed,
+batched). **ranged/targeting is the ONLY remaining Tier-5 screen and is intentionally
+DEFERRED to Tier 6** — it is a live overlay tied to the map (world→screen projection),
+which the plan sequences AFTER the §7 world-text / Tier-6 overlay layer exists. So the
+modal Tier-5 work is done; ranged rides Tier 6.
+**UPDATE (2026-06-17): the §7 world-text layer now EXISTS (slices 4.1/4.2a committed),
+so ranged is UNBLOCKED.** It is the last interactive modal still on curses (no
+`*_rmlui_enabled` toggle, `ranged.cpp` has zero rml wiring) — see the top frontier
+banner. It is the natural next migration unit before the Tier 7/8/9 architectural tiers.
+
+**RANGED SCOPING (2026-06-17, pre-build):** bigger than a clean modal — it is
+giant-class. `target_ui` (ranged.cpp:387) has TWO render parts: (a) `draw_terrain_overlay()`
+via a `game::draw_callback_t` — the aim line / cursor / trajectory drawn ON the map
+(world→screen); this is SPRITE-PATH rendering, OUT OF SCOPE (stays like §7, dies/stays
+with the map path, not curses-text UI). (b) **`draw_ui_window()` (3905) → the `w_target`
+side info panel — the RmlUi target.** It composes ~10 `panel_*` helpers (draw_window_title /
+draw_help_notice / draw_controls_list / panel_cursor_info / panel_gun_info / panel_recoil /
+panel_spell_info / target-info…) with per-TargetMode variation (Fire / Throw / Reach /
+TurretManual / Turrets / Spell / Shape). The target-info section calls the GENERIC
+`Creature::print_info(w_target,…)` (ranged.cpp:4254) → so ranged needs the deferred
+**generic `Creature::print_info` → lines component** (3 overrides: Character / monster /
+npc), the same one faction wanted (faction used the faction-specific `*_faction_display`
+text instead; ranged uses the generic compact print_info). The panel is ONE window
+rendered per frame → NOT section-sliceable by toggle (all-or-nothing, like faction).
+**Unit = the whole `draw_ui_window` panel + the print_info lines component**, done as one
+careful build-blind pass (faction precedent: parallel `_lines()` producers, curses
+`print_info`/`panel_*` left pristine for A/B). Sized ≈ faction-plus.
+
+**RANGED PROGRESS (2026-06-17):**
+- **PIECE 1 — generic `Creature::print_info_text()` lines component — DONE + COMMITTED
+  `228d962992`, build-green.** Virtual on Creature (empty default) + monster/npc overrides
+  (Character not a target → inherits empty). Faithful to each curses `print_info` (verified
+  against source incl. npc's visibility_cap formula); curses paths pristine. No consumer
+  yet — foundation for piece 2 + later look-around.
+- **PIECE 2 — the `w_target` panel (`draw_ui_window`) — NOT STARTED (next ranged unit).**
+  Bigger than faction: `draw_ui_window` (ranged.cpp:3905) = border + `draw_window_title` +
+  `draw_help_notice` + ~7 CONDITIONAL positional sections tracked by `text_y`:
+  `panel_cursor_info`; then per-mode `panel_gun_info`+`panel_recoil` (Fire/TurretManual/
+  Shape-gun) OR `panel_spell_info` (Spell); `panel_target_info` (→ now `print_info_text`);
+  then `panel_turret_list` (Turrets) OR `panel_fire_mode_aim` (Fire) OR `draw_throw_aim`
+  (Throw); `draw_controls_list` (unless narrow). Three layout variants (`compact`/`narrow`/
+  `tiny`) + 7 TargetModes. The sub-panels (`panel_fire_mode_aim`, `draw_throw_aim`,
+  `panel_turret_list`) carry their own intricate logic → each needs a faithful text
+  producer. This is a dedicated session-sized reproduction; piece 1 deliberately landed
+  first so piece 2 starts from a proven, green foundation. Approach when resumed: parallel
+  `*_text()`/lines producers per panel section, curses `panel_*` pristine, one RmlUi doc
+  (`ranged.{rml,rcss}`) + `ranged_rmlui_enabled()` toggle + F4, render-only (keyboard owns
+  aim/fire loop; the map overlay `draw_terrain_overlay` stays curses/sprite).
+
+  **DEEP DECOMPOSITION (mapped 2026-06-17 — piece 2 is itself a multi-commit sub-project,
+  NOT one pass):** `draw_ui_window` orchestrates section producers, of which the AIM READOUT
+  is a 4-deep drawing-function tree and the rest are shallow:
+  - **Shallow (direct `*_text()` producers, low risk):** `uitext_title` (already a string
+    fn), `draw_help_notice`, `panel_cursor_info` (range/elev/targets), `panel_gun_info`
+    (firing mode + ammo), `panel_recoil`, `panel_spell_info` (cost/fail/aoe/damage/desc),
+    `panel_target_info` (→ `print_info_text` ✓ done; + the infrared/specials `describe_*`
+    buf branches), `panel_turret_list`, `draw_controls_list` (keybinds).
+  - **DEEP — the aim readout (numerically critical, MUST be eyeballed):**
+    `panel_fire_mode_aim` → `print_aim` (ranged.cpp:2157) → **`print_steadiness`** (bar) +
+    **`print_ranged_chance`** (the `*`/`+`/`|` confidence + hit-chance table); plus
+    `draw_throw_aim` (ranged.cpp:2205, the parallel Throw tree). Shared static drawing fns
+    with intricate bar/table layout + confidence math — each needs its own lines-extraction,
+    and the hit-chance/confidence numbers are the whole point.
+  **RECOMMENDED SLICES:** (2a) shallow sections + panel scaffold + doc/toggle/F4, aim section
+  stubbed to a clearly-marked WIP line (toggle OFF → safe) = first buildable commit;
+  (2b) extract `print_steadiness`+`print_ranged_chance`→lines + wire the Fire aim readout =
+  the keystone eyeball (hit-chance numbers vs curses, number-for-number); (2c) `draw_throw_aim`
+  readout for Throw/ThrowBlind. **Most eyeball-sensitive screen in the migration — do NOT
+  land the aim readout build-blind without a number-for-number A/B.**
+
+### Tier 6 progress (overmap_ui + on-map text + §7 world-text layer)
+
+**Tier 6 decomposition (multi-slice sub-project; architecturally the hardest tier):**
+1. **overmap legend sidebar** (`draw_om_sidebar`) — the text panel beside the overmap
+   tile grid. Conforming side-panel; the priced first slice. **← DONE (slice 1).**
+2. **overmap sub-screens** — search popup, note editor (already has a `draw_rml` path),
+   place-terrain/special editor. Mostly small / partly Tier-0.
+3. **on-map static labels** — city labels (`draw_city_labels`) + zone labels + static
+   `overlay_strings` → an RmlUi DOM overlay positioned via world→screen projection
+   (reuse sprite.vert constants: `SV_Position/tile_px − camera_off`). NOVEL.
+4. **§7 world-text layer** — transient/animated text (SCT now, floating damage later):
+   an imperative pooled text layer reusing the RmlUi glyph atlas/render-interface (not
+   DOM, to avoid layout thrash). FOUNDATIONAL + hardest. **Unblocks Tier-5 ranged.**
+
+NOTE: the ASCII overmap grid (`draw_ascii`, used when `!use_tiles_overmap`) is curses
+cell-text but is the MAP VIEW (like `w_terrain`) — its disposition (GPU-only vs migrate)
+is a §8 rip-out question, not slice work here.
+
+- **Tier 6 slice 1: overmap legend sidebar (overmap_ui::display / draw_om_sidebar) —
+  CODE-COMPLETE + BUILD-GREEN (overmap_ui.cpp.o 14:17:47 + binary relinked 14:18:10, 0
+  errors, fresh mtime), TOGGLE OFF, EYEBALL OWED, COMMITTED.** `data/gui/overmap.{rml,
+  rcss}` model "overmap" + `overmap_rmlui_enabled()` toggle + F4 "overmap legend"
+  checkbox. The legend is a RIGHT-SIDE panel only — the doc body is **transparent +
+  right-anchored** so the overmap tile grid (drawn underneath by the GPU/ASCII map path,
+  UNCHANGED) shows through on the left. Render-only doc, 3 flat bound strings (no row
+  vectors → nothing to register): `info_rml` (tile symbol+description / weather / debug
+  oter info / mission distance), `hints_rml` (pan hints + the ~24 keybinding hints,
+  each coloured pink when its toggle is active else magenta — scroll-pane), `footer_rml`
+  (dimension name + LEVEL/coordinates). STRUCTURAL POINTS: (1) the session ptr is
+  THREADED through `draw()` → `draw_om_sidebar` (both file-static, only called here) —
+  draw_om_sidebar early-returns into `build_om_sidebar_rml` when the ptr+handle are set,
+  else draws curses (intact for A/B); cleaner than a file-global. (2) `build_om_sidebar_rml`
+  mirrors the curses content verbatim into the 3 strings. (3) doc owned in display()
+  (local unique_ptr + rml_doc), opened on the screen's own `ictxt` (real input_context,
+  unlike dialogue), torn down by the rml_doc dtor at the single `return`. (4) the on_redraw
+  passes `rml ? sidebar.get() : nullptr` so curses runs when the toggle is off. F4 toggle
+  "overmap legend" (OFF). **EYEBALL CHECK (user, A/B via F4):** open the overmap ('m'):
+  the right legend panel shows the tile description at the cursor (symbol + name), weather
+  if visible, mission distance, the full keybinding list (toggled actions pink), and the
+  dimension + "LEVEL z, coords" footer; moving the cursor updates the description; the
+  toggle hints flip pink/magenta as you press them; the map tiles still render on the left
+  (panel doesn't cover them). **WATCH:** (a) the panel is transparent-bg right-anchored —
+  confirm the map shows through (no full-screen cover). (b) the hint list is long → it
+  scrolls in its pane. (c) first Tier-6 doc over the live map → D3D12 (Win11) glance. (d)
+  the ASCII (non-tiles) overmap still renders underneath when use_tiles_overmap is off.
+
+- **Tier 6 slice 2: overmap search box (overmap_ui::search) — CODE-COMPLETE +
+  BUILD-GREEN (overmap_ui.cpp.o 14:41:52 + binary relinked 14:41:54, 0 errors, fresh
+  mtime), TOGGLE OFF (shares overmap_rmlui_enabled()), EYEBALL OWED, COMMITTED.**
+  `data/gui/overmapsearch.{rml,rcss}` model "overmapsearch" — **reuses the overmap
+  toggle** (one overmap family gated per sub-screen; worldfactory precedent), no new
+  toggle/checkbox. Small top-right box (transparent right-anchored body) stacked OVER
+  the legend doc: `body_rml` (Search term / Result i/N / Direction dist+name, label
+  light_blue + value light_red) + `hints_rml` (cycle/confirm/quit, yellow keys). The
+  search TERM is entered via the Tier-0 string_input popup (unchanged); this migrates
+  the result box (the on_redraw). Inline rml_doc + sync_rml in search() (its own
+  ui_adaptor/ctxt — not threaded like the legend). NEXT/PREV cycle, CONFIRM, QUIT stay
+  on the loop. **EYEBALL CHECK (user, A/B via the overmap toggle, string_input ON):**
+  open overmap → SEARCH → type a term → the result box (top-right, over the legend)
+  shows the term, "Result 1/N", direction+distance, and cycle/confirm/quit hints;
+  NEXT/PREV cycle results (the map cursor jumps), CONFIRM jumps there, QUIT cancels.
+  **WATCH:** two RmlUi docs stacked (legend "overmap" + "overmapsearch") — confirm the
+  box sits cleanly over the legend, both render.
+
+**Tier 6 slice 2 scope note:** the remaining overmap sub-screens — the note-create
+TERRAIN PREVIEW (a 3×3 oter-symbol mini-grid, borderline map-view not text-UI) and the
+debug PLACE_TERRAIN/SPECIAL editor (debug-only) — are LOW-VALUE / map-adjacent and
+DEFERRED (the note's color menu + text entry are already Tier-0 uilist/string_input).
+Revisit at the §8 rip-out sweep if they keep curses alive.
+
+- **Tier 6 slice 4.1: §7 world-text layer (FIRST vertical slice — SCT through RmlUi's
+  own FontEngine) — DONE + EYEBALLED WORKING (user 2026-06-16: "SCT shows as rmlui
+  text"), TOGGLE OFF, COMMITTED.** Position/size left at defaults (px=24, dx=dy=0) —
+  user will tune the live F4 sliders later. The
+  foundational/hardest tier-6 unit, started at its cheapest real consumer. Renders the
+  tile-path scrolling combat text (SCT) through RmlUi's **own** font engine (the glyph
+  path that survives the §8 curses rip-out) instead of the curses `overlay_strings` →
+  `map_font->OutputChar` path. **KEY DESIGN FINDING (refines §7):** §7's wording "reuse
+  RmlUi render interface for raw glyphs" was imprecise — RmlUi 6.x routes font geometry
+  through `RenderManager` (managed layer), NOT the bare `RenderInterface` the project
+  wraps. The reachable native path (all public API, confirmed): `ctx->GetRenderManager()`
+  → `GetFontEngineInterface()->GetFontFaceHandle("Terminus (TTF)",…)` +
+  `GenerateString(rm, face, 0, str, {0,0}, ColourbPremultiplied, 1, shaping, meshes)` →
+  per `TexturedMesh`: `rm.MakeGeometry(mesh)` → `Geometry::Render(translation, texture)`.
+  STRUCTURAL POINTS: (1) new `rmlui_layer::world_text_begin/add/active` (rmlui_layer.{h,
+  cpp}): items submitted per frame (physical-px top-left + utf8 + 0xRRGGBBAA), COMPILED
+  in `prepare()` (Render with no open pass = compile-only, uploaded by `upload_pending`),
+  DRAWN in `render_in_pass()` UNDER the menu docs (so SCT sits on the map, under any open
+  UI). Mirrors the doc two-phase render exactly. (2) `world_text_active()` is kept OUT of
+  `active()` (which gates input) so SCT showing with no menu open does NOT steal mouse;
+  `sdl_render_frame.cpp` gates the overlay pass on `active() || world_text_active()`.
+  (3) `cata_tiles::draw_sct_frame`: toggle ON → `world_text_begin()` + `world_text_add()`
+  per SCT entry (color = `windowsPalette[FG]`, the SAME index the curses overlay path
+  feeds `windowsPalette[]` → exact A/B colour fidelity; pos = `player_to_screen`), and
+  SKIPS the `overlay_strings.emplace` (no double-draw). (4) context is sized in PHYSICAL
+  px so `player_to_screen`'s physical-px output is the translation directly (no density
+  division). F4 toggle "world text (SCT)" (OFF). **EYEBALL CHECK (user, A/B via F4):**
+  enter combat (melee a monster) so damage SCT rises off it — with the toggle ON the
+  numbers render as crisp RmlUi-font text at the right map position, colours matching the
+  curses path (toggle OFF), animate/rise + fade as before, and clear when combat ends;
+  with a menu open over combat, SCT draws UNDER the menu. **WATCH / known flags (build-
+  blind on the RmlUi runtime):** (a) **font size hardcoded `g_world_text_px=16`** — may
+  not match the curses SCT size; tunable (TODO: promote to F4 slider). (b) **HiDPI:** the
+  font size is NOT scaled by `density_ratio` (the translation is physical-px and matches,
+  but the glyph size may read small on a HiDPI display) — flag if text is too small. (c)
+  **baseline offset:** GenerateString lays on the baseline at y=0; I nudge +font_px so
+  screen_y reads as the top edge — vertical position may be slightly off, flag. (d)
+  alignment: left/center/right per-direction offset of the curses path is approximated by
+  the start position only — minor horizontal drift possible. (e) the two-phase
+  compile→draw on ad-hoc `Geometry` (vs documents) is the core unproven mechanism — if
+  SCT renders NOTHING with the toggle on (but the overlay pass fires), the deferred-
+  upload reuse on ad-hoc geometry is the suspect. (f) D3D12 (Win11) glance — first
+  non-document RmlUi geometry path.
+  **★ KEY LEARNING (cost a long debug session — carry to any future imperative
+  RmlUi-font work): `FontEngineInterface::GetFontFaceHandle(family,…)` does a DIRECT
+  family lookup with NO fallback resolution.** The shared context's font is loaded via
+  `Rml::LoadFontFace(path, /*fallback=*/true)`, which registers under the TTF's embedded
+  family AND as the fallback — document text resolves ANY family via that fallback, so
+  RCSS "just works" and HIDES whether a direct lookup would. A direct
+  `GetFontFaceHandle("Terminus (TTF)", …)` returned **0** (font not found) → no geometry
+  → nothing rendered, SILENTLY. Fix: register the font from memory under an explicit
+  family we own (`Rml::LoadFontFace(bytes, "cata-world-text", …)`, bytes retained until
+  Shutdown) and look THAT up, with `FontWeight::Auto` (bundled Terminus is weight
+  "Medium"/500, so `FontWeight::Normal`/400 also misses). SECONDARY time-sink: the
+  project's debug.log filters by DEBUG CLASS — `DC::SDL` is filtered OFF, `DC::Main`
+  shows; all diagnostics MUST use `DC::Main` or they're invisible even while the code
+  runs. The render mechanism (two-phase compile-in-prepare / draw-in-render_in_pass on
+  ad-hoc `RenderManager::MakeGeometry`+`Geometry::Render`) is now PROVEN.
+
+- **Tier 6 slice 4.2a: generalize the world-text ROUTING (all `overlay_strings` →
+  RmlUi font) — CODE-COMPLETE + BUILD-GREEN (cata_tiles.cpp.o 06:24:44 +
+  sdl_curses_draw.cpp.o 06:24:34 both newer than source; binary relinked 06:24:47,
+  fresh mtime), TOGGLE OFF (shares `world_text_rmlui_enabled()`), EYEBALL OWED,
+  COMMITTED `9167f978b7`.** Moves the RmlUi world-text routing from the SCT-specific
+  `cata_tiles::draw_sct_frame` (slice 4.1) UP to the GENERIC `overlay_strings`
+  render loop in `cata_cursesport::curses_drawwindow` (sdl_curses_draw.cpp:343/380,
+  inside the `w == g->w_terrain && use_tiles` block ONLY → clears + refills once per
+  terrain draw, not per window). NET EFFECT: the world-text layer now catches ALL
+  on-map text that reaches `overlay_strings` — SCT (font mode) + zone labels + debug
+  overlays (scent/rad/temp/vis) — in ONE place, replacing the curses `OutputChar`
+  cell loop for the whole overlay, not just SCT. STRUCTURAL POINTS: (1) the slice-4.1
+  SCT-special-case in cata_tiles.cpp is REMOVED (-29 lines: the `world_text_begin()`
+  in `draw()`, the `world_text_add` branch + skip-emplace in `draw_sct_frame`, the
+  `rmlui_layer.h` include); `draw_sct_frame` now ALWAYS emplaces SCT into
+  `overlay_strings` (font mode) so the generic path picks it up — no double-draw. (2)
+  start pixel mirrors the curses path exactly: `win->pos*font + (x_offset −
+  alignment_offset)*map_font->width + coord` (coord is already physical-px from
+  `player_to_screen`; world-text context is physical-px → translation is direct). (3)
+  colour via `windowsPalette[ft.color]` (same index the curses overlay fed) → exact
+  A/B fidelity. **BEHAVIOR DELTA vs 4.1 (intentional, arguably more correct):** with
+  `ANIMATION_SCT_USE_FONT=off`, SCT draws as TILES (never enters `overlay_strings`) so
+  it no longer force-routes to RmlUi — the world-text layer replaces the FONT path,
+  not the tile path. **NOT in this slice (deferred):** the pooled animated layer with
+  its own lifetime/motion (floating damage numbers) — animation still rides the
+  existing per-frame `overlay_strings` rebuild. F4 toggle "world text (SCT)" (OFF).
+  **EYEBALL CHECK (user, A/B via F4):** (1) combat SCT renders as RmlUi-font text,
+  colours/positions matching curses (toggle OFF), under any open menu. (2) **NEW
+  coverage — ZONE LABELS** (zone-manager labels on the map) render as RmlUi text with
+  the toggle ON. (3) **NEW coverage — DEBUG OVERLAYS** (enable scent/temp/vis debug
+  display) route through RmlUi too. (4) toggle OFF → all three fall back to the curses
+  `OutputChar` path identically. **WATCH:** (a) any `overlay_strings` source with a
+  per-entry alignment/multi-segment layout the simplified start-pixel approximates
+  (left/center/right offset is start-position only, per 4.1 flag (d)) — check zone
+  labels aren't horizontally drifted. (b) SCT in tile-mode no longer appears in the
+  RmlUi layer (the behavior delta above) — confirm that's acceptable.
+
+**§7 ON-MAP TEXT — FUNCTIONALLY COMPLETE as of slice 4.2a (pending eyeball)
+(2026-06-17).** AUDIT FINDING that collapses the remaining §7 work: ALL on-map
+overlay text flows through ONE indivisible path — 14 producer emit-sites in
+cata_tiles (zone labels, zone-dim, vehicle-AI, scent, scent-type, rad/temp, SCT) →
+the SINGLE drain loop at `sdl_curses_draw.cpp:343-412`. `formatted_text` carries no
+source tag, so the loop is indivisible — "the whole render moves as one slice." Slice
+4.2a gated that ENTIRE loop, so **every** on-map overlay-text source already routes
+through the RmlUi FontEngine layer when the toggle is ON. Grep-confirmed: no other
+overlay_strings consumer, and no direct text-draw in cata_tiles that bypasses the
+drain (only sprite/texture blits). Consequences:
+- **Slice 3 (zone/city labels) is SUBSUMED — no separate work.** Those labels were
+  always in this same drain loop; 4.2a migrated them. There are no main-map static
+  labels outside overlay_strings (overmap city labels are Tier-6 slices 1-2, done).
+- **Slice 4.2b (pooled animated layer / floating damage numbers) DEFERRED as
+  speculative polish.** SCT already IS the floating-number system (own lifetime/motion
+  via `vSCT` steps) and already animates THROUGH the layer post-4.2a. 4.2b would only
+  reimplement that for smoother sub-pixel motion — it does NOT advance the §8 rip-out
+  (the curses `OutputChar` overlay consumer is already fully bypassable). Revisit only
+  if/when the turn-stepped SCT motion is judged too coarse. One-line revert to pick up.
+- **Rip-out banked:** the `OutputChar` overlay-text drain (a curses font consumer §8
+  must delete) is now end-to-end bypassable via `world_text_rmlui_enabled()`. At §8
+  it's force-ON + deleted.
+
+§7
+world-text unblocks Tier-5 ranged. The deferred faction (Tier 2) also remains (needs the
+creature/npc-info F.2 component).
 
 ## Load-bearing architecture facts (verified this session)
 
@@ -434,6 +2147,14 @@
    in-game eyeball (A/B vs curses) → flip default ON → commit. **No phase starts
    until the prior screen's eyeball passes** (build-blind on RmlUi runtime).
 5. The map/world GPU tile render is out of scope and unchanged.
+6. **RmlUi screens REQUIRE RmlUi popups (verified 2026-06-15, worldfactory eyeball).**
+   RmlUi composites OVER the curses framebuffer, so a curses popup (`query_yn`/`popup`/
+   `query_int` family) opened by an RmlUi screen renders UNDERNEATH the screen's doc →
+   invisible → the loop blocks on an unseeable prompt ("can't exit" symptom). Therefore
+   any screen whose toggle is ON must also have the Tier-0 popup toggles ON
+   (`query_popup`/`string_input`) so popups stack as RmlUi docs on top. At the §8 mass
+   flip this is automatic; during per-screen A/B, enabling a screen toggle without the
+   popup toggles breaks its nested prompts (abort-confirm, filter, dependency errors).
 
 ---
 
@@ -569,6 +2290,20 @@ The answer to "will it look clean + support future floating damage numbers."
 - **Build:** in Tier 6, alongside migrating `overlay_strings`. Reuses the existing
   `rmlui_render_interface` GPU path; no new font system. Debug overlays
   (scent/rad/temp/vis) route through the same layer (dev-only emitters).
+
+- **MECHANISM PROVEN + RECONCILED (2026-06-16/17, supersedes a mid-course detour):**
+  the imperative layer is REAL, not the raw-atlas access the §7 wording first implied.
+  RmlUi 6.x exposes glyph layout through `FontEngineInterface::GenerateString` +
+  `RenderManager::MakeGeometry`/`Geometry::Render` (managed layer) — slice 4.1 proved
+  this end-to-end (SCT through `rmlui_layer::world_text_*`, eyeballed working), 4.2a
+  generalized it to ALL `overlay_strings`. **TOMBSTONE:** a mid-course plan
+  (`~/.claude/plans/continue-rmlui-migration-plan-md-drifting-river.md`) declared the
+  imperative path "infeasible — no imperative glyph access" and prescribed a DOM
+  overlay (`map_text_overlay.{h,cpp}` + `mapoverlay.rml`) re-synced per frame. That
+  infeasibility claim was WRONG (it predates the FontEngine discovery) — the DOM
+  module was NEVER built; on-map text is the imperative world-text layer. The DOM
+  approach stays only as a deferred fallback IF per-frame churn ever bites (it has
+  not). Do not resurrect the DOM plan.
 
 ---
 

@@ -23,6 +23,11 @@
 #include "item.h"
 #include "line.h"
 #include "output.h"
+
+#include <RmlUi/Core.h>
+
+#include "rml_screen.h"
+#include "rml_util.h"
 #include "player_activity.h"
 #include "string_formatter.h"
 #include "translations.h"
@@ -427,6 +432,144 @@ static void draw_grid( const catacurses::window &w, int left_pane_w, int mid_pan
     wnoutrefresh( w );
 }
 
+// ── RmlUi render path (full UI→RmlUi migration, Tier 2: armor layers) ─────────
+// 10th rml_doc consumer; biggest Tier-2 yet — a 4-pane render-only doc (cat
+// header / left worn-list+protection / mid item-detail+encumbrance / right
+// layering). Two contained reconstructions reuse in-TU/shared helpers without
+// touching the curses paths (kept pristine for the A/B): mid_pane_lines() (this
+// file, parallel to draw_mid_pane) and character_display::encumbrance_lines()
+// (parallel to print_encumbrance). All actions stay on input_context + popups;
+// mouse selects the left list (only when NOT in move-mode) + the bodypart arrows.
+namespace
+{
+std::vector<std::string> mid_pane_lines(
+    location_vector<item>::const_iterator const &worn_item_it,
+    const Character &c, const bodypart_id &bp )
+{
+    item *const &worn_item = *worn_item_it;
+    const int width = 40;
+    std::vector<std::string> out;
+    out.push_back( worn_item->type_name( 1 ) );
+    for( const std::string &s : clothing_properties( *worn_item, width, c, bp ) ) {
+        out.push_back( s );
+    }
+    for( const std::string &s : clothing_protection( *worn_item, width ) ) {
+        out.push_back( s );
+    }
+    const std::string layer = clothing_layer( *worn_item );
+    if( !layer.empty() ) {
+        out.push_back( layer );
+    }
+    for( const std::string &s : clothing_flags_description( *worn_item ) ) {
+        out.push_back( s );
+    }
+    const item_penalties penalties = get_item_penalties( worn_item_it, c, bp );
+    if( !penalties.body_parts_with_stacking_penalty.empty() ) {
+        const std::string layer_description = [&]() {
+            switch( worn_item->get_layer() )
+            {
+                case PERSONAL_LAYER:
+                    return _( "in your <color_light_blue>personal aura</color>" );
+                case UNDERWEAR_LAYER:
+                    return _( "<color_light_blue>close to your skin</color>" );
+                case REGULAR_LAYER:
+                    return _( "of <color_light_blue>normal</color> clothing" );
+                case WAIST_LAYER:
+                    return _( "on your <color_light_blue>waist</color>" );
+                case OUTER_LAYER:
+                    return _( "of <color_light_blue>outer</color> clothing" );
+                case BELTED_LAYER:
+                    return _( "<color_light_blue>strapped</color> to you" );
+                case AURA_LAYER:
+                    return _( "an <color_light_blue>aura</color> around you" );
+                default:
+                    return _( "Unexpected layer" );
+            }
+        }
+        ();
+        const std::string body_parts = body_part_names( penalties.body_parts_with_stacking_penalty );
+        out.push_back( string_format(
+                           vgettext( "Wearing multiple items %s on your "
+                                     "<color_light_red>%s</color> is adding encumbrance there.",
+                                     "Wearing multiple items %s on your "
+                                     "<color_light_red>%s</color> is adding encumbrance there.",
+                                     penalties.body_parts_with_stacking_penalty.size() ),
+                           layer_description, body_parts ) );
+    }
+    if( !penalties.body_parts_with_out_of_order_penalty.empty() ) {
+        const std::string body_parts = body_part_names( penalties.body_parts_with_out_of_order_penalty );
+        if( penalties.bad_items_within.empty() ) {
+            out.push_back( string_format(
+                               vgettext( "Wearing this outside items it would normally be beneath "
+                                         "is adding encumbrance to your <color_light_red>%s</color>.",
+                                         "Wearing this outside items it would normally be beneath "
+                                         "is adding encumbrance to your <color_light_red>%s</color>.",
+                                         penalties.body_parts_with_out_of_order_penalty.size() ),
+                               body_parts ) );
+        } else {
+            const std::string bad_item_name = *penalties.bad_items_within.begin();
+            out.push_back( string_format(
+                               vgettext( "Wearing this outside your <color_light_blue>%s</color> "
+                                         "is adding encumbrance to your <color_light_red>%s</color>.",
+                                         "Wearing this outside your <color_light_blue>%s</color> "
+                                         "is adding encumbrance to your <color_light_red>%s</color>.",
+                                         penalties.body_parts_with_out_of_order_penalty.size() ),
+                               bad_item_name, body_parts ) );
+        }
+    }
+    return out;
+}
+
+struct al_left_row {
+    Rml::String name_rml;
+    Rml::String storage_rml;
+    Rml::String hidden_rml;
+    bool selected = false;   // cursor row
+    bool moving = false;     // picked up for reordering (move mode)
+};
+struct al_line {
+    Rml::String text_rml;
+};
+struct al_session {
+    Rml::String cat_rml;        // "<< Torso >>" bodypart name
+    Rml::String hint_rml;       // footer key hints
+    Rml::String protect_rml;    // Total Protection block (specific bp only)
+    Rml::Vector<al_left_row> left;
+    Rml::Vector<al_line> mid;
+    Rml::Vector<al_line> encumb;
+    Rml::Vector<al_line> right;
+    bool left_empty = false;
+    Rml::DataModelHandle handle;
+};
+
+bool g_al_types_registered = false;
+
+void register_al_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_al_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<al_left_row> rh = c.RegisterStruct<al_left_row>();
+    rh.RegisterMember( "name_rml", &al_left_row::name_rml );
+    rh.RegisterMember( "storage_rml", &al_left_row::storage_rml );
+    rh.RegisterMember( "hidden_rml", &al_left_row::hidden_rml );
+    rh.RegisterMember( "selected", &al_left_row::selected );
+    rh.RegisterMember( "moving", &al_left_row::moving );
+    c.RegisterArray<Rml::Vector<al_left_row>>();
+    Rml::StructHandle<al_line> lh = c.RegisterStruct<al_line>();
+    lh.RegisterMember( "text_rml", &al_line::text_rml );
+    c.RegisterArray<Rml::Vector<al_line>>();
+    g_al_types_registered = true;
+}
+} // namespace
+
+bool &armor_layers_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = false;
+    return enabled;
+}
+
 void show_armor_layers_ui( Character &who )
 {
     /* Define required height of the right pane:
@@ -558,7 +701,174 @@ void show_armor_layers_ui( Character &who )
     int leftListSize = 0;
     int rightListSize = 0;
 
+    // RmlUi render path (Tier 2: armor layers). data/doc declared before on_redraw
+    // so the redraw can sync; opened after ctxt is built (harness 16ms tick). The
+    // multiple early returns below all exit the function → the rml_doc destructor
+    // tears down (no explicit close).
+    std::unique_ptr<al_session> data;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !data ) {
+            return;
+        }
+        const bodypart_id &bp = armor_cat[ tabindex ];
+
+        // cat header ("Sort Armor  << name >>") + right-aligned hint keys
+        const std::string name = bp.id() ? body_part_name_as_heading( bp, 1 ) : _( "All" );
+        data->cat_rml = cata_text_to_rml( colorize( _( "Sort Armor" ), c_white ) +
+                                          colorize( string_format( "  << %s >>", name ), c_yellow ) );
+        data->hint_rml = cata_text_to_rml( string_format(
+                _( "[<color_yellow>%s</color>] Hide sprite.  "
+                   "[<color_yellow>%s</color>] Change side.  "
+                   "Press [<color_yellow>%s</color>] for help.  "
+                   "Press [<color_yellow>%s</color>] to change keybindings." ),
+                ctxt.get_desc( "TOGGLE_CLOTH" ), ctxt.get_desc( "CHANGE_SIDE" ),
+                ctxt.get_desc( "USAGE_HELP" ), ctxt.get_desc( "HELP_KEYBINDINGS" ) ) );
+
+        // LEFT worn list (RmlUi renders all rows; no curses windowing)
+        data->left.clear();
+        for( int i = 0; i < leftListSize; i++ ) {
+            al_left_row r;
+            item *const worn = *access_tmp_worn( i );
+            const item_penalties penalties = get_item_penalties( access_tmp_worn( i ), who, bp );
+            r.name_rml = cata_text_to_rml( colorize( worn->display_name(),
+                                           penalties.color_for_stacking_badness() ) );
+            r.storage_rml = cata_text_to_rml( format_volume( worn->get_storage() ) );
+            r.hidden_rml = worn->has_flag( json_flag_HIDDEN )
+                           ? cata_text_to_rml( colorize( _( "H" ), c_cyan ) ) : Rml::String();
+            r.selected = ( i == leftListIndex );
+            r.moving = ( i == selected );
+            data->left.push_back( r );
+        }
+        data->left_empty = ( leftListSize == 0 );
+
+        // Total Protection block (specific bodypart only)
+        data->protect_rml.clear();
+        if( bp.id() ) {
+            const int stab = static_cast<int>( std::round( who.get_armor_cut( bp ) * 0.8f ) );
+            std::string p = _( "Total Protection:" );
+            p += "\n  " + string_format( _( "Bash: %d" ), who.get_armor_bash( bp ) );
+            p += "\n  " + string_format( _( "Cut: %d" ), who.get_armor_cut( bp ) );
+            p += "\n  " + string_format( _( "Stab: %d" ), stab );
+            p += "\n  " + string_format( _( "Ballistic: %d" ), who.get_armor_bullet( bp ) );
+            data->protect_rml = cata_text_to_rml( p );
+        }
+
+        // Append one colour-tagged line to a pane vector.
+        const auto push_line = [&]( Rml::Vector<al_line> &v, const std::string &s ) {
+            al_line ln;
+            ln.text_rml = cata_text_to_rml( s );
+            v.push_back( ln );
+        };
+
+        // MIDDLE item detail (mid_pane_lines) or the empty hint
+        data->mid.clear();
+        if( leftListSize > 0 ) {
+            for( const std::string &l : mid_pane_lines( access_tmp_worn( leftListIndex ), who, bp ) ) {
+                push_line( data->mid, l );
+            }
+        } else {
+            push_line( data->mid, _( "Nothing to see here!" ) );
+        }
+
+        // Encumbrance + warmth table (shared builder)
+        data->encumb.clear();
+        const item *sel_clothing = leftListSize > 0 ? *access_tmp_worn( leftListIndex ) : nullptr;
+        for( const std::string &l : character_display::encumbrance_lines( who, sel_clothing ) ) {
+            push_line( data->encumb, l );
+        }
+
+        // RIGHT per-bodypart layering (combine logic mirrors the curses path)
+        data->right.clear();
+        const auto combine_bp = [&who]( const bodypart_id & cover ) -> bool {
+            const bodypart_id opposite = cover.obj().opposite_part;
+            return cover != opposite &&
+            items_cover_bp( who, cover ) == items_cover_bp( who, opposite );
+        };
+        cata::flat_set<bodypart_id> rl;
+        for( const bodypart_id cover : armor_cat ) {
+            if( !combine_bp( cover ) || rl.count( cover.obj().opposite_part ) == 0 ) {
+                rl.insert( cover );
+            }
+        }
+        for( const bodypart_id cover : rl ) {
+            if( cover.id().is_null() ) {
+                continue;
+            }
+            const bool is_highlighted = cover == bp || ( combine_bp( cover ) &&
+                                        static_cast<bodypart_id>( cover.obj().opposite_part ) == bp );
+            push_line( data->right, colorize( string_format( "%s:",
+                                              body_part_name_as_heading( cover, combine_bp( cover ) ? 2 : 1 ) ),
+                                              is_highlighted ? c_yellow : c_white ) );
+            for( layering_item_info &elem : items_cover_bp( who, cover ) ) {
+                const char plus = elem.penalties.badness() > 0 ? '+' : ' ';
+                push_line( data->right, "  " +
+                           colorize( elem.name, elem.penalties.color_for_stacking_badness() ) +
+                           "  " + colorize( string_format( "%3d%c", elem.encumber, plus ), c_light_gray ) );
+            }
+        }
+
+        data->handle.DirtyVariable( "cat_rml" );
+        data->handle.DirtyVariable( "hint_rml" );
+        data->handle.DirtyVariable( "protect_rml" );
+        data->handle.DirtyVariable( "left" );
+        data->handle.DirtyVariable( "mid" );
+        data->handle.DirtyVariable( "encumb" );
+        data->handle.DirtyVariable( "right" );
+        data->handle.DirtyVariable( "left_empty" );
+    };
+
+    rml.open( armor_layers_rmlui_enabled(), "sortarmor", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        data = std::make_unique<al_session>();
+        register_al_rml_types( c );
+        c.Bind( "cat_rml", &data->cat_rml );
+        c.Bind( "hint_rml", &data->hint_rml );
+        c.Bind( "protect_rml", &data->protect_rml );
+        c.Bind( "left", &data->left );
+        c.Bind( "mid", &data->mid );
+        c.Bind( "encumb", &data->encumb );
+        c.Bind( "right", &data->right );
+        c.Bind( "left_empty", &data->left_empty );
+        // Mouse: click/hover a worn row → select it, but ONLY outside move-mode
+        // (in move-mode UP/DOWN swap the picked item; a mouse jump would desync
+        // the cursor and the picked-item marker). << / >> cycle the bodypart.
+        c.BindEventCallback( "on_left",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            if( selected >= 0 ) {
+                return;
+            }
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            if( idx >= 0 && idx < leftListSize ) {
+                leftListIndex = idx;
+            }
+        } );
+        c.BindEventCallback( "on_prev_bp",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) {
+            if( tabindex-- == 0 ) {
+                tabindex = tabcount - 1;
+            }
+            leftListIndex = leftListOffset = 0;
+            selected = -1;
+        } );
+        c.BindEventCallback( "on_next_bp",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) {
+            tabindex = ( tabindex + 1 ) % tabcount;
+            leftListIndex = leftListOffset = 0;
+            selected = -1;
+        } );
+        data->handle = c.GetModelHandle();
+    } );
+
     ui.on_redraw( [&]( ui_adaptor & ui ) {
+        // RmlUi path owns the screen — sync the model and skip curses drawing.
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         draw_grid( w_sort_armor, left_w, middle_w );
 
         werase( w_sort_cat );

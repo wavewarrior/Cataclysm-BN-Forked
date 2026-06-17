@@ -1,0 +1,47 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="construction.rcss"/>
+</head>
+<body data-model="construction">
+    <!-- Tier 2 screen #6 (construction_menu). Category tabs (shared theme
+         .tabs/.tab, dynamic Vector) + a construct list (left) + a detail pane
+         (right) that renders the existing `full_construct_buffer` folded
+         colour-tagged lines (header = selected construction name; bottom = notes;
+         speed/status hints near the tabs). The curses tab-overflow windowing and
+         the detail breakpoint-paging are dropped for native RmlUi scroll: UP/DOWN
+         move the list cursor, PAGE_UP/DOWN scroll #construct-detail (SetScrollTop
+         from the loop). All editing/build stays on input_context + popups; the
+         doc is render-only and handles mouse selection. -->
+    <div class="panel cm-panel">
+        <div class="cm-tabrow">
+            <div class="tabs cm-tabs">
+                <div class="item tab" data-for="t : tabs"
+                     data-class-selected="t.selected"
+                     data-event-click="on_tab(it_index)" data-rml="t.name_rml"></div>
+            </div>
+            <span class="cm-speed" data-rml="speed_rml"></span>
+            <span class="cm-status" data-rml="status_rml"></span>
+        </div>
+
+        <div class="cm-main">
+            <div class="cm-list scroll-pane">
+                <div class="cm-row" data-for="row : rows"
+                     data-class-selected="row.selected"
+                     data-event-mouseover="on_select(it_index)"
+                     data-event-click="on_select(it_index)"
+                     data-rml="row.name_rml"></div>
+            </div>
+
+            <div class="cm-detailwrap">
+                <div class="cm-group" data-rml="group_name_rml"></div>
+                <div id="construct-detail" class="cm-detail scroll-pane">
+                    <div class="cm-line" data-for="ln : detail"
+                         data-class-sep="ln.separator" data-rml="ln.text_rml"></div>
+                </div>
+                <div class="cm-notes" data-rml="notes_rml"></div>
+            </div>
+        </div>
+    </div>
+</body>
+</rml>

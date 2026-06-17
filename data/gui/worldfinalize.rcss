@@ -1,0 +1,50 @@
+/* Layout for the worldgen Finalize step (Tier 4 #2 slice 1). Reuses theme .panel /
+   .tabs / .tab. body must be sized + centered (the missions gotcha — otherwise the
+   panel shrink-wraps / collapses). */
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.wf-panel {
+    width: 80%;
+    min-width: 720dp;
+    height: 92%;
+    display: flex;
+    flex-direction: column;
+}
+
+.wf-tabs {
+    flex: 0 0 auto;
+}
+
+/* Worldgen steps size to content (theme .tab is flex:1, which truncates long labels). */
+.wf-tabs .tab {
+    flex: 0 0 auto;
+}
+
+.wf-body {
+    flex: 1;
+    min-height: 0;
+    padding: 16dp 8dp;
+}
+
+.wf-name {
+    display: block;
+    margin-bottom: 16dp;
+}
+
+.wf-format {
+    display: block;
+    margin-bottom: 16dp;
+}
+
+.wf-hints {
+    display: block;
+    white-space: pre-wrap;
+    color: {{fg}};
+}

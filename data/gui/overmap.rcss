@@ -1,0 +1,45 @@
+/* Layout for the overmap legend sidebar (Tier 6 slice 1). The body is transparent
+   and right-anchored so the overmap tile grid shows through; only the right legend
+   strip is an opaque panel. Reuses theme .panel / .scroll-pane. */
+
+body {
+    background-color: transparent;
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+    width: 100%;
+    height: 100%;
+}
+
+.om-panel {
+    width: 24%;
+    min-width: 280dp;
+    max-width: 460dp;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.om-info {
+    display: block;
+    flex: 0 0 auto;
+    white-space: pre-wrap;
+    border-bottom: 1dp {{bg4}};
+    padding-bottom: 4dp;
+    margin-bottom: 4dp;
+}
+
+.om-hints {
+    flex: 1;
+    min-height: 0;
+    white-space: pre-wrap;
+}
+
+.om-footer {
+    display: block;
+    flex: 0 0 auto;
+    white-space: pre-wrap;
+    border-top: 1dp {{bg4}};
+    padding-top: 4dp;
+    margin-top: 4dp;
+}

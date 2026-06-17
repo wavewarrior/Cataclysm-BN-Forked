@@ -252,6 +252,21 @@ struct animation_tuning {
     float hit_flash_intensity = 1.f;
     float attack_amplitude = 4.f;       // pixels (melee); ranged recoils at half
     float attack_duration = 0.2f;       // seconds
+    // --- fine-grained shape knobs (defaults = the former hardcoded literals) ---
+    float move_slide_dur = 0.15f;       // seconds — single-tile slide travel time
+    float move_bob_freq = 20.9f;        // bob/tilt oscillation rate
+    float move_tilt_deg = 3.f;          // peak move tilt (degrees)
+    float idle_freq = 1.6f;             // idle sway oscillation rate
+    float idle_tilt_deg = 1.2f;         // peak idle lean (degrees)
+    float idle_vbob_mult = 0.9f;        // vertical foot-plant lift, × idle_sway
+    float hit_burst_total = 0.4f;       // seconds for a full multi-hit burst
+    float hit_flash_frac = 0.6f;        // flash duration as a fraction of hit duration
+    float hit_freq = 15.7f;             // kick/tilt oscillation rate
+    float hit_tilt_deg = 5.f;           // peak hit tilt (degrees)
+    float attack_freq = 15.7f;          // lunge oscillation rate
+    float attack_ranged_mult = -0.5f;   // ranged amplitude × (negative = recoil back)
+    float attack_tilt_melee_deg = -3.f; // peak melee lunge tilt (degrees)
+    float attack_tilt_ranged_deg = 2.f; // peak ranged recoil tilt (degrees)
 };
 
 // Render-side per-frame update: detects new sim events via the *_seq counters, latches
@@ -842,6 +857,14 @@ class Creature
          * call without creating empty lines or overwriting lines.
          */
         virtual int print_info( const catacurses::window &w, int vStart, int vLines, int column ) const = 0;
+
+        /**
+         * Colour-tagged multi-line text equivalent of print_info, for RmlUi info
+         * panes (e.g. the ranged targeting panel). Parallel to print_info's drawing;
+         * the curses print_info is left untouched for an A/B-faithful toggle. Base
+         * default is empty (only the targetable subclasses — monster, npc — override).
+         */
+        virtual std::string print_info_text() const;
 
         /** Describe this creature as seen by the avatar via infrared vision. */
         void describe_infrared( std::vector<std::string> &buf ) const;

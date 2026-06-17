@@ -1,0 +1,129 @@
+/* Layout for the armor-layers / sort-armor screen (Tier 2: show_armor_layers_ui).
+   Palette/border/scrollbar/.scroll-pane come from theme.rcss (linked first). This
+   file owns the 4-pane layout. Rows + lines are display:block (RmlUi divs default
+   to inline — see the theme.rcss gotcha). */
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.sa-panel {
+    width: 96%;
+    height: 94%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Cat header: << name >> + right-aligned hint keys. */
+.sa-cat {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 6dp;
+}
+.sa-catname {
+    color: {{yellow}};
+    margin: 0 6dp;
+}
+.sa-prev, .sa-next {
+    color: {{fg}};
+    padding: 0 4dp;
+}
+.sa-prev:hover, .sa-next:hover {
+    color: {{fg0}};
+    background-color: {{bg2}};
+}
+.sa-hint {
+    flex: 1;
+    text-align: right;
+    color: {{fg}};
+}
+
+/* Three equal-ish columns. */
+.sa-main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+}
+.sa-col {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+.sa-leftcol  { flex: 0 0 31%; margin-right: 8dp; }
+.sa-midcol   { flex: 1;       margin-right: 8dp; }
+.sa-rightcol { flex: 0 0 31%; }
+
+/* Pane headers/footers (Innermost / Outermost / column captions). */
+.sa-head, .sa-foot {
+    flex: 0 0 auto;
+    color: {{fg4}};
+    display: flex;
+    flex-direction: row;
+}
+.sa-head .sa-r { flex: 1; text-align: right; }
+.sa-foot { margin-top: 2dp; }
+
+/* LEFT worn list. */
+.sa-list {
+    flex: 1;
+    min-height: 0;
+}
+.sa-row {
+    display: flex;
+    flex-direction: row;
+    padding: 0 4dp;
+    border-radius: 4dp;
+}
+.sa-row:hover { background-color: {{bg2}}; }
+.sa-row.selected {
+    background-color: {{yellow}};
+    color: {{bg-hard}};
+}
+/* Item picked up for reordering (move mode). */
+.sa-row.moving {
+    border-left: 2dp {{purple}};
+    background-color: {{bg2}};
+}
+.sa-hide { flex: 0 0 auto; width: 12dp; color: {{aqua}}; }
+.sa-name { flex: 1; }
+.sa-vol  { flex: 0 0 auto; margin-left: 6dp; color: {{fg4}}; }
+
+.sa-protect {
+    flex: 0 0 auto;
+    margin-top: 4dp;
+    white-space: pre-wrap;
+}
+
+/* MIDDLE: item detail (scrolls) over the encumbrance/warmth table (fixed). */
+.sa-mid {
+    flex: 1;
+    min-height: 0;
+}
+.sa-encumb {
+    flex: 0 0 auto;
+    margin-top: 4dp;
+    padding-top: 4dp;
+    border-top: 1dp {{bg4}};
+}
+.sa-encumb-head { color: {{fg0}}; margin-bottom: 2dp; }
+
+/* RIGHT layering list. */
+.sa-right {
+    flex: 1;
+    min-height: 0;
+}
+
+.sa-line {
+    display: block;
+    white-space: pre-wrap;
+}
+.sa-msg {
+    display: block;
+    color: {{blue}};
+}

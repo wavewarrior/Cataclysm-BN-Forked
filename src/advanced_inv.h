@@ -137,6 +137,9 @@ class advanced_inventory
         // Returns the x coordinate where the header started. The header is
         // displayed right of it, everything left of it is till free.
         int print_header( advanced_inventory_pane &pane, aim_location sel );
+        // RmlUi (AIM slice 2): the area-selection grid as markup (semantic compass
+        // 3x3 + specials), mirroring print_header's per-location colour state.
+        std::string aim_area_grid_html( advanced_inventory_pane &pane, aim_location sel );
         void init();
         /**
          * Translate an action ident from the input context to an aim_location.

@@ -75,6 +75,14 @@ class rmlui_render_interface : public Rml::RenderInterface
         void EnableScissorRegion( bool enable ) override;
         void SetScissorRegion( Rml::Rectanglei region ) override;
 
+        // Gradient decorators (linear/radial/conic + repeating). Without these,
+        // RmlUi gradient decorators silently render nothing on this backend.
+        Rml::CompiledShaderHandle CompileShader( const Rml::String &name,
+                const Rml::Dictionary &parameters ) override;
+        void RenderShader( Rml::CompiledShaderHandle shader, Rml::CompiledGeometryHandle geometry,
+                           Rml::Vector2f translation, Rml::TextureHandle texture ) override;
+        void ReleaseShader( Rml::CompiledShaderHandle shader ) override;
+
     private:
         struct impl;
         std::unique_ptr<impl> p;

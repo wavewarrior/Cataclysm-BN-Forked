@@ -30,7 +30,7 @@ body {
 .diary-title {
     flex: 0 0 auto;
     text-align: center;
-    color: #ffcc66ff;
+    color: {{yellow}};
     margin-bottom: 4dp;
 }
 
@@ -38,10 +38,10 @@ body {
 .diary-desc {
     flex: 0 0 auto;
     text-align: center;
-    color: #9a9ab0ff;
+    color: {{fg4}};
     padding-bottom: 6dp;
     margin-bottom: 6dp;
-    border-bottom: 1dp #5a5a78ff;
+    border-bottom: 1dp {{bg4}};
 }
 
 /* The three side-by-side scroll lists. */
@@ -55,12 +55,12 @@ body {
 /* Each pane gets a thin border that brightens to the accent when it has focus
    (the active pane), so the player can see which list LEFT/RIGHT moved to. */
 .diary-pane {
-    border: 1dp #5a5a78ff;
+    border: 1dp {{bg4}};
     border-radius: 4dp;
     margin: 0 4dp;
 }
 .diary-pane.active {
-    border-color: #ffcc66ff;
+    border-color: {{yellow}};
 }
 
 .diary-pages {
@@ -86,12 +86,12 @@ body {
     border-radius: 4dp;
 }
 .diary-line:hover {
-    background-color: #3a3a55ff;
-    color: #ffffffff;
+    background-color: {{bg2}};
+    color: {{fg0}};
 }
 .diary-pane.active .diary-line.selected {
-    background-color: #ffcc66ff;
-    color: #1e1e28ff;
+    background-color: {{yellow}};
+    color: {{bg-hard}};
 }
 
 /* Bottom info pane: description of the selected change. */
@@ -99,7 +99,7 @@ body {
     flex: 0 0 auto;
     margin-top: 6dp;
     padding-top: 6dp;
-    border-top: 1dp #5a5a78ff;
+    border-top: 1dp {{bg4}};
     min-height: 40dp;
-    color: #cfcfe0ff;
+    color: {{fg}};
 }

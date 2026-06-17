@@ -9,6 +9,7 @@
 #include "game.h"
 #include "game_constants.h"
 #include "map.h"
+#include "profile.h"
 #include "lighting/emitter_collector.h"
 #include "lighting/render_state.h"
 #include "lighting/sdf_pass.h"
@@ -73,6 +74,7 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
         bool rebuild_pertile, bool want_hud_snapshot, float skylight_bleed,
         float vision_blur )
 {
+    ZoneScoped;
     frame_lighting_result result;
 
     if( !rs.collector() ) {
@@ -81,7 +83,10 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
 
     constexpr float FRAME_MS = 25.0f;
 
-    auto snapshot = lighting::build_emitter_snapshot( rs.emitter_events(), FRAME_MS );
+    auto snapshot = [&]() {
+        ZoneScopedN( "light_emitter_snapshot" );
+        return lighting::build_emitter_snapshot( rs.emitter_events(), FRAME_MS );
+    }();
 
     // Phase 4: compute transparency + SDF from the current map cache.
     // Gate on active_world: g exists during the main menu but get_map()
@@ -97,6 +102,7 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
     int sdf_runtime_h = 0;
     if( rebuild_pertile && g && world_generator && world_generator->active_world
         && rs.sdf().ready() ) {
+        ZoneScopedN( "light_pertile_rebuild" );
         map &m = get_map(); // non-const for i_at etc.
         const int zlev = g->u.bub_pos().z();
         const level_cache &mc = m.access_cache( zlev );
@@ -279,6 +285,7 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
             // the inter-tile interpolation to ~1/SS tile). Per-tile value is
             // replicated into its SS×SS subcells (no sub-tile LOS data exists).
             if( static_cast<int>( mc.seen_cache.size() ) >= total ) {
+                ZoneScopedN( "light_vis_build" );
                 // Per-tile visibility FIRST, so the blur radius is in tile units.
                 std::vector<float> vtile( total, 0.0f );
                 const bool have_cam =

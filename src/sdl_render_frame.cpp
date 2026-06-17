@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <random>
 #include <string>
 #include <utility>
 
@@ -15,8 +16,11 @@
 #include "calendar.h"
 #include "cached_options.h"
 #include "cata_tiles.h"
+#include "game_constants.h"
+#include "map.h"
 #include "debug.h"
 #include "game.h"
+#include "profile.h"
 #include "output.h"
 #include "point.h"
 #include "sdl_display.h"
@@ -107,6 +111,7 @@ auto begin_frame( lighting::render_state &rs ) -> std::optional<lighting::frame_
 
 auto build_lighting( lighting::render_state &rs ) -> bool
 {
+    ZoneScopedN( "render_build_lighting" );
     bool rc_rebuild = false;
     if( !rs.collector() ) {
         return rc_rebuild;
@@ -166,6 +171,7 @@ auto build_lighting( lighting::render_state &rs ) -> bool
 auto flush_and_gather_rc( lighting::render_state &rs,
                           lighting::frame_context &ctx, bool rc_rebuild ) -> void
 {
+    ZoneScopedN( "render_flush_gather_rc" );
     if( rs.collector() ) {
         rs.collector()->flush_to_render_cb( ctx.cmd_buffer );
     }
@@ -284,6 +290,11 @@ auto assemble_light_inputs( lighting::render_state &rs,
         in.debug.player_x = static_cast<float>( g->u.bub_pos().x() ) + 0.5f;
         in.debug.player_y = static_cast<float>( g->u.bub_pos().y() ) + 0.5f;
     }
+    // Wet specular: fold the user knob with rain intensity so the sheen only shows
+    // while raining (mirrors the A3 weather-mult CPU fold). 0 = exact no-op.
+    in.debug.spec_strength = g_rain_enable
+                             ? g_spec_strength * std::clamp( g_rain_intensity, 0.f, 1.f )
+                             : 0.f;
 
     static int emit_dbg_frame = 0;
     if( ++emit_dbg_frame >= 120 ) {
@@ -511,15 +522,56 @@ auto render_world_pass_w( lighting::render_state &rs,
                            g_bloom_threshold, g_bloom_intensity );
     }
 
-    // High-fidelity rain effect: droplets + splat map fade/accumulate.
-    dbg( DL::Info ) << "rain_effect: g_rain_enable=" << g_rain_enable
-                    << ", rs.rain().ready()=" << ( rs.rain().ready() ? 1 : 0 );
-    if( g_rain_enable && rs.rain().ready() ) {
+    // Rain: world-targeted falling drops → splash rings + dark impact decals.
+    // Needs the map + camera for the sky-gated tile spawn loop.
+    const bool want_rain = g_rain_enable && rs.rain().ready();
+    if( want_rain ) {
         lighting::rain_params rp{};
-        rp.active     = true;
-        rp.intensity  = std::clamp( g_rain_intensity, 0.f, 1.f );
-        rp.wind_angle = 270.f; // default: wind from west (left-to-right on screen)
-        rp.fade_rate  = 0.98f; // wetness decay per frame (~50% in ~35 frames)
+        rp.active          = true;
+        rp.intensity       = std::clamp( g_rain_intensity, 0.f, 1.f );
+        rp.wind_angle      = 270.f; // wind from west (left-to-right on screen)
+        rp.camera_off_x    = g_vol_params.camera_off_x;
+        rp.camera_off_y    = g_vol_params.camera_off_y;
+        rp.tile_pixel_size = g_vol_params.tile_pixel_size;
+
+        if( g && tilecontext && world_generator && world_generator->active_world
+            && rp.tile_pixel_size > 0.f ) {
+            map &m = get_map();
+            const int z = g->u.bub_pos().z();
+            const level_cache &mc = m.access_cache( z );
+            const int mapsize = m.getmapsize();
+            const int map_w = mapsize * SEEX;
+            const int map_h = mapsize * SEEY;
+            const point o = tilecontext->get_tile_map_origin().raw();
+            const int cache_n = static_cast<int>( mc.outside_cache.size() );
+
+            const int tiles_x = static_cast<int>( wt->width()  / rp.tile_pixel_size ) + 2;
+            const int tiles_y = static_cast<int>( wt->height() / rp.tile_pixel_size ) + 2;
+
+            // File-local RNG so spawn jitter never perturbs the game RNG stream.
+            static std::mt19937 rain_rng{ 0x5A1Du };
+            std::uniform_int_distribution<int> dx( 0, std::max( 0, tiles_x ) );
+            std::uniform_int_distribution<int> dy( 0, std::max( 0, tiles_y ) );
+            std::uniform_real_distribution<float> dj( 0.f, 0.35f );
+
+            const int spawn = static_cast<int>( rp.intensity * 22.f );
+            for( int i = 0; i < spawn; ++i ) {
+                const int tx = o.x + dx( rain_rng );
+                const int ty = o.y + dy( rain_rng );
+                if( tx < 0 || ty < 0 || tx >= map_w || ty >= map_h ) {
+                    continue;
+                }
+                const int idx = tx * map_h + ty; // x-major (matches frame_build)
+                if( idx < cache_n && mc.outside_cache[idx] ) { // sky-exposed only
+                    // Sub-tile landing position (not grid-locked). The drop dies
+                    // here and spawns its splash + dark impact decal at this tile.
+                    const float fx = static_cast<float>( tx ) + dj( rain_rng ) + 0.15f;
+                    const float fy = static_cast<float>( ty ) + dj( rain_rng ) + 0.15f;
+                    rs.rain().add_drop( fx, fy, 0.45f + dj( rain_rng ) );
+                }
+            }
+        }
+
         rs.rain().record( ctx.cmd_buffer, wt->texture(),
                           wt->width(), wt->height(), rp );
     }
@@ -544,7 +596,11 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
     constexpr float clear_black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 
     const bool imgui_active = imgui_layer::active();
-    const bool rmlui_active = rmlui_layer::active();
+    // World text (§7, e.g. SCT) renders through the RmlUi layer even with no menu
+    // open, so the overlay pass must run when either a document OR world text is
+    // present. world_text_active() is kept OUT of rmlui_layer::active() so it does
+    // not steal mouse input (active() gates input in sdl_input).
+    const bool rmlui_active = rmlui_layer::active() || rmlui_layer::world_text_active();
     if( imgui_active ) {
         imgui_layer::new_frame();
         imgui_layer::prepare( ctx.cmd_buffer );

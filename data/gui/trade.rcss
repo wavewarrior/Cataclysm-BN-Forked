@@ -1,0 +1,131 @@
+/* Layout for the NPC trade screen (Tier 5). Reuses theme .panel / .scroll-pane.
+   Two equal panes side by side; the focused pane border brightens to accent.
+   Rows are pre-formatted monospace strings (Terminus), so columns align by
+   space-padding baked in C++ — keep white-space:pre. */
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.trade-panel {
+    width: 96%;
+    height: 96%;
+    display: flex;
+    flex-direction: column;
+}
+
+.trade-head {
+    flex: 0 0 auto;
+    border-bottom: 1dp {{bg4}};
+    padding-bottom: 4dp;
+    margin-bottom: 4dp;
+}
+
+.trade-head-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+}
+
+.trade-title {
+    display: block;
+    flex: 1;
+}
+
+.trade-cost {
+    display: block;
+    flex: 0 0 auto;
+    margin: 0 16dp;
+    font-weight: bold;
+}
+
+.trade-category {
+    display: block;
+    flex: 0 0 auto;
+}
+
+.trade-hints {
+    display: block;
+    margin-top: 2dp;
+    white-space: pre;
+}
+
+.trade-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+}
+
+.trade-pane {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    border: 1dp {{bg4}};
+    margin-right: 6dp;
+    padding: 4dp;
+}
+
+.trade-pane.active {
+    border: 1dp {{yellow}};
+}
+
+.trade-pane-name {
+    display: block;
+    flex: 0 0 auto;
+}
+
+.trade-pane-stats {
+    display: block;
+    flex: 0 0 auto;
+    white-space: pre;
+}
+
+.trade-col-header {
+    display: block;
+    flex: 0 0 auto;
+    white-space: pre;
+    border-bottom: 1dp {{bg4}};
+}
+
+.trade-list {
+    flex: 1;
+    min-height: 0;
+}
+
+.trade-row {
+    display: block;
+    white-space: pre;
+}
+
+.trade-row.header {
+    margin-top: 2dp;
+}
+
+.trade-row.selected {
+    background-color: {{yellow}};
+    color: {{bg-hard}};
+}
+
+.trade-pane-foot {
+    display: block;
+    flex: 0 0 auto;
+    white-space: pre;
+    border-top: 1dp {{bg4}};
+    padding-top: 2dp;
+}
+
+.trade-info {
+    flex: 0 0 auto;
+    max-height: 140dp;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    border-top: 1dp {{bg4}};
+    padding: 4dp 6dp;
+    color: {{fg}};
+}

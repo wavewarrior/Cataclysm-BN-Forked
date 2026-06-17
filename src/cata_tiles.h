@@ -45,8 +45,16 @@ class item;
 class optional_vpart_position;
 class effect;
 struct bionic;
+struct animation_tuning;
 
 extern void set_displaybuffer_rendertarget();
+
+// Live (F4 "Animation" tab) access to the sprite-animation tuning struct. When
+// debug_anim_override() is true, refresh_anim_frame() stops re-reading the
+// options every frame so the panel can edit these values live; it also forces
+// animations on. Defined in cata_tiles.cpp over the file-scope tuning.
+animation_tuning &debug_anim_tuning();
+bool &debug_anim_override();
 
 /** Structures */
 struct tile_type {
@@ -222,7 +230,8 @@ class texture
                                   float light_g = 1.0f,
                                   float light_b = 1.0f,
                                   float light_mul = 0.0f,
-                                  float sway = 0.0f ) const {
+                                  float sway = 0.0f,
+                                  float outline = 0.0f ) const {
             if( !atlas_tex || atlas_w <= 0 || atlas_h <= 0 ) {
                 return false;
             }
@@ -256,6 +265,7 @@ class texture
             s.rotation = static_cast<float>( rotation_degrees * 3.14159265358979323846 / 180.0 );
             s.light_mul = light_mul;
             s.pad1 = sway;            // foliage sway weight (read by sprite.vert)
+            s.pad2 = outline;         // >0.5 = hover-outline silhouette (sprite.frag)
             lighting::get_render_state().queue_tile_sprite( atlas_tex, s );
             return true;
         }
@@ -1309,9 +1319,25 @@ class cata_tiles
         // Pixel offset of the tile-drawing area from the window's top-left.
         // camera_off = op / tile_width - o  converts tile_tu → absolute map tile.
         point get_drawing_pixel_offset() const { return op; }
+        // Hover-outline: map tile currently under the mouse (nullopt = none).
+        // Set by game::handle_mouseview; read in draw_critter_at to outline the
+        // creature there. See HOVER_OUTLINE_PLAN.md.
+        void set_hover_tile( const std::optional<tripoint_bub_ms> &p ) {
+            hover_tile_ = p;
+        }
     private:
         // offset for drawing, in pixels.
         point op;
+
+        // --- Hover-outline state (HOVER_OUTLINE_PLAN.md) ---
+        // Tile under the mouse cursor; its creature (if any) gets an outline.
+        std::optional<tripoint_bub_ms> hover_tile_;
+        // True while Alt is held: outline ALL visible creatures, not just hover.
+        bool outline_all_ = false;
+        // Transient per-creature flags set in draw_critter_at, consumed by the
+        // main-sprite enqueue in draw_sprite_at.
+        bool want_outline_ = false;
+        SDL_Color outline_color_ = SDL_Color{ 255, 255, 255, 255 };
 
         std::map<tripoint_bub_ms, int> radiation_override;
         std::map<tripoint_bub_ms, ter_id> terrain_override;

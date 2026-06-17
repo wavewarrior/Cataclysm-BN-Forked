@@ -64,6 +64,37 @@ Rml::Context *context();
 // virtualized-row pitch). See SetDensityIndependentPixelRatio in new_frame.
 float density_ratio();
 
+// User UI-scale multiplier (mutable; default 1.0). Multiplies the HiDPI dp ratio
+// applied to the context, scaling font + all dp spacing across every RmlUi panel.
+// Driven by an F4 dev slider; does not affect input mapping. <1 shrinks the UI.
+float &ui_scale();
+
+// CRT post-effect knobs (F4 dev sliders). Applied every frame in new_frame() to
+// each open document as inline RCSS GRADIENT decorators — the render interface now
+// implements the shader API (CompileShader/RenderShader), so gradients render:
+//   - scanlines -> repeating-linear-gradient on the #crt-overlay element (a bare
+//                  click-through <div> opted into, drawn ON TOP so the lines cross
+//                  the bright text). Fully parametric: pitch/thickness/darkness are
+//                  the gradient stops; scroll shifts the stop offsets each frame.
+//   - vignette  -> radial-gradient on every .panel, behind content.
+// Tune in F4, then bake the chosen gradient strings into theme.rcss for the ship
+// look (they are ordinary RCSS once the values are fixed).
+struct crt_params {
+    bool enabled = true;
+    float scanline_alpha = 0.35f;     // line darkness (0..1)
+    float scanline_pitch = 4.0f;      // px, line + gap pitch
+    float scanline_thickness = 1.0f;  // px, dark-line height within the pitch
+    float roll_speed = 8.0f;          // px/sec downward scroll (0 = static)
+    float flicker = 0.05f;            // opacity-pulse amplitude (0..1)
+    float vignette_alpha = 0.5f;      // corner darkness on .panel (0..1)
+};
+crt_params &crt();
+
+// Re-apply the current ui_theme to all open documents: clears RmlUi's stylesheet
+// cache and reloads each document's stylesheet, so the FileInterface re-substitutes
+// {{tokens}} with the latest values. Call after editing theme colours live (F4).
+void reload_theme();
+
 // Load + show an .rml document into the shared context, tracking it so active()
 // reports it. Returns the document (owned by the context) or nullptr on failure.
 // Pair with close_document() — typically via an RAII wrapper in the owner's
@@ -87,6 +118,37 @@ void prepare( SDL_GPUCommandBuffer *cb );
 
 // Record RmlUi draws INTO the open swapchain pass (Context::Render).
 void render_in_pass( SDL_GPURenderPass *rp, SDL_GPUCommandBuffer *cb );
+
+// --- World-space text layer (§7) ---
+// Imperative on-map text rendered through RmlUi's OWN font engine — the glyph
+// path that survives the curses rip-out — positioned in physical screen pixels
+// (the same space player_to_screen produces; the context is sized in physical
+// px so no density division is needed). Currently fed by scrolling combat text
+// (SCT); the foundation for future floating damage numbers.
+//
+// Lifecycle mirrors the document path: items are submitted each frame (cleared
+// by world_text_begin), compiled to geometry in prepare(), and drawn in
+// render_in_pass() UNDER the menu documents. Unlike documents, world text does
+// NOT make the layer active() (that gates input) — the render gate in
+// sdl_render_frame uses active() || world_text_active() so combat text shows
+// with no menu open without stealing mouse input.
+
+// Clear this frame's submitted world-text items. Call before re-submitting.
+void world_text_begin();
+
+// Queue one text item for this frame. screen_x/screen_y = physical-pixel
+// position of the text's top-left; rgba = 0xRRGGBBAA (alpha 0xFF = opaque).
+void world_text_add( float screen_x, float screen_y, const std::string &utf8,
+                     unsigned int rgba );
+
+// True if any world-text items are queued this frame (render-gate input).
+bool world_text_active();
+
+// World-text tuning knobs (F4 dev sliders): font point size + extra x/y pixel
+// offset applied to every item. Bake the dialed-in values once settled.
+int &world_text_px();
+float &world_text_dx();
+float &world_text_dy();
 
 }  // namespace rmlui_layer
 

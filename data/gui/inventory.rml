@@ -1,0 +1,42 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="inventory.rcss"/>
+</head>
+<body data-model="inventory">
+    <!-- Tier 3 framework migration, SLICE 1 (inventory_pick_selector only, gated
+         per selector subclass via inventory_selector::uses_rml()). Title + hint
+         header / a single scrolling list of rows (visible columns flattened — true
+         multi-column side-by-side is a later slice) / footer. Each row is finished
+         markup (invlet + cell text); category rows render as a header; the active
+         column's selected row gets the cursor highlight. Keyboard owns all input
+         (the existing execute() loop); mouse-select is deferred to a later slice. -->
+    <div class="panel inv-panel">
+        <!-- SLICE 2: stats header. Title/hint on the left, the weight/volume
+             stats block right-aligned on the right (mirrors draw_header's
+             display_stats right_print). Stats vector is empty when display_stats
+             is off, so the right block collapses. -->
+        <div class="inv-header">
+            <div class="inv-header-text">
+                <div class="inv-title" data-rml="title_rml"></div>
+                <div class="inv-hint" data-rml="hint_rml"></div>
+            </div>
+            <div class="inv-stats">
+                <div class="inv-stat" data-for="s : stats" data-rml="s.text_rml"></div>
+            </div>
+        </div>
+        <!-- SLICE 2b: visible columns side-by-side. Each column's rows are baked
+             into col.html (one <div class="inv-row ..."> per row, category/selected
+             via class) so this stays a flat data-for; nested data-for is avoided. -->
+        <div class="inv-list scroll-pane">
+            <div class="inv-col" data-for="col : columns" data-rml="col.html"></div>
+        </div>
+        <!-- SLICE 6: footer carries the filter indicator (left) + nav-mode hint
+             (centered), mirroring draw_footer. -->
+        <div class="inv-footer">
+            <span class="inv-filter" data-rml="filter_rml"></span>
+            <span class="inv-mode" data-rml="footer_rml"></span>
+        </div>
+    </div>
+</body>
+</rml>

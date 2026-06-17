@@ -36,6 +36,11 @@
 #include "type_id.h"
 #include "ui_manager.h"
 
+#include <RmlUi/Core.h>
+
+#include "rml_screen.h"
+#include "rml_util.h"
+
 static const bionic_id bio_infolink( "bio_infolink" );
 
 namespace npc_factions
@@ -609,6 +614,194 @@ int npc::faction_display( const catacurses::window &fac_w, const int width ) con
     return retval;
 }
 
+int npc::follower_interaction_flag() const
+{
+    static const flag_id json_flag_TWO_WAY_RADIO( "TWO_WAY_RADIO" );
+    const bool u_has_radio = g->u.has_item_with_flag( json_flag_TWO_WAY_RADIO, true ) ||
+                             g->u.has_bionic( bio_infolink );
+    const bool guy_has_radio = has_item_with_flag( json_flag_TWO_WAY_RADIO, true ) ||
+                               has_bionic( bio_infolink );
+    const tripoint_abs_omt player_abspos = get_player_character().abs_omt_pos();
+    if( rl_dist( player_abspos, abs_omt_pos() ) > 3 ||
+        ( rl_dist( g->u.bub_pos(), bub_pos() ) > SEEX * 2 || !g->u.sees( bub_pos() ) ) ) {
+        if( u_has_radio && guy_has_radio ) {
+            // TODO: better range calculation than just elevation.
+            int max_range = 200;
+            max_range *= ( 1 + ( g->u.bub_pos().z() * 0.1 ) );
+            max_range *= ( 1 + ( bub_pos().z() * 0.1 ) );
+            if( ( ( g->u.bub_pos().z() >= 0 && bub_pos().z() >= 0 ) ||
+                  ( g->u.bub_pos().z() == bub_pos().z() ) ) &&
+                square_dist( g->u.abs_sm_pos(), abs_sm_pos() ) <= max_range ) {
+                return 2;
+            }
+        }
+        return 0;
+    }
+    return 1;
+}
+
+std::string npc::faction_info_text() const
+{
+    // Parallel to npc::faction_display, producing the same lines as one
+    // colour-tagged string for the RmlUi detail pane (curses path untouched).
+    std::vector<std::string> lines;
+    lines.emplace_back( _( "Press enter to talk to this follower" ) );
+    lines.emplace_back( _( "Press s to swap to this follower" ) );
+
+    const int flag = follower_interaction_flag();
+    std::string can_see;
+    nc_color see_color = c_light_red;
+    if( flag == 1 ) {
+        can_see = _( "Within interaction range" );
+        see_color = c_light_green;
+    } else if( flag == 2 ) {
+        can_see = _( "Within radio range" );
+        see_color = c_light_green;
+    } else {
+        static const flag_id json_flag_TWO_WAY_RADIO( "TWO_WAY_RADIO" );
+        const bool u_has_radio = g->u.has_item_with_flag( json_flag_TWO_WAY_RADIO, true ) ||
+                                 g->u.has_bionic( bio_infolink );
+        const bool guy_has_radio = has_item_with_flag( json_flag_TWO_WAY_RADIO, true ) ||
+                                   has_bionic( bio_infolink );
+        if( u_has_radio && guy_has_radio ) {
+            can_see = _( "Not within radio range" );
+        } else if( guy_has_radio && !u_has_radio ) {
+            can_see = _( "You do not have a radio" );
+        } else if( !guy_has_radio && u_has_radio ) {
+            can_see = _( "Follower does not have a radio" );
+        } else {
+            can_see = _( "Both you and follower need a radio" );
+        }
+    }
+    lines.emplace_back( colorize( can_see, see_color ) );
+
+    std::string current_status = _( "Status: " );
+    nc_color status_col = c_white;
+    if( current_target() != nullptr ) {
+        current_status += _( "In Combat!" );
+        status_col = c_light_red;
+    } else if( in_sleep_state() ) {
+        current_status += _( "Sleeping" );
+    } else if( is_following() ) {
+        current_status += _( "Following" );
+    } else if( is_leader() ) {
+        current_status += _( "Leading" );
+    } else if( is_patrolling() ) {
+        current_status += _( "Patrolling" );
+    } else if( is_guarding() ) {
+        current_status += _( "Guarding" );
+    }
+    lines.emplace_back( colorize( current_status, status_col ) );
+
+    const std::pair <std::string, nc_color> condition = hp_description();
+    lines.emplace_back( colorize( _( "Condition: " ) + condition.first, condition.second ) );
+    const std::pair <std::string, nc_color> hunger_pair = get_hunger_description();
+    const std::pair <std::string, nc_color> thirst_pair = get_thirst_description();
+    const std::pair <std::string, nc_color> fatigue_pair = get_fatigue_description();
+    const std::string nominal = pgettext( "needs", "Nominal" );
+    lines.emplace_back( colorize( _( "Hunger: " ) +
+                                  ( hunger_pair.first.empty() ? nominal : hunger_pair.first ), hunger_pair.second ) );
+    lines.emplace_back( colorize( _( "Thirst: " ) +
+                                  ( thirst_pair.first.empty() ? nominal : thirst_pair.first ), thirst_pair.second ) );
+    lines.emplace_back( colorize( _( "Fatigue: " ) +
+                                  ( fatigue_pair.first.empty() ? nominal : fatigue_pair.first ), fatigue_pair.second ) );
+    lines.emplace_back( _( "Wielding: " ) + primary_weapon().tname() );
+
+    const auto skillslist = Skill::get_skills_sorted_by( [&]( const Skill & a, const Skill & b ) {
+        const int level_a = get_skill_level( a.ident() );
+        const int level_b = get_skill_level( b.ident() );
+        return localized_compare( std::make_pair( -level_a, a.name() ),
+                                  std::make_pair( -level_b, b.name() ) );
+    } );
+    std::vector<std::string> skill_strs;
+    for( size_t i = 0; i < skillslist.size() && skill_strs.size() < 3; i++ ) {
+        if( !skillslist[ i ]->is_combat_skill() ) {
+            skill_strs.push_back( string_format( "%s: %d", skillslist[i]->name(),
+                                                 get_skill_level( skillslist[i]->ident() ) ) );
+        }
+    }
+    lines.emplace_back( string_format( _( "Best combat skill: %s: %d" ),
+                                       best_skill().obj().name(), best_skill_level() ) );
+    // Guard the skill list (curses faction_display indexes [0..2] unconditionally;
+    // here we only emit what exists).
+    std::string other = _( "Best other skills: " );
+    if( !skill_strs.empty() ) {
+        other += skill_strs[0];
+    }
+    lines.emplace_back( other );
+    for( size_t i = 1; i < skill_strs.size(); i++ ) {
+        lines.emplace_back( skill_strs[i] );
+    }
+
+    std::string out;
+    for( size_t i = 0; i < lines.size(); i++ ) {
+        if( i > 0 ) {
+            out += '\n';
+        }
+        out += lines[i];
+    }
+    return out;
+}
+
+std::string faction::faction_info_text() const
+{
+    // Parallel to faction::faction_display (curses path untouched).
+    std::string out = string_format( _( "Attitude to you:           %s" ),
+                                     fac_ranking_text( likes_u ) );
+    out += '\n';
+    out += string_format( _( "Faction strength:       %s" ), power );
+    out += '\n';
+    out += _( desc );
+    return out;
+}
+
+// ── RmlUi render path (full UI→RmlUi migration) ──────────────────────────────
+// The faction manager is a 4-tab list+detail screen (Followers / Other factions /
+// Lore / Creatures). The RmlUi doc renders the tab bar, the left list, and the
+// right detail pane (each tab's *_faction_info_text() / lore snippet run through
+// cata_text_to_rml). Render-only: the keyboard loop owns navigation + CONFIRM /
+// SWAPTONPC, and the follower interaction flag is now computed in the loop
+// (npc::follower_interaction_flag) so it no longer depends on the curses draw.
+namespace
+{
+struct faction_rml_tab {
+    std::string label_rml;
+    bool selected = false;
+};
+struct faction_rml_row {
+    std::string text_rml;
+    bool selected = false;
+};
+struct faction_rml_session {
+    Rml::Vector<faction_rml_tab> tabs;
+    Rml::Vector<faction_rml_row> rows;
+    std::string detail_rml;
+    Rml::DataModelHandle handle;
+};
+bool g_faction_types_registered = false;
+void register_faction_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_faction_types_registered ) {
+        return;
+    }
+    g_faction_types_registered = true;
+    Rml::StructHandle<faction_rml_tab> th = c.RegisterStruct<faction_rml_tab>();
+    th.RegisterMember( "label_rml", &faction_rml_tab::label_rml );
+    th.RegisterMember( "selected", &faction_rml_tab::selected );
+    c.RegisterArray<Rml::Vector<faction_rml_tab>>();
+    Rml::StructHandle<faction_rml_row> rh = c.RegisterStruct<faction_rml_row>();
+    rh.RegisterMember( "text_rml", &faction_rml_row::text_rml );
+    rh.RegisterMember( "selected", &faction_rml_row::selected );
+    c.RegisterArray<Rml::Vector<faction_rml_row>>();
+}
+} // namespace
+
+bool &faction_rmlui_enabled()
+{
+    static bool enabled = false;
+    return enabled;
+}
+
 void faction_manager::display() const
 {
     catacurses::window w_missions;
@@ -665,7 +858,96 @@ void faction_manager::display() const
     std::vector<mtype_id> creatures; // Creatures we've recorded
     mtype_id cur_creature = mtype_id::NULL_ID();
 
+    // ---- RmlUi render path (F.3 rml_doc harness) ----------------------------
+    // Render-only: tab bar + left list + right detail pane. The keyboard loop
+    // below owns navigation and CONFIRM/SWAPTONPC; the follower interaction flag
+    // is set in that loop (not here), so this doc can be skipped without breaking
+    // the actions. `rml_data` is declared before `rml` so the doc tears down while
+    // the bound buffers are alive.
+    faction_rml_session rml_data;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml ) {
+            return;
+        }
+        const std::array<std::string, 4> tab_labels = {
+            _( "YOUR FOLLOWERS" ), _( "OTHER FACTIONS" ), _( "LORE" ), _( "CREATURES" )
+        };
+        rml_data.tabs.clear();
+        for( int i = 0; i < 4; i++ ) {
+            faction_rml_tab t;
+            t.label_rml = cata_text_to_rml( tab_labels[i] );
+            t.selected = ( static_cast<int>( tab ) == i );
+            rml_data.tabs.push_back( t );
+        }
+
+        rml_data.rows.clear();
+        rml_data.detail_rml.clear();
+        const auto add_row = [&]( const std::string & text, size_t i ) {
+            faction_rml_row r;
+            r.text_rml = cata_text_to_rml( text );
+            r.selected = ( selection == i );
+            rml_data.rows.push_back( r );
+        };
+        switch( tab ) {
+            case tab_mode::TAB_FOLLOWERS:
+                for( size_t i = 0; i < followers.size(); i++ ) {
+                    add_row( followers[i]->disp_name(), i );
+                }
+                rml_data.detail_rml = guy
+                                      ? cata_text_to_rml( guy->faction_info_text() )
+                                      : cata_text_to_rml( colorize( _( "You have no followers" ), c_light_red ) );
+                break;
+            case tab_mode::TAB_OTHERFACTIONS:
+                for( size_t i = 0; i < valfac.size(); i++ ) {
+                    add_row( _( valfac[i]->name ), i );
+                }
+                rml_data.detail_rml = cur_fac
+                                      ? cata_text_to_rml( cur_fac->faction_info_text() )
+                                      : cata_text_to_rml( colorize( _( "You don't know of any factions." ), c_light_red ) );
+                break;
+            case tab_mode::TAB_LORE:
+                for( size_t i = 0; i < lore.size(); i++ ) {
+                    add_row( _( lore[i].second ), i );
+                }
+                rml_data.detail_rml = snippet != nullptr
+                                      ? cata_text_to_rml( SNIPPET.get_snippet_by_id( snippet->first ).value().translated() )
+                                      : cata_text_to_rml( colorize( _( "You haven't learned anything about the world." ),
+                                              c_light_red ) );
+                break;
+            case tab_mode::TAB_CREATURES:
+                for( size_t i = 0; i < creatures.size(); i++ ) {
+                    add_row( string_format( "%s  %s", colorize( creatures[i]->sym, creatures[i]->color ),
+                                            creatures[i]->nname() ), i );
+                }
+                rml_data.detail_rml = !cur_creature.is_null()
+                                      ? cata_text_to_rml( cur_creature->faction_info_text() )
+                                      : cata_text_to_rml( colorize(
+                                              _( "You haven't recorded sightings of any creatures.  Taking photos can be a good way to keep track of them." ),
+                                              c_light_red ) );
+                break;
+            case tab_mode::NUM_TABS:
+                break;
+        }
+        rml_data.handle.DirtyVariable( "tabs" );
+        rml_data.handle.DirtyVariable( "rows" );
+        rml_data.handle.DirtyVariable( "detail_rml" );
+    };
+    rml.open( faction_rmlui_enabled(), "faction", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        register_faction_rml_types( c );
+        c.Bind( "tabs", &rml_data.tabs );
+        c.Bind( "rows", &rml_data.rows );
+        c.Bind( "detail_rml", &rml_data.detail_rml );
+        rml_data.handle = c.GetModelHandle();
+    } );
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        // RmlUi path owns the screen — sync the model and skip the curses draw.
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         werase( w_missions );
 
         for( int i = 3; i < FULL_SCREEN_HEIGHT - 1; i++ ) {
@@ -701,12 +983,10 @@ void faction_manager::display() const
                                         followers[i]->disp_name() );
                     }
                     if( guy ) {
-                        int retval = guy->faction_display( w_missions, 31 );
-                        if( retval == 2 ) {
-                            radio_interactable = true;
-                        } else if( retval == 1 ) {
-                            interactable = true;
-                        }
+                        // interactable / radio_interactable are set in the input loop
+                        // (from follower_interaction_flag) so the RmlUi path keeps them
+                        // working; here we only draw.
+                        guy->faction_display( w_missions, 31 );
                     } else {
                         mvwprintz( w_missions, point( 31, 4 ), c_light_red, no_ally );
                     }
@@ -850,6 +1130,11 @@ void faction_manager::display() const
         if( tab == tab_mode::TAB_FOLLOWERS ) {
             if( selection < followers.size() ) {
                 guy = followers[selection];
+                // Compute the interaction flag here (not in the draw) so both the
+                // curses and RmlUi paths get it.
+                const int flag = guy->follower_interaction_flag();
+                radio_interactable = ( flag == 2 );
+                interactable = ( flag == 1 );
             }
             active_vec_size = followers.size();
         } else if( tab == tab_mode::TAB_OTHERFACTIONS ) {

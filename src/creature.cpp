@@ -201,7 +201,7 @@ void update_animation_state( animation_state &s, const animation_tuning &t, doub
         // Slide: sprite travels from the old tile toward the new over ~0.15s. Output in
         // TILE units (renderer scales by tile size). Only for a true single-step move.
         if( s.move_slide ) {
-            const float slide_dur = 0.15f;
+            const float slide_dur = t.move_slide_dur;
             const float frac = std::min( 1.f, dt / slide_dur );
             const float remain = 1.f - frac;                 // 1 at start, 0 arrived
             s.slide_offset_x = -s.move_dir_x * remain;
@@ -214,11 +214,11 @@ void update_animation_state( animation_state &s, const animation_tuning &t, doub
             s.slide_offset_y = 0.f;
         }
         const float decay = std::max( 0.f, 1.f - dt / t.bob_duration );
-        const float phase = dt * 20.9f;
+        const float phase = dt * t.move_bob_freq;
         // Up-only hop: screen +y is down, so a positive bob would sink the sprite into the
         // floor. Use -|sin| so the sprite only ever rises above its feet, then settles.
         s.bob_offset_y = -std::fabs( std::sin( phase ) ) * t.bob_amplitude * decay;
-        s.tilt_degrees = std::sin( phase ) * 3.f * decay;
+        s.tilt_degrees = std::sin( phase ) * t.move_tilt_deg * decay;
     } else {
         s.slide_offset_x = s.slide_offset_y = 0.f;
         s.bob_offset_y = 0.f;
@@ -229,11 +229,11 @@ void update_animation_state( animation_state &s, const animation_tuning &t, doub
     // idle_phase desyncs creatures so a horde doesn't sway in unison. Low frequency reads
     // as a relaxed shift of weight rather than a jitter.
     if( t.breathing ) {
-        const float sway = std::sin( static_cast<float>( now ) * 1.6f + idle_phase );
+        const float sway = std::sin( static_cast<float>( now ) * t.idle_freq + idle_phase );
         s.idle_offset_x = sway * t.idle_sway;                        // shift left/right
-        s.idle_tilt = sway * 1.2f;                                   // lean with the weight
+        s.idle_tilt = sway * t.idle_tilt_deg;                        // lean with the weight
         // Vertical bob: rises on each foot plant (twice per sway cycle) for an up/down bounce.
-        s.idle_offset_y = -std::fabs( sway ) * t.idle_sway * 0.9f;
+        s.idle_offset_y = -std::fabs( sway ) * t.idle_sway * t.idle_vbob_mult;
     } else {
         s.idle_offset_x = 0.f;
         s.idle_offset_y = 0.f;
@@ -248,7 +248,7 @@ void update_animation_state( animation_state &s, const animation_tuning &t, doub
         const uint32_t pending = s.hit_push - s.hit_consumed;
         // Shrink per-hit duration as the queue deepens so the whole burst stays ~0.4s.
         const float eff_dur = pending > 1u
-                              ? std::max( 0.08f, 0.4f / static_cast<float>( pending ) )
+                              ? std::max( 0.08f, t.hit_burst_total / static_cast<float>( pending ) )
                               : t.hit_duration;
         const bool active_done = ( s.hit_active.seq == 0 ) ||
                                  ( static_cast<float>( now - s.hit_wall ) >= eff_dur );
@@ -260,16 +260,17 @@ void update_animation_state( animation_state &s, const animation_tuning &t, doub
         }
         const float dt = static_cast<float>( now - s.hit_wall );
         const float cur_dur = pending > 1u
-                              ? std::max( 0.08f, 0.4f / static_cast<float>( std::max( 1u, pending ) ) )
+                              ? std::max( 0.08f,
+                                          t.hit_burst_total / static_cast<float>( std::max( 1u, pending ) ) )
                               : t.hit_duration;
-        const float flash_dur = cur_dur * 0.6f;
+        const float flash_dur = cur_dur * t.hit_flash_frac;
         s.hit_flash = std::max( 0.f, 1.f - dt / flash_dur ) * t.hit_flash_intensity;
         const float decay = std::max( 0.f, 1.f - dt / cur_dur );
-        const float phase = dt * 15.7f;
+        const float phase = dt * t.hit_freq;
         const float kick = std::cos( phase ) * t.hit_push * decay * s.hit_active.intensity;
         s.hit_offset_x = kick * s.hit_active.dir_x;
         s.hit_offset_y = kick * s.hit_active.dir_y;
-        s.hit_tilt = std::sin( phase ) * ( 5.f * static_cast<float>( M_PI ) / 180.f ) * decay;
+        s.hit_tilt = std::sin( phase ) * ( t.hit_tilt_deg * static_cast<float>( M_PI ) / 180.f ) * decay;
         if( decay <= 0.f && s.hit_consumed >= s.hit_push ) {
             s.hit_active = animation_state::hit_evt{};       // burst finished; clear slot
         }
@@ -287,13 +288,14 @@ void update_animation_state( animation_state &s, const animation_tuning &t, doub
         }
         const float dt = static_cast<float>( now - s.attack_wall );
         const float decay = std::max( 0.f, 1.f - dt / t.attack_duration );
-        const float phase = dt * 15.7f;
-        const float amp = s.attack_ranged ? -t.attack_amplitude * 0.5f : t.attack_amplitude;
+        const float phase = dt * t.attack_freq;
+        const float amp = s.attack_ranged ? t.attack_amplitude * t.attack_ranged_mult : t.attack_amplitude;
         const float push = std::sin( phase ) * amp * decay;
         s.attack_offset_x = push * s.attack_dir_x;
         s.attack_offset_y = push * s.attack_dir_y;
         s.attack_tilt = std::sin( phase ) *
-                        ( ( s.attack_ranged ? 2.f : -3.f ) * static_cast<float>( M_PI ) / 180.f ) * decay;
+                        ( ( s.attack_ranged ? t.attack_tilt_ranged_deg : t.attack_tilt_melee_deg ) *
+                          static_cast<float>( M_PI ) / 180.f ) * decay;
     } else {
         s.attack_offset_x = s.attack_offset_y = 0.f;
         s.attack_tilt = 0.f;
@@ -2692,6 +2694,11 @@ void Creature::load_hit_range( const JsonObject &jo )
 void Creature::reset_hit_range()
 {
     dispersion_for_even_chance_of_good_hit = default_dispersion_for_ecogh;
+}
+
+std::string Creature::print_info_text() const
+{
+    return std::string();
 }
 
 void Creature::describe_infrared( std::vector<std::string> &buf ) const

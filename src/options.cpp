@@ -41,6 +41,10 @@
 #include "ui_manager.h"
 #include "worldfactory.h"
 
+#include <RmlUi/Core.h>
+#include "rml_screen.h"
+#include "rml_util.h"
+
 #include "cata_tiles.h"
 
 #include <algorithm>
@@ -3501,6 +3505,59 @@ struct string_col {
     string_col( const std::string &s, nc_color col ) : s( s ), col( col ) { }
 };
 
+// --- RmlUi render path (Tier 4 screen #1) -----------------------------------
+// Render-only data model for the options screen. Keyboard/input stays on the
+// input_context; the doc mirrors the page tabs + grouped two-column list + tooltip.
+namespace
+{
+struct opt_rml_tab {
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct opt_rml_row {
+    Rml::String num_rml;
+    Rml::String name_rml;
+    Rml::String value_rml;
+    bool is_header = false;
+    bool selected = false;
+};
+struct opt_rml_session {
+    Rml::Vector<opt_rml_tab> tabs;
+    Rml::Vector<opt_rml_row> rows;
+    Rml::String tooltip_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_options_types_registered = false;
+
+void register_options_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_options_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<opt_rml_tab> th = c.RegisterStruct<opt_rml_tab>();
+    th.RegisterMember( "name_rml", &opt_rml_tab::name_rml );
+    th.RegisterMember( "selected", &opt_rml_tab::selected );
+    c.RegisterArray<Rml::Vector<opt_rml_tab>>();
+
+    Rml::StructHandle<opt_rml_row> rh = c.RegisterStruct<opt_rml_row>();
+    rh.RegisterMember( "num_rml", &opt_rml_row::num_rml );
+    rh.RegisterMember( "name_rml", &opt_rml_row::name_rml );
+    rh.RegisterMember( "value_rml", &opt_rml_row::value_rml );
+    rh.RegisterMember( "is_header", &opt_rml_row::is_header );
+    rh.RegisterMember( "selected", &opt_rml_row::selected );
+    c.RegisterArray<Rml::Vector<opt_rml_row>>();
+
+    g_options_types_registered = true;
+}
+} // namespace
+
+bool &options_rmlui_enabled()
+{
+    static bool enabled = false;
+    return enabled;
+}
+
 std::string options_manager::show( bool ingame, const bool world_options_only,
                                    const std::function<bool()> &on_quit )
 {
@@ -3594,7 +3651,197 @@ std::string options_manager::show( bool ingame, const bool world_options_only,
     ui_adaptor ui;
     ui.on_screen_resize( init_windows );
     init_windows( ui );
+
+    // Shared name/value formatter — the curses on_redraw and the RmlUi sync_rml below
+    // both call this, so the option colour/prefix rules can never drift between paths.
+    const auto fmt_name_value = [&]( const PageItem & it, bool is_selected,
+                                     options_container & cOPTIONS )
+    -> std::pair<string_col, string_col> {
+        const char *IN_GROUP_PREFIX = ": ";
+        switch( it.type )
+        {
+            case ItemType::BlankLine: {
+                std::string name = it.group.empty() ? "" : IN_GROUP_PREFIX;
+                return { string_col( name, c_white ), string_col() };
+            }
+            case ItemType::GroupHeader: {
+                bool expanded = groups_state[it.group];
+                std::string name = expanded ? "- " : "+ ";
+                name += find_group( it.group ).name_.translated();
+                return std::make_pair( string_col( name, c_white ), string_col() );
+            }
+            case options_manager::ItemType::Option: {
+                const cOpt &opt = cOPTIONS.find( it.data )->second;
+                const bool hasPrerequisite = opt.hasPrerequisite();
+                const bool hasPrerequisiteFulfilled = opt.checkPrerequisite();
+
+                std::string name_prefix = it.group.empty() ? "" : IN_GROUP_PREFIX;
+                string_col name( name_prefix + opt.getMenuText(), !hasPrerequisite ||
+                                 hasPrerequisiteFulfilled ? c_white : c_light_gray );
+
+                nc_color cLineColor;
+                if( hasPrerequisite && !hasPrerequisiteFulfilled ) {
+                    cLineColor = c_light_gray;
+                } else if( opt.getValue() == "false" || opt.getValue() == "disabled" || opt.getValue() == "off" ) {
+                    cLineColor = c_light_red;
+                } else {
+                    cLineColor = c_light_green;
+                }
+
+                string_col value( opt.getValueName(), is_selected ? hilite( cLineColor ) : cLineColor );
+
+                return std::make_pair( name, value );
+            }
+            default:
+                abort();
+        }
+    };
+
+    // RmlUi render path (Tier 4 screen #1, standalone mode only — world_options_only
+    // keeps its curses worldgen-tab chrome until slice 2). Render-only: keyboard stays
+    // on the input_context; the doc mirrors page tabs + grouped list + tooltip.
+    std::unique_ptr<opt_rml_session> data;
+    std::vector<int> rml_visible;
+    // Keyboard nav (UP/DOWN/tab) sets rml_scroll_pending so sync_rml scrolls the
+    // selected row into view (native scroll otherwise doesn't follow the cursor).
+    // NOT set on mouse-select, so a parked mouse / wheel scroll isn't fought.
+    int rml_sel_child = -1;
+    bool rml_scroll_pending = false;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml ) {
+            return;
+        }
+        options_container &cOPTIONS = ( ingame || world_options_only ) && iCurrentPage == iWorldOptPage ?
+                                      ACTIVE_WORLD_OPTIONS : OPTIONS;
+        const Page &page = pages_[iCurrentPage];
+        const std::vector<PageItem> &page_items = page.items_;
+
+        // Tab strip. World-options-only mode (worldfactory wizard) shows the 3 worldgen
+        // steps with "World Options" current (render-only — mirrors draw_worldgen_tabs;
+        // wizard nav is keyboard). Otherwise the page tabs (ingame relabels world page).
+        data->tabs.clear();
+        if( world_options_only ) {
+            const std::vector<std::string> steps = {
+                _( "World Mods" ), _( "World Options" ), _( "Finalize World" )
+            };
+            for( size_t i = 0; i < steps.size(); i++ ) {
+                opt_rml_tab t;
+                t.name_rml = cata_text_to_rml( colorize( steps[i], c_light_green ) );
+                t.selected = i == 1;
+                data->tabs.push_back( t );
+            }
+        } else {
+            for( int i = 0; i < static_cast<int>( pages_.size() ); i++ ) {
+                opt_rml_tab t;
+                std::string nm = ( ingame && i == iWorldOptPage ) ? _( "Current world" ) :
+                                 pages_[i].name_.translated();
+                t.name_rml = cata_text_to_rml( colorize( nm, c_light_green ) );
+                t.selected = i == iCurrentPage;
+                data->tabs.push_back( t );
+            }
+        }
+
+        // Visible entries (collapsed groups hide their members) → flat row list.
+        // rml_visible maps a row index back to its page_items index for on_select.
+        data->rows.clear();
+        rml_visible.clear();
+        rml_sel_child = -1;
+        for( int i = 0; i < static_cast<int>( page_items.size() ); i++ ) {
+            const PageItem &it = page_items[i];
+            const bool visible = it.type == ItemType::GroupHeader || groups_state[it.group];
+            if( !visible ) {
+                continue;
+            }
+            const bool sel = i == iCurrentLine;
+            if( sel ) {
+                rml_sel_child = static_cast<int>( data->rows.size() );
+            }
+            std::pair<string_col, string_col> nv = fmt_name_value( it, false, cOPTIONS );
+            std::string name = sel ? ">> " + nv.first.s : nv.first.s;
+            opt_rml_row r;
+            r.num_rml = std::to_string( i + 1 );
+            r.name_rml = cata_text_to_rml( colorize( name, nv.first.col ) );
+            r.value_rml = cata_text_to_rml( colorize( nv.second.s, nv.second.col ) );
+            r.is_header = it.type == ItemType::GroupHeader;
+            r.selected = sel;
+            data->rows.push_back( r );
+            rml_visible.push_back( i );
+        }
+
+        // Tooltip for the selected entry (+ the ingame world-options note).
+        const PageItem &curr_item = page_items[iCurrentLine];
+        std::string tooltip = curr_item.fmt_tooltip( find_group( curr_item.group ), cOPTIONS );
+        if( ingame && iCurrentPage == iWorldOptPage ) {
+            tooltip += "\n";
+            tooltip += colorize( _( "Note: " ), c_light_red );
+            tooltip += _( "Some of these options may produce unexpected results if changed." );
+        }
+        data->tooltip_rml = cata_text_to_rml( tooltip );
+
+        data->handle.DirtyVariable( "tabs" );
+        data->handle.DirtyVariable( "rows" );
+        data->handle.DirtyVariable( "tooltip_rml" );
+
+        // Follow the keyboard cursor with the native scroll (minimal scroll change).
+        if( rml_scroll_pending && rml_sel_child >= 0 ) {
+            rml_scroll_pending = false;
+            if( Rml::Element *list = rml.document()->GetElementById( "opt-list" ) ) {
+                if( rml_sel_child < list->GetNumChildren() ) {
+                    list->GetChild( rml_sel_child )->ScrollIntoView(
+                        Rml::ScrollIntoViewOptions( Rml::ScrollAlignment::Nearest ) );
+                }
+            }
+        }
+    };
+    // world_options_only is reached ONLY from the worldfactory wizard, so that step
+    // rides the worldfactory toggle (one switch lights the whole wizard). Standalone
+    // options (main menu / in-game) uses its own toggle.
+    rml.open( world_options_only ? worldfactory_rmlui_enabled() : options_rmlui_enabled(),
+              "options", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        data = std::make_unique<opt_rml_session>();
+        register_options_rml_types( c );
+        c.Bind( "tabs", &data->tabs );
+        c.Bind( "rows", &data->rows );
+        c.Bind( "tooltip_rml", &data->tooltip_rml );
+        c.BindEventCallback( "on_tab",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            // In world_options_only mode the tab strip shows the worldgen wizard
+            // steps (render-only; navigation is keyboard PREV_TAB/NEXT_TAB → returns
+            // to worldfactory). Clicks must not switch options pages.
+            if( world_options_only ) {
+                return;
+            }
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            if( idx >= 0 && idx < static_cast<int>( pages_.size() ) ) {
+                iCurrentPage = idx;
+                iCurrentLine = 0;
+                iStartPos = 0;
+            }
+        } );
+        c.BindEventCallback( "on_select",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            if( idx >= 0 && idx < static_cast<int>( rml_visible.size() ) ) {
+                iCurrentLine = rml_visible[idx];
+            }
+        } );
+        data->handle = c.GetModelHandle();
+    } );
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        // RmlUi path owns the screen — sync the model and skip curses drawing.
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         werase( w_options_header );
         werase( w_options_border );
         werase( w_options_tooltip );
@@ -3640,49 +3887,6 @@ std::string options_manager::show( bool ingame, const bool world_options_only,
             }
         }
 
-        // Format name & value strings for given entry
-        const auto fmt_name_value = [&]( const PageItem & it, bool is_selected )
-        -> std::pair<string_col, string_col> {
-            const char *IN_GROUP_PREFIX = ": ";
-            switch( it.type )
-            {
-                case ItemType::BlankLine: {
-                    std::string name = it.group.empty() ? "" : IN_GROUP_PREFIX;
-                    return { string_col( name, c_white ), string_col() };
-                }
-                case ItemType::GroupHeader: {
-                    bool expanded = groups_state[it.group];
-                    std::string name = expanded ? "- " : "+ ";
-                    name += find_group( it.group ).name_.translated();
-                    return std::make_pair( string_col( name, c_white ), string_col() );
-                }
-                case options_manager::ItemType::Option: {
-                    const cOpt &opt = cOPTIONS.find( it.data )->second;
-                    const bool hasPrerequisite = opt.hasPrerequisite();
-                    const bool hasPrerequisiteFulfilled = opt.checkPrerequisite();
-
-                    std::string name_prefix = it.group.empty() ? "" : IN_GROUP_PREFIX;
-                    string_col name( name_prefix + opt.getMenuText(), !hasPrerequisite ||
-                                     hasPrerequisiteFulfilled ? c_white : c_light_gray );
-
-                    nc_color cLineColor;
-                    if( hasPrerequisite && !hasPrerequisiteFulfilled ) {
-                        cLineColor = c_light_gray;
-                    } else if( opt.getValue() == "false" || opt.getValue() == "disabled" || opt.getValue() == "off" ) {
-                        cLineColor = c_light_red;
-                    } else {
-                        cLineColor = c_light_green;
-                    }
-
-                    string_col value( opt.getValueName(), is_selected ? hilite( cLineColor ) : cLineColor );
-
-                    return std::make_pair( name, value );
-                }
-                default:
-                    abort();
-            }
-        };
-
         // Draw separation lines
         for( int x : vert_lines ) {
             for( int y = 0; y < iContentHeight; y++ ) {
@@ -3716,7 +3920,7 @@ std::string options_manager::show( bool ingame, const bool world_options_only,
             }
 
             const PageItem &curr_item = page_items[visible_items[i]];
-            auto name_value = fmt_name_value( curr_item, is_selected );
+            auto name_value = fmt_name_value( curr_item, is_selected, cOPTIONS );
 
             const std::string name = utf8_truncate( name_value.first.s, name_width );
             mvwprintz( w_options, point( name_col + 3, line_pos ), name_value.first.col, name );
@@ -3852,6 +4056,7 @@ std::string options_manager::show( bool ingame, const bool world_options_only,
         };
 
         if( action == "DOWN" ) {
+            rml_scroll_pending = true;
             do {
                 iCurrentLine++;
                 if( iCurrentLine >= static_cast<int>( page_items.size() ) ) {
@@ -3859,6 +4064,7 @@ std::string options_manager::show( bool ingame, const bool world_options_only,
                 }
             } while( !is_selectable( iCurrentLine ) );
         } else if( action == "UP" ) {
+            rml_scroll_pending = true;
             do {
                 iCurrentLine--;
                 if( iCurrentLine < 0 ) {
@@ -3866,6 +4072,7 @@ std::string options_manager::show( bool ingame, const bool world_options_only,
                 }
             } while( !is_selectable( iCurrentLine ) );
         } else if( action == "NEXT_TAB" ) {
+            rml_scroll_pending = true;
             iCurrentLine = 0;
             iStartPos = 0;
             iCurrentPage++;
@@ -3874,6 +4081,7 @@ std::string options_manager::show( bool ingame, const bool world_options_only,
             }
             sfx::play_variant_sound( "menu_move", "default", 100 );
         } else if( action == "PREV_TAB" ) {
+            rml_scroll_pending = true;
             iCurrentLine = 0;
             iStartPos = 0;
             iCurrentPage--;

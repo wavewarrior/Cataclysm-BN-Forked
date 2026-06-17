@@ -1,0 +1,66 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="sortarmor.rcss"/>
+</head>
+<body data-model="sortarmor">
+    <!-- Tier 2 screen (show_armor_layers_ui). Biggest Tier-2 yet: a 4-pane
+         render-only doc. cat header (bodypart cycler << name >> + hint keys); LEFT
+         = worn items for the current bodypart (cursor + move-mode marker + hidden
+         "H" + per-stacking-penalty colour + storage), a Total-Protection block,
+         and Innermost/Outermost labels; MIDDLE = item detail (mid_pane_lines) over
+         an encumbrance+warmth table (character_display::encumbrance_lines); RIGHT =
+         per-bodypart layering list. All actions (move/equip/remove/side/hide/sort/
+         invlets) stay on input_context + popups; the doc is render-only. Mouse
+         clicks the left list (gated to non-move-mode) + the << / >> bodypart
+         arrows. Static labels are literal English (i18n gap, §8/F.1 sweep). -->
+    <div class="panel sa-panel">
+        <div class="sa-cat">
+            <span class="sa-prev" data-event-click="on_prev_bp">&lt;&lt;</span>
+            <span class="sa-catname" data-rml="cat_rml"></span>
+            <span class="sa-next" data-event-click="on_next_bp">&gt;&gt;</span>
+            <span class="sa-hint" data-rml="hint_rml"></span>
+        </div>
+
+        <div class="sa-main">
+            <!-- LEFT: worn list + protection -->
+            <div class="sa-col sa-leftcol">
+                <div class="sa-head"><span>(Innermost)</span><span class="sa-r">Storage</span></div>
+                <div class="sa-list scroll-pane">
+                    <div class="sa-row" data-for="row : left"
+                         data-class-selected="row.selected" data-class-moving="row.moving"
+                         data-event-mouseover="on_left(it_index)"
+                         data-event-click="on_left(it_index)">
+                        <span class="sa-hide" data-rml="row.hidden_rml"></span>
+                        <span class="sa-name" data-rml="row.name_rml"></span>
+                        <span class="sa-vol" data-rml="row.storage_rml"></span>
+                    </div>
+                    <div class="sa-msg" data-if="left_empty">&lt;empty&gt;</div>
+                </div>
+                <div class="sa-protect" data-rml="protect_rml"></div>
+                <div class="sa-foot">(Outermost)</div>
+            </div>
+
+            <!-- MIDDLE: item detail + encumbrance/warmth -->
+            <div class="sa-col sa-midcol">
+                <div id="sa-mid" class="sa-mid scroll-pane">
+                    <div class="sa-line" data-for="ln : mid" data-rml="ln.text_rml"></div>
+                </div>
+                <div class="sa-encumb">
+                    <div class="sa-encumb-head">Encumbrance and Warmth</div>
+                    <div class="sa-line" data-for="ln : encumb" data-rml="ln.text_rml"></div>
+                </div>
+            </div>
+
+            <!-- RIGHT: per-bodypart layering -->
+            <div class="sa-col sa-rightcol">
+                <div class="sa-head"><span>(Innermost)</span><span class="sa-r">Encumbrance</span></div>
+                <div id="sa-right" class="sa-right scroll-pane">
+                    <div class="sa-line" data-for="ln : right" data-rml="ln.text_rml"></div>
+                </div>
+                <div class="sa-foot">(Outermost)</div>
+            </div>
+        </div>
+    </div>
+</body>
+</rml>

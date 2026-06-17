@@ -122,6 +122,10 @@
 #include "overmap.h"
 #include "veh_type.h"
 
+#include <RmlUi/Core.h>
+#include "rml_screen.h"
+#include "rml_util.h"
+
 static const activity_id ACT_ATM( "ACT_ATM" );
 static const activity_id ACT_CLEAR_RUBBLE( "ACT_CLEAR_RUBBLE" );
 static const activity_id ACT_CRACKING( "ACT_CRACKING" );
@@ -877,6 +881,44 @@ void iexamine::atm( player &p, const tripoint_bub_ms & )
     atm_menu {p} .start();
 }
 
+// Tier 5: the vending-machine screen RmlUi render path (the one bespoke iexamine
+// screen — the rest of the file is popups / uilists, Tier-0 covered). Render-only
+// doc: money header + item list (count + name, coloured) + item-info pane.
+bool &vending_rmlui_enabled()
+{
+    static bool enabled = false;
+    return enabled;
+}
+
+namespace
+{
+struct vend_row {
+    Rml::String text_rml;
+    bool selected = false;
+};
+struct vend_session {
+    Rml::String money_rml;
+    Rml::Vector<vend_row> rows;
+    Rml::String info_header_rml;
+    Rml::String info_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_vend_types_registered = false;
+
+void register_vend_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_vend_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<vend_row> rh = c.RegisterStruct<vend_row>();
+    rh.RegisterMember( "text_rml", &vend_row::text_rml );
+    rh.RegisterMember( "selected", &vend_row::selected );
+    c.RegisterArray<Rml::Vector<vend_row>>();
+    g_vend_types_registered = true;
+}
+} // namespace
+
 /**
  * Generates vending machine UI and allows players to purchase contained items with a cash card.
  */
@@ -953,7 +995,47 @@ void iexamine::vending( player &p, const tripoint_bub_ms &examp )
     }
 
     int cur_pos = 0;
+
+    // RmlUi render path (render-only; keyboard owns nav/confirm below).
+    auto rml_data = std::make_unique<vend_session>();
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml_data->handle ) {
+            return;
+        }
+        rml_data->money_rml = cata_text_to_rml( string_format( _( "Money left: %s" ),
+                              format_money( money ) ) );
+        rml_data->rows.clear();
+        const int num_items = item_map.size();
+        for( int i = 0; i < num_items; i++ ) {
+            const auto &elem = item_map[i];
+            const auto count = elem.size();
+            const char cc = count < 10 ? static_cast<char>( '0' + count ) : '*';
+            vend_row r;
+            r.text_rml = cata_text_to_rml( colorize(
+                                               string_format( "%c %s", cc, elem.front()->tname() ),
+                                               elem.front()->color_in_inventory( p ) ) );
+            r.selected = ( i == cur_pos );
+            rml_data->rows.push_back( r );
+        }
+        if( num_items > 0 && cur_pos >= 0 && cur_pos < num_items ) {
+            const item *cur_item = item_map[cur_pos].back();
+            rml_data->info_header_rml = cata_text_to_rml( string_format( "<%s> %s",
+                                        colorize( cur_item->display_name(), cur_item->color_in_inventory( p ) ),
+                                        format_money( cur_item->price( false ) ) ) );
+            rml_data->info_rml = cata_text_to_rml( cur_item->info_string() );
+        } else {
+            rml_data->info_header_rml.clear();
+            rml_data->info_rml.clear();
+        }
+        rml_data->handle.DirtyAllVariables();
+    };
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         const int num_items = item_map.size();
         const int page_size = std::min( num_items, list_lines );
 
@@ -1023,6 +1105,16 @@ void iexamine::vending( player &p, const tripoint_bub_ms &examp )
                                         cost );
         trim_and_print( w_item_info, point_east, std::max( 0, w_info_w - 3 ), c_light_gray, header_text );
         wnoutrefresh( w_item_info );
+    } );
+
+    rml.open( vending_rmlui_enabled(), "vending", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        register_vend_rml_types( c );
+        c.Bind( "money_rml", &rml_data->money_rml );
+        c.Bind( "rows", &rml_data->rows );
+        c.Bind( "info_header_rml", &rml_data->info_header_rml );
+        c.Bind( "info_rml", &rml_data->info_rml );
+        rml_data->handle = c.GetModelHandle();
     } );
 
     for( ;; ) {

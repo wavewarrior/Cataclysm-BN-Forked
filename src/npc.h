@@ -803,8 +803,18 @@ class npc : public player
 
         nc_color basic_symbol_color() const override;
         int print_info( const catacurses::window &w, int line, int vLines, int column ) const override;
+        std::string print_info_text() const override;
         std::string opinion_text() const;
         int faction_display( const catacurses::window &fac_w, int width ) const;
+        // State half of faction_display, callable without drawing: the RmlUi
+        // faction manager needs the interaction flag in its input loop (it skips
+        // the curses draw that used to compute it). 0 = no interaction, 1 = within
+        // interaction range, 2 = within radio range.
+        int follower_interaction_flag() const;
+        // Colour-tagged multi-line text for the faction manager's detail pane
+        // (parallel to faction_display's drawing; the curses path is left untouched
+        // so the A/B toggle stays byte-faithful).
+        std::string faction_info_text() const;
 
         // Interaction with the player
         void form_opinion( const Character &u );

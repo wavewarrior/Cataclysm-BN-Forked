@@ -1,0 +1,64 @@
+/* Layout for the examine-item menu (Tier 3 entry: examine_item_menu). Palette/
+   border/scrollbar/.scroll-pane come from theme.rcss (linked first). Action rows
+   + info lines are display:block (RmlUi divs default to inline — theme.rcss
+   gotcha). The right pane (#examine-info) is the shared F.2 item-info component. */
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.ei-panel {
+    width: 80%;
+    height: 88%;
+    display: flex;
+    flex-direction: column;
+}
+
+.ei-title {
+    flex: 0 0 auto;
+    color: {{fg0}};
+    margin-bottom: 6dp;
+    padding-bottom: 4dp;
+    border-bottom: 1dp {{bg4}};
+}
+
+.ei-main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+}
+
+/* Left: action list. */
+.ei-actions {
+    flex: 0 0 34%;
+    min-height: 0;
+    border-right: 1dp {{bg4}};
+    margin-right: 8dp;
+}
+.ei-action {
+    display: block;
+    padding: 1dp 6dp;
+    border-radius: 4dp;
+}
+.ei-action:hover {
+    background-color: {{bg2}};
+    color: {{fg0}};
+}
+.ei-action.selected {
+    background-color: {{yellow}};
+    color: {{bg-hard}};
+}
+
+/* Right: shared item-info pane. */
+.ei-info {
+    flex: 1;
+    min-height: 0;
+}
+.ei-line {
+    display: block;
+    white-space: pre-wrap;
+}

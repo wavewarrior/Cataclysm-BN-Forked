@@ -1,0 +1,113 @@
+/* Layout for the inventory selector (Tier 3 framework, slice 1). Palette/border/
+   scrollbar/.scroll-pane come from theme.rcss (linked first). Rows are
+   display:block (RmlUi divs default to inline — theme.rcss gotcha). */
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.inv-panel {
+    width: 80%;
+    height: 90%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Header: title/hint left, weight/volume stats right (slice 2). The separator
+   line under the whole header lives here so it spans full width (curses hline). */
+.inv-header {
+    flex: 0 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 4dp;
+    padding-bottom: 4dp;
+    border-bottom: 1dp {{bg4}};
+}
+.inv-header-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+.inv-stats {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    margin-left: 12dp;
+}
+.inv-stat {
+    display: block;
+    white-space: pre;
+    text-align: right;
+    color: {{fg4}};
+}
+
+.inv-title {
+    flex: 0 0 auto;
+    color: {{fg0}};
+}
+.inv-hint {
+    flex: 0 0 auto;
+    color: {{fg4}};
+}
+
+/* The list is a horizontal row of columns (slice 2b); it scrolls vertically as a
+   whole (scroll-pane overflow-y). Columns top-align and size to their content. */
+.inv-list {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+}
+.inv-col {
+    display: block;
+    flex: 0 0 auto;
+    margin-right: 24dp;
+}
+.inv-col:last-child {
+    margin-right: 0;
+}
+.inv-row {
+    display: block;
+    white-space: pre;
+    padding: 0 6dp;
+    border-radius: 4dp;
+}
+.inv-row:hover {
+    background-color: {{bg2}};
+}
+.inv-row.selected {
+    background-color: {{yellow}};
+    color: {{bg-hard}};
+}
+/* Category header rows: a separating band, not selectable. */
+.inv-row.category {
+    margin-top: 4dp;
+    border-bottom: 1dp {{bg4}};
+    color: {{purple}};
+}
+
+.inv-footer {
+    flex: 0 0 auto;
+    margin-top: 4dp;
+    padding-top: 4dp;
+    border-top: 1dp {{bg4}};
+    display: flex;
+    align-items: center;
+}
+/* Filter indicator on the left (sizes to content); nav-mode hint fills the rest,
+   centered (mirrors draw_footer's left filter + centered mode). */
+.inv-filter {
+    flex: 0 0 auto;
+    color: {{fg4}};
+}
+.inv-mode {
+    flex: 1;
+    text-align: center;
+}

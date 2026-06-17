@@ -1,0 +1,66 @@
+/* Layout for the vending-machine screen (Tier 5). Two panes: item list (left)
+   and item info (right). Reuses theme .panel / .item / .scroll-pane. */
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.vend-panel {
+    width: 80%;
+    min-width: 640dp;
+    height: 88%;
+    display: flex;
+    flex-direction: row;
+}
+
+.vend-list-pane {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    border-right: 1dp {{bg4}};
+    padding-right: 8dp;
+}
+
+.vend-money {
+    display: block;
+    flex: 0 0 auto;
+    margin-bottom: 4dp;
+    border-bottom: 1dp {{bg4}};
+    padding-bottom: 4dp;
+}
+
+.vend-list {
+    flex: 1;
+    min-height: 0;
+}
+
+.vend-row {
+    display: block;
+}
+
+.vend-info-pane {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    padding-left: 8dp;
+}
+
+.vend-info-header {
+    display: block;
+    flex: 0 0 auto;
+    margin-bottom: 4dp;
+    border-bottom: 1dp {{bg4}};
+    padding-bottom: 4dp;
+}
+
+.vend-info {
+    flex: 1;
+    min-height: 0;
+    white-space: pre-wrap;
+}

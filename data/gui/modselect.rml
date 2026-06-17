@@ -1,0 +1,50 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="modselect.rcss"/>
+</head>
+<body data-model="modselect">
+    <!-- Tier 4 screen #2 (worldfactory) slice 4: show_modselection_window (the mod
+         selector — also lights edit_active_world_mods + the wizard Mods step). Worldgen
+         steps (wizard only) + category tabs + two side-by-side mod lists (available |
+         active load-order with +/- shift indicators) + a description pane (mod info) +
+         a filter line. Render-only, keyboard-only this slice: the MODMANAGER_DIALOG loop
+         owns add/remove/reorder (dependency resolution)/filter/tab switching. -->
+    <div class="panel ms-panel">
+        <div class="tabs ms-wtabs" data-if="show_wtabs">
+            <div class="item tab" data-for="t : wtabs"
+                 data-class-selected="t.selected" data-rml="t.name_rml"></div>
+        </div>
+
+        <div class="tabs ms-cats">
+            <div class="item tab" data-for="t : cats"
+                 data-class-selected="t.selected" data-rml="t.name_rml"></div>
+        </div>
+
+        <div class="ms-main">
+            <div class="ms-col">
+                <div class="ms-head" data-rml="avail_head_rml"></div>
+                <div id="ms-avail" class="ms-list scroll-pane">
+                    <div class="ms-row" data-for="r : avail"
+                         data-class-category="r.is_category" data-class-selected="r.selected">
+                        <span class="ms-text" data-rml="r.text_rml"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="ms-col">
+                <div class="ms-head" data-rml="active_head_rml"></div>
+                <div id="ms-active" class="ms-list scroll-pane">
+                    <div class="ms-row" data-for="r : active"
+                         data-class-category="r.is_category" data-class-selected="r.selected">
+                        <span class="ms-shift" data-rml="r.shift_rml"></span>
+                        <span class="ms-text" data-rml="r.text_rml"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="ms-desc" data-rml="desc_rml"></div>
+        <div class="ms-filter" data-rml="filter_rml"></div>
+    </div>
+</body>
+</rml>

@@ -117,4 +117,74 @@ bool &autopickup_rmlui_enabled();
 // computer_session::use() RmlUi render path (Tier 2 #5: terminal text pane).
 bool &computer_rmlui_enabled();
 
+// construction_menu() RmlUi render path (Tier 2 #6: tabs + list + detail buffer).
+bool &construction_rmlui_enabled();
+
+// select_crafting_recipe() RmlUi render path (Tier 2: 2 tab rows + list + 2 info panes).
+bool &crafting_rmlui_enabled();
+
+// show_armor_layers_ui() RmlUi render path (Tier 2: 4-pane sort-armor).
+bool &armor_layers_rmlui_enabled();
+
+// examine_item_menu::run() RmlUi render path (Tier 3 entry: item-info component +
+// action list). First consumer of rml_util::item_info_rml_lines.
+bool &examine_item_rmlui_enabled();
+
+// inventory_selector framework RmlUi path (Tier 3, sliced). Gated per selector
+// subclass via inventory_selector::uses_rml(); slice 1 lights inventory_pick_selector.
+bool &inventory_rmlui_enabled();
+
+// game_menus::inv::compare() RmlUi path (Tier 3 follower: the two-pane item-info
+// comparison display; first compare-delta consumer of item_info_rml_lines).
+bool &compare_items_rmlui_enabled();
+
+// advanced_inventory::display() RmlUi path (Tier 3 sub-project: dual-pane AIM).
+// One toggle lights the whole doc; the work is sliced (slice 1 = dual item lists).
+bool &advanced_inv_rmlui_enabled();
+
+// options_manager::show() RmlUi path (Tier 4 screen #1: tabbed two-column form +
+// tooltip). Slice 1 lights standalone mode only (world_options_only stays curses).
+bool &options_rmlui_enabled();
+
+// worldfactory RmlUi path (Tier 4 screen #2, sliced). One toggle lights all
+// worldfactory docs, gated per-screen (slice 1 = the Finalize wizard step).
+bool &worldfactory_rmlui_enabled();
+
+// main_menu::opening_screen() RmlUi path (Tier 4 screen #3: the title screen).
+bool &main_menu_rmlui_enabled();
+
+// avatar::create() new-character creator RmlUi path (Tier 4 screen #4, sliced).
+// One toggle lights all 8 character-creation tabs, gated per-tab (slice 1 = the
+// POINTS tab, set_points).
+bool &newcharacter_rmlui_enabled();
+
+// trading_window::perform_trade() RmlUi path (Tier 5: the NPC trade screen —
+// dual item panes + credit/debt head + per-pane stats + item-info pane).
+bool &trade_rmlui_enabled();
+
+// iexamine::vending() RmlUi path (Tier 5: the vending-machine screen — item list
+// + item-info pane).
+bool &vending_rmlui_enabled();
+
+// dialogue::opt() RmlUi path (Tier 5: the NPC dialogue window — history pane +
+// lettered response list + keybind hints).
+bool &dialogue_rmlui_enabled();
+
+// overmap_ui::display() RmlUi path (Tier 6 slice 1: the overmap legend sidebar —
+// tile description + keybind hints + coordinates. The map tile grid stays GPU/ASCII).
+bool &overmap_rmlui_enabled();
+
+// §7 world-space text layer (Tier 6 slice 4): on-map scrolling combat text rendered
+// through RmlUi's own font engine instead of the curses overlay_strings path. The
+// rip-out-surviving glyph path; foundation for future floating damage numbers.
+bool &world_text_rmlui_enabled();
+
+// Examine-tile description view (game::extended_description): the creature /
+// furniture / terrain extended_description() text pane. Render-only RmlUi doc.
+bool &description_view_rmlui_enabled();
+
+// Faction manager (faction_manager::display): 4-tab list+detail screen
+// (followers / factions / lore / creatures). Render-only RmlUi doc.
+bool &faction_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

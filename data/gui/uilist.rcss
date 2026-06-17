@@ -33,12 +33,12 @@ body {
 }
 
 .uilist-title {
-    color: #ffcc66ff;
+    color: {{yellow}};
     font-size: 22dp;
     margin-bottom: 8dp;
 }
 
-/* text-primary (#cfcfe0ff) inherits from body — see theme.rcss palette. */
+/* text-primary ({{fg}}) inherits from body — see theme.rcss palette. */
 .uilist-header {
     margin-bottom: 6dp;
 }
@@ -87,7 +87,7 @@ body {
     overflow-y: auto;
     margin-top: 8dp;
     padding-top: 6dp;
-    border-top: 1dp #5a5a78ff;
+    border-top: 1dp {{bg4}};
 }
 
 /* Panel styles: two-column. List left, side becomes the right column with a
@@ -106,7 +106,7 @@ body {
     border-top: 0;
     margin-left: 12dp;
     padding-left: 12dp;
-    border-left: 1dp #5a5a78ff;
+    border-left: 1dp {{bg4}};
 }
 /* Grid (advanced inventory destination): the 3x3 square is small — size the
    side to its content instead of a wide text column. */
@@ -132,15 +132,15 @@ body {
 
 /* Disabled is uilist-only (buttons have no disabled state), so it stays here. */
 .uilist-row.disabled {
-    color: #6a6a7aff;
+    color: {{bg3}};
 }
 
 .uilist-hotkey {
-    color: #ffcc66ff;
+    color: {{yellow}};
     margin-right: 8dp;
 }
 .uilist-row.selected .uilist-hotkey {
-    color: #1e1e28ff;
+    color: {{bg-hard}};
 }
 
 .uilist-text {
@@ -149,13 +149,13 @@ body {
 
 .uilist-col {
     margin-left: 16dp;
-    color: #9a9ab0ff;
+    color: {{fg4}};
 }
 .uilist-row.selected .uilist-col {
-    color: #1e1e28ff;
+    color: {{bg-hard}};
 }
 .uilist-row.disabled .uilist-col {
-    color: #6a6a7aff;
+    color: {{bg3}};
 }
 
 /* desc + #callback now live in the side column, which owns the divider and
@@ -167,7 +167,7 @@ body {
 
 .uilist-filter {
     margin-top: 6dp;
-    color: #9a9ab0ff;
+    color: {{fg4}};
 }
 
 /* Callback content area — populated per-tick by uilist_callback subclasses.

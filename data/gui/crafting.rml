@@ -1,0 +1,58 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="crafting.rcss"/>
+</head>
+<body data-model="crafting">
+    <!-- Tier 2 screen (select_crafting_recipe). PEER of construction (tabs+list+
+         lines) but heavier: TWO tab rows (category + subcategory, both string
+         list_circularizers) + a recipe list (left) + a recipe-info lines pane
+         (#recipe-info, middle, from cached_recipe_info) + an item-info lines pane
+         (#item-info, right, wide mode only — nested-category block OR
+         format_item_info of the result item; ad-hoc text PENDING the Tier-3
+         item-info F.2 component). Curses tab-overflow windowing + breakpoint
+         paging dropped for native scroll: UP/DOWN move the list cursor;
+         PAGE_UP/DOWN + SCROLL_RECIPE_INFO_* scroll BOTH info panes in lockstep
+         (SetScrollTop from the loop, mirroring curses recipe_info_scroll/
+         item_info_scroll). All filtering/batch/favorite/build stays on
+         input_context + popups; the doc is render-only and handles mouse select. -->
+    <div class="panel cg-panel">
+        <div class="cg-tabrow">
+            <div class="tabs cg-tabs">
+                <div class="item tab" data-for="t : cats"
+                     data-class-selected="t.selected"
+                     data-event-click="on_cat(it_index)" data-rml="t.name_rml"></div>
+            </div>
+            <span class="cg-craft" data-rml="craft_status_rml"></span>
+            <span class="cg-hidden" data-rml="hidden_rml"></span>
+        </div>
+
+        <!-- Subcategory tabs: NORMAL mode only (FILTERED/BATCH have none). -->
+        <div class="tabs cg-subtabs" data-if="show_subcats">
+            <div class="item tab" data-for="t : subcats"
+                 data-class-selected="t.selected" data-class-cg-empty="t.empty"
+                 data-event-click="on_subcat(it_index)" data-rml="t.name_rml"></div>
+        </div>
+
+        <div class="cg-main">
+            <div class="cg-list scroll-pane">
+                <div class="cg-row" data-for="row : rows"
+                     data-class-selected="row.selected"
+                     data-event-mouseover="on_select(it_index)"
+                     data-event-click="on_select(it_index)"
+                     data-rml="row.name_rml"></div>
+            </div>
+
+            <div id="recipe-info" class="cg-info scroll-pane">
+                <div class="cg-line" data-for="ln : info" data-rml="ln.text_rml"></div>
+            </div>
+
+            <div id="item-info" class="cg-item scroll-pane" data-if="wide">
+                <div class="cg-line" data-for="ln : item" data-rml="ln.text_rml"></div>
+            </div>
+        </div>
+
+        <div class="cg-foot" data-rml="keybinds_rml"></div>
+    </div>
+</body>
+</rml>

@@ -1,0 +1,20 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="overmap.rcss"/>
+</head>
+<body data-model="overmap">
+    <!-- Tier 6 slice 1: the overmap legend sidebar (overmap_ui draw_om_sidebar).
+         A right-side panel only; the body is transparent so the overmap tile grid
+         (drawn underneath by the GPU/ASCII map path) shows through on the left.
+         Render-only: tile description / weather / mission info (top), the scrolling
+         keybinding hint list (middle), dimension + coordinates (bottom). Keyboard
+         owns all overmap navigation. -->
+    <div class="panel om-panel">
+        <div class="om-info" data-rml="info_rml"></div>
+        <div class="om-hints scroll-pane" data-rml="hints_rml"></div>
+        <div class="om-footer" data-rml="footer_rml"></div>
+    </div>
+    <div id="crt-overlay" class="crt"></div>
+</body>
+</rml>
