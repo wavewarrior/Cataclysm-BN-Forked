@@ -130,11 +130,8 @@ auto build_lighting( lighting::render_state &rs ) -> bool
                              ? tilecontext->get_tile_map_origin().raw()
                              : point{ INT_MIN, INT_MIN };
         // Read generation from the current level's cache.
-        std::uint64_t gen = 0;
-        if( g->m() ) {
-            const auto &cache = g->m()->get_cache( z );
-            gen = cache.transparency_generation;
-        }
+        const auto &cache = g->m.get_cache_ref( z );
+        const std::uint64_t gen = cache.transparency_generation;
         rebuild_pertile = imgui_layer::visible()
                           || gen != last_gen || z != last_z
                           || origin != last_origin;

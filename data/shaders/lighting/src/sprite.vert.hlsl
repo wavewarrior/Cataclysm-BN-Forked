@@ -35,7 +35,7 @@ cbuffer LightParams : register(b1, space1) {
     float lp_sun_pad;
 };
 
-// Cbuffer slot 2: DebugParams (128 bytes — wire-stable with C++ debug_params).
+// Cbuffer slot 2: DebugParams (136 bytes — wire-stable with C++ debug_params).
 // Pushed to the vertex stage so foliage sway can read sway_amp/sway_freq/anim_time.
 // The full field list is declared so those three land at the correct byte offset;
 // every other field is ignored by this shader.
@@ -72,6 +72,8 @@ cbuffer DebugParams : register(b2, space1) {
     float sway_freq;    // wind oscillation frequency
     float anim_time;    // wrapped render seconds (per-frame data)
     float spec_strength; // fragment-stage only (declared here for cbuffer layout parity)
+    float light_eps;     // fragment-stage only (declared here for cbuffer layout parity)
+    float max_shadow_k;  // fragment-stage only (declared here for cbuffer layout parity)
 };
 
 struct VS_OUT {

@@ -165,8 +165,7 @@ struct debug_params {
     float    anim_time     = 0.0f;   // DATA (not a knob): wrapped render seconds, injected per-frame
     // Wet specular glint strength. DATA (not a slider): the frame code folds the
     // user knob g_spec_strength with rain intensity per-frame so the sheen only
-    // shows while raining. 0 = off. Repurposed the old sway_pad alignment filler
-    // (struct stays 128 B). sprite.frag reads it; sprite.vert keeps it as pad.
+    // shows while raining. 0 = off.
     float    spec_strength = 0.0f;
     // P1: contribution epsilon for shadow march gating. 0 means use shader default.
     float    light_eps     = 0.0f;
