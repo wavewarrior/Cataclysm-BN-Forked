@@ -97,9 +97,12 @@ float4 main(VS_OUT i) : SV_Target0 {
     const uint me = min(emitter_count, 8192u);
 
     // P2: K-strongest budget — track the RC_K strongest in-range emitters by
-    // atten. 64 slots cover extreme horde density (RC_K is the active cap).
-    uint  top_idx[64];
-    float top_val[64];
+    // atten. Sized exactly RC_K (top_n never exceeds it): an oversized [64] here
+    // forced a large dynamically-indexed indexable-temp array whose DXIL the
+    // D3D12 driver rejected at pipeline creation (E_INVALIDARG) — Metal tolerated
+    // it. RC_K slots keep the array small enough to build on all backends.
+    uint  top_idx[RC_K];
+    float top_val[RC_K];
     int   top_n = 0;
 
     // --- PASS 1: accumulate unshadowed GI + track K-max candidates ---
