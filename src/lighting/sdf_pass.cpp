@@ -33,15 +33,23 @@ std::vector<float> compute_sdf_cpu( const float *trans, int w, int h )
     const int total = w * h;
     constexpr float INF = 1e20f;
 
-    // Squared-distance working grid: 0 at opaque seeds, INF elsewhere.
-    std::vector<float> grid( total );
+    // Working buffers reused across calls (this runs only on the render thread,
+    // every frame the SDF rebuilds) — avoids a multi-MB malloc+memset per call.
+    // resize() is a no-op once the map size is stable; every element below is
+    // overwritten, so no re-zeroing is needed.
+    static std::vector<float> grid;
+    grid.resize( total );
     for( int i = 0; i < total; ++i ) {
         grid[i] = ( trans[i] == 0.0f ) ? 0.0f : INF;
     }
 
     const int maxdim = std::max( w, h );
-    std::vector<float> f( maxdim ), d( maxdim ), z( maxdim + 1 );
-    std::vector<int>   vtx( maxdim );
+    static std::vector<float> f, d, z;
+    static std::vector<int>   vtx;
+    f.resize( maxdim );
+    d.resize( maxdim );
+    z.resize( maxdim + 1 );
+    vtx.resize( maxdim );
 
     // 1D squared-distance transform of f[0..n) into d[0..n) (lower envelope of
     // upward parabolas rooted at each sample).
@@ -229,7 +237,10 @@ void sdf_pass::init( gpu_device &dev, int map_w, int map_h )
     // Load returns 0 on Metal). Same data as the textures, as float arrays.
     {
         SDL_GPUBufferCreateInfo bci{};
-        bci.usage = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ;
+        // GRAPHICS read (sprite.frag SdfBuf) + COMPUTE read (gi_field/gi_bounce
+        // sphere-march the same SDF on the GPU compute GI path).
+        bci.usage = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ |
+                    SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ;
         // SDF_SUPERSAMPLE² subcells per tile, 4 bytes each.
         bci.size  = static_cast<Uint32>( map_w * map_h * SDF_SUPERSAMPLE * SDF_SUPERSAMPLE * 4 );
         sdf_storage_ = SDL_CreateGPUBuffer( d, &bci );

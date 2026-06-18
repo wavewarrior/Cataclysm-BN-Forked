@@ -125,35 +125,52 @@ Fragment shader (`SPRITE_FRAG_HLSL` in `sprite_batcher.cpp`):
   vision + tone-grade knobs were added; `static_assert` enforces 96): `dither_amt`
   (0=off), `dither_bands`. Widget: Shift+F8/F9 = strength, Ctrl+F8/F9 = bands.
 
-## Colored indirect light / GI — now GPU (Step-3, supersedes the CPU path)
+## Colored indirect light / GI — now GPU COMPUTE (Stage 1, supersedes RC fragment)
 
-GI is computed on the GPU by `radiance_cascade_pass` (Step-3 Phases 2/3). The
-old CPU seed + wall-gated diffusion (`frame_build.cpp`) and its entire plumbing
-(`pending_indirect_`, `sdf_pass` `indirect_tex_`/`indirect_texture()`, the
-`indirect` params through `submit/flush/upload`, the `g_gi_passes/g_gi_decay`
-knobs) were **deleted in Phase 4 (2026-06-03)**.
+GI is computed on the GPU by `gi_compute_pass` (Stage 1 of
+`GI_COMPUTE_AND_PERF_PLAN.md`, 2026-06-18). It **replaced** the fragment
+`radiance_cascade_pass` (+ `rc.frag`/`rc_bounce.frag`), which created on Metal
+but failed `SDL_CreateGPUGraphicsPipeline` root-signature construction on D3D12
+(a fragment storage buffer with no leading sampler). Compute uses a distinct
+binding model that dodges it; the A0 spike confirmed compute creates+runs on
+Win11/D3D12. The older CPU diffusion path was already deleted in Phase 4.
 
-- **Two-pass GPU GI** (`radiance_cascade_pass.{h,cpp}` + `rc.frag.hlsl` +
-  `rc_bounce.frag.hlsl`): pass 1 gathers per-tile direct emitter radiance
-  (occluded, SDF-marched) → `radiance_field_tex_`; pass 2 marches N=16 rays per
-  probe through that field (1/(1+t) falloff, stop at walls) → `cascade_tex_`.
-  Real colored bounce into shadow / around corners. Both RGBA16F
-  COLOR_TARGET|GRAPHICS_STORAGE_READ, transposed (width=tex_h height=tex_w).
-- **Consumer** (`sprite.frag.hlsl`): `Texture2D<float4> IndirectTex :
-  register(t1, space2)` — a fragment **storage-read texture** (storage-tex slot 0,
-  ahead of the 4 storage buffers emitter/sdf/skyvis/vis at t2–t5; see the Phase-1b
-  notes). `render_state` binds `rc().cascade_texture()` to it (the sole GI source
-  since Phase 4). Read transposed `Load(int3(y,x,0))`; `indirect_bilinear(p)` uses
-  the `p-0.5` centre. `dyn += gi_strength * indirect_bilinear(world_pos)`, gated
-  `gi_strength>0.001 && sdf_map_w>0`.
-- **Driven** in `refresh_display` after the emitter/SDF upload, before Pass W,
-  under the `rc_rebuild` (=`fr.built_pertile`) dirty gate; cascade retained on
-  skip frames. Knob: `debug_params.gi_strength` (Alt+F8/F9). Gather tuning
-  (RC_DIRS/STEPS/STEP/START/WALL) are `rc_bounce.frag` constants.
-- **Dev oracle**: F4 "RC cascade readback" → `rc().debug_log_stats()` synchronous
-  GPU→CPU readback logging sum/max/nonzero/centroid to DC::Main.
-- **Future**: directional cascade hierarchy + bilinear-fix merge (range/perf), and
-  promoting the gather constants to F4 knobs.
+- **Two compute dispatches** (`gi_compute_pass.{h,cpp}` + `gi_field.comp.hlsl` +
+  `gi_bounce.comp.hlsl`): pass 1 (field) — one thread/tile, gathers occluded
+  emitter radiance (SDF sphere-march) → `field_buf_`; pass 2 (bounce) — one
+  thread/tile, marches N=16 rays through the field (1/(1+t) falloff, stop at
+  walls) → `gi_buf_`. `numthreads(8,8,1)`, dispatch ceil(W/8)×ceil(H/8). SDL_GPU
+  inserts the compute→compute barrier on `field_buf_` and the
+  compute-write→graphics-read barrier on `gi_buf_` automatically.
+- **Buffers** are scalar `(RW)StructuredBuffer<float>`, 4 floats/tile (rgb+pad),
+  tile-res, x-major `[(x*map_h+y)*4 + c]` — **no transpose** (unlike the old RC
+  texture). Readonly inputs declared `StructuredBuffer` (not RW) so D3D12 doesn't
+  default them read-write. The emitter + SDF buffers carry
+  `COMPUTE_STORAGE_READ` (added to their create flags) so the field pass can bind
+  them. Compute HLSL spaces: readonly storage `(tN,space0)`, RW `(uN,space1)`,
+  uniform `(bN,space2)`.
+- **Consumer** (`sprite.frag.hlsl`): `StructuredBuffer<float> GiBuf :
+  register(t7, space2)` — the LAST fragment storage buffer (slot 5). Replaced the
+  old `IndirectTex` storage texture; with GI off the storage textures,
+  **`ShadowMask` is now the sole storage texture (t1)** and the 6 storage buffers
+  are t2..t7 (Emitters/Sdf/SkyVis/Vis/SunSdf/Gi). `indirect_bilinear(p)` reads
+  GiBuf scalar at tile-res with the `p-0.5` centre; `dyn += gi_strength *
+  indirect_bilinear(light_pos) * ao`, gated `gi_strength>0.001 && sdf_map_w>0`.
+  `render_state` feeds `gi().gi_buffer()` via the lighting god-call's `gi_buf`
+  param (only the tile batcher; ui/shadow batchers pass null).
+- **Driven** in `refresh_display` (`flush_and_gather_rc` in `sdl_render_frame.cpp`)
+  after the emitter/SDF upload, before Pass W, under the `rc_rebuild`
+  (=`fr.built_pertile`) dirty gate; `gi_buf_` retained on skip frames (RW bindings
+  `cycle=false`). Knob: `debug_params.gi_strength` (Alt+F8/F9). Gather tuning
+  (RC_DIRS/STEPS/STEP/START/WALL) are `gi_bounce.comp` constants.
+- **Dev oracle**: F4 readback (`g_rc_readback`) → `gi().debug_log_stats()`
+  synchronous GPU→CPU readback of `gi_buf_` (plain float32 now, no half decode),
+  logging sum/max/nonzero/centroid to DC::Main.
+- **vs old RC**: SDF read is now SS-correct (matches sprite.frag's `SDF_SS=4`
+  grid) where rc.frag mis-indexed the SS buffer as tile-res — so occlusion is
+  more accurate, not bug-for-bug identical to the Metal RC.
+- **Future (Stage 2)**: add the directional cascade hierarchy for sun/sky on this
+  proven-parity compute base; promote gather constants to F4 knobs.
 
 ## Intended direction (grilled 2026-06-01 — see `LIGHTING_REWORK_PLAN.md`)
 

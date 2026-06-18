@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 
+#include "lighting/dev_test_lights.h"
+
 #include "avatar.h"
 #include "character.h"
 #include "creature.h"
@@ -44,7 +46,8 @@ namespace cursor_light_emitter
 {
 extern bool  enabled;
 extern float radius;     // emission radius in tiles (used directly, not sqrt'd)
-extern float intensity;  // white emission brightness
+extern float intensity;  // emission brightness
+extern float color[3];   // RGB tint (default white); saturate a channel for colored GI
 extern float wx, wy, wz; // world-tile position under the cursor
 }  // namespace cursor_light_emitter
 
@@ -413,7 +416,29 @@ std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq, float frame_ms
         e.pos_z           = cursor_light_emitter::wz;
         e.radius          = std::max( 0.0f, cursor_light_emitter::radius );
         const float lum   = cursor_light_emitter::intensity;
-        e.r = lum; e.g = lum; e.b = lum;
+        e.r = lum * cursor_light_emitter::color[0];
+        e.g = lum * cursor_light_emitter::color[1];
+        e.b = lum * cursor_light_emitter::color[2];
+        e.falloff         = FALLOFF_DEFAULT;
+        e.cone_dir_x      = 0.0f;
+        e.cone_dir_y      = 0.0f;
+        e.cone_half_angle = M_PIf;
+        e.shape           = static_cast<uint32_t>( emitter_shape::OMNI );
+        out.push_back( e );
+    }
+
+    // Dev test lights (F4 click-to-place, cleared when the panel closes). Static
+    // omni lights so occlusion can be studied against fixed walls; colour-tinted
+    // intensity so the GI bounce is visibly coloured.
+    for( const dev_test_lights::light &L : dev_test_lights::lights ) {
+        gpu_emitter e{};
+        e.pos_x           = L.wx;
+        e.pos_y           = L.wy;
+        e.pos_z           = L.wz;
+        e.radius          = std::max( 0.0f, L.radius );
+        e.r               = L.intensity * L.r;
+        e.g               = L.intensity * L.g;
+        e.b               = L.intensity * L.b;
         e.falloff         = FALLOFF_DEFAULT;
         e.cone_dir_x      = 0.0f;
         e.cone_dir_y      = 0.0f;

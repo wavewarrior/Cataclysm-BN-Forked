@@ -200,18 +200,18 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
         // data all live in fragment storage buffers (slots 0/1/2), not
         // sampler textures — Metal mis-binds sampler-texture Load (see
         // SPRITE_FRAG_HLSL comment). Atlas is the only sampler texture.
-        SDL_GPUBuffer  *lp_emitter_buf  = nullptr;  // fragment storage BUFFER slot 0
-        SDL_GPUBuffer  *lp_sdf_buf      = nullptr;  // fragment storage BUFFER slot 1
-        SDL_GPUBuffer  *lp_sky_vis_buf  = nullptr;  // fragment storage BUFFER slot 2
-        SDL_GPUBuffer  *lp_vis_buf      = nullptr;  // fragment storage BUFFER slot 3 (VisBuf)
-        SDL_GPUBuffer  *lp_sun_sdf_buf  = nullptr;  // fragment storage BUFFER slot 4 (SunSdfBuf, t7)
-        // 1-bounce GI is now a storage-READ TEXTURE (IndirectTex), not a buffer
-        // (Step-3 Phase 1b). Bound via SDL_BindGPUFragmentStorageTextures slot 0
-        // → t1/space2 (storage textures precede storage buffers in t-space).
-        SDL_GPUTexture *lp_indirect_tex = nullptr;
-        // Silhouette sun-shadow mask (Phase 2). Storage-READ texture slot 1 ⇒
-        // t2/space2, ahead of the storage buffers (now t3..t6). Null on the
-        // shadow batcher (which reads no lighting resources).
+        SDL_GPUBuffer  *lp_emitter_buf  = nullptr;  // fragment storage BUFFER slot 0 (t2)
+        SDL_GPUBuffer  *lp_sdf_buf      = nullptr;  // fragment storage BUFFER slot 1 (t3)
+        SDL_GPUBuffer  *lp_sky_vis_buf  = nullptr;  // fragment storage BUFFER slot 2 (t4)
+        SDL_GPUBuffer  *lp_vis_buf      = nullptr;  // fragment storage BUFFER slot 3 (VisBuf, t5)
+        SDL_GPUBuffer  *lp_sun_sdf_buf  = nullptr;  // fragment storage BUFFER slot 4 (SunSdfBuf, t6)
+        // 1-bounce GI (Stage 1): GPU compute GI output, now a fragment storage
+        // BUFFER (GiBuf), not the old IndirectTex storage texture. Storage-buffer
+        // slot 5 ⇒ t7/space2 (last, after SunSdfBuf).
+        SDL_GPUBuffer  *lp_gi_buf       = nullptr;  // fragment storage BUFFER slot 5 (GiBuf, t7)
+        // Silhouette sun-shadow mask (Phase 2). The SOLE storage-READ texture now
+        // (GI moved to GiBuf) ⇒ storage-texture slot 0 ⇒ t1/space2, ahead of the
+        // storage buffers (t2..t7). Null on the shadow/UI batchers.
         SDL_GPUTexture *lp_shadow_mask  = nullptr;
         SDL_GPUSampler *lp_data_sampler = nullptr;
         light_params    lp              = {};  // defaults: all zero
@@ -230,7 +230,7 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                                      SDL_GPUBuffer  *sdf_buf       = nullptr,
                                      SDL_GPUSampler *data_sampler = nullptr,
                                      SDL_GPUBuffer  *sky_vis_buf  = nullptr,
-                                     SDL_GPUTexture *indirect_tex = nullptr,
+                                     SDL_GPUBuffer  *gi_buf       = nullptr,
                                      SDL_GPUBuffer  *vis_buf      = nullptr,
                                      const sun_params *sp         = nullptr,
                                      const debug_params *dbg      = nullptr,
@@ -245,7 +245,7 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
             lp_emitter_buf  = emitter_buf;
             lp_sdf_buf      = sdf_buf;
             lp_sky_vis_buf  = sky_vis_buf;
-            lp_indirect_tex = indirect_tex;
+            lp_gi_buf       = gi_buf;
             lp_vis_buf      = vis_buf;
             lp_sun_sdf_buf  = sun_sdf_buf;
             lp_data_sampler = data_sampler;
@@ -287,11 +287,6 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
         // 1). Left null on the shadow/UI batchers → bind_lighting_resources skips
         // it for them. Persists across frames until re-set.
         void set_shadow_mask( SDL_GPUTexture *tex ) noexcept { lp_shadow_mask = tex; }
-
-        // Indirect/GI cascade (sprite.frag storage-tex slot 0). Exposed so the UI
-        // batcher can be fed a valid storage texture too (D3D12 needs every
-        // declared pipeline resource bound). Persists across frames until re-set.
-        void set_indirect_tex( SDL_GPUTexture *tex ) noexcept { lp_indirect_tex = tex; }
 
         // ---- lifecycle -------------------------------------------------
 
@@ -817,40 +812,34 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
         // arrays. All per-tile reads are gated by sdf_map_w>0 in the shader, so
         // a not-yet-ready (null) resource is safe to leave unbound.
         void bind_lighting_resources( SDL_GPURenderPass *rp ) {
-            // Storage TEXTURE slot 0 → t1 (1-bounce GI, IndirectTex), slot 1 → t2
-            // (silhouette ShadowMask). Bound in ONE call when both are present
-            // (the normal case — both textures are created at init and bound
-            // unconditionally) so a later bind can't zero an earlier slot. The
-            // shadow/UI batchers leave both null → nothing bound (they declare no
-            // storage textures). Shader gates reads (gi_strength>0, etc.).
-            // Both-or-none. The sprite pipeline declares BOTH storage textures
-            // (IndirectTex t1, ShadowMask t2); on D3D12 leaving a declared SRV
-            // slot unbound corrupts the command list → device removed (crash on
-            // the next pass, e.g. when an SDF rebuild re-records the lit segment).
-            // So never bind just one: producers guarantee both are non-null at
-            // init (RC creates cascade_tex_ even when its pipeline fails; the
-            // shadow mask is created unconditionally). The shadow/UI batchers
-            // declare no storage textures and leave both null → bind nothing.
-            if( lp_indirect_tex && lp_shadow_mask ) {
-                SDL_GPUTexture *stex[2] = { lp_indirect_tex, lp_shadow_mask };
-                SDL_BindGPUFragmentStorageTextures( rp, /*first_slot=*/0, stex, 2 );
+            // Storage TEXTURE slot 0 → t1: the silhouette ShadowMask, now the SOLE
+            // storage texture (GI moved to GiBuf, a storage buffer, in Stage 1 —
+            // this is what removed the old all-or-none 2-slot hazard). Created
+            // unconditionally at init, so it is non-null on the tile batcher. The
+            // shadow/UI batchers leave it null → nothing bound (they declare no
+            // storage textures). On D3D12 a declared-but-unbound SRV slot corrupts
+            // the command list, so the tile pipeline (which declares it) must
+            // always have it bound — the producer guarantees that.
+            if( lp_shadow_mask ) {
+                SDL_BindGPUFragmentStorageTextures( rp, /*first_slot=*/0, &lp_shadow_mask, 1 );
             }
-            // Storage BUFFER slots 0..4 → t3..t7 (after the 2 storage textures):
-            // Emitters, SdfBuf, SkyVisBuf, VisBuf, SunSdfBuf. The sprite pipeline
-            // declares ALL FIVE, so this is strictly all-or-none: a PARTIAL bind
-            // (the old 3- or 1-buffer fallbacks) leaves declared SRV slots unbound
-            // → D3D12 "Missing fragment storage buffer binding!" → device removed.
-            // All five producers allocate their buffer unconditionally at init
-            // (emitter_collector ctor + sdf_pass::init), so on the tile batcher
-            // they are non-null whenever render_state is ready; the shader gates
-            // every per-tile read on sdf_map_w>0 / emitter_count>0, so binding an
-            // unpopulated buffer is read-safe. The shadow/UI batchers leave them
-            // null → bind nothing (they declare no storage buffers). Bound in ONE
-            // call so a later bind can't zero an earlier slot.
-            if( lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf && lp_vis_buf && lp_sun_sdf_buf ) {
-                SDL_GPUBuffer *sbufs[5] = { lp_emitter_buf, lp_sdf_buf, lp_sky_vis_buf,
-                                            lp_vis_buf, lp_sun_sdf_buf };
-                SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0, sbufs, 5 );
+            // Storage BUFFER slots 0..5 → t2..t7 (after the 1 storage texture):
+            // Emitters, SdfBuf, SkyVisBuf, VisBuf, SunSdfBuf, GiBuf. The sprite
+            // pipeline declares ALL SIX, so this is strictly all-or-none: a PARTIAL
+            // bind leaves declared SRV slots unbound → D3D12 "Missing fragment
+            // storage buffer binding!" → device removed. All six producers allocate
+            // their buffer unconditionally at init (emitter_collector ctor,
+            // sdf_pass::init, gi_compute_pass::init), so on the tile batcher they
+            // are non-null whenever render_state is ready; the shader gates every
+            // per-tile read on sdf_map_w>0 / emitter_count>0 / gi_strength>0, so
+            // binding an unpopulated buffer is read-safe. The shadow/UI batchers
+            // leave them null → bind nothing. Bound in ONE call so a later bind
+            // can't zero an earlier slot.
+            if( lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf && lp_vis_buf
+                && lp_sun_sdf_buf && lp_gi_buf ) {
+                SDL_GPUBuffer *sbufs[6] = { lp_emitter_buf, lp_sdf_buf, lp_sky_vis_buf,
+                                            lp_vis_buf, lp_sun_sdf_buf, lp_gi_buf };
+                SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0, sbufs, 6 );
             }
         }
 };
@@ -883,11 +872,6 @@ void sprite_batcher::shutdown() noexcept
 void sprite_batcher::set_shadow_mask( SDL_GPUTexture *tex )
 {
     p->set_shadow_mask( tex );
-}
-
-void sprite_batcher::set_indirect_tex( SDL_GPUTexture *tex )
-{
-    p->set_indirect_tex( tex );
 }
 
 void sprite_batcher::begin_pass( SDL_GPUCommandBuffer *cb,
@@ -926,7 +910,7 @@ void sprite_batcher::set_lighting_resources( float            tile_pixel_size,
                                               SDL_GPUBuffer   *sdf_buf,
                                               SDL_GPUSampler  *data_sampler,
                                               SDL_GPUBuffer   *sky_vis_buf,
-                                              SDL_GPUTexture  *indirect_tex,
+                                              SDL_GPUBuffer   *gi_buf,
                                               SDL_GPUBuffer   *vis_buf,
                                               const sun_params   *sp,
                                               const debug_params *dbg,
@@ -936,7 +920,7 @@ void sprite_batcher::set_lighting_resources( float            tile_pixel_size,
                                 emitter_count, ambient,
                                 cam_off_x, cam_off_y, sdf_map_w, sdf_map_h,
                                 emitter_buf, sdf_buf, data_sampler,
-                                sky_vis_buf, indirect_tex, vis_buf, sp, dbg,
+                                sky_vis_buf, gi_buf, vis_buf, sp, dbg,
                                 sun_sdf_buf );
 }
 

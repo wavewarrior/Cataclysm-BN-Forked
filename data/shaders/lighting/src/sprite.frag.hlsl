@@ -44,29 +44,34 @@ struct GpuEmitter {
 };
 Texture2D<float4>            Atlas       : register(t0, space2);
 SamplerState                 AtlasSmp    : register(s0, space2);
-// 1-bounce GI as a read-only storage texture (Texture2D, NO sampler, read via
-// .Load only — that is what makes shadercross reflect it as a storage texture,
-// not a 2nd sampled image). Storage-texture slot 0 ⇒ t1, ahead of the storage
-// buffers. RGBA32F, width=sdf_map_h height=sdf_map_w (see indirect_texel).
-Texture2D<float4>            IndirectTex : register(t1, space2);
 // Silhouette sun-shadow mask (Phase 2). Screen-space coverage, read-only storage
-// texture (Texture2D, .Load only — same reflect-as-storage trick as IndirectTex).
-// Storage-texture slot 1 ⇒ t2, which pushes the storage BUFFERS to t3..t6 (the
-// shadercross sampled→storage-tex→storage-buf t-order). Read at the fragment's
-// SCREEN pixel (SV_Position.xy) — NOT transposed/map-space like IndirectTex —
-// because the mask shares world_target's physical size + viewport+proj, so a
-// direct screen-texel fetch aligns 1:1 (no camera/proj math).
-Texture2D<float4>            ShadowMask  : register(t2, space2);
-StructuredBuffer<GpuEmitter> Emitters    : register(t3, space2);
-StructuredBuffer<float>      SdfBuf      : register(t4, space2);
-StructuredBuffer<float>      SkyVisBuf   : register(t5, space2);
-StructuredBuffer<float>      VisBuf      : register(t6, space2); // per-tile visibility (>=0 live, <0 memory)
-// Phase 2.3: wall-only sun SDF (storage buffer slot 4 ⇒ t7). Same SS grid +
+// texture (Texture2D, .Load only — that is what makes shadercross reflect it as a
+// storage texture, not a 2nd sampled image). Now the SOLE storage texture ⇒
+// storage-texture slot 0 ⇒ t1, ahead of the storage buffers (t2..t7). Read at the
+// fragment's SCREEN pixel (SV_Position.xy) — the mask shares world_target's
+// physical size + viewport+proj, so a direct screen-texel fetch aligns 1:1 (no
+// camera/proj math). (GI moved off a storage texture to GiBuf below — Stage 1 of
+// GI_COMPUTE_AND_PERF_PLAN; ShadowMask being the only storage texture removes the
+// old all-or-none 2-slot bind hazard.)
+Texture2D<float4>            ShadowMask  : register(t1, space2);
+StructuredBuffer<GpuEmitter> Emitters    : register(t2, space2);
+StructuredBuffer<float>      SdfBuf      : register(t3, space2);
+StructuredBuffer<float>      SkyVisBuf   : register(t4, space2);
+StructuredBuffer<float>      VisBuf      : register(t5, space2); // per-tile visibility (>=0 live, <0 memory)
+// Phase 2.3: wall-only sun SDF (storage buffer slot 4 ⇒ t6). Same SS grid +
 // x-major layout as SdfBuf, but built from a transparency grid where TREE tiles
 // are forced transparent → the SUN shadow march uses THIS (trees cast no SDF
 // column; their silhouette comes from the mask). Emitters/GI/AO keep the full
 // SdfBuf (trees still occlude lamps + form AO cavities).
-StructuredBuffer<float>      SunSdfBuf   : register(t7, space2);
+StructuredBuffer<float>      SunSdfBuf   : register(t6, space2);
+// 1-bounce indirect light (GI). Computed by the GPU compute GI pass
+// (gi_compute_pass → gi_bounce.comp) into gi_buf and bound here as the LAST
+// fragment storage buffer (slot 5 ⇒ t7). Tile-res, 4 floats/tile (rgb + pad),
+// x-major gi[(x*sdf_map_h+y)*4 + c] — written verbatim by the compute pass, no
+// transpose. Scalar StructuredBuffer<float> (a float4 dynamic-index read produced
+// DXIL D3D12 rejects). Replaces the old IndirectTex storage texture — moving the
+// gather to compute is what removed GI's D3D12 pipeline fragility (Stage 1).
+StructuredBuffer<float>      GiBuf       : register(t7, space2);
 cbuffer LightParams : register(b0, space3) {
     float tile_pixel_size; float current_z;
     uint  emitter_count;   float ambient;
@@ -195,17 +200,17 @@ float sdf_bilinear_sun(float2 p) {
     const float nr = sdf_texel_sun((int)floor(g.x + 0.5), (int)floor(g.y + 0.5));
     return lerp(bil, nr, saturate(sdf_sharp));
 }
-// Per-tile 1-bounce indirect light (RGB). Now a read-only storage texture
-// (Phase 1b). The CPU source is x-major arr[x*map_h+y]; the texture is uploaded
-// in that same linear order into dims width=map_h height=map_w, so tile (x,y)
-// lives at texel (col=y, row=x) → Load(int3(y, x, 0)). This row/col swap is the
-// row-major texture convention (cf. the sampler-texture note in CLAUDE.md);
-// it makes the texture read pixel-identical to the old x-major buffer index.
-// Bilinear with the same p-0.5 centre convention as sdf_bilinear.
+// Per-tile 1-bounce indirect light (RGB). Read from GiBuf, the GPU compute GI
+// pass's output: tile-res, 4 floats/tile (rgb + pad), x-major
+// gi[(x*sdf_map_h+y)*4 + c] — the same x-major layout as SdfBuf/SkyVisBuf, no
+// transpose (the compute shader writes the CPU-style index directly, unlike the
+// old IndirectTex storage texture which needed a row/col swap). Bilinear with the
+// same p-0.5 centre convention as sdf_bilinear.
 float3 indirect_texel(int x, int y) {
     x = clamp(x, 0, (int)sdf_map_w - 1);
     y = clamp(y, 0, (int)sdf_map_h - 1);
-    return IndirectTex.Load(int3(y, x, 0)).rgb;
+    const int o = (x * (int)sdf_map_h + y) * 4;
+    return float3(GiBuf[o + 0], GiBuf[o + 1], GiBuf[o + 2]);
 }
 float3 indirect_bilinear(float2 p) {
     const float2 sp = p - 0.5;
@@ -747,6 +752,15 @@ float4 main(VS_OUT i) : SV_Target0 {
             // the same screen positions = the storage-read fetch is aligned.
             const float m = ShadowMask.Load(int3((int)i.pos.x, (int)i.pos.y, 0)).r;
             vis = float3(m, m, m);
+            replace = true;
+        } else if(debug_mode == 12u) {
+            // GI view: the raw 1-bounce indirect field (GiBuf) from the compute
+            // GI pass, shown directly as colour — independent of gi_strength,
+            // ambient, and dither. Lit emitters appear as coloured blobs that
+            // bleed into shadow / around corners (the bounce). Uniform black =
+            // GI not computing (no emitters in range, SDF not ready, or the
+            // compute pass failed to create). The definitive GI confirmation.
+            vis = (sdf_map_w > 0u) ? indirect_bilinear(i.light_pos) : float3(0.0, 0.0, 0.0);
             replace = true;
         }
         if(replace) {

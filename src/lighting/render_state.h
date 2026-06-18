@@ -25,7 +25,7 @@
 #include "ui_adaptor_draw_slices.h"
 #include "ui_composite_target.h"
 #include "tonemap_pass.h"
-#include "radiance_cascade_pass.h"
+#include "gi_compute_pass.h"
 #include "bloom_pass.h"
 #include "volumetric_pass.h"
 #include "rain_effect.h"
@@ -316,9 +316,11 @@ class render_state
         // Fullscreen tonemap pass (HDR world_target → world_ldr_target).
         tonemap_pass &tonemap() noexcept { return tonemap_; }
 
-        // Radiance-cascade GI pass (Step-3 Phase 2/3). Driven from refresh_display;
-        // its cascade texture is the sprite's sole GI input since Phase 4.
-        radiance_cascade_pass &rc() noexcept { return rc_; }
+        // GPU compute GI pass (Stage 1 of GI_COMPUTE_AND_PERF_PLAN — replaced the
+        // fragment radiance_cascade_pass, which failed D3D12 pipeline creation).
+        // Driven from refresh_display; its gi_buffer() is the sprite's sole GI
+        // input. Named gi() (was rc()).
+        gi_compute_pass &gi() noexcept { return gi_; }
 
         // Bloom post pass (Step-4). Driven from refresh_display between Pass W
         // and the tonemap resolve; composites additively into world_target.
@@ -420,7 +422,7 @@ class render_state
         // fullscreen tonemap pass that produces it.
         std::unique_ptr<ui_composite_target> world_ldr_target_;
         tonemap_pass                         tonemap_;
-        radiance_cascade_pass                rc_;
+        gi_compute_pass                      gi_;
         bloom_pass                           bloom_;
         volumetric_pass                      volumetric_;
         rain_effect                          rain_;

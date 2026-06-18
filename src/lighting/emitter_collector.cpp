@@ -39,7 +39,10 @@ emitter_collector::emitter_collector( render_state &rs ) : rs_( rs )
         // the only sampled texture Atlas(t0). SdfBuf (slot 1 → t2) and
         // SkyVisBuf (slot 2 → t3) are the other fragment storage buffers.
         SDL_GPUBufferCreateInfo bci{};
-        bci.usage = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ;
+        // GRAPHICS read (sprite.frag Emitters) + COMPUTE read (gi_field.comp
+        // gathers the same emitter data on the GPU compute GI path).
+        bci.usage = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ |
+                    SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ;
         bci.size  = EMITTER_BUF_BYTES;
         emitter_buf_ = SDL_CreateGPUBuffer( dev, &bci );
         if( !emitter_buf_ ) {

@@ -51,6 +51,31 @@ struct compiled_shader {
     explicit operator bool() const noexcept { return shader != nullptr; }
 };
 
+// Compute resource model. Mirrors SDL_ShaderCross_ComputePipelineMetadata.
+// Distinct from the graphics reflection: compute splits storage into
+// readonly/readwrite and carries the [numthreads] workgroup size.
+struct compute_resource_info {
+    std::uint32_t num_samplers = 0;
+    std::uint32_t num_readonly_storage_textures = 0;
+    std::uint32_t num_readonly_storage_buffers = 0;
+    std::uint32_t num_readwrite_storage_textures = 0;
+    std::uint32_t num_readwrite_storage_buffers = 0;
+    std::uint32_t num_uniform_buffers = 0;
+    std::uint32_t threadcount_x = 0;
+    std::uint32_t threadcount_y = 0;
+    std::uint32_t threadcount_z = 0;
+};
+
+// Result of a successful compute compile. `pipeline` is owned — caller must
+// release with SDL_ReleaseGPUComputePipeline(device, pipeline). Unlike the
+// graphics path (shader → separate pipeline build), shadercross emits the
+// compute pipeline directly from SPIR-V + reflected metadata.
+struct compiled_compute_pipeline {
+    SDL_GPUComputePipeline *pipeline = nullptr;
+    compute_resource_info resources{};
+    explicit operator bool() const noexcept { return pipeline != nullptr; }
+};
+
 // Init the global SDL_shadercross state. Must be called after gpu_device::init
 // and before any compile_graphics_shader call. Idempotent — safe to call once
 // per process.
@@ -77,6 +102,24 @@ compiled_shader compile_graphics_shader(
     std::string_view source,
     const char *entrypoint,
     SDL_ShaderCross_ShaderStage stage,
+    const char *debug_name = nullptr );
+
+// Single-call HLSL → SDL_GPUComputePipeline. HLSL → SPIR-V → reflect compute
+// metadata → backend-native compute pipeline. The reflected metadata (resource
+// counts + [numthreads] workgroup size) is passed straight through to
+// SDL_CreateGPUComputePipeline, so the shader declares its own resource model.
+//
+// `source`     — HLSL compute text (copied internally).
+// `entrypoint` — e.g. "main".
+// `debug_name` — optional label for diagnostics.
+//
+// On failure logs to the SDL debug channel and returns an empty result
+// (operator bool == false). Used both by the A0 go/no-go compute spike and the
+// real gi_compute_pass.
+compiled_compute_pipeline compile_compute_pipeline(
+    gpu_device &dev,
+    std::string_view source,
+    const char *entrypoint,
     const char *debug_name = nullptr );
 
 // Load an HLSL shader source from the lighting shader dir

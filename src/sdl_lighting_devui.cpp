@@ -17,6 +17,7 @@
 #include "creature.h"
 #include "game.h"
 #include "map.h"
+#include "lighting/dev_test_lights.h"
 #include "lighting/gpu_emitter.h"
 #include "lighting/imgui_layer.h"
 #include "lighting/render_state.h"
@@ -83,8 +84,17 @@ namespace cursor_light_emitter
 bool  enabled   = false;
 float radius    = 8.0f;
 float intensity = 1.5f;
+float color[3]  = { 1.0f, 1.0f, 1.0f }; // RGB tint (saturate one channel to see colored GI bounce)
 float wx = 0.0f, wy = 0.0f, wz = 0.0f;
 }  // namespace cursor_light_emitter
+
+// Storage for the click-to-place dev test lights (declared in dev_test_lights.h).
+namespace dev_test_lights
+{
+bool  place_mode = false;
+float hover_wx = 0.0f, hover_wy = 0.0f, hover_wz = 0.0f;
+std::vector<light> lights;
+}  // namespace dev_test_lights
 
 namespace sdl_lighting_devui
 {
@@ -224,7 +234,7 @@ static void draw_lighting_tab()
 
     static const char *mode_names[] = {
         "off", "ambient", "emitter", "sun", "sky", "total", "SDF", "sky_vis", "emit_bw",
-        "normal", "AO", "shadow mask"
+        "normal", "AO", "shadow mask", "GI"
     };
     int mode = static_cast<int>( g_current_dbg_mode );
     if( ImGui::Combo( "mode (F7)", &mode, mode_names, static_cast<int>( std::size( mode_names ) ) ) ) {
@@ -289,6 +299,28 @@ static void draw_effects_tab()
     ImGui::Checkbox( "omni light follows cursor", &cursor_light_emitter::enabled );
     dbg_slider( "cursor radius (tiles)", &cursor_light_emitter::radius, 1.0f, 40.0f );
     dbg_slider( "cursor intensity", &cursor_light_emitter::intensity, 0.0f, 5.0f );
+    ImGui::ColorEdit3( "cursor color", cursor_light_emitter::color );
+
+    // Click-to-place STATIC test lights (despawn when this panel closes). Unlike
+    // the cursor light, these stay put — pin one beside a wall to study the
+    // occluded side (direct shadow vs GI bounce around the corner). They reuse
+    // the cursor brush's radius/intensity/colour. hover_* is updated each frame
+    // by sdl_render_frame; we place on a world click (one that ImGui didn't eat).
+    ImGui::Checkbox( "place test lights on click", &dev_test_lights::place_mode );
+    if( dev_test_lights::place_mode
+        && ImGui::IsMouseClicked( ImGuiMouseButton_Left )
+        && !ImGui::GetIO().WantCaptureMouse ) {
+        dev_test_lights::lights.push_back( dev_test_lights::light{
+            dev_test_lights::hover_wx, dev_test_lights::hover_wy, dev_test_lights::hover_wz,
+            cursor_light_emitter::radius, cursor_light_emitter::intensity,
+            cursor_light_emitter::color[0], cursor_light_emitter::color[1],
+            cursor_light_emitter::color[2] } );
+    }
+    ImGui::Text( "placed: %d", static_cast<int>( dev_test_lights::lights.size() ) );
+    ImGui::SameLine();
+    if( ImGui::Button( "clear placed" ) ) {
+        dev_test_lights::lights.clear();
+    }
 
     ImGui::SeparatorText( "Surface normals (A1)" );
     dbg_slider( "normal amount", &g_dbg_params.nrm_amount, 0.0f, 10.0f );

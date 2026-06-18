@@ -1319,6 +1319,10 @@ class cata_tiles
         // Pixel offset of the tile-drawing area from the window's top-left.
         // camera_off = op / tile_width - o  converts tile_tu → absolute map tile.
         point get_drawing_pixel_offset() const { return op; }
+        // On-screen visible tile extent (columns/rows of the map drawing area).
+        // Used to bound the lighting SDF rebuild to the camera region (B1).
+        int get_screentile_width() const { return screentile_width; }
+        int get_screentile_height() const { return screentile_height; }
         // Hover-outline: map tile currently under the mouse (nullopt = none).
         // Set by game::handle_mouseview; read in draw_critter_at to outline the
         // creature there. See HOVER_OUTLINE_PLAN.md.

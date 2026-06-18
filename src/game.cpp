@@ -1812,6 +1812,12 @@ void game::calc_driving_offset( vehicle *veh )
 bool game::do_turn()
 {
     ZoneScopedN( "game::do_turn" );
+    // perf probe: per-turn SIM cost (post-input) + the big sub-phases, rolling
+    // avg every 120 turns. Renders are ~1ms but frames are ~30ms apart while
+    // moving — this finds where the per-turn time actually goes.
+    using _perf_clk = std::chrono::steady_clock;
+    static double _perf_sim = 0.0, _perf_cache = 0.0, _perf_mon = 0.0, _perf_world = 0.0;
+    static int    _perf_n = 0;
     {
         cleanup_arenas();
         if( is_game_over() ) {
@@ -2052,11 +2058,16 @@ bool game::do_turn()
     }
     // Update vision caches for monsters. If this turns out to be expensive,
     // consider a stripped down cache just for monsters.
+    const auto _perf_sim_t0 = _perf_clk::now();
     {
+        const auto _t0 = _perf_clk::now();
         m.build_map_cache( get_levz(), true );
+        _perf_cache += std::chrono::duration<double, std::milli>( _perf_clk::now() - _t0 ).count();
     }
     if( !monperf ) {
+        const auto _t0 = _perf_clk::now();
         monmove();
+        _perf_mon += std::chrono::duration<double, std::milli>( _perf_clk::now() - _t0 ).count();
     }
     if( !npcperf ) {
         npcmove();
@@ -2117,7 +2128,11 @@ bool game::do_turn()
     u.volume = 0;
 
     // Tick all loaded submaps: fields for every submap, items/vehicles for batch-eligible ones.
-    world_tick();
+    {
+        const auto _t0 = _perf_clk::now();
+        world_tick();
+        _perf_world += std::chrono::duration<double, std::milli>( _perf_clk::now() - _t0 ).count();
+    }
 
     // Fire-spread (and other non-bubble) requests created during world_tick()
     // must be realised before the next turn.  Let the load manager diff
@@ -2152,6 +2167,16 @@ bool game::do_turn()
     // pause/menu keys can still stop long-running actions.
     if( !u.activity && !u.has_destination() ) {
         inp_mngr.pump_events();
+    }
+
+    _perf_sim += std::chrono::duration<double, std::milli>( _perf_clk::now() - _perf_sim_t0 ).count();
+    if( ++_perf_n >= 20 ) {
+        dbg( DL::Info ) << "[sim][perf] " << _perf_n << " turns avg: sim_total="
+                        << ( _perf_sim / _perf_n ) << "ms (build_map_cache=" << ( _perf_cache / _perf_n )
+                        << " monmove=" << ( _perf_mon / _perf_n ) << " world_tick="
+                        << ( _perf_world / _perf_n ) << ")";
+        _perf_sim = _perf_cache = _perf_mon = _perf_world = 0.0;
+        _perf_n = 0;
     }
 
     return false;

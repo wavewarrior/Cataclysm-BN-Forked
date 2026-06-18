@@ -265,24 +265,19 @@ class sprite_batcher
                                      SDL_GPUBuffer    *sdf_buf      = nullptr,
                                      SDL_GPUSampler   *data_sampler = nullptr,
                                      SDL_GPUBuffer    *sky_vis_buf  = nullptr,
-                                     SDL_GPUTexture   *indirect_tex = nullptr,
+                                     SDL_GPUBuffer    *gi_buf       = nullptr,
                                      SDL_GPUBuffer    *vis_buf      = nullptr,
                                      const sun_params *sp           = nullptr,
                                      const debug_params *dbg        = nullptr,
                                      SDL_GPUBuffer    *sun_sdf_buf  = nullptr );
 
-        // Silhouette sun-shadow mask (Phase 2). Bound as fragment storage-read
-        // texture slot 1 (t2/space2) for sprite.frag. Set separately from the
-        // lighting god-call; only the tile batcher uses it. Persists until re-set.
+        // Silhouette sun-shadow mask (Phase 2). Now the sole fragment storage-read
+        // texture, bound at slot 0 (t1/space2) for sprite.frag. Set separately from
+        // the lighting god-call; only the tile batcher uses it. Persists until
+        // re-set. (GI moved off a storage texture to the GiBuf storage buffer in
+        // Stage 1 — set_indirect_tex is gone; the GI buffer rides the lighting
+        // god-call's gi_buf param.)
         void set_shadow_mask( SDL_GPUTexture *tex );
-
-        // Indirect/GI cascade texture (sprite.frag storage-tex slot 0, t1/space2).
-        // Normally set via the lighting god-call for the tile batcher; exposed
-        // standalone so the UI batcher (same sprite.frag pipeline) can also be fed
-        // a valid storage texture. D3D12 requires every declared pipeline resource
-        // bound, so a sprite.frag batcher must have BOTH storage textures or it
-        // trips a "missing binding" error. Persists until re-set.
-        void set_indirect_tex( SDL_GPUTexture *tex );
 
         // Append one sprite to the pending batch. Triggers an automatic
         // flush when the per-frame instance budget is reached so callers can

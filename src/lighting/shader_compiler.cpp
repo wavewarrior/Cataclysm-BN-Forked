@@ -138,4 +138,89 @@ compiled_shader compile_graphics_shader(
     return out;
 }
 
+compiled_compute_pipeline compile_compute_pipeline(
+    gpu_device &dev,
+    std::string_view source,
+    const char *entrypoint,
+    const char *debug_name )
+{
+    compiled_compute_pipeline out;
+    if( !dev.ready() ) {
+        dbg( DL::Error ) << "compile_compute_pipeline: gpu_device not ready";
+        return out;
+    }
+    if( !compiler_initialised.load() ) {
+        dbg( DL::Error ) << "compile_compute_pipeline: SDL_ShaderCross not initialised";
+        return out;
+    }
+
+    const std::string src_z( source );
+
+    SDL_ShaderCross_HLSL_Info hlsl_info{};
+    hlsl_info.source = src_z.c_str();
+    hlsl_info.entrypoint = entrypoint;
+    hlsl_info.include_dir = nullptr;
+    hlsl_info.defines = nullptr;
+    hlsl_info.shader_stage = SDL_SHADERCROSS_SHADERSTAGE_COMPUTE;
+    hlsl_info.props = 0;
+
+    // Step A: HLSL → SPIR-V.
+    size_t spirv_size = 0;
+    void *spirv = SDL_ShaderCross_CompileSPIRVFromHLSL( &hlsl_info, &spirv_size );
+    if( !spirv || spirv_size == 0 ) {
+        dbg( DL::Error ) << "compute HLSL→SPIRV failed ("
+                         << ( debug_name ? debug_name : "?" )
+                         << "): " << SDL_GetError();
+        return out;
+    }
+
+    // Step B: reflect the compute resource model (readonly/readwrite split +
+    // [numthreads] workgroup size). Passed verbatim to the pipeline create.
+    SDL_ShaderCross_ComputePipelineMetadata *meta =
+        SDL_ShaderCross_ReflectComputeSPIRV(
+            static_cast<const Uint8 *>( spirv ), spirv_size, /*props=*/0 );
+    if( !meta ) {
+        dbg( DL::Error ) << "compute SPIR-V reflect failed ("
+                         << ( debug_name ? debug_name : "?" )
+                         << "): " << SDL_GetError();
+        SDL_free( spirv );
+        return out;
+    }
+
+    // Step C: SPIR-V + metadata → backend compute pipeline (one call, unlike
+    // the graphics shader+pipeline split).
+    SDL_ShaderCross_SPIRV_Info spirv_info{};
+    spirv_info.bytecode = static_cast<const Uint8 *>( spirv );
+    spirv_info.bytecode_size = spirv_size;
+    spirv_info.entrypoint = entrypoint;
+    spirv_info.shader_stage = SDL_SHADERCROSS_SHADERSTAGE_COMPUTE;
+    spirv_info.props = 0;
+
+    SDL_GPUComputePipeline *pipe = SDL_ShaderCross_CompileComputePipelineFromSPIRV(
+                                       dev.raw(), &spirv_info, meta, /*props=*/0 );
+
+    out.resources.num_samplers                  = meta->num_samplers;
+    out.resources.num_readonly_storage_textures = meta->num_readonly_storage_textures;
+    out.resources.num_readonly_storage_buffers  = meta->num_readonly_storage_buffers;
+    out.resources.num_readwrite_storage_textures = meta->num_readwrite_storage_textures;
+    out.resources.num_readwrite_storage_buffers = meta->num_readwrite_storage_buffers;
+    out.resources.num_uniform_buffers           = meta->num_uniform_buffers;
+    out.resources.threadcount_x                 = meta->threadcount_x;
+    out.resources.threadcount_y                 = meta->threadcount_y;
+    out.resources.threadcount_z                 = meta->threadcount_z;
+
+    SDL_free( spirv );
+    SDL_free( meta );
+
+    if( !pipe ) {
+        dbg( DL::Error ) << "SPIRV→ComputePipeline failed ("
+                         << ( debug_name ? debug_name : "?" )
+                         << "): " << SDL_GetError();
+        return out;
+    }
+
+    out.pipeline = pipe;
+    return out;
+}
+
 } // namespace lighting

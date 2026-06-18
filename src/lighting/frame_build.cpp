@@ -1,6 +1,7 @@
 #include "frame_build.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -72,7 +73,7 @@ void gaussian_blur_tilefield( std::vector<float> &f, int W, int H, float sigma )
 
 frame_lighting_result build_and_submit_lighting( render_state &rs,
         lighting_rebuild_flags rebuild, bool want_hud_snapshot, float skylight_bleed,
-        float vision_blur )
+        float vision_blur, int cam_x0, int cam_y0, int cam_w, int cam_h )
 {
     ZoneScoped;
     frame_lighting_result result;
@@ -147,6 +148,7 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
         if( rebuild.structure
             && static_cast<int>( mc.transparency_cache.size() ) >= total ) {
             ZoneScopedN( "light_pertile_rebuild" );
+            const auto _perf_struct_t0 = std::chrono::steady_clock::now();
 
             dbg( DL::Debug ) << "[lighting] structure_rebuild: trans=" << mc.transparency_cache.size()
                               << " out=" << mc.outside_cache.size()
@@ -162,58 +164,88 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
 
             // CPU Euclidean distance transform on an SDF_SUPERSAMPLE× finer grid:
             // replicate each tile's transparency into its SS×SS subcells (occluder
-            // edges stay tile-aligned — correct for tile-walls), run the same DT,
-            // then rescale subcell distances to TILE units (÷SS) so the shader's
-            // cone trace is unchanged. Sub-tile-fine penumbra → tight + smooth.
-            std::vector<float> trans_ss( static_cast<size_t>( SW ) * SH );
-            for( int x = 0; x < W; ++x ) {
-                for( int y = 0; y < H; ++y ) {
-                    const float t  = mc.transparency_cache[ x * H + y ];
-                    const int   bx = x * ss;
-                    const int   by = y * ss;
-                    for( int sx = 0; sx < ss; ++sx ) {
-                        for( int sy = 0; sy < ss; ++sy ) {
-                            trans_ss[ static_cast<size_t>( bx + sx ) * SH + ( by + sy ) ] = t;
+            // edges stay tile-aligned — correct for tile-walls), run the DT, then
+            // rescale subcell distances to TILE units (÷SS) so the shader's cone
+            // trace is unchanged. Sub-tile-fine penumbra → tight + smooth.
+            //
+            // B1 (perf): the DT over the full bubble × SS² (~520k cells) was the
+            // ~10ms structure_rebuild spike, but only the on-screen tiles (+
+            // shadow-reach margin) are ever sampled. Limit the SS replication +
+            // DT to the camera tile-rect ± MARGIN; scatter the (tile-unit) result
+            // into a full-size buffer whose off-region cells are a large
+            // "no-occluder" sentinel. On-screen fragments never bilinear-tap or
+            // shadow-march into the sentinel (MARGIN covers reach), so absolute
+            // indexing + the full-size upload + the shader stay unchanged.
+            // cam_w/h<=0 → whole-bubble region == pre-B1 behaviour.
+            constexpr int   MARGIN       = 8;        // tiles of shadow-reach slack
+            constexpr float SDF_SENTINEL = 1.0e6f;   // tile units; "no occluder near"
+            int rx0 = 0, ry0 = 0, rx1 = W, ry1 = H;
+            if( cam_w > 0 && cam_h > 0 ) {
+                rx0 = std::clamp( cam_x0 - MARGIN, 0, W );
+                ry0 = std::clamp( cam_y0 - MARGIN, 0, H );
+                rx1 = std::clamp( cam_x0 + cam_w + MARGIN, 0, W );
+                ry1 = std::clamp( cam_y0 + cam_h + MARGIN, 0, H );
+            }
+            const int   rw     = std::max( 0, rx1 - rx0 );
+            const int   rh     = std::max( 0, ry1 - ry0 );
+            const float inv_ss = 1.0f / static_cast<float>( ss );
+
+            // SS transparency staging for the sub-rect, reused across the sdf +
+            // sun_sdf builds (render thread only; sequential, fully overwritten).
+            static std::vector<float> trans_ss;
+            const auto region_sdf = [&]( std::vector<float> &out, auto trans_at ) {
+                out.assign( static_cast<size_t>( SW ) * SH, SDF_SENTINEL );
+                if( rw <= 0 || rh <= 0 ) {
+                    return;
+                }
+                const int SRW = rw * ss;
+                const int SRH = rh * ss;
+                trans_ss.assign( static_cast<size_t>( SRW ) * SRH, 0.0f );
+                for( int x = 0; x < rw; ++x ) {
+                    for( int y = 0; y < rh; ++y ) {
+                        const float t  = trans_at( rx0 + x, ry0 + y );
+                        const int   bx = x * ss;
+                        const int   by = y * ss;
+                        for( int sx = 0; sx < ss; ++sx ) {
+                            for( int sy = 0; sy < ss; ++sy ) {
+                                trans_ss[ static_cast<size_t>( bx + sx ) * SRH + ( by + sy ) ] = t;
+                            }
                         }
                     }
                 }
-            }
-            sdf = lighting::compute_sdf_cpu( trans_ss.data(), SW, SH );
-            const float inv_ss = 1.0f / static_cast<float>( ss );
-            for( float &d : sdf ) {
-                d *= inv_ss;   // subcell distance → tile units
-            }
+                const std::vector<float> sub =
+                    lighting::compute_sdf_cpu( trans_ss.data(), SRW, SRH );
+                // Scatter sub-rect subcell distances into the full SS grid at the
+                // region's subcell offset, rescaled to tile units.
+                for( int x = 0; x < SRW; ++x ) {
+                    const int gx = rx0 * ss + x;
+                    for( int y = 0; y < SRH; ++y ) {
+                        const int gy = ry0 * ss + y;
+                        out[ static_cast<size_t>( gx ) * SH + gy ] =
+                            sub[ static_cast<size_t>( x ) * SRH + y ] * inv_ss;
+                    }
+                }
+            };
+
+            // sdf: real transparency (trees stay opaque → they occlude emitters
+            // + form AO cavities).
+            region_sdf( sdf, [&]( int x, int y ) -> float {
+                return mc.transparency_cache[ x * H + y ];
+            } );
             sdf_runtime_w = W;   // tile dims; the SS factor is implicit (shader SDF_SS)
             sdf_runtime_h = H;
 
-            // Phase 2.3: wall-only sun SDF. Rebuild the SS transparency grid
-            // with TREE tiles forced fully transparent → the sun shadow march
-            // ignores them (their silhouette comes from the screen-space shadow
-            // mask instead of a blocky SDF column). Trees stay opaque in `sdf`
-            // above, so they still occlude emitters + form AO cavities. Separate
-            // per-tile loop (32k flag lookups, not per-subcell) — leaves the main
-            // trans_ss loop untouched.
-            std::vector<float> trans_ss_sun( static_cast<size_t>( SW ) * SH );
-            for( int x = 0; x < W; ++x ) {
-                for( int y = 0; y < H; ++y ) {
-                    float t = mc.transparency_cache[ x * H + y ];
-                    if( m.has_flag( TFLAG_TREE,
-                                    tripoint_bub_ms( point_bub_ms( x, y ), zlev ) ) ) {
-                        t = 1.0f;   // open air to the sun (max transparent)
-                    }
-                    const int bx = x * ss;
-                    const int by = y * ss;
-                    for( int sx = 0; sx < ss; ++sx ) {
-                        for( int sy = 0; sy < ss; ++sy ) {
-                            trans_ss_sun[ static_cast<size_t>( bx + sx ) * SH + ( by + sy ) ] = t;
-                        }
-                    }
+            // Phase 2.3: wall-only sun SDF — TREE tiles forced fully transparent
+            // so the sun march ignores them (their silhouette comes from the
+            // screen-space shadow mask, not a blocky SDF column). Same region DT.
+            region_sdf( sun_sdf, [&]( int x, int y ) -> float {
+                float t = mc.transparency_cache[ x * H + y ];
+                if( m.has_flag( TFLAG_TREE,
+                                tripoint_bub_ms( point_bub_ms( x, y ), zlev ) ) ) {
+                    t = 1.0f;   // open air to the sun (max transparent)
                 }
-            }
-            sun_sdf = lighting::compute_sdf_cpu( trans_ss_sun.data(), SW, SH );
-            for( float &d : sun_sdf ) {
-                d *= inv_ss;   // subcell distance → tile units
-            }
+                return t;
+            } );
 
             // Sky visibility from outside_cache (same x-major layout as
             // transparency_cache, idx = x*H+y). 255 = open sky overhead,
@@ -322,6 +354,10 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
             result.sdf_W    = W;
             result.sdf_size = sdf.size();
             result.built_pertile = true;
+            const double _perf_struct_ms = std::chrono::duration<double, std::milli>(
+                                               std::chrono::steady_clock::now() - _perf_struct_t0 ).count();
+            DebugLogFL( DL::Info, DC::Main ) << "[lighting][perf] structure_rebuild ms=" << _perf_struct_ms
+                                             << " grid=" << ( static_cast<int>( mc.transparency_cache.size() ) ) << "tiles x" << ( ss * ss );
         } // if rebuild.structure
 
         // ── Vis rebuild: FOV visibility mask ───────────────────────────────
@@ -331,6 +367,7 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
         if( rebuild.vis
             && static_cast<int>( mc.seen_cache.size() ) >= total ) {
             ZoneScopedN( "light_vis_build" );
+            const auto _perf_vis_t0 = std::chrono::steady_clock::now();
 
             dbg( DL::Debug ) << "[lighting] vis_rebuild: seen=" << mc.seen_cache.size()
                               << " cam=" << mc.camera_cache.size()
@@ -383,6 +420,9 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
                     }
                 }
             }
+            const double _perf_vis_ms = std::chrono::duration<double, std::milli>(
+                                            std::chrono::steady_clock::now() - _perf_vis_t0 ).count();
+            DebugLogFL( DL::Info, DC::Main ) << "[lighting][perf] vis_rebuild ms=" << _perf_vis_ms;
         } // if rebuild.vis
     } // if have_world
 

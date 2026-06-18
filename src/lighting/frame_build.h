@@ -62,8 +62,16 @@ struct lighting_rebuild_flags {
 // dissolve; a blur of radius >= a few tiles smears the steps into a smooth
 // diagonal (Stoneshard's mask-blur technique). Render-only (modulates final_rgb),
 // so gameplay LOS is untouched.
+// cam_x0/cam_y0/cam_w/cam_h (B1): on-screen tile rect in bubble-local tile
+// coords (origin from cata_tiles::get_tile_map_origin, extent from
+// get_screentile_*). The expensive supersampled Euclidean DT (structure_rebuild)
+// is limited to this rect + an internal margin; off-region SDF is a large
+// "no-occluder" sentinel never sampled by on-screen fragments. cam_w<=0 or
+// cam_h<=0 → whole-bubble DT (the pre-B1 behaviour). Absolute-world-tile
+// indexing and the full-size upload are unchanged, so no shader edit is needed.
 frame_lighting_result build_and_submit_lighting( render_state &rs,
         lighting_rebuild_flags rebuild, bool want_hud_snapshot, float skylight_bleed = 0.0f,
-        float vision_blur = 0.0f );
+        float vision_blur = 0.0f,
+        int cam_x0 = -1, int cam_y0 = -1, int cam_w = 0, int cam_h = 0 );
 
 } // namespace lighting

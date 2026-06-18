@@ -4,6 +4,7 @@
 #include "imgui.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <memory>
@@ -29,6 +30,7 @@
 #include "sdl_geometry.h"
 #include "sdl_lighting_devui.h"
 #include "sdl_wrappers.h"
+#include "lighting/dev_test_lights.h"
 #include "lighting/frame_build.h"
 #include "lighting/imgui_layer.h"
 #include "lighting/rmlui_layer.h"
@@ -150,6 +152,9 @@ auto build_lighting( lighting::render_state &rs ) -> bool
         const auto &cache = g->m.get_cache_ref( z );
         const std::uint64_t gen = cache.transparency_generation;
 
+        // Rebuild the SDF on transparency change (gen), z change, OR map shift
+        // (origin): a shift moves the bubble's contents, so the map-local SDF must
+        // realign immediately or shadows drift behind the camera for a frame.
         rebuild.structure = imgui_layer::visible()
                             || gen != last_gen || z != last_z
                             || origin != last_origin;
@@ -191,10 +196,43 @@ auto build_lighting( lighting::render_state &rs ) -> bool
         cursor_light_emitter::wz = static_cast<float>( g->u.bub_pos().z() );
     }
 
+    // Dev test lights: keep the hovered world-tile fresh while the F4 panel is
+    // open (the panel drops a static light there on click); despawn all placed
+    // lights the moment the panel closes. Pure debugging aid.
+    if( !imgui_layer::visible() ) {
+        if( !dev_test_lights::lights.empty() ) {
+            dev_test_lights::lights.clear();
+        }
+    } else if( g && tilecontext && world_generator && world_generator->active_world ) {
+        float msx = 0.0f, msy = 0.0f;
+        SDL_GetMouseState( &msx, &msy );
+        const point o  = tilecontext->get_tile_map_origin().raw();
+        const point op = tilecontext->get_drawing_pixel_offset();
+        const int   tw = std::max( 1, tilecontext->get_tile_width() );
+        const int   th = std::max( 1, tilecontext->get_tile_height() );
+        dev_test_lights::hover_wx = ( msx - static_cast<float>( op.x ) )
+                                    / static_cast<float>( tw ) + static_cast<float>( o.x );
+        dev_test_lights::hover_wy = ( msy - static_cast<float>( op.y ) )
+                                    / static_cast<float>( th ) + static_cast<float>( o.y );
+        dev_test_lights::hover_wz = static_cast<float>( g->u.bub_pos().z() );
+    }
+
     dbg( DL::Debug ) << "[render] build_and_submit_lighting START";
+    // B1: bound the SDF rebuild to the on-screen tile rect. Origin + extent come
+    // from cata_tiles (bubble-local tile coords, same space as the SDF grid).
+    // No tilecontext (e.g. main menu) → cam_w=0 → whole-bubble fallback.
+    int cam_x0 = -1, cam_y0 = -1, cam_w = 0, cam_h = 0;
+    if( tilecontext ) {
+        const point cam_o = tilecontext->get_tile_map_origin().raw();
+        cam_x0 = cam_o.x;
+        cam_y0 = cam_o.y;
+        cam_w  = tilecontext->get_screentile_width();
+        cam_h  = tilecontext->get_screentile_height();
+    }
     lighting::frame_lighting_result fr =
         lighting::build_and_submit_lighting( rs, rebuild, g_dbg_lighting,
-                                             g_skylight_bleed, g_vision_blur );
+                                             g_skylight_bleed, g_vision_blur,
+                                             cam_x0, cam_y0, cam_w, cam_h );
     dbg( DL::Debug ) << "[render] build_and_submit_lighting DONE, built_pertile=" << fr.built_pertile;
     rc_rebuild = fr.built_pertile;
     if( fr.built_pertile ) {
@@ -217,24 +255,27 @@ auto flush_and_gather_rc( lighting::render_state &rs,
         rs.collector()->flush_to_render_cb( ctx.cmd_buffer );
     }
 
-    if( rc_rebuild && rs.sdf().populated() && rs.rc().ready()
+    if( rc_rebuild && rs.sdf().populated() && rs.gi().ready()
         && rs.collector() && rs.sdf().sdf_buffer() ) {
-        lighting::rc_params rp{};
+        lighting::gi_params rp{};
         rp.emitter_count = static_cast<std::uint32_t>( std::max( 0, rs.collector()->last_count() ) );
         rp.map_w         = static_cast<std::uint32_t>( rs.sdf().map_w() );
         rp.map_h         = static_cast<std::uint32_t>( rs.sdf().map_h() );
         rp.current_z     = g ? static_cast<float>( g->u.bub_pos().z() ) : 0.0f;
         rp.shadow_k      = g_dbg_params.shadow_k;
         rp.shadow_steps  = g_dbg_params.shadow_steps;
-        rs.rc().record( ctx.cmd_buffer,
+        // Two compute dispatches (field gather → ray-march bounce) on the render
+        // CB. SDL_GPU inserts the compute→graphics barrier so the sprite pass
+        // reads the finished gi_buffer().
+        rs.gi().record( ctx.cmd_buffer,
                         rs.collector()->emitter_buffer(), rs.sdf().sdf_buffer(),
                         rp.map_w, rp.map_h, rp );
     }
 
     if( g_rc_readback ) {
         g_rc_readback = false;
-        if( rs.rc().ready() && rs.sdf().populated() ) {
-            rs.rc().debug_log_stats( static_cast<std::uint32_t>( rs.sdf().map_w() ),
+        if( rs.gi().ready() && rs.sdf().populated() ) {
+            rs.gi().debug_log_stats( static_cast<std::uint32_t>( rs.sdf().map_w() ),
                                      static_cast<std::uint32_t>( rs.sdf().map_h() ) );
         }
     }
@@ -696,6 +737,38 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
 
 void refresh_display()
 {
+    // perf probe: render-body time + wall-clock period between frames (the
+    // period includes the sim/turn work between renders). Rolling avg every
+    // 120 frames → tells render-bound vs sim-bound. RAII so all return paths log.
+    struct frame_perf {
+        std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
+        ~frame_perf() {
+            using clk = std::chrono::steady_clock;
+            const clk::time_point now = clk::now();
+            const double body_ms = std::chrono::duration<double, std::milli>( now - t0 ).count();
+            static clk::time_point last{};
+            static double sum_body = 0.0, max_body = 0.0, sum_period = 0.0, max_period = 0.0;
+            static int n = 0;
+            if( last.time_since_epoch().count() != 0 ) {
+                const double period_ms = std::chrono::duration<double, std::milli>( now - last ).count();
+                sum_period += period_ms;
+                max_period = std::max( max_period, period_ms );
+            }
+            last = now;
+            sum_body += body_ms;
+            max_body = std::max( max_body, body_ms );
+            if( ++n >= 120 ) {
+                const double ap = sum_period / n;
+                DebugLogFL( DL::Info, DC::Main )
+                        << "[render][perf] " << n << " frames: render_body avg=" << ( sum_body / n )
+                        << "ms max=" << max_body << "ms | frame_period avg=" << ap << "ms (~"
+                        << ( ap > 0.0 ? 1000.0 / ap : 0.0 ) << " fps) max=" << max_period << "ms";
+                sum_body = max_body = sum_period = max_period = 0.0;
+                n = 0;
+            }
+        }
+    } _fp;
+
     dbg( DL::Debug ) << "[render] refresh_display START";
     g_display.needupdate = false;
     g_display.lastupdate = SDL_GetTicks();

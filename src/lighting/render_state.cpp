@@ -3,6 +3,7 @@
 #include "sdf_pass.h"
 
 #include "shader_compiler.h"
+#include "compute_spike.h"
 #include "debug.h"
 #include "game_constants.h"
 
@@ -44,6 +45,11 @@ void render_state::init( SDL_Window *host_window )
     device_.init( host_window, /*debug=*/true, /*vsync=*/false );
 
     init_shader_compiler();
+
+    // A0 go/no-go: prove a minimal compute pipeline (dynamic SB loop) creates +
+    // runs on this backend before the GI compute rework relies on it. Logs the
+    // verdict to DC::Main; never fatal. Remove once A0 is resolved.
+    run_compute_spike( device_ );
 
     const SDL_GPUTextureFormat fmt = device_.swapchain_format();
 
@@ -108,10 +114,12 @@ void render_state::init( SDL_Window *host_window )
     const int rt_tiles = REALITY_BUBBLE_SIZE_MAX * SEEX;
     sdf_.init( device_, rt_tiles, rt_tiles );
 
-    // Radiance-cascade GI pass (Step-3 Phase 2). Its output cascade texture is
-    // sized to the same physical map extent as the SDF (square), stored
-    // transposed as a drop-in for the sprite's IndirectTex.
-    rc_.init( device_, static_cast<std::uint32_t>( rt_tiles ),
+    // GPU compute GI pass (Stage 1 of GI_COMPUTE_AND_PERF_PLAN — replaced the
+    // fragment radiance_cascade_pass). gi_buffer() is tile-res (4 floats/tile,
+    // x-major), sized to the same max map extent as the SDF; the sprite reads it
+    // as GiBuf. Emitter + SDF buffers carry COMPUTE_STORAGE_READ so the field
+    // pass can gather them.
+    gi_.init( device_, static_cast<std::uint32_t>( rt_tiles ),
               static_cast<std::uint32_t>( rt_tiles ) );
 
     // UI compositor target. Sized to the PHYSICAL (drawable) swapchain pixels
@@ -215,7 +223,7 @@ void render_state::shutdown() noexcept
     shadow_mask_.reset();
     world_ldr_target_.reset();
     tonemap_.shutdown();
-    rc_.shutdown();
+    gi_.shutdown();
     bloom_.shutdown();
     volumetric_.shutdown();
     rain_.shutdown();
@@ -308,17 +316,16 @@ void render_state::begin_lighting_frame( const frame_light_inputs &in )
     SDL_GPUBuffer  *ssun = sdf_.sun_sdf_buffer();  // Phase 2.3 wall-only sun SDF
     SDL_GPUBuffer  *kvis = sdf_.sky_vis_buffer();
     SDL_GPUBuffer  *vbuf = sdf_.vis_buffer();
-    // GI source for the sprite's IndirectTex: the GPU radiance-cascade gather
-    // (Step-3 Phases 2/3, single-bounce). The CPU diffusion path was retired in
-    // Phase 4 — RC is the sole GI now. cascade_tex_ is cleared at init, so it is
-    // safe to bind before the first gather (reads as no-GI).
-    // Bound unconditionally: cascade_tex_ is always allocated + cleared at init
-    // (even if the RC pipelines failed on this backend), so the sprite.frag
-    // IndirectTex slot always has a valid storage texture. When RC is disabled or
-    // the SDF isn't ready the cascade reads as cleared black (no GI); the shader
-    // also gates the GI term by gi_strength / sdf_map_w. A null here would leave
-    // a declared fragment storage-texture slot unbound → D3D12 "missing binding".
-    SDL_GPUTexture *itex = rc_.cascade_texture();
+    // GI source for the sprite's GiBuf: the GPU compute GI pass output
+    // (gi_compute_pass, single-bounce). The fragment radiance_cascade_pass it
+    // replaced failed D3D12 pipeline creation; the gather now runs in compute.
+    // gi_buffer() is always allocated + zeroed at init (even if the compute
+    // pipelines failed on this backend), so the sprite.frag GiBuf storage-buffer
+    // slot always has a valid handle. When GI is disabled or the SDF isn't ready
+    // it reads as zero (no GI); the shader also gates the GI term by gi_strength
+    // / sdf_map_w. A null here would leave a declared fragment storage-buffer slot
+    // unbound → D3D12 "missing binding".
+    SDL_GPUBuffer *gibuf = gi_.gi_buffer();
     const Uint32 ne = collector_
                       ? static_cast<Uint32>( collector_->last_count() )
                       : 0u;
@@ -328,7 +335,7 @@ void render_state::begin_lighting_frame( const frame_light_inputs &in )
     tile_batcher_.set_lighting_resources(
         in.tile_pixel_size, in.z_level, ne, in.ambient,
         in.camera_off_x, in.camera_off_y, sw, sh,
-        ebuf, sbuf, gpu_sampler_, kvis, itex, vbuf, &in.sun, &in.debug, ssun );
+        ebuf, sbuf, gpu_sampler_, kvis, gibuf, vbuf, &in.sun, &in.debug, ssun );
 
     // Silhouette sun-shadow mask (Phase 2): bind it as the tile batcher's 2nd
     // fragment storage texture (sprite.frag ShadowMask, t2/space2). Always
@@ -798,7 +805,7 @@ void render_state::flush_shadow_casters( SDL_GPUCommandBuffer *cb,
         in.tile_pixel_size, in.z_level, 0u, in.ambient,
         in.camera_off_x, in.camera_off_y, 0u, 0u,
         /*emitter*/nullptr, /*sdf*/nullptr, gpu_sampler_,
-        /*sky_vis*/nullptr, /*indirect*/nullptr, /*vis*/nullptr,
+        /*sky_vis*/nullptr, /*gi*/nullptr, /*vis*/nullptr,
         &in.sun, &in.debug );
 
     // Clear to opaque black (alpha 1): shadow.frag writes alpha=1 and the
