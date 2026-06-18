@@ -49,12 +49,17 @@ options=2, **newcharacter=16 (8 slices)**, main_menu=2, worldfactory=4 sessions;
 **ranged.cpp=0** (the proof it is genuinely unstarted). Worldfactory commits:
 `07d6d6aa53` / `6a7f93a194` / `d689e9acb4` / `2eedac603e`.
 
-**GENUINELY REMAINING (no toggle, confirmed unstarted in code):**
-1. **ranged** (targeting UI, `ranged.cpp`) — the last interactive modal; was deferred.
-2. **Tier 7 — sidebar HUD** (the 53 `draw_*` panels) — architecturally hardest.
+**GENUINELY REMAINING (updated 2026-06-18):**
+1. ~~**ranged**~~ **DONE** — slices 2a (`3109aa26b4`) + 2b/2c (`5a3c772d2d`) committed;
+   `ranged_rmlui_enabled()` toggle live. The top-banner "ranged.cpp=0" proof is STALE
+   (it predates the slices). Only the keystone number-for-number aim A/B is owed.
+2. **Tier 7 — sidebar HUD** (the 53 `draw_*` panels) — architecturally hardest. **STARTED:
+   slice 1 (lifecycle + Stats panel) committed `03bf258feb` 2026-06-18.** See the Tier 7
+   progress section below. The continuous-HUD lifecycle is now proven-shaped; remaining =
+   the other panel groups + the mouse-capture passive-doc gate (slice 2) + messages.
 3. **Tier 8 — F4 dev panel** (ImGui → RmlUi; still ImGui in `sdl_lighting_devui.cpp`).
 4. **Tier 9 — minigames** char-grid widget.
-5. **Tier 10 — RIP OUT** curses-SDL + ImGui — gated on 100% coverage (i.e. 1-4 above).
+5. **Tier 10 — RIP OUT** curses-SDL + ImGui — gated on 100% coverage (i.e. 2-4 above).
 
 **EYEBALL DEBT (committed, toggle OFF, user A/B owed):** most of the above DONE set
 shipped build-blind. The newest unverified: world_text 4.1/4.2a, description_view,
@@ -2126,6 +2131,48 @@ drain (only sprite/texture blits). Consequences:
 §7
 world-text unblocks Tier-5 ranged. The deferred faction (Tier 2) also remains (needs the
 creature/npc-info F.2 component).
+
+### Tier 7 progress (sidebar HUD — the continuous every-turn HUD)
+
+Plan/slice design: `~/.claude/plans/rippling-spinning-starfish.md`. Strategy (decided,
+GO at full scope): **hybrid, render-only, top-down contiguous incremental** — value/
+body-graph widgets bind structured data directly; the 53 native `draw_*` get parallel
+`*_text()` producers (faction/ranged precedent, curses pristine for A/B). One master
+toggle replaces a contiguous TOP segment; panels migrate in column order so the RmlUi
+block stays a single flex column; final slice → whole column → default-flip → §8 gate #1.
+
+Ground truth: `game::draw_panels` (game.cpp) loops `panel_manager::get_current_layout()`,
+drawing each `window_panel` into a fresh `newwin` via its `draw` fn. RmlUi context
+renders only while `any_open()` (rmlui_layer `g_open_docs`), so a persistent HUD doc
+opened once renders every frame with modals stacking on top by open order. The modal
+`rml_doc` harness is the WRONG lifecycle (bundles a 16ms input tick for a blocking loop);
+the HUD uses its own non-modal open path.
+
+- **Slice 1 — lifecycle scaffold + Stats panel — DONE + BUILD-GREEN (Metal, fresh relink
+  22:00), TOGGLE OFF, EYEBALL OWED (Metal + D3D12), COMMITTED `03bf258feb`.** Persistent-
+  HUD owner in **panels.cpp** (`sidebar_hud_open/sync/close/owns_panel`; lives there to
+  reuse the TU-static `str_string`/etc.) mirrors `rml_doc::open` MINUS the input tick.
+  `data/gui/sidebar_hud.{rml,rcss}` (model `sidebar_hud`, transparent edge-anchored flex
+  column) binds one `cata_text_to_rml` stats row built from the same getters `draw_stats`
+  uses. Wired into `draw_panels`: lazy open + per-turn sync when enabled, skip the curses
+  draw for the owned "Stats" panel; `close()` on toggle-off + in `game::cleanup_at_end`
+  (so the HUD never lingers over the main menu). F4 toggle "sidebar HUD (stats)" (OFF).
+  All 7 touched files were CLEAN (no entanglement with the uncommitted runic/lighting
+  working set). **EYEBALL CHECK (user, A/B via F4 — use a BUILT-IN layout, the default;
+  the `we_*` widget layouts name the panel by widget id, not "Stats", so slice 1 won't
+  own them yet):** toggle ON → STR/DEX/INT/PER render via RmlUi at the sidebar top,
+  values + colours matching curses number-for-number, updating as stats change; rest of
+  sidebar still curses, no overlap/gap; toggle OFF → identical to today; new-game / load /
+  quit-to-menu / re-enter → no crash, no doc lingering over the menu. **★ KNOWN LIMITATION
+  (slice 2):** while ON, the always-open doc makes `rmlui_layer::process_event` capture
+  in-game WORLD MOUSE (look/examine) — `process_event` returns true for any mouse event
+  whenever `any_open()`, and sdl_input.cpp:427 withholds it from the game. Fix = a
+  passive/render-only-doc distinction (`any_interactive_open()`) in `rmlui_layer.cpp`,
+  DEFERRED because that file is in the uncommitted runic-border set (would entangle the
+  commit). Keyboard + the F4 ImGui panel are unaffected (ImGui captures first).
+- **Next (slice 2):** the passive-doc mouse gate (once runic `rmlui_layer.cpp` is
+  committed / tree clean) + the next panel group down the column (needs/time/weather).
+  Then limbs/armor/vehicle/minimap → messages (coalesced bound list) → full-column flip.
 
 ## Load-bearing architecture facts (verified this session)
 
