@@ -252,6 +252,42 @@ auto build_lighting( lighting::render_state &rs ) -> bool
     return rc_rebuild;
 }
 
+// Stage 2b.2: the directional celestial light is the sun by day, the moon by
+// night. The compute sky/sun march (direction + elevation) and the fragment
+// shading (colour + intensity) both want ONE light, so we fold the moon into the
+// existing sun_params: the moon rides the opposite (12h-shifted) arc, cold and
+// dim, scaled by phase ("full moon = sun with different params"). We pick
+// whichever body is brighter — the sun overtakes the moon at dawn and vice-versa
+// at dusk — for the DIRECTIONAL term, and keep the real-hour SKY ambient either
+// way (the sky-dome glow is not the moon). No shader/struct change: the moon is
+// just the sun term with swapped direction/colour/intensity, occluded by the
+// same SkyBuf.a coverage march.
+static lighting::sun_params make_celestial_params( const time_point &when, float hour )
+{
+    lighting::sun_params sp = lighting::make_sun_params( hour );
+    float moon_hour = hour + 12.0f;
+    if( moon_hour >= 24.0f ) {
+        moon_hour -= 24.0f;
+    }
+    const lighting::sun_params mp = lighting::make_sun_params( moon_hour );
+    // Phase illumination: NEW(0)→0 … FULL(4)→1 … WANING→0 (enum 0..7).
+    float phase_d = 4.0f - static_cast<float>( get_moon_phase( when ) );
+    phase_d = phase_d < 0.0f ? -phase_d : phase_d;
+    const float illum = std::clamp( 1.0f - phase_d / 4.0f, 0.0f, 1.0f );
+    constexpr float MOON_MAX = 0.18f;   // peak full-moon directional intensity
+    const float moon_int = illum * MOON_MAX;
+    if( moon_int > sp.sun_intensity ) {
+        sp.sun_dir_x     = mp.sun_dir_x;
+        sp.sun_dir_y     = mp.sun_dir_y;
+        sp.sun_sin_elev  = mp.sun_sin_elev;
+        sp.sun_intensity = moon_int;
+        sp.sun_r = 0.55f;   // cold blue-white moonlight
+        sp.sun_g = 0.65f;
+        sp.sun_b = 0.95f;
+    }
+    return sp;
+}
+
 auto flush_and_gather_rc( lighting::render_state &rs,
                           lighting::frame_context &ctx, bool rc_rebuild ) -> void
 {
@@ -285,7 +321,7 @@ auto flush_and_gather_rc( lighting::render_state &rs,
         // we derive it here rather than waiting on assemble_light_inputs.
         if( rs.sky().ready() && rs.sdf().occ_buffer() ) {
             const float sun_hour = g ? hour_of_day<float>( calendar::turn ) : 12.f;
-            const lighting::sun_params sp = lighting::make_sun_params( sun_hour );
+            const lighting::sun_params sp = make_celestial_params( calendar::turn, sun_hour );
             lighting::sky_sun_params kp{};
             kp.map_w        = rp.map_w;
             kp.map_h        = rp.map_h;
@@ -363,7 +399,7 @@ auto assemble_light_inputs( lighting::render_state &rs,
     }
 
     const float sun_hour = g ? hour_of_day<float>( calendar::turn ) : 12.f;
-    in.sun = lighting::make_sun_params( sun_hour );
+    in.sun = make_celestial_params( calendar::turn, sun_hour );
     float weather_mult = 1.0f;
     if( g ) {
         const float base = sunlight( calendar::turn, false );
