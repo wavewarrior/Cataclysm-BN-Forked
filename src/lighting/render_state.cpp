@@ -116,10 +116,10 @@ void render_state::init( SDL_Window *host_window )
     gi_.init( device_, static_cast<std::uint32_t>( rt_tiles ),
               static_cast<std::uint32_t>( rt_tiles ) );
 
-    // GPU compute sky/sun directional skylight pass (Stage 2a). Same max tile
+    // GPU compute sky/sun directional skylight pass (Stage 2a/2b). Same max tile
     // extent as the SDF/GI; sky_buffer() feeds sprite.frag as SkyBuf (rgb
-    // directional sky-access + a sun occlusion). Reads sdf_'s sun_sdf + sky_vis
-    // buffers (which carry COMPUTE_STORAGE_READ).
+    // directional sky-access + a celestial occlusion). Reads sdf_'s unified
+    // coverage occluder buffer (occ_buffer(), which carries COMPUTE_STORAGE_READ).
     sky_.init( device_, static_cast<std::uint32_t>( rt_tiles ),
                static_cast<std::uint32_t>( rt_tiles ) );
 
@@ -315,7 +315,6 @@ void render_state::begin_lighting_frame( const frame_light_inputs &in )
     // Load → returned 0 for every fragment).
     const bool      sdf_ready = sdf_.populated();
     SDL_GPUBuffer  *sbuf = sdf_.sdf_buffer();
-    SDL_GPUBuffer  *ssun = sdf_.sun_sdf_buffer();  // Phase 2.3 wall-only sun SDF
     SDL_GPUBuffer  *kvis = sdf_.sky_vis_buffer();
     SDL_GPUBuffer  *vbuf = sdf_.vis_buffer();
     // GI source for the sprite's GiBuf: the GPU compute GI pass output
@@ -342,7 +341,7 @@ void render_state::begin_lighting_frame( const frame_light_inputs &in )
     tile_batcher_.set_lighting_resources(
         in.tile_pixel_size, in.z_level, ne, in.ambient,
         in.camera_off_x, in.camera_off_y, sw, sh,
-        ebuf, sbuf, gpu_sampler_, kvis, gibuf, vbuf, &in.sun, &in.debug, ssun, skybuf );
+        ebuf, sbuf, gpu_sampler_, kvis, gibuf, vbuf, &in.sun, &in.debug, skybuf );
 
     // Silhouette sun-shadow mask (Phase 2): bind it as the tile batcher's 2nd
     // fragment storage texture (sprite.frag ShadowMask, t2/space2). Always

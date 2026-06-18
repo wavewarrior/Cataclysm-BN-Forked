@@ -204,15 +204,14 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
         SDL_GPUBuffer  *lp_sdf_buf      = nullptr;  // fragment storage BUFFER slot 1 (t3)
         SDL_GPUBuffer  *lp_sky_vis_buf  = nullptr;  // fragment storage BUFFER slot 2 (t4)
         SDL_GPUBuffer  *lp_vis_buf      = nullptr;  // fragment storage BUFFER slot 3 (VisBuf, t5)
-        SDL_GPUBuffer  *lp_sun_sdf_buf  = nullptr;  // fragment storage BUFFER slot 4 (SunSdfBuf, t6)
-        // 1-bounce GI (Stage 1): GPU compute GI output, now a fragment storage
+        // 1-bounce GI (Stage 1): GPU compute GI output, a fragment storage
         // BUFFER (GiBuf), not the old IndirectTex storage texture. Storage-buffer
-        // slot 5 ⇒ t7/space2 (last, after SunSdfBuf).
-        SDL_GPUBuffer  *lp_gi_buf       = nullptr;  // fragment storage BUFFER slot 5 (GiBuf, t7)
-        // Sky/sun directional skylight (Stage 2a): GPU compute sky_sun.comp
-        // output (rgb sky-access + a sun-occ). Storage-buffer slot 6 ⇒ t8/space2
-        // (last, after GiBuf). Null on the shadow/UI batchers.
-        SDL_GPUBuffer  *lp_sky_buf      = nullptr;  // fragment storage BUFFER slot 6 (SkyBuf, t8)
+        // slot 4 ⇒ t6/space2 (Stage 2b dropped SunSdfBuf, which was here).
+        SDL_GPUBuffer  *lp_gi_buf       = nullptr;  // fragment storage BUFFER slot 4 (GiBuf, t6)
+        // Sky/sun directional skylight (Stage 2a/2b): GPU compute sky_sun.comp
+        // output (rgb sky-access + a celestial-occ). Storage-buffer slot 5 ⇒
+        // t7/space2 (LAST). Null on the shadow/UI batchers.
+        SDL_GPUBuffer  *lp_sky_buf      = nullptr;  // fragment storage BUFFER slot 5 (SkyBuf, t7)
         // Silhouette sun-shadow mask (Phase 2). The SOLE storage-READ texture now
         // (GI moved to GiBuf) ⇒ storage-texture slot 0 ⇒ t1/space2, ahead of the
         // storage buffers (t2..t7). Null on the shadow/UI batchers.
@@ -238,7 +237,6 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                                      SDL_GPUBuffer  *vis_buf      = nullptr,
                                      const sun_params *sp         = nullptr,
                                      const debug_params *dbg      = nullptr,
-                                     SDL_GPUBuffer  *sun_sdf_buf  = nullptr,
                                      SDL_GPUBuffer  *sky_buf      = nullptr ) noexcept {
             // data_sampler is vestigial now that all lighting data (emitters,
             // SDF, sky-vis) lives in storage buffers — Atlas is the only
@@ -252,7 +250,6 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
             lp_sky_vis_buf  = sky_vis_buf;
             lp_gi_buf       = gi_buf;
             lp_vis_buf      = vis_buf;
-            lp_sun_sdf_buf  = sun_sdf_buf;
             lp_sky_buf      = sky_buf;
             lp_data_sampler = data_sampler;
             lp.tile_pixel_size = tile_pixel_size;
@@ -922,7 +919,6 @@ void sprite_batcher::set_lighting_resources( float            tile_pixel_size,
                                               SDL_GPUBuffer   *vis_buf,
                                               const sun_params   *sp,
                                               const debug_params *dbg,
-                                              SDL_GPUBuffer   *sun_sdf_buf,
                                               SDL_GPUBuffer   *sky_buf )
 {
     p->set_lighting_resources( tile_pixel_size, z_level,
@@ -930,7 +926,7 @@ void sprite_batcher::set_lighting_resources( float            tile_pixel_size,
                                 cam_off_x, cam_off_y, sdf_map_w, sdf_map_h,
                                 emitter_buf, sdf_buf, data_sampler,
                                 sky_vis_buf, gi_buf, vis_buf, sp, dbg,
-                                sun_sdf_buf, sky_buf );
+                                sky_buf );
 }
 
 void sprite_batcher::draw( const sprite_instance &inst )

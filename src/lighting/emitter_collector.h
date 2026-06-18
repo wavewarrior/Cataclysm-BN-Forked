@@ -44,8 +44,6 @@ class emitter_collector
                      std::vector<float>      vis          = {},
                      int                     runtime_w    = 0,
                      int                     runtime_h    = 0,
-                     // Phase 2.3: wall-only sun SDF, same SS grid as `sdf`.
-                     std::vector<float>      sun_sdf      = {},
                      // Stage 2b: unified coverage occluder, tile-res, 2 floats/tile.
                      std::vector<float>      occ          = {} );
 
@@ -73,7 +71,6 @@ class emitter_collector
         std::vector<uint8_t>    pending_transparency_;
         std::vector<uint8_t>    pending_sky_vis_;
         std::vector<float>      pending_sdf_;
-        std::vector<float>      pending_sun_sdf_;   // Phase 2.3 wall-only sun SDF
         std::vector<float>      pending_occ_;       // Stage 2b coverage occluder
         std::vector<float>      pending_vis_;
         int  pending_runtime_w_ = 0;

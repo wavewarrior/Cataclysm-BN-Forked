@@ -206,14 +206,6 @@ void sdf_pass::init( gpu_device &dev, int map_w, int map_h )
         xfer_sdf_ = SDL_CreateGPUTransferBuffer( d, &tbci );
     }
     {
-        // Phase 2.3 sun-SDF: same SS-grid size as xfer_sdf_ (separate buffer so
-        // both can stage into one copy pass without clobbering each other).
-        SDL_GPUTransferBufferCreateInfo tbci{};
-        tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-        tbci.size  = static_cast<Uint32>( map_w * map_h * SDF_SUPERSAMPLE * SDF_SUPERSAMPLE * 4 );
-        xfer_sun_sdf_ = SDL_CreateGPUTransferBuffer( d, &tbci );
-    }
-    {
         SDL_GPUTransferBufferCreateInfo tbci{};
         tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
         tbci.size  = static_cast<Uint32>( map_w * map_h ); // 1 byte per tile
@@ -253,19 +245,6 @@ void sdf_pass::init( gpu_device &dev, int map_w, int map_h )
         sdf_storage_ = SDL_CreateGPUBuffer( d, &bci );
         if( !sdf_storage_ ) {
             dbg( DL::Error ) << "sdf_pass::init: failed to create sdf_storage";
-        }
-    }
-    {
-        // Phase 2.3 wall-only sun SDF — same SS-grid size as sdf_storage_.
-        // GRAPHICS read (sprite.frag SunSdfBuf) + COMPUTE read (sky_sun.comp
-        // marches it for the directional sky/sun occlusion — Stage 2a).
-        SDL_GPUBufferCreateInfo bci{};
-        bci.usage = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ |
-                    SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ;
-        bci.size  = static_cast<Uint32>( map_w * map_h * SDF_SUPERSAMPLE * SDF_SUPERSAMPLE * 4 );
-        sun_sdf_storage_ = SDL_CreateGPUBuffer( d, &bci );
-        if( !sun_sdf_storage_ ) {
-            dbg( DL::Error ) << "sdf_pass::init: failed to create sun_sdf_storage";
         }
     }
     {
@@ -314,10 +293,6 @@ void sdf_pass::shutdown( gpu_device &dev )
         SDL_ReleaseGPUTransferBuffer( d, xfer_sdf_ );
         xfer_sdf_ = nullptr;
     }
-    if( xfer_sun_sdf_ ) {
-        SDL_ReleaseGPUTransferBuffer( d, xfer_sun_sdf_ );
-        xfer_sun_sdf_ = nullptr;
-    }
     if( xfer_transparency_ ) {
         SDL_ReleaseGPUTransferBuffer( d, xfer_transparency_ );
         xfer_transparency_ = nullptr;
@@ -337,10 +312,6 @@ void sdf_pass::shutdown( gpu_device &dev )
     if( sdf_storage_ ) {
         SDL_ReleaseGPUBuffer( d, sdf_storage_ );
         sdf_storage_ = nullptr;
-    }
-    if( sun_sdf_storage_ ) {
-        SDL_ReleaseGPUBuffer( d, sun_sdf_storage_ );
-        sun_sdf_storage_ = nullptr;
     }
     if( skyvis_storage_ ) {
         SDL_ReleaseGPUBuffer( d, skyvis_storage_ );
@@ -379,7 +350,6 @@ void sdf_pass::upload( SDL_GPUCopyPass *cp,
                         const std::vector<float>   &sdf,
                         const std::vector<uint8_t> &sky_vis,
                         const std::vector<float>   &vis,
-                        const std::vector<float>   &sun_sdf,
                         const std::vector<float>   &occ )
 {
     if( !cp || !dev || !transparency_tex_ || !sdf_tex_ ) {
@@ -474,30 +444,6 @@ void sdf_pass::upload( SDL_GPUCopyPass *cp,
 
                 SDL_UploadToGPUBuffer( cp, &tb_src, &buf_dst, false );
             }
-        }
-    }
-
-    // Phase 2.3: wall-only sun SDF. Same SS² subcell payload + x-major layout
-    // as `sdf` (built in frame_build from a TREE-stripped transparency grid),
-    // staged through its own transfer buffer so both SDF copies coexist in one
-    // copy pass. The sprite shader reads SunSdfBuf only for the sun shadow march.
-    if( xfer_sun_sdf_ && sun_sdf_storage_
-        && static_cast<Uint32>( sun_sdf.size() ) >= sdf_subcells ) {
-        void *mapped = SDL_MapGPUTransferBuffer( dev, xfer_sun_sdf_, true );
-        if( mapped ) {
-            std::memcpy( mapped, sun_sdf.data(), sdf_subcells * sizeof( float ) );
-            SDL_UnmapGPUTransferBuffer( dev, xfer_sun_sdf_ );
-
-            SDL_GPUTransferBufferLocation tb_src{};
-            tb_src.transfer_buffer = xfer_sun_sdf_;
-            tb_src.offset          = 0;
-
-            SDL_GPUBufferRegion buf_dst{};
-            buf_dst.buffer = sun_sdf_storage_;
-            buf_dst.offset = 0;
-            buf_dst.size   = sdf_subcells * static_cast<Uint32>( sizeof( float ) );
-
-            SDL_UploadToGPUBuffer( cp, &tb_src, &buf_dst, false );
         }
     }
 

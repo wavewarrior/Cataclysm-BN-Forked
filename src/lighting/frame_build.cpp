@@ -96,7 +96,6 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
     // shadow=0 every emitter beyond ~1 tile.
     std::vector<uint8_t> transparency;
     std::vector<float>   sdf;
-    std::vector<float>   sun_sdf;   // Phase 2.3: wall-only sun SDF (trees excluded)
     std::vector<float>   occ;       // Stage 2b: unified coverage occluder (height,roof) /tile
     std::vector<uint8_t> sky_vis;
     std::vector<float>   vis;      // per-tile visibility for soft vision falloff (x-major)
@@ -235,18 +234,6 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
             } );
             sdf_runtime_w = W;   // tile dims; the SS factor is implicit (shader SDF_SS)
             sdf_runtime_h = H;
-
-            // Phase 2.3: wall-only sun SDF — TREE tiles forced fully transparent
-            // so the sun march ignores them (their silhouette comes from the
-            // screen-space shadow mask, not a blocky SDF column). Same region DT.
-            region_sdf( sun_sdf, [&]( int x, int y ) -> float {
-                float t = mc.transparency_cache[ x * H + y ];
-                if( m.has_flag( TFLAG_TREE,
-                                tripoint_bub_ms( point_bub_ms( x, y ), zlev ) ) ) {
-                    t = 1.0f;   // open air to the sun (max transparent)
-                }
-                return t;
-            } );
 
             // Stage 2b: unified coverage occluder field (tile-res, 2 floats/tile:
             // [0] = occluder height from map::coverage(p)/100 — wall ~1, half-wall
@@ -406,7 +393,6 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
                             std::move( vis ),
                             sdf_runtime_w,
                             sdf_runtime_h,
-                            std::move( sun_sdf ),
                             std::move( occ ) );
 
     dbg( DL::Debug ) << "[lighting] frame_build COMPLETE";

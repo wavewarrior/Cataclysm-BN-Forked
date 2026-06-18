@@ -331,6 +331,62 @@ SDF** roadmap phase (3D DT on CPU would undo B1). Tracked there, not here.
 
 ---
 
+## Post-Stage-2 improvement backlog (2026-06-18 — Stage 2a/2b shipped + eyeballed)
+
+Stage 2a (directional sky-portal) + 2b.1 (unified coverage occluder, 3D-elevation
+sun) + 2b.2 (directional moonlight) are committed (`fdbb63d`, `da07f28c8c`,
+`77537fef63`) and Metal-eyeball-confirmed. Remaining work, ordered by leverage:
+
+### P1 — cleanup: delete dead `sun_sdf` (quick, do first)
+After 2b.1 the wall-only sun SDF is read by nothing. Still being **built** (a
+second region-DT in `frame_build` `region_sdf(sun_sdf, …)`), **uploaded**
+(`sdf_pass`: `sun_sdf_storage_` + `xfer_sun_sdf_` + the upload block), and the
+`sun_sdf_buffer()` accessor + `emitter_collector` `pending_sun_sdf_`/`sun_sdf`
+plumbing. Remove the whole chain → drops one CPU DT + one GPU upload + one buffer
+per rebuild. Low risk (no consumer). Also long-dead: `sdf_tex_` / `sky_vis_tex_`
+R8/R32F textures in `sdf_pass` (superseded by storage buffers; nothing samples them).
+
+### P2 — biggest visual: sun/sky → GI bounce
+`gi_field.comp` gathers **emitters only** → the sun (dominant light) casts flat
+dark+ambient shadows with no bounced daylight and no indoor light-leak. Feed
+sun/sky-lit surface radiance into the GI field input (per-tile: `sun_term ·
+SkyBuf.a + sky_term · SkyBuf.rgb`, already computed) so `gi_bounce` propagates it.
+Plan's own thesis: "the GI win is the surface-radiance-field bounce." Moderate
+effort, large realism gain (soft daylight fill, colour bleed indoors).
+
+### P3 — biggest perf + unlocks the merge: GPU JFA SDF
+CPU Euclidean DT is the ~10 ms `structure_rebuild` hitch (render-thread even
+region-limited). Move SDF generation to a GPU **Jump-Flood** pass → round
+Euclidean, off the main thread, AND unblocks the genuinely-merged **thin-slab 3D
+SDF** (marched in 3D for emitters AND sun — the real indoor/outdoor unification,
+deferred here only because a 3D *CPU* DT would undo B1). See "Deferred" below.
+
+### P4 — robustness (primary target): verify the D3D12 compute barrier
+The same-CB compute-write→graphics-read barrier on `gi_buf_` / `sky_buf_` is
+**never verified on Win11/D3D12**. All compute lighting rests on SDL_GPU inserting
+it correctly. Confirm on the next Win11 pass (no device-removed, GI/sky visible).
+
+### P5 — cheap quality polish
+- Soft sun penumbra: average `celestial_occ` over 3–4 angular offsets of `toward`
+  (`SUN_PENUMBRA` const → loop) for softer shadow edges.
+- Promote shader/CPU constants to F4 knobs: `SKY_DIRS`/`SKY_REACH`/`SUN_STEPS`,
+  `MOON_MAX`, moon colour, penumbra width, `night_floor` (mirror `gi_strength`).
+- Sky colour as a horizon→zenith gradient instead of one flat `sky_color`.
+- `night_floor` retune against the new directional moonlight.
+
+### P6 — correctness gaps (accepted-for-now)
+- Moon not weather-dimmed (clouds ignore moonlight) — fold a cloud factor into
+  `make_celestial_params` moon intensity.
+- Vehicles: `map::coverage` is furn-then-ter → tall vehicle occluders may want
+  `obstacle_coverage` in the occ-field build.
+
+### Deferred (own phase) — full 3D-SDF unification (rides P3/JFA)
+One thin-slab 3D SDF (current z + few above, region-limited) sphere-marched in 3D
+for **both** emitters and sun = the genuinely-merged structure. Belongs to the
+GPU-JFA phase (a 3D CPU DT would undo B1).
+
+---
+
 ## Part B — Perf: structure_rebuild hitch + measured do_turn
 
 ### B0. Capture sim numbers FIRST
