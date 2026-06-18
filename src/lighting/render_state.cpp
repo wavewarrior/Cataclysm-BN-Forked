@@ -3,7 +3,6 @@
 #include "sdf_pass.h"
 
 #include "shader_compiler.h"
-#include "compute_spike.h"
 #include "debug.h"
 #include "game_constants.h"
 
@@ -45,11 +44,6 @@ void render_state::init( SDL_Window *host_window )
     device_.init( host_window, /*debug=*/true, /*vsync=*/false );
 
     init_shader_compiler();
-
-    // A0 go/no-go: prove a minimal compute pipeline (dynamic SB loop) creates +
-    // runs on this backend before the GI compute rework relies on it. Logs the
-    // verdict to DC::Main; never fatal. Remove once A0 is resolved.
-    run_compute_spike( device_ );
 
     const SDL_GPUTextureFormat fmt = device_.swapchain_format();
 
