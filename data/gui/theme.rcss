@@ -63,14 +63,22 @@ body {
    Scanlines are NOT here: a decorator paints behind the element's own content, so
    they'd never cross the text. They go on the `.crt` overlay (drawn on top).
 
-   Phase-4 drop-in (ornate riveted frame): slice assets/frame.png as a 9-patch
-   and replace `border` with, e.g.:
-       decorator: ninepatch( "assets/frame.png", 16px 16px / 16px 16px ); */
+   The ornate riveted runic frame is composed live in C++ (rmlui_layer::apply_crt)
+   as 8 stacked image() decorators on the border-box: four edges tiled
+   (repeat-x / repeat-y), four corners (scale-none) anchored to each corner. Each
+   region is its own procedural "?proc:runic-*" texture (lighting/rmlui_proc_texture.cpp);
+   "?"-prefixed sources are handed to the render interface verbatim, which
+   generates the pixels on first use. image() can repeat a full texture but not a
+   sprite, hence one texture per region. The frame is size-independent (edges
+   tile, corners fixed) so it fits any panel. The 24dp transparent border below
+   reserves the ring the frame draws into. */
 .panel {
     background-color: {{bg}};
-    border: 2dp {{bg4}};
+    border: 20dp transparent;
     border-radius: 0;
     padding: 12dp;
+    /* Fallback only — apply_crt overrides this inline every frame with the
+       vignette + runic frame. */
     decorator: radial-gradient( farthest-corner, #00000000, #00000077 );
 }
 

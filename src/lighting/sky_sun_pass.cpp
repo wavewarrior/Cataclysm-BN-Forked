@@ -52,8 +52,12 @@ bool sky_sun_pass::init( gpu_device &dev, std::uint32_t max_w, std::uint32_t max
     // bind), so a valid zeroed buffer must exist even if the pipeline failed on
     // this backend; ready() gates record(), so a failed pipeline just leaves the
     // sky reading as zero (dark — same as "no data yet").
+    // COMPUTE_STORAGE_READ: gi_field.comp reads SkyBuf to inject sun/sky surface
+    // radiance into the GI field (P2 — daylight bounce). GRAPHICS_STORAGE_READ:
+    // sprite.frag reads it as the direct SkyBuf term.
     const std::uint32_t floats = max_w * max_h * FLOATS_PER_TILE;
     sky_buf_ = create_buffer( floats, SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE |
+                              SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ |
                               SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ );
     if( !sky_buf_ ) {
         return false;
@@ -131,6 +135,7 @@ bool sky_sun_pass::resize( std::uint32_t max_w, std::uint32_t max_h )
     }
     const std::uint32_t floats = max_w * max_h * FLOATS_PER_TILE;
     sky_buf_ = create_buffer( floats, SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE |
+                              SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ |
                               SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ );
     if( !sky_buf_ ) {
         return false;

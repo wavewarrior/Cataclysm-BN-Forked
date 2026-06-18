@@ -42,8 +42,8 @@ bool gi_compute_pass::init( gpu_device &dev, std::uint32_t max_w, std::uint32_t 
     auto bp = compile_compute_pipeline( dev, bounce_src, "main", "gi_bounce.comp" );
 
     // Structural gate (DC::Main — DC::SDL is filtered). Field: 2 readonly storage
-    // buffers (emitters, sdf) + 1 readwrite (field). Bounce: 2 readonly (field,
-    // sdf) + 1 readwrite (gi). No samplers (compute dodges the fragment
+    // buffers (emitters, sdf, sky) + 1 readwrite (field). Bounce: 2 readonly
+    // (field, sdf) + 1 readwrite (gi). No samplers (compute dodges the fragment
     // sampler-order root-sig that killed rc.frag on D3D12).
     DebugLogFL( DL::Info, DC::Main )
             << "gi_field.comp reflection: ro_sb=" << fp.resources.num_readonly_storage_buffers
@@ -51,7 +51,7 @@ bool gi_compute_pass::init( gpu_device &dev, std::uint32_t max_w, std::uint32_t 
             << " uniforms=" << fp.resources.num_uniform_buffers
             << " threads=(" << fp.resources.threadcount_x << ","
             << fp.resources.threadcount_y << "," << fp.resources.threadcount_z
-            << ") (expects ro_sb=2 rw_sb=1)";
+            << ") (expects ro_sb=3 rw_sb=1)";
     DebugLogFL( DL::Info, DC::Main )
             << "gi_bounce.comp reflection: ro_sb=" << bp.resources.num_readonly_storage_buffers
             << " rw_sb=" << bp.resources.num_readwrite_storage_buffers
@@ -195,10 +195,12 @@ void gi_compute_pass::shutdown() noexcept
 
 void gi_compute_pass::record( SDL_GPUCommandBuffer *cb,
                               SDL_GPUBuffer *emitter_buf, SDL_GPUBuffer *sdf_buf,
+                              SDL_GPUBuffer *sky_buf,
                               std::uint32_t runtime_w, std::uint32_t runtime_h,
                               const gi_params &params )
 {
-    if( !ready() || !cb || !emitter_buf || !sdf_buf || runtime_w == 0 || runtime_h == 0 ) {
+    if( !ready() || !cb || !emitter_buf || !sdf_buf || !sky_buf
+        || runtime_w == 0 || runtime_h == 0 ) {
         return;
     }
     const std::uint32_t gx = ( runtime_w + 7u ) / 8u; // ceil(W/8) — numthreads(8,8,1)
@@ -216,8 +218,8 @@ void gi_compute_pass::record( SDL_GPUCommandBuffer *cb,
             return;
         }
         SDL_BindGPUComputePipeline( p, field_pipeline_ );
-        SDL_GPUBuffer *ro[2] = { emitter_buf, sdf_buf }; // t0, t1
-        SDL_BindGPUComputeStorageBuffers( p, /*first_slot=*/0, ro, 2 );
+        SDL_GPUBuffer *ro[3] = { emitter_buf, sdf_buf, sky_buf }; // t0, t1, t2 (SkyBuf)
+        SDL_BindGPUComputeStorageBuffers( p, /*first_slot=*/0, ro, 3 );
         SDL_DispatchGPUCompute( p, gx, gy, 1 );
         SDL_EndGPUComputePass( p );
     }

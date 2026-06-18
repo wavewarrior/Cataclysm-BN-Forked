@@ -16,6 +16,7 @@
 
 #include "debug.h"
 #include "gpu_device.h"
+#include "rmlui_proc_texture.h"
 #include "shader_compiler.h"
 
 // Lighting/ files must define dbg themselves (not globally available).
@@ -723,6 +724,32 @@ void rmlui_render_interface::ReleaseShader( Rml::CompiledShaderHandle shader )
 Rml::TextureHandle rmlui_render_interface::LoadTexture(
     Rml::Vector2i &texture_dimensions, const Rml::String &source )
 {
+    // Procedural textures: "?proc:<variant>" is generated in C++ rather than
+    // loaded from disk. The source can arrive bare ("?proc:runic") or still
+    // wrapped in the RCSS url(...) form ("url(?proc:runic)") — e.g. an
+    // @spritesheet src keeps the wrapper — so accept either.
+    Rml::String proc = source;
+    if( proc.rfind( "url(", 0 ) == 0 && !proc.empty() && proc.back() == ')' ) {
+        proc = proc.substr( 4, proc.size() - 5 );
+    }
+    if( proc.rfind( "?proc:", 0 ) == 0 ) {
+        const std::string variant = proc.substr( 6 );  // after "?proc:"
+        int w = 0, h = 0;
+        const std::vector<std::uint8_t> px = gen_runic_frame( variant, w, h );
+        SDL_GPUTexture *ptex = p->upload_rgba( px.data(), w, h );
+        if( !ptex ) {
+            return 0;
+        }
+        if( p->rp != nullptr ) {
+            p->textures_in_pass++;
+        }
+        texture_dimensions = Rml::Vector2i( w, h );
+        const std::uint64_t ph = p->next_tex++;
+        p->textures.emplace( ph, ptex );
+        dbg( DL::Info ) << "rmlui_proc: generated \"" << source << "\" " << w << "x" << h
+                        << " handle=" << ph;
+        return static_cast<Rml::TextureHandle>( ph );
+    }
     SDL_Surface *surf = IMG_Load( source.c_str() );
     if( !surf ) {
         dbg( DL::Warn ) << "rmlui: LoadTexture failed for " << source << ": " << SDL_GetError();

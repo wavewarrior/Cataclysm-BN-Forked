@@ -298,41 +298,61 @@ auto flush_and_gather_rc( lighting::render_state &rs,
 
     if( rc_rebuild && rs.sdf().populated() && rs.gi().ready()
         && rs.collector() && rs.sdf().sdf_buffer() ) {
-        lighting::gi_params rp{};
-        rp.emitter_count = static_cast<std::uint32_t>( std::max( 0, rs.collector()->last_count() ) );
-        rp.map_w         = static_cast<std::uint32_t>( rs.sdf().map_w() );
-        rp.map_h         = static_cast<std::uint32_t>( rs.sdf().map_h() );
-        rp.current_z     = g ? static_cast<float>( g->u.bub_pos().z() ) : 0.0f;
-        rp.shadow_k      = g_dbg_params.shadow_k;
-        rp.shadow_steps  = g_dbg_params.shadow_steps;
-        // Two compute dispatches (field gather → ray-march bounce) on the render
-        // CB. SDL_GPU inserts the compute→graphics barrier so the sprite pass
-        // reads the finished gi_buffer().
-        rs.gi().record( ctx.cmd_buffer,
-                        rs.collector()->emitter_buffer(), rs.sdf().sdf_buffer(),
-                        rp.map_w, rp.map_h, rp );
+        const std::uint32_t map_w = static_cast<std::uint32_t>( rs.sdf().map_w() );
+        const std::uint32_t map_h = static_cast<std::uint32_t>( rs.sdf().map_h() );
 
-        // Stage 2a: directional sky/sun pass on the same CB, under the same
-        // structure-rebuild gate. Marches the unified coverage occluder field
-        // (OccBuf: height + roof) in 3D toward the celestial light → sky-access +
-        // sun occlusion in sky_buffer(), read by sprite.frag as SkyBuf. Needs the
-        // light DIRECTION + elevation (the sun today; the moon is a 2b.2 param
-        // swap) — cheap, weather-independent (intensity/colour fragment-side), so
-        // we derive it here rather than waiting on assemble_light_inputs.
+        // Celestial light params drive BOTH the sky/sun pass and the GI daylight
+        // injection, so derive them once. Weather-independent (intensity/colour
+        // applied fragment-side); cheap, so no wait on assemble_light_inputs.
+        const float sun_hour = g ? hour_of_day<float>( calendar::turn ) : 12.f;
+        const lighting::sun_params sp = make_celestial_params( calendar::turn, sun_hour );
+
+        // Stage 2a/2b: directional sky/sun pass FIRST. Marches the unified coverage
+        // occluder field (OccBuf: height + roof) in 3D toward the celestial light →
+        // sky-access + sun occlusion in sky_buffer(), read by sprite.frag as SkyBuf.
+        // Recorded BEFORE the GI pass: gi_field.comp also reads SkyBuf (P2 daylight
+        // bounce), so SDL_GPU must see the write here before the read below to
+        // insert the compute-write→compute-read barrier.
         if( rs.sky().ready() && rs.sdf().occ_buffer() ) {
-            const float sun_hour = g ? hour_of_day<float>( calendar::turn ) : 12.f;
-            const lighting::sun_params sp = make_celestial_params( calendar::turn, sun_hour );
             lighting::sky_sun_params kp{};
-            kp.map_w        = rp.map_w;
-            kp.map_h        = rp.map_h;
+            kp.map_w        = map_w;
+            kp.map_h        = map_h;
             kp.sun_dir_x    = sp.sun_dir_x;
             kp.sun_dir_y    = sp.sun_dir_y;
             kp.sun_sin_elev = sp.sun_sin_elev;
             kp.shadow_k     = g_dbg_params.shadow_k;
             kp.shadow_steps = g_dbg_params.shadow_steps;
             rs.sky().record( ctx.cmd_buffer, rs.sdf().occ_buffer(),
-                             rp.map_w, rp.map_h, kp );
+                             map_w, map_h, kp );
         }
+
+        lighting::gi_params rp{};
+        rp.emitter_count = static_cast<std::uint32_t>( std::max( 0, rs.collector()->last_count() ) );
+        rp.map_w         = map_w;
+        rp.map_h         = map_h;
+        rp.current_z     = g ? static_cast<float>( g->u.bub_pos().z() ) : 0.0f;
+        rp.shadow_k      = g_dbg_params.shadow_k;
+        rp.shadow_steps  = g_dbg_params.shadow_steps;
+        // P2: sun/sky surface-radiance injection. gi_field.comp adds
+        // sky_color*SkyBuf.rgb + sun_color*SkyBuf.a to each tile's field so the
+        // bounce pass propagates daylight into shadowed/indoor neighbours. Colour
+        // mirrors the sprite's direct sun/sky terms (no weather mult — matches the
+        // weather-independent sky pass; bounce is a soft fill, exactness non-critical).
+        rp.sun_r         = sp.sun_r;
+        rp.sun_g         = sp.sun_g;
+        rp.sun_b         = sp.sun_b;
+        rp.sun_intensity = sp.sun_intensity;
+        rp.sky_r         = sp.sky_r;
+        rp.sky_g         = sp.sky_g;
+        rp.sky_b         = sp.sky_b;
+        rp.sky_intensity = sp.sky_intensity;
+        // Two compute dispatches (field gather → ray-march bounce) on the render
+        // CB. SDL_GPU inserts the compute→graphics barrier so the sprite pass
+        // reads the finished gi_buffer().
+        rs.gi().record( ctx.cmd_buffer,
+                        rs.collector()->emitter_buffer(), rs.sdf().sdf_buffer(),
+                        rs.sky().sky_buffer(),
+                        map_w, map_h, rp );
     }
 
     if( g_rc_readback ) {

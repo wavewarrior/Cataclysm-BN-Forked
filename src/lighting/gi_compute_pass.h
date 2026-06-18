@@ -41,6 +41,11 @@ struct gi_params {
     std::uint32_t shadow_steps; // per-emitter march cap
     float         pad0;
     float         pad1;
+    // P2 sun/sky surface-radiance injection into the field (gi_field.comp reads
+    // SkyBuf). Colour/intensity mirror the sprite's direct sun/sky terms so the
+    // bounced daylight matches. Layout MUST match gi_field.comp's GiParams cbuffer.
+    float         sun_r = 0.f, sun_g = 0.f, sun_b = 0.f, sun_intensity = 0.f;
+    float         sky_r = 0.f, sky_g = 0.f, sky_b = 0.f, sky_intensity = 0.f;
 };
 
 class gi_compute_pass
@@ -79,11 +84,14 @@ class gi_compute_pass
         // then bounce dispatch (reads field_buf_, writes gi_buf_). SDL_GPU
         // inserts the compute→compute barrier on field_buf_ between them, and the
         // compute-write→graphics-read barrier on gi_buf_ before the sprite pass.
-        // No-op if not ready or any arg invalid. Binds emitter_buf (t0) + sdf_buf
-        // (t1) as readonly compute storage buffers; both must carry
-        // SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ.
+        // No-op if not ready or any arg invalid. The field pass binds emitter_buf
+        // (t0) + sdf_buf (t1) + sky_buf (t2) as readonly compute storage buffers;
+        // all three must carry SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ. sky_buf
+        // (sky_sun_pass output) feeds the P2 daylight-bounce injection — it must
+        // be recorded BEFORE this call so SDL_GPU inserts the write→read barrier.
         void record( SDL_GPUCommandBuffer *cb,
                      SDL_GPUBuffer *emitter_buf, SDL_GPUBuffer *sdf_buf,
+                     SDL_GPUBuffer *sky_buf,
                      std::uint32_t runtime_w, std::uint32_t runtime_h,
                      const gi_params &params );
 

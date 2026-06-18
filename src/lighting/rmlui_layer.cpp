@@ -539,13 +539,37 @@ void apply_crt()
 {
     const double t = g_system ? g_system->GetElapsedTime() : 0.0;
 
-    char vignette[160];
+    // Panel decorator = optional CRT vignette gradient + the procedural runic
+    // frame. The frame is 8 stacked image() decorators on the border-box: four
+    // edges tiled (repeat-x / repeat-y) and four corners (scale-none) anchored
+    // to each corner. Each region is its own "?proc:runic-*" texture, generated
+    // in C++ (lighting/rmlui_proc_texture.cpp) — image() can repeat a full
+    // texture but not a sprite. apply_crt drives .panel's `decorator` inline
+    // every frame, overriding the stylesheet rule, so the frame is composed
+    // here. The 24dp transparent .panel border (theme.rcss) reserves the ring.
+    // image shorthand is SPACE-separated: image( src orientation fit align-x
+    // align-y ). src is a bare string (no url()); "?proc:" sources reach the
+    // render interface verbatim. Only three base textures are generated — one
+    // corner, one horizontal edge, one vertical edge — and the orientation arg
+    // (flip-horizontal / flip-vertical / rotate-180) mirrors them into all four
+    // corners and both edge pairs for a symmetric frame. Edges tile (repeat-x/y);
+    // corners are scale-none. Top-level decorator list stays comma-separated.
+    constexpr char frame[] =
+        "image( ?proc:runic-hedge none repeat-x center top ) border-box, "
+        "image( ?proc:runic-hedge flip-vertical repeat-x center bottom ) border-box, "
+        "image( ?proc:runic-vedge none repeat-y left center ) border-box, "
+        "image( ?proc:runic-vedge flip-horizontal repeat-y right center ) border-box, "
+        "image( ?proc:runic-corner none scale-none left top ) border-box, "
+        "image( ?proc:runic-corner flip-horizontal scale-none right top ) border-box, "
+        "image( ?proc:runic-corner flip-vertical scale-none left bottom ) border-box, "
+        "image( ?proc:runic-corner rotate-180 scale-none right bottom ) border-box";
+    char vignette[1024];
     if( g_crt.enabled ) {
         ( void )std::snprintf( vignette, sizeof( vignette ),
-                               "radial-gradient( farthest-corner, #00000000, #000000%02x )",
-                               crt_a255( g_crt.vignette_alpha ) );
+                               "radial-gradient( farthest-corner, #00000000, #000000%02x ), %s",
+                               crt_a255( g_crt.vignette_alpha ), frame );
     } else {
-        ( void )std::snprintf( vignette, sizeof( vignette ), "none" );
+        ( void )std::snprintf( vignette, sizeof( vignette ), "%s", frame );
     }
 
     for( Rml::ElementDocument *doc : g_open_docs ) {

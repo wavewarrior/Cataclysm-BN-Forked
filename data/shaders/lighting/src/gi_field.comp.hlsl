@@ -20,12 +20,17 @@
 //              D3D12 rejected; scalar is safe — same rule the spike proved).
 //   t1 space0  SdfBuf   — StructuredBuffer<float>, SS-finer Euclidean grid,
 //              x-major sdf[x*(map_h*SDF_SS)+y], distances already in tile units.
+//   t2 space0  SkyBuf   — StructuredBuffer<float>, sky_sun.comp output, tile-res,
+//              x-major sky[(x*map_h+y)*4 + c]: rgb = directional sky-access,
+//              a = celestial (sun/moon) occlusion. P2: its surface radiance is
+//              injected into the field so the bounce pass propagates daylight.
 //   u0 space1  FieldBuf — RWStructuredBuffer<float>, 4 floats/tile (rgb + pad),
 //              tile-res, x-major field[(x*map_h+y)*4 + c].
 //   b0 space2  GiParams.
 
 StructuredBuffer<float>   Emitters : register(t0, space0);
 StructuredBuffer<float>   SdfBuf   : register(t1, space0);
+StructuredBuffer<float>   SkyBuf   : register(t2, space0);
 RWStructuredBuffer<float> FieldBuf : register(u0, space1);
 
 cbuffer GiParams : register(b0, space2) {
@@ -37,6 +42,9 @@ cbuffer GiParams : register(b0, space2) {
     uint  shadow_steps;   // per-emitter march cap
     float gi_pad0;
     float gi_pad1;
+    // P2 sun/sky surface-radiance injection (matches sprite.frag sun/sky colour).
+    float sun_r, sun_g, sun_b, sun_intensity;
+    float sky_r, sky_g, sky_b, sky_intensity;
 };
 
 // P1: contribution epsilon — skip shadow march when atten is negligible.
@@ -138,6 +146,22 @@ void main( uint3 tid : SV_DispatchThreadID )
     }
 
     const uint o = ( (uint)tileX * sdf_map_h + (uint)tileY ) * 4u;
+
+    // P2 — sun/sky surface radiance. SkyBuf is tile-res with the SAME x-major
+    // layout as the field (sky[(x*map_h+y)*4 + c]): rgb = directional sky-access,
+    // a = celestial occlusion. Add the daylight a tile's floor receives so the
+    // bounce pass spreads it into shadowed/indoor neighbours (gi otherwise sees
+    // emitters only). SkyBuf already bakes in roof/wall occlusion, so no extra
+    // sky_vis gate is needed. Matches sprite.frag's direct sky_contrib/sun_contrib
+    // colour; lambert/spec/mask are view-dependent and intentionally dropped for
+    // the diffuse bounce source.
+    if( sdf_map_w > 0u ) {
+        const float3 sky_access = float3( SkyBuf[o + 0u], SkyBuf[o + 1u], SkyBuf[o + 2u] );
+        const float  sun_occ    = SkyBuf[o + 3u];
+        gi += float3( sky_r, sky_g, sky_b ) * sky_intensity * sky_access;
+        gi += float3( sun_r, sun_g, sun_b ) * sun_intensity * sun_occ;
+    }
+
     FieldBuf[o + 0u] = gi.x;
     FieldBuf[o + 1u] = gi.y;
     FieldBuf[o + 2u] = gi.z;
