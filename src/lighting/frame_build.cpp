@@ -258,86 +258,16 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
                 }
             }
 
-            // Indoor daylight bleed (Step 5 / indoor fix). The binary sky_vis
-            // above gives roofed tiles ZERO sun + sky, so daytime interiors read
-            // as cave-dark even when the sim says "bright". Propagate open-sky
-            // luminance into roofed tiles through TRANSPARENT cells (windows /
-            // doorways), blocked by opaque walls — a cheap wall-aware flood-fill
-            // on the tile grid. The result overwrites the interior sky_vis bytes
-            // with a soft gradient (the upload converts /255 → continuous float),
-            // so the shader's sky-ambient term fills the room near openings and
-            // decays inward. Open-sky tiles stay 255. Pure sky-ambient — the sun
-            // DIRECT term is decoupled (shader gate sky_vis>0.99) so this never
-            // fakes a sunbeam; artificial light is GPU-side, so no double-count.
-            // strength==0 → exact binary behaviour (off / bisect). Runs under the
-            // rebuild.structure gate, alongside the SDF DT.
-            // Gated on outside_cache_dirty: skip flood-fill when outside data hasn't changed.
-            if( skylight_bleed > 0.001f && mc.outside_cache_dirty.any()
-                && static_cast<int>( transparency.size() ) >= total ) {
-                constexpr int   K     = 8;      // bleed radius in tiles
-                constexpr float decay = 0.80f;  // per-step falloff
-                std::vector<float> bleed( total );
-                for( int i = 0; i < total; ++i ) {
-                    bleed[i] = sky_vis[i] ? 1.0f : 0.0f;
-                }
-                std::vector<float> next = bleed;
-                for( int it = 0; it < K; ++it ) {
-                    for( int x = 0; x < W; ++x ) {
-                        for( int y = 0; y < H; ++y ) {
-                            const int idx = x * H + y;
-                            if( sky_vis[idx] ) {       // open sky stays full
-                                next[idx] = 1.0f;
-                                continue;
-                            }
-                            float m = bleed[idx];
-                            // Receive from a 4-neighbour ONLY if that neighbour is
-                            // transparent (light can exit it toward us). Opaque
-                            // walls (transparency==0) neither receive-through nor
-                            // relay, so sealed rooms stay dark and walls are only
-                            // lit on their open-facing side.
-                            const auto recv = [&]( int nx, int ny ) {
-                                if( nx < 0 || nx >= W || ny < 0 || ny >= H ) {
-                                    return;
-                                }
-                                const int ni = nx * H + ny;
-                                if( transparency[ni] > 0u ) {
-                                    m = std::max( m, bleed[ni] * decay );
-                                }
-                            };
-                            recv( x - 1, y );
-                            recv( x + 1, y );
-                            recv( x, y - 1 );
-                            recv( x, y + 1 );
-                            next[idx] = m;
-                        }
-                    }
-                    bleed.swap( next );
-                }
-                const float s = std::min( skylight_bleed, 1.0f );
-                for( int i = 0; i < total; ++i ) {
-                    if( !sky_vis[i] ) {     // interior only; open sky untouched
-                        const float v = std::clamp( bleed[i] * s, 0.0f, 1.0f );
-                        sky_vis[i] = static_cast<uint8_t>( v * 255.0f );
-                    }
-                }
-            }
-
-            // Soften the open↔roof boundary so the sun/sky edge isn't a 1-tile
-            // bilinear step. Plain separable Gaussian over the tile field (stacks
-            // on top of the wall-aware bleed above; the bleed fills interiors, this
-            // rounds the edge). vision_blur=0 → exact prior behaviour.
-            if( vision_blur > 0.05f
-                && static_cast<int>( sky_vis.size() ) >= total ) {
-                std::vector<float> sf( total );
-                for( int i = 0; i < total; ++i ) {
-                    sf[i] = static_cast<float>( sky_vis[i] );
-                }
-                gaussian_blur_tilefield( sf, W, H, vision_blur );
-                for( int i = 0; i < total; ++i ) {
-                    sky_vis[i] = static_cast<uint8_t>(
-                                     std::clamp( sf[i], 0.0f, 255.0f ) );
-                }
-            }
+            // Stage 2a (GI_COMPUTE_AND_PERF_PLAN): the CPU indoor-bleed
+            // flood-fill (K=8 wall-aware diffusion over the full bubble) and the
+            // sky_vis edge Gaussian that used to live here are GONE. The new
+            // sky_sun.comp directional-portal march owns indoor daylight
+            // propagation on the GPU: it reaches open sky through window/door
+            // gaps per-direction, so sky_vis stays the RAW binary open/roofed
+            // field (above) and the heavy CPU flood-fill leaves the main thread
+            // (the Part-B CPU win). skylight_bleed is no longer consumed here
+            // (knob retained to avoid a cbuffer-layout churn this commit).
+            ( void )skylight_bleed;
 
             // Snapshot for HUD: what's the SDF / transparency at the player tile?
             // sdf is SS-grid indexed now → sample the player tile's centre subcell.

@@ -72,6 +72,15 @@ StructuredBuffer<float>      SunSdfBuf   : register(t6, space2);
 // DXIL D3D12 rejects). Replaces the old IndirectTex storage texture — moving the
 // gather to compute is what removed GI's D3D12 pipeline fragility (Stage 1).
 StructuredBuffer<float>      GiBuf       : register(t7, space2);
+// Stage 2a directional skylight (sky_sun.comp output) — fragment storage buffer
+// slot 6 ⇒ t8. Tile-res, 4 floats/tile [(x*sdf_map_h+y)*4 + c], x-major (no
+// transpose). rgb = directional sky-access (hemisphere fraction reaching open
+// sky — alcove/overhang self-shading + indoor daylight from window openings),
+// a = sun occlusion (0=shadowed .. 1=lit, reserved — the sun march stays inline
+// in Stage 2a). rgb REPLACES the flat sky_vis sky ambient with directional
+// sky-access; the CPU window-bleed flood-fill is gone (the compute portal-march
+// owns indoor propagation now).
+StructuredBuffer<float>      SkyBuf      : register(t8, space2);
 cbuffer LightParams : register(b0, space3) {
     float tile_pixel_size; float current_z;
     uint  emitter_count;   float ambient;
@@ -222,6 +231,26 @@ float3 indirect_bilinear(float2 p) {
     const float3 b = indirect_texel(x0 + 1, y0    );
     const float3 c = indirect_texel(x0,     y0 + 1);
     const float3 d = indirect_texel(x0 + 1, y0 + 1);
+    return lerp(lerp(a, b, w.x), lerp(c, d, w.x), w.y);
+}
+// Stage 2a directional skylight reader (SkyBuf). Same tile-res x-major layout +
+// p-0.5 bilinear centre as the GI reader. rgb = sky-access, a = sun-occ.
+float4 sky_texel(int x, int y) {
+    x = clamp(x, 0, (int)sdf_map_w - 1);
+    y = clamp(y, 0, (int)sdf_map_h - 1);
+    const int o = (x * (int)sdf_map_h + y) * 4;
+    return float4(SkyBuf[o + 0], SkyBuf[o + 1], SkyBuf[o + 2], SkyBuf[o + 3]);
+}
+float4 sky_bilinear(float2 p) {
+    const float2 sp = p - 0.5;
+    const float2 fp = floor(sp);
+    const int   x0  = (int)fp.x;
+    const int   y0  = (int)fp.y;
+    const float2 w  = sp - fp;
+    const float4 a = sky_texel(x0,     y0    );
+    const float4 b = sky_texel(x0 + 1, y0    );
+    const float4 c = sky_texel(x0,     y0 + 1);
+    const float4 d = sky_texel(x0 + 1, y0 + 1);
     return lerp(lerp(a, b, w.x), lerp(c, d, w.x), w.y);
 }
 // LIVE visibility on the SDF_SUPERSAMPLE grid (SS² floats/tile, x-major, stride
@@ -507,9 +536,16 @@ float4 main(VS_OUT i) : SV_Target0 {
                              : 0.0;
         emitter_light += rgb * atten * shadow * cone * (lambert + e_spec);
     }
-    // Phase 8: sky ambient + directional sun contribution. (sky_vis hoisted above.)
-    // Sky ambient: soft, no shadowing needed.
-    float3 sky_contrib = float3(sky_r, sky_g, sky_b) * sky_intensity * sky_vis;
+    // Phase 8 + Stage 2a: directional skylight + sun. sky_sun.comp provides
+    // per-tile directional sky-access (rgb) + sun occlusion (a); sample it once
+    // at the tile (light_pos, matching the GI read). The hoisted `sky_vis` is now
+    // the RAW open/roofed field — only the sun's overhead gate still uses it.
+    const float4 sky_dir = sky_bilinear(i.light_pos);
+    // Sky ambient: directional sky-access REPLACES the old flat `* sky_vis`. An
+    // open tile sees most of the hemisphere (~1); an alcove/overhang self-shades;
+    // a roofed tile lit only through window directions gets partial sky FROM the
+    // opening — the unified indoor/outdoor merge, no CPU bleed flood-fill needed.
+    float3 sky_contrib = float3(sky_r, sky_g, sky_b) * sky_intensity * sky_dir.rgb;
     // Sun direct: directional soft shadow via the SAME shared trace as
     // emitters, so it honours shadow_k / shadow_steps and matches their
     // softness (was a hardcoded copy: k=4, 16 steps, reach 8.0). 8.0 = the
@@ -537,6 +573,10 @@ float4 main(VS_OUT i) : SV_Target0 {
     float3 sun_contrib = float3(0.0, 0.0, 0.0);
     if(sun_intensity > 0.001 && sky_vis > 0.05 && sdf_map_w > 0u) {
         const float2 toward_sun = -float2(sun_dir_x, sun_dir_y);
+        // Sun shadow: kept as the inline directional SDF trace in Stage 2a (the
+        // proven path). sky_sun.comp ALSO computes a per-tile sun occlusion into
+        // SkyBuf.a (visible in debug mode 13) — reserved for a follow-on that
+        // moves this march off the fragment once that per-tile term is verified.
         const float sun_shadow = trace_shadow(i.light_pos, toward_sun, 8.0,
                                                shadow_k, (int)shadow_steps,
                                                /*directional=*/true, /*use_sun=*/true);
@@ -761,6 +801,26 @@ float4 main(VS_OUT i) : SV_Target0 {
             // GI not computing (no emitters in range, SDF not ready, or the
             // compute pass failed to create). The definitive GI confirmation.
             vis = (sdf_map_w > 0u) ? indirect_bilinear(i.light_pos) : float3(0.0, 0.0, 0.0);
+            replace = true;
+        } else if(debug_mode == 13u) {
+            // Sky-access view (Stage 2a): GREY = per-tile directional sky-access
+            // (hemisphere fraction reaching open sky) straight from sky_sun.comp,
+            // independent of sky colour/intensity, ambient, GI, dither. Grade:
+            // open ground ≈ white; alcove/overhang/against-wall = mid-grey;
+            // indoor near a window = partial (FROM the opening); deep interior =
+            // black. Uniform black everywhere = pass not computing (no SDF / pipe
+            // failed). 2D limit: an open tile boxed in by walls reads dark.
+            const float a = (sdf_map_w > 0u) ? sky_bilinear(i.light_pos).r : 0.0;
+            vis = float3(a, a, a);
+            replace = true;
+        } else if(debug_mode == 14u) {
+            // Sun-occlusion view (Stage 2a): GREY = the per-tile sun shadow march
+            // sky_sun.comp stores in SkyBuf.a (1 = lit toward the sun, 0 =
+            // wall-shadowed). Lets you grade the compute sun march in isolation
+            // before it replaces the inline fragment trace. Independent of sun
+            // colour/intensity/elevation. Uniform white = no occluders / pass off.
+            const float s = (sdf_map_w > 0u) ? sky_bilinear(i.light_pos).a : 0.0;
+            vis = float3(s, s, s);
             replace = true;
         }
         if(replace) {

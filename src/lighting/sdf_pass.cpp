@@ -250,8 +250,11 @@ void sdf_pass::init( gpu_device &dev, int map_w, int map_h )
     }
     {
         // Phase 2.3 wall-only sun SDF — same SS-grid size as sdf_storage_.
+        // GRAPHICS read (sprite.frag SunSdfBuf) + COMPUTE read (sky_sun.comp
+        // marches it for the directional sky/sun occlusion — Stage 2a).
         SDL_GPUBufferCreateInfo bci{};
-        bci.usage = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ;
+        bci.usage = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ |
+                    SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ;
         bci.size  = static_cast<Uint32>( map_w * map_h * SDF_SUPERSAMPLE * SDF_SUPERSAMPLE * 4 );
         sun_sdf_storage_ = SDL_CreateGPUBuffer( d, &bci );
         if( !sun_sdf_storage_ ) {
@@ -259,8 +262,11 @@ void sdf_pass::init( gpu_device &dev, int map_w, int map_h )
         }
     }
     {
+        // GRAPHICS read (sprite.frag SkyVisBuf) + COMPUTE read (sky_sun.comp
+        // portal-tests it to find open-sky directions — Stage 2a).
         SDL_GPUBufferCreateInfo bci{};
-        bci.usage = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ;
+        bci.usage = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ |
+                    SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ;
         bci.size  = static_cast<Uint32>( map_w * map_h * 4 );
         skyvis_storage_ = SDL_CreateGPUBuffer( d, &bci );
         if( !skyvis_storage_ ) {

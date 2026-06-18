@@ -125,6 +125,171 @@ Outcome wanted: GI that creates + renders identically on D3D12 and Metal with no
 
 ---
 
+## Stage 2 — sun/sky directional skylight (SPEC, 2026-06-18)
+
+**Goal.** Replace the flat sky ambient (`sky_color · sky_intensity · sky_vis`) and the
+single directional sun ray with a per-tile **directional skylight integral** computed
+in compute, so the sky behaves as an occluded dome (bright toward open sky, self-shaded
+in alcoves/overhangs) and indoor daylight emerges from the *direction of openings* —
+unifying indoor + outdoor in one model. Built on the proven Stage-1 compute base
+(scalar `StructuredBuffer`s, `numthreads(8,8,1)`, readonly-declared inputs, region-
+limited grid). Mirrors `gi_compute_pass` structurally.
+
+**Why directional-portal before heightfield (grilled 2026-06-18).** The indoor/outdoor
+"split" is a flattening artifact: the GPU lights a 2D z-slice; horizontal wall occlusion
+is marchable (in-plane SDF) but vertical/roof occlusion was collapsed to the per-tile
+`outside_cache` scalar (`sky_vis`). True unification = a thin-slab 3D SDF marched in 3D
+for *both* emitters and sun — but that wants **GPU JFA SDF generation** (a 3D CPU DT
+would re-create the hitch B1 just removed) and is therefore **deferred to the JFA
+roadmap phase**, not Stage 2. A single 2D *scalar* SDF cannot serve both because the
+occluder *set* differs (emitters: walls only — a lamp must light its roofed room; sun:
+walls **and** roofs). So Stage 2 keeps the emitter SDF untouched and works the sun/sky
+path only, in two sub-steps. Note: this does **not** add a structure — the sun already
+owns a separate 2D field (`sun_sdf`, wall-only, trees-excluded); 2b *upgrades* that one.
+
+### Stage 2a — 2D directional sky-portal march (ships the merge + the CPU win)
+
+Per tile, march the existing wall-only `SunSdfBuf` in N hemisphere directions; weight
+each direction by whether it **reaches an open-sky tile** before a wall stops it
+(sampling `SkyVisBuf`). This computes directional skylight *and* does the window/opening
+propagation itself — so the CPU window-bleed flood-fill is **deleted** (the Part-B CPU
+win: full-bubble K=8 flood-fill + gaussian → off the main thread).
+
+**A. `frame_build.cpp` — feed raw open-sky, delete the CPU bleed.**
+- `SkyVisBuf` upload becomes **raw `outside_cache`** (1.0 open / 0.0 roofed), tile-res,
+  x-major `[x*H+y]` — *no* bleed flood-fill, *no* gaussian. The directional march now
+  owns indoor propagation. **Delete** the `skylight_bleed` flood-fill block
+  (frame_build.cpp ~275–323) and the `vision_blur` sky_vis gaussian (~329–339). Keep
+  the `skylight_bleed`/`vision_blur` knobs wired to *nothing* for one commit (avoid a
+  cbuffer-layout churn), or repurpose `skylight_bleed`→`sky_dir_strength`. The raw
+  `sky_vis` still drives the fragment's roofed-tile gate as today (the march output is
+  *additional* directional shaping, multiplied in — see D).
+- `sun_sdf` build (region_sdf, ~241) is **unchanged** in 2a (still the wall-only SS SDF).
+
+**B. New `src/lighting/sky_sun_pass.{h,cpp}` + `data/shaders/lighting/src/sky_sun.comp.hlsl`.**
+Single compute dispatch (one thread = one tile), mirroring `gi_field`'s scaffolding:
+- **Inputs (readonly storage):** `t0 space0` SunSdfBuf (`StructuredBuffer<float>`,
+  SS-grid `[x*(map_h*SDF_SS)+y]`, tile units); `t1 space0` SkyVisBuf
+  (`StructuredBuffer<float>`, **tile-res** `[x*map_h+y]`, raw open-sky 0/1).
+- **Output (readwrite storage):** `u0 space1` SkyBuf (`RWStructuredBuffer<float>`,
+  4 floats/tile rgb+pad, tile-res, x-major `[(x*map_h+y)*4+c]`).
+- **Uniform `b0 space2` SkySunParams** (new struct, ≤32 B): `map_w, map_h` (uint);
+  `sun_dir_x, sun_dir_y, sun_sin_elev, sun_intensity`; `shadow_k` (float);
+  `shadow_steps` (uint). Sky/sun *colours* are applied in the fragment (keep colour out
+  of the buffer → buffer is pure occluded-luma RGB weight; fewer params, lets F4 colour
+  knobs stay fragment-side). Pack to 32 B with a pad.
+- **Algorithm per tile** (probe = tile centre +0.5):
+  - *Sky dome:* loop `d` over `SKY_DIRS` (const 8u start) fixed 2D directions over the
+    upper hemisphere (uniform azimuth). For each: `sky_march(probe, dir)` = step the
+    SunSdf (reuse Stage-1 `trace_shadow`/`sdf_bilinear` helpers — copy verbatim from
+    `gi_field.comp`) up to `SKY_REACH` (const ~10) tiles; if it hits a wall (`sd<0.05`)
+    → contributes 0; else sample `SkyVisBuf` at the march endpoint — if open (>0.5)
+    accumulate the direction's hemisphere weight. `sky_rgb += w_dir · reached_open`.
+    Normalise by `SKY_DIRS`. This is the per-tile **directional sky-access** (an
+    AO-like skylight integral). Store in `SkyBuf` rgb (white-weight; fragment multiplies
+    `sky_color`).
+  - *Sun term:* `sun_occ = trace_shadow(probe, toward_sun, SUN_REACH=8, shadow_k,
+    shadow_steps, directional)` averaged over `SUN_PENUMBRA` (const 1→ later 3–4)
+    angular offsets of `toward_sun` for a soft edge. Fold into a 4th channel? No — keep
+    SkyBuf rgb = sky-access; **add a parallel `sun_buf_`** OR pack sun_occ into the pad
+    lane `[...*4+3]` (cheaper: 1 buffer). **Decision: pack `sun_occ` into lane 3** of
+    SkyBuf (rgb = sky-access, a = sun occlusion). One buffer, one bind.
+- `numthreads(8,8,1)`; dispatch `ceil(W/8)×ceil(H/8)`. No samplers (reflect-gate clean).
+- `sky_sun_pass`: `init`/`resize`/`shutdown`/`ready()`/`sky_buffer()` exactly like
+  `gi_compute_pass` (copy the buffer-alloc + pipeline-compile scaffold). `sky_buf_`
+  usage = `COMPUTE_STORAGE_WRITE | GRAPHICS_STORAGE_READ`. Zero on init. `record(cb,
+  sun_sdf_buf, sky_vis_buf, W, H, params)`: one `BeginGPUComputePass(rw=sky_buf_,1)`,
+  bind `ro[2]={sun_sdf_buf, sky_vis_buf}`, dispatch.
+
+**C. `sdf_pass.cpp` — add `COMPUTE_STORAGE_READ` to the two inputs the pass binds.**
+- `sun_sdf_storage_` create flags (sdf_pass.cpp:254) and `skyvis_storage_` (~263):
+  add `| SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ` (exact precedent: `sdf_storage_`
+  already has it, :242–243). Never leave a bound SRV slot unflagged on D3D12.
+
+**D. `sprite.frag.hlsl` — consume SkyBuf (t8), replace flat sky + sun occlusion.**
+- Add `StructuredBuffer<float> SkyBuf : register(t8, space2);` (storage buf **slot 6**,
+  the new LAST). Renumber nothing else (append-only). Update the header slot comment.
+- `sky_contrib`: was `sky_color·sky_intensity·sky_vis`. Becomes
+  `sky_color·sky_intensity · sky_access(world_pos)` where `sky_access` bilinear-reads
+  SkyBuf.rgb at tile-res (`p-0.5` centre, mirror `indirect_bilinear`). The raw `sky_vis`
+  roofed gate still multiplies (roofed deep-interior → access≈0 anyway, but keep the
+  gate so the transition matches the fragment's other sky terms).
+- `sun_contrib`: keep the per-pixel `sun_lambert` + `wet_spec` + screen-space tree
+  `mask_term` (fragment-side, need the per-pixel normal). **Replace** the inline
+  `trace_shadow(...)` call (sprite.frag.hlsl:540) with `sun_occ = SkyBuf.a` (bilinear).
+  i.e. occlusion moves to compute, shading stays fragment. Drop the now-unused fragment
+  `trace_shadow` sun path if no other caller (emitter shadows still use it → keep the
+  helper; just the *sun* call site changes).
+- C++ side (`sprite_batcher.cpp` `bind_lighting_resources` / the lighting god-call):
+  bind `sky_buffer()` at fragment storage **slot 6** for the tile batcher only
+  (ui/shadow batchers pass null, like GiBuf). Add the param to the bind signature in
+  lockstep with the HLSL register (binding-order mismatch = D3D12 crash).
+
+**E. `render_state.{cpp,h}` + `sdl_render_frame.cpp` — own + dispatch.**
+- `render_state`: own `sky_sun_pass sky_`; `init`/`resize` it alongside `gi_` (same
+  `max_w/max_h`); expose `sky()`.
+- `flush_and_gather_rc` (sdl_render_frame.cpp ~250): under the **same `rc_rebuild` gate**
+  as the GI record, after the SkyVis/SunSdf upload, **before** the sprite pass, add:
+  `rs.sky().record(ctx.cmd_buffer, rs.sdf().sun_sdf_buffer(), rs.sdf().sky_vis_buffer(),
+  W, H, sky_params)`. SDL_GPU inserts the compute-write→graphics-read barrier on
+  `sky_buf_` automatically (same as `gi_buf_`). `cycle=false` (retained on skip frames).
+
+**F. Reflect-gate + knobs.**
+- `sky_sun.comp` joins the gate: expect `ro_sb=2 rw_sb=1 8×8×1`, no samplers. sprite.frag
+  becomes `tex=1 buf=7 ub=3` (was buf=6). Run
+  `shader_reflect_check` before declaring done (Mac-side D3D12 gate).
+- Tuning constants (`SKY_DIRS`, `SKY_REACH`, `SUN_PENUMBRA`) live as `static const` in
+  the shader first; promote to F4 `debug_params` knobs once eyeballed (follow-on, mirror
+  `gi_strength`). Add a debug-view mode (next free slot) showing raw `SkyBuf.rgb`
+  sky-access, gi_strength-independent (mirror GI mode 12).
+
+### Stage 2b — upgrade `sun_sdf` → heightfield (vertical accuracy), on the proven 2a base
+
+Only after 2a is dual-backend-confirmed. Makes the sun's **elevation real** (long
+dawn/dusk shadows; physical overhang/window light) by giving the sun/sky march a notion
+of height — *upgrades* the structure the sun already owns, does **not** add one.
+- **`frame_build.cpp`:** replace the `sun_sdf` region build with a per-tile **heightfield**
+  channel: `0`=open floor, full=wall, plus a roof bit from `outside_cache`. Coarse
+  granularity (floor/wall/roof) — BN has no continuous per-tile height; document the
+  quantisation. Same region-limit + SS as today's sun_sdf (region_sdf already runs
+  twice; this swaps one output, ≈ same build cost).
+- **`sky_sun.comp`:** march in 3D `(x, y, elev)`: the ray climbs `t·tan(elev)` and is
+  blocked when it passes a cell whose height exceeds the ray, or while still under a
+  contiguous roof it hasn't climbed out of. The roof-march is the fiddly bit (overhead
+  occlusion regardless of in-plane walls) → the main new risk surface; lands on a
+  confirmed-parity 2a base so a break is isolable to this logic.
+- **Delete** the 2D `sun_sdf` path (storage buffer, `sun_sdf_buffer()`, the
+  `region_sdf` sun call) once the heightfield subsumes it.
+- **Re-tune** indoor daylight under the new model (the user-tuned bleed is gone as of
+  2a; elevation changes the look again). Expect an eyeball + knob pass.
+
+### Deferred (NOT Stage 2) — full 3D-SDF unification
+One thin-slab 3D SDF (current z + few above, region-limited) sphere-marched in 3D for
+**both** emitters and sun = the genuinely-merged structure. Belongs to the **GPU JFA
+SDF** roadmap phase (3D DT on CPU would undo B1). Tracked there, not here.
+
+### Stage 2 critical files
+| File | Change |
+|---|---|
+| `src/lighting/sky_sun_pass.{h,cpp}` *(new)* + `data/shaders/lighting/src/sky_sun.comp.hlsl` *(new)* | 2a directional sky-portal march → `sky_buf_` (rgb=sky-access, a=sun occ) |
+| `src/lighting/frame_build.cpp` | 2a: SkyVis upload = raw `outside_cache`; **delete** bleed flood-fill + sky_vis gaussian. 2b: sun_sdf→heightfield |
+| `src/lighting/sdf_pass.cpp` | 2a: add `COMPUTE_STORAGE_READ` to `skyvis_storage_`; 2b: same to `sun_sdf_storage_` |
+| `data/shaders/lighting/src/sprite.frag.hlsl` | 2a: add `SkyBuf` t8 (slot 6); sky_contrib←SkyBuf.rgb, sun_occ←SkyBuf.a (drop inline sun `trace_shadow` call) |
+| `src/lighting/sprite_batcher.cpp` | 2a: bind `sky_buffer()` at fragment storage slot 6 (tile batcher only); param in lockstep with HLSL register |
+| `src/lighting/render_state.{cpp,h}` | 2a: own `sky_` pass; init/resize alongside `gi_`; `sky()` accessor |
+| `src/sdl_render_frame.cpp` | 2a: `sky().record(...)` in `flush_and_gather_rc` under the `rc_rebuild` gate, before the sprite pass |
+
+### Stage 2 verification (dual-backend — D3D12 is the gate)
+- **Reflect-gate (Mac, pre-run):** `sky_sun.comp` `ro_sb=2 rw_sb=1`; sprite.frag `buf=7`.
+- **Metal:** open-sky tiles full sky; alcove/overhang tiles visibly self-shaded; indoor
+  tile near a window lit *from the window direction*; deep interior dark; sun shadow
+  matches prior softness (then softer with `SUN_PENUMBRA>1`). Dev: sky-access debug mode.
+- **D3D12 (Win11):** no pipeline-creation failure, no device-removed, identical
+  structural result. Same gate the fragment RC never passed; compute binding model
+  carries it (Stage 1 precedent).
+
+---
+
 ## Part B — Perf: structure_rebuild hitch + measured do_turn
 
 ### B0. Capture sim numbers FIRST

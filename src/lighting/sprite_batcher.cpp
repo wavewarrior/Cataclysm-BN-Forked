@@ -209,6 +209,10 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
         // BUFFER (GiBuf), not the old IndirectTex storage texture. Storage-buffer
         // slot 5 ⇒ t7/space2 (last, after SunSdfBuf).
         SDL_GPUBuffer  *lp_gi_buf       = nullptr;  // fragment storage BUFFER slot 5 (GiBuf, t7)
+        // Sky/sun directional skylight (Stage 2a): GPU compute sky_sun.comp
+        // output (rgb sky-access + a sun-occ). Storage-buffer slot 6 ⇒ t8/space2
+        // (last, after GiBuf). Null on the shadow/UI batchers.
+        SDL_GPUBuffer  *lp_sky_buf      = nullptr;  // fragment storage BUFFER slot 6 (SkyBuf, t8)
         // Silhouette sun-shadow mask (Phase 2). The SOLE storage-READ texture now
         // (GI moved to GiBuf) ⇒ storage-texture slot 0 ⇒ t1/space2, ahead of the
         // storage buffers (t2..t7). Null on the shadow/UI batchers.
@@ -234,7 +238,8 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
                                      SDL_GPUBuffer  *vis_buf      = nullptr,
                                      const sun_params *sp         = nullptr,
                                      const debug_params *dbg      = nullptr,
-                                     SDL_GPUBuffer  *sun_sdf_buf  = nullptr ) noexcept {
+                                     SDL_GPUBuffer  *sun_sdf_buf  = nullptr,
+                                     SDL_GPUBuffer  *sky_buf      = nullptr ) noexcept {
             // data_sampler is vestigial now that all lighting data (emitters,
             // SDF, sky-vis) lives in storage buffers — Atlas is the only
             // sampler texture and carries its own sampler from set_texture().
@@ -248,6 +253,7 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
             lp_gi_buf       = gi_buf;
             lp_vis_buf      = vis_buf;
             lp_sun_sdf_buf  = sun_sdf_buf;
+            lp_sky_buf      = sky_buf;
             lp_data_sampler = data_sampler;
             lp.tile_pixel_size = tile_pixel_size;
             lp.current_z       = z_level;
@@ -823,23 +829,24 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
             if( lp_shadow_mask ) {
                 SDL_BindGPUFragmentStorageTextures( rp, /*first_slot=*/0, &lp_shadow_mask, 1 );
             }
-            // Storage BUFFER slots 0..5 → t2..t7 (after the 1 storage texture):
-            // Emitters, SdfBuf, SkyVisBuf, VisBuf, SunSdfBuf, GiBuf. The sprite
-            // pipeline declares ALL SIX, so this is strictly all-or-none: a PARTIAL
-            // bind leaves declared SRV slots unbound → D3D12 "Missing fragment
-            // storage buffer binding!" → device removed. All six producers allocate
-            // their buffer unconditionally at init (emitter_collector ctor,
-            // sdf_pass::init, gi_compute_pass::init), so on the tile batcher they
-            // are non-null whenever render_state is ready; the shader gates every
-            // per-tile read on sdf_map_w>0 / emitter_count>0 / gi_strength>0, so
-            // binding an unpopulated buffer is read-safe. The shadow/UI batchers
-            // leave them null → bind nothing. Bound in ONE call so a later bind
-            // can't zero an earlier slot.
+            // Storage BUFFER slots 0..6 → t2..t8 (after the 1 storage texture):
+            // Emitters, SdfBuf, SkyVisBuf, VisBuf, SunSdfBuf, GiBuf, SkyBuf. The
+            // sprite pipeline declares ALL SEVEN, so this is strictly all-or-none:
+            // a PARTIAL bind leaves declared SRV slots unbound → D3D12 "Missing
+            // fragment storage buffer binding!" → device removed. All seven
+            // producers allocate their buffer unconditionally at init
+            // (emitter_collector ctor, sdf_pass::init, gi_compute_pass::init,
+            // sky_sun_pass::init), so on the tile batcher they are non-null
+            // whenever render_state is ready; the shader gates every per-tile read
+            // on sdf_map_w>0 / emitter_count>0 / gi_strength>0, so binding an
+            // unpopulated buffer is read-safe. The shadow/UI batchers leave them
+            // null → bind nothing. Bound in ONE call so a later bind can't zero an
+            // earlier slot.
             if( lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf && lp_vis_buf
-                && lp_sun_sdf_buf && lp_gi_buf ) {
-                SDL_GPUBuffer *sbufs[6] = { lp_emitter_buf, lp_sdf_buf, lp_sky_vis_buf,
-                                            lp_vis_buf, lp_sun_sdf_buf, lp_gi_buf };
-                SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0, sbufs, 6 );
+                && lp_sun_sdf_buf && lp_gi_buf && lp_sky_buf ) {
+                SDL_GPUBuffer *sbufs[7] = { lp_emitter_buf, lp_sdf_buf, lp_sky_vis_buf,
+                                            lp_vis_buf, lp_sun_sdf_buf, lp_gi_buf, lp_sky_buf };
+                SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0, sbufs, 7 );
             }
         }
 };
@@ -914,14 +921,15 @@ void sprite_batcher::set_lighting_resources( float            tile_pixel_size,
                                               SDL_GPUBuffer   *vis_buf,
                                               const sun_params   *sp,
                                               const debug_params *dbg,
-                                              SDL_GPUBuffer   *sun_sdf_buf )
+                                              SDL_GPUBuffer   *sun_sdf_buf,
+                                              SDL_GPUBuffer   *sky_buf )
 {
     p->set_lighting_resources( tile_pixel_size, z_level,
                                 emitter_count, ambient,
                                 cam_off_x, cam_off_y, sdf_map_w, sdf_map_h,
                                 emitter_buf, sdf_buf, data_sampler,
                                 sky_vis_buf, gi_buf, vis_buf, sp, dbg,
-                                sun_sdf_buf );
+                                sun_sdf_buf, sky_buf );
 }
 
 void sprite_batcher::draw( const sprite_instance &inst )

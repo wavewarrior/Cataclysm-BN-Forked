@@ -26,6 +26,7 @@
 #include "ui_composite_target.h"
 #include "tonemap_pass.h"
 #include "gi_compute_pass.h"
+#include "sky_sun_pass.h"
 #include "bloom_pass.h"
 #include "volumetric_pass.h"
 #include "rain_effect.h"
@@ -322,6 +323,12 @@ class render_state
         // input. Named gi() (was rc()).
         gi_compute_pass &gi() noexcept { return gi_; }
 
+        // GPU compute sky/sun directional skylight pass (Stage 2a of
+        // GI_COMPUTE_AND_PERF_PLAN). Driven from refresh_display alongside gi();
+        // its sky_buffer() feeds sprite.frag as SkyBuf (directional sky-access +
+        // sun occlusion), replacing the flat sky ambient + inline sun shadow.
+        sky_sun_pass &sky() noexcept { return sky_; }
+
         // Bloom post pass (Step-4). Driven from refresh_display between Pass W
         // and the tonemap resolve; composites additively into world_target.
         bloom_pass &bloom() noexcept { return bloom_; }
@@ -423,6 +430,7 @@ class render_state
         std::unique_ptr<ui_composite_target> world_ldr_target_;
         tonemap_pass                         tonemap_;
         gi_compute_pass                      gi_;
+        sky_sun_pass                         sky_;
         bloom_pass                           bloom_;
         volumetric_pass                      volumetric_;
         rain_effect                          rain_;

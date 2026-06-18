@@ -270,6 +270,28 @@ auto flush_and_gather_rc( lighting::render_state &rs,
         rs.gi().record( ctx.cmd_buffer,
                         rs.collector()->emitter_buffer(), rs.sdf().sdf_buffer(),
                         rp.map_w, rp.map_h, rp );
+
+        // Stage 2a: directional sky/sun pass on the same CB, under the same
+        // structure-rebuild gate. Marches the wall-only SunSdf (per-direction
+        // sky-access via the SkyVis portal test + sun occlusion) → sky_buffer(),
+        // read by sprite.frag as SkyBuf. Needs only the sun DIRECTION (cheap,
+        // weather-independent — intensity/colour are applied fragment-side), so
+        // we derive it here rather than waiting on assemble_light_inputs.
+        if( rs.sky().ready() && rs.sdf().sun_sdf_buffer() && rs.sdf().sky_vis_buffer() ) {
+            const float sun_hour = g ? hour_of_day<float>( calendar::turn ) : 12.f;
+            const lighting::sun_params sp = lighting::make_sun_params( sun_hour );
+            lighting::sky_sun_params kp{};
+            kp.map_w        = rp.map_w;
+            kp.map_h        = rp.map_h;
+            kp.sun_dir_x    = sp.sun_dir_x;
+            kp.sun_dir_y    = sp.sun_dir_y;
+            kp.sun_sin_elev = sp.sun_sin_elev;
+            kp.shadow_k     = g_dbg_params.shadow_k;
+            kp.shadow_steps = g_dbg_params.shadow_steps;
+            rs.sky().record( ctx.cmd_buffer,
+                             rs.sdf().sun_sdf_buffer(), rs.sdf().sky_vis_buffer(),
+                             rp.map_w, rp.map_h, kp );
+        }
     }
 
     if( g_rc_readback ) {

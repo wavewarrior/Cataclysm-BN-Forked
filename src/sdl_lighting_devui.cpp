@@ -234,7 +234,7 @@ static void draw_lighting_tab()
 
     static const char *mode_names[] = {
         "off", "ambient", "emitter", "sun", "sky", "total", "SDF", "sky_vis", "emit_bw",
-        "normal", "AO", "shadow mask", "GI"
+        "normal", "AO", "shadow mask", "GI", "sky access", "sun occ"
     };
     int mode = static_cast<int>( g_current_dbg_mode );
     if( ImGui::Combo( "mode (F7)", &mode, mode_names, static_cast<int>( std::size( mode_names ) ) ) ) {

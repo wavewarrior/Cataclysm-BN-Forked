@@ -116,6 +116,13 @@ void render_state::init( SDL_Window *host_window )
     gi_.init( device_, static_cast<std::uint32_t>( rt_tiles ),
               static_cast<std::uint32_t>( rt_tiles ) );
 
+    // GPU compute sky/sun directional skylight pass (Stage 2a). Same max tile
+    // extent as the SDF/GI; sky_buffer() feeds sprite.frag as SkyBuf (rgb
+    // directional sky-access + a sun occlusion). Reads sdf_'s sun_sdf + sky_vis
+    // buffers (which carry COMPUTE_STORAGE_READ).
+    sky_.init( device_, static_cast<std::uint32_t>( rt_tiles ),
+               static_cast<std::uint32_t>( rt_tiles ) );
+
     // UI compositor target. Sized to the PHYSICAL (drawable) swapchain pixels
     // so the composite blit is 1:1; the resize hook in sdltiles keeps it in
     // sync with window size changes. A failed alloc leaves ui_target() != null
@@ -218,6 +225,7 @@ void render_state::shutdown() noexcept
     world_ldr_target_.reset();
     tonemap_.shutdown();
     gi_.shutdown();
+    sky_.shutdown();
     bloom_.shutdown();
     volumetric_.shutdown();
     rain_.shutdown();
@@ -320,6 +328,11 @@ void render_state::begin_lighting_frame( const frame_light_inputs &in )
     // / sdf_map_w. A null here would leave a declared fragment storage-buffer slot
     // unbound → D3D12 "missing binding".
     SDL_GPUBuffer *gibuf = gi_.gi_buffer();
+    // Sky/sun directional skylight source for the sprite's SkyBuf (Stage 2a).
+    // Always allocated + zeroed at init (even if the compute pipeline failed),
+    // so the fragment storage-buffer slot always has a valid handle; reads as
+    // zero (dark) until the first dispatch. Same all-or-none rationale as gibuf.
+    SDL_GPUBuffer *skybuf = sky_.sky_buffer();
     const Uint32 ne = collector_
                       ? static_cast<Uint32>( collector_->last_count() )
                       : 0u;
@@ -329,7 +342,7 @@ void render_state::begin_lighting_frame( const frame_light_inputs &in )
     tile_batcher_.set_lighting_resources(
         in.tile_pixel_size, in.z_level, ne, in.ambient,
         in.camera_off_x, in.camera_off_y, sw, sh,
-        ebuf, sbuf, gpu_sampler_, kvis, gibuf, vbuf, &in.sun, &in.debug, ssun );
+        ebuf, sbuf, gpu_sampler_, kvis, gibuf, vbuf, &in.sun, &in.debug, ssun, skybuf );
 
     // Silhouette sun-shadow mask (Phase 2): bind it as the tile batcher's 2nd
     // fragment storage texture (sprite.frag ShadowMask, t2/space2). Always
