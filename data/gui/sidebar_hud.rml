@@ -1,0 +1,18 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="sidebar_hud.rcss"/>
+</head>
+<body data-model="sidebar_hud">
+    <!-- Tier 7 sidebar HUD (game::draw_panels). A PERSISTENT, render-only,
+         continuous every-turn document — NOT a modal open/loop/close screen. It is
+         opened once during gameplay and synced each turn; modal screens stack above
+         it by open order. The body is transparent so the cleared (black) sidebar
+         region shows through; only migrated panels paint. Slice 1 owns the Stats
+         panel only — its row is built by hud_stats_text() + cata_text_to_rml() and
+         bound to `stats_rml`. Further panels stack below as later slices land. -->
+    <div class="hud-col">
+        <div class="hud-panel hud-stats" data-rml="stats_rml"></div>
+    </div>
+</body>
+</rml>

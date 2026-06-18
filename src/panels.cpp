@@ -15,6 +15,8 @@
 #include <tuple>
 #include <utility>
 
+#include <RmlUi/Core.h>
+
 #include "action.h"
 #include "avatar.h"
 #include "behavior.h"
@@ -56,6 +58,9 @@
 #include "path_info.h"
 #include "panels_utility.h"
 #include "player.h"
+#include "rml_screen.h"
+#include "rml_util.h"
+#include "lighting/rmlui_layer.h"
 #include "pldata.h"
 #include "point.h"
 #include "string_formatter.h"
@@ -2702,6 +2707,104 @@ static const std::map<std::string, std::function<bool()>> &render_predicate_regi
 bool native_draw_target_exists( const std::string &name )
 {
     return native_draw_registry().contains( name );
+}
+
+// ── Sidebar HUD → RmlUi (Tier 7, render-only, continuous) ────────────────────
+// Persistent HUD document (see panels.h). Lives in this TU so it can reuse the
+// file-static stat colour helpers (str_string/etc.). NOT the modal rml_doc harness:
+// the HUD has no blocking input loop, so there is NO 16ms input tick — the main game
+// loop ticks the RmlUi context every frame, and open order keeps modal screens
+// stacked above the HUD. Lifecycle is driven from game::draw_panels + cleanup_at_end.
+namespace
+{
+// Bound model: one pre-rendered RML string per migrated panel. Slice 1 = Stats only.
+struct hud_rml_model {
+    Rml::String stats_rml;
+    Rml::DataModelHandle handle;
+};
+std::unique_ptr<hud_rml_model> g_hud_data;
+Rml::ElementDocument *g_hud_doc = nullptr;
+
+// One row mirroring draw_stats: "STR n  DEX n  INT n  PER n"; each value is coloured
+// by the same str_string/etc. helper draw_stats uses (label stays default HUD colour).
+// The cata colour tags become RML spans via cata_text_to_rml in sidebar_hud_sync.
+std::string hud_stats_text( const avatar &u )
+{
+    const auto seg = [&]( const std::string & label, const nc_color clr, int val ) {
+        const std::string num = val < 100 ? std::to_string( val ) : "99+";
+        return label + " " + colorize( num, clr );
+    };
+    return seg( _( "STR" ), str_string( u ).first, u.get_str() ) + "  " +
+           seg( _( "DEX" ), dex_string( u ).first, u.get_dex() ) + "  " +
+           seg( _( "INT" ), int_string( u ).first, u.get_int() ) + "  " +
+           seg( _( "PER" ), per_string( u ).first, u.get_per() );
+}
+} // namespace
+
+bool &sidebar_hud_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = false;
+    return enabled;
+}
+
+void sidebar_hud_open()
+{
+    if( g_hud_doc != nullptr ) {
+        return;  // already open (idempotent)
+    }
+    if( !sidebar_hud_rmlui_enabled() || !rmlui_layer::ready() ) {
+        return;
+    }
+    Rml::Context *ctx = rmlui_layer::context();
+    if( ctx == nullptr ) {
+        return;
+    }
+    Rml::DataModelConstructor c = ctx->CreateDataModel( "sidebar_hud" );
+    if( !c ) {
+        return;
+    }
+    g_hud_data = std::make_unique<hud_rml_model>();
+    c.Bind( "stats_rml", &g_hud_data->stats_rml );
+    g_hud_data->handle = c.GetModelHandle();
+    Rml::ElementDocument *doc =
+        rmlui_layer::open_document( PATH_INFO::datadir() + "gui/sidebar_hud.rml" );
+    if( doc == nullptr ) {
+        // Roll back so a failed open leaves no dangling model (cf. rml_doc::open).
+        ctx->RemoveDataModel( "sidebar_hud" );
+        g_hud_data.reset();
+        return;
+    }
+    g_hud_doc = doc;
+}
+
+void sidebar_hud_sync( avatar &u )
+{
+    if( g_hud_doc == nullptr || !g_hud_data ) {
+        return;
+    }
+    g_hud_data->stats_rml = cata_text_to_rml( hud_stats_text( u ) );
+    g_hud_data->handle.DirtyVariable( "stats_rml" );
+}
+
+void sidebar_hud_close()
+{
+    if( g_hud_doc == nullptr ) {
+        return;
+    }
+    rmlui_layer::close_document( g_hud_doc );
+    if( Rml::Context *ctx = rmlui_layer::context() ) {
+        ctx->RemoveDataModel( "sidebar_hud" );
+    }
+    g_hud_doc = nullptr;
+    g_hud_data.reset();
+}
+
+bool sidebar_hud_owns_panel( const std::string &name )
+{
+    // Slice 1: the HUD reproduces the Stats panel. "Stats" is the stable (untranslated)
+    // window_panel name shared by the classic/narrow/wide stat variants.
+    return g_hud_doc != nullptr && name == "Stats";
 }
 
 // Resolve a widget's "show_if" to a window_panel render predicate (the data-driven

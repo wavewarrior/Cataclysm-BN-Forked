@@ -487,6 +487,10 @@ static void draw_rmlui_tab()
             ImGui::SliderFloat( "wt x offset", &rmlui_layer::world_text_dx(), -64.f, 64.f );
             ImGui::SliderFloat( "wt y offset", &rmlui_layer::world_text_dy(), -64.f, 64.f );
         }
+        // Tier 7: the continuous sidebar HUD (NOT a modal screen). Slice 1 owns the
+        // Stats panel only; with this ON, Stats renders via RmlUi while the rest of the
+        // sidebar stays curses.
+        ImGui::Checkbox( "sidebar HUD (stats)", &sidebar_hud_rmlui_enabled() );
     }
 }
 

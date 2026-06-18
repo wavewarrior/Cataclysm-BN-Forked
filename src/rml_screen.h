@@ -191,4 +191,11 @@ bool &faction_rmlui_enabled();
 // shallow sections; aim/hit-chance readout WIP. Render-only RmlUi doc.
 bool &ranged_rmlui_enabled();
 
+// Sidebar HUD (Tier 7): the continuous every-turn sidebar panels (game::draw_panels).
+// UNLIKE every screen above this is NOT a modal open/loop/close — it is a persistent
+// HUD document opened once during gameplay and synced each turn (see sidebar_hud_*
+// in panels.h/.cpp; it does NOT use rml_doc, which bundles a modal input tick). Slice 1
+// owns only the Stats panel. Render-only; default OFF.
+bool &sidebar_hud_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

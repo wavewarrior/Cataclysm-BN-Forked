@@ -1,0 +1,27 @@
+/* Tier 7 sidebar HUD layout. The body is transparent (the cleared sidebar region
+   shows through); the HUD column is anchored to the sidebar edge and stacks migrated
+   panels top-down to mirror game::draw_panels. Slice 1 paints only the Stats panel.
+   Pixel width/anchor are approximate for slice 1 (left edge, top) — the in-game A/B
+   tunes them; SIDEBAR_POSITION=right handling lands with a later slice. */
+
+body {
+    background-color: transparent;
+    width: 100%;
+    height: 100%;
+}
+
+.hud-col {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 256dp;
+    display: flex;
+    flex-direction: column;
+}
+
+/* display:block — RmlUi elements default to inline; a sidebar row must be a block or
+   it flows horizontally (documented gotcha in theme.rcss, bit mutations/diary). */
+.hud-panel {
+    display: block;
+    white-space: pre-wrap;
+}

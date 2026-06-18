@@ -154,6 +154,7 @@
 #include "overmap_ui.h"
 #include "overmapbuffer.h"
 #include "panels.h"
+#include "rml_screen.h"
 #include "sidebar_anim.h"
 #include "path_info.h"
 #include "pathfinding.h"
@@ -1379,6 +1380,9 @@ static std::string generate_memorial_filename( const std::string &char_name )
 
 bool game::cleanup_at_end()
 {
+    // Tier 7: tear down the sidebar HUD doc on leaving gameplay so it never lingers
+    // (and renders) over the main menu. Idempotent / no-op when it was never opened.
+    sidebar_hud_close();
     if( uquit == QUIT_DIED || uquit == QUIT_SUICIDE ) {
         // Put (non-hallucinations) into the overmap so they are not lost.
         for( monster &critter : all_monsters() ) {
@@ -4363,6 +4367,15 @@ void game::draw_panels( bool force_draw )
     const int current_turn = to_turns<int>( calendar::turn - calendar::turn_zero );
     const bool draw_this_turn = current_turn > previous_turn || force_draw;
     auto &mgr = panel_manager::get_manager();
+    // Sidebar HUD (Tier 7): when enabled, a persistent RmlUi document renders the
+    // migrated panels instead of curses. Open lazily + sync every call; close (no-op
+    // if already closed) when disabled so flipping the F4 toggle off restores curses.
+    if( sidebar_hud_rmlui_enabled() ) {
+        sidebar_hud_open();
+        sidebar_hud_sync( u );
+    } else {
+        sidebar_hud_close();
+    }
     int y = 0;
     const bool sidebar_right = get_option<std::string>( "SIDEBAR_POSITION" ) == "right";
     const int spacer = get_option<bool>( "SIDEBAR_SPACERS" ) ? 1 : 0;
@@ -4406,7 +4419,12 @@ void game::draw_panels( bool force_draw )
             overflow = true;
             break;
         }
-        if( panel.always_draw || draw_this_turn ) {
+        if( sidebar_hud_owns_panel( panel.get_name() ) ) {
+            // Tier 7: the persistent RmlUi HUD renders this panel — skip the curses
+            // draw to avoid double-draw. The slot/height is still reserved (y advances
+            // below), so un-migrated panels keep their positions and the RmlUi fragment
+            // fills the gap.
+        } else if( panel.always_draw || draw_this_turn ) {
             panel.draw( u, catacurses::newwin( h, panel.get_width(),
                                                point( sidebar_right ? TERMX - panel.get_width() : 0, y ) ) );
         }

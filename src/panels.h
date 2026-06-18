@@ -81,6 +81,25 @@ window_panel make_bodygraph_widget_panel( const widget &w, int width );
 // the dispatch table can be verified without a curses context.
 bool native_draw_target_exists( const std::string &name );
 
+// ── Sidebar HUD → RmlUi (Tier 7, render-only, continuous) ────────────────────
+// The persistent HUD document that renders sidebar panels through RmlUi instead of
+// the curses cell renderer. Lives in panels.cpp so it can reuse the TU-static stat
+// colour helpers (str_string/etc.). Lifecycle is driven from game::draw_panels (NOT
+// the modal rml_doc harness — the HUD has no blocking input loop):
+//   open()  — lazily create the "sidebar_hud" data model + open the doc (no-op when
+//             disabled / RmlUi not ready / already open). Idempotent.
+//   sync()  — repopulate the bound model from the avatar each turn. No-op if closed.
+//   close() — close the doc + remove the model. Idempotent; call on toggle-off and
+//             on leaving gameplay (game::cleanup_at_end) so the HUD never lingers
+//             over the main menu.
+//   owns_panel(name) — true while the HUD is live AND has taken over the panel named
+//             `name`; draw_panels skips that panel's curses draw to avoid double-draw.
+// Slice 1 owns only the "Stats" panel.
+void sidebar_hud_open();
+void sidebar_hud_sync( avatar &u );
+void sidebar_hud_close();
+bool sidebar_hud_owns_panel( const std::string &name );
+
 class panel_manager
 {
     public:
