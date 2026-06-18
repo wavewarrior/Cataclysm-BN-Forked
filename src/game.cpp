@@ -2009,6 +2009,10 @@ bool game::do_turn()
         calc_driving_offset( veh );
     }
 
+    // perf probe: sim_total spans the whole post-input world+sim block; the
+    // _perf_world window below isolates the pre-AI world tick
+    // (scent/falling/vehmove/process_items/grids/fluid).
+    const auto _perf_sim_t0 = _perf_clk::now();
     // No-scent debug mutation has to be processed here or else it takes time to start working
     {
         if( !u.has_active_bionic( bionic_id( "bio_scent_mask" ) ) &&
@@ -2056,9 +2060,9 @@ bool game::do_turn()
     {
         sounds::process_sounds();
     }
+    _perf_world += std::chrono::duration<double, std::milli>( _perf_clk::now() - _perf_sim_t0 ).count();
     // Update vision caches for monsters. If this turns out to be expensive,
     // consider a stripped down cache just for monsters.
-    const auto _perf_sim_t0 = _perf_clk::now();
     {
         const auto _t0 = _perf_clk::now();
         m.build_map_cache( get_levz(), true );
