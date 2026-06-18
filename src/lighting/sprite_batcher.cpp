@@ -829,24 +829,25 @@ static constexpr Uint32 MAX_INSTANCES = 262144;
             if( lp_shadow_mask ) {
                 SDL_BindGPUFragmentStorageTextures( rp, /*first_slot=*/0, &lp_shadow_mask, 1 );
             }
-            // Storage BUFFER slots 0..6 → t2..t8 (after the 1 storage texture):
-            // Emitters, SdfBuf, SkyVisBuf, VisBuf, SunSdfBuf, GiBuf, SkyBuf. The
-            // sprite pipeline declares ALL SEVEN, so this is strictly all-or-none:
-            // a PARTIAL bind leaves declared SRV slots unbound → D3D12 "Missing
-            // fragment storage buffer binding!" → device removed. All seven
-            // producers allocate their buffer unconditionally at init
-            // (emitter_collector ctor, sdf_pass::init, gi_compute_pass::init,
-            // sky_sun_pass::init), so on the tile batcher they are non-null
-            // whenever render_state is ready; the shader gates every per-tile read
-            // on sdf_map_w>0 / emitter_count>0 / gi_strength>0, so binding an
-            // unpopulated buffer is read-safe. The shadow/UI batchers leave them
-            // null → bind nothing. Bound in ONE call so a later bind can't zero an
-            // earlier slot.
+            // Storage BUFFER slots 0..5 → t2..t7 (after the 1 storage texture):
+            // Emitters, SdfBuf, SkyVisBuf, VisBuf, GiBuf, SkyBuf. (Stage 2b dropped
+            // SunSdfBuf — the sun shadow moved to the compute coverage march in
+            // SkyBuf.a, so the fragment no longer declares it.) The sprite pipeline
+            // declares ALL SIX, so this is strictly all-or-none: a PARTIAL bind
+            // leaves declared SRV slots unbound → D3D12 "Missing fragment storage
+            // buffer binding!" → device removed. All six producers allocate their
+            // buffer unconditionally at init (emitter_collector ctor, sdf_pass::init,
+            // gi_compute_pass::init, sky_sun_pass::init), so on the tile batcher they
+            // are non-null whenever render_state is ready; the shader gates every
+            // per-tile read on sdf_map_w>0 / emitter_count>0 / gi_strength>0, so
+            // binding an unpopulated buffer is read-safe. The shadow/UI batchers
+            // leave them null → bind nothing. Bound in ONE call so a later bind can't
+            // zero an earlier slot.
             if( lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf && lp_vis_buf
-                && lp_sun_sdf_buf && lp_gi_buf && lp_sky_buf ) {
-                SDL_GPUBuffer *sbufs[7] = { lp_emitter_buf, lp_sdf_buf, lp_sky_vis_buf,
-                                            lp_vis_buf, lp_sun_sdf_buf, lp_gi_buf, lp_sky_buf };
-                SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0, sbufs, 7 );
+                && lp_gi_buf && lp_sky_buf ) {
+                SDL_GPUBuffer *sbufs[6] = { lp_emitter_buf, lp_sdf_buf, lp_sky_vis_buf,
+                                            lp_vis_buf, lp_gi_buf, lp_sky_buf };
+                SDL_BindGPUFragmentStorageBuffers( rp, /*first_slot=*/0, sbufs, 6 );
             }
         }
 };

@@ -232,6 +232,13 @@ void sdf_pass::init( gpu_device &dev, int map_w, int map_h )
         tbci.size  = static_cast<Uint32>( map_w * map_h * SDF_SUPERSAMPLE * SDF_SUPERSAMPLE * 4 );
         xfer_vis_f_ = SDL_CreateGPUTransferBuffer( d, &tbci );
     }
+    {
+        // Stage 2b coverage occluder: tile-res, 2 floats/tile (height, roof).
+        SDL_GPUTransferBufferCreateInfo tbci{};
+        tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+        tbci.size  = static_cast<Uint32>( map_w * map_h * 2 * 4 );
+        xfer_occ_ = SDL_CreateGPUTransferBuffer( d, &tbci );
+    }
 
     // SDF + sky-vis as fragment-readable storage buffers (sampler-texture
     // Load returns 0 on Metal). Same data as the textures, as float arrays.
@@ -283,6 +290,18 @@ void sdf_pass::init( gpu_device &dev, int map_w, int map_h )
             dbg( DL::Error ) << "sdf_pass::init: failed to create visbuf_storage";
         }
     }
+    {
+        // Stage 2b unified coverage occluder field — tile-res, 2 floats/tile
+        // (height, roof). COMPUTE read (sky_sun.comp marches it).
+        SDL_GPUBufferCreateInfo bci{};
+        bci.usage = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ |
+                    SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ;
+        bci.size  = static_cast<Uint32>( map_w * map_h * 2 * 4 );
+        occ_storage_ = SDL_CreateGPUBuffer( d, &bci );
+        if( !occ_storage_ ) {
+            dbg( DL::Error ) << "sdf_pass::init: failed to create occ_storage";
+        }
+    }
 }
 
 void sdf_pass::shutdown( gpu_device &dev )
@@ -331,6 +350,14 @@ void sdf_pass::shutdown( gpu_device &dev )
         SDL_ReleaseGPUBuffer( d, visbuf_storage_ );
         visbuf_storage_ = nullptr;
     }
+    if( xfer_occ_ ) {
+        SDL_ReleaseGPUTransferBuffer( d, xfer_occ_ );
+        xfer_occ_ = nullptr;
+    }
+    if( occ_storage_ ) {
+        SDL_ReleaseGPUBuffer( d, occ_storage_ );
+        occ_storage_ = nullptr;
+    }
     if( sdf_tex_ ) {
         SDL_ReleaseGPUTexture( d, sdf_tex_ );
         sdf_tex_ = nullptr;
@@ -352,7 +379,8 @@ void sdf_pass::upload( SDL_GPUCopyPass *cp,
                         const std::vector<float>   &sdf,
                         const std::vector<uint8_t> &sky_vis,
                         const std::vector<float>   &vis,
-                        const std::vector<float>   &sun_sdf )
+                        const std::vector<float>   &sun_sdf,
+                        const std::vector<float>   &occ )
 {
     if( !cp || !dev || !transparency_tex_ || !sdf_tex_ ) {
         return;
@@ -470,6 +498,32 @@ void sdf_pass::upload( SDL_GPUCopyPass *cp,
             buf_dst.size   = sdf_subcells * static_cast<Uint32>( sizeof( float ) );
 
             SDL_UploadToGPUBuffer( cp, &tb_src, &buf_dst, false );
+        }
+    }
+
+    // Stage 2b: unified coverage occluder field — tile-res, 2 floats/tile
+    // (occ[(x*runtime_h+y)*2 + 0] = occluder height, +1 = roof bit). Marched by
+    // sky_sun.comp for sun/moon/sky occlusion (single occlusion source).
+    {
+        const Uint32 occ_floats = pixel_count * 2u;
+        if( xfer_occ_ && occ_storage_
+            && static_cast<Uint32>( occ.size() ) >= occ_floats ) {
+            void *mapped = SDL_MapGPUTransferBuffer( dev, xfer_occ_, true );
+            if( mapped ) {
+                std::memcpy( mapped, occ.data(), occ_floats * sizeof( float ) );
+                SDL_UnmapGPUTransferBuffer( dev, xfer_occ_ );
+
+                SDL_GPUTransferBufferLocation tb_src{};
+                tb_src.transfer_buffer = xfer_occ_;
+                tb_src.offset          = 0;
+
+                SDL_GPUBufferRegion buf_dst{};
+                buf_dst.buffer = occ_storage_;
+                buf_dst.offset = 0;
+                buf_dst.size   = occ_floats * static_cast<Uint32>( sizeof( float ) );
+
+                SDL_UploadToGPUBuffer( cp, &tb_src, &buf_dst, false );
+            }
         }
     }
 

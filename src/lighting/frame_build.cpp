@@ -97,6 +97,7 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
     std::vector<uint8_t> transparency;
     std::vector<float>   sdf;
     std::vector<float>   sun_sdf;   // Phase 2.3: wall-only sun SDF (trees excluded)
+    std::vector<float>   occ;       // Stage 2b: unified coverage occluder (height,roof) /tile
     std::vector<uint8_t> sky_vis;
     std::vector<float>   vis;      // per-tile visibility for soft vision falloff (x-major)
     int sdf_runtime_w = 0;
@@ -247,6 +248,42 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
                 return t;
             } );
 
+            // Stage 2b: unified coverage occluder field (tile-res, 2 floats/tile:
+            // [0] = occluder height from map::coverage(p)/100 — wall ~1, half-wall
+            // ~0.5, fence/furniture low; [1] = roof bit from floor_cache(z+1)).
+            // Marched by sky_sun.comp for sun/moon/sky occlusion — ONE occlusion
+            // source covering walls/half-walls/furniture/roofs. Region-limited to
+            // the same cam rect as the SDF (off-region = 0 = no occluder; off-screen
+            // tiles are never marched within reach). Full-size buffer, x-major
+            // occ[(x*H+y)*2 + c] (no SS — tile-res, like sky_vis).
+            occ.assign( static_cast<size_t>( total ) * 2, 0.0f );
+            {
+                const level_cache *above =
+                    ( zlev + 1 <= OVERMAP_HEIGHT ) ? &m.access_cache( zlev + 1 ) : nullptr;
+                const bool have_above = above
+                    && static_cast<int>( above->floor_cache.size() ) >= total;
+                for( int x = rx0; x < rx1; ++x ) {
+                    for( int y = ry0; y < ry1; ++y ) {
+                        const int idx = x * H + y;
+                        const tripoint_bub_ms tp( point_bub_ms( x, y ), zlev );
+                        // map::coverage() ends in ter(tp)->coverage, an obj() deref.
+                        // refresh_display runs during world load BEFORE terrain JSON
+                        // is finalized (factory empty), where that deref debugmsgs
+                        // "invalid terrain id 0". Guard on the ter id being valid;
+                        // until terrain loads, occ stays 0 (no occluder), correct for
+                        // the loading screen (no real map to shadow yet).
+                        const float h = m.ter( tp ).is_valid()
+                            ? std::clamp( static_cast<float>( m.coverage( tp ) ) / 100.0f,
+                                          0.0f, 1.0f )
+                            : 0.0f;
+                        const float roof =
+                            ( have_above && above->floor_cache[idx] ) ? 1.0f : 0.0f;
+                        occ[ static_cast<size_t>( idx ) * 2 + 0 ] = h;
+                        occ[ static_cast<size_t>( idx ) * 2 + 1 ] = roof;
+                    }
+                }
+            }
+
             // Sky visibility from outside_cache (same x-major layout as
             // transparency_cache, idx = x*H+y). 255 = open sky overhead,
             // 0 = roofed/indoor. Falls back to all-open if the cache
@@ -369,7 +406,8 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
                             std::move( vis ),
                             sdf_runtime_w,
                             sdf_runtime_h,
-                            std::move( sun_sdf ) );
+                            std::move( sun_sdf ),
+                            std::move( occ ) );
 
     dbg( DL::Debug ) << "[lighting] frame_build COMPLETE";
 

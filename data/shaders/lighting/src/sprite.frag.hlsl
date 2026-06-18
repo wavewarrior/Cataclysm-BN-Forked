@@ -58,29 +58,18 @@ StructuredBuffer<GpuEmitter> Emitters    : register(t2, space2);
 StructuredBuffer<float>      SdfBuf      : register(t3, space2);
 StructuredBuffer<float>      SkyVisBuf   : register(t4, space2);
 StructuredBuffer<float>      VisBuf      : register(t5, space2); // per-tile visibility (>=0 live, <0 memory)
-// Phase 2.3: wall-only sun SDF (storage buffer slot 4 ⇒ t6). Same SS grid +
-// x-major layout as SdfBuf, but built from a transparency grid where TREE tiles
-// are forced transparent → the SUN shadow march uses THIS (trees cast no SDF
-// column; their silhouette comes from the mask). Emitters/GI/AO keep the full
-// SdfBuf (trees still occlude lamps + form AO cavities).
-StructuredBuffer<float>      SunSdfBuf   : register(t6, space2);
-// 1-bounce indirect light (GI). Computed by the GPU compute GI pass
-// (gi_compute_pass → gi_bounce.comp) into gi_buf and bound here as the LAST
-// fragment storage buffer (slot 5 ⇒ t7). Tile-res, 4 floats/tile (rgb + pad),
-// x-major gi[(x*sdf_map_h+y)*4 + c] — written verbatim by the compute pass, no
-// transpose. Scalar StructuredBuffer<float> (a float4 dynamic-index read produced
-// DXIL D3D12 rejects). Replaces the old IndirectTex storage texture — moving the
-// gather to compute is what removed GI's D3D12 pipeline fragility (Stage 1).
-StructuredBuffer<float>      GiBuf       : register(t7, space2);
-// Stage 2a directional skylight (sky_sun.comp output) — fragment storage buffer
-// slot 6 ⇒ t8. Tile-res, 4 floats/tile [(x*sdf_map_h+y)*4 + c], x-major (no
-// transpose). rgb = directional sky-access (hemisphere fraction reaching open
-// sky — alcove/overhang self-shading + indoor daylight from window openings),
-// a = sun occlusion (0=shadowed .. 1=lit, reserved — the sun march stays inline
-// in Stage 2a). rgb REPLACES the flat sky_vis sky ambient with directional
-// sky-access; the CPU window-bleed flood-fill is gone (the compute portal-march
-// owns indoor propagation now).
-StructuredBuffer<float>      SkyBuf      : register(t8, space2);
+// 1-bounce indirect light (GI). GPU compute GI pass output (gi_bounce.comp) → gi_buf.
+// Storage buffer slot 4 ⇒ t6 (Stage 2b removed SunSdfBuf, which was here — the sun
+// shadow moved to the compute coverage march, see SkyBuf). Tile-res, 4 floats/tile
+// (rgb + pad), x-major gi[(x*sdf_map_h+y)*4 + c], scalar StructuredBuffer<float>.
+StructuredBuffer<float>      GiBuf       : register(t6, space2);
+// Stage 2a/2b sky+sun/moon (sky_sun.comp output) — LAST fragment storage buffer,
+// slot 5 ⇒ t7. Tile-res, 4 floats/tile [(x*sdf_map_h+y)*4 + c], x-major. rgb =
+// directional sky-access (alcove/overhang self-shading + indoor daylight from
+// window openings — REPLACES the flat sky_vis ambient; CPU bleed flood-fill gone).
+// a = celestial (sun/moon) occlusion from the 3D coverage-occluder march
+// (REPLACES the inline sun trace_shadow + SunSdfBuf — Stage 2b).
+StructuredBuffer<float>      SkyBuf      : register(t7, space2);
 cbuffer LightParams : register(b0, space3) {
     float tile_pixel_size; float current_z;
     uint  emitter_count;   float ambient;
@@ -183,32 +172,9 @@ float sdf_bilinear(float2 p) {
     const float nr = sdf_texel((int)floor(g.x + 0.5), (int)floor(g.y + 0.5));
     return lerp(bil, nr, saturate(sdf_sharp));
 }
-// Phase 2.3: sun-SDF variants (HLSL has no default params, so these are explicit
-// copies reading SunSdfBuf instead of SdfBuf — identical indexing/grid). Only
-// the sun shadow march uses them; trace_shadow selects via a literal use_sun
-// flag (constant-folds per call site, no runtime branch).
-float sdf_texel_sun(int x, int y) {
-    const int gw = (int)sdf_map_w * SDF_SS;
-    const int gh = (int)sdf_map_h * SDF_SS;
-    x = clamp(x, 0, gw - 1);
-    y = clamp(y, 0, gh - 1);
-    return SunSdfBuf[x * gh + y];
-}
-float sdf_bilinear_sun(float2 p) {
-    const float2 g  = p * (float)SDF_SS - 0.5;
-    const float2 fp = floor(g);
-    const int   x0  = (int)fp.x;
-    const int   y0  = (int)fp.y;
-    const float2 w  = g - fp;
-    const float a = sdf_texel_sun(x0,     y0    );
-    const float b = sdf_texel_sun(x0 + 1, y0    );
-    const float c = sdf_texel_sun(x0,     y0 + 1);
-    const float d = sdf_texel_sun(x0 + 1, y0 + 1);
-    const float bil = lerp(lerp(a, b, w.x), lerp(c, d, w.x), w.y);
-    if(sdf_sharp <= 0.001) { return bil; }
-    const float nr = sdf_texel_sun((int)floor(g.x + 0.5), (int)floor(g.y + 0.5));
-    return lerp(bil, nr, saturate(sdf_sharp));
-}
+// Stage 2b: the wall-only sun SDF + its bilinear sampler are GONE. The sun (and
+// moon) shadow is now the unified coverage occluder marched in 3D by
+// sky_sun.comp → SkyBuf.a; the fragment no longer reads SunSdfBuf.
 // Per-tile 1-bounce indirect light (RGB). Read from GiBuf, the GPU compute GI
 // pass's output: tile-res, 4 floats/tile (rgb + pad), x-major
 // gi[(x*sdf_map_h+y)*4 + c] — the same x-major layout as SdfBuf/SkyVisBuf, no
@@ -305,7 +271,7 @@ float skyvis_bilinear(float2 p) {
 // look consistent. `dist_to_light` is the march length (real distance for
 // point emitters; a fixed reach for the directional sun).
 float trace_shadow(float2 origin, float2 dir, float dist_to_light,
-                   float k, int steps, bool directional, bool use_sun) {
+                   float k, int steps, bool directional) {
     if(sdf_map_w == 0u || steps <= 0) {
         return 1.0;
     }
@@ -321,19 +287,17 @@ float trace_shadow(float2 origin, float2 dir, float dist_to_light,
     // the NEXT occluder still shadows — a tree inside a building marches out of the
     // tree, hits the building wall, stays dark (option A). No-op for ground (any
     // light): its SDF is well above the threshold so the guard never fires.
-    if((use_sun ? sdf_bilinear_sun(origin) : sdf_bilinear(origin)) < 0.05) {
+    if(sdf_bilinear(origin) < 0.05) {
         [loop] for(int ss = 0; ss < steps; ++ss) {
             if(t >= dist_to_light - 0.4) return 1.0;           // never left occluder → sunlit top
-            const float sg = use_sun ? sdf_bilinear_sun(origin + dir * t)
-                                     : sdf_bilinear(origin + dir * t);
+            const float sg = sdf_bilinear(origin + dir * t);
             if(sg >= 0.05) break;  // back in open air
             t += 0.15;
         }
     }
     [loop] for(int ss = 0; ss < steps; ++ss) {
         if(t >= dist_to_light - 0.4) break;
-        const float sd = use_sun ? sdf_bilinear_sun(origin + dir * t)
-                                 : sdf_bilinear(origin + dir * t);
+        const float sd = sdf_bilinear(origin + dir * t);
         if(sd < 0.05) { shadow = 0.0; break; }
         // Penumbra reference for the IQ cone ratio. A POINT light keys it to the
         // real remaining distance-to-light (dist_to_light - t), which is valid
@@ -520,7 +484,7 @@ float4 main(VS_OUT i) : SV_Target0 {
 
         const float  shadow = trace_shadow(i.light_pos, sh_dir, dist,
                                             shadow_k, (int)shadow_steps,
-                                            /*directional=*/false, /*use_sun=*/false);
+                                            /*directional=*/false);
 
         // Cone / spotlight angular falloff.
         float cone = 1.0;
@@ -573,13 +537,12 @@ float4 main(VS_OUT i) : SV_Target0 {
     float3 sun_contrib = float3(0.0, 0.0, 0.0);
     if(sun_intensity > 0.001 && sky_vis > 0.05 && sdf_map_w > 0u) {
         const float2 toward_sun = -float2(sun_dir_x, sun_dir_y);
-        // Sun shadow: kept as the inline directional SDF trace in Stage 2a (the
-        // proven path). sky_sun.comp ALSO computes a per-tile sun occlusion into
-        // SkyBuf.a (visible in debug mode 13) — reserved for a follow-on that
-        // moves this march off the fragment once that per-tile term is verified.
-        const float sun_shadow = trace_shadow(i.light_pos, toward_sun, 8.0,
-                                               shadow_k, (int)shadow_steps,
-                                               /*directional=*/true, /*use_sun=*/true);
+        // Sun shadow (Stage 2b): the unified coverage occluder marched in 3D toward
+        // the sun by sky_sun.comp → SkyBuf.a (0 shadowed .. 1 lit). Replaces the
+        // inline SDF trace + SunSdfBuf — half-walls/furniture register by coverage,
+        // roofs/overhangs by the roof bit, and a HIGH sun clears what a LOW sun
+        // shadows (real elevation). Debug mode 14 shows this term in isolation.
+        const float sun_shadow = sky_dir.a;
         // Per-pixel Lambert against the sun (Bucket A / A1). The 3D sun ray is
         // (toward_sun.xy, sin_elev). At NRM_AMOUNT=0 this collapses to the old
         // flat-normal value: dot((0,0,1), normalize(toward_sun, sin_elev)) =
@@ -814,11 +777,11 @@ float4 main(VS_OUT i) : SV_Target0 {
             vis = float3(a, a, a);
             replace = true;
         } else if(debug_mode == 14u) {
-            // Sun-occlusion view (Stage 2a): GREY = the per-tile sun shadow march
-            // sky_sun.comp stores in SkyBuf.a (1 = lit toward the sun, 0 =
-            // wall-shadowed). Lets you grade the compute sun march in isolation
-            // before it replaces the inline fragment trace. Independent of sun
-            // colour/intensity/elevation. Uniform white = no occluders / pass off.
+            // Sun-occlusion view (Stage 2b): GREY = the per-tile celestial shadow
+            // sky_sun.comp marches from the unified coverage occluder into SkyBuf.a
+            // (1 = lit toward the sun, 0 = shadowed). This IS the live sun shadow now
+            // (sun_shadow = SkyBuf.a; the inline fragment trace + SunSdfBuf are gone).
+            // Independent of sun colour/intensity. Uniform white = no occluders / off.
             const float s = (sdf_map_w > 0u) ? sky_bilinear(i.light_pos).a : 0.0;
             vis = float3(s, s, s);
             replace = true;

@@ -1,138 +1,133 @@
-// Sky/sun directional skylight — Stage 2a of GI_COMPUTE_AND_PERF_PLAN.md.
+// Sky/sun(/moon) directional skylight — Stage 2b of GI_COMPUTE_AND_PERF_PLAN.md.
 //
-// One compute thread = one map tile. Computes a per-tile DIRECTIONAL skylight
-// integral (the sky as an occluded dome) + the sun shadow occlusion, replacing
-// the fragment shader's flat `sky_color·sky_vis` ambient and its single inline
-// sun `trace_shadow` call. Writes SkyBuf: rgb = directional sky-access (0..1,
-// white weight — the fragment multiplies sky_color), a = sun occlusion (0..1).
+// One compute thread = one map tile. Computes, from ONE unified occluder field:
+//   rgb = directional sky-access (the sky as an occluded dome)
+//   a   = celestial (sun OR moon) occlusion via a 3D (x,y,elevation) march
+// written to SkyBuf, read by sprite.frag.
 //
-// Sky-access is a PORTAL march: per hemisphere direction, march the wall SDF;
-// a direction "admits sky" iff it reaches an open-sky tile (SkyVis>0.5) before a
-// wall blocks it. This unifies indoor + outdoor in one model:
-//   - open tile  → adjacent tiles already open → most dirs admit → full sky,
-//                  minus directions where a wall sits immediately alongside
-//                  (alcove / against-wall self-shading — the visible win);
-//   - roofed tile near a window → only the window's directions reach open sky
-//                  → directional indoor daylight FROM the opening;
-//   - deep interior → no direction reaches sky → dark. Correct, no flood-fill.
-// (This is why Stage 2a lets frame_build delete the CPU window-bleed flood-fill.)
+// THE UNIFIED SOURCE (2b): OccBuf, built from map::coverage(p) — the game's single
+// 0..1 per-tile obstruction scalar (full wall ~1, half-wall ~0.5, fence/furniture
+// low) used as an occluder HEIGHT in tile units — plus a roof bit from
+// floor_cache(z+1). Walls, half-walls, furniture AND roofs all come from this one
+// field, so there is one place to look when occlusion is wrong. The march is
+// parameterized by the light direction + elevation, so the SAME code serves the
+// sun (day) and the moon (night; "full moon = sun with different params").
 //
-// Why compute (not fragment): mirrors the Stage-1 GI pass — distinct binding
-// model (SDL_BindGPUComputeStorageBuffers / RW), dodges the fragment
-// sampler-order root-sig that killed rc.frag on D3D12, and runs off the main
-// thread. Inputs are SS-grid SunSdf (wall-only, trees excluded — same field the
-// fragment sun march used) + tile-res raw SkyVis (open-sky 0/1).
+// 3D elevation: marching toward the light, the ray climbs ray_h = t·tan(elev). An
+// occluder of height h at horizontal distance t blocks iff h >= ray_h — so a HIGH
+// sun clears a half-wall a LOW sun shadows, and dawn/dusk shadows lengthen. A roof
+// blocks while the ray is still below roof height (the probe's own roof → no direct
+// celestial light; an overhang clears once the ray climbs above it).
 //
 // Compute HLSL register spaces (SDL_GPU): readonly storage = (tN, space0),
-// read-write = (uN, space1), uniforms = (bN, space2). Readonly buffers are
-// declared StructuredBuffer (NOT RW) so D3D12 does not default them read-write.
+// read-write = (uN, space1), uniforms = (bN, space2). Readonly declared
+// StructuredBuffer (not RW) so D3D12 does not default it read-write.
 //
-//   t0 space0  SunSdf  — StructuredBuffer<float>, SS-finer Euclidean grid,
-//              x-major sunsdf[x*(map_h*SDF_SS)+y], distances in tile units.
-//   t1 space0  SkyVis  — StructuredBuffer<float>, tile-res sky[x*map_h+y],
-//              raw open-sky (1=open overhead, 0=roofed).
-//   u0 space1  SkyBuf  — RWStructuredBuffer<float>, 4 floats/tile (rgb sky-access
-//              + a sun-occ), tile-res, x-major sky[(x*map_h+y)*4 + c].
-//   b0 space2  SkySunParams.
+//   t0 space0  OccBuf — StructuredBuffer<float>, 2 floats/tile, tile-res, x-major
+//              occ[(x*map_h+y)*2 + c]: c0 = occluder height (tiles), c1 = roof bit.
+//   u0 space1  SkyBuf — RWStructuredBuffer<float>, 4 floats/tile (rgb sky-access +
+//              a celestial-occ), tile-res, x-major sky[(x*map_h+y)*4 + c].
+//   b0 space2  SkySunParams (light dir + sin_elev shared by sun/moon).
 
-StructuredBuffer<float>   SunSdf : register(t0, space0);
-StructuredBuffer<float>   SkyVis : register(t1, space0);
+StructuredBuffer<float>   OccBuf : register(t0, space0);
 RWStructuredBuffer<float> SkyBuf : register(u0, space1);
 
 cbuffer SkySunParams : register(b0, space2) {
     uint  map_w;        // runtime tile dims (thread/tile grid extent)
     uint  map_h;
-    float sun_dir_x;    // sun travel direction (toward_sun = -sun_dir)
+    float sun_dir_x;    // celestial travel direction (toward = -dir)
     float sun_dir_y;
-    float sun_sin_elev; // sun elevation sine (2b heightfield; unused in 2a)
-    float shadow_k;     // sphere-trace cone hardness (sprite shadow_k knob)
-    uint  shadow_steps; // sun march iteration cap
+    float sun_sin_elev; // celestial elevation sine (drives the 3D climb)
+    float shadow_k;     // (reserved; penumbra softness lever)
+    uint  shadow_steps; // (reserved)
     float ss_pad;
 };
 
-// Sky-dome sampling (constants; promote to F4 knobs once eyeballed).
+// Sky-dome sampling.
 static const int   SKY_DIRS    = 8;     // hemisphere directions per tile
 static const int   SKY_STEPS   = 16;    // max march steps per direction
 static const float SKY_STEP    = 0.70;  // tile units per step
 static const float SKY_START   = 0.60;  // skip the tile's own cell
-static const float SKY_REACH   = 10.0;  // give up looking for sky past this
-static const float WALL        = 0.05;  // SDF distance treated as "blocked"
-static const int   SUN_PENUMBRA = 1;    // angular samples across the sun (1=hard)
-static const float SUN_REACH   = 8.0;   // directional sun march reach
-static const float SUN_SPREAD  = 0.06;  // radians half-spread for penumbra
-static const int   SDF_SS      = 4;     // MUST match sdf_pass.h / sprite.frag
+static const float SKY_REACH   = 10.0;  // give up looking for open sky past this
+static const float SKY_WALL_H  = 0.60;  // occluder height that blocks a sky direction
+// Celestial (sun/moon) 3D-elevation march.
+static const int   SUN_STEPS   = 24;    // horizontal march steps toward the light
+static const float SUN_STEP    = 0.50;  // tile units per step
+static const float SUN_START   = 0.30;  // skip the probe cell
+static const float ROOF_H      = 1.00;  // roof height (tiles) — ray clears above this
+static const float MAX_OCC_H   = 1.20;  // ray above this has cleared all occluders
 
-// --- SDF helpers (SS-finer grid, identical math to sprite.frag / gi_field) ----
-float sdf_texel( int x, int y )
-{
-    const int gw = (int)map_w * SDF_SS;
-    const int gh = (int)map_h * SDF_SS;
-    x = clamp( x, 0, gw - 1 );
-    y = clamp( y, 0, gh - 1 );
-    return SunSdf[x * gh + y];
-}
-float sdf_bilinear( float2 p )
-{
-    const float2 g  = p * (float)SDF_SS - 0.5;
-    const float2 fp = floor( g );
-    const int   x0  = (int)fp.x;
-    const int   y0  = (int)fp.y;
-    const float2 w  = g - fp;
-    const float a = sdf_texel( x0,     y0     );
-    const float b = sdf_texel( x0 + 1, y0     );
-    const float c = sdf_texel( x0,     y0 + 1 );
-    const float d = sdf_texel( x0 + 1, y0 + 1 );
-    return lerp( lerp( a, b, w.x ), lerp( c, d, w.x ), w.y );
-}
-// SkyVis is tile-res, x-major sky[x*map_h+y]. 1=open overhead, 0=roofed.
-float skyvis_at( int x, int y )
+// OccBuf is tile-res, x-major occ[(x*map_h+y)*2 + c]. c0 = height, c1 = roof.
+float occ_height_at( int x, int y )
 {
     x = clamp( x, 0, (int)map_w - 1 );
     y = clamp( y, 0, (int)map_h - 1 );
-    return SkyVis[x * (int)map_h + y];
+    return OccBuf[( (uint)x * map_h + (uint)y ) * 2u + 0u];
 }
-// Soft directional sun shadow — identical model to gi_field's trace_shadow.
-float trace_shadow( float2 origin, float2 dir, float dist_to_light, float k, int steps )
+float roof_at( int x, int y )
 {
-    if( map_w == 0u || steps <= 0 ) {
-        return 1.0;
-    }
-    float shadow = 1.0;
-    float t = min( 0.3, dist_to_light * 0.5 );
-    [loop] for( int s = 0; s < steps; ++s ) {
-        if( t >= dist_to_light - 0.4 ) {
-            break;
-        }
-        const float sd = sdf_bilinear( origin + dir * t );
-        if( sd < WALL ) {
-            shadow = 0.0;
-            break;
-        }
-        shadow = min( shadow, k * sd / max( dist_to_light - t, 0.01 ) );
-        t += max( sd, 0.15 );
-    }
-    return saturate( shadow );
+    x = clamp( x, 0, (int)map_w - 1 );
+    y = clamp( y, 0, (int)map_h - 1 );
+    return OccBuf[( (uint)x * map_h + (uint)y ) * 2u + 1u];
 }
 
-// Does direction `dir` from `origin` reach open sky before a wall? Returns the
-// reached tile's openness (1) or 0 if wall-blocked / no sky within SKY_REACH.
+// Does direction `dir` from `origin` reach open sky (a non-roofed tile) before a
+// tall occluder blocks it? Returns 1 (admits) or 0. Half-walls (< SKY_WALL_H)
+// don't block the sky (you see over them); full walls do.
 float sky_admit( float2 origin, float2 dir )
 {
     float t = SKY_START;
     [loop] for( int s = 0; s < SKY_STEPS; ++s ) {
         const float2 pos = origin + dir * t;
-        if( sdf_bilinear( pos ) < WALL ) {
-            return 0.0;                 // wall blocks this direction
+        const int px = (int)floor( pos.x );
+        const int py = (int)floor( pos.y );
+        if( occ_height_at( px, py ) >= SKY_WALL_H ) {
+            return 0.0;                       // tall wall blocks this direction
         }
-        if( skyvis_at( (int)floor( pos.x ), (int)floor( pos.y ) ) > 0.5 ) {
-            return 1.0;                 // reached open sky
+        if( roof_at( px, py ) < 0.5 ) {
+            return 1.0;                       // reached open (non-roofed) sky
         }
         t += SKY_STEP;
         if( t > SKY_REACH ) {
             break;
         }
     }
-    return 0.0;                          // no sky reachable in this direction
+    return 0.0;                                // no open sky reachable
+}
+
+// Celestial occlusion via the 3D elevation march. 1 = lit toward the light,
+// 0 = shadowed (wall/half-wall of sufficient height for the sun's elevation, or
+// a roof/overhang the ray hasn't climbed above).
+float celestial_occ( float2 probe )
+{
+    if( map_w == 0u ) {
+        return 1.0;
+    }
+    // Probe under its own roof → no direct celestial light.
+    if( roof_at( (int)probe.x, (int)probe.y ) > 0.5 ) {
+        return 0.0;
+    }
+    const float cos_e    = sqrt( max( 1.0 - sun_sin_elev * sun_sin_elev, 0.02 ) );
+    const float elev_tan = sun_sin_elev / cos_e;     // ray climb per horizontal tile
+    const float2 toward  = -float2( sun_dir_x, sun_dir_y );
+    float t = SUN_START;
+    [loop] for( int s = 0; s < SUN_STEPS; ++s ) {
+        const float2 pos   = probe + toward * t;
+        const float  ray_h = t * elev_tan;
+        if( ray_h > MAX_OCC_H ) {
+            break;                            // ray has cleared every occluder
+        }
+        const int px = (int)floor( pos.x );
+        const int py = (int)floor( pos.y );
+        if( occ_height_at( px, py ) >= ray_h ) {
+            return 0.0;                       // occluder taller than the ray here
+        }
+        if( roof_at( px, py ) > 0.5 && ray_h < ROOF_H ) {
+            return 0.0;                       // overhang/roof still above the ray
+        }
+        t += SUN_STEP;
+    }
+    return 1.0;
 }
 
 [numthreads(8, 8, 1)]
@@ -145,7 +140,6 @@ void main( uint3 tid : SV_DispatchThreadID )
     }
     const float2 probe = float2( (float)tileX + 0.5, (float)tileY + 0.5 );
 
-    // Directional sky-access: fraction of the hemisphere that reaches open sky.
     float sky = 0.0;
     [loop] for( int d = 0; d < SKY_DIRS; ++d ) {
         const float  ang = 6.2831853 * ( (float)d + 0.5 ) / (float)SKY_DIRS;
@@ -154,24 +148,11 @@ void main( uint3 tid : SV_DispatchThreadID )
     }
     sky /= (float)SKY_DIRS;
 
-    // Sun occlusion: march toward the sun, optionally averaging a few angular
-    // offsets for a soft penumbra (SUN_PENUMBRA=1 → hard edge, matches today).
-    const float2 toward_sun = -float2( sun_dir_x, sun_dir_y );
-    const float  base_ang   = atan2( toward_sun.y, toward_sun.x );
-    float sun_occ = 0.0;
-    [loop] for( int p = 0; p < SUN_PENUMBRA; ++p ) {
-        const float off = ( SUN_PENUMBRA > 1 )
-                          ? ( ( (float)p / (float)( SUN_PENUMBRA - 1 ) ) - 0.5 ) * 2.0 * SUN_SPREAD
-                          : 0.0;
-        const float  a   = base_ang + off;
-        const float2 dir = float2( cos( a ), sin( a ) );
-        sun_occ += trace_shadow( probe, dir, SUN_REACH, shadow_k, (int)shadow_steps );
-    }
-    sun_occ /= (float)SUN_PENUMBRA;
+    const float occ = celestial_occ( probe );
 
     const uint o = ( (uint)tileX * map_h + (uint)tileY ) * 4u;
     SkyBuf[o + 0u] = sky;
     SkyBuf[o + 1u] = sky;
     SkyBuf[o + 2u] = sky;
-    SkyBuf[o + 3u] = sun_occ;
+    SkyBuf[o + 3u] = occ;
 }

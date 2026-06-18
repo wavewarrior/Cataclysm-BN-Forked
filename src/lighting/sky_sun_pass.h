@@ -69,13 +69,12 @@ class sky_sun_pass
         // all-or-none storage-buffer bind always has a valid handle.
         SDL_GPUBuffer *sky_buffer() const noexcept { return sky_buf_; }
 
-        // Run the compute pass on `cb`: one dispatch reading sun_sdf_buf (t0) +
-        // sky_vis_buf (t1) as readonly compute storage buffers (both must carry
-        // SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ), writing sky_buf_. SDL_GPU
-        // inserts the compute-write→graphics-read barrier on sky_buf_ before the
-        // sprite pass. No-op if not ready or any arg invalid.
-        void record( SDL_GPUCommandBuffer *cb,
-                     SDL_GPUBuffer *sun_sdf_buf, SDL_GPUBuffer *sky_vis_buf,
+        // Run the compute pass on `cb`: one dispatch reading occ_buf (t0) — the
+        // unified coverage occluder field (2 floats/tile: height + roof bit), which
+        // must carry SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ — and writing sky_buf_.
+        // SDL_GPU inserts the compute-write→graphics-read barrier on sky_buf_ before
+        // the sprite pass. No-op if not ready or any arg invalid.
+        void record( SDL_GPUCommandBuffer *cb, SDL_GPUBuffer *occ_buf,
                      std::uint32_t runtime_w, std::uint32_t runtime_h,
                      const sky_sun_params &params );
 

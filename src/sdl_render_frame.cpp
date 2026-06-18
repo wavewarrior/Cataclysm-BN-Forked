@@ -105,7 +105,12 @@ auto begin_frame( lighting::render_state &rs ) -> std::optional<lighting::frame_
         return std::nullopt;
     }
     if( !ctx.swapchain_tex ) {
-        rs.device().submit_frame( ctx );
+        // Acquire succeeded but the drawable is transiently unavailable (window
+        // occluded/minimised, or a timing gap during the rapid loading-screen
+        // frames). Presenting a nil drawable aborts on Metal
+        // (presentDrawable: "drawable must not be nil"), so CANCEL the command
+        // buffer — submit_frame would present and crash.
+        rs.device().cancel_frame( ctx );
         return std::nullopt;
     }
     return ctx;
@@ -272,12 +277,13 @@ auto flush_and_gather_rc( lighting::render_state &rs,
                         rp.map_w, rp.map_h, rp );
 
         // Stage 2a: directional sky/sun pass on the same CB, under the same
-        // structure-rebuild gate. Marches the wall-only SunSdf (per-direction
-        // sky-access via the SkyVis portal test + sun occlusion) → sky_buffer(),
-        // read by sprite.frag as SkyBuf. Needs only the sun DIRECTION (cheap,
-        // weather-independent — intensity/colour are applied fragment-side), so
+        // structure-rebuild gate. Marches the unified coverage occluder field
+        // (OccBuf: height + roof) in 3D toward the celestial light → sky-access +
+        // sun occlusion in sky_buffer(), read by sprite.frag as SkyBuf. Needs the
+        // light DIRECTION + elevation (the sun today; the moon is a 2b.2 param
+        // swap) — cheap, weather-independent (intensity/colour fragment-side), so
         // we derive it here rather than waiting on assemble_light_inputs.
-        if( rs.sky().ready() && rs.sdf().sun_sdf_buffer() && rs.sdf().sky_vis_buffer() ) {
+        if( rs.sky().ready() && rs.sdf().occ_buffer() ) {
             const float sun_hour = g ? hour_of_day<float>( calendar::turn ) : 12.f;
             const lighting::sun_params sp = lighting::make_sun_params( sun_hour );
             lighting::sky_sun_params kp{};
@@ -288,8 +294,7 @@ auto flush_and_gather_rc( lighting::render_state &rs,
             kp.sun_sin_elev = sp.sun_sin_elev;
             kp.shadow_k     = g_dbg_params.shadow_k;
             kp.shadow_steps = g_dbg_params.shadow_steps;
-            rs.sky().record( ctx.cmd_buffer,
-                             rs.sdf().sun_sdf_buffer(), rs.sdf().sky_vis_buffer(),
+            rs.sky().record( ctx.cmd_buffer, rs.sdf().occ_buffer(),
                              rp.map_w, rp.map_h, kp );
         }
     }

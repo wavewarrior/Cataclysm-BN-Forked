@@ -70,7 +70,10 @@ public:
                  const std::vector<uint8_t> &sky_vis = {},
                  const std::vector<float>   &vis = {},
                  // Phase 2.3: wall-only sun SDF, same SS grid as `sdf`. Empty = skip.
-                 const std::vector<float>   &sun_sdf = {} );
+                 const std::vector<float>   &sun_sdf = {},
+                 // Stage 2b: unified coverage occluder field, tile-res, 2 floats/tile
+                 // (height, roof). Marched by sky_sun.comp. Empty = skip.
+                 const std::vector<float>   &occ = {} );
 
     SDL_GPUTexture *transparency_texture() const noexcept { return transparency_tex_; }
     SDL_GPUTexture *sdf_texture()          const noexcept { return sdf_tex_; }
@@ -87,6 +90,9 @@ public:
     // (>=0 = live seen_cache [0..1]; <0 = memorized-tile sentinel). Drives the
     // soft vision falloff + memory desaturate-fade in the fragment shader.
     SDL_GPUBuffer  *vis_buffer()           const noexcept { return visbuf_storage_; }
+    // Stage 2b: unified coverage occluder field (tile-res, 2 floats/tile: height,
+    // roof). Marched by sky_sun.comp for sun/moon/sky occlusion. COMPUTE-readable.
+    SDL_GPUBuffer  *occ_buffer()           const noexcept { return occ_storage_; }
 
     bool ready() const noexcept { return sdf_tex_ != nullptr; }
     // True after the first successful upload(). Until then the SDF/sky_vis
@@ -114,6 +120,8 @@ private:
     SDL_GPUBuffer         *sdf_storage_      = nullptr; // fragment storage buffer (SdfBuf)
     SDL_GPUBuffer         *sun_sdf_storage_  = nullptr; // Phase 2.3 wall-only sun SDF (SunSdfBuf)
     SDL_GPUBuffer         *skyvis_storage_   = nullptr; // fragment storage buffer (SkyVisBuf, floats)
+    SDL_GPUBuffer         *occ_storage_      = nullptr; // Stage 2b unified coverage occluder (tile-res, 2 floats/tile)
+    SDL_GPUTransferBuffer *xfer_occ_         = nullptr; // float bytes for occ_storage_
     SDL_GPUBuffer         *visbuf_storage_   = nullptr; // fragment storage buffer (VisBuf, 1 float/tile)
     SDL_GPUTransferBuffer *xfer_transparency_ = nullptr;
     SDL_GPUTransferBuffer *xfer_sdf_          = nullptr;

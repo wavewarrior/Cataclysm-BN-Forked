@@ -243,25 +243,66 @@ Single compute dispatch (one thread = one tile), mirroring `gi_field`'s scaffold
   `gi_strength`). Add a debug-view mode (next free slot) showing raw `SkyBuf.rgb`
   sky-access, gi_strength-independent (mirror GI mode 12).
 
-### Stage 2b — upgrade `sun_sdf` → heightfield (vertical accuracy), on the proven 2a base
+### Stage 2b — unified coverage-occluder field + 3D elevation march (SPEC, validated 2026-06-18)
 
-Only after 2a is dual-backend-confirmed. Makes the sun's **elevation real** (long
-dawn/dusk shadows; physical overhang/window light) by giving the sun/sky march a notion
-of height — *upgrades* the structure the sun already owns, does **not** add one.
-- **`frame_build.cpp`:** replace the `sun_sdf` region build with a per-tile **heightfield**
-  channel: `0`=open floor, full=wall, plus a roof bit from `outside_cache`. Coarse
-  granularity (floor/wall/roof) — BN has no continuous per-tile height; document the
-  quantisation. Same region-limit + SS as today's sun_sdf (region_sdf already runs
-  twice; this swaps one output, ≈ same build cost).
-- **`sky_sun.comp`:** march in 3D `(x, y, elev)`: the ray climbs `t·tan(elev)` and is
-  blocked when it passes a cell whose height exceeds the ray, or while still under a
-  contiguous roof it hasn't climbed out of. The roof-march is the fiddly bit (overhead
-  occlusion regardless of in-plane walls) → the main new risk surface; lands on a
-  confirmed-parity 2a base so a break is isolable to this logic.
-- **Delete** the 2D `sun_sdf` path (storage buffer, `sun_sdf_buffer()`, the
-  `region_sdf` sun call) once the heightfield subsumes it.
-- **Re-tune** indoor daylight under the new model (the user-tuned bleed is gone as of
-  2a; elevation changes the look again). Expect an eyeball + knob pass.
+**Design pivoted after data audit** (grilled): the original hand-built heightfield and
+the "feed `angled_sunlight_cache`" pivot were BOTH rejected. `angled_sunlight_cache`
+(lightmap.cpp:368) is correct *z-aware* sun visibility but (a) floor-only → ignores
+half-walls/furniture, (b) sun-only → no moon. Decision: **one unified per-tile occluder
+field from `map::coverage(p)`** (the game's single 0–100 obstruction scalar — wall ~100,
+half-wall ~50, fence/furniture low; map.cpp:7615) + a roof bit from `floor_cache(z+1)`,
+**marched per light-direction in 3D (x,y,elev)** for sun + moon + sky. One source, one
+march, "fewer places to look when it's wrong". Confirmed available: `map::coverage`,
+`get_moon_phase` (calendar.h:626). Half-walls/furniture handled by coverage→height;
+roofs by the roof bit; sun elevation makes dawn/dusk shadows lengthen and lets a HIGH
+sun clear a half-wall a LOW sun shadows.
+
+**Sub-steps (verify each; 2b.1 carries the renumber risk):**
+
+**2b.1 — coverage field + 3D elevation SUN (moves sun fully to compute):**
+- **`frame_build.cpp`:** build per-tile `occ` field, region-limited (reuse the B1 cam
+  rect): 2 floats/tile `[(x*map_h+y)*2 + c]` — c0 = `map::coverage(p)/100` scaled to
+  tile-height units, c1 = `floor_cache(z+1)` roof bit (1=roofed). Thread it through
+  `emitter_collector::submit` → `flush_to_render_cb` → `sdf_pass::upload` (mirror the
+  `sun_sdf` param — add `occ` alongside; ~4 mechanical edits).
+- **`sdf_pass`:** new `occ_storage_` buffer (tile-res, 2 floats/tile) + `occ_buffer()`
+  getter + upload; `GRAPHICS|COMPUTE_STORAGE_READ` (fragment may read it later; compute
+  marches it now).
+- **`sky_sun.comp`:** REWRITE the march to read `OccBuf` (height+roof) instead of
+  SunSdf+SkyVis. Sun occlusion = 3D march toward the light: at horizontal step `t`,
+  ray height = `t · tan(elev)` (`elev` from `sun_sin_elev`); a cell blocks if
+  `occ_height(cell) ≥ ray_height` (soft-min by the margin for penumbra) OR the cell is
+  roofed while `ray_height < ROOF_H` (probe's own roof blocks at t≈0). Sky-access:
+  hemisphere portal march on the same field (reach a non-roofed tile, coverage-weighted
+  block). Output unchanged: `SkyBuf` rgb=sky-access, a=celestial-occ. Params struct
+  gains nothing (reuse `sky_sun_params`: dir + sin_elev already there).
+- **`sprite.frag`:** sun shadow `trace_shadow(...use_sun)` → `SkyBuf.a`. **REMOVE
+  `SunSdfBuf` (t6) + `sdf_bilinear_sun`/`sdf_texel_sun` + the `use_sun` branch of
+  `trace_shadow`**; renumber GiBuf t7→t6, SkyBuf t8→t7 (storage buffers contiguous t2..t7
+  again, buf=6). ⚠ THIS IS THE RENUMBER — fragment storage-buffer slot/register + the
+  C++ bind move in LOCKSTEP (the repeated D3D12 device-removal cause). Emitter
+  `trace_shadow` call drops the `use_sun` arg.
+- **`sprite_batcher.cpp`:** bind 6 storage buffers `{emitter,sdf,skyvis,vis,gi,sky}`
+  (drop `lp_sun_sdf_buf` from the array + gate); GiBuf→slot4/t6, SkyBuf→slot5/t7.
+- **`render_state`/`sdl_render_frame`:** pass `occ_buffer()` to `sky().record` instead of
+  sun_sdf+sky_vis; the celestial direction/elev is the SUN today (`make_sun_params`).
+- **frame_build:** the now-unused `sun_sdf` build + `sun_sdf_storage_` can be removed
+  (single-source cleanup) — OR kept one commit to shrink the diff, removed in 2b.1b.
+- **Reflect-gate:** `sky_sun.comp` still `ro≤2 rw=1`; sprite.frag back to `buf=6`.
+
+**2b.2 — moon (param-swap on the proven 2b.1 march):**
+- CPU: when `!m_solar.direct_active` (night), feed the **moon** as the celestial light:
+  direction = 12h-shifted sun arc (moon ≈ opposite sun; reuse the elevation math),
+  colour = cold blue-white, intensity = `get_moon_phase` illumination × small factor.
+  "Full moon = sun with different params." Same compute march, same `SkyBuf.a`; only the
+  fragment colour/intensity + the march direction differ. Smooth dawn/dusk handoff: pick
+  the brighter of sun/moon (or crossfade).
+- Re-tune night ambient floor against directional moonlight.
+
+**Residual limit (accepted):** the low-wall-pit-under-high-sun is now handled (elevation
+clears short coverage). Coverage conflates opacity+height (chain fence = low coverage =
+little shadow, physically tall but light-transparent — fine for lighting). Vehicles: 
+`map::coverage` is furn-then-ter; vehicle occluders may need `obstacle_coverage` later.
 
 ### Deferred (NOT Stage 2) — full 3D-SDF unification
 One thin-slab 3D SDF (current z + few above, region-limited) sphere-marched in 3D for

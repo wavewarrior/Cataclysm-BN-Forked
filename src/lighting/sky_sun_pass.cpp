@@ -37,7 +37,7 @@ bool sky_sun_pass::init( gpu_device &dev, std::uint32_t max_w, std::uint32_t max
     auto pp = compile_compute_pipeline( dev, src, "main", "sky_sun.comp" );
 
     // Structural gate (DC::Main — DC::SDL is filtered). 2 readonly storage
-    // buffers (sun_sdf, sky_vis) + 1 readwrite (sky). No samplers (compute
+    // buffer (unified coverage occluder) + 1 readwrite (sky). No samplers (compute
     // dodges the fragment sampler-order root-sig that killed rc.frag on D3D12).
     DebugLogFL( DL::Info, DC::Main )
             << "sky_sun.comp reflection: ro_sb=" << pp.resources.num_readonly_storage_buffers
@@ -45,7 +45,7 @@ bool sky_sun_pass::init( gpu_device &dev, std::uint32_t max_w, std::uint32_t max
             << " uniforms=" << pp.resources.num_uniform_buffers
             << " threads=(" << pp.resources.threadcount_x << ","
             << pp.resources.threadcount_y << "," << pp.resources.threadcount_z
-            << ") (expects ro_sb=2 rw_sb=1)";
+            << ") (expects ro_sb=1 rw_sb=1)";
 
     // Allocate the buffer FIRST, before checking the pipeline. The sprite's
     // SkyBuf bind reads sky_buffer() unconditionally (all-or-none storage-buffer
@@ -156,12 +156,11 @@ void sky_sun_pass::shutdown() noexcept
     max_w_ = max_h_ = 0;
 }
 
-void sky_sun_pass::record( SDL_GPUCommandBuffer *cb,
-                           SDL_GPUBuffer *sun_sdf_buf, SDL_GPUBuffer *sky_vis_buf,
+void sky_sun_pass::record( SDL_GPUCommandBuffer *cb, SDL_GPUBuffer *occ_buf,
                            std::uint32_t runtime_w, std::uint32_t runtime_h,
                            const sky_sun_params &params )
 {
-    if( !ready() || !cb || !sun_sdf_buf || !sky_vis_buf || runtime_w == 0 || runtime_h == 0 ) {
+    if( !ready() || !cb || !occ_buf || runtime_w == 0 || runtime_h == 0 ) {
         return;
     }
     const std::uint32_t gx = ( runtime_w + 7u ) / 8u; // ceil(W/8) — numthreads(8,8,1)
@@ -177,8 +176,8 @@ void sky_sun_pass::record( SDL_GPUCommandBuffer *cb,
         return;
     }
     SDL_BindGPUComputePipeline( p, pipeline_ );
-    SDL_GPUBuffer *ro[2] = { sun_sdf_buf, sky_vis_buf }; // t0 (sun_sdf), t1 (sky_vis)
-    SDL_BindGPUComputeStorageBuffers( p, /*first_slot=*/0, ro, 2 );
+    SDL_GPUBuffer *ro[1] = { occ_buf }; // t0 (unified coverage occluder field)
+    SDL_BindGPUComputeStorageBuffers( p, /*first_slot=*/0, ro, 1 );
     SDL_DispatchGPUCompute( p, gx, gy, 1 );
     SDL_EndGPUComputePass( p );
 }
