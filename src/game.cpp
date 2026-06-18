@@ -4423,7 +4423,13 @@ void game::draw_panels( bool force_draw )
             // Tier 7: the persistent RmlUi HUD renders this panel — skip the curses
             // draw to avoid double-draw. The slot/height is still reserved (y advances
             // below), so un-migrated panels keep their positions and the RmlUi fragment
-            // fills the gap.
+            // fills the gap. Place the HUD column at this panel's cell rect, expressed
+            // as %-of-window so it lands in the sidebar (left OR right edge) and tracks
+            // resize: the terminal is TERMX×TERMY cells over the full RmlUi context.
+            const float width_pct = 100.0f * panel.get_width() / TERMX;
+            const float left_pct = sidebar_right ? 100.0f - width_pct : 0.0f;
+            const float top_pct = 100.0f * y / TERMY;
+            sidebar_hud_position( left_pct, top_pct, width_pct );
         } else if( panel.always_draw || draw_this_turn ) {
             panel.draw( u, catacurses::newwin( h, panel.get_width(),
                                                point( sidebar_right ? TERMX - panel.get_width() : 0, y ) ) );

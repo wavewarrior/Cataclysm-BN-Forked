@@ -2807,6 +2807,24 @@ bool sidebar_hud_owns_panel( const std::string &name )
     return g_hud_doc != nullptr && name == "Stats";
 }
 
+void sidebar_hud_position( float left_pct, float top_pct, float width_pct )
+{
+    if( g_hud_doc == nullptr ) {
+        return;
+    }
+    // The HUD column is positioned in PERCENTAGES of the window: the curses terminal
+    // is TERMX×TERMY cells spanning the full window, so a panel's cell rect maps to a
+    // %-rect of the RmlUi context (which is window-sized). This honours SIDEBAR_POSITION
+    // (the caller bakes left==right-edge for a right sidebar) and tracks resize for free.
+    Rml::Element *col = g_hud_doc->GetElementById( "hud-col" );
+    if( col == nullptr ) {
+        return;
+    }
+    col->SetProperty( "left", string_format( "%.4f%%", left_pct ) );
+    col->SetProperty( "top", string_format( "%.4f%%", top_pct ) );
+    col->SetProperty( "width", string_format( "%.4f%%", width_pct ) );
+}
+
 // Resolve a widget's "show_if" to a window_panel render predicate (the data-driven
 // equivalent of the hardcoded panels' render_func). Empty / unknown → always show.
 static std::function<bool()> resolve_widget_show_if( const widget &w )

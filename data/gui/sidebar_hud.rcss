@@ -1,8 +1,10 @@
 /* Tier 7 sidebar HUD layout. The body is transparent (the cleared sidebar region
-   shows through); the HUD column is anchored to the sidebar edge and stacks migrated
-   panels top-down to mirror game::draw_panels. Slice 1 paints only the Stats panel.
-   Pixel width/anchor are approximate for slice 1 (left edge, top) — the in-game A/B
-   tunes them; SIDEBAR_POSITION=right handling lands with a later slice. */
+   shows through); the HUD column is absolutely positioned and stacks migrated panels
+   top-down to mirror game::draw_panels. The column's left/top/width are set from C++
+   (sidebar_hud_position) as PERCENTAGES of the window — the curses terminal is
+   TERMX×TERMY cells spanning the full window, so a panel that is W cells wide at the
+   right edge is (W/TERMX*100)% wide anchored at ((TERMX-W)/TERMX*100)% from the left.
+   This auto-tracks window resize and honours SIDEBAR_POSITION (left/right). */
 
 body {
     background-color: transparent;
@@ -12,9 +14,10 @@ body {
 
 .hud-col {
     position: absolute;
+    /* left / top / width injected from C++; defaults keep it on-screen pre-position. */
     left: 0;
     top: 0;
-    width: 256dp;
+    width: 25%;
     display: flex;
     flex-direction: column;
 }

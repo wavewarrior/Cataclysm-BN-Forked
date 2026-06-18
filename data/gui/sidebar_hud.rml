@@ -11,7 +11,7 @@
          region shows through; only migrated panels paint. Slice 1 owns the Stats
          panel only — its row is built by hud_stats_text() + cata_text_to_rml() and
          bound to `stats_rml`. Further panels stack below as later slices land. -->
-    <div class="hud-col">
+    <div id="hud-col" class="hud-col">
         <div class="hud-panel hud-stats" data-rml="stats_rml"></div>
     </div>
 </body>
