@@ -32,6 +32,20 @@ struct runic_params {
     int unit        = 256;  // default edge length when unspecified
     int fill_pct    = 38;   // glyph cell lit threshold (0..99): higher = denser
     int frame_inset = 12;   // whole-frame inward shift on every side (F9/F10)
+    // corrosion: knocks pixels out near the band walls / outer corner so the
+    // frame edges read as worn rather than crisp. Weighted to the rim so glyphs
+    // stay legible. corrode_pct=0 disables it entirely.
+    int corrode_pct   = 28;  // blob-hole density at the rim (0..99); 0 = off
+    int corrode_grid  = 5;   // value-noise cell size px (bigger = larger pits)
+    int corrode_reach = 2;   // px inward from each wall the corrosion fades over
+    int corrode_grit  = 10;  // fine 1px speckle right at the rim (0..99)
+    // taper: edge rule lines trail off into two dots toward the corner instead
+    // of stopping flat. First gap is small, second ~2x → "tapering out" feel.
+    int taper_dots = 1;      // 0 = flat line ends; 1 = trail into 2 dots
+    int taper_gap  = 2;      // px gap before the first trailing dot (gap2 ~ 2x)
+    // declutter small panels: an edge shorter than this (raw px) is "small" and
+    // thins out — sides drop their runes, top/bottom keep one centred group.
+    int rune_small_px = 170;
     // control (consumed by apply_crt, not by the pixel draw)
     int force_template = -1;     // -1 = Auto (per-edge); 0/1/2 forces all edges
     bool use_fixed_seed = false; // false = per-panel-size seed (shipping)

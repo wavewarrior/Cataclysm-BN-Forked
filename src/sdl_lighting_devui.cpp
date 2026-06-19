@@ -653,6 +653,19 @@ static void draw_runic_tab()
     changed |= dbg_slider_int( "pitch (fixed-interval)", &c.pitch, 60, 512 );
     changed |= dbg_slider_int( "unit (default edge len)", &c.unit, 64, 512 );
 
+    ImGui::SeparatorText( "Corrosion (worn edges)" );
+    changed |= dbg_slider_int( "corrode % (0 = off)", &c.corrode_pct, 0, 99 );
+    changed |= dbg_slider_int( "pit size (noise grid)", &c.corrode_grid, 1, 16 );
+    changed |= dbg_slider_int( "reach into band", &c.corrode_reach, 1, 10 );
+    changed |= dbg_slider_int( "rim grit %", &c.corrode_grit, 0, 99 );
+
+    ImGui::SeparatorText( "Edge taper (trailing dots)" );
+    changed |= dbg_slider_int( "taper dots (0 = flat)", &c.taper_dots, 0, 1 );
+    changed |= dbg_slider_int( "taper gap (1st; 2nd ~2x)", &c.taper_gap, 1, 12 );
+
+    ImGui::SeparatorText( "Declutter small panels" );
+    changed |= dbg_slider_int( "small edge px (sides drop runes)", &c.rune_small_px, 0, 500 );
+
     ImGui::SeparatorText( "Regenerate / persist" );
     static bool auto_regen = true;
     ImGui::Checkbox( "auto-regenerate on edit", &auto_regen );

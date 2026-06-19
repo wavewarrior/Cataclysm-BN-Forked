@@ -46,6 +46,68 @@ inline void put( std::vector<std::uint8_t> &px, int W, int H, int x, int y, rgba
     px[i + 3] = c.a;
 }
 
+// --- Corrosion -------------------------------------------------------------
+// A cheap integer hash (3 ints -> uint32) and bilinearly-interpolated value
+// noise, both seeded so a given panel corrodes identically across launches and
+// stays cache-correct. corrode_keep() decides whether a pixel survives: it eats
+// blobby patches (low-freq noise) plus a little fine grit, both gated by an
+// envelope that peaks at the rim (rim_dist 0) and fades to nothing by
+// corrode_reach px inward, so band glyphs sitting deeper in stay intact.
+inline std::uint32_t corr_hash( int x, int y, unsigned seed )
+{
+    std::uint32_t h = seed * 2166136261u;
+    h = ( h ^ static_cast<std::uint32_t>( x ) ) * 16777619u;
+    h = ( h ^ static_cast<std::uint32_t>( y ) ) * 16777619u;
+    h ^= h >> 13;
+    h *= 0x5bd1e995u;
+    h ^= h >> 15;
+    return h;
+}
+inline double corr_hash01( int gx, int gy, unsigned seed )
+{
+    return ( corr_hash( gx, gy, seed ) & 0xffffffu ) / static_cast<double>( 0x1000000 );
+}
+inline double corr_vnoise( int x, int y, int grid, unsigned seed )
+{
+    const int G = grid < 1 ? 1 : grid;
+    const int gx = ( x >= 0 ? x : x - G + 1 ) / G;  // floor division
+    const int gy = ( y >= 0 ? y : y - G + 1 ) / G;
+    double fx = ( x - gx * G ) / static_cast<double>( G );
+    double fy = ( y - gy * G ) / static_cast<double>( G );
+    fx = fx * fx * ( 3.0 - 2.0 * fx );  // smoothstep
+    fy = fy * fy * ( 3.0 - 2.0 * fy );
+    const double a = corr_hash01( gx,     gy,     seed );
+    const double b = corr_hash01( gx + 1, gy,     seed );
+    const double c = corr_hash01( gx,     gy + 1, seed );
+    const double d = corr_hash01( gx + 1, gy + 1, seed );
+    const double top = a + ( b - a ) * fx;
+    const double bot = c + ( d - c ) * fx;
+    return top + ( bot - top ) * fy;
+}
+// true = keep the pixel; false = corroded away. `rim_dist` is the pixel's
+// distance (px) from the nearest frame edge it should rot from (0 at the wall).
+inline bool corrode_keep( int x, int y, int rim_dist, unsigned seed )
+{
+    const runic_params &cfg = runic_cfg();
+    if( cfg.corrode_pct <= 0 ) {
+        return true;
+    }
+    const double reach = cfg.corrode_reach < 1 ? 1.0 : cfg.corrode_reach;
+    const double env = 1.0 - std::min( 1.0, rim_dist / reach );  // 1 at rim -> 0
+    if( env <= 0.0 ) {
+        return true;
+    }
+    const double thr = ( cfg.corrode_pct / 100.0 ) * env;
+    if( corr_vnoise( x, y, cfg.corrode_grid, seed ) < thr ) {
+        return false;  // eaten blob patch
+    }
+    if( rim_dist <= 1 && cfg.corrode_grit > 0 &&
+        ( corr_hash( x, y, seed ^ 0x9e3779b9u ) % 100u ) < static_cast<unsigned>( cfg.corrode_grit ) ) {
+        return false;  // fine rim grit
+    }
+    return true;
+}
+
 // A band strip in orientation-agnostic coordinates: `along` runs down the edge,
 // `depth` is the perpendicular distance from the outer edge. Horizontal edges
 // map (along,depth)->(x,y); vertical edges map ->(x=depth, y=along).
@@ -54,17 +116,23 @@ struct strip {
     int w;
     int h;
     bool horizontal;
+    unsigned seed = 0;  // per-edge corrosion seed
     int along_len() const
     {
         return horizontal ? w : h;
     }
     void plot( int along, int depth, rgba c ) const
     {
-        if( horizontal ) {
-            put( *px, w, h, along, depth, c );
-        } else {
-            put( *px, w, h, depth, along, c );
+        const int tx = horizontal ? along : depth;
+        const int ty = horizontal ? depth : along;
+        // rim_dist: 0 at either band wall (where the edge reads cleanest), rising
+        // toward the band centre, so corrosion eats the walls and spares glyphs.
+        const runic_params &cfg = runic_cfg();
+        const int rim = std::max( 0, std::min( depth - cfg.div_top, cfg.div_bot - depth ) );
+        if( !corrode_keep( tx, ty, rim, seed ) ) {
+            return;
         }
+        put( *px, w, h, tx, ty, c );
     }
 };
 
@@ -82,33 +150,42 @@ void draw_corner_rules( std::vector<std::uint8_t> &px, int W, int H )
     const int RING = cfg.ring, DIV_TOP = cfg.div_top, DIV_BOT = cfg.div_bot;
     const int c = ( DIV_TOP + DIV_BOT ) / 2;  // band centre
 
+    // Corner corrosion rots from the extreme outer corner inward (rim = min(x,y)),
+    // so the gusset/miter near (0,0) wear while the medallion at the centre stays
+    // whole. Fixed seed: the corner texture is shared/mirrored across all four.
+    auto cput = [&]( int x, int y ) {
+        if( corrode_keep( x, y, std::min( x, y ), 0xC0FFEEu ) ) {
+            put( px, W, H, x, y, LIGHT );
+        }
+    };
+
     auto fill = [&]( int x0, int y0, int x1, int y1 ) {
         for( int y = y0; y <= y1; ++y ) {
             for( int x = x0; x <= x1; ++x ) {
-                put( px, W, H, x, y, LIGHT );
+                cput( x, y );
             }
         }
     };
     auto outline = [&]( int x0, int y0, int x1, int y1 ) {
         for( int x = x0; x <= x1; ++x ) {
-            put( px, W, H, x, y0, LIGHT );
-            put( px, W, H, x, y1, LIGHT );
+            cput( x, y0 );
+            cput( x, y1 );
         }
         for( int y = y0; y <= y1; ++y ) {
-            put( px, W, H, x0, y, LIGHT );
-            put( px, W, H, x1, y, LIGHT );
+            cput( x0, y );
+            cput( x1, y );
         }
     };
 
     // Inner band wall (DIV_BOT) turning the corner; arms run inward to RING so
     // they abut the edge band. (The outer DIV_TOP L was removed by request.)
     for( int i = DIV_BOT; i < RING; ++i ) {
-        put( px, W, H, i, DIV_BOT, LIGHT );
-        put( px, W, H, DIV_BOT, i, LIGHT );
+        cput( i, DIV_BOT );
+        cput( DIV_BOT, i );
     }
     // 45° miter closing the band channel at the corner.
     for( int d = DIV_TOP; d <= DIV_BOT; ++d ) {
-        put( px, W, H, d, d, LIGHT );
+        cput( d, d );
     }
     // Solid gusset anchoring the extreme outer corner (outside the band).
     if( DIV_TOP > 0 ) {
@@ -290,7 +367,13 @@ void draw_group( const strip &s, int a0, int nel, std::mt19937 &gen )
 // A connecting rule between groups, centred on the band. Double = a tight `=`
 // (two lines 2px apart) for horizontal edges; single = one centre line for
 // vertical edges.
-void draw_rule( const strip &s, int a0, int a1, bool dbl )
+// `taper_lo`/`taper_hi` mark an end as a FREE terminus (the outermost rule of a
+// non-fullspan edge): instead of stopping flat it trails off into two dots
+// marching toward the corner — small gap then a wider one, so it reads as
+// tapering out. Interior ends (butting groups) and fullspan ends (tucked under
+// the corner) stay flat.
+void draw_rule( const strip &s, int a0, int a1, bool dbl,
+                bool taper_lo = false, bool taper_hi = false )
 {
     if( a1 < a0 ) {
         return;
@@ -304,6 +387,37 @@ void draw_rule( const strip &s, int a0, int a1, bool dbl )
         hline( s, a0, a1, c + 1, LIGHT );
     } else {
         hline( s, a0, a1, c, LIGHT );
+    }
+    if( cfg.taper_dots <= 0 ) {
+        return;
+    }
+    const int n = s.along_len();
+    const int RING = cfg.ring;
+    const int g1 = std::max( 1, cfg.taper_gap );  // first (small) gap
+    const int g2 = g1 * 2 + 1;                     // second (wide) gap -> trails out
+    auto trail = [&]( int from, int dir ) {
+        const int lim_lo = RING, lim_hi = n - 1 - RING;
+        auto dot = [&]( int start, int len ) {
+            for( int k = 0; k < len; ++k ) {
+                const int a = start + dir * k;
+                if( a >= lim_lo && a <= lim_hi ) {
+                    s.plot( a, c, LIGHT );
+                }
+            }
+        };
+        if( dbl ) {
+            s.plot( from, c, LIGHT );  // pinch the two lines to a centre point
+        }
+        int p = from + dir * ( g1 + 1 );  // after first gap
+        dot( p, 2 );                      // first dot (2px)
+        p += dir * ( 2 + g2 );            // past the dot + second gap
+        dot( p, 1 );                      // second dot (1px, fades)
+    };
+    if( taper_lo ) {
+        trail( a0, -1 );
+    }
+    if( taper_hi ) {
+        trail( a1, +1 );
     }
 }
 
@@ -362,6 +476,17 @@ void draw_edge( const strip &s, unsigned seed, bool dbl, int tmpl )
         }
     }
 
+    // Declutter small panels: a full rune layout looks busy on a short edge. When
+    // this edge is "small", thin it out — sides (vertical) drop their runes
+    // entirely; top/bottom (horizontal) keep a single centred group.
+    if( n < cfg.rune_small_px ) {
+        if( s.horizontal ) {
+            ps = { { 0.5, 3 } };
+        } else {
+            ps.clear();
+        }
+    }
+
     std::vector<std::pair<int, int>> spans;  // {a0, a1} of each placed group
     int last_end = lo - 1;
     for( const pos &p : ps ) {
@@ -386,12 +511,18 @@ void draw_edge( const strip &s, unsigned seed, bool dbl, int tmpl )
     // span edges, leaving the corner-side remainder empty.
     const int rule_lo = fullspan ? 0 : lo;
     const int rule_hi = fullspan ? n - 1 : hi;
+    // Only the outermost free ends of a non-fullspan edge taper into dots.
+    const bool taper = !fullspan;
     int prev = rule_lo;
+    bool first = true;
     for( const std::pair<int, int> &sp : spans ) {
-        draw_rule( s, prev, sp.first - 1 - RGAP, dbl );
+        draw_rule( s, prev, sp.first - 1 - RGAP, dbl, taper && first, false );
         prev = sp.second + 1 + RGAP;
+        first = false;
     }
-    draw_rule( s, prev, rule_hi, dbl );
+    // Final rule's hi end is a free terminus; its lo end taper only if it is also
+    // the first rule (no groups were placed, so it spans the whole edge).
+    draw_rule( s, prev, rule_hi, dbl, taper && first, taper );
 }
 
 std::uint32_t fnv1a( const std::string &s )
@@ -440,6 +571,13 @@ void save_runic_cfg()
         j.member( "unit", c.unit );
         j.member( "fill_pct", c.fill_pct );
         j.member( "frame_inset", c.frame_inset );
+        j.member( "corrode_pct", c.corrode_pct );
+        j.member( "corrode_grid", c.corrode_grid );
+        j.member( "corrode_reach", c.corrode_reach );
+        j.member( "corrode_grit", c.corrode_grit );
+        j.member( "taper_dots", c.taper_dots );
+        j.member( "taper_gap", c.taper_gap );
+        j.member( "rune_small_px", c.rune_small_px );
         j.member( "force_template", c.force_template );
         j.member( "use_fixed_seed", c.use_fixed_seed );
         // stored as int (bit-preserving round-trip via static_cast on load)
@@ -475,6 +613,13 @@ void load_runic_cfg()
         c.unit = jo.get_int( "unit", c.unit );
         c.fill_pct = jo.get_int( "fill_pct", c.fill_pct );
         c.frame_inset = jo.get_int( "frame_inset", c.frame_inset );
+        c.corrode_pct = jo.get_int( "corrode_pct", c.corrode_pct );
+        c.corrode_grid = jo.get_int( "corrode_grid", c.corrode_grid );
+        c.corrode_reach = jo.get_int( "corrode_reach", c.corrode_reach );
+        c.corrode_grit = jo.get_int( "corrode_grit", c.corrode_grit );
+        c.taper_dots = jo.get_int( "taper_dots", c.taper_dots );
+        c.taper_gap = jo.get_int( "taper_gap", c.taper_gap );
+        c.rune_small_px = jo.get_int( "rune_small_px", c.rune_small_px );
         c.force_template = jo.get_int( "force_template", c.force_template );
         c.use_fixed_seed = jo.get_bool( "use_fixed_seed", c.use_fixed_seed );
         c.seed = static_cast<unsigned>( jo.get_int( "seed", static_cast<int>( c.seed ) ) );
@@ -561,13 +706,13 @@ std::vector<std::uint8_t> gen_runic_frame( const std::string &variant, int &out_
     int tmpl = -1;
     if( parse_edge( "runic-hedge", len, seed, tmpl ) ) {
         std::vector<std::uint8_t> px = alloc( len, RING );
-        const strip s{ &px, out_w, out_h, true };
+        const strip s{ &px, out_w, out_h, true, seed };
         draw_edge( s, seed, /*dbl=*/true, tmpl );  // horizontal: double rule
         return px;
     }
     if( parse_edge( "runic-vedge", len, seed, tmpl ) ) {
         std::vector<std::uint8_t> px = alloc( RING, len );
-        const strip s{ &px, out_w, out_h, false };
+        const strip s{ &px, out_w, out_h, false, seed };
         draw_edge( s, seed, /*dbl=*/false, tmpl );  // vertical: single rule
         return px;
     }

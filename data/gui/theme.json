@@ -1,42 +1,42 @@
 {
-  "//": "Central UI theme for the RmlUi menus. 'rcss' values are substituted for {{token}} placeholders in data/gui/*.rcss at load time (RmlUi 6.2 has no native CSS variables). 'game_colors' override the in-game nc_color -> hex mapping used for coloured menu TEXT (scoped to RmlUi; the tile/world render path is unaffected). Edit hex values here to retheme the whole UI. Default palette: gruvbox dark.",
+  "//": "Central UI theme for the RmlUi menus. 'rcss' values fill {{token}} placeholders in data/gui/*.rcss; 'game_colors' override the nc_color->hex used for menu text. Editable live in the F4 Theme tab.",
 
   "rcss": {
+    "aqua": "#8ec07cff",
     "bg": "#1d2021f2",
     "bg-hard": "#1d2021ff",
     "bg1": "#3c3836ff",
     "bg2": "#504945ff",
     "bg3": "#665c54ff",
     "bg4": "#7c6f64ff",
-    "gray": "#928374ff",
+    "blue": "#83a598ff",
     "fg": "#ebdbb2ff",
     "fg0": "#fbf1c7ff",
     "fg4": "#a89984ff",
-    "yellow": "#fabd2fff",
-    "yellow-glow": "#fabd2faa",
-    "red": "#fb4934ff",
+    "gray": "#928374ff",
     "green": "#b8bb26ff",
-    "aqua": "#8ec07cff",
     "purple": "#d3869bff",
-    "blue": "#83a598ff"
+    "red": "#fb4934ff",
+    "yellow": "#b29153ff",
+    "yellow-glow": "#fabd2faa"
   },
 
   "game_colors": {
     "c_black": "#1d2021ff",
-    "c_dark_gray": "#928374ff",
-    "c_light_gray": "#ebdbb2ff",
-    "c_white": "#fbf1c7ff",
-    "c_red": "#cc241dff",
-    "c_light_red": "#fb4934ff",
-    "c_green": "#98971aff",
-    "c_light_green": "#b8bb26ff",
-    "c_brown": "#d79921ff",
-    "c_yellow": "#fabd2fff",
     "c_blue": "#458588ff",
-    "c_light_blue": "#83a598ff",
+    "c_brown": "#d79921ff",
     "c_cyan": "#689d6aff",
+    "c_dark_gray": "#928374ff",
+    "c_green": "#98971aff",
+    "c_light_blue": "#83a598ff",
     "c_light_cyan": "#8ec07cff",
+    "c_light_gray": "#ebdbb2ff",
+    "c_light_green": "#b8bb26ff",
+    "c_light_red": "#fb4934ff",
     "c_magenta": "#b16286ff",
-    "c_pink": "#d3869bff"
+    "c_pink": "#d3869bff",
+    "c_red": "#cc241dff",
+    "c_white": "#fbf1c7ff",
+    "c_yellow": "#fabd2fff"
   }
 }
