@@ -1,10 +1,11 @@
 /* Tier 7 sidebar HUD layout. The body is transparent (the cleared sidebar region
-   shows through); the HUD column is absolutely positioned and stacks migrated panels
-   top-down to mirror game::draw_panels. The column's left/top/width are set from C++
-   (sidebar_hud_position) as PERCENTAGES of the window — the curses terminal is
-   TERMX×TERMY cells spanning the full window, so a panel that is W cells wide at the
-   right edge is (W/TERMX*100)% wide anchored at ((TERMX-W)/TERMX*100)% from the left.
-   This auto-tracks window resize and honours SIDEBAR_POSITION (left/right). */
+   shows through). Each migrated panel is its OWN absolutely-positioned fragment —
+   the owned panels are not contiguous, so they can't share one flow column. C++
+   (sidebar_hud_position) sets each fragment's left/top/width as PERCENTAGES of the
+   window: the curses terminal is TERMX×TERMY cells spanning the full window, so a
+   panel W cells wide at the right edge is (W/TERMX*100)% wide anchored at
+   ((TERMX-W)/TERMX*100)% from the left. This auto-tracks resize and honours
+   SIDEBAR_POSITION (left/right). */
 
 body {
     background-color: transparent;
@@ -12,19 +13,21 @@ body {
     height: 100%;
 }
 
+/* Full-window container so child fragments' % positions resolve against the window. */
 .hud-col {
     position: absolute;
-    /* left / top / width injected from C++; defaults keep it on-screen pre-position. */
     left: 0;
     top: 0;
-    width: 25%;
-    display: flex;
-    flex-direction: column;
+    width: 100%;
+    height: 100%;
 }
 
-/* display:block — RmlUi elements default to inline; a sidebar row must be a block or
-   it flows horizontally (documented gotcha in theme.rcss, bit mutations/diary). */
+/* Each fragment is positioned individually by id from C++ (left/top/width injected).
+   display:block — RmlUi elements default to inline; a sidebar row must be a block or
+   it flows horizontally (documented gotcha in theme.rcss, bit mutations/diary).
+   white-space:pre-wrap preserves the producers' spacing + newlines. */
 .hud-panel {
+    position: absolute;
     display: block;
     white-space: pre-wrap;
 }

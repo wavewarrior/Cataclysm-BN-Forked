@@ -8,11 +8,18 @@
          continuous every-turn document — NOT a modal open/loop/close screen. It is
          opened once during gameplay and synced each turn; modal screens stack above
          it by open order. The body is transparent so the cleared (black) sidebar
-         region shows through; only migrated panels paint. Slice 1 owns the Stats
-         panel only — its row is built by hud_stats_text() + cata_text_to_rml() and
-         bound to `stats_rml`. Further panels stack below as later slices land. -->
+         region shows through; only migrated panels paint.
+
+         Slice 2b owns Sound / Stats / Needs. The owned panels are NOT contiguous in
+         the layout (Mana can sit between Stats and Needs), so each fragment is its
+         OWN absolutely-positioned element — game::draw_panels reports each panel's
+         cell rect and sidebar_hud_position() places the matching element by id. Each
+         fragment's text is built by its hud_*_text() producer + cata_text_to_rml()
+         and bound to its model var. Further panels add their own element + var. -->
     <div id="hud-col" class="hud-col">
-        <div class="hud-panel hud-stats" data-rml="stats_rml"></div>
+        <div id="hud-Sound" class="hud-panel" data-rml="sound_rml"></div>
+        <div id="hud-Stats" class="hud-panel" data-rml="stats_rml"></div>
+        <div id="hud-Needs" class="hud-panel" data-rml="needs_rml"></div>
     </div>
 </body>
 </rml>

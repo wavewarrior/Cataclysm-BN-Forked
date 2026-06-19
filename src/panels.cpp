@@ -2717,9 +2717,12 @@ bool native_draw_target_exists( const std::string &name )
 // stacked above the HUD. Lifecycle is driven from game::draw_panels + cleanup_at_end.
 namespace
 {
-// Bound model: one pre-rendered RML string per migrated panel. Slice 1 = Stats only.
+// Bound model: one pre-rendered RML string per migrated panel (slice 2b = Sound /
+// Stats / Needs). Each is bound to the matching positioned <div> in sidebar_hud.rml.
 struct hud_rml_model {
+    Rml::String sound_rml;
     Rml::String stats_rml;
+    Rml::String needs_rml;
     Rml::DataModelHandle handle;
 };
 std::unique_ptr<hud_rml_model> g_hud_data;
@@ -2738,6 +2741,71 @@ std::string hud_stats_text( const avatar &u )
            seg( _( "DEX" ), dex_string( u ).first, u.get_dex() ) + "  " +
            seg( _( "INT" ), int_string( u ).first, u.get_int() ) + "  " +
            seg( _( "PER" ), per_string( u ).first, u.get_per() );
+}
+
+// Mirrors draw_stealth (the "Sound" panel): Speed value + move-mode counter + sound
+// level (or DEAF). Reproduced in reading order with simple spacing — not the curses
+// cell-exact columns — per the slice-1 precedent (eyeball judges parity).
+std::string hud_sound_text( avatar &u )
+{
+    std::string r = std::string( _( "Speed" ) ) + " " +
+                    colorize( std::to_string( u.get_speed() ), value_color( u.get_speed() ) );
+    const std::string move_string = std::to_string( u.movecounter ) + move_mode_string( u );
+    r += "  " + colorize( move_string, move_mode_color( u ) );
+    if( u.is_deaf() ) {
+        r += "  " + colorize( _( "DEAF" ), c_red );
+    } else {
+        r += "  " + std::string( _( "Sound:" ) ) + " " +
+             colorize( std::to_string( u.volume ), u.volume != 0 ? c_yellow : c_light_gray );
+    }
+    return r;
+}
+
+// Mirrors draw_needs_compact (the "Needs" panel), 3 rows. Curses lays it out as two
+// columns (hunger/fatigue/pain | thirst/temp/focus); reproduced row-by-row in reading
+// order, left field then right field, per the slice-1 precedent.
+std::string hud_needs_text( const avatar &u )
+{
+    const auto desc = []( const std::pair<std::string, nc_color> &p ) {
+        return colorize( p.first, p.second );
+    };
+    const std::pair<std::string, nc_color> hunger = u.get_hunger_description();
+    const std::pair<std::string, nc_color> thirst = u.get_thirst_description();
+    const std::pair<std::string, nc_color> fatigue = u.get_fatigue_description();
+    const std::pair<std::string, nc_color> pain = u.get_pain_description();
+    const std::pair<nc_color, std::string> temp = temp_stat( u );
+    const std::pair<nc_color, std::string> arrow = temp_delta_arrows( u );
+    std::string out = desc( hunger ) + "   " + desc( thirst ) + "\n";
+    out += desc( fatigue ) + "   " + colorize( temp.second, temp.first ) +
+           colorize( arrow.second, arrow.first ) + "\n";
+    out += desc( pain ) + "   " + std::string( _( "Focus" ) ) + " " +
+           colorize( std::to_string( u.focus_pool ), focus_color( u.focus_pool ) );
+    return out;
+}
+
+// The panels the HUD reproduces, paired with their RML element id in sidebar_hud.rml.
+// owns_panel + position drive off this table; sync populates one model var per panel.
+// "Stats"/"Sound"/"Needs" are the stable (untranslated) window_panel names, shared by
+// the classic/narrow/wide variants.
+struct hud_owned_panel {
+    const char *panel_name;
+    const char *elem_id;
+};
+const std::array<hud_owned_panel, 3> g_hud_owned = {{
+        { "Sound", "hud-Sound" },
+        { "Stats", "hud-Stats" },
+        { "Needs", "hud-Needs" },
+    }
+};
+
+const char *hud_elem_id_for( const std::string &name )
+{
+    for( const hud_owned_panel &p : g_hud_owned ) {
+        if( name == p.panel_name ) {
+            return p.elem_id;
+        }
+    }
+    return nullptr;
 }
 } // namespace
 
@@ -2765,7 +2833,9 @@ void sidebar_hud_open()
         return;
     }
     g_hud_data = std::make_unique<hud_rml_model>();
+    c.Bind( "sound_rml", &g_hud_data->sound_rml );
     c.Bind( "stats_rml", &g_hud_data->stats_rml );
+    c.Bind( "needs_rml", &g_hud_data->needs_rml );
     g_hud_data->handle = c.GetModelHandle();
     // passive=true: render-only HUD — it must not capture in-game world mouse
     // (look/examine). See rmlui_layer::any_interactive_open / process_event.
@@ -2785,8 +2855,12 @@ void sidebar_hud_sync( avatar &u )
     if( g_hud_doc == nullptr || !g_hud_data ) {
         return;
     }
+    g_hud_data->sound_rml = cata_text_to_rml( hud_sound_text( u ) );
     g_hud_data->stats_rml = cata_text_to_rml( hud_stats_text( u ) );
+    g_hud_data->needs_rml = cata_text_to_rml( hud_needs_text( u ) );
+    g_hud_data->handle.DirtyVariable( "sound_rml" );
     g_hud_data->handle.DirtyVariable( "stats_rml" );
+    g_hud_data->handle.DirtyVariable( "needs_rml" );
 }
 
 void sidebar_hud_close()
@@ -2804,27 +2878,35 @@ void sidebar_hud_close()
 
 bool sidebar_hud_owns_panel( const std::string &name )
 {
-    // Slice 1: the HUD reproduces the Stats panel. "Stats" is the stable (untranslated)
-    // window_panel name shared by the classic/narrow/wide stat variants.
-    return g_hud_doc != nullptr && name == "Stats";
+    // The HUD reproduces the panels in g_hud_owned (slice 2b: Sound / Stats / Needs).
+    // The names are the stable (untranslated) window_panel names shared by the
+    // classic/narrow/wide variants.
+    return g_hud_doc != nullptr && hud_elem_id_for( name ) != nullptr;
 }
 
-void sidebar_hud_position( float left_pct, float top_pct, float width_pct )
+void sidebar_hud_position( const std::string &name, float left_pct, float top_pct,
+                           float width_pct )
 {
     if( g_hud_doc == nullptr ) {
         return;
     }
-    // The HUD column is positioned in PERCENTAGES of the window: the curses terminal
-    // is TERMX×TERMY cells spanning the full window, so a panel's cell rect maps to a
-    // %-rect of the RmlUi context (which is window-sized). This honours SIDEBAR_POSITION
-    // (the caller bakes left==right-edge for a right sidebar) and tracks resize for free.
-    Rml::Element *col = g_hud_doc->GetElementById( "hud-col" );
-    if( col == nullptr ) {
+    // Each owned panel is its OWN absolutely-positioned element (the panels are not
+    // contiguous — Mana can sit between Stats and Needs — so one shared column won't
+    // do). Positioned in PERCENTAGES of the window: the curses terminal is TERMX×TERMY
+    // cells spanning the full window, so a panel's cell rect maps to a %-rect of the
+    // RmlUi context. This honours SIDEBAR_POSITION (the caller bakes left==right-edge
+    // for a right sidebar) and tracks resize for free.
+    const char *elem_id = hud_elem_id_for( name );
+    if( elem_id == nullptr ) {
         return;
     }
-    col->SetProperty( "left", string_format( "%.4f%%", left_pct ) );
-    col->SetProperty( "top", string_format( "%.4f%%", top_pct ) );
-    col->SetProperty( "width", string_format( "%.4f%%", width_pct ) );
+    Rml::Element *el = g_hud_doc->GetElementById( elem_id );
+    if( el == nullptr ) {
+        return;
+    }
+    el->SetProperty( "left", string_format( "%.4f%%", left_pct ) );
+    el->SetProperty( "top", string_format( "%.4f%%", top_pct ) );
+    el->SetProperty( "width", string_format( "%.4f%%", width_pct ) );
 }
 
 // Resolve a widget's "show_if" to a window_panel render predicate (the data-driven

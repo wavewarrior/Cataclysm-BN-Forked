@@ -4429,7 +4429,7 @@ void game::draw_panels( bool force_draw )
             const float width_pct = 100.0f * panel.get_width() / TERMX;
             const float left_pct = sidebar_right ? 100.0f - width_pct : 0.0f;
             const float top_pct = 100.0f * y / TERMY;
-            sidebar_hud_position( left_pct, top_pct, width_pct );
+            sidebar_hud_position( panel.get_name(), left_pct, top_pct, width_pct );
         } else if( panel.always_draw || draw_this_turn ) {
             panel.draw( u, catacurses::newwin( h, panel.get_width(),
                                                point( sidebar_right ? TERMX - panel.get_width() : 0, y ) ) );
