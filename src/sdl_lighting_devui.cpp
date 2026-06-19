@@ -480,6 +480,7 @@ static void draw_rmlui_tab()
         ImGui::Checkbox( "options", &options_rmlui_enabled() );
         ImGui::Checkbox( "worldfactory", &worldfactory_rmlui_enabled() );
         ImGui::Checkbox( "main menu", &main_menu_rmlui_enabled() );
+        ImGui::Checkbox( "load character (sigils)", &loadchar_rmlui_enabled() );
         ImGui::Checkbox( "new character", &newcharacter_rmlui_enabled() );
         ImGui::Checkbox( "overmap legend", &overmap_rmlui_enabled() );
         ImGui::Checkbox( "world text (SCT)", &world_text_rmlui_enabled() );

@@ -1,6 +1,7 @@
 #include "rmlui_proc_texture.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <ostream>
@@ -534,6 +535,86 @@ std::uint32_t fnv1a( const std::string &s )
     }
     return hsh;
 }
+
+// A solid line of arbitrary angle, `thick` px wide, written straight into the
+// pixel buffer (the band `strip` helpers are axis-aligned only; bindrune staves
+// run diagonally). Marches the segment in ~1px steps stamping a filled square so
+// the stroke stays connected at any angle — hard-edged, matching the frame art.
+void draw_stroke( std::vector<std::uint8_t> &px, int W, int H,
+                  float x0, float y0, float x1, float y1, int thick, rgba col )
+{
+    const float dx = x1 - x0;
+    const float dy = y1 - y0;
+    const float len = std::sqrt( dx * dx + dy * dy );
+    const int steps = std::max( 1, static_cast<int>( std::ceil( len ) ) );
+    const int half = std::max( 0, thick / 2 );
+    for( int i = 0; i <= steps; ++i ) {
+        const float t = static_cast<float>( i ) / steps;
+        const int cx = static_cast<int>( std::lround( x0 + dx * t ) );
+        const int cy = static_cast<int>( std::lround( y0 + dy * t ) );
+        for( int yy = -half; yy <= half; ++yy ) {
+            for( int xx = -half; xx <= half; ++xx ) {
+                put( px, W, H, cx + xx, cy + yy, col );
+            }
+        }
+    }
+}
+
+// A self-framed bindrune sigil in a square `S`x`S` buffer: a central vertical
+// stave (Isa) with a seeded subset of Elder Futhark strokes merged onto it
+// (Algiz protective fork, Gebo binding-cross, Dagaz/Othala foot accents, an
+// optional side branch), enclosed by a diamond frame with corner accents. The
+// stroke set + jitter are chosen from `seed`, so each character name yields a
+// distinct-but-coherent protective sigil. `ink` is the caller-supplied colour
+// (the consumer passes the UI text colour so the sigil matches its label).
+void draw_bindrune( std::vector<std::uint8_t> &px, int S, unsigned seed, rgba ink )
+{
+    const rgba LIGHT = ink;
+    const float cx = S * 0.5f;
+    const float cy = S * 0.5f;
+    const int thick = std::max( 2, S / 32 );
+    const float r = S * 0.40f;
+    std::mt19937 gen( seed );
+    std::uniform_int_distribution<int> bit( 0, 99 );
+
+    // Enclosing diamond frame (the "self-frame").
+    const float top = cy - r, bot = cy + r, lft = cx - r, rgt = cx + r;
+    draw_stroke( px, S, S, cx, top, rgt, cy, thick, LIGHT );
+    draw_stroke( px, S, S, rgt, cy, cx, bot, thick, LIGHT );
+    draw_stroke( px, S, S, cx, bot, lft, cy, thick, LIGHT );
+    draw_stroke( px, S, S, lft, cy, cx, top, thick, LIGHT );
+    // Corner accents: short crossbars just inside the top/bottom vertices.
+    const float acc = r * 0.16f;
+    draw_stroke( px, S, S, cx - acc, top + acc, cx + acc, top + acc, thick, LIGHT );
+    draw_stroke( px, S, S, cx - acc, bot - acc, cx + acc, bot - acc, thick, LIGHT );
+
+    // Central stave (Isa) — always present.
+    const float sv = r * 0.72f;
+    draw_stroke( px, S, S, cx, cy - sv, cx, cy + sv, thick, LIGHT );
+    // Algiz: protective upper fork.
+    if( bit( gen ) < 85 ) {
+        draw_stroke( px, S, S, cx, cy - sv * 0.45f, cx - r * 0.34f, cy - sv * 0.95f, thick, LIGHT );
+        draw_stroke( px, S, S, cx, cy - sv * 0.45f, cx + r * 0.34f, cy - sv * 0.95f, thick, LIGHT );
+    }
+    // Gebo: binding X-cross through the centre.
+    if( bit( gen ) < 70 ) {
+        draw_stroke( px, S, S, cx - r * 0.32f, cy - r * 0.32f, cx + r * 0.32f, cy + r * 0.32f, thick,
+                     LIGHT );
+        draw_stroke( px, S, S, cx + r * 0.32f, cy - r * 0.32f, cx - r * 0.32f, cy + r * 0.32f, thick,
+                     LIGHT );
+    }
+    // Dagaz/Othala: lower foot branches.
+    if( bit( gen ) < 60 ) {
+        draw_stroke( px, S, S, cx, cy + sv * 0.5f, cx - r * 0.30f, cy + sv * 0.92f, thick, LIGHT );
+        draw_stroke( px, S, S, cx, cy + sv * 0.5f, cx + r * 0.30f, cy + sv * 0.92f, thick, LIGHT );
+    }
+    // Optional side branch for extra variety (mirrored by seed).
+    if( bit( gen ) < 50 ) {
+        const float dir = ( gen() & 1u ) ? 1.0f : -1.0f;
+        draw_stroke( px, S, S, cx, cy - sv * 0.10f, cx + dir * r * 0.30f, cy - sv * 0.45f, thick,
+                     LIGHT );
+    }
+}
 }  // namespace
 
 runic_params &runic_cfg()
@@ -714,6 +795,42 @@ std::vector<std::uint8_t> gen_runic_frame( const std::string &variant, int &out_
         std::vector<std::uint8_t> px = alloc( RING, len );
         const strip s{ &px, out_w, out_h, false, seed };
         draw_edge( s, seed, /*dbl=*/false, tmpl );  // vertical: single rule
+        return px;
+    }
+
+    // Self-framed bindrune save sigil: "bindrune:<size>:<seed>:<rrggbb>" (size,
+    // seed, colour all optional). <size> = square texture px (default 96); <seed>
+    // = the per-character hash so each save file gets a unique sigil; <rrggbb> =
+    // ink colour (default = the frame ink). A trailing ":G<n>" cache-bust is
+    // ignored (std::stoul reads only the leading number of each field).
+    if( variant.rfind( "bindrune", 0 ) == 0 ) {
+        int sz = 96;
+        unsigned bseed = fnv1a( variant );
+        rgba ink = light_col( cfg );
+        const std::size_t c1 = variant.find( ':' );
+        if( c1 != std::string::npos ) {
+            const std::size_t c2 = variant.find( ':', c1 + 1 );
+            try {
+                sz = std::stoi( variant.substr( c1 + 1, c2 - c1 - 1 ) );
+                if( c2 != std::string::npos ) {
+                    bseed = static_cast<unsigned>( std::stoul( variant.substr( c2 + 1 ) ) );
+                    const std::size_t c3 = variant.find( ':', c2 + 1 );
+                    if( c3 != std::string::npos ) {
+                        const unsigned long rgb = std::stoul( variant.substr( c3 + 1 ), nullptr, 16 );
+                        ink = rgba{ static_cast<std::uint8_t>( ( rgb >> 16 ) & 0xffu ),
+                                    static_cast<std::uint8_t>( ( rgb >> 8 ) & 0xffu ),
+                                    static_cast<std::uint8_t>( rgb & 0xffu ), 255 };
+                    }
+                }
+            } catch( ... ) {
+                sz = 96;
+                bseed = fnv1a( variant );
+                ink = light_col( cfg );
+            }
+        }
+        sz = std::max( 16, sz );
+        std::vector<std::uint8_t> px = alloc( sz, sz );
+        draw_bindrune( px, sz, bseed, ink );
         return px;
     }
 

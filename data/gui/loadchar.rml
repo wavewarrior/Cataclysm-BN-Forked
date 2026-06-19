@@ -1,0 +1,25 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="loadchar.rcss"/>
+</head>
+<body data-model="loadchar">
+    <!-- Load / character-select for one world. Each saved character is a "slot"
+         decorated with its own bindrune sigil (a procedural ?proc:bindrune texture
+         seeded by the character name). Render-only: the load loop owns `sel`; mouse
+         selects (click). The outer .panel gets the runic frame + close-X injected by
+         the panel loop in rmlui_layer.cpp — rows must NOT carry class `panel`. -->
+    <div class="panel lc-panel">
+        <div class="lc-tooltip" data-rml="tooltip_rml"></div>
+
+        <div id="lc-list" class="lc-list scroll-pane">
+            <div class="lc-row" data-for="r : rows"
+                 data-class-selected="r.selected"
+                 data-event-click="on_select(it_index)">
+                <div class="lc-sigil" data-style-decorator="r.sigil_dec"></div>
+                <span class="lc-name" data-rml="r.text_rml"></span>
+            </div>
+        </div>
+    </div>
+</body>
+</rml>

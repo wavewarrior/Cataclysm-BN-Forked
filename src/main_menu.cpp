@@ -110,9 +110,56 @@ void register_mm_rml_types( Rml::DataModelConstructor &c )
 
     g_mm_types_registered = true;
 }
+
+// Load / character-select (one world): each row is a saved character + its own
+// bindrune sigil decorator (a ?proc:bindrune procedural texture seeded by name).
+struct lc_row {
+    Rml::String text_rml;
+    Rml::String sigil_dec;
+    bool selected = false;
+};
+struct lc_session {
+    Rml::Vector<lc_row> rows;
+    Rml::String tooltip_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_lc_types_registered = false;
+
+void register_lc_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_lc_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<lc_row> rh = c.RegisterStruct<lc_row>();
+    rh.RegisterMember( "text_rml", &lc_row::text_rml );
+    rh.RegisterMember( "sigil_dec", &lc_row::sigil_dec );
+    rh.RegisterMember( "selected", &lc_row::selected );
+    c.RegisterArray<Rml::Vector<lc_row>>();
+
+    g_lc_types_registered = true;
+}
+
+// FNV-1a of the character name → the bindrune seed (the generator's own fnv1a is
+// translation-unit-private; one short local copy avoids widening its header).
+unsigned lc_name_seed( const std::string &name )
+{
+    unsigned h = 2166136261u;
+    for( const char ch : name ) {
+        h ^= static_cast<unsigned char>( ch );
+        h *= 16777619u;
+    }
+    return h;
+}
 } // namespace
 
 bool &main_menu_rmlui_enabled()
+{
+    static bool enabled = false;
+    return enabled;
+}
+
+bool &loadchar_rmlui_enabled()
 {
     static bool enabled = false;
     return enabled;
@@ -1236,20 +1283,97 @@ bool main_menu::load_character_tab( const std::string &worldname )
         return false;
     }
 
-    uilist mmenu( string_format( _( "Load character from \"%s\"" ), worldname ), {} );
-    mmenu.border_color = c_light_gray;
-    mmenu.hotkey_color = c_yellow;
-    sound_on_move_uilist_callback cb( this );
-    mmenu.callback = &cb;
-    mmenu.menu_style = "save";   // RmlUi: compact centred dialog
-    int opt_val = 0;
-    for( const save_t &s : savegames ) {
-        mmenu.entries.emplace_back( opt_val++, true, MENU_AUTOASSIGN,
-                                    colorize( s.decoded_name(), c_white ) );
+    int opt_val = -1;
+
+    // RmlUi path: a sigil-decorated character list (mirrors pick_world). Gated on
+    // rml.open() SUCCESS, not just the toggle, so a not-ready RmlUi falls through
+    // to the uilist instead of showing a blank screen.
+    input_context ctxt( "LOAD_CHAR_SELECT" );
+    ctxt.register_updown();
+    ctxt.register_action( "HELP_KEYBINDINGS" );
+    ctxt.register_action( "QUIT" );
+    ctxt.register_action( "CONFIRM" );
+
+    std::unique_ptr<lc_session> data;
+    size_t sel = 0;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml ) {
+            return;
+        }
+        data->rows.clear();
+        // Sigil ink = the list's text colour ("#rrggbbaa" → the rrggbb digits).
+        const std::string ink = nc_color_to_hex( c_white ).substr( 1, 6 );
+        for( size_t i = 0; i < savegames.size(); ++i ) {
+            const std::string name = savegames[i].decoded_name();
+            lc_row r;
+            r.text_rml = cata_text_to_rml( colorize( ( i == sel ? ">> " : "   " ) + name, c_white ) );
+            r.sigil_dec = string_format(
+                              "image( ?proc:bindrune:96:%u:%s none contain ) border-box",
+                              lc_name_seed( name ), ink.c_str() );
+            r.selected = i == sel;
+            data->rows.push_back( r );
+        }
+        data->tooltip_rml = cata_text_to_rml( colorize(
+                string_format( _( "Load character from \"%s\"" ), worldname ), c_white ) );
+        data->handle.DirtyVariable( "rows" );
+        data->handle.DirtyVariable( "tooltip_rml" );
+    };
+
+    if( rml.open( loadchar_rmlui_enabled(), "loadchar", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        data = std::make_unique<lc_session>();
+        register_lc_rml_types( c );
+        c.Bind( "rows", &data->rows );
+        c.Bind( "tooltip_rml", &data->tooltip_rml );
+        c.BindEventCallback( "on_select",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            if( idx >= 0 && idx < static_cast<int>( savegames.size() ) ) {
+                sel = static_cast<size_t>( idx );
+            }
+        } );
+        data->handle = c.GetModelHandle();
+    } ) ) {
+        ui_adaptor ui;
+        ui.on_redraw( [&]( const ui_adaptor & ) {
+            sync_rml();
+        } );
+        while( true ) {
+            ui_manager::redraw();
+            const std::string action = ctxt.handle_input();
+            if( action == "QUIT" ) {
+                opt_val = -1;
+                break;
+            } else if( action == "DOWN" ) {
+                sel = ( sel + 1 ) % savegames.size();
+            } else if( action == "UP" ) {
+                sel = ( sel == 0 ) ? savegames.size() - 1 : sel - 1;
+            } else if( action == "CONFIRM" ) {
+                opt_val = static_cast<int>( sel );
+                break;
+            }
+        }
+        rml.close();
+    } else {
+        uilist mmenu( string_format( _( "Load character from \"%s\"" ), worldname ), {} );
+        mmenu.border_color = c_light_gray;
+        mmenu.hotkey_color = c_yellow;
+        sound_on_move_uilist_callback cb( this );
+        mmenu.callback = &cb;
+        mmenu.menu_style = "save";   // RmlUi: compact centred dialog
+        int ov = 0;
+        for( const save_t &s : savegames ) {
+            mmenu.entries.emplace_back( ov++, true, MENU_AUTOASSIGN,
+                                        colorize( s.decoded_name(), c_white ) );
+        }
+        mmenu.entries.emplace_back( ov++, true, 'q', "<= Return" );
+        mmenu.query();
+        opt_val = mmenu.ret;
     }
-    mmenu.entries.emplace_back( opt_val++, true, 'q', "<= Return" );
-    mmenu.query();
-    opt_val = mmenu.ret;
     if( opt_val < 0 || static_cast<size_t>( opt_val ) >= savegames.size() ) {
         return false;
     }

@@ -1,0 +1,69 @@
+/* Layout for the load/character-select screen. Mirrors pickworld (panel + list +
+   tooltip) but each row is a flex row: a square bindrune sigil + the character name.
+   body must be sized + centered or the panel shrink-wraps / the flex:1 list collapses. */
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.lc-panel {
+    width: 60%;
+    min-width: 520dp;
+    height: 80%;
+    display: flex;
+    flex-direction: column;
+}
+
+.lc-tooltip {
+    flex: 0 0 auto;
+    min-height: 40dp;
+    margin-bottom: 6dp;
+    padding-bottom: 6dp;
+    border-bottom: 1dp {{bg4}};
+    color: {{fg}};
+}
+
+.lc-list {
+    flex: 1;
+    min-height: 0;
+}
+
+.lc-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 4dp 8dp;
+    border-radius: 4dp;
+}
+
+.lc-sigil {
+    flex: 0 0 auto;
+    width: 48dp;
+    height: 48dp;
+    margin-right: 10dp;
+    /* decorator is set per-row from C++ via data-style-decorator (r.sigil_dec) */
+    transition: transform 0.15s ease-out;
+}
+
+.lc-name {
+    flex: 1;
+    white-space: nowrap;
+}
+
+.lc-row:hover {
+    background-color: {{bg2}};
+    color: {{fg0}};
+}
+
+.lc-row:hover .lc-sigil {
+    transform: scale(1.1);
+}
+
+.lc-row.selected {
+    background-color: {{yellow}};
+    color: {{bg-hard}};
+}

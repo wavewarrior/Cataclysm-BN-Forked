@@ -153,6 +153,10 @@ bool &worldfactory_rmlui_enabled();
 // main_menu::opening_screen() RmlUi path (Tier 4 screen #3: the title screen).
 bool &main_menu_rmlui_enabled();
 
+// main_menu::load_character_tab() RmlUi path: the load/character-select list, where
+// each saved character is a slot decorated with its own seeded bindrune sigil.
+bool &loadchar_rmlui_enabled();
+
 // avatar::create() new-character creator RmlUi path (Tier 4 screen #4, sliced).
 // One toggle lights all 8 character-creation tabs, gated per-tab (slice 1 = the
 // POINTS tab, set_points).
