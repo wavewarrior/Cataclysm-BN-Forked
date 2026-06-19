@@ -2170,9 +2170,25 @@ the HUD uses its own non-modal open path.
   passive/render-only-doc distinction (`any_interactive_open()`) in `rmlui_layer.cpp`,
   DEFERRED because that file is in the uncommitted runic-border set (would entangle the
   commit). Keyboard + the F4 ImGui panel are unaffected (ImGui captures first).
-- **Next (slice 2):** the passive-doc mouse gate (once runic `rmlui_layer.cpp` is
-  committed / tree clean) + the next panel group down the column (needs/time/weather).
-  Then limbs/armor/vehicle/minimap → messages (coalesced bound list) → full-column flip.
+- **Slice 2a — passive-doc mouse gate — DONE + BUILD-GREEN (Metal, fresh relink 21:50),
+  COMMITTED `5c4b2c69de`, EYEBALL OWED.** Resolves slice 1's known limitation. `open_document`
+  gained a `passive` flag (default false = interactive, unchanged for all modal screens);
+  passive docs are tracked in a parallel `g_passive_docs`. `rmlui_layer::process_event` now
+  returns false (falls through to the game) when only passive docs are open — new
+  `any_interactive_open()` — so the always-open HUD no longer swallows world mouse
+  (look/examine); capture resumes the instant an interactive modal stacks on top. The HUD
+  opens passive. Rendering unchanged (still gates on `any_open()`). Tree clean (runic
+  `rmlui_layer.cpp` was committed, so this no longer entangles). **EYEBALL:** HUD ON →
+  world mouse (look/examine) works; open a modal over it → modal mouse still captured.
+- **Next (slice 2b):** the **multi-panel generalization** — slice 1's single `#hud-col`
+  is positioned at ONE panel's rect, so a 2nd owned panel would overwrite it. The owned
+  panels are NOT contiguous (Stats sits at index 2; Time/Needs are below Mana), so the
+  robust path is the plan's per-panel-absolute fallback: a registry of owned panels, each
+  with its own positioned doc element + bound RML var + `*_text()` producer, with
+  `sidebar_hud_position(name, rect)` targeting per panel. Add the next text panel(s) on
+  top of that (candidates: Sound/Time/Needs — reproduce content in reading order per the
+  slice-1 precedent, not cell-exact columns). Then limbs/armor/vehicle/minimap → messages
+  (coalesced bound list) → full-column flip.
 
 ## Load-bearing architecture facts (verified this session)
 
