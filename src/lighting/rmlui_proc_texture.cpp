@@ -100,12 +100,8 @@ void draw_corner_rules( std::vector<std::uint8_t> &px, int W, int H )
         }
     };
 
-    // Band walls turning the corner: outer (DIV_TOP) and inner (DIV_BOT) L's,
-    // arms running inward to RING so they abut the edge band exactly.
-    for( int i = DIV_TOP; i < RING; ++i ) {
-        put( px, W, H, i, DIV_TOP, LIGHT );
-        put( px, W, H, DIV_TOP, i, LIGHT );
-    }
+    // Inner band wall (DIV_BOT) turning the corner; arms run inward to RING so
+    // they abut the edge band. (The outer DIV_TOP L was removed by request.)
     for( int i = DIV_BOT; i < RING; ++i ) {
         put( px, W, H, i, DIV_BOT, LIGHT );
         put( px, W, H, DIV_BOT, i, LIGHT );
@@ -130,39 +126,54 @@ void draw_corner_rules( std::vector<std::uint8_t> &px, int W, int H )
 // Close-button glyph: a bold X ENCASED in a square box, transparent elsewhere.
 // This is the whole top-right corner piece (it replaces the corner ornament, so
 // nothing else sits beneath it). Symmetric, so no orientation flip is needed.
-void draw_close_x( std::vector<std::uint8_t> &px, int W, int H )
+// `invert` is the hover state: the box fills solid ink and the X is knocked out
+// (transparent), flipping foreground/background so the button reads as active.
+void draw_close_x( std::vector<std::uint8_t> &px, int W, int H, bool invert )
 {
     const runic_params &cfg = runic_cfg();
     const rgba LIGHT = light_col( cfg );
+    const rgba CLEAR{ 0, 0, 0, 0 };
     const int RING = cfg.ring;
     const int b0 = 1;            // encasement box, 1px in from the corner edges
     const int b1 = RING - 2;
     if( b1 - b0 < 6 ) {
         return;
     }
-    const int t = 2;            // line thickness (box + X)
-    // Encasement box (2px walls).
-    for( int x = b0; x <= b1; ++x ) {
-        for( int k = 0; k < t; ++k ) {
-            put( px, W, H, x, b0 + k, LIGHT );
-            put( px, W, H, x, b1 - k, LIGHT );
-        }
-    }
-    for( int y = b0; y <= b1; ++y ) {
-        for( int k = 0; k < t; ++k ) {
-            put( px, W, H, b0 + k, y, LIGHT );
-            put( px, W, H, b1 - k, y, LIGHT );
-        }
-    }
-    // The X, inset from the box walls, drawn 2px thick on both diagonals.
-    const int p = b0 + 3;
+    const int p = b0 + 3;        // X extent, inset from the box walls
     const int q = b1 - 3;
     const int sz = q - p;
-    for( int i = 0; i <= sz; ++i ) {
-        put( px, W, H, p + i, p + i, LIGHT );
-        put( px, W, H, p + i + 1, p + i, LIGHT );   // ╲
-        put( px, W, H, p + i, q - i, LIGHT );
-        put( px, W, H, p + i + 1, q - i, LIGHT );   // ╱
+    // The X marks, drawn in `col` at the given thickness on both diagonals.
+    auto xmark = [&]( rgba col, int th ) {
+        for( int i = 0; i <= sz; ++i ) {
+            for( int k = 0; k < th; ++k ) {
+                put( px, W, H, p + i + k, p + i, col );   // ╲
+                put( px, W, H, p + i + k, q - i, col );   // ╱
+            }
+        }
+    };
+    if( invert ) {
+        // Hover: solid ink box with the X carved back out (transparent).
+        for( int y = b0; y <= b1; ++y ) {
+            for( int x = b0; x <= b1; ++x ) {
+                put( px, W, H, x, y, LIGHT );
+            }
+        }
+        xmark( CLEAR, 3 );
+    } else {
+        // Idle: 2px box walls + 2px X.
+        for( int x = b0; x <= b1; ++x ) {
+            put( px, W, H, x, b0, LIGHT );
+            put( px, W, H, x, b0 + 1, LIGHT );
+            put( px, W, H, x, b1, LIGHT );
+            put( px, W, H, x, b1 - 1, LIGHT );
+        }
+        for( int y = b0; y <= b1; ++y ) {
+            put( px, W, H, b0, y, LIGHT );
+            put( px, W, H, b0 + 1, y, LIGHT );
+            put( px, W, H, b1, y, LIGHT );
+            put( px, W, H, b1 - 1, y, LIGHT );
+        }
+        xmark( LIGHT, 2 );
     }
 }
 
@@ -496,12 +507,17 @@ std::vector<std::uint8_t> gen_runic_frame( const std::string &variant, int &out_
         return px;
     }
 
-    // Close-button overlay (top-right corner): a transparent-backed X, drawn at
-    // the corner size so it sits over the corner ornament. Ignores trailing
-    // ":G<n>" cache-bust params like the corner art.
+    // Close-button piece (top-right corner): an encased X at corner size. The
+    // "-inv" variant is the hover state (solid box, X knocked out). Check it
+    // first — it shares the "runic-x" prefix. Both ignore trailing ":G<n>".
+    if( variant.rfind( "runic-x-inv", 0 ) == 0 ) {
+        std::vector<std::uint8_t> px = alloc( RING, RING );
+        draw_close_x( px, out_w, out_h, /*invert=*/true );
+        return px;
+    }
     if( variant.rfind( "runic-x", 0 ) == 0 ) {
         std::vector<std::uint8_t> px = alloc( RING, RING );
-        draw_close_x( px, out_w, out_h );
+        draw_close_x( px, out_w, out_h, /*invert=*/false );
         return px;
     }
 

@@ -637,7 +637,6 @@ void apply_crt()
         "image( ?proc:runic-vedge none repeat-y left center ) border-box, "
         "image( ?proc:runic-vedge flip-horizontal repeat-y right center ) border-box, "
         "image( ?proc:runic-corner none scale-none left top ) border-box, "
-        "image( ?proc:runic-x flip-horizontal scale-none right top ) border-box, "
         "image( ?proc:runic-corner flip-vertical scale-none left bottom ) border-box, "
         "image( ?proc:runic-corner rotate-180 scale-none right bottom ) border-box";
 
@@ -698,15 +697,13 @@ void apply_crt()
                                        "image( ?proc:runic-vedge:%d:%u:%d:G%u none scale-none %dpx %dpx ) border-box, "
                                        "image( ?proc:runic-vedge:%d:%u:%d:G%u flip-horizontal scale-none %dpx %dpx ) border-box, "
                                        "image( ?proc:runic-corner:G%u none scale-none %dpx %dpx ) border-box, "
-                                       "image( ?proc:runic-x:G%u flip-horizontal scale-none %dpx %dpx ) border-box, "
                                        "image( ?proc:runic-corner:G%u flip-vertical scale-none %dpx %dpx ) border-box, "
                                        "image( ?proc:runic-corner:G%u rotate-180 scale-none %dpx %dpx ) border-box",
                                        hlen, seed, t_h, g, FRAME_INSET, FRAME_INSET,   // top
                                        hlen, seed, t_h, g, FRAME_INSET, far_y,         // bottom
                                        vlen, seed, t_v, g, FRAME_INSET, FRAME_INSET,   // left
                                        vlen, seed, t_v, g, far_x, FRAME_INSET,         // right
-                                       g, FRAME_INSET, FRAME_INSET,                    // TL
-                                       g, far_x, FRAME_INSET,                          // TR
+                                       g, FRAME_INSET, FRAME_INSET,                    // TL (TR = #runic-close)
                                        g, FRAME_INSET, far_y,                          // BL
                                        g, far_x, far_y );                              // BR
             } else {
@@ -772,11 +769,17 @@ void apply_crt()
                     cl = doc->AppendChild( std::move( cp ) );
                 }
                 if( cl != nullptr ) {
-                    // Transparent hit rect over the TR corner: the encased-X art is
-                    // drawn by the frame layer (runic-x corner image); this element
-                    // just opts into hit-testing so a click there reads as close.
+                    // The TR corner piece: this element OWNS the encased-X art (the
+                    // frame layer leaves the TR corner empty) and is hit-tested, so a
+                    // click reads as close. On :hover it swaps to the inverted variant
+                    // (solid ink box, X knocked out) to signal it is interactable.
+                    const bool hov = cl->IsPseudoClassSet( "hover" );
                     const Rml::Vector2f coff = pe->GetAbsoluteOffset( Rml::BoxArea::Border );
                     const int far_x = pw - ring_disp - FRAME_INSET;
+                    char xdec[160];
+                    ( void )std::snprintf( xdec, sizeof( xdec ),
+                                           "image( ?proc:%s:G%u none scale-none 0px 0px ) border-box",
+                                           hov ? "runic-x-inv" : "runic-x", rcfg.regen );
                     cl->SetProperty( "position", "absolute" );
                     cl->SetProperty( "pointer-events", "auto" );
                     cl->SetProperty( "z-index", "12" );
@@ -784,7 +787,7 @@ void apply_crt()
                     cl->SetProperty( "top", std::to_string( coff.y + FRAME_INSET ) + "px" );
                     cl->SetProperty( "width", std::to_string( ring_disp ) + "px" );
                     cl->SetProperty( "height", std::to_string( ring_disp ) + "px" );
-                    cl->SetProperty( "decorator", "none" );
+                    cl->SetProperty( "decorator", xdec );
                 }
             } else if( cl != nullptr ) {
                 cl->SetProperty( "decorator", "none" );
