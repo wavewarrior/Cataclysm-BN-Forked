@@ -2767,8 +2767,10 @@ void sidebar_hud_open()
     g_hud_data = std::make_unique<hud_rml_model>();
     c.Bind( "stats_rml", &g_hud_data->stats_rml );
     g_hud_data->handle = c.GetModelHandle();
+    // passive=true: render-only HUD — it must not capture in-game world mouse
+    // (look/examine). See rmlui_layer::any_interactive_open / process_event.
     Rml::ElementDocument *doc =
-        rmlui_layer::open_document( PATH_INFO::datadir() + "gui/sidebar_hud.rml" );
+        rmlui_layer::open_document( PATH_INFO::datadir() + "gui/sidebar_hud.rml", true );
     if( doc == nullptr ) {
         // Roll back so a failed open leaves no dangling model (cf. rml_doc::open).
         ctx->RemoveDataModel( "sidebar_hud" );

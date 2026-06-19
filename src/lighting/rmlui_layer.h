@@ -99,7 +99,12 @@ void reload_theme();
 // reports it. Returns the document (owned by the context) or nullptr on failure.
 // Pair with close_document() — typically via an RAII wrapper in the owner's
 // query() scope. Build the document's data-model BEFORE calling this.
-Rml::ElementDocument *open_document( const std::string &rml_path );
+//
+// passive=true marks the doc render-only (e.g. the Tier-7 sidebar HUD): it paints
+// every frame but never captures input — process_event lets mouse/keys fall through
+// to the game while only passive docs are open. Default (interactive) modal docs
+// capture mouse as before.
+Rml::ElementDocument *open_document( const std::string &rml_path, bool passive = false );
 
 // Hide, unload and untrack a document opened with open_document(). Safe with
 // nullptr or an already-closed document.

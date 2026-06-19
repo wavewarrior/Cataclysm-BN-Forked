@@ -77,9 +77,29 @@ crt_params g_crt;
 // this only tracks which are live so active()/the frame gates can see them.
 std::vector<Rml::ElementDocument *> g_open_docs;
 
+// Subset of g_open_docs that are PASSIVE (render-only, e.g. the Tier-7 sidebar
+// HUD): they paint every frame but must NOT capture game input. A persistent
+// passive doc keeps any_open() true (so the context renders) yet leaves
+// any_interactive_open() false (so world mouse falls through to the game).
+std::vector<Rml::ElementDocument *> g_passive_docs;
+
 bool any_open()
 {
     return !g_open_docs.empty();
+}
+
+// True iff at least one open doc is INTERACTIVE (not in g_passive_docs). Modal
+// screens are interactive; the HUD is not. process_event gates mouse capture on
+// this so an always-open HUD doesn't swallow look/examine clicks.
+bool any_interactive_open()
+{
+    for( Rml::ElementDocument *doc : g_open_docs ) {
+        if( std::find( g_passive_docs.begin(), g_passive_docs.end(), doc ) ==
+            g_passive_docs.end() ) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // --- World-space text layer (§7) state ---
@@ -370,6 +390,7 @@ void shutdown()
         Rml::Shutdown();
     }
     g_open_docs.clear();
+    g_passive_docs.clear();
     g_context = nullptr;
     if( g_render ) {
         g_render->shutdown();
@@ -421,7 +442,7 @@ void reload_theme()
     }
 }
 
-Rml::ElementDocument *open_document( const std::string &rml_path )
+Rml::ElementDocument *open_document( const std::string &rml_path, bool passive )
 {
     if( !g_ready || g_context == nullptr ) {
         return nullptr;
@@ -433,6 +454,9 @@ Rml::ElementDocument *open_document( const std::string &rml_path )
     }
     doc->Show();
     g_open_docs.push_back( doc );
+    if( passive ) {
+        g_passive_docs.push_back( doc );
+    }
     dbg( DL::Info ) << "rmlui_layer: opened document " << rml_path
                     << " (" << g_open_docs.size() << " open)";
     return doc;
@@ -448,6 +472,10 @@ void close_document( Rml::ElementDocument *doc )
         return;  // already closed / not ours
     }
     g_open_docs.erase( it );
+    const auto pit = std::find( g_passive_docs.begin(), g_passive_docs.end(), doc );
+    if( pit != g_passive_docs.end() ) {
+        g_passive_docs.erase( pit );
+    }
     doc->Hide();
     g_context->UnloadDocument( doc );
 }
@@ -477,6 +505,12 @@ int mod_state()
 bool process_event( const SDL_Event &ev )
 {
     if( !g_ready || !any_open() || g_context == nullptr ) {
+        return false;
+    }
+    // Only PASSIVE docs open (e.g. the Tier-7 sidebar HUD)? It renders but must not
+    // capture input — fall through so the game keeps world mouse (look/examine) and
+    // its keys. As soon as an interactive (modal) doc stacks on top, resume capture.
+    if( !any_interactive_open() ) {
         return false;
     }
     // Debug keys (consumed so the game doesn't also act on them): F9/F10 nudge
