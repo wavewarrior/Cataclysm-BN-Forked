@@ -22,6 +22,7 @@
 #include "lighting/imgui_layer.h"
 #include "lighting/render_state.h"
 #include "lighting/rmlui_layer.h"
+#include "lighting/rmlui_proc_texture.h"
 #include "rml_util.h"
 #include "ui_theme.h"
 #include "lighting/sdf_pass.h"
@@ -577,6 +578,106 @@ static void draw_diagnostics_tab()
                  menu_emitter_tuning::blue_backdrop ? "ON" : "off" );
 }
 
+static void draw_runic_tab()
+{
+    lighting::runic_params &c = lighting::runic_cfg();
+    bool changed = false;
+
+    ImGui::TextWrapped( "Full control of the procedural runic frame. Edits apply live to every "
+                        "panel border. Save persists as the game-wide default." );
+
+    ImGui::SeparatorText( "Template" );
+    {
+        const char *names[] = { "Auto (top/bottom centred, sides thirds)",
+                                "Centred", "Thirds", "Fixed-interval"
+                              };
+        int ti = c.force_template + 1;   // -1 (Auto) -> 0
+        if( ImGui::Combo( "template", &ti, names, static_cast<int>( std::size( names ) ) ) ) {
+            c.force_template = ti - 1;
+            changed = true;
+        }
+    }
+
+    ImGui::SeparatorText( "Seed" );
+    {
+        const char *names[] = { "Per-panel size (shipping)", "Fixed" };
+        int si = c.use_fixed_seed ? 1 : 0;
+        if( ImGui::Combo( "seed mode", &si, names, 2 ) ) {
+            c.use_fixed_seed = ( si == 1 );
+            changed = true;
+        }
+        if( c.use_fixed_seed ) {
+            int sv = static_cast<int>( c.seed );
+            if( ImGui::InputInt( "seed value", &sv ) ) {
+                c.seed = static_cast<unsigned>( sv );
+                changed = true;
+            }
+            ImGui::SameLine();
+            if( ImGui::Button( "Randomize" ) ) {
+                c.seed = c.seed * 1664525u + 1013904223u;   // LCG step
+                changed = true;
+            }
+        }
+    }
+
+    ImGui::SeparatorText( "Colour" );
+    {
+        float col[3] = { c.col_r / 255.f, c.col_g / 255.f, c.col_b / 255.f };
+        if( ImGui::ColorEdit3( "rune ink", col ) ) {
+            c.col_r = static_cast<int>( std::lround( col[0] * 255.f ) );
+            c.col_g = static_cast<int>( std::lround( col[1] * 255.f ) );
+            c.col_b = static_cast<int>( std::lround( col[2] * 255.f ) );
+            changed = true;
+        }
+    }
+
+    ImGui::SeparatorText( "Geometry" );
+    changed |= dbg_slider_int( "ring (corner/edge depth)", &c.ring, 4, 48 );
+    changed |= dbg_slider_int( "glyph scale", &c.glyph_scale, 1, 4 );
+    changed |= dbg_slider_int( "band top", &c.band_top, 0, 20 );
+    changed |= dbg_slider_int( "div top", &c.div_top, 0, 20 );
+    changed |= dbg_slider_int( "div bot", &c.div_bot, 2, 40 );
+    changed |= dbg_slider_int( "frame inset (F9/F10)", &c.frame_inset, 0, 40 );
+    changed |= dbg_slider_int( "fill %", &c.fill_pct, 0, 99 );
+
+    ImGui::SeparatorText( "Boxes & dividers" );
+    changed |= dbg_slider_int( "wall", &c.wall, 1, 4 );
+    changed |= dbg_slider_int( "divider width", &c.divw, 1, 6 );
+    changed |= dbg_slider_int( "pad", &c.pad, 0, 10 );
+    changed |= dbg_slider_int( "glyph gap", &c.ggap, 0, 10 );
+    changed |= dbg_slider_int( "inner gap", &c.gapi, 0, 8 );
+
+    ImGui::SeparatorText( "Layout" );
+    changed |= dbg_slider_int( "rule gap", &c.rgap, 0, 16 );
+    changed |= dbg_slider_int( "pitch (fixed-interval)", &c.pitch, 60, 512 );
+    changed |= dbg_slider_int( "unit (default edge len)", &c.unit, 64, 512 );
+
+    ImGui::SeparatorText( "Regenerate / persist" );
+    static bool auto_regen = true;
+    ImGui::Checkbox( "auto-regenerate on edit", &auto_regen );
+    if( changed && auto_regen ) {
+        c.regen++;
+    }
+    if( ImGui::Button( "Generate" ) ) {
+        c.regen++;
+    }
+    ImGui::SameLine();
+    if( ImGui::Button( "Save (config/runic_frame.json)" ) ) {
+        lighting::save_runic_cfg();
+    }
+    ImGui::SameLine();
+    if( ImGui::Button( "Reload" ) ) {
+        lighting::load_runic_cfg();
+        c.regen++;
+    }
+    ImGui::SameLine();
+    if( ImGui::Button( "Reset to defaults" ) ) {
+        const unsigned keep = c.regen;
+        c = lighting::runic_params{};
+        c.regen = keep + 1;   // preserve+bump so the cache still busts
+    }
+}
+
 void draw()
 {
     // Closing via the title-bar X flips visible() too (same flag as F4).
@@ -607,6 +708,10 @@ void draw()
     }
     if( ImGui::BeginTabItem( "RmlUi" ) ) {
         draw_rmlui_tab();
+        ImGui::EndTabItem();
+    }
+    if( ImGui::BeginTabItem( "Runic Frame" ) ) {
+        draw_runic_tab();
         ImGui::EndTabItem();
     }
     if( ImGui::BeginTabItem( "Theme" ) ) {

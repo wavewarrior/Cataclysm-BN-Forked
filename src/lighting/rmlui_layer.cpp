@@ -20,16 +20,26 @@
 #include <RmlUi/Core/Geometry.h>
 #include <RmlUi/Core/Mesh.h>
 #include <RmlUi/Core/RenderManager.h>
+#include <RmlUi/Debugger.h>
 
 #include "debug.h"
 #include "gpu_device.h"
 #include "path_info.h"
 #include "rmlui_render_interface.h"
+#include "rmlui_proc_texture.h"
 #include "rmlui_system_interface.h"
 #include "ui_theme.h"
 
 // Lighting/ files must define dbg themselves (not globally available).
 #define dbg( x ) DebugLogFL( ( x ), DC::SDL )
+
+// --- Runic-frame debug knobs (see process_event: F9/F10/F11/F12) ---
+// FRAME_INSET as a live knob; F9/F10 nudge it so the frame placement can be
+// dialled in-game. g_frame_markers overlays a magenta cross at the panel-box
+// centre (so the rune cluster's centring vs the panel vs the screen is visible).
+// g_rml_debugger toggles RmlUi's built-in element inspector.
+static bool g_frame_markers = false;
+static bool g_rml_debugger = false;
 
 namespace rmlui_layer
 {
@@ -312,6 +322,10 @@ bool init( lighting::gpu_device &dev )
         return false;
     }
 
+    // Built-in element inspector (box model, computed RCSS, live outlines).
+    // Hidden until toggled with F11; needs the context to exist first.
+    Rml::Debugger::Initialise( g_context );
+
     // Registered as a fallback (second arg) so glyphs still resolve even if a
     // document's font-family doesn't match. Family name embedded in the TTF is
     // "Terminus (TTF)" — the RCSS must use that exact string.
@@ -465,6 +479,36 @@ bool process_event( const SDL_Event &ev )
     if( !g_ready || !any_open() || g_context == nullptr ) {
         return false;
     }
+    // Debug keys (consumed so the game doesn't also act on them): F9/F10 nudge
+    // the runic-frame inset, F11 toggles the RmlUi element inspector, F12 the
+    // panel-centre marker cross. These help diagnose frame placement in-game.
+    if( ev.type == SDL_EVENT_KEY_DOWN ) {
+        switch( ev.key.key ) {
+            case SDLK_F9: {
+                int &fi = lighting::runic_cfg().frame_inset;
+                fi = fi > 0 ? fi - 1 : 0;
+                dbg( DL::Info ) << "rmlui frame_inset=" << fi;
+                return true;
+            }
+            case SDLK_F10: {
+                int &fi = lighting::runic_cfg().frame_inset;
+                fi += 1;
+                dbg( DL::Info ) << "rmlui frame_inset=" << fi;
+                return true;
+            }
+            case SDLK_F11:
+                g_rml_debugger = !g_rml_debugger;
+                Rml::Debugger::SetVisible( g_rml_debugger );
+                dbg( DL::Info ) << "rmlui debugger=" << g_rml_debugger;
+                return true;
+            case SDLK_F12:
+                g_frame_markers = !g_frame_markers;
+                dbg( DL::Info ) << "rmlui frame_markers=" << g_frame_markers;
+                return true;
+            default:
+                break;
+        }
+    }
     // Mouse only: keyboard belongs to the game's input_context, which drives
     // menu navigation. We forward mouse so :hover and row click events work.
     // Context is sized in physical pixels; SDL mouse coords are in window points.
@@ -540,21 +584,30 @@ void apply_crt()
     const double t = g_system ? g_system->GetElapsedTime() : 0.0;
 
     // Panel decorator = optional CRT vignette gradient + the procedural runic
-    // frame. The frame is 8 stacked image() decorators on the border-box: four
-    // edges tiled (repeat-x / repeat-y) and four corners (scale-none) anchored
-    // to each corner. Each region is its own "?proc:runic-*" texture, generated
-    // in C++ (lighting/rmlui_proc_texture.cpp) — image() can repeat a full
-    // texture but not a sprite. apply_crt drives .panel's `decorator` inline
-    // every frame, overriding the stylesheet rule, so the frame is composed
-    // here. The 24dp transparent .panel border (theme.rcss) reserves the ring.
-    // image shorthand is SPACE-separated: image( src orientation fit align-x
-    // align-y ). src is a bare string (no url()); "?proc:" sources reach the
-    // render interface verbatim. Only three base textures are generated — one
-    // corner, one horizontal edge, one vertical edge — and the orientation arg
-    // (flip-horizontal / flip-vertical / rotate-180) mirrors them into all four
-    // corners and both edge pairs for a symmetric frame. Edges tile (repeat-x/y);
-    // corners are scale-none. Top-level decorator list stays comma-separated.
-    constexpr char frame[] =
+    // frame, composed per panel. The frame is 8 stacked image() decorators on the
+    // border-box: four edges + four corners (scale-none) anchored to each corner.
+    // EDGES ARE PANEL-RELATIVE: the hedge/vedge texture is generated at the panel's
+    // border-box length ("?proc:runic-hedge:<len>:<seed>") and placed ONCE
+    // (scale-none, centre-aligned) rather than tiled, so each edge lays out
+    // symmetrically about its centre (rule lines + rune groups). The seed is
+    // derived from the panel size, so all four edges of a panel share one of three
+    // layout templates and differently-sized panels differ. apply_crt drives
+    // .panel's `decorator` inline every frame, overriding the stylesheet rule. The
+    // 24dp transparent .panel border (theme.rcss) reserves the ring. image()
+    // shorthand is SPACE-separated: image( src orientation fit align-x align-y ).
+    //
+    // FRAME_INSET pulls the whole frame inward by N px on every side, so the frame
+    // is drawn as if for a rectangle inset by N: edges are generated at
+    // (len - 2*INSET) and every piece is offset by INSET via px align (scale-none
+    // tiles accept length align + clip). Because the panel-relative edges reserve
+    // RING at each end for the corners, the corner<->edge abutment is preserved
+    // automatically. Tuned so the rune band's centre (~depth 8 in the RING-deep
+    // texture) lands on the panel's border-inner edge — the CRT "screen" rect.
+    lighting::runic_params &rcfg = lighting::runic_cfg();
+    const int RUNE_RING = rcfg.ring;   // matches the generator's corner/edge depth
+    const int FRAME_INSET = rcfg.frame_inset;  // inward shift (F9/F10 knob)
+    // Tiled fallback for panels too small to inset (size unknown on first frame).
+    constexpr char fallback[] =
         "image( ?proc:runic-hedge none repeat-x center top ) border-box, "
         "image( ?proc:runic-hedge flip-vertical repeat-x center bottom ) border-box, "
         "image( ?proc:runic-vedge none repeat-y left center ) border-box, "
@@ -563,14 +616,6 @@ void apply_crt()
         "image( ?proc:runic-corner flip-horizontal scale-none right top ) border-box, "
         "image( ?proc:runic-corner flip-vertical scale-none left bottom ) border-box, "
         "image( ?proc:runic-corner rotate-180 scale-none right bottom ) border-box";
-    char vignette[1024];
-    if( g_crt.enabled ) {
-        ( void )std::snprintf( vignette, sizeof( vignette ),
-                               "radial-gradient( farthest-corner, #00000000, #000000%02x ), %s",
-                               crt_a255( g_crt.vignette_alpha ), frame );
-    } else {
-        ( void )std::snprintf( vignette, sizeof( vignette ), "%s", frame );
-    }
 
     for( Rml::ElementDocument *doc : g_open_docs ) {
         if( doc == nullptr ) {
@@ -579,7 +624,88 @@ void apply_crt()
         Rml::ElementList panels;
         doc->GetElementsByClassName( panels, "panel" );
         for( Rml::Element *pe : panels ) {
-            pe->SetProperty( "decorator", vignette );
+            // Border-box size from the previous frame's layout (apply runs before
+            // Update); panels don't move, so the 1-frame lag is invisible.
+            const Rml::Vector2f sz = pe->GetBox().GetSize( Rml::BoxArea::Border );
+            const int pw = static_cast<int>( std::lround( sz.x ) );
+            const int ph = static_cast<int>( std::lround( sz.y ) );
+            static int dbg_sweeps = 0;
+            if( dbg_sweeps < 12 ) {
+                const Rml::Vector2f ofs = pe->GetAbsoluteOffset( Rml::BoxArea::Border );
+                dbg( DL::Info ) << "rmlui_frame panel id='" << pe->GetId() << "' tag='"
+                                << pe->GetTagName() << "' box=" << pw << "x" << ph
+                                << " absofs=" << static_cast<int>( ofs.x ) << ","
+                                << static_cast<int>( ofs.y );
+                ++dbg_sweeps;
+            }
+            char frame[1600];
+            // RmlUi renders `scale-none` tiles at natural size = texture_px * the
+            // context's density-independent-pixel ratio (set below to physical /
+            // logical). The decorator align/offsets are raw px, so to make a tile
+            // DISPLAY N physical px wide we must bake it at N / dr raw px; without
+            // this the edge texture is dr-times too wide, overflows, gets clipped,
+            // and its centred rune group is shoved off to one side.
+            const float dr = g_density_ratio * g_ui_scale;
+            const int ring_disp = static_cast<int>( std::lround( RUNE_RING * dr ) );
+            // Need room for the inset frame: each edge length (pw/ph - 2*INSET)
+            // must still fit its two corner margins (2*ring_disp) plus a centre span.
+            const int need = 2 * ( FRAME_INSET + ring_disp ) + 1;
+            if( pw >= need && ph >= need ) {
+                const unsigned seed = rcfg.use_fixed_seed
+                                      ? rcfg.seed
+                                      : ( ( static_cast<unsigned>( pw ) * 73856093u ) ^
+                                          ( static_cast<unsigned>( ph ) * 19349663u ) );
+                // Template per edge: Auto keeps top/bottom=centred(0), sides=thirds(1);
+                // a forced value overrides both so the chosen template shows everywhere.
+                const int t_h = rcfg.force_template >= 0 ? rcfg.force_template : 0;
+                const int t_v = rcfg.force_template >= 0 ? rcfg.force_template : 1;
+                const unsigned g = rcfg.regen;  // cache-bust token (see :G%u below)
+                // Edge lengths are RAW texture px = (physical span) / dr, so the
+                // dr-scaled natural size spans the inset region exactly (centred).
+                const int hlen = static_cast<int>( std::lround( ( pw - 2 * FRAME_INSET ) / dr ) );
+                const int vlen = static_cast<int>( std::lround( ( ph - 2 * FRAME_INSET ) / dr ) );
+                // Far corner offsets use the DISPLAYED corner size (ring * dr).
+                const int far_x = pw - ring_disp - FRAME_INSET;  // right-edge / -corner x
+                const int far_y = ph - ring_disp - FRAME_INSET;  // bottom-edge / -corner y
+                ( void )std::snprintf( frame, sizeof( frame ),
+                                       // :%d = template, :G%u = regen cache-bust token.
+                                       "image( ?proc:runic-hedge:%d:%u:%d:G%u none scale-none %dpx %dpx ) border-box, "
+                                       "image( ?proc:runic-hedge:%d:%u:%d:G%u flip-vertical scale-none %dpx %dpx ) border-box, "
+                                       "image( ?proc:runic-vedge:%d:%u:%d:G%u none scale-none %dpx %dpx ) border-box, "
+                                       "image( ?proc:runic-vedge:%d:%u:%d:G%u flip-horizontal scale-none %dpx %dpx ) border-box, "
+                                       "image( ?proc:runic-corner:G%u none scale-none %dpx %dpx ) border-box, "
+                                       "image( ?proc:runic-corner:G%u flip-horizontal scale-none %dpx %dpx ) border-box, "
+                                       "image( ?proc:runic-corner:G%u flip-vertical scale-none %dpx %dpx ) border-box, "
+                                       "image( ?proc:runic-corner:G%u rotate-180 scale-none %dpx %dpx ) border-box",
+                                       hlen, seed, t_h, g, FRAME_INSET, FRAME_INSET,   // top
+                                       hlen, seed, t_h, g, FRAME_INSET, far_y,         // bottom
+                                       vlen, seed, t_v, g, FRAME_INSET, FRAME_INSET,   // left
+                                       vlen, seed, t_v, g, far_x, FRAME_INSET,         // right
+                                       g, FRAME_INSET, FRAME_INSET,                    // TL
+                                       g, far_x, FRAME_INSET,                          // TR
+                                       g, FRAME_INSET, far_y,                          // BL
+                                       g, far_x, far_y );                              // BR
+            } else {
+                ( void )std::snprintf( frame, sizeof( frame ), "%s", fallback );
+            }
+            // F12: magenta cross at the panel-box centre (painted last = on top),
+            // so the rune cluster's centring vs the panel vs the screen is visible.
+            char markers[256] = "";
+            if( g_frame_markers && pw >= need && ph >= need ) {
+                ( void )std::snprintf( markers, sizeof( markers ),
+                                       ", image( ?proc:dbg-v:%d none scale-none %dpx 0px ) border-box"
+                                       ", image( ?proc:dbg-h:%d none scale-none 0px %dpx ) border-box",
+                                       ph, pw / 2 - 1, pw, ph / 2 - 1 );
+            }
+            char dec[2048];
+            if( g_crt.enabled ) {
+                ( void )std::snprintf( dec, sizeof( dec ),
+                                       "radial-gradient( farthest-corner, #00000000, #000000%02x ), %s%s",
+                                       crt_a255( g_crt.vignette_alpha ), frame, markers );
+            } else {
+                ( void )std::snprintf( dec, sizeof( dec ), "%s%s", frame, markers );
+            }
+            pe->SetProperty( "decorator", dec );
         }
         Rml::Element *overlay = doc->GetElementById( "crt-overlay" );
         if( overlay == nullptr ) {
