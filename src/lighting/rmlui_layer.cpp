@@ -540,6 +540,30 @@ bool process_event( const SDL_Event &ev )
                             : ev.button.button == SDL_BUTTON_RIGHT ? 1
                             : ev.button.button == SDL_BUTTON_MIDDLE ? 2 : 3;
             if( ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN ) {
+                // Sync hover to the click point so the close-button hit-test is
+                // current even if no motion event preceded this press.
+                g_context->ProcessMouseMove( static_cast<int>( ev.button.x * sx ),
+                                             static_cast<int>( ev.button.y * sy ), mods );
+                if( ev.button.button == SDL_BUTTON_LEFT ) {
+                    for( Rml::Element *e = g_context->GetHoverElement(); e != nullptr;
+                         e = e->GetParentNode() ) {
+                        if( e->GetId() == "runic-close" ) {
+                            // The runic close button → synthesize the screen's cancel.
+                            // Keyboard owns menu input, so push a real ESC keypress the
+                            // game's input_context will consume to close the panel.
+                            SDL_Event esc{};
+                            esc.type = SDL_EVENT_KEY_DOWN;
+                            esc.key.down = true;
+                            esc.key.scancode = SDL_SCANCODE_ESCAPE;
+                            esc.key.key = SDLK_ESCAPE;
+                            SDL_PushEvent( &esc );
+                            esc.type = SDL_EVENT_KEY_UP;
+                            esc.key.down = false;
+                            SDL_PushEvent( &esc );
+                            return true;
+                        }
+                    }
+                }
                 g_context->ProcessMouseButtonDown( btn, mods );
             } else {
                 g_context->ProcessMouseButtonUp( btn, mods );
@@ -613,7 +637,7 @@ void apply_crt()
         "image( ?proc:runic-vedge none repeat-y left center ) border-box, "
         "image( ?proc:runic-vedge flip-horizontal repeat-y right center ) border-box, "
         "image( ?proc:runic-corner none scale-none left top ) border-box, "
-        "image( ?proc:runic-corner flip-horizontal scale-none right top ) border-box, "
+        "image( ?proc:runic-x flip-horizontal scale-none right top ) border-box, "
         "image( ?proc:runic-corner flip-vertical scale-none left bottom ) border-box, "
         "image( ?proc:runic-corner rotate-180 scale-none right bottom ) border-box";
 
@@ -674,7 +698,7 @@ void apply_crt()
                                        "image( ?proc:runic-vedge:%d:%u:%d:G%u none scale-none %dpx %dpx ) border-box, "
                                        "image( ?proc:runic-vedge:%d:%u:%d:G%u flip-horizontal scale-none %dpx %dpx ) border-box, "
                                        "image( ?proc:runic-corner:G%u none scale-none %dpx %dpx ) border-box, "
-                                       "image( ?proc:runic-corner:G%u flip-horizontal scale-none %dpx %dpx ) border-box, "
+                                       "image( ?proc:runic-x:G%u flip-horizontal scale-none %dpx %dpx ) border-box, "
                                        "image( ?proc:runic-corner:G%u flip-vertical scale-none %dpx %dpx ) border-box, "
                                        "image( ?proc:runic-corner:G%u rotate-180 scale-none %dpx %dpx ) border-box",
                                        hlen, seed, t_h, g, FRAME_INSET, FRAME_INSET,   // top
@@ -697,15 +721,75 @@ void apply_crt()
                                        ", image( ?proc:dbg-h:%d none scale-none 0px %dpx ) border-box",
                                        ph, pw / 2 - 1, pw, ph / 2 - 1 );
             }
-            char dec[2048];
+            // Panel background keeps only the CRT vignette; the runic frame is
+            // lifted onto a dedicated top element (#runic-frame) so it paints
+            // ABOVE the #crt-overlay scanlines (true z-order) instead of as the
+            // panel's background, which the later-painted overlay covered.
             if( g_crt.enabled ) {
-                ( void )std::snprintf( dec, sizeof( dec ),
-                                       "radial-gradient( farthest-corner, #00000000, #000000%02x ), %s%s",
-                                       crt_a255( g_crt.vignette_alpha ), frame, markers );
+                char vig[96];
+                ( void )std::snprintf( vig, sizeof( vig ),
+                                       "radial-gradient( farthest-corner, #00000000, #000000%02x )",
+                                       crt_a255( g_crt.vignette_alpha ) );
+                pe->SetProperty( "decorator", vig );
             } else {
-                ( void )std::snprintf( dec, sizeof( dec ), "%s%s", frame, markers );
+                pe->SetProperty( "decorator", "none" );
             }
-            pe->SetProperty( "decorator", dec );
+            // Top frame layer: created once per document, appended last and given a
+            // z-index above .crt's 10, so it sits over the scanline overlay. Sized
+            // and positioned to the panel's border-box, so the border-box-anchored
+            // image() offsets resolve identically to the old panel decorator.
+            Rml::Element *fr = doc->GetElementById( "runic-frame" );
+            if( fr == nullptr ) {
+                Rml::ElementPtr fp = doc->CreateElement( "div" );
+                fp->SetId( "runic-frame" );
+                fr = doc->AppendChild( std::move( fp ) );
+            }
+            if( fr != nullptr ) {
+                const Rml::Vector2f foff = pe->GetAbsoluteOffset( Rml::BoxArea::Border );
+                char fdec[2048];
+                ( void )std::snprintf( fdec, sizeof( fdec ), "%s%s", frame, markers );
+                fr->SetProperty( "position", "absolute" );
+                fr->SetProperty( "pointer-events", "none" );
+                fr->SetProperty( "z-index", "11" );
+                fr->SetProperty( "left", std::to_string( foff.x ) + "px" );
+                fr->SetProperty( "top", std::to_string( foff.y ) + "px" );
+                fr->SetProperty( "width", std::to_string( sz.x ) + "px" );
+                fr->SetProperty( "height", std::to_string( sz.y ) + "px" );
+                fr->SetProperty( "decorator", fdec );
+            }
+            // Interactive close button: a clickable X overlaying the top-right
+            // corner ornament. Unlike #runic-frame (pointer-events:none) this
+            // element opts back INTO hit-testing; process_event turns a left
+            // click on it into a synthetic ESC, which the owning screen's
+            // input_context reads as its cancel/close (keyboard owns menu input).
+            // z-index 12 keeps it above the frame (11) and CRT overlay (10).
+            const bool has_frame = pw >= need && ph >= need;
+            Rml::Element *cl = doc->GetElementById( "runic-close" );
+            if( has_frame ) {
+                if( cl == nullptr ) {
+                    Rml::ElementPtr cp = doc->CreateElement( "div" );
+                    cp->SetId( "runic-close" );
+                    cl = doc->AppendChild( std::move( cp ) );
+                }
+                if( cl != nullptr ) {
+                    // Transparent hit rect over the TR corner: the encased-X art is
+                    // drawn by the frame layer (runic-x corner image); this element
+                    // just opts into hit-testing so a click there reads as close.
+                    const Rml::Vector2f coff = pe->GetAbsoluteOffset( Rml::BoxArea::Border );
+                    const int far_x = pw - ring_disp - FRAME_INSET;
+                    cl->SetProperty( "position", "absolute" );
+                    cl->SetProperty( "pointer-events", "auto" );
+                    cl->SetProperty( "z-index", "12" );
+                    cl->SetProperty( "left", std::to_string( coff.x + far_x ) + "px" );
+                    cl->SetProperty( "top", std::to_string( coff.y + FRAME_INSET ) + "px" );
+                    cl->SetProperty( "width", std::to_string( ring_disp ) + "px" );
+                    cl->SetProperty( "height", std::to_string( ring_disp ) + "px" );
+                    cl->SetProperty( "decorator", "none" );
+                }
+            } else if( cl != nullptr ) {
+                cl->SetProperty( "decorator", "none" );
+                cl->SetProperty( "pointer-events", "none" );
+            }
         }
         Rml::Element *overlay = doc->GetElementById( "crt-overlay" );
         if( overlay == nullptr ) {

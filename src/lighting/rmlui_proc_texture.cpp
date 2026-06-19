@@ -68,25 +68,101 @@ struct strip {
     }
 };
 
-// Corner cap: the rune band turns the corner as a set of OPEN L brackets — the
-// band's outer wall (DIV_TOP), centre rule and inner wall (DIV_BOT) each bend
-// 90°, vertex at the OUTER corner, both arms running inward along the two edges.
-// The bracket therefore frames the panel interior (open toward it) and the
-// centre-rule arm meets each edge's centre rule, so the band reads as one
-// continuous channel turning the corner. Base = top-left; the decorator
-// mirrors/rotates it into the other three corners.
+// Corner piece: a distinct ornament rather than bare brackets. The rune band's
+// outer wall (DIV_TOP) and inner wall (DIV_BOT) each bend 90° (vertex at the
+// OUTER corner, arms running inward along both edges), the band is CLOSED by a
+// 45° miter joining the two wall vertices, a solid gusset block anchors the
+// extreme corner, and a nested-square medallion sits at the band centre where
+// the two edges' centre rules converge. Base = top-left; the decorator mirrors/
+// rotates it into the other three corners, so the ornament is symmetric.
 void draw_corner_rules( std::vector<std::uint8_t> &px, int W, int H )
 {
     const runic_params &cfg = runic_cfg();
     const rgba LIGHT = light_col( cfg );
     const int RING = cfg.ring, DIV_TOP = cfg.div_top, DIV_BOT = cfg.div_bot;
     const int c = ( DIV_TOP + DIV_BOT ) / 2;  // band centre
-    const int depths[] = { DIV_TOP, c, DIV_BOT };
-    for( const int d : depths ) {
-        for( int i = d; i < RING; ++i ) {
-            put( px, W, H, i, d, LIGHT );  // horizontal arm (turns along top edge)
-            put( px, W, H, d, i, LIGHT );  // vertical arm (turns along left edge)
+
+    auto fill = [&]( int x0, int y0, int x1, int y1 ) {
+        for( int y = y0; y <= y1; ++y ) {
+            for( int x = x0; x <= x1; ++x ) {
+                put( px, W, H, x, y, LIGHT );
+            }
         }
+    };
+    auto outline = [&]( int x0, int y0, int x1, int y1 ) {
+        for( int x = x0; x <= x1; ++x ) {
+            put( px, W, H, x, y0, LIGHT );
+            put( px, W, H, x, y1, LIGHT );
+        }
+        for( int y = y0; y <= y1; ++y ) {
+            put( px, W, H, x0, y, LIGHT );
+            put( px, W, H, x1, y, LIGHT );
+        }
+    };
+
+    // Band walls turning the corner: outer (DIV_TOP) and inner (DIV_BOT) L's,
+    // arms running inward to RING so they abut the edge band exactly.
+    for( int i = DIV_TOP; i < RING; ++i ) {
+        put( px, W, H, i, DIV_TOP, LIGHT );
+        put( px, W, H, DIV_TOP, i, LIGHT );
+    }
+    for( int i = DIV_BOT; i < RING; ++i ) {
+        put( px, W, H, i, DIV_BOT, LIGHT );
+        put( px, W, H, DIV_BOT, i, LIGHT );
+    }
+    // 45° miter closing the band channel at the corner.
+    for( int d = DIV_TOP; d <= DIV_BOT; ++d ) {
+        put( px, W, H, d, d, LIGHT );
+    }
+    // Solid gusset anchoring the extreme outer corner (outside the band).
+    if( DIV_TOP > 0 ) {
+        fill( 0, 0, DIV_TOP - 1, DIV_TOP - 1 );
+    }
+    // Nested-square medallion at the band centre (where the edge centre rules
+    // meet). Sized to sit inside the band; skipped if the band is too shallow.
+    const int r2 = std::min( 3, ( DIV_BOT - DIV_TOP ) / 2 );
+    if( r2 >= 1 ) {
+        outline( c - r2, c - r2, c + r2, c + r2 );
+        fill( c - 1, c - 1, c + 1, c + 1 );
+    }
+}
+
+// Close-button glyph: a bold X ENCASED in a square box, transparent elsewhere.
+// This is the whole top-right corner piece (it replaces the corner ornament, so
+// nothing else sits beneath it). Symmetric, so no orientation flip is needed.
+void draw_close_x( std::vector<std::uint8_t> &px, int W, int H )
+{
+    const runic_params &cfg = runic_cfg();
+    const rgba LIGHT = light_col( cfg );
+    const int RING = cfg.ring;
+    const int b0 = 1;            // encasement box, 1px in from the corner edges
+    const int b1 = RING - 2;
+    if( b1 - b0 < 6 ) {
+        return;
+    }
+    const int t = 2;            // line thickness (box + X)
+    // Encasement box (2px walls).
+    for( int x = b0; x <= b1; ++x ) {
+        for( int k = 0; k < t; ++k ) {
+            put( px, W, H, x, b0 + k, LIGHT );
+            put( px, W, H, x, b1 - k, LIGHT );
+        }
+    }
+    for( int y = b0; y <= b1; ++y ) {
+        for( int k = 0; k < t; ++k ) {
+            put( px, W, H, b0 + k, y, LIGHT );
+            put( px, W, H, b1 - k, y, LIGHT );
+        }
+    }
+    // The X, inset from the box walls, drawn 2px thick on both diagonals.
+    const int p = b0 + 3;
+    const int q = b1 - 3;
+    const int sz = q - p;
+    for( int i = 0; i <= sz; ++i ) {
+        put( px, W, H, p + i, p + i, LIGHT );
+        put( px, W, H, p + i + 1, p + i, LIGHT );   // ╲
+        put( px, W, H, p + i, q - i, LIGHT );
+        put( px, W, H, p + i + 1, q - i, LIGHT );   // ╱
     }
 }
 
@@ -230,9 +306,22 @@ void draw_edge( const strip &s, unsigned seed, bool dbl, int tmpl )
     const runic_params &cfg = runic_cfg();
     const int RING = cfg.ring;
     const int RGAP = cfg.rgap;         // gap between a rule and a group
-    const int lo = RING;               // keep groups clear of the corners
-    const int hi = n - 1 - RING;
-    const int usable = hi - lo;
+    const int edge_lo = RING;          // keep groups clear of the corners
+    const int edge_hi = n - 1 - RING;
+    const int full = edge_hi - edge_lo;
+    if( full <= 0 ) {
+        return;
+    }
+    // border_frac (0..100): the decoration (groups + connecting rules) covers
+    // this fraction of the usable span, CENTRED, so the edge no longer stretches
+    // a thin rule the whole way into the corners. Only at 100% do the rules tuck
+    // under the corners (0..n-1); below that they stop inside the active span and
+    // the corner-side remainder stays empty.
+    const int bf = std::max( 0, std::min( 100, cfg.border_frac ) );
+    const int usable = std::max( 1, full * bf / 100 );
+    const int lo = edge_lo + ( full - usable ) / 2;  // active-span start
+    const int hi = lo + usable;                       // active-span end
+    const bool fullspan = bf >= 100;
 
     // One of three layout templates. `tmpl` (0/1/2) forces a specific one; -1
     // falls back to the panel seed. Groups sit at fractions of the usable span;
@@ -281,13 +370,17 @@ void draw_edge( const strip &s, unsigned seed, bool dbl, int tmpl )
         last_end = a0 + gw - 1;
     }
 
-    // Rule lines fill the gaps (and run to 0 / n-1 so they tuck under the corners).
-    int prev = 0;
+    // Rule lines fill the gaps within the active span. At full span they run to
+    // 0 / n-1 so they tuck under the corners; otherwise they stop at the active
+    // span edges, leaving the corner-side remainder empty.
+    const int rule_lo = fullspan ? 0 : lo;
+    const int rule_hi = fullspan ? n - 1 : hi;
+    int prev = rule_lo;
     for( const std::pair<int, int> &sp : spans ) {
         draw_rule( s, prev, sp.first - 1 - RGAP, dbl );
         prev = sp.second + 1 + RGAP;
     }
-    draw_rule( s, prev, n - 1, dbl );
+    draw_rule( s, prev, rule_hi, dbl );
 }
 
 std::uint32_t fnv1a( const std::string &s )
@@ -332,6 +425,7 @@ void save_runic_cfg()
         j.member( "gapi", c.gapi );
         j.member( "rgap", c.rgap );
         j.member( "pitch", c.pitch );
+        j.member( "border_frac", c.border_frac );
         j.member( "unit", c.unit );
         j.member( "fill_pct", c.fill_pct );
         j.member( "frame_inset", c.frame_inset );
@@ -366,6 +460,7 @@ void load_runic_cfg()
         c.gapi = jo.get_int( "gapi", c.gapi );
         c.rgap = jo.get_int( "rgap", c.rgap );
         c.pitch = jo.get_int( "pitch", c.pitch );
+        c.border_frac = jo.get_int( "border_frac", c.border_frac );
         c.unit = jo.get_int( "unit", c.unit );
         c.fill_pct = jo.get_int( "fill_pct", c.fill_pct );
         c.frame_inset = jo.get_int( "frame_inset", c.frame_inset );
@@ -398,6 +493,15 @@ std::vector<std::uint8_t> gen_runic_frame( const std::string &variant, int &out_
     if( variant.rfind( "runic-corner", 0 ) == 0 ) {
         std::vector<std::uint8_t> px = alloc( RING, RING );
         draw_corner_rules( px, out_w, out_h );
+        return px;
+    }
+
+    // Close-button overlay (top-right corner): a transparent-backed X, drawn at
+    // the corner size so it sits over the corner ornament. Ignores trailing
+    // ":G<n>" cache-bust params like the corner art.
+    if( variant.rfind( "runic-x", 0 ) == 0 ) {
+        std::vector<std::uint8_t> px = alloc( RING, RING );
+        draw_close_x( px, out_w, out_h );
         return px;
     }
 

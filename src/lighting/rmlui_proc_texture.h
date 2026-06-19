@@ -28,6 +28,7 @@ struct runic_params {
     int gapi        = 1;    // gap glyph-box <-> divider inside a group
     int rgap        = 3;    // gap between a rule line and a group
     int pitch       = 220;  // fixed-interval template: group spacing
+    int border_frac = 100;  // % of usable span the edge decoration covers (centred)
     int unit        = 256;  // default edge length when unspecified
     int fill_pct    = 38;   // glyph cell lit threshold (0..99): higher = denser
     int frame_inset = 12;   // whole-frame inward shift on every side (F9/F10)

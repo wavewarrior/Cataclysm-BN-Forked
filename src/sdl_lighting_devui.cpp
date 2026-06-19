@@ -648,6 +648,7 @@ static void draw_runic_tab()
     changed |= dbg_slider_int( "inner gap", &c.gapi, 0, 8 );
 
     ImGui::SeparatorText( "Layout" );
+    changed |= dbg_slider_int( "edge length % (lower = shorter)", &c.border_frac, 0, 100 );
     changed |= dbg_slider_int( "rule gap", &c.rgap, 0, 16 );
     changed |= dbg_slider_int( "pitch (fixed-interval)", &c.pitch, 60, 512 );
     changed |= dbg_slider_int( "unit (default edge len)", &c.unit, 64, 512 );
