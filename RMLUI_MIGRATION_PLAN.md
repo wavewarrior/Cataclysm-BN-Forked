@@ -2180,15 +2180,24 @@ the HUD uses its own non-modal open path.
   opens passive. Rendering unchanged (still gates on `any_open()`). Tree clean (runic
   `rmlui_layer.cpp` was committed, so this no longer entangles). **EYEBALL:** HUD ON →
   world mouse (look/examine) works; open a modal over it → modal mouse still captured.
-- **Next (slice 2b):** the **multi-panel generalization** — slice 1's single `#hud-col`
-  is positioned at ONE panel's rect, so a 2nd owned panel would overwrite it. The owned
-  panels are NOT contiguous (Stats sits at index 2; Time/Needs are below Mana), so the
-  robust path is the plan's per-panel-absolute fallback: a registry of owned panels, each
-  with its own positioned doc element + bound RML var + `*_text()` producer, with
-  `sidebar_hud_position(name, rect)` targeting per panel. Add the next text panel(s) on
-  top of that (candidates: Sound/Time/Needs — reproduce content in reading order per the
-  slice-1 precedent, not cell-exact columns). Then limbs/armor/vehicle/minimap → messages
-  (coalesced bound list) → full-column flip.
+- **Slice 2b — multi-panel HUD (Sound + Needs) — DONE + BUILD-GREEN (Metal, fresh relink
+  22:00), COMMITTED `f0ee61902f`, TOGGLE OFF, EYEBALL OWED.** Generalized the HUD from one
+  positioned fragment to N: each owned panel is its own absolutely-positioned element,
+  driven by a name→element-id table (`g_hud_owned`); `owns_panel` + `sidebar_hud_position(
+  name, rect)` look up per panel, `draw_panels` passes `panel.get_name()`. (The single
+  `#hud-col` couldn't host non-contiguous panels — Mana can sit between Stats and Needs.)
+  Added Sound (`draw_stealth`) + Needs (`draw_needs_compact`) alongside Stats, each with a
+  `hud_*_text()` producer + bound model var + positioned `<div>`. Producers reproduce
+  content in reading order with simple spacing, not curses cell-exact columns (slice-1
+  precedent). **Time deferred** — its no-watch branch is a graphical sun/moon bar
+  (`draw_time_graphic`), not text; needs a non-text treatment. **EYEBALL:** toggle ON →
+  Sound/Stats/Needs render via RmlUi at their sidebar slots, values+colours matching
+  curses, rest of sidebar still curses, no overlap/gap; OFF → identical to today.
+- **Next (slice 2c+):** continue down the column. Easy text panels next (Env/weather is
+  6 rows but text; Wgt/Vol; Mana when the spell_panel predicate is on). Then the harder
+  shapes: Time (needs the sun/moon graphic as a non-text fragment), limbs/armor/vehicle,
+  minimap (`W_ALWAYS_DRAW` GPU panel — likely a transparent hole the map shows through),
+  and finally messages (coalesced bound list) → full-column coverage → default-flip.
 
 ## Load-bearing architecture facts (verified this session)
 
