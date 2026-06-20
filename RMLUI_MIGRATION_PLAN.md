@@ -54,10 +54,12 @@ options=2, **newcharacter=16 (8 slices)**, main_menu=2, worldfactory=4 sessions;
    `ranged_rmlui_enabled()` toggle live. The top-banner "ranged.cpp=0" proof is STALE
    (it predates the slices). Only the keystone number-for-number aim A/B is owed.
 2. **Tier 7 — sidebar HUD** (the 53 `draw_*` panels) — architecturally hardest. **IN
-   PROGRESS through slice 2c** (lifecycle `03bf258feb`; mouse gate 2a; multi-panel 2b;
-   **variant-aware HUD + Wgt/Vol + Mana 2c 2026-06-20, build-green, eyeball owed**). See
-   the Tier 7 progress section below. Lifecycle + variant-aware producer table now proven;
-   remaining = Time graphic, limbs/armor/vehicle, minimap, messages → full-column → flip.
+   PROGRESS through slice 2d** (lifecycle `03bf258feb`; mouse gate 2a; multi-panel 2b;
+   variant-aware HUD + Wgt/Vol + Mana 2c; **pure-text panels hint/movement/weapon/armor 2d
+   2026-06-20, build-green, eyeball owed**). 9 logical panels now have RmlUi producers. See
+   the Tier 7 progress section. **TEXT MIGRATION IS EXHAUSTED** — the rest (wind/moon icons,
+   location overmap, compass, bodygraph, time, minimap, log, val bars) need a new rendering
+   capability (slice 3, design decision), not more producers.
 3. **Tier 8 — F4 dev panel** (ImGui → RmlUi; still ImGui in `sdl_lighting_devui.cpp`).
 4. **Tier 9 — minigames** char-grid widget.
 5. **Tier 10 — RIP OUT** curses-SDL + ImGui — gated on 100% coverage (i.e. 2-4 above).
@@ -2219,11 +2221,30 @@ the HUD uses its own non-modal open path.
     draws (the user's variant), rest of sidebar curses, no overlap/gap; OFF → identical.
 - **Env/weather DEFERRED:** not in the target (custom) layout, and `draw_env_compact` (6 rows)
   vs `draw_weather_classic` are *different content*, not one panel — needs its own scoping.
-- **Next (slice 2d+):** the harder shapes — Time (sun/moon graphic as a non-text fragment),
-  limbs/armor/vehicle, minimap (`W_ALWAYS_DRAW` GPU panel — likely a transparent hole the
-  map shows through), and finally messages (coalesced bound list) → full-column coverage →
-  default-flip. Narrow/classic variants for the 2c panels: infra ready, add producers+rows
-  when a layout needs them.
+- **Slice 2d — pure-text panels — DONE + BUILD-GREEN (Metal, relink 13:07), COMMITTED, TOGGLE
+  OFF, EYEBALL OWED, 2026-06-20.** The panels that are pure text in the labels/wide layout:
+  `hud_hint` (draw_hint), `hud_movement` (draw_char_wide), `hud_weapon` (draw_weapon_labels),
+  `hud_armor` (draw_armor[_padding]). New elements hud-Hint/Movement/Weapon/Armor + vars;
+  owns the user's widget ids (+ armor_classic/"Armor"/"Hint" aliases). 10 of the column's
+  logical panels now have RmlUi producers (stats/sound/needs/wgtvol/mana/hint/movement/weapon/
+  armor — plus limbs is still curses).
+- **⛔ TEXT MIGRATION EXHAUSTED — remaining panels need a NEW CAPABILITY, not more producers
+  (this is slice 3, and a design decision).** The labels/wide layout is *icon-decorated* and
+  has graphical panels; faking them as text would REGRESS the user's visuals. Specifically:
+  - **wind, moon** — text + an animated widget **SVG icon** (wind arrow / moon disc, via
+    `draw_widget_icon` + `gfx/widgets/icons.json`). Needs RmlUi HUD icon rendering.
+  - **location** — text + an **embedded 5×5 overmap chunk** (`draw_loc_labels` minimap=true).
+  - **compass / compass_comp** — `g->mon_info(w)`: spatial creature compass drawn straight to
+    the window (not text). (`compass_simple` = the text-grid variant, if ever wanted.)
+  - **log** — `Messages::display_messages(w,…)`: draws into the window; needs a Messages
+    text/line accessor + coalescing to become a bound list.
+  - **bodygraph, time** (sun/moon arc), **map** (`draw_pixel_minimap` — GPU, `W_ALWAYS_DRAW`,
+    likely a transparent hole), **val_\* bar widgets** (Pain/Thirst/Stamina/Mana — a different
+    widget class: `make_value_widget_panel`, not native) — graphical / non-text fragments.
+  - **DECISION NEEDED for slice 3:** how the RmlUi HUD renders (a) widget SVG icons, (b) the
+    embedded overmap/minimap (transparent hole vs RmlUi-side draw), (c) bodygraph + time
+    graphics, (d) the message list. Pick an order + a rendering approach per group.
+- Narrow/classic variants for the migrated panels: infra ready, add producers+rows on demand.
 
 ## Load-bearing architecture facts (verified this session)
 
