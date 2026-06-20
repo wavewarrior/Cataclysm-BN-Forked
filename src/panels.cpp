@@ -3156,8 +3156,10 @@ std::string ( *hud_producer( const std::string &name ) )( avatar & )
 
 bool &sidebar_hud_rmlui_enabled()
 {
-    // Default OFF — opt in via the F4 panel. See rml_screen.h.
-    static bool enabled = false;
+    // Default ON (Tier 7 Phase-1 MVP flip, 2026-06-20): the flex-column HUD covers every
+    // text panel; remaining slots (minimap/bodygraph/full-compass/val_*) show visible
+    // [name] placeholders until phase 2. Toggle via the F4 panel for an A/B vs curses.
+    static bool enabled = true;
     return enabled;
 }
 
