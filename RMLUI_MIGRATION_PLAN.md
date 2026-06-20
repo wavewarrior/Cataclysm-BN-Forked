@@ -56,10 +56,11 @@ options=2, **newcharacter=16 (8 slices)**, main_menu=2, worldfactory=4 sessions;
 2. **Tier 7 — sidebar HUD** (the 53 `draw_*` panels) — architecturally hardest. **IN
    PROGRESS through slice 2d** (lifecycle `03bf258feb`; mouse gate 2a; multi-panel 2b;
    variant-aware HUD + Wgt/Vol + Mana 2c; **pure-text panels hint/movement/weapon/armor 2d
-   2026-06-20, build-green, eyeball owed**). 9 logical panels now have RmlUi producers. See
-   the Tier 7 progress section. **TEXT MIGRATION IS EXHAUSTED** — the rest (wind/moon icons,
-   location overmap, compass, bodygraph, time, minimap, log, val bars) need a new rendering
-   capability (slice 3, design decision), not more producers.
+   2026-06-20, eyeball CONFIRMED**). 9 logical panels migrated + verified in-game. See the
+   Tier 7 progress section + the **slice 3–10 roadmap** there. Re-scoped: nearly all remaining
+   panels ARE text-reproducible (only the pixel minimap needs graphics; icon panels need one
+   reusable proc-texture capability). Decisions locked: minimap = render-to-texture, compass =
+   monospaced grid. Key risk = a monospace font for the grid panels.
 3. **Tier 8 — F4 dev panel** (ImGui → RmlUi; still ImGui in `sdl_lighting_devui.cpp`).
 4. **Tier 9 — minigames** char-grid widget.
 5. **Tier 10 — RIP OUT** curses-SDL + ImGui — gated on 100% coverage (i.e. 2-4 above).
@@ -2228,23 +2229,58 @@ the HUD uses its own non-modal open path.
   owns the user's widget ids (+ armor_classic/"Armor"/"Hint" aliases). 10 of the column's
   logical panels now have RmlUi producers (stats/sound/needs/wgtvol/mana/hint/movement/weapon/
   armor — plus limbs is still curses).
-- **⛔ TEXT MIGRATION EXHAUSTED — remaining panels need a NEW CAPABILITY, not more producers
-  (this is slice 3, and a design decision).** The labels/wide layout is *icon-decorated* and
-  has graphical panels; faking them as text would REGRESS the user's visuals. Specifically:
-  - **wind, moon** — text + an animated widget **SVG icon** (wind arrow / moon disc, via
-    `draw_widget_icon` + `gfx/widgets/icons.json`). Needs RmlUi HUD icon rendering.
-  - **location** — text + an **embedded 5×5 overmap chunk** (`draw_loc_labels` minimap=true).
-  - **compass / compass_comp** — `g->mon_info(w)`: spatial creature compass drawn straight to
-    the window (not text). (`compass_simple` = the text-grid variant, if ever wanted.)
-  - **log** — `Messages::display_messages(w,…)`: draws into the window; needs a Messages
-    text/line accessor + coalescing to become a bound list.
-  - **bodygraph, time** (sun/moon arc), **map** (`draw_pixel_minimap` — GPU, `W_ALWAYS_DRAW`,
-    likely a transparent hole), **val_\* bar widgets** (Pain/Thirst/Stamina/Mana — a different
-    widget class: `make_value_widget_panel`, not native) — graphical / non-text fragments.
-  - **DECISION NEEDED for slice 3:** how the RmlUi HUD renders (a) widget SVG icons, (b) the
-    embedded overmap/minimap (transparent hole vs RmlUi-side draw), (c) bodygraph + time
-    graphics, (d) the message list. Pick an order + a rendering approach per group.
-- Narrow/classic variants for the migrated panels: infra ready, add producers+rows on demand.
+- **EYEBALL CONFIRMED 2026-06-20** — all 9 migrated panels (stats/sound/needs/wgtvol/mana/
+  hint/movement/weapon/armor) render correctly in-game on the user's custom widget layout.
+
+### Tier 7 — slice 3+ ROADMAP (the rest of the column)
+
+Exploration (2026-06-20) overturned the earlier "text exhausted" claim: **almost every
+remaining panel is text-reproducible**; only the pixel minimap needs true graphics, and the
+icon-decorated panels need ONE reusable capability. Render-mechanism verdicts (file:line):
+- TEXT (mvwprintz/putch glyphs → reproduce as producer ± monospaced grid): limbs
+  (`draw_limb_wide`), location text (`draw_loc_labels`), **overmap chunk** (`draw_overmap_chunk`
+  panels.cpp:434 — 5×5 single-char colored grid), **time graphic** (`draw_time_graphic`
+  panels.cpp:1188 — 14-char glyph bar), **bodygraph** (`make_bodygraph_widget_panel`
+  panels.cpp:3384 — labels + text HP bars), **value widgets** (`make_value_widget_panel`
+  panels.cpp:3266 — `get_hp_bar` text bars / numbers), vehicle (`draw_veh_padding`),
+  env/weather, **compass** (`g->mon_info` — spatial, reproduce as monospaced grid per
+  decision), **log** (`Messages::recent_messages()` messages.h:25 → bound list).
+- TEXT+ICON (reusable capability): wind (`render_wind` arrow), moon (`draw_moon_wide` disc),
+  value-widget icons. **Capability is cheap** — the RmlUi RenderInterface already loads
+  file/procedural textures (`LoadTexture` rmlui_render_interface.cpp:724; runic frame uses
+  `image()` decorators), so we add a `?proc:widget-<id>` variant that rasterizes the widget
+  SVG (`IMG_LoadSizedSVG_IO`, copy from widget_icon.cpp) tinted by colour, shown via `<img>`.
+- GRAPHICS (the only one): pixel minimap (`pixel_minimap::render` pixel_minimap.cpp:311 — SDL
+  geometry to framebuffer). **DECIDED: render-to-texture** (offscreen GPU texture → `<img>`),
+  not a transparent hole.
+
+**KEY RISK (gates the grid slices):** monospaced alignment. The overmap chunk, time bar,
+bodygraph and compass are column-aligned glyph grids; faithful reproduction needs a
+**monospace font face in RmlUi** + `white-space: pre`. First task of slice 4 = confirm/load a
+monospace TTF for `.hud-panel` grids (check what font RmlUi currently loads); if none, that's
+a prerequisite. Non-grid text panels are unaffected.
+
+Slices (ordered cheap-text → capability → graphics; each: producers + table rows + `<div>` +
+model vars, build-green, eyeball, commit — same shape as 2c/2d):
+1. **Slice 3 — easy text:** limbs, location (text part), vehicle, env/weather. Pure producers.
+2. **Slice 4 — monospaced grids:** overmap chunk (folds into location), time graphic,
+   bodygraph (+temp/encumb/status dims). PREREQ: monospace font (see risk above).
+3. **Slice 5 — value widgets:** own `val_*` names (Pain/Thirst/Stamina/Mana — note "Mana"=
+   `val_mana`, distinct from native `mana*`). Producers reproduce label + `get_hp_bar`/number.
+   New: `owns_panel`/producers must handle the value-widget class. Icons added in slice 6.
+4. **Slice 6 — icon capability + icon panels:** `?proc:widget-<id>` SVG rasterizer + `<img>`
+   binding (icon id + colour synced from C++); apply to wind, moon, value-widget icons →
+   full parity for icon-decorated panels.
+5. **Slice 7 — log/messages:** extend `recent_messages()` to carry `nc_color` (+ coalesce
+   count), bind a list in the fragment.
+6. **Slice 8 — compass:** reproduce `mon_info` as a monospaced 3×3 direction grid + creature
+   glyphs (uses `visible_count_by_dir`); covers compass + compass_comp.
+7. **Slice 9 — pixel minimap:** render `pixel_minimap` into an offscreen GPU texture; bind as
+   `<img>` positioned at the map panel's slot. The one graphics slice.
+8. **Slice 10 — coverage audit + flip-readiness:** verify every panel in the user's layout
+   (and built-in classic/narrow/labels) is owned; document remaining curses-only edge panels.
+   The actual `draw_*` builder deletion is the **Tier 10 rip-out** (separate, gated on 100%).
+- Narrow/classic variants for migrated panels: infra ready, add producers+rows on demand.
 
 ## Load-bearing architecture facts (verified this session)
 
