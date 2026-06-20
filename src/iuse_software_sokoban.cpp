@@ -12,9 +12,12 @@
 #include "cursesdef.h"
 #include "fstream_utils.h"
 #include "input.h"
+#include "minigame_rml.h"
 #include "output.h"
 #include "path_info.h"
 #include "point.h"
+#include "rml_screen.h"
+#include "string_formatter.h"
 #include "translations.h"
 #include "ui_manager.h"
 
@@ -241,7 +244,57 @@ int sokoban_game::start_game()
     ctxt.register_action( "UNDO" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
 
+    // Tier 9: render through the shared char-grid RmlUi widget when enabled.
+    minigame_rml::open( minigames_rmlui_enabled(), ctxt );
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( minigame_rml::active() ) {
+            minigame_rml::set_title(
+                colorize( string_format( _( "Sokoban  Level: %d/%d  Score: %d  Moves: %d  Total: %d" ),
+                                         iCurrentLevel + 1, iNumLevel, iScore, iMoves, iTotalMoves ),
+                          c_white ) );
+            const int maxx = mLevelInfo[iCurrentLevel]["MaxLevelX"];
+            const int maxy = mLevelInfo[iCurrentLevel]["MaxLevelY"];
+            std::vector<std::string> grid;
+            grid.reserve( maxy );
+            for( int y = 0; y < maxy; y++ ) {
+                std::string row;
+                const auto rowit = mLevel.find( y );
+                for( int x = 0; x < maxx; x++ ) {
+                    std::string tile = " ";
+                    if( rowit != mLevel.end() ) {
+                        const auto cellit = rowit->second.find( x );
+                        if( cellit != rowit->second.end() && !cellit->second.empty() ) {
+                            tile = cellit->second;
+                        }
+                    }
+                    // RML markup is foreground-only, so the curses red-background goal
+                    // tiles become distinct foreground colours; walls are '#' (the curses
+                    // box-drawing connection glyphs don't port to the RmlUi font).
+                    if( tile == "#" ) {
+                        row += colorize( "#", c_white );
+                    } else if( tile == "@" ) {
+                        row += colorize( "@", c_light_cyan );
+                    } else if( tile == "+" ) {
+                        row += colorize( "@", c_light_green );
+                    } else if( tile == "$" ) {
+                        row += colorize( "$", c_brown );
+                    } else if( tile == "*" ) {
+                        row += colorize( "*", c_green );
+                    } else if( tile == "." ) {
+                        row += colorize( ".", c_red );
+                    } else {
+                        row += ' ';
+                    }
+                }
+                grid.push_back( row );
+            }
+            minigame_rml::set_grid( grid );
+            minigame_rml::set_footer(
+                _( "<+> next   <-> prev   <r>eset   <u>ndo move   <q>uit" ) );
+            minigame_rml::sync();
+            return;
+        }
         werase( w_sokoban );
         draw_border( w_sokoban, BORDER_COLOR, _( "Sokoban" ), hilite( c_white ) );
 
@@ -305,6 +358,7 @@ int sokoban_game::start_game()
             dir = vec->xy().raw();
             bMoved = true;
         } else if( action == "QUIT" ) {
+            minigame_rml::close();
             return iScore;
         } else if( action == "UNDO" ) {
             point pl_new;

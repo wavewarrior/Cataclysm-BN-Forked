@@ -11,8 +11,10 @@
 #include "color.h"
 #include "cursesdef.h"
 #include "input.h"
+#include "minigame_rml.h"
 #include "output.h"
 #include "point.h"
+#include "rml_screen.h"
 #include "rng.h"
 #include "string_formatter.h"
 #include "string_input_popup.h"
@@ -176,7 +178,61 @@ int minesweeper_game::start_game()
 
     bool started = false;
     bool boom = false;
+
+    // Tier 9: render through the shared char-grid RmlUi widget when enabled.
+    minigame_rml::open( minigames_rmlui_enabled(), ctxt );
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( minigame_rml::active() ) {
+            minigame_rml::set_title( colorize( _( "Minesweeper" ), c_white ) );
+            std::vector<std::string> grid;
+            if( started ) {
+                grid.reserve( level.y );
+                for( int y = 0; y < level.y; ++y ) {
+                    std::string row;
+                    for( int x = 0; x < level.x; ++x ) {
+                        char ch = '?';
+                        nc_color col = c_red;
+                        const int num = mLevel[y][x];
+                        switch( mLevelReveal[y][x] ) {
+                            case unknown:
+                                ch = ( boom && num == bomb ) ? '*' : '#';
+                                col = ( boom && num == bomb ) ? c_red : c_white;
+                                break;
+                            case flag:
+                                ch = '!';
+                                col = ( boom && num == bomb ) ? c_red : c_yellow;
+                                break;
+                            case seen:
+                                if( num == bomb ) {
+                                    ch = '*';
+                                    col = c_red;
+                                } else if( num == 0 ) {
+                                    ch = ' ';
+                                    col = aColors[0];
+                                } else if( num >= 1 && num <= 8 ) {
+                                    ch = '0' + num;
+                                    col = aColors[num];
+                                }
+                                break;
+                        }
+                        // Cursor: RML markup is foreground-only (no curses inverse), so the
+                        // selected cell is forced to a distinct bright colour.
+                        if( !boom && pl == point( x, y ) ) {
+                            col = c_light_green;
+                        }
+                        row += ( ch == ' ' && !( !boom && pl == point( x, y ) ) )
+                               ? std::string( " " )
+                               : colorize( std::string( 1, ch ), col );
+                    }
+                    grid.push_back( row );
+                }
+            }
+            minigame_rml::set_grid( grid );
+            minigame_rml::set_footer( _( "<n>ew level   <f>lag   <q>uit" ) );
+            minigame_rml::sync();
+            return;
+        }
         werase( w_minesweeper_border );
         draw_border( w_minesweeper_border );
 
@@ -334,6 +390,7 @@ int minesweeper_game::start_game()
         }
     } while( action != "QUIT" );
 
+    minigame_rml::close();
     return iScore;
 }
 

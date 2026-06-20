@@ -66,7 +66,9 @@ options=2, **newcharacter=16 (8 slices)**, main_menu=2, worldfactory=4 sessions;
    **§8 flip committed `8c6a66d7e6` 2026-06-20**: F4 opens the RmlUi `devui.rml` doc; ImGui retired
    from the live composite (`devui_visible()` flag; `imgui_layer::visible()` never set → `active()`
    false). `imgui_layer` module stays compiled for the dormant uilist pilot; full deletion = Tier 10.
-4. **Tier 9 — minigames** char-grid widget.
+4. ~~**Tier 9 — minigames** char-grid widget.~~ **DONE (eyeball owed)** — all 5 grid games
+   (lightson/snake/sokoban/minesweeper/kitten) render through ONE shared char-grid doc
+   (`minigame.rml` + `src/minigame_rml.*`), one toggle. Slice 1 `c21e4bb6ae`; slice 2 (other 4) committed.
 5. **Tier 10 — RIP OUT** curses-SDL + ImGui — gated on 100% coverage (i.e. 2-4 above).
 
 **EYEBALL DEBT (committed, toggle OFF, user A/B owed):** most of the above DONE set
@@ -2658,9 +2660,32 @@ modal harness fits. One toggle (`minigames_rmlui_enabled()`) lights all five.
     arrows move the cursor, space/5 toggles + neighbours, win → "Congratulations" popup, r resets, q
     quits; toggle OFF → identical curses game. **Make-or-break:** monospace cell alignment under
     `white-space:pre` (proven by help's Movement grid) + the grid rebuilds each frame from state.
-  - **Next slices:** snake / sokoban / minesweeper / kitten — each ~one producer (game-state→grid
-    strings) + open/close wiring; the widget is done. snake/minesweeper are plain grids; sokoban has
-    tile glyphs; kitten is a scattered-glyph field (still a grid).
+- **Slice 2 — the other 4 games (snake / sokoban / minesweeper / kitten) — CODE-COMPLETE +
+  BUILD-GREEN (Metal, fresh relink 21:19, all 4 TUs + binary fresh), TOGGLE OFF, EYEBALL OWED
+  (Metal + D3D12), COMMITTED pending, 2026-06-20.** The slice-1 widget served all four unchanged;
+  each is just a game-state→grid producer + open/close wiring (render-behind-frozen-API).
+  - **snake** — full-screen interior grid (rows 1..H-2): snake head `#` white / body grey, fruit
+    `*` red; live + a GAME-OVER screen (title "GAME OVER" + score; drops the curses dead-snake ASCII
+    art — semantic rewrite). close on QUIT + end.
+  - **sokoban** — `mLevel[y][x]` glyphs (walls `#`, package `$` brown, on-goal `*` green, goal `.`
+    red, player `@`); **walls render as `#`** (the curses box-drawing connection glyphs / red-bg goal
+    tiles don't port to the RmlUi font — foreground-only, fidelity note). Title carries level/score/
+    moves; footer the keys.
+  - **minesweeper** — `level.x×level.y` grid by reveal state (unknown `#` / flag `!` yellow / seen
+    number coloured by `aColors` / bomb `*` red); **cursor cell forced bright green** (no curses
+    inverse). uilist difficulty + string_input bomb-count are already Tier-0 (stack over). close at end.
+  - **kitten** — state-machined (instructions/main/bogus_message/end_animation); new `show_rml()`
+    mirrors `show()`: field rows 2..rfkLINES (separator `_` + robot/kitten/bogus glyphs from
+    `rfkscreen`) + per-state title/footer (bogus message → footer; end → "<3<3<3"). The game loop is
+    in the ctor → a throwaway `input_context` drives the tick; close after the loop.
+  - **EYEBALL CHECK (user, A/B via F4 "minigames", Metal + D3D12):** each game with the toggle ON
+    renders as the centred RmlUi panel — snake moves/eats/dies, sokoban pushes packages + level
+    switch, minesweeper reveals/flags/cursor-moves + win/boom, kitten instructions→move→bump
+    message→find-kitten; toggle OFF → identical curses games. Watch the noted fidelity simplifications
+    (sokoban walls, minesweeper/kitten cursor colour, snake game-over art).
+- **★ TIER 9 COMPLETE (2026-06-20, eyeball owed).** All 5 grid minigames render through the one shared
+  char-grid widget (`minigame.rml` + `minigame_rml`), one toggle. With the rip-out, curses can't draw
+  them — this is the path that survives. Gate-blocker for Tier 10 cleared (pending eyeball).
 
 ## Load-bearing architecture facts (verified this session)
 

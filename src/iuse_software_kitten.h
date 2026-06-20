@@ -26,6 +26,7 @@ class robot_finds_kitten
         void draw_robot() const;
         void draw_kitten() const;
         void show() const;
+        void show_rml() const;
         void process_input();
         catacurses::window bkatwin;
         catacurses::window w;

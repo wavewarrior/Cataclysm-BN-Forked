@@ -12,8 +12,10 @@
 #include "color.h"
 #include "cursesdef.h"
 #include "input.h"
+#include "minigame_rml.h"
 #include "output.h"
 #include "point.h"
+#include "rml_screen.h"
 #include "rng.h"
 #include "string_formatter.h"
 #include "translations.h"
@@ -127,7 +129,36 @@ int snake_game::start_game()
     ctxt.register_action( "QUIT" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
 
+    // Tier 9: render through the shared char-grid RmlUi widget when enabled.
+    minigame_rml::open( minigames_rmlui_enabled(), ctxt );
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( minigame_rml::active() ) {
+            minigame_rml::set_title( colorize( _( "S N A K E" ), c_white ) + "   " +
+                                     colorize( string_format( _( "Score: %d" ), iScore ), c_white ) );
+            const point head( vSnakeBody.back().second, vSnakeBody.back().first );
+            std::vector<std::string> grid;
+            grid.reserve( FULL_SCREEN_HEIGHT - 2 );
+            for( int y = 1; y <= FULL_SCREEN_HEIGHT - 2; y++ ) {
+                std::string row;
+                for( int x = 1; x <= FULL_SCREEN_WIDTH - 2; x++ ) {
+                    if( x == iFruitPosX && y == iFruitPosY ) {
+                        row += colorize( "*", c_light_red );
+                    } else if( x == head.x && y == head.y ) {
+                        row += colorize( "#", c_white );
+                    } else if( mSnakeBody[y][x] ) {
+                        row += colorize( "#", c_light_gray );
+                    } else {
+                        row += ' ';
+                    }
+                }
+                grid.push_back( row );
+            }
+            minigame_rml::set_grid( grid );
+            minigame_rml::set_footer( _( "<q>uit" ) );
+            minigame_rml::sync();
+            return;
+        }
         werase( w_snake );
         print_header( w_snake );
         for( auto it = vSnakeBody.begin(); it != vSnakeBody.end(); ++it ) {
@@ -229,12 +260,21 @@ int snake_game::start_game()
                 iDirX = 1;
             }
         } else if( action == "QUIT" ) {
+            minigame_rml::close();
             return iScore;
         }
 
     } while( true );
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( minigame_rml::active() ) {
+            minigame_rml::set_title( colorize( _( "GAME OVER" ), c_light_red ) );
+            minigame_rml::set_grid( { colorize( string_format( _( "TOTAL SCORE: %d" ), iScore ),
+                                                c_yellow ) } );
+            minigame_rml::set_footer( _( "Press 'q' or ESC to exit." ) );
+            minigame_rml::sync();
+            return;
+        }
         snake_over( w_snake, iScore );
     } );
     do {
@@ -245,5 +285,6 @@ int snake_game::start_game()
         }
     } while( true );
 
+    minigame_rml::close();
     return iScore;
 }

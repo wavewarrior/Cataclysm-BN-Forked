@@ -3,9 +3,12 @@
 #include <cstdlib>  // Needed for rand()
 #include <vector>
 
+#include "color.h"
 #include "input.h"
+#include "minigame_rml.h"
 #include "output.h"
 #include "posix_time.h"
+#include "rml_screen.h"
 #include "rng.h"
 #include "translations.h"
 #include "ui_manager.h"
@@ -313,8 +316,18 @@ robot_finds_kitten::robot_finds_kitten()
     ui.mark_resize();
 
     ui.on_redraw( [this]( const ui_adaptor & ) {
+        if( minigame_rml::active() ) {
+            show_rml();
+            return;
+        }
         show();
     } );
+
+    // Tier 9: render through the shared char-grid RmlUi widget when enabled. The
+    // 16ms tick just needs an input_context; the game's own contexts live in
+    // show()/process_input().
+    input_context tick_ctxt( "IUSE_SOFTWARE_KITTEN" );
+    minigame_rml::open( minigames_rmlui_enabled(), tick_ctxt );
 
     /* Now the fun begins. */
     current_ui_state = ui_state::instructions;
@@ -322,6 +335,67 @@ robot_finds_kitten::robot_finds_kitten()
         ui_manager::redraw();
         process_input();
     }
+
+    minigame_rml::close();
+}
+
+// Tier 9 — RmlUi rendering of the field + per-state status, mirroring show().
+void robot_finds_kitten::show_rml() const
+{
+    std::vector<std::string> grid;
+    if( current_ui_state != ui_state::instructions ) {
+        // Field rows 2..rfkLINES-1 (row 2 = the separator; objects sit at y>=3).
+        for( int y = 2; y < rfkLINES; y++ ) {
+            std::string row;
+            for( int x = 0; x < rfkCOLS; x++ ) {
+                if( y == 2 ) {
+                    row += colorize( "_", c_dark_gray );
+                    continue;
+                }
+                const int v = rfkscreen[x][y];
+                if( v == EMPTY ) {
+                    row += ' ';
+                } else if( v == ROBOT ) {
+                    row += colorize( std::string( 1, static_cast<char>( robot.character ) ), robot.color );
+                } else if( v == KITTEN ) {
+                    row += colorize( std::string( 1, static_cast<char>( kitten.character ) ), kitten.color );
+                } else {
+                    const kobject &b = bogus[v - 2];
+                    row += colorize( std::string( 1, static_cast<char>( b.character ) ), b.color );
+                }
+            }
+            grid.push_back( row );
+        }
+    }
+    std::string title;
+    std::string footer;
+    switch( current_ui_state ) {
+        case ui_state::instructions:
+            title = colorize( _( "robotfindskitten" ), c_white );
+            footer = _( "You are robot (#).  Find kitten among the other objects — touch each to "
+                        "check.  Press any key to start, or the quit key to exit." );
+            break;
+        case ui_state::main:
+            title = colorize( _( "robotfindskitten — find kitten!" ), c_white );
+            break;
+        case ui_state::invalid_input:
+            title = colorize( _( "Invalid command: use the direction keys." ), c_white );
+            break;
+        case ui_state::bogus_message:
+            title = colorize( _( "robotfindskitten" ), c_white );
+            footer = getmessage( bogus_message_idx );
+            break;
+        case ui_state::end_animation:
+            title = colorize( _( "You found kitten!  Way to go, robot!" ), c_light_red );
+            grid.push_back( colorize( "<3<3<3", c_light_red ) );
+            break;
+        case ui_state::exit:
+            break;
+    }
+    minigame_rml::set_title( title );
+    minigame_rml::set_grid( grid );
+    minigame_rml::set_footer( footer );
+    minigame_rml::sync();
 }
 
 void robot_finds_kitten::show() const
