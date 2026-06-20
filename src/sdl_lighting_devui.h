@@ -128,4 +128,9 @@ namespace sdl_lighting_devui
 // imgui_layer dev-UI callback; reads the shared globals declared above.
 void draw();
 
+// Tier 8 slice 1: per-frame driver for the parallel RmlUi dev-panel preview.
+// Pass whether the ImGui F4 panel is visible; opens/syncs/closes the RmlUi doc
+// based on that + the in-panel "RmlUi dev panel (preview)" checkbox.
+void rml_tick( bool imgui_visible );
+
 }  // namespace sdl_lighting_devui

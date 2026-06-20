@@ -5,6 +5,8 @@
 
 #include "sdl_lighting_devui.h"
 
+#include <RmlUi/Core.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -30,6 +32,8 @@
 #include "mapdata.h"
 #include "ui.h"
 #include "rml_screen.h"
+#include "path_info.h"
+#include "panels.h"
 #include "weather.h"
 #include "worldfactory.h"
 
@@ -415,6 +419,62 @@ static void draw_animation_tab()
     dbg_slider( "ranged tilt (deg)", &t.attack_tilt_ranged_deg, -15.f, 15.f );
 }
 
+// ── Tier 8 slice 1: parallel RmlUi dev-panel preview ────────────────────────
+// A standalone RmlUi document that mirrors part of this ImGui panel, behind a
+// preview toggle. ImGui stays primary + fully live; this proves form-control
+// two-way data-binding (checkbox -> *_rmlui_enabled() bool, bound by pointer).
+// Driven per-frame by rml_tick() from sdl_render_frame; opens when (F4 visible &&
+// preview on), closes otherwise. Slice 2 expands it toward full parity.
+namespace
+{
+Rml::ElementDocument *g_devui_doc = nullptr;
+Rml::DataModelHandle g_devui_model;
+bool g_devui_preview = false;   // the ImGui "RmlUi dev panel (preview)" checkbox
+
+void devui_rml_open()
+{
+    if( g_devui_doc != nullptr || !rmlui_layer::ready() ) {
+        return;
+    }
+    Rml::Context *ctx = rmlui_layer::context();
+    if( ctx == nullptr ) {
+        return;
+    }
+    Rml::DataModelConstructor c = ctx->CreateDataModel( "devui" );
+    if( !c ) {
+        return;
+    }
+    // Bind the screen-toggle flags BY POINTER: data-checked two-way binds each
+    // checkbox to the real static bool, so a click toggles the live screen and
+    // ImGui-side changes reflect here (rml_tick DirtyAllVariables each frame).
+    c.Bind( "uilist", &uilist_rmlui_enabled() );
+    c.Bind( "query_popup", &query_popup_rmlui_enabled() );
+    c.Bind( "string_input", &string_input_rmlui_enabled() );
+    c.Bind( "sidebar_hud", &sidebar_hud_rmlui_enabled() );
+    g_devui_model = c.GetModelHandle();
+    Rml::ElementDocument *doc =
+        rmlui_layer::open_document( PATH_INFO::datadir() + "gui/devui.rml", false );
+    if( doc == nullptr ) {
+        ctx->RemoveDataModel( "devui" );
+        return;
+    }
+    g_devui_doc = doc;
+}
+
+void devui_rml_close()
+{
+    if( g_devui_doc == nullptr ) {
+        return;
+    }
+    rmlui_layer::close_document( g_devui_doc );
+    if( Rml::Context *ctx = rmlui_layer::context() ) {
+        ctx->RemoveDataModel( "devui" );
+    }
+    g_devui_doc = nullptr;
+    g_devui_model = Rml::DataModelHandle();
+}
+} // namespace
+
 // F4 "RmlUi" tab: global UI scale, CRT post-effects, and the per-screen
 // migration toggles (grouped by screen category in collapsing headers).
 static void draw_rmlui_tab()
@@ -494,6 +554,12 @@ static void draw_rmlui_tab()
         // sidebar stays curses.
         ImGui::Checkbox( "sidebar HUD (stats)", &sidebar_hud_rmlui_enabled() );
     }
+
+    // Tier 8 slice 1: open the parallel RmlUi dev-panel preview (this same toggle
+    // surface, rendered through RmlUi). ImGui stays primary; this proves the
+    // form-control binding foundation. Shows top-left while F4 is open.
+    ImGui::Separator();
+    ImGui::Checkbox( "RmlUi dev panel (preview)", &g_devui_preview );
 }
 
 // F4 "Diagnostics" tab: the former top-left curses HUD, now read-only ImGui text.
@@ -740,6 +806,22 @@ void draw()
     ImGui::EndTabBar();
 
     ImGui::End();
+}
+
+// Per-frame driver for the parallel RmlUi dev-panel preview (called from
+// sdl_render_frame). Opens the doc when F4 is visible AND the preview checkbox is on,
+// closes it otherwise; while open, dirty all bound vars so ImGui-side toggle changes
+// reflect in the RmlUi checkboxes.
+void rml_tick( bool imgui_visible )
+{
+    if( imgui_visible && g_devui_preview ) {
+        devui_rml_open();
+        if( g_devui_doc != nullptr ) {
+            g_devui_model.DirtyAllVariables();
+        }
+    } else {
+        devui_rml_close();
+    }
 }
 
 }  // namespace sdl_lighting_devui

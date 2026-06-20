@@ -1,0 +1,56 @@
+/* Tier 8 slice 1 — RmlUi dev-panel preview styling. An opaque box pinned top-left so it
+   doesn't fight the ImGui F4 window. Interactive doc (mouse). RmlUi form controls are
+   invisible without styling — input.checkbox + the :checked pseudo give a visible box
+   that fills green when on (the data_binding/invader sample idiom, sans sprite sheet). */
+
+body {
+    width: 100%;
+    height: 100%;
+}
+
+.devui-panel {
+    position: absolute;
+    left: 1em;
+    top: 1em;
+    width: 320dp;
+    padding: 1em;
+    background-color: #1e1e1ef0;
+    border: 1dp #555555;
+    color: #dddddd;
+    font-size: 15dp;
+}
+
+.devui-title {
+    font-size: 17dp;
+    color: #ffffff;
+    margin-bottom: 0.5em;
+}
+
+.devui-section {
+    color: #8ab4f8;
+    margin-top: 0.6em;
+    margin-bottom: 0.2em;
+}
+
+.devui-row {
+    display: block;
+    margin-bottom: 0.15em;
+}
+
+input.checkbox {
+    width: 1.1em;
+    height: 1.1em;
+    border: 1dp #888888;
+    background-color: #141414;
+    vertical-align: -0.2em;
+    margin-right: 0.4em;
+}
+
+input.checkbox:hover {
+    border-color: #cccccc;
+}
+
+input.checkbox:checked {
+    background-color: #5fdd5f;
+    border-color: #5fdd5f;
+}

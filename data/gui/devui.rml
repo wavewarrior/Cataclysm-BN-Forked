@@ -1,0 +1,25 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="devui.rcss"/>
+</head>
+<body data-model="devui">
+    <!-- Tier 8 slice 1 — RmlUi dev-panel FOUNDATION (parallel preview; the ImGui F4
+         panel stays primary + fully live). Proves form-control two-way data-binding:
+         each <input type="checkbox" data-checked="..."> binds to a *_rmlui_enabled() bool
+         (bound BY POINTER in C++), so clicking a box toggles the real screen live, and
+         ImGui-side changes reflect back here (C++ DirtyAllVariables each tick). Slice 2
+         expands to the full ~35-toggle registry + the first <input type="range"> slider;
+         later slices port the lighting tuning controls; finally F4 opens this and ImGui
+         is retired (§8). -->
+    <div class="devui-panel">
+        <div class="devui-title">RmlUi dev panel — preview (slice 1)</div>
+        <div class="devui-section">Core widgets</div>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="uilist"/> uilist</label>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="query_popup"/> query_popup</label>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="string_input"/> string_input</label>
+        <div class="devui-section">Sidebar</div>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="sidebar_hud"/> sidebar HUD</label>
+    </div>
+</body>
+</rml>

@@ -96,6 +96,11 @@ auto begin_frame( lighting::render_state &rs ) -> std::optional<lighting::frame_
         rmlui_layer::init( rs.device() );
     }
 
+    // Tier 8 slice 1: drive the parallel RmlUi dev-panel preview (opens only when the
+    // F4 ImGui panel is visible AND its preview checkbox is on). Renders via the normal
+    // RmlUi composite pass; ImGui stays primary.
+    sdl_lighting_devui::rml_tick( imgui_layer::visible() );
+
     rs.tile_batcher().begin_frame();
     rs.ui_batcher().begin_frame();
     rs.fonts().begin_frame();

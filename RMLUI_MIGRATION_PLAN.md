@@ -2402,6 +2402,42 @@ the single flex-column container + whole-sidebar suppression gate; (c) wire the 
 accessors; (d) placeholder everything else; (e) when playable, rip out curses; (f) phase 2
 design + icons + minimap RTT + RCSS animation.
 
+### Tier 8 progress (F4 dev panel → RmlUi)
+
+**Approach (user GO 2026-06-20, "start now / parallel preview"):** build an RmlUi dev-panel
+in PARALLEL behind a preview toggle inside the existing ImGui F4 — ImGui stays primary + fully
+live (zero tuning loss) until the RmlUi version reaches full parity, THEN F4 opens the RmlUi
+doc and `imgui_layer` is retired from the composite pass (§8). Migrate lowest-risk first (the
+screen-toggle registry — pure checkboxes), then the lighting tuning controls section by section.
+**Scope reality:** the F4 panel is ONE window, ~7 tabs, 51 checkboxes + 3 float / 2 int sliders
++ 3 combos + 3 colour pickers + 9 buttons (`sdl_lighting_devui.cpp`, 745 LOC). Foundation needed:
+RmlUi bound FORM CONTROLS (`<input type="checkbox" data-checked>` + `<input type="range"
+data-value>`) — proven in RmlUi's own samples, compiled into rmlui_core, but UNUSED in this
+codebase until now.
+
+- **Slice 1 — form-control foundation + preview lifecycle — CODE-COMPLETE + BUILD-GREEN (Metal,
+  fresh relink 18:43, devui.o + sdl_render_frame.o fresh), EYEBALL OWED (Metal + D3D12),
+  UNCOMMITTED, 2026-06-20.** Proves RmlUi checkbox two-way data-binding end-to-end on a small set.
+  - `data/gui/devui.{rml,rcss}` — model `devui`, interactive doc (top-left box). 4 checkboxes
+    (uilist / query_popup / string_input / sidebar HUD) bound `data-checked` to their
+    `*_rmlui_enabled()` bools. RCSS styles `input.checkbox` + `:checked` (green fill) — form
+    controls are invisible without styling (invader/data_binding sample idiom, no sprite sheet).
+  - `sdl_lighting_devui.cpp` — `#include <RmlUi/Core.h>` + path_info/panels; anon-namespace
+    `g_devui_doc`/`g_devui_model`/`g_devui_preview` + `devui_rml_open/close` (bind bools BY
+    POINTER → two-way) + `rml_tick(bool imgui_visible)` (open when F4 visible && preview on, else
+    close; DirtyAllVariables each frame so ImGui-side toggles reflect). ImGui checkbox "RmlUi dev
+    panel (preview)" added to the RmlUi tab. ImGui path otherwise UNTOUCHED.
+  - `sdl_render_frame.cpp` — calls `rml_tick(imgui_layer::visible())` each frame after rmlui init.
+  - **EYEBALL CHECK (user, A/B, Metal + D3D12):** open F4 → RmlUi tab → check "RmlUi dev panel
+    (preview)" → a top-left RmlUi box appears with 4 checkboxes whose state matches the ImGui
+    checkboxes; clicking an RmlUi box toggles the real screen live AND the ImGui checkbox updates
+    (and vice versa — two-way); uncheck preview (or close F4) → box disappears; world mouse returns
+    when closed. **The make-or-break:** does `data-checked` two-way binding actually fire (click
+    writes the bool, external change reflects)? If a box renders but won't toggle, the binding
+    needs an `onchange`/event fallback — flag it.
+  - **WATCH:** the preview box + ImGui window are both on screen (intended for A/B); the RmlUi box
+    captures mouse only when hovered (interactive doc), ImGui captures when over its window.
+
 ## Load-bearing architecture facts (verified this session)
 
 - **Single curses chokepoint:** every non-map window renders through
