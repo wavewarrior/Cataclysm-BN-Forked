@@ -75,8 +75,11 @@ options=2, **newcharacter=16 (8 slices)**, main_menu=2, worldfactory=4 sessions;
    **~12 interactive curses screens never listed in any tier** that still block the rip-out:
    `character_display` (@ sheet), `veh_interact`/`vehicle_display`, `gamemode_defense`, `magic`/
    `magic_teleporter_list`, full `messages` log, `monster`/`mtype`/`npc` info, `morale`,
-   `martialarts`, `pickup`, `dialogue_win`. See §8.1 for the full table + the corrected
-   3-part Tier-10 readiness gate. "~90% by screen count" is true for the enumerated set only.
+   `martialarts`, `pickup`, `dialogue_win`. PLUS a font-layer straggler the primitive sweep
+   structurally missed: `loading_ui` splash author text draws via the curses `Font` directly
+   (`draw_sdl_text_outlined`→`draw_string`) — a gate-step-4 blocker, not step-2. See §8.1 for
+   the full table + the corrected 3-part Tier-10 readiness gate. "~90% by screen count" is true
+   for the enumerated set only.
 
 **EYEBALL DEBT (committed, toggle OFF, user A/B owed):** most of the above DONE set
 shipped build-blind. The newest unverified: world_text 4.1/4.2a, description_view,
@@ -2954,6 +2957,23 @@ the set difference is below. Reproduce: see the per-file `mvwprintz` density gre
 | `morale` / `martialarts` / `pickup` | 1 / 0 / 4 | 3 / 3 / 3 | Small unlisted screens (morale screen, MA-style pick, pickup menu). |
 | `dialogue_win` | 12 | 1 | Dialogue/trade subwindow helper (separate from migrated `npctalk`). |
 
+**★ FONT-LAYER STRAGGLER the primitive sweep MISSED — `loading_ui` splash author text
+(gate step 4, not step 2).** The §8.1 cross-ref above swept the curses *primitive* layer
+(`mvwprintz`/`fold_and_print`/…) and found `loading_ui` clean (0 primitive calls). But the
+loading splash draws the "by <author>" overlay via `draw_sdl_text_outlined` (sdl_fonts.cpp)
+→ `draw_string(*g_display.font, …)` — i.e. directly through the **curses SDL `Font` / glyph
+path**, the exact renderer Tier 10 deletes. So it is a genuine gate-blocker against **step 4**
+("the only remaining glyph consumer is the §7 world-text layer"), invisible to the step-2
+primitive grep. `loading_ui::menu` (the uilist) is still Tier-0-covered as the plan said; the
+SPLASH author text is the straggler. Fix options: (a) route the splash text through the §7
+RmlUi text layer (`rmlui_layer::world_text_*` / managed `FontEngine::GenerateString`), or
+(b) accept the splash as a documented exception that keeps a single non-curses SDL-font draw
+alive (then gate step 4 must be reworded — currently it forbids exactly this). Sibling
+`draw_string`/`g_display.font` callers (`sdl_overmap_draw`/`sdl_render_frame`/`sdl_window`/
+`sdl_framebuffer`) are backend/render-frame plumbing that deletes wholesale — `loading_ui` is
+the only PLAYER-FACING straggler in this layer. **Lesson: the gate has TWO sweep dimensions —
+the primitive layer (step 2) AND the font layer (step 4); §8.1's first pass only did step 2.**
+
 **NON-blockers (correctly handled by the existing plan / out of scope):**
 - **Curses backend + primitive defs — DELETE WHOLESALE at Tier 10, do not migrate:**
   `output` (the primitive bodies live here), `color`, `input`, `popup`, `string_input_popup`,
@@ -2970,6 +2990,7 @@ The rip-out is gated on THREE things, not one:
 2. **Migrate the §8.1 gate-blocker backlog** (~12 screens above) — these were never coded at all.
    Biggest: `character_display`, `veh_interact`, `gamemode_defense`, `magic`, full `messages` log.
    Creature-info (`monster`/`mtype`/`npc`) wants a shared `Creature::print_info` F.2 component.
+   **PLUS the font-layer straggler:** `loading_ui` splash author text (route to §7 or except it).
 3. **Then** the deletion sequence (§8 step 5).
 So the honest remaining-work picture is: enumerated migration ≈ done-pending-eyeball; **a whole
 unlisted "Tier 7.5 / 9.5" of game screens (char sheet, vehicles, magic, defense mode, message
