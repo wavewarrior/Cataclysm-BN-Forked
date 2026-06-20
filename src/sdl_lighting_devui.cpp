@@ -689,6 +689,10 @@ void devui_rml_open()
     // ImGui-side changes reflect here (rml_tick DirtyAllVariables each frame). Mirrors
     // the ImGui "Route screens through RmlUi" registry (draw_rmlui_tab).
     c.Bind( "tab", &g_devui_tab );                             // slice 7 — active tab page
+    // Register the array type ONCE, before any Rml::Vector<Rml::String> Bind below
+    // (dbg_mode_names / ru_template_names / pk_names) — binding before this fails with
+    // "data type not registered".
+    c.RegisterArray<Rml::Vector<Rml::String>>();
     c.Bind( "ui_scale", &rmlui_layer::ui_scale() );             // slider (float, two-way)
     c.Bind( "uilist", &uilist_rmlui_enabled() );
     c.Bind( "query_popup", &query_popup_rmlui_enabled() );
@@ -1023,7 +1027,6 @@ void devui_rml_open()
         g_pk_combo.push_back( { Rml::String( n ), true } );
         g_pk_combo_labels.push_back( Rml::String( n ) );
     }
-    c.RegisterArray<Rml::Vector<Rml::String>>();
     c.Bind( "pk_names", &g_pk_combo_labels );
     c.Bind( "pk_combo_idx", &g_pk_combo_idx );
     // Slice 8 — <select> option lists + seed the int proxies from their live globals.
