@@ -3041,6 +3041,29 @@ std::string hud_location( avatar &u )
     return out;
 }
 
+// Compass — MVP DESIGN SIMPLIFICATION. The native full compass (draw_compass_padding ->
+// g->mon_info) is a GRAPHICAL 3x3 directional symbol grid + creature list → phase 2. For
+// MVP this renders the essential can't-play-without datum the simple-compass uses: enemy
+// COUNTS per direction (cached visible_count_by_dir, octants N/NE/E/SE/S/SW/W/NW + local).
+// A design call for the user: counts vs the symbol grid (flag at eyeball).
+std::string hud_compass( avatar &u )
+{
+    static constexpr std::array<const char *, 9> dir_labels = {
+        "N", "NE", "E", "SE", "S", "SW", "W", "NW", "--"
+    };
+    const auto &counts = u.get_mon_visible().visible_count_by_dir;
+    std::string out;
+    for( int i = 0; i < 9; ++i ) {
+        if( counts[i] > 0 ) {
+            out += string_format( "%s(%d) ", dir_labels[i], counts[i] );
+        }
+    }
+    if( out.empty() ) {
+        return colorize( _( "No enemies in sight" ), c_dark_gray );
+    }
+    return colorize( out, c_white );
+}
+
 // VARIANT-AWARE producer table: maps a window_panel name to the producer that
 // reproduces THAT variant's content. A logical panel (e.g. Stats) appears in any one
 // layout under exactly one name, so several rows point at different producers — the
@@ -3059,7 +3082,7 @@ struct hud_producer_entry {
     const char *panel_name;                  // widget id OR built-in label (CI match)
     std::string ( *produce )( avatar & );    // variant-specific content producer
 };
-const std::array<hud_producer_entry, 38> g_hud_producers = {{
+const std::array<hud_producer_entry, 46> g_hud_producers = {{
         // Stats — classic (draw_stats) vs labels/wide + narrow (draw_stat_wide/_narrow)
         { "Stats",         hud_stats_text },
         { "stats_compact", hud_stats_text },
@@ -3107,6 +3130,15 @@ const std::array<hud_producer_entry, 38> g_hud_producers = {{
         { "location_alt",  hud_location },
         { "location_narrow", hud_location },
         { "Location",      hud_location },
+        // Compass — MVP directional enemy COUNTS (full mon_info symbol grid is phase 2)
+        { "compass",            hud_compass },
+        { "compass_comp",       hud_compass },
+        { "compass_simple",     hud_compass },
+        { "compass_compact",    hud_compass },
+        { "compass_comp_compact", hud_compass },
+        { "Compass",            hud_compass },
+        { "Compact Compass",    hud_compass },
+        { "Simple Compass",     hud_compass },
     }
 };
 

@@ -2292,6 +2292,32 @@ the HUD uses its own non-modal open path.
   is NOT served (classic layout, not the user's; would show placeholder).
   - **EYEBALL CHECK (user, A/B via F4):** Location row shows place name / coords / sky+weather (right
     colour) / light level / date / time matching curses; underground + no-watch cases read right.
+- **Slice 6 — MVP accessor: compass (directional enemy counts) — CODE-COMPLETE + BUILD-GREEN
+  (Metal, fresh relink 15:17, panels.o fresh), TOGGLE OFF, EYEBALL OWED, UNCOMMITTED, 2026-06-20.**
+  One producer + 8 table rows (compass/compass_comp/compass_simple/compass_compact/
+  compass_comp_compact/Compass/Compact Compass/Simple Compass). **`hud_compass`** — enemy COUNTS
+  per direction (`get_mon_visible().visible_count_by_dir`, octants + local), "No enemies in sight"
+  when clear. **★ MVP DESIGN SIMPLIFICATION (flag for user):** the native full compass
+  (draw_compass_padding → `g->mon_info`) is a GRAPHICAL 3×3 directional symbol grid + creature
+  list → phase 2; this ships the simple-compass datum (counts) instead. User's design call at
+  eyeball: counts vs symbol grid.
+  - **EYEBALL CHECK:** compass row shows "N(2) SE(1)…" for visible enemies by direction, "No
+    enemies in sight" when clear; updates as monsters move.
+
+- **★ TIER 7 PHASE-1 MVP — TEXT-COMPLETE (2026-06-20).** Every text-able sidebar panel in the
+  user's custom layout now has an RmlUi producer on the slice-3 flex-column base: stats / sound /
+  needs / wgt-vol / mana / hint / movement / weapon / armor / **limbs / log / location / compass**
+  (12 logical panels). Remaining placeholders are NON-text / deferred, all phase-2 or out-of-MVP:
+  - **map (pixel minimap)** — graphical RTT, DECOUPLED from the gate (curses never drew it anyway);
+    ships as an empty/placeholder slot, RTT lands later as independent GPU work.
+  - **bodygraph** — graphical body silhouette → phase 2.
+  - **compass (full symbol grid)** — phase-2 upgrade from the MVP counts.
+  - **val_pain/thirst/stamina/mana** — DEFERRED (redundant + name collision, see below).
+  So the HUD is **playable on** (all essential text data present). **DECISION POINT (user):**
+  (a) flip the toggle default ON for daily use + iterate phase-2 polish on a curses-free base; or
+  (b) keep OFF and proceed to phase-2 graphical (minimap RTT / bodygraph) first; or (c) move to
+  Tier 8 (F4→RmlUi) / Tier 9 (minigames) toward the §8 all-tiers rip-out. Tier 7 completion alone
+  does NOT trigger the rip-out (§8 needs Tiers 0–9); it does unlock running the HUD full-time.
 - **★ val_* number widgets (val_pain/thirst/stamina/mana) — DEFERRED (not next), 2026-06-20.**
   Two reasons: (1) **largely REDUNDANT** in the custom layout — pain+thirst already render in the
   migrated Needs panel, stamina in Movement; only mana/stamina-as-bar add anything. (2) **name
