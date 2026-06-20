@@ -53,10 +53,11 @@ options=2, **newcharacter=16 (8 slices)**, main_menu=2, worldfactory=4 sessions;
 1. ~~**ranged**~~ **DONE** — slices 2a (`3109aa26b4`) + 2b/2c (`5a3c772d2d`) committed;
    `ranged_rmlui_enabled()` toggle live. The top-banner "ranged.cpp=0" proof is STALE
    (it predates the slices). Only the keystone number-for-number aim A/B is owed.
-2. **Tier 7 — sidebar HUD** (the 53 `draw_*` panels) — architecturally hardest. **STARTED:
-   slice 1 (lifecycle + Stats panel) committed `03bf258feb` 2026-06-18.** See the Tier 7
-   progress section below. The continuous-HUD lifecycle is now proven-shaped; remaining =
-   the other panel groups + the mouse-capture passive-doc gate (slice 2) + messages.
+2. **Tier 7 — sidebar HUD** (the 53 `draw_*` panels) — architecturally hardest. **IN
+   PROGRESS through slice 2c** (lifecycle `03bf258feb`; mouse gate 2a; multi-panel 2b;
+   **variant-aware HUD + Wgt/Vol + Mana 2c 2026-06-20, build-green, eyeball owed**). See
+   the Tier 7 progress section below. Lifecycle + variant-aware producer table now proven;
+   remaining = Time graphic, limbs/armor/vehicle, minimap, messages → full-column → flip.
 3. **Tier 8 — F4 dev panel** (ImGui → RmlUi; still ImGui in `sdl_lighting_devui.cpp`).
 4. **Tier 9 — minigames** char-grid widget.
 5. **Tier 10 — RIP OUT** curses-SDL + ImGui — gated on 100% coverage (i.e. 2-4 above).
@@ -2193,11 +2194,36 @@ the HUD uses its own non-modal open path.
   (`draw_time_graphic`), not text; needs a non-text treatment. **EYEBALL:** toggle ON →
   Sound/Stats/Needs render via RmlUi at their sidebar slots, values+colours matching
   curses, rest of sidebar still curses, no overlap/gap; OFF → identical to today.
-- **Next (slice 2c+):** continue down the column. Easy text panels next (Env/weather is
-  6 rows but text; Wgt/Vol; Mana when the spell_panel predicate is on). Then the harder
-  shapes: Time (needs the sun/moon graphic as a non-text fragment), limbs/armor/vehicle,
-  minimap (`W_ALWAYS_DRAW` GPU panel — likely a transparent hole the map shows through),
-  and finally messages (coalesced bound list) → full-column coverage → default-flip.
+- **Slice 2c — variant-aware HUD + Wgt/Vol + Mana — DONE + BUILD-GREEN (Metal, fresh
+  relink 12:55), COMMITTED, TOGGLE OFF, EYEBALL OWED.** Also fixes the slice-2b
+  positioning bug surfaced by the first eyeball (`fix` commit `feature` earlier this
+  session): the user's live sidebar is the **data-driven widget layout** (`current_layout_id:
+  "custom"`, `data/json/ui/sidebar.json`), whose panels are named by lowercase widget id
+  (`stats`/`sound`/`needs`/`weightvolume`/`mana`) — NOT the built-in `translate_marker`
+  labels (`Stats`/…). slice 2b's `g_hud_owned` keyed only the capitalised labels → `owns_panel`
+  false on the widget layout → curses kept drawing AND the never-positioned RmlUi fragments
+  stacked at the window top-left. **Root insight:** each logical panel has up to 4 *variants*
+  (classic/compact, labels/wide, narrow) under different names, and they render *different
+  content* (`stats`=`draw_stat_wide` adds Power+Safe; `stats_compact`=`draw_stats` doesn't).
+  - **`g_hud_owned` is now variant-aware:** `(name → elem_id, model var, producer)`; several
+    names share an elem_id+var but point at different producers, so the runtime panel name
+    selects the content variant. `hud_lookup` matches case-insensitively. `sidebar_hud_sync`
+    is layout-driven — walks the current layout, runs each present (toggled + `render()`)
+    owned panel's producer into its var; absent panels clear. Own only (name,variant) pairs
+    a producer faithfully reproduces; unlisted names fall back to the curses draw.
+  - **New producers:** `hud_stats_wide`, `hud_sound_labels`, `hud_needs_labels`, `hud_wgtvol`,
+    `hud_mana`. Added Wgt/Vol + Mana `<div>`s. **`Mana` (the label) intentionally NOT owned**
+    — collides with the `val_mana` value-widget; only native `mana*` ids map to the readout.
+  - **EYEBALL (Metal + D3D12):** toggle ON over the widget/custom layout → stats/sound/needs/
+    wgt-vol/mana render via RmlUi at their slots, content matching the *labels/wide* curses
+    draws (the user's variant), rest of sidebar curses, no overlap/gap; OFF → identical.
+- **Env/weather DEFERRED:** not in the target (custom) layout, and `draw_env_compact` (6 rows)
+  vs `draw_weather_classic` are *different content*, not one panel — needs its own scoping.
+- **Next (slice 2d+):** the harder shapes — Time (sun/moon graphic as a non-text fragment),
+  limbs/armor/vehicle, minimap (`W_ALWAYS_DRAW` GPU panel — likely a transparent hole the
+  map shows through), and finally messages (coalesced bound list) → full-column coverage →
+  default-flip. Narrow/classic variants for the 2c panels: infra ready, add producers+rows
+  when a layout needs them.
 
 ## Load-bearing architecture facts (verified this session)
 
