@@ -2994,6 +2994,53 @@ std::string hud_log( avatar & )
     return out;
 }
 
+// Mirrors draw_loc_labels (the Location panel, all loc_* variants): Place / X,Y,Z / Sky
+// (weather) / Light / Date / Time, one row each, full colour. The optional inline overmap
+// minichunk (draw_loc_wide_map's `minimap` flag → draw_overmap_chunk) is GRAPHICAL and
+// DROPPED for MVP (phase 2, like the pixel minimap RTT). draw_location_classic is a
+// different compact layout and is NOT served here.
+std::string hud_location( avatar &u )
+{
+    const oter_id &cur_ter = ACTIVE_OVERMAP_BUFFER.ter( u.abs_omt_pos() );
+    const tripoint_abs_omt coord = u.abs_omt_pos();
+    std::string out = std::string( _( "Place: " ) ) +
+                      colorize( cur_ter->get_name(), c_white ) + "\n";
+    out += std::string( _( "X,Y,Z: " ) );
+    if( get_option<std::string>( "OVERMAP_COORDINATE_FORMAT" ) == "subdivided" ) {
+        point_abs_om abs_coord;
+        tripoint_om_omt rel_coord;
+        std::tie( abs_coord, rel_coord ) = project_remain<coords::om>( coord );
+        out += colorize( string_format( "%d'%d, %d'%d, %d", abs_coord.x(), rel_coord.x(),
+                                        abs_coord.y(), rel_coord.y(), coord.z() ), c_white );
+    } else {
+        out += colorize( string_format( "%d, %d, %d", coord.x(), coord.y(), coord.z() ), c_white );
+    }
+    out += "\n";
+    if( g->get_levz() < 0 ) {
+        out += std::string( _( "Sky  : Underground" ) );
+    } else {
+        out += std::string( _( "Sky  :" ) ) + " " +
+               colorize( get_weather().weather_id->name.translated(),
+                         get_weather().weather_id->color );
+    }
+    out += "\n";
+    const std::pair<std::string, nc_color> ll = get_light_level(
+                character_funcs::fine_detail_vision_mod( get_avatar() ) );
+    out += std::string( _( "Light:" ) ) + " " + colorize( ll.first, ll.second ) + "\n";
+    out += string_format( _( "Date : %s, day %d" ),
+                          calendar::name_season( season_of_year( calendar::turn ) ),
+                          day_of_season<int>( calendar::turn ) + 1 ) + "\n";
+    if( u.has_watch() ) {
+        out += string_format( _( "Time : %s" ), to_string_time_of_day( calendar::turn ) );
+    } else if( g->get_levz() >= 0 ) {
+        out += string_format( _( "Time : %s" ), time_approx() );
+    } else {
+        // NOLINTNEXTLINE(cata-text-style): the question mark does not end a sentence
+        out += std::string( _( "Time : ???" ) );
+    }
+    return out;
+}
+
 // VARIANT-AWARE producer table: maps a window_panel name to the producer that
 // reproduces THAT variant's content. A logical panel (e.g. Stats) appears in any one
 // layout under exactly one name, so several rows point at different producers — the
@@ -3012,7 +3059,7 @@ struct hud_producer_entry {
     const char *panel_name;                  // widget id OR built-in label (CI match)
     std::string ( *produce )( avatar & );    // variant-specific content producer
 };
-const std::array<hud_producer_entry, 34> g_hud_producers = {{
+const std::array<hud_producer_entry, 38> g_hud_producers = {{
         // Stats — classic (draw_stats) vs labels/wide + narrow (draw_stat_wide/_narrow)
         { "Stats",         hud_stats_text },
         { "stats_compact", hud_stats_text },
@@ -3055,6 +3102,11 @@ const std::array<hud_producer_entry, 34> g_hud_producers = {{
         { "log",           hud_log },
         { "log_classic",   hud_log },
         { "Log",           hud_log },
+        // Location — loc_labels family (text rows; inline overmap chunk dropped, phase 2)
+        { "location",      hud_location },
+        { "location_alt",  hud_location },
+        { "location_narrow", hud_location },
+        { "Location",      hud_location },
     }
 };
 

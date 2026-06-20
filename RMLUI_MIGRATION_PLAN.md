@@ -2281,6 +2281,27 @@ the HUD uses its own non-modal open path.
     name + hp bar with the right colours (matches curses limbs panel number-for-number; try a
     damaged/broken/splinted limb + HEALTH_STYLE number vs bar); Log shows recent messages in order
     (plain colour — known gap); both grow/sit in their column slots; other placeholders unchanged.
+  - **COMMITTED `e269094038` (build-green, eyeball owed).**
+- **Slice 5 — MVP accessor: location — CODE-COMPLETE + BUILD-GREEN (Metal, fresh relink 15:14,
+  panels.o fresh), TOGGLE OFF, EYEBALL OWED (Metal + D3D12), UNCOMMITTED, 2026-06-20.** One
+  producer + 4 table rows (location/location_alt/location_narrow/Location). **`hud_location`** —
+  reproduces draw_loc_labels' text: Place / X,Y,Z (honours OVERMAP_COORDINATE_FORMAT subdivided) /
+  Sky+weather / Light / Date / Time (watch vs approx vs underground), one row each, full colour.
+  **DROPPED for MVP:** draw_loc_wide_map's inline overmap minichunk (`draw_overmap_chunk`) — it is
+  GRAPHICAL → phase 2, like the pixel minimap. `draw_location_classic` (different compact layout)
+  is NOT served (classic layout, not the user's; would show placeholder).
+  - **EYEBALL CHECK (user, A/B via F4):** Location row shows place name / coords / sky+weather (right
+    colour) / light level / date / time matching curses; underground + no-watch cases read right.
+- **★ val_* number widgets (val_pain/thirst/stamina/mana) — DEFERRED (not next), 2026-06-20.**
+  Two reasons: (1) **largely REDUNDANT** in the custom layout — pain+thirst already render in the
+  migrated Needs panel, stamina in Movement; only mana/stamina-as-bar add anything. (2) **name
+  collision:** the value-widget panel name is the *stripped* title-case form (`value_widget_name`:
+  "val_pain"→"Pain", "val_mana"→"Mana"), and `hud_producer` matches case-insensitively, so "Mana"
+  would wrongly hit the native `mana` producer (the exact clash slice 2c flagged). A generic value
+  producer (strategy's "one producer for all scalars" via `get_var_value`+`value_widget_color`) is
+  the right phase-2 home — but needs a name→widget resolver + collision handling. Defer to phase 2
+  with icons. The structured path (`get_var_value`, `value_widget_color`, `value_var_max`) already
+  exists, so it's cheap THEN; just not worth the collision wrinkle for redundant data now.
 
 ### Tier 7 — HUD STRATEGY (rewritten 2026-06-20, grilled)
 
