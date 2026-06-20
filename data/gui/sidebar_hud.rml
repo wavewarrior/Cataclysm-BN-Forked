@@ -23,6 +23,10 @@
         <div id="hud-Needs" class="hud-panel" data-rml="needs_rml"></div>
         <div id="hud-WgtVol" class="hud-panel" data-rml="wgtvol_rml"></div>
         <div id="hud-Mana" class="hud-panel" data-rml="mana_rml"></div>
+        <div id="hud-Hint" class="hud-panel" data-rml="hint_rml"></div>
+        <div id="hud-Movement" class="hud-panel" data-rml="movement_rml"></div>
+        <div id="hud-Weapon" class="hud-panel" data-rml="weapon_rml"></div>
+        <div id="hud-Armor" class="hud-panel" data-rml="armor_rml"></div>
     </div>
 </body>
 </rml>

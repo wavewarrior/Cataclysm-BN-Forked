@@ -2726,6 +2726,10 @@ struct hud_rml_model {
     Rml::String needs_rml;
     Rml::String wgtvol_rml;
     Rml::String mana_rml;
+    Rml::String hint_rml;
+    Rml::String movement_rml;
+    Rml::String weapon_rml;
+    Rml::String armor_rml;
     Rml::DataModelHandle handle;
 };
 std::unique_ptr<hud_rml_model> g_hud_data;
@@ -2858,6 +2862,65 @@ std::string hud_mana( avatar &u )
            colorize( std::to_string( u.magic->max_mana( u ) ), c_light_blue );
 }
 
+// Mirrors draw_hint: the panel-options keybind prompt. Single variant.
+std::string hud_hint( avatar & )
+{
+    const std::string press = press_x( ACTION_TOGGLE_PANEL_ADM );
+    return colorize( press, c_light_green ) + " " +
+           colorize( _( "to open sidebar options" ), c_white );
+}
+
+// Mirrors draw_char_wide (the "Movement" panel): Sound/Mood/Focus, then Stam/Speed/Move.
+// Smiley + stamina are text (emote string / hp-bar string), so this is pure text.
+std::string hud_movement( avatar &u )
+{
+    const std::pair<nc_color, int> morale = morale_stat( u );
+    const bool m_style = get_option<std::string>( "MORALE_STYLE" ) == "horizontal";
+    const std::string smiley = morale_emotion( morale.second, get_face_type( u ), m_style );
+    const nc_color move_color = move_mode_color( u );
+    const std::string movecost = std::to_string( u.movecounter ) + "(" + move_mode_string( u ) + ")";
+    const nc_color stam_clr = get_hp_bar( u.get_stamina(), u.get_stamina_max() ).second;
+    const std::string stam = get_option<std::string>( "HEALTH_STYLE" ) == "number"
+                             ? std::to_string( u.get_stamina() )
+                             : get_hp_bar( u.get_stamina(), u.get_stamina_max() ).first;
+    std::string out =
+        std::string( _( "Sound" ) ) + " " + colorize( std::to_string( u.volume ), c_light_gray ) + "  " +
+        std::string( _( "Mood" ) ) + " " + colorize( smiley, morale.first ) + "  " +
+        std::string( _( "Focus" ) ) + " " +
+        colorize( std::to_string( u.focus_pool ), focus_color( u.focus_pool ) ) + "\n";
+    out +=
+        std::string( _( "Stam" ) ) + " " + colorize( stam, stam_clr ) + "  " +
+        std::string( _( "Speed" ) ) + " " +
+        colorize( std::to_string( u.get_speed() ), focus_color( u.get_speed() ) ) + "  " +
+        std::string( _( "Move" ) ) + " " + colorize( movecost, move_color );
+    return out;
+}
+
+// Mirrors draw_weapon_labels: wielded weapon + martial style. fmt_wielded_weapon carries
+// its own colour tags; the gray wrap only tints any untagged remainder.
+std::string hud_weapon( avatar &u )
+{
+    return std::string( _( "Wield" ) ) + " " +
+           colorize( character_funcs::fmt_wielded_weapon( u ), c_light_gray ) + "\n" +
+           std::string( _( "Style" ) ) + " " +
+           colorize( u.martial_arts_data->selected_style_name( u ), c_light_gray );
+}
+
+// Mirrors draw_armor / draw_armor_padding: per-body-part outermost armor. get_armor()
+// returns already-coloured text. Single content variant.
+std::string hud_armor( avatar &u )
+{
+    const unsigned int maxlen = 24;
+    const auto row = [&]( const std::string & label, const char *bp ) {
+        return colorize( label, c_light_gray ) + " " + get_armor( u, bodypart_id( bp ), maxlen );
+    };
+    return row( _( "Head" ), "head" ) + "\n" +
+           row( _( "Torso" ), "torso" ) + "\n" +
+           row( _( "Arms" ), "arm_r" ) + "\n" +
+           row( _( "Legs" ), "leg_r" ) + "\n" +
+           row( _( "Feet" ), "foot_r" );
+}
+
 // The panels the HUD reproduces, paired with their RML element id in sidebar_hud.rml.
 // VARIANT-AWARE owned-panel table. Each row maps a window_panel name to a logical RmlUi
 // element (elem_id), its bound model var, and the producer that reproduces THAT variant's
@@ -2880,7 +2943,7 @@ struct hud_owned_panel {
     Rml::String hud_rml_model::*var;         // bound model var this element renders
     std::string ( *produce )( avatar & );    // variant-specific content producer
 };
-const std::array<hud_owned_panel, 20> g_hud_owned = {{
+const std::array<hud_owned_panel, 27> g_hud_owned = {{
         // Stats — classic (draw_stats) vs labels/wide + narrow (draw_stat_wide/_narrow)
         { "Stats",         "hud-Stats",  &hud_rml_model::stats_rml,  hud_stats_text },
         { "stats_compact", "hud-Stats",  &hud_rml_model::stats_rml,  hud_stats_text },
@@ -2906,6 +2969,14 @@ const std::array<hud_owned_panel, 20> g_hud_owned = {{
         { "mana_compact", "hud-Mana",   &hud_rml_model::mana_rml,   hud_mana },
         { "mana_narrow",  "hud-Mana",   &hud_rml_model::mana_rml,   hud_mana },
         { "mana_wide",    "hud-Mana",   &hud_rml_model::mana_rml,   hud_mana },
+        // Slice 2d — pure-text panels (no widget icons / embedded graphics)
+        { "hint",          "hud-Hint",     &hud_rml_model::hint_rml,     hud_hint },
+        { "Hint",          "hud-Hint",     &hud_rml_model::hint_rml,     hud_hint },
+        { "movement",      "hud-Movement", &hud_rml_model::movement_rml, hud_movement },
+        { "weapon",        "hud-Weapon",   &hud_rml_model::weapon_rml,   hud_weapon },
+        { "armor",         "hud-Armor",    &hud_rml_model::armor_rml,    hud_armor },
+        { "armor_classic", "hud-Armor",    &hud_rml_model::armor_rml,    hud_armor },
+        { "Armor",         "hud-Armor",    &hud_rml_model::armor_rml,    hud_armor },
     }
 };
 
@@ -2950,6 +3021,10 @@ void sidebar_hud_open()
     c.Bind( "needs_rml", &g_hud_data->needs_rml );
     c.Bind( "wgtvol_rml", &g_hud_data->wgtvol_rml );
     c.Bind( "mana_rml", &g_hud_data->mana_rml );
+    c.Bind( "hint_rml", &g_hud_data->hint_rml );
+    c.Bind( "movement_rml", &g_hud_data->movement_rml );
+    c.Bind( "weapon_rml", &g_hud_data->weapon_rml );
+    c.Bind( "armor_rml", &g_hud_data->armor_rml );
     g_hud_data->handle = c.GetModelHandle();
     // passive=true: render-only HUD — it must not capture in-game world mouse
     // (look/examine). See rmlui_layer::any_interactive_open / process_event.
@@ -2978,6 +3053,10 @@ void sidebar_hud_sync( avatar &u )
     g_hud_data->needs_rml.clear();
     g_hud_data->wgtvol_rml.clear();
     g_hud_data->mana_rml.clear();
+    g_hud_data->hint_rml.clear();
+    g_hud_data->movement_rml.clear();
+    g_hud_data->weapon_rml.clear();
+    g_hud_data->armor_rml.clear();
     for( const window_panel &panel : panel_manager::get_manager().get_current_layout() ) {
         if( !panel.toggle || !panel.render() ) {
             continue;
@@ -2991,6 +3070,10 @@ void sidebar_hud_sync( avatar &u )
     g_hud_data->handle.DirtyVariable( "needs_rml" );
     g_hud_data->handle.DirtyVariable( "wgtvol_rml" );
     g_hud_data->handle.DirtyVariable( "mana_rml" );
+    g_hud_data->handle.DirtyVariable( "hint_rml" );
+    g_hud_data->handle.DirtyVariable( "movement_rml" );
+    g_hud_data->handle.DirtyVariable( "weapon_rml" );
+    g_hud_data->handle.DirtyVariable( "armor_rml" );
 }
 
 void sidebar_hud_close()
