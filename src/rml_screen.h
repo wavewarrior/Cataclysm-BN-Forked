@@ -208,4 +208,11 @@ bool &sidebar_hud_rmlui_enabled();
 // model (see minigame_rml.h). Render-only; default OFF.
 bool &minigames_rmlui_enabled();
 
+// character_display::disp_info() RmlUi render path (the '@' character sheet:
+// §8.1 gate-blocker backlog, biggest first). 3-column grid of 6 navigable tabs
+// (stats/encumbrance/skills/traits/bionics/effects) + read-only speed panel +
+// focus-tracking info pane + tip bar; diary multi-pane focus model, faction
+// parallel-text producers (curses pristine). Render-only; default OFF.
+bool &character_display_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

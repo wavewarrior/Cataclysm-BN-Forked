@@ -705,6 +705,7 @@ void devui_rml_open()
     c.Bind( "diary", &diary_rmlui_enabled() );
     c.Bind( "mutations", &mutations_rmlui_enabled() );
     c.Bind( "bionics", &bionics_rmlui_enabled() );
+    c.Bind( "character_display", &character_display_rmlui_enabled() );
     c.Bind( "inventory", &inventory_rmlui_enabled() );
     c.Bind( "advanced_inv", &advanced_inv_rmlui_enabled() );
     c.Bind( "compare_items", &compare_items_rmlui_enabled() );

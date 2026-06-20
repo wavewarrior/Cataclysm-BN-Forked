@@ -1,0 +1,103 @@
+/* The '@' character sheet (§8.1 backlog). Palette / border / .scroll-pane come
+   from theme.rcss; this file owns the screen layout. Faithful 3-column grid of
+   the legacy disp_info (stats/traits/bionics | encumbrance/effects | speed/skills)
+   + a full-width tip bar and a focus-following info pane. Multi-pane focus model
+   copied from diary: only the ACTIVE panel shows its selected-row accent. */
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.cs-panel {
+    width: 96%;
+    height: 96%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Name / gender / profession header + keybinding hint. */
+.cs-tip {
+    flex: 0 0 auto;
+    color: {{light_gray}};
+    padding-bottom: 4dp;
+    margin-bottom: 4dp;
+    border-bottom: 1dp {{bg4}};
+    white-space: pre-wrap;
+}
+
+/* The three side-by-side columns. */
+.cs-cols {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+}
+.cs-col {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    margin: 0 4dp;
+}
+
+/* Each panel: a bordered scroll box that brightens to the accent when focused
+   (the active tab), so the player sees where NEXT_TAB/PREV_TAB moved. The panes
+   in a column share its height (flex) and scroll natively. */
+.cs-pane {
+    flex: 1 1 0;
+    min-height: 0;
+    border: 1dp {{bg4}};
+    border-radius: 4dp;
+    margin: 4dp 0;
+    padding: 2dp 6dp;
+}
+.cs-pane.active {
+    border-color: {{yellow}};
+}
+
+/* Panel header. */
+.cs-title {
+    display: block;
+    text-align: center;
+    color: {{light_gray}};
+    font-weight: bold;
+    margin-bottom: 2dp;
+}
+
+/* A single list row. display:block so each is its own line — RmlUi elements
+   default to inline (the bundled div{display:block} from the sample rml.rcss is
+   not linked) and .cs-pane is a .scroll-pane block container, so without this the
+   rows flow horizontally as one paragraph. The selected-row accent applies ONLY
+   inside the active panel (diary pattern) — the producers also gate selected on
+   the active flag, so this is belt-and-suspenders. */
+.cs-line {
+    display: block;
+    padding: 0 2dp;
+}
+.cs-pane.active .cs-line.selected {
+    background-color: {{yellow}};
+    color: {{bg-hard}};
+}
+
+/* Read-only speed breakdown. */
+.cs-speed {
+    display: block;
+    white-space: pre-wrap;
+    color: {{light_gray}};
+}
+
+/* Bottom info pane — detail of the focused tab's selected line. */
+.cs-info {
+    flex: 0 0 auto;
+    min-height: 80dp;
+    max-height: 22vh;
+    margin-top: 4dp;
+    padding-top: 4dp;
+    border-top: 1dp {{bg4}};
+    color: {{light_gray}};
+    white-space: pre-wrap;
+}

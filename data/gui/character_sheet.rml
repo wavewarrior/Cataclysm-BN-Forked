@@ -1,0 +1,54 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="character_sheet.rcss"/>
+</head>
+<body data-model="character_sheet">
+    <div class="panel cs-panel">
+        <div class="cs-tip" data-rml="tip_rml"></div>
+        <div class="cs-cols">
+            <div class="cs-col">
+                <div class="cs-pane scroll-pane" data-class-active="stats_active">
+                    <div class="cs-title">Stats</div>
+                    <div class="cs-line" data-for="row : stats" data-class-selected="row.selected"
+                         data-rml="row.text_rml"></div>
+                </div>
+                <div class="cs-pane scroll-pane" data-class-active="traits_active">
+                    <div class="cs-title">Traits</div>
+                    <div class="cs-line" data-for="row : traits" data-class-selected="row.selected"
+                         data-rml="row.text_rml"></div>
+                </div>
+                <div class="cs-pane scroll-pane" data-class-active="bionics_active">
+                    <div class="cs-title">Bionics</div>
+                    <div class="cs-line" data-for="row : bionics" data-class-selected="row.selected"
+                         data-rml="row.text_rml"></div>
+                </div>
+            </div>
+            <div class="cs-col">
+                <div class="cs-pane scroll-pane" data-class-active="encumb_active">
+                    <div class="cs-title">Encumbrance</div>
+                    <div class="cs-line" data-for="row : encumb" data-class-selected="row.selected"
+                         data-rml="row.text_rml"></div>
+                </div>
+                <div class="cs-pane scroll-pane" data-class-active="effects_active">
+                    <div class="cs-title">Effects</div>
+                    <div class="cs-line" data-for="row : effects" data-class-selected="row.selected"
+                         data-rml="row.text_rml"></div>
+                </div>
+            </div>
+            <div class="cs-col">
+                <div class="cs-pane scroll-pane">
+                    <div class="cs-title">Speed</div>
+                    <div class="cs-speed" data-rml="speed_rml"></div>
+                </div>
+                <div class="cs-pane scroll-pane" data-class-active="skills_active">
+                    <div class="cs-title">Skills</div>
+                    <div class="cs-line" data-for="row : skills" data-class-selected="row.selected"
+                         data-rml="row.text_rml"></div>
+                </div>
+            </div>
+        </div>
+        <div class="cs-info scroll-pane" data-rml="info_rml"></div>
+    </div>
+</body>
+</rml>
