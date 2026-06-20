@@ -431,6 +431,7 @@ namespace
 Rml::ElementDocument *g_devui_doc = nullptr;
 Rml::DataModelHandle g_devui_model;
 bool g_devui_preview = false;   // the ImGui "RmlUi dev panel (preview)" checkbox
+int g_devui_tab = 0;            // slice 7 — active tab (data-if/data-class-active in devui.rml)
 
 // ── Tier 8 slice 4: composite colour picker (SV square + hue strip) ─────────
 // RmlUi has no native colour picker, but the render interface implements gradient
@@ -676,6 +677,7 @@ void devui_rml_open()
     // checkbox to the real static bool, so a click toggles the live screen and
     // ImGui-side changes reflect here (rml_tick DirtyAllVariables each frame). Mirrors
     // the ImGui "Route screens through RmlUi" registry (draw_rmlui_tab).
+    c.Bind( "tab", &g_devui_tab );                             // slice 7 — active tab page
     c.Bind( "ui_scale", &rmlui_layer::ui_scale() );             // slider (float, two-way)
     c.Bind( "uilist", &uilist_rmlui_enabled() );
     c.Bind( "query_popup", &query_popup_rmlui_enabled() );
@@ -806,6 +808,41 @@ void devui_rml_open()
         pk_write_target( g_pk_orig );
         pk_rgb_to_hsv( g_pk_orig[0], g_pk_orig[1], g_pk_orig[2], g_pk_h, g_pk_s, g_pk_v );
         picker_apply();
+    } );
+    // Slice 7 — tab bar. data-event-click="devui_tab(N)" sets the active page; data-if /
+    // data-class-active in devui.rml read `tab`. Dirty it so the switch is instant (rml_tick
+    // also DirtyAllVariables each frame, but don't wait a frame on a click).
+    c.BindEventCallback( "devui_tab",
+    []( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+        int idx = 0;
+        if( !args.empty() ) {
+            args[0].GetInto( idx );
+        }
+        g_devui_tab = idx;
+        if( g_devui_model ) {
+            g_devui_model.DirtyVariable( "tab" );
+        }
+    } );
+    // Slice 7 — bottom-right drag handle resizes the panel. Drag emits absolute mouse_x/y;
+    // width = mouse - panel-left, body height = mouse - body-top (the body scrolls within).
+    c.BindEventCallback( "devui_resize",
+    []( Rml::DataModelHandle, Rml::Event & ev, const Rml::VariantList & ) {
+        if( g_devui_doc == nullptr ) {
+            return;
+        }
+        Rml::Element *panel = g_devui_doc->GetElementById( "devui-panel" );
+        Rml::Element *body = g_devui_doc->GetElementById( "devui-body" );
+        if( panel == nullptr || body == nullptr ) {
+            return;
+        }
+        const Rml::Vector2f poff = panel->GetAbsoluteOffset( Rml::BoxArea::Border );
+        const Rml::Vector2f boff = body->GetAbsoluteOffset( Rml::BoxArea::Border );
+        const float mx = ev.GetParameter<float>( "mouse_x", poff.x );
+        const float my = ev.GetParameter<float>( "mouse_y", boff.y );
+        const float w = std::clamp( mx - poff.x, 240.f, 900.f );
+        const float h = std::clamp( my - boff.y, 120.f, 1200.f );
+        panel->SetProperty( "width", std::to_string( static_cast<int>( w ) ) + "px" );
+        body->SetProperty( "height", std::to_string( static_cast<int>( h ) ) + "px" );
     } );
     // Build + bind the theme/game colour combo (names + selected index).
     g_pk_combo.clear();

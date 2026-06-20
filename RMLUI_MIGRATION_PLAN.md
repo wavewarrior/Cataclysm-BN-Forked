@@ -2536,6 +2536,31 @@ codebase until now.
     pattern), the debug-mode selector (`<select>`), the 9 buttons (event-click), the diagnostics
     read-out (bound text). Then a tab structure for navigability → F4 opens the RmlUi doc → retire
     `imgui_layer` (§8 gate).
+- **Slice 7 — real TAB structure + drag-resize — CODE-COMPLETE + BUILD-GREEN (Metal, fresh relink
+  20:24, devui.o + binary fresh), EYEBALL OWED, COMMITTED pending, 2026-06-20.** The flat 60-row
+  panel is now 7 tabs (Screens / Effects / Colour / Lighting / Anim / Runic / Diag) so it's
+  navigable before the remaining ImGui tabs are ported. Mechanisms all previously proven — this is
+  pure layout.
+  - **devui.rml:** a `.devui-tabs` bar of `.devui-tab` buttons, each `data-class-active="tab==N"`
+    (highlight) + `data-event-click="devui_tab(N)"` (switch); each page wrapped in `data-if="tab==N"`.
+    Screens/Effects/Colour pages hold the slice 1-6 content (moved verbatim, not rewritten); the 4
+    not-yet-ported tabs (Lighting/Anim/Runic/Diag) are stubbed `(slice 8)`. A `#devui-resize` handle
+    (bottom-right, `data-event-drag="devui_resize"`).
+  - **devui.rcss:** `.devui-tab`/`.devui-tab.active` styling; scroll moved off the panel onto a new
+    `.devui-body` (height 560px, `overflow-y:auto`) so the tab bar stays pinned while rows scroll;
+    `.devui-resize` (needs `drag: drag` to emit drag events, like the picker surfaces).
+  - **sdl_lighting_devui.cpp:** `int g_devui_tab` global + `c.Bind("tab", &g_devui_tab)`;
+    `devui_tab` event callback (arg→g_devui_tab + `DirtyVariable("tab")` for instant switch);
+    `devui_resize` callback (drag mouse_x/y → panel width + body height via `SetProperty` px strings,
+    clamped 240-900 / 120-1200). `data-class-<name>` confirmed valid RmlUi data-binding (proven path).
+  - **EYEBALL CHECK (user, A/B):** open the preview → 7 tab buttons; clicking one shows that page +
+    bold-highlights the tab (active class); Screens/Effects/Colour all still work as before; the
+    bottom-right handle drags to resize the panel (width + scrollable body height); stub tabs read
+    "(slice 8)". **Make-or-break:** does `data-if="tab==N"` swap pages on click (the int-equality
+    data-expr in data-if, cf. safemode's `row.sel_col==N` which works)?
+  - **Remaining (slice 8):** fill the 4 stub tabs — Lighting/Anim/Runic sliders + CRT sliders +
+    world-text offsets (slider pattern), debug-mode `<select>`, the 9 buttons (event-click),
+    diagnostics bound-text read-out. Then F4 opens the RmlUi doc + retire `imgui_layer` (§8 gate).
 
 ## Load-bearing architecture facts (verified this session)
 

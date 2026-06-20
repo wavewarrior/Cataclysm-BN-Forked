@@ -4,143 +4,155 @@
     <link type="text/rcss" href="devui.rcss"/>
 </head>
 <body data-model="devui">
-    <!-- Tier 8 slice 2 — full screen-toggle registry + first slider. Mirrors the ImGui
-         "Route screens through RmlUi" sections; each <input type="checkbox" data-checked>
-         two-way binds to a *_rmlui_enabled() bool (proven in slice 1). The UI-scale
-         <input type="range" data-value> proves slider binding (float, two-way). ImGui F4
-         stays primary; later slices port the lighting tuning controls, then F4 opens this
-         and ImGui retires (§8). -->
-    <div class="devui-panel">
-        <div class="devui-title">RmlUi dev panel — preview (slice 2)</div>
-
-        <div class="devui-section">Global</div>
-        <div class="devui-row">
-            UI scale
-            <input type="range" min="0.5" max="1.5" step="0.05" data-value="ui_scale"/>
-            <span class="devui-val">{{ui_scale}}</span>
+    <!-- Tier 8 — RmlUi dev panel (parallel preview; ImGui F4 stays primary). Slice 7:
+         real TAB structure (tab bar + data-if pages) + a drag-resize handle. Each tab
+         button sets `tab` (devui_tab); each page renders under data-if="tab==N". The
+         remaining ImGui tabs (Lighting/Anim/Runic/Diag) are stubbed here and filled in
+         slice 8. Authored in px so the panel is immune to the ui_scale slider it hosts. -->
+    <div id="devui-panel" class="devui-panel">
+        <div class="devui-title">RmlUi dev panel</div>
+        <div class="devui-tabs">
+            <div class="devui-tab" data-class-active="tab==0" data-event-click="devui_tab(0)">Screens</div>
+            <div class="devui-tab" data-class-active="tab==1" data-event-click="devui_tab(1)">Effects</div>
+            <div class="devui-tab" data-class-active="tab==2" data-event-click="devui_tab(2)">Colour</div>
+            <div class="devui-tab" data-class-active="tab==3" data-event-click="devui_tab(3)">Lighting</div>
+            <div class="devui-tab" data-class-active="tab==4" data-event-click="devui_tab(4)">Anim</div>
+            <div class="devui-tab" data-class-active="tab==5" data-event-click="devui_tab(5)">Runic</div>
+            <div class="devui-tab" data-class-active="tab==6" data-event-click="devui_tab(6)">Diag</div>
         </div>
 
-        <div class="devui-section">Core widgets</div>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="uilist"/> uilist</label>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="query_popup"/> query_popup</label>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="string_input"/> string_input</label>
+        <div class="devui-body">
+            <!-- ── Screens: UI scale + the migration toggle registry ──────────── -->
+            <div data-if="tab==0">
+                <div class="devui-section">Global</div>
+                <div class="devui-row">UI scale <input type="range" min="0.5" max="1.5" step="0.05" data-value="ui_scale"/> <span class="devui-val">{{ui_scale}}</span></div>
 
-        <div class="devui-section">Info screens</div>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="missions"/> missions</label>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="scores"/> scores</label>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="help"/> help</label>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="distraction"/> distraction mgr</label>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="auto_note"/> auto notes</label>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="diary"/> diary</label>
+                <div class="devui-section">Core widgets</div>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="uilist"/> uilist</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="query_popup"/> query_popup</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="string_input"/> string_input</label>
 
-        <div class="devui-section">Character</div>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="mutations"/> mutations</label>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="bionics"/> bionics</label>
+                <div class="devui-section">Info screens</div>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="missions"/> missions</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="scores"/> scores</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="help"/> help</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="distraction"/> distraction mgr</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="auto_note"/> auto notes</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="diary"/> diary</label>
 
-        <div class="devui-section">Items &amp; inventory</div>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="inventory"/> inventory (all selectors)</label>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="advanced_inv"/> advanced inventory</label>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="compare_items"/> compare items</label>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="examine_item"/> examine item</label>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="armor_layers"/> armor layers</label>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="autopickup"/> auto pickup</label>
+                <div class="devui-section">Character</div>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="mutations"/> mutations</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="bionics"/> bionics</label>
 
-        <div class="devui-section">World interaction</div>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="computer"/> computer terminal</label>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="construction"/> construction</label>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="crafting"/> crafting</label>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="safemode"/> safemode</label>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="trade"/> trade</label>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="vending"/> vending</label>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="dialogue"/> npc dialogue</label>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="description_view"/> examine description</label>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="faction"/> faction manager</label>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="ranged"/> ranged targeting</label>
+                <div class="devui-section">Items &amp; inventory</div>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="inventory"/> inventory (all selectors)</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="advanced_inv"/> advanced inventory</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="compare_items"/> compare items</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="examine_item"/> examine item</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="armor_layers"/> armor layers</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="autopickup"/> auto pickup</label>
 
-        <div class="devui-section">System menus</div>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="options"/> options</label>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="worldfactory"/> worldfactory</label>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="main_menu"/> main menu</label>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="loadchar"/> load character</label>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="newcharacter"/> new character</label>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="overmap"/> overmap legend</label>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="world_text"/> world text (SCT)</label>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="sidebar_hud"/> sidebar HUD</label>
+                <div class="devui-section">World interaction</div>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="computer"/> computer terminal</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="construction"/> construction</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="crafting"/> crafting</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="safemode"/> safemode</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="trade"/> trade</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="vending"/> vending</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="dialogue"/> npc dialogue</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="description_view"/> examine description</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="faction"/> faction manager</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="ranged"/> ranged targeting</label>
 
-        <!-- Tier 8 slice 3 — Effects tab tuning controls (proven slider/checkbox
-             mechanisms applied to live lighting params). Colour pickers, the cursor/
-             place-light interaction, buttons and combos are deferred to later slices. -->
-        <div class="devui-section">Surface normals (A1)</div>
-        <div class="devui-row">normal amount <input type="range" min="0" max="10" step="0.1" data-value="nrm_amount"/> <span class="devui-val">{{nrm_amount}}</span></div>
-        <div class="devui-row">normal relief <input type="range" min="-6" max="6" step="0.1" data-value="nrm_relief"/> <span class="devui-val">{{nrm_relief}}</span></div>
-        <div class="devui-row">normal elev <input type="range" min="0.05" max="1.5" step="0.01" data-value="nrm_elev"/> <span class="devui-val">{{nrm_elev}}</span></div>
-
-        <div class="devui-section">Volumetric sun shafts (C2)</div>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="vol_enable"/> volumetric</label>
-        <div class="devui-row">vol density <input type="range" min="0" max="2" step="0.02" data-value="vol_density"/> <span class="devui-val">{{vol_density}}</span></div>
-        <div class="devui-row">vol intensity <input type="range" min="0" max="4" step="0.04" data-value="vol_intensity"/> <span class="devui-val">{{vol_intensity}}</span></div>
-        <div class="devui-row">vol reach <input type="range" min="1" max="24" step="0.5" data-value="vol_reach"/> <span class="devui-val">{{vol_reach}}</span></div>
-        <div class="devui-row">vol shadow <input type="range" min="0" max="1" step="0.01" data-value="vol_shadow"/> <span class="devui-val">{{vol_shadow}}</span></div>
-
-        <div class="devui-section">High-fidelity rain</div>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="rain_enable"/> rain</label>
-        <div class="devui-row">rain intensity <input type="range" min="0" max="1" step="0.01" data-value="rain_intensity"/> <span class="devui-val">{{rain_intensity}}</span></div>
-        <div class="devui-row">wet specular <input type="range" min="0" max="3" step="0.03" data-value="spec_strength"/> <span class="devui-val">{{spec_strength}}</span></div>
-
-        <div class="devui-section">Silhouette sun shadows</div>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="shadow_debug"/> show shadow mask (debug blit)</label>
-        <div class="devui-row">shadow mask strength <input type="range" min="0" max="1" step="0.01" data-value="shadow_mask_str"/> <span class="devui-val">{{shadow_mask_str}}</span></div>
-
-        <div class="devui-section">Memory fade</div>
-        <div class="devui-row">mem dim <input type="range" min="0" max="1" step="0.01" data-value="mem_dim"/> <span class="devui-val">{{mem_dim}}</span></div>
-        <div class="devui-row">mem radius <input type="range" min="1" max="60" step="1" data-value="mem_radius"/> <span class="devui-val">{{mem_radius}}</span></div>
-
-        <div class="devui-section">Foliage sway</div>
-        <div class="devui-row">sway amplitude <input type="range" min="0" max="8" step="0.1" data-value="sway_amp"/> <span class="devui-val">{{sway_amp}}</span></div>
-        <div class="devui-row">sway frequency <input type="range" min="0" max="3" step="0.05" data-value="sway_freq"/> <span class="devui-val">{{sway_freq}}</span></div>
-
-        <div class="devui-section">Hover outline</div>
-        <label class="devui-row"><input type="checkbox" value="1" data-checked="outline_enable"/> outline enable</label>
-        <div class="devui-row">outline thickness <input type="range" min="0" max="0.25" step="0.005" data-value="outline_thickness"/> <span class="devui-val">{{outline_thickness}}</span></div>
-        <div class="devui-row">outline alpha <input type="range" min="0" max="1" step="0.01" data-value="outline_alpha"/> <span class="devui-val">{{outline_alpha}}</span></div>
-        <div class="devui-row">outline mask cut <input type="range" min="0" max="1" step="0.01" data-value="outline_alpha_cut"/> <span class="devui-val">{{outline_alpha_cut}}</span></div>
-
-        <!-- Tier 8 slice 4/5 — composite colour picker. SV square (saturation×value,
-             hue-tinted gradient + transparent→black overlay) + rainbow hue strip, both
-             draggable; C++ maps the drag to HSV → RGB. Slice 5: a target-swatch row picks
-             which colour the one picker edits (cursor light + the 4 hover-outline colours);
-             each swatch shows its live colour, the active one is outlined white. -->
-        <div class="devui-section">Colour picker</div>
-        <div class="pk-targets">
-            <div id="pkt-cursor"   class="pk-target" data-event-click="pk_target(0)">cur</div>
-            <div id="pkt-hostile"  class="pk-target" data-event-click="pk_target(1)">hos</div>
-            <div id="pkt-neutral"  class="pk-target" data-event-click="pk_target(2)">neu</div>
-            <div id="pkt-friendly" class="pk-target" data-event-click="pk_target(3)">fri</div>
-            <div id="pkt-self"     class="pk-target" data-event-click="pk_target(4)">slf</div>
-        </div>
-        <!-- Theme (RCSS) + game text colours — many, so chosen via a combo; selecting one
-             routes the picker to that named colour (RGB edited, alpha preserved). -->
-        <div class="devui-row">
-            <span class="pk-label">theme/text</span>
-            <select data-value="pk_combo_idx" data-event-change="pk_combo">
-                <option data-for="n : pk_names" data-value="it_index">{{n}}</option>
-            </select>
-        </div>
-        <div class="pk-wrap">
-            <div id="pk-sv" class="pk-sv" data-event-mousedown="pk_sv" data-event-drag="pk_sv">
-                <div class="pk-sv-val"></div>
-                <div id="pk-sv-thumb" class="pk-thumb"></div>
+                <div class="devui-section">System menus</div>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="options"/> options</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="worldfactory"/> worldfactory</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="main_menu"/> main menu</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="loadchar"/> load character</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="newcharacter"/> new character</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="overmap"/> overmap legend</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="world_text"/> world text (SCT)</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="sidebar_hud"/> sidebar HUD</label>
             </div>
-            <div id="pk-hue" class="pk-hue" data-event-mousedown="pk_hue" data-event-drag="pk_hue">
-                <div id="pk-hue-thumb" class="pk-hue-thumb"></div>
+
+            <!-- ── Effects: lighting tuning sliders + toggles ─────────────────── -->
+            <div data-if="tab==1">
+                <div class="devui-section">Surface normals (A1)</div>
+                <div class="devui-row">normal amount <input type="range" min="0" max="10" step="0.1" data-value="nrm_amount"/> <span class="devui-val">{{nrm_amount}}</span></div>
+                <div class="devui-row">normal relief <input type="range" min="-6" max="6" step="0.1" data-value="nrm_relief"/> <span class="devui-val">{{nrm_relief}}</span></div>
+                <div class="devui-row">normal elev <input type="range" min="0.05" max="1.5" step="0.01" data-value="nrm_elev"/> <span class="devui-val">{{nrm_elev}}</span></div>
+
+                <div class="devui-section">Volumetric sun shafts (C2)</div>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="vol_enable"/> volumetric</label>
+                <div class="devui-row">vol density <input type="range" min="0" max="2" step="0.02" data-value="vol_density"/> <span class="devui-val">{{vol_density}}</span></div>
+                <div class="devui-row">vol intensity <input type="range" min="0" max="4" step="0.04" data-value="vol_intensity"/> <span class="devui-val">{{vol_intensity}}</span></div>
+                <div class="devui-row">vol reach <input type="range" min="1" max="24" step="0.5" data-value="vol_reach"/> <span class="devui-val">{{vol_reach}}</span></div>
+                <div class="devui-row">vol shadow <input type="range" min="0" max="1" step="0.01" data-value="vol_shadow"/> <span class="devui-val">{{vol_shadow}}</span></div>
+
+                <div class="devui-section">High-fidelity rain</div>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="rain_enable"/> rain</label>
+                <div class="devui-row">rain intensity <input type="range" min="0" max="1" step="0.01" data-value="rain_intensity"/> <span class="devui-val">{{rain_intensity}}</span></div>
+                <div class="devui-row">wet specular <input type="range" min="0" max="3" step="0.03" data-value="spec_strength"/> <span class="devui-val">{{spec_strength}}</span></div>
+
+                <div class="devui-section">Silhouette sun shadows</div>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="shadow_debug"/> show shadow mask (debug blit)</label>
+                <div class="devui-row">shadow mask strength <input type="range" min="0" max="1" step="0.01" data-value="shadow_mask_str"/> <span class="devui-val">{{shadow_mask_str}}</span></div>
+
+                <div class="devui-section">Memory fade</div>
+                <div class="devui-row">mem dim <input type="range" min="0" max="1" step="0.01" data-value="mem_dim"/> <span class="devui-val">{{mem_dim}}</span></div>
+                <div class="devui-row">mem radius <input type="range" min="1" max="60" step="1" data-value="mem_radius"/> <span class="devui-val">{{mem_radius}}</span></div>
+
+                <div class="devui-section">Foliage sway</div>
+                <div class="devui-row">sway amplitude <input type="range" min="0" max="8" step="0.1" data-value="sway_amp"/> <span class="devui-val">{{sway_amp}}</span></div>
+                <div class="devui-row">sway frequency <input type="range" min="0" max="3" step="0.05" data-value="sway_freq"/> <span class="devui-val">{{sway_freq}}</span></div>
+
+                <div class="devui-section">Hover outline</div>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="outline_enable"/> outline enable</label>
+                <div class="devui-row">outline thickness <input type="range" min="0" max="0.25" step="0.005" data-value="outline_thickness"/> <span class="devui-val">{{outline_thickness}}</span></div>
+                <div class="devui-row">outline alpha <input type="range" min="0" max="1" step="0.01" data-value="outline_alpha"/> <span class="devui-val">{{outline_alpha}}</span></div>
+                <div class="devui-row">outline mask cut <input type="range" min="0" max="1" step="0.01" data-value="outline_alpha_cut"/> <span class="devui-val">{{outline_alpha_cut}}</span></div>
             </div>
+
+            <!-- ── Colour: composite picker (cursor/outline swatches + theme combo) ── -->
+            <div data-if="tab==2">
+                <div class="devui-section">Colour picker</div>
+                <div class="pk-targets">
+                    <div id="pkt-cursor"   class="pk-target" data-event-click="pk_target(0)">cur</div>
+                    <div id="pkt-hostile"  class="pk-target" data-event-click="pk_target(1)">hos</div>
+                    <div id="pkt-neutral"  class="pk-target" data-event-click="pk_target(2)">neu</div>
+                    <div id="pkt-friendly" class="pk-target" data-event-click="pk_target(3)">fri</div>
+                    <div id="pkt-self"     class="pk-target" data-event-click="pk_target(4)">slf</div>
+                </div>
+                <div class="devui-row">
+                    <span class="pk-label">theme/text</span>
+                    <select data-value="pk_combo_idx" data-event-change="pk_combo">
+                        <option data-for="n : pk_names" data-value="it_index">{{n}}</option>
+                    </select>
+                </div>
+                <div class="pk-wrap">
+                    <div id="pk-sv" class="pk-sv" data-event-mousedown="pk_sv" data-event-drag="pk_sv">
+                        <div class="pk-sv-val"></div>
+                        <div id="pk-sv-thumb" class="pk-thumb"></div>
+                    </div>
+                    <div id="pk-hue" class="pk-hue" data-event-mousedown="pk_hue" data-event-drag="pk_hue">
+                        <div id="pk-hue-thumb" class="pk-hue-thumb"></div>
+                    </div>
+                </div>
+                <div class="devui-row">
+                    <span class="pk-label">new</span><div id="pk-swatch" class="pk-swatch"></div>
+                    <span class="pk-label">orig</span><div id="pk-swatch-orig" class="pk-swatch pk-revert" data-event-click="pk_revert"></div>
+                    <span class="devui-val">{{pk_hex}}</span>
+                </div>
+            </div>
+
+            <!-- ── Stub tabs (filled in slice 8) ──────────────────────────────── -->
+            <div data-if="tab==3"><div class="devui-section">Lighting</div><div class="devui-row">(slice 8)</div></div>
+            <div data-if="tab==4"><div class="devui-section">Animation</div><div class="devui-row">(slice 8)</div></div>
+            <div data-if="tab==5"><div class="devui-section">Runic frame</div><div class="devui-row">(slice 8)</div></div>
+            <div data-if="tab==6"><div class="devui-section">Diagnostics</div><div class="devui-row">(slice 8)</div></div>
         </div>
-        <!-- new (current edit) vs orig (snapshot at target-select); click orig to revert. -->
-        <div class="devui-row">
-            <span class="pk-label">new</span><div id="pk-swatch" class="pk-swatch"></div>
-            <span class="pk-label">orig</span><div id="pk-swatch-orig" class="pk-swatch pk-revert" data-event-click="pk_revert"></div>
-            <span class="devui-val">{{pk_hex}}</span>
-        </div>
+
+        <div id="devui-resize" class="devui-resize" data-event-drag="devui_resize"></div>
     </div>
 </body>
 </rml>
