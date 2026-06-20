@@ -18,20 +18,20 @@ body {
     position: absolute;
     left: 12px;
     top: 12px;
-    width: 320px;
-    height: 600px;           /* definite height — resizable from C++; lets bottom:0 resolve */
+    width: 400px;
+    height: 660px;           /* definite height — resizable from C++; lets bottom:0 resolve */
     display: flex;
     flex-direction: column;
     padding: 12px;
     background-color: #1e1e1ef0;
     border: 1px #555555;
     color: #dddddd;
-    font-size: 15px;
+    font-size: 18px;
 }
 
 .devui-title {
     flex: 0 0 auto;
-    font-size: 17px;
+    font-size: 22px;
     color: #ffffff;
     margin-bottom: 8px;
 }
@@ -47,13 +47,13 @@ body {
 
 .devui-tab {
     display: inline-block;
-    padding: 2px 7px;
+    padding: 3px 9px;
     margin-right: 2px;
     margin-bottom: 2px;
     background-color: #2a2a2a;
     border: 1px #555555;
     color: #aaaaaa;
-    font-size: 13px;
+    font-size: 15px;
 }
 
 .devui-tab:hover {
@@ -86,6 +86,35 @@ body {
 
 .devui-resize:hover {
     background-color: #8ab4f8;
+}
+
+/* Slice 8 — clickable button (event-click span), inline note, diagnostics read-out. */
+.devui-btn {
+    display: inline-block;
+    padding: 2px 8px;
+    margin-right: 4px;
+    margin-top: 2px;
+    background-color: #333355;
+    border: 1px #6677aa;
+    color: #dddeff;
+}
+
+.devui-btn:hover {
+    background-color: #44447a;
+    border-color: #99aaff;
+}
+
+.devui-note {
+    color: #888888;
+    font-size: 14px;
+    margin-bottom: 4px;
+}
+
+.devui-diag {
+    display: block;
+    white-space: pre-wrap;
+    font-size: 15px;
+    color: #b8d8b8;
 }
 
 .devui-section {

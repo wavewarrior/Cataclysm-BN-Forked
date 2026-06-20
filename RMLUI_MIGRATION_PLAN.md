@@ -2561,6 +2561,38 @@ codebase until now.
   - **Remaining (slice 8):** fill the 4 stub tabs — Lighting/Anim/Runic sliders + CRT sliders +
     world-text offsets (slider pattern), debug-mode `<select>`, the 9 buttons (event-click),
     diagnostics bound-text read-out. Then F4 opens the RmlUi doc + retire `imgui_layer` (§8 gate).
+- **Slice 8 — fill all stub tabs (full ImGui parity) + bigger/readable panel — CODE-COMPLETE +
+  BUILD-GREEN (Metal, fresh relink 20:40, devui.o + binary fresh), EYEBALL OWED, COMMITTED pending,
+  2026-06-20.** Every remaining ImGui control replicated in RmlUi; the dev panel is now a complete
+  parallel of the ImGui F4 (mechanisms all proven in 1-7, this is bulk replication). ~90 new binds.
+  - **Lighting tab:** debug-mode `<select>` (15 modes, int proxy `g_devui_dbg_mode` + `dbg_mode`
+    event → `g_current_dbg_mode`/`g_dbg_params.debug_mode`) + 27 sliders (light scales, AgX tonemap +
+    bloom, dither/GI/shadow incl. the `shadow_steps` uint reconciled to an int proxy each frame,
+    vision, tone grade) + RC-readback button.
+  - **Effects tab:** added the cursor-light controls (enable/radius/intensity + place-mode + clear
+    button + `{{placed_count}}`); colour stays on the Colour tab; click-to-place still rides ImGui
+    while it's primary (noted in-panel).
+  - **Animation tab:** live-override + 4 effect checkboxes + 22 sliders bound straight to the
+    `debug_anim_tuning()` singleton fields.
+  - **Runic tab:** template `<select>` (event → `force_template`) + fixed-seed checkbox + Randomize +
+    26 int sliders (incl. rune-ink R/G/B 0-255) + auto-regen checkbox + Generate/Save/Reload/Reset
+    buttons. Auto-regen bumps `regen` in `rml_tick` via a cheap field-sum change check (ImGui used a
+    per-slider `changed` flag; data-binding has none).
+  - **Diagnostics tab:** the read-only HUD as one bound multi-line string (`build_diag_text()`,
+    rebuilt each frame — mirrors `draw_diagnostics_tab`; shows the "enable F5" hint when the HUD's off).
+  - **CRT + world-text** added to the Screens tab (CRT enable + 6 sliders bound to `rmlui_layer::crt()`;
+    wt px/dx/dy bound to the `world_text_*()` accessors).
+  - **Readability (user ask):** panel font 15→18px, title 17→22, tabs 13→15; default panel 400×660.
+    `.devui-btn` (event-click span), `.devui-note`, `.devui-diag` (pre-wrap) styles added.
+  - **EYEBALL CHECK (user, A/B):** each tab's controls drive their ImGui-equivalent param live —
+    Lighting mode `<select>` switches debug view + all sliders; Animation knobs change sprite motion
+    (with live-override on); Runic edits regenerate the border live (auto-regen) + Save/Reload/Reset/
+    Randomize work; Diagnostics shows the live HUD text; CRT + world-text sliders match ImGui. Font is
+    readable. **Make-or-break:** the two new `<select>`s (dbg_mode, ru_template) fire their change
+    events (proven by pk_combo); the shadow_steps + runic auto-regen per-frame reconciles behave.
+  - **★ TIER 8 NOW AT FULL PARITY — the RmlUi dev panel mirrors the entire ImGui F4.** Next: flip F4
+    to open the RmlUi doc as primary + retire `imgui_layer` from the composite pass (§8 gate), after
+    eyeball. (Cursor click-to-place + the ImGui-only mouse-placement logic must move at that flip.)
 
 ## Load-bearing architecture facts (verified this session)
 

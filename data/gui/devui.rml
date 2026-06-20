@@ -73,10 +73,32 @@
                 <label class="devui-row"><input type="checkbox" value="1" data-checked="overmap"/> overmap legend</label>
                 <label class="devui-row"><input type="checkbox" value="1" data-checked="world_text"/> world text (SCT)</label>
                 <label class="devui-row"><input type="checkbox" value="1" data-checked="sidebar_hud"/> sidebar HUD</label>
+
+                <div class="devui-section">CRT post-effect</div>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="crt_enable"/> CRT (scanlines + vignette)</label>
+                <div class="devui-row">scanline dark <input type="range" min="0" max="1" step="0.01" data-value="crt_scanline_alpha"/> <span class="devui-val">{{crt_scanline_alpha}}</span></div>
+                <div class="devui-row">scanline pitch <input type="range" min="2" max="64" step="0.5" data-value="crt_scanline_pitch"/> <span class="devui-val">{{crt_scanline_pitch}}</span></div>
+                <div class="devui-row">scanline thick <input type="range" min="0.5" max="32" step="0.5" data-value="crt_scanline_thickness"/> <span class="devui-val">{{crt_scanline_thickness}}</span></div>
+                <div class="devui-row">roll speed <input type="range" min="0" max="300" step="1" data-value="crt_roll_speed"/> <span class="devui-val">{{crt_roll_speed}}</span></div>
+                <div class="devui-row">flicker <input type="range" min="0" max="1" step="0.01" data-value="crt_flicker"/> <span class="devui-val">{{crt_flicker}}</span></div>
+                <div class="devui-row">vignette <input type="range" min="0" max="1" step="0.01" data-value="crt_vignette"/> <span class="devui-val">{{crt_vignette}}</span></div>
+
+                <div class="devui-section">World text (SCT)</div>
+                <div class="devui-row">wt font px <input type="range" min="8" max="64" step="1" data-value="wt_px"/> <span class="devui-val">{{wt_px}}</span></div>
+                <div class="devui-row">wt x offset <input type="range" min="-64" max="64" step="1" data-value="wt_dx"/> <span class="devui-val">{{wt_dx}}</span></div>
+                <div class="devui-row">wt y offset <input type="range" min="-64" max="64" step="1" data-value="wt_dy"/> <span class="devui-val">{{wt_dy}}</span></div>
             </div>
 
             <!-- ── Effects: lighting tuning sliders + toggles ─────────────────── -->
             <div data-if="tab==1">
+                <div class="devui-section">Cursor light (dev)</div>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="cursor_enable"/> omni light follows cursor</label>
+                <div class="devui-row">cursor radius <input type="range" min="1" max="40" step="0.5" data-value="cursor_radius"/> <span class="devui-val">{{cursor_radius}}</span></div>
+                <div class="devui-row">cursor intensity <input type="range" min="0" max="5" step="0.05" data-value="cursor_intensity"/> <span class="devui-val">{{cursor_intensity}}</span></div>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="place_mode"/> place test lights on click</label>
+                <div class="devui-row">placed: {{placed_count}} <span class="devui-btn" data-event-click="clear_lights">clear placed</span></div>
+                <div class="devui-note">(colour on the Colour tab; click-to-place rides ImGui while it stays primary)</div>
+
                 <div class="devui-section">Surface normals (A1)</div>
                 <div class="devui-row">normal amount <input type="range" min="0" max="10" step="0.1" data-value="nrm_amount"/> <span class="devui-val">{{nrm_amount}}</span></div>
                 <div class="devui-row">normal relief <input type="range" min="-6" max="6" step="0.1" data-value="nrm_relief"/> <span class="devui-val">{{nrm_relief}}</span></div>
@@ -145,11 +167,159 @@
                 </div>
             </div>
 
-            <!-- ── Stub tabs (filled in slice 8) ──────────────────────────────── -->
-            <div data-if="tab==3"><div class="devui-section">Lighting</div><div class="devui-row">(slice 8)</div></div>
-            <div data-if="tab==4"><div class="devui-section">Animation</div><div class="devui-row">(slice 8)</div></div>
-            <div data-if="tab==5"><div class="devui-section">Runic frame</div><div class="devui-row">(slice 8)</div></div>
-            <div data-if="tab==6"><div class="devui-section">Diagnostics</div><div class="devui-row">(slice 8)</div></div>
+            <!-- ── Lighting: debug-mode select + core lighting sliders ─────────── -->
+            <div data-if="tab==3">
+                <div class="devui-row">
+                    <span class="pk-label">mode (F7)</span>
+                    <select data-value="dbg_mode_idx" data-event-change="dbg_mode">
+                        <option data-for="n : dbg_mode_names" data-value="it_index">{{n}}</option>
+                    </select>
+                </div>
+
+                <div class="devui-section">Light scales</div>
+                <div class="devui-row">emitter <input type="range" min="0" max="4" step="0.02" data-value="emitter_scale"/> <span class="devui-val">{{emitter_scale}}</span></div>
+                <div class="devui-row">sun <input type="range" min="0" max="4" step="0.02" data-value="sun_scale"/> <span class="devui-val">{{sun_scale}}</span></div>
+                <div class="devui-row">sky <input type="range" min="0" max="4" step="0.02" data-value="sky_scale"/> <span class="devui-val">{{sky_scale}}</span></div>
+                <div class="devui-row">indoor sky bleed <input type="range" min="0" max="1" step="0.01" data-value="skylight_bleed"/> <span class="devui-val">{{skylight_bleed}}</span></div>
+                <div class="devui-row">vision blur <input type="range" min="0" max="6" step="0.1" data-value="vision_blur"/> <span class="devui-val">{{vision_blur}}</span></div>
+
+                <div class="devui-section">Tonemap (AgX)</div>
+                <div class="devui-row">exposure <input type="range" min="0" max="2" step="0.01" data-value="tonemap_exposure"/> <span class="devui-val">{{tonemap_exposure}}</span></div>
+                <div class="devui-row">min EV <input type="range" min="-20" max="0" step="0.1" data-value="tonemap_min_ev"/> <span class="devui-val">{{tonemap_min_ev}}</span></div>
+                <div class="devui-row">max EV <input type="range" min="0" max="12" step="0.1" data-value="tonemap_max_ev"/> <span class="devui-val">{{tonemap_max_ev}}</span></div>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="bloom_enable"/> bloom</label>
+                <div class="devui-row">bloom threshold <input type="range" min="0" max="4" step="0.02" data-value="bloom_threshold"/> <span class="devui-val">{{bloom_threshold}}</span></div>
+                <div class="devui-row">bloom intensity <input type="range" min="0" max="2" step="0.02" data-value="bloom_intensity"/> <span class="devui-val">{{bloom_intensity}}</span></div>
+
+                <div class="devui-section">Dither / GI / shadow</div>
+                <div class="devui-row">dither amt <input type="range" min="0" max="2" step="0.01" data-value="dither_amt"/> <span class="devui-val">{{dither_amt}}</span></div>
+                <div class="devui-row">dither bands <input type="range" min="1" max="32" step="1" data-value="dither_bands"/> <span class="devui-val">{{dither_bands}}</span></div>
+                <div class="devui-row">GI strength <input type="range" min="0" max="3" step="0.02" data-value="gi_strength"/> <span class="devui-val">{{gi_strength}}</span></div>
+                <div class="devui-row"><span class="devui-btn" data-event-click="rc_readback">RC cascade readback (log)</span></div>
+                <div class="devui-row">shadow k <input type="range" min="0" max="32" step="0.5" data-value="shadow_k"/> <span class="devui-val">{{shadow_k}}</span></div>
+                <div class="devui-row">shadow steps <input type="range" min="1" max="64" step="1" data-value="shadow_steps"/> <span class="devui-val">{{shadow_steps}}</span></div>
+                <div class="devui-row">light eps <input type="range" min="0" max="0.05" step="0.001" data-value="light_eps"/> <span class="devui-val">{{light_eps}}</span></div>
+                <div class="devui-row">max shadow K <input type="range" min="1" max="64" step="1" data-value="max_shadow_k"/> <span class="devui-val">{{max_shadow_k}}</span></div>
+                <div class="devui-row">SDF sharpness <input type="range" min="0" max="1" step="0.01" data-value="sdf_sharp"/> <span class="devui-val">{{sdf_sharp}}</span></div>
+                <div class="devui-row">ambient occlusion <input type="range" min="0" max="1" step="0.01" data-value="ao_strength"/> <span class="devui-val">{{ao_strength}}</span></div>
+
+                <div class="devui-section">Vision (Stoneshard)</div>
+                <div class="devui-row">vis curve <input type="range" min="0" max="4" step="0.05" data-value="vis_curve"/> <span class="devui-val">{{vis_curve}}</span></div>
+                <div class="devui-row">vis radius <input type="range" min="0" max="40" step="0.5" data-value="vis_radius"/> <span class="devui-val">{{vis_radius}}</span></div>
+                <div class="devui-row">night floor <input type="range" min="0" max="0.3" step="0.005" data-value="night_floor"/> <span class="devui-val">{{night_floor}}</span></div>
+                <div class="devui-row">day floor <input type="range" min="0" max="0.3" step="0.005" data-value="day_floor"/> <span class="devui-val">{{day_floor}}</span></div>
+
+                <div class="devui-section">Tone grade (Stoneshard wash)</div>
+                <div class="devui-row">desaturate <input type="range" min="0" max="1" step="0.01" data-value="grade_desat"/> <span class="devui-val">{{grade_desat}}</span></div>
+                <div class="devui-row">cool tint <input type="range" min="0" max="1" step="0.01" data-value="grade_cool"/> <span class="devui-val">{{grade_cool}}</span></div>
+                <div class="devui-row">brightness <input type="range" min="0" max="1.5" step="0.01" data-value="grade_bright"/> <span class="devui-val">{{grade_bright}}</span></div>
+            </div>
+
+            <!-- ── Animation: sprite-anim tuning ──────────────────────────────── -->
+            <div data-if="tab==4">
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="anim_override"/> live override (ignore options)</label>
+
+                <div class="devui-section">Effects on/off</div>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="an_move_bob"/> move bob/slide</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="an_breathing"/> idle sway</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="an_hit_reaction"/> hit reaction</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="an_attack_lunge"/> attack lunge</label>
+
+                <div class="devui-section">Movement</div>
+                <div class="devui-row">bob amplitude <input type="range" min="0" max="16" step="0.1" data-value="an_bob_amplitude"/> <span class="devui-val">{{an_bob_amplitude}}</span></div>
+                <div class="devui-row">bob duration <input type="range" min="0.05" max="1" step="0.01" data-value="an_bob_duration"/> <span class="devui-val">{{an_bob_duration}}</span></div>
+                <div class="devui-row">bob frequency <input type="range" min="1" max="60" step="0.1" data-value="an_move_bob_freq"/> <span class="devui-val">{{an_move_bob_freq}}</span></div>
+                <div class="devui-row">move tilt <input type="range" min="0" max="15" step="0.1" data-value="an_move_tilt_deg"/> <span class="devui-val">{{an_move_tilt_deg}}</span></div>
+                <div class="devui-row">slide duration <input type="range" min="0.02" max="0.5" step="0.01" data-value="an_move_slide_dur"/> <span class="devui-val">{{an_move_slide_dur}}</span></div>
+
+                <div class="devui-section">Idle sway</div>
+                <div class="devui-row">idle sway <input type="range" min="0" max="6" step="0.1" data-value="an_idle_sway"/> <span class="devui-val">{{an_idle_sway}}</span></div>
+                <div class="devui-row">idle frequency <input type="range" min="0" max="6" step="0.1" data-value="an_idle_freq"/> <span class="devui-val">{{an_idle_freq}}</span></div>
+                <div class="devui-row">idle tilt <input type="range" min="0" max="6" step="0.1" data-value="an_idle_tilt_deg"/> <span class="devui-val">{{an_idle_tilt_deg}}</span></div>
+                <div class="devui-row">idle vbob mult <input type="range" min="0" max="2" step="0.05" data-value="an_idle_vbob_mult"/> <span class="devui-val">{{an_idle_vbob_mult}}</span></div>
+
+                <div class="devui-section">Hit reaction</div>
+                <div class="devui-row">hit push <input type="range" min="0" max="24" step="0.1" data-value="an_hit_push"/> <span class="devui-val">{{an_hit_push}}</span></div>
+                <div class="devui-row">hit duration <input type="range" min="0.05" max="1" step="0.01" data-value="an_hit_duration"/> <span class="devui-val">{{an_hit_duration}}</span></div>
+                <div class="devui-row">hit burst total <input type="range" min="0.1" max="1.5" step="0.01" data-value="an_hit_burst_total"/> <span class="devui-val">{{an_hit_burst_total}}</span></div>
+                <div class="devui-row">hit flash intensity <input type="range" min="0" max="2" step="0.05" data-value="an_hit_flash_intensity"/> <span class="devui-val">{{an_hit_flash_intensity}}</span></div>
+                <div class="devui-row">hit flash frac <input type="range" min="0" max="1" step="0.01" data-value="an_hit_flash_frac"/> <span class="devui-val">{{an_hit_flash_frac}}</span></div>
+                <div class="devui-row">hit frequency <input type="range" min="1" max="60" step="0.1" data-value="an_hit_freq"/> <span class="devui-val">{{an_hit_freq}}</span></div>
+                <div class="devui-row">hit tilt <input type="range" min="0" max="20" step="0.1" data-value="an_hit_tilt_deg"/> <span class="devui-val">{{an_hit_tilt_deg}}</span></div>
+
+                <div class="devui-section">Attack lunge</div>
+                <div class="devui-row">attack amplitude <input type="range" min="0" max="16" step="0.1" data-value="an_attack_amplitude"/> <span class="devui-val">{{an_attack_amplitude}}</span></div>
+                <div class="devui-row">attack duration <input type="range" min="0.05" max="1" step="0.01" data-value="an_attack_duration"/> <span class="devui-val">{{an_attack_duration}}</span></div>
+                <div class="devui-row">attack frequency <input type="range" min="1" max="60" step="0.1" data-value="an_attack_freq"/> <span class="devui-val">{{an_attack_freq}}</span></div>
+                <div class="devui-row">ranged amp mult <input type="range" min="-2" max="2" step="0.05" data-value="an_attack_ranged_mult"/> <span class="devui-val">{{an_attack_ranged_mult}}</span></div>
+                <div class="devui-row">melee tilt <input type="range" min="-15" max="15" step="0.1" data-value="an_attack_tilt_melee_deg"/> <span class="devui-val">{{an_attack_tilt_melee_deg}}</span></div>
+                <div class="devui-row">ranged tilt <input type="range" min="-15" max="15" step="0.1" data-value="an_attack_tilt_ranged_deg"/> <span class="devui-val">{{an_attack_tilt_ranged_deg}}</span></div>
+            </div>
+
+            <!-- ── Runic frame: procedural border tuning ──────────────────────── -->
+            <div data-if="tab==5">
+                <div class="devui-row">
+                    <span class="pk-label">template</span>
+                    <select data-value="ru_template_idx" data-event-change="ru_template">
+                        <option data-for="n : ru_template_names" data-value="it_index">{{n}}</option>
+                    </select>
+                </div>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="ru_fixed_seed"/> fixed seed</label>
+                <div class="devui-row"><span class="devui-btn" data-event-click="ru_randomize">Randomize seed</span></div>
+
+                <div class="devui-section">Rune ink</div>
+                <div class="devui-row">R <input type="range" min="0" max="255" step="1" data-value="ru_col_r"/> <span class="devui-val">{{ru_col_r}}</span></div>
+                <div class="devui-row">G <input type="range" min="0" max="255" step="1" data-value="ru_col_g"/> <span class="devui-val">{{ru_col_g}}</span></div>
+                <div class="devui-row">B <input type="range" min="0" max="255" step="1" data-value="ru_col_b"/> <span class="devui-val">{{ru_col_b}}</span></div>
+
+                <div class="devui-section">Geometry</div>
+                <div class="devui-row">ring <input type="range" min="4" max="48" step="1" data-value="ru_ring"/> <span class="devui-val">{{ru_ring}}</span></div>
+                <div class="devui-row">glyph scale <input type="range" min="1" max="4" step="1" data-value="ru_glyph_scale"/> <span class="devui-val">{{ru_glyph_scale}}</span></div>
+                <div class="devui-row">band top <input type="range" min="0" max="20" step="1" data-value="ru_band_top"/> <span class="devui-val">{{ru_band_top}}</span></div>
+                <div class="devui-row">div top <input type="range" min="0" max="20" step="1" data-value="ru_div_top"/> <span class="devui-val">{{ru_div_top}}</span></div>
+                <div class="devui-row">div bot <input type="range" min="2" max="40" step="1" data-value="ru_div_bot"/> <span class="devui-val">{{ru_div_bot}}</span></div>
+                <div class="devui-row">frame inset <input type="range" min="0" max="40" step="1" data-value="ru_frame_inset"/> <span class="devui-val">{{ru_frame_inset}}</span></div>
+                <div class="devui-row">fill % <input type="range" min="0" max="99" step="1" data-value="ru_fill_pct"/> <span class="devui-val">{{ru_fill_pct}}</span></div>
+
+                <div class="devui-section">Boxes &amp; dividers</div>
+                <div class="devui-row">wall <input type="range" min="1" max="4" step="1" data-value="ru_wall"/> <span class="devui-val">{{ru_wall}}</span></div>
+                <div class="devui-row">divider width <input type="range" min="1" max="6" step="1" data-value="ru_divw"/> <span class="devui-val">{{ru_divw}}</span></div>
+                <div class="devui-row">pad <input type="range" min="0" max="10" step="1" data-value="ru_pad"/> <span class="devui-val">{{ru_pad}}</span></div>
+                <div class="devui-row">glyph gap <input type="range" min="0" max="10" step="1" data-value="ru_ggap"/> <span class="devui-val">{{ru_ggap}}</span></div>
+                <div class="devui-row">inner gap <input type="range" min="0" max="8" step="1" data-value="ru_gapi"/> <span class="devui-val">{{ru_gapi}}</span></div>
+
+                <div class="devui-section">Layout</div>
+                <div class="devui-row">edge length % <input type="range" min="0" max="100" step="1" data-value="ru_border_frac"/> <span class="devui-val">{{ru_border_frac}}</span></div>
+                <div class="devui-row">rule gap <input type="range" min="0" max="16" step="1" data-value="ru_rgap"/> <span class="devui-val">{{ru_rgap}}</span></div>
+                <div class="devui-row">pitch <input type="range" min="60" max="512" step="1" data-value="ru_pitch"/> <span class="devui-val">{{ru_pitch}}</span></div>
+                <div class="devui-row">unit <input type="range" min="64" max="512" step="1" data-value="ru_unit"/> <span class="devui-val">{{ru_unit}}</span></div>
+
+                <div class="devui-section">Corrosion</div>
+                <div class="devui-row">corrode % <input type="range" min="0" max="99" step="1" data-value="ru_corrode_pct"/> <span class="devui-val">{{ru_corrode_pct}}</span></div>
+                <div class="devui-row">pit size <input type="range" min="1" max="16" step="1" data-value="ru_corrode_grid"/> <span class="devui-val">{{ru_corrode_grid}}</span></div>
+                <div class="devui-row">reach <input type="range" min="1" max="10" step="1" data-value="ru_corrode_reach"/> <span class="devui-val">{{ru_corrode_reach}}</span></div>
+                <div class="devui-row">rim grit % <input type="range" min="0" max="99" step="1" data-value="ru_corrode_grit"/> <span class="devui-val">{{ru_corrode_grit}}</span></div>
+
+                <div class="devui-section">Edge taper / declutter</div>
+                <div class="devui-row">taper dots <input type="range" min="0" max="1" step="1" data-value="ru_taper_dots"/> <span class="devui-val">{{ru_taper_dots}}</span></div>
+                <div class="devui-row">taper gap <input type="range" min="1" max="12" step="1" data-value="ru_taper_gap"/> <span class="devui-val">{{ru_taper_gap}}</span></div>
+                <div class="devui-row">small edge px <input type="range" min="0" max="500" step="1" data-value="ru_rune_small_px"/> <span class="devui-val">{{ru_rune_small_px}}</span></div>
+
+                <div class="devui-section">Regenerate / persist</div>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="ru_auto_regen"/> auto-regenerate on edit</label>
+                <div class="devui-row">
+                    <span class="devui-btn" data-event-click="ru_generate">Generate</span>
+                    <span class="devui-btn" data-event-click="ru_save">Save</span>
+                    <span class="devui-btn" data-event-click="ru_reload">Reload</span>
+                    <span class="devui-btn" data-event-click="ru_reset">Reset</span>
+                </div>
+            </div>
+
+            <!-- ── Diagnostics: read-only HUD text (rebuilt each frame) ────────── -->
+            <div data-if="tab==6">
+                <div class="devui-section">Diagnostics</div>
+                <div class="devui-diag">{{diag_text}}</div>
+            </div>
         </div>
 
         <div id="devui-resize" class="devui-resize" data-event-drag="devui_resize"></div>
