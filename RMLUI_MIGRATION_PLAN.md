@@ -2437,9 +2437,9 @@ codebase until now.
     needs an `onchange`/event fallback — flag it.
   - **WATCH:** the preview box + ImGui window are both on screen (intended for A/B); the RmlUi box
     captures mouse only when hovered (interactive doc), ImGui captures when over its window.
-- **Slice 2 — full toggle registry + first slider — CODE-COMPLETE + BUILD-GREEN (Metal, fresh
-  relink 18:54, devui.o fresh — all 35 accessor names + ui_scale resolved), EYEBALL OWED, COMMITTED
-  pending.** Expands the preview to ALL 35 `*_rmlui_enabled()` checkboxes (6 sections mirroring the
+- **Slice 2 — full toggle registry + first slider — DONE + EYEBALL CONFIRMED (user, "slider works",
+  2026-06-20), COMMITTED `870c0c6f27`. Plus usability fix `80bb1842ab`.** Expands the preview to ALL
+  35 `*_rmlui_enabled()` checkboxes (6 sections mirroring the
   ImGui registry) + proves `<input type="range" data-value>` slider binding on `rmlui_layer::
   ui_scale()` (float, two-way) with a `{{ui_scale}}` live readout. RCSS: scrollable panel
   (`max-height:92vh; overflow-y:auto` — 35 rows exceed the screen) + range sub-element styling
@@ -2450,11 +2450,29 @@ codebase until now.
     panel scrolls when taller than the screen. **Make-or-break:** does `data-value` two-way binding
     fire on the range (drag writes the float, ImGui-side change reflects)? If the slider renders
     but won't drag-write, add an `onchange` event fallback.
-  - **Remaining for Tier 8 (later slices):** the LIGHTING TUNING controls — theme/text colours
-    (ColorEdit → RmlUi colour input or RGB sliders), CRT sliders, lighting debug-mode combos,
-    effects toggles+sliders (bloom/vol/rain/outline), runic-frame sliders, world-text px/offset
-    sliders, the diagnostics read-out tab, and the 9 buttons. Then F4 opens the RmlUi doc + retire
-    `imgui_layer` (§8 gate).
+  - **★ USABILITY FIX `80bb1842ab`:** `ui_scale()` multiplies the context-wide
+    `SetDensityIndependentPixelRatio` (rmlui_layer.cpp:904), so all `dp`/`em` scaled — including the
+    dev panel hosting the slider, which reflowed under the cursor (unusable). Re-authored devui.rcss
+    in **px** (raw pixels immune to the dp ratio) → panel is fixed-size; the slider rescales the rest
+    of the UI while staying put. (Data files read from source `data/` — no rebuild, relaunch only.)
+- **Slice 3 — Effects tab tuning (sliders + toggles) — CODE-COMPLETE + BUILD-GREEN (Metal, fresh
+  relink 19:34, devui.o fresh — all 21 effect globals + dbg_params fields resolved), EYEBALL OWED,
+  COMMITTED pending, 2026-06-20.** Ports the Effects tab's proven-mechanism controls to RmlUi: 4
+  checkboxes (vol/rain/shadow-debug/outline) + 17 sliders (normals nrm_amount/relief/elev, vol
+  density/intensity/reach/shadow, rain intensity + wet spec, shadow-mask str, mem dim/radius, sway
+  amp/freq, outline thickness/alpha/mask-cut) each with a `{{var}}` live readout, bound by pointer
+  to the same globals (`g_dbg_params.*`, `g_vol_*`, `g_rain_*`, `g_outline_*`) the ImGui sliders
+  drive. **DEFERRED (own slices):** colour pickers (no native RmlUi control → RGB-slider or hex
+  pattern), the cursor/place-light interaction (ImGui mouse logic), buttons (event-click callback),
+  debug-mode combos (`<select>`).
+  - **EYEBALL CHECK (user, A/B):** open the preview → Effects sections show; each slider drags its
+    lighting param live (game render changes, `{{var}}` tracks), matching the ImGui slider; the 4
+    checkboxes toggle their effect. Long panel scrolls.
+  - **Remaining for Tier 8 (later slices):** colour pickers (theme/text/outline/cursor colours),
+    lighting debug-mode combos (`<select>`), the 9 buttons (event-click), cursor/place-light, the
+    Lighting/Animation/Runic/Diagnostics tabs, CRT sliders, world-text px/offset. Likely a TAB
+    structure (reuse the `.tabs`/`.tab` component) once the flat panel gets unwieldy. Then F4 opens
+    the RmlUi doc + retire `imgui_layer` (§8 gate).
 
 ## Load-bearing architecture facts (verified this session)
 

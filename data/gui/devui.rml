@@ -66,6 +66,44 @@
         <label class="devui-row"><input type="checkbox" value="1" data-checked="overmap"/> overmap legend</label>
         <label class="devui-row"><input type="checkbox" value="1" data-checked="world_text"/> world text (SCT)</label>
         <label class="devui-row"><input type="checkbox" value="1" data-checked="sidebar_hud"/> sidebar HUD</label>
+
+        <!-- Tier 8 slice 3 — Effects tab tuning controls (proven slider/checkbox
+             mechanisms applied to live lighting params). Colour pickers, the cursor/
+             place-light interaction, buttons and combos are deferred to later slices. -->
+        <div class="devui-section">Surface normals (A1)</div>
+        <div class="devui-row">normal amount <input type="range" min="0" max="10" step="0.1" data-value="nrm_amount"/> <span class="devui-val">{{nrm_amount}}</span></div>
+        <div class="devui-row">normal relief <input type="range" min="-6" max="6" step="0.1" data-value="nrm_relief"/> <span class="devui-val">{{nrm_relief}}</span></div>
+        <div class="devui-row">normal elev <input type="range" min="0.05" max="1.5" step="0.01" data-value="nrm_elev"/> <span class="devui-val">{{nrm_elev}}</span></div>
+
+        <div class="devui-section">Volumetric sun shafts (C2)</div>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="vol_enable"/> volumetric</label>
+        <div class="devui-row">vol density <input type="range" min="0" max="2" step="0.02" data-value="vol_density"/> <span class="devui-val">{{vol_density}}</span></div>
+        <div class="devui-row">vol intensity <input type="range" min="0" max="4" step="0.04" data-value="vol_intensity"/> <span class="devui-val">{{vol_intensity}}</span></div>
+        <div class="devui-row">vol reach <input type="range" min="1" max="24" step="0.5" data-value="vol_reach"/> <span class="devui-val">{{vol_reach}}</span></div>
+        <div class="devui-row">vol shadow <input type="range" min="0" max="1" step="0.01" data-value="vol_shadow"/> <span class="devui-val">{{vol_shadow}}</span></div>
+
+        <div class="devui-section">High-fidelity rain</div>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="rain_enable"/> rain</label>
+        <div class="devui-row">rain intensity <input type="range" min="0" max="1" step="0.01" data-value="rain_intensity"/> <span class="devui-val">{{rain_intensity}}</span></div>
+        <div class="devui-row">wet specular <input type="range" min="0" max="3" step="0.03" data-value="spec_strength"/> <span class="devui-val">{{spec_strength}}</span></div>
+
+        <div class="devui-section">Silhouette sun shadows</div>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="shadow_debug"/> show shadow mask (debug blit)</label>
+        <div class="devui-row">shadow mask strength <input type="range" min="0" max="1" step="0.01" data-value="shadow_mask_str"/> <span class="devui-val">{{shadow_mask_str}}</span></div>
+
+        <div class="devui-section">Memory fade</div>
+        <div class="devui-row">mem dim <input type="range" min="0" max="1" step="0.01" data-value="mem_dim"/> <span class="devui-val">{{mem_dim}}</span></div>
+        <div class="devui-row">mem radius <input type="range" min="1" max="60" step="1" data-value="mem_radius"/> <span class="devui-val">{{mem_radius}}</span></div>
+
+        <div class="devui-section">Foliage sway</div>
+        <div class="devui-row">sway amplitude <input type="range" min="0" max="8" step="0.1" data-value="sway_amp"/> <span class="devui-val">{{sway_amp}}</span></div>
+        <div class="devui-row">sway frequency <input type="range" min="0" max="3" step="0.05" data-value="sway_freq"/> <span class="devui-val">{{sway_freq}}</span></div>
+
+        <div class="devui-section">Hover outline</div>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="outline_enable"/> outline enable</label>
+        <div class="devui-row">outline thickness <input type="range" min="0" max="0.25" step="0.005" data-value="outline_thickness"/> <span class="devui-val">{{outline_thickness}}</span></div>
+        <div class="devui-row">outline alpha <input type="range" min="0" max="1" step="0.01" data-value="outline_alpha"/> <span class="devui-val">{{outline_alpha}}</span></div>
+        <div class="devui-row">outline mask cut <input type="range" min="0" max="1" step="0.01" data-value="outline_alpha_cut"/> <span class="devui-val">{{outline_alpha_cut}}</span></div>
     </div>
 </body>
 </rml>

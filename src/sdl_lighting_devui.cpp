@@ -484,6 +484,29 @@ void devui_rml_open()
     c.Bind( "overmap", &overmap_rmlui_enabled() );
     c.Bind( "world_text", &world_text_rmlui_enabled() );
     c.Bind( "sidebar_hud", &sidebar_hud_rmlui_enabled() );
+    // Slice 3 — Effects tab tuning params (live lighting). Floats two-way bound to the
+    // same globals the ImGui sliders drive; the game render reads them each frame.
+    c.Bind( "nrm_amount", &g_dbg_params.nrm_amount );
+    c.Bind( "nrm_relief", &g_dbg_params.nrm_relief );
+    c.Bind( "nrm_elev", &g_dbg_params.nrm_elev );
+    c.Bind( "vol_enable", &g_vol_enable );
+    c.Bind( "vol_density", &g_vol_density );
+    c.Bind( "vol_intensity", &g_vol_intensity );
+    c.Bind( "vol_reach", &g_vol_reach );
+    c.Bind( "vol_shadow", &g_vol_shadow );
+    c.Bind( "rain_enable", &g_rain_enable );
+    c.Bind( "rain_intensity", &g_rain_intensity );
+    c.Bind( "spec_strength", &g_spec_strength );
+    c.Bind( "shadow_debug", &g_shadow_debug );
+    c.Bind( "shadow_mask_str", &g_dbg_params.shadow_mask_str );
+    c.Bind( "mem_dim", &g_dbg_params.mem_dim );
+    c.Bind( "mem_radius", &g_dbg_params.mem_radius );
+    c.Bind( "sway_amp", &g_dbg_params.sway_amp );
+    c.Bind( "sway_freq", &g_dbg_params.sway_freq );
+    c.Bind( "outline_enable", &g_outline_enable );
+    c.Bind( "outline_thickness", &g_outline_thickness );
+    c.Bind( "outline_alpha", &g_outline_alpha );
+    c.Bind( "outline_alpha_cut", &g_outline_alpha_cut );
     g_devui_model = c.GetModelHandle();
     Rml::ElementDocument *doc =
         rmlui_layer::open_document( PATH_INFO::datadir() + "gui/devui.rml", false );
