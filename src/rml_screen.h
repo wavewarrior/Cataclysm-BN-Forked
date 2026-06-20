@@ -202,4 +202,10 @@ bool &ranged_rmlui_enabled();
 // owns only the Stats panel. Render-only; default OFF.
 bool &sidebar_hud_rmlui_enabled();
 
+// Minigames (Tier 9): the 5 grid games (lightson/snake/sokoban/minesweeper/
+// kitten) rendered through ONE shared char-grid RmlUi doc (minigame.rml). One
+// toggle lights all five; each game's draw syncs the shared title/grid/footer
+// model (see minigame_rml.h). Render-only; default OFF.
+bool &minigames_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

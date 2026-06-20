@@ -729,6 +729,7 @@ void devui_rml_open()
     c.Bind( "overmap", &overmap_rmlui_enabled() );
     c.Bind( "world_text", &world_text_rmlui_enabled() );
     c.Bind( "sidebar_hud", &sidebar_hud_rmlui_enabled() );
+    c.Bind( "minigames", &minigames_rmlui_enabled() );
     // Slice 3 — Effects tab tuning params (live lighting). Floats two-way bound to the
     // same globals the ImGui sliders drive; the game render reads them each frame.
     c.Bind( "nrm_amount", &g_dbg_params.nrm_amount );

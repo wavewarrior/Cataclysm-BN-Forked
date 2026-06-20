@@ -10,8 +10,10 @@
 #include "color.h"
 #include "cursesdef.h"
 #include "input.h"
+#include "minigame_rml.h"
 #include "output.h"
 #include "point.h"
+#include "rml_screen.h"
 #include "rng.h"
 #include "translations.h"
 #include "ui_manager.h"
@@ -149,7 +151,39 @@ int lightson_game::start_game()
     ctxt.register_action( "QUIT" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
 
+    // Tier 9: render through the shared char-grid RmlUi widget when enabled.
+    minigame_rml::open( minigames_rmlui_enabled(), ctxt );
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( minigame_rml::active() ) {
+            minigame_rml::set_title( colorize( _( "Lights on!" ), c_white ) );
+            std::vector<std::string> grid;
+            grid.reserve( level_size.y );
+            for( int i = 0; i < level_size.y; i++ ) {
+                std::string row;
+                for( int j = 0; j < level_size.x; j++ ) {
+                    const point current( j, i );
+                    const bool on = get_value_at( current );
+                    const char symbol = on ? '#' : '-';
+                    // Cursor = bright yellow (RML markup is foreground-only, so the
+                    // curses inverse-video hilite becomes a distinct colour).
+                    const nc_color fg = position == current
+                                        ? c_yellow
+                                        : ( on ? c_white : c_dark_gray );
+                    row += colorize( std::string( 1, symbol ), fg );
+                }
+                grid.push_back( row );
+            }
+            minigame_rml::set_grid( grid );
+            minigame_rml::set_footer(
+                colorize( _( "Game goal:" ), c_white ) + _( " Switch all the lights on." ) + "\n" +
+                colorize( _( "Legend:" ), c_white ) + " " + colorize( "#", c_white ) + _( " on, " ) +
+                colorize( "-", c_dark_gray ) + _( " off." ) + "\n" +
+                _( "Toggle lights switches selected light and 4 its neighbors." ) + "\n\n" +
+                _( "<spacebar or 5> toggle lights   <r>eset   <q>uit" ) );
+            minigame_rml::sync();
+            return;
+        }
         std::vector<std::string> shortcuts;
         shortcuts.emplace_back( _( "<spacebar or 5> toggle lights" ) );
         shortcuts.emplace_back( _( "<r>eset" ) );
@@ -209,5 +243,6 @@ int lightson_game::start_game()
         }
     } while( true );
 
+    minigame_rml::close();
     return hasWon;
 }

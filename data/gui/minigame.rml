@@ -1,0 +1,18 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="minigame.rcss"/>
+</head>
+<body data-model="minigame">
+    <!-- Tier 9 — shared char-grid widget for the 5 grid minigames. The game feeds
+         title / grid rows / footer as cata-colour-tagged strings (minigame_rml::set_*);
+         the grid is monospace (Terminus, white-space:pre) so cells column-align. -->
+    <div class="mg-panel">
+        <div class="mg-title" data-rml="title"></div>
+        <div class="mg-grid">
+            <div class="mg-row" data-for="row : rows" data-rml="row.rml"></div>
+        </div>
+        <div class="mg-footer" data-rml="footer"></div>
+    </div>
+</body>
+</rml>

@@ -2626,6 +2626,42 @@ codebase until now.
     live (SDF rebuilds each frame while the panel's open)? And does the world click reach
     `place_test_light` (not eaten by the panel) only when off-panel?
 
+### Tier 9 progress (minigames — shared char-grid widget)
+
+The 5 grid games — `lightson` / `snake` / `sokoban` / `minesweeper` / `robot_finds_kitten`
+(`iuse_software*.cpp`, dispatched by `play_videogame` in `iuse_software.cpp`) — all draw a char
+grid via `mvwprintz` into a `ui_adaptor` curses window in a blocking input loop. Per the locked
+decision they share **ONE narrow reusable char-grid RmlUi doc** (NOT a general backend). Functionally
+the widget is title + a monospace coloured-cell grid + a footer — the sidebar-hud slice-3 idiom
+(`Vector<row{rml}>` + `data-for`/`data-rml`), and since the games are blocking loops the `rml_doc`
+modal harness fits. One toggle (`minigames_rmlui_enabled()`) lights all five.
+
+- **Slice 1 — shared widget + lightson — CODE-COMPLETE + BUILD-GREEN (Metal, fresh relink 21:12,
+  minigame_rml.o + binary fresh), TOGGLE OFF, EYEBALL OWED (Metal + D3D12), COMMITTED pending,
+  2026-06-20.** The reusable piece + the smallest game (lightson = a literal on/off grid).
+  - **`src/minigame_rml.{h,cpp}`** — free-function facade (`open/active/close/set_title/set_footer/
+    set_grid/sync`) over file-static model state (single active minigame; `rml_doc` guard keyed
+    "minigame"). The bind lambda registers a `mg_row{rml}` struct + array and binds `title`/`footer`/
+    `rows`; `set_*` take cata-colour-tagged strings → `cata_text_to_rml`. All RmlUi stays in the cpp;
+    the header is SDL/RmlUi-free so each game includes it cheaply.
+  - **`data/gui/minigame.{rml,rcss}`** — model `minigame`: `{{title}}` + `data-for row : rows`
+    monospace grid (`white-space:pre`, Terminus → cell-aligned) + `{{footer}}`. Centred flex modal.
+  - **`iuse_software_lightson.cpp`** — `minigame_rml::open(minigames_rmlui_enabled(), ctxt)` after the
+    input_context; on_redraw early-branches to build title/grid/footer + `sync()` (skips curses) when
+    active; `close()` before return. Cursor cell = bright yellow (RML markup is foreground-only, so the
+    curses inverse-video `hilite` becomes a distinct colour — fidelity note).
+  - **`rml_screen.h`** — `minigames_rmlui_enabled()` toggle (defined in minigame_rml.cpp). F4 devui
+    checkbox + bind added (Screens tab).
+  - **EYEBALL CHECK (user, A/B via F4 "minigames", Metal + D3D12):** find a video game (e.g. a handheld/
+    console item) that runs "Lights on!" → with the toggle ON it renders as a centred RmlUi panel:
+    title, the `#`(on, white)/`-`(off, grey) grid with the cursor cell yellow, legend+keys footer;
+    arrows move the cursor, space/5 toggles + neighbours, win → "Congratulations" popup, r resets, q
+    quits; toggle OFF → identical curses game. **Make-or-break:** monospace cell alignment under
+    `white-space:pre` (proven by help's Movement grid) + the grid rebuilds each frame from state.
+  - **Next slices:** snake / sokoban / minesweeper / kitten — each ~one producer (game-state→grid
+    strings) + open/close wiring; the widget is done. snake/minesweeper are plain grids; sokoban has
+    tile glyphs; kitten is a scattered-glyph field (still a grid).
+
 ## Load-bearing architecture facts (verified this session)
 
 - **Single curses chokepoint:** every non-map window renders through

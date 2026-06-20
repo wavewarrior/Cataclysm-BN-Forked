@@ -73,6 +73,7 @@
                 <label class="devui-row"><input type="checkbox" value="1" data-checked="overmap"/> overmap legend</label>
                 <label class="devui-row"><input type="checkbox" value="1" data-checked="world_text"/> world text (SCT)</label>
                 <label class="devui-row"><input type="checkbox" value="1" data-checked="sidebar_hud"/> sidebar HUD</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="minigames"/> minigames (grid games)</label>
 
                 <div class="devui-section">CRT post-effect</div>
                 <label class="devui-row"><input type="checkbox" value="1" data-checked="crt_enable"/> CRT (scanlines + vignette)</label>
