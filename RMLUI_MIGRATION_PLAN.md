@@ -2943,6 +2943,16 @@ the set difference is below. Reproduce: see the per-file `mvwprintz` density gre
 (Totals are uninformative until toggles flip + dead curses paths delete — they only confirm
 "everything still live by design." The file-level cross-ref below is the real signal.)
 
+**§8.1 BACKLOG PROGRESS:**
+- **`character_display` (@ sheet) — DONE (build-green Metal, toggle OFF, eyeball owed), COMMITTED.**
+  3-col grid of 6 tabs + speed + info + tip; 13 parallel producers (curses pristine), diary
+  multi-pane focus + faction data-model, sync-in-all-9-guards. `character_display` toggle + F4
+  checkbox. encumbrance reuses `encumbrance_lines`. Eyeball A/B: DIFF THE NUMBERS per tab
+  (stats/skills/speed/encumbrance reconstructions) + D3D12. Mouse click-focus deferred; titles
+  hardcoded English (i18n gap). The biggest blocker is cleared.
+- Remaining backlog: veh_interact / gamemode_defense / magic / messages(full log) / monster·mtype·npc
+  info / morale / martialarts / pickup / dialogue_win + the 3 font-layer stragglers.
+
 **GATE-BLOCKER BACKLOG — unmigrated interactive screens (no toggle, curses redraw, rml_refs=0):**
 
 | File | curses-text density | redraw markers | nature |
