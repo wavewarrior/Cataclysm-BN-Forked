@@ -2261,6 +2261,26 @@ the HUD uses its own non-modal open path.
     **WATCH:** (a) column overflow — if total content > TERMY, flex sentinels shrink but fixed rows
     could clip (no overflow marker now; flag if content lost). (b) the `[name]` placeholders are
     intentional this slice — limbs/log/etc data accessors land NEXT slice.
+- **Slice 4 — MVP accessors: limbs (HP) + message log — CODE-COMPLETE + BUILD-GREEN (Metal,
+  fresh relink 14:44, panels.o fresh), TOGGLE OFF, EYEBALL OWED (Metal + D3D12), UNCOMMITTED,
+  2026-06-20.** The slice-3 pivot pays off: adding a panel = ONE producer entry, ZERO RML/model/
+  RCSS churn (the `[name]` placeholder auto-replaces). Two new producers in panels.cpp + 7 table
+  rows (limbs/limbs_compact/limbs_narrow/Limbs + log/log_classic/Log):
+  - **`hud_limbs`** (+ helper `hud_limb_health`) — HP per body part, one row each, FULL colour
+    fidelity (reproduces draw_limb_wide name + draw_limb_health's text: broken-limb #/= mend bar,
+    splint colour, number vs 5-cell hp-bar style, trailing dots). One producer serves all limb
+    variants (same data, layout-only differences).
+  - **`hud_log`** — `Messages::recent_messages(20)` joined chronologically. **MVP FIDELITY GAP
+    (flagged):** recent_messages drops the per-type colour + age fade the curses display applies,
+    and the flex row top-aligns (curses bottom-aligns near the play area). Phase-2 fix = a coloured
+    message accessor. Acceptable for MVP (text is legible, cheapest source).
+  - Remaining `[name]` placeholders after this slice: location, compass, **map (minimap — phase 2
+    RTT, decoupled from gate)**, val_pain/thirst/stamina/mana (number widgets — easy structured via
+    get_var_value, candidate next), bodygraph (graphical — phase 2).
+  - **EYEBALL CHECK (user, A/B via F4, Metal + D3D12):** toggle ON → Limbs shows each body part's
+    name + hp bar with the right colours (matches curses limbs panel number-for-number; try a
+    damaged/broken/splinted limb + HEALTH_STYLE number vs bar); Log shows recent messages in order
+    (plain colour — known gap); both grow/sit in their column slots; other placeholders unchanged.
 
 ### Tier 7 — HUD STRATEGY (rewritten 2026-06-20, grilled)
 

@@ -2920,6 +2920,80 @@ std::string hud_armor( avatar &u )
            row( _( "Feet" ), "foot_r" );
 }
 
+// One body-part's HP as a coloured string — reproduces draw_limb_health's TEXT (broken
+// limb #/= mend bar / number / 5-cell hp bar + trailing dots), no curses window. Used by
+// hud_limbs.
+std::string hud_limb_health( avatar &u, const bodypart_id &bp, bool num_style )
+{
+    const int hp_cur = u.get_part_hp_cur( bp );
+    const int hp_max = u.get_part_hp_max( bp );
+    const bool checked = u.has_effect( effect_got_checked );
+    std::optional<nc_color> color_override;
+    if( u.is_limb_broken( bp.id() ) && !bp->essential ) {
+        const int mend_perc = hp_max > 0 ? 100 * hp_cur / hp_max : 0;
+        const bool splinted = u.worn_with_flag( json_flag_SPLINT, bp ) ||
+                              ( u.mutation_value( "mending_modifier" ) >= 1.0f );
+        const nc_color color = splinted ? c_blue : c_dark_gray;
+        if( num_style || checked ) {
+            color_override = color;
+        } else {
+            const int num = mend_perc / 20;
+            return colorize( std::string( num, '#' ) + std::string( 5 - num, '=' ), color );
+        }
+    }
+    std::pair<std::string, nc_color> hp = get_hp_bar( hp_cur, hp_max );
+    if( color_override ) {
+        hp.second = *color_override;
+    }
+    if( num_style || checked ) {
+        return colorize( string_format( "%3d", hp_cur ), hp.second );
+    }
+    std::string bar = colorize( hp.first, hp.second );
+    const int dots = 5 - utf8_width( hp.first );
+    if( dots > 0 ) {
+        bar += colorize( std::string( dots, '.' ), c_white );
+    }
+    return bar;
+}
+
+// Mirrors draw_limb_wide / draw_limb2 / draw_limb_narrow (all limb variants — same data,
+// only layout differs, so one producer serves all): "<name>: <hp bar>" per body part in
+// reading order, one row each. Full colour fidelity (limb_color name + hp-bar colour).
+std::string hud_limbs( avatar &u )
+{
+    const bool num_style = get_option<std::string>( "HEALTH_STYLE" ) == "number";
+    std::string out;
+    bool first = true;
+    for( const bodypart_id &bp : u.get_all_body_parts( true ) ) {
+        if( !first ) {
+            out += "\n";
+        }
+        first = false;
+        const std::string name = left_justify( body_part_hp_bar_ui_text( bp.id() ), 5 );
+        out += colorize( name, u.limb_color( bp.id(), true, true, true ) ) + " " +
+               hud_limb_health( u, bp, num_style );
+    }
+    return out;
+}
+
+// Mirrors draw_messages (the "Log" panel): the recent message buffer in chronological
+// order, one line each. MVP CHEAPEST SOURCE — Messages::recent_messages drops the
+// per-type colour + age fade the curses display applies (FIDELITY GAP, flag for phase 2:
+// add a coloured accessor). The flex row grows; content top-aligns + clips if it overruns.
+std::string hud_log( avatar & )
+{
+    std::string out;
+    bool first = true;
+    for( const std::pair<std::string, std::string> &m : Messages::recent_messages( 20 ) ) {
+        if( !first ) {
+            out += "\n";
+        }
+        first = false;
+        out += m.second;
+    }
+    return out;
+}
+
 // VARIANT-AWARE producer table: maps a window_panel name to the producer that
 // reproduces THAT variant's content. A logical panel (e.g. Stats) appears in any one
 // layout under exactly one name, so several rows point at different producers — the
@@ -2938,7 +3012,7 @@ struct hud_producer_entry {
     const char *panel_name;                  // widget id OR built-in label (CI match)
     std::string ( *produce )( avatar & );    // variant-specific content producer
 };
-const std::array<hud_producer_entry, 27> g_hud_producers = {{
+const std::array<hud_producer_entry, 34> g_hud_producers = {{
         // Stats — classic (draw_stats) vs labels/wide + narrow (draw_stat_wide/_narrow)
         { "Stats",         hud_stats_text },
         { "stats_compact", hud_stats_text },
@@ -2972,6 +3046,15 @@ const std::array<hud_producer_entry, 27> g_hud_producers = {{
         { "armor",         hud_armor },
         { "armor_classic", hud_armor },
         { "Armor",         hud_armor },
+        // Limbs — HP per body part (all variants same data, layout differs)
+        { "limbs",         hud_limbs },
+        { "limbs_compact", hud_limbs },
+        { "limbs_narrow",  hud_limbs },
+        { "Limbs",         hud_limbs },
+        // Log — recent message buffer
+        { "log",           hud_log },
+        { "log_classic",   hud_log },
+        { "Log",           hud_log },
     }
 };
 
