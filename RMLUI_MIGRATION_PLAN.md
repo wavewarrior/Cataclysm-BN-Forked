@@ -62,7 +62,10 @@ options=2, **newcharacter=16 (8 slices)**, main_menu=2, worldfactory=4 sessions;
    **hand-authored single flex-column document** (document flow — kills the height/overlap class).
    Widget engine kept as **data layer + icon registry only** (multi-layout/variant/custom-save
    machinery dropped). See the rewritten Tier 7 strategy section below.
-3. **Tier 8 — F4 dev panel** (ImGui → RmlUi; still ImGui in `sdl_lighting_devui.cpp`).
+3. ~~**Tier 8 — F4 dev panel**~~ **DONE (eyeball owed)** — full ImGui parity (slices 1–8) +
+   **§8 flip committed `8c6a66d7e6` 2026-06-20**: F4 opens the RmlUi `devui.rml` doc; ImGui retired
+   from the live composite (`devui_visible()` flag; `imgui_layer::visible()` never set → `active()`
+   false). `imgui_layer` module stays compiled for the dormant uilist pilot; full deletion = Tier 10.
 4. **Tier 9 — minigames** char-grid widget.
 5. **Tier 10 — RIP OUT** curses-SDL + ImGui — gated on 100% coverage (i.e. 2-4 above).
 
