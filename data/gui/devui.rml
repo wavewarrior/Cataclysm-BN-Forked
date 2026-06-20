@@ -118,6 +118,14 @@
             <div id="pkt-friendly" class="pk-target" data-event-click="pk_target(3)">fri</div>
             <div id="pkt-self"     class="pk-target" data-event-click="pk_target(4)">slf</div>
         </div>
+        <!-- Theme (RCSS) + game text colours — many, so chosen via a combo; selecting one
+             routes the picker to that named colour (RGB edited, alpha preserved). -->
+        <div class="devui-row">
+            <span class="pk-label">theme/text</span>
+            <select data-value="pk_combo_idx" data-event-change="pk_combo">
+                <option data-for="n : pk_names" data-value="it_index">{{n}}</option>
+            </select>
+        </div>
         <div class="pk-wrap">
             <div id="pk-sv" class="pk-sv" data-event-mousedown="pk_sv" data-event-drag="pk_sv">
                 <div class="pk-sv-val"></div>

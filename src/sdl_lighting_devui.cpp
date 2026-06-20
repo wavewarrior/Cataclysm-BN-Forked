@@ -463,6 +463,71 @@ const std::array<pk_target_t, 5> g_pk_targets = {{
 int g_pk_idx = 0;
 float g_pk_orig[3] = { 1.f, 1.f, 1.f };   // colour at the moment this target was selected
 
+// Named theme/game colours (ui_theme) are an ALTERNATE target kind: accessed by name
+// (RGBA, alpha preserved) with a post-write apply (reload_theme for RCSS, nc-cache clear
+// for game colours), and there are many — so they're chosen via the <select> combo, not
+// the fixed swatch row. When g_pk_named_active, the picker edits the named colour instead
+// of g_pk_targets[g_pk_idx]. The combo list (built on open) maps option index → name+kind.
+struct pk_named_t {
+    Rml::String name;
+    bool game;          // false = RCSS panel colour, true = game text colour
+};
+std::vector<pk_named_t> g_pk_combo;           // index → name + kind
+Rml::Vector<Rml::String> g_pk_combo_labels;   // bound for the <option data-for>
+int g_pk_combo_idx = 0;                        // bound <select> value
+bool g_pk_named_active = false;                // true → edit the combo's named colour
+
+void pk_read_target( float out[3] )
+{
+    if( g_pk_named_active && g_pk_combo_idx >= 0 &&
+        g_pk_combo_idx < static_cast<int>( g_pk_combo.size() ) ) {
+        const pk_named_t &n = g_pk_combo[g_pk_combo_idx];
+        float tmp[4] = { 0.f, 0.f, 0.f, 1.f };
+        if( n.game ) {
+            ui_theme::get_game_rgba( n.name, tmp );
+        } else {
+            ui_theme::get_rcss_rgba( n.name, tmp );
+        }
+        out[0] = tmp[0];
+        out[1] = tmp[1];
+        out[2] = tmp[2];
+        return;
+    }
+    const float *c = g_pk_targets[g_pk_idx].rgb;
+    out[0] = c[0];
+    out[1] = c[1];
+    out[2] = c[2];
+}
+
+void pk_write_target( const float in[3] )
+{
+    if( g_pk_named_active && g_pk_combo_idx >= 0 &&
+        g_pk_combo_idx < static_cast<int>( g_pk_combo.size() ) ) {
+        const pk_named_t &n = g_pk_combo[g_pk_combo_idx];
+        float tmp[4] = { 0.f, 0.f, 0.f, 1.f };
+        if( n.game ) {
+            ui_theme::get_game_rgba( n.name, tmp );   // preserve alpha
+            tmp[0] = in[0];
+            tmp[1] = in[1];
+            tmp[2] = in[2];
+            ui_theme::set_game_rgba( n.name, tmp );
+            clear_nc_color_cache();                   // applies on next screen reopen
+        } else {
+            ui_theme::get_rcss_rgba( n.name, tmp );
+            tmp[0] = in[0];
+            tmp[1] = in[1];
+            tmp[2] = in[2];
+            ui_theme::set_rcss_rgba( n.name, tmp );
+            rmlui_layer::reload_theme();              // RCSS applies instantly
+        }
+        return;
+    }
+    float *c = g_pk_targets[g_pk_idx].rgb;
+    c[0] = in[0];
+    c[1] = in[1];
+    c[2] = in[2];
+}
+
 void pk_hsv_to_rgb( float h, float s, float v, float &r, float &g, float &b )
 {
     h = std::fmod( std::fmod( h, 360.f ) + 360.f, 360.f );
@@ -543,10 +608,8 @@ void picker_apply()
     float g = 0.f;
     float b = 0.f;
     pk_hsv_to_rgb( g_pk_h, g_pk_s, g_pk_v, r, g, b );
-    float *tgt = g_pk_targets[g_pk_idx].rgb;
-    tgt[0] = r;
-    tgt[1] = g;
-    tgt[2] = b;
+    const float rgb[3] = { r, g, b };
+    pk_write_target( rgb );
     g_pk_hex = pk_hex( r, g, b );
     if( g_devui_model ) {
         g_devui_model.DirtyVariable( "pk_hex" );
@@ -588,7 +651,8 @@ void picker_apply()
 // (call after the doc opens / on target switch — i.e. whenever a fresh target is chosen).
 void picker_init()
 {
-    const float *c = g_pk_targets[g_pk_idx].rgb;
+    float c[3];
+    pk_read_target( c );
     g_pk_orig[0] = c[0];
     g_pk_orig[1] = c[1];
     g_pk_orig[2] = c[2];
@@ -720,8 +784,18 @@ void devui_rml_open()
             args[0].GetInto( idx );
         }
         if( idx >= 0 && idx < static_cast<int>( g_pk_targets.size() ) ) {
+            g_pk_named_active = false;   // back to a direct (cursor/outline) target
             g_pk_idx = idx;
             picker_init();   // reseed HSV + snapshot orig from the newly-selected colour
+            picker_apply();
+        }
+    } );
+    c.BindEventCallback( "pk_combo",
+    []( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) {
+        // The <select> two-way binds g_pk_combo_idx; switch to that named theme colour.
+        if( g_pk_combo_idx >= 0 && g_pk_combo_idx < static_cast<int>( g_pk_combo.size() ) ) {
+            g_pk_named_active = true;
+            picker_init();
             picker_apply();
         }
     } );
@@ -729,13 +803,24 @@ void devui_rml_open()
     []( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) {
         // Restore the snapshot taken when this target was selected; reseed HSV WITHOUT
         // re-snapshotting (picker_init would overwrite orig), then repaint.
-        float *t = g_pk_targets[g_pk_idx].rgb;
-        t[0] = g_pk_orig[0];
-        t[1] = g_pk_orig[1];
-        t[2] = g_pk_orig[2];
-        pk_rgb_to_hsv( t[0], t[1], t[2], g_pk_h, g_pk_s, g_pk_v );
+        pk_write_target( g_pk_orig );
+        pk_rgb_to_hsv( g_pk_orig[0], g_pk_orig[1], g_pk_orig[2], g_pk_h, g_pk_s, g_pk_v );
         picker_apply();
     } );
+    // Build + bind the theme/game colour combo (names + selected index).
+    g_pk_combo.clear();
+    g_pk_combo_labels.clear();
+    for( const std::string &n : ui_theme::rcss_names() ) {
+        g_pk_combo.push_back( { Rml::String( n ), false } );
+        g_pk_combo_labels.push_back( Rml::String( n ) );
+    }
+    for( const std::string &n : ui_theme::game_color_names() ) {
+        g_pk_combo.push_back( { Rml::String( n ), true } );
+        g_pk_combo_labels.push_back( Rml::String( n ) );
+    }
+    c.RegisterArray<Rml::Vector<Rml::String>>();
+    c.Bind( "pk_names", &g_pk_combo_labels );
+    c.Bind( "pk_combo_idx", &g_pk_combo_idx );
     g_devui_model = c.GetModelHandle();
     Rml::ElementDocument *doc =
         rmlui_layer::open_document( PATH_INFO::datadir() + "gui/devui.rml", false );

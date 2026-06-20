@@ -2512,8 +2512,30 @@ codebase until now.
   - **Slice 5b — new↔orig swatches + revert (user request):** `picker_init` snapshots the target's
     colour into `g_pk_orig` on select; the row now shows **new** (current edit) beside **orig** (the
     snapshot). Clicking the orig swatch (`pk_revert` → BindEventCallback) restores it (reseeds HSV
-    without re-snapshotting) → instant revert. `picker_apply` paints both. BUILD-GREEN (relink
-    20:05), eyeball owed.
+    without re-snapshotting) → instant revert. `picker_apply` paints both. COMMITTED `be05da2b94`.
+- **Slice 6 — theme/text colours via `<select>` combo — CODE-COMPLETE + BUILD-GREEN (Metal, fresh
+  relink 20:12, devui.o fresh), EYEBALL OWED, COMMITTED pending, 2026-06-20.** Proves the LAST
+  unproven control mechanism (`<select>`) AND routes the picker to the ui_theme named colours.
+  - **3-kind target abstraction:** `pk_read_target`/`pk_write_target` dispatch on whether a fixed
+    swatch (direct `float*`) or a named theme colour is active. Named writes go through
+    `ui_theme::get/set_rcss_rgba` (+ `rmlui_layer::reload_theme()` — applies instantly) or
+    `get/set_game_rgba` (+ `clear_nc_color_cache()` — applies on screen reopen), RGB edited, ALPHA
+    preserved. `picker_init`/`apply`/`revert` now all go through the helpers.
+  - **`<select>` combo:** options generated via `<option data-for="n : pk_names" data-value="it_index">`
+    from a bound `Rml::Vector<Rml::String>` (rcss_names + game_color_names, built on open);
+    `data-value="pk_combo_idx"` two-way + `data-event-change="pk_combo"` → activates the named target.
+    RCSS styles `select`/`selectvalue`/`selectarrow`/`selectbox`/`option` with plain colours
+    (scrollable dropdown).
+  - **EYEBALL CHECK (user, A/B):** the theme/text dropdown lists all theme + game colour names;
+    picking one routes the picker to it; editing an RCSS colour restyles open RmlUi panels instantly
+    (e.g. a panel background/border colour), a game colour applies on screen-reopen; alpha is kept;
+    the 5 fixed swatches still work + switching between a swatch and a combo entry is clean.
+  - **★ ALL TIER-8 CONTROL MECHANISMS NOW PROVEN:** checkbox, slider, button (event-click+arg),
+    `<select>` combo, gradient decorators, 2D drag, colour picker. Everything remaining is mechanical
+    replication: the Lighting/Animation/Runic tab sliders + CRT sliders + world-text offsets (slider
+    pattern), the debug-mode selector (`<select>`), the 9 buttons (event-click), the diagnostics
+    read-out (bound text). Then a tab structure for navigability → F4 opens the RmlUi doc → retire
+    `imgui_layer` (§8 gate).
 
 ## Load-bearing architecture facts (verified this session)
 
