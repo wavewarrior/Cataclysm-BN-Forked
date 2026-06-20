@@ -446,10 +446,43 @@ void devui_rml_open()
     }
     // Bind the screen-toggle flags BY POINTER: data-checked two-way binds each
     // checkbox to the real static bool, so a click toggles the live screen and
-    // ImGui-side changes reflect here (rml_tick DirtyAllVariables each frame).
+    // ImGui-side changes reflect here (rml_tick DirtyAllVariables each frame). Mirrors
+    // the ImGui "Route screens through RmlUi" registry (draw_rmlui_tab).
+    c.Bind( "ui_scale", &rmlui_layer::ui_scale() );             // slider (float, two-way)
     c.Bind( "uilist", &uilist_rmlui_enabled() );
     c.Bind( "query_popup", &query_popup_rmlui_enabled() );
     c.Bind( "string_input", &string_input_rmlui_enabled() );
+    c.Bind( "missions", &missions_rmlui_enabled() );
+    c.Bind( "scores", &scores_rmlui_enabled() );
+    c.Bind( "help", &help_rmlui_enabled() );
+    c.Bind( "distraction", &distraction_rmlui_enabled() );
+    c.Bind( "auto_note", &auto_note_rmlui_enabled() );
+    c.Bind( "diary", &diary_rmlui_enabled() );
+    c.Bind( "mutations", &mutations_rmlui_enabled() );
+    c.Bind( "bionics", &bionics_rmlui_enabled() );
+    c.Bind( "inventory", &inventory_rmlui_enabled() );
+    c.Bind( "advanced_inv", &advanced_inv_rmlui_enabled() );
+    c.Bind( "compare_items", &compare_items_rmlui_enabled() );
+    c.Bind( "examine_item", &examine_item_rmlui_enabled() );
+    c.Bind( "armor_layers", &armor_layers_rmlui_enabled() );
+    c.Bind( "autopickup", &autopickup_rmlui_enabled() );
+    c.Bind( "computer", &computer_rmlui_enabled() );
+    c.Bind( "construction", &construction_rmlui_enabled() );
+    c.Bind( "crafting", &crafting_rmlui_enabled() );
+    c.Bind( "safemode", &safemode_rmlui_enabled() );
+    c.Bind( "trade", &trade_rmlui_enabled() );
+    c.Bind( "vending", &vending_rmlui_enabled() );
+    c.Bind( "dialogue", &dialogue_rmlui_enabled() );
+    c.Bind( "description_view", &description_view_rmlui_enabled() );
+    c.Bind( "faction", &faction_rmlui_enabled() );
+    c.Bind( "ranged", &ranged_rmlui_enabled() );
+    c.Bind( "options", &options_rmlui_enabled() );
+    c.Bind( "worldfactory", &worldfactory_rmlui_enabled() );
+    c.Bind( "main_menu", &main_menu_rmlui_enabled() );
+    c.Bind( "loadchar", &loadchar_rmlui_enabled() );
+    c.Bind( "newcharacter", &newcharacter_rmlui_enabled() );
+    c.Bind( "overmap", &overmap_rmlui_enabled() );
+    c.Bind( "world_text", &world_text_rmlui_enabled() );
     c.Bind( "sidebar_hud", &sidebar_hud_rmlui_enabled() );
     g_devui_model = c.GetModelHandle();
     Rml::ElementDocument *doc =

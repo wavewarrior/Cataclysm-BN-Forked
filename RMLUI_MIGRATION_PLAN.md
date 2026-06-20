@@ -2415,9 +2415,9 @@ RmlUi bound FORM CONTROLS (`<input type="checkbox" data-checked>` + `<input type
 data-value>`) — proven in RmlUi's own samples, compiled into rmlui_core, but UNUSED in this
 codebase until now.
 
-- **Slice 1 — form-control foundation + preview lifecycle — CODE-COMPLETE + BUILD-GREEN (Metal,
-  fresh relink 18:43, devui.o + sdl_render_frame.o fresh), EYEBALL OWED (Metal + D3D12),
-  UNCOMMITTED, 2026-06-20.** Proves RmlUi checkbox two-way data-binding end-to-end on a small set.
+- **Slice 1 — form-control foundation + preview lifecycle — DONE + EYEBALL CONFIRMED (user,
+  "looks great", 2026-06-20), COMMITTED `e9e883a65a`.** Proved RmlUi checkbox two-way data-binding
+  end-to-end (`data-checked` fires both ways — no event fallback needed; de-risks the whole tier).
   - `data/gui/devui.{rml,rcss}` — model `devui`, interactive doc (top-left box). 4 checkboxes
     (uilist / query_popup / string_input / sidebar HUD) bound `data-checked` to their
     `*_rmlui_enabled()` bools. RCSS styles `input.checkbox` + `:checked` (green fill) — form
@@ -2437,6 +2437,24 @@ codebase until now.
     needs an `onchange`/event fallback — flag it.
   - **WATCH:** the preview box + ImGui window are both on screen (intended for A/B); the RmlUi box
     captures mouse only when hovered (interactive doc), ImGui captures when over its window.
+- **Slice 2 — full toggle registry + first slider — CODE-COMPLETE + BUILD-GREEN (Metal, fresh
+  relink 18:54, devui.o fresh — all 35 accessor names + ui_scale resolved), EYEBALL OWED, COMMITTED
+  pending.** Expands the preview to ALL 35 `*_rmlui_enabled()` checkboxes (6 sections mirroring the
+  ImGui registry) + proves `<input type="range" data-value>` slider binding on `rmlui_layer::
+  ui_scale()` (float, two-way) with a `{{ui_scale}}` live readout. RCSS: scrollable panel
+  (`max-height:92vh; overflow-y:auto` — 35 rows exceed the screen) + range sub-element styling
+  (`slidertrack`/`sliderbar`, plain colours, no sprite sheet).
+  - **EYEBALL CHECK (user, A/B, Metal + D3D12):** preview shows all 6 sections of checkboxes
+    (state mirrors ImGui both ways); the UI-scale slider drags 0.5–1.5, the `{{ui_scale}}` number
+    tracks it, and dragging it live-rescales the RmlUi UI (same effect as the ImGui slider); the
+    panel scrolls when taller than the screen. **Make-or-break:** does `data-value` two-way binding
+    fire on the range (drag writes the float, ImGui-side change reflects)? If the slider renders
+    but won't drag-write, add an `onchange` event fallback.
+  - **Remaining for Tier 8 (later slices):** the LIGHTING TUNING controls — theme/text colours
+    (ColorEdit → RmlUi colour input or RGB sliders), CRT sliders, lighting debug-mode combos,
+    effects toggles+sliders (bloom/vol/rain/outline), runic-frame sliders, world-text px/offset
+    sliders, the diagnostics read-out tab, and the 9 buttons. Then F4 opens the RmlUi doc + retire
+    `imgui_layer` (§8 gate).
 
 ## Load-bearing architecture facts (verified this session)
 

@@ -13,6 +13,8 @@ body {
     left: 1em;
     top: 1em;
     width: 320dp;
+    max-height: 92vh;        /* 35 rows can exceed the screen — scroll inside the box */
+    overflow-y: auto;
     padding: 1em;
     background-color: #1e1e1ef0;
     border: 1dp #555555;
@@ -53,4 +55,34 @@ input.checkbox:hover {
 input.checkbox:checked {
     background-color: #5fdd5f;
     border-color: #5fdd5f;
+}
+
+/* Range slider — sub-elements styled with plain colours (no sprite sheet). The bar is
+   the draggable knob; the track is the rail. Proves <input type="range" data-value>. */
+.devui-val {
+    color: #8ab4f8;
+    margin-left: 0.4em;
+}
+input.range {
+    width: 160dp;
+    height: 16dp;
+    vertical-align: -0.3em;
+}
+input.range slidertrack {
+    height: 6dp;
+    margin-top: 5dp;
+    background-color: #333333;
+    border: 1dp #555555;
+}
+input.range sliderbar {
+    width: 12dp;
+    height: 16dp;
+    margin-top: -5dp;
+    background-color: #8ab4f8;
+}
+input.range sliderbar:hover {
+    background-color: #cccfee;
+}
+input.range sliderbar:active {
+    background-color: #ffffff;
 }

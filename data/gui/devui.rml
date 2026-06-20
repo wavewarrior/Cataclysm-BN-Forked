@@ -4,21 +4,67 @@
     <link type="text/rcss" href="devui.rcss"/>
 </head>
 <body data-model="devui">
-    <!-- Tier 8 slice 1 — RmlUi dev-panel FOUNDATION (parallel preview; the ImGui F4
-         panel stays primary + fully live). Proves form-control two-way data-binding:
-         each <input type="checkbox" data-checked="..."> binds to a *_rmlui_enabled() bool
-         (bound BY POINTER in C++), so clicking a box toggles the real screen live, and
-         ImGui-side changes reflect back here (C++ DirtyAllVariables each tick). Slice 2
-         expands to the full ~35-toggle registry + the first <input type="range"> slider;
-         later slices port the lighting tuning controls; finally F4 opens this and ImGui
-         is retired (§8). -->
+    <!-- Tier 8 slice 2 — full screen-toggle registry + first slider. Mirrors the ImGui
+         "Route screens through RmlUi" sections; each <input type="checkbox" data-checked>
+         two-way binds to a *_rmlui_enabled() bool (proven in slice 1). The UI-scale
+         <input type="range" data-value> proves slider binding (float, two-way). ImGui F4
+         stays primary; later slices port the lighting tuning controls, then F4 opens this
+         and ImGui retires (§8). -->
     <div class="devui-panel">
-        <div class="devui-title">RmlUi dev panel — preview (slice 1)</div>
+        <div class="devui-title">RmlUi dev panel — preview (slice 2)</div>
+
+        <div class="devui-section">Global</div>
+        <div class="devui-row">
+            UI scale
+            <input type="range" min="0.5" max="1.5" step="0.05" data-value="ui_scale"/>
+            <span class="devui-val">{{ui_scale}}</span>
+        </div>
+
         <div class="devui-section">Core widgets</div>
         <label class="devui-row"><input type="checkbox" value="1" data-checked="uilist"/> uilist</label>
         <label class="devui-row"><input type="checkbox" value="1" data-checked="query_popup"/> query_popup</label>
         <label class="devui-row"><input type="checkbox" value="1" data-checked="string_input"/> string_input</label>
-        <div class="devui-section">Sidebar</div>
+
+        <div class="devui-section">Info screens</div>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="missions"/> missions</label>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="scores"/> scores</label>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="help"/> help</label>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="distraction"/> distraction mgr</label>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="auto_note"/> auto notes</label>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="diary"/> diary</label>
+
+        <div class="devui-section">Character</div>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="mutations"/> mutations</label>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="bionics"/> bionics</label>
+
+        <div class="devui-section">Items &amp; inventory</div>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="inventory"/> inventory (all selectors)</label>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="advanced_inv"/> advanced inventory</label>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="compare_items"/> compare items</label>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="examine_item"/> examine item</label>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="armor_layers"/> armor layers</label>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="autopickup"/> auto pickup</label>
+
+        <div class="devui-section">World interaction</div>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="computer"/> computer terminal</label>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="construction"/> construction</label>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="crafting"/> crafting</label>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="safemode"/> safemode</label>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="trade"/> trade</label>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="vending"/> vending</label>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="dialogue"/> npc dialogue</label>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="description_view"/> examine description</label>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="faction"/> faction manager</label>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="ranged"/> ranged targeting</label>
+
+        <div class="devui-section">System menus</div>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="options"/> options</label>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="worldfactory"/> worldfactory</label>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="main_menu"/> main menu</label>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="loadchar"/> load character</label>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="newcharacter"/> new character</label>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="overmap"/> overmap legend</label>
+        <label class="devui-row"><input type="checkbox" value="1" data-checked="world_text"/> world text (SCT)</label>
         <label class="devui-row"><input type="checkbox" value="1" data-checked="sidebar_hud"/> sidebar HUD</label>
     </div>
 </body>
