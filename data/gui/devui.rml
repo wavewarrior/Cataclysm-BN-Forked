@@ -127,7 +127,12 @@
                 <div id="pk-hue-thumb" class="pk-hue-thumb"></div>
             </div>
         </div>
-        <div class="devui-row"><div id="pk-swatch" class="pk-swatch"></div> <span class="devui-val">{{pk_hex}}</span></div>
+        <!-- new (current edit) vs orig (snapshot at target-select); click orig to revert. -->
+        <div class="devui-row">
+            <span class="pk-label">new</span><div id="pk-swatch" class="pk-swatch"></div>
+            <span class="pk-label">orig</span><div id="pk-swatch-orig" class="pk-swatch pk-revert" data-event-click="pk_revert"></div>
+            <span class="devui-val">{{pk_hex}}</span>
+        </div>
     </div>
 </body>
 </rml>

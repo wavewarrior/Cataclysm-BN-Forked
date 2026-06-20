@@ -2509,6 +2509,11 @@ codebase until now.
     one → its border goes white + the SV/hue picker jumps to that colour; edit → that swatch + the
     in-game effect update (hover-outline colours visible when you mouse over a creature with the
     outline effect on). Switching targets preserves each colour independently.
+  - **Slice 5b — new↔orig swatches + revert (user request):** `picker_init` snapshots the target's
+    colour into `g_pk_orig` on select; the row now shows **new** (current edit) beside **orig** (the
+    snapshot). Clicking the orig swatch (`pk_revert` → BindEventCallback) restores it (reseeds HSV
+    without re-snapshotting) → instant revert. `picker_apply` paints both. BUILD-GREEN (relink
+    20:05), eyeball owed.
 
 ## Load-bearing architecture facts (verified this session)
 

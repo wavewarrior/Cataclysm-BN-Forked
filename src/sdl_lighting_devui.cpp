@@ -461,6 +461,7 @@ const std::array<pk_target_t, 5> g_pk_targets = {{
     }
 };
 int g_pk_idx = 0;
+float g_pk_orig[3] = { 1.f, 1.f, 1.f };   // colour at the moment this target was selected
 
 void pk_hsv_to_rgb( float h, float s, float v, float &r, float &g, float &b )
 {
@@ -578,12 +579,19 @@ void picker_apply()
     if( Rml::Element *sw = g_devui_doc->GetElementById( "pk-swatch" ) ) {
         sw->SetProperty( "background-color", g_pk_hex );
     }
+    if( Rml::Element *sw = g_devui_doc->GetElementById( "pk-swatch-orig" ) ) {
+        sw->SetProperty( "background-color", pk_hex( g_pk_orig[0], g_pk_orig[1], g_pk_orig[2] ) );
+    }
 }
 
-// Seed HSV from the active target colour (call after the doc opens / on target switch).
+// Seed HSV from the active target colour AND snapshot it as the revert/"orig" colour
+// (call after the doc opens / on target switch — i.e. whenever a fresh target is chosen).
 void picker_init()
 {
     const float *c = g_pk_targets[g_pk_idx].rgb;
+    g_pk_orig[0] = c[0];
+    g_pk_orig[1] = c[1];
+    g_pk_orig[2] = c[2];
     pk_rgb_to_hsv( c[0], c[1], c[2], g_pk_h, g_pk_s, g_pk_v );
 }
 
@@ -713,9 +721,20 @@ void devui_rml_open()
         }
         if( idx >= 0 && idx < static_cast<int>( g_pk_targets.size() ) ) {
             g_pk_idx = idx;
-            picker_init();   // reseed HSV from the newly-selected colour
+            picker_init();   // reseed HSV + snapshot orig from the newly-selected colour
             picker_apply();
         }
+    } );
+    c.BindEventCallback( "pk_revert",
+    []( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) {
+        // Restore the snapshot taken when this target was selected; reseed HSV WITHOUT
+        // re-snapshotting (picker_init would overwrite orig), then repaint.
+        float *t = g_pk_targets[g_pk_idx].rgb;
+        t[0] = g_pk_orig[0];
+        t[1] = g_pk_orig[1];
+        t[2] = g_pk_orig[2];
+        pk_rgb_to_hsv( t[0], t[1], t[2], g_pk_h, g_pk_s, g_pk_v );
+        picker_apply();
     } );
     g_devui_model = c.GetModelHandle();
     Rml::ElementDocument *doc =
