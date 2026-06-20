@@ -1,7 +1,13 @@
-/* Tier 8 slice 1 — RmlUi dev-panel preview styling. An opaque box pinned top-left so it
-   doesn't fight the ImGui F4 window. Interactive doc (mouse). RmlUi form controls are
-   invisible without styling — input.checkbox + the :checked pseudo give a visible box
-   that fills green when on (the data_binding/invader sample idiom, sans sprite sheet). */
+/* Tier 8 — RmlUi dev-panel preview styling. An opaque box pinned top-left so it doesn't
+   fight the ImGui F4 window. Interactive doc (mouse).
+
+   IMPORTANT — authored in PX, NOT dp/em-on-dp. `ui_scale()` multiplies the context-wide
+   density-independent-pixel ratio (rmlui_layer SetDensityIndependentPixelRatio), so every
+   `dp` unit in every doc scales with it. The dev panel hosts the UI-scale slider itself, so
+   if it scaled too it would reflow under the cursor as you drag (unusable). `px` is raw
+   pixels — immune to the dp ratio — so the panel stays a fixed size while the slider
+   rescales the rest of the UI. (em here resolves against a px font-size, so it is stable
+   too; vh is viewport-relative, also independent of ui_scale.) */
 
 body {
     width: 100%;
@@ -10,42 +16,42 @@ body {
 
 .devui-panel {
     position: absolute;
-    left: 1em;
-    top: 1em;
-    width: 320dp;
+    left: 12px;
+    top: 12px;
+    width: 320px;
     max-height: 92vh;        /* 35 rows can exceed the screen — scroll inside the box */
     overflow-y: auto;
-    padding: 1em;
+    padding: 12px;
     background-color: #1e1e1ef0;
-    border: 1dp #555555;
+    border: 1px #555555;
     color: #dddddd;
-    font-size: 15dp;
+    font-size: 15px;
 }
 
 .devui-title {
-    font-size: 17dp;
+    font-size: 17px;
     color: #ffffff;
-    margin-bottom: 0.5em;
+    margin-bottom: 8px;
 }
 
 .devui-section {
     color: #8ab4f8;
-    margin-top: 0.6em;
-    margin-bottom: 0.2em;
+    margin-top: 10px;
+    margin-bottom: 3px;
 }
 
 .devui-row {
     display: block;
-    margin-bottom: 0.15em;
+    margin-bottom: 2px;
 }
 
 input.checkbox {
-    width: 1.1em;
-    height: 1.1em;
-    border: 1dp #888888;
+    width: 16px;
+    height: 16px;
+    border: 1px #888888;
     background-color: #141414;
-    vertical-align: -0.2em;
-    margin-right: 0.4em;
+    vertical-align: -3px;
+    margin-right: 6px;
 }
 
 input.checkbox:hover {
@@ -61,28 +67,33 @@ input.checkbox:checked {
    the draggable knob; the track is the rail. Proves <input type="range" data-value>. */
 .devui-val {
     color: #8ab4f8;
-    margin-left: 0.4em;
+    margin-left: 6px;
 }
+
 input.range {
-    width: 160dp;
-    height: 16dp;
-    vertical-align: -0.3em;
+    width: 160px;
+    height: 16px;
+    vertical-align: -4px;
 }
+
 input.range slidertrack {
-    height: 6dp;
-    margin-top: 5dp;
+    height: 6px;
+    margin-top: 5px;
     background-color: #333333;
-    border: 1dp #555555;
+    border: 1px #555555;
 }
+
 input.range sliderbar {
-    width: 12dp;
-    height: 16dp;
-    margin-top: -5dp;
+    width: 12px;
+    height: 16px;
+    margin-top: -5px;
     background-color: #8ab4f8;
 }
+
 input.range sliderbar:hover {
     background-color: #cccfee;
 }
+
 input.range sliderbar:active {
     background-color: #ffffff;
 }
