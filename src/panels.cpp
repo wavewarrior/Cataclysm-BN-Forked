@@ -2718,18 +2718,17 @@ bool native_draw_target_exists( const std::string &name )
 // stacked above the HUD. Lifecycle is driven from game::draw_panels + cleanup_at_end.
 namespace
 {
-// Bound model: one pre-rendered RML string per migrated panel (slice 2b = Sound /
-// Stats / Needs). Each is bound to the matching positioned <div> in sidebar_hud.rml.
+// Bound model (slice 3 structural pivot): the sidebar is ONE flex column of rows, one
+// row per present panel in layout order. Each row is a pre-rendered RML string (a
+// migrated producer's output, or a "[name]" placeholder) plus a flex flag (set for the
+// sentinel-height log/minimap panels so they grow to fill the column). data-for in
+// sidebar_hud.rml iterates `rows`; C++ rebuilds the vector each sync.
+struct hud_row_model {
+    Rml::String rml;
+    bool flex = false;
+};
 struct hud_rml_model {
-    Rml::String sound_rml;
-    Rml::String stats_rml;
-    Rml::String needs_rml;
-    Rml::String wgtvol_rml;
-    Rml::String mana_rml;
-    Rml::String hint_rml;
-    Rml::String movement_rml;
-    Rml::String weapon_rml;
-    Rml::String armor_rml;
+    Rml::Vector<hud_row_model> rows;
     Rml::DataModelHandle handle;
 };
 std::unique_ptr<hud_rml_model> g_hud_data;
@@ -2921,71 +2920,67 @@ std::string hud_armor( avatar &u )
            row( _( "Feet" ), "foot_r" );
 }
 
-// The panels the HUD reproduces, paired with their RML element id in sidebar_hud.rml.
-// VARIANT-AWARE owned-panel table. Each row maps a window_panel name to a logical RmlUi
-// element (elem_id), its bound model var, and the producer that reproduces THAT variant's
-// content. A logical panel (e.g. Stats) appears in any one layout under exactly one name,
-// so several rows can share an elem_id+var while pointing at different producers — the
+// VARIANT-AWARE producer table: maps a window_panel name to the producer that
+// reproduces THAT variant's content. A logical panel (e.g. Stats) appears in any one
+// layout under exactly one name, so several rows point at different producers — the
 // runtime name selects the right content (classic draw_stats vs labels draw_stat_wide
-// genuinely render different fields). Names are matched case-insensitively (hud_lookup).
+// genuinely render different fields). Names matched case-insensitively (hud_producer).
 //
 // Two naming schemes coexist (make_native_widget_panel names a panel by its widget id;
 // the built-in classic/narrow/labels layouts name it by the translate_marker label):
 //   - built-in label:      "Stats" / "Sound" / "Needs" / "Wgt/Vol"
 //   - widget id (variant): "stats"(wide) / "stats_compact"(classic) / "stats_narrow", etc.
-// We own only the (name, variant) pairs whose content a producer faithfully reproduces;
-// any unlisted name → owns_panel false → curses keeps drawing it (correct fallback, no
-// mismatch). "Mana" (the label) is deliberately NOT owned: it collides with the val_mana
-// value-widget (a bare number), so only the native mana* ids map to the full readout.
-struct hud_owned_panel {
+// Unlisted names have NO producer → sidebar_hud_sync emits a "[name]" placeholder (no
+// curses fallback after whole-sidebar suppression). "Mana" (the label) is deliberately
+// NOT listed: it collides with the val_mana value-widget (a bare number), so only the
+// native mana* ids map to the full readout.
+struct hud_producer_entry {
     const char *panel_name;                  // widget id OR built-in label (CI match)
-    const char *elem_id;                     // logical element in sidebar_hud.rml
-    Rml::String hud_rml_model::*var;         // bound model var this element renders
     std::string ( *produce )( avatar & );    // variant-specific content producer
 };
-const std::array<hud_owned_panel, 27> g_hud_owned = {{
+const std::array<hud_producer_entry, 27> g_hud_producers = {{
         // Stats — classic (draw_stats) vs labels/wide + narrow (draw_stat_wide/_narrow)
-        { "Stats",         "hud-Stats",  &hud_rml_model::stats_rml,  hud_stats_text },
-        { "stats_compact", "hud-Stats",  &hud_rml_model::stats_rml,  hud_stats_text },
-        { "stats",         "hud-Stats",  &hud_rml_model::stats_rml,  hud_stats_wide },
-        { "stats_narrow",  "hud-Stats",  &hud_rml_model::stats_rml,  hud_stats_wide },
+        { "Stats",         hud_stats_text },
+        { "stats_compact", hud_stats_text },
+        { "stats",         hud_stats_wide },
+        { "stats_narrow",  hud_stats_wide },
         // Sound — compact (draw_stealth: speed+move+sound) vs labels/narrow (sound only)
-        { "Sound",         "hud-Sound",  &hud_rml_model::sound_rml,  hud_sound_text },
-        { "sound_compact", "hud-Sound",  &hud_rml_model::sound_rml,  hud_sound_text },
-        { "sound",         "hud-Sound",  &hud_rml_model::sound_rml,  hud_sound_labels },
-        { "sound_narrow",  "hud-Sound",  &hud_rml_model::sound_rml,  hud_sound_labels },
+        { "Sound",         hud_sound_text },
+        { "sound_compact", hud_sound_text },
+        { "sound",         hud_sound_labels },
+        { "sound_narrow",  hud_sound_labels },
         // Needs — compact (arrows+Focus) vs labels/narrow (pain/thirst/rest/hunger/heat)
-        { "Needs",         "hud-Needs",  &hud_rml_model::needs_rml,  hud_needs_text },
-        { "needs_compact", "hud-Needs",  &hud_rml_model::needs_rml,  hud_needs_text },
-        { "needs",         "hud-Needs",  &hud_rml_model::needs_rml,  hud_needs_labels },
-        { "needs_narrow",  "hud-Needs",  &hud_rml_model::needs_rml,  hud_needs_labels },
+        { "Needs",         hud_needs_text },
+        { "needs_compact", hud_needs_text },
+        { "needs",         hud_needs_labels },
+        { "needs_narrow",  hud_needs_labels },
         // Wgt/Vol — content identical across variants (only columns differ)
-        { "Wgt/Vol",             "hud-WgtVol", &hud_rml_model::wgtvol_rml, hud_wgtvol },
-        { "weightvolume",        "hud-WgtVol", &hud_rml_model::wgtvol_rml, hud_wgtvol },
-        { "weightvolume_compact", "hud-WgtVol", &hud_rml_model::wgtvol_rml, hud_wgtvol },
-        { "weightvolume_narrow", "hud-WgtVol", &hud_rml_model::wgtvol_rml, hud_wgtvol },
+        { "Wgt/Vol",              hud_wgtvol },
+        { "weightvolume",         hud_wgtvol },
+        { "weightvolume_compact", hud_wgtvol },
+        { "weightvolume_narrow",  hud_wgtvol },
         // Mana — native mana panel only (NOT the "Mana" value-widget label)
-        { "mana",         "hud-Mana",   &hud_rml_model::mana_rml,   hud_mana },
-        { "mana_compact", "hud-Mana",   &hud_rml_model::mana_rml,   hud_mana },
-        { "mana_narrow",  "hud-Mana",   &hud_rml_model::mana_rml,   hud_mana },
-        { "mana_wide",    "hud-Mana",   &hud_rml_model::mana_rml,   hud_mana },
-        // Slice 2d — pure-text panels (no widget icons / embedded graphics)
-        { "hint",          "hud-Hint",     &hud_rml_model::hint_rml,     hud_hint },
-        { "Hint",          "hud-Hint",     &hud_rml_model::hint_rml,     hud_hint },
-        { "movement",      "hud-Movement", &hud_rml_model::movement_rml, hud_movement },
-        { "weapon",        "hud-Weapon",   &hud_rml_model::weapon_rml,   hud_weapon },
-        { "armor",         "hud-Armor",    &hud_rml_model::armor_rml,    hud_armor },
-        { "armor_classic", "hud-Armor",    &hud_rml_model::armor_rml,    hud_armor },
-        { "Armor",         "hud-Armor",    &hud_rml_model::armor_rml,    hud_armor },
+        { "mana",         hud_mana },
+        { "mana_compact", hud_mana },
+        { "mana_narrow",  hud_mana },
+        { "mana_wide",    hud_mana },
+        // Pure-text panels (no widget icons / embedded graphics)
+        { "hint",          hud_hint },
+        { "Hint",          hud_hint },
+        { "movement",      hud_movement },
+        { "weapon",        hud_weapon },
+        { "armor",         hud_armor },
+        { "armor_classic", hud_armor },
+        { "Armor",         hud_armor },
     }
 };
 
-const hud_owned_panel *hud_lookup( const std::string &name )
+std::string ( *hud_producer( const std::string &name ) )( avatar & )
 {
     const std::string lname = to_lower_case( name );
-    for( const hud_owned_panel &p : g_hud_owned ) {
+    for( const hud_producer_entry &p : g_hud_producers ) {
         if( lname == to_lower_case( p.panel_name ) ) {
-            return &p;
+            return p.produce;
         }
     }
     return nullptr;
@@ -3015,16 +3010,15 @@ void sidebar_hud_open()
     if( !c ) {
         return;
     }
+    // Register the row struct + array once per data-model construction. RegisterStruct
+    // is context-global and persists past RemoveDataModel; re-registering on reopen is
+    // safe (uilist precedent, plan "Type-register reuse across reopen").
+    Rml::StructHandle<hud_row_model> rh = c.RegisterStruct<hud_row_model>();
+    rh.RegisterMember( "rml", &hud_row_model::rml );
+    rh.RegisterMember( "flex", &hud_row_model::flex );
+    c.RegisterArray<Rml::Vector<hud_row_model>>();
     g_hud_data = std::make_unique<hud_rml_model>();
-    c.Bind( "sound_rml", &g_hud_data->sound_rml );
-    c.Bind( "stats_rml", &g_hud_data->stats_rml );
-    c.Bind( "needs_rml", &g_hud_data->needs_rml );
-    c.Bind( "wgtvol_rml", &g_hud_data->wgtvol_rml );
-    c.Bind( "mana_rml", &g_hud_data->mana_rml );
-    c.Bind( "hint_rml", &g_hud_data->hint_rml );
-    c.Bind( "movement_rml", &g_hud_data->movement_rml );
-    c.Bind( "weapon_rml", &g_hud_data->weapon_rml );
-    c.Bind( "armor_rml", &g_hud_data->armor_rml );
+    c.Bind( "rows", &g_hud_data->rows );
     g_hud_data->handle = c.GetModelHandle();
     // passive=true: render-only HUD — it must not capture in-game world mouse
     // (look/examine). See rmlui_layer::any_interactive_open / process_event.
@@ -3039,41 +3033,61 @@ void sidebar_hud_open()
     g_hud_doc = doc;
 }
 
+// Position the single column container (#hud-sidebar) at the sidebar rect. The curses
+// terminal is TERMX×TERMY cells over the full window, so the sidebar (W cells wide, full
+// height) is (W/TERMX*100)% wide, full height, anchored at the left or right edge per
+// SIDEBAR_POSITION. Called every sync so it tracks resize for free. Width = the layout's
+// first-panel width (matches the legacy overflow-marker assumption).
+static void sidebar_hud_apply_rect()
+{
+    if( g_hud_doc == nullptr || TERMX <= 0 ) {
+        return;
+    }
+    const auto &layout = panel_manager::get_manager().get_current_layout();
+    if( layout.begin() == layout.end() ) {
+        return;
+    }
+    const int wd = layout.begin()->get_width();
+    const bool sidebar_right = get_option<std::string>( "SIDEBAR_POSITION" ) == "right";
+    const float width_pct = 100.0f * wd / TERMX;
+    const float left_pct = sidebar_right ? 100.0f - width_pct : 0.0f;
+    Rml::Element *el = g_hud_doc->GetElementById( "hud-sidebar" );
+    if( el == nullptr ) {
+        return;
+    }
+    el->SetProperty( "left", string_format( "%.4f%%", left_pct ) );
+    el->SetProperty( "top", "0%" );
+    el->SetProperty( "width", string_format( "%.4f%%", width_pct ) );
+    el->SetProperty( "height", "100%" );
+}
+
 void sidebar_hud_sync( avatar &u )
 {
     if( g_hud_doc == nullptr || !g_hud_data ) {
         return;
     }
-    // Variant-aware: clear every owned var, then fill ONLY the panels actually present
-    // (toggled on + render predicate true) in the current layout, each via the producer
-    // its name selects. Mirroring draw_panels' render gate keeps content and positioning
-    // in lock-step — a filled-but-unpositioned element would render at the window origin.
-    g_hud_data->sound_rml.clear();
-    g_hud_data->stats_rml.clear();
-    g_hud_data->needs_rml.clear();
-    g_hud_data->wgtvol_rml.clear();
-    g_hud_data->mana_rml.clear();
-    g_hud_data->hint_rml.clear();
-    g_hud_data->movement_rml.clear();
-    g_hud_data->weapon_rml.clear();
-    g_hud_data->armor_rml.clear();
+    // Whole-sidebar ownership: rebuild the row list from EVERY present panel (toggled on +
+    // render predicate true) in layout order. A migrated panel emits its producer's RML; an
+    // unmigrated panel emits a visible "[name]" placeholder (never a silent blank — after
+    // whole-sidebar suppression there is no curses fallback). Sentinel-height panels (log
+    // -2 / minimap -1) get flex=true so they grow to fill the column.
+    g_hud_data->rows.clear();
     for( const window_panel &panel : panel_manager::get_manager().get_current_layout() ) {
         if( !panel.toggle || !panel.render() ) {
             continue;
         }
-        if( const hud_owned_panel *p = hud_lookup( panel.get_name() ) ) {
-            ( *g_hud_data ).*( p->var ) = cata_text_to_rml( p->produce( u ) );
+        hud_row_model row;
+        std::string( *produce )( avatar & ) = hud_producer( panel.get_name() );
+        if( produce != nullptr ) {
+            row.rml = cata_text_to_rml( produce( u ) );
+        } else {
+            row.rml = cata_text_to_rml( colorize( "[" + panel.get_name() + "]", c_dark_gray ) );
         }
+        row.flex = panel.get_height() < 0;
+        g_hud_data->rows.push_back( std::move( row ) );
     }
-    g_hud_data->handle.DirtyVariable( "sound_rml" );
-    g_hud_data->handle.DirtyVariable( "stats_rml" );
-    g_hud_data->handle.DirtyVariable( "needs_rml" );
-    g_hud_data->handle.DirtyVariable( "wgtvol_rml" );
-    g_hud_data->handle.DirtyVariable( "mana_rml" );
-    g_hud_data->handle.DirtyVariable( "hint_rml" );
-    g_hud_data->handle.DirtyVariable( "movement_rml" );
-    g_hud_data->handle.DirtyVariable( "weapon_rml" );
-    g_hud_data->handle.DirtyVariable( "armor_rml" );
+    g_hud_data->handle.DirtyVariable( "rows" );
+    sidebar_hud_apply_rect();
 }
 
 void sidebar_hud_close()
@@ -3089,36 +3103,11 @@ void sidebar_hud_close()
     g_hud_data.reset();
 }
 
-bool sidebar_hud_owns_panel( const std::string &name )
+bool sidebar_hud_active()
 {
-    // True iff the HUD is open AND it has a producer for this panel name/variant
-    // (g_hud_owned). Unowned names fall back to the curses draw.
-    return g_hud_doc != nullptr && hud_lookup( name ) != nullptr;
-}
-
-void sidebar_hud_position( const std::string &name, float left_pct, float top_pct,
-                           float width_pct )
-{
-    if( g_hud_doc == nullptr ) {
-        return;
-    }
-    // Each owned panel is its OWN absolutely-positioned element (the panels are not
-    // contiguous — Mana can sit between Stats and Needs — so one shared column won't
-    // do). Positioned in PERCENTAGES of the window: the curses terminal is TERMX×TERMY
-    // cells spanning the full window, so a panel's cell rect maps to a %-rect of the
-    // RmlUi context. This honours SIDEBAR_POSITION (the caller bakes left==right-edge
-    // for a right sidebar) and tracks resize for free.
-    const hud_owned_panel *p = hud_lookup( name );
-    if( p == nullptr ) {
-        return;
-    }
-    Rml::Element *el = g_hud_doc->GetElementById( p->elem_id );
-    if( el == nullptr ) {
-        return;
-    }
-    el->SetProperty( "left", string_format( "%.4f%%", left_pct ) );
-    el->SetProperty( "top", string_format( "%.4f%%", top_pct ) );
-    el->SetProperty( "width", string_format( "%.4f%%", width_pct ) );
+    // True iff the HUD doc is open → game::draw_panels suppresses the WHOLE curses
+    // sidebar (the column owns the entire region). Replaces the per-panel owns_panel gate.
+    return g_hud_doc != nullptr;
 }
 
 // Resolve a widget's "show_if" to a window_panel render predicate (the data-driven

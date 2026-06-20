@@ -4367,14 +4367,21 @@ void game::draw_panels( bool force_draw )
     const int current_turn = to_turns<int>( calendar::turn - calendar::turn_zero );
     const bool draw_this_turn = current_turn > previous_turn || force_draw;
     auto &mgr = panel_manager::get_manager();
-    // Sidebar HUD (Tier 7): when enabled, a persistent RmlUi document renders the
-    // migrated panels instead of curses. Open lazily + sync every call; close (no-op
-    // if already closed) when disabled so flipping the F4 toggle off restores curses.
+    // Sidebar HUD (Tier 7, slice 3 structural pivot): when enabled, a persistent RmlUi
+    // document = ONE flex column owns the WHOLE sidebar. Open lazily + sync every call
+    // (rebuilds rows + repositions the container); close (no-op if already closed) when
+    // disabled so flipping the F4 toggle off restores curses. When active, skip the entire
+    // curses sidebar draw below — the column renders everything (migrated panels + visible
+    // placeholders for the rest). previous_turn is advanced so the turn gate stays sane.
     if( sidebar_hud_rmlui_enabled() ) {
         sidebar_hud_open();
         sidebar_hud_sync( u );
     } else {
         sidebar_hud_close();
+    }
+    if( sidebar_hud_active() ) {
+        previous_turn = current_turn;
+        return;
     }
     int y = 0;
     const bool sidebar_right = get_option<std::string>( "SIDEBAR_POSITION" ) == "right";
@@ -4419,18 +4426,10 @@ void game::draw_panels( bool force_draw )
             overflow = true;
             break;
         }
-        if( sidebar_hud_owns_panel( panel.get_name() ) ) {
-            // Tier 7: the persistent RmlUi HUD renders this panel — skip the curses
-            // draw to avoid double-draw. The slot/height is still reserved (y advances
-            // below), so un-migrated panels keep their positions and the RmlUi fragment
-            // fills the gap. Place the HUD column at this panel's cell rect, expressed
-            // as %-of-window so it lands in the sidebar (left OR right edge) and tracks
-            // resize: the terminal is TERMX×TERMY cells over the full RmlUi context.
-            const float width_pct = 100.0f * panel.get_width() / TERMX;
-            const float left_pct = sidebar_right ? 100.0f - width_pct : 0.0f;
-            const float top_pct = 100.0f * y / TERMY;
-            sidebar_hud_position( panel.get_name(), left_pct, top_pct, width_pct );
-        } else if( panel.always_draw || draw_this_turn ) {
+        // Tier 7: when the RmlUi HUD is active we never reach here (draw_panels
+        // early-returns above — the HUD column owns the whole sidebar). So this is the
+        // plain curses path.
+        if( panel.always_draw || draw_this_turn ) {
             panel.draw( u, catacurses::newwin( h, panel.get_width(),
                                                point( sidebar_right ? TERMX - panel.get_width() : 0, y ) ) );
         }

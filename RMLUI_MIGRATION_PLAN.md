@@ -53,14 +53,15 @@ options=2, **newcharacter=16 (8 slices)**, main_menu=2, worldfactory=4 sessions;
 1. ~~**ranged**~~ **DONE** — slices 2a (`3109aa26b4`) + 2b/2c (`5a3c772d2d`) committed;
    `ranged_rmlui_enabled()` toggle live. The top-banner "ranged.cpp=0" proof is STALE
    (it predates the slices). Only the keystone number-for-number aim A/B is owed.
-2. **Tier 7 — sidebar HUD** (the 53 `draw_*` panels) — architecturally hardest. **IN
-   PROGRESS through slice 2d** (lifecycle `03bf258feb`; mouse gate 2a; multi-panel 2b;
-   variant-aware HUD + Wgt/Vol + Mana 2c; **pure-text panels hint/movement/weapon/armor 2d
-   2026-06-20, eyeball CONFIRMED**). 9 logical panels migrated + verified in-game. See the
-   Tier 7 progress section + the **slice 3–10 roadmap** there. Re-scoped: nearly all remaining
-   panels ARE text-reproducible (only the pixel minimap needs graphics; icon panels need one
-   reusable proc-texture capability). Decisions locked: minimap = render-to-texture, compass =
-   monospaced grid. Key risk = a monospace font for the grid panels.
+2. **Tier 7 — sidebar HUD** — **STRATEGY CHANGED 2026-06-20 (grilled).** Single user, one
+   bespoke UI → **faithful curses-repro DROPPED.** Don't reproduce the cell grid; **design the
+   target HUD now, AS the migration.** Phase 1 = MVP (the data you can't play without, cheapest
+   available source) → suppress curses sidebar → rip out. Phase 2 = design to perfection on a
+   curses-free base. Slices 1–2d (9 panels, lifecycle `03bf258feb`..2d) stay as a working
+   render path but the **per-panel absolute-positioning + variant machinery is superseded** by a
+   **hand-authored single flex-column document** (document flow — kills the height/overlap class).
+   Widget engine kept as **data layer + icon registry only** (multi-layout/variant/custom-save
+   machinery dropped). See the rewritten Tier 7 strategy section below.
 3. **Tier 8 — F4 dev panel** (ImGui → RmlUi; still ImGui in `sdl_lighting_devui.cpp`).
 4. **Tier 9 — minigames** char-grid widget.
 5. **Tier 10 — RIP OUT** curses-SDL + ImGui — gated on 100% coverage (i.e. 2-4 above).
@@ -2231,56 +2232,108 @@ the HUD uses its own non-modal open path.
   armor — plus limbs is still curses).
 - **EYEBALL CONFIRMED 2026-06-20** — all 9 migrated panels (stats/sound/needs/wgtvol/mana/
   hint/movement/weapon/armor) render correctly in-game on the user's custom widget layout.
+- **Slice 3 — STRUCTURAL PIVOT (flex-column + whole-sidebar suppression) — DONE + EYEBALL
+  CONFIRMED (user, 2026-06-20), COMMITTED, TOGGLE OFF.** Executes the locked new strategy (§"HUD
+  STRATEGY" below). The slice 1–2d per-panel `position:absolute` + `sidebar_hud_position` +
+  per-panel `owns_panel` suppression machinery is REPLACED by:
+  - **`sidebar_hud.rml`** — ONE container `#hud-sidebar` with a single `data-for="row : rows"`
+    div (`data-class-flex="row.flex" data-rml="row.rml"`). No per-panel elements.
+  - **`sidebar_hud.rcss`** — `#hud-sidebar` = `position:absolute` (C++ injects left/top/width/
+    height = sidebar rect %) + `display:flex; flex-direction:column`. `.hud-row` block +
+    pre-wrap, `flex:0 0 auto`; `.hud-row.flex` (sentinel -1 minimap / -2 log) = `flex:1 1 auto`.
+  - **panels.cpp** — model is now `Rml::Vector<hud_row_model{rml,flex}>` bound as `rows`
+    (RegisterStruct/RegisterArray, autopickup idiom). `g_hud_owned`(27, elem_id+var) → simpler
+    `g_hud_producers`(27, name→producer) + `hud_producer()`. `sidebar_hud_sync` walks the layout
+    in order: each present panel → producer RML, or a `[name]` dark-gray placeholder (no curses
+    fallback after suppression); `flex = get_height()<0`. New `sidebar_hud_apply_rect()` places
+    the container at the sidebar rect each sync (first-panel width / TERMX, edge per
+    SIDEBAR_POSITION, full height). `sidebar_hud_position` DELETED; `owns_panel` → `sidebar_hud_active()`.
+  - **game.cpp `draw_panels`** — when `sidebar_hud_active()`, advance `previous_turn` + early-return
+    BEFORE the curses panel loop (whole-sidebar suppression). The per-panel owns_panel/position
+    branch inside the loop is deleted (dead after early-return); curses path is now unconditional draw.
+  - **panels.h** — decls updated (drop owns_panel/position, add `sidebar_hud_active`).
+  - **EYEBALL CHECK (user, A/B via F4 "sidebar HUD", Metal + D3D12):** toggle ON over the custom
+    layout → the 9 migrated panels render as a single flex column at the sidebar (top→bottom in
+    layout order), values+colours as before; unmigrated present panels (limbs/location/log/compass/
+    map/bodygraph/val_*) show a dark-gray `[name]` placeholder in their slot; the log/map rows
+    grow (flex); NO curses sidebar underneath (whole-sidebar suppressed); world mouse (look/examine)
+    still works (passive doc); resize tracks the rect; toggle OFF → identical to today's curses.
+    **WATCH:** (a) column overflow — if total content > TERMY, flex sentinels shrink but fixed rows
+    could clip (no overflow marker now; flag if content lost). (b) the `[name]` placeholders are
+    intentional this slice — limbs/log/etc data accessors land NEXT slice.
 
-### Tier 7 — slice 3+ ROADMAP (the rest of the column)
+### Tier 7 — HUD STRATEGY (rewritten 2026-06-20, grilled)
 
-Exploration (2026-06-20) overturned the earlier "text exhausted" claim: **almost every
-remaining panel is text-reproducible**; only the pixel minimap needs true graphics, and the
-icon-decorated panels need ONE reusable capability. Render-mechanism verdicts (file:line):
-- TEXT (mvwprintz/putch glyphs → reproduce as producer ± monospaced grid): limbs
-  (`draw_limb_wide`), location text (`draw_loc_labels`), **overmap chunk** (`draw_overmap_chunk`
-  panels.cpp:434 — 5×5 single-char colored grid), **time graphic** (`draw_time_graphic`
-  panels.cpp:1188 — 14-char glyph bar), **bodygraph** (`make_bodygraph_widget_panel`
-  panels.cpp:3384 — labels + text HP bars), **value widgets** (`make_value_widget_panel`
-  panels.cpp:3266 — `get_hp_bar` text bars / numbers), vehicle (`draw_veh_padding`),
-  env/weather, **compass** (`g->mon_info` — spatial, reproduce as monospaced grid per
-  decision), **log** (`Messages::recent_messages()` messages.h:25 → bound list).
-- TEXT+ICON (reusable capability): wind (`render_wind` arrow), moon (`draw_moon_wide` disc),
-  value-widget icons. **Capability is cheap** — the RmlUi RenderInterface already loads
-  file/procedural textures (`LoadTexture` rmlui_render_interface.cpp:724; runic frame uses
-  `image()` decorators), so we add a `?proc:widget-<id>` variant that rasterizes the widget
-  SVG (`IMG_LoadSizedSVG_IO`, copy from widget_icon.cpp) tinted by colour, shown via `<img>`.
-- GRAPHICS (the only one): pixel minimap (`pixel_minimap::render` pixel_minimap.cpp:311 — SDL
-  geometry to framebuffer). **DECIDED: render-to-texture** (offscreen GPU texture → `<img>`),
-  not a transparent hole.
+**Context change that drives everything: single user, ONE bespoke UI.** No multi-layout, no
+variants, no per-user customization. This collapses the old "faithful-repro of 53 `draw_*`
+panels × 4 variants → flip → rip out" roadmap. The decisions below supersede the old slice
+3–10 roadmap (preserved in git history if needed).
 
-**KEY RISK (gates the grid slices):** monospaced alignment. The overmap chunk, time bar,
-bodygraph and compass are column-aligned glyph grids; faithful reproduction needs a
-**monospace font face in RmlUi** + `white-space: pre`. First task of slice 4 = confirm/load a
-monospace TTF for `.hud-panel` grids (check what font RmlUi currently loads); if none, that's
-a prerequisite. Non-grid text panels are unaffected.
+**Core decision — DON'T reproduce curses. DESIGN the target HUD now, as the migration.**
+Rationale: the data-extraction work (getting weapon/armor/weather/compass/log/hp-by-limb out
+of `draw_*` as data) is identical whether you reproduce or redesign; only the curses-cell
+*layout* differs, and a faithful layout is throwaway for a user who will design their own UI.
+So faithful-repro is strictly dominated. Build the HUD you want; extract each panel's data as
+you add it; suppress curses; rip out; then polish.
 
-Slices (ordered cheap-text → capability → graphics; each: producers + table rows + `<div>` +
-model vars, build-green, eyeball, commit — same shape as 2c/2d):
-1. **Slice 3 — easy text:** limbs, location (text part), vehicle, env/weather. Pure producers.
-2. **Slice 4 — monospaced grids:** overmap chunk (folds into location), time graphic,
-   bodygraph (+temp/encumb/status dims). PREREQ: monospace font (see risk above).
-3. **Slice 5 — value widgets:** own `val_*` names (Pain/Thirst/Stamina/Mana — note "Mana"=
-   `val_mana`, distinct from native `mana*`). Producers reproduce label + `get_hp_bar`/number.
-   New: `owns_panel`/producers must handle the value-widget class. Icons added in slice 6.
-4. **Slice 6 — icon capability + icon panels:** `?proc:widget-<id>` SVG rasterizer + `<img>`
-   binding (icon id + colour synced from C++); apply to wind, moon, value-widget icons →
-   full parity for icon-decorated panels.
-5. **Slice 7 — log/messages:** extend `recent_messages()` to carry `nc_color` (+ coalesce
-   count), bind a list in the fragment.
-6. **Slice 8 — compass:** reproduce `mon_info` as a monospaced 3×3 direction grid + creature
-   glyphs (uses `visible_count_by_dir`); covers compass + compass_comp.
-7. **Slice 9 — pixel minimap:** render `pixel_minimap` into an offscreen GPU texture; bind as
-   `<img>` positioned at the map panel's slot. The one graphics slice.
-8. **Slice 10 — coverage audit + flip-readiness:** verify every panel in the user's layout
-   (and built-in classic/narrow/labels) is owned; document remaining curses-only edge panels.
-   The actual `draw_*` builder deletion is the **Tier 10 rip-out** (separate, gated on 100%).
-- Narrow/classic variants for migrated panels: infra ready, add producers+rows on demand.
+**Two-phase, crisp gate kept:**
+- **Phase 1 = MVP** — a *designed* HUD covering the essential data you can't play without,
+  using the **cheapest available data source** per datum. When it's enough to play on and the
+  curses sidebar is redundant → suppress curses sidebar → **Tier 10 rip-out**.
+- **Phase 2 = design to perfection** on a curses-free base (no fallback to fight, no pressure).
+
+**Architecture decisions (locked):**
+1. **Layout = ONE hand-authored flex-column document** (`sidebar_hud.rml`), document flow —
+   NOT per-panel `position:absolute`. This deletes the unmanaged-height overlap/overrun class
+   entirely; widget flex-height sentinels (`-1` log / `-2` minimap) map to CSS `flex-grow`.
+   One absolutely-positioned *container* = the sidebar rect (width, full TERMY, left/right
+   edge), computed once per resize; children flow inside. The slice 1–2d per-panel
+   `sidebar_hud_position` + variant-aware `g_hud_owned` machinery is superseded.
+2. **Curses suppression = whole-sidebar**, not per-panel. Toggle ON → RmlUi container owns the
+   entire sidebar region, curses draws none of it. (Per-panel coexistence/alignment is gone
+   with the absolute positioning.) Un-built panels show a **visible placeholder**
+   (`[unmigrated: name]`), never a silent blank — post-rip-out `draw_*` cannot run (it only
+   writes to a curses window), so there is NO runtime curses fallback; producers must fully
+   replace it.
+3. **Data binding = the house idiom** — `RegisterStruct`/`RegisterArray` + `data-for` +
+   per-row `data-rml` (proven in auto_note/compare/bionics/…). Repeating sub-lists (message
+   log, limb rows) use `data-for`; the top-level structure is authored.
+4. **Widget engine = DATA LAYER + ICON REGISTRY only.** Its multi-layout / variant /
+   custom-save machinery (`panel_manager` layouts, multiple `sidebar.json` layouts, custom
+   save/load) is dropped. Data accessors built to **serve the later full redesign** (structured
+   widget-engine vars — value+color+fraction — via `widget_var` / ported `display::` providers,
+   NOT throwaway draw_* text-scraping). For MVP, only add the **easy** accessors; defer hard
+   data extraction to phase 2.
+5. **Animation = native RCSS** (transitions / `@keyframes`), NOT the bespoke curses-era tween
+   engine (which is curses-coupled and dies at rip-out). Verify coupling before deleting.
+
+**Coverage universe is finite + CLOSED:** a panel reaches screen via `_style="number"` (one
+generic value producer covers all scalars, incl. future/modded) or `_style="native"` →
+`native_draw_registry()` (panels.cpp:2634, ~57 entries / ~15–18 logical, **fixed C++** — mods
+cannot add native targets). The gate for the flip is just "every panel in MY one UI is built";
+`native_draw_target_exists()` + a `sidebar_hud_has_producer()` audit makes it mechanical.
+
+**The one true-graphics piece — pixel minimap:** render-to-texture into an offscreen
+`COLOR_TARGET|SAMPLER` GPU texture, **on the frame command buffer** (the GI compute-pass
+barrier recipe — SDL_GPU auto-inserts the write→read barrier), bound as `<img>`. NEVER a
+separate CB (that is the loading-image D3D12 crash: barrier to PIXEL_SHADER_RESOURCE not
+complete before sample). Real labor = porting `pixel_minimap::render` from SDL_Renderer
+`RenderCopy` (currently invisible, pixel_minimap.cpp:324) to SDL_GPU geometry. **DECOUPLED
+from the rip-out gate** — curses never drew the minimap, so the flip ships with an empty
+minimap slot; the RTT lands as independent GPU work after.
+
+**Icon capability is cheap + already exists** (`rmlui_proc_texture.cpp`): static SVG textures,
+upload-once → no D3D12 hazard (unlike the per-turn minimap RTT). Add icons in phase 2 polish.
+
+**Non-risk (was flagged KEY RISK, now retired):** monospace alignment. `Terminus.ttf` is
+`LoadFontFace`'d at init (`rmlui_layer.cpp:352`, registered as fallback face) and proven
+cell-aligned in-game (help Movement grid under `white-space:pre`). Colored glyph grids work;
+only test is N colored `<span>`s on one `pre` line for advance drift IF the design uses one.
+
+**Next concrete steps:** (a) define the MVP panel set (the can't-play-without data); (b) author
+the single flex-column container + whole-sidebar suppression gate; (c) wire the easy data
+accessors; (d) placeholder everything else; (e) when playable, rip out curses; (f) phase 2
+design + icons + minimap RTT + RCSS animation.
 
 ## Load-bearing architecture facts (verified this session)
 

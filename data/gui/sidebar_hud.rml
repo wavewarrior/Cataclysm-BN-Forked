@@ -4,29 +4,25 @@
     <link type="text/rcss" href="sidebar_hud.rcss"/>
 </head>
 <body data-model="sidebar_hud">
-    <!-- Tier 7 sidebar HUD (game::draw_panels). A PERSISTENT, render-only,
-         continuous every-turn document — NOT a modal open/loop/close screen. It is
-         opened once during gameplay and synced each turn; modal screens stack above
-         it by open order. The body is transparent so the cleared (black) sidebar
-         region shows through; only migrated panels paint.
+    <!-- Tier 7 sidebar HUD (game::draw_panels). A PERSISTENT, render-only, continuous
+         every-turn document — NOT a modal open/loop/close screen. Opened once during
+         gameplay and synced each turn; modal screens stack above it by open order.
 
-         Slice 2c owns Sound / Stats / Needs / Wgt-Vol / Mana. The owned panels are NOT
-         contiguous in the layout (other panels can sit between them), so each fragment
-         is its OWN absolutely-positioned element — game::draw_panels reports each
-         panel's cell rect and sidebar_hud_position() places the matching element by id.
-         Each fragment's text is built by its variant producer (g_hud_owned) +
-         cata_text_to_rml() and bound to its model var. Further panels add their own
-         element + var. -->
-    <div id="hud-col" class="hud-col">
-        <div id="hud-Sound" class="hud-panel" data-rml="sound_rml"></div>
-        <div id="hud-Stats" class="hud-panel" data-rml="stats_rml"></div>
-        <div id="hud-Needs" class="hud-panel" data-rml="needs_rml"></div>
-        <div id="hud-WgtVol" class="hud-panel" data-rml="wgtvol_rml"></div>
-        <div id="hud-Mana" class="hud-panel" data-rml="mana_rml"></div>
-        <div id="hud-Hint" class="hud-panel" data-rml="hint_rml"></div>
-        <div id="hud-Movement" class="hud-panel" data-rml="movement_rml"></div>
-        <div id="hud-Weapon" class="hud-panel" data-rml="weapon_rml"></div>
-        <div id="hud-Armor" class="hud-panel" data-rml="armor_rml"></div>
+         STRUCTURAL PIVOT (slice 3, 2026-06-20): ONE hand-authored flex column inside a
+         single absolutely-positioned container = the sidebar rect (C++ injects
+         left/top/width/height each frame so it tracks resize + SIDEBAR_POSITION). This
+         REPLACES the slice 1-2d per-panel position:absolute machinery. Curses suppression
+         is now WHOLE-SIDEBAR (game::draw_panels early-returns when the HUD is active), so
+         the column owns the entire sidebar — every present panel is a row here, either a
+         migrated producer's RML or a visible "[name]" placeholder (never a silent blank;
+         post-rip-out there is no curses fallback).
+
+         The column is data-driven: C++ walks the current layout in order and fills `rows`
+         (one {rml, flex} per present panel). Flex-height sentinels (-1 minimap / -2 log)
+         get row.flex=true → flex-grow:1 so they absorb the remaining height. -->
+    <div id="hud-sidebar" class="hud-sidebar">
+        <div class="hud-row" data-for="row : rows"
+             data-class-flex="row.flex" data-rml="row.rml"></div>
     </div>
 </body>
 </rml>

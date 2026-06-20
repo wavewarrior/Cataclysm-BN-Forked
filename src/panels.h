@@ -95,16 +95,16 @@ bool native_draw_target_exists( const std::string &name );
 //   owns_panel(name) — true while the HUD is live AND has taken over the panel named
 //             `name`; draw_panels skips that panel's curses draw to avoid double-draw.
 //   position(name,left%,top%,width%) — place the named owned panel's HUD fragment at
-//             its cell rect expressed as percentages of the window (the terminal is
-//             TERMX×TERMY cells over the full window); honours SIDEBAR_POSITION and
-//             tracks resize. No-op if closed or the panel isn't owned.
-// Slice 2b owns the "Sound", "Stats" and "Needs" panels.
+// Tier 7 sidebar HUD (slice 3 structural pivot): a persistent, render-only RmlUi
+// document = ONE flex column owning the WHOLE sidebar region. sidebar_hud_open() opens it
+// lazily; sidebar_hud_sync() rebuilds the row list (one per present panel — migrated
+// producer RML or a "[name]" placeholder) + repositions the container at the sidebar rect
+// every turn; sidebar_hud_close() tears it down. sidebar_hud_active() is true while the
+// doc is open → game::draw_panels suppresses the entire curses sidebar.
 void sidebar_hud_open();
 void sidebar_hud_sync( avatar &u );
 void sidebar_hud_close();
-bool sidebar_hud_owns_panel( const std::string &name );
-void sidebar_hud_position( const std::string &name, float left_pct, float top_pct,
-                           float width_pct );
+bool sidebar_hud_active();
 
 class panel_manager
 {

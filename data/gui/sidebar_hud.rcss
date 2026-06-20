@@ -1,11 +1,16 @@
-/* Tier 7 sidebar HUD layout. The body is transparent (the cleared sidebar region
-   shows through). Each migrated panel is its OWN absolutely-positioned fragment —
-   the owned panels are not contiguous, so they can't share one flow column. C++
-   (sidebar_hud_position) sets each fragment's left/top/width as PERCENTAGES of the
-   window: the curses terminal is TERMX×TERMY cells spanning the full window, so a
-   panel W cells wide at the right edge is (W/TERMX*100)% wide anchored at
-   ((TERMX-W)/TERMX*100)% from the left. This auto-tracks resize and honours
-   SIDEBAR_POSITION (left/right). */
+/* Tier 7 sidebar HUD layout — STRUCTURAL PIVOT (slice 3, 2026-06-20).
+
+   ONE absolutely-positioned container (#hud-sidebar) = the sidebar rect. C++
+   (sidebar_hud_apply_rect) injects left/top/width/height as PERCENTAGES of the window
+   each frame: the curses terminal is TERMX*TERMY cells over the full window, so a
+   sidebar W cells wide at the right edge is (W/TERMX*100)% wide anchored at
+   ((TERMX-W)/TERMX*100)% from the left, full height. Auto-tracks resize + honours
+   SIDEBAR_POSITION (left/right).
+
+   Inside it, rows flow as a flex COLUMN (document flow — this is what kills the
+   per-panel height/overlap class the absolute machinery suffered). Fixed-height rows
+   size to content; flex sentinel rows (.flex = log/minimap, height -2/-1) grow to fill
+   the remainder. The body is transparent so the cleared (black) sidebar shows through. */
 
 body {
     background-color: transparent;
@@ -13,21 +18,23 @@ body {
     height: 100%;
 }
 
-/* Full-window container so child fragments' % positions resolve against the window. */
-.hud-col {
+.hud-sidebar {
     position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
+    /* left / top / width / height injected from C++ each frame. */
+    display: flex;
+    flex-direction: column;
 }
 
-/* Each fragment is positioned individually by id from C++ (left/top/width injected).
-   display:block — RmlUi elements default to inline; a sidebar row must be a block or
-   it flows horizontally (documented gotcha in theme.rcss, bit mutations/diary).
+/* display:block — RmlUi elements default to inline; a row must be block or it flows
+   horizontally (documented gotcha in theme.rcss, bit mutations/diary).
    white-space:pre-wrap preserves the producers' spacing + newlines. */
-.hud-panel {
-    position: absolute;
+.hud-row {
     display: block;
     white-space: pre-wrap;
+    flex: 0 0 auto;
+}
+
+/* Sentinel-height panels (log -2 / minimap -1) absorb the leftover column height. */
+.hud-row.flex {
+    flex: 1 1 auto;
 }
