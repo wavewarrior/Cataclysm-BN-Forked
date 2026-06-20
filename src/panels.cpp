@@ -2724,6 +2724,8 @@ struct hud_rml_model {
     Rml::String sound_rml;
     Rml::String stats_rml;
     Rml::String needs_rml;
+    Rml::String wgtvol_rml;
+    Rml::String mana_rml;
     Rml::DataModelHandle handle;
 };
 std::unique_ptr<hud_rml_model> g_hud_data;
@@ -2732,7 +2734,7 @@ Rml::ElementDocument *g_hud_doc = nullptr;
 // One row mirroring draw_stats: "STR n  DEX n  INT n  PER n"; each value is coloured
 // by the same str_string/etc. helper draw_stats uses (label stays default HUD colour).
 // The cata colour tags become RML spans via cata_text_to_rml in sidebar_hud_sync.
-std::string hud_stats_text( const avatar &u )
+std::string hud_stats_text( avatar &u )
 {
     const auto seg = [&]( const std::string & label, const nc_color clr, int val ) {
         const std::string num = val < 100 ? std::to_string( val ) : "99+";
@@ -2742,6 +2744,27 @@ std::string hud_stats_text( const avatar &u )
            seg( _( "DEX" ), dex_string( u ).first, u.get_dex() ) + "  " +
            seg( _( "INT" ), int_string( u ).first, u.get_int() ) + "  " +
            seg( _( "PER" ), per_string( u ).first, u.get_per() );
+}
+
+// Mirrors draw_stat_wide / draw_stat_narrow (the labels/wide + narrow "Stats" variant):
+// STR/DEX/INT/PER plus a Power readout and the Safe-mode flag, two rows. draw_stats
+// (classic) omits Power+Safe, so this is a distinct content variant — the layout's panel
+// name selects which producer runs (see g_hud_owned).
+std::string hud_stats_wide( avatar &u )
+{
+    const auto seg = [&]( const std::string & label, const nc_color clr, const std::string & val ) {
+        return label + " " + colorize( val, clr );
+    };
+    const std::pair<nc_color, std::string> pwr = power_stat( u );
+    std::string out =
+        seg( _( "Str" ), str_string( u ).first, std::to_string( u.get_str() ) ) + "  " +
+        seg( _( "Dex" ), dex_string( u ).first, std::to_string( u.get_dex() ) ) + "  " +
+        seg( _( "Power" ), pwr.first, pwr.second ) + "\n";
+    out +=
+        seg( _( "Int" ), int_string( u ).first, std::to_string( u.get_int() ) ) + "  " +
+        seg( _( "Per" ), per_string( u ).first, std::to_string( u.get_per() ) ) + "  " +
+        seg( _( "Safe" ), safe_color(), g->safe_mode ? _( "On" ) : _( "Off" ) );
+    return out;
 }
 
 // Mirrors draw_stealth (the "Sound" panel): Speed value + move-mode counter + sound
@@ -2765,7 +2788,7 @@ std::string hud_sound_text( avatar &u )
 // Mirrors draw_needs_compact (the "Needs" panel), 3 rows. Curses lays it out as two
 // columns (hunger/fatigue/pain | thirst/temp/focus); reproduced row-by-row in reading
 // order, left field then right field, per the slice-1 precedent.
-std::string hud_needs_text( const avatar &u )
+std::string hud_needs_text( avatar &u )
 {
     const auto desc = []( const std::pair<std::string, nc_color> &p ) {
         return colorize( p.first, p.second );
@@ -2784,34 +2807,114 @@ std::string hud_needs_text( const avatar &u )
     return out;
 }
 
+// Mirrors draw_needs_labels / draw_needs_narrow (labels/wide + narrow "Needs" variant):
+// Pain/Thirst, Rest/Hunger, Heat — NO fatigue-arrow or Focus (those belong to the
+// compact variant above). Distinct content → its own producer.
+std::string hud_needs_labels( avatar &u )
+{
+    const auto desc = []( const std::pair<std::string, nc_color> &p ) {
+        return colorize( p.first, p.second );
+    };
+    const std::pair<nc_color, std::string> temp = temp_stat( u );
+    std::string out = std::string( _( "Pain" ) ) + " " + desc( u.get_pain_description() ) + "   " +
+                      std::string( _( "Thirst" ) ) + " " + desc( u.get_thirst_description() ) + "\n";
+    out += std::string( _( "Rest" ) ) + " " + desc( u.get_fatigue_description() ) + "   " +
+           std::string( _( "Hunger" ) ) + " " + desc( u.get_hunger_description() ) + "\n";
+    out += std::string( _( "Heat" ) ) + " " + colorize( temp.second, temp.first );
+    return out;
+}
+
+// Mirrors draw_sound_labels / draw_sound_narrow (labels/wide + narrow "Sound" variant):
+// just the sound level (or Deaf!). draw_stealth (compact) also shows Speed + move, so
+// that stays a separate producer (hud_sound_text).
+std::string hud_sound_labels( avatar &u )
+{
+    if( u.is_deaf() ) {
+        return std::string( _( "Sound:" ) ) + " " + colorize( _( "Deaf!" ), c_red );
+    }
+    return std::string( _( "Sound:" ) ) + " " + colorize( std::to_string( u.volume ), c_yellow );
+}
+
+// Mirrors draw_weightvolume_* (Wgt + Volume). All variants render the same content
+// (only column layout differs), so one producer serves every variant. Threshold colours
+// match draw_weightvolume_labels.
+std::string hud_wgtvol( avatar &u )
+{
+    const nc_color wclr = u.weight_carried() > u.weight_capacity() ? c_red :
+                          u.weight_carried() > u.weight_capacity() * 0.75 ? c_yellow : c_light_gray;
+    const nc_color vclr = u.volume_carried() > u.volume_capacity() * 0.85 ? c_red :
+                          u.volume_carried() > u.volume_capacity() * 0.65 ? c_yellow : c_light_gray;
+    return std::string( _( "Wgt" ) ) + " " + colorize( carry_weight_string( u ), wclr ) + "   " +
+           std::string( _( "Volume" ) ) + " " + colorize( carry_volume_string( u ), vclr );
+}
+
+// Mirrors print_mana (the native "Mana" panel, all variants — content is identical
+// across them, only spacing differs).
+std::string hud_mana( avatar &u )
+{
+    const std::pair<nc_color, std::string> m = mana_stat( u );
+    return std::string( _( "Mana" ) ) + " " + colorize( m.second, m.first ) + "   " +
+           std::string( _( "Max" ) ) + " " +
+           colorize( std::to_string( u.magic->max_mana( u ) ), c_light_blue );
+}
+
 // The panels the HUD reproduces, paired with their RML element id in sidebar_hud.rml.
-// owns_panel + position drive off this table; sync populates one model var per panel.
-// "Stats"/"Sound"/"Needs" are the stable (untranslated) window_panel names, shared by
-// the classic/narrow/wide variants.
+// VARIANT-AWARE owned-panel table. Each row maps a window_panel name to a logical RmlUi
+// element (elem_id), its bound model var, and the producer that reproduces THAT variant's
+// content. A logical panel (e.g. Stats) appears in any one layout under exactly one name,
+// so several rows can share an elem_id+var while pointing at different producers — the
+// runtime name selects the right content (classic draw_stats vs labels draw_stat_wide
+// genuinely render different fields). Names are matched case-insensitively (hud_lookup).
+//
+// Two naming schemes coexist (make_native_widget_panel names a panel by its widget id;
+// the built-in classic/narrow/labels layouts name it by the translate_marker label):
+//   - built-in label:      "Stats" / "Sound" / "Needs" / "Wgt/Vol"
+//   - widget id (variant): "stats"(wide) / "stats_compact"(classic) / "stats_narrow", etc.
+// We own only the (name, variant) pairs whose content a producer faithfully reproduces;
+// any unlisted name → owns_panel false → curses keeps drawing it (correct fallback, no
+// mismatch). "Mana" (the label) is deliberately NOT owned: it collides with the val_mana
+// value-widget (a bare number), so only the native mana* ids map to the full readout.
 struct hud_owned_panel {
-    const char *panel_name;
-    const char *elem_id;
+    const char *panel_name;                  // widget id OR built-in label (CI match)
+    const char *elem_id;                     // logical element in sidebar_hud.rml
+    Rml::String hud_rml_model::*var;         // bound model var this element renders
+    std::string ( *produce )( avatar & );    // variant-specific content producer
 };
-const std::array<hud_owned_panel, 3> g_hud_owned = {{
-        { "Sound", "hud-Sound" },
-        { "Stats", "hud-Stats" },
-        { "Needs", "hud-Needs" },
+const std::array<hud_owned_panel, 20> g_hud_owned = {{
+        // Stats — classic (draw_stats) vs labels/wide + narrow (draw_stat_wide/_narrow)
+        { "Stats",         "hud-Stats",  &hud_rml_model::stats_rml,  hud_stats_text },
+        { "stats_compact", "hud-Stats",  &hud_rml_model::stats_rml,  hud_stats_text },
+        { "stats",         "hud-Stats",  &hud_rml_model::stats_rml,  hud_stats_wide },
+        { "stats_narrow",  "hud-Stats",  &hud_rml_model::stats_rml,  hud_stats_wide },
+        // Sound — compact (draw_stealth: speed+move+sound) vs labels/narrow (sound only)
+        { "Sound",         "hud-Sound",  &hud_rml_model::sound_rml,  hud_sound_text },
+        { "sound_compact", "hud-Sound",  &hud_rml_model::sound_rml,  hud_sound_text },
+        { "sound",         "hud-Sound",  &hud_rml_model::sound_rml,  hud_sound_labels },
+        { "sound_narrow",  "hud-Sound",  &hud_rml_model::sound_rml,  hud_sound_labels },
+        // Needs — compact (arrows+Focus) vs labels/narrow (pain/thirst/rest/hunger/heat)
+        { "Needs",         "hud-Needs",  &hud_rml_model::needs_rml,  hud_needs_text },
+        { "needs_compact", "hud-Needs",  &hud_rml_model::needs_rml,  hud_needs_text },
+        { "needs",         "hud-Needs",  &hud_rml_model::needs_rml,  hud_needs_labels },
+        { "needs_narrow",  "hud-Needs",  &hud_rml_model::needs_rml,  hud_needs_labels },
+        // Wgt/Vol — content identical across variants (only columns differ)
+        { "Wgt/Vol",             "hud-WgtVol", &hud_rml_model::wgtvol_rml, hud_wgtvol },
+        { "weightvolume",        "hud-WgtVol", &hud_rml_model::wgtvol_rml, hud_wgtvol },
+        { "weightvolume_compact", "hud-WgtVol", &hud_rml_model::wgtvol_rml, hud_wgtvol },
+        { "weightvolume_narrow", "hud-WgtVol", &hud_rml_model::wgtvol_rml, hud_wgtvol },
+        // Mana — native mana panel only (NOT the "Mana" value-widget label)
+        { "mana",         "hud-Mana",   &hud_rml_model::mana_rml,   hud_mana },
+        { "mana_compact", "hud-Mana",   &hud_rml_model::mana_rml,   hud_mana },
+        { "mana_narrow",  "hud-Mana",   &hud_rml_model::mana_rml,   hud_mana },
+        { "mana_wide",    "hud-Mana",   &hud_rml_model::mana_rml,   hud_mana },
     }
 };
 
-const char *hud_elem_id_for( const std::string &name )
+const hud_owned_panel *hud_lookup( const std::string &name )
 {
-    // Match case-insensitively: the built-in layouts (classic/narrow/labels) register
-    // these panels as "Stats"/"Sound"/"Needs" (translate_marker), but the data-driven
-    // widget layouts (data/json/ui/sidebar.json) name them by the lowercase widget id
-    // ("stats"/"sound"/"needs"). A custom/widget sidebar would otherwise never match,
-    // so owns_panel returned false → curses kept drawing the panel and the RmlUi
-    // fragment, never positioned, stacked at the window's top-left. The three names are
-    // unique when case-folded, so a CI compare is unambiguous.
     const std::string lname = to_lower_case( name );
     for( const hud_owned_panel &p : g_hud_owned ) {
         if( lname == to_lower_case( p.panel_name ) ) {
-            return p.elem_id;
+            return &p;
         }
     }
     return nullptr;
@@ -2845,6 +2948,8 @@ void sidebar_hud_open()
     c.Bind( "sound_rml", &g_hud_data->sound_rml );
     c.Bind( "stats_rml", &g_hud_data->stats_rml );
     c.Bind( "needs_rml", &g_hud_data->needs_rml );
+    c.Bind( "wgtvol_rml", &g_hud_data->wgtvol_rml );
+    c.Bind( "mana_rml", &g_hud_data->mana_rml );
     g_hud_data->handle = c.GetModelHandle();
     // passive=true: render-only HUD — it must not capture in-game world mouse
     // (look/examine). See rmlui_layer::any_interactive_open / process_event.
@@ -2864,12 +2969,28 @@ void sidebar_hud_sync( avatar &u )
     if( g_hud_doc == nullptr || !g_hud_data ) {
         return;
     }
-    g_hud_data->sound_rml = cata_text_to_rml( hud_sound_text( u ) );
-    g_hud_data->stats_rml = cata_text_to_rml( hud_stats_text( u ) );
-    g_hud_data->needs_rml = cata_text_to_rml( hud_needs_text( u ) );
+    // Variant-aware: clear every owned var, then fill ONLY the panels actually present
+    // (toggled on + render predicate true) in the current layout, each via the producer
+    // its name selects. Mirroring draw_panels' render gate keeps content and positioning
+    // in lock-step — a filled-but-unpositioned element would render at the window origin.
+    g_hud_data->sound_rml.clear();
+    g_hud_data->stats_rml.clear();
+    g_hud_data->needs_rml.clear();
+    g_hud_data->wgtvol_rml.clear();
+    g_hud_data->mana_rml.clear();
+    for( const window_panel &panel : panel_manager::get_manager().get_current_layout() ) {
+        if( !panel.toggle || !panel.render() ) {
+            continue;
+        }
+        if( const hud_owned_panel *p = hud_lookup( panel.get_name() ) ) {
+            ( *g_hud_data ).*( p->var ) = cata_text_to_rml( p->produce( u ) );
+        }
+    }
     g_hud_data->handle.DirtyVariable( "sound_rml" );
     g_hud_data->handle.DirtyVariable( "stats_rml" );
     g_hud_data->handle.DirtyVariable( "needs_rml" );
+    g_hud_data->handle.DirtyVariable( "wgtvol_rml" );
+    g_hud_data->handle.DirtyVariable( "mana_rml" );
 }
 
 void sidebar_hud_close()
@@ -2887,10 +3008,9 @@ void sidebar_hud_close()
 
 bool sidebar_hud_owns_panel( const std::string &name )
 {
-    // The HUD reproduces the panels in g_hud_owned (slice 2b: Sound / Stats / Needs).
-    // The names are the stable (untranslated) window_panel names shared by the
-    // classic/narrow/wide variants.
-    return g_hud_doc != nullptr && hud_elem_id_for( name ) != nullptr;
+    // True iff the HUD is open AND it has a producer for this panel name/variant
+    // (g_hud_owned). Unowned names fall back to the curses draw.
+    return g_hud_doc != nullptr && hud_lookup( name ) != nullptr;
 }
 
 void sidebar_hud_position( const std::string &name, float left_pct, float top_pct,
@@ -2905,11 +3025,11 @@ void sidebar_hud_position( const std::string &name, float left_pct, float top_pc
     // cells spanning the full window, so a panel's cell rect maps to a %-rect of the
     // RmlUi context. This honours SIDEBAR_POSITION (the caller bakes left==right-edge
     // for a right sidebar) and tracks resize for free.
-    const char *elem_id = hud_elem_id_for( name );
-    if( elem_id == nullptr ) {
+    const hud_owned_panel *p = hud_lookup( name );
+    if( p == nullptr ) {
         return;
     }
-    Rml::Element *el = g_hud_doc->GetElementById( elem_id );
+    Rml::Element *el = g_hud_doc->GetElementById( p->elem_id );
     if( el == nullptr ) {
         return;
     }
