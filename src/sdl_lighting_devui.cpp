@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <array>
 #include <string>
 #include <unordered_map>
@@ -431,6 +432,135 @@ Rml::ElementDocument *g_devui_doc = nullptr;
 Rml::DataModelHandle g_devui_model;
 bool g_devui_preview = false;   // the ImGui "RmlUi dev panel (preview)" checkbox
 
+// ── Tier 8 slice 4: composite colour picker (SV square + hue strip) ─────────
+// RmlUi has no native colour picker, but the render interface implements gradient
+// shaders (linear/horizontal/vertical-gradient), so we compose one: a saturation×value
+// square (white→hue horizontal gradient under a transparent→black vertical overlay) +
+// a rainbow hue strip, each draggable. HSV state is internal; on drag we map the mouse
+// position to H or S/V, convert to RGB, write the target colour, and update the visuals
+// (gradient/thumbs/swatch) via SetProperty. Slice 4 targets the cursor-light colour to
+// prove the mechanism; later it generalises to the outline/theme colours.
+float g_pk_h = 0.f;     // hue 0..360
+float g_pk_s = 0.f;     // saturation 0..1
+float g_pk_v = 1.f;     // value 0..1
+Rml::String g_pk_hex = "#ffffff";
+
+void pk_hsv_to_rgb( float h, float s, float v, float &r, float &g, float &b )
+{
+    h = std::fmod( std::fmod( h, 360.f ) + 360.f, 360.f );
+    const float c = v * s;
+    const float x = c * ( 1.f - std::fabs( std::fmod( h / 60.f, 2.f ) - 1.f ) );
+    const float m = v - c;
+    float rr = 0.f;
+    float gg = 0.f;
+    float bb = 0.f;
+    if( h < 60.f ) {
+        rr = c;
+        gg = x;
+    } else if( h < 120.f ) {
+        rr = x;
+        gg = c;
+    } else if( h < 180.f ) {
+        gg = c;
+        bb = x;
+    } else if( h < 240.f ) {
+        gg = x;
+        bb = c;
+    } else if( h < 300.f ) {
+        rr = x;
+        bb = c;
+    } else {
+        rr = c;
+        bb = x;
+    }
+    r = rr + m;
+    g = gg + m;
+    b = bb + m;
+}
+
+void pk_rgb_to_hsv( float r, float g, float b, float &h, float &s, float &v )
+{
+    const float mx = std::max( { r, g, b } );
+    const float mn = std::min( { r, g, b } );
+    const float d = mx - mn;
+    v = mx;
+    s = mx <= 0.f ? 0.f : d / mx;
+    if( d <= 0.f ) {
+        h = 0.f;
+        return;
+    }
+    if( mx == r ) {
+        h = 60.f * std::fmod( ( g - b ) / d, 6.f );
+    } else if( mx == g ) {
+        h = 60.f * ( ( b - r ) / d + 2.f );
+    } else {
+        h = 60.f * ( ( r - g ) / d + 4.f );
+    }
+    if( h < 0.f ) {
+        h += 360.f;
+    }
+}
+
+Rml::String pk_hex( float r, float g, float b )
+{
+    const auto q = []( float f ) {
+        return static_cast<unsigned>( std::lround( std::clamp( f, 0.f, 1.f ) * 255.f ) );
+    };
+    char buf[8];
+    std::snprintf( buf, sizeof( buf ), "#%02x%02x%02x", q( r ), q( g ), q( b ) );
+    return Rml::String( buf );
+}
+
+Rml::String pk_pct( float frac )
+{
+    char buf[16];
+    std::snprintf( buf, sizeof( buf ), "%.2f%%", std::clamp( frac, 0.f, 1.f ) * 100.f );
+    return Rml::String( buf );
+}
+
+// Recompute RGB from HSV, write the target colour, and refresh the picker visuals.
+void picker_apply()
+{
+    float r = 0.f;
+    float g = 0.f;
+    float b = 0.f;
+    pk_hsv_to_rgb( g_pk_h, g_pk_s, g_pk_v, r, g, b );
+    cursor_light_emitter::color[0] = r;
+    cursor_light_emitter::color[1] = g;
+    cursor_light_emitter::color[2] = b;
+    g_pk_hex = pk_hex( r, g, b );
+    if( g_devui_model ) {
+        g_devui_model.DirtyVariable( "pk_hex" );
+    }
+    if( g_devui_doc == nullptr ) {
+        return;
+    }
+    float hr = 0.f;
+    float hg = 0.f;
+    float hb = 0.f;
+    pk_hsv_to_rgb( g_pk_h, 1.f, 1.f, hr, hg, hb );   // pure hue for the saturation gradient
+    if( Rml::Element *sv = g_devui_doc->GetElementById( "pk-sv" ) ) {
+        sv->SetProperty( "decorator", "horizontal-gradient(#ffffff " + pk_hex( hr, hg, hb ) + ")" );
+    }
+    if( Rml::Element *t = g_devui_doc->GetElementById( "pk-sv-thumb" ) ) {
+        t->SetProperty( "left", pk_pct( g_pk_s ) );
+        t->SetProperty( "top", pk_pct( 1.f - g_pk_v ) );
+    }
+    if( Rml::Element *t = g_devui_doc->GetElementById( "pk-hue-thumb" ) ) {
+        t->SetProperty( "top", pk_pct( g_pk_h / 360.f ) );
+    }
+    if( Rml::Element *sw = g_devui_doc->GetElementById( "pk-swatch" ) ) {
+        sw->SetProperty( "background-color", g_pk_hex );
+    }
+}
+
+// Seed HSV from the current target colour (call after the doc opens).
+void picker_init()
+{
+    pk_rgb_to_hsv( cursor_light_emitter::color[0], cursor_light_emitter::color[1],
+                   cursor_light_emitter::color[2], g_pk_h, g_pk_s, g_pk_v );
+}
+
 void devui_rml_open()
 {
     if( g_devui_doc != nullptr || !rmlui_layer::ready() ) {
@@ -507,6 +637,48 @@ void devui_rml_open()
     c.Bind( "outline_thickness", &g_outline_thickness );
     c.Bind( "outline_alpha", &g_outline_alpha );
     c.Bind( "outline_alpha_cut", &g_outline_alpha_cut );
+    // Slice 4 — colour picker. pk_hex is the readout; the SV square + hue strip emit
+    // mousedown/drag → map mouse pos to S/V or H, then picker_apply() writes the colour.
+    c.Bind( "pk_hex", &g_pk_hex );
+    c.BindEventCallback( "pk_sv",
+    []( Rml::DataModelHandle, Rml::Event & ev, const Rml::VariantList & ) {
+        if( g_devui_doc == nullptr ) {
+            return;
+        }
+        Rml::Element *sv = g_devui_doc->GetElementById( "pk-sv" );
+        if( sv == nullptr ) {
+            return;
+        }
+        const Rml::Vector2f off = sv->GetAbsoluteOffset( Rml::BoxArea::Border );
+        const float w = sv->GetClientWidth();
+        const float h = sv->GetClientHeight();
+        if( w <= 0.f || h <= 0.f ) {
+            return;
+        }
+        const float mx = ev.GetParameter<float>( "mouse_x", off.x );
+        const float my = ev.GetParameter<float>( "mouse_y", off.y );
+        g_pk_s = std::clamp( ( mx - off.x ) / w, 0.f, 1.f );
+        g_pk_v = std::clamp( 1.f - ( my - off.y ) / h, 0.f, 1.f );
+        picker_apply();
+    } );
+    c.BindEventCallback( "pk_hue",
+    []( Rml::DataModelHandle, Rml::Event & ev, const Rml::VariantList & ) {
+        if( g_devui_doc == nullptr ) {
+            return;
+        }
+        Rml::Element *hue = g_devui_doc->GetElementById( "pk-hue" );
+        if( hue == nullptr ) {
+            return;
+        }
+        const Rml::Vector2f off = hue->GetAbsoluteOffset( Rml::BoxArea::Border );
+        const float h = hue->GetClientHeight();
+        if( h <= 0.f ) {
+            return;
+        }
+        const float my = ev.GetParameter<float>( "mouse_y", off.y );
+        g_pk_h = std::clamp( ( my - off.y ) / h, 0.f, 1.f ) * 360.f;
+        picker_apply();
+    } );
     g_devui_model = c.GetModelHandle();
     Rml::ElementDocument *doc =
         rmlui_layer::open_document( PATH_INFO::datadir() + "gui/devui.rml", false );
@@ -515,6 +687,9 @@ void devui_rml_open()
         return;
     }
     g_devui_doc = doc;
+    // Seed the picker from the current cursor-light colour + paint the initial visuals.
+    picker_init();
+    picker_apply();
 }
 
 void devui_rml_close()

@@ -104,6 +104,22 @@
         <div class="devui-row">outline thickness <input type="range" min="0" max="0.25" step="0.005" data-value="outline_thickness"/> <span class="devui-val">{{outline_thickness}}</span></div>
         <div class="devui-row">outline alpha <input type="range" min="0" max="1" step="0.01" data-value="outline_alpha"/> <span class="devui-val">{{outline_alpha}}</span></div>
         <div class="devui-row">outline mask cut <input type="range" min="0" max="1" step="0.01" data-value="outline_alpha_cut"/> <span class="devui-val">{{outline_alpha_cut}}</span></div>
+
+        <!-- Tier 8 slice 4 — composite colour picker (cursor-light colour). SV square
+             (saturation×value, hue-tinted gradient + transparent→black overlay) and a
+             rainbow hue strip, both draggable; C++ maps the drag to HSV → RGB and paints
+             the gradient/thumbs/swatch. Proves gradient decorators + 2D drag mapping. -->
+        <div class="devui-section">Cursor light colour</div>
+        <div class="pk-wrap">
+            <div id="pk-sv" class="pk-sv" data-event-mousedown="pk_sv" data-event-drag="pk_sv">
+                <div class="pk-sv-val"></div>
+                <div id="pk-sv-thumb" class="pk-thumb"></div>
+            </div>
+            <div id="pk-hue" class="pk-hue" data-event-mousedown="pk_hue" data-event-drag="pk_hue">
+                <div id="pk-hue-thumb" class="pk-hue-thumb"></div>
+            </div>
+        </div>
+        <div class="devui-row"><div id="pk-swatch" class="pk-swatch"></div> <span class="devui-val">{{pk_hex}}</span></div>
     </div>
 </body>
 </rml>

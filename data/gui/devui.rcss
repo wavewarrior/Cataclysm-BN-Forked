@@ -97,3 +97,74 @@ input.range sliderbar:hover {
 input.range sliderbar:active {
     background-color: #ffffff;
 }
+
+/* Composite colour picker. The SV square is a hue-tinted horizontal gradient (white ->
+   pure hue, set from C++) under a transparent->black vertical overlay; the hue strip is a
+   rainbow linear-gradient. drag:drag on the interactive surfaces + their children so a
+   drag starts anywhere; the C++ handler maps mouse pos to S/V or H. */
+.pk-wrap {
+    display: block;
+    margin-bottom: 6px;
+}
+
+.pk-sv {
+    display: inline-block;
+    position: relative;
+    width: 160px;
+    height: 120px;
+    margin-right: 8px;
+    drag: drag;
+    decorator: horizontal-gradient(#ffffff #ff0000);   /* hue tint overwritten by C++ */
+}
+
+.pk-sv-val {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    drag: drag;
+    decorator: vertical-gradient(#00000000 #000000ff);  /* transparent -> black = value */
+}
+
+.pk-thumb {
+    position: absolute;
+    width: 9px;
+    height: 9px;
+    margin-left: -4px;
+    margin-top: -4px;
+    border: 1px #ffffff;
+    background-color: #00000000;
+    drag: drag;
+}
+
+.pk-hue {
+    display: inline-block;
+    position: relative;
+    width: 18px;
+    height: 120px;
+    vertical-align: top;
+    drag: drag;
+    decorator: linear-gradient(180deg, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000);
+}
+
+.pk-hue-thumb {
+    position: absolute;
+    left: -2px;
+    width: 22px;
+    height: 3px;
+    margin-top: -1px;
+    border: 1px #ffffff;
+    background-color: #00000000;
+    drag: drag;
+}
+
+.pk-swatch {
+    display: inline-block;
+    width: 24px;
+    height: 16px;
+    vertical-align: -3px;
+    margin-right: 4px;
+    border: 1px #888888;
+    background-color: #ffffff;
+}

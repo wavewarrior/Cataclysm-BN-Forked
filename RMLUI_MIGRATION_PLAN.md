@@ -2473,6 +2473,30 @@ codebase until now.
     Lighting/Animation/Runic/Diagnostics tabs, CRT sliders, world-text px/offset. Likely a TAB
     structure (reuse the `.tabs`/`.tab` component) once the flat panel gets unwieldy. Then F4 opens
     the RmlUi doc + retire `imgui_layer` (§8 gate).
+- **Slice 4 — composite COLOUR PICKER — CODE-COMPLETE + BUILD-GREEN (Metal, fresh relink 19:55,
+  devui.o fresh), EYEBALL OWED, COMMITTED pending, 2026-06-20.** A real SV-square + hue-strip
+  picker (user asked for a proper one, not RGB sliders). Enabled by the discovery that the
+  codebase's RmlUi render interface IMPLEMENTS gradient shaders (`linear/horizontal/vertical/
+  radial/conic-gradient` → `rmlui_gradient.frag.hlsl`, rmlui_render_interface.cpp:622-638).
+  - **SV square:** `#pk-sv` = `horizontal-gradient(#fff <pure-hue>)` (saturation; hue tint set
+    from C++) with a child `.pk-sv-val` = `vertical-gradient(#00000000 #000000ff)` overlay (value);
+    `#pk-hue` = rainbow `linear-gradient(180deg, 7 stops)`. Thumbs are absolutely-positioned divs.
+  - **Interaction:** `drag:drag` on the surfaces + children; `data-event-mousedown`/`data-event-drag`
+    → C++ handlers (BindEventCallback) map mouse pos (event mouse_x/y minus element
+    `GetAbsoluteOffset` / `GetClientWidth/Height`) → S,V or H. `picker_apply()` converts HSV→RGB
+    (local float helpers, NOT the lossy uint8 hsv_color.h ones), writes the target colour, and
+    repaints the saturation gradient + thumb positions + swatch via `SetProperty`; `{{pk_hex}}`
+    readout bound. `picker_init()` seeds HSV from the target via RGB→HSV on open.
+  - **Target:** cursor-light colour (`cursor_light_emitter::color[3]`) — proves the mechanism;
+    generalising to the outline (`g_outline_col_*[4]`) / theme / text colours is the next slice
+    (likely a colour-target selector or one picker per colour).
+  - **EYEBALL CHECK (user, A/B, Metal + D3D12) — the make-or-break runtime unknowns:** (1) do the
+    GRADIENTS render (SV square shows white→hue left-right, dark at bottom; hue strip shows the
+    rainbow)? (2) does DRAG work (drag in the square moves the thumb + recolours; drag the hue
+    strip rotates the SV square's hue)? (3) does the swatch + `{{pk_hex}}` track, and does the
+    actual cursor light in-game change colour (enable "omni light follows cursor")? If gradients
+    don't paint, the RCSS gradient-decorator syntax needs adjusting; if drag doesn't fire, switch
+    the `drag` event for `mousemove`-while-pressed.
 
 ## Load-bearing architecture facts (verified this session)
 
