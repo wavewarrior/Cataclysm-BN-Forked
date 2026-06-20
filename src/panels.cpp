@@ -65,6 +65,7 @@
 #include "point.h"
 #include "string_formatter.h"
 #include "string_id.h"
+#include "string_utils.h"
 #include "tileray.h"
 #include "translations.h"
 #include "type_id.h"
@@ -2800,8 +2801,16 @@ const std::array<hud_owned_panel, 3> g_hud_owned = {{
 
 const char *hud_elem_id_for( const std::string &name )
 {
+    // Match case-insensitively: the built-in layouts (classic/narrow/labels) register
+    // these panels as "Stats"/"Sound"/"Needs" (translate_marker), but the data-driven
+    // widget layouts (data/json/ui/sidebar.json) name them by the lowercase widget id
+    // ("stats"/"sound"/"needs"). A custom/widget sidebar would otherwise never match,
+    // so owns_panel returned false → curses kept drawing the panel and the RmlUi
+    // fragment, never positioned, stacked at the window's top-left. The three names are
+    // unique when case-folded, so a CI compare is unambiguous.
+    const std::string lname = to_lower_case( name );
     for( const hud_owned_panel &p : g_hud_owned ) {
-        if( name == p.panel_name ) {
+        if( lname == to_lower_case( p.panel_name ) ) {
             return p.elem_id;
         }
     }
