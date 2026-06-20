@@ -419,7 +419,16 @@ void CheckMessages( display_context &d )
         // can always be closed even while ImGui holds keyboard focus. P0 dev
         // key; revisit for collisions when promoting past P0.
         if( ev.type == SDL_EVENT_KEY_DOWN && !ev.key.repeat && ev.key.key == SDLK_F4 ) {
-            imgui_layer::visible() = !imgui_layer::visible();
+            // §8 gate: F4 toggles the RmlUi dev panel (the ImGui one is retired).
+            sdl_lighting_devui::devui_visible() = !sdl_lighting_devui::devui_visible();
+            d.needupdate = true;
+            continue;
+        }
+        // Dev test-light placement: a world click (not over the RmlUi panel) while the
+        // dev panel is open with place-mode on drops a static light. Was the ImGui mouse
+        // path; consume the click so it doesn't also trigger a game action.
+        if( ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN && ev.button.button == SDL_BUTTON_LEFT
+            && !rmlui_capture && sdl_lighting_devui::place_test_light() ) {
             d.needupdate = true;
             continue;
         }

@@ -96,10 +96,10 @@ auto begin_frame( lighting::render_state &rs ) -> std::optional<lighting::frame_
         rmlui_layer::init( rs.device() );
     }
 
-    // Tier 8 slice 1: drive the parallel RmlUi dev-panel preview (opens only when the
-    // F4 ImGui panel is visible AND its preview checkbox is on). Renders via the normal
-    // RmlUi composite pass; ImGui stays primary.
-    sdl_lighting_devui::rml_tick( imgui_layer::visible() );
+    // Tier 8 §8 gate: F4 now opens the RmlUi dev panel (devui_visible()). It renders via
+    // the normal RmlUi composite pass; the ImGui panel is retired (its visible() stays
+    // false, so imgui_layer::active() is false and it never composites).
+    sdl_lighting_devui::rml_tick();
 
     rs.tile_batcher().begin_frame();
     rs.ui_batcher().begin_frame();
@@ -165,7 +165,7 @@ auto build_lighting( lighting::render_state &rs ) -> bool
         // Rebuild the SDF on transparency change (gen), z change, OR map shift
         // (origin): a shift moves the bubble's contents, so the map-local SDF must
         // realign immediately or shadows drift behind the camera for a frame.
-        rebuild.structure = imgui_layer::visible()
+        rebuild.structure = sdl_lighting_devui::devui_visible()
                             || gen != last_gen || z != last_z
                             || origin != last_origin;
 
@@ -175,7 +175,7 @@ auto build_lighting( lighting::render_state &rs ) -> bool
         // rebuild.structure because seen_cache is rebuilt alongside transparency_cache.
         const int px = g->u.bub_pos().x();
         const int py = g->u.bub_pos().y();
-        rebuild.vis = imgui_layer::visible()
+        rebuild.vis = sdl_lighting_devui::devui_visible()
                       || px != last_player_x || py != last_player_y
                       || z != last_z;
 
@@ -209,7 +209,7 @@ auto build_lighting( lighting::render_state &rs ) -> bool
     // Dev test lights: keep the hovered world-tile fresh while the F4 panel is
     // open (the panel drops a static light there on click); despawn all placed
     // lights the moment the panel closes. Pure debugging aid.
-    if( !imgui_layer::visible() ) {
+    if( !sdl_lighting_devui::devui_visible() ) {
         if( !dev_test_lights::lights.empty() ) {
             dev_test_lights::lights.clear();
         }

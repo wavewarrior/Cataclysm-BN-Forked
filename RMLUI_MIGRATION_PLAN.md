@@ -2593,6 +2593,35 @@ codebase until now.
   - **★ TIER 8 NOW AT FULL PARITY — the RmlUi dev panel mirrors the entire ImGui F4.** Next: flip F4
     to open the RmlUi doc as primary + retire `imgui_layer` from the composite pass (§8 gate), after
     eyeball. (Cursor click-to-place + the ImGui-only mouse-placement logic must move at that flip.)
+- **§8 FLIP — F4 opens the RmlUi doc; ImGui dev panel retired from the composite — CODE-COMPLETE +
+  BUILD-GREEN (Metal, fresh relink 20:49, devui/render_frame/input + binary fresh), EYEBALL OWED,
+  COMMITTED pending, 2026-06-20.** The dev panel is now RmlUi-primary. Minimal + surgical — no
+  composite-pass edits needed (the elegant part):
+  - **The mechanism:** F4 now toggles a NEW `sdl_lighting_devui::devui_visible()` flag instead of
+    `imgui_layer::visible()`. `rml_tick()` (no longer arg-gated on imgui+preview) opens/closes the
+    devui doc to match it. Since nothing flips `imgui_layer::visible()` any more, `imgui_layer::active()`
+    stays false → the composite's `if(imgui_active)` branch never runs → **ImGui retires from the
+    composite automatically, no edit to `composite_swapchain_pass_b`.** The doc registers in
+    `rmlui_layer::active()` (any_open()), so it composites + captures mouse through the existing RmlUi
+    path.
+  - **Files:** `sdl_lighting_devui.{h,cpp}` — `devui_visible()` accessor + `g_devui_visible`;
+    `rml_tick()` opens on that flag; legacy `g_devui_preview`/`draw()` left dead (compiled, removed at
+    Tier 10). `sdl_render_frame.cpp` — `rml_tick()` call + the three `imgui_layer::visible()`
+    cache-rebuild/despawn gates (structure/vis live-rebuild while tuning + test-light despawn) now read
+    `devui_visible()`. `sdl_input.cpp` — F4 toggles `devui_visible()`; **cursor click-to-place moved
+    here** (`place_test_light()` on a left-click not over the panel, `!rmlui_capture`, consumes the
+    click) since the ImGui Effects-tab mouse path is dead.
+  - **NOT deleted (Tier 10, gated on Tiers 7+9):** `imgui_layer` the module stays compiled — still
+    inits + can composite for the dormant uilist ImGui pilot (`ui.cpp`, default off) and as a safety.
+    "Retire" here = the dev panel is off ImGui + ImGui isn't in the live composite. Full ImGui deletion
+    is the Tier 10 rip-out.
+  - **EYEBALL CHECK (user, A/B, Metal + D3D12):** F4 opens the RmlUi dev panel (no ImGui window); all
+    tabs/controls work; closing F4 hides it + returns world mouse; lighting sliders live-update (the
+    rebuild gate now keys off the RmlUi panel); F5/F6/F7 debug keys still work (they were never ImGui-
+    gated); place-test-lights: enable place-mode → click the world → a light drops (click consumed),
+    closing the panel despawns them. **Make-or-break:** does the rebuild-gate flip keep lighting tuning
+    live (SDF rebuilds each frame while the panel's open)? And does the world click reach
+    `place_test_light` (not eaten by the panel) only when off-panel?
 
 ## Load-bearing architecture facts (verified this session)
 

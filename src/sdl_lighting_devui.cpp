@@ -430,7 +430,8 @@ namespace
 {
 Rml::ElementDocument *g_devui_doc = nullptr;
 Rml::DataModelHandle g_devui_model;
-bool g_devui_preview = false;   // the ImGui "RmlUi dev panel (preview)" checkbox
+bool g_devui_preview = false;   // legacy: the ImGui "RmlUi dev panel (preview)" checkbox (dead)
+bool g_devui_visible = false;   // §8 gate — the F4 toggle (RmlUi dev panel open/closed)
 int g_devui_tab = 0;            // slice 7 — active tab (data-if/data-class-active in devui.rml)
 // Slice 8 — proxies for controls whose backing globals aren't directly bindable
 // (uint32 fields, <select> indices, size_t counts, read-only diagnostics text).
@@ -1474,9 +1475,29 @@ static Rml::String build_diag_text()
     return out;
 }
 
-void rml_tick( bool imgui_visible )
+bool &devui_visible()
 {
-    if( imgui_visible && g_devui_preview ) {
+    return g_devui_visible;
+}
+
+bool place_test_light()
+{
+    // No-op unless the panel is open with place-mode on (mirrors the old ImGui guard).
+    // Returns true when it placed one, so the caller can consume the click.
+    if( !g_devui_visible || !dev_test_lights::place_mode ) {
+        return false;
+    }
+    dev_test_lights::lights.push_back( dev_test_lights::light{
+        dev_test_lights::hover_wx, dev_test_lights::hover_wy, dev_test_lights::hover_wz,
+        cursor_light_emitter::radius, cursor_light_emitter::intensity,
+        cursor_light_emitter::color[0], cursor_light_emitter::color[1],
+        cursor_light_emitter::color[2] } );
+    return true;
+}
+
+void rml_tick()
+{
+    if( g_devui_visible ) {
         devui_rml_open();
         if( g_devui_doc != nullptr ) {
             // Slice 8 per-frame sync of the values that can't two-way bind directly.

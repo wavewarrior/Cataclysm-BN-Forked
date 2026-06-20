@@ -124,13 +124,19 @@ extern float wx, wy, wz;
 namespace sdl_lighting_devui
 {
 
-// Draw the "Lighting Debug (F4)" Dear ImGui panel. Registered as the
-// imgui_layer dev-UI callback; reads the shared globals declared above.
+// Draw the "Lighting Debug (F4)" Dear ImGui panel. Legacy: kept compiled but no
+// longer reachable now F4 drives the RmlUi doc (Tier 8 §8 gate). Removed at Tier 10.
 void draw();
 
-// Tier 8 slice 1: per-frame driver for the parallel RmlUi dev-panel preview.
-// Pass whether the ImGui F4 panel is visible; opens/syncs/closes the RmlUi doc
-// based on that + the in-panel "RmlUi dev panel (preview)" checkbox.
-void rml_tick( bool imgui_visible );
+// Tier 8 §8 gate: F4 now opens the RmlUi dev panel (devui.rml), not the ImGui one.
+// devui_visible() is the F4 toggle (sdl_input writes it); rml_tick() opens/syncs/
+// closes the doc to match it each frame (called from refresh_display).
+bool &devui_visible();
+void rml_tick();
+
+// Place a static dev test light at the hovered world tile. Returns true if it placed
+// one (panel open + place-mode on) so the caller can consume the click. Was inline in
+// the ImGui Effects tab; now driven by a world click from sdl_input.
+bool place_test_light();
 
 }  // namespace sdl_lighting_devui
