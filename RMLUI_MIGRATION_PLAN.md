@@ -2968,11 +2968,27 @@ primitive grep. `loading_ui::menu` (the uilist) is still Tier-0-covered as the p
 SPLASH author text is the straggler. Fix options: (a) route the splash text through the §7
 RmlUi text layer (`rmlui_layer::world_text_*` / managed `FontEngine::GenerateString`), or
 (b) accept the splash as a documented exception that keeps a single non-curses SDL-font draw
-alive (then gate step 4 must be reworded — currently it forbids exactly this). Sibling
-`draw_string`/`g_display.font` callers (`sdl_overmap_draw`/`sdl_render_frame`/`sdl_window`/
-`sdl_framebuffer`) are backend/render-frame plumbing that deletes wholesale — `loading_ui` is
-the only PLAYER-FACING straggler in this layer. **Lesson: the gate has TWO sweep dimensions —
-the primitive layer (step 2) AND the font layer (step 4); §8.1's first pass only did step 2.**
+alive (then gate step 4 must be reworded — currently it forbids exactly this). **Full font-layer sweep (2026-06-20, after loading_ui surfaced the dimension) — TWO MORE
+stragglers found.** Method: grepped every caller of the glyph-draw entry points
+(`Font::OutputChar`, `Font::draw_ascii_lines`, free `draw_string`, `draw_sdl_text_outlined`)
+minus the backend impl (`sdl_font`/`sdl_fonts`/`sdl_curses_draw`/`sdltiles`/`cata_cursesport`/
+`wincurse`/`ncurses_def`) and the §7 layer. Result:
+
+| Font-layer caller | Class | Verdict |
+|---|---|---|
+| `loading_ui` splash author (`draw_sdl_text_outlined`) | player-facing | straggler → §7 or documented exception |
+| `sdl_overmap_draw` city names + note labels (×3, `draw_string`) | player-facing WORLD text | **straggler** — this is exactly the §7 / Tier-6 "static map labels" class, but those labels were NEVER moved off the curses `Font`; the overmap TILE view stays (map path) but its text must go to §7 |
+| `sdl_render_frame` `tile_labels` (`draw_string`) | **dev/debug** coord overlay (lighting dev-UI, draws "mx,my" per tile in radius) | straggler in the dev-emitter class — §7 explicitly says "debug overlays route through the §7 layer"; move or delete with the dev tools |
+| `sdl_window` (font construct/reset) | backend lifecycle | NOT a straggler — deletes wholesale |
+| `sdl_framebuffer` (`font->width/height`) | backend METRICS only (curses cell rects) | NOT a straggler — deletes wholesale |
+| `Font::OutputChar` / `draw_ascii_lines` | the curses cell loop | **fully contained** — ZERO non-backend callers (clean) |
+
+So the font layer has **3 real stragglers** (loading splash + overmap labels + dev tile-coord
+overlay), all of the §7 "world/overlay text" class — none caught by the step-2 primitive grep.
+**Lesson: the gate has TWO sweep dimensions — the primitive layer (step 2) AND the font layer
+(step 4); §8.1's first pass only did step 2.** Good news: `OutputChar` (the actual cell/glyph
+loop) has no external consumers, so once these 3 + the §8.1 screen backlog migrate, deleting the
+curses glyph path is clean.
 
 **NON-blockers (correctly handled by the existing plan / out of scope):**
 - **Curses backend + primitive defs — DELETE WHOLESALE at Tier 10, do not migrate:**
@@ -2990,7 +3006,9 @@ The rip-out is gated on THREE things, not one:
 2. **Migrate the §8.1 gate-blocker backlog** (~12 screens above) — these were never coded at all.
    Biggest: `character_display`, `veh_interact`, `gamemode_defense`, `magic`, full `messages` log.
    Creature-info (`monster`/`mtype`/`npc`) wants a shared `Creature::print_info` F.2 component.
-   **PLUS the font-layer straggler:** `loading_ui` splash author text (route to §7 or except it).
+   **PLUS 3 font-layer stragglers** (gate step 4, missed by the step-2 grep): `loading_ui` splash
+   author text, `sdl_overmap_draw` city/note labels, `sdl_render_frame` dev tile-coord overlay —
+   all §7-class (route to the §7 RmlUi text layer, or delete the dev one with the dev tools).
 3. **Then** the deletion sequence (§8 step 5).
 So the honest remaining-work picture is: enumerated migration ≈ done-pending-eyeball; **a whole
 unlisted "Tier 7.5 / 9.5" of game screens (char sheet, vehicles, magic, defense mode, message
