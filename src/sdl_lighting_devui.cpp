@@ -445,6 +445,23 @@ float g_pk_s = 0.f;     // saturation 0..1
 float g_pk_v = 1.f;     // value 0..1
 Rml::String g_pk_hex = "#ffffff";
 
+// Colour targets the one picker can edit (selected by the swatch row). Each `rgb` points
+// at the first of 3 contiguous RGB floats (cursor is [3]; the outline colours are [4]
+// RGBA — we edit RGB and leave alpha). g_pk_idx is the active target.
+struct pk_target_t {
+    const char *elem_id;   // its swatch element in devui.rml
+    float *rgb;
+};
+const std::array<pk_target_t, 5> g_pk_targets = {{
+        { "pkt-cursor",   cursor_light_emitter::color },
+        { "pkt-hostile",  g_outline_col_hostile },
+        { "pkt-neutral",  g_outline_col_neutral },
+        { "pkt-friendly", g_outline_col_friendly },
+        { "pkt-self",     g_outline_col_self },
+    }
+};
+int g_pk_idx = 0;
+
 void pk_hsv_to_rgb( float h, float s, float v, float &r, float &g, float &b )
 {
     h = std::fmod( std::fmod( h, 360.f ) + 360.f, 360.f );
@@ -525,15 +542,24 @@ void picker_apply()
     float g = 0.f;
     float b = 0.f;
     pk_hsv_to_rgb( g_pk_h, g_pk_s, g_pk_v, r, g, b );
-    cursor_light_emitter::color[0] = r;
-    cursor_light_emitter::color[1] = g;
-    cursor_light_emitter::color[2] = b;
+    float *tgt = g_pk_targets[g_pk_idx].rgb;
+    tgt[0] = r;
+    tgt[1] = g;
+    tgt[2] = b;
     g_pk_hex = pk_hex( r, g, b );
     if( g_devui_model ) {
         g_devui_model.DirtyVariable( "pk_hex" );
     }
     if( g_devui_doc == nullptr ) {
         return;
+    }
+    // Repaint every target swatch from its live colour; outline the active one.
+    for( int i = 0; i < static_cast<int>( g_pk_targets.size() ); ++i ) {
+        if( Rml::Element *el = g_devui_doc->GetElementById( g_pk_targets[i].elem_id ) ) {
+            const float *c = g_pk_targets[i].rgb;
+            el->SetProperty( "background-color", pk_hex( c[0], c[1], c[2] ) );
+            el->SetProperty( "border-color", i == g_pk_idx ? "#ffffff" : "#555555" );
+        }
     }
     float hr = 0.f;
     float hg = 0.f;
@@ -554,11 +580,11 @@ void picker_apply()
     }
 }
 
-// Seed HSV from the current target colour (call after the doc opens).
+// Seed HSV from the active target colour (call after the doc opens / on target switch).
 void picker_init()
 {
-    pk_rgb_to_hsv( cursor_light_emitter::color[0], cursor_light_emitter::color[1],
-                   cursor_light_emitter::color[2], g_pk_h, g_pk_s, g_pk_v );
+    const float *c = g_pk_targets[g_pk_idx].rgb;
+    pk_rgb_to_hsv( c[0], c[1], c[2], g_pk_h, g_pk_s, g_pk_v );
 }
 
 void devui_rml_open()
@@ -678,6 +704,18 @@ void devui_rml_open()
         const float my = ev.GetParameter<float>( "mouse_y", off.y );
         g_pk_h = std::clamp( ( my - off.y ) / h, 0.f, 1.f ) * 360.f;
         picker_apply();
+    } );
+    c.BindEventCallback( "pk_target",
+    []( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+        int idx = -1;
+        if( !args.empty() ) {
+            args[0].GetInto( idx );
+        }
+        if( idx >= 0 && idx < static_cast<int>( g_pk_targets.size() ) ) {
+            g_pk_idx = idx;
+            picker_init();   // reseed HSV from the newly-selected colour
+            picker_apply();
+        }
     } );
     g_devui_model = c.GetModelHandle();
     Rml::ElementDocument *doc =

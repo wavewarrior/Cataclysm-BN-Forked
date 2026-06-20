@@ -105,11 +105,19 @@
         <div class="devui-row">outline alpha <input type="range" min="0" max="1" step="0.01" data-value="outline_alpha"/> <span class="devui-val">{{outline_alpha}}</span></div>
         <div class="devui-row">outline mask cut <input type="range" min="0" max="1" step="0.01" data-value="outline_alpha_cut"/> <span class="devui-val">{{outline_alpha_cut}}</span></div>
 
-        <!-- Tier 8 slice 4 — composite colour picker (cursor-light colour). SV square
-             (saturation×value, hue-tinted gradient + transparent→black overlay) and a
-             rainbow hue strip, both draggable; C++ maps the drag to HSV → RGB and paints
-             the gradient/thumbs/swatch. Proves gradient decorators + 2D drag mapping. -->
-        <div class="devui-section">Cursor light colour</div>
+        <!-- Tier 8 slice 4/5 — composite colour picker. SV square (saturation×value,
+             hue-tinted gradient + transparent→black overlay) + rainbow hue strip, both
+             draggable; C++ maps the drag to HSV → RGB. Slice 5: a target-swatch row picks
+             which colour the one picker edits (cursor light + the 4 hover-outline colours);
+             each swatch shows its live colour, the active one is outlined white. -->
+        <div class="devui-section">Colour picker</div>
+        <div class="pk-targets">
+            <div id="pkt-cursor"   class="pk-target" data-event-click="pk_target(0)">cur</div>
+            <div id="pkt-hostile"  class="pk-target" data-event-click="pk_target(1)">hos</div>
+            <div id="pkt-neutral"  class="pk-target" data-event-click="pk_target(2)">neu</div>
+            <div id="pkt-friendly" class="pk-target" data-event-click="pk_target(3)">fri</div>
+            <div id="pkt-self"     class="pk-target" data-event-click="pk_target(4)">slf</div>
+        </div>
         <div class="pk-wrap">
             <div id="pk-sv" class="pk-sv" data-event-mousedown="pk_sv" data-event-drag="pk_sv">
                 <div class="pk-sv-val"></div>

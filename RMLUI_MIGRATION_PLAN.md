@@ -2473,9 +2473,9 @@ codebase until now.
     Lighting/Animation/Runic/Diagnostics tabs, CRT sliders, world-text px/offset. Likely a TAB
     structure (reuse the `.tabs`/`.tab` component) once the flat panel gets unwieldy. Then F4 opens
     the RmlUi doc + retire `imgui_layer` (§8 gate).
-- **Slice 4 — composite COLOUR PICKER — CODE-COMPLETE + BUILD-GREEN (Metal, fresh relink 19:55,
-  devui.o fresh), EYEBALL OWED, COMMITTED pending, 2026-06-20.** A real SV-square + hue-strip
-  picker (user asked for a proper one, not RGB sliders). Enabled by the discovery that the
+- **Slice 4 — composite COLOUR PICKER — DONE + EYEBALL CONFIRMED (user, "looks perfect",
+  2026-06-20), COMMITTED `6a2b89dcb5`.** A real SV-square + hue-strip picker (user asked for a
+  proper one, not RGB sliders). Gradients render, drag maps, colour applies — all confirmed. Enabled by the discovery that the
   codebase's RmlUi render interface IMPLEMENTS gradient shaders (`linear/horizontal/vertical/
   radial/conic-gradient` → `rmlui_gradient.frag.hlsl`, rmlui_render_interface.cpp:622-638).
   - **SV square:** `#pk-sv` = `horizontal-gradient(#fff <pure-hue>)` (saturation; hue tint set
@@ -2497,6 +2497,18 @@ codebase until now.
     actual cursor light in-game change colour (enable "omni light follows cursor")? If gradients
     don't paint, the RCSS gradient-decorator syntax needs adjusting; if drag doesn't fire, switch
     the `drag` event for `mousemove`-while-pressed.
+- **Slice 5 — generalise the picker to the outline colours — CODE-COMPLETE + BUILD-GREEN (Metal,
+  fresh relink 20:00, devui.o fresh), EYEBALL OWED, COMMITTED pending, 2026-06-20.** One picker,
+  selectable target. A target table `g_pk_targets[5]` ({elem_id, float* rgb}) covers cursor light +
+  the 4 hover-outline colours (`g_outline_col_hostile/neutral/friendly/self[4]` — RGB edited, alpha
+  left). A swatch row (`pk_target(idx)` → BindEventCallback) selects the active colour: reseeds HSV
+  (`picker_init`) + repaints. `picker_apply` writes the active target and repaints ALL target
+  swatches from their live colour, outlining the active one white. `picker_init`/`apply` are now
+  index-driven (was cursor-hardcoded).
+  - **EYEBALL CHECK (user, A/B):** 5 swatches (cur/hos/neu/fri/slf) show their live colours; click
+    one → its border goes white + the SV/hue picker jumps to that colour; edit → that swatch + the
+    in-game effect update (hover-outline colours visible when you mouse over a creature with the
+    outline effect on). Switching targets preserves each colour independently.
 
 ## Load-bearing architecture facts (verified this session)
 

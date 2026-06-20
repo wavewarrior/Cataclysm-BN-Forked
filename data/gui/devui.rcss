@@ -102,6 +102,25 @@ input.range sliderbar:active {
    pure hue, set from C++) under a transparent->black vertical overlay; the hue strip is a
    rainbow linear-gradient. drag:drag on the interactive surfaces + their children so a
    drag starts anywhere; the C++ handler maps mouse pos to S/V or H. */
+/* Target selector — a row of live swatches; click to choose which colour the picker
+   edits. The active one's border is set white from C++ (picker_apply). */
+.pk-targets {
+    display: block;
+    margin-bottom: 6px;
+}
+
+.pk-target {
+    display: inline-block;
+    width: 34px;
+    height: 22px;
+    margin-right: 4px;
+    border: 2px #555555;
+    background-color: #000000;
+    color: #000000;
+    font-size: 11px;
+    text-align: center;
+}
+
 .pk-wrap {
     display: block;
     margin-bottom: 6px;
