@@ -19,6 +19,9 @@ body {
     left: 12px;
     top: 12px;
     width: 320px;
+    height: 600px;           /* definite height — resizable from C++; lets bottom:0 resolve */
+    display: flex;
+    flex-direction: column;
     padding: 12px;
     background-color: #1e1e1ef0;
     border: 1px #555555;
@@ -27,6 +30,7 @@ body {
 }
 
 .devui-title {
+    flex: 0 0 auto;
     font-size: 17px;
     color: #ffffff;
     margin-bottom: 8px;
@@ -36,6 +40,7 @@ body {
    handle. The body owns the scroll (was on the panel); the resize handle sets the panel
    width + body height from C++, so the panel grows and the rows scroll within it. */
 .devui-tabs {
+    flex: 0 0 auto;
     display: block;
     margin-bottom: 6px;
 }
@@ -63,9 +68,10 @@ body {
 }
 
 .devui-body {
+    flex: 1 1 auto;          /* fills the panel below the tab bar (definite parent height) */
     display: block;
-    height: 560px;           /* resizable from C++; rows scroll within */
     overflow-y: auto;
+    min-height: 0;           /* allow the flex item to shrink so overflow scrolls */
 }
 
 .devui-resize {

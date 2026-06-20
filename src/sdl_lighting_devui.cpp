@@ -824,25 +824,24 @@ void devui_rml_open()
         }
     } );
     // Slice 7 — bottom-right drag handle resizes the panel. Drag emits absolute mouse_x/y;
-    // width = mouse - panel-left, body height = mouse - body-top (the body scrolls within).
+    // panel size = mouse - panel top-left. The panel is a fixed-height flex column, so the
+    // body flexes to fill the new height (and scrolls when content exceeds it).
     c.BindEventCallback( "devui_resize",
     []( Rml::DataModelHandle, Rml::Event & ev, const Rml::VariantList & ) {
         if( g_devui_doc == nullptr ) {
             return;
         }
         Rml::Element *panel = g_devui_doc->GetElementById( "devui-panel" );
-        Rml::Element *body = g_devui_doc->GetElementById( "devui-body" );
-        if( panel == nullptr || body == nullptr ) {
+        if( panel == nullptr ) {
             return;
         }
         const Rml::Vector2f poff = panel->GetAbsoluteOffset( Rml::BoxArea::Border );
-        const Rml::Vector2f boff = body->GetAbsoluteOffset( Rml::BoxArea::Border );
         const float mx = ev.GetParameter<float>( "mouse_x", poff.x );
-        const float my = ev.GetParameter<float>( "mouse_y", boff.y );
+        const float my = ev.GetParameter<float>( "mouse_y", poff.y );
         const float w = std::clamp( mx - poff.x, 240.f, 900.f );
-        const float h = std::clamp( my - boff.y, 120.f, 1200.f );
+        const float h = std::clamp( my - poff.y, 160.f, 1200.f );
         panel->SetProperty( "width", std::to_string( static_cast<int>( w ) ) + "px" );
-        body->SetProperty( "height", std::to_string( static_cast<int>( h ) ) + "px" );
+        panel->SetProperty( "height", std::to_string( static_cast<int>( h ) ) + "px" );
     } );
     // Build + bind the theme/game colour combo (names + selected index).
     g_pk_combo.clear();
