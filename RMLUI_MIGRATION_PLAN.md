@@ -70,6 +70,13 @@ options=2, **newcharacter=16 (8 slices)**, main_menu=2, worldfactory=4 sessions;
    (lightson/snake/sokoban/minesweeper/kitten) render through ONE shared char-grid doc
    (`minigame.rml` + `src/minigame_rml.*`), one toggle. Slice 1 `c21e4bb6ae`; slice 2 (other 4) committed.
 5. **Tier 10 — RIP OUT** curses-SDL + ImGui — gated on 100% coverage (i.e. 2-4 above).
+6. **★ §8.1 GATE-BLOCKER BACKLOG (found 2026-06-20 primitive sweep) — the banner above
+   UNDERCOUNTS.** The enumerated tiers 0–9 are code-done-pending-eyeball, BUT the sweep found
+   **~12 interactive curses screens never listed in any tier** that still block the rip-out:
+   `character_display` (@ sheet), `veh_interact`/`vehicle_display`, `gamemode_defense`, `magic`/
+   `magic_teleporter_list`, full `messages` log, `monster`/`mtype`/`npc` info, `morale`,
+   `martialarts`, `pickup`, `dialogue_win`. See §8.1 for the full table + the corrected
+   3-part Tier-10 readiness gate. "~90% by screen count" is true for the enumerated set only.
 
 **EYEBALL DEBT (committed, toggle OFF, user A/B owed):** most of the above DONE set
 shipped build-blind. The newest unverified: world_text 4.1/4.2a, description_view,
@@ -2914,6 +2921,59 @@ Curses deletion is all-or-nothing. Before deleting anything, prove the floor:
    (RmlUi-atlas based), NOT the curses `OutputChar` cell loop.
 5. **Bisect safety:** delete in order — toggles → ImGui → curses cell/glyph loop →
    catacurses SDL backend — each its own commit, build-green between.
+
+### §8.1 — SWEEP RESULTS (2026-06-20) — the gate is NOT just "flip 32 toggles"
+
+Ran the gate's step-2 primitive sweep. **Headline finding: the "~90% done, only Tier 10
+left" framing in the frontier banner is WRONG.** Tiers 0–9 cover the *enumerated* screens,
+but the sweep surfaced a **hidden backlog of ~12 interactive curses screens that no tier
+(0–9) ever listed** — each has a live curses redraw loop and ZERO RmlUi path. These block
+the rip-out exactly like an un-flipped toggle would. Method: cross-referenced every `.cpp`
+calling a curses text primitive (`mvwprintz`/`fold_and_print`/`print_colored_text`/
+`trim_and_print`/`draw_border`/`draw_scrollbar`) against the 33 `*_rmlui_enabled()` files;
+the set difference is below. Reproduce: see the per-file `mvwprintz` density grep.
+
+**Raw primitive caller totals (whole `src/`, all paths still wired — 32/33 toggles OFF):**
+`mvwprintz`=913 · `wnoutrefresh`=321 · `fold_and_print`=144 · `trim_and_print`=119 ·
+`print_colored_text`=97 · `draw_border`=76 · `right_print`=44 · `draw_scrollbar`=40 ·
+`OutputChar`=21 · `draw_item_info`=15 · `scrolling_text_view`=12 · `draw_tabs`=11.
+(Totals are uninformative until toggles flip + dead curses paths delete — they only confirm
+"everything still live by design." The file-level cross-ref below is the real signal.)
+
+**GATE-BLOCKER BACKLOG — unmigrated interactive screens (no toggle, curses redraw, rml_refs=0):**
+
+| File | curses-text density | redraw markers | nature |
+|---|---|---|---|
+| `character_display` (+`character`) | 67 (+6) | 38 | the `@` character sheet. Tier 7 flagged "converge when char sheet migrates" — NEVER done. Largest blocker. |
+| `gamemode_defense` | 51 | 6 | Defense game-mode HUD/menus. Never listed in any tier. |
+| `veh_interact` (+`vehicle_display`) | 39 (+13) | 11 | Vehicle interaction menu + status. Big, never listed. |
+| `magic` (+`magic_teleporter_list`) | 33 (+1) | helper | Spellcasting list / teleporter pick. Never listed. |
+| `messages` | 9 | 7 | The full message-LOG screen (ESC log). Tier-7 sidebar log MVP ≠ this. |
+| `monster` / `mtype` | 13 / 14 | helper | Monster-info popups (only the `*_faction_display` slice was reused at Tier 2). |
+| `npc` | 11 | helper | NPC info (only the faction-display slice migrated). |
+| `morale` / `martialarts` / `pickup` | 1 / 0 / 4 | 3 / 3 / 3 | Small unlisted screens (morale screen, MA-style pick, pickup menu). |
+| `dialogue_win` | 12 | 1 | Dialogue/trade subwindow helper (separate from migrated `npctalk`). |
+
+**NON-blockers (correctly handled by the existing plan / out of scope):**
+- **Curses backend + primitive defs — DELETE WHOLESALE at Tier 10, do not migrate:**
+  `output` (the primitive bodies live here), `color`, `input`, `popup`, `string_input_popup`,
+  `string_editor_window` (the last is diary's known nested editor; it dies with the widget set).
+- **Map / world-tile path — STAYS (not UI):** `animation`, `scent_map`, `live_view`, `editmap`
+  (dev map editor), `character_preview`.
+- **Dev-only — fold into the rip-out sweep, not a player screen:** `catalua_console` (already a
+  §8 loose end), `wish` (debug spawn), `debug` (mostly uilist already).
+- **False positive:** `rml_util` (a mention, not a draw).
+
+**CORRECTED Tier-10 readiness (supersedes the frontier banner's item 5):**
+The rip-out is gated on THREE things, not one:
+1. **Flip + eyeball the 32 OFF toggles** (the enumerated tiers 0–9). User-task; build-blind debt.
+2. **Migrate the §8.1 gate-blocker backlog** (~12 screens above) — these were never coded at all.
+   Biggest: `character_display`, `veh_interact`, `gamemode_defense`, `magic`, full `messages` log.
+   Creature-info (`monster`/`mtype`/`npc`) wants a shared `Creature::print_info` F.2 component.
+3. **Then** the deletion sequence (§8 step 5).
+So the honest remaining-work picture is: enumerated migration ≈ done-pending-eyeball; **a whole
+unlisted "Tier 7.5 / 9.5" of game screens (char sheet, vehicles, magic, defense mode, message
+log, creature info) is still on curses and must be migrated before the curses renderer can die.**
 
 ---
 
