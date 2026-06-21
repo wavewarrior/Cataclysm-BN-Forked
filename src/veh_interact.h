@@ -187,6 +187,11 @@ class veh_interact
         // RmlUi slice 5: the 2D vehicle diagram as monospace colour-tagged rows
         // (parallels display_veh's w_disp glyph grid; debug CoM/pivot dropped).
         std::vector<std::string> diagram_lines() const;
+        // RmlUi slice 6: the install/repair sub-mode. The subtab bar (parallels the
+        // draw_subtab loop in display_list) and the selected part's detail block
+        // (parallels display_details; the border + 2-column layout dropped).
+        std::string install_tabs_text() const;
+        std::string install_details_text( const vpart_info *part ) const;
         void display_name();
         void display_mode();
         void display_list( size_t pos, const std::vector<const vpart_info *> &list, int header = 0 );

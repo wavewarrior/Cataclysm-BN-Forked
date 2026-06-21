@@ -116,6 +116,13 @@ struct veh_interact::veh_rml_data {
     Rml::String parts_rml;  // slice 4: parts-at-tile list (parallels print_part_list)
     Rml::String msg_rml;    // slice 4: descriptions / message pane (the w_msg block)
     Rml::Vector<veh_overview_row> diagram_rows; // slice 5: w_disp glyph grid (reuses .text)
+    // Slice 6: install/repair sub-mode. install_active gates the right column
+    // (install list+details vs overview+msg); show_overview is its inverse.
+    bool install_active = false;
+    bool show_overview = true;
+    Rml::String install_tabs_rml;                // subtab bar (parallels draw_subtab)
+    Rml::Vector<veh_overview_row> install_rows;  // installable vparts (reuses .text/.selected)
+    Rml::String install_details_rml;             // selected part detail (parallels display_details)
     Rml::DataModelHandle handle;
 };
 
@@ -523,6 +530,11 @@ void veh_interact::do_main_loop()
         c.Bind( "parts_rml", &rml_data->parts_rml );
         c.Bind( "msg_rml", &rml_data->msg_rml );
         c.Bind( "diagram_rows", &rml_data->diagram_rows );
+        c.Bind( "install_active", &rml_data->install_active );
+        c.Bind( "show_overview", &rml_data->show_overview );
+        c.Bind( "install_tabs_rml", &rml_data->install_tabs_rml );
+        c.Bind( "install_rows", &rml_data->install_rows );
+        c.Bind( "install_details_rml", &rml_data->install_details_rml );
         rml_data->handle = c.GetModelHandle();
     } );
 
@@ -3411,6 +3423,134 @@ std::vector<std::string> veh_interact::diagram_lines() const
     return out;
 }
 
+// Slice 6 install/repair: the subtab bar, parallel to the draw_subtab loop in
+// display_list. The selected tab is bracketed white, the rest dark-gray; the
+// curses subtab glyph art is dropped (semantic).
+std::string veh_interact::install_tabs_text() const
+{
+    if( !install_info ) {
+        return std::string();
+    }
+    std::string out;
+    for( size_t i = 0; i < install_info->tab_list.size(); i++ ) {
+        const std::string &name = install_info->tab_list[i];
+        if( name.empty() ) {
+            continue;
+        }
+        if( !out.empty() ) {
+            out += "  ";
+        }
+        if( install_info->tab == i ) {
+            out += colorize( "[" + name + "]", c_white );
+        } else {
+            out += colorize( name, c_dark_gray );
+        }
+    }
+    return out;
+}
+
+// Slice 6 install/repair: the selected part's detail block, parallel to
+// display_details. The bordered 2-column curses layout is flattened to one
+// colour-tagged line per stat (small_mode abbreviations dropped — the pane is
+// wide). display_details stays pristine for the A/B.
+std::string veh_interact::install_details_text( const vpart_info *part ) const
+{
+    if( part == nullptr ) {
+        return std::string();
+    }
+    std::vector<std::string> lines;
+    lines.emplace_back( colorize( part->name(), c_light_green ) );
+    lines.emplace_back( colorize( string_format( _( "Durability: <color_light_gray>%d</color>" ),
+                                  part->durability ), c_white ) );
+    lines.emplace_back( colorize( string_format( _( "Damage: <color_light_gray>%d%%</color>" ),
+                                  part->dmg_mod ), c_white ) );
+    lines.emplace_back( colorize( string_format( _( "Weight: <color_light_gray>%.1f%s</color>" ),
+                                  convert_weight( part->item->weight ), weight_units() ), c_white ) );
+    if( part->folded_volume != 0_ml ) {
+        lines.emplace_back( colorize( string_format( _( "Folded Volume: <color_light_gray>%s %s</color>" ),
+                                      format_volume( part->folded_volume ), volume_units_abbr() ), c_white ) );
+    }
+    if( part->size > 0_ml && part->has_flag( VPFLAG_CARGO ) ) {
+        lines.emplace_back( colorize( string_format( _( "Capacity: <color_light_gray>%s %s</color>" ),
+                                      format_volume( part->size ), volume_units_abbr() ), c_white ) );
+    }
+    if( part->bonus > 0 ) {
+        std::string label;
+        if( part->has_flag( VPFLAG_SEATBELT ) ) {
+            label = _( "Strength" );
+        } else if( part->has_flag( "HORN" ) ) {
+            label = _( "Noise" );
+        } else if( part->has_flag( "MUFFLER" ) ) {
+            label = _( "Noise Reduction" );
+        } else if( part->has_flag( VPFLAG_EXTENDS_VISION ) ) {
+            label = _( "Range" );
+        } else if( part->has_flag( VPFLAG_LIGHT ) || part->has_flag( VPFLAG_CONE_LIGHT ) ||
+                   part->has_flag( VPFLAG_WIDE_CONE_LIGHT ) || part->has_flag( VPFLAG_CIRCLE_LIGHT ) ||
+                   part->has_flag( VPFLAG_DOME_LIGHT ) || part->has_flag( VPFLAG_AISLE_LIGHT ) ||
+                   part->has_flag( VPFLAG_EVENTURN ) || part->has_flag( VPFLAG_ODDTURN ) ||
+                   part->has_flag( VPFLAG_ATOMIC_LIGHT ) ) {
+            label = _( "Light" );
+        }
+        if( !label.empty() ) {
+            lines.emplace_back( colorize( string_format( "%s: <color_light_gray>%d</color>",
+                                          label, part->bonus ), c_white ) );
+        }
+    }
+    if( part->has_flag( VPFLAG_WHEEL ) ) {
+        const cata::value_ptr<islot_wheel> &whl = part->item->wheel;
+        lines.emplace_back( colorize( string_format( _( "Wheel Diameter: <color_light_gray>%s</color>" ),
+                                      wheel_dimensions::format_for_display( whl ? whl->diameter : 0 ) ), c_white ) );
+        lines.emplace_back( colorize( string_format( _( "Wheel Width: <color_light_gray>%s</color>" ),
+                                      wheel_dimensions::format_for_display( whl ? whl->width : 0 ) ), c_white ) );
+    }
+    if( part->epower != 0 ) {
+        lines.emplace_back( colorize( string_format( _( "Electric Power: <color_light_gray>%+4d</color>" ),
+                                      part->epower ), c_white ) );
+    }
+    if( !part->fuel_type.is_null() ) {
+        lines.emplace_back( colorize( string_format( _( "Charge: <color_light_gray>%s</color>" ),
+                                      item::nname( part->fuel_type ) ), c_white ) );
+    }
+    if( part->energy_consumption != 0 ) {
+        lines.emplace_back( colorize( string_format( _( "Drain: <color_light_gray>%+8d</color>" ),
+                                      -part->energy_consumption ), c_white ) );
+    }
+    const std::vector<std::string> flags = { { "OPAQUE", "OPENABLE", "BOARDABLE" } };
+    const std::vector<std::string> flag_labels = { { _( "opaque" ), _( "openable" ), _( "boardable" ) } };
+    std::string flag_line;
+    for( size_t i = 0; i < flags.size(); i++ ) {
+        if( part->has_flag( flags[i] ) ) {
+            flag_line += ( flag_line.empty() ? "" : " " ) + flag_labels[i];
+        }
+    }
+    if( !flag_line.empty() ) {
+        lines.emplace_back( colorize( flag_line, c_yellow ) );
+    }
+    if( part->fuel_type == itype_battery && !part->has_flag( VPFLAG_ENGINE ) &&
+        !part->has_flag( VPFLAG_ALTERNATOR ) ) {
+        const cata::value_ptr<islot_magazine> &battery = part->item->magazine;
+        lines.emplace_back( colorize( string_format( _( "Battery Capacity: <color_light_gray>%8d</color>" ),
+                                      battery->capacity ), c_white ) );
+    } else {
+        int part_power = part->power;
+        if( part_power == 0 ) {
+            part_power = item::spawn_temporary( part->item )->engine_displacement();
+        }
+        if( part_power != 0 ) {
+            lines.emplace_back( colorize( string_format( _( "Power: <color_light_gray>%+8d</color>" ),
+                                          part_power ), c_white ) );
+        }
+    }
+    std::string out;
+    for( const std::string &l : lines ) {
+        if( !out.empty() ) {
+            out += "\n";
+        }
+        out += l;
+    }
+    return out;
+}
+
 // RmlUi render path — rebuild the bound model. Slices 1-3: name + mode bar
 // (display_name/display_mode), stats (display_stats), overview (display_overview).
 // All curses draws stay pristine. Defined after display_mode so it can reuse the
@@ -3547,9 +3687,39 @@ void veh_interact::sync_rml()
     rml_data->handle.DirtyVariable( "name_rml" );
     rml_data->handle.DirtyVariable( "stats_rml" );
     rml_data->handle.DirtyVariable( "overview_rows" );
+    // Install/repair sub-mode (slice 6; parallels display_list + display_details).
+    // When install_info is active the right column shows the installable-parts list
+    // + the selected part's detail block instead of overview + msg.
+    rml_data->install_active = static_cast<bool>( install_info );
+    rml_data->show_overview = !install_info;
+    rml_data->install_rows.clear();
+    if( install_info ) {
+        rml_data->install_tabs_rml = cata_text_to_rml( install_tabs_text() );
+        const std::vector<const vpart_info *> &list = install_info->tab_vparts;
+        for( size_t i = 0; i < list.size(); i++ ) {
+            const vpart_info &info = *list[i];
+            const std::string sym = veh_sym_to_utf8( special_symbol( info.sym ) );
+            const nc_color namecol = can_potentially_install( info ) ? c_white : c_dark_gray;
+            veh_overview_row row;
+            row.selected = ( install_info->pos == static_cast<int>( i ) );
+            row.text = cata_text_to_rml( colorize( sym, info.color ) + " " +
+                                         colorize( info.name(), namecol ) );
+            rml_data->install_rows.emplace_back( std::move( row ) );
+        }
+        rml_data->install_details_rml = cata_text_to_rml( install_details_text( sel_vpart_info ) );
+    } else {
+        rml_data->install_tabs_rml.clear();
+        rml_data->install_details_rml.clear();
+    }
+
     rml_data->handle.DirtyVariable( "parts_rml" );
     rml_data->handle.DirtyVariable( "msg_rml" );
     rml_data->handle.DirtyVariable( "diagram_rows" );
+    rml_data->handle.DirtyVariable( "install_active" );
+    rml_data->handle.DirtyVariable( "show_overview" );
+    rml_data->handle.DirtyVariable( "install_tabs_rml" );
+    rml_data->handle.DirtyVariable( "install_rows" );
+    rml_data->handle.DirtyVariable( "install_details_rml" );
 }
 
 /**
