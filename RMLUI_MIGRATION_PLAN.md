@@ -72,17 +72,26 @@ options=2, **newcharacter=16 (8 slices)**, main_menu=2, worldfactory=4 sessions;
 5. **Tier 10 — RIP OUT** curses-SDL + ImGui — gated on 100% coverage (i.e. 2-4 above).
 6. **★ §8.1 GATE-BLOCKER BACKLOG (found 2026-06-20 primitive sweep) — the banner above
    UNDERCOUNTS.** The enumerated tiers 0–9 are code-done-pending-eyeball, BUT the sweep found
-   **~12 interactive curses screens never listed in any tier** that still block the rip-out
-   (DONE so far: `character_display` @ sheet + full `messages` log — both eyeball-CONFIRMED clean
-   2026-06-21; `morale` + `martialarts` + `pickup` — toggle-OFF/eyeball-owed):
-   `veh_interact`/`vehicle_display`, `gamemode_defense`, `monster`/`mtype`/`npc` info.
-   (RE-CLASSIFIED as covered-by-toggle, NOT separate screens: `dialogue_win` = Tier-5 `dialogue`
-   fallback; `magic` + `magic_teleporter_list` = `uilist`+`draw_rml`, covered by the uilist toggle.)
-   PLUS a font-layer straggler the primitive sweep
-   structurally missed: `loading_ui` splash author text draws via the curses `Font` directly
-   (`draw_sdl_text_outlined`→`draw_string`) — a gate-step-4 blocker, not step-2. See §8.1 for
-   the full table + the corrected 3-part Tier-10 readiness gate. "~90% by screen count" is true
-   for the enumerated set only.
+   **~12 interactive curses screens never listed in any tier** that still block the rip-out.
+   **★ RESUME HERE (2026-06-21 eve): the bespoke-screen backlog is all but cleared.**
+   - **DONE (code-complete):** `character_display` @ sheet + full `messages` log (both eyeball-CONFIRMED
+     clean 2026-06-21); `morale`, `martialarts`, `pickup` (toggle-OFF/eyeball-owed);
+     **`veh_interact`/`vehicle_display` — all 6 slices DONE+committed** (name/mode, stats+fuel, overview,
+     parts, descs, ASCII diagram, install/repair); **`gamemode_defense` — both slices DONE+committed**
+     (setup form + caravan shop). All toggle-OFF, one A/B eyeball pass each owed (incl. D3D12).
+   - **LEFT — the only remaining bespoke screens:** the creature-info trio `monster`/`mtype`/`npc` info
+     — **architectural, DEFERRED**: host-drawn helper that wants a shared `Creature::print_info` F.2
+     component designed first (only the `*_faction_display` slice was reused at Tier 2). PLUS the
+     **3 font-layer stragglers** (gate step 4, NOT step 2 — invisible to the primitive grep):
+     `loading_ui` splash author text (`draw_sdl_text_outlined`→`draw_string`), `sdl_overmap_draw`
+     city/note labels, `sdl_render_frame` dev tile-coord overlay — all §7-class (route to the §7 RmlUi
+     text layer, or delete the dev one with the dev tools).
+   - (RE-CLASSIFIED as covered-by-toggle, NOT separate screens: `dialogue_win` = Tier-5 `dialogue`
+     fallback; `magic` + `magic_teleporter_list` = `uilist`+`draw_rml`, covered by the uilist toggle.)
+   See §8.1 for the full table + the corrected 3-part Tier-10 readiness gate. The honest picture now:
+   **all enumerated tiers + the unlisted game screens are code-done-pending-eyeball; the rip-out is
+   gated on (a) the mass toggle-flip + eyeball pass, (b) the deferred creature-info F.2 component, and
+   (c) the 3 font-layer stragglers.**
 
 **EYEBALL DEBT (committed, toggle OFF, user A/B owed):** most of the above DONE set
 shipped build-blind. The newest unverified: world_text 4.1/4.2a, description_view,
