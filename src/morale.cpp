@@ -32,6 +32,13 @@
 #include "translations.h"
 #include "ui_manager.h"
 
+#include <memory>
+
+#include <RmlUi/Core.h>
+
+#include "rml_screen.h"
+#include "rml_util.h"
+
 static const efftype_id effect_cold( "cold" );
 static const efftype_id effect_hot( "hot" );
 static const efftype_id effect_took_prozac( "took_prozac" );
@@ -533,6 +540,54 @@ void player_morale::decay( const time_duration &ticks )
     invalidate();
 }
 
+// ── RmlUi render path (full UI→RmlUi migration, §8.1 gate-blocker backlog) ────
+// The morale screen (player_morale::display). A fixed title + Source/Value
+// header (or a "Nothing affects your morale" line), a scrolling list of morale
+// sources (name + percent, coloured by sign, with caption rows for the positive
+// / negative totals), and a fixed bottom block (Total / Pain / Fatigue / Focus).
+// Each row is a left label + right-aligned value, both coloured via
+// cata_text_to_rml(colorize(...)) reusing the curses morale_line colour logic.
+// Content is static for the view, so the model is built once at open; UP/DOWN
+// scroll the middle pane natively (the curses offset windowing is dropped).
+namespace
+{
+struct morale_rml_row {
+    Rml::String left_rml;
+    Rml::String right_rml;
+    bool caption = false;
+};
+struct morale_rml_data {
+    Rml::String title_rml;
+    Rml::String head_left_rml;
+    Rml::String head_right_rml;
+    Rml::Vector<morale_rml_row> rows;   // scrolling middle list
+    Rml::Vector<morale_rml_row> footer; // fixed bottom block
+    Rml::DataModelHandle handle;
+};
+
+bool g_morale_types_registered = false;
+
+void register_morale_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_morale_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<morale_rml_row> rh = c.RegisterStruct<morale_rml_row>();
+    rh.RegisterMember( "left_rml", &morale_rml_row::left_rml );
+    rh.RegisterMember( "right_rml", &morale_rml_row::right_rml );
+    rh.RegisterMember( "caption", &morale_rml_row::caption );
+    c.RegisterArray<Rml::Vector<morale_rml_row>>();
+    g_morale_types_registered = true;
+}
+} // namespace
+
+bool &morale_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = false;
+    return enabled;
+}
+
 void player_morale::display( int focus_eq, int pain_penalty, int fatigue_cap )
 {
     /*calculates the percent contributions of the morale points,
@@ -609,6 +664,21 @@ void player_morale::display( int focus_eq, int pain_penalty, int fatigue_cap )
                         }
                         break;
                 }
+            }
+
+            // Accessors for the RmlUi render path (reuse the colour logic baked
+            // by the constructors above).
+            bool is_separator() const {
+                return sep_line;
+            }
+            const std::string &get_left() const {
+                return left;
+            }
+            const std::string &get_right() const {
+                return right;
+            }
+            nc_color get_color() const {
+                return color;
             }
 
             int max_width() const {
@@ -751,6 +821,23 @@ void player_morale::display( int focus_eq, int pain_penalty, int fatigue_cap )
 
     const int static_lines_height = top_lines.size() + bottom_lines.size();
 
+    // ---- RmlUi render path (F.3 rml_doc harness) ----------------------------
+    // `rml_data` is declared before `rml` so the doc tears down (dtor) while the
+    // bound model is still alive. The model is built ONCE after open (morale is
+    // static for the view); on_redraw just skips the curses draw when active, and
+    // UP/DOWN scroll the middle pane natively.
+    std::unique_ptr<morale_rml_data> rml_data;
+    rml_doc rml;
+    const auto morale_row_to_rml = []( const morale_line & ml, bool caption ) -> morale_rml_row {
+        morale_rml_row r;
+        r.caption = caption;
+        r.left_rml = cata_text_to_rml( colorize( ml.get_left(), ml.get_color() ) );
+        if( !ml.get_right().empty() ) {
+            r.right_rml = cata_text_to_rml( colorize( ml.get_right(), ml.get_color() ) );
+        }
+        return r;
+    };
+
     int win_w = 0;
     int win_h = 0;
 
@@ -780,6 +867,10 @@ void player_morale::display( int focus_eq, int pain_penalty, int fatigue_cap )
     ui.mark_resize();
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        // RmlUi path renders the doc itself — skip the curses draw entirely.
+        if( rml ) {
+            return;
+        }
         werase( w );
 
         draw_border( w );
@@ -829,6 +920,52 @@ void player_morale::display( int focus_eq, int pain_penalty, int fatigue_cap )
     ctxt.register_action( "QUIT" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
 
+    // Open (or no-op) the RmlUi doc now that `ctxt` exists — open()'s
+    // set_timeout(16) lands on it. Build the model ONCE (morale is static for the
+    // view): title + Source/Value header (or the empty message), the scrollable
+    // source rows, and the fixed bottom block. ASCII separator rows are skipped
+    // (CSS borders stand in); blank spacer rows are skipped too.
+    rml.open( morale_rmlui_enabled(), "morale", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        rml_data = std::make_unique<morale_rml_data>();
+        register_morale_rml_types( c );
+        c.Bind( "title_rml", &rml_data->title_rml );
+        c.Bind( "head_left_rml", &rml_data->head_left_rml );
+        c.Bind( "head_right_rml", &rml_data->head_right_rml );
+        c.Bind( "rows", &rml_data->rows );
+        c.Bind( "footer", &rml_data->footer );
+        rml_data->handle = c.GetModelHandle();
+    } );
+    if( rml ) {
+        rml_data->title_rml = cata_text_to_rml( colorize( _( "Morale" ), c_white ) );
+        if( positive_morale.empty() && negative_morale.empty() ) {
+            rml_data->head_left_rml = cata_text_to_rml( colorize( _( "Nothing affects your morale" ),
+                                      c_dark_gray ) );
+        } else {
+            rml_data->head_left_rml = cata_text_to_rml( colorize( _( "Source" ), c_light_gray ) );
+            rml_data->head_right_rml = cata_text_to_rml( colorize( _( "Value" ), c_light_gray ) );
+        }
+        for( const middle_morale_line &ml : middle_lines ) {
+            if( ml.ml.is_separator() ||
+                ( ml.ml.get_left().empty() && ml.ml.get_right().empty() ) ) {
+                continue;
+            }
+            rml_data->rows.push_back( morale_row_to_rml( ml.ml, ml.is_caption ) );
+        }
+        for( const morale_line &ml : bottom_lines ) {
+            if( ml.is_separator() ||
+                ( ml.get_left().empty() && ml.get_right().empty() ) ) {
+                continue;
+            }
+            rml_data->footer.push_back( morale_row_to_rml( ml, false ) );
+        }
+        rml_data->handle.DirtyVariable( "title_rml" );
+        rml_data->handle.DirtyVariable( "head_left_rml" );
+        rml_data->handle.DirtyVariable( "head_right_rml" );
+        rml_data->handle.DirtyVariable( "rows" );
+        rml_data->handle.DirtyVariable( "footer" );
+    }
+
     std::string action;
     do {
         ui_manager::redraw();
@@ -837,6 +974,17 @@ void player_morale::display( int focus_eq, int pain_penalty, int fatigue_cap )
             offset++;
         } else if( action == "UP" && offset > 0 ) {
             offset--;
+        }
+        // RmlUi path: the offset math above is invisible (the doc renders all
+        // rows + scrolls natively), so mirror UP/DOWN onto the middle pane.
+        if( rml ) {
+            if( Rml::Element *e = rml.document()->GetElementById( "morale-mid" ) ) {
+                if( action == "DOWN" ) {
+                    e->SetScrollTop( e->GetScrollTop() + 18.0f );
+                } else if( action == "UP" ) {
+                    e->SetScrollTop( e->GetScrollTop() - 18.0f );
+                }
+            }
         }
     } while( action != "CONFIRM" && action != "QUIT" );
 }

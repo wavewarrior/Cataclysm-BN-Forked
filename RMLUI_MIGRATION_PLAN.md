@@ -73,9 +73,10 @@ options=2, **newcharacter=16 (8 slices)**, main_menu=2, worldfactory=4 sessions;
 6. **★ §8.1 GATE-BLOCKER BACKLOG (found 2026-06-20 primitive sweep) — the banner above
    UNDERCOUNTS.** The enumerated tiers 0–9 are code-done-pending-eyeball, BUT the sweep found
    **~12 interactive curses screens never listed in any tier** that still block the rip-out
-   (DONE so far: `character_display` @ sheet, full `messages` log — both toggle-OFF/eyeball-owed):
+   (DONE so far: `character_display` @ sheet + full `messages` log — both eyeball-CONFIRMED clean
+   2026-06-21; `morale` — toggle-OFF/eyeball-owed):
    `veh_interact`/`vehicle_display`, `gamemode_defense`, `magic`/
-   `magic_teleporter_list`, `monster`/`mtype`/`npc` info, `morale`,
+   `magic_teleporter_list`, `monster`/`mtype`/`npc` info,
    `martialarts`, `pickup`, `dialogue_win`. PLUS a font-layer straggler the primitive sweep
    structurally missed: `loading_ui` splash author text draws via the curses `Font` directly
    (`draw_sdl_text_outlined`→`draw_string`) — a gate-step-4 blocker, not step-2. See §8.1 for
@@ -2969,8 +2970,27 @@ the set difference is below. Reproduce: see the per-file `mvwprintz` density gre
   clears; wide/full-height toggles re-fold. **WATCH:** lines pre-folded to the curses window width
   (cosmetic, may not fill the RmlUi pane — construction/crafting precedent); time-range bracket art
   intentionally gone. **+ D3D12 glance** (first §8.1-backlog text-pane on the primary target).
+  - **EYEBALL CONFIRMED CLEAN (user, 2026-06-21) — both `character_display` and `messages`.** "all
+    screens up till now look good." Toggles stay OFF (the A/B control; mass flip-ON is the §8 step).
+- **`morale` (player_morale::display) — DONE (build-green Metal, toggle OFF, eyeball owed),
+  UNCOMMITTED.** Smallest §8.1 screen. Fixed title + Source/Value header (or a "Nothing affects
+  your morale" line when empty), a scrolling middle list of morale sources (name + percent
+  contribution, coloured green/red by sign, with "Total positive/negative morale" caption rows),
+  and a fixed bottom block (Total morale / Pain level / Fatigue cap / Focus trend). Each line is a
+  flex pair of a left label + right-aligned value, both pre-coloured via
+  `cata_text_to_rml(colorize(...))` — REUSES the curses `morale_line` colour logic by adding public
+  getters (`is_separator`/`get_left`/`get_right`/`get_color`) to that local class (curses draw
+  pristine). Content is STATIC for the view → model built ONCE after open (not synced per frame),
+  `on_redraw` just skips the curses draw, UP/DOWN scroll `#morale-mid` natively. ASCII separator
+  glyphs + scrollbar + sticky-caption pinning DROPPED (semantic); blank spacer rows skipped.
+  `data/gui/morale.{rml,rcss}` + `morale` toggle + F4 checkbox + devui bind. Same gotcha as
+  messages: `rml_doc` opened AFTER the `ctxt("MORALE")` is built (open's `set_timeout(16)` lands on
+  it). **EYEBALL A/B (F4 "morale"):** title + Source/Value cols; positive sources green / negative
+  red with percent values matching curses; Total positive/negative caption rows; bottom Total
+  morale + Pain + Fatigue cap (when present) + Focus trend match the curses numbers; UP/DOWN scroll
+  a long list; empty case shows "Nothing affects your morale".
 - Remaining backlog: veh_interact / gamemode_defense / magic / monster·mtype·npc
-  info / morale / martialarts / pickup / dialogue_win + the 3 font-layer stragglers.
+  info / martialarts / pickup / dialogue_win + the 3 font-layer stragglers.
 
 **GATE-BLOCKER BACKLOG — unmigrated interactive screens (no toggle, curses redraw, rml_refs=0):**
 
@@ -2983,7 +3003,7 @@ the set difference is below. Reproduce: see the per-file `mvwprintz` density gre
 | ~~`messages`~~ **DONE** | 9 | 7 | The full message-LOG screen (ESC log). Tier-7 sidebar log MVP ≠ this. Migrated (toggle OFF, eyeball owed): scrolling time+text pane, native scroll, filter overlay stays Tier-0. |
 | `monster` / `mtype` | 13 / 14 | helper | Monster-info popups (only the `*_faction_display` slice was reused at Tier 2). |
 | `npc` | 11 | helper | NPC info (only the faction-display slice migrated). |
-| `morale` / `martialarts` / `pickup` | 1 / 0 / 4 | 3 / 3 / 3 | Small unlisted screens (morale screen, MA-style pick, pickup menu). |
+| ~~`morale`~~ **DONE** / `martialarts` / `pickup` | 1 / 0 / 4 | 3 / 3 / 3 | Small unlisted screens (morale screen — migrated, toggle OFF, eyeball owed; MA-style pick, pickup menu still open). |
 | `dialogue_win` | 12 | 1 | Dialogue/trade subwindow helper (separate from migrated `npctalk`). |
 
 **★ FONT-LAYER STRAGGLER the primitive sweep MISSED — `loading_ui` splash author text

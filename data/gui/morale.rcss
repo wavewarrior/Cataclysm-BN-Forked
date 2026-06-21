@@ -1,0 +1,83 @@
+/* Layout for the morale screen (§8.1 backlog: player_morale::display).
+   Palette/border/scrollbar/.scroll-pane come from theme.rcss (linked first in
+   morale.rml); this file owns only the screen's own layout. Lengths in dp.
+
+   Every line is an .ml-row: a flex pair of a left label (flex, ellipsised) and
+   a right-aligned value column. Rows are display:flex so they stack (RmlUi
+   divs/spans default to inline — see the theme.rcss gotcha). Per-line colour is
+   baked into the bound spans via cata_text_to_rml(colorize(...)), so this file
+   only positions; it does not colour the values. */
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.morale-panel {
+    width: 60%;
+    max-width: 560dp;
+    height: 80%;
+    display: flex;
+    flex-direction: column;
+}
+
+.morale-title {
+    flex: 0 0 auto;
+    text-align: center;
+    color: {{fg0}};
+    font-weight: bold;
+    padding-bottom: 4dp;
+}
+
+/* A morale line: left label + right-aligned value. */
+.ml-row {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    white-space: nowrap;
+}
+
+.ml-left {
+    display: block;
+    flex: 1;
+    min-width: 0;
+    text-overflow: ellipsis;
+    padding-right: 12dp;
+}
+
+.ml-right {
+    display: block;
+    flex: 0 0 auto;
+    text-align: right;
+}
+
+/* "Source / Value" column header (or the "Nothing affects your morale" line). */
+.morale-head {
+    flex: 0 0 auto;
+    border-bottom: 1dp {{bg4}};
+    padding-bottom: 2dp;
+    margin-bottom: 2dp;
+}
+
+/* The scrolling middle list of morale sources. */
+.morale-mid {
+    flex: 1;
+    min-height: 0;
+}
+
+/* "Total positive/negative morale" caption rows — subtly emphasised. */
+.ml-row.caption {
+    color: {{fg0}};
+    font-weight: bold;
+    margin-top: 4dp;
+}
+
+/* Fixed bottom block: Total morale / Pain / Fatigue cap / Focus trend. */
+.morale-foot {
+    flex: 0 0 auto;
+    border-top: 1dp {{bg4}};
+    padding-top: 4dp;
+    margin-top: 4dp;
+}

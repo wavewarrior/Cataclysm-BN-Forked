@@ -1,0 +1,39 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="morale.rcss"/>
+</head>
+<body data-model="morale">
+    <!-- §8.1 gate-blocker backlog: the morale screen (player_morale::display).
+         A fixed title + a Source/Value column header (or a "Nothing affects your
+         morale" message when empty), a scrolling middle list of morale sources
+         (name + percent contribution, coloured green/red by sign, with "Total
+         positive/negative morale" caption rows), and a fixed bottom block
+         (Total morale / Pain level / Fatigue cap / Focus trend). Each row is a
+         flex pair of a left label + a right-aligned value, both pre-coloured via
+         cata_text_to_rml(colorize(...)) reusing the curses morale_line colour
+         logic. The curses ASCII separator glyphs + scrollbar + sticky-caption
+         pinning are DROPPED (semantic rewrite); native RmlUi scroll replaces the
+         offset windowing (UP/DOWN scroll the middle pane). Content is static for
+         the view, so the model is built once at open. Render-only. -->
+    <div class="panel morale-panel">
+        <div class="morale-title" data-rml="title_rml"></div>
+        <div class="ml-row morale-head">
+            <span class="ml-left" data-rml="head_left_rml"></span>
+            <span class="ml-right" data-rml="head_right_rml"></span>
+        </div>
+        <div id="morale-mid" class="morale-mid scroll-pane">
+            <div class="ml-row" data-for="r : rows" data-class-caption="r.caption">
+                <span class="ml-left" data-rml="r.left_rml"></span>
+                <span class="ml-right" data-rml="r.right_rml"></span>
+            </div>
+        </div>
+        <div class="morale-foot">
+            <div class="ml-row" data-for="r : footer">
+                <span class="ml-left" data-rml="r.left_rml"></span>
+                <span class="ml-right" data-rml="r.right_rml"></span>
+            </div>
+        </div>
+    </div>
+</body>
+</rml>

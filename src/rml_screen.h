@@ -222,4 +222,11 @@ bool &character_display_rmlui_enabled();
 // string_input_popup compositing on top. Render-only; default OFF.
 bool &messages_rmlui_enabled();
 
+// player_morale::display() RmlUi render path (the morale screen: §8.1
+// gate-blocker backlog). Fixed title + Source/Value header, a scrolling list of
+// morale sources (name + percent, coloured by sign, with positive/negative total
+// caption rows), and a fixed bottom block (Total / Pain / Fatigue cap / Focus).
+// Static for the view (model built once); native scroll. Render-only; default OFF.
+bool &morale_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H
