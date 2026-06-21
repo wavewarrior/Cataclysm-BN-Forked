@@ -184,6 +184,9 @@ class veh_interact
         // per-entry `details` draw lambdas in calc_overview). A member so it keeps
         // veh_interact's friend access to vehicle_part::base.
         std::string overview_detail( const vehicle_part &pt, const std::string &key ) const;
+        // RmlUi slice 5: the 2D vehicle diagram as monospace colour-tagged rows
+        // (parallels display_veh's w_disp glyph grid; debug CoM/pivot dropped).
+        std::vector<std::string> diagram_lines() const;
         void display_name();
         void display_mode();
         void display_list( size_t pos, const std::vector<const vpart_info *> &list, int header = 0 );

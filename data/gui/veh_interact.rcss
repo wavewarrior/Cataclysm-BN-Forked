@@ -42,10 +42,25 @@ body {
     flex-direction: column;
 }
 
-.vi-col-right {
+.vi-col-mid, .vi-col-right {
     border-left: 1dp {{bg4}};
     margin-left: 4dp;
     padding-left: 4dp;
+}
+
+/* Slice 5: the 2D vehicle diagram — a monospace glyph grid (theme font is
+   monospace) under white-space:pre so columns line up. One row element per
+   w_disp line; each cell carries its own colour. */
+.vi-diagram {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 2dp;
+}
+
+.vi-diag-row {
+    display: block;
+    white-space: pre;
 }
 
 /* Slice 2: the stats pane. One \n-joined string → pre-wrap line breaks;

@@ -16,8 +16,13 @@
         <div class="vi-name" data-rml="name_rml"></div>
         <div class="vi-body">
             <div class="vi-col">
-                <div class="vi-stats" data-rml="stats_rml"></div>
+                <div id="vi-diagram" class="vi-diagram">
+                    <div class="vi-diag-row" data-for="r : diagram_rows" data-rml="r.text"></div>
+                </div>
                 <div id="vi-parts" class="vi-parts scroll-pane" data-rml="parts_rml"></div>
+            </div>
+            <div class="vi-col vi-col-mid">
+                <div class="vi-stats" data-rml="stats_rml"></div>
             </div>
             <div class="vi-col vi-col-right">
                 <div id="vi-overview" class="vi-overview scroll-pane">

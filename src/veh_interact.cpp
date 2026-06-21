@@ -115,6 +115,7 @@ struct veh_interact::veh_rml_data {
     Rml::Vector<veh_overview_row> overview_rows; // slice 3 (parallels display_overview)
     Rml::String parts_rml;  // slice 4: parts-at-tile list (parallels print_part_list)
     Rml::String msg_rml;    // slice 4: descriptions / message pane (the w_msg block)
+    Rml::Vector<veh_overview_row> diagram_rows; // slice 5: w_disp glyph grid (reuses .text)
     Rml::DataModelHandle handle;
 };
 
@@ -521,6 +522,7 @@ void veh_interact::do_main_loop()
         c.Bind( "overview_rows", &rml_data->overview_rows );
         c.Bind( "parts_rml", &rml_data->parts_rml );
         c.Bind( "msg_rml", &rml_data->msg_rml );
+        c.Bind( "diagram_rows", &rml_data->diagram_rows );
         rml_data->handle = c.GetModelHandle();
     } );
 
@@ -3295,6 +3297,120 @@ std::string veh_interact::overview_detail( const vehicle_part &pt, const std::st
     return std::string();
 }
 
+// Map a special_symbol() result to a UTF-8 string. special_symbol returns the
+// internal LINE_* sentinels (not codepoints) for box-drawing glyphs; translate
+// those to their Unicode equivalents, pass everything else through as a codepoint.
+static std::string veh_sym_to_utf8( int sym )
+{
+    switch( sym ) {
+        case LINE_XOXO:
+            return utf32_to_utf8( LINE_XOXO_UNICODE );
+        case LINE_OXOX:
+            return utf32_to_utf8( LINE_OXOX_UNICODE );
+        case LINE_XXXX:
+            return utf32_to_utf8( LINE_XXXX_UNICODE );
+        case LINE_OXXO:
+            return utf32_to_utf8( LINE_OXXO_UNICODE );
+        case LINE_OOXX:
+            return utf32_to_utf8( LINE_OOXX_UNICODE );
+        case LINE_XOOX:
+            return utf32_to_utf8( LINE_XOOX_UNICODE );
+        case LINE_XXOO:
+            return utf32_to_utf8( LINE_XXOO_UNICODE );
+        default:
+            return utf32_to_utf8( static_cast<uint32_t>( sym ) );
+    }
+}
+
+// RmlUi slice 5: the 2D vehicle diagram as monospace colour-tagged rows, parallel
+// to display_veh's w_disp glyph grid. Reuses w_disp's dimensions (still allocated
+// regardless of the toggle) for parity. The debug CoM/pivot overlay + red-bg
+// obstruction art are dropped (semantic); the cursor tile and obstruction are
+// still marked. display_veh stays pristine for the A/B.
+std::vector<std::string> veh_interact::diagram_lines() const
+{
+    const int cols = getmaxx( w_disp );
+    const int rows = getmaxy( w_disp );
+    if( cols <= 0 || rows <= 0 ) {
+        return std::vector<std::string>();
+    }
+    const point h_size = point( cols, rows ) / 2;
+
+    std::vector<std::string> glyph( static_cast<size_t>( cols ) * rows, std::string( " " ) );
+    std::vector<nc_color> col( static_cast<size_t>( cols ) * rows, c_dark_gray );
+    std::vector<bool> filled( static_cast<size_t>( cols ) * rows, false );
+    const auto put = [&]( int x, int y, const std::string & g, nc_color c ) {
+        if( x >= 0 && x < cols && y >= 0 && y < rows ) {
+            const size_t i = static_cast<size_t>( y ) * cols + x;
+            glyph[i] = g;
+            col[i] = c;
+            filled[i] = true;
+        }
+    };
+
+    // Guidelines (dark-gray cross through the cursor centre), drawn first so parts
+    // overwrite them.
+    for( int y = 0; y < rows; ++y ) {
+        put( h_size.x, y, veh_sym_to_utf8( LINE_XOXO ), c_dark_gray );
+    }
+    for( int x = 0; x < cols; ++x ) {
+        put( x, h_size.y, veh_sym_to_utf8( LINE_OXOX ), c_dark_gray );
+    }
+
+    // One glyph per structural part (each square hit once).
+    for( const int p : veh->all_standalone_parts() ) {
+        const units::angle part_direction = normalize( 270_degrees + veh->part_display_direction( p ) -
+                                            veh->face.dir() );
+        const tileray part_face( part_direction );
+        const int raw = part_face.dir_symbol( veh->part_sym( p ) );
+        nc_color pcol = veh->part_color( p );
+        const point_rel_veh q = ( veh->part( p ).mount - vehicle_cursor ).xy().rotate( 3 );
+        if( q == point_rel_veh::zero() ) {
+            pcol = hilite( pcol );
+        }
+        const point pos = h_size + q.raw();
+        put( pos.x, pos.y, veh_sym_to_utf8( special_symbol( raw ) ), pcol );
+    }
+
+    // Centre marker = the cursor tile's part, red when the tile is obstructed.
+    {
+        nc_color ccol = cpart >= 0 ? veh->part_color( cpart ) : c_dark_gray;
+        std::string csym = " ";
+        if( cpart >= 0 ) {
+            const units::angle dir = normalize( 270_degrees + veh->part_display_direction( cpart ) -
+                                                veh->face.dir() );
+            const tileray pf( dir );
+            csym = veh_sym_to_utf8( special_symbol( pf.dir_symbol( veh->part_sym( cpart ) ) ) );
+        }
+        const auto vehp = veh->mount_to_bubble( vehicle_cursor );
+        const map &here = get_map();
+        bool obstruct = here.impassable_ter_furn( vehp );
+        const optional_vpart_position ovp = here.veh_at( vehp );
+        if( ovp && &ovp->vehicle() != veh ) {
+            obstruct = true;
+        }
+        if( here.has_flag( flag_MOUNTABLE, vehp ) ) {
+            obstruct = true;
+            if( ovp && &ovp->vehicle() == veh ) {
+                obstruct = false;
+            }
+        }
+        put( cols / 2, rows / 2, csym, obstruct ? c_red : hilite( ccol ) );
+    }
+
+    std::vector<std::string> out;
+    out.reserve( rows );
+    for( int y = 0; y < rows; ++y ) {
+        std::string line;
+        for( int x = 0; x < cols; ++x ) {
+            const size_t i = static_cast<size_t>( y ) * cols + x;
+            line += filled[i] ? colorize( glyph[i], col[i] ) : std::string( " " );
+        }
+        out.emplace_back( line );
+    }
+    return out;
+}
+
 // RmlUi render path — rebuild the bound model. Slices 1-3: name + mode bar
 // (display_name/display_mode), stats (display_stats), overview (display_overview).
 // All curses draws stay pristine. Defined after display_mode so it can reuse the
@@ -3418,12 +3534,22 @@ void veh_interact::sync_rml()
         rml_data->msg_rml = cata_text_to_rml( veh->parts_descs_text( INT_MAX, 50, cpart, at, limit ) );
     }
 
+    // 2D vehicle diagram (slice 5; parallels display_veh). One monospace row per
+    // w_disp line; reuses veh_overview_row's `text` field as the row container.
+    rml_data->diagram_rows.clear();
+    for( const std::string &ln : diagram_lines() ) {
+        veh_overview_row row;
+        row.text = cata_text_to_rml( ln );
+        rml_data->diagram_rows.emplace_back( std::move( row ) );
+    }
+
     rml_data->handle.DirtyVariable( "mode_rml" );
     rml_data->handle.DirtyVariable( "name_rml" );
     rml_data->handle.DirtyVariable( "stats_rml" );
     rml_data->handle.DirtyVariable( "overview_rows" );
     rml_data->handle.DirtyVariable( "parts_rml" );
     rml_data->handle.DirtyVariable( "msg_rml" );
+    rml_data->handle.DirtyVariable( "diagram_rows" );
 }
 
 /**
