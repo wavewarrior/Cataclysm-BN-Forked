@@ -51,7 +51,7 @@
             </div>
         </div>
 
-        <div class="uilist-filter" data-if="has_filter or filter_active">&lt; {{ filter }} &gt;</div>
+        <div class="uilist-filter" data-if="has_filter || filter_active">&lt; {{ filter }} &gt;</div>
     </div>
 </body>
 </rml>

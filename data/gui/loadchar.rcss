@@ -46,7 +46,7 @@ body {
     height: 48dp;
     margin-right: 10dp;
     /* decorator is set per-row from C++ via data-style-decorator (r.sigil_dec) */
-    transition: transform 0.15s ease-out;
+    transition: transform 0.15s quadratic-out;
 }
 
 .lc-name {

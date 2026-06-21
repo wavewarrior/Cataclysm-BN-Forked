@@ -41,3 +41,9 @@ void Messages::deserialize( const JsonObject & ) {}
 
 void add_msg( std::string ) {}
 void add_msg( const game_message_params &, std::string ) {}
+
+bool &messages_rmlui_enabled()
+{
+    static bool enabled = false;
+    return enabled;
+}

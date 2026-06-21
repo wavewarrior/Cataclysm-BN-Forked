@@ -1586,7 +1586,7 @@ std::string cs_speed_text( const Character &you, const std::map<std::string, int
         }
         out += lines[i];
     }
-    return out;
+    return cata_text_to_rml( out );
 }
 
 std::string cs_tip_text( const Character &you, const std::string &race, const input_context &ctxt )
