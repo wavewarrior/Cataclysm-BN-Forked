@@ -3350,6 +3350,13 @@ void veh_interact::sync_rml()
             }
             s += ln;
         }
+        // Fuel gauges (slice 4b; parallels print_fuel_indicators in display_stats).
+        for( const std::string &ln : veh->fuel_indicator_lines() ) {
+            if( !s.empty() ) {
+                s += "\n";
+            }
+            s += ln;
+        }
         rml_data->stats_rml = cata_text_to_rml( s );
     }
 

@@ -598,3 +598,71 @@ void vehicle::print_fuel_indicator( const catacurses::window &win, point p,
         }
     }
 }
+
+// RmlUi (veh_interact slice 4b): the fuel gauges as colour-tagged text lines,
+// parallel to print_fuel_indicators (fullsize/verbose path) + print_fuel_indicator.
+// The E…F ASCII gauge bar + the gauge windowing ('>' for more) are dropped; each
+// printable fuel becomes one line "<fuel>  NN%" + the verbose rate / ETA suffix.
+std::vector<std::string> vehicle::fuel_indicator_lines() const
+{
+    std::vector<std::string> lines;
+    const std::vector<itype_id> fuels = get_printable_fuel_types();
+    for( const itype_id &fuel_type : fuels ) {
+        const int cap = fuel_capacity( fuel_type );
+        const int f_left = fuel_left( fuel_type );
+        const nc_color f_color = fuel_type->color;
+        const int pct = cap > 0 ? f_left * 100 / cap : 0;
+        std::string line = string_format( "%s  %d%%", item::nname( fuel_type ), pct );
+
+        // Verbose rate / time-to-goal (parallels print_fuel_indicator's verbose block).
+        int rate = 0;
+        std::string units;
+        const auto fuel_data = fuel_used_last_turn.find( fuel_type );
+        if( fuel_data != fuel_used_last_turn.end() ) {
+            rate = -consumption_per_hour( fuel_type, fuel_data->second );
+            units = _( "mL" );
+        }
+        if( fuel_type == itype_id( "battery" ) ) {
+            rate += power_to_energy_bat( net_battery_charge_rate_w(), 1_hours );
+            units = _( "kJ" );
+        }
+        if( rate != 0 && cap > 0 ) {
+            int tank_use = 0;
+            std::string tank_goal = _( "full" );
+            bool have_use = true;
+            if( rate > 0 ) {
+                tank_use = cap - f_left;
+                if( !tank_use ) {
+                    have_use = false;
+                }
+            } else {
+                if( !f_left ) {
+                    have_use = false;
+                }
+                tank_use = f_left;
+                tank_goal = _( "empty" );
+            }
+            if( have_use ) {
+                item &fitem = *item::spawn_temporary( fuel_type );
+                const int charges_per_L = fitem.charges_per_volume( 1_liter );
+                if( charges_per_L != 0 && charges_per_L != item::INFINITE_CHARGES ) {
+                    const float charges_per_mL = charges_per_L / 1000.0f;
+                    tank_use = tank_use / charges_per_mL;
+                    const double turns = to_turns<double>( 60_minutes );
+                    const time_duration estimate =
+                        time_duration::from_turns( turns * tank_use / std::abs( rate ) );
+                    if( debug_mode ) {
+                        line += string_format( _( ", %d %s(%4.2f%%)/hour, %s until %s" ),
+                                               rate, units, 100.0 * rate / cap,
+                                               to_string_clipped( estimate ), tank_goal );
+                    } else {
+                        line += string_format( _( ", %3.1f%% / hour, %s until %s" ),
+                                               100.0 * rate / cap, to_string_clipped( estimate ), tank_goal );
+                    }
+                }
+            }
+        }
+        lines.emplace_back( colorize( line, f_color ) );
+    }
+    return lines;
+}

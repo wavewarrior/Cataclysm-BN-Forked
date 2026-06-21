@@ -875,6 +875,11 @@ class vehicle
             const catacurses::window &win, point, int start_index = 0,
             bool fullsize = false, bool verbose = false, bool desc = false,
             bool isHorizontal = false );
+        // RmlUi (veh_interact slice 4b): the fuel gauges as colour-tagged text
+        // lines, parallel to print_fuel_indicators/print_fuel_indicator. The E…F
+        // ASCII gauge bar is dropped (semantic); each line is "<fuel>  NN%" plus
+        // the verbose rate / time-to-full/empty suffix.
+        std::vector<std::string> fuel_indicator_lines() const;
 
         //Refresh part locations
         void refresh_position();
