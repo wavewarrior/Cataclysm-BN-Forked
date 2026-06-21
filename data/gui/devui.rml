@@ -48,6 +48,7 @@
                 <label class="devui-row"><input type="checkbox" value="1" data-checked="morale"/> morale</label>
                 <label class="devui-row"><input type="checkbox" value="1" data-checked="martialarts"/> martial arts desc</label>
                 <label class="devui-row"><input type="checkbox" value="1" data-checked="pickup"/> pickup menu</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="veh_interact"/> vehicle interact (slice 1)</label>
 
                 <div class="devui-section">Items &amp; inventory</div>
                 <label class="devui-row"><input type="checkbox" value="1" data-checked="inventory"/> inventory (all selectors)</label>

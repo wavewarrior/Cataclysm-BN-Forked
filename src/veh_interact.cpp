@@ -67,6 +67,10 @@
 
 #include "vehicle_preview.h"
 
+#include <RmlUi/Core.h>
+
+#include "rml_util.h"
+
 static const itype_id fuel_type_battery( "battery" );
 
 static const itype_id itype_battery( "battery" );
@@ -84,6 +88,27 @@ static const trait_id trait_DEBUG_HS( "DEBUG_HS" );
 static const activity_id ACT_VEHICLE( "ACT_VEHICLE" );
 
 static const std::string flag_MOUNTABLE( "MOUNTABLE" );
+
+// ── RmlUi render path (§8.1 gate-blocker backlog, the giant — SLICED) ─────────
+// Slice 1: lifecycle harness + the two zero-dependency panes (the action mode
+// bar + the vehicle name). The number-heavy panes (stats / overview), the part
+// list + msg (need vehicle.cpp text producers), the 2D vehicle diagram, and the
+// install/repair sub-mode panes land in later slices. Defined here (before the
+// ctor/dtor) so the pimpl'd veh_rml_data is a complete type for the unique_ptr
+// member. Two scalar string binds → no struct/array registration needed.
+// Render-only: the keyboard owns every vehicle action.
+struct veh_interact::veh_rml_data {
+    Rml::String mode_rml;   // the action mode bar (parallels display_mode)
+    Rml::String name_rml;   // the vehicle name line (parallels display_name)
+    Rml::DataModelHandle handle;
+};
+
+bool &veh_interact_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = false;
+    return enabled;
+}
 
 namespace
 {
@@ -391,6 +416,13 @@ shared_ptr_fast<ui_adaptor> veh_interact::create_or_get_ui_adaptor()
             if( ui_hidden ) {
                 return;
             }
+            // RmlUi path (slice 1): sync the doc and skip the curses panes. Only
+            // the mode bar + name render via RmlUi so far; the other panes follow
+            // in later slices. Toggle default OFF.
+            if( rml ) {
+                sync_rml();
+                return;
+            }
             display_grid();
             display_name();
             display_stats();
@@ -443,6 +475,16 @@ void veh_interact::do_main_loop()
     }
 
     shared_ptr_fast<ui_adaptor> current_ui = create_or_get_ui_adaptor();
+
+    // Open (or no-op) the RmlUi doc — open()'s set_timeout(16) lands on
+    // main_context (the loop's input context). Teardown rides the rml_doc dtor.
+    rml.open( veh_interact_rmlui_enabled(), "veh_interact", main_context,
+    [this]( Rml::DataModelConstructor & c ) {
+        rml_data = std::make_unique<veh_rml_data>();
+        c.Bind( "mode_rml", &rml_data->mode_rml );
+        c.Bind( "name_rml", &rml_data->name_rml );
+        rml_data->handle = c.GetModelHandle();
+    } );
 
     while( !finish ) {
         calc_overview();
@@ -2911,6 +2953,54 @@ void veh_interact::display_mode()
         }
     }
     wnoutrefresh( w_mode );
+}
+
+// RmlUi render path — slice 1: rebuild the bound model for the two zero-dependency
+// panes. Parallels display_name + display_mode (those curses draws stay pristine).
+// Defined after display_mode so it can reuse the file-local `veh_act_desc` helper.
+void veh_interact::sync_rml()
+{
+    if( !rml || !rml_data ) {
+        return;
+    }
+
+    // Vehicle name line (parallels display_name).
+    const std::string name = string_format( _( "%s (%s)" ), veh->name, veh->get_owner_name() );
+    const nc_color name_col = !veh->is_owned_by( get_avatar(), true ) ? c_light_red : c_light_green;
+    rml_data->name_rml = cata_text_to_rml( colorize( _( "Name: " ), c_light_gray ) +
+                                           colorize( name, name_col ) );
+
+    // Action mode bar (parallels display_mode). The curses pixel-spacing is
+    // dropped — actions are joined with gaps; each carries its own colour tags.
+    if( title.has_value() ) {
+        rml_data->mode_rml = cata_text_to_rml( title.value() );
+    } else {
+        const std::array<std::string, 11> actions = { {
+                veh_act_desc( main_context, "INSTALL", pgettext( "veh_interact", "install" ), cant_do( 'i' ) ),
+                veh_act_desc( main_context, "REPAIR", pgettext( "veh_interact", "repair" ), cant_do( 'r' ) ),
+                veh_act_desc( main_context, "MEND", pgettext( "veh_interact", "mend" ), cant_do( 'm' ) ),
+                veh_act_desc( main_context, "REFILL", pgettext( "veh_interact", "refill" ), cant_do( 'f' ) ),
+                veh_act_desc( main_context, "REMOVE", pgettext( "veh_interact", "remove" ), cant_do( 'o' ) ),
+                veh_act_desc( main_context, "SIPHON", pgettext( "veh_interact", "siphon" ), cant_do( 's' ) ),
+                veh_act_desc( main_context, "UNLOAD", pgettext( "veh_interact", "unload" ), cant_do( 'd' ) ),
+                veh_act_desc( main_context, "ASSIGN_CREW", pgettext( "veh_interact", "crew" ), cant_do( 'w' ) ),
+                veh_act_desc( main_context, "RENAME", pgettext( "veh_interact", "rename" ), task_reason::CAN_DO ),
+                veh_act_desc( main_context, "RELABEL", pgettext( "veh_interact", "label" ), cant_do( 'a' ) ),
+                veh_act_desc( main_context, "QUIT", pgettext( "veh_interact", "back" ), task_reason::CAN_DO ),
+            }
+        };
+        std::string bar;
+        for( const std::string &a : actions ) {
+            if( !bar.empty() ) {
+                bar += "   ";
+            }
+            bar += a;
+        }
+        rml_data->mode_rml = cata_text_to_rml( bar );
+    }
+
+    rml_data->handle.DirtyVariable( "mode_rml" );
+    rml_data->handle.DirtyVariable( "name_rml" );
 }
 
 /**

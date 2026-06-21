@@ -242,4 +242,11 @@ bool &martialarts_rmlui_enabled();
 // each frame); native scroll. Default OFF.
 bool &pickup_rmlui_enabled();
 
+// veh_interact RmlUi render path (the vehicle interaction screen: §8.1
+// gate-blocker backlog, THE GIANT — migrated in slices). Slice 1 = lifecycle
+// harness + the vehicle name + the action mode bar; later slices add stats /
+// overview / part list / msg / the 2D diagram / install-repair sub-modes.
+// Render-only; default OFF.
+bool &veh_interact_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

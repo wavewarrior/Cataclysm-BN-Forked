@@ -1,0 +1,49 @@
+/* Layout for the vehicle interaction screen (§8.1 backlog, the giant — slice 1).
+   Palette/border come from theme.rcss (linked first in veh_interact.rml); this
+   file owns only the screen's own layout. Lengths in dp. SLICE 1 styles the name
+   line, a placeholder body, and the bottom action mode bar; later slices add the
+   real panes. Bound spans carry their own colour via cata_text_to_rml. */
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.vi-panel {
+    width: 90%;
+    height: 90%;
+    display: flex;
+    flex-direction: column;
+}
+
+.vi-name {
+    flex: 0 0 auto;
+    border-bottom: 1dp {{bg4}};
+    padding-bottom: 2dp;
+    margin-bottom: 2dp;
+    white-space: nowrap;
+}
+
+.vi-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.vi-placeholder {
+    color: {{fg4}};
+    font-style: italic;
+    text-align: center;
+}
+
+.vi-mode {
+    flex: 0 0 auto;
+    border-top: 1dp {{bg4}};
+    padding-top: 2dp;
+    margin-top: 2dp;
+    white-space: pre-wrap;
+}

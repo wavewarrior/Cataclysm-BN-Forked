@@ -1,0 +1,25 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="veh_interact.rcss"/>
+</head>
+<body data-model="veh_interact">
+    <!-- §8.1 gate-blocker backlog: the vehicle interaction screen
+         (veh_interact). THE GIANT — migrated in slices. SLICE 1 renders only the
+         two zero-dependency panes: the vehicle NAME line + the action MODE bar.
+         Later slices add the number panes (stats / overview), the part list +
+         message pane (need vehicle.cpp text producers), the 2D vehicle diagram,
+         and the install/repair sub-mode panes. Render-only: the keyboard owns
+         every vehicle action. Toggle default OFF — this is scaffold + 2 panes,
+         not yet a full A/B of the screen. -->
+    <div class="panel vi-panel">
+        <div class="vi-name" data-rml="name_rml"></div>
+        <div class="vi-body">
+            <div class="vi-placeholder">
+                (vehicle diagram / parts / stats / overview — later slices)
+            </div>
+        </div>
+        <div class="vi-mode" data-rml="mode_rml"></div>
+    </div>
+</body>
+</rml>

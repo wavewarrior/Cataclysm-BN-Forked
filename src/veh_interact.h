@@ -12,6 +12,7 @@
 #include "inventory.h"
 #include "memory_fast.h"
 #include "player_activity_ptr.h"
+#include "rml_screen.h"
 #include "type_id.h"
 
 class player;
@@ -107,6 +108,18 @@ class veh_interact
         vehicle *veh;
         inventory crafting_inv;
         input_context main_context;
+
+        // RmlUi render path (§8.1 gate-blocker backlog, the giant — SLICED).
+        // Slice 1: lifecycle harness + the two zero-dependency panes (the action
+        // mode bar + the vehicle name). The number-heavy panes (stats / overview),
+        // the part list + msg (need vehicle.cpp text producers), the 2D vehicle
+        // diagram, and the install/repair sub-mode panes land in later slices.
+        // `rml` is the F.3 harness doc; `rml_data` (RmlUi types) is pimpl'd into
+        // the .cpp. Render-only; the keyboard owns all vehicle actions.
+        struct veh_rml_data;
+        std::unique_ptr<veh_rml_data> rml_data;
+        rml_doc rml;
+        void sync_rml();
 
         // maximum level of available lifting equipment (if any)
         int max_lift;
