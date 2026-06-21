@@ -485,6 +485,17 @@ struct defense_setup_data {
     Rml::DataModelHandle handle;
 };
 
+// Slice 2: the between-wave caravan shop. Reuses defense_setup_row for both lists.
+struct defense_caravan_data {
+    Rml::String cash_rml;                       // "Your Cash: $X -> $Y" header
+    Rml::Vector<defense_setup_row> cat_rows;    // category list (left)
+    Rml::String info_rml;                       // selected item's folded info (left)
+    Rml::Vector<defense_setup_row> item_rows;   // item list (right): name xN (price)
+    bool cat_active = true;                      // which pane has focus (border)
+    bool items_active = false;
+    Rml::DataModelHandle handle;
+};
+
 bool g_defense_setup_types_registered = false;
 
 void register_defense_setup_rml_types( Rml::DataModelConstructor &c )
@@ -1036,7 +1047,72 @@ void defense_game::caravan()
 
     int current_window = 0;
 
+    // RmlUi render path (F.3 harness). Render-only — the keyboard owns category /
+    // item selection, buy/sell, and confirm; the doc is rebuilt each frame. The
+    // curses offset windowing is dropped for native scroll.
+    std::unique_ptr<defense_caravan_data> rml_data;
+    rml_doc rml;
+    const auto sync_caravan_rml = [&]() {
+        if( !rml || !rml_data ) {
+            return;
+        }
+        const int cash = g->u.cash;
+        rml_data->cash_rml =
+            cata_text_to_rml( colorize( string_format( _( "Your Cash: %s" ), format_money( cash ) ),
+                                        c_white ) + colorize( " -> ", c_light_gray ) +
+                              colorize( format_money( cash - total_price ),
+                                        total_price > cash ? c_red : c_green ) );
+
+        rml_data->cat_rows.clear();
+        for( int i = 0; i < NUM_CARAVAN_CATEGORIES; i++ ) {
+            defense_setup_row r;
+            r.selected = ( i == category_selected );
+            r.text = cata_text_to_rml( colorize(
+                                           caravan_category_name( static_cast<caravan_category>( i ) ), c_white ) );
+            rml_data->cat_rows.emplace_back( std::move( r ) );
+        }
+
+        const std::vector<itype_id> &cat_items = items[category_selected];
+        const std::vector<int> &cat_counts = item_count[category_selected];
+        if( item_selected >= 0 && item_selected < static_cast<int>( cat_items.size() ) ) {
+            item &tmp = *item::spawn_temporary( cat_items[item_selected], calendar::start_of_cataclysm );
+            rml_data->info_rml = cata_text_to_rml( tmp.info_string( iteminfo_query::no_text ) );
+        } else {
+            rml_data->info_rml.clear();
+        }
+
+        rml_data->item_rows.clear();
+        for( size_t i = 0; i < cat_items.size(); i++ ) {
+            defense_setup_row r;
+            r.selected = ( static_cast<int>( i ) == item_selected );
+            r.text = cata_text_to_rml( colorize( string_format( "%s x %2d",
+                                       item::nname( cat_items[i], cat_counts[i] ), cat_counts[i] ), c_white ) );
+            if( cat_counts[i] > 0 ) {
+                const int item_price = item::spawn_temporary( cat_items[i],
+                                       calendar::start_of_cataclysm )->price( false );
+                const int price = caravan_price( g->u, item_price * cat_counts[i] );
+                r.detail = cata_text_to_rml( colorize( string_format( "(%s)", format_money( price ) ),
+                                             price > g->u.cash ? c_red : c_green ) );
+            }
+            rml_data->item_rows.emplace_back( std::move( r ) );
+        }
+
+        rml_data->cat_active = ( current_window == 0 );
+        rml_data->items_active = ( current_window == 1 );
+
+        rml_data->handle.DirtyVariable( "cash_rml" );
+        rml_data->handle.DirtyVariable( "cat_rows" );
+        rml_data->handle.DirtyVariable( "info_rml" );
+        rml_data->handle.DirtyVariable( "item_rows" );
+        rml_data->handle.DirtyVariable( "cat_active" );
+        rml_data->handle.DirtyVariable( "items_active" );
+    };
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_caravan_rml();
+            return;
+        }
         draw_caravan_categories( w, category_selected, total_price, g->u.cash );
         draw_caravan_items( w, &( items[category_selected] ),
                             &( item_count[category_selected] ), offset, item_selected );
@@ -1050,6 +1126,21 @@ void defense_game::caravan()
     ctxt.register_action( "NEXT_TAB" );
     ctxt.register_action( "HELP" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
+
+    // Open (or no-op) the RmlUi doc — open()'s set_timeout(16) lands on `ctxt`.
+    // The model is rebuilt each frame by sync_caravan_rml() in on_redraw.
+    rml.open( gamemode_defense_rmlui_enabled(), "gamemode_defense_caravan", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        rml_data = std::make_unique<defense_caravan_data>();
+        register_defense_setup_rml_types( c );
+        c.Bind( "cash_rml", &rml_data->cash_rml );
+        c.Bind( "cat_rows", &rml_data->cat_rows );
+        c.Bind( "info_rml", &rml_data->info_rml );
+        c.Bind( "item_rows", &rml_data->item_rows );
+        c.Bind( "cat_active", &rml_data->cat_active );
+        c.Bind( "items_active", &rml_data->items_active );
+        rml_data->handle = c.GetModelHandle();
+    } );
 
     bool done = false;
     bool cancel = false;

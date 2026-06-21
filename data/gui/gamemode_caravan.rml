@@ -1,0 +1,33 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="gamemode_caravan.rcss"/>
+</head>
+<body data-model="gamemode_defense_caravan">
+    <!-- §8.1 gate-blocker backlog: the Defense game-mode CARAVAN shop
+         (defense_game::caravan + draw_caravan_*). Slice 2 of gamemode_defense.
+         Render-only: keyboard owns category/item selection, buy/sell (LEFT/RIGHT),
+         pane switch (NEXT_TAB) and confirm/quit; the doc is rebuilt each frame.
+         Left column = cash header + category list + the selected item's info;
+         right column = the item list (name xN + price). The focused pane (curses
+         yellow border) takes an accent border via cat_active / items_active. The
+         curses offset windowing is dropped for native scroll. -->
+    <div class="panel cv-panel">
+        <div class="cv-left">
+            <div class="cv-cash" data-rml="cash_rml"></div>
+            <div id="cv-cats" class="cv-cats scroll-pane" data-class-active="cat_active">
+                <div class="cv-row" data-for="r : cat_rows" data-class-selected="r.selected">
+                    <span data-rml="r.text"></span>
+                </div>
+            </div>
+            <div id="cv-info" class="cv-info scroll-pane" data-rml="info_rml"></div>
+        </div>
+        <div id="cv-items" class="cv-items scroll-pane" data-class-active="items_active">
+            <div class="cv-row" data-for="r : item_rows" data-class-selected="r.selected">
+                <span class="cv-item-name" data-rml="r.text"></span>
+                <span class="cv-item-price" data-rml="r.detail"></span>
+            </div>
+        </div>
+    </div>
+</body>
+</rml>
