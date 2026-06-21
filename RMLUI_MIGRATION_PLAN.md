@@ -74,11 +74,13 @@ options=2, **newcharacter=16 (8 slices)**, main_menu=2, worldfactory=4 sessions;
    UNDERCOUNTS.** The enumerated tiers 0–9 are code-done-pending-eyeball, BUT the sweep found
    **~12 interactive curses screens never listed in any tier** that still block the rip-out.
    **★ RESUME HERE (2026-06-21 eve): the bespoke-screen backlog is all but cleared.**
-   - **DONE (code-complete):** `character_display` @ sheet + full `messages` log (both eyeball-CONFIRMED
-     clean 2026-06-21); `morale`, `martialarts`, `pickup` (toggle-OFF/eyeball-owed);
-     **`veh_interact`/`vehicle_display` — all 6 slices DONE+committed** (name/mode, stats+fuel, overview,
-     parts, descs, ASCII diagram, install/repair); **`gamemode_defense` — both slices DONE+committed**
-     (setup form + caravan shop). All toggle-OFF, one A/B eyeball pass each owed (incl. D3D12).
+   - **DONE + EYEBALL-CONFIRMED CLEAN (user, 2026-06-21 — "all clean"):** `character_display` @ sheet,
+     full `messages` log, `morale`, `martialarts`, `pickup`, **`veh_interact`/`vehicle_display` (all 6
+     slices: name/mode, stats+fuel, overview, parts, descs, ASCII diagram, install/repair)**, and
+     **`gamemode_defense` (both slices: setup form + caravan shop)**. All committed, toggles still OFF
+     (the A/B control; the mass flip-ON is the §8 rip-out step). The whole §8.1 bespoke-screen backlog
+     is now eyeball-clean on Metal. (D3D12/Win11 glance still nice-to-have but the dynamic-doc path is
+     long since proven cross-backend.)
    - **LEFT — the only remaining bespoke screens:** the creature-info trio `monster`/`mtype`/`npc` info
      — **architectural, DEFERRED**: host-drawn helper that wants a shared `Creature::print_info` F.2
      component designed first (only the `*_faction_display` slice was reused at Tier 2). PLUS the
