@@ -177,6 +177,9 @@ class veh_interact
         void display_veh();
         void display_veh_tiles();
         void display_stats() const;
+        // RmlUi slice 2: stat lines as colour-tagged strings (parallels
+        // display_stats; the curses 3-column slot layout is dropped).
+        std::vector<std::string> stats_lines() const;
         void display_name();
         void display_mode();
         void display_list( size_t pos, const std::vector<const vpart_info *> &list, int header = 0 );

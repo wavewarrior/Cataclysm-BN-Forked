@@ -15,9 +15,7 @@
     <div class="panel vi-panel">
         <div class="vi-name" data-rml="name_rml"></div>
         <div class="vi-body">
-            <div class="vi-placeholder">
-                (vehicle diagram / parts / stats / overview — later slices)
-            </div>
+            <div class="vi-stats" data-rml="stats_rml"></div>
         </div>
         <div class="vi-mode" data-rml="mode_rml"></div>
     </div>

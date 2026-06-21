@@ -30,14 +30,16 @@ body {
     flex: 1;
     min-height: 0;
     display: flex;
-    align-items: center;
-    justify-content: center;
 }
 
-.vi-placeholder {
-    color: {{fg4}};
-    font-style: italic;
-    text-align: center;
+/* Slice 2: the stats pane. One \n-joined string → pre-wrap line breaks;
+   native scroll if it overflows. Each line carries its own colour. */
+.vi-stats {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    padding: 2dp;
 }
 
 .vi-mode {

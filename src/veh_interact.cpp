@@ -100,6 +100,7 @@ static const std::string flag_MOUNTABLE( "MOUNTABLE" );
 struct veh_interact::veh_rml_data {
     Rml::String mode_rml;   // the action mode bar (parallels display_mode)
     Rml::String name_rml;   // the vehicle name line (parallels display_name)
+    Rml::String stats_rml;  // slice 2: the stats pane (parallels display_stats)
     Rml::DataModelHandle handle;
 };
 
@@ -483,6 +484,7 @@ void veh_interact::do_main_loop()
         rml_data = std::make_unique<veh_rml_data>();
         c.Bind( "mode_rml", &rml_data->mode_rml );
         c.Bind( "name_rml", &rml_data->name_rml );
+        c.Bind( "stats_rml", &rml_data->stats_rml );
         rml_data->handle = c.GetModelHandle();
     } );
 
@@ -2858,6 +2860,148 @@ void veh_interact::display_stats() const
     wnoutrefresh( w_stats );
 }
 
+// RmlUi slice 2: the stats pane, parallel to display_stats. Returns the stat
+// lines as colour-tagged strings (one per logical stat). The curses display_stats
+// 3-column slot layout + empty-slot padding are DROPPED (semantic rewrite — the
+// RmlUi pane flows them in one column). The fuel-indicator gauges
+// (print_fuel_indicators) are slice 4. display_stats stays pristine for the A/B.
+std::vector<std::string> veh_interact::stats_lines() const
+{
+    std::vector<std::string> lines;
+    const auto stat = [&]( const std::string & s ) {
+        lines.emplace_back( colorize( s, c_light_gray ) );
+    };
+
+    units::volume total_cargo = 0_ml;
+    units::volume free_cargo = 0_ml;
+    for( const vpart_reference &vp : veh->get_any_parts( "CARGO" ) ) {
+        const size_t p = vp.part_index();
+        total_cargo += veh->max_volume( p );
+        free_cargo += veh->free_volume( p );
+    }
+
+    const bool is_boat = !veh->floating.empty();
+    const bool is_ground = !veh->wheelcache.empty() || !is_boat;
+    const bool is_aircraft = veh->is_aircraft() && veh->is_flying_in_air();
+
+    const auto vel_to_int = []( const double vel ) {
+        return static_cast<int>( convert_velocity( vel, VU_VEHICLE ) );
+    };
+
+    if( is_aircraft ) {
+        stat( string_format(
+                  _( "Air Safe/Top Speed: <color_light_green>%3d</color>/<color_light_red>%3d</color> %s" ),
+                  vel_to_int( veh->safe_aircraft_velocity( false, !veh->engine_on ) ),
+                  vel_to_int( veh->max_air_velocity( false, !veh->engine_on ) ),
+                  velocity_units( VU_VEHICLE ) ) );
+        stat( string_format(
+                  _( "Air Acceleration: <color_light_blue>%3d</color> %s/s" ),
+                  vel_to_int( veh->aircraft_acceleration( false, !veh->engine_on ) ),
+                  velocity_units( VU_VEHICLE ) ) );
+    } else {
+        if( is_ground ) {
+            stat( string_format(
+                      _( "Safe/Top Speed: <color_light_green>%3d</color>/<color_light_red>%3d</color> %s" ),
+                      vel_to_int( veh->safe_ground_velocity( false, !veh->engine_on ) ),
+                      vel_to_int( veh->max_ground_velocity( false, !veh->engine_on ) ),
+                      velocity_units( VU_VEHICLE ) ) );
+            stat( string_format(
+                      //~ /t means per turn
+                      _( "Acceleration: <color_light_blue>%3d</color> %s/s" ),
+                      vel_to_int( veh->ground_acceleration( false, !veh->engine_on ) ),
+                      velocity_units( VU_VEHICLE ) ) );
+        }
+        if( is_boat ) {
+            stat( string_format(
+                      _( "Water Safe/Top Speed: <color_light_green>%3d</color>/<color_light_red>%3d</color> %s" ),
+                      vel_to_int( veh->safe_water_velocity( false, !veh->engine_on ) ),
+                      vel_to_int( veh->max_water_velocity( false, !veh->engine_on ) ),
+                      velocity_units( VU_VEHICLE ) ) );
+            stat( string_format(
+                      //~ /t means per turn
+                      _( "Water Acceleration: <color_light_blue>%3d</color> %s/s" ),
+                      vel_to_int( veh->water_acceleration( false, !veh->engine_on ) ),
+                      velocity_units( VU_VEHICLE ) ) );
+        }
+    }
+    stat( string_format(
+              _( "Mass: <color_light_blue>%5.0f</color> %s" ),
+              convert_weight( veh->total_mass() ), weight_units() ) );
+    if( veh->has_lift() ) {
+        units::mass lift_as_mass = units::from_newton(
+                                       veh->total_lift( true, false, !veh->engine_on ) );
+        stat( string_format(
+                  _( "Maximum Lift: <color_light_blue>%5.0f</color> %s" ),
+                  convert_weight( lift_as_mass ), weight_units() ) );
+        if( veh->has_part( "WING" ) ) {
+            stat( string_format(
+                      _( "Liftoff Speed: <color_light_blue>%3d</color> %s" ),
+                      veh->get_takeoff_speed(), velocity_units( VU_VEHICLE ) ) );
+        }
+    }
+    if( is_boat ) {
+        units::mass buoyancy_as_mass = units::from_newton(
+                                           veh->max_buoyancy() + veh->total_balloon_lift() );
+        stat( string_format(
+                  _( "Maximum Buoyancy: <color_light_blue>%5.0f</color> %s" ),
+                  convert_weight( buoyancy_as_mass ), weight_units() ) );
+    }
+    stat( string_format(
+              _( "Cargo Volume: <color_light_blue>%s</color> / <color_light_blue>%s</color> %s" ),
+              format_volume( total_cargo - free_cargo ),
+              format_volume( total_cargo ), volume_units_abbr() ) );
+
+    // Status: + overall durability (curses prints the "Status:" prefix in
+    // light_gray then the durability text in total_durability_color, inline).
+    lines.emplace_back( colorize( _( "Status:" ), c_light_gray ) + " " +
+                        colorize( total_durability_text, total_durability_color ) );
+
+    stat( wheel_state_description( *veh ) );
+
+    vehicle_part *mostDamagedPart = get_most_damaged_part();
+    vehicle_part *most_repairable = get_most_repariable_part();
+    if( mostDamagedPart && mostDamagedPart->damage_percent() ) {
+        const std::string damaged_header = mostDamagedPart == most_repairable ?
+                                           _( "Most damaged:" ) :
+                                           _( "Most damaged (can't repair):" );
+        stat( damaged_header + " " + mostDamagedPart->name() );
+    }
+    if( most_repairable && most_repairable != mostDamagedPart ) {
+        const std::string needsRepair = _( "Needs repair:" );
+        stat( needsRepair + " " + most_repairable->name() );
+    }
+
+    stat( string_format(
+              _( "Air drag:       <color_light_blue>%5.2f</color>" ),
+              veh->coeff_air_drag() ) );
+    if( is_boat ) {
+        stat( string_format(
+                  _( "Water drag:     <color_light_blue>%5.2f</color>" ),
+                  veh->coeff_water_drag() ) );
+    }
+    if( is_ground ) {
+        stat( string_format(
+                  _( "Rolling drag:   <color_light_blue>%5.2f</color>" ),
+                  veh->coeff_rolling_drag() ) );
+    }
+    stat( string_format(
+              _( "Static drag:    <color_light_blue>%5d</color>" ),
+              veh->static_drag( false ) ) );
+    stat( string_format(
+              _( "Offroad:        <color_light_blue>%4d</color>%%" ),
+              static_cast<int>( veh->k_traction( veh->wheel_area() *
+                                      veh->average_or_rating() ) * 100 ) ) );
+    if( is_boat ) {
+        const double water_clearance = veh->water_hull_height() - veh->water_draft();
+        std::string draft_string = water_clearance > 0 ?
+                                   _( "Draft/Clearance:<color_light_blue>%4.2f</color>m/<color_light_blue>%4.2f</color>m" ) :
+                                   _( "Draft/Clearance:<color_light_blue>%4.2f</color>m/<color_light_red>%4.2f</color>m" );
+        stat( string_format( draft_string, veh->water_draft(), water_clearance ) );
+    }
+
+    return lines;
+}
+
 void veh_interact::display_name()
 {
     werase( w_name );
@@ -2999,8 +3143,22 @@ void veh_interact::sync_rml()
         rml_data->mode_rml = cata_text_to_rml( bar );
     }
 
+    // Stats pane (slice 2; parallels display_stats — see stats_lines()). One
+    // line per stat, joined with \n; the pane uses white-space:pre-wrap.
+    {
+        std::string s;
+        for( const std::string &ln : stats_lines() ) {
+            if( !s.empty() ) {
+                s += "\n";
+            }
+            s += ln;
+        }
+        rml_data->stats_rml = cata_text_to_rml( s );
+    }
+
     rml_data->handle.DirtyVariable( "mode_rml" );
     rml_data->handle.DirtyVariable( "name_rml" );
+    rml_data->handle.DirtyVariable( "stats_rml" );
 }
 
 /**
