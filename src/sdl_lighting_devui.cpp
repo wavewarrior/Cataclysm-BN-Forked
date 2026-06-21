@@ -712,6 +712,7 @@ void devui_rml_open()
     c.Bind( "pickup", &pickup_rmlui_enabled() );
     c.Bind( "veh_interact", &veh_interact_rmlui_enabled() );
     c.Bind( "gamemode_defense", &gamemode_defense_rmlui_enabled() );
+    c.Bind( "list_monsters", &list_monsters_rmlui_enabled() );
     c.Bind( "inventory", &inventory_rmlui_enabled() );
     c.Bind( "advanced_inv", &advanced_inv_rmlui_enabled() );
     c.Bind( "compare_items", &compare_items_rmlui_enabled() );

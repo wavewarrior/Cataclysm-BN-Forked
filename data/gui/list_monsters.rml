@@ -1,0 +1,34 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="list_monsters.rcss"/>
+</head>
+<body data-model="list_monsters">
+    <!-- §8.1 gate-blocker backlog: the nearby-monster list (game::list_monsters,
+         the `m` screen). A right-docked panel: a header (<Tab> Monsters + the
+         active/total counter), a scrolling list of nearby creatures (magenta
+         attitude-category headers interspersed with monster/npc rows — each row
+         a coloured name on the left + an HP-bar/attitude/distance cluster on the
+         right), the selected creature's info pane (Creature::print_info_text() —
+         the shared trio producer), and a footer hint line. Render-only: the
+         keyboard owns cursor nav / safemode blacklist / look / fire; the doc is
+         synced each frame from monster_list/iActive. The curses calcStartPos
+         windowing is dropped for native scroll (selected row scrolled into view
+         on move). Per-segment colour is baked via cata_text_to_rml. -->
+    <div class="panel lm-panel">
+        <div class="lm-header" data-rml="header_rml"></div>
+        <div id="lm-list" class="lm-list scroll-pane">
+            <div data-if="empty" class="lm-empty" data-rml="empty_rml"></div>
+            <div class="lm-row" data-for="r : rows" data-class-selected="r.selected"
+                 data-class-cat="r.is_cat">
+                <span class="lm-cat" data-if="r.is_cat" data-rml="r.cat_rml"></span>
+                <span class="lm-name" data-if="!r.is_cat" data-rml="r.name_rml"></span>
+                <span class="lm-meta" data-if="!r.is_cat" data-rml="r.meta_rml"></span>
+            </div>
+        </div>
+        <div class="lm-info-title" data-rml="info_title_rml"></div>
+        <div id="lm-info" class="lm-info scroll-pane" data-rml="info_rml"></div>
+        <div class="lm-footer" data-rml="footer_rml"></div>
+    </div>
+</body>
+</rml>

@@ -242,6 +242,15 @@ bool &martialarts_rmlui_enabled();
 // each frame); native scroll. Default OFF.
 bool &pickup_rmlui_enabled();
 
+// game::list_monsters RmlUi render path (the nearby-monster `m` list: §8.1
+// gate-blocker backlog, track-A creature-info). A right-docked panel: header +
+// counter, a scrolling list (attitude-category headers + creature rows with a
+// name + HP-bar/attitude/distance cluster), the selected creature's info pane
+// (Creature::print_info_text() — the shared monster/npc producer), and a footer.
+// Render-only (keyboard owns nav / safemode / look / fire; synced each frame);
+// native scroll. Default OFF.
+bool &list_monsters_rmlui_enabled();
+
 // veh_interact RmlUi render path (the vehicle interaction screen: §8.1
 // gate-blocker backlog, THE GIANT — migrated in slices). Slice 1 = lifecycle
 // harness + the vehicle name + the action mode bar; later slices add stats /

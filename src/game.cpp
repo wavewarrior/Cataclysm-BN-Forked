@@ -154,7 +154,9 @@
 #include "overmap_ui.h"
 #include "overmapbuffer.h"
 #include "panels.h"
+#include <RmlUi/Core.h>
 #include "rml_screen.h"
+#include "rml_util.h"
 #include "sidebar_anim.h"
 #include "path_info.h"
 #include "pathfinding.h"
@@ -10984,6 +10986,59 @@ game::vmenu_ret game::list_items( const std::vector<map_item_stack> &item_list )
     return game::vmenu_ret::QUIT;
 }
 
+// ---- list_monsters RmlUi render path (§8.1 gate-blocker backlog) -----------
+// The nearby-monster list (`m`). Render-only doc: the keyboard owns cursor nav /
+// safemode blacklist / look / fire; the model is synced each frame. The info
+// pane is fed by Creature::print_info_text() — the shared monster/npc producer
+// that is the "creature-info trio" component (curses print_info untouched for the
+// A/B toggle). Native scroll replaces the curses calcStartPos windowing.
+namespace
+{
+struct lm_rml_row {
+    bool is_cat = false;
+    Rml::String cat_rml;
+    Rml::String name_rml;
+    Rml::String meta_rml;
+    bool selected = false;
+};
+struct lm_rml_data {
+    Rml::String header_rml;
+    Rml::Vector<lm_rml_row> rows;
+    bool empty = false;
+    Rml::String empty_rml;
+    Rml::String info_title_rml;
+    Rml::String info_rml;
+    Rml::String footer_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_list_monsters_types_registered = false;
+
+void register_list_monsters_rml_types( Rml::DataModelConstructor &c )
+{
+    // RegisterStruct/Array are context-global and persist past RemoveDataModel —
+    // guard so a reopen doesn't double-register (uilist-proven pattern).
+    if( g_list_monsters_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<lm_rml_row> rh = c.RegisterStruct<lm_rml_row>();
+    rh.RegisterMember( "is_cat", &lm_rml_row::is_cat );
+    rh.RegisterMember( "cat_rml", &lm_rml_row::cat_rml );
+    rh.RegisterMember( "name_rml", &lm_rml_row::name_rml );
+    rh.RegisterMember( "meta_rml", &lm_rml_row::meta_rml );
+    rh.RegisterMember( "selected", &lm_rml_row::selected );
+    c.RegisterArray<Rml::Vector<lm_rml_row>>();
+    g_list_monsters_types_registered = true;
+}
+} // namespace
+
+bool &list_monsters_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = false;
+    return enabled;
+}
+
 game::vmenu_ret game::list_monsters( const std::vector<Creature *> &monster_list )
 {
     const int iInfoHeight = 15;
@@ -11063,7 +11118,165 @@ game::vmenu_ret game::list_monsters( const std::vector<Creature *> &monster_list
         }
     }
 
+    // ---- RmlUi render path (F.3 rml_doc harness) ------------------------
+    // `rml_data` before `rml` so the doc tears down while the model is alive.
+    // The doc is rebuilt each frame from the live cursor state; the keyboard owns
+    // all nav / safemode / look / fire. The info pane is Creature::print_info_text()
+    // (the shared monster/npc producer). Native scroll replaces the curses
+    // calcStartPos windowing. During the nested look_around() (hide_ui) the doc is
+    // hidden, matching the curses path zeroing the windows.
+    std::unique_ptr<lm_rml_data> rml_data;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml || !rml_data ) {
+            return;
+        }
+        lm_rml_data &d = *rml_data;
+
+        d.empty = monster_list.empty();
+        d.empty_rml = rml_escape( _( "You don't see any monsters around you!" ) );
+
+        // Header: "Monsters   active / total" (curses border title + counter).
+        d.header_rml = cata_text_to_rml( string_format( "%s   %s",
+                                         colorize( _( "Monsters" ), c_white ),
+                                         colorize( string_format( "%d / %d",
+                                                 monster_list.empty() ? 0 : iActive + 1,
+                                                 static_cast<int>( monster_list.size() ) ), c_light_green ) ) );
+
+        // Rows: replicate the curses combined walk (attitude-category headers
+        // interspersed with creature rows) WITHOUT the calcStartPos window.
+        d.rows.clear();
+        int iCurMon = 0;
+        auto CatSortIter = mSortCategory.cbegin();
+        const int combined = static_cast<int>( monster_list.size() + mSortCategory.size() );
+        for( int pos = 0; pos < combined; ++pos ) {
+            if( player_knows && CatSortIter != mSortCategory.cend() && CatSortIter->first == pos ) {
+                lm_rml_row row;
+                row.is_cat = true;
+                row.cat_rml = cata_text_to_rml( colorize(
+                                                    Creature::get_attitude_ui_data( CatSortIter->second ).first.translated(),
+                                                    c_magenta ) );
+                d.rows.push_back( std::move( row ) );
+                ++CatSortIter;
+                continue;
+            }
+            if( iCurMon >= static_cast<int>( monster_list.size() ) ) {
+                break;
+            }
+            Creature *critter = monster_list[iCurMon];
+            const bool selected = iCurMon == iActive;
+            const monster *m = dynamic_cast<monster *>( critter );
+
+            lm_rml_row row;
+            row.selected = selected;
+
+            // Name, with a leading "!" when the creature can see the avatar.
+            std::string name_str = colorize( m != nullptr ? m->name() : critter->disp_name(),
+                                             critter->basic_symbol_color() );
+            if( player_knows && critter->sees( u ) ) {
+                name_str = colorize( "! ", c_yellow ) + name_str;
+            }
+            row.name_rml = cata_text_to_rml( name_str );
+
+            // Meta cluster: HP bar (player_knows) + attitude + distance/direction.
+            std::string meta;
+            if( player_knows ) {
+                nc_color hp_color = c_white;
+                std::string hp_bar;
+                if( m != nullptr ) {
+                    m->get_HP_Bar( hp_color, hp_bar );
+                } else {
+                    std::tie( hp_bar, hp_color ) =
+                        ::get_hp_bar( critter->get_hp(), critter->get_hp_max(), false );
+                }
+                meta += colorize( hp_bar, hp_color );
+                for( int i = 0, bw = utf8_width( hp_bar ); i < 5 - bw; ++i ) {
+                    meta += colorize( ".", c_white );
+                }
+                meta += " ";
+            }
+            std::string att_str;
+            nc_color att_color = c_white;
+            if( m != nullptr ) {
+                const std::pair<std::string, nc_color> att = m->get_attitude();
+                att_str = att.first;
+                att_color = att.second;
+            } else if( const npc *p = dynamic_cast<npc *>( critter ) ) {
+                att_str = npc_attitude_name( p->get_attitude() );
+                att_color = p->symbol_color();
+            }
+            meta += colorize( att_str, att_color ) + "  ";
+            const int mon_dist = rl_dist( u.bub_pos(), critter->bub_pos() );
+            meta += colorize( string_format( "%d %s", mon_dist,
+                                             direction_name_short( direction_from( u.bub_pos(), critter->bub_pos() ) ) ),
+                              selected ? c_light_green : c_light_gray );
+            row.meta_rml = cata_text_to_rml( meta );
+
+            d.rows.push_back( std::move( row ) );
+            ++iCurMon;
+        }
+
+        // Info pane: the selected creature's print_info_text() (shared producer).
+        d.info_rml = cCurMon != nullptr ? cata_text_to_rml( cCurMon->print_info_text() )
+                     : Rml::String();
+
+        // Info title: the look/fire border hints (only when invoked from firing).
+        std::string title;
+        if( bVMonsterLookFire ) {
+            title += string_format( _( "[%s] to look around" ), ctxt.get_desc( "look", 1 ) );
+            if( cCurMon && rl_dist( u.bub_pos(), cCurMon->bub_pos() ) <= max_gun_range ) {
+                title += string_format( "   [%s] to shoot", ctxt.get_desc( "fire", 1 ) );
+            }
+        }
+        d.info_title_rml = rml_escape( title );
+
+        // Footer: tab hint + the selected creature's safemode blacklist toggle.
+        std::string footer = string_format( _( "[%s] Monsters" ), ctxt.get_desc( "NEXT_TAB", 1 ) );
+        if( cCurMon && !get_safemode().empty() ) {
+            const monster *sm = dynamic_cast<monster *>( cCurMon );
+            const std::string monName = sm != nullptr ? sm->name() : get_safemode().npc_type_name();
+            if( get_safemode().has_rule( monName, Attitude::A_ANY ) ) {
+                footer += string_format( _( "   [%s] Remove from safemode blacklist" ),
+                                         ctxt.get_desc( "SAFEMODE_BLACKLIST_REMOVE", 1 ) );
+            } else {
+                footer += string_format( _( "   [%s] Add to safemode blacklist" ),
+                                         ctxt.get_desc( "SAFEMODE_BLACKLIST_ADD", 1 ) );
+            }
+        }
+        d.footer_rml = rml_escape( footer );
+
+        d.handle.DirtyVariable( "header_rml" );
+        d.handle.DirtyVariable( "rows" );
+        d.handle.DirtyVariable( "empty" );
+        d.handle.DirtyVariable( "empty_rml" );
+        d.handle.DirtyVariable( "info_title_rml" );
+        d.handle.DirtyVariable( "info_rml" );
+        d.handle.DirtyVariable( "footer_rml" );
+    };
+    rml.open( list_monsters_rmlui_enabled(), "list_monsters", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        rml_data = std::make_unique<lm_rml_data>();
+        register_list_monsters_rml_types( c );
+        c.Bind( "header_rml", &rml_data->header_rml );
+        c.Bind( "rows", &rml_data->rows );
+        c.Bind( "empty", &rml_data->empty );
+        c.Bind( "empty_rml", &rml_data->empty_rml );
+        c.Bind( "info_title_rml", &rml_data->info_title_rml );
+        c.Bind( "info_rml", &rml_data->info_rml );
+        c.Bind( "footer_rml", &rml_data->footer_rml );
+        rml_data->handle = c.GetModelHandle();
+    } );
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        // RmlUi path owns the panel — hide during the nested look_around, else
+        // sync the model and skip the curses draw.
+        if( rml ) {
+            rml.document()->SetProperty( "visibility", hide_ui ? "hidden" : "visible" );
+            if( !hide_ui ) {
+                sync_rml();
+            }
+            return;
+        }
         if( !hide_ui ) {
             draw_custom_border( w_monsters_border, true, true, true, true, true, true, LINE_XOXO, LINE_XOXO );
             draw_custom_border( w_monster_info_border, true, true, true, true, LINE_XXXO, LINE_XOXX, true,
