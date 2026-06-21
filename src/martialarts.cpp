@@ -41,6 +41,11 @@
 #include "ui_manager.h"
 #include "value_ptr.h"
 
+#include <RmlUi/Core.h>
+
+#include "rml_screen.h"
+#include "rml_util.h"
+
 static const skill_id skill_unarmed( "unarmed" );
 
 static const bionic_id bio_armor_arms( "bio_armor_arms" );
@@ -1539,6 +1544,30 @@ struct cat_order {
     }
 };
 
+// ── RmlUi render path (full UI→RmlUi migration, §8.1 gate-blocker backlog) ────
+// The martial-arts style DESCRIPTION popup (ma_style_callback::key,
+// SHOW_DESCRIPTION). The style PICKER is a uilist (Tier-0); this doc is only the
+// scrolling description that opens over it. A single static text pane: the
+// colour-tagged writeup via cata_text_to_rml(replace_colors(...)), wrapped
+// natively, scrolled by UP/DOWN/PAGE (the curses line-offset windowing + border
+// title + scrollbar are dropped — semantic). Two scalar string binds, so no
+// struct/array registration is needed.
+namespace
+{
+struct ma_desc_rml_data {
+    Rml::String title_rml;
+    Rml::String body_rml;
+    Rml::DataModelHandle handle;
+};
+} // namespace
+
+bool &martialarts_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = false;
+    return enabled;
+}
+
 bool ma_style_callback::key( const input_context &ctxt, const input_event &event, int entnum,
                              uilist * )
 {
@@ -1709,6 +1738,12 @@ bool ma_style_callback::key( const input_context &ctxt, const input_event &event
         int iLines = 0;
         int selected = 0;
 
+        // RmlUi render path: `rml_data` before `rml` so the doc tears down while
+        // the bound model is alive. Static content (model built once at open);
+        // on_redraw skips the curses draw and UP/DOWN/PAGE scroll the pane.
+        std::unique_ptr<ma_desc_rml_data> rml_data;
+        rml_doc rml;
+
         ui_adaptor ui;
         ui.on_screen_resize( [&]( ui_adaptor & ui ) {
             w = catacurses::newwin( FULL_SCREEN_HEIGHT, FULL_SCREEN_WIDTH,
@@ -1739,7 +1774,28 @@ bool ma_style_callback::key( const input_context &ctxt, const input_event &event
         ict.register_action( "QUIT" );
         ict.register_action( "HELP_KEYBINDINGS" );
 
+        // Open (or no-op) the RmlUi description doc — open()'s set_timeout(16)
+        // lands on `ict`. Build the model ONCE (the writeup is static): title +
+        // the colour-tagged body (replace_colors already applied → cata_text_to_rml).
+        rml.open( martialarts_rmlui_enabled(), "martialarts", ict,
+        [&]( Rml::DataModelConstructor & c ) {
+            rml_data = std::make_unique<ma_desc_rml_data>();
+            c.Bind( "title_rml", &rml_data->title_rml );
+            c.Bind( "body_rml", &rml_data->body_rml );
+            rml_data->handle = c.GetModelHandle();
+        } );
+        if( rml ) {
+            rml_data->title_rml = rml_escape( string_format( _( "Style: %s" ), ma.name ) );
+            rml_data->body_rml = cata_text_to_rml( text );
+            rml_data->handle.DirtyVariable( "title_rml" );
+            rml_data->handle.DirtyVariable( "body_rml" );
+        }
+
         ui.on_redraw( [&]( const ui_adaptor & ) {
+            // RmlUi path renders the doc itself — skip the curses draw.
+            if( rml ) {
+                return;
+            }
             werase( w );
             fold_and_print_from( w, point( 2, 1 ), width, selected, c_light_gray, text );
             draw_border( w, BORDER_COLOR, string_format( _( " Style: %s " ), ma.name ) );
@@ -1770,6 +1826,23 @@ bool ma_style_callback::key( const input_context &ctxt, const input_event &event
                 selected += scroll_lines;
             } else if( action == "PAGE_UP" ) {
                 selected -= scroll_lines;
+            }
+
+            // RmlUi path: the `selected` line-offset above is invisible (the doc
+            // wraps + scrolls natively), so mirror the scroll keys onto the pane.
+            if( rml ) {
+                if( Rml::Element *e = rml.document()->GetElementById( "ma-body" ) ) {
+                    const float page = e->GetClientHeight();
+                    if( action == "DOWN" ) {
+                        e->SetScrollTop( e->GetScrollTop() + 18.0f );
+                    } else if( action == "UP" ) {
+                        e->SetScrollTop( e->GetScrollTop() - 18.0f );
+                    } else if( action == "PAGE_DOWN" ) {
+                        e->SetScrollTop( e->GetScrollTop() + page );
+                    } else if( action == "PAGE_UP" ) {
+                        e->SetScrollTop( e->GetScrollTop() - page );
+                    }
+                }
             }
         } while( true );
     }

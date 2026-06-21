@@ -1,0 +1,20 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="martialarts.rcss"/>
+</head>
+<body data-model="martialarts">
+    <!-- §8.1 gate-blocker backlog: the martial-arts STYLE DESCRIPTION popup
+         (ma_style_callback::key, SHOW_DESCRIPTION). The style PICKER itself is a
+         uilist (Tier-0); this doc is only the scrolling description that opens
+         over it. A single text pane: the colour-tagged style writeup
+         (replace_colors → cata_text_to_rml), wrapped natively, scrolled by
+         UP/DOWN/PAGE. The curses border title + scrollbar are dropped (semantic
+         rewrite); native RmlUi scroll replaces the line-offset windowing.
+         Static for the view → model built once at open. Render-only. -->
+    <div class="panel ma-panel">
+        <div class="ma-title" data-rml="title_rml"></div>
+        <div id="ma-body" class="ma-body scroll-pane" data-rml="body_rml"></div>
+    </div>
+</body>
+</rml>

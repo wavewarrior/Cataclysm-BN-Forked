@@ -229,4 +229,10 @@ bool &messages_rmlui_enabled();
 // Static for the view (model built once); native scroll. Render-only; default OFF.
 bool &morale_rmlui_enabled();
 
+// ma_style_callback::key() SHOW_DESCRIPTION RmlUi render path (the martial-arts
+// style description popup: §8.1 gate-blocker backlog). A single scrolling text
+// pane over the Tier-0 uilist style picker; colour-tagged writeup, native scroll.
+// Render-only; default OFF.
+bool &martialarts_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

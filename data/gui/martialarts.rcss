@@ -1,0 +1,40 @@
+/* Layout for the martial-arts style description popup (§8.1 backlog:
+   ma_style_callback::key SHOW_DESCRIPTION). Palette/border/scrollbar/.scroll-pane
+   come from theme.rcss (linked first in martialarts.rml); this file owns only the
+   screen's own layout. Lengths in dp.
+
+   A single scrolling text pane. white-space:pre-wrap preserves the writeup's
+   newlines (cata_text_to_rml leaves \n untouched) while still wrapping long
+   lines. Per-segment colour is baked into body_rml via
+   cata_text_to_rml(replace_colors(...)), so this file only positions. */
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.ma-panel {
+    width: 70%;
+    max-width: 720dp;
+    height: 80%;
+    display: flex;
+    flex-direction: column;
+}
+
+.ma-title {
+    flex: 0 0 auto;
+    text-align: center;
+    color: {{yellow}};
+    font-weight: bold;
+    border-bottom: 1dp {{bg4}};
+    padding-bottom: 4dp;
+    margin-bottom: 4dp;
+}
+
+.ma-body {
+    flex: 1;
+    min-height: 0;
+    white-space: pre-wrap;
+}

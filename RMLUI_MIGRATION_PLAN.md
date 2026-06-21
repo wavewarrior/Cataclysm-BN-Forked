@@ -74,10 +74,10 @@ options=2, **newcharacter=16 (8 slices)**, main_menu=2, worldfactory=4 sessions;
    UNDERCOUNTS.** The enumerated tiers 0–9 are code-done-pending-eyeball, BUT the sweep found
    **~12 interactive curses screens never listed in any tier** that still block the rip-out
    (DONE so far: `character_display` @ sheet + full `messages` log — both eyeball-CONFIRMED clean
-   2026-06-21; `morale` — toggle-OFF/eyeball-owed):
+   2026-06-21; `morale` + `martialarts` — toggle-OFF/eyeball-owed):
    `veh_interact`/`vehicle_display`, `gamemode_defense`, `magic`/
    `magic_teleporter_list`, `monster`/`mtype`/`npc` info,
-   `martialarts`, `pickup`, `dialogue_win`. PLUS a font-layer straggler the primitive sweep
+   `pickup`, `dialogue_win`. PLUS a font-layer straggler the primitive sweep
    structurally missed: `loading_ui` splash author text draws via the curses `Font` directly
    (`draw_sdl_text_outlined`→`draw_string`) — a gate-step-4 blocker, not step-2. See §8.1 for
    the full table + the corrected 3-part Tier-10 readiness gate. "~90% by screen count" is true
@@ -2989,8 +2989,23 @@ the set difference is below. Reproduce: see the per-file `mvwprintz` density gre
   red with percent values matching curses; Total positive/negative caption rows; bottom Total
   morale + Pain + Fatigue cap (when present) + Focus trend match the curses numbers; UP/DOWN scroll
   a long list; empty case shows "Nothing affects your morale".
+- **`martialarts` (ma_style_callback::key SHOW_DESCRIPTION) — DONE (build-green Metal, toggle OFF,
+  eyeball owed), UNCOMMITTED.** Cleanest §8.1 screen yet. The style PICKER is a uilist (Tier-0
+  covered); this migrates only the scrolling style-DESCRIPTION popup that opens over it. A single
+  static text pane: the colour-tagged writeup via `cata_text_to_rml(replace_colors(buffer))`
+  (`replace_colors` expands the `<info>`/`<good>`/`<bold>`/`<stat>` shorthand tags to `<color_x>`
+  that cata_text_to_rml understands; `\n` survives → `white-space:pre-wrap` line breaks). TWO scalar
+  string binds (title + body) — no struct/array registration needed. Model built ONCE at open;
+  `on_redraw` skips curses; UP/DOWN/PAGE scroll `#ma-body` natively (curses line-offset windowing +
+  border title + scrollbar dropped). Composites OVER the uilist's own RmlUi doc (distinct model
+  names → both open fine). `rml_doc` opened after the `ict` context (open's `set_timeout(16)`).
+  `data/gui/martialarts.{rml,rcss}` + `martialarts` toggle + F4 checkbox + devui bind. **EYEBALL A/B
+  (F4 "martial arts desc"):** open the MA style picker, SHOW_DESCRIPTION (usually `?`/a key) on a
+  style → description shows over the picker with colours (info cyan, good green, bad red, bold
+  white, "[have]" mutations light-cyan); UP/DOWN/PAGE scroll a long writeup; title "Style: <name>";
+  ESC/QUIT closes back to the picker.
 - Remaining backlog: veh_interact / gamemode_defense / magic / monster·mtype·npc
-  info / martialarts / pickup / dialogue_win + the 3 font-layer stragglers.
+  info / pickup / dialogue_win + the 3 font-layer stragglers.
 
 **GATE-BLOCKER BACKLOG — unmigrated interactive screens (no toggle, curses redraw, rml_refs=0):**
 
@@ -3003,7 +3018,7 @@ the set difference is below. Reproduce: see the per-file `mvwprintz` density gre
 | ~~`messages`~~ **DONE** | 9 | 7 | The full message-LOG screen (ESC log). Tier-7 sidebar log MVP ≠ this. Migrated (toggle OFF, eyeball owed): scrolling time+text pane, native scroll, filter overlay stays Tier-0. |
 | `monster` / `mtype` | 13 / 14 | helper | Monster-info popups (only the `*_faction_display` slice was reused at Tier 2). |
 | `npc` | 11 | helper | NPC info (only the faction-display slice migrated). |
-| ~~`morale`~~ **DONE** / `martialarts` / `pickup` | 1 / 0 / 4 | 3 / 3 / 3 | Small unlisted screens (morale screen — migrated, toggle OFF, eyeball owed; MA-style pick, pickup menu still open). |
+| ~~`morale`~~ **DONE** / ~~`martialarts`~~ **DONE** / `pickup` | 1 / 0 / 4 | 3 / 3 / 3 | Small unlisted screens (morale + MA-style description migrated, toggle OFF, eyeball owed; pickup menu still open). |
 | `dialogue_win` | 12 | 1 | Dialogue/trade subwindow helper (separate from migrated `npctalk`). |
 
 **★ FONT-LAYER STRAGGLER the primitive sweep MISSED — `loading_ui` splash author text

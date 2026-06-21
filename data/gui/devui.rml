@@ -46,6 +46,7 @@
                 <label class="devui-row"><input type="checkbox" value="1" data-checked="character_display"/> character sheet</label>
                 <label class="devui-row"><input type="checkbox" value="1" data-checked="messages"/> message log</label>
                 <label class="devui-row"><input type="checkbox" value="1" data-checked="morale"/> morale</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="martialarts"/> martial arts desc</label>
 
                 <div class="devui-section">Items &amp; inventory</div>
                 <label class="devui-row"><input type="checkbox" value="1" data-checked="inventory"/> inventory (all selectors)</label>

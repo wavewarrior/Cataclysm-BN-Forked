@@ -708,6 +708,7 @@ void devui_rml_open()
     c.Bind( "character_display", &character_display_rmlui_enabled() );
     c.Bind( "messages", &messages_rmlui_enabled() );
     c.Bind( "morale", &morale_rmlui_enabled() );
+    c.Bind( "martialarts", &martialarts_rmlui_enabled() );
     c.Bind( "inventory", &inventory_rmlui_enabled() );
     c.Bind( "advanced_inv", &advanced_inv_rmlui_enabled() );
     c.Bind( "compare_items", &compare_items_rmlui_enabled() );
