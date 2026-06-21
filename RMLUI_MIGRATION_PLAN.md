@@ -74,10 +74,10 @@ options=2, **newcharacter=16 (8 slices)**, main_menu=2, worldfactory=4 sessions;
    UNDERCOUNTS.** The enumerated tiers 0–9 are code-done-pending-eyeball, BUT the sweep found
    **~12 interactive curses screens never listed in any tier** that still block the rip-out
    (DONE so far: `character_display` @ sheet + full `messages` log — both eyeball-CONFIRMED clean
-   2026-06-21; `morale` + `martialarts` — toggle-OFF/eyeball-owed):
+   2026-06-21; `morale` + `martialarts` + `pickup` — toggle-OFF/eyeball-owed):
    `veh_interact`/`vehicle_display`, `gamemode_defense`, `magic`/
    `magic_teleporter_list`, `monster`/`mtype`/`npc` info,
-   `pickup`, `dialogue_win`. PLUS a font-layer straggler the primitive sweep
+   `dialogue_win`. PLUS a font-layer straggler the primitive sweep
    structurally missed: `loading_ui` splash author text draws via the curses `Font` directly
    (`draw_sdl_text_outlined`→`draw_string`) — a gate-step-4 blocker, not step-2. See §8.1 for
    the full table + the corrected 3-part Tier-10 readiness gate. "~90% by screen count" is true
@@ -3004,8 +3004,27 @@ the set difference is below. Reproduce: see the per-file `mvwprintz` density gre
   style → description shows over the picker with colours (info cyan, good green, bad red, bold
   white, "[have]" mutations light-cyan); UP/DOWN/PAGE scroll a long writeup; title "Style: <name>";
   ESC/QUIT closes back to the picker.
+- **`pickup` (pick_up_from_items) — DONE (build-green Metal, toggle OFF, eyeball owed),
+  UNCOMMITTED.** Biggest §8.1 screen so far — the item PICKUP menu: a multi-select list (hotkey
+  char + parent/pick mark + item name, selected row highlighted) over a scrolling item-info pane,
+  plus a weight/volume header + footer hint line. RENDER-ONLY: the doc is rebuilt each frame
+  (`sync_rml` in on_redraw) from `getitem[]`/`matches`/`selected`; ALL marking / count entry /
+  filter / paging stay on the keyboard (+ the Tier-0 `string_input` filter popup). The curses
+  `start`/`maxitems` paging is DROPPED for native scroll — the selected row is `ScrollIntoView`'d on
+  change (via `#pu-list`'s child[selected], guarded; refine if it snaps oddly). The row name logic
+  (money formatting / stack count / ITEM_SYMBOLS / stolen-`!` marker) is reproduced verbatim from
+  the curses draw (curses path pristine); item-info pane = `format_item_info(sel.info(temp), {})` →
+  cata_text_to_rml (ad-hoc text, same as crafting — the Tier-3 item-info F.2 component is still
+  pending). `data/gui/pickup.{rml,rcss}` + `pickup` toggle + F4 checkbox + devui bind. **EYEBALL A/B
+  (F4 "pickup menu") — exercise the multi-select state, not just the layout:** mark/unmark
+  (RIGHT/LEFT) flips the +/#/- mark + recomputes the Wgt/Vol header; the selected row highlights and
+  stays in view on UP/DOWN through a LONG list (the scroll-into-view check); count entry (digits)
+  shows `#`; SELECT_ALL marks all; FILTER narrows the list (curses popup composites on top); the
+  info pane matches the curses item info; parent/child marks (containers) colour right; CONFIRM
+  picks up, QUIT cancels. **WATCH:** selected-row text keeps its item colour over the accent bg
+  (curses used hilite-white); info/name pre-folded widths cosmetic (crafting precedent).
 - Remaining backlog: veh_interact / gamemode_defense / magic / monster·mtype·npc
-  info / pickup / dialogue_win + the 3 font-layer stragglers.
+  info / dialogue_win + the 3 font-layer stragglers.
 
 **GATE-BLOCKER BACKLOG — unmigrated interactive screens (no toggle, curses redraw, rml_refs=0):**
 
@@ -3018,7 +3037,7 @@ the set difference is below. Reproduce: see the per-file `mvwprintz` density gre
 | ~~`messages`~~ **DONE** | 9 | 7 | The full message-LOG screen (ESC log). Tier-7 sidebar log MVP ≠ this. Migrated (toggle OFF, eyeball owed): scrolling time+text pane, native scroll, filter overlay stays Tier-0. |
 | `monster` / `mtype` | 13 / 14 | helper | Monster-info popups (only the `*_faction_display` slice was reused at Tier 2). |
 | `npc` | 11 | helper | NPC info (only the faction-display slice migrated). |
-| ~~`morale`~~ **DONE** / ~~`martialarts`~~ **DONE** / `pickup` | 1 / 0 / 4 | 3 / 3 / 3 | Small unlisted screens (morale + MA-style description migrated, toggle OFF, eyeball owed; pickup menu still open). |
+| ~~`morale`~~ **DONE** / ~~`martialarts`~~ **DONE** / ~~`pickup`~~ **DONE** | 1 / 0 / 4 | 3 / 3 / 3 | Small unlisted screens — all three migrated (toggle OFF, eyeball owed). morale screen, MA-style description, item pickup menu. |
 | `dialogue_win` | 12 | 1 | Dialogue/trade subwindow helper (separate from migrated `npctalk`). |
 
 **★ FONT-LAYER STRAGGLER the primitive sweep MISSED — `loading_ui` splash author text

@@ -235,4 +235,11 @@ bool &morale_rmlui_enabled();
 // Render-only; default OFF.
 bool &martialarts_rmlui_enabled();
 
+// pickup.cpp pick_up_from_items() RmlUi render path (the item pickup menu: §8.1
+// gate-blocker backlog). A multi-select list (hotkey + parent/pick mark + name,
+// selected row highlighted) over a scrolling item-info pane, with a weight/volume
+// header + footer hints. Render-only (keyboard owns marking/counts/filter; synced
+// each frame); native scroll. Default OFF.
+bool &pickup_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

@@ -67,6 +67,11 @@
 #include "vehicle_selector.h"
 #include "vpart_position.h"
 
+#include <RmlUi/Core.h>
+
+#include "rml_screen.h"
+#include "rml_util.h"
+
 static const trait_id trait_DEBUG_STORAGE( "DEBUG_STORAGE" );
 
 using item_count = std::pair<item *, int>;
@@ -612,8 +617,54 @@ std::vector<std::list<item_stack::iterator>> flatten( const std::vector<stacked_
 
 } // namespace pickup
 
+// ── RmlUi render path (full UI→RmlUi migration, §8.1 gate-blocker backlog) ────
+// The item pickup menu (pick_up_from_items, below). A multi-select list (hotkey
+// char + parent/pick mark + item name, selected row highlighted) over a scrolling
+// item-info pane, with a weight/volume header and a footer hint line. Render-only:
+// the doc is rebuilt each frame from getitem[]/matches/selected; all marking /
+// count entry / filter / paging stay on the keyboard (+ the Tier-0 string_input
+// filter popup). The curses start/maxitems windowing is dropped for native scroll
+// (selected row scrolled into view on move).
+bool &pickup_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = false;
+    return enabled;
+}
+
 namespace
 {
+
+struct pickup_rml_row {
+    Rml::String hotkey_rml;
+    Rml::String mark_rml;
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct pickup_rml_data {
+    Rml::String header_rml;
+    Rml::Vector<pickup_rml_row> rows;
+    Rml::String info_title_rml;
+    Rml::String info_body_rml;
+    Rml::String footer_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_pickup_types_registered = false;
+
+void register_pickup_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_pickup_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<pickup_rml_row> rh = c.RegisterStruct<pickup_rml_row>();
+    rh.RegisterMember( "hotkey_rml", &pickup_rml_row::hotkey_rml );
+    rh.RegisterMember( "mark_rml", &pickup_rml_row::mark_rml );
+    rh.RegisterMember( "name_rml", &pickup_rml_row::name_rml );
+    rh.RegisterMember( "selected", &pickup_rml_row::selected );
+    c.RegisterArray<Rml::Vector<pickup_rml_row>>();
+    g_pickup_types_registered = true;
+}
 
 auto append_item_iterators( item_stack &stack, std::vector<item_stack::iterator> &items ) -> void
 {
@@ -749,7 +800,155 @@ auto pick_up_from_items( const std::vector<item_stack::iterator> &here, const in
 
         const std::string all_pickup_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ:;";
 
+        // ---- RmlUi render path (F.3 rml_doc harness) ------------------------
+        // `rml_data` before `rml` so the doc tears down while the model is alive.
+        // The doc is rebuilt each frame from the live selection/mark state; the
+        // keyboard owns all marking/counts/filter. Native scroll replaces the
+        // curses start/maxitems paging (selected row scrolled into view on move).
+        std::unique_ptr<pickup_rml_data> rml_data;
+        rml_doc rml;
+        const auto sync_rml = [&]() {
+            if( !rml || !rml_data ) {
+                return;
+            }
+            pickup_rml_data &d = *rml_data;
+            const std::string pickup_chars = ctxt.get_available_single_char_hotkeys( all_pickup_chars );
+
+            // Header: predicted weight / volume (mirrors the curses title line).
+            const std::string fmted_weight_predict = colorize(
+                        string_format( "%.1f", round_up( convert_weight( weight_predict ), 1 ) ),
+                        weight_predict > g->u.weight_capacity() ? c_red : c_white );
+            const std::string fmted_weight_capacity = string_format(
+                        "%.1f", round_up( convert_weight( g->u.weight_capacity() ), 1 ) );
+            const std::string fmted_volume_predict = colorize(
+                        format_volume( volume_predict ),
+                        volume_predict > g->u.volume_capacity() ? c_red : c_white );
+            const std::string fmted_volume_capacity = format_volume( g->u.volume_capacity() );
+            d.header_rml = cata_text_to_rml( string_format(
+                                                 _( "PICK Wgt %1$s/%2$s  Vol %3$s/%4$s" ),
+                                                 fmted_weight_predict, fmted_weight_capacity,
+                                                 fmted_volume_predict, fmted_volume_capacity ) );
+
+            // Rows (mirror the curses list draw, minus the start/maxitems window).
+            d.rows.clear();
+            for( int cur_it = 0; cur_it < static_cast<int>( matches.size() ); cur_it++ ) {
+                const int true_it = matches[cur_it];
+                const item &this_item = **stacked_here[true_it].front();
+                pickup_rml_row row;
+                row.selected = ( cur_it == selected );
+
+                // Hotkey label.
+                std::string key;
+                if( cur_it < static_cast<int>( pickup_chars.size() ) ) {
+                    key = std::string( 1, pickup_chars[cur_it] );
+                } else if( cur_it < static_cast<int>( pickup_chars.size() ) +
+                           static_cast<int>( pickup_chars.size() ) * static_cast<int>( pickup_chars.size() ) ) {
+                    const int p = cur_it - static_cast<int>( pickup_chars.size() );
+                    key = string_format( "`%c%c", pickup_chars[p / pickup_chars.size()],
+                                         pickup_chars[p % pickup_chars.size()] );
+                }
+                row.hotkey_rml = rml_escape( key );
+
+                // Mark column: parent marker + pick mark.
+                std::string mark;
+                if( getitem[true_it].parent ) {
+                    const pickup_count &parent = getitem[*getitem[true_it].parent];
+                    const nc_color pc = parent.pick ?
+                                        ( parent.all_children_picked ? c_light_blue : c_yellow ) : c_dark_gray;
+                    mark += colorize( "\\", pc );
+                } else {
+                    mark += " ";
+                }
+                if( getitem[true_it].pick ) {
+                    mark += colorize( getitem[true_it].count ? "# " : "+ ", c_light_blue );
+                } else {
+                    mark += "- ";
+                }
+                row.mark_rml = cata_text_to_rml( mark );
+
+                // Item name (money / stack count / ITEM_SYMBOLS / stolen-marker,
+                // exactly as the curses draw builds it).
+                std::string item_name;
+                if( ( *stacked_here[true_it].front() )->is_money() ) {
+                    unsigned int charges_total = 0;
+                    for( const item_stack::iterator &it : stacked_here[true_it] ) {
+                        charges_total += ( *it )->charges;
+                    }
+                    if( !getitem[true_it].pick || !getitem[true_it].count ) {
+                        item_name = ( *stacked_here[true_it].front() )->display_money( stacked_here[true_it].size(),
+                                    charges_total );
+                    } else {
+                        unsigned int charges = 0;
+                        const int item_count = getitem[true_it].count ? *getitem[true_it].count : 0;
+                        int c = item_count;
+                        for( std::list<item_stack::iterator>::const_iterator it = stacked_here[true_it].begin();
+                             it != stacked_here[true_it].end() && c > 0; ++it, --c ) {
+                            charges += ( **it )->charges;
+                        }
+                        item_name = ( *stacked_here[true_it].front() )->display_money( item_count, charges_total,
+                                    charges );
+                    }
+                } else {
+                    item_name = this_item.display_name( stacked_here[true_it].size() );
+                }
+                if( stacked_here[true_it].size() > 1 ) {
+                    item_name = string_format( "%d %s", stacked_here[true_it].size(), item_name );
+                }
+                if( get_option<bool>( "ITEM_SYMBOLS" ) ) {
+                    item_name = string_format( "%s %s", this_item.symbol().c_str(), item_name );
+                }
+                if( !this_item.is_owned_by( g->u, true ) ) {
+                    item_name = string_format( "<color_light_red>!</color> %s", item_name );
+                }
+                row.name_rml = cata_text_to_rml( colorize( item_name, this_item.color_in_inventory() ) );
+                d.rows.push_back( std::move( row ) );
+            }
+
+            // Info pane: selected item title + formatted info (the Tier-3
+            // item-info component is still ad-hoc text here — same as crafting).
+            if( !matches.empty() && selected >= 0 && selected < static_cast<int>( matches.size() ) ) {
+                const item &sel = **stacked_here[matches[selected]].front();
+                d.info_title_rml = cata_text_to_rml( colorize( string_format( "< %s >", sel.display_name() ),
+                                   sel.color_in_inventory() ) );
+                item *loc = *stacked_here[matches[selected]].front();
+                const temperature_flag temperature = rot::temperature_flag_for_location( get_map(), *loc );
+                d.info_body_rml = cata_text_to_rml( format_item_info( sel.info( temperature ), {} ) );
+            } else {
+                d.info_title_rml.clear();
+                d.info_body_rml.clear();
+            }
+
+            // Footer hints (mirror the curses footer keys).
+            d.footer_rml = rml_escape( string_format(
+                                           _( "[%s] Unmark  [%s] Mark  [%s] All  [%s] Prev  [%s] Next  [%s] Help" ),
+                                           ctxt.get_desc( "LEFT", 1 ), ctxt.get_desc( "RIGHT", 1 ),
+                                           ctxt.get_desc( "SELECT_ALL", 1 ), ctxt.get_desc( "PREV_TAB", 1 ),
+                                           ctxt.get_desc( "NEXT_TAB", 1 ), ctxt.get_desc( "HELP_KEYBINDINGS", 1 ) ) );
+
+            d.handle.DirtyVariable( "header_rml" );
+            d.handle.DirtyVariable( "rows" );
+            d.handle.DirtyVariable( "info_title_rml" );
+            d.handle.DirtyVariable( "info_body_rml" );
+            d.handle.DirtyVariable( "footer_rml" );
+        };
+        rml.open( pickup_rmlui_enabled(), "pickup", ctxt,
+        [&]( Rml::DataModelConstructor & c ) {
+            rml_data = std::make_unique<pickup_rml_data>();
+            register_pickup_rml_types( c );
+            c.Bind( "header_rml", &rml_data->header_rml );
+            c.Bind( "rows", &rml_data->rows );
+            c.Bind( "info_title_rml", &rml_data->info_title_rml );
+            c.Bind( "info_body_rml", &rml_data->info_body_rml );
+            c.Bind( "footer_rml", &rml_data->footer_rml );
+            rml_data->handle = c.GetModelHandle();
+        } );
+
         ui.on_redraw( [&]( const ui_adaptor & ) {
+            // RmlUi path owns the menu — sync the model and skip the curses draw.
+            if( rml ) {
+                sync_rml();
+                return;
+            }
             const item &selected_item = **stacked_here[matches[selected]].front();
 
             if( selected >= 0 && selected <= static_cast<int>( stacked_here.size() ) - 1 ) {
@@ -903,6 +1102,7 @@ auto pick_up_from_items( const std::vector<item_stack::iterator> &here, const in
 
         // Now print the two lists; those on the ground and about to be added to inv
         // Continue until we hit return or space
+        int rml_prev_selected = -1;
         do {
             const std::string pickup_chars = ctxt.get_available_single_char_hotkeys( all_pickup_chars );
             int idx = -1;
@@ -1157,6 +1357,19 @@ auto pick_up_from_items( const std::vector<item_stack::iterator> &here, const in
             }
 
             ui_manager::redraw();
+
+            // RmlUi path: keep the selected row visible when it moves (native
+            // scroll replaces the curses start/maxitems paging). Only on change
+            // so the list doesn't snap every frame.
+            if( rml && selected != rml_prev_selected ) {
+                rml_prev_selected = selected;
+                if( Rml::Element *list = rml.document()->GetElementById( "pu-list" ) ) {
+                    if( selected >= 0 && selected < static_cast<int>( list->GetNumChildren() ) ) {
+                        list->GetChild( selected )->ScrollIntoView( false );
+                    }
+                }
+            }
+
             action = ctxt.handle_input();
             raw_input_char = ctxt.get_raw_input().get_first_input();
 

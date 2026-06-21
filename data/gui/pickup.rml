@@ -1,0 +1,30 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="pickup.rcss"/>
+</head>
+<body data-model="pickup">
+    <!-- §8.1 gate-blocker backlog: the item PICKUP menu (pickup.cpp
+         pick_up_from_items). A multi-select list (hotkey char + parent/pick
+         mark + item name, with the selected row highlighted) over a scrolling
+         item-info pane, plus a header (predicted weight/volume) and a footer
+         hint line. Render-only: all marking / count entry / filter / paging stay
+         on the keyboard + the Tier-0 string_input filter popup; the doc is synced
+         each frame from getitem[]/matches/selected. The curses start/maxitems
+         windowing is dropped for native scroll (selected row scrolled into view
+         on move). Per-row/segment colour is baked via cata_text_to_rml. -->
+    <div class="panel pu-panel">
+        <div class="pu-header" data-rml="header_rml"></div>
+        <div id="pu-list" class="pu-list scroll-pane">
+            <div class="pu-row" data-for="r : rows" data-class-selected="r.selected">
+                <span class="pu-key" data-rml="r.hotkey_rml"></span>
+                <span class="pu-mark" data-rml="r.mark_rml"></span>
+                <span class="pu-name" data-rml="r.name_rml"></span>
+            </div>
+        </div>
+        <div class="pu-info-title" data-rml="info_title_rml"></div>
+        <div id="pu-info" class="pu-info scroll-pane" data-rml="info_body_rml"></div>
+        <div class="pu-footer" data-rml="footer_rml"></div>
+    </div>
+</body>
+</rml>
