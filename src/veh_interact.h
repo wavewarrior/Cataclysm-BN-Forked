@@ -180,6 +180,10 @@ class veh_interact
         // RmlUi slice 2: stat lines as colour-tagged strings (parallels
         // display_stats; the curses 3-column slot layout is dropped).
         std::vector<std::string> stats_lines() const;
+        // RmlUi slice 3: one overview entry's right-column detail (parallels the
+        // per-entry `details` draw lambdas in calc_overview). A member so it keeps
+        // veh_interact's friend access to vehicle_part::base.
+        std::string overview_detail( const vehicle_part &pt, const std::string &key ) const;
         void display_name();
         void display_mode();
         void display_list( size_t pos, const std::vector<const vpart_info *> &list, int header = 0 );

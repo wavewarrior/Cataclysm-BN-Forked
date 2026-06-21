@@ -97,12 +97,42 @@ static const std::string flag_MOUNTABLE( "MOUNTABLE" );
 // ctor/dtor) so the pimpl'd veh_rml_data is a complete type for the unique_ptr
 // member. Two scalar string binds → no struct/array registration needed.
 // Render-only: the keyboard owns every vehicle action.
+// Slice 3: one row of the overview pane (parallels a display_overview row).
+// Either a group header (is_header) or a part entry; `text` is the left column
+// (header label / "hotkey name"), `detail` the right column (caption / per-part
+// detail). Colours are baked into the strings via cata_text_to_rml.
+struct veh_overview_row {
+    Rml::String text;
+    Rml::String detail;
+    bool is_header = false;
+    bool selected = false;
+};
+
 struct veh_interact::veh_rml_data {
     Rml::String mode_rml;   // the action mode bar (parallels display_mode)
     Rml::String name_rml;   // the vehicle name line (parallels display_name)
     Rml::String stats_rml;  // slice 2: the stats pane (parallels display_stats)
+    Rml::Vector<veh_overview_row> overview_rows; // slice 3 (parallels display_overview)
     Rml::DataModelHandle handle;
 };
+
+static bool g_veh_rml_types_registered = false;
+
+// Register the overview row struct + array on the (context-global) data model.
+// Guarded — RegisterStruct/RegisterArray persist past RemoveDataModel.
+static void register_veh_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_veh_rml_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<veh_overview_row> rh = c.RegisterStruct<veh_overview_row>();
+    rh.RegisterMember( "text", &veh_overview_row::text );
+    rh.RegisterMember( "detail", &veh_overview_row::detail );
+    rh.RegisterMember( "is_header", &veh_overview_row::is_header );
+    rh.RegisterMember( "selected", &veh_overview_row::selected );
+    c.RegisterArray<Rml::Vector<veh_overview_row>>();
+    g_veh_rml_types_registered = true;
+}
 
 bool &veh_interact_rmlui_enabled()
 {
@@ -482,9 +512,11 @@ void veh_interact::do_main_loop()
     rml.open( veh_interact_rmlui_enabled(), "veh_interact", main_context,
     [this]( Rml::DataModelConstructor & c ) {
         rml_data = std::make_unique<veh_rml_data>();
+        register_veh_rml_types( c );
         c.Bind( "mode_rml", &rml_data->mode_rml );
         c.Bind( "name_rml", &rml_data->name_rml );
         c.Bind( "stats_rml", &rml_data->stats_rml );
+        c.Bind( "overview_rows", &rml_data->overview_rows );
         rml_data->handle = c.GetModelHandle();
     } );
 
@@ -3099,9 +3131,170 @@ void veh_interact::display_mode()
     wnoutrefresh( w_mode );
 }
 
-// RmlUi render path — slice 1: rebuild the bound model for the two zero-dependency
-// panes. Parallels display_name + display_mode (those curses draws stay pristine).
-// Defined after display_mode so it can reuse the file-local `veh_act_desc` helper.
+// Slice 3 overview producers — parallel to the overview_headers[] / per-entry
+// `details` draw lambdas in calc_overview (which right_print into w_list, so their
+// output can't be captured). These reproduce only the TEXT (left header label /
+// right caption / right per-part detail); calc_overview's grouping + hotkeys are
+// reused directly from overview_opts. The curses draws stay pristine for the A/B.
+static std::string veh_overview_header_label( vehicle &veh, const std::string &key, int epower_w )
+{
+    if( key == "ENGINE" ) {
+        return string_format( _( "Engines: %sSafe %4d kW</color> %sMax %4d kW</color>" ),
+                              health_color( true ), veh.total_power_w( true, true ) / 1000,
+                              health_color( false ), veh.total_power_w() / 1000 );
+    } else if( key == "TANK" ) {
+        return _( "Tanks" );
+    } else if( key == "BATTERY" ) {
+        if( std::abs( epower_w ) < 10000 ) {
+            return string_format( _( "Batteries: %s%+4d W</color>" ),
+                                  health_color( epower_w >= 0 ), epower_w );
+        }
+        return string_format( _( "Batteries: %s%+4.1f kW</color>" ),
+                              health_color( epower_w >= 0 ), epower_w / 1000.0 );
+    } else if( key == "POWER_GENERATOR" ) {
+        int generator_epower_w = 0;
+        for( const auto &vpr : veh.get_all_parts() ) {
+            if( vpr.part().is_available() && vpr.part().is_perpetual_power_source() &&
+                !vpr.part().is_reactor() ) {
+                generator_epower_w += static_cast<int>( vpr.part().info().epower * vpr.part().health_percent() );
+            }
+        }
+        if( generator_epower_w == 0 ) {
+            return _( "Power generators" );
+        } else if( generator_epower_w < 10000 ) {
+            return string_format( _( "Power generators: %s%+4d W</color>" ),
+                                  health_color( generator_epower_w ), generator_epower_w );
+        }
+        return string_format( _( "Power generators: %s%+4.1f kW</color>" ),
+                              health_color( generator_epower_w ), generator_epower_w / 1000.0 );
+    } else if( key == "REACTOR" ) {
+        int reactor_epower_w = 0;
+        for( const auto &vpr : veh.get_all_parts() ) {
+            if( vpr.part().is_available() && vpr.part().is_reactor() &&
+                veh.is_part_on( vpr.part_index() ) ) {
+                reactor_epower_w += static_cast<int>( vpr.part().info().epower * vpr.part().health_percent() );
+            }
+        }
+        if( reactor_epower_w > 0 && epower_w < 0 ) {
+            reactor_epower_w += epower_w;
+        }
+        if( reactor_epower_w == 0 ) {
+            return _( "Reactors" );
+        } else if( reactor_epower_w < 10000 ) {
+            return string_format( _( "Reactors: Up to %s%+4d W</color>" ),
+                                  health_color( reactor_epower_w ), reactor_epower_w );
+        }
+        return string_format( _( "Reactors: Up to %s%+4.1f kW</color>" ),
+                              health_color( reactor_epower_w ), reactor_epower_w / 1000.0 );
+    } else if( key == "TURRET" ) {
+        return _( "Turrets" );
+    } else if( key == "SEAT" ) {
+        return _( "Seats" );
+    }
+    return std::string();
+}
+
+static std::string veh_overview_caption( const std::string &key )
+{
+    if( key == "ENGINE" ) {
+        return _( "Fuel     Use" );
+    } else if( key == "TANK" ) {
+        return _( "Contents     Qty" );
+    } else if( key == "BATTERY" ) {
+        return _( "Capacity  Status" );
+    } else if( key == "POWER_GENERATOR" ) {
+        return _( "Output  Status" );
+    } else if( key == "REACTOR" ) {
+        return _( "Contents     Qty" );
+    } else if( key == "TURRET" ) {
+        return _( "Ammo     Qty" );
+    } else if( key == "SEAT" ) {
+        return _( "Who" );
+    }
+    return std::string();
+}
+
+// Member (not a free fn) so it inherits veh_interact's friendship with
+// vehicle_part — the tank branch reads the private `pt.base` item, exactly as
+// calc_overview's lambdas do.
+std::string veh_interact::overview_detail( const vehicle_part &pt, const std::string &key ) const
+{
+    if( key == "ENGINE" ) {
+        const std::string s = string_format(
+                                  "%s     <color_light_gray>%s</color>",
+                                  !pt.fuel_current().is_null() ? item::nname( pt.fuel_current() ) : std::string(),
+                                  right_justify( pt.enabled ? pgettext( "vehicle part enabled value", "Yes" )
+                                          : pgettext( "vehicle part enabled value", "No" ), 3 ) );
+        return colorize( s, pt.ammo_current()->color );
+    } else if( key == "TANK" ) {
+        if( pt.is_tank() ) {
+            if( !pt.ammo_current().is_null() ) {
+                std::string specials;
+                const item &it = pt.base->contents.front();
+                if( it.rotten() ) {
+                    specials += _( " (rotten)" );
+                }
+                const units::volume vol = pt.base->contents.front().volume();
+                const itype *pt_ammo_cur = &*pt.ammo_current();
+                std::string fmtstring = "%s %s  %5.1fL";
+                if( pt.is_leaking() ) {
+                    fmtstring = "%s %s " + leak_marker + "%5.1fL" + leak_marker;
+                }
+                return colorize( string_format( fmtstring, specials, pt_ammo_cur->nname( 1 ),
+                                                round_up( to_liter( vol ), 1 ) ), pt_ammo_cur->color );
+            } else if( pt.is_leaking() ) {
+                return colorize( leak_marker + "      " + leak_marker, c_light_gray );
+            }
+            return std::string();
+        }
+        // fuel_store (non-tank, non-battery, non-reactor)
+        if( !pt.ammo_current().is_null() ) {
+            const itype *pt_ammo_cur = &*pt.ammo_current();
+            const auto stack = units::legacy_volume_factor / pt_ammo_cur->stack_size;
+            std::string fmtstring = "%s  %5.1fL";
+            if( pt.is_leaking() ) {
+                fmtstring = "%s  " + leak_marker + "%5.1fL" + leak_marker;
+            }
+            return colorize( string_format( fmtstring, item::nname( pt.ammo_current() ),
+                                            round_up( to_liter( pt.ammo_remaining() * stack ), 1 ) ),
+                             pt_ammo_cur->color );
+        }
+        return std::string();
+    } else if( key == "BATTERY" ) {
+        const int pct = ( static_cast<double>( pt.ammo_remaining() ) / pt.ammo_capacity() ) * 100;
+        std::string fmtstring = "%i    %3i%%";
+        if( pt.is_leaking() ) {
+            fmtstring = "%i   " + leak_marker + "%3i%%" + leak_marker;
+        }
+        return colorize( string_format( fmtstring, pt.ammo_capacity(), pct ), pt.ammo_current()->color );
+    } else if( key == "POWER_GENERATOR" ) {
+        return colorize( string_format( _( "%+d W     %s" ),
+                                        static_cast<int>( pt.info().epower * pt.health_percent() ),
+                                        pgettext( "vehicle part enabled value", "Yes" ) ), c_light_gray );
+    } else if( key == "REACTOR" || key == "TURRET" ) {
+        if( pt.ammo_remaining() ) {
+            std::string fmtstring = "%s   %5i";
+            if( pt.is_leaking() ) {
+                fmtstring = "%s  " + leak_marker + "%5i" + leak_marker;
+            }
+            return colorize( string_format( fmtstring, item::nname( pt.ammo_current() ), pt.ammo_remaining() ),
+                             pt.ammo_current()->color );
+        }
+        return std::string();
+    } else if( key == "SEAT" ) {
+        const npc *who = pt.crew();
+        if( who ) {
+            return colorize( who->name, pt.passenger_id == who->getID() ? c_green : c_light_gray );
+        }
+        return std::string();
+    }
+    return std::string();
+}
+
+// RmlUi render path — rebuild the bound model. Slices 1-3: name + mode bar
+// (display_name/display_mode), stats (display_stats), overview (display_overview).
+// All curses draws stay pristine. Defined after display_mode so it can reuse the
+// file-local `veh_act_desc` helper.
 void veh_interact::sync_rml()
 {
     if( !rml || !rml_data ) {
@@ -3156,9 +3349,52 @@ void veh_interact::sync_rml()
         rml_data->stats_rml = cata_text_to_rml( s );
     }
 
+    // Overview pane (slice 3; parallels display_overview, reusing the overview_opts
+    // that calc_overview() builds at the loop top). A header row when the group key
+    // changes, then one row per part (left "hotkey name" + right detail). The curses
+    // offset windowing + '{'/'}' scroll hints are dropped for native scroll. During
+    // the install sub-mode (slice 6) w_list shows display_list in curses → leave the
+    // overview empty there until that slice lands.
+    rml_data->overview_rows.clear();
+    if( !install_info ) {
+        const int epower_w = veh->net_battery_charge_rate_w();
+        std::string last;
+        for( int idx = 0; idx != static_cast<int>( overview_opts.size() ); ++idx ) {
+            const part_option &opt = overview_opts[idx];
+            const vehicle_part &pt = *opt.part;
+            if( last != opt.key ) {
+                veh_overview_row hdr;
+                hdr.is_header = true;
+                hdr.text = cata_text_to_rml( colorize(
+                                                 veh_overview_header_label( *veh, opt.key, epower_w ), c_light_gray ) );
+                hdr.detail = cata_text_to_rml( colorize( veh_overview_caption( opt.key ), c_light_gray ) );
+                rml_data->overview_rows.emplace_back( std::move( hdr ) );
+                last = opt.key;
+            }
+            // Highlight: faithful to display_overview — in the passive main view
+            // overview_pos is -1 (no cursor); during the interactive overview()
+            // selection mode it tracks the selected entry.
+            bool highlighted = false;
+            if( overview_pos < 0 && overview_enable && !overview_action ) {
+                highlighted = overview_enable( pt );
+            } else if( overview_pos == idx ) {
+                highlighted = true;
+            }
+            const nc_color col = opt.hotkey ? c_white : c_dark_gray;
+            veh_overview_row row;
+            row.selected = highlighted;
+            row.text = cata_text_to_rml( colorize( string_format(
+                    "<color_dark_gray>%c </color>%s",
+                    opt.hotkey ? opt.hotkey : ' ', pt.name() ), col ) );
+            row.detail = cata_text_to_rml( overview_detail( pt, opt.key ) );
+            rml_data->overview_rows.emplace_back( std::move( row ) );
+        }
+    }
+
     rml_data->handle.DirtyVariable( "mode_rml" );
     rml_data->handle.DirtyVariable( "name_rml" );
     rml_data->handle.DirtyVariable( "stats_rml" );
+    rml_data->handle.DirtyVariable( "overview_rows" );
 }
 
 /**

@@ -30,6 +30,7 @@ body {
     flex: 1;
     min-height: 0;
     display: flex;
+    flex-direction: row;
 }
 
 /* Slice 2: the stats pane. One \n-joined string → pre-wrap line breaks;
@@ -40,6 +41,38 @@ body {
     overflow-y: auto;
     white-space: pre-wrap;
     padding: 2dp;
+}
+
+/* Slice 3: the overview pane (engines/tanks/batteries/… grouped list). Rows
+   are a left column (header label / "hotkey name") + a right-aligned detail
+   column. Headers get a top gap; the selected entry takes the accent. */
+.vi-overview {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 2dp;
+    border-left: 1dp {{bg4}};
+    margin-left: 4dp;
+}
+
+.vi-ov-row {
+    display: flex;
+    justify-content: space-between;
+    white-space: nowrap;
+}
+
+.vi-ov-row.header {
+    margin-top: 6dp;
+    color: {{fg3}};
+}
+
+.vi-ov-row.selected {
+    background-color: {{accent}};
+    color: {{bg0}};
+}
+
+.vi-ov-detail {
+    margin-left: 8dp;
 }
 
 .vi-mode {
