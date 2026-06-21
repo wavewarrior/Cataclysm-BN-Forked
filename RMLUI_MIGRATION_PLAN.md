@@ -72,9 +72,10 @@ options=2, **newcharacter=16 (8 slices)**, main_menu=2, worldfactory=4 sessions;
 5. **Tier 10 — RIP OUT** curses-SDL + ImGui — gated on 100% coverage (i.e. 2-4 above).
 6. **★ §8.1 GATE-BLOCKER BACKLOG (found 2026-06-20 primitive sweep) — the banner above
    UNDERCOUNTS.** The enumerated tiers 0–9 are code-done-pending-eyeball, BUT the sweep found
-   **~12 interactive curses screens never listed in any tier** that still block the rip-out:
-   `character_display` (@ sheet), `veh_interact`/`vehicle_display`, `gamemode_defense`, `magic`/
-   `magic_teleporter_list`, full `messages` log, `monster`/`mtype`/`npc` info, `morale`,
+   **~12 interactive curses screens never listed in any tier** that still block the rip-out
+   (DONE so far: `character_display` @ sheet, full `messages` log — both toggle-OFF/eyeball-owed):
+   `veh_interact`/`vehicle_display`, `gamemode_defense`, `magic`/
+   `magic_teleporter_list`, `monster`/`mtype`/`npc` info, `morale`,
    `martialarts`, `pickup`, `dialogue_win`. PLUS a font-layer straggler the primitive sweep
    structurally missed: `loading_ui` splash author text draws via the curses `Font` directly
    (`draw_sdl_text_outlined`→`draw_string`) — a gate-step-4 blocker, not step-2. See §8.1 for
@@ -2950,7 +2951,25 @@ the set difference is below. Reproduce: see the per-file `mvwprintz` density gre
   checkbox. encumbrance reuses `encumbrance_lines`. Eyeball A/B: DIFF THE NUMBERS per tab
   (stats/skills/speed/encumbrance reconstructions) + D3D12. Mouse click-focus deferred; titles
   hardcoded English (i18n gap). The biggest blocker is cleared.
-- Remaining backlog: veh_interact / gamemode_defense / magic / messages(full log) / monster·mtype·npc
+- **`messages` (full message LOG, the ESC log) — DONE (build-green Metal, toggle OFF, eyeball owed),
+  UNCOMMITTED.** A scrolling text pane: one row per folded message line — a right-aligned time
+  column (shown only when the time string changes; the curses ASCII time-range bracket glyphs
+  LINE_XOXO/XXOO/OXXO are DROPPED, semantic rewrite à la diary's book border) + msgtype-coloured
+  text via `cata_text_to_rml(colorize(...))`. Native RmlUi scroll replaces the curses offset
+  windowing: UP/DOWN/PAGE_UP/PAGE_DOWN repurposed in the rml path to `SetScrollTop` on `#msg-screen`
+  (offset math still runs, harmless), + a 3-frame initial scroll-to-newest-end for `!log_from_top`
+  (history(0)=newest → rows run oldest→newest top-to-bottom). The transient FILTER help + input
+  overlay is LEFT as the legacy curses `string_input_popup` (Tier-0) compositing on top — like
+  diary's nested editor; only the log pane itself moved off curses. `rml_doc` opened at the tail of
+  `dialog::init()` (must follow `init_first_time()` so open's `set_timeout(16)` lands on the member
+  `ctxt`; idempotent across resize re-inits). `data/gui/messages.{rml,rcss}` + `messages` toggle +
+  F4 checkbox + devui bind. **EYEBALL A/B (F4 "message log"):** ESC log shows time column + coloured
+  lines matching curses; FILTER (`type:text` syntax) narrows the list + the curses filter overlay
+  composites on top; RESET clears; UP/DOWN/PAGE scroll; COPY writes debug.log+clipboard; ERASE
+  clears; wide/full-height toggles re-fold. **WATCH:** lines pre-folded to the curses window width
+  (cosmetic, may not fill the RmlUi pane — construction/crafting precedent); time-range bracket art
+  intentionally gone. **+ D3D12 glance** (first §8.1-backlog text-pane on the primary target).
+- Remaining backlog: veh_interact / gamemode_defense / magic / monster·mtype·npc
   info / morale / martialarts / pickup / dialogue_win + the 3 font-layer stragglers.
 
 **GATE-BLOCKER BACKLOG — unmigrated interactive screens (no toggle, curses redraw, rml_refs=0):**
@@ -2961,7 +2980,7 @@ the set difference is below. Reproduce: see the per-file `mvwprintz` density gre
 | `gamemode_defense` | 51 | 6 | Defense game-mode HUD/menus. Never listed in any tier. |
 | `veh_interact` (+`vehicle_display`) | 39 (+13) | 11 | Vehicle interaction menu + status. Big, never listed. |
 | `magic` (+`magic_teleporter_list`) | 33 (+1) | helper | Spellcasting list / teleporter pick. Never listed. |
-| `messages` | 9 | 7 | The full message-LOG screen (ESC log). Tier-7 sidebar log MVP ≠ this. |
+| ~~`messages`~~ **DONE** | 9 | 7 | The full message-LOG screen (ESC log). Tier-7 sidebar log MVP ≠ this. Migrated (toggle OFF, eyeball owed): scrolling time+text pane, native scroll, filter overlay stays Tier-0. |
 | `monster` / `mtype` | 13 / 14 | helper | Monster-info popups (only the `*_faction_display` slice was reused at Tier 2). |
 | `npc` | 11 | helper | NPC info (only the faction-display slice migrated). |
 | `morale` / `martialarts` / `pickup` | 1 / 0 / 4 | 3 / 3 / 3 | Small unlisted screens (morale screen, MA-style pick, pickup menu). |

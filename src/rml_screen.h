@@ -215,4 +215,11 @@ bool &minigames_rmlui_enabled();
 // parallel-text producers (curses pristine). Render-only; default OFF.
 bool &character_display_rmlui_enabled();
 
+// Messages::display_messages() RmlUi render path (the full message-LOG screen,
+// the ESC log: §8.1 gate-blocker backlog). A scrolling text pane — time column
+// + msgtype-coloured text, one row per folded line; native scroll replaces the
+// curses offset windowing. The transient FILTER overlay stays the Tier-0
+// string_input_popup compositing on top. Render-only; default OFF.
+bool &messages_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

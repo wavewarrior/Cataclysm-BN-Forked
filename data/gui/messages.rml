@@ -1,0 +1,29 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="messages.rcss"/>
+</head>
+<body data-model="messages">
+    <!-- §8.1 gate-blocker backlog: the full message-LOG screen
+         (Messages::display_messages, the ESC log). A scrolling text pane, one
+         row per folded message line: a right-aligned time column (shown only
+         when the time string changes, light-blue) + the message text coloured
+         by msgtype (cata_text_to_rml of colorize(...)). The curses ASCII
+         time-range bracket glyphs (LINE_XOXO/XXOO/OXXO) are DROPPED — semantic
+         rewrite keeps the time grouping (blank-vs-shown time column) not the
+         line art (cf. diary's book border). Native RmlUi scroll replaces the
+         curses offset windowing; UP/DOWN/PAGE_UP/PAGE_DOWN scroll the pane.
+         The transient FILTER input + help overlay is NOT in this doc — it is a
+         string_input_popup (Tier-0) that composites on top, like diary's nested
+         editor. -->
+    <div class="panel msg-panel">
+        <div id="msg-screen" class="msg-screen scroll-pane">
+            <div class="msg-line" data-for="r : rows">
+                <span class="msg-time" data-rml="r.time_rml"></span>
+                <span class="msg-text" data-rml="r.text_rml"></span>
+            </div>
+        </div>
+        <div class="msg-footer" data-rml="footer_rml"></div>
+    </div>
+</body>
+</rml>

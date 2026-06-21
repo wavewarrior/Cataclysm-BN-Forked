@@ -22,6 +22,11 @@
 
 #include "options.h"
 
+#include <RmlUi/Core.h>
+
+#include "rml_screen.h"
+#include "rml_util.h"
+
 #include <algorithm>
 #include <deque>
 #include <iterator>
@@ -373,6 +378,54 @@ bool Messages::has_undisplayed_messages()
 namespace Messages
 {
 
+// ── RmlUi render path (full UI→RmlUi migration, §8.1 gate-blocker backlog) ────
+// The full message-LOG screen (display_messages, the ESC log). A scrolling text
+// pane: one row per folded message line — a right-aligned time column (shown
+// only when the time string changes; the curses ASCII time-range bracket glyphs
+// are DROPPED, semantic rewrite à la diary's border) + the message text coloured
+// by msgtype via cata_text_to_rml(colorize(...)). Native RmlUi scroll replaces
+// the curses offset windowing (UP/DOWN/PAGE_* scroll the pane). The transient
+// FILTER input + help overlay is left as the legacy string_input_popup
+// (Tier-0) compositing on top — like diary's nested editor — so only the log
+// pane itself moves off curses here.
+namespace
+{
+struct messages_rml_row {
+    Rml::String time_rml;
+    Rml::String text_rml;
+};
+struct messages_rml_data {
+    Rml::Vector<messages_rml_row> rows;
+    Rml::String footer_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_messages_types_registered = false;
+
+void register_messages_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_messages_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<messages_rml_row> rh = c.RegisterStruct<messages_rml_row>();
+    rh.RegisterMember( "time_rml", &messages_rml_row::time_rml );
+    rh.RegisterMember( "text_rml", &messages_rml_row::text_rml );
+    c.RegisterArray<Rml::Vector<messages_rml_row>>();
+    g_messages_types_registered = true;
+}
+} // namespace
+} // namespace Messages
+
+bool &messages_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = false;
+    return enabled;
+}
+
+namespace Messages
+{
+
 // NOLINTNEXTLINE(cata-xy)
 class dialog
 {
@@ -387,6 +440,10 @@ class dialog
         void do_filter( const std::string &filter_str );
         void set_size();
         static std::vector<std::string> filter_help_text( int width );
+
+        // RmlUi render path (see the file note above).
+        void sync_rml();
+        void rml_scroll( int dir );
 
         const nc_color border_color;
         const nc_color filter_color;
@@ -441,6 +498,15 @@ class dialog
         std::optional<ime_sentry> filter_sentry;
 
         bool first_init = true;
+
+        // RmlUi render path (the file note above). `rml` is the F.3 harness doc;
+        // `rml_data` holds the bound model (declared after the curses members so
+        // it tears down first). `rml_initial_scroll_frames` counts down a few
+        // frames after open to scroll the pane to the newest end (matching the
+        // curses initial offset) once RmlUi has laid the rows out.
+        rml_doc rml;
+        std::unique_ptr<messages_rml_data> rml_data;
+        int rml_initial_scroll_frames = 0;
 };
 } // namespace Messages
 
@@ -530,11 +596,51 @@ void Messages::dialog::init( ui_adaptor &ui )
 
     ui.position_from_window( w );
 
+    // Open (or no-op if already open) the RmlUi log doc. Must run AFTER
+    // init_first_time() built `ctxt` — open()'s set_timeout(16) lands on it and
+    // survives later resize re-inits (init_first_time is first-time-only, so the
+    // member ctxt is not rebuilt again). Idempotent: open() no-ops when already
+    // open on this instance, preserving rml_data across re-inits.
+    rml.open( messages_rmlui_enabled(), "messages", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        rml_data = std::make_unique<messages_rml_data>();
+        register_messages_rml_types( c );
+        c.Bind( "rows", &rml_data->rows );
+        c.Bind( "footer_rml", &rml_data->footer_rml );
+        rml_data->handle = c.GetModelHandle();
+    } );
+    if( rml ) {
+        rml_initial_scroll_frames = 3;
+    }
+
     first_init = false;
 }
 
 void Messages::dialog::show()
 {
+    if( rml ) {
+        // RmlUi path owns the log pane — sync the doc and skip the curses draw.
+        sync_rml();
+        if( filtering ) {
+            // The filter help + input overlay stays the legacy curses
+            // string_input_popup (Tier-0), compositing on top of the RmlUi log
+            // doc — like diary's nested editor. Same draw as the curses branch.
+            werase( w_filter_help );
+            draw_border( w_filter_help, border_color );
+            for( size_t line = 0; line < help_text.size(); ++line ) {
+                nc_color col = filter_help_color;
+                print_colored_text( w_filter_help, point( border_width, border_width + line ), col, col,
+                                    help_text[line] );
+            }
+            mvwprintz( w_filter_help, point( border_width, w_fh_height - 1 ), border_color, "< " );
+            mvwprintz( w_filter_help, point( w_fh_width - border_width - 2, w_fh_height - 1 ), border_color,
+                       " >" );
+            wnoutrefresh( w_filter_help );
+            filter.query( false, true ); // Draw only
+        }
+        return;
+    }
+
     werase( w );
     draw_border( w, border_color );
 
@@ -780,6 +886,21 @@ void Messages::dialog::input( const ui_adaptor &ui )
             }
             ui.mark_resize();
         }
+
+        // RmlUi path: the offset math above is invisible (the doc renders all
+        // filtered rows + scrolls natively), so mirror the scroll keys onto the
+        // pane. Harmless to also run the offset logic — it just clamps `offset`.
+        if( rml ) {
+            if( action == "UP" ) {
+                rml_scroll( -1 );
+            } else if( action == "DOWN" ) {
+                rml_scroll( 1 );
+            } else if( action == "PAGE_UP" ) {
+                rml_scroll( -2 );
+            } else if( action == "PAGE_DOWN" ) {
+                rml_scroll( 2 );
+            }
+        }
     }
 }
 
@@ -798,6 +919,93 @@ void Messages::dialog::run()
         ui_manager::redraw();
         input( ui );
     }
+}
+
+// Rebuild the bound model from the (already-filtered) folded log. One row per
+// folded line: text coloured by msgtype (inner <color> tags survive), and a time
+// column shown only when the time string changes from the previous row (the
+// curses ASCII bracket art that marked same-time ranges is dropped). Footer = the
+// keybinding hint or the active filter string. Mirrors the curses show() draw.
+void Messages::dialog::sync_rml()
+{
+    if( !rml || !rml_data ) {
+        return;
+    }
+    rml_data->rows.clear();
+    std::string prev_time_str;
+    for( const size_t folded_ind : folded_filtered ) {
+        const size_t msg_ind = folded_all[folded_ind].first;
+        const game_message &msg = player_messages.history( msg_ind );
+        const nc_color col = msgtype_to_color( msg.type, false );
+
+        messages_rml_row row;
+        row.text_rml = cata_text_to_rml( colorize( folded_all[folded_ind].second, col ) );
+
+        const time_point msg_time = msg.timestamp_in_turns;
+        const std::string time_str = to_string_clipped( calendar::turn - msg_time, clipped_align::right );
+        if( time_str != prev_time_str ) {
+            prev_time_str = time_str;
+            row.time_rml = cata_text_to_rml( colorize( time_str, time_color ) );
+        }
+        rml_data->rows.push_back( std::move( row ) );
+    }
+
+    if( filter_str.empty() ) {
+        rml_data->footer_rml = rml_escape( string_format(
+                                   _( "< %s to filter, %s to reset, %s/%s to adjust size, %s to copy, %s to erase >" ),
+                                   ctxt.get_desc( "FILTER" ), ctxt.get_desc( "RESET_FILTER" ),
+                                   ctxt.get_desc( "TOGGLE_WIDE_DISPLAY" ), ctxt.get_desc( "TOGGLE_FULL_HEIGHT_DISPLAY" ),
+                                   ctxt.get_desc( "COPY_MESSAGE" ), ctxt.get_desc( "ERASE_HISTORY" ) ) );
+    } else {
+        rml_data->footer_rml = cata_text_to_rml( colorize( string_format( "< %s >", filter_str ),
+                               filter_color ) );
+    }
+
+    rml_data->handle.DirtyVariable( "rows" );
+    rml_data->handle.DirtyVariable( "footer_rml" );
+
+    // After a fresh open, scroll the pane to the newest end — matching the curses
+    // initial offset (bottom slice when new-at-bottom). history(0) is newest, so
+    // for !log_from_top the rows run oldest→newest top-to-bottom and the newest
+    // sits at the bottom. Spread over a few frames so RmlUi has laid the rows out.
+    if( rml_initial_scroll_frames > 0 ) {
+        --rml_initial_scroll_frames;
+        if( !log_from_top ) {
+            if( Rml::Element *e = rml.document()->GetElementById( "msg-screen" ) ) {
+                e->SetScrollTop( e->GetScrollHeight() );
+            }
+        }
+    }
+}
+
+// Scroll the log pane. dir: -1 line up, +1 line down, -2 page up, +2 page down.
+void Messages::dialog::rml_scroll( int dir )
+{
+    if( !rml ) {
+        return;
+    }
+    Rml::Element *e = rml.document()->GetElementById( "msg-screen" );
+    if( !e ) {
+        return;
+    }
+    const float line = 18.0f; // approx one row; native wheel handles fine scroll
+    const float page = e->GetClientHeight();
+    float delta = 0.0f;
+    switch( dir ) {
+        case -1:
+            delta = -line;
+            break;
+        case 1:
+            delta = line;
+            break;
+        case -2:
+            delta = -page;
+            break;
+        case 2:
+            delta = page;
+            break;
+    }
+    e->SetScrollTop( e->GetScrollTop() + delta );
 }
 
 std::vector<std::string> Messages::dialog::filter_help_text( int width )
