@@ -6,6 +6,8 @@
 #include <ostream>
 #include <set>
 
+#include <RmlUi/Core.h>
+
 #include "action.h"
 #include "avatar.h"
 #include "color.h"
@@ -31,6 +33,8 @@
 #include "pldata.h"
 #include "point.h"
 #include "popup.h"
+#include "rml_screen.h"
+#include "rml_util.h"
 #include "rng.h"
 #include "string_formatter.h"
 #include "string_id.h"
@@ -464,6 +468,47 @@ void defense_game::init_to_style( defense_style new_style )
     }
 }
 
+// ── RmlUi render path (§8.1 gate-blocker backlog) ────────────────────────────
+// Slice 1: the setup settings form. Render-only — the keyboard owns every field
+// and the selection cursor; the doc is rebuilt each frame from the current values.
+namespace
+{
+struct defense_setup_row {
+    Rml::String text;     // field label / section header / toggle name
+    Rml::String detail;   // value + description (settings rows); On/Off (toggles)
+    bool is_header = false;
+    bool selected = false;
+};
+struct defense_setup_data {
+    Rml::String hint_rml;
+    Rml::Vector<defense_setup_row> rows;
+    Rml::DataModelHandle handle;
+};
+
+bool g_defense_setup_types_registered = false;
+
+void register_defense_setup_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_defense_setup_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<defense_setup_row> rh = c.RegisterStruct<defense_setup_row>();
+    rh.RegisterMember( "text", &defense_setup_row::text );
+    rh.RegisterMember( "detail", &defense_setup_row::detail );
+    rh.RegisterMember( "is_header", &defense_setup_row::is_header );
+    rh.RegisterMember( "selected", &defense_setup_row::selected );
+    c.RegisterArray<Rml::Vector<defense_setup_row>>();
+    g_defense_setup_types_registered = true;
+}
+} // namespace
+
+bool &gamemode_defense_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = false;
+    return enabled;
+}
+
 void defense_game::setup()
 {
     background_pane bg_pane;
@@ -482,7 +527,90 @@ void defense_game::setup()
     int selection = 1;
     int selection_max = 20;
 
+    // RmlUi render path (F.3 harness). Declared before the on_redraw lambda so it
+    // can capture them; the doc is rebuilt each frame (the form is live — values +
+    // the selection cursor change on every input).
+    std::unique_ptr<defense_setup_data> rml_data;
+    rml_doc rml;
+    const auto sync_setup_rml = [&]() {
+        if( !rml || !rml_data ) {
+            return;
+        }
+        rml_data->hint_rml = cata_text_to_rml( colorize(
+                _( "Press direction keys to cycle, ENTER to toggle, S to start" ), c_light_red ) );
+        Rml::Vector<defense_setup_row> &rows = rml_data->rows;
+        rows.clear();
+        // SELCOL / TOGCOL, reproduced (the selected field's value turns yellow;
+        // toggles colour their name by on/off + selection).
+        const auto selcol = [&]( int n ) {
+            return selection == n ? c_yellow : c_blue;
+        };
+        const auto togcol = [&]( int n, bool b ) {
+            return selection == n ? ( b ? c_light_green : c_yellow ) : ( b ? c_green : c_dark_gray );
+        };
+        const auto setting = [&]( int n, const std::string & label, const std::string & value,
+        const std::string & desc ) {
+            defense_setup_row r;
+            r.selected = ( selection == n );
+            r.text = cata_text_to_rml( colorize( label, c_white ) );
+            r.detail = cata_text_to_rml( colorize( value, selcol( n ) ) + "  " +
+                                         colorize( desc, c_light_gray ) );
+            rows.emplace_back( std::move( r ) );
+        };
+        const auto header = [&]( const std::string & h ) {
+            defense_setup_row r;
+            r.is_header = true;
+            r.text = cata_text_to_rml( colorize( h, c_white ) );
+            rows.emplace_back( std::move( r ) );
+        };
+        const auto toggle = [&]( int n, const std::string & name, bool b ) {
+            defense_setup_row r;
+            r.selected = ( selection == n );
+            r.text = cata_text_to_rml( colorize( name, togcol( n, b ) ) );
+            r.detail = cata_text_to_rml( colorize( b ? _( "On" ) : _( "Off" ), togcol( n, b ) ) );
+            rows.emplace_back( std::move( r ) );
+        };
+
+        setting( 1, _( "Scenario:" ), defense_style_name( style ), defense_style_description( style ) );
+        setting( 2, _( "Location:" ), defense_location_name( location ),
+                 defense_location_description( location ) );
+        setting( 3, _( "Initial Difficulty:" ), string_format( "%d", initial_difficulty ),
+                 _( "The difficulty of the first wave." ) );
+        setting( 4, _( "Wave Difficulty:" ), string_format( "%d", wave_difficulty ),
+                 _( "The increase of difficulty with each wave." ) );
+        setting( 5, _( "Time b/w Waves:" ), string_format( "%d", to_minutes<int>( time_between_waves ) ),
+                 _( "The time, in minutes, between waves." ) );
+        setting( 6, _( "Waves b/w Caravans:" ), string_format( "%d", waves_between_caravans ),
+                 _( "The number of waves in between caravans." ) );
+        setting( 7, _( "Initial Cash:" ), string_format( "%d", initial_cash / 100 ),
+                 _( "The amount of money the player starts with." ) );
+        setting( 8, _( "Cash for 1st Wave:" ), string_format( "%d", cash_per_wave / 100 ),
+                 _( "The cash awarded for the first wave." ) );
+        setting( 9, _( "Cash Increase:" ), string_format( "%d", cash_increase / 100 ),
+                 _( "The increase in the award each wave." ) );
+        header( _( "Enemy Selection:" ) );
+        toggle( 10, _( "Zombies" ), zombies );
+        toggle( 11, _( "Special Zombies" ), specials );
+        toggle( 12, _( "Spiders" ), spiders );
+        toggle( 13, _( "Triffids" ), triffids );
+        toggle( 14, _( "Robots" ), robots );
+        toggle( 15, _( "Subspace" ), subspace );
+        header( _( "Needs:" ) );
+        toggle( 16, _( "Food" ), hunger );
+        toggle( 17, _( "Water" ), thirst );
+        toggle( 18, _( "Sleep" ), sleep );
+        toggle( 19, _( "Mercenaries" ), mercenaries );
+        toggle( 20, _( "Allow save" ), allow_save );
+
+        rml_data->handle.DirtyVariable( "hint_rml" );
+        rml_data->handle.DirtyVariable( "rows" );
+    };
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            sync_setup_rml();
+            return;
+        }
         refresh_setup( w, selection );
     } );
 
@@ -496,6 +624,18 @@ void defense_game::setup()
     ctxt.register_action( "PREV_TAB" );
     ctxt.register_action( "START" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
+
+    // Open (or no-op) the RmlUi doc now that `ctxt` exists — open()'s
+    // set_timeout(16) lands on it. The model is rebuilt each frame by
+    // sync_setup_rml() in on_redraw (the form is live).
+    rml.open( gamemode_defense_rmlui_enabled(), "gamemode_defense", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        rml_data = std::make_unique<defense_setup_data>();
+        register_defense_setup_rml_types( c );
+        c.Bind( "hint_rml", &rml_data->hint_rml );
+        c.Bind( "rows", &rml_data->rows );
+        rml_data->handle = c.GetModelHandle();
+    } );
 
     while( true ) {
         ui_manager::redraw();

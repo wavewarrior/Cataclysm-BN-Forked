@@ -249,4 +249,10 @@ bool &pickup_rmlui_enabled();
 // Render-only; default OFF.
 bool &veh_interact_rmlui_enabled();
 
+// gamemode_defense RmlUi render path (the Defense game-mode screens: §8.1
+// gate-blocker backlog). Slice 1 = the setup settings form (defense_game::setup /
+// refresh_setup); slice 2 = the between-wave caravan shop. Render-only (keyboard
+// owns every field/selection); synced each frame. Default OFF.
+bool &gamemode_defense_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

@@ -1,0 +1,26 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="gamemode_defense.rcss"/>
+</head>
+<body data-model="gamemode_defense">
+    <!-- §8.1 gate-blocker backlog: the Defense game-mode SETUP form
+         (defense_game::setup / refresh_setup). Slice 1 of gamemode_defense. A
+         render-only settings form: a hint line + a list of fields (label + value
+         + description for the 9 settings, name + On/Off for the 11 toggles), with
+         section headers and the selected field highlighted. All cycling / toggling
+         / start stays on the keyboard; the doc is rebuilt each frame from the
+         current values + selection. The caravan shop is slice 2. -->
+    <div class="panel gd-panel">
+        <div class="gd-title">Defense Mode</div>
+        <div class="gd-hint" data-rml="hint_rml"></div>
+        <div id="gd-list" class="gd-list scroll-pane">
+            <div class="gd-row" data-for="r : rows"
+                 data-class-header="r.is_header" data-class-selected="r.selected">
+                <span class="gd-label" data-rml="r.text"></span>
+                <span class="gd-detail" data-rml="r.detail"></span>
+            </div>
+        </div>
+    </div>
+</body>
+</rml>
