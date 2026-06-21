@@ -75,9 +75,10 @@ options=2, **newcharacter=16 (8 slices)**, main_menu=2, worldfactory=4 sessions;
    **~12 interactive curses screens never listed in any tier** that still block the rip-out
    (DONE so far: `character_display` @ sheet + full `messages` log — both eyeball-CONFIRMED clean
    2026-06-21; `morale` + `martialarts` + `pickup` — toggle-OFF/eyeball-owed):
-   `veh_interact`/`vehicle_display`, `gamemode_defense`, `magic`/
-   `magic_teleporter_list`, `monster`/`mtype`/`npc` info,
-   `dialogue_win`. PLUS a font-layer straggler the primitive sweep
+   `veh_interact`/`vehicle_display`, `gamemode_defense`, `monster`/`mtype`/`npc` info.
+   (RE-CLASSIFIED as covered-by-toggle, NOT separate screens: `dialogue_win` = Tier-5 `dialogue`
+   fallback; `magic` + `magic_teleporter_list` = `uilist`+`draw_rml`, covered by the uilist toggle.)
+   PLUS a font-layer straggler the primitive sweep
    structurally missed: `loading_ui` splash author text draws via the curses `Font` directly
    (`draw_sdl_text_outlined`→`draw_string`) — a gate-step-4 blocker, not step-2. See §8.1 for
    the full table + the corrected 3-part Tier-10 readiness gate. "~90% by screen count" is true
@@ -3023,8 +3024,11 @@ the set difference is below. Reproduce: see the per-file `mvwprintz` density gre
   info pane matches the curses item info; parent/child marks (containers) colour right; CONFIRM
   picks up, QUIT cancels. **WATCH:** selected-row text keeps its item colour over the accent bg
   (curses used hilite-white); info/name pre-folded widths cosmetic (crafting precedent).
-- Remaining backlog: veh_interact / gamemode_defense / magic / monster·mtype·npc
-  info / dialogue_win + the 3 font-layer stragglers.
+- Remaining backlog (real bespoke screens): **veh_interact / gamemode_defense** + the
+  creature-info trio (monster·mtype·npc = host-drawn helper, architectural — deferred) + the 3
+  font-layer stragglers. RE-CLASSIFIED as covered-by-toggle (NOT separate, the sweep over-counted
+  uilist-callback screens): `dialogue_win` (Tier-5 `dialogue` fallback), `magic` +
+  `magic_teleporter_list` (`uilist`+`draw_rml`, covered by the uilist toggle).
 
 **GATE-BLOCKER BACKLOG — unmigrated interactive screens (no toggle, curses redraw, rml_refs=0):**
 
@@ -3033,12 +3037,12 @@ the set difference is below. Reproduce: see the per-file `mvwprintz` density gre
 | `character_display` (+`character`) | 67 (+6) | 38 | the `@` character sheet. Tier 7 flagged "converge when char sheet migrates" — NEVER done. Largest blocker. |
 | `gamemode_defense` | 51 | 6 | Defense game-mode HUD/menus. Never listed in any tier. |
 | `veh_interact` (+`vehicle_display`) | 39 (+13) | 11 | Vehicle interaction menu + status. Big, never listed. |
-| `magic` (+`magic_teleporter_list`) | 33 (+1) | helper | Spellcasting list / teleporter pick. Never listed. |
+| ~~`magic`~~ (+~~`magic_teleporter_list`~~) **NOT A BLOCKER** | 33 (+1) | helper | RE-CLASSIFIED 2026-06-21: both are `uilist` + `uilist_callback` screens whose `draw_rml` override is ALREADY IMPLEMENTED (`spellcasting_callback::draw_rml` magic.cpp:2001, `teleporter_callback::draw_rml` magic_teleporter_list.cpp:210 — the full spell-info / teleporter side pane as RML). `select_spell` is a pure `uilist spell_menu` with no own window; ui.cpp:1030 calls `callback->draw_rml` in the uilist RmlUi path. So both render via the **uilist toggle** (the `refresh()`/`draw_imgui` curses+ImGui paths are the toggle-OFF fallback). Covered (gate part 1, not part 2). The §8.1 density flag was the fallback code. |
 | ~~`messages`~~ **DONE** | 9 | 7 | The full message-LOG screen (ESC log). Tier-7 sidebar log MVP ≠ this. Migrated (toggle OFF, eyeball owed): scrolling time+text pane, native scroll, filter overlay stays Tier-0. |
 | `monster` / `mtype` | 13 / 14 | helper | Monster-info popups (only the `*_faction_display` slice was reused at Tier 2). |
 | `npc` | 11 | helper | NPC info (only the faction-display slice migrated). |
 | ~~`morale`~~ **DONE** / ~~`martialarts`~~ **DONE** / ~~`pickup`~~ **DONE** | 1 / 0 / 4 | 3 / 3 / 3 | Small unlisted screens — all three migrated (toggle OFF, eyeball owed). morale screen, MA-style description, item pickup menu. |
-| `dialogue_win` | 12 | 1 | Dialogue/trade subwindow helper (separate from migrated `npctalk`). |
+| ~~`dialogue_win`~~ **NOT A BLOCKER** | 12 | 1 | RE-CLASSIFIED 2026-06-21: this is the curses FALLBACK of the already-migrated Tier-5 `dialogue` screen, not a separate screen. `dialogue_window`'s draw methods (`print_header`/`display_responses`/`print_history`) are reached ONLY in npctalk's `on_redraw` when `rml` is false; its sole caller is the toggle-gated `dialogue::opt` path. Covered by the `dialogue` toggle (gate part 1, not part 2) — dies with the toggle flip + rip-out. The §8.1 table mislabeled it. |
 
 **★ FONT-LAYER STRAGGLER the primitive sweep MISSED — `loading_ui` splash author text
 (gate step 4, not step 2).** The §8.1 cross-ref above swept the curses *primitive* layer
