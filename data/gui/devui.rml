@@ -51,6 +51,7 @@
                 <label class="devui-row"><input type="checkbox" value="1" data-checked="veh_interact"/> vehicle interact</label>
                 <label class="devui-row"><input type="checkbox" value="1" data-checked="gamemode_defense"/> defense mode setup</label>
                 <label class="devui-row"><input type="checkbox" value="1" data-checked="list_monsters"/> monster list</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="look_around"/> look around</label>
 
                 <div class="devui-section">Items &amp; inventory</div>
                 <label class="devui-row"><input type="checkbox" value="1" data-checked="inventory"/> inventory (all selectors)</label>

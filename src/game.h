@@ -710,6 +710,15 @@ class game : public submap_load_listener
                                   const std::string &area_name, int column,
                                   int &line, int last_line, const visibility_variables &cache );
 
+        // Colour-tagged text equivalent of print_all_tile_info, for the look_around
+        // RmlUi info pane (§8.1 track-A). Parallel to the curses print_* helpers
+        // (which stay untouched for the A/B toggle); the creature section reuses
+        // Creature::print_info_text(). Newline-joined; curses column alignment +
+        // window scroll windowing are dropped (semantic).
+        std::string print_all_tile_info_text( const tripoint_bub_ms &lp,
+                                               const std::string &area_name,
+                                               const visibility_variables &cache );
+
         void draw_look_around_cursor( const tripoint_bub_ms &lp, const visibility_variables &cache );
 
         /** Long description of (visible) things at tile. */

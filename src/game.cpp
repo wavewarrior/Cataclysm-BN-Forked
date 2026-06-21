@@ -8790,6 +8790,219 @@ void game::print_graffiti_info( const tripoint_bub_ms &lp, const catacurses::win
     }
 }
 
+std::string game::print_all_tile_info_text( const tripoint_bub_ms &lp,
+        const std::string &area_name, const visibility_variables &cache )
+{
+    // Parallel to print_all_tile_info, producing the same content as one
+    // colour-tagged string for the look_around RmlUi info pane. The curses
+    // print_* helpers above are left untouched (A/B toggle). Curses column
+    // alignment / window scroll windowing are dropped (semantic rewrite).
+    std::vector<std::string> out;
+
+    visibility_type visibility = VIS_HIDDEN;
+    const bool inbounds = m.inbounds( lp );
+    if( inbounds ) {
+        visibility = m.get_visibility( m.apparent_light_at( lp, cache ), cache );
+    }
+    const Creature *creature = critter_at( lp, true );
+
+    if( visibility == VIS_CLEAR ) {
+        const optional_vpart_position vp = m.veh_at( lp );
+
+        // --- terrain (cf. print_terrain_info) ---
+        const ter_t &terrain = m.ter( lp ).obj();
+        const oter_id &cur_ter_m = get_overmapbuffer( current_dimension_id_ ).ter(
+                                       tripoint_abs_omt( project_to<coords::omt>( m.bub_to_abs( lp ) ) ) );
+        const nc_color location_color = cur_ter_m->get_color( uistate.overmap_show_land_use_codes );
+        const int move_cost = m.move_cost( lp );
+        const bool mc0 = move_cost == 0;
+        const std::string move_cost_str = mc0 ? _( "Impassable" )
+                                          : string_format( _( "Move cost: %d" ), move_cost * 50 );
+        const std::pair<std::string, nc_color> ll = get_light_level( std::max( 1.0,
+                LIGHT_AMBIENT_LIT - m.ambient_light_at( lp ) + 1.0 ) );
+        out.emplace_back( colorize( area_name, location_color ) + "  " +
+                          colorize( move_cost_str, mc0 ? c_light_red : c_light_gray ) );
+        out.emplace_back( colorize( m.tername( lp ), terrain.color() ) + "  " +
+                          colorize( ll.first, ll.second ) );
+        const std::string terrain_desc = terrain.description.translated();
+        if( !terrain_desc.empty() ) {
+            out.emplace_back( colorize( terrain_desc, c_light_gray ) );
+        }
+        if( m.has_furn( lp ) ) {
+            const furn_t &furniture = m.furn( lp ).obj();
+            out.emplace_back( colorize( m.furnname( lp ), furniture.color() ) );
+            const std::string fd = furniture.description.translated();
+            if( !fd.empty() ) {
+                out.emplace_back( colorize( fd, c_light_gray ) );
+            }
+        }
+        const int coverage = m.coverage( lp );
+        if( coverage > 0 ) {
+            out.emplace_back( colorize( string_format( _( "Cover: %d%%" ), coverage ), c_dark_gray ) );
+        }
+        const int block_chance = m.obstacle_coverage( u.bub_pos(), lp );
+        if( block_chance > 0 ) {
+            out.emplace_back( colorize( string_format( _( "Block: %d%%" ), block_chance ), c_dark_gray ) );
+        }
+        const std::string feats = m.features( lp );
+        if( !feats.empty() ) {
+            out.emplace_back( colorize( feats, c_dark_gray ) );
+        }
+        const std::string signage = m.get_signage( lp );
+        if( !signage.empty() ) {
+            const std::string sign_string = u.has_trait( trait_ILLITERATE ) ? "???" : signage;
+            out.emplace_back( colorize( string_format( _( "Sign: %s" ), sign_string ), c_light_gray ) );
+        }
+        if( m.has_zlevels() && lp.z() > -OVERMAP_DEPTH && !m.has_floor( lp ) ) {
+            tripoint_bub_ms below( lp.xy(), lp.z() - 1 );
+            std::string tile_below = m.tername( below );
+            if( m.has_furn( below ) ) {
+                tile_below += ", " + m.furnname( below );
+            }
+            out.emplace_back( colorize( string_format(
+                                            m.has_floor_or_support( lp ) ? _( "Below: %s; Walkable" ) :
+                                            _( "Below: %s; No support" ), tile_below ), c_dark_gray ) );
+        }
+
+        // --- fields (cf. print_fields_info) ---
+        const field &tmpfield = m.field_at( lp );
+        for( const auto &fld : tmpfield ) {
+            const field_entry &cur = fld.second;
+            if( fld.first.obj().has_fire && ( m.has_flag( TFLAG_FIRE_CONTAINER, lp ) ||
+                                              m.ter( lp ) == t_pit_shallow || m.ter( lp ) == t_pit ) ) {
+                out.emplace_back( colorize( get_fire_fuel_string( lp ), cur.color() ) );
+            } else {
+                out.emplace_back( colorize( cur.name(), cur.color() ) );
+            }
+        }
+
+        // --- trap (cf. print_trap_info) ---
+        const trap &tr = m.tr_at( lp );
+        if( tr.can_see( lp, u ) ) {
+            partial_con *pc = m.partial_con_at( lp );
+            std::string tr_name;
+            if( pc && tr.loadid == tr_unfinished_construction ) {
+                const construction &built = pc->id.obj();
+                tr_name = string_format( _( "Unfinished task: %s, %d%% complete" ),
+                                         built.group->name(), pc->counter / 100000 );
+            } else {
+                tr_name = tr.name();
+            }
+            out.emplace_back( colorize( tr_name, tr.color ) );
+        }
+
+        // --- creature (the shared producer; cf. print_creature_info) ---
+        if( creature != nullptr && ( u.sees( *creature ) || creature == &u ) ) {
+            const std::string ci = creature->print_info_text();
+            if( !ci.empty() ) {
+                out.emplace_back( ci );
+            }
+        }
+
+        // --- vehicle (reuses part_list_text; cf. print_vehicle_info) ---
+        if( const vehicle *veh = veh_pointer_or_null( vp ) ) {
+            out.emplace_back( colorize( veh->name, c_white ) );
+            const std::string pl = veh->part_list_text( vp ? vp->part_index() : -1 );
+            if( !pl.empty() ) {
+                out.emplace_back( pl );
+            }
+        }
+
+        // --- items (cf. print_items_info) ---
+        if( m.sees_some_items( lp, u ) ) {
+            if( m.has_flag( "CONTAINER", lp ) && !m.could_see_items( lp, u ) ) {
+                out.emplace_back( _( "You cannot see what is inside of it." ) );
+            } else if( ( u.has_effect( effect_blind ) || u.worn_with_flag( flag_BLIND ) ) &&
+                       u.clairvoyance() < 1 ) {
+                out.emplace_back( colorize(
+                                      _( "There's something there, but you can't see what it is." ), c_yellow ) );
+            } else {
+                std::map<std::string, std::pair<int, nc_color>> item_names;
+                for( auto &it : m.i_at( lp ) ) {
+                    ++item_names[it->tname()].first;
+                    item_names[it->tname()].second = it->color_in_inventory();
+                }
+                for( const auto &in : item_names ) {
+                    const std::string label = in.second.first > 1
+                                              ? string_format( "%s [%d]", in.first, in.second.first )
+                                              : in.first;
+                    out.emplace_back( colorize( label, in.second.second ) );
+                }
+            }
+        }
+
+        // --- graffiti (cf. print_graffiti_info) ---
+        if( m.has_graffiti_at( lp ) ) {
+            out.emplace_back( colorize( string_format(
+                                            m.ter( lp ) == t_grave_new ? _( "Graffiti: %s" ) : _( "Inscription: %s" ),
+                                            m.graffiti_at( lp ) ), c_light_gray ) );
+        }
+    } else {
+        // --- reduced visibility (cf. print_visibility_info + infrared/specials) ---
+        const char *visibility_message = nullptr;
+        switch( visibility ) {
+            case VIS_BOOMER:
+                visibility_message = _( "A bright pink blur." );
+                break;
+            case VIS_BOOMER_DARK:
+                visibility_message = _( "A pink blur." );
+                break;
+            case VIS_DARK:
+                visibility_message = _( "Darkness." );
+                break;
+            case VIS_LIT:
+                visibility_message = _( "Bright light." );
+                break;
+            case VIS_HIDDEN:
+            default:
+                visibility_message = _( "Unseen." );
+                break;
+        }
+        out.emplace_back( colorize( visibility_message, c_light_gray ) );
+
+        if( creature != nullptr ) {
+            std::vector<std::string> buf;
+            if( u.sees_with_infrared( *creature ) ) {
+                creature->describe_infrared( buf );
+            } else if( u.sees_with_specials( *creature ) ) {
+                creature->describe_specials( buf );
+            }
+            for( const std::string &s : buf ) {
+                out.emplace_back( s );
+            }
+        }
+    }
+
+    if( inbounds ) {
+        const auto this_sound = sounds::sound_at( lp );
+        if( !this_sound.empty() ) {
+            out.emplace_back( string_format( _( "You heard %s from here." ), this_sound ) );
+        } else {
+            auto tmp = lp;
+            for( tmp.z() = -OVERMAP_DEPTH; tmp.z() <= OVERMAP_HEIGHT; tmp.z()++ ) {
+                if( tmp.z() == lp.z() ) {
+                    continue;
+                }
+                const auto zlev_sound = sounds::sound_at( tmp );
+                if( !zlev_sound.empty() ) {
+                    out.emplace_back( string_format( tmp.z() > lp.z() ?
+                                                     _( "You heard %s from above." ) :
+                                                     _( "You heard %s from below." ), zlev_sound ) );
+                }
+            }
+        }
+    }
+
+    std::string res;
+    for( size_t i = 0; i < out.size(); i++ ) {
+        if( i > 0 ) {
+            res += '\n';
+        }
+        res += out[i];
+    }
+    return res;
+}
+
 bool game::check_zone( const zone_type_id &type, const tripoint_bub_ms &where ) const
 {
     return zone_manager::get_manager().has( type, m.bub_to_abs( where ) );
@@ -9523,10 +9736,64 @@ look_around_result game::look_around( bool show_window, tripoint_bub_ms &center,
 
     look_around_result result;
 
+    // ---- look_around RmlUi render path (§8.1 track-A, F.3 rml_doc harness) ----
+    // Render-only info pane fed by print_all_tile_info_text() (the parallel
+    // tile-readout producer; creature section = the shared Creature::print_info_text()).
+    // 4 scalar string binds (title / cursor coords / tile info / footer hints) — no
+    // struct/array registration. The map cursor (ter_indicator_cb) + zone overlay stay
+    // on the map path. Function-scope so the rml_doc dtor tears down on every exit.
+    struct la_rml_data {
+        Rml::String header_rml;
+        Rml::String cursor_rml;
+        Rml::String info_rml;
+        Rml::String footer_rml;
+        Rml::DataModelHandle handle;
+    };
+    std::unique_ptr<la_rml_data> rml_data;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml || !rml_data ) {
+            return;
+        }
+        la_rml_data &d = *rml_data;
+        d.header_rml = cata_text_to_rml( colorize( _( "Look Around" ), c_green ) );
+        d.cursor_rml = rml_escape( string_format( _( "Cursor At: (%d,%d,%d)" ), lx, ly, lz ) );
+        const oter_id &cur_ter_m = get_overmapbuffer( current_dimension_id_ ).ter(
+                                       tripoint_abs_omt( project_to<coords::omt>( m.bub_to_abs( lp ) ) ) );
+        d.info_rml = cata_text_to_rml( print_all_tile_info_text( lp, cur_ter_m->get_name(), cache ) );
+        const std::string ed = string_format( _( "%s - %s" ), ctxt.get_desc( "EXTENDED_DESCRIPTION" ),
+                                               ctxt.get_action_name( "EXTENDED_DESCRIPTION" ) );
+        const std::string fs = string_format( _( "%s - %s" ), ctxt.get_desc( "TOGGLE_FAST_SCROLL" ),
+                                               ctxt.get_action_name( "TOGGLE_FAST_SCROLL" ) );
+        const std::string pm = string_format( _( "%s - %s" ), ctxt.get_desc( "toggle_pixel_minimap" ),
+                                               ctxt.get_action_name( "toggle_pixel_minimap" ) );
+        d.footer_rml = cata_text_to_rml( colorize( ed, c_light_gray ) + "\n" +
+                                         colorize( fs, fast_scroll ? c_light_green : c_green ) + "   " +
+                                         colorize( pm, pixel_minimap_option ? c_light_green : c_green ) );
+        d.handle.DirtyVariable( "header_rml" );
+        d.handle.DirtyVariable( "cursor_rml" );
+        d.handle.DirtyVariable( "info_rml" );
+        d.handle.DirtyVariable( "footer_rml" );
+    };
+    rml.open( look_around_rmlui_enabled() && show_window, "look_around", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        rml_data = std::make_unique<la_rml_data>();
+        c.Bind( "header_rml", &rml_data->header_rml );
+        c.Bind( "cursor_rml", &rml_data->cursor_rml );
+        c.Bind( "info_rml", &rml_data->info_rml );
+        c.Bind( "footer_rml", &rml_data->footer_rml );
+        rml_data->handle = c.GetModelHandle();
+    } );
+
     shared_ptr_fast<draw_callback_t> ter_indicator_cb;
 
     if( show_window && ui ) {
         ui->on_redraw( [&]( const ui_adaptor & ) {
+            // RmlUi path owns the info pane — sync the model and skip the curses draw.
+            if( rml ) {
+                sync_rml();
+                return;
+            }
             werase( w_info );
             draw_border( w_info );
 
@@ -11033,6 +11300,13 @@ void register_list_monsters_rml_types( Rml::DataModelConstructor &c )
 } // namespace
 
 bool &list_monsters_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = false;
+    return enabled;
+}
+
+bool &look_around_rmlui_enabled()
 {
     // Default OFF — opt in via the F4 panel. See rml_screen.h.
     static bool enabled = false;

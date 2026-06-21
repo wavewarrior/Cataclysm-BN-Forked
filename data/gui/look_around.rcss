@@ -1,0 +1,56 @@
+/* Layout for the look-around / examine info pane (§8.1 track-A:
+   game::look_around). Palette/border/scrollbar/.scroll-pane come from theme.rcss
+   (linked first in look_around.rml); this file owns only the screen's own layout.
+   Lengths in dp.
+
+   A right-docked panel (the curses w_info side panel): centered title, cursor
+   coords, a scrolling tile-info pane, and a footer hint block. The info pane is
+   a .scroll-pane block container (RmlUi divs default to inline — see the
+   theme.rcss gotcha) with pre-wrap so the producer's newlines + long descriptions
+   wrap. Per-segment colour is baked via cata_text_to_rml, so this file only
+   positions. */
+body {
+    display: flex;
+    justify-content: flex-end;
+    align-items: stretch;
+    width: 100%;
+    height: 100%;
+}
+
+.la-panel {
+    width: 32%;
+    max-width: 480dp;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.la-header {
+    flex: 0 0 auto;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.la-cursor {
+    flex: 0 0 auto;
+    text-align: center;
+    color: {{fg}};
+    border-bottom: 1dp {{bg4}};
+    padding-bottom: 2dp;
+    margin-bottom: 2dp;
+    white-space: nowrap;
+}
+
+.la-info {
+    flex: 1 1 0;
+    min-height: 0;
+    white-space: pre-wrap;
+}
+
+.la-footer {
+    flex: 0 0 auto;
+    border-top: 1dp {{bg4}};
+    padding-top: 2dp;
+    margin-top: 2dp;
+    white-space: pre-wrap;
+}

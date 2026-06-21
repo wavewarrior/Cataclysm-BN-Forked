@@ -251,6 +251,14 @@ bool &pickup_rmlui_enabled();
 // native scroll. Default OFF.
 bool &list_monsters_rmlui_enabled();
 
+// game::look_around RmlUi render path (the examine/look-around info pane: §8.1
+// track-A creature-info). Render-only doc fed by print_all_tile_info_text() (the
+// parallel tile-readout producer; creature section reuses Creature::print_info_text()):
+// title + cursor coords + the full tile info (terrain/fields/trap/creature/vehicle/
+// items/graffiti) + footer hints. Map cursor + zone overlay stay on the map path.
+// Default OFF.
+bool &look_around_rmlui_enabled();
+
 // veh_interact RmlUi render path (the vehicle interaction screen: §8.1
 // gate-blocker backlog, THE GIANT — migrated in slices). Slice 1 = lifecycle
 // harness + the vehicle name + the action mode bar; later slices add stats /

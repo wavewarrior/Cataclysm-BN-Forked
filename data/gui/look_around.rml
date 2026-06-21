@@ -1,0 +1,22 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="look_around.rcss"/>
+</head>
+<body data-model="look_around">
+    <!-- §8.1 track-A: the look-around / examine info pane (game::look_around's
+         w_info). Render-only: a centered "Look Around" title, the cursor coords,
+         the full tile readout (terrain / fields / trap / creature / vehicle /
+         items / graffiti) produced by print_all_tile_info_text() — the creature
+         section reuses Creature::print_info_text() — and the footer key hints.
+         The map cursor + zone overlay stay on the map draw path; only the info
+         panel moved off curses. Synced each frame; per-segment colour baked via
+         cata_text_to_rml. -->
+    <div class="panel la-panel">
+        <div class="la-header" data-rml="header_rml"></div>
+        <div class="la-cursor" data-rml="cursor_rml"></div>
+        <div id="la-info" class="la-info scroll-pane" data-rml="info_rml"></div>
+        <div class="la-footer" data-rml="footer_rml"></div>
+    </div>
+</body>
+</rml>
