@@ -270,6 +270,77 @@ int vehicle::print_part_list( const catacurses::window &win, int y1, const int m
     return y;
 }
 
+// RmlUi (veh_interact slice 4): the parts-at-tile list as a single colour-tagged
+// string, parallel to print_part_list (detail=true path). The curses x-positioned
+// symbols + the right-aligned Interior/Exterior marker are inlined, and the scroll
+// windowing is dropped for native scroll; the highlighted row gets a "> " prefix.
+std::string vehicle::part_list_text( int p, int hl ) const
+{
+    if( p < 0 || p >= static_cast<int>( parts.size() ) ) {
+        return std::string();
+    }
+    const std::vector<int> pl = this->parts_at_relative( parts[p].mount, true );
+    std::string out;
+
+    for( size_t i = 0; i < pl.size(); i++ ) {
+        const vehicle_part &vp = parts[ pl[i] ];
+        std::string partname = vp.name();
+
+        if( vp.is_fuel_store() && !vp.ammo_current().is_null() ) {
+            if( vp.ammo_current() == itype_battery ) {
+                partname += string_format( _( " (%s/%s charge)" ), vp.ammo_remaining(), vp.ammo_capacity() );
+            } else {
+                const itype *pt_ammo_cur = &*vp.ammo_current();
+                auto stack = units::legacy_volume_factor / pt_ammo_cur->stack_size;
+                partname += string_format( _( " (%.1fL %s)" ),
+                                           round_up( units::to_liter( vp.ammo_remaining() * stack ), 1 ),
+                                           item::nname( vp.ammo_current() ) );
+            }
+        }
+        if( part_flag( pl[i], "CARGO" ) ) {
+            //~ used/total volume of a cargo vehicle part
+            partname += string_format( _( " (vol: %s/%s %s)" ),
+                                       format_volume( stored_volume( pl[i] ) ),
+                                       format_volume( max_volume( pl[i] ) ),
+                                       volume_units_abbr() );
+        }
+
+        std::string left_sym;
+        std::string right_sym;
+        if( part_flag( pl[i], "ARMOR" ) ) {
+            left_sym = "(";
+            right_sym = ")";
+        } else if( part_info( pl[i] ).location == part_location_structure ) {
+            left_sym = "[";
+            right_sym = "]";
+        } else {
+            left_sym = "-";
+            right_sym = "-";
+        }
+
+        std::string side;
+        if( i == 0 ) {
+            side = vpart_position( const_cast<vehicle &>( *this ), pl[i] ).is_inside()
+                   ? _( "Interior" ) : _( "Exterior" );
+        }
+
+        std::string row = ( static_cast<int>( i ) == hl ? "> " : "  " ) +
+                          left_sym + partname + right_sym;
+        if( !side.empty() ) {
+            row += "  " + side;
+        }
+        out += colorize( row, c_light_gray ) + "\n";
+    }
+
+    const std::optional<std::string> label = vpart_position( const_cast<vehicle &>( *this ),
+            p ).get_label();
+    if( label ) {
+        out += colorize( string_format( _( "Label: %s" ), label.value() ), c_light_red ) + "\n";
+    }
+
+    return out;
+}
+
 /**
  * Prints a list of descriptions for all parts to the screen inside of a boxed window
  * @param win The window to draw in.
@@ -284,6 +355,23 @@ void vehicle::print_vparts_descs( const catacurses::window &win, int max_y, int 
 {
     if( p < 0 || p >= static_cast<int>( parts.size() ) ) {
         return;
+    }
+    const std::string msg = parts_descs_text( max_y, width, p, start_at, start_limit );
+    werase( win );
+    // -2 for left & right padding
+    // NOLINTNEXTLINE(cata-use-named-point-constants)
+    fold_and_print( win, point( 1, 0 ), width - 2, c_light_gray, msg );
+    wnoutrefresh( win );
+}
+
+// String-building half of print_vparts_descs (see header). Behaviour-identical to
+// what that function used to inline; print_vparts_descs now delegates here so the
+// RmlUi path can consume the same colour-tagged text.
+std::string vehicle::parts_descs_text( int max_y, int width, int p,
+                                       int &start_at, int &start_limit ) const
+{
+    if( p < 0 || p >= static_cast<int>( parts.size() ) ) {
+        return std::string();
     }
 
     std::vector<int> pl = this->parts_at_relative( parts[p].mount, true );
@@ -340,11 +428,7 @@ void vehicle::print_vparts_descs( const catacurses::window &win, int max_y, int 
             break;
         }
     }
-    werase( win );
-    // -2 for left & right padding
-    // NOLINTNEXTLINE(cata-use-named-point-constants)
-    fold_and_print( win, point( 1, 0 ), width - 2, c_light_gray, msg );
-    wnoutrefresh( win );
+    return msg;
 }
 
 /**

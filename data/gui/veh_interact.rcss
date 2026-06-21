@@ -33,6 +33,21 @@ body {
     flex-direction: row;
 }
 
+/* Each half of the body stacks two panes vertically. Left: stats + parts.
+   Right (slice 4): overview + message/descriptions. */
+.vi-col {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.vi-col-right {
+    border-left: 1dp {{bg4}};
+    margin-left: 4dp;
+    padding-left: 4dp;
+}
+
 /* Slice 2: the stats pane. One \n-joined string → pre-wrap line breaks;
    native scroll if it overflows. Each line carries its own colour. */
 .vi-stats {
@@ -43,6 +58,19 @@ body {
     padding: 2dp;
 }
 
+/* Slice 4: the parts-at-tile list + the message/descriptions pane. Both are
+   single pre-wrap strings; native scroll. A separator splits each from the
+   pane above it in its column. */
+.vi-parts, .vi-msg {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    padding: 2dp;
+    border-top: 1dp {{bg4}};
+    margin-top: 2dp;
+}
+
 /* Slice 3: the overview pane (engines/tanks/batteries/… grouped list). Rows
    are a left column (header label / "hotkey name") + a right-aligned detail
    column. Headers get a top gap; the selected entry takes the accent. */
@@ -51,8 +79,6 @@ body {
     min-height: 0;
     overflow-y: auto;
     padding: 2dp;
-    border-left: 1dp {{bg4}};
-    margin-left: 4dp;
 }
 
 .vi-ov-row {

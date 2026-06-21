@@ -15,13 +15,19 @@
     <div class="panel vi-panel">
         <div class="vi-name" data-rml="name_rml"></div>
         <div class="vi-body">
-            <div class="vi-stats" data-rml="stats_rml"></div>
-            <div id="vi-overview" class="vi-overview scroll-pane">
-                <div class="vi-ov-row" data-for="r : overview_rows"
-                     data-class-header="r.is_header" data-class-selected="r.selected">
-                    <span class="vi-ov-text" data-rml="r.text"></span>
-                    <span class="vi-ov-detail" data-rml="r.detail"></span>
+            <div class="vi-col">
+                <div class="vi-stats" data-rml="stats_rml"></div>
+                <div id="vi-parts" class="vi-parts scroll-pane" data-rml="parts_rml"></div>
+            </div>
+            <div class="vi-col vi-col-right">
+                <div id="vi-overview" class="vi-overview scroll-pane">
+                    <div class="vi-ov-row" data-for="r : overview_rows"
+                         data-class-header="r.is_header" data-class-selected="r.selected">
+                        <span class="vi-ov-text" data-rml="r.text"></span>
+                        <span class="vi-ov-detail" data-rml="r.detail"></span>
+                    </div>
                 </div>
+                <div id="vi-msg" class="vi-msg scroll-pane" data-rml="msg_rml"></div>
             </div>
         </div>
         <div class="vi-mode" data-rml="mode_rml"></div>

@@ -113,6 +113,8 @@ struct veh_interact::veh_rml_data {
     Rml::String name_rml;   // the vehicle name line (parallels display_name)
     Rml::String stats_rml;  // slice 2: the stats pane (parallels display_stats)
     Rml::Vector<veh_overview_row> overview_rows; // slice 3 (parallels display_overview)
+    Rml::String parts_rml;  // slice 4: parts-at-tile list (parallels print_part_list)
+    Rml::String msg_rml;    // slice 4: descriptions / message pane (the w_msg block)
     Rml::DataModelHandle handle;
 };
 
@@ -517,6 +519,8 @@ void veh_interact::do_main_loop()
         c.Bind( "name_rml", &rml_data->name_rml );
         c.Bind( "stats_rml", &rml_data->stats_rml );
         c.Bind( "overview_rows", &rml_data->overview_rows );
+        c.Bind( "parts_rml", &rml_data->parts_rml );
+        c.Bind( "msg_rml", &rml_data->msg_rml );
         rml_data->handle = c.GetModelHandle();
     } );
 
@@ -3391,10 +3395,28 @@ void veh_interact::sync_rml()
         }
     }
 
+    // Parts-at-tile list (slice 4; parallels print_part_list — cpart is the part
+    // under the diagram cursor, highlight_part the examined row).
+    rml_data->parts_rml = cata_text_to_rml( veh->part_list_text( cpart, highlight_part ) );
+
+    // Descriptions / message pane (slice 4; parallels the w_msg block in on_redraw).
+    // A transient `msg` (red) takes priority; otherwise the folded part descriptions.
+    // Pass a large max_y so parts_descs_text emits everything (curses scroll
+    // windowing dropped → native scroll). Throwaway start_at/start_limit.
+    if( msg.has_value() ) {
+        rml_data->msg_rml = cata_text_to_rml( colorize( msg.value(), c_light_red ) );
+    } else {
+        int at = 0;
+        int limit = 0;
+        rml_data->msg_rml = cata_text_to_rml( veh->parts_descs_text( INT_MAX, 50, cpart, at, limit ) );
+    }
+
     rml_data->handle.DirtyVariable( "mode_rml" );
     rml_data->handle.DirtyVariable( "name_rml" );
     rml_data->handle.DirtyVariable( "stats_rml" );
     rml_data->handle.DirtyVariable( "overview_rows" );
+    rml_data->handle.DirtyVariable( "parts_rml" );
+    rml_data->handle.DirtyVariable( "msg_rml" );
 }
 
 /**
