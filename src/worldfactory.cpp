@@ -332,8 +332,6 @@ WORLDINFO *worldfactory::make_new_world( bool show_prompt, const std::string &wo
                 wnoutrefresh( wf_win );
                 return;
             }
-            draw_worldgen_tabs( wf_win, static_cast<size_t>( curtab ) );
-            wnoutrefresh( wf_win );
         } );
 
         const size_t numtabs = tabs.size();
@@ -621,85 +619,6 @@ WORLDINFO *worldfactory::pick_world( bool show_prompt, bool empty_only )
             sync_rml();
             return;
         }
-        draw_border( w_worlds_border, BORDER_COLOR, _( " WORLD SELECTION " ) );
-        mvwputch( w_worlds_border, point( 0, 4 ), BORDER_COLOR, LINE_XXXO ); // |-
-        mvwputch( w_worlds_border, point( iMinScreenWidth - 1, 4 ), BORDER_COLOR, LINE_XOXX ); // -|
-
-        for( auto &mapLine : mapLines ) {
-            if( mapLine.second ) {
-                mvwputch( w_worlds_border, point( mapLine.first + 1, TERMY - 1 ), BORDER_COLOR,
-                          LINE_XXOX ); // _|_
-            }
-        }
-
-        wnoutrefresh( w_worlds_border );
-
-        for( int i = 0; i < getmaxx( w_worlds_border ); i++ ) {
-            if( mapLines[i] ) {
-                mvwputch( w_worlds_header, point( i, 0 ), BORDER_COLOR, LINE_OXXX );
-            } else {
-                mvwputch( w_worlds_header, point( i, 0 ), BORDER_COLOR, LINE_OXOX ); // Draw header line
-            }
-        }
-
-        wnoutrefresh( w_worlds_header );
-
-        //Clear the lines
-        for( int i = 0; i < iContentHeight; i++ ) {
-            for( int j = 0; j < getmaxx( w_worlds ); j++ ) {
-                if( mapLines[j] ) {
-                    mvwputch( w_worlds, point( j, i ), BORDER_COLOR, LINE_XOXO );
-                } else {
-                    mvwputch( w_worlds, point( j, i ), c_black, ' ' );
-                }
-
-                if( i < iTooltipHeight ) {
-                    mvwputch( w_worlds_tooltip, point( j, i ), c_black, ' ' );
-                }
-            }
-        }
-
-        //Draw World Names
-        for( size_t i = 0; i < world_pages[selpage].size(); ++i ) {
-            mvwprintz( w_worlds, point( 0, static_cast<int>( i ) ), c_white, "%d", i + 1 );
-            wmove( w_worlds, point( 4, static_cast<int>( i ) ) );
-
-            std::string world_name = ( world_pages[selpage] )[i];
-            WORLDINFO *world = get_world( world_name );
-            size_t saves_num = world->world_saves.size();
-
-            std::string text = string_format( "%s (%d)", world_name, saves_num );
-            nc_color col = c_white;
-
-            if( i == sel ) {
-                wprintz( w_worlds, c_yellow, ">> " );
-            } else {
-                wprintz( w_worlds, c_yellow, "   " );
-            }
-
-            wprintz( w_worlds, col, text );
-        }
-
-        //Draw Tabs
-        wmove( w_worlds_header, point( 7, 0 ) );
-
-        for( size_t i = 0; i < num_pages; ++i ) {
-            //skip empty pages
-            if( !world_pages[i].empty() ) {
-                nc_color tabcolor = ( selpage == i ) ? hilite( c_white ) : c_white;
-                wprintz( w_worlds_header, c_white, "[" );
-                wprintz( w_worlds_header, tabcolor, _( "Page %lu" ), i + 1 );
-                wprintz( w_worlds_header, c_white, "]" );
-                wputch( w_worlds_header, BORDER_COLOR, LINE_OXOX );
-            }
-        }
-
-        wnoutrefresh( w_worlds_header );
-
-        fold_and_print( w_worlds_tooltip, point_zero, 78, c_white, _( "Pick a world to enter game" ) );
-        wnoutrefresh( w_worlds_tooltip );
-
-        wnoutrefresh( w_worlds );
     } );
 
     input_context ctxt( "PICK_WORLD_DIALOG" );
@@ -1011,7 +930,6 @@ void worldfactory::show_active_world_mods( const std::vector<mod_id> &world_mods
     init_windows( ui );
     ui.on_screen_resize( init_windows );
 
-    int start = 0;
     int cursor = 0;
     const size_t num_mods = world_mods.size();
 
@@ -1069,12 +987,6 @@ void worldfactory::show_active_world_mods( const std::vector<mod_id> &world_mods
             sync_rml();
             return;
         }
-        draw_border( w_border, BORDER_COLOR, _( " ACTIVE WORLD MODS " ) );
-        wnoutrefresh( w_border );
-
-        draw_mod_list( w_mods, start, static_cast<size_t>( cursor ), world_mods,
-                       true, _( "--NO ACTIVE MODS--" ), catacurses::window() );
-        wnoutrefresh( w_mods );
     } );
 
     while( true ) {

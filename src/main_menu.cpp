@@ -952,7 +952,6 @@ bool main_menu::opening_screen()
             sync_rml();
             return;
         }
-        print_menu( w_open, sel1, menu_offset, sel_line );
     } );
     ui.on_screen_resize( [this]( ui_adaptor & ui ) {
         init_windows();
