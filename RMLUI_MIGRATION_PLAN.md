@@ -3100,19 +3100,25 @@ minus the backend impl (`sdl_font`/`sdl_fonts`/`sdl_curses_draw`/`sdltiles`/`cat
 
 | Font-layer caller | Class | Verdict |
 |---|---|---|
-| `loading_ui` splash author (`draw_sdl_text_outlined`) | player-facing | straggler → §7 or documented exception |
-| `sdl_overmap_draw` city names + note labels (×3, `draw_string`) | player-facing WORLD text | **straggler** — this is exactly the §7 / Tier-6 "static map labels" class, but those labels were NEVER moved off the curses `Font`; the overmap TILE view stays (map path) but its text must go to §7 |
-| `sdl_render_frame` `tile_labels` (`draw_string`) | **dev/debug** coord overlay (lighting dev-UI, draws "mx,my" per tile in radius) | straggler in the dev-emitter class — §7 explicitly says "debug overlays route through the §7 layer"; move or delete with the dev tools |
+| `sdl_overmap_draw` city names + note labels (×3, `draw_string`) | player-facing WORLD text | **DONE `0706194b93` (toggle OFF, eyeball owed).** Routed to §7 `world_text_add` via new `overmap_text_rmlui_enabled()` + F4 "overmap labels (text)". draw_om runs in the redraw cycle (pre-prepare) so the begin+add timing matches the proven SCT feed; bg rects stay (GPU). The clean one of the three. |
+| `loading_ui` splash author (`draw_sdl_text_outlined`) | player-facing | **DOCUMENTED EXCEPTION (rip-out-time).** Not §7-routable as a slice: the splash draws on a SEPARATE render path (loading_image_splash), pre/around RmlUi-context init — not the in-game refresh_display frame that runs world_text prepare/render. Resolve at Tier 10 (accept one non-curses SDL-font draw, or special-case it then). |
+| `sdl_render_frame` `tile_labels` (`draw_string`) | **dev/debug** coord overlay (lighting dev-UI, draws "mx,my" per tile in radius) | **NOT a clean §7 route — DEFERRED to rip-out.** Lives in `draw_lighting_overlays`, which runs AFTER `prepare()` (refresh_display order: prepare[776] → draw_lighting_overlays[889] → render_world_pass_w[893]) → a `world_text_add` here lands one frame late / after geometry is built. Dev-only → per the plan, delete with the dev tools at Tier 10, or restructure its submission to pre-prepare if kept. Not worth a build-blind frame-pipeline change now. |
 | `sdl_window` (font construct/reset) | backend lifecycle | NOT a straggler — deletes wholesale |
 | `sdl_framebuffer` (`font->width/height`) | backend METRICS only (curses cell rects) | NOT a straggler — deletes wholesale |
 | `Font::OutputChar` / `draw_ascii_lines` | the curses cell loop | **fully contained** — ZERO non-backend callers (clean) |
 
-So the font layer has **3 real stragglers** (loading splash + overmap labels + dev tile-coord
-overlay), all of the §7 "world/overlay text" class — none caught by the step-2 primitive grep.
+So the font layer had **3 real stragglers** — **STATUS 2026-06-22: 1 routed, 2 deferred to rip-out.**
+- **overmap labels — DONE** (`0706194b93`, toggle OFF, eyeball owed): the clean one (pre-prepare
+  redraw-cycle timing → §7 `world_text_add`, like SCT).
+- **dev tile-coord overlay — DEFERRED**: post-`prepare()` in `draw_lighting_overlays` → not §7-routable
+  without restructuring; dev-only → delete-with-dev-tools or restructure at Tier 10.
+- **loading splash — DOCUMENTED EXCEPTION**: separate render path (loading_image_splash),
+  pre/around context init → resolve at Tier 10.
 **Lesson: the gate has TWO sweep dimensions — the primitive layer (step 2) AND the font layer
 (step 4); §8.1's first pass only did step 2.** Good news: `OutputChar` (the actual cell/glyph
-loop) has no external consumers, so once these 3 + the §8.1 screen backlog migrate, deleting the
-curses glyph path is clean.
+loop) has no external consumers; with the screen backlog done + overmap labels routed, the only
+glyph-path draw_string callers left are the 2 deferred dev/splash cases — both resolvable at the
+rip-out (delete or special-case), so deleting the curses glyph path stays clean.
 
 **NON-blockers (correctly handled by the existing plan / out of scope):**
 - **Curses backend + primitive defs — DELETE WHOLESALE at Tier 10, do not migrate:**
