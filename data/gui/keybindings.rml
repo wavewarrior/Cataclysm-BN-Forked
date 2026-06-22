@@ -1,0 +1,24 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="keybindings.rcss"/>
+</head>
+<body data-model="keybindings">
+    <!-- Keybindings editor (input_context::display_menu). Render-only: the keyboard
+         owns nav/add/remove/execute and the filter is the Tier-0 string_input that
+         composites on top. Rows mirror the curses scroll window (so the a-z hotkey
+         column lines up with the visible actions); invlet is shown only in
+         add/remove/execute modes. The legend string carries its own colours. -->
+    <div class="panel kb-panel">
+        <div class="kb-legend" data-rml="legend_rml"></div>
+
+        <div class="kb-list scroll-pane">
+            <div class="kb-row" data-for="row : rows">
+                <span class="kb-invlet" data-rml="row.invlet_rml"></span>
+                <span class="kb-name" data-rml="row.name_rml"></span>
+                <span class="kb-desc" data-rml="row.desc_rml"></span>
+            </div>
+        </div>
+    </div>
+</body>
+</rml>

@@ -289,4 +289,9 @@ bool &gamemode_defense_rmlui_enabled();
 // Default OFF.
 bool &loading_rmlui_enabled();
 
+// input_context::display_menu() RmlUi path (the keybindings editor — the legend +
+// the windowed/filtered action list; the filter string_input stays Tier-0). The
+// curses w_help draw is the toggle-OFF fallback. Default OFF.
+bool &keybindings_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

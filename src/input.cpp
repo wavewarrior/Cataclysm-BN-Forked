@@ -35,6 +35,10 @@
 #include "color.h"
 #include "point.h"
 
+#include <RmlUi/Core.h>
+#include "rml_screen.h"
+#include "rml_util.h"
+
 using std::min; // from <algorithm>
 using std::max;
 
@@ -1054,6 +1058,43 @@ static const std::map<fallback_action, int> fallback_keys = {
     { fallback_action::execute, '.' },
 };
 
+namespace
+{
+// RmlUi model for the keybindings editor (input_context::display_menu). One row per
+// VISIBLE action (the curses windowing is preserved so the a-z hotkey -> action
+// mapping stays correct); invlet shown only in add/remove/execute modes.
+struct kb_row {
+    Rml::String invlet_rml;
+    Rml::String name_rml;
+    Rml::String desc_rml;
+};
+struct kb_session {
+    Rml::String legend_rml;
+    Rml::Vector<kb_row> rows;
+    Rml::DataModelHandle handle;
+};
+bool g_kb_types_registered = false;
+void register_kb_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_kb_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<kb_row> rh = c.RegisterStruct<kb_row>();
+    rh.RegisterMember( "invlet_rml", &kb_row::invlet_rml );
+    rh.RegisterMember( "name_rml", &kb_row::name_rml );
+    rh.RegisterMember( "desc_rml", &kb_row::desc_rml );
+    c.RegisterArray<Rml::Vector<kb_row>>();
+    g_kb_types_registered = true;
+}
+} // namespace
+
+bool &keybindings_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = false;
+    return enabled;
+}
+
 action_id input_context::display_menu( const bool permit_execute_action )
 {
     action_id action_to_execute = ACTION_NULL;
@@ -1166,7 +1207,49 @@ action_id input_context::display_menu( const bool permit_execute_action )
     std::string action;
     int raw_input_char = 0;
 
+    kb_session kb_data;
+    rml_doc kb_rml;
+    const auto sync_kb_rml = [&]() {
+        if( !kb_rml ) {
+            return;
+        }
+        kb_data.legend_rml = cata_text_to_rml( legend );
+        kb_data.rows.clear();
+        // Mirror the curses window (same scroll_offset/display_height) so the a-z
+        // hotkey -> action mapping (hotkeys[i] -> filtered[i + scroll_offset]) holds.
+        for( size_t i = 0; i + scroll_offset < filtered_registered_actions.size() &&
+             i < display_height; i++ ) {
+            const std::string &aid = filtered_registered_actions[i + scroll_offset];
+            bool overwrite_default;
+            const action_attributes &attr = inp_mngr.get_action_attributes( aid, category,
+                                            &overwrite_default );
+            const char invlet = i < hotkeys.size() ? hotkeys[i] : ' ';
+            kb_row r;
+            if( status == s_add_global && overwrite_default ) {
+                r.invlet_rml = cata_text_to_rml( colorize( std::string( 1, invlet ), c_dark_gray ) );
+            } else if( status == s_add || status == s_add_global || status == s_remove ) {
+                r.invlet_rml = cata_text_to_rml( colorize( std::string( 1, invlet ), c_light_blue ) );
+            } else if( status == s_execute ) {
+                r.invlet_rml = cata_text_to_rml( colorize( std::string( 1, invlet ), c_white ) );
+            }
+            const nc_color col = attr.input_events.empty() ? unbound_key
+                                 : ( overwrite_default ? local_key : global_key );
+            r.name_rml = cata_text_to_rml( colorize( get_action_name( aid ) + ":", col ) );
+            r.desc_rml = cata_text_to_rml( colorize( get_desc( aid ), col ) );
+            kb_data.rows.push_back( r );
+        }
+        kb_data.handle.DirtyVariable( "legend_rml" );
+        kb_data.handle.DirtyVariable( "rows" );
+    };
+
     const auto redraw = [&]( ui_adaptor & ui ) {
+        if( kb_rml ) {
+            sync_kb_rml();
+            // The filter spopup (Tier-0) still handles input in the loop below; the
+            // curses list/legend draw is skipped on the RmlUi path.
+            ui.record_term_cursor();
+            return;
+        }
         werase( w_help );
         draw_border( w_help, BORDER_COLOR, _( "Keybindings" ), c_light_red );
         draw_scrollbar( w_help, scroll_offset, display_height,
@@ -1221,6 +1304,14 @@ action_id input_context::display_menu( const bool permit_execute_action )
         ui.record_term_cursor();
     };
     ui.on_redraw( redraw );
+
+    kb_rml.open( keybindings_rmlui_enabled(), "keybindings", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        register_kb_rml_types( c );
+        c.Bind( "legend_rml", &kb_data.legend_rml );
+        c.Bind( "rows", &kb_data.rows );
+        kb_data.handle = c.GetModelHandle();
+    } );
 
     // do not switch IME mode now, but restore previous mode on return
     ime_sentry sentry( ime_sentry::keep );

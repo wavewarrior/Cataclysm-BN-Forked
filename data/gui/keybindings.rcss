@@ -1,0 +1,48 @@
+/* Layout for the keybindings editor (input_context::display_menu). Palette/border/
+   scrollbar/.scroll-pane and the .panel frame come from theme.rcss (linked first);
+   this file owns only this screen's layout. Row colours are baked into the bound
+   strings. Monospace so the invlet column and the action/desc columns line up.
+   Lengths in dp. */
+
+body {
+    width: 100%;
+    height: 100%;
+}
+
+.kb-panel {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.kb-legend {
+    flex: 0 0 auto;
+    white-space: pre-wrap;
+    padding-bottom: 4dp;
+    margin-bottom: 4dp;
+    border-bottom: 1dp {{bg4}};
+}
+
+.kb-list {
+    flex: 1;
+    min-height: 0;
+}
+
+.kb-row {
+    display: flex;
+    flex-direction: row;
+    padding: 0 4dp;
+}
+
+.kb-invlet {
+    flex: 0 0 24dp;
+}
+
+.kb-name {
+    flex: 0 0 320dp;
+}
+
+.kb-desc {
+    flex: 1;
+}
