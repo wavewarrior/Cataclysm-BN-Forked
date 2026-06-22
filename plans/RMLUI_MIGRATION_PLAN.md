@@ -3238,8 +3238,22 @@ build-green:
          each keystroke by the shared producer), stacked under the string_input "Note:" box,
          gated `overmap_rmlui_enabled()`, curses kept as toggle-OFF fallback. Build+link green
          Metal; eyeball owed (backdrop position vs the input box, minimap glyph parity).
-     **Still open for O3:** the place-terrain/special editor + the `draw()`/`draw_om_sidebar`
-     curses/rml split (the main-display arm).
+     **place-terrain/special editor DONE (batch 16):** `place_ter_or_special`'s `w_editor`
+     box now renders via passive backdrop doc `gui/overmap_editor.rml` (`#editor`), synced each
+     redraw, gated `overmap_rmlui_enabled()`, curses fallback kept; the 5 narrow warning lines
+     merged into one wrapping `_()` paragraph (dev wizard tool). Build+link green Metal, eyeball owed.
+     **O3-B RESOLVED — overmap UI migration is COMPLETE (2026-06-22).** Audit of `draw()`/
+     `draw_om_sidebar`/`build_om_sidebar_rml` shows EVERY overmap UI panel is already RML: the
+     sidebar info, the **full `print_hint` legend**, and the footer are all mirrored into the
+     `om_sidebar_session` model (`build_om_sidebar_rml`, overmap_ui.cpp ~1481-1653) and bound on the
+     `"overmap"` doc; search/notes-manager/create_note/place-terrain editor are RML (batches 12/15/16).
+     The only remaining curses is `draw_ascii` — the **ASCII map-grid render** (mvwputch glyphs into
+     `w_overmap`), which is NOT a menu: it's the world view. There are two render paths — the tiles
+     (sprite) overmap that survives rip-out, and `draw_ascii` (the `!use_tiles_overmap` ASCII path)
+     which dies with the curses-cell backend at Tier-10, exactly like the in-game ASCII map (see the
+     NOTE ~line 2055: "a §8 rip-out question, not slice work"). So nothing here is left to *migrate*;
+     the curses sidebar/create_note/editor bodies remain only as toggle-OFF A/B fallbacks (delete at
+     the eyeball-gated rip-out, not now).
    - ~~`ranged` aim readout (`print_ranged_chance`/`print_aim`) — slice-2b deferred.~~ **DONE
      (batch 14b, 2026-06-22): producers were already wired into `panel_text()`; this session
      deleted the 4 now-dead curses draw fns (−268 lines) on a clean tree, build+link green.
