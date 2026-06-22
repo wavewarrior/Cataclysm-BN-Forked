@@ -616,7 +616,6 @@ class target_ui
         void draw_terrain_overlay();
 
         // Draw aiming window
-        void draw_ui_window();
 
         // Generate ui window title
         std::string uitext_title();
@@ -624,20 +623,10 @@ class target_ui
         // Generate flavor text for 'Fire!' key
         std::string uitext_fire();
 
-        void draw_window_title();
-        void draw_help_notice();
 
         // Draw list of available controls at the bottom of the window.
         // text_y - first free line counting from the top
-        void draw_controls_list( int text_y );
 
-        void panel_cursor_info( int &text_y );
-        void panel_gun_info( int &text_y );
-        void panel_recoil( int &text_y );
-        void panel_spell_info( int &text_y );
-        void panel_target_info( int &text_y, bool fill_with_blank_if_no_target );
-        void panel_fire_mode_aim( int &text_y );
-        void panel_turret_list( int &text_y );
 
         // RmlUi (slice 2a): colour-tagged text equivalent of draw_ui_window's
         // shallow sections (title/cursor/gun/recoil/spell/target/turret/controls).
@@ -3073,7 +3062,6 @@ target_handler::trajectory target_ui::run()
             sync_rml();
             return;
         }
-        draw_ui_window();
     } );
 
     // Handle multi-turn aiming
@@ -4322,58 +4310,6 @@ std::string target_ui::panel_text()
     return out;
 }
 
-void target_ui::draw_ui_window()
-{
-    // Clear target window and make it non-transparent.
-    int width = getmaxx( w_target );
-    int height = getmaxy( w_target );
-    for( int y = 0; y < height; y++ ) {
-        for( int x = 0; x < width; x++ ) {
-            mvwputch( w_target, point( x, y ), c_white, ' ' );
-        }
-    }
-
-    draw_border( w_target );
-    draw_window_title();
-    draw_help_notice();
-
-    int text_y = 1; // Skip top border
-
-    panel_cursor_info( text_y );
-    text_y += compact ? 0 : 1;
-
-    if( mode == TargetMode::Fire || mode == TargetMode::TurretManual || ( mode == TargetMode::Shape &&
-            relevant->is_gun() ) ) {
-        panel_gun_info( text_y );
-        panel_recoil( text_y );
-        text_y += compact ? 0 : 1;
-    } else if( mode == TargetMode::Spell ) {
-        panel_spell_info( text_y );
-        text_y += compact ? 0 : 1;
-    }
-
-    bool fill_with_blank_if_no_target = !tiny;
-    panel_target_info( text_y, fill_with_blank_if_no_target );
-    text_y += compact ? 0 : 1;
-
-    if( mode == TargetMode::Turrets ) {
-        panel_turret_list( text_y );
-    } else if( status == Status::Good ) {
-        // TODO: these are old, consider refactoring
-        if( mode == TargetMode::Fire ) {
-            panel_fire_mode_aim( text_y );
-        } else if( mode == TargetMode::Throw || mode == TargetMode::ThrowBlind ) {
-            bool blind = ( mode == TargetMode::ThrowBlind );
-            draw_throw_aim( *you, w_target, text_y, ctxt, *relevant, dst, blind );
-        }
-    }
-
-    if( !narrow ) {
-        draw_controls_list( text_y );
-    }
-
-    wnoutrefresh( w_target );
-}
 
 std::string target_ui::uitext_title()
 {
@@ -4403,344 +4339,15 @@ std::string target_ui::uitext_fire()
     }
 }
 
-void target_ui::draw_window_title()
-{
-    mvwprintz( w_target, point( 2, 0 ), c_white, "< " );
-    trim_and_print( w_target, point( 4, 0 ), getmaxx( w_target ) - 7, c_red, uitext_title() );
-    wprintz( w_target, c_white, " >" );
-}
 
-void target_ui::draw_help_notice()
-{
-    int text_y = getmaxy( w_target ) - 1;
-    int width = getmaxx( w_target );
-    const std::string label_help = string_format(
-                                       narrow ? _( "[%s] show help" ) : _( "[%s] show all controls" ),
-                                       ctxt.get_desc( "HELP_KEYBINDINGS", 1 ) );
-    int label_width = std::min( utf8_width( label_help ), width - 6 ); // 6 for borders and "< " + " >"
-    int text_x = width - label_width - 6;
-    mvwprintz( w_target, point( text_x + 1, text_y ), c_white, "< " );
-    trim_and_print( w_target, point( text_x + 3, text_y ), label_width, c_white, label_help );
-    wprintz( w_target, c_white, " >" );
-}
 
-void target_ui::draw_controls_list( int text_y )
-{
-    // Change UI colors for visual feedback
-    // TODO: Colorize keys inside brackets to be consistent with other UI windows
-    nc_color col_enabled = c_white;
-    nc_color col_disabled = c_light_gray;
-    nc_color col_move = ( status != Status::OutOfAmmo ? col_enabled : col_disabled );
-    nc_color col_fire = ( status == Status::Good ? col_enabled : col_disabled );
 
-    // Get first key bound to given action OR ' ' if there are none.
-    const auto bound_key = [this]( const std::string & s ) {
-        const std::vector<char> keys = this->ctxt.keys_bound_to( s );
-        return keys.empty() ? ' ' : keys.front();
-    };
-    const auto colored = [col_enabled]( nc_color color, const std::string & s ) {
-        if( color == col_enabled ) {
-            // col_enabled is the default one when printing
-            return s;
-        } else {
-            return colorize( s, color );
-        }
-    };
 
-    struct line {
-        size_t order; // Lines with highest 'order' are removed first
-        std::string str;
-    };
-    std::vector<line> lines;
 
-    // Compile full list
-    if( shifting_view ) {
-        lines.push_back( { 8, colored( col_move, _( "Shift view with directional keys" ) ) } );
-    } else {
-        lines.push_back( { 8, colored( col_move, _( "Move cursor with directional keys" ) ) } );
-    }
-    if( is_mouse_enabled() ) {
-        std::string move = _( "Mouse: LMB: Target, Wheel: Cycle," );
-        std::string fire = _( "RMB: Fire" );
-        lines.push_back( { 7, colored( col_move, move ) + " " + colored( col_fire, fire ) } );
-    }
-    {
-        std::string cycle = string_format( _( "[%s] Cycle targets;" ), ctxt.get_desc( "NEXT_TARGET", 1 ) );
-        std::string fire = string_format( _( "[%c] %s." ), bound_key( "FIRE" ), uitext_fire() );
-        lines.push_back( { 0, colored( col_move, cycle ) + " " + colored( col_fire, fire ) } );
-    }
-    {
-        std::string text = string_format( _( "[%c] target self; [%c] toggle snap-to-target" ),
-                                          bound_key( "CENTER" ), bound_key( "TOGGLE_SNAP_TO_TARGET" ) );
-        lines.push_back( { 3, colored( col_enabled, text ) } );
-    }
-    if( mode == TargetMode::Fire ) {
-        std::string aim_and_fire;
-        for( const auto &e : aim_types ) {
-            if( e.has_threshold ) {
-                aim_and_fire += string_format( "[%c] ", bound_key( e.action ) );
-            }
-        }
-        aim_and_fire += _( "to aim and fire." );
 
-        std::string aim = string_format( _( "[%c] to steady your aim.  (10 moves)" ),
-                                         bound_key( "AIM" ) );
 
-        lines.push_back( { 2, colored( col_fire, aim ) } );
-        lines.push_back( { 4, colored( col_fire, aim_and_fire ) } );
-    }
-    if( mode == TargetMode::Fire || mode == TargetMode::TurretManual || ( mode == TargetMode::Shape &&
-            relevant->is_gun() ) ) {
-        lines.push_back( { 5, colored( col_enabled, string_format( _( "[%c] to switch firing modes." ),
-                                       bound_key( "SWITCH_MODE" ) ) ) } );
-        lines.push_back( { 6, colored( col_enabled, string_format( _( "[%c] to switch ammo." ),
-                                       bound_key( "SWITCH_AMMO" ) ) ) } );
-    }
-    if( mode == TargetMode::Turrets ) {
-        const std::string label = draw_turret_lines
-                                  ? _( "[%c] Hide lines of fire" )
-                                  : _( "[%c] Show lines of fire" );
-        lines.push_back( { 1, colored( col_enabled, string_format( label, bound_key( "TOGGLE_TURRET_LINES" ) ) ) } );
-    }
 
-    // Shrink the list until it fits
-    int height = getmaxy( w_target );
-    int available_lines = height - text_y - 1; // 1 for bottom border
-    if( available_lines <= 0 ) {
-        return;
-    }
-    while( lines.size() > static_cast<size_t>( available_lines ) ) {
-        lines.erase( std::max_element( lines.begin(), lines.end(), []( const line & l1, const line & l2 ) {
-            return l1.order < l2.order;
-        } ) );
-    }
 
-    text_y = height - lines.size() - 1;
-    for( const line &l : lines ) {
-        nc_color col = col_enabled;
-        print_colored_text( w_target, point( 1, text_y++ ), col, col, l.str );
-    }
-}
-
-void target_ui::panel_cursor_info( int &text_y )
-{
-    std::string label_range;
-    if( src == dst ) {
-        label_range = string_format( "Range: %d", range );
-    } else {
-        label_range = string_format( "Range: %d/%d", dist_fn( dst ), range );
-    }
-    if( status == Status::OutOfRange && mode != TargetMode::Turrets ) {
-        // Since each turret has its own range, highlighting cursor
-        // range with red would be misleading
-        label_range = colorize( label_range, c_red );
-    }
-
-    std::vector<std::string> labels;
-    labels.push_back( label_range );
-    if( allow_zlevel_shift ) {
-        labels.push_back( string_format( _( "Elevation: %d" ), dst.z() - src.z() ) );
-    }
-    labels.push_back( string_format( _( "Targets: %d" ), targets.size() ) );
-
-    nc_color col = c_light_gray;
-    int width = getmaxx( w_target );
-    int text_x = 1;
-    for( const std::string &s : labels ) {
-        int x_left = width - text_x - 1;
-        int len = utf8_width( s, true );
-        if( len > x_left ) {
-            text_x = 1;
-            text_y++;
-        }
-        print_colored_text( w_target, point( text_x, text_y ), col, col, s );
-        text_x += len + 1; // 1 for space
-    }
-    text_y++;
-}
-
-void target_ui::panel_gun_info( int &text_y )
-{
-    gun_mode m = relevant->gun_current_mode();
-    std::string mode_name = m.tname();
-    std::string gunmod_name;
-    if( m.target != relevant ) {
-        // Gun mode comes from a gunmod, not base gun. Add gunmod's name
-        gunmod_name = m->tname() + " ";
-    }
-    std::string str = string_format( _( "Firing mode: <color_cyan>%s%s (%d)</color>" ),
-                                     gunmod_name, mode_name, m.qty
-                                   );
-    nc_color clr = c_light_gray;
-    print_colored_text( w_target, point( 1, text_y++ ), clr, clr, str );
-
-    if( status == Status::OutOfAmmo ) {
-        mvwprintz( w_target, point( 1, text_y++ ), c_red, _( "OUT OF AMMO" ) );
-    } else if( ammo ) {
-        str = string_format( m->ammo_remaining() ? _( "Ammo: %s (%d/%d)" ) : _( "Ammo: %s" ),
-                             colorize( ammo->nname( std::max( m->ammo_remaining(), 1 ) ), ammo->color ), m->ammo_remaining(),
-                             m->ammo_capacity() );
-        print_colored_text( w_target, point( 1, text_y++ ), clr, clr, str );
-    } else {
-        // Weapon doesn't use ammunition
-        text_y++;
-    }
-}
-
-void target_ui::panel_recoil( int &text_y )
-{
-    const int val = ranged::recoil_total( *you );
-    const int min_recoil = ranged::effective_dispersion( *you, relevant->sight_dispersion() );
-    const int recoil_range = MAX_RECOIL - min_recoil;
-    std::string str;
-    if( val >= min_recoil + ( recoil_range * 2 / 3 ) ) {
-        str = pgettext( "amount of backward momentum", "<color_red>High</color>" );
-    } else if( val >= min_recoil + ( recoil_range / 2 ) ) {
-        str = pgettext( "amount of backward momentum", "<color_yellow>Medium</color>" );
-    } else if( val >= min_recoil + ( recoil_range / 4 ) ) {
-        str = pgettext( "amount of backward momentum", "<color_light_green>Low</color>" );
-    } else {
-        str = pgettext( "amount of backward momentum", "<color_cyan>None</color>" );
-    }
-    str = string_format( _( "Recoil: %s" ), str );
-    nc_color clr = c_light_gray;
-    print_colored_text( w_target, point( 1, text_y++ ), clr, clr, str );
-}
-
-void target_ui::panel_spell_info( int &text_y )
-{
-    nc_color clr = c_light_gray;
-
-    mvwprintz( w_target, point( 1, text_y++ ), c_light_green, _( "Casting: %s (Level %u)" ),
-               casting->name(),
-               casting->get_level() );
-    if( !no_mana || casting->energy_source() == energy_type::none_energy ) {
-        if( casting->energy_source() == energy_type::hp_energy ) {
-            text_y += fold_and_print( w_target, point( 1, text_y ), getmaxx( w_target ) - 2,
-                                      clr,
-                                      _( "Cost: %s %s" ), casting->energy_cost_string( *you ), casting->energy_string() );
-        } else {
-            text_y += fold_and_print( w_target, point( 1, text_y ), getmaxx( w_target ) - 2,
-                                      clr,
-                                      _( "Cost: %s %s (Current: %s)" ), casting->energy_cost_string( *you ), casting->energy_string(),
-                                      casting->energy_cur_string( *you ) );
-        }
-    }
-
-    std::string fail_str;
-    if( no_fail ) {
-        fail_str = colorize( _( "0.0 % Failure Chance" ), c_light_green );
-    } else {
-        fail_str = casting->colorized_fail_percent( *you );
-    }
-    print_colored_text( w_target, point( 1, text_y++ ), clr, clr, fail_str );
-
-    if( casting->aoe() > 0 ) {
-        nc_color color = c_light_gray;
-        const std::string fx = casting->effect();
-        const std::string aoes = casting->aoe_string();
-        if( fx == "projectile_attack" || fx == "target_attack" ||
-            fx == "area_pull" || fx == "area_push" ||
-            fx == "ter_transform" ) {
-            text_y += fold_and_print( w_target, point( 1, text_y ), getmaxx( w_target ) - 2, color,
-                                      _( "Effective Spell Radius: %s%s" ), aoes,
-                                      casting->in_aoe( src, dst ) ? colorize( _( " WARNING!  IN RANGE" ), c_red ) : "" );
-        } else if( fx == "cone_attack" ) {
-            text_y += fold_and_print( w_target, point( 1, text_y ), getmaxx( w_target ) - 2, color,
-                                      _( "Cone Arc: %s degrees" ), aoes );
-        } else if( fx == "line_attack" ) {
-            text_y += fold_and_print( w_target, point( 1, text_y ), getmaxx( w_target ) - 2, color,
-                                      _( "Line width: %s" ), aoes );
-        }
-    }
-
-    mvwprintz( w_target, point( 1, text_y++ ), c_light_red, _( "Damage: %s" ),
-               casting->damage_string( *you ) );
-
-    text_y += fold_and_print( w_target, point( 1, text_y ), getmaxx( w_target ) - 2, clr,
-                              casting->description() );
-}
-
-void target_ui::panel_target_info( int &text_y, bool fill_with_blank_if_no_target )
-{
-    int max_lines = 4;
-    if( dst_critter ) {
-        if( you->sees( *dst_critter ) ) {
-            // FIXME: print_info doesn't really care about line limit
-            //        and can always occupy up to 4 of them (or even more?).
-            //        To make things consistent, we ask it for 2 lines
-            //        and somewhat reliably get 4.
-            int fix_for_print_info = max_lines - 2;
-            dst_critter->print_info( w_target, text_y, fix_for_print_info, 1 );
-            text_y += max_lines;
-        } else {
-            std::vector<std::string> buf;
-            if( you->sees_with_infrared( *dst_critter ) ) {
-                dst_critter->describe_infrared( buf );
-            } else if( you->sees_with_specials( *dst_critter ) ) {
-                dst_critter->describe_specials( buf );
-            }
-            for( size_t i = 0; i < static_cast<size_t>( max_lines ); i++, text_y++ ) {
-                if( i >= buf.size() ) {
-                    continue;
-                }
-                mvwprintw( w_target, point( 1, text_y ), buf[i] );
-            }
-        }
-    } else if( fill_with_blank_if_no_target ) {
-        // Fill with blank lines to prevent other panels from jumping around
-        // when the cursor moves.
-        text_y += max_lines;
-        // TODO: print info about tile?
-    }
-}
-
-void target_ui::panel_fire_mode_aim( int &text_y )
-{
-    // TODO: saving & restoring pc.recoil may actually be unnecessary
-    double saved_pc_recoil = you->recoil;
-    you->recoil = predicted_recoil;
-    double predicted_recoil = you->recoil;
-    int predicted_delay = 0;
-    if( aim_mode->has_threshold && aim_mode->threshold < you->recoil ) {
-        do {
-            const double aim_amount = ranged::aim_per_move( *you, *relevant, predicted_recoil );
-            if( aim_amount > 0 ) {
-                predicted_delay++;
-                predicted_recoil = std::max( predicted_recoil - aim_amount, 0.0 );
-            }
-        } while( predicted_recoil > aim_mode->threshold &&
-                 predicted_recoil - sight_dispersion > 0 );
-    } else {
-        predicted_recoil = you->recoil;
-    }
-
-    const double target_size = dst_critter ? dst_critter->ranged_target_size() :
-                               occupied_tile_fraction( creature_size::medium );
-
-    item *load_loc = activity->reload_loc ? &*activity->reload_loc : nullptr;
-    text_y = print_aim( *you, w_target, text_y, ctxt, *relevant->gun_current_mode(),
-                        target_size, dst, predicted_recoil, load_loc );
-
-    if( aim_mode->has_threshold ) {
-        mvwprintw( w_target, point( 1, text_y++ ), _( "%s Delay: %i" ), aim_mode->name,
-                   predicted_delay );
-    }
-
-    you->recoil = saved_pc_recoil;
-}
-
-void target_ui::panel_turret_list( int &text_y )
-{
-    mvwprintw( w_target, point( 1, text_y++ ), _( "Turrets in range: %d/%d" ), turrets_in_range.size(),
-               vturrets->size() );
-
-    for( const turret_with_lof &it : turrets_in_range ) {
-        std::string str = string_format( "* %s", it.turret->name() );
-        nc_color clr = c_white;
-        print_colored_text( w_target, point( 1, text_y++ ), clr, clr, str );
-    }
-}
 
 void target_ui::on_target_accepted( bool harmful )
 {
