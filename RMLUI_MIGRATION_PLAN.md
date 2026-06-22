@@ -3213,15 +3213,20 @@ oldest + long eyeball-confirmed). Order:
 build-green:
 1. After all toggles flipped & eyeballed: delete each screen's curses *draw/redraw fallback*
    branch (the `if(!rml)` arms) → primitive callers fall toward zero.
-   **PROGRESS (track-B (a) batches 1–11):** curses draw arm dropped from morale/scores/help,
+   **PROGRESS (track-B (a) batches 1–13):** curses draw arm dropped from morale/scores/help,
    martialarts/computer/descriptions, the 5 live-sync screens, armor/pickup/construction/
    crafting/diary/faction, missions/item-examine/defense-setup, pickup/trade, character sheet,
-   options/iexamine/worldfactory/main-menu, message log, advanced_inv, **and newcharacter
-   (batch 11 — all 8 sub-screens, the last Tier-4 giant; 207→0 curses calls, 5 dead helpers
-   removed)**. **REMAINING curses-draw still live:** `overmap_ui` (~87) + `ranged` (~30, map-overlap,
-   surgical) + `panels` (~303 = Tier-7 sidebar HUD, own strategy) + a few nested-helper/sub-popup
-   stragglers in faction/armor_layers/auto_pickup (faction member detail, test-rule window, help
-   popup — need real migration, not arm-drop).
+   options/iexamine/worldfactory/main-menu, message log, advanced_inv, newcharacter
+   (batch 11 — all 8 sub-screens, last Tier-4 giant; 207→0), overmap **search** (batch 12), and
+   the **ranged target panel** (batch 13 — `draw_ui_window` + 10 exclusive panel_* helpers removed;
+   kept uitext_title/uitext_fire, shared with rml).
+   **REMAINING curses-draw still live (each its own unit, NOT a simple arm-drop):**
+   - `panels` (~303) = Tier-7 sidebar HUD — own strategy.
+   - overmap **main display**: curses vs rml splits *inside* `draw()`/`draw_om_sidebar`, not a
+     deletable arm; plus notes-manager + place-terrain editor (both unmigrated).
+   - `ranged` aim readout (`print_ranged_chance`/`print_aim`) — slice-2b deferred.
+   - nested sub-popups in faction/armor_layers/auto_pickup (faction member detail, test-rule
+     window, help popup) — need real migration.
 2. Delete the now-unreachable curses text-primitive bodies in `output.cpp` once grep confirms
    zero non-test callers.
 3. Delete `sdl_curses_draw.cpp`; delete `Font::OutputChar` / `draw_ascii_lines` (`sdl_font.cpp`) —
