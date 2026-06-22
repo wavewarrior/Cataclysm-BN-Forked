@@ -299,4 +299,9 @@ bool &keybindings_rmlui_enabled();
 // behind the toggle. Default OFF.
 bool &color_manager_rmlui_enabled();
 
+// scrollable_text() RmlUi path (the shared scroll-text popup primitive — title +
+// the windowed folded body; keyboard keys still drive beg_line). Curses fallback
+// behind the toggle. Default OFF.
+bool &scrollable_text_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

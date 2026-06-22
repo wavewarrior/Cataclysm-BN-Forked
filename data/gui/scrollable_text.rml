@@ -1,0 +1,16 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="scrollable_text.rcss"/>
+</head>
+<body data-model="scrollable_text">
+    <!-- Shared scroll-text popup (scrollable_text). Render-only: the keyboard owns
+         scrolling, so body_rml carries only the currently-visible window of folded
+         lines (beg_line .. beg_line+text_h) — re-synced each redraw. Title + body
+         colours are baked into the bound strings. -->
+    <div class="panel st-panel">
+        <div class="st-title" data-rml="title_rml"></div>
+        <div class="st-body" data-rml="body_rml"></div>
+    </div>
+</body>
+</rml>

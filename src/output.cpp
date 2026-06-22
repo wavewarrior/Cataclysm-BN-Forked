@@ -40,6 +40,10 @@
 #include "point.h"
 #include "wcwidth.h"
 
+#include <RmlUi/Core.h>
+#include "rml_screen.h"
+#include "rml_util.h"
+
 // Display data
 int TERMX;
 int TERMY;
@@ -354,6 +358,25 @@ int fold_and_print_from( const catacurses::window &w, point begin, int width,
     return textformatted.size();
 }
 
+namespace
+{
+// RmlUi model for the shared scroll-text popup (scrollable_text). Render-only: the
+// keyboard still drives beg_line, so the body mirrors the SAME visible window the
+// curses path draws (beg_line .. beg_line+text_h).
+struct st_session {
+    Rml::String title_rml;
+    Rml::String body_rml;
+    Rml::DataModelHandle handle;
+};
+} // namespace
+
+bool &scrollable_text_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = false;
+    return enabled;
+}
+
 void scrollable_text( const std::function<catacurses::window()> &init_window,
                       const std::string &title, const std::string &text )
 {
@@ -394,7 +417,29 @@ void scrollable_text( const std::function<catacurses::window()> &init_window,
     };
     screen_resize_cb( ui );
     ui.on_screen_resize( screen_resize_cb );
+    st_session st_data;
+    rml_doc st_rml;
+    const auto sync_st_rml = [&]() {
+        if( !st_rml ) {
+            return;
+        }
+        st_data.title_rml = cata_text_to_rml( colorize( title, c_white ) );
+        // Mirror the curses visible window so keyboard scroll (beg_line) still works.
+        std::string body;
+        for( int line = beg_line; line < std::min<int>( beg_line + text_h, lines.size() ); ++line ) {
+            body += lines[line];
+            body += "\n";
+        }
+        st_data.body_rml = cata_text_to_rml( body );
+        st_data.handle.DirtyVariable( "title_rml" );
+        st_data.handle.DirtyVariable( "body_rml" );
+    };
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( st_rml ) {
+            sync_st_rml();
+            return;
+        }
         werase( w );
         draw_border( w, BORDER_COLOR, title, c_black_white );
         for( int line = beg_line, pos_y = text2.y; line < std::min<int>( beg_line + text_h, lines.size() );
@@ -405,6 +450,13 @@ void scrollable_text( const std::function<catacurses::window()> &init_window,
         scrollbar().offset_x( width - 1 ).offset_y( text2.y ).content_size( lines.size() )
         .viewport_pos( std::min( beg_line, max_beg_line ) ).viewport_size( text_h ).apply( w );
         wnoutrefresh( w );
+    } );
+
+    st_rml.open( scrollable_text_rmlui_enabled(), "scrollable_text", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        c.Bind( "title_rml", &st_data.title_rml );
+        c.Bind( "body_rml", &st_data.body_rml );
+        st_data.handle = c.GetModelHandle();
     } );
 
     std::string action;

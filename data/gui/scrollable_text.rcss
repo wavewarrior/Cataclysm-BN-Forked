@@ -1,0 +1,33 @@
+/* Layout for the shared scroll-text popup (scrollable_text). Palette/border/.panel
+   come from theme.rcss (linked first). A centered box; the body is the visible
+   window of folded lines (keyboard drives the scroll, so no scroll-pane needed).
+   Monospace + pre-wrap preserve the folded layout. Lengths in dp. */
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.st-panel {
+    width: 70%;
+    max-height: 80%;
+    display: flex;
+    flex-direction: column;
+}
+
+.st-title {
+    flex: 0 0 auto;
+    text-align: center;
+    padding-bottom: 4dp;
+    margin-bottom: 4dp;
+    border-bottom: 1dp {{bg4}};
+}
+
+.st-body {
+    flex: 1;
+    min-height: 0;
+    white-space: pre-wrap;
+}
