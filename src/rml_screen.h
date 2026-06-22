@@ -294,4 +294,9 @@ bool &loading_rmlui_enabled();
 // curses w_help draw is the toggle-OFF fallback. Default OFF.
 bool &keybindings_rmlui_enabled();
 
+// color_manager::show_gui() RmlUi path (the Colors editor — header + the
+// name/Normal/Invert table; the color-pick uilists stay Tier-0). Curses fallback
+// behind the toggle. Default OFF.
+bool &color_manager_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

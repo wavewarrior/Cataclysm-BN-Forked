@@ -1,0 +1,37 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="colors.rcss"/>
+</head>
+<body data-model="colors">
+    <!-- Colors editor (color_manager::show_gui). Render-only: keyboard owns the 2D
+         cursor (line + Normal/Invert column) and the colour-pick uilists stay Tier-0.
+         The active column on the current row is highlighted via row.sel_col
+         (1 = Normal group, 2 = Invert group) — the RML equivalent of the curses '>'.
+         Per-cell colours are baked into the bound strings. Column captions are
+         literal English (same i18n gap as other migrated tables). -->
+    <div class="panel cm-panel">
+        <div class="cm-header" data-rml="header_rml"></div>
+
+        <div class="cm-colheads">
+            <span class="cm-name">Colorname</span>
+            <span class="cm-normal">Normal</span>
+            <span class="cm-invert">Invert</span>
+        </div>
+
+        <div class="cm-list scroll-pane">
+            <div class="cm-row" data-for="row : rows">
+                <span class="cm-name" data-rml="row.name_rml"></span>
+                <span class="cm-normal" data-class-cellsel="row.sel_col == 1">
+                    <span data-rml="row.def_rml"></span>
+                    <span class="cm-custom" data-rml="row.custom_rml"></span>
+                </span>
+                <span class="cm-invert" data-class-cellsel="row.sel_col == 2">
+                    <span data-rml="row.inv_def_rml"></span>
+                    <span class="cm-custom" data-rml="row.inv_custom_rml"></span>
+                </span>
+            </div>
+        </div>
+    </div>
+</body>
+</rml>

@@ -22,6 +22,10 @@
 #include "ui.h"
 #include "ui_manager.h"
 
+#include <RmlUi/Core.h>
+#include "rml_screen.h"
+#include "rml_util.h"
+
 void nc_color::serialize( JsonOut &jsout ) const
 {
     jsout.write( attribute_value );
@@ -741,6 +745,49 @@ static void draw_header( const catacurses::window &w )
     wnoutrefresh( w );
 }
 
+namespace
+{
+// RmlUi model for the Colors editor (color_manager::show_gui). One row per colour
+// entry; per-cell colours baked via cata_text_to_rml. sel_col marks the active
+// column on the current row (1 = Normal group, 2 = Invert group).
+struct cm_row {
+    Rml::String name_rml;
+    Rml::String def_rml;
+    Rml::String custom_rml;
+    Rml::String inv_def_rml;
+    Rml::String inv_custom_rml;
+    int sel_col = 0;
+};
+struct cm_session {
+    Rml::String header_rml;
+    Rml::Vector<cm_row> rows;
+    Rml::DataModelHandle handle;
+};
+bool g_cm_types_registered = false;
+void register_cm_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_cm_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<cm_row> rh = c.RegisterStruct<cm_row>();
+    rh.RegisterMember( "name_rml", &cm_row::name_rml );
+    rh.RegisterMember( "def_rml", &cm_row::def_rml );
+    rh.RegisterMember( "custom_rml", &cm_row::custom_rml );
+    rh.RegisterMember( "inv_def_rml", &cm_row::inv_def_rml );
+    rh.RegisterMember( "inv_custom_rml", &cm_row::inv_custom_rml );
+    rh.RegisterMember( "sel_col", &cm_row::sel_col );
+    c.RegisterArray<Rml::Vector<cm_row>>();
+    g_cm_types_registered = true;
+}
+} // namespace
+
+bool &color_manager_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = false;
+    return enabled;
+}
+
 void color_manager::show_gui()
 {
     const int iHeaderHeight = 4;
@@ -800,7 +847,47 @@ void color_manager::show_gui()
         name_color_map[pr.first] = color_array[pr.second];
     }
 
+    cm_session cm_data;
+    rml_doc cm_rml;
+    const auto sync_cm_rml = [&]() {
+        if( !cm_rml ) {
+            return;
+        }
+        std::string hdr;
+        hdr += shortcut_text( c_light_green, _( "<R>emove custom color" ) ) + "  ";
+        hdr += shortcut_text( c_light_green, _( "<Arrow Keys> To navigate" ) ) + "  ";
+        hdr += shortcut_text( c_light_green, _( "<Enter>-Edit" ) ) + "  ";
+        hdr += shortcut_text( c_light_green, _( "Load <T>emplate" ) );
+        hdr += "\n" + colorize( _( "Some color changes may require a restart." ), c_white );
+        cm_data.header_rml = cata_text_to_rml( hdr );
+
+        cm_data.rows.clear();
+        int i = 0;
+        for( const auto &pr : name_color_map ) {
+            const color_struct &entry = pr.second;
+            cm_row r;
+            r.name_rml = cata_text_to_rml( colorize( pr.first, c_white ) );
+            r.def_rml  = cata_text_to_rml( colorize( _( "default" ), entry.color ) );
+            r.custom_rml = entry.name_custom.empty() ? Rml::String()
+                           : cata_text_to_rml( colorize( entry.name_custom,
+                                   name_color_map[entry.name_custom].color ) );
+            r.inv_def_rml = cata_text_to_rml( colorize( _( "default" ), entry.invert ) );
+            r.inv_custom_rml = entry.name_invert_custom.empty() ? Rml::String()
+                               : cata_text_to_rml( colorize( entry.name_invert_custom,
+                                       name_color_map[entry.name_invert_custom].color ) );
+            r.sel_col = ( i == iCurrentLine ) ? iCurrentCol : 0;
+            cm_data.rows.push_back( r );
+            i++;
+        }
+        cm_data.handle.DirtyVariable( "header_rml" );
+        cm_data.handle.DirtyVariable( "rows" );
+    };
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( cm_rml ) {
+            sync_cm_rml();
+            return;
+        }
         draw_border( w_colors_border, BORDER_COLOR, _( " COLOR MANAGER " ) );
         mvwputch( w_colors_border, point( 0, 3 ), BORDER_COLOR, LINE_XXXO ); // |-
         mvwputch( w_colors_border, point( getmaxx( w_colors_border ) - 1, 3 ), BORDER_COLOR,
@@ -867,6 +954,14 @@ void color_manager::show_gui()
         }
 
         wnoutrefresh( w_colors );
+    } );
+
+    cm_rml.open( color_manager_rmlui_enabled(), "colors", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        register_cm_rml_types( c );
+        c.Bind( "header_rml", &cm_data.header_rml );
+        c.Bind( "rows", &cm_data.rows );
+        cm_data.handle = c.GetModelHandle();
     } );
 
     while( true ) {

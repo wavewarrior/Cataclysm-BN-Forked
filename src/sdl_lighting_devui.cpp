@@ -1136,6 +1136,7 @@ static void draw_rmlui_tab()
         ImGui::Checkbox( "new character", &newcharacter_rmlui_enabled() );
         ImGui::Checkbox( "overmap legend", &overmap_rmlui_enabled() );
         ImGui::Checkbox( "keybindings", &keybindings_rmlui_enabled() );
+        ImGui::Checkbox( "colors editor", &color_manager_rmlui_enabled() );
         ImGui::Checkbox( "world text (SCT)", &world_text_rmlui_enabled() );
         if( world_text_rmlui_enabled() ) {
             ImGui::SliderInt( "wt font px", &rmlui_layer::world_text_px(), 8, 64 );
