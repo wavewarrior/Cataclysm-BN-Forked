@@ -214,208 +214,6 @@ void advanced_inventory::init()
     dest = ( save_state->active_left ) ? right : left;
 }
 
-void advanced_inventory::print_items( const advanced_inventory_pane &pane, bool active )
-{
-    const auto &items = pane.items;
-    const catacurses::window &window = pane.window;
-    const auto index = pane.index;
-    const int page = index / itemsPerPage;
-    bool compact = TERMX <= 100;
-
-    int columns = getmaxx( window );
-    std::string spaces( columns - 4, ' ' );
-
-    nc_color norm = active ? c_white : c_dark_gray;
-
-    //print inventory's current and total weight + volume
-    if( pane.get_area() == AIM_INVENTORY || pane.get_area() == AIM_WORN ) {
-        const double weight_carried = convert_weight( g->u.weight_carried() );
-        const double weight_capacity = convert_weight( g->u.weight_capacity() );
-        std::string volume_carried = format_volume( g->u.volume_carried() );
-        std::string volume_capacity = format_volume( g->u.volume_capacity() );
-        // align right, so calculate formatted head length
-        const std::string formatted_head = string_format( "%.1f/%.1f %s  %s/%s %s",
-                                           weight_carried, weight_capacity, weight_units(),
-                                           volume_carried,
-                                           volume_capacity,
-                                           volume_units_abbr() );
-        const int hrightcol = columns - 1 - utf8_width( formatted_head );
-        nc_color color = weight_carried > weight_capacity ? c_red : c_light_green;
-        mvwprintz( window, point( hrightcol, 4 ), color, "%.1f", weight_carried );
-        wprintz( window, c_light_gray, "/%.1f %s  ", weight_capacity, weight_units() );
-        color = g->u.volume_carried().value() > g->u.volume_capacity().value() ? c_red : c_light_green;
-        wprintz( window, color, volume_carried );
-        wprintz( window, c_light_gray, "/%s %s", volume_capacity, volume_units_abbr() );
-    } else {
-        //print square's current and total weight + volume
-        std::string formatted_head;
-        if( pane.get_area() == AIM_ALL ) {
-            formatted_head = string_format( "%3.1f %s  %s %s",
-                                            convert_weight( squares[pane.get_area()].weight ),
-                                            weight_units(),
-                                            format_volume( squares[pane.get_area()].volume ),
-                                            volume_units_abbr() );
-        } else {
-            units::volume maxvolume = 0_ml;
-            auto &s = squares[pane.get_area()];
-            if( pane.get_area() == AIM_CONTAINER && s.get_container( pane.in_vehicle() ) != nullptr ) {
-                maxvolume = s.get_container( pane.in_vehicle() )->get_container_capacity();
-            } else if( pane.in_vehicle() ) {
-                maxvolume = s.veh->max_volume( s.vstor );
-            } else {
-                maxvolume = get_map().max_volume( s.pos );
-            }
-            formatted_head = string_format( "%3.1f %s  %s/%s %s",
-                                            convert_weight( s.weight ),
-                                            weight_units(),
-                                            format_volume( s.volume ),
-                                            format_volume( maxvolume ),
-                                            volume_units_abbr() );
-        }
-        mvwprintz( window, point( columns - 1 - utf8_width( formatted_head ), 4 ), norm, formatted_head );
-    }
-
-    //print header row and determine max item name length
-    // Last printable column
-    const int lastcol = columns - 2;
-    const size_t name_startpos = compact ? 1 : 4;
-    const size_t src_startpos = lastcol - 18;
-    const size_t amt_startpos = lastcol - 15;
-    const size_t weight_startpos = lastcol - 10;
-    const size_t vol_startpos = lastcol - 4;
-    // Default name length
-    int max_name_length = amt_startpos - name_startpos - 1;
-
-    //~ Items list header (length type 1). Table fields length without spaces: amt - 4, weight - 5, vol - 4.
-    const int table_hdr_len1 = utf8_width( _( "amt weight vol" ) );
-    //~ Items list header (length type 2). Table fields length without spaces: src - 2, amt - 4, weight - 5, vol - 4.
-    const int table_hdr_len2 = utf8_width( _( "src amt weight vol" ) );
-
-    mvwprintz( window, point( compact ? 1 : 4, 5 ), c_light_gray, _( "Name (charges)" ) );
-    if( pane.get_area() == AIM_ALL && !compact ) {
-        mvwprintz( window, point( lastcol - table_hdr_len2 + 1, 5 ), c_light_gray,
-                   _( "src amt weight vol" ) );
-        // 1 for space
-        max_name_length = src_startpos - name_startpos - 1;
-    } else {
-        mvwprintz( window, point( lastcol - table_hdr_len1 + 1, 5 ), c_light_gray, _( "amt weight vol" ) );
-    }
-
-    for( int i = page * itemsPerPage, x = 0 ; i < static_cast<int>( items.size() ) &&
-         x < itemsPerPage ; i++, x++ ) {
-        const auto &sitem = items[i];
-        if( sitem.is_category_header() ) {
-            mvwprintz( window, point( ( columns - utf8_width( sitem.name ) - 6 ) / 2, 6 + x ), c_cyan, "[%s]",
-                       sitem.name );
-            continue;
-        }
-        if( !sitem.is_item_entry() ) {
-            // Empty entry at the bottom of a page.
-            continue;
-        }
-        const auto &it = *sitem.items.front();
-        const bool selected = active && index == i;
-
-        nc_color thiscolor = active ? it.color_in_inventory() : norm;
-        nc_color thiscolordark = c_dark_gray;
-        nc_color print_color;
-
-        if( selected ) {
-            thiscolor = inCategoryMode && pane.sortby == SORTBY_CATEGORY ? c_white_red : hilite( c_white );
-            thiscolordark = hilite( thiscolordark );
-            if( compact ) {
-                mvwprintz( window, point( 1, 6 + x ), thiscolor, "  %s", spaces );
-            } else {
-                mvwprintz( window, point( 1, 6 + x ), thiscolor, ">>%s", spaces );
-            }
-        }
-
-        std::string item_name;
-        std::string stolen_string;
-        bool stolen = false;
-        if( !it.is_owned_by( g->u, true ) ) {
-            stolen_string = "<color_light_red>!</color>";
-            stolen = true;
-        }
-        if( it.is_money() ) {
-            //Count charges
-            unsigned int charges_total = 0;
-            for( const auto item : sitem.items ) {
-                charges_total += item->charges;
-            }
-            if( stolen ) {
-                item_name = string_format( "%s %s", stolen_string, it.display_money( sitem.items.size(),
-                                           charges_total ) );
-            } else {
-                item_name = it.display_money( sitem.items.size(), charges_total );
-            }
-        } else {
-            if( stolen ) {
-                item_name = string_format( "%s %s", stolen_string, it.display_name() );
-            } else {
-                item_name = it.display_name();
-            }
-        }
-        if( get_option<bool>( "ITEM_SYMBOLS" ) ) {
-            item_name = string_format( "%s %s", it.symbol(), item_name );
-        }
-
-        //print item name
-        trim_and_print( window, point( compact ? 1 : 4, 6 + x ), max_name_length, thiscolor, item_name );
-
-        //print src column
-        // TODO: specify this is coming from a vehicle!
-        if( pane.get_area() == AIM_ALL && !compact ) {
-            mvwprintz( window, point( src_startpos, 6 + x ), thiscolor, squares[sitem.area].shortname );
-        }
-
-        //print "amount" column
-        int it_amt = sitem.stacks;
-        if( it_amt > 1 ) {
-            print_color = thiscolor;
-            if( it_amt > 9999 ) {
-                it_amt = 9999;
-                print_color = selected ? hilite( c_red ) : c_red;
-            }
-            mvwprintz( window, point( amt_startpos, 6 + x ), print_color, "%4d", it_amt );
-        }
-
-        //print weight column
-        double it_weight = convert_weight( sitem.weight );
-        size_t w_precision;
-        print_color = it_weight > 0 ? thiscolor : thiscolordark;
-
-        if( it_weight >= 1000.0 ) {
-            if( it_weight >= 10000.0 ) {
-                print_color = selected ? hilite( c_red ) : c_red;
-                it_weight = 9999.0;
-            }
-            w_precision = 0;
-        } else if( it_weight >= 100.0 ) {
-            w_precision = 1;
-        } else {
-            w_precision = 2;
-        }
-        mvwprintz( window, point( weight_startpos, 6 + x ), print_color, "%5.*f", w_precision, it_weight );
-
-        //print volume column
-        bool it_vol_truncated = false;
-        double it_vol_value = 0.0;
-        std::string it_vol = format_volume( sitem.volume, 5, &it_vol_truncated, &it_vol_value );
-        if( it_vol_truncated && it_vol_value > 0.0 ) {
-            print_color = selected ? hilite( c_red ) : c_red;
-        } else {
-            print_color = sitem.volume.value() > 0 ? thiscolor : thiscolordark;
-        }
-        mvwprintz( window, point( vol_startpos, 6 + x ), print_color, it_vol );
-
-        if( active && sitem.autopickup ) {
-            mvwprintz( window, point( 1, 6 + x ), magenta_background( it.color_in_inventory() ),
-                       compact ? it.tname().substr( 0, 1 ) : ">" );
-        }
-    }
-}
-
 struct advanced_inv_sorter {
     advanced_inv_sortby sortby;
     advanced_inv_sorter( advanced_inv_sortby sort ) {
@@ -526,40 +324,6 @@ struct advanced_inv_sorter {
         return localized_compare( *n1, *n2 );
     }
 };
-
-int advanced_inventory::print_header( advanced_inventory_pane &pane, aim_location sel )
-{
-    const catacurses::window &window = pane.window;
-    int area = pane.get_area();
-    int wwidth = getmaxx( window );
-    int ofs = wwidth - 25 - 2 - 14;
-    int min_x = wwidth;
-    for( int i = 0; i < NUM_AIM_LOCATIONS; ++i ) {
-        int data_location = screen_relative_location( static_cast<aim_location>( i ) );
-        const char *bracket = squares[data_location].can_store_in_vehicle() ? "<>" : "[]";
-        bool in_vehicle = pane.in_vehicle() && squares[data_location].id == area && sel == area &&
-                          area != AIM_ALL;
-        bool all_brackets = area == AIM_ALL && ( data_location >= AIM_SOUTHWEST &&
-                            data_location <= AIM_NORTHEAST );
-        nc_color bcolor = c_red;
-        nc_color kcolor = c_red;
-        if( squares[data_location].canputitems( pane.get_cur_item_ptr() ) ) {
-            bcolor = in_vehicle ? c_light_blue :
-                     area == data_location || all_brackets ? c_light_gray : c_dark_gray;
-            kcolor = area == data_location ? c_white : sel == data_location ? c_light_gray : c_dark_gray;
-        }
-
-        const std::string key = get_location_key( static_cast<aim_location>( i ) );
-        const point p( squares[i].hscreen + point( ofs, 0 ) );
-        mvwprintz( window, p, bcolor, "%c", bracket[0] );
-        wprintz( window, kcolor, "%s", in_vehicle && sel != AIM_DRAGGED ? "V" : key );
-        wprintz( window, bcolor, "%c", bracket[1] );
-        if( p.x < min_x ) {
-            min_x = p.x;
-        }
-    }
-    return min_x;
-}
 
 std::string advanced_inventory::aim_area_grid_html( advanced_inventory_pane &pane, aim_location sel )
 {
@@ -673,85 +437,6 @@ void advanced_inventory::recalc_pane( side p )
     if( itemsPerPage > 0 ) {
         pane.paginate( itemsPerPage );
     }
-}
-
-void advanced_inventory::redraw_pane( side p )
-{
-    input_context ctxt( "ADVANCED_INVENTORY" );
-
-    // don't update ui if processing demands
-    if( is_processing() ) {
-        return;
-    }
-    auto &pane = panes[p];
-    if( recalc || pane.recalc ) {
-        recalc_pane( p );
-    }
-    pane.fix_index();
-
-    const bool active = p == src;
-    const advanced_inv_area &square = squares[pane.get_area()];
-    auto w = pane.window;
-
-    werase( w );
-    print_items( pane, active );
-
-    auto itm = pane.get_cur_item_ptr();
-    // 2 for left border + 1 for padding between name & aim location selector
-    int width = print_header( pane, itm != nullptr ? itm->area : pane.get_area() ) - 2 - 1;
-    // only cardinals
-    // not where you stand, and pane is in vehicle
-    // make sure the offsets are the same as the grab point
-    bool same_as_dragged = ( square.id >= AIM_SOUTHWEST && square.id <= AIM_NORTHEAST ) &&
-                           square.id != AIM_CENTER && panes[p].in_vehicle() &&
-                           square.off == squares[AIM_DRAGGED].off;
-    const advanced_inv_area &sq = same_as_dragged ? squares[AIM_DRAGGED] : square;
-    bool car = square.can_store_in_vehicle() && panes[p].in_vehicle() && sq.id != AIM_DRAGGED;
-    trim_and_print( w, point( 2, 1 ), width, active ? c_green  : c_light_gray,
-                    car ? sq.veh->name : sq.name );
-    trim_and_print( w, point( 2, 2 ), width, active ? c_light_blue : c_dark_gray, sq.desc[car] );
-    trim_and_print( w, point( 2, 3 ), width, active ? c_cyan : c_dark_gray, square.flags );
-
-    const int max_page = ( pane.items.size() + itemsPerPage - 1 ) / itemsPerPage;
-    if( active && max_page > 1 ) {
-        const int page = pane.index / itemsPerPage;
-        mvwprintz( w, point( 2, 4 ), c_light_blue, _( "[<] page %1$d of %2$d [>]" ), page + 1, max_page );
-    }
-
-    if( active ) {
-        wattron( w, c_cyan );
-    }
-    // draw a darker border around the inactive pane
-    draw_border( w, active ? BORDER_COLOR : c_dark_gray );
-    mvwprintw( w, point( 3, 0 ), _( "< [%s] Sort: %s >" ), ctxt.get_desc( "SORT" ),
-               get_sortname( pane.sortby ) );
-    int max = square.max_size;
-    if( max > 0 ) {
-        int itemcount = square.get_item_count();
-        int fmtw = 7 + ( itemcount > 99 ? 3 : itemcount > 9 ? 2 : 1 ) +
-                   ( max > 99 ? 3 : max > 9 ? 2 : 1 );
-        mvwprintw( w, point( w_width / 2 - fmtw, 0 ), "< %d/%d >", itemcount, max );
-    }
-
-    std::string fprefix = string_format( _( "[%s] Filter" ), ctxt.get_desc( "FILTER" ) );
-    std::string fsuffix = string_format( _( "[%s] Reset" ), ctxt.get_desc( "RESET_FILTER" ) );
-    if( !filter_edit ) {
-        if( !pane.filter.empty() ) {
-            mvwprintw( w, point( 2, getmaxy( w ) - 1 ), "< %s: %s >", fprefix, pane.filter );
-        } else {
-            mvwprintw( w, point( 2, getmaxy( w ) - 1 ), "< %s >", fprefix );
-        }
-    }
-    if( active ) {
-        wattroff( w, c_white );
-    }
-    if( !filter_edit && !pane.filter.empty() ) {
-        mvwprintz( w, point( 6 + utf8_width( fprefix ), getmaxy( w ) - 1 ), c_white,
-                   pane.filter );
-        mvwprintz( w, point( getmaxx( w ) - utf8_width( fsuffix ) - 2, getmaxy( w ) - 1 ), c_white, "%s",
-                   fsuffix );
-    }
-    wnoutrefresh( w );
 }
 
 // be explicit with the values
@@ -1100,37 +785,6 @@ input_context advanced_inventory::register_ctxt() const
     ctxt.register_action( "SAVE_DEFAULT" );
 
     return ctxt;
-}
-
-void advanced_inventory::redraw_sidebar()
-{
-    input_context ctxt( "ADVANCED_INVENTORY" );
-    ctxt.register_action( "HELP_KEYBINDINGS" );
-
-    if( !is_processing() ) {
-        werase( head );
-        werase( minimap );
-        werase( mm_border );
-        draw_border( head );
-        Messages::display_messages( head, 2, 1, w_width - 1, head_height - 2 );
-        draw_minimap();
-        right_print( head, 0, +3, c_white, string_format(
-                         _( "< [<color_yellow>%s</color>] keybindings >" ),
-                         ctxt.get_desc( "HELP_KEYBINDINGS" ) ) );
-        if( get_option<bool>( "AIM_AUTORESET_FILTER" ) ) {
-            right_print( head, head_height - 1, +3, c_white,
-                         _( "Reset Filter On Close [<color_light_green>ON</color>|<color_dark_gray>OFF</color>]" ) );
-        } else {
-            right_print( head, head_height - 1, +3, c_white,
-                         _( "Reset Filter On Close [<color_dark_gray>ON</color>|<color_light_green>OFF</color>]" ) );
-        }
-        if( g->u.has_watch() ) {
-            const std::string time = to_string_time_of_day( calendar::turn );
-            mvwprintz( head, point( 2, 0 ), c_white, time );
-        }
-        wnoutrefresh( head );
-        refresh_minimap();
-    }
 }
 
 void advanced_inventory::change_square( const aim_location changeSquare,
@@ -1732,10 +1386,9 @@ void advanced_inventory::display()
         } );
 
         ui->on_redraw( [&]( const ui_adaptor & ) {
-            // RmlUi owns the screen when active (slice 1: dual item lists + heads;
-            // sidebar/footer/interactions land in later slices). redraw_pane is
-            // skipped, so the per-pane prep it does (recalc + fix_index) must run
-            // here or pane.items stays empty.
+            // RmlUi owns the AIM screen — the curses draw path is gone. The
+            // per-pane prep the old redraw_pane did (recalc + fix_index) must run
+            // here, or pane.items stays empty.
             if( rml ) {
                 for( side p : {
                          left, right
@@ -1748,17 +1401,6 @@ void advanced_inventory::display()
                 }
                 sync_rml();
                 return;
-            }
-            redraw_pane( advanced_inventory::side::left );
-            redraw_pane( advanced_inventory::side::right );
-            redraw_sidebar();
-
-            if( filter_edit && spopup ) {
-                draw_item_filter_rules( panes[dest].window, 1, 11, item_filter_type::FILTER );
-                mvwprintz( panes[src].window, point( 2, getmaxy( panes[src].window ) - 1 ), c_cyan, "< " );
-                mvwprintz( panes[src].window, point( w_width / 2 - 4, getmaxy( panes[src].window ) - 1 ), c_cyan,
-                           " >" );
-                spopup->query_string( /*loop=*/false, /*draw_only=*/true );
             }
         } );
     }
@@ -2194,91 +1836,6 @@ bool advanced_inventory::query_charges( aim_location destarea, const advanced_in
         }
     }
     return true;
-}
-
-void advanced_inventory::refresh_minimap()
-{
-    // don't update ui if processing demands
-    if( is_processing() ) {
-        return;
-    }
-    // redraw border around minimap
-    draw_border( mm_border );
-    // minor addition to border for AIM_ALL, sorta hacky
-    if( panes[src].get_area() == AIM_ALL || panes[dest].get_area() == AIM_ALL ) {
-        // NOLINTNEXTLINE(cata-use-named-point-constants)
-        mvwprintz( mm_border, point( 1, 0 ), c_light_gray, utf8_truncate( _( "All" ), minimap_width ) );
-    }
-    // refresh border, then minimap
-    wnoutrefresh( mm_border );
-    wnoutrefresh( minimap );
-}
-
-void advanced_inventory::draw_minimap()
-{
-    // if player is in one of the below, invert the player cell
-    static const std::array<aim_location, 3> player_locations = {
-        {AIM_CENTER, AIM_INVENTORY, AIM_WORN}
-    };
-    static const std::array<side, NUM_PANES> sides = {{left, right}};
-    // get the center of the window
-    tripoint_rel_ms pc = {getmaxx( minimap ) / 2, getmaxy( minimap ) / 2, 0};
-    // draw the 3x3 tiles centered around player
-    get_map().draw( minimap, g->u.bub_pos() );
-    for( auto s : sides ) {
-        char sym = get_minimap_sym( s );
-        if( sym == '\0' ) {
-            continue;
-        }
-        auto sq = squares[panes[s].get_area()];
-        auto pt = pc + sq.off;
-        // invert the color if pointing to the player's position
-        auto cl = sq.id == AIM_INVENTORY || sq.id == AIM_WORN ?
-                  invert_color( c_light_cyan ) : c_light_cyan.blink();
-        mvwputch( minimap, pt.xy().raw(), cl, sym );
-    }
-
-    // Invert player's tile color if exactly one pane points to player's tile
-    bool invert_left = false;
-    bool invert_right = false;
-    const auto is_selected = [ this ]( const aim_location & where, size_t side ) {
-        return where == this->panes[ side ].get_area();
-    };
-    for( auto &loc : player_locations ) {
-        invert_left |= is_selected( loc, 0 );
-        invert_right |= is_selected( loc, 1 );
-    }
-
-    if( !invert_left || !invert_right ) {
-        g->u.draw( minimap, g->u.bub_pos(), invert_left || invert_right );
-    }
-}
-
-char advanced_inventory::get_minimap_sym( side p ) const
-{
-    static const std::array<char, NUM_PANES> c_side = {{'L', 'R'}};
-    static const std::array<char, NUM_PANES> d_side = {{'^', 'v'}};
-    static const std::array<char, NUM_AIM_LOCATIONS> g_nome = {{
-            '@', '#', '#', '#', '#', '@', '#',
-            '#', '#', '#', 'D', '^', 'C', '@'
-        }
-    };
-    char ch = g_nome[panes[p].get_area()];
-    switch( ch ) {
-        case '@':
-            // '^' or 'v'
-            ch = d_side[panes[-p + 1].get_area() == AIM_CENTER];
-            break;
-        case '#':
-            // 'L' or 'R'
-            ch = panes[p].in_vehicle() ? 'V' : c_side[p];
-            break;
-        case '^':
-            // do not show anything
-            ch ^= ch;
-            break;
-    }
-    return ch;
 }
 
 void advanced_inventory::swap_panes()

@@ -59,9 +59,6 @@ class advanced_inventory
         catacurses::window mm_border;
         const int minimap_width  = 3;
         const int minimap_height = 3;
-        void draw_minimap();
-        void refresh_minimap();
-        char get_minimap_sym( side p ) const;
 
         bool inCategoryMode = false;
 
@@ -130,13 +127,7 @@ class advanced_inventory
 
         static std::string get_sortname( advanced_inv_sortby sortby );
         bool move_all_items( bool nested_call = false );
-        void print_items( const advanced_inventory_pane &pane, bool active );
         void recalc_pane( side p );
-        void redraw_pane( side p );
-        void redraw_sidebar();
-        // Returns the x coordinate where the header started. The header is
-        // displayed right of it, everything left of it is till free.
-        int print_header( advanced_inventory_pane &pane, aim_location sel );
         // RmlUi (AIM slice 2): the area-selection grid as markup (semantic compass
         // 3x3 + specials), mirroring print_header's per-location colour state.
         std::string aim_area_grid_html( advanced_inventory_pane &pane, aim_location sel );

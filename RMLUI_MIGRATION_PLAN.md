@@ -1166,9 +1166,19 @@ pane markers; the **slice-2 area-selection compass grid already conveys pane→d
 and terrain context is marginal on an item screen, so reproducing the cell render in
 RmlUi is high-effort/low-value. Aligns with the 2026-06-20 "drop faithful curses-repro"
 call. Remaining accepted gaps unchanged: (c) autopickup marker, (d) area desc/flags
-sublines, (e) examine composites over the doc, (f) compact mode. **→ NEXT: de-curse
-advanced_inv.cpp** (rip the `else` curses branch: redraw_pane/redraw_sidebar/draw_minimap/
-refresh_minimap/print_items/print_header + the now-dead curses window setup).
+sublines, (e) examine composites over the doc, (f) compact mode.
+
+**DE-CURSED (2026-06-22, build-green, eyeball owed) — `advanced_inv` is curses-draw-free.**
+Removed the on_redraw `else` curses body + the now-dead curses renderers it exclusively
+fed: `print_items`, `print_header`, `redraw_pane`, `redraw_sidebar`, `draw_minimap`,
+`refresh_minimap`, `get_minimap_sym` (~441 lines, +header decls). KEPT (char-sheet
+convention — dies with the curses backend at Tier 10): the `head`/`minimap`/`mm_border`/
+pane-window scaffolding in the resize callback (`minimap_width` still feeds the head
+layout math; the minimap windows are now created-but-undrawn). The `if(rml){…return;}`
+on_redraw guard stays (vestigial — toggle-OFF now renders nothing; toggle deleted at
+rip-out). `recalc_pane` kept (the rml prep loop calls it). **EYEBALL (user, in-game —
+toggle ON by default):** AIM renders fully via rml with NO curses fallback; everything
+slices 1-3 + the new message log show; the minimap area is intentionally empty.
 
 **Discipline:** the cell/preset model is load-bearing and this file is 2640 lines
 under the stale-read hook — every model field MUST be verified against fetched
