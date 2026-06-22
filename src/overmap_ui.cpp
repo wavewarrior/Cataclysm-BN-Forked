@@ -86,6 +86,8 @@
 #include "weather.h"
 #include "weather_gen.h"
 #include "world_type.h"
+#include "lighting/rmlui_layer.h"
+#include "path_info.h"
 #include "rml_screen.h"
 #include "rml_util.h"
 
@@ -568,6 +570,49 @@ struct note_cached {
     int dist_from_pl;
 };
 
+// Colour-tagged RML twin of update_note_preview's two panes: the note text (in its
+// note_color) and the 3x3 neighbour minimap (note symbol at centre). Shared by the
+// notes-manager callback (rendered into the uilist's "callback" element) and the
+// create_note editor backdrop, so both stay byte-identical.
+static std::string note_preview_rml(
+    const std::string &note,
+    const std::array<std::pair<nc_color, std::string>, npm_width *npm_height> &map_around )
+{
+    const auto om_symbol_info = get_note_display_info( note );
+    const nc_color note_color = std::get<1>( om_symbol_info );
+    const char        symbol  = std::get<0>( om_symbol_info );
+    const size_t prefix_len = std::get<2>( om_symbol_info );
+    const std::string note_text = note.substr( prefix_len );
+    const std::string visible_note_text =
+        note_label_utils::strip_label_commands( note_text );
+
+    std::string rml;
+    rml += "<div class=\"cb-text\">";
+    rml += cata_text_to_rml( colorize( "Note preview:", c_white ) );
+    rml += "<br/>";
+    rml += cata_text_to_rml( colorize( visible_note_text, note_color ) );
+    rml += "<br/><br/>";
+    rml += cata_text_to_rml( colorize( "Overmap:", c_white ) );
+    rml += "<table style=\"border-collapse:collapse;margin-top:4px\">";
+    for( int i = 0; i < npm_height; i++ ) {
+        rml += "<tr>";
+        for( int j = 0; j < npm_width; j++ ) {
+            const auto &ter = map_around[i * npm_width + j];
+            rml += "<td style=\"border:1px solid #5a5a78;padding:2px 6px;text-align:center;font-family:monospace\">";
+            if( i == npm_height / 2 && j == npm_width / 2 ) {
+                rml += cata_text_to_rml( colorize( std::string( 1, symbol ),
+                                                   note_color ) );
+            } else {
+                rml += cata_text_to_rml( colorize( ter.second, ter.first ) );
+            }
+            rml += "</td>";
+        }
+        rml += "</tr>";
+    }
+    rml += "</table></div>";
+    return rml;
+}
+
 class map_notes_callback : public uilist_callback
 {
     private:
@@ -681,40 +726,7 @@ class map_notes_callback : public uilist_callback
             const tripoint_abs_omt note_pos = note_location();
             const auto map_around = get_overmap_neighbors( note_pos );
             const std::string note = ACTIVE_OVERMAP_BUFFER.note( note_pos );
-
-            const auto om_symbol_info = get_note_display_info( note );
-            const nc_color note_color = std::get<1>( om_symbol_info );
-            const char        symbol  = std::get<0>( om_symbol_info );
-            const size_t prefix_len = std::get<2>( om_symbol_info );
-            const std::string note_text = note.substr( prefix_len );
-            const std::string visible_note_text =
-                note_label_utils::strip_label_commands( note_text );
-
-            std::string rml;
-            rml += "<div class=\"cb-text\">";
-            rml += cata_text_to_rml( colorize( "Note preview:", c_white ) );
-            rml += "<br/>";
-            rml += cata_text_to_rml( colorize( visible_note_text, note_color ) );
-            rml += "<br/><br/>";
-            rml += cata_text_to_rml( colorize( "Overmap:", c_white ) );
-            rml += "<table style=\"border-collapse:collapse;margin-top:4px\">";
-            for( int i = 0; i < npm_height; i++ ) {
-                rml += "<tr>";
-                for( int j = 0; j < npm_width; j++ ) {
-                    const auto &ter = map_around[i * npm_width + j];
-                    rml += "<td style=\"border:1px solid #5a5a78;padding:2px 6px;text-align:center;font-family:monospace\">";
-                    if( i == npm_height / 2 && j == npm_width / 2 ) {
-                        rml += cata_text_to_rml( colorize( std::string( 1, symbol ),
-                                                           note_color ) );
-                    } else {
-                        rml += cata_text_to_rml( colorize( ter.second, ter.first ) );
-                    }
-                    rml += "</td>";
-                }
-                rml += "</tr>";
-            }
-            rml += "</table></div>";
-            cb->SetInnerRML( rml );
+            cb->SetInnerRML( note_preview_rml( note, map_around ) );
         }
     };
 
@@ -1929,7 +1941,22 @@ static void create_note( const tripoint_abs_omt &curs )
     } );
     ui.mark_resize();
 
+    // RmlUi backdrop: the note preview pane as a doc stacked under the string_input
+    // "Note:" popup, replacing the curses w_preview/title/map panes. Re-synced each
+    // keystroke (the loop below invalidate_ui()s); same producer as the notes-manager.
+    Rml::ElementDocument *preview_doc = nullptr;
+    if( overmap_rmlui_enabled() && rmlui_layer::ready() ) {
+        preview_doc = rmlui_layer::open_document(
+                          PATH_INFO::datadir() + "gui/overmap_note.rml", true );
+    }
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( preview_doc ) {
+            if( Rml::Element *el = preview_doc->GetElementById( "preview" ) ) {
+                el->SetInnerRML( note_preview_rml( new_note, map_around ) );
+            }
+            return;
+        }
         update_note_preview( new_note, map_around, preview_windows );
     } );
 
@@ -1960,6 +1987,9 @@ static void create_note( const tripoint_abs_omt &curs )
         ui.invalidate_ui();
     } while( true );
 
+    if( preview_doc ) {
+        rmlui_layer::close_document( preview_doc );
+    }
     disable_ime();
 
     if( !esc_pressed && new_note.empty() && !old_note.empty() ) {

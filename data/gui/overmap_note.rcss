@@ -1,0 +1,21 @@
+/* Layout for the create_note preview backdrop (overmap_ui::create_note).
+   Palette/border/.panel come from theme.rcss (linked first). Anchored upper-left so
+   the string_input "Note:" box (drawn over it) stays clear, mirroring the curses
+   preview windows. Lengths in dp. */
+
+body {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.omn-panel {
+    position: absolute;
+    left: 2%;
+    top: 6%;
+    max-width: 46%;
+}
+
+.cb-text {
+    white-space: pre-wrap;
+}

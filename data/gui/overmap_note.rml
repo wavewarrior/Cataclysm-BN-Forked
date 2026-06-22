@@ -1,0 +1,17 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="overmap_note.rcss"/>
+</head>
+<body>
+    <!-- create_note preview backdrop (overmap_ui::create_note). A passive doc stacked
+         UNDER the string_input "Note:" popup, replacing the curses w_preview / title /
+         map panes. The #preview element is filled each keystroke by create_note's
+         on_redraw via note_preview_rml() — the same producer the notes-manager callback
+         uses, so the rendered preview is identical. Upper-left to match the curses
+         layout (preview windows were anchored at the top-left). -->
+    <div class="panel omn-panel">
+        <div id="preview" class="cb-text"></div>
+    </div>
+</body>
+</rml>
