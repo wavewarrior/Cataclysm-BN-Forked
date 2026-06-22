@@ -355,22 +355,6 @@ static void list_available_constructions( std::vector<construction_group_str_id>
     }
 }
 
-static void draw_grid( const catacurses::window &w, const int list_width )
-{
-    draw_border( w );
-    mvwprintz( w, point( 2, 0 ), c_light_red, _( " Construction " ) );
-    // draw internal lines
-    mvwvline( w, point( list_width, 1 ), LINE_XOXO, getmaxy( w ) - 2 );
-    mvwhline( w, point( 1, 2 ), LINE_OXOX, getmaxx( w ) - 2 );
-    // draw intersections
-    mvwputch( w, point( list_width, 0 ), c_light_gray, LINE_OXXX );
-    mvwputch( w, point( list_width, getmaxy( w ) - 1 ), c_light_gray, LINE_XXOX );
-    mvwputch( w, point( 0, 2 ), c_light_gray, LINE_XXXO );
-    mvwputch( w, point( list_width, 2 ), c_light_gray, LINE_XOXX );
-
-    wnoutrefresh( w );
-}
-
 static nc_color construction_color( const construction_group_str_id &group, bool highlight )
 {
     Character &player_character = get_player_character();
@@ -524,7 +508,6 @@ std::optional<construction_id> construction_menu( const bool blueprint )
     bool isnew = true;
     int tabindex = 0;
     int select = 0;
-    int offset = 0;
     bool exit = false;
     construction_category_id category_id;
     std::vector<construction_group_str_id> constructs;
@@ -1112,200 +1095,12 @@ std::optional<construction_id> construction_menu( const bool blueprint )
         data->handle = c.GetModelHandle();
     } );
 
-    ui.on_redraw( [&]( ui_adaptor & ui ) {
+    ui.on_redraw( [&]( const ui_adaptor & ) {
         // RmlUi path owns the screen — sync the model and skip curses drawing.
         if( rml ) {
             sync_rml();
             return;
         }
-        draw_grid( w_con, w_list_width + w_list_x0 );
-
-        // Erase existing tab selection & list of constructions
-        mvwhline( w_con, point( 1, 1 ), ' ', w_width - 2 );
-        werase( w_list );
-        // Print tab listing with craft-style tabs and overflow indicators
-        std::vector<std::string> tab_labels;
-        if( filter_mode ) {
-            tab_labels.push_back( _( "Searched" ) );
-        } else {
-            tab_labels.reserve( construct_cat_order.size() );
-            std::ranges::transform( construct_cat_order, std::back_inserter( tab_labels ),
-            [&]( const size_t idx ) {
-                return construct_cat[idx].name();
-            } );
-        }
-        const auto label_for = [&]( const size_t idx ) -> std::string {
-            return tab_labels[idx];
-        };
-        const auto tab_width = [&]( const size_t idx ) -> int {
-            const auto label_width = utf8_width( label_for( idx ) );
-            return label_width + 3;
-        };
-        const auto tabs_width = getmaxx( w_tabs );
-        const int tab_bar_width = std::max( 4, tabs_width * 7 / 10 );
-        const int tabs_available = tab_bar_width - 2;
-        int first_tab = 0;
-        const auto last_visible_tab = [&]( const int start_idx ) -> int {
-            int used = 0;
-            int last = start_idx - 1;
-            for( size_t i = static_cast<size_t>( start_idx ); i < tab_labels.size(); ++i )
-            {
-                const int needed = tab_width( i );
-                if( used + needed > tabs_available ) {
-                    break;
-                }
-                used += needed;
-                last = static_cast<int>( i );
-            }
-            return last;
-        };
-        int last_tab = last_visible_tab( first_tab );
-        while( tabindex > last_tab && first_tab < static_cast<int>( tab_labels.size() ) ) {
-            first_tab++;
-            last_tab = last_visible_tab( first_tab );
-        }
-        std::vector<std::string> visible_tabs;
-        for( int i = first_tab; i <= last_tab; ++i ) {
-            visible_tabs.push_back( tab_labels[ i ] );
-        }
-        werase( w_tabs );
-        werase( w_tabs );
-        // draw baseline and corners for tabs row
-        mvwhline( w_tabs, point( 0, 2 ), LINE_OXOX, tabs_width );
-        mvwputch( w_tabs, point( 0, 2 ), BORDER_COLOR, LINE_OXXO );
-        mvwputch( w_tabs, point( tabs_width - 1, 2 ), BORDER_COLOR, LINE_OOXX );
-        std::optional<std::pair<nc_color, std::string>> construction_speed_line;
-        if( !constructs.empty() && select >= 0 && static_cast<size_t>( select ) < constructs.size() ) {
-            const construction_group_str_id &current_group = constructs[select];
-            const std::vector<const construction *> group_options = constructions_by_group( current_group );
-            if( !group_options.empty() ) {
-                const construction *first_option = group_options.front();
-                const int base_time = to_moves<int>( first_option->time );
-                const int adjusted_time = first_option->adjusted_time();
-                if( base_time > 0 && adjusted_time > 0 ) {
-                    const int speed_percent = static_cast<int>( std::round( 100.0f * base_time /
-                                              static_cast<float>( adjusted_time ) ) );
-                    const bool is_slow = speed_percent < 100;
-                    const nc_color line_color = is_slow ? i_yellow : i_green;
-                    construction_speed_line = std::pair<nc_color, std::string> {
-                        line_color, string_format( _( "Construction speed %d%%" ), speed_percent )
-                    };
-                }
-            }
-        }
-        if( filter_mode ) {
-            const std::string display_label = label_for( 0 );
-            draw_tab( w_tabs, 2, display_label, true );
-        } else {
-            int start_x = 2;
-            const auto selected_visible_tab = tabindex - first_tab;
-            for( size_t idx = 0; idx < visible_tabs.size(); ++idx ) {
-                const size_t label_index = static_cast<size_t>( first_tab ) + idx;
-                const bool is_selected = static_cast<int>( idx ) == selected_visible_tab;
-                const std::string base_label = tab_labels[label_index];
-                const std::string display_label = base_label;
-                const auto label_width = utf8_width( display_label );
-                draw_tab( w_tabs, start_x, display_label, is_selected );
-                start_x += label_width + 3;
-            }
-            if( first_tab > 0 ) {
-                mvwprintz( w_tabs, point( 0, 1 ), c_light_gray, "<" );
-            }
-            if( last_tab + 1 < static_cast<int>( tab_labels.size() ) ) {
-                mvwprintz( w_tabs, point( tab_bar_width - 1, 1 ), c_light_gray, ">" );
-            }
-        }
-        if( construction_speed_line.has_value() ) {
-            const auto &[line_color, line_text] = *construction_speed_line;
-            right_print( w_tabs, 0, 1, line_color, line_text );
-        }
-        if( !tab_status_line.empty() ) {
-            right_print( w_tabs, 1, 1, c_green, tab_status_line );
-        }
-        // Determine where in the master list to start printing
-        calcStartPos( offset, select, w_list_height, constructs.size() );
-        // Print the constructions between offset and max (or how many will fit)
-        for( size_t i = 0; static_cast<int>( i ) < w_list_height &&
-             ( i + offset ) < constructs.size(); i++ ) {
-            int current = i + offset;
-            const construction_group_str_id &group = constructs[current];
-            bool highlight = ( current == select );
-            const point print_from( 0, i );
-            if( highlight ) {
-                ui.set_cursor( w_list, print_from );
-            }
-            const std::string group_name = is_favorite( group ) ? "* " + group->name() : group->name();
-            const nc_color final_col = construction_color( group, highlight );
-            trim_and_print( w_list, print_from, w_list_width, final_col, group_name );
-        }
-
-        // Clear out lines for tools & materials
-        for( int i = 1; i < w_height - 1; i++ ) {
-            mvwhline( w_con, point( pos_x, i ), ' ', available_window_width );
-        }
-
-        if( !notes.empty() ) {
-            const std::string notes_line = std::accumulate( notes.begin(), notes.end(), std::string(),
-            []( const std::string & acc, const std::string & note ) {
-                return acc.empty() ? note : acc + ", " + note;
-            } );
-            const int hint_width = available_window_width;
-            const std::vector<std::string> folded_notes = foldstring( notes_line, hint_width );
-            int start_y = w_height - notes_render_height - 1;
-            for( size_t i = 0; i < folded_notes.size(); ++i ) {
-                trim_and_print( w_con, point( pos_x, start_y + static_cast<int>( i ) ),
-                                hint_width, c_white, folded_notes[i] );
-            }
-        }
-
-        if( !constructs.empty() ) {
-            if( select >= static_cast<int>( constructs.size() ) ) {
-                select = 0;
-            }
-            const construction_group_str_id &current_group = constructs[select];
-            // Print construction name
-            trim_and_print( w_con, point( pos_x, 1 ), available_window_width, c_white, current_group->name() );
-
-            if( current_construct_breakpoint > 0 ) {
-                // Print previous stage indicator if breakpoint is past the beginning
-                trim_and_print( w_con, point( pos_x, 2 ), available_window_width, c_white,
-                                _( "Press %s to show previous stage(s)." ),
-                                ctxt.get_desc( "PAGE_UP" ) );
-            }
-            if( static_cast<size_t>( construct_buffer_breakpoints[current_construct_breakpoint] +
-                                     available_buffer_height ) < full_construct_buffer.size() ) {
-                // Print next stage indicator if more breakpoints are remaining after screen height
-                trim_and_print( w_con, point( pos_x, w_height - 2 ),
-                                available_window_width,
-                                c_white, _( "Press %s to show next stage(s)." ),
-                                ctxt.get_desc( "PAGE_DOWN" ) );
-            }
-            // Leave room for above/below indicators
-            int ypos = 3;
-            nc_color stored_color = color_stage;
-            for( size_t i = static_cast<size_t>( construct_buffer_breakpoints[current_construct_breakpoint] );
-                 i < full_construct_buffer.size(); i++ ) {
-                const int max_content_row = w_height - notes_render_height - 2;
-                if( ypos > max_content_row ) {
-                    break;
-                }
-                const std::string &line = full_construct_buffer[i];
-                if( !construct_separator_line.empty() && line == construct_separator_line ) {
-                    mvwhline( w_con, point( w_list_width + w_list_x0 + 2, ypos ),
-                              LINE_OXOX, available_window_width );
-                    ypos++;
-                    continue;
-                }
-                print_colored_text( w_con, point( w_list_width + w_list_x0 + 2, ypos++ ), stored_color,
-                                    color_stage, line );
-            }
-        }
-
-        draw_scrollbar( w_con, select, w_list_height, constructs.size(), point( 0, 3 ) );
-        wnoutrefresh( w_con );
-        wnoutrefresh( w_tabs );
-
-        wnoutrefresh( w_list );
     } );
 
     do {
@@ -1699,7 +1494,6 @@ std::optional<construction_id> construction_menu( const bool blueprint )
             update_info = true;
             update_cat = true;
             hide_unconstructable = !hide_unconstructable;
-            offset = 0;
             list_available_constructions( available, cat_available, hide_unconstructable );
         } else if( action == "CONFIRM" ) {
             if( constructs.empty() || select >= static_cast<int>( constructs.size() ) ) {

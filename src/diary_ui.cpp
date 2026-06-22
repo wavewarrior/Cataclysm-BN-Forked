@@ -401,25 +401,6 @@ void diary::show_diary_ui( diary *c_diary )
             sync_rml();
             return;
         }
-        werase( w_changes );
-        werase( w_text );
-        werase( w_border );
-
-        draw_diary_border( &w_border );
-
-        // first get head text, then add the change list to it
-        std::vector<std::string> left_diary_text = c_diary->get_head_text();
-        std::vector<std::string> change_list = c_diary->get_change_list();
-        left_diary_text.insert( left_diary_text.end(), change_list.begin(), change_list.end() );
-
-        print_list_scrollable( &w_changes, left_diary_text, &selected[window_mode::CHANGE_WIN],
-                               currwin == window_mode::CHANGE_WIN, false, report_color_error::yes );
-        print_list_scrollable( &w_text, c_diary->get_page_text(), &selected[window_mode::TEXT_WIN],
-                               currwin == window_mode::TEXT_WIN, false, report_color_error::no );
-
-        wnoutrefresh( w_border );
-        wnoutrefresh( w_changes );
-        wnoutrefresh( w_text );
     } );
 
     ui_adaptor ui_pages;
