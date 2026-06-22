@@ -622,7 +622,6 @@ void defense_game::setup()
             sync_setup_rml();
             return;
         }
-        refresh_setup( w, selection );
     } );
 
     input_context ctxt( "DEFENSE_SETUP" );

@@ -397,14 +397,12 @@ bool run(
         rml_sess->handle = c.GetModelHandle();
     } );
 
-    ui->on_redraw( [&]( ui_adaptor & ui ) {
+    ui->on_redraw( [&]( const ui_adaptor & ) {
         // RmlUi path owns the screen — sync the model and skip curses drawing.
         if( rml ) {
             sync_rml();
             return;
         }
-        draw_item_info( w_info, data );
-        action_list.show( ui );
     } );
 
     // Scroll the RmlUi item-info pane by ~one page (dir: -1 up, +1 down).
