@@ -3129,7 +3129,10 @@ missed three real screens:
   2026-06-22, build+link green Metal, toggle OFF, eyeball owed)** — `keybindings_rmlui_enabled()` +
   F4 checkbox; list+legend → `"keybindings"` doc (windowed rows preserve the a-z hotkey mapping);
   filter stays Tier-0. The highest-traffic miss (reachable from every screen via HELP_KEYBINDINGS).
-- **Colors editor** (`color_manager::show_gui`, color.cpp) — STILL CURSES. Options → Colors.
+- ~~**Colors editor** (`color_manager::show_gui`, color.cpp)~~ **DONE (batch 18, 2026-06-22,
+  build+link green Metal, toggle OFF, eyeball owed)** — `color_manager_rmlui_enabled()` + F4
+  checkbox; header + name/Normal/Invert table → `"colors"` doc (native-scroll, sel_col highlights
+  the active column); colour-pick uilists stay Tier-0.
 - **Blood-test results** (`character.cpp`, `BLOOD_TEST_RESULTS`) — STILL CURSES. Minor results popup.
 - **`scrollable_text`** (output.cpp:357) — STILL CURSES framework primitive (plan line ~175 already
   flagged "§8 sweep must inventory scrollable_text"); shared by multiple screens.
