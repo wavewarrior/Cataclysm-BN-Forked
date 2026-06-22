@@ -628,10 +628,11 @@ class target_ui
         // text_y - first free line counting from the top
 
 
-        // RmlUi (slice 2a): colour-tagged text equivalent of draw_ui_window's
-        // shallow sections (title/cursor/gun/recoil/spell/target/turret/controls).
-        // The aim readout (print_aim / draw_throw_aim) is a WIP stub here — wired in
-        // slice 2b. Curses panel_* left pristine for the A/B toggle.
+        // RmlUi: colour-tagged text equivalent of the old draw_ui_window — the
+        // shallow sections (title/cursor/gun/recoil/spell/target/turret/controls,
+        // slice 2a) plus the aim/hit-chance readout (slice 2b, via
+        // ranged_chance_lines / aim_lines / throw_aim_lines). The curses panel_*
+        // and print_* draw fns have been deleted.
         std::string panel_text();
 
         // On-selected-as-target checks that act as if they are on-hit checks.
@@ -1899,23 +1900,6 @@ struct confidence_rating {
     std::string label;
 };
 
-static int print_steadiness( const catacurses::window &w, int line_number, double steadiness )
-{
-    const int window_width = getmaxx( w ) - 2; // Window width minus borders.
-
-    if( get_option<std::string>( "ACCURACY_DISPLAY" ) == "numbers" ) {
-        std::string steadiness_s = string_format( "%s: %d%%", _( "Steadiness" ),
-                                   static_cast<int>( 100.0 * steadiness ) );
-        mvwprintw( w, point( 1, line_number++ ), steadiness_s );
-    } else {
-        const std::string &steadiness_bar = get_labeled_bar( steadiness, window_width,
-                                            _( "Steadiness" ), '*' );
-        mvwprintw( w, point( 1, line_number++ ), steadiness_bar );
-    }
-
-    return line_number;
-}
-
 static double confidence_estimate( int range, double target_size,
                                    const dispersion_sources &dispersion )
 {
@@ -1973,153 +1957,6 @@ static std::string get_colored_bar( const double val, const int width, const std
     return result;
 }
 
-static int print_ranged_chance( const catacurses::window &w, int line_number,
-                                input_context &ctxt, const item &,
-                                const std::vector<ranged::aim_type> &aim_types,
-                                const std::function<dispersion_sources( const ranged::aim_type & )> &dispersion_fun,
-                                const std::function<int( const ranged::aim_type & )> &cost_fun,
-                                const std::vector<confidence_rating> &confidence_config,
-                                double range, double target_size )
-{
-    int window_width = getmaxx( w ) - 2; // Window width minus borders.
-    std::string display_type = get_option<std::string>( "ACCURACY_DISPLAY" );
-    std::string panel_type = panel_manager::get_manager().get_current_layout_id();
-    const int bars_pad = 3; // Padding for "bars" to fit moves_to_fire value.
-    if( ( panel_type == "compact" || panel_type == "labels-narrow" ) && display_type != "numbers" ) {
-        window_width -= bars_pad;
-    }
-
-    std::string label_m = _( "Moves" );
-    std::vector<std::string> t_aims( 4 ), t_confidence( 16 );
-    int aim_iter = 0, conf_iter = 0;
-
-    nc_color col = c_dark_gray;
-
-    if( display_type != "numbers" ) {
-        std::string symbols;
-        int column_number = 1;
-        if( !( panel_type == "compact" || panel_type == "labels-narrow" ) ) {
-            std::string label = _( "Symbols:" );
-            mvwprintw( w, point( column_number, line_number ), label );
-            column_number += utf8_width( label ) + 1; // 1 for whitespace after 'Symbols:'
-        }
-        for( const confidence_rating &cr : confidence_config ) {
-            std::string label = pgettext( "aim_confidence", cr.label.c_str() );
-            std::string symbols = string_format( "<color_%s>%s</color> = %s", cr.color, cr.symbol,
-                                                 label );
-            int line_len = utf8_width( label ) + 5; // 5 for '# = ' and whitespace at end
-            if( ( window_width + bars_pad - column_number ) < line_len ) {
-                column_number = 1;
-                line_number++;
-            }
-            print_colored_text( w, point( column_number, line_number ), col, col, symbols );
-            column_number += line_len;
-        }
-        line_number++;
-    }
-    if( ( panel_type == "compact" || panel_type == "labels-narrow" ) && display_type == "numbers" ) {
-        std::string symbols = _( " <color_green>Great</color> - <color_light_gray>Normal</color>"
-                                 " - <color_magenta>Graze</color> - <color_light_blue>Moves</color>" );
-        fold_and_print( w, point( 1, line_number++ ), window_width + bars_pad,
-                        c_dark_gray, symbols );
-        int len = utf8_width( symbols ) - 96; // 96 to subtract color codes
-        if( len > window_width + bars_pad ) {
-            line_number++;
-        }
-        for( int i = 0; i < window_width; i++ ) {
-            mvwprintw( w, point( i + 1, line_number ), "-" );
-        }
-    }
-
-    const auto front_or = [&]( const std::string & s, const char fallback ) {
-        const auto keys = ctxt.keys_bound_to( s );
-        return keys.empty() ? fallback : keys.front();
-    };
-
-    for( const ranged::aim_type &type : aim_types ) {
-        dispersion_sources current_dispersion = dispersion_fun( type );
-        std::string label = _( "Current" );
-        std::string aim_l = _( "Aim" );
-        if( type.has_threshold ) {
-            label = type.name;
-        }
-
-        int moves_to_fire = cost_fun( type );
-
-        auto hotkey = front_or( type.action.empty() ? "FIRE" : type.action, ' ' );
-        if( ( panel_type == "compact" || panel_type == "labels-narrow" ) ) {
-            if( display_type == "numbers" ) {
-                t_aims[aim_iter] = string_format( "<color_dark_gray>%s:</color>", label );
-                t_confidence[( aim_iter * 4 ) + 3] = string_format( "<color_light_blue>%d</color>", moves_to_fire );
-            } else {
-                print_colored_text( w, point( 1, line_number ), col, col, string_format( _( "%s %s:" ), label,
-                                    aim_l ) );
-                right_print( w, line_number++, 1, c_light_blue, _( "Moves" ) );
-                right_print( w, line_number, 1, c_light_blue, string_format( "%d", moves_to_fire ) );
-            }
-        } else {
-            print_colored_text( w, point( 1, line_number++ ), col, col,
-                                string_format( _( "<color_white>[%s]</color> %s %s: Moves to fire: "
-                                                  "<color_light_blue>%d</color>" ),
-                                               hotkey, label, aim_l, moves_to_fire ) );
-        }
-
-        double confidence = confidence_estimate( range, target_size, current_dispersion );
-
-        if( display_type == "numbers" ) {
-            if( panel_type == "compact" || panel_type == "labels-narrow" ) {
-                int last_chance = 0;
-                for( const confidence_rating &cr : confidence_config ) {
-                    int chance = std::min<int>( 100, 100.0 * ( cr.aim_level ) * confidence ) - last_chance;
-                    last_chance += chance;
-                    t_confidence[conf_iter] = string_format( "<color_%s>%3d%%</color>", cr.color, chance );
-                    conf_iter++;
-                    if( conf_iter == ( aim_iter * 4 ) + 3 ) {
-                        conf_iter++;
-                    }
-                }
-                aim_iter++;
-            } else {
-                int last_chance = 0;
-                std::string confidence_s = enumerate_as_string( confidence_config.begin(), confidence_config.end(),
-                [&]( const confidence_rating & config ) {
-                    // TODO: Consider not printing 0 chances, but only if you can print something (at least miss 100% or so)
-                    int chance = std::min<int>( 100, 100.0 * ( config.aim_level * confidence ) ) - last_chance;
-                    last_chance += chance;
-                    return string_format( "%s: <color_%s>%3d%%</color>", pgettext( "aim_confidence",
-                                          config.label.c_str() ), config.color, chance );
-                }, enumeration_conjunction::none );
-                line_number += fold_and_print_from( w, point( 1, line_number ), window_width, 0,
-                                                    c_dark_gray, confidence_s );
-            }
-        } else {
-            std::vector<std::tuple<double, char, std::string>> confidence_ratings;
-            std::transform( confidence_config.begin(), confidence_config.end(),
-                            std::back_inserter( confidence_ratings ),
-            [&]( const confidence_rating & config ) {
-                return std::make_tuple( config.aim_level, config.symbol, config.color );
-            }
-                          );
-            const std::string &confidence_bar = get_colored_bar( confidence, window_width, "",
-                                                confidence_ratings.begin(),
-                                                confidence_ratings.end() );
-
-            print_colored_text( w, point( 1, line_number++ ), col, col, confidence_bar );
-        }
-    }
-
-    // Draw tables for compact Numbers display
-    if( ( panel_type == "compact" || panel_type == "labels-narrow" )
-        && display_type == "numbers" ) {
-        const std::string divider = "|";
-        int left_pad = 10, columns = 4;
-        insert_table( w, left_pad, ++line_number, columns, c_light_gray, divider, true, t_confidence );
-        insert_table( w, 0, line_number, 1, c_light_gray, "", false, t_aims );
-        line_number = line_number + 4; // 4 to account for the tables
-    }
-    return line_number;
-}
-
 // Whether player character knows creature's position and can roughly track it with the aim cursor
 static auto outside_visible_z_range( const tripoint_bub_ms &from,
                                      const tripoint_bub_ms &to ) -> bool
@@ -2154,98 +1991,13 @@ static double calculate_aim_cap( const Character &p, const tripoint_bub_ms &targ
     return min_recoil;
 }
 
-static int print_aim( const Character &p, const catacurses::window &w, int line_number,
-                      input_context &ctxt, item &weapon,
-                      const double target_size, const tripoint_bub_ms &pos, double predicted_recoil,
-                      item *load_loc )
-{
-    // This is absolute accuracy for the player.
-    // TODO: push the calculations duplicated from Creature::deal_projectile_attack() and
-    // Creature::projectile_attack() into shared methods.
-    // Dodge doesn't affect gun attacks
-
-    dispersion_sources dispersion = ranged::get_weapon_dispersion( p, weapon );
-    dispersion.add_range( ranged::recoil_vehicle( p ) );
-
-    const double min_recoil = calculate_aim_cap( p, pos );
-    const double effective_recoil = ranged::effective_dispersion( p,
-                                    p.primary_weapon().sight_dispersion() );
-    const double min_dispersion = std::max( min_recoil, effective_recoil );
-    const double steadiness_range = MAX_RECOIL - min_dispersion;
-    // This is a relative measure of how steady the player's aim is,
-    // 0 is the best the player can do.
-    const double steady_score = std::max( 0.0, predicted_recoil - min_dispersion );
-    // Fairly arbitrary cap on steadiness...
-    const double steadiness = 1.0 - ( steady_score / steadiness_range );
-
-    // This could be extracted, to allow more/less verbose displays
-    static const std::vector<confidence_rating> confidence_config = {{
-            { accuracy_critical, '*', "green", translate_marker_context( "aim_confidence", "Great" ) },
-            { accuracy_standard, '+', "light_gray", translate_marker_context( "aim_confidence", "Normal" ) },
-            { accuracy_grazing, '|', "magenta", translate_marker_context( "aim_confidence", "Graze" ) }
-        }
-    };
-
-    int shots = std::max( 1, weapon.gun_current_mode().qty );
-    const auto dispersion_fun = [&]( const ranged::aim_type & at ) {
-        int at_recoil = at.has_threshold ? at.threshold : static_cast<int>( predicted_recoil );
-        return calculate_dispersion( get_map(), p, weapon, at_recoil, shots > 1 );
-    };
-    const auto cost_fun = [&]( const ranged::aim_type & at ) {
-        int at_recoil = at.has_threshold ? at.threshold : static_cast<int>( predicted_recoil );
-        return ranged::gun_engagement_moves( p, weapon, at_recoil, p.recoil ) +
-               ranged::time_to_attack( p, weapon, load_loc );
-    };
-    const double range = rl_dist( p.bub_pos(), pos );
-    line_number = print_steadiness( w, line_number, steadiness );
-    return print_ranged_chance( w, line_number, ctxt, weapon, ranged::get_aim_types( p, weapon ),
-                                dispersion_fun, cost_fun, confidence_config, range, target_size );
-}
-
-static int draw_throw_aim( const player &p, const catacurses::window &w, int line_number,
-                           input_context &ctxt,
-                           const item &weapon, const tripoint_bub_ms &target_pos, bool is_blind_throw )
-{
-    Creature *target = g->critter_at( target_pos, true );
-    if( target != nullptr && !p.sees( *target ) ) {
-        target = nullptr;
-    }
-
-    const dispersion_sources dispersion(
-        ranged::throwing_dispersion( p, weapon, target, is_blind_throw ) );
-    const double range = rl_dist( p.bub_pos(), target_pos );
-
-    const double target_size = target != nullptr ? target->ranged_target_size() : 1.0f;
-
-    static const std::vector<confidence_rating> confidence_config_critter = {{
-            { accuracy_critical, '*', "green", translate_marker_context( "aim_confidence", "Great" ) },
-            { accuracy_standard, '+', "light_gray", translate_marker_context( "aim_confidence", "Normal" ) },
-            { accuracy_grazing, '|', "magenta", translate_marker_context( "aim_confidence", "Graze" ) }
-        }
-    };
-    static const std::vector<confidence_rating> confidence_config_object = {{
-            { accuracy_grazing, '*', "white", translate_marker_context( "aim_confidence", "Hit" ) }
-        }
-    };
-    const auto &confidence_config = target != nullptr ?
-                                    confidence_config_critter : confidence_config_object;
-
-    const auto dispersion_fun = [&]( const ranged::aim_type & ) {
-        return dispersion;
-    };
-    const auto cost_fun = [&]( const ranged::aim_type & ) {
-        return ranged::throw_cost( p, weapon );
-    };
-    return print_ranged_chance( w, line_number, ctxt, weapon, get_default_aim_type(),
-                                dispersion_fun, cost_fun, confidence_config, range, target_size );
-}
-
-// --- RmlUi slice 2b: parallel lines-producers for the aim/hit-chance readout. ---
-// These mirror print_steadiness / print_ranged_chance / print_aim / draw_throw_aim
-// number-for-number but RETURN colour-tagged lines instead of drawing into a curses
-// window. The curses fns above are left pristine for the F4 A/B toggle. Semantic
-// rewrite: always the readable wide form (the compact insert_table positional layout
-// is dropped) — the displayed NUMBERS are identical, only the layout is semantic.
+// --- RmlUi slice 2b: lines-producers for the aim/hit-chance readout. ---
+// The sole producers now: they RETURN colour-tagged lines for panel_text() instead
+// of drawing into a curses window. (The old curses print_steadiness /
+// print_ranged_chance / print_aim / draw_throw_aim were deleted once parity was
+// confirmed.) Always the readable wide form (the compact insert_table positional
+// layout is dropped) — the displayed NUMBERS match the historical curses readout,
+// only the layout is semantic.
 static std::string steadiness_line( int bar_width, double steadiness )
 {
     if( get_option<std::string>( "ACCURACY_DISPLAY" ) == "numbers" ) {
@@ -2978,12 +2730,12 @@ int burst_penalty( const Character &p, const item &gun, int gun_recoil )
 } // namespace ranged
 
 // ── RmlUi render path (full UI→RmlUi migration, ranged piece 2) ──────────────
-// The w_target targeting panel. Slice 2a renders draw_ui_window's shallow sections
-// (title/cursor/gun/recoil/spell/target/turret/controls) as one colour-tagged
-// `body_rml` string via target_ui::panel_text(); the aim/hit-chance readout
-// (print_aim / draw_throw_aim) is a WIP stub here and lands in slice 2b. Render-only:
-// the keyboard aim/fire loop is unchanged, and the map aim overlay (draw_terrain_overlay)
-// stays on the sprite path. Curses panel_* are left pristine for the A/B toggle.
+// The w_target targeting panel, rendered as one colour-tagged `body_rml` string via
+// target_ui::panel_text(): the shallow sections (title/cursor/gun/recoil/spell/
+// target/turret/controls, slice 2a) plus the aim/hit-chance readout (slice 2b, via
+// ranged_chance_lines / aim_lines / throw_aim_lines). Render-only: the keyboard
+// aim/fire loop is unchanged, and the map aim overlay (draw_terrain_overlay) stays
+// on the sprite path. The curses panel_* / print_* draw fns have been deleted.
 namespace
 {
 struct target_rml_session {
@@ -4109,8 +3861,8 @@ void target_ui::draw_terrain_overlay()
 
 std::string target_ui::panel_text()
 {
-    // Mirrors draw_ui_window's section order, producing colour-tagged text. The aim
-    // readout is a WIP stub (slice 2b). Curses panel_* are untouched.
+    // Reproduces the old draw_ui_window's section order as colour-tagged text,
+    // including the aim/hit-chance readout (slice 2b, appended below).
     std::vector<std::string> L;
 
     L.push_back( colorize( uitext_title(), c_red ) );

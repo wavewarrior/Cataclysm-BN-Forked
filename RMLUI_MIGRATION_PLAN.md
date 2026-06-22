@@ -50,9 +50,12 @@ options=2, **newcharacter=16 (8 slices)**, main_menu=2, worldfactory=4 sessions;
 `07d6d6aa53` / `6a7f93a194` / `d689e9acb4` / `2eedac603e`.
 
 **GENUINELY REMAINING (updated 2026-06-18):**
-1. ~~**ranged**~~ **DONE** — slices 2a (`3109aa26b4`) + 2b/2c (`5a3c772d2d`) committed;
-   `ranged_rmlui_enabled()` toggle live. The top-banner "ranged.cpp=0" proof is STALE
-   (it predates the slices). Only the keystone number-for-number aim A/B is owed.
+1. ~~**ranged**~~ **DONE + DE-CURSED** — slices 2a (`3109aa26b4`) + 2b/2c (`5a3c772d2d`)
+   committed; `ranged_rmlui_enabled()` toggle live. Batch 13 dropped the curses panel_*/
+   draw_ui_window; **batch 14b (2026-06-22) deleted the last 4 dead curses readout fns
+   (print_steadiness/print_ranged_chance/print_aim/draw_throw_aim, −268 lines), build+link
+   green.** The top-banner "ranged.cpp=0" proof is STALE (it predates the slices). Only the
+   keystone number-for-number aim A/B eyeball is owed.
 2. **Tier 7 — sidebar HUD** — **STRATEGY CHANGED 2026-06-20 (grilled).** Single user, one
    bespoke UI → **faithful curses-repro DROPPED.** Don't reproduce the cell grid; **design the
    target HUD now, AS the migration.** Phase 1 = MVP (the data you can't play without, cheapest
@@ -2007,12 +2010,15 @@ careful build-blind pass (faction precedent: parallel `_lines()` producers, curs
   the keystone eyeball (hit-chance numbers vs curses, number-for-number); (2c) `draw_throw_aim`
   readout for Throw/ThrowBlind. **Most eyeball-sensitive screen in the migration — do NOT
   land the aim readout build-blind without a number-for-number A/B.**
-  **SLICE 2b — CODE-COMPLETE + COMPILE-VERIFIED (ranged.cpp.o built clean 20:39, 0 errors;
-  isolated object compile — full link NOT run because the working tree carries unrelated
-  in-flight lighting changes, rc.frag.hlsl + radiance_cascade_pass.cpp), TOGGLE OFF,
-  EYEBALL OWED (the keystone A/B), UNCOMMITTED.** Added 4 parallel `*_lines()` producers
-  right after `draw_throw_aim` (curses `print_steadiness`/`print_ranged_chance`/`print_aim`/
-  `draw_throw_aim` left PRISTINE for the A/B): `steadiness_line(bar_width,steadiness)`,
+  **SLICE 2b — DONE + BUILD+LINK-GREEN on a clean tree (Metal; binary relinked 2026-06-22),
+  curses draw fns DELETED, EYEBALL OWED (the keystone A/B), COMMITTED batch 14b.** Earlier the
+  producers were wired but the curses `print_steadiness`/`print_ranged_chance`/`print_aim`/
+  `draw_throw_aim` were left in place pending parity confirmation + a full link (the tree then
+  carried in-flight lighting changes). This session: clean tree, full link verified, and those
+  4 now-dead curses fns DELETED (−268 lines; shared helpers `confidence_estimate`/`get_colored_bar`/
+  `calculate_aim_cap`/`get_default_aim_type`/`outside_visible_z_range`/`pl_sees` kept — they feed
+  the live producers). The 4 parallel `*_lines()` producers are now the sole readout path:
+  `steadiness_line(bar_width,steadiness)`,
   `ranged_chance_lines(ctxt,bar_width,aim_types,dispersion_fun,cost_fun,confidence_config,
   range,target_size)`, `aim_lines(...)` (mirrors print_aim's steadiness+dispersion+cost math),
   `throw_aim_lines(...)` (mirrors draw_throw_aim incl. the critter-vs-object confidence_config
@@ -3224,7 +3230,10 @@ build-green:
    - `panels` (~303) = Tier-7 sidebar HUD — own strategy.
    - overmap **main display**: curses vs rml splits *inside* `draw()`/`draw_om_sidebar`, not a
      deletable arm; plus notes-manager + place-terrain editor (both unmigrated).
-   - `ranged` aim readout (`print_ranged_chance`/`print_aim`) — slice-2b deferred.
+   - ~~`ranged` aim readout (`print_ranged_chance`/`print_aim`) — slice-2b deferred.~~ **DONE
+     (batch 14b, 2026-06-22): producers were already wired into `panel_text()`; this session
+     deleted the 4 now-dead curses draw fns (−268 lines) on a clean tree, build+link green.
+     Eyeball still owed (the keystone number-for-number A/B).**
    - ~~nested sub-popups in faction/armor_layers/auto_pickup~~ **BATCH 14 DONE (2026-06-22,
      build+link green Metal, toggle gates via `autopickup_rmlui_enabled()`, eyeball owed).**
      Ground-truth on a clean tree corrected the stale attribution: **faction & armor_layers have
