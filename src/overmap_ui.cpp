@@ -2090,46 +2090,6 @@ static bool search( const ui_adaptor &om_ui, tripoint_abs_omt &curs, const tripo
             sync_rml();
             return;
         }
-        //Draw search box
-
-        int a = utf8_width( _( "Search:" ) );
-        int b = utf8_width( _( "Result:" ) );
-        int c = utf8_width( _( "Results:" ) );
-        int d = utf8_width( _( "Direction:" ) );
-        int align_width = 0;
-        int align_w_value[4] = { a, b, c, d};
-        for( int n : align_w_value ) {
-            if( n > align_width ) {
-                align_width = n + 2;
-            }
-        }
-
-        // NOLINTNEXTLINE(cata-use-named-point-constants)
-        mvwprintz( w_search, point( 1, 1 ), c_light_blue, _( "Search:" ) );
-        mvwprintz( w_search, point( align_width, 1 ), c_light_red, "%s", term );
-
-        mvwprintz( w_search, point( 1, 2 ), c_light_blue,
-                   locations.size() == 1 ? _( "Result:" ) : _( "Results:" ) );
-        mvwprintz( w_search, point( align_width, 2 ), c_light_red, "%d/%d     ", i + 1,
-                   locations.size() );
-
-        mvwprintz( w_search, point( 1, 3 ), c_light_blue, _( "Direction:" ) );
-        mvwprintz( w_search, point( align_width, 3 ), c_light_red, "%d %s",
-                   trig_dist( orig, tripoint_abs_omt( locations[i], orig.z() ) ),
-                   direction_name_short( direction_from( orig, tripoint_abs_omt( locations[i], orig.z() ) ) ) );
-
-        if( locations.size() > 1 ) {
-            fold_and_print( w_search, point( 1, 6 ), search_width, c_white,
-                            _( "Press [<color_yellow>%s</color>] or [<color_yellow>%s</color>] "
-                               "to cycle through search results." ),
-                            ctxt.get_desc( "NEXT_TAB" ), ctxt.get_desc( "PREV_TAB" ) );
-        }
-        fold_and_print( w_search, point( 1, 10 ), search_width, c_white,
-                        _( "Press [<color_yellow>%s</color>] to confirm." ), ctxt.get_desc( "CONFIRM" ) );
-        fold_and_print( w_search, point( 1, 11 ), search_width, c_white,
-                        _( "Press [<color_yellow>%s</color>] to quit." ), ctxt.get_desc( "QUIT" ) );
-        draw_border( w_search );
-        wnoutrefresh( w_search );
     } );
 
     rml.open( overmap_rmlui_enabled(), "overmapsearch", ctxt,
