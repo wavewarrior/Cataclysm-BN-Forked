@@ -1153,6 +1153,23 @@ column showing each item's source square (NW/S/etc.); move/sort/filter all still
 type (the popup-draw is replaced by this). (b) src column only on AIM_ALL; the numeric
 columns stay aligned with/without it. (c) minimap + message log absent (documented gap).
 
+**GAP-CLOSING (2026-06-22, build-green, toggle already ON via `ad617da615`, eyeball
+owed) — AIM rml path is now COMPLETE enough to de-curse:** the two head-bar gaps (b)
+above closed/decided: (1) **message log DONE** — new `msglog_rml` scalar bound in the
+topbar; sync_rml builds it from `Messages::recent_messages(4)` (the text getter the
+plan wanted) → per-line `<div class="aim-msg">` of `colorize(time,dark_gray)+colorize(
+text,light_gray)` via the proven `cata_text_to_rml(colorize+colorize)` idiom (same as
+filter_str). `advinv.{rml,rcss}` gain `.aim-msglog`/`.aim-msg` between topbar + panes.
+(2) **minimap DROPPED in rml mode (decision, not deferral)** — it's `get_map().draw()`
+(a LOCAL-map cell snippet, NOT overmap tiles — the plan mis-described it) + L/R/^/v
+pane markers; the **slice-2 area-selection compass grid already conveys pane→direction**
+and terrain context is marginal on an item screen, so reproducing the cell render in
+RmlUi is high-effort/low-value. Aligns with the 2026-06-20 "drop faithful curses-repro"
+call. Remaining accepted gaps unchanged: (c) autopickup marker, (d) area desc/flags
+sublines, (e) examine composites over the doc, (f) compact mode. **→ NEXT: de-curse
+advanced_inv.cpp** (rip the `else` curses branch: redraw_pane/redraw_sidebar/draw_minimap/
+refresh_minimap/print_items/print_header + the now-dead curses window setup).
+
 **Discipline:** the cell/preset model is load-bearing and this file is 2640 lines
 under the stale-read hook — every model field MUST be verified against fetched
 source (the armor near-miss is the warning). Per-subclass gate means each slice

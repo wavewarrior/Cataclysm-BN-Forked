@@ -7,13 +7,15 @@
     <!-- Tier 3 sub-project (advanced inventory / AIM). SLICE 1: dual-pane item lists
          + weight/vol heads. SLICE 2: top bar (clock + keybinding/reset-filter hints)
          + per-pane area-selection grid (semantic compass 3x3 + specials, coloured by
-         state). DEFERRED: message log + minimap (slice 3), footer + filter/examine/
-         move feedback + AIM_ALL src + compact (slice 3). Keyboard owns all input. -->
+         state). SLICE 3: footer (sort/filter) + AIM_ALL src. GAP-CLOSING: recent
+         message log in the head bar. Minimap intentionally DROPPED in rml mode (the
+         compass grid already conveys pane→direction). Keyboard owns all input. -->
     <div class="panel aim-outer">
         <div class="aim-topbar">
             <span class="aim-clock" data-rml="clock_rml"></span>
             <span class="aim-hints" data-rml="hints_rml"></span>
         </div>
+        <div class="aim-msglog" data-rml="msglog_rml"></div>
         <div class="aim-root">
             <div class="aim-pane">
                 <div class="aim-sort" data-rml="left_sort_rml"></div>

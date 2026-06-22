@@ -1415,6 +1415,10 @@ struct aim_session {
     // Slice 3: per-pane sort indicator + filter footer.
     Rml::String left_sort_rml, right_sort_rml;
     Rml::String left_filter_rml, right_filter_rml;
+    // Gap-closing: recent message log (replaces the curses display_messages in the
+    // head bar). The minimap is intentionally dropped in rml mode — pane→direction is
+    // already conveyed by the slice-2 area-selection compass grid.
+    Rml::String msglog_rml;
     Rml::DataModelHandle handle;
 };
 
@@ -1611,6 +1615,16 @@ void advanced_inventory::display()
                  ? _( "Reset Filter On Close [<color_light_green>ON</color>|<color_dark_gray>OFF</color>]" )
                  : _( "Reset Filter On Close [<color_dark_gray>ON</color>|<color_light_green>OFF</color>]" );
         rml_sess->hints_rml = cata_text_to_rml( colorize( hints, c_white ) );
+        // Recent message log (head bar — replaces the curses display_messages call;
+        // head_height-2 == 3 lines in curses, a touch more here for the flex space).
+        std::string mlog;
+        for( const std::pair<std::string, std::string> &m : Messages::recent_messages( 4 ) ) {
+            mlog += "<div class=\"aim-msg\">" +
+                    cata_text_to_rml( colorize( m.first + " ", c_dark_gray ) +
+                                      colorize( m.second, c_light_gray ) ) +
+                    "</div>";
+        }
+        rml_sess->msglog_rml = mlog;
         // Per-pane sort indicator + item count (mirrors redraw_pane's top line).
         const auto sort_str = [&]( advanced_inventory_pane & p ) -> Rml::String {
             std::string s = string_format( _( "< [%s] Sort: %s >" ), ctxt.get_desc( "SORT" ),
@@ -1651,6 +1665,7 @@ void advanced_inventory::display()
         rml_sess->handle.DirtyVariable( "right_grid_rml" );
         rml_sess->handle.DirtyVariable( "clock_rml" );
         rml_sess->handle.DirtyVariable( "hints_rml" );
+        rml_sess->handle.DirtyVariable( "msglog_rml" );
         rml_sess->handle.DirtyVariable( "left_sort_rml" );
         rml_sess->handle.DirtyVariable( "right_sort_rml" );
         rml_sess->handle.DirtyVariable( "left_filter_rml" );
@@ -1708,6 +1723,7 @@ void advanced_inventory::display()
             c.Bind( "right_grid_rml", &rml_sess->right_grid_rml );
             c.Bind( "clock_rml", &rml_sess->clock_rml );
             c.Bind( "hints_rml", &rml_sess->hints_rml );
+            c.Bind( "msglog_rml", &rml_sess->msglog_rml );
             c.Bind( "left_sort_rml", &rml_sess->left_sort_rml );
             c.Bind( "right_sort_rml", &rml_sess->right_sort_rml );
             c.Bind( "left_filter_rml", &rml_sess->left_filter_rml );

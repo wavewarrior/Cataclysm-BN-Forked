@@ -34,6 +34,18 @@ body {
     color: {{fg4}};
     text-align: right;
 }
+/* Recent message log (head bar) — replaces the curses display_messages block.
+   Per-message colour is baked into the spans; this just lays them out. */
+.aim-msglog {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 4dp;
+}
+.aim-msg {
+    display: block;
+    white-space: pre-wrap;
+}
 .aim-root {
     flex: 1;
     min-height: 0;
