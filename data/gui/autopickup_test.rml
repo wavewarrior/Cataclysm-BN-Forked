@@ -1,0 +1,29 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="autopickup_test.rcss"/>
+</head>
+<body data-model="autopickup_test">
+    <!-- auto_pickup test-rule popup (user_interface::test_pattern). A centered box
+         listing the item names a rule matches, stacked over the still-open
+         "autopickup" rules screen — mirrors the curses sub-window. Render-only:
+         the keyboard owns up/down + quit; mouse click/hover moves the cursor.
+         The footer caption is literal English (same i18n gap as the column heads,
+         for the §8/F.1 sweep). -->
+    <div class="panel apt-panel">
+        <div class="apt-title" data-rml="title_rml"></div>
+
+        <div class="apt-list scroll-pane">
+            <div class="apt-row" data-for="row : rows"
+                 data-class-selected="row.selected"
+                 data-event-mouseover="on_select(it_index)"
+                 data-event-click="on_select(it_index)">
+                <span class="apt-num" data-rml="row.num_rml"></span>
+                <span class="apt-name" data-rml="row.name_rml"></span>
+            </div>
+        </div>
+
+        <div class="apt-footer">Won't display content or suffix matches</div>
+    </div>
+</body>
+</rml>

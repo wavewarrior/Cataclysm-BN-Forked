@@ -34,6 +34,7 @@
 #include <RmlUi/Core.h>
 
 #include "rml_screen.h"
+#include "lighting/rmlui_layer.h"
 #include "rml_util.h"
 
 // ── RmlUi render path (full UI→RmlUi migration, Tier 2 screen #4) ─────────────
@@ -83,6 +84,35 @@ void register_autopickup_rml_types( Rml::DataModelConstructor &c )
     rh.RegisterMember( "sel_col", &autopickup_rml_row::sel_col );
     c.RegisterArray<Rml::Vector<autopickup_rml_row>>();
     g_autopickup_types_registered = true;
+}
+
+// Nested test-rule popup (user_interface::test_pattern): a centered box listing
+// the item names a rule matches, stacked over the still-open "autopickup" doc.
+// Render-only — the keyboard owns up/down/quit; mouse click/hover moves the cursor.
+struct autopickup_test_row {
+    Rml::String num_rml;
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct autopickup_test_session {
+    Rml::String title_rml;
+    Rml::Vector<autopickup_test_row> rows;
+    Rml::DataModelHandle handle;
+};
+
+bool g_autopickup_test_types_registered = false;
+
+void register_autopickup_test_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_autopickup_test_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<autopickup_test_row> rh = c.RegisterStruct<autopickup_test_row>();
+    rh.RegisterMember( "num_rml", &autopickup_test_row::num_rml );
+    rh.RegisterMember( "name_rml", &autopickup_test_row::name_rml );
+    rh.RegisterMember( "selected", &autopickup_test_row::selected );
+    c.RegisterArray<Rml::Vector<autopickup_test_row>>();
+    g_autopickup_test_types_registered = true;
 }
 } // namespace
 
@@ -359,7 +389,20 @@ void user_interface::show()
                 init_help_window( help_ui );
                 help_ui.on_screen_resize( init_help_window );
 
+                // RmlUi backdrop: a passive static help doc stacked under the
+                // string_input popup, replacing the curses help window. No data
+                // model — the text is literal English in the .rml (same i18n gap
+                // as the column heads); closed after the rule entry below.
+                Rml::ElementDocument *help_doc = nullptr;
+                if( autopickup_rmlui_enabled() && rmlui_layer::ready() ) {
+                    help_doc = rmlui_layer::open_document(
+                                   PATH_INFO::datadir() + "gui/autopickup_help.rml", true );
+                }
+
                 help_ui.on_redraw( [&]( const ui_adaptor & ) {
+                    if( help_doc ) {
+                        return;
+                    }
                     // NOLINTNEXTLINE(cata-use-named-point-constants)
                     fold_and_print( w_help, point( 1, 1 ), 999, c_white,
                                     _(
@@ -390,6 +433,9 @@ void user_interface::show()
                                       .width( 30 )
                                       .text( cur_rules[iLine].sRule )
                                       .query_string();
+                if( help_doc ) {
+                    rmlui_layer::close_document( help_doc );
+                }
                 // If r is empty, then either (1) The player ESC'ed from the window (changed their mind), or
                 // (2) Explicitly entered an empty rule- which isn't allowed since "*" should be used
                 // to include/exclude everything
@@ -517,7 +563,33 @@ void user_interface::test_pattern( const rule &rule ) const
     ctxt.register_action( "QUIT" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
 
+    // RmlUi render path. Render-only: the loop below owns nav; the doc stacks over
+    // the still-open "autopickup" doc (centered box, rules screen behind), matching
+    // the curses sub-window. Model storage declared BEFORE rml so it outlives the doc.
+    std::unique_ptr<autopickup_test_session> tdata;
+    rml_doc test_rml;
+    const auto sync_test_rml = [&]() {
+        if( !test_rml ) {
+            return;
+        }
+        tdata->title_rml = cata_text_to_rml( buf );
+        tdata->rows.clear();
+        for( int i = 0; i < static_cast<int>( vMatchingItems.size() ); ++i ) {
+            autopickup_test_row r;
+            r.num_rml = cata_text_to_rml( string_format( "%d", i + 1 ) );
+            r.name_rml = cata_text_to_rml( vMatchingItems[i] );
+            r.selected = ( iLine == i );
+            tdata->rows.push_back( r );
+        }
+        tdata->handle.DirtyVariable( "title_rml" );
+        tdata->handle.DirtyVariable( "rows" );
+    };
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( test_rml ) {
+            sync_test_rml();
+            return;
+        }
         draw_border( w_test_rule_border, BORDER_COLOR, buf, hilite( c_white ) );
         center_print( w_test_rule_border, iContentHeight + 1, red_background( c_white ),
                       _( "Won't display content or suffix matches" ) );
@@ -553,6 +625,26 @@ void user_interface::test_pattern( const rule &rule ) const
         }
 
         wnoutrefresh( w_test_rule_content );
+    } );
+
+    test_rml.open( autopickup_rmlui_enabled(), "autopickup_test", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        tdata = std::make_unique<autopickup_test_session>();
+        register_autopickup_test_rml_types( c );
+        c.Bind( "title_rml", &tdata->title_rml );
+        c.Bind( "rows", &tdata->rows );
+        // Click/hover a row to move the cursor onto it; QUIT (keyboard) closes.
+        c.BindEventCallback( "on_select",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            if( idx >= 0 && idx < static_cast<int>( vMatchingItems.size() ) ) {
+                iLine = idx;
+            }
+        } );
+        tdata->handle = c.GetModelHandle();
     } );
 
     while( true ) {

@@ -1,0 +1,24 @@
+/* Layout for the auto_pickup wildcard help backdrop (user_interface::show).
+   Palette/border come from theme.rcss (linked first); this file owns only this
+   popup's layout. Positioned upper-centre so the string_input "Pickup Rule:" box
+   (drawn over it) stays clear, mirroring the curses help window. Lengths in dp.
+   Monospace + white-space: pre keep the example columns aligned. */
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    width: 100%;
+    height: 100%;
+}
+
+.aph-panel {
+    margin-top: 14%;
+    max-width: 80%;
+    display: flex;
+    flex-direction: column;
+}
+
+.aph-text {
+    white-space: pre;
+}

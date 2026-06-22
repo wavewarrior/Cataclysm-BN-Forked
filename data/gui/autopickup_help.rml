@@ -1,0 +1,30 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="autopickup_help.rcss"/>
+</head>
+<body>
+    <!-- auto_pickup wildcard help (user_interface::show, ADD/EDIT rule). A passive
+         backdrop stacked UNDER the string_input "Pickup Rule:" popup, replacing the
+         curses help window. Static: no data model. The text is literal English with
+         column alignment preserved (white-space: pre), matching the curses readout
+         and the same i18n gap noted for the column heads (for the §8/F.1 sweep). -->
+    <div class="panel aph-panel">
+        <div class="aph-text">* is used as a Wildcard.  A few Examples:
+
+wooden arrow    matches the itemname exactly
+wooden ar*      matches items beginning with wood ar
+*rrow           matches items ending with rrow
+*avy fle*fi*arrow     multiple * are allowed
+heAVY*woOD*arrOW      case insensitive search
+
+Pickup using:
+c:food          matches item in category food
+m:kevlar        matches items made of Kevlar
+M:copper        matches items made purely of copper
+q:drilling      matches items with drilling qualites
+k:fabrication   matches books that teach fabrication
+b:c:food;*meat* matches items that are foods and *meat*</div>
+    </div>
+</body>
+</rml>

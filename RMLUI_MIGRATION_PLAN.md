@@ -3225,8 +3225,23 @@ build-green:
    - overmap **main display**: curses vs rml splits *inside* `draw()`/`draw_om_sidebar`, not a
      deletable arm; plus notes-manager + place-terrain editor (both unmigrated).
    - `ranged` aim readout (`print_ranged_chance`/`print_aim`) — slice-2b deferred.
-   - nested sub-popups in faction/armor_layers/auto_pickup (faction member detail, test-rule
-     window, help popup) — need real migration.
+   - ~~nested sub-popups in faction/armor_layers/auto_pickup~~ **BATCH 14 DONE (2026-06-22,
+     build+link green Metal, toggle gates via `autopickup_rmlui_enabled()`, eyeball owed).**
+     Ground-truth on a clean tree corrected the stale attribution: **faction & armor_layers have
+     NO live nested popup** — their main draw-arms were already gutted (`if(rml)return;` at
+     faction.cpp:945 / armor_layers.cpp:866) and the faction "member detail" is already the
+     migrated `detail_rml` pane. The only genuine nested popups were BOTH in `auto_pickup.cpp`:
+       - **test-rule popup** (`user_interface::test_pattern`) → new modal doc `autopickup_test`
+         (centered match-list box stacked over the open "autopickup" doc; keyboard owns nav, mouse
+         click/hover moves cursor). `data/gui/autopickup_test.{rml,rcss}`.
+       - **wildcard help backdrop** (ADD/EDIT-rule flow) → passive static doc `autopickup_help`
+         via `rmlui_layer::open_document(..., passive=true)` (no data model; literal English text,
+         white-space:pre column alignment), stacked UNDER the string_input "Pickup Rule:" popup,
+         closed after `query_string()`. `data/gui/autopickup_help.{rml,rcss}`.
+     Both keep the curses draw as a toggle-OFF fallback (fresh build-blind migration) — the
+     fallback-delete is a later de-curse step. **WATCH (eyeball):** test-list cursor scroll-into-view
+     on long lists (native scroll, no ScrollIntoView yet); help backdrop position vs the string_input
+     box (upper-centre, should stay clear); + D3D12.
 2. Delete the now-unreachable curses text-primitive bodies in `output.cpp` once grep confirms
    zero non-test callers.
 3. Delete `sdl_curses_draw.cpp`; delete `Font::OutputChar` / `draw_ascii_lines` (`sdl_font.cpp`) —
