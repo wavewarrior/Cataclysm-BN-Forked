@@ -1,0 +1,16 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="overmap_editor.rcss"/>
+</head>
+<body>
+    <!-- place_ter_or_special editor panel (overmap_ui::place_ter_or_special). A passive
+         doc over the map, replacing the curses w_editor box. The #editor element is
+         filled each redraw by place_ter_or_special's on_redraw (terrain/special id,
+         rotation, the red-areas warning, and the rotate/apply/cancel controls). Anchored
+         upper-right so the placement cursor on the map stays visible. Dev/wizard tool. -->
+    <div class="panel ome-panel">
+        <div id="editor" class="ome-text"></div>
+    </div>
+</body>
+</rml>

@@ -2221,7 +2221,43 @@ static void place_ter_or_special( const ui_adaptor &om_ui, tripoint_abs_omt &cur
             }
         }
 
+        // RmlUi backdrop: the editor panel as a passive doc over the map, replacing the
+        // curses w_editor box. Re-synced each redraw (id/rotation change on ROTATE).
+        Rml::ElementDocument *editor_doc = nullptr;
+        if( overmap_rmlui_enabled() && rmlui_layer::ready() ) {
+            editor_doc = rmlui_layer::open_document(
+                             PATH_INFO::datadir() + "gui/overmap_editor.rml", true );
+        }
+        const auto editor_panel_rml = [&]() -> std::string {
+            std::string s;
+            s += colorize( terrain ? _( "Place overmap terrain:" ) : _( "Place overmap special:" ),
+                           c_white ) + "\n";
+            s += colorize( terrain ? uistate.place_terrain->id.str() : uistate.place_special->id.str(),
+                           c_light_blue ) + "\n";
+            const std::string &rotation = om_direction::name( uistate.omedit_rotation );
+            s += colorize( string_format( _( "Rotation: %s %s" ), rotation,
+                                          can_rotate ? "" : _( "(fixed)" ) ), c_light_gray ) + "\n\n";
+            // Merged from 5 narrow curses lines into one wrapping paragraph (dev wizard tool).
+            s += colorize( _( "Areas highlighted in red already have map content generated. "
+                              "Their overmap id will change, but not their contents." ),
+                           c_red ) + "\n\n";
+            if( can_rotate ) {
+                s += colorize( string_format( _( "[%s] Rotate" ), ctxt.get_desc( "ROTATE" ) ),
+                               c_white ) + "\n";
+            }
+            s += colorize( string_format( _( "[%s] Apply" ), ctxt.get_desc( "CONFIRM" ) ),
+                           c_white ) + "\n";
+            s += colorize( _( "[ESCAPE/Q] Cancel" ), c_white );
+            return cata_text_to_rml( s );
+        };
+
         ui.on_redraw( [&]( const ui_adaptor & ) {
+            if( editor_doc ) {
+                if( Rml::Element *el = editor_doc->GetElementById( "editor" ) ) {
+                    el->SetInnerRML( editor_panel_rml() );
+                }
+                return;
+            }
             draw_border( w_editor );
             if( terrain ) {
                 // NOLINTNEXTLINE(cata-use-named-point-constants)
@@ -2289,6 +2325,9 @@ static void place_ter_or_special( const ui_adaptor &om_ui, tripoint_abs_omt &cur
             }
         } while( action != "QUIT" );
 
+        if( editor_doc ) {
+            rmlui_layer::close_document( editor_doc );
+        }
         uistate.place_terrain = nullptr;
         uistate.place_special = nullptr;
     }

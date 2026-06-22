@@ -1,0 +1,20 @@
+/* Layout for the place_ter_or_special editor panel (overmap_ui::place_ter_or_special).
+   Palette/border/.panel come from theme.rcss (linked first). Anchored upper-right so the
+   map placement cursor stays visible, mirroring the curses w_editor box. Lengths in dp. */
+
+body {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.ome-panel {
+    position: absolute;
+    right: 2%;
+    top: 6%;
+    max-width: 30%;
+}
+
+.ome-text {
+    white-space: pre-wrap;
+}
