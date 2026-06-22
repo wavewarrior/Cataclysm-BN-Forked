@@ -33,6 +33,7 @@
 #include "mapdata.h"
 #include "ui.h"
 #include "rml_screen.h"
+#include "rml_toggle_registry.h"
 #include "path_info.h"
 #include "panels.h"
 #include "weather.h"
@@ -694,53 +695,25 @@ void devui_rml_open()
     // "data type not registered".
     c.RegisterArray<Rml::Vector<Rml::String>>();
     c.Bind( "ui_scale", &rmlui_layer::ui_scale() );             // slider (float, two-way)
-    c.Bind( "uilist", &uilist_rmlui_enabled() );
-    c.Bind( "query_popup", &query_popup_rmlui_enabled() );
-    c.Bind( "string_input", &string_input_rmlui_enabled() );
-    c.Bind( "missions", &missions_rmlui_enabled() );
-    c.Bind( "scores", &scores_rmlui_enabled() );
-    c.Bind( "help", &help_rmlui_enabled() );
-    c.Bind( "distraction", &distraction_rmlui_enabled() );
-    c.Bind( "auto_note", &auto_note_rmlui_enabled() );
-    c.Bind( "diary", &diary_rmlui_enabled() );
-    c.Bind( "mutations", &mutations_rmlui_enabled() );
-    c.Bind( "bionics", &bionics_rmlui_enabled() );
-    c.Bind( "character_display", &character_display_rmlui_enabled() );
-    c.Bind( "messages", &messages_rmlui_enabled() );
-    c.Bind( "morale", &morale_rmlui_enabled() );
-    c.Bind( "martialarts", &martialarts_rmlui_enabled() );
-    c.Bind( "pickup", &pickup_rmlui_enabled() );
-    c.Bind( "veh_interact", &veh_interact_rmlui_enabled() );
-    c.Bind( "gamemode_defense", &gamemode_defense_rmlui_enabled() );
-    c.Bind( "list_monsters", &list_monsters_rmlui_enabled() );
-    c.Bind( "look_around", &look_around_rmlui_enabled() );
-    c.Bind( "loading", &loading_rmlui_enabled() );
-    c.Bind( "inventory", &inventory_rmlui_enabled() );
-    c.Bind( "advanced_inv", &advanced_inv_rmlui_enabled() );
-    c.Bind( "compare_items", &compare_items_rmlui_enabled() );
-    c.Bind( "examine_item", &examine_item_rmlui_enabled() );
-    c.Bind( "armor_layers", &armor_layers_rmlui_enabled() );
-    c.Bind( "autopickup", &autopickup_rmlui_enabled() );
-    c.Bind( "computer", &computer_rmlui_enabled() );
-    c.Bind( "construction", &construction_rmlui_enabled() );
-    c.Bind( "crafting", &crafting_rmlui_enabled() );
-    c.Bind( "safemode", &safemode_rmlui_enabled() );
-    c.Bind( "trade", &trade_rmlui_enabled() );
-    c.Bind( "vending", &vending_rmlui_enabled() );
-    c.Bind( "dialogue", &dialogue_rmlui_enabled() );
-    c.Bind( "description_view", &description_view_rmlui_enabled() );
-    c.Bind( "faction", &faction_rmlui_enabled() );
-    c.Bind( "ranged", &ranged_rmlui_enabled() );
-    c.Bind( "options", &options_rmlui_enabled() );
-    c.Bind( "worldfactory", &worldfactory_rmlui_enabled() );
-    c.Bind( "main_menu", &main_menu_rmlui_enabled() );
-    c.Bind( "loadchar", &loadchar_rmlui_enabled() );
-    c.Bind( "newcharacter", &newcharacter_rmlui_enabled() );
-    c.Bind( "overmap", &overmap_rmlui_enabled() );
-    c.Bind( "world_text", &world_text_rmlui_enabled() );
-    c.Bind( "overmap_text", &overmap_text_rmlui_enabled() );
-    c.Bind( "sidebar_hud", &sidebar_hud_rmlui_enabled() );
-    c.Bind( "minigames", &minigames_rmlui_enabled() );
+    // The per-screen toggle checkboxes — bound BY POINTER from the single-source-of-truth
+    // registry so this list can never drift from the flip-all control (rml_toggle_registry).
+    for( const rml_toggle &t : rml_toggle_registry() ) {
+        c.Bind( t.name, &t.accessor() );
+    }
+    // Flip-all controls (mirror the ImGui buttons). The checkbox vars are bound by
+    // pointer + rml_tick DirtyAllVariables each frame, so they reflect the flip next frame.
+    c.BindEventCallback( "rml_all_on",
+    []( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) {
+        rml_toggles_set_all( true );
+    } );
+    c.BindEventCallback( "rml_all_off",
+    []( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) {
+        rml_toggles_set_all( false );
+    } );
+    c.BindEventCallback( "rml_reset",
+    []( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) {
+        rml_toggles_reset_defaults();
+    } );
     // Slice 3 — Effects tab tuning params (live lighting). Floats two-way bound to the
     // same globals the ImGui sliders drive; the game render reads them each frame.
     c.Bind( "nrm_amount", &g_dbg_params.nrm_amount );
@@ -1100,6 +1073,24 @@ static void draw_rmlui_tab()
     // Per-screen migration toggles. Off = existing ImGui/curses menus; flip to
     // route a screen through the new RmlUi renderer in-game.
     ImGui::SeparatorText( "Route screens through RmlUi" );
+    // Flip-all controls for the build-blind eyeball A/B pass: route every screen at once
+    // instead of clicking ~47 checkboxes (rml_toggle_registry is the single source).
+    if( ImGui::Button( "All ON" ) ) {
+        rml_toggles_set_all( true );
+    }
+    ImGui::SameLine();
+    if( ImGui::Button( "All OFF" ) ) {
+        rml_toggles_set_all( false );
+    }
+    ImGui::SameLine();
+    if( ImGui::Button( "Reset defaults" ) ) {
+        rml_toggles_reset_defaults();
+    }
+    // Mechanical sidebar-HUD coverage readout (Tier-10 rip-out gate): which layout panels
+    // still render a [name] placeholder. Only meaningful while the HUD is active.
+    if( sidebar_hud_active() ) {
+        ImGui::TextWrapped( "%s", sidebar_hud_coverage_report().c_str() );
+    }
     if( ImGui::CollapsingHeader( "Core widgets", ImGuiTreeNodeFlags_DefaultOpen ) ) {
         ImGui::Checkbox( "uilist", &uilist_rmlui_enabled() );
         ImGui::Checkbox( "query_popup", &query_popup_rmlui_enabled() );

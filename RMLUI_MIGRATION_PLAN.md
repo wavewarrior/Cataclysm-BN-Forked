@@ -3153,6 +3153,63 @@ So the honest remaining-work picture is: enumerated migration ≈ done-pending-e
 unlisted "Tier 7.5 / 9.5" of game screens (char sheet, vehicles, magic, defense mode, message
 log, creature info) is still on curses and must be migrated before the curses renderer can die.**
 
+### §8.2 — Deletion sequence (reachability-verified 2026-06-22)
+
+The screen migration is code-complete; this is the ordered, build-green deletion plan for the
+rip-out. **Correction to §8 step 5's stated chain** (`toggles → ImGui → curses glyph → backend`):
+it is really **two near-independent sub-series**. ImGui is deletable *now* (already retired from
+the live composite). The curses primitives are *caller-gated*, not toggle-flip-gated — `output.cpp`
+(mvwprintz / fold_and_print / draw_border / draw_scrollbar / draw_tabs / draw_item_info) and
+`cata_cursesport::WINDOW` have 50–100+ live callers and die only after every screen's curses
+*fallback* branch (`if(!rml){ …curses… }`) is removed — which is what the toggle-flip eyeball
+pass gates.
+
+**Prep landed (this session):** the flip-all control (`rml_toggle_registry` +
+`rml_toggles_set_all`/`reset_defaults`, F4 "All ON/OFF/Reset") makes the ~47-toggle eyeball pass
+one action; the coverage audit (`sidebar_hud_has_producer` + `sidebar_hud_coverage_report`, F4
+readout + one-shot DebugLog) makes the HUD flip gate mechanical. `native_draw_target_exists`
+(panels.cpp) already existed.
+
+**Sub-series A — ImGui (deletable now; self-contained; ~5 build-green commits).** Reachability:
+`imgui_layer` is referenced only by `ui.cpp` (the dormant uilist fallback) + `sdl_render_frame.cpp`
+(Pass B composite). Gate: retire the uilist ImGui fallback — i.e. uilist permanently RmlUi (Tier-0,
+oldest + long eyeball-confirmed). Order:
+1. Remove the ImGui-fallback branch in `uilist::show()` (`ui.cpp`) → always RmlUi.
+2. Delete `src/cata_imgui.{cpp,h}` (drop its `#include`s — only `ui.cpp`).
+3. Delete `src/lighting/imgui_layer.{cpp,h}`; drop `target_link_libraries(... imgui)`
+   (`src/CMakeLists.txt`).
+4. Strip the `imgui_active` blocks from `composite_swapchain_pass_b()` (`sdl_render_frame.cpp`);
+   the RmlUi pass stays.
+5. Remove the `FetchContent(imgui)` + `add_library(imgui …)` block from root `CMakeLists.txt`.
+
+**Sub-series B — curses glyph/backend (gated on the toggle-flip eyeball pass).** Order, each
+build-green:
+1. After all toggles flipped & eyeballed: delete each screen's curses *draw/redraw fallback*
+   branch (the `if(!rml)` arms) → primitive callers fall toward zero.
+2. Delete the now-unreachable curses text-primitive bodies in `output.cpp` once grep confirms
+   zero non-test callers.
+3. Delete `sdl_curses_draw.cpp`; delete `Font::OutputChar` / `draw_ascii_lines` (`sdl_font.cpp`) —
+   verified zero non-backend callers.
+4. Delete `sdl_font.{cpp,h}`, `sdl_fonts.{cpp,h}`.
+5. Delete `curses_drawwindow()` + `set_window_transparent_backdrop()` then the `cursesport.cpp`
+   impl. `cursesport.h` data structures (`WINDOW` / `cursecell` / `colorpairs`) stay until last —
+   they back `ui_adaptor` + the map path (~19 includers).
+6. Delete the toggle layer itself: `rml_screen.{h,cpp}` toggle accessors, `rml_toggle_registry.*`,
+   the F4 dev-panel checkboxes/flip-all, and `devui.rml`'s screen-toggle section.
+
+**STAYS (not UI — do not delete):** the map/world-tile path — `animation`, `scent_map`,
+`live_view`, `editmap`, `character_preview`, `cata_tiles` — keeps `WINDOW` + the GPU tile path.
+Dev-only (`catalua_console`, `wish`, `debug`) folds into the sweep.
+
+**Deferred font stragglers resolved AT rip-out** (per §8.1 font sweep): the dev tile-coord overlay
+(`draw_lighting_overlays`, post-`prepare()` → not §7-routable; delete with the dev tools) and the
+loading splash (`loading_image_splash`, separate render path → accept/special-case).
+
+**Mechanics:** CMake `GLOB_RECURSE CONFIGURE_DEPENDS` → deleting a `.cpp` needs no manifest edit,
+**but a brand-new/removed file requires an explicit `cmake -S . -B <dir>` reconfigure** to re-glob
+(`cmake <dir>` alone does NOT re-glob; verified this session). Always check the binary mtime after
+a build — `| rtk err` can report success on a no-op/failed link.
+
 ---
 
 ## Risks / watch-fors

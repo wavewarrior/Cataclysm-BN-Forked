@@ -105,6 +105,11 @@ void sidebar_hud_open();
 void sidebar_hud_sync( avatar &u );
 void sidebar_hud_close();
 bool sidebar_hud_active();
+// True iff panel `name` has an RmlUi producer (else the HUD shows a [name] placeholder).
+bool sidebar_hud_has_producer( const std::string &name );
+// One-line audit: "sidebar HUD coverage: C/T panels [— uncovered: …]" over the active layout.
+// The mechanical Tier-10 rip-out gate ("every panel in my UI built?").
+std::string sidebar_hud_coverage_report();
 
 class panel_manager
 {

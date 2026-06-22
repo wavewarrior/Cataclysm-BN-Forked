@@ -3235,6 +3235,13 @@ void sidebar_hud_sync( avatar &u )
     if( g_hud_doc == nullptr || !g_hud_data ) {
         return;
     }
+    // One-shot coverage dump the first sync after the HUD opens — surfaces which layout
+    // panels still render a [name] placeholder (the Tier-10 rip-out gate audit).
+    static bool coverage_logged = false;
+    if( !coverage_logged ) {
+        coverage_logged = true;
+        DebugLog( DL::Info, DC::Main ) << sidebar_hud_coverage_report();
+    }
     // Whole-sidebar ownership: rebuild the row list from EVERY present panel (toggled on +
     // render predicate true) in layout order. A migrated panel emits its producer's RML; an
     // unmigrated panel emits a visible "[name]" placeholder (never a silent blank — after
@@ -3277,6 +3284,38 @@ bool sidebar_hud_active()
     // True iff the HUD doc is open → game::draw_panels suppresses the WHOLE curses
     // sidebar (the column owns the entire region). Replaces the per-panel owns_panel gate.
     return g_hud_doc != nullptr;
+}
+
+bool sidebar_hud_has_producer( const std::string &name )
+{
+    // A panel is "covered" iff it has an RmlUi producer (else sidebar_hud_sync emits a
+    // visible [name] placeholder). Mechanical input to the Tier-10 rip-out coverage gate.
+    return hud_producer( name ) != nullptr;
+}
+
+std::string sidebar_hud_coverage_report()
+{
+    // Walk the active sidebar layout and classify each present panel covered/uncovered.
+    // "Is every panel in my one UI built?" — the rip-out flip gate, as a mechanical check.
+    int total = 0;
+    int covered = 0;
+    std::string uncovered;
+    for( const window_panel &panel : panel_manager::get_manager().get_current_layout() ) {
+        if( !panel.toggle || !panel.render() ) {
+            continue;
+        }
+        total++;
+        if( sidebar_hud_has_producer( panel.get_name() ) ) {
+            covered++;
+        } else {
+            uncovered += ( uncovered.empty() ? "" : ", " ) + panel.get_name();
+        }
+    }
+    std::string out = string_format( _( "sidebar HUD coverage: %d/%d panels" ), covered, total );
+    if( !uncovered.empty() ) {
+        out += " — uncovered: " + uncovered;
+    }
+    return out;
 }
 
 // Resolve a widget's "show_if" to a window_panel render predicate (the data-driven
