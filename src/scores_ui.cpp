@@ -215,17 +215,8 @@ void show_scores_ui( const achievements_tracker &achievements, stats_tracker &st
     }
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
-        // When the RmlUi path owns the screen, the model is synced in the
-        // tab-change block; skip all curses drawing (w/w_view left un-refreshed).
-        if( rml ) {
-            return;
-        }
-        werase( w );
-        draw_tabs( w, tabs, tab );
-        draw_border_below_tabs( w );
-        wnoutrefresh( w );
-
-        view.draw( c_white );
+        // Tier-10 rip-out: the RmlUi document renders itself; the curses draw path is gone.
+        // The model is synced in the tab-change block below.
     } );
 
     while( true ) {

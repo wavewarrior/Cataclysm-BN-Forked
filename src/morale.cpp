@@ -867,50 +867,7 @@ void player_morale::display( int focus_eq, int pain_penalty, int fatigue_cap )
     ui.mark_resize();
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
-        // RmlUi path renders the doc itself — skip the curses draw entirely.
-        if( rml ) {
-            return;
-        }
-        werase( w );
-
-        draw_border( w );
-
-        int line = 0;
-        for( const morale_line &ml : top_lines ) {
-            ml.draw( w, line );
-            ++line;
-        }
-
-        line = win_h - static_cast<int>( bottom_lines.size() );
-        for( const morale_line &ml : bottom_lines ) {
-            ml.draw( w, line );
-            ++line;
-        }
-
-        bool caption_drawn = false;
-        for( int mid_line = 0; offset + mid_line >= 0; --mid_line ) {
-            if( offset + mid_line < rows_total ) {
-                const middle_morale_line &ml = middle_lines[offset + mid_line];
-                if( ml.is_caption ) {
-                    ml.ml.draw( w, top_lines.size() );
-                    caption_drawn = true;
-                    break;
-                }
-            }
-        }
-        for( int mid_line = caption_drawn ? 1 : 0;
-             mid_line < rows_visible && offset + mid_line < rows_total;
-             ++mid_line ) {
-            if( offset + mid_line >= 0 ) {
-                const middle_morale_line &ml = middle_lines[offset + mid_line];
-                ml.ml.draw( w, static_cast<int>( top_lines.size() ) + mid_line );
-            }
-        }
-
-        draw_scrollbar( w, offset, rows_visible, rows_total,
-                        point( 0, top_lines.size() ), c_white, true );
-
-        wnoutrefresh( w );
+        // Tier-10 rip-out: the RmlUi document renders itself; the curses draw path is gone.
     } );
 
     input_context ctxt( "MORALE" );

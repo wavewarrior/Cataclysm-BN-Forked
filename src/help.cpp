@@ -288,13 +288,7 @@ void help::display_help()
     }
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
-        // RmlUi path owns the screen (menu + article); skip curses drawing.
-        if( rml ) {
-            return;
-        }
-        draw_border( w_help_border, BORDER_COLOR, _( " HELP " ), c_black_white );
-        wnoutrefresh( w_help_border );
-        draw_menu( w_help );
+        // Tier-10 rip-out: the RmlUi document renders the menu + article; curses draw is gone.
     } );
 
     do {
