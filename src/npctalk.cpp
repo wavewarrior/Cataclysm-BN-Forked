@@ -2067,7 +2067,7 @@ const talk_topic &special_talk( char ch )
 // highlighted) + keybinding hints. Keyboard owns nav/select (raw input loop).
 bool &dialogue_rmlui_enabled()
 {
-    static bool enabled = false;
+    static bool enabled = true;
     return enabled;
 }
 

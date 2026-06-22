@@ -3574,7 +3574,7 @@ void register_options_rml_types( Rml::DataModelConstructor &c )
 
 bool &options_rmlui_enabled()
 {
-    static bool enabled = false;
+    static bool enabled = true;
     return enabled;
 }
 

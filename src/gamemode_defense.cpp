@@ -516,7 +516,7 @@ void register_defense_setup_rml_types( Rml::DataModelConstructor &c )
 bool &gamemode_defense_rmlui_enabled()
 {
     // Default OFF — opt in via the F4 panel. See rml_screen.h.
-    static bool enabled = false;
+    static bool enabled = true;
     return enabled;
 }
 

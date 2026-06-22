@@ -1557,7 +1557,7 @@ std::string aim_pane_head_html( const advanced_inventory_pane &pane, bool active
 bool &advanced_inv_rmlui_enabled()
 {
     // Default OFF — opt in via the F4 panel. See rml_screen.h.
-    static bool enabled = false;
+    static bool enabled = true;
     return enabled;
 }
 

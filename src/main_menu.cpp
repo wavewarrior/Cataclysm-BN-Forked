@@ -155,13 +155,13 @@ unsigned lc_name_seed( const std::string &name )
 
 bool &main_menu_rmlui_enabled()
 {
-    static bool enabled = false;
+    static bool enabled = true;
     return enabled;
 }
 
 bool &loadchar_rmlui_enabled()
 {
-    static bool enabled = false;
+    static bool enabled = true;
     return enabled;
 }
 

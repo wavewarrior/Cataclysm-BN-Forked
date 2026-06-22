@@ -266,7 +266,7 @@ void register_wf_ms_rml_types( Rml::DataModelConstructor &c )
 
 bool &worldfactory_rmlui_enabled()
 {
-    static bool enabled = false;
+    static bool enabled = true;
     return enabled;
 }
 

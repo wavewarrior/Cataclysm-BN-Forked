@@ -113,7 +113,7 @@ static const int npm_height = 3;
 // GPU/ASCII map path. Keyboard owns all navigation.
 bool &overmap_rmlui_enabled()
 {
-    static bool enabled = false;
+    static bool enabled = true;
     return enabled;
 }
 

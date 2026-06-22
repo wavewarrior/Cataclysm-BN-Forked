@@ -722,7 +722,7 @@ void register_craft_rml_types( Rml::DataModelConstructor &c )
 bool &crafting_rmlui_enabled()
 {
     // Default OFF — opt in via the F4 panel. See rml_screen.h.
-    static bool enabled = false;
+    static bool enabled = true;
     return enabled;
 }
 

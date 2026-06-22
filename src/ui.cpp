@@ -101,14 +101,14 @@ bool &uilist_rmlui_enabled()
 bool &query_popup_rmlui_enabled()
 {
     // Default OFF — see ui.h. Opt in via the F4 panel.
-    static bool enabled = false;
+    static bool enabled = true;
     return enabled;
 }
 
 bool &string_input_rmlui_enabled()
 {
     // Default OFF — see ui.h. Opt in via the F4 panel.
-    static bool enabled = false;
+    static bool enabled = true;
     return enabled;
 }
 

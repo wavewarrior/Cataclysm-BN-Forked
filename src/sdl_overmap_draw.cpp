@@ -216,7 +216,7 @@ std::string cata_tiles::get_omt_id_rotation_and_subtile(
 // same timing as the SCT feed in sdl_curses_draw. Default OFF; A/B via F4.
 bool &overmap_text_rmlui_enabled()
 {
-    static bool enabled = false;
+    static bool enabled = true;
     return enabled;
 }
 

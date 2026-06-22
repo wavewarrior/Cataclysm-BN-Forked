@@ -1806,7 +1806,7 @@ void register_cmp_rml_types( Rml::DataModelConstructor &c )
 bool &compare_items_rmlui_enabled()
 {
     // Default OFF — opt in via the F4 panel. See rml_screen.h.
-    static bool enabled = false;
+    static bool enabled = true;
     return enabled;
 }
 

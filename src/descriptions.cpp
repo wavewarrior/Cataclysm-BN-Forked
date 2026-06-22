@@ -70,7 +70,7 @@ struct description_rml_session {
 
 bool &description_view_rmlui_enabled()
 {
-    static bool enabled = false;
+    static bool enabled = true;
     return enabled;
 }
 

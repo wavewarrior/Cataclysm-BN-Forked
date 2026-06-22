@@ -7051,7 +7051,7 @@ void cata_tiles::draw_weather_frame()
 // "world text (SCT)" checkbox.
 bool &world_text_rmlui_enabled()
 {
-    static bool enabled = false;
+    static bool enabled = true;
     return enabled;
 }
 

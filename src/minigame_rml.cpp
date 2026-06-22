@@ -27,7 +27,7 @@ Rml::Vector<mg_row> g_rows;
 
 bool &minigames_rmlui_enabled()
 {
-    static bool enabled = false;
+    static bool enabled = true;
     return enabled;
 }
 

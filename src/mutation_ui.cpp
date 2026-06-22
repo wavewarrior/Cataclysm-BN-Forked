@@ -163,7 +163,7 @@ static void register_mutations_rml_types( Rml::DataModelConstructor &c )
 bool &mutations_rmlui_enabled()
 {
     // Default OFF — opt in via the F4 panel. See rml_screen.h.
-    static bool enabled = false;
+    static bool enabled = true;
     return enabled;
 }
 

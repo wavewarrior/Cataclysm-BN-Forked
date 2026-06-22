@@ -3005,7 +3005,7 @@ struct target_rml_session {
 
 bool &ranged_rmlui_enabled()
 {
-    static bool enabled = false;
+    static bool enabled = true;
     return enabled;
 }
 

@@ -798,7 +798,7 @@ void register_faction_rml_types( Rml::DataModelConstructor &c )
 
 bool &faction_rmlui_enabled()
 {
-    static bool enabled = false;
+    static bool enabled = true;
     return enabled;
 }
 

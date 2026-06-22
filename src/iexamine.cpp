@@ -886,7 +886,7 @@ void iexamine::atm( player &p, const tripoint_bub_ms & )
 // doc: money header + item list (count + name, coloured) + item-info pane.
 bool &vending_rmlui_enabled()
 {
-    static bool enabled = false;
+    static bool enabled = true;
     return enabled;
 }
 

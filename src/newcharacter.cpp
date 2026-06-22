@@ -852,7 +852,7 @@ Rml::Vector<TabT> build_nc_char_tabs( int active )
 
 bool &newcharacter_rmlui_enabled()
 {
-    static bool enabled = false;
+    static bool enabled = true;
     return enabled;
 }
 

@@ -372,7 +372,7 @@ struct sdl_render_state_guard {
 
 bool &loading_rmlui_enabled()
 {
-    static bool enabled = false;
+    static bool enabled = true;
     return enabled;
 }
 

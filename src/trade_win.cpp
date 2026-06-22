@@ -43,7 +43,7 @@
 // path renders the SAME visible page as curses, not a native-scroll-all list).
 bool &trade_rmlui_enabled()
 {
-    static bool enabled = false;
+    static bool enabled = true;
     return enabled;
 }
 
