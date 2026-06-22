@@ -3134,8 +3134,10 @@ missed three real screens:
   checkbox; header + name/Normal/Invert table → `"colors"` doc (native-scroll, sel_col highlights
   the active column); colour-pick uilists stay Tier-0.
 - **Blood-test results** (`character.cpp`, `BLOOD_TEST_RESULTS`) — STILL CURSES. Minor results popup.
-- **`scrollable_text`** (output.cpp:357) — STILL CURSES framework primitive (plan line ~175 already
-  flagged "§8 sweep must inventory scrollable_text"); shared by multiple screens.
+- ~~**`scrollable_text`** (output.cpp:357)~~ **DONE (batch 19, 2026-06-22, build+link green Metal,
+  toggle OFF, eyeball owed)** — `scrollable_text_rmlui_enabled()` + F4 checkbox; renders the visible
+  window (`beg_line..+text_h`) to a `"scrollable_text"` doc so keyboard scroll still works. De-curses
+  every caller of the primitive at once.
 - Dev-only, stay: `catalua_console`, `editmap` (+`wish`).
 
 **CAVEAT:** this filter only catches files with ZERO rml coverage; a partly-migrated file
