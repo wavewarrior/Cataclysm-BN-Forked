@@ -205,12 +205,7 @@ class uilist_callback
         }
         virtual void refresh( uilist * ) {}
 
-        /// ImGui equivalent of refresh().  Default calls refresh() for backward compat.
-        virtual void draw_imgui( uilist *menu ) {
-            refresh( menu );
-        }
-
-        /// RmlUi equivalent of draw_imgui(). Called once per tick while the
+        /// RmlUi equivalent of refresh(). Called once per tick while the
         /// RmlUi path renders this menu, with the menu's live document so a
         /// callback can inject/update elements. Default no-op: plain lists need
         /// nothing, and select()/key() (paradigm-agnostic) keep working.

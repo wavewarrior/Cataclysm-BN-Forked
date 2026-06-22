@@ -637,7 +637,6 @@ class spellbook_callback : public uilist_callback
     public:
         void add_spell( const spell_id &sp );
         void refresh( uilist *menu ) override;
-        void draw_imgui( uilist *menu ) override;
         void draw_rml( uilist *menu, Rml::ElementDocument *doc ) override;
     };
 

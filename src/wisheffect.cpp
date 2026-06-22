@@ -3,7 +3,6 @@
 #include "imgui.h"
 #pragma pop_macro( "DebugLog" )
 
-#include "cata_imgui.h"
 
 #include <RmlUi/Core.h>
 
@@ -247,45 +246,6 @@ class effect_select_callback : public uilist_callback
         void toggle_force( const input_context &, const input_event &, int,
                            uilist & ) {
             toggle_effect_force();
-        }
-        void draw_imgui( uilist *menu ) override {
-            wisheffect_state &last_val = uistate.debug_menu.effect;
-            size_t selected = clamp<size_t>( menu->selected, 0, all_effects.size() - 1 );
-            input_context ctxt( menu->input_category );
-
-            ImGui::Separator();
-            std::stringstream ss;
-            ss << string_format( "ID: %s\n", all_effects[selected].str() );
-            const auto eff_type = all_effects[selected];
-            ss << string_format( "[%s] <bold>Body part</bold>: %s\n",
-                                 ctxt.get_desc( "CHANGE_BODY_PART" ),
-                                 last_val.bodypart
-                                 ? last_val.bodypart->name.translated().c_str()
-                                 : "Global" );
-
-            time_duration dur = last_val.duration <= 0_seconds
-                                ? eff_type->get_max_duration()
-                                : last_val.duration;
-            ss << string_format( "[%s] <bold>Duration</bold>: %10d (max: %d)\n",
-                                 ctxt.get_desc( "CHANGE_DURATION" ),
-                                 to_turns<int>( dur ),
-                                 to_turns<int>( eff_type->get_max_duration() ) );
-
-            ss << string_format( "[%s] <bold>Intensity</bold>: %d\n",
-                                 ctxt.get_desc( "CHANGE_INTENSITY" ),
-                                 std::max( last_val.intensity, 1 ) );
-
-            ss << string_format( "[%s] <bold>Force</bold>: %s\n",
-                                 ctxt.get_desc( "TOGGLE_FORCE" ),
-                                 last_val.force
-                                 ? "Yes"
-                                 : "No" );
-
-            ss << '\n';
-            ss << string_format( "Permanent: %s\n", eff_type->is_permanent()
-                                 ? "Yes"
-                                 : "No" );
-            cataimgui::draw_colored_text( replace_colors( ss.str() ) );
         }
         void draw_rml( uilist *menu, Rml::ElementDocument *doc ) override {
             Rml::Element *cb = doc->GetElementById( "callback" );
