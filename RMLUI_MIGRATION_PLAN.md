@@ -243,15 +243,22 @@ the prose still frames as open.
     mutations (`.diary-line` had no `display`, `.diary-pane` is a `.scroll-pane`
     block container). Fixed `.diary-line { display: block }`; gotcha documented in
     theme.rcss.
-- **Tier 1 screen: loading_ui — NO BESPOKE MIGRATION NEEDED (covered by Tier 0).**
-  Investigated: `loading_ui::menu` IS a `uilist` (loading_ui.cpp:476); its sole
-  on_redraw calls `menu->show(ui)` (loading_ui.cpp:508) → renders via RmlUi
-  automatically whenever the Tier-0 uilist toggle is ON. It rides the uilist
-  toggle, needs no own screen/toggle. The other half of the file
-  (`loading_image_splash`) is an SDL splash IMAGE + author-text overlay drawn via
-  `background_pane`/RenderCopy — not curses text UI, out of scope like the map
-  tile path. So loading is done-by-coverage; nothing diary-style to do. (Confirms
-  the F.0 census flag "loading_ui may be a no-loop progress display.")
+- **Tier 1 screen: loading_ui — BESPOKE DOC BUILT 2026-06-22 (was done-by-coverage).**
+  `loading_ui::menu` IS a `uilist` (loading_ui.cpp:476), so it already rode the Tier-0
+  uilist toggle (generic list-box look). Now upgraded to a dedicated `gui/loading.rml`:
+  context title + a progress bar (done/total) + the step list with per-row
+  done(✓/green)/current(▶/glow)/pending(•/dim) state. **Non-modal** like the sidebar
+  HUD (no input_context / loop) — `loading_doc_open/sync/close` (file-local in
+  loading_ui.cpp, NOT `rml_doc`, which bundles a modal input tick); lazy open, sync each
+  `loading_ui::show()`, close on dtor. The `uilist menu` STAYS the state holder
+  (entries / selected / green-done); `loading_doc_sync` reads it → clean toggle fallback.
+  `passive=true` (render-only). Toggle `loading_rmlui_enabled()` (default OFF, F4 "loading
+  screen"). Falls back to `menu->show()` when OFF **or** RmlUi not yet ready (early data
+  load, before the first refresh_display inits the context) — so the earliest loads are
+  curses, later loads are the bespoke doc. Build-green osx-arm-slim 2026-06-22; eyeball +
+  D3D12 owed. The other half of the file (`loading_image_splash`) is the SDL splash IMAGE
+  + author-text overlay (`background_pane`/RenderCopy) — still out of scope (the §8.1
+  font straggler, resolved at rip-out); the bespoke list renders on top of it.
 - **Tier 1 "screen": mod_manager_ui — NOT A SCREEN (mislabel). NO MIGRATION.**
   Read in full: `mod_manager_ui.cpp` is the `mod_ui` LOGIC class — try_add /
   try_rem / try_shift / can_shift_up/down (dependency + conflict resolution) plus
