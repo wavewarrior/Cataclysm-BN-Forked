@@ -100,8 +100,11 @@ class uilist_rml_session
 
 bool &uilist_rmlui_enabled()
 {
-    // Default OFF — see ui.h. Opt in via the F4 panel.
-    static bool enabled = false;
+    // Default ON (Tier-10 rip-out track A): uilist is the most-proven Tier-0 screen
+    // (eyeball-confirmed) and the only gameplay ImGui consumer; routing it through RmlUi
+    // by default is the precondition for deleting the dormant ImGui layer. Falls back to
+    // curses only when RmlUi isn't ready (early init). A/B via the F4 panel.
+    static bool enabled = true;
     return enabled;
 }
 

@@ -9,7 +9,7 @@
 const std::vector<rml_toggle> &rml_toggle_registry()
 {
     static const std::vector<rml_toggle> reg = {
-        { "uilist", &uilist_rmlui_enabled, false },
+        { "uilist", &uilist_rmlui_enabled, true },
         { "query_popup", &query_popup_rmlui_enabled, false },
         { "string_input", &string_input_rmlui_enabled, false },
         { "missions", &missions_rmlui_enabled, false },
