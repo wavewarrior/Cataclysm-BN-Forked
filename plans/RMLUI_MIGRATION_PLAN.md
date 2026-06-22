@@ -3121,6 +3121,24 @@ the set difference is below. Reproduce: see the per-file `mvwprintz` density gre
 | ~~`morale`~~ **DONE** / ~~`martialarts`~~ **DONE** / ~~`pickup`~~ **DONE** | 1 / 0 / 4 | 3 / 3 / 3 | Small unlisted screens — all three migrated (toggle OFF, eyeball owed). morale screen, MA-style description, item pickup menu. |
 | ~~`dialogue_win`~~ **NOT A BLOCKER** | 12 | 1 | RE-CLASSIFIED 2026-06-21: this is the curses FALLBACK of the already-migrated Tier-5 `dialogue` screen, not a separate screen. `dialogue_window`'s draw methods (`print_header`/`display_responses`/`print_history`) are reached ONLY in npctalk's `on_redraw` when `rml` is false; its sole caller is the toggle-gated `dialogue::opt` path. Covered by the `dialogue` toggle (gate part 1, not part 2) — dies with the toggle flip + rip-out. The §8.1 table mislabeled it. |
 
+**★ ZERO-RML-COVERAGE CODE SWEEP (2026-06-22) — screens the §8.1 density table never listed.**
+Scanned all 50 files with `catacurses::newwin` + `input_context`, filtered to those with NO rml
+coverage at all (`rml_doc`/`_rmlui_enabled`/`draw_rml`/`open_document`). Only 6 hit; the table had
+missed three real screens:
+- ~~**keybindings editor** (`input_context::display_menu`, input.cpp)~~ **DONE (batch 17,
+  2026-06-22, build+link green Metal, toggle OFF, eyeball owed)** — `keybindings_rmlui_enabled()` +
+  F4 checkbox; list+legend → `"keybindings"` doc (windowed rows preserve the a-z hotkey mapping);
+  filter stays Tier-0. The highest-traffic miss (reachable from every screen via HELP_KEYBINDINGS).
+- **Colors editor** (`color_manager::show_gui`, color.cpp) — STILL CURSES. Options → Colors.
+- **Blood-test results** (`character.cpp`, `BLOOD_TEST_RESULTS`) — STILL CURSES. Minor results popup.
+- **`scrollable_text`** (output.cpp:357) — STILL CURSES framework primitive (plan line ~175 already
+  flagged "§8 sweep must inventory scrollable_text"); shared by multiple screens.
+- Dev-only, stay: `catalua_console`, `editmap` (+`wish`).
+
+**CAVEAT:** this filter only catches files with ZERO rml coverage; a partly-migrated file
+(e.g. `game.cpp`, `iexamine.cpp`) could still hide a leftover curses screen behind no toggle.
+A per-screen pass on the big multi-screen files is still owed for an exhaustive gate.
+
 **★ FONT-LAYER STRAGGLER the primitive sweep MISSED — `loading_ui` splash author text
 (gate step 4, not step 2).** The §8.1 cross-ref above swept the curses *primitive* layer
 (`mvwprintz`/`fold_and_print`/…) and found `loading_ui` clean (0 primitive calls). But the
