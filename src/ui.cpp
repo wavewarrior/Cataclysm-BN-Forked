@@ -8,27 +8,17 @@
 #include <iterator>
 #include <memory>
 
-// imgui.h declares ImGui::DebugLog; the game's DebugLog macro would
-// expand it, breaking the declaration.  Undef the macro for the imgui
-// include and restore it after.
-#pragma push_macro( "DebugLog" )
-#undef DebugLog
-#include "imgui.h"
-#pragma pop_macro( "DebugLog" )
-
 // Third-party retained-mode UI. Included before debug.h so its headers can't
 // collide with the DebugLog macro.
 #include <RmlUi/Core.h>
 
 #include "avatar.h"
-#include "cata_imgui.h"
 #include "cata_utility.h"
 #include "catacharset.h"
 #include "debug.h"
 #include "game.h"
 #include "ime.h"
 #include "input.h"
-#include "lighting/imgui_layer.h"
 #include "lighting/rmlui_layer.h"
 #include "output.h"
 #include "path_info.h"
@@ -1021,8 +1011,7 @@ shared_ptr_fast<ui_adaptor> uilist::create_or_get_ui_adaptor()
     if( !current_ui ) {
         ui = current_ui = make_shared_fast<ui_adaptor>();
         current_ui->on_redraw( [this]( ui_adaptor & ui ) {
-            // Renderer priority: RmlUi (when this menu opened a document) >
-            // ImGui (drawn via the callback registered in query()) > curses
+            // Renderer priority: RmlUi (when this menu opened a document) > curses
             // show(). For the RmlUi path, push current state into the data-model
             // here — this runs on every redraw, including the ~60Hz ticks — and
             // let any callback touch the live document. setup() (→ vmax for
@@ -1032,7 +1021,7 @@ shared_ptr_fast<ui_adaptor> uilist::create_or_get_ui_adaptor()
                 if( callback != nullptr && rml_session->doc != nullptr ) {
                     callback->draw_rml( this, rml_session->doc );
                 }
-            } else if( !imgui_layer::ready() ) {
+            } else {
                 show( ui );
             }
         } );
@@ -1066,9 +1055,9 @@ void uilist::query( bool loop, int timeout )
 
     shared_ptr_fast<ui_adaptor> ui = create_or_get_ui_adaptor();
 
-    // Renderer priority: RmlUi first (when it can open a document), else ImGui,
-    // else curses. rml_open() returns false (and is a no-op) when RmlUi isn't
-    // ready or the model name is already taken by a nested menu.
+    // Renderer priority: RmlUi first (when it can open a document), else curses.
+    // rml_open() returns false (and is a no-op) when RmlUi isn't ready or the
+    // model name is already taken by a nested menu.
     // Ensure fentries is populated before the RmlUi document opens, so the
     // data model starts with the correct row data instead of an empty list
     // that may not visually update on the first dirty-variable pass.
@@ -1076,48 +1065,14 @@ void uilist::query( bool loop, int timeout )
         setup();
     }
     const bool use_rmlui = rml_open();
-    // Register ImGui draw callback for this menu
-    const bool use_imgui = !use_rmlui && imgui_layer::ready();
-    int imgui_handle = -1;
-    if( use_imgui ) {
-        imgui_handle = imgui_layer::push_draw_callback( [this]() {
-            // ImGui::Begin asserts on an empty name, and treats the name as the
-            // window's unique id.  uilist titles may be empty and are not
-            // guaranteed unique, so use the title as the visible label and the
-            // menu's address as a stable hidden id ("###" splits label from id).
-            const std::string window_id =
-                string_format( "%s###uilist_%p", title, static_cast<const void *>( this ) );
-            // Center on first open (user can't move it anyway; NoNav menu).
-            const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-            ImGui::SetNextWindowPos( center, ImGuiCond_Appearing, ImVec2( 0.5f, 0.5f ) );
-            // Floor the height at the old curses window's size (w_height rows)
-            // so the auto-resized window doesn't shrink to a sliver. Add window
-            // chrome (top+bottom padding) so content isn't cramped to the edges.
-            const float min_h = w_height * ImGui::GetTextLineHeightWithSpacing() +
-                                2.0f * ImGui::GetStyle().WindowPadding.y;
-            ImGui::SetNextWindowSizeConstraints(
-                ImVec2( 0.0f, min_h ), ImVec2( FLT_MAX, FLT_MAX ) );
-            if( !ImGui::Begin( window_id.c_str(), nullptr,
-                               ImGuiWindowFlags_NoNav |
-                               ImGuiWindowFlags_NoNavInputs |
-                               ImGuiWindowFlags_NoNavFocus |
-                               ImGuiWindowFlags_NoMove |
-                               ImGuiWindowFlags_NoCollapse) ) {
-                ImGui::End();
-                return;
-            }
-            draw_imgui();
-            ImGui::End();
-        } );
-    }
 
     ui_manager::redraw();
 
     do {
-        // When ImGui is active, drive ~60 Hz frame ticks so mouse hover and
+        // When RmlUi is active, drive ~60 Hz frame ticks so mouse hover and
         // transition animations stay responsive.  The caller-requested timeout
         // is handled below: internal ticks loop; caller timeouts return.
-        const int actual_timeout = ( ( use_imgui || use_rmlui ) && loop ) ? 16 : timeout;
+        const int actual_timeout = ( use_rmlui && loop ) ? 16 : timeout;
         ret_act = ctxt.handle_input( actual_timeout );
         const auto event = ctxt.get_raw_input();
         keypress = event.get_first_input();
@@ -1157,7 +1112,7 @@ void uilist::query( bool loop, int timeout )
         } else if( allow_cancel && ret_act == "QUIT" ) {
             ret = UILIST_CANCEL;
         } else if( ret_act == "TIMEOUT" ) {
-            if( ( use_imgui || use_rmlui ) && loop ) {
+            if( use_rmlui && loop ) {
                 // Internal frame tick — redraw and keep looping.
                 // (Caller-requested timeout with loop==false falls through below.)
                 ui_manager::redraw();
@@ -1165,7 +1120,7 @@ void uilist::query( bool loop, int timeout )
             }
             ret = UILIST_TIMEOUT;
         } else if( ret_act == "MOUSE_MOVE" ) {
-            // Mouse movement wakes the loop; redraw so ImGui can update hover.
+            // Mouse movement wakes the loop; redraw so RmlUi can update hover.
             ui_manager::redraw();
             continue;
         } else {
@@ -1186,10 +1141,6 @@ void uilist::query( bool loop, int timeout )
         ui_manager::redraw();
     } while( loop && ret == UILIST_WAIT_INPUT );
 
-    // Clean up ImGui draw callback
-    if( imgui_handle >= 0 ) {
-        imgui_layer::remove_draw_callback( imgui_handle );
-    }
     if( use_rmlui ) {
         rml_close();
     }
@@ -1529,123 +1480,6 @@ void uilist::addentry_col( int r, bool e, int k, const std::string &str, const s
 void uilist::settext( const std::string &str )
 {
     text = str;
-}
-
-void uilist::draw_imgui()
-{
-    // Title
-    if( !title.empty() ) {
-        cataimgui::draw_colored_text( title, title_color );
-        ImGui::Separator();
-    }
-
-    // Header text
-    for( const auto &line : textformatted ) {
-        cataimgui::draw_colored_text( line, text_color );
-    }
-    if( !textformatted.empty() ) {
-        ImGui::Separator();
-    }
-
-    // Entry list
-    const float avail_w = ImGui::GetContentRegionAvail().x;
-    // Only scroll (and reserve a scrollbar) once the list is longer than the
-    // cap; short menus auto-fit so no scrollbar shows. When scrolling, an
-    // explicit height is required — the window uses AlwaysAutoResize, so a
-    // ScrollY table with outer_size.y==0 collapses to ~1 row.
-    constexpr size_t max_visible_rows = 20;
-    const bool need_scroll = fentries.size() > max_visible_rows;
-    const float list_row_h = ImGui::GetTextLineHeightWithSpacing();
-    ImGuiTableFlags table_flags = ImGuiTableFlags_RowBg;
-    float table_h = 0.0f;
-    if( need_scroll ) {
-        table_flags |= ImGuiTableFlags_ScrollY;
-        table_h = list_row_h * max_visible_rows;
-    }
-    if( ImGui::BeginTable( "entries", 1, table_flags, ImVec2( avail_w, table_h ) ) ) {
-
-        for( size_t fei = 0; fei < fentries.size(); ++fei ) {
-            const int ei = fentries[fei];
-            const uilist_entry &entry = entries[ei];
-            const bool is_selected = ( ei == selected );
-
-            ImGui::TableNextRow();
-            ImGui::TableSetColumnIndex( 0 );
-
-            // Use InvisibleButton for click/hover detection so we can
-            // render colored hotkey + <color_>-tagged entry text freely.
-            ImGui::PushID( static_cast<int>( fei ) );
-            const float row_h = ImGui::GetTextLineHeightWithSpacing();
-            ImGui::InvisibleButton( "##entry", ImVec2( -FLT_MIN, row_h ) );
-
-            const bool hovered = ImGui::IsItemHovered();
-            const bool clicked = ImGui::IsItemClicked( ImGuiMouseButton_Left );
-
-            // Manual selection/hover highlight
-            if( is_selected ) {
-                ImGui::GetWindowDrawList()->AddRectFilled(
-                    ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
-                    ImGui::GetColorU32( ImGuiCol_Header ) );
-            } else if( hovered ) {
-                ImGui::GetWindowDrawList()->AddRectFilled(
-                    ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
-                    ImGui::GetColorU32( ImGuiCol_HeaderHovered ) );
-            }
-
-            // Render colored content at the button's origin
-            ImGui::SetCursorScreenPos( ImGui::GetItemRectMin() );
-
-            // Hotkey in hotkey_color
-            if( entry.hotkey >= 33 && entry.hotkey < 126 ) {
-                const std::string hk_str =
-                    std::string( 1, static_cast<char>( entry.hotkey ) ) + " ";
-                cataimgui::text_colored( entry.enabled ? hotkey_color : text_color, hk_str );
-                ImGui::SameLine( 0, 0 );
-            }
-
-            // Entry text with embedded color tags
-            cataimgui::draw_colored_text( entry.txt, text_color );
-
-            if( clicked && ( entry.enabled || allow_disabled ) ) {
-                fselected = static_cast<int>( fei );
-                selected = ei;
-                ret = entry.retval;
-            } else if( hovered && !is_selected ) {
-                fselected = static_cast<int>( fei );
-                selected = ei;
-                if( callback != nullptr ) {
-                    callback->select( this );
-                }
-            }
-
-            // Follow keyboard navigation: keep the selected row in view.
-            if( is_selected && imgui_scroll_to_selected ) {
-                ImGui::SetScrollHereY( 0.5f );
-            }
-
-            ImGui::PopID();
-        }
-        ImGui::EndTable();
-    }
-    imgui_scroll_to_selected = false;
-
-    // Description
-    if( desc_enabled && selected >= 0 && static_cast<size_t>( selected ) < entries.size() ) {
-        ImGui::Separator();
-        const std::string &desc_text = footer_text.empty() ? entries[selected].desc : footer_text;
-        cataimgui::draw_colored_text( desc_text, text_color );
-    }
-
-    // Footer / filter status
-    if( !filter.empty() ) {
-        ImGui::Separator();
-        ImGui::Text( "< %s >", filter.c_str() );
-    }
-
-    // Callback draw_imgui
-    if( callback != nullptr ) {
-        callback->draw_imgui( this );
-    }
 }
 
 struct pointmenu_cb::impl_t {

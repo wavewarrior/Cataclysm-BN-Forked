@@ -360,11 +360,7 @@ class uilist // NOLINT(cata-xy)
         // not be made public.
         void inputfilter();
 
-        // ImGui rendering for this menu.  Called from the draw callback
-        // registered in query() while imgui_layer is ready.
-        void draw_imgui();
-
-        // RmlUi path (sibling of the ImGui path). rml_open() loads the menu's
+        // RmlUi path. rml_open() loads the menu's
         // document + data-model from current state (false if RmlUi isn't ready
         // or the model name is already taken by a nested menu -> caller falls
         // back to ImGui/curses); rml_sync() pushes state to the model each tick;
