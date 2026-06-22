@@ -1,0 +1,34 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="loading.rcss"/>
+</head>
+<body data-model="loading">
+    <!-- Bespoke loading screen (full UI→RmlUi migration). NON-modal, passive doc:
+         the loading_ui pump (loading_ui::show → ui_manager::redraw → refresh_display)
+         paints it every step. The uilist `menu` remains the state holder; C++
+         (loading_doc_sync) rebuilds `rows` from menu.entries + menu.selected and
+         drives `done`/`total` for the bar. text_rml fields carry colour markup
+         (cata_text_to_rml). Renders over the splash art (which keeps its own path). -->
+    <div class="panel loading-panel">
+        <h1 class="loading-title" data-rml="title_rml"></h1>
+
+        <div class="loading-bar-track">
+            <!-- width set imperatively in loading_doc_sync (done/total %) so the bar
+                 reflects real progress without an RCSS expression. -->
+            <div id="loading-bar-fill" class="loading-bar-fill"></div>
+        </div>
+        <div class="loading-count">{{ done }} / {{ total }}</div>
+
+        <div class="loading-list">
+            <div class="loading-row" data-for="row : rows"
+                 data-class-done="row.state == 'done'"
+                 data-class-current="row.state == 'current'"
+                 data-class-pending="row.state == 'pending'">
+                <span class="loading-mark"></span>
+                <span class="loading-step" data-rml="row.rml"></span>
+            </div>
+        </div>
+    </div>
+</body>
+</rml>

@@ -278,4 +278,15 @@ bool &veh_interact_rmlui_enabled();
 // owns every field/selection); synced each frame. Default OFF.
 bool &gamemode_defense_rmlui_enabled();
 
+// loading_ui progress list RmlUi render path (the data-load step list shown while
+// the game loads). A bespoke loading document (gui/loading.rml): context title +
+// progress bar + the step list with per-row done/current/pending state. Like the
+// sidebar HUD it is NON-modal (no input_context / loop) — lazy open + sync each
+// loading_ui::show() + close on destruction; does NOT use rml_doc (which bundles a
+// modal input tick). Render-only: the uilist `menu` stays the state holder (entries
+// / selected / green-done) and the doc reads it. When OFF or RmlUi is not yet ready
+// (early data load, before first refresh_display) it falls back to menu->show().
+// Default OFF.
+bool &loading_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

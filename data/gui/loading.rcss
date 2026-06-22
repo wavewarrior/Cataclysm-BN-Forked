@@ -1,0 +1,108 @@
+/* Bespoke loading screen layout (full UI→RmlUi migration). Centered panel over the
+   splash art: title + progress bar + step list with per-row done/current/pending
+   state. body must be sized + centered (the missions/worldfinalize gotcha — else the
+   panel shrink-wraps / collapses). Palette hexes are copied literally from theme.rcss
+   (RCSS has no var()); the {{token}} preprocessor substitutes them at load. */
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.loading-panel {
+    width: 60%;
+    min-width: 520dp;
+    max-width: 900dp;
+    max-height: 88%;
+    display: flex;
+    flex-direction: column;
+}
+
+.loading-title {
+    flex: 0 0 auto;
+    color: {{yellow}};
+    font-effect: glow( 2dp {{yellow-glow}} );
+    margin-bottom: 12dp;
+}
+
+/* Progress bar — recessed track (bg3) with a yellow fill whose width is set
+   imperatively each sync (done/total %). */
+.loading-bar-track {
+    flex: 0 0 auto;
+    display: block;
+    height: 14dp;
+    background-color: {{bg3}};
+    border: 1dp {{bg4}};
+    margin-bottom: 4dp;
+}
+
+.loading-bar-fill {
+    display: block;
+    height: 100%;
+    width: 0%;
+    background-color: {{yellow}};
+}
+
+.loading-count {
+    flex: 0 0 auto;
+    display: block;
+    color: {{fg4}};
+    margin-bottom: 12dp;
+}
+
+/* Step list — scrolls if the context has more steps than fit. */
+.loading-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+.loading-row {
+    display: flex;
+    align-items: center;
+    padding: 1dp 0;
+}
+
+/* The leading status mark. Glyph + colour come from the row state below. */
+.loading-mark {
+    display: block;
+    width: 24dp;
+    flex: 0 0 auto;
+    text-align: center;
+}
+
+.loading-step {
+    display: block;
+    flex: 1 1 auto;
+}
+
+/* ── row states ───────────────────────────────────────────────────────────── */
+.loading-row.done .loading-mark::before {
+    content: "\2713";        /* ✓ */
+    color: {{green}};
+}
+.loading-row.done .loading-step {
+    color: {{green}};
+}
+
+.loading-row.current .loading-mark::before {
+    content: "\25B6";        /* ▶ */
+    color: {{yellow}};
+}
+.loading-row.current .loading-step {
+    color: {{fg0}};
+    font-effect: glow( 2dp {{yellow-glow}} );
+}
+
+.loading-row.pending .loading-mark::before {
+    content: "\2022";        /* • */
+    color: {{bg4}};
+}
+.loading-row.pending .loading-step {
+    color: {{fg4}};
+}
