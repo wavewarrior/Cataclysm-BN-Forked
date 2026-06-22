@@ -194,69 +194,6 @@ void distraction_manager_gui::show()
             sync_rml();
             return;
         }
-        // Draw border
-        draw_border( w_border, BORDER_COLOR, _( "Distractions manager" ) );
-        mvwputch( w_border, point( 0, iHeaderHeight - 1 ), c_light_gray, LINE_XXXO );
-        mvwputch( w_border, point( 79, iHeaderHeight - 1 ), c_light_gray, LINE_XOXX );
-        mvwputch( w_border, point( 61, FULL_SCREEN_HEIGHT - 1 ), c_light_gray, LINE_XXOX );
-        wnoutrefresh( w_border );
-
-        // Draw header
-        werase( w_header );
-        fold_and_print( w_header, point_zero, getmaxx( w_header ), c_white,
-                        _( distraction_desc.at( cur_distraction ).second.c_str() ) );
-
-        // Draw horizontal line and corner pieces of the table
-        for( int x = 0; x < 78; x++ ) {
-            if( x == 60 ) {
-                mvwputch( w_header, point( x, iHeaderHeight - 2 ), c_light_gray, LINE_OXXX );
-                mvwputch( w_header, point( x, iHeaderHeight - 1 ), c_light_gray, LINE_XOXO );
-            } else {
-                mvwputch( w_header, point( x, iHeaderHeight - 2 ), c_light_gray, LINE_OXOX );
-            }
-        }
-
-        wnoutrefresh( w_header );
-
-        // Clear table
-        for( int y = 0; y < iContentHeight; y++ ) {
-            for( int x = 0; x < 79; x++ ) {
-                if( x == 60 ) {
-                    mvwputch( w, point( x, y ), c_light_gray, LINE_XOXO );
-                } else {
-                    mvwputch( w, point( x, y ), c_black, ' ' );
-                }
-            }
-        }
-
-        draw_scrollbar( w_border, currentLine, iContentHeight, num_distractions, point( 0,
-                        iHeaderHeight + 1 ) );
-
-        calcStartPos( startPosition, currentLine, iContentHeight, num_distractions );
-
-        for( int i = startPosition; i < num_distractions; ++i ) {
-            if( !distractions.contains( distractions_status[i] ) ) {
-                debugmsg( "Distraction not valid for Distraction Manager" );
-                continue;
-            }
-
-            const nc_color line_color = i == currentLine ? hilite( c_white ) : c_white;
-            const nc_color status_color = distractions.at(
-                                              distractions_status[i] ) ? c_red : c_light_green;
-            const std::string status_string = distractions.at( distractions_status[i] ) ? _( "Disabled" ) :
-                                              _( "Enabled" );
-
-            // Print distraction types
-            mvwprintz( w, point( 1, i - startPosition ), line_color, "%s",
-                       _( distraction_desc.at( distractions_status[i] ).first.c_str() ) );
-
-            // Print "Enabled/Disabled" text
-            mvwprintz( w, point( 62, i - startPosition ), status_color, "%s", status_string );
-        }
-
-        wnoutrefresh( w_header );
-        wnoutrefresh( w_border );
-        wnoutrefresh( w );
     } );
 
     if( distraction_rmlui_enabled() && rmlui_layer::ready() && !g_distraction_model_active ) {
