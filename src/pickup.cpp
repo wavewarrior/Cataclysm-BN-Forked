@@ -775,8 +775,6 @@ auto pick_up_from_items( const std::vector<item_stack::iterator> &here, const in
         ctxt.register_action( "LEFT" );
         ctxt.register_action( "NEXT_TAB", to_translation( "Next page" ) );
         ctxt.register_action( "PREV_TAB", to_translation( "Previous page" ) );
-        ctxt.register_action( "SCROLL_UP" );
-        ctxt.register_action( "SCROLL_DOWN" );
         ctxt.register_action( "CONFIRM" );
         ctxt.register_action( "SELECT_ALL" );
         ctxt.register_action( "QUIT", to_translation( "Cancel" ) );
@@ -787,7 +785,6 @@ auto pick_up_from_items( const std::vector<item_stack::iterator> &here, const in
         ctxt.register_action( "WIELD", to_translation( "Wield" ) );
 
         bool update = true;
-        int iScrollPos = 0;
 
         std::string filter;
         std::string new_filter;
@@ -949,155 +946,6 @@ auto pick_up_from_items( const std::vector<item_stack::iterator> &here, const in
                 sync_rml();
                 return;
             }
-            const item &selected_item = **stacked_here[matches[selected]].front();
-
-            if( selected >= 0 && selected <= static_cast<int>( stacked_here.size() ) - 1 ) {
-                item *loc = *stacked_here[matches[selected]].front();
-                temperature_flag temperature = rot::temperature_flag_for_location( get_map(), *loc );
-
-                std::vector<iteminfo> this_item = selected_item.info( temperature );
-
-                item_info_data dummy( {}, {}, this_item, {}, iScrollPos );
-                dummy.without_getch = true;
-                dummy.without_border = true;
-
-                draw_item_info( w_item_info, dummy );
-            } else {
-                werase( w_item_info );
-                wnoutrefresh( w_item_info );
-            }
-            draw_custom_border( w_item_info, 0 );
-
-            // print info window title: < item name >
-            mvwprintw( w_item_info, point( 2, 0 ), "< " );
-            trim_and_print( w_item_info, point( 4, 0 ), pickupW - 8, selected_item.color_in_inventory(),
-                            selected_item.display_name() );
-            wprintw( w_item_info, " >" );
-            wnoutrefresh( w_item_info );
-
-            const std::string pickup_chars = ctxt.get_available_single_char_hotkeys( all_pickup_chars );
-
-            werase( w_pickup );
-            for( int cur_it = start; cur_it < start + maxitems; cur_it++ ) {
-                if( cur_it < static_cast<int>( matches.size() ) ) {
-                    int true_it = matches[cur_it];
-                    const item &this_item = **stacked_here[true_it].front();
-                    nc_color icolor = this_item.color_in_inventory();
-                    if( cur_it == selected ) {
-                        icolor = hilite( c_white );
-                    }
-
-                    if( cur_it < static_cast<int>( pickup_chars.size() ) ) {
-                        mvwputch( w_pickup, point( 0, 1 + ( cur_it % maxitems ) ), icolor,
-                                  static_cast<char>( pickup_chars[cur_it] ) );
-                    } else if( cur_it < static_cast<int>( pickup_chars.size() ) + static_cast<int>
-                               ( pickup_chars.size() ) *
-                               static_cast<int>( pickup_chars.size() ) ) {
-                        int p = cur_it - pickup_chars.size();
-                        int p1 = p / pickup_chars.size();
-                        int p2 = p % pickup_chars.size();
-                        mvwprintz( w_pickup, point( 0, 1 + ( cur_it % maxitems ) ), icolor, "`%c%c",
-                                   static_cast<char>( pickup_chars[p1] ), static_cast<char>( pickup_chars[p2] ) );
-                    } else {
-                        mvwputch( w_pickup, point( 0, 1 + ( cur_it % maxitems ) ), icolor, ' ' );
-                    }
-                    if( getitem[true_it].parent ) {
-                        const pickup_count &parent = getitem[*getitem[true_it].parent];
-                        nc_color color = parent.pick ?
-                                         ( parent.all_children_picked ? c_light_blue : c_yellow ) :
-                                         c_dark_gray;
-                        // TODO: Cute symbol here
-                        wprintz( w_pickup, color, "\\" );
-                    } else {
-                        wprintw( w_pickup, " " );
-                    }
-                    if( getitem[true_it].pick ) {
-                        if( getitem[true_it].count ) {
-                            wprintz( w_pickup, c_light_blue, "# " );
-                        } else {
-                            wprintz( w_pickup, c_light_blue, "+ " );
-                        }
-                    } else {
-                        wprintw( w_pickup, "- " );
-                    }
-                    std::string item_name;
-                    if( ( *stacked_here[true_it].front() )->is_money() ) {
-                        //Count charges
-                        // TODO: transition to the item_location system used for the inventory
-                        unsigned int charges_total = 0;
-                        for( const item_stack::iterator &it : stacked_here[true_it] ) {
-                            charges_total += ( *it )->charges;
-                        }
-                        //Picking up none or all the cards in a stack
-                        if( !getitem[true_it].pick || !getitem[true_it].count ) {
-                            item_name = ( *stacked_here[true_it].front() )->display_money( stacked_here[true_it].size(),
-                                        charges_total );
-                        } else {
-                            unsigned int charges = 0;
-                            int item_count = getitem[true_it].count ? *getitem[true_it].count : 0;
-                            int c = item_count;
-                            for( std::list<item_stack::iterator>::const_iterator it = stacked_here[true_it].begin();
-                                 it != stacked_here[true_it].end() && c > 0; ++it, --c ) {
-                                charges += ( **it )->charges;
-                            }
-
-                            item_name = ( *stacked_here[true_it].front() )->display_money( item_count, charges_total, charges );
-                        }
-                    } else {
-                        item_name = this_item.display_name( stacked_here[true_it].size() );
-                    }
-                    if( stacked_here[true_it].size() > 1 ) {
-                        item_name = string_format( "%d %s", stacked_here[true_it].size(), item_name );
-                    }
-                    if( get_option<bool>( "ITEM_SYMBOLS" ) ) {
-                        item_name = string_format( "%s %s", this_item.symbol().c_str(),
-                                                   item_name );
-                    }
-
-                    // if the item does not belong to your fraction then add the stolen symbol
-                    if( !this_item.is_owned_by( g->u, true ) ) {
-                        item_name = string_format( "<color_light_red>!</color> %s", item_name );
-                    }
-
-                    trim_and_print( w_pickup, point( 6, 1 + ( cur_it % maxitems ) ), pickupW - 4, icolor,
-                                    item_name );
-                }
-            }
-
-            mvwprintw( w_pickup, point( 0, maxitems + 1 ), _( "[%s] Unmark" ),
-                       ctxt.get_desc( "LEFT", 1 ) );
-
-            center_print( w_pickup, maxitems + 1, c_light_gray, string_format( _( "[%s] Help" ),
-                          ctxt.get_desc( "HELP_KEYBINDINGS", 1 ) ) );
-
-            right_print( w_pickup, maxitems + 1, 0, c_light_gray, string_format( _( "[%s] Mark" ),
-                         ctxt.get_desc( "RIGHT", 1 ) ) );
-
-            mvwprintw( w_pickup, point( 0, maxitems + 2 ), _( "[%s] Prev" ),
-                       ctxt.get_desc( "PREV_TAB", 1 ) );
-
-            center_print( w_pickup, maxitems + 2, c_light_gray, string_format( _( "[%s] All" ),
-                          ctxt.get_desc( "SELECT_ALL", 1 ) ) );
-
-            right_print( w_pickup, maxitems + 2, 0, c_light_gray, string_format( _( "[%s] Next" ),
-                         ctxt.get_desc( "NEXT_TAB", 1 ) ) );
-
-            const std::string fmted_weight_predict = colorize(
-                        string_format( "%.1f", round_up( convert_weight( weight_predict ), 1 ) ),
-                        weight_predict > g->u.weight_capacity() ? c_red : c_white );
-            const std::string fmted_weight_capacity = string_format(
-                        "%.1f", round_up( convert_weight( g->u.weight_capacity() ), 1 ) );
-            const std::string fmted_volume_predict = colorize(
-                        format_volume( volume_predict ),
-                        volume_predict > g->u.volume_capacity() ? c_red : c_white );
-            const std::string fmted_volume_capacity = format_volume( g->u.volume_capacity() );
-
-            trim_and_print( w_pickup, point_zero, pickupW, c_white,
-                            string_format( _( "PICK Wgt %1$s/%2$s  Vol %3$s/%4$s" ),
-                                           fmted_weight_predict, fmted_weight_capacity,
-                                           fmted_volume_predict, fmted_volume_capacity ) );
-
-            wnoutrefresh( w_pickup );
         } );
 
         // Now print the two lists; those on the ground and about to be added to inv
@@ -1121,10 +969,6 @@ auto pick_up_from_items( const std::vector<item_stack::iterator> &here, const in
                 if( *itemcount == 0 ) {
                     itemcount.reset();
                 }
-            } else if( action == "SCROLL_UP" ) {
-                iScrollPos--;
-            } else if( action == "SCROLL_DOWN" ) {
-                iScrollPos++;
             } else if( action == "PREV_TAB" ) {
                 if( start > 0 ) {
                     start -= maxitems;
@@ -1138,11 +982,9 @@ auto pick_up_from_items( const std::vector<item_stack::iterator> &here, const in
                 } else {
                     start = 0;
                 }
-                iScrollPos = 0;
                 selected = start;
             } else if( action == "UP" ) {
                 selected--;
-                iScrollPos = 0;
                 if( selected < 0 ) {
                     selected = matches.size() - 1;
                     start = static_cast<int>( matches.size() / maxitems ) * maxitems;
@@ -1154,7 +996,6 @@ auto pick_up_from_items( const std::vector<item_stack::iterator> &here, const in
                 }
             } else if( action == "DOWN" ) {
                 selected++;
-                iScrollPos = 0;
                 if( selected >= static_cast<int>( matches.size() ) ) {
                     selected = 0;
                     start = 0;
@@ -1233,7 +1074,6 @@ auto pick_up_from_items( const std::vector<item_stack::iterator> &here, const in
                 }
             } else if( action == "ANY_INPUT" ) {
                 idx = ( raw_input_char <= 127 ) ? pickup_chars.find( raw_input_char ) : -1;
-                iScrollPos = 0;
             } else if( action == "SELECT_ALL" ) {
                 int count = 0;
                 for( auto i : matches ) {
@@ -1330,7 +1170,6 @@ auto pick_up_from_items( const std::vector<item_stack::iterator> &here, const in
                     filter_changed = false;
                     selected = 0;
                     start = 0;
-                    iScrollPos = 0;
                 }
             }
 

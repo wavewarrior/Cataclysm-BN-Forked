@@ -1152,7 +1152,6 @@ auto trading_window::perform_trade( npc &np, const std::string &deal ) -> bool
             sync_rml();
             return;
         }
-        update_win( np, deal );
     } );
 
     rml.open( trade_rmlui_enabled(), "trade", ctxt,
