@@ -1792,15 +1792,7 @@ bool ma_style_callback::key( const input_context &ctxt, const input_event &event
         }
 
         ui.on_redraw( [&]( const ui_adaptor & ) {
-            // RmlUi path renders the doc itself — skip the curses draw.
-            if( rml ) {
-                return;
-            }
-            werase( w );
-            fold_and_print_from( w, point( 2, 1 ), width, selected, c_light_gray, text );
-            draw_border( w, BORDER_COLOR, string_format( _( " Style: %s " ), ma.name ) );
-            draw_scrollbar( w, selected, height, iLines, point_south, BORDER_COLOR, true );
-            wnoutrefresh( w );
+            // Tier-10 rip-out: the RmlUi document renders the style description; curses draw gone.
         } );
 
         do {

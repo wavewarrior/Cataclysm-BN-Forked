@@ -202,24 +202,10 @@ void game::extended_description( const tripoint_bub_ms &p )
     } );
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
-        // RmlUi path owns the panes — sync the bound strings and skip curses.
+        // Tier-10 rip-out: RmlUi owns the panes; sync the bound strings, no curses.
         if( rml ) {
             sync_rml();
-            return;
         }
-        werase( w_head );
-        mvwprintz( w_head, point_zero, c_white, "%s", build_hint() );
-
-        // Set up line drawings
-        for( int i = 0; i < TERMX; i++ ) {
-            mvwputch( w_head, point( i, top - 1 ), c_white, LINE_OXOX );
-        }
-
-        wnoutrefresh( w_head );
-
-        werase( w_main );
-        fold_and_print_from( w_main, point_zero, width, 0, c_light_gray, build_desc() );
-        wnoutrefresh( w_main );
     } );
 
     do {

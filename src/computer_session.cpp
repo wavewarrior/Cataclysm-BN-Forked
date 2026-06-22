@@ -182,12 +182,10 @@ void computer_session::use()
     } );
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
-        // RmlUi path owns the terminal pane — sync the buffer and skip curses.
+        // Tier-10 rip-out: RmlUi owns the terminal pane; sync the buffer, no curses.
         if( rml ) {
             sync_rml();
-            return;
         }
-        refresh();
     } );
 
     // Login
