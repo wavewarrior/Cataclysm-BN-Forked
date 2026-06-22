@@ -183,6 +183,12 @@ bool &overmap_rmlui_enabled();
 // rip-out-surviving glyph path; foundation for future floating damage numbers.
 bool &world_text_rmlui_enabled();
 
+// §8.1 gate step-4 font straggler: the overmap city / note / center-info labels
+// (cata_tiles::draw_om) routed off the curses SDL Font glyph path onto the §7
+// RmlUi world-text layer. Same timing as the SCT feed (redraw cycle, pre-prepare).
+// Default OFF.
+bool &overmap_text_rmlui_enabled();
+
 // Examine-tile description view (game::extended_description): the creature /
 // furniture / terrain extended_description() text pane. Render-only RmlUi doc.
 bool &description_view_rmlui_enabled();

@@ -56,6 +56,8 @@
 #include "weather.h"
 #include "weather_type.h"
 #include "lighting/render_state.h"
+#include "lighting/rmlui_layer.h"
+#include "rml_screen.h"
 
 // Reference aliases matching sdltiles.cpp names for the extracted code.
 // These let the moved functions read g_display members using the same short
@@ -206,10 +208,37 @@ std::string cata_tiles::get_omt_id_rotation_and_subtile(
 // cata_tiles::draw_om
 // -----------------------------------------------------------------------
 
+// §8.1 gate step-4 font straggler: the overmap city / note / center-info labels
+// draw through the curses SDL Font glyph path (draw_string). When enabled, route
+// them through the §7 RmlUi world-text layer instead (the glyph path that survives
+// the curses rip-out). draw_om runs in the redraw cycle (before refresh_display's
+// prepare), so world_text_begin + adds here land in this frame's geometry — the
+// same timing as the SCT feed in sdl_curses_draw. Default OFF; A/B via F4.
+bool &overmap_text_rmlui_enabled()
+{
+    static bool enabled = false;
+    return enabled;
+}
+
+// Map a curses palette colour index to the 0xRRGGBBAA world_text_add expects.
+static unsigned int omt_label_rgba( int color_index )
+{
+    const SDL_Color c = windowsPalette[color_index];
+    return ( static_cast<unsigned>( c.r ) << 24 ) | ( static_cast<unsigned>( c.g ) << 16 ) |
+           ( static_cast<unsigned>( c.b ) << 8 ) | 0xFFu;
+}
+
 void cata_tiles::draw_om( point dest, const tripoint_abs_omt &center_abs_omt, bool blink )
 {
     if( !g ) {
         return;
+    }
+
+    // §7 world-text: clear this frame's queue before re-submitting the labels
+    // below (mirrors the SCT begin in sdl_curses_draw). Only when routing is on.
+    const bool omt_text_rml = overmap_text_rmlui_enabled();
+    if( omt_text_rml ) {
+        rmlui_layer::world_text_begin();
     }
 
     // clear_frame_queues() was already called by redraw_invalidated() before
@@ -604,7 +633,11 @@ void cata_tiles::draw_om( point dest, const tripoint_abs_omt &center_abs_omt, bo
 
             geometry->rect( renderer, point{ clipRect.x, clipRect.y }, clipRect.w, clipRect.h, SDL_Color() );
 
-            draw_string( *font, renderer, geometry, name, draw_pos, 11 );
+            if( omt_text_rml ) {
+                rmlui_layer::world_text_add( draw_pos.x, draw_pos.y, name, omt_label_rgba( 11 ) );
+            } else {
+                draw_string( *font, renderer, geometry, name, draw_pos, 11 );
+            }
         };
 
         const auto abs_omt_to_draw_label = [&]( const tripoint_abs_omt & omt_pos, const int label_length ) {
@@ -629,7 +662,11 @@ void cata_tiles::draw_om( point dest, const tripoint_abs_omt &center_abs_omt, bo
             geometry->rect( renderer, point{ clip_rect.x, clip_rect.y }, clip_rect.w, clip_rect.h,
                             SDL_Color() );
 
-            draw_string( *font, renderer, geometry, name, draw_pos, 11 );
+            if( omt_text_rml ) {
+                rmlui_layer::world_text_add( draw_pos.x, draw_pos.y, name, omt_label_rgba( 11 ) );
+            } else {
+                draw_string( *font, renderer, geometry, name, draw_pos, 11 );
+            }
         };
 
         // the tiles on the overmap are overmap tiles, so we need to use
@@ -714,6 +751,10 @@ void cata_tiles::draw_om( point dest, const tripoint_abs_omt &center_abs_omt, bo
         nc_color & color ) {
             char note_fg_color = color == c_yellow ? 11 :
                                  cata_cursesport::colorpairs[color.to_color_pair_index()].FG;
+            if( omt_text_rml ) {
+                rmlui_layer::world_text_add( draw_pos.x, draw_pos.y, name, omt_label_rgba( note_fg_color ) );
+                return draw_pos;
+            }
             return draw_string( *font, renderer, geometry, name, draw_pos, note_fg_color );
         };
 

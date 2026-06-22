@@ -737,6 +737,7 @@ void devui_rml_open()
     c.Bind( "newcharacter", &newcharacter_rmlui_enabled() );
     c.Bind( "overmap", &overmap_rmlui_enabled() );
     c.Bind( "world_text", &world_text_rmlui_enabled() );
+    c.Bind( "overmap_text", &overmap_text_rmlui_enabled() );
     c.Bind( "sidebar_hud", &sidebar_hud_rmlui_enabled() );
     c.Bind( "minigames", &minigames_rmlui_enabled() );
     // Slice 3 — Effects tab tuning params (live lighting). Floats two-way bound to the
