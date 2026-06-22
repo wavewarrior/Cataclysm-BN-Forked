@@ -3229,7 +3229,17 @@ build-green:
    **REMAINING curses-draw still live (each its own unit, NOT a simple arm-drop):**
    - `panels` (~303) = Tier-7 sidebar HUD — own strategy.
    - overmap **main display**: curses vs rml splits *inside* `draw()`/`draw_om_sidebar`, not a
-     deletable arm; plus notes-manager + place-terrain editor (both unmigrated).
+     deletable arm; plus place-terrain/special editor (still curses). **Notes flow DONE:**
+       - notes-manager `map_notes_callback` preview was ALREADY RML (`draw_rml` → uilist
+         "callback" element); this session (batch 15) it was refactored to share a new
+         `note_preview_rml(note, map_around)` producer.
+       - `create_note` editor preview (batch 15): the curses w_preview/title/map panes now
+         render via a passive backdrop doc `gui/overmap_note.rml` (`#preview` element filled
+         each keystroke by the shared producer), stacked under the string_input "Note:" box,
+         gated `overmap_rmlui_enabled()`, curses kept as toggle-OFF fallback. Build+link green
+         Metal; eyeball owed (backdrop position vs the input box, minimap glyph parity).
+     **Still open for O3:** the place-terrain/special editor + the `draw()`/`draw_om_sidebar`
+     curses/rml split (the main-display arm).
    - ~~`ranged` aim readout (`print_ranged_chance`/`print_aim`) — slice-2b deferred.~~ **DONE
      (batch 14b, 2026-06-22): producers were already wired into `panel_text()`; this session
      deleted the 4 now-dead curses draw fns (−268 lines) on a clean tree, build+link green.
