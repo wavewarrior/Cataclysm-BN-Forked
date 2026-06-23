@@ -77,16 +77,6 @@ std::map<std::string, std::vector<std::string> > craft_subcat_list;
 std::map<std::string, std::string> normalized_names;
 
 static bool query_is_yes( const std::string &query );
-static void draw_hidden_amount( const catacurses::window &w, int amount, int num_recipe );
-static void draw_can_craft_indicator( const catacurses::window &w, const recipe &rec,
-                                      const Character &crafter );
-static void draw_recipe_tabs( const catacurses::window &w, const std::string &tab,
-                              TAB_MODE mode, const bool filtered_unread,
-                              std::map<std::string, bool> &unread );
-static void draw_recipe_subtabs( const catacurses::window &w, const std::string &tab,
-                                 const std::string &subtab,
-                                 const recipe_subset &available_recipes, TAB_MODE mode,
-                                 std::map<std::string, bool> &unread );
 
 std::string peek_related_recipe( const recipe *current, const recipe_subset &available,
                                  const Character &crafter );
@@ -2046,129 +2036,7 @@ static bool query_is_yes( const std::string &query )
            subquery == pgettext( "memorized recipe search term", "yes" );
 }
 
-static void draw_hidden_amount( const catacurses::window &w, int amount, int num_recipe )
-{
-    if( amount == 1 ) {
-        right_print( w, 1, 1, c_red, string_format( _( "* %s hidden recipe - %s in category *" ), amount,
-                     num_recipe ) );
-    } else if( amount >= 2 ) {
-        right_print( w, 1, 1, c_red, string_format( _( "* %s hidden recipes - %s in category *" ), amount,
-                     num_recipe ) );
-    } else if( amount == 0 ) {
-        right_print( w, 1, 1, c_green, string_format( _( "* No hidden recipe - %s in category *" ),
-                     num_recipe ) );
-    }
-}
-
 // Anchors top-right
-static void draw_can_craft_indicator( const catacurses::window &w, const recipe &rec,
-                                      const Character &crafter )
-{
-    // Draw text
-    if( lighting_crafting_speed_multiplier( crafter, rec ) <= 0.0f ) {
-        right_print( w, 0, 1, i_red, _( "too dark to craft" ) );
-    } else if( crafting_speed_multiplier( crafter, rec, false ) <= 0.0f ) {
-        // Technically not always only too sad, but must be too sad
-        right_print( w, 0, 1, i_red, _( "too sad to craft effectively" ) );
-    } else if( crafting_speed_multiplier( crafter, rec, false ) < 1.0f ) {
-        right_print( w, 0, 1, i_yellow, string_format( _( "crafting is slow %d%%" ),
-                     static_cast<int>( crafting_speed_multiplier( crafter, rec, false ) * 100 ) ) );
-    } else {
-        right_print( w, 0, 1, i_green, _( "craftable" ) );
-    }
-}
-
-static void draw_recipe_tabs( const catacurses::window &w, const std::string &tab, TAB_MODE mode,
-                              const bool filtered_unread, std::map<std::string, bool> &unread )
-{
-    werase( w );
-
-    switch( mode ) {
-        case NORMAL: {
-            draw_tabs( w, normalized_names, craft_cat_list, tab );
-            int pos_x = 2;
-            for( const std::string &cat : craft_cat_list ) {
-                pos_x += utf8_width( normalized_names[cat] ) + 3;
-                if( unread[cat] ) {
-                    mvwprintz( w, point( pos_x - 2, 1 ), c_light_green, "⁺" );
-                }
-            }
-            break;
-        }
-        case FILTERED: {
-            mvwhline( w, point( 0, getmaxy( w ) - 1 ), LINE_OXOX, getmaxx( w ) - 1 );
-            mvwputch( w, point( 0, getmaxy( w ) - 1 ), BORDER_COLOR, LINE_OXXO ); // |^
-            mvwputch( w, point( getmaxx( w ) - 1, getmaxy( w ) - 1 ), BORDER_COLOR, LINE_OOXX ); // ^|
-            const std::string tab_name = _( "Searched" );
-            draw_tab( w, 2, tab_name, true );
-            if( filtered_unread ) {
-                mvwprintz( w, point( 3 + utf8_width( tab_name ), 1 ), c_light_green, "⁺" );
-            }
-            break;
-        }
-        case BATCH:
-            mvwhline( w, point( 0, getmaxy( w ) - 1 ), LINE_OXOX, getmaxx( w ) - 1 );
-            mvwputch( w, point( 0, getmaxy( w ) - 1 ), BORDER_COLOR, LINE_OXXO ); // |^
-            mvwputch( w, point( getmaxx( w ) - 1, getmaxy( w ) - 1 ), BORDER_COLOR, LINE_OOXX ); // ^|
-            draw_tab( w, 2, _( "Batch" ), true );
-            break;
-    }
-
-    wnoutrefresh( w );
-}
-
-static void draw_recipe_subtabs( const catacurses::window &w, const std::string &tab,
-                                 const std::string &subtab,
-                                 const recipe_subset &available_recipes, TAB_MODE mode,
-                                 std::map<std::string, bool> &unread )
-{
-    werase( w );
-    int width = getmaxx( w );
-    for( int i = 0; i < width; i++ ) {
-        if( i == 0 ) {
-            mvwputch( w, point( i, 2 ), BORDER_COLOR, LINE_XXXO ); // |-
-        } else if( i == width ) { // TODO: that is always false!
-            mvwputch( w, point( i, 2 ), BORDER_COLOR, LINE_XOXX ); // -|
-        } else {
-            mvwputch( w, point( i, 2 ), BORDER_COLOR, LINE_OXOX ); // -
-        }
-    }
-
-    for( int i = 0; i < 3; i++ ) {
-        mvwputch( w, point( 0, i ), BORDER_COLOR, LINE_XOXO ); // |
-        mvwputch( w, point( width - 1, i ), BORDER_COLOR, LINE_XOXO ); // |
-    }
-
-    switch( mode ) {
-        case NORMAL: {
-            // Draw the tabs on each other
-            int pos_x = 2;
-            // Step between tabs, two for tabs border
-            int tab_step = 3;
-            for( const auto &stt : craft_subcat_list[tab] ) {
-                bool empty = available_recipes.empty_category( tab, stt != "CSC_ALL" ? stt : "" );
-                const std::string subtab_name = normalized_names[stt];
-                draw_subtab( w, pos_x, subtab_name, subtab == stt, true, empty );
-                pos_x += utf8_width( subtab_name ) + tab_step;
-                if( unread[stt] ) {
-                    mvwprintz( w, point( pos_x - 2, 0 ), c_light_green, "⁺" );
-                }
-            }
-            break;
-        }
-        case FILTERED:
-        case BATCH:
-            werase( w );
-            for( int i = 0; i < 3; i++ ) {
-                mvwputch( w, point( 0, i ), BORDER_COLOR, LINE_XOXO ); // |
-                mvwputch( w, point( width - 1, i ), BORDER_COLOR, LINE_XOXO ); // |
-            }
-            break;
-    }
-
-    wnoutrefresh( w );
-}
-
 template<typename T>
 bool lcmatch_any( const std::vector< std::vector<T> > &list_of_list, const std::string &filter )
 {
