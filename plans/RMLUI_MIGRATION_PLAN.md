@@ -68,7 +68,9 @@ options=2, **newcharacter=16 (8 slices)**, main_menu=2, worldfactory=4 sessions;
 3. ~~**Tier 8 — F4 dev panel**~~ **DONE (eyeball owed)** — full ImGui parity (slices 1–8) +
    **§8 flip committed `8c6a66d7e6` 2026-06-20**: F4 opens the RmlUi `devui.rml` doc; ImGui retired
    from the live composite (`devui_visible()` flag; `imgui_layer::visible()` never set → `active()`
-   false). `imgui_layer` module stays compiled for the dormant uilist pilot; full deletion = Tier 10.
+   false). **★ FULL IMGUI RIP-OUT DONE 2026-06-23 (§8.2 sub-series A, `1e5a316369`+`a277c32e68`):**
+   devui.rml eyeball-confirmed → stripped all ImGui uses + deleted the `imgui_layer` module + unlinked
+   the library; build+link green Metal. ImGui is gone from the build (D3D12 build still owed).
 4. ~~**Tier 9 — minigames** char-grid widget.~~ **DONE (eyeball owed)** — all 5 grid games
    (lightson/snake/sokoban/minesweeper/kitten) render through ONE shared char-grid doc
    (`minigame.rml` + `src/minigame_rml.*`), one toggle. Slice 1 `c21e4bb6ae`; slice 2 (other 4) committed.
@@ -3264,18 +3266,31 @@ commits, only ui.cpp+sdl_render_frame" claim was STALE on every point.** Ground-
 
 **CORRECTED gate + order (build-green, each its own commit):**
 - **GATE: eyeball-confirm `devui.rml`** (F4 dev panel) has parity with the ImGui panel on Metal +
-  D3D12 — same as every other rip-out fallback. Until then, leave ImGui compiled-but-dormant.
-- Commit A1 (use-removal, library stays linked → green): strip `imgui_active` + the `if(imgui_active)`
-  Pass-B composite blocks + `init`/`set_dev_ui` from `sdl_render_frame.cpp`; drop `process_event` +
-  the `imgui_layer::active()` arm of the capture gate in `sdl_input.cpp` (keep `rmlui_capture`); drop
-  `shutdown()` in `sdl_window.cpp`; drop the `imgui.h`/`imgui_layer.h` includes in `sdltiles.cpp`;
-  delete the ImGui `draw()` + 7 static tab fns + their helpers + imgui includes from
-  `sdl_lighting_devui.cpp`, KEEPING `devui_visible`/`rml_tick`/`place_test_light`; drop `draw()` from
-  `sdl_lighting_devui.h`; tidy the 2 comment-only mentions.
-- Commit A2 (unlink + delete module → reconfigure re-globs): delete `src/lighting/imgui_layer.{cpp,h}`;
-  drop `imgui` from `target_link_libraries` (`src/CMakeLists.txt`); remove the `FetchContent(imgui)` +
-  `add_library(imgui …)` block from root `CMakeLists.txt`. A brand-new/removed file needs an explicit
-  `cmake -S . -B <dir>` reconfigure to re-glob.
+  D3D12 — same as every other rip-out fallback. **DONE — user-confirmed green 2026-06-23.**
+- **Commit A1 — DONE `1e5a316369` (build+link green Metal, binary relinked):** use-removal, library
+  stays linked. Stripped `imgui_active` + the `if(imgui_active)` Pass-B composite blocks + `init`/
+  `set_dev_ui` from `sdl_render_frame.cpp`; dropped `process_event` + the `imgui_layer::active()`
+  capture arm + the repaint-gate imgui half in `sdl_input.cpp` (kept `rmlui_capture`); dropped
+  `shutdown()` in `sdl_window.cpp`; dropped the imgui includes in `sdltiles.cpp`; **deleted the dead
+  ImGui panel from `sdl_lighting_devui.cpp` — 3 slider/color helpers + all 7 tab fns + `draw()`
+  (~1000 lines, the whole ImGui surface), KEEPING the RML path (`devui_visible`/`rml_tick`/
+  `place_test_light` + the `devui.rml` data model, which is in a nested anon namespace INTERLEAVED
+  between the tabs — excised per-function, not as one range)**; dropped `draw()` from the header.
+  Also dropped the leftover `imgui.h` macro-guard include from the 6 ex-`draw_imgui` files
+  (magic / advanced_inv / overmap_ui / wisheffect / wish / magic_teleporter_list). −776 lines.
+- **Commit A2 — DONE `a277c32e68` (reconfigure + build+link green Metal):** deleted
+  `src/lighting/imgui_layer.{cpp,h}`; dropped `imgui` from `target_link_libraries`
+  (`src/CMakeLists.txt`); removed the `FetchContent(imgui)` + `add_library(imgui …)` block from root
+  `CMakeLists.txt`; `cmake -S . -B out/build/osx-arm-slim` reconfigure re-globbed the removed file.
+  −344 lines. **ImGui is fully gone from the build.** (Leftover `libimgui.a` on disk is a stale
+  artifact, no longer a target — vanishes on a clean build.)
+
+**★ SUB-SERIES A COMPLETE 2026-06-23.** ImGui ripped out end-to-end, build+link green on Metal,
+binary verified relinked (mtime). Residual `imgui_scroll_to_selected` in `ui.cpp`/`ui.h` is a uilist
+field NAME only (no library dependency) — left as-is. **Audit corrections proven by execution:** the
+old "~5 tidy commits, only ui.cpp+sdl_render_frame" plan was wrong; reality was 9 files + the whole
+1551-line `sdl_lighting_devui.cpp` ImGui body, done in 2 commits as predicted by the re-audit.
+**Owed: a D3D12/Win11 build (the no-imgui link line is new there too) — Metal-green ≠ D3D12-green.**
 
 **Sub-series B — curses glyph/backend (gated on the toggle-flip eyeball pass).** Order, each
 build-green:
