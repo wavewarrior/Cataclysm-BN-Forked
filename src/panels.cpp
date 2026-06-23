@@ -2479,139 +2479,6 @@ bool default_render()
     return true;
 }
 
-static std::vector<window_panel> initialize_default_classic_panels()
-{
-    std::vector<window_panel> ret;
-
-    ret.emplace_back( draw_health_classic, translate_marker( "Health" ), 7, 44, true );
-    ret.emplace_back( draw_veh_classic, translate_marker( "Vehicle" ), 2, 44, true, veh_panel );
-    ret.emplace_back( draw_location_classic, translate_marker( "Location" ), 1, 44,
-                      true );
-    ret.emplace_back( draw_mana_classic, translate_marker( "Mana" ), 1, 44, true,
-                      spell_panel );
-    ret.emplace_back( draw_weather_classic, translate_marker( "Weather" ), 1, 44,
-                      true );
-    ret.emplace_back( draw_lighting_classic, translate_marker( "Lighting" ), 1, 44,
-                      true );
-    ret.emplace_back( draw_weapon_classic, translate_marker( "Weapon" ), 1, 44, true );
-    ret.emplace_back( draw_weapon_classic_alt, translate_marker( "Weapon_alt" ), 2, 44,
-                      false );
-    ret.emplace_back( draw_weightvolume_classic, translate_marker( "Wgt/Vol" ), 1, 44,
-                      true );
-    ret.emplace_back( draw_time_classic, translate_marker( "Time" ), 1, 44, true );
-    ret.emplace_back( draw_wind, translate_marker( "Wind" ), 1, 44, false );
-    ret.emplace_back( draw_armor, translate_marker( "Armor" ), 5, 44, false );
-    ret.emplace_back( draw_armor_comp, translate_marker( "comp.Armor" ), 1, 32, false );
-    ret.emplace_back( draw_compass_padding, translate_marker( "Compass" ), 8, 44,
-                      true );
-    ret.emplace_back( draw_compass_padding, translate_marker( "Comp.Compass" ), 3, 44,
-                      false );
-    ret.emplace_back( draw_simple_compass, translate_marker( "Sim.Compass" ), 1, 44, false );
-
-    ret.emplace_back( draw_messages_classic, translate_marker( "Log" ), -2, 44, true );
-    ret.emplace_back( draw_mminimap, translate_marker( "Map" ), -1, 44, true,
-                      default_render, true );
-    ret.emplace_back( draw_ai_goal, "AI Needs", 1, 44, false );
-    return ret;
-}
-
-static std::vector<window_panel> initialize_default_compact_panels()
-{
-    std::vector<window_panel> ret;
-
-    ret.emplace_back( draw_limb2, translate_marker( "Limbs" ), 3, 32, true );
-    ret.emplace_back( draw_stealth, translate_marker( "Sound" ), 1, 32, true );
-    ret.emplace_back( draw_stats, translate_marker( "Stats" ), 1, 32, true );
-    ret.emplace_back( draw_mana_compact, translate_marker( "Mana" ), 1, 32, true,
-                      spell_panel );
-    ret.emplace_back( draw_time, translate_marker( "Time" ), 1, 32, true );
-    ret.emplace_back( draw_needs_compact, translate_marker( "Needs" ), 3, 32, true );
-    ret.emplace_back( draw_env_compact, translate_marker( "Env" ), 6, 32, true );
-    ret.emplace_back( draw_veh_compact, translate_marker( "Vehicle" ), 2, 32, true, veh_panel );
-    ret.emplace_back( draw_weightvolume_compact, translate_marker( "Wgt/Vol" ), 2, 32,
-                      true );
-    ret.emplace_back( draw_armor, translate_marker( "Armor" ), 5, 32, false );
-    ret.emplace_back( draw_armor_comp, translate_marker( "comp.Armor" ), 1, 32, false );
-    ret.emplace_back( draw_messages_classic, translate_marker( "Log" ), -2, 32, true );
-    ret.emplace_back( draw_compass, translate_marker( "Compass" ), 8, 32, true );
-    ret.emplace_back( draw_compass, translate_marker( "Comp.Compass" ), 3, 32, false );
-    ret.emplace_back( draw_simple_compass, translate_marker( "Sim.Compass" ), 1, 44, false );
-    ret.emplace_back( draw_mminimap, translate_marker( "Map" ), -1, 32, true,
-                      default_render, true );
-    ret.emplace_back( draw_ai_goal, "AI Needs", 1, 32, false );
-
-    return ret;
-}
-
-static std::vector<window_panel> initialize_default_label_narrow_panels()
-{
-    std::vector<window_panel> ret;
-
-    ret.emplace_back( draw_hint, translate_marker( "Hint" ), 1, 32, true );
-    ret.emplace_back( draw_limb_narrow, translate_marker( "Limbs" ), 3, 32, true );
-    ret.emplace_back( draw_char_narrow, translate_marker( "Movement" ), 3, 32, true );
-    ret.emplace_back( draw_mana_narrow, translate_marker( "Mana" ), 1, 32, true,
-                      spell_panel );
-    ret.emplace_back( draw_stat_narrow, translate_marker( "Stats" ), 3, 32, true );
-    ret.emplace_back( draw_veh_padding, translate_marker( "Vehicle" ), 2, 32, true, veh_panel );
-    ret.emplace_back( draw_loc_narrow, translate_marker( "Location" ), 6, 32, true );
-    ret.emplace_back( draw_wind_padding, translate_marker( "Wind" ), 1, 32, false );
-    ret.emplace_back( draw_weapon_labels, translate_marker( "Weapon" ), 2, 32, true );
-    ret.emplace_back( draw_weightvolume_narrow, translate_marker( "Wgt/Vol" ), 2, 32,
-                      true );
-    ret.emplace_back( draw_needs_narrow, translate_marker( "Needs" ), 5, 32, true );
-    ret.emplace_back( draw_sound_narrow, translate_marker( "Sound" ), 1, 32, true );
-    ret.emplace_back( draw_messages, translate_marker( "Log" ), -2, 32, true );
-    ret.emplace_back( draw_moon_narrow, translate_marker( "Moon" ), 2, 32, false );
-    ret.emplace_back( draw_armor_padding, translate_marker( "Armor" ), 5, 32, false );
-    ret.emplace_back( draw_armor_comp, translate_marker( "comp.Armor" ), 1, 32, false );
-    ret.emplace_back( draw_compass_padding, translate_marker( "Compass" ), 8, 32,
-                      true );
-    ret.emplace_back( draw_compass_padding, translate_marker( "Comp.Compass" ), 3, 32,
-                      false );
-    ret.emplace_back( draw_simple_compass, translate_marker( "Sim.Compass" ), 1, 44, false );
-    ret.emplace_back( draw_mminimap, translate_marker( "Map" ), -1, 32, true,
-                      default_render, true );
-    ret.emplace_back( draw_ai_goal, "AI Needs", 1, 32, false );
-
-    return ret;
-}
-
-static std::vector<window_panel> initialize_default_label_panels()
-{
-    std::vector<window_panel> ret;
-
-    ret.emplace_back( draw_hint, translate_marker( "Hint" ), 1, 44, true );
-    ret.emplace_back( draw_limb_wide, translate_marker( "Limbs" ), 2, 44, true );
-    ret.emplace_back( draw_char_wide, translate_marker( "Movement" ), 2, 44, true );
-    ret.emplace_back( draw_mana_wide, translate_marker( "Mana" ), 1, 44, true,
-                      spell_panel );
-    ret.emplace_back( draw_stat_wide, translate_marker( "Stats" ), 2, 44, true );
-    ret.emplace_back( draw_veh_padding, translate_marker( "Vehicle" ), 2, 44, true, veh_panel );
-    ret.emplace_back( draw_loc_wide_map, translate_marker( "Location" ), 6, 44, true );
-    ret.emplace_back( draw_wind_padding, translate_marker( "Wind" ), 1, 44, false );
-    ret.emplace_back( draw_loc_wide, translate_marker( "Location Alt" ), 6, 44, false );
-    ret.emplace_back( draw_weapon_labels, translate_marker( "Weapon" ), 2, 44, true );
-    ret.emplace_back( draw_weightvolume_labels, translate_marker( "Wgt/Vol" ), 1, 44,
-                      true );
-    ret.emplace_back( draw_needs_labels, translate_marker( "Needs" ), 3, 44, true );
-    ret.emplace_back( draw_sound_labels, translate_marker( "Sound" ), 1, 44, true );
-    ret.emplace_back( draw_messages, translate_marker( "Log" ), -2, 44, true );
-    ret.emplace_back( draw_moon_wide, translate_marker( "Moon" ), 1, 44, false );
-    ret.emplace_back( draw_armor_padding, translate_marker( "Armor" ), 5, 44, false );
-    ret.emplace_back( draw_armor_comp, translate_marker( "comp.Armor" ), 1, 32, false );
-    ret.emplace_back( draw_compass_padding, translate_marker( "Compass" ), 8, 44,
-                      true );
-    ret.emplace_back( draw_compass_padding, translate_marker( "Comp.Compass" ), 3, 32,
-                      false );
-    ret.emplace_back( draw_simple_compass, translate_marker( "Sim.Compass" ), 1, 44, false );
-    ret.emplace_back( draw_mminimap, translate_marker( "Map" ), -1, 44, true,
-                      default_render, true );
-    ret.emplace_back( draw_ai_goal, "AI Needs", 1, 44, false );
-
-    return ret;
-}
-
 // ── Native-wrapper widget bridge (widget-engine port) ───────────────────────
 // Maps a "native"-style widget's target name to an existing draw_* sidebar
 // function — the parity bridge. native_draw_fn is std::function (not a raw
@@ -3548,23 +3415,13 @@ static void inject_widget_layouts( std::map<std::string, std::vector<window_pane
     }
 }
 
-static std::map<std::string, std::vector<window_panel>> initialize_default_panel_layouts()
-{
-    std::map<std::string, std::vector<window_panel>> ret;
-
-    ret.emplace( translate_marker( "classic" ), initialize_default_classic_panels() );
-    ret.emplace( translate_marker( "compact" ), initialize_default_compact_panels() );
-    ret.emplace( translate_marker( "labels-narrow" ),
-                 initialize_default_label_narrow_panels() );
-    ret.emplace( translate_marker( "labels" ), initialize_default_label_panels() );
-
-    return ret;
-}
-
 panel_manager::panel_manager()
 {
-    current_layout_id = "labels";
-    layouts = initialize_default_panel_layouts();
+    // Tier-10 curses rip-out: no built-in curses layouts. The widget layout(s)
+    // (data/json/ui/sidebar.json, e.g. "custom") are injected after world load via
+    // reload_widget_layouts(); current_layout_id is overwritten from panel_options.json
+    // in load() when a saved selection exists.
+    current_layout_id = "custom";
 }
 
 std::vector<window_panel> &panel_manager::get_current_layout()
@@ -3573,16 +3430,16 @@ std::vector<window_panel> &panel_manager::get_current_layout()
     if( kv != layouts.end() ) {
         return kv->second;
     }
-    // The selected id may name a layout not built yet — notably the runtime
-    // "custom" widget layout, which is injected only after world load
-    // (reload_widget_layouts). Fall back to a built-in for this call WITHOUT
-    // discarding current_layout_id, so the selection resolves once that layout
-    // exists rather than being silently reset to classic on every launch.
-    auto fallback = layouts.find( "classic" );
-    if( fallback == layouts.end() ) {
-        fallback = layouts.begin();
+    // The selected id may name a layout not built yet — the widget layouts are
+    // injected only after world load (reload_widget_layouts). Built-in layouts were
+    // removed (Tier-10 curses rip-out), so fall back to any existing layout WITHOUT
+    // discarding current_layout_id; if none exist yet, return a static empty layout
+    // so early callers (pre-world-load) never deref end().
+    if( !layouts.empty() ) {
+        return layouts.begin()->second;
     }
-    return fallback->second;
+    static std::vector<window_panel> empty_layout;
+    return empty_layout;
 }
 
 std::string panel_manager::get_current_layout_id() const
@@ -3617,7 +3474,11 @@ void panel_manager::init()
     // JSON) load — so widget-driven layouts are built later via
     // reload_widget_layouts(), called from game::setup after load_world_modfiles.
     load();
-    update_offsets( get_current_layout().begin()->get_width() );
+    // Layouts are empty until reload_widget_layouts() runs (after world load); guard the
+    // deref. The real sidebar width is applied there. The sidebar isn't drawn before
+    // then, so a 0 placeholder here is harmless.
+    auto &layout = get_current_layout();
+    update_offsets( layout.empty() ? 0 : layout.begin()->get_width() );
 }
 
 void panel_manager::reload_widget_layouts()
@@ -3634,6 +3495,13 @@ void panel_manager::reload_widget_layouts()
             apply_saved_layout_entries( kv.second, saved->second,
                                         std::map<std::string, std::string> {} );
         }
+    }
+    // Built-in layouts were removed (Tier-10 curses rip-out), so update_offsets is no
+    // longer called with a built-in width at init(). Apply the active widget layout's
+    // sidebar width now that the layout exists.
+    auto &layout = get_current_layout();
+    if( !layout.empty() ) {
+        update_offsets( layout.begin()->get_width() );
     }
 }
 
