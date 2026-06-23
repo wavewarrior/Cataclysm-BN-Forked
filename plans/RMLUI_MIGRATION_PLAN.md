@@ -3337,8 +3337,11 @@ primitive counts) + the `panels.cpp` HUD curses sidebar. The shared backend is N
   - **inventory_ui BLOCKED (not a batch):** base inventory_selector (uses_rml()=false default) is
     instantiated directly at inventory.cpp:1122 → curses LIVE-reachable. Migrate that base usage first.
   - **★ Clean orphan-draw frontier EXHAUSTED after B10.** What remains is NOT mechanical deletion:
-    popup-migration (NEW RML: trade_win/safemode_ui/messages-filter/scores_ui-show_kills), panels HUD,
-    and the inventory_ui base-selector migration. Each is a feature/migration task, not a rip-out batch.
+    popup-migration (NEW RML: trade_win/safemode_ui/messages-filter/scores_ui-show_kills) and the
+    inventory_ui base-selector migration. Each is a feature/migration task, not a rip-out batch.
+  - **panels.cpp HUD curses sidebar — REMOVED FROM THIS PLAN (2026-06-23).** Split out to a dedicated
+    future plan (needs minimap + bodygraph RTT first; biggest/riskiest). NOT a blocker for the rest of
+    this rip-out. To be picked up separately.
   - Method that works: grep refs of each `draw_*`/`mvwprintz`-bearing fn; if refs = def + fwd-decl +
     comments only (no call site), it's orphaned → delete via the ripfn.py helper (delete_fn to the
     col-0 `}`; remove_decl up to `;`; remove decls BEFORE defs when they share a first-line prefix).
@@ -3364,7 +3367,8 @@ primitive counts) + the `panels.cpp` HUD curses sidebar. The shared backend is N
     magic/magic_teleporter_list, wish) — uilist KEEPS a curses fallback (`uilist::show` calls
     `callback->refresh()` at ui.cpp:922 for early-init before RmlUi is ready); shared text producers;
     and the whole map/dev backend.
-  - **`panels.cpp` HUD sidebar — LAST** (biggest + riskiest; RML HUD has minimap/bodygraph placeholders).
+  - **`panels.cpp` HUD sidebar — REMOVED FROM THIS PLAN (2026-06-23), split to a dedicated future plan**
+    (biggest + riskiest; RML HUD needs minimap/bodygraph RTT first). Not a blocker for the rest of the rip-out.
 - **BUILD NOTE (this session):** the first `game.cpp` recompile after touching `npc.h` failed once with
   a phantom `butchery_activity_actor` "no matching constructor" — a STALE intermediate against the
   uncommitted SIM_PERFORMANCE `activity_actor*` edits, NOT a source bug (the 2-arg calls match). A clean
