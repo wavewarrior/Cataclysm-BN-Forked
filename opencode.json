@@ -1,0 +1,4 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["/Users/nigel.fierens/dev-projects/ponytail/.opencode/plugins/ponytail.mjs"]
+}
