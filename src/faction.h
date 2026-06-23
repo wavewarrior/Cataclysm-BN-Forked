@@ -99,7 +99,6 @@ class faction : public faction_template
 
         void deserialize( JsonIn &jsin );
         void serialize( JsonOut &json ) const;
-        void faction_display( const catacurses::window &fac_w, int width ) const;
         // Colour-tagged text for the faction manager's detail pane (parallel to
         // faction_display; curses path untouched for the A/B toggle).
         std::string faction_info_text() const;

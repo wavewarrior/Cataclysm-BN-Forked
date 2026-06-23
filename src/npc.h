@@ -805,7 +805,6 @@ class npc : public player
         int print_info( const catacurses::window &w, int line, int vLines, int column ) const override;
         std::string print_info_text() const override;
         std::string opinion_text() const;
-        int faction_display( const catacurses::window &fac_w, int width ) const;
         // State half of faction_display, callable without drawing: the RmlUi
         // faction manager needs the interaction flag in its input loop (it skips
         // the curses draw that used to compute it). 0 = no interaction, 1 = within

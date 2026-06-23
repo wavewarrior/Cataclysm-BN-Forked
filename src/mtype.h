@@ -327,7 +327,6 @@ struct mtype {
         // Will stop fleeing if at max hp, and regen anger and morale.
         bool regen_morale = false;
 
-        void faction_display( catacurses::window &w, const point &top_left, const int width ) const;
         // Colour-tagged text for the faction manager's creature detail pane
         // (parallel to faction_display; curses path untouched for the A/B toggle).
         std::string faction_info_text() const;
