@@ -1,8 +1,3 @@
-#pragma push_macro( "DebugLog" )
-#undef DebugLog
-#include "imgui.h"
-#pragma pop_macro( "DebugLog" )
-
 #include <RmlUi/Core.h>
 
 

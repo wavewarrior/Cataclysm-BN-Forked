@@ -1,8 +1,3 @@
-// MUST precede any game header: debug.h defines a function-like `DebugLog`
-// macro that otherwise mangles ImGui::DebugLog in imgui.h (same reason
-// imgui_layer.cpp includes imgui.h before debug.h).
-#include "imgui.h"
-
 #include "cursesdef.h" // IWYU pragma: associated
 #include "sdltiles.h" // IWYU pragma: associated
 #include "sdl_input.h"
@@ -64,7 +59,6 @@
 #include "sdlsound.h"
 #include "lighting/emitter_collector.h"
 #include "lighting/frame_build.h"
-#include "lighting/imgui_layer.h"
 #include "lighting/render_state.h"
 #include "lighting/snapshot.h"
 #include "lighting/sdf_pass.h"

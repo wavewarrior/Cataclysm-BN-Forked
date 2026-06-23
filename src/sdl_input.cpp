@@ -15,7 +15,6 @@
 #include "cuboid_rectangle.h"
 #include "cursesdef.h" // KEY_*, KEY_F, KEY_NUM, catacurses::stdscr, wrefresh
 #include "game_ui.h"    // reinitialize_framebuffer
-#include "lighting/imgui_layer.h"
 #include "lighting/rmlui_layer.h"
 #include "lighting/sprite_batcher.h" // lighting::debug_params
 #include "options.h"   // get_option
@@ -409,17 +408,12 @@ void CheckMessages( display_context &d )
     bool render_target_reset = false;
 
     while( SDL_PollEvent( &ev ) ) {
-        // Dear ImGui dev UI sees every event first. While a tool is open keep
-        // producing frames (this event-driven loop has no vsync tick) so
-        // hover/drag stay responsive.
-        const bool imgui_capture = imgui_layer::process_event( ev );
-        // RmlUi layer sees events too; captures mouse (only) while a menu is open.
+        // RmlUi layer sees events first; captures mouse (only) while a menu is open.
         const bool rmlui_capture = rmlui_layer::process_event( ev );
         // Open/close toggle (F4) — handled BEFORE the capture gate so the panel
-        // can always be closed even while ImGui holds keyboard focus. P0 dev
-        // key; revisit for collisions when promoting past P0.
+        // can always be closed. P0 dev key; revisit for collisions when promoting
+        // past P0.
         if( ev.type == SDL_EVENT_KEY_DOWN && !ev.key.repeat && ev.key.key == SDLK_F4 ) {
-            // §8 gate: F4 toggles the RmlUi dev panel (the ImGui one is retired).
             sdl_lighting_devui::devui_visible() = !sdl_lighting_devui::devui_visible();
             d.needupdate = true;
             continue;
@@ -432,8 +426,8 @@ void CheckMessages( display_context &d )
             d.needupdate = true;
             continue;
         }
-        // ImGui or RmlUi consumed this mouse/keyboard event — keep it out of game.
-        if( imgui_capture || rmlui_capture ) {
+        // RmlUi consumed this mouse/keyboard event — keep it out of game.
+        if( rmlui_capture ) {
             continue;
         }
         switch( ev.type ) {
@@ -671,12 +665,12 @@ void CheckMessages( display_context &d )
         }
     }
 
-    // While the ImGui dev panel is open OR menus are in the registry, repaint
-    // every CheckMessages tick — not only on input events — so it animates/
-    // updates continuously.  get_input_event spins CheckMessages ~1 kHz while
-    // waiting; vsync on submit_frame caps actual redraws to the display rate.
-    // Without this an idle panel (no mouse motion) looks frozen.
-    if( imgui_layer::active() || rmlui_layer::active() ) {
+    // While an RmlUi doc (dev panel or menu) is open, repaint every CheckMessages
+    // tick — not only on input events — so it animates/updates continuously.
+    // get_input_event spins CheckMessages ~1 kHz while waiting; vsync on
+    // submit_frame caps actual redraws to the display rate. Without this an idle
+    // panel (no mouse motion) looks frozen.
+    if( rmlui_layer::active() ) {
         d.needupdate = true;
     }
 

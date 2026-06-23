@@ -124,13 +124,9 @@ extern float wx, wy, wz;
 namespace sdl_lighting_devui
 {
 
-// Draw the "Lighting Debug (F4)" Dear ImGui panel. Legacy: kept compiled but no
-// longer reachable now F4 drives the RmlUi doc (Tier 8 §8 gate). Removed at Tier 10.
-void draw();
-
-// Tier 8 §8 gate: F4 now opens the RmlUi dev panel (devui.rml), not the ImGui one.
-// devui_visible() is the F4 toggle (sdl_input writes it); rml_tick() opens/syncs/
-// closes the doc to match it each frame (called from refresh_display).
+// F4 opens the RmlUi dev panel (devui.rml). devui_visible() is the F4 toggle
+// (sdl_input writes it); rml_tick() opens/syncs/closes the doc to match it each
+// frame (called from refresh_display).
 bool &devui_visible();
 void rml_tick();
 

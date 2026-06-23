@@ -1,8 +1,3 @@
-// MUST precede any game header: debug.h defines a function-like `DebugLog`
-// macro that otherwise mangles ImGui::DebugLog in imgui.h (same reason
-// imgui_layer.cpp includes imgui.h before debug.h).
-#include "imgui.h"
-
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -32,7 +27,6 @@
 #include "sdl_wrappers.h"
 #include "lighting/dev_test_lights.h"
 #include "lighting/frame_build.h"
-#include "lighting/imgui_layer.h"
 #include "lighting/rmlui_layer.h"
 #include "lighting/render_state.h"
 #include "lighting/sdf_pass.h"
@@ -86,19 +80,13 @@ auto begin_frame( lighting::render_state &rs ) -> std::optional<lighting::frame_
     if( !rs.ready() ) {
         return std::nullopt;
     }
-    if( !imgui_layer::ready() ) {
-        imgui_layer::init( rs.device().window_ptr(), rs.device().raw() );
-        imgui_layer::set_dev_ui( sdl_lighting_devui::draw );
-    }
-    // RmlUi spike (Phase 1): lazy init beside ImGui; init() self-guards so this
-    // only truly attempts once. Render/input not wired yet.
+    // RmlUi: lazy init; init() self-guards so this only truly attempts once.
     if( !rmlui_layer::ready() ) {
         rmlui_layer::init( rs.device() );
     }
 
-    // Tier 8 §8 gate: F4 now opens the RmlUi dev panel (devui_visible()). It renders via
-    // the normal RmlUi composite pass; the ImGui panel is retired (its visible() stays
-    // false, so imgui_layer::active() is false and it never composites).
+    // F4 opens the RmlUi dev panel (devui_visible()), rendered via the normal RmlUi
+    // composite pass.
     sdl_lighting_devui::rml_tick();
 
     rs.tile_batcher().begin_frame();
@@ -765,16 +753,11 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
 {
     constexpr float clear_black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 
-    const bool imgui_active = imgui_layer::active();
     // World text (§7, e.g. SCT) renders through the RmlUi layer even with no menu
     // open, so the overlay pass must run when either a document OR world text is
     // present. world_text_active() is kept OUT of rmlui_layer::active() so it does
     // not steal mouse input (active() gates input in sdl_input).
     const bool rmlui_active = rmlui_layer::active() || rmlui_layer::world_text_active();
-    if( imgui_active ) {
-        imgui_layer::new_frame();
-        imgui_layer::prepare( ctx.cmd_buffer );
-    }
     if( rmlui_active ) {
         // new_frame()=Update() + prepare()=geometry upload, both BEFORE begin_pass
         // (D3D12: uploads must not land inside the open render pass).
@@ -805,18 +788,13 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
     }
     blit_layer( rs.ui_target() );
 
-    // Both overlays share the single swapchain pass (D3D12 single-pass rule).
-    // RmlUi (player menus) draws first, ImGui (dev UI) on top.
+    // RmlUi (player menus + dev panel + world text) draws into the single swapchain
+    // pass (D3D12 single-pass rule).
     rs.tile_batcher().end_pass(
-        ( imgui_active || rmlui_active )
+        rmlui_active
         ? lighting::sprite_batcher::pass_overlay_fn(
-    [imgui_active, rmlui_active]( SDL_GPURenderPass * rp, SDL_GPUCommandBuffer * cb ) {
-        if( rmlui_active ) {
-            rmlui_layer::render_in_pass( rp, cb );
-        }
-        if( imgui_active ) {
-            imgui_layer::render_in_pass( rp, cb );
-        }
+    []( SDL_GPURenderPass * rp, SDL_GPUCommandBuffer * cb ) {
+        rmlui_layer::render_in_pass( rp, cb );
     } )
         : lighting::sprite_batcher::pass_overlay_fn{} );
 

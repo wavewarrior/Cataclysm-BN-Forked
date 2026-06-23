@@ -1,8 +1,3 @@
-// MUST precede any game header: debug.h defines a function-like `DebugLog`
-// macro that otherwise mangles ImGui::DebugLog in imgui.h (same reason
-// imgui_layer.cpp includes imgui.h before debug.h).
-#include "imgui.h"
-
 #include "sdl_window.h"
 
 #include "cached_options.h"
@@ -31,7 +26,6 @@
 #include "ui_manager.h"
 #include "widget_icon.h"
 #include "lighting/render_state.h"
-#include "lighting/imgui_layer.h"
 #include "lighting/rmlui_layer.h"
 
 #define dbg(x) DebugLogFL((x), DC::SDL)
@@ -284,10 +278,8 @@ static void WinCreate()
 
 static void WinDestroy()
 {
-    // ImGui holds GPU resources on the shared device — tear it down BEFORE the
+    // RmlUi holds GPU resources on the shared device — tear it down BEFORE the
     // device is destroyed by shutdown_render_state(). No-op if never inited.
-    imgui_layer::shutdown();
-    // Same ordering for the RmlUi spike layer. No-op if never inited.
     rmlui_layer::shutdown();
 
     // Tear the SDL_GPU lighting stack down before SDL_Quit. Idempotent;
