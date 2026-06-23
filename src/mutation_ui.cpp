@@ -27,14 +27,6 @@
 const invlet_wrapper
 mutation_chars( "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\"#&()*+./:;@[\\]^_{|}" );
 
-static void draw_exam_window( const catacurses::window &win, const int border_y )
-{
-    const int width = getmaxx( win );
-    mvwputch( win, point( 0, border_y ), BORDER_COLOR, LINE_XXXO );
-    mvwhline( win, point( 1, border_y ), LINE_OXOX, width - 2 );
-    mvwputch( win, point( width - 1, border_y ), BORDER_COLOR, LINE_XOXX );
-}
-
 const auto shortcut_desc = []( const std::string &comment, const std::string &keys )
 {
     return string_format( comment, string_format( "[<color_yellow>%s</color>]", keys ) );
@@ -96,16 +88,6 @@ static std::string mutation_titlebar_desc( const mutation_menu_mode menu_mode,
     desc += shortcut_desc( _( "%s to toggle sprite visibility, " ), ctxt.get_desc( "TOGGLE_SPRITE" ) );
     desc += shortcut_desc( _( "%s to change keybindings." ), ctxt.get_desc( "HELP_KEYBINDINGS" ) );
     return desc;
-}
-
-static void show_mutations_titlebar( const catacurses::window &window,
-                                     const mutation_menu_mode menu_mode, const input_context &ctxt )
-{
-    werase( window );
-    // NOLINTNEXTLINE(cata-use-named-point-constants)
-    fold_and_print( window, point( 1, 0 ), getmaxx( window ) - 1, c_white,
-                    mutation_titlebar_desc( menu_mode, ctxt ) );
-    wnoutrefresh( window );
 }
 
 static std::optional<trait_id> trait_by_invlet( const mutation_collection &mutations, int ch )

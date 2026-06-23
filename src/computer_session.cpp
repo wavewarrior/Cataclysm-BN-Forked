@@ -1668,18 +1668,6 @@ computer_session::ynq computer_session::query_ynq( const std::string &text, Args
     } while( true );
 }
 
-void computer_session::refresh()
-{
-    werase( win );
-    draw_border( win );
-    for( size_t i = 0; i < lines.size(); ++i ) {
-        nc_color dummy = c_green;
-        print_colored_text( win, point( left + lines[i].first, top + static_cast<int>( i ) ),
-                            dummy, dummy, lines[i].second );
-    }
-    wnoutrefresh( win );
-}
-
 template<typename ...Args>
 void computer_session::print_indented_line( const int indent, const int text_width,
         const std::string &text, Args &&... args )

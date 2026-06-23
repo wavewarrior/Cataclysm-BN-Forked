@@ -42,7 +42,6 @@ class computer_session
         // Reset to a blank terminal (e.g. at start of usage loop)
         void reset_terminal();
         // Actually displaying the terminal window
-        void refresh();
         // Move the cursor to the beginning of the next line
         void print_newline();
         // Do the actual printing
