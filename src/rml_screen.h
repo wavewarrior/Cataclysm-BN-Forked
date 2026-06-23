@@ -304,4 +304,9 @@ bool &color_manager_rmlui_enabled();
 // behind the toggle. Default OFF.
 bool &scrollable_text_rmlui_enabled();
 
+// Character::conduct_blood_analysis() RmlUi path (the Blood Test Results popup —
+// red-bordered title + the per-effect coloured line list). Curses fallback behind
+// the toggle. Default OFF.
+bool &blood_test_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

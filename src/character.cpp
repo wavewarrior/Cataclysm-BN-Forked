@@ -84,6 +84,9 @@
 #include "omdata.h"
 #include "options.h"
 #include "output.h"
+#include <RmlUi/Core.h>
+#include "rml_screen.h"
+#include "rml_util.h"
 #include "overlay_ordering.h"
 #include "overmapbuffer.h"
 #include "player.h"
@@ -2370,7 +2373,33 @@ void Character::conduct_blood_analysis() const
         ui.position_from_window( w );
     } );
     ui.mark_resize();
+
+    // RmlUi mirror state (toggle-OFF leaves the curses path untouched). The popup is
+    // static, so the bound strings are built once below; on_redraw just re-DirtyVariables.
+    struct bt_session {
+        std::string title_rml;
+        std::string body_rml;
+        Rml::DataModelHandle handle;
+    } bt_data;
+    rml_doc bt_rml;
+    bt_data.title_rml = cata_text_to_rml( colorize( _( "Blood Test Results" ), c_red ) );
+    if( effect_descriptions.empty() ) {
+        bt_data.body_rml = cata_text_to_rml( colorize( _( "No effects." ), c_white ) );
+    } else {
+        std::string body;
+        for( size_t i = 0; i < effect_descriptions.size(); ++i ) {
+            body += colorize( effect_descriptions[i], colors[i] );
+            body += "\n";
+        }
+        bt_data.body_rml = cata_text_to_rml( body );
+    }
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( bt_rml ) {
+            bt_data.handle.DirtyVariable( "title_rml" );
+            bt_data.handle.DirtyVariable( "body_rml" );
+            return;
+        }
         draw_border( w, c_red, string_format( " %s ", _( "Blood Test Results" ) ) );
         if( effect_descriptions.empty() ) {
             trim_and_print( w, point( 2, 1 ), win_w - 3, c_white, _( "No effects." ) );
@@ -2385,6 +2414,14 @@ void Character::conduct_blood_analysis() const
     ctxt.register_action( "CONFIRM" );
     ctxt.register_action( "QUIT" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
+
+    bt_rml.open( blood_test_rmlui_enabled(), "blood_test", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        c.Bind( "title_rml", &bt_data.title_rml );
+        c.Bind( "body_rml", &bt_data.body_rml );
+        bt_data.handle = c.GetModelHandle();
+    } );
+
     bool stop = false;
     // Display new messages
     g->invalidate_main_ui_adaptor();
@@ -2395,6 +2432,13 @@ void Character::conduct_blood_analysis() const
             stop = true;
         }
     }
+}
+
+bool &blood_test_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = false;
+    return enabled;
 }
 
 std::vector<itype_id> Character::get_fuel_available( const bionic_id &bio ) const

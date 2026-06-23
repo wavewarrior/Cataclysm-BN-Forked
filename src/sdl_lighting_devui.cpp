@@ -1138,6 +1138,7 @@ static void draw_rmlui_tab()
         ImGui::Checkbox( "keybindings", &keybindings_rmlui_enabled() );
         ImGui::Checkbox( "colors editor", &color_manager_rmlui_enabled() );
         ImGui::Checkbox( "scrollable text", &scrollable_text_rmlui_enabled() );
+        ImGui::Checkbox( "blood test", &blood_test_rmlui_enabled() );
         ImGui::Checkbox( "world text (SCT)", &world_text_rmlui_enabled() );
         if( world_text_rmlui_enabled() ) {
             ImGui::SliderInt( "wt font px", &rmlui_layer::world_text_px(), 8, 64 );

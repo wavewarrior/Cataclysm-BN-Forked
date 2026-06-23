@@ -1,0 +1,16 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="blood_test.rcss"/>
+</head>
+<body data-model="blood_test">
+    <!-- Blood Test Results popup (Character::conduct_blood_analysis). Render-only:
+         a static, dismiss-only modal. Title (red) + one coloured line per blood-
+         analysis effect (green=good, red=bad), or "No effects.". Colours are baked
+         into the bound strings. -->
+    <div class="panel bt-panel">
+        <div class="bt-title" data-rml="title_rml"></div>
+        <div class="bt-body" data-rml="body_rml"></div>
+    </div>
+</body>
+</rml>

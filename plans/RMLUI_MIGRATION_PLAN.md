@@ -3133,7 +3133,12 @@ missed three real screens:
   build+link green Metal, toggle OFF, eyeball owed)** — `color_manager_rmlui_enabled()` + F4
   checkbox; header + name/Normal/Invert table → `"colors"` doc (native-scroll, sel_col highlights
   the active column); colour-pick uilists stay Tier-0.
-- **Blood-test results** (`character.cpp`, `BLOOD_TEST_RESULTS`) — STILL CURSES. Minor results popup.
+- ~~**Blood-test results** (`character.cpp`, `BLOOD_TEST_RESULTS`)~~ **DONE (batch 20, 2026-06-23,
+  build+link green Metal, toggle OFF, eyeball owed)** — `blood_test_rmlui_enabled()` + F4 checkbox;
+  red-bordered title + per-effect coloured line list (green=good/red=bad, or "No effects.") →
+  `"blood_test"` doc. Static dismiss-only popup; strings built once, re-DirtyVariable each redraw.
+  This empties the zero-RML-coverage set (only dev-only `catalua_console`/`editmap`/`wish` remain,
+  which stay by design).
 - ~~**`scrollable_text`** (output.cpp:357)~~ **DONE (batch 19, 2026-06-22, build+link green Metal,
   toggle OFF, eyeball owed)** — `scrollable_text_rmlui_enabled()` + F4 checkbox; renders the visible
   window (`beg_line..+text_h`) to a `"scrollable_text"` doc so keyboard scroll still works. De-curses
