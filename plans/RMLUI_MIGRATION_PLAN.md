@@ -3231,17 +3231,51 @@ one action; the coverage audit (`sidebar_hud_has_producer` + `sidebar_hud_covera
 readout + one-shot DebugLog) makes the HUD flip gate mechanical. `native_draw_target_exists`
 (panels.cpp) already existed.
 
-**Sub-series A — ImGui (deletable now; self-contained; ~5 build-green commits).** Reachability:
-`imgui_layer` is referenced only by `ui.cpp` (the dormant uilist fallback) + `sdl_render_frame.cpp`
-(Pass B composite). Gate: retire the uilist ImGui fallback — i.e. uilist permanently RmlUi (Tier-0,
-oldest + long eyeball-confirmed). Order:
-1. Remove the ImGui-fallback branch in `uilist::show()` (`ui.cpp`) → always RmlUi.
-2. Delete `src/cata_imgui.{cpp,h}` (drop its `#include`s — only `ui.cpp`).
-3. Delete `src/lighting/imgui_layer.{cpp,h}`; drop `target_link_libraries(... imgui)`
-   (`src/CMakeLists.txt`).
-4. Strip the `imgui_active` blocks from `composite_swapchain_pass_b()` (`sdl_render_frame.cpp`);
-   the RmlUi pass stays.
-5. Remove the `FetchContent(imgui)` + `add_library(imgui …)` block from root `CMakeLists.txt`.
+**Sub-series A — ImGui. ★ RE-AUDITED 2026-06-23 — the old "deletable now, self-contained, ~5
+commits, only ui.cpp+sdl_render_frame" claim was STALE on every point.** Ground-truth reachability
+(grep on a clean tree):
+- `ui.cpp` has **zero** imgui refs — the uilist ImGui fallback is ALREADY gone; uilist is
+  permanently RmlUi. So is `cata_imgui.{cpp,h}` (0 refs — already deleted). Old steps 1–2 are no-ops.
+- `imgui_layer` is referenced by **9** files, not 2: `sdl_render_frame.cpp` (init + Pass-B
+  composite: `active/new_frame/prepare/render_in_pass/set_dev_ui`), `sdl_input.cpp`
+  (`process_event` + `active()` capture gate), `sdl_window.cpp` (`shutdown()`), `sdltiles.cpp`
+  (include only), `sdl_lighting_devui.cpp` (the `ImGui::Begin` panel), + comment-only mentions in
+  `rmlui_layer.h` / `rmlui_render_interface.h` / two `.md`s.
+- **`push_draw_callback`/`remove_draw_callback`: 0 callers** (the player-facing ImGui-menu pilot is
+  gone). The ONLY `set_dev_ui` caller wires `sdl_lighting_devui::draw`.
+- **`imgui_layer::visible()`: the only caller is the dead `ImGui::Begin` inside
+  `sdl_lighting_devui.cpp:1361` itself.** Nobody sets it true; the live F4 lighting panel runs on the
+  **RML** path (`devui_visible()`/`rml_tick()`, toggled at sdl_input.cpp:423). So `active()` is always
+  false — ImGui is genuinely dormant (composites nothing, captures nothing).
+
+**Two findings that resize the work:**
+1. **Scope ≈ 10×.** `sdl_lighting_devui.cpp` is NOT a small dead `draw()` — the **whole 1551-line
+   file** is the ImGui dev panel (189 `ImGui::` calls; 7 tabs: theme/lighting/effects/animation/
+   rmlui/diagnostics/runic). Only 3 funcs are the live RML path (`devui_visible`/`rml_tick`/
+   `place_test_light`) to keep. And because every `#include "imgui.h"` resolves through the `imgui`
+   target's include dir, **dropping the link line breaks all 4 includers at once** → the use-removal
+   must land in ONE commit, then the library unlink in the next. Not 5 tidy independent commits.
+2. **It is NOT "deletable now" — it's the A/B reference for an UN-eyeballed replacement.** The plan's
+   own discipline keeps the old path as the toggle-OFF A/B fallback until the RML replacement is
+   *eyeball-confirmed*. The RML dev panel `devui.rml` (Tier-8 flip `8c6a66d7e6`) has full 7-tab
+   parity (verified: 347-line doc, all knobs) **but is still eyeball-owed.** The dormant ImGui
+   lighting panel is exactly the reference to diff `devui.rml` against. Deleting it first destroys the
+   A/B net for an unverified panel — the same trap the curses sub-series B explicitly avoids.
+
+**CORRECTED gate + order (build-green, each its own commit):**
+- **GATE: eyeball-confirm `devui.rml`** (F4 dev panel) has parity with the ImGui panel on Metal +
+  D3D12 — same as every other rip-out fallback. Until then, leave ImGui compiled-but-dormant.
+- Commit A1 (use-removal, library stays linked → green): strip `imgui_active` + the `if(imgui_active)`
+  Pass-B composite blocks + `init`/`set_dev_ui` from `sdl_render_frame.cpp`; drop `process_event` +
+  the `imgui_layer::active()` arm of the capture gate in `sdl_input.cpp` (keep `rmlui_capture`); drop
+  `shutdown()` in `sdl_window.cpp`; drop the `imgui.h`/`imgui_layer.h` includes in `sdltiles.cpp`;
+  delete the ImGui `draw()` + 7 static tab fns + their helpers + imgui includes from
+  `sdl_lighting_devui.cpp`, KEEPING `devui_visible`/`rml_tick`/`place_test_light`; drop `draw()` from
+  `sdl_lighting_devui.h`; tidy the 2 comment-only mentions.
+- Commit A2 (unlink + delete module → reconfigure re-globs): delete `src/lighting/imgui_layer.{cpp,h}`;
+  drop `imgui` from `target_link_libraries` (`src/CMakeLists.txt`); remove the `FetchContent(imgui)` +
+  `add_library(imgui …)` block from root `CMakeLists.txt`. A brand-new/removed file needs an explicit
+  `cmake -S . -B <dir>` reconfigure to re-glob.
 
 **Sub-series B — curses glyph/backend (gated on the toggle-flip eyeball pass).** Order, each
 build-green:
