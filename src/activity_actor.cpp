@@ -81,7 +81,18 @@ static const mtype_id mon_zombie_crawler( "mon_zombie_crawler" );
 static const quality_id qual_LOCKPICK( "LOCKPICK" );
 
 static const trait_id trait_DEBUG_HS( "DEBUG_HS" );
+static const trait_id trait_STOCKY_TROGLO( "STOCKY_TROGLO" );
 
+static const skill_id skill_fabrication( "fabrication" );
+static const skill_id skill_survival( "survival" );
+
+static const itype_id itype_nail( "nail" );
+static const itype_id itype_2x4( "2x4" );
+static const itype_id itype_battery( "battery" );
+
+static const zone_type_id zone_type_FARM_PLOT( "FARM_PLOT" );
+
+static const std::string flag_PLANTABLE( "PLANTABLE" );
 static const std::string has_thievery_witness( "has_thievery_witness" );
 
 int simple_task::to_counter() const
@@ -1483,6 +1494,907 @@ std::unique_ptr<activity_actor> boltcutting_activity_actor::deserialize( JsonIn 
     return actor;
 }
 
+// ---- burrow_activity_actor ----
+
+void burrow_activity_actor::start( player_activity &, Character &who )
+{
+    map &here = get_map();
+    int moves = to_moves<int>( 20_minutes );
+    moves += ( 24 - std::min( who.str_cur, 24 ) ) * to_moves<int>( 150_seconds );
+    if( here.move_cost( here.abs_to_bub( target ) ) == 2 ) {
+        moves /= 2;
+    }
+    const std::vector<npc *> helpers = character_funcs::get_crafting_helpers(
+                                           static_cast<player &>( who ), 3 );
+    moves = moves * ( 10 - static_cast<int>( helpers.size() ) ) / 10;
+    total_moves = moves;
+    progress.emplace( _( "Burrowing" ), total_moves );
+}
+
+void burrow_activity_actor::do_turn( player_activity &, Character &who )
+{
+    if( progress.front().complete() ) {
+        progress.pop();
+        return;
+    }
+    map &here = get_map();
+    sfx::play_activity_sound( "activity", "burrow",
+                              sfx::get_heard_volume( here.abs_to_bub( target ) ) );
+    if( calendar::once_every( 1_minutes ) ) {
+        sounds::sound( here.abs_to_bub( target ), 10, sounds::sound_t::movement,
+                       _( "ScratchCrunchScrabbleScurry." ) );
+    }
+}
+
+void burrow_activity_actor::finish( player_activity &act, Character &who )
+{
+    map &here = get_map();
+    if( who.is_avatar() ) {
+        int act_exertion = total_moves;
+        if( who.has_trait( trait_STOCKY_TROGLO ) ) {
+            act_exertion /= 2;
+        }
+        who.mod_stored_kcal( std::min( -1, -act_exertion / to_moves<int>( 45_seconds ) ) );
+        who.mod_thirst( std::max( 1, act_exertion / to_moves<int>( 6_minutes ) ) );
+        who.mod_fatigue( std::max( 1, act_exertion / to_moves<int>( 3_minutes ) ) );
+    }
+    act.set_to_null();
+    who.add_msg_if_player( m_good, _( "You finish burrowing." ) );
+    here.destroy( here.abs_to_bub( target ), true );
+}
+
+void burrow_activity_actor::serialize( JsonOut &jsout ) const
+{
+    jsout.start_object();
+    jsout.member( "target", target );
+    jsout.end_object();
+}
+
+std::unique_ptr<activity_actor> burrow_activity_actor::deserialize( JsonIn &jsin )
+{
+    std::unique_ptr<burrow_activity_actor> actor( new burrow_activity_actor( tripoint_abs_ms::zero() ) );
+    JsonObject data = jsin.get_object();
+    data.read( "target", actor->target );
+    return actor;
+}
+
+// ---- pickaxe_activity_actor ----
+
+void pickaxe_activity_actor::start( player_activity &, Character &who )
+{
+    map &here = get_map();
+    int moves = to_moves<int>( 30_minutes );
+    moves += ( 24 - std::min( who.str_cur, 24 ) ) * to_moves<int>( 225_seconds );
+    if( here.move_cost( here.abs_to_bub( target ) ) == 2 ) {
+        moves /= 2;
+    }
+    const std::vector<npc *> helpers = character_funcs::get_crafting_helpers(
+                                           static_cast<player &>( who ), 3 );
+    moves = moves * ( 10 - static_cast<int>( helpers.size() ) ) / 10;
+    total_moves = moves;
+    progress.emplace( _( "Mining" ), total_moves );
+}
+
+void pickaxe_activity_actor::do_turn( player_activity &, Character &who )
+{
+    if( progress.front().complete() ) {
+        progress.pop();
+        return;
+    }
+    map &here = get_map();
+    sfx::play_activity_sound( "tool", "pickaxe",
+                              sfx::get_heard_volume( here.abs_to_bub( target ) ) );
+    if( calendar::once_every( 1_minutes ) ) {
+        sounds::sound( here.abs_to_bub( target ), 30, sounds::sound_t::destructive_activity,
+                       _( "CHNK!  CHNK!  CHNK!" ) );
+    }
+}
+
+void pickaxe_activity_actor::finish( player_activity &act, Character &who )
+{
+    map &here = get_map();
+    const tripoint_bub_ms pos( here.abs_to_bub( target ) );
+    if( who.is_avatar() ) {
+        int act_exertion = total_moves;
+        if( who.has_trait( trait_STOCKY_TROGLO ) ) {
+            act_exertion /= 2;
+        }
+        who.mod_stored_kcal( std::min( -1, -act_exertion / to_moves<int>( 45_seconds ) ) );
+        who.mod_thirst( std::max( 1, act_exertion / to_moves<int>( 6_minutes ) ) );
+        who.mod_fatigue( std::max( 1, act_exertion / to_moves<int>( 3_minutes ) ) );
+    }
+    act.set_to_null();
+    who.add_msg_player_or_npc( m_good,
+                               _( "You finish digging." ),
+                               _( "<npcname> finishes digging." ) );
+    if( here.has_flag_furn( TFLAG_MINEABLE, pos ) ) {
+        here.destroy_furn( pos, true );
+    } else {
+        here.destroy( pos, true );
+    }
+    who.consume_charges( *tool, tool->ammo_required() );
+    if( activity_handlers::resume_for_multi_activities( static_cast<player &>( who ) ) ) {
+        for( item *&elem : here.i_at( pos ) ) {
+            elem->set_var( "activity_var", who.name );
+        }
+    }
+}
+
+void pickaxe_activity_actor::serialize( JsonOut &jsout ) const
+{
+    jsout.start_object();
+    jsout.member( "target", target );
+    jsout.member( "tool", tool );
+    jsout.end_object();
+}
+
+std::unique_ptr<activity_actor> pickaxe_activity_actor::deserialize( JsonIn &jsin )
+{
+    std::unique_ptr<pickaxe_activity_actor> actor( new pickaxe_activity_actor(
+                tripoint_abs_ms::zero(), safe_reference<item>() ) );
+    JsonObject data = jsin.get_object();
+    data.read( "target", actor->target );
+    data.read( "tool", actor->tool );
+    return actor;
+}
+
+// ---- jackhammer_activity_actor ----
+
+void jackhammer_activity_actor::start( player_activity &, Character &who )
+{
+    map &here = get_map();
+    int moves = to_moves<int>( 10_minutes );
+    moves += ( 24 - std::min( who.str_cur, 24 ) ) * to_moves<int>( 75_seconds );
+    if( here.move_cost( here.abs_to_bub( target ) ) == 2 ) {
+        moves /= 2;
+    }
+    const std::vector<npc *> helpers = character_funcs::get_crafting_helpers(
+                                           static_cast<player &>( who ), 3 );
+    moves = moves * ( 10 - static_cast<int>( helpers.size() ) ) / 10;
+    total_moves = moves;
+    progress.emplace( _( "Drilling" ), total_moves );
+}
+
+void jackhammer_activity_actor::do_turn( player_activity &, Character &who )
+{
+    if( progress.front().complete() ) {
+        progress.pop();
+        return;
+    }
+    map &here = get_map();
+    sfx::play_activity_sound( "tool", "jackhammer",
+                              sfx::get_heard_volume( here.abs_to_bub( target ) ) );
+    if( calendar::once_every( 1_minutes ) ) {
+        sounds::sound( here.abs_to_bub( target ), 15, sounds::sound_t::destructive_activity,
+                       _( "TATATATATATATAT!" ) );
+    }
+}
+
+void jackhammer_activity_actor::finish( player_activity &act, Character &who )
+{
+    map &here = get_map();
+    const auto &pos = here.abs_to_bub( target );
+
+    if( here.has_flag_furn( TFLAG_MINEABLE, pos ) ) {
+        here.destroy_furn( pos, true );
+    } else {
+        here.destroy( pos, true );
+    }
+
+    if( who.is_avatar() ) {
+        int act_exertion = total_moves;
+        if( who.has_trait( trait_STOCKY_TROGLO ) ) {
+            act_exertion /= 2;
+        }
+        who.mod_stored_kcal( std::min( -1, -act_exertion / to_moves<int>( 45_seconds ) ) );
+        who.mod_thirst( std::max( 1, act_exertion / to_moves<int>( 6_minutes ) ) );
+        who.mod_fatigue( std::max( 1, act_exertion / to_moves<int>( 3_minutes ) ) );
+    }
+    who.add_msg_player_or_npc( m_good,
+                               _( "You finish drilling." ),
+                               _( "<npcname> finishes drilling." ) );
+    act.set_to_null();
+    who.consume_charges( *tool, tool->ammo_required() );
+    if( activity_handlers::resume_for_multi_activities( static_cast<player &>( who ) ) ) {
+        for( item *&elem : here.i_at( pos ) ) {
+            elem->set_var( "activity_var", who.name );
+        }
+    }
+}
+
+void jackhammer_activity_actor::serialize( JsonOut &jsout ) const
+{
+    jsout.start_object();
+    jsout.member( "target", target );
+    jsout.member( "tool", tool );
+    jsout.end_object();
+}
+
+std::unique_ptr<activity_actor> jackhammer_activity_actor::deserialize( JsonIn &jsin )
+{
+    std::unique_ptr<jackhammer_activity_actor> actor( new jackhammer_activity_actor(
+                tripoint_abs_ms::zero(), safe_reference<item>() ) );
+    JsonObject data = jsin.get_object();
+    data.read( "target", actor->target );
+    data.read( "tool", actor->tool );
+    return actor;
+}
+
+// ---- churn_activity_actor ----
+
+void churn_activity_actor::start( player_activity &, Character & )
+{
+    total_moves = 18000;
+    progress.emplace( _( "Tilling" ), total_moves );
+}
+
+void churn_activity_actor::do_turn( player_activity &act, Character &who )
+{
+    if( progress.front().complete() ) {
+        progress.pop();
+        map &here = get_map();
+        who.add_msg_if_player( _( "You finish churning up the earth here." ) );
+        here.ter_set( here.abs_to_bub( target ), t_dirtmound );
+        act.set_to_null();
+        activity_handlers::resume_for_multi_activities( static_cast<player &>( who ) );
+    }
+}
+
+void churn_activity_actor::finish( player_activity &, Character & )
+{
+}
+
+void churn_activity_actor::serialize( JsonOut &jsout ) const
+{
+    jsout.start_object();
+    jsout.member( "target", target );
+    jsout.end_object();
+}
+
+std::unique_ptr<activity_actor> churn_activity_actor::deserialize( JsonIn &jsin )
+{
+    std::unique_ptr<churn_activity_actor> actor( new churn_activity_actor( tripoint_abs_ms::zero() ) );
+    JsonObject data = jsin.get_object();
+    data.read( "target", actor->target );
+    return actor;
+}
+
+// ---- fill_pit_activity_actor ----
+
+void fill_pit_activity_actor::start( player_activity &, Character &who )
+{
+    map &here = get_map();
+    ter_id ter = here.ter( here.abs_to_bub( target ) );
+    int moves = to_moves<int>( time_duration::from_minutes( ter->fill_minutes ) );
+    const std::vector<npc *> helpers = character_funcs::get_crafting_helpers(
+                                           static_cast<player &>( who ), 3 );
+    moves = moves * ( 10 - static_cast<int>( helpers.size() ) ) / 10;
+    total_moves = moves;
+    progress.emplace( _( "Filling" ), total_moves );
+}
+
+void fill_pit_activity_actor::do_turn( player_activity &act, Character &who )
+{
+    if( progress.front().complete() ) {
+        progress.pop();
+        map &here = get_map();
+        const auto bub_pos = here.abs_to_bub( target );
+        const ter_id ter = here.ter( bub_pos );
+        const ter_id old_ter = ter;
+
+        here.ter_set( bub_pos, old_ter->fill_result );
+        int act_exertion = to_moves<int>( time_duration::from_minutes( old_ter->fill_minutes ) );
+        const int helpersize = character_funcs::get_crafting_helpers( who, 3 ).size();
+        act_exertion = act_exertion * ( 10 - helpersize ) / 10;
+        who.mod_stored_kcal( std::min( -1, -act_exertion / to_moves<int>( 20_seconds ) ) );
+        who.mod_thirst( std::max( 1, act_exertion / to_moves<int>( 3_minutes ) ) );
+        who.mod_fatigue( std::max( 1, act_exertion / to_moves<int>( 90_seconds ) ) );
+        who.add_msg_if_player( m_good, _( "You finish filling up %s." ), old_ter->name() );
+        act.set_to_null();
+        return;
+    }
+    sfx::play_activity_sound( "tool", "shovel", 100 );
+    if( calendar::once_every( 1_minutes ) ) {
+        map &here = get_map();
+        sounds::sound( here.abs_to_bub( target ), 10, sounds::sound_t::activity, _( "hsh!" ) );
+    }
+}
+
+void fill_pit_activity_actor::finish( player_activity &, Character & )
+{
+}
+
+void fill_pit_activity_actor::serialize( JsonOut &jsout ) const
+{
+    jsout.start_object();
+    jsout.member( "target", target );
+    jsout.member( "tool", tool );
+    jsout.end_object();
+}
+
+std::unique_ptr<activity_actor> fill_pit_activity_actor::deserialize( JsonIn &jsin )
+{
+    std::unique_ptr<fill_pit_activity_actor> actor( new fill_pit_activity_actor(
+                tripoint_abs_ms::zero(), safe_reference<item>() ) );
+    JsonObject data = jsin.get_object();
+    data.read( "target", actor->target );
+    data.read( "tool", actor->tool );
+    return actor;
+}
+
+// ---- clear_rubble_activity_actor ----
+
+void clear_rubble_activity_actor::start( player_activity &, Character &who )
+{
+    map &here = get_map();
+    int moves = to_moves<int>( 30_seconds );
+    int bonus = std::max( who.max_quality( quality_id( "DIG" ) ) - 1, 1 );
+    const std::vector<npc *> helpers = character_funcs::get_crafting_helpers(
+                                           static_cast<player &>( who ), 3 );
+    moves = moves * ( 10 - static_cast<int>( helpers.size() ) ) / 10;
+    total_moves = moves / bonus;
+    progress.emplace( _( "Clearing rubble" ), total_moves );
+}
+
+void clear_rubble_activity_actor::do_turn( player_activity &act, Character &who )
+{
+    if( progress.front().complete() ) {
+        progress.pop();
+        map &here = get_map();
+        const auto bub_pos = here.abs_to_bub( target );
+        const map_bash_info &bash = here.furn( bub_pos ).obj().bash;
+        who.add_msg_if_player( m_info, _( "You clear up the %s." ),
+                               here.furnname( bub_pos ) );
+        here.spawn_items( bub_pos, item_group::items_from( bash.drop_group, calendar::turn ) );
+        here.furn_set( bub_pos, f_null );
+        act.set_to_null();
+    }
+}
+
+void clear_rubble_activity_actor::finish( player_activity &, Character & )
+{
+}
+
+void clear_rubble_activity_actor::serialize( JsonOut &jsout ) const
+{
+    jsout.start_object();
+    jsout.member( "target", target );
+    jsout.end_object();
+}
+
+std::unique_ptr<activity_actor> clear_rubble_activity_actor::deserialize( JsonIn &jsin )
+{
+    std::unique_ptr<clear_rubble_activity_actor> actor( new clear_rubble_activity_actor(
+                tripoint_abs_ms::zero() ) );
+    JsonObject data = jsin.get_object();
+    data.read( "target", actor->target );
+    return actor;
+}
+
+// ---- pry_nails_activity_actor ----
+
+void pry_nails_activity_actor::start( player_activity &, Character & )
+{
+    total_moves = to_moves<int>( 30_seconds );
+    progress.emplace( _( "Prying nails" ), total_moves );
+}
+
+void pry_nails_activity_actor::do_turn( player_activity &act, Character &who )
+{
+    if( progress.front().complete() ) {
+        progress.pop();
+        map &here = get_map();
+        const auto bub_loc = here.abs_to_bub( target );
+        const ter_id type = here.ter( bub_loc );
+
+        who.add_msg_if_player( _( "You pry out the nails from the terrain." ) );
+
+        who.practice( skill_fabrication, 1, 1 );
+        here.spawn_item( who.bub_pos(), itype_nail, 1, type->nail_pull_items[0] );
+        here.spawn_item( who.bub_pos(), itype_2x4, type->nail_pull_items[1] );
+        here.ter_set( bub_loc, type->nail_pull_result );
+        act.set_to_null();
+        return;
+    }
+    map &here = get_map();
+    const auto bub_loc = here.abs_to_bub( target );
+    sfx::play_activity_sound( "tool", "hammer", sfx::get_heard_volume( bub_loc ) );
+}
+
+void pry_nails_activity_actor::finish( player_activity &, Character & )
+{
+}
+
+void pry_nails_activity_actor::serialize( JsonOut &jsout ) const
+{
+    jsout.start_object();
+    jsout.member( "target", target );
+    jsout.end_object();
+}
+
+std::unique_ptr<activity_actor> pry_nails_activity_actor::deserialize( JsonIn &jsin )
+{
+    std::unique_ptr<pry_nails_activity_actor> actor( new pry_nails_activity_actor( tripoint_abs_ms::zero() ) );
+    JsonObject data = jsin.get_object();
+    data.read( "target", actor->target );
+    return actor;
+}
+
+// ---- plant_seed_activity_actor ----
+
+void plant_seed_activity_actor::start( player_activity &, Character & )
+{
+    total_moves = to_moves<int>( 30_seconds );
+    progress.emplace( _( "Planting" ), total_moves );
+}
+
+void plant_seed_activity_actor::do_turn( player_activity &act, Character &who )
+{
+    if( progress.front().complete() ) {
+        progress.pop();
+        map &here = get_map();
+        auto examp = here.abs_to_bub( target );
+        std::vector<detached_ptr<item>> used_seed;
+        if( item::count_by_charges( seed_id ) ) {
+            used_seed = who.use_charges( seed_id, 1 );
+        } else {
+            used_seed = who.use_amount( seed_id, 1 );
+        }
+        if( !used_seed.empty() ) {
+            used_seed.front()->set_age( 0_turns );
+            if( used_seed.front()->has_var( "activity_var" ) ) {
+                used_seed.front()->erase_var( "activity_var" );
+            }
+            used_seed.front()->set_flag( flag_HIDDEN_ITEM );
+            here.add_item_or_charges( examp, std::move( used_seed.front() ) );
+            if( here.has_flag_furn( seed_id->seed->required_terrain_flag, examp ) ) {
+                here.furn_set( examp, furn_str_id( here.furn( examp )->plant->transform ) );
+            } else if( seed_id->seed->required_terrain_flag == flag_PLANTABLE ) {
+                here.set( examp, t_dirt, f_plant_seed );
+            } else {
+                here.furn_set( examp, f_plant_seed );
+            }
+            who.add_msg_player_or_npc( _( "You plant some %s." ), _( "<npcname> plants some %s." ),
+                                       item::nname( seed_id ) );
+        }
+        act.set_to_null();
+        activity_handlers::resume_for_multi_activities( static_cast<player &>( who ) );
+    }
+}
+
+void plant_seed_activity_actor::finish( player_activity &, Character & )
+{
+}
+
+void plant_seed_activity_actor::serialize( JsonOut &jsout ) const
+{
+    jsout.start_object();
+    jsout.member( "target", target );
+    jsout.member( "seed_id", seed_id );
+    jsout.end_object();
+}
+
+std::unique_ptr<activity_actor> plant_seed_activity_actor::deserialize( JsonIn &jsin )
+{
+    std::unique_ptr<plant_seed_activity_actor> actor( new plant_seed_activity_actor(
+                tripoint_abs_ms::zero(), itype_id() ) );
+    JsonObject data = jsin.get_object();
+    data.read( "target", actor->target );
+    data.read( "seed_id", actor->seed_id );
+    return actor;
+}
+
+// ---- forage_activity_actor ----
+
+void forage_activity_actor::start( player_activity &act, Character &who )
+{
+    act.auto_resume = auto_resume;
+    int move_cost = 100000 / ( 2 * who.get_skill_level( skill_survival ) + 5 );
+    move_cost /= rng( std::max( 4, who.per_cur ), 4 + who.per_cur * 2 );
+    total_moves = move_cost;
+    progress.emplace( _( "Foraging" ), total_moves );
+}
+
+void forage_activity_actor::do_turn( player_activity &act, Character &who )
+{
+    if( progress.front().complete() ) {
+        progress.pop();
+        // Don't forage if we aren't next to the bush - otherwise we get weird bugs
+        bool next_to_bush = false;
+        map &here = get_map();
+        for( const auto &pnt : here.points_in_radius( who.bub_pos(), 1 ) ) {
+            if( here.bub_to_abs( pnt ) == target ) {
+                next_to_bush = true;
+                break;
+            }
+        }
+
+        if( !next_to_bush ) {
+            act.set_to_null();
+            return;
+        }
+
+        const int veggy_chance = rng( 1, 100 );
+        bool found_something = false;
+
+        item_group_id loc;
+        ter_str_id next_ter;
+
+        switch( season_of_year( calendar::turn ) ) {
+            case SPRING:
+                loc = item_group_id( "forage_spring" );
+                next_ter = ter_str_id( "t_underbrush_harvested_spring" );
+                break;
+            case SUMMER:
+                loc = item_group_id( "forage_summer" );
+                next_ter = ter_str_id( "t_underbrush_harvested_summer" );
+                break;
+            case AUTUMN:
+                loc = item_group_id( "forage_autumn" );
+                next_ter = ter_str_id( "t_underbrush_harvested_autumn" );
+                break;
+            case WINTER:
+                loc = item_group_id( "forage_winter" );
+                next_ter = ter_str_id( "t_underbrush_harvested_winter" );
+                break;
+            default:
+                debugmsg( "Invalid season" );
+        }
+
+        here.ter_set( here.abs_to_bub( target ), next_ter );
+
+    // Survival gives a bigger boost, and Perception is leveled a bit.
+    // Both survival and perception affect time to forage
+
+    ///\EFFECT_PER slightly increases forage success chance
+    ///\EFFECT_SURVIVAL increases forage success chance
+    if( veggy_chance < who.get_skill_level( skill_survival ) * 3 + who.per_cur - 2 ) {
+        const std::vector<item *> dropped = here.put_items_from_loc( loc, who.bub_pos(), calendar::turn );
+        for( item *it : dropped ) {
+            add_msg( m_good, _( "You found: %s!" ), it->tname() );
+            found_something = true;
+            if( it->has_flag( flag_FORAGE_POISON ) && one_in( 10 ) ) {
+                it->set_flag( flag_HIDDEN_POISON );
+                it->poison = rng( 2, 7 );
+            }
+            if( it->has_flag( flag_FORAGE_HALLU ) && !it->has_flag( flag_HIDDEN_POISON ) && one_in( 10 ) ) {
+                it->set_flag( flag_HIDDEN_HALLU );
+            }
+        }
+    }
+    // 10% to drop a item/items from this group.
+    if( one_in( 10 ) ) {
+        const std::vector<item *> dropped = here.put_items_from_loc( item_group_id( "trash_forest" ),
+                                            who.bub_pos(),
+                                            calendar::turn );
+        for( item * const &it : dropped ) {
+            add_msg( m_good, _( "You found: %s!" ), it->tname() );
+            found_something = true;
+        }
+    }
+
+    if( !found_something ) {
+        add_msg( _( "You didn't find anything." ) );
+    }
+
+    iexamine::practice_survival_while_foraging( static_cast<player *>( &who ) );
+
+    act.set_to_null();
+    }
+}
+
+void forage_activity_actor::finish( player_activity &, Character & )
+{
+}
+
+void forage_activity_actor::serialize( JsonOut &jsout ) const
+{
+    jsout.start_object();
+    jsout.member( "target", target );
+    jsout.member( "auto_resume", auto_resume );
+    jsout.end_object();
+}
+
+std::unique_ptr<activity_actor> forage_activity_actor::deserialize( JsonIn &jsin )
+{
+    std::unique_ptr<forage_activity_actor> actor( new forage_activity_actor(
+                tripoint_abs_ms::zero(), false ) );
+    JsonObject data = jsin.get_object();
+    data.read( "target", actor->target );
+    data.read( "auto_resume", actor->auto_resume );
+    return actor;
+}
+
+// ---- hand_crank_activity_actor ----
+
+void hand_crank_activity_actor::start( player_activity &, Character & )
+{
+}
+
+void hand_crank_activity_actor::do_turn( player_activity &act, Character &who )
+{
+    // Hand-crank chargers seem to range from 2 watt (very common easily verified)
+    // to 10 watt (suspicious claims from some manufacturers) sustained output.
+    // It takes 2.4 minutes to produce 1kj at just slightly under 7 watts (25 kj per hour)
+    // time-based instead of speed based because it's a sustained activity
+    auto &hand_crank_item = *tool;
+    constexpr auto interval_turns_index = 0;
+    constexpr auto charge_amount_index = 1;
+    constexpr auto fatigue_amount_index = 2;
+    constexpr auto ammo_type_index = 0;
+    constexpr auto fully_charged_message_index = 1;
+    constexpr auto exhausted_message_index = 2;
+    auto charge_interval = 144_seconds;
+    auto charge_amount = 1;
+    auto fatigue_amount = 1;
+    auto ammo_type = itype_id( "battery" );
+    auto fully_charged_message = std::string( "You've charged the battery completely." );
+    auto exhausted_message = std::string( "You're too exhausted to keep cranking." );
+
+    if( values.size() > interval_turns_index ) {
+        charge_interval = time_duration::from_turns( values[interval_turns_index] );
+    }
+    if( values.size() > charge_amount_index ) {
+        charge_amount = std::max( 1, values[charge_amount_index] );
+    }
+    if( values.size() > fatigue_amount_index ) {
+        fatigue_amount = std::max( 0, values[fatigue_amount_index] );
+    }
+    if( str_values.size() > ammo_type_index &&
+        !str_values[ammo_type_index].empty() ) {
+        ammo_type = itype_id( str_values[ammo_type_index] );
+    }
+    if( str_values.size() > fully_charged_message_index &&
+        !str_values[fully_charged_message_index].empty() ) {
+        fully_charged_message = str_values[fully_charged_message_index];
+    }
+    if( str_values.size() > exhausted_message_index &&
+        !str_values[exhausted_message_index].empty() ) {
+        exhausted_message = str_values[exhausted_message_index];
+    }
+    if( charge_interval <= 0_turns ) {
+        charge_interval = 144_seconds;
+    }
+
+    if( calendar::once_every( charge_interval ) ) {
+        who.mod_fatigue( fatigue_amount );
+        if( hand_crank_item.ammo_capacity() > hand_crank_item.ammo_remaining() ) {
+            const auto current = hand_crank_item.ammo_remaining();
+            const auto capacity = hand_crank_item.ammo_capacity();
+            const auto next_charges = std::min( capacity, current + charge_amount );
+            hand_crank_item.ammo_set( ammo_type, next_charges );
+            if( next_charges >= capacity ) {
+                act.moves_left = 0;
+                add_msg( m_info, _( fully_charged_message ) );
+            }
+        } else {
+            act.moves_left = 0;
+            add_msg( m_info, _( fully_charged_message ) );
+        }
+    }
+    if( who.get_fatigue() >= fatigue_levels::dead_tired ) {
+        act.moves_left = 0;
+        add_msg( m_info, _( exhausted_message ) );
+    }
+}
+
+void hand_crank_activity_actor::finish( player_activity &, Character & )
+{
+}
+
+void hand_crank_activity_actor::serialize( JsonOut &jsout ) const
+{
+    jsout.start_object();
+    jsout.member( "tool", tool );
+    jsout.member( "values", values );
+    jsout.member( "str_values", str_values );
+    jsout.end_object();
+}
+
+std::unique_ptr<activity_actor> hand_crank_activity_actor::deserialize( JsonIn &jsin )
+{
+    std::unique_ptr<hand_crank_activity_actor> actor(
+        new hand_crank_activity_actor( safe_reference<item>(), {}, {} ) );
+    JsonObject data = jsin.get_object();
+    data.read( "tool", actor->tool );
+    data.read( "values", actor->values );
+    data.read( "str_values", actor->str_values );
+    return actor;
+}
+
+// ---- fill_liquid_activity_actor ----
+
+void fill_liquid_activity_actor::start( player_activity &act, Character & )
+{
+    parent_activity = &act;
+}
+
+void fill_liquid_activity_actor::do_turn( player_activity &act, Character &who )
+{
+    map &here = get_map();
+    try {
+        // 1. Prepare source lambda
+        liquid_source_type source_type = static_cast<liquid_source_type>( act.values.at( 0 ) );
+        auto transfer = [source_type, &here,
+                     &act]( const std::function < detached_ptr<item>( detached_ptr<item> &&it ) > & cb ) {
+            auto pos = act.coords.at( 0 );
+            static const units::volume volume_per_second = units::from_liter( 4.0F / 6.0F );
+            int charges;
+            detached_ptr<item> source;
+            switch( source_type ) {
+                case LST_INFINITE_MAP:
+                    source = here.water_from( here.abs_to_bub( pos ) );
+                    charges = std::max( 1, source->charges_per_volume( volume_per_second ) );
+                    source->charges = charges;
+                    source = cb( std::move( source ) );
+                    return source && source->charges == charges;
+                case LST_VEHICLE:
+                    auto vp = here.veh_at( pos );
+                    if( !vp ) {
+                        debugmsg( "Lost track of vehicle source for fill_liquid activity" );
+                    }
+                    item &base = vp->vehicle().part( act.values.at( 1 ) ).get_base();
+                    if( base.contents.empty() ) {
+                        return true;
+                    }
+                    item &source_it = base.contents.back();
+                    charges = std::max( 1, source_it.charges_per_volume( volume_per_second ) );
+                    int orig = source_it.charges;
+                    source_it.attempt_split( charges, cb );
+                    return source_it.charges == 0 || source_it.charges == orig;
+            }
+            return false;
+        };
+        bool finished = true;
+        // 2. Transfer charges.
+        switch( static_cast<liquid_target_type>( act.values.at( 2 ) ) ) {
+            case LTT_VEHICLE:
+                if( const optional_vpart_position vp = here.veh_at( act.coords.at( 1 ) ) ) {
+                    finished = transfer( [&who, &vp]( detached_ptr<item> &&it ) {
+                        return who.pour_into( vp->vehicle(), std::move( it ) );
+                    } );
+                } else {
+                    throw std::runtime_error( "could not find target vehicle for liquid transfer" );
+                }
+                break;
+            case LTT_MAP: {
+                const auto bub_loc = here.abs_to_bub( act.coords.at( 1 ) );
+                if( iexamine::has_keg( bub_loc ) ) {
+                    finished = transfer( [&bub_loc]( detached_ptr<item> &&it ) {
+                        return iexamine::pour_into_keg( bub_loc, std::move( it ) );
+                    } );
+                } else {
+                    finished = transfer( [&who, &bub_loc, &here]( detached_ptr<item> &&it ) {
+                        who.add_msg_if_player( _( "You pour %1$s onto the ground." ), it->tname() );
+                        here.add_item_or_charges( bub_loc, std::move( it ) );
+                        return detached_ptr<item>();
+                    } );
+                }
+            }
+            break;
+            case LTT_MONSTER:
+                //Do nothing here
+                break;
+            case LTT_CONTAINER:
+                safe_reference<item> &container = act.targets.at( 0 );
+                if( !container ) {
+                    throw std::runtime_error( "could not find target container for liquid transfer" );
+                }
+
+                finished = transfer( [&who, &container]( detached_ptr<item> &&it ) {
+                    return who.pour_into( *container,  std::move( it ) );
+                } );
+
+                break;
+        }
+        if( finished ) {
+            act.set_to_null();
+        }
+
+    } catch( const std::runtime_error &err ) {
+        debugmsg( "error in activity data: \"%s\"", err.what() );
+        act.set_to_null();
+        return;
+    }
+}
+
+void fill_liquid_activity_actor::finish( player_activity &, Character & )
+{
+}
+
+void fill_liquid_activity_actor::serialize( JsonOut &jsout ) const
+{
+    // Fill_liquid serialization is handled via serialize_liquid_source/
+    // serialize_liquid_target into the player_activity bag.
+    // The actor itself delegates to those external helpers.
+    jsout.write_null();
+}
+
+std::unique_ptr<activity_actor> fill_liquid_activity_actor::deserialize( JsonIn & )
+{
+    return std::make_unique<fill_liquid_activity_actor>();
+}
+
+// ---- fertilize_plot_activity_actor ----
+
+void fertilize_plot_activity_actor::start( player_activity &act, Character & )
+{
+    if( !str_value.empty() ) {
+        act.str_values.clear();
+        act.str_values.emplace_back( str_value );
+    }
+}
+
+void fertilize_plot_activity_actor::do_turn( player_activity &act, Character &who )
+{
+    itype_id fertilizer;
+    auto check_fertilizer = [&]( bool ask_user = true ) -> void {
+        if( act.str_values.empty() )
+        {
+            act.str_values.emplace_back( "" );
+        }
+        fertilizer = itype_id( act.str_values[0] );
+
+        if( ask_user && ( fertilizer.is_empty() || !who.has_charges( fertilizer, 1 ) ) )
+        {
+            fertilizer = iexamine::choose_fertilizer( static_cast<player &>( who ), "plant",
+                    false );
+            act.str_values[0] = fertilizer.str();
+        }
+    };
+
+    auto have_fertilizer = [&]() {
+        return !fertilizer.is_empty() && who.has_charges( fertilizer, 1 );
+    };
+
+    const auto reject_tile = [&]( const tripoint_bub_ms & tile ) {
+        check_fertilizer();
+        ret_val<bool> can_fert = iexamine::can_fertilize( static_cast<player &>( who ), tile, fertilizer );
+        return !can_fert.success();
+    };
+
+    const auto fertilize = [&]( player &p, const tripoint_bub_ms & tile ) {
+        check_fertilizer();
+        if( have_fertilizer() ) {
+            iexamine::fertilize_plant( p, tile, fertilizer );
+            if( !have_fertilizer() ) {
+                add_msg( m_info, _( "You have run out of %s." ), item::nname( fertilizer ) );
+            }
+        }
+    };
+
+    check_fertilizer();
+    if( !have_fertilizer() ) {
+        act.set_to_null();
+        return;
+    }
+
+    activity_handlers::perform_zone_activity_turn( static_cast<player *>( &who ),
+                                zone_type_FARM_PLOT,
+                                reject_tile,
+                                fertilize,
+                                _( "You fertilized every plot you could." ) );
+}
+
+void fertilize_plot_activity_actor::finish( player_activity &, Character & )
+{
+}
+
+void fertilize_plot_activity_actor::serialize( JsonOut &jsout ) const
+{
+    jsout.start_object();
+    jsout.member( "str_value", str_value );
+    jsout.end_object();
+}
+
+std::unique_ptr<activity_actor> fertilize_plot_activity_actor::deserialize( JsonIn &jsin )
+{
+    std::unique_ptr<fertilize_plot_activity_actor> actor( new fertilize_plot_activity_actor() );
+    JsonObject data = jsin.get_object();
+    data.read( "str_value", actor->str_value );
+    return actor;
+}
+
 std::unique_ptr<lockpick_activity_actor> lockpick_activity_actor::use_item(
     int moves_total,
     item &lockpick,
@@ -2601,26 +3513,38 @@ namespace activity_actors
 const std::unordered_map<activity_id, std::unique_ptr<activity_actor>( * )( JsonIn & )>
 deserialize_functions = {
     { activity_id( "ACT_AIM" ), &aim_activity_actor::deserialize },
+    { activity_id( "ACT_ASSIST" ), &assist_activity_actor::deserialize },
     { activity_id( "ACT_AUTODRIVE" ), &autodrive_activity_actor::deserialize },
     { activity_id( "ACT_BOLTCUTTING" ), &boltcutting_activity_actor::deserialize },
     { activity_id( "ACT_BUILD" ), &construction_activity_actor::deserialize },
+    { activity_id( "ACT_BURROW" ), &burrow_activity_actor::deserialize },
+    { activity_id( "ACT_CHURN" ), &churn_activity_actor::deserialize },
+    { activity_id( "ACT_CLEAR_RUBBLE" ), &clear_rubble_activity_actor::deserialize },
     { activity_id( "ACT_CRAFT" ), &craft_activity_actor::deserialize },
     { activity_id( "ACT_DIG" ), &dig_activity_actor::deserialize },
     { activity_id( "ACT_DIG_CHANNEL" ), &dig_channel_activity_actor::deserialize },
     { activity_id( "ACT_DISASSEMBLE" ), &disassemble_activity_actor::deserialize },
     { activity_id( "ACT_DROP" ), &drop_activity_actor::deserialize },
+    { activity_id( "ACT_FERTILIZE_PLOT" ), &fertilize_plot_activity_actor::deserialize },
+    { activity_id( "ACT_FILL_LIQUID" ), &fill_liquid_activity_actor::deserialize },
+    { activity_id( "ACT_FILL_PIT" ), &fill_pit_activity_actor::deserialize },
+    { activity_id( "ACT_FORAGE" ), &forage_activity_actor::deserialize },
     { activity_id( "ACT_HACKING" ), &hacking_activity_actor::deserialize },
     { activity_id( "ACT_HACKSAW" ), &hacksaw_activity_actor::deserialize },
+    { activity_id( "ACT_HAND_CRANK" ), &hand_crank_activity_actor::deserialize },
+    { activity_id( "ACT_JACKHAMMER" ), &jackhammer_activity_actor::deserialize },
     { activity_id( "ACT_LOCKPICK" ), &lockpick_activity_actor::deserialize },
+    { activity_id( "ACT_LONGSALVAGE" ), &salvage_activity_actor::deserialize },
     { activity_id( "ACT_MIGRATION_CANCEL" ), &migration_cancel_activity_actor::deserialize },
     { activity_id( "ACT_MOVE_ITEMS" ), &move_items_activity_actor::deserialize },
-    { activity_id( "ACT_TOGGLE_GATE" ), &toggle_gate_activity_actor::deserialize },
     { activity_id( "ACT_OXYTORCH" ), &oxytorch_activity_actor::deserialize },
+    { activity_id( "ACT_PICKAXE" ), &pickaxe_activity_actor::deserialize },
     { activity_id( "ACT_PICKUP" ), &pickup_activity_actor::deserialize },
+    { activity_id( "ACT_PLANT_SEED" ), &plant_seed_activity_actor::deserialize },
+    { activity_id( "ACT_PRY_NAILS" ), &pry_nails_activity_actor::deserialize },
     { activity_id( "ACT_STASH" ), &stash_activity_actor::deserialize },
     { activity_id( "ACT_THROW" ), &throw_activity_actor::deserialize },
-    { activity_id( "ACT_ASSIST" ), &assist_activity_actor::deserialize },
-    { activity_id( "ACT_LONGSALVAGE" ), &salvage_activity_actor::deserialize }
+    { activity_id( "ACT_TOGGLE_GATE" ), &toggle_gate_activity_actor::deserialize }
 };
 } // namespace activity_actors
 

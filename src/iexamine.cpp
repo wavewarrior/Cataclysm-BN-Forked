@@ -127,10 +127,7 @@
 #include "rml_util.h"
 
 static const activity_id ACT_ATM( "ACT_ATM" );
-static const activity_id ACT_CLEAR_RUBBLE( "ACT_CLEAR_RUBBLE" );
 static const activity_id ACT_CRACKING( "ACT_CRACKING" );
-static const activity_id ACT_FORAGE( "ACT_FORAGE" );
-static const activity_id ACT_PLANT_SEED( "ACT_PLANT_SEED" );
 
 static const efftype_id effect_antibiotic( "antibiotic" );
 static const efftype_id effect_bite( "bite" );
@@ -1330,8 +1327,8 @@ void iexamine::rubble( player &p, const tripoint_bub_ms &examp )
         !query_yn( _( "Clear up that %s?" ), here.furnname( examp ) ) ) {
         return;
     }
-    p.assign_activity( ACT_CLEAR_RUBBLE, moves, -1, 0 );
-    p.activity->placement = bub_to_abs( examp );
+    p.assign_activity( std::make_unique<player_activity>(
+                           std::make_unique<clear_rubble_activity_actor>( bub_to_abs( examp ) ) ) );
     return;
 }
 
@@ -2612,11 +2609,9 @@ int iexamine::query_seed( const std::vector<seed_tuple> &seed_entries, int min_r
  */
 void iexamine::plant_seed( player &p, const tripoint_bub_ms &examp, const itype_id &seed_id )
 {
-    std::unique_ptr<player_activity> act = std::make_unique<player_activity>( ACT_PLANT_SEED,
-                                           to_moves<int>( 30_seconds ) );
-    act->placement = get_map().bub_to_abs( examp );
-    act->str_values.emplace_back( seed_id );
-    p.assign_activity( std::move( act ) );
+    p.assign_activity( std::make_unique<player_activity>(
+                           std::make_unique<plant_seed_activity_actor>( get_map().bub_to_abs( examp ),
+                                   seed_id ) ) );
 }
 
 /**
@@ -4492,9 +4487,9 @@ void iexamine::shrub_wildveggies( player &p, const tripoint_bub_ms &examp )
     int move_cost = 100000 / ( 2 * p.get_skill_level( skill_survival ) + 5 );
     ///\EFFECT_PER randomly speeds up foraging
     move_cost /= rng( std::max( 4, p.per_cur ), 4 + p.per_cur * 2 );
-    p.assign_activity( ACT_FORAGE, move_cost, 0 );
-    p.activity->placement = here.bub_to_abs( examp );
-    p.activity->auto_resume = true;
+    p.assign_activity( std::make_unique<player_activity>(
+                           std::make_unique<forage_activity_actor>( here.bub_to_abs( examp ),
+                                   true ) ) );
     return;
 }
 

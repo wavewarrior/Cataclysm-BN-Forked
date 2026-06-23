@@ -90,10 +90,8 @@ static const activity_id ACT_BUTCHER_FULL( "ACT_BUTCHER_FULL" );
 static const activity_id ACT_CHOP_LOGS( "ACT_CHOP_LOGS" );
 static const activity_id ACT_CHOP_PLANKS( "ACT_CHOP_PLANKS" );
 static const activity_id ACT_CHOP_TREE( "ACT_CHOP_TREE" );
-static const activity_id ACT_CHURN( "ACT_CHURN" );
 static const activity_id ACT_FETCH_REQUIRED( "ACT_FETCH_REQUIRED" );
 static const activity_id ACT_FISH( "ACT_FISH" );
-static const activity_id ACT_JACKHAMMER( "ACT_JACKHAMMER" );
 static const activity_id ACT_MOVE_LOOT( "ACT_MOVE_LOOT" );
 static const activity_id ACT_MULTIPLE_BUTCHER( "ACT_MULTIPLE_BUTCHER" );
 static const activity_id ACT_MULTIPLE_CHOP_PLANKS( "ACT_MULTIPLE_CHOP_PLANKS" );
@@ -102,7 +100,6 @@ static const activity_id ACT_MULTIPLE_CONSTRUCTION( "ACT_MULTIPLE_CONSTRUCTION" 
 static const activity_id ACT_MULTIPLE_FARM( "ACT_MULTIPLE_FARM" );
 static const activity_id ACT_MULTIPLE_FISH( "ACT_MULTIPLE_FISH" );
 static const activity_id ACT_MULTIPLE_MINE( "ACT_MULTIPLE_MINE" );
-static const activity_id ACT_PICKAXE( "ACT_PICKAXE" );
 static const activity_id ACT_TIDY_UP( "ACT_TIDY_UP" );
 static const activity_id ACT_VEHICLE( "ACT_VEHICLE" );
 static const activity_id ACT_VEHICLE_DECONSTRUCTION( "ACT_VEHICLE_DECONSTRUCTION" );
@@ -2637,19 +2634,15 @@ static bool mine_activity( player &p, const tripoint_bub_ms &src_loc )
     if( chosen_item == nullptr ) {
         return false;
     }
-    int moves = to_moves<int>( powered ? 10_minutes : 30_minutes );
     if( powered ) {
-        moves += ( ( MAX_STAT + 4 ) - std::min( p.str_cur, MAX_STAT ) ) * to_moves<int>( 75_seconds );
+        p.assign_activity( std::make_unique<player_activity>(
+                               std::make_unique<jackhammer_activity_actor>(
+                                       here.bub_to_abs( src_loc ), safe_reference<item>( *chosen_item ) ) ) );
     } else {
-        moves += ( ( MAX_STAT + 4 ) - std::min( p.str_cur, MAX_STAT ) ) * to_moves<int>( 225_seconds );
+        p.assign_activity( std::make_unique<player_activity>(
+                               std::make_unique<pickaxe_activity_actor>(
+                                       here.bub_to_abs( src_loc ), safe_reference<item>( *chosen_item ) ) ) );
     }
-    if( here.move_cost( src_loc ) == 2 ) {
-        // We're breaking up some flat surface like pavement, which is much easier
-        moves /= 2;
-    }
-    p.assign_activity( powered ? ACT_JACKHAMMER : ACT_PICKAXE, moves );
-    p.activity->add_tool( chosen_item );
-    p.activity->placement = here.bub_to_abs( src_loc );
     return true;
 
 }
@@ -3248,9 +3241,9 @@ static bool generic_multi_activity_do( player &p, const activity_id &act_id,
         iexamine::harvest_plant( p, src_loc, true );
     } else if( reason == do_activity_reason::NEEDS_TILLING && here.has_flag( flag_PLOWABLE, src_loc ) &&
                p.has_quality( qual_DIG, 1 ) && !here.has_furn( src_loc ) ) {
-        p.assign_activity( ACT_CHURN, 18000, -1 );
         p.backlog.emplace_front( std::make_unique<player_activity>( act_id ) );
-        p.activity->placement = src;
+        p.assign_activity( std::make_unique<player_activity>(
+                               std::make_unique<churn_activity_actor>( src ) ) );
         return false;
     } else if( reason == do_activity_reason::NEEDS_PLANTING ) {
         std::vector<zone_data> zones = mgr.get_zones( zone_type_FARM_PLOT,

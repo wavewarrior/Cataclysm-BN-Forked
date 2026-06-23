@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "action.h"
+#include "activity_actor_definitions.h"
 #include "advanced_inv.h"
 #include "animation.h"
 #include "armor_layers.h"
@@ -104,7 +105,6 @@
 #include "weather.h"
 #include "worldfactory.h"
 
-static const activity_id ACT_FERTILIZE_PLOT( "ACT_FERTILIZE_PLOT" );
 static const activity_id ACT_MOVE_LOOT( "ACT_MOVE_LOOT" );
 static const activity_id ACT_MULTIPLE_BUTCHER( "ACT_MULTIPLE_BUTCHER" );
 static const activity_id ACT_MULTIPLE_CHOP_PLANKS( "ACT_MULTIPLE_CHOP_PLANKS" );
@@ -1312,7 +1312,8 @@ static void loot()
             u.assign_activity( ACT_MOVE_LOOT );
             break;
         case FertilizePlots:
-            u.assign_activity( ACT_FERTILIZE_PLOT );
+            u.assign_activity( std::make_unique<player_activity>(
+                                   std::make_unique<fertilize_plot_activity_actor>() ) );
             break;
         case ConstructPlots:
             u.assign_activity( ACT_MULTIPLE_CONSTRUCTION );

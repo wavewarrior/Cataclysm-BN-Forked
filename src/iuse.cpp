@@ -128,23 +128,16 @@
 #include "weather.h"
 #include "weather_gen.h"
 
-static const activity_id ACT_BURROW( "ACT_BURROW" );
 static const activity_id ACT_CHOP_LOGS( "ACT_CHOP_LOGS" );
 static const activity_id ACT_CHOP_PLANKS( "ACT_CHOP_PLANKS" );
 static const activity_id ACT_CHOP_TREE( "ACT_CHOP_TREE" );
-static const activity_id ACT_CHURN( "ACT_CHURN" );
-static const activity_id ACT_CLEAR_RUBBLE( "ACT_CLEAR_RUBBLE" );
 static const activity_id ACT_CRAFT( "ACT_CRAFT" );
-static const activity_id ACT_FILL_PIT( "ACT_FILL_PIT" );
 static const activity_id ACT_FISH( "ACT_FISH" );
 static const activity_id ACT_GAME( "ACT_GAME" );
 static const activity_id ACT_GENERIC_GAME( "ACT_GENERIC_GAME" );
 static const activity_id ACT_HAIRCUT( "ACT_HAIRCUT" );
-static const activity_id ACT_JACKHAMMER( "ACT_JACKHAMMER" );
 static const activity_id ACT_MEDITATE( "ACT_MEDITATE" );
 static const activity_id ACT_MIND_SPLICER( "ACT_MIND_SPLICER" );
-static const activity_id ACT_PICKAXE( "ACT_PICKAXE" );
-static const activity_id ACT_PRY_NAILS( "ACT_PRY_NAILS" );
 static const activity_id ACT_ROBOT_CONTROL( "ACT_ROBOT_CONTROL" );
 static const activity_id ACT_SHAVE( "ACT_SHAVE" );
 static const activity_id ACT_VIBE( "ACT_VIBE" );
@@ -2341,11 +2334,8 @@ int iuse::hammer( player *p, item *it, bool, const tripoint_bub_ms & )
         return 0;
     } else {
         // pry action
-        std::unique_ptr<player_activity> act = std::make_unique<player_activity>( ACT_PRY_NAILS,
-                                               to_moves<int>( 30_seconds ),
-                                               -1 );
-        act->placement = bub_to_abs( pnt );
-        p->assign_activity( std::move( act ) );
+    p->assign_activity( std::make_unique<player_activity>(
+                            std::make_unique<pry_nails_activity_actor>( bub_to_abs( pnt ) ) ) );
         return it->type->charges_to_use();
     }
 }
@@ -2507,8 +2497,8 @@ int iuse::makemound( player *p, item *it, bool t, const tripoint_bub_ms & )
 
     if( g->m.has_flag( flag_PLOWABLE, pnt ) && !g->m.has_flag( flag_PLANT, pnt ) ) {
         p->add_msg_if_player( _( "You start churning up the earth here." ) );
-        p->assign_activity( ACT_CHURN, 18000, -1, p->get_item_position( it ) );
-        p->activity->placement = g->m.bub_to_abs( pnt );
+    p->assign_activity( std::make_unique<player_activity>(
+                            std::make_unique<churn_activity_actor>( g->m.bub_to_abs( pnt ) ) ) );
         return it->type->charges_to_use();
     } else {
         p->add_msg_if_player( _( "You can't churn up this ground." ) );
@@ -2760,8 +2750,9 @@ int iuse::fill_pit( player *p, item *it, bool t, const tripoint_bub_ms & )
     }
     moves = moves * ( 10 - helpers.size() ) / 10;
 
-    p->assign_activity( ACT_FILL_PIT, moves, -1, p->get_item_position( it ) );
-    p->activity->placement = bub_to_abs( pnt );
+    p->assign_activity( std::make_unique<player_activity>(
+                            std::make_unique<fill_pit_activity_actor>( bub_to_abs( pnt ),
+                                    safe_reference<item>( *it ) ) ) );
 
     return it->type->charges_to_use();
 }
@@ -2803,9 +2794,8 @@ int iuse::clear_rubble( player *p, item *it, bool, const tripoint_bub_ms & )
     }
     moves = moves * ( 10 - helpers.size() ) / 10;
 
-    player_activity act( ACT_CLEAR_RUBBLE, moves / bonus, bonus );
-    p->assign_activity( std::make_unique<player_activity>( ACT_CLEAR_RUBBLE, moves / bonus, bonus ) );
-    p->activity->placement = bub_to_abs( pnt );
+    p->assign_activity( std::make_unique<player_activity>(
+                            std::make_unique<clear_rubble_activity_actor>( bub_to_abs( pnt ) ) ) );
     return it->type->charges_to_use();
 }
 
@@ -2909,9 +2899,9 @@ int iuse::jackhammer( player *p, item *it, bool, const tripoint_bub_ms &pos )
     }
     moves = moves * ( 10 - helpers.size() ) / 10;
 
-    p->assign_activity( ACT_JACKHAMMER, moves );
-    p->activity->add_tool( it );
-    p->activity->placement = g->m.bub_to_abs( pnt );
+    p->assign_activity( std::make_unique<player_activity>(
+                            std::make_unique<jackhammer_activity_actor>( g->m.bub_to_abs( pnt ),
+                                    safe_reference<item>( *it ) ) ) );
     p->add_msg_if_player( _( "You start drilling into the %1$s with your %2$s." ),
                           g->m.tername( pnt ), it->tname() );
 
@@ -3001,9 +2991,9 @@ int iuse::pickaxe( player *p, item *it, bool, const tripoint_bub_ms &pos )
     }
     moves = moves * ( 10 - helpers.size() ) / 10;
 
-    p->assign_activity( ACT_PICKAXE, moves, -1 );
-    p->activity->add_tool( it );
-    p->activity->placement = g->m.bub_to_abs( pnt );
+    p->assign_activity( std::make_unique<player_activity>(
+                            std::make_unique<pickaxe_activity_actor>( g->m.bub_to_abs( pnt ),
+                                    safe_reference<item>( *it ) ) ) );
     p->add_msg_if_player( _( "You strike the %1$s with your %2$s." ),
                           g->m.tername( pnt ), it->tname() );
     return 0; // handled when the activity finishes
@@ -3057,8 +3047,8 @@ int iuse::burrow( player *p, item *it, bool, const tripoint_bub_ms &pos )
     }
     moves = moves * ( 10 - helpers.size() ) / 10;
 
-    p->assign_activity( ACT_BURROW, moves, -1, 0 );
-    p->activity->placement = bub_to_abs( pnt );
+    p->assign_activity( std::make_unique<player_activity>(
+                            std::make_unique<burrow_activity_actor>( bub_to_abs( pnt ) ) ) );
     p->add_msg_if_player( _( "You start tearing into the %1$s with your %2$s." ),
                           g->m.tername( pnt ), it->tname() );
     return 0; // handled when the activity finishes

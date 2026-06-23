@@ -169,21 +169,21 @@ namespace activity_handlers
 {
 
 bool resume_for_multi_activities( player &p );
+void perform_zone_activity_turn( player *p,
+                                 const zone_type_id &ztype,
+                                 const std::function<bool( const tripoint_bub_ms & )> &tile_filter,
+                                 const std::function<void ( player &p, const tripoint_bub_ms & )> &tile_action,
+                                 const std::string &finished_msg );
 /** activity_do_turn functions: */
-void burrow_do_turn( player_activity *act, player *p );
 void craft_do_turn( player_activity *act, player *p );
-void fill_liquid_do_turn( player_activity *act, player *p );
-void pickaxe_do_turn( player_activity *act, player *p );
 void drop_do_turn( player_activity *act, player *p );
 void stash_do_turn( player_activity *act, player *p );
 void pulp_do_turn( player_activity *act, player *p );
 void game_do_turn( player_activity *act, player *p );
 void generic_game_do_turn( player_activity *act, player *p );
-void churn_do_turn( player_activity *act, player *p );
 void start_fire_do_turn( player_activity *act, player *p );
 void vibe_do_turn( player_activity *act, player *p );
 void train_skill_do_turn( player_activity *act, player *p );
-void hand_crank_do_turn( player_activity *act, player *p );
 void multiple_chop_planks_do_turn( player_activity *act, player *p );
 void wear_do_turn( player_activity *act, player *p );
 void eat_menu_do_turn( player_activity *act, player *p );
@@ -209,13 +209,9 @@ void fish_do_turn( player_activity *act, player *p );
 void cracking_do_turn( player_activity *act, player *p );
 void repair_item_do_turn( player_activity *act, player *p );
 void butcher_do_turn( player_activity *act, player *p );
-void pry_nails_do_turn( player_activity *act, player *p );
 void chop_tree_do_turn( player_activity *act, player *p );
-void jackhammer_do_turn( player_activity *act, player *p );
 void find_mount_do_turn( player_activity *act, player *p );
 void tidy_up_do_turn( player_activity *act, player *p );
-void fill_pit_do_turn( player_activity *act, player *p );
-void fertilize_plot_do_turn( player_activity *act, player *p );
 void try_sleep_do_turn( player_activity *act, player *p );
 void operation_do_turn( player_activity *act, player *p );
 void robot_control_do_turn( player_activity *act, player *p );
@@ -230,16 +226,13 @@ extern const std::map< activity_id, std::function<void( player_activity *, playe
 do_turn_functions;
 
 /** activity_finish functions: */
-void burrow_finish( player_activity *act, player *p );
 void butcher_finish( player_activity *act, player *p );
 void firstaid_finish( player_activity *act, player *p );
 void fish_finish( player_activity *act, player *p );
-void forage_finish( player_activity *act, player *p );
 void hotwire_finish( player_activity *act, player *p );
 void longsalvage_finish( player_activity *act, player *p );
 void pulp_finish( player_activity *act, player *p );
 void make_zlave_finish( player_activity *act, player *p );
-void pickaxe_finish( player_activity *act, player *p );
 void reload_finish( player_activity *act, player *p );
 void start_fire_finish( player_activity *act, player *p );
 void train_finish( player_activity *act, player *p );
@@ -247,14 +240,11 @@ void milk_finish( player_activity *act, player *p );
 void shear_finish( player_activity *act, player *p );
 void vehicle_finish( player_activity *act, player *p );
 void start_engines_finish( player_activity *act, player *p );
-void churn_finish( player_activity *act, player *p );
-void plant_seed_finish( player_activity *act, player *p );
 void cracking_finish( player_activity *act, player *p );
 void repair_item_finish( player_activity *act, player *p );
 void mend_item_finish( player_activity *act, player *p );
 void gunmod_add_finish( player_activity *act, player *p );
 void toolmod_add_finish( player_activity *act, player *p );
-void clear_rubble_finish( player_activity *act, player *p );
 void meditate_finish( player_activity *act, player *p );
 void read_finish( player_activity *act, player *p );
 void wait_finish( player_activity *act, player *p );
@@ -266,7 +256,6 @@ void try_sleep_finish( player_activity *act, player *p );
 void operation_finish( player_activity *act, player *p );
 void vibe_finish( player_activity *act, player *p );
 void train_skill_finish( player_activity *act, player *p );
-void hand_crank_finish( player_activity *act, player *p );
 void atm_finish( player_activity *act, player *p );
 void eat_menu_finish( player_activity *act, player *p );
 void pry_nails_finish( player_activity *act, player *p );

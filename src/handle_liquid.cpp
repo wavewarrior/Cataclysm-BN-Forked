@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "action.h"
+#include "activity_actor_definitions.h"
 #include "avatar.h"
 #include "cata_utility.h"
 #include "debug.h"
@@ -340,18 +341,21 @@ static bool perform_liquid_transfer( const tripoint_bub_ms &pos, liquid_dest_opt
             g->u.consume_item( here.water_from( pos ) );
             return true;
         case LD_ITEM:
-            g->u.assign_activity( activity_id( "ACT_FILL_LIQUID" ) );
+            g->u.assign_activity( std::make_unique<player_activity>(
+                                      std::make_unique<fill_liquid_activity_actor>() ) );
             serialize_liquid_source( *g->u.activity, pos );
             serialize_liquid_target( *g->u.activity, *target.it );
             return true;
         case LD_VEH:
-            g->u.assign_activity( activity_id( "ACT_FILL_LIQUID" ) );
+            g->u.assign_activity( std::make_unique<player_activity>(
+                                      std::make_unique<fill_liquid_activity_actor>() ) );
             serialize_liquid_source( *g->u.activity, pos );
             serialize_liquid_target( *g->u.activity, *target.veh );
             return true;
         case LD_KEG:
         case LD_GROUND:
-            g->u.assign_activity( activity_id( "ACT_FILL_LIQUID" ) );
+            g->u.assign_activity( std::make_unique<player_activity>(
+                                      std::make_unique<fill_liquid_activity_actor>() ) );
             serialize_liquid_source( *g->u.activity, pos );
             serialize_liquid_target( *g->u.activity, target.pos );
             return true;
@@ -370,18 +374,21 @@ static bool perform_liquid_transfer( vehicle *veh, int part_id, liquid_dest_opt 
             } );
             return true;
         case LD_ITEM:
-            g->u.assign_activity( activity_id( "ACT_FILL_LIQUID" ) );
+            g->u.assign_activity( std::make_unique<player_activity>(
+                                      std::make_unique<fill_liquid_activity_actor>() ) );
             serialize_liquid_source( *g->u.activity, *veh, part_id );
             serialize_liquid_target( *g->u.activity, *target.it );
             return true;
         case LD_VEH:
-            g->u.assign_activity( activity_id( "ACT_FILL_LIQUID" ) );
+            g->u.assign_activity( std::make_unique<player_activity>(
+                                      std::make_unique<fill_liquid_activity_actor>() ) );
             serialize_liquid_source( *g->u.activity, *veh, part_id );
             serialize_liquid_target( *g->u.activity, *target.veh );
             return true;
         case LD_KEG:
         case LD_GROUND:
-            g->u.assign_activity( activity_id( "ACT_FILL_LIQUID" ) );
+            g->u.assign_activity( std::make_unique<player_activity>(
+                                      std::make_unique<fill_liquid_activity_actor>() ) );
             serialize_liquid_source( *g->u.activity, *veh, part_id );
             serialize_liquid_target( *g->u.activity, target.pos );
             return true;

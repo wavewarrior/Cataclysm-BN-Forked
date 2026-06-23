@@ -17,6 +17,7 @@
 #include <ranges>
 
 #include "action.h"
+#include "activity_actor_definitions.h"
 #include "activity_handlers.h"
 #include "addiction.h"
 #include "ammo.h"
@@ -117,7 +118,6 @@
 #include "world_type.h"
 
 static const activity_id ACT_FIRSTAID( "ACT_FIRSTAID" );
-static const activity_id ACT_HAND_CRANK( "ACT_HAND_CRANK" );
 static const activity_id ACT_MAKE_ZLAVE( "ACT_MAKE_ZLAVE" );
 static const activity_id ACT_RELOAD( "ACT_RELOAD" );
 static const activity_id ACT_REPAIR_ITEM( "ACT_REPAIR_ITEM" );
@@ -6104,17 +6104,12 @@ auto hand_crank_actor::use( player &p, item &it, bool, const tripoint_bub_ms & )
             resolved_charge_interval = 144_seconds;
         }
         const auto safe_charge_amount = std::max( 1, charge_amount );
-        const auto current = it.ammo_remaining();
-        const auto capacity = it.ammo_capacity();
-        const auto missing = capacity - current;
-        const auto required_intervals = divide_round_up( missing, safe_charge_amount );
-        const auto required_duration = resolved_charge_interval * required_intervals;
-        const auto moves = to_moves<int>( required_duration );
         const auto interval_turns = to_turns<int>( resolved_charge_interval );
-        p.assign_activity( ACT_HAND_CRANK, moves, -1, 0, activity_name );
-        p.activity->add_tool( &it );
-        p.activity->values = { interval_turns, safe_charge_amount, fatigue_per_interval };
-        p.activity->str_values = { ammo_type.str(), fully_charged_message, exhausted_message };
+        p.assign_activity( std::make_unique<player_activity>(
+                               std::make_unique<hand_crank_activity_actor>(
+                                       safe_reference<item>( it ),
+                                       std::vector<int>{ interval_turns, safe_charge_amount, fatigue_per_interval },
+                                       std::vector<std::string>{ ammo_type.str(), fully_charged_message, exhausted_message } ) ) );
     } else {
         p.add_msg_if_player( _( already_charged_message ), it.tname(), magazine->tname() );
     }

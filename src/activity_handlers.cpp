@@ -102,14 +102,11 @@ static const activity_id ACT_ADV_INVENTORY( "ACT_ADV_INVENTORY" );
 static const activity_id ACT_ARMOR_LAYERS( "ACT_ARMOR_LAYERS" );
 static const activity_id ACT_ATM( "ACT_ATM" );
 static const activity_id ACT_BLEED( "ACT_BLEED" );
-static const activity_id ACT_BURROW( "ACT_BURROW" );
 static const activity_id ACT_BUTCHER( "ACT_BUTCHER" );
 static const activity_id ACT_BUTCHER_FULL( "ACT_BUTCHER_FULL" );
 static const activity_id ACT_CHOP_LOGS( "ACT_CHOP_LOGS" );
 static const activity_id ACT_CHOP_PLANKS( "ACT_CHOP_PLANKS" );
 static const activity_id ACT_CHOP_TREE( "ACT_CHOP_TREE" );
-static const activity_id ACT_CHURN( "ACT_CHURN" );
-static const activity_id ACT_CLEAR_RUBBLE( "ACT_CLEAR_RUBBLE" );
 static const activity_id ACT_CONSUME_DRINK_MENU( "ACT_CONSUME_DRINK_MENU" );
 static const activity_id ACT_CONSUME_FOOD_MENU( "ACT_CONSUME_FOOD_MENU" );
 static const activity_id ACT_CONSUME_MEDS_MENU( "ACT_CONSUME_MEDS_MENU" );
@@ -122,23 +119,17 @@ static constexpr auto craft_tools_mult_next_refresh_idx = 3;
 static const activity_id ACT_DISMEMBER( "ACT_DISMEMBER" );
 static const activity_id ACT_DISSECT( "ACT_DISSECT" );
 static const activity_id ACT_EAT_MENU( "ACT_EAT_MENU" );
-static const activity_id ACT_FERTILIZE_PLOT( "ACT_FERTILIZE_PLOT" );
 static const activity_id ACT_FETCH_REQUIRED( "ACT_FETCH_REQUIRED" );
 static const activity_id ACT_FIELD_DRESS( "ACT_FIELD_DRESS" );
-static const activity_id ACT_FILL_LIQUID( "ACT_FILL_LIQUID" );
 static const activity_id ACT_MILK( "ACT_MILK" );
-static const activity_id ACT_FILL_PIT( "ACT_FILL_PIT" );
 static const activity_id ACT_FIND_MOUNT( "ACT_FIND_MOUNT" );
 static const activity_id ACT_FIRSTAID( "ACT_FIRSTAID" );
 static const activity_id ACT_FISH( "ACT_FISH" );
-static const activity_id ACT_FORAGE( "ACT_FORAGE" );
 static const activity_id ACT_GAME( "ACT_GAME" );
 static const activity_id ACT_GENERIC_GAME( "ACT_GENERIC_GAME" );
 static const activity_id ACT_GUNMOD_ADD( "ACT_GUNMOD_ADD" );
 static const activity_id ACT_HAIRCUT( "ACT_HAIRCUT" );
-static const activity_id ACT_HAND_CRANK( "ACT_HAND_CRANK" );
 static const activity_id ACT_HOTWIRE_CAR( "ACT_HOTWIRE_CAR" );
-static const activity_id ACT_JACKHAMMER( "ACT_JACKHAMMER" );
 static const activity_id ACT_MAKE_ZLAVE( "ACT_MAKE_ZLAVE" );
 static const activity_id ACT_MEDITATE( "ACT_MEDITATE" );
 static const activity_id ACT_MEND_ITEM( "ACT_MEND_ITEM" );
@@ -152,11 +143,8 @@ static const activity_id ACT_MULTIPLE_MINE( "ACT_MULTIPLE_MINE" );
 static const activity_id ACT_MULTIPLE_FARM( "ACT_MULTIPLE_FARM" );
 static const activity_id ACT_MULTIPLE_FISH( "ACT_MULTIPLE_FISH" );
 static const activity_id ACT_OPERATION( "ACT_OPERATION" );
-static const activity_id ACT_PICKAXE( "ACT_PICKAXE" );
-static const activity_id ACT_PLANT_SEED( "ACT_PLANT_SEED" );
 static const activity_id ACT_PLAY_WITH_PET( "ACT_PLAY_WITH_PET" );
 static const activity_id ACT_TRAIN_PET( "ACT_TRAIN_PET" );
-static const activity_id ACT_PRY_NAILS( "ACT_PRY_NAILS" );
 static const activity_id ACT_PULP( "ACT_PULP" );
 static const activity_id ACT_QUARTER( "ACT_QUARTER" );
 static const activity_id ACT_READ( "ACT_READ" );
@@ -255,17 +243,13 @@ using namespace activity_handlers;
 
 const std::map< activity_id, std::function<void( player_activity *, player * )> >
 activity_handlers::do_turn_functions = {
-    { ACT_BURROW, burrow_do_turn },
     { ACT_CRAFT, craft_do_turn },
-    { ACT_FILL_LIQUID, fill_liquid_do_turn },
-    { ACT_PICKAXE, pickaxe_do_turn },
     { ACT_PULP, pulp_do_turn },
     { ACT_GAME, game_do_turn },
     { ACT_GENERIC_GAME, generic_game_do_turn },
     { ACT_START_FIRE, start_fire_do_turn },
     { ACT_VIBE, vibe_do_turn },
     { ACT_TRAIN_SKILL, train_skill_do_turn },
-    { ACT_HAND_CRANK, hand_crank_do_turn },
     { ACT_WEAR, wear_do_turn },
     { ACT_MULTIPLE_FISH, multiple_fish_do_turn },
     { ACT_MULTIPLE_CONSTRUCTION, multiple_construction_do_turn },
@@ -296,17 +280,13 @@ activity_handlers::do_turn_functions = {
     { ACT_QUARTER, butcher_do_turn },
     { ACT_DISMEMBER, butcher_do_turn },
     { ACT_DISSECT, butcher_do_turn },
-    { ACT_PRY_NAILS, pry_nails_do_turn },
     { ACT_CHOP_TREE, chop_tree_do_turn },
     { ACT_CHOP_LOGS, chop_tree_do_turn },
     { ACT_TIDY_UP, tidy_up_do_turn },
     { ACT_CHOP_PLANKS, chop_tree_do_turn },
     { ACT_TIDY_UP, tidy_up_do_turn },
-    { ACT_JACKHAMMER, jackhammer_do_turn },
     { ACT_FIND_MOUNT, find_mount_do_turn },
-    { ACT_FILL_PIT, fill_pit_do_turn },
     { ACT_MULTIPLE_CHOP_PLANKS, multiple_chop_planks_do_turn },
-    { ACT_FERTILIZE_PLOT, fertilize_plot_do_turn },
     { ACT_TRY_SLEEP, try_sleep_do_turn },
     { ACT_OPERATION, operation_do_turn },
     { ACT_ROBOT_CONTROL, robot_control_do_turn },
@@ -318,7 +298,6 @@ activity_handlers::do_turn_functions = {
 
 const std::map< activity_id, std::function<void( player_activity *, player * )> >
 activity_handlers::finish_functions = {
-    { ACT_BURROW, burrow_finish },
     { ACT_BUTCHER, butcher_finish },
     { ACT_BUTCHER_FULL, butcher_finish },
     { ACT_FIELD_DRESS, butcher_finish },
@@ -329,15 +308,11 @@ activity_handlers::finish_functions = {
     { ACT_DISSECT, butcher_finish },
     { ACT_FIRSTAID, firstaid_finish },
     { ACT_FISH, fish_finish },
-    { ACT_FORAGE, forage_finish },
     { ACT_HOTWIRE_CAR, hotwire_finish },
     { ACT_MAKE_ZLAVE, make_zlave_finish },
-    { ACT_PICKAXE, pickaxe_finish },
     { ACT_RELOAD, reload_finish },
     { ACT_START_FIRE, start_fire_finish },
     { ACT_TRAIN, train_finish },
-    { ACT_CHURN, churn_finish },
-    { ACT_PLANT_SEED, plant_seed_finish },
     { ACT_VEHICLE, vehicle_finish },
     { ACT_START_ENGINES, start_engines_finish },
     { ACT_PULP, pulp_finish },
@@ -346,7 +321,6 @@ activity_handlers::finish_functions = {
     { ACT_MEND_ITEM, mend_item_finish },
     { ACT_GUNMOD_ADD, gunmod_add_finish },
     { ACT_TOOLMOD_ADD, toolmod_add_finish },
-    { ACT_CLEAR_RUBBLE, clear_rubble_finish },
     { ACT_MEDITATE, meditate_finish },
     { ACT_READ, read_finish },
     { ACT_WAIT, wait_finish },
@@ -363,14 +337,12 @@ activity_handlers::finish_functions = {
     { ACT_CONSUME_FOOD_MENU, eat_menu_finish },
     { ACT_CONSUME_DRINK_MENU, eat_menu_finish },
     { ACT_CONSUME_MEDS_MENU, eat_menu_finish },
-    { ACT_PRY_NAILS, pry_nails_finish },
     { ACT_CHOP_TREE, chop_tree_finish },
     { ACT_MILK, milk_finish },
     { activity_id( "ACT_SHEAR" ), shear_finish },
     { ACT_CHOP_LOGS, chop_logs_finish },
     { ACT_CHOP_PLANKS, chop_planks_finish },
-    { ACT_JACKHAMMER, jackhammer_finish },
-    { ACT_FILL_PIT, fill_pit_finish },
+
     { ACT_PLAY_WITH_PET, play_with_pet_finish },
     { ACT_TRAIN_PET, train_pet_finish },
     { ACT_SHAVE, shaving_finish },
@@ -394,37 +366,7 @@ bool activity_handlers::resume_for_multi_activities( player &p )
     return false;
 }
 
-void activity_handlers::burrow_do_turn( player_activity *act, player * )
-{
-    sfx::play_activity_sound( "activity", "burrow",
-                              sfx::get_heard_volume( abs_to_bub( act->placement ) ) );
-    if( calendar::once_every( 1_minutes ) ) {
-        sounds::sound( abs_to_bub( act->placement ), 10, sounds::sound_t::movement,
-                       //~ Sound of a Rat mutant burrowing!
-                       _( "ScratchCrunchScrabbleScurry." ) );
-    }
-}
 
-void activity_handlers::burrow_finish( player_activity *act, player *p )
-{
-    auto pos = act->placement; // make a copy to avoid use-after-free
-    map &here = get_map();
-    if( p->is_avatar() ) {
-        int act_exertion = act->moves_total;
-        // Impossible in vanilla since competing thresholds, but allowed in case of mods
-        if( p->has_trait( trait_STOCKY_TROGLO ) ) {
-            act_exertion /= 2;
-        }
-        // Base cost of 1 fatigue per 3 minutes, or 20 fatigue at 8 strength since 60 minutes
-        // Strength, terrain, and helpers accounted for by time calculation
-        p->mod_stored_kcal( std::min( -1, -act_exertion / to_moves<int>( 45_seconds ) ) );
-        p->mod_thirst( std::max( 1, act_exertion / to_moves<int>( 6_minutes ) ) );
-        p->mod_fatigue( std::max( 1, act_exertion / to_moves<int>( 3_minutes ) ) );
-    }
-    act->set_to_null();
-    p->add_msg_if_player( m_good, _( "You finish burrowing." ) );
-    here.destroy( here.abs_to_bub( pos ), true );
-}
 
 static bool check_butcher_cbm( const int roll )
 {
@@ -1529,96 +1471,7 @@ void activity_handlers::milk_finish( player_activity *act, player *p )
     act->set_to_null();
 }
 
-void activity_handlers::fill_liquid_do_turn( player_activity *act, player *p )
-{
-    player_activity &act_ref = *act;
-    map &here = get_map();
-    try {
 
-        // 1. Prepare source lambda
-        liquid_source_type source_type = static_cast<liquid_source_type>( act_ref.values.at( 0 ) );
-        auto transfer = [source_type, &here,
-                     &act_ref]( const std::function < detached_ptr<item>( detached_ptr<item> &&it ) > & cb ) {
-            auto pos = act_ref.coords.at( 0 );
-            static const units::volume volume_per_second = units::from_liter( 4.0F / 6.0F );
-            int charges;
-            detached_ptr<item> source;
-            switch( source_type ) {
-                case LST_INFINITE_MAP:
-                    source = here.water_from( here.abs_to_bub( pos ) );
-                    charges = std::max( 1, source->charges_per_volume( volume_per_second ) );
-                    source->charges = charges;
-                    source = cb( std::move( source ) );
-                    return source && source->charges == charges;
-                case LST_VEHICLE:
-                    auto vp = here.veh_at( pos );
-                    if( !vp ) {
-                        debugmsg( "Lost track of vehicle source for fill_liquid activity" );
-                    }
-                    item &base = vp->vehicle().part( act_ref.values.at( 1 ) ).get_base();
-                    if( base.contents.empty() ) {
-                        return true;
-                    }
-                    item &source_it = base.contents.back();
-                    charges = std::max( 1, source_it.charges_per_volume( volume_per_second ) );
-                    int orig = source_it.charges;
-                    source_it.attempt_split( charges, cb );
-                    return source_it.charges == 0 || source_it.charges == orig;
-            }
-            return false;
-        };
-        bool finished = true;
-        // 2. Transfer charges.
-        switch( static_cast<liquid_target_type>( act_ref.values.at( 2 ) ) ) {
-            case LTT_VEHICLE:
-                if( const optional_vpart_position vp = here.veh_at( act_ref.coords.at( 1 ) ) ) {
-                    finished = transfer( [&p, &vp]( detached_ptr<item> &&it ) {
-                        return p->pour_into( vp->vehicle(), std::move( it ) );
-                    } );
-                } else {
-                    throw std::runtime_error( "could not find target vehicle for liquid transfer" );
-                }
-                break;
-            case LTT_MAP: {
-                const auto bub_loc = here.abs_to_bub( act_ref.coords.at( 1 ) );
-                if( iexamine::has_keg( bub_loc ) ) {
-                    finished = transfer( [&bub_loc]( detached_ptr<item> &&it ) {
-                        return iexamine::pour_into_keg( bub_loc, std::move( it ) );
-                    } );
-                } else {
-                    finished = transfer( [&p, &bub_loc, &here]( detached_ptr<item> &&it ) {
-                        p->add_msg_if_player( _( "You pour %1$s onto the ground." ), it->tname() );
-                        here.add_item_or_charges( bub_loc, std::move( it ) );
-                        return detached_ptr<item>();
-                    } );
-                }
-            }
-            break;
-            case LTT_MONSTER:
-                //Do nothing here
-                break;
-            case LTT_CONTAINER:
-                safe_reference<item> &container = act_ref.targets.at( 0 );
-                if( !container ) {
-                    throw std::runtime_error( "could not find target container for liquid transfer" );
-                }
-
-                finished = transfer( [&p, &container]( detached_ptr<item> &&it ) {
-                    return p->pour_into( *container,  std::move( it ) );
-                } );
-
-                break;
-        }
-        if( finished ) {
-            act_ref.set_to_null();
-        }
-
-    } catch( const std::runtime_error &err ) {
-        debugmsg( "error in activity data: \"%s\"", err.what() );
-        act_ref.set_to_null();
-        return;
-    }
-}
 
 void activity_handlers::firstaid_finish( player_activity *act, player *p )
 {
@@ -1651,90 +1504,7 @@ void activity_handlers::firstaid_finish( player_activity *act, player *p )
     act->values.clear();
 }
 
-void activity_handlers::forage_finish( player_activity *act, player *p )
-{
-    // Don't forage if we aren't next to the bush - otherwise we get weird bugs
-    bool next_to_bush = false;
-    map &here = get_map();
-    for( const auto &pnt : here.points_in_radius( p->bub_pos(), 1 ) ) {
-        if( here.bub_to_abs( pnt ) == act->placement ) {
-            next_to_bush = true;
-            break;
-        }
-    }
 
-    if( !next_to_bush ) {
-        act->set_to_null();
-        return;
-    }
-
-    const int veggy_chance = rng( 1, 100 );
-    bool found_something = false;
-
-    item_group_id loc;
-    ter_str_id next_ter;
-
-    switch( season_of_year( calendar::turn ) ) {
-        case SPRING:
-            loc = item_group_id( "forage_spring" );
-            next_ter = ter_str_id( "t_underbrush_harvested_spring" );
-            break;
-        case SUMMER:
-            loc = item_group_id( "forage_summer" );
-            next_ter = ter_str_id( "t_underbrush_harvested_summer" );
-            break;
-        case AUTUMN:
-            loc = item_group_id( "forage_autumn" );
-            next_ter = ter_str_id( "t_underbrush_harvested_autumn" );
-            break;
-        case WINTER:
-            loc = item_group_id( "forage_winter" );
-            next_ter = ter_str_id( "t_underbrush_harvested_winter" );
-            break;
-        default:
-            debugmsg( "Invalid season" );
-    }
-
-    here.ter_set( here.abs_to_bub( act->placement ), next_ter );
-
-    // Survival gives a bigger boost, and Perception is leveled a bit.
-    // Both survival and perception affect time to forage
-
-    ///\EFFECT_PER slightly increases forage success chance
-    ///\EFFECT_SURVIVAL increases forage success chance
-    if( veggy_chance < p->get_skill_level( skill_survival ) * 3 + p->per_cur - 2 ) {
-        const std::vector<item *> dropped = here.put_items_from_loc( loc, p->bub_pos(), calendar::turn );
-        for( item *it : dropped ) {
-            add_msg( m_good, _( "You found: %s!" ), it->tname() );
-            found_something = true;
-            if( it->has_flag( flag_FORAGE_POISON ) && one_in( 10 ) ) {
-                it->set_flag( flag_HIDDEN_POISON );
-                it->poison = rng( 2, 7 );
-            }
-            if( it->has_flag( flag_FORAGE_HALLU ) && !it->has_flag( flag_HIDDEN_POISON ) && one_in( 10 ) ) {
-                it->set_flag( flag_HIDDEN_HALLU );
-            }
-        }
-    }
-    // 10% to drop a item/items from this group.
-    if( one_in( 10 ) ) {
-        const std::vector<item *> dropped = here.put_items_from_loc( item_group_id( "trash_forest" ),
-                                            p->bub_pos(),
-                                            calendar::turn );
-        for( item * const &it : dropped ) {
-            add_msg( m_good, _( "You found: %s!" ), it->tname() );
-            found_something = true;
-        }
-    }
-
-    if( !found_something ) {
-        add_msg( _( "You didn't find anything." ) );
-    }
-
-    iexamine::practice_survival_while_foraging( p );
-
-    act->set_to_null();
-}
 
 void activity_handlers::generic_game_do_turn( player_activity * /*act*/, player *p )
 {
@@ -1863,54 +1633,7 @@ void activity_handlers::make_zlave_finish( player_activity *act, player *p )
     }
 }
 
-void activity_handlers::pickaxe_do_turn( player_activity *act, player * )
-{
-    const auto &pos = get_map().abs_to_bub( act->placement );
-    sfx::play_activity_sound( "tool", "pickaxe", sfx::get_heard_volume( pos ) );
-    // each turn is too much
-    if( calendar::once_every( 1_minutes ) ) {
-        //~ Sound of a Pickaxe at work!
-        sounds::sound( pos, 30, sounds::sound_t::destructive_activity, _( "CHNK!  CHNK!  CHNK!" ) );
-    }
-}
 
-void activity_handlers::pickaxe_finish( player_activity *act, player *p )
-{
-    map &here = get_map();
-    const tripoint_bub_ms pos( here.abs_to_bub( act->placement ) );
-    if( p->is_avatar() ) {
-        int act_exertion = act->moves_total;
-        // Troglodyte mutants can dig longer before tiring
-        if( p->has_trait( trait_STOCKY_TROGLO ) ) {
-            act_exertion /= 2;
-        }
-        // Base cost of 1 fatigue per 3 minutes, or 30 fatigue at 8 strength since 90 minutes
-        // Strength, terrain, and helpers accounted for by time calculation
-        p->mod_stored_kcal( std::min( -1, -act_exertion / to_moves<int>( 45_seconds ) ) );
-        p->mod_thirst( std::max( 1, act_exertion / to_moves<int>( 6_minutes ) ) );
-        p->mod_fatigue( std::max( 1, act_exertion / to_moves<int>( 3_minutes ) ) );
-    }
-    act->set_to_null();
-    p->add_msg_player_or_npc( m_good,
-                              _( "You finish digging." ),
-                              _( "<npcname> finishes digging." ) );
-    if( here.has_flag_furn( TFLAG_MINEABLE, pos ) ) {
-        here.destroy_furn( pos, true );
-    } else {
-        here.destroy( pos, true );
-    }
-    if( !act->get_tools().empty() ) {
-        item &it = *act->get_tools().front();
-        p->consume_charges( it, it.ammo_required() );
-    } else {
-        debugmsg( "pickaxe activity has no tool" );
-    }
-    if( resume_for_multi_activities( *p ) ) {
-        for( item *&elem : here.i_at( pos ) ) {
-            elem->set_var( "activity_var", p->name );
-        }
-    }
-}
 
 void activity_handlers::pulp_do_turn( player_activity *act, player *p )
 {
@@ -2259,73 +1982,7 @@ void activity_handlers::vehicle_finish( player_activity *act, player *p )
     }
 }
 
-void activity_handlers::hand_crank_do_turn( player_activity *act, player *p )
-{
-    // Hand-crank chargers seem to range from 2 watt (very common easily verified)
-    // to 10 watt (suspicious claims from some manufacturers) sustained output.
-    // It takes 2.4 minutes to produce 1kj at just slightly under 7 watts (25 kj per hour)
-    // time-based instead of speed based because it's a sustained activity
-    auto &hand_crank_item = *act->get_tools().front();
-    constexpr auto interval_turns_index = 0;
-    constexpr auto charge_amount_index = 1;
-    constexpr auto fatigue_amount_index = 2;
-    constexpr auto ammo_type_index = 0;
-    constexpr auto fully_charged_message_index = 1;
-    constexpr auto exhausted_message_index = 2;
-    auto charge_interval = 144_seconds;
-    auto charge_amount = 1;
-    auto fatigue_amount = 1;
-    auto ammo_type = itype_id( "battery" );
-    auto fully_charged_message = std::string( "You've charged the battery completely." );
-    auto exhausted_message = std::string( "You're too exhausted to keep cranking." );
 
-    if( act->values.size() > interval_turns_index ) {
-        charge_interval = time_duration::from_turns( act->values[interval_turns_index] );
-    }
-    if( act->values.size() > charge_amount_index ) {
-        charge_amount = std::max( 1, act->values[charge_amount_index] );
-    }
-    if( act->values.size() > fatigue_amount_index ) {
-        fatigue_amount = std::max( 0, act->values[fatigue_amount_index] );
-    }
-    if( act->str_values.size() > ammo_type_index &&
-        !act->str_values[ammo_type_index].empty() ) {
-        ammo_type = itype_id( act->str_values[ammo_type_index] );
-    }
-    if( act->str_values.size() > fully_charged_message_index &&
-        !act->str_values[fully_charged_message_index].empty() ) {
-        fully_charged_message = act->str_values[fully_charged_message_index];
-    }
-    if( act->str_values.size() > exhausted_message_index &&
-        !act->str_values[exhausted_message_index].empty() ) {
-        exhausted_message = act->str_values[exhausted_message_index];
-    }
-    if( charge_interval <= 0_turns ) {
-        charge_interval = 144_seconds;
-    }
-
-    if( calendar::once_every( charge_interval ) ) {
-        p->mod_fatigue( fatigue_amount );
-        if( hand_crank_item.ammo_capacity() > hand_crank_item.ammo_remaining() ) {
-            const auto current = hand_crank_item.ammo_remaining();
-            const auto capacity = hand_crank_item.ammo_capacity();
-            const auto next_charges = std::min( capacity, current + charge_amount );
-            hand_crank_item.ammo_set( ammo_type, next_charges );
-            if( next_charges >= capacity ) {
-                act->moves_left = 0;
-                add_msg( m_info, _( fully_charged_message ) );
-            }
-        } else {
-            act->moves_left = 0;
-            add_msg( m_info, _( fully_charged_message ) );
-        }
-    }
-    if( p->get_fatigue() >= fatigue_levels::dead_tired ) {
-        act->moves_left = 0;
-        add_msg( m_info, _( exhausted_message ) );
-    }
-
-}
 
 void activity_handlers::vibe_do_turn( player_activity *act, player *p )
 {
@@ -3077,19 +2734,7 @@ void activity_handlers::toolmod_add_finish( player_activity *act, player *p )
     tool.put_in( mod.detach() );
 }
 
-void activity_handlers::clear_rubble_finish( player_activity *act, player *p )
-{
-    const auto &pos = act->placement;
-    map &here = get_map();
-    const auto bub_pos = here.abs_to_bub( pos );
-    const map_bash_info &bash = here.furn( bub_pos ).obj().bash;
-    p->add_msg_if_player( m_info, _( "You clear up the %s." ),
-                          here.furnname( bub_pos ) );
-    here.spawn_items( bub_pos, item_group::items_from( bash.drop_group, calendar::turn ) );
-    here.furn_set( bub_pos, f_null );
 
-    act->set_to_null();
-}
 
 void activity_handlers::meditate_finish( player_activity *act, player *p )
 {
@@ -3709,50 +3354,7 @@ void activity_handlers::operation_finish( player_activity *act, player *p )
     act->set_to_null();
 }
 
-void activity_handlers::churn_finish( player_activity *act, player *p )
-{
-    map &here = get_map();
-    p->add_msg_if_player( _( "You finish churning up the earth here." ) );
-    here.ter_set( here.abs_to_bub( act->placement ), t_dirtmound );
-    // Go back to what we were doing before
-    // could be player zone activity, or could be NPC multi-farming
-    act->set_to_null();
-    resume_for_multi_activities( *p );
-}
 
-void activity_handlers::plant_seed_finish( player_activity *act, player *p )
-{
-    map &here = get_map();
-    auto examp = here.abs_to_bub( act->placement );
-    const itype_id seed_id( act->str_values[0] );
-    std::vector<detached_ptr<item>> used_seed;
-    if( item::count_by_charges( seed_id ) ) {
-        used_seed = p->use_charges( seed_id, 1 );
-    } else {
-        used_seed = p->use_amount( seed_id, 1 );
-    }
-    if( !used_seed.empty() ) {
-        used_seed.front()->set_age( 0_turns );
-        if( used_seed.front()->has_var( "activity_var" ) ) {
-            used_seed.front()->erase_var( "activity_var" );
-        }
-        used_seed.front()->set_flag( flag_HIDDEN_ITEM );
-        here.add_item_or_charges( examp, std::move( used_seed.front() ) );
-        if( here.has_flag_furn( seed_id->seed->required_terrain_flag, examp ) ) {
-            here.furn_set( examp, furn_str_id( here.furn( examp )->plant->transform ) );
-        } else if( seed_id->seed->required_terrain_flag == flag_PLANTABLE ) {
-            here.set( examp, t_dirt, f_plant_seed );
-        } else {
-            here.furn_set( examp, f_plant_seed );
-        }
-        p->add_msg_player_or_npc( _( "You plant some %s." ), _( "<npcname> plants some %s." ),
-                                  item::nname( seed_id ) );
-    }
-    // Go back to what we were doing before
-    // could be player zone activity, or could be NPC multi-farming
-    act->set_to_null();
-    resume_for_multi_activities( *p );
-}
 
 void activity_handlers::tidy_up_do_turn( player_activity *act, player *p )
 {
@@ -3942,27 +3544,7 @@ void activity_handlers::eat_menu_finish( player_activity *, player * )
     return;
 }
 
-void activity_handlers::pry_nails_do_turn( player_activity *act, player * )
-{
-    map &here = get_map();
-    const auto bub_loc = here.abs_to_bub( act->placement );
-    sfx::play_activity_sound( "tool", "hammer", sfx::get_heard_volume( bub_loc ) );
-}
 
-void activity_handlers::pry_nails_finish( player_activity *act, player *p )
-{
-    map &here = get_map();
-    const auto bub_loc = here.abs_to_bub( act->placement );
-    const ter_id type = here.ter( bub_loc );
-
-    p->add_msg_if_player( _( "You pry out the nails from the terrain." ) );
-
-    p->practice( skill_fabrication, 1, 1 );
-    here.spawn_item( p->bub_pos(), itype_nail, 1, type->nail_pull_items[0] );
-    here.spawn_item( p->bub_pos(), itype_2x4, type->nail_pull_items[1] );
-    here.ter_set( bub_loc, type->nail_pull_result );
-    act->set_to_null();
-}
 
 void activity_handlers::chop_tree_do_turn( player_activity *act, player * )
 {
@@ -4158,85 +3740,7 @@ void activity_handlers::chop_planks_finish( player_activity *act, player *p )
     resume_for_multi_activities( *p );
 }
 
-void activity_handlers::jackhammer_do_turn( player_activity *act, player * )
-{
-    map &here = get_map();
-    sfx::play_activity_sound( "tool", "jackhammer",
-                              sfx::get_heard_volume( here.abs_to_bub( act->placement ) ) );
-    if( calendar::once_every( 1_minutes ) ) {
-        sounds::sound( here.abs_to_bub( act->placement ), 15, sounds::sound_t::destructive_activity,
-                       //~ Sound of a jackhammer at work!
-                       _( "TATATATATATATAT!" ) );
-    }
-}
 
-void activity_handlers::jackhammer_finish( player_activity *act, player *p )
-{
-    map &here = get_map();
-    const auto &pos = here.abs_to_bub( act->placement );
-
-    if( here.has_flag_furn( TFLAG_MINEABLE, pos ) ) {
-        here.destroy_furn( pos, true );
-    } else {
-        here.destroy( pos, true );
-    }
-
-    if( p->is_avatar() ) {
-        int act_exertion = act->moves_total;
-        // Troglodyte mutants can dig longer before tiring
-        if( p->has_trait( trait_STOCKY_TROGLO ) ) {
-            act_exertion /= 2;
-        }
-        // Base cost of 1 fatigue per 3 minutes, or 10 fatigue at 8 strength since 30 minutes
-        // Strength, terrain, and helpers accounted for by time calculation
-        p->mod_stored_kcal( std::min( -1, -act_exertion / to_moves<int>( 45_seconds ) ) );
-        p->mod_thirst( std::max( 1, act_exertion / to_moves<int>( 6_minutes ) ) );
-        p->mod_fatigue( std::max( 1, act_exertion / to_moves<int>( 3_minutes ) ) );
-    }
-    p->add_msg_player_or_npc( m_good,
-                              _( "You finish drilling." ),
-                              _( "<npcname> finishes drilling." ) );
-    act->set_to_null();
-    if( !act->get_tools().empty() ) {
-        item &it = *act->get_tools().front();
-        p->consume_charges( it, it.ammo_required() );
-    } else {
-        debugmsg( "unable to find tool" );
-    }
-    if( resume_for_multi_activities( *p ) ) {
-        for( item *&elem : here.i_at( pos ) ) {
-            elem->set_var( "activity_var", p->name );
-        }
-    }
-}
-
-void activity_handlers::fill_pit_do_turn( player_activity *act, player * )
-{
-    sfx::play_activity_sound( "tool", "shovel", 100 );
-    if( calendar::once_every( 1_minutes ) ) {
-        //~ Sound of a shovel filling a pit or mound at work!
-        sounds::sound( get_map().abs_to_bub( act->placement ), 10, sounds::sound_t::activity, _( "hsh!" ) );
-    }
-}
-
-void activity_handlers::fill_pit_finish( player_activity *act, player *p )
-{
-    const auto &pos = act->placement;
-    map &here = get_map();
-    const auto bub_pos = here.abs_to_bub( pos );
-    const ter_id ter = here.ter( bub_pos );
-    const ter_id old_ter = ter;
-
-    here.ter_set( bub_pos, old_ter->fill_result );
-    int act_exertion = to_moves<int>( time_duration::from_minutes( old_ter->fill_minutes ) );
-    const int helpersize = character_funcs::get_crafting_helpers( *p, 3 ).size();
-    act_exertion = act_exertion * ( 10 - helpersize ) / 10;
-    p->mod_stored_kcal( std::min( -1, -act_exertion / to_moves<int>( 20_seconds ) ) );
-    p->mod_thirst( std::max( 1, act_exertion / to_moves<int>( 3_minutes ) ) );
-    p->mod_fatigue( std::max( 1, act_exertion / to_moves<int>( 90_seconds ) ) );
-    p->add_msg_if_player( m_good, _( "You finish filling up %s." ), old_ter->name() );
-    act->set_to_null();
-}
 
 void activity_handlers::play_with_pet_finish( player_activity *act, player *p )
 {
@@ -4346,7 +3850,7 @@ static void cleanup_tiles( std::unordered_set<tripoint_abs_ms> &tiles, fn &clean
     }
 }
 
-static void perform_zone_activity_turn( player *p,
+void activity_handlers::perform_zone_activity_turn( player *p,
                                         const zone_type_id &ztype,
                                         const std::function<bool( const tripoint_bub_ms & )> &tile_filter,
                                         const std::function<void ( player &p, const tripoint_bub_ms & )> &tile_action,
@@ -4387,57 +3891,7 @@ static void perform_zone_activity_turn( player *p,
     p->activity->set_to_null();
 }
 
-void activity_handlers::fertilize_plot_do_turn( player_activity *act, player *p )
-{
-    itype_id fertilizer;
-    auto check_fertilizer = [&]( bool ask_user = true ) -> void {
-        if( act->str_values.empty() )
-        {
-            act->str_values.emplace_back( "" );
-        }
-        fertilizer = itype_id( act->str_values[0] );
 
-        /* If unspecified, or if we're out of what we used before, ask */
-        if( ask_user && ( fertilizer.is_empty() || !p->has_charges( fertilizer, 1 ) ) )
-        {
-            fertilizer = iexamine::choose_fertilizer( *p, "plant",
-                    false /* Don't confirm action with player */ );
-            act->str_values[0] = fertilizer.str();
-        }
-    };
-
-    auto have_fertilizer = [&]() {
-        return !fertilizer.is_empty() && p->has_charges( fertilizer, 1 );
-    };
-
-    const auto reject_tile = [&]( const tripoint_bub_ms & tile ) {
-        check_fertilizer();
-        ret_val<bool> can_fert = iexamine::can_fertilize( *p, tile, fertilizer );
-        return !can_fert.success();
-    };
-
-    const auto fertilize = [&]( player & p, const tripoint_bub_ms & tile ) {
-        check_fertilizer();
-        if( have_fertilizer() ) {
-            iexamine::fertilize_plant( p, tile, fertilizer );
-            if( !have_fertilizer() ) {
-                add_msg( m_info, _( "You have run out of %s." ), item::nname( fertilizer ) );
-            }
-        }
-    };
-
-    check_fertilizer();
-    if( !have_fertilizer() ) {
-        act->set_to_null();
-        return;
-    }
-
-    perform_zone_activity_turn( p,
-                                zone_type_FARM_PLOT,
-                                reject_tile,
-                                fertilize,
-                                _( "You fertilized every plot you could." ) );
-}
 
 void activity_handlers::robot_control_do_turn( player_activity *act, player *p )
 {
