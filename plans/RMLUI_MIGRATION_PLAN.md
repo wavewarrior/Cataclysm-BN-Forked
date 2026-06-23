@@ -3339,9 +3339,12 @@ primitive counts) + the `panels.cpp` HUD curses sidebar. The shared backend is N
   - **★ Clean orphan-draw frontier EXHAUSTED after B10.** What remains is NOT mechanical deletion:
     popup-migration (NEW RML: trade_win/safemode_ui/messages-filter/scores_ui-show_kills) and the
     inventory_ui base-selector migration. Each is a feature/migration task, not a rip-out batch.
-  - **panels.cpp HUD curses sidebar — REMOVED FROM THIS PLAN (2026-06-23).** Split out to a dedicated
-    future plan (needs minimap + bodygraph RTT first; biggest/riskiest). NOT a blocker for the rest of
-    this rip-out. To be picked up separately.
+  - **panels.cpp HUD curses sidebar — RIP OUT STAYS IN THIS PLAN (2026-06-23 user directive: rip out the
+    curses panels EVEN IF the RmlUi HUD lacks features the old panels had).** Whole-sidebar curses
+    suppression + delete the curses `draw_*` panel builders; un-built panels show a placeholder / are
+    simply absent — accepted. SPLIT OUT to a separate future plan = only the NEW-HUD FEATURE WORK
+    (minimap + bodygraph RTT, polish, full panel parity). So: delete curses panels now; perfect the RML
+    HUD later.
   - Method that works: grep refs of each `draw_*`/`mvwprintz`-bearing fn; if refs = def + fwd-decl +
     comments only (no call site), it's orphaned → delete via the ripfn.py helper (delete_fn to the
     col-0 `}`; remove_decl up to `;`; remove decls BEFORE defs when they share a first-line prefix).
@@ -3367,8 +3370,13 @@ primitive counts) + the `panels.cpp` HUD curses sidebar. The shared backend is N
     magic/magic_teleporter_list, wish) — uilist KEEPS a curses fallback (`uilist::show` calls
     `callback->refresh()` at ui.cpp:922 for early-init before RmlUi is ready); shared text producers;
     and the whole map/dev backend.
-  - **`panels.cpp` HUD sidebar — REMOVED FROM THIS PLAN (2026-06-23), split to a dedicated future plan**
-    (biggest + riskiest; RML HUD needs minimap/bodygraph RTT first). Not a blocker for the rest of the rip-out.
+  - **`panels.cpp` HUD sidebar — RIP-OUT DONE 2026-06-23** (P1 `1322cce459` + P2a `d40d1cd49e` + P2b
+    `bc8980a098`, ~1900 lines, build+link green Metal). Curses sidebar fully gone; RmlUi HUD is the only
+    sidebar. P1: draw_panels→HUD-only + make_native/make_bodygraph name-only. P2a: dropped 4 built-in layouts,
+    ctor default→"custom", empty-layout guards, reload_widget_layouts→update_offsets (width_right now tracks
+    custom layout — behavior change). P2b: deleted 58 draw_* + native_draw_registry/target_exists/fn + orphaned
+    helpers + widget_test native cases. Unmigrated panels = [name] placeholder; body graph = placeholder.
+    **EYEBALL+STARTUP OWED.** NEW-HUD feature work (minimap/bodygraph RTT, parity, polish) = separate future plan.
 - **BUILD NOTE (this session):** the first `game.cpp` recompile after touching `npc.h` failed once with
   a phantom `butchery_activity_actor` "no matching constructor" — a STALE intermediate against the
   uncommitted SIM_PERFORMANCE `activity_actor*` edits, NOT a source bug (the 2-arg calls match). A clean
