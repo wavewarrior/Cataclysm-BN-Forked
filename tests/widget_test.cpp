@@ -37,7 +37,9 @@ TEST_CASE( "native widget loads and binds to a draw target", "[widget][sidebar]"
     CHECK( wp.get_name() == "stats" );
     CHECK( wp.get_height() == 2 );
     CHECK( wp.get_width() == 38 );
-    CHECK( static_cast<bool>( wp.draw ) );
+    // Tier-10 curses rip-out: native panels are name-only now (rendered by the
+    // RmlUi HUD via hud_producer); they carry no curses draw.
+    CHECK_FALSE( static_cast<bool>( wp.draw ) );
 }
 
 TEST_CASE( "flex heights pass through unclamped", "[widget][sidebar]" )
@@ -106,11 +108,12 @@ TEST_CASE( "body_graph widget parses dimension + builds a multi-row panel", "[wi
     CHECK( widget_id( "bodygraph_encumb" )->var() == widget_var::body_graph_encumb );
     CHECK( widget_id( "bodygraph_status" )->var() == widget_var::body_graph_status );
 
-    // The renderer builds a multi-row panel with a clean gutter name + bound draw.
+    // The renderer builds a multi-row panel with a clean gutter name.
     const window_panel wp = make_bodygraph_widget_panel( w, 44 );
     CHECK( wp.get_name() == "Bodygraph" );
     CHECK( wp.get_height() == 3 );
-    CHECK( static_cast<bool>( wp.draw ) );
+    // Tier-10 curses rip-out: name-only (RmlUi HUD shows a placeholder); no curses draw.
+    CHECK_FALSE( static_cast<bool>( wp.draw ) );
 }
 
 TEST_CASE( "reload_widget_layouts registers the custom sidebar layout", "[widget][sidebar]" )

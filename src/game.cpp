@@ -4362,117 +4362,18 @@ void game::draw( ui_adaptor &ui )
     ui.set_cursor( w_terrain, -u.view_offset.xy().raw() + point( POSX, POSY ) );
 }
 
-void game::draw_panels( bool force_draw )
+void game::draw_panels( bool /* force_draw */ )
 {
     ZoneScopedN( "draw_panels" );
-    static int previous_turn = -1;
-    const int current_turn = to_turns<int>( calendar::turn - calendar::turn_zero );
-    const bool draw_this_turn = current_turn > previous_turn || force_draw;
-    auto &mgr = panel_manager::get_manager();
-    // Sidebar HUD (Tier 7, slice 3 structural pivot): when enabled, a persistent RmlUi
-    // document = ONE flex column owns the WHOLE sidebar. Open lazily + sync every call
-    // (rebuilds rows + repositions the container); close (no-op if already closed) when
-    // disabled so flipping the F4 toggle off restores curses. When active, skip the entire
-    // curses sidebar draw below — the column renders everything (migrated panels + visible
-    // placeholders for the rest). previous_turn is advanced so the turn gate stays sane.
+    // Tier-10 curses rip-out: the sidebar is rendered entirely by the RmlUi HUD.
+    // draw_panels only drives that persistent document — open/sync while enabled,
+    // close on toggle-off. The legacy curses panel render path has been removed.
     if( sidebar_hud_rmlui_enabled() ) {
         sidebar_hud_open();
         sidebar_hud_sync( u );
     } else {
         sidebar_hud_close();
     }
-    if( sidebar_hud_active() ) {
-        previous_turn = current_turn;
-        return;
-    }
-    int y = 0;
-    const bool sidebar_right = get_option<std::string>( "SIDEBAR_POSITION" ) == "right";
-    const int spacer = get_option<bool>( "SIDEBAR_SPACERS" ) ? 1 : 0;
-    // First pass: total height (incl. per-panel spacer) of every rendered non-log panel. The
-    // flex log panel (height == -2) absorbs whatever space is left, down to a 3-row minimum.
-    // The log's slot is the remainder, so the total never overshoots TERMY (previously a stray
-    // `+= spacer` on the log pushed the stack one row past the bottom).
-    int fixed_height = 0;
-    for( const window_panel &panel : mgr.get_current_layout() ) {
-        if( panel.toggle && panel.render() ) {
-            const int ph = panel.get_height();
-            if( ph != -2 ) {
-                fixed_height += ph + spacer;
-            }
-        }
-    }
-    const int log_height = std::max( TERMY - fixed_height, 3 );
-
-    // Second pass: draw, clamping each panel to the space left. If a panel can't fully fit (or
-    // a later panel has no room at all), flag overflow so we can mark hidden content instead of
-    // silently dropping it.
-    bool overflow = false;
-    for( const window_panel &panel : mgr.get_current_layout() ) {
-        if( !panel.toggle || !panel.render() ) {
-            continue;
-        }
-        const int remaining = TERMY - y;
-        if( remaining <= 0 ) {
-            overflow = true;
-            break;
-        }
-        // log panel (-2) already has its spacer budget folded into log_height; everything else
-        // reserves its own height plus one spacer row.
-        const int ph = panel.get_height();
-        int h = ph == -2 ? log_height : ph + spacer;
-        if( h > remaining ) {
-            h = remaining;
-            overflow = true;
-        }
-        if( h <= 0 ) {
-            overflow = true;
-            break;
-        }
-        // Tier 7: when the RmlUi HUD is active we never reach here (draw_panels
-        // early-returns above — the HUD column owns the whole sidebar). So this is the
-        // plain curses path.
-        if( panel.always_draw || draw_this_turn ) {
-            panel.draw( u, catacurses::newwin( h, panel.get_width(),
-                                               point( sidebar_right ? TERMX - panel.get_width() : 0, y ) ) );
-        }
-        if( show_panel_adm ) {
-            const std::string panel_name = _( panel.get_name() );
-            const int panel_name_width = utf8_width( panel_name );
-            auto label = catacurses::newwin( 1, panel_name_width, point( sidebar_right ?
-                                             TERMX - panel.get_width() - panel_name_width - 1 : panel.get_width() + 1, y ) );
-            werase( label );
-            mvwprintz( label, point_zero, c_light_red, panel_name );
-            wnoutrefresh( label );
-            label = catacurses::newwin( h, 1,
-                                        point( sidebar_right ? TERMX - panel.get_width() - 1 : panel.get_width(), y ) );
-            werase( label );
-            if( h == 1 ) {
-                mvwputch( label, point_zero, c_light_red, LINE_OXOX );
-            } else {
-                mvwputch( label, point_zero, c_light_red, LINE_OXXX );
-                for( int i = 1; i < h - 1; i++ ) {
-                    mvwputch( label, point( 0, i ), c_light_red, LINE_XOXO );
-                }
-                mvwputch( label, point( 0, h - 1 ), c_light_red, sidebar_right ? LINE_XXOO : LINE_XOOX );
-            }
-            wnoutrefresh( label );
-        }
-        y += h;
-    }
-
-    // Some enabled panels were truncated or pushed off the bottom: mark the sidebar's last row
-    // so hidden content is visible rather than silently lost.
-    if( overflow ) {
-        const int wd = mgr.get_current_layout().begin()->get_width();
-        const int x = sidebar_right ? TERMX - wd : 0;
-        catacurses::window marker = catacurses::newwin( 1, wd, point( x, TERMY - 1 ) );
-        werase( marker );
-        const std::string txt = "▼ more";
-        mvwprintz( marker, point( std::max( 0, ( wd - utf8_width( txt ) ) / 2 ), 0 ),
-                   c_yellow, txt );
-        wnoutrefresh( marker );
-    }
-    previous_turn = current_turn;
 }
 
 void game::draw_pixel_minimap( const catacurses::window &w )

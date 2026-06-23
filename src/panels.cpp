@@ -541,13 +541,11 @@ void overmap_ui::draw_overmap_chunk( const catacurses::window &w_minimap, const 
     }
 }
 
-
 static void draw_minimap( const avatar &u, const catacurses::window &w_minimap )
 {
     const tripoint_abs_omt curs = u.abs_omt_pos();
     overmap_ui::draw_overmap_chunk( w_minimap, u, curs, point( -1, -1 ), 7, 7 );
 }
-
 
 static void decorate_panel( const std::string &name, const catacurses::window &w )
 {
@@ -1050,7 +1048,6 @@ static void draw_limb_health( avatar &u, const catacurses::window &w, const body
         }
     }
 
-
     std::pair<std::string, nc_color> hp = get_hp_bar( hp_cur, hp_max );
     if( color_override ) {
         hp.second = *color_override;
@@ -1295,7 +1292,6 @@ static std::string carry_volume_string( const avatar &u )
     return string_format( "%.2f/%.2f", volume_carried, volume_capacity );
 }
 
-
 static auto get_weight_color( const avatar &u ) -> nc_color
 {
     if( u.weight_carried() > u.weight_capacity() ) {
@@ -1331,7 +1327,6 @@ static void draw_weightvolume_classic( const avatar &u, const catacurses::window
 
     wnoutrefresh( w );
 }
-
 
 static void draw_weightvolume_compact( const avatar &u, const catacurses::window &w )
 {
@@ -1906,7 +1901,6 @@ static void draw_health_classic( avatar &u, const catacurses::window &w )
         }
     };
 
-
     werase( w );
 
     draw_minimap( u, w );
@@ -2109,7 +2103,6 @@ static void draw_compass( avatar &, const catacurses::window &w )
     wnoutrefresh( w );
 }
 
-
 static void draw_simple_compass( avatar &u, const catacurses::window &w )
 {
     werase( w );
@@ -2135,8 +2128,6 @@ static void draw_simple_compass( avatar &u, const catacurses::window &w )
     mvwprintz( w, point( 0, 0 ), c_white, enemies_text );
     wnoutrefresh( w );
 }
-
-
 
 static void draw_compass_padding( avatar &, const catacurses::window &w )
 {
@@ -2352,7 +2343,6 @@ static void draw_weapon_classic( const avatar &u, const catacurses::window &w )
 
     wnoutrefresh( w );
 }
-
 
 static void draw_weapon_classic_alt( const avatar &u, const catacurses::window &w )
 {
@@ -3338,37 +3328,14 @@ static std::function<bool()> resolve_widget_show_if( const widget &w )
 
 window_panel make_native_widget_panel( const widget &w, int width )
 {
-    const std::string &target = w.native();
-    const auto &reg = native_draw_registry();
-    const auto it = reg.find( target );
-    const native_draw_fn fn = it != reg.end() ? it->second : native_draw_fn{};
-    if( !fn ) {
-        // Misconfigured sidebar.json. This builder runs once per panel at
-        // layout-build time (not per frame), so a plain warn is fine; the draw
-        // falls back to clearing the window so a bad target never crashes.
-        debugmsg( "native widget '%s' references unknown draw target '%s'",
-                  w.getId().c_str(), target.c_str() );
-    }
-    auto draw_func = [fn]( avatar & u, const catacurses::window & win ) {
-        if( fn ) {
-            fn( u, win );
-        } else {
-            werase( win );
-            wnoutrefresh( win );
-        }
-    };
-
-    // window_panel's name is its save/load match key (untranslated, stable) and
-    // is re-localized for display via _(). The widget id is that stable key;
-    // _label is the display label. The W_DISABLED_BY_DEFAULT flag mirrors CDDA's
-    // default-off panels.
+    // Tier-10 curses rip-out: native widgets no longer resolve a curses draw_*.
+    // The RmlUi HUD renders each panel by NAME via hud_producer(); build the
+    // window_panel name-only (no curses draw). The widget id is the stable
+    // save/match key and the hud_producer lookup key.
     const int panel_width = std::max( 1, width > 0 ? width : w.width() );
     const bool default_toggle = !w.has_flag( "W_DISABLED_BY_DEFAULT" );
-    // W_ALWAYS_DRAW → window_panel force_draw: the panel redraws every frame even
-    // when the sidebar isn't otherwise dirty (the hardcoded Map/draw_mminimap panel
-    // passes always_draw=true so the GPU minimap stays smooth while moving).
     const bool force_draw = w.has_flag( "W_ALWAYS_DRAW" );
-    return window_panel( draw_func, w.getId().str(), w.height(), panel_width,
+    return window_panel( {}, w.getId().str(), w.height(), panel_width,
                          default_toggle, resolve_widget_show_if( w ), force_draw );
 }
 
@@ -3533,46 +3500,6 @@ window_panel make_value_widget_panel( const widget &w, int width )
 // Per-body-part color for a body-graph dimension. The renderer-agnostic core:
 // each body_graph* var picks a different per-bp value to color by, mirroring
 // CDDA's display::get_bodygraph_bp_color but against BN's getters.
-static nc_color bodygraph_bp_color( widget_var var, const avatar &u, const bodypart_id &bp )
-{
-    switch( var ) {
-        case widget_var::body_graph_temp: {
-            const int t = u.get_part_temp_cur( bp );
-            if( t > BODYTEMP_VERY_HOT ) {
-                return c_red;
-            } else if( t > BODYTEMP_HOT ) {
-                return c_light_red;
-            } else if( t > BODYTEMP_COLD ) {
-                return c_light_gray;
-            } else if( t > BODYTEMP_VERY_COLD ) {
-                return c_light_blue;
-            }
-            return c_blue;
-        }
-        case widget_var::body_graph_encumb: {
-            const int e = u.encumb( bp.id() );
-            if( e <= 0 ) {
-                return c_green;
-            } else if( e < 20 ) {
-                return c_light_gray;
-            } else if( e < 40 ) {
-                return c_yellow;
-            } else if( e < 60 ) {
-                return c_light_red;
-            }
-            return c_red;
-        }
-        case widget_var::body_graph_status:
-            return u.limb_color( bp.id(), true, true, true );
-        case widget_var::body_graph_wet:
-            // BN has no per-bp wetness (only global) → degraded placeholder.
-            return c_light_gray;
-        case widget_var::body_graph:
-        default:
-            // HP — matches the Limbs panel coloring.
-            return get_hp_bar( u.get_part_hp_cur( bp ), u.get_part_hp_max( bp ) ).second;
-    }
-}
 
 // Body-graph value widget: lays the main body parts in a 2-column grid (the
 // draw_limb2 layout) and colors each limb label by the widget's body_graph*
@@ -3580,37 +3507,11 @@ static nc_color bodygraph_bp_color( widget_var var, const avatar &u, const bodyp
 // native Limbs panel.
 window_panel make_bodygraph_widget_panel( const widget &w, int width )
 {
-    const widget_id id = w.getId();
-    const widget_var var = w.var();
-    if( var == widget_var::body_graph_wet ) {
-        // Builder runs once per panel at layout-build, not per frame → a plain
-        // warn is fine. BN has no per-bp wetness, so this dimension is degraded.
-        debugmsg( "body_graph_wet: BN has no per-bp wetness; rendering degraded (flat color)" );
-    }
-    auto draw_func = [var]( avatar & u, const catacurses::window & win ) {
-        werase( win );
-        // The HP dimension mirrors the Limbs panel: colored limb label + an HP
-        // bar, two limbs per row. The other dimensions (temp/encumb/status/wet)
-        // have no bar representation, so they render as color-only labels — the
-        // tint IS the data — with wider spacing.
-        const bool hp_dim = ( var == widget_var::body_graph );
-        int i = 0;
-        for( const bodypart_id &bp : u.get_all_body_parts( true ) ) {
-            const bool left = ( i % 2 == 0 );
-            const int label_x = left ? 0 : ( hp_dim ? 11 : 16 );
-            mvwprintz( win, point( label_x, i / 2 ), bodygraph_bp_color( var, u, bp ),
-                       body_part_hp_bar_ui_text( bp ) );
-            if( hp_dim ) {
-                wmove( win, point( left ? 5 : 16, i / 2 ) );
-                draw_limb_health( u, win, bp.id() );
-            }
-            i++;
-        }
-        wnoutrefresh( win );
-    };
+    // Tier-10 curses rip-out: name-only. The RmlUi HUD shows a placeholder for the
+    // body graph until the dedicated HUD plan builds it (no curses draw).
     const int panel_width = std::max( 1, width > 0 ? width : w.width() );
     const bool default_toggle = !w.has_flag( "W_DISABLED_BY_DEFAULT" );
-    return window_panel( draw_func, value_widget_name( id ), w.height(), panel_width,
+    return window_panel( {}, value_widget_name( w.getId() ), w.height(), panel_width,
                          default_toggle, resolve_widget_show_if( w ) );
 }
 
