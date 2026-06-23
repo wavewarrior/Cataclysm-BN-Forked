@@ -118,8 +118,6 @@ TEST_CASE( "reload_widget_layouts registers the custom sidebar layout", "[widget
     panel_manager &pm = panel_manager::get_manager();
     pm.reload_widget_layouts();
     CHECK( pm.has_layout( "custom" ) );
-    // Built-ins remain.
-    CHECK( pm.has_layout( "labels" ) );
 }
 
 TEST_CASE( "W_ALWAYS_DRAW maps to the window_panel force-draw flag", "[widget][sidebar]" )
@@ -161,10 +159,10 @@ TEST_CASE( "widget-engine layouts reproduce the four built-ins", "[widget][sideb
         CHECK( s._widgets.back() == widget_id( c.back ) );
     }
 
-    // They register as selectable layouts beside the built-ins, never replacing them.
+    // They register as selectable widget layouts (the built-in curses layouts were
+    // removed in the Tier-10 rip-out).
     panel_manager &pm = panel_manager::get_manager();
     pm.reload_widget_layouts();
     CHECK( pm.has_layout( "we_classic" ) );
     CHECK( pm.has_layout( "we_labels" ) );
-    CHECK( pm.has_layout( "labels" ) );
 }
