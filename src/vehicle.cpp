@@ -6568,6 +6568,7 @@ void vehicle::refresh()
     rail_profile.clear();
     has_autoloaders = false;
     has_cargo_recharge = false;
+    has_portal_tap_parts = false;
 
     // Used to sort part list so it displays properly when examining
     struct sort_veh_part_vector {
@@ -6669,6 +6670,9 @@ void vehicle::refresh()
         }
         if( vpi.has_flag( VPFLAG_RECHARGE ) ) {
             has_cargo_recharge = true;
+        }
+        if( vpi.has_flag( "POWER_DRAW_LINKED_PORTAL" ) ) {
+            has_portal_tap_parts = true;
         }
         if( vpi.has_flag( VPFLAG_WHEEL ) ) {
             wheelcache.push_back( p );

@@ -2501,12 +2501,26 @@ void options_manager::add_options_performance()
              0, 1, 0 );
         add( "ACTIVITY_SKIP_MONSTER_LOD_GATE", page_id,
              translate_marker( "Activity Skip Monster Gate" ),
-             translate_marker( "Highest real monster LOD tier allowed to run activity-skip AI.  "
-                               "Allowed monsters act one LOD tier less detailed than normal.  "
-                               "0 lets only Tier-0 monsters act as Tier-1.  "
-                               "1 lets Tier-0 and Tier-1 monsters act as Tier-1 and Tier-2, "
-                               "which is the default.  2 also lets Tier-2 monsters run macro AI." ),
-             0, 2, 1 );
+              translate_marker( "Highest real monster LOD tier allowed to run activity-skip AI.  "
+                                "Allowed monsters act one LOD tier less detailed than normal.  "
+                                "0 lets only Tier-0 monsters act as Tier-1.  "
+                                "1 lets Tier-0 and Tier-1 monsters act as Tier-1 and Tier-2, "
+                                "which is the default.  2 also lets Tier-2 monsters run macro AI." ),
+              0, 2, 1 );
+        add( "LOD_Z_PENALTY", page_id,
+             translate_marker( "Z-Level Distance Penalty" ),
+             translate_marker( "Extra distance added per z-level when assigning monster AI tiers.  "
+                               "Higher values push off-z monsters into coarser tiers faster.  "
+                               "Monsters one floor away always keep full AI regardless of this value." ),
+             0, 100, 16 );
+        add( "LOD_LIFECYCLE_STRIDE", page_id,
+             translate_marker( "Lifecycle Stride" ),
+             translate_marker( "How many turns between lifecycle processing (item processing, effects, "
+                               "field damage) for distant off-z Tier-2 monsters.  At 1 they process every "
+                               "turn (disabled).  Higher values reduce CPU cost for off-z hordes on "
+                               "field-free submaps.  Off-z monsters on field-containing submaps always "
+                               "process every turn regardless of this setting." ),
+             1, 10, is_android ? 6 : 4 );
     } );
 
     get_option( "LOD_ACTION_BUDGET" ).setPrerequisite( "MONSTER_LOD_ENABLED" );
@@ -2517,6 +2531,112 @@ void options_manager::add_options_performance()
     get_option( "LOD_COARSE_SCENT_INTERVAL" ).setPrerequisite( "MONSTER_LOD_ENABLED" );
     get_option( "LOD_GROUP_MORALE_MAX_TIER" ).setPrerequisite( "MONSTER_LOD_ENABLED" );
     get_option( "ACTIVITY_SKIP_MONSTER_LOD_GATE" ).setPrerequisite( "MONSTER_LOD_ENABLED" );
+    get_option( "LOD_Z_PENALTY" ).setPrerequisite( "MONSTER_LOD_ENABLED" );
+    get_option( "LOD_LIFECYCLE_STRIDE" ).setPrerequisite( "MONSTER_LOD_ENABLED" );
+
+    add_option_group( performance, Group( "lod_npc", to_translation( "NPC LOD" ),
+                                          to_translation( "Configure level-of-detail thresholds for NPC AI." ) ),
+    [&]( auto & page_id ) {
+        add( "NPC_LOD_ENABLED", page_id,
+             translate_marker( "NPC LOD Enabled" ),
+             translate_marker( "If true, NPC AI fidelity decreases with distance from the player.  "
+                               "Close NPCs run full AI; distant NPCs run progressively coarser AI.  "
+                               "Companions and visible NPCs always run full AI regardless." ),
+             true
+           );
+        add( "NPC_TIER0_DIST", page_id,
+             translate_marker( "Full AI Radius" ),
+             translate_marker( "NPCs within this radius run the complete AI every turn.  "
+                               "Must be less than the Coarse AI Radius.  "
+                               "Companions always run full AI regardless of distance." ),
+             5, 208, is_android ? 20 : 30 );
+        add( "NPC_TIER1_DIST", page_id,
+             translate_marker( "Coarse AI Radius" ),
+             translate_marker( "NPCs between the Full AI Radius and this distance run coarse AI: "
+                               "process_turn and move loop every turn, but monster-danger scanning "
+                               "runs less frequently (see NPC Coarse Danger Interval).  "
+                               "NPCs beyond this distance are Tier-2 (process_turn only, no move loop)." ),
+             10, 208, is_android ? 40 : 75 );
+        add( "NPC_DEMOTION_COOLDOWN", page_id,
+             translate_marker( "Demotion Cooldown" ),
+             translate_marker( "Turns an NPC must wait after being promoted to a higher-fidelity "
+                               "tier before it can be demoted again.  Prevents rapid tier oscillation "
+                               "at distance boundaries.  0 disables the cooldown." ),
+             0, 10, 3 );
+        add( "NPC_ACTION_BUDGET", page_id,
+             translate_marker( "Action Budget" ),
+             translate_marker( "Maximum number of non-follower NPCs that can enter the full move loop "
+                               "each turn.  When the budget is exceeded, the farthest NPCs are deferred "
+                               "to the next turn.  Followers and visible NPCs are always processed "
+                               "regardless of budget.  0 disables the budget cap." ),
+             0, 128, is_android ? 8 : 16 );
+        add( "NPC_COARSE_DANGER_INTERVAL", page_id,
+             translate_marker( "Coarse Danger Scan Interval" ),
+             translate_marker( "How many turns between full monster-danger scans for Tier-1 (coarse) "
+                               "NPCs.  At 1 they scan every turn (full fidelity); at 5 (default) they "
+                               "scan only once every 5 turns, reusing cached danger between scans." ),
+             1, 20, is_android ? 8 : 5 );
+        add( "NPC_MACRO_INTERVAL", page_id,
+             translate_marker( "Macro Step Interval" ),
+             translate_marker( "How many turns between macro-steps for Tier-2 NPCs.  "
+                               "At 1 they step every turn (disabled macro AI); at 3 (default) they "
+                               "take a single reposition step once every 3 turns.  "
+                               "Higher values reduce CPU cost for distant NPCs." ),
+             1, 10, is_android ? 4 : 3 );
+    } );
+
+    get_option( "NPC_TIER0_DIST" ).setPrerequisite( "NPC_LOD_ENABLED" );
+    get_option( "NPC_TIER1_DIST" ).setPrerequisite( "NPC_LOD_ENABLED" );
+    get_option( "NPC_DEMOTION_COOLDOWN" ).setPrerequisite( "NPC_LOD_ENABLED" );
+    get_option( "NPC_ACTION_BUDGET" ).setPrerequisite( "NPC_LOD_ENABLED" );
+    get_option( "NPC_COARSE_DANGER_INTERVAL" ).setPrerequisite( "NPC_LOD_ENABLED" );
+    get_option( "NPC_MACRO_INTERVAL" ).setPrerequisite( "NPC_LOD_ENABLED" );
+
+    add_empty_line();
+
+    add_option_group( performance, Group( "vehicle", to_translation( "Vehicle Throttling" ),
+                                          to_translation( "Configure vehicle processing stride to reduce CPU cost "
+                                                          "for parked and off-z vehicles." ) ),
+    [&]( auto & page_id ) {
+        add( "VEHICLE_IDLE_STRIDE", page_id,
+             translate_marker( "Idle Stride" ),
+             translate_marker( "How many turns between idle() calls for parked vehicles "
+                               "(engine off, not moving, no reactor, not player-controlled).  "
+                               "At 1 they process every turn (disabled).  Higher values reduce "
+                               "CPU cost for many parked vehicles at the cost of battery-level "
+                               "precision, which lags by up to K-1 turns." ),
+             1, 20, 5 );
+        add( "VEHICLE_OUTER_STRIDE", page_id,
+             translate_marker( "Outer Loop Stride" ),
+             translate_marker( "How many turns between gain_moves/slow_leak processing for "
+                               "off-z parked vehicles (engine off, not moving, on a different "
+                               "z-level than the player).  At 1 they process every turn "
+                               "(disabled).  Higher values reduce CPU cost for many off-z "
+                               "parked vehicles." ),
+             1, 10, 2 );
+    } );
+
+    get_option( "VEHICLE_IDLE_STRIDE" ).setPrerequisite( "MONSTER_LOD_ENABLED" );
+    get_option( "VEHICLE_OUTER_STRIDE" ).setPrerequisite( "MONSTER_LOD_ENABLED" );
+
+    add_empty_line();
+
+    add_option_group( performance, Group( "item_processing", to_translation( "Item Processing" ),
+                                          to_translation( "Configure item processing stride to reduce CPU cost "
+                                                          "for off-z-level items." ) ),
+    [&]( auto & page_id ) {
+        add( "ITEM_PROCESS_STRIDE", page_id,
+             translate_marker( "Item Process Stride" ),
+             translate_marker( "How many turns between processing off-z submap active items.  "
+                               "At 1 they process every turn (disabled).  Higher values reduce "
+                               "CPU cost for off-z items at the cost of delayed per-turn side "
+                               "effects (emissions, tool drain, LITCIG).  "
+                               "Time-critical items (explosives, countdown items) always process "
+                               "every turn regardless of stride." ),
+             1, 10, 1 );
+    } );
+
+    get_option( "ITEM_PROCESS_STRIDE" ).setPrerequisite( "MONSTER_LOD_ENABLED" );
 
     add_empty_line();
 
@@ -4190,6 +4310,20 @@ void options_manager::cache_to_globals()
     lod_coarse_scent_interval = ::get_option<int>( "LOD_COARSE_SCENT_INTERVAL" );
     lod_group_morale_max_tier = ::get_option<int>( "LOD_GROUP_MORALE_MAX_TIER" );
     activity_skip_monster_lod_gate = ::get_option<int>( "ACTIVITY_SKIP_MONSTER_LOD_GATE" );
+    lod_z_penalty = ::get_option<int>( "LOD_Z_PENALTY" );
+    lod_lifecycle_stride = ::get_option<int>( "LOD_LIFECYCLE_STRIDE" );
+
+    vehicle_idle_stride  = ::get_option<int>( "VEHICLE_IDLE_STRIDE" );
+    vehicle_outer_stride = ::get_option<int>( "VEHICLE_OUTER_STRIDE" );
+    item_process_stride  = ::get_option<int>( "ITEM_PROCESS_STRIDE" );
+
+    npc_lod_enabled            = ::get_option<bool>( "NPC_LOD_ENABLED" );
+    npc_tier0_dist             = ::get_option<int>( "NPC_TIER0_DIST" );
+    npc_tier1_dist             = ::get_option<int>( "NPC_TIER1_DIST" );
+    npc_demotion_cooldown      = ::get_option<int>( "NPC_DEMOTION_COOLDOWN" );
+    npc_action_budget          = ::get_option<int>( "NPC_ACTION_BUDGET" );
+    npc_coarse_danger_interval = ::get_option<int>( "NPC_COARSE_DANGER_INTERVAL" );
+    npc_macro_interval         = ::get_option<int>( "NPC_MACRO_INTERVAL" );
 
     // Temporary fix for #8726: force out-of-bubble fire spread off while the
     // corresponding options are commented out above.

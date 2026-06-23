@@ -44,8 +44,12 @@ class active_item_cache
     private:
         std::unordered_map<int, active_item_queue> active_items;
         std::unordered_map<special_item_type, std::vector<cache_reference<item>>> special_items;
+        int time_critical_count = 0;
 
     public:
+        auto has_time_critical_items() const -> bool {
+            return time_critical_count > 0;
+        }
         /**
          * Removes the item if it is in the cache. Does nothing if the item is not in the cache.
          * Relies on the fact that item::processing_speed() is a constant.

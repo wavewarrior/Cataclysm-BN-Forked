@@ -116,6 +116,28 @@ extern int  lod_coarse_scent_interval;
 extern int  lod_group_morale_max_tier;
 extern int  activity_skip_monster_lod_gate;
 
+/** Z-level distance penalty for monster LOD tier assignment. */
+extern int lod_z_penalty;
+/** How many turns between lifecycle processing for off-z Tier-2 monsters. */
+extern int lod_lifecycle_stride;
+
+/** Vehicle idle stride: how many turns between idle() calls for parked vehicles. */
+extern int vehicle_idle_stride;
+/** Vehicle outer stride: how many turns between gain_moves/slow_leak for off-z parked vehicles. */
+extern int vehicle_outer_stride;
+
+/** Item process stride: how many turns between processing off-z submap active items. */
+extern int item_process_stride;
+
+/** NPC LOD options — mirror monster LOD system for NPC AI detail. */
+extern bool npc_lod_enabled;
+extern int  npc_tier0_dist;
+extern int  npc_tier1_dist;
+extern int  npc_demotion_cooldown;
+extern int  npc_action_budget;
+extern int  npc_coarse_danger_interval;
+extern int  npc_macro_interval;
+
 /** Out-of-bubble world-tick options. */
 extern bool reality_bubble_fire_spread;
 

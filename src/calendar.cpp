@@ -552,6 +552,14 @@ bool calendar::once_every( const time_duration &event_frequency )
     return ( calendar::turn - calendar::turn_zero ) % event_frequency == 0_turns;
 }
 
+bool calendar::stride_due( int stride )
+{
+    if( stride <= 1 ) {
+        return true;
+    }
+    return to_turn<int>( calendar::turn ) % stride == 0;
+}
+
 int calendar::ticks_between( const time_point &from, const time_point &to,
                              const time_duration &tick_length )
 {

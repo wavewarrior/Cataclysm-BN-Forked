@@ -5337,6 +5337,18 @@ void game::cleanup_dead()
     critter_died = false;
 }
 
+/// z-penalized distance for LOD tier assignment.
+/// Monsters >=2 z-levels away pay `lod_z_penalty` per extra z-level.
+/// Monsters <2 z-levels away use raw 2D distance (stair-followers keep Tier 0).
+static int lod_dist( const tripoint_bub_ms &a, const tripoint_bub_ms &b )
+{
+    const int dz = std::abs( a.z() - b.z() );
+    if( dz < 2 ) {
+        return rl_dist( a.xy(), b.xy() );
+    }
+    return rl_dist( a.xy(), b.xy() ) + lod_z_penalty * ( dz - 1 );
+}
+
 // LOD tier assignment — called once per monmove() pass, O(M).
 //
 // Tier 0 (Full):   dist ≤ LOD_TIER_FULL_DIST (default 20) or has an active
@@ -5394,8 +5406,9 @@ int game::tier_assign_all()
         if( mon.get_dimension() != player_dim ) {
             new_tier = 2;
         } else {
-            const int dist = rl_dist( mon.bub_pos(), player_pos );
-            if( dist <= tier01_dist || !mon.is_wandering() ) {
+            const int dist = lod_dist( mon.bub_pos(), player_pos );
+            const int abs_dz = std::abs( mon.bub_pos().z() - player_pos.z() );
+            if( dist <= tier01_dist || ( !mon.is_wandering() && abs_dz < 2 ) ) {
                 new_tier = 0;
             } else if( dist <= tier12_dist ) {
                 new_tier = 1;
@@ -5923,8 +5936,28 @@ auto game::monmove( const monster_activity_ai_mode mode, activity_monmove_cache 
             hostile_fac_map_for_plan = &hostile_fac_map;
         }
     }
+    // Build spatial grid for O(k) target acquisition in compute_plan().
+    // Built fresh every pass from live monster positions — the grid is keyed on
+    // position, which changes every turn, so it must NOT be cached/reused across
+    // an activity fixed-window (doing so acquired targets against stale geometry).
+    // Iterating *mon_snap here is exactly as safe as compute_plan's own use of it.
+    monster::spatial_grid_t spatial_grid;
+    {
+        ZoneScopedN( "monmove_build_spatial_grid" );
+        for( monster *mon_ptr : *mon_snap ) {
+            if( mon_ptr->is_dead() || !mon_ptr->is_simulated() ) {
+                continue;
+            }
+            const auto pos = mon_ptr->bub_pos();
+            const auto key = monster::spatial_grid_t::key_t{
+                pos.x() / monster::spatial_grid_t::bucket_size,
+                pos.y() / monster::spatial_grid_t::bucket_size
+            };
+            spatial_grid.buckets[key].push_back( mon_ptr );
+        }
+    }
     const monster::compute_plan_context plan_ctx{ mon_snap, npc_snap, faction_snap_for_plan,
-            hostile_fac_map_for_plan };
+            hostile_fac_map_for_plan, &spatial_grid };
 
     // parallel_for_chunked with a small chunk size gives the
     // pool a queue of fine-grained tasks.  Workers that finish a cheap monster
@@ -5997,15 +6030,30 @@ auto game::monmove( const monster_activity_ai_mode mode, activity_monmove_cache 
                 }
             }
 
-            if( !critter.is_dead() ) {
-                critter.process_items();
-            }
+            // ── Lifecycle stride gate ──────────────────────────────────────
+            // Tier-2 monsters far off-z (|dz| >= 2) skip the EXPENSIVE lifecycle
+            // (item + turn processing) every N turns.  Field damage is applied
+            // unconditionally below — it is cheap (early-outs on field-free tiles)
+            // and skipping it would let off-z monsters standing in fire/acid
+            // escape damage.  Striding the rest is safe because:
+            //   (a) effect durations become N-granular on off-screen monsters
+            //   (b) process_turn side effects (cooldown decrement, emit fields,
+            //       grab persistence, electrical field) are deferred, off-screen.
+            const auto monitor_pos = critter.bub_pos();
+            const bool striding = critter.lod_tier == 2 &&
+                                  std::abs( monitor_pos.z() - u.bub_pos().z() ) >= 2;
 
-            if( !critter.is_dead() ) {
-                critter.process_turn();
+            if( !striding || calendar::stride_due( lod_lifecycle_stride ) ) {
+                if( !critter.is_dead() ) {
+                    critter.process_items();
+                }
+                if( !critter.is_dead() ) {
+                    critter.process_turn();
+                }
             }
-
+            // Field damage always applies, even on strided turns.
             m.creature_in_field( critter );
+            // Daily events stay unconditional (already time-throttled):
             if( calendar::once_every( 1_days ) ) {
                 if( critter.has_flag( MF_MILKABLE ) ) {
                     critter.refill_udders();
@@ -6046,7 +6094,7 @@ auto game::monmove( const monster_activity_ai_mode mode, activity_monmove_cache 
                 if( !critter->is_dead() &&
                     !activity_ai_paused->contains( critter ) &&
                     critter->is_simulated() ) {
-                    eligible_order.emplace_back( rl_dist( critter->bub_pos(), player_pos ), critter );
+                    eligible_order.emplace_back( lod_dist( critter->bub_pos(), player_pos ), critter );
                 }
             }
             std::ranges::sort( eligible_order );
@@ -6084,7 +6132,7 @@ auto game::monmove( const monster_activity_ai_mode mode, activity_monmove_cache 
                     critter.moves > 0 &&
                     critter.next_turn <= current_turn &&
                     critter.is_simulated() ) {
-                    eligible.emplace_back( rl_dist( critter.bub_pos(), player_pos ), &critter );
+                    eligible.emplace_back( lod_dist( critter.bub_pos(), player_pos ), &critter );
                 }
             }
         }
@@ -6322,6 +6370,82 @@ auto game::monmove( const monster_activity_ai_mode mode, activity_monmove_cache 
     }
 }
 
+/// Player-facing NPCs (allies, followers, ally-bound missions) that must always
+/// run full AI at Tier 0.  Single source of truth for both tier assignment and
+/// the npcmove() always-process partition — these must agree or the budget floor
+/// desyncs (an NPC forced to Tier 0 but routed to the deferrable list, or v.v.).
+static bool npc_is_always_full( const npc &guy )
+{
+    return guy.is_player_ally() || guy.is_following() ||
+           guy.mission == NPC_MISSION_ACTIVITY ||
+           guy.mission == NPC_MISSION_GUARD_ALLY;
+}
+
+/// Assign NPC LOD tiers based on distance, follower status, and visibility.
+/// Followers/companions and potentially-visible NPCs are always Tier 0.
+/// Returns the count of Tier 0 NPCs (used for budget floor).
+static int npc_tier_assign_all()
+{
+    if( !npc_lod_enabled ) {
+        for( npc &guy : g->all_npcs() ) {
+            guy.npc_lod_tier     = 0;
+            guy.npc_lod_cooldown = 0;
+        }
+        return 0;
+    }
+
+    const auto player_pos = g->u.bub_pos();
+    const int tier01_dist = npc_tier0_dist;
+    const int tier12_dist = std::max( npc_tier1_dist, tier01_dist + 1 );
+    const int demote_cd   = npc_demotion_cooldown;
+    // Player's approximate sight range — NPCs within this band are "potentially visible"
+    // and must keep full AI.  Use g_max_view_distance (cached) as a cheap approximation
+    // instead of calling sees() on every NPC.
+    const int sight_radius = g_max_view_distance;
+    int tier0_count = 0;
+
+    for( npc &guy : g->all_npcs() ) {
+        int8_t new_tier;
+
+        // Followers/companions are always Tier 0 — player-facing.
+        if( npc_is_always_full( guy ) ) {
+            new_tier = 0;
+        } else {
+            const int dist = lod_dist( guy.bub_pos(), player_pos );
+            const int abs_dz = std::abs( guy.bub_pos().z() - player_pos.z() );
+
+            // NPCs within player sight radius are potentially visible — keep full AI.
+            if( dist <= tier01_dist || ( abs_dz < 2 && dist <= sight_radius ) ) {
+                new_tier = 0;
+            } else if( dist <= tier12_dist ) {
+                new_tier = 1;
+            } else {
+                new_tier = 2;
+            }
+        }
+
+        // Promotion immediate; demotion respects cooldown.
+        if( new_tier < guy.npc_lod_tier ) {
+            guy.npc_lod_tier     = new_tier;
+            guy.npc_lod_cooldown = 0;
+        } else if( new_tier > guy.npc_lod_tier && guy.npc_lod_cooldown <= 0 ) {
+            guy.npc_lod_tier     = new_tier;
+            guy.npc_lod_cooldown = static_cast<int8_t>( demote_cd );
+        }
+
+        if( guy.npc_lod_cooldown > 0 ) {
+            guy.npc_lod_cooldown--;
+        }
+
+        if( guy.npc_lod_tier == 0 ) {
+            ++tier0_count;
+        }
+    }
+
+    TracyPlot( "NPC LOD Tier 0 (Full)",  static_cast<int64_t>( tier0_count ) );
+    return tier0_count;
+}
+
 void game::npcmove()
 {
     ZoneScoped;
@@ -6331,11 +6455,45 @@ void game::npcmove()
     processing_npcs_ = true;
     const bool has_creature_do_turn_hooks = cata::has_hooks( "on_creature_do_turn" );
     const bool has_npc_do_turn_hooks = cata::has_hooks( "on_npc_do_turn" );
+
+    // Assign LOD tiers and build processing lists for tier + budget.
+    const int tier0_count = npc_tier_assign_all();
+    const auto player_pos = u.bub_pos();
+    const int effective_budget = npc_action_budget > 0
+        ? std::max( npc_action_budget, tier0_count )
+        : std::numeric_limits<int>::max();
+
+    // Separate always-process (followers + Tier 0) from budgeted (Tier 1+2).
+    std::vector<npc *> always_process;
+    std::vector<std::pair<int, npc *>> budgeted;
     for( npc &guy : g->all_npcs() ) {
-        // Don't process NPCs in unloaded submaps like a LEMON
         if( !guy.is_simulated() ) {
             continue;
         }
+        if( npc_is_always_full( guy ) || guy.npc_lod_tier == 0 ) {
+            always_process.push_back( &guy );
+        } else {
+            budgeted.emplace_back( lod_dist( guy.bub_pos(), player_pos ), &guy );
+        }
+    }
+
+    // Cap budgeted NPCs by distance — farthest are deferred.
+    if( static_cast<int>( budgeted.size() ) > effective_budget ) {
+        std::nth_element( budgeted.begin(),
+                          budgeted.begin() + effective_budget,
+                          budgeted.end() );
+        for( auto &entry : budgeted |
+             std::views::drop( static_cast<size_t>( effective_budget ) ) ) {
+            entry.second->moves = 0;
+        }
+        budgeted.resize( effective_budget );
+    }
+
+    // Lambda to process a single NPC with tier-dependent AI.
+    const auto process_npc = [&]( npc *guy_ptr ) -> void {
+        npc &guy = *guy_ptr;
+        const bool is_tier_2 = guy.npc_lod_tier == 2;
+
         if( has_creature_do_turn_hooks || has_npc_do_turn_hooks ) {
             ZoneScopedN( "npc_turn_hooks" );
             if( has_creature_do_turn_hooks ) {
@@ -6350,7 +6508,6 @@ void game::npcmove()
             }
         }
 
-        int turns = 0;
         if( guy.is_mounted() ) {
             guy.check_mount_is_spooked();
         }
@@ -6361,37 +6518,46 @@ void game::npcmove()
                 guy.process_turn();
             }
         }
-        while( !guy.is_dead() && guy.moves > 0 && turns < 10 &&
-               ( !guy.in_sleep_state() || guy.activity->id() == ACT_OPERATION )
-             ) {
-            ZoneScopedN( "npc_move_iter" );
-            int moves = guy.moves;
-            guy.move();
-            if( moves == guy.moves ) {
-                // Count every time we exit npc::move() without spending any moves.
-                turns++;
-            }
 
-            // Turn on debug mode when in infinite loop
-            // It has to be done before the last turn, otherwise
-            // there will be no meaningful debug output.
-            if( turns == 9 ) {
-                debugmsg( "NPC %s entered infinite loop.  Turning on debug mode",
-                          guy.name );
-                debug_mode = true;
+        if( is_tier_2 ) {
+            // Tier 2: process_turn + occasional macro step (via move() early return).
+            if( !guy.is_dead() && guy.moves > 0 ) {
+                guy.move();
             }
-        }
-
-        // If we spun too long trying to decide what to do (without spending moves),
-        // Invoke cognitive suspension to prevent an infinite loop.
-        if( turns == 10 ) {
-            add_msg( _( "%s faints!" ), guy.name );
-            guy.reboot();
+        } else {
+            // Tier 0/1: full move loop.
+            int turns = 0;
+            while( !guy.is_dead() && guy.moves > 0 && turns < 10 &&
+                   ( !guy.in_sleep_state() || guy.activity->id() == ACT_OPERATION )
+                 ) {
+                ZoneScopedN( "npc_move_iter" );
+                int moves = guy.moves;
+                guy.move();
+                if( moves == guy.moves ) {
+                    turns++;
+                }
+                if( turns == 9 ) {
+                    debugmsg( "NPC %s entered infinite loop.  Turning on debug mode",
+                              guy.name );
+                    debug_mode = true;
+                }
+            }
+            if( turns == 10 ) {
+                add_msg( _( "%s faints!" ), guy.name );
+                guy.reboot();
+            }
         }
 
         if( !guy.is_dead() ) {
             guy.npc_update_body();
         }
+    };
+
+    for( npc *guy : always_process ) {
+        process_npc( guy );
+    }
+    for( auto &entry : budgeted ) {
+        process_npc( entry.second );
     }
     processing_npcs_ = false;
     cleanup_dead();
@@ -16992,6 +17158,9 @@ void game::tick_vehicle_portal_taps()
 
     std::ranges::for_each( m.get_vehicles(), [&]( wrapped_vehicle & wv ) {
         vehicle &veh = *wv.v;
+        if( !veh.has_portal_tap_parts ) {
+            return;
+        }
         for( int i = 0; i < veh.part_count(); ++i ) {
             vehicle_part &part = veh.part( i );
             if( !part.portal_tap_linked ) {

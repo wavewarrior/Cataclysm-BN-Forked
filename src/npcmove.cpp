@@ -58,6 +58,7 @@
 #include "overmap_location.h"
 #include "overmapbuffer.h"
 #include "overmapbuffer_registry.h"
+#include "cached_options.h"
 #include "calendar.h"
 #include "player_activity.h"
 #include "pldata.h"
@@ -550,7 +551,10 @@ void npc::assess_danger()
         }
     }
 
-    {
+    // Stride the monster scan for Tier-1 NPCs — skip on non-scan turns.
+    const bool skip_monster_scan = npc_lod_tier == 1 &&
+                                   !calendar::stride_due( npc_coarse_danger_interval );
+    if( !skip_monster_scan ) {
         ZoneScopedN( "assess_all_monsters" );
         for( const shared_ptr_fast<monster> &mon_ptr : g->critter_tracker->get_monsters_list() ) {
             if( mon_ptr->is_dead() ) {
@@ -637,7 +641,13 @@ void npc::assess_danger()
     } // assess_all_monsters
 
     if( assessment == 0.0 && hostile_guys.empty() ) {
-        ai_cache.danger_assessment = assessment;
+        // When the monster scan was strided out this turn, preserve the danger
+        // assessment and threat_map cached from the last scan instead of zeroing
+        // them — otherwise a Tier-1 NPC fighting a monster-only horde would
+        // oscillate between alarmed (scan turn) and oblivious (skip turns).
+        if( !skip_monster_scan ) {
+            ai_cache.danger_assessment = assessment;
+        }
         return;
     }
     const auto handle_hostile = [&]( const Character & foe, float foe_threat,
@@ -825,6 +835,10 @@ void npc::move()
         set_attitude( NPCATT_FLEE_TEMP );  // Only run for so many hours
     } else if( attitude == NPCATT_FLEE_TEMP && !has_effect( effect_npc_flee_player ) ) {
         set_attitude( NPCATT_NULL );
+    }
+    // Tier 2 macro step: distant NPCs skip full AI on non-step turns.
+    if( npc_lod_tier == 2 && !calendar::stride_due( npc_macro_interval ) ) {
+        return;
     }
     regen_ai_cache();
     adjust_power_cbms();

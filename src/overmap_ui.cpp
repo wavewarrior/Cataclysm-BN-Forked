@@ -2228,6 +2228,14 @@ static void place_ter_or_special( const ui_adaptor &om_ui, tripoint_abs_omt &cur
             editor_doc = rmlui_layer::open_document(
                              PATH_INFO::datadir() + "gui/overmap_editor.rml", true );
         }
+        // RAII teardown so the doc is closed on every exit path (CONFIRM break,
+        // QUIT, or an exception out of place_special/ter_set) — matches the
+        // render-only close-on-destruction pattern used by the loading/HUD docs.
+        on_out_of_scope close_editor_doc( [&]() {
+            if( editor_doc ) {
+                rmlui_layer::close_document( editor_doc );
+            }
+        } );
         const auto editor_panel_rml = [&]() -> std::string {
             std::string s;
             s += colorize( terrain ? _( "Place overmap terrain:" ) : _( "Place overmap special:" ),
@@ -2325,9 +2333,6 @@ static void place_ter_or_special( const ui_adaptor &om_ui, tripoint_abs_omt &cur
             }
         } while( action != "QUIT" );
 
-        if( editor_doc ) {
-            rmlui_layer::close_document( editor_doc );
-        }
         uistate.place_terrain = nullptr;
         uistate.place_special = nullptr;
     }

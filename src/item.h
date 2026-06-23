@@ -754,6 +754,16 @@ class item : public location_visitable<item>, public game_object<item>
         bool has_explicit_turn_timer() const;
 
         /**
+         * Returns true if this item's TYPE can ever run an explicit countdown
+         * timer (itype::countdown_interval > 0), independent of the item's current
+         * active/counter state.  Stable for the item's lifetime, unlike
+         * has_explicit_turn_timer() — used by active_item_cache to classify
+         * time-critical items without the counter desyncing when the live counter
+         * reaches 0 or the item deactivates between add() and remove().
+         */
+        bool has_countdown_timer_type() const;
+
+        /**
          * Advance the item's countdown counter by @p n turns (batch catchup).
          * Clamps the counter at 0; does NOT fire the countdown_action — that
          * happens on the next normal in-bubble process_items() call.

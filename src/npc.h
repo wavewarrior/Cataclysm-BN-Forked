@@ -1319,6 +1319,14 @@ class npc : public player
         static constexpr tripoint_abs_omt no_goal_point{ tripoint_min };
         time_point last_updated;
 
+        // LOD tier for distance-based AI fidelity reduction.
+        //   0 = Full AI (close or follower)
+        //   1 = Coarse AI (mid-distance, non-follower)
+        //   2 = Macro   (far, non-follower; process_turn only)
+        // Transient — not saved or loaded.
+        int8_t npc_lod_tier     = 0;
+        int    npc_lod_cooldown = 0;
+
         // ID of the dimension this NPC belongs to.  Empty string = primary dimension.
         // Set when the NPC is spawned or loaded from a non-primary dimension submap.
         // Persisted across saves so cross-dimension processing survives reload.

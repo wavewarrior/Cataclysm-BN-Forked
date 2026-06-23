@@ -9704,6 +9704,11 @@ bool item::has_explicit_turn_timer() const
     return is_active() && item_counter > 0 && type->countdown_interval > 0;
 }
 
+bool item::has_countdown_timer_type() const
+{
+    return type->countdown_interval > 0;
+}
+
 void item::advance_timer( int n )
 {
     if( !has_explicit_turn_timer() || n <= 0 ) {

@@ -38,6 +38,21 @@ int  lod_coarse_scent_interval = 3;
 int  lod_group_morale_max_tier = 0;
 int  activity_skip_monster_lod_gate = 1;
 
+int lod_z_penalty = 16;
+int lod_lifecycle_stride = 4;
+
+int  vehicle_idle_stride   = 5;
+int  vehicle_outer_stride  = 2;
+int  item_process_stride   = 1;
+
+bool npc_lod_enabled       = true;
+int  npc_tier0_dist        = 30;
+int  npc_tier1_dist        = 75;
+int  npc_demotion_cooldown = 3;
+int  npc_action_budget     = 16;
+int  npc_coarse_danger_interval = 5;
+int  npc_macro_interval         = 3;
+
 bool reality_bubble_fire_spread = false;
 bool lazy_border_enabled        = false;
 int  retained_omt_cache_multiplier = 4;

@@ -409,6 +409,35 @@ monster_plan_t monster::compute_plan( const monster::compute_plan_context &ctx )
         }
     };
 
+    // Spatial-grid query helper: iterates monsters in buckets within radius buckets.
+    // Returns false if the grid is unavailable (caller must fall back).
+    const auto for_monsters_nearby = [&]( int radius_buckets, auto &&fn ) -> bool {
+        if( ctx.spatial_grid == nullptr ) {
+            return false;
+        }
+        const auto bucket_of = []( const tripoint_bub_ms &pos ) {
+            return monster::spatial_grid_t::key_t{
+                pos.x() / monster::spatial_grid_t::bucket_size,
+                pos.y() / monster::spatial_grid_t::bucket_size
+            };
+        };
+        const auto my_bucket = bucket_of( bub_pos() );
+        for( int dx = -radius_buckets; dx <= radius_buckets; ++dx ) {
+            for( int dy = -radius_buckets; dy <= radius_buckets; ++dy ) {
+                const auto it = ctx.spatial_grid->buckets.find(
+                    { my_bucket.first + dx, my_bucket.second + dy } );
+                if( it != ctx.spatial_grid->buckets.end() ) {
+                    for( monster *mp : it->second ) {
+                        if( mp != this ) {
+                            fn( *mp );
+                        }
+                    }
+                }
+            }
+        }
+        return true;
+    };
+
     monster_plan_t result;
     // Initialise final-value fields from current monster state so a no-op
     // planning pass is a no-op in apply_plan as well.
@@ -505,10 +534,8 @@ monster_plan_t monster::compute_plan( const monster::compute_plan_context &ctx )
                     }
                 }
                 if( angers_cub_threatened > 0 ) {
-                    for_each_monster( [&]( monster & tmp ) {
+                    const auto process_cub = [&]( monster & tmp ) {
                         if( type->baby_monster == tmp.type->id ) {
-                            // Mirrors original plan(): dist is updated so subsequent
-                            // target selection uses the baby-player distance.
                             dist = tmp.rate_target( g->u, dist, smart_planning );
                             if( dist <= 3 ) {
                                 if( has_flag( MF_FACTION_MEMORY ) ) {
@@ -521,32 +548,15 @@ monster_plan_t monster::compute_plan( const monster::compute_plan_context &ctx )
                                 result.aggro_triggers.push_back( "threatening cub" );
                             }
                         }
-                    } );
-                }
-                if( angers_cub_threatened > 0 ) {
-                    for_each_monster( [&]( monster & tmp ) {
-                        if( type->baby_monster == tmp.type->id ) {
-                            // Mirrors original plan(): dist is updated so subsequent
-                            // target selection uses the baby-player distance.
-                            dist = tmp.rate_target( g->u, dist, smart_planning );
-                            if( dist <= 3 ) {
-                                if( has_flag( MF_FACTION_MEMORY ) ) {
-                                    result.faction_angers.push_back(
-                                    { mfaction_id( "player" ), angers_cub_threatened } );
-                                } else {
-                                    local_anger += angers_cub_threatened;
-                                }
-                                local_morale += angers_cub_threatened / 2;
-                                result.aggro_triggers.push_back( "threatening cub" );
-                            }
-                        }
-                    } );
+                    };
+                    if( !for_monsters_nearby( 1, process_cub ) ) {
+                        for_each_monster( process_cub );
+                    }
                 }
             }
         } else if( local_friendly != 0 && !docile && !waiting ) {
-            for_each_monster( [&]( monster & tmp ) {
+            const auto process_foe = [&]( monster & tmp ) {
                 if( tmp.friendly == 0 ) {
-                    // P-4: distance cull — skip ray trace if target is out of range.
                     const int d_tmp = rl_dist( bub_pos(), tmp.bub_pos() );
                     if( d_tmp > max_sight_range ) {
                         return;
@@ -557,7 +567,12 @@ monster_plan_t monster::compute_plan( const monster::compute_plan_context &ctx )
                         dist   = rating;
                     }
                 }
-            } );
+            };
+            const int bucket_radius = max_sight_range /
+                monster::spatial_grid_t::bucket_size + 1;
+            if( !for_monsters_nearby( bucket_radius, process_foe ) ) {
+                for_each_monster( process_foe );
+            }
         }
     } // cp_initial_target
 

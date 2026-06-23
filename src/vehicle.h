@@ -1872,6 +1872,9 @@ class vehicle
         // refresh().  Gates the cargo recharge loop in process_items_in_vehicle()
         // (analogous to has_autoloaders gating process_autoloaders() in idle()).
         bool has_cargo_recharge = false;
+        // true if any part has the POWER_DRAW_LINKED_PORTAL flag; maintained by refresh().
+        // Gates the portal-tap loop in game::tick_vehicle_portal_taps().
+        bool has_portal_tap_parts = false;
         // skidding mode
         bool skidding = false;
         // has bloody or smoking parts

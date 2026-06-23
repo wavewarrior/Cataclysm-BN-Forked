@@ -48,6 +48,12 @@ void active_item_cache::remove( const item *it )
         std::vector<cache_reference<item>> &explosive = special_items[ special_item_type::explosive ];
         explosive.erase( std::remove( explosive.begin(), explosive.end(), it ), explosive.end() );
     }
+    // Classify by STABLE, type-level properties (explosion use + countdown-timer
+    // type) so this --/++ pairs exactly with add() regardless of the item's live
+    // counter/active state, which can change while the item sits in the cache.
+    if( it->get_use( "explosion" ) || it->has_countdown_timer_type() ) {
+        --time_critical_count;
+    }
 }
 
 void active_item_cache::add( item &it )
@@ -66,6 +72,10 @@ void active_item_cache::add( item &it )
     }
     if( it.get_use( "explosion" ) ) {
         special_items[ special_item_type::explosive ].emplace_back( it );
+    }
+    // Stable classifier — see remove(); must mirror it exactly so +/- pair up.
+    if( it.get_use( "explosion" ) || it.has_countdown_timer_type() ) {
+        ++time_critical_count;
     }
     target_list.emplace_back( it );
 }

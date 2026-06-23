@@ -896,10 +896,21 @@ void map::vehmove()
         ZoneScopedN( "veh_gain_moves" );
         const int zmin = zlevels ? -OVERMAP_DEPTH : abs_sub.z();
         const int zmax = zlevels ? OVERMAP_HEIGHT : abs_sub.z();
+        const bool outer_stride_hit = calendar::stride_due( vehicle_outer_stride );
         for( int z = zmin; z <= zmax; ++z ) {
             for( vehicle *veh : get_cache( z ).vehicle_list ) {
-                veh->gain_moves();
-                veh->slow_leak();
+                const bool on_player_z = z == abs_sub.z();
+                const bool parked_off_z = !veh->is_moving()
+                    && !veh->engine_on
+                    && !veh->is_falling
+                    && !on_player_z;
+                const bool skip_outer = parked_off_z && !outer_stride_hit;
+                if( !skip_outer ) {
+                    veh->gain_moves();
+                    veh->slow_leak();
+                } else {
+                    veh->of_turn = 0.001f;
+                }
                 vehicle_list.push_back( wrapped_vehicle{ .pos = veh->bub_ms_location(), .v = veh } );
             }
         }
@@ -1038,9 +1049,24 @@ void map::vehmove()
     } );
     std::map<vehicle *, bool> connected_vehicles;
     vehicle::enumerate_vehicles( connected_vehicles, all_veh_ptrs );
-    std::ranges::for_each( connected_vehicles, []( std::pair<vehicle *const, bool> &veh_pair ) {
-        veh_pair.first->idle( veh_pair.second );
-    } );
+    {
+        const bool stride_hit = calendar::stride_due( vehicle_idle_stride );
+        std::ranges::for_each( connected_vehicles, [&]( std::pair<vehicle *const, bool> &veh_pair ) {
+            vehicle &veh = *veh_pair.first;
+            const bool on_map = veh_pair.second;
+            const bool full_rate = veh.is_moving()
+                || veh.is_falling
+                || veh.engine_on
+                || veh.player_in_control( g->u )
+                || veh.is_following
+                || veh.is_patrolling
+                || !veh.reactors.empty()
+                || ( veh.is_rotorcraft() && veh.is_flying_in_air() );
+            if( full_rate || stride_hit ) {
+                veh.idle( on_map );
+            }
+        } );
+    }
 }
 
 bool map::vehproceed( VehicleList &vehicle_list )
@@ -5929,6 +5955,9 @@ void map::process_items()
     auto active_items = std::vector<item *> {};
     {
         ZoneScopedN( "process_items_scan_active_submaps" );
+        const bool stride_skip_turn = !calendar::stride_due( item_process_stride );
+        const int map_z = get_abs_sub().z();
+
         for( const tripoint_abs_sm &abs_pos : submaps_with_active_items_copy ) {
             if( !submap_loader.is_simulated( bound_dimension_, tripoint_abs_sm( abs_pos ) ) ) {
                 continue;
@@ -5938,15 +5967,25 @@ void map::process_items()
             if( current_submap == nullptr ) {
                 continue;
             }
-            if( !current_submap->active_items.empty() ) {
-                {
-                    ZoneScopedN( "process_items_count_active_items" );
-                    const auto counts = current_submap->active_items.count();
-                    total_active_items += counts.total;
-                    total_rottable_active_items += counts.rottable;
-                }
-                process_items_in_submap( *current_submap, local_pos, active_items );
+            if( current_submap->active_items.empty() ) {
+                continue;
             }
+
+            // Stride: off-z submaps with no time-critical items skip K-1/K turns.
+            if( stride_skip_turn
+                && abs_pos.z() != map_z
+                && !current_submap->active_items.has_time_critical_items() )
+            {
+                continue;  // skip counting and processing this turn
+            }
+
+            {
+                ZoneScopedN( "process_items_count_active_items" );
+                const auto counts = current_submap->active_items.count();
+                total_active_items += counts.total;
+                total_rottable_active_items += counts.rottable;
+            }
+            process_items_in_submap( *current_submap, local_pos, active_items );
         }
     }
     TracyPlot( "Total Active Items", total_active_items );

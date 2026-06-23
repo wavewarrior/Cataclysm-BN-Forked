@@ -65,6 +65,15 @@ namespace calendar
  */
 bool once_every( const time_duration &event_frequency );
 
+/**
+ * Stride predicate for turn-based throttling.  Returns `true` when work is due
+ * this turn for the given @p stride: always `true` when @p stride <= 1 (striding
+ * disabled — act every turn), otherwise `true` only when the current turn is a
+ * multiple of @p stride.  Centralizes the turn-origin contract and the
+ * `stride <= 1` / divide-by-zero guard for the LOD throttling call sites.
+ */
+bool stride_due( int stride );
+
 // Returns the number of multiples of tick_length we would "pass" on our way `from` to `to`
 // For example, if `tick_length` is 1 hour, then going from 0:59 to 1:01 should return 1
 int ticks_between( const time_point &from, const time_point &to,
