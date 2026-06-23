@@ -51,14 +51,6 @@ bool &character_display_rmlui_enabled()
 static const skill_id skill_swimming( "swimming" );
 static const skill_id skill_unarmed( "unarmed" );
 
-static const std::string title_STATS = translate_marker( "STATS" );
-static const std::string title_ENCUMB = translate_marker( "ENCUMBRANCE AND WARMTH" );
-static const std::string title_EFFECTS = translate_marker( "EFFECTS" );
-static const std::string title_SPEED = translate_marker( "SPEED" );
-static const std::string title_SKILLS = translate_marker( "SKILLS" );
-static const std::string title_BIONICS = translate_marker( "BIONICS" );
-static const std::string title_TRAITS = translate_marker( "TRAITS" );
-
 static const trait_flag_str_id trait_flag_NEED_ACTIVE_TO_MELEE( "NEED_ACTIVE_TO_MELEE" );
 static const trait_flag_str_id trait_flag_UNARMED_BONUS( "UNARMED_BONUS" );
 
@@ -163,78 +155,10 @@ static std::vector<std::pair<bodypart_str_id, bool>> list_and_combine_bps( const
     return bps;
 }
 
-
-void character_display::print_encumbrance( ui_adaptor &ui, const catacurses::window &win,
-        const Character &ch,
-        const int line, const item *selected_clothing )
-{
-    // bool represents whether the part has been combined with its other half
-    const std::vector<std::pair<bodypart_str_id, bool>> bps = list_and_combine_bps( ch,
-            selected_clothing );
-
-    // width/height excluding title & scrollbar
-    const int height = getmaxy( win ) - 1;
-    const bool do_draw_scrollbar = height < static_cast<int>( bps.size() );
-    const int width = getmaxx( win ) - ( do_draw_scrollbar ? 1 : 0 );
-    // index of the first printed bodypart from `bps`
-    const int firstline = clamp( line - height / 2, 0, std::max( 0,
-                                 static_cast<int>( bps.size() ) - height ) );
-
-    /*** I chose to instead only display X+Y instead of X+Y=Z. More room was needed ***
-     *** for displaying triple digit encumbrance, due to new encumbrance system.    ***
-     *** If the player wants to see the total without having to do them maths, the  ***
-     *** armor layers ui shows everything they want :-) -Davek                      ***/
-    const char_encumbrance_data enc_data = ch.get_encumbrance();
-    for( int i = 0; i < height; ++i ) {
-        int thisline = firstline + i;
-        if( thisline < 0 ) {
-            continue;
-        }
-        if( static_cast<size_t>( thisline ) >= bps.size() ) {
-            break;
-        }
-        const bodypart_str_id &bp = bps[thisline].first;
-        const bool combine = bps[thisline].second;
-        const encumbrance_data &e = enc_data.elems.at( bp );
-        const bool highlighted = selected_clothing ? selected_clothing->covers( bp.id() ) : false;
-        std::string out = body_part_name_as_heading( bp, combine ? 2 : 1 );
-        if( utf8_width( out ) > 7 ) {
-            out = utf8_truncate( out, 7 );
-        }
-
-        // Two different highlighting schemes, highlight if the line is selected as per line being set.
-        // Make the text green if this part is covered by the passed in item.
-        const bool highlight_line = thisline == line;
-        nc_color limb_color = highlight_line ?
-                              ( highlighted ? h_green : h_light_gray ) :
-                              ( highlighted ? c_green : c_light_gray );
-        const int y_pos = 1 + i;
-        if( highlight_line ) {
-            ui.set_cursor( win, point( 1, y_pos ) );
-        }
-        mvwprintz( win, point( 1, y_pos ), limb_color, "%s", out );
-        // accumulated encumbrance from clothing, plus extra encumbrance from layering
-        mvwprintz( win, point( 8, 1 + i ), encumb_color( e.encumbrance ), "%3d",
-                   e.encumbrance - e.layer_penalty );
-        // separator in low toned color
-        mvwprintz( win, point( 11, y_pos ), c_light_gray, "+" );
-        // take into account the new encumbrance system for layers
-        mvwprintz( win, point( 12, y_pos ), encumb_color( e.encumbrance ), "%-3d", e.layer_penalty );
-        // print warmth, tethered to right hand side of the window
-
-        mvwprintz( win, point( width - 6, y_pos ), warmth::bodytemp_color( ch, bp ), "(% 3d)",
-                   temperature_print_rescaling( get_temp_conv( ch, bp ) ) );
-    }
-
-    if( do_draw_scrollbar ) {
-        draw_scrollbar( win, firstline, height, bps.size(), point( width, 1 ), c_white, true );
-    }
-}
-
 std::vector<std::string> character_display::encumbrance_lines( const Character &ch,
         const item *selected_clothing )
 {
-    // Mirrors the per-row content of print_encumbrance (name / enc+layer / warmth)
+    // Builds the curses encumbrance row content (name / enc+layer / warmth)
     // as colour-tagged strings; RmlUi handles wrapping + scroll so there is no
     // column positioning, scrollbar, or line-highlight (armor_layers passes
     // line = -1 — only the green "covered by selected item" highlight applies).
