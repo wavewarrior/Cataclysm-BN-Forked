@@ -3334,11 +3334,14 @@ primitive counts) + the `panels.cpp` HUD curses sidebar. The shared backend is N
     if(rml&&handle)->build_om_sidebar_rml guard); fn stays for the RML sync, wbar param commented.
     KEPT (not orphans): draw_ascii + draw_map_labels/draw_city_labels (map-grid), place_ter_or_special
     (dev terrain mode), update_note_preview (LIVE — notes-list preview on_redraw @641 is unguarded).
-  - **inventory_ui BLOCKED (not a batch):** base inventory_selector (uses_rml()=false default) is
-    instantiated directly at inventory.cpp:1122 → curses LIVE-reachable. Migrate that base usage first.
-  - **★ Clean orphan-draw frontier EXHAUSTED after B10.** What remains is NOT mechanical deletion:
-    popup-migration (NEW RML: trade_win/safemode_ui/messages-filter/scores_ui-show_kills) and the
-    inventory_ui base-selector migration. Each is a feature/migration task, not a rip-out batch.
+  - B11 `de6952265f` — inventory_ui de-cursed (−234). NOT actually blocked: inventory.cpp:1122's base
+    inventory_selector is a non-drawing keybind hack (all_bound_keys only, never executed). All executed
+    selectors have uses_rml()=true → refresh_window's curses body was dead. Deleted it + the 5 orphaned
+    member draws (inventory_column::draw + draw_frame/header/columns/footer). LESSON: a direct base-class
+    instantiation isn't automatically a live draw path — check whether it's EXECUTED/shown.
+  - **★ DE-CURSE CAMPAIGN COMPLETE after B11 (2026-06-23).** All bespoke screens + the panels HUD are
+    de-cursed. The ONLY remaining rip-out-plan work is popup-migration (NEW RML authoring:
+    trade_win/safemode_ui/messages-filter/scores_ui-show_kills) — a feature task, not a deletion batch.
   - **panels.cpp HUD curses sidebar — RIP OUT STAYS IN THIS PLAN (2026-06-23 user directive: rip out the
     curses panels EVEN IF the RmlUi HUD lacks features the old panels had).** Whole-sidebar curses
     suppression + delete the curses `draw_*` panel builders; un-built panels show a placeholder / are
