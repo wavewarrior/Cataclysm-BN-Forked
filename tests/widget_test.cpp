@@ -24,15 +24,9 @@ TEST_CASE( "native widget loads and binds to a draw target", "[widget][sidebar]"
     CHECK( w.native() == "draw_stat_wide" );
     CHECK( w.height() == 2 );
 
-    // Dispatch resolves known targets and rejects an unknown one — verifiable
-    // without invoking the draw.
-    CHECK( native_draw_target_exists( "draw_stat_wide" ) );
-    CHECK( native_draw_target_exists( "draw_messages" ) );
-    CHECK( native_draw_target_exists( "draw_mminimap" ) );
-    CHECK_FALSE( native_draw_target_exists( "no_such_draw_fn" ) );
-
-    // The bridge carries widget metadata onto the panel and binds a draw. The
-    // panel name is the widget id (stable, untranslated save/load key).
+    // The bridge carries widget metadata onto the panel (Tier-10 curses rip-out:
+    // name-only, no curses draw). The panel name is the widget id (stable,
+    // untranslated save/load key).
     const window_panel wp = make_native_widget_panel( w, 38 );
     CHECK( wp.get_name() == "stats" );
     CHECK( wp.get_height() == 2 );

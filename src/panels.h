@@ -77,9 +77,6 @@ window_panel make_value_widget_panel( const widget &w, int width );
 // in a grid, coloring each by the widget's body_graph* dimension (hp/temp/encumb/
 // status; wet degraded — BN has no per-bp wetness).
 window_panel make_bodygraph_widget_panel( const widget &w, int width );
-// True if `name` resolves to a known native draw_* target. Exposed for tests so
-// the dispatch table can be verified without a curses context.
-bool native_draw_target_exists( const std::string &name );
 
 // ── Sidebar HUD → RmlUi (Tier 7, render-only, continuous) ────────────────────
 // The persistent HUD document that renders sidebar panels through RmlUi instead of
