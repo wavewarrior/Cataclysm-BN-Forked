@@ -1090,8 +1090,8 @@ void register_kb_rml_types( Rml::DataModelConstructor &c )
 
 bool &keybindings_rmlui_enabled()
 {
-    // Default OFF — opt in via the F4 panel. See rml_screen.h.
-    static bool enabled = false;
+    // Default ON (eyeball-confirmed) — curses fallback removed at rip-out.
+    static bool enabled = true;
     return enabled;
 }
 

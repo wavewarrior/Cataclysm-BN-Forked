@@ -372,8 +372,8 @@ struct st_session {
 
 bool &scrollable_text_rmlui_enabled()
 {
-    // Default OFF — opt in via the F4 panel. See rml_screen.h.
-    static bool enabled = false;
+    // Default ON (eyeball-confirmed) — curses fallback removed at rip-out.
+    static bool enabled = true;
     return enabled;
 }
 
