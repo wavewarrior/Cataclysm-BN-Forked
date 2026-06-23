@@ -18,7 +18,6 @@ class help
 
     private:
         void deserialize( JsonIn &jsin );
-        void draw_menu( const catacurses::window &win );
         std::string get_note_colors();
         std::string get_dir_grid();
 
