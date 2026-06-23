@@ -1272,13 +1272,10 @@ void avatar_action::reload( item &loc, bool prompt, bool empty )
             moves += 2500;
         }
 
-        u.assign_activity( activity_id( "ACT_RELOAD" ), moves, opt.qty() );
-        if( use_loc ) {
-            u.activity->targets.emplace_back( loc );
-        } else {
-            u.activity->targets.emplace_back( opt.target );
-        }
-        u.activity->targets.emplace_back( opt.ammo );
+        u.assign_activity( std::make_unique<player_activity>(
+            std::make_unique<reload_activity_actor>(
+                safe_reference<item>( use_loc ? loc : *opt.target ),
+                safe_reference<item>( *opt.ammo ), opt.qty() ) ) );
     }
 }
 
@@ -1367,10 +1364,10 @@ void avatar_action::reload_weapon( bool try_everything )
     if( veh && ( turret = veh->turret_query( u.abs_pos() ) ) && turret.can_reload() ) {
         item_reload_option opt = character_funcs::select_ammo( u, turret.base(), true );
         if( opt ) {
-            u.assign_activity( std::make_unique<player_activity>( activity_id( "ACT_RELOAD" ), opt.moves(),
-                               opt.qty() ) );
-            u.activity->targets.emplace_back( turret.base() );
-            u.activity->targets.emplace_back( opt.ammo );
+        u.assign_activity( std::make_unique<player_activity>(
+            std::make_unique<reload_activity_actor>(
+                safe_reference<item>( turret.base() ),
+                safe_reference<item>( *opt.ammo ), opt.qty() ) ) );
         }
         return;
     }

@@ -229,6 +229,12 @@ class player_activity
         /// Get the tools vector (read-write access for internal use)
         auto get_tools_mut() -> std::vector<safe_reference<item>>& { return tools_; } // *NOPAD*
 
+        /// Access the activity actor (migration helper).
+        template<typename T>
+        T *get_actor() const {
+            return dynamic_cast<T *>( actor.get() );
+        }
+
     private:
         std::vector<safe_reference<item>> tools_;
 };

@@ -1,5 +1,6 @@
 #include "avatar_functions.h"
 
+#include "activity_actor_definitions.h"
 #include "activity_handlers.h"
 #include "avatar.h"
 #include "character_functions.h"
@@ -326,10 +327,9 @@ void mend_item( avatar &you, item &obj, bool interactive )
         }
 
         const mending_method &method = opt.method;
-        you.assign_activity( activity_id( "ACT_MEND_ITEM" ), to_moves<int>( method.time ) );
-        you.activity->name = opt.fault.str();
-        you.activity->str_values.emplace_back( method.id );
-        you.activity->targets.emplace_back( &obj );
+        you.assign_activity( std::make_unique<player_activity>(
+            std::make_unique<mend_item_activity_actor>(
+                safe_reference<item>( obj ), opt.fault.str(), method.id ) ) );
     }
 }
 
@@ -453,13 +453,10 @@ void gunmod_add( avatar &you, item &gun, item &mod )
 
     const int moves = !you.has_trait( trait_DEBUG_HS ) ? mod.type->gunmod->install_time : 0;
 
-    you.assign_activity( activity_id( "ACT_GUNMOD_ADD" ), moves, -1, 0, tool );
-    you.activity->targets.emplace_back( &gun );
-    you.activity->targets.emplace_back( &mod );
-    you.activity->values.push_back( 0 ); // dummy value
-    you.activity->values.push_back( roll ); // chance of success (%)
-    you.activity->values.push_back( risk ); // chance of damage (%)
-    you.activity->values.push_back( qty ); // tool charges
+    you.assign_activity( std::make_unique<player_activity>(
+        std::make_unique<gunmod_add_activity_actor>(
+            safe_reference<item>( gun ), safe_reference<item>( mod ),
+            roll, risk, itype_id( tool ), qty ) ) );
 }
 
 bool gunmod_remove( avatar &you, item &gun, item &mod )
@@ -565,9 +562,9 @@ void toolmod_add( avatar &you, item &tool, item &mod )
         return; // player canceled installation
     }
 
-    you.assign_activity( activity_id( "ACT_TOOLMOD_ADD" ), 1, -1 );
-    you.activity->add_tool( &tool );
-    you.activity->targets.emplace_back( &mod );
+    you.assign_activity( std::make_unique<player_activity>(
+        std::make_unique<toolmod_add_activity_actor>(
+            safe_reference<item>( tool ), safe_reference<item>( mod ) ) ) );
 }
 
 static bool is_pet_food( const item &itm )

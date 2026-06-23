@@ -1,6 +1,7 @@
 #pragma once
 
 #include "activity_actor.h"
+#include "activity_handlers.h"
 #include "craft_command.h"
 
 #include <optional>
@@ -360,8 +361,218 @@ class hacking_activity_actor : public activity_actor
         }
 
         void start( player_activity &act, Character &who ) override;
-        void do_turn( player_activity &, Character & ) override;
+        void do_turn( player_activity &act, Character &who ) override;
         void finish( player_activity &act, Character &who ) override;
+
+        void serialize( JsonOut &jsout ) const override;
+        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+};
+
+class repair_item_activity_actor : public activity_actor
+{
+    public:
+        repair_item_activity_actor() = default;
+        repair_item_activity_actor(
+            safe_reference<item> tool,
+            const std::string &iuse_name
+        ) : tool_item( tool ), iuse_name_string( iuse_name ) {}
+
+        void set_hack_vehicle( const tripoint_abs_ms &pos, int crafter_idx,
+                               const itype_id &tool_type ) {
+            hack_type = hack_type_t::vehicle;
+            hack_position = pos;
+            hack_crafter_index = crafter_idx;
+            hack_tool_type_id = tool_type;
+        }
+        void set_hack_furniture( const tripoint_abs_ms &pos, const itype_id &tool_type ) {
+            hack_type = hack_type_t::furniture;
+            hack_position = pos;
+            hack_tool_type_id = tool_type;
+        }
+
+        activity_id get_type() const override {
+            return activity_id( "ACT_REPAIR_ITEM" );
+        }
+
+        void start( player_activity &, Character & ) override {}
+        void do_turn( player_activity &act, Character &who ) override;
+        void finish( player_activity &act, Character &who ) override;
+
+        void serialize( JsonOut &jsout ) const override;
+        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+
+    private:
+        enum class hack_type_t : int { none = -1, vehicle = 0, furniture = 1 };
+        enum repeat_type : int {
+            REPEAT_INIT = 0, REPEAT_ONCE, REPEAT_FOREVER, REPEAT_FULL, REPEAT_EVENT, REPEAT_CANCEL
+        };
+
+        std::string iuse_name_string;
+        repeat_type repeat = REPEAT_INIT;
+        safe_reference<item> tool_item;
+        safe_reference<item> fix_item;
+
+        hack_type_t hack_type = hack_type_t::none;
+        tripoint_abs_ms hack_position;
+        itype_id hack_tool_type_id;
+        int hack_crafter_index = 0;
+
+        auto get_fake_tool() const -> item *; // *NOPAD*
+        void discharge_real_power_source( item &tool, int original_charges ) const;
+        repeat_type show_repeat_menu( const std::string &title, repeat_type last_selection ) const;
+};
+
+class mend_item_activity_actor : public activity_actor
+{
+    public:
+        mend_item_activity_actor() = default;
+        mend_item_activity_actor(
+            safe_reference<item> target,
+            const std::string &fault,
+            const std::string &method
+        ) : target_item( target ), fault_id_str( fault ), method_id( method ) {}
+
+        activity_id get_type() const override {
+            return activity_id( "ACT_MEND_ITEM" );
+        }
+
+        void start( player_activity &, Character & ) override {}
+        void do_turn( player_activity &, Character & ) override {}
+        void finish( player_activity &act, Character &who ) override;
+
+        void serialize( JsonOut &jsout ) const override;
+        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+
+    private:
+        safe_reference<item> target_item;
+        std::string fault_id_str;
+        std::string method_id;
+};
+
+class toolmod_add_activity_actor : public activity_actor
+{
+    public:
+        toolmod_add_activity_actor() = default;
+        toolmod_add_activity_actor(
+            safe_reference<item> tool,
+            safe_reference<item> mod
+        ) : base_tool( tool ), mod_item( mod ) {}
+
+        activity_id get_type() const override {
+            return activity_id( "ACT_TOOLMOD_ADD" );
+        }
+
+        void start( player_activity &, Character & ) override {}
+        void do_turn( player_activity &, Character & ) override {}
+        void finish( player_activity &act, Character &who ) override;
+
+        void serialize( JsonOut &jsout ) const override;
+        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+
+    private:
+        safe_reference<item> base_tool;
+        safe_reference<item> mod_item;
+};
+
+class gunmod_add_activity_actor : public activity_actor
+{
+    public:
+        gunmod_add_activity_actor() = default;
+        gunmod_add_activity_actor(
+            safe_reference<item> gun,
+            safe_reference<item> mod,
+            int success_chance,
+            int damage_chance,
+            const itype_id &tool,
+            int charges_qty
+        ) : gun_item( gun ), mod_item( mod ),
+            roll( success_chance ), risk( damage_chance ),
+            tool_id( tool ), qty( charges_qty ) {}
+
+        activity_id get_type() const override {
+            return activity_id( "ACT_GUNMOD_ADD" );
+        }
+
+        void start( player_activity &, Character & ) override {}
+        void do_turn( player_activity &, Character & ) override {}
+        void finish( player_activity &act, Character &who ) override;
+
+        void serialize( JsonOut &jsout ) const override;
+        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+
+    private:
+        safe_reference<item> gun_item;
+        safe_reference<item> mod_item;
+        int roll = 0;
+        int risk = 0;
+        itype_id tool_id;
+        int qty = 0;
+};
+
+class reload_activity_actor : public activity_actor
+{
+    public:
+        reload_activity_actor() = default;
+        reload_activity_actor(
+            safe_reference<item> target,
+            safe_reference<item> ammo,
+            int quantity
+        ) : target_item( target ), ammo_item( ammo ), qty( quantity ) {}
+
+        activity_id get_type() const override {
+            return activity_id( "ACT_RELOAD" );
+        }
+
+        void start( player_activity &, Character & ) override {}
+        void do_turn( player_activity &, Character & ) override {}
+        void finish( player_activity &act, Character &who ) override;
+
+        void serialize( JsonOut &jsout ) const override;
+        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+
+    private:
+        safe_reference<item> target_item;
+        safe_reference<item> ammo_item;
+        int qty = 0;
+};
+
+class wear_activity_actor : public activity_actor
+{
+    public:
+        wear_activity_actor() = default;
+        wear_activity_actor(
+            std::vector<safe_reference<item>> items,
+            std::vector<int> quantities
+        ) : items( std::move( items ) ), quantities( std::move( quantities ) ) {}
+
+        activity_id get_type() const override {
+            return activity_id( "ACT_WEAR" );
+        }
+
+        void start( player_activity &, Character & ) override {}
+        void do_turn( player_activity &act, Character &who ) override;
+        void finish( player_activity &, Character & ) override {}
+
+        void serialize( JsonOut &jsout ) const override;
+        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+
+    private:
+        std::vector<safe_reference<item>> items;
+        std::vector<int> quantities;
+};
+
+class armor_layers_activity_actor : public activity_actor
+{
+    public:
+        armor_layers_activity_actor() = default;
+
+        activity_id get_type() const override {
+            return activity_id( "ACT_ARMOR_LAYERS" );
+        }
+
+        void start( player_activity &, Character & ) override {}
+        void do_turn( player_activity &act, Character &who ) override;
+        void finish( player_activity &, Character & ) override {}
 
         void serialize( JsonOut &jsout ) const override;
         static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
@@ -735,7 +946,6 @@ class burrow_activity_actor : public activity_actor
 
     private:
         tripoint_abs_ms target;
-        int total_moves = 0;
 
         bool can_resume_with_internal( const activity_actor &other,
                                        const Character &/*who*/ ) const override {
@@ -764,7 +974,6 @@ class pickaxe_activity_actor : public activity_actor
     private:
         tripoint_abs_ms target;
         safe_reference<item> tool;
-        int total_moves = 0;
 
         bool can_resume_with_internal( const activity_actor &other,
                                        const Character &/*who*/ ) const override {
@@ -793,7 +1002,6 @@ class jackhammer_activity_actor : public activity_actor
     private:
         tripoint_abs_ms target;
         safe_reference<item> tool;
-        int total_moves = 0;
 
         bool can_resume_with_internal( const activity_actor &other,
                                        const Character &/*who*/ ) const override {
@@ -820,7 +1028,6 @@ class churn_activity_actor : public activity_actor
 
     private:
         tripoint_abs_ms target;
-        int total_moves = 0;
 
         bool can_resume_with_internal( const activity_actor &other,
                                        const Character &/*who*/ ) const override {
@@ -849,7 +1056,6 @@ class fill_pit_activity_actor : public activity_actor
     private:
         tripoint_abs_ms target;
         safe_reference<item> tool;
-        int total_moves = 0;
 
         bool can_resume_with_internal( const activity_actor &other,
                                        const Character &/*who*/ ) const override {
@@ -876,7 +1082,6 @@ class clear_rubble_activity_actor : public activity_actor
 
     private:
         tripoint_abs_ms target;
-        int total_moves = 0;
 
         bool can_resume_with_internal( const activity_actor &other,
                                        const Character &/*who*/ ) const override {
@@ -903,7 +1108,6 @@ class pry_nails_activity_actor : public activity_actor
 
     private:
         tripoint_abs_ms target;
-        int total_moves = 0;
 
         bool can_resume_with_internal( const activity_actor &other,
                                        const Character &/*who*/ ) const override {
@@ -932,7 +1136,6 @@ class plant_seed_activity_actor : public activity_actor
     private:
         tripoint_abs_ms target;
         itype_id seed_id;
-        int total_moves = 0;
 
         bool can_resume_with_internal( const activity_actor &other,
                                        const Character &/*who*/ ) const override {
@@ -961,7 +1164,6 @@ class forage_activity_actor : public activity_actor
     private:
         tripoint_abs_ms target;
         bool auto_resume;
-        int total_moves = 0;
 
         bool can_resume_with_internal( const activity_actor &other,
                                        const Character &/*who*/ ) const override {
@@ -1073,6 +1275,69 @@ class salvage_activity_actor : public activity_actor
         void start( player_activity &act, Character &who ) override;
         void do_turn( player_activity &/*act*/, Character &/*who*/ ) override;
         void finish( player_activity &/*act*/, Character &/*who*/ ) override;
+
+        void serialize( JsonOut &jsout ) const override;
+        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+};
+
+class butchery_activity_actor : public activity_actor
+{
+    private:
+        butcher_type type;
+        std::vector<safe_reference<item>> targets;
+        tripoint_abs_ms placement;
+
+        auto setup_next_target( player_activity &act, Character &who ) -> bool; // *NOPAD*
+
+        bool can_resume_with_internal( const activity_actor &other,
+                                       const Character &/*who*/ ) const override {
+            const butchery_activity_actor &actor = static_cast<const butchery_activity_actor &>( other );
+            return actor.type == type && actor.placement == placement;
+        }
+
+    public:
+        butchery_activity_actor() = default;
+        butchery_activity_actor(
+            butcher_type type,
+            const std::vector<item *> &targets,
+            const tripoint_abs_ms &placement = tripoint_abs_ms()
+        ) : type( type ), placement( placement ) {
+            for( item *it : targets ) {
+                this->targets.emplace_back( it );
+            }
+        }
+
+        butchery_activity_actor(
+            butcher_type type,
+            std::vector<safe_reference<item>> &&targets,
+            const tripoint_abs_ms &placement = tripoint_abs_ms()
+        ) : type( type ), targets( std::move( targets ) ), placement( placement ) {}
+
+        activity_id get_type() const override {
+            switch( type ) {
+                case BUTCHER:
+                    return activity_id( "ACT_BUTCHER" );
+                case BUTCHER_FULL:
+                    return activity_id( "ACT_BUTCHER_FULL" );
+                case F_DRESS:
+                    return activity_id( "ACT_FIELD_DRESS" );
+                case SKIN:
+                    return activity_id( "ACT_SKIN" );
+                case QUARTER:
+                    return activity_id( "ACT_QUARTER" );
+                case BLEED:
+                    return activity_id( "ACT_BLEED" );
+                case DISMEMBER:
+                    return activity_id( "ACT_DISMEMBER" );
+                case DISSECT:
+                    return activity_id( "ACT_DISSECT" );
+            }
+            return activity_id( "ACT_BUTCHER" );
+        }
+
+        void start( player_activity &act, Character &who ) override;
+        void do_turn( player_activity &act, Character &who ) override;
+        void finish( player_activity &act, Character &who ) override;
 
         void serialize( JsonOut &jsout ) const override;
         static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );

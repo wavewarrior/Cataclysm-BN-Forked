@@ -5046,9 +5046,12 @@ void iexamine::use_furn_fake_item( player &p, const tripoint_bub_ms &examp )
     const int original_charges = fake_item.charges;
     p.invoke_item( &fake_item, examp );
 
-    // HACK: Evil hack incoming
-    activity_handlers::repair_activity_hack::patch_activity_for_furniture( *g->u.activity, examp,
-            cur_tool.get_id() );
+    if( auto *actor = g->u.activity->get_actor<repair_item_activity_actor>() ) {
+        actor->set_hack_furniture( abspos, cur_tool.get_id() );
+    } else if( g->u.activity->id() == activity_id( "ACT_TRAIN_SKILL" ) ) {
+        activity_handlers::repair_activity_hack::patch_activity_for_furniture(
+            *g->u.activity, examp, cur_tool.get_id() );
+    }
 
     const int discharged_ammo = original_charges - fake_item.charges;
 

@@ -8,11 +8,13 @@
 #include <vector>
 
 #include "coordinates.h"
+#include "enums.h"
 #include "type_id.h"
 
 class Character;
 class inventory;
 class item;
+class mtype;
 class player;
 class player_activity;
 // TODO (https://github.com/cataclysmbn/Cataclysm-BN/issues/1612):
@@ -120,6 +122,12 @@ struct butchery_setup {
 
 butchery_setup consider_butchery( const item &corpse_item, player &u, butcher_type action );
 int butcher_time_to_cut( const item &corpse_item, butcher_type action );
+void butchery_drops_harvest( item *corpse_item, const mtype &mt, player &p,
+                             const std::function<int()> &roll_butchery, butcher_type action,
+                             const std::function<double()> &roll_drops );
+void butchery_quarter( item *corpse_item, const player &p );
+void extract_or_wreck_cbms( std::vector<detached_ptr<item>> &cbms, int roll, player &p );
+int size_factor_in_time_to_cut( creature_size size );
 
 // activity_item_handling.cpp
 void activity_on_turn_drop();
@@ -208,7 +216,6 @@ void atm_do_turn( player_activity *act, player *p );
 void fish_do_turn( player_activity *act, player *p );
 void cracking_do_turn( player_activity *act, player *p );
 void repair_item_do_turn( player_activity *act, player *p );
-void butcher_do_turn( player_activity *act, player *p );
 void chop_tree_do_turn( player_activity *act, player *p );
 void find_mount_do_turn( player_activity *act, player *p );
 void tidy_up_do_turn( player_activity *act, player *p );
@@ -226,7 +233,6 @@ extern const std::map< activity_id, std::function<void( player_activity *, playe
 do_turn_functions;
 
 /** activity_finish functions: */
-void butcher_finish( player_activity *act, player *p );
 void firstaid_finish( player_activity *act, player *p );
 void fish_finish( player_activity *act, player *p );
 void hotwire_finish( player_activity *act, player *p );
@@ -258,7 +264,6 @@ void vibe_finish( player_activity *act, player *p );
 void train_skill_finish( player_activity *act, player *p );
 void atm_finish( player_activity *act, player *p );
 void eat_menu_finish( player_activity *act, player *p );
-void pry_nails_finish( player_activity *act, player *p );
 void chop_tree_finish( player_activity *act, player *p );
 void chop_logs_finish( player_activity *act, player *p );
 void chop_planks_finish( player_activity *act, player *p );

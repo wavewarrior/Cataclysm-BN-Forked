@@ -841,19 +841,22 @@ void advanced_inventory::start_activity( const aim_location destarea,
     const bool by_charges = sitem->items.front()->count_by_charges();
 
     if( destarea == AIM_WORN ) {
-        g->u.assign_activity( ACT_WEAR );
-
+        std::vector<safe_reference<item>> wear_items;
+        std::vector<int> wear_quantities;
         if( by_charges ) {
-            g->u.activity->targets.emplace_back( sitem->items.front() );
-            g->u.activity->values.push_back( amount_to_move );
+            wear_items.emplace_back( sitem->items.front() );
+            wear_quantities.push_back( amount_to_move );
         } else {
             for( std::list<item *>::iterator it = sitem->items.begin(); amount_to_move > 0 &&
                  it != sitem->items.end(); ++it ) {
-                g->u.activity->targets.emplace_back( *it );
-                g->u.activity->values.push_back( 0 );
+                wear_items.emplace_back( *it );
+                wear_quantities.push_back( 0 );
                 --amount_to_move;
             }
         }
+        g->u.assign_activity( std::make_unique<player_activity>(
+            std::make_unique<wear_activity_actor>(
+                std::move( wear_items ), std::move( wear_quantities ) ) ) );
     } else {
         // Find target items and quantities thereof for the new activity
         std::vector<item *> target_items;
@@ -941,10 +944,13 @@ bool advanced_inventory::action_move_item( advanced_inv_listitem *sitem,
         do_return_entry();
 
         if( destarea == AIM_WORN ) {
-            g->u.assign_activity( ACT_WEAR );
-
-            g->u.activity->targets.emplace_back( sitem->items.front() );
-            g->u.activity->values.push_back( amount_to_move );
+            std::vector<safe_reference<item>> wear_items;
+            std::vector<int> wear_quantities;
+            wear_items.emplace_back( sitem->items.front() );
+            wear_quantities.push_back( amount_to_move );
+            g->u.assign_activity( std::make_unique<player_activity>(
+                std::make_unique<wear_activity_actor>(
+                    std::move( wear_items ), std::move( wear_quantities ) ) ) );
         } else {
             item *itm = &g->u.i_at( sitem->idx );
 

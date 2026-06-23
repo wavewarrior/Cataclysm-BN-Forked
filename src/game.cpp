@@ -12236,29 +12236,27 @@ static void butcher_submenu( const std::vector<item *> &corpses, int corpse = -1
     smenu.query();
     switch( smenu.ret ) {
         case BUTCHER:
-            you.assign_activity( activity_id( "ACT_BUTCHER" ), 0, true );
-            break;
         case BUTCHER_FULL:
-            you.assign_activity( activity_id( "ACT_BUTCHER_FULL" ), 0, true );
-            break;
         case F_DRESS:
-            you.assign_activity( activity_id( "ACT_FIELD_DRESS" ), 0, true );
-            break;
         case BLEED:
-            you.assign_activity( activity_id( "ACT_BLEED" ), 0, true );
-            break;
         case SKIN:
-            you.assign_activity( activity_id( "ACT_SKIN" ), 0, true );
-            break;
         case QUARTER:
-            you.assign_activity( activity_id( "ACT_QUARTER" ), 0, true );
-            break;
         case DISMEMBER:
-            you.assign_activity( activity_id( "ACT_DISMEMBER" ), 0, true );
+        case DISSECT: {
+            std::vector<item *> targets;
+            if( corpse != -1 ) {
+                targets.push_back( corpses[corpse] );
+            } else {
+                targets = corpses;
+            }
+            you.assign_activity( std::make_unique<player_activity>(
+                std::make_unique<butchery_activity_actor>(
+                    static_cast<butcher_type>( smenu.ret ), targets,
+                    get_map().bub_to_abs( you.bub_pos() )
+                )
+            ) );
             break;
-        case DISSECT:
-            you.assign_activity( activity_id( "ACT_DISSECT" ), 0, true );
-            break;
+        }
         default:
             return;
     }
@@ -12486,9 +12484,6 @@ void game::butcher()
                     break;
                 case MULTIBUTCHER:
                     butcher_submenu( corpses );
-                    for( item *&it : corpses ) {
-                        u.activity->targets.emplace_back( it );
-                    }
                     break;
                 case MULTIDISASSEMBLE_ONE:
                     crafting::disassemble_all( u, false );
@@ -12506,7 +12501,6 @@ void game::butcher()
             break;
         case BUTCHER_CORPSE: {
             butcher_submenu( corpses, indexer_index );
-            u.activity->targets.emplace_back( corpses[indexer_index] );
         }
         break;
         case BUTCHER_DISASSEMBLE: {
@@ -13284,10 +13278,11 @@ auto game::place_player( const tripoint_bub_ms &dest_loc, const bool keep_grab )
             }
 
             if( !corpses.empty() ) {
-                u.assign_activity( activity_id( "ACT_BUTCHER" ), 0, true );
-                for( item *&it : corpses ) {
-                    u.activity->targets.emplace_back( it );
-                }
+                u.assign_activity( std::make_unique<player_activity>(
+                    std::make_unique<butchery_activity_actor>(
+                        BUTCHER, corpses, m.bub_to_abs( u.bub_pos() )
+                    )
+                ) );
             }
         } else if( pulp_butcher == "pulp" || pulp_butcher == "pulp_adjacent" ) {
             const auto pulp = [&]( const tripoint_bub_ms & pos ) {
