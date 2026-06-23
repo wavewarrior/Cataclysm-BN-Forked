@@ -73,7 +73,6 @@ class worldfactory
          */
         void delete_world( const std::string &worldname, bool delete_folder );
 
-        static void draw_worldgen_tabs( const catacurses::window &w, size_t current );
         void show_active_world_mods( const std::vector<mod_id> &world_mods );
         void edit_active_world_mods( WORLDINFO *world );
 
@@ -96,12 +95,7 @@ class worldfactory
                                       const std::function<bool()> &on_quit,
                                       const std::function<bool()> &on_backtab,
                                       bool standalone );
-        void draw_modselection_borders( const catacurses::window &win, const input_context &ctxtp,
-                                        bool standalone );
         static void draw_empty_worldgen_tabs( const catacurses::window &w );
-        void draw_mod_list( const catacurses::window &w, int &start, size_t cursor,
-                            const std::vector<mod_id> &mods, bool is_active_list, const std::string &text_if_empty,
-                            const catacurses::window &w_shift );
 
         WORLDINFO *add_world( std::unique_ptr<WORLDINFO> retworld );
 
