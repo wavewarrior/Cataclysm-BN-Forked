@@ -350,23 +350,8 @@ std::string vehicle::part_list_text( int p, int hl ) const
  * @param start_at Which vehicle part to start printing at.
  * @param start_limit the part index beyond which the display is full
  */
-void vehicle::print_vparts_descs( const catacurses::window &win, int max_y, int width, int p,
-                                  int &start_at, int &start_limit ) const
-{
-    if( p < 0 || p >= static_cast<int>( parts.size() ) ) {
-        return;
-    }
-    const std::string msg = parts_descs_text( max_y, width, p, start_at, start_limit );
-    werase( win );
-    // -2 for left & right padding
-    // NOLINTNEXTLINE(cata-use-named-point-constants)
-    fold_and_print( win, point( 1, 0 ), width - 2, c_light_gray, msg );
-    wnoutrefresh( win );
-}
-
-// String-building half of print_vparts_descs (see header). Behaviour-identical to
-// what that function used to inline; print_vparts_descs now delegates here so the
-// RmlUi path can consume the same colour-tagged text.
+// Colour-tagged descriptions for all the parts on a single tile (RmlUi path; call
+// with a large max_y to disable the scroll windowing).
 std::string vehicle::parts_descs_text( int max_y, int width, int p,
                                        int &start_at, int &start_limit ) const
 {
