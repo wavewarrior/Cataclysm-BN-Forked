@@ -982,123 +982,6 @@ int inventory_column::reassign_custom_invlets( const player &p, int min_invlet, 
     return cur_invlet;
 }
 
-void inventory_column::draw( const catacurses::window &win, point pos ) const
-{
-    if( !visible() ) {
-        return;
-    }
-
-    const auto available_cell_width = [ this ]( size_t index, size_t cell_index ) {
-        const size_t displayed_width = cells[cell_index].current_width;
-        const size_t real_width = get_entry_cell_width( index, cell_index );
-
-        return displayed_width > real_width ? displayed_width - real_width : 0;
-    };
-
-    // Do the actual drawing
-    for( size_t index = page_offset, line = 0; index < entries.size() &&
-         line < entries_per_page; ++index, ++line ) {
-        const auto &entry = entries[index];
-        const auto &entry_cell_cache = get_entry_cell_cache( index );
-
-        if( !entry ) {
-            continue;
-        }
-
-        int x1 = pos.x + get_entry_indent( entry );
-        int x2 = pos.x + std::max( static_cast<int>( reserved_width - get_cells_width() ), 0 );
-        int yy = pos.y + line;
-
-        const bool selected = active && is_selected( entry );
-
-        if( selected && visible_cells() > 1 ) {
-            for( int hx = x1, hx_max = pos.x + get_width(); hx < hx_max; ++hx ) {
-                mvwputch( win, point( hx, yy ), h_white, ' ' );
-            }
-        }
-
-        const std::string &denial = entry_cell_cache.denial;
-
-        if( !denial.empty() ) {
-            const size_t max_denial_width = std::max( static_cast<int>( get_width() - ( min_denial_gap +
-                                            get_entry_cell_width( index, 0 ) ) ), 0 );
-            const size_t denial_width = std::min( max_denial_width, static_cast<size_t>( utf8_width( denial,
-                                                  true ) ) );
-
-            trim_and_print( win, point( pos.x + get_width() - denial_width, yy ), denial_width, c_red, denial );
-        }
-
-        const size_t count = denial.empty() ? cells.size() : 1;
-
-        for( size_t cell_index = 0; cell_index < count; ++cell_index ) {
-            if( !cells[cell_index].visible() ) {
-                continue; // Don't show empty cells
-            }
-
-            if( line != 0 && cell_index != 0 && entry.is_category() ) {
-                break; // Don't show duplicated titles
-            }
-
-            x2 += cells[cell_index].current_width;
-
-            size_t text_width = utf8_width( entry_cell_cache.text[cell_index], true );
-            size_t text_gap = cell_index > 0 ? std::max( cells[cell_index].gap(), min_cell_gap ) : 0;
-            size_t available_width = x2 - x1 - text_gap;
-
-            if( text_width > available_width ) {
-                // See if we can steal some of the needed width from an adjacent cell
-                if( cell_index == 0 && count >= 2 ) {
-                    available_width += available_cell_width( index, 1 );
-                } else if( cell_index > 0 ) {
-                    available_width += available_cell_width( index, cell_index - 1 );
-                }
-                text_width = std::min( text_width, available_width );
-            }
-
-            if( text_width > 0 ) {
-                const int text_x = cell_index == 0 ? x1 : x2 -
-                                   text_width; // Align either to the left or to the right
-                const std::string &text = entry_cell_cache.text[cell_index];
-
-                if( entry.is_item() && ( selected || !entry.is_selectable() ) ) {
-                    trim_and_print( win, point( text_x, yy ), text_width, selected ? h_white : c_dark_gray,
-                                    remove_color_tags( text ) );
-                } else {
-                    trim_and_print( win, point( text_x, yy ), text_width, entry_cell_cache.color, text );
-                }
-            }
-
-            x1 = x2;
-        }
-
-        if( entry.is_item() ) {
-            int xx = pos.x;
-            if( entry.get_invlet() != '\0' ) {
-                mvwputch( win, point( pos.x, yy ), entry.get_invlet_color(), entry.get_invlet() );
-            }
-            xx += 2;
-            if( get_option<bool>( "ITEM_SYMBOLS" ) ) {
-                const nc_color color = entry.any_item()->color();
-                mvwputch( win, point( xx, yy ), color, entry.any_item()->symbol() );
-                xx += 2;
-            }
-            if( allows_selecting() && activatable() && multiselect ) {
-                if( entry.chosen_count == 0 ) {
-                    mvwputch( win, point( xx, yy ), c_dark_gray, '-' );
-                } else if( entry.chosen_count >= entry.get_available_count() ) {
-                    mvwputch( win, point( xx, yy ), c_light_green, '+' );
-                } else {
-                    mvwputch( win, point( xx, yy ), c_light_green, '#' );
-                }
-            }
-        }
-    }
-
-    if( pages_count() > 1 ) {
-        mvwprintw( win, pos + point( 0, height - 1 ), _( "Page %d/%d" ), page_index() + 1, pages_count() );
-    }
-}
-
 size_t inventory_column::visible_cells() const
 {
     return std::count_if( cells.begin(), cells.end(), []( const cell_t &elem ) {
@@ -1411,7 +1294,6 @@ void inventory_selector::remove_item( item *location )
 
 }
 
-
 void inventory_selector::add_character_items( Character &character )
 {
     character.visit_items( [ this, &character ]( item * it ) {
@@ -1670,22 +1552,6 @@ size_t inventory_selector::get_footer_min_width() const
     return result;
 }
 
-void inventory_selector::draw_header( const catacurses::window &w ) const
-{
-    trim_and_print( w, point( border + 1, border ), getmaxx( w ) - 2 * ( border + 1 ), c_white, title );
-    fold_and_print( w, point( border + 1, border + 1 ), getmaxx( w ) - 2 * ( border + 1 ), c_dark_gray,
-                    hint );
-
-    mvwhline( w, point( border, border + get_header_height() ), LINE_OXOX, getmaxx( w ) - 2 * border );
-
-    if( display_stats ) {
-        size_t y = border;
-        for( const std::string &elem : get_stats() ) {
-            right_print( w, y++, border + 1, c_dark_gray, elem );
-        }
-    }
-}
-
 inventory_selector::stat display_stat( const std::string &caption, int cur_value, int max_value,
                                        const std::function<std::string( int )> &disp_func )
 {
@@ -1781,16 +1647,6 @@ void inventory_selector::refresh_window() const
         return;
     }
 
-    assert( w_inv );
-
-    werase( w_inv );
-
-    draw_frame( w_inv );
-    draw_header( w_inv );
-    draw_columns( w_inv );
-    draw_footer( w_inv );
-
-    wnoutrefresh( w_inv );
 }
 
 void inventory_selector::rml_open()
@@ -1958,54 +1814,6 @@ bool inventory_selector::wear( inventory_entry &entry )
     return wear_result;
 }
 
-void inventory_selector::draw_columns( const catacurses::window &w ) const
-{
-    const auto columns = get_visible_columns();
-
-    const int screen_width = getmaxx( w ) - 2 * ( border + 1 );
-    const bool centered = are_columns_centered( screen_width );
-
-    const int free_space = screen_width - get_columns_width( columns );
-    const int max_gap = ( columns.size() > 1 ) ? free_space / ( static_cast<int>
-                        ( columns.size() ) - 1 ) :
-                        free_space;
-    const int gap = centered ? max_gap : std::min<int>( max_gap, normal_column_gap );
-    const int gap_rounding_error = centered && columns.size() > 1
-                                   ? free_space % ( columns.size() - 1 ) : 0;
-
-    size_t x = border + 1;
-    size_t y = get_header_height() + border + 1;
-    size_t active_x = 0;
-
-    for( const auto &elem : columns ) {
-        if( &elem == &columns.back() ) {
-            x += gap_rounding_error;
-        }
-
-        if( !is_active_column( *elem ) ) {
-            elem->draw( w, point( x, y ) );
-        } else {
-            active_x = x;
-        }
-
-        x += elem->get_width() + gap;
-    }
-
-    get_active_column().draw( w, point( active_x, y ) );
-    if( empty() ) {
-        center_print( w, getmaxy( w ) / 2, c_dark_gray, _( "Your inventory is empty." ) );
-    }
-}
-
-void inventory_selector::draw_frame( const catacurses::window &w ) const
-{
-    draw_border( w );
-
-    const int y = border + get_header_height();
-    mvwhline( w, point( 0, y ), LINE_XXXO, 1 );
-    mvwhline( w, point( getmaxx( w ) - border, y ), LINE_XOXX, 1 );
-}
-
 std::pair<std::string, nc_color> inventory_selector::get_footer( navigation_mode m ) const
 {
     if( has_available_choices() ) {
@@ -2013,42 +1821,6 @@ std::pair<std::string, nc_color> inventory_selector::get_footer( navigation_mode
                                get_navigation_data( m ).color );
     }
     return std::make_pair( _( "There are no available choices" ), i_red );
-}
-
-void inventory_selector::draw_footer( const catacurses::window &w ) const
-{
-    if( spopup ) {
-        mvwprintz( w_inv, point( 2, getmaxy( w_inv ) - 1 ), c_cyan, "< " );
-        mvwprintz( w_inv, point( ( getmaxx( w_inv ) / 2 ) - 4, getmaxy( w_inv ) - 1 ), c_cyan, " >" );
-
-        spopup->query_string( /*loop=*/false, /*draw_only=*/true );
-    } else {
-        int filter_offset = 0;
-        if( has_available_choices() || !filter.empty() ) {
-            std::string text = string_format( filter.empty() ? _( "[%s] Filter" ) : _( "[%s] Filter: " ),
-                                              ctxt.get_desc( "INVENTORY_FILTER" ) );
-            filter_offset = utf8_width( text + filter ) + 6;
-
-            mvwprintz( w, point( 2, getmaxy( w ) - border ), c_light_gray, "< " );
-            wprintz( w, c_light_gray, text );
-            wprintz( w, c_white, filter );
-            wprintz( w, c_light_gray, " >" );
-        }
-
-        const auto footer = get_footer( mode );
-        if( !footer.first.empty() ) {
-            const int string_width = utf8_width( footer.first );
-            const int x1 = filter_offset + std::max( getmaxx( w ) - string_width - filter_offset, 0 ) / 2;
-            const int x2 = x1 + string_width - 1;
-            const int y = getmaxy( w ) - border;
-
-            mvwprintz( w, point( x1, y ), footer.second, footer.first );
-            mvwputch( w, point( x1 - 1, y ), c_light_gray, ' ' );
-            mvwputch( w, point( x2 + 1, y ), c_light_gray, ' ' );
-            mvwputch( w, point( x1 - 2, y ), c_light_gray, LINE_XOXX );
-            mvwputch( w, point( x2 + 2, y ), c_light_gray, LINE_XXXO );
-        }
-    }
 }
 
 inventory_selector::inventory_selector( player &u, const inventory_selector_preset &preset )
@@ -2079,7 +1851,6 @@ inventory_selector::inventory_selector( player &u, const inventory_selector_pres
     ctxt.register_action( "WIELD" );
     ctxt.register_action( "WEAR" );
     ctxt.register_action( "ANY_INPUT" ); // For invlets
-
 
     append_column( own_inv_column );
     append_column( map_column );

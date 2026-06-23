@@ -292,7 +292,6 @@ class inventory_column
         std::vector<inventory_entry *> get_all_entries() const;
         inventory_entry *find_by_invlet( int invlet ) const;
 
-        void draw( const catacurses::window &win, point pos ) const;
 
         /** Build this column's entries as RmlUi rows (mirrors draw(), reuses the
          *  cell cache). All entries — RmlUi scrolls, no page windowing. */
@@ -598,10 +597,6 @@ class inventory_selector
         void rml_sync() const;
         std::unique_ptr<inventory_rml_state> rml_state_;
 
-        void draw_header( const catacurses::window &w ) const;
-        void draw_footer( const catacurses::window &w ) const;
-        void draw_columns( const catacurses::window &w ) const;
-        void draw_frame( const catacurses::window &w ) const;
 
     public:
         /**
