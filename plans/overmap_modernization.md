@@ -1,106 +1,115 @@
-# Overmap Modernization — Plan
+# Overmap Decomposition — Plan
+
+> Scope rewritten 2026-06-23 after review. The prior version named ~10 functions
+> that do not exist (`path_to`, `cost_for_path`, `get_connection_to`,
+> `place_terrain`, `place_buildings`, `Spawn_rotation`, `place_extra`,
+> `build_connections`, `connect_road_t_types`, `note_string`), invented two data
+> members (`std::vector<overmap_special_placement>`, `std::vector<overmap_connection> connections`),
+> and a non-existent `from_legacy()` shim. Real names and the actual risk model
+> are below.
 
 ## Context
 
-`overmap.cpp` (6700 lines) is the second-largest file in the gameplay core (after `item.cpp`). It carries 26 TODO markers, public data members in `overmap.h`, and a partial migration to JSON-driven loading. `overmapbuffer.cpp` (2235 lines) adds 18 more TODOs.
+`overmap.cpp` is ~6700 lines — second-largest gameplay-core file. The only
+defensible win here is **decomposition for navigability and compile time**.
+There is **no perf benefit**: every target (`generate`, `place_*`,
+`build_connection`) runs at world/OMT first-load and is then cached
+(`mapbuffer::generate_omt`). State that plainly so nobody mistakes this for a
+runtime optimization.
 
-| Metric | overmap.cpp | overmapbuffer.cpp | overmap_ui.cpp |
-|--------|-------------|-------------------|----------------|
-| Lines | 6700 | 2235 | 2767 |
-| TODO/FIXME markers | 26 | 18 | 7 |
-| `ranges::` | ~3 | ~5 | ~2 |
-| Trailing returns | few | few | few |
-| Public data members | overmap.h:434 "TODO: make private" | — | — |
+### The real risk: worldgen RNG call-ordering
 
-This plan covers code quality decomposition and modernization. Overmap generation logic is not changed.
+Overmap generation is seeded RNG. The order of RNG-consuming calls determines
+the map. A file split that *only* moves whole functions to new translation units
+is RNG-safe. But promoting the **14 file-local `static` helpers** in
+`overmap.cpp` (anonymous-namespace / TU-local functions) to shared headers, or
+reordering anything, can perturb call order and silently change every
+same-seed map. There is currently **no same-seed regression harness**. Building
+one is therefore Phase 0 and gates everything else.
 
 ## Phases
 
-### Phase 1 — Split by function
+### Phase 0 — Same-seed regression harness (gate)
 
-Extract overland components into domain-specific files:
+Before touching any code, add a test that pins worldgen determinism:
+- Construct an `overmap` at a fixed seed/point, run generation, and hash a
+  canonical serialization (oter ids per tile + city list + connection list +
+  special placements).
+- Store the golden hash. Test fails if generation output changes.
+- Run it green on `main` first to prove it is stable, then keep it green through
+  every subsequent phase. **If Phase 0 cannot be made deterministic, stop** —
+  the decomposition is too risky to verify and should be abandoned.
 
-| New file | Content from overmap.cpp |
-|----------|-------------------------|
-| `overmap_pathfinding.cpp` | Pathfinding algorithms (`path_to()`, `cost_for_path()`, `get_connection_to()`, etc.) |
-| `overmap_terrain.cpp` | Terrain generation (`generate()`, `place_terrain()`, `place_buildings()`, etc.) |
-| `overmap_specials.cpp` | Special placement (`place_specials()`, `Spawn_rotation()`, `place_extra()`) |
-| `overmap_connections.cpp` | Connection logic (`build_connections()`, `connect_road_t_types()`, etc.) — merge with partial `overmap_connection.cpp` |
-| `overmap_labels.cpp` | Label functionality (`add_note()`, `delete_note()`, `note_string()`) — merge with partial `overmap_label.cpp` |
+Verification: test passes twice in a row on unchanged source (no hidden
+nondeterminism from global state / time / `rng()` seeding).
 
-Target: `overmap.cpp` < 3000 lines after split.
+### Phase 1 — Move whole functions to new TUs (no helper promotion)
 
-### Phase 2 — Encapsulate data members
+Split by real, verified method groups. Move only complete `overmap::` member
+definitions; leave all TU-local `static` helpers where they are *unless* a moved
+function is their sole caller (then move the helper with it, still TU-local in
+the new file). Do **not** promote helpers to headers in this phase.
 
-`overmap.h:434` has: `// TODO: make private`
+| New file | Real `overmap::` methods to move |
+|---|---|
+| `overmap_generate.cpp` | `place_cities`, `place_building`, `pick_random_building_to_place`, `place_forests`, `place_forest_trails`, `place_forest_trailheads`, `place_swamps`, `place_lakes`, `place_rivers`, `place_river`, `place_roads`, `polish_rivers` |
+| `overmap_specials.cpp` | `place_specials`, `place_special`, `place_special_attempt`, `place_special_forced`, `place_special_custom`, `random_special_rotation`, `overmap_special_at` |
+| `overmap_connections.cpp` | `build_connection` (both overloads), `lay_out_connection`, `lay_out_street`, `populate_connections_out_from_neighbors`, `set_electric_grid_connections`, `is_path` — merge with existing `overmap_connection.cpp` if cohesive |
+| `overmap_mongroups.cpp` | `place_mongroups`, `process_mongroups`, `signal_hordes`, `move_hordes`, `monster_check`, `mongroup_check`, `place_nemesis`, `move_nemesis`, `remove_nemesis`, `signal_nemesis` |
 
-Several `overmap` data members are public and accessed directly from `overmapbuffer.cpp`, `overmap_ui.cpp`, and Lua bindings:
+Notes:
+- `overmap.cpp` keeps ctor/dtor, serialize/deserialize, `generate` (the
+  orchestrator), notes (`has_note`/`mark_note_dangerous`/etc.), and accessors.
+- The actual overmap *travel* pathfinding is `overmapbuffer::get_travel_path()`
+  (`overmapbuffer.cpp:1086`), not in overmap.cpp — there is **no**
+  `overmap_pathfinding.cpp` to create. `lay_out_*` just calls the header-only
+  `pf::directed_path` template from `simple_pathfinding.h`.
+- Do **not** merge `add_note`/`delete_note` (player map notes) into the existing
+  `overmap_label.cpp` — that file is an `oter_type_str_id`→string *terrain-label*
+  registry, an unrelated system (and a third file `overmap_label_note.cpp`
+  exists). Notes stay in `overmap.cpp`.
 
-```cpp
-// Current (overmap.h):
-std::vector<overmap_special_placement> overmap_special_placements;
-std::vector<overmap_connection> connections;
-std::vector<city> cities;
-// etc.
-```
+Verification: Phase 0 harness green (identical hash). `wc -l src/overmap.cpp`
+drops. `src/CMakeLists.txt` updated.
 
-Move to private with accessors:
-```cpp
-class overmap {
-    std::vector<overmap_special_placement> overmap_special_placements_;
-public:
-    auto overmap_special_placements() const -> const std::vector<overmap_special_placement> &;
-    auto add_special_placement( overmap_special_placement p ) -> void;
-    // ...
-};
-```
+### Phase 2 — Encapsulate the author-flagged public members (optional)
 
-Also encapsulate `overmap_special` and `overmap_tile` members where they are publicly accessible and mutable.
+`overmap.h:433` carries `// TODO: make private` over: `radios`, `vehicles`,
+`cities`, `connections_out`, `connection_cache`. These are the real targets (the
+prior plan's `overmap_special_placements` is **already private** at `overmap.h:473`
+and is an `unordered_map`, not a vector).
 
-### Phase 3 — Complete JSON migration
+Reality check that caps the value: `friend class overmapbuffer;`
+(`overmap.h:457`) already grants the one significant external consumer full
+access (only `om->cities` at `overmapbuffer.cpp:1807-1808` reads these directly;
+`overmap_ui.cpp` / Lua bindings have zero direct hits). So encapsulation here is
+near-cosmetic. **Do this phase only if Phase 1 lands clean and the churn is
+judged worth it** — otherwise skip.
 
-Several TODOs reference incomplete JSON migration:
-- `overmap.h:160`: "TODO: Needs to load from a JSON somewhere, move to json"
-- `overmap.h:472`: "TODO: Should have individual instances grouped by placement"
+Verification: Phase 0 harness green. Build green.
 
-Scope:
-- Audit remaining hardcoded overmap specials/connections/locations against JSON equivalents
-- Move any that have no JSON counterpart into JSON definitions
-- Remove `from_legacy()` shim when all legacy formats are covered
+## Out of scope (cut from prior plan)
 
-### Phase 4 — C++23 modernization pass
-
-- Options structs for pathfinding queries (currently pass 5+ raw params)
-- `ranges::*` for overmap buffer searches and filtering
-- Trailing return types
-- `std::expected` for fallible operations (pathfinding failure, connection validation)
-- Designated initializers for struct construction
-
-## Verification (per phase)
-
-- Build green. Overmap generation produces identical output for same seed.
-- Phase 1: `wc -l src/overmap.cpp` drops.
-- Phase 2: `rg "(overmap|overmap_tile|overmap_special)\.\w+ = " src/` returns only setter-style calls.
-- Phase 3: `rg "TODO.*JSON" src/overmap*.cpp src/overmap*.h` returns 0.
-- Phase 4: `rg "for\s*\(.*int\s+\w+\s*=\s*0" src/overmap*` drops.
+- "Complete JSON migration / remove `from_legacy()`" — no such shim exists
+  (grep: 0 hits). The `overmap.h:160` TODO is about an ore-spawn rate table,
+  unrelated. Dropped.
+- File-wide C++23 sweep (ranges/std::expected/options-structs) on cold worldgen
+  code — pure churn, RNG-ordering risk, no payoff. Dropped.
 
 ## Files
 
 | File | Phase |
-|------|-------|
-| `src/overmap.cpp` | 1 (source, shrinks), 4 (C++23) |
-| `src/overmap.h` | 2 (encapsulation), 3 (JSON migration) |
-| `src/overmap_pathfinding.cpp` (new) | 1 |
-| `src/overmap_terrain.cpp` (new) | 1 |
-| `src/overmap_specials.cpp` (new) | 1 |
-| `src/overmap_connections.cpp` (new) | 1 |
-| `src/overmap_labels.cpp` (new) | 1 (merge with overmap_label.cpp) |
-| `src/overmapbuffer.cpp` | 2 (update to accessor API) |
-| `src/overmap_ui.cpp` | 2 (update to accessor API) |
+|---|---|
+| `tests/overmap_determinism_test.cpp` (new) | 0 |
+| `src/overmap.cpp` (shrinks) | 1 |
+| `src/overmap_generate.cpp` / `_specials.cpp` / `_connections.cpp` / `_mongroups.cpp` (new) | 1 |
 | `src/CMakeLists.txt` | 1 |
+| `src/overmap.h`, `src/overmapbuffer.cpp` | 2 (optional) |
 
-## Effort: 2–3 weeks
-- Phase 1: 3–4 days (file split, mechanical)
-- Phase 2: 2–3 days (encapsulation + call-site audit)
-- Phase 3: 2–3 days (JSON migration)
-- Phase 4: 1–2 days (C++23)
+## Effort
+- Phase 0: 1–2 days (the hard part — making worldgen deterministically testable)
+- Phase 1: 2–4 days (mechanical once Phase 0 guards it)
+- Phase 2: 1 day (optional)
+
+If Phase 0 proves worldgen non-deterministic in a way you can't pin, abandon the
+whole plan — an unverifiable 6700-line split is not worth the regression risk.

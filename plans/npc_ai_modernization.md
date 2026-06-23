@@ -1,114 +1,92 @@
-# NPC AI Modernization — Plan
+# NPC AI Cleanup — Plan
+
+> Scope rewritten 2026-06-23 after review. The prior version proposed a
+> utility-ranked `npc_goal` strategy pattern (Phase 1), a perception/AI split
+> (Phase 3), and a `talk_function` dispatch-table (Phase 4). All three were
+> dropped:
+> - **Strategy pattern** — `npc::move()` (`npcmove.cpp:828-1103`) is a hand-ordered
+>   priority *cascade* with early-return hard-overrides (dangerous fields,
+>   explosives) and contextual gating (vehicle, attitude, follow distance). A flat
+>   `vector<npc_goal>` ranked by `utility()` descending cannot express early-return
+>   overrides without re-encoding all that context into every `utility()` call.
+>   It also adds virtual dispatch + heap indirection on a per-NPC-per-turn hot path
+>   (`game.cpp:6529`), directly opposing `SIM_PERFORMANCE_PLAN`.
+> - **Perception/AI split** — its stated payoff ("what SIM_PERF Part 2 needs") is
+>   false: Part 2 explicitly says *do not* separate perception/AI, and is already
+>   shipped (commit `5315065c12`: `npc_lod_tier`, tier/budget/stride in
+>   `game::npcmove()` and `npc::move()`).
+> - **talk_function table** — already ships: `static_functions_map` built via the
+>   `WRAP` macro at `npctalk.cpp:3119-3121`. Nothing to build.
 
 ## Context
 
-`npcmove.cpp` (4888 lines) is the largest game-AI file in the project. It uses a 25-value `npc_action` C enum and a ~400-line `execute_action()` switch to dispatch NPC behavior. `method_of_attack()` mixes targeting, ammo, range, and behavior selection in one monolithic function. Zero `std::ranges`, zero `std::views`, zero options structs.
+`method_of_attack()` (`npcmove.cpp:1502-1620`, 118 lines) interleaves three
+concerns in one function:
+1. **Side-effecting combat prep** — `activate_combat_cbms()`, transforming worn
+   COMBAT_NPC_USE armor, transforming the wielded weapon (`:1530-1554`).
+2. **Gun-mode resolution** — picking/clearing `g_mode` against silent/ammo/dist
+   gates (`:1567-1573`).
+3. **The decision cascade** — alt-attack → wield-better → reach → shoot →
+   avoid-friendly-fire → reload → melee → aim → undecided (`:1556-1619`), each
+   returning an `npc_action` with debug logging.
 
-The `SIM_PERFORMANCE_PLAN Part 2` (NPC LOD/budget sketch) addresses perf gating but not code quality. This plan covers structural modernization only.
+The mixing makes the decision cascade hard to read (the actual AI logic) because
+it is buried under gear-activation side effects. This is a maintainability
+cleanup, **not** a perf change and **not** a behavior change.
 
-| Metric | npcmove.cpp | npctalk.cpp | npc.cpp |
-|--------|-------------|-------------|---------|
-| Lines | 4888 | 3919 | 3790 |
-| `ranges::` | 0 | 0 | 2 |
-| `std::views` | 0 | 0 | 0 |
-| Trailing returns | few | few | ~10 |
-| Raw `Creature*` params | ~20 sites | ~5 | ~10 |
+## Approach
 
-## Phases
+Single phase, one function, mechanical. No new files, no new types beyond two
+private helpers on `npc`.
 
-### Phase 1 — Strategy pattern for NPC actions
+### Extract the two non-decision blocks
 
-Current dispatch flow:
-```cpp
-enum npc_action : int {
-    npc_undecided = 0,
-    npc_pause, npc_reload, npc_sleep, // 25+ values
-};
+| New private method | Extracted from | Signature | Notes |
+|---|---|---|---|
+| `npc::activate_combat_gear()` | `:1530-1554` | `void` | Pure side effects: combat CBMs + worn/weapon transforms. No return. |
+| `npc::resolve_gun_mode()` | `:1567-1573` | `gun_mode` | Returns the usable mode or a null `gun_mode()`. Takes the already-computed `can_use_gun`, `dist`, `use_silent` as params (or recomputes locally — pick one, don't pass 3 bools if recompute is cheap). |
 
-void npc::execute_action( npc_action action ) {
-    switch( action ) {
-        case npc_pause: move_pause(); break;
-        case npc_reload: do_reload( primary_weapon() ); break;
-        // 400+ lines, 25+ cases
-    }
-}
-```
+After extraction, `method_of_attack()` reads as: target guard → compute
+`dist`/`has_los`/`same_z`/`cur_recoil`/engagement flags → `activate_combat_gear()`
+→ early alt-attack/wield returns → `g_mode = resolve_gun_mode(...)` → the
+reach/shoot/reload/melee/aim cascade. ~70 lines, the cascade no longer buried.
 
-Replace with:
+### Do NOT
 
-```cpp
-struct npc_goal {
-    virtual ~npc_goal() = default;
-    virtual auto utility( const npc &who, const Character &target ) const -> float = 0;
-    virtual auto execute( npc &who, const Character &target ) -> bool = 0;
-    virtual auto id() const -> npc_goal_id = 0;
-};
-```
+- Do not invent `select_target()` — `current_target()` already exists
+  (`npc.h:940`) and returns `Creature*` (targets are mostly **monsters**, not
+  `Character`).
+- Do not split the decision cascade itself into per-branch functions — the
+  ordering *is* the logic; keeping it one linear read is the point.
+- Do not change any return value or early-return condition.
 
-Goals are registered in a `std::vector<std::unique_ptr<npc_goal>>` at startup. `execute_action()` becomes `goals_by_utility[0].execute()`. The `switch` is replaced by the planner scanning candidates by `utility()` descending.
+## Optional follow-on (only if the above lands clean)
 
-### Phase 2 — Decompose `method_of_attack()`
+A targeted C++23 pass **on the touched function only**:
+- Trailing return type on the new helpers (match neighbours — file is mixed; do
+  not sweep the whole file).
+- The `worn` activation loop (`:1533`) can stay a range-for; no `ranges::`
+  needed (it has side effects + early `invoke_item`).
 
-Current: `method_of_attack()` (~200 lines in `npcmove.cpp`) evaluates all attack options inline. Split into:
+Skip the file-wide "ranges/views/std::expected/options-struct" sweep from the old
+plan — `npcmove.cpp` is per-turn hot-path code and a cosmetic sweep buys nothing
+while risking behavior drift in the cascade.
 
-| Function | Returns | Concern |
-|----------|---------|---------|
-| `select_target()` | `Creature *` or `std::optional<weak_ptr<Creature>>` | Which enemy to attack |
-| `evaluate_range()` | `struct range_assessment { int dist; int accuracy; bool in_range; }` | Distance + accuracy check |
-| `check_ammo()` | `struct ammo_assessment { bool has_ammo; bool has_magazine; int reload_turns; }` | Ammo + reload status |
-| `choose_attack_type()` | `npc_goal_id` or `attack_type` enum | Final action selection |
+## Verification
 
-Each returns a named struct (no out-params via references).
-
-### Phase 3 — Extract perception from AI loop
-
-`regen_ai_cache()` (in `npcmove.cpp`) handles perception (listening, sight checks, sound tracking) mixed with AI evaluation. Extract all sensory functions into a `npc_perception` module:
-
-- `npc_perception::hear_sounds()`
-- `npc_perception::see_targets()`
-- `npc_perception::track_target()`
-
-The `npc` retains a `npc_perception` member. `regen_ai_cache()` calls perception first, then AI evaluation. This decoupling is what `SIM_PERFORMANCE_PLAN Part 2` needs to gate perception and AI independently.
-
-### Phase 4 — NPC talk modernization
-
-`npctalk.cpp` (3919 lines) has significant legacy:
-- Dialogue `switch` on `talk_function` enums (should be function table)
-- Mission-grant logic mixing with NPC response generation
-- Raw `std::string` for dialogue options instead of typed IDs
-
-Scope: extract mission-giving dialogue into `npctalk_missions.cpp`, replace talk-function switch with map dispatch, use `trial_id`/`dialogue_id` typed strings.
-
-### Phase 5 — C++23 modernization pass
-
-- Trailing return types in all touched files.
-- `ranges::*` for NPC filtering in pathfinding and target selection.
-- Options structs for functions with 4+ bare params.
-- `Creature*` → `Creature&` where guaranteed non-null.
-- `std::expected` for operations that may fail (pathfinding, target acquisition).
-
-## Verification (per phase)
-
-- Build green. Tracy `npcmove` zone: no regression.
-- NPC behavior A/B: same-save companion actions identical (same attack choices, same movement).
-- Phase 1: `rg "npc_action" src/` usage count drops.
-- Phase 3: `rg "regen_ai_cache" src/` shows separation of perception/AI calls.
-- Phase 5: `rg "for\s*\(.*int\s+\w+\s*=\s*0" src/npcmove.cpp` drops below 3.
+- Build green.
+- **Behavior unchanged** is the hard requirement. The cascade returns identical
+  `npc_action` for identical inputs. Best check: load a combat save, confirm an
+  NPC with a gun still shoots/aims/reloads in the same situations (manual A/B —
+  there is no NPC-combat unit test harness; do not claim one).
+- `method_of_attack()` body drops from 118 to ~70 lines; the two helpers are
+  each self-contained.
 
 ## Files
 
-| File | Phase |
-|------|-------|
-| `src/npcmove.cpp` | 1 (strategy), 2 (decomp), 5 (modernize) |
-| `src/npc.h` | 1 (goal types + member), 3 (perception member) |
-| `src/npc_perception.{h,cpp}` (new) | 3 |
-| `src/npctalk.cpp` | 4 |
-| `src/npctalk_missions.cpp` (new) | 4 |
-| `src/CMakeLists.txt` | 1, 3, 4 (new files) |
+| File | Change |
+|---|---|
+| `src/npcmove.cpp` | Extract 2 helpers; slim `method_of_attack` |
+| `src/npc.h` | Declare `activate_combat_gear()` + `resolve_gun_mode()` private |
 
-## Effort: 2–3 weeks
-- Phase 1: 3–4 days (strategy pattern, highest risk)
-- Phase 2: 1–2 days (decompose one function)
-- Phase 3: 2–3 days (perception extraction)
-- Phase 4: 2–3 days (NPC talk)
-- Phase 5: 1–2 days (C++23)
+## Effort: 0.5–1 day

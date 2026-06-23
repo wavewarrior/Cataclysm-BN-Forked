@@ -1,120 +1,105 @@
-# Faction System Modernization — Plan
+# Faction Cleanup — Plan
 
-## Context
+> Scope rewritten 2026-06-23 after review. The prior version described a
+> `struct faction { std::string name; int likes_u; ... }` that does not exist
+> (those fields live in the **`faction_template` base class**, `faction.h:77-91`;
+> `faction : public faction_template`, `:94`), fabricated the relationship enum
+> (`relationship_fear/mate/kill`), proposed `operator<=>=default` that cannot
+> compile (a member is `snippet_id`, a `string_id`, which has `operator<`/`==`
+> but **no `operator<=>`** — `string_id.h`), and understated the blast radius.
+> Corrected below. This is pure code hygiene — **no perf benefit** (`epilogue()`
+> runs once at game-over, `faction_display`/`faction_info_text` are UI-only).
 
-`faction.h` (146 lines) and `faction.cpp` (1078 lines) are small files with disproportionately large legacy baggage for their size. The system has been partially reworked (JSON loading exists) but retains several C++98-era patterns.
+## Ordered by value (do the cheap/safe ones first; encapsulation is the churn)
 
-Current issues:
+### 1. Delete dead `MAX_FAC_NAME_SIZE` (trivial, safe)
 
-| Issue | Location | Severity |
-|-------|----------|----------|
-| Public data members | `faction.h:77-91` (name, likes_u, respects_u, size, power, etc.) | Medium |
-| `std::set<std::tuple<int,int,snippet_id>>` for epilogue data | `faction.h:90` | High — tuple hides intent |
-| Raw `enum relationship` with hand-maintained `relation_strs` map | `npc_factions` namespace | Medium |
-| "TODO: Redefine?" for `MAX_FAC_NAME_SIZE = 40` | `faction.h:19` | Low — ancient open question |
-| Bare `std::map` for faction storage | `faction_manager::factions` | Low |
+`faction.h:20` `static constexpr int MAX_FAC_NAME_SIZE = 40;` has **0 callers**
+(verified `grep -rn MAX_FAC_NAME_SIZE src/` → only its own definition). `name` is
+already a `std::string`. Delete the line and its `// TODO: Redefine?` comment.
+There is no char-array to migrate — the prior plan invented that.
 
-## Approach
+Verify: `rg MAX_FAC_NAME_SIZE src/` → 0.
 
-Single phase — small, mechanical, reviewable in one pass.
+### 2. Replace the epilogue tuple with a named struct (contained, safe)
 
-### Replace epilogue tuple with struct
+`faction.h:91`: `std::set<std::tuple<int, int, snippet_id>> epilogue_data;`
+The fields are `power_min`, `power_max`, `snippet_id` (from the loader at
+`faction.cpp:126`). All readers are **contained in `faction.cpp`** (`:80`, `:126`,
+`:141-143` use `std::get<0/1/2>`, `:443` copies the whole set) — so this change
+touches one file.
 
 ```cpp
-// Before:  std::set<std::tuple<int, int, snippet_id>> epilogue_data;
-// After:
-struct epilogue_entry {
-    int field_1;
-    int field_2;
+struct faction_epilogue {
+    int power_min;
+    int power_max;
     snippet_id id;
-
-    auto operator<=>( const epilogue_entry & ) const = default; // *NOPAD*
+    // snippet_id (string_id) has operator< but NO operator<=> — hand-write,
+    // do NOT use = default, and keep the same ordering std::set relied on.
+    bool operator<( const faction_epilogue &rhs ) const {
+        return std::tie( power_min, power_max, id ) < std::tie( rhs.power_min, rhs.power_max, rhs.id );
+    }
 };
 ```
 
-Update all readers of `epilogue_data` (grep `std::get<0>` / `std::get<1>` / `std::get<2>` on faction epilogue tuples → named field access).
+Update `faction.cpp:80,126,141-143,443` to named fields. `std::set` keeps working
+via the hand-written `operator<`.
 
-### Encapsulate public members
+Verify: `rg "std::get<.*epilogue" src/` → 0. Build green.
 
-Move from:
-```cpp
-// faction.h
-struct faction {
-    std::string name;
-    int likes_u;
-    int respects_u;
-    int size;
-    int power;
-    // ...
-};
-```
+### 3. Encapsulate `faction_template` data members (the churn — scope honestly)
 
-To:
-```cpp
-class faction {
-    std::string name_;
-    int likes_u_ = 0;
-    int respects_u_ = 0;
-    int size_ = 0;
-    int power_ = 0;
-    // ...
-public:
-    auto name() const -> const std::string & { return name_; }
-    auto likes_u() const -> int { return likes_u_; }
-    auto set_likes_u( int v ) -> void { likes_u_ = v; }
-    // ...
-};
-```
+The `// TODO: make private`-worthy fields are on **`faction_template`**
+(`faction.h:77-91`), not `faction`. Encapsulating means:
+- Add private `name_`/`likes_u_`/… + public getters/setters **on
+  `faction_template`** (the base), and update its member-initializer-list
+  constructor at `faction.cpp:105-130`.
+- Update all external access. Reality of the blast radius (do not under-promise):
+  ~50 sites across `crafting.cpp, npctalk.cpp, npctalk_funcs.cpp, avatar.cpp,
+  npc.cpp, activity_actor.cpp, consumption.cpp, pickup.cpp,
+  activity_item_handling.cpp, inventory.cpp`, **including 12 compound-assignment
+  sites** (`my_fac->likes_u += …` `npctalk_funcs.cpp:123`; `fac->likes_u -= 1`
+  `avatar.cpp:1557`; `my_fac->likes_u = std::max(0, my_fac->likes_u/2+10)`
+  `npc.cpp:1515`) that each become `set_likes_u( likes_u() + v )`, plus
+  serialize/deserialize in `savegame_json.cpp:3601-3608` and the direct writes
+  `faction.cpp:419 fac.name = name_new`, `:440 elem.second.name = …`.
 
-Audit all `faction.foo` accesses in callers and update to `faction.foo()` / `faction.set_foo()`. Callers using designated initializers for `faction` (if any) need to migrate to setter calls.
+Constraints to respect:
+- `faction` is a Lua usertype (`catalua_bindings_type_defs.cpp:25`, `reg_id<faction>`/
+  `SET_MEMB`). It currently does **not** expose these data members to Lua, so
+  encapsulation won't break bindings — but **confirm** no `SET_MEMB(faction, name)`
+  etc. exists before/after (keep it a verification item).
+- The codebase authors already flagged this inheritance as painful
+  (`catalua_bindings_type_defs.cpp:29-30`). Encapsulating the *base* is the right
+  layer; do not try to flatten the inheritance in this pass.
 
-### Replace raw enum with `enum class`
+Verify: build green; load an existing save and confirm faction reputation values
+match (savegame round-trip). The prior plan's
+`rg "faction\.(name|likes_u|…)"` check is **useless** — access is via `fac->`,
+`my_fac->`, `get_owner()->`, so that regex returns 0 today regardless of work
+done. Use the savegame round-trip + compile errors as the real gate.
 
-```cpp
-// Before:
-namespace npc_factions {
-    enum relationship : int {
-        relationship_fear = 0,
-        relationship_mate = 1,
-        relationship_kill = 2,
-        relationship_max = 3,
-    };
-    const std::map<relationship, std::string> relation_strs = { ... };
-}
+### 4. `enum relationship` → `enum class` — SKIP unless you want the cast churn
 
-// After:
-enum class faction_relationship : int {
-    fear = 0,
-    mate = 1,
-    kill = 2,
-};
-
-// Use enum_traits pattern (as used elsewhere in codebase):
-template<>
-struct enum_traits<faction_relationship> {
-    static constexpr auto last() -> faction_relationship { return faction_relationship::kill; };
-    static constexpr auto count() -> int { return static_cast<int>( last() ) + 1; };
-};
-```
-
-### Remove `MAX_FAC_NAME_SIZE`
-
-Replace the `name` storage pattern (char array bounded by `MAX_FAC_NAME_SIZE` or `std::string` with length check) — use `std::string` directly. The JSON loader already truncates at reasonable lengths.
-
-## Verification
-
-- Build green.
-- Faction behavior identical — load an existing save, check faction reputation/relation values match.
-- `rg "std::get<.*epilogue" src/` returns 0.
-- `rg "faction\.(name|likes_u|respects_u|size|power)" src/` returns only accessor-style calls.
-- `rg "MAX_FAC_NAME_SIZE" src/` returns 0.
-- `rg "enum relationship" src/` returns 0.
+`npc_factions::relationship` (`faction.h:37-47`) is a 7-entry enum used as a
+**bitset index**: `std::bitset<npc_factions::rel_types> relations` (`:89`) and
+`.test(npc_factions::kill_on_sight)` (`npc.cpp:2269/2271`, `npcmove.cpp:528`).
+Converting to `enum class` forces `static_cast<size_t>()` at every bitset
+index/size site and at `relation_strs` (`:49`, string→enum) and the savegame
+serialize (`savegame_json.cpp:3608`). The type-safety gain is marginal and it
+fights the bitset usage. **Recommend skipping** — low value, pure cast noise. If
+done anyway, add a `static_cast` helper and convert every `.test()`/`std::bitset<…>`
+site; "rg `enum relationship` → 0" alone is not sufficient verification.
 
 ## Files
 
-| File | Changes |
-|------|---------|
-| `src/faction.h` | Encapsulate members, replace epilogue tuple, convert enum |
-| `src/faction.cpp` | Update implementation to match new interface |
+| File | Items |
+|---|---|
+| `src/faction.h` | 1 (delete const), 2 (struct), 3 (base getters/setters) |
+| `src/faction.cpp` | 2 (readers), 3 (ctor init-list + direct writes) |
+| ~10 caller files + `src/savegame_json.cpp` | 3 (access migration) |
 
-## Effort: 1–2 days
+## Effort
+- Items 1+2: ~0.5 day, safe, do first.
+- Item 3: 1–2 days (mechanical churn, ~50 sites, savegame round-trip risk).
+- Item 4: skip.

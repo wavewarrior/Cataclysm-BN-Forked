@@ -4,6 +4,8 @@
 
 The current "camera" is ad-hoc math distributed across `avatar::view_offset`, `game::driving_view_offset`, `cata_tiles::o`/`op`, and inline `player_to_screen()` conversions. The lighting/render pipeline is surprisingly modern (GPU compute GI, SDF shadows, instance-batched sprites, bloom, tonemap), but the camera/viewport layer is fundamentally 1990s tile-scrolling. This plan modernizes the camera in 6 phases.
 
+> **Review status (2026-06-23, re-verified):** An earlier review layer in this file claimed several real functions were fictional; those notes were themselves wrong and are corrected here (re-verified by grep against `src/`). **Blockers to clear before Phase 1:** **A2** (`set_view_offset` is not a shared API — must be created, and must replicate its z-clamp + `invalidate_map_cache` payload), **A3** (`draw()` z-component path undefined — decide at Phase 1, since §1.3 changes the `draw()` call). **B3** stands (`draw_minimap` already exists → replace not add). **B1/B2 RETRACTED:** `assemble_light_inputs` (`sdl_render_frame.cpp:69`/`372`, called `:876`) and `seen_through_air_light` (`cata_tiles.cpp:3492` lambda, used `:3594/3605/3626`) **both exist** — do not treat them as placeholders. **A1:** re-derive the `view_offset` site list *semantically* — the raw `rg` count includes false positives (e.g. local variables named `view_offset`), so do not hard-code "44/9". **C1–C5** are design-time resolutions inside their phases. **D** = line-number/file-list corrections.
+
 ### Design decisions
 
 | Question | Decision |
@@ -52,24 +54,32 @@ Player Position (bub_pos)  +  view_offset*  +  driving_view_offset†
 
 ### `avatar::view_offset` — all mutation sites
 
-Every site that writes `view_offset` must be migrated:
+Every site that writes `view_offset` must be migrated.
 
-| Context | File:line | Pattern |
+> ⚠️ **CORRECTNESS GATE (review 2026-06-23, re-verified).** This table is **incomplete** — regenerate the real list at implementation time. But the raw `rg 'view_offset *(=|\+=|-=)'` count is **not** a valid gate: it matches expressions that assign **local variables** named `view_offset` (e.g. `sdl_window_dims.cpp:160` declares a local `point_bub_ms view_offset;`, so `:162` is *not* an `avatar::view_offset` write — false positive). Derive the migration list **semantically** (writes to `avatar::view_offset` / `g->u.view_offset` only), not by regex count. Approximate per-file writes to the real member: `game.cpp` ~21, `veh_interact.cpp` ~9, `debug_menu.cpp` 4, `ui.cpp` 3, `activity_actor.cpp` 3, `ranged.cpp` 1 (direct) + the `target_ui` setter, `editmap.cpp` 1, `handle_action.cpp` 1, `iuse.cpp` 1. **`sdl_window_dims.cpp` is excluded** (local var).
+
+| Context | File:line (verified) | Pattern |
 |---------|-----------|---------|
 | Pan (ACTION_SHIFT_\*) | `handle_action.cpp:1864` | `u.view_offset += shift_delta * soffset` |
 | Center view (ACTION_CENTER) | `handle_action.cpp:1842-1843` | `u.view_offset.xy() = driving_view_offset` |
-| Look-around | `game.cpp:9859` | `u.view_offset = center - u.bub_pos()` |
-| Aiming (target_ui) | `ranged.cpp:3793` | `you->view_offset = new_` (clamped) |
-| Aiming edge-scroll | `ranged.cpp:3376` | `set_view_offset(you->view_offset + edge_scroll)` |
-| Point menu | `ui.cpp:1524` | `g->u.view_offset = center - g->u.bub_pos()` |
+| Look-around | `game.cpp:10025` | `u.view_offset = center - u.bub_pos()` |
+| Look-around viewer save/restore | `game.cpp:10650, 10837, 10854, 10863` | Save/restore + `tripoint_rel_ms::zero()` |
+| Modal save/restore (×2 blocks) | `game.cpp:11037–11418, 11527–11970` | Save/restore |
+| Item-list view shift | `game.cpp:10186` | `u.view_offset = prev_offset` |
+| Aiming (target_ui, **private** setter) | `ranged.cpp:3545` direct; `3110/3128/3225/3507` via `target_ui::set_view_offset` (`3539-3551`) | see A2 below |
+| Point menu | `ui.cpp:1524` (+ save/restore `1511/1521`) | `g->u.view_offset = center - g->u.bub_pos()` |
 | Editmap target | `editmap.cpp:498` | Same pattern |
-| Debug menu possess NPC | `debug_menu.cpp:696` | `view_offset = other.bub_pos() - avatar.bub_pos()` |
+| Debug menu possess / pick_character | `debug_menu.cpp:555, 603, 696` | `view_offset = other.bub_pos() - avatar.bub_pos()` |
 | Driving offset setter | `game.cpp:2195-2205` | Additive composition: `view_offset = (old - old_driving) + new_driving` |
-| Vehicle interaction | `veh_interact.cpp:302-303` | Save/restore |
-| Zones manager | `game.cpp:9103-9105` | Save/restore |
-| Aim activity | `activity_actor.cpp:123,340` | `initial_view_offset` stored on start, restored on finish |
+| Vehicle interaction | `veh_interact.cpp` (9 writes incl. `4151/4152/4170`) | Save/restore |
+| Zones manager | `game.cpp:9269–9756` | Save/restore (original draft cited `9103-9105` — wrong) |
+| Aim activity | `activity_actor.cpp:123, 257, 340` | `initial_view_offset` stored on start, restored on finish |
+| ~~Window resize~~ | ~~`sdl_window_dims.cpp:162`~~ | **NOT a migration site** — `:160` declares a local `point_bub_ms view_offset;`; `:162` assigns that local, not `avatar::view_offset`. False positive; do not migrate. |
+| Remote vehicle controller | `iuse.cpp:7977` (read), `8011-8012` (write `.x()`/`.y()`) | Save/restore `g->u.view_offset` (draft + prior review both cited `8013-8014` — wrong) |
 
 **Pattern for modal UIs**: `stored = u.view_offset; u.view_offset = tripoint_rel_ms::zero();` on enter, `u.view_offset = stored;` on exit. This must be preserved exactly by the camera snapshot/restore API.
+
+**A2 — `set_view_offset()` is NOT a shared API.** It is a **private method of the `target_ui` class** (`ranged.cpp:3539-3551`, decl `582`), used only by aiming. Every other site mutates `view_offset` by **direct assignment**. The migration must therefore **create** a real camera-backed setter (e.g. `avatar::set_view_offset()` routing to `game::main_camera_`) as an explicit Phase 1 task — it does not exist today. **The new setter must replicate `target_ui::set_view_offset`'s payload** (`ranged.cpp:3541-3550`): clamp z to `[-fov_3d_z_range, fov_3d_z_range]`, then re-clamp `z + src.z()` to `[-OVERMAP_DEPTH, OVERMAP_HEIGHT]`, and call `get_map().invalidate_map_cache( new_z )` **only on z-change**. Dropping this is a silent z-level cache-invalidation regression. Add `iuse.cpp` to the File-change summary (not `sdl_window_dims.cpp` — false positive, see gate note).
 
 ### `driving_view_offset` additive composition (critical)
 
@@ -95,10 +105,11 @@ u.view_offset += driving_view_offset;      // apply new
 
 `op` (`point` at `cata_tiles.h:1334`): pixel offset of tile-drawing area from window top-left (sidebar width). Set from `dest` rect at draw time.
 
-**Lighting cam_off formula** (read from tilecontext at `sdl_render_frame.cpp:386-392`):
+**Lighting cam_off formula** (computed inside `assemble_light_inputs()` at `sdl_render_frame.cpp:386-392`):
 ```
 cam_off = op / tile_pixel_size - o
 ```
+> ⚠️ **Review (B1) — RETRACTED.** An earlier note claimed `assemble_light_inputs()` does not exist. It does: forward-declared `sdl_render_frame.cpp:69`, defined `:372`, called `:876`; the `cam_off` block lives inside it (`:386-392`). Edit it in place — do **not** create a duplicate function.
 
 This is the world-position → map-tile camera offset used by `sprite.frag.hlsl` for SDF shadow cone-tracing and emitter positioning. The SDF B1 region optimization (`frame_build.cpp:182-188`) bounds computation to `[cam_x0 - 8, cam_y0 - 8, cam_w + 16, cam_h + 16]` where `cam_x0 = o.x`, `cam_w = screentile_width`.
 
@@ -107,7 +118,7 @@ This is the world-position → map-tile camera offset used by `sprite.frag.hlsl`
 ### world_target and the GPU accumulation pipeline
 
 - `world_target` = `RGBA16F` HDR accumulation texture (size = swapchain pixels)
-- First frame: `LOADOP_CLEAR` (black). Subsequent: `LOADOP_LOAD` (preserves previous frame)
+- First frame: `LOADOP_CLEAR` (black). Subsequent: `LOADOP_LOAD` (preserves previous frame). ⚠️ **Review (C5):** in source this persistence is driven by `ui_composite_target`'s one-shot dirty flag (`invalidate()` / `consume_dirty()`, `ui_composite_target.h`), **not** raw `LOADOP_*` enums — don't grep for those. Phase 4's `wt->consume_dirty()` (§4.3) already matches the real API.
 - No-input frames: tile queue retains last populated content, world_target not re-cleared
 - This accumulation behavior is already in place — Phase 4 builds on it
 - Single world_target means no multi-viewport support exists yet
@@ -135,7 +146,9 @@ Two parallel UI layers:
 
 Both read/write `g_dbg_params` (the `debug_params` struct at `sprite_batcher.h:127-174`).
 
-**`debug_params` is wire-stable with GPU cbuffer** (`register(b2, space3)` for fragment). Currently ~136 bytes. Adding camera knobs that are CPU-only need NOT be in this struct — they can live in a separate `camera_debug_params` or just be file-scope globals in `sdl_lighting_devui.cpp`.
+**`debug_params` is wire-stable with GPU cbuffer** (`register(b2, space3)` for fragment, `sprite_batcher.h:128+`). Actual size **~136 bytes** — note the in-source `// 48 bytes` comment is **stale**, and there is **no `static_assert` on `sizeof(debug_params)`** (unlike `sprite_instance`). Adding camera knobs that are CPU-only need NOT be in this struct — they can live in a separate `camera_debug_params` or just be file-scope globals in `sdl_lighting_devui.cpp`.
+
+> ✅ **Review (C4) — cheap insurance.** While this area is being touched, add `static_assert( sizeof( lighting::debug_params ) == N )` (with N pinned to the verified layout) and fix the stale comment. The struct is already unguarded and wire-fragile against the HLSL `cbuffer DebugParams`; a size assert turns a silent cbuffer mismatch into a compile error.
 
 **The F4 panel forces `rebuild.structure = true` every frame while open** (`sdl_render_frame.cpp:168-170`). Camera-debug sliders should not exacerbate this — either gate the forced rebuild behind a lighting-needs-it flag, or make camera sliders cheap enough that the forced rebuild is irrelevant.
 
@@ -172,8 +185,8 @@ JFA will replace the CPU DT while keeping the same buffer format — the fragmen
 
 The z-loop in `cata_tiles.cpp:3510` iterates downward from `center.z()` to `-OVERMAP_DEPTH`:
 
-1. `dont_draw_lower_floor()` (map.cpp:7209): returns true if tile at `p` has solid floor above (checks `TFLAG_NO_FLOOR` / `TFLAG_Z_TRANSPARENT`). This is the **primary culling gate**.
-2. `fov_3d_z_range`: limits how far down rendering goes. Tiles beyond `center.z() - fov_3d_z_range` use `seen_through_air_light()` fallback.
+1. `dont_draw_lower_floor()` (map.cpp:7248): returns true if tile at `p` has solid floor above (checks `TFLAG_NO_FLOOR` / `TFLAG_Z_TRANSPARENT`). This is the **primary culling gate**.
+2. `fov_3d_z_range` (`cached_options.h:65`): limits how far down rendering goes. The deeper-z fallback lighting lives in `build_seen_cache`/`lightmap.cpp` (real symbol: `vert_blocked`, `lightmap.cpp:1400`). ⚠️ **Review (B2) — RETRACTED.** An earlier note claimed `seen_through_air_light()` does not exist. It does: a lambda at `cata_tiles.cpp:3492`, used at `:3594/3605/3626`, governing deeper-z fallback lighting. Phase 6 z-culling must not break it — treat it as a real interaction point.
 3. `min_z` tracking: lowest z-level with drawable content.
 4. `vert_blocked` in `build_seen_cache`: cumulative floor mask propagated across z-levels.
 
@@ -611,6 +624,8 @@ Internally:
 - `center` → derived from `cam.get_center()` (was `ter_view_p`)
 - `width/height` → `viewport_rect.w/h`
 
+> ⚠️ **Review (A3) — z-component gap.** The real `draw()` takes `const tripoint_bub_ms &center` and the z-descent loop (`cata_tiles.cpp:3510`, `for( int z = center.z(); … )`) plus all of Phase 6 depend on `center.z()`. But `cam.get_center()` returns `point_bub_ms` (**no z**). §1.2 keeps the z-offset on `avatar` yet never says how `draw()` receives the absolute z after the signature change. **Decide one:** keep an explicit `int center_z` parameter on `draw()`, OR add `camera_2d::get_center_z()`. **Pin this at Phase 1** — §1.3 already changes the `draw()` call, so the z-source must be settled before that signature change, not deferred to Phase 3, or the z-loop and Phase 6 break silently.
+
 The `draw()` call in `sdl_curses_draw.cpp` changes from:
 ```cpp
 tilecontext->draw( point( pos.x * fontwidth, pos.y * fontheight ),
@@ -631,6 +646,8 @@ minimap_camera_.set_viewport_size( { 200, 200 } );
 // Position set each frame to follow main camera:
 minimap_camera_.set_center( main_camera_.get_center() / SEEX );
 ```
+
+> ⚠️ **Review (B3):** `cata_tiles::draw_minimap(point dest, const tripoint_bub_ms &center, int width, int height)` **already exists** (`cata_tiles.cpp:4205`) — it is the old pixel-minimap path that §3.4 deletes. The new signature below is a **replace** (delete the old method body + decl, then add the new one), not an add. Do not leave both — the old overload would become dead code.
 
 **OMT rendering path**: The minimap does NOT render at zoom=0.05 with the normal tile draw (tiles would be 2 pixels each, unreadable noise). Instead it uses a dedicated draw path that renders **overmap terrain (OMT) tiles** centered on the player's current submap position.
 
@@ -692,9 +709,11 @@ Remove all references from:
 - `panels.cpp` — pixel minimap height logic
 - `options.cpp` — all `PIXEL_MINIMAP_*` options (replace with `CAMERA_MINIMAP` toggle)
 - `cached_options.h` — `pixel_minimap_option`
-- `animation.cpp` — `minimap_requires_animation()`
-- `explosion.cpp` — temporary disable logic
+- `animation.cpp` — ⚠️ **Review (D) — corrected.** `minimap_requires_animation()` exists in **both** places: the free-function wrapper `animation.cpp:1237` (declared `animation.h:60`, calls the method, invoked at `handle_action.cpp:381`) **and** the method `cata_tiles::minimap_requires_animation()` at `cata_tiles.cpp:4210` (declared `cata_tiles.h:840`). The earlier note's "no reference in animation.cpp" was wrong — keep `animation.cpp` in scope (consistent with the File-change summary).
+- `explosion.cpp` — temporary disable logic (`1116/1118/1134`)
+- `action.cpp:325` + `handle_action.cpp` — the `"toggle_pixel_minimap"` action string (add to removal)
 - `sdl_geometry.h` — `GeometryRenderer` may become unused (check)
+- `sdl_window.cpp:157`, `sdltiles.cpp:110` — comments only, no code change
 
 **Preserve**: The `PIXEL_MINIMAP` option name for continuity, but reconnect it to the new camera minimap toggle.
 
@@ -742,7 +761,9 @@ void submap::set_ter( const point &p, ter_id terr ) {
 }
 ```
 
-Also: `set_furn()`, `set_trap()`, `set_radiation()`, `set_lum()`, `set_graffiti()`, `set_signage()`.
+Also: `set_furn()`, `set_trap()`, `set_radiation()`, `set_lum()`, `set_graffiti()`, `set_signage()`. (All confirmed present on `submap`, `submap.h:103-251`.)
+
+> ⚠️ **Review (C3) — write-path audit required.** Instrumenting these 7 setters is correct only if **every** terrain/furniture write funnels through them. Bulk/alternate paths can bypass them: mapgen, `map::load`, explosions writing terrain directly, and `map::ter_set`/`map::furn_set`. Before relying on the counter, grep those paths and confirm none write `sm->ter[x][y]` / `sm->frn[x][y]` directly — any direct write leaves `generation` stale → ghost tiles.
 
 **NOT serialized** — `generation` is transient. Reset to 0 on submap load (`submap::submap()`). Initial value 0 vs `last_drawn_generation = UINT64_MAX` → first-draw triggers full render.
 
@@ -784,6 +805,8 @@ if( !any_change && !camera_moved && !zoom_changed ) {
     return;  // skip the tile render
 }
 ```
+
+> ⚠️ **Review (C2) — dynamic overlays will freeze.** `generation` bumps only on tile-data setters. Per-frame visual state that is **not** a submap setter would be frozen by this `return`: moving creatures/NPCs, SCT (scrolling combat text), item-on-ground sprite changes, field/smoke/fire animation, weather, and the look/cursor overlays. Before trusting the skip path, define the full **always-redraw** set (any creature in the visible rect, any active SCT, any animation-frame tick) and OR it into the guard — or scope Phase 4 to the **terrain layer only** and keep dynamic layers always-enqueued.
 
 **When to force full redraw**:
 - Camera pan → visible submap set changes → all new submaps have `generation` ≠ `last_generation` → full redraw (correct by default)
@@ -934,6 +957,8 @@ void map::rebuild_lowest_open_z( int submap_sx, int submap_sy ) {
 
 **Compute trigger**: Piggyback on `floor_cache` rebuild. When `set_floor_cache_dirty()` is called for a tile, recompute `lowest_open_z` for that column.
 
+> ⚠️ **Review (C1) — storage-ownership ambiguous.** `lowest_open_z` is a **per-column, cross-z** value, but it is declared on `submap` (single-z). The algorithm loops over z-levels writing `sm->lowest_open_z[x][y]` without saying *which* z-level's submap owns the array, nor how a z=0 submap's value is read when the draw loop is at z=−2. Confirmed: the per-tile source data exists — `submap` has `char floor_cache[SEEX][SEEY]` (`submap.h:312`). **Resolve before coding 6.1:** give the column-summary a single home — e.g. store on the column's **top** submap, or hang it off `level_cache` keyed by xy. Also quantify the trigger cost: recomputing a column on each floor-dirty event walks every loaded z-level for that column; verify this doesn't erase the savings.
+
 ### 6.2 Culling in the z-loop
 
 In `cata_tiles.cpp` z-loop (around line 3502):
@@ -1052,7 +1077,9 @@ branch: perf/3d-fov-occlusion               Phase 6  (pure addition, ~3 files)
 | `src/camera_2d.h` | 1 | **New** — class declaration |
 | `src/camera_2d.cpp` | 1 | **New** — implementation |
 | `src/avatar.h` | 1 | Remove `view_offset` (move z-only to avatar) |
-| `src/avatar.cpp` | 1 | Remove view_offset mutation helpers |
+| `src/avatar.cpp` | 1 | Remove view_offset mutation helpers; **add real `set_view_offset()` (A2)** |
+| `src/iuse.cpp` | 1 | **(added, A1)** Migrate remote-vehicle view_offset save/restore — read `:7977`, write `:8011-8012` |
+| `src/ranged.cpp` | 1 | **(added, A2)** Aiming writes (`target_ui::set_view_offset` private) route to camera |
 | `src/game.h` | 1,2,3 | Add `main_camera_`, `minimap_camera_`; remove `driving_view_offset` (or deprecate) |
 | `src/game.cpp` | 1,2,3 | Replace all `view_offset`/`driving_view_offset` logic |
 | `src/cata_tiles.h` | 1,3 | Remove `o`, `op`; new `draw(camera_2d const&, …)` signature; add `draw_minimap()` |
