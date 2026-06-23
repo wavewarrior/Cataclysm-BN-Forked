@@ -3326,6 +3326,19 @@ primitive counts) + the `panels.cpp` HUD curses sidebar. The shared backend is N
     else-blocks were RESIDUAL. KEY: `draw_empty_worldgen_tabs` STAYS — it has a LIVE unguarded caller in
     `edit_active_world_mods` (the rml backdrop-erase at ~1035). 3 on_redraw lambdas total: 2 dead/deleted,
     1 live backdrop.
+  - B9 `4a90d1dc4c` — veh_interact: dead on_redraw else + 9 orphaned member draws (display_grid/veh/
+    veh_tiles/stats/name/mode/overview/list/details), −740. B9b `8994c80e8d` — orphaned vehicle::print_vparts_descs.
+    KEPT: print_part_list (editmap+game look), print_fuel_indicators (panels HUD), parts_descs_text (RML).
+    calc_overview's 7 trim_and_print stay (LIVE fn — builds overview_opts the RML path needs).
+  - B10 `9f97e3cfdd` — overmap_ui: gutted draw_om_sidebar's 206-line curses legend tail (after the
+    if(rml&&handle)->build_om_sidebar_rml guard); fn stays for the RML sync, wbar param commented.
+    KEPT (not orphans): draw_ascii + draw_map_labels/draw_city_labels (map-grid), place_ter_or_special
+    (dev terrain mode), update_note_preview (LIVE — notes-list preview on_redraw @641 is unguarded).
+  - **inventory_ui BLOCKED (not a batch):** base inventory_selector (uses_rml()=false default) is
+    instantiated directly at inventory.cpp:1122 → curses LIVE-reachable. Migrate that base usage first.
+  - **★ Clean orphan-draw frontier EXHAUSTED after B10.** What remains is NOT mechanical deletion:
+    popup-migration (NEW RML: trade_win/safemode_ui/messages-filter/scores_ui-show_kills), panels HUD,
+    and the inventory_ui base-selector migration. Each is a feature/migration task, not a rip-out batch.
   - Method that works: grep refs of each `draw_*`/`mvwprintz`-bearing fn; if refs = def + fwd-decl +
     comments only (no call site), it's orphaned → delete via the ripfn.py helper (delete_fn to the
     col-0 `}`; remove_decl up to `;`; remove decls BEFORE defs when they share a first-line prefix).
