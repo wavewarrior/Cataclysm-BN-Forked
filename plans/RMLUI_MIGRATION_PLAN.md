@@ -3317,6 +3317,15 @@ primitive counts) + the `panels.cpp` HUD curses sidebar. The shared backend is N
   - B4 `442b0f5ff5` — mutation_ui (draw_exam_window, show_mutations_titlebar) + computer_session
     (computer_session::refresh + .h decl) → both 0 prims.
   - B5 `94b5c1353f` — help (help::draw_menu + decl) + armor_layers (draw_mid_pane, draw_grid) → both 0.
+  - B6 `e1230ed030` — main_menu orphaned curses draws.
+  - B7 `2f0003d954` — character_display orphaned curses draws (9-pane cascade).
+  - B8 `d4343e6c3d` — worldfactory: deleted the modselection + confirm on_redraw curses ELSE-blocks
+    (both behind `if(rml){sync_rml();return;}`, dead since toggle ON) + orphaned `draw_mod_list`/
+    `draw_modselection_borders`/`draw_worldgen_tabs` (−346). **CORRECTION:** worldfactory was NOT cleanly
+    "arms gutted" — batch-8-fallback-sweep only dropped the worldgen-tab else; the modselection + confirm
+    else-blocks were RESIDUAL. KEY: `draw_empty_worldgen_tabs` STAYS — it has a LIVE unguarded caller in
+    `edit_active_world_mods` (the rml backdrop-erase at ~1035). 3 on_redraw lambdas total: 2 dead/deleted,
+    1 live backdrop.
   - Method that works: grep refs of each `draw_*`/`mvwprintz`-bearing fn; if refs = def + fwd-decl +
     comments only (no call site), it's orphaned → delete via the ripfn.py helper (delete_fn to the
     col-0 `}`; remove_decl up to `;`; remove decls BEFORE defs when they share a first-line prefix).
