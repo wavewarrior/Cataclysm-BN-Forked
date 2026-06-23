@@ -69,11 +69,6 @@ std::set<m_flag> monflags_to_add;
 
 int caravan_price( Character &who, int price );
 
-void draw_caravan_borders( const catacurses::window &w, int current_window );
-void draw_caravan_categories( const catacurses::window &w, int category_selected,
-                              int total_price, int cash );
-void draw_caravan_items( const catacurses::window &w, std::vector<itype_id> *items,
-                         std::vector<int> *counts, int offset, int item_selected );
 
 std::string defense_style_name( defense_style style );
 std::string defense_style_description( defense_style style );
@@ -778,8 +773,6 @@ void defense_game::setup()
                         zombies = !zombies;
                         specials = false;
                     }
-                    mvwprintz( w, point( 2, 18 ), ( zombies ? c_light_green : c_yellow ), "Zombies" );
-                    mvwprintz( w, point( 14, 18 ), c_yellow, _( "Special Zombies" ) );
                     break;
 
                 case 11:
@@ -845,62 +838,6 @@ void defense_game::setup()
             }
         }
     }
-}
-
-void defense_game::refresh_setup( const catacurses::window &w, int selection )
-{
-    werase( w );
-    draw_border( w, c_light_gray, _( "DEFENSE MODE" ), c_light_red );
-    mvwprintz( w, point( 2, 1 ), c_light_red,
-               _( "Press direction keys to cycle, ENTER to toggle, S to start" ) );
-    mvwprintz( w, point( 2, 2 ), c_white, _( "Scenario:" ) );
-    mvwprintz( w, point( 2, 3 ), SELCOL( 1 ), defense_style_name( style ) );
-    mvwprintz( w, point( 28, 3 ), c_light_gray, defense_style_description( style ) );
-    mvwprintz( w, point( 2, 4 ), c_white, _( "Location:" ) );
-    mvwprintz( w, point( 2, 5 ), SELCOL( 2 ), defense_location_name( location ) );
-    mvwprintz( w, point( 28, 5 ), c_light_gray, defense_location_description( location ) );
-
-    mvwprintz( w, point( 2, 7 ), c_white, _( "Initial Difficulty:" ) );
-    mvwprintz( w, point( NUMALIGN( initial_difficulty ), 7 ), SELCOL( 3 ), "%d", initial_difficulty );
-    mvwprintz( w, point( 28, 7 ), c_light_gray, _( "The difficulty of the first wave." ) );
-    mvwprintz( w, point( 2, 8 ), c_white, _( "Wave Difficulty:" ) );
-    mvwprintz( w, point( NUMALIGN( wave_difficulty ), 8 ), SELCOL( 4 ), "%d", wave_difficulty );
-    mvwprintz( w, point( 28, 8 ), c_light_gray, _( "The increase of difficulty with each wave." ) );
-
-    mvwprintz( w, point( 2, 10 ), c_white, _( "Time b/w Waves:" ) );
-    mvwprintz( w, point( NUMALIGN( to_minutes<int>( time_between_waves ) ), 10 ), SELCOL( 5 ),
-               "%d", to_minutes<int>( time_between_waves ) );
-    mvwprintz( w, point( 28, 10 ), c_light_gray, _( "The time, in minutes, between waves." ) );
-    mvwprintz( w, point( 2, 11 ), c_white, _( "Waves b/w Caravans:" ) );
-    mvwprintz( w, point( NUMALIGN( waves_between_caravans ), 11 ), SELCOL( 6 ), "%d",
-               waves_between_caravans );
-    mvwprintz( w, point( 28, 11 ), c_light_gray, _( "The number of waves in between caravans." ) );
-
-    mvwprintz( w, point( 2, 13 ), c_white, _( "Initial Cash:" ) );
-    mvwprintz( w, point( NUMALIGN( initial_cash ), 13 ), SELCOL( 7 ), "%d", initial_cash / 100 );
-    mvwprintz( w, point( 28, 13 ), c_light_gray, _( "The amount of money the player starts with." ) );
-    mvwprintz( w, point( 2, 14 ), c_white, _( "Cash for 1st Wave:" ) );
-    mvwprintz( w, point( NUMALIGN( cash_per_wave ), 14 ), SELCOL( 8 ), "%d", cash_per_wave / 100 );
-    mvwprintz( w, point( 28, 14 ), c_light_gray, _( "The cash awarded for the first wave." ) );
-    mvwprintz( w, point( 2, 15 ), c_white, _( "Cash Increase:" ) );
-    mvwprintz( w, point( NUMALIGN( cash_increase ), 15 ), SELCOL( 9 ), "%d", cash_increase / 100 );
-    mvwprintz( w, point( 28, 15 ), c_light_gray, _( "The increase in the award each wave." ) );
-
-    mvwprintz( w, point( 2, 17 ), c_white, _( "Enemy Selection:" ) );
-    mvwprintz( w, point( 2, 18 ), TOGCOL( 10, zombies ), _( "Zombies" ) );
-    mvwprintz( w, point( 14, 18 ), TOGCOL( 11, specials ), _( "Special Zombies" ) );
-    mvwprintz( w, point( 34, 18 ), TOGCOL( 12, spiders ), _( "Spiders" ) );
-    mvwprintz( w, point( 46, 18 ), TOGCOL( 13, triffids ), _( "Triffids" ) );
-    mvwprintz( w, point( 59, 18 ), TOGCOL( 14, robots ), _( "Robots" ) );
-    mvwprintz( w, point( 70, 18 ), TOGCOL( 15, subspace ), _( "Subspace" ) );
-
-    mvwprintz( w, point( 2, 20 ), c_white, _( "Needs:" ) );
-    mvwprintz( w, point( 2, 21 ), TOGCOL( 16, hunger ), _( "Food" ) );
-    mvwprintz( w, point( 14, 21 ), TOGCOL( 17, thirst ), _( "Water" ) );
-    mvwprintz( w, point( 34, 21 ), TOGCOL( 18, sleep ), _( "Sleep" ) );
-    mvwprintz( w, point( 46, 21 ), TOGCOL( 19, mercenaries ), _( "Mercenaries" ) );
-    mvwprintz( w, point( 59, 21 ), TOGCOL( 20, allow_save ), _( "Allow save" ) );
-    wnoutrefresh( w );
 }
 
 std::string defense_style_name( defense_style style )
@@ -1112,10 +1049,6 @@ void defense_game::caravan()
             sync_caravan_rml();
             return;
         }
-        draw_caravan_categories( w, category_selected, total_price, g->u.cash );
-        draw_caravan_items( w, &( items[category_selected] ),
-                            &( item_count[category_selected] ), offset, item_selected );
-        draw_caravan_borders( w, current_window );
     } );
 
     input_context ctxt( "CARAVAN" );
@@ -1385,116 +1318,6 @@ std::vector<itype_id> caravan_items( caravan_category cat )
         }
     }
     return ret;
-}
-
-void draw_caravan_borders( const catacurses::window &w, int current_window )
-{
-    // First, do the borders for the category window
-    nc_color col = c_light_gray;
-    if( current_window == 0 ) {
-        col = c_yellow;
-    }
-
-    mvwputch( w, point_zero, col, LINE_OXXO );
-    for( int i = 1; i <= 38; i++ ) {
-        mvwputch( w, point( i, 0 ), col, LINE_OXOX );
-        mvwputch( w, point( i, 11 ), col, LINE_OXOX );
-    }
-    for( int i = 1; i <= 10; i++ ) {
-        mvwputch( w, point( 0, i ), col, LINE_XOXO );
-        mvwputch( w, point( 39, i ), c_yellow, LINE_XOXO ); // Shared border, always yellow
-    }
-    mvwputch( w, point( 0, 11 ), col, LINE_XXXO );
-
-    // These are shared with the items window, and so are always "on"
-    mvwputch( w, point( 39, 0 ), c_yellow, LINE_OXXX );
-    mvwputch( w, point( 39, 11 ), c_yellow, LINE_XOXX );
-
-    col = ( current_window == 1 ? c_yellow : c_light_gray );
-    // Next, draw the borders for the item description window--always "off" & gray
-    for( int i = 12; i <= 23; i++ ) {
-        mvwputch( w, point( 0, i ), c_light_gray, LINE_XOXO );
-        mvwputch( w, point( 39, i ), col,      LINE_XOXO );
-    }
-    for( int i = 1; i <= 38; i++ ) {
-        mvwputch( w, point( i, FULL_SCREEN_HEIGHT - 1 ), c_light_gray, LINE_OXOX );
-    }
-
-    mvwputch( w, point( 0, FULL_SCREEN_HEIGHT - 1 ), c_light_gray, LINE_XXOO );
-    mvwputch( w, point( 39, FULL_SCREEN_HEIGHT - 1 ), c_light_gray, LINE_XXOX );
-
-    // Finally, draw the item section borders
-    for( int i = 40; i <= FULL_SCREEN_WIDTH - 2; i++ ) {
-        mvwputch( w, point( i, 0 ), col, LINE_OXOX );
-        mvwputch( w, point( i, FULL_SCREEN_HEIGHT - 1 ), col, LINE_OXOX );
-    }
-    for( int i = 1; i <= FULL_SCREEN_HEIGHT - 2; i++ ) {
-        mvwputch( w, point( FULL_SCREEN_WIDTH - 1, i ), col, LINE_XOXO );
-    }
-
-    mvwputch( w, point( 39, FULL_SCREEN_HEIGHT - 1 ), col, LINE_XXOX );
-    mvwputch( w, point( FULL_SCREEN_WIDTH - 1, 0 ), col, LINE_OOXX );
-    mvwputch( w, point( FULL_SCREEN_WIDTH - 1, FULL_SCREEN_HEIGHT - 1 ), col, LINE_XOOX );
-
-    // Quick reminded about help.
-    // NOLINTNEXTLINE(cata-text-style): literal question mark
-    mvwprintz( w, point( 2, FULL_SCREEN_HEIGHT - 1 ), c_red, _( "Press ? for help." ) );
-    wnoutrefresh( w );
-}
-
-void draw_caravan_categories( const catacurses::window &w, int category_selected,
-                              int total_price, int cash )
-{
-    // Clear the window
-    for( int i = 1; i <= 10; i++ ) {
-        mvwprintz( w, point( 1, i ), c_black, "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" );
-    }
-    // NOLINTNEXTLINE(cata-use-named-point-constants)
-    mvwprintz( w, point( 1, 1 ), c_white, _( "Your Cash: %s" ), format_money( cash ) );
-    wprintz( w, c_light_gray, " -> " );
-    wprintz( w, ( total_price > cash ? c_red : c_green ), "%s",
-             format_money( cash - total_price ) );
-
-    for( int i = 0; i < NUM_CARAVAN_CATEGORIES; i++ ) {
-        mvwprintz( w, point( 1, i + 3 ), ( i == category_selected ? h_white : c_white ),
-                   caravan_category_name( static_cast<caravan_category>( i ) ) );
-    }
-    wnoutrefresh( w );
-}
-
-void draw_caravan_items( const catacurses::window &w, std::vector<itype_id> *items,
-                         std::vector<int> *counts, int offset, int item_selected )
-{
-    // Print the item info first.  This is important, because it contains \n which
-    // will corrupt the item list.
-
-    // Actually, clear the item info first.
-    for( int i = 12; i <= FULL_SCREEN_HEIGHT - 2; i++ ) {
-        mvwprintz( w, point( 1, i ), c_black, "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" );
-    }
-    // THEN print it--if item_selected is valid
-    if( item_selected < static_cast<int>( items->size() ) ) {
-        item &tmp = *item::spawn_temporary( ( *items )[item_selected], calendar::start_of_cataclysm );
-        fold_and_print( w, point( 1, 12 ), 38, c_white, tmp.info_string( iteminfo_query::no_text ) );
-    }
-    // Next, clear the item list on the right
-    for( int i = 1; i <= FULL_SCREEN_HEIGHT - 2; i++ ) {
-        mvwprintz( w, point( 40, i ), c_black, "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" );
-    }
-    // Finally, print the item list on the right
-    for( int i = offset; i <= offset + FULL_SCREEN_HEIGHT - 2 &&
-         i < static_cast<int>( items->size() ); i++ ) {
-        mvwprintz( w, point( 40, i - offset + 1 ), ( item_selected == i ? h_white : c_white ),
-                   item::nname( ( *items )[i], ( *counts )[i] ) );
-        wprintz( w, c_white, " x %2d", ( *counts )[i] );
-        if( ( *counts )[i] > 0 ) {
-            int item_price = item::spawn_temporary( ( *items )[i],
-                                                    calendar::start_of_cataclysm )->price( false );
-            int price = caravan_price( g->u, item_price * ( *counts )[i] );
-            wprintz( w, ( price > g->u.cash ? c_red : c_green ), " (%s)", format_money( price ) );
-        }
-    }
-    wnoutrefresh( w );
 }
 
 int caravan_price( Character &who, int price )
