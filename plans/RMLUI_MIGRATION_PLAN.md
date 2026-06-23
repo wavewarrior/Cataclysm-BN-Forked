@@ -3292,8 +3292,38 @@ old "~5 tidy commits, only ui.cpp+sdl_render_frame" plan was wrong; reality was 
 1551-line `sdl_lighting_devui.cpp` ImGui body, done in 2 commits as predicted by the re-audit.
 **Owed: a D3D12/Win11 build (the no-imgui link line is new there too) — Metal-green ≠ D3D12-green.**
 
-**Sub-series B — curses glyph/backend (gated on the toggle-flip eyeball pass).** Order, each
-build-green:
+**Sub-series B — curses glyph/backend (gated on the toggle-flip eyeball pass).**
+**★ STARTED 2026-06-23 (user eyeball-confirmed sub-series B). ★ SCOPE CORRECTION from execution:
+the curses BACKEND mostly SURVIVES — "delete the curses renderer entirely" (old steps 2–5) is NOT
+achievable.** Ground truth: `curses_drawwindow` is called from `cursesport.cpp` inside
+`wrefresh`/`wnoutrefresh`, and the **surviving** map/dev path still refreshes curses windows —
+`live_view` (`wnoutrefresh`), `animation`, `scent_map`, `editmap`, `character_preview`, + dev
+`wish`/`debug`/`catalua_console`. `OutputChar` is backend-internal (only `sdl_font.cpp`). So the
+text-primitive bodies (`mvwprintz` etc.), `curses_drawwindow`, `sdl_font`/`sdl_fonts`, and
+`cursesport` **stay** for those consumers. The realistic rip-out = **remove the migrated UI screens'
+now-dead curses draw code** (the `if(!rml)` arms — mostly done in batches 1–13 — PLUS the orphaned
+`draw_*` FUNCTION BODIES those arms used to call, which were left behind and still inflate the
+primitive counts) + the `panels.cpp` HUD curses sidebar. The shared backend is NOT deleted.
+- **Step 0 DONE `9cc0231444`:** all 48 screen toggles default ON (flipped the last 4 —
+  keybindings/colors/scrollable_text/blood_test). Curses arms now dead at runtime.
+- **Batch 1 DONE `ceebdbcfba` (build+link green, binary relinked):** deleted the orphaned
+  `faction::`/`npc::`/`mtype::faction_display(window&)` curses draws (state→`follower_interaction_flag`,
+  text→`faction_info_text` kept). First orphaned-draw-fn cleanup; the on_redraw arms were already gone.
+- **REMAINING = a per-screen grind** (build-green batches; build is SLOW when a widely-included header
+  like `npc.h` is touched → `game.cpp` recompiles): trace each residual `mvwprintz`/`draw_*` to confirm
+  it is truly uncalled (build-green is the safety net — deleting a live fn fails the link), then delete.
+  Candidate orphans to verify next: character_display, bionics_ui, armor_layers, crafting_gui, plus the
+  uilist-callback curses `draw(menu->window)` overrides (advanced_inv, magic_teleporter_list — alive
+  only if uilist still has a curses fallback path; verify). CAUTION: some residual primitives live in
+  shared helpers the RML producers still call (e.g. character_display encumbrance reuses
+  `encumbrance_lines`) — those are NOT orphans, leave them. `panels.cpp` HUD sidebar LAST (biggest +
+  riskiest; the RML HUD has minimap/bodygraph placeholders).
+- **BUILD NOTE (this session):** the first `game.cpp` recompile after touching `npc.h` failed once with
+  a phantom `butchery_activity_actor` "no matching constructor" — a STALE intermediate against the
+  uncommitted SIM_PERFORMANCE `activity_actor*` edits, NOT a source bug (the 2-arg calls match). A clean
+  rebuild fixed it; no SIM code was changed. If it recurs, it's PCH/intermediate staleness, not source.
+
+Order, each build-green:
 1. After all toggles flipped & eyeballed: delete each screen's curses *draw/redraw fallback*
    branch (the `if(!rml)` arms) → primitive callers fall toward zero.
    **PROGRESS (track-B (a) batches 1–13):** curses draw arm dropped from morale/scores/help,
