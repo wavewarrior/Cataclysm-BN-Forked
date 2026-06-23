@@ -1,0 +1,22 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="safemode_help.rcss"/>
+</head>
+<body>
+    <!-- safe mode wildcard help, sounds (SOUND category). A passive backdrop stacked
+         UNDER the string_input "Safe Mode Rule:" popup, replacing the curses help
+         window. Static: no data model. Literal English with column alignment preserved
+         (white-space: pre), matching the curses readout and the same i18n gap noted
+         for the column heads. -->
+    <div class="panel smh-panel">
+        <div class="smh-text">* is used as a Wildcard.  A few Examples:
+
+footsteps      matches the sound name exactly
+a loud ba*     matches sounds beginning with 'a loud ba'
+*losion!       matches sounds ending with 'losion!'
+a *oud*ba*     multiple * are allowed
+*LoU*bA*       case insensitive search</div>
+    </div>
+</body>
+</rml>

@@ -1,0 +1,23 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="safemode_help.rcss"/>
+</head>
+<body>
+    <!-- safe mode wildcard help, monster names (HOSTILE_SPOTTED category). A passive
+         backdrop stacked UNDER the string_input "Safe Mode Rule:" popup, replacing the
+         curses help window. Static: no data model. Literal English with column
+         alignment preserved (white-space: pre), matching the curses readout and the
+         same i18n gap noted for the column heads. -->
+    <div class="panel smh-panel">
+        <div class="smh-text">* is used as a Wildcard.  A few Examples:
+
+human          matches every NPC
+zombie         matches the monster name exactly
+acidic zo*     matches monsters beginning with 'acidic zo'
+*mbie          matches monsters ending with 'mbie'
+*cid*zo*ie     multiple * are allowed
+AcI*zO*iE      case insensitive search</div>
+    </div>
+</body>
+</rml>

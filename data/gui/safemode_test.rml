@@ -1,0 +1,28 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="safemode_test.rcss"/>
+</head>
+<body data-model="safemode_test">
+    <!-- safe mode test-rule popup (safemode::test_pattern). A centered box listing the
+         monster names a rule matches, stacked over the still-open "safemode" rules
+         screen — mirrors the curses sub-window. Render-only: the keyboard owns up/down +
+         quit; mouse click/hover moves the cursor. The footer caption is literal English
+         (same i18n gap as the column heads). -->
+    <div class="panel smt-panel">
+        <div class="smt-title" data-rml="title_rml"></div>
+
+        <div class="smt-list scroll-pane">
+            <div class="smt-row" data-for="row : rows"
+                 data-class-selected="row.selected"
+                 data-event-mouseover="on_select(it_index)"
+                 data-event-click="on_select(it_index)">
+                <span class="smt-num" data-rml="row.num_rml"></span>
+                <span class="smt-name" data-rml="row.name_rml"></span>
+            </div>
+        </div>
+
+        <div class="smt-footer">Lists monsters regardless of their attitude.</div>
+    </div>
+</body>
+</rml>
