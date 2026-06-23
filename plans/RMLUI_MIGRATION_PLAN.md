@@ -3309,15 +3309,40 @@ primitive counts) + the `panels.cpp` HUD curses sidebar. The shared backend is N
 - **Batch 1 DONE `ceebdbcfba` (build+link green, binary relinked):** deleted the orphaned
   `faction::`/`npc::`/`mtype::faction_display(window&)` curses draws (state→`follower_interaction_flag`,
   text→`faction_info_text` kept). First orphaned-draw-fn cleanup; the on_redraw arms were already gone.
-- **REMAINING = a per-screen grind** (build-green batches; build is SLOW when a widely-included header
-  like `npc.h` is touched → `game.cpp` recompiles): trace each residual `mvwprintz`/`draw_*` to confirm
-  it is truly uncalled (build-green is the safety net — deleting a live fn fails the link), then delete.
-  Candidate orphans to verify next: character_display, bionics_ui, armor_layers, crafting_gui, plus the
-  uilist-callback curses `draw(menu->window)` overrides (advanced_inv, magic_teleporter_list — alive
-  only if uilist still has a curses fallback path; verify). CAUTION: some residual primitives live in
-  shared helpers the RML producers still call (e.g. character_display encumbrance reuses
-  `encumbrance_lines`) — those are NOT orphans, leave them. `panels.cpp` HUD sidebar LAST (biggest +
-  riskiest; the RML HUD has minimap/bodygraph placeholders).
+- **Batches 2–5 DONE (build+link green each, binary relinked):**
+  - B2 `0631dcc356` — bionics_ui (draw_bionics_titlebar/_tabs, draw_description, draw_connectors) +
+    crafting_gui (draw_can_craft_indicator/_recipe_tabs/_recipe_subtabs/_hidden_amount).
+  - B3 `e6a50d41a6` — gamemode_defense FULLY de-cursed: removed the caravan on_redraw curses arm +
+    draw_caravan_* fns, refresh_setup, 2 stray setup draws → 0 prims.
+  - B4 `442b0f5ff5` — mutation_ui (draw_exam_window, show_mutations_titlebar) + computer_session
+    (computer_session::refresh + .h decl) → both 0 prims.
+  - B5 `94b5c1353f` — help (help::draw_menu + decl) + armor_layers (draw_mid_pane, draw_grid) → both 0.
+  - Method that works: grep refs of each `draw_*`/`mvwprintz`-bearing fn; if refs = def + fwd-decl +
+    comments only (no call site), it's orphaned → delete via the ripfn.py helper (delete_fn to the
+    col-0 `}`; remove_decl up to `;`; remove decls BEFORE defs when they share a first-line prefix).
+    Build (`.cpp`-only edits are fast; header edits recompile game.cpp ~5min) — unused-function warnings
+    reveal cascade orphans; delete those too. The shared TEXT producers (e.g. `mutation_titlebar_desc`,
+    `faction_info_text`, `encumbrance_lines`) STAY — the RML path uses them.
+- **★ SCREEN CLASSIFICATION (triage 2026-06-23) — what's left after B1–B5:**
+  - **Already clean (0 prims, nothing to do):** descriptions, options, newcharacter, ranged,
+    game_inventory, examine_item_menu, pickup, distraction_manager, npctalk. (Their `if(!rml)` are
+    benign null-guards in sync, not curses arms.)
+  - **BIG de-curse jobs (migrated, arms gutted, but MANY orphaned draw fns / multi-pane):**
+    `character_display` (multi-pane @ sheet; print_encumbrance orphaned + per-pane draws — caution: its
+    helpers encumb_color/get_temp_conv/etc. cascade), `veh_interact` (60 prims) + `vehicle_display` (13;
+    the `vehicle::print_*` methods are cross-file — verify no non-veh_interact caller before deleting),
+    `overmap_ui` (80 — BUT most is `draw_ascii`, the ASCII map-grid render that STAYS with the backend;
+    only non-map orphans are deletable), `worldfactory` (39, 4 arms), `inventory_ui` (17), `main_menu` (10).
+  - **NEED POPUP MIGRATION first (live un-migrated curses sub-screens — NOT deletable, new RML work like
+    auto_pickup's batch-14):** `trade_win` (scrollable item-info popup), `safemode_ui` (wildcard-help +
+    test-rule popups — mirror auto_pickup's `autopickup_help`/`autopickup_test`), `messages` (filter-help
+    overlay), `scores_ui` (the whole `show_kills` screen, never migrated). `auto_pickup` already did its
+    two (batch 14) — its residual 6 prims need a recheck.
+  - **LEAVE (not orphans):** uilist-callback `refresh()` curses draws (advanced_inv `draw_squares`,
+    magic/magic_teleporter_list, wish) — uilist KEEPS a curses fallback (`uilist::show` calls
+    `callback->refresh()` at ui.cpp:922 for early-init before RmlUi is ready); shared text producers;
+    and the whole map/dev backend.
+  - **`panels.cpp` HUD sidebar — LAST** (biggest + riskiest; RML HUD has minimap/bodygraph placeholders).
 - **BUILD NOTE (this session):** the first `game.cpp` recompile after touching `npc.h` failed once with
   a phantom `butchery_activity_actor` "no matching constructor" — a STALE intermediate against the
   uncommitted SIM_PERFORMANCE `activity_actor*` edits, NOT a source bug (the 2-arg calls match). A clean
