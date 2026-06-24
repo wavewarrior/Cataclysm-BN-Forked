@@ -1,0 +1,22 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="messages_filter_help.rcss"/>
+</head>
+<body data-model="messages_filter_help">
+    <!-- Message-log filter-help overlay (Messages::dialog, FILTER action). A
+         passive backdrop stacked UNDER the curses string_input "filter" line,
+         replacing the curses w_filter_help box — the same role autopickup_help /
+         safemode_help play for their string_input popups. The syntax help is
+         DYNAMIC (it lists the registered message-type names, coloured by type),
+         so unlike those static helps it is data-bound (help_rml) rather than
+         literal in the .rml. The bottom row is left blank for the curses input
+         field, which composites on top. -->
+    <div class="mfh-wrap">
+        <div class="panel mfh-panel">
+            <div class="mfh-text" data-rml="help_rml"></div>
+            <div class="mfh-input-row"></div>
+        </div>
+    </div>
+</body>
+</rml>

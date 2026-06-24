@@ -3341,8 +3341,8 @@ primitive counts) + the `panels.cpp` HUD curses sidebar. The shared backend is N
     instantiation isn't automatically a live draw path — check whether it's EXECUTED/shown.
   - **★ DE-CURSE CAMPAIGN COMPLETE after B11 (2026-06-23).** All bespoke screens + the panels HUD are
     de-cursed. The ONLY remaining rip-out-plan work is popup-migration (NEW RML authoring:
-    ~~trade_win~~/~~safemode_ui~~/messages-filter/scores_ui-show_kills — trade_win + safemode DONE) — a
-    feature task, not a deletion batch.
+    ~~trade_win~~/~~safemode_ui~~/~~messages-filter~~/scores_ui-show_kills — only scores_ui-show_kills
+    left) — a feature task, not a deletion batch.
   - **panels.cpp HUD curses sidebar — RIP OUT STAYS IN THIS PLAN (2026-06-23 user directive: rip out the
     curses panels EVEN IF the RmlUi HUD lacks features the old panels had).** Whole-sidebar curses
     suppression + delete the curses `draw_*` panel builders; un-built panels show a placeholder / are
@@ -3371,8 +3371,14 @@ primitive counts) + the `panels.cpp` HUD curses sidebar. The shared backend is N
     overlaying the examined pane via data-class-right; PAGE_UP/DOWN → SetScrollTop like help.cpp, UP/DOWN
     still exit-to-adjacent; curses kept as toggle-OFF fallback; build+link green Metal, EYEBALL OWED),
     ~~`safemode_ui` (wildcard-help + test-rule popups)~~ **DONE** (commit 89d5299ab1, mirrors auto_pickup's
-    `autopickup_help`/`autopickup_test`). REMAINING: `messages` (filter-help overlay), `scores_ui` (the
-    whole `show_kills` screen, never migrated). `auto_pickup` already did its two (batch 14) — its
+    `autopickup_help`/`autopickup_test`), ~~`messages` (filter-help overlay)~~ **DONE 2026-06-24** (new
+    data-bound `messages_filter_help` backdrop — the syntax help is DYNAMIC (lists registered msg-type
+    names+colours) so unlike the static autopickup/safemode helps it binds a `help_rml` string;
+    `filter_help_text(10000)` joined → cata_text_to_rml; opened lazily while `filtering`, closed on exit;
+    the Tier-0 curses string_input field + `< >` markers composite on top of the backdrop's blank bottom
+    row; curses help box kept as toggle-OFF fallback; build+link green Metal, EYEBALL OWED — esp. the
+    backdrop-vs-input-row alignment, the known-fragile partial-migration seam). REMAINING: `scores_ui`
+    (the whole `show_kills` screen, never migrated). `auto_pickup` already did its two (batch 14) — its
     residual 6 prims need a recheck.
   - **LEAVE (not orphans):** uilist-callback `refresh()` curses draws (advanced_inv `draw_squares`,
     magic/magic_teleporter_list, wish) — uilist KEEPS a curses fallback (`uilist::show` calls
