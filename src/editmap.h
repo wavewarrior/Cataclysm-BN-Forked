@@ -13,6 +13,11 @@
 #include "point.h"
 #include "type_id.h"
 
+namespace Rml
+{
+class ElementDocument;
+} // namespace Rml
+
 class Creature;
 class field;
 class ui_adaptor;
@@ -50,6 +55,9 @@ class editmap
         std::optional<tripoint_bub_ms> edit();
         void uber_draw_ter( const catacurses::window &w, map *m );
         void update_view_with_help( const std::string &txt, const std::string &title );
+        // RmlUi backdrop for the w_info panel: builds the colour-tagged info text
+        // (the same content update_view_with_help draws via curses) for #editmap-info.
+        std::string info_panel_text( const std::string &txt, const std::string &title ) const;
 
         // T_t can be ter_t, furn_t, and trap
         template<typename T_t>
@@ -69,6 +77,9 @@ class editmap
         void update_fmenu_entry( uilist &fmenu, field &field, const field_type_id &idx );
         void setup_fmenu( uilist &fmenu );
         catacurses::window w_info;
+        // Passive RmlUi backdrop replacing the curses w_info panel (tiles-only
+        // rip-out). Opened in edit() when editmap_rmlui_enabled(); null = curses.
+        Rml::ElementDocument *info_doc_ = nullptr;
 
         void recalc_target( shapetype shape );
         bool move_target( const std::string &action, int moveorigin = -1 );

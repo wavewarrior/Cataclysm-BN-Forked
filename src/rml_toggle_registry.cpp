@@ -56,6 +56,7 @@ const std::vector<rml_toggle> &rml_toggle_registry()
         { "overmap_text", &overmap_text_rmlui_enabled, false },
         { "sidebar_hud", &sidebar_hud_rmlui_enabled, true },
         { "minigames", &minigames_rmlui_enabled, false },
+        { "editmap", &editmap_rmlui_enabled, true },
     };
     return reg;
 }

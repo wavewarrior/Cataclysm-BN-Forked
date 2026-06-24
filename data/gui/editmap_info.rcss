@@ -1,0 +1,30 @@
+/* Layout for the editmap dev info panel (editmap::update_view_with_help backdrop).
+   Palette/border/scrollbar and the .panel frame come from theme.rcss (linked first
+   in editmap_info.rml); this file owns only this panel's layout. Bottom-left box
+   matching where the curses w_info sat (offsetX 0, height ~20 rows). white-space:
+   pre-wrap keeps the colour-tagged debug lines readable. Dev tool. Lengths in dp. */
+
+body {
+    display: flex;
+    justify-content: flex-start;
+    align-items: flex-end;
+    width: 100%;
+    height: 100%;
+}
+
+.emi-panel {
+    flex: 0 0 auto;
+    width: 46%;
+    max-height: 60%;
+    margin: 0 0 4dp 4dp;
+    display: flex;
+    flex-direction: column;
+}
+
+.emi-text {
+    display: block;
+    min-height: 0;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    color: {{fg}};
+}
