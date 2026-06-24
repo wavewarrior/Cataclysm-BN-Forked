@@ -3442,6 +3442,11 @@ Order, each build-green:
    gutted the on_redraw; deleted it + the now-unused `middle_padding_min` local. The struct's
    accessors (`get_left/get_right/get_color/is_separator/max_width`) stay — the RML sync + window
    sizing use them. Build+link green, 0 primitives left.
+   **BATCH (2026-06-24): diary_ui DONE** — gutted the 3 curses fallback arms (`ui_pages`/`ui_desc`/
+   `ui_info` on_redraw, all `if(rml) return;` + curses below) and deleted the now-orphaned curses
+   helpers in the anon namespace: 4 `print_list_scrollable` overloads + `draw_diary_border`
+   (the ASCII-art border, ~120 lines, only `mvwprintw` user). Build+link green, 0 primitives left.
+   Curses windows (`w_pages/w_desc/w_info`) vestigial (resize still creates them) — follow-up.
    **RECLASSIFIED — NOT clean orphan/fallback deletes (need per-site migration first):**
    `veh_interact` (22): the `overview()`/`calc_overview()` part-picker is a **live** curses path
    called by do_repair/refill/siphon/change_shape (NOT a dead arm). `messages` (1037/1070): the
