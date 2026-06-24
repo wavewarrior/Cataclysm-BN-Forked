@@ -247,6 +247,17 @@ auto build_lighting( lighting::render_state &rs ) -> bool
 
 // Stage 2b.2: the directional celestial light is the sun by day, the moon by
 // night. The compute sky/sun march (direction + elevation) and the fragment
+// Cloud dimming valid at any hour (unlike the daytime sunlight()-ratio mult):
+// clear weather (light_modifier≈0) → 1.0; heavy overcast (≈-60..-100) → ~0.3.
+static float weather_cloud_mult()
+{
+    if( !g ) { return 1.0f; }
+    const weather_type_id wid = get_weather().weather_id;
+    if( !wid.is_valid() ) { return 1.0f; }
+    return std::clamp( 1.0f + static_cast<float>( wid->light_modifier ) / 100.0f,
+                       0.3f, 1.0f );
+}
+
 // shading (colour + intensity) both want ONE light, so we fold the moon into the
 // existing sun_params: the moon rides the opposite (12h-shifted) arc, cold and
 // dim, scaled by phase ("full moon = sun with different params"). We pick
@@ -273,7 +284,7 @@ static lighting::sun_params make_celestial_params( const time_point &when, float
         sp.sun_dir_x     = mp.sun_dir_x;
         sp.sun_dir_y     = mp.sun_dir_y;
         sp.sun_sin_elev  = mp.sun_sin_elev;
-        sp.sun_intensity = moon_int;
+        sp.sun_intensity = moon_int * weather_cloud_mult(); // P6a: clouds dim the moon
         sp.sun_r = 0.55f;   // cold blue-white moonlight
         sp.sun_g = 0.65f;
         sp.sun_b = 0.95f;
@@ -424,6 +435,11 @@ auto assemble_light_inputs( lighting::render_state &rs,
         }
         in.sun.sun_intensity *= weather_mult;
         in.sun.sky_intensity *= weather_mult;
+        // P6a: at night the sunlight()-ratio mult above is a no-op (base <= 1.0),
+        // so apply cloud dimming directly to avoid double-dimming daytime sun.
+        if( base <= 1.0f ) {
+            in.sun.sun_intensity *= weather_cloud_mult();
+        }
     }
     in.sun.sp_pad = g_dbg_lighting_shader ? 1.0f : 0.0f;
 
