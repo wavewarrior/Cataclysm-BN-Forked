@@ -259,10 +259,14 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
                         // "invalid terrain id 0". Guard on the ter id being valid;
                         // until terrain loads, occ stays 0 (no occluder), correct for
                         // the loading screen (no real map to shadow yet).
-                        const float h = m.ter( tp ).is_valid()
+                        float h = m.ter( tp ).is_valid()
                             ? std::clamp( static_cast<float>( m.coverage( tp ) ) / 100.0f,
                                           0.0f, 1.0f )
                             : 0.0f;
+                        // P6b: parked vehicles are solid occluders for shadowing.
+                        if( const auto vpart = m.veh_at( tp ); vpart && vpart->obstacle_at_part() ) {
+                            h = std::max( h, 1.0f );
+                        }
                         const float roof =
                             ( have_above && above->floor_cache[idx] ) ? 1.0f : 0.0f;
                         occ[ static_cast<size_t>( idx ) * 2 + 0 ] = h;
