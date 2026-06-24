@@ -3421,6 +3421,22 @@ Order, each build-green:
    (batch 11 — all 8 sub-screens, last Tier-4 giant; 207→0), overmap **search** (batch 12), and
    the **ranged target panel** (batch 13 — `draw_ui_window` + 10 exclusive panel_* helpers removed;
    kept uitext_title/uitext_fire, shared with rml).
+   **★ CENSUS CORRECTION (2026-06-24): "de-curse complete" was optimistic.** A grep census of
+   curses text-primitive callers (mvwprintz/mvwputch/fold_and_print/etc., excluding `output.cpp`
+   = the primitive library, and tests) shows many migrated screens still carry their curses draw
+   as **orphaned helpers or toggle-OFF fallback arms** that were never deleted. The eyeball gate
+   passed 2026-06-23, so these are now deletable (step 1 tail). Caller counts at census time
+   (non-test, excluding output.cpp): game 123 (mixed: map overlays STAY + dev + fallback),
+   overmap_ui 45 (incl. `draw_ascii` map-grid which dies at backend rip-out), ~~trade_win 51~~,
+   veh_interact 22, ui 22, panels 18, color 17, editmap 10 (STAYS — map path), string_input_popup 8,
+   input 8, safemode_ui 6, diary_ui 6, character 6, messages 5, auto_pickup 5, morale 2,
+   advanced_inv 1; dev minigames (snake/kitten/sokoban/lightson/minesweeper ~41) fold into the sweep.
+   **BATCH (2026-06-24): trade_win DONE** — `trading_window::update_win` (the ~484-line curses
+   draw fn, ~42 mvwprintz) was already orphaned (the `on_redraw` arm is RML-only; zero callers);
+   deleted it + the `.h` decl. Build+link green Metal, 0 mvwprintz left in the file. The 4 curses
+   windows (`w_them/w_you/w_head/w_whose`) are now vestigial (still created in `setup_win`) — clean
+   those + the remaining `show_item_data` curses fallback in a follow-up. Eyeball not required
+   (pure dead-code deletion, RML path untouched).
    **REMAINING curses-draw still live (each its own unit, NOT a simple arm-drop):**
    - `panels` (~303) = Tier-7 sidebar HUD — own strategy.
    - overmap **main display**: curses vs rml splits *inside* `draw()`/`draw_om_sidebar`, not a

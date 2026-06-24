@@ -23,7 +23,6 @@ class trading_window
 
     private:
         auto setup_win( ui_adaptor &ui ) -> void;
-        auto update_win( npc &np, const std::string &deal ) -> void;
         enum class info_popup_result {
             none,
             move_up,
