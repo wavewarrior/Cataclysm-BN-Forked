@@ -3478,9 +3478,20 @@ Order, each build-green:
    filter spopup is Tier-0, renders on its own path. Build+link green, 0 primitives in both.
    (Correction: the earlier inflection note guessed "color test menu = live" — it was a clean arm.)
 
-   **★ INFLECTION (2026-06-24): cheap deletes exhausted.** Session landed 7 clean de-curse batches
-   (trade_win, morale, diary_ui, safemode_ui, character, color, input) — orphaned helpers +
-   toggle-OFF fallback arms, build+link green throughout. What REMAINS is live curses that
+   **BATCH (2026-06-24): auto_pickup DONE** — same dual-popup shape as safemode. Gutted the help
+   (`help_ui.on_redraw`, `if(help_doc) return;` + fold_and_print) and test-pattern (`ui.on_redraw`,
+   `if(test_rml){sync;return}` + match-list curses) arms; removed `w_help`+`init_help_window` and
+   `w_test_rule_content`+`iStartPos`. Kept `w_test_rule_border` (load-bearing position_from_window).
+   Build+link green, 0 primitives. (Pre-existing unused `iStartPos`@173 + `check_special_rule` left.)
+   **ui.cpp (22, `uilist::show`) DEFERRED — DO NOT mechanically delete.** Those primitives are the
+   shared curses fallback for EVERY uilist (gated by `rml_session`). Gutting commits all uilist
+   consumers — incl. custom-draw callbacks like `advanced_inv::draw_squares` — to RML-only; that's a
+   big eyeball-required decision across many screens, not a free arm-drop.
+
+   **★ INFLECTION (2026-06-24): cheap single-screen deletes exhausted.** Session landed 8 clean
+   de-curse batches (trade_win, morale, diary_ui, safemode_ui, character, color, input,
+   auto_pickup) — orphaned helpers + toggle-OFF fallback arms, build+link green throughout. What
+   REMAINS is live/shared curses that
    needs **per-screen migration** (heavier, eyeball-required), not deletion:
    `panel_manager::show_adm` (sidebar-options editor), the polymorphic `print_info` creature-info
    subsystem (look_around / monster sidebar), `veh_interact` part-picker (`overview()`), uilist

@@ -377,17 +377,6 @@ void user_interface::show()
 
             if( iColumn == 1 || action == "ADD_RULE" ) {
                 ui_adaptor help_ui;
-                catacurses::window w_help;
-                const auto init_help_window = [&]( ui_adaptor & help_ui ) {
-                    const point iOffset( TERMX > FULL_SCREEN_WIDTH ? ( TERMX - FULL_SCREEN_WIDTH ) / 2 : 0,
-                                         TERMY > FULL_SCREEN_HEIGHT ? ( TERMY - FULL_SCREEN_HEIGHT ) / 2 : 0 );
-                    w_help = catacurses::newwin( FULL_SCREEN_HEIGHT * ( 2.0 / 3 ) + 2,
-                                                 FULL_SCREEN_WIDTH * 3 / 4,
-                                                 iOffset + point( 19 / 2, 7 + FULL_SCREEN_HEIGHT / 2 / 2 ) );
-                    help_ui.position_from_window( w_help );
-                };
-                init_help_window( help_ui );
-                help_ui.on_screen_resize( init_help_window );
 
                 // RmlUi backdrop: a passive static help doc stacked under the
                 // string_input popup, replacing the curses help window. No data
@@ -399,34 +388,8 @@ void user_interface::show()
                                    PATH_INFO::datadir() + "gui/autopickup_help.rml", true );
                 }
 
-                help_ui.on_redraw( [&]( const ui_adaptor & ) {
-                    if( help_doc ) {
-                        return;
-                    }
-                    // NOLINTNEXTLINE(cata-use-named-point-constants)
-                    fold_and_print( w_help, point( 1, 1 ), 999, c_white,
-                                    _(
-                                        "* is used as a Wildcard.  A few Examples:\n"
-                                        "\n"
-                                        "wooden arrow    matches the itemname exactly\n"
-                                        "wooden ar*      matches items beginning with wood ar\n"
-                                        "*rrow           matches items ending with rrow\n"
-                                        "*avy fle*fi*arrow     multiple * are allowed\n"
-                                        "heAVY*woOD*arrOW      case insensitive search\n"
-                                        "\n"
-                                        "Pickup using:\n"
-                                        "c:food          matches item in category food\n"
-                                        "m:kevlar        matches items made of Kevlar\n"
-                                        "M:copper        matches items made purely of copper\n"
-                                        "q:drilling      matches items with drilling qualites\n"
-                                        "k:fabrication   matches books that teach fabrication\n"
-                                        "b:c:food;*meat* matches items that are foods and *meat*"
-
-                                    )
-                                  );
-
-                    draw_border( w_help );
-                    wnoutrefresh( w_help );
+                help_ui.on_redraw( []( const ui_adaptor & ) {
+                    // RmlUi help doc owns this; curses fallback removed (rip-out B).
                 } );
                 const std::string r = string_input_popup()
                                       .title( _( "Pickup Rule:" ) )
@@ -524,12 +487,10 @@ void user_interface::test_pattern( const rule &rule ) const
         }
     }
 
-    int iStartPos = 0;
     int iContentHeight = 0;
     int iContentWidth = 0;
 
     catacurses::window w_test_rule_border;
-    catacurses::window w_test_rule_content;
 
     ui_adaptor ui;
 
@@ -542,9 +503,6 @@ void user_interface::test_pattern( const rule &rule ) const
 
         w_test_rule_border = catacurses::newwin( iContentHeight + 2, iContentWidth,
                              iOffset );
-        w_test_rule_content = catacurses::newwin( iContentHeight,
-                              iContentWidth - 2,
-                              iOffset + point_south_east );
 
         ui.position_from_window( w_test_rule_border );
     };
@@ -588,43 +546,8 @@ void user_interface::test_pattern( const rule &rule ) const
     ui.on_redraw( [&]( const ui_adaptor & ) {
         if( test_rml ) {
             sync_test_rml();
-            return;
         }
-        draw_border( w_test_rule_border, BORDER_COLOR, buf, hilite( c_white ) );
-        center_print( w_test_rule_border, iContentHeight + 1, red_background( c_white ),
-                      _( "Won't display content or suffix matches" ) );
-        wnoutrefresh( w_test_rule_border );
-
-        // Clear the lines
-        for( int i = 0; i < iContentHeight; i++ ) {
-            for( int j = 0; j < 79; j++ ) {
-                mvwputch( w_test_rule_content, point( j, i ), c_black, ' ' );
-            }
-        }
-
-        calcStartPos( iStartPos, iLine, iContentHeight, vMatchingItems.size() );
-
-        // display auto pickup
-        for( int i = iStartPos; i < static_cast<int>( vMatchingItems.size() ); i++ ) {
-            if( i >= iStartPos &&
-                i < iStartPos + ( iContentHeight > static_cast<int>( vMatchingItems.size() ) ?
-                                  static_cast<int>( vMatchingItems.size() ) : iContentHeight ) ) {
-                nc_color cLineColor = c_white;
-
-                mvwprintz( w_test_rule_content, point( 0, i - iStartPos ), cLineColor, "%d", i + 1 );
-                mvwprintz( w_test_rule_content, point( 4, i - iStartPos ), cLineColor, "" );
-
-                if( iLine == i ) {
-                    wprintz( w_test_rule_content, c_yellow, ">> " );
-                } else {
-                    wprintz( w_test_rule_content, c_yellow, "   " );
-                }
-
-                wprintz( w_test_rule_content, iLine == i ? hilite( cLineColor ) : cLineColor, vMatchingItems[i] );
-            }
-        }
-
-        wnoutrefresh( w_test_rule_content );
+        // RmlUi owns the screen; curses fallback removed (rip-out B).
     } );
 
     test_rml.open( autopickup_rmlui_enabled(), "autopickup_test", ctxt,
