@@ -27,6 +27,11 @@
                 <div class="devui-section">Global</div>
                 <div class="devui-row">UI scale <input type="range" min="0.5" max="1.5" step="0.05" data-value="ui_scale"/> <span class="devui-val">{{ui_scale}}</span></div>
 
+                <div class="devui-section">Camera</div>
+                <div class="devui-row">Smooth speed <input type="range" min="0" max="24" step="0.5" data-value="cam_smooth"/> <span class="devui-val">{{cam_smooth}}</span></div>
+                <div class="devui-row">Look-ahead <input type="range" min="0" max="10" step="0.25" data-value="cam_lookahead"/> <span class="devui-val">{{cam_lookahead}}</span></div>
+                <div class="devui-row">Dead zone <input type="range" min="0" max="6" step="1" data-value="cam_deadzone"/> <span class="devui-val">{{cam_deadzone}}</span></div>
+
                 <div class="devui-section">Route screens through RmlUi</div>
                 <div class="devui-row">
                     <button class="devui-btn" data-event-click="rml_all_on">All ON</button>

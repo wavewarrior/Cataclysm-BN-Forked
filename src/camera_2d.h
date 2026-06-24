@@ -42,6 +42,15 @@ class camera_2d
             return follow_speed_;
         }
 
+        // Tiles of look-ahead lead at walking speed. 0 = off.
+        void set_look_ahead( float tiles ) {
+            look_ahead_ = tiles;
+        }
+        // Dead-zone radius (tiles); view holds while target stays within it. 0 = off.
+        void set_dead_zone( float tiles ) {
+            dead_zone_ = tiles;
+        }
+
         // Kick a decaying screen shake, layered on top of the follow residual.
         // amplitude is in tiles, duration in seconds. A stronger ongoing shake
         // is not weakened by a smaller new one.
@@ -54,6 +63,15 @@ class camera_2d
         float sub_x_ = 0.0f;
         float sub_y_ = 0.0f;
         float follow_speed_ = 12.0f;
+        float look_ahead_ = 0.0f;
+        float dead_zone_ = 0.0f;
+
+        // Smoothed target velocity (tiles/s) for look-ahead direction + ramp.
+        double vx_ = 0.0;
+        double vy_ = 0.0;
+        bool have_prev_target_ = false;
+        double prev_tx_ = 0.0;
+        double prev_ty_ = 0.0;
 
         // Screen shake state.
         float shake_amp_ = 0.0f;     // current amplitude (tiles)

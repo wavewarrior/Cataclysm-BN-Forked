@@ -11,6 +11,7 @@
 #include <unordered_map>
 
 #include "avatar.h"
+#include "camera_debug.h"
 #include "cata_tiles.h"
 #include "creature.h"
 #include "game.h"
@@ -397,6 +398,10 @@ void devui_rml_open()
     c.Bind( "nrm_amount", &g_dbg_params.nrm_amount );
     c.Bind( "nrm_relief", &g_dbg_params.nrm_relief );
     c.Bind( "nrm_elev", &g_dbg_params.nrm_elev );
+    // Camera follow knobs (CPU-only; pushed into game::main_camera_ in draw_ter).
+    c.Bind( "cam_smooth", &camera_dbg::smooth_speed );
+    c.Bind( "cam_lookahead", &camera_dbg::look_ahead );
+    c.Bind( "cam_deadzone", &camera_dbg::dead_zone );
     c.Bind( "vol_enable", &g_vol_enable );
     c.Bind( "vol_density", &g_vol_density );
     c.Bind( "vol_intensity", &g_vol_intensity );
