@@ -136,6 +136,20 @@ rg -C2 -i '<<TARGET>>' lang/po/<<LANG>>.po | rg -v '^(#:|--)' | head -n 20
 rg -C2 -i 'speedway' lang/po/ko.po | rg -v '^(#:|--)' | head -n 20
 ```
 
+## Token Optimization (MANDATORY for verbose outputs)
+
+Use installed token reduction tools to compress tool outputs before they enter context:
+
+- **rtk** — Prepend `rtk` to terminal commands with verbose output (builds, tests, git logs, large listings):
+  ```sh
+  rtk cmake --build --preset windows-tiles-sounds-x64-msvc --target cataclysm-bn-tiles
+  rtk ./out/build/win-rel-deb/tests/cata_test-tiles "[filter]"
+  rtk git log --oneline -50
+  ```
+- **Headroom** — Compress large file contents or search results via Python `execute_code` when output exceeds ~2000 chars.
+
+See `token-optimization` skill for details. Track savings with `rtk gain`.
+
 ## References
 
 - **Docs**: [Building](./docs/en/dev/guides/building/cmake.md), [Formatting](./docs/en/dev/guides/formatting.md), [Dev Index](./docs/en/dev/).

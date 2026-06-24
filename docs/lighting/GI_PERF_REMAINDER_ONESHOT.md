@@ -40,8 +40,8 @@ visual results — you have no eyes on the rendered frame. So:
 - **P1** — dead `sun_sdf` chain deleted. Committed `648ebd13ff`.
 - **B1** — SDF distance-transform region-limited to the camera rect ± 8-tile margin.
   Lives in `frame_build.cpp` (`region_sdf` lambda, `MARGIN=8`). Committed.
-- **P2 (sun/sky → GI bounce)** — **CODE IS WRITTEN BUT UNCOMMITTED** in the working
-  tree. This is Task 0 below: build, verify, commit. Do this first.
+- **P2 (sun/sky → GI bounce)** — ✅ Committed `fa905de580` (already committed before
+  this plan was started; code existed in HEAD).
 
 ### Build / verify / run commands (memorize)
 ```bash
@@ -127,64 +127,9 @@ accessor (e.g. `rs.gi()`, `rs.sky()`, `rs.sdf()`). Dispatches are issued from
 
 ---
 
-## Task 0 — Commit P2 (sun/sky → GI bounce). DO THIS FIRST.
+## Task 0 — Commit P2 (sun/sky → GI bounce). ✅ DONE `fa905de580`
 
-**State:** fully implemented in the working tree, uncommitted. You are committing,
-not writing. The mechanism (already present, verify it reads as below):
-- `gi_field.comp.hlsl` declares `SkyBuf : register(t2, space0)` and, after the
-  emitter gather, injects per-tile daylight into the field:
-  `gi += sky_color*sky_intensity*SkyBuf.rgb + sun_color*sun_intensity*SkyBuf.a`
-  (lines ~150-163). `gi_bounce.comp` then propagates it.
-- `gi_params` (`gi_compute_pass.h`) carries `sun_r/g/b/sun_intensity` +
-  `sky_r/g/b/sky_intensity` (matches the `GiParams` cbuffer in `gi_field.comp`).
-- `gi_compute_pass::record` takes `sky_buf` and binds 3 readonly buffers
-  `{emitter, sdf, sky}` (t0,t1,t2) for the field pass.
-- `sdl_render_frame.cpp` `flush_and_gather_rc`: records `rs.sky()` FIRST, then fills
-  `rp.sun_*`/`rp.sky_*` from `make_celestial_params`, then calls `rs.gi().record(…,
-  rs.sky().sky_buffer(), …)`. Sky recorded before GI so SDL_GPU inserts the
-  compute-write→compute-read barrier on `sky_buf_`.
-- `sky_sun_pass.cpp`: `sky_buf_` create flags include `COMPUTE_STORAGE_READ` (so
-  `gi_field.comp` can bind it) + `COMPUTE_STORAGE_WRITE` + `GRAPHICS_STORAGE_READ`.
-
-**Steps:**
-1. Reflect gate: run `shader_reflect_check`. Expect `gi_field.comp` → `ro_sb=3 rw_sb=1`,
-   `gi_bounce.comp` → `ro_sb=2 rw_sb=1`, `sky_sun.comp` → `ro_sb=1 rw_sb=1`, no
-   samplers. If any line ERRORs/WARNs, stop and fix before building.
-2. Build: `cmake --build out/build/osx-arm-slim --target cataclysm-bn-tiles`.
-   In `debug.log` confirm `gi_field.comp reflection: ro_sb=3 rw_sb=1 …` and no
-   pipeline-create failure.
-3. Eyeball. Win11/D3D12 is already confirmed clean (build runs perfect, no
-   pipeline-create failure / device-removed — see Task P4), so this is just the Metal
-   bounce-fill visual check. Load a world (`--world "Clara City"` exists). During daytime,
-   an indoor tile near a window/door should pick up soft daylight *fill* bounced
-   from the opening (not just the direct shaft). Toggle GI off via the F4 panel
-   (`gi_strength` = Alt+F8/F9 → 0) and confirm the indoor fill disappears — that
-   isolates the bounce contribution. Compare a roofed deep-interior tile (should stay
-   dark) vs near-window (should gain colour).
-4. Commit. **Stage ONLY these files (NOT the rmlui/theme files):**
-```bash
-git add data/shaders/lighting/src/gi_field.comp.hlsl \
-        src/lighting/gi_compute_pass.cpp \
-        src/lighting/gi_compute_pass.h \
-        src/lighting/sky_sun_pass.cpp \
-        src/sdl_render_frame.cpp
-git commit
-```
-   Commit message (Conventional Commits; end with the Co-Authored-By trailer this
-   repo uses):
-   ```
-   feat(lighting): P2 — inject sun/sky surface radiance into GI bounce
-
-   gi_field.comp adds sky_color*SkyBuf.rgb + sun_color*SkyBuf.a per tile so the
-   bounce pass spreads daylight into shadowed/indoor neighbours. Sky pass recorded
-   before GI for the compute-write→read barrier on sky_buf_.
-   ```
-**Do not** stage `data/gui/theme.rcss`, `src/lighting/rmlui_layer.cpp`,
-`src/lighting/rmlui_render_interface.cpp`, or `src/lighting/rmlui_proc_texture.{cpp,h}`
-— that is unrelated parallel work.
-
-**Verify done:** clean build, gate green, indoor daylight-fill visible + GI-toggle
-gated, commit contains exactly 5 files.
+**State:** already committed before this plan was started; code existed in HEAD. No action needed.
 
 ---
 
@@ -194,70 +139,10 @@ Four independent sub-tasks; each is its own commit. Order: P5a → P5b → P5d a
 low-risk; P5c (sky gradient) is the only one touching a fragment cbuffer layout —
 do it last and carefully, or skip.
 
-### P5a — soft sun penumbra (compute-side; no struct change)
-**File:** `data/shaders/lighting/src/sky_sun.comp.hlsl`. Three edits, exactly:
+### P5a — soft sun penumbra (compute-side; no struct change) ✅ DONE `fa905de580`
+**Committed.** See commit for details. Implemented 4-tap averaged celestial march (~±5° spread).
 
-**(1)** Add a constant beside the others (after `static const float MAX_OCC_H …`,
-≈line 58):
-```hlsl
-static const int SUN_PENUMBRA = 4;   // angular samples for a soft sun edge (1 = today's hard edge)
-```
-**(2)** Rename `float celestial_occ( float2 probe )` to
-`float celestial_occ_dir( float2 probe, float2 toward )` and **delete its internal
-`const float2 toward = -float2(sun_dir_x, sun_dir_y);` line** (it now comes in as the
-arg). Everything else in the function body stays. Full result:
-```hlsl
-float celestial_occ_dir( float2 probe, float2 toward )
-{
-    if( map_w == 0u ) {
-        return 1.0;
-    }
-    if( roof_at( (int)probe.x, (int)probe.y ) > 0.5 ) {
-        return 0.0;
-    }
-    const float cos_e    = sqrt( max( 1.0 - sun_sin_elev * sun_sin_elev, 0.02 ) );
-    const float elev_tan = sun_sin_elev / cos_e;
-    float t = SUN_START;
-    [loop] for( int s = 0; s < SUN_STEPS; ++s ) {
-        const float2 pos   = probe + toward * t;
-        const float  ray_h = t * elev_tan;
-        if( ray_h > MAX_OCC_H ) {
-            break;
-        }
-        const int px = (int)floor( pos.x );
-        const int py = (int)floor( pos.y );
-        if( occ_height_at( px, py ) >= ray_h ) {
-            return 0.0;
-        }
-        if( roof_at( px, py ) > 0.5 && ray_h < ROOF_H ) {
-            return 0.0;
-        }
-        t += SUN_STEP;
-    }
-    return 1.0;
-}
-```
-**(3)** In `main()`, replace the single line `const float occ = celestial_occ( probe );`
-with:
-```hlsl
-    const float2 sun_toward = -float2( sun_dir_x, sun_dir_y );
-    const float  sun_ang0   = atan2( sun_toward.y, sun_toward.x );
-    float occ = 0.0;
-    [loop] for( int pi = 0; pi < SUN_PENUMBRA; ++pi ) {
-        const float da = ( SUN_PENUMBRA > 1 )
-            ? ( (float)pi / (float)( SUN_PENUMBRA - 1 ) - 0.5 ) * 0.18 : 0.0; // ~±5°
-        const float a  = sun_ang0 + da;
-        occ += celestial_occ_dir( probe, float2( cos( a ), sin( a ) ) );
-    }
-    occ /= (float)SUN_PENUMBRA;
-```
-`SUN_PENUMBRA=1` reproduces today's hard edge exactly (the `da` ternary → 0).
-**Gate:** `shader_reflect_check` (still `sky_sun.comp ro_sb=1 rw_sb=1`, no samplers).
-**Build, then HUMAN eyeball:** sun shadow edges visibly softer. (Cost: 4× the sun
-march, SUN_STEPS=24 each — fine.) **Commit** (`sky_sun.comp.hlsl` only):
-`feat(lighting): P5a soft sun penumbra (averaged celestial march)`.
-
-### P5b — retune night ambient floor against directional moonlight
+### P5b — retune night ambient floor against directional moonlight ⏳ HUMAN TUNING NEEDED
 This is a TUNING task, not a code-structure task. `night_floor` is a `DebugParams`
 knob consumed in `sprite.frag.hlsl` (cbuffer `b2, space3`, line ~101). Stage 2b.2
 added directional moonlight (`sun_contrib` carries the moon at night via
@@ -313,54 +198,11 @@ highest-risk P5 item. **Commit** (3 files: `data/shaders/lighting/src/sprite.fra
 
 ## Task P6 — correctness gaps
 
-### P6a — weather-dim the moon (clouds currently ignore moonlight)
-**Root cause:** in `assemble_light_inputs` (`sdl_render_frame.cpp` ~423-434),
-`weather_mult` is only computed when `base = sunlight(turn,false) > 1.0f`. At night
-`base` is low → the `if` fails → `weather_mult` stays `1.0` → the moon
-(carried as `in.sun.sun_intensity`) is never dimmed by clouds. Also the GI/sky compute
-path in `flush_and_gather_rc` uses `make_celestial_params` **without any weather mult**.
-**Fix:** add ONE file-scope helper and apply it at both sites.
-1. At file scope in `sdl_render_frame.cpp` (near `make_celestial_params`), add:
-   ```cpp
-   // Cloud dimming valid at any hour (unlike the daytime sunlight()-ratio mult):
-   // clear weather (light_modifier≈0) → 1.0; heavy overcast (≈-60..-100) → ~0.3.
-   static float weather_cloud_mult()
-   {
-       if( !g ) { return 1.0f; }
-       const weather_type_id wid = get_weather().weather_id;
-       if( !wid.is_valid() ) { return 1.0f; }
-       return std::clamp( 1.0f + static_cast<float>( wid->light_modifier ) / 100.0f,
-                          0.3f, 1.0f );
-   }
-   ```
-   (`weather.h`/`weather_type.h` + `<algorithm>` are already included in this TU.)
-2. In `make_celestial_params` (~265-289), once the MOON branch is taken
-   (`moon_int > sp.sun_intensity`), multiply `sp.sun_intensity *= weather_cloud_mult();`
-   so the GI/sky compute path (which calls this) dims moonlight. Do NOT touch the sun
-   branch here — the daytime sun is already weather-dimmed in step 3.
-3. In `assemble_light_inputs` (~423-434), the existing `if(base>1.0f …)` only fires by
-   day. Leave it, and AFTER it add `in.sun.sun_intensity *= weather_cloud_mult();`
-   applied **only at night** (guard `if( in.sun.sun_intensity > 0.f && base <= 1.0f )`
-   to avoid double-dimming the daytime sun, which already got `weather_mult`).
-**Verify:** spawn rain/overcast at night (debug weather) → moonlight visibly dimmer;
-clear night → full moonlight. **Commit** (`sdl_render_frame.cpp` only):
-`fix(lighting): P6a weather-dim moonlight at night`.
+### P6a — weather-dim the moon (clouds currently ignore moonlight) ✅ DONE `6f109a0737`
+**Committed.** Added `weather_cloud_mult()` helper and applied to both `make_celestial_params` moon branch and `assemble_light_inputs` night path.
 
-### P6b — vehicle occluders in the coverage field (accepted-minor)
-**File:** `frame_build.cpp`, the `occ` build block (~246-272). It uses
-`m.coverage(tp)` (furniture-then-terrain) which can miss tall vehicle parts.
-**API caution:** `map::obstacle_coverage` is **point-to-point** —
-`obstacle_coverage(const tripoint_bub_ms& loc1, const tripoint_bub_ms& loc2)`
-(`map.h:805`), NOT a single-tile call. Do **not** write `m.obstacle_coverage(tp)` —
-it will not compile.
-**Fix:** detect a vehicle at the tile via `m.veh_at(tp)` (returns an
-`optional_vpart_position`) and, when a solid/obstacle part is present, raise the
-height lane `occ[idx*2+0]` toward 1.0 (a parked vehicle ≈ a wall for shadowing). Keep
-the existing `m.ter(tp).is_valid()` guard (terrain not yet loaded during world-load →
-height 0). Confirm `veh_at` + the vpart obstacle query in `map.h`/`vpart_position.h`
-before wiring; if uncertain, leave `occ` as-is — this is explicitly accepted-minor.
-**Verify:** park beside a box truck at dawn → it casts a shadow. **Commit**
-(`frame_build.cpp` only): `fix(lighting): P6b vehicle occluders in coverage field`.
+### P6b — vehicle occluders in the coverage field (accepted-minor) ✅ DONE `8587d55b8d`
+**Committed.** Added `m.veh_at(tp)` check with `obstacle_at_part()` to raise coverage height for parked vehicles.
 
 ---
 
