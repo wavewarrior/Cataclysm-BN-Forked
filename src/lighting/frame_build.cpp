@@ -89,13 +89,13 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
         return lighting::build_emitter_snapshot( rs.emitter_events(), FRAME_MS );
     }();
 
-    // Phase 4: compute transparency + SDF from the current map cache.
+    // Phase 4: compute transparency + occ + sky_vis from the current map cache.
+    // P3.3: SDF is now GPU-only (JFA) — no CPU sdf vector needed.
     // Gate on active_world: g exists during the main menu but get_map()
     // returns the default-constructed map (all transparent), which would
-    // upload a populated SDF and cause the fragment shadow march to
+    // upload a populated transparency buffer and cause the fragment shadow march to
     // shadow=0 every emitter beyond ~1 tile.
     std::vector<uint8_t> transparency;
-    std::vector<float>   sdf;
     std::vector<float>   occ;       // Stage 2b: unified coverage occluder (height,roof) /tile
     std::vector<uint8_t> sky_vis;
     std::vector<float>   vis;      // per-tile visibility for soft vision falloff (x-major)
@@ -144,7 +144,7 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
         const int SW = W * ss;
         const int SH = H * ss;
 
-        // ── Structure rebuild: SDF, sun_sdf, sky_vis ───────────────────────
+        // ── Structure rebuild: transparency, occ, sky_vis (SDF → GPU JFA) ────
         if( rebuild.structure
             && static_cast<int>( mc.transparency_cache.size() ) >= total ) {
             ZoneScopedN( "light_pertile_rebuild" );
@@ -162,23 +162,13 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
                     std::min( 255.0f, std::max( 0.0f, t * 255.0f ) ) );
             }
 
-            // CPU Euclidean distance transform on an SDF_SUPERSAMPLE× finer grid:
-            // replicate each tile's transparency into its SS×SS subcells (occluder
-            // edges stay tile-aligned — correct for tile-walls), run the DT, then
-            // rescale subcell distances to TILE units (÷SS) so the shader's cone
-            // trace is unchanged. Sub-tile-fine penumbra → tight + smooth.
-            //
-            // B1 (perf): the DT over the full bubble × SS² (~520k cells) was the
-            // ~10ms structure_rebuild spike, but only the on-screen tiles (+
-            // shadow-reach margin) are ever sampled. Limit the SS replication +
-            // DT to the camera tile-rect ± MARGIN; scatter the (tile-unit) result
-            // into a full-size buffer whose off-region cells are a large
-            // "no-occluder" sentinel. On-screen fragments never bilinear-tap or
-            // shadow-march into the sentinel (MARGIN covers reach), so absolute
-            // indexing + the full-size upload + the shader stay unchanged.
-            // cam_w/h<=0 → whole-bubble region == pre-B1 behaviour.
-            constexpr int   MARGIN       = 8;        // tiles of shadow-reach slack
-            constexpr float SDF_SENTINEL = 1.0e6f;   // tile units; "no occluder near"
+            // P3.3: SDF is now computed on GPU via JFA (gpu_sdf_pass). The CPU no
+            // longer builds the distance transform — transparency feeds trans_storage_
+            // which the seed shader reads directly. sdf_runtime_w/h still set so the
+            // collector submit carries correct dimensions for populated_.
+
+            // B1 region limits (still used for occ build below):
+            constexpr int   MARGIN = 8;        // tiles of shadow-reach slack
             int rx0 = 0, ry0 = 0, rx1 = W, ry1 = H;
             if( cam_w > 0 && cam_h > 0 ) {
                 rx0 = std::clamp( cam_x0 - MARGIN, 0, W );
@@ -186,52 +176,7 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
                 rx1 = std::clamp( cam_x0 + cam_w + MARGIN, 0, W );
                 ry1 = std::clamp( cam_y0 + cam_h + MARGIN, 0, H );
             }
-            const int   rw     = std::max( 0, rx1 - rx0 );
-            const int   rh     = std::max( 0, ry1 - ry0 );
-            const float inv_ss = 1.0f / static_cast<float>( ss );
 
-            // SS transparency staging for the sub-rect, reused across the sdf +
-            // sun_sdf builds (render thread only; sequential, fully overwritten).
-            static std::vector<float> trans_ss;
-            const auto region_sdf = [&]( std::vector<float> &out, auto trans_at ) {
-                out.assign( static_cast<size_t>( SW ) * SH, SDF_SENTINEL );
-                if( rw <= 0 || rh <= 0 ) {
-                    return;
-                }
-                const int SRW = rw * ss;
-                const int SRH = rh * ss;
-                trans_ss.assign( static_cast<size_t>( SRW ) * SRH, 0.0f );
-                for( int x = 0; x < rw; ++x ) {
-                    for( int y = 0; y < rh; ++y ) {
-                        const float t  = trans_at( rx0 + x, ry0 + y );
-                        const int   bx = x * ss;
-                        const int   by = y * ss;
-                        for( int sx = 0; sx < ss; ++sx ) {
-                            for( int sy = 0; sy < ss; ++sy ) {
-                                trans_ss[ static_cast<size_t>( bx + sx ) * SRH + ( by + sy ) ] = t;
-                            }
-                        }
-                    }
-                }
-                const std::vector<float> sub =
-                    lighting::compute_sdf_cpu( trans_ss.data(), SRW, SRH );
-                // Scatter sub-rect subcell distances into the full SS grid at the
-                // region's subcell offset, rescaled to tile units.
-                for( int x = 0; x < SRW; ++x ) {
-                    const int gx = rx0 * ss + x;
-                    for( int y = 0; y < SRH; ++y ) {
-                        const int gy = ry0 * ss + y;
-                        out[ static_cast<size_t>( gx ) * SH + gy ] =
-                            sub[ static_cast<size_t>( x ) * SRH + y ] * inv_ss;
-                    }
-                }
-            };
-
-            // sdf: real transparency (trees stay opaque → they occlude emitters
-            // + form AO cavities).
-            region_sdf( sdf, [&]( int x, int y ) -> float {
-                return mc.transparency_cache[ x * H + y ];
-            } );
             sdf_runtime_w = W;   // tile dims; the SS factor is implicit (shader SDF_SS)
             sdf_runtime_h = H;
 
@@ -259,10 +204,14 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
                         // "invalid terrain id 0". Guard on the ter id being valid;
                         // until terrain loads, occ stays 0 (no occluder), correct for
                         // the loading screen (no real map to shadow yet).
-                        const float h = m.ter( tp ).is_valid()
+                        float h = m.ter( tp ).is_valid()
                             ? std::clamp( static_cast<float>( m.coverage( tp ) ) / 100.0f,
                                           0.0f, 1.0f )
                             : 0.0f;
+                        // P6b: parked vehicles are solid occluders for shadowing.
+                        if( const auto vpart = m.veh_at( tp ); vpart && vpart->obstacle_at_part() ) {
+                            h = std::max( h, 1.0f );
+                        }
                         const float roof =
                             ( have_above && above->floor_cache[idx] ) ? 1.0f : 0.0f;
                         occ[ static_cast<size_t>( idx ) * 2 + 0 ] = h;
@@ -293,20 +242,14 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
             // (knob retained to avoid a cbuffer-layout churn this commit).
             ( void )skylight_bleed;
 
-            // Snapshot for HUD: what's the SDF / transparency at the player tile?
-            // sdf is SS-grid indexed now → sample the player tile's centre subcell.
-            const int ss_hud = lighting::SDF_SUPERSAMPLE;
-            const int pi = ( g->u.bub_pos().x() * ss_hud + ss_hud / 2 ) * ( H * ss_hud )
-                           + ( g->u.bub_pos().y() * ss_hud + ss_hud / 2 );
-            if( pi >= 0 && pi < static_cast<int>( sdf.size() ) ) {
-                result.sdf_at_player = sdf[pi];
-                dbg( DL::Debug ) << "sdf[player]: " << sdf[pi];
-            }
+            // Snapshot for HUD: transparency at the player tile (SDF now lives
+            // on GPU via JFA — no longer available CPU-side).
+            const int pi = g->u.bub_pos().x() * H + g->u.bub_pos().y();
             if( pi >= 0 && pi < static_cast<int>( mc.transparency_cache.size() ) ) {
                 result.trans_at_player = mc.transparency_cache[pi];
             }
             result.sdf_W    = W;
-            result.sdf_size = sdf.size();
+            result.sdf_size = 0; // P3.3: SDF is GPU-only (JFA), no CPU vector
             result.built_pertile = true;
             const double _perf_struct_ms = std::chrono::duration<double, std::milli>(
                                                std::chrono::steady_clock::now() - _perf_struct_t0 ).count();
@@ -388,7 +331,7 @@ frame_lighting_result build_and_submit_lighting( render_state &rs,
     }
     rs.collector()->submit( std::move( snapshot ),
                             std::move( transparency ),
-                            std::move( sdf ),
+                            {}, // P3.3: SDF is GPU-only (JFA), no CPU upload needed
                             std::move( sky_vis ),
                             std::move( vis ),
                             sdf_runtime_w,

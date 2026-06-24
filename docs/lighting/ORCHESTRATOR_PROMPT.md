@@ -13,7 +13,7 @@ Widen deliberately (e.g. `Task 0, then P5a, P5b`) — never say "all".
 You are executing a pre-written implementation plan. Do NOT improvise scope.
 
 SOURCE OF TRUTH (read it fully before doing anything):
-/Users/nigel.fierens/dev-projects/Cataclysm-BN-Forked/docs/lighting/GI_PERF_REMAINDER_ONESHOT.md
+./docs/lighting/GI_PERF_REMAINDER_ONESHOT.md
 
 Scope for this run: Task 0 only.   ← change to the task ID(s) you want, or "Task 0, then P5a, P5b". Never "all".
 

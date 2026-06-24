@@ -24,25 +24,23 @@ class gpu_device;
 // fix; it is orthogonal to JFA, which is only a faster way to COMPUTE a DT.)
 inline constexpr int SDF_SUPERSAMPLE = 4;
 
-// Manages per-z-level transparency and SDF (signed-distance-field) GPU textures.
+// Manages per-z-level transparency, SDF (signed-distance-field) GPU storage buffers.
 //
-// Layout (Phase 4):  1 texel per tile.
-//   transparency_tex : R8_UNORM  (0 = opaque, 255 = fully transparent)
-//   sdf_tex          : R32_FLOAT (distance in tiles to nearest opaque tile)
+// P3.3: SDF is now computed on GPU via JFA (gpu_sdf_pass). The CPU no longer builds
+// the distance transform — transparency feeds trans_storage_ which the seed shader
+// reads directly. sdf_storage_ is written by the JFA resolve pass.
 //
-// Texture flags include COMPUTE_STORAGE_WRITE so Phase 6 can switch to
-// GPU JFA without recreating these textures.
+// Layout: 1 texel per tile for transparency_tex (R8_UNORM, 0=opaque, 255=open).
+// SDF/sky_vis/vis are storage buffers (no textures — nothing samples them).
 //
-// The CPU BFS distance transform (Chebyshev 8-connected) is computed on the
-// main thread (~17K ops for my_MAPSIZE=11, well under 1ms).  Data is then
-// passed to the collector thread which calls upload() inside a copy pass.
+// The data is passed to the collector thread which calls upload() inside a copy pass.
 class sdf_pass
 {
 public:
     sdf_pass() = default;
     ~sdf_pass();
 
-    // Create GPU textures for a map_w × map_h tile grid.
+    // Create GPU resources for a map_w × map_h tile grid.
     void init( gpu_device &dev, int map_w, int map_h );
     void shutdown( gpu_device &dev );
 
@@ -55,7 +53,8 @@ public:
     //                Shader uses these dims (via map_w/map_h accessors) so the
     //                sample math matches the CPU x-major layout.
     // transparency : runtime_w*runtime_h bytes (0=opaque, 255=transparent).
-    // sdf          : runtime_w*runtime_h floats (tiles to nearest opaque).
+    // sdf          : P3.3: no longer consumed — JFA writes SDF on GPU. Retained
+    //                for backward compat with emitter_collector::submit().
     // sky_vis      : runtime_w*runtime_h bytes (255=open sky, 0=indoor).
     //                Empty = skip.
     // vis          : runtime_w*runtime_h floats — per-tile visibility
@@ -74,11 +73,8 @@ public:
                  const std::vector<float>   &occ = {} );
 
     SDL_GPUTexture *transparency_texture() const noexcept { return transparency_tex_; }
-    SDL_GPUTexture *sdf_texture()          const noexcept { return sdf_tex_; }
-    // Phase 6b: SDF values as a vertex-readable storage buffer.
+    // Phase 6b: SDF values as a vertex-readable storage buffer (JFA output).
     SDL_GPUBuffer  *sdf_buffer()           const noexcept { return sdf_storage_; }
-    // Phase 8: sky visibility per tile (R8_UNORM, 255=open sky, 0=indoor).
-    SDL_GPUTexture *sky_vis_texture()      const noexcept { return sky_vis_tex_; }
     // Sky visibility as a fragment-readable storage buffer of floats
     // (1.0=open sky, 0.0=roofed) — sampler-texture Load returns 0 on Metal.
     SDL_GPUBuffer  *sky_vis_buffer()       const noexcept { return skyvis_storage_; }
@@ -89,10 +85,13 @@ public:
     // Stage 2b: unified coverage occluder field (tile-res, 2 floats/tile: height,
     // roof). Marched by sky_sun.comp for sun/moon/sky occlusion. COMPUTE-readable.
     SDL_GPUBuffer  *occ_buffer()           const noexcept { return occ_storage_; }
+    // P3 JFA input: tile-res transparency as floats (0.0=opaque .. 1.0=open).
+    // COMPUTE-readable so the seed shader can read it directly.
+    SDL_GPUBuffer  *trans_buffer()         const noexcept { return trans_storage_; }
 
-    bool ready() const noexcept { return sdf_tex_ != nullptr; }
+    bool ready() const noexcept { return transparency_tex_ != nullptr; }
     // True after the first successful upload(). Until then the SDF/sky_vis
-    // textures contain undefined/zero bytes — the fragment shader must NOT
+    // buffers contain undefined/zero bytes — the fragment shader must NOT
     // run its shadow march over them (would read s=0 → shadow=0 →
     // emitter contribution clamped everywhere except <1 tile from the
     // light source). render_state::begin_lighting_frame uses this to
@@ -111,15 +110,14 @@ public:
 
 private:
     SDL_GPUTexture        *transparency_tex_ = nullptr;
-    SDL_GPUTexture        *sdf_tex_          = nullptr;
-    SDL_GPUTexture        *sky_vis_tex_      = nullptr; // Phase 8: R8_UNORM
-    SDL_GPUBuffer         *sdf_storage_      = nullptr; // fragment storage buffer (SdfBuf)
+    SDL_GPUBuffer         *sdf_storage_      = nullptr; // fragment storage buffer (SdfBuf, JFA output)
     SDL_GPUBuffer         *skyvis_storage_   = nullptr; // fragment storage buffer (SkyVisBuf, floats)
     SDL_GPUBuffer         *occ_storage_      = nullptr; // Stage 2b unified coverage occluder (tile-res, 2 floats/tile)
     SDL_GPUTransferBuffer *xfer_occ_         = nullptr; // float bytes for occ_storage_
+    SDL_GPUBuffer         *trans_storage_    = nullptr; // P3 JFA input: tile-res transparency as floats
+    SDL_GPUTransferBuffer *xfer_trans_f_     = nullptr; // float bytes for trans_storage_
     SDL_GPUBuffer         *visbuf_storage_   = nullptr; // fragment storage buffer (VisBuf, 1 float/tile)
     SDL_GPUTransferBuffer *xfer_transparency_ = nullptr;
-    SDL_GPUTransferBuffer *xfer_sdf_          = nullptr;
     SDL_GPUTransferBuffer *xfer_sky_vis_      = nullptr; // R8 bytes for sky_vis_tex_
     SDL_GPUTransferBuffer *xfer_skyvis_f_     = nullptr; // float bytes for skyvis_storage_
     SDL_GPUTransferBuffer *xfer_vis_f_        = nullptr; // float bytes for visbuf_storage_ (1/tile)
@@ -129,12 +127,5 @@ private:
     int  runtime_h_ = 0;
     bool populated_ = false;
 };
-
-// CPU-side distance transform: Chebyshev BFS from all opaque tiles.
-// transparency_flat: row-major float array, transparency_flat[x * h + y].
-//   0.0f = opaque; >0.0f = open.
-// Returns a row-major float array with the same indexing.
-// Result[i] = distance in tiles to nearest opaque; 0.0f if the tile is opaque.
-std::vector<float> compute_sdf_cpu( const float *transparency_flat, int w, int h );
 
 } // namespace lighting
