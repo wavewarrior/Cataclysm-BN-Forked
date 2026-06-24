@@ -42,6 +42,11 @@ class camera_2d
             return follow_speed_;
         }
 
+        // Kick a decaying screen shake, layered on top of the follow residual.
+        // amplitude is in tiles, duration in seconds. A stronger ongoing shake
+        // is not weakened by a smaller new one.
+        void shake( float amplitude, float seconds );
+
     private:
         bool have_center_ = false;
         double cx_ = 0.0;
@@ -49,6 +54,11 @@ class camera_2d
         float sub_x_ = 0.0f;
         float sub_y_ = 0.0f;
         float follow_speed_ = 12.0f;
+
+        // Screen shake state.
+        float shake_amp_ = 0.0f;     // current amplitude (tiles)
+        float shake_k_ = 0.0f;       // decay rate (1/s)
+        float shake_phase_ = 0.0f;   // oscillation phase
 
         bool have_last_ = false;
         std::chrono::steady_clock::time_point last_;

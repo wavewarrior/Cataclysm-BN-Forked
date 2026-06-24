@@ -1572,6 +1572,20 @@ void explosion_funcs::regular( const queued_explosion &qe )
         lighting::get_render_state().emitter_events().push( fe );
     }
 
+    // Camera shake, scaled by blast radius and attenuated by distance to the
+    // player so distant blasts don't jolt the view.
+    if( g ) {
+        const int dist = rl_dist( p.raw(), g->u.bub_pos().raw() );
+        constexpr int shake_range = 50;
+        if( dist < shake_range ) {
+            const float atten = 1.0f - static_cast<float>( dist ) / shake_range;
+            const float amp = std::min( 0.6f, 0.06f * ex.radius ) * atten;
+            if( amp > 0.01f ) {
+                g->main_camera_.shake( amp, 0.35f );
+            }
+        }
+    }
+
     cata::run_hooks( "on_explosion_start", [&]( sol::table & params ) {
         params["pos"] = cata::detail::lua_coords::to_lua( p );
         params["damage"] = ex.damage;
