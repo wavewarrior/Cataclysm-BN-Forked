@@ -68,7 +68,6 @@
 #include "overlay_ordering.h"
 #include "overmap_location.h"
 #include "path_info.h"
-#include "pixel_minimap.h"
 #include "player.h"
 #include "rect_range.h"
 #include "scent_map.h"
@@ -152,19 +151,6 @@ std::string get_ascii_tile_id( const uint32_t sym, const int FG, const int BG )
     return std::string( { 'A', 'S', 'C', 'I', 'I', '_', static_cast<char>( sym ), static_cast<char>( FG ), static_cast<char>( BG ) } );
 }
 
-pixel_minimap_mode pixel_minimap_mode_from_string( const std::string &mode )
-{
-    if( mode == "solid" ) {
-        return pixel_minimap_mode::solid;
-    } else if( mode == "squares" ) {
-        return pixel_minimap_mode::squares;
-    } else if( mode == "dots" ) {
-        return pixel_minimap_mode::dots;
-    }
-
-    debugmsg( "Unsupported pixel minimap mode \"" + mode + "\"." );
-    return pixel_minimap_mode::solid;
-}
 
 struct draw_zone_overlay_options {
     const SDL_Renderer_Ptr &renderer;
@@ -284,8 +270,7 @@ struct tile_render_info {
 
 cata_tiles::cata_tiles( const SDL_Renderer_Ptr &renderer, const GeometryRenderer_Ptr &geometry ) :
     renderer( renderer ),
-    geometry( geometry ),
-    minimap( renderer, geometry )
+    geometry( geometry )
 {
     assert( renderer );
 
@@ -317,18 +302,6 @@ cata_tiles::~cata_tiles() = default;
 void cata_tiles::on_options_changed()
 {
     memory_map_mode = get_option <std::string>( "MEMORY_MAP_MODE" );
-
-    pixel_minimap_settings settings;
-
-    settings.mode = pixel_minimap_mode_from_string( get_option<std::string>( "PIXEL_MINIMAP_MODE" ) );
-    settings.brightness = get_option<int>( "PIXEL_MINIMAP_BRIGHTNESS" );
-    settings.beacon_size = get_option<int>( "PIXEL_MINIMAP_BEACON_SIZE" );
-    settings.beacon_blink_interval = get_option<bool>( "ANIMATIONS" ) ?
-                                     get_option<int>( "PIXEL_MINIMAP_BLINK" ) : 0;
-    settings.square_pixels = get_option<bool>( "PIXEL_MINIMAP_RATIO" );
-    settings.scale_to_fit = get_option<bool>( "PIXEL_MINIMAP_SCALE_TO_FIT" );
-
-    minimap->set_settings( settings );
 }
 
 const tile_type *tileset::find_tile_type( const std::string &id ) const
@@ -421,8 +394,6 @@ void cata_tiles::load_tileset(
     tileset_mod_list_stamp = mod_list;
 
     set_draw_scale( 16 );
-
-    minimap->set_type( tile_iso ? pixel_minimap_type::iso : pixel_minimap_type::ortho );
 }
 
 void cata_tiles::reinit()
@@ -4295,12 +4266,14 @@ void cata_tiles::draw_minimap( point dest, const tripoint_bub_ms &center, int wi
 
 bool cata_tiles::minimap_requires_animation() const
 {
-    return minimap->has_animated_elements();
+    // GPU minimap (draw_minimap) draws a static OMT overview + beacon; no
+    // per-frame animation drives a redraw.
+    return false;
 }
 
 void cata_tiles::reset_minimap()
 {
-    minimap->reset();
+    // GPU minimap holds no cache to reset; OMTs are re-resolved each draw.
 }
 
 void cata_tiles::get_window_tile_counts( const int width, const int height, int &columns,

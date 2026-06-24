@@ -38,7 +38,6 @@ struct char_trait_data;
 using mutation = std::pair<const trait_id, char_trait_data>;
 class monster;
 class JsonObject;
-class pixel_minimap;
 class dynamic_atlas;
 class field;
 class item;
@@ -1412,10 +1411,6 @@ class cata_tiles
         bool creatures_require_animation() const;
         // Register a directional bash recoil on a tile (called from map::bash via a bridge).
         void register_tile_hit( const tripoint_bub_ms &p, float dir_x, float dir_y );
-
-    private:
-
-        pimpl<pixel_minimap> minimap;
 
     public:
         std::string memory_map_mode = "color_pixel_sepia";
