@@ -14,11 +14,6 @@ struct gpu_emitter;
 }  // namespace lighting
 
 // Debug overlay state — saved from the previous frame, drawn this frame.
-struct TileCoordGlyph {
-    float x, y;
-    std::string text;
-};
-
 struct EmitterOverlayState {
     std::vector<lighting::gpu_emitter> snap;
     float cam_off_x = 0.f, cam_off_y = 0.f, tile_px = 32.f;
@@ -32,11 +27,6 @@ struct EmitterOverlayState {
     float trans_at_player = -1.f;
     int   sdf_W_at_submit = 0;
     size_t sdf_size_at_submit = 0;
-    std::vector<TileCoordGlyph> tile_labels;
-    int cached_player_x = INT_MIN, cached_player_y = INT_MIN;
-    float cached_cam_off_x = 0.f, cached_cam_off_y = 0.f;
-    float cached_tile_px = 0.f;
-    int cached_screen_w = 0, cached_screen_h = 0;
 };
 
 extern EmitterOverlayState s_emo;

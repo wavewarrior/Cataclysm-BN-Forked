@@ -3317,6 +3317,38 @@ primitive counts) + the `panels.cpp` HUD curses sidebar. The shared backend is N
   - B4 `442b0f5ff5` — mutation_ui (draw_exam_window, show_mutations_titlebar) + computer_session
     (computer_session::refresh + .h decl) → both 0 prims.
   - B5 `94b5c1353f` — help (help::draw_menu + decl) + armor_layers (draw_mid_pane, draw_grid) → both 0.
+  - B6 `e1230ed030` — main_menu orphaned curses draws.
+  - B7 `2f0003d954` — character_display orphaned curses draws (9-pane cascade).
+  - B8 `d4343e6c3d` — worldfactory: deleted the modselection + confirm on_redraw curses ELSE-blocks
+    (both behind `if(rml){sync_rml();return;}`, dead since toggle ON) + orphaned `draw_mod_list`/
+    `draw_modselection_borders`/`draw_worldgen_tabs` (−346). **CORRECTION:** worldfactory was NOT cleanly
+    "arms gutted" — batch-8-fallback-sweep only dropped the worldgen-tab else; the modselection + confirm
+    else-blocks were RESIDUAL. KEY: `draw_empty_worldgen_tabs` STAYS — it has a LIVE unguarded caller in
+    `edit_active_world_mods` (the rml backdrop-erase at ~1035). 3 on_redraw lambdas total: 2 dead/deleted,
+    1 live backdrop.
+  - B9 `4a90d1dc4c` — veh_interact: dead on_redraw else + 9 orphaned member draws (display_grid/veh/
+    veh_tiles/stats/name/mode/overview/list/details), −740. B9b `8994c80e8d` — orphaned vehicle::print_vparts_descs.
+    KEPT: print_part_list (editmap+game look), print_fuel_indicators (panels HUD), parts_descs_text (RML).
+    calc_overview's 7 trim_and_print stay (LIVE fn — builds overview_opts the RML path needs).
+  - B10 `9f97e3cfdd` — overmap_ui: gutted draw_om_sidebar's 206-line curses legend tail (after the
+    if(rml&&handle)->build_om_sidebar_rml guard); fn stays for the RML sync, wbar param commented.
+    KEPT (not orphans): draw_ascii + draw_map_labels/draw_city_labels (map-grid), place_ter_or_special
+    (dev terrain mode), update_note_preview (LIVE — notes-list preview on_redraw @641 is unguarded).
+  - B11 `de6952265f` — inventory_ui de-cursed (−234). NOT actually blocked: inventory.cpp:1122's base
+    inventory_selector is a non-drawing keybind hack (all_bound_keys only, never executed). All executed
+    selectors have uses_rml()=true → refresh_window's curses body was dead. Deleted it + the 5 orphaned
+    member draws (inventory_column::draw + draw_frame/header/columns/footer). LESSON: a direct base-class
+    instantiation isn't automatically a live draw path — check whether it's EXECUTED/shown.
+  - **★ DE-CURSE CAMPAIGN COMPLETE after B11 (2026-06-23).** All bespoke screens + the panels HUD are
+    de-cursed. The ONLY remaining rip-out-plan work is popup-migration (NEW RML authoring:
+    ~~trade_win~~/~~safemode_ui~~/~~messages-filter~~/~~scores_ui-show_kills~~ — ALL DONE 2026-06-24) — a
+    feature task, not a deletion batch. **★ POPUP-MIGRATION COMPLETE; eyeball pass owed on all four.**
+  - **panels.cpp HUD curses sidebar — RIP OUT STAYS IN THIS PLAN (2026-06-23 user directive: rip out the
+    curses panels EVEN IF the RmlUi HUD lacks features the old panels had).** Whole-sidebar curses
+    suppression + delete the curses `draw_*` panel builders; un-built panels show a placeholder / are
+    simply absent — accepted. SPLIT OUT to a separate future plan = only the NEW-HUD FEATURE WORK
+    (minimap + bodygraph RTT, polish, full panel parity). So: delete curses panels now; perfect the RML
+    HUD later.
   - Method that works: grep refs of each `draw_*`/`mvwprintz`-bearing fn; if refs = def + fwd-decl +
     comments only (no call site), it's orphaned → delete via the ripfn.py helper (delete_fn to the
     col-0 `}`; remove_decl up to `;`; remove decls BEFORE defs when they share a first-line prefix).
@@ -3334,19 +3366,50 @@ primitive counts) + the `panels.cpp` HUD curses sidebar. The shared backend is N
     `overmap_ui` (80 — BUT most is `draw_ascii`, the ASCII map-grid render that STAYS with the backend;
     only non-map orphans are deletable), `worldfactory` (39, 4 arms), `inventory_ui` (17), `main_menu` (10).
   - **NEED POPUP MIGRATION first (live un-migrated curses sub-screens — NOT deletable, new RML work like
-    auto_pickup's batch-14):** `trade_win` (scrollable item-info popup), `safemode_ui` (wildcard-help +
-    test-rule popups — mirror auto_pickup's `autopickup_help`/`autopickup_test`), `messages` (filter-help
-    overlay), `scores_ui` (the whole `show_kills` screen, never migrated). `auto_pickup` already did its
-    two (batch 14) — its residual 6 prims need a recheck.
+    auto_pickup's batch-14):** ~~`trade_win` (scrollable item-info popup)~~ **DONE 2026-06-24** (new
+    `trade_iteminfo` doc + .rcss; show_item_data's curses w_popup now an rml_doc stacked over "trade",
+    overlaying the examined pane via data-class-right; PAGE_UP/DOWN → SetScrollTop like help.cpp, UP/DOWN
+    still exit-to-adjacent; curses kept as toggle-OFF fallback; build+link green Metal, EYEBALL OWED),
+    ~~`safemode_ui` (wildcard-help + test-rule popups)~~ **DONE** (commit 89d5299ab1, mirrors auto_pickup's
+    `autopickup_help`/`autopickup_test`), ~~`messages` (filter-help overlay)~~ **DONE 2026-06-24** (new
+    data-bound `messages_filter_help` backdrop — the syntax help is DYNAMIC (lists registered msg-type
+    names+colours) so unlike the static autopickup/safemode helps it binds a `help_rml` string;
+    `filter_help_text(10000)` joined → cata_text_to_rml; opened lazily while `filtering`, closed on exit;
+    the Tier-0 curses string_input field + `< >` markers composite on top of the backdrop's blank bottom
+    row; curses help box kept as toggle-OFF fallback; build+link green Metal, EYEBALL OWED — esp. the
+    backdrop-vs-input-row alignment, the known-fragile partial-migration seam), ~~`scores_ui` (the whole
+    `show_kills` screen)~~ **DONE 2026-06-24** (new tab-less `scores_kills` doc — the show_kills twin of
+    show_scores_ui's body, on the rml_doc harness; one bound `body_rml` via cata_text_to_rml, scrolled by
+    SetScrollTop like the scores body; shares the scores_rmlui_enabled() toggle; curses scrolling_text_view
+    kept as fallback; build+link green Metal, EYEBALL OWED). **★ ALL POPUP MIGRATION DONE.** `auto_pickup`
+    already did its two (batch 14) — its residual 6 prims need a recheck.
   - **LEAVE (not orphans):** uilist-callback `refresh()` curses draws (advanced_inv `draw_squares`,
     magic/magic_teleporter_list, wish) — uilist KEEPS a curses fallback (`uilist::show` calls
     `callback->refresh()` at ui.cpp:922 for early-init before RmlUi is ready); shared text producers;
     and the whole map/dev backend.
-  - **`panels.cpp` HUD sidebar — LAST** (biggest + riskiest; RML HUD has minimap/bodygraph placeholders).
+  - **`panels.cpp` HUD sidebar — RIP-OUT DONE 2026-06-23** (P1 `1322cce459` + P2a `d40d1cd49e` + P2b
+    `bc8980a098`, ~1900 lines, build+link green Metal). Curses sidebar fully gone; RmlUi HUD is the only
+    sidebar. P1: draw_panels→HUD-only + make_native/make_bodygraph name-only. P2a: dropped 4 built-in layouts,
+    ctor default→"custom", empty-layout guards, reload_widget_layouts→update_offsets (width_right now tracks
+    custom layout — behavior change). P2b: deleted 58 draw_* + native_draw_registry/target_exists/fn + orphaned
+    helpers + widget_test native cases. Unmigrated panels = [name] placeholder; body graph = placeholder.
+    **EYEBALL+STARTUP OWED.** NEW-HUD feature work (minimap/bodygraph RTT, parity, polish) = separate future plan.
 - **BUILD NOTE (this session):** the first `game.cpp` recompile after touching `npc.h` failed once with
   a phantom `butchery_activity_actor` "no matching constructor" — a STALE intermediate against the
   uncommitted SIM_PERFORMANCE `activity_actor*` edits, NOT a source bug (the 2-arg calls match). A clean
   rebuild fixed it; no SIM code was changed. If it recurs, it's PCH/intermediate staleness, not source.
+
+**★ TILES-ONLY PRECURSOR (use_tiles neutralization) — STAGE 1+2 DONE, build-green.**
+This fork is tiles-only, so the legacy ASCII-mode axis (`use_tiles` false) is dead. Stage 1
+(`96129a4859`) + stage 2 (committed 2026-06-24, `+79 −195`) strip the always-true `if(use_tiles)`
+guards and delete the dead `!use_tiles` ASCII else-branches across the map/UI render paths
+(tile_iso, memorized symbols, spell/shape highlight drawsq, zone-overlay offset, editmap preview,
+scent overlay, font dims, character preview, gamepad). `use_tiles`/`use_tiles_overmap` globals
+stay **forced `true`** in `cached_options.cpp` as the anchor (not ripped — many readers remain).
+**DEFERRED to steps 2–3 below (intentionally left dead-but-correct, global=true):** the large
+ASCII-overmap bodies (`overmap_ui.cpp` `draw_ascii` + the `use_tiles_overmap` guards at 1678/2247)
+and all of `sdl_curses_draw.cpp` (whole file dies in step 3). These are curses-body deletions, so
+they ride the curses rip-out sequence below, not the guard-simplification pass.
 
 Order, each build-green:
 1. After all toggles flipped & eyeballed: delete each screen's curses *draw/redraw fallback*
@@ -3358,6 +3421,37 @@ Order, each build-green:
    (batch 11 — all 8 sub-screens, last Tier-4 giant; 207→0), overmap **search** (batch 12), and
    the **ranged target panel** (batch 13 — `draw_ui_window` + 10 exclusive panel_* helpers removed;
    kept uitext_title/uitext_fire, shared with rml).
+   **★ CENSUS CORRECTION (2026-06-24): "de-curse complete" was optimistic.** A grep census of
+   curses text-primitive callers (mvwprintz/mvwputch/fold_and_print/etc., excluding `output.cpp`
+   = the primitive library, and tests) shows many migrated screens still carry their curses draw
+   as **orphaned helpers or toggle-OFF fallback arms** that were never deleted. The eyeball gate
+   passed 2026-06-23, so these are now deletable (step 1 tail). Caller counts at census time
+   (non-test, excluding output.cpp): game 123 (mixed: map overlays STAY + dev + fallback),
+   overmap_ui 45 (incl. `draw_ascii` map-grid which dies at backend rip-out), ~~trade_win 51~~,
+   veh_interact 22, ui 22, panels 18, color 17, editmap 10 (STAYS — map path), string_input_popup 8,
+   input 8, safemode_ui 6, diary_ui 6, character 6, messages 5, auto_pickup 5, morale 2,
+   advanced_inv 1; dev minigames (snake/kitten/sokoban/lightson/minesweeper ~41) fold into the sweep.
+   **BATCH (2026-06-24): trade_win DONE** — `trading_window::update_win` (the ~484-line curses
+   draw fn, ~42 mvwprintz) was already orphaned (the `on_redraw` arm is RML-only; zero callers);
+   deleted it + the `.h` decl. Build+link green Metal, 0 mvwprintz left in the file. The 4 curses
+   windows (`w_them/w_you/w_head/w_whose`) are now vestigial (still created in `setup_win`) — clean
+   those + the remaining `show_item_data` curses fallback in a follow-up. Eyeball not required
+   (pure dead-code deletion, RML path untouched).
+   **BATCH (2026-06-24): morale DONE** — `morale_line::draw()` (the per-row curses draw, the only
+   mvwprintz/mvwhline/trim_and_print/right_print in the file) was orphaned after commit `187561`
+   gutted the on_redraw; deleted it + the now-unused `middle_padding_min` local. The struct's
+   accessors (`get_left/get_right/get_color/is_separator/max_width`) stay — the RML sync + window
+   sizing use them. Build+link green, 0 primitives left.
+   **BATCH (2026-06-24): diary_ui DONE** — gutted the 3 curses fallback arms (`ui_pages`/`ui_desc`/
+   `ui_info` on_redraw, all `if(rml) return;` + curses below) and deleted the now-orphaned curses
+   helpers in the anon namespace: 4 `print_list_scrollable` overloads + `draw_diary_border`
+   (the ASCII-art border, ~120 lines, only `mvwprintw` user). Build+link green, 0 primitives left.
+   Curses windows (`w_pages/w_desc/w_info`) vestigial (resize still creates them) — follow-up.
+   **RECLASSIFIED — NOT clean orphan/fallback deletes (need per-site migration first):**
+   `veh_interact` (22): the `overview()`/`calc_overview()` part-picker is a **live** curses path
+   called by do_repair/refill/siphon/change_shape (NOT a dead arm). `messages` (1037/1070): the
+   `ipk_target` print_colored_text is the **live** in-game message-log render. `auto_pickup` help +
+   test-rule popups: verify before deleting. These are not free dead-code wins.
    **REMAINING curses-draw still live (each its own unit, NOT a simple arm-drop):**
    - `panels` (~303) = Tier-7 sidebar HUD — own strategy.
    - overmap **main display**: curses vs rml splits *inside* `draw()`/`draw_om_sidebar`, not a

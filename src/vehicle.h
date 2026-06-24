@@ -553,12 +553,8 @@ class vehicle
         // and the scroll windowing is dropped; the hl row gets a "> " prefix.
         std::string part_list_text( int p, int hl = -1 ) const;
 
-        // Vehicle parts descriptions - descriptions for all the parts on a single tile
-        void print_vparts_descs( const catacurses::window &win, int max_y, int width, int p,
-                                 int &start_at, int &start_limit ) const;
-        // The colour-tagged description text print_vparts_descs folds into the window.
-        // Extracted so the RmlUi path can consume the same string (call with a large
-        // max_y to disable the scroll windowing). print_vparts_descs delegates here.
+        // Colour-tagged descriptions for all parts on a single tile (RmlUi path; call
+        // with a large max_y to disable the scroll windowing).
         std::string parts_descs_text( int max_y, int width, int p,
                                       int &start_at, int &start_limit ) const;
         // towing functions

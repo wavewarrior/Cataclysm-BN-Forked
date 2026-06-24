@@ -1,0 +1,19 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="editmap_info.rcss"/>
+</head>
+<body>
+    <!-- editmap (dev map editor, game::look_debug) info panel. A passive doc over
+         the map, replacing the curses w_info box. The #editmap-info element is
+         filled each redraw by editmap::update_view_with_help via info_panel_text()
+         (tile coords / terrain / furniture / cache / light / fields / trap /
+         creature / vehicle / items / graffiti + the editing-mode help footer).
+         Anchored bottom-left so the placement cursor on the map stays visible.
+         The editing menus are uilists (already RmlUi); the map cursor/selection
+         render on the GPU map path. Dev/wizard tool. -->
+    <div class="panel emi-panel">
+        <div id="editmap-info" class="emi-text"></div>
+    </div>
+</body>
+</rml>

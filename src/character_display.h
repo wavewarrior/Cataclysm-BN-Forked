@@ -19,18 +19,10 @@ namespace character_display
 {
 
 /**
- * Formats and prints encumbrance info to specified window
- */
-void print_encumbrance( ui_adaptor &ui, const catacurses::window &win, const Character &ch,
-                        int line = -1,
-                        const item *selected_clothing = nullptr );
-
-/**
  * Builds the per-bodypart encumbrance + warmth rows as colour-tagged strings
- * (one per row), for the RmlUi armor-layers pane. Mirrors print_encumbrance's
- * row content without curses column positioning/scroll. Non-invasive: shares no
- * code with print_encumbrance (which stays the curses path); converge when the
- * '@' character sheet migrates to RmlUi.
+ * (one per row), for the RmlUi armor-layers pane and the '@' character sheet
+ * encumbrance pane. RmlUi handles wrapping + scroll, so there is no curses
+ * column positioning or scrollbar.
  */
 std::vector<std::string> encumbrance_lines( const Character &ch,
         const item *selected_clothing = nullptr );

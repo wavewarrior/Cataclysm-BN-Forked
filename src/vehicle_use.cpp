@@ -18,6 +18,7 @@
 #include <tuple>
 
 #include "action.h"
+#include "activity_actor_definitions.h"
 #include "activity_handlers.h"
 #include "avatar.h"
 #include "avatar_functions.h"
@@ -2114,10 +2115,10 @@ void vehicle::interact_with( const tripoint_bub_ms &pos, int interact_part )
             fake_item.charges = fuel_left( itype_battery, true );
             int original_charges = fake_item.charges;
             you.invoke_item( &fake_item, pos );
-            // HACK: Evil hack incoming
-            activity_handlers::repair_activity_hack::patch_activity_for_vehicle(
-                *you.activity, pos, *this, interact_part, fake_item.typeId()
-            );
+            if( auto *actor = you.activity->get_actor<repair_item_activity_actor>() ) {
+                actor->set_hack_vehicle(
+                    get_map().bub_to_abs( pos ), interact_part, fake_item.typeId() );
+            }
             const int discharged = original_charges - fake_item.charges;
             drain( itype_battery, discharged );
             return;
@@ -2133,9 +2134,10 @@ void vehicle::interact_with( const tripoint_bub_ms &pos, int interact_part )
         case RELOAD_TURRET: {
             item_reload_option opt = character_funcs::select_ammo( you,  turret.base(), true );
             if( opt ) {
-                you.assign_activity( ACT_RELOAD, opt.moves(), opt.qty() );
-                you.activity->targets.emplace_back( turret.base() );
-                you.activity->targets.emplace_back( opt.ammo );
+                you.assign_activity( std::make_unique<player_activity>(
+                    std::make_unique<reload_activity_actor>(
+                        safe_reference<item>( turret.base() ),
+                        safe_reference<item>( *opt.ammo ), opt.qty() ) ) );
             }
             return;
         }

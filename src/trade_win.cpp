@@ -94,6 +94,15 @@ void register_trade_rml_types( Rml::DataModelConstructor &c )
     g_trade_types_registered = true;
 }
 
+// Separate data-model for the EXAMINE item-description popup (show_item_data);
+// stacks over the still-open "trade" doc. One colour-tagged body string + the
+// pane-side flag (mirrors the curses info_win = w_you / w_them choice).
+struct trade_iteminfo_session {
+    Rml::String info_rml;
+    bool on_right = false;
+    Rml::DataModelHandle handle;
+};
+
 constexpr auto trade_head_height = 4;
 constexpr auto trade_info_height = 4;
 constexpr auto trade_header_rows = 4;
@@ -233,491 +242,6 @@ auto trading_window::setup_win( ui_adaptor &ui ) -> void
     ui.position( point_zero, point( TERMX, TERMY ) );
 }
 
-auto trading_window::update_win( npc &np, const std::string &deal ) -> void
-{
-    // Draw borders, one of which is highlighted
-    werase( w_them );
-    werase( w_you );
-
-    // Colors for hinting if the trade will be accepted or not.
-    const auto trade_color = npc_trading::npc_will_accept_trade( state, np ) ? c_green : c_red;
-    struct selection_totals {
-        units::volume volume = 0_ml;
-        units::mass weight = 0_gram;
-    };
-
-    auto ctxt = input_context( "NPC_TRADE" );
-    register_trade_actions( ctxt, false );
-    ctxt.register_action( "SWITCH_LISTS" );
-    ctxt.register_action( "PAGE_UP" );
-    ctxt.register_action( "PAGE_DOWN" );
-    ctxt.register_action( "UP" );
-    ctxt.register_action( "DOWN" );
-    ctxt.register_action( "LEFT" );
-    ctxt.register_action( "RIGHT" );
-    ctxt.register_action( "FILTER" );
-    ctxt.register_action( "RESET_FILTER" );
-    ctxt.register_action( "EXAMINE" );
-    ctxt.register_action( "CONFIRM" );
-    ctxt.register_action( "QUIT" );
-    ctxt.register_action( "HELP_KEYBINDINGS" );
-
-    werase( w_head );
-    draw_border( w_head );
-    const auto head_inner_w = getmaxx( w_head ) - 2;
-    const auto head_title_y = 1;
-    const auto head_keybinds_label_prefix = _( "< [" );
-    const auto head_keybinds_label_middle = _( "] keybindings >" );
-    const auto head_keybinds_label_width = utf8_width( head_keybinds_label_prefix ) +
-                                           1 + utf8_width( head_keybinds_label_middle );
-    const auto title_label = [&deal]() -> std::string {
-        if( deal == _( "Pay:" ) )
-        {
-            return _( "Paying" );
-        }
-        if( deal == _( "Reward" ) )
-        {
-            return _( "Accepting a reward from" );
-        }
-        return _( "Trading with" );
-    }();
-    mvwprintz( w_head, point( 1, head_title_y ), c_white, title_label );
-    mvwprintz( w_head, point( 1 + utf8_width( title_label ) + 1, head_title_y ),
-               c_light_green, np.disp_name() );
-    const auto examine_key = to_lower_case( ctxt.get_desc( "EXAMINE", 1 ) );
-    const auto switch_key = ctxt.get_desc( "SWITCH_LISTS", 1 );
-    const auto confirm_key = ctxt.get_desc( "CONFIRM", 1 );
-    const auto autobalance_key = ctxt.get_desc( "AUTOBALANCE", 1 );
-    const auto confirm_label = _( "confirm trade" );
-    const auto autobalance_label = _( "autobalance" );
-    const auto examine_label = _( "examine item" );
-    const auto switch_label = _( "switch panes" );
-    const auto category_state_on = _( "ON" );
-    const auto category_state_off = _( "OFF" );
-    const auto state_on_color = category_mode ? c_light_green : c_dark_gray;
-    const auto state_off_color = category_mode ? c_dark_gray : c_light_green;
-    const auto state_sep = _( "|" );
-    const auto hint_sep = "  ";
-    const auto hint_width = [&]( const std::string & key, const std::string & label ) -> int {
-        return 2 + utf8_width( key ) + 2 + utf8_width( label );
-    };
-    const auto col0_w = std::max( hint_width( examine_key, examine_label ),
-                                  hint_width( confirm_key, confirm_label ) );
-    const auto col1_w = std::max( hint_width( switch_key, switch_label ),
-                                  hint_width( autobalance_key, autobalance_label ) );
-    const auto grid_width = col0_w + utf8_width( hint_sep ) + col1_w;
-    const auto grid_x = 1 + std::max( head_inner_w - grid_width, 0 );
-    const auto hint_y1 = head_title_y;
-    const auto hint_y2 = head_title_y + 1;
-    const auto draw_hint = [&]( int x, int y, const std::string & key,
-    const std::string & label ) -> void {
-        mvwprintz( w_head, point( x, y ), c_light_gray, "[" );
-        x += 1;
-        mvwprintz( w_head, point( x, y ), c_light_gray, key );
-        x += utf8_width( key );
-        mvwprintz( w_head, point( x, y ), c_light_gray, "] " );
-        x += 2;
-        mvwprintz( w_head, point( x, y ), c_light_gray, label );
-    };
-    draw_hint( grid_x, hint_y1, examine_key, examine_label );
-    draw_hint( grid_x + col0_w + utf8_width( hint_sep ), hint_y1, switch_key, switch_label );
-    draw_hint( grid_x, hint_y2, confirm_key, confirm_label );
-    draw_hint( grid_x + col0_w + utf8_width( hint_sep ), hint_y2, autobalance_key,
-               autobalance_label );
-
-    auto cost_str = std::string{ _( "Exchange" ) };
-    if( !np.will_exchange_items_freely() ) {
-        cost_str = string_format( state.your_balance >= 0 ? _( "Credit %s" ) : _( "Debt %s" ),
-                                  format_money( std::abs( state.your_balance ) ) );
-    }
-
-    const auto head_bottom_y = getmaxy( w_head ) - 1;
-    const auto cost_tag = string_format( "< %s >", cost_str );
-    const auto cost_w = utf8_width( cost_tag );
-    const auto cost_x = 1 + ( head_inner_w - cost_w ) / 2;
-    mvwprintz( w_head, point( cost_x, head_bottom_y ), trade_color, cost_tag );
-
-    const auto category_key = ctxt.get_desc( "CATEGORY_SELECTION", 1 );
-    const auto category_label_prefix = _( "< [" );
-    const auto category_label_middle = _( "] category select " );
-    const auto category_label_suffix = _( " >" );
-    const auto category_label_width = utf8_width( category_label_prefix ) +
-                                      utf8_width( category_key ) +
-                                      utf8_width( category_label_middle ) +
-                                      1 + utf8_width( category_state_on ) +
-                                      utf8_width( state_sep ) +
-                                      utf8_width( category_state_off ) + 1 +
-                                      utf8_width( category_label_suffix );
-    auto category_x = 1 + std::max( head_inner_w - category_label_width, 0 );
-    mvwprintz( w_head, point( category_x, head_bottom_y ), c_white, category_label_prefix );
-    category_x += utf8_width( category_label_prefix );
-    mvwprintz( w_head, point( category_x, head_bottom_y ), c_yellow, category_key );
-    category_x += utf8_width( category_key );
-    mvwprintz( w_head, point( category_x, head_bottom_y ), c_white, category_label_middle );
-    category_x += utf8_width( category_label_middle );
-    mvwprintz( w_head, point( category_x, head_bottom_y ), c_white, "[" );
-    category_x += 1;
-    mvwprintz( w_head, point( category_x, head_bottom_y ), state_on_color, category_state_on );
-    category_x += utf8_width( category_state_on );
-    mvwprintz( w_head, point( category_x, head_bottom_y ), c_white, state_sep );
-    category_x += utf8_width( state_sep );
-    mvwprintz( w_head, point( category_x, head_bottom_y ), state_off_color, category_state_off );
-    category_x += utf8_width( category_state_off );
-    mvwprintz( w_head, point( category_x, head_bottom_y ), c_white, "]" );
-    category_x += 1;
-    mvwprintz( w_head, point( category_x, head_bottom_y ), c_white, category_label_suffix );
-
-    auto keybinds_x = 1 + head_inner_w - head_keybinds_label_width;
-    mvwprintz( w_head, point( keybinds_x, 0 ), c_white, head_keybinds_label_prefix );
-    keybinds_x += utf8_width( head_keybinds_label_prefix );
-    mvwprintz( w_head, point( keybinds_x, 0 ), c_yellow, "?" );
-    keybinds_x += 1;
-    mvwprintz( w_head, point( keybinds_x, 0 ), c_white, head_keybinds_label_middle );
-    draw_border( w_them, ( focus_them ? c_yellow : BORDER_COLOR ) );
-    draw_border( w_you, ( !focus_them ? c_yellow : BORDER_COLOR ) );
-    draw_border( w_info, BORDER_COLOR );
-
-    mvwprintz( w_them, point( 2, 1 ), c_white, _( "Inventory:" ) );
-    mvwprintz( w_them, point( 2 + utf8_width( _( "Inventory:" ) ) + 1, 1 ), c_light_green,
-               np.name );
-    mvwprintz( w_you,  point( 2, 1 ), c_white, _( "Inventory:" ) );
-    mvwprintz( w_you,  point( 2 + utf8_width( _( "Inventory:" ) ) + 1, 1 ), c_light_green,
-               _( "You" ) );
-
-    const auto selected_amount = []( const item_pricing & ip, bool is_theirs ) -> int {
-        if( ip.charges > 0 )
-        {
-            return is_theirs ? ip.u_charges : ip.npc_charges;
-        }
-        return is_theirs ? ip.u_has : ip.npc_has;
-    };
-    const auto sum_selected = [&]( const std::vector<item_pricing> &list,
-    bool is_theirs ) -> selection_totals {
-        return std::ranges::fold_left( list | std::views::transform( [&]( const item_pricing & ip )
-        {
-            const auto amount = selected_amount( ip, is_theirs );
-            return selection_totals{ .volume = ip.vol * amount, .weight = ip.weight * amount };
-        } ), selection_totals{},
-        []( const selection_totals & acc, const selection_totals & value ) -> selection_totals {
-            return selection_totals{
-                .volume = acc.volume + value.volume,
-                .weight = acc.weight + value.weight };
-        } );
-    };
-    const auto your_selected = sum_selected( state.yours, false );
-    const auto their_selected = sum_selected( state.theirs, true );
-    const auto player_free_volume = g->u.volume_capacity() - g->u.volume_carried() +
-                                    your_selected.volume - their_selected.volume;
-    const auto player_free_weight = g->u.weight_capacity() - g->u.weight_carried() +
-                                    your_selected.weight - their_selected.weight;
-
-    them_filtered = build_filtered_indices( state.theirs, them_filter );
-    you_filtered = build_filtered_indices( state.yours, you_filter );
-
-    const auto show_filter_help = filter_edit;
-    const auto help_on_theirs = !filter_edit_theirs;
-    // Draw lists of items, starting from offset
-    for( size_t whose = 0; whose <= 1; whose++ ) {
-        const auto they = whose == 0;
-        const auto &list = they ? state.theirs : state.yours;
-        const auto &filtered = they ? them_filtered : you_filtered;
-        const auto &offset = they ? them_off : you_off;
-        const auto &person = they ? static_cast<player &>( np ) :
-                             static_cast<player &>( g->u );
-        auto &w_whose = they ? w_them : w_you;
-        auto win_w = getmaxx( w_whose );
-        // Borders
-        win_w -= 2;
-        const auto end = std::min( filtered.size(), offset + entries_per_page );
-        const auto visible = std::views::iota( offset, end );
-        const auto max_width = [&]( auto make_width ) -> int {
-            return std::ranges::fold_left( visible | std::views::transform( make_width ), 0,
-            []( int acc, int value ) { return std::max( acc, value ); } );
-        };
-        const auto qty_label = _( "amt" );
-        const auto weight_label = _( "weight" );
-        const auto vol_label = _( "vol" );
-        const auto price_label = _( "unit price" );
-        auto qty_w = max_width( [&]( size_t idx ) -> int {
-            const auto &ip = list[filtered[idx]];
-            const auto available_amount = ip.charges > 0 ? ip.charges : ip.count;
-            return available_amount > 1 ? utf8_width( string_format( "%d", available_amount ) ) : 0;
-        } );
-        auto weight_w = max_width( [&]( size_t idx ) -> int {
-            const auto &ip = list[filtered[idx]];
-            const auto available_amount = ip.charges > 0 ? ip.charges : std::max( ip.count, 1 );
-            const auto weight_str = string_format( "%.2f",
-                                                   convert_weight( ip.weight * available_amount ) );
-            return utf8_width( weight_str );
-        } );
-        auto vol_w = max_width( [&]( size_t idx ) -> int {
-            const auto &ip = list[filtered[idx]];
-            const auto available_amount = ip.charges > 0 ? ip.charges : std::max( ip.count, 1 );
-            const auto vol_str = string_format(
-                "%.2f",
-                convert_volume( to_milliliter( ip.vol * available_amount ) ) );
-            return utf8_width( vol_str );
-        } );
-        auto price_w = max_width( [&]( size_t idx ) -> int {
-            const auto &ip = list[filtered[idx]];
-            return utf8_width( format_money( ip.price ) );
-        } );
-        qty_w = std::max( qty_w, utf8_width( qty_label ) );
-        vol_w = std::max( vol_w, utf8_width( vol_label ) );
-        weight_w = std::max( weight_w, utf8_width( weight_label ) );
-        price_w = std::max( price_w, utf8_width( price_label ) );
-        const auto align_left = [&]( const std::string & text, int width ) -> std::string {
-            const auto pad = std::max( width - utf8_width( text ), 0 );
-            return text + std::string( pad, ' ' );
-        };
-        const auto align_right = [&]( const std::string & text, int width ) -> std::string {
-            const auto pad = std::max( width - utf8_width( text ), 0 );
-            return std::string( pad, ' ' ) + text;
-        };
-        const auto price_x = win_w - price_w;
-        const auto vol_x = price_x - 1 - vol_w;
-        const auto weight_x = vol_x - 1 - weight_w;
-        const auto qty_x = weight_x - 1 - qty_w;
-        const auto name_indent = 2;
-        const auto name_x = 1 + name_indent;
-        const auto name_w = std::max( qty_x - 2 - name_indent, 1 );
-        const auto item_hotkeys = ctxt.get_available_single_char_hotkeys(
-                                      "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ" );
-        const auto stats_y = 2;
-        const auto separator_y = 3;
-        const auto header_y = 4;
-        const auto header_color = c_light_gray;
-        mvwprintz( w_whose, point( 1, stats_y ), header_color, std::string( win_w, ' ' ) );
-        if( !they || !np.is_shopkeeper() ) {
-            const auto pane_free_volume = they ? state.volume_left : player_free_volume;
-            const auto pane_free_weight = they ? state.weight_left : player_free_weight;
-            const auto pane_max_volume = they ? np.volume_capacity() : g->u.volume_capacity();
-            const auto pane_max_weight = they ? np.weight_capacity() : g->u.weight_capacity();
-            const auto pane_used_volume = pane_max_volume - pane_free_volume;
-            const auto pane_used_weight = pane_max_weight - pane_free_weight;
-            const auto weight_used_str = string_format( "%.2f",
-                                         convert_weight( pane_used_weight ) );
-            const auto weight_max_str = string_format( "%.2f",
-                                        convert_weight( pane_max_weight ) );
-            const auto weight_str = string_format( _( "/%s %s" ), weight_max_str, weight_units() );
-            const auto vol_used_str = string_format( "%.2f",
-                                      convert_volume( to_milliliter( pane_used_volume ) ) );
-            const auto vol_max_str = string_format( "%.2f",
-                                                    convert_volume( to_milliliter( pane_max_volume ) ) );
-            const auto vol_str = string_format( _( "/%s %s" ), vol_max_str, volume_units_abbr() );
-            const auto weight_color = pane_used_weight > pane_max_weight ? c_light_red : c_light_green;
-            const auto vol_color = pane_used_volume > pane_max_volume ? c_light_red : c_light_green;
-            const auto stats_width = utf8_width( weight_used_str ) +
-                                     utf8_width( weight_str ) + 2 +
-                                     utf8_width( vol_used_str ) +
-                                     utf8_width( vol_str );
-            auto x = std::max( win_w - stats_width, 1 );
-            mvwprintz( w_whose, point( x, stats_y ), weight_color, weight_used_str );
-            x += utf8_width( weight_used_str );
-            mvwprintz( w_whose, point( x, stats_y ), header_color, weight_str );
-            x += utf8_width( weight_str ) + 2;
-            mvwprintz( w_whose, point( x, stats_y ), vol_color, vol_used_str );
-            x += utf8_width( vol_used_str );
-            mvwprintz( w_whose, point( x, stats_y ), header_color, vol_str );
-        }
-        mvwhline( w_whose, point( 1, separator_y ), LINE_OXOX, win_w );
-        mvwprintz( w_whose, point( name_x + 3, header_y ), header_color,
-                   trim_by_length( _( "Name (charges)" ), name_w ) );
-        mvwprintz( w_whose, point( qty_x, header_y ), header_color,
-                   align_left( qty_label, qty_w ) );
-        mvwprintz( w_whose, point( weight_x, header_y ), header_color,
-                   align_left( weight_label, weight_w ) );
-        mvwprintz( w_whose, point( vol_x, header_y ), header_color,
-                   align_left( vol_label, vol_w ) );
-        mvwprintz( w_whose, point( price_x, header_y ), header_color,
-                   align_left( price_label, price_w ) );
-        const auto filter_prefix = _( "< [" );
-        const auto filter_middle = _( "] filter" );
-        const auto filter_suffix = _( " >" );
-        const auto filter_input_sep = _( ": " );
-        const auto filter_label_width = utf8_width( filter_prefix ) + 1 +
-                                        utf8_width( filter_middle ) +
-                                        utf8_width( filter_suffix );
-        const auto filter_y = getmaxy( w_whose ) - 1;
-        auto filter_x = 1;
-        mvwprintz( w_whose, point( filter_x, filter_y ), c_white, filter_prefix );
-        filter_x += utf8_width( filter_prefix );
-        mvwprintz( w_whose, point( filter_x, filter_y ), c_yellow, "/" );
-        filter_x += 1;
-        mvwprintz( w_whose, point( filter_x, filter_y ), c_white, filter_middle );
-        filter_x += utf8_width( filter_middle );
-        const auto is_editing_here = filter_edit && ( filter_edit_theirs == they );
-        if( is_editing_here || !( they ? them_filter : you_filter ).empty() ) {
-            const auto filter_label_free = std::max( win_w - filter_label_width -
-                                           utf8_width( filter_input_sep ), 0 );
-            const auto &pane_filter = they ? them_filter : you_filter;
-            const auto &active_text = is_editing_here && filter_popup ? filter_popup->text() :
-                                      pane_filter;
-            const auto filter_text = trim_by_length( active_text, filter_label_free );
-            mvwprintz( w_whose, point( filter_x, filter_y ), c_white, filter_input_sep );
-            filter_x += utf8_width( filter_input_sep );
-            const auto filter_color = is_editing_here ? c_white : c_magenta;
-            mvwprintz( w_whose, point( filter_x, filter_y ), filter_color, filter_text );
-            filter_x += utf8_width( filter_text );
-        }
-        mvwprintz( w_whose, point( filter_x, filter_y ), c_white, filter_suffix );
-        const auto draw_filter_help = show_filter_help && ( they == help_on_theirs );
-        if( draw_filter_help ) {
-            const auto help_start_y = 1;
-            const auto help_height = std::max( getmaxy( w_whose ) - 2, 0 );
-            if( help_height > 0 ) {
-                const auto clear_width = std::string( win_w, ' ' );
-                std::ranges::for_each( std::views::iota( help_start_y,
-                help_start_y + help_height ), [&]( int y ) {
-                    mvwprintz( w_whose, point( 1, y ), c_white, clear_width );
-                } );
-                draw_item_filter_rules( w_whose, help_start_y, help_height,
-                                        item_filter_type::FILTER );
-            }
-            continue;
-        }
-        auto last_category = std::optional<item_category_id> {};
-        const auto is_focused_pane = ( they && focus_them ) || ( !they && !focus_them );
-        const auto category_ranges = build_category_ranges( list, filtered );
-        auto active_category_id = std::optional<item_category_id> {};
-        if( category_mode && is_focused_pane && !category_ranges.empty() ) {
-            const auto &category_cursor = they ? them_category_cursor : you_category_cursor;
-            if( category_cursor < category_ranges.size() ) {
-                active_category_id = category_ranges[category_cursor].id;
-            }
-        }
-        auto row = size_t{0};
-        for( size_t i = offset; i < filtered.size() && row < entries_per_page; i++ ) {
-            const auto list_index = filtered[i];
-            const auto &ip = list[list_index];
-            const auto *it = ip.locs.front();
-            const auto category_id = it->get_category().get_id();
-            if( !last_category || *last_category != category_id ) {
-                const auto category_label = to_upper_case( it->get_category().name() );
-                const auto category_y = static_cast<int>( row + 1 + trade_total_header_rows );
-                mvwprintz( w_whose, point( 2, category_y ), c_magenta,
-                           trim_by_length( category_label, win_w - 1 ) );
-                row++;
-                if( row >= entries_per_page ) {
-                    break;
-                }
-            }
-            auto color = it == &person.primary_weapon() ? c_yellow : c_light_gray;
-            const auto is_cursor = ( they && focus_them && i == them_cursor ) ||
-                                   ( !they && !focus_them && i == you_cursor );
-            const auto row_y = static_cast<int>( row + 1 + trade_total_header_rows );
-            const auto &owner_sells = they ? ip.u_has : ip.npc_has;
-            const auto &owner_sells_charge = they ? ip.u_charges : ip.npc_charges;
-            auto itname = it->display_name();
-
-            if( np.will_exchange_items_freely() &&
-                ip.locs.front()->where() != item_location_type::character ) {
-                itname = itname + " (" + ip.locs.front()->describe_location( &g->u ) + ")";
-                color = c_light_blue;
-            }
-
-            if( ip.selected ) {
-                color = c_white;
-            }
-            const auto is_category_selected = active_category_id &&
-                                              *active_category_id == category_id;
-            const auto should_hilite = is_cursor || is_category_selected;
-            auto line_color = should_hilite ? hilite( c_white ) : color;
-            if( should_hilite ) {
-                const auto fill = std::string( win_w, ' ' );
-                mvwprintz( w_whose, point( 1, row_y ), line_color, fill );
-            }
-
-            const auto hotkey_index = i - offset;
-            const auto keychar = hotkey_index < item_hotkeys.size() ?
-                                 item_hotkeys[hotkey_index] : ' ';
-            const auto total_amount = ip.charges > 0 ? ip.charges : std::max( ip.count, 1 );
-            const auto selected_amount = ip.charges > 0 ? owner_sells_charge : owner_sells;
-            auto selection_mark = '-';
-            if( selected_amount >= total_amount && total_amount > 0 ) {
-                selection_mark = '+';
-            } else if( selected_amount > 0 ) {
-                selection_mark = '#';
-            }
-            trim_and_print( w_whose, point( name_x, row_y ), name_w, line_color, "%c %c %s",
-                            keychar, selection_mark, itname );
-
-            auto price_str = format_money( ip.price );
-            const auto available_amount = ip.charges > 0 ? ip.charges : ip.count;
-            const auto qty_str = available_amount > 1 ? string_format( "%d", available_amount ) :
-                                 std::string{};
-            const auto weight_str = string_format(
-                                        "%.2f",
-                                        convert_weight( ip.weight * available_amount ) );
-            const auto vol_str = string_format(
-                                     "%.2f",
-                                     convert_volume( to_milliliter( ip.vol * available_amount ) ) );
-            mvwprintz( w_whose, point( qty_x, row_y ), line_color,
-                       align_left( qty_str, qty_w ) );
-            mvwprintz( w_whose, point( weight_x, row_y ), line_color,
-                       align_left( weight_str, weight_w ) );
-            mvwprintz( w_whose, point( vol_x, row_y ), line_color,
-                       align_left( vol_str, vol_w ) );
-            auto price_color = c_light_gray;
-            if( !np.will_exchange_items_freely() ) {
-                const auto base_price = it->price( true );
-                if( base_price > 0 ) {
-                    const auto ratio = ip.price / base_price;
-                    const auto neutral_low = 0.95;
-                    const auto neutral_high = 1.05;
-                    if( ratio < neutral_low ) {
-                        price_color = they ? c_light_green : c_light_red;
-                    } else if( ratio > neutral_high ) {
-                        price_color = they ? c_light_red : c_light_green;
-                    } else {
-                        price_color = c_light_gray;
-                    }
-                }
-            } else {
-                price_color = c_dark_gray;
-                price_str.clear();
-            }
-            if( should_hilite ) {
-                price_color = hilite( price_color );
-            }
-            mvwprintz( w_whose, point( price_x, row_y ), price_color,
-                       align_right( price_str, price_w ) );
-            last_category = category_id;
-            row++;
-        }
-        const auto paging_y = getmaxy( w_whose ) - 1;
-        const auto page_starts = build_page_starts( list, filtered, entries_per_page );
-        const auto total_pages = std::max( page_starts.size(), size_t{1} );
-        const auto current_page = page_index_for_offset( page_starts, offset ) + 1;
-        const auto page_label = string_format( _( "< Page %d/%d >" ),
-                                               static_cast<int>( current_page ),
-                                               static_cast<int>( total_pages ) );
-        const auto page_x = 1 + std::max( win_w - utf8_width( page_label ), 0 );
-        mvwprintw( w_whose, point( page_x, paging_y ), page_label );
-    }
-    const auto &info_list = focus_them ? state.theirs : state.yours;
-    const auto &info_filtered = focus_them ? them_filtered : you_filtered;
-    const auto info_cursor = focus_them ? them_cursor : you_cursor;
-    const auto info_inner_w = getmaxx( w_info ) - 2;
-    werase( w_info );
-    if( show_item_info ) {
-        draw_border( w_info, BORDER_COLOR );
-        mvwprintz( w_info, point( 2, 0 ), c_white, _( "< item description >" ) );
-        if( !category_mode && !info_filtered.empty() && info_cursor < info_filtered.size() ) {
-            const auto &info_item = *info_list[info_filtered[info_cursor]].locs.front();
-            const auto info_desc = info_item.type->description.translated();
-            fold_and_print( w_info, point( 1, 1 ), info_inner_w, c_light_gray, info_desc );
-        } else {
-            trim_and_print( w_info, point( 1, 1 ), info_inner_w, c_dark_gray,
-                            _( "No item selected." ) );
-        }
-    }
-    wnoutrefresh( w_head );
-    wnoutrefresh( w_them );
-    wnoutrefresh( w_you );
-    wnoutrefresh( w_info );
-}
-
 auto trading_window::show_item_data( size_t index, bool target_is_theirs ) -> info_popup_result
 {
     auto &target_list = target_is_theirs ? state.theirs : state.yours;
@@ -741,7 +265,41 @@ auto trading_window::show_item_data( size_t index, bool target_is_theirs ) -> in
     const auto &itm = *target_list[index].locs.front();
     const auto info_text = itm.info_string();
 
+    // RmlUi render path (render-only; keyboard owns scroll + exit-to-adjacent
+    // below). The doc stacks over the still-open "trade" doc, overlaying the
+    // pane the curses w_popup covered. The body element scrolls natively; the
+    // colour-tagged text is baked once (static for this popup instance), so no
+    // per-frame sync is needed. info_data declared before rml so it outlives it.
+    std::unique_ptr<trade_iteminfo_session> info_data;
+    rml_doc info_rml;
+    Rml::Element *scroll_el = nullptr;
+
+    auto ctxt = input_context( "NPC_TRADE" );
+    ctxt.register_action( "UP" );
+    ctxt.register_action( "DOWN" );
+    ctxt.register_action( "PAGE_UP" );
+    ctxt.register_action( "PAGE_DOWN" );
+    ctxt.register_action( "CONFIRM" );
+    ctxt.register_action( "QUIT" );
+    ctxt.register_action( "HELP_KEYBINDINGS" );
+
+    info_rml.open( trade_rmlui_enabled(), "trade_iteminfo", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        info_data = std::make_unique<trade_iteminfo_session>();
+        info_data->info_rml = cata_text_to_rml( info_text );
+        info_data->on_right = target_is_theirs;
+        c.Bind( "info_rml", &info_data->info_rml );
+        c.Bind( "on_right", &info_data->on_right );
+        info_data->handle = c.GetModelHandle();
+    } );
+    if( info_rml ) {
+        scroll_el = info_rml.document()->GetElementById( "trade-iteminfo-body" );
+    }
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( info_rml ) {
+            return;
+        }
         werase( w_popup );
         draw_border( w_popup );
         const auto inner_w = getmaxx( w_popup ) - 2;
@@ -768,14 +326,16 @@ auto trading_window::show_item_data( size_t index, bool target_is_theirs ) -> in
         wnoutrefresh( w_popup );
     } );
 
-    auto ctxt = input_context( "NPC_TRADE" );
-    ctxt.register_action( "UP" );
-    ctxt.register_action( "DOWN" );
-    ctxt.register_action( "PAGE_UP" );
-    ctxt.register_action( "PAGE_DOWN" );
-    ctxt.register_action( "CONFIRM" );
-    ctxt.register_action( "QUIT" );
-    ctxt.register_action( "HELP_KEYBINDINGS" );
+    // Scroll the RmlUi body element by a fraction of its viewport (cf. help.cpp).
+    const auto scroll_rml = [&]( float frac ) {
+        if( scroll_el == nullptr ) {
+            return;
+        }
+        const float ch = scroll_el->GetClientHeight();
+        const float max_top = std::max( 0.0f, scroll_el->GetScrollHeight() - ch );
+        const float t = std::clamp( scroll_el->GetScrollTop() + frac * ch, 0.0f, max_top );
+        scroll_el->SetScrollTop( t );
+    };
 
     auto result = info_popup_result::none;
     auto exit = false;
@@ -789,20 +349,25 @@ auto trading_window::show_item_data( size_t index, bool target_is_theirs ) -> in
             result = info_popup_result::move_down;
             exit = true;
         } else if( action == "PAGE_UP" || action == "PAGE_DOWN" ) {
-            const auto inner_h = std::max( getmaxy( w_popup ) - 2, 1 );
-            const auto folded = foldstring( info_text, std::max( getmaxx( w_popup ) - 2, 1 ) );
-            const auto max_scroll = folded.size() > static_cast<size_t>( inner_h ) ?
-                                    folded.size() - static_cast<size_t>( inner_h ) : 0;
-            const auto page_rem = static_cast<size_t>( inner_h );
-            if( action == "PAGE_UP" ) {
-                scroll_pos = scroll_pos > page_rem ? scroll_pos - page_rem : 0;
+            if( info_rml ) {
+                scroll_rml( action == "PAGE_UP" ? -0.9f : 0.9f );
             } else {
-                scroll_pos = std::min( scroll_pos + page_rem, max_scroll );
+                const auto inner_h = std::max( getmaxy( w_popup ) - 2, 1 );
+                const auto folded = foldstring( info_text, std::max( getmaxx( w_popup ) - 2, 1 ) );
+                const auto max_scroll = folded.size() > static_cast<size_t>( inner_h ) ?
+                                        folded.size() - static_cast<size_t>( inner_h ) : 0;
+                const auto page_rem = static_cast<size_t>( inner_h );
+                if( action == "PAGE_UP" ) {
+                    scroll_pos = scroll_pos > page_rem ? scroll_pos - page_rem : 0;
+                } else {
+                    scroll_pos = std::min( scroll_pos + page_rem, max_scroll );
+                }
             }
         } else if( action == "CONFIRM" || action == "QUIT" ) {
             exit = true;
         }
     }
+    info_rml.close();
     return result;
 }
 

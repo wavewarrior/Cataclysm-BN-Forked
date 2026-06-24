@@ -124,58 +124,6 @@ tripoint_rel_ms relative_view_pos( const avatar &u, const tripoint_bub_ms &p ) n
     return p - ( u.bub_pos() + u.view_offset ) + point_rel_ms( POSX, POSY );
 }
 
-// Convert p to screen position relative to the current terrain view
-tripoint_rel_ms relative_view_pos( const game &g, const tripoint_bub_ms &p ) noexcept
-{
-    return p - g.ter_view_p + point( POSX, POSY );
-}
-
-void draw_explosion_curses( game &g, const tripoint_bub_ms &center, const int r,
-                            const nc_color &col )
-{
-    if( !is_radius_visible( center, r ) ) {
-        return;
-    }
-    // TODO: Make it look different from above/below
-    const auto p = relative_view_pos( g.u, center );
-
-    explosion_animation anim;
-
-    int frame = 0;
-    shared_ptr_fast<game::draw_callback_t> explosion_cb =
-    make_shared_fast<game::draw_callback_t>( [&]() {
-        if( r == 0 ) {
-            mvwputch( g.w_terrain, point( p.y(), p.x() ), col, '*' );
-        }
-
-        for( int i = 1; i <= frame; ++i ) {
-            // corner: top left
-            mvwputch( g.w_terrain, p.xy().raw() + point( -i, -i ), col, '/' );
-            // corner: top right
-            mvwputch( g.w_terrain, p.xy().raw() + point( i, -i ), col, '\\' );
-            // corner: bottom left
-            mvwputch( g.w_terrain, p.xy().raw() + point( -i, i ), col, '\\' );
-            // corner: bottom right
-            mvwputch( g.w_terrain, p.xy().raw() + point( i, i ), col, '/' );
-            for( int j = 1 - i; j < 0 + i; j++ ) {
-                // edge: top
-                mvwputch( g.w_terrain, p.xy().raw() + point( j, -i ), col, '-' );
-                // edge: bottom
-                mvwputch( g.w_terrain, p.xy().raw() + point( j, i ), col, '-' );
-                // edge: left
-                mvwputch( g.w_terrain, p.xy().raw() + point( -i, j ), col, '|' );
-                // edge: right
-                mvwputch( g.w_terrain, p.xy().raw() + point( i, j ), col, '|' );
-            }
-        }
-    } );
-    g.add_draw_callback( explosion_cb );
-
-    for( frame = 1; frame <= r; ++frame ) {
-        anim.progress();
-    }
-}
-
 constexpr explosion_neighbors operator | ( explosion_neighbors lhs, explosion_neighbors rhs )
 {
     return static_cast<explosion_neighbors>( static_cast< int >( lhs ) | static_cast< int >( rhs ) );
@@ -184,79 +132,6 @@ constexpr explosion_neighbors operator | ( explosion_neighbors lhs, explosion_ne
 constexpr explosion_neighbors operator ^ ( explosion_neighbors lhs, explosion_neighbors rhs )
 {
     return static_cast<explosion_neighbors>( static_cast< int >( lhs ) ^ static_cast< int >( rhs ) );
-}
-
-void draw_custom_explosion_curses( game &g,
-                                   const std::list< std::map<tripoint_bub_ms, explosion_tile> > &layers )
-{
-    // calculate screen offset relative to player + view offset position
-    const auto center = g.u.bub_pos() + g.u.view_offset;
-    const tripoint topleft( center.x() - ( getmaxx( g.w_terrain ) / 2 ),
-                            center.y() - ( getmaxy( g.w_terrain ) / 2 ), 0 );
-
-    explosion_animation anim;
-
-    auto last_layer_it = layers.begin();
-    shared_ptr_fast<game::draw_callback_t> explosion_cb =
-    make_shared_fast<game::draw_callback_t>( [&]() {
-        for( auto it = layers.begin(); it != std::next( last_layer_it ); ++it ) {
-            for( const auto &pr : *it ) {
-                // update tripoint in relation to top left corner of curses window
-                // mvwputch already filters out of bounds coordinates
-                const auto p = pr.first - topleft;
-                const explosion_neighbors ngh = pr.second.neighborhood;
-                const nc_color col = pr.second.color;
-
-                switch( ngh ) {
-                    // '^', 'v', '<', '>'
-                    case N_NORTH:
-                        mvwputch( g.w_terrain, p.xy().raw(), col, '^' );
-                        break;
-                    case N_SOUTH:
-                        mvwputch( g.w_terrain, p.xy().raw(), col, 'v' );
-                        break;
-                    case N_WEST:
-                        mvwputch( g.w_terrain, p.xy().raw(), col, '<' );
-                        break;
-                    case N_EAST:
-                        mvwputch( g.w_terrain, p.xy().raw(), col, '>' );
-                        break;
-                    // '|' and '-'
-                    case N_NORTH | N_SOUTH:
-                    case N_NORTH | N_SOUTH | N_WEST:
-                    case N_NORTH | N_SOUTH | N_EAST:
-                        mvwputch( g.w_terrain, p.xy().raw(), col, '|' );
-                        break;
-                    case N_WEST | N_EAST:
-                    case N_WEST | N_EAST | N_NORTH:
-                    case N_WEST | N_EAST | N_SOUTH:
-                        mvwputch( g.w_terrain, p.xy().raw(), col, '-' );
-                        break;
-                    // '/' and '\'
-                    case N_NORTH | N_WEST:
-                    case N_SOUTH | N_EAST:
-                        mvwputch( g.w_terrain, p.xy().raw(), col, '/' );
-                        break;
-                    case N_SOUTH | N_WEST:
-                    case N_NORTH | N_EAST:
-                        mvwputch( g.w_terrain, p.xy().raw(), col, '\\' );
-                        break;
-                    case N_NO_NEIGHBORS:
-                        mvwputch( g.w_terrain, p.xy().raw(), col, '*' );
-                        break;
-                    case N_WEST | N_EAST | N_NORTH | N_SOUTH:
-                        break;
-                }
-            }
-        }
-    } );
-    g.add_draw_callback( explosion_cb );
-
-    for( last_layer_it = layers.begin(); last_layer_it != layers.end(); ++last_layer_it ) {
-        if( is_layer_visible( *last_layer_it ) ) {
-            anim.progress();
-        }
-    }
 }
 
 [[maybe_unused]]
@@ -295,16 +170,12 @@ auto get_bullet_dir( const std::vector<tripoint_bub_ms> &trajectory, size_t i ) 
 
 } // namespace
 
-void explosion_handler::draw_explosion( const tripoint_bub_ms &p, const int r, const nc_color &col,
+void explosion_handler::draw_explosion( const tripoint_bub_ms &p, const int r,
+                                        const nc_color &/*col*/,
                                         const std::string &exp_name )
 {
     if( test_mode ) {
         // avoid segfault from null tilecontext in tests
-        return;
-    }
-
-    if( !use_tiles ) {
-        draw_explosion_curses( *g, p, r, col );
         return;
     }
 
@@ -351,22 +222,13 @@ void explosion_handler::draw_custom_explosion( const tripoint_bub_ms &,
 
     // Start by getting rid of everything except current z-level
     std::map<tripoint_bub_ms, explosion_tile> neighbors;
-    if( !use_tiles ) {
-        for( const auto &pr : all_area ) {
-            const auto relative_point = relative_view_pos( g->u, pr.first );
-            if( relative_point.z() == 0 ) {
-                neighbors[pr.first] = explosion_tile{ N_NO_NEIGHBORS, pr.second };
-            }
-        }
-    } else {
-        // In tiles mode, the coordinates have to be absolute
-        const auto view_center = relative_view_pos( g->u, g->u.bub_pos() );
-        for( const auto &pr : all_area ) {
-            // Relative point is only used for z level check
-            const auto relative_point = relative_view_pos( g->u, pr.first );
-            if( relative_point.z() == view_center.z() ) {
-                neighbors[pr.first] = explosion_tile{ N_NO_NEIGHBORS, pr.second };
-            }
+    // In tiles mode, the coordinates have to be absolute
+    const auto view_center = relative_view_pos( g->u, g->u.bub_pos() );
+    for( const auto &pr : all_area ) {
+        // Relative point is only used for z level check
+        const auto relative_point = relative_view_pos( g->u, pr.first );
+        if( relative_point.z() == view_center.z() ) {
+            neighbors[pr.first] = explosion_tile{ N_NO_NEIGHBORS, pr.second };
         }
     }
 
@@ -440,11 +302,6 @@ void explosion_handler::draw_custom_explosion( const tripoint_bub_ms &,
         layers.push_front( std::move( layer ) );
     }
 
-    if( !use_tiles ) {
-        draw_custom_explosion_curses( *g, layers );
-        return;
-    }
-
     explosion_animation anim;
     // We need to draw all explosions up to now
     std::map<tripoint_bub_ms, explosion_tile> combined_layer;
@@ -485,40 +342,12 @@ auto get_bullet_sprite( const char bullet, const std::string &custom_sprite ) ->
     return {};
 }
 
-void draw_bullet_curses( map &m, const tripoint_bub_ms &t, const char bullet,
-                         const tripoint_bub_ms *const p )
-{
-    if( !is_point_visible( t ) ) {
-        return;
-    }
-
-    const auto vp = g->u.bub_pos() + g->u.view_offset;
-
-    if( vp.z() != t.z() ) {
-        return;
-    }
-
-    shared_ptr_fast<game::draw_callback_t> bullet_cb = make_shared_fast<game::draw_callback_t>( [&]() {
-        if( p != nullptr && p->z() == vp.z() ) {
-            m.drawsq( g->w_terrain, *p, drawsq_params().center( vp ) );
-        }
-        mvwputch( g->w_terrain, ( t.xy() - vp.xy() ).raw() + point( POSX, POSY ), c_red, bullet );
-    } );
-    g->add_draw_callback( bullet_cb );
-    bullet_animation().progress();
-}
-
 } // namespace
 
 void game::draw_bullet( const tripoint_bub_ms &t, const int i,
                         const std::vector<tripoint_bub_ms> &trajectory, const char bullet,
                         const std::string &custom_sprite )
 {
-    if( !use_tiles ) {
-        draw_bullet_curses( m, t, bullet, nullptr );
-        return;
-    }
-
     if( !is_point_visible( t ) ) {
         return;
     }
@@ -572,64 +401,11 @@ auto append_line_points( const draw_bullet_trajectories_options &options,
     }
 }
 
-auto draw_bullet_trajectories_curses( game &g,
-                                      const draw_bullet_trajectories_options &options ) -> void
-{
-    if( options.draw_as_line ) {
-        auto bullet_cb = make_shared_fast<game::draw_callback_t>( [&]() {
-            auto &here = get_map();
-            for( const auto &trajectory : options.trajectories ) {
-                for( size_t point_index = 1; point_index < trajectory.size(); point_index++ ) {
-                    const auto &point = trajectory[point_index];
-                    if( !is_point_visible( point ) ) {
-                        continue;
-                    }
-
-                    here.drawsq( g.w_terrain, point, drawsq_params().highlight( true ) );
-                }
-            }
-        } );
-        g.add_draw_callback( bullet_cb );
-        bullet_animation().progress( false );
-        return;
-    }
-
-    const auto longest_trajectory_size = get_longest_trajectory_size( options.trajectories );
-    for( size_t step = 1; step < longest_trajectory_size; step++ ) {
-        auto bullet_cb = make_shared_fast<game::draw_callback_t>( [ &, step]() {
-            auto &here = get_map();
-            const auto view_pos = g.u.bub_pos() + g.u.view_offset;
-            for( const auto &trajectory : options.trajectories ) {
-                if( step >= trajectory.size() || !is_point_visible( trajectory[step] ) ) {
-                    continue;
-                }
-
-                if( trajectory[step - 1].z() == view_pos.z() ) {
-                    here.drawsq( g.w_terrain, trajectory[step - 1], drawsq_params().center( view_pos ) );
-                }
-                if( trajectory[step].z() != view_pos.z() ) {
-                    continue;
-                }
-
-                mvwputch( g.w_terrain, ( trajectory[step].xy() - view_pos.xy() ).raw() + point( POSX, POSY ),
-                          c_red, options.bullet );
-            }
-        } );
-        g.add_draw_callback( bullet_cb );
-        bullet_animation().progress();
-    }
-}
-
 } // namespace
 
 void draw_bullet_trajectories( const draw_bullet_trajectories_options &options )
 {
     if( options.trajectories.empty() ) {
-        return;
-    }
-
-    if( !use_tiles ) {
-        draw_bullet_trajectories_curses( *g, options );
         return;
     }
 
@@ -679,50 +455,10 @@ void draw_bullet_trajectories( const draw_bullet_trajectories_options &options )
     }
 }
 
-namespace
-{
-// short visual animation (player, monster, ...) (hit, dodge, ...)
-// cTile is a UTF-8 strings, and must be a single cell wide!
-void hit_animation( const avatar &u, const tripoint_bub_ms &center, nc_color cColor,
-                    const std::string &cTile )
-{
-    const auto init_pos = relative_view_pos( u, center );
-    // Only show animation if initially visible
-    if( init_pos.z() == 0 && is_valid_in_w_terrain( init_pos.xy().raw() ) ) {
-        shared_ptr_fast<game::draw_callback_t> hit_cb = make_shared_fast<game::draw_callback_t>( [&]() {
-            // In case the window is resized during waiting, we always re-calculate the animation position
-            const auto pos = relative_view_pos( u, center );
-            if( pos.z() == 0 && is_valid_in_w_terrain( pos.xy().raw() ) ) {
-                mvwprintz( g->w_terrain, pos.xy().raw(), cColor, cTile );
-            }
-        } );
-        g->add_draw_callback( hit_cb );
-
-        ui_manager::redraw();
-        inp_mngr.set_timeout( get_option<int>( "ANIMATION_DELAY" ) );
-        // Skip input (if any), because holding down a key with nanosleep can get yourself killed
-        inp_mngr.get_input_event();
-        inp_mngr.reset_timeout();
-    }
-}
-
-void draw_hit_mon_curses( const tripoint_bub_ms &center, const monster &m, const avatar &u,
-                          const bool dead )
-{
-    hit_animation( u, center, red_background( m.type->color ), dead ? "%" : m.symbol() );
-}
-
-} // namespace
-
-void game::draw_hit_mon( const tripoint_bub_ms &p, const monster &m, const bool dead )
+void game::draw_hit_mon( const tripoint_bub_ms &/*p*/, const monster &/*m*/, const bool /*dead*/ )
 {
     if( test_mode ) {
         // avoid segfault from null tilecontext in tests
-        return;
-    }
-
-    if( !use_tiles ) {
-        draw_hit_mon_curses( p, m, u, dead );
         return;
     }
 
@@ -731,25 +467,10 @@ void game::draw_hit_mon( const tripoint_bub_ms &p, const monster &m, const bool 
     bullet_animation().progress();
 }
 
-namespace
-{
-void draw_hit_player_curses( const game &g, const Character &who, const int dam )
-{
-    nc_color const col = !dam ? yellow_background( who.symbol_color() ) : red_background(
-                             who.symbol_color() );
-    hit_animation( g.u, who.bub_pos(), col, who.symbol() );
-}
-} //namespace
-
-void game::draw_hit_player( const Character &p, const int dam )
+void game::draw_hit_player( const Character &/*p*/, const int /*dam*/ )
 {
     if( test_mode ) {
         // avoid segfault from null tilecontext in tests
-        return;
-    }
-
-    if( !use_tiles ) {
-        draw_hit_player_curses( *this, p, dam );
         return;
     }
 
@@ -759,71 +480,18 @@ void game::draw_hit_player( const Character &p, const int dam )
 }
 
 /* Line drawing code, not really an animation but should be separated anyway */
-namespace
-{
-void draw_line_curses( game &g, const tripoint_bub_ms &center,
-                       const std::vector<tripoint_bub_ms> &ret,
-                       bool noreveal )
-{
-    drawsq_params params = drawsq_params().highlight( true ).center( center );
-    for( const tripoint_bub_ms &p : ret ) {
-        const auto critter = g.critter_at( p, true );
-
-        // NPCs and monsters get drawn with inverted colors
-        if( critter && g.u.sees( *critter ) ) {
-            critter->draw( g.w_terrain, center, true );
-        } else if( noreveal && !g.u.sees( p ) ) {
-            // Draw a meaningless symbol. Avoids revealing tile, but keeps feedback
-            const char sym = '?';
-            const nc_color col = c_dark_gray;
-            const catacurses::window &w = g.w_terrain;
-            const int k = p.x() + ( getmaxx( w ) / 2 ) - center.x();
-            const int j = p.y() + ( getmaxy( w ) / 2 ) - center.y();
-            mvwputch( w, point( k, j ), col, sym );
-        } else {
-            // This function reveals tile at p and writes it to the player's memory
-            get_map().drawsq( g.w_terrain, p, params );
-        }
-    }
-}
-} //namespace
-
-void game::draw_line( const tripoint_bub_ms &p, const tripoint_bub_ms &center,
-                      const std::vector<tripoint_bub_ms> &points, bool noreveal )
+void game::draw_line( const tripoint_bub_ms &p, const tripoint_bub_ms &/*center*/,
+                      const std::vector<tripoint_bub_ms> &points, bool /*noreveal*/ )
 {
     if( !u.sees( p ) ) {
-        return;
-    }
-
-    if( !use_tiles ) {
-        draw_line_curses( *this, center, points, noreveal );
         return;
     }
 
     tilecontext->init_draw_line( p, points, "line_target", true );
 }
 
-namespace
-{
-void draw_line_curses( game &g, const std::vector<tripoint_bub_ms> &points )
-{
-    map &here = get_map();
-    for( const tripoint_bub_ms &p : points ) {
-        here.drawsq( g.w_terrain, p, drawsq_params().highlight( true ) );
-    }
-
-    const auto p = points.empty() ? tripoint {POSX, POSY, 0} :
-                   relative_view_pos( g.u, points.back() ).raw();
-    mvwputch( g.w_terrain, p.xy(), c_white, 'X' );
-}
-} //namespace
-
 void draw_line_of( const draw_sprite_line_options &options )
 {
-    if( !use_tiles ) {
-        draw_line_curses( *g, options.points );
-        return;
-    }
     std::vector<tripoint_bub_ms> ps;
     std::vector<std::string> ids;
     std::vector<int> rots;
@@ -860,8 +528,6 @@ void draw_line_of( const draw_sprite_line_options &options )
 }
 void game::draw_line( const tripoint_bub_ms &p, const std::vector<tripoint_bub_ms> &points )
 {
-    draw_line_curses( *this, points );
-
     if( test_mode ) {
         // avoid segfault from null tilecontext in tests
         return;
@@ -871,8 +537,6 @@ void game::draw_line( const tripoint_bub_ms &p, const std::vector<tripoint_bub_m
 
 void game::draw_cursor( const tripoint_bub_ms &p )
 {
-    const auto rp = relative_view_pos( *this, p );
-    mvwputch_inv( w_terrain, rp.xy().raw(), c_light_green, 'X' );
     tilecontext->init_draw_cursor( p );
 }
 
@@ -886,204 +550,74 @@ void game::draw_highlight( const tripoint_bub_ms &p )
     tilecontext->init_draw_highlight( p );
 }
 
-namespace
-{
-void draw_weather_curses( const catacurses::window &win, const weather_printable &w )
-{
-    for( const auto &drop : w.vdrops ) {
-        mvwputch( win, point( drop.first, drop.second ), w.colGlyph, w.get_symbol() );
-    }
-}
-} //namespace
-
 void game::draw_weather( const weather_printable &w )
 {
-    if( !use_tiles ) {
-        draw_weather_curses( w_terrain, w );
-        return;
-    }
-
     tilecontext->init_draw_weather( w, w.wtype->animation.tile );
 }
 
-namespace
-{
-void draw_sct_curses( const game &g )
-{
-    const auto off = relative_view_pos( g.u, tripoint_bub_ms::zero() );
-
-    for( const auto &text : SCT.vSCT ) {
-        const int dy = off.y() + text.getPosY();
-        const int dx = off.x() + text.getPosX();
-
-        if( !is_valid_in_w_terrain( point( dx, dy ) ) ) {
-            continue;
-        }
-
-        const bool is_old = text.getStep() >= scrollingcombattext::iMaxSteps / 2;
-
-        nc_color const col1 = msgtype_to_color( text.getMsgType( "first" ),  is_old );
-        nc_color const col2 = msgtype_to_color( text.getMsgType( "second" ), is_old );
-
-        mvwprintz( g.w_terrain, point( dx, dy ), col1, text.getText( "first" ) );
-        wprintz( g.w_terrain, col2, text.getText( "second" ) );
-    }
-}
-} //namespace
-
 void game::draw_sct()
 {
-    if( use_tiles ) {
-        tilecontext->init_draw_sct();
-    } else {
-        draw_sct_curses( *this );
-    }
+    tilecontext->init_draw_sct();
 }
-
-namespace
-{
-void draw_zones_curses( const catacurses::window &w, const zone_draw_options &options )
-{
-    nc_color    const col = invert_color( c_light_green );
-    const bool has_points = !options.points.empty();
-    if( has_points ) {
-        std::ranges::for_each( options.points, [&]( const tripoint_bub_ms & location ) {
-            mvwputch( w, point( location.x() - options.offset.x(), location.y() - options.offset.y() ),
-                      col, '~' );
-        } );
-    } else {
-        if( options.end.x() < options.start.x() || options.end.y() < options.start.y() ||
-            options.end.z() < options.start.z() ) {
-            return;
-        }
-
-        const std::string line( options.end.x() - options.start.x() + 1, '~' );
-        const int x = options.start.x() - options.offset.x();
-
-        for( int y = options.start.y(); y <= options.end.y(); ++y ) {
-            mvwprintz( w, point( x, y - options.offset.y() ), col, line );
-        }
-    }
-
-    const auto bounds = [&]() -> std::optional<std::pair<point_bub_ms, point_bub_ms>> {
-        if( has_points )
-        {
-            const auto min_x = std::ranges::minmax_element( options.points, {}, [](
-                const tripoint_bub_ms & p ) { return p.x(); } );
-            const auto min_y = std::ranges::minmax_element( options.points, {}, [](
-            const tripoint_bub_ms & p ) { return p.y(); } );
-            return std::pair<point_bub_ms, point_bub_ms>( point_bub_ms( min_x.min->x(), min_y.min->y() ),
-                    point_bub_ms( min_x.max->x(), min_y.max->y() ) );
-        }
-        return std::pair<point_bub_ms, point_bub_ms>( options.start.xy(), options.end.xy() );
-    }();
-
-    if( !bounds.has_value() ) {
-        return;
-    }
-
-    const auto min_local = bounds->first;
-    const auto max_local = bounds->second;
-    const int width = max_local.x() - min_local.x() + 1;
-    const int height = max_local.y() - min_local.y() + 1;
-    if( width <= 0 || height <= 0 ) {
-        return;
-    }
-
-    const std::string label = string_format( _( "(%dx%d)" ), width, height );
-    const point center_local( ( min_local.x() + max_local.x() ) / 2,
-                              ( min_local.y() + max_local.y() ) / 2 );
-    const auto label_pos = point(
-                               std::clamp( center_local.x - static_cast<int>( label.size() ) / 2,
-                                           0, getmaxx( w ) - static_cast<int>( label.size() ) ),
-                               std::clamp( center_local.y - options.offset.y(), 0,
-                                           getmaxy( w ) - 1 ) );
-    mvwprintz( w, label_pos, c_white, label );
-}
-} //namespace
 
 void game::draw_zones( const zone_draw_options &options )
 {
-    if( use_tiles ) {
-        tilecontext->init_draw_zones( options );
-    } else {
-        draw_zones_curses( w_terrain, options );
-    }
+    tilecontext->init_draw_zones( options );
 }
 
 void game::draw_radiation_override( const tripoint_bub_ms &p, const int rad )
 {
-    if( use_tiles ) {
-        tilecontext->init_draw_radiation_override( p, rad );
-    }
+    tilecontext->init_draw_radiation_override( p, rad );
 }
 
 void game::draw_terrain_override( const tripoint_bub_ms &p, const ter_id &id )
 {
-    if( use_tiles ) {
-        tilecontext->init_draw_terrain_override( p, id );
-    }
+    tilecontext->init_draw_terrain_override( p, id );
 }
 
 void game::draw_furniture_override( const tripoint_bub_ms &p, const furn_id &id )
 {
-    if( use_tiles ) {
-        tilecontext->init_draw_furniture_override( p, id );
-    }
+    tilecontext->init_draw_furniture_override( p, id );
 }
 
 void game::draw_graffiti_override( const tripoint_bub_ms &p, const bool has )
 {
-    if( use_tiles ) {
-        tilecontext->init_draw_graffiti_override( p, has );
-    }
+    tilecontext->init_draw_graffiti_override( p, has );
 }
 
 void game::draw_trap_override( const tripoint_bub_ms &p, const trap_id &id )
 {
-    if( use_tiles ) {
-        tilecontext->init_draw_trap_override( p, id );
-    }
+    tilecontext->init_draw_trap_override( p, id );
 }
 
 void game::draw_field_override( const tripoint_bub_ms &p, const field_type_id &id )
 {
-    if( use_tiles ) {
-        tilecontext->init_draw_field_override( p, id );
-    }
+    tilecontext->init_draw_field_override( p, id );
 }
 
 void game::draw_item_override( const tripoint_bub_ms &p, const itype_id &id, const mtype_id &mid,
                                const bool hilite )
 {
-    if( use_tiles ) {
-        tilecontext->init_draw_item_override( p, id, mid, hilite );
-    }
+    tilecontext->init_draw_item_override( p, id, mid, hilite );
 }
 
 void game::draw_vpart_override(
     const tripoint_bub_ms &p, const vpart_id &id, const int part_mod, const units::angle veh_dir,
     const bool hilite, tripoint_mnt_veh mount )
 {
-    if( use_tiles ) {
-        // TRIPOINT MIGRATION FIXME
-        tilecontext->init_draw_vpart_override( p, id, part_mod, veh_dir, hilite, mount.xy().raw() );
-    }
+    // TRIPOINT MIGRATION FIXME
+    tilecontext->init_draw_vpart_override( p, id, part_mod, veh_dir, hilite, mount.xy().raw() );
 }
 
 void game::draw_below_override( const tripoint_bub_ms &p, const bool draw )
 {
-    if( use_tiles ) {
-        tilecontext->init_draw_below_override( p, draw );
-    }
+    tilecontext->init_draw_below_override( p, draw );
 }
 
 void game::draw_monster_override( const tripoint_bub_ms &p, const mtype_id &id, const int count,
                                   const bool more, const Attitude att )
 {
-    if( use_tiles ) {
-        tilecontext->init_draw_monster_override( p, id, count, more, att );
-    }
+    tilecontext->init_draw_monster_override( p, id, count, more, att );
 }
 
 bucketed_points bucket_by_distance( const tripoint_bub_ms &origin,
@@ -1138,53 +672,6 @@ bucketed_points optimal_bucketing( const bucketed_points &buckets, size_t max_bu
     return optimal;
 }
 
-static void draw_cone_aoe_curses( const tripoint_bub_ms &, const bucketed_points &waves )
-{
-    // Calculate screen offset relative to player + view offset position
-    const avatar &u = get_avatar();
-    const auto center = u.bub_pos() + u.view_offset;
-    const tripoint topleft( center.x() - ( catacurses::getmaxx( g->w_terrain ) / 2 ),
-                            center.y() - ( catacurses::getmaxy( g->w_terrain ) / 2 ), 0 );
-
-    auto it = waves.begin();
-    shared_ptr_fast<game::draw_callback_t> wave_cb =
-    make_shared_fast<game::draw_callback_t>( [&]() {
-        // All the buckets up until now
-        for( auto inner_it = waves.begin(); inner_it != std::next( it ); inner_it++ ) {
-            for( const point_with_value &pr : *inner_it ) {
-                // update tripoint in relation to top left corner of curses window
-                // mvwputch already filters out of bounds coordinates
-                const tripoint p = pr.pt - topleft;
-                int intensity = ( pr.val >= 1.0 ) + ( pr.val >= 0.5 ) + ( inner_it == it );
-                nc_color col;
-                switch( intensity ) {
-                    case 3:
-                        col = c_red;
-                        break;
-                    case 2:
-                        col = c_yellow;
-                        break;
-                    case 1:
-                        col = c_white;
-                        break;
-                    default:
-                        col = c_dark_gray;
-                        break;
-                }
-
-                // TODO: Prettier
-                mvwputch( g->w_terrain, p.xy(), col, '*' );
-            }
-        }
-    } );
-    g->add_draw_callback( wave_cb );
-
-    wave_animation anim;
-    for( it = waves.begin(); it != waves.end(); it++ ) {
-        anim.progress();
-    }
-}
-
 namespace ranged
 {
 void draw_cone_aoe( const tripoint_bub_ms &origin, const std::map<tripoint_bub_ms, double> &aoe )
@@ -1197,11 +684,6 @@ void draw_cone_aoe( const tripoint_bub_ms &origin, const std::map<tripoint_bub_m
     // That hardcoded value could be improved... Not sure about the name
     size_t max_bucket_count = std::min<size_t>( 10, aoe.size() );
     bucketed_points waves = optimal_bucketing( buckets, max_bucket_count );
-
-    if( !use_tiles ) {
-        draw_cone_aoe_curses( origin, waves );
-        return;
-    }
 
     // This is copied from explosion code
     // Not sure if it couldn't be cleaner, without that lambda capture thing

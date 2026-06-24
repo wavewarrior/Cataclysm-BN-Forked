@@ -301,7 +301,7 @@ std::optional<std::string> player_activity::get_progress_message( const avatar &
          */
         if( actor ) {
             if( actor->progress.empty() ) {
-                target = string_format( ": %s", actor->progress.front().target_name );
+                target = "";
                 progress_desc = "";
                 //shouldn't ever happend actually
                 debugmsg( "Progress counter is empty, despite activity using actor, total tasks %s",

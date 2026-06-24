@@ -33,128 +33,6 @@ namespace
 // maximum limit of the UIs width. After that, we center them, with an even space left and right
 const int MAX_DAIRY_UI_WIDTH = 150;
 
-/**print a scrollable list, printed std::vector<std::string> as list with scrollbar*/
-void print_list_scrollable( catacurses::window *win, std::vector<std::string> list, int *selection,
-                            int entries_per_page, int xoffset, int width, bool active, bool border,
-                            const report_color_error color_error )
-{
-    if( *selection < 0 && !list.empty() ) {
-        *selection = static_cast<int>( list.size() ) - 1;
-    } else if( *selection >= static_cast<int>( list.size() ) ) {
-        *selection = 0;
-    }
-    const int borderspace = border ? 1 : 0;
-    entries_per_page = entries_per_page - borderspace * 2;
-
-
-    const int top_of_page = entries_per_page * ( *selection / entries_per_page );
-
-    const int bottom_of_page = std::min<int>( top_of_page + entries_per_page, list.size() );
-
-    const int line_width = width - 1 - borderspace;
-
-    for( int i = top_of_page; i < bottom_of_page; i++ ) {
-
-        const nc_color col = c_white;
-        const int y = i - top_of_page;
-        const bool highlight = *selection == i && active;
-        const nc_color line_color = highlight ? hilite( col ) : col;
-        std::string line_str = list[i];
-        if( highlight ) {
-            line_str = left_justify( remove_color_tags( line_str ), line_width );
-        }
-        trim_and_print( *win, point( xoffset + 1, y + borderspace ), line_width,
-                        line_color, line_str, color_error );
-    }
-    if( border ) {
-        draw_border( *win );
-    }
-    if( active && entries_per_page < static_cast<int>( list.size() ) ) {
-        draw_scrollbar( *win, *selection, entries_per_page, list.size(), point( xoffset,
-                        0 + borderspace ) );
-    }
-
-}
-
-void print_list_scrollable( catacurses::window *win, std::vector<std::string> list, int *selection,
-                            bool active, bool border, const report_color_error color_error )
-{
-    print_list_scrollable( win, std::move( list ), selection, getmaxy( *win ), 0, getmaxx( *win ),
-                           active, border,
-                           color_error );
-}
-
-void print_list_scrollable( catacurses::window *win, const std::string &text, int *selection,
-                            int entries_per_page, int xoffset, int width, bool active, bool border,
-                            const report_color_error color_error )
-{
-    int border_space = border ? 1 : 0;
-    // -1 on the left for scroll bar and another -1 on the right reserved for cursor
-    std::vector<std::string> list = foldstring( text, width - 2 - border_space * 2 );
-    print_list_scrollable( win, list, selection, entries_per_page, xoffset, width, active, border,
-                           color_error );
-}
-
-void print_list_scrollable( catacurses::window *win, const std::string &text, int *selection,
-                            bool active,
-                            bool border, const report_color_error color_error )
-{
-    print_list_scrollable( win, text, selection, getmaxy( *win ), 0, getmaxx( *win ), active, border,
-                           color_error );
-}
-
-void draw_diary_border( catacurses::window *win, const nc_color &color = c_white )
-{
-    wattron( *win, color );
-
-    const point max( getmaxx( *win ) - 1, getmaxy( *win ) - 1 );
-    const int midx = max.x / 2;
-    for( int i = 4; i <= max.y - 4; i++ ) {
-        mvwprintw( *win, point( 0, i ), "||||" );
-        mvwprintw( *win, point( max.x - 3, i ), "||||" );
-        mvwprintw( *win, point( midx, i ), " | " );
-    }
-    for( int i = 4; i <= max.x - 4; i++ ) {
-        if( !( i >= midx && i <= midx + 2 ) ) {
-            mvwprintw( *win, point( i, 0 ), "____" );
-            mvwprintw( *win, point( i, max.y - 2 ), "____" );
-            mvwprintw( *win, point( i, max.y - 1 ), "====" );
-            mvwprintw( *win, point( i, max.y ), "----" );
-        }
-    }
-    // top left corner
-    mvwprintw( *win, point_zero, "    " );
-    mvwprintw( *win, point_south, ".-/|" );
-    mvwprintw( *win, point( 0, 2 ), "||||" );
-    mvwprintw( *win, point( 0, 3 ), "||||" );
-    // bottom left corner
-    mvwprintw( *win, point( 0, max.y - 3 ), "||||" );
-    mvwprintw( *win, point( 0, max.y - 2 ), "||||" );
-    mvwprintw( *win, point( 0, max.y - 1 ), "||/=" );
-    mvwprintw( *win, point( 0, max.y - 0 ), "`'--" );
-    // top right corner
-    mvwprintw( *win, point( max.x - 3, 0 ), "    " );
-    mvwprintw( *win, point( max.x - 3, 1 ), "|\\-." );
-    mvwprintw( *win, point( max.x - 3, 2 ), "||||" );
-    mvwprintw( *win, point( max.x - 3, 3 ), "||||" );
-    // bottom right corner
-    mvwprintw( *win, max + point( -3, -3 ), "||||" );
-    mvwprintw( *win, max + point( -3, -2 ), "||||" );
-    mvwprintw( *win, max + point( -3, -1 ), "=\\||" );
-    mvwprintw( *win, max + point( -3, 0 ), "--''" );
-    // mid top
-    mvwprintw( *win, point( midx, 0 ), "   " );
-    mvwprintw( *win, point( midx, 1 ), "\\ /" );
-    mvwprintw( *win, point( midx, 2 ), " | " );
-    mvwprintw( *win, point( midx, 3 ), " | " );
-    // mid bottom
-    mvwprintw( *win, point( midx, max.y - 3 ), " | " );
-    mvwprintw( *win, point( midx, max.y - 2 ), " | " );
-    mvwprintw( *win, point( midx, max.y - 1 ), "\\|/" );
-    mvwprintw( *win, point( midx, max.y - 0 ), "___" );
-    wattroff( *win, color );
-}
-
 // RmlUi render path for the diary (full UI→RmlUi migration, Tier 1 screen #6) via
 // the F.3 rml_doc harness. FIRST multi-pane shape: three simultaneous scroll
 // lists (pages / changes / page-text) plus a title bar and a bottom info pane.
@@ -416,18 +294,8 @@ void diary::show_diary_ui( diary *c_diary )
         ui.position_from_window( w_pages );
     } );
     ui_pages.mark_resize();
-    ui_pages.on_redraw( [&]( const ui_adaptor & ) {
-        if( rml ) {
-            return;
-        }
-        werase( w_pages );
-
-        print_list_scrollable( &w_pages, c_diary->get_pages_list(), &selected[window_mode::PAGE_WIN],
-                               currwin == window_mode::PAGE_WIN, true, report_color_error::yes );
-        center_print( w_pages, 0, c_light_gray, string_format( _( "pages: %d" ),
-                      c_diary->get_pages_list().size() ) );
-
-        wnoutrefresh( w_pages );
+    ui_pages.on_redraw( []( const ui_adaptor & ) {
+        // RmlUi owns the screen; curses fallback removed (rip-out B).
     } );
 
     ui_adaptor ui_desc;
@@ -440,23 +308,8 @@ void diary::show_diary_ui( diary *c_diary )
         ui.position_from_window( w_desc );
     } );
     ui_desc.mark_resize();
-    ui_desc.on_redraw( [&]( const ui_adaptor & ) {
-        if( rml ) {
-            return;
-        }
-        werase( w_desc );
-
-        draw_border( w_desc );
-        center_print( w_desc, 0, c_light_gray, string_format( _( "%s's Diary" ), c_diary->owner ) );
-        std::string desc = string_format( _( "%s, %s, %s, %s" ),
-                                          ctxt.get_desc( "NEW_PAGE", _( "New page" ), input_context::allow_all_keys ),
-                                          ctxt.get_desc( "CONFIRM", _( "Edit text" ), input_context::allow_all_keys ),
-                                          ctxt.get_desc( "DELETE PAGE", _( "Delete page" ), input_context::allow_all_keys ),
-                                          ctxt.get_desc( "EXPORT_DIARY", _( "Export diary" ), input_context::allow_all_keys )
-                                        );
-        center_print( w_desc, 1, c_white, desc );
-
-        wnoutrefresh( w_desc );
+    ui_desc.on_redraw( []( const ui_adaptor & ) {
+        // RmlUi owns the screen; curses fallback removed (rip-out B).
     } );
 
     ui_adaptor ui_info;
@@ -471,20 +324,8 @@ void diary::show_diary_ui( diary *c_diary )
         ui.position_from_window( w_info );
     } );
     ui_info.mark_resize();
-    ui_info.on_redraw( [&]( const ui_adaptor & ) {
-        if( rml ) {
-            return;
-        }
-        werase( w_info );
-
-        draw_border( w_info );
-        center_print( w_info, 0, c_light_gray, string_format( _( "Info" ) ) );
-        if( currwin == window_mode::CHANGE_WIN || currwin == window_mode::TEXT_WIN ) {
-            fold_and_print( w_info, point_south_east, getmaxx( w_info ) - 2, c_white, string_format( "%s",
-                            c_diary->get_desc_map()[selected[window_mode::CHANGE_WIN]] ) );
-        }
-
-        wnoutrefresh( w_info );
+    ui_info.on_redraw( []( const ui_adaptor & ) {
+        // RmlUi owns the screen; curses fallback removed (rip-out B).
     } );
 
     while( true ) {

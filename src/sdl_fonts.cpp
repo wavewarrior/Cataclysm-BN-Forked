@@ -1,4 +1,4 @@
-#include "sdltiles.h" // IWYU pragma: associated  — tilecontext, overmap_tilecontext, windowsPalette, sdl_text_outline_options, draw_sdl_text_outlined
+#include "sdltiles.h" // IWYU pragma: associated  — tilecontext, overmap_tilecontext, windowsPalette
 #include "sdl_fonts.h"
 
 #include <algorithm>
@@ -21,7 +21,7 @@
 
 static auto map_font_width() -> int
 {
-    if( use_tiles && tilecontext ) {
+    if( tilecontext ) {
         return tilecontext->get_tile_width();
     }
     return ( g_display.map_font ? g_display.map_font.get() : g_display.font.get() )->width;
@@ -29,7 +29,7 @@ static auto map_font_width() -> int
 
 static auto map_font_height() -> int
 {
-    if( use_tiles && tilecontext ) {
+    if( tilecontext ) {
         return tilecontext->get_tile_height();
     }
     return ( g_display.map_font ? g_display.map_font.get() : g_display.font.get() )->height;
@@ -37,7 +37,7 @@ static auto map_font_height() -> int
 
 static auto overmap_font_width() -> int
 {
-    if( use_tiles && overmap_tilecontext && use_tiles_overmap ) {
+    if( overmap_tilecontext ) {
         return overmap_tilecontext->get_tile_width();
     }
     return ( g_display.overmap_font ? g_display.overmap_font.get() : g_display.font.get() )->width;
@@ -45,7 +45,7 @@ static auto overmap_font_width() -> int
 
 static auto overmap_font_height() -> int
 {
-    if( use_tiles && overmap_tilecontext && use_tiles_overmap ) {
+    if( overmap_tilecontext ) {
         return overmap_tilecontext->get_tile_height();
     }
     return ( g_display.overmap_font ? g_display.overmap_font.get() : g_display.font.get() )->height;
@@ -71,27 +71,6 @@ auto draw_string( Font &font,
         p.x += mk_wcwidth( ch32 ) * font.width;
     }
     return p;
-}
-
-void draw_sdl_text_outlined( const sdl_text_outline_options &opts )
-{
-    if( !g_display.font || !g_display.renderer || opts.text.empty() ) {
-        return;
-    }
-
-    const auto outline_thickness = std::max( 0, opts.outline_thickness );
-    for( auto y = -outline_thickness; y <= outline_thickness; ++y ) {
-        for( auto x = -outline_thickness; x <= outline_thickness; ++x ) {
-            if( x != 0 || y != 0 ) {
-                draw_string( *g_display.font, g_display.renderer, g_display.geometry,
-                             opts.text, opts.pos_pixel + point( x, y ),
-                             static_cast<unsigned char>( opts.outline_color ) );
-            }
-        }
-    }
-    draw_string( *g_display.font, g_display.renderer, g_display.geometry,
-                 opts.text, opts.pos_pixel,
-                 static_cast<unsigned char>( opts.text_color ) );
 }
 
 // ---------------------------------------------------------------------------

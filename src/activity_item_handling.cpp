@@ -86,7 +86,6 @@
 
 namespace views = std::views;
 
-static const activity_id ACT_BUTCHER_FULL( "ACT_BUTCHER_FULL" );
 static const activity_id ACT_CHOP_LOGS( "ACT_CHOP_LOGS" );
 static const activity_id ACT_CHOP_PLANKS( "ACT_CHOP_PLANKS" );
 static const activity_id ACT_CHOP_TREE( "ACT_CHOP_TREE" );
@@ -2316,10 +2315,13 @@ static bool butcher_corpse_activity( player &p, const tripoint_bub_ms &src_loc,
             if( corpse.size >= creature_size::medium && reason != do_activity_reason::NEEDS_BIG_BUTCHERING ) {
                 continue;
             }
+            std::vector<item *> targets = { &*elem };
             elem->set_var( "activity_var", p.name );
-            p.assign_activity( ACT_BUTCHER_FULL, 0, true );
-            p.activity->targets.emplace_back( elem );
-            p.activity->placement = here.bub_to_abs( src_loc );
+            p.assign_activity( std::make_unique<player_activity>(
+                std::make_unique<butchery_activity_actor>(
+                    BUTCHER_FULL, targets, here.bub_to_abs( src_loc )
+                )
+            ) );
             return true;
         }
     }
@@ -3241,9 +3243,11 @@ static bool generic_multi_activity_do( player &p, const activity_id &act_id,
         iexamine::harvest_plant( p, src_loc, true );
     } else if( reason == do_activity_reason::NEEDS_TILLING && here.has_flag( flag_PLOWABLE, src_loc ) &&
                p.has_quality( qual_DIG, 1 ) && !here.has_furn( src_loc ) ) {
-        p.backlog.emplace_front( std::make_unique<player_activity>( act_id ) );
+        // assign_activity push_fronts the current (now-empty) activity to the backlog, so the
+        // multi-farm act_id must be emplaced AFTER it to sit at the front and resume after churn.
         p.assign_activity( std::make_unique<player_activity>(
                                std::make_unique<churn_activity_actor>( src ) ) );
+        p.backlog.emplace_front( std::make_unique<player_activity>( act_id ) );
         return false;
     } else if( reason == do_activity_reason::NEEDS_PLANTING ) {
         std::vector<zone_data> zones = mgr.get_zones( zone_type_FARM_PLOT,

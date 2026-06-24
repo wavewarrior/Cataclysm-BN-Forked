@@ -581,55 +581,6 @@ auto draw_lighting_overlays( lighting::render_state &rs,
             rs.queue_ui_rect( cx - 1.f, cy - 10.f, 2.f, 20.f, 0.f, 1.f, 1.f, 0.9f );
         }
 
-        // ── Tier 3: per-tile (x,y) coord labels ────────────────────────────
-        constexpr int TIER3_RADIUS = 6;
-        constexpr int TIER3_STEP   = 2;
-        const bool cache_stale =
-            s_emo.player_x != s_emo.cached_player_x ||
-            s_emo.player_y != s_emo.cached_player_y ||
-            s_emo.cam_off_x != s_emo.cached_cam_off_x ||
-            s_emo.cam_off_y != s_emo.cached_cam_off_y ||
-            s_emo.tile_px != s_emo.cached_tile_px ||
-            s_emo.screen_w != s_emo.cached_screen_w ||
-            s_emo.screen_h != s_emo.cached_screen_h;
-        if( cache_stale && tp >= 16.f ) {
-            s_emo.tile_labels.clear();
-            const int mx0 = s_emo.player_x - TIER3_RADIUS;
-            const int my0 = s_emo.player_y - TIER3_RADIUS;
-            const int mx1 = s_emo.player_x + TIER3_RADIUS;
-            const int my1 = s_emo.player_y + TIER3_RADIUS;
-            for( int my = my0; my <= my1; my += TIER3_STEP ) {
-                for( int mx = mx0; mx <= mx1; mx += TIER3_STEP ) {
-                    const float tx = ( mx + s_emo.cam_off_x ) * tp + s_emo.op_x + 1.f;
-                    const float ty = ( my + s_emo.cam_off_y ) * tp + s_emo.op_y + 1.f;
-                    s_emo.tile_labels.push_back( {
-                        tx, ty,
-                        std::to_string( mx ) + "," + std::to_string( my )
-                    } );
-                }
-            }
-            s_emo.cached_player_x  = s_emo.player_x;
-            s_emo.cached_player_y  = s_emo.player_y;
-            s_emo.cached_cam_off_x = s_emo.cam_off_x;
-            s_emo.cached_cam_off_y = s_emo.cam_off_y;
-            s_emo.cached_tile_px   = tp;
-            s_emo.cached_screen_w  = s_emo.screen_w;
-            s_emo.cached_screen_h  = s_emo.screen_h;
-        }
-        if( g_display.font ) {
-            for( const TileCoordGlyph &g_lbl : s_emo.tile_labels ) {
-                const float lw = static_cast<float>( g_lbl.text.size() ) *
-                                 static_cast<float>( g_display.font->width );
-                rs.queue_ui_rect( g_lbl.x - 1.f, g_lbl.y - 1.f,
-                                  lw + 2.f, static_cast<float>( g_display.font->height ) + 2.f,
-                                  0.f, 0.f, 0.f, 0.7f );
-                draw_string( *g_display.font, g_display.renderer, g_display.geometry,
-                             g_lbl.text,
-                             point( static_cast<int>( g_lbl.x ),
-                                    static_cast<int>( g_lbl.y ) ),
-                             14 );
-            }
-        }
     }
 }
 

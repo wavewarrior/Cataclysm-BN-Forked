@@ -1,0 +1,41 @@
+/* Layout for the message-log filter-help overlay (Messages::dialog filtering).
+   Palette/border/scrollbar and the .panel frame come from theme.rcss (linked
+   first in messages_filter_help.rml); this file owns only this overlay's layout.
+   A bottom-anchored box ~matching the log panel width (msg-panel is 80%), sitting
+   where the curses w_filter_help used to draw — the curses string_input field
+   composites over the blank .mfh-input-row at the bottom. Lengths in dp. */
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    width: 100%;
+    height: 100%;
+}
+
+.mfh-wrap {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    margin-bottom: 4dp;
+}
+
+.mfh-panel {
+    width: 80%;
+    display: flex;
+    flex-direction: column;
+}
+
+.mfh-text {
+    display: block;
+    white-space: pre-wrap;
+    color: {{fg}};
+}
+
+/* Blank line reserved for the curses input field drawn on top. */
+.mfh-input-row {
+    display: block;
+    height: 1em;
+    margin-top: 2dp;
+    border-top: 1dp {{bg4}};
+}

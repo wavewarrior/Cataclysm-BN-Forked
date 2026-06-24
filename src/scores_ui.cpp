@@ -93,6 +93,13 @@ struct scores_rml_session {
     Rml::Element *scroll = nullptr;  // #scores-body, scrolled from C++
 };
 
+// Data-model for the tab-less kills screen (show_kills). One colour-tagged body
+// string; uses the rml_doc harness rather than show_scores_ui's inline boilerplate.
+struct scores_kills_session {
+    Rml::String body_rml;
+    Rml::DataModelHandle handle;
+};
+
 bool g_scores_types_registered = false;
 bool g_scores_model_active = false;
 
@@ -307,6 +314,13 @@ void show_kills( kill_tracker &kills )
     catacurses::window w_view;
     scrolling_text_view view( w_view );
 
+    // RmlUi render path: a single scrolling text pane (no tabs) — the show_kills
+    // twin of show_scores_ui's body, on the rml_doc harness. kdata declared before
+    // the doc so it outlives it; scroll element captured for keyboard SetScrollTop.
+    std::unique_ptr<scores_kills_session> kdata;
+    rml_doc kills_rml;
+    Rml::Element *scroll_el = nullptr;
+
     ui_adaptor ui;
     const auto &init_windows = [&]( ui_adaptor & ui ) {
         w = new_centered_win( TERMY - 2, FULL_SCREEN_WIDTH );
@@ -319,7 +333,32 @@ void show_kills( kill_tracker &kills )
     // initialize explicitly here since w_view is used before first redraw
     init_windows( ui );
 
+    kills_rml.open( scores_rmlui_enabled(), "scores_kills", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        kdata = std::make_unique<scores_kills_session>();
+        kdata->body_rml = cata_text_to_rml( kills.get_kills_text() );
+        c.Bind( "body_rml", &kdata->body_rml );
+        kdata->handle = c.GetModelHandle();
+    } );
+    if( kills_rml ) {
+        scroll_el = kills_rml.document()->GetElementById( "scores-kills-body" );
+    }
+
+    // Scroll the RmlUi body element by a fraction of its viewport (cf. show_scores_ui).
+    const auto scroll_rml = [&]( float frac ) {
+        if( scroll_el == nullptr ) {
+            return;
+        }
+        const float ch = scroll_el->GetClientHeight();
+        const float max_top = std::max( 0.0f, scroll_el->GetScrollHeight() - ch );
+        const float t = std::clamp( scroll_el->GetScrollTop() + frac * ch, 0.0f, max_top );
+        scroll_el->SetScrollTop( t );
+    };
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( kills_rml ) {
+            return;
+        }
         werase( w );
         draw_border( w );
         wnoutrefresh( w );
@@ -330,15 +369,16 @@ void show_kills( kill_tracker &kills )
         ui_manager::redraw();
         const std::string action = ctxt.handle_input();
         if( action == "DOWN" ) {
-            view.scroll_down();
+            kills_rml ? scroll_rml( 0.1f ) : view.scroll_down();
         } else if( action == "UP" ) {
-            view.scroll_up();
+            kills_rml ? scroll_rml( -0.1f ) : view.scroll_up();
         } else if( action == "PAGE_DOWN" ) {
-            view.page_down();
+            kills_rml ? scroll_rml( 0.9f ) : view.page_down();
         } else if( action == "PAGE_UP" ) {
-            view.page_up();
+            kills_rml ? scroll_rml( -0.9f ) : view.page_up();
         } else if( action == "CONFIRM" || action == "QUIT" ) {
             break;
         }
     }
+    kills_rml.close();
 }

@@ -35,6 +35,7 @@
 
 #include "rml_screen.h"
 #include "rml_util.h"
+#include "lighting/rmlui_layer.h"
 
 safemode &get_safemode()
 {
@@ -93,6 +94,36 @@ void register_safemode_rml_types( Rml::DataModelConstructor &c )
     rh.RegisterMember( "sel_col", &safemode_rml_row::sel_col );
     c.RegisterArray<Rml::Vector<safemode_rml_row>>();
     g_safemode_types_registered = true;
+}
+
+// test_pattern popup (safemode::test_pattern): a centered box over the still-open
+// "safemode" rules screen listing the monster names a rule matches. Render-only —
+// the keyboard owns up/down + quit; mouse click/hover moves the cursor. Mirrors the
+// autopickup_test twin.
+struct safemode_test_row {
+    Rml::String num_rml;
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct safemode_test_session {
+    Rml::String title_rml;
+    Rml::Vector<safemode_test_row> rows;
+    Rml::DataModelHandle handle;
+};
+
+bool g_safemode_test_types_registered = false;
+
+void register_safemode_test_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_safemode_test_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<safemode_test_row> rh = c.RegisterStruct<safemode_test_row>();
+    rh.RegisterMember( "num_rml", &safemode_test_row::num_rml );
+    rh.RegisterMember( "name_rml", &safemode_test_row::name_rml );
+    rh.RegisterMember( "selected", &safemode_test_row::selected );
+    c.RegisterArray<Rml::Vector<safemode_test_row>>();
+    g_safemode_test_types_registered = true;
 }
 } // namespace
 
@@ -414,7 +445,33 @@ void safemode::show( const std::string &custom_name_in, bool is_safemode_in )
                 init_help_window( help_ui );
                 help_ui.on_screen_resize( init_help_window );
 
+                // RmlUi backdrop: a passive static help doc stacked UNDER the
+                // string_input "Safe Mode Rule:" popup, replacing the curses help
+                // window. Category-specific (monster vs sound wildcards); no data
+                // model — literal English in the .rml (same i18n gap as the column
+                // heads). Closed after the rule entry below.
+                Rml::ElementDocument *help_doc = nullptr;
+                if( safemode_rmlui_enabled() && rmlui_layer::ready() ) {
+                    const char *help_rml = nullptr;
+                    switch( current_tab[line].category ) {
+                        case Categories::HOSTILE_SPOTTED:
+                            help_rml = "gui/safemode_help_monster.rml";
+                            break;
+                        case Categories::SOUND:
+                            help_rml = "gui/safemode_help_sound.rml";
+                            break;
+                        default:
+                            break;
+                    }
+                    if( help_rml ) {
+                        help_doc = rmlui_layer::open_document( PATH_INFO::datadir() + help_rml, true );
+                    }
+                }
+
                 help_ui.on_redraw( [&]( const ui_adaptor & ) {
+                    if( help_doc ) {
+                        return;
+                    }
                     switch( current_tab[line].category ) {
                         case Categories::HOSTILE_SPOTTED:
                             // NOLINTNEXTLINE(cata-use-named-point-constants)
@@ -455,6 +512,9 @@ void safemode::show( const std::string &custom_name_in, bool is_safemode_in )
                                          .width( 30 )
                                          .text( current_tab[line].rule )
                                          .query_string() );
+                if( help_doc ) {
+                    rmlui_layer::close_document( help_doc );
+                }
             } else if( column == COLUMN_WHITE_BLACKLIST ) {
                 current_tab[line].whitelist = !current_tab[line].whitelist;
             } else if( column == COLUMN_CATEGORY ) {
@@ -624,7 +684,33 @@ void safemode::test_pattern( const int tab_in, const int row_in )
     ctxt.register_action( "QUIT" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
 
+    // RmlUi render path (mirrors autopickup_test). Render-only: the loop below owns
+    // nav; the doc stacks over the still-open "safemode" rules screen. tdata is
+    // declared BEFORE test_rml so it outlives the doc.
+    std::unique_ptr<safemode_test_session> tdata;
+    rml_doc test_rml;
+    const auto sync_test_rml = [&]() {
+        if( !test_rml ) {
+            return;
+        }
+        tdata->title_rml = cata_text_to_rml( buf );
+        tdata->rows.clear();
+        for( int i = 0; i < static_cast<int>( creature_list.size() ); ++i ) {
+            safemode_test_row r;
+            r.num_rml = cata_text_to_rml( string_format( "%d", i + 1 ) );
+            r.name_rml = cata_text_to_rml( creature_list[i] );
+            r.selected = ( line == i );
+            tdata->rows.push_back( r );
+        }
+        tdata->handle.DirtyVariable( "title_rml" );
+        tdata->handle.DirtyVariable( "rows" );
+    };
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( test_rml ) {
+            sync_test_rml();
+            return;
+        }
         draw_border( w_test_rule_border, BORDER_COLOR, buf, hilite( c_white ) );
         center_print( w_test_rule_border, content_height + 1, red_background( c_white ),
                       _( "Lists monsters regardless of their attitude." ) );
@@ -657,6 +743,26 @@ void safemode::test_pattern( const int tab_in, const int row_in )
         }
 
         wnoutrefresh( w_test_rule_content );
+    } );
+
+    test_rml.open( safemode_rmlui_enabled(), "safemode_test", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        tdata = std::make_unique<safemode_test_session>();
+        register_safemode_test_rml_types( c );
+        c.Bind( "title_rml", &tdata->title_rml );
+        c.Bind( "rows", &tdata->rows );
+        // Click/hover a row to move the cursor onto it; QUIT (keyboard) closes.
+        c.BindEventCallback( "on_select",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            if( idx >= 0 && idx < static_cast<int>( creature_list.size() ) ) {
+                line = idx;
+            }
+        } );
+        tdata->handle = c.GetModelHandle();
     } );
 
     while( true ) {

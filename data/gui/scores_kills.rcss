@@ -1,0 +1,29 @@
+/* Layout for the kills screen (show_kills) — the tab-less twin of scores.rcss.
+   Palette/border/scrollbar come from theme.rcss (linked first in scores_kills.rml);
+   this file owns only the screen's own layout. Lengths in dp.
+
+   Same two RmlUi-6.2 gotchas pre-empted as scores.rcss: the panel needs a
+   definite height (else it shrink-wraps), and the scroll child needs an explicit
+   vh max-height (else its overflow region collapses to 0 and clips the text). */
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.sk-panel {
+    width: 90%;
+    height: 90%;
+    display: flex;
+    flex-direction: column;
+}
+
+.sk-body {
+    flex: 1;
+    min-height: 0;
+    max-height: 86vh;
+    overflow-y: auto;
+    padding: 4dp 8dp;
+}

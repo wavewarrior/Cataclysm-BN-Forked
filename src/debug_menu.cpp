@@ -1452,7 +1452,7 @@ void benchmark( const int max_difference, bench_kind kind )
     DebugLog( DL::Info, DC::Main ) << bench_name << ":\n" <<
                                    "\n| USE_TILES |  RENDERER | FRAMEBUFFER_ACCEL | USE_COLOR_MODULATED_TEXTURES | FPS |" <<
                                    "\n|:---:|:---:|:---:|:---:|:---:|\n| " <<
-                                   get_option<bool>( "USE_TILES" ) << " | " <<
+                                   use_tiles << " | " <<
                                    get_option<std::string>( "RENDERER" ) << " | " <<
                                    get_option<bool>( "FRAMEBUFFER_ACCEL" ) << " | " <<
                                    get_option<bool>( "USE_COLOR_MODULATED_TEXTURES" ) << " | " <<

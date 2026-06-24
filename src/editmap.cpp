@@ -14,9 +14,12 @@
 #include <utility>
 #include <vector>
 
+#include <RmlUi/Core.h>
+
 #include "avatar.h"
 #include "calendar.h"
 #include "cata_utility.h"
+#include "catacharset.h"
 #include "coordinates.h"
 #include "creature.h"
 #include "debug.h"
@@ -40,6 +43,10 @@
 #include "omdata.h"
 #include "output.h"
 #include "overmapbuffer.h"
+#include "path_info.h"
+#include "rml_screen.h"
+#include "rml_util.h"
+#include "lighting/rmlui_layer.h"
 #include "scent_map.h"
 #include "shadowcasting.h"
 #include "string_formatter.h"
@@ -373,6 +380,20 @@ std::optional<tripoint_bub_ms> editmap::edit()
     restore_on_out_of_scope<std::string> info_txt_prev( info_txt_curr );
     restore_on_out_of_scope<std::string> info_title_prev( info_title_curr );
 
+    // RmlUi backdrop for the w_info panel (passive doc over the map). Opened for the
+    // whole edit() scope so it covers the sub-editors invoked from the loop below;
+    // update_view_with_help fills #editmap-info while info_doc_ is set. RAII close on
+    // every exit path. The map cursor/selection stay on the GPU path; menus = uilists.
+    if( editmap_rmlui_enabled() && rmlui_layer::ready() ) {
+        info_doc_ = rmlui_layer::open_document( PATH_INFO::datadir() + "gui/editmap_info.rml", true );
+    }
+    on_out_of_scope close_info_doc( [this]() {
+        if( info_doc_ ) {
+            rmlui_layer::close_document( info_doc_ );
+            info_doc_ = nullptr;
+        }
+    } );
+
     do {
         if( target_list.empty() ) {
             target_list.push_back( target ); // 'editmap.target_list' always has point 'editmap.target' at least
@@ -513,7 +534,7 @@ void editmap::draw_main_ui_overlay()
         here.drawsq( g->w_terrain, target, drawsq_params().highlight( true ).center( target ) );
     }
     // give some visual indication of different cursor moving modes
-    if( use_tiles && altblink ) {
+    if( altblink ) {
         point_bub_ms p[2] = { origin.xy(), target.xy() };
         if( editshape == editmap_rect || editshape == editmap_rect_filled || p[0] == p[1] ) {
             if( p[0] == p[1] ) {
@@ -537,40 +558,15 @@ void editmap::draw_main_ui_overlay()
         g->draw_cursor( target );
     }
 
-    // hilight target_list points if blink=true
+    // hilight target_list points if blink=true. Tiles-only: the curses mvwputch
+    // fallback that drew onto w_terrain is gone (sdl_curses_draw skips w_terrain
+    // glyphs when use_tiles), so this is the GPU highlight path unconditionally.
     if( blink ) {
         for( const auto &p : target_list ) {
-            if( use_tiles ) {
-                if( draw_target_override ) {
-                    draw_target_override( p );
-                } else {
-                    g->draw_highlight( p );
-                }
+            if( draw_target_override ) {
+                draw_target_override( p );
             } else {
-                // but only if there's no vehicles/mobs/npcs on a point
-                if( !here.veh_at( p ) && !g->critter_at( p ) ) {
-                    const ter_t &terrain = here.ter( p ).obj();
-                    char t_sym = terrain.symbol();
-                    nc_color t_col = terrain.color();
-
-                    if( here.has_furn( p ) ) {
-                        const furn_t &furniture_type = here.furn( p ).obj();
-                        t_sym = furniture_type.symbol();
-                        t_col = furniture_type.color();
-                    }
-                    const field &t_field = here.field_at( p );
-                    if( t_field.field_count() > 0 ) {
-                        field_type_id t_ftype = t_field.displayed_field_type();
-                        const field_entry *t_fld = t_field.find_field( t_ftype );
-                        if( t_fld != nullptr ) {
-                            t_col = t_fld->color();
-                            t_sym = t_fld->symbol()[0];
-                        }
-                    }
-                    t_col = altblink ? green_background( t_col ) : cyan_background( t_col );
-                    tripoint scrpos = pos2screen( p );
-                    mvwputch( g->w_terrain, scrpos.xy(), t_col, t_sym );
-                }
+                g->draw_highlight( p );
             }
         }
     }
@@ -583,18 +579,9 @@ void editmap::draw_main_ui_overlay()
         }
     }
 
-    // draw arrows if altblink is set (ie, [m]oving a large selection
-    if( blink && altblink ) {
-        const point mp = tmax / 2 + point_south_east;
-        mvwputch( g->w_terrain, point( 1, mp.y ), c_yellow, '<' );
-        mvwputch( g->w_terrain, point( tmax.x - 1, mp.y ), c_yellow, '>' );
-        mvwputch( g->w_terrain, point( mp.x, 1 ), c_yellow, '^' );
-        mvwputch( g->w_terrain, point( mp.x, tmax.y - 1 ), c_yellow, 'v' );
-    }
-
     if( tmpmap_ptr ) {
         tinymap &tmpmap = *tmpmap_ptr;
-        if( use_tiles ) {
+        {
             const auto origin_p = target.xy() + point( 1 - SEEX, 1 - SEEY );
             for( int x = 0; x < SEEX * 2; x++ ) {
                 for( int y = 0; y < SEEY * 2; y++ ) {
@@ -663,19 +650,145 @@ void editmap::draw_main_ui_overlay()
                 g->draw_monster_override( it.first, std::get<0>( it.second ), std::get<1>( it.second ),
                                           std::get<2>( it.second ), std::get<3>( it.second ) );
             }
-        } else {
-            hilights["mapgentgt"].draw( *this, true );
-            tmpmap.reset_vehicle_cache( );
-            drawsq_params params = drawsq_params().center( tripoint_bub_ms( SEEX - 1, SEEY - 1, target.z() ) );
-            for( const tripoint_bub_ms &p : tmpmap.points_on_zlevel() ) {
-                tmpmap.drawsq( g->w_terrain, p, params );
-            }
         }
     }
 }
 
+bool &editmap_rmlui_enabled()
+{
+    // Default ON — RmlUi is the shipped path; toggle off via F4 to A/B the curses
+    // fallback. See rml_screen.h.
+    static bool enabled = true;
+    return enabled;
+}
+
+// Colour-tagged text mirroring the w_info panel (the curses update_view_with_help
+// below). Symbols/fields/trap keep their nc_color via colorize(); the creature and
+// vehicle sections reuse the shared print_info_text() / part_list_text() producers.
+// The help title + keybinding text trail at the end (the curses path bottom-anchors
+// them; in document flow they read naturally last).
+std::string editmap::info_panel_text( const std::string &txt, const std::string &title ) const
+{
+    Character &player_character = get_player_character();
+    map &here = get_map();
+
+    const optional_vpart_position vp = here.veh_at( target );
+    std::string veh_msg;
+    if( !vp ) {
+        veh_msg = pgettext( "map editor vehicle status", "no" );
+    } else if( vp->is_inside() ) {
+        veh_msg = pgettext( "map editor vehicle status", "in" );
+    } else {
+        veh_msg = pgettext( "map editor vehicle status", "out" );
+    }
+
+    const ter_t &terrain_type = here.ter( target ).obj();
+    const furn_t &furniture_type = here.furn( target ).obj();
+
+    std::string s;
+    s += colorize( string_format( "< %d,%d >", target.x(), target.y() ), c_light_gray ) + "\n";
+    s += colorize( utf32_to_utf8( terrain_type.symbol() ), terrain_type.color() ) + " " +
+         string_format( _( "%d: %s; movecost %d" ), here.ter( target ).to_i(),
+                        terrain_type.name(), terrain_type.movecost ) + "\n";
+    if( here.furn( target ).to_i() > 0 ) {
+        s += colorize( utf32_to_utf8( furniture_type.symbol() ), furniture_type.color() ) + " " +
+             string_format( _( "%d: %s; movecost %d movestr %d" ), here.furn( target ).to_i(),
+                            furniture_type.name(), furniture_type.movecost,
+                            furniture_type.move_str_req ) + "\n";
+    }
+    const auto &map_cache = here.get_cache( target.z() );
+    const auto u_see_msg = player_character.sees( target ) ?
+                           pgettext( "map editor visibility value", "yes" ) :
+                           pgettext( "map editor visibility value", "no" );
+    s += string_format( _( "dist: %d u_see: %s veh: %s scent: %d" ),
+                        rl_dist( player_character.bub_pos(), target ), u_see_msg, veh_msg,
+                        g->scent.get( target ) ) + "\n";
+    s += string_format( _( "sight_range: %d, daylight_sight_range: %d," ),
+                        player_character.sight_range( g->light_level( player_character.bub_pos().z() ) ),
+                        player_character.sight_range( current_daylight_level( calendar::turn ) ) ) + "\n";
+    s += string_format( _( "cache{transp:%.4f seen:%.4f cam:%.4f}" ),
+                        map_cache.transparency_cache[map_cache.idx( target.x(), target.y() )],
+                        map_cache.seen_cache[map_cache.idx( target.x(), target.y() )],
+                        map_cache.camera_cache[map_cache.idx( target.x(), target.y() )] ) + "\n";
+    const auto &visibility_cache = here.get_visibility_variables_cache();
+    const auto al = map::apparent_light_helper( map_cache, target,
+                    visibility_cache.visibility_scale_factor );
+    const auto apparent_light = static_cast<int>(
+                                    here.apparent_light_at( target, visibility_cache ) );
+    s += string_format( _( "outside: %d sheltered: %d floor: %d obstructed: %d" ),
+                        static_cast<int>( here.is_outside( target ) ),
+                        static_cast<int>( here.is_sheltered( target ) ),
+                        static_cast<int>( here.has_floor( target ) ),
+                        static_cast<int>( al.obstructed ) ) + "\n";
+    s += string_format( _( "light_at: %s" ),
+                        map_cache.lm[map_cache.idx( target.x(), target.y() )].to_string() ) + "\n";
+    s += string_format( _( "apparent light: %.5f (%d)" ), al.apparent_light, apparent_light ) + "\n";
+    std::string extras;
+    if( vp ) {
+        extras += _( " [vehicle]" );
+    }
+    if( !here.is_outside( target ) ) {
+        extras += _( " [indoors]" );
+    } else if( here.is_sheltered( target ) ) {
+        extras += _( " [sheltered]" );
+    }
+    if( here.has_flag( TFLAG_SUPPORTS_ROOF, target ) ) {
+        extras += _( " [roof]" );
+    }
+    s += string_format( "%s %s", here.features( target ), extras ) + "\n";
+    for( auto &fld : here.get_field( target ) ) {
+        const field_entry &cur = fld.second;
+        s += colorize( string_format( _( "field: %s L:%d[%s] A:%d" ),
+                                      cur.get_field_type().id().str(),
+                                      cur.get_field_intensity(), cur.name(),
+                                      to_turns<int>( cur.get_field_age() ) ), cur.color() ) + "\n";
+    }
+    const trap &cur_trap = here.tr_at( target );
+    if( cur_trap.loadid != tr_null ) {
+        s += colorize( string_format( _( "trap: %s (%d)" ), cur_trap.name(),
+                                      cur_trap.loadid.to_i() ), cur_trap.color ) + "\n";
+    }
+    const Creature *critter = g->critter_at( target );
+    if( critter != nullptr ) {
+        s += critter->print_info_text() + "\n";
+    } else if( vp ) {
+        s += string_format( _( "There is a %s there.  Parts:" ), vp->vehicle().name ) + "\n";
+        s += vp->vehicle().part_list_text( vp->part_index() ) + "\n";
+    }
+    map_stack target_stack = here.i_at( target );
+    const int target_stack_size = target_stack.size();
+    if( !here.has_flag( "CONTAINER", target ) && target_stack_size > 0 ) {
+        s += string_format( _( "There is a %s there." ),
+                            ( *target_stack.begin() )->tname() ) + "\n";
+        if( target_stack_size > 1 ) {
+            s += string_format( vgettext( "There is %d other item there as well.",
+                                          "There are %d other items there as well.",
+                                          target_stack_size - 1 ),
+                                target_stack_size - 1 ) + "\n";
+        }
+    }
+    if( here.has_graffiti_at( target ) ) {
+        s += string_format( here.ter( target ) == t_grave_new ? _( "Graffiti: %s" ) : _( "Inscription: %s" ),
+                            here.graffiti_at( target ) ) + "\n";
+    }
+    if( !title.empty() ) {
+        s += "\n" + string_format( "< <color_cyan>%s</color> >", title ) + "\n";
+    }
+    if( !txt.empty() ) {
+        s += txt + "\n";
+    }
+    return cata_text_to_rml( s );
+}
+
 void editmap::update_view_with_help( const std::string &txt, const std::string &title )
 {
+    if( info_doc_ ) {
+        // RmlUi backdrop path: fill #editmap-info, skip the curses w_info draw.
+        if( Rml::Element *el = info_doc_->GetElementById( "editmap-info" ) ) {
+            el->SetInnerRML( info_panel_text( txt, title ) );
+        }
+        return;
+    }
     // updating info
     werase( w_info );
 

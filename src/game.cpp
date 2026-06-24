@@ -833,7 +833,6 @@ bool game::start_game()
 
     init_autosave();
 
-    loading_image_splash background;
     static_popup popup;
     popup.message( "%s", _( "Please wait as we build your world" ) );
     ui_manager::redraw();
@@ -3249,10 +3248,8 @@ input_context get_default_mode_input_context()
     ctxt.register_action( "debug_submap_grid" );
     ctxt.register_action( "debug_hour_timer" );
     ctxt.register_action( "debug_mode" );
-    if( use_tiles ) {
-        ctxt.register_action( "zoom_out" );
-        ctxt.register_action( "zoom_in" );
-    }
+    ctxt.register_action( "zoom_out" );
+    ctxt.register_action( "zoom_in" );
     ctxt.register_action( "toggle_fullscreen" );
     ctxt.register_action( "toggle_pixel_minimap" );
     ctxt.register_action( "toggle_zone_overlay" );
@@ -4266,16 +4263,7 @@ shared_ptr_fast<game::draw_callback_t>
             }
         }
         if( zone_start && zone_end ) {
-            const point_rel_ms offset2( g->u.view_offset.xy() + point_rel_ms( g->u.bub_pos().x() - getmaxx(
-                                            g->w_terrain ) / 2,
-                                        g->u.bub_pos().y() - getmaxy( g->w_terrain ) / 2 ) );
-
-            tripoint_rel_ms offset;
-            if( use_tiles ) {
-                offset = tripoint_rel_ms::zero(); //TILES
-            } else {
-                offset = tripoint_rel_ms( offset2, 0 ); //CURSES
-            }
+            const tripoint_rel_ms offset = tripoint_rel_ms::zero(); //TILES
 
             const tripoint_abs_ms start( std::min( zone_start->x(), zone_end->x() ),
                                          std::min( zone_start->y(), zone_end->y() ),
@@ -4362,117 +4350,18 @@ void game::draw( ui_adaptor &ui )
     ui.set_cursor( w_terrain, -u.view_offset.xy().raw() + point( POSX, POSY ) );
 }
 
-void game::draw_panels( bool force_draw )
+void game::draw_panels( bool /* force_draw */ )
 {
     ZoneScopedN( "draw_panels" );
-    static int previous_turn = -1;
-    const int current_turn = to_turns<int>( calendar::turn - calendar::turn_zero );
-    const bool draw_this_turn = current_turn > previous_turn || force_draw;
-    auto &mgr = panel_manager::get_manager();
-    // Sidebar HUD (Tier 7, slice 3 structural pivot): when enabled, a persistent RmlUi
-    // document = ONE flex column owns the WHOLE sidebar. Open lazily + sync every call
-    // (rebuilds rows + repositions the container); close (no-op if already closed) when
-    // disabled so flipping the F4 toggle off restores curses. When active, skip the entire
-    // curses sidebar draw below — the column renders everything (migrated panels + visible
-    // placeholders for the rest). previous_turn is advanced so the turn gate stays sane.
+    // Tier-10 curses rip-out: the sidebar is rendered entirely by the RmlUi HUD.
+    // draw_panels only drives that persistent document — open/sync while enabled,
+    // close on toggle-off. The legacy curses panel render path has been removed.
     if( sidebar_hud_rmlui_enabled() ) {
         sidebar_hud_open();
         sidebar_hud_sync( u );
     } else {
         sidebar_hud_close();
     }
-    if( sidebar_hud_active() ) {
-        previous_turn = current_turn;
-        return;
-    }
-    int y = 0;
-    const bool sidebar_right = get_option<std::string>( "SIDEBAR_POSITION" ) == "right";
-    const int spacer = get_option<bool>( "SIDEBAR_SPACERS" ) ? 1 : 0;
-    // First pass: total height (incl. per-panel spacer) of every rendered non-log panel. The
-    // flex log panel (height == -2) absorbs whatever space is left, down to a 3-row minimum.
-    // The log's slot is the remainder, so the total never overshoots TERMY (previously a stray
-    // `+= spacer` on the log pushed the stack one row past the bottom).
-    int fixed_height = 0;
-    for( const window_panel &panel : mgr.get_current_layout() ) {
-        if( panel.toggle && panel.render() ) {
-            const int ph = panel.get_height();
-            if( ph != -2 ) {
-                fixed_height += ph + spacer;
-            }
-        }
-    }
-    const int log_height = std::max( TERMY - fixed_height, 3 );
-
-    // Second pass: draw, clamping each panel to the space left. If a panel can't fully fit (or
-    // a later panel has no room at all), flag overflow so we can mark hidden content instead of
-    // silently dropping it.
-    bool overflow = false;
-    for( const window_panel &panel : mgr.get_current_layout() ) {
-        if( !panel.toggle || !panel.render() ) {
-            continue;
-        }
-        const int remaining = TERMY - y;
-        if( remaining <= 0 ) {
-            overflow = true;
-            break;
-        }
-        // log panel (-2) already has its spacer budget folded into log_height; everything else
-        // reserves its own height plus one spacer row.
-        const int ph = panel.get_height();
-        int h = ph == -2 ? log_height : ph + spacer;
-        if( h > remaining ) {
-            h = remaining;
-            overflow = true;
-        }
-        if( h <= 0 ) {
-            overflow = true;
-            break;
-        }
-        // Tier 7: when the RmlUi HUD is active we never reach here (draw_panels
-        // early-returns above — the HUD column owns the whole sidebar). So this is the
-        // plain curses path.
-        if( panel.always_draw || draw_this_turn ) {
-            panel.draw( u, catacurses::newwin( h, panel.get_width(),
-                                               point( sidebar_right ? TERMX - panel.get_width() : 0, y ) ) );
-        }
-        if( show_panel_adm ) {
-            const std::string panel_name = _( panel.get_name() );
-            const int panel_name_width = utf8_width( panel_name );
-            auto label = catacurses::newwin( 1, panel_name_width, point( sidebar_right ?
-                                             TERMX - panel.get_width() - panel_name_width - 1 : panel.get_width() + 1, y ) );
-            werase( label );
-            mvwprintz( label, point_zero, c_light_red, panel_name );
-            wnoutrefresh( label );
-            label = catacurses::newwin( h, 1,
-                                        point( sidebar_right ? TERMX - panel.get_width() - 1 : panel.get_width(), y ) );
-            werase( label );
-            if( h == 1 ) {
-                mvwputch( label, point_zero, c_light_red, LINE_OXOX );
-            } else {
-                mvwputch( label, point_zero, c_light_red, LINE_OXXX );
-                for( int i = 1; i < h - 1; i++ ) {
-                    mvwputch( label, point( 0, i ), c_light_red, LINE_XOXO );
-                }
-                mvwputch( label, point( 0, h - 1 ), c_light_red, sidebar_right ? LINE_XXOO : LINE_XOOX );
-            }
-            wnoutrefresh( label );
-        }
-        y += h;
-    }
-
-    // Some enabled panels were truncated or pushed off the bottom: mark the sidebar's last row
-    // so hidden content is visible rather than silently lost.
-    if( overflow ) {
-        const int wd = mgr.get_current_layout().begin()->get_width();
-        const int x = sidebar_right ? TERMX - wd : 0;
-        catacurses::window marker = catacurses::newwin( 1, wd, point( x, TERMY - 1 ) );
-        werase( marker );
-        const std::string txt = "▼ more";
-        mvwprintz( marker, point( std::max( 0, ( wd - utf8_width( txt ) ) / 2 ), 0 ),
-                   c_yellow, txt );
-        wnoutrefresh( marker );
-    }
-    previous_turn = current_turn;
 }
 
 void game::draw_pixel_minimap( const catacurses::window &w )
@@ -9883,11 +9772,9 @@ look_around_result game::look_around( bool show_window, tripoint_bub_ms &center,
     ctxt.register_action( "CONFIRM" );
     ctxt.register_action( "QUIT" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
-    if( use_tiles ) {
-        ctxt.register_action( "zoom_out" );
-        ctxt.register_action( "zoom_in" );
-        ctxt.register_action( "debug_tileset" );
-    }
+    ctxt.register_action( "zoom_out" );
+    ctxt.register_action( "zoom_in" );
+    ctxt.register_action( "debug_tileset" );
     ctxt.register_action( "toggle_pixel_minimap" );
     ctxt.register_action( "toggle_zone_overlay" );
 
@@ -12236,29 +12123,27 @@ static void butcher_submenu( const std::vector<item *> &corpses, int corpse = -1
     smenu.query();
     switch( smenu.ret ) {
         case BUTCHER:
-            you.assign_activity( activity_id( "ACT_BUTCHER" ), 0, true );
-            break;
         case BUTCHER_FULL:
-            you.assign_activity( activity_id( "ACT_BUTCHER_FULL" ), 0, true );
-            break;
         case F_DRESS:
-            you.assign_activity( activity_id( "ACT_FIELD_DRESS" ), 0, true );
-            break;
         case BLEED:
-            you.assign_activity( activity_id( "ACT_BLEED" ), 0, true );
-            break;
         case SKIN:
-            you.assign_activity( activity_id( "ACT_SKIN" ), 0, true );
-            break;
         case QUARTER:
-            you.assign_activity( activity_id( "ACT_QUARTER" ), 0, true );
-            break;
         case DISMEMBER:
-            you.assign_activity( activity_id( "ACT_DISMEMBER" ), 0, true );
+        case DISSECT: {
+            std::vector<item *> targets;
+            if( corpse != -1 ) {
+                targets.push_back( corpses[corpse] );
+            } else {
+                targets = corpses;
+            }
+            you.assign_activity( std::make_unique<player_activity>(
+                std::make_unique<butchery_activity_actor>(
+                    static_cast<butcher_type>( smenu.ret ), targets,
+                    get_map().bub_to_abs( you.bub_pos() )
+                )
+            ) );
             break;
-        case DISSECT:
-            you.assign_activity( activity_id( "ACT_DISSECT" ), 0, true );
-            break;
+        }
         default:
             return;
     }
@@ -12486,9 +12371,6 @@ void game::butcher()
                     break;
                 case MULTIBUTCHER:
                     butcher_submenu( corpses );
-                    for( item *&it : corpses ) {
-                        u.activity->targets.emplace_back( it );
-                    }
                     break;
                 case MULTIDISASSEMBLE_ONE:
                     crafting::disassemble_all( u, false );
@@ -12506,7 +12388,6 @@ void game::butcher()
             break;
         case BUTCHER_CORPSE: {
             butcher_submenu( corpses, indexer_index );
-            u.activity->targets.emplace_back( corpses[indexer_index] );
         }
         break;
         case BUTCHER_DISASSEMBLE: {
@@ -13284,10 +13165,11 @@ auto game::place_player( const tripoint_bub_ms &dest_loc, const bool keep_grab )
             }
 
             if( !corpses.empty() ) {
-                u.assign_activity( activity_id( "ACT_BUTCHER" ), 0, true );
-                for( item *&it : corpses ) {
-                    u.activity->targets.emplace_back( it );
-                }
+                u.assign_activity( std::make_unique<player_activity>(
+                    std::make_unique<butchery_activity_actor>(
+                        BUTCHER, corpses, m.bub_to_abs( u.bub_pos() )
+                    )
+                ) );
             }
         } else if( pulp_butcher == "pulp" || pulp_butcher == "pulp_adjacent" ) {
             const auto pulp = [&]( const tripoint_bub_ms & pos ) {
@@ -16043,44 +15925,23 @@ void game::display_toggle_overlay( const action_id action )
 
 void game::display_scent()
 {
-    if( use_tiles ) {
-        display_toggle_overlay( ACTION_DISPLAY_SCENT );
-    } else {
-        int div;
-        bool got_value = query_int( div, _( "Set the Scent Map sensitivity to (0 to cancel)?" ) );
-        if( !got_value || div < 1 ) {
-            add_msg( _( "Never mind." ) );
-            return;
-        }
-        shared_ptr_fast<game::draw_callback_t> scent_cb = make_shared_fast<game::draw_callback_t>( [&]() {
-            scent.draw( w_terrain, div * 2, u.bub_pos() + u.view_offset );
-        } );
-        g->add_draw_callback( scent_cb );
-
-        ui_manager::redraw();
-        inp_mngr.wait_for_any_key();
-    }
+    display_toggle_overlay( ACTION_DISPLAY_SCENT );
 }
 
 void game::display_temperature()
 {
-    if( use_tiles ) {
-        display_toggle_overlay( ACTION_DISPLAY_TEMPERATURE );
-    }
+    display_toggle_overlay( ACTION_DISPLAY_TEMPERATURE );
 }
 
 void game::display_vehicle_ai()
 {
-    if( use_tiles ) {
-        display_toggle_overlay( ACTION_DISPLAY_VEHICLE_AI );
-    }
+    display_toggle_overlay( ACTION_DISPLAY_VEHICLE_AI );
 }
 
 void game::display_visibility()
 {
-    if( use_tiles ) {
-        display_toggle_overlay( ACTION_DISPLAY_VISIBILITY );
-        if( display_overlay_state( ACTION_DISPLAY_VISIBILITY ) ) {
+    display_toggle_overlay( ACTION_DISPLAY_VISIBILITY );
+    if( display_overlay_state( ACTION_DISPLAY_VISIBILITY ) ) {
             std::vector<tripoint_bub_ms> locations;
             uilist creature_menu;
             int num_creatures = 0;
@@ -16105,7 +15966,6 @@ void game::display_visibility()
         } else {
             displaying_visibility_creature = nullptr;
         }
-    }
 }
 
 void game::toggle_debug_hour_timer()
@@ -16138,56 +15998,46 @@ void game::debug_hour_timer::print_time()
 
 void game::display_lighting()
 {
-    if( use_tiles ) {
-        display_toggle_overlay( ACTION_DISPLAY_LIGHTING );
-        if( !g->display_overlay_state( ACTION_DISPLAY_LIGHTING ) ) {
-            return;
-        }
-        uilist lighting_menu;
-        std::vector<std::string> lighting_menu_strings{
-            "Global lighting conditions"
-        };
+    display_toggle_overlay( ACTION_DISPLAY_LIGHTING );
+    if( !g->display_overlay_state( ACTION_DISPLAY_LIGHTING ) ) {
+        return;
+    }
+    uilist lighting_menu;
+    std::vector<std::string> lighting_menu_strings{
+        "Global lighting conditions"
+    };
 
-        int count = 0;
-        for( const auto &menu_str : lighting_menu_strings ) {
-            lighting_menu.addentry( count++, true, MENU_AUTOASSIGN, "%s", menu_str );
-        }
+    int count = 0;
+    for( const auto &menu_str : lighting_menu_strings ) {
+        lighting_menu.addentry( count++, true, MENU_AUTOASSIGN, "%s", menu_str );
+    }
 
-        lighting_menu.w_y_setup = 0;
-        lighting_menu.query();
-        if( ( lighting_menu.ret >= 0 ) &&
-            ( static_cast<size_t>( lighting_menu.ret ) < lighting_menu_strings.size() ) ) {
-            g->displaying_lighting_condition = lighting_menu.ret;
-        }
+    lighting_menu.w_y_setup = 0;
+    lighting_menu.query();
+    if( ( lighting_menu.ret >= 0 ) &&
+        ( static_cast<size_t>( lighting_menu.ret ) < lighting_menu_strings.size() ) ) {
+        g->displaying_lighting_condition = lighting_menu.ret;
     }
 }
 
 void game::display_radiation()
 {
-    if( use_tiles ) {
-        display_toggle_overlay( ACTION_DISPLAY_RADIATION );
-    }
+    display_toggle_overlay( ACTION_DISPLAY_RADIATION );
 }
 
 void game::display_transparency()
 {
-    if( use_tiles ) {
-        display_toggle_overlay( ACTION_DISPLAY_TRANSPARENCY );
-    }
+    display_toggle_overlay( ACTION_DISPLAY_TRANSPARENCY );
 }
 
 void game::display_outside()
 {
-    if( use_tiles ) {
-        display_toggle_overlay( ACTION_DISPLAY_OUTSIDE );
-    }
+    display_toggle_overlay( ACTION_DISPLAY_OUTSIDE );
 }
 
 void game::display_tiles_no_vfx()
 {
-    if( use_tiles ) {
-        display_toggle_overlay( ACTION_DISPLAY_TILES_NO_VFX );
-    }
+    display_toggle_overlay( ACTION_DISPLAY_TILES_NO_VFX );
 }
 
 void game::init_autosave()

@@ -3239,12 +3239,9 @@ int repair_item_actor::use( player &p, item &it, bool, const tripoint_bub_ms & )
         return 0;
     }
 
-    p.assign_activity( ACT_REPAIR_ITEM, 0, p.get_item_position( &it ), INT_MIN );
-    // We also need to store the repair actor subtype in the activity
-    p.activity->str_values.push_back( type );
-    // storing of item_location to support repairs by tools on the ground
-    p.activity->targets.emplace_back( &it );
-    // All repairs are done in the activity, including charge cost and target item selection
+    p.assign_activity( std::make_unique<player_activity>(
+        std::make_unique<repair_item_activity_actor>(
+            safe_reference<item>( it ), type ) ) );
     return 0;
 }
 

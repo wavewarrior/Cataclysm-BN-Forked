@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "activity_actor_definitions.h"
 #include "avatar.h"
 #include "cata_utility.h"
 #include "catacharset.h" // used for utf8_width()
@@ -564,7 +565,8 @@ void show_armor_layers_ui( Character &who )
 
     auto do_return_entry = []() {
         avatar &you = get_avatar();
-        you.assign_activity( ACT_ARMOR_LAYERS, 0 );
+        you.assign_activity( std::make_unique<player_activity>(
+            std::make_unique<armor_layers_activity_actor>() ) );
         you.activity->auto_resume = true;
         you.activity->moves_left = INT_MAX;
     };

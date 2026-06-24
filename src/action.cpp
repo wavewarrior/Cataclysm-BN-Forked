@@ -526,7 +526,7 @@ action_id get_movement_action_from_delta( const tripoint_rel_ms &d, iso_rotate r
         return ACTION_MOVE_UP;
     }
 
-    const bool iso_mode = rot == iso_rotate::yes && use_tiles && tile_iso;
+    const bool iso_mode = rot == iso_rotate::yes && tile_iso;
     if( d.xy() == point_rel_ms::north() ) {
         return iso_mode ? ACTION_MOVE_FORTH_LEFT : ACTION_MOVE_FORTH;
     } else if( d.xy() == point_rel_ms::north_east() ) {
@@ -548,7 +548,7 @@ action_id get_movement_action_from_delta( const tripoint_rel_ms &d, iso_rotate r
 
 point_rel_ms get_delta_from_movement_action( const action_id act, const iso_rotate rot )
 {
-    const bool iso_mode = rot == iso_rotate::yes && use_tiles && tile_iso;
+    const bool iso_mode = rot == iso_rotate::yes && tile_iso;
     switch( act ) {
         case ACTION_MOVE_FORTH:
             return iso_mode ? point_rel_ms::north_east() : point_rel_ms::north();
@@ -990,9 +990,7 @@ action_id handle_action_menu()
                 ACTION_WAIT, ACTION_SLEEP, ACTION_BIONICS, ACTION_MUTATIONS,
                 ACTION_CONTROL_VEHICLE, ACTION_ITEMACTION, ACTION_TOGGLE_THIEF_MODE
             } );
-            if( use_tiles ) {
-                register_actions( { ACTION_ZOOM_OUT, ACTION_ZOOM_IN } );
-            }
+            register_actions( { ACTION_ZOOM_OUT, ACTION_ZOOM_IN } );
             register_lua_action_entries( category_id );
         } else {
             register_lua_action_entries( category_id );

@@ -1,0 +1,23 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="trade_iteminfo.rcss"/>
+</head>
+<body data-model="trade_iteminfo">
+    <!-- NPC trade item-description popup (trading_window::show_item_data, EXAMINE
+         key). A scrollable item-info box stacked over the still-open "trade" doc,
+         overlaying the pane the curses sub-window covered: right when examining
+         their items, left when examining yours (data-class-right mirrors the
+         curses info_win = w_you / w_them choice). Render-only: the keyboard owns
+         scroll (PAGE_UP/PAGE_DOWN → SetScrollTop) + up/down exit-to-adjacent +
+         quit; the body element is #trade-iteminfo-body, scrolled from C++. The
+         "< item description >" heading is literal English (same i18n gap noted
+         for the other popups, for the §8/F.1 sweep). -->
+    <div class="tii-wrap" data-class-right="on_right">
+        <div class="panel tii-panel">
+            <div class="tii-title">&lt; item description &gt;</div>
+            <div id="trade-iteminfo-body" class="tii-body scroll-pane" data-rml="info_rml"></div>
+        </div>
+    </div>
+</body>
+</rml>

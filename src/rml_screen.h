@@ -265,6 +265,11 @@ bool &list_monsters_rmlui_enabled();
 // Default OFF.
 bool &look_around_rmlui_enabled();
 
+// editmap (game::look_debug, dev map editor) RmlUi render path: the w_info side
+// panel renders as a passive backdrop doc (gui/editmap_info.rml). The map cursor /
+// selection stay on the GPU map path; the editing menus are uilists. Default ON.
+bool &editmap_rmlui_enabled();
+
 // veh_interact RmlUi render path (the vehicle interaction screen: §8.1
 // gate-blocker backlog, THE GIANT — migrated in slices). Slice 1 = lifecycle
 // harness + the vehicle name + the action mode bar; later slices add stats /

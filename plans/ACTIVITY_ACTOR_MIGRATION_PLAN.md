@@ -35,8 +35,8 @@ closed); `activity_type::load` validation updated to require an actor.
 - **157** `ACT_*` ids exist total; **21 already migrated** to actors (aim, build/construction, craft,
   dig, dig_channel, disassemble, drop, hacking, hacksaw, lockpick, longsalvage, move_items, oxytorch,
   pickup, stash, throw, toggle_gate, boltcutting, assist, autodrive, migration_cancel).
-- **~50 still on the legacy path** (the `ACT_*` keys in the two maps). Many are trivial; a handful are
-  genuinely complex (multi/zone, vehicle).
+- **64 still on the legacy path** (unique `ACT_*` ids across 42 `do_turn` + 44 `finish` map entries).
+  Many are trivial; a handful are genuinely complex (multi/zone, vehicle).
 - Actors are registered in the `deserialize_functions` table at `src/activity_actor.cpp:2602`.
 
 ## Critical architectural fact (drives the whole recipe)
@@ -66,6 +66,11 @@ Consequences that shape everything below:
 - **No separate legacy cancel hook exists** — there is no `canceled_functions` map; cancel cleanup (where
   any) lived inside `finish` or wasn't done. So actor `canceled()` is needed only in the rare cases where
   legacy code did teardown outside `finish`. Lowers per-activity burden.
+- **`Character::cancel_activity()` has hardcoded activity-type special cases** (`character.cpp:10393-10411`)
+  for `ACT_TRY_SLEEP` (removes sleep query) and `ACT_WAIT_STAMINA` (unwinds auto_resume backlog). These
+  are effectively cancel-time teardown that lives outside any handler/actor. When those ids migrate, the
+  special case must move into their actor's `canceled()`. Grep `character.cpp` and `player_activity.cpp`
+  for `ACT_` branches when migrating any activity — type-punned cancel logic lives in unexpected places.
 
 ## The migration recipe (one pattern, applied repeatedly)
 
@@ -85,6 +90,11 @@ legacy activity:
    activities lean on them, so audit which bag fields *this* activity actually uses and carry every one.
    Keep `moves_left` as the progress unit unless deliberately adopting `progress_counter` — mixing the
    two double-counts.
+   **NPC fast-forward trap.** `npc::advance_job_progress()` (`npc.cpp:3210-3228`) directly decrements
+   `activity->moves_left` to catch up out-of-bubble NPCs. An actor using `progress_counter` is invisible
+   to this — the NPC silently never completes. Add a `fast_forward( int turns )` virtual on
+   `activity_actor` (delegating to `progress_counter::mod_moves_left()` by default) and update
+   `advance_job_progress` to call it on the actor path.
 3. **Port resume semantics** — if the legacy activity relied on type+param matching to stack/auto-resume
    from the `backlog` (`character.cpp:10307` `can_resume_with`), implement `can_resume_with_internal`
    so queued/interrupted instances still resume.
@@ -120,6 +130,13 @@ legacy activity:
 Before deleting any handlers, make `call_do_turn` / `call_finish` emit a `debugmsg` (not a silent return)
 when invoked for an id that *should* be an actor. This turns "missed a call site" from a silent in-game
 no-op into a loud, testable failure during the whole transition. Removed when the legacy maps are deleted.
+
+**Double-registration sweep.** `activity_type::check_consistency()` (`activity_type.cpp:173-209`) validates
+that each id has *either* a legacy handler or an actor, but never warns if **both** exist. After each wave,
+add a manual check: for every id in the wave, verify it isn't *also* still in the legacy maps post-migration
+(`ACT_CRAFT` is the pre-existing orphan — `craft_do_turn` in `do_turn_functions` is dead code while the
+`craft_activity_actor` handles runtime dispatch). Consider promoting this to a `debugmsg` in
+`check_consistency()` once Wave 1 proves the pattern.
 
 ### Wave 9 — Rip-out (only after every id is migrated)
 - Delete `do_turn_functions` / `finish_functions` and `activity_type::call_do_turn` / `call_finish`

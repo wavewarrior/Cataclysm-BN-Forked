@@ -400,6 +400,14 @@ struct messages_rml_data {
     Rml::DataModelHandle handle;
 };
 
+// Data-model for the filter-help backdrop (one colour-tagged help string). The
+// syntax help lists the registered message types, so it is bound (not literal in
+// the .rml like the static autopickup/safemode helps).
+struct messages_filter_help_data {
+    Rml::String help_rml;
+    Rml::DataModelHandle handle;
+};
+
 bool g_messages_types_registered = false;
 
 void register_messages_rml_types( Rml::DataModelConstructor &c )
@@ -444,6 +452,8 @@ class dialog
         // RmlUi render path (see the file note above).
         void sync_rml();
         void rml_scroll( int dir );
+        // Open the filter-help backdrop doc (lazily, while filtering).
+        void open_filter_help_rml();
 
         const nc_color border_color;
         const nc_color filter_color;
@@ -507,6 +517,11 @@ class dialog
         rml_doc rml;
         std::unique_ptr<messages_rml_data> rml_data;
         int rml_initial_scroll_frames = 0;
+
+        // Filter-help backdrop (data declared before the doc so it outlives it,
+        // per rml_screen.h). Opened only while `filtering` and the log doc is RML.
+        std::unique_ptr<messages_filter_help_data> filter_help_data;
+        rml_doc filter_help_rml;
 };
 } // namespace Messages
 
@@ -622,24 +637,59 @@ void Messages::dialog::show()
         // RmlUi path owns the log pane — sync the doc and skip the curses draw.
         sync_rml();
         if( filtering ) {
-            // The filter help + input overlay stays the legacy curses
-            // string_input_popup (Tier-0), compositing on top of the RmlUi log
-            // doc — like diary's nested editor. Same draw as the curses branch.
-            werase( w_filter_help );
-            draw_border( w_filter_help, border_color );
-            for( size_t line = 0; line < help_text.size(); ++line ) {
-                nc_color col = filter_help_color;
-                print_colored_text( w_filter_help, point( border_width, border_width + line ), col, col,
-                                    help_text[line] );
+            // The filter INPUT stays the legacy curses string_input_popup (Tier-0
+            // primitive, not migrated), compositing on top of the log doc. The
+            // help-text BOX is migrated to a passive RmlUi backdrop (opened lazily
+            // here, closed when filtering ends) — the autopickup/safemode help
+            // pattern. The curses input field + its <  > markers draw over the
+            // backdrop's blank bottom row; only those cells paint (no werase), so
+            // the RmlUi box shows through. Curses help box kept as the toggle-OFF
+            // fallback.
+            if( !filter_help_rml ) {
+                open_filter_help_rml();
+            }
+            if( !filter_help_rml ) {
+                werase( w_filter_help );
+                draw_border( w_filter_help, border_color );
+                for( size_t line = 0; line < help_text.size(); ++line ) {
+                    nc_color col = filter_help_color;
+                    print_colored_text( w_filter_help, point( border_width, border_width + line ), col, col,
+                                        help_text[line] );
+                }
             }
             mvwprintz( w_filter_help, point( border_width, w_fh_height - 1 ), border_color, "< " );
             mvwprintz( w_filter_help, point( w_fh_width - border_width - 2, w_fh_height - 1 ), border_color,
                        " >" );
             wnoutrefresh( w_filter_help );
             filter.query( false, true ); // Draw only
+        } else {
+            // Left filtering (input confirmed/canceled) — tear the backdrop down.
+            filter_help_rml.close();
         }
         return;
     }
+}
+
+void Messages::dialog::open_filter_help_rml()
+{
+    filter_help_rml.open( messages_rmlui_enabled(), "messages_filter_help", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        filter_help_data = std::make_unique<messages_filter_help_data>();
+        // Build the syntax help unfolded (huge width → foldstring only breaks on
+        // the format's explicit \n; RmlUi re-wraps), then join and convert the
+        // colour tags to RML spans.
+        const std::vector<std::string> lines = filter_help_text( 10000 );
+        std::string joined;
+        for( size_t i = 0; i < lines.size(); ++i ) {
+            joined += lines[i];
+            if( i + 1 < lines.size() ) {
+                joined += '\n';
+            }
+        }
+        filter_help_data->help_rml = cata_text_to_rml( joined );
+        c.Bind( "help_rml", &filter_help_data->help_rml );
+        filter_help_data->handle = c.GetModelHandle();
+    } );
 }
 
 void Messages::dialog::do_filter( const std::string &filter_str )

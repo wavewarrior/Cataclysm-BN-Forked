@@ -173,10 +173,6 @@ class veh_interact
         void do_relabel();
         /*@}*/
 
-        void display_grid();
-        void display_veh();
-        void display_veh_tiles();
-        void display_stats() const;
         // RmlUi slice 2: stat lines as colour-tagged strings (parallels
         // display_stats; the curses 3-column slot layout is dropped).
         std::vector<std::string> stats_lines() const;
@@ -192,10 +188,6 @@ class veh_interact
         // (parallels display_details; the border + 2-column layout dropped).
         std::string install_tabs_text() const;
         std::string install_details_text( const vpart_info *part ) const;
-        void display_name();
-        void display_mode();
-        void display_list( size_t pos, const std::vector<const vpart_info *> &list, int header = 0 );
-        void display_details( const vpart_info *part );
 
         struct part_option {
             part_option( const std::string &key, vehicle_part *part, char hotkey,
@@ -228,7 +220,6 @@ class veh_interact
         int overview_pos = -1;
 
         void calc_overview();
-        void display_overview();
         /**
          * Display overview of parts, optionally with interactive selection of one part
          *

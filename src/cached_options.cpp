@@ -5,9 +5,13 @@
 bool test_mode = false;
 bool debug_mode = false;
 bool json_report_strict = true;
-bool use_tiles = false;
+// Tiles-only fork: ASCII mode is dropped. These are forced true (no longer synced
+// from the removed USE_TILES / USE_TILES_OVERMAP options) so every legacy
+// `if( use_tiles )` branch takes the tiles path. Kept as globals (rather than
+// deleted) while the ~71 read sites are unwound stage by stage.
+bool use_tiles = true;
 bool use_pinyin_search = false;
-bool use_tiles_overmap = false;
+bool use_tiles_overmap = true;
 bool log_from_top;
 int message_ttl;
 int message_cooldown;
