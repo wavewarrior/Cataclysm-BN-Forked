@@ -123,6 +123,16 @@ struct DynamicDataLoader::cached_streams {
     lru_cache<std::string, shared_ptr_fast<std::istringstream>> cache;
 };
 
+// Eviction limit for the deferred-JSON stream cache. Deferred objects (notably
+// the ~740 mapgen files) are re-read and parsed during finalization in
+// overmap-terrain-id order, not file order, so a small cache thrashes and the
+// same files get read_entire_file()'d repeatedly -- very costly on Windows
+// where every open is a _wfopen()/CreateFile (AV scan + NTFS metadata). The
+// cache lives only for one finalization pass (see reset_stream_cache) and the
+// full deferred JSON working set is only a few MB of text, so we size the limit
+// above the total source-file count to read each file from disk exactly once.
+static constexpr int stream_cache_limit = 4096;
+
 DynamicDataLoader::DynamicDataLoader()
 {
     initialize();
@@ -161,7 +171,7 @@ shared_ptr_fast<std::istream> DynamicDataLoader::get_cached_stream( const std::s
     } else if( cached.use_count() > 2 ) {
         cached = make_shared_fast<std::istringstream>( cached->str() );
     }
-    stream_cache->cache.insert( 8, path, cached );
+    stream_cache->cache.insert( stream_cache_limit, path, cached );
     return cached;
 }
 
