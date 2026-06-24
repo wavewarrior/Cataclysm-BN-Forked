@@ -2398,17 +2398,8 @@ void Character::conduct_blood_analysis() const
         if( bt_rml ) {
             bt_data.handle.DirtyVariable( "title_rml" );
             bt_data.handle.DirtyVariable( "body_rml" );
-            return;
         }
-        draw_border( w, c_red, string_format( " %s ", _( "Blood Test Results" ) ) );
-        if( effect_descriptions.empty() ) {
-            trim_and_print( w, point( 2, 1 ), win_w - 3, c_white, _( "No effects." ) );
-        } else {
-            for( size_t line = 1; line < ( win_h - 1 ) && line <= effect_descriptions.size(); ++line ) {
-                trim_and_print( w, point( 2, line ), win_w - 3, colors[line - 1], effect_descriptions[line - 1] );
-            }
-        }
-        wnoutrefresh( w );
+        // RmlUi owns the screen; curses fallback removed (rip-out B).
     } );
     input_context ctxt( "BLOOD_TEST_RESULTS" );
     ctxt.register_action( "CONFIRM" );

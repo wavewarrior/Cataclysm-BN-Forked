@@ -3454,6 +3454,14 @@ Order, each build-green:
    `start_pos`. KEPT `w_test_rule_border` — load-bearing (`ui.position_from_window` drives the rml
    layout too). Build+link green, 0 primitives left. (Pre-existing unused `start_pos`@~199 in a
    different fn left as-is.)
+   **BATCH (2026-06-24): character (blood-test) DONE** — `Character::conduct_blood_analysis` had a
+   clean fallback arm (`if(bt_rml){DirtyVars}` + draw_border/trim_and_print into `w`); gutted the
+   curses. `colors`/`w` stay (rml body-build uses `colors`; `position_from_window(w)` sizes the rml
+   popup). **`Character::print_info` (11648, body bars) is LIVE — kept** (polymorphic with
+   monster/npc::print_info; called by look_around/monster-info/editmap/wish via curses windows;
+   that creature-info subsystem isn't migrated). `advanced_inv::query_destination_callback::
+   draw_squares` (uilist `grid` callback) DEFERRED — unclear if RML still invokes it for the 3×3
+   grid decoration; needs a uilist-callback trace before deleting.
    **RECLASSIFIED — NOT clean orphan/fallback deletes (need per-site migration first):**
    `veh_interact` (22): the `overview()`/`calc_overview()` part-picker is a **live** curses path
    called by do_repair/refill/siphon/change_shape (NOT a dead arm). `messages` (1037/1070): the
