@@ -597,7 +597,6 @@ void player_morale::display( int focus_eq, int pain_penalty, int fatigue_cap )
 
     constexpr int left_padding = 2; // including border
     constexpr int right_padding = 2; // including border
-    constexpr int middle_padding_min = 2;
     constexpr int middle_padding_max = 12;
 
     class morale_line
@@ -692,21 +691,6 @@ void player_morale::display( int focus_eq, int pain_penalty, int fatigue_cap )
                 }
             }
 
-            void draw( catacurses::window &w, const int posy ) const {
-                int width = getmaxx( w );
-                if( sep_line ) {
-                    mvwhline( w, point( 0, posy ), LINE_XXXO, 1 );
-                    mvwhline( w, point( 1, posy ), 0, width - 2 );
-                    mvwhline( w, point( width - 1, posy ), LINE_XOXX, 1 );
-                } else {
-                    int text_width = width - left_padding - right_padding;
-                    if( !right.empty() ) {
-                        right_print( w, posy, right_padding, color, right );
-                        text_width -= middle_padding_min + utf8_width( right );
-                    }
-                    trim_and_print( w, point( left_padding, posy ), text_width, color, left );
-                }
-            }
     };
 
     // Separate and sort positive and negative morale

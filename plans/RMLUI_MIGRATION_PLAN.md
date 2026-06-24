@@ -3437,6 +3437,16 @@ Order, each build-green:
    windows (`w_them/w_you/w_head/w_whose`) are now vestigial (still created in `setup_win`) — clean
    those + the remaining `show_item_data` curses fallback in a follow-up. Eyeball not required
    (pure dead-code deletion, RML path untouched).
+   **BATCH (2026-06-24): morale DONE** — `morale_line::draw()` (the per-row curses draw, the only
+   mvwprintz/mvwhline/trim_and_print/right_print in the file) was orphaned after commit `187561`
+   gutted the on_redraw; deleted it + the now-unused `middle_padding_min` local. The struct's
+   accessors (`get_left/get_right/get_color/is_separator/max_width`) stay — the RML sync + window
+   sizing use them. Build+link green, 0 primitives left.
+   **RECLASSIFIED — NOT clean orphan/fallback deletes (need per-site migration first):**
+   `veh_interact` (22): the `overview()`/`calc_overview()` part-picker is a **live** curses path
+   called by do_repair/refill/siphon/change_shape (NOT a dead arm). `messages` (1037/1070): the
+   `ipk_target` print_colored_text is the **live** in-game message-log render. `auto_pickup` help +
+   test-rule popups: verify before deleting. These are not free dead-code wins.
    **REMAINING curses-draw still live (each its own unit, NOT a simple arm-drop):**
    - `panels` (~303) = Tier-7 sidebar HUD — own strategy.
    - overmap **main display**: curses vs rml splits *inside* `draw()`/`draw_om_sidebar`, not a
