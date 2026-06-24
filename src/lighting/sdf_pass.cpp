@@ -231,6 +231,13 @@ void sdf_pass::init( gpu_device &dev, int map_w, int map_h )
         tbci.size  = static_cast<Uint32>( map_w * map_h * 2 * 4 );
         xfer_occ_ = SDL_CreateGPUTransferBuffer( d, &tbci );
     }
+    {
+        // P3 JFA input: tile-res transparency as floats (0.0=opaque .. 1.0=open).
+        SDL_GPUTransferBufferCreateInfo tbci{};
+        tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+        tbci.size  = static_cast<Uint32>( map_w * map_h * 4 );
+        xfer_trans_f_ = SDL_CreateGPUTransferBuffer( d, &tbci );
+    }
 
     // SDF + sky-vis as fragment-readable storage buffers (sampler-texture
     // Load returns 0 on Metal). Same data as the textures, as float arrays.
@@ -281,6 +288,18 @@ void sdf_pass::init( gpu_device &dev, int map_w, int map_h )
             dbg( DL::Error ) << "sdf_pass::init: failed to create occ_storage";
         }
     }
+    {
+        // P3 JFA input: tile-res transparency as floats (0.0=opaque .. 1.0=open).
+        // COMPUTE read so the seed shader can consume it directly.
+        SDL_GPUBufferCreateInfo bci{};
+        bci.usage = SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ |
+                    SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE;
+        bci.size  = static_cast<Uint32>( map_w * map_h * 4 );
+        trans_storage_ = SDL_CreateGPUBuffer( d, &bci );
+        if( !trans_storage_ ) {
+            dbg( DL::Error ) << "sdf_pass::init: failed to create trans_storage";
+        }
+    }
 }
 
 void sdf_pass::shutdown( gpu_device &dev )
@@ -328,6 +347,14 @@ void sdf_pass::shutdown( gpu_device &dev )
     if( occ_storage_ ) {
         SDL_ReleaseGPUBuffer( d, occ_storage_ );
         occ_storage_ = nullptr;
+    }
+    if( xfer_trans_f_ ) {
+        SDL_ReleaseGPUTransferBuffer( d, xfer_trans_f_ );
+        xfer_trans_f_ = nullptr;
+    }
+    if( trans_storage_ ) {
+        SDL_ReleaseGPUBuffer( d, trans_storage_ );
+        trans_storage_ = nullptr;
     }
     if( sdf_tex_ ) {
         SDL_ReleaseGPUTexture( d, sdf_tex_ );
@@ -470,6 +497,31 @@ void sdf_pass::upload( SDL_GPUCopyPass *cp,
 
                 SDL_UploadToGPUBuffer( cp, &tb_src, &buf_dst, false );
             }
+        }
+    }
+
+    // P3 JFA input: tile-res transparency as floats (0.0=opaque .. 1.0=open).
+    // Convert uint8 bytes → float so the seed shader can read directly.
+    if( trans_storage_ && xfer_trans_f_
+        && static_cast<Uint32>( transparency.size() ) >= pixel_count ) {
+        void *mapped = SDL_MapGPUTransferBuffer( dev, xfer_trans_f_, true );
+        if( mapped ) {
+            float *fdst = static_cast<float *>( mapped );
+            for( Uint32 i = 0; i < pixel_count; ++i ) {
+                fdst[i] = static_cast<float>( transparency[i] ) / 255.0f;
+            }
+            SDL_UnmapGPUTransferBuffer( dev, xfer_trans_f_ );
+
+            SDL_GPUTransferBufferLocation tb_src{};
+            tb_src.transfer_buffer = xfer_trans_f_;
+            tb_src.offset          = 0;
+
+            SDL_GPUBufferRegion buf_dst{};
+            buf_dst.buffer = trans_storage_;
+            buf_dst.offset = 0;
+            buf_dst.size   = pixel_count * static_cast<Uint32>( sizeof( float ) );
+
+            SDL_UploadToGPUBuffer( cp, &tb_src, &buf_dst, false );
         }
     }
 

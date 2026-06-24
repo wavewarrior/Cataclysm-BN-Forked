@@ -89,6 +89,9 @@ public:
     // Stage 2b: unified coverage occluder field (tile-res, 2 floats/tile: height,
     // roof). Marched by sky_sun.comp for sun/moon/sky occlusion. COMPUTE-readable.
     SDL_GPUBuffer  *occ_buffer()           const noexcept { return occ_storage_; }
+    // P3 JFA input: tile-res transparency as floats (0.0=opaque .. 1.0=open).
+    // COMPUTE-readable so the seed shader can read it directly.
+    SDL_GPUBuffer  *trans_buffer()         const noexcept { return trans_storage_; }
 
     bool ready() const noexcept { return sdf_tex_ != nullptr; }
     // True after the first successful upload(). Until then the SDF/sky_vis
@@ -117,6 +120,8 @@ private:
     SDL_GPUBuffer         *skyvis_storage_   = nullptr; // fragment storage buffer (SkyVisBuf, floats)
     SDL_GPUBuffer         *occ_storage_      = nullptr; // Stage 2b unified coverage occluder (tile-res, 2 floats/tile)
     SDL_GPUTransferBuffer *xfer_occ_         = nullptr; // float bytes for occ_storage_
+    SDL_GPUBuffer         *trans_storage_    = nullptr; // P3 JFA input: tile-res transparency as floats
+    SDL_GPUTransferBuffer *xfer_trans_f_     = nullptr; // float bytes for trans_storage_
     SDL_GPUBuffer         *visbuf_storage_   = nullptr; // fragment storage buffer (VisBuf, 1 float/tile)
     SDL_GPUTransferBuffer *xfer_transparency_ = nullptr;
     SDL_GPUTransferBuffer *xfer_sdf_          = nullptr;
