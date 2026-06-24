@@ -3469,9 +3469,18 @@ Order, each build-green:
    1784/1802 widget label/value drawers (~3 calls) would need individual tracing. None are
    fallback arms.
 
-   **★ INFLECTION (2026-06-24): cheap deletes exhausted.** Session landed 5 clean de-curse batches
-   (trade_win, morale, diary_ui, safemode_ui, character) — orphaned helpers + toggle-OFF fallback
-   arms, ~280 lines of dead curses removed, all build+link green. What REMAINS is live curses that
+   **BATCH (2026-06-24): color + input (keybindings) DONE** — both had clean fallback arms
+   (`color_manager::show_gui` on_redraw `if(cm_rml){sync;return}` + the full color-table curses;
+   `input_context::display_menu` redraw `if(kb_rml){sync;return}` + the keybinding-list curses).
+   Gutted both; deleted orphaned `color::draw_header` + the `w_colors`/`w_colors_header` windows +
+   `iStartPos`/`iContentHeight`. KEPT `w_colors_border` (color) and `w_help` (input) — load-bearing
+   (`position_from_window`; input's `w_help` also backs the filter `spopup.window`). The keybindings
+   filter spopup is Tier-0, renders on its own path. Build+link green, 0 primitives in both.
+   (Correction: the earlier inflection note guessed "color test menu = live" — it was a clean arm.)
+
+   **★ INFLECTION (2026-06-24): cheap deletes exhausted.** Session landed 7 clean de-curse batches
+   (trade_win, morale, diary_ui, safemode_ui, character, color, input) — orphaned helpers +
+   toggle-OFF fallback arms, build+link green throughout. What REMAINS is live curses that
    needs **per-screen migration** (heavier, eyeball-required), not deletion:
    `panel_manager::show_adm` (sidebar-options editor), the polymorphic `print_info` creature-info
    subsystem (look_around / monster sidebar), `veh_interact` part-picker (`overview()`), uilist

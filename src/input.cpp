@@ -1245,62 +1245,9 @@ action_id input_context::display_menu( const bool permit_execute_action )
     const auto redraw = [&]( ui_adaptor & ui ) {
         if( kb_rml ) {
             sync_kb_rml();
-            // The filter spopup (Tier-0) still handles input in the loop below; the
-            // curses list/legend draw is skipped on the RmlUi path.
-            ui.record_term_cursor();
-            return;
         }
-        werase( w_help );
-        draw_border( w_help, BORDER_COLOR, _( "Keybindings" ), c_light_red );
-        draw_scrollbar( w_help, scroll_offset, display_height,
-                        filtered_registered_actions.size(), point( 0, 10 ), c_white, true );
-        fold_and_print( w_help, point( 2, 1 ), legwidth, c_white, legend );
-
-        for( size_t i = 0; i + scroll_offset < filtered_registered_actions.size() &&
-             i < display_height; i++ ) {
-            const std::string &action_id = filtered_registered_actions[i + scroll_offset];
-
-            bool overwrite_default;
-            const action_attributes &attributes = inp_mngr.get_action_attributes( action_id, category,
-                                                  &overwrite_default );
-
-            char invlet;
-            if( i < hotkeys.size() ) {
-                invlet = hotkeys[i];
-            } else {
-                invlet = ' ';
-            }
-
-            if( status == s_add_global && overwrite_default ) {
-                // We're trying to add a global, but this action has a local
-                // defined, so gray out the invlet.
-                mvwprintz( w_help, point( 2, i + 10 ), c_dark_gray, "%c ", invlet );
-            } else if( status == s_add || status == s_add_global ) {
-                mvwprintz( w_help, point( 2, i + 10 ), c_light_blue, "%c ", invlet );
-            } else if( status == s_remove ) {
-                mvwprintz( w_help, point( 2, i + 10 ), c_light_blue, "%c ", invlet );
-            } else if( status == s_execute ) {
-                mvwprintz( w_help, point( 2, i + 10 ), c_white, "%c ", invlet );
-            } else {
-                mvwprintz( w_help, point( 2, i + 10 ), c_blue, "  " );
-            }
-            nc_color col;
-            if( attributes.input_events.empty() ) {
-                col = unbound_key;
-            } else if( overwrite_default ) {
-                col = local_key;
-            } else {
-                col = global_key;
-            }
-            mvwprintz( w_help, point( 4, i + 10 ), col, "%s:", get_action_name( action_id ) );
-            mvwprintz( w_help, point( 52, i + 10 ), col, "%s", get_desc( action_id ) );
-        }
-
-        // spopup.query_string() will call wnoutrefresh( w_help ), and should
-        // be called last to position the cursor at the correct place in the curses build.
-        spopup.text( filter_phrase );
-        spopup.query_string( false, true );
-        // Record cursor immediately after spopup drawing
+        // RmlUi owns the screen; curses fallback removed (rip-out B). The filter
+        // spopup (Tier-0) renders on its own path.
         ui.record_term_cursor();
     };
     ui.on_redraw( redraw );

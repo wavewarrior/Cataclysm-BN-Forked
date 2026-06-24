@@ -722,29 +722,6 @@ void color_manager::clear()
     }
 }
 
-static void draw_header( const catacurses::window &w )
-{
-    int tmpx = 0;
-    tmpx += shortcut_print( w, point( tmpx, 0 ), c_white, c_light_green,
-                            _( "<R>emove custom color" ) ) + 2;
-    tmpx += shortcut_print( w, point( tmpx, 0 ), c_white, c_light_green,
-                            _( "<Arrow Keys> To navigate" ) ) + 2;
-    tmpx += shortcut_print( w, point( tmpx, 0 ), c_white, c_light_green, _( "<Enter>-Edit" ) ) + 2;
-    shortcut_print( w, point( tmpx, 0 ), c_white, c_light_green, _( "Load <T>emplate" ) );
-
-    // NOLINTNEXTLINE(cata-use-named-point-constants)
-    mvwprintz( w, point( 0, 1 ), c_white, _( "Some color changes may require a restart." ) );
-
-    mvwhline( w, point( 0, 2 ), LINE_OXOX, getmaxx( w ) ); // Draw line under header
-    mvwputch( w, point( 48, 2 ), BORDER_COLOR, LINE_OXXX ); //^|^
-
-    mvwprintz( w, point( 3, 3 ), c_white, _( "Colorname" ) );
-    mvwprintz( w, point( 21, 3 ), c_white, _( "Normal" ) );
-    mvwprintz( w, point( 52, 3 ), c_white, _( "Invert" ) );
-
-    wnoutrefresh( w );
-}
-
 namespace
 {
 // RmlUi model for the Colors editor (color_manager::show_gui). One row per colour
@@ -791,7 +768,6 @@ bool &color_manager_rmlui_enabled()
 void color_manager::show_gui()
 {
     const int iHeaderHeight = 4;
-    int iContentHeight = 0;
 
     point iOffset;
 
@@ -802,8 +778,6 @@ void color_manager::show_gui()
     const int iTotalCols = vLines.size();
 
     catacurses::window w_colors_border;
-    catacurses::window w_colors_header;
-    catacurses::window w_colors;
 
     const auto calc_offset_y = []() -> int {
         return TERMY > FULL_SCREEN_HEIGHT ? ( TERMY - FULL_SCREEN_HEIGHT ) / 2 : 0;
@@ -811,17 +785,12 @@ void color_manager::show_gui()
 
     ui_adaptor ui;
     const auto init_windows = [&]( ui_adaptor & ui ) {
-        iContentHeight = FULL_SCREEN_HEIGHT - 2 - iHeaderHeight;
 
         iOffset.x = TERMX > FULL_SCREEN_WIDTH ? ( TERMX - FULL_SCREEN_WIDTH ) / 2 : 0;
         iOffset.y = calc_offset_y();
 
         w_colors_border = catacurses::newwin( FULL_SCREEN_HEIGHT, FULL_SCREEN_WIDTH,
                                               iOffset );
-        w_colors_header = catacurses::newwin( iHeaderHeight, FULL_SCREEN_WIDTH - 2,
-                                              iOffset + point_south_east );
-        w_colors = catacurses::newwin( iContentHeight, FULL_SCREEN_WIDTH - 2,
-                                       iOffset + point( 1, iHeaderHeight + 1 ) );
 
         ui.position_from_window( w_colors_border );
     };
@@ -830,7 +799,6 @@ void color_manager::show_gui()
 
     int iCurrentLine = 0;
     int iCurrentCol = 1;
-    int iStartPos = 0;
     const int iMaxColors = color_array.size();
     bool bStuffChanged = false;
     input_context ctxt( "COLORS" );
@@ -886,74 +854,8 @@ void color_manager::show_gui()
     ui.on_redraw( [&]( const ui_adaptor & ) {
         if( cm_rml ) {
             sync_cm_rml();
-            return;
         }
-        draw_border( w_colors_border, BORDER_COLOR, _( " COLOR MANAGER " ) );
-        mvwputch( w_colors_border, point( 0, 3 ), BORDER_COLOR, LINE_XXXO ); // |-
-        mvwputch( w_colors_border, point( getmaxx( w_colors_border ) - 1, 3 ), BORDER_COLOR,
-                  LINE_XOXX ); // -|
-
-        for( auto &iCol : vLines ) {
-            if( iCol > -1 ) {
-                mvwputch( w_colors_border, point( iCol + 1, FULL_SCREEN_HEIGHT - 1 ), BORDER_COLOR,
-                          LINE_XXOX ); // _|_
-                mvwputch( w_colors_header, point( iCol, 3 ), BORDER_COLOR, LINE_XOXO );
-            }
-        }
-        wnoutrefresh( w_colors_border );
-
-        draw_header( w_colors_header );
-
-        // Clear all lines
-        for( int i = 0; i < iContentHeight; i++ ) {
-            for( int j = 0; j < 79; j++ ) {
-                mvwputch( w_colors, point( j, i ), c_black, ' ' );
-
-                for( auto &iCol : vLines ) {
-                    if( iCol == j ) {
-                        mvwputch( w_colors, point( j, i ), BORDER_COLOR, LINE_XOXO );
-                    }
-                }
-            }
-        }
-
-        calcStartPos( iStartPos, iCurrentLine, iContentHeight, iMaxColors );
-
-        draw_scrollbar( w_colors_border, iCurrentLine, iContentHeight, iMaxColors, point( 0, 5 ) );
-        wnoutrefresh( w_colors_border );
-
-        auto iter = name_color_map.begin();
-        std::advance( iter, iStartPos );
-
-        // display color manager
-        for( int i = iStartPos; iter != name_color_map.end(); ++iter, ++i ) {
-            if( i >= iStartPos &&
-                i < iStartPos + ( iContentHeight > iMaxColors ? iMaxColors : iContentHeight ) ) {
-                auto &entry = iter->second;
-
-                if( iCurrentLine == i ) {
-                    mvwprintz( w_colors, point( vLines[iCurrentCol - 1] + 2, i - iStartPos ), c_yellow, ">" );
-                }
-
-                mvwprintz( w_colors, point( 3, i - iStartPos ), c_white, iter->first ); //color name
-                mvwprintz( w_colors, point( 21, i - iStartPos ), entry.color, _( "default" ) ); //default color
-
-                if( !entry.name_custom.empty() ) {
-                    mvwprintz( w_colors, point( 30, i - iStartPos ), name_color_map[entry.name_custom].color,
-                               entry.name_custom ); //custom color
-                }
-
-                mvwprintz( w_colors, point( 52, i - iStartPos ), entry.invert,
-                           _( "default" ) ); //invert default color
-
-                if( !entry.name_invert_custom.empty() ) {
-                    mvwprintz( w_colors, point( 61, i - iStartPos ), name_color_map[entry.name_invert_custom].color,
-                               entry.name_invert_custom ); //invert custom color
-                }
-            }
-        }
-
-        wnoutrefresh( w_colors );
+        // RmlUi owns the screen; curses fallback removed (rip-out B).
     } );
 
     cm_rml.open( color_manager_rmlui_enabled(), "colors", ctxt,
