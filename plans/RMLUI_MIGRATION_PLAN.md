@@ -3462,6 +3462,22 @@ Order, each build-green:
    that creature-info subsystem isn't migrated). `advanced_inv::query_destination_callback::
    draw_squares` (uilist `grid` callback) DEFERRED — unclear if RML still invokes it for the 3×3
    grid decoration; needs a uilist-callback trace before deleting.
+   **TRIAGE (2026-06-24): panels (18) — NOT a clean delete, LIVE curses.** `draw_overmap_chunk`
+   (ASCII minimap, ~488-536) is called by `magic_teleporter_list.cpp:182` (live). `decorate_panel`
+   + the 2223-2264 block live inside `panel_manager::show_adm()` — the sidebar-options / panel-
+   layout editor, a whole **unmigrated curses screen** (migration target, not a delete). The 319 +
+   1784/1802 widget label/value drawers (~3 calls) would need individual tracing. None are
+   fallback arms.
+
+   **★ INFLECTION (2026-06-24): cheap deletes exhausted.** Session landed 5 clean de-curse batches
+   (trade_win, morale, diary_ui, safemode_ui, character) — orphaned helpers + toggle-OFF fallback
+   arms, ~280 lines of dead curses removed, all build+link green. What REMAINS is live curses that
+   needs **per-screen migration** (heavier, eyeball-required), not deletion:
+   `panel_manager::show_adm` (sidebar-options editor), the polymorphic `print_info` creature-info
+   subsystem (look_around / monster sidebar), `veh_interact` part-picker (`overview()`), uilist
+   custom-draw callbacks (`draw_squares`), `messages` in-game log, `color` test menu, the ASCII
+   minimap, and the `game`/`overmap_ui` map overlays. Step 2 (delete `output.cpp` primitive bodies)
+   stays blocked until these consumers migrate. Next mode = pick ONE screen, migrate, eyeball.
    **RECLASSIFIED — NOT clean orphan/fallback deletes (need per-site migration first):**
    `veh_interact` (22): the `overview()`/`calc_overview()` part-picker is a **live** curses path
    called by do_repair/refill/siphon/change_shape (NOT a dead arm). `messages` (1037/1070): the
