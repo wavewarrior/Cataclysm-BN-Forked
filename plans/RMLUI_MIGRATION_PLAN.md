@@ -3341,7 +3341,8 @@ primitive counts) + the `panels.cpp` HUD curses sidebar. The shared backend is N
     instantiation isn't automatically a live draw path — check whether it's EXECUTED/shown.
   - **★ DE-CURSE CAMPAIGN COMPLETE after B11 (2026-06-23).** All bespoke screens + the panels HUD are
     de-cursed. The ONLY remaining rip-out-plan work is popup-migration (NEW RML authoring:
-    trade_win/safemode_ui/messages-filter/scores_ui-show_kills) — a feature task, not a deletion batch.
+    ~~trade_win~~/~~safemode_ui~~/messages-filter/scores_ui-show_kills — trade_win + safemode DONE) — a
+    feature task, not a deletion batch.
   - **panels.cpp HUD curses sidebar — RIP OUT STAYS IN THIS PLAN (2026-06-23 user directive: rip out the
     curses panels EVEN IF the RmlUi HUD lacks features the old panels had).** Whole-sidebar curses
     suppression + delete the curses `draw_*` panel builders; un-built panels show a placeholder / are
@@ -3365,10 +3366,14 @@ primitive counts) + the `panels.cpp` HUD curses sidebar. The shared backend is N
     `overmap_ui` (80 — BUT most is `draw_ascii`, the ASCII map-grid render that STAYS with the backend;
     only non-map orphans are deletable), `worldfactory` (39, 4 arms), `inventory_ui` (17), `main_menu` (10).
   - **NEED POPUP MIGRATION first (live un-migrated curses sub-screens — NOT deletable, new RML work like
-    auto_pickup's batch-14):** `trade_win` (scrollable item-info popup), `safemode_ui` (wildcard-help +
-    test-rule popups — mirror auto_pickup's `autopickup_help`/`autopickup_test`), `messages` (filter-help
-    overlay), `scores_ui` (the whole `show_kills` screen, never migrated). `auto_pickup` already did its
-    two (batch 14) — its residual 6 prims need a recheck.
+    auto_pickup's batch-14):** ~~`trade_win` (scrollable item-info popup)~~ **DONE 2026-06-24** (new
+    `trade_iteminfo` doc + .rcss; show_item_data's curses w_popup now an rml_doc stacked over "trade",
+    overlaying the examined pane via data-class-right; PAGE_UP/DOWN → SetScrollTop like help.cpp, UP/DOWN
+    still exit-to-adjacent; curses kept as toggle-OFF fallback; build+link green Metal, EYEBALL OWED),
+    ~~`safemode_ui` (wildcard-help + test-rule popups)~~ **DONE** (commit 89d5299ab1, mirrors auto_pickup's
+    `autopickup_help`/`autopickup_test`). REMAINING: `messages` (filter-help overlay), `scores_ui` (the
+    whole `show_kills` screen, never migrated). `auto_pickup` already did its two (batch 14) — its
+    residual 6 prims need a recheck.
   - **LEAVE (not orphans):** uilist-callback `refresh()` curses draws (advanced_inv `draw_squares`,
     magic/magic_teleporter_list, wish) — uilist KEEPS a curses fallback (`uilist::show` calls
     `callback->refresh()` at ui.cpp:922 for early-init before RmlUi is ready); shared text producers;

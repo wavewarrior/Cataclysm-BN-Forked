@@ -94,6 +94,15 @@ void register_trade_rml_types( Rml::DataModelConstructor &c )
     g_trade_types_registered = true;
 }
 
+// Separate data-model for the EXAMINE item-description popup (show_item_data);
+// stacks over the still-open "trade" doc. One colour-tagged body string + the
+// pane-side flag (mirrors the curses info_win = w_you / w_them choice).
+struct trade_iteminfo_session {
+    Rml::String info_rml;
+    bool on_right = false;
+    Rml::DataModelHandle handle;
+};
+
 constexpr auto trade_head_height = 4;
 constexpr auto trade_info_height = 4;
 constexpr auto trade_header_rows = 4;
@@ -741,7 +750,41 @@ auto trading_window::show_item_data( size_t index, bool target_is_theirs ) -> in
     const auto &itm = *target_list[index].locs.front();
     const auto info_text = itm.info_string();
 
+    // RmlUi render path (render-only; keyboard owns scroll + exit-to-adjacent
+    // below). The doc stacks over the still-open "trade" doc, overlaying the
+    // pane the curses w_popup covered. The body element scrolls natively; the
+    // colour-tagged text is baked once (static for this popup instance), so no
+    // per-frame sync is needed. info_data declared before rml so it outlives it.
+    std::unique_ptr<trade_iteminfo_session> info_data;
+    rml_doc info_rml;
+    Rml::Element *scroll_el = nullptr;
+
+    auto ctxt = input_context( "NPC_TRADE" );
+    ctxt.register_action( "UP" );
+    ctxt.register_action( "DOWN" );
+    ctxt.register_action( "PAGE_UP" );
+    ctxt.register_action( "PAGE_DOWN" );
+    ctxt.register_action( "CONFIRM" );
+    ctxt.register_action( "QUIT" );
+    ctxt.register_action( "HELP_KEYBINDINGS" );
+
+    info_rml.open( trade_rmlui_enabled(), "trade_iteminfo", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        info_data = std::make_unique<trade_iteminfo_session>();
+        info_data->info_rml = cata_text_to_rml( info_text );
+        info_data->on_right = target_is_theirs;
+        c.Bind( "info_rml", &info_data->info_rml );
+        c.Bind( "on_right", &info_data->on_right );
+        info_data->handle = c.GetModelHandle();
+    } );
+    if( info_rml ) {
+        scroll_el = info_rml.document()->GetElementById( "trade-iteminfo-body" );
+    }
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( info_rml ) {
+            return;
+        }
         werase( w_popup );
         draw_border( w_popup );
         const auto inner_w = getmaxx( w_popup ) - 2;
@@ -768,14 +811,16 @@ auto trading_window::show_item_data( size_t index, bool target_is_theirs ) -> in
         wnoutrefresh( w_popup );
     } );
 
-    auto ctxt = input_context( "NPC_TRADE" );
-    ctxt.register_action( "UP" );
-    ctxt.register_action( "DOWN" );
-    ctxt.register_action( "PAGE_UP" );
-    ctxt.register_action( "PAGE_DOWN" );
-    ctxt.register_action( "CONFIRM" );
-    ctxt.register_action( "QUIT" );
-    ctxt.register_action( "HELP_KEYBINDINGS" );
+    // Scroll the RmlUi body element by a fraction of its viewport (cf. help.cpp).
+    const auto scroll_rml = [&]( float frac ) {
+        if( scroll_el == nullptr ) {
+            return;
+        }
+        const float ch = scroll_el->GetClientHeight();
+        const float max_top = std::max( 0.0f, scroll_el->GetScrollHeight() - ch );
+        const float t = std::clamp( scroll_el->GetScrollTop() + frac * ch, 0.0f, max_top );
+        scroll_el->SetScrollTop( t );
+    };
 
     auto result = info_popup_result::none;
     auto exit = false;
@@ -789,20 +834,25 @@ auto trading_window::show_item_data( size_t index, bool target_is_theirs ) -> in
             result = info_popup_result::move_down;
             exit = true;
         } else if( action == "PAGE_UP" || action == "PAGE_DOWN" ) {
-            const auto inner_h = std::max( getmaxy( w_popup ) - 2, 1 );
-            const auto folded = foldstring( info_text, std::max( getmaxx( w_popup ) - 2, 1 ) );
-            const auto max_scroll = folded.size() > static_cast<size_t>( inner_h ) ?
-                                    folded.size() - static_cast<size_t>( inner_h ) : 0;
-            const auto page_rem = static_cast<size_t>( inner_h );
-            if( action == "PAGE_UP" ) {
-                scroll_pos = scroll_pos > page_rem ? scroll_pos - page_rem : 0;
+            if( info_rml ) {
+                scroll_rml( action == "PAGE_UP" ? -0.9f : 0.9f );
             } else {
-                scroll_pos = std::min( scroll_pos + page_rem, max_scroll );
+                const auto inner_h = std::max( getmaxy( w_popup ) - 2, 1 );
+                const auto folded = foldstring( info_text, std::max( getmaxx( w_popup ) - 2, 1 ) );
+                const auto max_scroll = folded.size() > static_cast<size_t>( inner_h ) ?
+                                        folded.size() - static_cast<size_t>( inner_h ) : 0;
+                const auto page_rem = static_cast<size_t>( inner_h );
+                if( action == "PAGE_UP" ) {
+                    scroll_pos = scroll_pos > page_rem ? scroll_pos - page_rem : 0;
+                } else {
+                    scroll_pos = std::min( scroll_pos + page_rem, max_scroll );
+                }
             }
         } else if( action == "CONFIRM" || action == "QUIT" ) {
             exit = true;
         }
     }
+    info_rml.close();
     return result;
 }
 

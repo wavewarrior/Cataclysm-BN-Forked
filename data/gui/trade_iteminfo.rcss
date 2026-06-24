@@ -1,0 +1,49 @@
+/* Layout for the NPC trade item-description popup (trading_window::show_item_data).
+   Palette/border/scrollbar/.scroll-pane and the .panel frame come from theme.rcss
+   (linked first in trade_iteminfo.rml); this file owns only this popup's layout.
+   A half-width box overlaying one pane of the trade screen behind it — left by
+   default, right when .tii-wrap.right (mirrors the curses info_win pane choice).
+   The body wraps + scrolls (overflow-y) like the curses foldstring window.
+   Lengths in dp. */
+
+body {
+    display: flex;
+    width: 100%;
+    height: 100%;
+}
+
+.tii-wrap {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.tii-wrap.right {
+    justify-content: flex-end;
+}
+
+.tii-panel {
+    flex: 0 0 47%;
+    height: 92%;
+    margin: 0 2%;
+    display: flex;
+    flex-direction: column;
+}
+
+.tii-title {
+    flex: 0 0 auto;
+    padding-bottom: 4dp;
+    margin-bottom: 4dp;
+    border-bottom: 1dp {{bg4}};
+}
+
+.tii-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    color: {{fg}};
+}
