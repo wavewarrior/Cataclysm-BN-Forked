@@ -217,7 +217,7 @@ static void generate_weather_anim_frame( const weather_type_id &wtype, weather_p
     point offset( u.view_offset.xy().raw() + point( -getmaxx( g->w_terrain ) / 2 + u.bub_pos().x(),
                   -getmaxy( g->w_terrain ) / 2 + u.bub_pos().y() ) );
 
-    if( tile_iso && use_tiles ) {
+    if( tile_iso ) {
         iStart.x = 0;
         iStart.y = 0;
         iEnd.x = g_mapsize_x;
@@ -1862,7 +1862,7 @@ bool game::handle_action()
                     { ACTION_SHIFT_W, { point_west, point_north_west } },
                     { ACTION_SHIFT_NW, { point_north_west, point_north } },
                 };
-                u.view_offset += use_tiles && tile_iso ?
+                u.view_offset += tile_iso ?
                                  shift_delta.at( act ).second * soffset : shift_delta.at( act ).first * soffset;
             }
             break;

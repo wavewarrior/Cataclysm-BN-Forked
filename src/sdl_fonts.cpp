@@ -21,7 +21,7 @@
 
 static auto map_font_width() -> int
 {
-    if( use_tiles && tilecontext ) {
+    if( tilecontext ) {
         return tilecontext->get_tile_width();
     }
     return ( g_display.map_font ? g_display.map_font.get() : g_display.font.get() )->width;
@@ -29,7 +29,7 @@ static auto map_font_width() -> int
 
 static auto map_font_height() -> int
 {
-    if( use_tiles && tilecontext ) {
+    if( tilecontext ) {
         return tilecontext->get_tile_height();
     }
     return ( g_display.map_font ? g_display.map_font.get() : g_display.font.get() )->height;
@@ -37,7 +37,7 @@ static auto map_font_height() -> int
 
 static auto overmap_font_width() -> int
 {
-    if( use_tiles && overmap_tilecontext && use_tiles_overmap ) {
+    if( overmap_tilecontext ) {
         return overmap_tilecontext->get_tile_width();
     }
     return ( g_display.overmap_font ? g_display.overmap_font.get() : g_display.font.get() )->width;
@@ -45,7 +45,7 @@ static auto overmap_font_width() -> int
 
 static auto overmap_font_height() -> int
 {
-    if( use_tiles && overmap_tilecontext && use_tiles_overmap ) {
+    if( overmap_tilecontext ) {
         return overmap_tilecontext->get_tile_height();
     }
     return ( g_display.overmap_font ? g_display.overmap_font.get() : g_display.font.get() )->height;

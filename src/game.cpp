@@ -3248,10 +3248,8 @@ input_context get_default_mode_input_context()
     ctxt.register_action( "debug_submap_grid" );
     ctxt.register_action( "debug_hour_timer" );
     ctxt.register_action( "debug_mode" );
-    if( use_tiles ) {
-        ctxt.register_action( "zoom_out" );
-        ctxt.register_action( "zoom_in" );
-    }
+    ctxt.register_action( "zoom_out" );
+    ctxt.register_action( "zoom_in" );
     ctxt.register_action( "toggle_fullscreen" );
     ctxt.register_action( "toggle_pixel_minimap" );
     ctxt.register_action( "toggle_zone_overlay" );
@@ -4265,16 +4263,7 @@ shared_ptr_fast<game::draw_callback_t>
             }
         }
         if( zone_start && zone_end ) {
-            const point_rel_ms offset2( g->u.view_offset.xy() + point_rel_ms( g->u.bub_pos().x() - getmaxx(
-                                            g->w_terrain ) / 2,
-                                        g->u.bub_pos().y() - getmaxy( g->w_terrain ) / 2 ) );
-
-            tripoint_rel_ms offset;
-            if( use_tiles ) {
-                offset = tripoint_rel_ms::zero(); //TILES
-            } else {
-                offset = tripoint_rel_ms( offset2, 0 ); //CURSES
-            }
+            const tripoint_rel_ms offset = tripoint_rel_ms::zero(); //TILES
 
             const tripoint_abs_ms start( std::min( zone_start->x(), zone_end->x() ),
                                          std::min( zone_start->y(), zone_end->y() ),
@@ -9783,11 +9772,9 @@ look_around_result game::look_around( bool show_window, tripoint_bub_ms &center,
     ctxt.register_action( "CONFIRM" );
     ctxt.register_action( "QUIT" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
-    if( use_tiles ) {
-        ctxt.register_action( "zoom_out" );
-        ctxt.register_action( "zoom_in" );
-        ctxt.register_action( "debug_tileset" );
-    }
+    ctxt.register_action( "zoom_out" );
+    ctxt.register_action( "zoom_in" );
+    ctxt.register_action( "debug_tileset" );
     ctxt.register_action( "toggle_pixel_minimap" );
     ctxt.register_action( "toggle_zone_overlay" );
 
@@ -15938,44 +15925,23 @@ void game::display_toggle_overlay( const action_id action )
 
 void game::display_scent()
 {
-    if( use_tiles ) {
-        display_toggle_overlay( ACTION_DISPLAY_SCENT );
-    } else {
-        int div;
-        bool got_value = query_int( div, _( "Set the Scent Map sensitivity to (0 to cancel)?" ) );
-        if( !got_value || div < 1 ) {
-            add_msg( _( "Never mind." ) );
-            return;
-        }
-        shared_ptr_fast<game::draw_callback_t> scent_cb = make_shared_fast<game::draw_callback_t>( [&]() {
-            scent.draw( w_terrain, div * 2, u.bub_pos() + u.view_offset );
-        } );
-        g->add_draw_callback( scent_cb );
-
-        ui_manager::redraw();
-        inp_mngr.wait_for_any_key();
-    }
+    display_toggle_overlay( ACTION_DISPLAY_SCENT );
 }
 
 void game::display_temperature()
 {
-    if( use_tiles ) {
-        display_toggle_overlay( ACTION_DISPLAY_TEMPERATURE );
-    }
+    display_toggle_overlay( ACTION_DISPLAY_TEMPERATURE );
 }
 
 void game::display_vehicle_ai()
 {
-    if( use_tiles ) {
-        display_toggle_overlay( ACTION_DISPLAY_VEHICLE_AI );
-    }
+    display_toggle_overlay( ACTION_DISPLAY_VEHICLE_AI );
 }
 
 void game::display_visibility()
 {
-    if( use_tiles ) {
-        display_toggle_overlay( ACTION_DISPLAY_VISIBILITY );
-        if( display_overlay_state( ACTION_DISPLAY_VISIBILITY ) ) {
+    display_toggle_overlay( ACTION_DISPLAY_VISIBILITY );
+    if( display_overlay_state( ACTION_DISPLAY_VISIBILITY ) ) {
             std::vector<tripoint_bub_ms> locations;
             uilist creature_menu;
             int num_creatures = 0;
@@ -16000,7 +15966,6 @@ void game::display_visibility()
         } else {
             displaying_visibility_creature = nullptr;
         }
-    }
 }
 
 void game::toggle_debug_hour_timer()
@@ -16033,56 +15998,46 @@ void game::debug_hour_timer::print_time()
 
 void game::display_lighting()
 {
-    if( use_tiles ) {
-        display_toggle_overlay( ACTION_DISPLAY_LIGHTING );
-        if( !g->display_overlay_state( ACTION_DISPLAY_LIGHTING ) ) {
-            return;
-        }
-        uilist lighting_menu;
-        std::vector<std::string> lighting_menu_strings{
-            "Global lighting conditions"
-        };
+    display_toggle_overlay( ACTION_DISPLAY_LIGHTING );
+    if( !g->display_overlay_state( ACTION_DISPLAY_LIGHTING ) ) {
+        return;
+    }
+    uilist lighting_menu;
+    std::vector<std::string> lighting_menu_strings{
+        "Global lighting conditions"
+    };
 
-        int count = 0;
-        for( const auto &menu_str : lighting_menu_strings ) {
-            lighting_menu.addentry( count++, true, MENU_AUTOASSIGN, "%s", menu_str );
-        }
+    int count = 0;
+    for( const auto &menu_str : lighting_menu_strings ) {
+        lighting_menu.addentry( count++, true, MENU_AUTOASSIGN, "%s", menu_str );
+    }
 
-        lighting_menu.w_y_setup = 0;
-        lighting_menu.query();
-        if( ( lighting_menu.ret >= 0 ) &&
-            ( static_cast<size_t>( lighting_menu.ret ) < lighting_menu_strings.size() ) ) {
-            g->displaying_lighting_condition = lighting_menu.ret;
-        }
+    lighting_menu.w_y_setup = 0;
+    lighting_menu.query();
+    if( ( lighting_menu.ret >= 0 ) &&
+        ( static_cast<size_t>( lighting_menu.ret ) < lighting_menu_strings.size() ) ) {
+        g->displaying_lighting_condition = lighting_menu.ret;
     }
 }
 
 void game::display_radiation()
 {
-    if( use_tiles ) {
-        display_toggle_overlay( ACTION_DISPLAY_RADIATION );
-    }
+    display_toggle_overlay( ACTION_DISPLAY_RADIATION );
 }
 
 void game::display_transparency()
 {
-    if( use_tiles ) {
-        display_toggle_overlay( ACTION_DISPLAY_TRANSPARENCY );
-    }
+    display_toggle_overlay( ACTION_DISPLAY_TRANSPARENCY );
 }
 
 void game::display_outside()
 {
-    if( use_tiles ) {
-        display_toggle_overlay( ACTION_DISPLAY_OUTSIDE );
-    }
+    display_toggle_overlay( ACTION_DISPLAY_OUTSIDE );
 }
 
 void game::display_tiles_no_vfx()
 {
-    if( use_tiles ) {
-        display_toggle_overlay( ACTION_DISPLAY_TILES_NO_VFX );
-    }
+    display_toggle_overlay( ACTION_DISPLAY_TILES_NO_VFX );
 }
 
 void game::init_autosave()

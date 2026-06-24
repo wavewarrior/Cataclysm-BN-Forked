@@ -1013,7 +1013,7 @@ std::optional<tripoint_rel_ms> input_context::get_direction( const std::string &
         rotate_direction_cw( p.x(), p.y() );
         return p;
     } );
-    const auto transform = iso_mode && tile_iso && use_tiles ? rotate : noop;
+    const auto transform = iso_mode && tile_iso ? rotate : noop;
 
     if( action == "UP" ) {
         return transform( tripoint_rel_ms::north() );

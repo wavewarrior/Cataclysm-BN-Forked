@@ -62,7 +62,7 @@ auto get_window_dimensions( const catacurses::window &win,
                             point pos, point size ) -> window_dimensions
 {
     window_dimensions dim;
-    if( use_tiles && g && win == g->w_terrain ) {
+    if( g && win == g->w_terrain ) {
         // tiles might have different dimensions than standard font
         dim.scaled_font_size.x = tilecontext->get_tile_width();
         dim.scaled_font_size.y = tilecontext->get_tile_height();
@@ -164,7 +164,7 @@ std::optional<tripoint_bub_ms> input_context::get_coordinates(
 
     const point screen_pos = coordinate - win_min;
     point_bub_ms p;
-    if( tile_iso && use_tiles ) {
+    if( tile_iso ) {
         const float win_mid_x = win_min.x + win_size.x / 2.0f;
         const float win_mid_y = -win_min.y + win_size.y / 2.0f;
         const int screen_col = std::round( ( screen_pos.x - win_mid_x ) / ( fw / 2.0 ) );

@@ -117,7 +117,7 @@ void set_displaybuffer_rendertarget() {}
 // This is supposed to be called from init.cpp, and only from there.
 void load_tileset()
 {
-    if( !tilecontext || !use_tiles ) {
+    if( !tilecontext ) {
         return;
     }
     const auto tilesName = get_option<std::string>( "TILES" );
@@ -172,7 +172,7 @@ bool gamepad_available()
 
 bool is_draw_tiles_mode()
 {
-    return use_tiles;
+    return true;
 }
 
 /** Saves a screenshot of the current viewport as a PNG file.

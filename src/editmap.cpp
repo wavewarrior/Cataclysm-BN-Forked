@@ -534,7 +534,7 @@ void editmap::draw_main_ui_overlay()
         here.drawsq( g->w_terrain, target, drawsq_params().highlight( true ).center( target ) );
     }
     // give some visual indication of different cursor moving modes
-    if( use_tiles && altblink ) {
+    if( altblink ) {
         point_bub_ms p[2] = { origin.xy(), target.xy() };
         if( editshape == editmap_rect || editshape == editmap_rect_filled || p[0] == p[1] ) {
             if( p[0] == p[1] ) {
@@ -581,7 +581,7 @@ void editmap::draw_main_ui_overlay()
 
     if( tmpmap_ptr ) {
         tinymap &tmpmap = *tmpmap_ptr;
-        if( use_tiles ) {
+        {
             const auto origin_p = target.xy() + point( 1 - SEEX, 1 - SEEY );
             for( int x = 0; x < SEEX * 2; x++ ) {
                 for( int y = 0; y < SEEY * 2; y++ ) {
@@ -649,13 +649,6 @@ void editmap::draw_main_ui_overlay()
             for( const auto &it : spawns ) {
                 g->draw_monster_override( it.first, std::get<0>( it.second ), std::get<1>( it.second ),
                                           std::get<2>( it.second ), std::get<3>( it.second ) );
-            }
-        } else {
-            hilights["mapgentgt"].draw( *this, true );
-            tmpmap.reset_vehicle_cache( );
-            drawsq_params params = drawsq_params().center( tripoint_bub_ms( SEEX - 1, SEEY - 1, target.z() ) );
-            for( const tripoint_bub_ms &p : tmpmap.points_on_zlevel() ) {
-                tmpmap.drawsq( g->w_terrain, p, params );
             }
         }
     }

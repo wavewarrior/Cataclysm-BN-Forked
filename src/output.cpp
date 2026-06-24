@@ -1831,7 +1831,7 @@ scrollingcombattext::cSCT::cSCT( point p_pos, const direction p_oDir,
 
     // translate from player relative to screen relative direction
     iso_mode = false;
-    iso_mode = tile_iso && use_tiles;
+    iso_mode = tile_iso;
     oUp = iso_mode ? direction::NORTHEAST : direction::NORTH;
     oUpRight = iso_mode ? direction::EAST : direction::NORTHEAST;
     oRight = iso_mode ? direction::SOUTHEAST : direction::EAST;
@@ -1877,8 +1877,8 @@ void scrollingcombattext::add( point pos, direction p_oDir,
 
         bool tiled = false;
         bool iso_mode = false;
-        tiled = use_tiles;
-        iso_mode = tile_iso && use_tiles;
+        tiled = true;
+        iso_mode = tile_iso;
 
         if( p_sType == "hp" ) {
             //Remove old HP bar

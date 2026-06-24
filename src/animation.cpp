@@ -567,77 +567,57 @@ void game::draw_zones( const zone_draw_options &options )
 
 void game::draw_radiation_override( const tripoint_bub_ms &p, const int rad )
 {
-    if( use_tiles ) {
-        tilecontext->init_draw_radiation_override( p, rad );
-    }
+    tilecontext->init_draw_radiation_override( p, rad );
 }
 
 void game::draw_terrain_override( const tripoint_bub_ms &p, const ter_id &id )
 {
-    if( use_tiles ) {
-        tilecontext->init_draw_terrain_override( p, id );
-    }
+    tilecontext->init_draw_terrain_override( p, id );
 }
 
 void game::draw_furniture_override( const tripoint_bub_ms &p, const furn_id &id )
 {
-    if( use_tiles ) {
-        tilecontext->init_draw_furniture_override( p, id );
-    }
+    tilecontext->init_draw_furniture_override( p, id );
 }
 
 void game::draw_graffiti_override( const tripoint_bub_ms &p, const bool has )
 {
-    if( use_tiles ) {
-        tilecontext->init_draw_graffiti_override( p, has );
-    }
+    tilecontext->init_draw_graffiti_override( p, has );
 }
 
 void game::draw_trap_override( const tripoint_bub_ms &p, const trap_id &id )
 {
-    if( use_tiles ) {
-        tilecontext->init_draw_trap_override( p, id );
-    }
+    tilecontext->init_draw_trap_override( p, id );
 }
 
 void game::draw_field_override( const tripoint_bub_ms &p, const field_type_id &id )
 {
-    if( use_tiles ) {
-        tilecontext->init_draw_field_override( p, id );
-    }
+    tilecontext->init_draw_field_override( p, id );
 }
 
 void game::draw_item_override( const tripoint_bub_ms &p, const itype_id &id, const mtype_id &mid,
                                const bool hilite )
 {
-    if( use_tiles ) {
-        tilecontext->init_draw_item_override( p, id, mid, hilite );
-    }
+    tilecontext->init_draw_item_override( p, id, mid, hilite );
 }
 
 void game::draw_vpart_override(
     const tripoint_bub_ms &p, const vpart_id &id, const int part_mod, const units::angle veh_dir,
     const bool hilite, tripoint_mnt_veh mount )
 {
-    if( use_tiles ) {
-        // TRIPOINT MIGRATION FIXME
-        tilecontext->init_draw_vpart_override( p, id, part_mod, veh_dir, hilite, mount.xy().raw() );
-    }
+    // TRIPOINT MIGRATION FIXME
+    tilecontext->init_draw_vpart_override( p, id, part_mod, veh_dir, hilite, mount.xy().raw() );
 }
 
 void game::draw_below_override( const tripoint_bub_ms &p, const bool draw )
 {
-    if( use_tiles ) {
-        tilecontext->init_draw_below_override( p, draw );
-    }
+    tilecontext->init_draw_below_override( p, draw );
 }
 
 void game::draw_monster_override( const tripoint_bub_ms &p, const mtype_id &id, const int count,
                                   const bool more, const Attitude att )
 {
-    if( use_tiles ) {
-        tilecontext->init_draw_monster_override( p, id, count, more, att );
-    }
+    tilecontext->init_draw_monster_override( p, id, count, more, att );
 }
 
 bucketed_points bucket_by_distance( const tripoint_bub_ms &origin,
