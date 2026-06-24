@@ -42,14 +42,6 @@ window_dimensions get_window_dimensions( const catacurses::window &win );
 window_dimensions get_window_dimensions( point pos, point size );
 auto get_sdl_window_size() -> point;
 auto get_sdl_font_size() -> point;
-struct sdl_text_outline_options {
-    std::string text;
-    point pos_pixel = point_zero;
-    catacurses::base_color text_color = {};
-    catacurses::base_color outline_color = {};
-    int outline_thickness = 1;
-};
-void draw_sdl_text_outlined( const sdl_text_outline_options &opts );
 
 const SDL_Renderer_Ptr &get_sdl_renderer();
 const SDL_Window_Ptr &get_sdl_window();

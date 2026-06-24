@@ -1,4 +1,4 @@
-#include "sdltiles.h" // IWYU pragma: associated  — tilecontext, overmap_tilecontext, windowsPalette, sdl_text_outline_options, draw_sdl_text_outlined
+#include "sdltiles.h" // IWYU pragma: associated  — tilecontext, overmap_tilecontext, windowsPalette
 #include "sdl_fonts.h"
 
 #include <algorithm>
@@ -71,27 +71,6 @@ auto draw_string( Font &font,
         p.x += mk_wcwidth( ch32 ) * font.width;
     }
     return p;
-}
-
-void draw_sdl_text_outlined( const sdl_text_outline_options &opts )
-{
-    if( !g_display.font || !g_display.renderer || opts.text.empty() ) {
-        return;
-    }
-
-    const auto outline_thickness = std::max( 0, opts.outline_thickness );
-    for( auto y = -outline_thickness; y <= outline_thickness; ++y ) {
-        for( auto x = -outline_thickness; x <= outline_thickness; ++x ) {
-            if( x != 0 || y != 0 ) {
-                draw_string( *g_display.font, g_display.renderer, g_display.geometry,
-                             opts.text, opts.pos_pixel + point( x, y ),
-                             static_cast<unsigned char>( opts.outline_color ) );
-            }
-        }
-    }
-    draw_string( *g_display.font, g_display.renderer, g_display.geometry,
-                 opts.text, opts.pos_pixel,
-                 static_cast<unsigned char>( opts.text_color ) );
 }
 
 // ---------------------------------------------------------------------------
