@@ -61,12 +61,7 @@ bool gpu_sdf_pass::init( gpu_device &dev, std::uint32_t max_w, std::uint32_t max
     seed_b_ = create_buffer( seed_floats, SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ |
                                           SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE );
 
-    // Allocate scratch SDF buffer (1 float/subcell).
-    const std::uint32_t sdf_floats = max_sw * max_sh;
-    jfa_sdf_ = create_buffer( sdf_floats, SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ |
-                                           SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE );
-
-    if( !seed_a_ || !seed_b_ || !jfa_sdf_ ) {
+    if( !seed_a_ || !seed_b_ ) {
         dbg( DL::Error ) << "gpu_sdf_pass: buffer allocation failed";
         return false;
     }
@@ -76,7 +71,7 @@ bool gpu_sdf_pass::init( gpu_device &dev, std::uint32_t max_w, std::uint32_t max
 
     DebugLogFL( DL::Info, DC::Main )
             << "gpu_sdf_pass init OK: SS=" << max_sw << "x" << max_sh
-            << " seed_floats=" << seed_floats << " sdf_floats=" << sdf_floats;
+            << " seed_floats=" << seed_floats;
 
     return true;
 }
@@ -106,20 +101,16 @@ bool gpu_sdf_pass::resize( std::uint32_t max_w, std::uint32_t max_h )
     if( dev_ && dev_->ready() ) {
         if( seed_a_ )  { SDL_ReleaseGPUBuffer( dev_->raw(), seed_a_ );  seed_a_ = nullptr; }
         if( seed_b_ )  { SDL_ReleaseGPUBuffer( dev_->raw(), seed_b_ );  seed_b_ = nullptr; }
-        if( jfa_sdf_ ) { SDL_ReleaseGPUBuffer( dev_->raw(), jfa_sdf_ ); jfa_sdf_ = nullptr; }
     }
 
     const std::uint32_t seed_floats = new_sw * new_sh * 2u;
-    const std::uint32_t sdf_floats  = new_sw * new_sh;
 
     seed_a_ = create_buffer( seed_floats, SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ |
                                           SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE );
     seed_b_ = create_buffer( seed_floats, SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ |
                                           SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE );
-    jfa_sdf_ = create_buffer( sdf_floats, SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ |
-                                           SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE );
 
-    if( !seed_a_ || !seed_b_ || !jfa_sdf_ ) {
+    if( !seed_a_ || !seed_b_ ) {
         return false;
     }
 
@@ -136,22 +127,21 @@ void gpu_sdf_pass::shutdown() noexcept
         if( resolve_pipeline_) SDL_ReleaseGPUComputePipeline( dev_->raw(), resolve_pipeline_ );
         if( seed_a_   ) SDL_ReleaseGPUBuffer( dev_->raw(), seed_a_ );
         if( seed_b_   ) SDL_ReleaseGPUBuffer( dev_->raw(), seed_b_ );
-        if( jfa_sdf_  ) SDL_ReleaseGPUBuffer( dev_->raw(), jfa_sdf_ );
     }
     seed_pipeline_   = nullptr;
     flood_pipeline_  = nullptr;
     resolve_pipeline_ = nullptr;
     seed_a_          = nullptr;
     seed_b_          = nullptr;
-    jfa_sdf_         = nullptr;
     max_sw_          = 0;
     max_sh_          = 0;
 }
 
 void gpu_sdf_pass::record( SDL_GPUCommandBuffer *cb, SDL_GPUBuffer *trans_buf,
-                           std::uint32_t runtime_w, std::uint32_t runtime_h )
+                           SDL_GPUBuffer *target_sdf, std::uint32_t runtime_w,
+                           std::uint32_t runtime_h )
 {
-    if( !ready() || !cb || !trans_buf || runtime_w == 0 || runtime_h == 0 ) {
+    if( !ready() || !cb || !trans_buf || !target_sdf || runtime_w == 0 || runtime_h == 0 ) {
         return;
     }
 
@@ -224,7 +214,7 @@ void gpu_sdf_pass::record( SDL_GPUCommandBuffer *cb, SDL_GPUBuffer *trans_buf,
         flood_result = seed_read;
     }
 
-    // --- RESOLVE pass ---
+    // --- RESOLVE pass --- writes directly to target_sdf (sdf_storage_)
     {
         jfa_params params{};
         params.map_w = runtime_w;
@@ -233,7 +223,7 @@ void gpu_sdf_pass::record( SDL_GPUCommandBuffer *cb, SDL_GPUBuffer *trans_buf,
 
         SDL_PushGPUComputeUniformData( cb, /*slot=*/0, &params, sizeof( params ) );
         SDL_GPUStorageBufferReadWriteBinding rw{};
-        rw.buffer = jfa_sdf_;
+        rw.buffer = target_sdf;
         rw.cycle  = false;
         SDL_GPUComputePass *p = SDL_BeginGPUComputePass( cb, nullptr, 0, &rw, 1 );
         if( !p ) { return; }

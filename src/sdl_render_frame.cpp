@@ -305,6 +305,14 @@ auto flush_and_gather_rc( lighting::render_state &rs,
         const std::uint32_t map_w = static_cast<std::uint32_t>( rs.sdf().map_w() );
         const std::uint32_t map_h = static_cast<std::uint32_t>( rs.sdf().map_h() );
 
+        // P3.3: GPU JFA SDF FIRST — writes directly to sdf_storage_ (the live
+        // consumer buffer). Sky/sun and GI passes read this buffer, so SDL_GPU
+        // must see the write here before the reads below to insert barriers.
+        if( rs.gpu_sdf().ready() && rs.sdf().trans_buffer() ) {
+            rs.gpu_sdf().record( ctx.cmd_buffer, rs.sdf().trans_buffer(),
+                                 rs.sdf().sdf_buffer(), map_w, map_h );
+        }
+
         // Celestial light params drive BOTH the sky/sun pass and the GI daylight
         // injection, so derive them once. Weather-independent (intensity/colour
         // applied fragment-side); cheap, so no wait on assemble_light_inputs.
@@ -475,7 +483,7 @@ auto assemble_light_inputs( lighting::render_state &rs,
         emit_dbg_frame = 0;
         dbg( DL::Debug ) << "lighting: n_emit=" << rs.collector()->last_count()
                          << " emitter_buf=" << ( rs.collector()->emitter_buffer() ? "ok" : "NULL" )
-                         << " sdf_tex=" << ( rs.sdf().sdf_texture() ? "ok" : "NULL" )
+                         << " sdf_buf=" << ( rs.sdf().sdf_buffer() ? "ok" : "NULL" )
                          << " sampler=" << ( rs.gpu_sampler() ? "ok" : "NULL" )
                          << " cam_off=(" << in.camera_off_x << "," << in.camera_off_y << ")"
                          << " sdf=" << rs.sdf().map_w() << "x" << rs.sdf().map_h()

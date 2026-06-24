@@ -55,20 +55,17 @@ class gpu_sdf_pass
 
         bool ready() const noexcept {
             return seed_pipeline_ != nullptr && flood_pipeline_ != nullptr
-                   && resolve_pipeline_ != nullptr && jfa_sdf_ != nullptr;
+                   && resolve_pipeline_ != nullptr;
         }
 
-        // The scratch SDF buffer (SS-grid, 1 float/subcell, TILE units). Used for
-        // A/B comparison against the CPU DT in P3.2. P3.3 will write sdf_storage_
-        // directly instead.
-        SDL_GPUBuffer *jfa_sdf_buffer() const noexcept { return jfa_sdf_; }
-
         // Run seed → flood (ping-pong) → resolve on `cb`. Reads trans_buf
-        // (tile-res floats, 0=opaque .. 1=open), writes jfa_sdf_. Each dispatch
-        // is its own BeginGPUComputePass/EndGPUComputePass so SDL_GPU inserts
-        // write→read barriers between ping-pong steps. No-op if not ready.
+        // (tile-res floats, 0=opaque .. 1=open), writes to `target_sdf`
+        // (SS-grid, 1 float/subcell, TILE units). Each dispatch is its own
+        // BeginGPUComputePass/EndGPUComputePass so SDL_GPU inserts write→read
+        // barriers between ping-pong steps. No-op if not ready.
         void record( SDL_GPUCommandBuffer *cb, SDL_GPUBuffer *trans_buf,
-                     std::uint32_t runtime_w, std::uint32_t runtime_h );
+                     SDL_GPUBuffer *target_sdf, std::uint32_t runtime_w,
+                     std::uint32_t runtime_h );
 
     private:
         SDL_GPUBuffer *create_buffer( std::uint32_t floats, SDL_GPUBufferUsageFlags usage );
@@ -82,9 +79,6 @@ class gpu_sdf_pass
         // Sentinel (-1,-1) = no seed yet.
         SDL_GPUBuffer *seed_a_ = nullptr;
         SDL_GPUBuffer *seed_b_ = nullptr;
-
-        // Scratch SDF output: SS-grid, 1 float/subcell, TILE units.
-        SDL_GPUBuffer *jfa_sdf_ = nullptr;
 
         std::uint32_t max_sw_ = 0;  // physical SS width (max_w * SDF_SS)
         std::uint32_t max_sh_ = 0;  // physical SS height (max_h * SDF_SS)

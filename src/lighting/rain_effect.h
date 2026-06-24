@@ -74,7 +74,10 @@ class rain_effect
         void shutdown() noexcept;
 
         bool ready() const noexcept {
-            return droplet_pipeline_ != nullptr && splash_pipeline_ != nullptr;
+            return dev_ != nullptr &&
+                   droplet_pipeline_ != nullptr && splash_pipeline_ != nullptr &&
+                   droplet_xfer_ != nullptr && droplet_storage_ != nullptr &&
+                   splash_xfer_ != nullptr && splash_storage_ != nullptr;
         }
 
         // Spawn a falling drop targeted at world tile (wx, wy). Called from the
