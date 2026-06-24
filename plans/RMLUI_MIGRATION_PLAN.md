@@ -3447,6 +3447,13 @@ Order, each build-green:
    helpers in the anon namespace: 4 `print_list_scrollable` overloads + `draw_diary_border`
    (the ASCII-art border, ~120 lines, only `mvwprintw` user). Build+link green, 0 primitives left.
    Curses windows (`w_pages/w_desc/w_info`) vestigial (resize still creates them) — follow-up.
+   **BATCH (2026-06-24): safemode_ui DONE** — gutted both curses fallback arms: the help popup
+   (`help_ui.on_redraw`, `if(help_doc) return;` + fold_and_print/draw_border) and the test-rule
+   popup (`ui.on_redraw`, `if(test_rml){sync;return;}` + the creature-list curses draw). Removed
+   the dead curses scaffolding: `w_help` + `init_help_window`, and `w_test_rule_content` +
+   `start_pos`. KEPT `w_test_rule_border` — load-bearing (`ui.position_from_window` drives the rml
+   layout too). Build+link green, 0 primitives left. (Pre-existing unused `start_pos`@~199 in a
+   different fn left as-is.)
    **RECLASSIFIED — NOT clean orphan/fallback deletes (need per-site migration first):**
    `veh_interact` (22): the `overview()`/`calc_overview()` part-picker is a **live** curses path
    called by do_repair/refill/siphon/change_shape (NOT a dead arm). `messages` (1037/1070): the

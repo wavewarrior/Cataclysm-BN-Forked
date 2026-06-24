@@ -431,19 +431,7 @@ void safemode::show( const std::string &custom_name_in, bool is_safemode_in )
         } else if( action == "CONFIRM" && !current_tab.empty() ) {
             changes_made = true;
             if( column == COLUMN_RULE ) {
-                catacurses::window w_help;
                 ui_adaptor help_ui;
-                const auto init_help_window = [&]( ui_adaptor & help_ui ) {
-                    const point offset( TERMX > FULL_SCREEN_WIDTH ? ( TERMX - FULL_SCREEN_WIDTH ) / 2 : 0,
-                                        TERMY > FULL_SCREEN_HEIGHT ? ( TERMY - FULL_SCREEN_HEIGHT ) / 2 : 0 );
-
-                    w_help = catacurses::newwin( FULL_SCREEN_HEIGHT / 2 - 2, FULL_SCREEN_WIDTH * 3 / 4,
-                                                 offset + point( 19 / 2, 7 + FULL_SCREEN_HEIGHT / 2 / 2 ) );
-
-                    help_ui.position_from_window( w_help );
-                };
-                init_help_window( help_ui );
-                help_ui.on_screen_resize( init_help_window );
 
                 // RmlUi backdrop: a passive static help doc stacked UNDER the
                 // string_input "Safe Mode Rule:" popup, replacing the curses help
@@ -468,43 +456,8 @@ void safemode::show( const std::string &custom_name_in, bool is_safemode_in )
                     }
                 }
 
-                help_ui.on_redraw( [&]( const ui_adaptor & ) {
-                    if( help_doc ) {
-                        return;
-                    }
-                    switch( current_tab[line].category ) {
-                        case Categories::HOSTILE_SPOTTED:
-                            // NOLINTNEXTLINE(cata-use-named-point-constants)
-                            fold_and_print( w_help, point( 1, 1 ), 999, c_white,
-                                            _(
-                                                "* is used as a Wildcard.  A few Examples:\n"
-                                                "\n"
-                                                "human          matches every NPC\n"
-                                                "zombie         matches the monster name exactly\n"
-                                                "acidic zo*     matches monsters beginning with 'acidic zo'\n"
-                                                "*mbie          matches monsters ending with 'mbie'\n"
-                                                "*cid*zo*ie     multiple * are allowed\n"
-                                                "AcI*zO*iE      case insensitive search" )
-                                          );
-                            break;
-                        case Categories::SOUND:
-                            // NOLINTNEXTLINE(cata-use-named-point-constants)
-                            fold_and_print( w_help, point( 1, 1 ), 999, c_white,
-                                            _(
-                                                "* is used as a Wildcard.  A few Examples:\n"
-                                                "\n"
-                                                "footsteps      matches the sound name exactly\n"
-                                                "a loud ba*     matches sounds beginning with 'a loud ba'\n"
-                                                "*losion!       matches sounds ending with 'losion!'\n"
-                                                "a *oud*ba*     multiple * are allowed\n"
-                                                "*LoU*bA*       case insensitive search" )
-                                          );
-                            break;
-                        default:
-                            break;
-                    }
-                    draw_border( w_help );
-                    wnoutrefresh( w_help );
+                help_ui.on_redraw( []( const ui_adaptor & ) {
+                    // RmlUi help doc owns this; curses fallback removed (rip-out B).
                 } );
 
                 current_tab[line].rule = wildcard_trim_rule( string_input_popup()
@@ -646,12 +599,10 @@ void safemode::test_pattern( const int tab_in, const int row_in )
         }
     }
 
-    int start_pos = 0;
     int content_height = 0;
     int content_width = 0;
 
     catacurses::window w_test_rule_border;
-    catacurses::window w_test_rule_content;
 
     ui_adaptor ui;
     const auto init_windows = [&]( ui_adaptor & ui ) {
@@ -664,8 +615,6 @@ void safemode::test_pattern( const int tab_in, const int row_in )
 
         w_test_rule_border = catacurses::newwin( content_height + 2, content_width,
                              offset );
-        w_test_rule_content = catacurses::newwin( content_height, content_width - 2,
-                              offset + point_south_east );
 
         ui.position_from_window( w_test_rule_border );
     };
@@ -709,40 +658,8 @@ void safemode::test_pattern( const int tab_in, const int row_in )
     ui.on_redraw( [&]( const ui_adaptor & ) {
         if( test_rml ) {
             sync_test_rml();
-            return;
         }
-        draw_border( w_test_rule_border, BORDER_COLOR, buf, hilite( c_white ) );
-        center_print( w_test_rule_border, content_height + 1, red_background( c_white ),
-                      _( "Lists monsters regardless of their attitude." ) );
-
-        wnoutrefresh( w_test_rule_border );
-
-        // Clear the lines
-        for( int i = 0; i < content_height; i++ ) {
-            for( int j = 0; j < 79; j++ ) {
-                mvwputch( w_test_rule_content, point( j, i ), c_black, ' ' );
-            }
-        }
-
-        calcStartPos( start_pos, line, content_height, creature_list.size() );
-
-        // display safe mode
-        for( int i = start_pos; i < static_cast<int>( creature_list.size() ); i++ ) {
-            if( i >= start_pos &&
-                i < start_pos + std::min( content_height, static_cast<int>( creature_list.size() ) ) ) {
-                nc_color line_color = c_white;
-
-                mvwprintz( w_test_rule_content, point( 0, i - start_pos ), line_color, "%d", i + 1 );
-                mvwprintz( w_test_rule_content, point( 4, i - start_pos ), line_color, "" );
-
-                wprintz( w_test_rule_content, c_yellow, ( line == i ) ? ">> " : "   " );
-
-                wprintz( w_test_rule_content, ( line == i ) ? hilite( line_color ) : line_color,
-                         creature_list[i] );
-            }
-        }
-
-        wnoutrefresh( w_test_rule_content );
+        // RmlUi owns the screen; curses fallback removed (rip-out B).
     } );
 
     test_rml.open( safemode_rmlui_enabled(), "safemode_test", ctxt,
