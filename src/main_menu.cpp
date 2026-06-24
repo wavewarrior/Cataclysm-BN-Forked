@@ -568,8 +568,14 @@ bool main_menu::opening_screen()
         data->handle.DirtyVariable( "logo_rml" );
         data->handle.DirtyVariable( "version_rml" );
         data->handle.DirtyVariable( "items" );
-        data->handle.DirtyVariable( "submenu" );
-        data->handle.DirtyVariable( "motd_lines" );
+        // Only dirty arrays that are actually shown — dirtying a cleared array
+        // while RML still has stale iteration state causes out-of-bounds access.
+        if( data->show_submenu ) {
+            data->handle.DirtyVariable( "submenu" );
+        }
+        if( data->show_motd ) {
+            data->handle.DirtyVariable( "motd_lines" );
+        }
         data->handle.DirtyVariable( "tips_rml" );
         data->handle.DirtyVariable( "show_motd" );
         data->handle.DirtyVariable( "show_submenu" );

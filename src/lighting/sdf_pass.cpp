@@ -376,24 +376,27 @@ void sdf_pass::upload( SDL_GPUCopyPass *cp,
     // Per-tile visibility on the SDF_SUPERSAMPLE grid (SS² floats/tile, x-major,
     // stride runtime_h*SS). Fragment storage buffer (VisBuf); shader applies the
     // soft vision falloff sampled as finely as the SDF shadows.
-    if( visbuf_storage_ && xfer_vis_f_
-        && static_cast<Uint32>( vis.size() ) >= sdf_subcells ) {
-        void *mapped = SDL_MapGPUTransferBuffer( dev, xfer_vis_f_, true );
-        if( mapped ) {
-            std::memcpy( mapped, vis.data(),
-                         sdf_subcells * static_cast<Uint32>( sizeof( float ) ) );
-            SDL_UnmapGPUTransferBuffer( dev, xfer_vis_f_ );
+    {
+        const Uint32 vis_count = pixel_count * static_cast<Uint32>( SDF_SUPERSAMPLE * SDF_SUPERSAMPLE );
+        if( visbuf_storage_ && xfer_vis_f_
+            && static_cast<Uint32>( vis.size() ) >= vis_count ) {
+            void *mapped = SDL_MapGPUTransferBuffer( dev, xfer_vis_f_, true );
+            if( mapped ) {
+                std::memcpy( mapped, vis.data(),
+                             vis_count * sizeof( float ) );
+                SDL_UnmapGPUTransferBuffer( dev, xfer_vis_f_ );
 
-            SDL_GPUTransferBufferLocation tb_src{};
-            tb_src.transfer_buffer = xfer_vis_f_;
-            tb_src.offset          = 0;
+                SDL_GPUTransferBufferLocation tb_src{};
+                tb_src.transfer_buffer = xfer_vis_f_;
+                tb_src.offset          = 0;
 
-            SDL_GPUBufferRegion buf_dst{};
-            buf_dst.buffer = visbuf_storage_;
-            buf_dst.offset = 0;
-            buf_dst.size   = sdf_subcells * static_cast<Uint32>( sizeof( float ) );
+                SDL_GPUBufferRegion buf_dst{};
+                buf_dst.buffer = visbuf_storage_;
+                buf_dst.offset = 0;
+                buf_dst.size   = vis_count * sizeof( float );
 
-            SDL_UploadToGPUBuffer( cp, &tb_src, &buf_dst, false );
+                SDL_UploadToGPUBuffer( cp, &tb_src, &buf_dst, false );
+            }
         }
     }
 }
