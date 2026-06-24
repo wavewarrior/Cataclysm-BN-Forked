@@ -23,7 +23,6 @@ struct EmitterOverlayState {
     int map_origin_x = 0, map_origin_y = 0;
     int draw_off_px_x = 0, draw_off_px_y = 0;
     uint32_t last_n_emit_pushed = 0;
-    float sdf_at_player = -1.f;
     float trans_at_player = -1.f;
     int   sdf_W_at_submit = 0;
     size_t sdf_size_at_submit = 0;

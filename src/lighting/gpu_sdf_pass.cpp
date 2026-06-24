@@ -7,6 +7,7 @@
 
 #include "debug.h"
 #include "lighting/gpu_device.h"
+#include "lighting/sdf_pass.h"
 #include "lighting/shader_compiler.h"
 
 #define dbg( x ) DebugLogFL( ( x ), DC::SDL )
@@ -14,10 +15,12 @@
 namespace lighting
 {
 
-// Subcells per tile side — must match jfa_shared.hlsl SDF_SS_DIM.
-static constexpr std::uint32_t SDF_SS = 4u;
+// Subcells per tile side. Single-sourced from sdf_pass.h's SDF_SUPERSAMPLE so the
+// GPU buffer sizing here can never drift from the CPU upload sizing. Must also
+// match the shader-side SDF_SS in jfa_shared.hlsl.
+static constexpr std::uint32_t SDF_SS = static_cast<std::uint32_t>( SDF_SUPERSAMPLE );
 
-// Max flood step size in SS units (covers ~4 tiles).
+// Max flood step size in SS units (covers ~4 tiles — the resolve clamp radius).
 static constexpr float SDF_FLOOD_STEP = 16.0f;
 
 gpu_sdf_pass::~gpu_sdf_pass()
@@ -39,9 +42,12 @@ bool gpu_sdf_pass::init( gpu_device &dev, std::uint32_t max_w, std::uint32_t max
     const std::uint32_t max_sw = max_w * SDF_SS;
     const std::uint32_t max_sh = max_h * SDF_SS;
 
-    // Compile all three compute pipelines.
+    // Compile all three compute pipelines. `name` is the bare "<x>.comp" label;
+    // the source file adds the ".hlsl" extension (matches gi_compute_pass /
+    // sky_sun_pass). Loading without ".hlsl" reads an empty file → "missing entry
+    // point" → the pipeline silently fails to create.
     auto compile_one = [&]( const char *name ) -> SDL_GPUComputePipeline * {
-        const std::string src = load_lighting_shader_source( name );
+        const std::string src = load_lighting_shader_source( std::string( name ) + ".hlsl" );
         auto pp = compile_compute_pipeline( dev, src, "main", name );
         if( !pp ) {
             DebugLogFL( DL::Error, DC::Main ) << "gpu_sdf_pass: " << name << " pipeline failed";
@@ -53,6 +59,14 @@ bool gpu_sdf_pass::init( gpu_device &dev, std::uint32_t max_w, std::uint32_t max
     seed_pipeline_   = compile_one( "jfa_seed.comp" );
     flood_pipeline_  = compile_one( "jfa_flood.comp" );
     resolve_pipeline_ = compile_one( "jfa_resolve.comp" );
+
+    // Fail loudly if any pipeline didn't compile — otherwise ready() is false and
+    // the JFA pass is silently disabled while init() reports success (which is
+    // exactly how the missing-".hlsl" / missing-include breakage stayed hidden).
+    if( !seed_pipeline_ || !flood_pipeline_ || !resolve_pipeline_ ) {
+        dbg( DL::Error ) << "gpu_sdf_pass::init: one or more JFA pipelines failed to compile";
+        return false;
+    }
 
     // Allocate ping-pong seed buffers (2 floats/subcell).
     const std::uint32_t seed_floats = max_sw * max_sh * 2u;
@@ -86,37 +100,6 @@ SDL_GPUBuffer *gpu_sdf_pass::create_buffer( std::uint32_t floats, SDL_GPUBufferU
         dbg( DL::Error ) << "gpu_sdf_pass: buffer create failed: " << SDL_GetError();
     }
     return b;
-}
-
-bool gpu_sdf_pass::resize( std::uint32_t max_w, std::uint32_t max_h )
-{
-    const std::uint32_t new_sw = max_w * SDF_SS;
-    const std::uint32_t new_sh = max_h * SDF_SS;
-
-    if( seed_a_ && new_sw == max_sw_ && new_sh == max_sh_ ) {
-        return true;
-    }
-
-    // Release old buffers.
-    if( dev_ && dev_->ready() ) {
-        if( seed_a_ )  { SDL_ReleaseGPUBuffer( dev_->raw(), seed_a_ );  seed_a_ = nullptr; }
-        if( seed_b_ )  { SDL_ReleaseGPUBuffer( dev_->raw(), seed_b_ );  seed_b_ = nullptr; }
-    }
-
-    const std::uint32_t seed_floats = new_sw * new_sh * 2u;
-
-    seed_a_ = create_buffer( seed_floats, SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ |
-                                          SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE );
-    seed_b_ = create_buffer( seed_floats, SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ |
-                                          SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE );
-
-    if( !seed_a_ || !seed_b_ ) {
-        return false;
-    }
-
-    max_sw_ = new_sw;
-    max_sh_ = new_sh;
-    return true;
 }
 
 void gpu_sdf_pass::shutdown() noexcept
@@ -182,9 +165,12 @@ void gpu_sdf_pass::record( SDL_GPUCommandBuffer *cb, SDL_GPUBuffer *trans_buf,
         params.map_w = runtime_w;
         params.map_h = runtime_h;
 
-        // Number of flood passes: log2(SDF_FLOOD_STEP) ≈ 4. Each halves the step.
-        const int flood_passes = static_cast<int>( std::ceil(
-            std::log2( SDF_FLOOD_STEP ) ) );
+        // Step schedule: start at the FULL SDF_FLOOD_STEP reach and halve down to
+        // 1 (e.g. 16,8,4,2,1). passes = log2(step)+1 — the +1 is what makes the
+        // first jump equal the advertised flood radius; without it the largest
+        // step was only SDF_FLOOD_STEP/2, truncating shadow reach by half.
+        const int flood_passes = static_cast<int>(
+            std::log2( SDF_FLOOD_STEP ) ) + 1;
 
         SDL_GPUBuffer *seed_read  = seed_a_;
         SDL_GPUBuffer *seed_write = seed_b_;

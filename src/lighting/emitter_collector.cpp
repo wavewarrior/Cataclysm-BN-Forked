@@ -156,11 +156,13 @@ void emitter_collector::flush_to_render_cb( SDL_GPUCommandBuffer *cb )
         SDL_UploadToGPUBuffer( cp, &src, &dst, /*cycle=*/true );
     }
 
-    // Phase 4/8: upload transparency + SDF + sky_vis + indirect in the same
-    // copy pass. Runtime W/H come from the submitter (sdltiles.cpp) so the
-    // upload region matches the live mapsize, even if the GPU buffer is
-    // over-allocated.
-    if( rs_.sdf().ready() && !transparency.empty() && !sdf.empty()
+    // Phase 4/8: upload transparency + sky_vis + vis + occ in the same copy pass.
+    // Runtime W/H come from the submitter (sdltiles.cpp) so the upload region
+    // matches the live mapsize, even if the GPU buffer is over-allocated.
+    // P3.3: do NOT gate on `!sdf.empty()` — the CPU SDF vector is now always {}
+    // (JFA writes sdf_storage_ on the GPU). transparency feeds the JFA seed via
+    // trans_storage_, so transparency presence is the real upload trigger.
+    if( rs_.sdf().ready() && !transparency.empty()
         && runtime_w > 0 && runtime_h > 0 ) {
         rs_.sdf().upload( cp, rs_.device().raw(),
                           runtime_w, runtime_h,

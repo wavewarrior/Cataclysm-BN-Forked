@@ -144,10 +144,15 @@ int main( int argc, char **argv )
             continue;
         }
 
+        // Resolve `#include` (jfa_*.comp pull in jfa_shared.hlsl) relative to the
+        // shader's own directory — mirrors the game's runtime include_dir so this
+        // gate actually exercises the included files instead of erroring on them.
+        const std::string inc_dir = p.parent_path().string();
+
         SDL_ShaderCross_HLSL_Info info{};
         info.source = src.c_str();
         info.entrypoint = "main";
-        info.include_dir = nullptr;
+        info.include_dir = inc_dir.c_str();
         info.defines = nullptr;
         info.shader_stage = stage;
         info.props = 0;

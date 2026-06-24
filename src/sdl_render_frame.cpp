@@ -234,7 +234,6 @@ auto build_lighting( lighting::render_state &rs ) -> bool
     dbg( DL::Debug ) << "[render] build_and_submit_lighting DONE, built_pertile=" << fr.built_pertile;
     rc_rebuild = fr.built_pertile;
     if( fr.built_pertile ) {
-        s_emo.sdf_at_player      = fr.sdf_at_player;
         s_emo.trans_at_player    = fr.trans_at_player;
         s_emo.sdf_W_at_submit    = fr.sdf_W;
         s_emo.sdf_size_at_submit = fr.sdf_size;
@@ -300,18 +299,27 @@ auto flush_and_gather_rc( lighting::render_state &rs,
         rs.collector()->flush_to_render_cb( ctx.cmd_buffer );
     }
 
+    // P3.3: GPU JFA SDF — the SOLE writer of sdf_storage_. Recorded INDEPENDENTLY
+    // of GI/sky pipeline readiness: the CPU Euclidean DT it replaced never
+    // depended on them, and a backend that fails to create the GI/sky compute
+    // pipelines (e.g. a D3D12 reflection failure) must STILL get a valid SDF —
+    // otherwise the fragment shadow march reads an uninitialised buffer and all
+    // emitter/sun shadows break. Runs first so SDL_GPU sees the write before the
+    // sky/GI reads below and inserts the write→read barrier on sdf_storage_.
+    if( rc_rebuild && rs.sdf().populated() && rs.sdf().sdf_buffer()
+        && rs.gpu_sdf().ready() && rs.sdf().trans_buffer() ) {
+        rs.gpu_sdf().record( ctx.cmd_buffer, rs.sdf().trans_buffer(),
+                             rs.sdf().sdf_buffer(),
+                             static_cast<std::uint32_t>( rs.sdf().map_w() ),
+                             static_cast<std::uint32_t>( rs.sdf().map_h() ) );
+    }
+
+    // Sky/sun + GI are the optional compute layers ON TOP of the SDF; they need
+    // their own pipelines created (gi().ready()) and consume the SDF write above.
     if( rc_rebuild && rs.sdf().populated() && rs.gi().ready()
         && rs.collector() && rs.sdf().sdf_buffer() ) {
         const std::uint32_t map_w = static_cast<std::uint32_t>( rs.sdf().map_w() );
         const std::uint32_t map_h = static_cast<std::uint32_t>( rs.sdf().map_h() );
-
-        // P3.3: GPU JFA SDF FIRST — writes directly to sdf_storage_ (the live
-        // consumer buffer). Sky/sun and GI passes read this buffer, so SDL_GPU
-        // must see the write here before the reads below to insert barriers.
-        if( rs.gpu_sdf().ready() && rs.sdf().trans_buffer() ) {
-            rs.gpu_sdf().record( ctx.cmd_buffer, rs.sdf().trans_buffer(),
-                                 rs.sdf().sdf_buffer(), map_w, map_h );
-        }
 
         // Celestial light params drive BOTH the sky/sun pass and the GI daylight
         // injection, so derive them once. Weather-independent (intensity/colour

@@ -21,9 +21,9 @@ namespace lighting
 
 sdf_pass::~sdf_pass()
 {
-    // Caller must call shutdown() with the device before destruction.
-    // If transparency_tex_ is still non-null, it means shutdown was skipped —
-    // we can't release GPU resources without a device pointer here.
+    // Caller must call shutdown() with the device before destruction. GPU
+    // resources can't be released here (no device pointer); a leak means
+    // shutdown() was skipped.
 }
 
 void sdf_pass::init( gpu_device &dev, int map_w, int map_h )
@@ -36,34 +36,11 @@ void sdf_pass::init( gpu_device &dev, int map_w, int map_h )
 
     SDL_GPUDevice *d = dev.raw();
 
-    // Transparency texture: R8 UNORM, 1 byte per tile.
-    {
-        SDL_GPUTextureCreateInfo tci{};
-        tci.type                 = SDL_GPU_TEXTURETYPE_2D;
-        tci.format               = SDL_GPU_TEXTUREFORMAT_R8_UNORM;
-        tci.usage                = SDL_GPU_TEXTUREUSAGE_SAMPLER
-                                   | SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE;
-        tci.width                = static_cast<Uint32>( map_w );
-        tci.height               = static_cast<Uint32>( map_h );
-        tci.layer_count_or_depth = 1;
-        tci.num_levels           = 1;
-        tci.sample_count         = SDL_GPU_SAMPLECOUNT_1;
-        transparency_tex_ = SDL_CreateGPUTexture( d, &tci );
-        if( !transparency_tex_ ) {
-            dbg( DL::Error ) << "sdf_pass::init: failed to create transparency_tex";
-        }
-    }
+    // P3.3: transparency_tex_ (R8), sdf_tex_ (R32F) and sky_vis_tex_ deleted —
+    // nothing samples them. The JFA seed reads trans_storage_ (float), SDF reads
+    // sdf_storage_, sky_vis reads skyvis_storage_.
 
-    // P3.3: sdf_tex_ (R32F) and sky_vis_tex_ deleted — nothing samples them.
-    // SDF reads from sdf_storage_; sky_vis reads from skyvis_storage_.
-
-    // Transfer buffers: one for transparency (R8), one for sky_vis_f (R32F).
-    {
-        SDL_GPUTransferBufferCreateInfo tbci{};
-        tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-        tbci.size  = static_cast<Uint32>( map_w * map_h ); // 1 byte per tile
-        xfer_transparency_ = SDL_CreateGPUTransferBuffer( d, &tbci );
-    }
+    // Transfer buffers (sky_vis R8 path retained for the byte source below).
     {
         SDL_GPUTransferBufferCreateInfo tbci{};
         tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
@@ -169,10 +146,6 @@ void sdf_pass::shutdown( gpu_device &dev )
     if( !d ) {
         return;
     }
-    if( xfer_transparency_ ) {
-        SDL_ReleaseGPUTransferBuffer( d, xfer_transparency_ );
-        xfer_transparency_ = nullptr;
-    }
     if( xfer_sky_vis_ ) {
         SDL_ReleaseGPUTransferBuffer( d, xfer_sky_vis_ );
         xfer_sky_vis_ = nullptr;
@@ -213,10 +186,6 @@ void sdf_pass::shutdown( gpu_device &dev )
         SDL_ReleaseGPUBuffer( d, trans_storage_ );
         trans_storage_ = nullptr;
     }
-    if( transparency_tex_ ) {
-        SDL_ReleaseGPUTexture( d, transparency_tex_ );
-        transparency_tex_ = nullptr;
-    }
 }
 
 void sdf_pass::upload( SDL_GPUCopyPass *cp,
@@ -228,70 +197,37 @@ void sdf_pass::upload( SDL_GPUCopyPass *cp,
                         const std::vector<float>   &vis,
                         const std::vector<float>   &occ )
 {
-    if( !cp || !dev || !transparency_tex_ ) {
+    if( !cp || !dev || !trans_storage_ ) {
         return;
     }
     if( runtime_w <= 0 || runtime_h <= 0 ) {
         return;
     }
-    // Refuse runtime sizes that exceed the texture allocation. Should never
+    // Refuse runtime sizes that exceed the buffer allocation. Should never
     // happen if render_state::init sized for REALITY_BUBBLE_SIZE_MAX, but
-    // clamp defensively rather than overrun the GPU texture.
+    // clamp defensively rather than overrun the GPU storage buffers.
     if( runtime_w > map_w_ || runtime_h > map_h_ ) {
         dbg( DL::Error ) << "sdf_pass::upload: runtime " << runtime_w << "x"
-                         << runtime_h << " exceeds tex " << map_w_ << "x" << map_h_;
+                         << runtime_h << " exceeds buf " << map_w_ << "x" << map_h_;
         return;
     }
 
     const Uint32 pixel_count = static_cast<Uint32>( runtime_w * runtime_h );
-    // populated_ flips only when SDF data actually lands on the GPU
-    // (see SDF block below). Main-menu / pre-world frames call upload()
-    // with empty vectors → guards skip every channel → populated_ must
-    // stay false so begin_lighting_frame keeps sdf_map_w/h=0 and the
-    // shader skips its shadow march (which would read s=0 → shadow=0
-    // → SDF debug view all red + sun killed).
+    // populated_ flips only when transparency actually lands on the GPU (the
+    // trans_storage_ block below). Main-menu / pre-world frames call upload()
+    // with empty vectors → guards skip every channel → populated_ stays false
+    // so begin_lighting_frame keeps sdf_map_w/h=0 and the shader skips its
+    // shadow march (which would read s=0 → shadow=0 → SDF debug all red + sun
+    // killed).
 
-    // All uploads write a runtime_w × runtime_h sub-rect at (0,0). The
-    // texture is sized for REALITY_BUBBLE_SIZE_MAX so it can hold any
-    // legal mapsize; the shader clamps with runtime_w/h (via map_w()/h()).
-    // pixels_per_row = runtime_w so the source rows match the CPU x-major
-    // packing sdf[x * runtime_h + y].
+    // All uploads write a runtime_w × runtime_h sub-rect at (0,0). The buffers
+    // are sized for REALITY_BUBBLE_SIZE_MAX so they hold any legal mapsize; the
+    // shader clamps with runtime_w/h (via map_w()/h()), and the x-major packing
+    // matches arr[x * runtime_h + y].
 
-    // Upload transparency (R8, 1 byte/tile).
-    if( xfer_transparency_ &&
-        static_cast<Uint32>( transparency.size() ) >= pixel_count ) {
-        void *mapped = SDL_MapGPUTransferBuffer( dev, xfer_transparency_, true );
-        if( mapped ) {
-            std::memcpy( mapped, transparency.data(), pixel_count );
-            SDL_UnmapGPUTransferBuffer( dev, xfer_transparency_ );
-
-            SDL_GPUTextureTransferInfo src{};
-            src.transfer_buffer = xfer_transparency_;
-            src.pixels_per_row  = static_cast<Uint32>( runtime_w );
-
-            SDL_GPUTextureRegion dst{};
-            dst.texture = transparency_tex_;
-            dst.w       = static_cast<Uint32>( runtime_w );
-            dst.h       = static_cast<Uint32>( runtime_h );
-            dst.d       = 1;
-
-            // cycle=false: shader binds transparency_tex_ by handle.
-            // cycle=true would orphan it after every upload (new texture
-            // gets the bytes, sampler keeps the stale empty handle).
-            SDL_UploadToGPUTexture( cp, &src, &dst, false );
-        }
-        // P3.3: populated_ flips when transparency lands — JFA writes SDF
-        // directly to sdf_storage_, so we no longer need the CPU SDF upload
-        // block below to set this flag. begin_lighting_frame() exposes
-        // sdf_map_w/h from this frame onward.
-        populated_  = true;
-        runtime_w_  = runtime_w;
-        runtime_h_  = runtime_h;
-    }
-
-    // P3.3: CPU SDF upload removed — JFA writes directly to sdf_storage_ on GPU.
-    // The `sdf` parameter is retained in the function signature for backward compat
-    // with emitter_collector::submit() but no longer consumed here.
+    // P3.3: transparency is no longer uploaded to an R8 sampler texture (nothing
+    // sampled it). It feeds the JFA seed via trans_storage_ (float) only — see
+    // the trans_storage_ block below, which also flips populated_.
 
     // Stage 2b: unified coverage occluder field — tile-res, 2 floats/tile
     // (occ[(x*runtime_h+y)*2 + 0] = occluder height, +1 = roof bit). Marched by
@@ -342,6 +278,12 @@ void sdf_pass::upload( SDL_GPUCopyPass *cp,
 
             SDL_UploadToGPUBuffer( cp, &tb_src, &buf_dst, false );
         }
+        // populated_ flips here: trans_storage_ is the JFA seed input, so once it
+        // lands the GPU SDF pass has valid data to consume. begin_lighting_frame()
+        // exposes sdf_map_w/h from this frame onward.
+        populated_  = true;
+        runtime_w_  = runtime_w;
+        runtime_h_  = runtime_h;
     }
 
     // P3.3: sky_vis_tex_ deleted — shader reads from skyvis_storage_ buffer, not a texture.

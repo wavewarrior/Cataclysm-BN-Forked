@@ -11,8 +11,8 @@
 //   3. RESOLVE (jfa_resolve.comp):  one thread = one SS-subcell. Computes distance
 //      from subcell to its nearest seed, divides by SDF_SS → tile units.
 //
-// Writes a scratch jfa_sdf_ buffer first (P3.2) for A/B vs CPU DT. P3.3 switches
-// consumers to write sdf_storage_ directly and deletes the CPU path.
+// P3.3: the resolve pass writes sdf_storage_ directly (the live consumer buffer);
+// the CPU Euclidean DT path is gone.
 //
 // Shaders: data/shaders/lighting/src/jfa_seed.comp.hlsl, jfa_flood.comp.hlsl,
 //          jfa_resolve.comp.hlsl.
@@ -43,13 +43,11 @@ class gpu_sdf_pass
         gpu_sdf_pass &operator=( const gpu_sdf_pass & ) = delete;
         ~gpu_sdf_pass();
 
-        // Compile all three compute pipelines + allocate seed ping-pong buffers
-        // and scratch SDF buffer for a max_w × max_h SS grid. Returns false on
-        // failure (logged).
-        bool init( gpu_device &dev, std::uint32_t max_sw, std::uint32_t max_sh );
-
-        // Reallocate buffers for new SS dimensions. Cheap no-op if unchanged.
-        bool resize( std::uint32_t max_sw, std::uint32_t max_sh );
+        // Compile all three compute pipelines + allocate the seed ping-pong
+        // buffers. max_w/max_h are TILE dimensions (the max mapsize this pass
+        // will ever run); the SS grid is sized max_w*SDF_SS × max_h*SDF_SS
+        // internally. Returns false on failure (logged).
+        bool init( gpu_device &dev, std::uint32_t max_w, std::uint32_t max_h );
 
         void shutdown() noexcept;
 

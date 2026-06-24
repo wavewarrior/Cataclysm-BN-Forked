@@ -27,7 +27,6 @@ class render_state;
 // HUD / debug snapshot bits the caller mirrors into its EmitterOverlayState.
 struct frame_lighting_result {
     bool   built_pertile   = false; // per-tile buffers were rebuilt this call
-    float  sdf_at_player   = -1.f;
     float  trans_at_player = -1.f;
     int    sdf_W           = 0;
     std::size_t sdf_size   = 0;

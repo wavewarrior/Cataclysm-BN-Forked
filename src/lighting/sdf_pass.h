@@ -30,8 +30,9 @@ inline constexpr int SDF_SUPERSAMPLE = 4;
 // the distance transform — transparency feeds trans_storage_ which the seed shader
 // reads directly. sdf_storage_ is written by the JFA resolve pass.
 //
-// Layout: 1 texel per tile for transparency_tex (R8_UNORM, 0=opaque, 255=open).
-// SDF/sky_vis/vis are storage buffers (no textures — nothing samples them).
+// Layout: all per-tile data is in storage buffers (no sampler textures — nothing
+// samples them). transparency feeds trans_storage_ (float, JFA seed input);
+// SDF/sky_vis/vis are their own storage buffers.
 //
 // The data is passed to the collector thread which calls upload() inside a copy pass.
 class sdf_pass
@@ -72,7 +73,6 @@ public:
                  // (height, roof). Marched by sky_sun.comp. Empty = skip.
                  const std::vector<float>   &occ = {} );
 
-    SDL_GPUTexture *transparency_texture() const noexcept { return transparency_tex_; }
     // Phase 6b: SDF values as a vertex-readable storage buffer (JFA output).
     SDL_GPUBuffer  *sdf_buffer()           const noexcept { return sdf_storage_; }
     // Sky visibility as a fragment-readable storage buffer of floats
@@ -89,7 +89,7 @@ public:
     // COMPUTE-readable so the seed shader can read it directly.
     SDL_GPUBuffer  *trans_buffer()         const noexcept { return trans_storage_; }
 
-    bool ready() const noexcept { return transparency_tex_ != nullptr; }
+    bool ready() const noexcept { return sdf_storage_ != nullptr; }
     // True after the first successful upload(). Until then the SDF/sky_vis
     // buffers contain undefined/zero bytes — the fragment shader must NOT
     // run its shadow march over them (would read s=0 → shadow=0 →
@@ -109,7 +109,6 @@ public:
     int tex_h() const noexcept { return map_h_; }
 
 private:
-    SDL_GPUTexture        *transparency_tex_ = nullptr;
     SDL_GPUBuffer         *sdf_storage_      = nullptr; // fragment storage buffer (SdfBuf, JFA output)
     SDL_GPUBuffer         *skyvis_storage_   = nullptr; // fragment storage buffer (SkyVisBuf, floats)
     SDL_GPUBuffer         *occ_storage_      = nullptr; // Stage 2b unified coverage occluder (tile-res, 2 floats/tile)
@@ -117,7 +116,6 @@ private:
     SDL_GPUBuffer         *trans_storage_    = nullptr; // P3 JFA input: tile-res transparency as floats
     SDL_GPUTransferBuffer *xfer_trans_f_     = nullptr; // float bytes for trans_storage_
     SDL_GPUBuffer         *visbuf_storage_   = nullptr; // fragment storage buffer (VisBuf, 1 float/tile)
-    SDL_GPUTransferBuffer *xfer_transparency_ = nullptr;
     SDL_GPUTransferBuffer *xfer_sky_vis_      = nullptr; // R8 bytes for sky_vis_tex_
     SDL_GPUTransferBuffer *xfer_skyvis_f_     = nullptr; // float bytes for skyvis_storage_
     SDL_GPUTransferBuffer *xfer_vis_f_        = nullptr; // float bytes for visbuf_storage_ (1/tile)

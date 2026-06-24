@@ -76,10 +76,16 @@ compiled_shader compile_graphics_shader(
     // shadercross expects a null-terminated source string.
     const std::string src_z( source );
 
+    // Resolve `#include` directives (the jfa_*.comp shaders pull in
+    // jfa_shared.hlsl) relative to the lighting shader src dir. DXC needs an
+    // explicit include search dir; a null include_dir makes the include fail
+    // with "file not found" so the pipeline never compiles.
+    const std::string inc_dir = PATH_INFO::datadir() + "shaders/lighting/src";
+
     SDL_ShaderCross_HLSL_Info hlsl_info{};
     hlsl_info.source = src_z.c_str();
     hlsl_info.entrypoint = entrypoint;
-    hlsl_info.include_dir = nullptr;
+    hlsl_info.include_dir = inc_dir.c_str();
     hlsl_info.defines = nullptr;
     hlsl_info.shader_stage = stage;
     hlsl_info.props = 0;
@@ -156,10 +162,15 @@ compiled_compute_pipeline compile_compute_pipeline(
 
     const std::string src_z( source );
 
+    // Resolve `#include` directives (jfa_*.comp pull in jfa_shared.hlsl) relative
+    // to the lighting shader src dir. A null include_dir makes the include fail
+    // with "file not found" so the compute pipeline never compiles.
+    const std::string inc_dir = PATH_INFO::datadir() + "shaders/lighting/src";
+
     SDL_ShaderCross_HLSL_Info hlsl_info{};
     hlsl_info.source = src_z.c_str();
     hlsl_info.entrypoint = entrypoint;
-    hlsl_info.include_dir = nullptr;
+    hlsl_info.include_dir = inc_dir.c_str();
     hlsl_info.defines = nullptr;
     hlsl_info.shader_stage = SDL_SHADERCROSS_SHADERSTAGE_COMPUTE;
     hlsl_info.props = 0;

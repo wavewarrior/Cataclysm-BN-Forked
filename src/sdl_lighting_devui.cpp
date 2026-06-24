@@ -767,8 +767,8 @@ static Rml::String build_diag_text()
         snprintf( buf, sizeof( buf ), "trans@p=%.3f N=%.3f S=%.3f E=%.3f W=%.3f\n",
                   T( px, py ), T( px, py - 1 ), T( px, py + 1 ), T( px + 1, py ), T( px - 1, py ) );
         out += buf;
-        snprintf( buf, sizeof( buf ), "sdf@p=%.3f trans@p(submit)=%.3f sdfW=%d sz=%zu\n",
-                  s_emo.sdf_at_player, s_emo.trans_at_player,
+        snprintf( buf, sizeof( buf ), "trans@p(submit)=%.3f sdfW=%d sz=%zu\n",
+                  s_emo.trans_at_player,
                   s_emo.sdf_W_at_submit, s_emo.sdf_size_at_submit );
         out += buf;
     }
