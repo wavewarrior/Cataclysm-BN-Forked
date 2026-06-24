@@ -1,0 +1,16 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="scores_kills.rcss"/>
+</head>
+<body data-model="scores_kills">
+    <!-- The kills screen (show_kills) — the tab-less twin of show_scores_ui's
+         body. A single scrolling text pane: keyboard stays on input_context
+         (UP/DOWN/PAGE_* scroll the #scores-kills-body element via SetScrollTop;
+         RmlUi handles mouse-wheel on its own), body_rml carries colour spans from
+         cata_text_to_rml() and the layout engine wraps it (NO manual fold). -->
+    <div class="panel sk-panel">
+        <div id="scores-kills-body" class="sk-body" data-rml="body_rml"></div>
+    </div>
+</body>
+</rml>

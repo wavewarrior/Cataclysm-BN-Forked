@@ -3341,8 +3341,8 @@ primitive counts) + the `panels.cpp` HUD curses sidebar. The shared backend is N
     instantiation isn't automatically a live draw path — check whether it's EXECUTED/shown.
   - **★ DE-CURSE CAMPAIGN COMPLETE after B11 (2026-06-23).** All bespoke screens + the panels HUD are
     de-cursed. The ONLY remaining rip-out-plan work is popup-migration (NEW RML authoring:
-    ~~trade_win~~/~~safemode_ui~~/~~messages-filter~~/scores_ui-show_kills — only scores_ui-show_kills
-    left) — a feature task, not a deletion batch.
+    ~~trade_win~~/~~safemode_ui~~/~~messages-filter~~/~~scores_ui-show_kills~~ — ALL DONE 2026-06-24) — a
+    feature task, not a deletion batch. **★ POPUP-MIGRATION COMPLETE; eyeball pass owed on all four.**
   - **panels.cpp HUD curses sidebar — RIP OUT STAYS IN THIS PLAN (2026-06-23 user directive: rip out the
     curses panels EVEN IF the RmlUi HUD lacks features the old panels had).** Whole-sidebar curses
     suppression + delete the curses `draw_*` panel builders; un-built panels show a placeholder / are
@@ -3377,9 +3377,12 @@ primitive counts) + the `panels.cpp` HUD curses sidebar. The shared backend is N
     `filter_help_text(10000)` joined → cata_text_to_rml; opened lazily while `filtering`, closed on exit;
     the Tier-0 curses string_input field + `< >` markers composite on top of the backdrop's blank bottom
     row; curses help box kept as toggle-OFF fallback; build+link green Metal, EYEBALL OWED — esp. the
-    backdrop-vs-input-row alignment, the known-fragile partial-migration seam). REMAINING: `scores_ui`
-    (the whole `show_kills` screen, never migrated). `auto_pickup` already did its two (batch 14) — its
-    residual 6 prims need a recheck.
+    backdrop-vs-input-row alignment, the known-fragile partial-migration seam), ~~`scores_ui` (the whole
+    `show_kills` screen)~~ **DONE 2026-06-24** (new tab-less `scores_kills` doc — the show_kills twin of
+    show_scores_ui's body, on the rml_doc harness; one bound `body_rml` via cata_text_to_rml, scrolled by
+    SetScrollTop like the scores body; shares the scores_rmlui_enabled() toggle; curses scrolling_text_view
+    kept as fallback; build+link green Metal, EYEBALL OWED). **★ ALL POPUP MIGRATION DONE.** `auto_pickup`
+    already did its two (batch 14) — its residual 6 prims need a recheck.
   - **LEAVE (not orphans):** uilist-callback `refresh()` curses draws (advanced_inv `draw_squares`,
     magic/magic_teleporter_list, wish) — uilist KEEPS a curses fallback (`uilist::show` calls
     `callback->refresh()` at ui.cpp:922 for early-init before RmlUi is ready); shared text producers;
