@@ -73,7 +73,7 @@ void camera_2d::update( point target, bool snap )
         } else if( look_ahead_ > 0.0f ) {
             const double speed = std::hypot( vx_, vy_ );
             if( speed > 0.05 ) {
-                const double act = std::min( 1.0, speed / LOOKAHEAD_FULL_SPEED );
+                const double act = std::clamp( speed / LOOKAHEAD_FULL_SPEED, 0.0, 1.0 );
                 aim_x += ( vx_ / speed ) * look_ahead_ * act;
                 aim_y += ( vy_ / speed ) * look_ahead_ * act;
             }

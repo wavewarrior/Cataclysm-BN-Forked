@@ -3210,7 +3210,7 @@ void cata_tiles::draw( point dest, const tripoint_bub_ms &center, int width, int
         const double cfy = center.y() + static_cast<double>( subtile_off_y_ );
         const int fx = static_cast<int>( std::floor( cfx ) );
         const int fy = static_cast<int>( std::floor( cfy ) );
-        o = ( center.xy() + point( fx - center.x(), fy - center.y() ) ) - point( POSX, POSY );
+        o = point_bub_ms( fx - POSX, fy - POSY );
         op = dest - point(
                  static_cast<int>( std::lround( ( cfx - fx ) * tile_width ) ),
                  static_cast<int>( std::lround( ( cfy - fy ) * tile_height ) ) );
