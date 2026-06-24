@@ -55,7 +55,8 @@ static const int   SUN_STEPS   = 24;    // horizontal march steps toward the lig
 static const float SUN_STEP    = 0.50;  // tile units per step
 static const float SUN_START   = 0.30;  // skip the probe cell
 static const float ROOF_H      = 1.00;  // roof height (tiles) — ray clears above this
-static const float MAX_OCC_H   = 1.20;  // ray above this has cleared all occluders
+static const float MAX_OCC_H    = 1.20;  // ray above this has cleared all occluders
+static const int   SUN_PENUMBRA = 4;     // angular samples for a soft sun edge (1 = today's hard edge)
 
 // OccBuf is tile-res, x-major occ[(x*map_h+y)*2 + c]. c0 = height, c1 = roof.
 float occ_height_at( int x, int y )
@@ -98,7 +99,7 @@ float sky_admit( float2 origin, float2 dir )
 // Celestial occlusion via the 3D elevation march. 1 = lit toward the light,
 // 0 = shadowed (wall/half-wall of sufficient height for the sun's elevation, or
 // a roof/overhang the ray hasn't climbed above).
-float celestial_occ( float2 probe )
+float celestial_occ_dir( float2 probe, float2 toward )
 {
     if( map_w == 0u ) {
         return 1.0;
@@ -109,7 +110,6 @@ float celestial_occ( float2 probe )
     }
     const float cos_e    = sqrt( max( 1.0 - sun_sin_elev * sun_sin_elev, 0.02 ) );
     const float elev_tan = sun_sin_elev / cos_e;     // ray climb per horizontal tile
-    const float2 toward  = -float2( sun_dir_x, sun_dir_y );
     float t = SUN_START;
     [loop] for( int s = 0; s < SUN_STEPS; ++s ) {
         const float2 pos   = probe + toward * t;
@@ -148,7 +148,16 @@ void main( uint3 tid : SV_DispatchThreadID )
     }
     sky /= (float)SKY_DIRS;
 
-    const float occ = celestial_occ( probe );
+    const float2 sun_toward = -float2( sun_dir_x, sun_dir_y );
+    const float  sun_ang0   = atan2( sun_toward.y, sun_toward.x );
+    float occ = 0.0;
+    [loop] for( int pi = 0; pi < SUN_PENUMBRA; ++pi ) {
+        const float da = ( SUN_PENUMBRA > 1 )
+            ? ( (float)pi / (float)( SUN_PENUMBRA - 1 ) - 0.5 ) * 0.18 : 0.0; // ~±5°
+        const float a  = sun_ang0 + da;
+        occ += celestial_occ_dir( probe, float2( cos( a ), sin( a ) ) );
+    }
+    occ /= (float)SUN_PENUMBRA;
 
     const uint o = ( (uint)tileX * map_h + (uint)tileY ) * 4u;
     SkyBuf[o + 0u] = sky;
