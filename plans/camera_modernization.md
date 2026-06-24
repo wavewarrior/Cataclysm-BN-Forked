@@ -6,6 +6,23 @@ The current "camera" is ad-hoc math distributed across `avatar::view_offset`, `g
 
 > **Review status (2026-06-23, re-verified):** An earlier review layer in this file claimed several real functions were fictional; those notes were themselves wrong and are corrected here (re-verified by grep against `src/`). **Blockers to clear before Phase 1:** **A2** (`set_view_offset` is not a shared API — must be created, and must replicate its z-clamp + `invalidate_map_cache` payload), **A3** (`draw()` z-component path undefined — decide at Phase 1, since §1.3 changes the `draw()` call). **B3** stands (`draw_minimap` already exists → replace not add). **B1/B2 RETRACTED:** `assemble_light_inputs` (`sdl_render_frame.cpp:69`/`372`, called `:876`) and `seen_through_air_light` (`cata_tiles.cpp:3492` lambda, used `:3594/3605/3626`) **both exist** — do not treat them as placeholders. **A1:** re-derive the `view_offset` site list *semantically* — the raw `rg` count includes false positives (e.g. local variables named `view_offset`), so do not hard-code "44/9". **C1–C5** are design-time resolutions inside their phases. **D** = line-number/file-list corrections.
 
+## Implementation Status (2026-06-24, verified against source)
+
+This plan was written against an older pipeline; deep verification this session
+found several phases already done or moot. Current state:
+
+| Phase | Status | Evidence / decision |
+|-------|--------|---------------------|
+| **1 — camera_2d** | **Done, additive variant** | `camera_2d` ships (`src/camera_2d.{h,cpp}`), owns smooth float center + sub-tile residual folded into `o`/`op` (the single shared input for sprites + lighting). `view_offset` is kept as the discrete *target* feeding the camera, NOT migrated. The full 17-site `view_offset` rip-out + `o`/`op` deletion is **deferred as pure churn** — the additive design already gives a single viewport/lighting source of truth with no modal-UI regression risk. See `plans/camera_subtile_contract.md`. |
+| **2 — smart follow** | **Done** | Smooth exp-lerp follow (`073fcf0546`), screen shake + explosion hook (`d49a45176b`), look-ahead + dead-zone + live F4 tuning (`8c8fc9c5f3`). Zoom: see below. World-bounds clamp (2.6) resolved by rationale — look-ahead defaults off and the base target is already game-constrained, so the view never exceeds valid range out-of-box. |
+| **2.5 — zoom** | **Already existed** | `ACTION_ZOOM_IN/OUT` → `game::zoom_in()/zoom_out()` → `cata_tiles::set_draw_scale()` changes `tile_width`. `cam_off` uses `tile_pixel_size`, so lighting already tracks zoom (Risk 5 moot — engine zooms via tile-size, not screen-space scale). Optional polish: mouse-wheel + smooth interpolation. |
+| **3 — GPU minimap** | **Open** | Pixel minimap is currently invisible (blits through the no-op display buffer). A GPU OMT-tile rewrite would *restore* it. Largest blast radius (delete 4 files, new render path); only verifiable in-game. |
+| **4 — dirty-tile** | **Deferred (rationale)** | Antagonistic with smooth-follow: the camera moves every frame during motion → `camera_moved` forces full redraw → P4 yields nothing exactly when perf matters; only helps when fully stationary. Plus C2 (frozen creatures/SCT/fields) + C3 (write-path audit) hazards. Marginal benefit, real risk. |
+| **5 — GPU JFA SDF** | **Already shipped** | `gpu_sdf_pass` (seed→flood→resolve), `compute_sdf_cpu` deleted (commits `61869027bf`/`59f09cb0e4`). |
+| **6 — 3D FOV cull** | **Already satisfied** | The z-descent loop already `break`s at the first solid floor via `dont_draw_lower_floor` (`cata_tiles.cpp:3664`). It does NOT brute-force through floors — the plan's premise was a misread. A `lowest_open_z` precompute adds the C1 storage problem + per-floor-dirty rebuild cost for ~0 gain (open-air columns must render all levels regardless). Not implementing. |
+
+**Net remaining:** P3 minimap (real value, needs in-game verification), and the explicitly-deferred churn (P4, full-P1 migration). The plan's core intent — a modern camera with smooth follow and lighting locked to it — is delivered.
+
 ### Design decisions
 
 | Question | Decision |
