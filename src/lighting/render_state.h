@@ -167,6 +167,11 @@ class render_state
         // set_texture and N draws.
         void queue_tile_sprite( SDL_GPUTexture *atlas_tex,
                                 const sprite_instance &inst );
+        // When set, queue_tile_sprite redirects into the UNLIT UI/font-glyph
+        // path (current adaptor slice) instead of the lit world tile queue.
+        // Used by the GPU minimap to draw OMT atlas sprites as an unlit overlay
+        // without a separate pass or shader change. See camera_modernization.md P3.
+        void set_unlit_overlay_route( bool on ) noexcept { unlit_overlay_route_ = on; }
         bool tile_sprites_empty() const noexcept { return tile_sprite_queue_.empty(); }
         void flush_tile_sprites( sprite_batcher &dst, SDL_GPUSampler *sampler );
 
@@ -403,6 +408,10 @@ class render_state
             sprite_instance inst;
         };
         std::vector<tile_sprite_draw> tile_sprite_queue_;
+
+        // When true, queue_tile_sprite redirects sprites into the unlit
+        // UI/font-glyph path (GPU minimap overlay). See set_unlit_overlay_route.
+        bool unlit_overlay_route_ = false;
 
         SDL_GPUSampler        *gpu_sampler_ = nullptr;
 

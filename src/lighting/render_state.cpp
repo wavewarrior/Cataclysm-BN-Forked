@@ -736,6 +736,23 @@ void render_state::queue_tile_sprite( SDL_GPUTexture *atlas_tex,
     if( !device_.ready() || !atlas_tex ) {
         return;
     }
+    if( unlit_overlay_route_ ) {
+        // GPU minimap overlay: redirect this atlas sprite into the UNLIT
+        // font-glyph path (current adaptor slice) so world lighting never
+        // samples it. Reuses the existing textured-quad flush; no new pass.
+        font_glyph_draw d{};
+        d.texture = atlas_tex;
+        d.inst = inst;
+        d.lit = false;
+        if( current_slices_ ) {
+            current_slices_->font_glyphs.push_back( d );
+        } else if( transient_routing_ ) {
+            font_glyph_transient_.push_back( d );
+        } else {
+            font_glyph_queue_.push_back( d );
+        }
+        return;
+    }
     tile_sprite_queue_.push_back( { atlas_tex, inst } );
 }
 
