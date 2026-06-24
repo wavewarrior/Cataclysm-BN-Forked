@@ -2192,38 +2192,25 @@ void options_manager::add_options_graphics()
 
     add_empty_line();
 
-    add( "USE_TILES", graphics, translate_marker( "Use tiles" ),
-         translate_marker( "If true, replaces some TTF rendered text with tiles." ),
-         true, COPT_CURSES_HIDE
-       );
-
+    // Tiles-only fork: the USE_TILES / USE_TILES_OVERMAP options are removed
+    // (use_tiles / use_tiles_overmap are forced true in cached_options.cpp). The
+    // tileset selectors and tiles-dependent options stay but no longer carry a
+    // USE_TILES prerequisite. LOADING_SCREEN_IMAGES is dropped (its splash feature
+    // was removed).
     add( "TILES", graphics, translate_marker( "Choose tileset" ),
          translate_marker( "Choose the tileset you want to use." ),
          build_tilesets_list(), "UNDEAD_PEOPLE_BASE", COPT_CURSES_HIDE
        ); // populate the options dynamically
-
-    get_option( "TILES" ).setPrerequisite( "USE_TILES" );
-
-    add( "USE_TILES_OVERMAP", graphics, translate_marker( "Use tiles to display overmap" ),
-         translate_marker( "If true, replaces some TTF-rendered text with tiles for overmap display." ),
-         true, COPT_CURSES_HIDE
-       );
-
-    get_option( "USE_TILES_OVERMAP" ).setPrerequisite( "USE_TILES" );
 
     add( "OVERMAP_TILES", graphics, translate_marker( "Choose overmap tileset" ),
          translate_marker( "Choose the overmap tileset you want to use." ),
          build_tilesets_list(), "UNDEAD_PEOPLE_BASE", COPT_CURSES_HIDE
        ); // populate the options dynamically
 
-    get_option( "OVERMAP_TILES" ).setPrerequisite( "USE_TILES_OVERMAP" );
-
     add( "VEHICLE_EDIT_TILES", graphics, translate_marker( "Graphical vehicle display" ),
          translate_marker( "If true, the vehicle interaction screen will display vehicle parts using graphical tiles instead of ASCII symbols." ),
          true, COPT_CURSES_HIDE
        );
-
-    get_option( "VEHICLE_EDIT_TILES" ).setPrerequisite( "USE_TILES" );
 
     add( "USE_CHARACTER_PREVIEW", graphics, translate_marker( "Enable character preview window" ),
          translate_marker( "If true, shows character preview window in traits tab on character creation.  "
@@ -2231,15 +2218,6 @@ void options_manager::add_options_graphics()
                            "Press 'C' to toggle clothes preview" ),
          true, COPT_CURSES_HIDE
        );
-
-    get_option( "USE_CHARACTER_PREVIEW" ).setPrerequisite( "USE_TILES" );
-
-    add( "LOADING_SCREEN_IMAGES", graphics, translate_marker( "Loading screen images" ),
-         translate_marker( "If true, shows loading splash images when available." ),
-         true, COPT_CURSES_HIDE
-       );
-
-    get_option( "LOADING_SCREEN_IMAGES" ).setPrerequisite( "USE_TILES" );
 
     add_empty_line();
 
@@ -2265,7 +2243,6 @@ void options_manager::add_options_graphics()
          true, COPT_CURSES_HIDE
        );
 
-    get_option( "STATE_MODIFIERS" ).setPrerequisite( "USE_TILES" );
 
     add_empty_line();
 
@@ -3529,9 +3506,9 @@ static void refresh_tiles( bool used_tiles_changed, bool pixel_minimap_height_ch
                 DebugLog( DL::Info, DC::Main ) << str;
             } );
         } catch( const std::exception &err ) {
+            // Tiles-only fork: no ASCII fallback. Keep the previously-loaded tileset
+            // and report the failure rather than dropping to a (removed) curses mode.
             popup( _( "Loading the tileset failed: %s" ), err.what() );
-            use_tiles = false;
-            use_tiles_overmap = false;
         }
         if( tilesName == omTilesName ) {
             overmap_tilecontext = tilecontext;
@@ -3554,9 +3531,8 @@ static void refresh_tiles( bool used_tiles_changed, bool pixel_minimap_height_ch
                     DebugLog( DL::Info, DC::Main ) << str;
                 } );
             } catch( const std::exception &err ) {
+                // Tiles-only fork: no ASCII fallback; keep the current overmap tileset.
                 popup( _( "Loading the overmap tileset failed: %s" ), err.what() );
-                use_tiles = false;
-                use_tiles_overmap = false;
             }
         }
     } else if( ingame && pixel_minimap_option && pixel_minimap_height_changed ) {
@@ -4281,8 +4257,8 @@ void options_manager::cache_to_globals()
     display_mod_source = ::get_option<bool>( "MOD_SOURCE" );
     display_object_ids = ::get_option<bool>( "SHOW_IDS" );
     trigdist = ::get_option<bool>( "CIRCLEDIST" );
-    use_tiles = ::get_option<bool>( "USE_TILES" );
-    use_tiles_overmap = ::get_option<bool>( "USE_TILES_OVERMAP" );
+    // Tiles-only fork: use_tiles / use_tiles_overmap are forced true in
+    // cached_options.cpp and no longer driven by a (removed) option.
     use_pinyin_search = ::get_option<bool>( "USE_PINYIN_SEARCH" );
     log_from_top = ::get_option<std::string>( "LOG_FLOW" ) == "new_top";
     message_ttl = ::get_option<int>( "MESSAGE_TTL" );

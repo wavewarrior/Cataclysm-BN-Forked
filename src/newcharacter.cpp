@@ -1380,7 +1380,7 @@ tab_direction set_traits( avatar &u, points_left &points )
     character_preview_window character_preview;
     character_preview.init( &u );
     const bool use_character_preview = get_option<bool>( "USE_CHARACTER_PREVIEW" ) &&
-                                       get_option<bool>( "USE_TILES" );
+                                       use_tiles;
 
     const auto init_windows = [&]( ui_adaptor & ui ) {
         w = catacurses::newwin( TERMY, TERMX, point_zero );
@@ -1859,7 +1859,7 @@ tab_direction set_bionics( avatar &u, points_left &points )
     character_preview_window character_preview;
     character_preview.init( &u );
     const bool use_character_preview = get_option<bool>( "USE_CHARACTER_PREVIEW" ) &&
-                                       get_option<bool>( "USE_TILES" );
+                                       use_tiles;
 
     const auto init_windows = [&]( ui_adaptor & ui ) {
         w = catacurses::newwin( TERMY, TERMX, point_zero );
@@ -2336,7 +2336,7 @@ tab_direction set_profession( avatar &u, points_left &points,
     character_preview_window character_preview;
     character_preview.init( &u );
     const bool use_character_preview = get_option<bool>( "USE_CHARACTER_PREVIEW" ) &&
-                                       get_option<bool>( "USE_TILES" );
+                                       use_tiles;
     const auto init_windows = [&]( ui_adaptor & ui ) {
         iContentHeight = TERMY - 10;
         w = catacurses::newwin( TERMY, TERMX, point_zero );
@@ -3557,7 +3557,7 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
     character_preview_window character_preview;
     character_preview.init( &you );
     const bool use_character_preview = get_option<bool>( "USE_CHARACTER_PREVIEW" ) &&
-                                       get_option<bool>( "USE_TILES" );
+                                       use_tiles;
 
     const auto init_windows = [&]( ui_adaptor & ui ) {
         // Row 1

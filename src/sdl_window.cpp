@@ -560,11 +560,9 @@ void catacurses::init_interface()
             /*pump_events=*/true
         );
     } catch( const std::exception &err ) {
+        // Tiles-only fork: no ASCII fallback. Log the precheck failure but stay in
+        // tiles mode; a genuinely broken tileset surfaces at the real load below.
         dbg( DL::Error ) << "failed to check for tileset: " << err.what();
-        // use_tiles is the cached value of the USE_TILES option.
-        // most (all?) code refers to this to see if cata_tiles should be used.
-        // Setting it to false disables this from getting used.
-        use_tiles = false;
     }
     if( tilesName == omTilesName ) {
         overmap_tilecontext = tilecontext;
@@ -581,11 +579,8 @@ void catacurses::init_interface()
                 /*pump_events=*/true
             );
         } catch( const std::exception &err ) {
+            // Tiles-only fork: no ASCII fallback; stay in tiles mode and log.
             dbg( DL::Error ) << "failed to check for overmap tileset: " << err.what();
-            // use_tiles is the cached value of the USE_TILES option.
-            // most (all?) code refers to this to see if cata_tiles should be used.
-            // Setting it to false disables this from getting used.
-            use_tiles = false;
         }
     }
     color_loader<SDL_Color>().load( windowsPalette );
