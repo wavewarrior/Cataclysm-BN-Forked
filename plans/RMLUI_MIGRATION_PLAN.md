@@ -3399,6 +3399,18 @@ primitive counts) + the `panels.cpp` HUD curses sidebar. The shared backend is N
   uncommitted SIM_PERFORMANCE `activity_actor*` edits, NOT a source bug (the 2-arg calls match). A clean
   rebuild fixed it; no SIM code was changed. If it recurs, it's PCH/intermediate staleness, not source.
 
+**★ TILES-ONLY PRECURSOR (use_tiles neutralization) — STAGE 1+2 DONE, build-green.**
+This fork is tiles-only, so the legacy ASCII-mode axis (`use_tiles` false) is dead. Stage 1
+(`96129a4859`) + stage 2 (committed 2026-06-24, `+79 −195`) strip the always-true `if(use_tiles)`
+guards and delete the dead `!use_tiles` ASCII else-branches across the map/UI render paths
+(tile_iso, memorized symbols, spell/shape highlight drawsq, zone-overlay offset, editmap preview,
+scent overlay, font dims, character preview, gamepad). `use_tiles`/`use_tiles_overmap` globals
+stay **forced `true`** in `cached_options.cpp` as the anchor (not ripped — many readers remain).
+**DEFERRED to steps 2–3 below (intentionally left dead-but-correct, global=true):** the large
+ASCII-overmap bodies (`overmap_ui.cpp` `draw_ascii` + the `use_tiles_overmap` guards at 1678/2247)
+and all of `sdl_curses_draw.cpp` (whole file dies in step 3). These are curses-body deletions, so
+they ride the curses rip-out sequence below, not the guard-simplification pass.
+
 Order, each build-green:
 1. After all toggles flipped & eyeballed: delete each screen's curses *draw/redraw fallback*
    branch (the `if(!rml)` arms) → primitive callers fall toward zero.
