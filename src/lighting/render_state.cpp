@@ -210,6 +210,11 @@ void render_state::init( SDL_Window *host_window )
         rain_.init( device_, world_fmt,
                     static_cast<std::uint32_t>( pw ),
                     static_cast<std::uint32_t>( ph ) );
+
+        // GPU JFA SDF pass (P3): seed → flood → resolve on SS-grid. Same max tile
+        // extent as the CPU SDF; jfa_sdf_buffer() is scratch output for A/B vs CPU DT.
+        gpu_sdf_.init( device_, static_cast<std::uint32_t>( rt_tiles ),
+                       static_cast<std::uint32_t>( rt_tiles ) );
     }
 }
 
@@ -229,6 +234,7 @@ void render_state::shutdown() noexcept
     bloom_.shutdown();
     volumetric_.shutdown();
     rain_.shutdown();
+    gpu_sdf_.shutdown();
 
     // Phase 4: release SDF textures.
     sdf_.shutdown( device_ );

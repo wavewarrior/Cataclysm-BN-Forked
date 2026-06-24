@@ -30,6 +30,7 @@
 #include "bloom_pass.h"
 #include "volumetric_pass.h"
 #include "rain_effect.h"
+#include "gpu_sdf_pass.h"
 
 #include <memory>
 
@@ -342,6 +343,9 @@ class render_state
         // world_target then runs a fullscreen splat fade/accumulate pass.
         rain_effect &rain() noexcept { return rain_; }
 
+        // GPU JFA SDF pass (P3). Three compute dispatches: seed → flood → resolve.
+        gpu_sdf_pass &gpu_sdf() noexcept { return gpu_sdf_; }
+
         // Silhouette sun-shadow mask (Phase 1). Screen-space coverage texture
         // (swapchain format) the shadow_batcher_ renders sheared caster
         // silhouettes into; sized to world_target. nullptr until init() succeeds.
@@ -434,6 +438,7 @@ class render_state
         bloom_pass                           bloom_;
         volumetric_pass                      volumetric_;
         rain_effect                          rain_;
+        gpu_sdf_pass                         gpu_sdf_;
 };
 
 // Process-wide accessor. The object is constructed in init() and torn down
