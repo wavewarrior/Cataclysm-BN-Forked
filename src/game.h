@@ -21,6 +21,7 @@
 
 #include "action.h"
 #include "calendar.h"
+#include "camera_2d.h"
 #include "character_id.h"
 #include "coordinates.h"
 #include "creature.h"
@@ -1147,6 +1148,8 @@ class game : public submap_load_listener
         int monstairz = 0;
 
         tripoint_bub_ms ter_view_p;
+        // Smooth sub-tile view follow; feeds cata_tiles' o/op fractional offset.
+        camera_2d main_camera_;
         catacurses::window w_terrain;
         catacurses::window w_overmap;
         catacurses::window w_omlegend;

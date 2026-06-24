@@ -4431,6 +4431,15 @@ void game::draw_ter( const tripoint_bub_ms &center, const bool looking, const bo
     ZoneScopedN( "draw_ter" );
     ter_view_p = center;
 
+    // Smooth sub-tile view follow. center stays integer (drives the z-loop,
+    // cursor, footsteps); the camera only adds a fractional residual that
+    // cata_tiles folds into o/op so sprites and lighting scroll together.
+    // Snap while looking/aiming to keep a crisp cursor-driven view.
+    main_camera_.update( center.xy().raw(), looking );
+    if( tilecontext ) {
+        tilecontext->set_subtile_offset( main_camera_.sub_x(), main_camera_.sub_y() );
+    }
+
     m.draw( w_terrain, center );
 
     if( draw_sounds ) {

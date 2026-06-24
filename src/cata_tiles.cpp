@@ -3223,9 +3223,27 @@ void cata_tiles::draw( point dest, const tripoint_bub_ms &center, int width, int
         }
     }
 
-    o = iso_mode ? center.xy() : center.xy() - point( POSX, POSY );
-
-    op = dest;
+    if( iso_mode ) {
+        // Sub-tile smoothing is disabled in iso: a cartesian pixel shift on op
+        // is not the iso diamond projection of a sub-tile world move.
+        o = center.xy();
+        op = dest;
+    } else {
+        // Sub-tile scroll: floor the fractional center for the integer tile
+        // origin, push the remainder into op as a pixel shift. o and op are the
+        // single shared source of truth for both sprites (player_to_screen) and
+        // lighting (cam_off = op/tile - o), so both scroll together and cannot
+        // desync. With subtile_off == 0 this degenerates byte-for-byte to the
+        // legacy framing. See plans/camera_subtile_contract.md.
+        const double cfx = center.x() + static_cast<double>( subtile_off_x_ );
+        const double cfy = center.y() + static_cast<double>( subtile_off_y_ );
+        const int fx = static_cast<int>( std::floor( cfx ) );
+        const int fy = static_cast<int>( std::floor( cfy ) );
+        o = ( center.xy() + point( fx - center.x(), fy - center.y() ) ) - point( POSX, POSY );
+        op = dest - point(
+                 static_cast<int>( std::lround( ( cfx - fx ) * tile_width ) ),
+                 static_cast<int>( std::lround( ( cfy - fy ) * tile_height ) ) );
+    }
     // Rounding up to include incomplete tiles at the bottom/right edges
     screentile_width = divide_round_up( width, tile_width );
     screentile_height = divide_round_up( height, tile_height );

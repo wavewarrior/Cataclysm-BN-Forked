@@ -1323,6 +1323,13 @@ class cata_tiles
         // Used to bound the lighting SDF rebuild to the camera region (B1).
         int get_screentile_width() const { return screentile_width; }
         int get_screentile_height() const { return screentile_height; }
+        // Sub-tile camera residual (tile units, ~[-1,1]) injected into o/op so
+        // sprites and lighting scroll together at sub-tile precision. (0,0) =
+        // legacy integer framing. See plans/camera_subtile_contract.md.
+        void set_subtile_offset( float x, float y ) {
+            subtile_off_x_ = x;
+            subtile_off_y_ = y;
+        }
         // Hover-outline: map tile currently under the mouse (nullopt = none).
         // Set by game::handle_mouseview; read in draw_critter_at to outline the
         // creature there. See HOVER_OUTLINE_PLAN.md.
@@ -1332,6 +1339,9 @@ class cata_tiles
     private:
         // offset for drawing, in pixels.
         point op;
+        // Sub-tile camera residual (tile units), applied to o/op at draw time.
+        float subtile_off_x_ = 0.0f;
+        float subtile_off_y_ = 0.0f;
 
         // --- Hover-outline state (HOVER_OUTLINE_PLAN.md) ---
         // Tile under the mouse cursor; its creature (if any) gets an outline.
