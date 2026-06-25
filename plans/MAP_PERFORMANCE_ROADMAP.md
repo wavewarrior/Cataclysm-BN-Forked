@@ -1,0 +1,105 @@
+# Map Handling & Performance — Research + Optimization Roadmap
+
+## Context
+
+Goal: broad, thorough understanding of how the map is handled and where its
+performance goes — architecturally, for chunk loading, and for lighting — plus
+how the same problems are solved in industry / comparable games. This roadmap is
+the reference doc; individual plans under `plans/` implement each tier.
+
+## Pain axes
+
+1. **Walking-hitch residual spikes** — ~2/10 shifts still spike to 20–23ms
+2. **Steady-state FPS** — some non-shift turns show lightmap=8ms all-z
+3. **Big-base/driving/dense-scene worst case** — entity counts, vehicles, SDF
+4. **Memory** — bubble size quadratic scaling
+
+---
+
+## 1. Architecture (three-tier spatial model)
+
+| Scale | Size | Role | Code |
+|-------|------|------|------|
+| map square (tile) | 1×1 | what you walk on | `tripoint_bub_ms` |
+| submap | 12×12 (`SEEX`×`SEEY`) | unit of load/save/shift | `submap.h:91`, `maptile_soa` |
+| overmap terrain (OMT) | 2×2 submaps | unit of mapgen | overmap |
+| overmap | 180×180 OMT | unit of large-scale gen (cities) | `overmap.*` |
+
+### Reality bubble — dynamic, runtime-sized
+
+- `REALITY_BUBBLE_SIZE` option, 1–16, default 4 (`game_constants.h:130`).
+- `init_bubble_config(size)` (`game.cpp:246`): `g_half_mapsize = size+1`,
+  `g_mapsize = 2*half+1`. Default 4 → `g_mapsize = 11` → 132×132 tiles —
+  identical to upstream CDDA.
+- Compile-time `MAPSIZE = 2*REALITY_BUBBLE_SIZE_MAX+3 = 35` (`game_constants.h:34`)
+  is only the allocation ceiling.
+
+### Z-levels — all loaded simultaneously
+
+- `OVERMAP_DEPTH=10`, `OVERMAP_HEIGHT=10`, `OVERMAP_LAYERS=21` (`game_constants.h:64-68`).
+- Per-z `level_cache` (`map.h:308-436`), `std::array<unique_ptr<level_cache>,21> caches`.
+- Cross-z coupling is structural only: `outside_cache[z]` reads `floor[z+1]`;
+  light does NOT propagate between z lightmaps directly.
+
+### `build_map_cache` — the cost centre
+
+Phases (verified at `map.cpp:9848-10117`):
+
+| Phase | Lines | Z-scope | Notes |
+|-------|-------|---------|-------|
+| 1a floor | 9888 | all-z | `build_floor_cache(z)` |
+| 1b outside/sheltered | 9908 | all-z, top-down | reads floor[z+1] |
+| 1c transparency | 9916 | all-z | reads outside |
+| 1d parallel-caches | 9928 | all-z | vehicle clears + dirty levels |
+| 2 suspension | 9975 | all-z | serial (support_cache_dirty) |
+| 3 vehicles | 9985 | all-z | serial (neighbour z writes) |
+| seen | 10004 | player-z | shadowcast FOV |
+| 4 lightmap | 10011 | dirty z only | sunlight + entity lights |
+
+### In-tree probes (ready to run)
+
+- `[build_cache][perf]` phase+z-split (`map.cpp:10111`)
+- `[shift-probe][outside|lightmap|invalidate|invalidate-bt]` (`map.cpp:9528/10039/10796/10803`)
+- `[render][perf]` 10-phase breakdown (`sdl_render_frame.cpp:~869`)
+- Tracy `ZoneScopedN` zones on render+sim paths
+
+---
+
+## 2. Ranked optimization roadmap
+
+### Tier 0 — finish what's in flight (do first, near-zero risk)
+
+| Item | Plan | Status |
+|------|------|--------|
+| 0a. Commit walking-hitch fix | `walking_hitch_cache_shift_plan.md` | Code written, uncommitted |
+| 0b. Pin residual all-z structural spike | `residual_all_z_structural_spike_plan.md` | Not started |
+| 0c. Pin non-shift all-z lightmap | `non_shift_all_z_lightmap_plan.md` | Not started |
+
+### Tier 1 — structural, high payoff, moderate effort
+
+| Item | Plan | Status |
+|------|------|--------|
+| 1a. Per-submap incremental lightmap | `per_submap_incremental_lightmap_plan.md` | Not started |
+| 1b. Amortise non-player-z structural rebuild | `amortise_non_player_z_rebuild_plan.md` | Not started |
+
+### Tier 2 — parallelism (do AFTER 1a/1b)
+
+| Item | Plan | Status |
+|------|------|--------|
+| 2a. Parallelise build_map_cache across z | `parallelize_build_map_cache_plan.md` | Not started |
+| 2b. Finish GI/SDF GPU-compute migration | `GI_COMPUTE_AND_PERF_PLAN.md` | In flight |
+
+### Tier 3 — memory & bubble
+
+| Item | Plan | Status |
+|------|------|--------|
+| 3a. Measure bubble cost curve | `bubble_cost_curve_plan.md` | Not started |
+| 3b. Lazy non-visible-z cache allocation | `lazy_non_visible_z_cache_plan.md` | Not started |
+
+---
+
+## 3. Related plans in repo
+
+- `plans/SIM_PERFORMANCE_PLAN.md` (done) — Monster AI, NPC LOD, vehicle throttling, active-item striding
+- `plans/LIGHTING_OPTIMIZATION_PLAN.md` — GPU lighting crash fix (P0-P6)
+- `plans/done/LIGHTING_PERF_RESEARCH.md` — SDF rebuild gate research
