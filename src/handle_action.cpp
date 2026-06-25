@@ -2837,6 +2837,10 @@ bool game::handle_action()
                 toggle_debug_hour_timer();
                 break;
 
+            case ACTION_TOGGLE_FPS:
+                toggle_debug_fps();
+                break;
+
             case ACTION_TOGGLE_DEBUG_MODE:
                 if( MAP_SHARING::isCompetitive() && !MAP_SHARING::isDebugger() ) {
                     break;    //don't do anything when sharing and not debugger

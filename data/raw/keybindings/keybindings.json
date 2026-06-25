@@ -2341,6 +2341,13 @@
   },
   {
     "type": "keybinding",
+    "name": "Toggle FPS Counter",
+    "category": "DEFAULTMODE",
+    "id": "debug_fps",
+    "bindings": [ { "input_method": "keyboard", "key": "F3" } ]
+  },
+  {
+    "type": "keybinding",
     "name": "Switch Sidebar Style",
     "category": "DEFAULTMODE",
     "id": "toggle_sidebar_style"

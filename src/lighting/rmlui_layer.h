@@ -149,6 +149,13 @@ void world_text_add( float screen_x, float screen_y, const std::string &utf8,
 // True if any world-text items are queued this frame (render-gate input).
 bool world_text_active();
 
+// Persistent single-line HUD overlay (e.g. FPS counter). SET each frame (not
+// appended) so it never accumulates, and kept OUTSIDE the world_text begin/clear
+// cycle: it renders every frame regardless of menus or combat text, and makes
+// world_text_active() true on its own. Pass an empty utf8 to clear it.
+void set_hud_text( float screen_x, float screen_y, const std::string &utf8,
+                   unsigned int rgba );
+
 // World-text tuning knobs (F4 dev sliders): font point size + extra x/y pixel
 // offset applied to every item. Bake the dialed-in values once settled.
 int &world_text_px();

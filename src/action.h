@@ -351,6 +351,8 @@ enum action_id : int {
     ACTION_DISPLAY_TILES_NO_VFX,
     /** Toggle timing of the game hours */
     ACTION_TOGGLE_HOUR_TIMER,
+    /** Toggle FPS counter overlay */
+    ACTION_TOGGLE_FPS,
     /** Swap to an NPC in faction menu **/
     ACTION_SWAP_TO_NPC,
     /** Not an action, serves as count of enumerated actions */

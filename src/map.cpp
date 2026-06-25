@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <chrono>
+#include <sstream> // [shift-probe] backtrace buffer; remove with probes
 #include <climits>
 #include <cstdlib>
 #include <cstring>
@@ -8216,11 +8218,25 @@ void map::shift( const point_rel_sm &sp )
                 // Shift per-submap dirty bitsets so retained submaps stay clean.
                 shift_bitset_cache( gc.transparency_cache_dirty, gc.cache_mapsize, 1, sp );
                 shift_bitset_cache( gc.floor_cache_dirty, gc.cache_mapsize, 1, sp );
+                shift_bitset_cache( gc.outside_cache_dirty, gc.cache_mapsize, 1, sp );
                 // Shift flat cache data so retained submaps' data stays in the
                 // correct tile position.  New edge submaps get stale values that
                 // will be overwritten by the next build_*_cache() call.
                 shift_flat_cache( gc.transparency_cache, gc.cache_x, gc.cache_y, sp );
                 shift_flat_cache( gc.floor_cache, gc.cache_x, gc.cache_y, sp );
+                shift_flat_cache( gc.outside_cache, gc.cache_x, gc.cache_y, sp );
+                shift_flat_cache( gc.sheltered_cache, gc.cache_x, gc.cache_y, sp );
+                // Translate the lightmap so a non-player z that is rendered
+                // (visible lower z through open air / holes / ledges, or the
+                // whole stack under fov_3d) stays at the correct world position.
+                // Non-player-z lightmaps are no longer regenerated on a pure
+                // horizontal shift (see set_seen_cache_dirty gate below), so the
+                // translate is what keeps them visually correct; the player z is
+                // rebuilt fresh anyway.  Light does not propagate lm->lm across z
+                // (cross-z coupling is structural, via floor/outside, which is
+                // rebuilt above), so a translated stale lm cannot corrupt player z.
+                shift_flat_cache( gc.lm, gc.cache_x, gc.cache_y, sp );
+                shift_flat_cache( gc.sm, gc.cache_x, gc.cache_y, sp );
                 if( fov_3d_occlusion ) {
                     shift_flat_cache( gc.angled_sunlight_cache, gc.cache_x, gc.cache_y, sp );
                 }
@@ -8268,8 +8284,26 @@ void map::shift( const point_rel_sm &sp )
                     } );
                 } );
             }
-            set_outside_cache_dirty( gridz );
-            set_seen_cache_dirty( gridz );
+            // outside_cache/sheltered_cache were translated above and their dirty
+            // bitset shifted; new edge submaps are marked dirty in loadn's
+            // incremental block, so no blanket all-z rebuild is needed here.
+            //
+            // seen_cache/lightmap: dirtying a z here drives a full generate_lightmap
+            // for that level (the costly all-z work, ~7-10ms).  A pure horizontal
+            // shift does not change a level's lighting relative to its own world
+            // tiles, and lm/sm were translated above to stay visually correct where
+            // a non-player z is rendered.  Light does not propagate lm->lm across z
+            // (coupling is structural, via floor/outside, rebuilt above), so a
+            // translated stale lm cannot corrupt another level.  So regenerate only
+            // the player's z, plus the immediately-adjacent z under fov_3d (the
+            // levels most likely glimpsed through a hole/ledge while crossing).
+            // Deeper visible levels (z±2..fov_3d_z_range) rely on the translate;
+            // they are rarely viewed and mostly static.  FOV_3D defaults on, so
+            // this must NOT fall back to all-z.
+            const int player_z = g->u.bub_pos().z();
+            if( gridz == player_z || ( fov_3d && std::abs( gridz - player_z ) <= 1 ) ) {
+                set_seen_cache_dirty( gridz );
+            }
             set_pathfinding_cache_dirty( gridz );
             set_suspension_cache_dirty( gridz );
         }
@@ -8428,6 +8462,7 @@ void map::loadn( const tripoint_bub_sm &grid, const bool update_vehicles,
             level_cache &ch = get_cache( grid.z() );
             ch.transparency_cache_dirty.set( static_cast<size_t>( ch.bidx( grid.x(), grid.y() ) ) );
             ch.floor_cache_dirty.set( static_cast<size_t>( ch.bidx( grid.x(), grid.y() ) ) );
+            ch.outside_cache_dirty.set( static_cast<size_t>( ch.bidx( grid.x(), grid.y() ) ) );
             tmpsub->transparency_dirty = true;
             tmpsub->floor_dirty = true;
             tmpsub->outside_dirty = true;
@@ -9477,6 +9512,24 @@ void map::build_outside_cache( const int zlev )
     const level_cache *above = inbounds_z( above_z ) ? &get_cache_ref( above_z ) : nullptr;
     const bool rebuild_all = ch.outside_cache_dirty.all();
 
+    // [shift-probe] Count dirty submaps to tell an edge-incremental shift
+    // (~my_MAPSIZE per axis) apart from a broad invalidate (whole level = the
+    // residual 20-23ms structural spike).  Cheap: bitset is my_MAPSIZE² (~121 bits).
+    {
+        size_t _dn = 0;
+        const size_t _sz = ch.outside_cache_dirty.size();
+        for( size_t _i = 0; _i < _sz; ++_i ) {
+            if( ch.outside_cache_dirty.test( _i ) ) {
+                ++_dn;
+            }
+        }
+        if( _dn > static_cast<size_t>( my_MAPSIZE * 3 ) ) {
+            DebugLogFL( DL::Info, DC::Main )
+                    << "[shift-probe][outside] z=" << zlev << " dirty_submaps=" << _dn
+                    << "/" << _sz << " rebuild_all=" << rebuild_all;
+        }
+    }
+
     // Delegate to per-submap rebuild, then copy into the flat render cache.
     // Each smx column writes to unique flat positions; rebuild_outside_cache reads
     // only from the immutable above cache, so columns are safe to process concurrently.
@@ -9795,6 +9848,24 @@ void map::do_vehicle_caching( int z )
 void map::build_map_cache( const int zlev, bool skip_lightmap )
 {
     ZoneScoped;
+    // Submap-shift stall attribution (diagnostic, logged only when total >2ms):
+    // per-phase split + player-z vs other-z for the unconditional all-z Phase1
+    // loops. Decides z-range-limit (B) vs single-level work (C). Remove once pinned.
+    using _bc = std::chrono::steady_clock;
+    const _bc::time_point _bc_t0 = _bc::now();
+    _bc::time_point _bc_tp = _bc_t0;
+    double _ph_floor = 0, _ph_out = 0, _ph_trans = 0, _ph_par = 0, _ph_susp = 0,
+           _ph_veh = 0, _ph_seen = 0, _ph_tail = 0;
+    double _z_player = 0, _z_other = 0;
+    auto _lap = [&]( double &acc ) {
+        const _bc::time_point now = _bc::now();
+        acc += std::chrono::duration<double, std::milli>( now - _bc_tp ).count();
+        _bc_tp = now;
+    };
+    auto _zadd = [&]( int z, const _bc::time_point &t ) {
+        ( z == zlev ? _z_player : _z_other ) +=
+            std::chrono::duration<double, std::milli>( _bc::now() - t ).count();
+    };
     const int minz = zlevels ? -OVERMAP_DEPTH : zlev;
     const int maxz = zlevels ? OVERMAP_HEIGHT : zlev;
     bool seen_cache_dirty = false;
@@ -9819,11 +9890,15 @@ void map::build_map_cache( const int zlev, bool skip_lightmap )
         // They must complete before outside/sheltered caches which read floor[z+1].
         for( int z = minz; z <= maxz; ++z ) {
             const bool affects_seen_cache = z == zlev || fov_3d;
-            if( build_floor_cache( z ) && affects_seen_cache ) {
+            const _bc::time_point _zt = _bc::now();
+            const bool _floor_dirty = build_floor_cache( z );
+            _zadd( z, _zt );
+            if( _floor_dirty && affects_seen_cache ) {
                 seen_cache_dirty = true;
             }
         }
     }
+    _lap( _ph_floor );
 
     {
         ZoneScopedN( "Phase1_outside_sheltered" );
@@ -9831,17 +9906,23 @@ void map::build_map_cache( const int zlev, bool skip_lightmap )
         // so they must be computed top-down.  They use intra-z parallel_for, so they
         // cannot run inside a parallel-over-z block.
         for( int z = maxz; z >= minz; --z ) {
+            const _bc::time_point _zt = _bc::now();
             build_outside_cache( z );
+            _zadd( z, _zt );
         }
     }
+    _lap( _ph_out );
 
     {
         ZoneScopedN( "Phase1_transparency" );
         // Transparency depends on outside_cache; runs after outside is complete.
         for( int z = minz; z <= maxz; ++z ) {
+            const _bc::time_point _zt = _bc::now();
             build_transparency_cache( z );
+            _zadd( z, _zt );
         }
     }
+    _lap( _ph_trans );
 
     {
         ZoneScopedN( "Phase1_parallel_caches" );
@@ -9888,6 +9969,7 @@ void map::build_map_cache( const int zlev, bool skip_lightmap )
             }
         }
     }
+    _lap( _ph_par );
     // implicit barrier; floor/outside/sheltered/transparency caches for all z-levels are complete.
 
     {
@@ -9898,6 +9980,7 @@ void map::build_map_cache( const int zlev, bool skip_lightmap )
             update_suspension_cache( z );
         }
     }
+    _lap( _ph_susp );
 
     {
         ZoneScopedN( "Phase3_vehicles" );
@@ -9910,6 +9993,7 @@ void map::build_map_cache( const int zlev, bool skip_lightmap )
             }
         }
     }
+    _lap( _ph_veh );
 
     seen_cache_dirty |= build_vision_transparency_cache( get_player_character() );
 
@@ -9923,6 +10007,7 @@ void map::build_map_cache( const int zlev, bool skip_lightmap )
         // seen_cache changed; any cached visibility derived from it is now stale.
         get_cache( zlev ).visibility_cache_dirty = true;
     }
+    _lap( _ph_seen );
     if( !skip_lightmap ) {
         ZoneScopedN( "Phase4_lightmap" );
         // Only include levels whose lightmap is actually stale this redraw.
@@ -9942,6 +10027,18 @@ void map::build_map_cache( const int zlev, bool skip_lightmap )
                                        dirty_seen_cache_levels.end() );
 
         if( !dirty_seen_cache_levels.empty() ) {
+
+            // [shift-probe] Which levels regenerate lightmap this build.  >1 level on a
+            // non-shift turn flags an unexpected all-z driver (residual lightmap spike).
+            if( dirty_seen_cache_levels.size() > 1 ) {
+                std::string _zs;
+                for( const int _z : dirty_seen_cache_levels ) {
+                    _zs += std::to_string( _z ) + ",";
+                }
+                DebugLogFL( DL::Info, DC::Main )
+                        << "[shift-probe][lightmap] regen " << dirty_seen_cache_levels.size()
+                        << " levels: " << _zs;
+            }
 
             if( dirty_seen_cache_levels.size() > 1 && parallel_enabled && parallel_map_cache ) {
                 // Multiple dirty levels: hoist shared initialization outside the
@@ -10004,6 +10101,19 @@ void map::build_map_cache( const int zlev, bool skip_lightmap )
             } );
 
         } // end if( !dirty_seen_cache_levels.empty() )
+    }
+    _lap( _ph_tail );
+
+    const double _bc_total = std::chrono::duration<double, std::milli>(
+                                 _bc::now() - _bc_t0 ).count();
+    if( _bc_total > 2.0 ) {
+        DebugLogFL( DL::Info, DC::Main )
+                << "[build_cache][perf] total=" << _bc_total << "ms (z " << minz << ".."
+                << maxz << ") floor=" << _ph_floor << " outside=" << _ph_out
+                << " trans=" << _ph_trans << " parclear=" << _ph_par
+                << " susp=" << _ph_susp << " veh=" << _ph_veh << " seen=" << _ph_seen
+                << " lightmap=" << _ph_tail << " | z-split: player=" << _z_player
+                << " other=" << _z_other;
     }
 }
 
@@ -10677,6 +10787,23 @@ bool map::check_and_set_seen_cache( const tripoint_bub_ms &p ) const
 
 void map::invalidate_map_cache( const int zlev )
 {
+    // [shift-probe] invalidate_map_cache sets every dirty bitset .all() for a level,
+    // forcing a full structural rebuild (the residual 20-23ms shift spike if it fires
+    // across many z).  Log each call; emit a backtrace once per turn to identify the
+    // caller without flooding.  Remove after the trigger is found.
+#if defined(BACKTRACE)
+    {
+        DebugLogFL( DL::Info, DC::Main ) << "[shift-probe][invalidate] z=" << zlev;
+        static int _last_bt_turn = -1;
+        const int _now = to_turn<int>( calendar::turn );
+        if( _now != _last_bt_turn ) {
+            _last_bt_turn = _now;
+            std::ostringstream _bt;
+            debug_write_backtrace( _bt );
+            DebugLogFL( DL::Info, DC::Main ) << "[shift-probe][invalidate-bt]\n" << _bt.str();
+        }
+    }
+#endif
     if( inbounds_z( zlev ) ) {
         level_cache &ch = get_cache( zlev );
         ch.floor_cache_dirty.set();

@@ -313,6 +313,8 @@ std::string action_ident( action_id act )
             return "toggle_zone_overlay";
         case ACTION_TOGGLE_HOUR_TIMER:
             return "debug_hour_timer";
+        case ACTION_TOGGLE_FPS:
+            return "debug_fps";
         case ACTION_TOGGLE_DEBUG_MODE:
             return "debug_mode";
         case ACTION_ZOOM_OUT:
@@ -951,7 +953,8 @@ action_id handle_action_menu()
                 ACTION_DISPLAY_TEMPERATURE, ACTION_DISPLAY_VEHICLE_AI, ACTION_DISPLAY_VISIBILITY,
                 ACTION_DISPLAY_LIGHTING, ACTION_DISPLAY_TRANSPARENCY, ACTION_DISPLAY_RADIATION,
                 ACTION_DISPLAY_OUTSIDE,
-                ACTION_DISPLAY_SUBMAP_GRID, ACTION_TOGGLE_ZONE_OVERLAY, ACTION_TOGGLE_DEBUG_MODE
+                ACTION_DISPLAY_SUBMAP_GRID, ACTION_TOGGLE_ZONE_OVERLAY, ACTION_TOGGLE_DEBUG_MODE,
+                ACTION_TOGGLE_FPS
             } );
             register_lua_action_entries( category_id );
         } else if( category_id == "interact" ) {

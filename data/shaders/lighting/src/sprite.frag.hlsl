@@ -715,15 +715,18 @@ float4 main(VS_OUT i) : SV_Target0 {
             vis = gpu_total;
         } else if(debug_mode == 6u) {
             // SDF view: red (wall, s≈0) → yellow (s≈4) → green (open, s≥8).
-            // Bilinear so the view matches what the shadow march now samples.
-            const float s = (sdf_map_w > 0u) ? sdf_bilinear(i.world_pos) : 0.0;
+            // Bilinear at light_pos — the SAME sample the shadow march uses, so
+            // tall sprites (walls/trees) show their base-tile distance, not the
+            // sprite's own s≈0 tile (frag_is_tall: light_pos != world_pos).
+            const float s = (sdf_map_w > 0u) ? sdf_bilinear(i.light_pos) : 0.0;
             const float t = saturate(s / 8.0);
             vis = float3(1.0 - t, t, 0.0);
             replace = true;
         } else if(debug_mode == 7u) {
-            // SkyVis view: grayscale 0..1.
-            const int sx = clamp((int)i.world_pos.x, 0, (int)sdf_map_w - 1);
-            const int sy = clamp((int)i.world_pos.y, 0, (int)sdf_map_h - 1);
+            // SkyVis view: grayscale 0..1. Sample at light_pos (base-tile centre
+            // for tall sprites) to match the live sky-vis read, not world_pos.
+            const int sx = clamp((int)i.light_pos.x, 0, (int)sdf_map_w - 1);
+            const int sy = clamp((int)i.light_pos.y, 0, (int)sdf_map_h - 1);
             const float v = (sdf_map_w > 0u) ? SkyVisBuf[sx * (int)sdf_map_h + sy] : 0.0;
             vis = float3(v, v, v);
             replace = true;

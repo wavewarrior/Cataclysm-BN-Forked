@@ -1173,6 +1173,8 @@ class game : public submap_load_listener
         bool display_overlay_state( action_id );
         // toggles the timing of in-game hours
         void toggle_debug_hour_timer();
+        // toggles the FPS counter overlay
+        void toggle_debug_fps();
         /** Creature for which to display the visibility map */
         Creature *displaying_visibility_creature;
         /** Type of lighting condition overlay to display */

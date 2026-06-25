@@ -180,6 +180,7 @@
 #include "scenario.h"
 #include "scent_map.h"
 #include "scores_ui.h"
+#include "sdl_render_frame.h"
 #include "sdltiles.h"
 #include "sounds.h"
 #include "start_location.h"
@@ -3249,6 +3250,7 @@ input_context get_default_mode_input_context()
     ctxt.register_action( "debug_outside" );
     ctxt.register_action( "debug_submap_grid" );
     ctxt.register_action( "debug_hour_timer" );
+    ctxt.register_action( "debug_fps" );
     ctxt.register_action( "debug_mode" );
     ctxt.register_action( "zoom_out" );
     ctxt.register_action( "zoom_in" );
@@ -9783,6 +9785,7 @@ look_around_result game::look_around( bool show_window, tripoint_bub_ms &center,
     ctxt.register_action( "debug_outside" );
     ctxt.register_action( "debug_submap_grid" );
     ctxt.register_action( "debug_hour_timer" );
+    ctxt.register_action( "debug_fps" );
     ctxt.register_action( "CONFIRM" );
     ctxt.register_action( "QUIT" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
@@ -10030,6 +10033,8 @@ look_around_result game::look_around( bool show_window, tripoint_bub_ms &center,
             g->debug_submap_grid_overlay = !g->debug_submap_grid_overlay;
         } else if( action == "debug_hour_timer" ) {
             toggle_debug_hour_timer();
+        } else if( action == "debug_fps" ) {
+            toggle_debug_fps();
         } else if( action == "EXTENDED_DESCRIPTION" ) {
             extended_description( lp );
         } else if( action == "CENTER" ) {
@@ -15435,6 +15440,20 @@ point_rel_sm game::update_map( int &x, int &y )
         return point_rel_sm::zero();
     }
 
+    // Sim-stall attribution: a submap shift fires the heavy cache/mapgen work
+    // between frames — the prime suspect for the walking "hitch". Time each
+    // sub-step; logged once per shift. Diagnostic — remove once pinned.
+    using _shclk = std::chrono::steady_clock;
+    const _shclk::time_point _sh_t0 = _shclk::now();
+    _shclk::time_point _sh_tp = _sh_t0;
+    double _sh_shift = 0, _sh_loader = 0, _sh_ent = 0, _sh_npc = 0,
+           _sh_cache = 0, _sh_spawn = 0, _sh_om = 0;
+    auto _sh_lap = [&]( double &acc ) {
+        const _shclk::time_point now = _shclk::now();
+        acc = std::chrono::duration<double, std::milli>( now - _sh_tp ).count();
+        _sh_tp = now;
+    };
+
     // this handles loading/unloading submaps that have scrolled on or off the viewport
     // NOLINTNEXTLINE(cata-use-named-point-constants)
     inclusive_rectangle<point_rel_sm> size_1( point_rel_sm( -1, -1 ), point_rel_sm( 1, 1 ) );
@@ -15444,6 +15463,7 @@ point_rel_sm game::update_map( int &x, int &y )
         m.shift( this_shift );
         remaining_shift -= this_shift;
     }
+    _sh_lap( _sh_shift );
 
     // Keep the reality bubble request center in sync with the shifted map.
     // Distribution-grid tracker updates are fully incremental via
@@ -15483,6 +15503,7 @@ point_rel_sm game::update_map( int &x, int &y )
             }
         }
     }
+    _sh_lap( _sh_loader );
 
     // Shift monsters
     shift_monsters( tripoint_rel_sm( shift, 0 ) );
@@ -15507,6 +15528,8 @@ point_rel_sm game::update_map( int &x, int &y )
         }
     }
 
+    _sh_lap( _sh_ent );
+
     // scent.shift() removed — scent values live on per-submap arrays,
     // which move with the submap grid automatically on scroll.
 
@@ -15520,15 +15543,26 @@ point_rel_sm game::update_map( int &x, int &y )
     // Check for overmap saved npcs that should now come into view.
     // Put those in the active list.
     load_npcs();
+    _sh_lap( _sh_npc );
 
     m.build_map_cache( get_levz() );
+    _sh_lap( _sh_cache );
 
     // Spawn monsters only in the strip of submaps that just entered the bubble
     // to avoid duplicating already-active monsters from stale monster_map entries.
     m.spawn_monsters_new_submaps( shift ); // Static monsters
+    _sh_lap( _sh_spawn );
 
     // Update what parts of the world map we can see
     update_overmap_seen();
+    _sh_lap( _sh_om );
+
+    const double _sh_total = std::chrono::duration<double, std::milli>(
+                                 _shclk::now() - _sh_t0 ).count();
+    DebugLogFL( DL::Info, DC::Main )
+            << "[shift][perf] total=" << _sh_total << "ms shift=" << _sh_shift
+            << " loader=" << _sh_loader << " ent=" << _sh_ent << " npc=" << _sh_npc
+            << " cache=" << _sh_cache << " spawn=" << _sh_spawn << " om_seen=" << _sh_om;
 
     return shift;
 }
@@ -15992,6 +16026,12 @@ void game::debug_hour_timer::toggle()
     enabled = !enabled;
     start_time = std::nullopt;
     add_msg( string_format( "debug timer %s", enabled ? "enabled" : "disabled" ) );
+}
+
+void game::toggle_debug_fps()
+{
+    g_show_fps = !g_show_fps;
+    add_msg( string_format( "FPS counter %s", g_show_fps ? "enabled" : "disabled" ) );
 }
 
 void game::debug_hour_timer::print_time()

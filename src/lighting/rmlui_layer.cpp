@@ -112,6 +112,11 @@ struct world_text_item {
 };
 // This frame's submitted items (cleared by world_text_begin, drained next frame).
 std::vector<world_text_item> g_world_text;
+// Persistent single HUD line (e.g. FPS overlay). SET each frame via set_hud_text
+// (not appended) so it never accumulates, and kept OUTSIDE the world_text
+// begin/clear cycle so it renders every frame regardless of menus or combat text.
+world_text_item g_hud_text;
+bool g_hud_active = false;
 // Geometry compiled from g_world_text in prepare(), drawn in render_in_pass().
 // Rml::Geometry is a move-only render resource; clearing this vector releases the
 // GPU geometry (deferred free, rolled forward by g_render->begin_frame()).
@@ -134,7 +139,7 @@ std::vector<char> g_world_font_data;
 
 bool world_text_have()
 {
-    return g_ready && g_context && !g_world_text.empty();
+    return g_ready && g_context && ( !g_world_text.empty() || g_hud_active );
 }
 
 // Build (compile) geometry for this frame's world-text items via RmlUi's own
@@ -161,7 +166,7 @@ void build_world_text()
         DebugLog( DL::Info, DC::Main ) << "world_text: GetFontFaceHandle returned 0 (font not found)";
         return;
     }
-    for( const world_text_item &it : g_world_text ) {
+    auto emit = [&]( const world_text_item & it ) {
         const Rml::byte r = ( it.rgba >> 24 ) & 0xFFu;
         const Rml::byte g = ( it.rgba >> 16 ) & 0xFFu;
         const Rml::byte b = ( it.rgba >> 8 ) & 0xFFu;
@@ -187,6 +192,12 @@ void build_world_text()
                                      it.y + static_cast<float>( g_world_text_px ) + g_world_text_dy );
             g_world_geom.push_back( std::move( out ) );
         }
+    };
+    for( const world_text_item &it : g_world_text ) {
+        emit( it );
+    }
+    if( g_hud_active ) {
+        emit( g_hud_text );
     }
     // Compile pass: a Render() with no open pass only compiles geometry CPU-side
     // (begin_render_pass not called yet) so upload_pending() can upload it. The
@@ -972,6 +983,13 @@ void render_in_pass( SDL_GPURenderPass *rp, SDL_GPUCommandBuffer *cb )
 void world_text_begin()
 {
     g_world_text.clear();
+}
+
+void set_hud_text( float screen_x, float screen_y, const std::string &utf8,
+                   unsigned int rgba )
+{
+    g_hud_active = !utf8.empty();
+    g_hud_text = world_text_item{ screen_x, screen_y, utf8, rgba };
 }
 
 void world_text_add( float screen_x, float screen_y, const std::string &utf8,

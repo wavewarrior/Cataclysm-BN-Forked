@@ -201,6 +201,7 @@ enum debug_menu_index {
     DEBUG_VEHICLE_BATTERY_CHARGE,
     DEBUG_VEHICLE_EXPORT_JSON,
     DEBUG_HOUR_TIMER,
+    DEBUG_FPS,
     DEBUG_NESTED_MAPGEN,
     DEBUG_RESET_IGNORED_MESSAGES,
     DEBUG_RELOAD_TILES,
@@ -259,6 +260,7 @@ static int info_uilist( bool display_all_entries = true )
             { uilist_entry( DEBUG_BENCHMARK, true, 'b', _( "Draw benchmark" ) ) },
             { uilist_entry( DEBUG_BENCHMARK_FPS, true, 'B', _( "FPS benchmark" ) ) },
             { uilist_entry( DEBUG_HOUR_TIMER, true, 'E', _( "Toggle hour timer" ) ) },
+            { uilist_entry( DEBUG_FPS, true, 'F', _( "Toggle FPS counter" ) ) },
             { uilist_entry( DEBUG_TRAIT_GROUP, true, 't', _( "Test trait group" ) ) },
             { uilist_entry( DEBUG_SHOW_MSG, true, 'd', _( "Show debug message" ) ) },
             { uilist_entry( DEBUG_CRASH_GAME, true, 'C', _( "Crash game (test crash handling)" ) ) },
@@ -1968,6 +1970,9 @@ void debug()
             break;
         case DEBUG_HOUR_TIMER:
             g->toggle_debug_hour_timer();
+            break;
+        case DEBUG_FPS:
+            g->toggle_debug_fps();
             break;
         case DEBUG_SWAP_CHAR:
             control_npc_menu();

@@ -20,9 +20,6 @@ namespace lighting
 // match the shader-side SDF_SS in jfa_shared.hlsl.
 static constexpr std::uint32_t SDF_SS = static_cast<std::uint32_t>( SDF_SUPERSAMPLE );
 
-// Max flood step size in SS units (covers ~4 tiles — the resolve clamp radius).
-static constexpr float SDF_FLOOD_STEP = 16.0f;
-
 gpu_sdf_pass::~gpu_sdf_pass()
 {
     shutdown();
@@ -165,18 +162,26 @@ void gpu_sdf_pass::record( SDL_GPUCommandBuffer *cb, SDL_GPUBuffer *trans_buf,
         params.map_w = runtime_w;
         params.map_h = runtime_h;
 
-        // Step schedule: start at the FULL SDF_FLOOD_STEP reach and halve down to
-        // 1 (e.g. 16,8,4,2,1). passes = log2(step)+1 — the +1 is what makes the
-        // first jump equal the advertised flood radius; without it the largest
-        // step was only SDF_FLOOD_STEP/2, truncating shadow reach by half.
+        // Step schedule: standard JFA — start at the smallest power-of-two that
+        // is >= the largest SS-grid dimension, then halve down to 1. This floods
+        // the ENTIRE grid (every subcell finds its nearest seed), matching the
+        // full-map reach of the deleted CPU Euclidean DT. A fixed start step
+        // (SDF_FLOOD_STEP) only reached ~step*2 subcells, so any receiver beyond
+        // that radius got the jfa_resolve "no seed" clamp (a constant ~4 tiles)
+        // instead of its true distance — which flattened the trace_shadow
+        // penumbra into a hard lit/shadow ring at the reach boundary.
+        std::uint32_t start_step = 1u;
+        while( start_step < std::max( ss_w, ss_h ) ) {
+            start_step <<= 1u;
+        }
         const int flood_passes = static_cast<int>(
-            std::log2( SDF_FLOOD_STEP ) ) + 1;
+            std::log2( static_cast<double>( start_step ) ) ) + 1;
 
         SDL_GPUBuffer *seed_read  = seed_a_;
         SDL_GPUBuffer *seed_write = seed_b_;
 
         for( int pass = 0; pass < flood_passes; ++pass ) {
-            params.step = static_cast<float>( std::pow( 2.0, (double)(flood_passes - 1 - pass) ) );
+            params.step = static_cast<float>( start_step >> static_cast<std::uint32_t>( pass ) );
 
             SDL_PushGPUComputeUniformData( cb, /*slot=*/0, &params, sizeof( params ) );
             SDL_GPUStorageBufferReadWriteBinding rw{};

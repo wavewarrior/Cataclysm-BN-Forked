@@ -24,6 +24,7 @@
 #include "sdl_fonts.h"
 #include "sdl_geometry.h"
 #include "sdl_lighting_devui.h"
+#include "sdl_render_frame.h"
 #include "sdl_wrappers.h"
 #include "lighting/dev_test_lights.h"
 #include "lighting/frame_build.h"
@@ -37,6 +38,25 @@
 #define dbg(x) DebugLogFL((x),DC::SDL)
 
 using namespace std::literals;
+
+// Rolling averages from frame_perf, published every frame by refresh_display.
+// File-static: consumed only within this TU (the overlay in pass_b).
+static float g_fps_avg = 0.0f;
+static float g_body_ms_avg = 0.0f;
+// External linkage: toggled from game::toggle_debug_fps() via sdl_render_frame.h.
+bool g_show_fps = false;
+
+// Per-phase render-body timing — pins which refresh_display stage produces the
+// render_body spikes seen while walking. Indexed 0..9 in call order; sum+max
+// accumulate over the SAME 120-frame window as the [render][perf] line and reset
+// with it (logged + zeroed in the frame_perf destructor). Diagnostic; remove once
+// the spike source is identified.
+static double      g_phase_sum[10] = {};
+static double      g_phase_max[10] = {};
+static const char *g_phase_name[10] = {
+    "begin", "build_light", "flush_gather", "assemble", "menu_bg",
+    "overlays", "ui_a", "world_w", "tonemap", "swap_b"
+};
 
 // Per-frame volumetric inputs: written in assemble_light_inputs, consumed in
 // render_world_pass_w. Both live in this TU, so file-local (was a dev-UI global).
@@ -740,6 +760,26 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
     // open, so the overlay pass must run when either a document OR world text is
     // present. world_text_active() is kept OUT of rmlui_layer::active() so it does
     // not steal mouse input (active() gates input in sdl_input).
+    // FPS overlay: set the persistent HUD line. set_hud_text lives OUTSIDE the
+    // world_text begin/clear cycle, so the counter shows with no menu/SCT open and
+    // never accumulates (set, not appended). It also makes world_text_active() true
+    // on its own → the overlay pass below runs even on an otherwise-empty frame.
+    // body_ms is render-body CPU wall-clock (steady_clock), NOT GPU time — labelled
+    // accordingly. The label is cached and rebuilt only when the averages change.
+    if( g_show_fps ) {
+        static std::string fps_label;
+        static float shown_fps = -1.0f;
+        static float shown_body = -1.0f;
+        if( g_fps_avg != shown_fps || g_body_ms_avg != shown_body ) {
+            fps_label = string_format( "FPS: %.0f  body: %.1f ms", g_fps_avg, g_body_ms_avg );
+            shown_fps = g_fps_avg;
+            shown_body = g_body_ms_avg;
+        }
+        rmlui_layer::set_hud_text( 8.0f, 8.0f, fps_label, 0xCCFFFFFFu );
+    } else {
+        rmlui_layer::set_hud_text( 0.0f, 0.0f, std::string(), 0u );
+    }
+
     const bool rmlui_active = rmlui_layer::active() || rmlui_layer::world_text_active();
     if( rmlui_active ) {
         // new_frame()=Update() + prepare()=geometry upload, both BEFORE begin_pass
@@ -806,12 +846,30 @@ void refresh_display()
             last = now;
             sum_body += body_ms;
             max_body = std::max( max_body, body_ms );
-            if( ++n >= 120 ) {
+            ++n;
+            // Publish running averages EVERY frame (not just at the 120-frame
+            // boundary) so the overlay isn't pinned at 0 during the first window
+            // after launch/enable.
+            {
+                const double ap = sum_period / n;
+                g_fps_avg = static_cast<float>( ap > 0.0 ? 1000.0 / ap : 0.0 );
+                g_body_ms_avg = static_cast<float>( sum_body / n );
+            }
+            if( n >= 120 ) {
                 const double ap = sum_period / n;
                 DebugLogFL( DL::Info, DC::Main )
                         << "[render][perf] " << n << " frames: render_body avg=" << ( sum_body / n )
                         << "ms max=" << max_body << "ms | frame_period avg=" << ap << "ms (~"
                         << ( ap > 0.0 ? 1000.0 / ap : 0.0 ) << " fps) max=" << max_period << "ms";
+                // Per-phase breakdown (avg/max ms) — which stage owns the spike.
+                std::string ph;
+                for( int i = 0; i < 10; ++i ) {
+                    ph += string_format( " %s=%.2f/%.2f", g_phase_name[i],
+                                         g_phase_sum[i] / n, g_phase_max[i] );
+                    g_phase_sum[i] = 0.0;
+                    g_phase_max[i] = 0.0;
+                }
+                DebugLogFL( DL::Info, DC::Main ) << "[render][perf][phase avg/max ms]" << ph;
                 sum_body = max_body = sum_period = max_period = 0.0;
                 n = 0;
             }
@@ -824,19 +882,35 @@ void refresh_display()
 
     auto &rs = lighting::get_render_state();
 
+    // Per-phase spike attribution (see g_phase_* above). lap(i) charges the time
+    // since the previous lap to phase i; maxes are logged with the 120-frame window.
+    std::chrono::steady_clock::time_point _pt = std::chrono::steady_clock::now();
+    auto lap = [&]( int idx ) {
+        const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+        const double ms = std::chrono::duration<double, std::milli>( now - _pt ).count();
+        g_phase_sum[idx] += ms;
+        g_phase_max[idx] = std::max( g_phase_max[idx], ms );
+        _pt = now;
+    };
+
     dbg( DL::Debug ) << "[render] begin_frame";
     auto ctx = begin_frame( rs );
+    lap( 0 );
     if( !ctx ) {
         return;
     }
 
     const bool rc_rebuild = build_lighting( rs );
+    lap( 1 );
     dbg( DL::Debug ) << "[render] flush_and_gather_rc";
     flush_and_gather_rc( rs, *ctx, rc_rebuild );
+    lap( 2 );
     dbg( DL::Debug ) << "[render] assemble_light_inputs";
     assemble_light_inputs( rs, *ctx );
+    lap( 3 );
     dbg( DL::Debug ) << "[render] maybe_push_menu_background";
     maybe_push_menu_background( rs, *ctx );
+    lap( 4 );
 
     int proj_w = 0;
     int proj_h = 0;
@@ -848,13 +922,18 @@ void refresh_display()
 
     dbg( DL::Debug ) << "[render] draw_lighting_overlays";
     draw_lighting_overlays( rs, *ctx );
+    lap( 5 );
     dbg( DL::Debug ) << "[render] composite_ui_pass_a";
     composite_ui_pass_a( rs, *ctx, proj_w, proj_h );
+    lap( 6 );
     dbg( DL::Debug ) << "[render] render_world_pass_w";
     render_world_pass_w( rs, *ctx, proj_w, proj_h );
+    lap( 7 );
     dbg( DL::Debug ) << "[render] tonemap_pass_t";
     tonemap_pass_t( rs, *ctx );
+    lap( 8 );
     dbg( DL::Debug ) << "[render] composite_swapchain_pass_b";
     composite_swapchain_pass_b( rs, *ctx, proj_w, proj_h );
+    lap( 9 );
     dbg( DL::Debug ) << "[render] refresh_display COMPLETE";
 }
