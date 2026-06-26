@@ -40,23 +40,23 @@ cbuffer SkySunParams : register(b0, space2) {
     float sun_sin_elev; // celestial elevation sine (drives the 3D climb)
     float shadow_k;     // (reserved; penumbra softness lever)
     uint  shadow_steps; // (reserved)
-    float ss_pad;
+    uint  sky_dirs;     // hemisphere directions per tile (P5b — F4 knob)
+    float sky_reach;    // sky march max distance in tiles (P5b)
+    uint  sun_steps;    // celestial march steps (P5b)
+    uint  sun_penumbra; // penumbra angular samples, 1=hard edge (P5b)
 };
 
-// Sky-dome sampling.
-static const int   SKY_DIRS    = 8;     // hemisphere directions per tile
+// Sky-dome sampling. SKY_DIRS/SKY_REACH are cbuffer-driven (P5b — F4 knobs).
+// The march-micro constants keep static const (geometric, not quality/perf tradeoffs).
 static const int   SKY_STEPS   = 16;    // max march steps per direction
 static const float SKY_STEP    = 0.70;  // tile units per step
 static const float SKY_START   = 0.60;  // skip the tile's own cell
-static const float SKY_REACH   = 10.0;  // give up looking for open sky past this
 static const float SKY_WALL_H  = 0.60;  // occluder height that blocks a sky direction
-// Celestial (sun/moon) 3D-elevation march.
-static const int   SUN_STEPS   = 24;    // horizontal march steps toward the light
+// Celestial (sun/moon) 3D-elevation march. SUN_STEPS/SUN_PENUMBRA are cbuffer-driven.
 static const float SUN_STEP    = 0.50;  // tile units per step
 static const float SUN_START   = 0.30;  // skip the probe cell
 static const float ROOF_H      = 1.00;  // roof height (tiles) — ray clears above this
 static const float MAX_OCC_H    = 1.20;  // ray above this has cleared all occluders
-static const int   SUN_PENUMBRA = 4;     // angular samples for a soft sun edge (1 = today's hard edge)
 
 // OccBuf is tile-res, x-major occ[(x*map_h+y)*2 + c]. c0 = height, c1 = roof.
 float occ_height_at( int x, int y )
@@ -89,7 +89,7 @@ float sky_admit( float2 origin, float2 dir )
             return 1.0;                       // reached open (non-roofed) sky
         }
         t += SKY_STEP;
-        if( t > SKY_REACH ) {
+        if( t > sky_reach ) {
             break;
         }
     }
@@ -111,7 +111,7 @@ float celestial_occ_dir( float2 probe, float2 toward )
     const float cos_e    = sqrt( max( 1.0 - sun_sin_elev * sun_sin_elev, 0.02 ) );
     const float elev_tan = sun_sin_elev / cos_e;     // ray climb per horizontal tile
     float t = SUN_START;
-    [loop] for( int s = 0; s < SUN_STEPS; ++s ) {
+    [loop] for( int s = 0; s < (int)max( sun_steps, 1u ); ++s ) {
         const float2 pos   = probe + toward * t;
         const float  ray_h = t * elev_tan;
         if( ray_h > MAX_OCC_H ) {
@@ -141,23 +141,25 @@ void main( uint3 tid : SV_DispatchThreadID )
     const float2 probe = float2( (float)tileX + 0.5, (float)tileY + 0.5 );
 
     float sky = 0.0;
-    [loop] for( int d = 0; d < SKY_DIRS; ++d ) {
-        const float  ang = 6.2831853 * ( (float)d + 0.5 ) / (float)SKY_DIRS;
+    const uint sd = max( sky_dirs, 1u );
+    [loop] for( int d = 0; d < (int)sd; ++d ) {
+        const float  ang = 6.2831853 * ( (float)d + 0.5 ) / (float)sd;
         const float2 dir = float2( cos( ang ), sin( ang ) );
         sky += sky_admit( probe, dir );
     }
-    sky /= (float)SKY_DIRS;
+    sky /= (float)sd;
 
     const float2 sun_toward = -float2( sun_dir_x, sun_dir_y );
     const float  sun_ang0   = atan2( sun_toward.y, sun_toward.x );
     float occ = 0.0;
-    [loop] for( int pi = 0; pi < SUN_PENUMBRA; ++pi ) {
-        const float da = ( SUN_PENUMBRA > 1 )
-            ? ( (float)pi / (float)( SUN_PENUMBRA - 1 ) - 0.5 ) * 0.18 : 0.0; // ~±5°
+    const uint sp = max( sun_penumbra, 1u );
+    [loop] for( int pi = 0; pi < (int)sp; ++pi ) {
+        const float da = ( sp > 1u )
+            ? ( (float)pi / (float)( sp - 1u ) - 0.5 ) * 0.18 : 0.0; // ~±5°
         const float a  = sun_ang0 + da;
         occ += celestial_occ_dir( probe, float2( cos( a ), sin( a ) ) );
     }
-    occ /= (float)SUN_PENUMBRA;
+    occ /= (float)sp;
 
     const uint o = ( (uint)tileX * map_h + (uint)tileY ) * 4u;
     SkyBuf[o + 0u] = sky;

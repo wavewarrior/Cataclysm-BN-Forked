@@ -1,75 +1,30 @@
 # Plan: D3D12-robust GI (GPU compute) + do_turn / lighting perf
 
-## ★ Update 2026-06-18 — findings, staged sequence, Mac-side gate
+## ★ Status (2026-06-25) — all structural work done; polish + perf remain
 
-**Goal (refined).** Three things at once: (1) GI that creates + renders on D3D12
-with no pipeline roulette; (2) the sun/sky **quality upgrade** — the sun is the
-dominant light (full-moon = sun with different params), so unlike for point
-lights, RC's angular/cascade machinery genuinely earns its keep on the
-directional+sky-dome case; (3) Mac/Win **structural parity** so we stop fixing
-bugs back-and-forth across machines.
+| Section | Status | Commits |
+|---------|--------|---------|
+| Stage 0 — gates | ✅ Done | `66c21e2f6b` (reflection gate), `0bc24c3570` (A0 spike) |
+| Stage 1 — GPU compute GI | ✅ Done | `a5857d907f` |
+| Stage 2a — Directional skylight | ✅ Done | `fdbb63d14e` |
+| Stage 2b.1 — Unified coverage occluder | ✅ Done | `da07f28c8c` |
+| Stage 2b.2 — Directional moonlight | ✅ Done | `77537fef63` |
+| P1 — Delete dead sun_sdf | ✅ Done | `648ebd13ff` |
+| P2 — Sun/sky → GI bounce | ✅ Done | `c8bdd1e1bd` |
+| P3 — GPU JFA SDF | ✅ Done | `129f42add8`, `241b3ffa2d` |
+| P4 — D3D12 compute barrier | ❌ Blocked | Needs Win11 hardware |
+| P5a — Soft sun penumbra | ✅ Done | `fa905de580` |
+| P5b — F4 tunable knobs (SKY_DIRS/SKY_REACH/SUN_STEPS/SUN_PENUMBRA) | ✅ Done | 2026-06-25 |
+| P5c — Sky horizon→zenith gradient | ❌ Deferred | 2D top-down has no view horizon; negligible |
+| P5d — night_floor retune | ❌ Deferred | Knob exists (0.02f default); needs in-game tuning |
+| P6a — Weather-dim moonlight | ✅ Done | `6f109a0737` |
+| P6b — Vehicle occluders | ✅ Done | `8587d55b8d` |
+| B0 — Sim perf probes wired | ✅ Done | `0273a52ca4` |
+| B1 — structure_rebuild region-limit | 🔄 Superseded | P3 JFA SDF replaces CPU DT entirely |
+| B2 — Attack sim spans | ❌ Not started | Needs measurement data first |
 
-**Findings (this session, via the new gate below):**
-- **DXIL compiles for ALL 18 lighting shaders on the Mac, including
-  rc.frag/rc_bounce.** So the Win11 failure is **NOT DXC codegen** — the bytecode
-  is valid. It is **`SDL_CreateGPUGraphicsPipeline` root-signature construction**
-  from reflection. This reframes the rc.frag diagnostic stub's "the dynamic
-  `[loop]` is the trigger" conclusion — the *same* dynamic emitter loop is in
-  sprite.frag (sprite.frag.hlsl:409-420).
-- **Likely real trigger = a fragment storage buffer with NO leading sampler.**
-  sprite.frag (works) = `smp=1 storage[tex=2 buf=5]` (sampler at t0, storage
-  after — SDL's documented sampled→storage-texture→storage-buffer t-order).
-  rc.frag / rc_bounce / vol.frag = `smp=0`, storage at t0 → suspected E_INVALIDARG.
-  **UNCONFIRMED on Win11** — the fork test decides.
-- Vertex-stage storage buffers with no sampler (sprite.vert/shadow.vert) are
-  fine — the issue is fragment-specific.
-
-**Fork test (owed, Win11 — decides cheap-fix vs compute-mandatory):**
-1. *Does the game render a LIT scene on D3D12 right now* (a lamp/fire lighting
-   tiles)? **YES** → sprite.frag's sampler-led layout creates fine → the bug is
-   the no-sampler layout → cheap fix = add a leading sampler to the sampler-less
-   frag passes; compute still wanted for sun/sky quality but not urgent. **NO** →
-   sprite.frag itself won't create on D3D12 → dynamic fragment loops are dead on
-   this toolchain → compute is mandatory for ALL lighting.
-2. *Run the A0 compute spike* (built: `src/lighting/compute_spike.cpp`) → GO/NO-GO.
-
-**Staged sequence (do NOT land port + hierarchy as one diff on the backend you
-can't see):**
-- **Stage 0 — gates.** Fork test + A0 spike on Win11. Mac-side reflection gate
-  green-able (below).
-- **Stage 1 — PORT current RC math to compute; reach D3D12 == Metal on what
-  exists today.** New `gi_compute_pass` + `gi.comp.hlsl` (Part A1-A3 below).
-  Delete `radiance_cascade_pass` + `rc.frag` + `rc_bounce.frag` → this also clears
-  their gate warnings. Pure robustness/parity move, small algorithmic risk.
-  **LOCK PARITY HERE.**
-- **Stage 2 — add the directional cascade hierarchy for sun/sky** (the quality
-  upgrade) on the proven-parity base. Angular bins live in compute (the construct
-  the fragment stage chokes on; compute is its natural home). If it breaks, you
-  know it's the new math, not the port.
-
-**Mac-side parity gate (BUILT this session): `tools/shader_check/shader_reflect_check`.**
-Compiles every lighting HLSL to SPIRV + DXIL via the same shadercross the game
-uses, reflects, lints — no GPU device, runs on macOS. ERROR on SPIRV/DXIL/reflect
-failure; WARN (→ error under `--strict` / `-DSHADER_CHECK_STRICT=ON`) on a
-fragment storage-buffer-with-0-samplers. Run:
-`cmake --build out/build/osx-arm-slim --target shader_reflect_check && out/build/osx-arm-slim/tools/shader_check/shader_reflect_check`.
-Moves the reflection-class bugs (the back-and-forth) onto the Mac. `gi.comp.hlsl`
-gets checked too and dodges the fragment sampler rule entirely.
-
-**Parity discipline (compute ≠ parity by itself).** Compute narrows the
-divergence surface (no vertex pairing → dodges shadercross #169 signature-strip;
-distinct reflection model → dodges the sampler-order root-sig) but the Mac/Win
-divergence is shadercross MSL-vs-DXIL codegen and exists in compute too (#157:
-Vulkan defaults storage buffers readonly, D3D12 readwrite → mark `readonly`
-explicitly; the spike does). Real parity = the reflection gate + structural-
-parity-not-pixel-parity expectations + pinned shadercross version.
-
-**vol.frag (NOT in this GI migration — stays a fragment pass).** Sampler-less by
-design. If the fork test confirms the no-sampler hypothesis, rebind sampler-first:
-add `Texture2D Dummy : register(t0,space2)` + `SamplerState : register(s0,space2)`,
-bump `SdfBuf`→t1 / `SkyVisBuf`→t2, and bind a sampler + dummy texture in
-`volumetric_pass::record` (storage `first_slot` stays 0 — the sampler bind is a
-separate slot counter). The `--strict` gate tracks this until done.
+**One remaining actionable item:** build_map_cache/monmove/world_tick perf (B2) —
+capture sim numbers, find the dominant span, target it.
 
 ---
 
@@ -92,29 +47,29 @@ Outcome wanted: GI that creates + renders identically on D3D12 and Metal with no
 
 ---
 
-## Part A — GI: GPU compute gather → storage buffer
+## Part A — GI: GPU compute gather → storage buffer  (✅ Done: `a5857d907f`)
 
-### A0. Compute infrastructure + spike gate (go/no-go)
+### A0. Compute infrastructure + spike gate (go/no-go)  <!-- ✅ Done: `0bc24c3570` (spike removed — compute proven) -->
 - **Add a COMPUTE compile path** to `shader_compiler.{h,cpp}`: `SDL_SHADERCROSS_SHADERSTAGE_COMPUTE` via `SDL_ShaderCross_CompileComputePipelineFromHLSL` → `SDL_CreateGPUComputePipeline`. Compute declares its own resource model in `SDL_GPUComputePipelineCreateInfo` (`num_readonly_storage_buffers/textures`, `num_readwrite_storage_buffers/textures`, `num_uniform_buffers`, `threadcount_x/y/z`) — different from the graphics reflection.
 - **SPIKE**: a minimal compute shader — dynamic `[loop]` over a `StructuredBuffer<float>` (readonly) writing one `RWStructuredBuffer<float>`. Build + run on **Win11/D3D12**. Read `debug.log`:
   - **Creates (no `E_INVALIDARG`/`0x80070057`)** → GO: the fragment-stage bug does not apply to compute; proceed A1+.
   - **Fails** → NO-GO: fall back to the **CPU-GI contingency** (appendix below). This is the explicit decision gate before investing in the real shader.
 - This plumbing is required for the real rework regardless, so the spike is not throwaway.
 
-### A1. `gi_compute_pass` (replaces `radiance_cascade_pass`)
+### A1. `gi_compute_pass` (replaces `radiance_cascade_pass`)  <!-- ✅ Done -->
 - New `src/lighting/gi_compute_pass.{h,cpp}` + `data/shaders/lighting/src/gi.comp.hlsl`. Port the RC gather/bounce math from `rc.frag`/`rc_bounce.frag` into one compute shader:
   - **Readonly storage**: Emitters SB, SDF SB (reuse the existing buffers, same data the fragment passes consumed).
   - **Readwrite storage**: `gi_storage_` — tile-resolution RGB radiance over the **camera region + shadow margin** (low-freq; no supersampling, no transpose).
   - One thread per tile: gather emitters with SDF-occluded falloff (reuse `trace_shadow`/`sdf_bilinear` logic), optional bounce iterations. Dispatch `ceil(W/8)×ceil(H/8)` groups.
 - Compute→graphics dependency: dispatch (write `gi_storage_`) precedes the sprite pass (read) on the same CB. This is the **standard compute→graphics barrier** SDL_GPU is designed to insert — verify it holds on D3D12 during early bring-up (lower-risk than the fragment color-target→storage-read edge it replaces).
 
-### A2. Swap the sprite.frag consumer (`sprite_batcher.cpp` embedded HLSL + `bind_lighting_resources`)
+### A2. Swap the sprite.frag consumer  <!-- ✅ Done -->
 - Remove `Texture2D<float4> IndirectTex` (storage texture) + its bind. Add `StructuredBuffer<float4> GiBuf` at the next fragment storage-buffer slot.
 - **Renumber `register(tN, space2)` decls and the C++ `SDL_BindGPUFragmentStorageBuffers` slot indices in lockstep** (binding-order mismatch is a documented D3D12 crash).
 - GI read: `dyn += gi_strength * gi_bilinear(world_pos)`, x-major `arr[x*H+y]` + `p-0.5` centre (mirror `sdf_bilinear`). `gi_strength` knob (F4 Alt+F8/F9) unchanged.
 - `ShadowMask` becomes the only storage texture → the all-or-none 2-slot hazard is gone.
 
-### A3. Wire + delete
+### A3. Wire + delete  <!-- ✅ Done -->
 - `render_state.{cpp,h}`: replace `rc_` with `gi_compute_pass`; own `gi_storage_`/`xfer_gi_` (or in `sdf_pass`/`emitter_collector`, uploaded in the same copy pass, `cycle=false`).
 - `sdl_render_frame.cpp`: replace `rc().record()` + flush-and-gather with the compute dispatch, under the existing per-tile/structure gate; retain buffer on skip frames.
 - **Delete**: `radiance_cascade_pass.{h,cpp}`, `rc.frag.hlsl`, `rc_bounce.frag.hlsl`, `cascade_tex_`/`radiance_field_tex_`, RC readback oracle. Keep `gi_strength` + the debug-mode slot.
@@ -125,7 +80,7 @@ Outcome wanted: GI that creates + renders identically on D3D12 and Metal with no
 
 ---
 
-## Stage 2 — sun/sky directional skylight (SPEC, 2026-06-18)
+## Stage 2 — sun/sky directional skylight (SPEC, 2026-06-18)  (✅ Done: `fdbb63d14e` `da07f28c8c` `77537fef63`)
 
 **Goal.** Replace the flat sky ambient (`sky_color · sky_intensity · sky_vis`) and the
 single directional sun ray with a per-tile **directional skylight integral** computed
@@ -147,7 +102,7 @@ walls **and** roofs). So Stage 2 keeps the emitter SDF untouched and works the s
 path only, in two sub-steps. Note: this does **not** add a structure — the sun already
 owns a separate 2D field (`sun_sdf`, wall-only, trees-excluded); 2b *upgrades* that one.
 
-### Stage 2a — 2D directional sky-portal march (ships the merge + the CPU win)
+### Stage 2a — 2D directional sky-portal march  (✅ Done: `fdbb63d14e`)
 
 Per tile, march the existing wall-only `SunSdfBuf` in N hemisphere directions; weight
 each direction by whether it **reaches an open-sky tile** before a wall stops it
@@ -243,7 +198,7 @@ Single compute dispatch (one thread = one tile), mirroring `gi_field`'s scaffold
   `gi_strength`). Add a debug-view mode (next free slot) showing raw `SkyBuf.rgb`
   sky-access, gi_strength-independent (mirror GI mode 12).
 
-### Stage 2b — unified coverage-occluder field + 3D elevation march (SPEC, validated 2026-06-18)
+### Stage 2b — unified coverage-occluder field + 3D elevation march  (✅ Done: `da07f28c8c` `77537fef63`)
 
 **Design pivoted after data audit** (grilled): the original hand-built heightfield and
 the "feed `angled_sunlight_cache`" pivot were BOTH rejected. `angled_sunlight_cache`
@@ -259,7 +214,7 @@ sun clear a half-wall a LOW sun shadows.
 
 **Sub-steps (verify each; 2b.1 carries the renumber risk):**
 
-**2b.1 — coverage field + 3D elevation SUN (moves sun fully to compute):**
+**2b.1 — coverage field + 3D elevation SUN  (✅ Done: `da07f28c8c`)**
 - **`frame_build.cpp`:** build per-tile `occ` field, region-limited (reuse the B1 cam
   rect): 2 floats/tile `[(x*map_h+y)*2 + c]` — c0 = `map::coverage(p)/100` scaled to
   tile-height units, c1 = `floor_cache(z+1)` roof bit (1=roofed). Thread it through
@@ -290,7 +245,7 @@ sun clear a half-wall a LOW sun shadows.
   (single-source cleanup) — OR kept one commit to shrink the diff, removed in 2b.1b.
 - **Reflect-gate:** `sky_sun.comp` still `ro≤2 rw=1`; sprite.frag back to `buf=6`.
 
-**2b.2 — moon (param-swap on the proven 2b.1 march):**
+**2b.2 — moon (param-swap on the proven 2b.1 march)  (✅ Done: `77537fef63`)**
 - CPU: when `!m_solar.direct_active` (night), feed the **moon** as the celestial light:
   direction = 12h-shifted sun arc (moon ≈ opposite sun; reuse the elevation math),
   colour = cold blue-white, intensity = `get_moon_phase` illumination × small factor.
@@ -304,7 +259,7 @@ clears short coverage). Coverage conflates opacity+height (chain fence = low cov
 little shadow, physically tall but light-transparent — fine for lighting). Vehicles: 
 `map::coverage` is furn-then-ter; vehicle occluders may need `obstacle_coverage` later.
 
-### Deferred (NOT Stage 2) — full 3D-SDF unification
+### Deferred (NOT Stage 2) — full 3D-SDF unification  (🧊 rides P3/JFA roadmap)
 One thin-slab 3D SDF (current z + few above, region-limited) sphere-marched in 3D for
 **both** emitters and sun = the genuinely-merged structure. Belongs to the **GPU JFA
 SDF** roadmap phase (3D DT on CPU would undo B1). Tracked there, not here.
@@ -337,7 +292,7 @@ Stage 2a (directional sky-portal) + 2b.1 (unified coverage occluder, 3D-elevatio
 sun) + 2b.2 (directional moonlight) are committed (`fdbb63d`, `da07f28c8c`,
 `77537fef63`) and Metal-eyeball-confirmed. Remaining work, ordered by leverage:
 
-### P1 — cleanup: delete dead `sun_sdf` (quick, do first)
+### P1 — cleanup: delete dead `sun_sdf` (✅ Done: `648ebd13ff`)
 After 2b.1 the wall-only sun SDF is read by nothing. Still being **built** (a
 second region-DT in `frame_build` `region_sdf(sun_sdf, …)`), **uploaded**
 (`sdf_pass`: `sun_sdf_storage_` + `xfer_sun_sdf_` + the upload block), and the
@@ -346,7 +301,7 @@ plumbing. Remove the whole chain → drops one CPU DT + one GPU upload + one buf
 per rebuild. Low risk (no consumer). Also long-dead: `sdf_tex_` / `sky_vis_tex_`
 R8/R32F textures in `sdf_pass` (superseded by storage buffers; nothing samples them).
 
-### P2 — biggest visual: sun/sky → GI bounce
+### P2 — biggest visual: sun/sky → GI bounce (✅ Done: `c8bdd1e1bd`)
 `gi_field.comp` gathers **emitters only** → the sun (dominant light) casts flat
 dark+ambient shadows with no bounced daylight and no indoor light-leak. Feed
 sun/sky-lit surface radiance into the GI field input (per-tile: `sun_term ·
@@ -354,19 +309,19 @@ SkyBuf.a + sky_term · SkyBuf.rgb`, already computed) so `gi_bounce` propagates 
 Plan's own thesis: "the GI win is the surface-radiance-field bounce." Moderate
 effort, large realism gain (soft daylight fill, colour bleed indoors).
 
-### P3 — biggest perf + unlocks the merge: GPU JFA SDF
+### P3 — biggest perf + unlocks the merge: GPU JFA SDF (✅ Done: `129f42add8` `241b3ffa2d`)
 CPU Euclidean DT is the ~10 ms `structure_rebuild` hitch (render-thread even
 region-limited). Move SDF generation to a GPU **Jump-Flood** pass → round
 Euclidean, off the main thread, AND unblocks the genuinely-merged **thin-slab 3D
 SDF** (marched in 3D for emitters AND sun — the real indoor/outdoor unification,
 deferred here only because a 3D *CPU* DT would undo B1). See "Deferred" below.
 
-### P4 — robustness (primary target): verify the D3D12 compute barrier
+### P4 — robustness: verify the D3D12 compute barrier (❌ Blocked — needs Win11 hardware)
 The same-CB compute-write→graphics-read barrier on `gi_buf_` / `sky_buf_` is
 **never verified on Win11/D3D12**. All compute lighting rests on SDL_GPU inserting
 it correctly. Confirm on the next Win11 pass (no device-removed, GI/sky visible).
 
-### P5 — cheap quality polish
+### P5 — cheap quality polish  (✅ P5a penumbra `fa905de580`; ✅ P5b F4 knobs 2026-06-25; ❌ P5c deferred; ❌ P5d deferred)
 - Soft sun penumbra: average `celestial_occ` over 3–4 angular offsets of `toward`
   (`SUN_PENUMBRA` const → loop) for softer shadow edges.
 - Promote shader/CPU constants to F4 knobs: `SKY_DIRS`/`SKY_REACH`/`SUN_STEPS`,
@@ -374,31 +329,31 @@ it correctly. Confirm on the next Win11 pass (no device-removed, GI/sky visible)
 - Sky colour as a horizon→zenith gradient instead of one flat `sky_color`.
 - `night_floor` retune against the new directional moonlight.
 
-### P6 — correctness gaps (accepted-for-now)
+### P6 — correctness gaps  (✅ P6a `6f109a0737`; ✅ P6b `8587d55b8d`)
 - Moon not weather-dimmed (clouds ignore moonlight) — fold a cloud factor into
   `make_celestial_params` moon intensity.
 - Vehicles: `map::coverage` is furn-then-ter → tall vehicle occluders may want
   `obstacle_coverage` in the occ-field build.
 
-### Deferred (own phase) — full 3D-SDF unification (rides P3/JFA)
+### Deferred (own phase) — full 3D-SDF unification (🧊 rides P3/JFA)
 One thin-slab 3D SDF (current z + few above, region-limited) sphere-marched in 3D
 for **both** emitters and sun = the genuinely-merged structure. Belongs to the
 GPU-JFA phase (a 3D CPU DT would undo B1).
 
 ---
 
-## Part B — Perf: structure_rebuild hitch + measured do_turn
+## Part B — Perf: structure_rebuild hitch + measured do_turn  (🔄 P3 JFA SDF superseded B1; B0 probes wired; B2 not started)
 
-### B0. Capture sim numbers FIRST
+### B0. Capture sim numbers FIRST  (✅ Done: `0273a52ca4` — probes wired, no captured results yet)
 Run, **hold movement ≥20 turns**, read `[sim][perf] … sim_total= (build_map_cache= monmove= world_tick=)` from `debug.log`. Don't pre-commit to a sim target before this. (`[sim][perf] build_map_cache` (map.cpp) is **distinct** from `[lighting][perf] structure_rebuild` (SDF DT) — both ~10ms, do not conflate.)
 
-### B1. structure_rebuild region-limit (high-confidence, shares files/region with A1)
+### B1. structure_rebuild region-limit  (🔄 Superseded — P3 JFA SDF replaces the CPU DT; no separate action needed)
 - The DT recomputes over the **full 180×180 bubble × 16 SS ≈ 520k cells ≈ 10ms**, but only on-screen + shadow-reach is sampled.
 - **Limit the DT + SS transparency replication to camera rect + ~8-tile margin** in `frame_build.cpp`/`sdf_pass.cpp` → ~180×180 → ~80×60 ≈ 4× less → ~10ms → ~2–3ms. Preserves SS=4 (user-confirmed quality). Keep CPU↔shader stride (`x*map_h+y`) consistent with new dims.
 - The GI compute field (A1) uses the same camera region — single source of region bounds.
 - Fallback lever: `SDF_SUPERSAMPLE` 4→2 (last resort, quality tradeoff).
 
-### B2. Attack the dominant sim span (after B0)
+### B2. Attack the dominant sim span  (❌ Not started — needs measurement from B0 first)
 - **build_map_cache** (map.cpp ~9778, already parallel-phased): finer dirty-gating of transparency/lightmap sub-caches (rebuild only on changed inputs). Correctness-sensitive; gate on measured share.
 - **monmove**: already LOD + `monperf` sleep-skip — inspect sight-cache clearing / tier thresholds.
 - **world_tick**: field decay over loaded submaps (`do_emits` already 10s-gated) — check iteration scope.
@@ -408,20 +363,24 @@ Re-run, hold ≥20 turns, compare `[sim][perf]` + `structure_rebuild` + `[render
 
 ---
 
-## Critical files
+## Critical files  (🔄 all Stage-1/2 structural files done; per-item remaining below)
 
-| File | Change |
-|---|---|
-| `src/lighting/shader_compiler.{h,cpp}` | A0 add COMPUTE compile path |
-| `src/lighting/gi_compute_pass.{h,cpp}` *(new)* + `data/shaders/lighting/src/gi.comp.hlsl` *(new)* | A1 compute gather → `gi_storage_` |
-| `src/lighting/sprite_batcher.cpp` | A2 HLSL: drop `IndirectTex`, add `GiBuf`; renumber registers + bind slots together |
-| `src/lighting/render_state.{cpp,h}`, `sdf_pass.{cpp,h}`, `emitter_collector.{cpp,h}` | A3 own/upload `gi_storage_`; remove `rc_` |
-| `src/sdl_render_frame.cpp` | A3 dispatch under gate; remove RC record; B1 region bounds |
-| `src/lighting/frame_build.{cpp,h}` | B1 region-limit DT + SS replication |
-| `radiance_cascade_pass.{h,cpp}`, `rc.frag.hlsl`, `rc_bounce.frag.hlsl` | A3 **delete** |
-| `src/game.cpp` (~1818–2180), `src/map.cpp` (~9778) | B2 only if B0 points here |
+| File | Change | Status |
+|------|--------|--------|
+| `src/lighting/shader_compiler.{h,cpp}` | A0 add COMPUTE compile path | ✅ Done |
+| `src/lighting/gi_compute_pass.{h,cpp}` + `data/shaders/lighting/src/gi_field.comp.hlsl` + `gi_bounce.comp.hlsl` | A1/A3 compute gather → `gi_storage_` | ✅ Done |
+| `data/shaders/lighting/src/sky_sun.comp.hlsl` | Stage 2a/2b directional sky/sun compute | ✅ Done |
+| `src/lighting/sky_sun_pass.{h,cpp}` | Stage 2a/2b owns sky_buf_ | ✅ Done |
+| `src/lighting/sprite_batcher.cpp` | A2 renumber storage slots; bind GiBuf + SkyBuf | ✅ Done |
+| `src/lighting/render_state.{cpp,h}` | A3 own gi_/sky_; remove rc_ | ✅ Done |
+| `src/sdl_render_frame.cpp` | A3 dispatch under gate; B1 region bounds | ✅ Done |
+| `src/lighting/frame_build.{cpp,h}` | B1 region-limit DT (superseded by P3 JFA) | 🔄 JFA now handles |
+| `src/lighting/sdf_pass.cpp` | Stage-2b occ_buffer + COMPUTE_STORAGE_READ flags | ✅ Done |
+| `src/lighting/gpu_sdf_pass.{cpp,h}` | P3 JFA SDF pass | ✅ Done |
+| `radiance_cascade_pass.{h,cpp}`, `rc.frag.hlsl`, `rc_bounce.frag.hlsl` | A3 **delete** | ✅ Done |
+| `src/game.cpp` (~1818–2180), `src/map.cpp` (~9778) | B2 only if B0 points here | ❌ Waiting |
 
-## Appendix — CPU-GI contingency (only if A0 spike fails on D3D12)
+## Appendix — CPU-GI contingency  (🧊 Not needed — A0 spike confirmed compute works on D3D12)
 Compute single-bounce on CPU in `frame_build.cpp` (splat emitter snapshot into per-tile RGB, SDF-occluded falloff + few wall-gated diffusion iters, camera region) → upload `gi_storage_` exactly as A2/A3 consume it. Robust but non-standard and adds main-thread cost (the Part-B tension). Same consumer swap, so only A0/A1 differ.
 
 ## Gotchas (module CLAUDE.md)

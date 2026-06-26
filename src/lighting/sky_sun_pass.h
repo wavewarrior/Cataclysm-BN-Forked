@@ -25,7 +25,7 @@ namespace lighting
 class gpu_device;
 
 // Per-dispatch tuning, pushed as the compute uniform (b0/space2). Field names +
-// ORDER must match the SkySunParams cbuffer in sky_sun.comp.hlsl. 32 bytes.
+// ORDER must match the SkySunParams cbuffer in sky_sun.comp.hlsl. 48 bytes.
 struct sky_sun_params {
     std::uint32_t map_w;        // runtime tile dims (thread/tile grid extent)
     std::uint32_t map_h;
@@ -34,7 +34,11 @@ struct sky_sun_params {
     float         sun_sin_elev; // sun elevation sine (2b heightfield; unused 2a)
     float         shadow_k;     // sphere-trace cone hardness (sprite shadow_k)
     std::uint32_t shadow_steps; // sun march iteration cap
-    float         ss_pad;
+    // P5b: sky/sun quality knobs (was ss_pad).
+    std::uint32_t sky_dirs     = 8;     // hemisphere directions per tile
+    float         sky_reach    = 10.0f; // sky march max distance (tiles)
+    std::uint32_t sun_steps    = 24;    // celestial march steps
+    std::uint32_t sun_penumbra = 4;     // penumbra angular samples (1=hard edge)
 };
 
 class sky_sun_pass

@@ -222,6 +222,10 @@
                 <div class="devui-row"><span class="devui-btn" data-event-click="rc_readback">RC cascade readback (log)</span></div>
                 <div class="devui-row">shadow k <input type="range" min="0" max="32" step="0.5" data-value="shadow_k"/> <span class="devui-val">{{shadow_k}}</span></div>
                 <div class="devui-row">shadow steps <input type="range" min="1" max="64" step="1" data-value="shadow_steps"/> <span class="devui-val">{{shadow_steps}}</span></div>
+                <div class="devui-row">sky dirs <input type="range" min="1" max="32" step="1" data-value="sky_dirs"/> <span class="devui-val">{{sky_dirs}}</span></div>
+                <div class="devui-row">sky reach <input type="range" min="1" max="30" step="0.5" data-value="sky_reach"/> <span class="devui-val">{{sky_reach}}</span></div>
+                <div class="devui-row">sun steps <input type="range" min="1" max="64" step="1" data-value="sun_steps"/> <span class="devui-val">{{sun_steps}}</span></div>
+                <div class="devui-row">sun penumbra <input type="range" min="1" max="12" step="1" data-value="sun_penumbra"/> <span class="devui-val">{{sun_penumbra}}</span></div>
                 <div class="devui-row">light eps <input type="range" min="0" max="0.05" step="0.001" data-value="light_eps"/> <span class="devui-val">{{light_eps}}</span></div>
                 <div class="devui-row">max shadow K <input type="range" min="1" max="64" step="1" data-value="max_shadow_k"/> <span class="devui-val">{{max_shadow_k}}</span></div>
                 <div class="devui-row">SDF sharpness <input type="range" min="0" max="1" step="0.01" data-value="sdf_sharp"/> <span class="devui-val">{{sdf_sharp}}</span></div>

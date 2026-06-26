@@ -121,6 +121,12 @@ cbuffer DebugParams : register(b2, space3) {
     float spec_strength;       // wet specular glint strength (0=off; CPU-folded with rain intensity)
     float light_eps;           // P1: contribution epsilon for shadow march gating (default 0.004)
     float max_shadow_k;        // P2: max emitters per pixel that get full shadow trace (default 16)
+    // P5b: sky/sun quality knobs (vertex+fragment padding — not used here; consumed by
+    // sky_sun.comp via sky_sun_params cbuffer. Declared for cbuffer layout parity.)
+    float sky_dirs;            // sky hemisphere directions (float → uint in compute push)
+    float sky_reach;           // sky march max distance (tiles)
+    float sun_steps;           // celestial march steps (float → uint in compute push)
+    float sun_penumbra;        // penumbra angular samples (float → uint in compute push)
 };
 struct VS_OUT {
     float4 pos      : SV_Position;

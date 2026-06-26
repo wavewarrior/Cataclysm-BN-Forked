@@ -438,6 +438,11 @@ void devui_rml_open()
     c.Bind( "gi_strength", &g_dbg_params.gi_strength );
     c.Bind( "shadow_k", &g_dbg_params.shadow_k );
     c.Bind( "shadow_steps", &g_devui_shadow_steps );   // int proxy → uint each frame
+    // P5b: sky/sun quality knobs (sky_sun.comp cbuffer, read each frame)
+    c.Bind( "sky_dirs", &g_dbg_params.sky_dirs );
+    c.Bind( "sky_reach", &g_dbg_params.sky_reach );
+    c.Bind( "sun_steps", &g_dbg_params.sun_steps );
+    c.Bind( "sun_penumbra", &g_dbg_params.sun_penumbra );
     c.Bind( "light_eps", &g_dbg_params.light_eps );
     c.Bind( "max_shadow_k", &g_dbg_params.max_shadow_k );
     c.Bind( "sdf_sharp", &g_dbg_params.sdf_sharp );

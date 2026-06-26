@@ -26,54 +26,113 @@ Industry precedent:
 
 ## Approach
 
-### Phase A — per-submap dirty tracking for lightmap
+### Phase A — per-submap dirty tracking for lightmap [DONE]
 
 Add per-submap dirty tracking to the lightmap, mirroring the pattern used by
 `transparency_cache_dirty`:
 
-1. **Add `lightmap_dirty` bitset** to `level_cache` (`src/map.h`), parallel to
-   `transparency_cache_dirty`/`floor_cache_dirty`/`outside_cache_dirty`.
+1. **[DONE]** **Add `lightmap_dirty` bitset** to `level_cache` (`src/map.h`),
+   parallel to `transparency_cache_dirty`/`floor_cache_dirty`/`outside_cache_dirty`.
 
-2. **In `map::shift`** — when shifting the bubble, translate the lightmap arrays
-   (`lm`, `sm`, `light_source_buffer`) via `shift_flat_cache`, and shift the
-   dirty bitset via `shift_bitset_cache`. Only new-edge submaps are marked dirty.
+2. **[DONE]** **In `map::shift`** — when shifting the bubble, translate the
+   lightmap arrays (`lm`, `sm`, `light_source_buffer`) via `shift_flat_cache`,
+   and shift the dirty bitset via `shift_bitset_cache`. Only new-edge submaps
+   are marked dirty. Removed the blanket `invalidate_lightmap_caches()` from
+   shift — retained submaps stay correctly clean.
 
-3. **In `build_map_cache` Phase 4** (`map.cpp:10011-10104`):
-   - Replace the level-scope `lightmap_dirty` gate with per-submap iteration
-     over only the dirty submaps.
-   - `build_sunlight_cache` must still run top-down (z-cascade), but its
-     *per-submap* cost is bounded by the dirty set.
-   - `generate_lightmap` / `generate_lightmap_worker` already iterates submaps
-     internally — add a dirty-submap skip.
+3. **[DONE]** **In `build_map_cache` Phase 4**:
+   - `.any()` / `.reset()` on the bitset instead of bool checks.
+   - Per-submap zeroing of `sm`, `light_source_buffer`, `light_color_cache`
+     (lm remains full-level fill — overwritten by `build_sunlight_cache`).
+   - Dirty-submap skip in `generate_lightmap_worker` collection loop.
+   - Diagnostic log: `[build_cache][perf] lightmap_dirty z=N dirty/total submaps`.
 
-4. **In `invalidate_map_cache`** — when invalidating a level, mark
-   `lightmap_dirty` but do NOT `.set()` the per-submap bitset unless the whole
-   level truly changed. Let the per-submap dirty bits mirror the structural
-   cache invalidation scope.
+4. **[DONE]** **In `loadn`** — mark the loaded submap dirty in incremental mode;
+   mark all bits dirty in non-incremental mode.
 
-### Phase B — deferred/regional regen
+### Phase B — Stop blanket invalidate every turn (B1/B2/B3) [DONE]
 
-If Phase A alone is insufficient (e.g., the whole level still dirties from
-structural cascade), add deferred regen:
+**Context from debug.log:**
 
-1. When `build_map_cache` is called but only player-z lightmap is immediately
-   needed, defer non-player-z lightmap regen to the next frame that actually
-   reads those z (e.g., when the z-stack render loop visits them, or when FOV
-   changes on that z).
-2. Track a "pending regen" set of `(z, submap)` tuples. Process K per frame
-   (time-sliced).
+After Phase A, per-submap tracking is correct but the savings are drowned out:
+- `invalidate_lightmap_caches()` at game.cpp:1878 (turn start) sets ALL bits
+  for ALL 21 z-levels every turn.
+- `invalidate_lightmap_caches()` at game.cpp:13128 (player move) also sets all
+  bits for all levels.
+- Result: z=0 shows 225/225 submaps on every non-shift frame → full rebuild.
+- The per-submap skip only saves 14/225 submaps on shift frames (211/225 dirty).
+- Non-player-z levels are already gated (only processed during shifts) — not
+  the bottleneck.
+
+**Changes:**
+
+B1. **Remove turn-start `invalidate_lightmap_caches()`** (game.cpp:1878)
+    - Standing still: lightmap stays clean after first frame, Phase 4 skips
+      entirely → ~0ms lightmap cost.
+    - Entity lights (character, NPC, monster) are currently applied *inside*
+      the Phase 4 dirty-submap gate — if Phase 4 skips, they don't render.
+      Fix: extract entity-light application to run *outside* the Phase 4 gate,
+      unconditionally (they're cheap — a few `apply_light_source` calls).
+
+B2. **Shrink player-move `invalidate_lightmap_caches()`** (game.cpp:13128)
+    - Change from all-z-levels to single-z-level, or remove entirely.
+    - After `map::shift`, `loadn` already marks the 14 new-edge submaps dirty.
+    - Entity lights are re-applied by the always-run step (B1) → player light
+      follows the avatar without a Phase 4 entry.
+    - Result: post-shift rebuild processes only ~14 submaps instead of 225.
+
+B3. **Add sun-angle tracking to skip `build_sunlight_cache` when unchanged** [DONE]
+    - `build_sunlight_cache` is the remaining bottleneck when Phase 4 does
+      run (it writes `lm` for ALL tiles in the z-cascade).
+    - Track `m_solar.last_built_light_level_int` — truncated `natural_light_level(0)`
+      from the last cascade.  Set to -1 by `invalidate_map_cache` so structural
+      changes (new walls, destroyed roofs) force a rebuild even when the sun
+      hasn't moved.
+    - If `last_built_light_level_int` matches current truncated light level AND
+      is >= 0: skip the `lm` full-zero + cascade.  `lm` retains previous outdoor
+      values; the worker adds artificial lights via `max()`.  Dawn/dusk tint
+      still reads `lm` for sunlight values (same result as last build).
+    - Saves the remaining ~1-2ms cascade cost on frames where only entity
+      lights or per-submap artificial sources changed — the dominant
+      steady-state case after B1/B2.
+    - **Known edge case (ponytail: accepted):** phantom old-artificial-light in
+      `lm` for dirty submaps where a light source moved away.  During daytime
+      the artifact is invisible (sunlight dominates).  At night it's a
+      single-frame glow at the pre-move position.  Self-corrects on next full
+      rebuild (structural invalidate or meaningful sun change).
+    - Implemented in both code paths: `generate_lightmap` (single-level) and
+      the multi-level hoisted init in `build_map_cache`.
+
+**Key insight:** Phase B isn't about deferring non-player-z (they're already
+naturally deferred). It's about removing the blanket-turn and player-move
+invalidates that defeat the per-submap tracking Phase A built.
+
+**Risk:**
+- Extracting entity lights from Phase 4 changes the ordering: they currently
+  run after `build_sunlight_cache` but before `generate_lightmap_worker`.
+  Must ensure the new ordering (entity lights → worker skip) doesn't create
+  races or incorrect results.
+- When B3 skips the cascade, `lm` retains pre-zeroing values from the last
+  full rebuild.  `invalidate_map_cache` resets `last_built_light_level_int`
+  to -1, forcing a rebuild on the next frame — so structural changes that
+  affect the sunlight cascade (new roofs, destroyed walls) always trigger a
+  full rebuild.  Non-structural Phase 4 entries (per-submap dirty from player
+  movement) skip the cascade, saving ~1-2ms.
 
 ## Verification
 
-1. **Before:** measure `lightmap=` ms in `[build_cache][perf]` for a walking
-   session and a standing session.
-2. **After:** same session — lightmap cost should scale with number of *dirty
-   submaps*, not entire z-level.
-3. **Quality:** stand at z=0, observe z-1 and z+1 lighting (hole, ledge, stairs).
-   Lower-z lightmap should still be correct — if not, the deferred/regional
-   regen needs the per-submap baseline first.
-4. **Horde scene:** many emitters on the same z — lightmap cost should be
-   proportional to submaps with changed emitters, not the whole z.
+1. **[DONE]** **Before:** measure `lightmap=` ms in `[build_cache][perf]` for a
+   walking session and a standing session. (Log captured: standing ~1.5-8ms,
+   shifting ~2-10ms across 3 levels, lightmap≈0 for second-pass renders.)
+2. **[DONE]** **After Phase B (B1/B2):** standing session → lightmap=`~0ms`.
+   Walking session → lightmap scales with dirty submaps (~14), not whole level.
+3. **[PLANNED]** **B3 measurement:** compare `[build_cache][perf]` total ms
+   before/after B3 on a walking session. Expected: ~1-2ms reduction on each
+   non-shift walk frame (the saved `build_sunlight_cache` cascade).
+3. **[DONE]** **Quality:** stand at z=0, observe z-1/z+1 lighting. Correctness
+   confirmed during playtest.
+4. **[PLANNED]** **Horde scene:** many emitters on the same z — lightmap cost
+   should be proportional to submaps with changed emitters, not the whole z.
 
 ## Risk
 

@@ -1872,12 +1872,11 @@ bool game::do_turn()
     // Reset dimension swap flag now that the map is fully loaded and turn is processing
     swapping_dimensions = false;
 
-    // Mark all lightmap and visibility caches dirty for this turn.  The first redraw will run
-    // generate_lightmap / update_visibility_cache; subsequent redraws within the same turn skip them.
-    {
-        m.invalidate_lightmap_caches();
-        m.invalidate_visibility_caches();
-    }
+    // Mark all visibility caches dirty for this turn.  The first redraw will run
+    // update_visibility_cache; subsequent redraws within the same turn skip it.
+    // Lightmap is NOT blanket-invalidated here — per-submap dirty tracking handles
+    // the incremental rebuild; only submaps with actual changes are rebuilt.
+    m.invalidate_visibility_caches();
 
     // starting a new turn, clear out temperature cache
     weather_manager &weather = get_weather();
@@ -13125,7 +13124,6 @@ auto game::place_player( const tripoint_bub_ms &dest_loc, const bool keep_grab )
         u.stop_hauling();
     }
     u.setpos( dest_loc );
-    m.invalidate_lightmap_caches();
     if( u.is_mounted() ) {
         monster *mon = u.mounted_creature.get();
         mon->setpos( dest_loc );
@@ -13133,6 +13131,11 @@ auto game::place_player( const tripoint_bub_ms &dest_loc, const bool keep_grab )
         m.creature_in_field( *mon );
     }
     point_rel_sm submap_shift = update_map( u );
+    // Mark the player's submap dirty so the per-submap lightmap rebuild
+    // picks up the character light and any static sources at the new position.
+    // For shifts, update_map+loadn already marks the 14 new-edge submaps —
+    // this handles within-submap moves that don't trigger a shift.
+    m.mark_lightmap_dirty( u.bub_pos() );
     // Important: don't use dest_loc after this line. `update_map` may have shifted the map
     // and dest_loc was not adjusted and therefore is still in the un-shifted system and probably wrong.
     // If you must use it you can calculate the position in the new, shifted system with

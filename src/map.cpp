@@ -8219,6 +8219,7 @@ void map::shift( const point_rel_sm &sp )
                 shift_bitset_cache( gc.transparency_cache_dirty, gc.cache_mapsize, 1, sp );
                 shift_bitset_cache( gc.floor_cache_dirty, gc.cache_mapsize, 1, sp );
                 shift_bitset_cache( gc.outside_cache_dirty, gc.cache_mapsize, 1, sp );
+                shift_bitset_cache( gc.lightmap_dirty, gc.cache_mapsize, 1, sp );
                 // Shift flat cache data so retained submaps' data stays in the
                 // correct tile position.  New edge submaps get stale values that
                 // will be overwritten by the next build_*_cache() call.
@@ -8348,7 +8349,11 @@ void map::shift( const point_rel_sm &sp )
         shift_tripoint_set( support_cache_dirty, shift_offset_pt, boundaries_2d );
     }
 
-    invalidate_lightmap_caches();
+    // Lightmap was translated via shift_flat_cache above, and the per-submap
+    // lightmap_dirty bitset was shifted via shift_bitset_cache.  Only new-edge
+    // submaps are marked dirty by loadn(incremental=true).  No blanket
+    // invalidate_lightmap_caches() needed — retained submaps stay clean.
+    // Entity lights are applied unconditionally in build_map_cache Phase 4.
 }
 
 auto map::apply_boundary_overlay( submap &sm, const tripoint_abs_sm &pos ) -> void
@@ -8451,18 +8456,18 @@ void map::loadn( const tripoint_bub_sm &grid, const bool update_vehicles,
     }
 
     // New submap changes the content of the map and all caches must be recalculated.
-    // In incremental mode (shift context), transparency and floor caches were
-    // shifted in shift() — only mark this specific submap dirty for those two.
-    // In shift context, map::shift marks the whole z-level dirty once after
-    // all grid slots are moved.  Avoid repeating that full-level work here for
-    // every newly loaded edge submap.
+    // In incremental mode (shift context), transparent and floor caches and
+    // lightmap were shifted in shift() — only mark this specific submap dirty.
+    // Avoid repeating full-level work here for every newly loaded edge submap.
     {
         ZoneScopedN( "loadn_dirty" );
         if( incremental ) {
             level_cache &ch = get_cache( grid.z() );
-            ch.transparency_cache_dirty.set( static_cast<size_t>( ch.bidx( grid.x(), grid.y() ) ) );
-            ch.floor_cache_dirty.set( static_cast<size_t>( ch.bidx( grid.x(), grid.y() ) ) );
-            ch.outside_cache_dirty.set( static_cast<size_t>( ch.bidx( grid.x(), grid.y() ) ) );
+            const size_t bidx = static_cast<size_t>( ch.bidx( grid.x(), grid.y() ) );
+            ch.transparency_cache_dirty.set( bidx );
+            ch.floor_cache_dirty.set( bidx );
+            ch.outside_cache_dirty.set( bidx );
+            ch.lightmap_dirty.set( bidx );
             tmpsub->transparency_dirty = true;
             tmpsub->floor_dirty = true;
             tmpsub->outside_dirty = true;
@@ -8474,6 +8479,7 @@ void map::loadn( const tripoint_bub_sm &grid, const bool update_vehicles,
             set_seen_cache_dirty( grid.z() );
             set_pathfinding_cache_dirty( grid.z() );
             set_suspension_cache_dirty( grid.z() );
+            get_cache( grid.z() ).lightmap_dirty.set();
         }
     }
     setsubmap( gridn, tmpsub );
@@ -10011,15 +10017,16 @@ void map::build_map_cache( const int zlev, bool skip_lightmap )
     if( !skip_lightmap ) {
         ZoneScopedN( "Phase4_lightmap" );
         // Only include levels whose lightmap is actually stale this redraw.
-        // lightmap_dirty is set for all levels at the start of each game turn and
-        // cleared here after generate_lightmap runs, so subsequent redraws within
-        // the same turn skip the rebuild entirely.
-        if( get_cache( zlev ).lightmap_dirty ) {
+        // lightmap_dirty is marked per-submap by map::shift (loadn), player
+        // movement, terrain changes, and explicit invalidate calls (vehicle
+        // lights, bionics, etc).  Levels with no dirty submaps are skipped,
+        // and their shifted lm array from the last rebuild is reused.
+        if( get_cache( zlev ).lightmap_dirty.any() ) {
             dirty_seen_cache_levels.push_back( zlev );
         }
         dirty_seen_cache_levels.erase(
         std::ranges::remove_if( dirty_seen_cache_levels, [this]( int z ) {
-            return !get_cache( z ).lightmap_dirty;
+            return !get_cache( z ).lightmap_dirty.any();
         } ).begin(),
         dirty_seen_cache_levels.end() );
         std::ranges::sort( dirty_seen_cache_levels );
@@ -10044,38 +10051,20 @@ void map::build_map_cache( const int zlev, bool skip_lightmap )
                 // Multiple dirty levels: hoist shared initialization outside the
                 // parallel loop so worker threads never race on cross-level writes.
                 //
-                // Clear sm, light_source_buffer, and lm for every dirty level.
-                // lm must be zeroed because build_sunlight_cache only writes outdoor tiles.
+                // Always run the sunlight cascade in the multi-level path because
+                // shift+loadn gives new-edge submaps stale lm values (from the old
+                // grid position's terrain).  Skipping the cascade here would leave
+                // those submaps with incorrect sunlight — causing a visible flash.
                 for( const int z : dirty_seen_cache_levels ) {
                     auto &c = get_cache( z );
                     std::fill( c.sm.begin(), c.sm.end(), 0.0f );
                     std::fill( c.light_source_buffer.begin(), c.light_source_buffer.end(),
                               level_cache::buffered_light_source{} );
+                    // lm must be zeroed because build_sunlight_cache only writes outdoor tiles.
                     std::fill( c.lm.begin(), c.lm.end(), four_quadrants( 0.0f ) );
                 }
                 // Build sunlight (all z-levels, top-to-bottom; serial).
                 build_sunlight_cache( zlev );
-                // Apply character/NPC lights serially to avoid racing on per-level caches.
-                apply_character_light( get_player_character() );
-                for( npc &guy : g->all_npcs() ) {
-                    apply_character_light( guy );
-                }
-                // Apply monster lights serially (all_monsters() uses non-atomic weak_ptr_fast
-                // refcounts, so iterating from worker threads would be a data race).
-                for( monster &critter : g->all_monsters() ) {
-                    if( critter.is_hallucination() ) {
-                        continue;
-                    }
-                    const auto &mp = critter.bub_pos();
-                    if( inbounds( mp ) ) {
-                        if( critter.has_effect( effect_onfire ) ) {
-                            apply_light_source( mp, 8 );
-                        }
-                        if( critter.type->luminance > 0 ) {
-                            apply_light_source( mp, critter.type->luminance );
-                        }
-                    }
-                }
                 // Generate per-level dynamic lighting in parallel.
                 // skip_shared_init=true: workers only process entities on their own z-level.
                 // Pre-warm the vehicle list cache serially to avoid heap corruption
@@ -10091,16 +10080,54 @@ void map::build_map_cache( const int zlev, bool skip_lightmap )
                 }
             }
 
+            // Diagnostic: log dirty-submap fraction for each regenerated level so the
+            // per-submap scaling can be verified in debug.log.
+            for( const int z : dirty_seen_cache_levels ) {
+                const auto &ld = get_cache( z ).lightmap_dirty;
+                const int total_sm = get_cache( z ).cache_mapsize * get_cache( z ).cache_mapsize;
+                int dirty_sm = 0;
+                for( int i = 0; i < total_sm; ++i ) {
+                    if( ld[static_cast<size_t>( i )] ) {
+                        ++dirty_sm;
+                    }
+                }
+                DebugLogFL( DL::Info, DC::Main )
+                        << "[build_cache][perf] lightmap_dirty z=" << z
+                        << " " << dirty_sm << "/" << total_sm << " submaps";
+            }
+
             // Mark each regenerated level clean so subsequent redraws this turn skip it.
             // Also mark visibility dirty: the lightmap just changed, so any visibility
             // cache computed before this rebuild (e.g. from handle_action's unconditional
             // update_visibility_cache call) is now stale and must be rebuilt in game::draw.
             std::ranges::for_each( dirty_seen_cache_levels, [this]( int z ) {
-                get_cache( z ).lightmap_dirty = false;
+                get_cache( z ).lightmap_dirty.reset();
                 get_cache( z ).visibility_cache_dirty = true;
             } );
 
         } // end if( !dirty_seen_cache_levels.empty() )
+
+        // Always apply entity lights when lightmap processing is enabled,
+        // regardless of submap dirtiness.  Entity lights track current
+        // position + state of creatures and are cheap (a few ray casts).
+        apply_character_light( get_player_character() );
+        for( npc &guy : g->all_npcs() ) {
+            apply_character_light( guy );
+        }
+        for( monster &critter : g->all_monsters() ) {
+            if( critter.is_hallucination() ) {
+                continue;
+            }
+            const auto &mp = critter.bub_pos();
+            if( inbounds( mp ) ) {
+                if( critter.has_effect( effect_onfire ) ) {
+                    apply_light_source( mp, 8 );
+                }
+                if( critter.type->luminance > 0 ) {
+                    apply_light_source( mp, critter.type->luminance );
+                }
+            }
+        }
     }
     _lap( _ph_tail );
 
@@ -10709,6 +10736,7 @@ level_cache::level_cache( int mx, int my )
       transparency_cache_dirty( static_cast<size_t>( mx / SEEX ) * ( my / SEEY ) ),
       outside_cache_dirty( static_cast<size_t>( mx / SEEX ) * ( my / SEEY ) ),
       floor_cache_dirty( static_cast<size_t>( mx / SEEX ) * ( my / SEEY ) ),
+      lightmap_dirty( static_cast<size_t>( mx / SEEX ) * ( my / SEEY ) ),
       lm( static_cast<size_t>( mx * my ), four_quadrants( 0.0f ) ),
       sm( static_cast<size_t>( mx * my ), 0.0f ),
       light_source_buffer( static_cast<size_t>( mx * my ) ),
@@ -10730,6 +10758,7 @@ level_cache::level_cache( int mx, int my )
     transparency_cache_dirty.set();
     outside_cache_dirty.set();
     floor_cache_dirty.set();
+    lightmap_dirty.set();
 }
 
 
@@ -10809,12 +10838,13 @@ void map::invalidate_map_cache( const int zlev )
         ch.floor_cache_dirty.set();
         ch.transparency_cache_dirty.set();
         ch.seen_cache_dirty = true;
-        ch.lightmap_dirty = true;
+        ch.lightmap_dirty.set();
         ch.visibility_cache_dirty = true;
         ch.outside_cache_dirty.set();
         ch.suspension_cache_dirty = true;
         m_last_seen_cache_origin = tripoint_bub_ms( tripoint_min );
         m_solar.last_built_hour  = -1;
+        m_solar.last_built_light_level_int = -1;
     }
 }
 
@@ -10823,7 +10853,7 @@ void map::invalidate_lightmap_caches()
     const int minz = zlevels ? -OVERMAP_DEPTH : abs_sub.z();
     const int maxz = zlevels ? OVERMAP_HEIGHT : abs_sub.z();
     std::ranges::for_each( std::views::iota( minz, maxz + 1 ), [this]( int z ) {
-        get_cache( z ).lightmap_dirty = true;
+        get_cache( z ).lightmap_dirty.set();
     } );
 }
 
@@ -10843,6 +10873,18 @@ void map::set_memory_seen_cache_dirty( const tripoint_bub_ms &p )
     if( offset >= 0 && offset < ch.cache_x * ch.cache_y ) {
         ch.map_memory_seen_cache.reset( static_cast<size_t>( offset ) );
     }
+}
+
+void map::mark_lightmap_dirty( const tripoint_bub_ms &p )
+{
+    if( !inbounds_z( p.z() ) ) {
+        return;
+    }
+    level_cache &ch = get_cache( p.z() );
+    const int smx = p.x() / SEEX;
+    const int smy = p.y() / SEEY;
+    const size_t bidx = static_cast<size_t>( ch.bidx( smx, smy ) );
+    ch.lightmap_dirty.set( bidx );
 }
 
 void map::clip_to_bounds( point_bub_ms &p ) const

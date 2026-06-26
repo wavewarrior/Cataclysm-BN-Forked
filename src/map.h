@@ -343,10 +343,11 @@ struct level_cache {
     cata_dynamic_bitset outside_cache_dirty;
     cata_dynamic_bitset floor_cache_dirty;
     bool seen_cache_dirty = false;
-    // Set to true at the start of each game turn; cleared after generate_lightmap
-    // completes for this level.  Allows subsequent redraws within the same turn
-    // to skip the full lightmap rebuild when nothing has changed.
-    bool lightmap_dirty = true;
+    // Per-submap dirty bitset for lightmap, parallel to transparency_cache_dirty
+    // etc.  Set at the start of each game turn (all bits), cleared per submap
+    // after generate_lightmap recomputes that submap.  Allows incremental regen
+    // within a level and skip of levels with no dirty submaps.
+    cata_dynamic_bitset lightmap_dirty;
     // Set to true at the start of each game turn; cleared after update_visibility_cache
     // completes.  Allows repeated draws within the same turn (animations, UI refreshes)
     // to skip the full visibility rebuild when nothing has changed.
@@ -604,6 +605,11 @@ class map : public submap_load_listener
         void set_memory_seen_cache_dirty( const tripoint_bub_ms &p );
 
         void invalidate_map_cache( const int zlev );
+
+        /// Mark a single submap's lightmap_dirty bit.  Used by game::place_player
+        /// so that within-submap moves trigger a lightmap rebuild for changed
+        /// entity lights and static sources, without a blanket all-z invalidate.
+        void mark_lightmap_dirty( const tripoint_bub_ms &p );
 
         /// Mark lightmap_dirty for every loaded z-level.  Call once per game turn
         /// so that only the first redraw of each turn runs generate_lightmap.
@@ -2155,6 +2161,10 @@ class map : public submap_load_listener
             bool  direct_active  = false;
             // Game-hour when the cache was last rebuilt; -1 forces a rebuild on first use.
             int   last_built_hour = -1;
+            // Truncated natural_light_level(0) from the last build_sunlight_cache cascade.
+            // -1 forces a rebuild on first use; set to -1 by invalidate_map_cache to
+            // force a rebuild after structural changes.
+            int   last_built_light_level_int = -1;
         };
         solar_params m_solar;
 

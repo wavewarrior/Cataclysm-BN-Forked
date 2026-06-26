@@ -171,6 +171,11 @@ struct debug_params {
     float    light_eps     = 0.0f;
     // P2: max emitters per pixel that get full shadow trace (cast as uint in HLSL).
     float    max_shadow_k  = 16.0f;
+    // P5b: sky/sun quality knobs (sky_sun.comp cbuffer). Float cast to uint in HLSL.
+    float    sky_dirs      = 8.0f;   // sky hemisphere directions (1=flat sky, 16=high quality)
+    float    sky_reach     = 10.0f;  // sky march max distance (tiles)
+    float    sun_steps     = 24.0f;  // celestial march steps
+    float    sun_penumbra  = 4.0f;   // penumbra angular samples (1=hard edge, 6=very soft)
 };
 
 // Returns sun/sky params interpolated from a 24h LUT for the given hour (0..24).

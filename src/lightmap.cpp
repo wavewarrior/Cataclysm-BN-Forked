@@ -622,15 +622,51 @@ void map::generate_lightmap( const int zlev )
     auto &sm = map_cache.sm;
     auto &light_source_buffer = map_cache.light_source_buffer;
 
-    std::fill( lm.begin(), lm.end(), four_quadrants( 0.0f ) );
-    std::fill( sm.begin(), sm.end(), 0.0f );
-    std::fill( light_source_buffer.begin(), light_source_buffer.end(),
-              level_cache::buffered_light_source{} );
-    std::fill( map_cache.light_color_cache.begin(), map_cache.light_color_cache.end(),
-              light_color_rgb{} );
+    // sm, light_source_buffer, light_color_cache: only zero dirty submaps
+    // so that clean (retained/translated) submap data survives.
+    {
+        const int mapsize = map_cache.cache_mapsize;
+        for( int sx = 0; sx < mapsize; ++sx ) {
+            for( int sy = 0; sy < mapsize; ++sy ) {
+                const size_t bidx = static_cast<size_t>( map_cache.bidx( sx, sy ) );
+                if( !map_cache.lightmap_dirty[bidx] ) {
+                    continue;
+                }
+                const int x0 = sx * SEEX;
+                const int y0 = sy * SEEY;
+                for( int tx = 0; tx < SEEX; ++tx ) {
+                    for( int ty = 0; ty < SEEY; ++ty ) {
+                        const int idx = map_cache.idx( x0 + tx, y0 + ty );
+                        sm[idx] = 0.0f;
+                        light_source_buffer[idx] = {};
+                        map_cache.light_color_cache[idx] = {};
+                    }
+                }
+            }
+        }
+    }
+
     map_cache.has_colored_lights = false;
 
-    build_sunlight_cache( zlev );
+    // B3: skip the lm full-zero and sunlight cascade when the outdoor light level
+    // hasn't changed since the last build.  lm retains its previous values; the
+    // worker below adds artificial lights on top.  invalidate_map_cache sets the
+    // tracking field to -1, forcing a rebuild on the next frame — this covers
+    // structural changes (new walls, destroyed roofs) that the cascade depends on.
+    // The int truncation means frames where only entity lights moved skip the
+    // ~1-2ms cascade, which is the dominant steady-state case after B1/B2.
+    const int current_light_int = static_cast<int>( g->natural_light_level( 0 ) );
+    if( current_light_int == m_solar.last_built_light_level_int
+        && m_solar.last_built_light_level_int >= 0 ) {
+        // lm is valid, build_sunlight_cache not needed
+        // ponytail: phantom old-artificial-light on dirty submaps is accepted —
+        // daytime (sunlight dominates) it's invisible; nighttime it's a single-frame
+        // glow at the pre-move position that self-corrects on next full rebuild.
+    } else {
+        std::fill( lm.begin(), lm.end(), four_quadrants( 0.0f ) );
+        build_sunlight_cache( zlev );
+        m_solar.last_built_light_level_int = current_light_int;
+    }
 
     // Dawn/dusk tint: color sunlit tiles during twilight.
     // At this point lm contains only sunlight (no artificial sources yet),
@@ -657,28 +693,6 @@ void map::generate_lightmap( const int zlev )
         }
         if( wrote_any ) {
             map_cache.has_colored_lights = true;
-        }
-    }
-
-    apply_character_light( get_player_character() );
-    for( npc &guy : g->all_npcs() ) {
-        apply_character_light( guy );
-    }
-    for( monster &critter : g->all_monsters() ) {
-        if( critter.is_hallucination() ) {
-            continue;
-        }
-        const auto &mp = critter.bub_pos();
-        if( inbounds( mp ) ) {
-            if( critter.has_effect( effect_onfire ) ) {
-                apply_light_source( mp, 8 );
-            }
-            // TODO: [lightmap] Attach natural light brightness to creatures
-            // TODO: [lightmap] Allow creatures to have light attacks (i.e.: eyebot)
-            // TODO: [lightmap] Allow creatures to have facing and arc lights
-            if( critter.type->luminance > 0 ) {
-                apply_light_source( mp, critter.type->luminance );
-            }
         }
     }
 
@@ -750,6 +764,10 @@ void map::generate_lightmap_worker( const int zlev )
         auto process_smx = [&]( int smx ) {
             auto &local = smx_accs[smx];
             for( int smy = 0; smy < my_MAPSIZE; ++smy ) {
+                if( !map_cache.lightmap_dirty[static_cast<size_t>( map_cache.bidx( smx, smy ) )] ) {
+                    // ponytail: clean submap — no sources changed, skip collection
+                    continue;
+                }
                 const auto sm_pos = tripoint_bub_sm( smx, smy, zlev );
                 const auto cur_submap = get_submap_at_grid( sm_pos );
                 if( cur_submap == nullptr ) {

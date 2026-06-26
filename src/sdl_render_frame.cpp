@@ -163,12 +163,16 @@ auto build_lighting( lighting::render_state &rs ) -> bool
     static int           last_player_y = INT_MIN;
 
     lighting::lighting_rebuild_flags rebuild{};
+    int px = 0, py = 0;
+    std::uint64_t gen = 0;
     if( g && world_generator && world_generator->active_world ) {
         const int z = g->u.bub_pos().z();
         const point origin = g->m.get_abs_sub().raw().xy();
         // Read generation from the current level's cache.
         const auto &cache = g->m.get_cache_ref( z );
-        const std::uint64_t gen = cache.transparency_generation;
+        gen = cache.transparency_generation;
+        px = g->u.bub_pos().x();
+        py = g->u.bub_pos().y();
 
         // Rebuild the SDF on transparency change (gen), z change, OR map shift
         // (origin): a shift moves the bubble's contents, so the map-local SDF must
@@ -181,8 +185,6 @@ auto build_lighting( lighting::render_state &rs ) -> bool
         // When the player moves, FOV changes even if terrain hasn't.
         // When terrain changes (structure rebuild), vis is already covered by
         // rebuild.structure because seen_cache is rebuilt alongside transparency_cache.
-        const int px = g->u.bub_pos().x();
-        const int py = g->u.bub_pos().y();
         rebuild.vis = sdl_lighting_devui::devui_visible()
                       || px != last_player_x || py != last_player_y
                       || z != last_z;
@@ -241,9 +243,22 @@ auto build_lighting( lighting::render_state &rs ) -> bool
     // No tilecontext (e.g. main menu) → cam_w=0 → whole-bubble fallback.
     int cam_x0 = -1, cam_y0 = -1, cam_w = 0, cam_h = 0;
     if( tilecontext ) {
-        const point cam_o = tilecontext->get_tile_map_origin().raw();
-        cam_x0 = cam_o.x;
-        cam_y0 = cam_o.y;
+        if( g ) {
+            // Compute camera origin from current player position rather than reading
+            // tilecontext->get_tile_map_origin(), which is only updated by
+            // cata_tiles::draw() and can be stale on frames where refresh_display
+            // fires without a preceding redraw (e.g. pump_events at end of turn).
+            // Matches cata_tiles::draw() formula: o = floor(center + subtile) - POS.
+            // Subtile offset omitted (<1 tile error, irrelevant for clip region).
+            const float cx = static_cast<float>( g->u.bub_pos().x() + g->u.view_offset.x() );
+            const float cy = static_cast<float>( g->u.bub_pos().y() + g->u.view_offset.y() );
+            cam_x0 = static_cast<int>( std::floor( cx ) ) - POSX;
+            cam_y0 = static_cast<int>( std::floor( cy ) ) - POSY;
+        } else {
+            const point cam_o = tilecontext->get_tile_map_origin().raw();
+            cam_x0 = cam_o.x;
+            cam_y0 = cam_o.y;
+        }
         cam_w  = tilecontext->get_screentile_width();
         cam_h  = tilecontext->get_screentile_height();
     }
@@ -251,8 +266,16 @@ auto build_lighting( lighting::render_state &rs ) -> bool
         lighting::build_and_submit_lighting( rs, rebuild, g_dbg_lighting,
                                              g_skylight_bleed, g_vision_blur,
                                              cam_x0, cam_y0, cam_w, cam_h );
-    dbg( DL::Debug ) << "[render] build_and_submit_lighting DONE, built_pertile=" << fr.built_pertile;
     rc_rebuild = fr.built_pertile;
+    DebugLogFL( DL::Info, DC::Main )
+            << "[flash][gpu] rebuild: struct=" << rebuild.structure
+            << " vis=" << rebuild.vis
+            << " rc=" << rc_rebuild
+            << " origin=" << ( g ? g->m.get_abs_sub().raw().xy().to_string() : "?" )
+            << " px=" << px << " py=" << py
+            << " gen=" << ( g ? std::to_string( gen ) : "?" )
+            << " cam_xy0=" << cam_x0 << "," << cam_y0
+            << " cam_wh=" << cam_w << "x" << cam_h;
     if( fr.built_pertile ) {
         s_emo.trans_at_player    = fr.trans_at_player;
         s_emo.sdf_W_at_submit    = fr.sdf_W;
@@ -362,6 +385,11 @@ auto flush_and_gather_rc( lighting::render_state &rs,
             kp.sun_sin_elev = sp.sun_sin_elev;
             kp.shadow_k     = g_dbg_params.shadow_k;
             kp.shadow_steps = g_dbg_params.shadow_steps;
+            // P5b: F4-tunable sky/sun quality knobs.
+            kp.sky_dirs     = static_cast<std::uint32_t>( std::max( 1.0f, g_dbg_params.sky_dirs ) );
+            kp.sky_reach    = g_dbg_params.sky_reach;
+            kp.sun_steps    = static_cast<std::uint32_t>( std::max( 1.0f, g_dbg_params.sun_steps ) );
+            kp.sun_penumbra = static_cast<std::uint32_t>( std::max( 1.0f, g_dbg_params.sun_penumbra ) );
             rs.sky().record( ctx.cmd_buffer, rs.sdf().occ_buffer(),
                              map_w, map_h, kp );
         }
