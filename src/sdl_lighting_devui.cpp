@@ -447,13 +447,8 @@ void devui_rml_open()
     c.Bind( "max_shadow_k", &g_dbg_params.max_shadow_k );
     c.Bind( "sdf_sharp", &g_dbg_params.sdf_sharp );
     c.Bind( "ao_strength", &g_dbg_params.ao_strength );
-    c.Bind( "vis_curve", &g_dbg_params.vis_curve );
-    c.Bind( "vis_radius", &g_dbg_params.vis_radius );
     c.Bind( "night_floor", &g_dbg_params.night_floor );
     c.Bind( "day_floor", &g_dbg_params.day_floor );
-    c.Bind( "grade_desat", &g_dbg_params.grade_desat );
-    c.Bind( "grade_cool", &g_dbg_params.grade_cool );
-    c.Bind( "grade_bright", &g_dbg_params.grade_bright );
     c.Bind( "dbg_mode_idx", &g_devui_dbg_mode );
     c.Bind( "dbg_mode_names", &g_dbg_mode_names );
     c.BindEventCallback( "dbg_mode",

@@ -231,16 +231,8 @@
                 <div class="devui-row">SDF sharpness <input type="range" min="0" max="1" step="0.01" data-value="sdf_sharp"/> <span class="devui-val">{{sdf_sharp}}</span></div>
                 <div class="devui-row">ambient occlusion <input type="range" min="0" max="1" step="0.01" data-value="ao_strength"/> <span class="devui-val">{{ao_strength}}</span></div>
 
-                <div class="devui-section">Vision (Stoneshard)</div>
-                <div class="devui-row">vis curve <input type="range" min="0" max="4" step="0.05" data-value="vis_curve"/> <span class="devui-val">{{vis_curve}}</span></div>
-                <div class="devui-row">vis radius <input type="range" min="0" max="40" step="0.5" data-value="vis_radius"/> <span class="devui-val">{{vis_radius}}</span></div>
                 <div class="devui-row">night floor <input type="range" min="0" max="0.3" step="0.005" data-value="night_floor"/> <span class="devui-val">{{night_floor}}</span></div>
                 <div class="devui-row">day floor <input type="range" min="0" max="0.3" step="0.005" data-value="day_floor"/> <span class="devui-val">{{day_floor}}</span></div>
-
-                <div class="devui-section">Tone grade (Stoneshard wash)</div>
-                <div class="devui-row">desaturate <input type="range" min="0" max="1" step="0.01" data-value="grade_desat"/> <span class="devui-val">{{grade_desat}}</span></div>
-                <div class="devui-row">cool tint <input type="range" min="0" max="1" step="0.01" data-value="grade_cool"/> <span class="devui-val">{{grade_cool}}</span></div>
-                <div class="devui-row">brightness <input type="range" min="0" max="1.5" step="0.01" data-value="grade_bright"/> <span class="devui-val">{{grade_bright}}</span></div>
             </div>
 
             <!-- ── Animation: sprite-anim tuning ──────────────────────────────── -->

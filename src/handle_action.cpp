@@ -102,6 +102,7 @@
 #include "vehicle_wait.h"
 #include "vpart_position.h"
 #include "vpart_range.h"
+#include "sdl_lighting_devui.h"
 #include "weather.h"
 #include "worldfactory.h"
 
@@ -292,7 +293,7 @@ input_context game::get_player_input( std::string &action )
         if( get_option<bool>( "ANIMATIONS" ) ) {
             const bool weather_has_anim = init_weather_anim( get_weather().weather_id, wPrint );
 
-            animate_weather = weather_has_anim && get_option<bool>( "ANIMATION_RAIN" );
+            animate_weather = weather_has_anim && get_option<bool>( "ANIMATION_RAIN" ) && !g_rain_enable;
             animate_sct = !SCT.vSCT.empty() && uquit != QUIT_WATCH && get_option<bool>( "ANIMATION_SCT" );
 
             // Always animate, minimap and terrain may have animations to run
