@@ -312,12 +312,6 @@ class messages_impl
 // Messages object.
 messages_impl player_messages;
 
-bool message_exceeds_ttl( const game_message &message )
-{
-    return message_ttl > 0 &&
-           message.timestamp_in_user_actions + message_ttl <= g->get_user_action_counter();
-}
-
 } //namespace
 
 std::vector<std::pair<std::string, std::string>> Messages::recent_messages( const size_t count )
@@ -459,7 +453,6 @@ class dialog
         const nc_color filter_color;
         const nc_color time_color;
         const nc_color bracket_color;
-        const nc_color filter_help_color;
 
         // border_width padding_width         border_width
         //      v           v                     v
@@ -527,8 +520,7 @@ class dialog
 
 Messages::dialog::dialog()
     : border_color( BORDER_COLOR ), filter_color( c_white ),
-      time_color( c_light_blue ), bracket_color( c_dark_gray ),
-      filter_help_color( c_cyan )
+      time_color( c_light_blue ), bracket_color( c_dark_gray )
 {
 }
 
@@ -643,19 +635,9 @@ void Messages::dialog::show()
             // here, closed when filtering ends) — the autopickup/safemode help
             // pattern. The curses input field + its <  > markers draw over the
             // backdrop's blank bottom row; only those cells paint (no werase), so
-            // the RmlUi box shows through. Curses help box kept as the toggle-OFF
-            // fallback.
+            // the RmlUi box shows through. The help box itself is the RmlUi backdrop.
             if( !filter_help_rml ) {
                 open_filter_help_rml();
-            }
-            if( !filter_help_rml ) {
-                werase( w_filter_help );
-                draw_border( w_filter_help, border_color );
-                for( size_t line = 0; line < help_text.size(); ++line ) {
-                    nc_color col = filter_help_color;
-                    print_colored_text( w_filter_help, point( border_width, border_width + line ), col, col,
-                                        help_text[line] );
-                }
             }
             mvwprintz( w_filter_help, point( border_width, w_fh_height - 1 ), border_color, "< " );
             mvwprintz( w_filter_help, point( w_fh_width - border_width - 2, w_fh_height - 1 ), border_color,
@@ -996,82 +978,6 @@ void Messages::display_messages()
 {
     dialog dlg;
     dlg.run();
-    player_messages.curmes = calendar::turn;
-}
-
-void Messages::display_messages( const catacurses::window &ipk_target, const int left,
-                                 const int top, const int right, const int bottom )
-{
-    if( !size() ) {
-        return;
-    }
-
-    const int maxlength = right - left;
-    int line = log_from_top ? top : bottom;
-
-    if( log_from_top ) {
-        for( int i = size() - 1; i >= 0; --i ) {
-            if( line > bottom ) {
-                break;
-            }
-
-            const game_message &m = player_messages.messages[i];
-            if( message_exceeds_ttl( m ) ) {
-                break;
-            }
-
-            const nc_color col = m.get_color( player_messages.curmes );
-            std::string message_text = m.get_with_count();
-            if( !m.is_recent( player_messages.curmes ) ) {
-                message_text = remove_color_tags( message_text );
-            }
-
-            for( const std::string &folded : foldstring( message_text, maxlength ) ) {
-                if( line > bottom ) {
-                    break;
-                }
-                // Redrawing line to ensure new messages similar to previous
-                // messages will not be missed by screen readers
-                wredrawln( ipk_target, line, 1 );
-                nc_color col_out = col;
-                print_colored_text( ipk_target, point( left, line++ ), col_out, col, folded );
-            }
-        }
-    } else {
-        for( int i = size() - 1; i >= 0; --i ) {
-            if( line < top ) {
-                break;
-            }
-
-            const game_message &m = player_messages.messages[i];
-            if( message_exceeds_ttl( m ) ) {
-                break;
-            }
-
-            if( m.is_in_cooldown() ) {
-                // message is still (or was at some point) into a cooldown period.
-                continue;
-            }
-
-            const nc_color col = m.get_color( player_messages.curmes );
-            std::string message_text = m.get_with_count();
-            if( !m.is_recent( player_messages.curmes ) ) {
-                message_text = remove_color_tags( message_text );
-            }
-
-            const auto folded_strings = foldstring( message_text, maxlength );
-            const auto folded_rend = folded_strings.rend();
-            for( auto string_iter = folded_strings.rbegin();
-                 string_iter != folded_rend && line >= top; ++string_iter, line-- ) {
-                // Redrawing line to ensure new messages similar to previous
-                // messages will not be missed by screen readers
-                wredrawln( ipk_target, line, 1 );
-                nc_color col_out = col;
-                print_colored_text( ipk_target, point( left, line ), col_out, col, *string_iter );
-            }
-        }
-    }
-
     player_messages.curmes = calendar::turn;
 }
 
