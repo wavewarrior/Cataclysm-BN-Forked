@@ -1,5 +1,14 @@
 # Tier 1b — Amortise non-player-z structural rebuild across frames
 
+## STATUS (reviewed 2026-06-27)
+0% implemented — no budget/time-slice/next_z code in build_map_cache; the z-loops
+(map.cpp:9897/9914/9925) still run minz..maxz every frame unconditionally. Premise PARTLY
+DATED: structural phases now use intra-z parallel_for and the lightmap is per-submap
+incremental (1a done), so the "~9ms non-player-z" baseline this plan cites is lower than when
+written — re-measure before committing effort. Risk section (solar cascade reads z+1 structure)
+remains the hard part. KEEP but re-baseline. OVERLAPS `lazy_non_visible_z_cache_plan.md`
+(both cut non-player-z structural cost) — see cluster note; pick one approach, don't ship both.
+
 ## Context
 
 Phases 1a–1c of `build_map_cache` (floor, outside/sheltered, transparency) run

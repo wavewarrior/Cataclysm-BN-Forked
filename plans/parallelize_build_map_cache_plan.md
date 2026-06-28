@@ -1,5 +1,20 @@
 # Tier 2a — Parallelise `build_map_cache` across z on the worker pool
 
+## STATUS (reviewed 2026-06-27)
+~30% done, and the plan's framing is now PARTLY STALE. Reality in code (map.cpp:9893-9978):
+- Phase 1a floor, 1b outside, 1c transparency are still SERIAL z-loops AS THIS PLAN ASSUMES —
+  BUT build_floor_cache/build_outside_cache already use intra-z `parallel_for` over smx
+  (map.cpp:9540-9564), so each z is internally parallel. The proposed Phase A/B (parallel_for
+  OVER z for 1a/1c) is NOT done and would conflict with the existing intra-z parallel_for
+  (nested pools) — re-think before implementing.
+- Phase 1d is already parallel-over-z via `parallel_for(minz,maxz+1,...)` gated on
+  `parallel_map_cache`/`parallel_enabled` (9936-9956) — plan's "already parallel" note holds.
+- Phase 4 lightmap already per-submap parallel (parallel_for over smx, lightmap.cpp:233/878).
+- Phases 2/3 correctly still serial (matches Phase D).
+Net: the cross-z parallelism this plan proposes is unbuilt, but the bigger lever (intra-z) is
+already pulled. KEEP but rewrite the analysis to account for nested-parallelism risk before
+acting. Still correctly gated AFTER 1a/1b.
+
 ## Context
 
 `build_map_cache` (`map.cpp:9848`) already has per-z parallelism for Phase 1d

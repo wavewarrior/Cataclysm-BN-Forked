@@ -1,5 +1,15 @@
 # Tier 3b — Lazy non-visible-z cache allocation
 
+## STATUS (reviewed 2026-06-27)
+0% implemented — `caches` is still the dense `std::array<unique_ptr<level_cache>,
+OVERMAP_LAYERS>` (map.h:2341); get_cache() unconditionally derefs caches[z+OVERMAP_DEPTH]
+(2395/2415), no NULL/sparse path. `calc_max_populated_zlev` exists (map.cpp:10950) but is NOT
+used to skip the structural phase loops. Plan's own assessment is honest: RAM win is small,
+real win is loop-iteration skip. OVERLAPS `amortise_non_player_z_rebuild_plan.md` — both
+attack non-player-z loop cost. Phase B here (skip empty z via populated-range) is a strictly
+SIMPLER subset of 1b's amortisation and lower-risk; consider doing Phase B only and dropping
+1b, or merging. KEEP but flag overlap.
+
 ## Context
 
 `level_cache` per z (`map.h:308-436`) is a `std::array<unique_ptr<level_cache>,

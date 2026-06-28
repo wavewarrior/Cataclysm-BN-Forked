@@ -1,4 +1,15 @@
+# ❌ ARCHIVED 2026-06-28 — DEAD / superseded by per_submap_incremental_lightmap (B1/B2). Root cause already removed. Moved to plans/done/
+
 # Tier 0c — Pin the non-shift all-z lightmap =8ms spike
+
+## STATUS (reviewed 2026-06-27)
+LARGELY SUPERSEDED by `per_submap_incremental_lightmap_plan.md` (B1/B2). The "what dirties
+all-z seen cache every turn" culprit this plan hunts = the turn-start + player-move blanket
+`invalidate_lightmap_caches()`, both now REMOVED (game.cpp:1878 visibility-only; player-move
+uses per-submap dirty). The 8ms all-z lightmap path this plan targets no longer fires on a
+normal stationary/walking turn. Recommend ARCHIVE — fold any residual measurement into 1a's
+verification. Only kept-relevant bit: the `[shift-probe][lightmap]` >1-level diagnostic still
+flags unexpected all-z drivers if one regresses.
 
 ## Context
 

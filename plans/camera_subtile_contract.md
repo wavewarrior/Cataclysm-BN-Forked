@@ -1,5 +1,16 @@
 # Sub-Tile Camera Contract
 
+## STATUS (reviewed 2026-06-27)
+
+✅ **SHIPPED — ~100% implemented, contract honored by code. KEEP as reference spec.**
+The one invariant holds: contract math lives at `cata_tiles.cpp:3209-3216` (plan said
+`:3226-3228` — lines drifted, logic identical: floor center, push remainder to `op`, iso
+excluded). Lighting reads the same `o`/`op` (`sdl_render_frame.cpp:208-209`, was `:404-407`).
+`camera_2d.{h,cpp}`, `set_subtile_offset` (`cata_tiles.h:1328`), and the `draw_ter` wiring
+(`game.cpp:4441-4447`) all match the integration table. Snap rules + zero-offset gate present.
+Remaining: nothing in this slice. Deferred items (full view_offset migration, zoom, dead-zone
+**game option**, minimap) stay deferred — accurate. Only stale data: a few line numbers above.
+
 The lynchpin for "smooth beautiful lighting." This is the precise rule that lets
 the camera scroll by fractional tiles while sprites and shadows stay locked
 together. Get this wrong and shadows swim off geometry; get it right and the
@@ -105,13 +116,13 @@ keep the steady state byte-identical.
 
 ## Integration points (this slice)
 
-| Site | Change |
-|------|--------|
-| `src/camera_2d.{h,cpp}` | New. Owns smooth float center; `update(target, snap)`; `sub_x()/sub_y()`. |
-| `src/game.h` | `camera_2d main_camera_;` |
-| `src/game.cpp` `draw_ter(center, looking, …)` | After `ter_view_p = center`: `main_camera_.update(center.xy().raw(), looking)`; `if(tilecontext) tilecontext->set_subtile_offset(sub_x, sub_y)`. |
-| `src/cata_tiles.h` | `float subtile_off_x_=0, subtile_off_y_=0;` + `set_subtile_offset()`. |
-| `src/cata_tiles.cpp:3226-3228` | Apply the contract (non-iso, non-zero only). |
+| Site | Change | Status |
+|------|--------|--------|
+| `src/camera_2d.{h,cpp}` | New. Owns smooth float center; `update(target, snap)`; `sub_x()/sub_y()`. | ✅ DONE (also gained look-ahead, dead-zone, shake) |
+| `src/game.h` | `camera_2d main_camera_;` | ✅ DONE (`game.h:1152`) |
+| `src/game.cpp` `draw_ter(center, looking, …)` | After `ter_view_p = center`: `main_camera_.update(center.xy().raw(), looking)`; `if(tilecontext) tilecontext->set_subtile_offset(sub_x, sub_y)`. | ✅ DONE (`game.cpp:4441-4447`) |
+| `src/cata_tiles.h` | `float subtile_off_x_=0, subtile_off_y_=0;` + `set_subtile_offset()`. | ✅ DONE (`cata_tiles.h:1328,1342-1343`) |
+| `src/cata_tiles.cpp:3226-3228` | Apply the contract (non-iso, non-zero only). | ✅ DONE (now `cata_tiles.cpp:3209-3216`) |
 
 **Deferred (not this slice):** the full `view_offset` 17-site migration, zoom,
 shake, dead-zone, minimap. `view_offset` remains the discrete target; the camera

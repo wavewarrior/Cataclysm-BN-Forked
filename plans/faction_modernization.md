@@ -1,3 +1,6 @@
+## STATUS (reviewed 2026-06-27)
+**0% DONE — KEEP (cheap items realistic).** Nothing done: `MAX_FAC_NAME_SIZE` still at `faction.h:20` (item 1, dead const), `epilogue_data` still `std::set<std::tuple<int,int,snippet_id>>` at `faction.h:91` (item 2, not the named struct). Item 3 (encapsulate `faction_template` members, ~50 sites) untouched. faction.cpp = 953 lines. Post-review plan corrected the prior fabrications and matches reality. Items 1+2 are ~0.5 day safe wins worth doing; item 3 is churn; item 4 correctly says SKIP. Keep — accurate, low-stakes hygiene.
+
 # Faction Cleanup — Plan
 
 > Scope rewritten 2026-06-23 after review. The prior version described a

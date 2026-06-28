@@ -1,3 +1,6 @@
+## STATUS (reviewed 2026-06-27)
+**0% DONE — KEEP (not started, gated).** `overmap.cpp` still **6,700 lines**; no `overmap_generate.cpp` / `_specials.cpp` / `_connections.cpp` / `_mongroups.cpp`; no `tests/overmap_determinism_test.cpp`. Plan is the *post-review* rewrite (real method names verified, RNG-ordering risk model sound) and matches reality. Hard-gated on Phase 0 determinism harness — explicit "abandon if non-deterministic" exit clause makes this honest, not aspirational fluff. Keep, but note the whole thing is blocked behind a non-trivial Phase 0.
+
 # Overmap Decomposition — Plan
 
 > Scope rewritten 2026-06-23 after review. The prior version named ~10 functions

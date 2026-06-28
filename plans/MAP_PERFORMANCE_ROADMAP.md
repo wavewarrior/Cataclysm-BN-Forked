@@ -1,5 +1,14 @@
 # Map Handling & Performance — Research + Optimization Roadmap
 
+## STATUS (reviewed 2026-06-27)
+Tier 0a (walking-hitch fix) DONE + committed `5315065c12`. Tier 1a (per-submap incremental
+lightmap) DONE — Phase A + B1/B2/B3 all verified in code (lightmap_dirty bitset, per-submap
+skip, solar-level tracking). Tiers 0b/0c (residual spike pins) = still diagnosis-only, not
+started. Tier 1b (amortise non-player-z), Tier 2a (parallelise structural across z), Tier 3a
+(bubble curve), Tier 3b (lazy alloc) = NOT started. NOTE: structural phases 1a/1b/1c already
+use intra-z parallel_for and Phase 1d uses parallel_for-over-z gated on PARALLEL_MAP_CACHE —
+the status table below understates existing parallelism. Roadmap still the right index doc; keep.
+
 ## Context
 
 Goal: broad, thorough understanding of how the map is handled and where its
@@ -71,7 +80,7 @@ Phases (verified at `map.cpp:9848-10117`):
 
 | Item | Plan | Status |
 |------|------|--------|
-| 0a. Commit walking-hitch fix | `walking_hitch_cache_shift_plan.md` | Code written, uncommitted |
+| 0a. Commit walking-hitch fix | `walking_hitch_cache_shift_plan.md` | ✅ DONE — committed `5315065c12` |
 | 0b. Pin residual all-z structural spike | `residual_all_z_structural_spike_plan.md` | Not started |
 | 0c. Pin non-shift all-z lightmap | `non_shift_all_z_lightmap_plan.md` | Not started |
 
@@ -79,7 +88,7 @@ Phases (verified at `map.cpp:9848-10117`):
 
 | Item | Plan | Status |
 |------|------|--------|
-| 1a. Per-submap incremental lightmap | `per_submap_incremental_lightmap_plan.md` | Not started |
+| 1a. Per-submap incremental lightmap | `per_submap_incremental_lightmap_plan.md` | ✅ DONE — Phase A + B1/B2/B3 in code |
 | 1b. Amortise non-player-z structural rebuild | `amortise_non_player_z_rebuild_plan.md` | Not started |
 
 ### Tier 2 — parallelism (do AFTER 1a/1b)

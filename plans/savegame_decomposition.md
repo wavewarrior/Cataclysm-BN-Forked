@@ -1,3 +1,6 @@
+## STATUS (reviewed 2026-06-27)
+**0% DONE — KEEP (not started, realistic).** `savegame_json.cpp` still **4,989 lines**; none of the proposed targets exist (`src/avatar/save.cpp`, `src/npcs/save.cpp`, `src/overmap/save.cpp`, `src/items/save.cpp`, `src/faction/save.cpp`, etc. — all absent). Plan is mechanical, low-risk, and matches current reality. Sound but aspirational until someone picks it up. Keep — it's a clean, accurate roadmap, not stale.
+
 # Save/Load Decomposition — Plan
 
 ## Context

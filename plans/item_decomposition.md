@@ -1,3 +1,6 @@
+## STATUS (reviewed 2026-06-27)
+**0% DONE — KEEP (not started, realistic).** `item.cpp` still **11,688 lines** (largest file in repo). None of the proposed splits exist: `item_combat.cpp`, `item_crafting.cpp`, `item_food.cpp`, `item_book.cpp`, `item_tool.cpp`, `item_armor.cpp`, `item_container.cpp` all absent; `item_use.cpp` (the "existing" merge target in Phase 4) is **also absent** — verify that assumption before starting. Plan is mechanical/.cpp-only and matches reality otherwise. High-value navigability win, untouched. Keep.
+
 # Item Decomposition — Plan
 
 ## Context

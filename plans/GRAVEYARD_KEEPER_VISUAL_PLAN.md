@@ -1,5 +1,9 @@
 # GK visual-fidelity plan — IMPLEMENTATION BUILD SHEET
 
+## STATUS (reviewed 2026-06-27)
+Done ~0% — ASPIRATIONAL / UNSTARTED. Verified against code: §1 knobs (nrm_entity_amount, ripple_k, gust_amp, gust_freq, part_radius, part_strength) ABSENT from debug_params; §2 `surface_normal` still albedo-luma Sobel (sprite.frag.hlsl:355) w/ tall-sprite flat override intact (:404); §4/§5 vert sway is still the single-sine block (`player_x/y` declared but UNUSED — no ripple/gust/parting); §6 tonemap.frag has AgX ONLY, no grade block. KEEP as a real backlog (foundation — debug_params/sway/tonemap — all exists and is hookable), but nothing here is built.
+STALE FACTS in §0: debug_params is now **152 B** (not 128 — grew for sun/sky work), so §1's "new size = 128 + N*4" math is wrong. §0 + §6 claim `grade_desat/cool/bright` knobs exist to "replace" — they DON'T exist in tonemap.frag (never landed / removed). §0 register-space table lists fragment storage buffers as `space4`, but live code uses `space2` (per module CLAUDE.md). Re-derive anchors before implementing.
+
 > Optimized for a small-context implementer. **Read §0 first, then load ONE chunk (§1–§6) per work session.** Each chunk is self-contained. Anchors are **grep strings** (line numbers drift — confirm by grep before editing).
 
 ---
@@ -41,7 +45,7 @@ Win11/MSVC/D3D12 is the primary RELEASE target; Mac/Metal is dev. Sources are GL
 
 ---
 
-## §1 GROW debug_params (do first)
+## §1 GROW debug_params (do first) — NOT started (none of the 6 knobs present; debug_params currently 152 B)
 
 GOAL: one ABI change reserving every knob §2/§4/§5 need.
 FILES: `src/lighting/sprite_batcher.h` (struct + static_assert), `src/lighting/sprite_batcher.cpp` (static_assert value, vertex+fragment push sites — grep `PushGPUVertexUniformData` & `PushGPUFragmentUniformData` for slot 2/`debug_params`), `data/shaders/lighting/src/sprite.frag.hlsl` + `sprite.vert.hlsl` (cbuffer mirrors).
@@ -54,7 +58,7 @@ VERIFY: build clean (no static_assert fail); game inits (no `E_INVALIDARG` pipel
 
 ---
 
-## §2 NORMALS B1 — inline alpha-shape + un-flatten
+## §2 NORMALS B1 — inline alpha-shape + un-flatten — NOT started (surface_normal still albedo-luma Sobel @ sprite.frag.hlsl:355; flat override @ :404)
 
 GOAL: replace albedo-luma Sobel with alpha-shape bevel; give ALL sprites (incl. creatures) relief.
 FILE: `data/shaders/lighting/src/sprite.frag.hlsl` (shader-only, no rebuild).
@@ -69,7 +73,7 @@ VERIFY: F4 debug mode 9 → rounded silhouettes (shape), NOT albedo hatch; trees
 
 ---
 
-## §3 NORMALS B2 — baked SpriteDLight atlas (spike binding FIRST)
+## §3 NORMALS B2 — baked SpriteDLight atlas (spike binding FIRST) — NOT started (no normal page / 2nd-sampler spike in code)
 
 GOAL: per-sprite shape-dome normals baked at load, sampled at runtime (true volume).
 
@@ -87,7 +91,7 @@ VERIFY: §3a probe nonzero (records PATH). Mode 9 → smooth interior dome, no a
 
 ---
 
-## §4 VEGETATION — ripple + gust
+## §4 VEGETATION — ripple + gust — NOT started (sprite.vert.hlsl still single `sin()` sway, no ripple_k/gust)
 
 GOAL: kill the uniform-sine look. Shader-only.
 FILE: `data/shaders/lighting/src/sprite.vert.hlsl` (grep the sway block: `swayw`, `BASE_PIN`, `sin( anim_time * sway_freq + ph )`).
@@ -101,7 +105,7 @@ VERIFY: canopies ripple/desync (not rigid), gusts non-periodic, bases stay pinne
 
 ---
 
-## §5 INTERACTION — player foliage parting
+## §5 INTERACTION — player foliage parting — NOT started (`player_x/y` in vert cbuffer but UNUSED by sway block)
 
 GOAL: foliage bends away from player. Shader-only + verify the cbuffer reaches vert.
 FILE: `data/shaders/lighting/src/sprite.vert.hlsl` (same sway block as §4).
@@ -122,7 +126,7 @@ VERIFY: walk player through grass/crops → foliage parts AWAY, springs back; no
 
 ---
 
-## §6 GRADING — knob suite + bake-to-LUT
+## §6 GRADING — knob suite + bake-to-LUT — NOT started (tonemap.frag = AgX only; no grade block, no LUT; `grade_desat/cool/bright` do NOT exist)
 
 GOAL: replace weak `grade_desat/cool/bright` with a real grade; runtime = live grade; bake to LUT PNG for presets.
 FILES: `data/shaders/lighting/src/tonemap.frag.hlsl` (grade math, after AgX), new grade cbuffer, `src/lighting/tonemap_pass.{h,cpp}` (params + optional LUT bind + bake), `src/lighting/render_state.*`, `src/sdl_render_frame.cpp` (grep `tonemap().record(`), `imgui_layer.cpp` (sliders + Bake button).

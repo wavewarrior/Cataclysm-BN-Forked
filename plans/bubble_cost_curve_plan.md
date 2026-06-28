@@ -1,5 +1,12 @@
 # Tier 3a — Measure the bubble cost curve
 
+## STATUS (reviewed 2026-06-27)
+0% — pure measurement/decision plan, no code to implement. Premises confirmed:
+init_bubble_config (game.cpp), REALITY_BUBBLE_SIZE option, dense level_cache array all match.
+Still self-contained and useful; its conclusion gates whether to raise the default (correctly
+says "not until 1a/1b land" — 1a HAS landed, 1b has not). Standalone, no overlap with the
+other plans. KEEP as-is. Low priority until someone wants to raise the default bubble size.
+
 ## Context
 
 `REALITY_BUBBLE_SIZE` is a runtime option (1–16, default 4). Cost grows

@@ -1,3 +1,6 @@
+## STATUS (reviewed 2026-06-27)
+**~35% DONE — KEEP (in progress).** Actor count grew from the plan's 21 baseline to **41**. Wave 1 (terrain: burrow/pickaxe/jackhammer/churn/fill_pit/clear_rubble/hand_crank/pry_nails/fill_liquid/plant_seed/fertilize/forage) = ALL present. Wave 2 (`butchery_activity_actor`) = present. Wave 3 (repair_item/mend_item/toolmod_add/gunmod_add/reload/wear/armor_layers actors) = present. Waves 4–8 (consume, wood-chop, vehicle, multi/zone) = NOT started. **Wave 3's headline payoff is incomplete**: `repair_activity_hack` namespace still in `activity_handlers.cpp` (#1612 not closed). Legacy `do_turn_functions` (~40) / `finish_functions` (~39) still alive → nowhere near Wave 9 rip-out; dual-path branch in `player_activity.cpp` intact. Plan matches reality and is the best-ROI live work — keep.
+
 # Rework Plan — Finish the Activity → `activity_actor` Migration
 
 ## Context
@@ -116,9 +119,9 @@ legacy activity:
 
 | Wave | Activities | Why grouped |
 |------|-----------|-------------|
-| 1 — Terrain/timer warm-up | BURROW, PICKAXE, JACKHAMMER, CHURN, FILL_PIT, CLEAR_RUBBLE, HAND_CRANK, PRY_NAILS, FILL_LIQUID, PLANT_SEED, FERTILIZE_PLOT, FORAGE | Self-contained, near-identical to `dig`/`boltcutting`. Establishes the recipe + reviewer trust. |
-| 2 — Butchery family | BUTCHER, BUTCHER_FULL, FIELD_DRESS, SKIN, QUARTER, DISMEMBER, DISSECT, BLEED | Share corpse logic → **one** `butchery_activity_actor` with a `butcher_type` param replaces 8 entries. |
-| 3 — Item-action (**unblocks #1612**) | REPAIR_ITEM, MEND_ITEM, TOOLMOD_ADD, GUNMOD_ADD, RELOAD, WEAR, ARMOR_LAYERS | Implementing `repair_activity_actor` lets the whole `repair_activity_hack` namespace be deleted — the headline payoff. |
+| ✅ 1 — Terrain/timer warm-up (DONE) | BURROW, PICKAXE, JACKHAMMER, CHURN, FILL_PIT, CLEAR_RUBBLE, HAND_CRANK, PRY_NAILS, FILL_LIQUID, PLANT_SEED, FERTILIZE_PLOT, FORAGE | Self-contained, near-identical to `dig`/`boltcutting`. Establishes the recipe + reviewer trust. |
+| ✅ 2 — Butchery family (DONE — `butchery_activity_actor` present) | BUTCHER, BUTCHER_FULL, FIELD_DRESS, SKIN, QUARTER, DISMEMBER, DISSECT, BLEED | Share corpse logic → **one** `butchery_activity_actor` with a `butcher_type` param replaces 8 entries. |
+| 🟡 3 — Item-action (**unblocks #1612**) (ACTORS DONE, hack NOT removed) | REPAIR_ITEM, MEND_ITEM, TOOLMOD_ADD, GUNMOD_ADD, RELOAD, WEAR, ARMOR_LAYERS | Actors all present; but `repair_activity_hack` still in `activity_handlers.cpp` (#1612 open) — the headline deletion is unfinished. |
 | 4 — Consume/menu | EAT_MENU, CONSUME_FOOD_MENU, CONSUME_DRINK_MENU, CONSUME_MEDS_MENU, FIRSTAID | UI-driven; share consume plumbing. |
 | 5 — Wood | CHOP_TREE, CHOP_PLANKS, CHOP_LOGS | Small, related. |
 | 6 — Misc/social/skill/spell + waits | READ, STUDY_SPELL, SPELLCASTING, TRAIN, TRAIN_SKILL, TRAIN_PET, PLAY_WITH_PET, MEDITATE, GAME, GENERIC_GAME, SOCIALIZE, VIBE, SHAVE, HAIRCUT, ATM, CRACKING, START_FIRE, FISH, ROBOT_CONTROL, OPERATION, MIND_SPLICER, MAKE_ZLAVE, MILK, FIND_MOUNT, TREE_COMMUNION, ADV_INVENTORY, WAIT, WAIT_NPC, WAIT_WEATHER, WAIT_STAMINA, TRAVELLING | Long tail of one-offs; mechanical once the recipe is muscle-memory. **Note:** WAIT_STAMINA and TRAVELLING are special-cased in `player_activity.cpp`'s do_turn stamina block — preserve that interaction; ADV_INVENTORY drives the advanced-inventory UI (it's a friend-class `game` consumer). |

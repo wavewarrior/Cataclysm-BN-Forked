@@ -1,3 +1,8 @@
+# ✅ ARCHIVED 2026-06-28 — fully executed, moved to plans/done/
+
+## STATUS (reviewed 2026-06-27)
+**~100% DONE — ARCHIVE.** sdltiles.cpp is now **289 lines** (from 4,293). All 6 proposed modules exist: `sdl_input`, `sdl_window_dims`, `sdl_fonts`, `sdl_overmap_draw`, `sdl_framebuffer`, `sdl_curses_draw` (+ `sdl_display.h` holding `display_context`/`g_display`). Phase 0 net landed: `render_state::capture_texture_to_rgba` + `tests/render_regression_test.cpp` both present. `refresh_display`/`InitSDL`/`WinCreate` gone from sdltiles.cpp. Plan matches reality and is fully executed — move to `plans/done/`. Continued by `sdltiles_decomposition_followup.md`.
+
 # Decompose `sdltiles.cpp` — God-TU → Owned Modules
 
 > Supersedes the original "Overmap Context Gating" draft. That plan attacked one
@@ -88,6 +93,8 @@ Fixtures (the scenarios that actually cover the decomposition's risk):
 ---
 
 ## Extraction order (each step independently build-green + shippable)
+
+✅ ALL STEPS DONE (0–7b). Verified 2026-06-27 by file presence; see STATUS banner.
 
 | Step | What | Why this order | Gate |
 |---|---|---|---|

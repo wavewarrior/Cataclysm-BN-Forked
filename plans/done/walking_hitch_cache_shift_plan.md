@@ -1,4 +1,13 @@
+# ✅ ARCHIVED 2026-06-28 — Phase 1+2 shipped (`5315065c12`), only probe-cleanup deferred. Moved to plans/done/
+
 # Kill the walking hitch — incremental cache rebuild on reality-bubble shift  (✅ Done: `5315065c12`)
+
+## STATUS (reviewed 2026-06-27)
+~100% done. Phase 1 (outside/sheltered translate+edge) and Phase 2 (lm/sm/angled_sunlight
+translate + seen-dirty gated to player-z ±1 under fov_3d) both verified in src/map.cpp
+(shift block 8217–8243, gate comment 8288–8306). Only the diagnostic-probe CLEANUP is
+deferred (intentional — probes still drive ongoing Tier-1 perf work). Plan is DONE; keep
+as historical record / probe-cleanup checklist. Not superseded.
 
 ## Context
 

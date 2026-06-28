@@ -1,5 +1,21 @@
 # RmlUi HUD — Panel Widget Reference
 
+## STATUS (reviewed 2026-06-27)
+
+**This is a REFERENCE / FORWARD WORKLIST, not part of the migration plan — KEEP.** It is the
+spec for the SEPARATE "new HUD" feature plan (split out of the rip-out per the 2026-06-23 user
+directive: rip the curses panels even though the RmlUi HUD lacks some old features). Verified
+current vs the code below: `sidebar_hud_rmlui_enabled()` is ON; the curses panel renderers are
+gone (panels.cpp P1/P2a/P2b); panels with no RML producer render a `[name]` placeholder.
+
+**Coverage unchanged since this was written (2026-06-23): 16 of 30 `custom`-layout widgets have
+producers; 14 GAP** (val_* ×4, bodygraph ×4, vehicle, wind, moon, armor_comp, map/minimap,
+ai_goal). None of these GAPs block anything — they ship as placeholders. Build order in §1.x
+stands. The hardest two stay RTT/graphics (minimap, vehicle fuel gauges). This doc has no
+done/undone checkboxes to flip; it is a build spec.
+
+---
+
 **Purpose.** The Tier-10 curses sidebar rip-out (commits `1322cce459` → `bc8980a098`,
 2026-06-23) deleted all 58 curses `draw_*` sidebar-panel renderers. The RmlUi HUD now
 renders the sidebar by panel **name**, and any panel without an RML producer shows a

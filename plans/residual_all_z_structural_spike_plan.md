@@ -1,5 +1,14 @@
 # Tier 0b — Pin the residual all-z structural spike
 
+## STATUS (reviewed 2026-06-27)
+0% implemented — pure diagnosis plan, no code change shipped. Premise still VALID: the
+walking-hitch fix translates outside_cache + shifts dirty bitsets, so the common shift no
+longer blanket-dirties all-z; this plan hunts the rare (~2/10) residual via the in-tree
+`[shift-probe][invalidate-bt]` backtrace probe (still present in map.cpp). All listed
+invalidate_map_cache call sites confirmed in game.cpp (925/930/3793/8477/8486/9987/10085/
+13932/14851/15094). Keep as a live diagnostic checklist — the spike is real but rare and not
+blocking Tier-1. Overlaps 0c only in spirit (both "pin a spike"); not a duplicate.
+
 ## Context
 
 Post-walking-hitch-fix, ~2/10 shifts still spike to **20–23ms all-z STRUCTURAL

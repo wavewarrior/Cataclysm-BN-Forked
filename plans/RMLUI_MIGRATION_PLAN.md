@@ -1,5 +1,44 @@
 # Full UI Migration to RmlUi — Master Plan
 
+## STATUS (reviewed 2026-06-27)
+
+**≈95% done. NEARLY A HISTORICAL RECORD — only the backend-deletion tail is live, and it is
+BLOCKED by design (not by missing work).** Verified against the clean tree this date.
+
+**What is DONE (confirmed in code/commits):**
+- All screen migration (Tiers 0–9) + the §8.1 hidden backlog (char sheet, vehicles, defense
+  mode, message log, morale, martialarts, pickup, creature-info hosts, keybindings, colors,
+  blood-test, scrollable_text). 49 `*_rmlui_enabled()` toggles in `rml_screen.h`; 74 `data/gui/*.rml`.
+- **Toggles flipped ON + eyeball pass COMPLETE** (memory-confirmed 2026-06-23; toggle accessors
+  now `static bool enabled = true` despite stale "Default OFF" comments). Do NOT re-open the
+  per-screen "eyeball owed / toggle OFF" tags in the prose below — they are HISTORICAL.
+- **Sub-series A (ImGui rip-out) COMPLETE** — verified: 0 real `ImGui::` calls (only 2 in
+  comments), no `imgui.h` include, `imgui_layer.{cpp,h}` deleted, `imgui` target dropped from
+  CMake. Residual `imgui_scroll_to_selected` in ui.cpp/ui.h is a field NAME only.
+- **Sub-series B de-curse campaign COMPLETE** (batches 1–13 + 8 clean batches + popup migration,
+  through 2026-06-24, commits `7b27..16d4`). The migrated screens' curses *render* bodies are
+  deleted; the panels.cpp curses sidebar is ripped out (P1/P2a/P2b). The 52 remaining `if(!rml)`
+  arms are now **benign `return;` guards in sync lambdas**, NOT curses-render fallbacks.
+
+**What GENUINELY REMAINS (Tier-10 §8.2 deletion sequence, steps 2–6) — verified NOT done:**
+`output.cpp` primitive bodies, `sdl_curses_draw.cpp`, `sdl_font.{cpp,h}`, `sdl_fonts.{cpp,h}`,
+`cursesport.cpp`, `rml_screen.cpp`, `rml_toggle_registry.*` ALL still present on disk.
+**BLOCKED, not pending:** §8.2 (scope-corrected 2026-06-23) found the curses backend mostly
+SURVIVES — the text primitives + glyph path still have LIVE callers in the map/dev path
+(`live_view`, `animation`, `scent_map`, `editmap`, `character_preview`, ASCII overmap `draw_ascii`,
+`panel_manager::show_adm` sidebar editor, uilist early-init fallback). The realistic endgame is
+NOT "delete the curses renderer entirely"; it's deleting only the now-dead UI-screen draw code
+(done) and leaving the shared backend. Steps 2–6 wait on those live consumers migrating.
+
+**Active work has moved ON** (camera/minimap/FPS commits sit on top) — this plan is at a stable
+rest point. **USEFULNESS: keep as historical record + the §8.2 worklist for the eventual
+backend cull.** The only still-actionable items: the D3D12/Win11 no-imgui link build (owed), and
+the per-site migrations that unblock §8.2 step 2 (creature-info `print_info`, `show_adm` editor,
+uilist custom-draw callbacks). The split-out **NEW-HUD feature plan** (minimap/bodygraph RTT,
+panel parity) lives in `RMLUI_HUD_PANEL_REFERENCE.md`, not here.
+
+---
+
 > Goal: migrate **all** player-facing UI off the legacy curses-SDL renderer onto
 > RmlUi (RML/RCSS + C++ data-binding), per-screen and semantic, then **delete the
 > curses-SDL text renderer and ImGui entirely**. The GPU map/world tile view

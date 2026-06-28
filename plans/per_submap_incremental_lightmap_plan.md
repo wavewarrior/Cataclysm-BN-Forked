@@ -1,5 +1,15 @@
 # Tier 1a — Per-submap incremental lightmap (Phosphor/Starlight model)
 
+## STATUS (reviewed 2026-06-27)
+~95% done. Phase A (lightmap_dirty bitset on level_cache, shift translate, per-submap skip in
+build_map_cache Phase 4) verified: map.h:350, map.cpp:8222/8470/8482/10024-10034,
+lightmap.cpp:632/767. Phase B1 (turn-start invalidate removed → game.cpp:1878 now
+visibility-only) + B2 (player-move invalidate → per-submap dirty) + B3 (solar-level skip,
+last_built_light_level_int) ALL implemented (lightmap.cpp:659-668; map.h:2167). In-plan B3
+"[PLANNED]" tags are STALE — B3 shipped. Only remaining: the "[PLANNED]" verification/horde
+measurements. Plan is effectively DONE; keep as the lighting-incremental reference. This is
+the lightmap half of the walking-hitch cluster — do NOT merge into 1b (different cache).
+
 ## Context
 
 Today the lightmap (`lm`, `sm`, `light_source_buffer` per `level_cache`) is
@@ -81,7 +91,7 @@ B2. **Shrink player-move `invalidate_lightmap_caches()`** (game.cpp:13128)
       follows the avatar without a Phase 4 entry.
     - Result: post-shift rebuild processes only ~14 submaps instead of 225.
 
-B3. **Add sun-angle tracking to skip `build_sunlight_cache` when unchanged** [DONE]
+B3. ✅ DONE (verified lightmap.cpp:659-668, map.h:2167) — **Add sun-angle tracking to skip `build_sunlight_cache` when unchanged** [DONE]
     - `build_sunlight_cache` is the remaining bottleneck when Phase 4 does
       run (it writes `lm` for ALL tiles in the z-cascade).
     - Track `m_solar.last_built_light_level_int` — truncated `natural_light_level(0)`
@@ -126,7 +136,7 @@ invalidates that defeat the per-submap tracking Phase A built.
    shifting ~2-10ms across 3 levels, lightmap≈0 for second-pass renders.)
 2. **[DONE]** **After Phase B (B1/B2):** standing session → lightmap=`~0ms`.
    Walking session → lightmap scales with dirty submaps (~14), not whole level.
-3. **[PLANNED]** **B3 measurement:** compare `[build_cache][perf]` total ms
+3. **[PLANNED — code shipped, measurement pending]** **B3 measurement:** compare `[build_cache][perf]` total ms
    before/after B3 on a walking session. Expected: ~1-2ms reduction on each
    non-shift walk frame (the saved `build_sunlight_cache` cascade).
 3. **[DONE]** **Quality:** stand at z=0, observe z-1/z+1 lighting. Correctness

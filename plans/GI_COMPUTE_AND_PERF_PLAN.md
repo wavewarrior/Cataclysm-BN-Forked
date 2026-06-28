@@ -1,5 +1,8 @@
 # Plan: D3D12-robust GI (GPU compute) + do_turn / lighting perf
 
+## STATUS (reviewed 2026-06-27)
+Done ~90%. Status table below VERIFIED against code 2026-06-27 and is accurate: rc.frag/rc_bounce.frag + radiance_cascade_pass DELETED; gi_field.comp/gi_bounce.comp/sky_sun.comp + jfa_*.comp present; gpu_sdf_pass (JFA) wired in render_state; SunSdfBuf removed from sprite.frag, GiBuf t6/SkyBuf t7 renumber landed (Stage 2b); B0 [sim][perf] probe in game.cpp:2185. KEEP — live spec. Only 2 items open: P4 (D3D12 barrier verify — blocked on Win11 hw) + B2 (sim-span attack — blocked on B0 capture). No contradictions found.
+
 ## ★ Status (2026-06-25) — all structural work done; polish + perf remain
 
 | Section | Status | Commits |

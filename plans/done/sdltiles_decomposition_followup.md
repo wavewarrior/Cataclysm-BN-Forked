@@ -1,3 +1,8 @@
+# ✅ ARCHIVED 2026-06-28 — fully executed, moved to plans/done/
+
+## STATUS (reviewed 2026-06-27)
+**~100% DONE — ARCHIVE.** sdltiles.cpp now **289 lines** (plan started at 2063). All four extractions shipped as files: Step A `sdl_lighting_devui.{h,cpp}`, Step B `sdl_widget_draw.{h,cpp}`, Step C `sdl_window.{h,cpp}`, Step D2 `sdl_render_frame.{h,cpp}` (refresh_display moved out entirely — not in sdltiles.cpp anymore). Final residual landed well below the "300–500 lines" target. Plan matches reality, fully executed — move to `plans/done/`. Out-of-scope items (A2 callback-hook, fontwidth dual-source) remain open but were explicitly deferred.
+
 # sdltiles.cpp — further cleanup (follow-up to sdltiles_decomposition.md)
 
 Sidebar redesign + lighting both declared **settled**, so the earlier "active WIP" deferrals
@@ -18,7 +23,7 @@ histories don't tangle.
 git add -A && git commit -m "refactor(sdl): extract sdl_display.h; drop dead headers/includes"
 ```
 
-## Step A — `sdl_lighting_devui.{h,cpp}`   (do first — also a prereq for D)
+✅ DONE — ## Step A — `sdl_lighting_devui.{h,cpp}`   (do first — also a prereq for D)
 
 Move out of sdltiles.cpp: the lighting/debug globals (~535–630: `g_dbg_*`, `g_current_dbg_mode`,
 `g_dbg_params`, `g_rc_readback`, `g_vol_*` + `g_vol_params`, `g_emitter_scale`/`g_sun_scale`/
@@ -35,13 +40,13 @@ Move out of sdltiles.cpp: the lighting/debug globals (~535–630: `g_dbg_*`, `g_
   refresh_display still writes `g_vol_params`/`g_rc_readback`. The module owns the *declarations*,
   the dependency stays bidirectional. The callback-hook that would sever it is out of scope.
 
-## Step B — `sdl_widget_draw.{h,cpp}`   (independent, low risk)
+✅ DONE — ## Step B — `sdl_widget_draw.{h,cpp}`   (independent, low risk)
 
 Move `draw_widget_icon` ×2 + `draw_widget_row_highlight` (441–635, ~194 lines) to a definition
 site. Declarations stay in `widget_icon.h` (public API); callers in panels.cpp unchanged — same
 pattern sdl_window_dims already uses. Zero lighting coupling; orderable anytime.
 
-## Step C — `sdl_window.{h,cpp}`   (window/term lifecycle, medium risk)
+✅ DONE — ## Step C — `sdl_window.{h,cpp}`   (window/term lifecycle, medium risk)
 
 Move InitSDL / WinCreate / WinDestroy / handle_resize / resize_term / toggle_fullscreen_window /
 init_term_size_and_scaling_factor (+ `catacurses::init_interface` / `endwin`) — ~660 lines.
@@ -54,7 +59,8 @@ init_term_size_and_scaling_factor (+ `catacurses::init_interface` / `endwin`) �
 - Watch: GPU-device init ordering (WinCreate) and the per-target list in handle_resize (it
   enumerates ui/world/shadow/world_ldr/bloom — a mild leak; keep as-is, don't redesign here).
 
-## Step D — decompose `refresh_display` (711 lines, the heart — last, highest risk)
+✅ DONE — ## Step D — decompose `refresh_display` (711 lines, the heart — last, highest risk)
+> D2 executed: `refresh_display` lives in `sdl_render_frame.{h,cpp}` (45KB), no longer in sdltiles.cpp.
 
 The function is one 711-line block already sectioned by phase comments, threading `(rs, ctx)` +
 globals. Confirmed splittable; the fat "assemble frame_light_inputs" phase (~1017–1170, sun/
