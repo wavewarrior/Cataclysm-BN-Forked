@@ -23,69 +23,6 @@
 
 snake_game::snake_game() = default;
 
-void snake_game::print_score( const catacurses::window &w_snake, int iScore )
-{
-    mvwprintz( w_snake, point( 5, 0 ), c_white, string_format( _( "Score: %d" ), iScore ) );
-}
-
-void snake_game::print_header( const catacurses::window &w_snake, bool show_shortcut )
-{
-    draw_border( w_snake, BORDER_COLOR, _( "S N A K E" ), c_white );
-    if( show_shortcut ) {
-        std::string shortcut = _( "<q>uit" );
-        shortcut_print( w_snake, point( FULL_SCREEN_WIDTH - utf8_width( shortcut ) - 2, 0 ),
-                        c_white, c_light_green, shortcut );
-    }
-}
-
-void snake_game::snake_over( const catacurses::window &w_snake, int iScore )
-{
-    werase( w_snake );
-    print_header( w_snake, false );
-
-    // Body of dead snake
-    size_t body_length = 3;
-    for( size_t i = 1; i <= body_length; i++ ) {
-        for( size_t j = 0; j <= 1; j++ ) {
-            mvwprintz( w_snake, point( 4 + j * 65, i ), c_green, "|   |" );
-        }
-    }
-
-    // Head of dead snake
-    mvwprintz( w_snake, point( 3, body_length + 1 ), c_green, "(     )" );
-    mvwprintz( w_snake, point( 4, body_length + 1 ), c_dark_gray, "x   x" );
-    mvwprintz( w_snake, point( 3, body_length + 2 ), c_green, " \\___/ " );
-    mvwputch( w_snake, point( 6, body_length + 3 ), c_red, '|' );
-    mvwputch( w_snake, point( 6, body_length + 4 ), c_red, '^' );
-
-    // Tail of dead snake
-    mvwprintz( w_snake, point( 70, body_length + 1 ), c_green, "\\ /" );
-    mvwputch( w_snake, point( 71, body_length + 2 ), c_green, 'v' );
-
-    std::vector<std::string> game_over_text;
-    game_over_text.emplace_back( R"(  ________    _____      _____   ___________)" );
-    game_over_text.emplace_back( R"( /  _____/   /  _  \    /     \  \_   _____/)" );
-    game_over_text.emplace_back( R"(/   \  ___  /  /_\  \  /  \ /  \  |    __)_ )" );
-    game_over_text.emplace_back( R"(\    \_\  \/    |    \/    Y    \ |        \)" );
-    game_over_text.emplace_back( R"( \______  /\____|__  /\____|__  //_______  /)" );
-    game_over_text.emplace_back( R"(        \/         \/         \/         \/ )" );
-    game_over_text.emplace_back( R"( ________ ____   _________________________  )" );
-    game_over_text.emplace_back( R"( \_____  \\   \ /   /\_   _____/\______   \ )" );
-    game_over_text.emplace_back( R"(  /   |   \\   Y   /  |    __)_  |       _/ )" );
-    game_over_text.emplace_back( R"( /    |    \\     /   |        \ |    |   \ )" );
-    game_over_text.emplace_back( R"( \_______  / \___/   /_______  / |____|_  / )" );
-    game_over_text.emplace_back( R"(         \/                  \/         \/  )" );
-
-    for( size_t i = 0; i < game_over_text.size(); i++ ) {
-        mvwprintz( w_snake, point( 17, i + 3 ), c_light_red, game_over_text[i] );
-    }
-
-    center_print( w_snake, 17, c_yellow, string_format( _( "TOTAL SCORE: %d" ), iScore ) );
-    // TODO: print actual bound keys
-    center_print( w_snake, 21, c_white, _( "Press 'q' or ESC to exit." ) );
-    wnoutrefresh( w_snake );
-}
-
 int snake_game::start_game()
 {
     std::vector<std::pair<int, int> > vSnakeBody;
@@ -157,19 +94,7 @@ int snake_game::start_game()
             minigame_rml::set_grid( grid );
             minigame_rml::set_footer( _( "<q>uit" ) );
             minigame_rml::sync();
-            return;
         }
-        werase( w_snake );
-        print_header( w_snake );
-        for( auto it = vSnakeBody.begin(); it != vSnakeBody.end(); ++it ) {
-            const nc_color col = it + 1 == vSnakeBody.end() ? c_white : c_light_gray;
-            mvwputch( w_snake, point( it->second, it->first ), col, '#' );
-        }
-        if( iFruitPosX != 0 && iFruitPosY != 0 ) {
-            mvwputch( w_snake, point( iFruitPosX, iFruitPosY ), c_light_red, '*' );
-        }
-        print_score( w_snake, iScore );
-        wnoutrefresh( w_snake );
     } );
 
     do {
@@ -273,9 +198,7 @@ int snake_game::start_game()
                                                 c_yellow ) } );
             minigame_rml::set_footer( _( "Press 'q' or ESC to exit." ) );
             minigame_rml::sync();
-            return;
         }
-        snake_over( w_snake, iScore );
     } );
     do {
         ui_manager::redraw();
