@@ -300,6 +300,27 @@ static float weather_cloud_mult()
                        0.3f, 1.0f );
 }
 
+// Weather-driven rain intensity (GPU rain). Returns 0 when no rain or no game
+// session; dev slider g_rain_intensity serves as fallback for menu testing.
+static auto weather_rain_intensity() -> float
+{
+    if( g ) {
+        const weather_type_id wid = get_weather().weather_id;
+        if( wid.is_valid() && wid->rains ) {
+            switch( wid->precip ) {
+                case precip_class::very_light: return 0.1f;
+                case precip_class::light:      return 0.3f;
+                case precip_class::medium:     return 0.6f;
+                case precip_class::heavy:      return 1.0f;
+                default:                       return 0.0f;
+            }
+        } else {
+            return 0.0f;
+        }
+    }
+    return std::clamp( g_rain_intensity, 0.f, 1.f );
+}
+
 // shading (colour + intensity) both want ONE light, so we fold the moon into the
 // existing sun_params: the moon rides the opposite (12h-shifted) arc, cold and
 // dim, scaled by phase ("full moon = sun with different params"). We pick
@@ -531,7 +552,7 @@ auto assemble_light_inputs( lighting::render_state &rs,
     // Wet specular: fold the user knob with rain intensity so the sheen only shows
     // while raining (mirrors the A3 weather-mult CPU fold). 0 = exact no-op.
     in.debug.spec_strength = g_rain_enable
-                             ? g_spec_strength * std::clamp( g_rain_intensity, 0.f, 1.f )
+                             ? g_spec_strength * weather_rain_intensity()
                              : 0.f;
 
     static int emit_dbg_frame = 0;
@@ -717,7 +738,7 @@ auto render_world_pass_w( lighting::render_state &rs,
     if( want_rain ) {
         lighting::rain_params rp{};
         rp.active          = true;
-        rp.intensity       = std::clamp( g_rain_intensity, 0.f, 1.f );
+        rp.intensity       = weather_rain_intensity();
         rp.wind_angle      = 270.f; // wind from west (left-to-right on screen)
         rp.camera_off_x    = g_vol_params.camera_off_x;
         rp.camera_off_y    = g_vol_params.camera_off_y;
