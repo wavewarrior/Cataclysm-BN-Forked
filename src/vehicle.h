@@ -433,15 +433,6 @@ class vehicle
 
         units::volume total_folded_volume() const;
 
-        // Vehicle fuel indicator (by fuel)
-        void print_fuel_indicator( const catacurses::window &w, point p,
-                                   const itype_id &fuel_type,
-                                   bool verbose = false, bool desc = false );
-        void print_fuel_indicator( const catacurses::window &w, point p,
-                                   const itype_id &fuel_type,
-                                   std::map<itype_id, float> fuel_usages,
-                                   bool verbose = false, bool desc = false );
-
         // Calculate how long it takes to attempt to start an engine
         int engine_start_time( int e ) const;
 
@@ -866,11 +857,6 @@ class vehicle
         // Get all printable fuel types
         std::vector<itype_id> get_printable_fuel_types() const;
 
-        // Vehicle fuel indicators (all of them)
-        void print_fuel_indicators(
-            const catacurses::window &win, point, int start_index = 0,
-            bool fullsize = false, bool verbose = false, bool desc = false,
-            bool isHorizontal = false );
         // RmlUi (veh_interact slice 4b): the fuel gauges as colour-tagged text
         // lines, parallel to print_fuel_indicators/print_fuel_indicator. The E…F
         // ASCII gauge bar is dropped (semantic); each line is "<fuel>  NN%" plus
