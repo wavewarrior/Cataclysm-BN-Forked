@@ -1,10 +1,10 @@
 # Full UI Migration to RmlUi — Master Plan
 
 > **▶ NEXT SESSION: jump to the "★★★ RESUME HERE — Tier-10 §C ★★★" section at the END of this
-> file.** (2026-06-29) Core world-render (w_terrain) is fully de-cursed; the live work is now
-> **P3 — migrating category-A interactive screens.** `list_items`, `list_monsters`,
-> `look_around` (INFO pane) and `zones_manager` are DONE; next recommended = **`panels.cpp::show_adm`**
-> (the `}` panel-manager menu). The §C survey/decision/P2 sections below are historical context.
+> file.** (2026-06-29) P3 + P4 complete; P5 backend cull in progress. game.cpp
+> list_items/list_monsters/zones_manager curses arms deleted (P5-A); `Creature::print_info`
+> callers reduced to editmap + wish. Next: magic.cpp uilist-callback fallback (P5-B),
+> then dialogue_win curses impl (P5-C). The §C survey/decision sections below are historical context.
 
 ## STATUS (reviewed 2026-06-27)
 
@@ -3973,3 +3973,49 @@ deletions `ecc47c6cf6` (draw_minimap) `72fae4a792` (veh-dir) `756ca00706` (critt
 `5b7b11ba51` (draw_critter chain) `3a7d879284` (footsteps) `86a2d236ad` (draw_ter m.draw+trail)
 `69c49a2ee8` (map::draw) `df4710c43d` (look-around cursor) `4548df6553` (vestigial highlights);
 plus docs commits.
+
+### P5-A progress (CURRENT SESSION — commit TBD)
+
+**State entering this session (HEAD `b56e9ee3df`):**
+- P3 category-A migration COMPLETE: list_items / list_monsters / zones_manager / show_adm /
+  live_view / character_preview all migrated. The curses on_redraw arms exist but are dead
+  behind default-ON toggles.
+- P4 done: overmap `draw_ascii` deleted (`05c4ccfeed`).
+- look_around curses producers deleted (`b56e9ee3df`): `print_all_tile_info` + its 8
+  `print_*_info` sub-producers gone (−387 lines). `Creature::print_info` callers: 3
+  (game.cpp list_monsters arm, editmap, wish).
+
+**P5-A batch — game.cpp dead arm deletion:**
+- Deleted `zones_manager` on_redraw curses arm + orphaned static helpers
+  `zones_manager_draw_borders` / `zones_manager_shortcuts` / local lambda `zones_manager_options`.
+- Deleted `list_items` on_redraw curses arm + orphaned `reset_item_list_state`
+  (`draw_item_filter_rules` kept — live caller in clzones.cpp:502).
+- Deleted `list_monsters` on_redraw curses arm — **this removes `cCurMon->print_info(w_monster_info,
+  ...)` (the last game.cpp caller of `Creature::print_info`)**.
+- game.cpp curses calls: ~102 → 28. `Creature::print_info` callers: 2 (editmap + wish).
+- All build-green. No eyeball required (dead-code deletion, no runtime path change).
+
+**Remaining `Creature::print_info(window&)` callers (NOT deleted here — need their own pass):**
+- `editmap.cpp:804` — live cursor pane (editmap is deferred / non-mechanical).
+- `wish.cpp:654` — dev wish screen (dev tools batch, P5-G).
+
+**`vehicle::print_part_list` remaining callers:** editmap.cpp:808 only (same editmap pass).
+
+**Next after P5-A (priority order from the full-rip chain):**
+1. **P5-B** — magic.cpp uilist-callback curses fallback: `spellcasting_callback::refresh()` +
+   `teleporter_callback::refresh()` (the toggle-OFF curses fallback for the uilist draw_rml path;
+   delete the bodies, keep the `draw_rml` override; these are the ~33 curses-text calls in magic.cpp).
+2. **P5-C** — dialogue_win curses impl: `dialogue_window::print_header` / `print_history` /
+   `display_responses` / `clear_window_texts` / `cache_msg` / `refresh_response_display` (the
+   curses fallback for the migrated Tier-5 `dialogue` screen; callers are guarded by
+   `dialogue_rmlui_enabled()`; delete the curses method bodies, keep `history_markup()` and the
+   data members the RmlUi path uses).
+3. **P5-D** — game.cpp death screen (`draw_rip_screen`, ~1505–1580): the post-death curses UI
+   (kills/name/last-words); decide: migrate to RmlUi or remove (it is not player-interactive).
+4. **P5-E** — remaining game.cpp isolated curses: NPC debugger (~4075), compass helper (~4614–4725);
+   census callers per symbol.
+5. **P5-F** — generics (uilist `show` curses fallback, string_input_popup, popup): high blast radius;
+   gated on all the above.
+6. **P5-G** — dev tools: wish, catalua_console.
+7. **P5-H** — veh_interact / advanced_inv curses remnants.
+8. **P5-I** — backend cull + toggle layer (LAST).
