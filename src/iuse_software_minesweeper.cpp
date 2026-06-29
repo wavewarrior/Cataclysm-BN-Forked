@@ -135,7 +135,6 @@ bool minesweeper_game::check_win()
 int minesweeper_game::start_game()
 {
     catacurses::window w_minesweeper_border;
-    catacurses::window w_minesweeper;
 
     ui_adaptor ui;
     ui.on_screen_resize( [&]( ui_adaptor & ui ) {
@@ -144,8 +143,6 @@ int minesweeper_game::start_game()
 
         w_minesweeper_border = catacurses::newwin( FULL_SCREEN_HEIGHT, FULL_SCREEN_WIDTH,
                                iCenter );
-        w_minesweeper = catacurses::newwin( FULL_SCREEN_HEIGHT - 2, FULL_SCREEN_WIDTH - 2,
-                                            iCenter + point_south_east );
         max = point( FULL_SCREEN_WIDTH - 4, FULL_SCREEN_HEIGHT - 4 );
         ui.position_from_window( w_minesweeper_border );
     } );
@@ -231,86 +228,7 @@ int minesweeper_game::start_game()
             minigame_rml::set_grid( grid );
             minigame_rml::set_footer( _( "<n>ew level   <f>lag   <q>uit" ) );
             minigame_rml::sync();
-            return;
         }
-        werase( w_minesweeper_border );
-        draw_border( w_minesweeper_border );
-
-        std::vector<std::string> shortcuts;
-        shortcuts.emplace_back( _( "<n>ew level" ) );
-        shortcuts.emplace_back( _( "<f>lag" ) );
-        shortcuts.emplace_back( _( "<q>uit" ) );
-
-        int iWidth = 0;
-        for( auto &shortcut : shortcuts ) {
-            if( iWidth > 0 ) {
-                iWidth += 1;
-            }
-            iWidth += utf8_width( shortcut );
-        }
-
-        int iPos = FULL_SCREEN_WIDTH - iWidth - 1;
-        for( auto &shortcut : shortcuts ) {
-            shortcut_print( w_minesweeper_border, point( iPos, 0 ), c_white, c_light_green, shortcut );
-            iPos += utf8_width( shortcut ) + 1;
-        }
-
-        mvwputch( w_minesweeper_border, point( 2, 0 ), hilite( c_white ), _( "Minesweeper" ) );
-
-        wnoutrefresh( w_minesweeper_border );
-
-        if( !started ) {
-            return;
-        }
-
-        werase( w_minesweeper );
-        draw_custom_border( w_minesweeper, 1, 1, 1, 1, 1, 1, 1, 1, BORDER_COLOR,
-                            // NOLINTNEXTLINE(cata-use-named-point-constants)
-                            offset + point( -1, -1 ), level.y + 2, level.x + 2 );
-        for( int y = 0; y < level.y; ++y ) {
-            for( int x = 0; x < level.x; ++x ) {
-                char ch = '?';
-                nc_color col = c_red;
-                const int num = mLevel[y][x];
-                switch( mLevelReveal[y][x] ) {
-                    case unknown:
-                        if( boom && num == bomb ) {
-                            ch = '*';
-                            col = h_red;
-                        } else {
-                            ch = '#';
-                            col = c_white;
-                        }
-                        break;
-                    case flag:
-                        ch = '!';
-                        if( boom && num == bomb ) {
-                            col = h_red;
-                        } else {
-                            col = c_yellow;
-                        }
-                        break;
-                    case seen: {
-                        if( num == bomb ) {
-                            ch = '*';
-                            col = boom ? h_red : c_red;
-                        } else if( num == 0 ) {
-                            ch = ' ';
-                            col = aColors[num];
-                        } else if( num >= 1 && num <= 8 ) {
-                            ch = '0' + num;
-                            col = aColors[num];
-                        }
-                        break;
-                    }
-                }
-                if( !boom && pl == point( x, y ) ) {
-                    col = hilite( col );
-                }
-                mvwputch( w_minesweeper, offset + point( x, y ), col, ch );
-            }
-        }
-        wnoutrefresh( w_minesweeper );
     } );
 
     std::function<void ( point )> rec_reveal = [&]( point  pt ) {

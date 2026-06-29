@@ -62,23 +62,6 @@ void lightson_game::toggle_value_at( point pt )
     set_value_at( pt, !get_value_at( pt ) );
 }
 
-void lightson_game::draw_level()
-{
-    werase( w );
-    draw_border( w );
-    for( int i = 0; i < level_size.y; i++ ) {
-        for( int j = 0; j < level_size.x; j++ ) {
-            point current = point( j, i );
-            bool selected = position == current;
-            bool on = get_value_at( current );
-            const nc_color fg = on ? c_white : c_dark_gray;
-            const char symbol = on ? '#' : '-';
-            mvwputch( w, current + point_south_east, selected ? hilite( c_white ) : fg, symbol );
-        }
-    }
-    wnoutrefresh( w );
-}
-
 void lightson_game::generate_change_coords( int changes )
 {
     change_coords.resize( changes );
@@ -138,7 +121,6 @@ int lightson_game::start_game()
         const point iOffset( TERMX > FULL_SCREEN_WIDTH ? ( TERMX - FULL_SCREEN_WIDTH ) / 2 : 0,
                              TERMY > FULL_SCREEN_HEIGHT ? ( TERMY - FULL_SCREEN_HEIGHT ) / 2 : 0 );
         w_border = catacurses::newwin( w_height, FULL_SCREEN_WIDTH, iOffset );
-        w = catacurses::newwin( w_height - 6, FULL_SCREEN_WIDTH - 2, iOffset + point_south_east );
         ui.position_from_window( w_border );
     } );
     ui.mark_resize();
@@ -182,38 +164,7 @@ int lightson_game::start_game()
                 _( "Toggle lights switches selected light and 4 its neighbors." ) + "\n\n" +
                 _( "<spacebar or 5> toggle lights   <r>eset   <q>uit" ) );
             minigame_rml::sync();
-            return;
         }
-        std::vector<std::string> shortcuts;
-        shortcuts.emplace_back( _( "<spacebar or 5> toggle lights" ) );
-        shortcuts.emplace_back( _( "<r>eset" ) );
-        shortcuts.emplace_back( _( "<q>uit" ) );
-
-        int iWidth = 0;
-        for( auto &shortcut : shortcuts ) {
-            if( iWidth > 0 ) {
-                iWidth += 1;
-            }
-            iWidth += utf8_width( shortcut );
-        }
-
-        werase( w_border );
-        draw_border( w_border );
-        int iPos = FULL_SCREEN_WIDTH - iWidth - 1;
-        for( auto &shortcut : shortcuts ) {
-            shortcut_print( w_border, point( iPos, 0 ), c_white, c_light_green, shortcut );
-            iPos += utf8_width( shortcut ) + 1;
-        }
-
-        mvwputch( w_border, point( 2, 0 ), hilite( c_white ), _( "Lights on!" ) );
-        fold_and_print( w_border, point( 2, w_height - 5 ), FULL_SCREEN_WIDTH - 4, c_light_gray,
-                        "%s\n%s\n%s", _( "<color_white>Game goal:</color> Switch all the lights on." ),
-                        _( "<color_white>Legend: #</color> on, <color_dark_gray>-</color> off." ),
-                        _( "Toggle lights switches selected light and 4 its neighbors." ) );
-
-        wnoutrefresh( w_border );
-
-        draw_level();
     } );
 
     win = true;

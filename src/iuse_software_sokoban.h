@@ -45,9 +45,6 @@ class sokoban_game
 
         void parse_level( std::istream &fin );
         bool check_win();
-        int get_wall_connection( point );
-        void draw_level( const catacurses::window &w_sokoban );
-        void print_score( const catacurses::window &w_sokoban, int iScore, int iMoves );
     public:
         int start_game();
         sokoban_game();

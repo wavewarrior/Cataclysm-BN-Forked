@@ -309,8 +309,6 @@ robot_finds_kitten::robot_finds_kitten()
     ui.on_screen_resize( [this]( ui_adaptor & ui ) {
         bkatwin = catacurses::newwin( rfkLINES + 2, rfkCOLS + 2,
                                       point( ( TERMX - rfkCOLS - 2 ) / 2, ( TERMY - rfkLINES - 2 ) / 2 ) );
-        w = catacurses::newwin( rfkLINES, rfkCOLS,
-                                point( ( TERMX - rfkCOLS ) / 2, ( TERMY - rfkLINES ) / 2 ) );
         ui.position_from_window( bkatwin );
     } );
     ui.mark_resize();
@@ -318,9 +316,7 @@ robot_finds_kitten::robot_finds_kitten()
     ui.on_redraw( [this]( const ui_adaptor & ) {
         if( minigame_rml::active() ) {
             show_rml();
-            return;
         }
-        show();
     } );
 
     // Tier 9: render through the shared char-grid RmlUi widget when enabled. The

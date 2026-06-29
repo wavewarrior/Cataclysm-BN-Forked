@@ -23,19 +23,6 @@
 
 sokoban_game::sokoban_game() = default;
 
-void sokoban_game::print_score( const catacurses::window &w_sokoban, int iScore, int iMoves )
-{
-    mvwprintz( w_sokoban, point( 3, 1 ), c_white, _( "Level: %d/%d" ), iCurrentLevel + 1, iNumLevel );
-    wprintw( w_sokoban, "    " );
-
-    mvwprintz( w_sokoban, point( 3, 2 ), c_white, _( "Score: %d" ), iScore );
-
-    mvwprintz( w_sokoban, point( 3, 3 ), c_white, _( "Moves: %d" ), iMoves );
-    wprintw( w_sokoban, "    " );
-
-    mvwprintz( w_sokoban, point( 3, 4 ), c_white, _( "Total moves: %d" ), iTotalMoves );
-}
-
 void sokoban_game::parse_level( std::istream &fin )
 {
     /*
@@ -101,105 +88,6 @@ void sokoban_game::parse_level( std::istream &fin )
         }
 
         mLevelInfo[iNumLevel]["MaxLevelY"]++;
-    }
-}
-
-int sokoban_game::get_wall_connection( point i )
-{
-    bool bTop = false;
-    bool bRight = false;
-    bool bBottom = false;
-    bool bLeft = false;
-
-    if( mLevel[i.y - 1][i.x] == "#" ) {
-        bTop = true;
-    }
-
-    if( mLevel[i.y][i.x + 1] == "#" ) {
-        bRight = true;
-    }
-
-    if( mLevel[i.y + 1][i.x] == "#" ) {
-        bBottom = true;
-    }
-
-    if( mLevel[i.y][i.x - 1] == "#" ) {
-        bLeft = true;
-    }
-
-    if( !bRight && !bLeft ) {
-        return LINE_XOXO; //
-
-    } else if( !bTop && !bBottom ) {
-        return LINE_OXOX;
-
-    } else if( bTop && bRight && !bBottom && !bLeft ) {
-        return LINE_XXOO;
-
-    } else if( !bTop && bRight && bBottom && !bLeft ) {
-        return LINE_OXXO;
-
-    } else if( !bTop && !bRight && bBottom && bLeft ) {
-        return LINE_OOXX;
-
-    } else if( bTop && !bRight && !bBottom && bLeft ) {
-        return LINE_XOOX;
-
-    } else if( bTop && bRight && bBottom && !bLeft ) {
-        return LINE_XXXO;
-
-    } else if( bTop && bRight && !bBottom && bLeft ) {
-        return LINE_XXOX;
-
-    } else if( bTop && !bRight && bBottom && bLeft ) {
-        return LINE_XOXX;
-
-    } else if( !bTop && bRight && bBottom && bLeft ) {
-        return LINE_OXXX;
-
-    } else if( bTop && bRight && bBottom && bLeft ) {
-        return LINE_XXXX;
-    }
-
-    return '#';
-}
-
-void sokoban_game::draw_level( const catacurses::window &w_sokoban )
-{
-    const point iOffset( ( FULL_SCREEN_WIDTH - 2 - mLevelInfo[iCurrentLevel]["MaxLevelX"] ) / 2,
-                         ( FULL_SCREEN_HEIGHT - 2 - mLevelInfo[iCurrentLevel]["MaxLevelY"] ) / 2 );
-
-    for( auto &elem : mLevel ) {
-        for( std::map<int, std::string>::iterator iterX = elem.second.begin();
-             iterX != elem.second.end(); ++iterX ) {
-            std::string sTile = iterX->second;
-
-            if( sTile == "#" ) {
-                mvwputch( w_sokoban, iOffset + point( iterX->first, elem.first ),
-                          c_white, get_wall_connection( point( iterX->first, elem.first ) ) );
-
-            } else {
-                nc_color cCol = c_white;
-
-                if( sTile == "." || sTile == "*" ||  sTile == "+" ) {
-                    cCol = red_background( c_white );
-                }
-
-                if( sTile == "." ) {
-                    sTile = " ";
-                }
-
-                if( sTile == "*" ) {
-                    sTile = "$";
-                }
-
-                if( sTile == "+" ) {
-                    sTile = "@";
-                }
-
-                mvwprintz( w_sokoban, iOffset + point( iterX->first, elem.first ), cCol, sTile );
-            }
-        }
     }
 }
 
@@ -293,33 +181,7 @@ int sokoban_game::start_game()
             minigame_rml::set_footer(
                 _( "<+> next   <-> prev   <r>eset   <u>ndo move   <q>uit" ) );
             minigame_rml::sync();
-            return;
         }
-        werase( w_sokoban );
-        draw_border( w_sokoban, BORDER_COLOR, _( "Sokoban" ), hilite( c_white ) );
-
-        std::vector<std::string> shortcuts;
-        shortcuts.emplace_back( _( "<+> next" ) ); // '+': next
-        shortcuts.emplace_back( _( "<-> prev" ) ); // '-': prev
-        shortcuts.emplace_back( _( "<r>eset" ) ); // 'r': reset
-        shortcuts.emplace_back( _( "<q>uit" ) ); // 'q': quit
-        shortcuts.emplace_back( _( "<u>ndo move" ) ); // 'u': undo move
-
-        int indent = 10;
-        for( auto &shortcut : shortcuts ) {
-            indent = std::max( indent, utf8_width( shortcut ) + 1 );
-        }
-        indent = std::min( indent, 30 );
-
-        for( size_t i = 0; i < shortcuts.size(); i++ ) {
-            shortcut_print( w_sokoban, point( FULL_SCREEN_WIDTH - indent, i + 1 ),
-                            c_white, c_light_green, shortcuts[i] );
-        }
-
-        print_score( w_sokoban, iScore, iMoves );
-
-        draw_level( w_sokoban );
-        wnoutrefresh( w_sokoban );
     } );
 
     point pl;
