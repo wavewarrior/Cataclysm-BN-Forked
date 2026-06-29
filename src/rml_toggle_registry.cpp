@@ -31,6 +31,7 @@ const std::vector<rml_toggle> &rml_toggle_registry()
         { "list_items", &list_items_rmlui_enabled, false },
         { "zones_manager", &zones_manager_rmlui_enabled, false },
         { "panel_adm", &panel_adm_rmlui_enabled, false },
+        { "live_view", &live_view_rmlui_enabled, false },
         { "look_around", &look_around_rmlui_enabled, false },
         { "loading", &loading_rmlui_enabled, false },
         { "inventory", &inventory_rmlui_enabled, false },

@@ -1,0 +1,19 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="live_view.rcss"/>
+</head>
+<body data-model="live_view">
+    <!-- P3 track-A: the SDL mouse-hover tile tooltip (live_view). A non-modal,
+         passive overlay box anchored at the sidebar edge: a "< Mouse View >"
+         title over the hovered tile's info (game::print_all_tile_info_text — the
+         same producer behind the migrated look_around info pane). The box's
+         left/top/width are set from C++ each sync (#lv-box) to track the sidebar
+         rect; height auto-sizes to content (capped in rcss). Render-only —
+         driven by the game loop's mouse handling, no input of its own. -->
+    <div id="lv-box" class="lv-box">
+        <div class="lv-title" data-rml="title_rml"></div>
+        <div class="lv-info scroll-pane" data-rml="info_rml"></div>
+    </div>
+</body>
+</rml>

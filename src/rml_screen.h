@@ -287,6 +287,14 @@ bool &zones_manager_rmlui_enabled();
 // Default OFF.
 bool &panel_adm_rmlui_enabled();
 
+// live_view RmlUi render path (the SDL mouse-hover tile tooltip). A NON-modal,
+// passive overlay box (no input loop): opened lazily when the hover box appears,
+// fed each redraw by game::print_all_tile_info_text() (the same producer behind
+// the migrated look_around info pane), positioned at the sidebar edge, and closed
+// when the box hides. Uses the rmlui_layer doc lifecycle directly (not the modal
+// rml_doc harness). Default OFF.
+bool &live_view_rmlui_enabled();
+
 // game::look_around RmlUi render path (the examine/look-around info pane: §8.1
 // track-A creature-info). Render-only doc fed by print_all_tile_info_text() (the
 // parallel tile-readout producer; creature section reuses Creature::print_info_text()):
