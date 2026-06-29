@@ -8279,55 +8279,11 @@ std::optional<tripoint_bub_ms> game::look_debug()
 }
 ////////////////////////////////////////////////////////////////////////////////////////////
 
-void game::draw_look_around_cursor( const tripoint_bub_ms &lp, const visibility_variables &cache )
+void game::draw_look_around_cursor( const tripoint_bub_ms &lp,
+                                    const visibility_variables &/* cache */ )
 {
     if( !liveview.is_enabled() ) {
-        if( is_draw_tiles_mode() ) {
-            draw_cursor( lp );
-            return;
-        }
-        const auto view_center = u.bub_pos() + u.view_offset;
-        visibility_type visibility = VIS_HIDDEN;
-        const bool inbounds = m.inbounds( lp );
-        if( inbounds ) {
-            visibility = m.get_visibility( m.apparent_light_at( lp, cache ), cache );
-        }
-        if( visibility == VIS_CLEAR ) {
-            const Creature *const creature = critter_at( lp, true );
-            if( creature != nullptr && u.sees( *creature ) ) {
-                creature->draw( w_terrain, view_center, true );
-            } else {
-                m.drawsq( w_terrain, lp, drawsq_params().highlight( true ).center( view_center ) );
-            }
-        } else {
-            std::string visibility_indicator;
-            nc_color visibility_indicator_color = c_white;
-            switch( visibility ) {
-                case VIS_CLEAR:
-                    // Already handled by the outer if statement
-                    break;
-                case VIS_BOOMER:
-                case VIS_BOOMER_DARK:
-                    visibility_indicator = '#';
-                    visibility_indicator_color = c_pink;
-                    break;
-                case VIS_DARK:
-                    visibility_indicator = '#';
-                    visibility_indicator_color = c_dark_gray;
-                    break;
-                case VIS_LIT:
-                    visibility_indicator = '#';
-                    visibility_indicator_color = c_light_gray;
-                    break;
-                case VIS_HIDDEN:
-                    visibility_indicator = 'x';
-                    visibility_indicator_color = c_white;
-                    break;
-            }
-
-            const tripoint screen_pos = point( POSX, POSY ) + lp.raw() - view_center.raw();
-            mvwputch( w_terrain, screen_pos.xy(), visibility_indicator_color, visibility_indicator );
-        }
+        draw_cursor( lp );
     }
 }
 
