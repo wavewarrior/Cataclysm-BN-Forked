@@ -3869,7 +3869,7 @@ The remaining 102 game.cpp curses calls are interactive screens rendering into t
 - ~~`list_items` family~~ **DONE 2026-06-29 (`7c30b7e2f1`)** — RmlUi render path added
   (twin of list_monsters): `data/gui/list_items.{rml,rcss}` + `list_items_rmlui_enabled`
   toggle (default on); curses `on_redraw` body retained as gated A/B fallback. Info pane
-  via `item_info_rml_lines`. Build + test build green (Metal). **Eyeball owed.** Note
+  via `item_info_rml_lines`. Build + test build green (Metal). **EYEBALL-CONFIRMED 2026-06-29.** Note
   `print_items_info` (the look-around tile-item pane, game.cpp:~8546) is a SEPARATE
   render path shared with look-around — migrate it under the look-around INFO pane target,
   NOT here. `find_nearby_items` is pure data (no curses), already fine.
@@ -3882,16 +3882,28 @@ The remaining 102 game.cpp curses calls are interactive screens rendering into t
 - ~~`zones_manager`~~ **DONE 2026-06-29 (`4aba15d3aa`)** — RmlUi render path (sibling of
   list_items): `data/gui/zones_manager.{rml,rcss}` + `zones_manager_rmlui_enabled` toggle;
   3-pane panel (zone list / options block / shortcut footer), hidden during nested
-  point-selection look_around. Curses body kept as gated A/B fallback. **Eyeball owed.**
+  point-selection look_around. Curses body kept as gated A/B fallback. **EYEBALL-CONFIRMED 2026-06-29.**
   `is_zone_submap_grid_overlay_enabled` is the map-overlay path (separate, untouched).
 - ~~`panels.cpp::show_adm`~~ **DONE 2026-06-29 (`b945e6a589`)** — RmlUi render path: centered
   3-column modal (`data/gui/panel_adm.{rml,rcss}` + `panel_adm_rmlui_enabled` toggle), panel
   list / help / layout list with a 2D cursor; swap-drag reproduced via display-order emit.
-  Curses body kept as gated A/B fallback. **Eyeball owed.**
+  Curses body kept as gated A/B fallback. **EYEBALL-CONFIRMED 2026-06-29.**
 
-**All five originally-listed P3 targets are now migrated.** Re-survey game.cpp/other files for any
-remaining category-A screens that still draw into their own *displayed* curses windows before
-declaring P3 complete; then P4 (overmap `draw_ascii` confirm) and P5 (backend deletion).
+**All five originally-listed P3 targets are now migrated.** Re-survey (2026-06-29) found the
+straggler set:
+- ~~`live_view`~~ **DONE 2026-06-29 (`89f2bd36b3`)** — the SDL mouse-hover tile tooltip, a NON-modal
+  passive overlay (rmlui_layer doc lifecycle, not rml_doc). Fed by the already-migrated
+  `print_all_tile_info_text`. `data/gui/live_view.{rml,rcss}` + `live_view_rmlui_enabled`. **Eyeball owed.**
+- `scent_map::draw` (`src/scent_map.cpp`) — DEBUG scent overlay (`debug_scent`); low priority, dev-only.
+- `character_preview` — the newcharacter/portrait preview widget; check whether already covered.
+- `editmap` (dev map editor) — explicitly NON-mechanical / deferred (has an `editmap_info` backdrop
+  toggle already; the cursor/menus are map-path + uilists). Not a clean mechanical migration.
+- Creature-info `print_info` (monster/npc/character.cpp) — curses, but only as the A/B fallback for
+  the migrated `look_around` info pane; deletion is P5, not a new migration.
+
+Player-facing P3 is effectively complete (live_view was the last interactive straggler). Next: P4
+(overmap `draw_ascii` confirm — tile-overmap likely already covers it) and P5 (backend deletion,
+gated on the remaining dev/debug consumers above + toggle removal after eyeball sign-off).
 
 **How to migrate (follow existing Tier 2–9 pattern):** add an `xxx.rml` + `xxx.rcss` under
 `data/`, a `xxx_rmlui_enabled()` toggle (default true) like the others, build the model in a
