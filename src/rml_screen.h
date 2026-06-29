@@ -360,4 +360,10 @@ bool &scrollable_text_rmlui_enabled();
 // the toggle. Default OFF.
 bool &blood_test_rmlui_enabled();
 
+
+// game::cleanup_at_end() death/RIP screen RmlUi path (the post-death gravestone
+// art + survival stats + player name + last-words string_input_popup on top).
+// Default ON.
+bool &death_rip_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

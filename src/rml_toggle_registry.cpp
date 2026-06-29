@@ -62,6 +62,7 @@ const std::vector<rml_toggle> &rml_toggle_registry()
         { "sidebar_hud", &sidebar_hud_rmlui_enabled, true },
         { "minigames", &minigames_rmlui_enabled, false },
         { "editmap", &editmap_rmlui_enabled, true },
+        { "death_rip", &death_rip_rmlui_enabled, true },
     };
     return reg;
 }

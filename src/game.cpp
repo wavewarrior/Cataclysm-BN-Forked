@@ -1382,6 +1382,13 @@ static std::string generate_memorial_filename( const std::string &char_name )
     return memorial_file_path.str();
 }
 
+bool &death_rip_rmlui_enabled()
+{
+    // Default ON — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = true;
+    return enabled;
+}
+
 bool game::cleanup_at_end()
 {
     // Tier 7: tear down the sidebar HUD doc on leaving gameplay so it never lingers
@@ -1502,87 +1509,158 @@ bool game::cleanup_at_end()
 
         catacurses::window w_rip = catacurses::newwin( FULL_SCREEN_HEIGHT, FULL_SCREEN_WIDTH,
                                    point( iOffsetX, iOffsetY ) );
-        draw_border( w_rip );
-
         sfx::do_player_death_hurt( g->u, true );
         sfx::fade_audio_group( sfx::group::weather, 2000 );
         sfx::fade_audio_group( sfx::group::time_of_day, 2000 );
         sfx::fade_audio_group( sfx::group::context_themes, 2000 );
         sfx::fade_audio_group( sfx::group::fatigue, 2000 );
 
+        // Compute stats once — shared by both RmlUi and curses paths.
+        const time_duration rip_survived = calendar::turn - calendar::start_of_cataclysm;
+        const int rip_minutes = to_minutes<int>( rip_survived ) % 60;
+        const int rip_hours   = to_hours<int>( rip_survived ) % 24;
+        const int rip_days    = to_days<int>( rip_survived );
+        std::string sSurvived;
+        if( rip_days > 0 ) {
+            sSurvived = string_format( "%dd %dh %dm", rip_days, rip_hours, rip_minutes );
+        } else if( rip_hours > 0 ) {
+            sSurvived = string_format( "%dh %dm", rip_hours, rip_minutes );
+        } else {
+            sSurvived = string_format( "%dm", rip_minutes );
+        }
+        const int iTotalKills = get_kill_tracker().monster_kill_count();
+
+        // Build RmlUi art: spaces → &nbsp;, line breaks → <br/>, coloured chars
+        // → cata_text_to_rml spans, uncoloured → rml_escape.
+        Rml::String rip_art_rml;
         for( size_t iY = 0; iY < vRip.size(); ++iY ) {
-            size_t iX = 0;
-            const char *str = vRip[iY].data();
-            for( int slen = vRip[iY].size(); slen > 0; ) {
-                const uint32_t cTemp = UTF8_getch( &str, &slen );
-                if( cTemp != U' ' ) {
-                    nc_color ncColor = c_light_gray;
-
-                    if( cTemp == U'%' ) {
-                        ncColor = c_green;
-
-                    } else if( cTemp == U'_' || cTemp == U'|' ) {
-                        ncColor = c_white;
-
-                    } else if( cTemp == U'@' ) {
-                        ncColor = c_brown;
-
-                    } else if( cTemp == U'*' ) {
-                        ncColor = c_red;
+            if( iY > 0 ) {
+                rip_art_rml += "<br/>";
+            }
+            for( const char c : vRip[iY] ) {
+                if( c == ' ' ) {
+                    rip_art_rml += "&nbsp;";
+                } else {
+                    nc_color col = c_light_gray;
+                    if( c == '%' )                   { col = c_green; }
+                    else if( c == '_' || c == '|' )  { col = c_white; }
+                    else if( c == '@' )              { col = c_brown; }
+                    else if( c == '*' )              { col = c_red;   }
+                    if( col != c_light_gray ) {
+                        rip_art_rml += cata_text_to_rml( colorize( std::string( 1, c ), col ) );
+                    } else {
+                        rip_art_rml += rml_escape( std::string( 1, c ) );
                     }
-
-                    mvwputch( w_rip, point( iX + FULL_SCREEN_WIDTH / 2 - ( iMaxWidth / 2 ), iY + 1 ), ncColor,
-                              cTemp );
                 }
-                iX += mk_wcwidth( cTemp );
             }
         }
 
-        std::string sTemp;
+        struct rip_rml_t {
+            Rml::String art_rml;
+            Rml::String survived_rml;
+            Rml::String kills_rml;
+            Rml::String name_rml;
+            Rml::DataModelHandle handle;
+        };
+        auto rml_data = std::make_unique<rip_rml_t>( rip_rml_t{
+            .art_rml      = std::move( rip_art_rml ),
+            .survived_rml = cata_text_to_rml(
+                colorize( _( "Survived:" ), c_white ) + " " + colorize( sSurvived, c_white ) ),
+            .kills_rml    = cata_text_to_rml(
+                colorize( _( "Kills:" ), c_light_gray ) + " " +
+                colorize( std::to_string( iTotalKills ), c_magenta ) ),
+            .name_rml     = cata_text_to_rml(
+                colorize( _( "In memory of:" ), c_light_gray ) + "\n" +
+                colorize( u.name, c_white ) ),
+        } );
 
-        center_print( w_rip, iInfoLine++, c_white, _( "Survived:" ) );
+        rml_doc rml;
+        ui_adaptor ui;
+        ui.on_screen_resize( [&]( ui_adaptor &ui ) {
+            ui.position_from_window( w_rip );
+        } );
+        ui.mark_resize();
 
-        const time_duration survived = calendar::turn - calendar::start_of_cataclysm;
-        const int minutes = to_minutes<int>( survived ) % 60;
-        const int hours = to_hours<int>( survived ) % 24;
-        const int days = to_days<int>( survived );
+        ui.on_redraw( [&]( const ui_adaptor & ) {
+            if( rml ) {
+                return;
+            }
+            // ── curses fallback ────────────────────────────────────────────
+            draw_border( w_rip );
+            for( size_t iY = 0; iY < vRip.size(); ++iY ) {
+                size_t iX = 0;
+                const char *str = vRip[iY].data();
+                for( int slen = vRip[iY].size(); slen > 0; ) {
+                    const uint32_t cTemp = UTF8_getch( &str, &slen );
+                    if( cTemp != U' ' ) {
+                        nc_color ncColor = c_light_gray;
+                        if( cTemp == U'%' )                       { ncColor = c_green;  }
+                        else if( cTemp == U'_' || cTemp == U'|' ) { ncColor = c_white;  }
+                        else if( cTemp == U'@' )                  { ncColor = c_brown;  }
+                        else if( cTemp == U'*' )                  { ncColor = c_red;    }
+                        mvwputch( w_rip,
+                                  point( iX + FULL_SCREEN_WIDTH / 2 - ( iMaxWidth / 2 ), iY + 1 ),
+                                  ncColor, cTemp );
+                    }
+                    iX += mk_wcwidth( cTemp );
+                }
+            }
+            int iLine = iInfoLine;
+            center_print( w_rip, iLine++, c_white, _( "Survived:" ) );
+            center_print( w_rip, iLine++, c_white, sSurvived );
+            const std::string sKills = std::string( _( "Kills:" ) ) + " ";
+            mvwprintz( w_rip, point( FULL_SCREEN_WIDTH / 2 - 5, 1 + iLine++ ),
+                       c_light_gray, sKills );
+            wprintz( w_rip, c_magenta, "%d", iTotalKills );
+            int iNLine = iNameLine;
+            const std::string sInMemory = _( "In memory of:" );
+            mvwprintz( w_rip,
+                       point( FULL_SCREEN_WIDTH / 2 - utf8_width( sInMemory ) / 2, iNLine++ ),
+                       c_light_gray, sInMemory );
+            mvwprintz( w_rip,
+                       point( FULL_SCREEN_WIDTH / 2 - utf8_width( u.name ) / 2, iNLine++ ),
+                       c_white, u.name );
+            const std::string sLastWordsLabel = _( "Last Words:" );
+            mvwprintz( w_rip,
+                       point( FULL_SCREEN_WIDTH / 2 - utf8_width( sLastWordsLabel ) / 2, iNLine++ ),
+                       c_light_gray, sLastWordsLabel );
+            wnoutrefresh( w_rip );
+        } );
 
-        if( days > 0 ) {
-            sTemp = string_format( "%dd %dh %dm", days, hours, minutes );
-        } else if( hours > 0 ) {
-            sTemp = string_format( "%dh %dm", hours, minutes );
-        } else {
-            sTemp = string_format( "%dm", minutes );
+        input_context ctxt( "DEATH_SCREEN" );
+        rml.open( death_rip_rmlui_enabled(), "death_rip", ctxt,
+        [&]( Rml::DataModelConstructor &c ) {
+            c.Bind( "art_rml",      &rml_data->art_rml );
+            c.Bind( "survived_rml", &rml_data->survived_rml );
+            c.Bind( "kills_rml",    &rml_data->kills_rml );
+            c.Bind( "name_rml",     &rml_data->name_rml );
+            rml_data->handle = c.GetModelHandle();
+        } );
+        // Dirty all variables so RmlUi evaluates the pre-populated data on
+        // the first (and only) frame. Without this the eager-populate path is
+        // untested — bindings may not be read until dirtied.
+        if( rml ) {
+            rml_data->handle.DirtyAllVariables();
         }
 
-        center_print( w_rip, iInfoLine++, c_white, sTemp );
+        ui_manager::redraw();
 
-        const int iTotalKills = get_kill_tracker().monster_kill_count();
-
-        sTemp = _( "Kills:" );
-        mvwprintz( w_rip, point( FULL_SCREEN_WIDTH / 2 - 5, 1 + iInfoLine++ ), c_light_gray,
-                   ( sTemp + " " ) );
-        wprintz( w_rip, c_magenta, "%d", iTotalKills );
-
-        sTemp = _( "In memory of:" );
-        mvwprintz( w_rip, point( FULL_SCREEN_WIDTH / 2 - utf8_width( sTemp ) / 2, iNameLine++ ),
-                   c_light_gray,
-                   sTemp );
-
-        sTemp = u.name;
-        mvwprintz( w_rip, point( FULL_SCREEN_WIDTH / 2 - utf8_width( sTemp ) / 2, iNameLine++ ), c_white,
-                   sTemp );
-
-        sTemp = _( "Last Words:" );
-        mvwprintz( w_rip, point( FULL_SCREEN_WIDTH / 2 - utf8_width( sTemp ) / 2, iNameLine++ ),
-                   c_light_gray,
-                   sTemp );
-
-        int iStartX = FULL_SCREEN_WIDTH / 2 - ( ( iMaxWidth - 4 ) / 2 );
-        std::string sLastWords = string_input_popup()
-                                 .window( w_rip, point( iStartX, iNameLine ), iStartX + iMaxWidth - 4 - 1 )
-                                 .max_length( iMaxWidth - 4 - 1 )
-                                 .query_string();
+        // Last words: RmlUi uses standalone string_input_popup (its own doc);
+        // curses path embeds the popup into the rip window at the name position.
+        const std::string sLastWords = [&]() -> std::string {
+            if( rml ) {
+                return string_input_popup()
+                       .title( _( "Last Words" ) )
+                       .max_length( iMaxWidth - 4 - 1 )
+                       .query_string();
+            }
+            const int iStartX = FULL_SCREEN_WIDTH / 2 - ( ( iMaxWidth - 4 ) / 2 );
+            return string_input_popup()
+                   .window( w_rip, point( iStartX, iNameLine + 3 ),
+                            iStartX + iMaxWidth - 4 - 1 )
+                   .max_length( iMaxWidth - 4 - 1 )
+                   .query_string();
+        }();
         death_screen();
         const bool is_suicide = uquit == QUIT_SUICIDE;
         events().send<event_type::game_over>( is_suicide, sLastWords );

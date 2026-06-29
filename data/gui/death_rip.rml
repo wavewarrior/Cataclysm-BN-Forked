@@ -1,0 +1,27 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="death_rip.rcss"/>
+</head>
+<body data-model="death_rip">
+    <!-- Death / RIP screen (game::cleanup_at_end, QUIT_DIED / QUIT_SUICIDE).
+         Rendered once via ui_manager::redraw() before the last-words
+         string_input_popup appears on top.
+
+         art_rml      — pre-coloured ASCII gravestone art: spaces → &nbsp;,
+                        line breaks → <br/>, coloured chars → cata_text_to_rml spans.
+         survived_rml — coloured "Survived: <duration>" label.
+         kills_rml    — coloured "Kills: <N>" label.
+         name_rml     — "In memory of:<br/><player name>" (cata_text_to_rml). -->
+    <div class="panel rip-panel">
+        <div class="rip-art" data-rml="art_rml"></div>
+        <div class="rip-stats">
+            <div class="rip-stat" data-rml="survived_rml"></div>
+            <div class="rip-stat" data-rml="kills_rml"></div>
+        </div>
+        <div class="rip-memorial" data-rml="name_rml"></div>
+        <div class="rip-lastwords-prompt">— Last Words —</div>
+    </div>
+    <div id="crt-overlay" class="crt"></div>
+</body>
+</rml>
