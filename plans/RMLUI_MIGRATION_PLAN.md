@@ -2,8 +2,10 @@
 
 > **▶ NEXT SESSION: jump to the "★★★ RESUME HERE — Tier-10 §C ★★★" section at the END of this
 > file.** (2026-06-29) Core world-render (w_terrain) is fully de-cursed; the live work is now
-> **P3 — migrating category-A interactive screens** (`list_items` recommended first). The §C
-> survey/decision/P2 sections below are historical context.
+> **P3 — migrating category-A interactive screens.** `list_items` + `list_monsters` are DONE;
+> next recommended = the **look-around INFO pane** (unlocks the 3 creature-info files at once),
+> then `zones_manager` and `show_adm`. The §C survey/decision/P2 sections below are historical
+> context.
 
 ## STATUS (reviewed 2026-06-27)
 
@@ -3865,9 +3867,15 @@ it once you confirm `cata_tiles` covers that visual (terrain, `draw_critter_at`,
 The remaining 102 game.cpp curses calls are interactive screens rendering into their own
 *displayed* curses windows. These need real RmlUi documents, one screen per session. Targets
 (curses-call weight in game.cpp):
-- `list_items` family (`reset_item_list_state` + `list_items` + `print_items_info` +
-  `find_nearby_items`) — ~59. Self-contained, high-traffic. **Recommended first.**
-- `list_monsters` (+ `monster::print_info` in monster.cpp) — ~29.
+- ~~`list_items` family~~ **DONE 2026-06-29 (`7c30b7e2f1`)** — RmlUi render path added
+  (twin of list_monsters): `data/gui/list_items.{rml,rcss}` + `list_items_rmlui_enabled`
+  toggle (default on); curses `on_redraw` body retained as gated A/B fallback. Info pane
+  via `item_info_rml_lines`. Build + test build green (Metal). **Eyeball owed.** Note
+  `print_items_info` (the look-around tile-item pane, game.cpp:~8546) is a SEPARATE
+  render path shared with look-around — migrate it under the look-around INFO pane target,
+  NOT here. `find_nearby_items` is pure data (no curses), already fine.
+- `list_monsters` — already migrated (in-file twin used as the reference). `monster::print_info`
+  in monster.cpp still curses (look-around path).
 - look-around INFO pane: `print_all_tile_info` → `print_terrain_info` / `print_fields_info` /
   `print_trap_info` / `print_vehicle_info` / `print_graffiti_info` / `print_visibility_info`,
   plus the creature panes `monster.cpp`/`npc.cpp`/`character.cpp` `print_info`. Migrating this
