@@ -1,5 +1,10 @@
 # Full UI Migration to RmlUi — Master Plan
 
+> **▶ NEXT SESSION: jump to the "★★★ RESUME HERE — Tier-10 §C ★★★" section at the END of this
+> file.** (2026-06-29) Core world-render (w_terrain) is fully de-cursed; the live work is now
+> **P3 — migrating category-A interactive screens** (`list_items` recommended first). The §C
+> survey/decision/P2 sections below are historical context.
+
 ## STATUS (reviewed 2026-06-27)
 
 **≈95% done. NEARLY A HISTORICAL RECORD — only the backend-deletion tail is live, and it is
