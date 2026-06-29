@@ -4019,3 +4019,21 @@ plus docs commits.
 6. **P5-G** — dev tools: wish, catalua_console.
 7. **P5-H** — veh_interact / advanced_inv curses remnants.
 8. **P5-I** — backend cull + toggle layer (LAST).
+
+### P5-B progress (CURRENT SESSION)
+
+**Deleted curses fallback bodies in magic.cpp + magic_teleporter_list.cpp:**
+- `spellcasting_callback::refresh()` (magic.cpp ~1871–1889) — border + shortcut drawing removed.
+  Base class `uilist_callback::refresh() {}` no-op now inherited.
+- `spellcasting_callback::draw_spell_info()` (magic.cpp ~2150–2315) — orphaned curses info pane
+  renderer; only caller was `refresh()`. The four static helpers
+  (`enumerate_spell_data`, `enumerate_traits`, `casting_time_encumbered`,
+  `energy_cost_encumbered`) were NOT deleted — they are also called from `draw_rml`.
+- `draw_spell_info` private declaration removed from `spellcasting_callback` (line 1835).
+- `teleporter_callback::refresh()` (magic_teleporter_list.cpp ~172–191) — overmap chunk draw
+  + distance label removed. Base class no-op inherited. `draw_rml` kept intact.
+- Both `cataclysm-bn-tiles` + `cata_test-tiles` link green (37s incremental).
+
+**Next: P5-C** — dialogue_win curses impl: delete `dialogue_window::print_header` /
+`print_history` / `display_responses` / `clear_window_texts` / `cache_msg` /
+`refresh_response_display` bodies; keep `history_markup()` and data members the RmlUi path uses.
