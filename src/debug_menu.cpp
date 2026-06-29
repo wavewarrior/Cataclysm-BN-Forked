@@ -1906,21 +1906,9 @@ void debug()
         break;
 
         case DEBUG_SHOW_SOUND: {
-            const auto &sounds_to_draw = sounds::get_monster_sounds();
-
-            shared_ptr_fast<game::draw_callback_t> sound_cb = make_shared_fast<game::draw_callback_t>( [&]() {
-                const point_rel_ms offset {
-                    u.view_offset.xy() + point( POSX - u.bub_pos().x(), POSY - u.bub_pos().y() )
-                };
-                for( const auto &sound : sounds_to_draw.first ) {
-                    mvwputch( g->w_terrain, ( offset + sound.xy() ).raw(), c_yellow, '?' );
-                }
-                for( const auto &sound : sounds_to_draw.second ) {
-                    mvwputch( g->w_terrain, ( offset + sound.xy() ).raw(), c_red, '?' );
-                }
-            } );
-            g->add_draw_callback( sound_cb );
-
+            // TODO(tiles-rip-out): re-implement the monster-sound overlay ('?' markers)
+            // via the tiles overlay. The old curses w_terrain mvwputch markers were dead
+            // under tiles and have been removed.
             ui_manager::redraw();
             inp_mngr.wait_for_any_key();
         }

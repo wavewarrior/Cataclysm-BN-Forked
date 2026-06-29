@@ -1158,16 +1158,9 @@ std::optional<tripoint_bub_ms> choose_adjacent_highlight(
         return valid.back();
     }
 
-    shared_ptr_fast<game::draw_callback_t> hilite_cb;
-    if( !valid.empty() ) {
-        hilite_cb = make_shared_fast<game::draw_callback_t>( [&]() {
-            for( const tripoint_bub_ms &pos : valid ) {
-                here.drawsq( g->w_terrain, pos, drawsq_params().highlight( true ) );
-            }
-        } );
-        g->add_draw_callback( hilite_cb );
-    }
-
+    // TODO(tiles-rip-out): re-add the adjacent-tile highlight via the tiles cursor/
+    // highlight overlay. The old curses w_terrain drawsq highlight was dead under
+    // tiles and has been removed.
     const auto selection = choose_adjacent( message, allow_vertical );
     if( selection.has_value() && std::ranges::contains( valid, selection.value() ) ) {
         return selection;

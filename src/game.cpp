@@ -8183,12 +8183,9 @@ void game::pickup()
 
 void game::pickup( const tripoint_bub_ms &p )
 {
-    // Highlight target
-    shared_ptr_fast<game::draw_callback_t> hilite_cb = make_shared_fast<game::draw_callback_t>( [&]() {
-        m.drawsq( w_terrain, p, drawsq_params().highlight( true ) );
-    } );
-    add_draw_callback( hilite_cb );
-
+    // TODO(tiles-rip-out): re-add a pickup target highlight via the tiles cursor
+    // overlay (init_draw_cursor / init_draw_highlight). The old curses w_terrain
+    // drawsq highlight was dead under tiles and has been removed.
     if( get_option<bool>( "NEW_PICKUP_MENU" ) ) {
         std::vector<pickup::pick_drop_selection> pickup_list = game_menus::inv::pickup_from_tile( g->u, p );
         g->u.assign_activity( std::make_unique<player_activity>( std::make_unique<pickup_activity_actor>
@@ -9893,7 +9890,8 @@ std::vector<map_item_stack> game::find_nearby_items( int iRadius )
     return ret;
 }
 
-void draw_trail( const tripoint_bub_ms &start, const tripoint_bub_ms &end, const bool bDrawX )
+void draw_trail( const tripoint_bub_ms &start, const tripoint_bub_ms &end,
+                 const bool /* bDrawX */ )
 {
     std::vector<tripoint_bub_ms> pts;
     auto center = g->u.bub_pos() + g->u.view_offset;
@@ -9905,22 +9903,10 @@ void draw_trail( const tripoint_bub_ms &start, const tripoint_bub_ms &end, const
         pts.emplace_back( start );
     }
 
+    // The tiles trajectory is drawn by game::draw_line (tilecontext->init_draw_line).
+    // TODO(tiles-rip-out): re-add the target/z-direction end marker (X/^/v) via the
+    // tiles overlay — the old curses w_terrain mvwputch marker was dead and is removed.
     g->draw_line( end, center, pts );
-    if( bDrawX ) {
-        char sym = 'X';
-        if( end.z() > center.z() ) {
-            sym = '^';
-        } else if( end.z() < center.z() ) {
-            sym = 'v';
-        }
-        if( pts.empty() ) {
-            mvwputch( g->w_terrain, point( POSX, POSY ), c_white, sym );
-        } else {
-            mvwputch( g->w_terrain, pts.back().xy().raw() - g->u.view_offset.xy().raw() +
-                      point( POSX - g->u.bub_pos().x(), POSY - g->u.bub_pos().y() ),
-                      c_white, sym );
-        }
-    }
 }
 
 void game::draw_trail_to_square( const tripoint_rel_ms &t, bool bDrawX )

@@ -1648,14 +1648,9 @@ void place_construction( const construction_group_str_id &group )
         }
     }
 
-    shared_ptr_fast<game::draw_callback_t> draw_valid = make_shared_fast<game::draw_callback_t>( [&]() {
-        map &here = get_map();
-        for( auto &elem : valid ) {
-            here.drawsq( g->w_terrain, elem.first, drawsq_params().highlight( true ).show_items( true ) );
-        }
-    } );
-    g->add_draw_callback( draw_valid );
-
+    // TODO(tiles-rip-out): re-add the valid-construction-tile highlight via the tiles
+    // cursor/highlight overlay. The old curses w_terrain drawsq highlight was dead
+    // under tiles and has been removed.
     const std::optional<tripoint_bub_ms> pnt_ = choose_adjacent( _( "Construct where?" ) );
     if( !pnt_ ) {
         return;
