@@ -4392,19 +4392,6 @@ void game::draw_ter( const tripoint_bub_ms &center, const bool looking,
         tilecontext->set_subtile_offset( main_camera_.sub_x(), main_camera_.sub_y() );
     }
 
-    m.draw( w_terrain, center );
-
-
-    if( !destination_preview.empty() && u.view_offset.z() == 0 ) {
-        // Draw auto-move preview trail
-        const tripoint_bub_ms &final_destination = destination_preview.back();
-        auto line_center = u.bub_pos() + u.view_offset;
-        draw_line( final_destination, line_center, destination_preview, true );
-        mvwputch( w_terrain, final_destination.xy().raw() - u.view_offset.xy().raw() + point(
-                      POSX - u.bub_pos().x(),
-                      POSY - u.bub_pos().y() ), c_white, 'X' );
-    }
-
     // Place the cursor over the player as is expected by screen readers.
     wmove( w_terrain, -center.xy().raw() + g->u.bub_pos().xy().raw() + point( POSX, POSY ) );
 }
