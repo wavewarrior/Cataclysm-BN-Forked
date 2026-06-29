@@ -1,4 +1,7 @@
 #include "character_preview.h"
+
+#include <RmlUi/Core.h>
+
 #include "bionics.h"
 #include "color.h"
 #include "hsv_color.h"
@@ -6,7 +9,10 @@
 #include "messages.h"
 #include "type_id.h"
 #include "character.h"
+#include "path_info.h"
 #include "profession.h"
+#include "rml_screen.h"
+#include "rml_util.h"
 #include "sdltiles.h"
 #include "output.h"
 #include "cata_tiles.h"
@@ -15,6 +21,87 @@
 #include "avatar.h"
 #include "overlay_ordering.h"
 #include "effect.h"
+#include "lighting/rmlui_layer.h"
+
+namespace
+{
+// ── RmlUi render path (P5) ───────────────────────────────────────────────────
+// Non-modal, passive backdrop replacing the curses draw_border frame: a bordered
+// box with a transparent centre (so the GPU character sprite shows through) and a
+// "CHARACTER PREVIEW" title strip, positioned at the preview rect each redraw.
+// Uses the rmlui_layer doc lifecycle directly (like live_view), not rml_doc.
+struct cp_rml_model {
+    Rml::String title_rml;
+    Rml::DataModelHandle handle;
+};
+std::unique_ptr<cp_rml_model> g_cp_data;
+Rml::ElementDocument *g_cp_doc = nullptr;
+
+void cp_rml_open()
+{
+    if( g_cp_doc != nullptr ) {
+        return;  // already open (idempotent)
+    }
+    if( !character_preview_rmlui_enabled() || !rmlui_layer::ready() ) {
+        return;
+    }
+    Rml::Context *ctx = rmlui_layer::context();
+    if( ctx == nullptr ) {
+        return;
+    }
+    Rml::DataModelConstructor c = ctx->CreateDataModel( "character_preview" );
+    if( !c ) {
+        return;
+    }
+    g_cp_data = std::make_unique<cp_rml_model>();
+    c.Bind( "title_rml", &g_cp_data->title_rml );
+    g_cp_data->title_rml = cata_text_to_rml( colorize( _( "CHARACTER PREVIEW" ), BORDER_COLOR ) );
+    g_cp_data->handle = c.GetModelHandle();
+    Rml::ElementDocument *doc =
+        rmlui_layer::open_document( PATH_INFO::datadir() + "gui/character_preview.rml", true );
+    if( doc == nullptr ) {
+        ctx->RemoveDataModel( "character_preview" );
+        g_cp_data.reset();
+        return;
+    }
+    g_cp_doc = doc;
+}
+
+void cp_rml_close()
+{
+    if( g_cp_doc == nullptr ) {
+        return;
+    }
+    rmlui_layer::close_document( g_cp_doc );
+    if( Rml::Context *ctx = rmlui_layer::context() ) {
+        ctx->RemoveDataModel( "character_preview" );
+    }
+    g_cp_doc = nullptr;
+    g_cp_data.reset();
+}
+
+void cp_rml_position( const point &p, const int ncols_width, const int nlines_width )
+{
+    if( g_cp_doc == nullptr || TERMX <= 0 || TERMY <= 0 ) {
+        return;
+    }
+    Rml::Element *el = g_cp_doc->GetElementById( "cp-box" );
+    if( el == nullptr ) {
+        return;
+    }
+    el->SetProperty( "left", string_format( "%.4f%%", 100.0f * p.x / TERMX ) );
+    el->SetProperty( "top", string_format( "%.4f%%", 100.0f * p.y / TERMY ) );
+    el->SetProperty( "width", string_format( "%.4f%%", 100.0f * ncols_width / TERMX ) );
+    el->SetProperty( "height", string_format( "%.4f%%", 100.0f * nlines_width / TERMY ) );
+}
+} // namespace
+
+bool &character_preview_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = true;
+    return enabled;
+}
 
 auto termx_to_pixel_value() -> int
 {
@@ -338,15 +425,29 @@ void character_preview_window::toggle_clothes()
 
 void character_preview_window::display() const
 {
+    const bool too_small = TERMX - ncols_width < hide_below_ncols;
+
+    // RmlUi backdrop owns the frame chrome when enabled+ready; otherwise the
+    // curses draw_border is the A/B fallback. The character itself is always the
+    // GPU sprite below.
+    cp_rml_open();
+    if( g_cp_doc != nullptr ) {
+        g_cp_doc->SetProperty( "visibility", too_small ? "hidden" : "visible" );
+    }
+
     // If device width is too small - ignore display
-    if( TERMX - ncols_width < hide_below_ncols ) {
+    if( too_small ) {
         return;
     }
 
-    // Drawing UI across character tile
-    werase( w_preview );
-    draw_border( w_preview, BORDER_COLOR, _( "CHARACTER PREVIEW" ), BORDER_COLOR );
-    wnoutrefresh( w_preview );
+    if( g_cp_doc != nullptr ) {
+        cp_rml_position( pos, ncols_width, nlines_width );
+    } else {
+        // Drawing UI across character tile (curses fallback)
+        werase( w_preview );
+        draw_border( w_preview, BORDER_COLOR, _( "CHARACTER PREVIEW" ), BORDER_COLOR );
+        wnoutrefresh( w_preview );
+    }
 
     // Drawing character itself
     const auto pos = calc_character_pos();
@@ -357,6 +458,7 @@ void character_preview_window::display() const
 
 void character_preview_window::clear() const
 {
+    cp_rml_close();
     Messages::clear_messages();
     tilecontext->set_draw_scale( DEFAULT_TILESET_ZOOM );
 }
