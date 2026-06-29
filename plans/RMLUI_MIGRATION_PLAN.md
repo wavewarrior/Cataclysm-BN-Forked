@@ -3797,3 +3797,34 @@ overlay — confirm per-call + eyeball, and most ride along with the category-A 
 
 Next: fold these into P3 category-A migration (look_around first — owns 8188/8298/8300 + Creature::draw),
 or a focused "w_terrain highlight overlay" sweep with one click-to-examine/target eyeball.
+
+### P2 — w_terrain SWEEP COMPLETE (2026-06-29, user decision: delete vestigial, track reimpl)
+
+The w_terrain curses cell buffer is no longer written by anything except editmap. All
+terrain/creature/cursor/highlight/marker rendering goes through the tile path.
+
+- `df4710c43d` — collapsed `draw_look_around_cursor` to the tiles `draw_cursor(lp)` path
+  (dead !tiles ASCII branch removed).
+- `4548df6553` — removed vestigial highlight/marker callbacks with NO tiles equivalent:
+  pickup target highlight, `draw_trail` end marker (X/^/v), examine/peek (action.cpp),
+  construction placement, DEBUG_SHOW_SOUND markers. Each left a `TODO(tiles-rip-out)`.
+
+**FOLLOW-UP (tracked, not yet done) — re-add these indicators via the tiles cursor/highlight
+overlay (`init_draw_cursor` / `init_draw_highlight`), then they show in tiles again:**
+pickup target · examine/peek adjacent-tile · construction valid-placement · trajectory
+end + z-direction marker · monster-sound debug overlay. Search `TODO(tiles-rip-out)`.
+
+**ONLY remaining w_terrain writers: `editmap.cpp:260` (cursor mvwputch) + `:534` (drawsq
+highlight)** — editmap is bespoke/non-mechanical; handle during an editmap-specific pass.
+`map::drawsq` and `Creature::draw` are now reached ONLY from editmap → both become deletable
+once editmap is migrated/de-cursed.
+
+**game.cpp curses 183 → 102.** The remaining 102 are NOT w_terrain — they are category-A
+interactive screens that render into their own (displayed) curses windows and need real
+RmlUi migration (P3), not deletion: `list_items`/`reset_item_list_state`, `list_monsters`
+(+ `monster::print_info`), `zones_manager`, and the look-around INFO pane
+(`print_all_tile_info` → `print_terrain_info`/`print_*_info`, which also drives the
+`monster.cpp`/`npc.cpp`/`character.cpp` `print_info` panes). Plus `panels.cpp::show_adm`.
+
+NEXT (P3): migrate one category-A screen — recommend `list_items`/`list_monsters` (self-
+contained, high-traffic) or the look-around info pane (unlocks monster/npc/character panes).
