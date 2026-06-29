@@ -3894,8 +3894,12 @@ straggler set:
 - ~~`live_view`~~ **DONE 2026-06-29 (`89f2bd36b3`)** — the SDL mouse-hover tile tooltip, a NON-modal
   passive overlay (rmlui_layer doc lifecycle, not rml_doc). Fed by the already-migrated
   `print_all_tile_info_text`. `data/gui/live_view.{rml,rcss}` + `live_view_rmlui_enabled`. **Eyeball owed.**
-- `scent_map::draw` (`src/scent_map.cpp`) — DEBUG scent overlay (`debug_scent`); low priority, dev-only.
-- `character_preview` — the newcharacter/portrait preview widget; check whether already covered.
+- ~~`scent_map::draw`~~ **DELETED 2026-06-29 (`085d0649ee`)** — was DEAD (zero callers; debug scent goes
+  through `display_toggle_overlay`, a GPU overlay). Removed def + decl + orphaned `sev()` + color/cursesdef includes.
+- `character_preview` — NOT a text screen: `display()` renders the avatar via the GPU sprite path
+  (`tilecontext->...display_avatar_preview_with_overlays`); the only curses is a single `draw_border`
+  + "CHARACTER PREVIEW" title around it. Map/sprite-path class → dies with the backend `draw_border` cut
+  (or a trivial rml border later). Not worth a bespoke migration now.
 - `editmap` (dev map editor) — explicitly NON-mechanical / deferred (has an `editmap_info` backdrop
   toggle already; the cursor/menus are map-path + uilists). Not a clean mechanical migration.
 - Creature-info `print_info` (monster/npc/character.cpp) — curses, but only as the A/B fallback for
