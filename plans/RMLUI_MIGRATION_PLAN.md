@@ -3916,8 +3916,15 @@ Player-facing P3 is effectively complete (live_view was the last interactive str
 - `draw_ascii_lines` (sdl_font.cpp) is the backend box-drawing glyph routine for the generic cell
   renderer — P5, not a map path.
 
-**Remaining for P5 (backend deletion), gated on eyeball sign-off + dev consumers:** editmap NSA
-(`uber_draw_ter`/`editmap_hilight::draw`), `character_preview` border, the generic curses cell/glyph
+**editmap NSA de-cursed: DONE 2026-06-29 (`1a926da72c`, −464).** `uber_draw_ter` (dead) +
+`editmap_hilight::draw` (dead mvwputch) deleted; `draw_main_ui_overlay`'s dead w_terrain writes removed
+(drawsq's one live effect — `draw_highlight` when no critter — preserved as a direct GPU call). This
+orphaned **`map::drawsq` + `Creature::draw`** (editmap was their last caller) → both deleted, plus the
+chain they alone fed (`map::draw_maptile`/`draw_from_above`, file-local `has_memory_at`/`get_memory_at`).
+A big curses-cell-renderer chunk is now gone.
+
+**Remaining for P5 (backend deletion), gated on eyeball sign-off + dev consumers:** `character_preview`
+border, the generic curses cell/glyph
 backend (`output.cpp` primitives, `cursesport`, `sdl_curses_draw` non-terrain `draw_window`, `sdl_font`/
 `Font::OutputChar`/`draw_ascii_lines`), neutralizing the `use_tiles` option, and removing the per-screen
 `*_rmlui_enabled()` toggle layer + retained curses A/B fallback bodies after the daily-drive bake.
