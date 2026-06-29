@@ -1,0 +1,31 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="panel_adm.rcss"/>
+</head>
+<body data-model="panel_adm">
+    <!-- P3 track-A: the panel/sidebar manager (panel_manager::show_adm, the `}`
+         SIDEBAR OPTIONS menu). A centered modal with a title and three columns:
+         (0) the renderable-panel list — toggle on/off (white/dark-gray), reorder
+         via swap-drag (the source row jumps to the cursor and turns yellow);
+         (1) a static help/keys column; (2) the layout list (current layout in
+         light_blue). 2D cursor (column + row): the active row in the active
+         column gets the shared accent highlight (no `>>` glyph). Render-only: the
+         keyboard owns nav / toggle / move / layout-switch. Per-segment colour
+         baked via cata_text_to_rml. -->
+    <div class="panel adm-panel">
+        <div class="adm-title" data-rml="title_rml"></div>
+        <div class="adm-cols">
+            <div class="adm-col0 scroll-pane">
+                <div class="adm-row" data-for="p : panels" data-class-selected="p.selected"
+                     data-rml="p.name_rml"></div>
+            </div>
+            <div class="adm-col1" data-rml="col1_rml"></div>
+            <div class="adm-col2 scroll-pane">
+                <div class="adm-row" data-for="l : layouts" data-class-selected="l.selected"
+                     data-rml="l.name_rml"></div>
+            </div>
+        </div>
+    </div>
+</body>
+</rml>

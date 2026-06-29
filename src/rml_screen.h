@@ -278,6 +278,15 @@ bool &list_items_rmlui_enabled();
 // Default OFF.
 bool &zones_manager_rmlui_enabled();
 
+// panel_manager::show_adm RmlUi render path (the `}` SIDEBAR OPTIONS menu). A
+// centered modal: a title, then three columns — the renderable-panel list (toggle
+// on/off, reorder via swap-drag, the source row highlighted yellow during a
+// move), a help/keys column, and the layout list (current layout in light_blue).
+// 2D cursor (column + row): the active row in the active column gets the shared
+// accent highlight. Render-only (keyboard owns nav / toggle / move / layout-switch).
+// Default OFF.
+bool &panel_adm_rmlui_enabled();
+
 // game::look_around RmlUi render path (the examine/look-around info pane: §8.1
 // track-A creature-info). Render-only doc fed by print_all_tile_info_text() (the
 // parallel tile-readout producer; creature section reuses Creature::print_info_text()):

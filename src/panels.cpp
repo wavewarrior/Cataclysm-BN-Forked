@@ -2167,6 +2167,60 @@ void panel_manager::deserialize( JsonIn &jsin )
     jsin.end_array();
 }
 
+// ---- show_adm RmlUi render path (P3 track-A) -------------------------------
+// The `}` SIDEBAR OPTIONS menu. Render-only modal doc: the keyboard owns all
+// nav / toggle / move / layout-switch; the model is synced each frame. Three
+// columns (panel list / help / layouts) with a 2D cursor; the swap-drag reorder
+// is reproduced by emitting the panel column in display order (the source row
+// jumps to the cursor, yellow).
+namespace
+{
+struct adm_rml_panel {
+    Rml::String name_rml;
+    bool selected = false;
+    bool is_source = false;
+};
+struct adm_rml_layout {
+    Rml::String name_rml;
+    bool selected = false;
+};
+struct adm_rml_data {
+    Rml::String title_rml;
+    Rml::Vector<adm_rml_panel> panels;
+    Rml::String col1_rml;
+    Rml::Vector<adm_rml_layout> layouts;
+    Rml::DataModelHandle handle;
+};
+
+bool g_panel_adm_types_registered = false;
+
+void register_panel_adm_rml_types( Rml::DataModelConstructor &c )
+{
+    // RegisterStruct/Array are context-global and persist past RemoveDataModel —
+    // guard so a reopen doesn't double-register (uilist-proven pattern).
+    if( g_panel_adm_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<adm_rml_panel> ph = c.RegisterStruct<adm_rml_panel>();
+    ph.RegisterMember( "name_rml", &adm_rml_panel::name_rml );
+    ph.RegisterMember( "selected", &adm_rml_panel::selected );
+    ph.RegisterMember( "is_source", &adm_rml_panel::is_source );
+    c.RegisterArray<Rml::Vector<adm_rml_panel>>();
+    Rml::StructHandle<adm_rml_layout> lh = c.RegisterStruct<adm_rml_layout>();
+    lh.RegisterMember( "name_rml", &adm_rml_layout::name_rml );
+    lh.RegisterMember( "selected", &adm_rml_layout::selected );
+    c.RegisterArray<Rml::Vector<adm_rml_layout>>();
+    g_panel_adm_types_registered = true;
+}
+} // namespace
+
+bool &panel_adm_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = true;
+    return enabled;
+}
+
 void panel_manager::show_adm()
 {
     input_context ctxt( "PANEL_MGMT" );
@@ -2211,7 +2265,111 @@ void panel_manager::show_adm()
     } );
     ui.mark_resize();
 
+    // ---- RmlUi render path (F.3 rml_doc harness) ----------------------------
+    // `rml_data` before `rml` so the doc tears down while the model is alive. The
+    // doc is rebuilt each frame from the live cursor + layout state; the keyboard
+    // owns all editing.
+    std::unique_ptr<adm_rml_data> rml_data;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml || !rml_data ) {
+            return;
+        }
+        adm_rml_data &d = *rml_data;
+        auto &panels = layouts[current_layout_id];
+
+        d.title_rml = cata_text_to_rml( colorize( _( "SIDEBAR OPTIONS" ), c_white ) );
+
+        // Col 0: renderable panels in display order. During a swap-drag the source
+        // panel jumps to the cursor row (yellow) and the others shift ±1 to open
+        // the insertion gap — exactly the curses offset logic, applied to the
+        // emit order instead of a y-coordinate.
+        struct disp_row {
+            int row = 0;
+            size_t index = 0;
+            bool is_source = false;
+        };
+        std::vector<disp_row> ordered;
+        for( const std::pair<const size_t, size_t> &ri : row_indices ) {
+            const size_t r = ri.first;
+            const size_t idx = ri.second;
+            if( swapping && idx == source_index ) {
+                ordered.push_back( disp_row{ static_cast<int>( current_row ), idx, true } );
+                continue;
+            }
+            int offset = 0;
+            if( swapping ) {
+                if( current_row > source_row && r > source_row && r <= current_row ) {
+                    offset = -1;
+                } else if( current_row < source_row && r < source_row && r >= current_row ) {
+                    offset = 1;
+                }
+            }
+            ordered.push_back( disp_row{ static_cast<int>( r ) + offset, idx, false } );
+        }
+        std::sort( ordered.begin(), ordered.end(),
+        []( const disp_row & a, const disp_row & b ) {
+            return a.row < b.row;
+        } );
+        d.panels.clear();
+        for( const disp_row &dr : ordered ) {
+            adm_rml_panel row;
+            const nc_color col = dr.is_source ? c_yellow
+                                 : ( panels[dr.index].toggle ? c_white : c_dark_gray );
+            row.name_rml = cata_text_to_rml( colorize( _( panels[dr.index].get_name() ), col ) );
+            row.selected = current_col == 0 && dr.row == static_cast<int>( current_row );
+            row.is_source = dr.is_source;
+            d.panels.push_back( std::move( row ) );
+        }
+
+        // Col 1: the static help/keys column (live keybind descriptions).
+        const int col_width = column_widths[1] - 4;
+        std::string h;
+        h += colorize( trunc_ellipse( ctxt.get_desc( "TOGGLE_PANEL" ), col_width ) + ":",
+                       c_light_green ) + "\n";
+        h += colorize( _( "Toggle panels on/off" ), c_white ) + "\n";
+        h += colorize( trunc_ellipse( ctxt.get_desc( "MOVE_PANEL" ), col_width ) + ":",
+                       c_light_green ) + "\n";
+        h += colorize( _( "Change display order" ), c_white ) + "\n";
+        h += colorize( trunc_ellipse( ctxt.get_desc( "QUIT" ), col_width ) + ":",
+                       c_light_green ) + "\n";
+        h += colorize( _( "Exit" ), c_white );
+        d.col1_rml = cata_text_to_rml( h );
+
+        // Col 2: the layout list (current layout in light_blue).
+        d.layouts.clear();
+        size_t li = 0;
+        for( const auto &layout : layouts ) {
+            adm_rml_layout row;
+            const nc_color c = current_layout_id == layout.first ? c_light_blue : c_white;
+            row.name_rml = cata_text_to_rml( colorize( _( layout.first ), c ) );
+            row.selected = current_col == 2 && current_row == li;
+            d.layouts.push_back( std::move( row ) );
+            ++li;
+        }
+
+        d.handle.DirtyVariable( "title_rml" );
+        d.handle.DirtyVariable( "panels" );
+        d.handle.DirtyVariable( "col1_rml" );
+        d.handle.DirtyVariable( "layouts" );
+    };
+    rml.open( panel_adm_rmlui_enabled(), "panel_adm", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        rml_data = std::make_unique<adm_rml_data>();
+        register_panel_adm_rml_types( c );
+        c.Bind( "title_rml", &rml_data->title_rml );
+        c.Bind( "panels", &rml_data->panels );
+        c.Bind( "col1_rml", &rml_data->col1_rml );
+        c.Bind( "layouts", &rml_data->layouts );
+        rml_data->handle = c.GetModelHandle();
+    } );
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        // RmlUi path owns the modal — sync the model and skip the curses draw.
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         auto &panels = layouts[current_layout_id];
 
         werase( w );

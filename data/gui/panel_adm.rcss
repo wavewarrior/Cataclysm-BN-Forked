@@ -1,0 +1,80 @@
+/* Layout for the panel/sidebar manager (P3 track-A: panel_manager::show_adm).
+   Palette/border/scrollbar/.scroll-pane come from theme.rcss (linked first in
+   panel_adm.rml); this file owns only the screen's own layout. Lengths in dp.
+
+   A centered modal (the curses window was 75 cols, centered): a title bar over a
+   three-column row — the panel list, a help/keys column, and the layout list.
+   Column flex weights mirror the curses column_widths {17, 37, 17}; the two
+   inter-column borders reproduce the mvwvline dividers. Rows are plain blocks;
+   the help column honours its baked <br/> line breaks (white-space: pre-wrap).
+   Per-segment colour is baked into the bound spans via cata_text_to_rml, so this
+   file only positions. The active row in the active column gets the shared accent
+   highlight. */
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.adm-panel {
+    display: flex;
+    flex-direction: column;
+    width: 80%;
+    max-width: 760dp;
+    max-height: 90%;
+    background-color: {{bg}};
+    border: 1dp {{bg4}};
+    padding: 6dp;
+}
+
+.adm-title {
+    flex: 0 0 auto;
+    color: {{fg}};
+    text-align: center;
+    border-bottom: 1dp {{bg4}};
+    padding-bottom: 3dp;
+    margin-bottom: 3dp;
+    white-space: nowrap;
+}
+
+.adm-cols {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    min-height: 0;
+}
+
+/* Column flex weights mirror the curses column_widths {17, 37, 17}. */
+.adm-col0 {
+    flex: 17 1 0;
+    min-width: 0;
+    padding-right: 4dp;
+    border-right: 1dp {{bg4}};
+}
+
+.adm-col1 {
+    flex: 37 1 0;
+    min-width: 0;
+    padding: 0 6dp;
+    border-right: 1dp {{bg4}};
+    white-space: pre-wrap;
+}
+
+.adm-col2 {
+    flex: 17 1 0;
+    min-width: 0;
+    padding-left: 6dp;
+}
+
+.adm-row {
+    display: block;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.adm-row.selected {
+    background-color: {{yellow}};
+    color: {{bg-hard}};
+}
