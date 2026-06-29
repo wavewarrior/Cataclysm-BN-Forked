@@ -29,6 +29,7 @@ const std::vector<rml_toggle> &rml_toggle_registry()
         { "gamemode_defense", &gamemode_defense_rmlui_enabled, false },
         { "list_monsters", &list_monsters_rmlui_enabled, false },
         { "list_items", &list_items_rmlui_enabled, false },
+        { "zones_manager", &zones_manager_rmlui_enabled, false },
         { "look_around", &look_around_rmlui_enabled, false },
         { "loading", &loading_rmlui_enabled, false },
         { "inventory", &inventory_rmlui_enabled, false },

@@ -1,0 +1,39 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="zones_manager.rcss"/>
+</head>
+<body data-model="zones_manager">
+    <!-- P3 track-A: the zones manager (game::zones_manager, the `Y` screen). A
+         right-docked panel mirroring list_items: a header ("Zones manager"), a
+         scrolling list of nearby (or all) zones — each row a coloured name, type,
+         distance/direction cluster and a vehicle marker, the active row
+         recoloured — the active zone's options block (key→value descriptions),
+         and a multi-line shortcut footer whose <O> overlay / <G> submap-grid
+         tokens are live-coloured by state. Render-only: the keyboard owns
+         add/remove/enable/disable/move/edit and the overlay toggles; the map
+         cursor + zone overlay stay on the map path. Synced each frame from
+         zones/active_index; hidden during the nested point-selection look_around
+         (the curses `show` gate). Per-segment colour baked via cata_text_to_rml. -->
+    <div class="panel zm-panel">
+        <div class="zm-header" data-rml="header_rml"></div>
+        <div id="zm-list" class="zm-list scroll-pane">
+            <div data-if="empty" class="zm-empty" data-rml="empty_rml"></div>
+            <div class="zm-row" data-for="r : rows" data-class-selected="r.selected">
+                <span class="zm-name" data-rml="r.name_rml"></span>
+                <span class="zm-type" data-rml="r.type_rml"></span>
+                <span class="zm-dist" data-rml="r.dist_rml"></span>
+                <span class="zm-veh" data-rml="r.veh_rml"></span>
+            </div>
+        </div>
+        <div class="zm-options" data-if="has_options">
+            <div class="zm-options-title" data-rml="options_title_rml"></div>
+            <div class="zm-opt" data-for="o : options">
+                <span class="zm-opt-key" data-rml="o.key_rml"></span>
+                <span class="zm-opt-val" data-rml="o.val_rml"></span>
+            </div>
+        </div>
+        <div class="zm-footer" data-rml="footer_rml"></div>
+    </div>
+</body>
+</rml>

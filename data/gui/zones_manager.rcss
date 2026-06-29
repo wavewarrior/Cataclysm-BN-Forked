@@ -1,0 +1,127 @@
+/* Layout for the zones manager (P3 track-A: game::zones_manager). Mirrors
+   list_items.rcss. Palette/border/scrollbar/.scroll-pane come from theme.rcss
+   (linked first in zones_manager.rml); this file owns only the screen's own
+   layout. Lengths in dp.
+
+   A right-docked panel (the curses screen sat top/bottom-right, width ~45 cols):
+   a header (Zones manager), a scrolling zone list, the active zone's options
+   block, and a multi-line shortcut footer. Zone rows are flex
+   (name | type | right-aligned distance | vehicle marker); the options block is
+   a titled list of key→value pairs. List is a .scroll-pane block container
+   (RmlUi divs default to inline — see the theme.rcss gotcha). Per-segment colour
+   is baked into the bound spans via cata_text_to_rml, so this file only
+   positions. The selected row gets the shared accent highlight. */
+body {
+    display: flex;
+    justify-content: flex-end;
+    align-items: stretch;
+    width: 100%;
+    height: 100%;
+}
+
+.zm-panel {
+    width: 34%;
+    max-width: 520dp;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.zm-header {
+    flex: 0 0 auto;
+    color: {{fg}};
+    border-bottom: 1dp {{bg4}};
+    padding-bottom: 2dp;
+    margin-bottom: 2dp;
+    white-space: nowrap;
+}
+
+/* The scrolling zone list. Takes the larger share of the panel. */
+.zm-list {
+    flex: 1 1 0;
+    min-height: 0;
+}
+
+.zm-empty {
+    display: block;
+    color: {{fg}};
+    padding: 4dp 2dp;
+}
+
+.zm-row {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    white-space: nowrap;
+}
+
+.zm-row.selected {
+    background-color: {{yellow}};
+    color: {{bg-hard}};
+}
+
+.zm-name {
+    display: block;
+    flex: 1;
+    min-width: 0;
+    text-overflow: ellipsis;
+}
+
+.zm-type {
+    display: block;
+    flex: 0 0 auto;
+    padding-left: 6dp;
+    white-space: nowrap;
+}
+
+.zm-dist {
+    display: block;
+    flex: 0 0 auto;
+    padding-left: 6dp;
+    white-space: nowrap;
+}
+
+.zm-veh {
+    display: block;
+    flex: 0 0 auto;
+    padding-left: 4dp;
+    white-space: nowrap;
+}
+
+/* The active zone's options block (key→value descriptions). */
+.zm-options {
+    flex: 0 0 auto;
+    border-top: 1dp {{bg4}};
+    padding-top: 2dp;
+    margin-top: 2dp;
+}
+
+.zm-options-title {
+    display: block;
+    white-space: nowrap;
+}
+
+.zm-opt {
+    display: flex;
+    flex-direction: row;
+    white-space: nowrap;
+}
+
+.zm-opt-key {
+    display: block;
+    flex: 0 0 40%;
+}
+
+.zm-opt-val {
+    display: block;
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.zm-footer {
+    flex: 0 0 auto;
+    border-top: 1dp {{bg4}};
+    padding-top: 2dp;
+    margin-top: 2dp;
+    white-space: nowrap;
+}

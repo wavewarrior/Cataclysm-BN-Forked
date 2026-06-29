@@ -267,6 +267,17 @@ bool &list_monsters_rmlui_enabled();
 // curses calcStartPos windowing. Default OFF.
 bool &list_items_rmlui_enabled();
 
+// game::zones_manager RmlUi render path (the `Y` zones screen). A right-docked
+// panel mirroring list_items: header ("Zones manager"), a scrolling zone list
+// (name / type / distance-direction / vehicle marker, the active row recoloured),
+// the active zone's options block (key→value descriptions), and a multi-line
+// shortcut footer (the <O> overlay / <G> submap-grid toggles live-coloured by
+// state). Render-only (keyboard owns add/remove/enable/move/edit/overlay; the map
+// cursor + zone overlay stay on the map path); synced each frame, hidden during
+// the nested query_position look_around (mirrors the curses `show` gate).
+// Default OFF.
+bool &zones_manager_rmlui_enabled();
+
 // game::look_around RmlUi render path (the examine/look-around info pane: §8.1
 // track-A creature-info). Render-only doc fed by print_all_tile_info_text() (the
 // parallel tile-readout producer; creature section reuses Creature::print_info_text()):

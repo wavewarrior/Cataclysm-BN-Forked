@@ -8907,6 +8907,69 @@ static void zones_manager_draw_borders( const catacurses::window &w_border,
     wnoutrefresh( w_info_border );
 }
 
+// ---- zones_manager RmlUi render path (P3 track-A) --------------------------
+// The zones manager (`Y` screen). Render-only doc, sibling of list_items: the
+// keyboard owns add/remove/enable/disable/move/edit and the overlay toggles; the
+// model is synced each frame. The map cursor + zone overlay stay on the map path.
+// Three sections: the scrolling zone list, the active zone's options block, and a
+// shortcut footer. Hidden during the nested point-selection look_around (the
+// curses `show` gate).
+namespace
+{
+struct zm_rml_row {
+    Rml::String name_rml;
+    Rml::String type_rml;
+    Rml::String dist_rml;
+    Rml::String veh_rml;
+    bool selected = false;
+};
+struct zm_rml_opt {
+    Rml::String key_rml;
+    Rml::String val_rml;
+};
+struct zm_rml_data {
+    Rml::String header_rml;
+    Rml::Vector<zm_rml_row> rows;
+    bool empty = false;
+    Rml::String empty_rml;
+    bool has_options = false;
+    Rml::String options_title_rml;
+    Rml::Vector<zm_rml_opt> options;
+    Rml::String footer_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_zones_manager_types_registered = false;
+
+void register_zones_manager_rml_types( Rml::DataModelConstructor &c )
+{
+    // RegisterStruct/Array are context-global and persist past RemoveDataModel —
+    // guard so a reopen doesn't double-register (uilist-proven pattern).
+    if( g_zones_manager_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<zm_rml_row> rh = c.RegisterStruct<zm_rml_row>();
+    rh.RegisterMember( "name_rml", &zm_rml_row::name_rml );
+    rh.RegisterMember( "type_rml", &zm_rml_row::type_rml );
+    rh.RegisterMember( "dist_rml", &zm_rml_row::dist_rml );
+    rh.RegisterMember( "veh_rml", &zm_rml_row::veh_rml );
+    rh.RegisterMember( "selected", &zm_rml_row::selected );
+    c.RegisterArray<Rml::Vector<zm_rml_row>>();
+    Rml::StructHandle<zm_rml_opt> oh = c.RegisterStruct<zm_rml_opt>();
+    oh.RegisterMember( "key_rml", &zm_rml_opt::key_rml );
+    oh.RegisterMember( "val_rml", &zm_rml_opt::val_rml );
+    c.RegisterArray<Rml::Vector<zm_rml_opt>>();
+    g_zones_manager_types_registered = true;
+}
+} // namespace
+
+bool &zones_manager_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = true;
+    return enabled;
+}
+
 void game::zones_manager()
 {
     const auto stored_view_offset = u.view_offset;
@@ -9104,7 +9167,124 @@ void game::zones_manager()
         return std::nullopt;
     };
 
+    // ---- RmlUi render path (F.3 rml_doc harness, sibling of list_items) ------
+    // `rml_data` before `rml` so the doc tears down while the model is alive. The
+    // doc is rebuilt each frame from the live zone list + cursor; the keyboard
+    // owns all editing. Native scroll replaces the curses calcStartPos windowing.
+    // During the nested point-selection look_around (show == false) the doc is
+    // hidden, matching the curses path zeroing the windows.
+    std::unique_ptr<zm_rml_data> rml_data;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml || !rml_data ) {
+            return;
+        }
+        zm_rml_data &d = *rml_data;
+
+        d.header_rml = cata_text_to_rml( colorize( _( "Zones manager" ), c_white ) );
+        d.empty = zone_cnt == 0;
+        d.empty_rml = rml_escape( _( "No Zones defined." ) );
+
+        // Zone rows: name / type / distance-direction / vehicle marker. The active
+        // row is recoloured (light_green/green) exactly as the curses body; the
+        // shared .selected highlight adds the accent background.
+        d.rows.clear();
+        const auto player_absolute_pos = m.bub_to_abs( u.bub_pos() );
+        for( int i = 0; i < zone_cnt; ++i ) {
+            const auto &zone = zones[i].get();
+            const bool selected = i == active_index;
+            nc_color colorLine = zone.get_enabled() ? c_white : c_light_gray;
+            if( selected ) {
+                colorLine = zone.get_enabled() ? c_light_green : c_green;
+            }
+            zm_rml_row row;
+            row.selected = selected;
+            row.name_rml = cata_text_to_rml( colorize( trim_by_length( zone.get_name(), 15 ), colorLine ) );
+            row.type_rml = cata_text_to_rml( colorize( mgr.get_name_from_type( zone.get_type() ),
+                                             colorLine ) );
+            const auto center = zone.get_center_point();
+            row.dist_rml = cata_text_to_rml( colorize(
+                                                 string_format( "%d %s",
+                                                         static_cast<int>( trig_dist( player_absolute_pos, center ) ),
+                                                         direction_name_short( direction_from( player_absolute_pos, center ) ) ),
+                                                 colorLine ) );
+            row.veh_rml = cata_text_to_rml( colorize( zone.get_is_vehicle() ? "*" : "", colorLine ) );
+            d.rows.push_back( std::move( row ) );
+        }
+
+        // Active zone's options block (key→value descriptions).
+        d.options.clear();
+        d.has_options = false;
+        d.options_title_rml = Rml::String();
+        if( zone_cnt > 0 ) {
+            const auto &zone = zones[active_index].get();
+            if( zone.has_options() ) {
+                const auto &descriptions = zone.get_options().get_descriptions();
+                if( !descriptions.empty() ) {
+                    d.has_options = true;
+                    d.options_title_rml = cata_text_to_rml( colorize( _( "Options" ), c_white ) );
+                    for( const auto &desc : descriptions ) {
+                        zm_rml_opt o;
+                        o.key_rml = cata_text_to_rml( colorize( desc.first, c_white ) );
+                        o.val_rml = cata_text_to_rml( colorize( desc.second, c_white ) );
+                        d.options.push_back( std::move( o ) );
+                    }
+                }
+            }
+        }
+
+        // Shortcut footer (the curses zones_manager_shortcuts). <O>/<G> tokens are
+        // live-coloured by overlay / submap-grid state.
+        const nc_color o_col = g->show_zone_overlay ? c_light_green : c_white;
+        const nc_color g_col = ( g->debug_submap_grid_overlay || zone_submap_grid_overlay )
+                               ? c_light_green : c_white;
+        std::string f;
+        f += colorize( _( "<A>dd" ), c_light_green ) + "  "
+             + colorize( _( "<R>emove" ), c_light_green ) + "  "
+             + colorize( _( "<E>nable" ), c_light_green ) + "  "
+             + colorize( _( "<D>isable" ), c_light_green ) + "\n";
+        f += colorize( _( "<+-> Move up/down" ), c_light_green ) + "  "
+             + colorize( _( "<Enter>-Edit" ), c_light_green ) + "\n";
+        f += colorize( _( "<S>how all / hide distant" ), c_light_green ) + "  "
+             + colorize( _( "<M>ap" ), c_light_green ) + "\n";
+        f += colorize( _( "<O> - Toggle Overlays" ), o_col ) + "  "
+             + colorize( _( "<G> - Submap grid" ), g_col );
+        d.footer_rml = cata_text_to_rml( f );
+
+        d.handle.DirtyVariable( "header_rml" );
+        d.handle.DirtyVariable( "rows" );
+        d.handle.DirtyVariable( "empty" );
+        d.handle.DirtyVariable( "empty_rml" );
+        d.handle.DirtyVariable( "has_options" );
+        d.handle.DirtyVariable( "options_title_rml" );
+        d.handle.DirtyVariable( "options" );
+        d.handle.DirtyVariable( "footer_rml" );
+    };
+    rml.open( zones_manager_rmlui_enabled(), "zones_manager", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        rml_data = std::make_unique<zm_rml_data>();
+        register_zones_manager_rml_types( c );
+        c.Bind( "header_rml", &rml_data->header_rml );
+        c.Bind( "rows", &rml_data->rows );
+        c.Bind( "empty", &rml_data->empty );
+        c.Bind( "empty_rml", &rml_data->empty_rml );
+        c.Bind( "has_options", &rml_data->has_options );
+        c.Bind( "options_title_rml", &rml_data->options_title_rml );
+        c.Bind( "options", &rml_data->options );
+        c.Bind( "footer_rml", &rml_data->footer_rml );
+        rml_data->handle = c.GetModelHandle();
+    } );
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        // RmlUi path owns the panel — hide during the nested look_around, else
+        // sync the model and skip the curses draw.
+        if( rml ) {
+            rml.document()->SetProperty( "visibility", show ? "visible" : "hidden" );
+            if( show ) {
+                sync_rml();
+            }
+            return;
+        }
         if( !show ) {
             return;
         }
