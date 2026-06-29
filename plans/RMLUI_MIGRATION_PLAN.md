@@ -3934,6 +3934,17 @@ per-screen `*_rmlui_enabled()` toggle layer + retained curses A/B fallback bodie
 bake. (`character_preview` border DONE `439b8e1ee3` — no longer a bespoke blocker; its `draw_border`
 fallback dies with the generic backend cut.)
 
+**★ FULL-RIP CAMPAIGN (user authorized "full rip" 2026-06-29).** Census reframed P5: the backend cull
+is **mechanically reachable — no feature-completion blocker** (the feared `vehicle_display` primary-curses
+turned out to be live TEXT producers + dead fallback; the 2D veh diagram was already deleted). Done this
+session: `use_tiles`/`use_tiles_overmap` globals removed (`06b7efb0c6`); orphaned `print_fuel_indicators`/
+`print_fuel_indicator` cluster deleted. Remaining deletable chain (all dead fallback, priority order):
+(1) creature-info `print_info(window)` + its 4 callers [look_around/list_monsters/editmap/wish];
+(2) `print_part_list` (orphans with #1's look_around+editmap blocks); (3) magic.cpp uilist-callback curses
+fallback; (4) dialogue_win curses impl; (5) game.cpp ~135-prim remnants; (6) generics popup/string_input_popup/
+uilist (high blast radius); (7) dev wish/catalua_console; (8) veh_interact/advanced_inv remnants; (9) backend
+cull + toggle layer (LAST). Full batch detail + caller census in the `project_rmlui_gate_backlog` memory.
+
 **How to migrate (follow existing Tier 2–9 pattern):** add an `xxx.rml` + `xxx.rcss` under
 `data/`, a `xxx_rmlui_enabled()` toggle (default true) like the others, build the model in a
 `*_rml` helper, gate the existing `ui_adaptor` redraw with the RmlUi path, and keep any
