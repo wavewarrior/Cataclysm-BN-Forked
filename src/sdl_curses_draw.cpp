@@ -35,7 +35,6 @@
 
 static Font_Ptr &font = g_display.font;
 static Font_Ptr &map_font = g_display.map_font;
-static Font_Ptr &overmap_font = g_display.overmap_font;
 
 static SDL_Renderer_Ptr &renderer = g_display.renderer;
 static GeometryRenderer_Ptr &geometry = g_display.geometry;
@@ -313,7 +312,7 @@ void cata_cursesport::curses_drawwindow( const catacurses::window &w )
     }
     WINDOW *const win = w.get<WINDOW>();
     bool update = false;
-    if( g && w == g->w_terrain && use_tiles ) {
+    if( g && w == g->w_terrain ) {
         // color blocks overlay; drawn on top of tiles and on top of overlay strings (if any).
         color_block_overlay_container color_blocks;
 
@@ -443,39 +442,10 @@ void cata_cursesport::curses_drawwindow( const catacurses::window &w )
                                  TERRAIN_WINDOW_TERM_WIDTH, TERRAIN_WINDOW_TERM_HEIGHT );
 
         update = true;
-    } else if( g && w == g->w_terrain && map_font ) {
-        // When the terrain updates, predraw a black space around its edge
-        // to keep various former interface elements from showing through the gaps
-
-        //calculate width differences between map_font and font
-        int partial_width = std::max( TERRAIN_WINDOW_TERM_WIDTH * ::fontwidth - TERRAIN_WINDOW_WIDTH *
-                                      map_font->width, 0 );
-        int partial_height = std::max( TERRAIN_WINDOW_TERM_HEIGHT * ::fontheight - TERRAIN_WINDOW_HEIGHT *
-                                       map_font->height, 0 );
-        //Gap between terrain and lower window edge
-        if( partial_height > 0 ) {
-            geometry->rect( renderer, point( win->pos.x * map_font->width,
-                                             ( win->pos.y + TERRAIN_WINDOW_HEIGHT ) * map_font->height ),
-                            TERRAIN_WINDOW_WIDTH * map_font->width + partial_width, partial_height,
-                            color_as_sdl( catacurses::black ) );
-        }
-        //Gap between terrain and sidebar
-        if( partial_width > 0 ) {
-            geometry->rect( renderer, point( ( win->pos.x + TERRAIN_WINDOW_WIDTH ) * map_font->width,
-                                             win->pos.y * map_font->height ),
-                            partial_width,
-                            TERRAIN_WINDOW_HEIGHT * map_font->height + partial_height,
-                            color_as_sdl( catacurses::black ) );
-        }
-        // Special font for the terrain window
-        update = draw_window( map_font, w );
-    } else if( g && w == g->w_overmap && use_tiles && use_tiles_overmap ) {
+    } else if( g && w == g->w_overmap ) {
         ::overmap_tilecontext->draw_om( win->pos, overmap_ui::redraw_info.center,
                                       overmap_ui::redraw_info.blink );
         update = true;
-    } else if( g && w == g->w_overmap && overmap_font ) {
-        // Special font for the terrain window
-        update = draw_window( overmap_font, w );
     } else if( g && w == g->w_pixel_minimap && pixel_minimap_option ) {
         // ensure the space the minimap covers is "dirtied".
         // this is necessary when it's the only part of the sidebar being drawn
