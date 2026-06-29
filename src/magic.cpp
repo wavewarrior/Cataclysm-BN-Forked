@@ -1832,7 +1832,6 @@ class spellcasting_callback : public uilist_callback
 {
     private:
         std::vector<spell *> known_spells;
-        void draw_spell_info( const spell &sp, const uilist *menu );
     public:
         // invlets reserved for special functions
         const std::set<int> reserved_invlets{ 'I', '=' };
@@ -1866,26 +1865,6 @@ class spellcasting_callback : public uilist_callback
                 return true;
             }
             return false;
-        }
-
-        void refresh( uilist *menu ) override {
-            mvwputch( menu->window, point( menu->w_width - menu->pad_right, 0 ), c_magenta, LINE_OXXX );
-            mvwputch( menu->window, point( menu->w_width - menu->pad_right, menu->w_height - 1 ), c_magenta,
-                      LINE_XXOX );
-            for( int i = 1; i < menu->w_height - 1; i++ ) {
-                mvwputch( menu->window, point( menu->w_width - menu->pad_right, i ), c_magenta, LINE_XOXO );
-            }
-            std::string ignore_string = casting_ignore ? _( "Ignore Distractions" ) :
-                                        _( "Popup Distractions" );
-            mvwprintz( menu->window, point( menu->w_width - menu->pad_right + 2, 0 ),
-                       casting_ignore ? c_red : c_light_green, string_format( "%s %s", "[I]", ignore_string ) );
-            const std::string assign_letter = _( "Assign Hotkey [=]" );
-            mvwprintz( menu->window, point( menu->w_width - assign_letter.length() - 1, 0 ), c_yellow,
-                       assign_letter );
-            if( menu->selected >= 0 && static_cast<size_t>( menu->selected ) < known_spells.size() ) {
-                draw_spell_info( *known_spells[menu->selected], menu );
-            }
-            wnoutrefresh( menu->window );
         }
 
         void draw_rml( uilist *menu, Rml::ElementDocument *doc ) override;
@@ -2145,173 +2124,6 @@ void spellcasting_callback::draw_rml( uilist *menu, Rml::ElementDocument *doc )
 
     rml += "</div>";
     cb->SetInnerRML( rml );
-}
-
-void spellcasting_callback::draw_spell_info( const spell &sp, const uilist *menu )
-{
-    const int h_offset = menu->w_width - menu->pad_right + 1;
-    // includes spaces on either side for readability
-    const int info_width = menu->pad_right - 4;
-    const int win_height = menu->w_height;
-    const int h_col1 = h_offset + 1;
-    const int h_col2 = h_offset + ( info_width / 2 );
-    const catacurses::window w_menu = menu->window;
-    // various pieces of spell data mean different things depending on the effect of the spell
-    const std::string fx = sp.effect();
-    int line = 1;
-    nc_color gray = c_light_gray;
-    nc_color light_green = c_light_green;
-    nc_color yellow = c_yellow;
-
-    print_colored_text( w_menu, point( h_col1, line++ ), yellow, yellow,
-                        sp.spell_class() == trait_NONE ? _( "Classless" ) : sp.spell_class()->name() );
-
-    line += fold_and_print( w_menu, point( h_col1, line ), info_width, gray, sp.description() );
-
-    line++;
-
-    line += fold_and_print( w_menu, point( h_col1, line ), info_width, gray,
-                            enumerate_spell_data( sp ) );
-    if( line <= win_height / 3 ) {
-        line++;
-    }
-
-    line += fold_and_print( w_menu, point( h_col1, line++ ), info_width, gray, string_format( "%s: %s",
-                            _( "Blocker mutations" ), enumerate_traits( sp.get_blocker_muts() ) ) );
-    line += fold_and_print( w_menu, point( h_col1, line++ ), info_width, gray, string_format( "%s: %s",
-                            _( "Skill" ), sp.skill() ) );
-
-    print_colored_text( w_menu, point( h_col1, line ), gray, gray,
-                        string_format( "%s: %d %s", _( "Spell Level" ), sp.get_level(),
-                                       sp.is_max_level() ? _( "(MAX)" ) : "" ) );
-    print_colored_text( w_menu, point( h_col2, line++ ), gray, gray,
-                        string_format( "%s: %d", _( "Max Level" ), sp.get_max_level() ) );
-
-    print_colored_text( w_menu, point( h_col1, line ), gray, gray,
-                        sp.colorized_fail_percent( g->u ) );
-    print_colored_text( w_menu, point( h_col2, line++ ), gray, gray,
-                        string_format( "%s: %d", _( "Difficulty" ), sp.get_difficulty() ) );
-
-    print_colored_text( w_menu, point( h_col1, line ), gray, gray,
-                        string_format( "%s: %s", _( "Current Exp" ), colorize( std::to_string( sp.xp() ), light_green ) ) );
-    print_colored_text( w_menu, point( h_col2, line++ ), gray, gray,
-                        string_format( "%s: %s", _( "to Next Level" ), colorize( std::to_string( sp.exp_to_next_level() ),
-                                       light_green ) ) );
-
-    if( line <= win_height / 2 ) {
-        line++;
-    }
-
-    const bool cost_encumb = energy_cost_encumbered( sp, g->u );
-    std::string cost_string = cost_encumb ? _( "Casting Cost (impeded)" ) : _( "Casting Cost" );
-    std::string energy_cur = sp.energy_source() == hp_energy ? "" : string_format( _( " (%s current)" ),
-                             sp.energy_cur_string( g->u ) );
-    if( !sp.can_cast( g->u ) ) {
-        cost_string = colorize( _( "Not Enough Energy" ), c_red );
-        energy_cur = "";
-    }
-    print_colored_text( w_menu, point( h_col1, line++ ), gray, gray,
-                        string_format( "%s: %s %s%s", cost_string,
-                                       sp.energy_cost_string( g->u ), sp.energy_string(), energy_cur ) );
-    const bool c_t_encumb = casting_time_encumbered( sp, g->u );
-    print_colored_text( w_menu, point( h_col1, line++ ), gray, gray, colorize(
-                            string_format( "%s: %s", c_t_encumb ? _( "Casting Time (impeded)" ) : _( "Casting Time" ),
-                                           moves_to_string( sp.casting_time( g->u ) ) ),
-                            c_t_encumb  ? c_red : c_light_gray ) );
-
-    if( line <= win_height * 3 / 4 ) {
-        line++;
-    }
-
-    std::string targets;
-    if( sp.is_valid_target( target_none ) ) {
-        targets = _( "self" );
-    } else {
-        targets = sp.enumerate_targets();
-    }
-    print_colored_text( w_menu, point( h_col1, line++ ), gray, gray,
-                        string_format( "%s: %s", _( "Valid Targets" ), targets ) );
-
-    std::string target_ids;
-    target_ids = sp.list_targeted_monster_names();
-    if( !target_ids.empty() ) {
-        fold_and_print( w_menu, point( h_col1, line++ ), info_width, gray,
-                        _( "Only affects the monsters: %s" ), target_ids );
-    }
-
-    if( line <= win_height * 3 / 4 ) {
-        line++;
-    }
-
-    const int damage = sp.damage_as_character( g->u );
-    std::string damage_string;
-    std::string aoe_string;
-    // if it's any type of attack spell, the stats are normal.
-    if( fx == "target_attack" || fx == "projectile_attack" || fx == "cone_attack" ||
-        fx == "line_attack" ) {
-        if( damage > 0 ) {
-            damage_string = string_format( "%s: %s %s", _( "Damage" ), colorize( sp.damage_string( g->u ),
-                                           sp.damage_type_color() ),
-                                           colorize( sp.damage_type_string(), sp.damage_type_color() ) );
-        } else if( damage < 0 ) {
-            damage_string = string_format( "%s: %s", _( "Healing" ), colorize( sp.damage_string( g->u ),
-                                           light_green ) );
-        }
-        if( sp.aoe() > 0 ) {
-            std::string aoe_string_temp = _( "Spell Radius" );
-            std::string degree_string;
-            if( fx == "cone_attack" ) {
-                aoe_string_temp = _( "Cone Arc" );
-                degree_string = _( "degrees" );
-            } else if( fx == "line_attack" ) {
-                aoe_string_temp = _( "Line Width" );
-            }
-            aoe_string = string_format( "%s: %d %s", aoe_string_temp, sp.aoe(), degree_string );
-        }
-    } else if( fx == "teleport_random" ) {
-        if( sp.aoe() > 0 ) {
-            aoe_string = string_format( "%s: %d", _( "Variance" ), sp.aoe() );
-        }
-    } else if( fx == "spawn_item" ) {
-        damage_string = string_format( "%s %d %s", _( "Spawn" ), sp.damage(),
-                                       item::nname( itype_id( sp.effect_data() ), sp.damage() ) );
-    } else if( fx == "summon" ) {
-        damage_string = string_format( "%s %d %s", _( "Summon" ), sp.damage(),
-                                       _( monster( mtype_id( sp.effect_data() ) ).get_name( ) ) );
-        aoe_string = string_format( "%s: %d", _( "Spell Radius" ), sp.aoe() );
-    } else if( fx == "ter_transform" ) {
-        aoe_string = string_format( "%s: %s", _( "Spell Radius" ), sp.aoe_string() );
-    }
-
-    print_colored_text( w_menu, point( h_col1, line ), gray, gray, damage_string );
-    print_colored_text( w_menu, point( h_col2, line++ ), gray, gray, aoe_string );
-
-    print_colored_text( w_menu, point( h_col1, line++ ), gray, gray,
-                        string_format( "%s: %s", _( "Range" ),
-                                       sp.range() <= 0 ? _( "self" ) : std::to_string( sp.range() ) ) );
-
-    // todo: damage over time here, when it gets implemeted
-
-    print_colored_text( w_menu, point( h_col1, line++ ), gray, gray, sp.duration() <= 0 ? "" :
-                        string_format( "%s: %s", _( "Duration" ), sp.duration_string() ) );
-
-    // helper function for printing tool and item component requirement lists
-    const auto print_vec_string = [&]( const std::vector<std::string> &vec ) {
-        for( const std::string &line_str : vec ) {
-            print_colored_text( w_menu, point( h_col1, line++ ), gray, gray, line_str );
-        }
-    };
-
-    if( sp.has_components() ) {
-        if( !sp.components().get_components().empty() ) {
-            print_vec_string( sp.components().get_folded_components_list( info_width - 2, gray,
-                              get_player_character().crafting_inventory(), return_true<item> ) );
-        }
-        if( !( sp.components().get_tools().empty() && sp.components().get_qualities().empty() ) ) {
-            print_vec_string( sp.components().get_folded_tools_list( info_width - 2, gray,
-                              get_player_character().crafting_inventory() ) );
-        }
-    }
 }
 
 bool known_magic::set_invlet( const spell_id &sp, int invlet, const std::set<int> &used_invlets )
