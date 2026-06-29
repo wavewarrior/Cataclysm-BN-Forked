@@ -4083,3 +4083,22 @@ Committed versions are clean originals + our additions only.
 
 **Next: P5-E** — remaining game.cpp isolated curses: NPC debugger (~4075),
 compass helper (~4614–4725); census callers per symbol before deleting.
+
+### P5-E progress (CURRENT SESSION)
+
+**Census result:**
+- `game::mon_info(const catacurses::window &, int hor_padding)` — ZERO callers. The
+  sidebar compass was fully replaced by `hud_compass()` in `panels.cpp` (uses
+  `visible_count_by_dir`; symbol-grid deferred to "phase 2"). Safe to delete.
+- `game::disp_NPCs()` — live caller in `debug_menu.cpp:1619`. Dev tool; deferred to P5-G.
+
+**Deleted:**
+- `game::mon_info` definition (game.cpp, 154 lines) + 2-line declaration (game.h).
+- `mon_info_update()` kept (live, called from `do_turn`).
+- Build green `+0/-156`. Both targets link.
+
+**⚠ Working-tree WIP note:** `src/game.h` has pre-existing reformatting as uncommitted
+diff (~2377 lines churn). Committed version is clean HEAD − the 2-line declaration.
+
+**Next: P5-F** — generics: uilist `show` curses fallback, string_input_popup, popup.
+High blast radius; gated on all the above being complete.
