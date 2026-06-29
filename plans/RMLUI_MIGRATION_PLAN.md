@@ -3896,10 +3896,14 @@ straggler set:
   `print_all_tile_info_text`. `data/gui/live_view.{rml,rcss}` + `live_view_rmlui_enabled`. **Eyeball owed.**
 - ~~`scent_map::draw`~~ **DELETED 2026-06-29 (`085d0649ee`)** — was DEAD (zero callers; debug scent goes
   through `display_toggle_overlay`, a GPU overlay). Removed def + decl + orphaned `sev()` + color/cursesdef includes.
-- `character_preview` — NOT a text screen: `display()` renders the avatar via the GPU sprite path
-  (`tilecontext->...display_avatar_preview_with_overlays`); the only curses is a single `draw_border`
-  + "CHARACTER PREVIEW" title around it. Map/sprite-path class → dies with the backend `draw_border` cut
-  (or a trivial rml border later). Not worth a bespoke migration now.
+- ~~`character_preview`~~ **DONE 2026-06-29 (`439b8e1ee3`)** — NOT a text screen (the avatar is a GPU
+  sprite via `display_avatar_preview_with_overlays`); the only curses was a single `draw_border` +
+  "CHARACTER PREVIEW" title. Replaced that chrome with a non-modal passive RmlUi backdrop (rmlui_layer
+  doc lifecycle, like live_view): bordered box, transparent centre so the sprite shows through, `#cp-box`
+  left/top/width/height set each redraw from the preview rect (cells→TERM%), hidden when too narrow.
+  `data/gui/character_preview.{rml,rcss}` + `character_preview_rmlui_enabled` toggle + registry row;
+  curses `draw_border` kept as gated A/B fallback. Build + test build green. **Eyeball owed.**
+  → removes `character_preview` from the P5 backend-deletion blocker list below.
 - `editmap` (dev map editor) — explicitly NON-mechanical / deferred (has an `editmap_info` backdrop
   toggle already; the cursor/menus are map-path + uilists). Not a clean mechanical migration.
 - Creature-info `print_info` (monster/npc/character.cpp) — curses, but only as the A/B fallback for
@@ -3923,11 +3927,12 @@ orphaned **`map::drawsq` + `Creature::draw`** (editmap was their last caller) �
 chain they alone fed (`map::draw_maptile`/`draw_from_above`, file-local `has_memory_at`/`get_memory_at`).
 A big curses-cell-renderer chunk is now gone.
 
-**Remaining for P5 (backend deletion), gated on eyeball sign-off + dev consumers:** `character_preview`
-border, the generic curses cell/glyph
-backend (`output.cpp` primitives, `cursesport`, `sdl_curses_draw` non-terrain `draw_window`, `sdl_font`/
-`Font::OutputChar`/`draw_ascii_lines`), neutralizing the `use_tiles` option, and removing the per-screen
-`*_rmlui_enabled()` toggle layer + retained curses A/B fallback bodies after the daily-drive bake.
+**Remaining for P5 (backend deletion), gated on eyeball sign-off + dev consumers:** the generic curses
+cell/glyph backend (`output.cpp` primitives, `cursesport`, `sdl_curses_draw` non-terrain `draw_window`,
+`sdl_font`/`Font::OutputChar`/`draw_ascii_lines`), neutralizing the `use_tiles` option, and removing the
+per-screen `*_rmlui_enabled()` toggle layer + retained curses A/B fallback bodies after the daily-drive
+bake. (`character_preview` border DONE `439b8e1ee3` — no longer a bespoke blocker; its `draw_border`
+fallback dies with the generic backend cut.)
 
 **How to migrate (follow existing Tier 2–9 pattern):** add an `xxx.rml` + `xxx.rcss` under
 `data/`, a `xxx_rmlui_enabled()` toggle (default true) like the others, build the model in a
