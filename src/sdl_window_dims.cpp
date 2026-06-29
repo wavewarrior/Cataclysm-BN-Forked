@@ -71,14 +71,9 @@ auto get_window_dimensions( const catacurses::window &win,
         dim.scaled_font_size.x = g_display.map_font->width;
         dim.scaled_font_size.y = g_display.map_font->height;
     } else if( g_display.overmap_font && g && win == g->w_overmap ) {
-        if( use_tiles && use_tiles_overmap ) {
-            // tiles might have different dimensions than standard font
-            dim.scaled_font_size.x = overmap_tilecontext->get_tile_width();
-            dim.scaled_font_size.y = overmap_tilecontext->get_tile_height();
-        } else {
-            dim.scaled_font_size.x = g_display.overmap_font->width;
-            dim.scaled_font_size.y = g_display.overmap_font->height;
-        }
+        // tiles-only fork: the overmap always renders via the tile path
+        dim.scaled_font_size.x = overmap_tilecontext->get_tile_width();
+        dim.scaled_font_size.y = overmap_tilecontext->get_tile_height();
     } else {
         dim.scaled_font_size.x = fontwidth;
         dim.scaled_font_size.y = fontheight;

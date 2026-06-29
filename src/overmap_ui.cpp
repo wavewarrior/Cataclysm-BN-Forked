@@ -1575,17 +1575,11 @@ static tripoint_abs_omt display( const tripoint_abs_omt &orig,
     // backdrop transparent so suppress_cell_bg() skips its pure-black cells and
     // the overmap tiles show through. The legend (w_omlegend) is a separate,
     // opaque window so it is unaffected, and disable_uis_below still hides the
-    // game UI. ASCII overmap draws its glyphs into stdscr/w_overmap and still
-    // needs the opaque backdrop, so this is tile-mode only. Restored on exit via
-    // RAII so the main-menu / loading background panes keep their solid black.
-    const bool om_graphical = use_tiles && use_tiles_overmap;
-    if( om_graphical ) {
-        cata_cursesport::set_window_transparent_backdrop( catacurses::stdscr, true );
-    }
-    on_out_of_scope restore_stdscr_backdrop( [om_graphical]() {
-        if( om_graphical ) {
-            cata_cursesport::set_window_transparent_backdrop( catacurses::stdscr, false );
-        }
+    // game UI. Restored on exit via RAII so the main-menu / loading background
+    // panes keep their solid black.
+    cata_cursesport::set_window_transparent_backdrop( catacurses::stdscr, true );
+    on_out_of_scope restore_stdscr_backdrop( []() {
+        cata_cursesport::set_window_transparent_backdrop( catacurses::stdscr, false );
     } );
 
     ui_adaptor ui;
