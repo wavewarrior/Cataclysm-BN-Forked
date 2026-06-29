@@ -3884,7 +3884,14 @@ The remaining 102 game.cpp curses calls are interactive screens rendering into t
   3-pane panel (zone list / options block / shortcut footer), hidden during nested
   point-selection look_around. Curses body kept as gated A/B fallback. **Eyeball owed.**
   `is_zone_submap_grid_overlay_enabled` is the map-overlay path (separate, untouched).
-- `panels.cpp::show_adm` — the `}` panel-manager menu (14). **Next recommended.**
+- ~~`panels.cpp::show_adm`~~ **DONE 2026-06-29 (`b945e6a589`)** — RmlUi render path: centered
+  3-column modal (`data/gui/panel_adm.{rml,rcss}` + `panel_adm_rmlui_enabled` toggle), panel
+  list / help / layout list with a 2D cursor; swap-drag reproduced via display-order emit.
+  Curses body kept as gated A/B fallback. **Eyeball owed.**
+
+**All five originally-listed P3 targets are now migrated.** Re-survey game.cpp/other files for any
+remaining category-A screens that still draw into their own *displayed* curses windows before
+declaring P3 complete; then P4 (overmap `draw_ascii` confirm) and P5 (backend deletion).
 
 **How to migrate (follow existing Tier 2–9 pattern):** add an `xxx.rml` + `xxx.rcss` under
 `data/`, a `xxx_rmlui_enabled()` toggle (default true) like the others, build the model in a
