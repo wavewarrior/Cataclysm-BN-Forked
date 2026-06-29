@@ -158,18 +158,10 @@ void live_view::show( const tripoint_bub_ms &p )
             ui.position_from_window( win );
         } );
         ui->on_redraw( [this]( const ui_adaptor & ) {
-            // RmlUi overlay owns the box — sync the model and skip the curses draw.
+            // RmlUi overlay owns the box (curses fallback removed in the tiles-only rip-out).
             if( g_lv_doc != nullptr ) {
                 lv_rml_sync( mouse_position );
-                return;
             }
-            werase( win );
-            const visibility_variables &cache = get_map().get_visibility_variables_cache();
-            int line_out = START_LINE;
-            g->pre_print_all_tile_info( mouse_position, win, line_out, getmaxy( win ) - 2, cache );
-            draw_border( win );
-            center_print( win, 0, c_white, _( "< <color_green>Mouse View</color> >" ) );
-            wnoutrefresh( win );
         } );
         lv_rml_open();
     }
