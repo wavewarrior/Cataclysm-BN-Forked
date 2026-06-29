@@ -10585,6 +10585,70 @@ void game::list_items_monsters()
     reenter_fullscreen();
 }
 
+// ---- list_items RmlUi render path (P3 track-A) -----------------------------
+// The nearby-items list (`V` screen). Render-only doc, twin of list_monsters:
+// the keyboard owns cursor nav / filter / priority / examine / compare / travel;
+// the model is synced each frame. The info pane is fed by
+// rml_util::item_info_rml_lines() (the shared item-info producer). Native scroll
+// replaces the curses calcStartPos windowing. Sort-by-category headers are
+// interspersed as full-width magenta rows.
+namespace
+{
+struct li_rml_row {
+    bool is_cat = false;
+    Rml::String cat_rml;
+    Rml::String name_rml;
+    bool has_new = false;
+    Rml::String new_rml;
+    Rml::String dist_rml;
+    bool selected = false;
+};
+struct li_rml_info_line {
+    Rml::String text_rml;
+};
+struct li_rml_data {
+    Rml::String header_rml;
+    Rml::Vector<li_rml_row> rows;
+    bool empty = false;
+    Rml::String empty_rml;
+    Rml::String info_title_rml;
+    Rml::Vector<li_rml_info_line> info;
+    Rml::String footer_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_list_items_types_registered = false;
+
+void register_list_items_rml_types( Rml::DataModelConstructor &c )
+{
+    // RegisterStruct/Array are context-global and persist past RemoveDataModel —
+    // guard so a reopen doesn't double-register (uilist-proven pattern).
+    if( g_list_items_types_registered ) {
+        return;
+    }
+    Rml::StructHandle<li_rml_row> rh = c.RegisterStruct<li_rml_row>();
+    rh.RegisterMember( "is_cat", &li_rml_row::is_cat );
+    rh.RegisterMember( "cat_rml", &li_rml_row::cat_rml );
+    rh.RegisterMember( "name_rml", &li_rml_row::name_rml );
+    rh.RegisterMember( "has_new", &li_rml_row::has_new );
+    rh.RegisterMember( "new_rml", &li_rml_row::new_rml );
+    rh.RegisterMember( "dist_rml", &li_rml_row::dist_rml );
+    rh.RegisterMember( "selected", &li_rml_row::selected );
+    c.RegisterArray<Rml::Vector<li_rml_row>>();
+    Rml::StructHandle<li_rml_info_line> ih = c.RegisterStruct<li_rml_info_line>();
+    ih.RegisterMember( "text_rml", &li_rml_info_line::text_rml );
+    c.RegisterArray<Rml::Vector<li_rml_info_line>>();
+    g_list_items_types_registered = true;
+}
+} // namespace
+
+bool &list_items_rmlui_enabled()
+{
+    // Default OFF — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = true;
+    return enabled;
+}
+
 game::vmenu_ret game::list_items( const std::vector<map_item_stack> &item_list )
 {
     std::vector<map_item_stack> ground_items = item_list;
@@ -10701,7 +10765,169 @@ game::vmenu_ret game::list_items( const std::vector<map_item_stack> &item_list )
 
     std::optional<item_filter_type> filter_type;
 
+    // ---- RmlUi render path (F.3 rml_doc harness, twin of list_monsters) ------
+    // `rml_data` before `rml` so the doc tears down while the model is alive. The
+    // doc is rebuilt each frame from the live cursor state; the keyboard owns all
+    // nav / filter / priority / examine / compare / travel. The info pane is
+    // item_info_rml_lines() (the shared item-info producer). Native scroll
+    // replaces the curses calcStartPos windowing.
+    std::unique_ptr<li_rml_data> rml_data;
+    rml_doc rml;
+    const auto sync_rml = [&]() {
+        if( !rml || !rml_data ) {
+            return;
+        }
+        li_rml_data &d = *rml_data;
+
+        d.empty = ground_items.empty();
+        d.empty_rml = rml_escape( _( "You don't see any items around you!" ) );
+
+        // Header: "<Tab> Items   active / total" (curses border title + counter).
+        int catsBefore = 0;
+        for( const auto &kv : mSortCategory ) {
+            if( kv.first < iActive && !kv.second.empty() ) {
+                ++catsBefore;
+            }
+        }
+        const int activeNum = iItemNum > 0 ? iActive - catsBefore + 1 : 0;
+        const int total = iItemNum - iCatSortNum;
+        d.header_rml = cata_text_to_rml( string_format( "%s%s   %s",
+                                         colorize( "<Tab> ", c_light_green ),
+                                         colorize( _( "Items" ), c_white ),
+                                         colorize( string_format( "%d / %d", activeNum, total ),
+                                                 c_light_green ) ) );
+
+        // Rows: replicate the curses combined walk (sort-category headers
+        // interspersed with item rows) WITHOUT the calcStartPos window. Priority
+        // colour (yellow/red), in-inventory colour, NEW! badge and the
+        // distance/direction cluster are all baked per the curses body.
+        d.rows.clear();
+        int index = 0;
+        int iCatSortOffset = 0;
+        auto iter = filtered_items.begin();
+        for( int pos = 0; pos < iItemNum; ++pos ) {
+            const auto catit = mSortCategory.find( pos );
+            if( catit != mSortCategory.end() && !catit->second.empty() ) {
+                li_rml_row row;
+                row.is_cat = true;
+                row.cat_rml = cata_text_to_rml( colorize( catit->second, c_magenta ) );
+                d.rows.push_back( std::move( row ) );
+                ++iCatSortOffset;
+                continue;
+            }
+            if( iter == filtered_items.end() ) {
+                break;
+            }
+            const int iThisPage = pos == iActive ? page_num : 0;
+            const int pidx = std::min<int>( iThisPage, static_cast<int>( iter->vIG.size() ) - 1 );
+
+            std::string sText;
+            if( iter->vIG.size() > 1 ) {
+                sText += string_format( "[%d/%d] (%d) ", pidx + 1,
+                                        static_cast<int>( iter->vIG.size() ), iter->totalcount );
+            }
+            sText += iter->example->tname();
+            if( iter->vIG[pidx].count > 1 ) {
+                sText += string_format( "[%d]", iter->vIG[pidx].count );
+            }
+
+            nc_color col;
+            if( highPEnd > 0 && index < highPEnd + iCatSortOffset ) {
+                col = c_yellow;
+            } else if( index >= lowPStart + iCatSortOffset ) {
+                col = c_red;
+            } else {
+                col = iter->example->color_in_inventory();
+            }
+
+            li_rml_row row;
+            row.selected = pos == iActive;
+            row.name_rml = cata_text_to_rml( colorize( sText, col ) );
+
+            const bool print_new = highlight_unread_items &&
+                                   !uistate.read_items.contains( iter->example->typeId() );
+            row.has_new = print_new;
+            if( print_new ) {
+                row.new_rml = cata_text_to_rml( colorize( item_new_str, item_new_col ) );
+            }
+
+            const auto p = iter->vIG[pidx].pos.xy();
+            row.dist_rml = cata_text_to_rml( colorize(
+                                                 string_format( "%2d %s", rl_dist( point_rel_ms::zero(), p ),
+                                                         direction_name_short( direction_from( point_rel_ms::zero(), p ) ) ),
+                                                 row.selected ? c_light_green : c_light_gray ) );
+
+            d.rows.push_back( std::move( row ) );
+            ++iter;
+            ++index;
+        }
+
+        // Info pane: the selected stack's item_info_rml_lines() (shared producer).
+        d.info.clear();
+        if( !ground_items.empty() && activeItem ) {
+            const item &loc = *activeItem->example;
+            const temperature_flag temperature = rot::temperature_flag_for_location( m, loc );
+            std::vector<iteminfo> this_item = activeItem->example->info( temperature );
+            std::vector<iteminfo> item_info_dummy;
+            item_info_data dummy( "", "", this_item, item_info_dummy );
+            dummy.without_getch = true;
+            dummy.without_border = true;
+            for( const std::string &l : item_info_rml_lines( dummy ) ) {
+                li_rml_info_line ln;
+                ln.text_rml = l;
+                d.info.push_back( std::move( ln ) );
+            }
+            // Info title: "< item display_name >".
+            d.info_title_rml = cata_text_to_rml(
+                                   colorize( "< ", c_white )
+                                   + colorize( activeItem->example->display_name(),
+                                           activeItem->example->color_in_inventory() )
+                                   + colorize( " >", c_white ) );
+        } else {
+            d.info_title_rml = Rml::String();
+        }
+
+        // Footer: the reset_item_list_state hint tokens, live keybinds.
+        std::string footer = string_format( _( "[%s] Sort: %s" ), ctxt.get_desc( "SORT", 1 ),
+                                            sort_radius ? _( "dist" ) : _( "cat" ) );
+        if( !sFilter.empty() ) {
+            footer += string_format( _( "   [%s] Reset" ), ctxt.get_desc( "RESET_FILTER", 1 ) );
+        }
+        footer += string_format(
+                      _( "   [%s] Examine   [%s] Compare   [%s] Filter   [%s/%s] Priority   [%s] Travel" ),
+                      ctxt.get_desc( "EXAMINE", 1 ), ctxt.get_desc( "COMPARE", 1 ),
+                      ctxt.get_desc( "FILTER", 1 ), ctxt.get_desc( "PRIORITY_INCREASE", 1 ),
+                      ctxt.get_desc( "PRIORITY_DECREASE", 1 ), ctxt.get_desc( "TRAVEL_TO", 1 ) );
+        d.footer_rml = rml_escape( footer );
+
+        d.handle.DirtyVariable( "header_rml" );
+        d.handle.DirtyVariable( "rows" );
+        d.handle.DirtyVariable( "empty" );
+        d.handle.DirtyVariable( "empty_rml" );
+        d.handle.DirtyVariable( "info_title_rml" );
+        d.handle.DirtyVariable( "info" );
+        d.handle.DirtyVariable( "footer_rml" );
+    };
+    rml.open( list_items_rmlui_enabled(), "list_items", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        rml_data = std::make_unique<li_rml_data>();
+        register_list_items_rml_types( c );
+        c.Bind( "header_rml", &rml_data->header_rml );
+        c.Bind( "rows", &rml_data->rows );
+        c.Bind( "empty", &rml_data->empty );
+        c.Bind( "empty_rml", &rml_data->empty_rml );
+        c.Bind( "info_title_rml", &rml_data->info_title_rml );
+        c.Bind( "info", &rml_data->info );
+        c.Bind( "footer_rml", &rml_data->footer_rml );
+        rml_data->handle = c.GetModelHandle();
+    } );
+
     ui.on_redraw( [&]( ui_adaptor & ui ) {
+        // RmlUi path owns the panel — sync the model and skip the curses draw.
+        if( rml ) {
+            sync_rml();
+            return;
+        }
         reset_item_list_state( w_items_border, iInfoHeight, sort_radius );
 
         int iStartPos = 0;

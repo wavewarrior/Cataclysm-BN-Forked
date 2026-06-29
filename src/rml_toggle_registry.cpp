@@ -28,6 +28,7 @@ const std::vector<rml_toggle> &rml_toggle_registry()
         { "veh_interact", &veh_interact_rmlui_enabled, false },
         { "gamemode_defense", &gamemode_defense_rmlui_enabled, false },
         { "list_monsters", &list_monsters_rmlui_enabled, false },
+        { "list_items", &list_items_rmlui_enabled, false },
         { "look_around", &look_around_rmlui_enabled, false },
         { "loading", &loading_rmlui_enabled, false },
         { "inventory", &inventory_rmlui_enabled, false },

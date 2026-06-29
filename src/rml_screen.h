@@ -257,6 +257,16 @@ bool &pickup_rmlui_enabled();
 // native scroll. Default OFF.
 bool &list_monsters_rmlui_enabled();
 
+// game::list_items RmlUi render path (the nearby-items list, the `V` screen). A
+// right-docked panel mirroring list_monsters: header (Items + active/total
+// counter), a scrolling list (magenta category headers + item rows with a
+// coloured name, an optional NEW! badge, and a distance/direction cluster), the
+// selected item's info-title + scrolling item-info pane (rml_util::item_info_rml_lines),
+// and a footer hint line. Render-only (keyboard owns nav / filter / priority /
+// examine / compare / travel; synced each frame); native scroll replaces the
+// curses calcStartPos windowing. Default OFF.
+bool &list_items_rmlui_enabled();
+
 // game::look_around RmlUi render path (the examine/look-around info pane: §8.1
 // track-A creature-info). Render-only doc fed by print_all_tile_info_text() (the
 // parallel tile-readout producer; creature section reuses Creature::print_info_text()):

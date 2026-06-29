@@ -1,0 +1,121 @@
+/* Layout for the nearby-items list (P3 track-A: game::list_items). Mirrors
+   list_monsters.rcss. Palette/border/scrollbar/.scroll-pane come from theme.rcss
+   (linked first in list_items.rml); this file owns only the screen's own layout.
+   Lengths in dp.
+
+   A right-docked panel (the curses screen sat top-right, width ~45 cols): a
+   header (Items + counter), a scrolling list, the selected stack's info-title +
+   scrolling item-info pane, and a footer hint line. Item rows are flex
+   (name | NEW! badge | right-aligned distance); category headers + empty message
+   are plain blocks. List/info are .scroll-pane block containers (RmlUi divs
+   default to inline — see the theme.rcss gotcha). Per-segment colour is baked
+   into the bound spans via cata_text_to_rml, so this file only positions. The
+   selected row gets the shared accent highlight. */
+body {
+    display: flex;
+    justify-content: flex-end;
+    align-items: stretch;
+    width: 100%;
+    height: 100%;
+}
+
+.li-panel {
+    width: 34%;
+    max-width: 520dp;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.li-header {
+    flex: 0 0 auto;
+    color: {{fg}};
+    border-bottom: 1dp {{bg4}};
+    padding-bottom: 2dp;
+    margin-bottom: 2dp;
+    white-space: nowrap;
+}
+
+/* The scrolling item list. Takes the larger share of the panel. */
+.li-list {
+    flex: 2 1 0;
+    min-height: 0;
+}
+
+.li-empty {
+    display: block;
+    color: {{fg}};
+    padding: 4dp 2dp;
+}
+
+.li-row {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    white-space: nowrap;
+}
+
+.li-row.selected {
+    background-color: {{yellow}};
+    color: {{bg-hard}};
+}
+
+/* Sort-category header row (magenta, baked) — spans the full width. */
+.li-row.cat {
+    display: block;
+}
+
+.li-cat {
+    display: block;
+}
+
+.li-name {
+    display: block;
+    flex: 1;
+    min-width: 0;
+    text-overflow: ellipsis;
+}
+
+/* "NEW!" badge (green, baked) between the name and the distance cluster. */
+.li-new {
+    display: block;
+    flex: 0 0 auto;
+    padding-left: 4dp;
+    white-space: nowrap;
+}
+
+/* Distance/direction cluster, right-aligned after the name. */
+.li-dist {
+    display: block;
+    flex: 0 0 auto;
+    padding-left: 6dp;
+    white-space: nowrap;
+}
+
+/* Selected-stack info title + scrolling item-info pane (item_info_rml_lines). */
+.li-info-title {
+    flex: 0 0 auto;
+    border-top: 1dp {{bg4}};
+    padding-top: 2dp;
+    margin-top: 2dp;
+    white-space: nowrap;
+}
+
+.li-info {
+    flex: 1 1 0;
+    min-height: 0;
+}
+
+.li-info-line {
+    display: block;
+    white-space: pre-wrap;
+}
+
+.li-footer {
+    flex: 0 0 auto;
+    border-top: 1dp {{bg4}};
+    padding-top: 2dp;
+    margin-top: 2dp;
+    color: {{fg4}};
+    white-space: nowrap;
+}
