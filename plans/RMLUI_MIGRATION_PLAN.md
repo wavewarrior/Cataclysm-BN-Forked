@@ -3828,3 +3828,73 @@ RmlUi migration (P3), not deletion: `list_items`/`reset_item_list_state`, `list_
 
 NEXT (P3): migrate one category-A screen — recommend `list_items`/`list_monsters` (self-
 contained, high-traffic) or the look-around info pane (unlocks monster/npc/character panes).
+
+---
+
+## ★★★ RESUME HERE — Tier-10 §C next session (clean handoff, 2026-06-29) ★★★
+
+### Where we are
+Core world-render (w_terrain) is **fully de-cursed** and tiles-only is already in force
+(`use_tiles`/`use_tiles_overmap` hardcoded `true`, Options entry gone). The map viewport,
+terrain, creatures, cursor, highlights, and trajectory all render via the tile path
+(`cata_tiles` / `sdl_curses_draw` branch 315). `game.cpp` curses calls: 183 → 102.
+Build + tests green, in-game eyeball confirmed.
+
+### The invariant that drove §C (don't re-derive)
+`sdl_curses_draw` renders `w_terrain`/`w_overmap` ONLY via `tilecontext->draw` (from map
+data) and **never reads their curses cell buffer**; those windows never hit the final
+`draw_window` else. So **any `mvwputch`/`drawsq`/`->draw` into `w_terrain` is dead** — delete
+it once you confirm `cata_tiles` covers that visual (terrain, `draw_critter_at`,
+`draw_footsteps_frame`, `draw_cursor`, `init_draw_line`, `init_draw_highlight`).
+
+### Loose ends in §C (small, optional)
+1. **editmap** (`editmap.cpp:260` mvwputch, `:534` drawsq) — the ONLY remaining w_terrain
+   writers. Bespoke/non-mechanical. Once handled, `map::drawsq` AND `Creature::draw` become
+   orphaned (editmap is their last caller) → delete both.
+2. **`grep TODO(tiles-rip-out)`** — 5 indicators removed but not yet re-added in tiles
+   (pickup/examine/construction highlight, trajectory end-marker, debug sound). Parity-neutral
+   (they rendered nothing under tiles already). Re-add via `init_draw_cursor`/`init_draw_highlight`
+   when convenient — feature work, not blocking.
+
+### NEXT MAJOR PHASE — P3: migrate category-A screens to RmlUi (NOT deletion)
+The remaining 102 game.cpp curses calls are interactive screens rendering into their own
+*displayed* curses windows. These need real RmlUi documents, one screen per session. Targets
+(curses-call weight in game.cpp):
+- `list_items` family (`reset_item_list_state` + `list_items` + `print_items_info` +
+  `find_nearby_items`) — ~59. Self-contained, high-traffic. **Recommended first.**
+- `list_monsters` (+ `monster::print_info` in monster.cpp) — ~29.
+- look-around INFO pane: `print_all_tile_info` → `print_terrain_info` / `print_fields_info` /
+  `print_trap_info` / `print_vehicle_info` / `print_graffiti_info` / `print_visibility_info`,
+  plus the creature panes `monster.cpp`/`npc.cpp`/`character.cpp` `print_info`. Migrating this
+  pane unlocks all three creature-info files at once.
+- `zones_manager` + `is_zone_submap_grid_overlay_enabled` — ~33.
+- `panels.cpp::show_adm` — the `}` panel-manager menu (14).
+
+**How to migrate (follow existing Tier 2–9 pattern):** add an `xxx.rml` + `xxx.rcss` under
+`data/`, a `xxx_rmlui_enabled()` toggle (default true) like the others, build the model in a
+`*_rml` helper, gate the existing `ui_adaptor` redraw with the RmlUi path, and keep any
+load-bearing border window for `ui.position_from_window()` sizing. Reference a recently-migrated
+screen (e.g. `scores_ui.cpp`, the minigames) for the exact scaffolding.
+
+### P4 / P5 (after all category-A migrate)
+P4: confirm overmap screen (`overmap_ui::draw_ascii`) — tile-overmap likely covers it.
+P5: backend deletion — once no window but RmlUi remains, delete `sdl_curses_draw`,
+`cursesport`, and `output.cpp` curses primitives.
+
+### Build / verify (per session)
+- Main: `cmake --build out/build/osx-arm-slim --target cataclysm-bn-tiles -j8` — pipe to RAW
+  output (NOT `rtk err` — it masks no-op/relink failures). Confirm 0 `error:` AND check the
+  binary mtime is fresh (`stat -f '%Sm' out/build/osx-arm-slim/src/cataclysm-bn-tiles`).
+- **Header-touching commits MUST also build `cata_test-tiles`** — test fakes (`tests/fake_*.cpp`)
+  mirror real signatures; a removed overload breaks them (see `4219a150cc`).
+- **Before deleting any shared method, census BOTH `\.draw\(` and `->draw\(`** (pointer syntax) —
+  see `ref_decurse_caller_census` memory; a missed pointer caller broke the build mid-sweep.
+- LSP/clangd diagnostics LAG direct file writes — trust the build, not inline `No member`/`does
+  not match` diagnostics at stale line numbers.
+
+### Session commit log (2026-06-29, all green)
+minigames `e12b47fdc3` `c5831194dc`; test fake `4219a150cc`; §C keystone `248071aa5a`;
+deletions `ecc47c6cf6` (draw_minimap) `72fae4a792` (veh-dir) `756ca00706` (critter_highlighted)
+`5b7b11ba51` (draw_critter chain) `3a7d879284` (footsteps) `86a2d236ad` (draw_ter m.draw+trail)
+`69c49a2ee8` (map::draw) `df4710c43d` (look-around cursor) `4548df6553` (vestigial highlights);
+plus docs commits.
