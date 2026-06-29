@@ -2,10 +2,9 @@
 
 > **▶ NEXT SESSION: jump to the "★★★ RESUME HERE — Tier-10 §C ★★★" section at the END of this
 > file.** (2026-06-29) Core world-render (w_terrain) is fully de-cursed; the live work is now
-> **P3 — migrating category-A interactive screens.** `list_items` + `list_monsters` are DONE;
-> next recommended = the **look-around INFO pane** (unlocks the 3 creature-info files at once),
-> then `zones_manager` and `show_adm`. The §C survey/decision/P2 sections below are historical
-> context.
+> **P3 — migrating category-A interactive screens.** `list_items`, `list_monsters`,
+> `look_around` (INFO pane) and `zones_manager` are DONE; next recommended = **`panels.cpp::show_adm`**
+> (the `}` panel-manager menu). The §C survey/decision/P2 sections below are historical context.
 
 ## STATUS (reviewed 2026-06-27)
 
@@ -3880,8 +3879,12 @@ The remaining 102 game.cpp curses calls are interactive screens rendering into t
   `print_trap_info` / `print_vehicle_info` / `print_graffiti_info` / `print_visibility_info`,
   plus the creature panes `monster.cpp`/`npc.cpp`/`character.cpp` `print_info`. Migrating this
   pane unlocks all three creature-info files at once.
-- `zones_manager` + `is_zone_submap_grid_overlay_enabled` — ~33.
-- `panels.cpp::show_adm` — the `}` panel-manager menu (14).
+- ~~`zones_manager`~~ **DONE 2026-06-29 (`4aba15d3aa`)** — RmlUi render path (sibling of
+  list_items): `data/gui/zones_manager.{rml,rcss}` + `zones_manager_rmlui_enabled` toggle;
+  3-pane panel (zone list / options block / shortcut footer), hidden during nested
+  point-selection look_around. Curses body kept as gated A/B fallback. **Eyeball owed.**
+  `is_zone_submap_grid_overlay_enabled` is the map-overlay path (separate, untouched).
+- `panels.cpp::show_adm` — the `}` panel-manager menu (14). **Next recommended.**
 
 **How to migrate (follow existing Tier 2–9 pattern):** add an `xxx.rml` + `xxx.rcss` under
 `data/`, a `xxx_rmlui_enabled()` toggle (default true) like the others, build the model in a
