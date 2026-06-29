@@ -3658,3 +3658,59 @@ a build — `| rtk err` can report success on a no-op/failed link.
   the HUD model shape is known.
 - Font consolidation (custom `FontEngineInterface`) — only if cross-UI text drift
   appears; the §7 layer sharing the RmlUi atlas largely pre-empts this.
+
+---
+
+## Tier-10 §C — CORE WORLD-RENDER rip-out / ASCII-mode DROP (2026-06-29)
+
+**Decision (user, 2026-06-29): DROP runtime ASCII mode (`use_tiles=false`).**
+This unblocks eventual deletion of the curses backend. Irreversible for no-tiles play.
+
+### Survey findings (the ~278 core-render curses calls are NOT one world render)
+- `game.cpp` 183, `overmap_ui.cpp` 57, `panels.cpp` 33, `map.cpp` 5.
+- The sidebar HUD is **already 100% RmlUi** — `game::draw_panels` says
+  *"The legacy curses panel render path has been removed."*
+- `use_tiles` is a **runtime** `extern bool` (cached_options.h, default `true`), NOT
+  compile-time. Only **14 read sites**. The single curses *executable* is already gone
+  (`cataclysm-bn-tiles` only). So ASCII mode = the runtime Options toggle, nothing else.
+- **Keystone**: `sdl_curses_draw.cpp:316` `if(w==w_terrain && use_tiles)` → tile render,
+  else → ASCII glyph render of the curses buffer. `:472` same for `w_overmap`. Under
+  `use_tiles` the map `mvwputch` glyphs are already dead pixels.
+
+### Four kinds of remaining core-render curses
+- **A — bespoke interactive screens stuck in game.cpp → MIGRATE to RmlUi** (same as prior
+  tiers; render identically in tile/ASCII so deletion is NOT an option, must migrate):
+  `list_items` family (~59), `list_monsters` 25 + `mon_info` 4, `zones_manager` 15 +
+  `is_zone_submap_grid_overlay_enabled` 18, `look_around` 8 + `print_*_info` look pane
+  (~28), `panels.cpp::show_adm` 14 (the `}` panel-manager menu, live from handle_action).
+- **B — overmap screen → MIGRATE** (rml path partly exists: `overmap_text_rmlui_enabled`,
+  `sdl_overmap_draw`): `overmap_ui::draw_ascii` 21, `update_note_preview` 14,
+  `place_ter_or_special` 18 (overmap editor, dev).
+- **C — ASCII-only map glyph render → DELETE** (the actual "world render", now unblocked):
+  `game::draw_minimap` (**DONE — orphaned, deleted `ecc47c6cf6`**), `draw_critter_internal`
+  glyphs on w_terrain, `draw_ter` ASCII arm, vehicle dir indicator, scattered
+  creature/monster/npc glyph draws, `sdl_curses_draw` w_terrain/w_overmap else-branches.
+- **D — panels.cpp helpers** (`decorate_panel`, `make_value_widget_panel`,
+  `draw_lua_widget_panel`) — called only inside panels.cpp; likely orphaned by the HUD
+  rip-out → reachability pass → probably DELETE.
+
+### Forced phase order (dependency-driven)
+1. **P1 — Orphan sweep (low-risk, NOW).** Delete already-zero-caller curses fns in the
+   core-render files. `draw_minimap` done. Continue: audit D helpers + any other orphans.
+2. **P2 — ASCII map-glyph removal (category C).** Force `use_tiles=true`, delete the map
+   glyph writers, collapse `sdl_curses_draw:316/472` to the tile path, drop
+   `overmap_ui:1678` `draw_ascii` fallback. Remove the `use_tiles`/`use_tiles_overmap`
+   Options entries.
+3. **P3 — Migrate category-A screens** (one per session): list_items, list_monsters,
+   zones_manager, look_around pane, show_adm.
+4. **P4 — Migrate/confirm B overmap** (`draw_ascii` → rml, or confirm tile-overmap covers).
+5. **P5 — Backend deletion.** Once only RmlUi windows remain, delete `sdl_curses_draw`,
+   `cursesport`, and the `output.cpp` curses primitives.
+
+### Gotchas
+- `w_minimap`/`w_terrain` buffering in `sdl_curses_draw` (130-131) is the fragile
+  persistent-backbuffer path (see `bug_persistent_backbuffer_loss`). Touch carefully in P2/P5.
+- `editmap` is NOT mechanical (per memory). Treat as bespoke in P3/P4.
+- Category-A windows (e.g. `w_missions`) are often kept load-bearing for
+  `ui.position_from_window` sizing even under RmlUi — don't delete the window when you
+  delete its draw block.
