@@ -3905,9 +3905,22 @@ straggler set:
 - Creature-info `print_info` (monster/npc/character.cpp) — curses, but only as the A/B fallback for
   the migrated `look_around` info pane; deletion is P5, not a new migration.
 
-Player-facing P3 is effectively complete (live_view was the last interactive straggler). Next: P4
-(overmap `draw_ascii` confirm — tile-overmap likely already covers it) and P5 (backend deletion,
-gated on the remaining dev/debug consumers above + toggle removal after eyeball sign-off).
+Player-facing P3 is effectively complete (live_view was the last interactive straggler).
+
+**P4 — ASCII map-render confirm: DONE 2026-06-29.**
+- Overmap `draw_ascii` — was DEAD (dispatch always takes the tile-redraw else; `use_tiles*` forced true)
+  → DELETED `05c4ccfeed` (−664: draw_ascii + draw_city/map_labels + get_scent_glyph/has_player_label/
+  get_map_label_text cascade). Graphical overmap renders via sdltiles; labels via §7 world-text.
+- In-game `w_terrain` — NO dead ASCII branch exists: `sdl_curses_draw.cpp:315` renders w_terrain ONLY via
+  `tilecontext->draw` (the §C work already made it tiles-only). Nothing to delete.
+- `draw_ascii_lines` (sdl_font.cpp) is the backend box-drawing glyph routine for the generic cell
+  renderer — P5, not a map path.
+
+**Remaining for P5 (backend deletion), gated on eyeball sign-off + dev consumers:** editmap NSA
+(`uber_draw_ter`/`editmap_hilight::draw`), `character_preview` border, the generic curses cell/glyph
+backend (`output.cpp` primitives, `cursesport`, `sdl_curses_draw` non-terrain `draw_window`, `sdl_font`/
+`Font::OutputChar`/`draw_ascii_lines`), neutralizing the `use_tiles` option, and removing the per-screen
+`*_rmlui_enabled()` toggle layer + retained curses A/B fallback bodies after the daily-drive bake.
 
 **How to migrate (follow existing Tier 2–9 pattern):** add an `xxx.rml` + `xxx.rcss` under
 `data/`, a `xxx_rmlui_enabled()` toggle (default true) like the others, build the model in a
