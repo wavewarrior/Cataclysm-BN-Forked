@@ -59,8 +59,6 @@ class scent_map
         void deserialize( const std::string &data, bool is_type = false );
         std::string serialize( bool is_type = false ) const;
 
-        void draw( const catacurses::window &win, int div, const tripoint_bub_ms &center ) const;
-
         void update( const tripoint_bub_ms &center, map &m );
         void reset();
         void decay();

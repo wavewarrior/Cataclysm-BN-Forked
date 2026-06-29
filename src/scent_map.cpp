@@ -8,9 +8,7 @@
 #include "assign.h"
 #include "cached_options.h"
 #include "calendar.h"
-#include "color.h"
 #include "cuboid_rectangle.h"
-#include "cursesdef.h"
 #include "debug.h"
 #include "game.h"
 #include "generic_factory.h"
@@ -24,37 +22,6 @@
 #include "thread_pool.h"
 
 static constexpr int SCENT_RADIUS = 40;
-
-static nc_color sev( const size_t level )
-{
-    static const std::array<nc_color, 22> colors = { {
-            c_cyan,
-            c_light_cyan,
-            c_light_blue,
-            c_blue,
-            c_light_green,
-            c_green,
-            c_yellow,
-            c_pink,
-            c_light_red,
-            c_red,
-            c_magenta,
-            c_brown,
-            c_cyan_red,
-            c_light_cyan_red,
-            c_light_blue_red,
-            c_blue_red,
-            c_light_green_red,
-            c_green_red,
-            c_yellow_red,
-            c_pink_red,
-            c_magenta_red,
-            c_brown_red,
-        }
-    };
-    return level < colors.size() ? colors[level] : c_dark_gray;
-}
-
 
 auto scent_map::raw_scent_at( int x, int y, int z ) const -> int
 {
@@ -130,19 +97,6 @@ void scent_map::decay()
             return !any_nonzero;
         } );
     } );
-}
-
-void scent_map::draw( const catacurses::window &win, const int div,
-                      const tripoint_bub_ms &center ) const
-{
-    assert( div != 0 );
-    const point max( getmaxx( win ), getmaxy( win ) );
-    for( int x = 0; x < max.x; ++x ) {
-        for( int y = 0; y < max.y; ++y ) {
-            const int sn = get( center + point( -max.x / 2 + x, -max.y / 2 + y ) ) / div;
-            mvwprintz( win, point( x, y ), sev( sn / 10 ), "%d", sn % 10 );
-        }
-    }
 }
 
 int scent_map::get( const tripoint_bub_ms &p ) const
