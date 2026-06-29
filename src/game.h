@@ -911,7 +911,6 @@ class game : public submap_load_listener
 
         game::vmenu_ret list_items( const std::vector<map_item_stack> &item_list );
         std::vector<map_item_stack> find_nearby_items( int iRadius );
-        void reset_item_list_state( const catacurses::window &window, int height, bool bRadiusSort );
 
         game::vmenu_ret list_monsters( const std::vector<Creature *> &monster_list );
 
