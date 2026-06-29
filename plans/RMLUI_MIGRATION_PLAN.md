@@ -3714,3 +3714,35 @@ This unblocks eventual deletion of the curses backend. Irreversible for no-tiles
 - Category-A windows (e.g. `w_missions`) are often kept load-bearing for
   `ui.position_from_window` sizing even under RmlUi — don't delete the window when you
   delete its draw block.
+
+### P2 progress (2026-06-29) — all build+link green, tiles-only already in force
+
+**Key proof (no eyeball needed for w_terrain writers):** the *only* renderer of `w_terrain`
+is `sdl_curses_draw` branch 315 → `::tilecontext->draw(...)`, which renders from map data
+and emits only the *output* `overlay_strings`/`color_blocks`. It never reads w_terrain's
+curses cell buffer, and w_terrain never reaches the final `draw_window` else. **Therefore
+every `mvwputch`/`wputch` into `w_terrain` is dead** (cata_tiles draws the real thing).
+
+DONE this session:
+- `ecc47c6cf6` — orphan `game::draw_minimap` (text 5×5 minimap; GPU pixel-minimap replaced it).
+- `248071aa5a` — **keystone**: deleted the `!use_tiles` ASCII arms for w_terrain (map_font) +
+  w_overmap (overmap_font) in sdl_curses_draw; collapsed the const `use_tiles`/`use_tiles_overmap`
+  guards; w_terrain/w_overmap now unconditionally tile-rendered; dropped orphan `overmap_font` alias.
+- `72fae4a792` — dead dup `game::draw_veh_dir_indicator` (cata_tiles.cpp:4069 draws it via
+  `get_veh_dir_indicator_location`, which STAYS).
+- `756ca00706` — orphan `game::draw_critter_highlighted` (zero callers).
+
+**NEXT P2 sub-project — "creature-glyph sweep" (own session, eyeball at end):**
+All write dead w_terrain cells; cata_tiles covers them — but high blast radius:
+- `game::draw_critter` (1 caller: draw_ter loop) → `draw_critter_internal` → `Creature::draw`
+  (creature.cpp ×3) → virtual `monster::draw` (monster.cpp ×11) / `npc::draw` (npc.cpp ×8) /
+  Character glyphs (character.cpp ×3).
+- `map::draw( w_terrain, … )` (map.cpp ×4) — the terrain glyph render. **HIGHEST RISK**: verify
+  cata_tiles does NOT depend on side effects of `m.draw` (cache/memorized-tile/lighting) before
+  deleting. Likely the call site in draw_ter is removable but `map::draw` the method may have
+  other (non-w_terrain) callers — check.
+- draw_ter leftovers: `destination_preview` auto-move trail (verify cata_tiles draws it),
+  `draw_footsteps`, visibility indicator (game.cpp ~8403), trajectory/target glyphs (~10035).
+- `debug_menu.cpp:1916/1919` sound `?` overlay; `editmap.cpp:260` cursor (**NOT mechanical** — bespoke).
+Recommend: code-confirm cata_tiles coverage per item (as done for veh-dir/critter), delete writers,
+then ONE in-game eyeball that critters/below-indicators/auto-move-trail/SCT still render.
