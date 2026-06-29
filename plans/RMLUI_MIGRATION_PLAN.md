@@ -4056,3 +4056,30 @@ plus docs commits.
 
 **Next: P5-D** — game.cpp death screen (`draw_rip_screen`, ~1505–1580):
 post-death curses UI (kills/name/last-words); decide migrate vs remove.
+
+### P5-D progress (CURRENT SESSION)
+
+**Migrated death/RIP screen to RmlUi (`game::cleanup_at_end`):**
+- Created `data/gui/death_rip.rml` + `data/gui/death_rip.rcss`.
+- Data model `"death_rip"` with 4 bindings:
+  - `art_rml` — pre-coloured ASCII gravestone art (`&nbsp;` for spaces,
+    `<br/>` between lines, `cata_text_to_rml(colorize(...))` for coloured chars).
+  - `survived_rml` — "Survived: <duration>" (coloured).
+  - `kills_rml` — "Kills: <N>" (coloured).
+  - `name_rml` — "In memory of:<br/><player name>" (coloured).
+- Toggle `death_rip_rmlui_enabled()` added (default ON); registered in
+  `rml_toggle_registry.cpp`.
+- `DirtyAllVariables()` called after `rml.open()` to prime the eager-populated
+  model (matches the zones_manager/dialogue proven pattern).
+- Curses fallback arm kept intact in `ui.on_redraw()`.
+- Last-words `string_input_popup()` uses standalone path in RmlUi arm
+  (no `.window()` → uses `string_input.rml` doc); curses arm passes `.window(w_rip, ...)`.
+- Build green `+234/-63` across 5 files. Render correctness needs an in-game death
+  to verify — cannot be exercised by the test suite.
+
+**⚠ Working-tree WIP note:** `src/rml_screen.h` and `src/rml_toggle_registry.cpp`
+have pre-existing reformatting as uncommitted diffs (same pattern as game.h / magic.cpp).
+Committed versions are clean originals + our additions only.
+
+**Next: P5-E** — remaining game.cpp isolated curses: NPC debugger (~4075),
+compass helper (~4614–4725); census callers per symbol before deleting.
