@@ -2816,6 +2816,16 @@ modal harness fits. One toggle (`minigames_rmlui_enabled()`) lights all five.
 - **★ TIER 9 COMPLETE (2026-06-20, eyeball owed).** All 5 grid minigames render through the one shared
   char-grid widget (`minigame.rml` + `minigame_rml`), one toggle. With the rip-out, curses can't draw
   them — this is the path that survives. Gate-blocker for Tier 10 cleared (pending eyeball).
+- **★ TIER-9 DE-CURSE COMPLETE (2026-06-29, build+link green Metal).** Minigame curses fallback
+  stripped — the RmlUi char-grid is the only live renderer:
+  - snake `5bd03588c6` (prior session).
+  - kitten/lightson/minesweeper/sokoban `e12b47fdc3` — removed orphaned `draw_level`/`print_score`/
+    member draw windows + gutted `on_redraw` curses blocks (−278).
+  - kitten orphan `show()` `c5831194dc` — the fallback-arm strip left `show()` callerless; deleted it
+    + its `draw_robot`/`draw_kitten` helpers + inner field window `w` (−106).
+  - **KEPT (load-bearing, NOT orphaned):** each game's *border* window (`w_border`/`w_minesweeper_border`/
+    `bkatwin`/…) + its `newwin` — still drives `ui.position_from_window()` layout sizing under RmlUi.
+    `grep mvwputch/wputch/werase\( w` over the 5 files = 0.
 
 ## Load-bearing architecture facts (verified this session)
 
