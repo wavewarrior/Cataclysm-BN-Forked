@@ -4467,10 +4467,6 @@ void game::draw_ter( const tripoint_bub_ms &center, const bool looking, const bo
                       POSY - u.bub_pos().y() ), c_white, 'X' );
     }
 
-    if( u.controlling_vehicle && !looking ) {
-        draw_veh_dir_indicator( false );
-        draw_veh_dir_indicator( true );
-    }
     // Place the cursor over the player as is expected by screen readers.
     wmove( w_terrain, -center.xy().raw() + g->u.bub_pos().xy().raw() + point( POSX, POSY ) );
 }
@@ -4489,16 +4485,6 @@ std::optional<tripoint_rel_ms> game::get_veh_dir_indicator_location( bool next )
     float r = 10.0;
     return tripoint_rel_ms( static_cast<int>( r * face.x ), static_cast<int>( r * face.y ),
                             u.bub_pos().z() );
-}
-
-void game::draw_veh_dir_indicator( bool next )
-{
-    if( const std::optional<tripoint_rel_ms> indicator_offset = get_veh_dir_indicator_location(
-                next ) ) {
-        auto col = next ? c_white : c_dark_gray;
-        mvwputch( w_terrain, indicator_offset->xy().raw() - u.view_offset.xy().raw() + point( POSX, POSY ),
-                  col, 'X' );
-    }
 }
 
 float game::natural_light_level( const int zlev ) const

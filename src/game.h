@@ -264,7 +264,6 @@ class game : public submap_load_listener
          * instead of the one it is currently facing.
          */
         std::optional<tripoint_rel_ms> get_veh_dir_indicator_location( bool next ) const;
-        void draw_veh_dir_indicator( bool next );
 
         /**
          * Moves the player vertically.
