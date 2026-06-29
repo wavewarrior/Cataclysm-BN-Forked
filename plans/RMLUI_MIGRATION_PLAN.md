@@ -3746,3 +3746,31 @@ All write dead w_terrain cells; cata_tiles covers them — but high blast radius
 - `debug_menu.cpp:1916/1919` sound `?` overlay; `editmap.cpp:260` cursor (**NOT mechanical** — bespoke).
 Recommend: code-confirm cata_tiles coverage per item (as done for veh-dir/critter), delete writers,
 then ONE in-game eyeball that critters/below-indicators/auto-move-trail/SCT still render.
+
+### P2 creature-glyph sweep progress (2026-06-29 cont.) — all build+link green
+
+DONE (provably-dead w_terrain writers, cata_tiles covers each — code-confirmed):
+- `5b7b11ba51` — `draw_critter` wrapper chain (draw_ter loop + game::draw_critter +
+  static draw_critter_internal). cata_tiles `draw_critter_at` covers critters.
+- `3a7d879284` — static `draw_footsteps` + its draw_ter call site (cata_tiles
+  `draw_footsteps_frame` covers it). `draw_sounds` param commented out, kept for overloads.
+
+**KEPT — Creature::draw is NOT mine to delete:** it has LIVE callers in
+`editmap.cpp:493,532` and the look-around pane `game.cpp:~8311` (`creature->draw(...)`).
+It already no-ops under `is_draw_tiles_mode()`. Delete it + those call sites when editmap /
+look-around migrate (category A + editmap-is-bespoke).
+> **Caller-census lesson:** grep BOTH `\.draw\(` and `->draw\(` (pointer syntax) — the first
+> pass missed the editmap/look-around pointer callers and a deletion broke the build. Always
+> census every call syntax before deleting a shared method.
+
+draw_ter is now down to TWO curses writers, both needing more than a code-grep:
+- `m.draw( w_terrain, center )` (map.cpp:7068) — **HIGHEST RISK**, deferred. Verify cata_tiles
+  has no dependency on its side effects (memorized tiles / cache / lighting) before removing.
+- `destination_preview` auto-move trail → `game::draw_line(...w_terrain)` (game.cpp:4402).
+  cata_tiles has a `draw_line()` for the firing/targeting trajectory, but it is UNCONFIRMED
+  whether it renders the mouse auto-move preview trail. Needs an in-game eyeball (click-to-move
+  and check the trail shows) before deleting — otherwise silent regression.
+
+Other-file category-C still to census (per-file, same `->draw`/`.draw` caution):
+`monster.cpp` ×11, `npc.cpp` ×8, `character.cpp` ×3, `map.cpp` ×4 curses calls;
+`debug_menu.cpp:1916/1919` sound `?` overlay; `editmap.cpp` (NOT mechanical).
