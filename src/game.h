@@ -820,8 +820,6 @@ class game : public submap_load_listener
         // In curses mode, draw critter (if visible!) on its current position into w_terrain.
         // @param center the center of view, same as when calling map::draw
         void draw_critter( const Creature &critter, const tripoint_bub_ms &center );
-        // As @ref draw_critter, but with inverted colors.
-        void draw_critter_highlighted( const Creature &critter, const tripoint_bub_ms &center );
         void draw_cursor( const tripoint_bub_ms &p );
         // Draw a highlight graphic at p, for example when examining something.
         // TILES only, in curses this does nothing

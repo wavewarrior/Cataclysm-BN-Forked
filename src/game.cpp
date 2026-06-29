@@ -4410,11 +4410,6 @@ void game::draw_critter( const Creature &critter, const tripoint_bub_ms &center 
     draw_critter_internal( w_terrain, critter, center, false, m, u );
 }
 
-void game::draw_critter_highlighted( const Creature &critter, const tripoint_bub_ms &center )
-{
-    draw_critter_internal( w_terrain, critter, center, true, m, u );
-}
-
 bool game::is_in_viewport( const tripoint_bub_ms &p, int margin ) const
 {
     const tripoint_rel_ms diff( u.bub_pos() + u.view_offset - p );
