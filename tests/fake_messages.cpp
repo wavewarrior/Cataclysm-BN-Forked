@@ -9,11 +9,6 @@
 class JsonObject;
 class JsonOut;
 
-namespace catacurses
-{
-class window;
-}  // namespace catacurses
-
 /**
  * Stubs to turn all Messages calls into no-ops for unit testing.
  */
@@ -35,7 +30,6 @@ bool Messages::has_undisplayed_messages()
     return false;
 }
 void Messages::display_messages() {}
-void Messages::display_messages( const catacurses::window &, int, int, int, int ) {}
 void Messages::serialize( JsonOut & ) {}
 void Messages::deserialize( const JsonObject & ) {}
 
