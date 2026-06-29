@@ -655,18 +655,6 @@ class map : public submap_load_listener
         std::tuple<maptile, maptile, maptile> get_wind_blockers( const int &winddirection,
                 const tripoint_bub_ms &pos );
 
-        /** Draw a visible part of the map into `w`.
-         *
-         * This method uses `g->u.bub_pos().x()/bub_pos().y()` for visibility calculations, so it can
-         * not be used for anything but the player's viewport. Likewise, only
-         * `g->m` and maps with equivalent coordinates can be used, as other maps
-         * would have coordinate systems incompatible with `g->u.bub_pos().x()`
-         *
-         * @param w Window we are drawing in
-         * @param center The coordinate of the center of the viewport, this can
-         *               be different from the player coordinate.
-         */
-        void draw( const catacurses::window &w, const tripoint_bub_ms &center );
 
         /**
          * Draw the map tile at the given coordinate. Called by `map::draw()`.
