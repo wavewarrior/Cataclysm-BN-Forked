@@ -4105,18 +4105,6 @@ void game::disp_NPCs()
 }
 
 // A little helper to draw footstep glyphs.
-static void draw_footsteps( const catacurses::window &window, const tripoint_rel_ms &offset )
-{
-    for( const auto &footstep : sounds::get_footstep_markers() ) {
-        char glyph = '?';
-        if( footstep.z() != offset.z() ) { // Here z isn't an offset, but a coordinate
-            glyph = footstep.z() > offset.z() ? '^' : 'v';
-        }
-
-        mvwputch( window, footstep.xy().raw() + offset.xy().raw(), c_yellow, glyph );
-    }
-}
-
 shared_ptr_fast<ui_adaptor> game::create_or_get_main_ui_adaptor()
 {
     shared_ptr_fast<ui_adaptor> ui = main_ui_adaptor.lock();
@@ -4386,7 +4374,8 @@ void game::draw_ter( const bool draw_sounds )
               draw_sounds );
 }
 
-void game::draw_ter( const tripoint_bub_ms &center, const bool looking, const bool draw_sounds )
+void game::draw_ter( const tripoint_bub_ms &center, const bool looking,
+                     const bool /* draw_sounds */ )
 {
     ZoneScopedN( "draw_ter" );
     ter_view_p = center;
@@ -4404,11 +4393,6 @@ void game::draw_ter( const tripoint_bub_ms &center, const bool looking, const bo
     }
 
     m.draw( w_terrain, center );
-
-    if( draw_sounds ) {
-        draw_footsteps( w_terrain, tripoint_rel_ms( -center.x(), -center.y(),
-                        center.z() ) + point_rel_ms( POSX, POSY ) );
-    }
 
 
     if( !destination_preview.empty() && u.view_offset.z() == 0 ) {
