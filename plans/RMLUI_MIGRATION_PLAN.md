@@ -3774,3 +3774,26 @@ draw_ter is now down to TWO curses writers, both needing more than a code-grep:
 Other-file category-C still to census (per-file, same `->draw`/`.draw` caution):
 `monster.cpp` ×11, `npc.cpp` ×8, `character.cpp` ×3, `map.cpp` ×4 curses calls;
 `debug_menu.cpp:1916/1919` sound `?` overlay; `editmap.cpp` (NOT mechanical).
+
+### P2 — CORE WORLD-RENDER curses ELIMINATED (2026-06-29, eyeball-confirmed all green)
+
+draw_ter is curses-free and `map::draw` is gone. The actual terrain/creature/minimap
+glyph render no longer touches curses. game.cpp curses: **183 → 104**.
+
+- `86a2d236ad` — draw_ter: dropped `m.draw(w_terrain)` (no-op under tiles — map::draw
+  early-returns) + the `destination_preview` auto-move trail. draw_ter now only sets the
+  screen-reader cursor.
+- `69c49a2ee8` — deleted orphaned `map::draw` (terrain glyph render + map-memory memorize
+  loop). `draw_maptile`/`draw_from_above` kept (drawsq still uses them).
+
+**REMAINING w_terrain writers = interactive-mode highlights/cursors only (the tail, not bulk):**
+all write the unrendered w_terrain buffer; cata_tiles draws cursors/highlights via its own
+overlay — confirm per-call + eyeball, and most ride along with the category-A screen migration:
+- `game.cpp:8188/8298/8300` — look-around highlight + `creature->draw` (LOOK-AROUND = category A).
+- `game.cpp:9961/9963` — targeting/trajectory cursor glyphs (target_ui path).
+- `action.cpp:1165` — examine/peek highlight.  `construction.cpp:1654` — placement highlight.
+- `editmap.cpp:260/534` — editmap (**NOT mechanical**).  `debug_menu.cpp:1916/1919` — sound `?` debug overlay.
+- Shared methods kept until their callers migrate: `Creature::draw`, `map::drawsq`.
+
+Next: fold these into P3 category-A migration (look_around first — owns 8188/8298/8300 + Creature::draw),
+or a focused "w_terrain highlight overlay" sweep with one click-to-examine/target eyeball.
