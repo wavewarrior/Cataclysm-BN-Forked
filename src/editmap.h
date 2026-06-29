@@ -44,7 +44,6 @@ struct editmap_hilight {
                 color == c_cyan ? &cyan_background :
                 color == c_yellow ? &yellow_background : &green_background;
     }
-    void draw( editmap &em, bool update = false );
 };
 
 class editmap
@@ -53,7 +52,6 @@ class editmap
         tripoint pos2screen( const tripoint_bub_ms &p );
         bool eget_direction( tripoint_rel_ms &p, const std::string &action ) const;
         std::optional<tripoint_bub_ms> edit();
-        void uber_draw_ter( const catacurses::window &w, map *m );
         void update_view_with_help( const std::string &txt, const std::string &title );
         // RmlUi backdrop for the w_info panel: builds the colour-tagged info text
         // (the same content update_view_with_help draws via curses) for #editmap-info.

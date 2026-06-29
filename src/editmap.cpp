@@ -223,45 +223,6 @@ editmap::editmap()
 
 editmap::~editmap() = default;
 
-void editmap_hilight::draw( editmap &em, bool update )
-{
-    cur_blink++;
-    if( cur_blink >= static_cast<int>( blink_interval.size() ) ) {
-        cur_blink = 0;
-    }
-    if( blink_interval[ cur_blink ] || update ) {
-        map &here = get_map();
-        for( auto &elem : points ) {
-            const tripoint_bub_ms &p = elem.first;
-            // but only if there's no vehicles/mobs/npcs on a point
-            if( !here.veh_at( p ) && !g->critter_at( p ) ) {
-                const ter_t &terrain = here.ter( p ).obj();
-                char t_sym = terrain.symbol();
-                nc_color t_col = terrain.color();
-
-                if( here.furn( p ).to_i() > 0 ) {
-                    const furn_t &furniture_type = here.furn( p ).obj();
-                    t_sym = furniture_type.symbol();
-                    t_col = furniture_type.color();
-                }
-                const field &t_field = here.field_at( p );
-                if( t_field.field_count() > 0 ) {
-                    field_type_id t_ftype = t_field.displayed_field_type();
-                    const field_entry *t_fld = t_field.find_field( t_ftype );
-                    if( t_fld != nullptr ) {
-                        t_col = t_fld->color();
-                        t_sym = t_fld->symbol()[0];
-                    }
-                }
-                if( blink_interval[ cur_blink ] ) {
-                    t_col = getbg( t_col );
-                }
-                tripoint scrpos = em.pos2screen( p );
-                mvwputch( g->w_terrain, scrpos.xy(), t_col, t_sym );
-            }
-        }
-    }
-}
 /*
  * map position to screen position
  */
@@ -465,55 +426,6 @@ std::optional<tripoint_bub_ms> editmap::edit()
  * This is a map editor after all.
  */
 
-void editmap::uber_draw_ter( const catacurses::window &w, map *m )
-{
-    auto center = target;
-    auto start = center.xy() + tripoint_rel_ms( -getmaxx( w ) / 2, -getmaxy( w ) / 2, target.z() );
-    auto end = center.xy() + tripoint_rel_ms( getmaxx( w ) / 2, getmaxy( w ) / 2, target.z() );
-    /*
-        // pending filter options
-        bool draw_furn=true;
-        bool draw_ter=true;
-        bool draw_trp=true;
-        bool draw_fld=true;
-        bool draw_veh=true;
-    */
-    bool game_map = m == &get_map() || w == g->w_terrain;
-    const int msize = g_mapsize_x;
-    if( refresh_mplans ) {
-        hilights["mplan"].points.clear();
-    }
-    drawsq_params params = drawsq_params().center( center );
-    for( const auto &p : tripoint_range<tripoint_bub_ms>( start, end ) ) {
-        int sym = game_map ? '%' : ' ';
-        if( p.x() >= 0 && p.x() < msize && p.y() >= 0 && p.y() < msize ) {
-            if( game_map ) {
-                Creature *critter = g->critter_at( p );
-                if( critter != nullptr ) {
-                    critter->draw( w, center.xy(), false );
-                } else {
-                    m->drawsq( w, p, params );
-                }
-                if( refresh_mplans ) {
-                    monster *mon = dynamic_cast<monster *>( critter );
-                    if( mon != nullptr && mon->bub_pos() != mon->move_target() ) {
-                        for( auto &location : line_to( mon->bub_pos(), mon->move_target() ) ) {
-                            hilights["mplan"].points[location] = 1;
-                        }
-                    }
-                }
-            } else {
-                m->drawsq( w, p, params );
-            }
-        } else {
-            mvwputch( w, ( p.xy() - start.xy() ).raw(), c_dark_gray, sym );
-        }
-    }
-    if( refresh_mplans ) {
-        refresh_mplans = false;
-    }
-}
-
 void editmap::do_ui_invalidation()
 {
     g->u.view_offset = target - g->u.bub_pos();
@@ -523,15 +435,14 @@ void editmap::do_ui_invalidation()
 
 void editmap::draw_main_ui_overlay()
 {
-    const Creature *critter = g->critter_at( target );
-
     map &here = get_map();
 
-    // update target point
-    if( critter != nullptr ) {
-        critter->draw( g->w_terrain, target, true );
-    } else {
-        here.drawsq( g->w_terrain, target, drawsq_params().highlight( true ).center( target ) );
+    // Target emphasis. The critter glyph (Creature::draw) and the curses cell
+    // highlight (map::drawsq) wrote to w_terrain and are dead in tiles-only mode;
+    // drawsq's only live effect there was g->draw_highlight when no critter sits on
+    // the target, so call it directly (the critter itself is shown by the GPU tiles).
+    if( g->critter_at( target ) == nullptr ) {
+        g->draw_highlight( target );
     }
     // give some visual indication of different cursor moving modes
     if( altblink ) {
@@ -571,14 +482,8 @@ void editmap::draw_main_ui_overlay()
         }
     }
 
-    // custom highlight.
-    // TODO: optimize
-    for( auto &elem : hilights ) {
-        if( !elem.second.points.empty() ) {
-            elem.second.draw( *this );
-        }
-    }
-
+    // custom highlight (mplan / mapgentgt) drew via mvwputch onto w_terrain — dead
+    // in tiles-only mode (those curses writes render nothing), so the draw is gone.
     if( tmpmap_ptr ) {
         tinymap &tmpmap = *tmpmap_ptr;
         {

@@ -2518,29 +2518,6 @@ units::mass Creature::weight_capacity() const
 /*
  * Drawing-related functions
  */
-void Creature::draw( const catacurses::window &w, const point_bub_ms &origin, bool inverted ) const
-{
-    draw( w, tripoint_bub_ms( origin, bub_pos().z() ), inverted );
-}
-
-void Creature::draw( const catacurses::window &w, const tripoint_bub_ms &origin,
-                     bool inverted ) const
-{
-    if( is_draw_tiles_mode() ) {
-        return;
-    }
-
-    point draw( -origin.xy().raw() + point( getmaxx( w ) / 2 + bub_pos().x(),
-                                            getmaxy( w ) / 2 + bub_pos().y() ) );
-    if( inverted ) {
-        mvwputch_inv( w, draw, basic_symbol_color(), symbol() );
-    } else if( is_symbol_highlighted() ) {
-        mvwputch_hi( w, draw, basic_symbol_color(), symbol() );
-    } else {
-        mvwputch( w, draw, symbol_color(), symbol() );
-    }
-}
-
 bool Creature::is_symbol_highlighted() const
 {
     return false;

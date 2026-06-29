@@ -657,16 +657,6 @@ class map : public submap_load_listener
 
 
         /**
-         * Draw the map tile at the given coordinate. Called by `map::draw()`.
-         *
-         * @param w The window we are drawing in
-         * @param p The tile on this map to draw.
-         * @param params Draw parameters.
-         */
-        void drawsq( const catacurses::window &w, const tripoint_bub_ms &p,
-                     const drawsq_params &params ) const;
-
-        /**
          * Add currently loaded submaps (in @ref grid) to the @ref mapbuffer.
          * They will than be stored by that class and can be loaded from that class.
          * This can be called several times, the mapbuffer takes care of adding
@@ -2233,18 +2223,6 @@ class map : public submap_load_listener
          * @param zlev zlevel where uniformity change occured
          */
         void invalidate_max_populated_zlev( int zlev );
-
-        /**
-         * Internal version of the drawsq. Keeps a cached maptile for less re-getting.
-         * Returns false if it has drawn all it should, true if `draw_from_above` should be called after.
-         */
-        bool draw_maptile( const catacurses::window &w, const tripoint_bub_ms &p,
-                           const maptile &tile, const drawsq_params &params ) const;
-        /**
-         * Draws the tile as seen from above.
-         */
-        void draw_from_above( const catacurses::window &w, const tripoint_bub_ms &p,
-                              const maptile &tile, const drawsq_params &params ) const;
 
         int determine_wall_corner( const tripoint_bub_ms &p ) const;
         // apply a circular light pattern immediately, however it's best to use...
