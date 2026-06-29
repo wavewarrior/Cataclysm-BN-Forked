@@ -23,13 +23,9 @@ class robot_finds_kitten
         robot_finds_kitten();
     private:
         std::string getmessage( int idx ) const;
-        void draw_robot() const;
-        void draw_kitten() const;
-        void show() const;
         void show_rml() const;
         void process_input();
         catacurses::window bkatwin;
-        catacurses::window w;
         kobject robot;
         kobject kitten;
         kobject empty;
