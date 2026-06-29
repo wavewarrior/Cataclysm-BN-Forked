@@ -4037,3 +4037,22 @@ plus docs commits.
 **Next: P5-C** — dialogue_win curses impl: delete `dialogue_window::print_header` /
 `print_history` / `display_responses` / `clear_window_texts` / `cache_msg` /
 `refresh_response_display` bodies; keep `history_markup()` and data members the RmlUi path uses.
+
+### P5-C progress (CURRENT SESSION)
+
+**Emptied dialogue_window curses method bodies in dialogue_win.cpp:**
+- `print_header(const std::string &)` → `{}`
+- `clear_window_texts()` → `{}`
+- `print_history()` → `{}`
+- `cache_msg(const std::string &, size_t)` → `{}`
+- `display_responses(const std::vector<talk_data> &, size_t)` → `{}`
+- Deleted file-static helpers: `page_entry`, `page` structs; `split_to_pages`,
+  `print_responses`, `print_keybindings` functions; anonymous namespace
+  (`header_height`, `dialogue_divider_x`).
+- `refresh_response_display()` and `handle_scrolling()` kept (called from live
+  main loop in npctalk.cpp; scroll state is always at default in RmlUi path).
+- `add_to_history()`, `history_markup()`, `resize_dialogue()` untouched.
+- Build green `+28/-258`. No warnings.
+
+**Next: P5-D** — game.cpp death screen (`draw_rip_screen`, ~1505–1580):
+post-death curses UI (kills/name/last-words); decide migrate vs remove.
