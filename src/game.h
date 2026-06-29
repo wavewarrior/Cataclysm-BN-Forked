@@ -1047,7 +1047,6 @@ class game : public submap_load_listener
         bool is_game_over();     // Returns true if the player quit or died
         void death_screen();     // Display our stats, "GAME OVER BOO HOO"
         void win_screen();       // Display our stats, "CONGRATULATIONS!"
-        void draw_minimap();     // Draw the 5x5 minimap
     public:
         // Draws the pixel minimap based on the player's current location
         void draw_pixel_minimap( const catacurses::window &w );
