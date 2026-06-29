@@ -4372,44 +4372,6 @@ void game::draw_pixel_minimap( const catacurses::window &w )
     w_pixel_minimap = w;
 }
 
-static void draw_critter_internal( const catacurses::window &w, const Creature &critter,
-                                   const tripoint_bub_ms &center,
-                                   bool inverted,
-                                   const map &m, const avatar &u )
-{
-    const int my = POSY + ( critter.bub_pos().y() - center.y() );
-    const int mx = POSX + ( critter.bub_pos().x() - center.x() );
-    if( !is_valid_in_w_terrain( point( mx, my ) ) ) {
-        return;
-    }
-    if( critter.bub_pos().z() != center.z() && m.has_zlevels() ) {
-        static constexpr tripoint up_tripoint( tripoint_above );
-        if( critter.bub_pos().z() == center.z() - 1 &&
-            ( debug_mode || u.sees( critter ) ) &&
-            m.valid_move( critter.bub_pos(), critter.bub_pos() + up_tripoint, false, true ) ) {
-            // Monster is below
-            // TODO: Make this show something more informative than just green 'v'
-            // TODO: Allow looking at this mon with look command
-            // TODO: Redraw this after weather etc. animations
-            mvwputch( w, point( mx, my ), c_green_cyan, 'v' );
-        }
-        return;
-    }
-    if( u.sees( critter ) || &critter == &u ) {
-        critter.draw( w, center.xy(), inverted );
-        return;
-    }
-
-    if( u.sees_with_infrared( critter ) || u.sees_with_specials( critter ) ) {
-        mvwputch( w, point( mx, my ), c_red, '?' );
-    }
-}
-
-void game::draw_critter( const Creature &critter, const tripoint_bub_ms &center )
-{
-    draw_critter_internal( w_terrain, critter, center, false, m, u );
-}
-
 bool game::is_in_viewport( const tripoint_bub_ms &p, int margin ) const
 {
     const tripoint_rel_ms diff( u.bub_pos() + u.view_offset - p );
@@ -4448,9 +4410,6 @@ void game::draw_ter( const tripoint_bub_ms &center, const bool looking, const bo
                         center.z() ) + point_rel_ms( POSX, POSY ) );
     }
 
-    for( Creature &critter : all_creatures() ) {
-        draw_critter( critter, center );
-    }
 
     if( !destination_preview.empty() && u.view_offset.z() == 0 ) {
         // Draw auto-move preview trail
