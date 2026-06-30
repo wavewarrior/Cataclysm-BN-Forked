@@ -369,10 +369,47 @@ Keep: `cursesport.h` data structures (`WINDOW`, `cursecell`, `colorpairs`).
 
 ---
 
-## ★★★ RESUME HERE (2026-06-30) ★★★
+## ★★★ RESUME HERE (2026-06-30 session 2) ★★★
 
-**State**: P5-I complete. P6 plan written. Ready to execute.
+**Commit**: `39833c4` — P6-B/D/E complete.
 
-**Critical path**: P6-A → P6-B → P6-D (parallel batches) → P6-E (independent) → P6-F → P6-G → P6-H
+**Done this session:**
+- P6-B: Deleted dead `effect_select_callback::refresh()` (wisheffect.cpp) and
+  `draw_spellbook_info()` + `spellbook_callback::refresh()` (magic.cpp) — never called,
+  `draw_rml()` covers the content; `fold_and_print_from` references removed.
+- P6-D: Deleted curses bodies behind guards in scores_ui show_kills, trade_win
+  item-info popup, overmap editor overlay, overmap note-preview.
+  All other D-batch files confirmed already GUARD_CLEAN or NO_RML (skip).
+- P6-E: Confirmed already complete (data model + rml.open + lua_console.rml/.rcss
+  all existed). E-4: deleted curses fallback body from catalua_console on_redraw.
+  Removed unused `g_lua_console_rml_active` variable.
 
-**Start with P6-A-1**: `src/game.cpp` vehicle list on_redraw — add `if(rml){sync_rml();return;}` guard before the first `trim_and_print` call. Grep `w_vehicles` to locate.
+**Plan corrections (advisories verified against actual code):**
+- A-1 (list_vehicles guard): NO rml path exists — skip; needs full migration.
+- A-2 (editmap guard): Already correctly self-gates in `update_view_with_help()`;
+  adding an on_redraw guard would blank the RmlUi info panel — no change needed.
+- B-1/B-2 (gate refresh()): `uilist::show()` is a stub; `refresh()` is never called;
+  `menu->rml_session` is private. Correct fix = delete dead bodies, not gate.
+- C-1/C-2 (gate draw_item_info): Modal popups with own newwin+input loop, not
+  redraw fallbacks. Can't gate without regression. Leave until RmlUi examine exists.
+- overmap_ui:1666: passes `rml ? sidebar : nullptr` to `draw()` — correct dispatch, no guard needed.
+- look_around on_redraw: already RmlUi-only (sync_rml() only, curses removed).
+
+**Blocked: P6-F / P6-G / P6-H**
+All three depend on removing the curses fallback in `editmap::update_view_with_help()`
+(editmap.cpp ~line 690+), which is the sole caller of:
+- `npc::print_info`, `monster::print_info`, `character::print_info` (use trim_and_print)
+- `vehicle::print_part_list` (uses trim_and_print)
+And `draw_item_info` modal callers in advanced_inv/crafting_gui/game/game_inventory/
+inventory_ui cannot be gated until an RmlUi examine overlay exists.
+And `list_vehicles` (game.cpp) + `debug.cpp` have no RmlUi path — they reference
+`trim_and_print`/`fold_and_print` unconditionally.
+
+**Next session critical path:**
+1. Remove editmap curses fallback from `update_view_with_help()` — once RmlUi info
+   panel is confirmed working, delete the `else` branch that calls `print_info`/
+   `print_part_list`. This unblocks P6-F.
+2. Add RmlUi path to `list_vehicles` (game.cpp ~9700) — or port to not use trim_and_print.
+3. Port `debug.cpp` on_redraw — or gate on a debug RmlUi toggle.
+4. After all callers gone: P6-F (delete print_info/print_part_list), P6-G (delete
+   fold_and_print/trim_and_print from output.cpp), P6-H (backend cull).
