@@ -375,30 +375,43 @@ Keep: `cursesport.h` data structures (`WINDOW`, `cursecell`, `colorpairs`).
 - `39833c4` — P6-B/D/E: dead refresh() bodies, guarded on_redraw fallbacks, catalua_console E-4
 - `3de10da` — editmap::update_view_with_help() curses fallback deleted (D-style cleanup)
 - `bd61cc1` — P6-F: entire Creature::print_info pure-virtual hierarchy + vehicle::print_part_list removed
+- `f083b2c` — plan update
 
-**State after session 2:**
-- P6-A/B/C/D/E/F: complete (with corrections noted below)
+**⚠ VERIFICATION GAP — MUST FIX FIRST NEXT SESSION ⚠**
+Every change was verified at **object-compile level only**. The full linked binary
+(`cataclysm-bn-tiles` + `cata_test-tiles`) was NEVER successfully built this session —
+all full-build attempts timed out on third-party dep recompilation (SPIRV-Tools/DXC/RmlUi)
+before reaching the link step or game objects. AGENTS.md mandates building both targets
+together with tests. The verification matrix eyeball checks (vehicle list render, editmap
+info panel, Lua console scroll/input, wish effect selector, magic spellbook) were NOT run.
+
+**First task next session (non-negotiable before any new edits):**
+```sh
+cmake --build out/build/osx-arm-slim --target cataclysm-bn-tiles cata_test-tiles -j8
+```
+Confirm clean link. Then eyeball-test the screens touched by P6-B/D/E/F deletions.
+Only after green link + eyeball should any further P6-G work proceed.
+
+**State after session 2 (object-compile verified only):**
+- P6-A through P6-F edits applied; each changed .cpp compiles without errors
 - P6-G (output.cpp primitive deletion): **BLOCKED** — remaining callers:
   - `debug.cpp:328` — `fold_and_print` in on_redraw; no RmlUi path exists
   - `game.cpp:9791+` — `trim_and_print` in `list_vehicles`; no RmlUi path exists
-  - `advanced_inv/crafting_gui/game look-around/game_inventory/inventory_ui` — `draw_item_info` modal popups (own newwin+loop, not redraw fallbacks; need RmlUi examine overlay)
+  - `advanced_inv/crafting_gui/game look-around/game_inventory/inventory_ui` — `draw_item_info` modal popups (own newwin+loop; need RmlUi examine overlay)
   - `overmap_ui.cpp:324` — `print_colored_text` in `update_note_preview` (map_notes_callback has no RML path)
   - `panels.cpp:319` — `print_colored_text` in HUD sidebar panel draw
   - `popup.cpp:224-231` — `print_colored_text` in static/throbber popup (no RmlUi path)
 
 **Plan corrections verified this session:**
-- A-1 (list_vehicles): NO rml_doc, NO sync_rml. Plan wrong — needs full migration, not just guard.
-- A-2 (editmap): Self-gates correctly inside update_view_with_help(); adding on_redraw guard would blank RmlUi panel.
+- A-1 (list_vehicles): NO rml_doc, NO sync_rml. Plan wrong — needs full migration.
+- A-2 (editmap): Self-gates inside update_view_with_help(); on_redraw guard would blank RmlUi panel.
 - B-1/B-2: uilist::show() stub; refresh() never called; menu->rml_session private. Delete dead bodies.
-- C-1/C-2: draw_item_info are modal popups (own window + input loop), not redraw fallbacks. Leave until RmlUi examine overlay exists.
-- P6-F pure-virtual note: Creature::print_info is `= 0`; must delete base + ALL overrides (monster/character/npc) atomically, not piecemeal.
+- C-1/C-2: draw_item_info are modal popups (own window + input loop). Leave until RmlUi examine overlay.
+- P6-F pure-virtual: Creature::print_info is `= 0`; must delete base + ALL overrides atomically.
 
-**Next session critical path:**
-1. Port `debug.cpp` on_redraw — add RmlUi toggle + doc/data model, OR defer: the debug handler
-   is error-display-only so a simpler approach is keeping fold_and_print there permanently
-   and not including it in P6-G deletions. Decision needed.
-2. Port `list_vehicles` (game.cpp ~9700) — add rml_doc + RML file + sync_rml, mirroring
-   list_items/list_monsters pattern. This is the larger migration work.
-3. Port `popup.cpp` static_popup/throbber_popup — give them RmlUi render paths.
+**Next session critical path (after green link):**
+1. Port `list_vehicles` (game.cpp ~9700) — add rml_doc + RML file + sync_rml (list_items pattern).
+2. Port `popup.cpp` static_popup/throbber_popup — give them RmlUi render paths.
+3. Decide `debug.cpp`: port or exempt from P6-G permanently (error handler, no RmlUi context).
 4. Build RmlUi examine overlay for draw_item_info modal callers.
-5. After all above: re-audit P6-G targets, delete from output.cpp/output.h, then P6-H.
+5. Re-audit P6-G targets → delete output.cpp primitives → P6-H.
