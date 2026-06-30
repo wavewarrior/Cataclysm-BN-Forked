@@ -5,7 +5,7 @@
 </head>
 <body data-model="aim_examine">
     <div id="aim-ex-panel">
-        <div id="aim-ex-info" class="scroll-pane" data-rml="info_html"/>
+        <div id="aim-ex-info" class="scroll-pane" data-rml="info_html"></div>
     </div>
 </body>
 </rml>

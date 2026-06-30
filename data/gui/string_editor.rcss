@@ -20,7 +20,6 @@ body {
 #se-content {
   flex: 1;
   overflow-y: auto;
-  font-family: Terminus, monospace;
   padding: 4dp 8dp;
 }
 
@@ -41,8 +40,11 @@ body {
 }
 
 .se-cursor {
-  background-color: #ddd;
-  color: #111;
+  display: inline-block;
+  min-width: 9dp;
+  height: 1.1em;
+  background-color: #fbf1c7;
+  color: #1d2021;
 }
 
 .se-ime {

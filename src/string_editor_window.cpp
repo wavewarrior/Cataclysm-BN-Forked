@@ -512,6 +512,7 @@ std::pair<bool, std::string> string_editor_window::query_string() {
             se_data.handle = c.GetModelHandle();
         });
 
+
     ui.on_redraw([&](ui_adaptor& ui) {
         if (refold) {
             utf8_wrapper text = _utext;

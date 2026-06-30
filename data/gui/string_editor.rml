@@ -3,10 +3,12 @@
   <link type="text/rcss" href="string_editor.rcss"/>
   <link type="text/rcss" href="theme.rcss"/>
 </head>
-<body>
+<body data-model="string_editor">
 <div id="se-panel">
-  <div id="se-content" class="scroll-pane" data-for="row : rows" data-rml="row.html"/>
-  <div id="se-hints" data-rml="hints_rml"/>
+  <div id="se-content" class="scroll-pane">
+    <div class="se-row" data-for="row : rows" data-rml="row.html"></div>
+  </div>
+  <div id="se-hints" data-rml="hints_rml"></div>
 </div>
 </body>
 </rml>
