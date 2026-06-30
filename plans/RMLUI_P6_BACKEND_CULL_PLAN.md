@@ -107,37 +107,50 @@ cmake --build out/build/osx-arm-slim --target cataclysm-bn-tiles cata_test-tiles
 
 These are `uilist_callback` subclasses that write to `menu->window` via `refresh()`.
 Since uilist renders via RmlUi, `menu->window` is never displayed — but the curses
-write still happens. Fix: gate with `if(menu->rml_session) return;`.
+write still happens. Fix: gate `refresh()` with `if(menu->rml_session) return;`.
+
+**Invariant before gating any uilist_callback's curses body**: confirm a `draw_rml()`
+override exists that renders the same content. If `draw_rml()` is missing, **add it
+first** rather than gate (per AGENTS.md "preserve visible content"). Do NOT apply
+the gate pattern blindly during the P6-D sweep — a callback without `draw_rml()` would
+lose its side-panel content under RmlUi.
+
+B-1 and B-2 are safe because both callbacks already have complete `draw_rml()` overrides:
+- `wisheffect.cpp:245` — `draw_rml()` renders the full effect stats panel
+- `magic.cpp:2100-2188` — `draw_rml()` renders the full spell stats panel
 
 ### B-1: wisheffect.cpp effect_select_callback
 
 **File**: `src/wisheffect.cpp`  
-**Location**: `effect_select_callback::refresh(uilist* menu)` (~line 220)
+**Location**: `effect_select_callback::refresh(uilist* menu)` (~line 220)  
+**draw_rml() present at**: `wisheffect.cpp:~245` — renders effect stats (safe to gate)
 
 ```cpp
 void effect_select_callback::refresh(uilist* menu) override {
-    if( menu->rml_session ) { return; }  // uilist renders via RmlUi — window unused
+    if( menu->rml_session ) { return; }  // draw_rml() handles this under RmlUi
     fold_and_print_from( menu->window, ... );
     wnoutrefresh( menu->window );
 }
 ```
 
-**Verify**: open wish → apply effect — selector works, description shows.
+**Verify**: open wish → apply effect — selector works, description shows in side panel.
 
 ### B-2: magic.cpp draw_spellbook_info
 
 **File**: `src/magic.cpp`  
-**Location**: `spellcasting_callback::refresh()` calls `draw_spellbook_info(menu)` (~line 2095)
+**Location**: `spellcasting_callback::refresh()` calls `draw_spellbook_info(menu)` (~line 2095)  
+**draw_rml() present at**: `magic.cpp:~2100-2188` — renders full spell stats (safe to gate)
 
 Gate in `refresh()`:
 ```cpp
 void spellcasting_callback::refresh(uilist* menu) override {
-    if( menu->rml_session ) { return; }
+    if( menu->rml_session ) { return; }  // draw_rml() handles this under RmlUi
     draw_spellbook_info( menu );
 }
 ```
 
-**Verify**: open magic casting menu — spells list correctly, description appears.
+**Verify**: open magic casting menu — spells list correctly, spell description appears
+in the side panel (rendered by draw_rml(), not refresh()).
 
 Build after B-1 and B-2.
 
