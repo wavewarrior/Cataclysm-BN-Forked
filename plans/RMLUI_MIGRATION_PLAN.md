@@ -4102,3 +4102,42 @@ diff (~2377 lines churn). Committed version is clean HEAD − the 2-line declara
 
 **Next: P5-F** — generics: uilist `show` curses fallback, string_input_popup, popup.
 High blast radius; gated on all the above being complete.
+
+### P5-F progress (CURRENT SESSION)
+
+**Only one safe change landed; the other two are explicitly deferred.**
+
+**Done — `string_input_popup::draw()` RmlUi gate:**
+- Added `if( rml_session ) { return; }` at the top of `draw()` (string_input_popup.cpp).
+- `rml_session` is the instance's own RmlUi state pointer: non-null only when
+  `rml_open()` succeeded for THIS call.  When RmlUi is active, curses `draw()` is
+  now a no-op; all three fall-through cases (toggle OFF / `!ready()` / open failure)
+  leave `rml_session` null and curses renders normally.  `custom_window` and
+  `draw_only=true` paths are unaffected (both leave `rml_session` null).
+- Build green (trivial — no new TUs touched).
+
+**Deferred — `uilist::show()` and `query_popup::show()`:**
+The plan to empty these bodies was rejected after analysis:
+- `uilist::rml_open()` returns `false` (→ `rml_session` null → `show()` called) in
+  THREE live cases that a nested-uilist fix does NOT eliminate:
+  1. `!uilist_rmlui_enabled()` — F4 toggle OFF (the A/B fallback kept until P5-I).
+  2. `!rmlui_layer::ready()` — early-init uilists before the first `refresh_display`.
+  3. `CreateDataModel` / `open_document` failure path.
+- `query_popup::show()` has an even deeper blocker: **`static_popup` and
+  `throbber_popup` never call `rml_open()` at all** — their ctors call only
+  `create_or_get_adaptor()`, so `rml_session` is ALWAYS null and `on_redraw`
+  ALWAYS hits `else { show(); }`.  This is the entire loading/wait-screen family:
+  worldgen "Please wait…", save/load, saving, mapbuffer, autodrive.  Emptying
+  `show()` would blank EVERY loading screen unconditionally, not just nested-popup
+  edge cases.  The toggle-exposure analysis for interactive `query_popup` applies
+  here too (toggle OFF / early-init / failure).
+- The test suite cannot catch blank-screen regressions (`query()` bails in
+  `test_mode`); silent breakage would only surface in manual play.
+- **`uilist::show()`**: deleted in **P5-I** together with the toggle layer —
+  the three fall-through cases no longer exist at that point.
+- **`query_popup::show()`**: **CANNOT be deleted at P5-I** without FIRST giving
+  `static_popup` and `throbber_popup` their own RmlUi render path.  That work
+  is a prerequisite of P5-I, not a free side-effect of dropping the toggle.
+  Record this as a P5-I pre-requisite now so a future session doesn't silently
+  blank every loading screen.
+**Next: P5-G** — dev tools: `wish.cpp`, `catalua_console`, `game::disp_NPCs`.

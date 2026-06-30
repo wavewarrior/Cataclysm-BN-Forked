@@ -239,6 +239,10 @@ void string_input_popup::update_input_history( utf8_wrapper &ret, bool up )
 void string_input_popup::draw( ui_adaptor *const ui, const utf8_wrapper &ret,
                                const utf8_wrapper &edit ) const
 {
+    // RmlUi handles rendering when it is active for this instance.
+    if( rml_session ) {
+        return;
+    }
     if( !custom_window ) {
         werase( w_full );
         draw_border( w_full );
