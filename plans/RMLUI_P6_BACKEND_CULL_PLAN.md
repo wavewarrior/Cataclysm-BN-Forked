@@ -406,10 +406,26 @@ Deleted this session: draw_item_info (3 overloads), insert_table, fold_and_print
 **P6-G scope exhausted** given permanent exceptions. No further output.cpp deletions possible
 without porting clzones, draw_border/center_print callers, or the three pre-init exceptions.
 
-**Next: P6-H backend cull** — draw_window stub, Font::OutputChar/draw_ascii_lines,
-cursesport.cpp, toggle layer removal. Assess prerequisites before starting.
+**⛔ P6-H IS FULLY BLOCKED — achievable scope: zero.**
+All four H sub-tasks depend on migrating the three permanent exceptions away from curses:
+- debug.cpp on_redraw — crash handler; fires when game state is broken. Cannot use RmlUi.
+- popup.cpp::show() — pre-RmlUi-init fallback; fires *before* rmlui_layer::ready(). By definition cannot use RmlUi.
+- panels.cpp HUD — major subsystem; entire HUD rewrite required. Out of scope.
 
-**Plan corrections verified:**
+Why each H task is blocked:
+- H-1 (stub draw_window→false): debug/popup/panels go blank — hard regression at crash time and startup.
+- H-2 (delete Font::OutputChar/draw_ascii_lines): blocked by H-1.
+- H-3 (delete cursesport.cpp functions): debug.cpp calls catacurses::erase/wnoutrefresh; popup.cpp::show() calls werase/draw_border; panels.cpp calls print_colored_text → undefined symbol at link time.
+- H-4 (remove toggle layer): removing if(rml){return;} guards + accessor functions leaves debug.cpp on_redraw and popup.cpp::show() with no render path exactly when RmlUi is unavailable — the scenario those fallbacks exist to handle.
+
+**Unblocking P6-H requires (in order):**
+1. Startup-before-RmlUi popups: wire popup.cpp::show() to an alternative non-curses renderer (e.g., SDL text directly), OR defer all startup popups until after rmlui_layer::init() completes.
+2. Crash handler: debug.cpp on_redraw must be replaced with a renderer that works without RmlUi context (SDL_RenderDrawText or similar). This is a custom solution, not a screen migration.
+3. HUD (panels.cpp): requires porting the entire sidebar panel system to RmlUi — a major project of its own.
+
+**End state of P6 as executed**: P6-A through P6-F complete. P6-G partial (deletable set exhausted). P6-H blocked. The curses infrastructure (draw_window, cursesport, toggle layer) remains for the three pre-init/crash/HUD exceptions.
+
+**Plan corrections verified this session:**
 - A-1 (list_vehicles): full migration done (3faeaa9).
 - A-2 (editmap): self-gates inside update_view_with_help(); no change needed.
 - B-1/B-2: refresh() dead code — delete bodies.
@@ -417,3 +433,4 @@ cursesport.cpp, toggle layer removal. Assess prerequisites before starting.
 - P6-F: pure-virtual removal must be atomic.
 - debug.cpp / popup.cpp / panels.cpp: print_colored_text = permanent exceptions.
 - fold_and_print: permanent exception (clzones live caller chain).
+- P6-H: fully blocked by same three exceptions; achievable scope = zero.
