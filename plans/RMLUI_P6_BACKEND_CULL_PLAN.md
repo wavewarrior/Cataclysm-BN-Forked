@@ -369,42 +369,48 @@ Keep: `cursesport.h` data structures (`WINDOW`, `cursecell`, `colorpairs`).
 
 ---
 
-## ★★★ RESUME HERE (2026-06-30 session 2 — end) ★★★
+## ★★★ RESUME HERE (next session) ★★★
 
-**Commits this session:**
+**Commits (all linked clean, 282s second link):**
 - `39833c4` — P6-B/D/E: dead refresh() bodies, guarded on_redraw fallbacks, catalua_console E-4
-- `3de10da` — editmap::update_view_with_help() curses fallback deleted (D-style cleanup)
-- `bd61cc1` — P6-F: entire Creature::print_info pure-virtual hierarchy + vehicle::print_part_list removed
-- `f083b2c` — plan update
+- `3de10da` — editmap::update_view_with_help() curses fallback deleted
+- `bd61cc1` — P6-F: Creature::print_info pure-virtual hierarchy + vehicle::print_part_list removed
+- `3faeaa9` — list_vehicles RmlUi migration (list_vehicles.rml/rcss; sync_rml; curses body deleted)
+- `86ff30c` — debug.cpp: fold_and_print → print_colored_text (see ⚠ below)
 
-**✓ LINK VERIFIED** (2026-06-30, same session): Full build completed cleanly at ~21 min
-(1260s, deps now fully cached). Both targets linked without errors:
-- `[1780/1786] Linking CXX executable src/cataclysm-bn-tiles`
-- `[1783/1786] Linking CXX executable tests/cata_test-tiles`
-Eyeball checks still outstanding (requires running the binary interactively):
-vehicle list render, editmap info panel NPC/monster/vehicle info, Lua console scroll,
-wish effect selector side panel, magic spellbook description.
+**⚠ NOTE on 86ff30c**: Swapped fold_and_print for print_colored_text in debug.cpp. Both
+are P6-G deletion targets — NO net progress. The message contains `<color_white>` tags
+so mvwprintz is not a substitute. **debug.cpp is a PERMANENT P6-G exception**: the
+crash/error path must stay curses-native. Document as exempt; do NOT churn further.
+panels.cpp HUD is also a permanent exception (major subsystem, out of scope).
 
-**State after session 2 (link verified; eyeball pending):**
-- P6-A through P6-F edits applied and linked clean
-- P6-G (output.cpp primitive deletion): **BLOCKED** — remaining callers:
-  - `debug.cpp:328` — `fold_and_print` in on_redraw; no RmlUi path exists
-  - `game.cpp:9791+` — `trim_and_print` in `list_vehicles`; no RmlUi path exists
-  - `advanced_inv/crafting_gui/game look-around/game_inventory/inventory_ui` — `draw_item_info` modal popups (own newwin+loop; need RmlUi examine overlay)
-  - `overmap_ui.cpp:324` — `print_colored_text` in `update_note_preview` (map_notes_callback has no RML path)
-  - `panels.cpp:319` — `print_colored_text` in HUD sidebar panel draw
-  - `popup.cpp:224-231` — `print_colored_text` in static/throbber popup (no RmlUi path)
+**Full link verified:** `[1782/1786] tests/cata_test-tiles` + `[1783/1786] src/cataclysm-bn-tiles`
+clean, no errors. Eyeball checks still outstanding (run binary interactively):
+list_vehicles RmlUi panel, editmap info, Lua console scroll, wish selector, magic spellbook.
 
-**Plan corrections verified this session:**
-- A-1 (list_vehicles): NO rml_doc, NO sync_rml. Plan wrong — needs full migration.
-- A-2 (editmap): Self-gates inside update_view_with_help(); on_redraw guard would blank RmlUi panel.
-- B-1/B-2: uilist::show() stub; refresh() never called; menu->rml_session private. Delete dead bodies.
-- C-1/C-2: draw_item_info are modal popups (own window + input loop). Leave until RmlUi examine overlay.
-- P6-F pure-virtual: Creature::print_info is `= 0`; must delete base + ALL overrides atomically.
+**Accurate P6-G blocker status:**
+- `fold_and_print` external callers: ZERO (list_vehicles ported; npc/monster/vehicle deleted)
+- `trim_and_print` external callers: ZERO
+- `print_colored_text` external callers (BLOCKING):
+  - `debug.cpp` — **permanent exception** (crash path; color-tagged; must stay curses)
+  - `overmap_ui.cpp` — update_note_preview (map_notes_callback has no RML path)
+  - `panels.cpp` — **permanent exception** (HUD subsystem; major migration, out of scope)
+  - `popup.cpp` — static_popup / throbber_popup (portABLE — next target)
+- `draw_item_info` external callers (BLOCKING):
+  - advanced_inv, crafting_gui, game look-around, game_inventory, inventory_ui
+  - All modal popups; need RmlUi examine overlay before removal
 
-**Next session critical path (after green link):**
-1. Port `list_vehicles` (game.cpp ~9700) — add rml_doc + RML file + sync_rml (list_items pattern).
-2. Port `popup.cpp` static_popup/throbber_popup — give them RmlUi render paths.
-3. Decide `debug.cpp`: port or exempt from P6-G permanently (error handler, no RmlUi context).
+**Next session critical path:**
+1. Eyeball-test list_vehicles + prior P6-B/D/E/F screens (binary is built).
+2. Port `popup.cpp` static_popup/throbber_popup → removes print_colored_text blocker there.
+3. Port overmap_ui map_notes_callback → or gate the update_note_preview call there.
 4. Build RmlUi examine overlay for draw_item_info modal callers.
-5. Re-audit P6-G targets → delete output.cpp primitives → P6-H.
+5. After all above resolved: P6-G (delete output.cpp primitives) → P6-H.
+
+**Plan corrections verified:**
+- A-1 (list_vehicles): needed full migration — now done (3faeaa9).
+- A-2 (editmap): self-gates inside update_view_with_help(); on_redraw guard would blank panel.
+- B-1/B-2: refresh() never called; delete dead bodies (not gate).
+- C-1/C-2: draw_item_info are modal popups; leave until RmlUi examine overlay.
+- P6-F: pure-virtual removal must be atomic (base + all overrides together).
+- debug.cpp: print_colored_text ≠ progress; permanent exception, do not retry.
