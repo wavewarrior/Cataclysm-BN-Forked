@@ -62,6 +62,7 @@ const std::vector<rml_toggle>& rml_toggle_registry() {
         {"minigames", &minigames_rmlui_enabled, false},
         {"editmap", &editmap_rmlui_enabled, true},
         {"death_rip", &death_rip_rmlui_enabled, true},
+        {"string_editor", &string_editor_rmlui_enabled, true},
         {"lua_console", &lua_console_rmlui_enabled, true},
     };
     return reg;

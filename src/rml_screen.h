@@ -358,6 +358,10 @@ bool& blood_test_rmlui_enabled();
 // Default ON.
 bool& death_rip_rmlui_enabled();
 
+// string_editor_window::query_string() RmlUi render path (text editor for diary pages
+// and Lua console EDIT action). Default ON.
+bool& string_editor_rmlui_enabled();
+
 // Default ON.
 bool& lua_console_rmlui_enabled();
 

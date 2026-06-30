@@ -1,0 +1,51 @@
+body {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+#se-panel {
+  display: flex;
+  flex-direction: column;
+  width: 80%;
+  min-width: 600dp;
+  height: 80%;
+  min-height: 400dp;
+  border: 1px #666;
+  background: #111;
+}
+
+#se-content {
+  flex: 1;
+  overflow-y: auto;
+  font-family: Terminus, monospace;
+  padding: 4dp 8dp;
+}
+
+#se-hints {
+  padding: 4dp 8dp;
+  border-top: 1px #444;
+  color: #aaa;
+  font-size: 12dp;
+}
+
+.se-row {
+  display: block;
+  white-space: pre;
+}
+
+.se-ln {
+  color: #666;
+}
+
+.se-cursor {
+  background-color: #ddd;
+  color: #111;
+}
+
+.se-ime {
+  text-decoration: underline;
+  color: #aaa;
+}
