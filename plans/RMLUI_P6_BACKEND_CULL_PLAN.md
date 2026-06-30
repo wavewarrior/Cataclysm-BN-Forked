@@ -377,23 +377,16 @@ Keep: `cursesport.h` data structures (`WINDOW`, `cursecell`, `colorpairs`).
 - `bd61cc1` — P6-F: entire Creature::print_info pure-virtual hierarchy + vehicle::print_part_list removed
 - `f083b2c` — plan update
 
-**⚠ VERIFICATION GAP — MUST FIX FIRST NEXT SESSION ⚠**
-Every change was verified at **object-compile level only**. The full linked binary
-(`cataclysm-bn-tiles` + `cata_test-tiles`) was NEVER successfully built this session —
-all full-build attempts timed out on third-party dep recompilation (SPIRV-Tools/DXC/RmlUi)
-before reaching the link step or game objects. AGENTS.md mandates building both targets
-together with tests. The verification matrix eyeball checks (vehicle list render, editmap
-info panel, Lua console scroll/input, wish effect selector, magic spellbook) were NOT run.
+**✓ LINK VERIFIED** (2026-06-30, same session): Full build completed cleanly at ~21 min
+(1260s, deps now fully cached). Both targets linked without errors:
+- `[1780/1786] Linking CXX executable src/cataclysm-bn-tiles`
+- `[1783/1786] Linking CXX executable tests/cata_test-tiles`
+Eyeball checks still outstanding (requires running the binary interactively):
+vehicle list render, editmap info panel NPC/monster/vehicle info, Lua console scroll,
+wish effect selector side panel, magic spellbook description.
 
-**First task next session (non-negotiable before any new edits):**
-```sh
-cmake --build out/build/osx-arm-slim --target cataclysm-bn-tiles cata_test-tiles -j8
-```
-Confirm clean link. Then eyeball-test the screens touched by P6-B/D/E/F deletions.
-Only after green link + eyeball should any further P6-G work proceed.
-
-**State after session 2 (object-compile verified only):**
-- P6-A through P6-F edits applied; each changed .cpp compiles without errors
+**State after session 2 (link verified; eyeball pending):**
+- P6-A through P6-F edits applied and linked clean
 - P6-G (output.cpp primitive deletion): **BLOCKED** — remaining callers:
   - `debug.cpp:328` — `fold_and_print` in on_redraw; no RmlUi path exists
   - `game.cpp:9791+` — `trim_and_print` in `list_vehicles`; no RmlUi path exists
