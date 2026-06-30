@@ -14,6 +14,20 @@
 
 #include <algorithm>
 
+#include <RmlUi/Core.h>
+
+#include "lighting/rmlui_layer.h"
+#include "path_info.h"
+#include "rml_screen.h"
+#include "rml_util.h"
+
+bool &lua_console_rmlui_enabled()
+{
+    // Default ON — opt in via the F4 panel. See rml_screen.h.
+    static bool enabled = true;
+    return enabled;
+}
+
 namespace cata
 {
 
@@ -84,6 +98,31 @@ auto build_numbered_prompt_lines( const std::string &text, const int content_wid
 }
 
 } // namespace
+
+
+// ---- RmlUi session ---------------------------------------------------------
+
+struct rml_log_entry {
+    Rml::String text_rml;
+    bool is_input = false;
+    bool is_head  = false;
+};
+
+struct rml_prompt_line {
+    Rml::String num;       // line-number label (or spaces for continuation)
+    Rml::String text_rml;
+};
+
+struct lua_console_rml_session {
+    Rml::Vector<rml_log_entry>    log;
+    Rml::Vector<rml_prompt_line>  prompt;
+    Rml::String                   hints_rml;
+    Rml::String                   footer_rml;
+    Rml::DataModelHandle          handle;
+    Rml::ElementDocument         *doc = nullptr;
+};
+
+static bool g_lua_console_rml_active = false;
 
 struct folded_log_msg {
     bool is_head = false;
@@ -164,6 +203,8 @@ void show_lua_console_impl()
     ctxt.register_action( "SCROLL_BOTTOM" );
 
     ui_adaptor ui;
+    rml_doc rml;
+    std::unique_ptr<lua_console_rml_session> rml_sess;
 
     constexpr auto CURRENT_INPUT = -1;
     constexpr auto scroll_speed = 5;
@@ -223,6 +264,9 @@ void show_lua_console_impl()
     ui.mark_resize();
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            return;
+        }
         werase( w_console );
         draw_border( w_console );
         std::string separator;
@@ -328,12 +372,108 @@ void show_lua_console_impl()
         wnoutrefresh( w_prompt );
     } );
 
+
+    // ---- RmlUi path ---------------------------------------------------------
+    // Build a sync_rml lambda that pushes current state into the data model.
+    // Called after every log rebuild and after each action that changes visible state.
+    const auto sync_rml_data = [&]() {
+        if( !rml_sess ) {
+            return;
+        }
+        lua_console_rml_session &s = *rml_sess;
+
+        // Log entries (rml_sess->log is rebuilt from log_folded)
+        // log_folded[0] = newest; render oldest-first for top-down display.
+        s.log.clear();
+        for( int i = static_cast<int>( log_folded.size() ) - 1; i >= 0; i-- ) {
+            const folded_log_msg &m = log_folded[i];
+            nc_color col = get_log_level_color( m.level );
+            std::string text = m.level == LuaLogLevel::Input && m.is_head
+                               ? "> " + m.text
+                               : m.level == LuaLogLevel::Input
+                                 ? "  " + m.text
+                                 : m.text;
+            s.log.push_back( rml_log_entry{
+                cata_text_to_rml( colorize( text, col ) ),
+                m.level == LuaLogLevel::Input,
+                m.is_head,
+            } );
+        }
+
+        // Prompt lines
+        const auto prompt_text =
+            history_cursor == CURRENT_INPUT ? current_input : get_input_history()[history_cursor];
+        const auto prompt_lines = build_numbered_prompt_lines( prompt_text, 60 );
+        s.prompt.clear();
+        for( const auto &line : prompt_lines ) {
+            std::string num_str = format_line_number( line.number, 3 );
+            s.prompt.push_back( rml_prompt_line{
+                rml_escape( num_str ),
+                rml_escape( line.text ),
+            } );
+        }
+
+        // Hints
+        if( is_editing ) {
+            s.hints_rml = rml_escape( _( "Ctrl+S: run   Esc: cancel   Arrows: navigate   Enter: new line" ) );
+        } else {
+            s.hints_rml = rml_escape( string_format(
+                _( "Enter: edit   Up/Down: history   PgUp/PgDn: scroll log   %s: expanded input   Esc: quit" ),
+                ctxt.get_desc( "TOGGLE_EXPANDED" ) ) );
+        }
+
+        // Footer
+        s.footer_rml = rml_escape( _( "Lua console" ) );
+
+        Rml::DataModelHandle h = s.handle;
+        h.DirtyVariable( "log" );
+        h.DirtyVariable( "prompt" );
+        h.DirtyVariable( "hints_rml" );
+        h.DirtyVariable( "footer_rml" );
+    };
+
+    // Open RmlUi document (no-op when toggle OFF or not ready).
+    rml.open( lua_console_rmlui_enabled(), "lua_console", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        rml_sess = std::make_unique<lua_console_rml_session>();
+
+        // Register struct types once per context.
+        static bool types_registered = false;
+        if( !types_registered ) {
+            types_registered = true;
+            auto lh = c.RegisterStruct<rml_log_entry>();
+            lh.RegisterMember( "text_rml",  &rml_log_entry::text_rml  );
+            lh.RegisterMember( "is_input",  &rml_log_entry::is_input  );
+            lh.RegisterMember( "is_head",   &rml_log_entry::is_head   );
+            c.RegisterArray<Rml::Vector<rml_log_entry>>();
+
+            auto ph = c.RegisterStruct<rml_prompt_line>();
+            ph.RegisterMember( "num",      &rml_prompt_line::num      );
+            ph.RegisterMember( "text_rml", &rml_prompt_line::text_rml );
+            c.RegisterArray<Rml::Vector<rml_prompt_line>>();
+        }
+
+        c.Bind( "log",        &rml_sess->log        );
+        c.Bind( "prompt",     &rml_sess->prompt      );
+        c.Bind( "hints_rml",  &rml_sess->hints_rml  );
+        c.Bind( "footer_rml", &rml_sess->footer_rml );
+        rml_sess->handle = c.GetModelHandle();
+    } );
+
+    // Prime the model on first open.
+    if( rml ) {
+        sync_rml_data();
+    }
+
     bool log_invalidated = true;
     while( true ) {
         if( log_invalidated ) {
             log_invalidated = false;
             log_scroll_pos = 0;
             log_folded = build_folded_log( 76 );
+        if( rml ) {
+            sync_rml_data();
+        }
         }
         ui_manager::redraw_invalidated();
 

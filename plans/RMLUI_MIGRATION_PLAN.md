@@ -4170,5 +4170,53 @@ The plan to empty these bodies was rejected after analysis:
   real RmlUi screen before the backend is culled.
 - Promoted to **P5-H** so it gets its own session.
 
-**Next: P5-H** — `catalua_console` RmlUi migration + `veh_interact` /
-`advanced_inv` curses remnants.
+**Next: P5-H** — `catalua_console` RmlUi migration (P5-H primary).
+`veh_interact` / `advanced_inv` — **status uncertain, deferred:**
+The `overview_headers[]` / per-entry `details` lambdas in `calc_overview` are
+only ever ASSIGNED, never called (no `[key](w,y)` / `.details(pt,w,y)` /
+map-iteration invocation found in grep census). The curses `on_redraw` body is
+empty (just `if(rml){ return; }`). Parallel RmlUi text producers exist at
+veh_interact.cpp:2592+. **Conclusion likely: lambdas are dead code, not live**
+— the original curses renderers that would have called them appear already
+deleted. But the `calc_overview()` data population feeds the live RmlUi sync,
+so structure changes need care. **Before next session:** confirm with a
+`.details(` / `overview_headers` call-site trace + check the one remaining
+display_/draw_ method; if dead, the removal is mechanical (like P5-A).
+Deferred to a post-P5-H pass.
+
+### P5-H progress (CURRENT SESSION)
+
+**`catalua_console` — MIGRATED to RmlUi:**
+- New `data/gui/lua_console.{rml,rcss}` — full-screen panel with:
+  - Scrollable log area (`data-for="entry : log"`) — entries rendered
+    oldest-first (top-to-bottom), coloured via `cata_text_to_rml`.
+  - Hints bar (`hints_rml`) — switches between normal / editing text.
+  - Prompt preview (`data-for="line : prompt"`) — numbered lines from
+    `build_numbered_prompt_lines`.
+  - Footer (`footer_rml`).
+- `lua_console_rmlui_enabled()` toggle (default ON) added to
+  `catalua_console.cpp` (global scope, outside `namespace cata`).
+- Toggle registered in `rml_screen.h` + `rml_toggle_registry.cpp`.
+- `rml_doc rml` + `lua_console_rml_session` injected into
+  `show_lua_console_impl()`:
+  - `on_redraw` gated: `if( rml ) { return; }` skips curses draw.
+  - `sync_rml_data()` lambda: rebuilds log entries + prompt lines +
+    hints string from current state; called on every log invalidation
+    and after each input action via `if(rml) sync_rml_data()` inline.
+  - `rml.open(...)` called before main loop; RAII close on exit.
+- Curses fallback (`ui.on_screen_resize` + `ui.on_redraw` curses body)
+  kept intact — active when toggle OFF / `!rmlui_layer::ready()` /
+  open failure. The `string_editor_window` (EDIT action) is still
+  curses; it composites over the RmlUi console doc transparently.
+- Build green (`+140/-0` in catalua_console.cpp; `+3/-0` rml_screen.h;
+  `+1/-0` rml_toggle_registry.cpp; +2 new data files).
+- **Eyeball owed** (dev tool; needs Lua-enabled build to verify log
+  renders, scroll works, prompt preview updates, EDIT mode composes).
+
+**`veh_interact` / `advanced_inv`** — see deferral note above.
+
+**Next: P5-I** (backend cull prereqs):
+1. Confirm veh_interact overview_headers/details lambda call-site trace.
+2. Give `static_popup` + `throbber_popup` an RmlUi render path (required
+   before `query_popup::show()` can be deleted).
+3. Then: remove toggle layer (`*_rmlui_enabled()`), delete curses backend.

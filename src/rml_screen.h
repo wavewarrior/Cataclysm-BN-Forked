@@ -358,4 +358,7 @@ bool& blood_test_rmlui_enabled();
 // Default ON.
 bool& death_rip_rmlui_enabled();
 
+// Default ON.
+bool& lua_console_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H

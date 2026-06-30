@@ -1,0 +1,33 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="lua_console.rcss"/>
+</head>
+<body data-model="lua_console">
+    <div class="panel lua-con-panel">
+        <!-- Scrollable log (oldest at top, newest at bottom) -->
+        <div id="lua-log" class="lua-log">
+            <div class="lua-entry"
+                 data-for="entry : log"
+                 data-class-lua-input="entry.is_input"
+                 data-class-lua-head="entry.is_head">
+                <span data-rml="entry.text_rml"/>
+            </div>
+        </div>
+
+        <!-- Hints bar: changes between normal / editing mode -->
+        <div class="lua-hints" data-rml="hints_rml"/>
+
+        <!-- Prompt preview: numbered lines -->
+        <div class="lua-prompt">
+            <div class="lua-pline" data-for="line : prompt">
+                <span class="lua-pnum">{{ line.num }}</span><span
+                    class="lua-ptext" data-rml="line.text_rml"/>
+            </div>
+        </div>
+
+        <!-- Footer: hotkey summary -->
+        <div class="lua-footer" data-rml="footer_rml"/>
+    </div>
+</body>
+</rml>
