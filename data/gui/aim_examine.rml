@@ -1,0 +1,11 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="aim_examine.rcss"/>
+</head>
+<body data-model="aim_examine">
+    <div id="aim-ex-panel">
+        <div id="aim-ex-info" class="scroll-pane" data-rml="info_html"/>
+    </div>
+</body>
+</rml>

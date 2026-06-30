@@ -1,0 +1,26 @@
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+#aim-ex-panel {
+    width: 60%;
+    max-width: 800dp;
+    height: 70%;
+    background: #111;
+    border: 1px #555;
+    display: flex;
+    flex-direction: column;
+}
+
+#aim-ex-info {
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    padding: 8dp;
+    font-family: Terminus, monospace;
+    font-size: 12dp;
+}
