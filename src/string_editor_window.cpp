@@ -610,8 +610,11 @@ std::pair<bool, std::string> string_editor_window::query_string() {
                                 html += cata_text_to_rml(
                                     colorize(tok.text.substr(0, cs), tok.color));
                             }
-                            html += "<span class=\"se-cursor\">"
-                                  + Rml::String(tok.text.substr(cs, ce - cs)) + "</span>";
+                            html +=
+                                "<span class=\"se-cursor\">"
+                                + cata_text_to_rml(
+                                    colorize(tok.text.substr(cs, ce - cs), tok.color))
+                                + "</span>";
                             if (ce < tok.text.size()) {
                                 html += cata_text_to_rml(colorize(tok.text.substr(ce), tok.color));
                             }
