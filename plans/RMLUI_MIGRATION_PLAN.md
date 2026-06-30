@@ -1,10 +1,11 @@
 # Full UI Migration to RmlUi — Master Plan
 
-> **▶ NEXT SESSION: jump to the "★★★ RESUME HERE — Tier-10 §C ★★★" section at the END of this
-> file.** (2026-06-29) P3 + P4 complete; P5 backend cull in progress. game.cpp
-> list_items/list_monsters/zones_manager curses arms deleted (P5-A); `Creature::print_info`
-> callers reduced to editmap + wish. Next: magic.cpp uilist-callback fallback (P5-B),
-> then dialogue_win curses impl (P5-C). The §C survey/decision sections below are historical context.
+> **▶ NEXT SESSION: see `plans/RMLUI_P6_BACKEND_CULL_PLAN.md` — P6 is the active plan.**
+> (2026-06-30) P5-I complete (prerequisites + 5a/5b backend sweep). P6 covers: fixing
+> 5 unguarded on_redraw callers (P6-A/B/C), sweeping ~40 on_redraw fallback bodies
+> (P6-D), migrating catalua_console (P6-E), deleting curses utility functions (P6-F),
+> then output.cpp primitives + full backend cull (P6-G/H). Start with P6-A-1:
+> `src/game.cpp` vehicle list on_redraw — add `if(rml){sync_rml();return;}` guard.
 
 ## STATUS (reviewed 2026-06-27)
 
