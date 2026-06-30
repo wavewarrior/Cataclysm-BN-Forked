@@ -260,6 +260,13 @@ bool& list_monsters_rmlui_enabled();
 // curses calcStartPos windowing. Default OFF.
 bool& list_items_rmlui_enabled();
 
+// game::list_vehicles RmlUi render path (the nearby-vehicle list, V-screen tab 2).
+// A right-docked panel mirroring list_monsters: header (Vehicles + active/total
+// counter), a scrolling vehicle list (name left + distance/direction right), and
+// the selected vehicle's detail info pane (speed/engine/wheels/status/cargo/leak
+// as colour-tagged lines). Render-only; synced each frame. Default ON.
+bool& list_vehicles_rmlui_enabled();
+
 // game::zones_manager RmlUi render path (the `Y` zones screen). A right-docked
 // panel mirroring list_items: header ("Zones manager"), a scrolling zone list
 // (name / type / distance-direction / vehicle marker, the active row recoloured),

@@ -9697,6 +9697,49 @@ static auto vehicle_damage_summary( const vehicle &veh ) -> std::pair<std::strin
     return { _( "destroyed" ), c_dark_gray };
 }
 
+// ---- list_vehicles RmlUi render path ---------------------------------------
+// The nearby-vehicle list (V screen, vehicles tab). Render-only doc: keyboard
+// owns cursor nav + tab switching; model synced each frame from vehicle_list /
+// iActive. Native scroll replaces calcStartPos windowing.
+namespace
+{
+struct lv_rml_row {
+    Rml::String name_rml;
+    Rml::String dist_rml;
+    bool selected = false;
+};
+struct lv_rml_data {
+    Rml::String  header_rml;
+    Rml::Vector<lv_rml_row> rows;
+    bool         empty = false;
+    Rml::String  empty_rml;
+    Rml::String  info_rml;
+    Rml::String  footer_rml;
+    Rml::DataModelHandle handle;
+};
+
+bool g_list_vehicles_types_registered = false;
+
+void register_list_vehicles_rml_types( Rml::DataModelConstructor &c )
+{
+    if( g_list_vehicles_types_registered ) {
+        return;
+    }
+    auto rh = c.RegisterStruct<lv_rml_row>();
+    rh.RegisterMember( "name_rml", &lv_rml_row::name_rml );
+    rh.RegisterMember( "dist_rml", &lv_rml_row::dist_rml );
+    rh.RegisterMember( "selected",  &lv_rml_row::selected  );
+    c.RegisterArray<Rml::Vector<lv_rml_row>>();
+    g_list_vehicles_types_registered = true;
+}
+} // namespace
+
+bool &list_vehicles_rmlui_enabled()
+{
+    static bool enabled = true;
+    return enabled;
+}
+
 static auto list_vehicles( const vehicle_list_t &vehicle_list ) -> vehicle_menu_ret
 {
     avatar &viewer = get_avatar();
@@ -9754,158 +9797,142 @@ static auto list_vehicles( const vehicle_list_t &vehicle_list ) -> vehicle_menu_
     ctxt.register_action( "QUIT" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
 
-    ui.on_redraw( [&]( ui_adaptor & ui ) {
+    std::unique_ptr<lv_rml_data> rml_data;
+    rml_doc rml;
+    const itype_id fuel_type_battery( "battery" );
+
+    const auto sync_rml = [&]() {
+        if( !rml || !rml_data ) {
+            return;
+        }
+        lv_rml_data &d = *rml_data;
+
+        d.empty = vehicle_list.empty();
+        d.empty_rml = rml_escape( _( "You don't see any vehicles around you!" ) );
+
+        const int iNumVehicles = static_cast<int>( vehicle_list.size() );
+        d.header_rml = cata_text_to_rml( string_format( "%s   %s",
+            colorize( _( "Vehicles" ), c_white ),
+            colorize( string_format( "%d / %d",
+                vehicle_list.empty() ? 0 : iActive + 1, iNumVehicles ),
+                c_light_green ) ) );
+
+        d.rows.clear();
+        for( int idx = 0; idx < iNumVehicles; ++idx ) {
+            const nearby_vehicle_entry &entry = vehicle_list[idx];
+            const bool selected = idx == iActive;
+            lv_rml_row row;
+            row.selected = selected;
+            nc_color name_color = selected ? hilite( c_light_gray ) : c_light_gray;
+            row.name_rml = cata_text_to_rml( colorize( entry.veh->name, name_color ) );
+            const int dist = entry.dist;
+            row.dist_rml = cata_text_to_rml( colorize(
+                string_format( "%d %s", dist,
+                    direction_name_short( direction_from( viewer.bub_pos(), entry.pos ) ) ),
+                selected ? c_light_green : c_light_gray ) );
+            d.rows.push_back( std::move( row ) );
+        }
+
+        // Info pane: the selected vehicle's status lines.
+        if( cur_vehicle ) {
+            const int speed = static_cast<int>( convert_velocity( cur_vehicle->velocity, VU_VEHICLE ) );
+            const std::string speed_text = string_format( _( "%d %s" ), speed,
+                velocity_units( VU_VEHICLE ) );
+            const bool wheels_ok = cur_vehicle->sufficient_wheel_config();
+            const auto [status_text, status_color] = vehicle_damage_summary( *cur_vehicle );
+            const bool is_boat = !cur_vehicle->floating.empty();
+            units::volume total_cargo = 0_ml;
+            units::volume free_cargo  = 0_ml;
+            for( const vpart_reference &vp : cur_vehicle->get_any_parts( "CARGO" ) ) {
+                const size_t p = vp.part_index();
+                total_cargo += cur_vehicle->max_volume( p );
+                free_cargo  += cur_vehicle->free_volume( p );
+            }
+            bool leaking_fuel = false;
+            for( const vpart_reference &vpr : cur_vehicle->get_all_parts() ) {
+                const vehicle_part &part = vpr.part();
+                if( !part.is_leaking() || part.ammo_remaining() <= 0 ) {
+                    continue;
+                }
+                if( part.ammo_current() == fuel_type_battery ) {
+                    continue;
+                }
+                leaking_fuel = true;
+                break;
+            }
+            const bool can_float = cur_vehicle->can_float();
+            std::string info;
+            info += cata_text_to_rml( colorize( cur_vehicle->name, c_light_gray ) );
+            info += "<br/>";
+            info += cata_text_to_rml( colorize( string_format( "[%s]", cur_vehicle->type.str() ), c_light_blue ) );
+            info += "<br/>";
+            info += cata_text_to_rml( colorize( _( "Speed: " ), c_light_gray ) );
+            info += cata_text_to_rml( colorize( speed_text, c_light_green ) );
+            info += "<br/>";
+            info += cata_text_to_rml( colorize( _( "Engine: " ), c_light_gray ) );
+            info += cata_text_to_rml( colorize(
+                cur_vehicle->engine_on ? _( "on" ) : _( "off" ),
+                cur_vehicle->engine_on ? c_light_green : c_light_red ) );
+            info += "<br/>";
+            info += cata_text_to_rml( colorize( wheels_ok
+                ? _( "This vehicle has enough wheels." )
+                : _( "This vehicle does not have enough wheels." ),
+                wheels_ok ? c_light_green : c_light_red ) );
+            info += "<br/>";
+            info += cata_text_to_rml( colorize( _( "Status: " ), c_light_gray ) );
+            info += cata_text_to_rml( colorize( status_text, status_color ) );
+            info += "<br/>";
+            info += cata_text_to_rml( colorize( _( "Cargo: " ), c_light_gray ) );
+            info += cata_text_to_rml( colorize( string_format( _( "%s / %s %s" ),
+                format_volume( total_cargo - free_cargo ),
+                format_volume( total_cargo ), volume_units_abbr() ), c_yellow ) );
+            if( leaking_fuel ) {
+                info += "<br/>";
+                info += cata_text_to_rml( colorize( _( "This vehicle is leaking fuel." ), c_light_red ) );
+            }
+            if( is_boat ) {
+                info += "<br/>";
+                info += cata_text_to_rml( colorize(
+                    can_float ? _( "This vehicle can float." ) : _( "This vehicle can't float." ),
+                    can_float ? c_light_green : c_light_red ) );
+            }
+            d.info_rml = info;
+        } else {
+            d.info_rml = Rml::String();
+        }
+
+        d.footer_rml = rml_escape( string_format( _( "[%s] Vehicles" ),
+            ctxt.get_desc( "NEXT_TAB", 1 ) ) );
+
+        d.handle.DirtyVariable( "header_rml" );
+        d.handle.DirtyVariable( "rows" );
+        d.handle.DirtyVariable( "empty" );
+        d.handle.DirtyVariable( "empty_rml" );
+        d.handle.DirtyVariable( "info_rml" );
+        d.handle.DirtyVariable( "footer_rml" );
+    };
+
+    rml.open( list_vehicles_rmlui_enabled(), "list_vehicles", ctxt,
+    [&]( Rml::DataModelConstructor &c ) {
+        rml_data = std::make_unique<lv_rml_data>();
+        register_list_vehicles_rml_types( c );
+        c.Bind( "header_rml", &rml_data->header_rml );
+        c.Bind( "rows",       &rml_data->rows );
+        c.Bind( "empty",      &rml_data->empty );
+        c.Bind( "empty_rml",  &rml_data->empty_rml );
+        c.Bind( "info_rml",   &rml_data->info_rml );
+        c.Bind( "footer_rml", &rml_data->footer_rml );
+        rml_data->handle = c.GetModelHandle();
+    } );
+
+    ui.on_redraw( [&]( const ui_adaptor & ) {
         if( hide_ui ) {
             return;
         }
-
-        draw_custom_border( w_vehicles_border, true, true, true, true, true, true, LINE_XOXO, LINE_XOXO );
-        draw_custom_border( w_vehicle_info_border, true, true, true, true, LINE_XXXO, LINE_XOXX, true,
-                            true );
-
-        mvwprintz( w_vehicles_border, point( 2, 0 ), c_light_green, "<Tab> " );
-        wprintz( w_vehicles_border, c_white, _( "Vehicles" ) );
-
-        if( vehicle_list.empty() ) {
-            werase( w_vehicles );
-            mvwprintz( w_vehicles, point( 2, iMaxRows / 3 ), c_white,
-                       _( "You don't see any vehicles around you!" ) );
-        } else {
-            werase( w_vehicles );
-
-            const int iNumVehicles = vehicle_list.size();
-            const int numw = iNumVehicles > 999 ? 4 :
-                             iNumVehicles > 99 ? 3 :
-                             iNumVehicles > 9 ? 2 : 1;
-
-            int iStartPos = 0;
-            calcStartPos( iStartPos, iActive, iMaxRows - 1, iNumVehicles );
-
-            const int endY = std::min( iMaxRows - 1, iNumVehicles );
-            for( int y = 0; y < endY; ++y ) {
-                const int idx = iStartPos + y;
-                const nearby_vehicle_entry &entry = vehicle_list[idx];
-                const bool selected = idx == iActive;
-                nc_color name_color = selected ? hilite( c_light_gray ) : c_light_gray;
-
-                trim_and_print( w_vehicles, point( 1, y ), width - 18, name_color,
-                                entry.veh->name );
-
-                const int dist = entry.dist;
-                const int numd = dist > 999 ? 4 :
-                                 dist > 99 ? 3 :
-                                 dist > 9 ? 2 : 1;
-                trim_and_print( w_vehicles, point( width - ( 8 + numd ), y ), 6 + numd,
-                                selected ? c_light_green : c_light_gray, "%*d %s",
-                                numd, dist,
-                                direction_name_short( direction_from( viewer.bub_pos(), entry.pos ) ) );
-            }
-
-            mvwprintz( w_vehicles_border, point( ( width / 2 ) - numw - 2, 0 ), c_light_green, " %*d",
-                       numw, iActive + 1 );
-            wprintz( w_vehicles_border, c_white, " / %*d ", numw, static_cast<int>( vehicle_list.size() ) );
-
-            werase( w_vehicle_info );
-            if( cur_vehicle ) {
-                const int speed = static_cast<int>( convert_velocity( cur_vehicle->velocity, VU_VEHICLE ) );
-                const bool moving = cur_vehicle->is_moving();
-                const std::string speed_text = string_format( _( "%d %s" ), speed,
-                                               velocity_units( VU_VEHICLE ) );
-                const std::string engine_text = string_format( _( "Engine: %s" ),
-                                                cur_vehicle->engine_on ? _( "on" ) : _( "off" ) );
-                const auto moving_text = string_format( _( "Moving: %s" ),
-                                                        moving ? pgettext( "vehicle status value", "yes" ) :
-                                                        pgettext( "vehicle status value", "no" ) );
-                const std::string id_text = string_format( "[%s]", cur_vehicle->type.str() );
-                const bool wheels_ok = cur_vehicle->sufficient_wheel_config();
-                const std::string wheels_text = wheels_ok ?
-                                                _( "This vehicle has enough wheels." ) :
-                                                _( "This vehicle does not have enough wheels." );
-                const int info_width = getmaxx( w_vehicle_info );
-                const bool is_boat = !cur_vehicle->floating.empty();
-                const auto [status_text, status_color] = vehicle_damage_summary( *cur_vehicle );
-                units::volume total_cargo = 0_ml;
-                units::volume free_cargo = 0_ml;
-                for( const vpart_reference &vp : cur_vehicle->get_any_parts( "CARGO" ) ) {
-                    const size_t p = vp.part_index();
-                    total_cargo += cur_vehicle->max_volume( p );
-                    free_cargo += cur_vehicle->free_volume( p );
-                }
-                static const itype_id fuel_type_battery( "battery" );
-                bool leaking_fuel = false;
-                for( const vpart_reference &vpr : cur_vehicle->get_all_parts() ) {
-                    const vehicle_part &part = vpr.part();
-                    if( !part.is_leaking() || part.ammo_remaining() <= 0 ) {
-                        continue;
-                    }
-                    const itype_id fuel = part.ammo_current();
-                    if( fuel == fuel_type_battery ) {
-                        continue;
-                    }
-                    leaking_fuel = true;
-                    break;
-                }
-                const std::string cargo_value = string_format( _( "%s / %s %s" ),
-                                                format_volume( total_cargo - free_cargo ),
-                                                format_volume( total_cargo ),
-                                                volume_units_abbr() );
-                const std::string leak_text = _( "This vehicle is leaking fuel." );
-                const bool can_float = cur_vehicle->can_float();
-                const auto float_text = string_format( _( "Floats: %s" ),
-                                                       can_float ? pgettext( "vehicle status value", "yes" ) :
-                                                       pgettext( "vehicle status value", "no" ) );
-
-                int line = 0;
-                trim_and_print( w_vehicle_info, point( 1, line++ ), width - 4, c_light_gray,
-                                cur_vehicle->name );
-                trim_and_print( w_vehicle_info, point( 1, line++ ), width - 4, c_light_blue, id_text );
-                mvwprintz( w_vehicle_info, point( 1, line ), c_light_gray, _( "Speed: " ) );
-                const int speed_label_width = utf8_width( _( "Speed: " ) );
-                trim_and_print( w_vehicle_info, point( 1 + speed_label_width, line ),
-                                info_width - 2 - speed_label_width, c_light_green, speed_text );
-                line++;
-                mvwprintz( w_vehicle_info, point( 1, line ), c_light_gray, _( "Engine: " ) );
-                wprintz( w_vehicle_info, cur_vehicle->engine_on ? c_light_green : c_light_red,
-                         cur_vehicle->engine_on ? _( "on" ) : _( "off" ) );
-                line++;
-                trim_and_print( w_vehicle_info, point( 1, line++ ), width - 4,
-                                wheels_ok ? c_light_green : c_light_red, wheels_text );
-                mvwprintz( w_vehicle_info, point( 1, line ), c_light_gray, _( "Status: " ) );
-                wprintz( w_vehicle_info, status_color, status_text );
-                line++;
-                mvwprintz( w_vehicle_info, point( 1, line ), c_light_gray, _( "Cargo: " ) );
-                const int cargo_label_width = utf8_width( _( "Cargo: " ) );
-                trim_and_print( w_vehicle_info, point( 1 + cargo_label_width, line ),
-                                info_width - 2 - cargo_label_width, c_yellow, cargo_value );
-                line++;
-                if( leaking_fuel ) {
-                    trim_and_print( w_vehicle_info, point( 1, line++ ), width - 4,
-                                    c_light_red, leak_text );
-                }
-                if( is_boat ) {
-                    const std::string float_text = can_float ?
-                                                   _( "This vehicle can float." ) :
-                                                   _( "This vehicle can't float." );
-                    trim_and_print( w_vehicle_info, point( 1, line++ ), width - 4,
-                                    can_float ? c_light_green : c_light_red, float_text );
-                }
-            }
-
-            draw_custom_border( w_vehicle_info_border, true, true, true, true, LINE_XXXO, LINE_XOXX, true,
-                                true );
-
-            draw_scrollbar( w_vehicles_border, iActive, iMaxRows, static_cast<int>( vehicle_list.size() ),
-                            point_south );
-
-            if( iNumVehicles > 0 ) {
-                ui.set_cursor( w_vehicles, point( 1, iActive - iStartPos ) );
-            }
+        if( rml ) {
+            sync_rml();
+            return;
         }
-
-        wnoutrefresh( w_vehicles_border );
-        wnoutrefresh( w_vehicle_info_border );
-        wnoutrefresh( w_vehicles );
-        wnoutrefresh( w_vehicle_info );
     } );
 
     std::optional<tripoint_bub_ms> trail_start;

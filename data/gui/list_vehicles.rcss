@@ -1,0 +1,90 @@
+/* Layout for the nearby-vehicle list (game::list_vehicles, V-screen vehicles tab).
+   Palette / border / scrollbar / .scroll-pane come from theme.rcss (linked first in
+   list_vehicles.rml); this file owns only the screen-specific layout. Lengths in dp.
+
+   Right-docked panel mirroring list_monsters: header (Vehicles + counter), a
+   scrolling list of vehicle rows (name flex-left, dist flex-right), the selected
+   vehicle's detail info pane, and a footer hint line. Per-segment colour is baked
+   into the bound spans via cata_text_to_rml; this file only positions. */
+body {
+    display: flex;
+    justify-content: flex-end;
+    align-items: stretch;
+    width: 100%;
+    height: 100%;
+}
+
+.lv-panel {
+    width: 34%;
+    max-width: 520dp;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.lv-header {
+    flex: 0 0 auto;
+    color: {{fg}};
+    border-bottom: 1dp {{bg4}};
+    padding-bottom: 2dp;
+    margin-bottom: 2dp;
+    white-space: nowrap;
+}
+
+/* Scrolling vehicle list — takes the larger share of the panel. */
+.lv-list {
+    flex: 2 1 0;
+    min-height: 0;
+}
+
+.lv-empty {
+    display: block;
+    color: {{fg}};
+    padding: 4dp 2dp;
+}
+
+.lv-row {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    white-space: nowrap;
+}
+
+.lv-row.selected {
+    background-color: {{yellow}};
+    color: {{bg-hard}};
+}
+
+/* Vehicle name — grows to fill available space, truncates on overflow. */
+.lv-name {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Distance/direction — right-aligned, never shrinks. */
+.lv-dist {
+    flex: 0 0 auto;
+    margin-left: 4dp;
+    text-align: right;
+}
+
+/* Detail info pane for the selected vehicle.
+   Smaller share of the panel; separator line above. */
+.lv-info {
+    flex: 1 1 0;
+    min-height: 0;
+    border-top: 1dp {{bg4}};
+    margin-top: 2dp;
+    padding-top: 2dp;
+    white-space: pre-wrap;
+}
+
+.lv-footer {
+    flex: 0 0 auto;
+    color: {{fg2}};
+    border-top: 1dp {{bg4}};
+    padding-top: 2dp;
+    margin-top: 2dp;
+    white-space: nowrap;
+}
