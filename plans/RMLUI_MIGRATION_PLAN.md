@@ -4141,3 +4141,34 @@ The plan to empty these bodies was rejected after analysis:
   Record this as a P5-I pre-requisite now so a future session doesn't silently
   blank every loading screen.
 **Next: P5-G** — dev tools: `wish.cpp`, `catalua_console`, `game::disp_NPCs`.
+
+### P5-G progress (CURRENT SESSION)
+
+**`wish.cpp` — three `refresh()` curses bodies deleted:**
+- `wish_mutate_callback::refresh()` (−146 lines) — mutation detail side pane.
+- `wish_monster_callback::refresh()` (−36 lines) — monster info pane +
+  `monster::print_info(w_info, ...)` (**removes the last `Creature::print_info`
+  caller outside dev-deferred editmap/wish**; now only editmap remains).
+- `wish_item_callback::refresh()` (−53 lines) — item info side pane.
+- Each had an existing `draw_rml()` counterpart that owns all state + rendering.
+- Net: `−235` lines, 3 insertions (empty stubs). Build-clean.
+
+**`game::disp_NPCs()` — converted from curses window to `uilist`:**
+- Removed `catacurses::window`, `ui_adaptor`, `on_redraw`, `on_screen_resize`,
+  and the full `mvwprintz`/`wnoutrefresh` body.
+- Replaced with a `uilist` populated with player-pos title + NPC entries +
+  monster entries. `uilist` is RmlUi-backed; no new curses calls.
+- Net: `−38 +14` lines. Build-clean.
+
+**`catalua_console` — DEFERRED to P5-H:**
+- Census (grep tool): 3 catacurses::window members, `catacurses::newwin` ×3,
+  `werase` ×3, `draw_border`, ~15 `mvwprintz`, `wnoutrefresh` ×3 — full
+  curses on_redraw body with log/console/prompt layout.  **NO RmlUi/`draw_rml`
+  path exists**.  This is a genuine migration (not a body-empty), requiring
+  new RML/RCSS + data model for a multi-pane interactive console.
+- **Cannot be treated as a no-op or simple deletion at P5-I** — it needs a
+  real RmlUi screen before the backend is culled.
+- Promoted to **P5-H** so it gets its own session.
+
+**Next: P5-H** — `catalua_console` RmlUi migration + `veh_interact` /
+`advanced_inv` curses remnants.

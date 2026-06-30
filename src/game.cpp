@@ -4140,46 +4140,22 @@ void game::disp_NPCs()
                                        current_dimension_id_ ).get_npcs_near_player( 100 );
     std::sort( npcs.begin(), npcs.end(), npc_dist_to_player() );
 
-    catacurses::window w;
-    ui_adaptor ui;
-    ui.on_screen_resize( [&]( ui_adaptor & ui ) {
-        w = catacurses::newwin( FULL_SCREEN_HEIGHT, FULL_SCREEN_WIDTH,
-                                point( TERMX > FULL_SCREEN_WIDTH ? ( TERMX - FULL_SCREEN_WIDTH ) / 2 : 0,
-                                       TERMY > FULL_SCREEN_HEIGHT ? ( TERMY - FULL_SCREEN_HEIGHT ) / 2 : 0 ) );
-        ui.position_from_window( w );
-    } );
-    ui.mark_resize();
-    ui.on_redraw( [&]( const ui_adaptor & ) {
-        werase( w );
-        mvwprintz( w, point_zero, c_white, _( "Your overmap position: %s" ), ppos.to_string() );
-        // NOLINTNEXTLINE(cata-use-named-point-constants)
-        mvwprintz( w, point( 0, 1 ), c_white, _( "Your local position: %s" ), lpos.to_string() );
-        size_t i;
-        for( i = 0; i < 20 && i < npcs.size(); i++ ) {
-            const tripoint_abs_omt apos = npcs[i]->abs_omt_pos();
-            mvwprintz( w, point( 0, i + 3 ), c_white, "%s: %s", npcs[i]->name,
-                       apos.to_string() );
-        }
-        for( const monster &m : all_monsters() ) {
-            mvwprintz( w, point( 0, i + 3 ), c_white, "%s: %d, %d, %d", m.name(),
-                       m.bub_pos().x(), m.bub_pos().y(), m.bub_pos().z() );
-            ++i;
-        }
-        wnoutrefresh( w );
-    } );
-
-    input_context ctxt( "DISP_NPCS" );
-    ctxt.register_action( "CONFIRM" );
-    ctxt.register_action( "QUIT" );
-    ctxt.register_action( "HELP_KEYBINDINGS" );
-    bool stop = false;
-    while( !stop ) {
-        ui_manager::redraw();
-        const std::string action = ctxt.handle_input();
-        if( action == "CONFIRM" || action == "QUIT" ) {
-            stop = true;
-        }
+    // Display player position + nearby NPCs + monsters as a scrollable uilist.
+    // (Replaced curses window with uilist, which is RmlUi-backed.)
+    uilist menu;
+    menu.allow_cancel = true;
+    menu.title = string_format( _( "Pos: %s  Local: %s" ), ppos.to_string(), lpos.to_string() );
+    for( size_t i = 0; i < npcs.size() && i < 100; i++ ) {
+        const tripoint_abs_omt apos = npcs[i]->abs_omt_pos();
+        menu.addentry( static_cast<int>( i ), false, MENU_AUTOASSIGN,
+                       "%s: %s", npcs[i]->name, apos.to_string() );
     }
+    for( const monster &m : all_monsters() ) {
+        menu.addentry( -1, false, MENU_AUTOASSIGN,
+                       "%s: %d, %d, %d", m.name(),
+                       m.bub_pos().x(), m.bub_pos().y(), m.bub_pos().z() );
+    }
+    menu.query();
 }
 
 // A little helper to draw footstep glyphs.
