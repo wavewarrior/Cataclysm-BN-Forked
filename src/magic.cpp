@@ -223,8 +223,9 @@ static damage_type damage_type_from_string(std::string& str) {
     } else if (str == "TRUE") {
         return DT_TRUE;
     } else if (str == "NONE") {
-        debugmsg(_("ERROR: 'None' damage is not not valid and obsoleted for spells!  Please switch "
-                   "to 'True' instead"));
+        debugmsg(_(
+            "ERROR: 'None' damage is not not valid and obsoleted for spells!  Please switch "
+            "to 'True' instead"));
         return DT_TRUE;
     } else {
         // Bash is much less problematic than defaulting to True damage, bypassing any and all
@@ -1985,116 +1986,6 @@ static std::string color_number(const float num) {
     } else {
         return colorize("0", c_white);
     }
-}
-
-static void draw_spellbook_info(const spell_type& sp, uilist* menu) {
-    const int width = menu->pad_left - 4;
-    const int start_x = 2;
-    int line = 1;
-    const catacurses::window w = menu->window;
-    nc_color gray = c_light_gray;
-    nc_color yellow = c_yellow;
-    const spell fake_spell(sp.id);
-
-    const std::string spell_name = colorize(sp.name, c_light_green);
-    const std::string spell_class =
-        sp.spell_class == trait_NONE ? _("Classless") : sp.spell_class->name();
-    print_colored_text(w, point(start_x, line), gray, gray, spell_name);
-    print_colored_text(
-        w, point(menu->pad_left - utf8_width(spell_class) - 1, line++), yellow, yellow,
-        spell_class);
-    line++;
-    line += fold_and_print(w, point(start_x, line), width, gray, "%s", sp.description);
-    line++;
-
-    mvwprintz(w, point(start_x, line), c_light_gray,
-              string_format("%s: %d", _("Difficulty"), sp.difficulty));
-    mvwprintz(w, point(start_x + width / 2, line++), c_light_gray,
-              string_format("%s: %d", _("Max Level"), sp.max_level));
-
-    const std::string fx = sp.effect_name;
-    std::string damage_string;
-    std::string aoe_string;
-    bool has_damage_type = false;
-    if (fx == "target_attack" || fx == "projectile_attack" || fx == "cone_attack"
-        || fx == "line_attack") {
-        damage_string = _("Damage");
-        aoe_string = _("AoE");
-        has_damage_type = sp.min_damage > 0 && sp.max_damage > 0;
-    } else if (fx == "spawn_item" || fx == "summon_monster") {
-        damage_string = _("Spawned");
-    } else if (fx == "recover_energy") {
-        damage_string = _("Recover");
-    } else if (fx == "teleport_random") {
-        aoe_string = _("Variance");
-    } else if (fx == "area_pull" || fx == "area_push" || fx == "ter_transform") {
-        aoe_string = _("AoE");
-    }
-
-    if (has_damage_type) {
-        print_colored_text(
-            w, point(start_x, line++), gray, gray,
-            string_format(
-                "%s: %s", _("Damage Type"),
-                colorize(fake_spell.damage_type_string(), fake_spell.damage_type_color())));
-    }
-    line++;
-
-    print_colored_text(
-        w, point(start_x, line++), gray, gray,
-        string_format(
-            "%s %s %s %s",
-            //~ translation should not exceed 10 console cells
-            left_justify(_("Stat Gain"), 10),
-            //~ translation should not exceed 7 console cells
-            left_justify(_("lvl 0"), 7),
-            //~ translation should not exceed 7 console cells
-            left_justify(_("per lvl"), 7),
-            //~ translation should not exceed 7 console cells
-            left_justify(_("max lvl"), 7)));
-    std::vector<std::tuple<std::string, int, float, int>> rows;
-
-    if (sp.max_damage != 0 && sp.min_damage != 0 && !damage_string.empty()) {
-        rows.emplace_back(damage_string, sp.min_damage, sp.damage_increment, sp.max_damage);
-    }
-
-    if (sp.max_range != 0 && sp.min_range != 0) {
-        rows.emplace_back(_("Range"), sp.min_range, sp.range_increment, sp.max_range);
-    }
-
-    if (sp.min_aoe != 0 && sp.max_aoe != 0 && !aoe_string.empty()) {
-        rows.emplace_back(aoe_string, sp.min_aoe, sp.aoe_increment, sp.max_aoe);
-    }
-
-    if (sp.min_duration != 0 && sp.max_duration != 0) {
-        rows.emplace_back(_("Duration"), sp.min_duration, static_cast<float>(sp.duration_increment),
-                          sp.max_duration);
-    }
-
-    rows.emplace_back(
-        _("Cast Cost"), sp.base_energy_cost, sp.energy_increment, sp.final_energy_cost);
-    rows.emplace_back(
-        _("Cast Time"), sp.base_casting_time, sp.casting_time_increment, sp.final_casting_time);
-
-    for (std::tuple<std::string, int, float, int>& row : rows) {
-        mvwprintz(w, point(start_x, line), c_light_gray, std::get<0>(row));
-        print_colored_text(w, point(start_x + 11, line), gray, gray, color_number(std::get<1>(row)));
-        print_colored_text(w, point(start_x + 19, line), gray, gray, color_number(std::get<2>(row)));
-        print_colored_text(w, point(start_x + 27, line), gray, gray, color_number(std::get<3>(row)));
-        line++;
-    }
-}
-
-void spellbook_callback::refresh(uilist* menu) {
-    mvwputch(menu->window, point(menu->pad_left, 0), c_magenta, LINE_OXXX);
-    mvwputch(menu->window, point(menu->pad_left, menu->w_height - 1), c_magenta, LINE_XXOX);
-    for (int i = 1; i < menu->w_height - 1; i++) {
-        mvwputch(menu->window, point(menu->pad_left, i), c_magenta, LINE_XOXO);
-    }
-    if (menu->selected >= 0 && static_cast<size_t>(menu->selected) < spells.size()) {
-        draw_spellbook_info(spells[menu->selected], menu);
-    }
-    wnoutrefresh(menu->window);
 }
 
 void spellbook_callback::draw_rml(uilist* menu, Rml::ElementDocument* doc) {
