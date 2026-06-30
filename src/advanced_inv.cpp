@@ -971,61 +971,12 @@ void advanced_inventory::action_examine(
         item_info_data data(it.tname(), it.type_name(), item_info, dummy);
         data.handle_scrolling = true;
 
-        // --- RmlUi examine overlay (P5-I-4a) ----------------------------------------
-        struct aim_ex_data_t {
-            Rml::String info_html;
-            Rml::DataModelHandle handle;
-        } aim_ex_data;
-        rml_doc aim_ex_rml;
-        aim_ex_rml.open(
-            advanced_inv_rmlui_enabled(), "aim_examine", ctxt,
-            [&aim_ex_data](Rml::DataModelConstructor& c) {
-                c.Bind("info_html", &aim_ex_data.info_html);
-                aim_ex_data.handle = c.GetModelHandle();
-            });
-        if (aim_ex_rml) {
-            const auto lines = item_info_rml_lines(data);
-            for (const auto& l : lines) { aim_ex_data.info_html += l + "<br/>"; }
-            aim_ex_data.handle.DirtyVariable("info_html");
-            input_context ex_ctxt("AIM_EXAMINE");
-            ex_ctxt.register_action("PAGE_UP");
-            ex_ctxt.register_action("PAGE_DOWN");
-            ex_ctxt.register_action("QUIT");
-            int scroll = 0;
-            Rml::Element* pane = aim_ex_rml.document()->GetElementById("aim-ex-info");
-            do {
-                ui_manager::redraw();
-                const std::string act = ex_ctxt.handle_input();
-                if (pane) {
-                    if (act == "PAGE_UP") {
-                        scroll =
-                            std::max(0, scroll - static_cast<int>(pane->GetScrollHeight() / 4));
-                        pane->SetScrollTop(static_cast<float>(scroll));
-                    }
-                    if (act == "PAGE_DOWN") {
-                        scroll += static_cast<int>(pane->GetScrollHeight() / 4);
-                        pane->SetScrollTop(static_cast<float>(scroll));
-                    }
-                }
-                if (act == "QUIT") {
-                    ret = 'q';
-                    break;
-                }
-            } while (true);
-        } else {
-            ret =
-                draw_item_info(
-                    [&]() -> catacurses::window {
-                        return catacurses::newwin(0, info_width(), point(info_startx(), 0));
-                    },
-                    data)
-                    .get_first_input();
+        rml_examine_item(data);
+        if (ret == KEY_NPAGE || ret == KEY_DOWN) {
+            spane.scroll_by(+1);
+        } else if (ret == KEY_PPAGE || ret == KEY_UP) {
+            spane.scroll_by(-1);
         }
-    }
-    if (ret == KEY_NPAGE || ret == KEY_DOWN) {
-        spane.scroll_by(+1);
-    } else if (ret == KEY_PPAGE || ret == KEY_UP) {
-        spane.scroll_by(-1);
     }
 }
 
@@ -1281,7 +1232,11 @@ void advanced_inventory::display() {
         // Per-pane filter footer (mirrors redraw_pane's bottom line); while editing
         // the active pane shows the in-progress query from the popup.
         const auto filter_str = [&](advanced_inventory_pane& p, bool act) -> Rml::String {
-            const std::string fprefix = string_format(_("[%s] Filter"), ctxt.get_desc("FILTER"));
+            const std::string fprefix = string_format(
+                _("[%s] Filter"),
+                ctxt.get_desc(
+                    "FILTE"
+                    "R"));
             if (filter_edit && act && spopup) {
                 return cata_text_to_rml(
                     colorize("< " + fprefix + ": ", c_light_gray)
@@ -1710,7 +1665,8 @@ bool advanced_inventory::query_charges(
     // Map and vehicles have a maximal item count, check that. Inventory does not have this.
     if (destarea != AIM_INVENTORY && destarea != AIM_WORN && destarea != AIM_CONTAINER) {
         const int cntmax = p.max_size - p.get_item_count();
-        // For items counted by charges, adding it adds 0 items if something there stacks with it.
+        // For items counted by charges, adding it adds 0 items if something there stacks with
+        // it.
         const bool adds0 =
             by_charges
             && std::any_of(

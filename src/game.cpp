@@ -10461,9 +10461,7 @@ game::vmenu_ret game::list_items( const std::vector<map_item_stack> &item_list )
             item_info_data info_data( example_item->tname(), example_item->type_name(), this_item, dummy );
             info_data.handle_scrolling = true;
 
-            draw_item_info( [&]() -> catacurses::window {
-                return catacurses::newwin( TERMY, width - 5, point_zero );
-            }, info_data );
+            rml_examine_item( info_data );
             recalc_unread = highlight_unread_items;
         } else if( action == "PRIORITY_INCREASE" ) {
             filter_type = item_filter_type::HIGH_PRIORITY;
