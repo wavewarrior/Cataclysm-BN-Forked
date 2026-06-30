@@ -388,40 +388,32 @@ panels.cpp HUD is also a permanent exception (major subsystem, out of scope).
 clean, no errors. Eyeball checks still outstanding (run binary interactively):
 list_vehicles RmlUi panel, editmap info, Lua console scroll, wish selector, magic spellbook.
 
-**Accurate P6-G blocker status (confirmed permanent exceptions):**
-- `fold_and_print` external callers: ZERO
-- `trim_and_print` external callers: ZERO
-- `print_colored_text` external callers:
-  - `debug.cpp` — **PERMANENT EXCEPTION** (crash-path fallback; startup before RmlUi init)
-  - `popup.cpp` — **PERMANENT EXCEPTION** (query_popup::show() is the pre-RmlUi-init fallback;
-    rml_open() returns false when rmlui_layer::ready()==false during early startup; same
-    class as debug.cpp. static_popup/throbber_popup ARE already ported — rml_open() in ctors.
-    Do NOT delete show(). Reclassify as permanent curses-init fallback, do not retry.)
-  - `overmap_ui.cpp` — update_note_preview in map_notes_callback (no RML path for callback)
-  - `panels.cpp` — **PERMANENT EXCEPTION** (HUD subsystem; major migration, out of scope)
-- `draw_item_info` external callers (LAST real blocker):
-  - advanced_inv, crafting_gui, game look-around, game_inventory, inventory_ui
-  - All open modal item-info popups with own newwin + input loop
-  - Need RmlUi examine overlay to replace; then draw_item_info can be deleted
+**Session 3 completed (link verified 890s — both targets clean):**
+- `79411b6` — rml_examine_item helper; replaced all 5 draw_item_info modal callers
+- `22eebc0` — P6-G partial: draw_item_info (3×) + insert_table + fold_and_print_from + right_print deleted
 
-**Implication**: P6-G can only partially proceed. fold_and_print, trim_and_print,
-fold_and_print_from can be deleted once draw_item_info is also deleted (they're used
-internally in draw_item_info/draw_item_filter_rules within output.cpp). print_colored_text
-CANNOT be deleted (permanent exceptions in debug.cpp + popup.cpp + panels.cpp).
-So P6-G target list shrinks: delete fold_and_print family + draw_item_info family;
-keep print_colored_text, center_print, right_print.
+**Accurate P6-G outcome — ALWAYS fresh-grep from current tree before output.cpp deletions:**
+Deleted this session: draw_item_info (3 overloads), insert_table, fold_and_print_from, right_print.
 
-**Next session critical path:**
-1. Build RmlUi examine overlay (new rml_doc + RML/RCSS, replaces draw_item_info modal)
-   and wire into advanced_inv, crafting_gui, game look-around, game_inventory, inventory_ui.
-2. Delete draw_item_info + fold_and_print + trim_and_print from output.h/output.cpp.
-3. Port overmap_ui map_notes_callback (removes last print_colored_text non-exception).
-4. After above: P6-H backend cull.
+**Permanent exceptions (VERIFIED via fresh grep — do not retry):**
+- `fold_and_print` — draw_item_filter_rules (7 calls) ← clzones.cpp:502. Live caller chain.
+- `draw_item_filter_rules` — clzones.cpp:502. Cannot delete.
+- `trim_and_print` + `center_print` + `trim_by_length` — draw_border() → center_print chain. Cannot delete.
+- `print_colored_text` — debug.cpp (crash path), popup.cpp (pre-RmlUi-init fallback), panels.cpp (HUD).
+- `format_item_info` — rml_util::item_info_rml_lines() calls it. Must keep.
+- `rand_char`, `special_symbol` — unrelated functions in output.cpp, never migration targets.
+
+**P6-G scope exhausted** given permanent exceptions. No further output.cpp deletions possible
+without porting clzones, draw_border/center_print callers, or the three pre-init exceptions.
+
+**Next: P6-H backend cull** — draw_window stub, Font::OutputChar/draw_ascii_lines,
+cursesport.cpp, toggle layer removal. Assess prerequisites before starting.
 
 **Plan corrections verified:**
-- A-1 (list_vehicles): needed full migration — now done (3faeaa9).
-- A-2 (editmap): self-gates inside update_view_with_help(); on_redraw guard would blank panel.
-- B-1/B-2: refresh() never called; delete dead bodies (not gate).
-- C-1/C-2: draw_item_info are modal popups; leave until RmlUi examine overlay.
-- P6-F: pure-virtual removal must be atomic (base + all overrides together).
-- debug.cpp / popup.cpp / panels.cpp: print_colored_text = permanent exceptions (pre-init/HUD fallbacks).
+- A-1 (list_vehicles): full migration done (3faeaa9).
+- A-2 (editmap): self-gates inside update_view_with_help(); no change needed.
+- B-1/B-2: refresh() dead code — delete bodies.
+- C-1/C-2: draw_item_info replaced by rml_examine_item (79411b6).
+- P6-F: pure-virtual removal must be atomic.
+- debug.cpp / popup.cpp / panels.cpp: print_colored_text = permanent exceptions.
+- fold_and_print: permanent exception (clzones live caller chain).
