@@ -4216,7 +4216,13 @@ Deferred to a post-P5-H pass.
 **`veh_interact` / `advanced_inv`** — see deferral note above.
 
 **Next: P5-I** (backend cull prereqs):
-1. Confirm veh_interact overview_headers/details lambda call-site trace.
+1. Confirm veh_interact `overview_headers`/`details` lambda call-site trace
+   (likely dead — remove if confirmed).
 2. Give `static_popup` + `throbber_popup` an RmlUi render path (required
    before `query_popup::show()` can be deleted).
-3. Then: remove toggle layer (`*_rmlui_enabled()`), delete curses backend.
+3. Give `string_editor_window` an RmlUi path — curses-only (`_win`,
+   `mvwprintz print_editor`, own `on_redraw`; no `draw_rml`/toggle).
+   Live callers include the Lua console EDIT action and likely others
+   (census `string_editor_window` callers before migrating). Backend cull
+   breaks it with no fallback.
+4. Then: remove toggle layer (`*_rmlui_enabled()`), delete curses backend.
