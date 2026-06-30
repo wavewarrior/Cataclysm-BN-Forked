@@ -2370,58 +2370,6 @@ void panel_manager::show_adm()
             sync_rml();
             return;
         }
-        auto &panels = layouts[current_layout_id];
-
-        werase( w );
-        decorate_panel( _( "SIDEBAR OPTIONS" ), w );
-
-        for( std::pair<size_t, size_t> row_indx : row_indices ) {
-            std::string name = _( panels[row_indx.second].get_name() );
-            if( swapping && source_index == row_indx.second ) {
-                mvwprintz( w, point( 5, current_row + 1 ), c_yellow, name );
-            } else {
-                int offset = 0;
-                if( !swapping ) {
-                    offset = 0;
-                } else if( current_row > source_row && row_indx.first > source_row &&
-                           row_indx.first <= current_row ) {
-                    offset = -1;
-                } else if( current_row < source_row && row_indx.first < source_row &&
-                           row_indx.first >= current_row ) {
-                    offset = 1;
-                }
-                const nc_color toggle_color = panels[row_indx.second].toggle ? c_white : c_dark_gray;
-                mvwprintz( w, point( 4, row_indx.first + 1 + offset ), toggle_color, name );
-            }
-        }
-        size_t i = 1;
-        for( const auto &layout : layouts ) {
-            mvwprintz( w, point( column_widths[0] + column_widths[1] + 4, i ),
-                       current_layout_id == layout.first ? c_light_blue : c_white, _( layout.first ) );
-            i++;
-        }
-        int col_offset = 0;
-        for( i = 0; i < current_col; i++ ) {
-            col_offset += column_widths[i];
-        }
-        mvwprintz( w, point( 1 + ( col_offset ), current_row + 1 ), c_yellow, ">>" );
-        const auto divider_height = getmaxy( w ) - 2;
-        mvwvline( w, point( column_widths[0], 1 ), 0, divider_height );
-        mvwvline( w, point( column_widths[0] + column_widths[1], 1 ), 0, divider_height );
-
-        col_offset = column_widths[0] + 2;
-        int col_width = column_widths[1] - 4;
-        mvwprintz( w, point( col_offset, 1 ), c_light_green, trunc_ellipse( ctxt.get_desc( "TOGGLE_PANEL" ),
-                   col_width ) + ":" );
-        mvwprintz( w, point( col_offset, 2 ), c_white, _( "Toggle panels on/off" ) );
-        mvwprintz( w, point( col_offset, 3 ), c_light_green, trunc_ellipse( ctxt.get_desc( "MOVE_PANEL" ),
-                   col_width ) + ":" );
-        mvwprintz( w, point( col_offset, 4 ), c_white, _( "Change display order" ) );
-        mvwprintz( w, point( col_offset, 5 ), c_light_green, trunc_ellipse( ctxt.get_desc( "QUIT" ),
-                   col_width ) + ":" );
-        mvwprintz( w, point( col_offset, 6 ), c_white, _( "Exit" ) );
-
-        wnoutrefresh( w );
     } );
 
     while( !exit ) {

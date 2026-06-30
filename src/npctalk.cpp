@@ -2176,8 +2176,6 @@ talk_topic dialogue::opt( dialogue_window &d_win, const std::string &npc_name,
             sync_rml();
             return;
         }
-        d_win.print_header( npc_name );
-        d_win.display_responses( response_lines, selected_response );
     } );
 
     // dialogue::opt drives input via the raw inp_mngr (no input_context); the

@@ -1585,46 +1585,6 @@ bool game::cleanup_at_end()
             if( rml ) {
                 return;
             }
-            // ── curses fallback ────────────────────────────────────────────
-            draw_border( w_rip );
-            for( size_t iY = 0; iY < vRip.size(); ++iY ) {
-                size_t iX = 0;
-                const char *str = vRip[iY].data();
-                for( int slen = vRip[iY].size(); slen > 0; ) {
-                    const uint32_t cTemp = UTF8_getch( &str, &slen );
-                    if( cTemp != U' ' ) {
-                        nc_color ncColor = c_light_gray;
-                        if( cTemp == U'%' )                       { ncColor = c_green;  }
-                        else if( cTemp == U'_' || cTemp == U'|' ) { ncColor = c_white;  }
-                        else if( cTemp == U'@' )                  { ncColor = c_brown;  }
-                        else if( cTemp == U'*' )                  { ncColor = c_red;    }
-                        mvwputch( w_rip,
-                                  point( iX + FULL_SCREEN_WIDTH / 2 - ( iMaxWidth / 2 ), iY + 1 ),
-                                  ncColor, cTemp );
-                    }
-                    iX += mk_wcwidth( cTemp );
-                }
-            }
-            int iLine = iInfoLine;
-            center_print( w_rip, iLine++, c_white, _( "Survived:" ) );
-            center_print( w_rip, iLine++, c_white, sSurvived );
-            const std::string sKills = std::string( _( "Kills:" ) ) + " ";
-            mvwprintz( w_rip, point( FULL_SCREEN_WIDTH / 2 - 5, 1 + iLine++ ),
-                       c_light_gray, sKills );
-            wprintz( w_rip, c_magenta, "%d", iTotalKills );
-            int iNLine = iNameLine;
-            const std::string sInMemory = _( "In memory of:" );
-            mvwprintz( w_rip,
-                       point( FULL_SCREEN_WIDTH / 2 - utf8_width( sInMemory ) / 2, iNLine++ ),
-                       c_light_gray, sInMemory );
-            mvwprintz( w_rip,
-                       point( FULL_SCREEN_WIDTH / 2 - utf8_width( u.name ) / 2, iNLine++ ),
-                       c_white, u.name );
-            const std::string sLastWordsLabel = _( "Last Words:" );
-            mvwprintz( w_rip,
-                       point( FULL_SCREEN_WIDTH / 2 - utf8_width( sLastWordsLabel ) / 2, iNLine++ ),
-                       c_light_gray, sLastWordsLabel );
-            wnoutrefresh( w_rip );
         } );
 
         input_context ctxt( "DEATH_SCREEN" );
