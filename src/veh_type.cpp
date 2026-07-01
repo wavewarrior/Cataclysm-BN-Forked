@@ -592,6 +592,7 @@ void vpart_info::set_flag( const std::string &flag )
 
 void vpart_info::finalize()
 {
+    DynamicDataLoader::get_instance().sort_deferred( deferred, "id" );
     DynamicDataLoader::get_instance().load_deferred( deferred );
 
     for( auto &[_id, info] : vpart_info_all ) {

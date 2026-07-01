@@ -4,6 +4,7 @@
 #include <list>
 #include <map>
 #include <string>
+#include <string_view>
 #include <vector>
 #include <utility>
 
@@ -160,6 +161,17 @@ class DynamicDataLoader
          * Loads and then removes entries from @param data
          */
         void load_deferred( deferred_json &data );
+
+        /**
+         * Topologically sorts @param data so that each entry's copy-from parent
+         * appears before the entry itself. Independent entries are kept in their
+         * original relative order (ascending index) so that mod override semantics
+         * are preserved. Circular dependencies are appended at the end in their
+         * original order and will be handled by load_deferred's existing error path.
+         *
+         * @param id_field  The primary id member name for this factory (e.g. "id").
+         */
+        void sort_deferred( deferred_json &data, std::string_view id_field );
 
         /**
          * Returns whether the data is finalized and ready to be utilized.

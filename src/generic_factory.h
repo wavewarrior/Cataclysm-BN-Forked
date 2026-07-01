@@ -378,6 +378,7 @@ class generic_factory
                 debugmsg( "Attempted to finalize %s factory multiple times.", type_name );
             }
 
+            DynamicDataLoader::get_instance().sort_deferred( deferred, id_member_name );
             DynamicDataLoader::get_instance().load_deferred( deferred );
             abstracts.clear();
 
