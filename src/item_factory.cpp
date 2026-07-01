@@ -687,6 +687,7 @@ void Item_factory::finalize_post( itype &obj,
 
 void Item_factory::finalize()
 {
+    DynamicDataLoader::get_instance().sort_deferred( deferred, "id" );
     DynamicDataLoader::get_instance().load_deferred( deferred );
 
     finalize_item_blacklist();

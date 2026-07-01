@@ -11,7 +11,9 @@
 #include <sstream> // for throwing errors
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <vector>
+#include <queue>
 #include <ranges>
 #include <chrono>
 #include <cstdio>
@@ -194,6 +196,97 @@ shared_ptr_fast<std::istream> DynamicDataLoader::get_cached_stream( const std::s
     }
     stream_cache->cache.insert( stream_cache_limit, path, cached );
     return cached;
+}
+
+void DynamicDataLoader::sort_deferred( deferred_json &data, std::string_view id_field )
+{
+    if( data.size() <= 1 ) {
+        return;
+    }
+
+    struct entry_meta {
+        std::string self_id;
+        std::string copy_from;
+    };
+
+    const auto id_field_str = std::string( id_field );
+    auto metas = std::vector<entry_meta>( data.size() );
+
+    for( size_t i = 0; i < data.size(); ++i ) {
+        if( !data[i].first.path ) {
+            continue;
+        }
+        try {
+            auto stream = get_cached_stream( *data[i].first.path );
+            JsonIn jsin( *stream, data[i].first );
+            auto jo = jsin.get_object();
+            if( jo.has_string( "copy-from" ) ) {
+                metas[i].copy_from = jo.get_string( "copy-from" );
+            }
+            if( jo.has_string( id_field_str ) ) {
+                metas[i].self_id = jo.get_string( id_field_str );
+            } else if( jo.has_string( "ident" ) ) {
+                metas[i].self_id = jo.get_string( "ident" );
+            } else if( jo.has_string( "abstract" ) ) {
+                metas[i].self_id = jo.get_string( "abstract" );
+            }
+            jo.allow_omitted_members();
+        } catch( const JsonError & ) {
+            // Skip malformed entries; load_deferred will report them.
+        }
+    }
+
+    auto id_to_idx = std::unordered_map<std::string, size_t>{};
+    id_to_idx.reserve( data.size() );
+    for( size_t i = 0; i < data.size(); ++i ) {
+        if( !metas[i].self_id.empty() ) {
+            id_to_idx[metas[i].self_id] = i;
+        }
+    }
+
+    auto adj = std::vector<std::vector<size_t>>( data.size() );
+    auto in_deg = std::vector<size_t>( data.size(), 0 );
+    for( size_t i = 0; i < data.size(); ++i ) {
+        if( !metas[i].copy_from.empty() ) {
+            const auto it = id_to_idx.find( metas[i].copy_from );
+            if( it != id_to_idx.end() ) {
+                const auto parent = it->second;
+                adj[parent].push_back( i );
+                ++in_deg[i];
+            }
+        }
+    }
+
+    auto pq = std::priority_queue<size_t, std::vector<size_t>, std::greater<size_t>>{};
+    auto sorted_order = std::vector<size_t>{};
+    sorted_order.reserve( data.size() );
+    for( size_t i = 0; i < data.size(); ++i ) {
+        if( in_deg[i] == 0 ) {
+            pq.push( i );
+        }
+    }
+    while( !pq.empty() ) {
+        const auto n = pq.top();
+        pq.pop();
+        sorted_order.push_back( n );
+        for( const auto m : adj[n] ) {
+            if( --in_deg[m] == 0 ) {
+                pq.push( m );
+            }
+        }
+    }
+    for( size_t i = 0; i < data.size(); ++i ) {
+        if( in_deg[i] > 0 ) {
+            sorted_order.push_back( i );
+        }
+    }
+
+    auto sorted = deferred_json{};
+    sorted.reserve( data.size() );
+    for( const auto i : sorted_order ) {
+        sorted.push_back( std::move( data[i] ) );
+    }
+    data = std::move( sorted );
 }
 
 void DynamicDataLoader::load_deferred( deferred_json &data )
