@@ -29,7 +29,6 @@ option(DYNAMIC_ATLAS "Enable dynamic atlas generation" ON)
 option(SOUND "Support for in-game sounds & music." "OFF")
 option(BACKTRACE "Support for printing stack backtraces on crash" "ON")
 option(LIBBACKTRACE "Print backtrace with libbacktrace." "OFF")
-option(CATA_PARALLEL_MAPGEN "Enable parallel row-loop during mapgen weight calculation (Linux TSAN gate before enabling by default)" OFF)
 option(USE_XDG_DIR "Use XDG directories for save and config files." "OFF")
 # On Windows, default to current directory for backwards compatibility
 # On other platforms, use home directory
@@ -667,10 +666,6 @@ if (BACKTRACE)
     if (LIBBACKTRACE)
         add_definitions(-DLIBBACKTRACE)
     endif ()
-endif ()
-
-if (CATA_PARALLEL_MAPGEN)
-    add_definitions(-DCATA_PARALLEL_MAPGEN)
 endif ()
 
 if (NOT (LANGUAGES STREQUAL "none") AND "${GETTEXT_MSGFMT_BINARY}" STREQUAL "")

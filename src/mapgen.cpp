@@ -390,13 +390,6 @@ class mapgen_basic_container
                 mapgen_function_ptr.obj->finalize_parameters();
             }
         }
-        void collect_json_bases( std::vector<mapgen_function_json_base *> &out ) {
-            for( auto &wo : weights_ ) {
-                if( auto *base = dynamic_cast<mapgen_function_json_base *>( wo.obj.get() ) ) {
-                    out.push_back( base );
-                }
-            }
-        }
         void check_consistency( const std::string &key ) {
             for( auto &mapgen_function_ptr : weights_ ) {
                 mapgen_function_ptr.obj->check( key );
@@ -520,11 +513,6 @@ class mapgen_factory
             return iter->second.get_mapgen_params( mapgen_parameter_scope::overmap_special,
                                                    string_format( "map special %s", key ) );
         }
-        void collect_json_bases( std::vector<mapgen_function_json_base *> &out ) {
-            for( auto &pr : mapgens_ ) {
-                pr.second.collect_json_bases( out );
-            }
-        }
 };
 
 static mapgen_factory oter_mapgen;
@@ -633,42 +621,6 @@ void calculate_mapgen_weights()   // TODO: rename as it runs jsonfunction setup 
             ptr->setup();
             inp_mngr.pump_events();
         }
-    }
-    // Collect all json-based mapgens across all three containers.
-    // Must be called AFTER all setup() loops (setup() moves entries from mapgens_ into weights_).
-    std::vector<mapgen_function_json_base *> all_json_bases;
-    oter_mapgen.collect_json_bases( all_json_bases );
-    for( auto &pr : nested_mapgen ) {
-        for( auto &wo : pr.second ) {
-            if( auto *base = dynamic_cast<mapgen_function_json_base *>( wo.obj.get() ) ) {
-                all_json_bases.push_back( base );
-            }
-        }
-    }
-    for( auto &pr : update_mapgen ) {
-        for( auto &ptr : pr.second ) {
-            if( auto *base = dynamic_cast<mapgen_function_json_base *>( ptr.get() ) ) {
-                all_json_bases.push_back( base );
-            }
-        }
-    }
-
-    // Phase B: parallel row-loop — pure const reads + pointer capture, no shared_ptr copies.
-#ifdef CATA_PARALLEL_MAPGEN
-    const int n_bases = static_cast<int>( all_json_bases.size() );
-    parallel_for( 0, n_bases, [&]( const int i ) {
-        all_json_bases[i]->setup_parallel_b();
-    } );
-#else
-    for( mapgen_function_json_base *base : all_json_bases ) {
-        base->setup_parallel_b();
-    }
-#endif
-
-    // Phase C: serial merge — all objects.add() and re-finalize() calls happen here.
-    for( mapgen_function_json_base *base : all_json_bases ) {
-        base->setup_serial_c();
-        inp_mngr.pump_events();
     }
 
     // Release pre-flattened cache memory; no longer needed after setup.
@@ -3946,18 +3898,16 @@ bool mapgen_function_json_base::setup_common( const JsonObject &jo )
     // just like mapf::basic_bind("stuff",blargle("foo", etc) ), only json input and faster when applying
     if( jo.has_array( "rows" ) ) {
         // TODO: forward correct 'src' parameter
-        auto palette = mapgen_palette::load_temp( jo,
-                       mod_management::get_default_core_content_pack().str(), "" );
+        mapgen_palette palette = mapgen_palette::load_temp( jo,
+                                 mod_management::get_default_core_content_pack().str(), "" );
         auto &keys_with_terrain = palette.keys_with_terrain;
+        auto &format_placings = palette.format_placings;
 
         if( palette.keys_with_terrain.empty() && !fallback_terrain_exists ) {
             return false;
         }
 
         parameters = palette.get_parameters();
-        // Move format_placings into the transient member so setup_parallel_b can access it.
-        pending_format_placings_ = std::move( palette.format_placings );
-        const auto &format_placings = pending_format_placings_;
 
         // mandatory: mapgensize rows of mapgensize character lines, each of which must have a
         // matching key in "terrain", unless fill_ter is set
@@ -3976,10 +3926,8 @@ bool mapgen_function_json_base::setup_common( const JsonObject &jo )
                 string_format( "format: rows: must have %d rows, not %d; check mapgensize if applicable",
                                total_size.y(), parray.size() ) );
         }
-        pending_rows_.reserve( static_cast<size_t>( expected_dim.y() - m_offset.y() ) );
         for( int c = m_offset.y(); c < expected_dim.y(); c++ ) {
             const std::string row = parray.get_string( c );
-            pending_rows_.emplace_back( row );
             std::vector<map_key> row_keys;
             for( const std::string &key : utf8_display_split( row ) ) {
                 row_keys.emplace_back( key );
@@ -4018,6 +3966,12 @@ bool mapgen_function_json_base::setup_common( const JsonObject &jo )
                                            c + 1, i + 1, key.str ), c, i + 1 );
                     } catch( const JsonError &e ) {
                         debugmsg( "(json-error)\n%s", e.what() );
+                    }
+                }
+                if( has_placing ) {
+                    jmapgen_place where( p );
+                    for( auto &what : fpi->second ) {
+                        objects.add( where, what );
                     }
                 }
             }
@@ -4073,54 +4027,6 @@ bool mapgen_function_json_base::setup_common( const JsonObject &jo )
     return true;
 }
 
-void mapgen_function_json_base::setup_parallel_b()
-{
-    if( pending_rows_.empty() ) {
-        return;
-    }
-    const auto &fp = pending_format_placings_;
-    const auto expected_dim = mapgensize + m_offset;
-    for( int c = m_offset.y(); c < expected_dim.y(); c++ ) {
-        std::vector<map_key> row_keys;
-        for( const std::string &key : utf8_display_split( pending_rows_[c - m_offset.y()] ) ) {
-            row_keys.emplace_back( key );
-        }
-        for( int i = m_offset.x(); i < expected_dim.x(); i++ ) {
-            const auto fpi = fp.find( row_keys[i] );
-            if( fpi == fp.end() ) {
-                continue;
-            }
-            const jmapgen_place where( point_rel_ms( i, c ) - m_offset );
-            for( const auto &piece : fpi->second ) {
-                // Store raw pointer — NO shared_ptr copy, NO refcount touch.
-                pending_entries_.push_back( { where, &piece } );
-            }
-        }
-    }
-}
-
-void mapgen_function_json_base::setup_serial_c()
-{
-    if( pending_rows_.empty() ) {
-        return;  // No rows: setup_common(jo) already called objects.finalize(); nothing to merge.
-    }
-    // Build concrete row_objs (shared_ptr copies) — serial, no race.
-    using row_obj_t = std::pair<jmapgen_place, shared_ptr_fast<const jmapgen_piece>>;
-    std::vector<row_obj_t> row_objs;
-    row_objs.reserve( pending_entries_.size() );
-    for( const auto &entry : pending_entries_ ) {
-        row_objs.emplace_back( entry.place, *entry.piece );
-    }
-    // PREPEND row pieces before the existing place_* pieces, then re-finalize.
-    // This restores the original row-before-place_* insertion order so that within each
-    // phase, stable_sort keeps row-terrain before place_terrain (place_terrain wins as
-    // last-writer in apply(), matching pre-parallelisation behaviour).
-    objects.prepend_and_finalize( row_objs );
-    pending_entries_.clear();
-    pending_rows_.clear();
-    pending_format_placings_.clear();
-}
-
 void mapgen_function_json::check( const std::string &oter_name ) const
 {
     check_common( oter_name );
@@ -4169,34 +4075,6 @@ void jmapgen_objects::finalize()
     }
     std::stable_sort( objects.begin(), objects.end(),
     []( const jmapgen_obj & l, const jmapgen_obj & r ) {
-        return l.second->phase() < r.second->phase();
-    } );
-}
-
-void jmapgen_objects::prepend_and_finalize(
-    const std::vector<std::pair<jmapgen_place, shared_ptr_fast<const jmapgen_piece>>> &row_objs )
-{
-    if( row_objs.empty() ) {
-        // Nothing to prepend — but we still need finalize for the pieces already present.
-        finalize();
-        return;
-    }
-    // Build a new vector: row pieces first, then the existing place_* pieces.
-    // This preserves row-before-place_* insertion order so stable_sort keeps
-    // row terrain applied before place_terrain within each phase (place_terrain wins).
-    std::vector<jmapgen_obj> merged;
-    merged.reserve( row_objs.size() + objects.size() );
-    for( const auto &ro : row_objs ) {
-        merged.emplace_back( ro.first, ro.second );
-    }
-    merged.insert( merged.end(), objects.begin(), objects.end() );
-    objects = std::move( merged );
-    // Call per-piece finalize() and stable_sort by phase.
-    for( const auto &obj : objects ) {
-        obj.second->finalize();
-    }
-    std::stable_sort( objects.begin(), objects.end(),
-    []( const jmapgen_obj &l, const jmapgen_obj &r ) {
         return l.second->phase() < r.second->phase();
     } );
 }

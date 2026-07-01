@@ -373,10 +373,6 @@ struct jmapgen_objects {
 
         void check( const std::string &oter_name, const mapgen_parameters & ) const;
         void finalize();
-        /// Prepend entries (row-derived pieces) before the existing place_* pieces, then re-finalize.
-        /// Maintains row-before-place_* ordering within each phase (stable_sort preserves insertion order).
-        void prepend_and_finalize(
-            const std::vector<std::pair<jmapgen_place, shared_ptr_fast<const jmapgen_piece>>> &row_objs );
 
         void merge_parameters_into( mapgen_parameters &, const std::string &outer_context ) const;
 
@@ -439,25 +435,6 @@ class mapgen_function_json_base
 
         mapgen_parameters parameters;
 
-        // Transient fields populated during serial Phase A (setup_common(jo));
-        // consumed and cleared in setup_serial_c() after parallel Phase B.
-        // Stored as placing_map (fully defined here) rather than mapgen_palette to
-        // avoid requiring the complete mapgen_value<std::string> type in this header.
-        mapgen_palette::placing_map                       pending_format_placings_;
-        std::vector<std::string>                          pending_rows_;
-        struct PendingEntry {
-            jmapgen_place                                 place;
-            const shared_ptr_fast<const jmapgen_piece>   *piece;  // raw ptr into pending_format_placings_
-        };
-        std::vector<PendingEntry>                         pending_entries_;
-
-    public:
-        /// Phase B: row-loop lookup — pure const reads + pointer capture, no shared_ptr copies.
-        /// Safe to call from a pool worker thread.
-        void setup_parallel_b();
-        /// Phase C: serial merge — PREPENDS pending_entries_ before existing place_* pieces,
-        /// then re-finalizes to maintain row-before-place_* ordering within each phase.
-        void setup_serial_c();
 };
 
 class mapgen_function_json : public mapgen_function_json_base, public virtual mapgen_function
