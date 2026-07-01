@@ -128,9 +128,6 @@
 #include "weather.h"
 #include "weather_gen.h"
 
-static const activity_id ACT_CHOP_LOGS( "ACT_CHOP_LOGS" );
-static const activity_id ACT_CHOP_PLANKS( "ACT_CHOP_PLANKS" );
-static const activity_id ACT_CHOP_TREE( "ACT_CHOP_TREE" );
 static const activity_id ACT_CRAFT( "ACT_CRAFT" );
 static const activity_id ACT_FISH( "ACT_FISH" );
 static const activity_id ACT_GAME( "ACT_GAME" );
@@ -4372,8 +4369,8 @@ void iuse::cut_log_into_planks( player &p )
     const int moves = to_moves<int>( 20_minutes );
     p.add_msg_if_player( _( "You cut the log into planks." ) );
 
-    p.assign_activity( ACT_CHOP_PLANKS, moves, -1 );
-    p.activity->placement = g->m.bub_to_abs( p.bub_pos() );
+    p.assign_activity( std::make_unique<player_activity>( std::make_unique<wood_chop_activity_actor>( wood_chop_type::PLANKS,
+              g->m.bub_to_abs( p.bub_pos() ), moves ) ) );
 }
 
 int iuse::lumber( player *p, item *it, bool t, const tripoint_bub_ms & )
@@ -4467,9 +4464,8 @@ int iuse::chop_tree( player *p, item *it, bool t, const tripoint_bub_ms & )
     }
     moves = moves * ( 10 - helpers.size() ) / 10;
 
-    p->assign_activity( ACT_CHOP_TREE, moves, -1, p->get_item_position( it ) );
-    p->activity->add_tool( it );
-    p->activity->placement = g->m.bub_to_abs( pnt );
+    p->assign_activity( std::make_unique<player_activity>( std::make_unique<wood_chop_activity_actor>( wood_chop_type::TREE,
+              g->m.bub_to_abs( pnt ), moves, it ) ) );
 
     return it->type->charges_to_use();
 }
@@ -4514,9 +4510,8 @@ int iuse::chop_logs( player *p, item *it, bool t, const tripoint_bub_ms & )
     }
     moves = moves * ( 10 - helpers.size() ) / 10;
 
-    p->assign_activity( ACT_CHOP_LOGS, moves, -1, p->get_item_position( it ) );
-    p->activity->placement = g->m.bub_to_abs( pnt );
-    p->activity->add_tool( it );
+    p->assign_activity( std::make_unique<player_activity>( std::make_unique<wood_chop_activity_actor>( wood_chop_type::LOGS,
+              g->m.bub_to_abs( pnt ), moves, it ) ) );
 
     return it->type->charges_to_use();
 }

@@ -104,12 +104,6 @@ static const activity_id ACT_ATM( "ACT_ATM" );
 static const activity_id ACT_BLEED( "ACT_BLEED" );
 static const activity_id ACT_BUTCHER( "ACT_BUTCHER" );
 static const activity_id ACT_BUTCHER_FULL( "ACT_BUTCHER_FULL" );
-static const activity_id ACT_CHOP_LOGS( "ACT_CHOP_LOGS" );
-static const activity_id ACT_CHOP_PLANKS( "ACT_CHOP_PLANKS" );
-static const activity_id ACT_CHOP_TREE( "ACT_CHOP_TREE" );
-static const activity_id ACT_CONSUME_DRINK_MENU( "ACT_CONSUME_DRINK_MENU" );
-static const activity_id ACT_CONSUME_FOOD_MENU( "ACT_CONSUME_FOOD_MENU" );
-static const activity_id ACT_CONSUME_MEDS_MENU( "ACT_CONSUME_MEDS_MENU" );
 static const activity_id ACT_CRACKING( "ACT_CRACKING" );
 static const activity_id ACT_CRAFT( "ACT_CRAFT" );
 static constexpr auto craft_is_long_idx = 0;
@@ -118,12 +112,10 @@ static constexpr auto craft_tools_mult_percent_idx = 2;
 static constexpr auto craft_tools_mult_next_refresh_idx = 3;
 static const activity_id ACT_DISMEMBER( "ACT_DISMEMBER" );
 static const activity_id ACT_DISSECT( "ACT_DISSECT" );
-static const activity_id ACT_EAT_MENU( "ACT_EAT_MENU" );
 static const activity_id ACT_FETCH_REQUIRED( "ACT_FETCH_REQUIRED" );
 static const activity_id ACT_FIELD_DRESS( "ACT_FIELD_DRESS" );
 static const activity_id ACT_MILK( "ACT_MILK" );
 static const activity_id ACT_FIND_MOUNT( "ACT_FIND_MOUNT" );
-static const activity_id ACT_FIRSTAID( "ACT_FIRSTAID" );
 static const activity_id ACT_FISH( "ACT_FISH" );
 static const activity_id ACT_GAME( "ACT_GAME" );
 static const activity_id ACT_GENERIC_GAME( "ACT_GENERIC_GAME" );
@@ -250,23 +242,16 @@ activity_handlers::do_turn_functions = {
     { ACT_MULTIPLE_BUTCHER, multiple_butcher_do_turn },
     { ACT_MULTIPLE_FARM, multiple_farm_do_turn },
     { ACT_FETCH_REQUIRED, fetch_do_turn },
-    { ACT_EAT_MENU, eat_menu_do_turn },
     { ACT_VEHICLE_DECONSTRUCTION, vehicle_deconstruction_do_turn },
     { ACT_VEHICLE_REPAIR, vehicle_repair_do_turn },
     { ACT_MULTIPLE_CHOP_TREES, chop_trees_do_turn },
-    { ACT_CONSUME_FOOD_MENU, consume_food_menu_do_turn },
-    { ACT_CONSUME_DRINK_MENU, consume_drink_menu_do_turn },
-    { ACT_CONSUME_MEDS_MENU, consume_meds_menu_do_turn },
     { ACT_MOVE_LOOT, move_loot_do_turn },
     { ACT_ADV_INVENTORY, adv_inventory_do_turn },
     { ACT_ATM, atm_do_turn },
     { ACT_CRACKING, cracking_do_turn },
     { ACT_FISH, fish_do_turn },
 
-    { ACT_CHOP_TREE, chop_tree_do_turn },
-    { ACT_CHOP_LOGS, chop_tree_do_turn },
     { ACT_TIDY_UP, tidy_up_do_turn },
-    { ACT_CHOP_PLANKS, chop_tree_do_turn },
     { ACT_TIDY_UP, tidy_up_do_turn },
     { ACT_FIND_MOUNT, find_mount_do_turn },
     { ACT_MULTIPLE_CHOP_PLANKS, multiple_chop_planks_do_turn },
@@ -283,7 +268,6 @@ activity_handlers::do_turn_functions = {
 const std::map< activity_id, std::function<void( player_activity *, player * )> >
 activity_handlers::finish_functions = {
 
-    { ACT_FIRSTAID, firstaid_finish },
     { ACT_FISH, fish_finish },
     { ACT_HOTWIRE_CAR, hotwire_finish },
     { ACT_MAKE_ZLAVE, make_zlave_finish },
@@ -305,15 +289,8 @@ activity_handlers::finish_functions = {
     { ACT_VIBE, vibe_finish },
     { ACT_TRAIN_SKILL, train_skill_finish },
     { ACT_ATM, atm_finish },
-    { ACT_EAT_MENU, eat_menu_finish },
-    { ACT_CONSUME_FOOD_MENU, eat_menu_finish },
-    { ACT_CONSUME_DRINK_MENU, eat_menu_finish },
-    { ACT_CONSUME_MEDS_MENU, eat_menu_finish },
-    { ACT_CHOP_TREE, chop_tree_finish },
     { ACT_MILK, milk_finish },
     { activity_id( "ACT_SHEAR" ), shear_finish },
-    { ACT_CHOP_LOGS, chop_logs_finish },
-    { ACT_CHOP_PLANKS, chop_planks_finish },
 
     { ACT_PLAY_WITH_PET, play_with_pet_finish },
     { ACT_TRAIN_PET, train_pet_finish },
@@ -1079,36 +1056,6 @@ void activity_handlers::milk_finish( player_activity *act, player *p )
 
 
 
-void activity_handlers::firstaid_finish( player_activity *act, player *p )
-{
-    static const std::string iuse_name_string( "heal" );
-
-    item &it = *act->targets.front();
-    item *used_tool = it.get_usable_item( iuse_name_string );
-    if( used_tool == nullptr ) {
-        debugmsg( "Lost tool used for healing" );
-        act->set_to_null();
-        return;
-    }
-
-    const use_function *use_fun = used_tool->get_use( iuse_name_string );
-    const heal_actor *actor = dynamic_cast<const heal_actor *>( use_fun->get_actor_ptr() );
-    if( actor == nullptr ) {
-        debugmsg( "iuse_actor type descriptor and actual type mismatch" );
-        act->set_to_null();
-        return;
-    }
-
-    // TODO: Store the patient somehow, retrieve here
-    player &patient = *p;
-    const bodypart_str_id healed = bodypart_str_id( act->str_values[0] );
-    const int charges_consumed = actor->finish_using( *p, patient, *used_tool, healed );
-    p->consume_charges( it, charges_consumed );
-
-    // Erase activity and values.
-    act->set_to_null();
-    act->values.clear();
-}
 
 
 
@@ -1962,26 +1909,6 @@ void activity_handlers::meditate_finish( player_activity *act, player *p )
     act->set_to_null();
 }
 
-// This activity opens the menu (it's not meant to queue consumption of items)
-void activity_handlers::eat_menu_do_turn( player_activity *, player * )
-{
-    avatar_action::eat( g->u );
-}
-
-void activity_handlers::consume_food_menu_do_turn( player_activity *, player * )
-{
-    avatar_action::eat( g->u, game_menus::inv::consume_food( g->u ) );
-}
-
-void activity_handlers::consume_drink_menu_do_turn( player_activity *, player * )
-{
-    avatar_action::eat( g->u, game_menus::inv::consume_drink( g->u ) );
-}
-
-void activity_handlers::consume_meds_menu_do_turn( player_activity *, player * )
-{
-    avatar_action::eat( g->u, game_menus::inv::consume_meds( g->u ) );
-}
 
 void activity_handlers::move_loot_do_turn( player_activity *act, player *p )
 {
@@ -2722,207 +2649,11 @@ void activity_handlers::atm_finish( player_activity *act, player * )
     }
 }
 
-void activity_handlers::eat_menu_finish( player_activity *, player * )
-{
-    // Only exists to keep the eat activity alive between turns
-    return;
-}
 
 
 
-void activity_handlers::chop_tree_do_turn( player_activity *act, player * )
-{
-    map &here = get_map();
-    sfx::play_activity_sound( "tool", "axe",
-                              sfx::get_heard_volume( here.abs_to_bub( act->placement ) ) );
-    if( calendar::once_every( 1_minutes ) ) {
-        //~ Sound of a wood chopping tool at work!
-        sounds::sound( here.abs_to_bub( act->placement ), 15, sounds::sound_t::activity, _( "CHK!" ) );
-    }
-}
 
-void activity_handlers::chop_tree_finish( player_activity *act, player *p )
-{
-    map &here = get_map();
-    const auto &pos = here.abs_to_bub( act->placement );
 
-    tripoint_rel_ms direction;
-    if( !p->is_npc() ) {
-        if( p->backlog.empty() || p->backlog.front()->id() != ACT_MULTIPLE_CHOP_TREES ) {
-            while( true ) {
-                if( const auto dir = choose_direction(
-                                         _( "Select a direction for the tree to fall in." ) ) ) {
-                    direction = *dir;
-                    break;
-                }
-                // try again
-            }
-        }
-    } else {
-        // Try to safely fell tree
-        std::vector<tripoint_rel_ms> valid_directions;
-
-        for( const auto &elem : here.points_in_radius( pos, 1 ) ) {
-            bool cantuse = false;
-            auto direc = elem - pos;
-            auto proposed_to = pos + point_rel_ms( 3 * direction.x(), 3 * direction.y() );
-            std::vector<tripoint_bub_ms> rough_tree_line = line_to( pos, proposed_to );
-            for( const auto &elem : rough_tree_line ) {
-                // Try not to drop onto a critter
-                if( g->critter_at( elem ) ) {
-                    cantuse = true;
-                    break;
-                }
-
-                ter_t ter = here.ter( elem ).obj();
-                furn_t furn = here.furn( elem ).obj();
-                // Furniture / Terrain test
-                if( elem != pos && ( ter.bash.str_max != -1 || ( furn.id && furn.bash.str_max != -1 ) ) ) {
-                    cantuse = true;
-                    break;
-                }
-                // Vehicle check
-                if( veh_pointer_or_null( here.veh_at( elem ) ) ) {
-                    cantuse = true;
-                    break;
-                }
-            }
-            if( !cantuse ) {
-                // Passed all tests for safe direction, add to the possible routes
-                valid_directions.push_back( direc );
-            }
-        }
-        // Select a random valid direction, or none if empty
-        direction = random_entry( valid_directions, direction );
-    }
-
-    const auto to = pos + 3 * direction.xy() + point( rng( -1, 1 ), rng( -1, 1 ) );
-    std::vector<tripoint_bub_ms> tree = line_to( pos, to, rng( 1, 8 ) );
-    for( const auto &elem : tree ) {
-        here.batter( elem, 300, 5 );
-        here.ter_set( elem, t_trunk );
-    }
-
-    here.ter_set( pos, t_stump );
-    p->add_msg_if_player( m_good, _( "You finish chopping down a tree." ) );
-    here.collapse_at( pos, false, true, false );
-    // sound of falling tree
-    sfx::play_variant_sound( "misc", "timber",
-                             sfx::get_heard_volume( here.abs_to_bub( act->placement ) ) );
-    act->set_to_null();
-
-    // Quality of tool used and assistants can together both reduce intensity of work.
-    if( act->get_tools().empty() ) {
-        debugmsg( "woodcutting item location not set" );
-        resume_for_multi_activities( *p );
-        return;
-    }
-
-    safe_reference<item> &loc = act->get_tools_mut()[ 0 ];
-    if( !loc ) {
-        debugmsg( "woodcutting item location lost" );
-        resume_for_multi_activities( *p );
-        return;
-    }
-
-    item *it = &*loc;
-
-    int act_exertion = iuse::chop_moves( *p, *it );
-    p->add_msg_if_player( m_good, _( "You finish chopping down a tree." ) );
-    const std::vector<npc *> helpers = character_funcs::get_crafting_helpers( *p, 3 );
-    act_exertion = act_exertion * ( 10 - helpers.size() ) / 10;
-
-    p->mod_stored_kcal( std::min( -1, -act_exertion / to_moves<int>( 80_seconds ) ) );
-    p->mod_thirst( std::max( 1, act_exertion / to_moves<int>( 12_minutes ) ) );
-    p->mod_fatigue( std::max( 1, act_exertion / to_moves<int>( 6_minutes ) ) );
-
-    resume_for_multi_activities( *p );
-}
-
-void activity_handlers::chop_logs_finish( player_activity *act, player *p )
-{
-    map &here = get_map();
-    const auto &pos = here.abs_to_bub( act->placement );
-    int log_quan;
-    int stick_quan;
-    int splint_quan;
-    if( here.ter( pos ) == t_trunk ) {
-        log_quan = rng( 2, 3 );
-        stick_quan = rng( 0, 1 );
-        splint_quan = 0;
-    } else if( here.ter( pos ) == t_stump ) {
-        log_quan = rng( 0, 2 );
-        stick_quan = 0;
-        splint_quan = rng( 5, 15 );
-    } else {
-        log_quan = 0;
-        stick_quan = 0;
-        splint_quan = 0;
-    }
-    for( int i = 0; i != log_quan; ++i ) {
-        detached_ptr<item> obj = item::spawn( itype_log, calendar::turn );
-        obj->set_var( "activity_var", p->name );
-        here.add_item_or_charges( pos, std::move( obj ) );
-    }
-    for( int i = 0; i != stick_quan; ++i ) {
-        detached_ptr<item> obj = item::spawn( itype_stick_long, calendar::turn );
-        obj->set_var( "activity_var", p->name );
-        here.add_item_or_charges( pos, std::move( obj ) );
-    }
-    for( int i = 0; i != splint_quan; ++i ) {
-        detached_ptr<item> obj = item::spawn( itype_splinter, calendar::turn );
-        obj->set_var( "activity_var", p->name );
-        here.add_item_or_charges( pos, std::move( obj ) );
-    }
-    here.ter_set( pos, t_dirt );
-    p->add_msg_if_player( m_good, _( "You finish chopping wood." ) );
-
-    act->set_to_null();
-
-    // Quality of tool used and assistants can together both reduce intensity of work.
-
-    safe_reference<item> &loc = act->get_tools_mut()[ 0 ];
-    if( !loc ) {
-        debugmsg( "woodcutting item location lost" );
-        return;
-    }
-
-    item *it = &*loc;
-    int act_exertion = iuse::chop_moves( *p, *it );
-    const std::vector<npc *> helpers = character_funcs::get_crafting_helpers( *p, 3 );
-    act_exertion = act_exertion * ( 10 - helpers.size() ) / 10;
-
-    p->mod_stored_kcal( std::min( -1, -act_exertion / to_moves<int>( 80_seconds ) ) );
-    p->mod_thirst( std::max( 1, act_exertion / to_moves<int>( 12_minutes ) ) );
-    p->mod_fatigue( std::max( 1, act_exertion / to_moves<int>( 6_minutes ) ) );
-
-    resume_for_multi_activities( *p );
-}
-
-void activity_handlers::chop_planks_finish( player_activity *act, player *p )
-{
-    const int max_planks = 10;
-    /** @EFFECT_FABRICATION increases number of planks cut from a log */
-    int planks = normal_roll( 2 + p->get_skill_level( skill_id( "fabrication" ) ), 1 );
-    int wasted_planks = max_planks - planks;
-    int scraps = rng( wasted_planks, wasted_planks * 3 );
-    planks = std::min( planks, max_planks );
-
-    map &here = get_map();
-    if( planks > 0 ) {
-        here.spawn_item( here.abs_to_bub( act->placement ), itype_2x4, planks, 0, calendar::turn );
-        p->add_msg_if_player( m_good, _( "You produce %d planks." ), planks );
-    }
-    if( scraps > 0 ) {
-        here.spawn_item( here.abs_to_bub( act->placement ), itype_splinter, scraps, 0, calendar::turn );
-        p->add_msg_if_player( m_good, _( "You produce %d splinters." ), scraps );
-    }
-    if( planks < max_planks / 2 ) {
-        p->add_msg_if_player( m_bad, _( "You waste a lot of the wood." ) );
-    }
-    act->set_to_null();
-    resume_for_multi_activities( *p );
-}
 
 
 

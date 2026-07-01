@@ -70,6 +70,8 @@
 #include "iuse_actor.h"
 #include "requirements.h"
 #include "skill.h"
+#include "bodypart.h"
+#include "iuse.h"
 
 #define dbg(x) DebugLog((x),DC::Game)
 
@@ -80,7 +82,11 @@ advanced_object_deconstruction( "advanced_object_deconstruction" );
 
 static const itype_id itype_bone_human( "bone_human" );
 static const itype_id itype_electrohack( "electrohack" );
+static const itype_id itype_log( "log" );
+static const itype_id itype_splinter( "splinter" );
+static const itype_id itype_stick_long( "stick_long" );
 
+static const activity_id ACT_MULTIPLE_CHOP_TREES( "ACT_MULTIPLE_CHOP_TREES" );
 static const skill_id skill_computer( "computer" );
 static const skill_id skill_mechanics( "mechanics" );
 
@@ -4517,6 +4523,332 @@ std::unique_ptr<activity_actor> armor_layers_activity_actor::deserialize( JsonIn
     return std::unique_ptr<armor_layers_activity_actor>( new armor_layers_activity_actor() );
 }
 
+// ---- consume_menu_activity_actor ------------------------------------------
+
+activity_id consume_menu_activity_actor::get_type() const
+{
+    switch( menu_type ) {
+        case consume_menu_type::EAT:
+            return activity_id( "ACT_EAT_MENU" );
+        case consume_menu_type::FOOD:
+            return activity_id( "ACT_CONSUME_FOOD_MENU" );
+        case consume_menu_type::DRINK:
+            return activity_id( "ACT_CONSUME_DRINK_MENU" );
+        case consume_menu_type::MEDS:
+            return activity_id( "ACT_CONSUME_MEDS_MENU" );
+    }
+    return activity_id( "ACT_EAT_MENU" );
+}
+
+void consume_menu_activity_actor::do_turn( player_activity & /*act*/, Character & /*who*/ )
+{
+    switch( menu_type ) {
+        case consume_menu_type::EAT:
+            avatar_action::eat( g->u );
+            break;
+        case consume_menu_type::FOOD:
+            avatar_action::eat( g->u, game_menus::inv::consume_food( g->u ) );
+            break;
+        case consume_menu_type::DRINK:
+            avatar_action::eat( g->u, game_menus::inv::consume_drink( g->u ) );
+            break;
+        case consume_menu_type::MEDS:
+            avatar_action::eat( g->u, game_menus::inv::consume_meds( g->u ) );
+            break;
+    }
+}
+
+void consume_menu_activity_actor::serialize( JsonOut &jsout ) const
+{
+    jsout.start_object();
+    jsout.member( "menu_type", static_cast<int>( menu_type ) );
+    jsout.end_object();
+}
+
+std::unique_ptr<activity_actor> consume_menu_activity_actor::deserialize( JsonIn &jsin )
+{
+    JsonObject data = jsin.get_object();
+    int menu_type_int = 0;
+    data.read( "menu_type", menu_type_int );
+    return std::make_unique<consume_menu_activity_actor>( static_cast<consume_menu_type>( menu_type_int ) );
+}
+
+
+// ---- firstaid_activity_actor ----------------------------------------------
+
+void firstaid_activity_actor::finish( player_activity &act, Character &who )
+{
+    static const std::string iuse_name_string( "heal" );
+
+    item *it = &*healing_item;
+    if( it == nullptr ) {
+        debugmsg( "Lost healing item for firstaid activity" );
+        act.set_to_null();
+        return;
+    }
+
+    item *used_tool = it->get_usable_item( iuse_name_string );
+    if( used_tool == nullptr ) {
+        debugmsg( "Lost tool used for healing" );
+        act.set_to_null();
+        return;
+    }
+
+    const use_function *use_fun = used_tool->get_use( iuse_name_string );
+    const heal_actor *actor = dynamic_cast<const heal_actor *>( use_fun->get_actor_ptr() );
+    if( actor == nullptr ) {
+        debugmsg( "iuse_actor type descriptor and actual type mismatch" );
+        act.set_to_null();
+        return;
+    }
+
+    player &patient = static_cast<player &>( who );
+    const bodypart_str_id healed = bodypart_str_id( body_part );
+    const int charges_consumed = actor->finish_using( patient, patient, *used_tool, healed );
+    patient.consume_charges( *it, charges_consumed );
+
+    act.set_to_null();
+}
+
+void firstaid_activity_actor::serialize( JsonOut &jsout ) const
+{
+    jsout.start_object();
+    jsout.member( "healing_item", healing_item.serialize() );
+    jsout.member( "body_part", body_part );
+    jsout.member( "moves", moves );
+    jsout.end_object();
+}
+
+std::unique_ptr<activity_actor> firstaid_activity_actor::deserialize( JsonIn &jsin )
+{
+    JsonObject data = jsin.get_object();
+    safe_reference<item> healing_item_ref;
+    std::string body_part_str;
+    int moves_val = 0;
+    data.read( "healing_item", healing_item_ref );
+    data.read( "body_part", body_part_str );
+    data.read( "moves", moves_val );
+    return std::make_unique<firstaid_activity_actor>( healing_item_ref, body_part_str, moves_val );
+}
+
+
+// ---- wood_chop_activity_actor ---------------------------------------------
+
+activity_id wood_chop_activity_actor::get_type() const
+{
+    switch( chop_type ) {
+        case wood_chop_type::TREE:
+            return activity_id( "ACT_CHOP_TREE" );
+        case wood_chop_type::LOGS:
+            return activity_id( "ACT_CHOP_LOGS" );
+        case wood_chop_type::PLANKS:
+            return activity_id( "ACT_CHOP_PLANKS" );
+    }
+    return activity_id( "ACT_CHOP_TREE" );
+}
+
+void wood_chop_activity_actor::do_turn( player_activity &act, Character & /*who*/ )
+{
+    map &here = get_map();
+    sfx::play_activity_sound( "tool", "axe",
+                              sfx::get_heard_volume( here.abs_to_bub( act.placement ) ) );
+    if( calendar::once_every( 1_minutes ) ) {
+        sounds::sound( here.abs_to_bub( act.placement ), 15, sounds::sound_t::activity, _( "CHK!" ) );
+    }
+}
+
+void wood_chop_activity_actor::finish( player_activity &act, Character &who )
+{
+    map &here = get_map();
+    player &p = static_cast<player &>( who );
+
+    switch( chop_type ) {
+        case wood_chop_type::TREE: {
+            const auto &pos = here.abs_to_bub( placement );
+
+            tripoint_rel_ms direction;
+            if( !p.is_npc() ) {
+                if( p.backlog.empty() || p.backlog.front()->id() != ACT_MULTIPLE_CHOP_TREES ) {
+                    while( true ) {
+                        if( const auto dir = choose_direction(
+                                     _( "Select a direction for the tree to fall in." ) ) ) {
+                            direction = *dir;
+                            break;
+                        }
+                    }
+                }
+            } else {
+                std::vector<tripoint_rel_ms> valid_directions;
+
+                for( const auto &elem : here.points_in_radius( pos, 1 ) ) {
+                    bool cantuse = false;
+                    auto direc = elem - pos;
+                    auto proposed_to = pos + point_rel_ms( 3 * direction.x(), 3 * direction.y() );
+                    std::vector<tripoint_bub_ms> rough_tree_line = line_to( pos, proposed_to );
+                    for( const auto &elem : rough_tree_line ) {
+                        if( g->critter_at( elem ) ) {
+                            cantuse = true;
+                            break;
+                        }
+
+                        ter_t ter = here.ter( elem ).obj();
+                        furn_t furn = here.furn( elem ).obj();
+                        if( elem != pos && ( ter.bash.str_max != -1 || ( furn.id && furn.bash.str_max != -1 ) ) ) {
+                            cantuse = true;
+                            break;
+                        }
+                        if( veh_pointer_or_null( here.veh_at( elem ) ) ) {
+                            cantuse = true;
+                            break;
+                        }
+                    }
+                    if( !cantuse ) {
+                        valid_directions.push_back( direc );
+                    }
+                }
+                direction = random_entry( valid_directions, direction );
+            }
+
+            const auto to = pos + 3 * direction.xy() + point( rng( -1, 1 ), rng( -1, 1 ) );
+            std::vector<tripoint_bub_ms> tree = line_to( pos, to, rng( 1, 8 ) );
+            for( const auto &elem : tree ) {
+                here.batter( elem, 300, 5 );
+                here.ter_set( elem, t_trunk );
+            }
+
+            here.ter_set( pos, t_stump );
+            p.add_msg_if_player( m_good, _( "You finish chopping down a tree." ) );
+            here.collapse_at( pos, false, true, false );
+            sfx::play_variant_sound( "misc", "timber",
+                                     sfx::get_heard_volume( here.abs_to_bub( placement ) ) );
+
+            // Exertion calculation
+            if( !axe ) {
+                debugmsg( "woodcutting item location not set" );
+                activity_handlers::resume_for_multi_activities( p );
+                act.set_to_null();
+                return;
+            }
+
+            item *it = &*axe;
+            int act_exertion = iuse::chop_moves( p, *it );
+            const std::vector<npc *> helpers = character_funcs::get_crafting_helpers( p, 3 );
+            act_exertion = act_exertion * ( 10 - helpers.size() ) / 10;
+
+            p.mod_stored_kcal( std::min( -1, -act_exertion / to_moves<int>( 80_seconds ) ) );
+            p.mod_thirst( std::max( 1, act_exertion / to_moves<int>( 12_minutes ) ) );
+            p.mod_fatigue( std::max( 1, act_exertion / to_moves<int>( 6_minutes ) ) );
+
+            activity_handlers::resume_for_multi_activities( p );
+            act.set_to_null();
+            break;
+        }
+        case wood_chop_type::LOGS: {
+            const auto &pos = here.abs_to_bub( placement );
+            int log_quan;
+            int stick_quan;
+            int splint_quan;
+            if( here.ter( pos ) == t_trunk ) {
+                log_quan = rng( 2, 3 );
+                stick_quan = rng( 0, 1 );
+                splint_quan = 0;
+            } else if( here.ter( pos ) == t_stump ) {
+                log_quan = rng( 0, 2 );
+                stick_quan = 0;
+                splint_quan = rng( 5, 15 );
+            } else {
+                log_quan = 0;
+                stick_quan = 0;
+                splint_quan = 0;
+            }
+            for( int i = 0; i != log_quan; ++i ) {
+                detached_ptr<item> obj = item::spawn( itype_log, calendar::turn );
+                obj->set_var( "activity_var", p.name );
+                here.add_item_or_charges( pos, std::move( obj ) );
+            }
+            for( int i = 0; i != stick_quan; ++i ) {
+                detached_ptr<item> obj = item::spawn( itype_stick_long, calendar::turn );
+                obj->set_var( "activity_var", p.name );
+                here.add_item_or_charges( pos, std::move( obj ) );
+            }
+            for( int i = 0; i != splint_quan; ++i ) {
+                detached_ptr<item> obj = item::spawn( itype_splinter, calendar::turn );
+                obj->set_var( "activity_var", p.name );
+                here.add_item_or_charges( pos, std::move( obj ) );
+            }
+            here.ter_set( pos, t_dirt );
+            p.add_msg_if_player( m_good, _( "You finish chopping wood." ) );
+
+            if( !axe ) {
+                debugmsg( "woodcutting item location lost" );
+                activity_handlers::resume_for_multi_activities( p );
+                act.set_to_null();
+                return;
+            }
+
+            item *it = &*axe;
+            int act_exertion = iuse::chop_moves( p, *it );
+            const std::vector<npc *> helpers = character_funcs::get_crafting_helpers( p, 3 );
+            act_exertion = act_exertion * ( 10 - helpers.size() ) / 10;
+
+            p.mod_stored_kcal( std::min( -1, -act_exertion / to_moves<int>( 80_seconds ) ) );
+            p.mod_thirst( std::max( 1, act_exertion / to_moves<int>( 12_minutes ) ) );
+            p.mod_fatigue( std::max( 1, act_exertion / to_moves<int>( 6_minutes ) ) );
+
+            activity_handlers::resume_for_multi_activities( p );
+            act.set_to_null();
+            break;
+        }
+        case wood_chop_type::PLANKS: {
+            const int max_planks = 10;
+            int planks = normal_roll( 2 + p.get_skill_level( skill_id( "fabrication" ) ), 1 );
+            int wasted_planks = max_planks - planks;
+            int scraps = rng( wasted_planks, wasted_planks * 3 );
+            planks = std::min( planks, max_planks );
+
+            if( planks > 0 ) {
+                here.spawn_item( here.abs_to_bub( placement ), itype_2x4, planks, 0, calendar::turn );
+                p.add_msg_if_player( m_good, _( "You produce %d planks." ), planks );
+            }
+            if( scraps > 0 ) {
+                here.spawn_item( here.abs_to_bub( placement ), itype_splinter, scraps, 0, calendar::turn );
+                p.add_msg_if_player( m_good, _( "You produce %d splinters." ), scraps );
+            }
+            if( planks < max_planks / 2 ) {
+                p.add_msg_if_player( m_bad, _( "You waste a lot of the wood." ) );
+            }
+            activity_handlers::resume_for_multi_activities( p );
+            act.set_to_null();
+            break;
+        }
+    }
+}
+
+void wood_chop_activity_actor::serialize( JsonOut &jsout ) const
+{
+    jsout.start_object();
+    jsout.member( "chop_type", static_cast<int>( chop_type ) );
+    jsout.member( "placement", placement );
+    jsout.member( "axe", axe.serialize() );
+    jsout.member( "moves", moves );
+    jsout.end_object();
+}
+
+std::unique_ptr<activity_actor> wood_chop_activity_actor::deserialize( JsonIn &jsin )
+{
+    JsonObject data = jsin.get_object();
+    int chop_type_int = 0;
+    tripoint_abs_ms placement_val;
+    safe_reference<item> axe_ref;
+    int moves_val = 0;
+    data.read( "chop_type", chop_type_int );
+    data.read( "placement", placement_val );
+    data.read( "axe", axe_ref );
+    data.read( "moves", moves_val );
+    auto act = std::make_unique<wood_chop_activity_actor>( static_cast<wood_chop_type>( chop_type_int ),
+              placement_val, moves_val, axe_ref );
+    return act;
+}
 namespace activity_actors
 {
 
@@ -4533,8 +4865,14 @@ deserialize_functions = {
     { activity_id( "ACT_BOLTCUTTING" ), &boltcutting_activity_actor::deserialize },
     { activity_id( "ACT_BUILD" ), &construction_activity_actor::deserialize },
     { activity_id( "ACT_BURROW" ), &burrow_activity_actor::deserialize },
+    { activity_id( "ACT_CHOP_LOGS" ), &wood_chop_activity_actor::deserialize },
+    { activity_id( "ACT_CHOP_PLANKS" ), &wood_chop_activity_actor::deserialize },
+    { activity_id( "ACT_CHOP_TREE" ), &wood_chop_activity_actor::deserialize },
     { activity_id( "ACT_CHURN" ), &churn_activity_actor::deserialize },
     { activity_id( "ACT_CLEAR_RUBBLE" ), &clear_rubble_activity_actor::deserialize },
+    { activity_id( "ACT_CONSUME_DRINK_MENU" ), &consume_menu_activity_actor::deserialize },
+    { activity_id( "ACT_CONSUME_FOOD_MENU" ), &consume_menu_activity_actor::deserialize },
+    { activity_id( "ACT_CONSUME_MEDS_MENU" ), &consume_menu_activity_actor::deserialize },
     { activity_id( "ACT_CRAFT" ), &craft_activity_actor::deserialize },
     { activity_id( "ACT_DIG" ), &dig_activity_actor::deserialize },
     { activity_id( "ACT_DIG_CHANNEL" ), &dig_channel_activity_actor::deserialize },
@@ -4542,10 +4880,12 @@ deserialize_functions = {
     { activity_id( "ACT_DISMEMBER" ), &butchery_activity_actor::deserialize },
     { activity_id( "ACT_DISSECT" ), &butchery_activity_actor::deserialize },
     { activity_id( "ACT_DROP" ), &drop_activity_actor::deserialize },
+    { activity_id( "ACT_EAT_MENU" ), &consume_menu_activity_actor::deserialize },
     { activity_id( "ACT_FERTILIZE_PLOT" ), &fertilize_plot_activity_actor::deserialize },
     { activity_id( "ACT_FIELD_DRESS" ), &butchery_activity_actor::deserialize },
     { activity_id( "ACT_FILL_LIQUID" ), &fill_liquid_activity_actor::deserialize },
     { activity_id( "ACT_FILL_PIT" ), &fill_pit_activity_actor::deserialize },
+    { activity_id( "ACT_FIRSTAID" ), &firstaid_activity_actor::deserialize },
     { activity_id( "ACT_FORAGE" ), &forage_activity_actor::deserialize },
     { activity_id( "ACT_GUNMOD_ADD" ), &gunmod_add_activity_actor::deserialize },
     { activity_id( "ACT_HACKING" ), &hacking_activity_actor::deserialize },

@@ -16,6 +16,7 @@
 #include "point.h"
 #include "type_id.h"
 #include "units_energy.h"
+#include "player_activity.h"
 
 class Creature;
 class vehicle;
@@ -1337,6 +1338,85 @@ class butchery_activity_actor : public activity_actor
 
         void start( player_activity &act, Character &who ) override;
         void do_turn( player_activity &act, Character &who ) override;
+        void finish( player_activity &act, Character &who ) override;
+
+        void serialize( JsonOut &jsout ) const override;
+        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+};
+enum class consume_menu_type { EAT, FOOD, DRINK, MEDS };
+
+class consume_menu_activity_actor : public activity_actor
+{
+    private:
+        consume_menu_type menu_type;
+
+    public:
+        explicit consume_menu_activity_actor( consume_menu_type type ) : menu_type( type ) {}
+
+        activity_id get_type() const override;
+
+        void start( player_activity &, Character & ) override {}
+        void do_turn( player_activity &, Character & ) override;
+        void finish( player_activity &, Character & ) override {}
+
+        void serialize( JsonOut &jsout ) const override;
+        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+};
+
+class firstaid_activity_actor : public activity_actor
+{
+    private:
+        safe_reference<item> healing_item;
+        std::string body_part;
+        int moves = 0;
+
+    public:
+        firstaid_activity_actor() = default;
+        firstaid_activity_actor( const safe_reference<item> &item, const std::string &part, int moves_ )
+            : healing_item( item ), body_part( part ), moves( moves_ ) {}
+
+        activity_id get_type() const override {
+            return activity_id( "ACT_FIRSTAID" );
+        }
+
+        void start( player_activity &act, Character & ) override {
+            act.moves_left = moves;
+        }
+        void do_turn( player_activity &, Character & ) override {}
+        void finish( player_activity &act, Character &who ) override;
+
+        void serialize( JsonOut &jsout ) const override;
+        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+};
+
+enum class wood_chop_type { TREE, LOGS, PLANKS };
+
+class wood_chop_activity_actor : public activity_actor
+{
+    private:
+        wood_chop_type chop_type;
+        tripoint_abs_ms placement;
+        safe_reference<item> axe;
+        int moves = 0;
+
+        bool can_resume_with_internal( const activity_actor &other,
+                                       const Character &/*who*/ ) const override {
+            const wood_chop_activity_actor &actor = static_cast<const wood_chop_activity_actor &>( other );
+            return actor.chop_type == chop_type && actor.placement == placement;
+        }
+
+    public:
+        wood_chop_activity_actor() = default;
+        wood_chop_activity_actor( wood_chop_type type, const tripoint_abs_ms &place, int moves_,
+                                  const safe_reference<item> &tool = safe_reference<item>() )
+            : chop_type( type ), placement( place ), moves( moves_ ), axe( tool ) {}
+
+        activity_id get_type() const override;
+
+        void start( player_activity &act, Character & ) override {
+            act.moves_left = moves;
+        }
+        void do_turn( player_activity &act, Character & ) override;
         void finish( player_activity &act, Character &who ) override;
 
         void serialize( JsonOut &jsout ) const override;

@@ -194,10 +194,6 @@ void vibe_do_turn( player_activity *act, player *p );
 void train_skill_do_turn( player_activity *act, player *p );
 void multiple_chop_planks_do_turn( player_activity *act, player *p );
 void wear_do_turn( player_activity *act, player *p );
-void eat_menu_do_turn( player_activity *act, player *p );
-void consume_food_menu_do_turn( player_activity *act, player *p );
-void consume_drink_menu_do_turn( player_activity *act, player *p );
-void consume_meds_menu_do_turn( player_activity *act, player *p );
 void move_items_do_turn( player_activity *act, player *p );
 void multiple_farm_do_turn( player_activity *act, player *p );
 void multiple_fish_do_turn( player_activity *act, player *p );
@@ -216,7 +212,6 @@ void atm_do_turn( player_activity *act, player *p );
 void fish_do_turn( player_activity *act, player *p );
 void cracking_do_turn( player_activity *act, player *p );
 void repair_item_do_turn( player_activity *act, player *p );
-void chop_tree_do_turn( player_activity *act, player *p );
 void find_mount_do_turn( player_activity *act, player *p );
 void tidy_up_do_turn( player_activity *act, player *p );
 void try_sleep_do_turn( player_activity *act, player *p );
@@ -233,7 +228,6 @@ extern const std::map< activity_id, std::function<void( player_activity *, playe
 do_turn_functions;
 
 /** activity_finish functions: */
-void firstaid_finish( player_activity *act, player *p );
 void fish_finish( player_activity *act, player *p );
 void hotwire_finish( player_activity *act, player *p );
 void longsalvage_finish( player_activity *act, player *p );
@@ -263,10 +257,6 @@ void operation_finish( player_activity *act, player *p );
 void vibe_finish( player_activity *act, player *p );
 void train_skill_finish( player_activity *act, player *p );
 void atm_finish( player_activity *act, player *p );
-void eat_menu_finish( player_activity *act, player *p );
-void chop_tree_finish( player_activity *act, player *p );
-void chop_logs_finish( player_activity *act, player *p );
-void chop_planks_finish( player_activity *act, player *p );
 void jackhammer_finish( player_activity *act, player *p );
 void fill_pit_finish( player_activity *act, player *p );
 void play_with_pet_finish( player_activity *act, player *p );

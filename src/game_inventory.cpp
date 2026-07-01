@@ -1,6 +1,7 @@
 #include "game_inventory.h"
 
 #include "avatar.h"
+#include "activity_actor_definitions.h"
 #include "avatar_action.h"
 #include "avatar_functions.h"
 #include "bionics.h"
@@ -730,7 +731,9 @@ static std::string get_consume_needs_hint(player& p) {
 }
 
 item* game_menus::inv::consume(player& p) {
-    if (!g->u.has_activity(ACT_EAT_MENU)) { g->u.assign_activity(ACT_EAT_MENU); }
+    if( !p.has_activity( ACT_EAT_MENU ) ) {
+        p.assign_activity( std::make_unique<player_activity>( std::make_unique<consume_menu_activity_actor>( consume_menu_type::EAT ) ) );
+    }
 
     return inv_internal(
         p, comestible_inventory_preset(p), _("Consume item"), 1, _("You have nothing to consume."),
@@ -752,7 +755,9 @@ private:
 };
 
 item* game_menus::inv::consume_food(player& p) {
-    if (!g->u.has_activity(ACT_CONSUME_FOOD_MENU)) { g->u.assign_activity(ACT_CONSUME_FOOD_MENU); }
+    if( !p.has_activity( ACT_CONSUME_FOOD_MENU ) ) {
+        p.assign_activity( std::make_unique<player_activity>( std::make_unique<consume_menu_activity_actor>( consume_menu_type::FOOD ) ) );
+    }
 
     return inv_internal(
         p,
@@ -766,8 +771,8 @@ item* game_menus::inv::consume_food(player& p) {
 }
 
 item* game_menus::inv::consume_drink(player& p) {
-    if (!g->u.has_activity(ACT_CONSUME_DRINK_MENU)) {
-        g->u.assign_activity(ACT_CONSUME_DRINK_MENU);
+    if( !p.has_activity( ACT_CONSUME_DRINK_MENU ) ) {
+        p.assign_activity( std::make_unique<player_activity>( std::make_unique<consume_menu_activity_actor>( consume_menu_type::DRINK ) ) );
     }
 
     return inv_internal(
@@ -782,11 +787,12 @@ item* game_menus::inv::consume_drink(player& p) {
 }
 
 item* game_menus::inv::consume_meds(player& p) {
-    if (!g->u.has_activity(ACT_CONSUME_MEDS_MENU)) { g->u.assign_activity(ACT_CONSUME_MEDS_MENU); }
+    if( !p.has_activity( ACT_CONSUME_MEDS_MENU ) ) {
+        p.assign_activity( std::make_unique<player_activity>( std::make_unique<consume_menu_activity_actor>( consume_menu_type::MEDS ) ) );
+    }
 
     return inv_internal(
-        p,
-        comestible_filtered_inventory_preset(p, [](const item& it) { return it.is_medication(); }),
+        p, comestible_filtered_inventory_preset(p, [](const item& it) { return it.is_medication(); }),
         _("Consume medication"), 1, _("You have no medication to consume."),
         get_consume_needs_hint(p));
 }

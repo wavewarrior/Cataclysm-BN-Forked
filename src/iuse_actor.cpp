@@ -3844,9 +3844,7 @@ int heal_actor::use( player &p, item &it, bool, const tripoint_bub_ms &pos ) con
     if( long_action && &patient == &p && !p.is_npc() ) {
         // Assign first aid long action.
         /** @EFFECT_FIRSTAID speeds up firstaid activity */
-        p.assign_activity( ACT_FIRSTAID, cost, 0, 0, it.tname() );
-        p.activity->targets.emplace_back( &it );
-        p.activity->str_values.push_back( hpp.str() );
+        p.assign_activity( std::make_unique<player_activity>( std::make_unique<firstaid_activity_actor>( &it, hpp.str(), cost ) ) );
         p.moves = 0;
         return 0;
     }

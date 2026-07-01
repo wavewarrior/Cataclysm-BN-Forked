@@ -86,9 +86,6 @@
 
 namespace views = std::views;
 
-static const activity_id ACT_CHOP_LOGS( "ACT_CHOP_LOGS" );
-static const activity_id ACT_CHOP_PLANKS( "ACT_CHOP_PLANKS" );
-static const activity_id ACT_CHOP_TREE( "ACT_CHOP_TREE" );
 static const activity_id ACT_FETCH_REQUIRED( "ACT_FETCH_REQUIRED" );
 static const activity_id ACT_FISH( "ACT_FISH" );
 static const activity_id ACT_MOVE_LOOT( "ACT_MOVE_LOOT" );
@@ -2343,8 +2340,8 @@ static bool chop_plank_activity( player &p, const tripoint_bub_ms &src_loc )
             here.i_rem( src_loc, i );
             int moves = to_moves<int>( 20_minutes );
             p.add_msg_if_player( _( "You cut the log into planks." ) );
-            p.assign_activity( ACT_CHOP_PLANKS, moves, -1 );
-            p.activity->placement = here.bub_to_abs( src_loc );
+            p.assign_activity( std::make_unique<player_activity>( std::make_unique<wood_chop_activity_actor>( wood_chop_type::PLANKS,
+                      here.bub_to_abs( src_loc ), moves ) ) );
             return true;
         }
     }
@@ -2662,14 +2659,12 @@ static bool chop_tree_activity( player &p, const tripoint_bub_ms &src_loc )
     map &here = get_map();
     const ter_id ter = here.ter( src_loc );
     if( here.has_flag( flag_TREE, src_loc ) ) {
-        p.assign_activity( ACT_CHOP_TREE, moves, -1, p.get_item_position( best_qual ) );
-        p.activity->add_tool( best_qual );
-        p.activity->placement = here.bub_to_abs( src_loc );
+        p.assign_activity( std::make_unique<player_activity>( std::make_unique<wood_chop_activity_actor>( wood_chop_type::TREE,
+                  here.bub_to_abs( src_loc ), moves, best_qual ) ) );
         return true;
     } else if( ter == t_trunk || ter == t_stump ) {
-        p.assign_activity( ACT_CHOP_LOGS, moves, -1, p.get_item_position( best_qual ) );
-        p.activity->add_tool( best_qual );
-        p.activity->placement = here.bub_to_abs( src_loc );
+        p.assign_activity( std::make_unique<player_activity>( std::make_unique<wood_chop_activity_actor>( wood_chop_type::LOGS,
+                  here.bub_to_abs( src_loc ), moves, best_qual ) ) );
         return true;
     }
     return false;
