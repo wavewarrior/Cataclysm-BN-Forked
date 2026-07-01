@@ -79,6 +79,8 @@ extern uint32_t g_npcmove_attitude_epoch;
 class input_context;
 #ifdef COOP_ENABLED
 struct input_event;
+struct coop_server;
+struct coop_client;
 #endif
 
 input_context get_default_mode_input_context();
@@ -231,6 +233,12 @@ public:
     /// if no event is pending (inputdelay=0 semantics).
     auto poll_event() -> input_event;
 
+    /// Dispatch one world tick:
+    ///   host   → coop_server_->coop_world_tick() (which calls post_action_world_step + sends sync)
+    ///   client → coop_client_->coop_world_tick() (send action + apply sync; NO local sim)
+    ///   solo   → post_action_world_step() directly
+    auto coop_game_tick() -> void;
+
     // --- FS-B main loop state (only active when COOP_ENABLED) ---
     std::optional<coop_fiber> modal_fiber_;
     std::queue<std::string> pending_action_queue_;
@@ -238,7 +246,12 @@ public:
     /// Variant of handle_action() that takes a pre-resolved action string
     /// from the non-blocking main loop. Modal-opening cases push to modal_fiber_
     /// instead of calling directly; non-modal cases execute inline.
-    auto handle_action_from( const std::string &pre_action ) -> bool;
+    auto handle_action_from(const std::string& pre_action) -> bool;
+
+    // Active co-op server or client — set during coop_menu::start_host()/start_join(),
+    // cleared on disconnect. Only one is non-null at a time.
+    coop_server* coop_server_ = nullptr;
+    coop_client* coop_client_ = nullptr;
 #endif // COOP_ENABLED
     shared_ptr_fast<ui_adaptor> create_or_get_main_ui_adaptor();
     void invalidate_main_ui_adaptor() const;

@@ -4,14 +4,20 @@
 
 #include "coop_net.h"
 #include "coop_session.h"
+#include "calendar.h"
 #include "coordinates.h"
+#include "creature_tracker.h"
 #include "debug.h"
 #include "game.h"
 #include "get_version.h"
 #include "json.h"
+#include "map.h"
+#include "mapbuffer.h"
 #include "messages.h"
+#include "monster.h"
 #include "npc.h"
 #include "overmapbuffer.h"
+#include "submap.h"
 
 #include <SDL3_net/SDL_net.h>
 #include <sstream>
@@ -234,28 +240,63 @@ auto coop_server::coop_world_tick() -> void {
 }
 
 auto coop_server::execute_client_action(
-    npc* proxy, const std::string& key, const std::string& /*ctx_json*/) -> void {
+    npc* proxy, const std::string& key, const std::string& ctx_json) -> void {
     if (!proxy) { return; }
 
     const tripoint_bub_ms cur = proxy->bub_pos();
 
-    // Directional movement
+    // Move to destination, or melee-attack any monster already standing there.
+    const auto move_or_melee = [&](const tripoint_bub_ms& dest) {
+        if (const auto mon_ptr = g->critter_tracker->find(dest)) {
+            proxy->melee_attack(*mon_ptr, true);
+        } else {
+            proxy->move_to(dest);
+        }
+    };
+
     if (key == "MOVE_N" || key == "UP") {
-        proxy->move_to(cur + tripoint(0, -1, 0));
+        move_or_melee(cur + tripoint(0, -1, 0));
     } else if (key == "MOVE_S" || key == "DOWN") {
-        proxy->move_to(cur + tripoint(0, 1, 0));
+        move_or_melee(cur + tripoint(0, 1, 0));
     } else if (key == "MOVE_E" || key == "RIGHT") {
-        proxy->move_to(cur + tripoint(1, 0, 0));
+        move_or_melee(cur + tripoint(1, 0, 0));
     } else if (key == "MOVE_W" || key == "LEFT") {
-        proxy->move_to(cur + tripoint(-1, 0, 0));
+        move_or_melee(cur + tripoint(-1, 0, 0));
     } else if (key == "MOVE_NE") {
-        proxy->move_to(cur + tripoint(1, -1, 0));
+        move_or_melee(cur + tripoint(1, -1, 0));
     } else if (key == "MOVE_NW") {
-        proxy->move_to(cur + tripoint(-1, -1, 0));
+        move_or_melee(cur + tripoint(-1, -1, 0));
     } else if (key == "MOVE_SE") {
-        proxy->move_to(cur + tripoint(1, 1, 0));
+        move_or_melee(cur + tripoint(1, 1, 0));
     } else if (key == "MOVE_SW") {
-        proxy->move_to(cur + tripoint(-1, 1, 0));
+        move_or_melee(cur + tripoint(-1, 1, 0));
+    } else if (key == "SMASH") {
+        if (!ctx_json.empty()) {
+            std::istringstream iss(ctx_json);
+            JsonIn jin(iss);
+            JsonObject ctx = jin.get_object();
+            ctx.allow_omitted_members();
+            const tripoint_bub_ms tpos{
+                ctx.get_int("tx", cur.x()),
+                ctx.get_int("ty", cur.y()),
+                ctx.get_int("tz", cur.z())
+            };
+            if (const auto mon_ptr = g->critter_tracker->find(tpos)) {
+                proxy->melee_attack(*mon_ptr, true);
+            }
+        }
+    } else if (key == "FIRE") {
+        if (!ctx_json.empty()) {
+            std::istringstream iss(ctx_json);
+            JsonIn jin(iss);
+            JsonObject ctx = jin.get_object();
+            ctx.allow_omitted_members();
+            DebugLog(DL::Info, DC::Main)
+                << "[coop] FIRE from proxy: target="
+                << ctx.get_int("tx", 0) << "," << ctx.get_int("ty", 0);
+        } else {
+            DebugLog(DL::Info, DC::Main) << "[coop] FIRE from proxy: no target context";
+        }
     } else if (key == "PAUSE" || key == "WAIT") {
         proxy->moves -= proxy->get_speed();
     } else {
@@ -265,7 +306,51 @@ auto coop_server::execute_client_action(
 }
 
 auto coop_server::build_and_send_sync() -> void {
-    // TODO: Phase 5+ — tile + monster + entity sync
+    std::ostringstream oss;
+    JsonOut jout(oss);
+    jout.start_object();
+    jout.member("t", static_cast<int>(coop_pkt::sync));
+    jout.member("turn", to_turn<int>(calendar::turn));
+
+    // Serialize a 5×5 submap grid centred on the player.
+    jout.member("tiles");
+    jout.start_array();
+    const tripoint_abs_sm abs_sub = g->m.get_abs_sub();
+    for (int dy = -2; dy <= 2; ++dy) {
+        for (int dx = -2; dx <= 2; ++dx) {
+            const tripoint_abs_sm sm_pos{abs_sub.x() + dx, abs_sub.y() + dy, abs_sub.z()};
+            const submap* sm = MAPBUFFER.lookup_submap(sm_pos);
+            if (!sm) { continue; }
+            jout.start_object();
+            jout.member("x", sm_pos.x());
+            jout.member("y", sm_pos.y());
+            jout.member("z", sm_pos.z());
+            sm->store(jout);
+            jout.end_object();
+        }
+    }
+    jout.end_array();
+
+    // Serialize live monsters as absolute positions so the client can
+    // place them correctly regardless of its own map origin.
+    jout.member("monsters");
+    jout.start_array();
+    for (monster& mon : g->all_monsters()) {
+        if (mon.is_dead()) { continue; }
+        const tripoint_abs_ms apos = mon.abs_pos();
+        jout.start_object();
+        jout.member("type", mon.type->id.str());
+        jout.member("ax", apos.x());
+        jout.member("ay", apos.y());
+        jout.member("az", apos.z());
+        jout.member("hp", mon.get_hp());
+        jout.member("hp_max", mon.get_hp_max());
+        jout.end_object();
+    }
+    jout.end_array();
+
+    jout.end_object();
+    coop_net::send(client_sock_, oss.str());
 }
 
 auto coop_server::shutdown() -> void {

@@ -4,9 +4,15 @@
 
 #include "coop_net.h"
 #include "coop_session.h"
+#include "calendar.h"
+#include "creature_tracker.h"
 #include "debug.h"
+#include "game.h"
 #include "get_version.h"
 #include "json.h"
+#include "map.h"
+#include "monster.h"
+#include "type_id.h"
 
 #include <SDL3_net/SDL_net.h>
 #include <sstream>
@@ -133,8 +139,39 @@ auto coop_client::queue_action(const std::string& key, const std::string& ctx_js
     action_q_.push_back({key, ctx_json});
 }
 
-auto coop_client::apply_sync(const std::string& /*json_buf*/) -> void {
-    // TODO: Phase 5+
+auto coop_client::apply_sync(const std::string& json_buf) -> void {
+    std::istringstream iss(json_buf);
+    JsonIn jin(iss);
+    JsonObject sync = jin.get_object();
+    sync.allow_omitted_members(); // "tiles" section is not processed yet
+
+    // Advance client calendar to match host.
+    const int turn_val = sync.get_int("turn", -1);
+    if (turn_val >= 0) {
+        calendar::turn = time_point::from_turn(turn_val);
+    }
+
+    // Rebuild monster list from host state.
+    // Clear existing monsters first (safe: all_monsters() snapshots weak_ptrs).
+    for (monster& critter : g->all_monsters()) {
+        g->despawn_monster(critter);
+    }
+    JsonArray monsters = sync.get_array("monsters");
+    while (monsters.has_more()) {
+        JsonObject mon_data = monsters.next_object();
+        mon_data.allow_omitted_members();
+        const mtype_id type_id(mon_data.get_string("type"));
+        // Monster positions are sent as absolute coords (tripoint_abs_ms) so
+        // they land correctly regardless of which map origin each side has.
+        const tripoint_abs_ms apos{
+            mon_data.get_int("ax"), mon_data.get_int("ay"), mon_data.get_int("az")
+        };
+        const tripoint_bub_ms bpos = g->m.abs_to_bub(apos);
+        monster* mon = g->place_critter_at(type_id, bpos);
+        if (mon) {
+            mon->set_hp(mon_data.get_int("hp", mon->get_hp()));
+        }
+    }
 }
 
 auto coop_client::handle_disconnect() -> void { shutdown(); }

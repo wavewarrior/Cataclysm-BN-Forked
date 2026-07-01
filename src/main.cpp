@@ -609,7 +609,7 @@ int main(int argc, char* argv[]) {
                         }
                     }
 
-                    g->post_action_world_step();
+                    g->coop_game_tick();
 
                     if (g->is_game_over()) {
                         g->cleanup_at_end();

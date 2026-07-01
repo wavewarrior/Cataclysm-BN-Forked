@@ -1,4 +1,8 @@
 #include "game.h"
+#ifdef COOP_ENABLED
+#include "coop_server.h"
+#include "coop_client.h"
+#endif
 
 #include "camera_debug.h"
 
@@ -16591,6 +16595,24 @@ auto game::post_action_world_step() -> void
                         << ( _perf_world / _perf_n ) << ")";
         _perf_sim = _perf_cache = _perf_mon = _perf_world = 0.0;
         _perf_n = 0;
+    }
+}
+#endif // COOP_ENABLED
+
+#ifdef COOP_ENABLED
+
+auto game::coop_game_tick() -> void
+{
+    if( coop_server_ ) {
+        // Host: server drives the world sim + sync
+        coop_server_->coop_world_tick();
+    } else if( coop_client_ ) {
+        // Client thin path: send queued actions + apply incoming SYNC.
+        // Do NOT call post_action_world_step() — world state comes from host.
+        coop_client_->coop_world_tick();
+    } else {
+        // Single-player: direct world sim
+        post_action_world_step();
     }
 }
 #endif // COOP_ENABLED
