@@ -11034,6 +11034,23 @@ game::vmenu_ret game::list_monsters( const std::vector<Creature *> &monster_list
         ui_manager::redraw();
 
         action = ctxt.handle_input();
+#ifdef COOP_ENABLED
+        // After a fiber yield a world tick may have freed one or more of the
+        // Creature* in monster_list.  Re-derive cCurMon from critter_tracker
+        // (authoritative, never holds freed pointers) and clamp iActive so the
+        // branches above don't deref a dangling pointer.
+        if( coop_fiber::active() && cCurMon != nullptr ) {
+            const tripoint_bub_ms saved_pos = iActivePos + u.bub_pos();
+            const Creature *found = critter_at( saved_pos, true );
+            if( found != cCurMon ) {
+                // Monster moved or died — clear the cursor; UP/DOWN will reselect.
+                cCurMon = nullptr;
+                iActive = 0;
+                iActivePos = tripoint_rel_ms::zero();
+                u.view_offset = stored_view_offset;
+            }
+        }
+#endif
     } while( action != "QUIT" );
 
     u.view_offset = stored_view_offset;
