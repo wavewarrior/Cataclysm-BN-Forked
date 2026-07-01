@@ -11,7 +11,7 @@ list(REMOVE_ITEM CATACLYSM_BN_SOURCES ${MAIN_CPP} ${MESSAGES_CPP})
 # compile them with no optimization to reduce build times.
 file(GLOB CATALUA_BINDINGS_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/catalua_bindings*.cpp)
 if (MSVC)
-    set(CATALUA_BINDINGS_COMPILE_OPTIONS /Od)
+    set(CATALUA_BINDINGS_COMPILE_OPTIONS /Od /bigobj)
 else ()
     set(CATALUA_BINDINGS_COMPILE_OPTIONS -O0 -g0)
 endif ()
