@@ -38,6 +38,11 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+#ifdef COOP_ENABLED
+#include "coop_fiber.h"
+
+#include <queue>
+#endif
 
 class Character;
 class Creature_tracker;
@@ -72,6 +77,9 @@ extern std::atomic<uint32_t> g_npc_friends_dirty_version;
 extern uint32_t g_npcmove_attitude_epoch;
 
 class input_context;
+#ifdef COOP_ENABLED
+struct input_event;
+#endif
 
 input_context get_default_mode_input_context();
 
@@ -214,6 +222,24 @@ public:
     void start_calendar();
     /** MAIN GAME LOOP. Returns true if game is over (death, saved, quit, etc.). */
     bool do_turn();
+#ifdef COOP_ENABLED
+    /// World simulation pass extracted from do_turn() for the accumulator-gated
+    /// non-blocking main loop. Calendar advance + all world sim; NO player input loop.
+    auto post_action_world_step() -> void;
+
+    /// Non-blocking SDL event poll. Returns error-type event immediately
+    /// if no event is pending (inputdelay=0 semantics).
+    auto poll_event() -> input_event;
+
+    // --- FS-B main loop state (only active when COOP_ENABLED) ---
+    std::optional<coop_fiber> modal_fiber_;
+    std::queue<std::string> pending_action_queue_;
+    double main_loop_accum_ms_ = 0.0;
+    /// Variant of handle_action() that takes a pre-resolved action string
+    /// from the non-blocking main loop. Modal-opening cases push to modal_fiber_
+    /// instead of calling directly; non-modal cases execute inline.
+    auto handle_action_from( const std::string &pre_action ) -> bool;
+#endif // COOP_ENABLED
     shared_ptr_fast<ui_adaptor> create_or_get_main_ui_adaptor();
     void invalidate_main_ui_adaptor() const;
     void mark_main_ui_adaptor_resize() const;
@@ -1005,10 +1031,10 @@ private:
 
     void item_action_menu(); // Displays item action menu
 
-    bool is_game_over(); // Returns true if the player quit or died
     void death_screen(); // Display our stats, "GAME OVER BOO HOO"
     void win_screen();   // Display our stats, "CONGRATULATIONS!"
 public:
+    bool is_game_over(); // Returns true if the player quit or died
     // Draws the pixel minimap based on the player's current location
     void draw_pixel_minimap(const catacurses::window& w);
 
@@ -1295,6 +1321,13 @@ private:
     // Handle for the lazy border around the reality bubble.
     // Controlled by LAZY_BORDER cached option.
     load_request_handle lazy_border_handle_ = 0;
+
+#ifdef COOP_ENABLED
+    // Second reality-bubble handle centered on the co-op proxy NPC.
+    // Keeps the proxy's simulation zone loaded when the client roams away
+    // from the host avatar.  0 = not active (no co-op session).
+    load_request_handle coop_proxy_bubble_handle_ = 0;
+#endif
 
     // True while the bubble is temporarily shrunk for an ongoing long activity.
     // Entry requires >= ACTIVITY_BUBBLE_GRACE minutes remaining; once set, stays true

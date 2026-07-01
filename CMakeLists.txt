@@ -747,6 +747,23 @@ foreach (_rml_tgt rmlui_core rmlui_debugger)
     endif ()
 endforeach ()
 
+# --- Co-op multiplayer (SDL_net3 transport) ---
+option(COOP "Enable co-op multiplayer" OFF)
+if(COOP)
+    message(STATUS "Co-op: enabled — fetching SDL3_net")
+    # SDL3_net main branch tracks SDL3; pin to a known-good commit.
+    # Bump deliberately after verifying the new commit builds on all platforms.
+    FetchContent_Declare(
+        SDL3_net
+        GIT_REPOSITORY https://github.com/libsdl-org/SDL_net.git
+        GIT_TAG        main
+        GIT_SHALLOW    TRUE
+        EXCLUDE_FROM_ALL
+    )
+    set(SDL3NET_SAMPLES OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(SDL3_net)
+endif()
+
 add_subdirectory(src)
 add_subdirectory(data)
 

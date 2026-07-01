@@ -5928,7 +5928,11 @@ static bool npc_is_always_full( const npc &guy )
 {
     return guy.is_player_ally() || guy.is_following() ||
            guy.mission == NPC_MISSION_ACTIVITY ||
-           guy.mission == NPC_MISSION_GUARD_ALLY;
+           guy.mission == NPC_MISSION_GUARD_ALLY
+#ifdef COOP_ENABLED
+           || guy.is_coop_remote
+#endif
+           ;
 }
 
 /// Assign NPC LOD tiers based on distance, follower status, and visibility.
@@ -5957,7 +5961,7 @@ static int npc_tier_assign_all()
     for( npc &guy : g->all_npcs() ) {
         int8_t new_tier;
 
-        // Followers/companions are always Tier 0 — player-facing.
+        // Followers/companions (and co-op proxy NPC) are always Tier 0.
         if( npc_is_always_full( guy ) ) {
             new_tier = 0;
         } else {
@@ -16266,3 +16270,327 @@ void set_scenario( const scenario *new_scenario )
 {
     g->scen = new_scenario;
 }
+
+#ifdef COOP_ENABLED
+auto game::poll_event() -> input_event
+{
+    const auto old_delay = inp_mngr.get_timeout();
+    inp_mngr.set_timeout( 0 );               // non-blocking
+    const auto evt = inp_mngr.get_input_event();
+    inp_mngr.set_timeout( old_delay );        // restore
+    return evt;
+}
+#endif // COOP_ENABLED
+
+#ifdef COOP_ENABLED
+auto game::post_action_world_step() -> void
+{
+    ZoneScopedN( "game::post_action_world_step" );
+    // perf probe: per-turn SIM cost (post-input) + the big sub-phases, rolling
+    // avg every 120 turns. Renders are ~1ms but frames are ~30ms apart while
+    // moving — this finds where the per-turn time actually goes.
+    using _perf_clk = std::chrono::steady_clock;
+    static double _perf_sim = 0.0, _perf_cache = 0.0, _perf_mon = 0.0, _perf_world = 0.0;
+    static int    _perf_n = 0;
+    cleanup_arenas();
+    if( try_activity_fixed_window_skip() ) {
+        return;
+    }
+    const bool asleep = u.in_sleep_state();
+    const auto vehperf = asleep && !character_funcs::is_driving( u ) &&
+                         get_option<bool>( "SLEEP_SKIP_VEH" );
+    const auto soundperf = asleep && get_option<bool>( "SLEEP_SKIP_SOUND" );
+    const auto monperf = asleep && get_option<bool>( "SLEEP_SKIP_MON" );
+    const auto npcperf = asleep && get_option<bool>( "SLEEP_SKIP_NPC" );
+    {
+        TracyPlot( "Total Monsters", static_cast<int64_t>( critter_tracker->size() ) );
+        auto total_npcs = int64_t{ 0 };
+        auto simulated_npcs = int64_t{ 0 };
+        for( const shared_ptr_fast<npc> &guy : active_npc ) {
+            if( !guy || guy->is_dead() ) {
+                continue;
+            }
+            ++total_npcs;
+            if( guy->is_simulated() ) {
+                ++simulated_npcs;
+            }
+        }
+        TracyPlot( "Total NPCs", total_npcs );
+        TracyPlot( "Total Simulated NPCs", simulated_npcs );
+    }
+    // Actual stuff
+    {
+        if( new_game ) {
+            new_game = false;
+        } else {
+            if( !gamemode ) {
+                gamemode = std::make_unique<special_game>();
+            }
+            gamemode->per_turn();
+            calendar::turn += 1_turns;
+        }
+    }
+    // Reset dimension swap flag now that the map is fully loaded and turn is processing
+    swapping_dimensions = false;
+
+    // Mark all visibility caches dirty for this turn.  The first redraw will run
+    // update_visibility_cache; subsequent redraws within the same turn skip it.
+    // Lightmap is NOT blanket-invalidated here — per-submap dirty tracking handles
+    // the incremental rebuild; only submaps with actual changes are rebuilt.
+    m.invalidate_visibility_caches();
+
+    // starting a new turn, clear out temperature cache
+    weather_manager &weather = get_weather();
+    {
+        weather.clear_temp_cache();
+    }
+
+    if( npcs_dirty ) {
+        load_npcs();
+    }
+
+    {
+        timed_events.process();
+    }
+    {
+        mission::process_all();
+    }
+    // If controlling a vehicle that is owned by someone else
+    if( u.in_vehicle && u.controlling_vehicle ) {
+        vehicle *veh = veh_pointer_or_null( m.veh_at( u.bub_pos() ) );
+        if( veh && !veh->handle_potential_theft( u, true ) ) {
+            veh->handle_potential_theft( u, false, false );
+        }
+    }
+    // If riding a horse - chance to spook
+    if( u.is_mounted() ) {
+        u.check_mount_is_spooked();
+    }
+    if( calendar::once_every( 1_days ) ) {
+        get_overmapbuffer( current_dimension_id_ ).process_mongroups();
+    }
+
+    // Move hordes every 2.5 min
+    if( calendar::once_every( time_duration::from_minutes( 2.5 ) ) ) {
+        get_overmapbuffer( current_dimension_id_ ).move_hordes();
+        if( u.has_trait( trait_HAS_NEMESIS ) ) {
+            get_overmapbuffer( current_dimension_id_ ).move_nemesis();
+        }
+        // Hordes that reached the reality bubble need to spawn,
+        // make them spawn in invisible areas only.
+        m.spawn_monsters( false );
+    }
+
+    debug_hour_timer.print_time();
+
+    {
+        u.update_body();
+    }
+
+    // Auto-save if autosave is enabled
+    if( get_option<bool>( "AUTOSAVE" ) &&
+        calendar::once_every( 1_turns * get_option<int>( "AUTOSAVE_TURNS" ) ) &&
+        !u.is_dead_state() ) {
+        autosave();
+    }
+
+    {
+        weather.update_weather();
+        reset_light_level();
+    }
+
+    {
+        perhaps_add_random_npc();
+        process_voluntary_act_interrupt();
+        process_activity();
+        update_performance_bubble();
+    }
+    if( !soundperf ) {
+        // Process NPC sound events before they move or they hear themselves talking
+        for( npc &guy : all_npcs() ) {
+            if( rl_dist( guy.bub_pos(), u.bub_pos() ) < g_max_view_distance ) {
+                sounds::process_sound_markers( &guy );
+            }
+        }
+        sounds::process_sound_markers( &u );
+
+        if( u.is_deaf() ) {
+            sfx::do_hearing_loss();
+        }
+    }
+
+    // perf probe: sim_total spans the whole post-input world+sim block; the
+    // _perf_world window below isolates the pre-AI world tick
+    // (scent/falling/vehmove/process_items/grids/fluid).
+    const auto _perf_sim_t0 = _perf_clk::now();
+    // No-scent debug mutation has to be processed here or else it takes time to start working
+    {
+        if( !u.has_active_bionic( bionic_id( "bio_scent_mask" ) ) &&
+            !u.has_trait( trait_id( "DEBUG_NOSCENT" ) ) ) {
+            scent.set( u.bub_pos(), u.scent, u.get_type_of_scent() );
+            get_overmapbuffer( current_dimension_id_ ).set_scent( u.abs_omt_pos(),  u.scent );
+        }
+        scent.update( u.bub_pos(), m );
+    }
+
+    // We need floor cache before checking falling 'n stuff
+    {
+        m.build_floor_caches();
+    }
+
+    if( !vehperf ) {
+        m.process_falling();
+        autopilot_vehicles();
+        m.vehmove();
+    }
+    {
+        ZoneScopedN( "do_turn_process_items" );
+        m.process_items();
+    }
+    {
+        m.creature_in_field( u );
+    }
+    {
+        for( auto &[dim_id, tracker_ptr] : grid_trackers_ ) {
+            if( tracker_ptr ) {
+                tracker_ptr->update( calendar::turn );
+            }
+        }
+    }
+    {
+        tick_portal_links();
+        tick_temporary_pocket_dimensions();
+        tick_vehicle_portal_taps();
+    }
+    {
+        fluid_grid::update( calendar::turn );
+    }
+
+    // Apply sounds from previous turn to monster and NPC AI.
+    {
+        sounds::process_sounds();
+    }
+    _perf_world += std::chrono::duration<double, std::milli>( _perf_clk::now() - _perf_sim_t0 ).count();
+    // Update vision caches for monsters. If this turns out to be expensive,
+    // consider a stripped down cache just for monsters.
+    {
+        const auto _t0 = _perf_clk::now();
+        m.build_map_cache( get_levz(), true );
+        _perf_cache += std::chrono::duration<double, std::milli>( _perf_clk::now() - _t0 ).count();
+    }
+    if( !monperf ) {
+        const auto _t0 = _perf_clk::now();
+        monmove();
+        _perf_mon += std::chrono::duration<double, std::milli>( _perf_clk::now() - _t0 ).count();
+    }
+    if( !npcperf ) {
+        npcmove();
+    } else {
+        sleep_skip_npc_process();
+    }
+    if( calendar::once_every( 5_minutes ) ) {
+        overmap_npc_move();
+    }
+
+    update_stair_monsters();
+    mon_info_update();
+    {
+        ZoneScopedN( "do_turn_player_process_turn" );
+        u.process_turn();
+    }
+
+    {
+        ZoneScopedN( "do_turn_lua_every_x" );
+        cata::run_on_every_x_hooks( *DynamicDataLoader::get_instance().lua );
+    }
+
+    {
+        explosion_handler::get_explosion_queue().execute();
+    }
+    {
+        cleanup_dead();
+    }
+
+    if( u.moves < 0 && get_option<bool>( "FORCE_REDRAW" ) ) {
+        ui_manager::redraw();
+        refresh_display();
+    }
+
+    if( get_levz() >= 0 && !u.is_underwater() ) {
+        handle_weather_effects( weather.weather_id );
+    }
+
+    handle_wait_activity_redraw();
+
+    {
+        u.update_bodytemp( m, weather );
+        character_funcs::update_body_wetness( u, get_weather().get_precise() );
+        u.apply_wetness_morale( weather.temperature );
+    }
+
+    if( !u.is_deaf() ) {
+        sfx::remove_hearing_loss();
+    }
+    {
+        sfx::do_danger_music();
+        sfx::do_vehicle_engine_sfx();
+        sfx::do_vehicle_exterior_engine_sfx();
+        sfx::do_fatigue();
+    }
+
+    // reset player noise
+    u.volume = 0;
+
+    // Tick all loaded submaps: fields for every submap, items/vehicles for batch-eligible ones.
+    {
+        const auto _t0 = _perf_clk::now();
+        world_tick();
+        _perf_world += std::chrono::duration<double, std::milli>( _perf_clk::now() - _t0 ).count();
+    }
+
+    // Fire-spread (and other non-bubble) requests created during world_tick()
+    // must be realised before the next turn.  Let the load manager diff
+    // the desired set and load/unload as needed.
+    // Ensure trackers exist for all active dimensions before update() fires
+    // on_submap_loaded events (mirrors the logic in load_map / update_map).
+    for( const auto &dim_id : submap_loader.active_dimensions() ) {
+        ensure_distribution_grid_tracker_for( dim_id );
+    }
+    submap_loader.update_lazy_border_focus( current_dimension_id_, u.abs_pos() );
+    submap_loader.update();
+    // Destroy trackers for non-primary dimensions with no remaining tracked submaps.
+    {
+        for( auto it = grid_trackers_.begin(); it != grid_trackers_.end(); ) {
+            if( !it->first.empty() && !it->second->has_tracked_submaps() ) {
+                submap_loader.remove_listener( it->second.get() );
+                it = grid_trackers_.erase( it );
+            } else {
+                ++it;
+            }
+        }
+    }
+
+    // Finally, clear pathfinding cache
+    {
+        Pathfinding::clear_d_maps();
+    }
+
+    // Drain the OS input buffer so key-repeat events generated during world
+    // processing don't accumulate and drive movement after key release.  Keep
+    // input while activity or auto-move interruption checks are active, so
+    // pause/menu keys can still stop long-running actions.
+    if( !u.activity && !u.has_destination() ) {
+        inp_mngr.pump_events();
+    }
+
+    _perf_sim += std::chrono::duration<double, std::milli>( _perf_clk::now() - _perf_sim_t0 ).count();
+    if( ++_perf_n >= 20 ) {
+        dbg( DL::Info ) << "[sim][perf] " << _perf_n << " turns avg: sim_total="
+                        << ( _perf_sim / _perf_n ) << "ms (build_map_cache=" << ( _perf_cache / _perf_n )
+                        << " monmove=" << ( _perf_mon / _perf_n ) << " world_tick="
+                        << ( _perf_world / _perf_n ) << ")";
+        _perf_sim = _perf_cache = _perf_mon = _perf_world = 0.0;
+        _perf_n = 0;
+    }
+}
+#endif // COOP_ENABLED

@@ -141,6 +141,19 @@ setup_common_target_properties(cataclysm-bn-tiles-common)
 if (DYNAMIC_ATLAS)
     target_compile_definitions(cataclysm-bn-tiles-common PUBLIC DYNAMIC_ATLAS)
 endif()
+
+# --- Co-op multiplayer ---
+# PUBLIC so the define propagates through the OBJECT lib to the executable
+# (main.cpp) and cata_test via transitive linkage — prevents ODR/ABI splits
+# when game.h members (modal_fiber_, pending queues) are conditionally declared.
+if (COOP)
+    target_compile_definitions(cataclysm-bn-tiles-common PUBLIC COOP_ENABLED=1)
+    if (NOT DYNAMIC_LINKING)
+        target_link_libraries(cataclysm-bn-tiles-common PUBLIC SDL3_net::SDL3_net-static)
+    else()
+        target_link_libraries(cataclysm-bn-tiles-common PUBLIC SDL3_net::SDL3_net)
+    endif()
+endif()
 target_link_libraries(cataclysm-bn-tiles PRIVATE cataclysm-bn-tiles-common)
 
 # Windows specific tiles libraries

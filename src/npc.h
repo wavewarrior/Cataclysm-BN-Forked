@@ -1208,9 +1208,9 @@ public:
     std::string companion_mission_role_id; // Set mission source or squad leader for a patrol
     // Mission leader use to determine item sorting, patrols use for points
     std::vector<tripoint_abs_omt> companion_mission_points;
-    time_point companion_mission_time;     // When you left for ongoing/repeating missions
-    time_point companion_mission_time_ret; // When you are expected to return for
-                                           // calculated/variable mission returns
+    time_point companion_mission_time;        // When you left for ongoing/repeating missions
+    time_point companion_mission_time_ret;    // When you are expected to return for
+                                              // calculated/variable mission returns
     location_inventory companion_mission_inv; // Inventory that is added and dropped on mission
     npc_mission mission;
     npc_mission previous_mission = NPC_MISSION_NULL;
@@ -1235,6 +1235,13 @@ public:
     // Transient — not saved or loaded.
     int8_t npc_lod_tier = 0;
     int npc_lod_cooldown = 0;
+
+#ifdef COOP_ENABLED
+    /// True when this NPC's actions come from the TCP co-op connection
+    /// rather than the AI.  Set by coop_server::spawn_proxy_npc().
+    /// Transient — not saved; always false after load.
+    bool is_coop_remote = false;
+#endif
 
     // ID of the dimension this NPC belongs to.  Empty string = primary dimension.
     // Set when the NPC is spawned or loaded from a non-primary dimension submap.
