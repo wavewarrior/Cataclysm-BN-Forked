@@ -2070,7 +2070,9 @@ int vehicle::install_part( const tripoint_mnt_veh &dp, vehicle_part &&new_part )
     }
 
     parts.push_back( std::move( new_part ) );
-    refresh_locations_hack();
+    if( !no_refresh ) {
+        refresh_locations_hack();
+    }
     auto &pt = parts.back();
     pt.set_vehicle_hack( this );
 
@@ -6527,6 +6529,9 @@ void vehicle::enable_refresh()
     coeff_air_dirty = true;
     coeff_water_dirty = true;
     coeff_air_changed = true;
+    // Run the locations hack once here, covering all parts installed while suspended.
+    // During suspend, install_part() skips refresh_locations_hack() to avoid O(N²).
+    refresh_locations_hack();
     refresh();
 }
 

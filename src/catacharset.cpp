@@ -438,6 +438,26 @@ std::u32string utf8_to_utf32( const std::string &str )
 
 std::vector<std::string> utf8_display_split( const std::string &s )
 {
+    // Fast-path: pure printable-ASCII strings need no UTF-8 decoding.
+    // Every printable ASCII byte (0x20–0x7E) is a single-column glyph, so split
+    // directly at byte boundaries.  Control characters (< 0x20 or 0x7F) have
+    // zero/negative mk_wcwidth and are merged into the preceding glyph by the
+    // slow-path; fall through rather than diverge on those edge cases.
+    // >99% of mapgen row strings qualify; this eliminates UTF8_getch + mk_wcwidth
+    // for ~132k calls during calculate_mapgen_weights().
+    const bool is_printable_ascii = std::none_of( s.begin(), s.end(),
+    []( const unsigned char c ) {
+        return c < 0x20 || c == 0x7F || c >= 0x80;
+    } );
+    if( is_printable_ascii ) {
+        std::vector<std::string> result;
+        result.reserve( s.size() );
+        for( const char c : s ) {
+            result.emplace_back( 1, c );
+        }
+        return result;
+    }
+    // Slow-path: Unicode — handle combining characters and wide glyphs.
     std::vector<std::string> result;
     std::string current_glyph;
     const char *pos = s.c_str();
