@@ -159,12 +159,18 @@ std::string read_entire_file( const std::string &path )
     cata_ifstream infile;
     infile.mode( cata_ios_mode::binary ).open( path );
     if( !infile.is_open() ) {
-        return "";
+        return {};
     }
-    std::string ret = std::string( std::istreambuf_iterator<char>( *infile ),
-                                   std::istreambuf_iterator<char>() );
-    if( infile.fail() ) {
-        return "";
+    infile->seekg( 0, std::ios::end );
+    const std::streamsize sz = infile->tellg();
+    infile->seekg( 0 );
+    if( sz <= 0 ) {
+        return {};
+    }
+    std::string ret( static_cast<size_t>( sz ), '\0' );
+    infile->read( ret.data(), sz );
+    if( infile->fail() ) {
+        return {};
     }
     return ret;
 }

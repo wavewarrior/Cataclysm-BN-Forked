@@ -13,6 +13,8 @@
 #include <string>
 #include <vector>
 #include <ranges>
+#include <chrono>
+#include <cstdio>
 
 #include "achievement.h"
 #include "activity_type.h"
@@ -133,6 +135,25 @@ struct DynamicDataLoader::cached_streams {
 // above the total source-file count to read each file from disk exactly once.
 static constexpr int stream_cache_limit = 4096;
 
+namespace
+{
+
+struct json_perf_load_metrics {
+    int files = 0;
+    size_t bytes = 0;
+};
+
+struct json_perf_deferred_stats {
+    int rounds = 0;
+    int reparsed = 0;
+    int64_t us = 0;
+};
+
+json_perf_load_metrics g_last_load_metrics;
+json_perf_deferred_stats g_deferred_stats;
+
+} // namespace
+
 DynamicDataLoader::DynamicDataLoader()
 {
     initialize();
@@ -177,8 +198,14 @@ shared_ptr_fast<std::istream> DynamicDataLoader::get_cached_stream( const std::s
 
 void DynamicDataLoader::load_deferred( deferred_json &data )
 {
+    const auto td0 = std::chrono::steady_clock::now();
+    on_out_of_scope record_time( [&td0]() {
+        g_deferred_stats.us += std::chrono::duration_cast<std::chrono::microseconds>(
+                                    std::chrono::steady_clock::now() - td0 ).count();
+    } );
     while( !data.empty() ) {
         const size_t n = data.size();
+        g_deferred_stats.reparsed += static_cast<int>( n );
         for( size_t idx = 0; idx != n; ++idx ) {
             auto it = data.begin();
             std::advance( it, idx );
@@ -199,6 +226,7 @@ void DynamicDataLoader::load_deferred( deferred_json &data )
         auto it = data.begin();
         std::advance( it, n );
         data.erase( data.begin(), it );
+        ++g_deferred_stats.rounds;
         if( data.size() == n ) {
             for( const auto &elem : data ) {
                 if( !elem.first.path ) {
@@ -507,19 +535,13 @@ void DynamicDataLoader::load_data_from_path( const std::string &path, const std:
         }
     }
     // iterate over each file
-    for( auto &files_i : files ) {
-        const std::string &file = files_i;
-        // open the file as a stream
-        cata_ifstream infile = std::move( cata_ifstream().mode( cata_ios_mode::binary ).open( file ) );
-        // and stuff it into ram
-        std::istringstream iss(
-            std::string(
-                ( std::istreambuf_iterator<char>( *infile ) ),
-                std::istreambuf_iterator<char>()
-            )
-        );
+    g_last_load_metrics = {};
+    g_last_load_metrics.files = static_cast<int>( files.size() );
+    for( const auto &file : files ) {
+        auto content = read_entire_file( file );
+        g_last_load_metrics.bytes += content.size();
+        std::istringstream iss( std::move( content ) );
         try {
-            // parse it
             JsonIn jsin( iss, file );
             load_all_from_json( jsin, src, ui, path, file );
         } catch( const JsonError &err ) {
@@ -675,6 +697,7 @@ void DynamicDataLoader::finalize_loaded_data( loading_ui &ui )
         stream_cache.reset();
     } );
     stream_cache = std::make_unique<cached_streams>();
+    g_deferred_stats = {};
 
     ui.new_context( _( "Finalizing" ) );
 
@@ -747,7 +770,15 @@ void DynamicDataLoader::finalize_loaded_data( loading_ui &ui )
 
     ui.show();
     for( const named_entry &e : entries ) {
+        const auto tf0 = std::chrono::steady_clock::now();
         e.second();
+        const auto tf_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                               std::chrono::steady_clock::now() - tf0 ).count();
+        if( tf_ms >= 5 ) {
+            // NOLINTNEXTLINE(cata-text-style)
+            fprintf( stderr, "[JSON_PERF]   finalize[%s]=%lldms\n",
+                     e.first.c_str(), static_cast<long long>( tf_ms ) );
+        }
         ui.proceed();
     }
 }
@@ -902,14 +933,34 @@ static void load_and_finalize_packs( loading_ui &ui, const std::string &msg,
         }
     }
 
+    struct mod_timing {
+        std::string id;
+        int files = 0;
+        size_t bytes = 0;
+        int64_t parse_us = 0;
+    };
+    std::vector<mod_timing> mod_timings;
+    mod_timings.reserve( available.size() );
+    const auto t_wall = std::chrono::steady_clock::now();
+
     cata::reg_lua_icallback_actors( *loader.lua, *item_controller );
 
     for( const mod_id &mod : available ) {
+        const auto t0 = std::chrono::steady_clock::now();
         loader.load_data_from_path( mod->path, mod.str(), ui );
+        const auto t1 = std::chrono::steady_clock::now();
+        mod_timings.push_back( mod_timing{
+            .id       = mod.str(),
+            .files    = g_last_load_metrics.files,
+            .bytes    = g_last_load_metrics.bytes,
+            .parse_us = std::chrono::duration_cast<std::chrono::microseconds>( t1 - t0 ).count(),
+        } );
         ui.proceed();
     }
 
+    const auto t_finalize_0 = std::chrono::steady_clock::now();
     loader.finalize_loaded_data( ui );
+    const auto t_finalize_1 = std::chrono::steady_clock::now();
 
     cata::resolve_lua_bionic_and_mutation_callbacks();
 
@@ -920,7 +971,33 @@ static void load_and_finalize_packs( loading_ui &ui, const std::string &msg,
         }
     }
 
+    const auto t_check_0 = std::chrono::steady_clock::now();
     loader.check_consistency( ui );
+    const auto t_check_1 = std::chrono::steady_clock::now();
+    const auto t_wall_end = std::chrono::steady_clock::now();
+    {
+        namespace ch = std::chrono;
+        const auto wall_ms = ch::duration_cast<ch::milliseconds>( t_wall_end - t_wall ).count();
+        const auto fin_ms  = ch::duration_cast<ch::milliseconds>( t_finalize_1 - t_finalize_0 ).count();
+        const auto chk_ms  = ch::duration_cast<ch::milliseconds>( t_check_1 - t_check_0 ).count();
+        // NOLINTNEXTLINE(cata-text-style)
+        fprintf( stderr, "[JSON_PERF] total_wall_ms=%lld  finalize_ms=%lld  check_ms=%lld\n",
+                 static_cast<long long>( wall_ms ),
+                 static_cast<long long>( fin_ms ),
+                 static_cast<long long>( chk_ms ) );
+        for( const auto &m : mod_timings ) {
+            // NOLINTNEXTLINE(cata-text-style)
+            fprintf( stderr, "[JSON_PERF] mod=%s  files=%d  bytes=%llu  parse_ms=%lld\n",
+                     m.id.c_str(), m.files,
+                     static_cast<unsigned long long>( m.bytes ),
+                     static_cast<long long>( m.parse_us / 1000 ) );
+        }
+        // NOLINTNEXTLINE(cata-text-style)
+        fprintf( stderr, "[JSON_PERF] deferred_rounds=%d  deferred_reparsed=%d  deferred_ms=%lld\n",
+                 g_deferred_stats.rounds, g_deferred_stats.reparsed,
+                 static_cast<long long>( g_deferred_stats.us / 1000 ) );
+    }
+
 
     init::load_main_lua_scripts( *loader.lua, packs );
     cata::clear_mod_being_loaded( *loader.lua );

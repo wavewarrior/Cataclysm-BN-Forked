@@ -13,6 +13,8 @@
 #include <set>
 #include <stdexcept>
 #include <unordered_map>
+#include <chrono>
+#include <cstdio>
 
 #include "advanced_inv_listitem.h"
 #include "artifact_enum_traits.h"
@@ -556,11 +558,28 @@ void call_mapgen_function( std::string name, mapgendata &dat, bool nested, const
     }
 }
 
+
+namespace
+{
+
+// Temporary instrumentation to split the 2900ms mapgen-setup bucket:
+//   A) get_cached_stream + seek  B) jsin.get_object()  C) setup_common(jo)
+// Reset at start of calculate_mapgen_weights, printed at end.
+int64_t g_mg_stream_us = 0;
+int64_t g_mg_getobj_us = 0;
+int64_t g_mg_setup_us  = 0;
+
+} // namespace
+
 /*
  * setup mapgen_basic_container::weights_ which mapgen uses to diceroll. Also setup mapgen_function_json
  */
 void calculate_mapgen_weights()   // TODO: rename as it runs jsonfunction setup too
 {
+    g_mg_stream_us = 0;
+    g_mg_getobj_us = 0;
+    g_mg_setup_us  = 0;
+
     oter_mapgen.setup();
     // Not really calculate weights, but let's keep it here for now
     for( auto &pr : nested_mapgen ) {
@@ -591,6 +610,13 @@ void calculate_mapgen_weights()   // TODO: rename as it runs jsonfunction setup 
             inp_mngr.pump_events();
         }
     }
+
+    // NOLINTNEXTLINE(cata-text-style)
+    fprintf( stderr,
+             "[JSON_PERF]   mapgen_setup: stream_ms=%lld  get_object_ms=%lld  setup_jo_ms=%lld\n",
+             static_cast<long long>( g_mg_stream_us / 1000 ),
+             static_cast<long long>( g_mg_getobj_us / 1000 ),
+             static_cast<long long>( g_mg_setup_us  / 1000 ) );
 }
 
 void check_mapgen_definitions()
@@ -3753,14 +3779,26 @@ void mapgen_function_json_base::setup_common()
         debugmsg( "null json source location path" );
         return;
     }
+    // Phase A: stream access + seek to source offset
+    const auto t_stream0 = std::chrono::steady_clock::now();
     shared_ptr_fast<std::istream> stream = DynamicDataLoader::get_instance().get_cached_stream(
             *jsrcloc->path );
+    g_mg_stream_us += std::chrono::duration_cast<std::chrono::microseconds>(
+                          std::chrono::steady_clock::now() - t_stream0 ).count();
+    // Phase B: positions-map construction
+    const auto t_getobj0 = std::chrono::steady_clock::now();
     JsonIn jsin( *stream, *jsrcloc );
     JsonObject jo = jsin.get_object();
+    g_mg_getobj_us += std::chrono::duration_cast<std::chrono::microseconds>(
+                          std::chrono::steady_clock::now() - t_getobj0 ).count();
+    // Phase C: jmapgen piece allocation (palette, rows, objects)
+    const auto t_setup0 = std::chrono::steady_clock::now();
     mapgen_defer::defer = false;
     if( !setup_common( jo ) ) {
         jsin.error( "format: no terrain map" );
     }
+    g_mg_setup_us += std::chrono::duration_cast<std::chrono::microseconds>(
+                         std::chrono::steady_clock::now() - t_setup0 ).count();
     if( mapgen_defer::defer ) {
         mapgen_defer::jsi.throw_error( mapgen_defer::message, mapgen_defer::member );
     } else {
