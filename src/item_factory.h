@@ -361,7 +361,8 @@ class Item_factory
         /** Registers the item as having repair actions (if it has any). */
         void register_cached_uses( const itype &obj );
         /** Applies part of finalization that depends on other items. */
-        void finalize_post( itype &obj );
+        void finalize_post( itype &obj,
+                            const std::unordered_map<material_id, std::set<itype_id>> &repair_mat_index );
 
         //iuse stuff
         std::map<item_action_id, use_function> iuse_function_list;
@@ -407,4 +408,8 @@ class Item_factory
         std::set<itype_id> gun_tools;
 
         std::set<std::string> repair_actions;
+
+        // Pre-built material → repair-tools index; populated once in finalize()
+        // and reused for any post-freeze items added via add_item_type().
+        std::unordered_map<material_id, std::set<itype_id>> repair_mat_index_;
 };

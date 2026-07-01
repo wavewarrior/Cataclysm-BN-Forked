@@ -35,6 +35,15 @@ detached_ptr<item> Item_spawn_data::create_single( const time_point &birthday ) 
     return create_single( birthday, rec );
 }
 
+void Item_spawn_data::replace_items( const std::unordered_map<itype_id, itype_id> &migration )
+{
+    // Default fallback: call single-id replace_item for each migration entry.
+    // Subclasses override to do a single traversal with a map lookup per node.
+    for( const auto &[old_id, new_id] : migration ) {
+        replace_item( old_id, new_id );
+    }
+}
+
 Single_item_creator::Single_item_creator( const std::string &_id, Type _type, int _probability )
     : Item_spawn_data( _probability )
     , id( _id )
@@ -182,6 +191,24 @@ bool Single_item_creator::replace_item( const itype_id &itemid, const itype_id &
         }
     }
     return type == S_NONE;
+}
+
+void Single_item_creator::replace_items( const std::unordered_map<itype_id, itype_id> &migration )
+{
+    if( modifier ) {
+        modifier->replace_items( migration );
+    }
+    if( type == S_ITEM ) {
+        const auto it = migration.find( itype_id( id ) );
+        if( it != migration.end() ) {
+            id = it->second.str();
+        }
+    } else if( type == S_ITEM_GROUP ) {
+        Item_spawn_data *isd = item_controller->get_group( item_group_id( id ) );
+        if( isd != nullptr ) {
+            isd->replace_items( migration );
+        }
+    }
 }
 
 bool Single_item_creator::has_item( const itype_id &itemid ) const
@@ -426,6 +453,18 @@ bool Item_modifier::replace_item( const itype_id &itemid, const itype_id &replac
     return false;
 }
 
+void Item_modifier::replace_items( const std::unordered_map<itype_id, itype_id> &migration )
+{
+    // Match Item_modifier::replace_item exactly: recurse only ammo + container,
+    // not contents — keeping this a pure performance change with identical semantics.
+    if( ammo != nullptr ) {
+        ammo->replace_items( migration );
+    }
+    if( container != nullptr ) {
+        container->replace_items( migration );
+    }
+}
+
 Item_group::Item_group( Type t, int probability, int ammo_chance, int magazine_chance )
     : Item_spawn_data( probability )
     , type( t )
@@ -594,6 +633,13 @@ bool Item_group::replace_item( const itype_id &itemid, const itype_id &replaceme
         ( elem )->replace_item( itemid, replacementid );
     }
     return items.empty();
+}
+
+void Item_group::replace_items( const std::unordered_map<itype_id, itype_id> &migration )
+{
+    for( const std::unique_ptr<Item_spawn_data> &elem : items ) {
+        elem->replace_items( migration );
+    }
 }
 
 bool Item_group::has_item( const itype_id &itemid ) const

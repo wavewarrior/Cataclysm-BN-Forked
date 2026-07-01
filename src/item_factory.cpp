@@ -648,7 +648,8 @@ void Item_factory::register_cached_uses( const itype &obj )
     }
 }
 
-void Item_factory::finalize_post( itype &obj )
+void Item_factory::finalize_post( itype &obj,
+                                  const std::unordered_map<material_id, std::set<itype_id>> &repair_mat_index )
 {
     erase_if( obj.item_tags, [&]( const flag_id & f ) {
         if( !f.is_valid() ) {
@@ -665,23 +666,11 @@ void Item_factory::finalize_post( itype &obj )
         return;
     }
 
-    // for each item iterate through potential repair tools
-    for( const auto &tool : repair_tools ) {
-
-        // check if item can be repaired with any of the actions?
-        for( const auto &act : repair_actions ) {
-            const use_function *func = m_templates[tool].get_use( act );
-            if( func == nullptr ) {
-                continue;
-            }
-
-            // tool has a possible repair action, check if the materials are compatible
-            const auto &opts = dynamic_cast<const repair_item_actor *>( func->get_actor_ptr() )->materials;
-            if( std::any_of( obj.materials.begin(), obj.materials.end(), [&opts]( const material_id & m ) {
-            return opts.contains( m );
-            } ) ) {
-                obj.repair.insert( tool );
-            }
+    // O(materials) lookup into pre-built index instead of O(tools * actions) nested scan
+    for( const material_id &mat : obj.materials ) {
+        const auto it = repair_mat_index.find( mat );
+        if( it != repair_mat_index.end() ) {
+            obj.repair.insert( it->second.begin(), it->second.end() );
         }
     }
 
@@ -710,15 +699,32 @@ void Item_factory::finalize()
         register_cached_uses( e.second );
     }
 
+    // Build material → repair-tools index once (O(tools * actions)) so
+    // finalize_post can do O(materials) lookup instead of O(tools * actions)
+    // per item — avoids ~600k iterations of dynamic_cast + any_of over materials.
+    repair_mat_index_.clear();
+    for( const auto &tool : repair_tools ) {
+        for( const auto &act : repair_actions ) {
+            const use_function *func = m_templates[tool].get_use( act );
+            if( func == nullptr ) {
+                continue;
+            }
+            const auto &opts = dynamic_cast<const repair_item_actor *>( func->get_actor_ptr() )->materials;
+            for( const material_id &mat : opts ) {
+                repair_mat_index_[mat].insert( tool );
+            }
+        }
+    }
+
     for( auto &e : m_templates ) {
-        finalize_post( e.second );
+        finalize_post( e.second, repair_mat_index_ );
     }
 
     // We may actually have some runtimes here - ones loaded from saved game
     // TODO: support for runtimes that repair
     for( auto &e : m_runtimes ) {
         finalize_pre( *e.second );
-        finalize_post( *e.second );
+        finalize_post( *e.second, repair_mat_index_ );
     }
 
     // Wire Lua callback actor pointers onto itype objects
@@ -770,27 +776,15 @@ void Item_factory::finalize_item_blacklist()
         }
     }
 
+    // Validate migrations and collect metadata side-effects (ammo/magazine) in one
+    // pass before the expensive group/requirement sweeps.
+    std::unordered_map<itype_id, itype_id> valid_migrations;
     for( const std::pair<const itype_id, migration> &migrate : migrations ) {
         if( !m_templates.contains( migrate.second.replace ) ) {
             debugmsg( "Replacement item for migration %s does not exist", migrate.first.c_str() );
             continue;
         }
-
-        for( std::pair<const item_group_id, std::unique_ptr<Item_spawn_data>> &g : m_template_groups ) {
-            g.second->replace_item( migrate.first, migrate.second.replace );
-        }
-
-        // replace migrated items in requirements
-        for( const std::pair<const requirement_id, requirement_data> &r : requirement_data::all() ) {
-            const_cast<requirement_data &>( r.second ).replace_item( migrate.first,
-                    migrate.second.replace );
-        }
-
-        // remove any recipes used to craft the migrated item
-        // if there's a valid recipe, it will be for the replacement
-        recipe_dictionary::delete_if( [&migrate]( const recipe & r ) {
-            return !r.obsolete && r.result() == migrate.first;
-        } );
+        valid_migrations.emplace( migrate.first, migrate.second.replace );
 
         // If the default ammo of an ammo_type gets migrated, we migrate all guns using that ammo
         // type to the ammo type of whatever that default ammo was migrated to.
@@ -819,6 +813,34 @@ void Item_factory::finalize_item_blacklist()
             }
         }
     }
+
+    // ONE pass per group across all migrations — O(groups) calls to replace_items
+    // instead of O(migrations × groups) calls to replace_item.
+    // replace_items(map) walks each group tree once with a map lookup per node.
+    for( std::pair<const item_group_id, std::unique_ptr<Item_spawn_data>> &g : m_template_groups ) {
+        g.second->replace_items( valid_migrations );
+    }
+
+    // replace migrated items in requirements — O(migrations × requirements), ~15ms,
+    // not worth adding batch method to requirements.h (>10-usage header) here.
+    for( const std::pair<const itype_id, migration> &migrate : migrations ) {
+        if( !valid_migrations.contains( migrate.first ) ) {
+            continue;
+        }
+        for( const std::pair<const requirement_id, requirement_data> &r : requirement_data::all() ) {
+            const_cast<requirement_data &>( r.second ).replace_item( migrate.first,
+                    migrate.second.replace );
+        }
+    }
+
+    // ONE delete_if pass for all migrated recipes together — O(recipes + migrations)
+    // instead of O(migrations × recipes).
+    // remove any recipes used to craft the migrated item;
+    // if there's a valid recipe, it will be for the replacement.
+    recipe_dictionary::delete_if( [&valid_migrations]( const recipe & r ) {
+        return !r.obsolete && valid_migrations.contains( r.result() );
+    } );
+
     for( vproto_id &vid : vehicle_prototype::get_all() ) {
         vehicle_prototype &prototype = const_cast<vehicle_prototype &>( vid.obj() );
         for( vehicle_item_spawn &vis : prototype.item_spawns ) {
@@ -914,7 +936,7 @@ void Item_factory::add_item_type( const itype &def )
     new_item_ptr = std::make_unique<itype>( def );
     if( frozen ) {
         finalize_pre( *new_item_ptr );
-        finalize_post( *new_item_ptr );
+        finalize_post( *new_item_ptr, repair_mat_index_ );
     }
 }
 
