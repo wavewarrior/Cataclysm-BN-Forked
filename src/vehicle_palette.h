@@ -31,7 +31,7 @@ class VehiclePalette
 
         static void reset();
 
-        int fuzzy_to_index( const vpart_id &id ) const;
+        auto fuzzy_to_index( const vpart_id &id ) const -> int;
 
         std::vector<RGBColor> pick_colors() const;
 
@@ -39,4 +39,5 @@ class VehiclePalette
         vpalette_id id;
         std::vector<weighted_int_list<std::string>> colors;
         std::map<std::string, int> fuzzy_color_match;
+        mutable std::unordered_map<std::string, int> id_index_cache;
 };
