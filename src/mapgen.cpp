@@ -390,6 +390,13 @@ class mapgen_basic_container
                 mapgen_function_ptr.obj->finalize_parameters();
             }
         }
+        void collect_json_bases( std::vector<mapgen_function_json_base *> &out ) {
+            for( auto &wo : weights_ ) {
+                if( auto *base = dynamic_cast<mapgen_function_json_base *>( wo.obj.get() ) ) {
+                    out.push_back( base );
+                }
+            }
+        }
         void check_consistency( const std::string &key ) {
             for( auto &mapgen_function_ptr : weights_ ) {
                 mapgen_function_ptr.obj->check( key );
@@ -513,6 +520,11 @@ class mapgen_factory
             return iter->second.get_mapgen_params( mapgen_parameter_scope::overmap_special,
                                                    string_format( "map special %s", key ) );
         }
+        void collect_json_bases( std::vector<mapgen_function_json_base *> &out ) {
+            for( auto &pr : mapgens_ ) {
+                pr.second.collect_json_bases( out );
+            }
+        }
 };
 
 static mapgen_factory oter_mapgen;
@@ -565,9 +577,32 @@ namespace
 // Instrumentation for [JSON_PERF] mapgen-setup split (always-on, per Step 1 spec):
 //   A) get_cached_stream + seek  B) jsin.get_object()  C) setup_common(jo)
 // Reset at start of calculate_mapgen_weights, printed at end.
-int64_t g_mg_stream_us  = 0;
-int64_t g_mg_getobj_us  = 0;
-int64_t g_mg_setup_us   = 0;
+int64_t g_mg_stream_us        = 0;
+int64_t g_mg_getobj_us        = 0;
+int64_t g_mg_setup_us         = 0;
+int64_t g_mg_inline_read_us   = 0;  // time in load_place_mapings<T>() calls
+int64_t g_mg_palette_add_us   = 0;  // time in add() calls for named palettes
+
+// Pre-flattened palette cache for calculate_mapgen_weights().
+// Populated once by mapgen_palette::pre_flatten_palettes(), cleared after setup completes.
+std::unordered_map<palette_id, mapgen_palette> s_flat_palettes;
+
+// Load-time positions cache (Step 2): populated during load_mapgen_function(),
+// consumed in setup_common(). Key: {interned-path-ptr, stream-start-offset}.
+// Cleared by reset_mapgens().
+struct MapgenLayoutKey {
+    const std::string *path;   // points into the shared_ptr_fast<std::string> in json_source_location
+    int                offset;
+    auto operator==( const MapgenLayoutKey & ) const noexcept -> bool = default;
+};
+struct MapgenLayoutKeyHash {
+    auto operator()( const MapgenLayoutKey &k ) const noexcept -> std::size_t {
+        return std::hash<const std::string *>{}( k.path )
+               ^ ( std::hash<int>{}( k.offset ) << 16 );
+    }
+};
+std::unordered_map<MapgenLayoutKey, JsonObject::RawLayout,
+                   MapgenLayoutKeyHash> s_mapgen_layout_cache;
 
 } // namespace
 
@@ -576,9 +611,13 @@ int64_t g_mg_setup_us   = 0;
  */
 void calculate_mapgen_weights()   // TODO: rename as it runs jsonfunction setup too
 {
-    g_mg_stream_us = 0;
-    g_mg_getobj_us = 0;
-    g_mg_setup_us  = 0;
+    g_mg_stream_us      = 0;
+    g_mg_getobj_us      = 0;
+    g_mg_setup_us       = 0;
+    g_mg_inline_read_us = 0;
+    g_mg_palette_add_us = 0;
+    // Pre-flatten named palettes once so add(palette_id) can skip recursive walks.
+    mapgen_palette::pre_flatten_palettes();
 
     oter_mapgen.setup();
     // Not really calculate weights, but let's keep it here for now
@@ -595,6 +634,46 @@ void calculate_mapgen_weights()   // TODO: rename as it runs jsonfunction setup 
             inp_mngr.pump_events();
         }
     }
+    // Collect all json-based mapgens across all three containers.
+    // Must be called AFTER all setup() loops (setup() moves entries from mapgens_ into weights_).
+    std::vector<mapgen_function_json_base *> all_json_bases;
+    oter_mapgen.collect_json_bases( all_json_bases );
+    for( auto &pr : nested_mapgen ) {
+        for( auto &wo : pr.second ) {
+            if( auto *base = dynamic_cast<mapgen_function_json_base *>( wo.obj.get() ) ) {
+                all_json_bases.push_back( base );
+            }
+        }
+    }
+    for( auto &pr : update_mapgen ) {
+        for( auto &ptr : pr.second ) {
+            if( auto *base = dynamic_cast<mapgen_function_json_base *>( ptr.get() ) ) {
+                all_json_bases.push_back( base );
+            }
+        }
+    }
+
+    // Phase B: parallel row-loop — pure const reads + pointer capture, no shared_ptr copies.
+#ifdef CATA_PARALLEL_MAPGEN
+    const int n_bases = static_cast<int>( all_json_bases.size() );
+    parallel_for( 0, n_bases, [&]( const int i ) {
+        all_json_bases[i]->setup_parallel_b();
+    } );
+#else
+    for( mapgen_function_json_base *base : all_json_bases ) {
+        base->setup_parallel_b();
+    }
+#endif
+
+    // Phase C: serial merge — all objects.add() and re-finalize() calls happen here.
+    for( mapgen_function_json_base *base : all_json_bases ) {
+        base->setup_serial_c();
+        inp_mngr.pump_events();
+    }
+
+    // Release pre-flattened cache memory; no longer needed after setup.
+    s_flat_palettes.clear();
+
     // Having set up all the mapgens we can now perform a second
     // pass of finalizing their parameters
     oter_mapgen.finalize_parameters();
@@ -613,10 +692,12 @@ void calculate_mapgen_weights()   // TODO: rename as it runs jsonfunction setup 
 
     // NOLINTNEXTLINE(cata-text-style)
     fprintf( stderr,
-             "[JSON_PERF]   mapgen_setup: stream_ms=%lld  get_object_ms=%lld  setup_jo_ms=%lld\n",
-             static_cast<long long>( g_mg_stream_us / 1000 ),
-             static_cast<long long>( g_mg_getobj_us / 1000 ),
-             static_cast<long long>( g_mg_setup_us  / 1000 ) );
+             "[JSON_PERF]   mapgen_setup: stream_ms=%lld  get_object_ms=%lld  setup_jo_ms=%lld  inline_read_ms=%lld  palette_add_ms=%lld\n",
+             static_cast<long long>( g_mg_stream_us      / 1000 ),
+             static_cast<long long>( g_mg_getobj_us      / 1000 ),
+             static_cast<long long>( g_mg_setup_us       / 1000 ),
+             static_cast<long long>( g_mg_inline_read_us / 1000 ),
+             static_cast<long long>( g_mg_palette_add_us / 1000 ) );
 }
 
 void check_mapgen_definitions()
@@ -683,6 +764,7 @@ load_mapgen_function( const JsonObject &jio, const point_rel_omt &offset,
         }
         JsonObject jo = jio.get_object( "object" );
         const json_source_location jsrc = jo.get_source_location();
+        s_mapgen_layout_cache[{ jsrc.path.get(), jsrc.offset }] = jo.raw_layout();
         jo.allow_omitted_members();
         return std::make_shared<mapgen_function_json>(
                    jsrc, mgweight, offset, total );
@@ -714,6 +796,7 @@ static void load_nested_mapgen( const JsonObject &jio, const std::string &id_bas
             int weight = jio.get_int( "weight", 1000 );
             JsonObject jo = jio.get_object( "object" );
             const json_source_location jsrc = jo.get_source_location();
+            s_mapgen_layout_cache[{ jsrc.path.get(), jsrc.offset }] = jo.raw_layout();
             jo.allow_omitted_members();
             nested_mapgen[id_base].add( std::make_shared<mapgen_function_json_nested>( jsrc ), weight );
         } else {
@@ -732,6 +815,7 @@ static void load_update_mapgen( const JsonObject &jio, const std::string &id_bas
         if( jio.has_object( "object" ) ) {
             JsonObject jo = jio.get_object( "object" );
             const json_source_location jsrc = jo.get_source_location();
+            s_mapgen_layout_cache[{ jsrc.path.get(), jsrc.offset }] = jo.raw_layout();
             jo.allow_omitted_members();
             update_mapgen[id_base].push_back(
                 std::make_unique<update_mapgen_function_json>( jsrc ) );
@@ -797,6 +881,8 @@ void reset_mapgens()
     oter_mapgen.reset();
     nested_mapgen.clear();
     update_mapgen.clear();
+    s_flat_palettes.clear();
+    s_mapgen_layout_cache.clear();
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -3464,6 +3550,20 @@ void mapgen_palette::load_place_mapings( const JsonObject &jo, const std::string
 
 static std::map<palette_id, mapgen_palette> palettes;
 
+void mapgen_palette::pre_flatten_palettes()
+{
+    s_flat_palettes.clear();
+    s_flat_palettes.reserve( palettes.size() );
+    for( const auto &entry : palettes ) {
+        mapgen_palette flat;
+        // context: no constraints, no ancestors; safe since palettes map is already loop-checked
+        add_palette_context ctx( "", &flat.parameters );
+        flat.add( entry.second, ctx );
+        // flat.palettes_used is empty; format_placings has everything resolved
+        s_flat_palettes.emplace( entry.first, std::move( flat ) );
+    }
+}
+
 template<>
 const mapgen_palette &string_id<mapgen_palette>::obj() const
 {
@@ -3535,6 +3635,7 @@ void mapgen_palette::check_definitions()
 void mapgen_palette::reset()
 {
     palettes.clear();
+    s_flat_palettes.clear();
 }
 
 void mapgen_palette::add( const mapgen_value<std::string> &rh, const add_palette_context &context )
@@ -3561,7 +3662,27 @@ void mapgen_palette::add( const mapgen_value<std::string> &rh, const add_palette
 
 void mapgen_palette::add( const palette_id &rh, const add_palette_context &context )
 {
-    add( get( rh ), context );
+    // Fast path: use the pre-flattened cache when there are no parameter constraints
+    // (constraints indicate parameterized palette choices that need the recursive path).
+    if( context.constraints.empty() && !s_flat_palettes.empty() ) {
+        const auto it = s_flat_palettes.find( rh );
+        if( it != s_flat_palettes.end() ) {
+            const mapgen_palette &flat = it->second;
+            // flat.palettes_used is empty — skip recursive traversal entirely.
+            const std::string actual_context = id.is_empty() ? context.context
+                                               : "palette " + id.str();
+            for( const auto &placing : flat.format_placings ) {
+                auto &dest = format_placings[placing.first];
+                dest.insert( dest.end(), placing.second.begin(), placing.second.end() );
+            }
+            for( const auto &key : flat.keys_with_terrain ) {
+                keys_with_terrain.insert( key );
+            }
+            parameters.check_and_merge( flat.parameters, actual_context );
+            return;
+        }
+    }
+    add( get( rh ), context );   // existing path: parameterized or pre-flatten not ready
 }
 
 void mapgen_palette::add( const mapgen_palette &rh, const add_palette_context &context )
@@ -3626,9 +3747,12 @@ mapgen_palette mapgen_palette::load_internal( const JsonObject &jo, const std::s
             // list in our palettes_used array and it will be consumed
             // recursively by calls to add which add this palette.
             add_palette_context add_context{ context, &new_pal.parameters };
+            const auto t_pal_add0 = std::chrono::steady_clock::now();
             for( auto &p : new_pal.palettes_used ) {
                 new_pal.add( p, add_context );
             }
+            g_mg_palette_add_us += std::chrono::duration_cast<std::chrono::microseconds>(
+                                       std::chrono::steady_clock::now() - t_pal_add0 ).count();
             new_pal.palettes_used.clear();
         }
     }
@@ -3643,6 +3767,7 @@ mapgen_palette mapgen_palette::load_internal( const JsonObject &jo, const std::s
     }
 
     std::string c = "palette " + new_pal.id.str();
+    const auto t_inline0 = std::chrono::steady_clock::now();
     new_pal.load_place_mapings<jmapgen_terrain>( jo, "terrain", format_placings );
     new_pal.load_place_mapings<jmapgen_furniture>( jo, "furniture", format_placings );
     new_pal.load_place_mapings<jmapgen_field>( jo, "fields", format_placings );
@@ -3672,6 +3797,8 @@ mapgen_palette mapgen_palette::load_internal( const JsonObject &jo, const std::s
     new_pal.load_place_mapings<jmapgen_ter_furn_transform>( jo, "ter_furn_transforms",
             format_placings );
     new_pal.load_place_mapings<jmapgen_faction>( jo, "faction_owner_character", format_placings );
+    g_mg_inline_read_us += std::chrono::duration_cast<std::chrono::microseconds>(
+                               std::chrono::steady_clock::now() - t_inline0 ).count();
 
     for( mapgen_palette::placing_map::value_type &p : format_placings ) {
         p.second.erase(
@@ -3785,10 +3912,14 @@ void mapgen_function_json_base::setup_common()
             *jsrcloc->path );
     g_mg_stream_us += std::chrono::duration_cast<std::chrono::microseconds>(
                           std::chrono::steady_clock::now() - t_stream0 ).count();
-    // Phase B: positions-map construction
+    // Phase B: positions-map construction (cache hit: skip character scan)
     const auto t_getobj0 = std::chrono::steady_clock::now();
     JsonIn jsin( *stream, *jsrcloc );
-    JsonObject jo = jsin.get_object();
+    const MapgenLayoutKey layout_key{ jsrcloc->path.get(), jsrcloc->offset };
+    const auto cache_it = s_mapgen_layout_cache.find( layout_key );
+    JsonObject jo = ( cache_it != s_mapgen_layout_cache.end() )
+                    ? JsonObject( jsin, cache_it->second )
+                    : jsin.get_object();
     g_mg_getobj_us += std::chrono::duration_cast<std::chrono::microseconds>(
                           std::chrono::steady_clock::now() - t_getobj0 ).count();
     // Phase C: jmapgen piece allocation (palette, rows, objects)
@@ -3815,16 +3946,18 @@ bool mapgen_function_json_base::setup_common( const JsonObject &jo )
     // just like mapf::basic_bind("stuff",blargle("foo", etc) ), only json input and faster when applying
     if( jo.has_array( "rows" ) ) {
         // TODO: forward correct 'src' parameter
-        mapgen_palette palette = mapgen_palette::load_temp( jo,
-                                 mod_management::get_default_core_content_pack().str(), "" );
+        auto palette = mapgen_palette::load_temp( jo,
+                       mod_management::get_default_core_content_pack().str(), "" );
         auto &keys_with_terrain = palette.keys_with_terrain;
-        auto &format_placings = palette.format_placings;
 
         if( palette.keys_with_terrain.empty() && !fallback_terrain_exists ) {
             return false;
         }
 
         parameters = palette.get_parameters();
+        // Move format_placings into the transient member so setup_parallel_b can access it.
+        pending_format_placings_ = std::move( palette.format_placings );
+        const auto &format_placings = pending_format_placings_;
 
         // mandatory: mapgensize rows of mapgensize character lines, each of which must have a
         // matching key in "terrain", unless fill_ter is set
@@ -3843,8 +3976,10 @@ bool mapgen_function_json_base::setup_common( const JsonObject &jo )
                 string_format( "format: rows: must have %d rows, not %d; check mapgensize if applicable",
                                total_size.y(), parray.size() ) );
         }
+        pending_rows_.reserve( static_cast<size_t>( expected_dim.y() - m_offset.y() ) );
         for( int c = m_offset.y(); c < expected_dim.y(); c++ ) {
             const std::string row = parray.get_string( c );
+            pending_rows_.emplace_back( row );
             std::vector<map_key> row_keys;
             for( const std::string &key : utf8_display_split( row ) ) {
                 row_keys.emplace_back( key );
@@ -3883,12 +4018,6 @@ bool mapgen_function_json_base::setup_common( const JsonObject &jo )
                                            c + 1, i + 1, key.str ), c, i + 1 );
                     } catch( const JsonError &e ) {
                         debugmsg( "(json-error)\n%s", e.what() );
-                    }
-                }
-                if( has_placing ) {
-                    jmapgen_place where( p );
-                    for( auto &what : fpi->second ) {
-                        objects.add( where, what );
                     }
                 }
             }
@@ -3944,6 +4073,54 @@ bool mapgen_function_json_base::setup_common( const JsonObject &jo )
     return true;
 }
 
+void mapgen_function_json_base::setup_parallel_b()
+{
+    if( pending_rows_.empty() ) {
+        return;
+    }
+    const auto &fp = pending_format_placings_;
+    const auto expected_dim = mapgensize + m_offset;
+    for( int c = m_offset.y(); c < expected_dim.y(); c++ ) {
+        std::vector<map_key> row_keys;
+        for( const std::string &key : utf8_display_split( pending_rows_[c - m_offset.y()] ) ) {
+            row_keys.emplace_back( key );
+        }
+        for( int i = m_offset.x(); i < expected_dim.x(); i++ ) {
+            const auto fpi = fp.find( row_keys[i] );
+            if( fpi == fp.end() ) {
+                continue;
+            }
+            const jmapgen_place where( point_rel_ms( i, c ) - m_offset );
+            for( const auto &piece : fpi->second ) {
+                // Store raw pointer — NO shared_ptr copy, NO refcount touch.
+                pending_entries_.push_back( { where, &piece } );
+            }
+        }
+    }
+}
+
+void mapgen_function_json_base::setup_serial_c()
+{
+    if( pending_rows_.empty() ) {
+        return;  // No rows: setup_common(jo) already called objects.finalize(); nothing to merge.
+    }
+    // Build concrete row_objs (shared_ptr copies) — serial, no race.
+    using row_obj_t = std::pair<jmapgen_place, shared_ptr_fast<const jmapgen_piece>>;
+    std::vector<row_obj_t> row_objs;
+    row_objs.reserve( pending_entries_.size() );
+    for( const auto &entry : pending_entries_ ) {
+        row_objs.emplace_back( entry.place, *entry.piece );
+    }
+    // PREPEND row pieces before the existing place_* pieces, then re-finalize.
+    // This restores the original row-before-place_* insertion order so that within each
+    // phase, stable_sort keeps row-terrain before place_terrain (place_terrain wins as
+    // last-writer in apply(), matching pre-parallelisation behaviour).
+    objects.prepend_and_finalize( row_objs );
+    pending_entries_.clear();
+    pending_rows_.clear();
+    pending_format_placings_.clear();
+}
+
 void mapgen_function_json::check( const std::string &oter_name ) const
 {
     check_common( oter_name );
@@ -3992,6 +4169,34 @@ void jmapgen_objects::finalize()
     }
     std::stable_sort( objects.begin(), objects.end(),
     []( const jmapgen_obj & l, const jmapgen_obj & r ) {
+        return l.second->phase() < r.second->phase();
+    } );
+}
+
+void jmapgen_objects::prepend_and_finalize(
+    const std::vector<std::pair<jmapgen_place, shared_ptr_fast<const jmapgen_piece>>> &row_objs )
+{
+    if( row_objs.empty() ) {
+        // Nothing to prepend — but we still need finalize for the pieces already present.
+        finalize();
+        return;
+    }
+    // Build a new vector: row pieces first, then the existing place_* pieces.
+    // This preserves row-before-place_* insertion order so stable_sort keeps
+    // row terrain applied before place_terrain within each phase (place_terrain wins).
+    std::vector<jmapgen_obj> merged;
+    merged.reserve( row_objs.size() + objects.size() );
+    for( const auto &ro : row_objs ) {
+        merged.emplace_back( ro.first, ro.second );
+    }
+    merged.insert( merged.end(), objects.begin(), objects.end() );
+    objects = std::move( merged );
+    // Call per-piece finalize() and stable_sort by phase.
+    for( const auto &obj : objects ) {
+        obj.second->finalize();
+    }
+    std::stable_sort( objects.begin(), objects.end(),
+    []( const jmapgen_obj &l, const jmapgen_obj &r ) {
         return l.second->phase() < r.second->phase();
     } );
 }

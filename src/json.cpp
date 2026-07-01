@@ -97,6 +97,21 @@ JsonObject::JsonObject( JsonIn &j )
     final_separator = jsin->get_ate_separator();
 }
 
+JsonObject::RawLayout JsonObject::raw_layout() const
+{
+    return { positions, start, end_, final_separator };
+}
+
+JsonObject::JsonObject( JsonIn &jsin_, const RawLayout &layout )
+    : positions( layout.positions )
+    , start( layout.start )
+    , end_( layout.end_ )
+    , final_separator( layout.final_separator )
+    , jsin( &jsin_ )
+{
+    jsin_.seek( layout.end_ );  // match post-condition of the scanning ctor
+}
+
 void JsonObject::mark_visited( const std::string &name ) const
 {
 #ifndef CATA_IN_TOOL

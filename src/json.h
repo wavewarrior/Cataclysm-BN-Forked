@@ -944,6 +944,21 @@ class JsonObject
                              bool throw_exception = true ) const;
 
     public:
+        /// Pre-built member positions for external caching (Step 2: load-time positions cache).
+        struct RawLayout {
+            std::map<std::string, int> positions;
+            int                        start;
+            int                        end_;
+            bool                       final_separator;
+        };
+        /// Extract the pre-built member positions for external caching.
+        RawLayout raw_layout() const;
+        /// Construct a JsonObject from a cached layout, skipping the character scan.
+        /// The stream jsin must have been created for the same file and offset
+        /// (already seeked to layout.start by the JsonIn constructor).
+        /// After this call the stream cursor is at layout.end_ (matching normal ctor post-condition).
+        JsonObject( JsonIn &jsin, const RawLayout &layout );
+
         JsonObject( JsonIn &jsin );
         JsonObject() : start( 0 ), end_( 0 ), jsin( nullptr ) {}
         JsonObject( const JsonObject & ) = default;
