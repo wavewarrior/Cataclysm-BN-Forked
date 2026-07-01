@@ -13,6 +13,7 @@
 #include "map.h"
 #include "monster.h"
 #include "type_id.h"
+#include "messages.h"
 
 #include <SDL3_net/SDL_net.h>
 #include <sstream>
@@ -124,14 +125,34 @@ auto coop_client::coop_world_tick() -> void {
         }
     }
 
-    // 2. Non-blocking poll for COOP_SYNC from the host.
+    // 2. Non-blocking poll for inbound packets from the host.
     if (coop_net::poll(socket_)) {
         std::string buf;
         if (!coop_net::recv(socket_, buf, 0)) {
             handle_disconnect();
             return;
         }
-        apply_sync(buf);
+        try {
+            std::istringstream iss(buf);
+            JsonIn jin(iss);
+            JsonObject pkt = jin.get_object();
+            pkt.allow_omitted_members();
+            const auto t = static_cast<coop_pkt>(pkt.get_int("t"));
+            if (t == coop_pkt::sync) {
+                apply_sync(buf);
+            } else if (t == coop_pkt::chat) {
+                JsonObject d = pkt.get_object("d");
+                d.allow_omitted_members();
+                add_msg(m_info, "[host]: %s", d.get_string("text", ""));
+            } else if (t == coop_pkt::disconnect) {
+                DebugLog(DL::Info, DC::Main) << "[coop] host sent disconnect";
+                handle_disconnect();
+                return;
+            }
+            // other packet types silently ignored
+        } catch (const JsonError& e) {
+            DebugLog(DL::Error, DC::Main) << "[coop] coop_world_tick: JSON parse error: " << e.what();
+        }
     }
 }
 
@@ -178,12 +199,35 @@ auto coop_client::handle_disconnect() -> void { shutdown(); }
 
 auto coop_client::shutdown() -> void {
     if (socket_) {
+        {
+            std::ostringstream oss;
+            JsonOut jout(oss);
+            jout.start_object();
+            jout.member("t", static_cast<int>(coop_pkt::disconnect));
+            jout.end_object();
+            coop_net::send(socket_, oss.str());
+        }
         NET_DestroyStreamSocket(socket_);
         socket_ = nullptr;
     }
     NET_Quit();
     coop_session::get().mode = coop_mode::none;
     DebugLog(DL::Info, DC::Main) << "[coop] client shutdown";
+}
+
+auto coop_client::send_chat(const std::string& text) -> void {
+    if (!socket_) { return; }
+    std::ostringstream oss;
+    JsonOut jout(oss);
+    jout.start_object();
+    jout.member("t", static_cast<int>(coop_pkt::chat));
+    jout.member("d");
+    jout.start_object();
+    jout.member("from", "client");
+    jout.member("text", text);
+    jout.end_object();
+    jout.end_object();
+    coop_net::send(socket_, oss.str());
 }
 
 #endif // COOP_ENABLED

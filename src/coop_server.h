@@ -35,6 +35,7 @@ struct coop_server {
     auto update_proxy_position(npc* proxy) -> void;
     auto build_and_send_sync() -> void;
     auto shutdown() -> void;
+    auto send_chat(const std::string& text) -> void;
     auto is_running() const -> bool { return running_.load(); }
 
 private:

@@ -21,6 +21,7 @@ struct coop_client {
     auto queue_action(const std::string& key, const std::string& ctx_json = {}) -> void;
     auto is_connected() const -> bool { return socket_ != nullptr; }
     auto shutdown() -> void;
+    auto send_chat(const std::string& text) -> void;
 
 private:
     auto apply_sync(const std::string& json_buf) -> void;

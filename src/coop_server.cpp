@@ -184,6 +184,10 @@ auto coop_server::receiver_loop() -> void {
                 d.allow_omitted_members();
                 std::scoped_lock lk{chat_mtx_};
                 chat_q_.push_back({d.get_string("text", "")});
+            } else if (t == coop_pkt::disconnect) {
+                DebugLog(DL::Info, DC::Main) << "[coop] receiver: client sent disconnect";
+                running_ = false;
+                break;
             }
             // other packet types silently ignored until later phases
         } catch (const JsonError& e) {
@@ -360,6 +364,14 @@ auto coop_server::shutdown() -> void {
         receiver_thread_.join();
     }
     if (client_sock_) {
+        {
+            std::ostringstream oss;
+            JsonOut jout(oss);
+            jout.start_object();
+            jout.member("t", static_cast<int>(coop_pkt::disconnect));
+            jout.end_object();
+            coop_net::send(client_sock_, oss.str());
+        }
         NET_DestroyStreamSocket(client_sock_);
         client_sock_ = nullptr;
     }
@@ -370,6 +382,21 @@ auto coop_server::shutdown() -> void {
     NET_Quit();
     coop_session::get().mode = coop_mode::none;
     DebugLog(DL::Info, DC::Main) << "[coop] server shutdown";
+}
+
+auto coop_server::send_chat(const std::string& text) -> void {
+    if (!client_sock_ || !running_) { return; }
+    std::ostringstream oss;
+    JsonOut jout(oss);
+    jout.start_object();
+    jout.member("t", static_cast<int>(coop_pkt::chat));
+    jout.member("d");
+    jout.start_object();
+    jout.member("from", "host");
+    jout.member("text", text);
+    jout.end_object();
+    jout.end_object();
+    coop_net::send(client_sock_, oss.str());
 }
 
 #endif // COOP_ENABLED
