@@ -1109,7 +1109,9 @@ void jmapgen_place::offset( const point_rel_ms &offset )
 
 map_key::map_key( const std::string &s ) : str( s )
 {
-    if( utf8_width( str ) != 1 ) {
+    if( str.size() == 1 && static_cast<unsigned char>( str[0] ) < 0x80 ) {
+        // ASCII single-byte: width is always 1, skip the full UTF-8 scan.
+    } else if( utf8_width( str ) != 1 ) {
         debugmsg( "map key '%s' must be 1 column", str );
     }
 }
