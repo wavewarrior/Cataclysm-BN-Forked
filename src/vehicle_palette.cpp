@@ -76,14 +76,22 @@ void VehiclePalette::check()
         }
     }
 }
-int VehiclePalette::fuzzy_to_index( const vpart_id &id ) const
+auto VehiclePalette::fuzzy_to_index( const vpart_id &id ) const -> int
 {
-    for( auto const &[ fuzzy, index ] : fuzzy_color_match ) {
-        if( id.str().contains( fuzzy ) || id.str() == fuzzy ) {
-            return index;
+    const auto &key = id.str();
+    const auto cached = id_index_cache.find( key );
+    if( cached != id_index_cache.end() ) {
+        return cached->second;
+    }
+    auto result = int{ -1 };
+    for( const auto &[ fuzzy, index ] : fuzzy_color_match ) {
+        if( key.contains( fuzzy ) || key == fuzzy ) {
+            result = index;
+            break;
         }
     }
-    return -1;
+    id_index_cache.emplace( key, result );
+    return result;
 }
 
 std::vector<RGBColor> VehiclePalette::pick_colors() const
