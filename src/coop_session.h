@@ -1,6 +1,7 @@
 #pragma once
 #ifdef COOP_ENABLED
 
+#include "character_id.h"
 #include <cstdint>
 #include <string>
 
@@ -14,6 +15,7 @@ struct coop_session {
     coop_mode mode = coop_mode::none;
     std::string partner_name;
     int partner_ping_ms = 0; // updated by receiver thread each tick
+    character_id proxy_npc_id;
 
     auto is_host() const -> bool { return mode == coop_mode::host; }
     auto is_client() const -> bool { return mode == coop_mode::client; }

@@ -5,8 +5,11 @@
 #include "coop_net.h"
 #include "coop_session.h"
 #include "debug.h"
+#include "get_version.h"
+#include "json.h"
 
 #include <SDL3_net/SDL_net.h>
+#include <sstream>
 
 coop_client::~coop_client() { shutdown(); }
 
@@ -47,13 +50,83 @@ auto coop_client::connect(const std::string& ip, uint16_t port) -> bool {
 }
 
 auto coop_client::handshake() -> bool {
-    // TODO: Phase 2
+    // Send client handshake first (client goes second per the protocol, but
+    // both sides send then receive — order matches coop_server::handshake()).
+    std::ostringstream oss;
+    {
+        JsonOut jout(oss);
+        jout.start_object();
+        jout.member("t", static_cast<int>(coop_pkt::handshake));
+        jout.member("d");
+        jout.start_object();
+        jout.member("version", std::string(getVersionString()));
+        jout.member("mods");
+        jout.start_array();
+        jout.end_array();
+        jout.member("mod_hash", std::string(""));
+        jout.end_object();
+        jout.end_object();
+    }
+    if (!coop_net::send(socket_, oss.str())) {
+        DebugLog(DL::Error, DC::Main) << "[coop] client handshake: send failed";
+        return false;
+    }
+
+    // Receive host handshake
+    std::string buf;
+    if (!coop_net::recv(socket_, buf, 5000)) {
+        DebugLog(DL::Error, DC::Main) << "[coop] client handshake: recv failed";
+        return false;
+    }
+    std::istringstream iss(buf);
+    JsonIn jin(iss);
+    JsonObject pkt = jin.get_object();
+    pkt.allow_omitted_members();
+    JsonObject d = pkt.get_object("d");
+    d.allow_omitted_members();
+    const std::string host_ver = d.get_string("version", "");
+    if (host_ver != getVersionString()) {
+        DebugLog(DL::Info, DC::Main)
+            << "[coop] version mismatch: client=" << getVersionString()
+            << " host=" << host_ver;
+    }
+    DebugLog(DL::Info, DC::Main) << "[coop] client handshake complete";
     return true;
 }
 
 auto coop_client::coop_world_tick() -> void {
     if (!coop_session::get().is_client() || !socket_) { return; }
-    // TODO: Phase 4 — send queued action, poll for COOP_SYNC
+
+    // 1. Send one queued action (non-blocking — just serialise and push onto TCP).
+    if (!action_q_.empty()) {
+        const auto act = action_q_.front();
+        action_q_.pop_front();
+        std::ostringstream oss;
+        JsonOut jout(oss);
+        jout.start_object();
+        jout.member("t", static_cast<int>(coop_pkt::action));
+        jout.member("d");
+        jout.start_object();
+        jout.member("key", act.key);
+        jout.member("ctx", act.ctx_json);
+        jout.end_object();
+        jout.end_object();
+        if (!coop_net::send(socket_, oss.str())) {
+            DebugLog(DL::Error, DC::Main) << "[coop] coop_world_tick: action send failed";
+            handle_disconnect();
+            return;
+        }
+    }
+
+    // 2. Non-blocking poll for COOP_SYNC from the host.
+    if (coop_net::poll(socket_)) {
+        std::string buf;
+        if (!coop_net::recv(socket_, buf, 0)) {
+            handle_disconnect();
+            return;
+        }
+        apply_sync(buf);
+    }
 }
 
 auto coop_client::queue_action(const std::string& key, const std::string& ctx_json) -> void {

@@ -12,8 +12,9 @@
 #include <thread>
 #include <unordered_set>
 
+#include "coordinates.h"
+
 class npc;
-struct tripoint_ms;
 
 /// Host-side co-op server.
 struct coop_server {
@@ -23,9 +24,12 @@ struct coop_server {
     coop_server& operator=(const coop_server&) = delete;
 
     auto listen(uint16_t port = 8080) -> bool;
+    /// Non-blocking: attempt to accept one pending client. Returns true if a
+    /// client connected and client_sock_ is now valid.
+    auto try_accept() -> bool;
     auto wait_for_client() -> bool;
     auto handshake() -> bool;
-    auto spawn_proxy_npc(const tripoint_ms& spawn_pos, const std::string& player_name) -> npc*;
+    auto spawn_proxy_npc(const tripoint_abs_ms& spawn_pos, const std::string& player_name) -> npc*;
     auto start_receiver_thread() -> void;
     auto coop_world_tick() -> void;
     auto update_proxy_position(npc* proxy) -> void;
