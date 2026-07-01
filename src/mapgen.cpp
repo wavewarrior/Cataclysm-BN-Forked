@@ -562,12 +562,12 @@ void call_mapgen_function( std::string name, mapgendata &dat, bool nested, const
 namespace
 {
 
-// Temporary instrumentation to split the 2900ms mapgen-setup bucket:
+// Instrumentation for [JSON_PERF] mapgen-setup split (always-on, per Step 1 spec):
 //   A) get_cached_stream + seek  B) jsin.get_object()  C) setup_common(jo)
 // Reset at start of calculate_mapgen_weights, printed at end.
-int64_t g_mg_stream_us = 0;
-int64_t g_mg_getobj_us = 0;
-int64_t g_mg_setup_us  = 0;
+int64_t g_mg_stream_us  = 0;
+int64_t g_mg_getobj_us  = 0;
+int64_t g_mg_setup_us   = 0;
 
 } // namespace
 
@@ -3805,7 +3805,6 @@ void mapgen_function_json_base::setup_common()
         mapgen_defer::jsi = JsonObject();
     }
 }
-
 bool mapgen_function_json_base::setup_common( const JsonObject &jo )
 {
     bool fallback_terrain_exists = setup_internal( jo );
@@ -3907,7 +3906,6 @@ bool mapgen_function_json_base::setup_common( const JsonObject &jo )
     if( jo.has_array( "set" ) ) {
         setup_setmap( jo.get_array( "set" ) );
     }
-
     // "add" is deprecated in favor of "place_item", but kept to support mods
     // which are not under our control.
     objects.load_objects<jmapgen_spawn_item>( jo, "add" );
