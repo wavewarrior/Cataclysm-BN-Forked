@@ -3503,6 +3503,11 @@ void mapgen_palette::load_place_mapings( const JsonObject &jo, const std::string
 }
 
 static std::map<palette_id, mapgen_palette> palettes;
+// Cache: maps {path-ptr, offset} → placing_map, keyed by source location pointer
+// identity (stable within one finalization pass via the stream cache).
+// Cleared in reset() at the end of each finalization pass.
+static std::map<std::pair<const std::string *, int>, mapgen_palette::placing_map>
+    palette_placings_cache;
 
 void mapgen_palette::pre_flatten_palettes()
 {
@@ -3588,6 +3593,7 @@ void mapgen_palette::check_definitions()
 
 void mapgen_palette::reset()
 {
+    palette_placings_cache.clear();
     palettes.clear();
     s_flat_palettes.clear();
 }
@@ -3721,36 +3727,44 @@ mapgen_palette mapgen_palette::load_internal( const JsonObject &jo, const std::s
     }
 
     std::string c = "palette " + new_pal.id.str();
+    const auto loc = jo.get_source_location();
+    const auto cache_key = std::make_pair( loc.path.get(), loc.offset );
+    const auto cache_it = palette_placings_cache.find( cache_key );
     const auto t_inline0 = std::chrono::steady_clock::now();
-    new_pal.load_place_mapings<jmapgen_terrain>( jo, "terrain", format_placings );
-    new_pal.load_place_mapings<jmapgen_furniture>( jo, "furniture", format_placings );
-    new_pal.load_place_mapings<jmapgen_field>( jo, "fields", format_placings );
-    new_pal.load_place_mapings<jmapgen_npc>( jo, "npcs", format_placings );
-    new_pal.load_place_mapings<jmapgen_sign>( jo, "signs", format_placings );
-    new_pal.load_place_mapings<jmapgen_vending_machine>( jo, "vendingmachines", format_placings );
-    new_pal.load_place_mapings<jmapgen_toilet>( jo, "toilets", format_placings );
-    new_pal.load_place_mapings<jmapgen_gaspump>( jo, "gaspumps", format_placings );
-    new_pal.load_place_mapings<jmapgen_item_group>( jo, "items", format_placings );
-    new_pal.load_place_mapings<jmapgen_monster_group>( jo, "monsters", format_placings );
-    new_pal.load_place_mapings<jmapgen_vehicle>( jo, "vehicles", format_placings );
-    // json member name is not optimal, it should be plural like all the others above, but that conflicts
-    // with the items entry with refers to item groups.
-    new_pal.load_place_mapings<jmapgen_spawn_item>( jo, "item", format_placings );
-    new_pal.load_place_mapings<jmapgen_artifact>( jo, "artifact", format_placings );
-    new_pal.load_place_mapings<jmapgen_artifact>( jo, "artifacts", format_placings );
-    new_pal.load_place_mapings<jmapgen_trap>( jo, "traps", format_placings );
-    new_pal.load_place_mapings<jmapgen_monster>( jo, "monster", format_placings );
-    new_pal.load_place_mapings<jmapgen_make_rubble>( jo, "rubble", format_placings );
-    new_pal.load_place_mapings<jmapgen_computer>( jo, "computers", format_placings );
-    new_pal.load_place_mapings<jmapgen_sealed_item>( jo, "sealed_item", format_placings );
-    new_pal.load_place_mapings<jmapgen_nested>( jo, "nested", format_placings );
-    new_pal.load_place_mapings<jmapgen_liquid_item>( jo, "liquids", format_placings );
-    new_pal.load_place_mapings<jmapgen_graffiti>( jo, "graffiti", format_placings );
-    new_pal.load_place_mapings<jmapgen_translate>( jo, "translate", format_placings );
-    new_pal.load_place_mapings<jmapgen_zone>( jo, "zones", format_placings );
-    new_pal.load_place_mapings<jmapgen_ter_furn_transform>( jo, "ter_furn_transforms",
-            format_placings );
-    new_pal.load_place_mapings<jmapgen_faction>( jo, "faction_owner_character", format_placings );
+    if( cache_it != palette_placings_cache.end() ) {
+        format_placings = cache_it->second;
+    } else {
+        new_pal.load_place_mapings<jmapgen_terrain>( jo, "terrain", format_placings );
+        new_pal.load_place_mapings<jmapgen_furniture>( jo, "furniture", format_placings );
+        new_pal.load_place_mapings<jmapgen_field>( jo, "fields", format_placings );
+        new_pal.load_place_mapings<jmapgen_npc>( jo, "npcs", format_placings );
+        new_pal.load_place_mapings<jmapgen_sign>( jo, "signs", format_placings );
+        new_pal.load_place_mapings<jmapgen_vending_machine>( jo, "vendingmachines", format_placings );
+        new_pal.load_place_mapings<jmapgen_toilet>( jo, "toilets", format_placings );
+        new_pal.load_place_mapings<jmapgen_gaspump>( jo, "gaspumps", format_placings );
+        new_pal.load_place_mapings<jmapgen_item_group>( jo, "items", format_placings );
+        new_pal.load_place_mapings<jmapgen_monster_group>( jo, "monsters", format_placings );
+        new_pal.load_place_mapings<jmapgen_vehicle>( jo, "vehicles", format_placings );
+        // json member name is not optimal, it should be plural like all the others above, but that
+        // conflicts with the items entry which refers to item groups.
+        new_pal.load_place_mapings<jmapgen_spawn_item>( jo, "item", format_placings );
+        new_pal.load_place_mapings<jmapgen_artifact>( jo, "artifact", format_placings );
+        new_pal.load_place_mapings<jmapgen_artifact>( jo, "artifacts", format_placings );
+        new_pal.load_place_mapings<jmapgen_trap>( jo, "traps", format_placings );
+        new_pal.load_place_mapings<jmapgen_monster>( jo, "monster", format_placings );
+        new_pal.load_place_mapings<jmapgen_make_rubble>( jo, "rubble", format_placings );
+        new_pal.load_place_mapings<jmapgen_computer>( jo, "computers", format_placings );
+        new_pal.load_place_mapings<jmapgen_sealed_item>( jo, "sealed_item", format_placings );
+        new_pal.load_place_mapings<jmapgen_nested>( jo, "nested", format_placings );
+        new_pal.load_place_mapings<jmapgen_liquid_item>( jo, "liquids", format_placings );
+        new_pal.load_place_mapings<jmapgen_graffiti>( jo, "graffiti", format_placings );
+        new_pal.load_place_mapings<jmapgen_translate>( jo, "translate", format_placings );
+        new_pal.load_place_mapings<jmapgen_zone>( jo, "zones", format_placings );
+        new_pal.load_place_mapings<jmapgen_ter_furn_transform>( jo, "ter_furn_transforms",
+                format_placings );
+        new_pal.load_place_mapings<jmapgen_faction>( jo, "faction_owner_character", format_placings );
+        palette_placings_cache.emplace( cache_key, format_placings );
+    }
     g_mg_inline_read_us += std::chrono::duration_cast<std::chrono::microseconds>(
                                std::chrono::steady_clock::now() - t_inline0 ).count();
 
