@@ -942,7 +942,7 @@ private:
     game::vmenu_ret list_items(const std::vector<map_item_stack>& item_list);
     std::vector<map_item_stack> find_nearby_items(int iRadius);
 
-    game::vmenu_ret list_monsters(const std::vector<Creature*>& monster_list);
+    game::vmenu_ret list_monsters(std::vector<Creature*> monster_list);
 
     /** Check for dangerous stuff at dest_loc, return false if the player decides
     not to step there */
