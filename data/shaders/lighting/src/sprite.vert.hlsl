@@ -163,8 +163,8 @@ VS_OUT main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
         // vertical_pos: 0 at base (c.y=1), 1 at canopy top (c.y=0).
         const float vertical_pos  = 1.0 - c.y;
         const float2 viewport_ctr = target_size * 0.5;
-        // Lean direction: toward viewport centre so all sprites converge there.
-        const float2 lean_dir     = viewport_ctr - centre;
+        // Lean direction: away from viewport centre — tops fan outward for parallax depth.
+        const float2 lean_dir     = centre - viewport_ctr;
         pixel_out = pixel + lean_dir * ( s.extrude_lean * vertical_pos );
     }
     // Dark gradient: 0 at base, extrude_dark at top. extrude_dark=0 on non-opted tiles → no-op.
