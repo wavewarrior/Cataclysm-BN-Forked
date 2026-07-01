@@ -562,7 +562,7 @@ void call_mapgen_function( std::string name, mapgendata &dat, bool nested, const
 namespace
 {
 
-// Instrumentation for [JSON_PERF] mapgen-setup split (always-on, per Step 1 spec):
+// Instrumentation for [JSON_PERF] mapgen-setup split (gated by CATA_JSON_PERF env var):
 //   A) get_cached_stream + seek  B) jsin.get_object()  C) setup_common(jo)
 // Reset at start of calculate_mapgen_weights, printed at end.
 int64_t g_mg_stream_us        = 0;
@@ -591,6 +591,8 @@ struct MapgenLayoutKeyHash {
 };
 std::unordered_map<MapgenLayoutKey, JsonObject::RawLayout,
                    MapgenLayoutKeyHash> s_mapgen_layout_cache;
+
+const auto s_json_perf_enabled = getenv( "CATA_JSON_PERF" ) != nullptr;
 
 } // namespace
 
@@ -642,14 +644,16 @@ void calculate_mapgen_weights()   // TODO: rename as it runs jsonfunction setup 
         }
     }
 
-    // NOLINTNEXTLINE(cata-text-style)
-    fprintf( stderr,
-             "[JSON_PERF]   mapgen_setup: stream_ms=%lld  get_object_ms=%lld  setup_jo_ms=%lld  inline_read_ms=%lld  palette_add_ms=%lld\n",
-             static_cast<long long>( g_mg_stream_us      / 1000 ),
-             static_cast<long long>( g_mg_getobj_us      / 1000 ),
-             static_cast<long long>( g_mg_setup_us       / 1000 ),
-             static_cast<long long>( g_mg_inline_read_us / 1000 ),
-             static_cast<long long>( g_mg_palette_add_us / 1000 ) );
+    if( s_json_perf_enabled ) {
+        // NOLINTNEXTLINE(cata-text-style)
+        fprintf( stderr,
+                 "[JSON_PERF]   mapgen_setup: stream_ms=%lld  get_object_ms=%lld  setup_jo_ms=%lld  inline_read_ms=%lld  palette_add_ms=%lld\n",
+                 static_cast<long long>( g_mg_stream_us      / 1000 ),
+                 static_cast<long long>( g_mg_getobj_us      / 1000 ),
+                 static_cast<long long>( g_mg_setup_us       / 1000 ),
+                 static_cast<long long>( g_mg_inline_read_us / 1000 ),
+                 static_cast<long long>( g_mg_palette_add_us / 1000 ) );
+    }
 }
 
 void check_mapgen_definitions()

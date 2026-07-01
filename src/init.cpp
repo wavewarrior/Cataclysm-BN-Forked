@@ -17,6 +17,7 @@
 #include <ranges>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 
 #include "achievement.h"
 #include "activity_type.h"
@@ -153,6 +154,8 @@ struct json_perf_deferred_stats {
 
 json_perf_load_metrics g_last_load_metrics;
 json_perf_deferred_stats g_deferred_stats;
+
+const auto s_json_perf_enabled = getenv( "CATA_JSON_PERF" ) != nullptr;
 
 } // namespace
 
@@ -867,7 +870,7 @@ void DynamicDataLoader::finalize_loaded_data( loading_ui &ui )
         e.second();
         const auto tf_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                std::chrono::steady_clock::now() - tf0 ).count();
-        if( tf_ms >= 5 ) {
+        if( s_json_perf_enabled && tf_ms >= 5 ) {
             // NOLINTNEXTLINE(cata-text-style)
             fprintf( stderr, "[JSON_PERF]   finalize[%s]=%lldms\n",
                      e.first.c_str(), static_cast<long long>( tf_ms ) );
@@ -1068,7 +1071,7 @@ static void load_and_finalize_packs( loading_ui &ui, const std::string &msg,
     loader.check_consistency( ui );
     const auto t_check_1 = std::chrono::steady_clock::now();
     const auto t_wall_end = std::chrono::steady_clock::now();
-    {
+    if( s_json_perf_enabled ) {
         namespace ch = std::chrono;
         const auto wall_ms = ch::duration_cast<ch::milliseconds>( t_wall_end - t_wall ).count();
         const auto fin_ms  = ch::duration_cast<ch::milliseconds>( t_finalize_1 - t_finalize_0 ).count();
