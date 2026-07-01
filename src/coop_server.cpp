@@ -2,9 +2,9 @@
 
 #include "coop_server.h"
 
+#include "calendar.h"
 #include "coop_net.h"
 #include "coop_session.h"
-#include "calendar.h"
 #include "coordinates.h"
 #include "creature_tracker.h"
 #include "debug.h"
@@ -41,9 +41,7 @@ auto coop_server::listen(uint16_t port) -> bool {
 auto coop_server::try_accept() -> bool {
     if (client_sock_) { return true; }
     NET_StreamSocket* candidate = nullptr;
-    if (!NET_AcceptClient(server_sock_, &candidate) || !candidate) {
-        return false;
-    }
+    if (!NET_AcceptClient(server_sock_, &candidate) || !candidate) { return false; }
     while (NET_GetConnectionStatus(candidate) == 0) { SDL_Delay(10); }
     if (NET_GetConnectionStatus(candidate) < 0) {
         NET_DestroyStreamSocket(candidate);
@@ -102,8 +100,7 @@ auto coop_server::handshake() -> bool {
     const std::string client_ver = d.get_string("version", "");
     if (client_ver != getVersionString()) {
         DebugLog(DL::Info, DC::Main)
-            << "[coop] version mismatch: host=" << getVersionString()
-            << " client=" << client_ver;
+            << "[coop] version mismatch: host=" << getVersionString() << " client=" << client_ver;
         // warn but allow
     }
 
@@ -111,13 +108,11 @@ auto coop_server::handshake() -> bool {
     return true;
 }
 
-auto coop_server::spawn_proxy_npc(
-    const tripoint_abs_ms& spawn_pos, const std::string& player_name) -> npc* {
+auto coop_server::spawn_proxy_npc(const tripoint_abs_ms& spawn_pos, const std::string& player_name)
+    -> npc* {
     shared_ptr_fast<npc> tmp = make_shared_fast<npc>();
     tmp->randomize();
-    if (!player_name.empty()) {
-        tmp->name = player_name;
-    }
+    if (!player_name.empty()) { tmp->name = player_name; }
     tmp->is_coop_remote = true;
     tmp->set_attitude(NPCATT_FOLLOW);
     tmp->mission = NPC_MISSION_NULL;
@@ -224,9 +219,7 @@ auto coop_server::coop_world_tick() -> void {
     // 1. Drain one client action and execute on proxy NPC
     auto act = try_pop_action();
     npc* proxy = g->critter_by_id<npc>(coop_session::get().proxy_npc_id);
-    if (proxy && act) {
-        execute_client_action(proxy, act->key, act->ctx_json);
-    }
+    if (proxy && act) { execute_client_action(proxy, act->key, act->ctx_json); }
 
     // 2. Update proxy bubble position (stub until Phase 3.5)
     if (proxy) { update_proxy_position(proxy); }
@@ -238,9 +231,7 @@ auto coop_server::coop_world_tick() -> void {
     build_and_send_sync();
 
     // 5. Drain chat messages
-    if (auto msg = try_pop_chat()) {
-        add_msg(m_info, "[partner]: %s", msg->text);
-    }
+    if (auto msg = try_pop_chat()) { add_msg(m_info, "[partner]: %s", msg->text); }
 }
 
 auto coop_server::execute_client_action(
@@ -281,10 +272,7 @@ auto coop_server::execute_client_action(
             JsonObject ctx = jin.get_object();
             ctx.allow_omitted_members();
             const tripoint_bub_ms tpos{
-                ctx.get_int("tx", cur.x()),
-                ctx.get_int("ty", cur.y()),
-                ctx.get_int("tz", cur.z())
-            };
+                ctx.get_int("tx", cur.x()), ctx.get_int("ty", cur.y()), ctx.get_int("tz", cur.z())};
             if (const auto mon_ptr = g->critter_tracker->find(tpos)) {
                 proxy->melee_attack(*mon_ptr, true);
             }
@@ -296,16 +284,15 @@ auto coop_server::execute_client_action(
             JsonObject ctx = jin.get_object();
             ctx.allow_omitted_members();
             DebugLog(DL::Info, DC::Main)
-                << "[coop] FIRE from proxy: target="
-                << ctx.get_int("tx", 0) << "," << ctx.get_int("ty", 0);
+                << "[coop] FIRE from proxy: target=" << ctx.get_int("tx", 0) << ","
+                << ctx.get_int("ty", 0);
         } else {
             DebugLog(DL::Info, DC::Main) << "[coop] FIRE from proxy: no target context";
         }
     } else if (key == "PAUSE" || key == "WAIT") {
         proxy->moves -= proxy->get_speed();
     } else {
-        DebugLog(DL::Debug, DC::Main)
-            << "[coop] execute_client_action: unimplemented key=" << key;
+        DebugLog(DL::Debug, DC::Main) << "[coop] execute_client_action: unimplemented key=" << key;
     }
 }
 
@@ -326,9 +313,15 @@ auto coop_server::build_and_send_sync() -> void {
             const submap* sm = MAPBUFFER.lookup_submap(sm_pos);
             if (!sm) { continue; }
             jout.start_object();
-            jout.member("x", sm_pos.x());
-            jout.member("y", sm_pos.y());
-            jout.member("z", sm_pos.z());
+            // Standard mapbuffer format: version + coordinates array + submap members.
+            // Matches mapbuffer::deserialize_into_vec() so client can reuse the load path.
+            jout.member("version", savegame_version);
+            jout.member("coordinates");
+            jout.start_array();
+            jout.write(sm_pos.x());
+            jout.write(sm_pos.y());
+            jout.write(sm_pos.z());
+            jout.end_array();
             sm->store(jout);
             jout.end_object();
         }
