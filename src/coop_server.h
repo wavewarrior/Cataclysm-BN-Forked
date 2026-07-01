@@ -2,6 +2,7 @@
 #ifdef COOP_ENABLED
 
 #include "coop_proto.h"
+#include "coordinates.h"
 
 #include <SDL3_net/SDL_net.h>
 #include <atomic>
@@ -11,8 +12,6 @@
 #include <string>
 #include <thread>
 #include <unordered_set>
-
-#include "coordinates.h"
 
 class npc;
 
@@ -53,6 +52,7 @@ private:
     auto execute_client_action(npc* proxy, const std::string& key, const std::string& ctx_json)
         -> void;
     auto receiver_loop() -> void;
+    auto both_idle() const -> bool;
 
     NET_Server* server_sock_ = nullptr;
     NET_StreamSocket* client_sock_ = nullptr;
@@ -66,6 +66,7 @@ private:
     std::deque<chat_entry> chat_q_;
 
     std::unordered_set<std::string> client_known_vehicles_;
+    int both_idle_streak_ = 0;
 };
 
 #endif // COOP_ENABLED

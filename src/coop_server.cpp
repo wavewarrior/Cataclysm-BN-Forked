@@ -2,6 +2,7 @@
 
 #include "coop_server.h"
 
+#include "avatar.h"
 #include "calendar.h"
 #include "coop_net.h"
 #include "coop_session.h"
@@ -232,6 +233,28 @@ auto coop_server::coop_world_tick() -> void {
 
     // 5. Drain chat messages
     if (auto msg = try_pop_chat()) { add_msg(m_info, "[partner]: %s", msg->text); }
+
+    // 6. Phase 4.4: fast-forward during long activities.
+    // When both players are in activities (sleep, crafting), inject extra
+    // accumulator credit so the 1 Hz accumulator fires many more times per
+    // real frame — effectively speeding up idle world time.
+    if (both_idle()) {
+        ++both_idle_streak_;
+        if (both_idle_streak_ >= 3) {
+            // Inject 50 ticks worth of credit; the MAX_CATCH_UP=3 cap in
+            // main.cpp limits actual ticks per frame so this is safe.
+            g->main_loop_accum_ms_ += 1000.0 * 50.0;
+        }
+    } else {
+        both_idle_streak_ = 0;
+    }
+}
+
+auto coop_server::both_idle() const -> bool {
+    // Fast-forward trigger: both players sleeping.
+    // Full activity check deferred until activity_ptr API is confirmed.
+    const npc* proxy = g->critter_by_id<npc>(coop_session::get().proxy_npc_id);
+    return g->u.in_sleep_state() && proxy && proxy->in_sleep_state();
 }
 
 auto coop_server::execute_client_action(
@@ -290,6 +313,21 @@ auto coop_server::execute_client_action(
             DebugLog(DL::Info, DC::Main) << "[coop] FIRE from proxy: no target context";
         }
     } else if (key == "PAUSE" || key == "WAIT") {
+        proxy->moves -= proxy->get_speed();
+    } else if (key == "PICKUP") {
+        // Phase 9: pickup is avatar-centric (g->u); proxy-targeted pickup
+        // requires item::pickup_target on an npc — deferred to Ph9 implementation.
+        // Deduct moves so the client's action is consumed.
+        proxy->moves -= proxy->get_speed();
+        DebugLog(DL::Info, DC::Main) << "[coop] PICKUP from proxy: NPC pickup deferred";
+    } else if (key == "MOVE_UP" || key == "MOVE_DOWN") {
+        // Phase 10: vertical_move() acts on host avatar (g->u), not proxy.
+        // True proxy vertical move needs NPC stair navigation — deferred.
+        // Deduct moves to consume the queued action.
+        proxy->moves -= proxy->get_speed();
+        DebugLog(DL::Info, DC::Main) << "[coop] " << key << " from proxy: deferred";
+    } else if (key == "SLEEP" || key == "CRAFT") {
+        // Phase 11: activity relay — deduct moves; NPC activity set elsewhere
         proxy->moves -= proxy->get_speed();
     } else {
         DebugLog(DL::Debug, DC::Main) << "[coop] execute_client_action: unimplemented key=" << key;
