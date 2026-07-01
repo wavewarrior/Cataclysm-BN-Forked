@@ -474,6 +474,24 @@ void veh_interact::do_main_loop() {
         calc_overview();
         ui_manager::redraw();
         const std::string action = main_context.handle_input();
+#ifdef COOP_ENABLED
+        if (coop_fiber::active()) {
+            // Confirm the stored veh* still exists in the live vehicle set.
+            // Do NOT re-derive from u.bub_pos() — veh_interact can operate on
+            // an adjacent vehicle the player isn't standing on.
+            bool still_there = false;
+            for (const wrapped_vehicle& wv : g->m.get_vehicles()) {
+                if (wv.v == veh) {
+                    still_there = true;
+                    break;
+                }
+            }
+            if (!still_there) {
+                finish = true;
+                break;
+            }
+        }
+#endif
         msg.reset();
         if (const std::optional<tripoint_rel_ms> vec = main_context.get_direction(action)) {
             const point_rel_veh vehicle_delta = vec->xy().rotate(1).reinterpret_as<point_rel_veh>();
@@ -1051,6 +1069,18 @@ void veh_interact::do_install() {
         ui_manager::redraw();
 
         const std::string action = main_context.handle_input();
+#ifdef COOP_ENABLED
+        if (coop_fiber::active()) {
+            bool still_there = false;
+            for (const wrapped_vehicle& wv : g->m.get_vehicles()) {
+                if (wv.v == veh) {
+                    still_there = true;
+                    break;
+                }
+            }
+            if (!still_there) { return; }
+        }
+#endif
         msg.reset();
         if (action == "FILTER") {
             string_input_popup()
@@ -1242,6 +1272,18 @@ void veh_interact::do_repair() {
         ui_manager::redraw();
 
         const std::string action = main_context.handle_input();
+#ifdef COOP_ENABLED
+        if (coop_fiber::active()) {
+            bool still_there = false;
+            for (const wrapped_vehicle& wv : g->m.get_vehicles()) {
+                if (wv.v == veh) {
+                    still_there = true;
+                    break;
+                }
+            }
+            if (!still_there) { return; }
+        }
+#endif
         msg.reset();
         if ((action == "REPAIR" || action == "CONFIRM") && ok) {
             reason = cant_do('r');
@@ -1499,6 +1541,18 @@ void veh_interact::overview(const overview_enable_t& enable, const overview_acti
         ui_manager::redraw();
 
         const std::string input = main_context.handle_input();
+#ifdef COOP_ENABLED
+        if (coop_fiber::active()) {
+            bool still_there = false;
+            for (const wrapped_vehicle& wv : g->m.get_vehicles()) {
+                if (wv.v == veh) {
+                    still_there = true;
+                    break;
+                }
+            }
+            if (!still_there) { break; }
+        }
+#endif
         msg.reset();
         if (input == "CONFIRM" && overview_opts[overview_pos].hotkey && overview_action) {
             overview_action(*overview_opts[overview_pos].part);
@@ -1710,6 +1764,18 @@ void veh_interact::do_remove() {
 
         // read input
         const std::string action = main_context.handle_input();
+#ifdef COOP_ENABLED
+        if (coop_fiber::active()) {
+            bool still_there = false;
+            for (const wrapped_vehicle& wv : g->m.get_vehicles()) {
+                if (wv.v == veh) {
+                    still_there = true;
+                    break;
+                }
+            }
+            if (!still_there) { return; }
+        }
+#endif
         msg.reset();
         if (can_remove && (action == "REMOVE" || action == "CONFIRM")) {
             switch (reason) {
