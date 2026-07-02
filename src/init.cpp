@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iterator>
 #include <memory>
+#include <queue>
 #include <set>
 #include <sstream> // for throwing errors
 #include <stdexcept>
@@ -215,6 +216,8 @@ void DynamicDataLoader::sort_deferred( deferred_json &data, std::string_view id_
     const auto id_field_str = std::string( id_field );
     auto metas = std::vector<entry_meta>( data.size() );
 
+    // Pre-pass: extract self_id and copy_from from each entry's JSON.
+    // Re-uses get_cached_stream (stream is either cached or file-read once).
     for( size_t i = 0; i < data.size(); ++i ) {
         if( !data[i].first.path ) {
             continue;
@@ -239,6 +242,7 @@ void DynamicDataLoader::sort_deferred( deferred_json &data, std::string_view id_
         }
     }
 
+    // Build id→index map. Last writer wins for duplicate ids (mod override).
     auto id_to_idx = std::unordered_map<std::string, size_t>{};
     id_to_idx.reserve( data.size() );
     for( size_t i = 0; i < data.size(); ++i ) {
@@ -247,6 +251,7 @@ void DynamicDataLoader::sort_deferred( deferred_json &data, std::string_view id_
         }
     }
 
+    // Build adjacency list and in-degree array for topological sort.
     auto adj = std::vector<std::vector<size_t>>( data.size() );
     auto in_deg = std::vector<size_t>( data.size(), 0 );
     for( size_t i = 0; i < data.size(); ++i ) {
@@ -257,9 +262,13 @@ void DynamicDataLoader::sort_deferred( deferred_json &data, std::string_view id_
                 adj[parent].push_back( i );
                 ++in_deg[i];
             }
+            // else: copy-from target already loaded (not in deferred) — treat as root.
         }
     }
 
+    // Kahn's algorithm with min-heap: independent entries are processed in
+    // ascending original-index order, preserving mod override semantics for
+    // duplicate-id entries.
     auto pq = std::priority_queue<size_t, std::vector<size_t>, std::greater<size_t>>{};
     auto sorted_order = std::vector<size_t>{};
     sorted_order.reserve( data.size() );
@@ -278,12 +287,15 @@ void DynamicDataLoader::sort_deferred( deferred_json &data, std::string_view id_
             }
         }
     }
+    // Circular entries: append in ascending original-index order.
+    // load_deferred's existing circular-dep error path handles them.
     for( size_t i = 0; i < data.size(); ++i ) {
         if( in_deg[i] > 0 ) {
             sorted_order.push_back( i );
         }
     }
 
+    // Reorder data in-place.
     auto sorted = deferred_json{};
     sorted.reserve( data.size() );
     for( const auto i : sorted_order ) {
