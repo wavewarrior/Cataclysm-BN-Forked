@@ -746,22 +746,59 @@ foreach (_rml_tgt rmlui_core rmlui_debugger)
         endif ()
     endif ()
 endforeach ()
+# --- Box2D physics (vehicle VV collision torque and multi-target) ---
+option(BOX2D "Enable Box2D physics for vehicle VV collision" OFF)
+if (BOX2D)
+    set(_cata_saved_build_shared "${BUILD_SHARED_LIBS}")
+    set(BUILD_SHARED_LIBS OFF)
+    set(BOX2D_SAMPLES    OFF CACHE BOOL "" FORCE)
+    set(BOX2D_UNIT_TESTS OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+        box2d
+        GIT_REPOSITORY https://github.com/erincatto/box2d.git
+        GIT_TAG        v3.0.0
+        GIT_SHALLOW    TRUE
+        EXCLUDE_FROM_ALL
+    )
+    FetchContent_MakeAvailable(box2d)
+    set(BUILD_SHARED_LIBS "${_cata_saved_build_shared}")
+    unset(_cata_saved_build_shared)
+    if (TARGET box2d)
+        if (MSVC)
+            target_compile_options(box2d PRIVATE /w)
+        else ()
+            target_compile_options(box2d PRIVATE -w)
+        endif ()
+    endif ()
+endif ()
+
 
 # --- Co-op multiplayer (SDL_net3 transport) ---
 option(COOP "Enable co-op multiplayer" OFF)
 if(COOP)
     message(STATUS "Co-op: enabled — fetching SDL3_net")
-    # SDL3_net main branch tracks SDL3; pin to a known-good commit.
-    # Bump deliberately after verifying the new commit builds on all platforms.
+    # SDL3_net pinned to release-3.2.0. Bump deliberately after verifying the new tag builds on all platforms.
+    # C3: force SDL3_net to build the correct variant (static vs shared)
+    set( _cata_sdlnet_saved_build_shared "${BUILD_SHARED_LIBS}" )
+    if( DYNAMIC_LINKING )
+        set( BUILD_SHARED_LIBS ON )
+    else()
+        set( BUILD_SHARED_LIBS OFF )
+    endif()
     FetchContent_Declare(
         SDL3_net
         GIT_REPOSITORY https://github.com/libsdl-org/SDL_net.git
-        GIT_TAG        main
+        GIT_TAG        release-3.2.0
         GIT_SHALLOW    TRUE
         EXCLUDE_FROM_ALL
     )
-    set(SDL3NET_SAMPLES OFF CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable(SDL3_net)
+    set(SDLNET_SAMPLES OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable( SDL3_net )
+    set( BUILD_SHARED_LIBS "${_cata_sdlnet_saved_build_shared}" )
+    unset( _cata_sdlnet_saved_build_shared )
+    if( DYNAMIC_LINKING )
+        install( TARGETS SDL3_net-shared DESTINATION "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}" )
+    endif()
 endif()
 
 add_subdirectory(src)
