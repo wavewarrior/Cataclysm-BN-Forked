@@ -2,11 +2,15 @@
 #ifdef COOP_ENABLED
 
 #include "coop_proto.h"
+#include "coordinates.h"
 
 #include <SDL3_net/SDL_net.h>
 #include <deque>
 #include <optional>
 #include <string>
+#include <unordered_map>
+
+class monster;
 
 /// Client-side co-op thin path.
 struct coop_client {
@@ -34,6 +38,16 @@ private:
         std::string ctx_json;
     };
     std::deque<pending_action> action_q_; // main-thread only
+
+    bool net_initialized_ = false;
+    // H5: host-assigned monster ID → local monster pointer.
+    // Stable for stationary monsters; updated on position change.
+    std::unordered_map<int, monster*> coop_monster_map_;
+
+    // Last proxy and host positions received from sync — used for reconciliation
+    // and future host-avatar rendering.  Initialized to zero; valid after first sync.
+    tripoint_abs_ms sync_proxy_apos_{};
+    tripoint_abs_ms sync_host_apos_{};
 };
 
 #endif // COOP_ENABLED

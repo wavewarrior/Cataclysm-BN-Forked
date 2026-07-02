@@ -30,6 +30,7 @@ auto coop_server::listen(uint16_t port) -> bool {
         DebugLog(DL::Error, DC::Main) << "[coop] NET_Init failed: " << SDL_GetError();
         return false;
     }
+    net_initialized_ = true;
     server_sock_ = NET_CreateServer(nullptr, port, 0);
     if (!server_sock_) {
         DebugLog(DL::Error, DC::Main) << "[coop] NET_CreateServer failed: " << SDL_GetError();
@@ -113,6 +114,12 @@ auto coop_server::spawn_proxy_npc(const tripoint_abs_ms& spawn_pos, const std::s
     -> npc* {
     shared_ptr_fast<npc> tmp = make_shared_fast<npc>();
     tmp->randomize();
+    // L7: strip randomize()'s garbage inventory/worn before hooks see the proxy NPC.
+    // inv_clear() is the public API (character.h:1275); worn.clear() is safe here
+    // because the NPC hasn't been registered with the game world yet, so
+    // location_vector tracking hasn't started for its items.
+    tmp->inv_clear();
+    tmp->worn.clear();
     if (!player_name.empty()) { tmp->name = player_name; }
     tmp->is_coop_remote = true;
     tmp->set_attitude(NPCATT_FOLLOW);
@@ -150,13 +157,29 @@ auto coop_server::update_proxy_position(npc* /*proxy*/) -> void {
 
 auto coop_server::start_receiver_thread() -> void {
     running_ = true;
-    receiver_thread_ = std::jthread([this](std::stop_token /*st*/) { receiver_loop(); });
+    receiver_thread_ = std::jthread([this](std::stop_token st) { receiver_loop(st); });
 }
 
-auto coop_server::receiver_loop() -> void {
+auto coop_server::receiver_loop(std::stop_token st) -> void {
     std::string buf;
-    while (running_) {
-        if (!coop_net::recv(client_sock_, buf, 100)) {
+    while (running_ && !st.stop_requested()) {
+        // Drain outgoing send queue first — IO thread is the sole caller of send.
+        {
+            std::deque<std::string> outgoing;
+            {
+                std::scoped_lock lk{send_mtx_};
+                outgoing.swap(send_q_);
+            }
+            for (const auto& frame : outgoing) { coop_net::send(client_sock_, frame); }
+        }
+
+        // Non-blocking check: skip recv if nothing is waiting.
+        if (!coop_net::poll(client_sock_)) {
+            SDL_Delay(1);
+            continue;
+        }
+
+        if (!coop_net::recv(client_sock_, buf, 5000)) {
             if (running_) {
                 DebugLog(DL::Info, DC::Main) << "[coop] receiver: client disconnected";
             }
@@ -178,8 +201,17 @@ auto coop_server::receiver_loop() -> void {
             } else if (t == coop_pkt::chat) {
                 JsonObject d = pkt.get_object("d");
                 d.allow_omitted_members();
+                std::string text = d.get_string("text", "");
+                if (text.size() > 512) { text = text.substr(0, 512); }
                 std::scoped_lock lk{chat_mtx_};
-                chat_q_.push_back({d.get_string("text", "")});
+                if (chat_q_.size() >= 64) { chat_q_.pop_front(); }
+                chat_q_.push_back({std::move(text)});
+            } else if (t == coop_pkt::client_status) {
+                // Client reports its own idle state (sleeping/long activity) so
+                // both_idle() doesn't have to guess from the stubbed proxy state.
+                JsonObject d = pkt.get_object("d");
+                d.allow_omitted_members();
+                client_is_idle_.store(d.get_bool("idle", false));
             } else if (t == coop_pkt::disconnect) {
                 DebugLog(DL::Info, DC::Main) << "[coop] receiver: client sent disconnect";
                 running_ = false;
@@ -195,6 +227,7 @@ auto coop_server::receiver_loop() -> void {
 
 auto coop_server::push_action(action_entry e) -> void {
     std::scoped_lock lk{action_mtx_};
+    if (action_q_.size() >= 32) { action_q_.pop_front(); }
     action_q_.push_back(std::move(e));
 }
 
@@ -217,44 +250,43 @@ auto coop_server::try_pop_chat() -> std::optional<chat_entry> {
 auto coop_server::coop_world_tick() -> void {
     if (!coop_session::get().is_host() || !running_) { return; }
 
-    // 1. Drain one client action and execute on proxy NPC
-    auto act = try_pop_action();
-    npc* proxy = g->critter_by_id<npc>(coop_session::get().proxy_npc_id);
-    if (proxy && act) { execute_client_action(proxy, act->key, act->ctx_json); }
-
-    // 2. Update proxy bubble position (stub until Phase 3.5)
-    if (proxy) { update_proxy_position(proxy); }
-
-    // 3. World simulation
+    // 1. World simulation first — process_turn() inside post_action_world_step()
+    //    grants the proxy its move budget via mod_moves(get_speed()).
+    //    npcmove() skips AI for is_coop_remote without zeroing moves, so the
+    //    proxy exits the sim with fresh moves ready to consume below.
     g->post_action_world_step();
 
-    // 4. Build and send sync (stub until Phase 5+)
+    // 2. Drain client actions NOW — proxy has valid moves from process_turn().
+    npc* proxy = g->critter_by_id<npc>(coop_session::get().proxy_npc_id);
+    while (proxy && proxy->moves > 0) {
+        const auto act = try_pop_action();
+        if (!act) { break; }
+        execute_client_action(proxy, act->key, act->ctx_json);
+    }
+    // Explicit consume: prevent residual moves carrying into next tick's sim.
+    if (proxy) { proxy->set_moves(0); }
+
+    // 3. Build and send sync (tiles only when host submap changes; always sends
+    //    monsters + turn + proxy position).
     build_and_send_sync();
 
-    // 5. Drain chat messages
-    if (auto msg = try_pop_chat()) { add_msg(m_info, "[partner]: %s", msg->text); }
+    // 4. Drain ALL pending chat messages — not just one per tick.
+    while (auto msg = try_pop_chat()) { add_msg(m_info, "[partner]: %s", msg->text); }
 
-    // 6. Phase 4.4: fast-forward during long activities.
-    // When both players are in activities (sleep, crafting), inject extra
-    // accumulator credit so the 1 Hz accumulator fires many more times per
-    // real frame — effectively speeding up idle world time.
-    if (both_idle()) {
-        ++both_idle_streak_;
-        if (both_idle_streak_ >= 3) {
-            // Inject 50 ticks worth of credit; the MAX_CATCH_UP=3 cap in
-            // main.cpp limits actual ticks per frame so this is safe.
-            g->main_loop_accum_ms_ += 1000.0 * 50.0;
-        }
-    } else {
-        both_idle_streak_ = 0;
-    }
+    // 5. Fast-forward when both players are engaged in long activities (sleep,
+    //    craft, read, wait…).  At 1 tick/sec no streak threshold needed — react
+    //    immediately by saturating the accumulator to MAX_CATCH_UP (3 s).
+    if (both_idle()) { g->main_loop_accum_ms_ = 3000.0; }
 }
 
 auto coop_server::both_idle() const -> bool {
-    // Fast-forward trigger: both players sleeping.
-    // Full activity check deferred until activity_ptr API is confirmed.
+    // True when both host player and proxy are occupied in any long activity
+    // (sleep, craft, read, wait, etc.) — uses the activity operator bool() which
+    // is true for any non-null activity, covering every current and future type.
     const npc* proxy = g->critter_by_id<npc>(coop_session::get().proxy_npc_id);
-    return g->u.in_sleep_state() && proxy && proxy->in_sleep_state();
+    const auto host_idle = g->u.in_sleep_state() || bool(g->u.activity);
+    const auto client_idle = proxy && (proxy->in_sleep_state() || bool(proxy->activity));
+    return host_idle && client_idle;
 }
 
 auto coop_server::execute_client_action(
@@ -263,31 +295,22 @@ auto coop_server::execute_client_action(
 
     const tripoint_bub_ms cur = proxy->bub_pos();
 
-    // Move to destination, or melee-attack any monster already standing there.
-    const auto move_or_melee = [&](const tripoint_bub_ms& dest) {
-        if (const auto mon_ptr = g->critter_tracker->find(dest)) {
-            proxy->melee_attack(*mon_ptr, true);
-        } else {
-            proxy->move_to(dest);
-        }
-    };
-
     if (key == "MOVE_N" || key == "UP") {
-        move_or_melee(cur + tripoint(0, -1, 0));
+        proxy->move_to(cur + tripoint(0, -1, 0));
     } else if (key == "MOVE_S" || key == "DOWN") {
-        move_or_melee(cur + tripoint(0, 1, 0));
+        proxy->move_to(cur + tripoint(0, 1, 0));
     } else if (key == "MOVE_E" || key == "RIGHT") {
-        move_or_melee(cur + tripoint(1, 0, 0));
+        proxy->move_to(cur + tripoint(1, 0, 0));
     } else if (key == "MOVE_W" || key == "LEFT") {
-        move_or_melee(cur + tripoint(-1, 0, 0));
+        proxy->move_to(cur + tripoint(-1, 0, 0));
     } else if (key == "MOVE_NE") {
-        move_or_melee(cur + tripoint(1, -1, 0));
+        proxy->move_to(cur + tripoint(1, -1, 0));
     } else if (key == "MOVE_NW") {
-        move_or_melee(cur + tripoint(-1, -1, 0));
+        proxy->move_to(cur + tripoint(-1, -1, 0));
     } else if (key == "MOVE_SE") {
-        move_or_melee(cur + tripoint(1, 1, 0));
+        proxy->move_to(cur + tripoint(1, 1, 0));
     } else if (key == "MOVE_SW") {
-        move_or_melee(cur + tripoint(-1, 1, 0));
+        proxy->move_to(cur + tripoint(-1, 1, 0));
     } else if (key == "SMASH") {
         if (!ctx_json.empty()) {
             std::istringstream iss(ctx_json);
@@ -341,39 +364,59 @@ auto coop_server::build_and_send_sync() -> void {
     jout.member("t", static_cast<int>(coop_pkt::sync));
     jout.member("turn", to_turn<int>(calendar::turn));
 
-    // Serialize a 5×5 submap grid centred on the player.
+    // Tile resync policy: send the 5×5 submap grid when:
+    //   (a) host moved to a new submap origin (map shift), OR
+    //   (b) periodic safety net every TILE_RESYNC_INTERVAL ticks.
+    // (b) catches in-place terrain changes (smash, doors, fire, explosions,
+    //     construction) that don't shift the origin.  First-tick sentinel
+    //     last_sync_origin_ = INT_MIN guarantees an initial full sync.
+    const tripoint_abs_sm abs_sub = g->m.get_abs_sub();
+    ++sync_tick_counter_;
+    const bool origin_changed = (abs_sub != last_sync_origin_);
+    const bool periodic = (sync_tick_counter_ % TILE_RESYNC_INTERVAL == 0);
     jout.member("tiles");
     jout.start_array();
-    const tripoint_abs_sm abs_sub = g->m.get_abs_sub();
-    for (int dy = -2; dy <= 2; ++dy) {
-        for (int dx = -2; dx <= 2; ++dx) {
-            const tripoint_abs_sm sm_pos{abs_sub.x() + dx, abs_sub.y() + dy, abs_sub.z()};
-            const submap* sm = MAPBUFFER.lookup_submap(sm_pos);
-            if (!sm) { continue; }
-            jout.start_object();
-            // Standard mapbuffer format: version + coordinates array + submap members.
-            // Matches mapbuffer::deserialize_into_vec() so client can reuse the load path.
-            jout.member("version", savegame_version);
-            jout.member("coordinates");
-            jout.start_array();
-            jout.write(sm_pos.x());
-            jout.write(sm_pos.y());
-            jout.write(sm_pos.z());
-            jout.end_array();
-            sm->store(jout);
-            jout.end_object();
+    if (origin_changed || periodic) {
+        last_sync_origin_ = abs_sub;
+        for (int dy = -2; dy <= 2; ++dy) {
+            for (int dx = -2; dx <= 2; ++dx) {
+                const tripoint_abs_sm sm_pos{abs_sub.x() + dx, abs_sub.y() + dy, abs_sub.z()};
+                const submap* sm = MAPBUFFER.lookup_submap(sm_pos);
+                if (!sm) { continue; }
+                jout.start_object();
+                jout.member("version", savegame_version);
+                jout.member("coordinates");
+                jout.start_array();
+                jout.write(sm_pos.x());
+                jout.write(sm_pos.y());
+                jout.write(sm_pos.z());
+                jout.end_array();
+                sm->store(jout);
+                jout.end_object();
+            }
         }
     }
+    // Empty array on idle ticks — client skips tile processing when empty.
     jout.end_array();
 
-    // Serialize live monsters as absolute positions so the client can
-    // place them correctly regardless of its own map origin.
+    // H5: assign stable IDs to live monsters keyed by pointer (stable in creature_tracker).
+    std::unordered_set<const monster*> live_ptrs;
+    for (monster& mon : g->all_monsters()) {
+        if (!mon.is_dead()) { live_ptrs.insert(&mon); }
+    }
+    std::erase_if(monster_id_map_, [&](const auto& kv) { return !live_ptrs.contains(kv.first); });
+    for (const monster* ptr : live_ptrs) {
+        if (!monster_id_map_.contains(ptr)) { monster_id_map_.emplace(ptr, next_monster_id_++); }
+    }
+
+    // Serialize live monsters with host-assigned stable IDs.
     jout.member("monsters");
     jout.start_array();
     for (monster& mon : g->all_monsters()) {
         if (mon.is_dead()) { continue; }
         const tripoint_abs_ms apos = mon.abs_pos();
         jout.start_object();
+        jout.member("id", monster_id_map_.at(&mon));
         jout.member("type", mon.type->id.str());
         jout.member("ax", apos.x());
         jout.member("ay", apos.y());
@@ -384,25 +427,49 @@ auto coop_server::build_and_send_sync() -> void {
     }
     jout.end_array();
 
+    // Proxy canonical position — client uses this to reconcile local prediction
+    // if the two diverge beyond a threshold (e.g. blocked terrain).
+    const npc* proxy = g->critter_by_id<npc>(coop_session::get().proxy_npc_id);
+    if (proxy) {
+        const tripoint_abs_ms ppos = proxy->abs_pos();
+        jout.member("proxy_ax", ppos.x());
+        jout.member("proxy_ay", ppos.y());
+        jout.member("proxy_az", ppos.z());
+    }
+
+    // Host player position — lets client render the host's avatar location.
+    {
+        const tripoint_abs_ms hpos = g->u.abs_pos();
+        jout.member("host_ax", hpos.x());
+        jout.member("host_ay", hpos.y());
+        jout.member("host_az", hpos.z());
+    }
+
     jout.end_object();
-    coop_net::send(client_sock_, oss.str());
+    // Push onto send queue — IO thread is the sole caller of send on the socket (C5).
+    std::scoped_lock lk{send_mtx_};
+    send_q_.push_back(oss.str());
 }
 
 auto coop_server::shutdown() -> void {
-    if (!running_.exchange(false)) { return; }
+    const bool was_running = running_.exchange(false);
+    // Join first — the IO thread checks running_ and st.stop_requested() at the top of
+    // each iteration and exits quickly (no long-blocking recv under C5).
     if (receiver_thread_.joinable()) {
         receiver_thread_.request_stop();
         receiver_thread_.join();
     }
+    if (was_running && client_sock_) {
+        // Only send disconnect when we initiated the shutdown (not when the receiver
+        // already signaled it by clearing running_).
+        std::ostringstream oss;
+        JsonOut jout(oss);
+        jout.start_object();
+        jout.member("t", static_cast<int>(coop_pkt::disconnect));
+        jout.end_object();
+        coop_net::send(client_sock_, oss.str());
+    }
     if (client_sock_) {
-        {
-            std::ostringstream oss;
-            JsonOut jout(oss);
-            jout.start_object();
-            jout.member("t", static_cast<int>(coop_pkt::disconnect));
-            jout.end_object();
-            coop_net::send(client_sock_, oss.str());
-        }
         NET_DestroyStreamSocket(client_sock_);
         client_sock_ = nullptr;
     }
@@ -410,13 +477,16 @@ auto coop_server::shutdown() -> void {
         NET_DestroyServer(server_sock_);
         server_sock_ = nullptr;
     }
-    NET_Quit();
+    if (net_initialized_) {
+        NET_Quit();
+        net_initialized_ = false;
+    }
     coop_session::get().mode = coop_mode::none;
     DebugLog(DL::Info, DC::Main) << "[coop] server shutdown";
 }
 
 auto coop_server::send_chat(const std::string& text) -> void {
-    if (!client_sock_ || !running_) { return; }
+    if (!running_) { return; }
     std::ostringstream oss;
     JsonOut jout(oss);
     jout.start_object();
@@ -427,7 +497,11 @@ auto coop_server::send_chat(const std::string& text) -> void {
     jout.member("text", text);
     jout.end_object();
     jout.end_object();
-    coop_net::send(client_sock_, oss.str());
+    // Push onto send queue — IO thread is the sole caller of send on the socket (C5).
+    // Drop oldest chat frame if queue is full (M6).
+    std::scoped_lock lk{send_mtx_};
+    if (send_q_.size() >= 64) { send_q_.pop_front(); }
+    send_q_.push_back(oss.str());
 }
 
 #endif // COOP_ENABLED

@@ -2,6 +2,7 @@
 #ifdef COOP_ENABLED
 #include "coop_server.h"
 #include "coop_client.h"
+#include "coop_session.h"
 #endif
 
 #include "camera_debug.h"
@@ -6682,12 +6683,18 @@ monster *game::place_critter_around( const mtype_id &id, const tripoint_bub_ms &
         return nullptr;
     }
     const auto temp = make_shared_fast<monster>( id );
-    cata::run_hooks( "on_creature_spawn", [&]( sol::table & params ) {
-        params["creature"] = temp.get();
-    } );
-    cata::run_hooks( "on_monster_spawn", [&]( sol::table & params ) {
-        params["monster"] = temp.get();
-    } );
+#ifdef COOP_ENABLED
+    if( !coop_session::get().is_client() ) {
+#endif
+        cata::run_hooks( "on_creature_spawn", [&]( sol::table & params ) {
+            params["creature"] = temp.get();
+        } );
+        cata::run_hooks( "on_monster_spawn", [&]( sol::table & params ) {
+            params["monster"] = temp.get();
+        } );
+#ifdef COOP_ENABLED
+    }
+#endif
     return place_critter_around( temp, center, radius );
 }
 
@@ -10051,6 +10058,18 @@ void game::list_items_monsters()
         if( vmenu_tab == 0 ) {
             ret = list_items( items );
         } else if( vmenu_tab == 1 ) {
+#ifdef COOP_ENABLED
+            mons = u.get_visible_creatures( current_daylight_level( calendar::turn ) );
+            std::sort( mons.begin(), mons.end(), [&]( const Creature *lhs, const Creature *rhs ) {
+                if( !u.has_trait( trait_INATTENTIVE ) ) {
+                    const auto al = lhs->attitude_to( u );
+                    const auto ar = rhs->attitude_to( u );
+                    return al < ar || ( al == ar &&
+                        rl_dist( u.bub_pos(), lhs->bub_pos() ) < rl_dist( u.bub_pos(), rhs->bub_pos() ) );
+                }
+                return rl_dist( u.bub_pos(), lhs->bub_pos() ) < rl_dist( u.bub_pos(), rhs->bub_pos() );
+            } );
+#endif
             ret = list_monsters( mons );
         } else {
             ret = list_vehicles( vehicles ) == vehicle_menu_ret::CHANGE_TAB ?
@@ -11057,6 +11076,16 @@ game::vmenu_ret game::list_monsters( std::vector<Creature *> monster_list )
             iActive = std::clamp( iActive, 0,
                                   std::max( 0, static_cast<int>( monster_list.size() ) - 1 ) );
             cCurMon = monster_list.empty() ? nullptr : monster_list[iActive];
+            if( player_knows ) {
+                mSortCategory.clear();
+                for( int i = 0, last_attitude = -1; i < static_cast<int>( monster_list.size() ); i++ ) {
+                    const auto attitude = monster_list[i]->attitude_to( u );
+                    if( static_cast<int>( attitude ) != last_attitude ) {
+                        mSortCategory[i + mSortCategory.size()] = attitude;
+                        last_attitude = static_cast<int>( attitude );
+                    }
+                }
+            }
         }
 #endif
     } while( action != "QUIT" );
@@ -16434,6 +16463,10 @@ auto game::post_action_world_step() -> void
         process_activity();
         update_performance_bubble();
     }
+    // Reset sound overlay markers from the previous turn so stale sound
+    // indicators don't persist into the next world tick (mirrors do_turn()).
+    sounds::reset_markers();
+
     if( !soundperf ) {
         // Process NPC sound events before they move or they hear themselves talking
         for( npc &guy : all_npcs() ) {
@@ -16446,6 +16479,10 @@ auto game::post_action_world_step() -> void
         if( u.is_deaf() ) {
             sfx::do_hearing_loss();
         }
+    }
+    if( driving_view_offset.x != 0 || driving_view_offset.y != 0 ) {
+        vehicle *veh = veh_pointer_or_null( m.veh_at( u.bub_pos() ) );
+        calc_driving_offset( veh );
     }
 
     // perf probe: sim_total spans the whole post-input world+sim block; the
@@ -16633,7 +16670,9 @@ auto game::coop_game_tick() -> void
         coop_server_->coop_world_tick();
     } else if( coop_client_ ) {
         // Client thin path: send queued actions + apply incoming SYNC.
-        // Do NOT call post_action_world_step() — world state comes from host.
+        // World state (tiles, monsters) is host-authoritative — no local sim.
+        // process_turn() is called inside apply_sync() once per turn advanced;
+        // that fires it correctly during both normal play and fast-forward bursts.
         coop_client_->coop_world_tick();
     } else {
         // Single-player: direct world sim

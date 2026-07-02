@@ -779,8 +779,9 @@ void npc::move() {
         set_attitude(NPCATT_NULL);
     }
 #ifdef COOP_ENABLED
-    // Co-op proxy NPC: action was already executed by coop_server before
-    // npcmove() runs this turn — skip AI entirely.
+    // Co-op proxy NPC: process_turn() already ran (grants moves); coop_world_tick
+    // will drain those moves after post_action_world_step() returns and then
+    // explicitly zero them.  Skip AI entirely — do not touch moves here.
     if (is_coop_remote) { return; }
 #endif
     // Tier 2 macro step: distant NPCs skip full AI on non-step turns.

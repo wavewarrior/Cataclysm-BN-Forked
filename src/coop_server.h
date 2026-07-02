@@ -7,11 +7,15 @@
 #include <SDL3_net/SDL_net.h>
 #include <atomic>
 #include <deque>
+#include <limits>
 #include <mutex>
 #include <optional>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <unordered_set>
+
+class monster;
 
 class npc;
 
@@ -51,10 +55,12 @@ private:
     auto try_pop_chat() -> std::optional<chat_entry>;
     auto execute_client_action(npc* proxy, const std::string& key, const std::string& ctx_json)
         -> void;
-    auto receiver_loop() -> void;
+    auto receiver_loop(std::stop_token st) -> void;
     auto both_idle() const -> bool;
 
     NET_Server* server_sock_ = nullptr;
+    // client_sock_ is owned exclusively by the IO thread once receiver_thread_ starts.
+    // Main thread MUST NOT call send/recv on it directly — use send_q_ instead.
     NET_StreamSocket* client_sock_ = nullptr;
 
     std::atomic<bool> running_{false};
@@ -65,8 +71,34 @@ private:
     std::mutex chat_mtx_;
     std::deque<chat_entry> chat_q_;
 
+    // Outgoing frame queue: main thread pushes; IO thread drains and sends.
+    std::mutex send_mtx_;
+    std::deque<std::string> send_q_;
+
+    bool net_initialized_ = false;
+
     std::unordered_set<std::string> client_known_vehicles_;
-    int both_idle_streak_ = 0;
+    // Position-based tile dirty gate: resend tiles only when host moves to a new submap.
+    // Sentinel {INT_MIN,INT_MIN,INT_MIN} forces a full sync on first tick.
+    tripoint_abs_sm last_sync_origin_{
+        std::numeric_limits<int>::min(), std::numeric_limits<int>::min(),
+        std::numeric_limits<int>::min()};
+
+    // Set by the receiver thread when a client_status packet declares the client
+    // is sleeping or in a long activity.  Read by both_idle() on the main thread —
+    // atomic so no lock needed for this single bool.
+    std::atomic<bool> client_is_idle_{false};
+
+    // Periodic full tile resync safety net — catches in-place terrain changes
+    // (smash, doors, fire, explosions, construction) when the host is stationary
+    // and abs_sub hasn't changed.  Forced resync every TILE_RESYNC_INTERVAL ticks
+    // (30 s at 1 tick/sec) regardless of position.
+    static constexpr int TILE_RESYNC_INTERVAL = 30;
+    int sync_tick_counter_ = 0;
+
+    // H5: stable monster IDs — pointer is stable while held in creature_tracker.
+    std::unordered_map<const monster*, int> monster_id_map_;
+    int next_monster_id_ = 1;
 };
 
 #endif // COOP_ENABLED

@@ -2,6 +2,7 @@
 
 #include "coop_client.h"
 
+#include "avatar.h"
 #include "calendar.h"
 #include "coop_net.h"
 #include "coop_session.h"
@@ -20,6 +21,7 @@
 
 #include <SDL3_net/SDL_net.h>
 #include <sstream>
+#include <unordered_set>
 
 coop_client::~coop_client() { shutdown(); }
 
@@ -28,6 +30,7 @@ auto coop_client::connect(const std::string& ip, uint16_t port) -> bool {
         DebugLog(DL::Error, DC::Main) << "[coop] NET_Init failed: " << SDL_GetError();
         return false;
     }
+    net_initialized_ = true;
     NET_Address* addr = NET_ResolveHostname(ip.c_str());
     if (!addr) {
         DebugLog(DL::Error, DC::Main) << "[coop] resolve failed: " << SDL_GetError();
@@ -127,8 +130,29 @@ auto coop_client::coop_world_tick() -> void {
         }
     }
 
-    // 2. Non-blocking poll for inbound packets from the host.
-    if (coop_net::poll(socket_)) {
+    // 1b. Send client_status each tick — host uses this for both_idle() fast-forward.
+    //     Reports the client's OWN g->u state; proxy-inference is unreliable since
+    //     SLEEP/CRAFT stubs don't set proxy->activity.
+    {
+        const bool idle = g->u.in_sleep_state() || bool(g->u.activity);
+        std::ostringstream status_oss;
+        JsonOut status_jout(status_oss);
+        status_jout.start_object();
+        status_jout.member("t", static_cast<int>(coop_pkt::client_status));
+        status_jout.member("d");
+        status_jout.start_object();
+        status_jout.member("idle", idle);
+        status_jout.end_object();
+        status_jout.end_object();
+        if (!coop_net::send(socket_, status_oss.str())) {
+            DebugLog(DL::Error, DC::Main) << "[coop] coop_world_tick: status send failed";
+            handle_disconnect();
+            return;
+        }
+    }
+
+    // 2. Drain all buffered inbound packets from the host (H6).
+    while (coop_net::poll(socket_)) {
         std::string buf;
         if (!coop_net::recv(socket_, buf, 0)) {
             handle_disconnect();
@@ -167,8 +191,13 @@ auto coop_client::apply_sync(const std::string& json_buf) -> void {
     std::istringstream iss(json_buf);
     JsonIn jin(iss);
 
+    // Capture turn before parsing so we know how many turns this sync advances.
+    // During fast-forward the host may burst 2–3 turns per outer-loop cycle;
+    // each turn needs exactly one process_turn() call to keep avatar stats in sync.
+    const auto turn_before = calendar::turn;
+
     // Use raw JsonIn iteration to handle the mixed-member tile objects.
-    // The outer sync object has: "t", "turn", "tiles", "monsters".
+    // The outer sync object has: "t", "turn", "tiles", "monsters", "proxy_*", "host_*".
     jin.start_object();
     while (!jin.end_object()) {
         const std::string key = jin.get_member_name();
@@ -226,19 +255,26 @@ auto coop_client::apply_sync(const std::string& json_buf) -> void {
             g->m.invalidate_visibility_caches();
 
         } else if (key == "monsters") {
-            // Rebuild monster list from host state.
-            for (monster& critter : g->all_monsters()) { g->despawn_monster(critter); }
+            // H5: delta-update by host-assigned stable ID.
+            // Server assigns sequential IDs to monster pointers (stable in creature_tracker);
+            // client tracks host_id → local monster*.  Stationary monsters are updated in-place
+            // (no respawn, references stay valid).  Moving monsters get despawned/respawned once
+            // per move step — still far better than every-tick full respawn.
+            std::unordered_set<int> received_ids;
             jin.start_array();
             while (!jin.end_array()) {
                 jin.start_object();
+                int host_id = -1;
                 mtype_id type_id;
                 tripoint_abs_ms apos;
                 int hp = -1;
                 bool dead = false;
 
                 while (!jin.end_object()) {
-                    const std::string mk = jin.get_member_name();
-                    if (mk == "type") {
+                    const auto mk = jin.get_member_name();
+                    if (mk == "id") {
+                        host_id = jin.get_int();
+                    } else if (mk == "type") {
                         type_id = mtype_id(jin.get_string());
                     } else if (mk == "ax") {
                         apos.x() = jin.get_int();
@@ -254,15 +290,79 @@ auto coop_client::apply_sync(const std::string& json_buf) -> void {
                         jin.skip_value();
                     }
                 }
-                if (dead || type_id.is_empty()) { continue; }
+                if (dead || type_id.is_empty() || host_id < 0) { continue; }
+                received_ids.insert(host_id);
+
                 const tripoint_bub_ms bpos = g->m.abs_to_bub(apos);
-                monster* mon = g->place_critter_at(type_id, bpos);
-                if (mon && hp >= 0) { mon->set_hp(hp); }
+                const auto it = coop_monster_map_.find(host_id);
+                if (it != coop_monster_map_.end() && it->second && !it->second->is_dead()) {
+                    monster& existing = *it->second;
+                    if (existing.bub_pos() == bpos) {
+                        // Same position — update hp in-place, no respawn.
+                        if (hp >= 0) { existing.set_hp(hp); }
+                    } else {
+                        // Monster moved — despawn old, spawn at new position, update map.
+                        g->despawn_monster(existing);
+                        monster* mon = g->place_critter_at(type_id, bpos);
+                        it->second = mon;
+                        if (mon && hp >= 0) { mon->set_hp(hp); }
+                    }
+                } else {
+                    // New or stale entry — spawn and track.
+                    monster* mon = g->place_critter_at(type_id, bpos);
+                    coop_monster_map_[host_id] = mon;
+                    if (mon && hp >= 0) { mon->set_hp(hp); }
+                }
             }
+
+            // Despawn locals whose host_id was absent from the sync; remove from map.
+            std::erase_if(coop_monster_map_, [&](const auto& kv) {
+                if (received_ids.contains(kv.first)) { return false; }
+                if (kv.second && !kv.second->is_dead()) { g->despawn_monster(*kv.second); }
+                return true;
+            });
+        } else if (key == "proxy_ax") {
+            sync_proxy_apos_.x() = jin.get_int();
+        } else if (key == "proxy_ay") {
+            sync_proxy_apos_.y() = jin.get_int();
+        } else if (key == "proxy_az") {
+            sync_proxy_apos_.z() = jin.get_int();
+            // Reconcile: if our local position has drifted far from the host's
+            // canonical proxy position, teleport back.  Small drift (≤5 tiles) is
+            // acceptable — local prediction runs ahead by up to one action.
+            // Large drift means we hit a wall the proxy didn't, or vice versa.
+            const auto client_apos = g->u.abs_pos();
+            // Compute drift as raw integer deltas — avoids coordinate-type arithmetic.
+            const int dx = client_apos.x() - sync_proxy_apos_.x();
+            const int dy = client_apos.y() - sync_proxy_apos_.y();
+            const int dz = client_apos.z() - sync_proxy_apos_.z();
+            if (std::abs(dx) > 5 || std::abs(dy) > 5 || dz != 0) {
+                const tripoint_bub_ms bpos = g->m.abs_to_bub(sync_proxy_apos_);
+                g->u.setpos(bpos);
+                DebugLog(DL::Info, DC::Main)
+                    << "[coop] client reconciled position: drift=" << dx << "," << dy << "," << dz;
+            }
+        } else if (key == "host_ax") {
+            sync_host_apos_.x() = jin.get_int();
+        } else if (key == "host_ay") {
+            sync_host_apos_.y() = jin.get_int();
+        } else if (key == "host_az") {
+            sync_host_apos_.z() = jin.get_int();
         } else {
             jin.skip_value();
         }
     }
+
+    // Process turns for the delta between turn_before and the new calendar::turn.
+    // During fast-forward the host may advance N turns in one burst; without this
+    // loop the client's avatar skips N-1 process_turn() calls → wakes unrested,
+    // heals incorrectly, effects don't tick, etc.  Capped at MAX_CATCH_UP (3) to
+    // match the host's burst limit and prevent blocking the render loop.
+    const int turns_advanced =
+        std::max(0, to_turn<int>(calendar::turn) - to_turn<int>(turn_before));
+    constexpr int MAX_PROCESS_CATCH_UP = 3;
+    const int catch_up = std::min(turns_advanced, MAX_PROCESS_CATCH_UP);
+    for (int i = 0; i < catch_up; ++i) { g->u.process_turn(); }
 }
 
 auto coop_client::handle_disconnect() -> void { shutdown(); }
@@ -280,7 +380,10 @@ auto coop_client::shutdown() -> void {
         NET_DestroyStreamSocket(socket_);
         socket_ = nullptr;
     }
-    NET_Quit();
+    if (net_initialized_) {
+        NET_Quit();
+        net_initialized_ = false;
+    }
     coop_session::get().mode = coop_mode::none;
     DebugLog(DL::Info, DC::Main) << "[coop] client shutdown";
 }

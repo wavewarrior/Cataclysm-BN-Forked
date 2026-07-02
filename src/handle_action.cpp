@@ -13,6 +13,9 @@
 #include "calendar.h"
 #include "catacharset.h"
 #include "catalua.h"
+#ifdef COOP_ENABLED
+#include "coop_client.h"
+#endif
 #include "character.h"
 #include "character_display.h"
 #include "character_martial_arts.h"
@@ -2876,6 +2879,16 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
 
     int before_action_moves = u.moves;
 
+#ifdef COOP_ENABLED
+    // Client co-op: suppress vertical movement until the host proxy supports stairs.
+    // Executing locally without mirroring on the proxy causes an irrecoverable z-desync —
+    // the client descends, the proxy stays at z0, and sync sends tiles for the wrong level.
+    if (coop_client_ && (act == ACTION_MOVE_UP || act == ACTION_MOVE_DOWN)) {
+        add_msg(m_info, _("[co-op] Vertical movement not yet supported in co-op mode."));
+        return false;
+    }
+#endif // COOP_ENABLED
+
     // These actions are allowed while deathcam is active
     if (uquit == QUIT_WATCH || !u.is_dead_state()) {
         switch (act) {
@@ -2960,7 +2973,7 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                 break;
 
             case ACTION_OPEN_MOVEMENT:
-                open_movement_mode_menu();
+                modal_fiber_.emplace([this]() { open_movement_mode_menu(); });
                 break;
 
             case ACTION_MOVE_FORTH:
@@ -3286,11 +3299,11 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                 break;
 
             case ACTION_ZONES:
-                zones_manager();
+                modal_fiber_.emplace([this]() { zones_manager(); });
                 break;
 
             case ACTION_LOOT:
-                loot();
+                modal_fiber_.emplace([this]() { loot(); });
                 break;
 
             case ACTION_INVENTORY:
@@ -3298,11 +3311,11 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                 break;
 
             case ACTION_COMPARE:
-                game_menus::inv::compare(u, std::nullopt);
+                modal_fiber_.emplace([this]() { game_menus::inv::compare(u, std::nullopt); });
                 break;
 
             case ACTION_ORGANIZE:
-                game_menus::inv::swap_letters(u);
+                modal_fiber_.emplace([this]() { game_menus::inv::swap_letters(u); });
                 break;
 
             case ACTION_USE:
@@ -3371,11 +3384,34 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
             }
 
             case ACTION_FIRE:
-                modal_fiber_.emplace([this]() { fire(); });
+                modal_fiber_.emplace([this]() {
+                    // COOP: avatar_action::fire_wielded_weapon() (called by fire()) assigns
+                    // ACT_AIM to u.activity then returns immediately.  If the fiber ends
+                    // there, target_ui::run() runs later via aim_activity_actor::do_turn
+                    // inside process_activity() — outside any fiber — where
+                    // ctxt.handle_input() blocks on get_input_event() directly.
+                    //
+                    // Fix: after fire() assigns ACT_AIM, move it out of u.activity with
+                    // release() so the world-tick's process_activity() sees the null-type
+                    // activity_ptr and returns at game.cpp:2294, then drive the actor here
+                    // inside the fiber where yield_event() suspends instead of blocking.
+                    //
+                    // Exception safety: if fiber_cancelled unwinds from yield_event() during
+                    // fiber teardown, u.activity already holds the null-type placeholder from
+                    // release() — process_activity()'s early-return guard holds with no flag
+                    // to reset.  The loop also handles AIM_AFTER_FIRING: finish() may
+                    // re-assign ACT_AIM to u.activity; we pick it up in the next iteration.
+                    fire();
+                    while (u.activity && u.activity->id() == activity_id("ACT_AIM")) {
+                        auto local_act = u.activity.release(); // nulls u.activity; blocks
+                                                               // process_activity()
+                        local_act->do_turn(u); // runs target_ui::run() inside this fiber
+                    }
+                });
                 break;
 
             case ACTION_CAST_SPELL:
-                cast_spell();
+                modal_fiber_.emplace([this]() { cast_spell(); });
                 break;
 
             case ACTION_CAST_LAST_SPELL:
@@ -3631,7 +3667,7 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                 break;
 
             case ACTION_MISSIONS:
-                list_missions();
+                modal_fiber_.emplace([this]() { list_missions(); });
                 break;
 
             case ACTION_SCORES:
@@ -3681,28 +3717,30 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                 break;
 
             case ACTION_AUTOPICKUP:
-                get_auto_pickup().show();
+                modal_fiber_.emplace([this]() { get_auto_pickup().show(); });
                 break;
 
             case ACTION_AUTONOTES:
-                get_auto_notes_settings().show_gui();
+                modal_fiber_.emplace([this]() { get_auto_notes_settings().show_gui(); });
                 break;
 
             case ACTION_SAFEMODE:
-                get_safemode().show();
+                modal_fiber_.emplace([this]() { get_safemode().show(); });
                 break;
 
             case ACTION_DISTRACTION_MANAGER:
-                get_distraction_manager().show();
+                modal_fiber_.emplace([this]() { get_distraction_manager().show(); });
                 break;
 
             case ACTION_COLOR:
-                all_colors.show_gui();
+                modal_fiber_.emplace([this]() { all_colors.show_gui(); });
                 break;
 
             case ACTION_WORLD_MODS:
-                world_generator->show_active_world_mods(
-                    world_generator->active_world->info->active_mod_order);
+                modal_fiber_.emplace([this]() {
+                    world_generator->show_active_world_mods(
+                        world_generator->active_world->info->active_mod_order);
+                });
                 break;
 
             case ACTION_DEBUG:
@@ -3875,7 +3913,7 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                 break;
 
             case ACTION_ITEMACTION:
-                item_action_menu();
+                modal_fiber_.emplace([this]() { item_action_menu(); });
                 break;
 
             case ACTION_AUTOATTACK:
@@ -3886,6 +3924,55 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                 break;
         }
     }
+
+#ifdef COOP_ENABLED
+    // Client co-op: forward world-affecting actions to the host proxy.
+    // The local action already executed above for instant visual feedback
+    // (local prediction).  The host mirrors via execute_client_action().
+    if (coop_client_) {
+        // Movement: re-derive the actual delta (respects iso_rotate) so the
+        // proxy mirrors the real direction the client moved, not the raw key.
+        const bool is_move_action =
+            (act == ACTION_MOVE_FORTH || act == ACTION_MOVE_FORTH_RIGHT || act == ACTION_MOVE_RIGHT
+             || act == ACTION_MOVE_BACK_RIGHT || act == ACTION_MOVE_BACK
+             || act == ACTION_MOVE_BACK_LEFT || act == ACTION_MOVE_LEFT
+             || act == ACTION_MOVE_FORTH_LEFT);
+        if (is_move_action) {
+            const auto delta = get_delta_from_movement_action(act, iso_rotate::yes);
+            std::string_view dir;
+            if (delta == point_rel_ms{0, -1}) {
+                dir = "MOVE_N";
+            } else if (delta == point_rel_ms{1, -1}) {
+                dir = "MOVE_NE";
+            } else if (delta == point_rel_ms{1, 0}) {
+                dir = "MOVE_E";
+            } else if (delta == point_rel_ms{1, 1}) {
+                dir = "MOVE_SE";
+            } else if (delta == point_rel_ms{0, 1}) {
+                dir = "MOVE_S";
+            } else if (delta == point_rel_ms{-1, 1}) {
+                dir = "MOVE_SW";
+            } else if (delta == point_rel_ms{-1, 0}) {
+                dir = "MOVE_W";
+            } else if (delta == point_rel_ms{-1, -1}) {
+                dir = "MOVE_NW";
+            }
+            if (!dir.empty()) { coop_client_->queue_action(std::string(dir)); }
+        } else if (act == ACTION_PAUSE || act == ACTION_TIMEOUT || act == ACTION_WAIT) {
+            coop_client_->queue_action("PAUSE");
+        } else if (act == ACTION_PICKUP || act == ACTION_PICKUP_ALL || act == ACTION_PICKUP_FEET) {
+            coop_client_->queue_action("PICKUP");
+        } else if (act == ACTION_SLEEP) {
+            coop_client_->queue_action("SLEEP");
+        } else if (act == ACTION_CRAFT || act == ACTION_LONGCRAFT || act == ACTION_RECRAFT) {
+            coop_client_->queue_action("CRAFT");
+        } else if (act == ACTION_SMASH) {
+            coop_client_->queue_action("SMASH");
+        } else if (act == ACTION_FIRE || act == ACTION_FIRE_BURST) {
+            coop_client_->queue_action("FIRE");
+        }
+    }
+#endif // COOP_ENABLED
 
     if (act != ACTION_TIMEOUT) { u.mod_moves(-current_turn.moves_elapsed()); }
     gamemode->post_action(act);
