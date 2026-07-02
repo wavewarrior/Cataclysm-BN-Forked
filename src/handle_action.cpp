@@ -766,8 +766,9 @@ static void smash()
 
     if( should_pulp ) {
         // do activity forever. ACT_PULP stops itself
-        u.assign_activity( std::make_unique<player_activity>( ACT_PULP, calendar::INDEFINITELY_LONG, 0 ) );
-        u.activity->placement = here.bub_to_abs( smashp );
+        u.assign_activity( std::make_unique<player_activity>(
+                               std::make_unique<pulp_activity_actor>( here.bub_to_abs( smashp ) ) ),
+                           calendar::INDEFINITELY_LONG );
         return; // don't smash terrain if we've smashed a corpse
     }
 
@@ -1069,8 +1070,9 @@ static void wait()
         if( as_m.ret == 11 ) {
             u.assign_activity( std::make_unique<player_activity>( std::make_unique<wait_activity_actor>( wait_type::WAIT_WEATHER ) ), false );
         } else if( as_m.ret == 12 ) {
-            u.assign_activity( std::make_unique<player_activity>( ACT_WAIT_STAMINA,
-                           100 * ( to_turns<int>( time_to_wait ) ), 0 ), false );
+            auto act = std::make_unique<player_activity>( std::make_unique<wait_stamina_activity_actor>( 0 ) );
+            act->moves_left = 100 * ( to_turns<int>( time_to_wait ) );
+            u.assign_activity( std::move( act ), false );
         } else {
             u.assign_activity( std::make_unique<player_activity>( std::make_unique<wait_activity_actor>( wait_type::WAIT ) ), false );
         }

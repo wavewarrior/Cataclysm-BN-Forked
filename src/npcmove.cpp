@@ -12,6 +12,7 @@
 #include <tuple>
 
 #include "active_item_cache.h"
+#include "activity_actor_definitions.h"
 #include "activity_handlers.h"
 #include "creature_tracker.h"
 #include "bionics.h"
@@ -3545,8 +3546,9 @@ bool npc::do_pulp()
     }
     // TODO: Don't recreate the activity every time
     int old_moves = moves;
-    assign_activity( ACT_PULP, calendar::INDEFINITELY_LONG, 0 );
-    activity->placement = get_map().bub_to_abs( *pulp_location );
+    assign_activity( std::make_unique<player_activity>(
+                         std::make_unique<pulp_activity_actor>( get_map().bub_to_abs( *pulp_location ) ) ) );
+    activity->moves_left = calendar::INDEFINITELY_LONG;
     activity->do_turn( *this );
     return moves != old_moves;
 }

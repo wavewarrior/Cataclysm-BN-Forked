@@ -1888,11 +1888,11 @@ int firestarter_actor::use( player &p, item &it, bool t, const tripoint_bub_ms &
     // skill gains are handled by the activity, but stored here in the index field
     const int potential_skill_gain =
         moves_modifier + moves_cost_fast / 100.0 + 2;
-    p.assign_activity( ACT_START_FIRE, moves, potential_skill_gain,
-                       0, it.tname() );
-    p.activity->add_tool( &it );
+    p.assign_activity( std::make_unique<player_activity>(
+                           std::make_unique<start_fire_activity_actor>( &it, bub_to_abs( pos ),
+                                                                         potential_skill_gain ) ),
+                       moves );
     p.activity->values.push_back( g->natural_light_level( pos.z() ) );
-    p.activity->placement = bub_to_abs( pos );
     // charges to use are handled by the activity
     return 0;
 }
@@ -2283,9 +2283,10 @@ int enzlave_actor::use( player &p, item &it, bool t, const tripoint_bub_ms & ) c
     /** @EFFECT_FIRSTAID speeds up enzlavement */
     const int moves = difficulty * to_moves<int>( 12_seconds ) / p.get_skill_level( skill_firstaid );
 
-    p.assign_activity( ACT_MAKE_ZLAVE, moves );
-    p.activity->values.push_back( success );
-    p.activity->str_values.push_back( corpses[selected_corpse]->display_name() );
+    p.assign_activity( std::make_unique<player_activity>(
+                           std::make_unique<make_zlave_activity_actor>(
+                                   corpses[selected_corpse]->display_name(), success ) ),
+                       moves );
 
     return cost >= 0 ? cost : it.ammo_required();
 }
@@ -6200,9 +6201,9 @@ int train_skill_actor::use( player &p, item &i, bool, const tripoint_bub_ms & ) 
     p.set_value( "training_iuse_skill_fatigue", std::to_string( training_skill_fatigue ) );
     p.set_value( "training_iuse_skill_interval", std::to_string( training_skill_interval ) );
     p.set_value( "training_iuse_skill_xp_chance", std::to_string( training_skill_xp_chance ) );
-    p.assign_activity( ACT_TRAIN_SKILL, hours * 360000, -1, 0, "training" );
-    p.activity->str_values.emplace_back( i.typeId() );
-    p.activity->add_tool( &i );
+    p.assign_activity( std::make_unique<player_activity>(
+                           std::make_unique<train_activity_actor>( "training", -1 ) ),
+                       hours * 360000 );
 
     return 0;
 }

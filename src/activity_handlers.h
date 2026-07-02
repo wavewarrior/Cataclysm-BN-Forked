@@ -186,8 +186,6 @@ void perform_zone_activity_turn( player *p,
 void craft_do_turn( player_activity *act, player *p );
 void drop_do_turn( player_activity *act, player *p );
 void stash_do_turn( player_activity *act, player *p );
-void pulp_do_turn( player_activity *act, player *p );
-void start_fire_do_turn( player_activity *act, player *p );
 void train_skill_do_turn( player_activity *act, player *p );
 void multiple_chop_planks_do_turn( player_activity *act, player *p );
 void wear_do_turn( player_activity *act, player *p );
@@ -202,46 +200,28 @@ void vehicle_repair_do_turn( player_activity *act, player *p );
 void chop_trees_do_turn( player_activity *act, player *p );
 void fetch_do_turn( player_activity *act, player *p );
 void move_loot_do_turn( player_activity *act, player *p );
-void travel_do_turn( player_activity *act, player *p );
-void adv_inventory_do_turn( player_activity *act, player *p );
 void armor_layers_do_turn( player_activity *act, player *p );
-void fish_do_turn( player_activity *act, player *p );
-void cracking_do_turn( player_activity *act, player *p );
 void repair_item_do_turn( player_activity *act, player *p );
 void tidy_up_do_turn( player_activity *act, player *p );
-void try_sleep_do_turn( player_activity *act, player *p );
 void operation_do_turn( player_activity *act, player *p );
 void robot_control_do_turn( player_activity *act, player *p );
-void tree_communion_do_turn( player_activity *act, player *p );
 void spellcasting_do_turn( player_activity *act, player *p );
 void study_spell_do_turn( player_activity *act, player *p );
-void read_do_turn( player_activity *act, player *p );
-void wait_stamina_do_turn( player_activity *act, player *p );
 
 // defined in activity_handlers.cpp
 extern const std::map< activity_id, std::function<void( player_activity *, player * )> >
 do_turn_functions;
 
 /** activity_finish functions: */
-void fish_finish( player_activity *act, player *p );
 void hotwire_finish( player_activity *act, player *p );
 void longsalvage_finish( player_activity *act, player *p );
-void pulp_finish( player_activity *act, player *p );
-void make_zlave_finish( player_activity *act, player *p );
 void reload_finish( player_activity *act, player *p );
-void start_fire_finish( player_activity *act, player *p );
-void train_finish( player_activity *act, player *p );
-void milk_finish( player_activity *act, player *p );
 void vehicle_finish( player_activity *act, player *p );
 void start_engines_finish( player_activity *act, player *p );
-void cracking_finish( player_activity *act, player *p );
 void repair_item_finish( player_activity *act, player *p );
 void mend_item_finish( player_activity *act, player *p );
 void gunmod_add_finish( player_activity *act, player *p );
 void toolmod_add_finish( player_activity *act, player *p );
-void read_finish( player_activity *act, player *p );
-void wait_stamina_finish( player_activity *act, player *p );
-void try_sleep_finish( player_activity *act, player *p );
 void operation_finish( player_activity *act, player *p );
 void train_skill_finish( player_activity *act, player *p );
 void jackhammer_finish( player_activity *act, player *p );

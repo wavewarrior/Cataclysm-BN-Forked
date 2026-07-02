@@ -1,9 +1,9 @@
 # Activity → `activity_actor` Migration Plan
 
-## STATUS (reviewed 2026-07-01)
-**~65% DONE.** Actors: **58** registered (up from 21 baseline). Legacy: **~23** `do_turn`, **~27** `finish` ids remaining. 3 double-registered (`ACT_READ`, `ACT_TRY_SLEEP`, `ACT_WAIT_STAMINA`).
+## STATUS (reviewed 2026-07-02)
+**~75% DONE.** Actors: **71** registered (up from 58 after Wave 6b). Legacy: **~15** `do_turn`, **~17** `finish` ids remaining. 3 double-registered (`ACT_READ`, `ACT_TRY_SLEEP`, `ACT_WAIT_STAMINA`).
 
-### Completed (Waves 1-6a: 45 activities migrated)
+### Completed (Waves 1-6b: 58 activities migrated)
 | Wave | Actors | Activities | Notes |
 |------|--------|------------|-------|
 | ✅ 1 | 11 | BURROW, PICKAXE, JACKHAMMER, CHURN, FILL_PIT, CLEAR_RUBBLE, HAND_CRANK, PRY_NAILS, FILL_LIQUID, PLANT_SEED, FERTILIZE_PLOT, FORAGE | Legacy deleted |
@@ -12,11 +12,11 @@
 | ✅ 4 | 2 | EAT_MENU, CONSUME_FOOD_MENU, CONSUME_DRINK_MENU, CONSUME_MEDS_MENU, FIRSTAID | `consume_menu_activity_actor` + `firstaid_activity_actor` |
 | ✅ 5 | 1 | CHOP_TREE, CHOP_LOGS, CHOP_PLANKS | `wood_chop_activity_actor` |
 | ✅ 6a | 11 | GAME, GENERIC_GAME, MEDITATE, SHAVE, HAIRCUT, SOCIALIZE, ATM, VIBE, WAIT, WAIT_WEATHER, WAIT_NPC, FIND_MOUNT, SHEAR, PLAY_WITH_PET, TRAIN_PET | 11 actors (game, morale, wait, social, atm, vibe, shear, play_with_pet, train_pet, find_mount) |
+| ✅ 6b | 13 | READ, TRY_SLEEP, WAIT_STAMINA, TRAVELLING, CRACKING, START_FIRE, FISH, MILK, MAKE_ZLAVE, TREE_COMMUNION, TRAIN, PULP, ADV_INVENTORY | Legacy deleted |
 
-### Remaining (~31 activities)
+### Remaining (~18 activities)
 | Wave | Status | Activities |
 |------|--------|------------|
-| 6b — Medium | NOT STARTED | READ, TRY_SLEEP, WAIT_STAMINA, TRAVELLING, CRACKING, START_FIRE, FISH, MILK, MAKE_ZLAVE, TREE_COMMUNION, TRAIN, PULP, ADV_INVENTORY |
 | 6c — Complex | NOT STARTED | TRAIN_SKILL, OPERATION, ROBOT_CONTROL, MIND_SPLICER, STUDY_SPELL, SPELLCASTING |
 | 7 — Vehicle | NOT STARTED | VEHICLE, VEHICLE_REPAIR, VEHICLE_DECONSTRUCTION, START_ENGINES, HOTWIRE_CAR |
 | 8 — Multi/zone/NPC | NOT STARTED | MULTIPLE_*, FETCH_REQUIRED, MOVE_LOOT, TIDY_UP |

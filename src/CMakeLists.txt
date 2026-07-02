@@ -18,6 +18,23 @@ endif ()
 foreach (catalua_src IN LISTS CATALUA_BINDINGS_SOURCES)
     set_source_files_properties(${catalua_src} PROPERTIES COMPILE_OPTIONS "${CATALUA_BINDINGS_COMPILE_OPTIONS}")
 endforeach ()
+# Large template-heavy files that need /bigobj on MSVC
+if (MSVC)
+    set(BIGOBJ_FILES
+        ${CMAKE_SOURCE_DIR}/src/character.cpp
+        ${CMAKE_SOURCE_DIR}/src/game.cpp
+        ${CMAKE_SOURCE_DIR}/src/iexamine.cpp
+        ${CMAKE_SOURCE_DIR}/src/item.cpp
+        ${CMAKE_SOURCE_DIR}/src/iuse_actor.cpp
+        ${CMAKE_SOURCE_DIR}/src/mapgen.cpp
+        ${CMAKE_SOURCE_DIR}/src/monster.cpp
+        ${CMAKE_SOURCE_DIR}/src/overmap.cpp
+        ${CMAKE_SOURCE_DIR}/src/overmapbuffer.cpp
+    )
+    foreach(bigobj_file IN LISTS BIGOBJ_FILES)
+        set_source_files_properties(${bigobj_file} PROPERTIES COMPILE_OPTIONS "/bigobj")
+    endforeach()
+endif()
 
 file(GLOB_RECURSE CATACLYSM_BN_HEADERS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/*.h)
 list(FILTER CATACLYSM_BN_HEADERS EXCLUDE REGEX "/src/(lua|sol|third-party)/")

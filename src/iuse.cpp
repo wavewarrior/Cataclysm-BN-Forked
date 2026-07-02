@@ -1763,9 +1763,9 @@ int iuse::fishing_rod( player *p, item *it, bool, const tripoint_bub_ms & )
         }
     }
     p->add_msg_if_player( _( "You cast your line and wait to hook something…" ) );
-    p->assign_activity( ACT_FISH, to_moves<int>( 5_hours ), 0, 0, it->tname() );
-    p->activity->add_tool( it );
-    p->activity->placement = bub_to_abs( *found );
+    p->assign_activity( std::make_unique<player_activity>(
+                             std::make_unique<fish_activity_actor>( it, bub_to_abs( *found ) ) ),
+                        to_moves<int>( 5_hours ) );
     const auto fishable_locations = g->get_fishable_locations( 60, *found );
     p->activity->coord_set.reserve( fishable_locations.size() );
     std::ranges::transform( fishable_locations, std::inserter( p->activity->coord_set,

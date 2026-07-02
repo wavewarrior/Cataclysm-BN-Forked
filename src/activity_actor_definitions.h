@@ -1633,3 +1633,321 @@ class find_mount_activity_actor : public activity_actor
         void serialize( JsonOut & ) const override {}
         static std::unique_ptr<activity_actor> deserialize( JsonIn & );
 };
+// Wave 6b: Medium activities
+
+class adv_inventory_activity_actor : public activity_actor
+{
+    public:
+        activity_id get_type() const override {
+            return activity_id( "ACT_ADV_INVENTORY" );
+        }
+
+        void start( player_activity &, Character & ) override {}
+        void do_turn( player_activity &act, Character & ) override {
+            act.set_to_null();
+        }
+        void finish( player_activity &, Character & ) override {}
+
+        void serialize( JsonOut & ) const override {}
+        static std::unique_ptr<activity_actor> deserialize( JsonIn & );
+};
+
+class cracking_activity_actor : public activity_actor
+{
+    private:
+        tripoint_abs_ms placement;
+
+        bool can_resume_with_internal( const activity_actor &other,
+                                       const Character &/*who*/ ) const override {
+            const cracking_activity_actor &actor = static_cast<const cracking_activity_actor &>( other );
+            return actor.placement == placement;
+        }
+
+    public:
+        cracking_activity_actor() = default;
+        explicit cracking_activity_actor( const tripoint_abs_ms &place ) : placement( place ) {}
+
+        activity_id get_type() const override {
+            return activity_id( "ACT_CRACKING" );
+        }
+
+        void start( player_activity &, Character & ) override {}
+        void do_turn( player_activity &act, Character &who ) override;
+        void finish( player_activity &act, Character &who ) override;
+
+        void serialize( JsonOut &jsout ) const override;
+        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+};
+
+class wait_stamina_activity_actor : public activity_actor
+{
+    private:
+        int stamina_threshold = 0;
+
+        bool can_resume_with_internal( const activity_actor &other,
+                                       const Character &/*who*/ ) const override {
+            const wait_stamina_activity_actor &actor = static_cast<const wait_stamina_activity_actor &>( other );
+            return actor.stamina_threshold == stamina_threshold;
+        }
+
+    public:
+        wait_stamina_activity_actor() = default;
+        explicit wait_stamina_activity_actor( int threshold ) : stamina_threshold( threshold ) {}
+
+        activity_id get_type() const override {
+            return activity_id( "ACT_WAIT_STAMINA" );
+        }
+
+        void start( player_activity &, Character & ) override {}
+        void do_turn( player_activity &act, Character &who ) override;
+        void finish( player_activity &act, Character &who ) override;
+
+        void serialize( JsonOut &jsout ) const override;
+        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+};
+
+class read_activity_actor : public activity_actor
+{
+    public:
+        activity_id get_type() const override {
+            return activity_id( "ACT_READ" );
+        }
+
+        void start( player_activity &, Character & ) override {}
+        void do_turn( player_activity &act, Character &who ) override;
+        void finish( player_activity &act, Character &who ) override;
+
+        void serialize( JsonOut & ) const override {}
+        static std::unique_ptr<activity_actor> deserialize( JsonIn & );
+};
+
+class try_sleep_activity_actor : public activity_actor
+{
+    public:
+        activity_id get_type() const override {
+            return activity_id( "ACT_TRY_SLEEP" );
+        }
+
+        void start( player_activity &, Character & ) override {}
+        void do_turn( player_activity &act, Character &who ) override;
+        void finish( player_activity &, Character & ) override {}
+
+        void serialize( JsonOut & ) const override {}
+        static std::unique_ptr<activity_actor> deserialize( JsonIn & );
+};
+
+class travelling_activity_actor : public activity_actor
+{
+    public:
+        activity_id get_type() const override {
+            return activity_id( "ACT_TRAVELLING" );
+        }
+
+        void start( player_activity &, Character & ) override {}
+        void do_turn( player_activity &act, Character &who ) override;
+        void finish( player_activity &, Character & ) override {}
+
+        void serialize( JsonOut & ) const override {}
+        static std::unique_ptr<activity_actor> deserialize( JsonIn & );
+};
+
+class start_fire_activity_actor : public activity_actor
+{
+    private:
+        safe_reference<item> tool;
+        tripoint_abs_ms placement;
+        int index = 0; // skill gain
+
+        bool can_resume_with_internal( const activity_actor &other,
+                                       const Character &/*who*/ ) const override {
+            const start_fire_activity_actor &actor = static_cast<const start_fire_activity_actor &>( other );
+            return actor.placement == placement;
+        }
+
+    public:
+        start_fire_activity_actor() = default;
+        start_fire_activity_actor( const safe_reference<item> &t, const tripoint_abs_ms &place, int skill_gain )
+            : tool( t ), placement( place ), index( skill_gain ) {}
+
+        activity_id get_type() const override {
+            return activity_id( "ACT_START_FIRE" );
+        }
+
+        void start( player_activity &, Character & ) override {}
+        void do_turn( player_activity &act, Character &who ) override;
+        void finish( player_activity &act, Character &who ) override;
+
+        void serialize( JsonOut &jsout ) const override;
+        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+};
+
+class fish_activity_actor : public activity_actor
+{
+    private:
+        safe_reference<item> tool;
+        tripoint_abs_ms placement;
+
+        bool can_resume_with_internal( const activity_actor &other,
+                                       const Character &/*who*/ ) const override {
+            const fish_activity_actor &actor = static_cast<const fish_activity_actor &>( other );
+            return actor.placement == placement;
+        }
+
+    public:
+        fish_activity_actor() = default;
+        fish_activity_actor( const safe_reference<item> &t, const tripoint_abs_ms &place )
+            : tool( t ), placement( place ) {}
+
+        activity_id get_type() const override {
+            return activity_id( "ACT_FISH" );
+        }
+
+        void start( player_activity &, Character & ) override {}
+        void do_turn( player_activity &act, Character &who ) override;
+        void finish( player_activity &act, Character &who ) override;
+
+        void serialize( JsonOut &jsout ) const override;
+        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+};
+
+class milk_activity_actor : public activity_actor
+{
+    private:
+        tripoint_abs_ms coords;
+        std::string str_value; // temp_tie
+
+        bool can_resume_with_internal( const activity_actor &other,
+                                       const Character &/*who*/ ) const override {
+            const milk_activity_actor &actor = static_cast<const milk_activity_actor &>( other );
+            return actor.coords == coords;
+        }
+
+    public:
+        milk_activity_actor() = default;
+        milk_activity_actor( const tripoint_abs_ms &c, const std::string &str )
+            : coords( c ), str_value( str ) {}
+
+        activity_id get_type() const override {
+            return activity_id( "ACT_MILK" );
+        }
+
+        void start( player_activity &, Character & ) override {}
+        void do_turn( player_activity &, Character & ) override {}
+        void finish( player_activity &act, Character &who ) override;
+
+        void serialize( JsonOut &jsout ) const override;
+        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+};
+
+class make_zlave_activity_actor : public activity_actor
+{
+    private:
+        std::string str_value; // corpse display_name
+        int success = 0;
+
+        bool can_resume_with_internal( const activity_actor &other,
+                                       const Character &/*who*/ ) const override {
+            const make_zlave_activity_actor &actor = static_cast<const make_zlave_activity_actor &>( other );
+            return actor.str_value == str_value;
+        }
+
+    public:
+        make_zlave_activity_actor() = default;
+        make_zlave_activity_actor( const std::string &corpse_name, int succ )
+            : str_value( corpse_name ), success( succ ) {}
+
+        activity_id get_type() const override {
+            return activity_id( "ACT_MAKE_ZLAVE" );
+        }
+
+        void start( player_activity &, Character & ) override {}
+        void do_turn( player_activity &, Character & ) override {}
+        void finish( player_activity &act, Character &who ) override;
+
+        void serialize( JsonOut &jsout ) const override;
+        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+};
+
+class tree_communion_activity_actor : public activity_actor
+{
+    private:
+        int initial_rooting_countdown = 0;
+
+    public:
+        tree_communion_activity_actor() = default;
+        explicit tree_communion_activity_actor( int countdown ) : initial_rooting_countdown( countdown ) {}
+
+        activity_id get_type() const override {
+            return activity_id( "ACT_TREE_COMMUNION" );
+        }
+
+        void start( player_activity &act, Character & ) override {
+            act.values.push_back( initial_rooting_countdown );
+        }
+        void do_turn( player_activity &act, Character &who ) override;
+        void finish( player_activity &, Character & ) override {}
+
+        void serialize( JsonOut &jsout ) const override;
+        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+};
+
+class train_activity_actor : public activity_actor
+{
+    private:
+        std::string name; // skill/style/spell name
+        int expert_multiplier = 0;
+
+        bool can_resume_with_internal( const activity_actor &other,
+                                       const Character &/*who*/ ) const override {
+            const train_activity_actor &actor = static_cast<const train_activity_actor &>( other );
+            return actor.name == name;
+        }
+
+    public:
+        train_activity_actor() = default;
+        train_activity_actor( const std::string &n, int mult = 0 )
+            : name( n ), expert_multiplier( mult ) {}
+
+        activity_id get_type() const override {
+            return activity_id( "ACT_TRAIN" );
+        }
+
+        void start( player_activity &, Character & ) override {}
+        void do_turn( player_activity &, Character & ) override {}
+        void finish( player_activity &act, Character &who ) override;
+
+        void serialize( JsonOut &jsout ) const override;
+        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+};
+
+class pulp_activity_actor : public activity_actor
+{
+    private:
+        tripoint_abs_ms placement;
+        int num_corpses = 0;
+        std::string str_value; // auto_pulp_no_acid
+
+        bool can_resume_with_internal( const activity_actor &other,
+                                       const Character &/*who*/ ) const override {
+            const pulp_activity_actor &actor = static_cast<const pulp_activity_actor &>( other );
+            return actor.placement == placement;
+        }
+
+    public:
+        pulp_activity_actor() = default;
+        pulp_activity_actor( const tripoint_abs_ms &place, const std::string &str = std::string() )
+            : placement( place ), str_value( str ) {}
+
+        activity_id get_type() const override {
+            return activity_id( "ACT_PULP" );
+        }
+
+        void start( player_activity &act, Character & ) override {
+            act.index = num_corpses;
+        }
+        void do_turn( player_activity &act, Character &who ) override;
+        void finish( player_activity &act, Character &who ) override;
+
+        void serialize( JsonOut &jsout ) const override;
+        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+};

@@ -90,7 +90,7 @@ class player_activity
          * Create a new activity with the given actor
          */
         // player_activity( const activity_actor &actor );
-        player_activity( std::unique_ptr<activity_actor> &&actor );
+        player_activity( std::unique_ptr<activity_actor> actor );
 
         player_activity( player_activity && ) = default;
         player_activity &operator=( player_activity && ) = default;
