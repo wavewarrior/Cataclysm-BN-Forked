@@ -350,7 +350,7 @@ auto submap_load_manager::evict_omt_column( const retained_omt_key &key ) -> voi
 auto submap_load_manager::evict_oldest_retained_omts( std::size_t count ) -> void
 {
     while( count > 0 && !retained_omts_.empty() ) {
-        const auto key = retained_omts_.front();
+    const auto key = retained_omts_.front();
         retained_omts_.pop_front();
         retained_omt_index_.erase( key );
         evict_omt_column( key );
@@ -366,7 +366,7 @@ auto submap_load_manager::process_retained_omt_eviction() -> void
 
     const auto soft_cap = retained_omt_soft_cap();
     if( retained <= soft_cap ) {
-        TracyPlot( "Retained OMT Evict Budget", int64_t{ 0 } );
+    TracyPlot( "Retained OMT Evict Budget", int64_t{ 0 } );
         return;
     }
 
@@ -374,9 +374,9 @@ auto submap_load_manager::process_retained_omt_eviction() -> void
     const auto panic_cap = retained_omt_panic_cap();
     auto budget = retained_omt_base_budget();
     if( retained > panic_cap ) {
-        budget = retained - hard_cap;
-    } else {
-        if( retained > hard_cap ) {
+    budget = retained - hard_cap;
+} else {
+    if( retained > hard_cap ) {
             const auto scale = std::min( retained_omt_max_budget_scale,
                                          divide_round_up_size( retained, hard_cap ) );
             budget *= scale;
@@ -419,17 +419,17 @@ auto submap_load_manager::complete_lazy_omt_result_on_main_thread( const omt_key
         lazy_omt_load_result result ) -> lazy_omt_load_result
 {
     if( !result.generation.needs_main_thread() ) {
-        return result;
-    }
+    return result;
+}
 
-    auto &mb = MAPBUFFER_REGISTRY.get( key.first );
-    auto completed = load_lazy_omt_zlevel_data( mb, key.second, {
-        .defer_postprocess_hooks = true,
-        .use_selected_mapgen = true,
-        .selected_mapgen = result.generation.selected_mapgen,
-    } );
-    completed.dirty = completed.dirty || result.dirty;
-    return completed;
+auto &mb = MAPBUFFER_REGISTRY.get( key.first );
+auto completed = load_lazy_omt_zlevel_data( mb, key.second, {
+    .defer_postprocess_hooks = true,
+    .use_selected_mapgen = true,
+    .selected_mapgen = result.generation.selected_mapgen,
+} );
+completed.dirty = completed.dirty || result.dirty;
+return completed;
 }
 
 auto submap_load_manager::erase_lazy_omt_job( const omt_key &key ) -> void
@@ -447,7 +447,7 @@ auto submap_load_manager::apply_lazy_omt_result( const omt_key &key,
 {
     MAPBUFFER_REGISTRY.get( key.first ).drain_pending_submap_destroy();
     if( result.dirty || result.generated() ) {
-        dirty_omts_.insert( key );
+    dirty_omts_.insert( key );
     }
     return result.generated();
 }
@@ -469,7 +469,7 @@ auto submap_load_manager::finish_lazy_omt_job( const omt_key &key ) -> bool
     const auto generated = apply_lazy_omt_result( key, result );
     lazy_omt_futures_.erase( it );
     if( generated ) {
-        run_deferred_mapgen_hooks();
+    run_deferred_mapgen_hooks();
         flush_deferred_zones();
         run_deferred_autonotes();
     }
@@ -493,7 +493,7 @@ auto submap_load_manager::reap_lazy_omt_jobs() -> void
     } );
 
     if( generated ) {
-        run_deferred_mapgen_hooks();
+    run_deferred_mapgen_hooks();
         flush_deferred_zones();
         run_deferred_autonotes();
     }
@@ -504,24 +504,24 @@ auto submap_load_manager::reap_lazy_omt_jobs() -> void
 auto submap_load_manager::start_lazy_omt_job( const omt_key &key ) -> bool
 {
     if( lazy_omt_futures_.contains( key ) ) {
-        return false;
-    }
+    return false;
+}
 
-    auto &mb = MAPBUFFER_REGISTRY.get( key.first );
-    if( is_omt_zlevel_loaded( mb, key.second ) ) {
-        return false;
-    }
+auto &mb = MAPBUFFER_REGISTRY.get( key.first );
+if( is_omt_zlevel_loaded( mb, key.second ) ) {
+    return false;
+}
 
-    if( get_thread_pool().num_workers() == 0 || is_any_omt_zlevel_loaded( mb, key.second ) ) {
-        auto result = load_lazy_omt_zlevel_data( mb, key.second, {
-            .defer_postprocess_hooks = true,
-        } );
+if( get_thread_pool().num_workers() == 0 || is_any_omt_zlevel_loaded( mb, key.second ) ) {
+    auto result = load_lazy_omt_zlevel_data( mb, key.second, {
+        .defer_postprocess_hooks = true,
+    } );
         apply_lazy_omt_result( key, result );
         return true;
     }
 
     if( mapgen_has_any_direct_lua_generator() ) {
-        const auto terrain_type = get_overmapbuffer( key.first ).ter( key.second );
+    const auto terrain_type = get_overmapbuffer( key.first ).ter( key.second );
         const auto mapgen_id = terrain_type->get_mapgen_id();
         if( mapgen_id_has_direct_lua_generator( mapgen_id ) ) {
             const auto selected_mapgen = pick_mapgen_func( mapgen_id );
@@ -658,7 +658,7 @@ auto submap_load_manager::process_lazy_border_preload() -> void
     TracyPlot( "Lazy Border Z Jobs Queue", static_cast<int64_t>( queued ) );
     TracyPlot( "Lazy Border Z Jobs In-Flight", static_cast<int64_t>( lazy_omt_futures_.size() ) );
     if( queued == 0 ) {
-        TracyPlot( "Lazy Border OMT Budget", int64_t{ 0 } );
+    TracyPlot( "Lazy Border OMT Budget", int64_t{ 0 } );
         TracyPlot( "Lazy Border Z Jobs Started", int64_t{ 0 } );
         return;
     }
@@ -692,7 +692,7 @@ auto submap_load_manager::process_lazy_border_preload() -> void
     };
 
     if( lazy_omt_preload_direction_ == point_zero ) {
-        auto budget = divide_round_up_size( queued, lazy_border_steps_to_cross_omt );
+    auto budget = divide_round_up_size( queued, lazy_border_steps_to_cross_omt );
         budget = std::max( std::size_t{ 1 }, budget );
         TracyPlot( "Lazy Border OMT Deadline",
                    static_cast<int64_t>( lazy_border_steps_to_cross_omt ) );
@@ -712,7 +712,7 @@ auto submap_load_manager::process_lazy_border_preload() -> void
 
     const auto current_turn = to_turn<int>( calendar::turn );
     if( current_turn == lazy_omt_last_credit_turn_ ) {
-        TracyPlot( "Lazy Border OMT Budget", int64_t{ 0 } );
+    TracyPlot( "Lazy Border OMT Budget", int64_t{ 0 } );
         TracyPlot( "Lazy Border Z Jobs Started", int64_t{ 0 } );
         return;
     }
@@ -722,8 +722,8 @@ auto submap_load_manager::process_lazy_border_preload() -> void
                           ? turns_to_omt_edge( lazy_omt_focus_->pos, lazy_omt_preload_direction_ )
                           : lazy_border_steps_to_cross_omt;
     if( urgent == 0 ) {
-        lazy_omt_budget_credit_ = 0.0;
-        TracyPlot( "Lazy Border OMT Deadline", static_cast<int64_t>( deadline ) );
+    lazy_omt_budget_credit_ = 0.0;
+    TracyPlot( "Lazy Border OMT Deadline", static_cast<int64_t>( deadline ) );
         TracyPlot( "Lazy Border Credit x1000", int64_t{ 0 } );
         TracyPlot( "Lazy Border OMT Budget", int64_t{ 0 } );
         TracyPlot( "Lazy Border Z Jobs Started", int64_t{ 0 } );
@@ -743,7 +743,7 @@ auto submap_load_manager::process_lazy_border_preload() -> void
         return lazy_omt_priority( key ) > 0;
     } );
     if( started > 0 ) {
-        run_deferred_mapgen_hooks();
+    run_deferred_mapgen_hooks();
         flush_deferred_zones();
         run_deferred_autonotes();
     }
@@ -1036,10 +1036,10 @@ bool submap_load_manager::is_simulated( const std::string &dim_id,
                                         const tripoint_abs_sm &pos ) const
 {
     if( !is_loaded( dim_id, pos ) ) { return false; }
-    const point_abs_sm p = pos.xy();
-    bool covered_by_lazy_only = false;
-    for( const auto &[handle, req] : requests_ ) {
-        if( req.dimension_id != dim_id ) {
+const point_abs_sm p = pos.xy();
+bool covered_by_lazy_only = false;
+for( const auto &[handle, req] : requests_ ) {
+    if( req.dimension_id != dim_id ) {
             continue;
         }
         const point_abs_sm c = req.center.xy();
@@ -1054,16 +1054,16 @@ bool submap_load_manager::is_simulated( const std::string &dim_id,
         covered_by_lazy_only = true;
     }
     if( covered_by_lazy_only ) {
-        return false;
-    }
-    // No request covers this position.  Two distinct cases:
-    //   • requests_ is empty  — map was loaded directly (e.g. in tests via
-    //     map::load) without going through the request system.  Treat the
-    //     submap as simulated so items, fields, and NPCs are processed normally.
-    //   • requests_ is non-empty — the submap was loaded as a omt-alignment
-    //     overflow beyond the lazy-border zone (odd bubble size forces an extra
-    //     row/column of submaps to be resident).  It should not be simulated.
-    return requests_.empty();
+    return false;
+}
+// No request covers this position.  Two distinct cases:
+//   • requests_ is empty  — map was loaded directly (e.g. in tests via
+//     map::load) without going through the request system.  Treat the
+//     submap as simulated so items, fields, and NPCs are processed normally.
+//   • requests_ is non-empty — the submap was loaded as a omt-alignment
+//     overflow beyond the lazy-border zone (odd bubble size forces an extra
+//     row/column of submaps to be resident).  It should not be simulated.
+return requests_.empty();
 }
 
 bool submap_load_manager::is_loaded( const std::string &dim_id,

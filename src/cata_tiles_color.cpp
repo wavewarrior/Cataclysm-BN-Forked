@@ -137,7 +137,7 @@ auto cata_tiles::get_vpart_color(
     const bool use_roof )-> color_tint_pair
 {
     if( vp.has_value() ) {
-        if( use_roof ) {
+    if( use_roof ) {
             auto &veh = vp->vehicle();
             const auto part_idx = veh.roof_at_part( vp->part_index() );
             if( part_idx != -1 ) {

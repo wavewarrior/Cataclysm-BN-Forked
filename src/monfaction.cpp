@@ -127,8 +127,8 @@ mf_attitude monfaction::attitude( const mfaction_id &other ) const
         static_cast<size_t>( source_index ) < faction_attitude_table_width &&
         static_cast<size_t>( target_index ) < faction_attitude_table_width ) {
         return faction_attitude_table[static_cast<size_t>( source_index ) *
-                                                           faction_attitude_table_width +
-                                                           static_cast<size_t>( target_index )];
+                                      faction_attitude_table_width +
+                                      static_cast<size_t>( target_index )];
     }
 
     return resolve_attitude_map( *this, other );

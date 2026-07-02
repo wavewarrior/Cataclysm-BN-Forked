@@ -103,8 +103,8 @@ class advanced_inv_area
         bool can_store_in_vehicle() const {
             // disallow for non-valid vehicle locations
             if( id > AIM_DRAGGED || id < AIM_SOUTHWEST ) {
-                return false;
-            }
-            return veh != nullptr && vstor >= 0;
+            return false;
         }
+        return veh != nullptr && vstor >= 0;
+    }
 };

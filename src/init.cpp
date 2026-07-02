@@ -239,7 +239,7 @@ void DynamicDataLoader::sort_deferred( deferred_json &data, std::string_view id_
         }
     }
 
-    auto id_to_idx = std::unordered_map<std::string, size_t>{};
+    auto id_to_idx = std::unordered_map<std::string, size_t> {};
     id_to_idx.reserve( data.size() );
     for( size_t i = 0; i < data.size(); ++i ) {
         if( !metas[i].self_id.empty() ) {
@@ -260,8 +260,8 @@ void DynamicDataLoader::sort_deferred( deferred_json &data, std::string_view id_
         }
     }
 
-    auto pq = std::priority_queue<size_t, std::vector<size_t>, std::greater<size_t>>{};
-    auto sorted_order = std::vector<size_t>{};
+    auto pq = std::priority_queue<size_t, std::vector<size_t>, std::greater<size_t>> {};
+    auto sorted_order = std::vector<size_t> {};
     sorted_order.reserve( data.size() );
     for( size_t i = 0; i < data.size(); ++i ) {
         if( in_deg[i] == 0 ) {
@@ -297,7 +297,7 @@ void DynamicDataLoader::load_deferred( deferred_json &data )
     const auto td0 = std::chrono::steady_clock::now();
     on_out_of_scope record_time( [&td0]() {
         g_deferred_stats.us += std::chrono::duration_cast<std::chrono::microseconds>(
-                                    std::chrono::steady_clock::now() - td0 ).count();
+                                   std::chrono::steady_clock::now() - td0 ).count();
     } );
     while( !data.empty() ) {
         const size_t n = data.size();
@@ -1111,8 +1111,8 @@ auto init::load_main_lua_scripts( cata::lua_state &state, const std::vector<mod_
         end
     )" );
     auto range = packs | std::views::filter( []( const mod_id & mod ) { return mod.is_valid() && mod->lua_api_version; } );
-    for( const auto &mod : range ) {
-        cata::set_mod_being_loaded( state, mod );
+for( const auto &mod : range ) {
+    cata::set_mod_being_loaded( state, mod );
         cata::run_mod_main_script( state, mod );
     }
     const auto loaded = std::ranges::distance( range );

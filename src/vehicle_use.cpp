@@ -150,9 +150,9 @@ void vehicle::add_toggle_to_opts( std::vector<uilist_entry> &options,
     options.emplace_back( -1, allow, key, msg );
 
     actions.emplace_back( [ =, this ] {
-        for( const auto p : found )
-        {
-            auto &e = parts[p];
+for( const auto p : found )
+    {
+        auto &e = parts[p];
             if( e.enabled != state ) {
                 add_msg( state ? _( "Turned on %s" ) : _( "Turned off %s." ), e.name() );
                 e.enabled = state;
@@ -349,9 +349,9 @@ void vehicle::set_electronics_menu_options( std::vector<uilist_entry> &options,
                               keybind( "TOGGLE_CAMERA" ) );
         actions.emplace_back( [&] {
             if( camera_on )
-            {
-                camera_on = false;
-                add_msg( _( "Camera system disabled" ) );
+        {
+            camera_on = false;
+            add_msg( _( "Camera system disabled" ) );
             } else if( fuel_left( fuel_type_battery, true ) )
             {
                 camera_on = true;
@@ -384,9 +384,9 @@ void vehicle::control_electronics()
                                   keybind( "TOGGLE_ENGINE" ) );
             actions.emplace_back( [&] {
                 if( engine_on )
-                {
-                    engine_on = false;
-                    stop_engines();
+            {
+                engine_on = false;
+                stop_engines();
                 } else
                 {
                     start_engines();
@@ -715,16 +715,16 @@ void vehicle::use_controls( const tripoint_bub_ms &pos )
     avatar &you = get_avatar();
     const auto confirm_stop_driving = [this] {
         return !is_flying_in_air() || has_sufficient_lift( true, true ) || !has_part( VPFLAG_WING ) || query_yn(
-            _( "Really let go of controls while flying?  This will result in a crash." ) );
+        _( "Really let go of controls while flying?  This will result in a crash." ) );
     };
 
     if( remote ) {
         options.emplace_back( _( "Stop controlling" ), keybind( "RELEASE_CONTROLS" ) );
         actions.emplace_back( [&] {
             if( confirm_stop_driving() )
-            {
-                you.controlling_vehicle = false;
-                g->setremoteveh( nullptr );
+        {
+            you.controlling_vehicle = false;
+            g->setremoteveh( nullptr );
                 add_msg( _( "You stop controlling the vehicle." ) );
                 refresh();
             }
@@ -737,9 +737,9 @@ void vehicle::use_controls( const tripoint_bub_ms &pos )
             options.emplace_back( _( "Let go of controls" ), keybind( "RELEASE_CONTROLS" ) );
             actions.emplace_back( [&] {
                 if( confirm_stop_driving() )
-                {
-                    you.controlling_vehicle = false;
-                    add_msg( _( "You let go of the controls." ) );
+            {
+                you.controlling_vehicle = false;
+                add_msg( _( "You let go of the controls." ) );
                     refresh();
                 }
             } );
@@ -764,11 +764,11 @@ void vehicle::use_controls( const tripoint_bub_ms &pos )
             options.emplace_back( _( "Stop driving" ), keybind( "TOGGLE_ENGINE" ) );
             actions.emplace_back( [&] {
                 if( !confirm_stop_driving() )
-                {
-                    return;
-                } else if( engine_on && has_engine_type_not( fuel_type_muscle, true ) )
-                {
-                    add_msg( _( "You turn the engine off and let go of the controls." ) );
+            {
+                return;
+            } else if( engine_on && has_engine_type_not( fuel_type_muscle, true ) )
+            {
+                add_msg( _( "You turn the engine off and let go of the controls." ) );
                     sounds::sound( pos, 2, sounds::sound_t::movement,
                                    _( "the engine go silent" ) );
                 } else
@@ -777,8 +777,8 @@ void vehicle::use_controls( const tripoint_bub_ms &pos )
                 }
 
                 for( size_t e = 0; e < engines.size(); ++e )
-                {
-                    if( is_engine_on( e ) ) {
+            {
+                if( is_engine_on( e ) ) {
                         const vpart_info &einfo = part_info( e );
                         const std::string &engine_id = einfo.get_id().str();
                         const int noise = einfo.engine_noise_factor();
@@ -809,10 +809,10 @@ void vehicle::use_controls( const tripoint_bub_ms &pos )
                                   keybind( "TOGGLE_ENGINE" ) );
             actions.emplace_back( [&] {
                 if( engine_on )
-                {
-                    engine_on = false;
-                    sounds::sound( pos, 2, sounds::sound_t::movement,
-                                   _( "the engine go silent" ) );
+            {
+                engine_on = false;
+                sounds::sound( pos, 2, sounds::sound_t::movement,
+                               _( "the engine go silent" ) );
                     stop_engines();
                 } else
                 {
@@ -1049,7 +1049,7 @@ double vehicle::engine_cold_factor( const int e ) const
 
     int eff_temp = units::to_fahrenheit( get_weather().get_temperature( g->u.abs_pos() ) );
     if( !parts[ engines[ e ] ].faults().contains( fault_glowplug ) ) {
-        eff_temp = std::min( eff_temp, 20 );
+    eff_temp = std::min( eff_temp, 20 );
     }
 
     return 1.0 - ( std::max( 0, std::min( 30, eff_temp ) ) / 30.0 );
@@ -1058,20 +1058,20 @@ double vehicle::engine_cold_factor( const int e ) const
 int vehicle::engine_start_time( const int e ) const
 {
     if( !is_engine_on( e ) || part_info( engines[e] ).has_flag( "E_STARTS_INSTANTLY" ) ||
-        !engine_fuel_left( e ) ) {
-        return 0;
-    }
+    !engine_fuel_left( e ) ) {
+    return 0;
+}
 
-    const double dmg = parts[engines[e]].damage_percent();
+const double dmg = parts[engines[e]].damage_percent();
 
-    // non-linear range [100-1000]; f(0.0) = 100, f(0.6) = 250, f(0.8) = 500, f(0.9) = 1000
-    // diesel engines with working glow plugs always start with f = 0.6 (or better)
-    const double cold = 100 / tanh( 1 - std::min( engine_cold_factor( e ), 0.9 ) );
+// non-linear range [100-1000]; f(0.0) = 100, f(0.6) = 250, f(0.8) = 500, f(0.9) = 1000
+// diesel engines with working glow plugs always start with f = 0.6 (or better)
+const double cold = 100 / tanh( 1 - std::min( engine_cold_factor( e ), 0.9 ) );
 
-    // watts to old vhp = watts / 373
-    // divided by magic 16 = watts / 6000
-    const double watts_per_time = 6000;
-    return part_vpower_w( engines[ e ], true ) / watts_per_time + 100 * dmg + cold;
+// watts to old vhp = watts / 373
+// divided by magic 16 = watts / 6000
+const double watts_per_time = 6000;
+return part_vpower_w( engines[ e ], true ) / watts_per_time + 100 * dmg + cold;
 }
 
 bool vehicle::start_engine( const int e )
@@ -1576,7 +1576,7 @@ void vehicle::operate_scoop()
                 // Ignore it. Street sweepers are not known for their ability to harvest crops.
                 continue;
             }
-            for( item *&it : items ) {
+            for( item * &it : items ) {
                 if( it->volume() < max_pickup_volume ) {
                     that_item_there = it;
                     break;
@@ -1760,8 +1760,8 @@ void vehicle::use_harness( int part, const tripoint_bub_ms &pos )
     };
 
     const std::optional<tripoint_bub_ms> pnt_ = choose_adjacent_highlight(
-                _( "Where is the creature to harness?" ), _( "There is no creature to harness nearby." ), f,
-                false );
+            _( "Where is the creature to harness?" ), _( "There is no creature to harness nearby." ), f,
+            false );
     if( !pnt_ ) {
         add_msg( m_info, _( "Never mind." ) );
         return;
@@ -2135,9 +2135,9 @@ void vehicle::interact_with( const tripoint_bub_ms &pos, int interact_part )
             item_reload_option opt = character_funcs::select_ammo( you,  turret.base(), true );
             if( opt ) {
                 you.assign_activity( std::make_unique<player_activity>(
-                    std::make_unique<reload_activity_actor>(
-                        safe_reference<item>( turret.base() ),
-                        safe_reference<item>( *opt.ammo ), opt.qty() ) ) );
+                                         std::make_unique<reload_activity_actor>(
+                                             safe_reference<item>( turret.base() ),
+                                             safe_reference<item>( *opt.ammo ), opt.qty() ) ) );
             }
             return;
         }

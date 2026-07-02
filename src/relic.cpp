@@ -208,7 +208,7 @@ void relic::serialize( JsonOut &jsout ) const
     // in such case names read back from a save wouold no longer be properly translated.
 
     if( !passive_effects.empty() ) {
-        jsout.member( "passive_effects" );
+    jsout.member( "passive_effects" );
         jsout.start_array();
         for( const enchantment &ench : passive_effects ) {
             ench.serialize( jsout );
@@ -217,7 +217,7 @@ void relic::serialize( JsonOut &jsout ) const
     }
 
     if( !active_effects.empty() ) {
-        jsout.member( "active_effects" );
+    jsout.member( "active_effects" );
         jsout.start_array();
         for( const fake_spell &sp : active_effects ) {
             sp.serialize( jsout );
@@ -226,7 +226,7 @@ void relic::serialize( JsonOut &jsout ) const
     }
 
     if( !recharge_scheme.empty() ) {
-        jsout.member( "recharge_scheme" );
+    jsout.member( "recharge_scheme" );
         jsout.start_array();
         for( const relic_recharge &sp : recharge_scheme ) {
             sp.serialize( jsout );
@@ -263,11 +263,11 @@ std::string relic::name() const
 
 void relic::check() const
 {
-    for( const enchantment &ench : passive_effects ) {
-        ench.check();
+for( const enchantment &ench : passive_effects ) {
+    ench.check();
     }
-    for( const relic_recharge &rech : recharge_scheme ) {
-        rech.check();
+for( const relic_recharge &rech : recharge_scheme ) {
+    rech.check();
     }
 }
 

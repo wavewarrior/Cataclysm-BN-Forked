@@ -35,9 +35,9 @@ behavior_return node_t::tick( const oracle_t *subject ) const
 {
     assert( predicate );
     if( children.empty() ) {
-        return { predicate( subject ), this };
-    } else {
-        assert( strategy != nullptr );
+    return { predicate( subject ), this };
+} else {
+    assert( strategy != nullptr );
         status_t result = predicate( subject );
         if( result == running ) {
             return strategy->evaluate( subject, children );
@@ -137,7 +137,7 @@ void node_t::check() const
 {
     // Invariants
     if( children.empty() ) {
-        if( _goal.empty() ) {
+    if( _goal.empty() ) {
             debugmsg( "Behavior %s must have either children or a goal.",
                       id.str() );
         }

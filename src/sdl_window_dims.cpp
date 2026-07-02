@@ -56,7 +56,8 @@ int get_scaling_factor()
 // Window / font sizing              *
 //***********************************
 
-namespace {
+namespace
+{
 
 auto get_window_dimensions( const catacurses::window &win,
                             point pos, point size ) -> window_dimensions
@@ -117,7 +118,7 @@ window_dimensions get_window_dimensions( point pos, point size )
 auto get_sdl_window_size() -> point
 {
     return point( std::max( 1, g_display.WindowWidth / g_display.scaling_factor ),
-                  std::max( 1, g_display.WindowHeight / g_display.scaling_factor ) );
+    std::max( 1, g_display.WindowHeight / g_display.scaling_factor ) );
 }
 
 auto get_sdl_font_size() -> point

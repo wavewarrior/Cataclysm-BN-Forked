@@ -322,14 +322,14 @@ static nutrients compute_default_effective_nutrients( const item &comest,
 nutrients Character::compute_effective_nutrients( const item &comest ) const
 {
     if( !comest.is_comestible() ) {
-        return {};
-    }
+    return {};
+}
 
-    // if item has components, will derive calories from that instead.
-    const std::vector<item *> &components = comest.get_components().as_vector();
-    if( !components.empty() && !comest.has_flag( flag_NUTRIENT_OVERRIDE ) ) {
-        nutrients tally{};
-        for( const item * const &component : components ) {
+// if item has components, will derive calories from that instead.
+const std::vector<item *> &components = comest.get_components().as_vector();
+if( !components.empty() && !comest.has_flag( flag_NUTRIENT_OVERRIDE ) ) {
+    nutrients tally{};
+    for( const item * const &component : components ) {
             nutrients component_value =
                 compute_effective_nutrients( *component ) * component->charges;
             if( component->has_flag( flag_BYPRODUCT ) ) {
@@ -354,14 +354,14 @@ std::pair<nutrients, nutrients> Character::compute_nutrient_range(
     const cata::flat_set<flag_id> &extra_flags ) const
 {
     if( !comest.is_comestible() ) {
-        return {};
-    }
+    return {};
+}
 
-    const recipe &rec = *recipe_i;
-    int charges = comest.count();
-    // if item has components, will derive calories from that instead.
-    if( comest.has_flag( flag_NUTRIENT_OVERRIDE ) || !g->u.can_make( &rec, charges ) ) {
-        nutrients result = compute_default_effective_nutrients( comest, *this );
+const recipe &rec = *recipe_i;
+int charges = comest.count();
+// if item has components, will derive calories from that instead.
+if( comest.has_flag( flag_NUTRIENT_OVERRIDE ) || !g->u.can_make( &rec, charges ) ) {
+    nutrients result = compute_default_effective_nutrients( comest, *this );
         return { result, result };
     }
 
@@ -371,18 +371,18 @@ std::pair<nutrients, nutrients> Character::compute_nutrient_range(
     cata::flat_set<flag_id> our_extra_flags = extra_flags;
 
     if( rec.hot_result() || rec.dehydrate_result() ) {
-        our_extra_flags.insert( flag_COOKED );
+    our_extra_flags.insert( flag_COOKED );
     }
 
     const requirement_data requirements = rec.simple_requirements();
     const requirement_data::alter_item_comp_vector &component_requirements =
         requirements.get_components();
 
-    for( const std::vector<item_comp> &component_options : component_requirements ) {
-        nutrients this_min;
-        nutrients this_max;
-        bool first = true;
-        for( const item_comp &component_option : component_options ) {
+for( const std::vector<item_comp> &component_options : component_requirements ) {
+    nutrients this_min;
+    nutrients this_max;
+    bool first = true;
+    for( const item_comp &component_option : component_options ) {
             if( component_option.has( g->u.crafting_inventory(), rec.get_component_filter(), charges ) ) {
                 std::pair<nutrients, nutrients> component_option_range =
                     compute_nutrient_range( component_option.type, our_extra_flags );
@@ -402,14 +402,14 @@ std::pair<nutrients, nutrients> Character::compute_nutrient_range(
         tally_max += this_max;
     }
 
-    for( const std::pair<const itype_id, int> &byproduct : rec.byproducts ) {
-        item &byproduct_it = *item::spawn_temporary( byproduct.first, calendar::turn, byproduct.second );
+for( const std::pair<const itype_id, int> &byproduct : rec.byproducts ) {
+    item &byproduct_it = *item::spawn_temporary( byproduct.first, calendar::turn, byproduct.second );
         nutrients byproduct_nutr = compute_default_effective_nutrients( byproduct_it, *this );
         tally_min -= byproduct_nutr;
         tally_max -= byproduct_nutr;
     }
     if( comest.get_kcal_mult() > 1 ) {
-        tally_min.kcal *= comest.get_kcal_mult();
+    tally_min.kcal *= comest.get_kcal_mult();
         tally_max.kcal *= comest.get_kcal_mult();
     }
 
@@ -470,7 +470,7 @@ int Character::nutrition_for( const item &comest ) const
 std::pair<int, int> Character::fun_for( const item &comest ) const
 {
     if( !comest.is_comestible() ) {
-        return std::pair<int, int>( 0, 0 );
+    return std::pair<int, int>( 0, 0 );
     }
 
     // As float to avoid rounding too many times
@@ -481,7 +481,7 @@ std::pair<int, int> Character::fun_for( const item &comest ) const
     // This is specifically so that Lupines/Felines don't get the harsher
     //    morale penalties from rotting cat/dog food.
     if( ( comest.has_flag( flag_LUPINE ) && has_trait( trait_THRESH_LUPINE ) ) ||
-        ( comest.has_flag( flag_FELINE ) && has_trait( trait_THRESH_FELINE ) ) ) {
+            ( comest.has_flag( flag_FELINE ) && has_trait( trait_THRESH_FELINE ) ) ) {
         if( fun < 0 ) {
             fun = -fun / 2;
         }
@@ -490,9 +490,9 @@ std::pair<int, int> Character::fun_for( const item &comest ) const
     const float relative_rot = comest.get_relative_rot();
 
     if( relative_rot > 1.0f && !has_trait( trait_SAPROPHAGE ) && !has_trait( trait_SAPROVORE ) ) {
-        // Rotten food should be pretty disgusting.
-        // Baseline minumum is the same as eating raw meat as a normal human being.
-        fun = std::min( fun - 5, -10.0f );
+    // Rotten food should be pretty disgusting.
+    // Baseline minumum is the same as eating raw meat as a normal human being.
+    fun = std::min( fun - 5, -10.0f );
         fun_max = fun * 6;
     } else {
         // Food is less enjoyable when eaten too often.
@@ -1278,19 +1278,19 @@ bool Character::consume_effects( item &food )
 bool Character::can_feed_furnace_with( const item &it ) const
 {
     if( !it.flammable() || it.has_flag( flag_RADIOACTIVE ) || can_eat( it ).success() ) {
-        return false;
-    }
+    return false;
+}
 
-    if( !has_active_bionic( bio_furnace ) ) {
-        return false;
-    }
+if( !has_active_bionic( bio_furnace ) ) {
+    return false;
+}
 
-    // Not even one charge fits
-    if( it.charges_per_volume( furnace_max_volume ) < 1 ) {
-        return false;
-    }
+// Not even one charge fits
+if( it.charges_per_volume( furnace_max_volume ) < 1 ) {
+    return false;
+}
 
-    return !it.has_flag( flag_CORPSE );
+return !it.has_flag( flag_CORPSE );
 }
 
 bool Character::feed_furnace_with( item &it )
@@ -1390,24 +1390,24 @@ bool Character::fuel_bionic_with( item &it )
 rechargeable_cbm Character::get_cbm_rechargeable_with( const item &it ) const
 {
     if( can_feed_furnace_with( it ) ) {
-        return rechargeable_cbm::furnace;
-    }
+    return rechargeable_cbm::furnace;
+}
 
-    if( can_fuel_bionic_with( it ) ) {
-        return rechargeable_cbm::other;
-    }
+if( can_fuel_bionic_with( it ) ) {
+    return rechargeable_cbm::other;
+}
 
-    return rechargeable_cbm::none;
+return rechargeable_cbm::none;
 }
 
 int Character::get_acquirable_energy( const item &it, rechargeable_cbm cbm ) const
 {
     switch( cbm ) {
-        case rechargeable_cbm::none:
-            break;
+    case rechargeable_cbm::none:
+        break;
 
-        case rechargeable_cbm::reactor:
-            if( it.charges > 0 ) {
+    case rechargeable_cbm::reactor:
+        if( it.charges > 0 ) {
                 const auto iter = plut_charges.find( it.typeId() );
                 return iter != plut_charges.end() ? it.charges * iter->second : 0;
             }
@@ -1469,22 +1469,22 @@ bool Character::can_consume_for_bionic( const item &it ) const
 bool Character::can_consume( const item &it ) const
 {
     if( can_consume_as_is( it ) ) {
-        return true;
-    }
-    // Checking NO_RELOAD to prevent consumption of `battery` when contained in `battery_car` (#20012)
-    return !it.is_container_empty() && !it.has_flag( flag_NO_RELOAD ) &&
-           can_consume_as_is( it.contents.front() );
+    return true;
+}
+// Checking NO_RELOAD to prevent consumption of `battery` when contained in `battery_car` (#20012)
+return !it.is_container_empty() && !it.has_flag( flag_NO_RELOAD ) &&
+       can_consume_as_is( it.contents.front() );
 }
 
 item &Character::get_consumable_from( item &it ) const
 {
     if( !it.is_container_empty() && can_consume_as_is( it.contents.front() ) ) {
-        return it.contents.front();
+    return it.contents.front();
     } else if( can_consume_as_is( it ) ) {
-        return it;
-    }
+    return it;
+}
 
-    return null_item_reference();
+return null_item_reference();
 }
 
 bool query_consume_ownership( item &target, avatar &you )

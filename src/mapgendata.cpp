@@ -182,8 +182,8 @@ void mapgendata::fill_groundcover() const
 
 bool mapgendata::is_groundcover( const ter_id &iid ) const
 {
-    for( const auto &pr : default_groundcover ) {
-        if( pr.obj == iid ) {
+for( const auto &pr : default_groundcover ) {
+    if( pr.obj == iid ) {
             return true;
         }
     }
@@ -201,8 +201,8 @@ const oter_id &mapgendata::neighbor_at( om_direction::type dir ) const
 {
     // TODO: De-uglify, implement proper conversion somewhere
     switch( dir ) {
-        case om_direction::type::north:
-            return north();
+    case om_direction::type::north:
+        return north();
         case om_direction::type::east:
             return east();
         case om_direction::type::south:
@@ -227,8 +227,8 @@ const oter_id &mapgendata::neighbor_at( direction dir ) const
 {
     // TODO: De-uglify, implement proper conversion somewhere
     switch( dir ) {
-        case direction::NORTH:
-            return north();
+    case direction::NORTH:
+        return north();
         case direction::EAST:
             return east();
         case direction::SOUTH:

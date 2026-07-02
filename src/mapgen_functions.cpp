@@ -2231,7 +2231,7 @@ void mapgen_forest( mapgendata &dat )
     static constexpr int margin_y = SEEY * 2 / 3;
 
     const auto get_blended_feature = [&no_ter_furn, &max_factor, &factor,
-                  &get_feature_for_neighbor, &dat]( const point_bub_ms & p ) {
+    &get_feature_for_neighbor, &dat]( const point_bub_ms & p ) {
         // Pick one random feature from each biome according to the biome defs and save it into a lookup.
         // We'll blend these features together below based on the current and adjacent terrains.
         std::map<oter_id, ter_furn_id> biome_features;
@@ -2372,7 +2372,7 @@ void mapgen_forest( mapgendata &dat )
     const auto set_terrain_dependent_furniture = [&current_biome_def, &m]( const ter_id & tid,
     point_bub_ms  p ) {
         const auto terrain_dependent_furniture_it = current_biome_def.terrain_dependent_furniture.find(
-                    tid );
+                tid );
         if( terrain_dependent_furniture_it == current_biome_def.terrain_dependent_furniture.end() ) {
             // No terrain dependent furnitures for this terrain, so bail.
             return;
@@ -2960,7 +2960,7 @@ void mapgen_lake_shore( mapgendata &dat )
 
     const auto fill_deep_water = [&]( const point_bub_ms & starting_point ) {
         std::vector<point_bub_ms> water_points = ff::point_flood_fill_4_connected( starting_point, visited,
-                should_fill );
+            should_fill );
         for( auto &wp : water_points ) {
             m->ter_set( wp, water_tile );
             m->furn_set( wp, f_null );

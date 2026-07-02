@@ -30,7 +30,7 @@ class Creature_tracker
         };
 
         std::unordered_map<mfaction_id, std::set<weak_ptr_fast<monster>, weak_ptr_comparator>>
-                monster_faction_map_;
+        monster_faction_map_;
 
         /**
          * Creatures that get removed via @ref remove are stored here until the end of the turn.

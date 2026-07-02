@@ -756,8 +756,8 @@ direction direction_from( const coords::coord_point<Point, Origin, Scale> &loc1,
 
 template<typename Point, coords::origin Origin, coords::scale Scale>
 std::vector<coords::coord_point<Point, Origin, Scale>>
-        line_to( const coords::coord_point<Point, Origin, Scale> &loc1,
-                 const coords::coord_point<Point, Origin, Scale> &loc2 )
+line_to( const coords::coord_point<Point, Origin, Scale> &loc1,
+         const coords::coord_point<Point, Origin, Scale> &loc2 )
 {
     std::vector<Point> raw_result = line_to( loc1.raw(), loc2.raw() );
     std::vector<coords::coord_point<Point, Origin, Scale>> result;
@@ -797,8 +797,8 @@ coords::coord_point<Point, Origin, Scale> move_along_line( const
 
 template<typename Point, coords::origin Origin, coords::scale Scale>
 std::vector<coords::coord_point<Point, Origin, Scale>>
-        continue_line( const std::vector<coords::coord_point<Point, Origin, Scale>> &line,
-                       const int distance )
+continue_line( const std::vector<coords::coord_point<Point, Origin, Scale>> &line,
+               const int distance )
 {
     return line_to( line.back(), move_along_line( line.back(), line, distance ) );
 }

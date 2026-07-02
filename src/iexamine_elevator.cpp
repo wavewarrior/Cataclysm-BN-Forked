@@ -191,8 +191,8 @@ auto move_items( const elevator::tiles &from, const elevator::tiles &dest ) -> v
 
 auto move_creatures( const elevator::tiles &from, const elevator::tiles &dest ) -> void
 {
-    for( Creature &critter : g->all_creatures() ) {
-        const auto eit = std::ranges::find( from, critter.bub_pos() );
+for( Creature &critter : g->all_creatures() ) {
+    const auto eit = std::ranges::find( from, critter.bub_pos() );
         if( eit != from.cend() ) {
             critter.setpos( dest[ std::distance( from.cbegin(), eit ) ] );
         }

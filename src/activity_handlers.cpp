@@ -353,7 +353,7 @@ static bool check_butcher_cbm( const int roll )
 }
 
 void extract_or_wreck_cbms( std::vector<detached_ptr<item>> &cbms, int roll,
-                                   player &p )
+                            player &p )
 {
     if( roll < 0 ) {
         return;
@@ -719,8 +719,8 @@ static int corpse_damage_effect( int weight, const std::string &entry_type, int 
 }
 
 void butchery_drops_harvest( item *corpse_item, const mtype &mt, player &p,
-                                    const std::function<int()> &roll_butchery, butcher_type action,
-                                    const std::function<double()> &roll_drops )
+                             const std::function<int()> &roll_butchery, butcher_type action,
+                             const std::function<double()> &roll_drops )
 {
     p.add_msg_if_player( m_neutral, mt.harvest->message() );
     int monster_weight = to_gram( mt.weight );
@@ -820,7 +820,7 @@ void butchery_drops_harvest( item *corpse_item, const mtype &mt, player &p,
                                             corpse_item->has_flag( flag_FIELD_DRESS_FAILED ) || corpse_item->has_flag( flag_QUARTERED );
         const bool already_harvested = ( corpse_item->has_flag( flag_SKINNED ) && entry.type == "skin" ) ||
                                        ( has_any_field_dressing && entry.type == "offal" ) || ( ( has_any_field_dressing ||
-                                               corpse_item->has_flag( flag_BLED ) || action != BLEED ) && entry.type == "blood" );
+                                           corpse_item->has_flag( flag_BLED ) || action != BLEED ) && entry.type == "blood" );
         if( already_harvested ) {
             roll = 0;
         }
@@ -1180,7 +1180,7 @@ void activity_handlers::make_zlave_finish( player_activity *act, player *p )
     const std::string corpse_name = act->str_values[0];
     item *body = nullptr;
 
-    for( item *&it : items ) {
+    for( item * &it : items ) {
         if( it->display_name() == corpse_name ) {
             body = it;
         }
@@ -1269,7 +1269,7 @@ void activity_handlers::pulp_do_turn( player_activity *act, player *p )
     // use this to collect how many corpse are pulped
     int &num_corpses = act->index;
     map_stack corpse_pile = here.i_at( pos );
-    for( item *&corpse : corpse_pile ) {
+    for( item * &corpse : corpse_pile ) {
         const mtype *corpse_mtype = corpse->get_mtype();
         if( !corpse->is_corpse() || ( !corpse_mtype->has_flag( MF_REVIVES ) &&
                                       !corpse_mtype->zombify_into ) ||
@@ -2053,7 +2053,7 @@ static void rod_fish( player *p,
     const std::pair<std::string, int> *caught = fishables.pick();
     if( caught->first.contains( "fish" ) ) {
         const std::vector<mtype_id> fish_group = MonsterGroupManager::GetMonstersFromGroup(
-                    mongroup_id( "GROUP_FISH" ) );
+                mongroup_id( "GROUP_FISH" ) );
         const mtype_id fish_mon = random_entry_ref( fish_group );
         here.add_item_or_charges(
             p->bub_pos(), item::make_corpse( fish_mon, calendar::turn +
@@ -2070,7 +2070,7 @@ static void rod_fish( player *p,
         }
     }
 
-    for( item *&elem : here.i_at( p->bub_pos() ) ) {
+    for( item * &elem : here.i_at( p->bub_pos() ) ) {
         if( elem->is_corpse() && !elem->has_var( "activity_var" ) ) {
             elem->set_var( "activity_var", p->name );
         }
@@ -3035,10 +3035,10 @@ static void cleanup_tiles( std::unordered_set<tripoint_abs_ms> &tiles, fn &clean
 }
 
 void activity_handlers::perform_zone_activity_turn( player *p,
-                                        const zone_type_id &ztype,
-                                        const std::function<bool( const tripoint_bub_ms & )> &tile_filter,
-                                        const std::function<void ( player &p, const tripoint_bub_ms & )> &tile_action,
-                                        const std::string &finished_msg )
+        const zone_type_id &ztype,
+        const std::function<bool( const tripoint_bub_ms & )> &tile_filter,
+        const std::function<void ( player &p, const tripoint_bub_ms & )> &tile_action,
+        const std::string &finished_msg )
 {
     const zone_manager &mgr = zone_manager::get_manager();
     map &here = get_map();
@@ -3266,8 +3266,8 @@ void activity_handlers::spellcasting_finish( player_activity *act, player *p )
         do {
             avatar &you = *p->as_avatar();
             std::vector<tripoint_bub_ms> trajectory = target_handler::mode_spell( you, spell_being_cast,
-                    no_fail,
-                    no_mana );
+                no_fail,
+                no_mana );
 
             if( !trajectory.empty() ) {
                 target = trajectory.back();
@@ -3286,7 +3286,7 @@ void activity_handlers::spellcasting_finish( player_activity *act, player *p )
         } while( !target_is_valid );
     } else if( spell_being_cast.has_flag( RANDOM_TARGET ) ) {
         const std::optional<tripoint_bub_ms> target_ = spell_being_cast.random_valid_target( *p,
-                p->bub_pos() );
+            p->bub_pos() );
         if( !target_ ) {
             p->add_msg_if_player( game_message_params{ m_bad, gmf_bypass_cooldown },
                                   _( "Your spell can't find a suitable target." ) );

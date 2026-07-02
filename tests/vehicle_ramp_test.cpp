@@ -217,8 +217,8 @@ static void ramp_transition_angled( const vproto_id &veh_id, const units::angle 
     CHECK( veh.bub_ms_location().z() - map_starting_point.z() == expected_move );
 
     const std::optional<vpart_reference> vp = here.veh_at(
-                player_character.bub_pos() ).part_with_feature(
-                VPFLAG_BOARDABLE, true );
+            player_character.bub_pos() ).part_with_feature(
+            VPFLAG_BOARDABLE, true );
     REQUIRE( vp );
     if( vp ) {
         // Regression: get_passenger() must return the correct passenger regardless

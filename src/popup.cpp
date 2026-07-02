@@ -28,7 +28,7 @@ struct query_popup::rml_session_t {
     bool has_buttons = false;
 
     Rml::DataModelHandle handle;
-    Rml::ElementDocument* doc = nullptr;
+    Rml::ElementDocument *doc = nullptr;
 };
 
 static bool g_rml_query_popup_types_registered = false;
@@ -37,162 +37,174 @@ static bool g_rml_query_popup_model_active = false;
 query_popup::~query_popup() = default;
 
 query_popup::query_popup()
-    : cur(0),
-      default_text_color(c_white),
-      anykey(false),
-      cancel(false),
-      ontop(false),
-      fullscr(false) {}
+    : cur( 0 ),
+      default_text_color( c_white ),
+      anykey( false ),
+      cancel( false ),
+      ontop( false ),
+      fullscr( false ) {}
 
-query_popup& query_popup::context(const std::string& cat) {
+query_popup &query_popup::context( const std::string& cat )
+{
     invalidate_ui();
     category = cat;
     return *this;
 }
 
-query_popup& query_popup::option(const std::string& opt) {
+query_popup &query_popup::option( const std::string& opt )
+{
     invalidate_ui();
-    options.emplace_back(opt, [](const input_event&) { return true; });
+    options.emplace_back( opt, []( const input_event & ) { return true; } );
     return *this;
 }
 
-query_popup& query_popup::option(
-    const std::string& opt, const std::function<bool(const input_event&)>& filter) {
+query_popup &query_popup::option(
+    const std::string& opt, const std::function<bool( const input_event & )> &filter )
+{
     invalidate_ui();
-    options.emplace_back(opt, filter);
+    options.emplace_back( opt, filter );
     return *this;
 }
 
-query_popup& query_popup::allow_anykey(bool allow) {
+query_popup &query_popup::allow_anykey( bool allow )
+{
     // Change does not affect cache, do not invalidate the window
     anykey = allow;
     return *this;
 }
 
-query_popup& query_popup::allow_cancel(bool allow) {
+query_popup &query_popup::allow_cancel( bool allow )
+{
     // Change does not affect cache, do not invalidate the window
     cancel = allow;
     return *this;
 }
 
-query_popup& query_popup::on_top(bool top) {
+query_popup &query_popup::on_top( bool top )
+{
     invalidate_ui();
     ontop = top;
     return *this;
 }
 
-query_popup& query_popup::full_screen(bool full) {
+query_popup &query_popup::full_screen( bool full )
+{
     invalidate_ui();
     fullscr = full;
     return *this;
 }
 
-query_popup& query_popup::cursor(size_t pos) {
+query_popup &query_popup::cursor( size_t pos )
+{
     // Change does not affect cache, do not invalidate window
     cur = pos;
     return *this;
 }
 
-query_popup& query_popup::default_color(const nc_color& d_color) {
+query_popup &query_popup::default_color( const nc_color& d_color )
+{
     default_text_color = d_color;
     return *this;
 }
 
 std::vector<std::vector<std::string>> query_popup::fold_query(
-    const std::string& category, const std::vector<query_option>& options, const int max_width,
-    const int horz_padding) {
-    input_context ctxt(category);
+    const std::string& category, const std::vector<query_option> &options, const int max_width,
+    const int horz_padding )
+{
+    input_context ctxt( category );
 
     std::vector<std::vector<std::string>> folded_query;
     folded_query.emplace_back();
 
     int query_cnt = 0;
     int query_width = 0;
-    for (const auto& opt : options) {
-        const auto& name = ctxt.get_action_name(opt.action);
-        const auto& desc = ctxt.get_desc(opt.action, name, opt.filter);
-        const int this_query_width = utf8_width(desc, true) + horz_padding;
+    for( const auto& opt : options ) {
+        const auto& name = ctxt.get_action_name( opt.action );
+        const auto& desc = ctxt.get_desc( opt.action, name, opt.filter );
+        const int this_query_width = utf8_width( desc, true ) + horz_padding;
         ++query_cnt;
         query_width += this_query_width;
-        if (query_width > max_width + horz_padding) {
-            if (query_cnt == 1) {
+        if( query_width > max_width + horz_padding ) {
+            if( query_cnt == 1 ) {
                 // Each line has at least one query, so keep this query in the current line
-                folded_query.back().emplace_back(desc);
+                folded_query.back().emplace_back( desc );
                 folded_query.emplace_back();
                 query_cnt = 0;
                 query_width = 0;
             } else {
                 // Wrap this query to the next line
                 folded_query.emplace_back();
-                folded_query.back().emplace_back(desc);
+                folded_query.back().emplace_back( desc );
                 query_cnt = 1;
                 query_width = this_query_width;
             }
         } else {
-            folded_query.back().emplace_back(desc);
+            folded_query.back().emplace_back( desc );
         }
     }
 
-    if (folded_query.back().empty()) { folded_query.pop_back(); }
+    if( folded_query.back().empty() ) { folded_query.pop_back(); }
 
     return folded_query;
 }
 
-void query_popup::invalidate_ui() const {
-    if (win) {
-        win = {};
-        folded_msg.clear();
+void query_popup::invalidate_ui() const
+{
+    if( win ) {
+    win = {};
+    folded_msg.clear();
         buttons.clear();
     }
     std::shared_ptr<ui_adaptor> ui = adaptor.lock();
-    if (ui) { ui->mark_resize(); }
+    if( ui ) { ui->mark_resize(); }
 }
 
 constexpr int border_width = 1;
 
-void query_popup::init() const {
+void query_popup::init() const
+{
     constexpr int horz_padding = 2;
     constexpr int vert_padding = 1;
     const int max_line_width = FULL_SCREEN_WIDTH - border_width * 2;
 
     // Fold message text
-    folded_msg = foldstring(text, max_line_width);
+    folded_msg = foldstring( text, max_line_width );
 
     // Fold query buttons
-    const auto& folded_query = fold_query(category, options, max_line_width, horz_padding);
+    const auto& folded_query = fold_query( category, options, max_line_width, horz_padding );
 
     // Calculate size of message part
     int msg_width = 0;
     int msg_height = folded_msg.size();
 
-    for (const auto& line : folded_msg) { msg_width = std::max(msg_width, utf8_width(line, true)); }
+    for( const auto& line : folded_msg ) { msg_width = std::max( msg_width, utf8_width( line, true ) ); }
 
     // Calculate width with query buttons
-    for (const auto& line : folded_query) {
-        if (!line.empty()) {
+    for( const auto& line : folded_query ) {
+        if( !line.empty() ) {
             int button_width = 0;
-            for (const auto& opt : line) { button_width += utf8_width(opt, true); }
+            for( const auto& opt : line ) { button_width += utf8_width( opt, true ); }
             msg_width = std::
-                max(msg_width, button_width + horz_padding * static_cast<int>(line.size() - 1));
+                        max( msg_width, button_width + horz_padding * static_cast<int>( line.size() - 1 ) );
         }
     }
-    msg_width = std::min(msg_width, max_line_width);
+    msg_width = std::min( msg_width, max_line_width );
 
     // Calculate height with query buttons & button positions
     buttons.clear();
-    if (!folded_query.empty()) {
+    if( !folded_query.empty() ) {
         msg_height += vert_padding;
-        for (const auto& line : folded_query) {
-            if (!line.empty()) {
+        for( const auto& line : folded_query ) {
+            if( !line.empty() ) {
                 int button_width = 0;
-                for (const auto& opt : line) { button_width += utf8_width(opt, true); }
+                for( const auto& opt : line ) { button_width += utf8_width( opt, true ); }
                 // Right align.
                 // TODO: multi-line buttons
                 int button_x = std::max(
-                    0, msg_width - button_width - horz_padding * static_cast<int>(line.size() - 1));
-                for (const auto& opt : line) {
-                    buttons.emplace_back(opt, point(button_x, msg_height));
-                    button_x += utf8_width(opt, true) + horz_padding;
+                                   0, msg_width - button_width - horz_padding * static_cast<int>( line.size() - 1 ) );
+                for( const auto& opt : line ) {
+                    buttons.emplace_back( opt, point( button_x, msg_height ) );
+                    button_x += utf8_width( opt, true ) + horz_padding;
                 }
                 msg_height += 1 + vert_padding;
             }
@@ -202,69 +214,72 @@ void query_popup::init() const {
 
     // Calculate window size
     const int win_width =
-        std::min(TERMX, fullscr ? FULL_SCREEN_WIDTH : msg_width + border_width * 2);
+        std::min( TERMX, fullscr ? FULL_SCREEN_WIDTH : msg_width + border_width * 2 );
     const int win_height =
-        std::min(TERMY, fullscr ? FULL_SCREEN_HEIGHT : msg_height + border_width * 2);
-    const int win_x = (TERMX - win_width) / 2;
-    const int win_y = ontop ? 0 : (TERMY - win_height) / 2;
-    win = catacurses::newwin(win_height, win_width, point(win_x, win_y));
+        std::min( TERMY, fullscr ? FULL_SCREEN_HEIGHT : msg_height + border_width * 2 );
+    const int win_x = ( TERMX - win_width ) / 2;
+    const int win_y = ontop ? 0 : ( TERMY - win_height ) / 2;
+    win = catacurses::newwin( win_height, win_width, point( win_x, win_y ) );
 
     std::shared_ptr<ui_adaptor> ui = adaptor.lock();
-    if (ui) { ui->position_from_window(win); }
+    if( ui ) { ui->position_from_window( win ); }
 }
 
-void query_popup::show() const {
-    if (!win) { init(); }
+void query_popup::show() const
+{
+    if( !win ) { init(); }
 
-    werase(win);
-    draw_border(win);
+    werase( win );
+    draw_border( win );
 
-    for (size_t line = 0; line < folded_msg.size(); ++line) {
+    for( size_t line = 0; line < folded_msg.size(); ++line ) {
         nc_color col = default_text_color;
         print_colored_text(
-            win, point(border_width, border_width + line), col, col, folded_msg[line]);
+            win, point( border_width, border_width + line ), col, col, folded_msg[line] );
     }
 
-    for (size_t ind = 0; ind < buttons.size(); ++ind) {
-        nc_color col = ind == cur ? hilite(c_white) : c_white;
+    for( size_t ind = 0; ind < buttons.size(); ++ind ) {
+        nc_color col = ind == cur ? hilite( c_white ) : c_white;
         const auto& btn = buttons[ind];
-        print_colored_text(win, btn.pos + point(border_width, border_width), col, col, btn.text);
+        print_colored_text( win, btn.pos + point( border_width, border_width ), col, col, btn.text );
     }
 
-    wnoutrefresh(win);
+    wnoutrefresh( win );
 }
 
-std::shared_ptr<ui_adaptor> query_popup::create_or_get_adaptor(bool disable_below) {
+std::shared_ptr<ui_adaptor> query_popup::create_or_get_adaptor( bool disable_below )
+{
     std::shared_ptr<ui_adaptor> ui = adaptor.lock();
-    if (!ui) {
-        if (disable_below) {
-            ui = std::make_shared<ui_adaptor>(ui_adaptor::disable_uis_below{});
+    if( !ui ) {
+        if( disable_below ) {
+            ui = std::make_shared<ui_adaptor>( ui_adaptor::disable_uis_below{} );
         } else {
             ui = std::make_shared<ui_adaptor>();
         }
         adaptor = ui;
-        ui->on_redraw([this](const ui_adaptor&) {
-            if (rml_session) {
+        ui->on_redraw( [this]( const ui_adaptor & ) {
+            if( rml_session ) {
                 rml_sync();
             } else {
                 show();
             }
-        });
-        ui->on_screen_resize([this](ui_adaptor&) { init(); });
+        } );
+        ui->on_screen_resize( [this]( ui_adaptor & ) { init(); } );
         ui->mark_resize();
     }
     return ui;
 }
 
-query_popup::result query_popup::query_once() {
-    if (!anykey && !cancel && options.empty()) { return {false, "ERROR", {}}; }
+query_popup::result query_popup::query_once()
+{
+    if( !anykey && !cancel && options.empty() ) { return {false, "ERROR", {}}; }
 
-    if (test_mode) { return {false, "ERROR", {}}; }
+    if( test_mode ) { return {false, "ERROR", {}}; }
 
     // Handle a pending RmlUi mouse-click result (set by rml_on_click) before
     // blocking for input.
-    if (rml_pending_result.has_value()) {
-        result r = std::move(*rml_pending_result);
+    if( rml_pending_result.has_value() ) {
+        result r = std::move( *rml_pending_result );
         rml_pending_result.reset();
         return r;
     }
@@ -273,20 +288,20 @@ query_popup::result query_popup::query_once() {
 
     ui_manager::redraw();
 
-    input_context ctxt(category);
-    if (cancel || !options.empty()) { ctxt.register_action("HELP_KEYBINDINGS"); }
-    if (!options.empty()) {
-        ctxt.register_action("LEFT");
-        ctxt.register_action("RIGHT");
-        ctxt.register_action("CONFIRM");
-        for (const auto& opt : options) { ctxt.register_action(opt.action); }
+    input_context ctxt( category );
+    if( cancel || !options.empty() ) { ctxt.register_action( "HELP_KEYBINDINGS" ); }
+    if( !options.empty() ) {
+        ctxt.register_action( "LEFT" );
+        ctxt.register_action( "RIGHT" );
+        ctxt.register_action( "CONFIRM" );
+        for( const auto& opt : options ) { ctxt.register_action( opt.action ); }
     }
-    if (anykey) {
-        ctxt.register_action("ANY_INPUT");
+    if( anykey ) {
+        ctxt.register_action( "ANY_INPUT" );
         // Mouse movement, button, and wheel
-        ctxt.register_action("COORDINATE");
+        ctxt.register_action( "COORDINATE" );
     }
-    if (cancel) { ctxt.register_action("QUIT"); }
+    if( cancel ) { ctxt.register_action( "QUIT" ); }
 
     result res;
     // Assign outside construction of `res` to ensure execution order
@@ -294,46 +309,46 @@ query_popup::result query_popup::query_once() {
     do {
         // When RmlUi is active, use a 16 ms timeout so the document updates on
         // mouse hover and animations stay responsive between input events.
-        res.action = rml_session ? ctxt.handle_input(16) : ctxt.handle_input();
+        res.action = rml_session ? ctxt.handle_input( 16 ) : ctxt.handle_input();
         res.evt = ctxt.get_raw_input();
-    } while (
+    } while(
         // Always ignore mouse movement
-        (res.evt.type == input_event_t::mouse && res.evt.get_first_input() == MOUSE_MOVE) ||
+        ( res.evt.type == input_event_t::mouse && res.evt.get_first_input() == MOUSE_MOVE ) ||
         // Ignore window losing focus in SDL
-        (res.evt.type == input_event_t::keyboard && res.evt.sequence.empty()));
+        ( res.evt.type == input_event_t::keyboard && res.evt.sequence.empty() ) );
 
-    if (rml_session && res.action == "TIMEOUT") {
+    if( rml_session && res.action == "TIMEOUT" ) {
         // Internal frame tick — keep looping (wait_input stays !anykey).
         return res;
     }
 
-    if (cancel && res.action == "QUIT") {
+    if( cancel && res.action == "QUIT" ) {
         res.wait_input = false;
-    } else if (res.action == "LEFT") {
-        if (cur > 0) {
+    } else if( res.action == "LEFT" ) {
+        if( cur > 0 ) {
             --cur;
         } else {
             cur = options.size() - 1;
         }
-    } else if (res.action == "RIGHT") {
-        if (cur + 1 < options.size()) {
+    } else if( res.action == "RIGHT" ) {
+        if( cur + 1 < options.size() ) {
             ++cur;
         } else {
             cur = 0;
         }
-    } else if (res.action == "CONFIRM") {
-        if (cur < options.size()) {
+    } else if( res.action == "CONFIRM" ) {
+        if( cur < options.size() ) {
             res.wait_input = false;
             res.action = options[cur].action;
         }
-    } else if (res.action == "HELP_KEYBINDINGS") {
+    } else if( res.action == "HELP_KEYBINDINGS" ) {
         // Keybindings may have changed, regenerate the UI
         init();
     } else {
-        for (size_t ind = 0; ind < options.size(); ++ind) {
-            if (res.action == options[ind].action) {
+        for( size_t ind = 0; ind < options.size(); ++ind ) {
+            if( res.action == options[ind].action ) {
                 cur = ind;
-                if (options[ind].filter(res.evt)) {
+                if( options[ind].filter( res.evt ) ) {
                     res.wait_input = false;
                     break;
                 }
@@ -344,66 +359,73 @@ query_popup::result query_popup::query_once() {
     return res;
 }
 
-query_popup::result query_popup::query() {
-    ime_sentry sentry(ime_sentry::disable);
+query_popup::result query_popup::query()
+{
+    ime_sentry sentry( ime_sentry::disable );
 
     std::shared_ptr<ui_adaptor> ui = create_or_get_adaptor();
 
     const bool use_rmlui = rml_open();
 
     result res;
-    do { res = query_once(); } while (res.wait_input);
+    do { res = query_once(); }
+    while( res.wait_input );
 
-    if (use_rmlui) { rml_close(); }
+    if( use_rmlui ) { rml_close(); }
 
     return res;
 }
 
-std::string query_popup::wait_text(const std::string& text, const nc_color& bar_color) {
+std::string query_popup::wait_text( const std::string& text, const nc_color& bar_color )
+{
     static const std::array<std::string, 4> phase_icons = {{"|", "/", "-", "\\"}};
     static size_t phase = phase_icons.size() - 1;
-    phase = (phase + 1) % phase_icons.size();
-    return string_format(" %s %s", colorize(phase_icons[phase], bar_color), text);
+    phase = ( phase + 1 ) % phase_icons.size();
+    return string_format( " %s %s", colorize( phase_icons[phase], bar_color ), text );
 }
 
-std::string query_popup::wait_text(const std::string& text) {
-    return wait_text(text, c_light_green);
+std::string query_popup::wait_text( const std::string& text )
+{
+    return wait_text( text, c_light_green );
 }
 
-query_popup::result::result(): wait_input(false), action("ERROR") {}
+query_popup::result::result(): wait_input( false ), action( "ERROR" ) {}
 
-query_popup::result::result(bool wait_input, const std::string& action, const input_event& evt)
-    : wait_input(wait_input),
-      action(action),
-      evt(evt) {}
+query_popup::result::result( bool wait_input, const std::string& action, const input_event& evt )
+    : wait_input( wait_input ),
+      action( action ),
+      evt( evt ) {}
 
 query_popup::query_option::query_option(
-    const std::string& action, const std::function<bool(const input_event&)>& filter)
-    : action(action),
-      filter(filter) {}
+    const std::string& action, const std::function<bool( const input_event & )> &filter )
+    : action( action ),
+      filter( filter ) {}
 
-query_popup::button::button(const std::string& text, point p): text(text), pos(p) {}
+query_popup::button::button( const std::string& text, point p ): text( text ), pos( p ) {}
 
-static_popup::static_popup() {
+static_popup::static_popup()
+{
     ui = create_or_get_adaptor();
     rml_open();
 }
 
 static_popup::~static_popup() { rml_close(); }
 
-throbber_popup::throbber_popup(const std::string& msg): msg(msg) {
-    on_top(true);
-    ui = create_or_get_adaptor(true);
+throbber_popup::throbber_popup( const std::string& msg ): msg( msg )
+{
+    on_top( true );
+    ui = create_or_get_adaptor( true );
     rml_open();
 }
 
 throbber_popup::~throbber_popup() { rml_close(); }
 
-void throbber_popup::refresh() {
-    static constexpr std::chrono::milliseconds update_interval(500);
+void throbber_popup::refresh()
+{
+    static constexpr std::chrono::milliseconds update_interval( 500 );
     auto now = std::chrono::steady_clock::now();
-    if (last_update + update_interval < now) {
-        wait_message("%s", msg); // re-assign the message to advance the animation
+    if( last_update + update_interval < now ) {
+        wait_message( "%s", msg ); // re-assign the message to advance the animation
         ui_manager::redraw();
         refresh_display();
         last_update = now;
@@ -413,37 +435,38 @@ void throbber_popup::refresh() {
 
 // ---- RmlUi session ----------------------------------------------------------
 
-bool query_popup::rml_open() {
-    if (!query_popup_rmlui_enabled() || !rmlui_layer::ready()) { return false; }
+bool query_popup::rml_open()
+{
+    if( !query_popup_rmlui_enabled() || !rmlui_layer::ready() ) { return false; }
     Rml::Context* ctx = rmlui_layer::context();
-    if (ctx == nullptr || g_rml_query_popup_model_active) { return false; }
-    Rml::DataModelConstructor c = ctx->CreateDataModel("query_popup");
-    if (!c) { return false; }
+    if( ctx == nullptr || g_rml_query_popup_model_active ) { return false; }
+    Rml::DataModelConstructor c = ctx->CreateDataModel( "query_popup" );
+    if( !c ) { return false; }
     rml_session = std::make_unique<rml_session_t>();
 
-    if (!g_rml_query_popup_types_registered) {
+    if( !g_rml_query_popup_types_registered ) {
         using btn_t = rml_session_t::button;
         auto bh = c.RegisterStruct<btn_t>();
-        bh.RegisterMember("text", &btn_t::text);
-        bh.RegisterMember("selected", &btn_t::selected);
+        bh.RegisterMember( "text", &btn_t::text );
+        bh.RegisterMember( "selected", &btn_t::selected );
         c.RegisterArray<Rml::Vector<btn_t>>();
         g_rml_query_popup_types_registered = true;
     }
 
-    c.Bind("message_rml", &rml_session->message_rml);
-    c.Bind("buttons", &rml_session->buttons);
-    c.Bind("has_buttons", &rml_session->has_buttons);
+    c.Bind( "message_rml", &rml_session->message_rml );
+    c.Bind( "buttons", &rml_session->buttons );
+    c.Bind( "has_buttons", &rml_session->has_buttons );
     c.BindEventCallback(
-        "on_button", [this](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList& args) {
-            int idx = -1;
-            if (!args.empty()) { args[0].GetInto(idx); }
-            rml_on_click(idx);
-        });
+    "on_button", [this]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+        int idx = -1;
+        if( !args.empty() ) { args[0].GetInto( idx ); }
+        rml_on_click( idx );
+    } );
     rml_session->handle = c.GetModelHandle();
 
-    rml_session->doc = rmlui_layer::open_document(PATH_INFO::datadir() + "gui/query_popup.rml");
-    if (rml_session->doc == nullptr) {
-        ctx->RemoveDataModel("query_popup");
+    rml_session->doc = rmlui_layer::open_document( PATH_INFO::datadir() + "gui/query_popup.rml" );
+    if( rml_session->doc == nullptr ) {
+        ctx->RemoveDataModel( "query_popup" );
         rml_session.reset();
         return false;
     }
@@ -453,45 +476,48 @@ bool query_popup::rml_open() {
     return true;
 }
 
-void query_popup::rml_sync() {
-    if (!rml_session) { return; }
-    rml_session_t& s = *rml_session;
+void query_popup::rml_sync()
+{
+    if( !rml_session ) { return; }
+    rml_session_t &s = *rml_session;
 
-    s.message_rml = cata_text_to_rml(text);
+    s.message_rml = cata_text_to_rml( text );
 
     s.buttons.clear();
-    if (!options.empty()) {
+    if( !options.empty() ) {
         // Generate button text the same way fold_query does: input_context with
         // all registered option actions to get keybinding-hint descriptions.
-        input_context ctxt(category);
-        for (const auto& opt : options) { ctxt.register_action(opt.action); }
-        for (size_t i = 0; i < options.size(); ++i) {
-            const auto& name = ctxt.get_action_name(options[i].action);
-            const auto& desc = ctxt.get_desc(options[i].action, name, options[i].filter);
+        input_context ctxt( category );
+        for( const auto& opt : options ) { ctxt.register_action( opt.action ); }
+        for( size_t i = 0; i < options.size(); ++i ) {
+            const auto& name = ctxt.get_action_name( options[i].action );
+            const auto& desc = ctxt.get_desc( options[i].action, name, options[i].filter );
             rml_session_t::button btn;
             btn.text = desc;
-            btn.selected = (i == cur);
-            s.buttons.emplace_back(std::move(btn));
+            btn.selected = ( i == cur );
+            s.buttons.emplace_back( std::move( btn ) );
         }
     }
     s.has_buttons = !s.buttons.empty();
 
     Rml::DataModelHandle h = s.handle;
-    h.DirtyVariable("message_rml");
-    h.DirtyVariable("buttons");
-    h.DirtyVariable("has_buttons");
+    h.DirtyVariable( "message_rml" );
+    h.DirtyVariable( "buttons" );
+    h.DirtyVariable( "has_buttons" );
 }
 
-void query_popup::rml_close() {
-    if (!rml_session) { return; }
-    if (rml_session->doc != nullptr) { rmlui_layer::close_document(rml_session->doc); }
-    if (Rml::Context* ctx = rmlui_layer::context()) { ctx->RemoveDataModel("query_popup"); }
+void query_popup::rml_close()
+{
+    if( !rml_session ) { return; }
+    if( rml_session->doc != nullptr ) { rmlui_layer::close_document( rml_session->doc ); }
+    if( Rml::Context * ctx = rmlui_layer::context() ) { ctx->RemoveDataModel( "query_popup" ); }
     g_rml_query_popup_model_active = false;
     rml_session.reset();
 }
 
-void query_popup::rml_on_click(int window_index) {
-    if (!rml_session || window_index < 0 || static_cast<size_t>(window_index) >= options.size()) {
+void query_popup::rml_on_click( int window_index )
+{
+    if( !rml_session || window_index < 0 || static_cast<size_t>( window_index ) >= options.size() ) {
         return;
     }
     cur = window_index;

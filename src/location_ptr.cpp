@@ -8,7 +8,7 @@ location_ptr<T, error_if_null>::location_ptr( location_ptr<T, error_if_null> &&s
 noexcept
 {
     if( source ) {
-        *this = std::move( source );
+    *this = std::move( source );
     }
 }
 
@@ -132,7 +132,7 @@ template<typename T, bool error_if_null>
 T *location_ptr<T, error_if_null>::get() const
 {
     if( !*this ) {
-        if( error_if_null ) {
+    if( error_if_null ) {
             debugmsg( "Attempted to resolve invalid location_ptr" );
         }
         return &null_item_reference();//TODO! more than items

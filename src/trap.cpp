@@ -225,32 +225,32 @@ bool trap::detect_trap( const tripoint_bub_ms &pos, const Character &p ) const
     // Effective Perception...
     ///\EFFECT_PER increases chance of detecting a trap
     return p.per_cur - p.encumb( body_part_eyes ) / 10 +
-           // ...small bonus from stimulants...
-           ( p.get_stim() > 10 ? rng( 1, 2 ) : 0 ) +
-           // ...bonus from trap skill...
-           ///\EFFECT_TRAPS increases chance of detecting a trap
-           p.get_skill_level( skill_traps ) * 2 +
-           // ...luck, might be good, might be bad...
-           rng( -4, 4 ) -
-           // ...malus if we are tired...
-           ( p.has_effect( effect_lack_sleep ) ? rng( 1, 5 ) : 0 ) -
-           // ...malus farther we are from trap...
-           rl_dist( p.bub_pos(), pos ) +
-           // Police are trained to notice Something Wrong.
-           ( p.has_trait( trait_PROF_POLICE ) ? 1 : 0 ) +
-           ( p.has_trait( trait_PROF_PD_DET ) ? 2 : 0 ) >
-           // ...must all be greater than the trap visibility.
-           visibility;
+    // ...small bonus from stimulants...
+    ( p.get_stim() > 10 ? rng( 1, 2 ) : 0 ) +
+    // ...bonus from trap skill...
+    ///\EFFECT_TRAPS increases chance of detecting a trap
+    p.get_skill_level( skill_traps ) * 2 +
+    // ...luck, might be good, might be bad...
+    rng( -4, 4 ) -
+    // ...malus if we are tired...
+    ( p.has_effect( effect_lack_sleep ) ? rng( 1, 5 ) : 0 ) -
+    // ...malus farther we are from trap...
+    rl_dist( p.bub_pos(), pos ) +
+    // Police are trained to notice Something Wrong.
+    ( p.has_trait( trait_PROF_POLICE ) ? 1 : 0 ) +
+    ( p.has_trait( trait_PROF_PD_DET ) ? 2 : 0 ) >
+    // ...must all be greater than the trap visibility.
+    visibility;
 }
 
 // Whether or not, in the current state, the player can see the trap.
 bool trap::can_see( const tripoint_bub_ms &pos, const Character &p ) const
 {
     if( is_null() ) {
-        // There is no trap at all, so logically one can not see it.
-        return false;
-    }
-    return visibility < 0 || p.knows_trap( pos );
+    // There is no trap at all, so logically one can not see it.
+    return false;
+}
+return visibility < 0 || p.knows_trap( pos );
 }
 
 void trap::trigger( const tripoint_bub_ms &pos, Creature *creature, item *item ) const
@@ -287,26 +287,26 @@ bool trap::is_funnel() const
 
 void trap::trigger_aftermath( map &m, const tripoint_bub_ms &p ) const
 {
-    for( auto &i : m.tr_at( p ).trigger_components ) {
-        const itype_id &item_type = std::get<0>( i );
+for( auto &i : m.tr_at( p ).trigger_components ) {
+    const itype_id &item_type = std::get<0>( i );
         const int quantity = std::get<1>( i );
         const int charges = std::get<2>( i );
         m.spawn_item( p.xy(), item_type, quantity, charges );
     }
     if( m.tr_at( p ).remove_trap_when_triggered() ) {
-        m.remove_trap( p );
+    m.remove_trap( p );
     }
 }
 
 void trap::on_disarmed( map &m, const tripoint_bub_ms &p ) const
 {
-    for( auto &i : components ) {
-        const itype_id &item_type = std::get<0>( i );
+for( auto &i : components ) {
+    const itype_id &item_type = std::get<0>( i );
         const int quantity = std::get<1>( i );
         const int charges = std::get<2>( i );
         m.spawn_item( p.xy(), item_type, quantity, charges );
     }
-    for( const tripoint_bub_ms &dest : m.points_in_radius( p, trap_radius ) ) {
+for( const tripoint_bub_ms &dest : m.points_in_radius( p, trap_radius ) ) {
         m.remove_trap( dest );
     }
 }

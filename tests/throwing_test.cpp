@@ -56,7 +56,7 @@ struct throw_test_pstats {
 static std::ostream &operator<<( std::ostream &stream, const throw_test_pstats &pstats )
 {
     return( stream << "STR: " << pstats.str << " DEX: " << pstats.dex <<
-            " PER: " << pstats.per << " SKL: " << pstats.skill_lvl );
+                      " PER: " << pstats.per << " SKL: " << pstats.skill_lvl );
 }
 
 static const skill_id skill_throw = skill_id( "throw" );

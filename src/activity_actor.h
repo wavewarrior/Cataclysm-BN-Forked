@@ -296,7 +296,7 @@ class activity_actor
          * anything below 0 is invalid, promting to use default formula
         */
         std::vector<std::pair<character_stat, float>> calc_stats_factors( const Character &/*who*/,
-        const std::vector<activity_req<character_stat>> &/*stats*/ ) const {
+                const std::vector<activity_req<character_stat>> &/*stats*/ ) const {
             return {};
         }
 };

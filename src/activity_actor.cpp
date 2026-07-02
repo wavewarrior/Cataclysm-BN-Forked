@@ -388,10 +388,10 @@ bool aim_activity_actor::load_RAS_weapon()
 
     const auto ammo_location_is_valid = [&]() -> bool {
         if( !you.ammo_location )
-        {
-            return false;
-        }
-        if( !gun->can_reload_with( you.ammo_location->typeId() ) )
+    {
+        return false;
+    }
+    if( !gun->can_reload_with( you.ammo_location->typeId() ) )
         {
             return false;
         }
@@ -981,7 +981,7 @@ void hacking_activity_actor::finish( player_activity &act, Character &who )
                 }
                 const tripoint_bub_ms pTank = *pTank_;
                 const std::optional<tripoint_bub_ms> pGasPump = iexamine::getGasPumpByNumber( examp,
-                        uistate.ags_pay_gas_selected_pump );
+                    uistate.ags_pay_gas_selected_pump );
                 if( pGasPump && iexamine::toPumpFuel( pTank, *pGasPump, tankGasUnits ) ) {
                     who.add_msg_if_player( _( "You hack the terminal and route all available fuel to your pump!" ) );
                     sounds::sound( examp, 6, sounds::sound_t::activity,
@@ -1576,7 +1576,8 @@ void burrow_activity_actor::serialize( JsonOut &jsout ) const
 
 std::unique_ptr<activity_actor> burrow_activity_actor::deserialize( JsonIn &jsin )
 {
-    std::unique_ptr<burrow_activity_actor> actor( new burrow_activity_actor( tripoint_abs_ms::zero() ) );
+    std::unique_ptr<burrow_activity_actor> actor( new burrow_activity_actor(
+                tripoint_abs_ms::zero() ) );
     JsonObject data = jsin.get_object();
     data.read( "progress", actor->progress );
     data.read( "target", actor->target );
@@ -1634,7 +1635,7 @@ void pickaxe_activity_actor::finish( player_activity &act, Character &who )
         who.consume_charges( *tool, tool->ammo_required() );
     }
     if( activity_handlers::resume_for_multi_activities( static_cast<player &>( who ) ) ) {
-        for( item *&elem : here.i_at( pos ) ) {
+        for( item * &elem : here.i_at( pos ) ) {
             elem->set_var( "activity_var", who.name );
         }
     }
@@ -1713,7 +1714,7 @@ void jackhammer_activity_actor::finish( player_activity &act, Character &who )
         who.consume_charges( *tool, tool->ammo_required() );
     }
     if( activity_handlers::resume_for_multi_activities( static_cast<player &>( who ) ) ) {
-        for( item *&elem : here.i_at( pos ) ) {
+        for( item * &elem : here.i_at( pos ) ) {
             elem->set_var( "activity_var", who.name );
         }
     }
@@ -1934,7 +1935,8 @@ void pry_nails_activity_actor::serialize( JsonOut &jsout ) const
 
 std::unique_ptr<activity_actor> pry_nails_activity_actor::deserialize( JsonIn &jsin )
 {
-    std::unique_ptr<pry_nails_activity_actor> actor( new pry_nails_activity_actor( tripoint_abs_ms::zero() ) );
+    std::unique_ptr<pry_nails_activity_actor> actor( new pry_nails_activity_actor(
+                tripoint_abs_ms::zero() ) );
     JsonObject data = jsin.get_object();
     data.read( "progress", actor->progress );
     data.read( "target", actor->target );
@@ -2252,7 +2254,7 @@ void fill_liquid_activity_actor::do_turn( player_activity &act, Character &who )
         // 1. Prepare source lambda
         liquid_source_type source_type = static_cast<liquid_source_type>( act.values.at( 0 ) );
         auto transfer = [source_type, &here,
-                     &act]( const std::function < detached_ptr<item>( detached_ptr<item> &&it ) > & cb ) {
+        &act]( const std::function < detached_ptr<item>( detached_ptr<item> &&it ) > & cb ) {
             auto pos = act.coords.at( 0 );
             static const units::volume volume_per_second = units::from_liter( 4.0F / 6.0F );
             int charges;
@@ -2366,15 +2368,15 @@ void fertilize_plot_activity_actor::do_turn( player_activity &act, Character &wh
     itype_id fertilizer;
     auto check_fertilizer = [&]( bool ask_user = true ) -> void {
         if( act.str_values.empty() )
-        {
-            act.str_values.emplace_back( "" );
+    {
+        act.str_values.emplace_back( "" );
         }
         fertilizer = itype_id( act.str_values[0] );
 
         if( ask_user && ( fertilizer.is_empty() || !who.has_charges( fertilizer, 1 ) ) )
         {
             fertilizer = iexamine::choose_fertilizer( static_cast<player &>( who ), "plant",
-                    false );
+                false );
             act.str_values[0] = fertilizer.str();
         }
     };
@@ -2389,7 +2391,7 @@ void fertilize_plot_activity_actor::do_turn( player_activity &act, Character &wh
         return !can_fert.success();
     };
 
-    const auto fertilize = [&]( player &p, const tripoint_bub_ms & tile ) {
+    const auto fertilize = [&]( player & p, const tripoint_bub_ms & tile ) {
         check_fertilizer();
         if( have_fertilizer() ) {
             iexamine::fertilize_plant( p, tile, fertilizer );
@@ -2406,10 +2408,10 @@ void fertilize_plot_activity_actor::do_turn( player_activity &act, Character &wh
     }
 
     activity_handlers::perform_zone_activity_turn( static_cast<player *>( &who ),
-                                zone_type_FARM_PLOT,
-                                reject_tile,
-                                fertilize,
-                                _( "You fertilized every plot you could." ) );
+            zone_type_FARM_PLOT,
+            reject_tile,
+            fertilize,
+            _( "You fertilized every plot you could." ) );
 }
 
 void fertilize_plot_activity_actor::finish( player_activity &, Character & )
@@ -2631,7 +2633,7 @@ std::optional<tripoint_bub_ms> lockpick_activity_actor::select_location( avatar 
     }
 
     const std::optional<tripoint_bub_ms> target = choose_adjacent_highlight(
-                _( "Use your lockpick where?" ), _( "There is nothing to lockpick nearby." ), is_pickable, false );
+            _( "Use your lockpick where?" ), _( "There is nothing to lockpick nearby." ), is_pickable, false );
     if( !target ) {
         return std::nullopt;
     }
@@ -3317,7 +3319,7 @@ act_progress_message craft_activity_actor::get_progress_message(
     const player_activity &act, const Character &who ) const
 {
     if( !rec || !is_valid ) {
-        return act_progress_message::make_empty();
+    return act_progress_message::make_empty();
     }
 
     const int assistants = who.available_assistant_count( *rec );
@@ -3352,7 +3354,7 @@ act_progress_message craft_activity_actor::get_progress_message(
     mults_desc += fmt_spd( act.speed.morale, _( "Morale" ) );
     mults_desc += fmt_spd( act.speed.tools, _( "Tools" ) );
     if( assistants > 0 ) {
-        mults_desc += fmt_spd( act.speed.assist, _( "Assistants" ) );
+    mults_desc += fmt_spd( act.speed.assist, _( "Assistants" ) );
     }
 
     return act_progress_message::make_full(
@@ -3548,21 +3550,21 @@ auto butchery_activity_actor::setup_next_target( player_activity &act,
         Character &who ) -> bool
 {
     if( this->targets.empty() ) {
-        return false;
-    }
+    return false;
+}
 
-    safe_reference<item> &target = this->targets.back();
-    player &p = static_cast<player &>( who );
+safe_reference<item> &target = this->targets.back();
+player &p = static_cast<player &>( who );
 
-    // Check if the corpse still exists
-    if( !target || target.is_destroyed() ) {
-        p.add_msg_if_player( m_bad, _( "The corpse completely rotted away!" ) );
+// Check if the corpse still exists
+if( !target || target.is_destroyed() ) {
+    p.add_msg_if_player( m_bad, _( "The corpse completely rotted away!" ) );
         this->targets.pop_back();
         return setup_next_target( act, who );
     }
 
     if( !target->is_corpse() ) {
-        this->targets.pop_back();
+    this->targets.pop_back();
         return setup_next_target( act, who );
     }
 
@@ -3580,19 +3582,19 @@ auto butchery_activity_actor::setup_next_target( player_activity &act,
     };
 
     if( setup.can_do == butchery_possibility::never ) {
-        act.set_to_null();
+    act.set_to_null();
         print_reasons();
         return false;
     }
 
     if( setup.can_do == butchery_possibility::not_this ) {
-        this->targets.pop_back();
+    this->targets.pop_back();
         print_reasons();
         return setup_next_target( act, who );
     }
 
     if( setup.can_do == butchery_possibility::need_confirmation ) {
-        if( p.is_player() ) {
+    if( p.is_player() ) {
             if( query_yn( _( "Would you dare desecrate the mortal remains of a fellow human being?" ) ) ) {
                 switch( rng( 1, 3 ) ) {
                     case 1:
@@ -3602,7 +3604,8 @@ auto butchery_activity_actor::setup_next_target( player_activity &act,
                         p.add_msg_if_player( m_bad, _( "This will haunt you in your dreams." ) );
                         break;
                     case 3:
-                        p.add_msg_if_player( m_bad, _( "You try to look away, but this gruesome image will stay on your mind for some time." ) );
+                        p.add_msg_if_player( m_bad,
+                                             _( "You try to look away, but this gruesome image will stay on your mind for some time." ) );
                         break;
                 }
                 g->u.add_morale( MORALE_BUTCHER, -50, 0, 2_days, 3_hours );
@@ -3776,7 +3779,8 @@ void butchery_activity_actor::finish( player_activity &act, Character &who )
         case QUARTER:
             break;
         case BUTCHER:
-            p.add_msg_if_player( m_good, _( "You apply few quick cuts to the %s and leave what's left of it for scavengers." ),
+            p.add_msg_if_player( m_good,
+                                 _( "You apply few quick cuts to the %s and leave what's left of it for scavengers." ),
                                  corpse_item.tname() );
             target->detach();
             break;
@@ -3807,10 +3811,12 @@ void butchery_activity_actor::finish( player_activity &act, Character &who )
                         p.add_msg_if_player( m_good, _( "You field dress the %s." ), corpse->nname() );
                         break;
                     case 2:
-                        p.add_msg_if_player( m_good, _( "You slice the corpse's belly and remove intestines and organs, until you're confident that it will not rot from inside." ) );
+                        p.add_msg_if_player( m_good,
+                                             _( "You slice the corpse's belly and remove intestines and organs, until you're confident that it will not rot from inside." ) );
                         break;
                     case 3:
-                        p.add_msg_if_player( m_good, _( "You remove guts and excess parts, preparing the corpse for later use." ) );
+                        p.add_msg_if_player( m_good,
+                                             _( "You remove guts and excess parts, preparing the corpse for later use." ) );
                         break;
                 }
                 corpse_item.set_flag( flag_FIELD_DRESS );
@@ -3839,10 +3845,12 @@ void butchery_activity_actor::finish( player_activity &act, Character &who )
                     p.add_msg_if_player( m_good, _( "You carefully remove the hide from the %s" ), corpse->nname() );
                     break;
                 case 3:
-                    p.add_msg_if_player( m_good, _( "The %s is challenging to skin, but you get a good hide from it." ), corpse->nname() );
+                    p.add_msg_if_player( m_good, _( "The %s is challenging to skin, but you get a good hide from it." ),
+                                         corpse->nname() );
                     break;
                 case 4:
-                    p.add_msg_if_player( m_good, _( "With a few deft slices you take the skin from the %s" ), corpse->nname() );
+                    p.add_msg_if_player( m_good, _( "With a few deft slices you take the skin from the %s" ),
+                                         corpse->nname() );
                     break;
             }
             corpse_item.set_flag( flag_SKINNED );

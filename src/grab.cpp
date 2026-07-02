@@ -33,7 +33,7 @@ namespace
 auto make_scraping_noise( const tripoint_bub_ms &pos, const int volume ) -> void
 {
     sounds::sound( pos, volume, sounds::sound_t::movement,
-                   _( "a scraping noise." ), true, "misc", "scraping" );
+    _( "a scraping noise." ), true, "misc", "scraping" );
 }
 
 // vehicle movement: strength check. very strong humans can move about 2,000 kg in a wheelbarrow.
@@ -80,9 +80,9 @@ auto get_vehicle_str_requirement( vehicle *veh ) -> int
     // If one can do 2000 in a wheelbarrow
     // 400kg blimp at 20 str should be easy
     if( veh->has_sufficient_lift( true ) ) {
-        return base_str_req( veh ) / 50;
+    return base_str_req( veh ) / 50;
     } else if( !veh->valid_wheel_config() ) {
-        return base_str_req( veh ) * 10;
+    return base_str_req( veh ) * 10;
     }
 
     //if vehicle is rollable we modify str_req based on a function of movecost per wheel.

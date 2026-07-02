@@ -973,7 +973,7 @@ void iexamine::vending( player &p, const tripoint_bub_ms &examp )
     ctxt.register_action( "HELP_KEYBINDINGS" );
 
     std::vector<std::vector<item *>> item_map;
-    for( item *&it : vend_items ) {
+    for( item * &it : vend_items ) {
         // |# {name}|
         // 123      4
         std::string name = it->tname();
@@ -1000,7 +1000,7 @@ void iexamine::vending( player &p, const tripoint_bub_ms &examp )
             return;
         }
         rml_data->money_rml = cata_text_to_rml( string_format( _( "Money left: %s" ),
-                              format_money( money ) ) );
+                                                format_money( money ) ) );
         rml_data->rows.clear();
         const int num_items = item_map.size();
         for( int i = 0; i < num_items; i++ ) {
@@ -2678,8 +2678,8 @@ void iexamine::dirtmound( player &p, const tripoint_bub_ms &examp )
  * @ref islot_seed::byproducts) are included.
  */
 std::vector<detached_ptr<item>> iexamine::get_harvest_items( const itype &type,
-                             const int plant_count,
-                             const int seed_count, const bool byproducts )
+        const int plant_count,
+        const int seed_count, const bool byproducts )
 {
     std::vector<detached_ptr<item>> result;
     if( !type.seed ) {
@@ -3565,19 +3565,19 @@ void iexamine::fvat_full( player &p, const tripoint_bub_ms &examp )
 static auto fluid_grid_tank_capacity( const furn_t &furn ) -> std::optional<units::volume>
 {
     if( !furn.fluid_grid ) {
-        return std::nullopt;
-    }
-    const auto &fluid_grid = *furn.fluid_grid;
-    if( fluid_grid.role != fluid_grid_role::tank ) {
-        return std::nullopt;
-    }
-    if( fluid_grid.capacity ) {
-        return fluid_grid.capacity;
-    }
-    if( fluid_grid.use_keg_capacity ) {
-        return furn.keg_capacity;
-    }
     return std::nullopt;
+}
+const auto &fluid_grid = *furn.fluid_grid;
+if( fluid_grid.role != fluid_grid_role::tank ) {
+    return std::nullopt;
+}
+if( fluid_grid.capacity ) {
+    return fluid_grid.capacity;
+}
+if( fluid_grid.use_keg_capacity ) {
+    return furn.keg_capacity;
+}
+return std::nullopt;
 }
 
 static auto is_fluid_grid_tank( const furn_t &furn ) -> bool
@@ -3589,19 +3589,19 @@ static auto confirm_fluid_grid_contamination( const tripoint_abs_omt &pos_abs_om
         const itype_id &liquid_type ) -> bool
 {
     if( !fluid_grid::would_contaminate( pos_abs_omt, liquid_type ) ) {
-        return true;
-    }
-    const auto clean_available =
-        fluid_grid::liquid_charges_at( pos_abs_omt, itype_water_clean ) > 0;
-    const auto dirty_available =
-        fluid_grid::liquid_charges_at( pos_abs_omt, itype_water ) > 0;
-    if( liquid_type == itype_water_clean && dirty_available ) {
-        return query_yn(
-                   _( "Adding clean water to this grid containing tainted water will contaminate your clean water.  Continue?" ) );
+    return true;
+}
+const auto clean_available =
+    fluid_grid::liquid_charges_at( pos_abs_omt, itype_water_clean ) > 0;
+const auto dirty_available =
+    fluid_grid::liquid_charges_at( pos_abs_omt, itype_water ) > 0;
+if( liquid_type == itype_water_clean && dirty_available ) {
+    return query_yn(
+               _( "Adding clean water to this grid containing tainted water will contaminate your clean water.  Continue?" ) );
     }
     if( liquid_type == itype_water && clean_available ) {
-        return query_yn(
-                   _( "Adding tainted water to this grid containing clean water will contaminate your clean water.  Continue?" ) );
+    return query_yn(
+               _( "Adding tainted water to this grid containing clean water will contaminate your clean water.  Continue?" ) );
     }
     return query_yn( string_format(
                          _( "Adding %s will contaminate the fluid grid's water supply.  Continue?" ),
@@ -4967,7 +4967,7 @@ void iexamine::reload_furniture( player &p, const tripoint_bub_ms &examp )
     }
 
     const int amount_in_furn_after_placing = count_charges_in_list( &ammo_types.at( ammo_index ),
-            items );
+        items );
     //~ %1$s - furniture, %2$d - number, %3$s items.
     add_msg( _( "The %1$s contains %2$d %3$s." ), f.name(), amount_in_furn_after_placing,
              cur_ammo->nname( amount_in_furn_after_placing ) );
@@ -5508,7 +5508,7 @@ void iexamine::pay_gas( player &p, const tripoint_bub_ms &examp )
         }
 
         const std::optional<tripoint_bub_ms> pGasPump = getGasPumpByNumber( examp,
-                uistate.ags_pay_gas_selected_pump );
+            uistate.ags_pay_gas_selected_pump );
         if( !pGasPump || !toPumpFuel( pTank, *pGasPump, liters * 1000 ) ) {
             return;
         }
@@ -5540,7 +5540,7 @@ void iexamine::pay_gas( player &p, const tripoint_bub_ms &examp )
         item *cashcard = &( p.i_at( pos ) );
         // Okay, we have a cash card. Now we need to know what's left in the pump.
         const std::optional<tripoint_bub_ms> pGasPump = getGasPumpByNumber( examp,
-                uistate.ags_pay_gas_selected_pump );
+            uistate.ags_pay_gas_selected_pump );
         int amount = pGasPump ? fromPumpFuel( pTank, *pGasPump ) : 0;
         if( amount >= 0 ) {
             sounds::sound( p.bub_pos(), 6, sounds::sound_t::activity, _( "Glug Glug Glug" ), true, "tool",
@@ -5810,7 +5810,7 @@ static item *cyborg_on_couch( const tripoint_bub_ms &couch_pos )
     }
     // if we're in a autodoc couch on a vehicle, go through the items in it, and return the item if's a cyborg
     if( const std::optional<vpart_reference> vp = get_map().veh_at( couch_pos ).part_with_feature(
-                flag_AUTODOC_COUCH, false ) ) {
+            flag_AUTODOC_COUCH, false ) ) {
         auto dest_veh = &vp->vehicle();
         int dest_part = vp->part_index();
         for( item * const &it : dest_veh->get_items( dest_part ) ) {
@@ -5979,7 +5979,7 @@ void iexamine::autodoc( player &p, const tripoint_bub_ms &examp )
     std::vector<item *> leg_splints;
 
     // find splints on the ground
-    for( item *&supplies : get_map().i_at( examp ) ) {
+    for( item * &supplies : get_map().i_at( examp ) ) {
         if( supplies->typeId() == itype_arm_splint ) {
             arm_splints.push_back( supplies );
         }
@@ -5989,10 +5989,10 @@ void iexamine::autodoc( player &p, const tripoint_bub_ms &examp )
     }
     // find splints in vehicle
     if( const std::optional<vpart_reference> vp = get_map().veh_at( examp ).part_with_feature(
-                flag_AUTODOC, false ) ) {
+            flag_AUTODOC, false ) ) {
         auto dest_veh = &vp->vehicle();
         int dest_part = vp->part_index();
-        for( item *&it : dest_veh->get_items( dest_part ) ) {
+        for( item * &it : dest_veh->get_items( dest_part ) ) {
             if( it->typeId() == itype_arm_splint ) {
                 arm_splints.push_back( it );
             }
@@ -6328,7 +6328,7 @@ static void mill_activate( player &p, const tripoint_bub_ms &examp )
     map_stack items = here.i_at( examp );
     units::volume food_volume = 0_ml;
 
-    for( item *&it : items ) {
+    for( item * &it : items ) {
         if( it->type->milling_data ) {
             food_present = true;
             food_volume += it->volume();
@@ -6468,7 +6468,7 @@ static void cloning_vat_activate( player &p, const tripoint_bub_ms &examp )
                         }
                     }
                     const shared_ptr_fast<monster> newmon_ptr = make_shared_fast<monster>
-                            ( mtype_id( chosen->name.str() ) );
+                        ( mtype_id( chosen->name.str() ) );
                     monster &newmon = *newmon_ptr;
 
                     if( chosen ) {
@@ -7194,7 +7194,7 @@ void iexamine::quern_examine( player &p, const tripoint_bub_ms &examp )
                 for( auto it_mill : mill_list ) {
                     pop += "-> " + item::nname( it_mill.first->typeId(),
                                                 it_mill.first->count() ) + ( ( it_mill.second > 1 ) ? " (" + std::to_string(
-                                                            it_mill.second ) + ")\n" : "\n" );
+                                                        it_mill.second ) + ")\n" : "\n" );
                 }
             }
             popup( pop, PF_NONE );

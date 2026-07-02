@@ -93,8 +93,8 @@ bool character_martial_arts::pick_style( const avatar &you )  // Style selection
 
     // Any other keys quit the menu
     const std::vector<matype_id> &selectable_styles = you.has_active_bionic(
-                bio_cqb ) ? bio_cqb_styles :
-            ma_styles;
+            bio_cqb ) ? bio_cqb_styles :
+        ma_styles;
 
     input_context ctxt( "MELEE_STYLE_PICKER" );
     ctxt.register_action( "SHOW_DESCRIPTION" );
@@ -218,9 +218,9 @@ std::string character_martial_arts::enumerate_known_styles( const itype_id &weap
 std::string character_martial_arts::selected_style_name( const Character &owner ) const
 {
     if( style_selected->force_unarmed || style_selected->weapon_valid( owner.primary_weapon() ) ) {
-        return style_selected->name.translated();
+    return style_selected->name.translated();
     } else if( owner.is_armed() ) {
-        return _( "Normal" );
+    return _( "Normal" );
     } else {
         return _( "No Style" );
     }

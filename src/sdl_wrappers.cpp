@@ -23,10 +23,10 @@ bool printErrorIf( const bool condition, const char *const message )
 auto printImgErrorIf( const bool condition, const char *const message ) -> bool
 {
     if( !condition ) {
-        return false;
-    }
-    dbg( DL::Error ) << message << ": " << SDL_GetError();
-    return true;
+    return false;
+}
+dbg( DL::Error ) << message << ": " << SDL_GetError();
+return true;
 }
 
 void throwErrorIf( const bool condition, const char *const message )

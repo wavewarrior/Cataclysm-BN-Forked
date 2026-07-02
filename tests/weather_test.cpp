@@ -63,11 +63,11 @@ TEST_CASE( "default season temperatures", "[weather]" )
         const time_point end_season_time = calendar::turn_zero
                                            + next_season * calendar::season_length();
         const units::temperature min_temperature = std::min(
-                    season_stats[current_season].average_temperature,
-                    season_stats[next_season].average_temperature ) - max_offset;
+                season_stats[current_season].average_temperature,
+                season_stats[next_season].average_temperature ) - max_offset;
         const units::temperature max_temperature = std::max(
-                    season_stats[current_season].average_temperature,
-                    season_stats[next_season].average_temperature ) + max_offset;
+                season_stats[current_season].average_temperature,
+                season_stats[next_season].average_temperature ) + max_offset;
         constexpr const tripoint_abs_ms pos;
         for( time_point current_time = start_season_time;
              current_time < end_season_time;

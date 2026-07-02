@@ -59,10 +59,10 @@ auto coord_from_lua_coord( const lua_tripoint_coord &coord ) -> lua_coord_value
 auto coord_from_object( const sol::object &obj ) -> std::optional<lua_coord_value>
 {
     if( obj.is<lua_point_coord>() ) {
-        return coord_from_lua_coord( obj.as<lua_point_coord>() );
+    return coord_from_lua_coord( obj.as<lua_point_coord>() );
     }
     if( obj.is<lua_tripoint_coord>() ) {
-        return coord_from_lua_coord( obj.as<lua_tripoint_coord>() );
+    return coord_from_lua_coord( obj.as<lua_tripoint_coord>() );
     }
     return std::nullopt;
 }
@@ -70,7 +70,7 @@ auto coord_from_object( const sol::object &obj ) -> std::optional<lua_coord_valu
 auto make_coord_result( const lua_coord_value &coord ) -> lua_coord_result
 {
     if( coord.is_tripoint ) {
-        return make_tripoint_coord( coord.origin, coord.scale, tripoint( coord.xy, coord.z ) );
+    return make_tripoint_coord( coord.origin, coord.scale, tripoint( coord.xy, coord.z ) );
     }
     return make_point_coord( coord.origin, coord.scale, coord.xy );
 }
@@ -108,14 +108,14 @@ auto lua_project_tripoint_to( const lua_tripoint_coord &coord,
 auto lua_project_to( const sol::object &val, const std::string &result_scale ) -> lua_coord_result
 {
     if( val.is<lua_point_coord>() ) {
-        const auto projected = lua_project_point_to( val.as<lua_point_coord>(), result_scale );
+    const auto projected = lua_project_point_to( val.as<lua_point_coord>(), result_scale );
         if( !projected ) {
             return sol::nil;
         }
         return *projected;
     }
     if( val.is<lua_tripoint_coord>() ) {
-        const auto projected = lua_project_tripoint_to( val.as<lua_tripoint_coord>(), result_scale );
+    const auto projected = lua_project_tripoint_to( val.as<lua_tripoint_coord>(), result_scale );
         if( !projected ) {
             return sol::nil;
         }
@@ -175,7 +175,7 @@ auto lua_project_remain_to( const sol::object &val,
                             const std::string &result_scale ) -> std::tuple<lua_coord_result, std::optional<lua_point_coord>>
 {
     if( val.is<lua_point_coord>() ) {
-        const auto [coarse, remainder] = lua_project_point_remain_to( val.as<lua_point_coord>(),
+    const auto [coarse, remainder] = lua_project_point_remain_to( val.as<lua_point_coord>(),
                                          result_scale );
         if( !coarse || !remainder ) {
             return std::make_tuple( lua_coord_result{ sol::nil }, std::optional<lua_point_coord>() );
@@ -183,7 +183,7 @@ auto lua_project_remain_to( const sol::object &val,
         return std::make_tuple( lua_coord_result{ *coarse }, remainder );
     }
     if( val.is<lua_tripoint_coord>() ) {
-        const auto [coarse, remainder] = lua_project_tripoint_remain_to( val.as<lua_tripoint_coord>(),
+    const auto [coarse, remainder] = lua_project_tripoint_remain_to( val.as<lua_tripoint_coord>(),
                                          result_scale );
         if( !coarse || !remainder ) {
             return std::make_tuple( lua_coord_result{ sol::nil }, std::optional<lua_point_coord>() );
@@ -198,7 +198,7 @@ auto lua_project_combine_impl( const lua_coord_value &coarse_coord,
                                const std::optional<lua_coord_value> &fine_coord ) -> lua_coord_result
 {
     if( !fine_coord ) {
-        debugmsg( "project_combine expected PointCoord or TripointCoord arguments" );
+    debugmsg( "project_combine expected PointCoord or TripointCoord arguments" );
         return sol::nil;
     }
 
@@ -211,9 +211,9 @@ auto lua_project_combine_impl( const lua_coord_value &coarse_coord,
         fine_coord->is_tripoint
     } );
     if( !can_combine ) {
-        debugmsg( "Cannot project_combine %s%s with %s%s",
-                  origin_type_name( coarse_coord.origin ), scale_type_name( coarse_coord.scale ),
-                  origin_type_name( fine_coord->origin ), scale_type_name( fine_coord->scale ) );
+    debugmsg( "Cannot project_combine %s%s with %s%s",
+              origin_type_name( coarse_coord.origin ), scale_type_name( coarse_coord.scale ),
+              origin_type_name( fine_coord->origin ), scale_type_name( fine_coord->scale ) );
         return sol::nil;
     }
 
@@ -221,12 +221,12 @@ auto lua_project_combine_impl( const lua_coord_value &coarse_coord,
                                             fine_coord->scale );
     const auto result_xy = refined_coarse + fine_coord->xy;
     if( coarse_coord.is_tripoint ) {
-        return make_coord_result( lua_coord_value{ coarse_coord.origin, fine_coord->scale,
-                                  result_xy, coarse_coord.z, true } );
+    return make_coord_result( lua_coord_value{ coarse_coord.origin, fine_coord->scale,
+                              result_xy, coarse_coord.z, true } );
     }
     if( fine_coord->is_tripoint ) {
-        return make_coord_result( lua_coord_value{ coarse_coord.origin, fine_coord->scale,
-                                  result_xy, fine_coord->z, true } );
+    return make_coord_result( lua_coord_value{ coarse_coord.origin, fine_coord->scale,
+                              result_xy, fine_coord->z, true } );
     }
     return make_coord_result( lua_coord_value{ coarse_coord.origin, fine_coord->scale,
                               result_xy, 0, false } );
@@ -259,8 +259,8 @@ auto make_distance_value( const point &lhs, const point &rhs,
                           const distance_call &call ) -> Result
 {
     switch( call.distance_kind ) {
-        case distance_call::kind::rl:
-            return static_cast<Result>( rl_dist( lhs, rhs ) );
+    case distance_call::kind::rl:
+        return static_cast<Result>( rl_dist( lhs, rhs ) );
         case distance_call::kind::trig:
             return static_cast<Result>( trig_dist( lhs, rhs ) );
         case distance_call::kind::square:
@@ -274,8 +274,8 @@ auto make_distance_value( const tripoint &lhs, const tripoint &rhs,
                           const distance_call &call ) -> Result
 {
     switch( call.distance_kind ) {
-        case distance_call::kind::rl:
-            return static_cast<Result>( rl_dist( lhs, rhs ) );
+    case distance_call::kind::rl:
+        return static_cast<Result>( rl_dist( lhs, rhs ) );
         case distance_call::kind::trig:
             return static_cast<Result>( trig_dist( lhs, rhs ) );
         case distance_call::kind::square:
@@ -289,7 +289,7 @@ auto lua_point_coord_distance( const lua_point_coord &lhs, const lua_point_coord
                                const distance_call &call ) -> std::optional<Result>
 {
     if( same_coord_kind( lhs, rhs ) ) {
-        return make_distance_value<Result>( lhs.raw, rhs.raw, call );
+    return make_distance_value<Result>( lhs.raw, rhs.raw, call );
     }
     debugmsg( "Distance expects two PointCoord values with matching origin and scale" );
     return std::nullopt;
@@ -300,7 +300,7 @@ auto lua_tripoint_coord_distance( const lua_tripoint_coord &lhs, const lua_tripo
                                   const distance_call &call ) -> std::optional<Result>
 {
     if( same_coord_kind( lhs, rhs ) ) {
-        return make_distance_value<Result>( lhs.raw, rhs.raw, call );
+    return make_distance_value<Result>( lhs.raw, rhs.raw, call );
     }
     debugmsg( "Distance expects two TripointCoord values with matching origin and scale" );
     return std::nullopt;

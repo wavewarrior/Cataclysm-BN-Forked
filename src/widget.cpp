@@ -86,8 +86,8 @@ void widget::check() const
 {
     // A "sidebar"/layout widget references child widgets by id; catch typos at
     // data-load time rather than as a silent blank panel when dereferenced.
-    for( const widget_id &child : _widgets ) {
-        if( !child.is_valid() ) {
+for( const widget_id &child : _widgets ) {
+    if( !child.is_valid() ) {
             debugmsg( "widget '%s' references unknown child widget '%s'",
                       id.c_str(), child.c_str() );
         }
@@ -113,8 +113,8 @@ void widget::load( const JsonObject &jo, const std::string & )
 int widget::get_var_value( const avatar &ava ) const
 {
     switch( _var ) {
-        case widget_var::stat_str:
-            return ava.get_str();
+    case widget_var::stat_str:
+        return ava.get_str();
         case widget_var::stat_dex:
             return ava.get_dex();
         case widget_var::stat_int:

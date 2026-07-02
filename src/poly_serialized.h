@@ -30,7 +30,7 @@ class poly_serialized : public std::unique_ptr<T>
         void serialize( Stream &jsout ) const {
             jsout.start_array();
             if( this->get() ) {
-                jsout.write( this->get()->get_type() );
+            jsout.write( this->get()->get_type() );
                 jsout.start_object();
                 this->get()->serialize( jsout );
                 jsout.end_object();

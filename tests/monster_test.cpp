@@ -70,9 +70,9 @@ struct track {
 static std::ostream &operator<<( std::ostream &os, track const &value )
 {
     os << value.participant <<
-       " l:" << value.location <<
-       " d:" << value.distance <<
-       " m:" << value.moves;
+    " l:" << value.location <<
+    " d:" << value.distance <<
+    " m:" << value.moves;
     return os;
 }
 

@@ -386,7 +386,7 @@ template <typename OutputIt, typename Char> class basic_printf_context
         basic_format_args<basic_printf_context> args_;
         parse_context_type parse_ctx_;
 
-        static void parse_flags( format_specs &specs, const Char *&it,
+        static void parse_flags( format_specs &specs, const Char * &it,
                                  const Char *end );
 
         // Returns the argument with specified index or, if arg_index is -1, the next
@@ -394,7 +394,7 @@ template <typename OutputIt, typename Char> class basic_printf_context
         format_arg get_arg( int arg_index = -1 );
 
         // Parses argument index, flags and width and returns the argument index.
-        int parse_header( const Char *&it, const Char *end, format_specs &specs );
+        int parse_header( const Char * &it, const Char *end, format_specs &specs );
 
     public:
         /**
@@ -575,8 +575,8 @@ OutputIt basic_printf_context<OutputIt, Char>::format()
             auto str_end = str + specs.precision;
             auto nul = std::find( str, str_end, Char() );
             arg = detail::make_arg<basic_printf_context>( basic_string_view<Char>(
-                        str,
-                        detail::to_unsigned( nul != str_end ? nul - str : specs.precision ) ) );
+                      str,
+                      detail::to_unsigned( nul != str_end ? nul - str : specs.precision ) ) );
         }
         if( specs.alt && visit_format_arg( detail::is_zero_int(), arg ) ) {
             specs.alt = false;
@@ -715,7 +715,7 @@ inline std::basic_string<Char> vsprintf(
 */
 template <typename S, typename... Args,
           typename Char = enable_if_t<detail::is_string<S>::value, char_t<S>>>
-                                      inline std::basic_string<Char> sprintf( const S &format, const Args &... args )
+inline std::basic_string<Char> sprintf( const S &format, const Args &... args )
 {
     using context = basic_printf_context_t<Char>;
     return vsprintf( to_string_view( format ), make_format_args<context>( args... ) );
@@ -745,7 +745,7 @@ inline int vfprintf(
  */
 template <typename S, typename... Args,
           typename Char = enable_if_t<detail::is_string<S>::value, char_t<S>>>
-                                      inline int fprintf( std::FILE *f, const S &format, const Args &... args )
+inline int fprintf( std::FILE *f, const S &format, const Args &... args )
 {
     using context = basic_printf_context_t<Char>;
     return vfprintf( f, to_string_view( format ),

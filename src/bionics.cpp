@@ -350,7 +350,7 @@ void bionic_data::load( const JsonObject &jsobj, const std::string &src )
 void bionic_data::finalize() const
 {
     if( has_flag( STATIC( flag_id( "BIONIC_FAULTY" ) ) ) ) {
-        faulty_bionics.push_back( id );
+    faulty_bionics.push_back( id );
     }
 }
 
@@ -880,7 +880,7 @@ bool Character::activate_bionic( bionic &bio, bool eff_only, bool *close_bionics
     } else if( bio.id == bio_water_extractor ) {
         bool no_target = true;
         bool extracted = false;
-        for( item *&it : here.i_at( bub_pos() ) ) {
+        for( item * &it : here.i_at( bub_pos() ) ) {
             static const auto volume_per_water_charge = 500_ml;
             if( it->is_corpse() ) {
                 const int avail = it->get_var( "remaining_water", it->volume() / volume_per_water_charge );
@@ -1144,7 +1144,7 @@ bool Character::activate_bionic( bionic &bio, bool eff_only, bool *close_bionics
 
     } else if( bio.id == bio_probability_travel ) {
         if( const std::optional<tripoint_bub_ms> pnt = choose_adjacent(
-                    _( "Tunnel in which direction?" ) ) ) {
+                _( "Tunnel in which direction?" ) ) ) {
             if( g->m.impassable( *pnt ) ) {
                 add_msg_activate();
                 g->phasing_move( *pnt );
@@ -3065,13 +3065,13 @@ void bionic::serialize( JsonOut &json ) const
     json.member( "ammo_count", ammo_count );
     json.member( "bionic_tags", bionic_tags );
     if( incapacitated_time > 0_turns ) {
-        json.member( "incapacitated_time", incapacitated_time );
+    json.member( "incapacitated_time", incapacitated_time );
     }
     if( is_auto_start_on() ) {
-        json.member( "auto_start_threshold", auto_start_threshold );
+    json.member( "auto_start_threshold", auto_start_threshold );
     }
     if( energy_stored > 0_kJ ) {
-        json.member( "energy_stored", energy_stored );
+    json.member( "energy_stored", energy_stored );
     }
     json.member( "show_sprite", show_sprite );
 

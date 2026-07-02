@@ -115,15 +115,16 @@ void game::extended_description( const tripoint_bub_ms &p )
     // colour-text body for the current target (+ signage).
     const auto build_hint = [&]() -> std::string {
         return string_format(
-                   _( "[%s] describe creatures, [%s] describe furniture, "
-                      "[%s] describe terrain, [%s] close." ),
-                   ctxt.get_desc( "CREATURE" ), ctxt.get_desc( "FURNITURE" ),
-                   ctxt.get_desc( "TERRAIN" ), ctxt.get_desc( "QUIT" ) );
+        _( "[%s] describe creatures, [%s] describe furniture, "
+           "[%s] describe terrain, [%s] close." ),
+        ctxt.get_desc( "CREATURE" ), ctxt.get_desc( "FURNITURE" ),
+        ctxt.get_desc( "TERRAIN" ), ctxt.get_desc( "QUIT" ) );
     };
     const auto build_desc = [&]() -> std::string {
         std::string desc;
         // Allow looking at invisible tiles - player may want to examine hallucinations etc.
-        switch( cur_target ) {
+        switch( cur_target )
+        {
             case description_target::creature: {
                 const Creature *critter = seen_critter( *this, p );
                 if( critter != nullptr ) {
@@ -172,7 +173,8 @@ void game::extended_description( const tripoint_bub_ms &p )
         }
 
         const std::string signage = m.get_signage( p );
-        if( !signage.empty() ) {
+        if( !signage.empty() )
+        {
             // NOLINTNEXTLINE(cata-text-style): the question mark does not end a sentence
             desc += u.has_trait( trait_ILLITERATE ) ? _( "\nSign: ???" ) : string_format( _( "\nSign: %s" ),
                     signage );

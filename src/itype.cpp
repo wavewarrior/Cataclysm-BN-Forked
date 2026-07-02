@@ -62,23 +62,23 @@ int itype::damage_max() const
 std::string itype::get_item_type_string() const
 {
     if( tool ) {
-        return "TOOL";
-    } else if( comestible ) {
-        return "FOOD";
-    } else if( container ) {
-        return "CONTAINER";
-    } else if( armor ) {
-        return "ARMOR";
-    } else if( book ) {
-        return "BOOK";
-    } else if( gun ) {
-        return "GUN";
-    } else if( bionic ) {
-        return "BIONIC";
-    } else if( ammo ) {
-        return "AMMO";
-    }
-    return "misc";
+    return "TOOL";
+} else if( comestible ) {
+    return "FOOD";
+} else if( container ) {
+    return "CONTAINER";
+} else if( armor ) {
+    return "ARMOR";
+} else if( book ) {
+    return "BOOK";
+} else if( gun ) {
+    return "GUN";
+} else if( bionic ) {
+    return "BIONIC";
+} else if( ammo ) {
+    return "AMMO";
+}
+return "misc";
 }
 
 std::string itype::nname( unsigned int quantity ) const
@@ -104,21 +104,21 @@ bool itype::count_by_charges() const
 int itype::charges_default() const
 {
     if( tool ) {
-        return tool->def_charges;
-    } else if( comestible ) {
-        return comestible->def_charges;
-    } else if( ammo ) {
-        return ammo->def_charges;
-    }
-    return count_by_charges() ? 1 : 0;
+    return tool->def_charges;
+} else if( comestible ) {
+    return comestible->def_charges;
+} else if( ammo ) {
+    return ammo->def_charges;
+}
+return count_by_charges() ? 1 : 0;
 }
 
 int itype::charges_to_use() const
 {
     if( tool ) {
-        return tool->charges_per_use;
-    }
-    return 1;
+    return tool->charges_per_use;
+}
+return 1;
 }
 
 int itype::charge_factor() const
@@ -129,9 +129,9 @@ int itype::charge_factor() const
 int itype::maximum_charges() const
 {
     if( tool ) {
-        return tool->max_charges;
-    }
-    return 0;
+    return tool->max_charges;
+}
+return 0;
 }
 
 int itype::charges_per_volume( const units::volume &vol ) const
@@ -174,22 +174,22 @@ void itype::tick( player &p, item &it, const tripoint_bub_ms &pos ) const
 {
     // If istate_callbacks defines on_tick, use it instead of legacy use_methods loop
     if( istate_callbacks && istate_callbacks->has_on_tick() ) {
-        istate_callbacks->call_on_tick( p, it, pos );
+    istate_callbacks->call_on_tick( p, it, pos );
         return;
     }
     // Legacy fallback: tick via use_methods (iuse tick_func)
     // Maybe should move charge decrementing here?
-    for( auto &method : use_methods ) {
-        method.second.call( p, it, true, pos );
+for( auto &method : use_methods ) {
+    method.second.call( p, it, true, pos );
     }
 }
 
 int itype::invoke( player &p, item &it, const tripoint_bub_ms &pos ) const
 {
     if( !has_use() ) {
-        return 0;
-    }
-    return invoke( p, it, pos, use_methods.begin()->first );
+    return 0;
+}
+return invoke( p, it, pos, use_methods.begin()->first );
 }
 
 int itype::invoke( player &p, item &it, const tripoint_bub_ms &pos,
@@ -223,15 +223,15 @@ int itype::invoke( player &p, item &it, const tripoint_bub_ms &pos,
 bool itype::can_have_charges() const
 {
     if( count_by_charges() ) {
-        return true;
-    }
-    if( tool && tool->max_charges > 0 ) {
-        return true;
-    }
-    if( gun && gun->clip > 0 ) {
-        return true;
-    }
-    if( has_flag( STATIC( flag_id( "CAN_HAVE_CHARGES" ) ) ) ) {
+    return true;
+}
+if( tool && tool->max_charges > 0 ) {
+    return true;
+}
+if( gun && gun->clip > 0 ) {
+    return true;
+}
+if( has_flag( STATIC( flag_id( "CAN_HAVE_CHARGES" ) ) ) ) {
         return true;
     }
     return false;

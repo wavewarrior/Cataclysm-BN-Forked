@@ -44,9 +44,9 @@ bool string_id<MOD_INFORMATION>::is_valid() const
 auto MOD_INFORMATION::name() const -> std::string
 {
     if( translatable_info.name().empty() ) {
-        // "No name" gets confusing if many mods have no name
-        //~ name of a mod that has no name entry, (%s is the mods identifier)
-        return string_format( _( "No name (%s)" ), ident.c_str() );
+    // "No name" gets confusing if many mods have no name
+    //~ name of a mod that has no name entry, (%s is the mods identifier)
+    return string_format( _( "No name (%s)" ), ident.c_str() );
     } else {
         return translatable_info.name();
     }
@@ -55,7 +55,7 @@ auto MOD_INFORMATION::name() const -> std::string
 auto MOD_INFORMATION::name_raw() const -> std::string
 {
     if( translatable_info.name_raw().empty() ) {
-        return string_format( "No name (%s)", ident.c_str() );
+    return string_format( "No name (%s)", ident.c_str() );
     } else {
         return translatable_info.name_raw();
     }
@@ -159,8 +159,8 @@ void mod_manager::refresh_mod_list()
     add_mods( mod_management::load_mods_from( PATH_INFO::user_moddir() ) );
 
     std::optional<t_mod_list> default_list = mod_management::load_mod_list(
-                PATH_INFO::mods_user_default()
-            );
+            PATH_INFO::mods_user_default()
+        );
     if( !default_list ) {
         default_list = mod_management::load_mod_list( PATH_INFO::mods_dev_default() );
     }
@@ -409,7 +409,7 @@ void mod_manager::add_mods( std::vector<MOD_INFORMATION> &&list )
 
     if( !replaced.empty() ) {
         DebugLog( DL::Info, DC::Main ) << "[Mod manager] Replaced " << replaced.size() <<
-                                       " mod(s) with user overrides.";
+                                          " mod(s) with user overrides.";
         std::string msg;
         for( const replacement &it : replaced ) {
             msg += string_format( "[%s] from \"%s\" with \"%s\"\n", it.id, it.path_old, it.path_new );
@@ -532,10 +532,10 @@ translatable_mod_info::translatable_mod_info( std::string name,
 auto translatable_mod_info::name() -> std::string
 {
     if( name_raw_.empty() ) {
-        return "";
-    }
-    if( language_version != detail::get_current_language_version() ) {
-        update();
+    return "";
+}
+if( language_version != detail::get_current_language_version() ) {
+    update();
     }
     return name_tr;
 }
@@ -548,10 +548,10 @@ auto translatable_mod_info::name_raw() const -> std::string
 auto translatable_mod_info::description() -> std::string
 {
     if( description_raw.empty() ) {
-        return "";
-    }
-    if( language_version != detail::get_current_language_version() ) {
-        update();
+    return "";
+}
+if( language_version != detail::get_current_language_version() ) {
+    update();
     }
     return description_tr;
 }

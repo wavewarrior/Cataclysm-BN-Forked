@@ -38,7 +38,7 @@ auto serialize_lua_point_coord_data( const detail::lua_coords::lua_point_coord &
 {
     jsout.start_object();
     jsout.member_as_string( "origin",
-                            std::string( detail::lua_coords::origin_lua_name( coord.origin ) ) );
+    std::string( detail::lua_coords::origin_lua_name( coord.origin ) ) );
     jsout.member_as_string( "scale", std::string( detail::lua_coords::scale_lua_name( coord.scale ) ) );
     jsout.member( "raw" );
     coord.raw.serialize( jsout );
@@ -50,7 +50,7 @@ auto serialize_lua_tripoint_coord_data( const detail::lua_coords::lua_tripoint_c
 {
     jsout.start_object();
     jsout.member_as_string( "origin",
-                            std::string( detail::lua_coords::origin_lua_name( coord.origin ) ) );
+    std::string( detail::lua_coords::origin_lua_name( coord.origin ) ) );
     jsout.member_as_string( "scale", std::string( detail::lua_coords::scale_lua_name( coord.scale ) ) );
     jsout.member( "raw" );
     coord.raw.serialize( jsout );
@@ -60,12 +60,12 @@ auto serialize_lua_tripoint_coord_data( const detail::lua_coords::lua_tripoint_c
 auto try_serialize_lua_coord( const sol::object &val, JsonOut &jsout ) -> bool
 {
     if( val.is<detail::lua_coords::lua_point_coord>() ) {
-        serialize_lua_coord_kind( point_coord_kind, jsout );
+    serialize_lua_coord_kind( point_coord_kind, jsout );
         serialize_lua_point_coord_data( val.as<detail::lua_coords::lua_point_coord>(), jsout );
         return true;
     }
     if( val.is<detail::lua_coords::lua_tripoint_coord>() ) {
-        serialize_lua_coord_kind( tripoint_coord_kind, jsout );
+    serialize_lua_coord_kind( tripoint_coord_kind, jsout );
         serialize_lua_tripoint_coord_data( val.as<detail::lua_coords::lua_tripoint_coord>(), jsout );
         return true;
     }

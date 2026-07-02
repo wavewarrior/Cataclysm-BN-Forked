@@ -646,18 +646,18 @@ void mutation_branch::check_consistency()
 nc_color mutation_branch::get_display_color() const
 {
     if( threshold || profession ) {
-        return c_white;
-    } else if( debug ) {
-        return c_light_cyan;
-    } else if( mixed_effect ) {
-        return c_pink;
-    } else if( points > 0 ) {
-        return c_light_green;
-    } else if( points < 0 ) {
-        return c_light_red;
-    } else {
-        return c_yellow;
-    }
+    return c_white;
+} else if( debug ) {
+    return c_light_cyan;
+} else if( mixed_effect ) {
+    return c_pink;
+} else if( points > 0 ) {
+    return c_light_green;
+} else if( points < 0 ) {
+    return c_light_red;
+} else {
+    return c_yellow;
+}
 }
 
 std::string mutation_branch::get_name( const trait_id &mutation_id )
@@ -725,13 +725,13 @@ std::string dreams::get_random_for_category( const mutation_category_id &cat, in
 bool trait_display_sort( const trait_id &a, const trait_id &b ) noexcept
 {
     if( a->get_display_color() > b->get_display_color() ) {
-        return true;
-    }
-    if( a->get_display_color() < b->get_display_color() ) {
-        return false;
-    }
+    return true;
+}
+if( a->get_display_color() < b->get_display_color() ) {
+    return false;
+}
 
-    return localized_compare( a->name(), b->name() );
+return localized_compare( a->name(), b->name() );
 }
 
 bool trait_display_nocolor_sort( const trait_id &a, const trait_id &b ) noexcept
@@ -900,8 +900,8 @@ void mutation_branch::add_entry( Trait_group &tg, const JsonObject &obj )
         ptr = std::make_unique<Single_trait_creator>( id, probability );
     } else if( obj.has_member( "group" ) ) {
         ptr = std::make_unique<Trait_group_creator>( trait_group::Trait_group_tag(
-                    obj.get_string( "group" ) ),
-                probability );
+                  obj.get_string( "group" ) ),
+              probability );
     }
 
     if( !ptr ) {

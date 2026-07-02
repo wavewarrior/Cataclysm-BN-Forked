@@ -167,10 +167,10 @@ static auto get_free_temp_track() -> MIX_Track *
 auto init_sound() -> bool
 {
     if( sound_init_success ) {
-        return true;
-    }
+    return true;
+}
 
-    if( !MIX_Init() ) {
+if( !MIX_Init() ) {
         dbg( DL::Error ) << "MIX_Init failed: " << SDL_GetError();
         return false;
     }
@@ -185,19 +185,19 @@ auto init_sound() -> bool
 
     g_mixer = MIX_CreateMixerDevice( SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec );
     if( !g_mixer ) {
-        dbg( DL::Error ) << "MIX_CreateMixerDevice failed: " << SDL_GetError();
+    dbg( DL::Error ) << "MIX_CreateMixerDevice failed: " << SDL_GetError();
         MIX_Quit();
         return false;
     }
 
     // Persistent tracks for each named/reserved channel
     for( int i = 0; i < MAX_CHANNEL_COUNT; ++i ) {
-        channel_tracks[i] = MIX_CreateTrack( g_mixer );
+    channel_tracks[i] = MIX_CreateTrack( g_mixer );
     }
 
     // Fire-and-forget pool
     for( int i = 0; i < TEMP_TRACK_POOL_SIZE; ++i ) {
-        temp_tracks[i] = MIX_CreateTrack( g_mixer );
+    temp_tracks[i] = MIX_CreateTrack( g_mixer );
     }
 
     music_track = MIX_CreateTrack( g_mixer );
@@ -208,10 +208,10 @@ auto init_sound() -> bool
 
     // All SFX (everything except music) — used by fade_audio_channel(any)
     for( int i = 0; i < MAX_CHANNEL_COUNT; ++i ) {
-        MIX_TagTrack( channel_tracks[i], TAG_ALL_SFX );
+    MIX_TagTrack( channel_tracks[i], TAG_ALL_SFX );
     }
-    for( auto *t : temp_tracks ) {
-        MIX_TagTrack( t, TAG_ALL_SFX );
+for( auto *t : temp_tracks ) {
+    MIX_TagTrack( t, TAG_ALL_SFX );
     }
 
     // Mirrors original: Mix_GroupChannels(daytime_outdoors_env, nighttime_outdoors_env, time_of_day)
@@ -252,12 +252,12 @@ auto shutdown_sound() -> void
     playlists.clear();
 
     if( !sound_init_success ) {
-        return;
-    }
-    sound_init_success = false;
+    return;
+}
+sound_init_success = false;
 
-    if( g_mixer ) {
-        MIX_StopAllTracks( g_mixer, 0 );
+if( g_mixer ) {
+    MIX_StopAllTracks( g_mixer, 0 );
 
         if( current_music_audio ) {
             MIX_DestroyAudio( current_music_audio );
@@ -297,7 +297,7 @@ void musicFinished();
 static auto music_stopped_cb( void * /*userdata*/, MIX_Track * /*track*/ ) -> void
 {
     if( current_music_audio ) {
-        MIX_DestroyAudio( current_music_audio );
+    MIX_DestroyAudio( current_music_audio );
         current_music_audio = nullptr;
     }
     musicFinished();
@@ -306,11 +306,11 @@ static auto music_stopped_cb( void * /*userdata*/, MIX_Track * /*track*/ ) -> vo
 static auto play_music_file( const std::string &filename, const int volume ) -> void
 {
     if( test_mode ) {
-        return;
-    }
-    current_music_track_volume = 0;
+    return;
+}
+current_music_track_volume = 0;
 
-    if( !check_sound( volume ) ) {
+if( !check_sound( volume ) ) {
         return;
     }
 
@@ -318,7 +318,7 @@ static auto play_music_file( const std::string &filename, const int volume ) -> 
     // Music is streamed (predecode=false) to avoid loading large files into RAM.
     auto *audio = MIX_LoadAudio( g_mixer, path.c_str(), false );
     if( !audio ) {
-        dbg( DL::Error ) << "Failed to load music file " << path << ": " << SDL_GetError();
+    dbg( DL::Error ) << "Failed to load music file " << path << ": " << SDL_GetError();
         return;
     }
 
@@ -396,15 +396,15 @@ auto play_music( const std::string &playlist ) -> void
 auto stop_music() -> void
 {
     if( test_mode ) {
-        return;
-    }
-    if( music_track ) {
-        // Clear callback before stopping so musicFinished() does not queue the next song
-        MIX_SetTrackStoppedCallback( music_track, nullptr, nullptr );
+    return;
+}
+if( music_track ) {
+    // Clear callback before stopping so musicFinished() does not queue the next song
+    MIX_SetTrackStoppedCallback( music_track, nullptr, nullptr );
         MIX_StopTrack( music_track, 0 );
     }
     if( current_music_audio ) {
-        MIX_DestroyAudio( current_music_audio );
+    MIX_DestroyAudio( current_music_audio );
         current_music_audio = nullptr;
     }
     current_playlist.clear();
@@ -415,10 +415,10 @@ auto stop_music() -> void
 auto update_volumes() -> void
 {
     if( test_mode ) {
-        return;
-    }
-    if( !sounds::sound_enabled ) {
-        stop_music();
+    return;
+}
+if( !sounds::sound_enabled ) {
+    stop_music();
         return;
     }
 
@@ -478,13 +478,13 @@ static auto add_sfx_path( const std::string &path ) -> int
 auto sfx::load_sound_effects( const JsonObject &jsobj ) -> void
 {
     if( !sound_init_success ) {
-        return;
-    }
-    const id_and_variant key( jsobj.get_string( "id" ), jsobj.get_string( "variant", "default" ) );
+    return;
+}
+const id_and_variant key( jsobj.get_string( "id" ), jsobj.get_string( "variant", "default" ) );
     const int volume = jsobj.get_int( "volume", 100 );
     auto &effects = sfx_resources.sound_effects[key];
 
-    for( const std::string file : jsobj.get_array( "files" ) ) {
+for( const std::string file : jsobj.get_array( "files" ) ) {
         sound_effect new_sound_effect;
         new_sound_effect.volume      = volume;
         new_sound_effect.resource_id = add_sfx_path( file );
@@ -495,9 +495,9 @@ auto sfx::load_sound_effects( const JsonObject &jsobj ) -> void
 auto sfx::load_sound_effect_preload( const JsonObject &jsobj ) -> void
 {
     if( !sound_init_success ) {
-        return;
-    }
-    for( JsonObject aobj : jsobj.get_array( "preload" ) ) {
+    return;
+}
+for( JsonObject aobj : jsobj.get_array( "preload" ) ) {
         const id_and_variant preload_key( aobj.get_string( "id" ),
                                           aobj.get_string( "variant", "default" ) );
         sfx_preload.push_back( preload_key );
@@ -507,9 +507,9 @@ auto sfx::load_sound_effect_preload( const JsonObject &jsobj ) -> void
 auto sfx::load_playlist( const JsonObject &jsobj ) -> void
 {
     if( !sound_init_success ) {
-        return;
-    }
-    for( JsonObject playlist : jsobj.get_array( "playlists" ) ) {
+    return;
+}
+for( JsonObject playlist : jsobj.get_array( "playlists" ) ) {
         const std::string playlist_id = playlist.get_string( "id" );
         music_playlist playlist_to_load;
         playlist_to_load.shuffle = playlist.get_bool( "shuffle", false );
@@ -557,16 +557,16 @@ auto sfx::play_variant_sound( const std::string &id, const std::string &variant,
                               const int volume ) -> void
 {
     if( test_mode ) {
-        return;
-    }
-    add_msg( m_debug, "sound id: %s, variant: %s, volume: %d ", id, variant, volume );
-    if( !check_sound( volume ) ) {
+    return;
+}
+add_msg( m_debug, "sound id: %s, variant: %s, volume: %d ", id, variant, volume );
+if( !check_sound( volume ) ) {
         return;
     }
 
     const sound_effect *eff = find_random_effect( id, variant );
     if( eff == nullptr ) {
-        eff = find_random_effect( id, "default" );
+    eff = find_random_effect( id, "default" );
         if( eff == nullptr ) {
             return;
         }
@@ -574,12 +574,12 @@ auto sfx::play_variant_sound( const std::string &id, const std::string &variant,
 
     auto *audio = get_sfx_resource( eff->resource_id );
     if( !audio ) {
-        return;
-    }
+    return;
+}
 
-    auto *track = get_free_temp_track();
-    if( !track ) {
-        dbg( DL::Warn ) << "No free track for sound effect: " << id;
+auto *track = get_free_temp_track();
+if( !track ) {
+    dbg( DL::Warn ) << "No free track for sound effect: " << id;
         return;
     }
 
@@ -597,26 +597,26 @@ auto sfx::play_variant_sound( const std::string &id, const std::string &variant,
                               double /*pitch_min*/, double /*pitch_max*/ ) -> void
 {
     if( test_mode ) {
-        return;
-    }
-    add_msg( m_debug, "sound id: %s, variant: %s, volume: %d ", id, variant, volume );
-    if( !check_sound( volume ) ) {
+    return;
+}
+add_msg( m_debug, "sound id: %s, variant: %s, volume: %d ", id, variant, volume );
+if( !check_sound( volume ) ) {
         return;
     }
 
     const sound_effect *eff = find_random_effect( id, variant );
     if( eff == nullptr ) {
-        return;
-    }
+    return;
+}
 
-    auto *audio = get_sfx_resource( eff->resource_id );
-    if( !audio ) {
-        return;
-    }
+auto *audio = get_sfx_resource( eff->resource_id );
+if( !audio ) {
+    return;
+}
 
-    auto *track = get_free_temp_track();
-    if( !track ) {
-        dbg( DL::Warn ) << "No free track for sound effect: " << id;
+auto *track = get_free_temp_track();
+if( !track ) {
+    dbg( DL::Warn ) << "No free track for sound effect: " << id;
         return;
     }
 
@@ -641,40 +641,40 @@ auto sfx::play_ambient_variant_sound( const std::string &id, const std::string &
                                       double /*pitch*/, const int loops ) -> void
 {
     if( test_mode ) {
-        return;
-    }
-    if( !check_sound( volume ) ) {
+    return;
+}
+if( !check_sound( volume ) ) {
         return;
     }
 
     const int ch = static_cast<int>( channel );
     if( ch < 0 || ch >= MAX_CHANNEL_COUNT ) {
-        return;
-    }
-    if( is_channel_playing( channel ) ) {
+    return;
+}
+if( is_channel_playing( channel ) ) {
         return;
     }
 
     const sound_effect *eff = find_random_effect( id, variant );
     if( eff == nullptr ) {
-        return;
-    }
+    return;
+}
 
-    auto *audio = get_sfx_resource( eff->resource_id );
-    if( !audio ) {
-        return;
-    }
+auto *audio = get_sfx_resource( eff->resource_id );
+if( !audio ) {
+    return;
+}
 
-    auto *track = channel_tracks[ch];
-    const int vol = eff->volume * get_option<int>( "AMBIENT_SOUND_VOLUME" ) * volume / ( 100 * 100 );
-    MIX_SetTrackGain( track, volume_to_gain( vol ) );
+auto *track = channel_tracks[ch];
+const int vol = eff->volume * get_option<int>( "AMBIENT_SOUND_VOLUME" ) * volume / ( 100 * 100 );
+MIX_SetTrackGain( track, volume_to_gain( vol ) );
     MIX_SetTrackAudio( track, audio );
     MIX_SetTrackLoops( track, loops );
 
     // Apply fade-in via play properties if requested
     SDL_PropertiesID props = 0;
     if( fade_in_duration > 0 ) {
-        props = SDL_CreateProperties();
+    props = SDL_CreateProperties();
         SDL_SetNumberProperty( props, MIX_PROP_PLAY_FADE_IN_FRAMES_NUMBER,
                                ms_to_frames( fade_in_duration ) );
     }
@@ -689,7 +689,7 @@ auto sfx::play_ambient_variant_sound( const std::string &id, const std::string &
     }
 
     if( props ) {
-        SDL_DestroyProperties( props );
+    SDL_DestroyProperties( props );
     }
 
     current_ambient.id               = id;
@@ -706,21 +706,21 @@ auto sfx::play_ambient_variant_sound( const std::string &id, const std::string &
 auto sfx::fade_audio_group( const group group, const int duration ) -> void
 {
     if( test_mode ) {
-        return;
-    }
-    const char *tag = sfx_group_to_tag( group );
-    if( tag ) {
-        MIX_StopTag( g_mixer, tag, static_cast<Sint64>( duration ) );
+    return;
+}
+const char *tag = sfx_group_to_tag( group );
+if( tag ) {
+    MIX_StopTag( g_mixer, tag, static_cast<Sint64>( duration ) );
     }
 }
 
 auto sfx::fade_audio_channel( const channel channel, const int duration ) -> void
 {
     if( test_mode ) {
-        return;
-    }
-    if( channel == channel::any ) {
-        MIX_StopTag( g_mixer, TAG_ALL_SFX, static_cast<Sint64>( duration ) );
+    return;
+}
+if( channel == channel::any ) {
+    MIX_StopTag( g_mixer, TAG_ALL_SFX, static_cast<Sint64>( duration ) );
         return;
     }
     const int idx = static_cast<int>( channel );
@@ -732,22 +732,22 @@ auto sfx::fade_audio_channel( const channel channel, const int duration ) -> voi
 auto sfx::is_channel_playing( const channel channel ) -> bool
 {
     if( test_mode ) {
-        return false;
-    }
-    if( channel == channel::any ) {
-        return false;
-    }
-    const int idx = static_cast<int>( channel );
-    return channel_tracks[idx] && MIX_TrackPlaying( channel_tracks[idx] );
+    return false;
+}
+if( channel == channel::any ) {
+    return false;
+}
+const int idx = static_cast<int>( channel );
+return channel_tracks[idx] && MIX_TrackPlaying( channel_tracks[idx] );
 }
 
 auto sfx::stop_sound_effect_fade( const channel channel, const int duration ) -> void
 {
     if( test_mode ) {
-        return;
-    }
-    if( channel == channel::any ) {
-        MIX_StopTag( g_mixer, TAG_ALL_SFX, static_cast<Sint64>( duration ) );
+    return;
+}
+if( channel == channel::any ) {
+    MIX_StopTag( g_mixer, TAG_ALL_SFX, static_cast<Sint64>( duration ) );
         return;
     }
     const int idx = static_cast<int>( channel );
@@ -759,13 +759,13 @@ auto sfx::stop_sound_effect_fade( const channel channel, const int duration ) ->
 auto sfx::stop_sound_effect_timed( const channel channel, const int time ) -> void
 {
     if( test_mode ) {
-        return;
-    }
-    if( channel == channel::any ) {
-        return;
-    }
-    const int idx = static_cast<int>( channel );
-    if( channel_tracks[idx] ) {
+    return;
+}
+if( channel == channel::any ) {
+    return;
+}
+const int idx = static_cast<int>( channel );
+if( channel_tracks[idx] ) {
         // SDL3_mixer has no expire-after-N-ms equivalent; treat time as fade-out duration
         MIX_StopTrack( channel_tracks[idx], ms_to_frames( time ) );
     }
@@ -774,14 +774,14 @@ auto sfx::stop_sound_effect_timed( const channel channel, const int time ) -> vo
 auto sfx::set_channel_volume( const channel channel, const int volume ) -> int
 {
     if( test_mode ) {
-        return 0;
-    }
-    if( channel == channel::any ) {
-        return -1;
-    }
-    const int idx   = static_cast<int>( channel );
-    auto *track     = channel_tracks[idx];
-    if( !track || !MIX_TrackPlaying( track ) ) {
+    return 0;
+}
+if( channel == channel::any ) {
+    return -1;
+}
+const int idx   = static_cast<int>( channel );
+auto *track     = channel_tracks[idx];
+if( !track || !MIX_TrackPlaying( track ) ) {
         return -1;
     }
     if( MIX_GetTrackFadeFrames( track ) != 0 ) {

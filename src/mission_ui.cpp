@@ -122,14 +122,16 @@ void game::list_missions()
     const auto build_detail_rml = [&]( mission * miss ) -> std::string {
         const nc_color col = u.get_active_mission() == miss ? c_light_green : c_white;
         std::string for_npc;
-        if( miss->get_npc_id().is_valid() ) {
+        if( miss->get_npc_id().is_valid() )
+        {
             npc *guy = g->find_npc( miss->get_npc_id() );
             if( guy ) {
                 for_npc = string_format( _( " for %s" ), guy->disp_name() );
             }
         }
         std::string d = colorize( miss->name() + for_npc, col ) + "\n\n";
-        if( !miss->get_description().empty() ) {
+        if( !miss->get_description().empty() )
+        {
             std::string desc = miss->get_description();
             for( const auto &reward : miss->get_likely_rewards() ) {
                 const std::string token = "<reward_count:" + reward.second.str() + ">";
@@ -137,7 +139,8 @@ void game::list_missions()
             }
             d += colorize( desc, c_white ) + "\n";
         }
-        if( miss->has_deadline() ) {
+        if( miss->has_deadline() )
+        {
             const time_point deadline = miss->get_deadline();
             d += "\n" + colorize( string_format( _( "Deadline: %s" ), to_string( deadline ) ), c_white );
             if( tab != tab_mode::TAB_COMPLETED ) {
@@ -153,7 +156,8 @@ void game::list_missions()
                 d += "\n" + colorize( string_format( _( "Time remaining: %s" ), remaining_time ), c_white );
             }
         }
-        if( miss->has_target() ) {
+        if( miss->has_target() )
+        {
             const tripoint_abs_omt pos = u.abs_omt_pos();
             d += "\n" + colorize( string_format( _( "Target: %s   You: %s" ),
                                                  miss->get_target().to_string(), pos.to_string() ), c_white );

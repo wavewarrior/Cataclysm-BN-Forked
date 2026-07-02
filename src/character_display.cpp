@@ -180,9 +180,10 @@ std::vector<std::string> character_display::encumbrance_lines( const Character &
         const nc_color enc_col = encumb_color( e.encumbrance );
         std::string row = colorize( string_format( "%-7s", name ), limb_color );
         row += " " + colorize( string_format( "%3d", e.encumbrance - e.layer_penalty ), enc_col );
-        row += colorize( "+", c_light_gray ) + colorize( string_format( "%-3d", e.layer_penalty ), enc_col );
+        row += colorize( "+", c_light_gray ) + colorize( string_format( "%-3d", e.layer_penalty ),
+               enc_col );
         row += "  " + colorize( string_format( "(% 3d)",
-                                temperature_print_rescaling( get_temp_conv( ch, bp ) ) ),
+                                               temperature_print_rescaling( get_temp_conv( ch, bp ) ) ),
                                 warmth::bodytemp_color( ch, bp ) );
         out.push_back( row );
     }
@@ -553,10 +554,10 @@ static bool handle_player_display_action( Character &you, unsigned int &line,
     } else if( action == "CHANGE_PROFESSION_NAME" ) {
         string_input_popup popup;
         popup.title( _( "Profession Name: " ) )
-        .width( 25 )
-        .text( "" )
-        .max_length( 25 )
-        .query();
+             .width( 25 )
+             .text( "" )
+             .max_length( 25 )
+             .query();
 
         you.custom_profession = popup.text();
         add_msg( "You now consider yourself to be a %s.", popup.text() );
@@ -564,10 +565,10 @@ static bool handle_player_display_action( Character &you, unsigned int &line,
     } else if( action == "CHANGE_NAME" ) {
         string_input_popup popup;
         popup.title( _( "Name: " ) )
-        .width( 50 )
-        .text( "" )
-        .max_length( 50 )
-        .query();
+             .width( 50 )
+             .text( "" )
+             .max_length( 50 )
+             .query();
 
         you.name = popup.text();
         add_msg( "From now on, you will refer to yourself as '%s.'", popup.text() );
@@ -651,15 +652,20 @@ std::vector<cs_row> cs_stats_rows( const Character &you, unsigned line, bool act
 {
     std::vector<cs_row> out;
     const auto stat_color = []( int cur, int max ) -> nc_color {
-        if( cur <= 0 ) {
+        if( cur <= 0 )
+        {
             return c_dark_gray;
-        } else if( cur < max / 2 ) {
+        } else if( cur < max / 2 )
+        {
             return c_red;
-        } else if( cur < max ) {
+        } else if( cur < max )
+        {
             return c_light_red;
-        } else if( cur == max ) {
+        } else if( cur == max )
+        {
             return c_white;
-        } else if( cur < max * 1.5 ) {
+        } else if( cur < max * 1.5 )
+        {
             return c_light_green;
         }
         return c_green;
@@ -675,9 +681,9 @@ std::vector<cs_row> cs_stats_rows( const Character &you, unsigned line, bool act
     stat_row( _( "Intelligence:" ), you.get_int(), you.get_int_base(), 2 );
     stat_row( _( "Perception:" ), you.get_per(), you.get_per_base(), 3 );
     out.push_back( { cata_text_to_rml( colorize( string_format( "%s %s", _( "Height:" ),
-                     you.height_string() ), c_light_gray ) ), active && line == 4 } );
+                                       you.height_string() ), c_light_gray ) ), active && line == 4 } );
     out.push_back( { cata_text_to_rml( colorize( string_format( "%s %s", _( "Age:" ),
-                     you.age_string() ), c_light_gray ) ), active && line == 5 } );
+                                       you.age_string() ), c_light_gray ) ), active && line == 5 } );
     return out;
 }
 
@@ -711,9 +717,9 @@ std::vector<cs_row> cs_bionics_rows( const Character &you,
     std::vector<cs_row> out;
     // Power header (pos 1 in curses) — never selectable.
     out.push_back( { cata_text_to_rml( string_format(
-                _( "Bionic Power: <color_light_blue>%1$d</color> / <color_light_blue>%2$d</color>" ),
-                units::to_kilojoule( you.get_power_level() ),
-                units::to_kilojoule( you.get_max_power_level() ) ) ), false } );
+                                           _( "Bionic Power: <color_light_blue>%1$d</color> / <color_light_blue>%2$d</color>" ),
+                                           units::to_kilojoule( you.get_power_level() ),
+                                           units::to_kilojoule( you.get_max_power_level() ) ) ), false } );
     for( size_t i = 0; i < bionicslist.size(); ++i ) {
         const auto& [bio, cnt] = bionicslist[i];
         const nc_color color = get_bionic_text_color( bio, false );
@@ -891,9 +897,10 @@ std::string cs_info_text( const Character &you, unsigned line, player_display_ta
     switch( curtab ) {
         case player_display_tab::stats:
             if( line == 0 ) {
-                s = colorize( _( "Strength affects your melee damage, the amount of weight you can carry, your total HP, "
-                                 "your resistance to many diseases, and the effectiveness of actions which require brute force." ),
-                              c_magenta ) + "\n\n";
+                s = colorize(
+                        _( "Strength affects your melee damage, the amount of weight you can carry, your total HP, "
+                           "your resistance to many diseases, and the effectiveness of actions which require brute force." ),
+                        c_magenta ) + "\n\n";
                 s += string_format( _( "Base HP: <color_white>%d</color>" ),
                                     you.get_part_hp_max( bodypart_id( "torso" ) ) ) + "\n";
                 s += string_format( _( "Carry weight (%s): <color_white>%.1f</color>" ), weight_units(),
@@ -909,8 +916,10 @@ std::string cs_info_text( const Character &you, unsigned line, player_display_ta
                 s += string_format( _( "Throwing penalty per target's dodge: <color_white>%+d</color>" ),
                                     ranged::throw_dispersion_per_dodge( you, false ) );
             } else if( line == 2 ) {
-                s = colorize( _( "Intelligence is less important in most situations, but it is vital for more complex tasks like "
-                                 "electronics crafting.  It also affects how much skill you can pick up from reading a book." ), c_magenta ) + "\n\n";
+                s = colorize(
+                        _( "Intelligence is less important in most situations, but it is vital for more complex tasks like "
+                           "electronics crafting.  It also affects how much skill you can pick up from reading a book." ),
+                        c_magenta ) + "\n\n";
                 if( you.rust_rate() ) {
                     s += string_format( _( "Skill rust: <color_white>%d%%</color>" ), you.rust_rate() ) + "\n";
                 }
@@ -1279,7 +1288,7 @@ void character_display::disp_info( Character &ch )
     ui_adaptor ui_traits;
     ui_traits.on_screen_resize( [&]( ui_adaptor & ui_traits ) {
         std::tie( trait_win_size_y, bionics_win_size_y ) = calculate_shared_column_win_height(
-                    static_cast<unsigned>( TERMY ) - infooffsetybottom, trait_win_size_y_max, bionics_win_size_y_max );
+                static_cast<unsigned>( TERMY ) - infooffsetybottom, trait_win_size_y_max, bionics_win_size_y_max );
         w_traits = catacurses::newwin( trait_win_size_y, grid_width,
                                        point( grid_width + 1, infooffsetybottom ) );
         w_traits_border = catacurses::newwin( trait_win_size_y + 1, grid_width + 2,
@@ -1303,7 +1312,7 @@ void character_display::disp_info( Character &ch )
     ui_adaptor ui_bionics;
     ui_bionics.on_screen_resize( [&]( ui_adaptor & ui_bionics ) {
         std::tie( trait_win_size_y, bionics_win_size_y ) = calculate_shared_column_win_height(
-                    static_cast<unsigned>( TERMY ) - infooffsetybottom, trait_win_size_y_max, bionics_win_size_y_max );
+                static_cast<unsigned>( TERMY ) - infooffsetybottom, trait_win_size_y_max, bionics_win_size_y_max );
         w_bionics = catacurses::newwin( bionics_win_size_y, grid_width,
                                         point( grid_width + 1,
                                                infooffsetybottom + trait_win_size_y + 1 ) );

@@ -95,11 +95,11 @@ bool mtype::made_of( const material_id &material ) const
 bool mtype::made_of_any( const std::set<material_id> &materials ) const
 {
     if( mat.empty() ) {
-        return false;
-    }
+    return false;
+}
 
-    return std::ranges::any_of( mat, [&materials]( const material_id & e ) {
-        return materials.count( e );
+return std::ranges::any_of( mat, [&materials]( const material_id & e ) {
+    return materials.count( e );
     } );
 }
 
@@ -148,8 +148,8 @@ std::vector<std::string> mtype::species_descriptions() const
 
 bool mtype::same_species( const mtype &other ) const
 {
-    for( auto &s : species_ptrs ) {
-        if( other.in_species( *s ) ) {
+for( auto &s : species_ptrs ) {
+    if( other.in_species( *s ) ) {
             return true;
         }
     }
@@ -159,17 +159,17 @@ bool mtype::same_species( const mtype &other ) const
 field_type_id mtype::bloodType() const
 {
     if( has_flag( MF_ACID_BLOOD ) )
-        //A monster that has the death effect "ACID" does not need to have acid blood.
-    {
-        return fd_acid;
-    }
-    if( has_flag( MF_BILE_BLOOD ) ) {
-        return fd_bile;
-    }
-    if( has_flag( MF_LARVA ) || has_flag( MF_ARTHROPOD_BLOOD ) ) {
-        return fd_blood_invertebrate;
-    }
-    if( made_of( material_id( "veggy" ) ) ) {
+    //A monster that has the death effect "ACID" does not need to have acid blood.
+{
+    return fd_acid;
+}
+if( has_flag( MF_BILE_BLOOD ) ) {
+    return fd_bile;
+}
+if( has_flag( MF_LARVA ) || has_flag( MF_ARTHROPOD_BLOOD ) ) {
+    return fd_blood_invertebrate;
+}
+if( made_of( material_id( "veggy" ) ) ) {
         return fd_blood_veggy;
     }
     if( made_of( material_id( "iflesh" ) ) ) {
@@ -184,25 +184,25 @@ field_type_id mtype::bloodType() const
 field_type_id mtype::gibType() const
 {
     if( has_flag( MF_LARVA ) || in_species( MOLLUSK ) ) {
-        return fd_gibs_invertebrate;
-    }
-    if( made_of( material_id( "veggy" ) ) ) {
-        return fd_gibs_veggy;
-    }
-    if( made_of( material_id( "iflesh" ) ) ) {
-        return fd_gibs_insect;
-    }
-    if( made_of( material_id( "flesh" ) ) ) {
-        return fd_gibs_flesh;
-    }
-    // There are other materials not listed here like steel, protoplasmic, powder, null, stone, bone
-    return fd_null;
+    return fd_gibs_invertebrate;
+}
+if( made_of( material_id( "veggy" ) ) ) {
+    return fd_gibs_veggy;
+}
+if( made_of( material_id( "iflesh" ) ) ) {
+    return fd_gibs_insect;
+}
+if( made_of( material_id( "flesh" ) ) ) {
+    return fd_gibs_flesh;
+}
+// There are other materials not listed here like steel, protoplasmic, powder, null, stone, bone
+return fd_null;
 }
 
 itype_id mtype::get_meat_itype() const
 {
     if( has_flag( MF_POISON ) ) {
-        if( made_of( material_id( "flesh" ) ) || made_of( material_id( "hflesh" ) ) ) {
+    if( made_of( material_id( "flesh" ) ) || made_of( material_id( "hflesh" ) ) ) {
             return itype_meat_tainted;
         } else if( made_of( material_id( "iflesh" ) ) ) {
             //In the future, insects could drop insect flesh rather than plain ol' meat.

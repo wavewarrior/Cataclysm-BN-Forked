@@ -88,11 +88,11 @@ class cartesian_product_view_2
 
         auto begin() -> iterator {
             return iterator( std::ranges::begin( r1_ ), std::ranges::end( r1_ ),
-                             std::ranges::begin( r2_ ), std::ranges::end( r2_ ) );
+            std::ranges::begin( r2_ ), std::ranges::end( r2_ ) );
         }
         auto end() -> iterator {
             return iterator( std::ranges::end( r1_ ), std::ranges::end( r1_ ),
-                             std::ranges::begin( r2_ ), std::ranges::end( r2_ ) );
+            std::ranges::begin( r2_ ), std::ranges::end( r2_ ) );
         }
 };
 
@@ -171,13 +171,13 @@ class cartesian_product_view_3
 
         auto begin() -> iterator {
             return iterator( std::ranges::begin( r1_ ), std::ranges::end( r1_ ),
-                             std::ranges::begin( r2_ ), std::ranges::end( r2_ ),
-                             std::ranges::begin( r3_ ), std::ranges::end( r3_ ) );
+            std::ranges::begin( r2_ ), std::ranges::end( r2_ ),
+            std::ranges::begin( r3_ ), std::ranges::end( r3_ ) );
         }
         auto end() -> iterator {
             return iterator( std::ranges::end( r1_ ), std::ranges::end( r1_ ),
-                             std::ranges::begin( r2_ ), std::ranges::end( r2_ ),
-                             std::ranges::begin( r3_ ), std::ranges::end( r3_ ) );
+            std::ranges::begin( r2_ ), std::ranges::end( r2_ ),
+            std::ranges::begin( r3_ ), std::ranges::end( r3_ ) );
         }
 };
 
@@ -187,17 +187,17 @@ struct cartesian_product_fn {
     template<std::ranges::viewable_range R1, std::ranges::viewable_range R2>
     auto operator()( R1 &&r1, R2 &&r2 ) const {
         return detail::cartesian_product_view_2<std::views::all_t<R1>, std::views::all_t<R2>>(
-                   std::views::all( std::forward<R1>( r1 ) ),
-                   std::views::all( std::forward<R2>( r2 ) ) );
+               std::views::all( std::forward<R1>( r1 ) ),
+        std::views::all( std::forward<R2>( r2 ) ) );
     }
     template<std::ranges::viewable_range R1, std::ranges::viewable_range R2,
              std::ranges::viewable_range R3>
     auto operator()( R1 &&r1, R2 &&r2, R3 &&r3 ) const {
         return detail::cartesian_product_view_3<std::views::all_t<R1>, std::views::all_t<R2>,
                std::views::all_t<R3>>(
-                   std::views::all( std::forward<R1>( r1 ) ),
-                   std::views::all( std::forward<R2>( r2 ) ),
-                   std::views::all( std::forward<R3>( r3 ) ) );
+               std::views::all( std::forward<R1>( r1 ) ),
+        std::views::all( std::forward<R2>( r2 ) ),
+        std::views::all( std::forward<R3>( r3 ) ) );
     }
 };
 

@@ -23,8 +23,8 @@ namespace behavior
 status_t character_oracle_t::needs_warmth_badly() const
 {
     // Use bodypart::temp_conv to predict whether the Character is "in trouble".
-    for( const auto &pr : subject->get_body() ) {
-        if( pr.second.get_temp_conv() <= BODYTEMP_VERY_COLD ) {
+for( const auto &pr : subject->get_body() ) {
+    if( pr.second.get_temp_conv() <= BODYTEMP_VERY_COLD ) {
             return running;
         }
     }
@@ -35,18 +35,18 @@ status_t character_oracle_t::needs_water_badly() const
 {
     // Check thirst threshold.
     if( subject->get_thirst() > thirst_levels::parched ) {
-        return running;
-    }
-    return success;
+    return running;
+}
+return success;
 }
 
 status_t character_oracle_t::needs_food_badly() const
 {
     // Check hunger threshold.
     if( subject->get_kcal_percent() < 0.5f ) {
-        return running;
-    }
-    return success;
+    return running;
+}
+return success;
 }
 
 status_t character_oracle_t::can_wear_warmer_clothes() const

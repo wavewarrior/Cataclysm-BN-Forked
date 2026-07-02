@@ -71,8 +71,8 @@ struct canvas {
                    p.y >= 0 &&
                    p.z >= 0 &&
                    p.x < size().x &&
-                   p.y < size().y &&
-                   p.z < size().z;
+            p.y < size().y &&
+            p.z < size().z;
         }
 
         inline void set( const tripoint &p, char32_t val ) {

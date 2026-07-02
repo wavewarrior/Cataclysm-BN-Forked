@@ -168,7 +168,8 @@ void drop_or_embed_projectile( dealt_projectile_attack &attack )
             add_msg( _( "The %1$s embeds in %2$s!" ), drop_item.tname(), mon->disp_name() );
         }
         avatar *ch = g->u.attitude_to( *mon ) == Attitude::A_FRIENDLY ? &g->u : nullptr;
-        if( ch && ( attack.dealt_dam.type_damage( DT_CUT ) > 0 || attack.dealt_dam.type_damage( DT_STAB ) > 0 ) ) {
+        if( ch && ( attack.dealt_dam.type_damage( DT_CUT ) > 0 ||
+                    attack.dealt_dam.type_damage( DT_STAB ) > 0 ) ) {
             if( ch->has_trait( trait_MUT_TOXIC_SECRETION ) && one_in( 3 ) ) {
                 ch->add_msg_if_player( m_good, _( "Your toxic secretion corrodes %s!" ), mon->disp_name() );
                 mon->add_effect( effect_poison, 4_turns );
@@ -215,7 +216,8 @@ void drop_or_embed_projectile( dealt_projectile_attack &attack )
                 tr.trigger( pt, nullptr, &drop_item );
             }
         }
-        if( mon && attack.dealt_dam.total_damage() > 0 && g->u.attitude_to( *mon ) == Attitude::A_FRIENDLY ) {
+        if( mon && attack.dealt_dam.total_damage() > 0 &&
+            g->u.attitude_to( *mon ) == Attitude::A_FRIENDLY ) {
             if( g->u.has_trait( trait_MUT_TOXIC_SECRETION ) && one_in( 3 ) ) {
                 g->u.add_msg_if_player( m_good, _( "Your toxic secretion corrodes %s!" ), mon->disp_name() );
                 mon->add_effect( effect_poison, 4_turns );
@@ -236,13 +238,13 @@ void drop_or_embed_projectile( dealt_projectile_attack &attack )
 auto blood_trail_len( int damage ) -> size_t
 {
     if( damage > 50 ) {
-        return 3;
-    } else if( damage > 20 ) {
-        return 2;
-    } else if( damage > 0 ) {
-        return 1;
-    }
-    return 0;
+    return 3;
+} else if( damage > 20 ) {
+    return 2;
+} else if( damage > 0 ) {
+    return 1;
+}
+return 0;
 }
 
 static bool can_be_tangled_by_net( const monster &z )
@@ -475,7 +477,7 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
         // Continue line is very "stiff" when the original range is short
         // TODO: Make it use a more distant point for more realistic extended lines
         std::vector<tripoint_bub_ms> trajectory_extension = continue_line( trajectory,
-                extend_to_range - range );
+            extend_to_range - range );
         trajectory.reserve( trajectory.size() + trajectory_extension.size() );
         trajectory.insert( trajectory.end(), trajectory_extension.begin(), trajectory_extension.end() );
     }

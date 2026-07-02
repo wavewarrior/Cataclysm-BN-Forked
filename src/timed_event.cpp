@@ -343,12 +343,12 @@ bool timed_event_manager::queued( const timed_event_type type ) const
 auto timed_event_manager::next_event_time() const -> std::optional<time_point>
 {
     if( events.empty() ) {
-        return std::nullopt;
-    }
+    return std::nullopt;
+}
 
-    auto next_time = events.front().when;
-    for( const timed_event &event : events ) {
-        next_time = std::min( next_time, event.when );
+auto next_time = events.front().when;
+for( const timed_event &event : events ) {
+    next_time = std::min( next_time, event.when );
     }
     return next_time;
 }

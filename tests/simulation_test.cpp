@@ -35,8 +35,8 @@ static auto make_blank_submap( mapbuffer &mb, const tripoint_abs_sm &pos ) -> su
 static auto plant_fire( submap &sm, const point_sm_ms &local, int intensity = 1 ) -> void
 {
     if( sm.get_field( local ).add_field( fd_fire, intensity, 0_turns ) ) {
-        ++sm.field_count;
-        sm.field_cache.push_back( local );
+    ++sm.field_count;
+    sm.field_cache.push_back( local );
         sm.is_uniform = false;
     }
 }

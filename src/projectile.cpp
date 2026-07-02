@@ -57,7 +57,7 @@ void projectile::set_drop( detached_ptr<item> &&it )
 item *projectile::get_drop() const
 {
     if( !drop ) {
-        return &null_item_reference();
+    return &null_item_reference();
     }
     return &*drop;
 }

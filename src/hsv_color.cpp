@@ -210,7 +210,7 @@ void RGBColor::serialize( JsonOut &jsout ) const
     jsout.write( g );
     jsout.write( b );
     if( a != 255 ) {
-        jsout.write( a );
+    jsout.write( a );
     }
     jsout.end_array();
 }

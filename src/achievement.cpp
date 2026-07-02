@@ -253,9 +253,9 @@ achievement_completion time_req_completed( const achievement &ach )
 achievement_completion kill_req_completed( const achievement &ach, const kill_tracker &kt )
 {
     const std::map<mtype_id, std::pair<achievement_comparison, int>> &kill_reqs =
-                ach.kill_requirements();
+        ach.kill_requirements();
     const std::map<species_id, std::pair<achievement_comparison, int>> &species_kill_reqs =
-                ach.species_kill_requirements();
+        ach.species_kill_requirements();
     if( kill_reqs.empty() && species_kill_reqs.empty() ) {
         return achievement_completion::completed;
     }
@@ -310,7 +310,7 @@ achievement_completion kill_req_completed( const achievement &ach, const kill_tr
 achievement_completion skill_req_completed( const achievement &ach )
 {
     const std::map<skill_id, std::pair<achievement_comparison, int>> &skill_reqs =
-                ach.skill_requirements();
+        ach.skill_requirements();
     if( skill_reqs.empty() ) {
         return achievement_completion::completed;
     }
@@ -625,14 +625,14 @@ void achievement::load( const JsonObject &jo, const std::string &src )
 
 void achievement::check() const
 {
-    for( const string_id<achievement> &a : hidden_by_ ) {
-        if( !a.is_valid() ) {
+for( const string_id<achievement> &a : hidden_by_ ) {
+    if( !a.is_valid() ) {
             debugmsg( "Achievement %s specifies hidden_by achievement %s, but the latter does not "
                       "exist.", id.str(), a.str() );
         }
     }
     if( time_constraint_ ) {
-        time_constraint_->check( id );
+    time_constraint_->check( id );
     }
     if( !skill_requirements_.empty() ) {
         for( const auto& [sk_id, pair] : skill_requirements_ ) {
@@ -673,8 +673,8 @@ void achievement::check() const
             }
         }
     }
-    for( const achievement_requirement &req : requirements_ ) {
-        req.check( id );
+for( const achievement_requirement &req : requirements_ ) {
+    req.check( id );
     }
 }
 
@@ -874,26 +874,26 @@ std::string achievement_tracker::ui_text() const
 {
     // Determine overall achievement status
     if( has_failed() ) {
-        return achievement_state{
-            achievement_completion::failed,
-            calendar::turn,
-            current_values()
-        }. ui_text( achievement_, *tracker_->kills() );
+    return achievement_state{
+        achievement_completion::failed,
+        calendar::turn,
+        current_values()
+    }. ui_text( achievement_, *tracker_->kills() );
     }
 
     // First: the achievement name and description
     nc_color c = color_from_completion( achievement_completion::pending );
     std::string result = colorize( achievement_->name(), c ) + "\n";
     if( !achievement_->description().empty() ) {
-        result += "  " + colorize( achievement_->description(), c ) + "\n";
+    result += "  " + colorize( achievement_->description(), c ) + "\n";
     }
 
     // Next: the time constraint, skill requirements and kill_requirements, if any
     result += achievement_->ui_text( achievement_completion::pending, *tracker_->kills() );
 
     // Next: the requirements
-    for( const std::unique_ptr<requirement_watcher> &watcher : watchers_ ) {
-        result += "  " + watcher->ui_text() + "\n";
+for( const std::unique_ptr<requirement_watcher> &watcher : watchers_ ) {
+    result += "  " + watcher->ui_text() + "\n";
     }
 
     return result;
@@ -1060,7 +1060,7 @@ void achievement_requirement::finalize()
 void achievement_requirement::check( const string_id<achievement> &id ) const
 {
     if( !statistic.is_valid() ) {
-        debugmsg( "score %s refers to invalid statistic %s", id.str(), statistic.str() );
+    debugmsg( "score %s refers to invalid statistic %s", id.str(), statistic.str() );
     }
 }
 

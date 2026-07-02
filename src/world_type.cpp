@@ -58,14 +58,14 @@ void world_type::load( const JsonObject &jo, const std::string & )
 void world_type::check() const
 {
     if( boundary_terrain && !boundary_terrain->is_valid() ) {
-        debugmsg( "World type \"%s\" has invalid boundary_terrain \"%s\"",
-                  id.str(), boundary_terrain->str() );
+    debugmsg( "World type \"%s\" has invalid boundary_terrain \"%s\"",
+              id.str(), boundary_terrain->str() );
     }
 
     // Bounded dimensions should have boundary terrain defined
     if( !infinite_bounds && !boundary_terrain ) {
-        debugmsg( "World type \"%s\" has infinite_bounds=false but no boundary_terrain defined",
-                  id.str() );
+    debugmsg( "World type \"%s\" has infinite_bounds=false but no boundary_terrain defined",
+              id.str() );
     }
 }
 

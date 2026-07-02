@@ -1544,13 +1544,13 @@ class map : public submap_load_listener
          */
         /*@{*/
         std::vector<detached_ptr<item>> use_amount_square( const tripoint_bub_ms &p, const itype_id &type,
-                                     int &quantity, const std::function<bool( const item & )> &filter = return_true<item> );
+                int &quantity, const std::function<bool( const item & )> &filter = return_true<item> );
         std::vector<detached_ptr<item>> use_amount( const tripoint_bub_ms &origin, int range,
-                                     const itype_id &type,
-                                     int &quantity, const std::function<bool( const item & )> &filter = return_true<item> );
+                const itype_id &type,
+                int &quantity, const std::function<bool( const item & )> &filter = return_true<item> );
         std::vector<detached_ptr<item>> use_charges( const tripoint_bub_ms &origin, int range,
-                                     const itype_id &type,
-                                     int &quantity, const std::function<bool( const item & )> &filter = return_true<item> );
+                const itype_id &type,
+                int &quantity, const std::function<bool( const item & )> &filter = return_true<item> );
         /*@}*/
 
         /**
@@ -1593,9 +1593,9 @@ class map : public submap_load_listener
 
         // Similar to spawn_an_item, but spawns a list of items, or nothing if the list is empty.
         std::vector<detached_ptr<item>> spawn_items( const tripoint_bub_ms &p,
-                                     std::vector<detached_ptr<item>> new_items );
+                std::vector<detached_ptr<item>> new_items );
         std::vector<detached_ptr<item>> spawn_items( const point_bub_ms &p,
-        std::vector<detached_ptr<item>> new_items ) {
+                std::vector<detached_ptr<item>> new_items ) {
             return spawn_items( tripoint_bub_ms( p, abs_sub.z() ), std::move( new_items ) );
         }
 

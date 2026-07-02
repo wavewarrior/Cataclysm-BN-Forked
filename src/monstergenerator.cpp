@@ -1058,7 +1058,7 @@ void mtype::load( const JsonObject &jo, const std::string &src )
         const auto inject_float = [&jop, this]( std::string field ) {
             if( jop.has_member( field ) ) {
                 this->recorded_path_settings.insert_or_assign( field,
-                        static_cast<float>( jop.get_float( field ) ) );
+                    static_cast<float>( jop.get_float( field ) ) );
             }
         };
         const auto inject_bool = [&jop, this]( std::string field ) {
@@ -1535,8 +1535,8 @@ void mtype::remove_regeneration_modifiers( const JsonObject &jo, const std::stri
 
 void MonsterGenerator::check_monster_definitions() const
 {
-    for( const auto &mon : mon_templates->get_all() ) {
-        if( !mon.harvest && !mon.has_flag( MF_ELECTRONIC ) && mon.id ) {
+for( const auto &mon : mon_templates->get_all() ) {
+    if( !mon.harvest && !mon.has_flag( MF_ELECTRONIC ) && mon.id ) {
             debugmsg( "monster %s has no harvest entry", mon.id.c_str(), mon.harvest.c_str() );
         }
         if( mon.has_flag( MF_MILKABLE ) && mon.starting_ammo.empty() ) {

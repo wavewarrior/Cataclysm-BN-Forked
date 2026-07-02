@@ -12,7 +12,8 @@
 class Font;
 class GeometryRenderer;
 
-namespace cata_cursesport {
+namespace cata_cursesport
+{
 struct curseline;
 } // namespace cata_cursesport
 

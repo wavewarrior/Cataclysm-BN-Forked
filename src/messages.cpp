@@ -86,12 +86,12 @@ struct game_message : public JsonDeserializer, public JsonSerializer {
 
     nc_color get_color( const time_point &current ) const {
         if( is_new( current ) ) {
-            // color for new messages
-            return msgtype_to_color( type, false );
+        // color for new messages
+        return msgtype_to_color( type, false );
 
         } else if( is_recent( current ) ) {
-            // color for slightly old messages
-            return msgtype_to_color( type, true );
+        // color for slightly old messages
+        return msgtype_to_color( type, true );
         }
 
         // color for old messages
@@ -880,10 +880,10 @@ void Messages::dialog::sync_rml()
 
     if( filter_str.empty() ) {
         rml_data->footer_rml = rml_escape( string_format(
-                                   _( "< %s to filter, %s to reset, %s/%s to adjust size, %s to copy, %s to erase >" ),
-                                   ctxt.get_desc( "FILTER" ), ctxt.get_desc( "RESET_FILTER" ),
-                                   ctxt.get_desc( "TOGGLE_WIDE_DISPLAY" ), ctxt.get_desc( "TOGGLE_FULL_HEIGHT_DISPLAY" ),
-                                   ctxt.get_desc( "COPY_MESSAGE" ), ctxt.get_desc( "ERASE_HISTORY" ) ) );
+                                               _( "< %s to filter, %s to reset, %s/%s to adjust size, %s to copy, %s to erase >" ),
+                                               ctxt.get_desc( "FILTER" ), ctxt.get_desc( "RESET_FILTER" ),
+                                               ctxt.get_desc( "TOGGLE_WIDE_DISPLAY" ), ctxt.get_desc( "TOGGLE_FULL_HEIGHT_DISPLAY" ),
+                                               ctxt.get_desc( "COPY_MESSAGE" ), ctxt.get_desc( "ERASE_HISTORY" ) ) );
     } else {
         rml_data->footer_rml = cata_text_to_rml( colorize( string_format( "< %s >", filter_str ),
                                filter_color ) );

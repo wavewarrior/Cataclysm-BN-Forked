@@ -23,8 +23,8 @@
 std::string four_quadrants::to_string() const
 {
     return string_format( "(%.2f,%.2f,%.2f,%.2f)",
-                          ( *this )[quadrant::NE], ( *this )[quadrant::SE],
-                          ( *this )[quadrant::SW], ( *this )[quadrant::NW] );
+           ( *this )[quadrant::NE], ( *this )[quadrant::SE],
+    ( *this )[quadrant::SW], ( *this )[quadrant::NW] );
 }
 
 // ── exp_lookup ────────────────────────────────────────────────────────────────
@@ -73,7 +73,7 @@ static void rebuild_zdist_table()
             for( int dx = 0; dx <= R; ++dx ) {
                 const float d = std::sqrt( static_cast<float>( dx * dx + dy * dy ) + fz2 );
                 s_zdist_table[static_cast<size_t>( dy ) * ( Z + 1 ) * ( R + 1 ) +
-                                                   static_cast<size_t>( dz ) * ( R + 1 ) + dx] =
+                              static_cast<size_t>( dz ) * ( R + 1 ) + dx] =
                                   static_cast<uint16_t>( std::lround( d ) );
             }
         }
@@ -83,7 +83,7 @@ static void rebuild_zdist_table()
 static int zdist_lookup( int dx, int dy, int dz ) noexcept
 {
     return s_zdist_table[static_cast<size_t>( dy ) * ( s_zdist_Z + 1 ) * ( s_zdist_R + 1 ) +
-                                              static_cast<size_t>( dz ) * ( s_zdist_R + 1 ) + dx];
+    static_cast<size_t>( dz ) * ( s_zdist_R + 1 ) + dx];
 }
 
 template<bool UseAtomic>
@@ -91,16 +91,16 @@ static void atomic_float_max( float &cell, float val ) noexcept
 {
     if constexpr( UseAtomic ) {
 #if defined(__cpp_lib_atomic_ref)
-        std::atomic_ref<float> a( cell );
+    std::atomic_ref<float> a( cell );
         float expected = a.load( std::memory_order_relaxed );
         while( expected < val &&
                !a.compare_exchange_weak( expected, val, std::memory_order_relaxed ) ) {
         }
 #else
-        // Fallback for toolchains without std::atomic_ref (e.g. older Android NDK).
-        // __atomic_* builtins only accept integer/pointer types, so type-pun float through uint32_t.
-        // Non-negative IEEE 754 floats preserve ordering as uint32_t, so bit comparison is valid.
-        static_assert( sizeof( float ) == sizeof( uint32_t ) );
+    // Fallback for toolchains without std::atomic_ref (e.g. older Android NDK).
+    // __atomic_* builtins only accept integer/pointer types, so type-pun float through uint32_t.
+    // Non-negative IEEE 754 floats preserve ordering as uint32_t, so bit comparison is valid.
+    static_assert( sizeof( float ) == sizeof( uint32_t ) );
         uint32_t *cell_bits = reinterpret_cast<uint32_t *>( &cell );
         uint32_t val_bits;
         std::memcpy( &val_bits, &val, sizeof( float ) );
@@ -259,9 +259,9 @@ static void castLight(
 
     const auto check_blocked = [&]( point p ) -> bool {
         switch( quad )
-        {
-            case quadrant::NW:
-                return blocked_array[p.x * sy + p.y].nw;
+    {
+        case quadrant::NW:
+            return blocked_array[p.x * sy + p.y].nw;
             case quadrant::NE:
                 return blocked_array[p.x * sy + p.y].ne;
             case quadrant::SE:
@@ -288,7 +288,7 @@ static void castLight(
         // Trim the x-range to the visible sector.
         delta.x = static_cast<int>( std::ceil(
                                         std::max( static_cast<float>( -distance ),
-                                                ( ( -distance - 0.5f ) * start ) - 0.5f ) ) );
+                                            ( ( -distance - 0.5f ) * start ) - 0.5f ) ) );
         const int x_limit = static_cast<int>( std::floor(
                 std::min( 0.0f,
                           ( ( -distance + 0.5f ) * end ) - 0.5f ) ) ) + 1;

@@ -71,9 +71,9 @@ void cata::detail::reg_requirement( sol::state &lua )
     std::optional<requirement_data> {
         requirement_id id( id_str );
         if( id.is_valid() )
-        {
-            return *id;
-        }
-        return std::nullopt;
-    } );
+    {
+        return *id;
+    }
+    return std::nullopt;
+} );
 }

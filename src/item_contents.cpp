@@ -162,7 +162,7 @@ const std::vector<item *> &item_contents::all_items_top() const
 detached_ptr<item> item_contents::remove_top( item *it )
 {
     auto iter = std::ranges::find_if( items,
-    [&it]( item *&against ) {
+    [&it]( item * &against ) {
         return against == it;
     } );
     detached_ptr<item> ret;
@@ -202,7 +202,7 @@ std::vector<const item *> item_contents::all_items_ptr() const
 std::vector<item *> item_contents::gunmods()
 {
     std::vector<item *> res;
-    for( item *&e : items ) {
+    for( item * &e : items ) {
         if( e->is_gunmod() ) {
             res.push_back( e );
         }

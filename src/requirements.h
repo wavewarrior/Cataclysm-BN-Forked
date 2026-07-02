@@ -75,7 +75,7 @@ struct component {
     // members!
     bool operator==( const component &rhs ) const {
         return std::forward_as_tuple( type, requirement, count, recoverable )
-               == std::forward_as_tuple( rhs.type, rhs.requirement, rhs.count, rhs.recoverable );
+        == std::forward_as_tuple( rhs.type, rhs.requirement, rhs.count, rhs.recoverable );
     }
     bool operator!=( const component &rhs ) const {
         return !operator==( rhs );
@@ -84,7 +84,7 @@ struct component {
     bool operator<( const component &rhs ) const {
         //TODO change to use localized sorting
         return std::forward_as_tuple( type, requirement, count, recoverable )
-               < std::forward_as_tuple( rhs.type, rhs.requirement, rhs.count, rhs.recoverable );
+        < std::forward_as_tuple( rhs.type, rhs.requirement, rhs.count, rhs.recoverable );
     }
 
     component() = default;
@@ -148,7 +148,7 @@ struct quality_requirement {
     // members!
     bool operator==( const quality_requirement &rhs ) const {
         return std::forward_as_tuple( type, requirement, count, level )
-               == std::forward_as_tuple( rhs.type, rhs.requirement, rhs.count, rhs.level );
+        == std::forward_as_tuple( rhs.type, rhs.requirement, rhs.count, rhs.level );
     }
     bool operator!=( const quality_requirement &rhs ) const {
         return !operator==( rhs );
@@ -156,7 +156,7 @@ struct quality_requirement {
     // lexicographic comparison
     bool operator<( const quality_requirement &rhs ) const {
         return std::forward_as_tuple( type, requirement, count, level )
-               < std::forward_as_tuple( rhs.type, rhs.requirement, rhs.count, rhs.level );
+        < std::forward_as_tuple( rhs.type, rhs.requirement, rhs.count, rhs.level );
     }
 
     quality_requirement() = default;

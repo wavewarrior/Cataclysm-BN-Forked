@@ -492,8 +492,8 @@ static void add_monsters( const tripoint_abs_omt &omtstart, const mongroup_id &t
 void start_location::surround_with_monsters(
     const tripoint_abs_omt &omtstart, const mongroup_id &type, float expected_points ) const
 {
-    for( const tripoint_abs_omt &p : points_in_radius( omtstart, 1 ) ) {
-        if( p != omtstart ) {
+for( const tripoint_abs_omt &p : points_in_radius( omtstart, 1 ) ) {
+    if( p != omtstart ) {
             add_monsters( p, type, roll_remainder( expected_points / 8.0f ) );
         }
     }

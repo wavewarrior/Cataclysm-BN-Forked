@@ -18,13 +18,13 @@ auto climbing_cost( const map &m, const tripoint_bub_ms &from,
 {
     // TODO: All sorts of mutations, equipment weight etc. for characters
     if( !m.valid_move( from, to, false, true ) ) {
-        return {};
-    }
-    const int diff = m.climb_difficulty( from );
-    if( diff > 5 ) {
-        return {};
-    }
-    return 50 + diff * 100;
+    return {};
+}
+const int diff = m.climb_difficulty( from );
+if( diff > 5 ) {
+    return {};
+}
+return 50 + diff * 100;
 }
 
 void migo_nerve_cage_removal( map &m, const tripoint_bub_ms &p, bool spawn_damaged )

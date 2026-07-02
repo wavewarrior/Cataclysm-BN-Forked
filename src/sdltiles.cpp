@@ -106,8 +106,10 @@ static SDL_Window_Ptr &window = g_display.window;
 // those call sites to the GPU stack and drop the hidden window.
 static SDL_Renderer_Ptr &renderer = g_display.renderer;
 static GeometryRenderer_Ptr &geometry = g_display.geometry;
-static int &WindowWidth = g_display.WindowWidth;        //Width of the actual window, not the curses window
-static int &WindowHeight = g_display.WindowHeight;       //Height of the actual window, not the curses window
+static int &WindowWidth =
+    g_display.WindowWidth;        //Width of the actual window, not the curses window
+static int &WindowHeight =
+    g_display.WindowHeight;       //Height of the actual window, not the curses window
 
 // only update if the set interval has elapsed
 // No-op: display_buffer removed. Remains until atlas lookup uses GPU-native
@@ -243,8 +245,8 @@ bool save_screenshot( const std::string &file_path )
         // (little-endian BGRA byte order) so IMG_SavePNG writes correct colours.
         const Uint32 row_pitch = static_cast<Uint32>( w ) * 4;
         SDL_Surface *surf = SDL_CreateSurfaceFrom(
-            w, h, SDL_PIXELFORMAT_ARGB8888,
-            pixels.data(), static_cast<int>( row_pitch ) );
+                                w, h, SDL_PIXELFORMAT_ARGB8888,
+                                pixels.data(), static_cast<int>( row_pitch ) );
         if( surf ) {
             ok = !printErrorIf(
                      !IMG_SavePNG( surf, file_path.c_str() ),

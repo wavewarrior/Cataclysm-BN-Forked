@@ -213,7 +213,7 @@ struct value_constraint {
 
     void check( const std::string &name, const cata_variant_type input_type ) const {
         if( equals_statistic_ ) {
-            if( !equals_statistic_->is_valid() ) {
+        if( !equals_statistic_->is_valid() ) {
                 debugmsg( "constraint for event_transformation %s refers to invalid statistic %s",
                           name, equals_statistic_->str() );
                 return;
@@ -230,7 +230,7 @@ struct value_constraint {
         }
 
         if( equals_ ) {
-            if( input_type != equals_->type() ) {
+        if( input_type != equals_->type() ) {
                 debugmsg( "constraint for event_transformation %s matches constant of type %s but "
                           "value compared with it has type %s",
                           name, io::enum_to_string( equals_->type() ),
@@ -568,8 +568,8 @@ struct event_transformation_impl : public event_transformation::impl {
     }
 
     monotonically monotonicity() const override {
-        for( const std::pair<std::string, value_constraint> &constraint : constraints_ ) {
-            if( !constraint.second.is_constant() ) {
+for( const std::pair<std::string, value_constraint> &constraint : constraints_ ) {
+        if( !constraint.second.is_constant() ) {
                 return monotonically::unknown;
             }
         }
@@ -861,14 +861,14 @@ struct event_statistic_minimum : event_statistic::impl {
     monotonically monotonicity() const override {
         // If the source is increasing (adding more events)
         if( is_increasing( source->monotonicity() ) ) {
-            // Then the minimum value will be decreasing
-            return monotonically::decreasing;
-        } else {
-            return monotonically::unknown;
-        }
+        // Then the minimum value will be decreasing
+        return monotonically::decreasing;
+    } else {
+        return monotonically::unknown;
     }
+}
 
-    std::unique_ptr<impl> clone() const override {
+std::unique_ptr<impl> clone() const override {
         return std::make_unique<event_statistic_minimum>( *this );
     }
 };
@@ -957,13 +957,13 @@ struct event_statistic_unique_value : event_statistic::impl {
 
     monotonically monotonicity() const override {
         if( source_->is_game_start() ) {
-            return monotonically::constant;
-        } else {
-            return monotonically::unknown;
-        }
+        return monotonically::constant;
+    } else {
+        return monotonically::unknown;
     }
+}
 
-    std::unique_ptr<impl> clone() const override {
+std::unique_ptr<impl> clone() const override {
         return std::make_unique<event_statistic_unique_value>( *this );
     }
 };
@@ -1057,6 +1057,6 @@ void score::load( const JsonObject &jo, const std::string & )
 void score::check() const
 {
     if( !stat_.is_valid() ) {
-        debugmsg( "score %s refers to invalid statistic %s", id.str(), stat_.str() );
+    debugmsg( "score %s refers to invalid statistic %s", id.str(), stat_.str() );
     }
 }

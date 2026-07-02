@@ -129,7 +129,7 @@ std::optional<tripoint_bub_ms> getNearFilledGasTank( const tripoint_bub_ms &cent
 bool has_keg( const tripoint_bub_ms &pos );
 
 std::vector<detached_ptr<item>> get_harvest_items( const itype &type, int plant_count,
-                             int seed_count, bool byproducts );
+        int seed_count, bool byproducts );
 
 // Planting functions
 std::vector<seed_tuple> get_seed_entries( const std::vector<item *> &seed_inv );

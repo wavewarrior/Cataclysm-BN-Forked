@@ -125,7 +125,7 @@ void ter_furn_transform::load( const JsonObject &jo, const std::string & )
 
 template<class T, class K>
 std::optional<ter_furn_data<T>> ter_furn_transform::find_transform( const
-                             std::map<K, ter_furn_data<T>> &list, const K &key ) const
+        std::map<K, ter_furn_data<T>> &list, const K &key ) const
 {
     const auto result_iter = list.find( key );
     if( result_iter == list.cend() ) {

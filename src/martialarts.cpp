@@ -297,7 +297,7 @@ class ma_buff_reader : public generic_typed_reader<ma_buff_reader>
     public:
         mabuff_id get_next( JsonIn &jin ) const {
             if( jin.test_string() ) {
-                return mabuff_id( jin.get_string() );
+            return mabuff_id( jin.get_string() );
             }
             JsonObject jsobj = jin.get_object();
             ma_buffs.load( jsobj, "" );
@@ -496,8 +496,8 @@ void clear_techniques_and_martial_arts()
 
 bool ma_requirements::is_valid_character( const Character &u ) const
 {
-    for( const mabuff_id &buff_id : req_buffs ) {
-        if( !u.has_mabuff( buff_id ) ) {
+for( const mabuff_id &buff_id : req_buffs ) {
+    if( !u.has_mabuff( buff_id ) ) {
             return false;
         }
     }
@@ -525,10 +525,10 @@ bool ma_requirements::is_valid_character( const Character &u ) const
     bool valid_melee = !strictly_unarmed && ( forced_unarmed || melee_ok );
 
     if( !valid_unarmed && !valid_melee ) {
-        return false;
-    }
+    return false;
+}
 
-    if( !style_muts.empty() ) {
+if( !style_muts.empty() ) {
         bool valid_mut = false;
         for( const trait_id &mut : style_muts ) {
             if( u.has_trait( mut ) ) {
@@ -544,8 +544,8 @@ bool ma_requirements::is_valid_character( const Character &u ) const
         return false;
     }
 
-    for( const auto &pr : min_skill ) {
-        if( ( cqb ? 5 : u.get_skill_level( pr.first ) ) < pr.second ) {
+for( const auto &pr : min_skill ) {
+    if( ( cqb ? 5 : u.get_skill_level( pr.first ) ) < pr.second ) {
             return false;
         }
     }
@@ -579,13 +579,13 @@ bool ma_requirements::is_valid_character( const Character &u ) const
 
 bool ma_requirements::is_valid_weapon( const item &i ) const
 {
-    for( const flag_id &flag : req_flags ) {
-        if( !i.has_flag( flag ) ) {
+for( const flag_id &flag : req_flags ) {
+    if( !i.has_flag( flag ) ) {
             return false;
         }
     }
-    for( const auto &pr : min_damage ) {
-        if( i.damage_melee( pr.first ) < pr.second ) {
+for( const auto &pr : min_damage ) {
+    if( i.damage_melee( pr.first ) < pr.second ) {
             return false;
         }
     }
@@ -947,8 +947,8 @@ void martialart::apply_onkill_buffs( Character &u ) const
 
 bool martialart::has_technique( const Character &u, const matec_id &tec_id ) const
 {
-    for( const matec_id &elem : techniques ) {
-        const ma_technique &tec = elem.obj();
+for( const matec_id &elem : techniques ) {
+    const ma_technique &tec = elem.obj();
         if( tec.is_valid_character( u ) && tec.id == tec_id ) {
             return true;
         }
@@ -959,7 +959,7 @@ bool martialart::has_technique( const Character &u, const matec_id &tec_id ) con
 bool martialart::has_weapon( const itype_id &itt ) const
 {
     return weapons.contains( itt ) ||
-           std::any_of( itt->weapon_category.begin(), itt->weapon_category.end(),
+    std::any_of( itt->weapon_category.begin(), itt->weapon_category.end(),
     [&]( const weapon_category_id & weap ) {
         return weapon_category.contains( weap );
     } );
@@ -968,10 +968,10 @@ bool martialart::has_weapon( const itype_id &itt ) const
 bool martialart::weapon_valid( const item &it ) const
 {
     if( allow_melee ) {
-        return true;
-    }
+    return true;
+}
 
-    if( it.is_null() && !strictly_melee ) {
+if( it.is_null() && !strictly_melee ) {
         return true;
     }
 
@@ -980,7 +980,7 @@ bool martialart::weapon_valid( const item &it ) const
     }
 
     if( !strictly_unarmed && !strictly_melee && !it.is_null() &&
-        it.has_flag( json_flag_UNARMED_WEAPON ) ) {
+            it.has_flag( json_flag_UNARMED_WEAPON ) ) {
         return true;
     }
 
@@ -1015,8 +1015,8 @@ std::vector<matec_id> character_martial_arts::get_all_techniques( const item &we
 // defensive technique-related
 bool character_martial_arts::has_miss_recovery_tec( const item &weap ) const
 {
-    for( const matec_id &technique : get_all_techniques( weap ) ) {
-        if( technique->miss_recovery ) {
+for( const matec_id &technique : get_all_techniques( weap ) ) {
+    if( technique->miss_recovery ) {
             return true;
         }
     }
@@ -1039,8 +1039,8 @@ ma_technique character_martial_arts::get_miss_recovery_tec( const item &weap ) c
 // This one isn't used with a weapon
 bool character_martial_arts::has_grab_break_tec() const
 {
-    for( const matec_id &technique : get_all_techniques( null_item_reference() ) ) {
-        if( technique->grab_break ) {
+for( const matec_id &technique : get_all_techniques( null_item_reference() ) ) {
+    if( technique->grab_break ) {
             return true;
         }
     }
@@ -1062,23 +1062,23 @@ ma_technique character_martial_arts::get_grab_break_tec( const item &weap ) cons
 bool Character::can_use_grab_break_tec( const item &weap ) const
 {
     if( !has_grab_break_tec() ) {
-        return false;
-    }
+    return false;
+}
 
-    ma_technique tec = martial_arts_data->get_grab_break_tec( weap );
+ma_technique tec = martial_arts_data->get_grab_break_tec( weap );
 
-    return tec.is_valid_character( *this );
+return tec.is_valid_character( *this );
 }
 
 bool Character::can_miss_recovery( const item &weap ) const
 {
     if( !martial_arts_data->has_miss_recovery_tec( weap ) ) {
-        return false;
-    }
+    return false;
+}
 
-    ma_technique tec = martial_arts_data->get_miss_recovery_tec( weap );
+ma_technique tec = martial_arts_data->get_miss_recovery_tec( weap );
 
-    return tec.is_valid_character( *this );
+return tec.is_valid_character( *this );
 }
 
 bool character_martial_arts::can_leg_block( const Character &owner ) const

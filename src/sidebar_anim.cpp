@@ -251,8 +251,8 @@ icon_transform registry::sample( const std::string &key, std::uint32_t now ) con
 
 bool registry::any_active( std::uint32_t now ) const
 {
-    for( const auto &kv : states_ ) {
-        for( const auto &pr : kv.second.active ) {
+for( const auto &kv : states_ ) {
+    for( const auto &pr : kv.second.active ) {
             if( !pr.second.settled( now ) ) {
                 return true;
             }

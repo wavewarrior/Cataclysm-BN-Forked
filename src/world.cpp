@@ -216,13 +216,13 @@ bool WORLDINFO::load_options()
 bool WORLDINFO::save( const bool is_conversion ) const
 {
     if( !assure_dir_exist( folder_path() ) ) {
-        DebugLog( DL::Error, DC::Main ) << "Unable to create or open world[" << world_name
+    DebugLog( DL::Error, DC::Main ) << "Unable to create or open world[" << world_name
                                         << "] directory for saving";
         return false;
     }
 
     if( !is_conversion ) {
-        const auto savefile = folder_path() + "/" + PATH_INFO::worldoptions();
+    const auto savefile = folder_path() + "/" + PATH_INFO::worldoptions();
         const bool saved = write_to_file( savefile, [&]( std::ostream & fout ) {
             JsonOut jout( fout );
 
@@ -257,7 +257,7 @@ bool WORLDINFO::save( const bool is_conversion ) const
     // choice of world save format.
     if( world_save_format == save_format::V2_COMPRESSED_SQLITE3 &&
         !file_exist( folder_path() + "/map.sqlite3" ) ) {
-        auto *db = open_db( folder_path() + "/map.sqlite3" );
+    auto *db = open_db( folder_path() + "/map.sqlite3" );
         sqlite3_close( db );
     }
     return true;

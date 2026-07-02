@@ -24,15 +24,15 @@ auto normalize_name( const std::string &id, const std::string &name ) -> std::st
 auto register_widget( const widget_options &opts ) -> void
 {
     if( opts.id.empty() ) {
-        debugmsg( "Lua sidebar widget id must not be empty." );
+    debugmsg( "Lua sidebar widget id must not be empty." );
         return;
     }
     if( opts.draw == sol::lua_nil ) {
-        debugmsg( "Lua sidebar widget '%s' has no draw callback.", opts.id );
+    debugmsg( "Lua sidebar widget '%s' has no draw callback.", opts.id );
         return;
     }
     if( opts.height <= 0 && opts.height != -2 ) {
-        debugmsg( "Lua sidebar widget '%s' has non-positive height.", opts.id );
+    debugmsg( "Lua sidebar widget '%s' has non-positive height.", opts.id );
         return;
     }
 
@@ -53,7 +53,7 @@ auto register_widget( const widget_options &opts ) -> void
     auto &widgets = widgets_storage();
     auto existing = std::ranges::find( widgets, opts.id, &widget_entry::id );
     if( existing != widgets.end() ) {
-        *existing = std::move( new_entry );
+    *existing = std::move( new_entry );
         return;
     }
 

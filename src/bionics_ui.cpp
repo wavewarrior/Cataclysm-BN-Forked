@@ -564,8 +564,8 @@ void show_bionics_ui( Character &who )
         data->empty = cur->empty();
         if( cur->empty() ) {
             data->empty_rml = cata_text_to_rml( colorize(
-                                  tab_mode == TAB_ACTIVE ? _( "No activatable bionics installed." )
-                                  : _( "No passive bionics installed." ), c_light_gray ) );
+                                                    tab_mode == TAB_ACTIVE ? _( "No activatable bionics installed." )
+                                                    : _( "No passive bionics installed." ), c_light_gray ) );
         }
 
         data->rows.clear();
@@ -574,7 +574,7 @@ void show_bionics_ui( Character &who )
             const nc_color col = get_bionic_text_color( bio, false );
             const std::string marker = ( i == cursor ) ? "> " : "• ";
             const std::string desc = string_format( "%c %s", ( *cur )[i]->invlet,
-                                     build_bionic_powerdesc_string( bio ) );
+                                                    build_bionic_powerdesc_string( bio ) );
             bionic_rml_row r;
             r.text_rml = cata_text_to_rml( marker + colorize( desc, col ) );
             r.selected = ( i == cursor );
@@ -594,7 +594,7 @@ void show_bionics_ui( Character &who )
                 const int count = who.count_bionic_of_type( bio.id );
                 if( count != 1 ) {
                     ex += "\n" + colorize( string_format(
-                            "You have %s instances of this bionic installed.", count ), c_magenta );
+                                               "You have %s instances of this bionic installed.", count ), c_magenta );
                 }
             }
             data->examine_rml = cata_text_to_rml( ex );

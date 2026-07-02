@@ -11,7 +11,7 @@ namespace
 auto has_broken_limb_penalty( const Character &c, const bodypart_id &bp ) -> bool
 {
     return c.is_limb_broken( bp )
-           && !c.worn_with_flag( flag_SPLINT, bp );
+    && !c.worn_with_flag( flag_SPLINT, bp );
 }
 
 /// Broken limbs without splint heal slower up to 25%

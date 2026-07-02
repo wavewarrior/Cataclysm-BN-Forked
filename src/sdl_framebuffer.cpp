@@ -18,7 +18,8 @@ using cata_cursesport::cursecell;
 // ---------------------------------------------------------------------------
 // Per-family self-validating cache
 // ---------------------------------------------------------------------------
-namespace {
+namespace
+{
 
 struct family_cache {
     std::vector<curseline> cells;
@@ -47,12 +48,16 @@ void cache_initialize_all( int term_height, int term_width,
     // coordinates relative to the terminal origin.
     struct { window_family family; int h; int w; } const init[] = {
         { window_family::terminal, term_height, term_width },
-        { window_family::terrain,
-          std::max( { term_height, over_height, terr_height } ),
-          std::max( { term_width, over_width, terr_width } ) },
-        { window_family::overmap,
-          std::max( { term_height, over_height, terr_height } ),
-          std::max( { term_width, over_width, terr_width } ) },
+        {
+            window_family::terrain,
+            std::max( { term_height, over_height, terr_height } ),
+            std::max( { term_width, over_width, terr_width } )
+        },
+        {
+            window_family::overmap,
+            std::max( { term_height, over_height, terr_height } ),
+            std::max( { term_width, over_width, terr_width } )
+        },
     };
 
     for( const auto &e : init ) {

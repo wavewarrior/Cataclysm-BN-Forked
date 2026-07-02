@@ -62,9 +62,9 @@ inv_chars( "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!\"#&()+.:;=@[\\
 bool invlet_wrapper::valid( const int invlet ) const
 {
     if( invlet > std::numeric_limits<char>::max() || invlet < std::numeric_limits<char>::min() ) {
-        return false;
-    }
-    return find( static_cast<char>( invlet ) ) != std::string::npos;
+    return false;
+}
+return find( static_cast<char>( invlet ) ) != std::string::npos;
 }
 
 invlet_favorites::invlet_favorites( const std::unordered_map<itype_id, std::string> &map )
@@ -418,7 +418,7 @@ void inventory::restack( player &p )
 
     //Ensure that all items in the same stack have the same invlet.
     for( std::vector< item * > &outer : items ) {
-        for( item *&inner : outer ) {
+        for( item * &inner : outer ) {
             inner->invlet = outer.front()->invlet;
         }
     }
@@ -620,7 +620,7 @@ void inventory::form_from_map( map &m, std::vector<tripoint_bub_ms> pts, const C
 }
 
 std::vector<detached_ptr<item>> location_inventory::reduce_stack( const int position,
-                             const int quantity )
+        const int quantity )
 {
     int pos = 0;
     std::vector<detached_ptr<item>> ret;
@@ -631,7 +631,7 @@ std::vector<detached_ptr<item>> location_inventory::reduce_stack( const int posi
             if( quantity >= static_cast<int>( iter->size() ) || quantity < 0 ) {
                 std::vector<item *> stack = *iter;
                 inv.items.erase( iter );
-                for( item *&it : stack ) {
+                for( item * &it : stack ) {
                     it->remove_location();
                     ret.push_back( detached_ptr<item>( it ) );
                 }
@@ -687,7 +687,7 @@ item &inventory::remove_item( const int position )
 }
 
 std::vector<detached_ptr<item>> location_inventory::remove_randomly_by_volume(
-                                 const units::volume &volume )
+    const units::volume &volume )
 {
     std::vector<detached_ptr<item>> result;
     units::volume volume_dropped = 0_ml;
@@ -814,7 +814,7 @@ int inventory::position_by_type( const itype_id &type ) const
 }
 
 std::vector<detached_ptr<item>> location_inventory::use_amount( itype_id it, int quantity,
-                             const std::function<bool( const item & )> &filter )
+        const std::function<bool( const item & )> &filter )
 {
     inv.items.sort( stack_compare );
     std::vector<detached_ptr<item>> ret;
@@ -880,8 +880,8 @@ int inventory::worst_item_value( npc *p ) const
 
 bool inventory::has_enough_painkiller( int pain ) const
 {
-    for( const auto &elem : items ) {
-        const item &it = *elem.front();
+for( const auto &elem : items ) {
+    const item &it = *elem.front();
         if( ( pain <= 35 && it.typeId() == itype_aspirin ) ||
             ( pain >= 50 && it.typeId() == itype_oxycodone ) ||
             it.typeId() == itype_tramadol || it.typeId() == itype_codeine ) {
@@ -1235,14 +1235,14 @@ invlets_bitset inventory::allocated_invlets() const
 const itype_bin &inventory::get_binned_items() const
 {
     if( binned ) {
-        return binned_items;
-    }
+    return binned_items;
+}
 
-    binned_items.clear();
+binned_items.clear();
 
-    // HACK: Hack warning
-    inventory *this_nonconst = const_cast<inventory *>( this );
-    this_nonconst->visit_items( [ this ]( item * e ) {
+// HACK: Hack warning
+inventory *this_nonconst = const_cast<inventory *>( this );
+this_nonconst->visit_items( [ this ]( item * e ) {
         binned_items[ e->typeId() ].push_back( e );
         return VisitResponse::NEXT;
     } );
@@ -1280,8 +1280,8 @@ location_inventory::location_inventory( item_location *location ) : loc( locatio
 location_inventory &location_inventory::operator=( location_inventory &&source )
 noexcept
 {
-    for( auto &stack : source.inv.items ) {
-        for( item * const &it : stack ) {
+for( auto &stack : source.inv.items ) {
+    for( item * const &it : stack ) {
             it->remove_location();
             it->set_location( &*loc );
         }

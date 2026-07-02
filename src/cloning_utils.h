@@ -10,17 +10,17 @@ namespace cloning_utils
 inline auto specimen_size_class( const mtype_id &specimen_id ) -> int
 {
     if( specimen_id.is_null() ) {
-        return 0;
-    }
-    return static_cast<int>( specimen_id.obj().size );
+    return 0;
+}
+return static_cast<int>( specimen_id.obj().size );
 }
 
 inline auto specimen_required_sample_size( const mtype_id &specimen_id ) -> int
 {
     if( specimen_id.is_null() ) {
-        return 0;
-    }
-    return specimen_size_class( specimen_id ) + 1;
+    return 0;
+}
+return specimen_size_class( specimen_id ) + 1;
 }
 inline auto specimen_size_class_string( const mtype_id &specimen_id ) -> const char *
 {

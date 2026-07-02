@@ -165,9 +165,9 @@ auto configure_vehicle_locks( vehicle &veh, const replace_vehicle_request &reque
 {
     if( !request.options.locks.has_value() || *request.options.locks ) { return; }
 
-    for( auto index = veh.part_count(); index > 0; --index ) {
-        const auto part_index = index - 1;
-        if( veh.part_with_feature( part_index, "DOOR_LOCKING", false ) == part_index ) {
+for( auto index = veh.part_count(); index > 0; --index ) {
+    const auto part_index = index - 1;
+    if( veh.part_with_feature( part_index, "DOOR_LOCKING", false ) == part_index ) {
             veh.remove_part( part_index );
         }
     }

@@ -168,8 +168,8 @@ float bonus_container::get_flat( const Character &u, affected_stat stat, damage_
     }
 
     float ret = 0.0f;
-    for( const auto &es : iter->second ) {
-        ret += es.get( u );
+for( const auto &es : iter->second ) {
+    ret += es.get( u );
     }
 
     return ret;
@@ -188,8 +188,8 @@ float bonus_container::get_mult( const Character &u, affected_stat stat, damage_
     }
 
     float ret = 1.0f;
-    for( const auto &es : iter->second ) {
-        ret *= es.get( u );
+for( const auto &es : iter->second ) {
+    ret *= es.get( u );
     }
 
     // Currently all relevant effects require non-negative values

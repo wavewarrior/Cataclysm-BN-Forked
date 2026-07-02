@@ -41,7 +41,7 @@ template <class Char> class formatbuf : public std::basic_streambuf<Char>
 
         int_type overflow( int_type ch = traits_type::eof() ) FMT_OVERRIDE {
             if( !traits_type::eq_int_type( ch, traits_type::eof() ) ) {
-                buffer_.push_back( static_cast<Char>( ch ) );
+            buffer_.push_back( static_cast<Char>( ch ) );
             }
             return ch;
         }
@@ -127,7 +127,7 @@ void format_value( buffer<Char> &buf, const T &value,
 // Formats an object of type T that has an overloaded ostream operator<<.
 template <typename T, typename Char>
 struct fallback_formatter<T, Char, enable_if_t<is_streamable<T, Char>::value>>
-            : private formatter<basic_string_view<Char>, Char> {
+    : private formatter<basic_string_view<Char>, Char> {
     FMT_CONSTEXPR auto parse( basic_format_parse_context<Char> &ctx )
     -> decltype( ctx.begin() ) {
         return formatter<basic_string_view<Char>, Char>::parse( ctx );
@@ -177,7 +177,7 @@ void vprint( std::basic_ostream<Char> &os, basic_string_view<Char> format_str,
  */
 template <typename S, typename... Args,
           typename Char = enable_if_t<detail::is_string<S>::value, char_t<S>>>
-                                      void print( std::basic_ostream<Char> &os, const S &format_str, Args && ... args )
+void print( std::basic_ostream<Char> &os, const S &format_str, Args && ... args )
 {
     vprint( os, to_string_view( format_str ),
             fmt::make_args_checked<Args...>( format_str, args... ) );

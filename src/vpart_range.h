@@ -30,11 +30,11 @@ class vehicle_part_iterator
 
         auto skip_to_next_valid( size_t i ) -> void {
             while( i < range_.part_count() &&
-                   !range_.matches( i ) ) {
-                ++i;
-            }
-            if( i < range_.part_count() ) {
-                vp_.emplace( range_.vehicle(), i );
+            !range_.matches( i ) ) {
+            ++i;
+        }
+        if( i < range_.part_count() ) {
+            vp_.emplace( range_.vehicle(), i );
             } else {
                 vp_.reset();
             }
@@ -159,7 +159,7 @@ class vehicle_part_with_feature_range : public
         vehicle_part_with_feature_range() = default;
         vehicle_part_with_feature_range( ::vehicle &v, feature_type f, part_status_flag r ) :
             generic_vehicle_part_range<vehicle_part_with_feature_range<feature_type>>( v ),
-                    feature_( std::move( f ) ), required_( r ) { }
+            feature_( std::move( f ) ), required_( r ) { }
 
         auto matches( size_t part ) const -> bool;
 

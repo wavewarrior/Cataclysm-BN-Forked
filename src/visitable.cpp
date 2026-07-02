@@ -233,8 +233,8 @@ bool visitable<location_inventory>::has_quality( const quality_id &qual, int lev
 template <>
 bool visitable<vehicle_selector>::has_quality( const quality_id &qual, int level, int qty ) const
 {
-    for( const auto &cursor : static_cast<const vehicle_selector &>( *this ) ) {
-        if( cursor.ignore_vpart ) {
+for( const auto &cursor : static_cast<const vehicle_selector &>( *this ) ) {
+    if( cursor.ignore_vpart ) {
             continue;
         }
 
@@ -378,7 +378,7 @@ visitable<T>::visit_items( const std::function<VisitResponse( const item *,
                            const item * )> &func ) const
 {
     return const_cast<visitable<T> *>( this )->visit_items(
-               static_cast<const std::function<VisitResponse( item *, item * )>&>( func ) );
+    static_cast<const std::function<VisitResponse( item *, item * )>&>( func ) );
 }
 
 /** @relates visitable */
@@ -457,7 +457,7 @@ static VisitResponse visit_internal( const std::function<VisitResponse( item *, 
 VisitResponse item_contents::visit_contents( const std::function<VisitResponse( item *, item * )>
         &func, item *parent )
 {
-    for( item *&e : items ) {
+    for( item * &e : items ) {
         switch( visit_internal( func, e, parent ) ) {
             case VisitResponse::ABORT:
                 return VisitResponse::ABORT;
@@ -534,7 +534,7 @@ VisitResponse visitable<map_cursor>::visit_items(
         return VisitResponse::NEXT;
     }
 
-    for( item *&e : here.i_at( *cur ) ) {
+    for( item * &e : here.i_at( *cur ) ) {
         if( visit_internal( func, e ) == VisitResponse::ABORT ) {
             return VisitResponse::ABORT;
         }
@@ -564,7 +564,7 @@ VisitResponse visitable<vehicle_cursor>::visit_items(
 
     int idx = self->veh.part_with_feature( self->part, "CARGO", true );
     if( idx >= 0 ) {
-        for( auto *&e : self->veh.get_items( idx ) ) {
+        for( auto * &e : self->veh.get_items( idx ) ) {
             if( visit_internal( func, e ) == VisitResponse::ABORT ) {
                 return VisitResponse::ABORT;
             }

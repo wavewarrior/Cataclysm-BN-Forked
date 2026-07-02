@@ -19,7 +19,7 @@ detached_ptr<T> &detached_ptr<T>::operator=( detached_ptr &&source )
 noexcept
 {
     if( ptr ) {
-        ptr->destroy();
+    ptr->destroy();
     }
     ptr = source.ptr;
     source.ptr = nullptr;
@@ -54,7 +54,7 @@ template<typename T>
 T *detached_ptr<T>::get() const
 {
     if( !*this ) {
-        debugmsg( "Attempted to resolve invalid detached_ptr" );
+    debugmsg( "Attempted to resolve invalid detached_ptr" );
         return &null_item_reference();
     }
     return ptr;

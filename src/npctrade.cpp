@@ -115,7 +115,7 @@ std::vector<item_pricing> npc_trading::init_buying( Character &buyer, Character 
     double adjust = net_price_adjustment( buyer, seller );
 
     const auto check_item = [fac, adjust, is_npc, &np, &result,
-                                  &seller]( const std::vector<item *> &locs,
+                             &seller]( const std::vector<item *> &locs,
     int count = 1 ) {
         item *it_ptr = locs.front();
         if( it_ptr == nullptr || it_ptr->is_null() ) {
@@ -227,17 +227,17 @@ auto npc_trading::calc_npc_owes_you( const trade_state &state, const npc &np ) -
 {
     // Friends don't hold debts against friends.
     if( np.will_exchange_items_freely() ) {
-        return 0;
-    }
+    return 0;
+}
 
-    // If they're going to owe you more than before, and it's more than they're willing
-    // to owe, then cap the amount owed at the present level or their willingness to owe
-    // (whichever is bigger).
-    //
-    // When could they owe you more than max_willing_to_owe? It could be from quest rewards,
-    // when they were less angry, or from when you were better friends.
-    if( state.your_balance > np.op_of_u.owed && state.your_balance > np.max_willing_to_owe() ) {
-        return std::max( np.op_of_u.owed, np.max_willing_to_owe() );
+// If they're going to owe you more than before, and it's more than they're willing
+// to owe, then cap the amount owed at the present level or their willingness to owe
+// (whichever is bigger).
+//
+// When could they owe you more than max_willing_to_owe? It could be from quest rewards,
+// when they were less angry, or from when you were better friends.
+if( state.your_balance > np.op_of_u.owed && state.your_balance > np.max_willing_to_owe() ) {
+    return std::max( np.op_of_u.owed, np.max_willing_to_owe() );
     }
 
     // Fair's fair. NPC will remember this debt (or credit they've extended)
@@ -257,7 +257,7 @@ auto npc_trading::trade( npc &np, int cost, const std::string &deal ) -> bool
 {
     // Only allow actual shopkeepers to refresh their inventory like this
     if( np.is_shopkeeper() ) {
-        np.shop_restock();
+    np.shop_restock();
     }
     //np.drop_items( np.weight_carried() - np.weight_capacity(),
     //               np.volume_carried() - np.volume_capacity() );
@@ -270,9 +270,9 @@ auto npc_trading::trade( npc &np, int cost, const std::string &deal ) -> bool
 
     const auto traded = trade_win.perform_trade( np, deal );
     if( traded ) {
-        auto practice = 0;
+    auto practice = 0;
 
-        npc_trading::transfer_items( state.yours, g->u, np, false );
+    npc_trading::transfer_items( state.yours, g->u, np, false );
         npc_trading::transfer_items( state.theirs, np, g->u, true );
 
         // NPCs will remember debts, to the limit that they'll extend credit or previous debts

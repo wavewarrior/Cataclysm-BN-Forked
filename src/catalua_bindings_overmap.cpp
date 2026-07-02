@@ -192,8 +192,8 @@ void cata::detail::reg_overmap( sol::state &lua )
                   []( const tripoint_abs_omt & center, int radius,
     sol::optional<sol::protected_function> filter_fn ) -> bool {
         if( filter_fn.has_value() )
-        {
-            auto filter = filter_fn.value();
+    {
+        auto filter = filter_fn.value();
             const auto wrapped_filter = [filter]( const oter_id & ter ) -> bool {
                 sol::protected_function_result res = filter( ter );
                 check_func_result( res );
@@ -225,8 +225,8 @@ void cata::detail::reg_overmap( sol::state &lua )
     luna::set_fx( lib, "set_note",
     []( const tripoint_abs_omt & pos, const sol::optional<std::string> &note_text ) -> void {
         if( note_text.has_value() && !note_text->empty() )
-        {
-            get_active_overmapbuffer().add_note( pos, *note_text );
+    {
+        get_active_overmapbuffer().add_note( pos, *note_text );
             return;
         }
         get_active_overmapbuffer().delete_note( pos );

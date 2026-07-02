@@ -798,7 +798,7 @@ void safemode::set_rule( const rules_class &rule_in, const std::string &name_in,
                     }
                 } else {
                     safemode_rules_hostile[name_in][rule_in.attitude] = rule_state_class( rs_in, rule_in.proximity,
-                            HOSTILE_SPOTTED );
+                        HOSTILE_SPOTTED );
                 }
             }
             break;
@@ -923,7 +923,7 @@ void safemode::serialize( JsonOut &json ) const
 
     auto &temp_rules = ( is_character ) ? character_rules : global_rules;
     for( auto &elem : temp_rules ) {
-        json.start_object();
+    json.start_object();
 
         json.member( "rule", elem.rule );
         json.member( "active", elem.active );

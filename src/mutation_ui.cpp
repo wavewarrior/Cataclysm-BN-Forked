@@ -71,12 +71,12 @@ static std::string mutation_titlebar_desc( const mutation_menu_mode menu_mode,
     if( menu_mode == mutation_menu_mode::activating ) {
         desc += colorize( _( "Activating" ),
                           c_green ) + "  " + shortcut_desc( _( "%s to examine mutation, " ),
-                                  ctxt.get_desc( "TOGGLE_EXAMINE" ) );
+                              ctxt.get_desc( "TOGGLE_EXAMINE" ) );
     }
     if( menu_mode == mutation_menu_mode::examining ) {
         desc += colorize( _( "Examining" ),
                           c_light_blue ) + "  " + shortcut_desc( _( "%s to activate mutation, " ),
-                                  ctxt.get_desc( "TOGGLE_EXAMINE" ) );
+                              ctxt.get_desc( "TOGGLE_EXAMINE" ) );
     }
     if( menu_mode == mutation_menu_mode::hiding ) {
         desc += colorize( _( "Hiding" ), c_cyan ) + "  " + shortcut_desc( _( "%s to activate mutation, " ),
@@ -463,9 +463,9 @@ detail::mutations_ui_result detail::show_mutations_ui_internal( Character &who )
                         query_popup pop;
                         pop.message( _( "%s; enter new letter." ),
                                      mutation_branch::get_name( *mut_id ) )
-                        .context( "POPUP_WAIT" )
-                        .allow_cancel( true )
-                        .allow_anykey( true );
+                           .context( "POPUP_WAIT" )
+                           .allow_cancel( true )
+                           .allow_anykey( true );
 
                         bool pop_exit = false;
                         while( !pop_exit ) {
@@ -630,9 +630,9 @@ detail::mutations_ui_result detail::show_mutations_ui_internal( Character &who )
                             query_popup pop;
                             pop.message( _( "%s; enter new letter." ),
                                          mutation_branch::get_name( mut_id ) )
-                            .context( "POPUP_WAIT" )
-                            .allow_cancel( true )
-                            .allow_anykey( true );
+                               .context( "POPUP_WAIT" )
+                               .allow_cancel( true )
+                               .allow_anykey( true );
 
                             bool pop_exit = false;
                             while( !pop_exit ) {

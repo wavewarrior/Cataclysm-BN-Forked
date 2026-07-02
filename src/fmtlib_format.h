@@ -3544,9 +3544,9 @@ struct format_handler : detail::error_handler {
         } else {
             using parse_context_t = basic_format_parse_context<Char>;
             specs_checker<specs_handler<parse_context_t, Context>> handler(
-                        specs_handler<parse_context_t, Context>( specs, parse_context,
-                                context ),
-                        arg.type() );
+                specs_handler<parse_context_t, Context>( specs, parse_context,
+                        context ),
+                arg.type() );
             begin = parse_format_specs( begin, end, handler );
             if( begin == end || *begin != '}' ) {
                 on_error( "missing '}' in format string" );
@@ -4329,8 +4329,8 @@ inline void vformat_to(
 
 template <typename S, typename... Args, size_t SIZE = inline_buffer_size,
           typename Char = enable_if_t<detail::is_string<S>::value, char_t<S>>>
-                                      inline typename buffer_context<Char>::iterator format_to(
-                                              basic_memory_buffer<Char, SIZE> &buf, const S &format_str, Args && ... args )
+inline typename buffer_context<Char>::iterator format_to(
+    basic_memory_buffer<Char, SIZE> &buf, const S &format_str, Args && ... args )
 {
     const auto &vargs = fmt::make_args_checked<Args...>( format_str, args... );
     detail::vformat_to( buf, to_string_view( format_str ), vargs );
@@ -4348,7 +4348,7 @@ using format_to_n_context FMT_DEPRECATED_ALIAS = buffer_context<Char>;
 
 template <typename OutputIt, typename Char = typename OutputIt::value_type>
 using format_to_n_args FMT_DEPRECATED_ALIAS =
-basic_format_args<buffer_context<Char>>;
+    basic_format_args<buffer_context<Char>>;
 
 template <typename OutputIt, typename Char, typename... Args>
 FMT_DEPRECATED format_arg_store<buffer_context<Char>, Args...>
@@ -4392,12 +4392,12 @@ namespace detail
 #  if FMT_USE_UDL_TEMPLATE
 template <typename Char, Char... CHARS> class udl_formatter
 {
-public:
-    template <typename... Args>
-    std::basic_string<Char> operator()( Args &&... args ) const {
-        static FMT_CONSTEXPR_DECL Char s[] = {CHARS..., '\0'};
-        return format( FMT_STRING( s ), std::forward<Args>( args )... );
-    }
+    public:
+        template <typename... Args>
+        std::basic_string<Char> operator()( Args &&... args ) const {
+            static FMT_CONSTEXPR_DECL Char s[] = {CHARS..., '\0'};
+            return format( FMT_STRING( s ), std::forward<Args>( args )... );
+        }
 };
 #  else
 template <typename Char> struct udl_formatter {

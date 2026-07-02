@@ -64,8 +64,8 @@ class basic_animation
             // NOLINTNEXTLINE(cata-no-long): timespec uses long int
             long int remain = delay;
             while( remain > 0 ) {
-                // NOLINTNEXTLINE(cata-no-long): timespec uses long int
-                long int do_sleep = std::min( remain, 100'000'000L );
+            // NOLINTNEXTLINE(cata-no-long): timespec uses long int
+            long int do_sleep = std::min( remain, 100'000'000L );
                 timespec to_sleep = timespec { 0, do_sleep };
                 nanosleep( &to_sleep, nullptr );
                 inp_mngr.pump_events();
@@ -147,25 +147,25 @@ auto get_bullet_dir( const std::vector<tripoint_bub_ms> &trajectory, size_t i ) 
 [[maybe_unused]] auto get_bullet_rotation( direction dir ) -> int
 {
     switch( dir ) {
-        case direction::NORTH:
-            return 0;
-        case direction::NORTHEAST:
-            return 5;
-        case direction::EAST:
-            return 3;
-        case direction::SOUTHEAST:
-            return 8;
-        case direction::SOUTH:
-            return 2;
-        case direction::SOUTHWEST:
-            return 7;
-        case direction::WEST:
-            return 1;
-        case direction::NORTHWEST:
-            return 6;
-        default:
-            return 0;
-    }
+    case direction::NORTH:
+        return 0;
+    case direction::NORTHEAST:
+        return 5;
+    case direction::EAST:
+        return 3;
+    case direction::SOUTHEAST:
+        return 8;
+    case direction::SOUTH:
+        return 2;
+    case direction::SOUTHWEST:
+        return 7;
+    case direction::WEST:
+        return 1;
+    case direction::NORTHWEST:
+        return 6;
+    default:
+        return 0;
+}
 }
 
 } // namespace
@@ -328,18 +328,18 @@ namespace
 auto get_bullet_sprite( const char bullet, const std::string &custom_sprite ) -> std::string
 {
     if( !custom_sprite.empty() ) {
-        return custom_sprite;
-    }
-    if( bullet == '*' ) {
-        return "animation_bullet_normal_0deg";
-    }
-    if( bullet == '#' ) {
-        return "animation_bullet_flame";
-    }
-    if( bullet == '`' ) {
-        return "animation_bullet_shrapnel";
-    }
-    return {};
+    return custom_sprite;
+}
+if( bullet == '*' ) {
+    return "animation_bullet_normal_0deg";
+}
+if( bullet == '#' ) {
+    return "animation_bullet_flame";
+}
+if( bullet == '`' ) {
+    return "animation_bullet_shrapnel";
+}
+return {};
 }
 
 } // namespace

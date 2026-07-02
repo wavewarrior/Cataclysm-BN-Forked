@@ -290,12 +290,12 @@ void auto_note_manager_gui::show()
         }
         const bool an = get_option<bool>( "AUTO_NOTES" );
         data->header_rml = cata_text_to_rml( string_format( _( "Auto notes enabled: %s" ),
-                           colorize( an ? _( "True" ) : _( "False" ), an ? c_light_green : c_light_red ) ) );
+                                             colorize( an ? _( "True" ) : _( "False" ), an ? c_light_green : c_light_red ) ) );
         data->empty = emptyMode;
         data->rows.clear();
         if( emptyMode ) {
             data->empty_rml = cata_text_to_rml( colorize(
-                    _( "Discover more special encounters to populate this list" ), c_light_gray ) );
+                                                    _( "Discover more special encounters to populate this list" ), c_light_gray ) );
         } else {
             for( int i = 0; i < cacheSize; ++i ) {
                 const string_id<map_extra> &id = displayCache[i];
@@ -306,9 +306,9 @@ void auto_note_manager_gui::show()
                 r.symbol_rml = cata_text_to_rml( colorize( cacheEntry.first.get_symbol(),
                                                  cacheEntry.first.color ) );
                 r.status_rml = cata_text_to_rml( colorize(
-                        en ? pgettext( "auto notes status value", "yes" )
-                        : pgettext( "auto notes status value", "no" ),
-                        en ? c_green : c_red ) );
+                                                     en ? pgettext( "auto notes status value", "yes" )
+                                                     : pgettext( "auto notes status value", "no" ),
+                                                     en ? c_green : c_red ) );
                 r.selected = ( i == currentLine );
                 data->rows.push_back( r );
             }

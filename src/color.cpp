@@ -838,11 +838,11 @@ void color_manager::show_gui()
             r.def_rml  = cata_text_to_rml( colorize( _( "default" ), entry.color ) );
             r.custom_rml = entry.name_custom.empty() ? Rml::String()
                            : cata_text_to_rml( colorize( entry.name_custom,
-                                   name_color_map[entry.name_custom].color ) );
+                                               name_color_map[entry.name_custom].color ) );
             r.inv_def_rml = cata_text_to_rml( colorize( _( "default" ), entry.invert ) );
             r.inv_custom_rml = entry.name_invert_custom.empty() ? Rml::String()
                                : cata_text_to_rml( colorize( entry.name_invert_custom,
-                                       name_color_map[entry.name_invert_custom].color ) );
+                                                   name_color_map[entry.name_invert_custom].color ) );
             r.sel_col = ( i == iCurrentLine ) ? iCurrentCol : 0;
             cm_data.rows.push_back( r );
             i++;
@@ -1046,8 +1046,8 @@ void color_manager::load_custom( const std::string &sPath )
 void color_manager::serialize( JsonOut &json ) const
 {
     json.start_array();
-    for( auto &entry : color_array ) {
-        if( !entry.name_custom.empty() || !entry.name_invert_custom.empty() ) {
+for( auto &entry : color_array ) {
+    if( !entry.name_custom.empty() || !entry.name_invert_custom.empty() ) {
             json.start_object();
 
             json.member( "name", id_to_name( entry.col_id ) );

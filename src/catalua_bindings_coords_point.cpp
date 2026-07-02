@@ -35,7 +35,7 @@ auto lua_point_add( const lua_point_coord &lhs,
                     const sol::object &rhs ) -> std::optional<lua_point_coord>
 {
     if( rhs.is<lua_point_coord>() ) {
-        const auto other = rhs.as<lua_point_coord>();
+    const auto other = rhs.as<lua_point_coord>();
         if( lhs.scale == other.scale && other.origin == coords::origin::relative ) {
             return make_point_coord( lhs.origin, lhs.scale, lhs.raw + other.raw );
         }
@@ -51,7 +51,7 @@ auto lua_point_subtract( const lua_point_coord &lhs,
                          const sol::object &rhs ) -> std::optional<lua_point_coord>
 {
     if( rhs.is<lua_point_coord>() ) {
-        const auto other = rhs.as<lua_point_coord>();
+    const auto other = rhs.as<lua_point_coord>();
         if( lhs.scale == other.scale && other.origin == coords::origin::relative ) {
             return make_point_coord( lhs.origin, lhs.scale, lhs.raw - other.raw );
         }

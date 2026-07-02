@@ -78,7 +78,7 @@ static std::optional<std::pair<tripoint_abs_omt, std::string>> get_mission_arrow
 {
     const auto *mission = get_avatar().get_active_mission();
     const bool custom_waypoint_valid = get_avatar().get_custom_mission_target() !=
-                                      overmap::invalid_tripoint;
+                                       overmap::invalid_tripoint;
     if( mission == nullptr && !custom_waypoint_valid ) {
         return std::nullopt;
     }
@@ -107,7 +107,7 @@ static std::optional<std::pair<tripoint_abs_omt, std::string>> get_mission_arrow
     }
 
     const std::vector<tripoint_abs_omt> traj = line_to( center,
-            tripoint_abs_omt( mission_target.xy(), center.z() ) );
+        tripoint_abs_omt( mission_target.xy(), center.z() ) );
 
     if( traj.empty() ) {
         debugmsg( "Failed to gen overmap mission trajectory %s %s",
@@ -317,7 +317,7 @@ void cata_tiles::draw_om( point dest, const tripoint_abs_omt &center_abs_omt, bo
 
     // Cache display_oter substitution strings for the active region.
     const regional_settings &active_region_settings = ACTIVE_OVERMAP_BUFFER.get_settings(
-                center_abs_omt );
+            center_abs_omt );
     const bool om_has_display_oter = !active_region_settings.display_oter.is_empty();
     const std::string om_default_oter_str = active_region_settings.default_oter.str();
     const std::string om_display_oter_str = om_has_display_oter
@@ -424,15 +424,15 @@ void cata_tiles::draw_om( point dest, const tripoint_abs_omt &center_abs_omt, bo
                     const mongroup *mgp = *horde_it;
                     const MonsterGroup &group = mgp->type.obj();
                     const auto default_id = group.defaultMonster.is_valid()
-                    ? group.defaultMonster.str()
-                    : std::string( "mon_zombie" );
+                        ? group.defaultMonster.str()
+                        : std::string( "mon_zombie" );
                     if( group.monsters.empty() )
                     {
                         return default_id;
                     }
 
                     const auto best_entry = std::ranges::max_element( group.monsters, []( const auto & lhs,
-                            const auto & rhs )
+                        const auto & rhs )
                     {
                         return lhs.frequency < rhs.frequency;
                     } );
@@ -604,7 +604,7 @@ void cata_tiles::draw_om( point dest, const tripoint_abs_omt &center_abs_omt, bo
         inclusive_cuboid<tripoint_abs_omt> map_cursor_area = overmap_area;
         map_cursor_area.p_max.y()--;
         const std::optional<std::pair<tripoint_abs_omt, std::string>> mission_arrow =
-                    get_mission_arrow( map_cursor_area, center_abs_omt );
+            get_mission_arrow( map_cursor_area, center_abs_omt );
         if( mission_arrow ) {
             const tile_search_params tile { mission_arrow->second, C_NONE, empty_string, 0, 0 };
             draw_from_id_string(
@@ -717,7 +717,7 @@ void cata_tiles::draw_om( point dest, const tripoint_abs_omt &center_abs_omt, bo
         const std::string &note_text = ACTIVE_OVERMAP_BUFFER.note( center_abs_omt );
         if( !note_text.empty() && !overmap_label_note::is_label_only( note_text ) ) {
             const std::tuple<char, nc_color, size_t> note_info = overmap_ui::get_note_display_info(
-                        note_text );
+                    note_text );
             const size_t pos = std::get<2>( note_info );
             if( pos != std::string::npos ) {
                 const auto display_note_text =
@@ -800,7 +800,7 @@ void cata_tiles::draw_om( point dest, const tripoint_abs_omt &center_abs_omt, bo
 
                 if( seg[0] == '<' ) {
                     const color_tag_parse_result::tag_type type = update_color_stack(
-                                color_stack, seg, report_color_error::no );
+                            color_stack, seg, report_color_error::no );
                     if( type != color_tag_parse_result::non_color_tag ) {
                         seg = rm_prefix( seg );
                     }

@@ -102,7 +102,7 @@ void scent_map::decay()
 int scent_map::get( const tripoint_bub_ms &p ) const
 {
     if( inbounds( p ) && raw_scent_at( p.x(), p.y(), p.z() ) > 0 ) {
-        return get_unsafe( p );
+    return get_unsafe( p );
     }
     return 0;
 }
@@ -144,7 +144,7 @@ bool scent_map::inbounds( const tripoint_bub_ms &p ) const
     const int levz = gm.get_levz();
     const bool scent_map_z_level_inbounds = ( p.z() == levz ) ||
                                             ( std::abs( p.z() - levz ) == SCENT_MAP_Z_REACH &&
-                                                    get_map().valid_move( p, tripoint_bub_ms( p.xy(), levz ), false, true ) );
+                                                get_map().valid_move( p, tripoint_bub_ms( p.xy(), levz ), false, true ) );
     if( !scent_map_z_level_inbounds ) {
         return false;
     }
@@ -414,7 +414,7 @@ std::string scent_map::serialize( bool is_type ) const
     // Scent values now live on per-submap arrays and are not serialized.
     // Only typescent is retained for backward compatibility.
     if( is_type ) {
-        return typescent.str();
+    return typescent.str();
     }
     return {};
 }

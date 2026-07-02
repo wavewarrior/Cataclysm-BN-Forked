@@ -309,8 +309,8 @@ void distraction_manager_gui::serialize( JsonOut &json ) const
 {
     json.start_array();
 
-    for( auto &elem : distractions ) {
-        json.start_object();
+for( auto &elem : distractions ) {
+    json.start_object();
 
         json.member( "Distraction Type", io::enum_to_string<distraction_type>( elem.first ) );
         json.member( "Bool", elem.second );

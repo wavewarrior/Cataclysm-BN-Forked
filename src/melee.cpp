@@ -88,11 +88,11 @@ auto with_cross_z_melee_cost( const int base_cost, const tripoint_bub_ms &source
                               const tripoint_bub_ms &target ) -> int
 {
     if( std::abs( source.z() - target.z() ) < 1 ) {
-        return base_cost;
-    }
+    return base_cost;
+}
 
-    const auto modifier = get_option<float>( "CROSS_Z_LEVEL_MELEE_DIFFICULTY_MODIFIER" );
-    return static_cast<int>( std::floor( base_cost * modifier ) );
+const auto modifier = get_option<float>( "CROSS_Z_LEVEL_MELEE_DIFFICULTY_MODIFIER" );
+return static_cast<int>( std::floor( base_cost * modifier ) );
 }
 
 } // namespace
@@ -120,7 +120,7 @@ static const efftype_id effect_monster_disarmed( "monster_disarmed" );
 static const efftype_id effect_narcosis( "narcosis" );
 static const efftype_id effect_poison( "poison" );
 static const efftype_id effect_stunned( "stunned" );
-static const efftype_id effect_bleed("bleed");
+static const efftype_id effect_bleed( "bleed" );
 
 static const trait_id trait_ARM_TENTACLES( "ARM_TENTACLES" );
 static const trait_id trait_ARM_TENTACLES_4( "ARM_TENTACLES_4" );
@@ -175,7 +175,7 @@ item &Character::used_weapon() const
 item &Character::primary_weapon() const
 {
     if( !get_body().contains( body_part_arm_r ) ) {
-        return null_item_reference();
+    return null_item_reference();
     }
     return *get_part( body_part_arm_r ).wielding.wielded;
 }
@@ -183,14 +183,14 @@ item &Character::primary_weapon() const
 std::vector<item *> Character::wielded_items() const
 {
     if( !get_body().contains( body_part_arm_r ) ) {
-        return {};
-    }
+    return {};
+}
 
-    if( !get_part( body_part_arm_r ).wielding.wielded ) {
-        return {};
-    }
+if( !get_part( body_part_arm_r ).wielding.wielded ) {
+    return {};
+}
 
-    return {& *get_part( body_part_arm_r ).wielding.wielded};
+return {& *get_part( body_part_arm_r ).wielding.wielded};
 }
 
 detached_ptr<item> Character::set_primary_weapon( detached_ptr<item> &&new_weapon )
@@ -1029,7 +1029,7 @@ float Character::bonus_damage( bool random ) const
 {
     /** @EFFECT_STR increases bashing damage */
     if( random ) {
-        return rng_float( get_str() / 2.0f, get_str() );
+    return rng_float( get_str() / 2.0f, get_str() );
     }
 
     return get_str() * 0.75f;
@@ -1547,7 +1547,7 @@ bool character_martial_arts::has_technique( const Character &guy, const matec_id
         const item &weap ) const
 {
     return weap.has_technique( id ) ||
-           style_selected->has_technique( guy, id );
+    style_selected->has_technique( guy, id );
 }
 
 static damage_unit &get_damage_unit( std::vector<damage_unit> &di, const damage_type dt )

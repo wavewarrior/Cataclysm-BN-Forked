@@ -119,7 +119,7 @@ class trans_catalogue
         u32 get_u32( u32 offs ) const;
         u32 get_u32_unsafe( u32 offs ) const {
             if( is_little_endian ) {
-                return get_u8_unsafe( offs ) |
+            return get_u8_unsafe( offs ) |
                        get_u8_unsafe( offs + 1 ) << 8 |
                        get_u8_unsafe( offs + 2 ) << 16 |
                        get_u8_unsafe( offs + 3 ) << 24;

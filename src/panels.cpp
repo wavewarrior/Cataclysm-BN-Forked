@@ -104,7 +104,7 @@ auto resolve_layout_entry_name( const panel_layout_entry &entry,
                                 const std::map<std::string, std::string> &lua_name_by_id ) -> std::optional<std::string>
 {
     if( entry.lua_id ) {
-        const auto it = lua_name_by_id.find( *entry.lua_id );
+    const auto it = lua_name_by_id.find( *entry.lua_id );
         if( it == lua_name_by_id.end() ) {
             return std::nullopt;
         }
@@ -253,8 +253,8 @@ auto get_lua_widget_lines( const cata::lua_sidebar_widgets::widget_entry &widget
 auto should_render_lua_widget( const cata::lua_sidebar_widgets::widget_entry &widget ) -> bool
 {
     if( widget.panel_visible_fn ) {
-        try {
-            auto res = ( *widget.panel_visible_fn )();
+    try {
+        auto res = ( *widget.panel_visible_fn )();
             check_func_result( res );
             if( res.return_count() == 0 ) {
                 return true;
@@ -275,10 +275,10 @@ auto should_render_lua_widget( const cata::lua_sidebar_widgets::widget_entry &wi
         return false;
     }
     if( !widget.render ) {
-        return true;
-    }
-    try {
-        auto res = ( *widget.render )();
+    return true;
+}
+try {
+    auto res = ( *widget.render )();
         check_func_result( res );
         if( res.return_count() == 0 ) {
             return true;
@@ -409,12 +409,12 @@ static std::pair<nc_color, std::string> per_string( const avatar &p )
 int window_panel::get_height() const
 {
     if( dynamic_height ) {
-        return dynamic_height();
+    return dynamic_height();
     }
     if( height != -1 ) {
-        return height;
-    } else if( pixel_minimap_option ) {
-        const int minimap_height = get_option<int>( "PIXEL_MINIMAP_HEIGHT" );
+    return height;
+} else if( pixel_minimap_option ) {
+    const int minimap_height = get_option<int>( "PIXEL_MINIMAP_HEIGHT" );
         return minimap_height > 0 ? minimap_height : width / 2;
     } else {
         return 0;
@@ -1328,7 +1328,7 @@ std::string hud_location( avatar &u )
     }
     out += "\n";
     const std::pair<std::string, nc_color> ll = get_light_level(
-                character_funcs::fine_detail_vision_mod( get_avatar() ) );
+            character_funcs::fine_detail_vision_mod( get_avatar() ) );
     out += std::string( _( "Light:" ) ) + " " + colorize( ll.first, ll.second ) + "\n";
     out += string_format( _( "Date : %s, day %d" ),
                           calendar::name_season( season_of_year( calendar::turn ) ),
@@ -1383,7 +1383,7 @@ std::string hud_compass( avatar &u )
 // native mana* ids map to the full readout.
 struct hud_producer_entry {
     const char *panel_name;                  // widget id OR built-in label (CI match)
-    std::string ( *produce )( avatar & );    // variant-specific content producer
+    std::string( *produce )( avatar & );     // variant-specific content producer
 };
 const std::array<hud_producer_entry, 46> g_hud_producers = {{
         // Stats — classic (draw_stats) vs labels/wide + narrow (draw_stat_wide/_narrow)
@@ -1445,7 +1445,7 @@ const std::array<hud_producer_entry, 46> g_hud_producers = {{
     }
 };
 
-std::string ( *hud_producer( const std::string &name ) )( avatar & )
+std::string( *hud_producer( const std::string &name ) )( avatar & )
 {
     const std::string lname = to_lower_case( name );
     for( const hud_producer_entry &p : g_hud_producers ) {

@@ -55,9 +55,9 @@ static q_result yn_ignore_query( const std::string &text )
                          .context( "YN_IGNORE_QUERY" )
                          .message( force_uc
                                    ? pgettext( "YN_IGNORE_QUERY",
-                                           "<color_light_red>%s (Case Sensitive)</color>" )
+                                       "<color_light_red>%s (Case Sensitive)</color>" )
                                    : pgettext( "YN_IGNORE_QUERY",
-                                           "<color_light_red>%s</color>" ),
+                                       "<color_light_red>%s</color>" ),
                                    text )
                          .option( "YES", allow_key )
                          .option( "SKIP", allow_key )
@@ -164,7 +164,7 @@ static q_result prompt_warnings( const Character &who, const item &target,
 
 //Returns vector of pairs <material, fraction>, where fraction = [0.0f, 1.0f]
 static std::vector<std::pair< material_id, float>> salvage_result_proportions(
-            const item &target )
+    const item &target )
 {
     auto &materials = target.made_of();
     std::vector<std::pair< material_id, float>> salvagable_materials;
@@ -521,10 +521,10 @@ void salvage_activity_actor::serialize( JsonOut &jsout ) const
 bool item::is_salvageable( bool strict ) const
 {
     if( is_null() ) {
-        return false;
-    }
-    for( auto &mat : made_of() ) {
-        if( salvage::all_salvagable_materials.contains( mat ) ) {
+    return false;
+}
+for( auto &mat : made_of() ) {
+    if( salvage::all_salvagable_materials.contains( mat ) ) {
             if( !strict ) {
                 return !has_flag( flag_NO_SALVAGE );
             }

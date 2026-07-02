@@ -43,17 +43,17 @@ struct stripe_texture_packer final : detail::texture_packer {
                                   const uint32_t height ) override {
 
         if( std::cmp_greater( width, bounds.w ) || std::cmp_greater( height, bounds.h ) ) {
-            return std::nullopt;
-        }
+        return std::nullopt;
+    }
 
-        const auto r_height = round_up( height, min_size );
+    const auto r_height = round_up( height, min_size );
 
-        auto it = std::ranges::find_if( stripes, [&]( const stripe & s ) {
-            return s.x_remainder >= width && s.height == r_height;
-        } );
+    auto it = std::ranges::find_if( stripes, [&]( const stripe & s ) {
+        return s.x_remainder >= width && s.height == r_height;
+    } );
 
-        if( it == stripes.end() ) {
-            if( r_height > y_remainder || y_remainder < min_size ) {
+    if( it == stripes.end() ) {
+        if( r_height > y_remainder || y_remainder < min_size ) {
                 return std::nullopt;
             }
 
@@ -81,31 +81,31 @@ struct stripe_texture_packer final : detail::texture_packer {
 
         s.x_remainder -= width;
         if( s.x_remainder < min_size ) {
-            s.x_remainder = 0;
-        }
-
-        return rect;
+        s.x_remainder = 0;
     }
+
+    return rect;
+}
 };
 
 struct null_texture_packer final : detail::texture_packer {
 
-    bool has_contents;
+bool has_contents;
 
-    explicit null_texture_packer( const SDL_Rect &bounds )
+explicit null_texture_packer( const SDL_Rect &bounds )
         : texture_packer( bounds )
         , has_contents( false ) {
     }
 
     std::optional<SDL_Rect> pack( const uint32_t width, const uint32_t height ) override {
         if( has_contents
-            || std::cmp_greater( width, bounds.w )
-            || std::cmp_greater( height, bounds.h ) ) {
-            return std::nullopt;
-        }
-        has_contents = true;
-        return bounds;
-    };
+        || std::cmp_greater( width, bounds.w )
+        || std::cmp_greater( height, bounds.h ) ) {
+        return std::nullopt;
+    }
+    has_contents = true;
+    return bounds;
+};
 };
 
 auto dynamic_atlas::get_staging_area(
@@ -284,10 +284,10 @@ atlas_texture dynamic_atlas::allocate_sprite( const int w, const int h )
 SDL_GPUTexture *dynamic_atlas::find_gpu_texture( SDL_Texture *legacy_tex ) const
 {
     if( !legacy_tex ) {
-        return nullptr;
-    }
-    for( const auto &s : sheets ) {
-        if( s.texture.get() == legacy_tex ) {
+    return nullptr;
+}
+for( const auto &s : sheets ) {
+    if( s.texture.get() == legacy_tex ) {
             return s.gpu_texture.get();
         }
     }
@@ -297,10 +297,10 @@ SDL_GPUTexture *dynamic_atlas::find_gpu_texture( SDL_Texture *legacy_tex ) const
 dynamic_atlas::gpu_lookup dynamic_atlas::find_gpu_texture_full( SDL_Texture *legacy_tex ) const
 {
     if( !legacy_tex ) {
-        return { nullptr, 0, 0 };
-    }
-    for( const auto &s : sheets ) {
-        if( s.texture.get() == legacy_tex ) {
+    return { nullptr, 0, 0 };
+}
+for( const auto &s : sheets ) {
+    if( s.texture.get() == legacy_tex ) {
             return { s.gpu_texture.get(), s.atlas_width, s.atlas_height };
         }
     }

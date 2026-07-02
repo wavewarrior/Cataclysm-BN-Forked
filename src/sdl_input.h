@@ -7,7 +7,8 @@
 /// Every function takes display_context& for the input state it needs
 /// (joystick, dpad timing, window for mouse capture).  No function touches
 /// renderer/geometry/fonts/tiles — cleanest decomposition seam.
-namespace sdl_input {
+namespace sdl_input
+{
 
 /// Poll the gamepad d-pad (joystick hat) and synthesise directional input
 /// events.  Handles diagonal delay so quick orthogonal presses produce a

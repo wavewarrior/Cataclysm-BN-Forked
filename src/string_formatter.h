@@ -276,13 +276,13 @@ class string_formatter
         template<typename RT, unsigned int current_index>
         RT get_nth_arg_as( const unsigned int requested ) const {
             throw_error( "Requested argument " + std::to_string( requested ) +
-                         " but input has only " + std::to_string( current_index )
-                       );
+            " but input has only " + std::to_string( current_index )
+                    );
         }
         template<typename RT, unsigned int current_index, typename T, typename ...Args>
         RT get_nth_arg_as( const unsigned int requested, T &&head, Args &&... args ) const {
             if( requested > current_index ) {
-                return get_nth_arg_as < RT, current_index + 1 > ( requested, std::forward<Args>( args )... );
+            return get_nth_arg_as < RT, current_index + 1 > ( requested, std::forward<Args>( args )... );
             } else {
                 return convert( static_cast<RT *>( nullptr ), *this, std::forward<T>( head ), 0 );
             }

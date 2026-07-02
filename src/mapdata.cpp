@@ -1575,53 +1575,53 @@ void ter_t::check() const
     check_pry_items( pry, id.str(), true );
 
     if( !transforms_into.is_valid() ) {
-        debugmsg( "invalid transforms_into %s for %s", transforms_into.c_str(), id.c_str() );
+    debugmsg( "invalid transforms_into %s for %s", transforms_into.c_str(), id.c_str() );
     }
     if( !open.is_valid() ) {
-        debugmsg( "invalid terrain %s for opening %s", open.c_str(), id.c_str() );
+    debugmsg( "invalid terrain %s for opening %s", open.c_str(), id.c_str() );
     }
     if( id && open == id ) {
-        debugmsg( "%s has \"open\" set to itself", id.c_str() );
+    debugmsg( "%s has \"open\" set to itself", id.c_str() );
     }
     if( !close.is_valid() ) {
-        debugmsg( "invalid terrain %s for closing %s", close.c_str(), id.c_str() );
+    debugmsg( "invalid terrain %s for closing %s", close.c_str(), id.c_str() );
     }
     if( id && close == id ) {
-        debugmsg( "%s has \"close\" set to itself", id.c_str() );
+    debugmsg( "%s has \"close\" set to itself", id.c_str() );
     }
     if( transforms_into && transforms_into == id ) {
-        debugmsg( "%s transforms_into itself", id.c_str() );
+    debugmsg( "%s transforms_into itself", id.c_str() );
     }
     if( bash.ter_set && bash.ter_set == id ) {
-        debugmsg( "%s turns into itself when bashed", id.c_str() );
+    debugmsg( "%s turns into itself when bashed", id.c_str() );
     }
     if( bash.ter_set_bashed_from_above && bash.ter_set_bashed_from_above == id ) {
-        debugmsg( "%s turns into itself when bashed from above", id.c_str() );
+    debugmsg( "%s turns into itself when bashed from above", id.c_str() );
     }
     if( json_report_strict
         && ( bash.ter_set == t_open_air.id() || bash.ter_set_bashed_from_above == t_open_air.id() ) ) {
-        debugmsg( "%s explicitly turns into \"t_open_air\", but \"t_null\" is preferred",
-                  id.c_str() );
+    debugmsg( "%s explicitly turns into \"t_open_air\", but \"t_null\" is preferred",
+              id.c_str() );
     }
     if( roof && roof->roof ) {
-        debugmsg( "%s has roof %s, which has its own roof %s",
-                  id.str(), roof.str(), roof->roof.str() );
+    debugmsg( "%s has roof %s, which has its own roof %s",
+              id.str(), roof.str(), roof->roof.str() );
     }
     if( roof && !roof->bash.bash_below ) {
-        debugmsg( "%s has roof %s, with \"bash_below\": false",
-                  id.str(), roof.str() );
+    debugmsg( "%s has roof %s, with \"bash_below\": false",
+              id.str(), roof.str() );
     }
     if( bash.ter_set_bashed_from_above && bash.ter_set_bashed_from_above->movecost == 0 &&
         !bash.ter_set_bashed_from_above->roof ) {
-        debugmsg( "%s has bash.ter_set_bashed_from_above %s, which is unpassable but has no roof",
-                  id.str(), bash.ter_set_bashed_from_above.str() );
+    debugmsg( "%s has bash.ter_set_bashed_from_above %s, which is unpassable but has no roof",
+              id.str(), bash.ter_set_bashed_from_above.str() );
     }
     if( json_report_strict && deconstruct.ter_set == t_open_air.id() ) {
-        debugmsg( "%s deconstructs into \"t_open_air\", but \"t_null\" is preferred",
-                  id.str() );
+    debugmsg( "%s deconstructs into \"t_open_air\", but \"t_null\" is preferred",
+              id.str() );
     }
     if( movecost == 1 || movecost < 0 ) {
-        debugmsg( "%s has move_cost %d, but allowed values for terrain are >=2 and 0", id, movecost );
+    debugmsg( "%s has move_cost %d, but allowed values for terrain are >=2 and 0", id, movecost );
     }
 }
 
@@ -1784,8 +1784,8 @@ void furn_t::load( const JsonObject &jo, const std::string &src )
 
 void map_data_common_t::check() const
 {
-    for( auto &harvest : harvest_by_season ) {
-        if( !harvest.is_null() && examine == iexamine::none ) {
+for( auto &harvest : harvest_by_season ) {
+    if( !harvest.is_null() && examine == iexamine::none ) {
             debugmsg( "Harvest data defined without examine function for %s", name_.c_str() );
         }
     }
@@ -1799,13 +1799,13 @@ void furn_t::check() const
     check_pry_items( pry, id.str(), false );
 
     if( !open.is_valid() ) {
-        debugmsg( "invalid furniture %s for opening %s", open.c_str(), id.c_str() );
+    debugmsg( "invalid furniture %s for opening %s", open.c_str(), id.c_str() );
     }
     if( !close.is_valid() ) {
-        debugmsg( "invalid furniture %s for closing %s", close.c_str(), id.c_str() );
+    debugmsg( "invalid furniture %s for closing %s", close.c_str(), id.c_str() );
     }
     if( has_flag( "EMITTER" ) ) {
-        if( emissions.empty() ) {
+    if( emissions.empty() ) {
             debugmsg( "furn %s has the EMITTER flag, but no emissions were set", id.c_str() );
         } else {
             for( const emit_id &e : emissions ) {
@@ -1817,8 +1817,8 @@ void furn_t::check() const
         }
     }
     if( fluid_grid ) {
-        const auto &fluid_grid_data = *fluid_grid;
-        if( fluid_grid_data.allowed_liquids.empty() ) {
+    const auto &fluid_grid_data = *fluid_grid;
+    if( fluid_grid_data.allowed_liquids.empty() ) {
             debugmsg( "furn %s has fluid grid but no allowed_liquids set", id.c_str() );
         }
         const auto invalid_liquid = std::ranges::find_if(

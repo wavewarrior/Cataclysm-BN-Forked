@@ -265,7 +265,7 @@ float workbench_crafting_speed_multiplier( const item &craft, const bench_locati
         break;
         case bench_type::vehicle:
             if( const std::optional<vpart_reference> vp = here.veh_at(
-                        bench.position ).part_with_feature( "WORKBENCH", true ) ) {
+                    bench.position ).part_with_feature( "WORKBENCH", true ) ) {
                 // Vehicle workbench
                 const vpart_info &vp_info = vp->part().info();
                 if( const std::optional<vpslot_workbench> &v_info = vp_info.get_workbench_info() ) {
@@ -295,9 +295,9 @@ float crafting_speed_multiplier( const Character &who, const recipe &rec, bool )
     const auto tools_multi = crafting_tools_speed_multiplier( who, rec );
     const auto result = morale_crafting_speed_multiplier( who, rec ) *
                         lighting_crafting_speed_multiplier( who,
-                                rec ) * tools_multi * ( get_option<int>( "CRAFTING_SPEED_MULT" ) == 0
-                                        ? 9999
-                                        : 100.0f / get_option<int>( "CRAFTING_SPEED_MULT" ) ) *
+                            rec ) * tools_multi * ( get_option<int>( "CRAFTING_SPEED_MULT" ) == 0
+                                ? 9999
+                                : 100.0f / get_option<int>( "CRAFTING_SPEED_MULT" ) ) *
                         who.mutation_value( "crafting_speed_modifier" );
 
     return result;
@@ -558,7 +558,7 @@ std::vector<const item *> Character::get_eligible_containers_for_crafting() cons
         }
 
         if( const std::optional<vpart_reference> vp = here.veh_at( loc ).part_with_feature( "CARGO",
-                true ) ) {
+            true ) ) {
             for( const auto &it : vp->vehicle().get_items( vp->part_index() ) ) {
                 if( is_container_eligible_for_crafting( *it, false ) ) {
                     conts.emplace_back( it );
@@ -725,7 +725,7 @@ static void set_item_map_or_vehicle( const Character &who, const tripoint_bub_ms
     }
     map &here = get_map();
     if( const std::optional<vpart_reference> vp = here.veh_at( loc ).part_with_feature( "CARGO",
-            false ) ) {
+        false ) ) {
 
         item &obj = *newit;
         newit = vp->vehicle().add_item( vp->part_index(), std::move( newit ) );
@@ -801,8 +801,8 @@ item *Character::start_craft( craft_command &command, const tripoint_bub_ms & )
 
     bench_location bench = find_best_bench( *this, *craft );
     std::pair<bench_type, float> best_found_bench = crafting::best_bench_here( *craft,
-            abs_to_bub( bench.position ),
-            bench.type == bench_type::hands );
+        abs_to_bub( bench.position ),
+        bench.type == bench_type::hands );
     if( best_found_bench.second < 1.0f ) {
         add_msg_if_player( m_info, pgettext( "in progress craft",
                                              "You can't hold %s in your hands and there is no good work surface nearby." ), craft->tname() );
@@ -968,7 +968,7 @@ double Character::crafting_success_roll( const recipe &making ) const
 int item::get_next_failure_point() const
 {
     if( !is_craft() ) {
-        debugmsg( "get_next_failure_point() called on non-craft '%s.'  Aborting.", tname() );
+    debugmsg( "get_next_failure_point() called on non-craft '%s.'  Aborting.", tname() );
         return INT_MAX;
     }
     return craft_data_->next_failure_point >= 0 ? craft_data_->next_failure_point : INT_MAX;
@@ -1048,7 +1048,7 @@ bool item::handle_craft_failure( Character &crafter )
 requirement_data item::get_continue_reqs() const
 {
     if( !is_craft() ) {
-        debugmsg( "get_continue_reqs() called on non-craft '%s.'  Aborting.", tname() );
+    debugmsg( "get_continue_reqs() called on non-craft '%s.'  Aborting.", tname() );
         return requirement_data();
     }
     return requirement_data::continue_requirements( craft_data_->comps_used, components.as_vector() );
@@ -1400,17 +1400,17 @@ const requirement_data *Character::select_requirements(
 {
     assert( !alternatives.empty() );
     if( alternatives.size() == 1 || !is_avatar() ) {
-        return alternatives.front();
+    return alternatives.front();
     }
 
     uilist menu;
 
-    for( const requirement_data *req : alternatives ) {
-        // Write with a large width and then just re-join the lines, because
-        // uilist does its own wrapping and we want to rely on that.
-        std::vector<std::string> component_lines =
-            req->get_folded_components_list( TERMX - 4, c_light_gray, inv, filter, batch, "",
-                                             requirement_display_flags::no_unavailable );
+for( const requirement_data *req : alternatives ) {
+    // Write with a large width and then just re-join the lines, because
+    // uilist does its own wrapping and we want to rely on that.
+    std::vector<std::string> component_lines =
+        req->get_folded_components_list( TERMX - 4, c_light_gray, inv, filter, batch, "",
+                                         requirement_display_flags::no_unavailable );
         menu.addentry_desc( "", join( component_lines, "\n" ) );
     }
 
@@ -1420,10 +1420,10 @@ const requirement_data *Character::select_requirements(
     menu.query();
 
     if( menu.ret < 0 || static_cast<size_t>( menu.ret ) >= alternatives.size() ) {
-        return nullptr;
-    }
+    return nullptr;
+}
 
-    return alternatives[menu.ret];
+return alternatives[menu.ret];
 }
 
 /* selection of component if a recipe requirement has multiple options (e.g. 'duct tap' or 'welder') */
@@ -1630,17 +1630,17 @@ static void empty_buckets( Character &p )
 }
 
 std::vector<detached_ptr<item>> Character::consume_items( const comp_selection<item_comp> &is,
-                             int batch,
-                             const std::function<bool( const item & )> &filter )
+        int batch,
+        const std::function<bool( const item & )> &filter )
 {
     return consume_items( get_map(), is, batch, bub_pos(), PICKUP_RANGE, filter );
 }
 
 std::vector<detached_ptr<item>> Character::consume_items( map &m,
-                             const comp_selection<item_comp> &is,
-                             int batch,
-                             const tripoint_bub_ms &origin, int radius,
-                             const std::function<bool( const item & )> &filter )
+        const comp_selection<item_comp> &is,
+        int batch,
+        const tripoint_bub_ms &origin, int radius,
+        const std::function<bool( const item & )> &filter )
 {
     std::vector<detached_ptr<item>> ret;
 
@@ -1710,8 +1710,8 @@ std::vector<detached_ptr<item>> Character::consume_items( map &m,
 In that case, consider using select_item_component with 1 pre-created map inventory, and then passing the results
 to consume_items */
 std::vector<detached_ptr<item>> Character::consume_items( const std::vector<item_comp> &components,
-                             int batch,
-                             const std::function<bool( const item & )> &filter )
+        int batch,
+        const std::function<bool( const item & )> &filter )
 {
     inventory map_inv;
     map_inv.form_from_map( bub_pos(), PICKUP_RANGE, this );
@@ -1926,7 +1926,7 @@ bool Character::craft_consume_tools( item &craft, int mulitplier, bool start_cra
 
     // First check if we still have our cached selections
     const std::vector<comp_selection<tool_comp>> &cached_tool_selections =
-                craft.get_cached_tool_selections();
+        craft.get_cached_tool_selections();
 
     inventory map_inv;
     map_inv.form_from_map( bub_pos(), PICKUP_RANGE, this );
@@ -2436,7 +2436,7 @@ bench_location find_best_bench( const Character &who, const item &craft )
 {
     bool can_lift = who.can_wield( craft ).success() && who.weight_capacity() >= craft.weight();
     std::pair<bench_type, float> bench_here = crafting::best_bench_here( craft, who.bub_pos(),
-            can_lift );
+        can_lift );
     bench_type best_type = bench_here.first;
     float best_bench_multi = bench_here.second;
     auto best_loc = who.bub_pos();
@@ -2452,7 +2452,7 @@ bench_location find_best_bench( const Character &who, const item &craft )
         }
 
         if( const std::optional<vpart_reference> vp = g->m.veh_at(
-                    adj ).part_with_feature( "WORKBENCH", true ) ) {
+                adj ).part_with_feature( "WORKBENCH", true ) ) {
             if( const std::optional<vpslot_workbench> &wb_info = vp->part().info().get_workbench_info() ) {
                 if( wb_info->multiplier > best_bench_multi ) {
                     best_type = bench_type::vehicle;
@@ -2494,7 +2494,7 @@ std::pair<bench_type, float> best_bench_here( const item &craft, const tripoint_
     }
 
     if( const std::optional<vpart_reference> vp = g->m.veh_at(
-                abs_loc ).part_with_feature( "WORKBENCH", true ) ) {
+            abs_loc ).part_with_feature( "WORKBENCH", true ) ) {
         float veh_mult = workbench_crafting_speed_multiplier( craft, bench_location{ bench_type::vehicle, abs_loc } );
         if( veh_mult > best_mult ) {
             best_type = bench_type::vehicle;

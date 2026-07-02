@@ -384,14 +384,14 @@ auto game_info::game_report() -> std::string
     // Note: We shorten 'Lua API' to 'LAPI' so that 'Lua' word does not show up
     //       in every issue out there and pollute GitHub issue search results.
     report <<
-           "- OS: " << operating_system() << "\n" <<
-           "    - OS Version: " << os_version << "\n" <<
-           "- Game Version: " << game_version() << " [" << bitness_string() << "]\n" <<
-           "- Graphics Version: " << graphics_version() << "\n" <<
-           "- LAPI Version: " << cata::get_lapi_version_string() << "\n" <<
-           "- Save File Version: " << save_file_version() << "\n" <<
-           "- Game Language: " << lang_translated << " [" << lang << "]\n" <<
-           "- Mods loaded: [\n    " << mods_loaded() << "\n]\n";
+    "- OS: " << operating_system() << "\n" <<
+    "    - OS Version: " << os_version << "\n" <<
+    "- Game Version: " << game_version() << " [" << bitness_string() << "]\n" <<
+    "- Graphics Version: " << graphics_version() << "\n" <<
+    "- LAPI Version: " << cata::get_lapi_version_string() << "\n" <<
+    "- Save File Version: " << save_file_version() << "\n" <<
+    "- Game Language: " << lang_translated << " [" << lang << "]\n" <<
+    "- Mods loaded: [\n    " << mods_loaded() << "\n]\n";
 
     return report.str();
 }

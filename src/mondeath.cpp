@@ -779,7 +779,7 @@ void mdeath::jabberwock( monster &z )
 
     bool vorpal = ch && ch->is_player() &&
                   ( ch->primary_weapon().damage_melee( DT_CUT ) >= ( ch->primary_weapon().damage_melee(
-                              DT_BASH ) * 1.5 ) ) &&
+                          DT_BASH ) * 1.5 ) ) &&
                   ch->primary_weapon().volume() > 500_ml;
 
     if( vorpal && !ch->primary_weapon().has_technique( matec_id( "VORPAL" ) ) ) {
@@ -894,8 +894,8 @@ void mdeath::broken_ammo( monster &z )
 }
 
 static std::vector<detached_ptr<item>> butcher_cbm_item( const itype_id &what,
-                                    const time_point &birthday, const std::vector<flag_id> &flags,
-                                    const std::vector<fault_id> &faults )
+        const time_point &birthday, const std::vector<flag_id> &flags,
+        const std::vector<fault_id> &faults )
 {
     detached_ptr<item> something = item::spawn( what, birthday );
     for( const flag_id &flg : flags ) {
@@ -910,8 +910,8 @@ static std::vector<detached_ptr<item>> butcher_cbm_item( const itype_id &what,
 }
 
 static std::vector<detached_ptr<item>> butcher_cbm_group( const item_group_id &group,
-                                    const time_point &birthday, const std::vector<flag_id> &flags,
-                                    const std::vector<fault_id> &faults )
+        const time_point &birthday, const std::vector<flag_id> &flags,
+        const std::vector<fault_id> &faults )
 {
     std::vector<detached_ptr<item>> spawned = item_group::items_from( group, birthday );
     for( detached_ptr<item> &it : spawned ) {
@@ -945,9 +945,9 @@ void make_mon_corpse( monster &z, int damageLvl )
         for( const harvest_entry &entry : *z.type->harvest ) {
             if( entry.type == "bionic" || entry.type == "bionic_group" ) {
                 std::vector<detached_ptr<item>> contained_bionics =
-                                                 entry.type == "bionic"
-                                                 ? butcher_cbm_item( itype_id( entry.drop ), calendar::turn, entry.flags, entry.faults )
-                                                 : butcher_cbm_group( item_group_id( entry.drop ), calendar::turn, entry.flags, entry.faults );
+                    entry.type == "bionic"
+                    ? butcher_cbm_item( itype_id( entry.drop ), calendar::turn, entry.flags, entry.faults )
+                    : butcher_cbm_group( item_group_id( entry.drop ), calendar::turn, entry.flags, entry.faults );
                 for( detached_ptr<item> &it : contained_bionics ) {
                     // Disgusting hack: use components instead of contents to hide stuff
                     corpse->add_component( std::move( it ) );

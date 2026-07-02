@@ -60,15 +60,15 @@ bool advanced_inventory_pane::is_filtered( const advanced_inv_listitem &it ) con
 bool advanced_inventory_pane::is_filtered( const item &it ) const
 {
     if( it.has_flag( STATIC( flag_id( "HIDDEN_ITEM" ) ) ) ) {
-        return true;
-    }
-    if( filter.empty() ) {
-        return false;
-    }
+    return true;
+}
+if( filter.empty() ) {
+    return false;
+}
 
-    const std::string str = it.tname();
-    if( !filtercache.contains( str ) ) {
-        const auto filter_fn = item_filter_from_string( filter );
+const std::string str = it.tname();
+if( !filtercache.contains( str ) ) {
+    const auto filter_fn = item_filter_from_string( filter );
         filtercache[str] = filter_fn;
 
         return !filter_fn( it );
@@ -132,8 +132,8 @@ void advanced_inventory_pane::add_items_from_area( advanced_inv_area &square,
     } else {
         bool is_in_vehicle = square.can_store_in_vehicle() && ( in_vehicle() || vehicle_override );
         const advanced_inv_area::itemstack &stacks = is_in_vehicle ?
-                square.i_stacked( square.veh->get_items( square.vstor ) ) :
-                square.i_stacked( m.i_at( square.pos ) );
+            square.i_stacked( square.veh->get_items( square.vstor ) ) :
+            square.i_stacked( m.i_at( square.pos ) );
 
         for( size_t x = 0; x < stacks.size(); ++x ) {
             advanced_inv_listitem it( stacks[x], x, square.id, is_in_vehicle );

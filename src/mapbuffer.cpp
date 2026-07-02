@@ -46,12 +46,12 @@ auto uniform_terrain_for_omt( const std::string &dimension_id,
 
     const auto terrain_type = get_overmapbuffer( dimension_id ).ter( omt_addr );
     if( terrain_type == air ) {
-        return t_open_air;
-    }
-    if( terrain_type == rock ) {
-        return t_rock;
-    }
-    return std::nullopt;
+    return t_open_air;
+}
+if( terrain_type == rock ) {
+    return t_rock;
+}
+return std::nullopt;
 }
 
 auto add_uniform_omt( mapbuffer &dest, const tripoint_abs_sm &base,
@@ -630,10 +630,10 @@ auto mapbuffer::generate_omt( const tripoint_abs_omt &omt_addr,
         && lookup_submap_in_memory( base + point_south )
         && lookup_submap_in_memory( base + point_south_east );
     if( all_loaded ) {
-        return {};
-    }
+    return {};
+}
 
-    if( const auto uniform_terrain = uniform_terrain_for_omt( dimension_id_, omt_addr ) ) {
+if( const auto uniform_terrain = uniform_terrain_for_omt( dimension_id_, omt_addr ) ) {
         ZoneScopedN( "mapbuffer_generate_uniform_omt" );
         return {
             .status = add_uniform_omt( *this, base, *uniform_terrain )

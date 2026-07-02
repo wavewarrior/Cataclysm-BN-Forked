@@ -44,7 +44,7 @@ void rule::set_rule_string( const std::string &filter )
 rule_state rule::operator()( const itype_id &item_type ) const
 {
     if( bActive ) {
-        bool in_filter = ruleFunction( item_type );
+    bool in_filter = ruleFunction( item_type );
         if( !in_filter ) {
             return RULE_NONE;
         } else {
@@ -72,8 +72,8 @@ rule_state rule::operator()( const item &item ) const
 void rule_list::serialize( JsonOut &jsout ) const
 {
     jsout.start_array();
-    for( const rule &elem : *this ) {
-        elem.serialize( jsout );
+for( const rule &elem : *this ) {
+    elem.serialize( jsout );
     }
     jsout.end_array();
 }

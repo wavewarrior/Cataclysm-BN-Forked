@@ -840,7 +840,7 @@ const std::map<vpart_id, vpart_info> &vpart_info::all()
 std::string vpart_info::name() const
 {
     if( name_.empty() ) {
-        return item::nname( item );
+    return item::nname( item );
     } else {
         return name_.translated();
     }
@@ -1084,12 +1084,12 @@ int vpart_info::get_conversion_charges() const
 const std::pair<itype_id, int> vpart_info::get_conversion_input() const
 {
     return has_flag( "CONVERTER" ) ? std::make_pair( converter_info->input,
-            converter_info->input_step ) : std::make_pair( itype_id::NULL_ID(), 0 );
+    converter_info->input_step ) : std::make_pair( itype_id::NULL_ID(), 0 );
 }
 const std::pair<itype_id, int> vpart_info::get_conversion_output() const
 {
     return has_flag( "CONVERTER" ) ? std::make_pair( converter_info->output,
-            converter_info->output_step ) : std::make_pair( itype_id::NULL_ID(), 0 );
+    converter_info->output_step ) : std::make_pair( itype_id::NULL_ID(), 0 );
 }
 
 const std::vector<itype_id> vpart_info::craftertools() const

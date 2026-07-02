@@ -263,7 +263,7 @@ class dig_channel_activity_actor : public activity_actor
          */
         bool can_resume_with_internal( const activity_actor &other, const Character & ) const override {
             const dig_channel_activity_actor &dc_actor = static_cast<const dig_channel_activity_actor &>
-                    ( other );
+                ( other );
             return equivalent_activity( dc_actor );
         }
 
@@ -636,7 +636,7 @@ class boltcutting_activity_actor : public activity_actor
         bool can_resume_with_internal( const activity_actor &other,
                                        const Character &/*who*/ ) const override {
             const boltcutting_activity_actor &actor = static_cast<const boltcutting_activity_actor &>
-                    ( other );
+                ( other );
             return actor.target == target && actor.tool == tool;
         }
 };
@@ -719,7 +719,7 @@ class move_items_activity_actor : public activity_actor
             quantities( quantities ), to_vehicle( to_vehicle ),
             relative_destination( relative_destination ) {
 
-            for( item *&it : items ) {
+            for( item * &it : items ) {
                 target_items.emplace_back( it );
             }
         }
@@ -748,7 +748,7 @@ class toggle_gate_activity_actor : public activity_actor
          */
         bool can_resume_with_internal( const activity_actor &other, const Character & ) const override {
             const toggle_gate_activity_actor &og_actor = static_cast<const toggle_gate_activity_actor &>
-                    ( other );
+                ( other );
             return placement == og_actor.placement;
         }
 
@@ -1085,7 +1085,8 @@ class clear_rubble_activity_actor : public activity_actor
 
         bool can_resume_with_internal( const activity_actor &other,
                                        const Character &/*who*/ ) const override {
-            const clear_rubble_activity_actor &actor = static_cast<const clear_rubble_activity_actor &>( other );
+            const clear_rubble_activity_actor &actor = static_cast<const clear_rubble_activity_actor &>
+                ( other );
             return actor.target == target;
         }
 };
@@ -1177,7 +1178,8 @@ class hand_crank_activity_actor : public activity_actor
     public:
         explicit hand_crank_activity_actor( const safe_reference<item> tool,
                                             const std::vector<int> &values,
-                                            const std::vector<std::string> &str_values ) : tool( tool ), values( values ), str_values( str_values ) {};
+                                            const std::vector<std::string> &str_values ) : tool( tool ), values( values ),
+            str_values( str_values ) {};
 
         activity_id get_type() const override {
             return activity_id( "ACT_HAND_CRANK" );
@@ -1228,7 +1230,8 @@ class fertilize_plot_activity_actor : public activity_actor
 {
     public:
         fertilize_plot_activity_actor() = default;
-        explicit fertilize_plot_activity_actor( const std::string &fertilizer_str ) : str_value( fertilizer_str ) {};
+        explicit fertilize_plot_activity_actor( const std::string &fertilizer_str ) : str_value(
+                fertilizer_str ) {};
 
         activity_id get_type() const override {
             return activity_id( "ACT_FERTILIZE_PLOT" );
@@ -1246,7 +1249,8 @@ class fertilize_plot_activity_actor : public activity_actor
 
         bool can_resume_with_internal( const activity_actor &other,
                                        const Character &/*who*/ ) const override {
-            const fertilize_plot_activity_actor &actor = static_cast<const fertilize_plot_activity_actor &>( other );
+            const fertilize_plot_activity_actor &actor = static_cast<const fertilize_plot_activity_actor &>
+                ( other );
             return actor.str_value == str_value;
         }
 };
@@ -1315,8 +1319,8 @@ class butchery_activity_actor : public activity_actor
 
         activity_id get_type() const override {
             switch( type ) {
-                case BUTCHER:
-                    return activity_id( "ACT_BUTCHER" );
+            case BUTCHER:
+                return activity_id( "ACT_BUTCHER" );
                 case BUTCHER_FULL:
                     return activity_id( "ACT_BUTCHER_FULL" );
                 case F_DRESS:
