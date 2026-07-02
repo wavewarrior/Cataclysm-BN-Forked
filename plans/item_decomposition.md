@@ -1,5 +1,59 @@
-## STATUS (reviewed 2026-06-27)
-**0% DONE — KEEP (not started, realistic).** `item.cpp` still **11,688 lines** (largest file in repo). None of the proposed splits exist: `item_combat.cpp`, `item_crafting.cpp`, `item_food.cpp`, `item_book.cpp`, `item_tool.cpp`, `item_armor.cpp`, `item_container.cpp` all absent; `item_use.cpp` (the "existing" merge target in Phase 4) is **also absent** — verify that assumption before starting. Plan is mechanical/.cpp-only and matches reality otherwise. High-value navigability win, untouched. Keep.
+## STATUS — COMPLETE (2026-07-02)
+
+**item.cpp: 11,688 → 1,262 lines (−89%).** Phase 6 partial: `item.cpp` include pruning done
+(42 unused headers removed, commit `8a46ef4291`). `item.h` include cleanup is NOT tractable
+as a follow-on to body extraction: item.h includes are driven by the class *declaration*
+(member variable types, method signatures, base classes) — which is unchanged. Pruning item.h
+would require forward-declaration refactoring (different scope, higher risk per AGENTS.md
+"don't modify headers with >10 usages"). Declare DONE. Move item.h forward-decl work to a
+separate plan if ever needed for build-speed gains.
+
+| Commit | File | Lines moved | item.cpp before → after |
+|--------|------|------------|--------------------------|
+| `4752d73269` | `item_info.cpp` | 2,950 | 11,688 → 8,738 |
+| `931f8fa625` | `item_combat.cpp` | 668 | 8,738 → 8,069 |
+| `3d5b7ea113` | `item_food.cpp` | 413 | 8,069 → 7,656 |
+| `c2a54aca1d` | `item_gun.cpp` | 856 | 7,656 → 6,800 |
+| `9f8d8e9e5c` | `item_process.cpp` | 881 | 6,800 → 5,919 |
+| `1760aec44f` | `item_armor.cpp` + `item_type.cpp` (atomic) | 1,137 | 5,919 → 4,782 |
+| `64e964c6f7` | `item_events.cpp` | 302 | 4,782 → 4,478 |
+| `fa066e8db6` | `item_display.cpp` | 604 | 4,478 → 3,869 |
+| `3428bf8089` | `item_fire.cpp` | 169 | 3,869 → 3,700 |
+| `c98c846588` | `item_container.cpp` | 220 | 3,700 → 3,480 |
+| `e5c1b54f04` | `item_properties.cpp` | 280 | 3,480 → 3,200 |
+| `5311540105` | `item_flags.cpp` | 234 | 3,200 → 2,966 |
+| `86576efb02` | `item_tool.cpp` | 500 | 2,966 → 2,466 |
+| `04c8be2d26` | `item_misc.cpp` | 765 | 2,466 → 1,701 |
+| `ebfaf55744` | `item_ownership.cpp` | 397 | 1,701 → 1,304 |
+| `8a46ef4291` | include pruning (42 removed) | — | 1,304 → **1,262** |
+
+`item_info.cpp` holds `item::basic_info`..`info_string` + 4 info helpers.
+`item_combat.cpp` holds: DPS calc (`hits_by_accuracy`, `effective_dps`, `dps`, `average_dps`);
+melee methods (`attack_cost`, `stamina_cost`, `damage_melee`×2, `get_attacks`, 12 bonus get/set,
+`base_damage_*`, `reach_range`, `can_shatter`); physical resist (`phys_resist<>` + `bash/cut/stab/bullet/acid/fire_resist`).
+`item_food.cpp` holds: `item_internal` namespace (goes-bad cache; sole users moved); `goes_bad()` cluster
+(`goes_bad`, `goes_bad_after_opening`, `is_in_preserving_container`, `mark_rot_checked_now`,
+`get_shelf_life`, `get_relative_rot`, `set_relative_rot`, `set_rot`, `spoilage_sort_order`, `calc_rot`,
+`minimum_freshness_duration`, `mod_last_rot_check`); rot-apply cluster (`process_rot`×2, `update_rot_from_location`, `update_rot`).
+All three verified: build+link green, `item::` symbol set byte-identical (463), `[item]` tests
+pass (140,636 assertions / 47 cases). `[melee]` has 5 pre-existing seed-0 probabilistic
+failures confirmed identical before and after the combat cut.
+
+**NOTE — resist method standing debt:** `bash/cut/acid/fire_resist` are protection-flavored and
+belong conceptually in `item_armor.cpp`, which was created in commit `1760aec44f`. They were NOT
+migrated — they remain in `item_combat.cpp`. This is standing technical debt; migration is
+mechanical (move + update statics) if ever pursued.
+
+**CORRECTIONS to the plan below (verified against tree 2026-07-02):**
+- **No CMakeLists edits needed.** `src/CMakeLists.txt` uses `file(GLOB_RECURSE ... CONFIGURE_DEPENDS)`
+  — new `src/item_*.cpp` auto-compile. Ignore the `CMakeLists.txt` rows in the Files table.
+- **`item_use.cpp` does NOT exist.** Phase 4 must CREATE it, not "merge with existing".
+- **Gating risk the plan omits:** file-scope `static`/anon-namespace helpers + `static const` id
+  constants (internal linkage) referenced by a moved method. Use compiler-guided extraction — build
+  the object lib `cataclysm-bn-tiles-common` (no link) to surface undeclared-id (new TU) and
+  unused-const (old TU) precisely. Add needed id decls to the new TU; remove only sole-user-moved
+  ones from item.cpp (leave PRE-EXISTING dead decls like `itype_cig_*`/`joint_roach` — not our mess).
+  Full procedure captured in managed skill `cpp-godfile-decompose`.
 
 # Item Decomposition — Plan
 

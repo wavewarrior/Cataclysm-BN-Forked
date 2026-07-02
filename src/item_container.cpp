@@ -128,7 +128,9 @@ static const ammotype ammo_battery( "battery" );
 
 namespace
 {
-// Duplicated from item.cpp (also used by merge_charges there; pure computation).
+// Intentional duplicate: fill_with() uses this in item_container.cpp while
+// merge_charges() uses the copy in item.cpp. Callers split across TUs;
+// pure computation (no state) so duplication is safe and correct.
 time_duration weighted_averaged_rot( const item *a, const item *b )
 {
     const int base_charges = a->charges + b->charges;
