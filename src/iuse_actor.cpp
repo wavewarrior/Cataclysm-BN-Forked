@@ -6221,8 +6221,7 @@ int sex_toy_actor::use( player &p, item &i, bool, const tripoint_bub_ms & ) cons
         p.add_msg_if_player( _( "You whip out your %s and start getting the tension out." ),
                              i.tname() );
     }
-    p.assign_activity( ACT_VIBE, moves, -1, 0, "de-stressing" );
-    p.activity->add_tool( &i );
+    p.assign_activity( std::make_unique<player_activity>( std::make_unique<vibe_activity_actor>( safe_reference<item>( &i ) ) ) );
 
     return i.type->charges_to_use();
 }

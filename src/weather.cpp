@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "activity_time_cadence.h"
+#include "activity_actor_definitions.h"
 #include "assign.h"
 #include "avatar.h"
 #include "bodypart.h"
@@ -1167,7 +1168,7 @@ void weather_manager::update_weather()
     }
 
     if( weather_id != old_weather && g->u.has_activity( ACT_WAIT_WEATHER ) ) {
-        g->u.assign_activity( ACT_WAIT_WEATHER, 0, 0 );
+        g->u.assign_activity( std::make_unique<player_activity>( std::make_unique<wait_activity_actor>( wait_type::WAIT_WEATHER ) ) );
     }
 
     if( weather_id->sight_penalty !=

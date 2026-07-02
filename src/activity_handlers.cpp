@@ -231,10 +231,7 @@ const std::map< activity_id, std::function<void( player_activity *, player * )> 
 activity_handlers::do_turn_functions = {
     { ACT_CRAFT, craft_do_turn },
     { ACT_PULP, pulp_do_turn },
-    { ACT_GAME, game_do_turn },
-    { ACT_GENERIC_GAME, generic_game_do_turn },
     { ACT_START_FIRE, start_fire_do_turn },
-    { ACT_VIBE, vibe_do_turn },
     { ACT_TRAIN_SKILL, train_skill_do_turn },
     { ACT_MULTIPLE_FISH, multiple_fish_do_turn },
     { ACT_MULTIPLE_CONSTRUCTION, multiple_construction_do_turn },
@@ -247,13 +244,11 @@ activity_handlers::do_turn_functions = {
     { ACT_MULTIPLE_CHOP_TREES, chop_trees_do_turn },
     { ACT_MOVE_LOOT, move_loot_do_turn },
     { ACT_ADV_INVENTORY, adv_inventory_do_turn },
-    { ACT_ATM, atm_do_turn },
     { ACT_CRACKING, cracking_do_turn },
     { ACT_FISH, fish_do_turn },
 
     { ACT_TIDY_UP, tidy_up_do_turn },
     { ACT_TIDY_UP, tidy_up_do_turn },
-    { ACT_FIND_MOUNT, find_mount_do_turn },
     { ACT_MULTIPLE_CHOP_PLANKS, multiple_chop_planks_do_turn },
     { ACT_TRY_SLEEP, try_sleep_do_turn },
     { ACT_OPERATION, operation_do_turn },
@@ -277,25 +272,13 @@ activity_handlers::finish_functions = {
     { ACT_START_ENGINES, start_engines_finish },
     { ACT_PULP, pulp_finish },
     { ACT_CRACKING, cracking_finish },
-    { ACT_MEDITATE, meditate_finish },
     { ACT_READ, read_finish },
-    { ACT_WAIT, wait_finish },
-    { ACT_WAIT_WEATHER, wait_weather_finish },
-    { ACT_WAIT_NPC, wait_npc_finish },
     { ACT_WAIT_STAMINA, wait_stamina_finish },
-    { ACT_SOCIALIZE, socialize_finish },
     { ACT_TRY_SLEEP, try_sleep_finish },
     { ACT_OPERATION, operation_finish },
-    { ACT_VIBE, vibe_finish },
     { ACT_TRAIN_SKILL, train_skill_finish },
-    { ACT_ATM, atm_finish },
     { ACT_MILK, milk_finish },
-    { activity_id( "ACT_SHEAR" ), shear_finish },
 
-    { ACT_PLAY_WITH_PET, play_with_pet_finish },
-    { ACT_TRAIN_PET, train_pet_finish },
-    { ACT_SHAVE, shaving_finish },
-    { ACT_HAIRCUT, haircut_finish },
     { ACT_ROBOT_CONTROL, robot_control_finish },
     { ACT_MIND_SPLICER, mind_splicer_finish },
     { ACT_SPELLCASTING, spellcasting_finish },
@@ -981,40 +964,6 @@ void butchery_quarter( item *corpse_item, const player &p )
     }
 }
 
-void activity_handlers::shear_finish( player_activity *act, player *p )
-{
-    if( act->coords.empty() ) {
-        debugmsg( "shearing activity with no position of monster stored" );
-        return;
-    }
-    safe_reference<item> &loc = act->targets[ 0 ];
-
-    if( !loc ) {
-        debugmsg( "shearing item location lost" );
-        return;
-    }
-    item *shears = &*loc;
-    map &here = get_map();
-    const auto source_pos = here.abs_to_bub( act->coords.at( 0 ) );
-    monster *source_mon = g->critter_at<monster>( source_pos );
-    if( source_mon == nullptr ) {
-        debugmsg( "could not find source creature for shearing" );
-        return;
-    }
-    // 22 wool staples corresponds to an average wool-producing sheep yield of 10 lbs or so
-    for( int i = 0; i != 22; ++i ) {
-        detached_ptr<item> wool_staple = item::spawn( itype_wool_staple, calendar::turn );
-        here.add_item_or_charges( p->bub_pos(), std::move( wool_staple ) );
-    }
-    source_mon->add_effect( effect_sheared, calendar::season_length() );
-    if( !act->str_values.empty() && act->str_values[0] == "temp_tie" ) {
-        source_mon->remove_effect( effect_tied );
-    }
-    act->set_to_null();
-    if( shears->type->can_have_charges() ) {
-        p->consume_charges( *shears, shears->type->charges_to_use() );
-    }
-}
 
 void activity_handlers::milk_finish( player_activity *act, player *p )
 {
@@ -1058,36 +1007,6 @@ void activity_handlers::milk_finish( player_activity *act, player *p )
 
 
 
-
-void activity_handlers::generic_game_do_turn( player_activity * /*act*/, player *p )
-{
-    if( calendar::once_every( 1_minutes ) ) {
-        // So 30 points per play
-        p->add_morale( MORALE_GAME, 2, 60, 2_hours, 30_minutes, true );
-        return;
-    }
-}
-
-void activity_handlers::game_do_turn( player_activity *act, player *p )
-{
-    item &game_item = *act->targets.front();
-
-    // Consume battery charges for every minute spent playing
-    if( calendar::once_every( 1_minutes ) ) {
-        int energy = game_item.ammo_required();
-        energy -= game_item.ammo_consume( energy, p->bub_pos() );
-        if( energy > 0 && game_item.has_flag( flag_USE_UPS ) ) {
-            if( p->use_charges_if_avail( itype_UPS, energy ) ) {
-                energy = 0;
-            }
-        }
-        // Morale boost from game is handled in iuse::portable_game
-        if( energy ) {
-            act->moves_left = 0;
-            add_msg( m_info, _( "The %s runs out of batteries." ), game_item.tname() );
-        }
-    }
-}
 
 void activity_handlers::hotwire_finish( player_activity *act, player *p )
 {
@@ -1478,41 +1397,6 @@ void activity_handlers::vehicle_finish( player_activity *act, player *p )
 
 
 
-void activity_handlers::vibe_do_turn( player_activity *act, player *p )
-{
-    //Using a vibrator takes time (10 minutes), not speed
-    //Linear increase in morale during action with a small boost at end
-    //Deduct 1 battery charge for every minute in use, or vibrator is much less effective
-    item &vibrator_item = *act->get_tools().front();
-
-    if( p->encumb( body_part_mouth ) >= 30 ) {
-        act->moves_left = 0;
-        add_msg( m_bad, _( "You have trouble breathing, and stop." ) );
-    }
-
-    if( calendar::once_every( 1_minutes ) ) {
-        p->mod_fatigue( 1 );
-        if( vibrator_item.ammo_remaining() > 0 ) {
-            vibrator_item.ammo_consume( 1, p->bub_pos() );
-            p->add_morale( MORALE_FEELING_GOOD, 3, 40 );
-            if( vibrator_item.ammo_remaining() == 0 ) {
-                add_msg( m_info, _( "The %s runs out of batteries." ), vibrator_item.tname() );
-            }
-        } else {
-            //twenty minutes to fill
-            p->add_morale( MORALE_FEELING_GOOD, 1, 40 );
-        }
-    }
-    // Dead Tired: different kind of relaxation needed
-    if( p->get_fatigue() >= fatigue_levels::dead_tired ) {
-        act->moves_left = 0;
-        add_msg( m_info, _( "You're too tired to continue." ) );
-    }
-
-    // Vibrator requires that you be able to move around, stretch, etc, so doesn't play
-    // well with roots.  Sorry.  :-(
-}
-
 
 
 void activity_handlers::start_engines_finish( player_activity *act, player *p )
@@ -1902,13 +1786,6 @@ void activity_handlers::train_skill_do_turn( player_activity *act, player *p )
     }
 }
 
-void activity_handlers::meditate_finish( player_activity *act, player *p )
-{
-    p->add_msg_if_player( m_good, _( "You pause to engage in spiritual contemplation." ) );
-    p->add_morale( MORALE_FEELING_GOOD, 5, 10 );
-    act->set_to_null();
-}
-
 
 void activity_handlers::move_loot_do_turn( player_activity *act, player *p )
 {
@@ -1965,11 +1842,6 @@ void activity_handlers::travel_do_turn( player_activity *act, player *p )
         p->add_msg_if_player( m_info, _( "You have reached your destination." ) );
     }
     act->set_to_null();
-}
-
-void activity_handlers::atm_do_turn( player_activity *, player *p )
-{
-    iexamine::atm( *p, p->bub_pos() );
 }
 
 // fish-with-rod fish catching function.
@@ -2106,67 +1978,6 @@ void activity_handlers::read_finish( player_activity *act, player *p )
     }
 }
 
-void activity_handlers::wait_finish( player_activity *act, player *p )
-{
-    p->add_msg_if_player( _( "You finish waiting." ) );
-    act->set_to_null();
-}
-
-void activity_handlers::wait_weather_finish( player_activity *act, player *p )
-{
-    p->add_msg_if_player( _( "You finish waiting." ) );
-    act->set_to_null();
-}
-
-void activity_handlers::find_mount_do_turn( player_activity *act, player *p )
-{
-    //npc only activity
-    if( p->is_player() ) {
-        act->set_to_null();
-        return;
-    }
-    npc &guy = dynamic_cast<npc &>( *p );
-    monster *mon = guy.chosen_mount.lock().get();
-    if( !mon ) {
-        act->set_to_null();
-        guy.revert_after_activity();
-        return;
-    }
-    if( rl_dist( guy.bub_pos(), mon->bub_pos() ) <= 1 ) {
-        if( mon->has_effect( effect_ai_waiting ) ) {
-            mon->remove_effect( effect_ai_waiting );
-        }
-        if( p->can_mount( *mon ) ) {
-            act->set_to_null();
-            guy.revert_after_activity();
-            guy.chosen_mount = weak_ptr_fast<monster>();
-            p->mount_creature( *mon );
-        } else {
-            act->set_to_null();
-            guy.revert_after_activity();
-            return;
-        }
-    } else {
-        const auto route = route_adjacent( *p, guy.chosen_mount.lock()->bub_pos() );
-        if( route.empty() ) {
-            act->set_to_null();
-            guy.revert_after_activity();
-            mon->remove_effect( effect_ai_waiting );
-            return;
-        } else {
-            p->activity->set_to_null();// = player_activity();
-            mon->add_effect( effect_ai_waiting, 40_turns );
-            p->set_destination( route, std::make_unique<player_activity>( ACT_FIND_MOUNT ) );
-        }
-    }
-}
-
-void activity_handlers::wait_npc_finish( player_activity *act, player *p )
-{
-    p->add_msg_if_player( _( "%s finishes with you…" ), act->str_values[0] );
-    act->set_to_null();
-}
-
 void activity_handlers::wait_stamina_do_turn( player_activity *act, player *p )
 {
     int stamina_threshold = p->get_stamina_max();
@@ -2196,12 +2007,6 @@ void activity_handlers::wait_stamina_finish( player_activity *act, player *p )
     } else {
         p->add_msg_if_player( _( "You finish waiting and feel refreshed." ) );
     }
-    act->set_to_null();
-}
-
-void activity_handlers::socialize_finish( player_activity *act, player *p )
-{
-    p->add_msg_if_player( _( "%s finishes chatting with you." ), act->str_values[0] );
     act->set_to_null();
 }
 
@@ -2465,6 +2270,12 @@ void activity_handlers::operation_finish( player_activity *act, player *p )
     act->set_to_null();
 }
 
+void activity_handlers::train_skill_finish( player_activity *act, player *p )
+{
+    p->add_msg_if_player( m_good, _( "You feel like you've learned a little bit." ) );
+    act->set_to_null();
+}
+
 
 
 void activity_handlers::tidy_up_do_turn( player_activity *act, player *p )
@@ -2628,26 +2439,6 @@ void activity_handlers::craft_do_turn( player_activity *act, player *p )
     }
 }
 
-void activity_handlers::vibe_finish( player_activity *act, player *p )
-{
-    p->add_msg_if_player( m_good, _( "You feel much better." ) );
-    p->add_morale( MORALE_FEELING_GOOD, 10, 40 );
-    act->set_to_null();
-}
-
-void activity_handlers::train_skill_finish( player_activity *act, player *p )
-{
-    p->add_msg_if_player( m_good, _( "You feel like you've learned a little bit." ) );
-    act->set_to_null();
-}
-
-void activity_handlers::atm_finish( player_activity *act, player * )
-{
-    // ATM sets index to 0 to indicate it's finished.
-    if( !act->index ) {
-        act->set_to_null();
-    }
-}
 
 
 
@@ -2655,69 +2446,6 @@ void activity_handlers::atm_finish( player_activity *act, player * )
 
 
 
-
-
-void activity_handlers::play_with_pet_finish( player_activity *act, player *p )
-{
-    p->add_morale( MORALE_PLAY_WITH_PET, rng( 3, 10 ), 10, 5_hours, 25_minutes );
-    p->add_msg_if_player( m_good, _( "Playing with your %s has lifted your spirits a bit." ),
-                          act->str_values[0] );
-    act->set_to_null();
-}
-
-void activity_handlers::train_pet_finish( player_activity *act, player *p )
-{
-    auto mon = act->monsters[0].lock();
-    if( mon && mon->type->pet_training &&
-        p->get_skill_level( skill_survival ) < mon->type->pet_training->min_skill ) {
-        p->add_msg_if_player( m_bad,
-                              _( "You lack the skill to train %s effectively." ),
-                              act->str_values[0] );
-        act->set_to_null();
-        return;
-    }
-    if( !mon ) {
-        act->set_to_null();
-        return;
-    }
-    mon->remove_effect( effect_well_fed );
-    mon->remove_effect( effect_ai_waiting );
-    if( 4 * p->get_skill_level( skill_survival ) >= rng( 0, 100 ) ) {
-        if( mon && mon->type->pet_training ) {
-            mon->training_level = std::min( mon->training_level + 1, mon->type->pet_training->max_level );
-            for( const auto &lf : mon->type->pet_training->level_flags ) {
-                if( lf.level == mon->training_level ) {
-                    for( const m_flag f : lf.flags ) {
-                        mon->monster_flags.insert( f );
-                    }
-                }
-            }
-            p->add_msg_if_player( m_good,
-                                  _( "Training your %s has paid off!  They are now at training level %d/%d." ),
-                                  act->str_values[0], mon->training_level,
-                                  mon->type->pet_training->max_level );
-        }
-    } else {
-        p->add_msg_if_player( m_neutral,
-                              _( "Training your %s takes time, it seems they are making a bit of progress at least." ),
-                              act->str_values[0] );
-    }
-    act->set_to_null();
-}
-
-void activity_handlers::shaving_finish( player_activity *act, player *p )
-{
-    p->add_msg_if_player( _( "You open up your kit and shave." ) );
-    p->add_morale( MORALE_SHAVE, 8, 8, 240_minutes, 3_minutes );
-    act->set_to_null();
-}
-
-void activity_handlers::haircut_finish( player_activity *act, player *p )
-{
-    p->add_msg_if_player( _( "You give your hair a trim." ) );
-    p->add_morale( MORALE_HAIRCUT, 3, 3, 480_minutes, 3_minutes );
-    act->set_to_null();
-}
 
 std::vector<tripoint_bub_ms> get_sorted_tiles_by_distance( const tripoint_bub_ms &coord,
         const std::unordered_set<tripoint_bub_ms> &tiles )

@@ -19,6 +19,7 @@
 #include "player_activity.h"
 
 class Creature;
+class monster;
 class vehicle;
 struct partial_con;
 
@@ -1421,4 +1422,214 @@ class wood_chop_activity_actor : public activity_actor
 
         void serialize( JsonOut &jsout ) const override;
         static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+};
+
+// Wave 6a: Simple activities
+
+enum class game_type { GAME, GENERIC_GAME };
+
+class game_activity_actor : public activity_actor
+{
+    private:
+        game_type gtype;
+        safe_reference<item> game_item;
+
+    public:
+        game_activity_actor() = default;
+        game_activity_actor( game_type type ) : gtype( type ) {}
+        game_activity_actor( game_type type, const safe_reference<item> &item )
+            : gtype( type ), game_item( item ) {}
+
+        activity_id get_type() const override;
+
+        void start( player_activity &, Character & ) override {}
+        void do_turn( player_activity &, Character & ) override;
+        void finish( player_activity &, Character & ) override {}
+
+        void serialize( JsonOut &jsout ) const override;
+        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+};
+
+class vibe_activity_actor : public activity_actor
+{
+    private:
+        safe_reference<item> vibrator;
+
+    public:
+        vibe_activity_actor() = default;
+        explicit vibe_activity_actor( const safe_reference<item> &item )
+            : vibrator( item ) {}
+
+        activity_id get_type() const override {
+            return activity_id( "ACT_VIBE" );
+        }
+
+        void start( player_activity &, Character & ) override {}
+        void do_turn( player_activity &, Character & ) override;
+        void finish( player_activity &, Character & ) override;
+
+        void serialize( JsonOut &jsout ) const override;
+        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+};
+
+enum class morale_act_type { MEDITATE, SHAVE, HAIRCUT };
+
+class morale_activity_actor : public activity_actor
+{
+    private:
+        morale_act_type mtype;
+
+    public:
+        explicit morale_activity_actor( morale_act_type type ) : mtype( type ) {}
+
+        activity_id get_type() const override;
+
+        void start( player_activity &, Character & ) override {}
+        void do_turn( player_activity &, Character & ) override {}
+        void finish( player_activity &, Character & ) override;
+
+        void serialize( JsonOut &jsout ) const override;
+        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+};
+
+enum class wait_type { WAIT, WAIT_WEATHER, WAIT_NPC };
+
+class wait_activity_actor : public activity_actor
+{
+    private:
+        wait_type wtype;
+        std::string npc_name;
+
+    public:
+        wait_activity_actor() = default;
+        wait_activity_actor( wait_type type, const std::string &name = std::string() )
+            : wtype( type ), npc_name( name ) {}
+
+        activity_id get_type() const override;
+
+        void start( player_activity &, Character & ) override {}
+        void do_turn( player_activity &, Character & ) override {}
+        void finish( player_activity &, Character & ) override;
+
+        void serialize( JsonOut &jsout ) const override;
+        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+};
+
+class socialize_activity_actor : public activity_actor
+{
+    private:
+        std::string npc_name;
+
+    public:
+        explicit socialize_activity_actor( const std::string &name ) : npc_name( name ) {}
+
+        activity_id get_type() const override {
+            return activity_id( "ACT_SOCIALIZE" );
+        }
+
+        void start( player_activity &, Character & ) override {}
+        void do_turn( player_activity &, Character & ) override {}
+        void finish( player_activity &, Character & ) override;
+
+        void serialize( JsonOut &jsout ) const override;
+        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+};
+
+class atm_activity_actor : public activity_actor
+{
+    public:
+        activity_id get_type() const override {
+            return activity_id( "ACT_ATM" );
+        }
+
+        void start( player_activity &, Character & ) override {}
+        void do_turn( player_activity &, Character & ) override;
+        void finish( player_activity &, Character & ) override {}
+
+        void serialize( JsonOut & ) const override {}
+        static std::unique_ptr<activity_actor> deserialize( JsonIn & );
+};
+
+class play_with_pet_activity_actor : public activity_actor
+{
+    private:
+        std::string pet_name;
+
+    public:
+        explicit play_with_pet_activity_actor( const std::string &name ) : pet_name( name ) {}
+
+        activity_id get_type() const override {
+            return activity_id( "ACT_PLAY_WITH_PET" );
+        }
+
+        void start( player_activity &, Character & ) override {}
+        void do_turn( player_activity &, Character & ) override {}
+        void finish( player_activity &, Character & ) override;
+
+        void serialize( JsonOut &jsout ) const override;
+        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+};
+
+class train_pet_activity_actor : public activity_actor
+{
+    private:
+        weak_ptr_fast<monster> pet;
+        std::string pet_name;
+
+    public:
+        train_pet_activity_actor() = default;
+        train_pet_activity_actor( const weak_ptr_fast<monster> &m, const std::string &name )
+            : pet( m ), pet_name( name ) {}
+
+        activity_id get_type() const override {
+            return activity_id( "ACT_TRAIN_PET" );
+        }
+
+        void start( player_activity &, Character & ) override {}
+        void do_turn( player_activity &, Character & ) override {}
+        void finish( player_activity &, Character & ) override;
+
+        void serialize( JsonOut &jsout ) const override;
+        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+};
+
+class shear_activity_actor : public activity_actor
+{
+    private:
+        std::vector<tripoint_abs_ms> sheep_positions;
+        safe_reference<item> shears;
+        std::string tie_type;
+
+    public:
+        shear_activity_actor() = default;
+        shear_activity_actor( const std::vector<tripoint_abs_ms> &positions,
+                              const safe_reference<item> &tool,
+                              const std::string &tie )
+            : sheep_positions( positions ), shears( tool ), tie_type( tie ) {}
+
+        activity_id get_type() const override {
+            return activity_id( "ACT_SHEAR" );
+        }
+
+        void start( player_activity &, Character & ) override {}
+        void do_turn( player_activity &, Character & ) override {}
+        void finish( player_activity &, Character & ) override;
+
+        void serialize( JsonOut &jsout ) const override;
+        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+};
+
+class find_mount_activity_actor : public activity_actor
+{
+    public:
+        activity_id get_type() const override {
+            return activity_id( "ACT_FIND_MOUNT" );
+        }
+
+        void start( player_activity &, Character & ) override {}
+        void do_turn( player_activity &, Character & ) override;
+        void finish( player_activity &, Character & ) override {}
+
+        void serialize( JsonOut & ) const override {}
+        static std::unique_ptr<activity_actor> deserialize( JsonIn & );
 };

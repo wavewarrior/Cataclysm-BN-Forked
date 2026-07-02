@@ -782,7 +782,7 @@ int iuse::meditate( player *p, item *it, bool t, const tripoint_bub_ms & )
     }
     if( p->has_trait( trait_SPIRITUAL ) ) {
         const int moves = to_moves<int>( 20_minutes );
-        p->assign_activity( ACT_MEDITATE, moves );
+        p->assign_activity( std::make_unique<player_activity>( std::make_unique<morale_activity_actor>( morale_act_type::MEDITATE ) ) );
     } else {
         p->add_msg_if_player( _( "This %s probably meant a lot to someone at one time." ),
                               it->tname() );
@@ -4085,8 +4085,7 @@ int iuse::portable_game( player *p, item *it, bool t, const tripoint_bub_ms & )
         const int moves = to_moves<int>( 15_minutes );
 
         p->add_msg_if_player( _( "You play on your %s for a while." ), it->tname() );
-        p->assign_activity( ACT_GAME, moves, -1, 0, "gaming" );
-        p->activity->targets.emplace_back( it );
+        p->assign_activity( std::make_unique<player_activity>( std::make_unique<game_activity_actor>( game_type::GAME, safe_reference<item>( it ) ) ) );
         std::string end_message;
         end_message.clear();
         int game_score = 0;
@@ -4139,8 +4138,7 @@ int iuse::vibe( player *p, item *it, bool, const tripoint_bub_ms & )
             p->add_msg_if_player( _( "You whip out your %s and start getting the tension out." ),
                                   it->tname() );
         }
-        p->assign_activity( ACT_VIBE, moves, -1, 0, "de-stressing" );
-        p->activity->add_tool( it );
+        p->assign_activity( std::make_unique<player_activity>( std::make_unique<vibe_activity_actor>( safe_reference<item>( it ) ) ) );
     }
     return it->type->charges_to_use();
 }
@@ -8436,7 +8434,7 @@ int iuse::shavekit( player *p, item *it, bool, const tripoint_bub_ms & )
         p->add_msg_if_player( _( "You need soap to use this." ) );
     } else {
         const int moves = to_moves<int>( 5_minutes );
-        p->assign_activity( ACT_SHAVE, moves );
+        p->assign_activity( std::make_unique<player_activity>( std::make_unique<morale_activity_actor>( morale_act_type::SHAVE ) ) );
     }
     return it->type->charges_to_use();
 }
@@ -8448,7 +8446,7 @@ int iuse::hairkit( player *p, item *it, bool, const tripoint_bub_ms & )
         return 0;
     }
     const int moves = to_moves<int>( 30_minutes );
-    p->assign_activity( ACT_HAIRCUT, moves );
+    p->assign_activity( std::make_unique<player_activity>( std::make_unique<morale_activity_actor>( morale_act_type::HAIRCUT ) ) );
     return it->type->charges_to_use();
 }
 
@@ -8858,8 +8856,7 @@ int iuse::play_game( player *p, item *it, bool t, const tripoint_bub_ms & )
 
     if( query_yn( _( "Play a game with the %s?" ), it->tname() ) ) {
         p->add_msg_if_player( _( "You start playing." ) );
-        p->assign_activity( ACT_GENERIC_GAME, to_moves<int>( 30_minutes ), -1,
-                            p->get_item_position( it ), "gaming" );
+        p->assign_activity( std::make_unique<player_activity>( std::make_unique<game_activity_actor>( game_type::GENERIC_GAME ) ) );
     }
     return 0;
 }

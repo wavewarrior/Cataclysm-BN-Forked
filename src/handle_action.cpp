@@ -1066,17 +1066,14 @@ static void wait()
 
     } else {
         // Waiting
-        activity_id actType;
         if( as_m.ret == 11 ) {
-            actType = ACT_WAIT_WEATHER;
+            u.assign_activity( std::make_unique<player_activity>( std::make_unique<wait_activity_actor>( wait_type::WAIT_WEATHER ) ), false );
         } else if( as_m.ret == 12 ) {
-            actType = ACT_WAIT_STAMINA;
-        } else {
-            actType = ACT_WAIT;
-        }
-
-        u.assign_activity( std::make_unique<player_activity>( actType,
+            u.assign_activity( std::make_unique<player_activity>( ACT_WAIT_STAMINA,
                            100 * ( to_turns<int>( time_to_wait ) ), 0 ), false );
+        } else {
+            u.assign_activity( std::make_unique<player_activity>( std::make_unique<wait_activity_actor>( wait_type::WAIT ) ), false );
+        }
     }
 }
 

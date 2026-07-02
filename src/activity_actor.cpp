@@ -40,6 +40,7 @@
 #include "map_selector.h"
 #include "mapdata.h"
 #include "messages.h"
+#include "monster.h"
 #include "morale_types.h"
 #include "output.h"
 #include "npc.h"
@@ -85,6 +86,13 @@ static const itype_id itype_electrohack( "electrohack" );
 static const itype_id itype_log( "log" );
 static const itype_id itype_splinter( "splinter" );
 static const itype_id itype_stick_long( "stick_long" );
+static const itype_id itype_UPS( "UPS" );
+static const itype_id itype_wool_staple( "wool_staple" );
+
+static const efftype_id effect_ai_waiting( "ai_waiting" );
+static const efftype_id effect_sheared( "sheared" );
+static const efftype_id effect_tied( "tied" );
+static const efftype_id effect_well_fed( "well_fed" );
 
 static const activity_id ACT_MULTIPLE_CHOP_TREES( "ACT_MULTIPLE_CHOP_TREES" );
 static const skill_id skill_computer( "computer" );
@@ -3410,7 +3418,7 @@ std::unique_ptr<activity_actor> craft_activity_actor::deserialize( JsonIn &jsin 
     return actor;
 }
 
-inline void construction_activity_actor::calc_all_moves( player_activity &act, Character &who )
+void construction_activity_actor::calc_all_moves( player_activity &act, Character &who )
 {
     // Check if pc was lost for some reason, but actually still exists on map, e.g. save/load
     if( !pc ) {
@@ -4849,6 +4857,437 @@ std::unique_ptr<activity_actor> wood_chop_activity_actor::deserialize( JsonIn &j
               placement_val, moves_val, axe_ref );
     return act;
 }
+
+// Wave 6a: Simple activities
+
+activity_id game_activity_actor::get_type() const
+{
+    switch( gtype ) {
+        case game_type::GAME:
+            return activity_id( "ACT_GAME" );
+        case game_type::GENERIC_GAME:
+            return activity_id( "ACT_GENERIC_GAME" );
+    }
+    return activity_id( "ACT_GAME" );
+}
+
+void game_activity_actor::do_turn( player_activity &act, Character &who )
+{
+    player &p = dynamic_cast<player &>( who );
+
+    if( gtype == game_type::GENERIC_GAME ) {
+        // GENERIC_GAME: simple morale boost
+        if( calendar::once_every( 1_minutes ) ) {
+            p.add_morale( MORALE_GAME, 2, 60, 2_hours, 30_minutes, true );
+        }
+        return;
+    }
+
+    // ACT_GAME: uses game_item and drains battery
+    if( !game_item ) {
+        debugmsg( "ACT_GAME with no game item" );
+        act.moves_left = 0;
+        return;
+    }
+    item &game_item_ref = *game_item;
+
+    if( calendar::once_every( 1_minutes ) ) {
+        int energy = game_item_ref.ammo_required();
+        energy -= game_item_ref.ammo_consume( energy, p.bub_pos() );
+        if( energy > 0 && game_item_ref.has_flag( flag_USE_UPS ) ) {
+            if( p.use_charges_if_avail( itype_UPS, energy ) ) {
+                energy = 0;
+            }
+        }
+        if( energy ) {
+            act.moves_left = 0;
+            add_msg( m_info, _( "The %s runs out of batteries." ), game_item_ref.tname() );
+        }
+    }
+}
+
+void game_activity_actor::serialize( JsonOut &jsout ) const
+{
+    jsout.start_object();
+    jsout.member( "game_type", static_cast<int>( gtype ) );
+    jsout.member( "game_item", game_item.serialize() );
+    jsout.end_object();
+}
+
+std::unique_ptr<activity_actor> game_activity_actor::deserialize( JsonIn &jsin )
+{
+    JsonObject data = jsin.get_object();
+    int gtype_int = 0;
+    safe_reference<item> item_ref;
+    data.read( "game_type", gtype_int );
+    data.read( "game_item", item_ref );
+    auto act = std::make_unique<game_activity_actor>( static_cast<game_type>( gtype_int ), item_ref );
+    return act;
+}
+
+void vibe_activity_actor::do_turn( player_activity &act, Character &who )
+{
+    player &p = dynamic_cast<player &>( who );
+
+    if( !vibrator ) {
+        debugmsg( "ACT_VIBE with no vibrator item" );
+        act.moves_left = 0;
+        return;
+    }
+    item &vibrator_item = *vibrator;
+
+    if( p.encumb( body_part_mouth ) >= 30 ) {
+        act.moves_left = 0;
+        add_msg( m_bad, _( "You have trouble breathing, and stop." ) );
+    }
+
+    if( calendar::once_every( 1_minutes ) ) {
+        p.mod_fatigue( 1 );
+        if( vibrator_item.ammo_remaining() > 0 ) {
+            vibrator_item.ammo_consume( 1, p.bub_pos() );
+            p.add_morale( MORALE_FEELING_GOOD, 3, 40 );
+            if( vibrator_item.ammo_remaining() == 0 ) {
+                add_msg( m_info, _( "The %s runs out of batteries." ), vibrator_item.tname() );
+            }
+        } else {
+            p.add_morale( MORALE_FEELING_GOOD, 1, 40 );
+        }
+    }
+
+    if( p.get_fatigue() >= fatigue_levels::dead_tired ) {
+        act.moves_left = 0;
+        add_msg( m_info, _( "You're too tired to continue." ) );
+    }
+}
+
+void vibe_activity_actor::finish( player_activity & /*act*/, Character &who )
+{
+    player &p = dynamic_cast<player &>( who );
+    p.add_msg_if_player( m_good, _( "You feel much better." ) );
+    p.add_morale( MORALE_FEELING_GOOD, 10, 40 );
+}
+
+void vibe_activity_actor::serialize( JsonOut &jsout ) const
+{
+    jsout.start_object();
+    jsout.member( "vibrator", vibrator.serialize() );
+    jsout.end_object();
+}
+
+std::unique_ptr<activity_actor> vibe_activity_actor::deserialize( JsonIn &jsin )
+{
+    JsonObject data = jsin.get_object();
+    safe_reference<item> item_ref;
+    data.read( "vibrator", item_ref );
+    auto act = std::make_unique<vibe_activity_actor>( item_ref );
+    return act;
+}
+
+activity_id morale_activity_actor::get_type() const
+{
+    switch( mtype ) {
+        case morale_act_type::MEDITATE:
+            return activity_id( "ACT_MEDITATE" );
+        case morale_act_type::SHAVE:
+            return activity_id( "ACT_SHAVE" );
+        case morale_act_type::HAIRCUT:
+            return activity_id( "ACT_HAIRCUT" );
+    }
+    return activity_id( "ACT_MEDITATE" );
+}
+
+void morale_activity_actor::finish( player_activity & /*act*/, Character &who )
+{
+    player &p = dynamic_cast<player &>( who );
+
+    switch( mtype ) {
+        case morale_act_type::MEDITATE: {
+            p.add_msg_if_player( m_good, _( "You pause to engage in spiritual contemplation." ) );
+            p.add_morale( MORALE_FEELING_GOOD, 5, 10 );
+            break;
+        }
+        case morale_act_type::SHAVE: {
+            p.add_msg_if_player( _( "You open up your kit and shave." ) );
+            p.add_morale( MORALE_SHAVE, 8, 8, 240_minutes, 3_minutes );
+            break;
+        }
+        case morale_act_type::HAIRCUT: {
+            p.add_msg_if_player( _( "You give your hair a trim." ) );
+            p.add_morale( MORALE_HAIRCUT, 3, 3, 480_minutes, 3_minutes );
+            break;
+        }
+    }
+}
+
+void morale_activity_actor::serialize( JsonOut &jsout ) const
+{
+    jsout.start_object();
+    jsout.member( "morale_type", static_cast<int>( mtype ) );
+    jsout.end_object();
+}
+
+std::unique_ptr<activity_actor> morale_activity_actor::deserialize( JsonIn &jsin )
+{
+    JsonObject data = jsin.get_object();
+    int mtype_int = 0;
+    data.read( "morale_type", mtype_int );
+    auto act = std::make_unique<morale_activity_actor>( static_cast<morale_act_type>( mtype_int ) );
+    return act;
+}
+
+activity_id wait_activity_actor::get_type() const
+{
+    switch( wtype ) {
+        case wait_type::WAIT:
+            return activity_id( "ACT_WAIT" );
+        case wait_type::WAIT_WEATHER:
+            return activity_id( "ACT_WAIT_WEATHER" );
+        case wait_type::WAIT_NPC:
+            return activity_id( "ACT_WAIT_NPC" );
+    }
+    return activity_id( "ACT_WAIT" );
+}
+
+void wait_activity_actor::finish( player_activity & /*act*/, Character &who )
+{
+    player &p = dynamic_cast<player &>( who );
+
+    if( wtype == wait_type::WAIT_NPC ) {
+        p.add_msg_if_player( _( "%s finishes with you…" ), npc_name );
+    } else {
+        p.add_msg_if_player( _( "You finish waiting." ) );
+    }
+}
+
+void wait_activity_actor::serialize( JsonOut &jsout ) const
+{
+    jsout.start_object();
+    jsout.member( "wait_type", static_cast<int>( wtype ) );
+    jsout.member( "npc_name", npc_name );
+    jsout.end_object();
+}
+
+std::unique_ptr<activity_actor> wait_activity_actor::deserialize( JsonIn &jsin )
+{
+    JsonObject data = jsin.get_object();
+    int wtype_int = 0;
+    std::string name;
+    data.read( "wait_type", wtype_int );
+    data.read( "npc_name", name );
+    auto act = std::make_unique<wait_activity_actor>( static_cast<wait_type>( wtype_int ), name );
+    return act;
+}
+
+void socialize_activity_actor::finish( player_activity & /*act*/, Character &who )
+{
+    player &p = dynamic_cast<player &>( who );
+    p.add_msg_if_player( _( "%s finishes chatting with you." ), npc_name );
+}
+
+void socialize_activity_actor::serialize( JsonOut &jsout ) const
+{
+    jsout.start_object();
+    jsout.member( "npc_name", npc_name );
+    jsout.end_object();
+}
+
+std::unique_ptr<activity_actor> socialize_activity_actor::deserialize( JsonIn &jsin )
+{
+    JsonObject data = jsin.get_object();
+    std::string name;
+    data.read( "npc_name", name );
+    auto act = std::make_unique<socialize_activity_actor>( name );
+    return act;
+}
+
+void atm_activity_actor::do_turn( player_activity & /*act*/, Character &who )
+{
+    player &p = dynamic_cast<player &>( who );
+    iexamine::atm( p, p.bub_pos() );
+}
+
+
+std::unique_ptr<activity_actor> atm_activity_actor::deserialize( JsonIn & /*jsin*/ )
+{
+    return std::make_unique<atm_activity_actor>();
+}
+
+void play_with_pet_activity_actor::finish( player_activity & /*act*/, Character &who )
+{
+    player &p = dynamic_cast<player &>( who );
+    p.add_morale( MORALE_PLAY_WITH_PET, rng( 3, 10 ), 10, 5_hours, 25_minutes );
+    p.add_msg_if_player( m_good, _( "Playing with your %s has lifted your spirits a bit." ), pet_name );
+}
+
+void play_with_pet_activity_actor::serialize( JsonOut &jsout ) const
+{
+    jsout.start_object();
+    jsout.member( "pet_name", pet_name );
+    jsout.end_object();
+}
+
+std::unique_ptr<activity_actor> play_with_pet_activity_actor::deserialize( JsonIn &jsin )
+{
+    JsonObject data = jsin.get_object();
+    std::string name;
+    data.read( "pet_name", name );
+    auto act = std::make_unique<play_with_pet_activity_actor>( name );
+    return act;
+}
+
+void train_pet_activity_actor::finish( player_activity & /*act*/, Character &who )
+{
+    player &p = dynamic_cast<player &>( who );
+    auto mon = pet.lock();
+    if( mon && mon->type->pet_training &&
+        p.get_skill_level( skill_survival ) < mon->type->pet_training->min_skill ) {
+        p.add_msg_if_player( m_bad,
+                              _( "You lack the skill to train %s effectively." ),
+                              pet_name );
+        return;
+    }
+    if( !mon ) {
+        return;
+    }
+    mon->remove_effect( effect_well_fed );
+    mon->remove_effect( effect_ai_waiting );
+    if( 4 * p.get_skill_level( skill_survival ) >= rng( 0, 100 ) ) {
+        if( mon && mon->type->pet_training ) {
+            mon->training_level = std::min( mon->training_level + 1, mon->type->pet_training->max_level );
+            for( const auto &lf : mon->type->pet_training->level_flags ) {
+                if( lf.level == mon->training_level ) {
+                    for( const m_flag f : lf.flags ) {
+                        mon->monster_flags.insert( f );
+                    }
+                }
+            }
+            p.add_msg_if_player( m_good,
+                                  _( "Training your %s has paid off!  They are now at training level %d/%d." ),
+                                  pet_name, mon->training_level,
+                                  mon->type->pet_training->max_level );
+        }
+    } else {
+        p.add_msg_if_player( m_neutral,
+                              _( "Training your %s takes time, it seems they are making a bit of progress at least." ),
+                              pet_name );
+    }
+}
+
+void train_pet_activity_actor::serialize( JsonOut &jsout ) const
+{
+    jsout.start_object();
+    jsout.member( "pet_name", pet_name );
+    jsout.end_object();
+}
+
+std::unique_ptr<activity_actor> train_pet_activity_actor::deserialize( JsonIn &jsin )
+{
+    JsonObject data = jsin.get_object();
+    std::string name;
+    data.read( "pet_name", name );
+    auto act = std::make_unique<train_pet_activity_actor>( weak_ptr_fast<monster>(), name );
+    return act;
+}
+
+void shear_activity_actor::finish( player_activity & /*act*/, Character &who )
+{
+    player &p = dynamic_cast<player &>( who );
+    map &here = get_map();
+
+    if( sheep_positions.empty() ) {
+        debugmsg( "shearing activity with no position of monster stored" );
+        return;
+    }
+
+    if( !shears ) {
+        debugmsg( "shearing item location lost" );
+        return;
+    }
+
+    const auto source_pos = here.abs_to_bub( sheep_positions[0] );
+    monster *source_mon = g->critter_at<monster>( source_pos );
+    if( source_mon == nullptr ) {
+        debugmsg( "could not find source creature for shearing" );
+        return;
+    }
+
+    for( int i = 0; i != 22; ++i ) {
+        detached_ptr<item> wool_staple = item::spawn( itype_wool_staple, calendar::turn );
+        here.add_item_or_charges( p.bub_pos(), std::move( wool_staple ) );
+    }
+    source_mon->add_effect( effect_sheared, calendar::season_length() );
+
+    if( !tie_type.empty() && tie_type == "temp_tie" ) {
+        source_mon->remove_effect( effect_tied );
+    }
+}
+
+void shear_activity_actor::serialize( JsonOut &jsout ) const
+{
+    jsout.start_object();
+    jsout.member( "sheep_positions", sheep_positions );
+    jsout.member( "shears", shears.serialize() );
+    jsout.member( "tie_type", tie_type );
+    jsout.end_object();
+}
+
+std::unique_ptr<activity_actor> shear_activity_actor::deserialize( JsonIn &jsin )
+{
+    JsonObject data = jsin.get_object();
+    std::vector<tripoint_abs_ms> positions;
+    safe_reference<item> tool;
+    std::string tie;
+    data.read( "sheep_positions", positions );
+    data.read( "shears", tool );
+    data.read( "tie_type", tie );
+    auto act = std::make_unique<shear_activity_actor>( positions, tool, tie );
+    return act;
+}
+
+void find_mount_activity_actor::do_turn( player_activity &act, Character &who )
+{
+    // NPC-only activity
+    if( who.is_player() ) {
+        act.set_to_null();
+        return;
+    }
+    npc &guy = dynamic_cast<npc &>( who );
+    monster *mon = guy.chosen_mount.lock().get();
+    if( !mon ) {
+        act.set_to_null();
+        guy.revert_after_activity();
+        return;
+    }
+    if( rl_dist( guy.bub_pos(), mon->bub_pos() ) <= 1 ) {
+        if( mon->has_effect( effect_ai_waiting ) ) {
+            mon->remove_effect( effect_ai_waiting );
+        }
+        if( guy.can_mount( *mon ) ) {
+            act.set_to_null();
+            guy.revert_after_activity();
+            guy.chosen_mount = weak_ptr_fast<monster>();
+            guy.mount_creature( *mon );
+        } else {
+            act.set_to_null();
+            guy.revert_after_activity();
+        }
+    } else {
+        const tripoint_bub_ms dest = guy.chosen_mount.lock()->bub_pos();
+        if( !guy.update_path( dest ) ) {
+            act.set_to_null();
+            guy.revert_after_activity();
+            mon->remove_effect( effect_ai_waiting );
+        } else {
+            mon->add_effect( effect_ai_waiting, 40_turns );
+        }
+    }
+}
+
+
+std::unique_ptr<activity_actor> find_mount_activity_actor::deserialize( JsonIn & /*jsin*/ )
+{
+    return std::make_unique<find_mount_activity_actor>();
+}
 namespace activity_actors
 {
 
@@ -4858,18 +5297,19 @@ deserialize_functions = {
     { activity_id( "ACT_AIM" ), &aim_activity_actor::deserialize },
     { activity_id( "ACT_ARMOR_LAYERS" ), &armor_layers_activity_actor::deserialize },
     { activity_id( "ACT_ASSIST" ), &assist_activity_actor::deserialize },
-    { activity_id( "ACT_BLEED" ), &butchery_activity_actor::deserialize },
-    { activity_id( "ACT_BUTCHER" ), &butchery_activity_actor::deserialize },
-    { activity_id( "ACT_BUTCHER_FULL" ), &butchery_activity_actor::deserialize },
+    { activity_id( "ACT_ATM" ), &atm_activity_actor::deserialize },
     { activity_id( "ACT_AUTODRIVE" ), &autodrive_activity_actor::deserialize },
+    { activity_id( "ACT_BLEED" ), &butchery_activity_actor::deserialize },
     { activity_id( "ACT_BOLTCUTTING" ), &boltcutting_activity_actor::deserialize },
     { activity_id( "ACT_BUILD" ), &construction_activity_actor::deserialize },
     { activity_id( "ACT_BURROW" ), &burrow_activity_actor::deserialize },
+    { activity_id( "ACT_BUTCHER" ), &butchery_activity_actor::deserialize },
+    { activity_id( "ACT_BUTCHER_FULL" ), &butchery_activity_actor::deserialize },
     { activity_id( "ACT_CHOP_LOGS" ), &wood_chop_activity_actor::deserialize },
     { activity_id( "ACT_CHOP_PLANKS" ), &wood_chop_activity_actor::deserialize },
     { activity_id( "ACT_CHOP_TREE" ), &wood_chop_activity_actor::deserialize },
-    { activity_id( "ACT_CHURN" ), &churn_activity_actor::deserialize },
     { activity_id( "ACT_CLEAR_RUBBLE" ), &clear_rubble_activity_actor::deserialize },
+    { activity_id( "ACT_CHURN" ), &churn_activity_actor::deserialize },
     { activity_id( "ACT_CONSUME_DRINK_MENU" ), &consume_menu_activity_actor::deserialize },
     { activity_id( "ACT_CONSUME_FOOD_MENU" ), &consume_menu_activity_actor::deserialize },
     { activity_id( "ACT_CONSUME_MEDS_MENU" ), &consume_menu_activity_actor::deserialize },
@@ -4886,30 +5326,44 @@ deserialize_functions = {
     { activity_id( "ACT_FILL_LIQUID" ), &fill_liquid_activity_actor::deserialize },
     { activity_id( "ACT_FILL_PIT" ), &fill_pit_activity_actor::deserialize },
     { activity_id( "ACT_FIRSTAID" ), &firstaid_activity_actor::deserialize },
+    { activity_id( "ACT_FIND_MOUNT" ), &find_mount_activity_actor::deserialize },
     { activity_id( "ACT_FORAGE" ), &forage_activity_actor::deserialize },
+    { activity_id( "ACT_GAME" ), &game_activity_actor::deserialize },
+    { activity_id( "ACT_GENERIC_GAME" ), &game_activity_actor::deserialize },
     { activity_id( "ACT_GUNMOD_ADD" ), &gunmod_add_activity_actor::deserialize },
     { activity_id( "ACT_HACKING" ), &hacking_activity_actor::deserialize },
     { activity_id( "ACT_HACKSAW" ), &hacksaw_activity_actor::deserialize },
     { activity_id( "ACT_HAND_CRANK" ), &hand_crank_activity_actor::deserialize },
+    { activity_id( "ACT_HAIRCUT" ), &morale_activity_actor::deserialize },
     { activity_id( "ACT_JACKHAMMER" ), &jackhammer_activity_actor::deserialize },
     { activity_id( "ACT_LOCKPICK" ), &lockpick_activity_actor::deserialize },
     { activity_id( "ACT_LONGSALVAGE" ), &salvage_activity_actor::deserialize },
+    { activity_id( "ACT_MEDITATE" ), &morale_activity_actor::deserialize },
     { activity_id( "ACT_MEND_ITEM" ), &mend_item_activity_actor::deserialize },
     { activity_id( "ACT_MIGRATION_CANCEL" ), &migration_cancel_activity_actor::deserialize },
     { activity_id( "ACT_MOVE_ITEMS" ), &move_items_activity_actor::deserialize },
     { activity_id( "ACT_OXYTORCH" ), &oxytorch_activity_actor::deserialize },
     { activity_id( "ACT_PICKAXE" ), &pickaxe_activity_actor::deserialize },
-    { activity_id( "ACT_QUARTER" ), &butchery_activity_actor::deserialize },
     { activity_id( "ACT_PICKUP" ), &pickup_activity_actor::deserialize },
     { activity_id( "ACT_PLANT_SEED" ), &plant_seed_activity_actor::deserialize },
+    { activity_id( "ACT_PLAY_WITH_PET" ), &play_with_pet_activity_actor::deserialize },
     { activity_id( "ACT_PRY_NAILS" ), &pry_nails_activity_actor::deserialize },
+    { activity_id( "ACT_QUARTER" ), &butchery_activity_actor::deserialize },
     { activity_id( "ACT_RELOAD" ), &reload_activity_actor::deserialize },
     { activity_id( "ACT_REPAIR_ITEM" ), &repair_item_activity_actor::deserialize },
+    { activity_id( "ACT_SHAVE" ), &morale_activity_actor::deserialize },
+    { activity_id( "ACT_SHEAR" ), &shear_activity_actor::deserialize },
     { activity_id( "ACT_SKIN" ), &butchery_activity_actor::deserialize },
+    { activity_id( "ACT_SOCIALIZE" ), &socialize_activity_actor::deserialize },
     { activity_id( "ACT_STASH" ), &stash_activity_actor::deserialize },
     { activity_id( "ACT_THROW" ), &throw_activity_actor::deserialize },
     { activity_id( "ACT_TOGGLE_GATE" ), &toggle_gate_activity_actor::deserialize },
     { activity_id( "ACT_TOOLMOD_ADD" ), &toolmod_add_activity_actor::deserialize },
+    { activity_id( "ACT_TRAIN_PET" ), &train_pet_activity_actor::deserialize },
+    { activity_id( "ACT_VIBE" ), &vibe_activity_actor::deserialize },
+    { activity_id( "ACT_WAIT" ), &wait_activity_actor::deserialize },
+    { activity_id( "ACT_WAIT_NPC" ), &wait_activity_actor::deserialize },
+    { activity_id( "ACT_WAIT_WEATHER" ), &wait_activity_actor::deserialize },
     { activity_id( "ACT_WEAR" ), &wear_activity_actor::deserialize }
 };
 } // namespace activity_actors

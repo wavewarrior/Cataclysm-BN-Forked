@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "auto_pickup.h"
+#include "activity_actor_definitions.h"
 #include "avatar.h"
 #include "bionics.h"
 #include "bodypart.h"
@@ -240,7 +241,7 @@ void talk_function::find_mount( npc &p )
     for( monster &critter : g->all_monsters() ) {
         if( p.can_mount( critter ) ) {
             // keep the horse still for some time, so that NPC can catch up to it and mount it.
-            p.assign_activity( ACT_FIND_MOUNT );
+            p.assign_activity( std::make_unique<player_activity>( std::make_unique<find_mount_activity_actor>() ) );
             p.chosen_mount = g->shared_from( critter );
             // we found one, that's all we need.
             return;
@@ -513,8 +514,7 @@ void talk_function::give_aid( npc &p )
 
     p.add_effect( effect_currently_busy, 30_minutes );
     const int moves = to_moves<int>( 30_minutes );
-    u.assign_activity( ACT_WAIT_NPC, moves );
-    u.activity->str_values.push_back( p.name );
+    u.assign_activity( std::make_unique<player_activity>( std::make_unique<wait_activity_actor>( wait_type::WAIT_NPC, p.name ) ) );
 }
 
 void talk_function::give_all_aid( npc &p )
@@ -530,8 +530,7 @@ void talk_function::give_all_aid( npc &p )
 
     p.add_effect( effect_currently_busy, 60_minutes );
     const int moves = to_moves<int>( 60_minutes );
-    u.assign_activity( ACT_WAIT_NPC, moves );
-    u.activity->str_values.push_back( p.name );
+    u.assign_activity( std::make_unique<player_activity>( std::make_unique<wait_activity_actor>( wait_type::WAIT_NPC, p.name ) ) );
 }
 
 static void generic_barber( const std::string &mut_type )
@@ -580,8 +579,7 @@ void talk_function::buy_haircut( npc &p )
 {
     g->u.add_morale( MORALE_HAIRCUT, 5, 5, 720_minutes, 3_minutes );
     const int moves = to_moves<int>( 20_minutes );
-    g->u.assign_activity( ACT_WAIT_NPC, moves );
-    g->u.activity->str_values.push_back( p.name );
+    g->u.assign_activity( std::make_unique<player_activity>( std::make_unique<wait_activity_actor>( wait_type::WAIT_NPC, p.name ) ) );
     add_msg( m_good, _( "%s gives you a decent haircut…" ), p.name );
 }
 
@@ -589,8 +587,7 @@ void talk_function::buy_shave( npc &p )
 {
     g->u.add_morale( MORALE_SHAVE, 10, 10, 360_minutes, 3_minutes );
     const int moves = to_moves<int>( 5_minutes );
-    g->u.assign_activity( ACT_WAIT_NPC, moves );
-    g->u.activity->str_values.push_back( p.name );
+    g->u.assign_activity( std::make_unique<player_activity>( std::make_unique<wait_activity_actor>( wait_type::WAIT_NPC, p.name ) ) );
     add_msg( m_good, _( "%s gives you a decent shave…" ), p.name );
 }
 
@@ -603,8 +600,7 @@ void talk_function::morale_chat( npc &p )
 void talk_function::morale_chat_activity( npc &p )
 {
     const int moves = to_moves<int>( 10_minutes );
-    g->u.assign_activity( ACT_SOCIALIZE, moves );
-    g->u.activity->str_values.push_back( p.name );
+    g->u.assign_activity( std::make_unique<player_activity>( std::make_unique<socialize_activity_actor>( p.name ) ) );
     add_msg( m_good, _( "That was a pleasant conversation with %s." ), p.disp_name() );
     g->u.add_morale( MORALE_CHAT, rng( 3, 10 ), 10, 200_minutes, 5_minutes / 2 );
 }

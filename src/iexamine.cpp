@@ -852,8 +852,7 @@ class atm_menu
                     // Money from `*i` could be transferred, but we're out of moves, schedule it for
                     // the next turn. Putting this here makes sure there will be something to be
                     // done next turn.
-                    u.assign_activity( ACT_ATM, 0, transfer_all_money );
-                    u.activity->targets.emplace_back( dst );
+                    u.assign_activity( std::make_unique<player_activity>( std::make_unique<atm_activity_actor>() ) );
                     break;
                 }
 

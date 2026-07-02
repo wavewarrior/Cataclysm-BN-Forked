@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "avatar.h"
+#include "activity_actor_definitions.h"
 #include "bodypart.h"
 #include "calendar.h"
 #include "cata_utility.h"
@@ -407,14 +408,13 @@ void monexamine::shear_animal( monster &z )
     const int moves = to_moves<int>( time_duration::from_minutes( 30 / you.max_quality(
                                          qual_shear ) ) );
 
-    you.assign_activity( activity_id( "ACT_SHEAR" ), moves, -1 );
-    you.activity->coords.push_back( get_map().bub_to_abs( z.bub_pos() ) );
-    // pin the sheep in place if it isn't already
+    you.assign_activity( std::make_unique<player_activity>( std::make_unique<shear_activity_actor>(
+        std::vector<tripoint_abs_ms>{ get_map().bub_to_abs( z.bub_pos() ) },
+        you.best_quality_item( qual_shear ),
+        z.has_effect( effect_tied ) ? std::string() : std::string( "temp_tie" ) ) ) );
     if( !z.has_effect( effect_tied ) ) {
         z.add_effect( effect_tied, 1_turns );
-        you.activity->str_values.emplace_back( "temp_tie" );
     }
-    you.activity->targets.emplace_back( you.best_quality_item( qual_shear ) );
     add_msg( _( "You start shearing the %s." ), z.get_name() );
 }
 
@@ -882,8 +882,7 @@ void monexamine::play_with( monster &z )
     std::string pet_name = z.get_name();
     avatar &you = get_avatar();
     int turns = rng( 50, 125 ) * 100;
-    you.assign_activity( ACT_PLAY_WITH_PET, turns );
-    you.activity->str_values.push_back( pet_name );
+    you.assign_activity( std::make_unique<player_activity>( std::make_unique<play_with_pet_activity_actor>( pet_name ) ) );
     z.add_effect( effect_ai_waiting, time_duration::from_turns( turns ) );
 }
 
@@ -891,9 +890,7 @@ void monexamine::train_pet( monster &z )
 {
     avatar &you = get_avatar();
     std::string pet_name = z.get_name();
-    you.assign_activity( ACT_TRAIN_PET, to_moves<int>( 60_minutes ) );
-    you.activity->monsters.push_back( g->shared_from( z ) );
-    you.activity->str_values.push_back( pet_name );
+    you.assign_activity( std::make_unique<player_activity>( std::make_unique<train_pet_activity_actor>( g->shared_from( z ), pet_name ) ) );
     z.add_effect( effect_ai_waiting, 60_minutes );
 }
 
