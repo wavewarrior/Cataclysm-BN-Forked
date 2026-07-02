@@ -1,5 +1,5 @@
 ## STATUS (reviewed 2026-07-01)
-**~55% DONE — KEEP (in progress).** Actor count: **43 registered** (up from 21 baseline). Waves 1-5 COMPLETE. Legacy: **~26 unique** `do_turn` ids, **~30 unique** `finish` ids remaining. 3 double-registered (`ACT_READ`, `ACT_TRY_SLEEP`, `ACT_WAIT_STAMINA`).
+**~65% DONE — KEEP (in progress).** Actor count: **58 registered** (up from 21 baseline). Waves 1-6a COMPLETE. Legacy: **~23 unique** `do_turn` ids, **~27 unique** `finish` ids remaining. 3 double-registered (`ACT_READ`, `ACT_TRY_SLEEP`, `ACT_WAIT_STAMINA`).
 
 **Completed:**
 - Wave 1 (terrain): 11 actors, legacy handlers deleted
@@ -7,8 +7,9 @@
 - Wave 3 (item-action): 7 actors present, `repair_activity_hack` still present (blocked by ACT_TRAIN_SKILL)
 - Wave 4 (consume/menu): 5 activities migrated (`consume_menu_activity_actor`, `firstaid_activity_actor`)
 - Wave 5 (wood): 3 activities migrated (`wood_chop_activity_actor`)
+- Wave 6a (simple): 15 activities migrated (11 actors)
 
-**Remaining:** ~44 activities across Waves 6a-9
+**Remaining:** ~31 activities across Waves 6b-9
 
 # Rework Plan — Finish the Activity → `activity_actor` Migration
 
@@ -28,9 +29,9 @@ else        { type->call_do_turn( this, &p ); }   // legacy function-pointer map
 
 ## Current state
 
-- **43** registered in `deserialize_functions` (`src/activity_actor.cpp:4857`)
-- **~26** unique ids in `do_turn_functions` (`src/activity_handlers.cpp:231-266`)
-- **~30** unique ids in `finish_functions` (`src/activity_handlers.cpp:269-303`)
+- **58** registered in `deserialize_functions` (`src/activity_actor.cpp`)
+- **~23** unique ids in `do_turn_functions` (`src/activity_handlers.cpp`)
+- **~27** unique ids in `finish_functions` (`src/activity_handlers.cpp`)
 - **3** double-registered (actor + legacy both present): `ACT_READ`, `ACT_TRY_SLEEP`, `ACT_WAIT_STAMINA`
 - **1** duplicate key in `do_turn_functions`: `ACT_TIDY_UP` appears twice
 
@@ -43,7 +44,7 @@ else        { type->call_do_turn( this, &p ); }   // legacy function-pointer map
 | 🟡 3 — Item-action | ACTORS DONE, HACK NOT REMOVED | 7 actors present; `repair_activity_hack` still in `activity_handlers.cpp` — blocked by `ACT_TRAIN_SKILL` lacking an actor. |
 | ✅ 4 — Consume/menu | DONE | 5 activities migrated: `consume_menu_activity_actor` (4 ids) + `firstaid_activity_actor`. |
 | ✅ 5 — Wood | DONE | 3 activities migrated: `wood_chop_activity_actor`. |
-| 6a — Simple | NOT STARTED | GAME, GENERIC_GAME, MEDITATE, SHAVE, HAIRCUT, SOCIALIZE, ATM, VIBE, WAIT, WAIT_WEATHER, WAIT_NPC, FIND_MOUNT, SHEAR, PLAY_WITH_PET, TRAIN_PET |
+| ✅ 6a — Simple | DONE | 15 activities migrated: 11 actors (game, morale, wait, social, atm, vibe, shear, play_with_pet, train_pet, find_mount). |
 | 6b — Medium | NOT STARTED | READ, TRY_SLEEP, WAIT_STAMINA, TRAVELLING, CRACKING, START_FIRE, FISH, MILK, MAKE_ZLAVE, TREE_COMMUNION, TRAIN, PULP, ADV_INVENTORY |
 | 6c — Complex | NOT STARTED | TRAIN_SKILL, OPERATION, ROBOT_CONTROL, MIND_SPLICER, STUDY_SPELL, SPELLCASTING |
 | 7 — Vehicle | NOT STARTED | VEHICLE, VEHICLE_REPAIR, VEHICLE_DECONSTRUCTION, START_ENGINES, HOTWIRE_CAR |
