@@ -77,6 +77,14 @@ auto print_button( const catacurses::window &w, const button_options &opts ) -> 
 - **Code**: Refer to [code changes](#when-working-on-code-changes).
 - **PR**: Use [Template](./.github/pull_request_template.md). **DO NOT ADD fluff**. create via `git push && gh pr create --web --fill`.
 
+### WHEN creating a plan
+
+**MUST** write the plan to two places simultaneously:
+1. `local://<slug>.md` — for subagent handoff and `do` execution
+2. `plans/<slug>.md` in this repo — permanent record that survives session resets
+
+The `plans/` directory exists in this repo. Use the same kebab-case slug for both. The repo file is the source of truth for long-running or multi-session work.
+
 ### WHEN working on code changes
 
 - **Style**: Follow [Code Style](./docs/en/dev/explanation/code_style.md). Use `_( "text" )` for L10n.
