@@ -257,7 +257,6 @@ activity_handlers::finish_functions = {
     { ACT_OPERATION, operation_finish },
 
     { ACT_ROBOT_CONTROL, robot_control_finish },
-    { ACT_MIND_SPLICER, mind_splicer_finish },
     { ACT_SPELLCASTING, spellcasting_finish },
     { ACT_STUDY_SPELL, study_spell_finish }
 };
@@ -2223,17 +2222,3 @@ void activity_handlers::study_spell_finish( player_activity *act, player *p )
 }
 
 //This is just used for robofac_intercom_mission_2
-void activity_handlers::mind_splicer_finish( player_activity *act, player *p )
-{
-    act->set_to_null();
-
-    if( act->targets.size() != 1 || !act->targets[0] ) {
-        debugmsg( "Incompatible arguments to: activity_handlers::mind_splicer_finish" );
-        return;
-    }
-    item &data_card = *act->targets[0];
-    p->add_msg_if_player( m_info, _( "…you finally find the memory banks." ) );
-    p->add_msg_if_player( m_info, _( "The kit makes a copy of the data inside the bionic." ) );
-    data_card.contents.clear_items();
-    data_card.put_in( item::spawn( itype_mind_scan_robofac ) );
-}

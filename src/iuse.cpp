@@ -4347,10 +4347,9 @@ int iuse::mind_splicer( player *p, item *it, bool, const tripoint_bub_ms & )
             const time_duration time = std::max( 150_minutes - 20_minutes * ( p->get_skill_level(
                     skill_firstaid ) - 1 ) - 10_minutes * ( p->get_dex() - 8 ), 30_minutes );
 
-            std::unique_ptr<player_activity> act = std::make_unique<player_activity>( ACT_MIND_SPLICER,
-                                                   to_moves<int>( time ) );
-            act->targets.emplace_back( &data_card );
-            p->assign_activity( std::move( act ) );
+            p->assign_activity( std::make_unique<player_activity>(
+                std::make_unique<mind_splicer_activity_actor>(
+                    safe_reference<item>( &data_card ), to_moves<int>( time ) ) ) );
             return it->type->charges_to_use();
         }
     }

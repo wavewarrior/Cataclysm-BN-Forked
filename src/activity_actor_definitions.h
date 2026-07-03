@@ -1949,6 +1949,31 @@ class train_skill_activity_actor : public activity_actor
         tripoint_abs_ms hack_position;
         itype_id hack_tool_type_id;
 };
+
+class mind_splicer_activity_actor : public activity_actor
+{
+    private:
+        safe_reference<item> data_card;
+        int moves = 0;
+
+    public:
+        mind_splicer_activity_actor() = default;
+        mind_splicer_activity_actor( const safe_reference<item> &card, int m )
+            : data_card( card ), moves( m ) {}
+
+        activity_id get_type() const override {
+            return activity_id( "ACT_MIND_SPLICER" );
+        }
+
+        void start( player_activity &act, Character & ) override {
+            act.moves_left = moves;
+        }
+        void do_turn( player_activity &, Character & ) override {}
+        void finish( player_activity &act, Character &who ) override;
+
+        void serialize( JsonOut &jsout ) const override;
+        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+};
 class pulp_activity_actor : public activity_actor
 {
     private:

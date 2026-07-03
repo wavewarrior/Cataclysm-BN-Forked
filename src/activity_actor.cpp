@@ -6132,6 +6132,40 @@ std::unique_ptr<activity_actor> train_skill_activity_actor::deserialize( JsonIn 
     data.read( "hack_tool_type_id", actor->hack_tool_type_id );
     return actor;
 }
+// ---- mind_splicer_activity_actor ----
+
+void mind_splicer_activity_actor::finish( player_activity &act, Character &who )
+{
+    Character &p = who;
+    act.set_to_null();
+
+    item *data_card_item = data_card.get();
+    if( data_card_item == nullptr ) {
+        debugmsg( "Incompatible arguments to: mind_splicer_activity_actor::finish" );
+        return;
+    }
+    p.add_msg_if_player( m_info, _( "…you finally find the memory banks." ) );
+    p.add_msg_if_player( m_info, _( "The kit makes a copy of the data inside the bionic." ) );
+    data_card_item->contents.clear_items();
+    data_card_item->put_in( item::spawn( itype_id( "mind_scan_robofac" ) ) );
+}
+
+void mind_splicer_activity_actor::serialize( JsonOut &jsout ) const
+{
+    jsout.start_object();
+    jsout.member( "data_card", data_card );
+    jsout.member( "moves", moves );
+    jsout.end_object();
+}
+
+std::unique_ptr<activity_actor> mind_splicer_activity_actor::deserialize( JsonIn &jsin )
+{
+    std::unique_ptr<mind_splicer_activity_actor> actor( new mind_splicer_activity_actor() );
+    JsonObject data = jsin.get_object();
+    data.read( "data_card", actor->data_card );
+    data.read( "moves", actor->moves );
+    return actor;
+}
 // ---- pulp_activity_actor ----
 
 void pulp_activity_actor::do_turn( player_activity &act, Character &who )
@@ -6296,6 +6330,7 @@ deserialize_functions = {
     { activity_id( "ACT_MEND_ITEM" ), &mend_item_activity_actor::deserialize },
     { activity_id( "ACT_MIGRATION_CANCEL" ), &migration_cancel_activity_actor::deserialize },
     { activity_id( "ACT_MILK" ), &milk_activity_actor::deserialize },
+    { activity_id( "ACT_MIND_SPLICER" ), &mind_splicer_activity_actor::deserialize },
     { activity_id( "ACT_MOVE_ITEMS" ), &move_items_activity_actor::deserialize },
     { activity_id( "ACT_OXYTORCH" ), &oxytorch_activity_actor::deserialize },
     { activity_id( "ACT_PICKAXE" ), &pickaxe_activity_actor::deserialize },

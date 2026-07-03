@@ -226,7 +226,6 @@ void jackhammer_finish( player_activity *act, player *p );
 void fill_pit_finish( player_activity *act, player *p );
 void unload_mag_finish( player_activity *act, player *p );
 void robot_control_finish( player_activity *act, player *p );
-void mind_splicer_finish( player_activity *act, player *p );
 void spellcasting_finish( player_activity *act, player *p );
 void study_spell_finish( player_activity *act, player *p );
 
