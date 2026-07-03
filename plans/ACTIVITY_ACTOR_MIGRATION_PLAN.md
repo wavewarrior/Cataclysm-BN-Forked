@@ -19,7 +19,7 @@
 ### Remaining (~14 activities)
 | Wave | Status | Activities |
 | 6c — Complex | PARTIAL | TRAIN_SKILL (blocked #1612), OPERATION |
-| 7 — Vehicle | PARTIAL | VEHICLE_REPAIR, VEHICLE_DECONSTRUCTION |
+| 7 — Vehicle | DONE | — |
 | 8 — Multi/zone/NPC | NOT STARTED | MULTIPLE_*, FETCH_REQUIRED, MOVE_LOOT, TIDY_UP |
 | 9 — Rip-out | NOT STARTED | Legacy map deletion, dual-path branch removal |
 
