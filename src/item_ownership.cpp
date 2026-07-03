@@ -122,6 +122,10 @@
 #include <tuple>
 #include <unordered_set>
 
+// File-scope id constants (internal linkage).
+static const activity_id ACT_PICKUP("ACT_PICKUP");
+static const std::string has_thievery_witness("has_thievery_witness");
+
 bool item::is_owned_by(const Character& c, bool available_to_take) const {
     // owner.is_null() implies faction_id( "no_faction" ) which shouldn't happen, or no owner at
     // all. either way, certain situations this means the thing is available to take. in other
@@ -175,9 +179,6 @@ void item::validate_ownership() const {
     }
     if (!owner.is_null() && !g->faction_manager_ptr->get(owner, false)) { remove_owner(); }
 }
-
-
-
 
 
 bool item::is_money() const { return ammo_types().contains(ammotype("money")); }
@@ -256,45 +257,41 @@ const item& item::get_contained() const {
 }
 
 
-
-
-void item::handle_pickup_ownership( Character &c )
-{
-    if( is_owned_by( c ) ) {
-        return;
-    }
+void item::handle_pickup_ownership(Character& c) {
+    if (is_owned_by(c)) { return; }
     // Add ownership to item if unowned
-    if( owner.is_null() ) {
-        set_owner( c );
+    if (owner.is_null()) {
+        set_owner(c);
     } else {
-        Character &you = get_player_character();
-        if( !is_owned_by( c ) && &c == &you ) {
-            std::vector<npc *> witnesses;
-            for( npc &elem : g->all_npcs() ) {
+        Character& you = get_player_character();
+        if (!is_owned_by(c) && &c == &you) {
+            std::vector<npc*> witnesses;
+            for (npc& elem : g->all_npcs()) {
                 // If they already want to murder you, no point in confronting you about theft
-                if( rl_dist( elem.bub_pos(), you.bub_pos() ) < g_max_view_distance && elem.get_faction() &&
-                    is_owned_by( elem ) && elem.sees( you.bub_pos() ) && !elem.guaranteed_hostile() ) {
-                    elem.say( "<witnessed_thievery>", 7 );
-                    npc *npc_to_add = &elem;
-                    witnesses.push_back( npc_to_add );
+                if (rl_dist(elem.bub_pos(), you.bub_pos()) < g_max_view_distance
+                    && elem.get_faction() && is_owned_by(elem) && elem.sees(you.bub_pos())
+                    && !elem.guaranteed_hostile()) {
+                    elem.say("<witnessed_thievery>", 7);
+                    npc* npc_to_add = &elem;
+                    witnesses.push_back(npc_to_add);
                 }
             }
-            if( !witnesses.empty() ) {
-                set_old_owner( get_owner() );
+            if (!witnesses.empty()) {
+                set_old_owner(get_owner());
                 // Make sure there is only one witness
-                for( npc &guy : g->all_npcs() ) {
-                    if( guy.get_attitude() == NPCATT_RECOVER_GOODS ) {
-                        guy.set_attitude( NPCATT_NULL );
+                for (npc& guy : g->all_npcs()) {
+                    if (guy.get_attitude() == NPCATT_RECOVER_GOODS) {
+                        guy.set_attitude(NPCATT_NULL);
                     }
                 }
-                random_entry( witnesses )->set_attitude( NPCATT_RECOVER_GOODS );
+                random_entry(witnesses)->set_attitude(NPCATT_RECOVER_GOODS);
                 // Notify the activity that we got a witness
-                if( c.activity && !c.activity->is_null() && c.activity->id() == ACT_PICKUP ) {
+                if (c.activity && !c.activity->is_null() && c.activity->id() == ACT_PICKUP) {
                     c.activity->str_values.clear();
-                    c.activity->str_values.emplace_back( has_thievery_witness );
+                    c.activity->str_values.emplace_back(has_thievery_witness);
                 }
             }
-            set_owner( c );
+            set_owner(c);
         }
     }
 }

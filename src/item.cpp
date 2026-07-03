@@ -72,35 +72,6 @@
 
 namespace {
 
-static const itype_id itype_cig_butt("cig_butt");
-static const itype_id itype_cig_lit("cig_lit");
-static const itype_id itype_cigar_butt("cigar_butt");
-static const itype_id itype_cigar_lit("cigar_lit");
-static const itype_id itype_joint_roach("joint_roach");
-
-} // namespace
-
-std::string rad_badge_color(const int rad) {
-    using pair_t = std::pair<const int, const translation>;
-
-    static const std::array<pair_t, 6> values = {{
-        pair_t{0, to_translation("color", "green")},
-        pair_t{30, to_translation("color", "blue")},
-        pair_t{60, to_translation("color", "yellow")},
-        pair_t{120, to_translation("color", "orange")},
-        pair_t{240, to_translation("color", "red")},
-        pair_t{500, to_translation("color", "black")},
-    }};
-
-    for (const auto& i : values) {
-        if (rad <= i.first) { return i.second.translated(); }
-    }
-
-    return values.back().second.translated();
-}
-
-namespace {
-
 // Returns the default item type, used for the null item (default constructed),
 // the returned pointer is always valid, it's never cleared by the @ref Item_factory.
 static const itype* nullitem() {
@@ -265,7 +236,7 @@ item::item(
     }
 
     for (item* const& component : components) {
-        for (const flag_id& f : component->item_tags) {
+        for (const flag_id& f : component->get_flags()) {
             if (f->craft_inherit()) { set_flag(f); }
         }
         for (const flag_id& f : component->type->get_flags()) {
@@ -280,41 +251,7 @@ item::item(const item& source)
     : game_object<item>(source),
       contents(this),
       components(new component_item_location(this)) {
-    // TODO!: back to defaults
-    // Awful copy block, this can be avoided with equally awful inheritance shenanigans but...
-    type = source.type;
-    faults = source.faults;
-    item_tags = source.item_tags;
-    curammo = source.curammo;
-    item_vars_ = source.item_vars_;
-    corpse = source.corpse;
-    corpse_name = source.corpse_name;
-    techniques = source.techniques;
-    craft_data_ = source.craft_data_;
-    relic_data = source.relic_data;
-    charges = source.charges;
-    energy = source.energy;
-    recipe_charges = source.recipe_charges;
-    burnt = source.burnt;
-    poison = source.poison;
-    frequency = source.frequency;
-    snip_id = source.snip_id;
-    irradiation = source.irradiation;
-    item_counter = source.item_counter;
-    mission_id = source.mission_id;
-    player_id = source.player_id;
-    encumbrance_update_ = source.encumbrance_update_;
-    rot = source.rot;
-    last_rot_check = source.last_rot_check;
-    bday = source.bday;
-    owner = source.owner;
-    old_owner = source.old_owner;
-    damage_ = source.damage_;
-    light = source.light;
-    invlet = source.invlet;
-    active = source.active;
-    activated_by = source.activated_by;
-    is_favorite = source.is_favorite;
+    copy_fields_from(source);
 
     for (item* const& it : source.contents.all_items_top()) {
         contents.insert_item(item::spawn(*it));
@@ -327,41 +264,8 @@ item::item(const item& source)
         if (actor != nullptr) { actor->on_spawned(*this); }
     }
 }
-
 item& item::operator=(const item& source) {
-    type = source.type;
-    faults = source.faults;
-    item_tags = source.item_tags;
-    curammo = source.curammo;
-    item_vars_ = source.item_vars_;
-    corpse = source.corpse;
-    corpse_name = source.corpse_name;
-    techniques = source.techniques;
-    craft_data_ = source.craft_data_;
-    relic_data = source.relic_data;
-    charges = source.charges;
-    energy = source.energy;
-    recipe_charges = source.recipe_charges;
-    burnt = source.burnt;
-    poison = source.poison;
-    frequency = source.frequency;
-    snip_id = source.snip_id;
-    irradiation = source.irradiation;
-    item_counter = source.item_counter;
-    mission_id = source.mission_id;
-    player_id = source.player_id;
-    encumbrance_update_ = source.encumbrance_update_;
-    rot = source.rot;
-    last_rot_check = source.last_rot_check;
-    bday = source.bday;
-    owner = source.owner;
-    old_owner = source.old_owner;
-    damage_ = source.damage_;
-    light = source.light;
-    invlet = source.invlet;
-    active = source.active;
-    activated_by = source.activated_by;
-    is_favorite = source.is_favorite;
+    copy_fields_from(source);
 
     contents.clear_items();
 
@@ -389,6 +293,42 @@ void item::on_destroy() {
 
 
 item::~item() = default;
+void item::copy_fields_from(const item& source) {
+    type = source.type;
+    faults = source.faults;
+    item_tags = source.item_tags;
+    curammo = source.curammo;
+    item_vars_ = source.item_vars_;
+    corpse = source.corpse;
+    corpse_name = source.corpse_name;
+    techniques = source.techniques;
+    craft_data_ = source.craft_data_;
+    relic_data = source.relic_data;
+    charges = source.charges;
+    energy = source.energy;
+    recipe_charges = source.recipe_charges;
+    burnt = source.burnt;
+    poison = source.poison;
+    frequency = source.frequency;
+    snip_id = source.snip_id;
+    irradiation = source.irradiation;
+    item_counter = source.item_counter;
+    mission_id = source.mission_id;
+    player_id = source.player_id;
+    encumbrance_update_ = source.encumbrance_update_;
+    rot = source.rot;
+    last_rot_check = source.last_rot_check;
+    bday = source.bday;
+    owner = source.owner;
+    old_owner = source.old_owner;
+    damage_ = source.damage_;
+    light = source.light;
+    invlet = source.invlet;
+    active = source.active;
+    activated_by = source.activated_by;
+    is_favorite = source.is_favorite;
+}
+
 
 detached_ptr<item> item::make_corpse(
     const mtype_id& mt, time_point turn, const std::string& name, const int upgrade_time) {
@@ -881,15 +821,11 @@ void item::add_item_with_id(const itype_id& itype, int count) {
 }
 
 bool item::has_item_with_id(const itype_id& itype) const {
-    // shouldn't need to check any deeper than top-level
-    std::vector<item*> item_contents = contents.all_items_top();
-    for (item* itm : item_contents) {
-        if (itm->typeId() == itype) { return true; }
-    }
-    return false;
+    auto item_contents = contents.all_items_top();
+    return std::ranges::any_of(item_contents, [&](const item* itm) {
+        return itm->typeId() == itype;
+    });
 }
-
-
 
 
 detached_ptr<item> item::actualize_rot(
