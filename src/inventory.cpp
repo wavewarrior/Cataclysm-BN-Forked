@@ -587,9 +587,9 @@ void inventory::form_from_map( map &m, std::vector<tripoint_bub_ms> pts, const C
                 if( !found_tools.contains( id.str() ) ) {
                     item &tool = *item::spawn_temporary( id, bday );
                     tool.charges = veh->fuel_left( itype_battery, true );
-                    tool.item_tags.insert( flag_PSEUDO );
+                    tool.set_flag( flag_PSEUDO );
                     if( id == itype_hotplate ) {
-                        tool.item_tags.insert( flag_HEATS_FOOD );
+                        tool.set_flag( flag_HEATS_FOOD );
                     }
                     add_item_by_items_type_cache( tool, false );
                     found_tools.insert( id.str() );
@@ -611,7 +611,7 @@ void inventory::form_from_map( map &m, std::vector<tripoint_bub_ms> pts, const C
         if( autoclavepart && !has_autodoc ) {
             item &autoclave = *item::spawn_temporary( "autoclave", bday );
             autoclave.charges = veh->fuel_left( itype_battery, true );
-            autoclave.item_tags.insert( flag_PSEUDO );
+            autoclave.set_flag( flag_PSEUDO );
             add_item_by_items_type_cache( autoclave, false );
             has_autodoc = true;
         }

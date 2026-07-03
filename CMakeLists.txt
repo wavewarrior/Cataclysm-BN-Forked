@@ -547,6 +547,9 @@ if (NOT TARGET SDL3_shadercross::SDL3_shadercross)
         # Force vendored deps (spirv-cross, SPIRV-Tools, DXC) to use /MDd like the
         # rest of the project. Without this they default to /MTd and the linker dies.
         set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL" CACHE STRING "" FORCE)
+        # spirv-cross calls project() which resets CMAKE_MSVC_RUNTIME_LIBRARY;
+        # use CMAKE_PROJECT_<NAME>_INCLUDE to re-set after the project() call.
+        set(CMAKE_PROJECT_SPIRV-CROSS_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/CMakeModules/FixSpirvCrossRuntime.cmake")
         FetchContent_Declare(
             SDL3_SHADERCROSS
             GIT_REPOSITORY https://github.com/libsdl-org/SDL_shadercross.git

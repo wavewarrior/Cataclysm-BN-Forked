@@ -2767,7 +2767,7 @@ bool game::cancel_activity_or_ignore_query( const distraction_type type, const s
             return true;
         } else {
             u.set_destination( u.get_auto_move_route(),
-                               std::make_unique<player_activity>( activity_id( "ACT_TRAVELLING" ) ) );
+                               std::make_unique<player_activity>( std::make_unique<travelling_activity_actor>() ) );
             return false;
         }
     }
@@ -2821,7 +2821,7 @@ bool game::cancel_activity_query( const std::string &text )
             return true;
         } else {
             u.set_destination( u.get_auto_move_route(),
-                               std::make_unique<player_activity>( activity_id( "ACT_TRAVELLING" ) ) );
+                               std::make_unique<player_activity>( std::make_unique<travelling_activity_actor>() ) );
             return false;
         }
     }
@@ -12424,10 +12424,11 @@ auto game::place_player( const tripoint_bub_ms &dest_loc, const bool keep_grab )
                 for( const auto &maybe_corpse : m.i_at( pos ) ) {
                     if( maybe_corpse->is_corpse() && maybe_corpse->can_revive() &&
                         !maybe_corpse->get_mtype()->bloodType().obj().has_acid ) {
-                        u.assign_activity( activity_id( "ACT_PULP" ), calendar::INDEFINITELY_LONG, 0 );
-                        u.activity->placement = m.bub_to_abs( pos );
+                        u.assign_activity( std::make_unique<player_activity>(
+                                               std::make_unique<pulp_activity_actor>(
+                                                       m.bub_to_abs( pos ), "auto_pulp_no_acid" ) ) );
+                        u.activity->moves_left = calendar::INDEFINITELY_LONG;
                         u.activity->auto_resume = true;
-                        u.activity->str_values.emplace_back( "auto_pulp_no_acid" );
                         return;
                     }
                 }

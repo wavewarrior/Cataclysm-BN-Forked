@@ -74,6 +74,7 @@
 #include "itype.h"
 #include "json.h"
 #include "kill_tracker.h"
+#include "light_emission.h"
 #include "lru_cache.h"
 #include "magic.h"
 #include "magic_teleporter_list.h"
@@ -3027,7 +3028,7 @@ void vehicle_part::deserialize( JsonIn &jsin )
         if( ammo_capacity() > 0 ) {
             ammo_set( legacy_fuel, data.get_int( "amount" ) );
         }
-        base->item_tags.insert( flag_id( "VEHICLE" ) );
+        base->set_flag( flag_id( "VEHICLE" ) );
     }
 
     if( data.has_int( "hp" ) && id.obj().durability > 0 ) {

@@ -38,6 +38,7 @@
 #include "item_contents.h"
 #include "iuse_actor.h"
 #include "itype.h"
+#include "item_reload_option.h"
 #include "line.h"
 #include "map.h"
 #include "map_iterator.h"

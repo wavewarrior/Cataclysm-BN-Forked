@@ -772,7 +772,7 @@ void debug_menu::wishitem( Character *who, const tripoint_bub_ms &pos )
                 granted = item::in_its_container( std::move( granted ) );
             }
             if( cb.has_flag ) {
-                granted->item_tags.insert( flag_id( cb.flag ) );
+                granted->set_flag( flag_id( cb.flag ) );
             }
             // If the item has an ammunition, this loads it to capacity, including magazines.
             if( !granted->ammo_default().is_null() ) {

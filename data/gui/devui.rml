@@ -215,6 +215,10 @@
                 <div class="devui-row">bloom threshold <input type="range" min="0" max="4" step="0.02" data-value="bloom_threshold"/> <span class="devui-val">{{bloom_threshold}}</span></div>
                 <div class="devui-row">bloom intensity <input type="range" min="0" max="2" step="0.02" data-value="bloom_intensity"/> <span class="devui-val">{{bloom_intensity}}</span></div>
 
+                <div class="devui-section">Height depth (DitW)</div>
+                <div class="devui-row">lean mul <input type="range" min="0" max="3" step="0.05" data-value="depth_lean_str"/> <span class="devui-val">{{depth_lean_str}}</span></div>
+                <div class="devui-row">dark mul <input type="range" min="0" max="2" step="0.05" data-value="depth_dark_str"/> <span class="devui-val">{{depth_dark_str}}</span></div>
+
                 <div class="devui-section">Dither / GI / shadow</div>
                 <div class="devui-row">dither amt <input type="range" min="0" max="2" step="0.01" data-value="dither_amt"/> <span class="devui-val">{{dither_amt}}</span></div>
                 <div class="devui-row">dither bands <input type="range" min="1" max="32" step="1" data-value="dither_bands"/> <span class="devui-val">{{dither_bands}}</span></div>

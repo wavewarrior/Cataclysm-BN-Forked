@@ -1,9 +1,10 @@
-// ---- Sprite instance (64 bytes, wire-stable) ----
+// ---- Sprite instance (80 bytes, wire-stable) ----
 struct SpriteInstance {
     float dst_x, dst_y, dst_w, dst_h;
     float src_u, src_v, src_uw, src_vh;
     float tint_r, tint_g, tint_b, tint_a;
     float rotation, light_mul, pad1, pad2;
+    float extrude_px, extrude_dark, extrude_lean, extrude_pad;
 };
 
 // Vertex storage slot 0: sprite instances
@@ -90,6 +91,7 @@ struct VS_OUT {
     float2 light_pos: TEXCOORD4; // lighting sample pos: base-tile centre for tall
                                  // sprites (uniform), else == world_pos (per-pixel)
     float  outline  : TEXCOORD5; // >0.5 = silhouette mask mode (hover outline)
+    float  dark_frac: TEXCOORD6; // 0 at sprite base → extrude_dark at canopy; applied in frag
 };
 static const float2 quad_uv[6] = {
     float2(0.0,0.0), float2(1.0,0.0), float2(0.0,1.0),
@@ -151,12 +153,30 @@ VS_OUT main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
         const float bend = 1.0 - smoothstep( 0.0, BASE_PIN, c.y );
         c_uv.x += bend * swayw * sway_amp * wind / max( s.dst_w, 1.0 );
     }
+
+    // ---- Height depth pillar (DitW) ----
+    // UV mapping is unchanged: s.src_v + c.y * s.src_vh spans the full taller quad,
+    // so the sprite artwork stretches vertically — no UV remap or atlas-bleed risk.
+    // This block only adds lean (horizontal shear) and computes the dark_frac gradient.
+    float2 pixel_out = pixel;
+    if( s.extrude_px > 0.0 ) {
+        // vertical_pos: 0 at base (c.y=1), 1 at canopy top (c.y=0).
+        const float vertical_pos  = 1.0 - c.y;
+        const float2 viewport_ctr = target_size * 0.5;
+        // Lean direction: away from viewport centre — tops fan outward for parallax depth.
+        const float2 lean_dir     = centre - viewport_ctr;
+        pixel_out = pixel + lean_dir * ( s.extrude_lean * vertical_pos );
+    }
+    // Dark gradient: 0 at base, extrude_dark at top. extrude_dark=0 on non-opted tiles → no-op.
+    const float dark_frac_out = s.extrude_dark * ( 1.0 - c.y );
+
     const float2 ndc = float2(
-        pixel.x / target_size.x *  2.0 - 1.0,
-        pixel.y / target_size.y * -2.0 + 1.0);
+        pixel_out.x / target_size.x *  2.0 - 1.0,
+        pixel_out.y / target_size.y * -2.0 + 1.0 );
 
     VS_OUT o;
     o.pos       = float4(ndc, 0.0, 1.0);
+    o.dark_frac = dark_frac_out;
     o.uv        = float2(s.src_u + c_uv.x * s.src_uw, s.src_v + c_uv.y * s.src_vh);
     o.tint      = float4(s.tint_r, s.tint_g, s.tint_b, s.tint_a);
     o.world_pos = map_pos;

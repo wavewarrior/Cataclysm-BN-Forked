@@ -40,6 +40,7 @@
 #include "item_group.h"
 #include "iuse_actor.h"
 #include "json.h"
+#include "light_emission.h"
 
 class player;
 

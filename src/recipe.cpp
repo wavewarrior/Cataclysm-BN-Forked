@@ -401,7 +401,7 @@ detached_ptr<item> recipe::create_result() const
     // Show crafted items as fitting
     // They might end up not fitting, but it's rare
     if( newit->has_flag( flag_VARSIZE ) ) {
-        newit->item_tags.insert( flag_FIT );
+        newit->set_flag( flag_FIT );
     }
 
     if( contained ) {

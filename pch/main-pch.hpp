@@ -1,4 +1,5 @@
  
+#define _USE_MATH_DEFINES
 #include <algorithm>
 #include <array>
 #include <bitset>
@@ -55,3 +56,10 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+
+#include <optional>
+#include <ranges>
+#include <span>
+#include <variant>
+#include <mutex>
+#include <atomic>

@@ -136,6 +136,7 @@ struct VS_OUT {
     float  light_mul: TEXCOORD3; // memory-fade marker (<0 = -(dist); else no-op)
     float2 light_pos: TEXCOORD4; // base-tile centre for tall sprites, else world_pos
     float  outline  : TEXCOORD5; // >0.5 = silhouette mask mode (hover outline)
+    float  dark_frac: TEXCOORD6; // 0 at sprite base → extrude_dark at canopy; applied in frag
 };
 // SDF supersample factor — MUST match lighting::SDF_SUPERSAMPLE (sdf_pass.h).
 // SdfBuf is the SS-finer grid: dims (sdf_map_w*SDF_SS) x (sdf_map_h*SDF_SS),
@@ -669,6 +670,10 @@ float4 main(VS_OUT i) : SV_Target0 {
     const bool  dbg_active   = (debug_mode == 8u)
                                || (debug_mode > 0u && debug_mode != 8u
                                    && dbg_tint_sum < 0.01);
+    // Height depth: dims canopy to enhance depth perception. dark_frac=0 at base → no-op.
+    // Applied after memory-fade, before debug modes — so debug replace=true cleanly overrides.
+    final_rgb *= ( 1.0 - i.dark_frac );
+
     if(dbg_active) {
         float3 vis = float3(0, 0, 0);
         bool   replace = false;

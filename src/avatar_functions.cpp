@@ -170,7 +170,9 @@ void try_to_sleep( avatar &you, const time_duration &dur )
             you.add_msg_if_player( m_bad, _( "Your soporific inducer doesn't have enough power to operate." ) );
         }
     }
-    you.assign_activity( activity_id( "ACT_TRY_SLEEP" ), to_moves<int>( dur ) );
+    auto act = std::make_unique<player_activity>( std::make_unique<try_sleep_activity_actor>() );
+    act->moves_left = to_moves<int>( dur );
+    you.assign_activity( std::move( act ) );
 }
 
 void mend_item( avatar &you, item &obj, bool interactive )

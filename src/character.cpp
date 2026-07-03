@@ -10330,11 +10330,6 @@ std::unique_ptr<player_activity> Character::remove_activity()
     return ret;
 }
 
-void Character::assign_activity( const activity_id &type, int moves, int index, int pos,
-                                 const std::string &name )
-{
-    assign_activity( std::make_unique<player_activity>( type, moves, index, pos, name ) );
-}
 
 void Character::assign_activity( std::unique_ptr<player_activity> act, bool allow_resume )
 {

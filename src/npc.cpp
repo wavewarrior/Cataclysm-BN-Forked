@@ -10,6 +10,7 @@
 #include <memory>
 
 #include "auto_pickup.h"
+#include "activity_actor_definitions.h"
 #include "avatar.h"
 #include "bodypart.h"
 #include "cached_options.h"
@@ -1071,8 +1072,8 @@ void npc::start_read( item &it, Character *pl )
     item &chosen = it;
     const int time_taken = time_to_read( chosen, *pl );
     const double penalty = static_cast<double>( time_taken ) / time_to_read( chosen, *pl );
-    std::unique_ptr<player_activity> act = std::make_unique<player_activity>( ACT_READ, time_taken, 0,
-                                           pl->getID().get_value() );
+    std::unique_ptr<player_activity> act = std::make_unique<player_activity>( std::make_unique<read_activity_actor>() );
+    act->moves_left = time_taken;
     act->targets.emplace_back( it );
     act->str_values.push_back( std::to_string( penalty ) );
     // push an identifier of martial art book to the action handling
