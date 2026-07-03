@@ -31,6 +31,7 @@
 #include "int_id.h"
 #include "inventory.h"
 #include "item.h"
+#include "item_info.h"
 #include "magic_enchantment.h"
 #include "map.h"
 #include "messages.h"

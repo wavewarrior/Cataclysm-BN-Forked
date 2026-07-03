@@ -123,6 +123,28 @@
 #include "weather_gen.h"
 #include "wheel_dimensions.h"
 
+auto rad_badge_color( const int rad ) -> std::string
+{
+    using pair_t = std::pair<const int, const translation>;
+
+    static const std::array<pair_t, 6> values = {{
+        pair_t{0,   to_translation( "color", "green" )},
+        pair_t{30,  to_translation( "color", "blue" )},
+        pair_t{60,  to_translation( "color", "yellow" )},
+        pair_t{120, to_translation( "color", "orange" )},
+        pair_t{240, to_translation( "color", "red" )},
+        pair_t{500, to_translation( "color", "black" )},
+    }};
+
+    for( const auto &i : values ) {
+        if( rad <= i.first ) {
+            return i.second.translated();
+        }
+    }
+
+    return values.back().second.translated();
+}
+
 // File-scope id constants (moved with the info methods; internal linkage).
 static const ammo_effect_str_id ammo_effect_BLACKPOWDER( "BLACKPOWDER" );
 static const ammo_effect_str_id ammo_effect_INCENDIARY( "INCENDIARY" );

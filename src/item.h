@@ -88,8 +88,8 @@ class weather_manager;
 enum damage_type : int;
 enum clothing_mod_type : int;
 
-std::string rad_badge_color(int rad);
 
+#include "item_info.h"
 #include "light_emission.h"
 
 
