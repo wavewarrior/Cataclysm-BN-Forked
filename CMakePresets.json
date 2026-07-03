@@ -11,11 +11,11 @@
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "displayName": "Windows Tiles Sounds x64 MSVC",
       "description": "Target Windows (64-bit) with the Visual Studio 2022 development environment.",
-      "generator": "Visual Studio 17 2022",
+      "generator": "Visual Studio 18 2026",
       "cacheVariables": {
         "CMAKE_PROJECT_INCLUDE_BEFORE": "${sourceDir}/build-scripts/${presetName}.cmake",
-        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build-scripts/MSVC.cmake",
-        "VCPKG_TARGET_TRIPLET": "x64-windows-static",
+        "CMAKE_TOOLCHAIN_FILE": "C:/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static-md",
         "DYNAMIC_LINKING": "False",
         "CMAKE_CONFIGURATION_TYPES": "Debug;RelWithDebInfo;Release",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
@@ -23,7 +23,12 @@
         "SOUND": "True",
         "TESTS": "True",
         "JSON_FORMAT": "ON",
-        "CMAKE_INSTALL_MESSAGE": "NEVER"
+        "CMAKE_INSTALL_MESSAGE": "NEVER",
+        "CMAKE_C_COMPILER_LAUNCHER": "C:/Users/NIGEL-BEAST/AppData/Local/Microsoft/WinGet/Packages/Mozilla.sccache_Microsoft.Winget.Source_8wekyb3d8bbwe/sccache-v0.16.0-x86_64-pc-windows-msvc/sccache.exe",
+        "CMAKE_CXX_COMPILER_LAUNCHER": "C:/Users/NIGEL-BEAST/AppData/Local/Microsoft/WinGet/Packages/Mozilla.sccache_Microsoft.Winget.Source_8wekyb3d8bbwe/sccache-v0.16.0-x86_64-pc-windows-msvc/sccache.exe",
+        "CMAKE_MSVC_DEBUG_INFORMATION_FORMAT": "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>",
+        "CMAKE_POLICY_CMP0141": "NEW",
+        "SDLIMAGE_AVIF": "OFF"
       }
     },
     {

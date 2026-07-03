@@ -16,9 +16,6 @@
 #include "action.h"
 #include "activity_actor.h"
 #include "activity_actor_definitions.h"
-// TODO (https://github.com/cataclysmbn/Cataclysm-BN/issues/1612):
-// Remove that include after repair_activity_actor.
-#include "activity_handlers.h"
 #include "active_tile_data_def.h"
 #include "ammo.h"
 #include "avatar.h"
@@ -852,8 +849,7 @@ class atm_menu
                     // Money from `*i` could be transferred, but we're out of moves, schedule it for
                     // the next turn. Putting this here makes sure there will be something to be
                     // done next turn.
-                    u.assign_activity( ACT_ATM, 0, transfer_all_money );
-                    u.activity->targets.emplace_back( dst );
+                    u.assign_activity( std::make_unique<player_activity>( std::make_unique<atm_activity_actor>() ) );
                     break;
                 }
 
@@ -1701,8 +1697,9 @@ void iexamine::safe( player &p, const tripoint_bub_ms &examp )
         // capped at 5 minutes minimum.
         const time_duration time = safecracking_time( p );
 
-        p.assign_activity( ACT_CRACKING, to_moves<int>( time ) );
-        p.activity->placement = bub_to_abs( examp );
+        auto act = std::make_unique<player_activity>( std::make_unique<cracking_activity_actor>( bub_to_abs( examp ) ) );
+        act->moves_left = to_moves<int>( time );
+        p.assign_activity( std::move( act ) );
     }
 }
 
@@ -5048,9 +5045,8 @@ void iexamine::use_furn_fake_item( player &p, const tripoint_bub_ms &examp )
 
     if( auto *actor = g->u.activity->get_actor<repair_item_activity_actor>() ) {
         actor->set_hack_furniture( abspos, cur_tool.get_id() );
-    } else if( g->u.activity->id() == activity_id( "ACT_TRAIN_SKILL" ) ) {
-        activity_handlers::repair_activity_hack::patch_activity_for_furniture(
-            *g->u.activity, examp, cur_tool.get_id() );
+    } else if( auto *ts_actor = g->u.activity->get_actor<train_skill_activity_actor>() ) {
+        ts_actor->set_hack_furniture( abspos, cur_tool.get_id() );
     }
 
     const int discharged_ammo = original_charges - fake_item.charges;

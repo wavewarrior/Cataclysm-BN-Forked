@@ -11,13 +11,30 @@ list(REMOVE_ITEM CATACLYSM_BN_SOURCES ${MAIN_CPP} ${MESSAGES_CPP})
 # compile them with no optimization to reduce build times.
 file(GLOB CATALUA_BINDINGS_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/catalua_bindings*.cpp)
 if (MSVC)
-    set(CATALUA_BINDINGS_COMPILE_OPTIONS /Od)
+    set(CATALUA_BINDINGS_COMPILE_OPTIONS /Od /bigobj)
 else ()
     set(CATALUA_BINDINGS_COMPILE_OPTIONS -O0 -g0)
 endif ()
 foreach (catalua_src IN LISTS CATALUA_BINDINGS_SOURCES)
     set_source_files_properties(${catalua_src} PROPERTIES COMPILE_OPTIONS "${CATALUA_BINDINGS_COMPILE_OPTIONS}")
 endforeach ()
+# Large template-heavy files that need /bigobj on MSVC
+if (MSVC)
+    set(BIGOBJ_FILES
+        ${CMAKE_SOURCE_DIR}/src/character.cpp
+        ${CMAKE_SOURCE_DIR}/src/game.cpp
+        ${CMAKE_SOURCE_DIR}/src/iexamine.cpp
+        ${CMAKE_SOURCE_DIR}/src/item.cpp
+        ${CMAKE_SOURCE_DIR}/src/iuse_actor.cpp
+        ${CMAKE_SOURCE_DIR}/src/mapgen.cpp
+        ${CMAKE_SOURCE_DIR}/src/monster.cpp
+        ${CMAKE_SOURCE_DIR}/src/overmap.cpp
+        ${CMAKE_SOURCE_DIR}/src/overmapbuffer.cpp
+    )
+    foreach(bigobj_file IN LISTS BIGOBJ_FILES)
+        set_source_files_properties(${bigobj_file} PROPERTIES COMPILE_OPTIONS "/bigobj")
+    endforeach()
+endif()
 
 file(GLOB_RECURSE CATACLYSM_BN_HEADERS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/*.h)
 list(FILTER CATACLYSM_BN_HEADERS EXCLUDE REGEX "/src/(lua|sol|third-party)/")
@@ -105,11 +122,8 @@ function(setup_common_target_properties target_name)
         target_compile_definitions(${target_name} PUBLIC USE_TRACY)
     endif ()
 
-    # Set up precompiled headers if not exporting compile commands
-    if (NOT "${CMAKE_EXPORT_COMPILE_COMMANDS}")
-        target_precompile_headers(${target_name} PRIVATE
-            ${CMAKE_SOURCE_DIR}/pch/main-pch.hpp)
-    endif ()
+    target_precompile_headers(${target_name} PRIVATE
+        ${CMAKE_SOURCE_DIR}/pch/main-pch.hpp)
 endfunction()
 
 # Build tiles version (only supported configuration)

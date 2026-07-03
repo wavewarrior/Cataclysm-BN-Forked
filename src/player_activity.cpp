@@ -78,7 +78,7 @@ player_activity::player_activity( activity_id t, int turns, int Index, int pos,
 {
 }
 
-player_activity::player_activity( std::unique_ptr<activity_actor> &&actor_ ) : type(
+player_activity::player_activity( std::unique_ptr<activity_actor> actor_ ) : type(
         actor_->get_type() ),
     actor( std::move( actor_ ) ), moves_total( 0 ), moves_left( 0 )
 {
@@ -556,9 +556,6 @@ void player_activity::do_turn( player &p )
 
     if( actor ) {
         actor->do_turn( *this, p );
-    } else {
-        // Use the legacy turn function
-        type->call_do_turn( this, &p );
     }
 
 
@@ -581,9 +578,9 @@ void player_activity::do_turn( player &p )
             p.add_msg_if_player( _( "You pause for a moment to catch your breath." ) );
         }
         auto_resume = true;
-        std::unique_ptr<player_activity> new_act = std::make_unique<player_activity>
-                ( ACT_WAIT_STAMINA, to_moves<int>( 1_minutes ) );
-        new_act->values.push_back( 200 + p.get_stamina_max() / 3 );
+        std::unique_ptr<player_activity> new_act = std::make_unique<player_activity>(
+                std::make_unique<wait_stamina_activity_actor>( 200 + p.get_stamina_max() / 3 ) );
+        new_act->moves_left = to_moves<int>( 1_minutes );
         p.assign_activity( std::move( new_act ) );
         return;
     }
@@ -599,10 +596,7 @@ void player_activity::do_turn( player &p )
         if( actor ) {
             actor->finish( *this, p );
         } else {
-            if( !type->call_finish( this, &p ) ) {
-                // "Finish" is never a misnomer for any activity without a finish function
-                set_to_null();
-            }
+            set_to_null();
         }
         for( Character *npc : assistants() ) {
             npc->cancel_activity();

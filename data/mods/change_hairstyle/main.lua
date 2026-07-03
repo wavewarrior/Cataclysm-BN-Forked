@@ -91,7 +91,7 @@ mod.change_hairstyle_function = function(params)
     who:set_mutation(selected.id)
     gapi.add_msg(MsgType.good, locale.gettext("Success! Your appearance has been updated."))
 
-    who:assign_activity(ActivityTypeId.new("ACT_HAIRCUT"), 18000, -1, -1, "")
+    who:assign_activity(ActivityTypeId.new("ACT_HAIRCUT"), 18000)
     return 1
   end
 

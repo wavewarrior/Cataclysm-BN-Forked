@@ -1745,7 +1745,7 @@ void advanced_inventory::swap_panes() {
 void advanced_inventory::do_return_entry() {
     // only save pane settings
     save_settings(true);
-    g->u.assign_activity(ACT_ADV_INVENTORY);
+    g->u.assign_activity( std::make_unique<player_activity>( std::make_unique<adv_inventory_activity_actor>() ) );
     g->u.activity->auto_resume = true;
     save_state->exit_code = exit_re_entry;
 }

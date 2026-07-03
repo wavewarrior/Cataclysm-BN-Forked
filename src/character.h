@@ -1808,13 +1808,6 @@ public:
     void assign_stashed_activity();
     bool check_outbounds_activity(player_activity& act);
     bool restore_outbounds_activity();
-    /** Legacy activity assignment, does not work for any activites using
-     * the new activity_actor class and may cause issues with resuming.
-     * TODO: delete this once migration of activites to the activity_actor system is complete
-     */
-    void assign_activity(
-        const activity_id& type, int moves = calendar::INDEFINITELY_LONG, int index = -1,
-        int pos = INT_MIN, const std::string& name = "");
     /** Assigns activity to player, possibly resuming old activity if it's similar enough. */
     void assign_activity(std::unique_ptr<player_activity> act, bool allow_resume = true);
     /** Check if player currently has a given activity */

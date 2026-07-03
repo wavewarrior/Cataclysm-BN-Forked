@@ -177,10 +177,9 @@ void activity_type::check_consistency()
             debugmsg( "%s doesn't have a verb", pair.first.c_str() );
         }
         const bool has_actor = activity_actors::deserialize_functions.contains( pair.second.id_ );
-        const bool has_turn_func = activity_handlers::do_turn_functions.contains( pair.second.id_ );
 
-        if( pair.second.special_ && !( has_turn_func || has_actor ) ) {
-            debugmsg( "%s needs a do_turn function or activity actor if it expects a special behaviour.",
+        if( pair.second.special_ && !has_actor ) {
+            debugmsg( "%s needs an activity actor if it expects a special behaviour.",
                       pair.second.id_.c_str() );
         }
         for( auto &skill : pair.second.skills )
@@ -193,46 +192,6 @@ void activity_type::check_consistency()
                 debugmsg( "Unknown quality id %s", quality.req.str() );
             }
     }
-
-    for( const auto &pair : activity_handlers::do_turn_functions ) {
-        if( !activity_type_all.contains( pair.first ) ) {
-            debugmsg( "The do_turn function %s doesn't correspond to a valid activity_type.",
-                      pair.first.c_str() );
-        }
-    }
-
-    for( const auto &pair : activity_handlers::finish_functions ) {
-        if( !activity_type_all.contains( pair.first ) ) {
-            debugmsg( "The finish_function %s doesn't correspond to a valid activity_type",
-                      pair.first.c_str() );
-        }
-    }
-}
-
-void activity_type::call_do_turn( player_activity *act, player *p ) const
-{
-    const auto &pair = activity_handlers::do_turn_functions.find( id_ );
-    if( pair != activity_handlers::do_turn_functions.end() ) {
-        pair->second( act, p );
-    }
-}
-
-bool activity_type::call_finish( player_activity *act, player *p ) const
-{
-    const auto &pair = activity_handlers::finish_functions.find( id_ );
-    if( pair != activity_handlers::finish_functions.end() ) {
-        pair->second( act, p );
-        // kill activity sounds at finish
-        sfx::end_activity_sounds();
-        if( !act->get_tools().empty() ) {
-            auto &tool = *act->get_tools().front();
-            if( tool.has_flag( flag_TEMPORARY_ITEM ) ) {
-                g->remove_fake_item( &tool );
-            }
-        }
-        return true;
-    }
-    return false;
 }
 
 void activity_type::reset()

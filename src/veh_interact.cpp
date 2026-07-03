@@ -1,5 +1,6 @@
 #include "veh_interact.h"
 
+#include "activity_actor_definitions.h"
 #include "activity_handlers.h"
 #include "avatar.h"
 #include "avatar_functions.h"
@@ -205,22 +206,14 @@ std::unique_ptr<player_activity> veh_interact::serialize_activity() {
             break;
     }
     if (you.has_trait(trait_DEBUG_HS)) { time = 1; }
-    std::unique_ptr<player_activity> res =
-        std::make_unique<player_activity>(ACT_VEHICLE, time, static_cast<int>(sel_cmd));
-
     // if we're working on an existing part, use that part as the reference point
     // otherwise (e.g. installing a new frame), just use part 0
     const vehicle_part* vpt = pt ? pt : &veh->part(0);
     const tripoint_abs_ms q = here.bub_to_abs(veh->bub_part_location(*vpt));
+    std::unique_ptr<player_activity> res = std::make_unique<
+        player_activity>(std::make_unique<vehicle_activity_actor>(
+        q, vehicle_cursor, veh->index_of_part(vpt), vp->get_id(), sel_cmd, time));
     for (const tripoint_abs_ms& p : veh->get_points(true)) { res->coord_set.insert(p); }
-    res->values.push_back(q.x());                   // values[0]
-    res->values.push_back(q.y());                   // values[1]
-    res->values.push_back(q.z());                   // values[2]
-    res->values.push_back(vehicle_cursor.x());      // values[3]
-    res->values.push_back(vehicle_cursor.y());      // values[4]
-    res->values.push_back(vehicle_cursor.z());      // values[5]
-    res->values.push_back(veh->index_of_part(vpt)); // values[6]
-    res->str_values.push_back(vp->get_id().str());
     if (target) { res->targets.emplace_back(target); }
 
     return res;

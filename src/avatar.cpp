@@ -14,6 +14,7 @@
 
 #include "action.h"
 #include "bodypart.h"
+#include "activity_actor_definitions.h"
 #include "calendar.h"
 #include "catalua.h"
 #include "catalua_hooks.h"
@@ -538,9 +539,10 @@ bool avatar::read( item *loc, const bool continuous )
     const int time_taken = time_to_read( it, *reader );
 
     add_msg( m_debug, "avatar::read: time_taken = %d", time_taken );
-    player_activity act( ACT_READ, time_taken, continuous ? activity->index : 0,
-                         reader->getID().get_value() );
+    player_activity act( std::make_unique<read_activity_actor>() );
+    act.moves_left = time_taken;
     act.targets.emplace_back( loc );
+    act.index = continuous ? activity->index : 0;
 
     if( it.typeId() == itype_guidebook ) {
         // special guidebook effect: print a misc. hint when read

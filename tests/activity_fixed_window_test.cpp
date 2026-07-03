@@ -26,10 +26,11 @@
 #include "vehicle.h"
 #include "weather.h"
 
-static const auto act_wait = activity_id( "ACT_WAIT" );
+#include "activity_actor_definitions.h"
 
 static auto prepare_fixed_window_wait( const time_duration &duration ) -> void
 {
+    ( void ) duration; // duration handled by actor internally
     clear_all_state();
 
     g->timed_events = timed_event_manager {};
@@ -47,7 +48,8 @@ static auto prepare_fixed_window_wait( const time_duration &duration ) -> void
 
     g->new_game = false;
     g->u.set_moves( 100 );
-    g->u.assign_activity( act_wait, to_moves<int>( duration ), 0 );
+    g->u.assign_activity( std::make_unique<player_activity>(
+                              std::make_unique<wait_activity_actor>( wait_type::WAIT, "" ) ) );
 
     REQUIRE( g->u.activity );
     REQUIRE( *g->u.activity );
