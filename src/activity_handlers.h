@@ -202,16 +202,14 @@ extern const std::map<activity_id, std::function<void(player_activity*, player*)
     do_turn_functions;
 
 /** activity_finish functions: */
-void hotwire_finish(player_activity* act, player* p);
 void longsalvage_finish(player_activity* act, player* p);
 void reload_finish(player_activity* act, player* p);
-void vehicle_finish(player_activity* act, player* p);
-void start_engines_finish(player_activity* act, player* p);
 void repair_item_finish(player_activity* act, player* p);
 void mend_item_finish(player_activity* act, player* p);
 void gunmod_add_finish(player_activity* act, player* p);
 void toolmod_add_finish(player_activity* act, player* p);
 void operation_finish(player_activity* act, player* p);
+void vehicle_finish(player_activity* act, player* p);
 void jackhammer_finish(player_activity* act, player* p);
 void fill_pit_finish(player_activity* act, player* p);
 void unload_mag_finish(player_activity* act, player* p);

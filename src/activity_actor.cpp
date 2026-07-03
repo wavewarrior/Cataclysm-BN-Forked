@@ -94,6 +94,8 @@ static const itype_id itype_log("log");
 static const itype_id itype_splinter("splinter");
 static const itype_id itype_stick_long("stick_long");
 static const itype_id itype_UPS("UPS");
+static const itype_id itype_muscle( "muscle" );
+static const itype_id itype_animal( "animal" );
 static const itype_id itype_wool_staple("wool_staple");
 static const efftype_id effect_ai_waiting("ai_waiting");
 static const efftype_id effect_sleep("sleep");
@@ -6035,6 +6037,134 @@ std::unique_ptr<activity_actor> pulp_activity_actor::deserialize(JsonIn& jsin) {
     data.read("str_value", actor->str_value);
     return actor;
 }
+// ---- hotwire_car_activity_actor ----
+void hotwire_car_activity_actor::do_turn( player_activity & /*act*/, Character & /*who*/ )
+{
+}
+
+
+void hotwire_car_activity_actor::finish( player_activity &act, Character &who )
+{
+    act.set_to_null();
+    player &p = static_cast<player &>( who );
+    if( const optional_vpart_position vp = g->m.veh_at(
+            tripoint_abs_ms( veh_x, veh_y, p.bub_pos().z() ) ) ) {
+        vehicle *const veh = &vp->vehicle();
+        if( mech_skill > rng( 1, 6 ) ) {
+            veh->is_locked = false;
+            add_msg( _( "This wire will start the engine." ) );
+        } else if( mech_skill > rng( 0, 4 ) ) {
+            veh->is_locked = false;
+            veh->is_alarm_on = veh->has_security_working();
+            add_msg( _( "This wire will probably start the engine." ) );
+        } else if( veh->is_alarm_on ) {
+            veh->is_locked = false;
+            add_msg( _( "By process of elimination, this wire will start the engine." ) );
+        } else {
+            veh->is_alarm_on = veh->has_security_working();
+            add_msg( _( "The red wire always starts the engine, doesn't it?" ) );
+        }
+    } else {
+        debugmsg( "process_activity ACT_HOTWIRE_CAR: vehicle not found" );
+    }
+}
+
+void hotwire_car_activity_actor::serialize( JsonOut &jsout ) const
+{
+    jsout.member( "veh_x", veh_x );
+    jsout.member( "veh_y", veh_y );
+    jsout.member( "mech_skill", mech_skill );
+    jsout.member( "moves", moves );
+}
+
+std::unique_ptr<activity_actor> hotwire_car_activity_actor::deserialize( JsonIn &jsin )
+{
+    std::unique_ptr<hotwire_car_activity_actor> actor( new hotwire_car_activity_actor() );
+    JsonObject data = jsin.get_object();
+    data.read( "veh_x", actor->veh_x );
+    data.read( "veh_y", actor->veh_y );
+    data.read( "mech_skill", actor->mech_skill );
+    data.read( "moves", actor->moves );
+    return actor;
+}
+// ---- start_engines_activity_actor ----
+void start_engines_activity_actor::do_turn( player_activity & /*act*/, Character & /*who*/ )
+{
+}
+
+
+void start_engines_activity_actor::finish( player_activity &act, Character &who )
+{
+    act.set_to_null();
+    player &p = static_cast<player &>( who );
+    vehicle *veh = g->remoteveh();
+    map &here = get_map();
+    if( !veh ) {
+        veh = veh_pointer_or_null( here.veh_at( placement ) );
+        if( !veh ) {
+            return;
+        }
+    }
+
+    int attempted = 0;
+    int started = 0;
+    int non_combustion_started = 0;
+
+    for( size_t e = 0; e < veh->engines.size(); ++e ) {
+        if( veh->is_engine_on( e ) ) {
+            attempted++;
+            if( veh->start_engine( e ) ) {
+                started++;
+                if( !veh->is_engine_type( e, itype_muscle ) &&
+                    !veh->is_engine_type( e, itype_animal ) ) {
+                    non_combustion_started++;
+                }
+            }
+        }
+    }
+
+    if( started == 0 ) {
+        if( attempted == 0 ) {
+            add_msg( _( "No engines are running." ) );
+        } else {
+            add_msg( _( "None of the engines started." ) );
+        }
+    } else if( started == 1 ) {
+        if( non_combustion_started == 1 ) {
+            add_msg( _( "The engine started." ) );
+        } else {
+            add_msg( _( "One engine started." ) );
+        }
+    } else {
+        if( non_combustion_started == started ) {
+            add_msg( _( "The engines started." ) );
+        } else {
+            add_msg( _( "%d engines started." ), started );
+        }
+    }
+
+    if( take_control && !veh->engine_on && !veh->velocity ) {
+        p.controlling_vehicle = true;
+        add_msg( _( "You take control of the %s." ), veh->name );
+    }
+}
+
+void start_engines_activity_actor::serialize( JsonOut &jsout ) const
+{
+    jsout.member( "placement", placement );
+    jsout.member( "take_control", take_control );
+    jsout.member( "moves", moves );
+}
+
+std::unique_ptr<activity_actor> start_engines_activity_actor::deserialize( JsonIn &jsin )
+{
+    std::unique_ptr<start_engines_activity_actor> actor( new start_engines_activity_actor() );
+    JsonObject data = jsin.get_object();
+    data.read( "placement", actor->placement );
+    data.read( "take_control", actor->take_control );
+    data.read( "moves", actor->moves );
+    return actor;
+}
 namespace activity_actors {
 
 // Please keep this alphabetically sorted
@@ -6081,6 +6211,7 @@ const std::unordered_map<activity_id, std::unique_ptr<activity_actor> (*)(JsonIn
      {activity_id("ACT_GUNMOD_ADD"), &gunmod_add_activity_actor::deserialize},
      {activity_id("ACT_HACKING"), &hacking_activity_actor::deserialize},
      {activity_id("ACT_HACKSAW"), &hacksaw_activity_actor::deserialize},
+     {activity_id("ACT_HOTWIRE_CAR"), &hotwire_car_activity_actor::deserialize},
      {activity_id("ACT_HAND_CRANK"), &hand_crank_activity_actor::deserialize},
      {activity_id("ACT_HAIRCUT"), &morale_activity_actor::deserialize},
      {activity_id("ACT_JACKHAMMER"), &jackhammer_activity_actor::deserialize},
@@ -6111,6 +6242,7 @@ const std::unordered_map<activity_id, std::unique_ptr<activity_actor> (*)(JsonIn
      {activity_id("ACT_SKIN"), &butchery_activity_actor::deserialize},
      {activity_id("ACT_SOCIALIZE"), &socialize_activity_actor::deserialize},
      {activity_id("ACT_START_FIRE"), &start_fire_activity_actor::deserialize},
+     {activity_id("ACT_START_ENGINES"), &start_engines_activity_actor::deserialize},
      {activity_id("ACT_STUDY_SPELL"), &study_spell_activity_actor::deserialize},
      {activity_id("ACT_STASH"), &stash_activity_actor::deserialize},
      {activity_id("ACT_THROW"), &throw_activity_actor::deserialize},

@@ -1,7 +1,7 @@
 # Activity → `activity_actor` Migration Plan
 
 ## STATUS (reviewed 2026-07-02)
-**~80% DONE.** Actors: **75** registered (up from 71 after Wave 6c). Legacy: **~13** `do_turn`, **~15** `finish` ids remaining. 3 double-registered (`ACT_READ`, `ACT_TRY_SLEEP`, `ACT_WAIT_STAMINA`).
+**~82% DONE.** Actors: **77** registered (up from 75 after Wave 6c). Legacy: **~13** `do_turn`, **~13** `finish` ids remaining. 3 double-registered (`ACT_READ`, `ACT_TRY_SLEEP`, `ACT_WAIT_STAMINA`).
 
 ### Completed (Waves 1-6c: 62 activities migrated)
 | Wave | Actors | Activities | Notes |
@@ -12,13 +12,14 @@
 | ✅ 4 | 2 | EAT_MENU, CONSUME_FOOD_MENU, CONSUME_DRINK_MENU, CONSUME_MEDS_MENU, FIRSTAID | `consume_menu_activity_actor` + `firstaid_activity_actor` |
 | ✅ 5 | 1 | CHOP_TREE, CHOP_LOGS, CHOP_PLANKS | `wood_chop_activity_actor` |
 | ✅ 6a | 11 | GAME, GENERIC_GAME, MEDITATE, SHAVE, HAIRCUT, SOCIALIZE, ATM, VIBE, WAIT, WAIT_WEATHER, WAIT_NPC, FIND_MOUNT, SHEAR, PLAY_WITH_PET, TRAIN_PET | 11 actors (game, morale, wait, social, atm, vibe, shear, play_with_pet, train_pet, find_mount) |
-| ✅ 6b | 13 | READ, TRY_SLEEP, WAIT_STAMINA, TRAVELLING, CRACKING, START_FIRE, FISH, MILK, MAKE_ZLAVE, TREE_COMMUNION, TRAIN, PULP, ADV_INVENTORY | Legacy deleted |
-| ✅ 6c | 4 | ROBOT_CONTROL, MIND_SPLICER, STUDY_SPELL, SPELLCASTING | Legacy deleted (TRAIN_SKILL blocked by #1612)
+| | 6b | 13 | READ, TRY_SLEEP, WAIT_STAMINA, TRAVELLING, CRACKING, START_FIRE, FISH, MILK, MAKE_ZLAVE, TREE_COMMUNION, TRAIN, PULP, ADV_INVENTORY | Legacy deleted |
+| | 6c | 4 | ROBOT_CONTROL, MIND_SPLICER, STUDY_SPELL, SPELLCASTING | Legacy deleted (TRAIN_SKILL blocked by #1612) |
+| | 7a | 2 | HOTWIRE_CAR, START_ENGINES | Legacy deleted |
 
 ### Remaining (~14 activities)
 | Wave | Status | Activities |
 | 6c — Complex | PARTIAL | TRAIN_SKILL (blocked #1612), OPERATION |
-| 7 — Vehicle | NOT STARTED | VEHICLE, VEHICLE_REPAIR, VEHICLE_DECONSTRUCTION, START_ENGINES, HOTWIRE_CAR |
+| 7 — Vehicle | PARTIAL | VEHICLE, VEHICLE_REPAIR, VEHICLE_DECONSTRUCTION |
 | 8 — Multi/zone/NPC | NOT STARTED | MULTIPLE_*, FETCH_REQUIRED, MOVE_LOOT, TIDY_UP |
 | 9 — Rip-out | NOT STARTED | Legacy map deletion, dual-path branch removal |
 
@@ -75,6 +76,9 @@ else        { type->call_do_turn( this, &p ); }   // legacy function-pointer map
 ## Wave 7 — Vehicle activities
 
 **Activities:** VEHICLE, VEHICLE_REPAIR, VEHICLE_DECONSTRUCTION, START_ENGINES, HOTWIRE_CAR
+
+- `hotwire_car_activity_actor` — HOTWIRE_CAR (veh_x, veh_y, mech_skill, moves) ✅
+- `start_engines_activity_actor` — START_ENGINES (placement, take_control, moves) ✅
 
 ## Wave 8 — Multi/zone/NPC activities
 

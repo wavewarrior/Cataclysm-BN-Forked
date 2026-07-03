@@ -249,9 +249,7 @@ const std::map<activity_id, std::function<void(player_activity*, player*)>>
 const std::map<activity_id, std::function<void(player_activity*, player*)>>
     activity_handlers::finish_functions = {
 
-        {ACT_HOTWIRE_CAR, hotwire_finish},
         {ACT_VEHICLE, vehicle_finish},
-        {ACT_START_ENGINES, start_engines_finish},
         {ACT_OPERATION, operation_finish},
 
 };
@@ -871,35 +869,6 @@ void butchery_quarter(item* corpse_item, const player& p) {
 }
 
 
-void activity_handlers::hotwire_finish(player_activity* act, player* p) {
-    // Grab this now, in case the vehicle gets shifted
-    if (const optional_vpart_position vp = g->m.veh_at(
-            tripoint_abs_ms(act->values[0], act->values[1], p->bub_pos().z()))) {
-        vehicle* const veh = &vp->vehicle();
-        const int mech_skill = act->values[2];
-        if (mech_skill > rng(1, 6)) {
-            // success
-            veh->is_locked = false;
-            add_msg(_("This wire will start the engine."));
-        } else if (mech_skill > rng(0, 4)) {
-            // soft fail
-            veh->is_locked = false;
-            veh->is_alarm_on = veh->has_security_working();
-            add_msg(_("This wire will probably start the engine."));
-        } else if (veh->is_alarm_on) {
-            veh->is_locked = false;
-            add_msg(_("By process of elimination, this wire will start the engine."));
-        } else {
-            // hard fail
-            veh->is_alarm_on = veh->has_security_working();
-            add_msg(_("The red wire always starts the engine, doesn't it?"));
-        }
-    } else {
-        debugmsg("process_activity ACT_HOTWIRE_CAR: vehicle not found");
-    }
-    act->set_to_null();
-}
-
 
 static bool magic_train(player_activity* act, player* p) {
     if (!p) { return false; }
@@ -970,78 +939,6 @@ void activity_handlers::vehicle_finish(player_activity* act, player* p) {
                 debugmsg("process_activity ACT_VEHICLE: vehicle not found");
             }
         }
-    }
-}
-
-
-void activity_handlers::start_engines_finish(player_activity* act, player* p) {
-    act->set_to_null();
-    vehicle* veh = g->remoteveh();
-    map& here = get_map();
-    if (!veh) {
-        veh = veh_pointer_or_null(here.veh_at(act->placement));
-        if (!veh) { return; }
-    }
-
-    int attempted = 0;
-    int non_muscle_attempted = 0;
-    int started = 0;
-    int non_muscle_started = 0;
-    int non_combustion_started = 0;
-    const bool take_control = act->values[0];
-
-    for (size_t e = 0; e < veh->engines.size(); ++e) {
-        if (veh->is_engine_on(e)) {
-            attempted++;
-            if (!veh->is_engine_type(e, itype_muscle) && !veh->is_engine_type(e, itype_animal)) {
-                non_muscle_attempted++;
-            }
-            if (veh->start_engine(e)) {
-                started++;
-                if (!veh->is_engine_type(e, itype_muscle)
-                    && !veh->is_engine_type(e, itype_animal)) {
-                    non_muscle_started++;
-                } else {
-                    non_combustion_started++;
-                }
-            }
-        }
-    }
-
-    // Did any engines start?
-    veh->engine_on = started;
-    // init working engine noise
-    sfx::do_vehicle_engine_sfx();
-
-    if (attempted == 0) {
-        add_msg(m_info, _("The %s doesn't have an engine!"), veh->name);
-    } else if (non_muscle_attempted > 0) {
-        // Some non-muscle engines tried to start
-        if (non_muscle_attempted == non_muscle_started) {
-            // All of the non-muscle engines started
-            add_msg(vgettext("The %s's engine starts up.", "The %s's engines start up.",
-                             non_muscle_started),
-                    veh->name);
-        } else if (non_muscle_started > 0) {
-            // Only some of the non-muscle engines started
-            add_msg(vgettext("One of the %s's engines start up.",
-                             "Some of the %s's engines start up.", non_muscle_started),
-                    veh->name);
-        } else if (non_combustion_started > 0) {
-            // Non-combustions "engines" started
-            add_msg(_("The %s is ready for movement."), veh->name);
-        } else {
-            // All of the non-muscle engines failed
-            add_msg(m_bad,
-                    vgettext("The %s's engine fails to start.", "The %s's engines fail to start.",
-                             non_muscle_attempted),
-                    veh->name);
-        }
-    }
-
-    if (take_control && !veh->engine_on && !veh->velocity) {
-        p->controlling_vehicle = false;
-        add_msg(_("You let go of the controls."));
     }
 }
 
