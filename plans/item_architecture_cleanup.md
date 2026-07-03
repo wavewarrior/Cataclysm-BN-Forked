@@ -1,5 +1,17 @@
 # Item Subsystem Architectural Cleanup
 
+**STATUS: COMPLETE** — 2026-07-03. Binary links cleanly on macOS (`osx-arm-slim` preset).
+
+| Phase | Status | Notes |
+|-------|--------|-------|
+| 1 — Extract standalone types from item.h | ✅ Done | `iteminfo.h`, `item_reload_option.h`, `light_emission.h`, `item_cable.h`, `item_functions.h` created; `overmapbuffer.h` removed |
+| 2 — Migrate methods to correct TUs | ✅ Done | 2a–2k committed; `rad_badge_color` restored to `item_info.cpp` per 2l; dead code removed (2m) |
+| 3 — item.cpp code quality | ✅ Done | `copy_fields_from` extracted (3c), `has_item_with_id` range-fixed (3d), 5 stale includes removed (3b), anon namespaces confirmed (3a) |
+| 4 — AGENTS.md style modernization | ⏭ Deferred | User marked obsolete. Scope: trailing returns, auto, std::ranges across 16 TUs |
+| 5 — item_tags encapsulation | ✅ Done | `item_tags` private; all 5 external callers migrated to `set/unset_flag` |
+| 6 — Decompose item_info.cpp | ✅ Done | `iteminfo_gun.cpp`, `iteminfo_food.cpp`, `iteminfo_bionic.cpp`, `iteminfo_combat.cpp` created; armor methods in `iteminfo_armor.cpp`; 3085→1462 lines. ≤800 target unmet: `final_info` (435 lines) cannot be split per plan; `basic_info`+9 small methods remain as residual |
+
+
 ## Context
 
 The `item.cpp` P6 decomposition (−89%) was a mechanical file-split with no API or structural changes. It exposed three categories of architectural debt now addressed here:
