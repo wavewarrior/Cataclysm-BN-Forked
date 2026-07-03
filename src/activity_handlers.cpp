@@ -156,7 +156,6 @@ static const activity_id ACT_VEHICLE( "ACT_VEHICLE" );
 static const activity_id ACT_VEHICLE_DECONSTRUCTION( "ACT_VEHICLE_DECONSTRUCTION" );
 static const activity_id ACT_VEHICLE_REPAIR( "ACT_VEHICLE_REPAIR" );
 static const activity_id ACT_VIBE( "ACT_VIBE" );
-static const activity_id ACT_TRAIN_SKILL( "ACT_TRAIN_SKILL" );
 static const activity_id ACT_WAIT( "ACT_WAIT" );
 static const activity_id ACT_WAIT_NPC( "ACT_WAIT_NPC" );
 static const activity_id ACT_WAIT_STAMINA( "ACT_WAIT_STAMINA" );
@@ -230,7 +229,6 @@ using namespace activity_handlers;
 const std::map< activity_id, std::function<void( player_activity *, player * )> >
 activity_handlers::do_turn_functions = {
     { ACT_CRAFT, craft_do_turn },
-    { ACT_TRAIN_SKILL, train_skill_do_turn },
     { ACT_MULTIPLE_FISH, multiple_fish_do_turn },
     { ACT_MULTIPLE_CONSTRUCTION, multiple_construction_do_turn },
     { ACT_MULTIPLE_MINE, multiple_mine_do_turn },
@@ -257,7 +255,6 @@ activity_handlers::finish_functions = {
     { ACT_VEHICLE, vehicle_finish },
     { ACT_START_ENGINES, start_engines_finish },
     { ACT_OPERATION, operation_finish },
-    { ACT_TRAIN_SKILL, train_skill_finish },
 
     { ACT_ROBOT_CONTROL, robot_control_finish },
     { ACT_MIND_SPLICER, mind_splicer_finish },
@@ -1346,7 +1343,7 @@ void patch_activity_for_furniture( player_activity &activity,
     // Player may start another activity on welder/soldering iron
     // Check it here instead of furniture interaction code
     // because we want to encapsulate hack here.
-    if( activity.id() != ACT_REPAIR_ITEM && activity.id() != ACT_TRAIN_SKILL ) {
+    if( activity.id() != ACT_REPAIR_ITEM ) {
         return;
     }
 
@@ -1366,90 +1363,6 @@ void patch_activity_for_furniture( player_activity &activity,
 } // namespace repair_activity_hack
 } // namespace activity_handlers
 
-void activity_handlers::train_skill_do_turn( player_activity *act, player *p )
-{
-    namespace hack = activity_handlers::repair_activity_hack;
-
-    std::optional<hack::hack_type_t> hack_type = hack::get_hack_type( *act );
-    const tripoint_bub_ms hack_pos = hack_type ? hack::get_position( * act ) : tripoint_bub_ms{};
-    int hack_original_charges = 0;
-    item *main_tool = nullptr;
-    if( hack_type ) {
-        main_tool = hack::get_fake_tool( hack_type.value(), *act );
-        if( main_tool != nullptr ) {
-            hack_original_charges = main_tool ? main_tool->charges : 0;
-        }
-    } else {
-        main_tool = &*act->get_tools().front();
-    }
-    if( main_tool == nullptr ) {
-        debugmsg( "train skill tools array and hack values are empty. this would have caused invalid safe reference error" );
-        act->moves_left = 0;
-        return;
-    }
-    item &skill_training_item = *main_tool;
-    int training_skill_interval = atoi( p->get_value( "training_iuse_skill_interval" ).c_str() );
-
-    if( training_skill_interval <= 0 ) {
-        debugmsg( "training_iuse_skill_interval is invalid ( %d )", training_skill_interval );
-        act->moves_left = 0;
-        return;
-    }
-
-    if( calendar::once_every( 1_minutes * training_skill_interval ) ) {
-        // pull metadata. this is probably the easiest way to get this data from the JSON definition
-        std::string training_skill = p->get_value( "training_iuse_skill" );
-        if( training_skill.empty() ) {
-            debugmsg( "training_iuse_skill is empty" );
-            act->moves_left = 0;
-            return;
-        }
-        int training_skill_xp = atoi( p->get_value( "training_iuse_skill_xp" ).c_str() );
-        int training_skill_max_level = atoi( p->get_value( "training_iuse_skill_xp_max_level" ).c_str() );
-        int training_skill_xp_chance = atoi( p->get_value( "training_iuse_skill_xp_chance" ).c_str() );
-        int training_skill_fatigue = atoi( p->get_value( "training_iuse_skill_fatigue" ).c_str() );
-
-        p->mod_fatigue( training_skill_fatigue );
-        if( skill_training_item.ammo_remaining() > 0 ) {
-            skill_training_item.ammo_consume( 1, p->bub_pos() );
-            if( hack_type.has_value() ) {
-                hack::discharge_real_power_source(
-                    hack_type.value(),
-                    hack_pos,
-                    skill_training_item,
-                    hack_original_charges
-                );
-            }
-        } else if( skill_training_item.ammo_required() > 0 ) {
-            act->moves_left = 0;
-            add_msg( m_info, _( "The %s runs out of power." ), skill_training_item.tname() );
-            return;
-        }
-        if( p->get_skill_level( skill_id( training_skill ) ) >= training_skill_max_level ) {
-            act->moves_left = 0;
-            add_msg( m_info, _( "You can no longer learn anything from this." ) );
-            return;
-        }
-        if( rng( 1, 100 ) < training_skill_xp_chance ) {
-            p->practice( skill_id( training_skill ), training_skill_xp,
-                         training_skill_max_level );
-        }
-    }
-
-    // needs rest
-    if( p->get_fatigue() >= fatigue_levels::dead_tired ) {
-        if( hack_type.has_value() ) {
-            hack::discharge_real_power_source(
-                hack_type.value(),
-                hack_pos,
-                skill_training_item,
-                hack_original_charges
-            );
-        }
-        act->moves_left = 0;
-        add_msg( m_info, _( "You're too tired to continue." ) );
-    }
-}
 
 
 void activity_handlers::move_loot_do_turn( player_activity *act, player *p )
@@ -1736,11 +1649,6 @@ void activity_handlers::operation_finish( player_activity *act, player *p )
     act->set_to_null();
 }
 
-void activity_handlers::train_skill_finish( player_activity *act, player *p )
-{
-    p->add_msg_if_player( m_good, _( "You feel like you've learned a little bit." ) );
-    act->set_to_null();
-}
 
 
 

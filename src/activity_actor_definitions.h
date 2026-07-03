@@ -1920,6 +1920,35 @@ class train_activity_actor : public activity_actor
         static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
 };
 
+class train_skill_activity_actor : public activity_actor
+{
+    public:
+        train_skill_activity_actor() = default;
+
+        void set_hack_furniture( const tripoint_abs_ms &pos, const itype_id &tool_type ) {
+            hack_type = hack_type_t::furniture;
+            hack_position = pos;
+            hack_tool_type_id = tool_type;
+        }
+
+        activity_id get_type() const override {
+            return activity_id( "ACT_TRAIN_SKILL" );
+        }
+
+        void start( player_activity &, Character & ) override {}
+        void do_turn( player_activity &act, Character &who ) override;
+        void finish( player_activity &act, Character &who ) override;
+
+        void serialize( JsonOut &jsout ) const override;
+        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+
+    private:
+        enum class hack_type_t : int { none = -1, vehicle = 0, furniture = 1 };
+
+        hack_type_t hack_type = hack_type_t::none;
+        tripoint_abs_ms hack_position;
+        itype_id hack_tool_type_id;
+};
 class pulp_activity_actor : public activity_actor
 {
     private:

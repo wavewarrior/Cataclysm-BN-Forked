@@ -16,9 +16,6 @@
 #include "action.h"
 #include "activity_actor.h"
 #include "activity_actor_definitions.h"
-// TODO (https://github.com/cataclysmbn/Cataclysm-BN/issues/1612):
-// Remove that include after repair_activity_actor.
-#include "activity_handlers.h"
 #include "active_tile_data_def.h"
 #include "ammo.h"
 #include "avatar.h"
@@ -5048,9 +5045,8 @@ void iexamine::use_furn_fake_item( player &p, const tripoint_bub_ms &examp )
 
     if( auto *actor = g->u.activity->get_actor<repair_item_activity_actor>() ) {
         actor->set_hack_furniture( abspos, cur_tool.get_id() );
-    } else if( g->u.activity->id() == activity_id( "ACT_TRAIN_SKILL" ) ) {
-        activity_handlers::repair_activity_hack::patch_activity_for_furniture(
-            *g->u.activity, examp, cur_tool.get_id() );
+    } else if( auto *ts_actor = g->u.activity->get_actor<train_skill_activity_actor>() ) {
+        ts_actor->set_hack_furniture( abspos, cur_tool.get_id() );
     }
 
     const int discharged_ammo = original_charges - fake_item.charges;

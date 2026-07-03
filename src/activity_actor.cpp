@@ -6002,6 +6002,136 @@ std::unique_ptr<activity_actor> train_activity_actor::deserialize( JsonIn &jsin 
     return actor;
 }
 
+// ---- train_skill_activity_actor ----
+
+void train_skill_activity_actor::do_turn( player_activity &act, Character &who )
+{
+    player &p = static_cast<player &>( who );
+
+    item *main_tool = nullptr;
+    tripoint_bub_ms hack_pos_bub = tripoint_bub_ms{};
+    int hack_original_charges = 0;
+
+    if( hack_type == hack_type_t::furniture ) {
+        // Actor-set hack (from iexamine.cpp)
+        const map &m = get_map();
+        hack_pos_bub = m.abs_to_bub( hack_position );
+        if( m.has_furn( hack_pos_bub ) ) {
+            const furn_t &furniture = m.furn( hack_pos_bub ).obj();
+            const std::vector<itype> item_type_list = furniture.crafting_pseudo_item_types();
+            for( const itype &item_type : item_type_list ) {
+                if( item_type.get_id() == hack_tool_type_id ) {
+                    const tripoint_abs_ms abspos = m.bub_to_abs( hack_pos_bub );
+                    const distribution_grid &grid = get_distribution_grid_tracker().grid_at( abspos );
+                    main_tool = item::spawn_temporary( item_type.get_id(), calendar::turn, 0 );
+                    main_tool->charges = grid.get_resource( true );
+                    main_tool->set_flag( flag_PSEUDO );
+                    hack_original_charges = main_tool->charges;
+                    break;
+                }
+            }
+        }
+    } else {
+        if( !act.get_tools().empty() ) {
+            main_tool = &*act.get_tools().front();
+        }
+    }
+
+    if( main_tool == nullptr ) {
+        debugmsg( "train skill tools array and hack values are empty. this would have caused invalid safe reference error" );
+        act.moves_left = 0;
+        return;
+    }
+    item &skill_training_item = *main_tool;
+    int training_skill_interval = atoi( p.get_value( "training_iuse_skill_interval" ).c_str() );
+
+    if( training_skill_interval <= 0 ) {
+        debugmsg( "training_iuse_skill_interval is invalid ( %d )", training_skill_interval );
+        act.moves_left = 0;
+        return;
+    }
+
+    if( calendar::once_every( 1_minutes * training_skill_interval ) ) {
+        std::string training_skill = p.get_value( "training_iuse_skill" );
+        if( training_skill.empty() ) {
+            debugmsg( "training_iuse_skill is empty" );
+            act.moves_left = 0;
+            return;
+        }
+        int training_skill_xp = atoi( p.get_value( "training_iuse_skill_xp" ).c_str() );
+        int training_skill_max_level = atoi( p.get_value( "training_iuse_skill_xp_max_level" ).c_str() );
+        int training_skill_xp_chance = atoi( p.get_value( "training_iuse_skill_xp_chance" ).c_str() );
+        int training_skill_fatigue = atoi( p.get_value( "training_iuse_skill_fatigue" ).c_str() );
+
+        p.mod_fatigue( training_skill_fatigue );
+        if( skill_training_item.ammo_remaining() > 0 ) {
+            skill_training_item.ammo_consume( 1, p.bub_pos() );
+            if( hack_type == hack_type_t::furniture ) {
+                const int used_charges = hack_original_charges - skill_training_item.charges;
+                if( used_charges > 0 ) {
+                    const tripoint_abs_ms abspos = get_map().bub_to_abs( hack_pos_bub );
+                    distribution_grid &grid = get_distribution_grid_tracker().grid_at( abspos );
+                    grid.mod_resource( -used_charges );
+                }
+            }
+        } else if( skill_training_item.ammo_required() > 0 ) {
+            act.moves_left = 0;
+            add_msg( m_info, _( "The %s runs out of power." ), skill_training_item.tname() );
+            return;
+        }
+        if( p.get_skill_level( skill_id( training_skill ) ) >= training_skill_max_level ) {
+            act.moves_left = 0;
+            add_msg( m_info, _( "You can no longer learn anything from this." ) );
+            return;
+        }
+        if( rng( 1, 100 ) < training_skill_xp_chance ) {
+            p.practice( skill_id( training_skill ), training_skill_xp,
+                        training_skill_max_level );
+        }
+    }
+
+    // needs rest
+    if( p.get_fatigue() >= fatigue_levels::dead_tired ) {
+        if( hack_type == hack_type_t::furniture ) {
+            const int used_charges = hack_original_charges - skill_training_item.charges;
+            if( used_charges > 0 ) {
+                const tripoint_abs_ms abspos = get_map().bub_to_abs( hack_pos_bub );
+                distribution_grid &grid = get_distribution_grid_tracker().grid_at( abspos );
+                grid.mod_resource( -used_charges );
+            }
+        }
+        act.moves_left = 0;
+        add_msg( m_info, _( "You're too tired to continue." ) );
+    }
+}
+
+void train_skill_activity_actor::finish( player_activity &act, Character &who )
+{
+    player &p = static_cast<player &>( who );
+    p.add_msg_if_player( m_good, _( "You feel like you've learned a little bit." ) );
+    act.set_to_null();
+}
+
+void train_skill_activity_actor::serialize( JsonOut &jsout ) const
+{
+    jsout.start_object();
+    jsout.member( "hack_type", static_cast<int>( hack_type ) );
+    jsout.member( "hack_position", hack_position );
+    jsout.member( "hack_tool_type_id", hack_tool_type_id );
+    jsout.end_object();
+}
+
+std::unique_ptr<activity_actor> train_skill_activity_actor::deserialize( JsonIn &jsin )
+{
+    std::unique_ptr<train_skill_activity_actor> actor( new train_skill_activity_actor() );
+    JsonObject data = jsin.get_object();
+    int hack_val = -1;
+    data.read( "hack_type", hack_val );
+    actor->hack_type = static_cast<train_skill_activity_actor::hack_type_t>( hack_val );
+    data.read( "hack_position", actor->hack_position );
+    data.read( "hack_tool_type_id", actor->hack_tool_type_id );
+    return actor;
+}
 // ---- pulp_activity_actor ----
 
 void pulp_activity_actor::do_turn( player_activity &act, Character &who )
@@ -6188,6 +6318,7 @@ deserialize_functions = {
     { activity_id( "ACT_TOGGLE_GATE" ), &toggle_gate_activity_actor::deserialize },
     { activity_id( "ACT_TOOLMOD_ADD" ), &toolmod_add_activity_actor::deserialize },
     { activity_id( "ACT_TRAIN" ), &train_activity_actor::deserialize },
+    { activity_id( "ACT_TRAIN_SKILL" ), &train_skill_activity_actor::deserialize },
     { activity_id( "ACT_TRAIN_PET" ), &train_pet_activity_actor::deserialize },
     { activity_id( "ACT_TRAVELLING" ), &travelling_activity_actor::deserialize },
     { activity_id( "ACT_TREE_COMMUNION" ), &tree_communion_activity_actor::deserialize },
