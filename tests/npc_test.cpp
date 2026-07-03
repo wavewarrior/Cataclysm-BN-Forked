@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "calendar.h"
+#include "activity_actor_definitions.h"
 #include "coordinates.h"
 #include "faction.h"
 #include "field.h"
@@ -24,6 +25,7 @@
 #include "numeric_interval.h"
 #include "overmapbuffer.h"
 #include "pimpl.h"
+#include "player_activity.h"
 #include "player_helpers.h"
 #include "state_helpers.h"
 #include "text_snippets.h"
@@ -379,7 +381,8 @@ TEST_CASE( "npc-movement" )
                 // wandering off in search of distant ammo caches, etc.
                 guy->mission = NPC_MISSION_SHOPKEEP;
                 // This prevents npcs occasionally teleporting away
-                guy->assign_activity( activity_id( "ACT_MEDITATE" ) );
+                guy->assign_activity(std::make_unique<player_activity>(
+                    std::make_unique<morale_activity_actor>(morale_act_type::MEDITATE)));
                 //Sometimes they spawn with sledge hammers and bash down the walls
                 guy->remove_primary_weapon();
                 ACTIVE_OVERMAP_BUFFER.insert_npc( guy );

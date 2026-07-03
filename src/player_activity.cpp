@@ -556,9 +556,6 @@ void player_activity::do_turn( player &p )
 
     if( actor ) {
         actor->do_turn( *this, p );
-    } else {
-        // Use the legacy turn function
-        type->call_do_turn( this, &p );
     }
 
 
@@ -599,10 +596,7 @@ void player_activity::do_turn( player &p )
         if( actor ) {
             actor->finish( *this, p );
         } else {
-            if( !type->call_finish( this, &p ) ) {
-                // "Finish" is never a misnomer for any activity without a finish function
-                set_to_null();
-            }
+            set_to_null();
         }
         for( Character *npc : assistants() ) {
             npc->cancel_activity();

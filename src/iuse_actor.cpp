@@ -2870,9 +2870,9 @@ int ammobelt_actor::use(player& p, item&, bool, const tripoint_bub_ms&) const {
 
     item_reload_option opt = character_funcs::select_ammo(p, *mag, true);
     if (opt) {
-        p.assign_activity(ACT_RELOAD, opt.moves(), opt.qty());
-        p.activity->targets.emplace_back(&*mag);
-        p.activity->targets.emplace_back(opt.ammo);
+        p.assign_activity(std::make_unique<player_activity>(
+            std::make_unique<reload_activity_actor>(
+                safe_reference<item>(*mag), safe_reference<item>(*opt.ammo), opt.qty() )));
         p.i_add(std::move(mag));
     }
 

@@ -3,7 +3,7 @@
 #include <cmath>
 #include <string>
 
-#include "activity_handlers.h"
+#include "activity_actor_definitions.h"
 #include "avatar.h"
 #include "calendar.h"
 #include "game.h"
@@ -226,7 +226,7 @@ TEST_CASE( "train_pet_finish with null monster reference does not crash",
     act.str_values.push_back( "test_pet" );
 
     // Must not crash and must set the activity to null.
-    activity_handlers::train_pet_finish( &act, &p );
+    train_pet_activity_actor( act.monsters[0], act.str_values[0] ).finish( act, p );
     CHECK( act.is_null() );
 }
 
@@ -248,7 +248,7 @@ TEST_CASE( "train_pet_finish removes effect_well_fed", "[pet][monster][training]
     act.monsters.push_back( g->shared_from( mon ) );
     act.str_values.push_back( mon.get_name() );
 
-    activity_handlers::train_pet_finish( &act, &p );
+    train_pet_activity_actor( act.monsters[0], act.str_values[0] ).finish( act, p );
     CHECK_FALSE( mon.has_effect( effect_well_fed ) );
 }
 
@@ -270,7 +270,7 @@ TEST_CASE( "train_pet_finish increments training_level on success",
     act.monsters.push_back( g->shared_from( mon ) );
     act.str_values.push_back( mon.get_name() );
 
-    activity_handlers::train_pet_finish( &act, &p );
+    train_pet_activity_actor( act.monsters[0], act.str_values[0] ).finish( act, p );
     CHECK( mon.training_level == 1 );
 }
 
@@ -293,7 +293,7 @@ TEST_CASE( "train_pet_finish does not exceed max_level", "[pet][monster][trainin
     act.monsters.push_back( g->shared_from( mon ) );
     act.str_values.push_back( mon.get_name() );
 
-    activity_handlers::train_pet_finish( &act, &p );
+    train_pet_activity_actor( act.monsters[0], act.str_values[0] ).finish( act, p );
     CHECK( mon.training_level == max_level );
 }
 
@@ -316,7 +316,7 @@ TEST_CASE( "train_pet_finish with insufficient skill does not increment training
     act.monsters.push_back( g->shared_from( mon ) );
     act.str_values.push_back( mon.get_name() );
 
-    activity_handlers::train_pet_finish( &act, &p );
+    train_pet_activity_actor( act.monsters[0], act.str_values[0] ).finish( act, p );
     // Should return early without touching training_level or well_fed.
     CHECK( mon.training_level == 0 );
     CHECK( mon.has_effect( effect_well_fed ) );
@@ -357,6 +357,6 @@ TEST_CASE( "train_pet_finish removes effect_ai_waiting so pet is not stuck after
     act.monsters.push_back( g->shared_from( mon ) );
     act.str_values.push_back( mon.get_name() );
 
-    activity_handlers::train_pet_finish( &act, &p );
+    train_pet_activity_actor( act.monsters[0], act.str_values[0] ).finish( act, p );
     CHECK_FALSE( mon.has_effect( effect_ai_waiting ) );
 }

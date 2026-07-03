@@ -179,9 +179,6 @@ class activity_type
         bool valid_auto_needs() const {
             return auto_needs;
         }
-        void call_do_turn( player_activity *, player * ) const;
-        /** Returns whether it had a finish function or not */
-        bool call_finish( player_activity *, player * ) const;
 
         /** JSON stuff */
         static void load( const JsonObject &jo );

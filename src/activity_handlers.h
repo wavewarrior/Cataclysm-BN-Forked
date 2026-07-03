@@ -176,30 +176,13 @@ void perform_zone_activity_turn(
     const std::function<void(player& p, const tripoint_bub_ms&)>& tile_action,
     const std::string& finished_msg);
 /** activity_do_turn functions: */
-void craft_do_turn(player_activity* act, player* p);
 void drop_do_turn(player_activity* act, player* p);
 void stash_do_turn(player_activity* act, player* p);
-void multiple_chop_planks_do_turn(player_activity* act, player* p);
 void wear_do_turn(player_activity* act, player* p);
 void move_items_do_turn(player_activity* act, player* p);
-void multiple_farm_do_turn(player_activity* act, player* p);
-void multiple_fish_do_turn(player_activity* act, player* p);
-void multiple_construction_do_turn(player_activity* act, player* p);
-void multiple_mine_do_turn(player_activity* act, player* p);
-void multiple_butcher_do_turn(player_activity* act, player* p);
-void vehicle_deconstruction_do_turn(player_activity* act, player* p);
-void vehicle_repair_do_turn(player_activity* act, player* p);
-void chop_trees_do_turn(player_activity* act, player* p);
-void fetch_do_turn(player_activity* act, player* p);
-void move_loot_do_turn(player_activity* act, player* p);
 void armor_layers_do_turn(player_activity* act, player* p);
 void repair_item_do_turn(player_activity* act, player* p);
-void tidy_up_do_turn(player_activity* act, player* p);
-void operation_do_turn(player_activity* act, player* p);
 
-// defined in activity_handlers.cpp
-extern const std::map<activity_id, std::function<void(player_activity*, player*)>>
-    do_turn_functions;
 
 /** activity_finish functions: */
 void longsalvage_finish(player_activity* act, player* p);
@@ -208,30 +191,11 @@ void repair_item_finish(player_activity* act, player* p);
 void mend_item_finish(player_activity* act, player* p);
 void gunmod_add_finish(player_activity* act, player* p);
 void toolmod_add_finish(player_activity* act, player* p);
-void operation_finish(player_activity* act, player* p);
 void jackhammer_finish(player_activity* act, player* p);
 void fill_pit_finish(player_activity* act, player* p);
 void unload_mag_finish(player_activity* act, player* p);
 
 void try_sleep_query(player_activity* act, player* p);
 
-// defined in activity_handlers.cpp
-extern const std::map<activity_id, std::function<void(player_activity*, player*)>> finish_functions;
-
-// HACK: This is a hack to provide fake items
-// from vehicles or furniture until
-// `repair_activity_actor` would be implemented.
-//
-// TODO (https://github.com/cataclysmbn/Cataclysm-BN/issues/1612):
-// Remove that repair code after repair_activity_actor.
-namespace repair_activity_hack {
-
-void patch_activity_for_vehicle(
-    player_activity& activity, const tripoint_bub_ms& veh_part_position, const vehicle& veh,
-    int interact_part_idx, const itype_id& it);
-void patch_activity_for_furniture(
-    player_activity& activity, const tripoint_bub_ms& furniture_position, const itype_id& itt);
-
-} // namespace repair_activity_hack
 
 } // namespace activity_handlers

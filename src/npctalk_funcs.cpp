@@ -212,17 +212,20 @@ void talk_function::start_trade( npc &p )
 
 void talk_function::sort_loot( npc &p )
 {
-    p.assign_activity( ACT_MOVE_LOOT );
+    p.assign_activity( std::make_unique<player_activity>(
+        std::make_unique<move_loot_activity_actor>() ) );
 }
 
 void talk_function::do_construction( npc &p )
 {
-    p.assign_activity( ACT_MULTIPLE_CONSTRUCTION );
+    p.assign_activity(std::make_unique<player_activity>(
+        std::make_unique<generic_multi_activity_actor>( ACT_MULTIPLE_CONSTRUCTION )));
 }
 
 void talk_function::do_mining( npc &p )
 {
-    p.assign_activity( ACT_MULTIPLE_MINE );
+    p.assign_activity(std::make_unique<player_activity>(
+        std::make_unique<generic_multi_activity_actor>( ACT_MULTIPLE_MINE )));
 }
 
 void talk_function::do_read( npc &p )
@@ -255,37 +258,44 @@ void talk_function::find_mount( npc &p )
 
 void talk_function::do_butcher( npc &p )
 {
-    p.assign_activity( ACT_MULTIPLE_BUTCHER );
+    p.assign_activity(std::make_unique<player_activity>(
+        std::make_unique<generic_multi_activity_actor>( ACT_MULTIPLE_BUTCHER )));
 }
 
 void talk_function::do_chop_plank( npc &p )
 {
-    p.assign_activity( ACT_MULTIPLE_CHOP_PLANKS );
+    p.assign_activity(std::make_unique<player_activity>(
+        std::make_unique<generic_multi_activity_actor>( ACT_MULTIPLE_CHOP_PLANKS )));
 }
 
 void talk_function::do_vehicle_deconstruct( npc &p )
 {
-    p.assign_activity( ACT_VEHICLE_DECONSTRUCTION );
+    p.assign_activity(std::make_unique<player_activity>(
+        std::make_unique<generic_multi_activity_actor>( ACT_VEHICLE_DECONSTRUCTION )));
 }
 
 void talk_function::do_vehicle_repair( npc &p )
 {
-    p.assign_activity( ACT_VEHICLE_REPAIR );
+    p.assign_activity(std::make_unique<player_activity>(
+        std::make_unique<generic_multi_activity_actor>( ACT_VEHICLE_REPAIR )));
 }
 
 void talk_function::do_chop_trees( npc &p )
 {
-    p.assign_activity( ACT_MULTIPLE_CHOP_TREES );
+    p.assign_activity(std::make_unique<player_activity>(
+        std::make_unique<generic_multi_activity_actor>( ACT_MULTIPLE_CHOP_TREES )));
 }
 
 void talk_function::do_farming( npc &p )
 {
-    p.assign_activity( ACT_MULTIPLE_FARM );
+    p.assign_activity(std::make_unique<player_activity>(
+        std::make_unique<generic_multi_activity_actor>( ACT_MULTIPLE_FARM )));
 }
 
 void talk_function::do_fishing( npc &p )
 {
-    p.assign_activity( ACT_MULTIPLE_FISH );
+    p.assign_activity(std::make_unique<player_activity>(
+        std::make_unique<generic_multi_activity_actor>( ACT_MULTIPLE_FISH )));
 }
 
 void talk_function::revert_activity( npc &p )

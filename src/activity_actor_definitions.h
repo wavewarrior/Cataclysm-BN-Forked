@@ -1979,3 +1979,67 @@ public:
     void serialize(JsonOut& jsout) const override;
     static std::unique_ptr<activity_actor> deserialize(JsonIn& jsin);
 };
+class move_loot_activity_actor: public activity_actor {
+  private:
+    int stage;
+    int num_processed;
+    tripoint_abs_ms placement;
+    std::unordered_set<tripoint_abs_ms> coord_set;
+
+public:
+    move_loot_activity_actor() noexcept;
+
+    activity_id get_type() const override { return activity_id( "ACT_MOVE_LOOT" ); }
+
+    void start( player_activity &act, Character &who ) override;
+    void do_turn( player_activity &act, Character &who ) override;
+    void finish( player_activity &act, Character &who ) override;
+    void serialize( JsonOut &jsout ) const override;
+    static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+};
+
+class operation_activity_actor: public activity_actor {
+private:
+    int difficulty;
+    int success;
+    int max_power_level;
+    int pl_skill;
+    std::string operation_type;
+    bionic_id bid;
+    std::string installer_name;
+    bool autodoc;
+
+public:
+    operation_activity_actor() noexcept;
+    operation_activity_actor( int diff, int succ, int power, int skill,
+                              const std::string &type, const bionic_id &b,
+                              const std::string &installer, bool auto_ );
+
+    activity_id get_type() const override { return activity_id( "ACT_OPERATION" ); }
+
+    void start( player_activity &act, Character &who ) override;
+    void do_turn( player_activity &act, Character &who ) override;
+    void finish( player_activity &act, Character &who ) override;
+
+    void serialize( JsonOut &jsout ) const override;
+    static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+};
+class generic_multi_activity_actor: public activity_actor {
+private:
+    activity_id type;
+
+public:
+    explicit generic_multi_activity_actor( activity_id type_in = activity_id::NULL_ID() )
+        : type( type_in ) {}
+
+    activity_id get_type() const override { return type; }
+
+    /// Delegates to generic_multi_activity_handler which manages the entire flow
+    void start( player_activity &act, Character &who ) override;
+    void do_turn( player_activity &act, Character &who ) override;
+    void finish( player_activity &act, Character &who ) override;
+
+    void serialize( JsonOut &jsout ) const override;
+    static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+};
+

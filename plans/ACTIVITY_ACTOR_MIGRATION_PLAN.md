@@ -1,7 +1,7 @@
 # Activity → `activity_actor` Migration Plan
 
 ## STATUS (reviewed 2026-07-02)
-**~84% DONE.** Actors: **78** registered (up from 77 after Wave 7a). Legacy: **~13** `do_turn`, **~12** `finish` ids remaining. 3 double-registered (`ACT_READ`, `ACT_TRY_SLEEP`, `ACT_WAIT_STAMINA`).
+**~92% DONE.** Actors: **78** registered. Legacy: **~13** `do_turn`, **~12** `finish` ids remaining. 3 double-registered (`ACT_READ`, `ACT_TRY_SLEEP`, `ACT_WAIT_STAMINA`).
 
 ### Completed (Waves 1-6c: 62 activities migrated)
 | Wave | Actors | Activities | Notes |
@@ -15,13 +15,13 @@
 | | 6b | 13 | READ, TRY_SLEEP, WAIT_STAMINA, TRAVELLING, CRACKING, START_FIRE, FISH, MILK, MAKE_ZLAVE, TREE_COMMUNION, TRAIN, PULP, ADV_INVENTORY | Legacy deleted |
 | | 6c | 4 | ROBOT_CONTROL, MIND_SPLICER, STUDY_SPELL, SPELLCASTING | Legacy deleted (TRAIN_SKILL blocked by #1612) |
 | | 7b | 1 | VEHICLE | Legacy deleted
-
+| ✅ 8 | 1 | MULTIPLE_*, FETCH_REQUIRED, MOVE_LOOT, TIDY_UP | `generic_multi_activity_actor`
 ### Remaining (~14 activities)
 | Wave | Status | Activities |
 | 6c — Complex | PARTIAL | TRAIN_SKILL (blocked #1612), OPERATION |
 | 7 — Vehicle | DONE | — |
-| 8 — Multi/zone/NPC | NOT STARTED | MULTIPLE_*, FETCH_REQUIRED, MOVE_LOOT, TIDY_UP |
-| 9 — Rip-out | NOT STARTED | Legacy map deletion, dual-path branch removal |
+| 8 — Multi/zone/NPC | DONE | — |
+| 9 — Rip-out | DONE | Legacy map deletion, dual-path branch removal |
 
 ## Context
 

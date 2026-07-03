@@ -1244,35 +1244,44 @@ static void loot() {
             add_msg(_("Never mind."));
             break;
         case SortLoot:
-            u.assign_activity(ACT_MOVE_LOOT);
+            u.assign_activity( std::make_unique<player_activity>(
+                std::make_unique<move_loot_activity_actor>() ) );
             break;
         case FertilizePlots:
             u.assign_activity(std::make_unique<player_activity>(
                 std::make_unique<fertilize_plot_activity_actor>()));
             break;
         case ConstructPlots:
-            u.assign_activity(ACT_MULTIPLE_CONSTRUCTION);
+            u.assign_activity(std::make_unique<player_activity>(
+                std::make_unique<generic_multi_activity_actor>( ACT_MULTIPLE_CONSTRUCTION )));
             break;
         case MultiFarmPlots:
-            u.assign_activity(ACT_MULTIPLE_FARM);
+            u.assign_activity(std::make_unique<player_activity>(
+                std::make_unique<generic_multi_activity_actor>( ACT_MULTIPLE_FARM )));
             break;
         case Multichoptrees:
-            u.assign_activity(ACT_MULTIPLE_CHOP_TREES);
+            u.assign_activity(std::make_unique<player_activity>(
+                std::make_unique<generic_multi_activity_actor>( ACT_MULTIPLE_CHOP_TREES )));
             break;
         case Multichopplanks:
-            u.assign_activity(ACT_MULTIPLE_CHOP_PLANKS);
+            u.assign_activity(std::make_unique<player_activity>(
+                std::make_unique<generic_multi_activity_actor>( ACT_MULTIPLE_CHOP_PLANKS )));
             break;
         case Multideconvehicle:
-            u.assign_activity(ACT_VEHICLE_DECONSTRUCTION);
+            u.assign_activity(std::make_unique<player_activity>(
+                std::make_unique<generic_multi_activity_actor>( ACT_VEHICLE_DECONSTRUCTION )));
             break;
         case Multirepairvehicle:
-            u.assign_activity(ACT_VEHICLE_REPAIR);
+            u.assign_activity(std::make_unique<player_activity>(
+                std::make_unique<generic_multi_activity_actor>( ACT_VEHICLE_REPAIR )));
             break;
         case MultiButchery:
-            u.assign_activity(ACT_MULTIPLE_BUTCHER);
+            u.assign_activity(std::make_unique<player_activity>(
+                std::make_unique<generic_multi_activity_actor>( ACT_MULTIPLE_BUTCHER )));
             break;
         case MultiMining:
-            u.assign_activity(ACT_MULTIPLE_MINE);
+            u.assign_activity(std::make_unique<player_activity>(
+                std::make_unique<generic_multi_activity_actor>( ACT_MULTIPLE_MINE )));
             break;
         default:
             debugmsg("Unsupported flag");

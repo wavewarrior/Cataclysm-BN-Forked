@@ -6,6 +6,7 @@
 #include "advanced_inv.h"
 #include "armor_layers.h"
 #include "avatar.h"
+#include "bionics.h"
 #include "avatar_action.h"
 #include "bodypart.h"
 #include "calendar.h"
@@ -104,6 +105,17 @@ static const efftype_id effect_sleep("sleep");
 static const efftype_id effect_sheared("sheared");
 static const efftype_id effect_tied("tied");
 static const efftype_id effect_well_fed("well_fed");
+static const efftype_id effect_narcosis( "narcosis" );
+static const efftype_id effect_under_op( "under_op" );
+static const efftype_id effect_bleed( "bleed" );
+static const efftype_id effect_blind( "blind" );
+
+static const bionic_id bio_painkiller( "painkiller" );
+
+static const trait_id trait_NOPAIN( "NOPAIN" );
+
+static const std::string flag_AUTODOC( "AUTODOC" );
+static const std::string flag_AUTODOC_COUCH( "AUTODOC_COUCH" );
 
 static const trait_id trait_SPIRITUAL("SPIRITUAL");
 
@@ -5175,7 +5187,8 @@ void fish_activity_actor::do_turn(player_activity& act, Character& who) {
               "stop."));
         if (!p.backlog.empty() && p.backlog.front()->id() == ACT_MULTIPLE_FISH) {
             p.backlog.clear();
-            p.assign_activity(ACT_TIDY_UP);
+            p.assign_activity(std::make_unique<player_activity>(
+                std::make_unique<generic_multi_activity_actor>( ACT_MULTIPLE_FISH )));
             return;
         }
         return;
@@ -5228,7 +5241,8 @@ void fish_activity_actor::finish(player_activity& act, Character& who) {
     p.add_msg_if_player(m_info, _("You finish fishing"));
     if (!p.backlog.empty() && p.backlog.front()->id() == ACT_MULTIPLE_FISH) {
         p.backlog.clear();
-        p.assign_activity(ACT_TIDY_UP);
+        p.assign_activity(std::make_unique<player_activity>(
+            std::make_unique<generic_multi_activity_actor>( ACT_MULTIPLE_FISH )));
     }
 }
 
@@ -6260,6 +6274,336 @@ std::unique_ptr<activity_actor> vehicle_activity_actor::deserialize(JsonIn& jsin
     data.read("cmd", actor->cmd);
     return actor;
 }
+// ---- move_loot_activity_actor ----
+move_loot_activity_actor::move_loot_activity_actor() noexcept
+    : stage( -1 ), num_processed( 0 ), placement( tripoint_abs_ms::zero() )
+{}
+
+void move_loot_activity_actor::do_turn( player_activity &act, Character &who )
+{
+    // Sync actor state to act fields before calling the legacy helper
+    act.index = stage;
+    if( act.values.empty() ) {
+        act.values.push_back( num_processed );
+    } else {
+        act.values[ 0 ] = num_processed;
+    }
+    act.placement = placement;
+    act.coord_set = coord_set;
+
+    // Call the legacy helper function
+    activity_on_turn_move_loot( act, static_cast<player & >( who ) );
+
+    // Sync state back from act to actor members
+    stage = act.index;
+    num_processed = act.values[ 0 ];
+    placement = act.placement;
+    coord_set = act.coord_set;
+}
+
+
+void move_loot_activity_actor::start( player_activity &act, Character &who )
+{
+    placement = act.placement;
+}
+
+void move_loot_activity_actor::finish( player_activity &act, Character &who )
+{
+    // Activity self-terminates - no finish logic needed
+    // The activity_on_turn_move_loot function calls set_to_null() when done
+}
+
+void move_loot_activity_actor::serialize( JsonOut &jsout ) const
+{
+    jsout.member( "stage", stage );
+    jsout.member( "num_processed", num_processed );
+    jsout.member( "placement", placement );
+    jsout.member( "coord_set", coord_set );
+}
+
+std::unique_ptr<activity_actor> move_loot_activity_actor::deserialize( JsonIn &jsin )
+{
+    std::unique_ptr<move_loot_activity_actor> actor( new move_loot_activity_actor() );
+    JsonObject data = jsin.get_object();
+    data.read( "stage", actor->stage );
+    data.read( "num_processed", actor->num_processed );
+    data.read( "placement", actor->placement );
+    data.read( "coord_set", actor->coord_set );
+    return actor;
+}
+// ---- operation_activity_actor ----
+
+operation_activity_actor::operation_activity_actor() noexcept
+    : difficulty( 0 ), success( 0 ), max_power_level( 0 ), pl_skill( 0 ),
+      autodoc( false )
+{}
+
+operation_activity_actor::operation_activity_actor( int diff, int succ, int power, int skill,
+        const std::string &type, const bionic_id &b,
+        const std::string &installer, bool auto_ )
+    : difficulty( diff ), success( succ ), max_power_level( power ), pl_skill( skill ),
+      operation_type( type ), bid( b ), installer_name( installer ), autodoc( auto_ )
+{}
+
+void operation_activity_actor::start( player_activity &act, Character &who )
+{
+    // No initialization needed, state is already set in constructor
+}
+
+void operation_activity_actor::do_turn( player_activity &act, Character &who )
+{
+    player *p = dynamic_cast<player * >( &who );
+    if ( p == nullptr ) {
+        return;
+    }
+
+    const bionic_id upbid = bid->upgraded_bionic;
+    const bool u_see = g->u.sees( p->bub_pos() )
+                       && ( !g->u.has_effect( effect_narcosis ) || g->u.has_bionic( bio_painkiller )
+                            || g->u.has_trait( trait_NOPAIN ) );
+
+    const std::vector<bodypart_id> bps = get_occupied_bodyparts( bid );
+
+    const time_duration half_op_duration = difficulty * 10_minutes;
+    const time_duration message_freq = difficulty * 2_minutes;
+    time_duration time_left = time_duration::from_turns( act.moves_left / 100 );
+
+    map &here = get_map();
+
+    if ( autodoc && here.inbounds( p->bub_pos() ) ) {
+        const auto autodocs = here.find_furnitures_or_vparts_with_flag_in_radius(
+            p->bub_pos(), 1, flag_AUTODOC );
+        if ( !here.has_flag_furn_or_vpart( flag_AUTODOC_COUCH, p->bub_pos() ) || autodocs.empty() ) {
+            p->remove_effect( effect_under_op );
+            act.set_to_null();
+
+            if ( u_see ) {
+                add_msg( m_bad, _( "The autodoc suffers a catastrophic failure." ) );
+                p->add_msg_player_or_npc( m_bad,
+                    _( "The Autodoc's failure damages you greatly." ),
+                    _( "The Autodoc's failure damages <npcname> greatly." ) );
+            }
+            if ( !bps.empty() ) {
+                for ( const bodypart_id &bp : bps ) {
+                    p->add_effect( effect_bleed, 1_hours, bp.id(), difficulty );
+                    p->apply_damage( nullptr, bp, 20 * difficulty );
+                    if ( u_see ) {
+                        p->add_msg_player_or_npc( m_bad,
+                            _( "Your %s is ripped open." ),
+                            _( "<npcname>'s %s is ripped open." ),
+                            body_part_name_accusative( bp->token ) );
+                    }
+                    if ( bp == bodypart_id( "eyes" ) ) {
+                        p->add_effect( effect_blind, 1_hours, bodypart_str_id::NULL_ID() );
+                    }
+                }
+            } else {
+                p->add_effect( effect_bleed, 1_hours, bodypart_str_id::NULL_ID(), difficulty );
+                p->apply_damage( nullptr, bodypart_id( "torso" ), 20 * difficulty );
+            }
+            return;
+        }
+    }
+
+    if ( time_left > half_op_duration ) {
+        if ( !bps.empty() ) {
+            for ( const bodypart_id &bp : bps ) {
+                if ( calendar::once_every( message_freq ) && u_see && autodoc ) {
+                    p->add_msg_player_or_npc( m_info,
+                        _( "The Autodoc is meticulously cutting your %s open." ),
+                        _( "The Autodoc is meticulously cutting <npcname>'s %s open." ),
+                        body_part_name_accusative( bp->token ) );
+                }
+            }
+        } else {
+            if ( calendar::once_every( message_freq ) && u_see ) {
+                p->add_msg_player_or_npc( m_info,
+                    _( "The Autodoc is meticulously cutting you open." ),
+                    _( "The Autodoc is meticulously cutting <npcname> open." ) );
+            }
+        }
+    } else if ( time_left == half_op_duration ) {
+        if ( operation_type == "uninstall" ) {
+            if ( u_see && autodoc ) {
+                add_msg( m_info, _( "The Autodoc attempts to carefully extract the bionic." ) );
+            }
+            if ( p->has_bionic( bid ) ) {
+                p->perform_uninstall( bid, difficulty, success,
+                    units::from_joule( max_power_level ), pl_skill );
+            } else {
+                debugmsg( _( "Tried to uninstall %s, but you don't have this bionic installed." ),
+                    bid.c_str() );
+                p->remove_effect( effect_under_op );
+                act.set_to_null();
+            }
+        } else {
+            if ( u_see && autodoc ) {
+                add_msg( m_info, _( "The Autodoc attempts to carefully insert the bionic." ) );
+            }
+            if ( bid.is_valid() ) {
+                p->perform_install( bid, upbid, difficulty, success, pl_skill,
+                    installer_name, bid->canceled_mutations );
+            } else {
+                debugmsg( _( "%s is no a valid bionic_id" ), bid.c_str() );
+                p->remove_effect( effect_under_op );
+                act.set_to_null();
+            }
+        }
+    } else if ( success > 0 ) {
+        if ( !bps.empty() ) {
+            for ( const bodypart_id &bp : bps ) {
+                if ( calendar::once_every( message_freq ) && u_see && autodoc ) {
+                    p->add_msg_player_or_npc( m_info,
+                        _( "The Autodoc is stitching your %s back up." ),
+                        _( "The Autodoc is stitching <npcname>'s %s back up." ),
+                        body_part_name_accusative( bp->token ) );
+                }
+            }
+        } else {
+            if ( calendar::once_every( message_freq ) && u_see && autodoc ) {
+                p->add_msg_player_or_npc( m_info,
+                    _( "The Autodoc is stitching you back up." ),
+                    _( "The Autodoc is stitching <npcname> back up." ) );
+            }
+        }
+    } else {
+        if ( calendar::once_every( message_freq ) && u_see && autodoc ) {
+            p->add_msg_player_or_npc( m_bad,
+                _( "The Autodoc is moving erratically through the rest of its program, not actually "
+                   "stitching your wounds." ),
+                _( "The Autodoc is moving erratically through the rest of its program, not actually "
+                   "stitching <npcname>'s wounds." ) );
+        }
+    }
+
+    if ( p->has_effect( effect_narcosis ) ) {
+        const time_duration remaining_time = p->get_effect_dur( effect_narcosis );
+        if ( remaining_time <= time_left ) {
+            const time_duration top_off_time = time_left - remaining_time;
+            p->add_effect( effect_narcosis, top_off_time );
+            p->add_effect( effect_sleep, top_off_time );
+        }
+    } else {
+        p->add_effect( effect_narcosis, time_left );
+        p->add_effect( effect_sleep, time_left );
+    }
+}
+
+void operation_activity_actor::finish( player_activity &act, Character &who )
+{
+    player *p = dynamic_cast<player * >( &who );
+    if ( p == nullptr ) {
+        return;
+    }
+
+    map &here = get_map();
+    if ( autodoc ) {
+        if ( success > 0 ) {
+            add_msg( m_good, _( "The Autodoc returns to its resting position after successfully "
+                               "performing the operation." ) );
+            const auto autodocs = here.find_furnitures_or_vparts_with_flag_in_radius(
+                p->bub_pos(), 1, flag_AUTODOC );
+            sounds::sound( autodocs.front(), 10, sounds::sound_t::music,
+                _( "a short upbeat jingle: \"Operation successful\"" ), true, "Autodoc", "success" );
+        } else {
+            if ( operation_type == "install" ) {
+                add_msg( m_warning, _( "The Autodoc completes installation and activates bionic but "
+                                      "reports about complications during operation." ) );
+                const auto autodocs = here.find_furnitures_or_vparts_with_flag_in_radius(
+                    p->bub_pos(), 1, flag_AUTODOC );
+                sounds::sound( autodocs.front(), 10, sounds::sound_t::music,
+                    _( "a sad beeping noise: \"Complications detected!  Report to medical personnel "
+                       "immediately!\"" ),
+                    true, "Autodoc", "failure" );
+            } else {
+                add_msg( m_bad, _( "The Autodoc jerks back to its resting position after failing the "
+                                  "operation." ) );
+                const auto autodocs = here.find_furnitures_or_vparts_with_flag_in_radius(
+                    p->bub_pos(), 1, flag_AUTODOC );
+                sounds::sound( autodocs.front(), 10, sounds::sound_t::music,
+                    _( "a sad beeping noise: \"Operation failed\"" ), true, "Autodoc", "failure" );
+            }
+        }
+    } else {
+        if ( success > 0 ) {
+            add_msg( m_good, _( "The operation is a success." ) );
+        } else {
+            if ( operation_type == "install" ) {
+                add_msg( m_warning,
+                    _( "Bionic was installed and activated but a complication "
+                       "happened during operation!" ) );
+            } else {
+                add_msg( m_bad, _( "The operation is a failure." ) );
+            }
+        }
+    }
+    p->remove_effect( effect_under_op );
+    act.set_to_null();
+}
+
+void operation_activity_actor::serialize( JsonOut &jsout ) const
+{
+    jsout.member( "difficulty", difficulty );
+    jsout.member( "success", success );
+    jsout.member( "max_power_level", max_power_level );
+    jsout.member( "pl_skill", pl_skill );
+    jsout.member( "operation_type", operation_type );
+    jsout.member( "bid", bid );
+    jsout.member( "installer_name", installer_name );
+    jsout.member( "autodoc", autodoc );
+}
+
+std::unique_ptr<activity_actor> operation_activity_actor::deserialize( JsonIn &jsin )
+{
+    std::unique_ptr<operation_activity_actor> actor( new operation_activity_actor() );
+    JsonObject data = jsin.get_object();
+    data.read( "difficulty", actor->difficulty );
+    data.read( "success", actor->success );
+    data.read( "max_power_level", actor->max_power_level );
+    data.read( "pl_skill", actor->pl_skill );
+    data.read( "operation_type", actor->operation_type );
+    data.read( "bid", actor->bid );
+    data.read( "installer_name", actor->installer_name );
+    data.read( "autodoc", actor->autodoc );
+    return actor;
+}
+// ---- generic_multi_activity_actor ----
+
+void generic_multi_activity_actor::start( player_activity &act, Character & /*who*/ )
+{
+    // No state to initialize; handler manages everything
+}
+
+void generic_multi_activity_actor::do_turn( player_activity &act, Character &who )
+{
+    player *p = dynamic_cast<player *>( &who );
+    if( !p ) {
+        debugmsg( "generic_multi_activity_actor::do_turn called on non-player" );
+        act.set_to_null();
+        return;
+    }
+    // The handler manages the entire multi-activity flow internally
+    generic_multi_activity_handler( act, *p, false );
+}
+
+void generic_multi_activity_actor::finish( player_activity &act, Character & /*who*/ )
+{
+    // Handler manages its own completion; this is a no-op
+}
+
+void generic_multi_activity_actor::serialize( JsonOut &jsout ) const
+{
+    jsout.member( "type", type.str() );
+}
+
+std::unique_ptr<activity_actor> generic_multi_activity_actor::deserialize( JsonIn &jsin )
+{
+    JsonObject data = jsin.get_object();
+    activity_id type;
+    data.read( "type", type );
+    return std::make_unique<generic_multi_activity_actor>( type );
+}
+
 namespace activity_actors {
 
 // Please keep this alphabetically sorted
@@ -6293,6 +6637,7 @@ const std::unordered_map<activity_id, std::unique_ptr<activity_actor> (*)(JsonIn
      {activity_id("ACT_DISSECT"), &butchery_activity_actor::deserialize},
      {activity_id("ACT_DROP"), &drop_activity_actor::deserialize},
      {activity_id("ACT_EAT_MENU"), &consume_menu_activity_actor::deserialize},
+     {activity_id("ACT_FETCH_REQUIRED"), &generic_multi_activity_actor::deserialize},
      {activity_id("ACT_FERTILIZE_PLOT"), &fertilize_plot_activity_actor::deserialize},
      {activity_id("ACT_FIELD_DRESS"), &butchery_activity_actor::deserialize},
      {activity_id("ACT_FILL_LIQUID"), &fill_liquid_activity_actor::deserialize},
@@ -6318,8 +6663,17 @@ const std::unordered_map<activity_id, std::unique_ptr<activity_actor> (*)(JsonIn
      {activity_id("ACT_MIGRATION_CANCEL"), &migration_cancel_activity_actor::deserialize},
      {activity_id("ACT_MILK"), &milk_activity_actor::deserialize},
      {activity_id("ACT_MIND_SPLICER"), &mind_splicer_activity_actor::deserialize},
+     {activity_id("ACT_MOVE_LOOT"), &move_loot_activity_actor::deserialize},
+     {activity_id("ACT_MULTIPLE_BUTCHER"), &generic_multi_activity_actor::deserialize},
+     {activity_id("ACT_MULTIPLE_CHOP_PLANKS"), &generic_multi_activity_actor::deserialize},
+     {activity_id("ACT_MULTIPLE_CHOP_TREES"), &generic_multi_activity_actor::deserialize},
+     {activity_id("ACT_MULTIPLE_CONSTRUCTION"), &generic_multi_activity_actor::deserialize},
+     {activity_id("ACT_MULTIPLE_FARM"), &generic_multi_activity_actor::deserialize},
+     {activity_id("ACT_MULTIPLE_FISH"), &generic_multi_activity_actor::deserialize},
+     {activity_id("ACT_MULTIPLE_MINE"), &generic_multi_activity_actor::deserialize},
      {activity_id("ACT_MOVE_ITEMS"), &move_items_activity_actor::deserialize},
      {activity_id("ACT_OXYTORCH"), &oxytorch_activity_actor::deserialize},
+     {activity_id("ACT_OPERATION"), &operation_activity_actor::deserialize},
      {activity_id("ACT_PICKAXE"), &pickaxe_activity_actor::deserialize},
      {activity_id("ACT_PICKUP"), &pickup_activity_actor::deserialize},
      {activity_id("ACT_PLANT_SEED"), &plant_seed_activity_actor::deserialize},
@@ -6349,7 +6703,10 @@ const std::unordered_map<activity_id, std::unique_ptr<activity_actor> (*)(JsonIn
      {activity_id("ACT_TRAVELLING"), &travelling_activity_actor::deserialize},
      {activity_id("ACT_TREE_COMMUNION"), &tree_communion_activity_actor::deserialize},
      {activity_id("ACT_TRY_SLEEP"), &try_sleep_activity_actor::deserialize},
+     {activity_id("ACT_TIDY_UP"), &generic_multi_activity_actor::deserialize},
      {activity_id("ACT_VEHICLE"), &vehicle_activity_actor::deserialize},
+     {activity_id("ACT_VEHICLE_DECONSTRUCTION"), &generic_multi_activity_actor::deserialize},
+     {activity_id("ACT_VEHICLE_REPAIR"), &generic_multi_activity_actor::deserialize},
      {activity_id("ACT_VIBE"), &vibe_activity_actor::deserialize},
      {activity_id("ACT_WAIT"), &wait_activity_actor::deserialize},
      {activity_id("ACT_WAIT_NPC"), &wait_activity_actor::deserialize},

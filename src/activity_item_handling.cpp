@@ -2231,8 +2231,9 @@ void activity_on_turn_move_loot(player_activity& act, player& p) {
                     // p is implicitly an NPC that has been moved off the map, so reset the activity
                     // and unload them
                     p.cancel_activity();
-                    p.assign_activity(ACT_MOVE_LOOT);
-                    p.set_moves(0);
+                    p.assign_activity( std::make_unique<player_activity>(
+                        std::make_unique<move_loot_activity_actor>() ) );
+                    p.set_moves( 0 );
                     g->reload_npcs();
                     return;
                 }
@@ -2971,7 +2972,8 @@ static requirement_check_result generic_multi_activity_check_requirement(
         } else {
             if (!check_only) {
                 p.backlog.emplace_front(std::make_unique<player_activity>(act_id));
-                p.assign_activity(ACT_FETCH_REQUIRED);
+                p.assign_activity(std::make_unique<player_activity>(
+                    std::make_unique<generic_multi_activity_actor>( act_id )));
                 player_activity& act_prev = *p.backlog.front();
                 act_prev.str_values.push_back(what_we_need.str());
                 act_prev.values.push_back(static_cast<int>(reason));
@@ -3098,10 +3100,9 @@ static bool generic_multi_activity_do(
         p.backlog.emplace_front(std::make_unique<player_activity>(act_id));
         // we don't want to keep repeating the fishing activity, just piggybacking on this functions
         // structure to find requirements.
-        p.activity = std::make_unique<player_activity>();
         item* best_rod = p.best_quality_item(qual_FISHING);
-        p.assign_activity(std::make_unique<player_activity>(
-            ACT_FISH, to_moves<int>(5_hours), 0, 0, best_rod->tname()));
+        p.activity = std::make_unique<player_activity>(
+            std::make_unique<fish_activity_actor>(best_rod, g->m.bub_to_abs(src_loc)));
         p.activity->add_tool(best_rod);
         const auto fishable_locations =
             g->get_fishable_locations(ACTIVITY_SEARCH_DISTANCE, src_loc);
@@ -3156,7 +3157,8 @@ bool generic_multi_activity_handler(player_activity& act, player& p, bool check_
             if (!here.inbounds(p.bub_pos())) {
                 // p is implicitly an NPC that has been moved off the map, so reset the activity
                 // and unload them
-                p.assign_activity(std::make_unique<player_activity>(activity_to_restore));
+                p.assign_activity(std::make_unique<player_activity>(
+                    std::make_unique<generic_multi_activity_actor>( activity_to_restore )));
                 p.set_moves(0);
                 g->reload_npcs();
                 return false;
@@ -3181,7 +3183,8 @@ bool generic_multi_activity_handler(player_activity& act, player& p, bool check_
                 continue;
             }
             p.set_moves(0);
-            p.set_destination(route, std::make_unique<player_activity>(activity_to_restore));
+            p.set_destination(route, std::make_unique<player_activity>(
+                std::make_unique<generic_multi_activity_actor>( activity_to_restore )));
             return false;
         }
         activity_reason_info act_info = can_do_activity_there(
@@ -3222,14 +3225,16 @@ bool generic_multi_activity_handler(player_activity& act, player& p, bool check_
             if (!check_only) {
                 if (p.moves <= 0) {
                     // Restart activity and break from cycle.
-                    p.assign_activity(activity_to_restore);
+                    p.assign_activity(std::make_unique<player_activity>(
+                        std::make_unique<generic_multi_activity_actor>( activity_to_restore )));
                     return true;
                 }
                 // set the destination and restart activity after player arrives there
                 // we don't need to check for safe mode,
                 // activity will be restarted only if
                 // player arrives on destination tile
-                p.set_destination(route, std::make_unique<player_activity>(activity_to_restore));
+                p.set_destination(route, std::make_unique<player_activity>(
+                    std::make_unique<generic_multi_activity_actor>( activity_to_restore )));
                 if (is_multi_construction) { construction_progress = true; }
                 return true;
             }
@@ -3274,7 +3279,8 @@ bool generic_multi_activity_handler(player_activity& act, player& p, bool check_
     if (!check_only) {
         if (p.moves <= 0) {
             // Restart activity and break from cycle.
-            p.assign_activity(activity_to_restore);
+            p.assign_activity(std::make_unique<player_activity>(
+                std::make_unique<generic_multi_activity_actor>( activity_to_restore )));
             p.activity_vehicle_part_index = -1;
             return false;
         }
@@ -3297,7 +3303,8 @@ bool generic_multi_activity_handler(player_activity& act, player& p, bool check_
             check_npc_revert(p);
             // tidy up leftover moved parts and tools left lying near the work spots.
             if (player_activity(activity_to_restore).is_multi_type()) {
-                p.assign_activity(ACT_TIDY_UP);
+                p.assign_activity(std::make_unique<player_activity>(
+                    std::make_unique<generic_multi_activity_actor>( activity_to_restore )));
             }
         } else if (is_multi_construction && !construction_progress) {
             if (npc* guy = p.as_npc()) {
