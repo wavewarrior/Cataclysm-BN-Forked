@@ -122,11 +122,8 @@ function(setup_common_target_properties target_name)
         target_compile_definitions(${target_name} PUBLIC USE_TRACY)
     endif ()
 
-    # Set up precompiled headers if not exporting compile commands
-    if (NOT "${CMAKE_EXPORT_COMPILE_COMMANDS}")
-        target_precompile_headers(${target_name} PRIVATE
-            ${CMAKE_SOURCE_DIR}/pch/main-pch.hpp)
-    endif ()
+    target_precompile_headers(${target_name} PRIVATE
+        ${CMAKE_SOURCE_DIR}/pch/main-pch.hpp)
 endfunction()
 
 # Build tiles version (only supported configuration)
