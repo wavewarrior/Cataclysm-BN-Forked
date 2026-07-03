@@ -327,46 +327,6 @@ void item::on_unwield( Character &who )
     }
 }
 
-void item::handle_pickup_ownership( Character &c )
-{
-    if( is_owned_by( c ) ) {
-        return;
-    }
-    // Add ownership to item if unowned
-    if( owner.is_null() ) {
-        set_owner( c );
-    } else {
-        Character &you = get_player_character();
-        if( !is_owned_by( c ) && &c == &you ) {
-            std::vector<npc *> witnesses;
-            for( npc &elem : g->all_npcs() ) {
-                // If they already want to murder you, no point in confronting you about theft
-                if( rl_dist( elem.bub_pos(), you.bub_pos() ) < g_max_view_distance && elem.get_faction() &&
-                    is_owned_by( elem ) && elem.sees( you.bub_pos() ) && !elem.guaranteed_hostile() ) {
-                    elem.say( "<witnessed_thievery>", 7 );
-                    npc *npc_to_add = &elem;
-                    witnesses.push_back( npc_to_add );
-                }
-            }
-            if( !witnesses.empty() ) {
-                set_old_owner( get_owner() );
-                // Make sure there is only one witness
-                for( npc &guy : g->all_npcs() ) {
-                    if( guy.get_attitude() == NPCATT_RECOVER_GOODS ) {
-                        guy.set_attitude( NPCATT_NULL );
-                    }
-                }
-                random_entry( witnesses )->set_attitude( NPCATT_RECOVER_GOODS );
-                // Notify the activity that we got a witness
-                if( c.activity && !c.activity->is_null() && c.activity->id() == ACT_PICKUP ) {
-                    c.activity->str_values.clear();
-                    c.activity->str_values.emplace_back( has_thievery_witness );
-                }
-            }
-            set_owner( c );
-        }
-    }
-}
 
 void item::on_pickup( Character &who )
 {
@@ -429,4 +389,24 @@ void item::on_map_placement( const map &m, const tripoint_bub_ms &p )
             actor->on_placed( *this, m, p );
         }
     }
+}
+
+bool item::on_drop(const tripoint_bub_ms& pos) { return on_drop(pos, get_map()); }
+
+bool item::on_drop(const tripoint_bub_ms& pos, map& m) {
+    avatar& you = get_avatar();
+
+    if (type->istate_callbacks) {
+        bool prevented = type->istate_callbacks->call_on_drop(you, *this, pos);
+        if (prevented) { return true; }
+    }
+
+    // dropping liquids, even currently frozen ones, on the ground makes them
+    // dirty
+    if (made_of(LIQUID) && !m.has_flag(flag_LIQUIDCONT, pos) && !has_own_flag(flag_DIRTY)) {
+        set_flag(flag_DIRTY);
+    }
+    you.flag_encumbrance();
+
+    return type->drop_action && type->drop_action.call(you, *this, false, pos);
 }

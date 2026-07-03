@@ -64,6 +64,7 @@
 #include "int_id.h"
 #include "inventory.h"
 #include "item.h"
+#include "item_cable.h"
 #include "item_contents.h"
 #include "iteminfo_query.h"
 #include "itype.h"

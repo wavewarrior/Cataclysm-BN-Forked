@@ -67,6 +67,7 @@
 #include "fault.h"
 #include "game_inventory.h"
 #include "itype.h"
+#include "item_reload_option.h"
 #include "iuse_actor.h"
 #include "requirements.h"
 #include "skill.h"

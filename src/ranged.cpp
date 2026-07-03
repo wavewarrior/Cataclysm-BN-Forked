@@ -47,6 +47,7 @@
 #include "input.h"
 #include "item.h"
 #include "item_functions.h"
+#include "item_reload_option.h"
 #include "itype.h"
 #include "line.h"
 #include "magic.h"

@@ -74,6 +74,7 @@
 #include "itype.h"
 #include "json.h"
 #include "kill_tracker.h"
+#include "light_emission.h"
 #include "lru_cache.h"
 #include "magic.h"
 #include "magic_teleporter_list.h"

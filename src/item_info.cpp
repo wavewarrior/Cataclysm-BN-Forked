@@ -3082,3 +3082,36 @@ std::string item::info_string( const iteminfo_query &parts, int batch,
     std::vector<iteminfo> item_info = info( parts, batch, temperature );
     return format_item_info( item_info, {} );
 }
+
+iteminfo::iteminfo( const std::string &Type, const std::string &Name, const std::string &Fmt,
+                    flags Flags, double Value )
+{
+    sType = Type;
+    sName = replace_colors( Name );
+    sFmt = replace_colors( Fmt );
+    is_int = !( Flags & is_decimal || Flags & is_three_decimal );
+    three_decimal = ( Flags & is_three_decimal );
+    dValue = Value;
+    bShowPlus = static_cast<bool>( Flags & show_plus );
+    std::stringstream convert;
+    if( bShowPlus ) {
+        convert << std::showpos;
+    }
+    if( is_int ) {
+        convert << std::setprecision( 0 );
+    } else if( three_decimal ) {
+        convert << std::setprecision( 3 );
+    } else {
+        convert << std::setprecision( 2 );
+    }
+    convert << std::fixed << Value;
+    sValue = convert.str();
+    bNewLine = !( Flags & no_newline );
+    bLowerIsBetter = static_cast<bool>( Flags & lower_is_better );
+    bDrawName = !( Flags & no_name );
+}
+
+iteminfo::iteminfo( const std::string &Type, const std::string &Name, double Value )
+    : iteminfo( Type, Name, "", no_flags, Value )
+{
+}

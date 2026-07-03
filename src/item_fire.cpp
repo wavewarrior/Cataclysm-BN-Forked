@@ -292,3 +292,61 @@ int item::getlight_emit() const
     }
     return lumint;
 }
+
+bool item::will_explode_in_fire() const {
+    if (type->explode_in_fire) { return true; }
+
+    if (type->ammo && (type->ammo->special_cookoff || type->ammo->cookoff)) { return true; }
+
+    // Most containers do nothing to protect the contents from fire
+    if (!is_magazine() || !type->magazine->protects_contents) {
+        return has_item_with([&](const item& it) {
+            return this != &it && it.will_explode_in_fire();
+        });
+    }
+
+    return false;
+}
+
+detached_ptr<item> item::detonate(
+    detached_ptr<item>&& self, const tripoint_bub_ms& p, std::vector<detached_ptr<item>>& drops) {
+    if (self->type->explosion) {
+        explosion_handler::explosion(p, self->type->explosion, self->activated_by);
+        return detached_ptr<item>();
+    } else if (self->type->ammo
+               && (self->type->ammo->special_cookoff || self->type->ammo->cookoff)) {
+        int charges_remaining = self->charges;
+        const int rounds_exploded = rng(1, charges_remaining);
+        // Yank the exploding item off the map for the duration of the explosion
+        // so it doesn't blow itself up.
+        const islot_ammo& ammo_type = *self->type->ammo;
+
+        if (ammo_type.special_cookoff) {
+            // If it has a special effect just trigger it.
+            apply_ammo_effects(p, ammo_type.ammo_effects, self->activated_by);
+        }
+        charges_remaining -= rounds_exploded;
+        if (charges_remaining > 0) {
+            detached_ptr<item> temp_item = item::spawn(*self);
+            temp_item->charges = charges_remaining;
+            drops.push_back(std::move(temp_item));
+        }
+
+        return detached_ptr<item>();
+    } else if (!self->contents.empty()
+               && (!self->type->magazine || !self->type->magazine->protects_contents)) {
+        bool detonated = false;
+        self->contents.remove_top_items_with([&p, &drops, &detonated](detached_ptr<item>&& it) {
+            it = detonate(std::move(it), p, drops);
+            if (!it) { detonated = true; }
+            return std::move(it);
+        });
+        if (detonated) {
+            return detached_ptr<item>();
+        } else {
+            return std::move(self);
+        }
+    }
+
+    return std::move(self);
+}

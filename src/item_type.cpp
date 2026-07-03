@@ -70,6 +70,7 @@
 #include "iuse.h"
 #include "iuse_actor.h"
 #include "line.h"
+#include "light_emission.h"
 #include "locations.h"
 #include "magic.h"
 #include "magic_enchantment.h"
@@ -323,41 +324,6 @@ void item::mitigate_damage( damage_unit &du ) const
     du.amount = std::max( 0.0f, du.amount - mitigation );
 }
 
-int item::damage_resist( damage_type dt, bool to_self ) const
-{
-    switch( dt ) {
-    case DT_NULL:
-    case NUM_DT:
-        return 0;
-    case DT_TRUE:
-    case DT_BIOLOGICAL:
-    case DT_ELECTRIC:
-    case DT_COLD:
-    case DT_DARK:
-    case DT_LIGHT:
-    case DT_PSI:
-        // Currently hardcoded:
-        // Items can never be damaged by those types
-        // But they provide 0 protection from them
-        return to_self ? INT_MAX : 0;
-    case DT_BASH:
-        return bash_resist( to_self );
-        case DT_CUT:
-            return cut_resist( to_self );
-        case DT_ACID:
-            return acid_resist( to_self );
-        case DT_STAB:
-            return stab_resist( to_self );
-        case DT_HEAT:
-            return fire_resist( to_self );
-        case DT_BULLET:
-            return bullet_resist( to_self );
-        default:
-            debugmsg( "Invalid damage type: %d", dt );
-    }
-
-    return 0;
-}
 
 bool item::is_two_handed( const Character &guy ) const
 {
@@ -969,4 +935,38 @@ const std::vector<enchantment> &item::get_enchantments() const
     return fallback;
 }
 return relic_data->get_enchantments();
+}
+
+const material_type& item::get_random_material() const {
+    return random_entry(made_of(), material_id::NULL_ID()).obj();
+}
+
+const material_type& item::get_base_material() const {
+    const std::vector<material_id>& mats = made_of();
+    return mats.empty() ? material_id::NULL_ID().obj() : mats.front().obj();
+}
+
+bool item::operator<(const item& other) const {
+    const item_category& cat_a = get_category();
+    const item_category& cat_b = other.get_category();
+    if (cat_a != cat_b) {
+        return cat_a < cat_b;
+    } else {
+        const item* me = is_container() && !contents.empty() ? &contents.front() : this;
+        const item* rhs =
+            other.is_container() && !other.contents.empty() ? &other.contents.front() : &other;
+
+        const itype* me_type = me->type;
+        const itype* rhs_type = rhs->type;
+        if (!me_type || !rhs_type) { return !!me_type; }
+
+        if (me_type->get_id() == rhs_type->get_id()) {
+            if (me->is_money()) { return me->charges > rhs->charges; }
+            return me->charges < rhs->charges;
+        } else {
+            std::string n1 = me_type->nname(1);
+            std::string n2 = rhs_type->nname(1);
+            return localized_compare(n1, n2);
+        }
+    }
 }

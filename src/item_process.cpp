@@ -2,6 +2,7 @@
 // — split out of item.cpp. .cpp-only, no API changes.
 
 #include "item.h"
+#include "item_cable.h"
 
 #include <algorithm>
 #include <numeric>
@@ -1007,4 +1008,32 @@ detached_ptr<item> item::process_internal( detached_ptr<item> &&self, player *ca
         }
     }
     return std::move( self );
+}
+
+bool item::can_revive() const {
+    return is_corpse() && corpse->has_flag(MF_REVIVES) && damage() < max_damage()
+        && !(has_flag(flag_FIELD_DRESS) || has_flag(flag_FIELD_DRESS_FAILED)
+             || has_flag(flag_QUARTERED) || has_flag(flag_SKINNED) || has_flag(flag_PULPED));
+}
+
+bool item::ready_to_revive(const tripoint_bub_ms& pos) const {
+    if (!can_revive()) { return false; }
+    if (get_map().veh_at(pos)) { return false; }
+    if (!calendar::once_every(1_seconds)) { return false; }
+    int age_in_hours = to_hours<int>(age());
+    age_in_hours -= static_cast<int>(static_cast<float>(burnt) / (volume() / 250_ml));
+    if (damage_level(4) > 0) { age_in_hours /= (damage_level(4) + 1); }
+    int rez_factor = 48 - age_in_hours;
+    if (age_in_hours > 6 && (rez_factor <= 0 || one_in(rez_factor))) {
+        // If we're a special revival zombie, wait to get up until the player is nearby.
+        const bool isReviveSpecial = has_flag(flag_REVIVE_SPECIAL);
+        if (isReviveSpecial) {
+            const int distance = rl_dist(pos, get_player_character().bub_pos());
+            if (distance > 3) { return false; }
+            if (!one_in(distance + 1)) { return false; }
+        }
+
+        return true;
+    }
+    return false;
 }

@@ -38,6 +38,7 @@
 #include "vpart_position.h"
 #include "weather_gen.h"
 #include "weather.h"
+#include "item_reload_option.h"
 
 static const trait_id trait_CHLOROMORPH( "CHLOROMORPH" );
 static const trait_id trait_DEBUG_NODMG( "DEBUG_NODMG" );

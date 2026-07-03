@@ -123,6 +123,10 @@
 #include "weather_gen.h"
 #include "wheel_dimensions.h"
 
+// File-scope constant for clothing mod variable names
+static const std::string CLOTHING_MOD_VAR_PREFIX( "clothing_mod_" );
+
+
 units::volume item::get_storage() const
 {
     const islot_armor *armor = find_armor_data();
@@ -414,4 +418,343 @@ units::volume item::get_pet_armor_min_vol() const
 std::string item::get_pet_armor_bodytype() const
 {
     return is_pet_armor() ? type->pet_armor->bodytype : "";
+}
+#if defined(_MSC_VER)
+// Deal with MSVC compiler bug (#17791, #17958)
+#pragma optimize("", off)
+#endif
+template <typename ResistGetter>
+static int phys_resist(
+    const item& it, damage_type dt, clothing_mod_type cmt, ResistGetter resist_getter,
+    bool to_self) {
+    if (it.is_null()) { return 0; }
+
+    float resist = 0;
+    int eff_thickness = 1;
+
+    // base resistance
+    // Don't give reinforced items +armor, just more resistance to ripping
+    const int dmg = it.damage_level(4);
+    const int eff_damage = to_self ? std::min(dmg, 0) : std::max(dmg, 0);
+    eff_thickness = std::max(1, it.get_thickness() - eff_damage);
+
+    float mod = it.get_clothing_mod_val(cmt);
+
+    std::optional<resistances> overriden_resistance = it.damage_resistance_override();
+    if (overriden_resistance) {
+        float base_resistance = 0.0f;
+        auto iter = overriden_resistance->flat.find(dt);
+        if (iter != overriden_resistance->flat.end()) { base_resistance = iter->second; }
+
+        // We can have 0 thickness items, so need to check for it to ensure we don't get NaN in
+        // calcs
+        const int thickness = it.get_thickness();
+        const float damaged_resistance =
+            (thickness == 0) ? 0.0f : base_resistance * eff_thickness / thickness;
+
+        return std::lround(damaged_resistance + mod);
+    }
+
+    const std::vector<const material_type*> mat_types = it.made_of_types();
+    if (!mat_types.empty()) {
+        for (const material_type* mat : mat_types) { resist += (mat->*resist_getter)(); }
+        // Average based on number of materials.
+        resist /= mat_types.size();
+    }
+
+    return std::lround((resist * eff_thickness) + mod);
+}
+
+int item::bash_resist(bool to_self) const {
+    return phys_resist(*this, DT_BASH, clothing_mod_type_bash, &material_type::bash_resist, to_self);
+}
+
+int item::cut_resist(bool to_self) const {
+    return phys_resist(*this, DT_CUT, clothing_mod_type_cut, &material_type::cut_resist, to_self);
+}
+
+#if defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
+
+int item::stab_resist(bool to_self) const {
+    // Better than hardcoding it in multiple places
+    return static_cast<int>(0.8f * cut_resist(to_self));
+}
+
+int item::bullet_resist(bool to_self) const {
+    return phys_resist(
+        *this, DT_BULLET, clothing_mod_type_bullet, &material_type::bullet_resist, to_self);
+}
+
+int item::acid_resist(bool to_self, int base_env_resist) const {
+    if (to_self) {
+        // Currently no items are damaged by acid
+        return INT_MAX;
+    }
+
+    if (is_null()) { return 0.0; }
+
+    float resist = 0.0;
+    float mod = get_clothing_mod_val(clothing_mod_type_acid);
+
+    std::optional<resistances> overriden_resistance = damage_resistance_override();
+    if (overriden_resistance && overriden_resistance->flat.contains(DT_ACID)) {
+        return std::lround(overriden_resistance->flat[DT_ACID] + mod);
+    }
+
+    const std::vector<const material_type*> mat_types = made_of_types();
+    if (!mat_types.empty()) {
+        // Not sure why cut and bash get an armor thickness bonus but acid doesn't,
+        // but such is the way of the code.
+
+        for (const material_type* mat : mat_types) { resist += mat->acid_resist(); }
+        // Average based on number of materials.
+        resist /= mat_types.size();
+    }
+
+    const int env = get_env_resist(base_env_resist);
+    if (env < 10) {
+        // Low env protection means it doesn't prevent acid seeping in.
+        resist *= env / 10.0f;
+    }
+
+    return std::lround(resist + mod);
+}
+
+int item::fire_resist(bool to_self, int base_env_resist) const {
+    if (to_self) {
+        // Fire damages items in a different way
+        return INT_MAX;
+    }
+
+    if (is_null()) { return 0.0; }
+
+    float mod = get_clothing_mod_val(clothing_mod_type_fire);
+
+    std::optional<resistances> overriden_resistance = damage_resistance_override();
+    if (overriden_resistance && overriden_resistance->flat.contains(DT_HEAT)) {
+        return std::lround(overriden_resistance->flat[DT_HEAT] + mod);
+    }
+
+    float resist = 0.0;
+
+    const std::vector<const material_type*> mat_types = made_of_types();
+    if (!mat_types.empty()) {
+        for (const material_type* mat : mat_types) { resist += mat->fire_resist(); }
+        // Average based on number of materials.
+        resist /= mat_types.size();
+    }
+
+    const int env = get_env_resist(base_env_resist);
+    if (env < 10) {
+        // Iron resists immersion in magma, iron-clad knight won't.
+        resist *= env / 10.0f;
+    }
+
+    return std::lround(resist + mod);
+}
+
+int item::damage_resist( damage_type dt, bool to_self ) const
+{
+    switch( dt ) {
+    case DT_NULL:
+    case NUM_DT:
+        return 0;
+    case DT_TRUE:
+    case DT_BIOLOGICAL:
+    case DT_ELECTRIC:
+    case DT_COLD:
+    case DT_DARK:
+    case DT_LIGHT:
+    case DT_PSI:
+        // Currently hardcoded:
+        // Items can never be damaged by those types
+        // But they provide 0 protection from them
+        return to_self ? INT_MAX : 0;
+    case DT_BASH:
+        return bash_resist( to_self );
+        case DT_CUT:
+            return cut_resist( to_self );
+        case DT_ACID:
+            return acid_resist( to_self );
+        case DT_STAB:
+            return stab_resist( to_self );
+        case DT_HEAT:
+            return fire_resist( to_self );
+        case DT_BULLET:
+            return bullet_resist( to_self );
+        default:
+            debugmsg( "Invalid damage type: %d", dt );
+    }
+
+    return 0;
+}
+
+bool item::covers(const bodypart_id& bp) const { return get_covered_body_parts().test(bp.id()); }
+
+body_part_set item::get_covered_body_parts() const { return get_covered_body_parts(get_side()); }
+
+body_part_set item::get_covered_body_parts(const side s) const {
+    body_part_set res;
+
+    if (is_gun()) {
+        // Currently only used for guns with the should strap mod, other guns might
+        // go on another bodypart.
+        res.set(bodypart_str_id("torso"));
+    }
+
+    const islot_armor* armor = find_armor_data();
+    if (armor == nullptr) { return res; }
+
+    for (const armor_portion_data& data : armor->data) { res.unify_set(data.covers); }
+
+    if (!armor->sided) {
+        return res; // Just ignore the side.
+    }
+
+    switch (s) {
+        case side::BOTH:
+        case side::num_sides:
+            break;
+
+        case side::LEFT:
+            res.reset(bodypart_str_id("arm_r"));
+            res.reset(bodypart_str_id("hand_r"));
+            res.reset(bodypart_str_id("leg_r"));
+            res.reset(bodypart_str_id("foot_r"));
+            break;
+
+        case side::RIGHT:
+            res.reset(bodypart_str_id("arm_l"));
+            res.reset(bodypart_str_id("hand_l"));
+            res.reset(bodypart_str_id("leg_l"));
+            res.reset(bodypart_str_id("foot_l"));
+            break;
+    }
+
+    return res;
+}
+
+bool item::is_sided() const {
+    const islot_armor* armor = find_armor_data();
+    return armor ? armor->sided : false;
+}
+
+side item::get_side() const {
+    // MSVC complains if directly cast double to enum
+    return static_cast<side>(static_cast<int>(get_var("lateral", static_cast<int>(side::BOTH))));
+}
+
+bool item::set_side(side s) {
+    if (!is_sided()) { return false; }
+
+    if (s == side::BOTH) {
+        erase_var("lateral");
+    } else {
+        set_var("lateral", static_cast<int>(s));
+    }
+
+    return true;
+}
+
+bool item::swap_side() { return set_side(opposite_side(get_side())); }
+
+bool item::is_worn_only_with(const item& it) const {
+    return ((has_flag(flag_POWERARMOR_EXTERNAL) || has_flag(flag_POWERARMOR_MOD))
+            && it.has_flag(flag_POWERARMOR_EXO));
+}
+
+item::sizing item::get_sizing(const Character& who) const {
+    const islot_armor* armor_data = find_armor_data();
+    if (!armor_data) { return sizing::ignore; }
+    bool to_ignore = true;
+    for (const armor_portion_data& piece : armor_data->data) {
+        if (piece.encumber != 0 || piece.max_encumber != 0) { to_ignore = false; }
+    }
+    if (to_ignore) {
+        return sizing::ignore;
+    } else {
+        const bool small = who.get_size() == creature_size::tiny;
+        const bool big = who.get_size() == creature_size::huge;
+
+        // due to the iterative nature of these features, something can fit and be
+        // undersized/oversized but that is fine because we have separate logic to adjust
+        // encumberance per each. One day we may want to have fit be a flag that only applies if a
+        // piece of clothing is sized for you as there is a bit of cognitive dissonance when
+        // something 'fits' and is 'oversized' and the same time
+        const bool undersize = has_flag(flag_UNDERSIZE) || has_flag(flag_resized_small);
+        const bool oversize = has_flag(flag_OVERSIZE) || has_flag(flag_resized_large);
+
+        if (undersize) {
+            if (small) {
+                return sizing::small_sized_small_char;
+            } else if (big) {
+                return sizing::small_sized_big_char;
+            } else {
+                return sizing::small_sized_human_char;
+            }
+        } else if (oversize) {
+            if (big) {
+                return sizing::big_sized_big_char;
+            } else if (small) {
+                return sizing::big_sized_small_char;
+            } else {
+                return sizing::big_sized_human_char;
+            }
+        } else {
+            if (big) {
+                return sizing::human_sized_big_char;
+            } else if (small) {
+                return sizing::human_sized_small_char;
+            } else {
+                return sizing::human_sized_human_char;
+            }
+        }
+    }
+}
+
+bool item::has_clothing_mod() const
+{
+for( const clothing_mod &cm : clothing_mods::get_all() ) {
+    if( has_own_flag( cm.flag ) ) {
+            return true;
+        }
+    }
+    return false;
+}
+
+namespace
+{
+const std::string &get_clothing_mod_val_key( clothing_mod_type type )
+{
+    const static auto cache = ( []() {
+        std::array<std::string, clothing_mods::all_clothing_mod_types.size()> res;
+        for( const clothing_mod_type &type : clothing_mods::all_clothing_mod_types ) {
+            res[type] = CLOTHING_MOD_VAR_PREFIX
+                        + clothing_mods::string_from_clothing_mod_type( clothing_mods::all_clothing_mod_types[type] );
+        }
+        return res;
+    } )();
+
+    return cache[ type ];
+}
+} // namespace
+
+float item::get_clothing_mod_val( clothing_mod_type type ) const
+{
+    return get_var( get_clothing_mod_val_key( type ), 0.0f );
+}
+
+void item::update_clothing_mod_val()
+{
+    for( const clothing_mod_type &type : clothing_mods::all_clothing_mod_types ) {
+        float tmp = 0.0;
+        for( const clothing_mod &cm : clothing_mods::get_all_with( type ) ) {
+            if( has_own_flag( cm.flag ) ) {
+                tmp += cm.get_mod_val( type, *this );
+            }
+        }
+        set_var( get_clothing_mod_val_key( type ), tmp );
+    }
 }

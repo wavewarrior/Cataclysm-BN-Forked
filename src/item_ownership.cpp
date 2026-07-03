@@ -177,72 +177,8 @@ void item::validate_ownership() const {
 }
 
 
-std::map<gunmod_location, int> item::get_mod_locations() const {
-    std::map<gunmod_location, int> mod_locations = type->gun->valid_mod_locations;
-
-    for (const item* mod : gunmods()) {
-        if (!mod->type->gunmod->add_mod.empty()) {
-            std::map<gunmod_location, int> add_locations = mod->type->gunmod->add_mod;
-
-            for (const std::pair<const gunmod_location, int>& add_location : add_locations) {
-                mod_locations[add_location.first] += add_location.second;
-            }
-        }
-    }
-
-    return mod_locations;
-}
-
-int item::get_free_mod_locations(const gunmod_location& location) const {
-    if (!is_gun()) { return 0; }
-
-    std::map<gunmod_location, int> mod_locations = get_mod_locations();
-
-    const auto loc = mod_locations.find(location);
-    if (loc == mod_locations.end()) { return 0; }
-    int result = loc->second;
-    for (const item* elem : contents.all_items_top()) {
-        const cata::value_ptr<islot_gunmod>& mod = elem->type->gunmod;
-        if (mod && mod->location == location) { result--; }
-    }
-    return result;
-}
 
 
-time_duration item::brewing_time() const { return is_brewable() ? type->brewable->time : 0_turns; }
-
-const std::vector<itype_id>& item::brewing_results() const {
-    static const std::vector<itype_id> nulresult{};
-    return is_brewable() ? type->brewable->results : nulresult;
-}
-
-bool item::can_revive() const {
-    return is_corpse() && corpse->has_flag(MF_REVIVES) && damage() < max_damage()
-        && !(has_flag(flag_FIELD_DRESS) || has_flag(flag_FIELD_DRESS_FAILED)
-             || has_flag(flag_QUARTERED) || has_flag(flag_SKINNED) || has_flag(flag_PULPED));
-}
-
-bool item::ready_to_revive(const tripoint_bub_ms& pos) const {
-    if (!can_revive()) { return false; }
-    if (get_map().veh_at(pos)) { return false; }
-    if (!calendar::once_every(1_seconds)) { return false; }
-    int age_in_hours = to_hours<int>(age());
-    age_in_hours -= static_cast<int>(static_cast<float>(burnt) / (volume() / 250_ml));
-    if (damage_level(4) > 0) { age_in_hours /= (damage_level(4) + 1); }
-    int rez_factor = 48 - age_in_hours;
-    if (age_in_hours > 6 && (rez_factor <= 0 || one_in(rez_factor))) {
-        // If we're a special revival zombie, wait to get up until the player is nearby.
-        const bool isReviveSpecial = has_flag(flag_REVIVE_SPECIAL);
-        if (isReviveSpecial) {
-            const int distance = rl_dist(pos, get_player_character().bub_pos());
-            if (distance > 3) { return false; }
-            if (!one_in(distance + 1)) { return false; }
-        }
-
-        return true;
-    }
-    return false;
-}
 
 bool item::is_money() const { return ammo_types().contains(ammotype("money")); }
 
@@ -319,107 +255,46 @@ const item& item::get_contained() const {
     return contents.front();
 }
 
-bool item::spill_contents(Character& c) {
-    if (!is_container() || is_container_empty()) { return true; }
 
-    if (c.is_npc()) { return spill_contents(c.bub_pos()); }
 
-    contents.handle_liquid_or_spill(c);
-    on_contents_changed();
 
-    return true;
-}
-
-bool item::spill_contents(const tripoint_bub_ms& pos) {
-    if (!is_container() || is_container_empty()) { return true; }
-
-    for (detached_ptr<item>& it : contents.clear_items()) {
-        get_map().add_item_or_charges(pos, std::move(it));
-    }
-
-    return true;
-}
-
-int item::get_chapters() const {
-    if (!type->book) { return 0; }
-    return type->book->chapters;
-}
-
-int item::get_remaining_chapters(const Character& ch) const {
-    const std::string var = string_format("remaining-chapters-%d", ch.getID().get_value());
-    return get_var(var, get_chapters());
-}
-
-void item::mark_chapter_as_read(const Character& ch) {
-    const std::string var = string_format("remaining-chapters-%d", ch.getID().get_value());
-    if (type->book && type->book->chapters == 0) {
-        // books without chapters will always have remaining chapters == 0, so we don't need to
-        // store them
-        erase_var(var);
+void item::handle_pickup_ownership( Character &c )
+{
+    if( is_owned_by( c ) ) {
         return;
     }
-    const int remain = std::max(0, get_remaining_chapters(ch) - 1);
-    set_var(var, remain);
-}
-
-std::vector<std::pair<const recipe*, int>> item::get_available_recipes(const Character& u) const {
-    std::vector<std::pair<const recipe*, int>> recipe_entries;
-    if (is_book()) {
-        for (const book_recipe& elem : type->book->recipes) {
-            if (u.get_skill_level(elem.recipe->skill_used) >= elem.skill_level) {
-                recipe_entries.emplace_back(elem.recipe, elem.skill_level);
-            }
-        }
-    } else if (has_var("EIPC_RECIPES")) {
-        // See einkpc_download_memory_card() in iuse.cpp where this is set.
-        const std::string recipes = get_var("EIPC_RECIPES");
-        // Capture the index one past the delimiter, i.e. start of target string.
-        size_t first_string_index = recipes.find_first_of(',') + 1;
-        while (first_string_index != std::string::npos) {
-            size_t next_string_index = recipes.find_first_of(',', first_string_index);
-            if (next_string_index == std::string::npos) { break; }
-            std::string new_recipe =
-                recipes.substr(first_string_index, next_string_index - first_string_index);
-            const recipe* r = &recipe_id(new_recipe).obj();
-            if (u.get_skill_level(r->skill_used) >= r->difficulty) {
-                recipe_entries.emplace_back(r, r->difficulty);
-            }
-            first_string_index = next_string_index + 1;
-        }
-    }
-    return recipe_entries;
-}
-
-const material_type& item::get_random_material() const {
-    return random_entry(made_of(), material_id::NULL_ID()).obj();
-}
-
-const material_type& item::get_base_material() const {
-    const std::vector<material_id>& mats = made_of();
-    return mats.empty() ? material_id::NULL_ID().obj() : mats.front().obj();
-}
-
-bool item::operator<(const item& other) const {
-    const item_category& cat_a = get_category();
-    const item_category& cat_b = other.get_category();
-    if (cat_a != cat_b) {
-        return cat_a < cat_b;
+    // Add ownership to item if unowned
+    if( owner.is_null() ) {
+        set_owner( c );
     } else {
-        const item* me = is_container() && !contents.empty() ? &contents.front() : this;
-        const item* rhs =
-            other.is_container() && !other.contents.empty() ? &other.contents.front() : &other;
-
-        const itype* me_type = me->type;
-        const itype* rhs_type = rhs->type;
-        if (!me_type || !rhs_type) { return !!me_type; }
-
-        if (me_type->get_id() == rhs_type->get_id()) {
-            if (me->is_money()) { return me->charges > rhs->charges; }
-            return me->charges < rhs->charges;
-        } else {
-            std::string n1 = me_type->nname(1);
-            std::string n2 = rhs_type->nname(1);
-            return localized_compare(n1, n2);
+        Character &you = get_player_character();
+        if( !is_owned_by( c ) && &c == &you ) {
+            std::vector<npc *> witnesses;
+            for( npc &elem : g->all_npcs() ) {
+                // If they already want to murder you, no point in confronting you about theft
+                if( rl_dist( elem.bub_pos(), you.bub_pos() ) < g_max_view_distance && elem.get_faction() &&
+                    is_owned_by( elem ) && elem.sees( you.bub_pos() ) && !elem.guaranteed_hostile() ) {
+                    elem.say( "<witnessed_thievery>", 7 );
+                    npc *npc_to_add = &elem;
+                    witnesses.push_back( npc_to_add );
+                }
+            }
+            if( !witnesses.empty() ) {
+                set_old_owner( get_owner() );
+                // Make sure there is only one witness
+                for( npc &guy : g->all_npcs() ) {
+                    if( guy.get_attitude() == NPCATT_RECOVER_GOODS ) {
+                        guy.set_attitude( NPCATT_NULL );
+                    }
+                }
+                random_entry( witnesses )->set_attitude( NPCATT_RECOVER_GOODS );
+                // Notify the activity that we got a witness
+                if( c.activity && !c.activity->is_null() && c.activity->id() == ACT_PICKUP ) {
+                    c.activity->str_values.clear();
+                    c.activity->str_values.emplace_back( has_thievery_witness );
+                }
+            }
+            set_owner( c );
         }
     }
 }

@@ -41,6 +41,7 @@
 #include "item.h"
 #include "item_contents.h"
 #include "item_functions.h"
+#include "item_reload_option.h"
 #include "itype.h"
 #include "iuse.h"
 #include "iuse_actor.h"

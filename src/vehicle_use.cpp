@@ -34,6 +34,7 @@
 #include "int_id.h"
 #include "inventory.h"
 #include "item.h"
+#include "item_reload_option.h"
 #include "itype.h"
 #include "iuse.h"
 #include "json.h"
@@ -2111,7 +2112,7 @@ void vehicle::interact_with( const tripoint_bub_ms &pos, int interact_part )
                 return;
             }
             item &fake_item = *item::spawn_temporary( usable_item_types.at( tool_index ), calendar::turn, 0 );
-            fake_item.item_tags.insert( flag_PSEUDO );
+            fake_item.set_flag( flag_PSEUDO );
             fake_item.charges = fuel_left( itype_battery, true );
             int original_charges = fake_item.charges;
             you.invoke_item( &fake_item, pos );

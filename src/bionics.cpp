@@ -44,6 +44,7 @@
 #include "input.h"
 #include "int_id.h"
 #include "item.h"
+#include "item_cable.h"
 #include "item_functions.h"
 #include "itype.h"
 #include "json.h"

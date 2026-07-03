@@ -12,7 +12,7 @@ class player;
 class Character;
 class Creature;
 class item;
-class item_reload_option;
+#include "item_reload_option.h"
 class item_location;
 class npc;
 class time_duration;
