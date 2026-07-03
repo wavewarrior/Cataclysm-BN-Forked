@@ -1,9 +1,9 @@
 # Activity → `activity_actor` Migration Plan
 
 ## STATUS (reviewed 2026-07-02)
-**~75% DONE.** Actors: **71** registered (up from 58 after Wave 6b). Legacy: **~15** `do_turn`, **~17** `finish` ids remaining. 3 double-registered (`ACT_READ`, `ACT_TRY_SLEEP`, `ACT_WAIT_STAMINA`).
+**~80% DONE.** Actors: **75** registered (up from 71 after Wave 6c). Legacy: **~13** `do_turn`, **~15** `finish` ids remaining. 3 double-registered (`ACT_READ`, `ACT_TRY_SLEEP`, `ACT_WAIT_STAMINA`).
 
-### Completed (Waves 1-6b: 58 activities migrated)
+### Completed (Waves 1-6c: 62 activities migrated)
 | Wave | Actors | Activities | Notes |
 |------|--------|------------|-------|
 | ✅ 1 | 11 | BURROW, PICKAXE, JACKHAMMER, CHURN, FILL_PIT, CLEAR_RUBBLE, HAND_CRANK, PRY_NAILS, FILL_LIQUID, PLANT_SEED, FERTILIZE_PLOT, FORAGE | Legacy deleted |
@@ -13,11 +13,11 @@
 | ✅ 5 | 1 | CHOP_TREE, CHOP_LOGS, CHOP_PLANKS | `wood_chop_activity_actor` |
 | ✅ 6a | 11 | GAME, GENERIC_GAME, MEDITATE, SHAVE, HAIRCUT, SOCIALIZE, ATM, VIBE, WAIT, WAIT_WEATHER, WAIT_NPC, FIND_MOUNT, SHEAR, PLAY_WITH_PET, TRAIN_PET | 11 actors (game, morale, wait, social, atm, vibe, shear, play_with_pet, train_pet, find_mount) |
 | ✅ 6b | 13 | READ, TRY_SLEEP, WAIT_STAMINA, TRAVELLING, CRACKING, START_FIRE, FISH, MILK, MAKE_ZLAVE, TREE_COMMUNION, TRAIN, PULP, ADV_INVENTORY | Legacy deleted |
+| ✅ 6c | 4 | ROBOT_CONTROL, MIND_SPLICER, STUDY_SPELL, SPELLCASTING | Legacy deleted (TRAIN_SKILL blocked by #1612)
 
-### Remaining (~18 activities)
+### Remaining (~14 activities)
 | Wave | Status | Activities |
-|------|--------|------------|
-| 6c — Complex | NOT STARTED | TRAIN_SKILL, OPERATION, ROBOT_CONTROL, MIND_SPLICER, STUDY_SPELL, SPELLCASTING |
+| 6c — Complex | PARTIAL | TRAIN_SKILL (blocked #1612), OPERATION |
 | 7 — Vehicle | NOT STARTED | VEHICLE, VEHICLE_REPAIR, VEHICLE_DECONSTRUCTION, START_ENGINES, HOTWIRE_CAR |
 | 8 — Multi/zone/NPC | NOT STARTED | MULTIPLE_*, FETCH_REQUIRED, MOVE_LOOT, TIDY_UP |
 | 9 — Rip-out | NOT STARTED | Legacy map deletion, dual-path branch removal |
