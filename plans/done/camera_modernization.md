@@ -1,11 +1,10 @@
 # Camera System Modernization Plan
 
-## STATUS (reviewed 2026-06-27)
+## STATUS (reviewed 2026-07-03)
 
-🟡 **~60% done by intent, the other 40% deliberately deferred/moot. KEEP — still tracks the deferred churn + P3 in-game verify.**
-Implemented: P1 (additive `camera_2d` variant, not the full rip-out), P2 smart-follow (smooth ease + look-ahead + dead-zone + shake-on-explosion + F4 knobs), P2.5 zoom (pre-existing), P3 GPU minimap (OMT overview + beacon via unlit-overlay route), P5 GPU JFA SDF (shipped). Deferred/moot: P4 dirty-tile (rationale: antagonistic w/ smooth-follow), P6 z-cull (moot: `dont_draw_lower_floor` already culls), full P1 `view_offset` 17-site migration + `o`/`op` deletion (pure churn).
-Net remaining: P3 minimap in-game scale/position pass; the deferred churn if ever wanted.
-The phase-status table (below) is accurate and current. **Contradiction:** P3 shipped with a DIFFERENT shape than §3.1/§3.3 — `draw_minimap` kept its OLD signature `(point dest, const tripoint_bub_ms &center, int w, int h)` (`cata_tiles.cpp:4194`) and routes through the existing font/unlit path, NOT the `draw(camera_2d const&, …)` signature change the plan prescribed. Also: F4 knobs are RmlUi bindings (`cam_smooth`/`cam_lookahead`/`cam_deadzone`) not the ImGui "Camera" tab §2.7 described; no `camera_zoom`/`camera_shake` sliders and **no `CAMERA_DEAD_ZONE` game option** — only the F4 float. P1 line refs drifted (`o`/`op` now `cata_tiles.cpp:3209-3216`, lighting `sdl_render_frame.cpp:208-209`).
+✅ **DONE.** Core goal delivered. Deferred items (P4 dirty-tile, P6 z-cull, full P1 `view_offset` migration) closed as won't-do with documented rationale.
+Implemented: P1 (`camera_2d` additive variant), P2 smart-follow (smooth lerp + look-ahead + dead-zone + shake + F4 RmlUi knobs), P2.5 zoom (pre-existing), P3 GPU minimap (`draw_om_tile_recursively` + unlit-overlay route; `pixel_minimap.*` deleted), P5 GPU JFA SDF (seed→flood→resolve; CPU DT removed). Deferred/moot: P4 dirty-tile (antagonistic w/ smooth-follow), P6 z-cull (`dont_draw_lower_floor` already culls), full P1 `view_offset` 17-site migration (pure churn).
+As-shipped divergences from spec: `draw_minimap` kept old signature `(point dest, const tripoint_bub_ms&, int w, int h)`; F4 knobs are RmlUi-only (`cam_smooth`/`cam_lookahead`/`cam_deadzone`), no ImGui Camera tab, no `CAMERA_DEAD_ZONE` game option.
 
 ## Context
 
