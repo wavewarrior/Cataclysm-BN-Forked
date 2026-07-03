@@ -209,7 +209,6 @@ void mend_item_finish(player_activity* act, player* p);
 void gunmod_add_finish(player_activity* act, player* p);
 void toolmod_add_finish(player_activity* act, player* p);
 void operation_finish(player_activity* act, player* p);
-void vehicle_finish(player_activity* act, player* p);
 void jackhammer_finish(player_activity* act, player* p);
 void fill_pit_finish(player_activity* act, player* p);
 void unload_mag_finish(player_activity* act, player* p);

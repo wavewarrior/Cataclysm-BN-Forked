@@ -71,6 +71,7 @@
 #include "type_id.h"
 #include "ui.h"
 #include "uistate.h"
+#include "veh_interact.h"
 #include "vehicle.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
@@ -85,8 +86,9 @@
 
 static const construction_str_id deconstruct_simple("constr_deconstruct_simple");
 static const construction_str_id deconstruct("constr_deconstruct");
-static const construction_group_str_id advanced_object_deconstruction("advanced_object_"
-                                                                      "deconstruction");
+static const construction_group_str_id advanced_object_deconstruction(
+    "advanced_object_"
+    "deconstruction");
 
 static const itype_id itype_bone_human("bone_human");
 static const itype_id itype_electrohack("electrohack");
@@ -94,8 +96,8 @@ static const itype_id itype_log("log");
 static const itype_id itype_splinter("splinter");
 static const itype_id itype_stick_long("stick_long");
 static const itype_id itype_UPS("UPS");
-static const itype_id itype_muscle( "muscle" );
-static const itype_id itype_animal( "animal" );
+static const itype_id itype_muscle("muscle");
+static const itype_id itype_animal("animal");
 static const itype_id itype_wool_staple("wool_staple");
 static const efftype_id effect_ai_waiting("ai_waiting");
 static const efftype_id effect_sleep("sleep");
@@ -425,15 +427,17 @@ void autodrive_activity_actor::start(player_activity& /* act */, Character& who)
             }
         }
         if (player_vehicle->min_autodrive_speed * 0.8 < min_speed) {
-            if (!g->u.query_yn("Warning: Min Autodrive Speed is below recommened values, "
-                               "proceed?")) {
+            if (!g->u.query_yn(
+                    "Warning: Min Autodrive Speed is below recommened values, "
+                    "proceed?")) {
                 who.cancel_activity();
                 return;
             }
         }
         if (player_vehicle->max_autodrive_speed * 0.5 < min_speed) {
-            if (!g->u.query_yn("Warning: Max Autodrive Speed is below recommened values, "
-                               "proceed?")) {
+            if (!g->u.query_yn(
+                    "Warning: Max Autodrive Speed is below recommened values, "
+                    "proceed?")) {
                 who.cancel_activity();
                 return;
             }
@@ -719,8 +723,9 @@ void disassemble_activity_actor::do_turn(player_activity& act, Character& who) {
 
 void disassemble_activity_actor::finish(player_activity& act, Character& who) {
     if (try_start_single(act, who)) {
-        debugmsg("disassemble_activity_actor call finish function while able to start new "
-                 "disassembly");
+        debugmsg(
+            "disassemble_activity_actor call finish function while able to start new "
+            "disassembly");
     }
     // Make a copy to avoid use-after-free
     bool recurse = this->recursive;
@@ -912,8 +917,9 @@ void hacking_activity_actor::finish(player_activity& act, Character& who) {
                 const std::optional<tripoint_bub_ms> pGasPump =
                     iexamine::getGasPumpByNumber(examp, uistate.ags_pay_gas_selected_pump);
                 if (pGasPump && iexamine::toPumpFuel(pTank, *pGasPump, tankGasUnits)) {
-                    who.add_msg_if_player(_("You hack the terminal and route all available fuel to "
-                                            "your pump!"));
+                    who.add_msg_if_player(_(
+                        "You hack the terminal and route all available fuel to "
+                        "your pump!"));
                     sounds::sound(
                         examp, 6, sounds::sound_t::activity,
                         _("Glug Glug Glug Glug Glug Glug Glug Glug Glug"), true, "tool", "gaspump");
@@ -2314,12 +2320,16 @@ void lockpick_activity_actor::finish(player_activity& act, Character& who) {
     } else if (lock_roll > (1.5 * pick_roll) && !durable) {
         // damage lockpick on a low result, unless it's durable
         if (it->inc_damage()) {
-            who.add_msg_if_player(m_bad, _("The lock stumps your efforts to pick it, and you "
-                                           "destroy your tool."));
+            who.add_msg_if_player(
+                m_bad,
+                _("The lock stumps your efforts to pick it, and you "
+                  "destroy your tool."));
             destroy = true;
         } else {
-            who.add_msg_if_player(m_bad, _("The lock stumps your efforts to pick it, and you "
-                                           "damage your tool."));
+            who.add_msg_if_player(
+                m_bad,
+                _("The lock stumps your efforts to pick it, and you "
+                  "damage your tool."));
         }
     } else {
         who.add_msg_if_player(m_bad, _("The lock stumps your efforts to pick it."));
@@ -2383,8 +2393,10 @@ std::optional<tripoint_bub_ms> lockpick_activity_actor::select_location(avatar& 
     if (*target == you.bub_pos()) {
         you.add_msg_if_player(m_info, _("You pick your nose and your sinuses swing open."));
     } else if (g->critter_at<npc>(*target)) {
-        you.add_msg_if_player(m_info, _("You can pick your friends, and you can pick your nose, "
-                                        "but you can't pick your friend's nose."));
+        you.add_msg_if_player(
+            m_info,
+            _("You can pick your friends, and you can pick your nose, "
+              "but you can't pick your friend's nose."));
     } else if (!terr_type->open.is_null()) {
         you.add_msg_if_player(m_info, _("That door isn't locked."));
     } else {
@@ -3240,16 +3252,20 @@ auto butchery_activity_actor::setup_next_target(player_activity& act, Character&
                            "being?"))) {
                 switch (rng(1, 3)) {
                     case 1:
-                        p.add_msg_if_player(m_bad, _("You clench your teeth at the prospect of "
-                                                     "this gruesome job."));
+                        p.add_msg_if_player(
+                            m_bad,
+                            _("You clench your teeth at the prospect of "
+                              "this gruesome job."));
                         break;
                     case 2:
                         p.add_msg_if_player(m_bad, _("This will haunt you in your dreams."));
                         break;
                     case 3:
-                        p.add_msg_if_player(m_bad, _("You try to look away, but this gruesome "
-                                                     "image will stay on your mind for some "
-                                                     "time."));
+                        p.add_msg_if_player(
+                            m_bad,
+                            _("You try to look away, but this gruesome "
+                              "image will stay on your mind for some "
+                              "time."));
                         break;
                 }
                 g->u.add_morale(MORALE_BUTCHER, -50, 0, 2_days, 3_hours);
@@ -3347,19 +3363,25 @@ void butchery_activity_actor::finish(player_activity& act, Character& who) {
     if (this->type != DISSECT && roll_butchery() <= (-15) && one_in(2)) {
         switch (rng(1, 3)) {
             case 1:
-                p.add_msg_if_player(m_warning, _("You hack up the corpse so unskillfully, that "
-                                                 "there is nothing left to salvage from this "
-                                                 "bloody mess."));
+                p.add_msg_if_player(
+                    m_warning,
+                    _("You hack up the corpse so unskillfully, that "
+                      "there is nothing left to salvage from this "
+                      "bloody mess."));
                 break;
             case 2:
-                p.add_msg_if_player(m_warning, _("You wanted to cut the corpse, but instead you "
-                                                 "hacked the meat, spilled the guts all over it, "
-                                                 "and made a bloody mess."));
+                p.add_msg_if_player(
+                    m_warning,
+                    _("You wanted to cut the corpse, but instead you "
+                      "hacked the meat, spilled the guts all over it, "
+                      "and made a bloody mess."));
                 break;
             case 3:
-                p.add_msg_if_player(m_warning, _("You made so many mistakes during the process "
-                                                 "that you doubt even vultures will be interested "
-                                                 "in what's left of it."));
+                p.add_msg_if_player(
+                    m_warning,
+                    _("You made so many mistakes during the process "
+                      "that you doubt even vultures will be interested "
+                      "in what's left of it."));
                 break;
         }
 
@@ -3426,19 +3448,25 @@ void butchery_activity_actor::finish(player_activity& act, Character& who) {
             if (roll_butchery() < 0) {
                 switch (rng(1, 3)) {
                     case 1:
-                        p.add_msg_if_player(m_warning, _("You unskillfully hack up the corpse and "
-                                                         "chop off some excess body parts.  You're "
-                                                         "left wondering how you did so poorly."));
+                        p.add_msg_if_player(
+                            m_warning,
+                            _("You unskillfully hack up the corpse and "
+                              "chop off some excess body parts.  You're "
+                              "left wondering how you did so poorly."));
                         break;
                     case 2:
-                        p.add_msg_if_player(m_warning, _("Your unskilled hands slip and damage the "
-                                                         "corpse.  You still hope it's not a total "
-                                                         "waste though."));
+                        p.add_msg_if_player(
+                            m_warning,
+                            _("Your unskilled hands slip and damage the "
+                              "corpse.  You still hope it's not a total "
+                              "waste though."));
                         break;
                     case 3:
-                        p.add_msg_if_player(m_warning, _("You did something wrong and hacked the "
-                                                         "corpse badly.  Maybe it's still "
-                                                         "recoverable."));
+                        p.add_msg_if_player(
+                            m_warning,
+                            _("You did something wrong and hacked the "
+                              "corpse badly.  Maybe it's still "
+                              "recoverable."));
                         break;
                 }
                 corpse_item.set_flag(flag_FIELD_DRESS_FAILED);
@@ -3448,14 +3476,18 @@ void butchery_activity_actor::finish(player_activity& act, Character& who) {
                         p.add_msg_if_player(m_good, _("You field dress the %s."), corpse->nname());
                         break;
                     case 2:
-                        p.add_msg_if_player(m_good, _("You slice the corpse's belly and remove "
-                                                      "intestines and organs, until you're "
-                                                      "confident that it will not rot from "
-                                                      "inside."));
+                        p.add_msg_if_player(
+                            m_good,
+                            _("You slice the corpse's belly and remove "
+                              "intestines and organs, until you're "
+                              "confident that it will not rot from "
+                              "inside."));
                         break;
                     case 3:
-                        p.add_msg_if_player(m_good, _("You remove guts and excess parts, preparing "
-                                                      "the corpse for later use."));
+                        p.add_msg_if_player(
+                            m_good,
+                            _("You remove guts and excess parts, preparing "
+                              "the corpse for later use."));
                         break;
                 }
                 corpse_item.set_flag(flag_FIELD_DRESS);
@@ -4243,8 +4275,9 @@ void wood_chop_activity_actor::finish(player_activity& act, Character& who) {
             if (!p.is_npc()) {
                 if (p.backlog.empty() || p.backlog.front()->id() != ACT_MULTIPLE_CHOP_TREES) {
                     while (true) {
-                        if (const auto dir = choose_direction(_("Select a direction for the tree "
-                                                                "to fall in."))) {
+                        if (const auto dir = choose_direction(_(
+                                "Select a direction for the tree "
+                                "to fall in."))) {
                             direction = *dir;
                             break;
                         }
@@ -5071,8 +5104,10 @@ void start_fire_activity_actor::do_turn(player_activity& act, Character& who) {
     const float light = actor->light_mod(p.bub_pos());
     act.moves_left -= light * 100;
     if (light < 0.1) {
-        p.add_msg_if_player(m_bad, _("There is not enough sunlight to start a fire now.  You stop "
-                                     "trying."));
+        p.add_msg_if_player(
+            m_bad,
+            _("There is not enough sunlight to start a fire now.  You stop "
+              "trying."));
         p.cancel_activity();
     }
 }
@@ -5134,8 +5169,10 @@ void fish_activity_actor::do_turn(player_activity& act, Character& who) {
     int fishing_mult = iuse::good_fishing_spot(abs_to_bub(placement));
     if (fishing_mult == 0 || p.is_blind()) {
         act.set_to_null();
-        p.add_msg_if_player(m_info, _("You realize fishing here at the moment is pointless, and "
-                                      "stop."));
+        p.add_msg_if_player(
+            m_info,
+            _("You realize fishing here at the moment is pointless, and "
+              "stop."));
         if (!p.backlog.empty() && p.backlog.front()->id() == ACT_MULTIPLE_FISH) {
             p.backlog.clear();
             p.assign_activity(ACT_TIDY_UP);
@@ -5282,9 +5319,11 @@ void make_zlave_activity_actor::finish(player_activity& act, Character& who) {
         p.practice(skill_firstaid, rng(2, 5));
         p.practice(skill_survival, rng(2, 5));
 
-        p.add_msg_if_player(m_good, _("You slice muscles and tendons, and remove body parts until "
-                                      "you're confident the zombie won't be able to attack you "
-                                      "when it reanimates."));
+        p.add_msg_if_player(
+            m_good,
+            _("You slice muscles and tendons, and remove body parts until "
+              "you're confident the zombie won't be able to attack you "
+              "when it reanimates."));
 
         body->set_var("zlave", "zlave");
         if (one_in(10)) { body->set_var("zlave", "mutilated"); }
@@ -5292,9 +5331,11 @@ void make_zlave_activity_actor::finish(player_activity& act, Character& who) {
         p.practice(skill_firstaid, rng(3, 6));
         p.practice(skill_survival, rng(3, 6));
 
-        p.add_msg_if_player(m_warning, _("You hack into the corpse and chop off some body parts.  "
-                                         "You think the zombie won't be able to attack when it "
-                                         "reanimates."));
+        p.add_msg_if_player(
+            m_warning,
+            _("You hack into the corpse and chop off some body parts.  "
+              "You think the zombie won't be able to attack when it "
+              "reanimates."));
 
         body->set_var("zlave", "zlave");
     } else {
@@ -5487,8 +5528,9 @@ void train_skill_activity_actor::do_turn(player_activity& act, Character& who) {
     }
 
     if (main_tool == nullptr) {
-        debugmsg("train skill tools array and hack values are empty. this would have caused "
-                 "invalid safe reference error");
+        debugmsg(
+            "train skill tools array and hack values are empty. this would have caused "
+            "invalid safe reference error");
         act.moves_left = 0;
         return;
     }
@@ -5835,10 +5877,12 @@ void spellcasting_activity_actor::finish(player_activity& act, Character& who) {
         const std::optional<tripoint_bub_ms> target_ =
             spell_being_cast.random_valid_target(p, p.bub_pos());
         if (!target_) {
-            p.add_msg_if_player(game_message_params{m_bad, gmf_bypass_cooldown}, _("Your spell "
-                                                                                   "can't find a "
-                                                                                   "suitable "
-                                                                                   "target."));
+            p.add_msg_if_player(
+                game_message_params{m_bad, gmf_bypass_cooldown},
+                _("Your spell "
+                  "can't find a "
+                  "suitable "
+                  "target."));
             return;
         }
     }
@@ -5846,8 +5890,10 @@ void spellcasting_activity_actor::finish(player_activity& act, Character& who) {
     bool success = no_fail || rng_float(0.0f, 1.0f) >= spell_being_cast.spell_fail(p);
     int exp_gained = spell_being_cast.casting_exp(p);
     if (!success) {
-        p.add_msg_if_player(game_message_params{m_bad, gmf_bypass_cooldown}, _("You lose your "
-                                                                               "concentration!"));
+        p.add_msg_if_player(
+            game_message_params{m_bad, gmf_bypass_cooldown},
+            _("You lose your "
+              "concentration!"));
         if (!spell_being_cast.is_max_level() && level_override == -1) {
             spell_being_cast.gain_exp(exp_gained / 5);
             p.add_msg_if_player(
@@ -5895,8 +5941,10 @@ void spellcasting_activity_actor::finish(player_activity& act, Character& who) {
             int old_level = spell_being_cast.get_level();
             if (old_level == 0) {
                 spell_being_cast.gain_level();
-                p.add_msg_if_player(m_good, _("Something about how this spell works just clicked!  "
-                                              "You gained a level!"));
+                p.add_msg_if_player(
+                    m_good,
+                    _("Something about how this spell works just clicked!  "
+                      "You gained a level!"));
             } else {
                 spell_being_cast.gain_exp(exp_gained);
                 p.add_msg_if_player(
@@ -6038,131 +6086,178 @@ std::unique_ptr<activity_actor> pulp_activity_actor::deserialize(JsonIn& jsin) {
     return actor;
 }
 // ---- hotwire_car_activity_actor ----
-void hotwire_car_activity_actor::do_turn( player_activity & /*act*/, Character & /*who*/ )
-{
-}
+void hotwire_car_activity_actor::do_turn(player_activity& /*act*/, Character& /*who*/) {}
 
 
-void hotwire_car_activity_actor::finish( player_activity &act, Character &who )
-{
+void hotwire_car_activity_actor::finish(player_activity& act, Character& who) {
     act.set_to_null();
-    player &p = static_cast<player &>( who );
-    if( const optional_vpart_position vp = g->m.veh_at(
-            tripoint_abs_ms( veh_x, veh_y, p.bub_pos().z() ) ) ) {
-        vehicle *const veh = &vp->vehicle();
-        if( mech_skill > rng( 1, 6 ) ) {
+    player& p = static_cast<player&>(who);
+    if (const optional_vpart_position vp = g->m.veh_at(
+            tripoint_abs_ms(veh_x, veh_y, p.bub_pos().z()))) {
+        vehicle* const veh = &vp->vehicle();
+        if (mech_skill > rng(1, 6)) {
             veh->is_locked = false;
-            add_msg( _( "This wire will start the engine." ) );
-        } else if( mech_skill > rng( 0, 4 ) ) {
+            add_msg(_("This wire will start the engine."));
+        } else if (mech_skill > rng(0, 4)) {
             veh->is_locked = false;
             veh->is_alarm_on = veh->has_security_working();
-            add_msg( _( "This wire will probably start the engine." ) );
-        } else if( veh->is_alarm_on ) {
+            add_msg(_("This wire will probably start the engine."));
+        } else if (veh->is_alarm_on) {
             veh->is_locked = false;
-            add_msg( _( "By process of elimination, this wire will start the engine." ) );
+            add_msg(_("By process of elimination, this wire will start the engine."));
         } else {
             veh->is_alarm_on = veh->has_security_working();
-            add_msg( _( "The red wire always starts the engine, doesn't it?" ) );
+            add_msg(_("The red wire always starts the engine, doesn't it?"));
         }
     } else {
-        debugmsg( "process_activity ACT_HOTWIRE_CAR: vehicle not found" );
+        debugmsg("process_activity ACT_HOTWIRE_CAR: vehicle not found");
     }
 }
 
-void hotwire_car_activity_actor::serialize( JsonOut &jsout ) const
-{
-    jsout.member( "veh_x", veh_x );
-    jsout.member( "veh_y", veh_y );
-    jsout.member( "mech_skill", mech_skill );
-    jsout.member( "moves", moves );
+void hotwire_car_activity_actor::serialize(JsonOut& jsout) const {
+    jsout.member("veh_x", veh_x);
+    jsout.member("veh_y", veh_y);
+    jsout.member("mech_skill", mech_skill);
+    jsout.member("moves", moves);
 }
 
-std::unique_ptr<activity_actor> hotwire_car_activity_actor::deserialize( JsonIn &jsin )
-{
-    std::unique_ptr<hotwire_car_activity_actor> actor( new hotwire_car_activity_actor() );
+std::unique_ptr<activity_actor> hotwire_car_activity_actor::deserialize(JsonIn& jsin) {
+    std::unique_ptr<hotwire_car_activity_actor> actor(new hotwire_car_activity_actor());
     JsonObject data = jsin.get_object();
-    data.read( "veh_x", actor->veh_x );
-    data.read( "veh_y", actor->veh_y );
-    data.read( "mech_skill", actor->mech_skill );
-    data.read( "moves", actor->moves );
+    data.read("veh_x", actor->veh_x);
+    data.read("veh_y", actor->veh_y);
+    data.read("mech_skill", actor->mech_skill);
+    data.read("moves", actor->moves);
     return actor;
 }
 // ---- start_engines_activity_actor ----
-void start_engines_activity_actor::do_turn( player_activity & /*act*/, Character & /*who*/ )
-{
-}
+void start_engines_activity_actor::do_turn(player_activity& /*act*/, Character& /*who*/) {}
 
 
-void start_engines_activity_actor::finish( player_activity &act, Character &who )
-{
+void start_engines_activity_actor::finish(player_activity& act, Character& who) {
     act.set_to_null();
-    player &p = static_cast<player &>( who );
-    vehicle *veh = g->remoteveh();
-    map &here = get_map();
-    if( !veh ) {
-        veh = veh_pointer_or_null( here.veh_at( placement ) );
-        if( !veh ) {
-            return;
-        }
+    player& p = static_cast<player&>(who);
+    vehicle* veh = g->remoteveh();
+    map& here = get_map();
+    if (!veh) {
+        veh = veh_pointer_or_null(here.veh_at(placement));
+        if (!veh) { return; }
     }
 
     int attempted = 0;
     int started = 0;
     int non_combustion_started = 0;
 
-    for( size_t e = 0; e < veh->engines.size(); ++e ) {
-        if( veh->is_engine_on( e ) ) {
+    for (size_t e = 0; e < veh->engines.size(); ++e) {
+        if (veh->is_engine_on(e)) {
             attempted++;
-            if( veh->start_engine( e ) ) {
+            if (veh->start_engine(e)) {
                 started++;
-                if( !veh->is_engine_type( e, itype_muscle ) &&
-                    !veh->is_engine_type( e, itype_animal ) ) {
+                if (!veh->is_engine_type(e, itype_muscle)
+                    && !veh->is_engine_type(e, itype_animal)) {
                     non_combustion_started++;
                 }
             }
         }
     }
 
-    if( started == 0 ) {
-        if( attempted == 0 ) {
-            add_msg( _( "No engines are running." ) );
+    if (started == 0) {
+        if (attempted == 0) {
+            add_msg(_("No engines are running."));
         } else {
-            add_msg( _( "None of the engines started." ) );
+            add_msg(_("None of the engines started."));
         }
-    } else if( started == 1 ) {
-        if( non_combustion_started == 1 ) {
-            add_msg( _( "The engine started." ) );
+    } else if (started == 1) {
+        if (non_combustion_started == 1) {
+            add_msg(_("The engine started."));
         } else {
-            add_msg( _( "One engine started." ) );
+            add_msg(_("One engine started."));
         }
     } else {
-        if( non_combustion_started == started ) {
-            add_msg( _( "The engines started." ) );
+        if (non_combustion_started == started) {
+            add_msg(_("The engines started."));
         } else {
-            add_msg( _( "%d engines started." ), started );
+            add_msg(_("%d engines started."), started);
         }
     }
 
-    if( take_control && !veh->engine_on && !veh->velocity ) {
+    if (take_control && !veh->engine_on && !veh->velocity) {
         p.controlling_vehicle = true;
-        add_msg( _( "You take control of the %s." ), veh->name );
+        add_msg(_("You take control of the %s."), veh->name);
     }
 }
 
-void start_engines_activity_actor::serialize( JsonOut &jsout ) const
-{
-    jsout.member( "placement", placement );
-    jsout.member( "take_control", take_control );
-    jsout.member( "moves", moves );
+void start_engines_activity_actor::serialize(JsonOut& jsout) const {
+    jsout.member("placement", placement);
+    jsout.member("take_control", take_control);
+    jsout.member("moves", moves);
 }
 
-std::unique_ptr<activity_actor> start_engines_activity_actor::deserialize( JsonIn &jsin )
-{
-    std::unique_ptr<start_engines_activity_actor> actor( new start_engines_activity_actor() );
+std::unique_ptr<activity_actor> start_engines_activity_actor::deserialize(JsonIn& jsin) {
+    std::unique_ptr<start_engines_activity_actor> actor(new start_engines_activity_actor());
     JsonObject data = jsin.get_object();
-    data.read( "placement", actor->placement );
-    data.read( "take_control", actor->take_control );
-    data.read( "moves", actor->moves );
+    data.read("placement", actor->placement);
+    data.read("take_control", actor->take_control);
+    data.read("moves", actor->moves);
+    return actor;
+}
+
+// ---- vehicle_activity_actor ----
+void vehicle_activity_actor::start(player_activity& act, Character&) {
+    act.moves_left = moves;
+    act.placement = placement;
+    act.values.push_back(placement.x());
+    act.values.push_back(placement.y());
+    act.values.push_back(placement.z());
+    act.values.push_back(cursor_pos.x());
+    act.values.push_back(cursor_pos.y());
+    act.values.push_back(cursor_pos.z());
+    act.values.push_back(vehicle_part);
+    act.str_values.push_back(part_id.str());
+}
+
+void vehicle_activity_actor::do_turn(player_activity& /*act*/, Character& /*who*/) {}
+
+void vehicle_activity_actor::finish(player_activity& act, Character& who) {
+    act.set_to_null();
+    map& here = get_map();
+    const optional_vpart_position vp = here.veh_at(placement);
+    veh_interact::complete_vehicle(who);
+    if (act.is_null()) {
+        if (npc* guy = dynamic_cast<npc*>(&who)) {
+            guy->revert_after_activity();
+            guy->set_moves(0);
+        }
+        return;
+    }
+    act.set_to_null();
+    if (!who.is_npc()) {
+        if (vp) {
+            if (!activity_handlers::resume_for_multi_activities(static_cast<player&>(who))) {
+                g->exam_vehicle(vp->vehicle(), cursor_pos);
+            }
+        }
+    }
+}
+
+void vehicle_activity_actor::serialize(JsonOut& jsout) const {
+    jsout.member("placement", placement);
+    jsout.member("cursor_pos", cursor_pos);
+    jsout.member("vehicle_part", vehicle_part);
+    jsout.member("part_id", part_id.str());
+    jsout.member("cmd", cmd);
+}
+
+std::unique_ptr<activity_actor> vehicle_activity_actor::deserialize(JsonIn& jsin) {
+    std::unique_ptr<vehicle_activity_actor> actor(new vehicle_activity_actor());
+    JsonObject data = jsin.get_object();
+    data.read("placement", actor->placement);
+    data.read("cursor_pos", actor->cursor_pos);
+    data.read("vehicle_part", actor->vehicle_part);
+    std::string part_id_str;
+    data.read("part_id", part_id_str);
+    actor->part_id = vpart_id(part_id_str);
+    data.read("cmd", actor->cmd);
     return actor;
 }
 namespace activity_actors {
@@ -6254,6 +6349,7 @@ const std::unordered_map<activity_id, std::unique_ptr<activity_actor> (*)(JsonIn
      {activity_id("ACT_TRAVELLING"), &travelling_activity_actor::deserialize},
      {activity_id("ACT_TREE_COMMUNION"), &tree_communion_activity_actor::deserialize},
      {activity_id("ACT_TRY_SLEEP"), &try_sleep_activity_actor::deserialize},
+     {activity_id("ACT_VEHICLE"), &vehicle_activity_actor::deserialize},
      {activity_id("ACT_VIBE"), &vibe_activity_actor::deserialize},
      {activity_id("ACT_WAIT"), &wait_activity_actor::deserialize},
      {activity_id("ACT_WAIT_NPC"), &wait_activity_actor::deserialize},

@@ -1901,55 +1901,81 @@ public:
     static std::unique_ptr<activity_actor> deserialize(JsonIn& jsin);
 };
 
-class hotwire_car_activity_actor : public activity_actor
-{
-    private:
-        int veh_x = 0;
-        int veh_y = 0;
-        int mech_skill = 0;
-        int moves = 0;
+class hotwire_car_activity_actor: public activity_actor {
+private:
+    int veh_x = 0;
+    int veh_y = 0;
+    int mech_skill = 0;
+    int moves = 0;
 
-    public:
-        hotwire_car_activity_actor() = default;
-        hotwire_car_activity_actor( int x, int y, int skill, int m )
-            : veh_x( x ), veh_y( y ), mech_skill( skill ), moves( m ) {}
+public:
+    hotwire_car_activity_actor() = default;
+    hotwire_car_activity_actor(int x, int y, int skill, int m)
+        : veh_x(x),
+          veh_y(y),
+          mech_skill(skill),
+          moves(m) {}
 
-        activity_id get_type() const override {
-            return activity_id( "ACT_HOTWIRE_CAR" );
-        }
+    activity_id get_type() const override { return activity_id("ACT_HOTWIRE_CAR"); }
 
-        void start( player_activity &act, Character & ) override {
-            act.moves_left = moves;
-        }
-        void do_turn( player_activity &act, Character &who ) override;
-        void finish( player_activity &act, Character &who ) override;
+    void start(player_activity& act, Character&) override { act.moves_left = moves; }
+    void do_turn(player_activity& act, Character& who) override;
+    void finish(player_activity& act, Character& who) override;
 
-        void serialize( JsonOut &jsout ) const override;
-        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+    void serialize(JsonOut& jsout) const override;
+    static std::unique_ptr<activity_actor> deserialize(JsonIn& jsin);
 };
 
-class start_engines_activity_actor : public activity_actor
-{
-    private:
-        tripoint_abs_ms placement;
-        bool take_control = false;
-        int moves = 0;
+class start_engines_activity_actor: public activity_actor {
+private:
+    tripoint_abs_ms placement;
+    bool take_control = false;
+    int moves = 0;
 
-    public:
-        start_engines_activity_actor() = default;
-        start_engines_activity_actor( const tripoint_abs_ms &place, bool control, int m )
-            : placement( place ), take_control( control ), moves( m ) {}
+public:
+    start_engines_activity_actor() = default;
+    start_engines_activity_actor(const tripoint_abs_ms& place, bool control, int m)
+        : placement(place),
+          take_control(control),
+          moves(m) {}
 
-        activity_id get_type() const override {
-            return activity_id( "ACT_START_ENGINES" );
-        }
+    activity_id get_type() const override { return activity_id("ACT_START_ENGINES"); }
 
-        void start( player_activity &act, Character & ) override {
-            act.moves_left = moves;
-        }
-        void do_turn( player_activity &act, Character &who ) override;
-        void finish( player_activity &act, Character &who ) override;
+    void start(player_activity& act, Character&) override { act.moves_left = moves; }
+    void do_turn(player_activity& act, Character& who) override;
+    void finish(player_activity& act, Character& who) override;
 
-        void serialize( JsonOut &jsout ) const override;
-        static std::unique_ptr<activity_actor> deserialize( JsonIn &jsin );
+    void serialize(JsonOut& jsout) const override;
+    static std::unique_ptr<activity_actor> deserialize(JsonIn& jsin);
+};
+
+class vehicle_activity_actor: public activity_actor {
+private:
+    tripoint_abs_ms placement;
+    tripoint_mnt_veh cursor_pos;
+    int vehicle_part = 0;
+    vpart_id part_id;
+    char cmd = 0;
+    int moves = 0;
+
+public:
+    vehicle_activity_actor() = default;
+    vehicle_activity_actor(
+        const tripoint_abs_ms& place, const tripoint_mnt_veh& cursor, int part, const vpart_id& pid,
+        char c, int m)
+        : placement(place),
+          cursor_pos(cursor),
+          vehicle_part(part),
+          part_id(pid),
+          cmd(c),
+          moves(m) {}
+
+    activity_id get_type() const override { return activity_id("ACT_VEHICLE"); }
+
+    void start(player_activity& act, Character&) override;
+    void do_turn(player_activity& act, Character& who) override;
+    void finish(player_activity& act, Character& who) override;
+
+    void serialize(JsonOut& jsout) const override;
+    static std::unique_ptr<activity_actor> deserialize(JsonIn& jsin);
 };

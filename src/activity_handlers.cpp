@@ -249,7 +249,6 @@ const std::map<activity_id, std::function<void(player_activity*, player*)>>
 const std::map<activity_id, std::function<void(player_activity*, player*)>>
     activity_handlers::finish_functions = {
 
-        {ACT_VEHICLE, vehicle_finish},
         {ACT_OPERATION, operation_finish},
 
 };
@@ -444,24 +443,27 @@ butchery_setup consider_butchery(const item& corpse_item, player& u, butcher_typ
 
         if (big_corpse) {
             if (has_rope && !has_tree_nearby && !b_rack_present) {
-                not_this_one(_("You need to suspend this corpse to butcher it.  While you have a "
-                               "rope to lift the corpse, there is no tree nearby to hang it from."),
-                             butcherable_rating::no_tree_rope_rack);
+                not_this_one(
+                    _("You need to suspend this corpse to butcher it.  While you have a "
+                      "rope to lift the corpse, there is no tree nearby to hang it from."),
+                    butcherable_rating::no_tree_rope_rack);
             }
             if (!has_rope && !b_rack_present) {
-                not_this_one(_("To perform a full butchery on a corpse this big, you need either a "
-                               "butchering rack, a nearby hanging meathook, or both a long rope in "
-                               "your inventory and a nearby tree to hang the corpse from."),
-                             butcherable_rating::no_tree_rope_rack);
+                not_this_one(
+                    _("To perform a full butchery on a corpse this big, you need either a "
+                      "butchering rack, a nearby hanging meathook, or both a long rope in "
+                      "your inventory and a nearby tree to hang the corpse from."),
+                    butcherable_rating::no_tree_rope_rack);
             }
             if (!(here.has_nearby_table(u.bub_pos(), PICKUP_RANGE)
                   || inv.has_item_with([](const item& it) {
                          return it.has_flag(flag_FLAT_SURFACE);
                      }))) {
-                not_this_one(_("To perform a full butchery on a corpse this big, you need a table "
-                               "nearby or something else with a flat surface.  A leather tarp "
-                               "spread out on the ground could suffice."),
-                             butcherable_rating::no_table);
+                not_this_one(
+                    _("To perform a full butchery on a corpse this big, you need a table "
+                      "nearby or something else with a flat surface.  A leather tarp "
+                      "spread out on the ground could suffice."),
+                    butcherable_rating::no_table);
             }
         }
     }
@@ -469,9 +471,10 @@ butchery_setup consider_butchery(const item& corpse_item, player& u, butcher_typ
     if (action == DISSECT
         && (corpse_item.has_flag(flag_QUARTERED)
             || corpse_item.has_flag(flag_FIELD_DRESS_FAILED))) {
-        not_this_one(_("It would be futile to search for implants inside this badly damaged "
-                       "corpse."),
-                     butcherable_rating::too_damaged);
+        not_this_one(
+            _("It would be futile to search for implants inside this badly damaged "
+              "corpse."),
+            butcherable_rating::too_damaged);
     }
 
     if (action == F_DRESS
@@ -634,8 +637,10 @@ void butchery_drops_harvest(
     if (corpse_item->has_flag(flag_GIBBED)) {
         monster_weight = std::round(0.85 * monster_weight);
         if (action != F_DRESS) {
-            p.add_msg_if_player(m_bad, _("You salvage what you can from the corpse, but it is "
-                                         "badly damaged."));
+            p.add_msg_if_player(
+                m_bad,
+                _("You salvage what you can from the corpse, but it is "
+                  "badly damaged."));
         }
     }
     if (corpse_item->has_flag(flag_SKINNED)) { monster_weight = std::round(0.85 * monster_weight); }
@@ -672,39 +677,51 @@ void butchery_drops_harvest(
             if (action == F_DRESS) {
                 if (drop != nullptr && !drop->bionic) {
                     if (one_in(3)) {
-                        p.add_msg_if_player(m_bad, _("You notice something embedded in the corpse, "
-                                                     "perhaps harvestable via careful "
-                                                     "dissection."));
+                        p.add_msg_if_player(
+                            m_bad,
+                            _("You notice something embedded in the corpse, "
+                              "perhaps harvestable via careful "
+                              "dissection."));
                     }
                     continue;
                 }
-                p.add_msg_if_player(m_bad, _("You notice there are implants in this corpse, that "
-                                             "careful dissection might preserve."));
+                p.add_msg_if_player(
+                    m_bad,
+                    _("You notice there are implants in this corpse, that "
+                      "careful dissection might preserve."));
                 continue;
             }
             if (action == BUTCHER || action == BUTCHER_FULL || action == DISMEMBER) {
                 if (drop != nullptr && !drop->bionic) {
                     if (one_in(3)) {
-                        p.add_msg_if_player(m_bad, _("Your butchering tool destroys something.  "
-                                                     "Perhaps a more surgical approach would allow "
-                                                     "harvesting it."));
+                        p.add_msg_if_player(
+                            m_bad,
+                            _("Your butchering tool destroys something.  "
+                              "Perhaps a more surgical approach would allow "
+                              "harvesting it."));
                     }
                     continue;
                 }
                 switch (rng(1, 3)) {
                     case 1:
-                        p.add_msg_if_player(m_bad, _("Your butchering tool encounters something "
-                                                     "implanted in this corpse, but your rough "
-                                                     "cuts destroy it."));
+                        p.add_msg_if_player(
+                            m_bad,
+                            _("Your butchering tool encounters something "
+                              "implanted in this corpse, but your rough "
+                              "cuts destroy it."));
                         break;
                     case 2:
-                        p.add_msg_if_player(m_bad, _("You find traces of implants in the body, but "
-                                                     "you care only for the flesh."));
+                        p.add_msg_if_player(
+                            m_bad,
+                            _("You find traces of implants in the body, but "
+                              "you care only for the flesh."));
                         break;
                     case 3:
-                        p.add_msg_if_player(m_bad, _("You found some implants in the body, but "
-                                                     "harvesting them would require more surgical "
-                                                     "approach."));
+                        p.add_msg_if_player(
+                            m_bad,
+                            _("You found some implants in the body, but "
+                              "harvesting them would require more surgical "
+                              "approach."));
                         break;
                 }
                 continue;
@@ -869,7 +886,6 @@ void butchery_quarter(item* corpse_item, const player& p) {
 }
 
 
-
 static bool magic_train(player_activity* act, player* p) {
     if (!p) { return false; }
     const spell_id& sp_id = spell_id(act->name);
@@ -893,53 +909,6 @@ static bool magic_train(player_activity* act, player* p) {
         return true;
     }
     return false;
-}
-
-
-void activity_handlers::vehicle_finish(player_activity* act, player* p) {
-    map& here = get_map();
-    // Grab this now, in case the vehicle gets shifted
-    const bool legacy = act->values.size() == 8;
-    tripoint_abs_ms pos;
-    if (legacy) {
-        pos = tripoint_abs_ms(act->values[0], act->values[1], p->bub_pos().z());
-    } else {
-        pos = tripoint_abs_ms(act->values[0], act->values[1], act->values[2]);
-    }
-    const optional_vpart_position vp = here.veh_at(pos);
-    veh_interact::complete_vehicle(*p);
-    // complete_vehicle set activity type to NULL if the vehicle
-    // was completely dismantled, otherwise the vehicle still exist and
-    // is to be examined again.
-    if (act->is_null()) {
-        if (npc* guy = dynamic_cast<npc*>(p)) {
-            guy->revert_after_activity();
-            guy->set_moves(0);
-        }
-        return;
-    }
-    act->set_to_null();
-    if (!p->is_npc()) {
-        if (act->values.size() < 7) {
-            debugmsg("process_activity invalid ACT_VEHICLE values:%d", act->values.size());
-        } else {
-            if (vp) {
-                here.invalidate_map_cache(g->get_levz());
-                tripoint_mnt_veh cursor_pos;
-                if (legacy) {
-                    cursor_pos = tripoint_mnt_veh(act->values[2], act->values[3], 0);
-                } else {
-                    cursor_pos = tripoint_mnt_veh(act->values[3], act->values[4], act->values[5]);
-                }
-                if (!resume_for_multi_activities(*p)) {
-                    g->exam_vehicle(vp->vehicle(), cursor_pos);
-                }
-                return;
-            } else {
-                debugmsg("process_activity ACT_VEHICLE: vehicle not found");
-            }
-        }
-    }
 }
 
 
@@ -1365,8 +1334,9 @@ void activity_handlers::operation_finish(player_activity* act, player* p) {
                 _("a short upbeat jingle: \"Operation successful\""), true, "Autodoc", "success");
         } else {
             if (act->str_values[0] == "install") {
-                add_msg(m_warning, _("The Autodoc completes installation and activates bionic but "
-                                     "reports about complications during operation."));
+                add_msg(m_warning,
+                        _("The Autodoc completes installation and activates bionic but "
+                          "reports about complications during operation."));
                 const auto autodocs = here.find_furnitures_or_vparts_with_flag_in_radius(
                     p->bub_pos(), 1, flag_AUTODOC);
                 sounds::sound(
@@ -1389,8 +1359,9 @@ void activity_handlers::operation_finish(player_activity* act, player* p) {
             add_msg(m_good, _("The operation is a success."));
         } else {
             if (act->str_values[0] == "install") {
-                add_msg(m_warning, _("Bionic was installed and activated but a complication "
-                                     "happened during operation!"));
+                add_msg(m_warning,
+                        _("Bionic was installed and activated but a complication "
+                          "happened during operation!"));
             } else {
                 add_msg(m_bad, _("The operation is a failure."));
             }
