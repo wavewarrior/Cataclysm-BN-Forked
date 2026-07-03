@@ -84,6 +84,7 @@
 #include "overmap.h"
 #include "overmap_special.h"
 #include "overmap_ui.h"
+#include "overmapbuffer.h"
 #include "player.h"
 #include "player_activity.h"
 #include "pldata.h"
