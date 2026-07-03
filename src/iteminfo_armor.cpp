@@ -433,14 +433,14 @@ void item::armor_protection_info( std::vector<iteminfo> &info, const iteminfo_qu
                                   bool /*debug*/ ) const
 {
     if( !is_armor() && !is_pet_armor() ) {
-        return;
-    }
+    return;
+}
 
-    const std::string space = "  ";
+const std::string space = "  ";
 
-    if( parts->test( iteminfo_parts::ARMOR_PROTECTION ) ) {
-        info.emplace_back( "ARMOR", _( "<bold>Protection</bold>: Bash: " ), "",
-                           iteminfo::no_newline, bash_resist() );
+if( parts->test( iteminfo_parts::ARMOR_PROTECTION ) ) {
+    info.emplace_back( "ARMOR", _( "<bold>Protection</bold>: Bash: " ), "",
+                       iteminfo::no_newline, bash_resist() );
         info.emplace_back( "ARMOR", space + _( "Cut: " ), "", iteminfo::no_newline, cut_resist() );
         info.emplace_back( "ARMOR", space + _( "Ballistic: " ), bullet_resist() );
         info.emplace_back( "ARMOR", space + _( "Acid: " ), "",
@@ -475,19 +475,19 @@ void item::animal_armor_info( std::vector<iteminfo> &info, const iteminfo_query 
                               bool debug ) const
 {
     if( !is_pet_armor() ) {
-        return;
-    }
+    return;
+}
 
-    const std::string space = "  ";
+const std::string space = "  ";
 
-    int converted_storage_scale = 0;
-    const double converted_storage = round_up( convert_volume( get_storage().value(),
-                                         &converted_storage_scale ), 2 );
+int converted_storage_scale = 0;
+const double converted_storage = round_up( convert_volume( get_storage().value(),
+                                     &converted_storage_scale ), 2 );
     if( parts->test( iteminfo_parts::ARMOR_STORAGE ) && converted_storage > 0 ) {
-        const iteminfo::flags f = converted_storage_scale == 0 ? iteminfo::no_flags : iteminfo::is_decimal;
-        info.emplace_back( "ARMOR", space + _( "Storage: " ),
-                           string_format( "<num> %s", volume_units_abbr() ),
-                           f, converted_storage );
+    const iteminfo::flags f = converted_storage_scale == 0 ? iteminfo::no_flags : iteminfo::is_decimal;
+    info.emplace_back( "ARMOR", space + _( "Storage: " ),
+                       string_format( "<num> %s", volume_units_abbr() ),
+                       f, converted_storage );
     }
 
     // Whatever the last entry was, we want a newline at this point
@@ -500,21 +500,21 @@ void item::armor_fit_info( std::vector<iteminfo> &info, const iteminfo_query *pa
                            bool /*debug*/ ) const
 {
     if( !is_armor() ) {
-        return;
-    }
+    return;
+}
 
-    avatar &you = get_avatar();
-    const sizing sizing_level = get_sizing( you );
+avatar &you = get_avatar();
+const sizing sizing_level = get_sizing( you );
 
-    if( has_flag( flag_HELMET_COMPAT ) &&
-            parts->test( iteminfo_parts::DESCRIPTION_FLAGS_HELMETCOMPAT ) ) {
-        info.emplace_back( "DESCRIPTION",
-                           _( "* This item can be <info>worn with a "
-                              "helmet</info>." ) );
+if( has_flag( flag_HELMET_COMPAT ) &&
+        parts->test( iteminfo_parts::DESCRIPTION_FLAGS_HELMETCOMPAT ) ) {
+    info.emplace_back( "DESCRIPTION",
+                       _( "* This item can be <info>worn with a "
+                          "helmet</info>." ) );
     }
 
     if( parts->test( iteminfo_parts::DESCRIPTION_FLAGS_FITS ) ) {
-        switch( sizing_level ) {
+    switch( sizing_level ) {
             case sizing::human_sized_human_char:
                 if( has_flag( flag_FIT ) ) {
                     info.emplace_back( "DESCRIPTION",
@@ -571,7 +571,7 @@ void item::armor_fit_info( std::vector<iteminfo> &info, const iteminfo_query *pa
     }
 
     if( parts->test( iteminfo_parts::DESCRIPTION_FLAGS_VARSIZE ) ) {
-        if( has_flag( flag_VARSIZE ) ) {
+    if( has_flag( flag_VARSIZE ) ) {
             std::string resize_str;
             if( has_flag( flag_FIT ) ) {
                 switch( sizing_level ) {
@@ -626,9 +626,9 @@ void item::armor_fit_info( std::vector<iteminfo> &info, const iteminfo_query *pa
     }
 
     if( is_sided() && parts->test( iteminfo_parts::DESCRIPTION_FLAGS_SIDED ) ) {
-        info.emplace_back( "DESCRIPTION",
-                           _( "* This item can be worn on <info>either side</info> of "
-                              "the body." ) );
+    info.emplace_back( "DESCRIPTION",
+                       _( "* This item can be worn on <info>either side</info> of "
+                          "the body." ) );
     }
     if( ( is_power_armor() ) &&
             parts->test( iteminfo_parts::DESCRIPTION_FLAGS_POWERARMOR ) ) {
@@ -646,8 +646,8 @@ void item::armor_fit_info( std::vector<iteminfo> &info, const iteminfo_query *pa
         }
     }
     if( typeId() == itype_rad_badge && parts->test( iteminfo_parts::DESCRIPTION_IRRADIATION ) ) {
-        info.emplace_back( "DESCRIPTION",
-                           string_format( _( "* The film strip on the badge is %s." ),
-                                          rad_badge_color( irradiation ) ) );
+    info.emplace_back( "DESCRIPTION",
+                       string_format( _( "* The film strip on the badge is %s." ),
+                                      rad_badge_color( irradiation ) ) );
     }
 }

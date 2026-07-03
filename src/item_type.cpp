@@ -937,19 +937,22 @@ const std::vector<enchantment> &item::get_enchantments() const
 return relic_data->get_enchantments();
 }
 
-const material_type& item::get_random_material() const {
-    return random_entry(made_of(), material_id::NULL_ID()).obj();
+const material_type &item::get_random_material() const
+{
+    return random_entry( made_of(), material_id::NULL_ID() ).obj();
 }
 
-const material_type& item::get_base_material() const {
-    const std::vector<material_id>& mats = made_of();
+const material_type &item::get_base_material() const
+{
+    const std::vector<material_id> &mats = made_of();
     return mats.empty() ? material_id::NULL_ID().obj() : mats.front().obj();
 }
 
-bool item::operator<(const item& other) const {
+bool item::operator<( const item& other ) const
+{
     const item_category& cat_a = get_category();
     const item_category& cat_b = other.get_category();
-    if (cat_a != cat_b) {
+    if( cat_a != cat_b ) {
         return cat_a < cat_b;
     } else {
         const item* me = is_container() && !contents.empty() ? &contents.front() : this;
@@ -958,15 +961,15 @@ bool item::operator<(const item& other) const {
 
         const itype* me_type = me->type;
         const itype* rhs_type = rhs->type;
-        if (!me_type || !rhs_type) { return !!me_type; }
+        if( !me_type || !rhs_type ) { return !!me_type; }
 
-        if (me_type->get_id() == rhs_type->get_id()) {
-            if (me->is_money()) { return me->charges > rhs->charges; }
+        if( me_type->get_id() == rhs_type->get_id() ) {
+            if( me->is_money() ) { return me->charges > rhs->charges; }
             return me->charges < rhs->charges;
         } else {
-            std::string n1 = me_type->nname(1);
-            std::string n2 = rhs_type->nname(1);
-            return localized_compare(n1, n2);
+            std::string n1 = me_type->nname( 1 );
+            std::string n2 = rhs_type->nname( 1 );
+            return localized_compare( n1, n2 );
         }
     }
 }

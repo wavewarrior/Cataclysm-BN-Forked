@@ -942,15 +942,15 @@ void cata::detail::reg_character( sol::state &lua )
         luna::set_fx( ut, "assign_activity", []( UT_CLASS & c, const activity_id & id, int moves )
         {
             ( void ) moves; // moves are handled by the actor internally
-            if ( id == activity_id( "ACT_HAIRCUT" ) ) {
+            if( id == activity_id( "ACT_HAIRCUT" ) ) {
                 c.assign_activity( std::make_unique<player_activity>(
-                                      std::make_unique<morale_activity_actor>( morale_act_type::HAIRCUT ) ) );
-            } else if ( id == activity_id( "ACT_MEDITATE" ) ) {
+                                       std::make_unique<morale_activity_actor>( morale_act_type::HAIRCUT ) ) );
+            } else if( id == activity_id( "ACT_MEDITATE" ) ) {
                 c.assign_activity( std::make_unique<player_activity>(
-                                      std::make_unique<morale_activity_actor>( morale_act_type::MEDITATE ) ) );
-            } else if ( id == activity_id( "ACT_SHAVE" ) ) {
+                                       std::make_unique<morale_activity_actor>( morale_act_type::MEDITATE ) ) );
+            } else if( id == activity_id( "ACT_SHAVE" ) ) {
                 c.assign_activity( std::make_unique<player_activity>(
-                                      std::make_unique<morale_activity_actor>( morale_act_type::SHAVE ) ) );
+                                       std::make_unique<morale_activity_actor>( morale_act_type::SHAVE ) ) );
             }
         } );
         SET_FX_T( has_activity, bool( const activity_id & type ) const );

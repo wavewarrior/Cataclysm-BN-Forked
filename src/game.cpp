@@ -12426,7 +12426,7 @@ auto game::place_player( const tripoint_bub_ms &dest_loc, const bool keep_grab )
                         !maybe_corpse->get_mtype()->bloodType().obj().has_acid ) {
                         u.assign_activity( std::make_unique<player_activity>(
                                                std::make_unique<pulp_activity_actor>(
-                                                       m.bub_to_abs( pos ), "auto_pulp_no_acid" ) ) );
+                                                   m.bub_to_abs( pos ), "auto_pulp_no_acid" ) ) );
                         u.activity->moves_left = calendar::INDEFINITELY_LONG;
                         u.activity->auto_resume = true;
                         return;

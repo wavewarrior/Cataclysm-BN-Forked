@@ -381,8 +381,8 @@ TEST_CASE( "npc-movement" )
                 // wandering off in search of distant ammo caches, etc.
                 guy->mission = NPC_MISSION_SHOPKEEP;
                 // This prevents npcs occasionally teleporting away
-                guy->assign_activity(std::make_unique<player_activity>(
-                    std::make_unique<morale_activity_actor>(morale_act_type::MEDITATE)));
+                guy->assign_activity( std::make_unique<player_activity>(
+                                          std::make_unique<morale_activity_actor>( morale_act_type::MEDITATE ) ) );
                 //Sometimes they spawn with sledge hammers and bash down the walls
                 guy->remove_primary_weapon();
                 ACTIVE_OVERMAP_BUFFER.insert_npc( guy );

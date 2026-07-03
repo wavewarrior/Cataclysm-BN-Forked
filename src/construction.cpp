@@ -1810,8 +1810,8 @@ void complete_construction( Character &who, tripoint_abs_ms &where )
     if( who.is_avatar() && !who.backlog.empty() &&
         who.backlog.front()->id() == ACT_MULTIPLE_CONSTRUCTION ) {
         who.backlog.clear();
-        who.assign_activity(std::make_unique<player_activity>(
-            std::make_unique<generic_multi_activity_actor>( ACT_MULTIPLE_CONSTRUCTION )));
+        who.assign_activity( std::make_unique<player_activity>(
+                                 std::make_unique<generic_multi_activity_actor>( ACT_MULTIPLE_CONSTRUCTION ) ) );
     }
 }
 

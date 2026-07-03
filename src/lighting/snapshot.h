@@ -1,11 +1,11 @@
 #pragma once
+#include "lighting/event_queue.h"
+#include "lighting/gpu_emitter.h"
+
 #include <cstdint>
 #include <vector>
-#include "lighting/gpu_emitter.h"
-#include "lighting/event_queue.h"
 
-namespace lighting
-{
+namespace lighting {
 
 // Build the per-frame emitter snapshot on the main thread.
 //
@@ -18,7 +18,6 @@ namespace lighting
 //
 // Preconditions: g != nullptr, map is loaded.
 // frame_ms: elapsed milliseconds since last frame (for event aging).
-std::vector<gpu_emitter> build_emitter_snapshot( event_queue &eq,
-                                                  float frame_ms );
+std::vector<gpu_emitter> build_emitter_snapshot(event_queue& eq, float frame_ms);
 
 } // namespace lighting

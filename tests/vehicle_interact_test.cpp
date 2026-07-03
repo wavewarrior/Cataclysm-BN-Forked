@@ -134,10 +134,10 @@ TEST_CASE( "debug_hammerspace_installs_full_vehicle_battery", "[vehicle][veh_int
     const auto reference_part = &veh_ptr->part( reference_part_index );
     const auto reference_pos = here.bub_to_abs( veh_ptr->bub_part_location( *reference_part ) );
 
-    you.assign_activity(std::make_unique<player_activity>(
-        std::make_unique<vehicle_activity_actor>(
-            reference_pos, tripoint_mnt_veh(0, 0, 0), reference_part_index,
-            install_part_id, 'i', 1 )));
+    you.assign_activity( std::make_unique<player_activity>(
+                             std::make_unique<vehicle_activity_actor>(
+                                 reference_pos, tripoint_mnt_veh( 0, 0, 0 ), reference_part_index,
+                                 install_part_id, 'i', 1 ) ) );
     for( const tripoint_abs_ms &p : veh_ptr->get_points( true ) ) {
         you.activity->coord_set.insert( p );
     }

@@ -23,26 +23,23 @@ struct SDL_GPUCommandBuffer;
 struct SDL_GPURenderPass;
 union SDL_Event;
 
-namespace lighting
-{
+namespace lighting {
 class gpu_device;
-}  // namespace lighting
+} // namespace lighting
 
-namespace Rml
-{
+namespace Rml {
 class Context;
 class ElementDocument;
-}  // namespace Rml
+} // namespace Rml
 
 // Top-level namespace to mirror imgui_layer (call sites read `rmlui_layer::init`
 // next to `imgui_layer::init`).
-namespace rmlui_layer
-{
+namespace rmlui_layer {
 
 // Initialise RmlUi + interfaces + a window-sized shared context + a font. Takes
 // the live render_state gpu_device (window + swapchain format come from it).
 // Idempotent via ready(); any failure degrades to ready()==false (no crash).
-bool init( lighting::gpu_device &device );
+bool init(lighting::gpu_device& device);
 
 // Destroy the context, interfaces and RmlUi core. Safe when not ready.
 void shutdown();
@@ -56,7 +53,7 @@ bool active();
 
 // The shared context (nullptr until ready()). Callers use it to create
 // data-models (context()->CreateDataModel) for their documents.
-Rml::Context *context();
+Rml::Context* context();
 
 // Physical/logical pixel ratio last applied to the context (the HiDPI density
 // ratio set in new_frame). 1.0 until the first frame. Callers that size things
@@ -67,7 +64,7 @@ float density_ratio();
 // User UI-scale multiplier (mutable; default 1.0). Multiplies the HiDPI dp ratio
 // applied to the context, scaling font + all dp spacing across every RmlUi panel.
 // Driven by an F4 dev slider; does not affect input mapping. <1 shrinks the UI.
-float &ui_scale();
+float& ui_scale();
 
 // CRT post-effect knobs (F4 dev sliders). Applied every frame in new_frame() to
 // each open document as inline RCSS GRADIENT decorators — the render interface now
@@ -81,14 +78,14 @@ float &ui_scale();
 // look (they are ordinary RCSS once the values are fixed).
 struct crt_params {
     bool enabled = true;
-    float scanline_alpha = 0.35f;     // line darkness (0..1)
-    float scanline_pitch = 4.0f;      // px, line + gap pitch
-    float scanline_thickness = 1.0f;  // px, dark-line height within the pitch
-    float roll_speed = 8.0f;          // px/sec downward scroll (0 = static)
-    float flicker = 0.05f;            // opacity-pulse amplitude (0..1)
-    float vignette_alpha = 0.5f;      // corner darkness on .panel (0..1)
+    float scanline_alpha = 0.35f;    // line darkness (0..1)
+    float scanline_pitch = 4.0f;     // px, line + gap pitch
+    float scanline_thickness = 1.0f; // px, dark-line height within the pitch
+    float roll_speed = 8.0f;         // px/sec downward scroll (0 = static)
+    float flicker = 0.05f;           // opacity-pulse amplitude (0..1)
+    float vignette_alpha = 0.5f;     // corner darkness on .panel (0..1)
 };
-crt_params &crt();
+crt_params& crt();
 
 // Re-apply the current ui_theme to all open documents: clears RmlUi's stylesheet
 // cache and reloads each document's stylesheet, so the FileInterface re-substitutes
@@ -104,25 +101,25 @@ void reload_theme();
 // every frame but never captures input — process_event lets mouse/keys fall through
 // to the game while only passive docs are open. Default (interactive) modal docs
 // capture mouse as before.
-Rml::ElementDocument *open_document( const std::string &rml_path, bool passive = false );
+Rml::ElementDocument* open_document(const std::string& rml_path, bool passive = false);
 
 // Hide, unload and untrack a document opened with open_document(). Safe with
 // nullptr or an already-closed document.
-void close_document( Rml::ElementDocument *doc );
+void close_document(Rml::ElementDocument* doc);
 
 // Translate one SDL event into RmlUi input. Returns true if RmlUi consumed it
 // (so the game should ignore it). Mouse only — keyboard falls through to the
 // game's input_context, which owns menu navigation.
-bool process_event( const SDL_Event &ev );
+bool process_event(const SDL_Event& ev);
 
 // Advance the shared context one frame (Context::Update). Cheap; no GPU work.
 void new_frame();
 
 // Upload this frame's geometry OUTSIDE the render pass (D3D12-safe).
-void prepare( SDL_GPUCommandBuffer *cb );
+void prepare(SDL_GPUCommandBuffer* cb);
 
 // Record RmlUi draws INTO the open swapchain pass (Context::Render).
-void render_in_pass( SDL_GPURenderPass *rp, SDL_GPUCommandBuffer *cb );
+void render_in_pass(SDL_GPURenderPass* rp, SDL_GPUCommandBuffer* cb);
 
 // --- World-space text layer (§7) ---
 // Imperative on-map text rendered through RmlUi's OWN font engine — the glyph
@@ -143,8 +140,7 @@ void world_text_begin();
 
 // Queue one text item for this frame. screen_x/screen_y = physical-pixel
 // position of the text's top-left; rgba = 0xRRGGBBAA (alpha 0xFF = opaque).
-void world_text_add( float screen_x, float screen_y, const std::string &utf8,
-                     unsigned int rgba );
+void world_text_add(float screen_x, float screen_y, const std::string& utf8, unsigned int rgba);
 
 // True if any world-text items are queued this frame (render-gate input).
 bool world_text_active();
@@ -153,15 +149,14 @@ bool world_text_active();
 // appended) so it never accumulates, and kept OUTSIDE the world_text begin/clear
 // cycle: it renders every frame regardless of menus or combat text, and makes
 // world_text_active() true on its own. Pass an empty utf8 to clear it.
-void set_hud_text( float screen_x, float screen_y, const std::string &utf8,
-                   unsigned int rgba );
+void set_hud_text(float screen_x, float screen_y, const std::string& utf8, unsigned int rgba);
 
 // World-text tuning knobs (F4 dev sliders): font point size + extra x/y pixel
 // offset applied to every item. Bake the dialed-in values once settled.
-int &world_text_px();
-float &world_text_dx();
-float &world_text_dy();
+int& world_text_px();
+float& world_text_dx();
+float& world_text_dy();
 
-}  // namespace rmlui_layer
+} // namespace rmlui_layer
 
-#endif  // CATA_SRC_LIGHTING_RMLUI_LAYER_H
+#endif // CATA_SRC_LIGHTING_RMLUI_LAYER_H

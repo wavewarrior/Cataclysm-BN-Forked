@@ -1072,7 +1072,8 @@ void npc::start_read( item &it, Character *pl )
     item &chosen = it;
     const int time_taken = time_to_read( chosen, *pl );
     const double penalty = static_cast<double>( time_taken ) / time_to_read( chosen, *pl );
-    std::unique_ptr<player_activity> act = std::make_unique<player_activity>( std::make_unique<read_activity_actor>() );
+    std::unique_ptr<player_activity> act = std::make_unique<player_activity>
+                                           ( std::make_unique<read_activity_actor>() );
     act->moves_left = time_taken;
     act->targets.emplace_back( it );
     act->str_values.push_back( std::to_string( penalty ) );

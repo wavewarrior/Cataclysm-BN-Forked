@@ -17,17 +17,16 @@
 // type and hold a unique_ptr to it without pulling sprite_instance and
 // the rest of the GPU stack into the world's most-included header.
 
-#include <vector>
+#include "sprite_batcher.h" // sprite_instance
 
-#include "sprite_batcher.h"   // sprite_instance
+#include <vector>
 
 struct SDL_GPUTexture;
 
-namespace lighting
-{
+namespace lighting {
 
 struct font_glyph_draw {
-    SDL_GPUTexture *texture = nullptr;
+    SDL_GPUTexture* texture = nullptr;
     sprite_instance inst{};
     // false = HUD/UI (skip lighting); true = world-space text that
     // should be lit by ambient/emitters/sun. Default false.

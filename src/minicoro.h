@@ -313,7 +313,7 @@ typedef struct mco_desc {
     /* Custom allocation interface. */
     void *( *alloc_cb )( size_t size, void* allocator_data ); /* Custom allocation function. */
     void  ( *dealloc_cb )( void* ptr, size_t size,
-                           void* allocator_data ); /* Custom deallocation function. */
+                           void *allocator_data ); /* Custom deallocation function. */
     void *allocator_data;       /* User data pointer passed to `alloc`/`dealloc` allocation functions. */
     size_t storage_size;        /* Coroutine storage size, to be used with the storage APIs. */
     /* These must be initialized only through `mco_init_desc`. */
@@ -1443,7 +1443,8 @@ static void _mco_jumpin( mco_coro* co )
 {
     void *cur_fib = GetCurrentFiber();
     if( !cur_fib ||
-        cur_fib == ( void * )0x1e00 ) { /* See http://blogs.msdn.com/oldnewthing/archive/2004/12/31/344799.aspx */
+        cur_fib == ( void * )
+        0x1e00 ) { /* See http://blogs.msdn.com/oldnewthing/archive/2004/12/31/344799.aspx */
         cur_fib = ConvertThreadToFiber( NULL );
     }
     MCO_ASSERT( cur_fib != NULL );

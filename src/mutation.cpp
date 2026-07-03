@@ -647,10 +647,10 @@ void Character::activate_mutation( const trait_id &mut )
 
         const time_duration startup_time = ( has_trait( trait_ROOTS2 ) || has_trait( trait_ROOTS3 ) )
                                            ? ( has_trait( trait_ROOTS3 ) ? rng( 15_minutes, 30_minutes )
-                                                                        : rng( 60_minutes, 90_minutes ) )
+                                               : rng( 60_minutes, 90_minutes ) )
                                            : rng( 120_minutes, 180_minutes );
         assign_activity( std::make_unique<player_activity>(
-                              std::make_unique<tree_communion_activity_actor>( to_turns<int>( startup_time ) ) ) );
+                             std::make_unique<tree_communion_activity_actor>( to_turns<int>( startup_time ) ) ) );
     } else if( !mdata.spawn_item.is_empty() ) {
         detached_ptr<item> granted = item::spawn( mdata.spawn_item );
         if( granted->made_of( LIQUID ) ) {

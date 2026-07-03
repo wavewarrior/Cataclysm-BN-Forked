@@ -1697,7 +1697,8 @@ void iexamine::safe( player &p, const tripoint_bub_ms &examp )
         // capped at 5 minutes minimum.
         const time_duration time = safecracking_time( p );
 
-        auto act = std::make_unique<player_activity>( std::make_unique<cracking_activity_actor>( bub_to_abs( examp ) ) );
+        auto act = std::make_unique<player_activity>( std::make_unique<cracking_activity_actor>( bub_to_abs(
+                       examp ) ) );
         act->moves_left = to_moves<int>( time );
         p.assign_activity( std::move( act ) );
     }

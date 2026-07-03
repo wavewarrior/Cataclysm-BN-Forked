@@ -1,19 +1,12 @@
 #include "rmlui_layer.h"
 
-#include <algorithm>
-#include <cmath>
-#include <cstdint>
-#include <cstdio>
-#include <cstring>
-#include <memory>
-#include <string>
-#include <unordered_set>
-#include <vector>
-
-#include <SDL3/SDL.h>
-
-#include <fstream>
-#include <iterator>
+#include "debug.h"
+#include "gpu_device.h"
+#include "path_info.h"
+#include "rmlui_proc_texture.h"
+#include "rmlui_render_interface.h"
+#include "rmlui_system_interface.h"
+#include "ui_theme.h"
 
 #include <RmlUi/Core.h>
 #include <RmlUi/Core/FontEngineInterface.h>
@@ -21,17 +14,21 @@
 #include <RmlUi/Core/Mesh.h>
 #include <RmlUi/Core/RenderManager.h>
 #include <RmlUi/Debugger.h>
-
-#include "debug.h"
-#include "gpu_device.h"
-#include "path_info.h"
-#include "rmlui_render_interface.h"
-#include "rmlui_proc_texture.h"
-#include "rmlui_system_interface.h"
-#include "ui_theme.h"
+#include <SDL3/SDL.h>
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
+#include <fstream>
+#include <iterator>
+#include <memory>
+#include <string>
+#include <unordered_set>
+#include <vector>
 
 // Lighting/ files must define dbg themselves (not globally available).
-#define dbg( x ) DebugLogFL( ( x ), DC::SDL )
+#define dbg(x) DebugLogFL((x), DC::SDL)
 
 // --- Runic-frame debug knobs (see process_event: F9/F10/F11/F12) ---
 // FRAME_INSET as a live knob; F9/F10 nudge it so the frame placement can be
@@ -41,17 +38,15 @@
 static bool g_frame_markers = false;
 static bool g_rml_debugger = false;
 
-namespace rmlui_layer
-{
+namespace rmlui_layer {
 
-namespace
-{
+namespace {
 
 bool g_ready = false;
 // init() tried once (success or failure); don't re-attempt every frame.
 bool g_attempted = false;
 // Window kept for per-frame context sizing + the render-pass projection.
-SDL_Window *g_window = nullptr;
+SDL_Window* g_window = nullptr;
 
 // Interfaces are held by raw pointer inside RmlUi, so they must outlive
 // Rml::Shutdown(). Owned here; destroyed AFTER Rml::Shutdown() in shutdown().
@@ -59,7 +54,7 @@ std::unique_ptr<lighting::rmlui_render_interface> g_render;
 std::unique_ptr<lighting::rmlui_system_interface> g_system;
 
 // Owned by RmlUi core; destroyed by Rml::Shutdown(). Not deleted manually.
-Rml::Context *g_context = nullptr;
+Rml::Context* g_context = nullptr;
 
 // Last physical/logical pixel ratio applied to the context (HiDPI density).
 float g_density_ratio = 1.0f;
@@ -75,27 +70,22 @@ crt_params g_crt;
 // Documents currently open (shown) via open_document(), in open order. The
 // layer is "active" while this is non-empty. Documents are owned by g_context;
 // this only tracks which are live so active()/the frame gates can see them.
-std::vector<Rml::ElementDocument *> g_open_docs;
+std::vector<Rml::ElementDocument*> g_open_docs;
 
 // Subset of g_open_docs that are PASSIVE (render-only, e.g. the Tier-7 sidebar
 // HUD): they paint every frame but must NOT capture game input. A persistent
 // passive doc keeps any_open() true (so the context renders) yet leaves
 // any_interactive_open() false (so world mouse falls through to the game).
-std::vector<Rml::ElementDocument *> g_passive_docs;
+std::vector<Rml::ElementDocument*> g_passive_docs;
 
-bool any_open()
-{
-    return !g_open_docs.empty();
-}
+bool any_open() { return !g_open_docs.empty(); }
 
 // True iff at least one open doc is INTERACTIVE (not in g_passive_docs). Modal
 // screens are interactive; the HUD is not. process_event gates mouse capture on
 // this so an always-open HUD doesn't swallow look/examine clicks.
-bool any_interactive_open()
-{
-    for( Rml::ElementDocument *doc : g_open_docs ) {
-        if( std::find( g_passive_docs.begin(), g_passive_docs.end(), doc ) ==
-            g_passive_docs.end() ) {
+bool any_interactive_open() {
+    for (Rml::ElementDocument* doc : g_open_docs) {
+        if (std::find(g_passive_docs.begin(), g_passive_docs.end(), doc) == g_passive_docs.end()) {
             return true;
         }
     }
@@ -127,84 +117,70 @@ struct world_text_geom {
 };
 std::vector<world_text_geom> g_world_geom;
 // World-text tuning (F4 sliders; bake the dialed-in values once settled).
-int g_world_text_px = 24;     // font point size
-float g_world_text_dx = 0.f;  // extra x offset (px); + shifts right
-float g_world_text_dy = 0.f;  // extra y offset (px); + shifts down
+int g_world_text_px = 24;    // font point size
+float g_world_text_dx = 0.f; // extra x offset (px); + shifts right
+float g_world_text_dy = 0.f; // extra y offset (px); + shifts down
 // World text resolves its font via a DIRECT GetFontFaceHandle lookup (no fallback
 // resolution like document text gets), so the font is registered under this
 // explicit family at init from these retained bytes (RmlUi keeps the data span
 // until Shutdown). Looking up the TTF's embedded family name directly fails.
-const char *const WORLD_TEXT_FAMILY = "cata-world-text";
+const char* const WORLD_TEXT_FAMILY = "cata-world-text";
 std::vector<char> g_world_font_data;
 
-bool world_text_have()
-{
-    return g_ready && g_context && ( !g_world_text.empty() || g_hud_active );
-}
+bool world_text_have() { return g_ready && g_context && (!g_world_text.empty() || g_hud_active); }
 
 // Build (compile) geometry for this frame's world-text items via RmlUi's own
 // FontEngine + RenderManager. Called from prepare() (outside the render pass) so
 // the geometry uploads with the documents' in upload_pending(). Safe to call with
 // no items (clears + returns).
-void build_world_text()
-{
+void build_world_text() {
     g_world_geom.clear();
-    if( !world_text_have() ) {
-        return;
-    }
-    Rml::FontEngineInterface *fe = Rml::GetFontEngineInterface();
-    if( !fe ) {
-        return;
-    }
-    Rml::RenderManager &rm = g_context->GetRenderManager();
+    if (!world_text_have()) { return; }
+    Rml::FontEngineInterface* fe = Rml::GetFontEngineInterface();
+    if (!fe) { return; }
+    Rml::RenderManager& rm = g_context->GetRenderManager();
     // Look up our explicitly-registered family (see init). Auto weight matches the
     // bundled Terminus (registered as "Medium" / 500).
     const Rml::FontFaceHandle face = fe->GetFontFaceHandle(
-            WORLD_TEXT_FAMILY, Rml::Style::FontStyle::Normal,
-            Rml::Style::FontWeight::Auto, g_world_text_px );
-    if( face == 0 ) {
-        DebugLog( DL::Info, DC::Main ) << "world_text: GetFontFaceHandle returned 0 (font not found)";
+        WORLD_TEXT_FAMILY, Rml::Style::FontStyle::Normal, Rml::Style::FontWeight::Auto,
+        g_world_text_px);
+    if (face == 0) {
+        DebugLog(DL::Info, DC::Main) << "world_text: GetFontFaceHandle returned 0 (font not found)";
         return;
     }
-    auto emit = [&]( const world_text_item & it ) {
-        const Rml::byte r = ( it.rgba >> 24 ) & 0xFFu;
-        const Rml::byte g = ( it.rgba >> 16 ) & 0xFFu;
-        const Rml::byte b = ( it.rgba >> 8 ) & 0xFFu;
+    auto emit = [&](const world_text_item& it) {
+        const Rml::byte r = (it.rgba >> 24) & 0xFFu;
+        const Rml::byte g = (it.rgba >> 16) & 0xFFu;
+        const Rml::byte b = (it.rgba >> 8) & 0xFFu;
         const Rml::byte a = it.rgba & 0xFFu;
         // Premultiplied alpha (render interface uses premult blend).
-        const Rml::ColourbPremultiplied col(
-            static_cast<Rml::byte>( r * a / 255 ),
-            static_cast<Rml::byte>( g * a / 255 ),
-            static_cast<Rml::byte>( b * a / 255 ), a );
+        const Rml::ColourbPremultiplied
+            col(static_cast<Rml::byte>(r * a / 255), static_cast<Rml::byte>(g * a / 255),
+                static_cast<Rml::byte>(b * a / 255), a);
         static const Rml::String world_text_lang;
-        const Rml::TextShapingContext shaping{ world_text_lang };
+        const Rml::TextShapingContext shaping{world_text_lang};
         Rml::TexturedMeshList meshes;
-        fe->GenerateString( rm, face, Rml::FontEffectsHandle( 0 ), it.text,
-                            Rml::Vector2f( 0.f, 0.f ), col, 1.0f,
-                            shaping, meshes );
-        for( Rml::TexturedMesh &tm : meshes ) {
+        fe->GenerateString(
+            rm, face, Rml::FontEffectsHandle(0), it.text, Rml::Vector2f(0.f, 0.f), col, 1.0f,
+            shaping, meshes);
+        for (Rml::TexturedMesh& tm : meshes) {
             world_text_geom out;
-            out.geom = rm.MakeGeometry( std::move( tm.mesh ) );
+            out.geom = rm.MakeGeometry(std::move(tm.mesh));
             out.texture = tm.texture;
             // GenerateString lays text on the baseline at y=0; nudge down by the
             // point size so screen_y reads as the text's top edge, plus the F4 offsets.
-            out.pos = Rml::Vector2f( it.x + g_world_text_dx,
-                                     it.y + static_cast<float>( g_world_text_px ) + g_world_text_dy );
-            g_world_geom.push_back( std::move( out ) );
+            out.pos = Rml::Vector2f(
+                it.x + g_world_text_dx,
+                it.y + static_cast<float>(g_world_text_px) + g_world_text_dy);
+            g_world_geom.push_back(std::move(out));
         }
     };
-    for( const world_text_item &it : g_world_text ) {
-        emit( it );
-    }
-    if( g_hud_active ) {
-        emit( g_hud_text );
-    }
+    for (const world_text_item& it : g_world_text) { emit(it); }
+    if (g_hud_active) { emit(g_hud_text); }
     // Compile pass: a Render() with no open pass only compiles geometry CPU-side
     // (begin_render_pass not called yet) so upload_pending() can upload it. The
     // real draw happens again in render_in_pass() with the pass open.
-    for( world_text_geom &w : g_world_geom ) {
-        w.geom.Render( w.pos, w.texture );
-    }
+    for (world_text_geom& w : g_world_geom) { w.geom.Render(w.pos, w.texture); }
 }
 
 // Stylesheet preprocessor: a FileInterface that substitutes {{theme-tokens}} in
@@ -217,94 +193,80 @@ struct mem_file {
     std::size_t pos = 0;
 };
 
-class theme_file_interface : public Rml::FileInterface
-{
-    public:
-        Rml::FileHandle Open( const Rml::String &path ) override {
-            std::FILE *fp = std::fopen( path.c_str(), "rb" );
-            if( fp == nullptr ) {
-                return 0;
-            }
-            const bool is_rcss = path.size() >= 5 &&
-                                 path.compare( path.size() - 5, 5, ".rcss" ) == 0;
-            if( !is_rcss ) {
-                return reinterpret_cast<Rml::FileHandle>( fp );
-            }
-            std::string buf;
-            std::fseek( fp, 0, SEEK_END );
-            const long len = std::ftell( fp );
-            std::fseek( fp, 0, SEEK_SET );
-            if( len > 0 ) {
-                buf.resize( static_cast<std::size_t>( len ) );
-                const std::size_t rd = std::fread( &buf[0], 1, buf.size(), fp );
-                buf.resize( rd );
-            }
-            std::fclose( fp );
-            ui_theme::substitute_tokens( buf );
-            mem_file *mf = new mem_file{ std::move( buf ), 0 };
-            const Rml::FileHandle h = reinterpret_cast<Rml::FileHandle>( mf );
-            mem_handles.insert( h );
-            return h;
+class theme_file_interface: public Rml::FileInterface {
+public:
+    Rml::FileHandle Open(const Rml::String& path) override {
+        std::FILE* fp = std::fopen(path.c_str(), "rb");
+        if (fp == nullptr) { return 0; }
+        const bool is_rcss = path.size() >= 5 && path.compare(path.size() - 5, 5, ".rcss") == 0;
+        if (!is_rcss) { return reinterpret_cast<Rml::FileHandle>(fp); }
+        std::string buf;
+        std::fseek(fp, 0, SEEK_END);
+        const long len = std::ftell(fp);
+        std::fseek(fp, 0, SEEK_SET);
+        if (len > 0) {
+            buf.resize(static_cast<std::size_t>(len));
+            const std::size_t rd = std::fread(&buf[0], 1, buf.size(), fp);
+            buf.resize(rd);
         }
-        void Close( Rml::FileHandle file ) override {
-            const auto it = mem_handles.find( file );
-            if( it != mem_handles.end() ) {
-                mem_handles.erase( it );
-                delete reinterpret_cast<mem_file *>( file );
-            } else {
-                std::fclose( reinterpret_cast<std::FILE *>( file ) );
+        std::fclose(fp);
+        ui_theme::substitute_tokens(buf);
+        mem_file* mf = new mem_file{std::move(buf), 0};
+        const Rml::FileHandle h = reinterpret_cast<Rml::FileHandle>(mf);
+        mem_handles.insert(h);
+        return h;
+    }
+    void Close(Rml::FileHandle file) override {
+        const auto it = mem_handles.find(file);
+        if (it != mem_handles.end()) {
+            mem_handles.erase(it);
+            delete reinterpret_cast<mem_file*>(file);
+        } else {
+            std::fclose(reinterpret_cast<std::FILE*>(file));
+        }
+    }
+    std::size_t Read(void* buffer, std::size_t size, Rml::FileHandle file) override {
+        if (is_mem(file)) {
+            mem_file* mf = reinterpret_cast<mem_file*>(file);
+            const std::size_t n = std::min(size, mf->data.size() - mf->pos);
+            std::memcpy(buffer, mf->data.data() + mf->pos, n);
+            mf->pos += n;
+            return n;
+        }
+        return std::fread(buffer, 1, size, reinterpret_cast<std::FILE*>(file));
+    }
+    bool Seek(Rml::FileHandle file, long offset, int origin) override {
+        if (is_mem(file)) {
+            mem_file* mf = reinterpret_cast<mem_file*>(file);
+            long base = 0;
+            if (origin == SEEK_CUR) {
+                base = static_cast<long>(mf->pos);
+            } else if (origin == SEEK_END) {
+                base = static_cast<long>(mf->data.size());
             }
+            const long np = base + offset;
+            if (np < 0 || np > static_cast<long>(mf->data.size())) { return false; }
+            mf->pos = static_cast<std::size_t>(np);
+            return true;
         }
-        std::size_t Read( void *buffer, std::size_t size, Rml::FileHandle file ) override {
-            if( is_mem( file ) ) {
-                mem_file *mf = reinterpret_cast<mem_file *>( file );
-                const std::size_t n = std::min( size, mf->data.size() - mf->pos );
-                std::memcpy( buffer, mf->data.data() + mf->pos, n );
-                mf->pos += n;
-                return n;
-            }
-            return std::fread( buffer, 1, size, reinterpret_cast<std::FILE *>( file ) );
-        }
-        bool Seek( Rml::FileHandle file, long offset, int origin ) override {
-            if( is_mem( file ) ) {
-                mem_file *mf = reinterpret_cast<mem_file *>( file );
-                long base = 0;
-                if( origin == SEEK_CUR ) {
-                    base = static_cast<long>( mf->pos );
-                } else if( origin == SEEK_END ) {
-                    base = static_cast<long>( mf->data.size() );
-                }
-                const long np = base + offset;
-                if( np < 0 || np > static_cast<long>( mf->data.size() ) ) {
-                    return false;
-                }
-                mf->pos = static_cast<std::size_t>( np );
-                return true;
-            }
-            return std::fseek( reinterpret_cast<std::FILE *>( file ), offset, origin ) == 0;
-        }
-        std::size_t Tell( Rml::FileHandle file ) override {
-            if( is_mem( file ) ) {
-                return reinterpret_cast<mem_file *>( file )->pos;
-            }
-            return static_cast<std::size_t>( std::ftell( reinterpret_cast<std::FILE *>( file ) ) );
-        }
-    private:
-        std::unordered_set<Rml::FileHandle> mem_handles;
-        bool is_mem( Rml::FileHandle f ) const {
-            return mem_handles.count( f ) > 0;
-        }
+        return std::fseek(reinterpret_cast<std::FILE*>(file), offset, origin) == 0;
+    }
+    std::size_t Tell(Rml::FileHandle file) override {
+        if (is_mem(file)) { return reinterpret_cast<mem_file*>(file)->pos; }
+        return static_cast<std::size_t>(std::ftell(reinterpret_cast<std::FILE*>(file)));
+    }
+
+private:
+    std::unordered_set<Rml::FileHandle> mem_handles;
+    bool is_mem(Rml::FileHandle f) const { return mem_handles.count(f) > 0; }
 };
 
-}  // namespace
+} // namespace
 
-bool init( lighting::gpu_device &dev )
-{
-    if( g_attempted ) {
-        return g_ready;
-    }
-    if( !dev.ready() ) {
-        dbg( DL::Info ) << "rmlui_layer: init skipped (device not ready)";
+bool init(lighting::gpu_device& dev) {
+    if (g_attempted) { return g_ready; }
+    if (!dev.ready()) {
+        dbg(DL::Info) << "rmlui_layer: init skipped (device not ready)";
         return false;
     }
     g_attempted = true;
@@ -316,24 +278,24 @@ bool init( lighting::gpu_device &dev )
 
     // Build the render interface's GPU resources (pipeline, white texture,
     // sampler) before RmlUi can call into it, on the live render_state device.
-    if( !g_render->init( dev ) ) {
-        dbg( DL::Error ) << "rmlui_layer: render interface init failed";
+    if (!g_render->init(dev)) {
+        dbg(DL::Error) << "rmlui_layer: render interface init failed";
         g_render.reset();
         g_system.reset();
         return false;
     }
 
-    Rml::SetRenderInterface( g_render.get() );
-    Rml::SetSystemInterface( g_system.get() );
+    Rml::SetRenderInterface(g_render.get());
+    Rml::SetSystemInterface(g_system.get());
 
     // Load the theme tokens and install the stylesheet preprocessor BEFORE
     // Initialise, so the very first document's .rcss gets {{token}} substitution.
     ui_theme::load();
     static theme_file_interface g_file_iface;
-    Rml::SetFileInterface( &g_file_iface );
+    Rml::SetFileInterface(&g_file_iface);
 
-    if( !Rml::Initialise() ) {
-        dbg( DL::Error ) << "rmlui_layer: Rml::Initialise failed";
+    if (!Rml::Initialise()) {
+        dbg(DL::Error) << "rmlui_layer: Rml::Initialise failed";
         g_render->shutdown();
         g_render.reset();
         g_system.reset();
@@ -342,10 +304,10 @@ bool init( lighting::gpu_device &dev )
 
     int win_w = 0;
     int win_h = 0;
-    SDL_GetWindowSizeInPixels( g_window, &win_w, &win_h );
-    g_context = Rml::CreateContext( "main", Rml::Vector2i( win_w, win_h ) );
-    if( g_context == nullptr ) {
-        dbg( DL::Error ) << "rmlui_layer: CreateContext failed";
+    SDL_GetWindowSizeInPixels(g_window, &win_w, &win_h);
+    g_context = Rml::CreateContext("main", Rml::Vector2i(win_w, win_h));
+    if (g_context == nullptr) {
+        dbg(DL::Error) << "rmlui_layer: CreateContext failed";
         Rml::Shutdown();
         g_render->shutdown();
         g_render.reset();
@@ -355,15 +317,15 @@ bool init( lighting::gpu_device &dev )
 
     // Built-in element inspector (box model, computed RCSS, live outlines).
     // Hidden until toggled with F11; needs the context to exist first.
-    Rml::Debugger::Initialise( g_context );
+    Rml::Debugger::Initialise(g_context);
 
     // Registered as a fallback (second arg) so glyphs still resolve even if a
     // document's font-family doesn't match. Family name embedded in the TTF is
     // "Terminus (TTF)" — the RCSS must use that exact string.
     const std::string font = PATH_INFO::fontdir() + "Terminus.ttf";
-    if( !Rml::LoadFontFace( font, true ) ) {
+    if (!Rml::LoadFontFace(font, true)) {
         // Non-fatal — boxes/colours still render; only text would be missing.
-        dbg( DL::Warn ) << "rmlui_layer: LoadFontFace failed for " << font;
+        dbg(DL::Warn) << "rmlui_layer: LoadFontFace failed for " << font;
     }
 
     // Also register the same font from memory under an explicit family name for
@@ -371,41 +333,34 @@ bool init( lighting::gpu_device &dev )
     // lookup (no document-style fallback resolution). The bytes must stay alive
     // until Shutdown, so they live in the file-scope g_world_font_data.
     {
-        std::ifstream wf( font, std::ios::binary );
-        g_world_font_data.assign( std::istreambuf_iterator<char>( wf ),
-                                  std::istreambuf_iterator<char>() );
-        if( g_world_font_data.empty() ||
-            !Rml::LoadFontFace(
+        std::ifstream wf(font, std::ios::binary);
+        g_world_font_data
+            .assign(std::istreambuf_iterator<char>(wf), std::istreambuf_iterator<char>());
+        if (g_world_font_data.empty()
+            || !Rml::LoadFontFace(
                 Rml::Span<const Rml::byte>(
-                    reinterpret_cast<const Rml::byte *>( g_world_font_data.data() ),
-                    g_world_font_data.size() ),
-                WORLD_TEXT_FAMILY, Rml::Style::FontStyle::Normal,
-                Rml::Style::FontWeight::Auto, false ) ) {
-            dbg( DL::Warn ) << "rmlui_layer: world-text font register failed";
+                    reinterpret_cast<const Rml::byte*>(g_world_font_data.data()),
+                    g_world_font_data.size()),
+                WORLD_TEXT_FAMILY, Rml::Style::FontStyle::Normal, Rml::Style::FontWeight::Auto,
+                false)) {
+            dbg(DL::Warn) << "rmlui_layer: world-text font register failed";
         }
     }
 
     g_ready = true;
-    dbg( DL::Info ) << "rmlui_layer: init ok (" << win_w << "x" << win_h << ")";
+    dbg(DL::Info) << "rmlui_layer: init ok (" << win_w << "x" << win_h << ")";
     return true;
 }
 
-void shutdown()
-{
-    if( !g_attempted ) {
-        return;
-    }
+void shutdown() {
+    if (!g_attempted) { return; }
     // Tear RmlUi down before the interfaces it points at, then release the
     // render interface's GPU resources before the device is destroyed.
-    if( g_ready ) {
-        Rml::Shutdown();
-    }
+    if (g_ready) { Rml::Shutdown(); }
     g_open_docs.clear();
     g_passive_docs.clear();
     g_context = nullptr;
-    if( g_render ) {
-        g_render->shutdown();
-    }
+    if (g_render) { g_render->shutdown(); }
     g_render.reset();
     g_system.reset();
     g_window = nullptr;
@@ -413,142 +368,96 @@ void shutdown()
     g_attempted = false;
 }
 
-bool ready()
-{
-    return g_ready;
-}
+bool ready() { return g_ready; }
 
-bool active()
-{
-    return g_ready && any_open();
-}
+bool active() { return g_ready && any_open(); }
 
-Rml::Context *context()
-{
-    return g_ready ? g_context : nullptr;
-}
+Rml::Context* context() { return g_ready ? g_context : nullptr; }
 
-float density_ratio()
-{
-    return g_density_ratio;
-}
+float density_ratio() { return g_density_ratio; }
 
-float &ui_scale()
-{
-    return g_ui_scale;
-}
+float& ui_scale() { return g_ui_scale; }
 
-crt_params &crt()
-{
-    return g_crt;
-}
+crt_params& crt() { return g_crt; }
 
-void reload_theme()
-{
+void reload_theme() {
     Rml::Factory::ClearStyleSheetCache();
-    for( Rml::ElementDocument *doc : g_open_docs ) {
-        if( doc != nullptr ) {
-            doc->ReloadStyleSheet();
-        }
+    for (Rml::ElementDocument* doc : g_open_docs) {
+        if (doc != nullptr) { doc->ReloadStyleSheet(); }
     }
 }
 
-Rml::ElementDocument *open_document( const std::string &rml_path, bool passive )
-{
-    if( !g_ready || g_context == nullptr ) {
-        return nullptr;
-    }
-    Rml::ElementDocument *doc = g_context->LoadDocument( rml_path );
-    if( doc == nullptr ) {
-        dbg( DL::Warn ) << "rmlui_layer: LoadDocument failed for " << rml_path;
+Rml::ElementDocument* open_document(const std::string& rml_path, bool passive) {
+    if (!g_ready || g_context == nullptr) { return nullptr; }
+    Rml::ElementDocument* doc = g_context->LoadDocument(rml_path);
+    if (doc == nullptr) {
+        dbg(DL::Warn) << "rmlui_layer: LoadDocument failed for " << rml_path;
         return nullptr;
     }
     doc->Show();
-    g_open_docs.push_back( doc );
-    if( passive ) {
-        g_passive_docs.push_back( doc );
-    }
-    dbg( DL::Info ) << "rmlui_layer: opened document " << rml_path
-                    << " (" << g_open_docs.size() << " open)";
+    g_open_docs.push_back(doc);
+    if (passive) { g_passive_docs.push_back(doc); }
+    dbg(DL::Info) << "rmlui_layer: opened document " << rml_path << " (" << g_open_docs.size()
+                  << " open)";
     return doc;
 }
 
-void close_document( Rml::ElementDocument *doc )
-{
-    if( doc == nullptr || g_context == nullptr ) {
-        return;
+void close_document(Rml::ElementDocument* doc) {
+    if (doc == nullptr || g_context == nullptr) { return; }
+    const auto it = std::find(g_open_docs.begin(), g_open_docs.end(), doc);
+    if (it == g_open_docs.end()) {
+        return; // already closed / not ours
     }
-    const auto it = std::find( g_open_docs.begin(), g_open_docs.end(), doc );
-    if( it == g_open_docs.end() ) {
-        return;  // already closed / not ours
-    }
-    g_open_docs.erase( it );
-    const auto pit = std::find( g_passive_docs.begin(), g_passive_docs.end(), doc );
-    if( pit != g_passive_docs.end() ) {
-        g_passive_docs.erase( pit );
-    }
+    g_open_docs.erase(it);
+    const auto pit = std::find(g_passive_docs.begin(), g_passive_docs.end(), doc);
+    if (pit != g_passive_docs.end()) { g_passive_docs.erase(pit); }
     doc->Hide();
-    g_context->UnloadDocument( doc );
+    g_context->UnloadDocument(doc);
 }
 
-namespace
-{
-int mod_state()
-{
+namespace {
+int mod_state() {
     const SDL_Keymod m = SDL_GetModState();
     int s = 0;
-    if( m & SDL_KMOD_CTRL ) {
-        s |= Rml::Input::KM_CTRL;
-    }
-    if( m & SDL_KMOD_SHIFT ) {
-        s |= Rml::Input::KM_SHIFT;
-    }
-    if( m & SDL_KMOD_ALT ) {
-        s |= Rml::Input::KM_ALT;
-    }
-    if( m & SDL_KMOD_GUI ) {
-        s |= Rml::Input::KM_META;
-    }
+    if (m & SDL_KMOD_CTRL) { s |= Rml::Input::KM_CTRL; }
+    if (m & SDL_KMOD_SHIFT) { s |= Rml::Input::KM_SHIFT; }
+    if (m & SDL_KMOD_ALT) { s |= Rml::Input::KM_ALT; }
+    if (m & SDL_KMOD_GUI) { s |= Rml::Input::KM_META; }
     return s;
 }
-}  // namespace
+} // namespace
 
-bool process_event( const SDL_Event &ev )
-{
-    if( !g_ready || !any_open() || g_context == nullptr ) {
-        return false;
-    }
+bool process_event(const SDL_Event& ev) {
+    if (!g_ready || !any_open() || g_context == nullptr) { return false; }
     // Only PASSIVE docs open (e.g. the Tier-7 sidebar HUD)? It renders but must not
     // capture input — fall through so the game keeps world mouse (look/examine) and
     // its keys. As soon as an interactive (modal) doc stacks on top, resume capture.
-    if( !any_interactive_open() ) {
-        return false;
-    }
+    if (!any_interactive_open()) { return false; }
     // Debug keys (consumed so the game doesn't also act on them): F9/F10 nudge
     // the runic-frame inset, F11 toggles the RmlUi element inspector, F12 the
     // panel-centre marker cross. These help diagnose frame placement in-game.
-    if( ev.type == SDL_EVENT_KEY_DOWN ) {
-        switch( ev.key.key ) {
+    if (ev.type == SDL_EVENT_KEY_DOWN) {
+        switch (ev.key.key) {
             case SDLK_F9: {
-                int &fi = lighting::runic_cfg().frame_inset;
+                int& fi = lighting::runic_cfg().frame_inset;
                 fi = fi > 0 ? fi - 1 : 0;
-                dbg( DL::Info ) << "rmlui frame_inset=" << fi;
+                dbg(DL::Info) << "rmlui frame_inset=" << fi;
                 return true;
             }
             case SDLK_F10: {
-                int &fi = lighting::runic_cfg().frame_inset;
+                int& fi = lighting::runic_cfg().frame_inset;
                 fi += 1;
-                dbg( DL::Info ) << "rmlui frame_inset=" << fi;
+                dbg(DL::Info) << "rmlui frame_inset=" << fi;
                 return true;
             }
             case SDLK_F11:
                 g_rml_debugger = !g_rml_debugger;
-                Rml::Debugger::SetVisible( g_rml_debugger );
-                dbg( DL::Info ) << "rmlui debugger=" << g_rml_debugger;
+                Rml::Debugger::SetVisible(g_rml_debugger);
+                dbg(DL::Info) << "rmlui debugger=" << g_rml_debugger;
                 return true;
             case SDLK_F12:
                 g_frame_markers = !g_frame_markers;
-                dbg( DL::Info ) << "rmlui frame_markers=" << g_frame_markers;
+                dbg(DL::Info) << "rmlui frame_markers=" << g_frame_markers;
                 return true;
             default:
                 break;
@@ -559,40 +468,39 @@ bool process_event( const SDL_Event &ev )
     // Context is sized in physical pixels; SDL mouse coords are in window points.
     float sx = 1.f;
     float sy = 1.f;
-    if( g_window != nullptr ) {
+    if (g_window != nullptr) {
         int pw = 0;
         int ph = 0;
         int ww = 0;
         int wh = 0;
-        SDL_GetWindowSizeInPixels( g_window, &pw, &ph );
-        SDL_GetWindowSize( g_window, &ww, &wh );
-        if( ww > 0 ) {
-            sx = static_cast<float>( pw ) / ww;
-        }
-        if( wh > 0 ) {
-            sy = static_cast<float>( ph ) / wh;
-        }
+        SDL_GetWindowSizeInPixels(g_window, &pw, &ph);
+        SDL_GetWindowSize(g_window, &ww, &wh);
+        if (ww > 0) { sx = static_cast<float>(pw) / ww; }
+        if (wh > 0) { sy = static_cast<float>(ph) / wh; }
     }
     const int mods = mod_state();
-    switch( ev.type ) {
+    switch (ev.type) {
         case SDL_EVENT_MOUSE_MOTION:
-            g_context->ProcessMouseMove( static_cast<int>( ev.motion.x * sx ),
-                                         static_cast<int>( ev.motion.y * sy ), mods );
+            g_context->ProcessMouseMove(
+                static_cast<int>(ev.motion.x * sx), static_cast<int>(ev.motion.y * sy), mods);
             return true;
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
         case SDL_EVENT_MOUSE_BUTTON_UP: {
-            const int btn = ev.button.button == SDL_BUTTON_LEFT ? 0
-                            : ev.button.button == SDL_BUTTON_RIGHT ? 1
-                            : ev.button.button == SDL_BUTTON_MIDDLE ? 2 : 3;
-            if( ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN ) {
+            const int btn =
+                ev.button.button == SDL_BUTTON_LEFT    ? 0
+                : ev.button.button == SDL_BUTTON_RIGHT ? 1
+                : ev.button.button == SDL_BUTTON_MIDDLE
+                    ? 2
+                    : 3;
+            if (ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
                 // Sync hover to the click point so the close-button hit-test is
                 // current even if no motion event preceded this press.
-                g_context->ProcessMouseMove( static_cast<int>( ev.button.x * sx ),
-                                             static_cast<int>( ev.button.y * sy ), mods );
-                if( ev.button.button == SDL_BUTTON_LEFT ) {
-                    for( Rml::Element *e = g_context->GetHoverElement(); e != nullptr;
-                         e = e->GetParentNode() ) {
-                        if( e->GetId() == "runic-close" ) {
+                g_context->ProcessMouseMove(
+                    static_cast<int>(ev.button.x * sx), static_cast<int>(ev.button.y * sy), mods);
+                if (ev.button.button == SDL_BUTTON_LEFT) {
+                    for (Rml::Element* e = g_context->GetHoverElement(); e != nullptr;
+                         e = e->GetParentNode()) {
+                        if (e->GetId() == "runic-close") {
                             // The runic close button → synthesize the screen's cancel.
                             // Keyboard owns menu input, so push a real ESC keypress the
                             // game's input_context will consume to close the panel.
@@ -601,23 +509,23 @@ bool process_event( const SDL_Event &ev )
                             esc.key.down = true;
                             esc.key.scancode = SDL_SCANCODE_ESCAPE;
                             esc.key.key = SDLK_ESCAPE;
-                            SDL_PushEvent( &esc );
+                            SDL_PushEvent(&esc);
                             esc.type = SDL_EVENT_KEY_UP;
                             esc.key.down = false;
-                            SDL_PushEvent( &esc );
+                            SDL_PushEvent(&esc);
                             return true;
                         }
                     }
                 }
-                g_context->ProcessMouseButtonDown( btn, mods );
+                g_context->ProcessMouseButtonDown(btn, mods);
             } else {
-                g_context->ProcessMouseButtonUp( btn, mods );
+                g_context->ProcessMouseButtonUp(btn, mods);
             }
             return true;
         }
         case SDL_EVENT_MOUSE_WHEEL:
             // SDL: +y scrolls up; RmlUi: +delta scrolls down.
-            g_context->ProcessMouseWheel( -ev.wheel.y, mods );
+            g_context->ProcessMouseWheel(-ev.wheel.y, mods);
             return true;
         default:
             // Keyboard / text / everything else: let the game handle it.
@@ -625,22 +533,19 @@ bool process_event( const SDL_Event &ev )
     }
 }
 
-namespace
-{
+namespace {
 // Authentic non-uniform CRT flicker — the aleclownes.com/2017 reference opacity
 // table (20 steps, random-ish). Stepped (not interpolated) for the stutter; the
 // `flicker` slider lerps from 1.0 (off) toward these values (mean ~0.5).
 constexpr float CRT_FLICKER[20] = {
-    0.27861f, 0.34769f, 0.23604f, 0.90626f, 0.18128f,
-    0.83891f, 0.65583f, 0.67807f, 0.26559f, 0.84693f,
-    0.96019f, 0.08594f, 0.20313f, 0.71988f, 0.53455f,
-    0.37288f, 0.71428f, 0.70419f, 0.70030f, 0.24387f,
+    0.27861f, 0.34769f, 0.23604f, 0.90626f, 0.18128f, 0.83891f, 0.65583f,
+    0.67807f, 0.26559f, 0.84693f, 0.96019f, 0.08594f, 0.20313f, 0.71988f,
+    0.53455f, 0.37288f, 0.71428f, 0.70419f, 0.70030f, 0.24387f,
 };
 
 // 0..1 -> 0..255 alpha byte for an #rrggbbaa colour.
-unsigned crt_a255( float a01 )
-{
-    return static_cast<unsigned>( std::lround( std::clamp( a01, 0.0f, 1.0f ) * 255.0f ) );
+unsigned crt_a255(float a01) {
+    return static_cast<unsigned>(std::lround(std::clamp(a01, 0.0f, 1.0f) * 255.0f));
 }
 
 // Apply the F4 CRT knobs to every open document as inline RCSS gradient decorators,
@@ -648,8 +553,7 @@ unsigned crt_a255( float a01 )
 // on #crt-overlay (drawn on top, sized to the window in explicit px since an abspos
 // width/height:100% resolves to zero here); the scroll is baked into the stop
 // offsets (phase). Vignette = radial-gradient on every .panel.
-void apply_crt()
-{
+void apply_crt() {
     const double t = g_system ? g_system->GetElapsedTime() : 0.0;
 
     // Panel decorator = optional CRT vignette gradient + the procedural runic
@@ -672,9 +576,9 @@ void apply_crt()
     // RING at each end for the corners, the corner<->edge abutment is preserved
     // automatically. Tuned so the rune band's centre (~depth 8 in the RING-deep
     // texture) lands on the panel's border-inner edge — the CRT "screen" rect.
-    lighting::runic_params &rcfg = lighting::runic_cfg();
-    const int RUNE_RING = rcfg.ring;   // matches the generator's corner/edge depth
-    const int FRAME_INSET = rcfg.frame_inset;  // inward shift (F9/F10 knob)
+    lighting::runic_params& rcfg = lighting::runic_cfg();
+    const int RUNE_RING = rcfg.ring;          // matches the generator's corner/edge depth
+    const int FRAME_INSET = rcfg.frame_inset; // inward shift (F9/F10 knob)
     // Tiled fallback for panels too small to inset (size unknown on first frame).
     constexpr char fallback[] =
         "image( ?proc:runic-hedge none repeat-x center top ) border-box, "
@@ -685,25 +589,22 @@ void apply_crt()
         "image( ?proc:runic-corner flip-vertical scale-none left bottom ) border-box, "
         "image( ?proc:runic-corner rotate-180 scale-none right bottom ) border-box";
 
-    for( Rml::ElementDocument *doc : g_open_docs ) {
-        if( doc == nullptr ) {
-            continue;
-        }
+    for (Rml::ElementDocument* doc : g_open_docs) {
+        if (doc == nullptr) { continue; }
         Rml::ElementList panels;
-        doc->GetElementsByClassName( panels, "panel" );
-        for( Rml::Element *pe : panels ) {
+        doc->GetElementsByClassName(panels, "panel");
+        for (Rml::Element* pe : panels) {
             // Border-box size from the previous frame's layout (apply runs before
             // Update); panels don't move, so the 1-frame lag is invisible.
-            const Rml::Vector2f sz = pe->GetBox().GetSize( Rml::BoxArea::Border );
-            const int pw = static_cast<int>( std::lround( sz.x ) );
-            const int ph = static_cast<int>( std::lround( sz.y ) );
+            const Rml::Vector2f sz = pe->GetBox().GetSize(Rml::BoxArea::Border);
+            const int pw = static_cast<int>(std::lround(sz.x));
+            const int ph = static_cast<int>(std::lround(sz.y));
             static int dbg_sweeps = 0;
-            if( dbg_sweeps < 12 ) {
-                const Rml::Vector2f ofs = pe->GetAbsoluteOffset( Rml::BoxArea::Border );
-                dbg( DL::Info ) << "rmlui_frame panel id='" << pe->GetId() << "' tag='"
-                                << pe->GetTagName() << "' box=" << pw << "x" << ph
-                                << " absofs=" << static_cast<int>( ofs.x ) << ","
-                                << static_cast<int>( ofs.y );
+            if (dbg_sweeps < 12) {
+                const Rml::Vector2f ofs = pe->GetAbsoluteOffset(Rml::BoxArea::Border);
+                dbg(DL::Info) << "rmlui_frame panel id='" << pe->GetId() << "' tag='"
+                              << pe->GetTagName() << "' box=" << pw << "x" << ph << " absofs="
+                              << static_cast<int>(ofs.x) << "," << static_cast<int>(ofs.y);
                 ++dbg_sweeps;
             }
             char frame[1600];
@@ -714,90 +615,96 @@ void apply_crt()
             // this the edge texture is dr-times too wide, overflows, gets clipped,
             // and its centred rune group is shoved off to one side.
             const float dr = g_density_ratio * g_ui_scale;
-            const int ring_disp = static_cast<int>( std::lround( RUNE_RING * dr ) );
+            const int ring_disp = static_cast<int>(std::lround(RUNE_RING * dr));
             // Need room for the inset frame: each edge length (pw/ph - 2*INSET)
             // must still fit its two corner margins (2*ring_disp) plus a centre span.
-            const int need = 2 * ( FRAME_INSET + ring_disp ) + 1;
-            if( pw >= need && ph >= need ) {
-                const unsigned seed = rcfg.use_fixed_seed
-                                      ? rcfg.seed
-                                      : ( ( static_cast<unsigned>( pw ) * 73856093u ) ^
-                                          ( static_cast<unsigned>( ph ) * 19349663u ) );
+            const int need = 2 * (FRAME_INSET + ring_disp) + 1;
+            if (pw >= need && ph >= need) {
+                const unsigned seed =
+                    rcfg.use_fixed_seed
+                        ? rcfg.seed
+                        : ((static_cast<unsigned>(pw) * 73856093u)
+                           ^ (static_cast<unsigned>(ph) * 19349663u));
                 // Template per edge: Auto keeps top/bottom=centred(0), sides=thirds(1);
                 // a forced value overrides both so the chosen template shows everywhere.
                 const int t_h = rcfg.force_template >= 0 ? rcfg.force_template : 0;
                 const int t_v = rcfg.force_template >= 0 ? rcfg.force_template : 1;
-                const unsigned g = rcfg.regen;  // cache-bust token (see :G%u below)
+                const unsigned g = rcfg.regen; // cache-bust token (see :G%u below)
                 // Edge lengths are RAW texture px = (physical span) / dr, so the
                 // dr-scaled natural size spans the inset region exactly (centred).
-                const int hlen = static_cast<int>( std::lround( ( pw - 2 * FRAME_INSET ) / dr ) );
-                const int vlen = static_cast<int>( std::lround( ( ph - 2 * FRAME_INSET ) / dr ) );
+                const int hlen = static_cast<int>(std::lround((pw - 2 * FRAME_INSET) / dr));
+                const int vlen = static_cast<int>(std::lround((ph - 2 * FRAME_INSET) / dr));
                 // Far corner offsets use the DISPLAYED corner size (ring * dr).
-                const int far_x = pw - ring_disp - FRAME_INSET;  // right-edge / -corner x
-                const int far_y = ph - ring_disp - FRAME_INSET;  // bottom-edge / -corner y
-                ( void )std::snprintf( frame, sizeof( frame ),
-                                       // :%d = template, :G%u = regen cache-bust token.
-                                       "image( ?proc:runic-hedge:%d:%u:%d:G%u none scale-none %dpx %dpx ) border-box, "
-                                       "image( ?proc:runic-hedge:%d:%u:%d:G%u flip-vertical scale-none %dpx %dpx ) border-box, "
-                                       "image( ?proc:runic-vedge:%d:%u:%d:G%u none scale-none %dpx %dpx ) border-box, "
-                                       "image( ?proc:runic-vedge:%d:%u:%d:G%u flip-horizontal scale-none %dpx %dpx ) border-box, "
-                                       "image( ?proc:runic-corner:G%u none scale-none %dpx %dpx ) border-box, "
-                                       "image( ?proc:runic-corner:G%u flip-vertical scale-none %dpx %dpx ) border-box, "
-                                       "image( ?proc:runic-corner:G%u rotate-180 scale-none %dpx %dpx ) border-box",
-                                       hlen, seed, t_h, g, FRAME_INSET, FRAME_INSET,   // top
-                                       hlen, seed, t_h, g, FRAME_INSET, far_y,         // bottom
-                                       vlen, seed, t_v, g, FRAME_INSET, FRAME_INSET,   // left
-                                       vlen, seed, t_v, g, far_x, FRAME_INSET,         // right
-                                       g, FRAME_INSET, FRAME_INSET,                    // TL (TR = #runic-close)
-                                       g, FRAME_INSET, far_y,                          // BL
-                                       g, far_x, far_y );                              // BR
+                const int far_x = pw - ring_disp - FRAME_INSET; // right-edge / -corner x
+                const int far_y = ph - ring_disp - FRAME_INSET; // bottom-edge / -corner y
+                (void)std::snprintf(
+                    frame, sizeof(frame),
+                    // :%d = template, :G%u = regen cache-bust token.
+                    "image( ?proc:runic-hedge:%d:%u:%d:G%u none scale-none %dpx %dpx ) border-box, "
+                    "image( ?proc:runic-hedge:%d:%u:%d:G%u flip-vertical scale-none %dpx %dpx ) "
+                    "border-box, "
+                    "image( ?proc:runic-vedge:%d:%u:%d:G%u none scale-none %dpx %dpx ) border-box, "
+                    "image( ?proc:runic-vedge:%d:%u:%d:G%u flip-horizontal scale-none %dpx %dpx ) "
+                    "border-box, "
+                    "image( ?proc:runic-corner:G%u none scale-none %dpx %dpx ) border-box, "
+                    "image( ?proc:runic-corner:G%u flip-vertical scale-none %dpx %dpx ) "
+                    "border-box, "
+                    "image( ?proc:runic-corner:G%u rotate-180 scale-none %dpx %dpx ) border-box",
+                    hlen, seed, t_h, g, FRAME_INSET, FRAME_INSET, // top
+                    hlen, seed, t_h, g, FRAME_INSET, far_y,       // bottom
+                    vlen, seed, t_v, g, FRAME_INSET, FRAME_INSET, // left
+                    vlen, seed, t_v, g, far_x, FRAME_INSET,       // right
+                    g, FRAME_INSET, FRAME_INSET,                  // TL (TR = #runic-close)
+                    g, FRAME_INSET, far_y,                        // BL
+                    g, far_x, far_y);                             // BR
             } else {
-                ( void )std::snprintf( frame, sizeof( frame ), "%s", fallback );
+                (void)std::snprintf(frame, sizeof(frame), "%s", fallback);
             }
             // F12: magenta cross at the panel-box centre (painted last = on top),
             // so the rune cluster's centring vs the panel vs the screen is visible.
             char markers[256] = "";
-            if( g_frame_markers && pw >= need && ph >= need ) {
-                ( void )std::snprintf( markers, sizeof( markers ),
-                                       ", image( ?proc:dbg-v:%d none scale-none %dpx 0px ) border-box"
-                                       ", image( ?proc:dbg-h:%d none scale-none 0px %dpx ) border-box",
-                                       ph, pw / 2 - 1, pw, ph / 2 - 1 );
+            if (g_frame_markers && pw >= need && ph >= need) {
+                (void)std::snprintf(
+                    markers, sizeof(markers),
+                    ", image( ?proc:dbg-v:%d none scale-none %dpx 0px ) border-box"
+                    ", image( ?proc:dbg-h:%d none scale-none 0px %dpx ) border-box",
+                    ph, pw / 2 - 1, pw, ph / 2 - 1);
             }
             // Panel background keeps only the CRT vignette; the runic frame is
             // lifted onto a dedicated top element (#runic-frame) so it paints
             // ABOVE the #crt-overlay scanlines (true z-order) instead of as the
             // panel's background, which the later-painted overlay covered.
-            if( g_crt.enabled ) {
+            if (g_crt.enabled) {
                 char vig[96];
-                ( void )std::snprintf( vig, sizeof( vig ),
-                                       "radial-gradient( farthest-corner, #00000000, #000000%02x )",
-                                       crt_a255( g_crt.vignette_alpha ) );
-                pe->SetProperty( "decorator", vig );
+                (void)std::snprintf(
+                    vig, sizeof(vig), "radial-gradient( farthest-corner, #00000000, #000000%02x )",
+                    crt_a255(g_crt.vignette_alpha));
+                pe->SetProperty("decorator", vig);
             } else {
-                pe->SetProperty( "decorator", "none" );
+                pe->SetProperty("decorator", "none");
             }
             // Top frame layer: created once per document, appended last and given a
             // z-index above .crt's 10, so it sits over the scanline overlay. Sized
             // and positioned to the panel's border-box, so the border-box-anchored
             // image() offsets resolve identically to the old panel decorator.
-            Rml::Element *fr = doc->GetElementById( "runic-frame" );
-            if( fr == nullptr ) {
-                Rml::ElementPtr fp = doc->CreateElement( "div" );
-                fp->SetId( "runic-frame" );
-                fr = doc->AppendChild( std::move( fp ) );
+            Rml::Element* fr = doc->GetElementById("runic-frame");
+            if (fr == nullptr) {
+                Rml::ElementPtr fp = doc->CreateElement("div");
+                fp->SetId("runic-frame");
+                fr = doc->AppendChild(std::move(fp));
             }
-            if( fr != nullptr ) {
-                const Rml::Vector2f foff = pe->GetAbsoluteOffset( Rml::BoxArea::Border );
+            if (fr != nullptr) {
+                const Rml::Vector2f foff = pe->GetAbsoluteOffset(Rml::BoxArea::Border);
                 char fdec[2048];
-                ( void )std::snprintf( fdec, sizeof( fdec ), "%s%s", frame, markers );
-                fr->SetProperty( "position", "absolute" );
-                fr->SetProperty( "pointer-events", "none" );
-                fr->SetProperty( "z-index", "11" );
-                fr->SetProperty( "left", std::to_string( foff.x ) + "px" );
-                fr->SetProperty( "top", std::to_string( foff.y ) + "px" );
-                fr->SetProperty( "width", std::to_string( sz.x ) + "px" );
-                fr->SetProperty( "height", std::to_string( sz.y ) + "px" );
-                fr->SetProperty( "decorator", fdec );
+                (void)std::snprintf(fdec, sizeof(fdec), "%s%s", frame, markers);
+                fr->SetProperty("position", "absolute");
+                fr->SetProperty("pointer-events", "none");
+                fr->SetProperty("z-index", "11");
+                fr->SetProperty("left", std::to_string(foff.x) + "px");
+                fr->SetProperty("top", std::to_string(foff.y) + "px");
+                fr->SetProperty("width", std::to_string(sz.x) + "px");
+                fr->SetProperty("height", std::to_string(sz.y) + "px");
+                fr->SetProperty("decorator", fdec);
             }
             // Interactive close button: a clickable X overlaying the top-right
             // corner ornament. Unlike #runic-frame (pointer-events:none) this
@@ -806,102 +713,99 @@ void apply_crt()
             // input_context reads as its cancel/close (keyboard owns menu input).
             // z-index 12 keeps it above the frame (11) and CRT overlay (10).
             const bool has_frame = pw >= need && ph >= need;
-            Rml::Element *cl = doc->GetElementById( "runic-close" );
-            if( has_frame ) {
-                if( cl == nullptr ) {
-                    Rml::ElementPtr cp = doc->CreateElement( "div" );
-                    cp->SetId( "runic-close" );
-                    cl = doc->AppendChild( std::move( cp ) );
+            Rml::Element* cl = doc->GetElementById("runic-close");
+            if (has_frame) {
+                if (cl == nullptr) {
+                    Rml::ElementPtr cp = doc->CreateElement("div");
+                    cp->SetId("runic-close");
+                    cl = doc->AppendChild(std::move(cp));
                 }
-                if( cl != nullptr ) {
+                if (cl != nullptr) {
                     // The TR corner piece: this element OWNS the encased-X art (the
                     // frame layer leaves the TR corner empty) and is hit-tested, so a
                     // click reads as close. On :hover it swaps to the inverted variant
                     // (solid ink box, X knocked out) to signal it is interactable.
-                    const bool hov = cl->IsPseudoClassSet( "hover" );
-                    const Rml::Vector2f coff = pe->GetAbsoluteOffset( Rml::BoxArea::Border );
+                    const bool hov = cl->IsPseudoClassSet("hover");
+                    const Rml::Vector2f coff = pe->GetAbsoluteOffset(Rml::BoxArea::Border);
                     const int far_x = pw - ring_disp - FRAME_INSET;
                     char xdec[160];
-                    ( void )std::snprintf( xdec, sizeof( xdec ),
-                                           "image( ?proc:%s:G%u none scale-none 0px 0px ) border-box",
-                                           hov ? "runic-x-inv" : "runic-x", rcfg.regen );
-                    cl->SetProperty( "position", "absolute" );
-                    cl->SetProperty( "pointer-events", "auto" );
-                    cl->SetProperty( "z-index", "12" );
-                    cl->SetProperty( "left", std::to_string( coff.x + far_x ) + "px" );
-                    cl->SetProperty( "top", std::to_string( coff.y + FRAME_INSET ) + "px" );
-                    cl->SetProperty( "width", std::to_string( ring_disp ) + "px" );
-                    cl->SetProperty( "height", std::to_string( ring_disp ) + "px" );
-                    cl->SetProperty( "decorator", xdec );
+                    (void)std::snprintf(
+                        xdec, sizeof(xdec),
+                        "image( ?proc:%s:G%u none scale-none 0px 0px ) border-box",
+                        hov ? "runic-x-inv" : "runic-x", rcfg.regen);
+                    cl->SetProperty("position", "absolute");
+                    cl->SetProperty("pointer-events", "auto");
+                    cl->SetProperty("z-index", "12");
+                    cl->SetProperty("left", std::to_string(coff.x + far_x) + "px");
+                    cl->SetProperty("top", std::to_string(coff.y + FRAME_INSET) + "px");
+                    cl->SetProperty("width", std::to_string(ring_disp) + "px");
+                    cl->SetProperty("height", std::to_string(ring_disp) + "px");
+                    cl->SetProperty("decorator", xdec);
                 }
-            } else if( cl != nullptr ) {
-                cl->SetProperty( "decorator", "none" );
-                cl->SetProperty( "pointer-events", "none" );
+            } else if (cl != nullptr) {
+                cl->SetProperty("decorator", "none");
+                cl->SetProperty("pointer-events", "none");
             }
         }
-        Rml::Element *overlay = doc->GetElementById( "crt-overlay" );
-        if( overlay == nullptr ) {
-            continue;
-        }
+        Rml::Element* overlay = doc->GetElementById("crt-overlay");
+        if (overlay == nullptr) { continue; }
         // Mask the scanlines to the active panel (the "device screen"): size the
         // overlay to the panel's border-box rect, not the whole window. Geometry is
         // from the previous frame's layout (apply runs before Update), but panels
         // don't move so the 1-frame lag is invisible; a zero box (first frame /
         // unlaid-out) just hides the overlay until it settles.
-        Rml::Element *panel = panels.empty() ? nullptr : panels.front();
+        Rml::Element* panel = panels.empty() ? nullptr : panels.front();
         Rml::Vector2f poff;
         Rml::Vector2f psz;
-        if( panel != nullptr ) {
-            poff = panel->GetAbsoluteOffset( Rml::BoxArea::Border );
-            psz = panel->GetBox().GetSize( Rml::BoxArea::Border );
+        if (panel != nullptr) {
+            poff = panel->GetAbsoluteOffset(Rml::BoxArea::Border);
+            psz = panel->GetBox().GetSize(Rml::BoxArea::Border);
         }
-        if( !g_crt.enabled || panel == nullptr || psz.x <= 0.f || psz.y <= 0.f ) {
-            overlay->SetProperty( "display", "none" );
+        if (!g_crt.enabled || panel == nullptr || psz.x <= 0.f || psz.y <= 0.f) {
+            overlay->SetProperty("display", "none");
             continue;
         }
-        const float pitch = std::max( 2.0f, g_crt.scanline_pitch );
-        const float thick = std::clamp( g_crt.scanline_thickness, 0.5f, pitch - 0.5f );
+        const float pitch = std::max(2.0f, g_crt.scanline_pitch);
+        const float thick = std::clamp(g_crt.scanline_thickness, 0.5f, pitch - 0.5f);
         const float gap = pitch - thick;
-        const float phase = static_cast<float>( std::fmod( t * g_crt.roll_speed, pitch ) );
-        const unsigned sa = crt_a255( g_crt.scanline_alpha );
+        const float phase = static_cast<float>(std::fmod(t * g_crt.roll_speed, pitch));
+        const unsigned sa = crt_a255(g_crt.scanline_alpha);
         // Flicker = a uniform black layer (under the scanlines) whose alpha pulses
         // per the random table. Modulating a thin scanline's opacity is invisible;
         // pulsing a full-panel tint reads as whole-screen CRT flicker. 0 -> no pulse.
-        const int idx = static_cast<int>( std::fmod( t * 24.0, 20.0 ) );
-        const float ftab = CRT_FLICKER[std::clamp( idx, 0, 19 )];
-        const unsigned fa = crt_a255( g_crt.flicker * ( 1.0f - ftab ) );
+        const int idx = static_cast<int>(std::fmod(t * 24.0, 20.0));
+        const float ftab = CRT_FLICKER[std::clamp(idx, 0, 19)];
+        const unsigned fa = crt_a255(g_crt.flicker * (1.0f - ftab));
         char dec[320];
-        ( void )std::snprintf( dec, sizeof( dec ),
-                               "linear-gradient( 0deg, #000000%02x, #000000%02x ), "
-                               "repeating-linear-gradient( 0deg, "
-                               "#00000000 %.2fpx, #00000000 %.2fpx, "
-                               "#000000%02x %.2fpx, #000000%02x %.2fpx )",
-                               fa, fa, phase, phase + gap, sa, phase + gap, sa, phase + pitch );
-        overlay->SetProperty( "display", "block" );
-        overlay->SetProperty( "position", "absolute" );
-        overlay->SetProperty( "left", std::to_string( poff.x ) + "px" );
-        overlay->SetProperty( "top", std::to_string( poff.y ) + "px" );
-        overlay->SetProperty( "width", std::to_string( psz.x ) + "px" );
-        overlay->SetProperty( "height", std::to_string( psz.y ) + "px" );
-        overlay->SetProperty( "decorator", dec );
-        overlay->SetProperty( "opacity", "1.0" );
+        (void)std::snprintf(
+            dec, sizeof(dec),
+            "linear-gradient( 0deg, #000000%02x, #000000%02x ), "
+            "repeating-linear-gradient( 0deg, "
+            "#00000000 %.2fpx, #00000000 %.2fpx, "
+            "#000000%02x %.2fpx, #000000%02x %.2fpx )",
+            fa, fa, phase, phase + gap, sa, phase + gap, sa, phase + pitch);
+        overlay->SetProperty("display", "block");
+        overlay->SetProperty("position", "absolute");
+        overlay->SetProperty("left", std::to_string(poff.x) + "px");
+        overlay->SetProperty("top", std::to_string(poff.y) + "px");
+        overlay->SetProperty("width", std::to_string(psz.x) + "px");
+        overlay->SetProperty("height", std::to_string(psz.y) + "px");
+        overlay->SetProperty("decorator", dec);
+        overlay->SetProperty("opacity", "1.0");
     }
 }
-}  // namespace
+} // namespace
 
-void new_frame()
-{
-    if( !g_ready ) {
-        return;
-    }
+void new_frame() {
+    if (!g_ready) { return; }
     // Drain deferred GPU-resource frees every frame, even with nothing open.
     g_render->begin_frame();
-    if( any_open() && g_context != nullptr && g_window != nullptr ) {
+    if (any_open() && g_context != nullptr && g_window != nullptr) {
         int w = 0;
         int h = 0;
-        SDL_GetWindowSizeInPixels( g_window, &w, &h );
-        if( w > 0 && h > 0 ) {
-            g_context->SetDimensions( Rml::Vector2i( w, h ) );
+        SDL_GetWindowSizeInPixels(g_window, &w, &h);
+        if (w > 0 && h > 0) {
+            g_context->SetDimensions(Rml::Vector2i(w, h));
             // Context is sized in PHYSICAL pixels so the GPU projection matches
             // the framebuffer. Set the density ratio = physical / logical so RCSS
             // `dp` units scale with HiDPI — without this, px-sized fonts render at
@@ -909,10 +813,10 @@ void new_frame()
             // mouse sx/sy scaling in process_event handles the inverse for input.
             int lw = 0;
             int lh = 0;
-            SDL_GetWindowSize( g_window, &lw, &lh );
-            if( lw > 0 ) {
-                g_density_ratio = static_cast<float>( w ) / static_cast<float>( lw );
-                g_context->SetDensityIndependentPixelRatio( g_density_ratio * g_ui_scale );
+            SDL_GetWindowSize(g_window, &lw, &lh);
+            if (lw > 0) {
+                g_density_ratio = static_cast<float>(w) / static_cast<float>(lw);
+                g_context->SetDensityIndependentPixelRatio(g_density_ratio * g_ui_scale);
             }
         }
         apply_crt();
@@ -920,47 +824,35 @@ void new_frame()
     }
 }
 
-void prepare( SDL_GPUCommandBuffer *cb )
-{
+void prepare(SDL_GPUCommandBuffer* cb) {
     const bool doc = g_ready && any_open() && g_context != nullptr;
     const bool wt = world_text_have();
-    if( !doc && !wt ) {
-        return;
-    }
+    if (!doc && !wt) { return; }
     // Pre-render OUTSIDE the render pass so geometry compiles immediately (not
     // deferred by begin_render_pass). Then upload_pending uploads the compiled
     // data to GPU buffers. The real render pass's ctx->Render() reuses the cached
     // handles and renders on this same frame. World text compiles the same way.
-    if( doc ) {
-        g_context->Render();
-    }
-    if( wt ) {
-        build_world_text();
-    }
-    g_render->upload_pending( cb );
+    if (doc) { g_context->Render(); }
+    if (wt) { build_world_text(); }
+    g_render->upload_pending(cb);
 }
 
-void render_in_pass( SDL_GPURenderPass *rp, SDL_GPUCommandBuffer *cb )
-{
+void render_in_pass(SDL_GPURenderPass* rp, SDL_GPUCommandBuffer* cb) {
     const bool doc = any_open();
     const bool wt = !g_world_geom.empty();
-    if( !g_ready || g_window == nullptr || g_context == nullptr || ( !doc && !wt ) ) {
-        return;
-    }
+    if (!g_ready || g_window == nullptr || g_context == nullptr || (!doc && !wt)) { return; }
     int w = 0;
     int h = 0;
-    SDL_GetWindowSizeInPixels( g_window, &w, &h );
-    const auto uw = static_cast<std::uint32_t>( w > 0 ? w : 1 );
-    const auto uh = static_cast<std::uint32_t>( h > 0 ? h : 1 );
+    SDL_GetWindowSizeInPixels(g_window, &w, &h);
+    const auto uw = static_cast<std::uint32_t>(w > 0 ? w : 1);
+    const auto uh = static_cast<std::uint32_t>(h > 0 ? h : 1);
     // RmlUi context is sized in physical pixels, so projection == target.
-    g_render->begin_render_pass( rp, cb, uw, uh, uw, uh );
+    g_render->begin_render_pass(rp, cb, uw, uh, uw, uh);
     // World text draws FIRST so menu documents composite on top of it (SCT sits
     // on the map, under any open UI).
-    for( world_text_geom &item : g_world_geom ) {
-        item.geom.Render( item.pos, item.texture );
-    }
-    if( doc ) {
-        g_context->Render();  // all shown documents, z-ordered by open order
+    for (world_text_geom& item : g_world_geom) { item.geom.Render(item.pos, item.texture); }
+    if (doc) {
+        g_context->Render(); // all shown documents, z-ordered by open order
     }
     g_render->end_render_pass();
 
@@ -971,54 +863,33 @@ void render_in_pass( SDL_GPURenderPass *rp, SDL_GPUCommandBuffer *cb )
     static std::uint32_t last_t = 0;
     const std::uint32_t c = g_render->compiles_in_pass();
     const std::uint32_t t = g_render->textures_in_pass();
-    if( c != last_c || t != last_t ) {
+    if (c != last_c || t != last_t) {
         last_c = c;
         last_t = t;
-        DebugLogFL( DL::Info, DC::Main )
-                << "rmlui in-pass uploads: compiles=" << c << " textures=" << t
-                << " (0 = safe; geometry deferred, textures are the D3D12 watch)";
+        DebugLogFL(DL::Info, DC::Main)
+            << "rmlui in-pass uploads: compiles=" << c << " textures=" << t
+            << " (0 = safe; geometry deferred, textures are the D3D12 watch)";
     }
 }
 
-void world_text_begin()
-{
-    g_world_text.clear();
-}
+void world_text_begin() { g_world_text.clear(); }
 
-void set_hud_text( float screen_x, float screen_y, const std::string &utf8,
-                   unsigned int rgba )
-{
+void set_hud_text(float screen_x, float screen_y, const std::string& utf8, unsigned int rgba) {
     g_hud_active = !utf8.empty();
-    g_hud_text = world_text_item{ screen_x, screen_y, utf8, rgba };
+    g_hud_text = world_text_item{screen_x, screen_y, utf8, rgba};
 }
 
-void world_text_add( float screen_x, float screen_y, const std::string &utf8,
-                     unsigned int rgba )
-{
-    if( utf8.empty() ) {
-        return;
-    }
-    g_world_text.push_back( world_text_item{ screen_x, screen_y, utf8, rgba } );
+void world_text_add(float screen_x, float screen_y, const std::string& utf8, unsigned int rgba) {
+    if (utf8.empty()) { return; }
+    g_world_text.push_back(world_text_item{screen_x, screen_y, utf8, rgba});
 }
 
-bool world_text_active()
-{
-    return world_text_have();
-}
+bool world_text_active() { return world_text_have(); }
 
-int &world_text_px()
-{
-    return g_world_text_px;
-}
+int& world_text_px() { return g_world_text_px; }
 
-float &world_text_dx()
-{
-    return g_world_text_dx;
-}
+float& world_text_dx() { return g_world_text_dx; }
 
-float &world_text_dy()
-{
-    return g_world_text_dy;
-}
+float& world_text_dy() { return g_world_text_dy; }
 
-}  // namespace rmlui_layer
+} // namespace rmlui_layer
