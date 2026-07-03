@@ -970,3 +970,25 @@ bool item::operator<(const item& other) const {
         }
     }
 }
+
+
+const std::string &item::get_category_id() const
+{
+    if( is_container() && !contents.empty() ) {
+    return contents.front().get_category().get_id().str();
+    }
+
+    static item_category null_category;
+    return type->category_force.is_valid() ? type->category_force.obj().get_id().str() :
+           null_category.get_id().str();
+}
+
+const item_category &item::get_category() const
+{
+    if( is_container() && !contents.empty() ) {
+    return contents.front().get_category();
+    }
+
+    static item_category null_category;
+    return type->category_force.is_valid() ? type->category_force.obj() : null_category;
+}
