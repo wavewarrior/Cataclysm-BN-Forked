@@ -8912,12 +8912,12 @@ int iuse::toggle_heats_food( player *p, item *it, bool, const tripoint_bub_ms & 
 {
     static const flag_id json_flag_HEATS_FOOD( flag_HEATS_FOOD );
     if( !it->has_flag( json_flag_HEATS_FOOD ) ) {
-        it->item_tags.insert( json_flag_HEATS_FOOD );
+        it->set_flag( json_flag_HEATS_FOOD );
         p->add_msg_if_player(
             _( "You will try to use %s to heat food next time you eat something that should be eaten hot." ),
             it->tname().c_str() );
     } else {
-        it->item_tags.erase( json_flag_HEATS_FOOD );
+        it->unset_flag( json_flag_HEATS_FOOD );
         p->add_msg_if_player( _( "You will no longer use %s to heat food." ), it->tname().c_str() );
     }
 
@@ -8928,12 +8928,12 @@ int iuse::toggle_ups_charging( player *p, item *it, bool, const tripoint_bub_ms 
 {
     static const flag_id json_flag_USE_UPS( flag_USE_UPS );
     if( !it->has_flag( json_flag_USE_UPS ) ) {
-        it->item_tags.insert( json_flag_USE_UPS );
+        it->set_flag( json_flag_USE_UPS );
         p->add_msg_if_player(
             _( "You will recharge the %s using any available Unified Power System." ),
             it->tname().c_str() );
     } else {
-        it->item_tags.erase( json_flag_USE_UPS );
+        it->unset_flag( json_flag_USE_UPS );
         p->add_msg_if_player( _( "You will no longer recharge the %s via UPS." ), it->tname().c_str() );
     }
 

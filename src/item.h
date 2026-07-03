@@ -2387,8 +2387,6 @@ public:
     /** What faults (if any) currently apply to this item */
     std::set<fault_id> faults;
 
-    // TODO: Move to private ASAP
-    FlagsSetType item_tags; // generic item specific flags
 
     std::vector<detached_ptr<item>> remove_components();
     detached_ptr<item> remove_component(item& it);
@@ -2410,6 +2408,9 @@ public:
     auto set_recoil_bonus(int bonus) -> void;
 
 private:
+    void copy_fields_from(const item& source);
+    // TODO: Move to private ASAP (DONE: moved to private in Phase 5)
+    FlagsSetType item_tags; // generic item specific flags
     location_vector<item> components;
     const itype* curammo = nullptr;
     data_vars::data_set item_vars_ = {};
