@@ -299,16 +299,21 @@ auto coop_server::coop_world_tick() -> void {
     //    snapshot represents the world state at the moment the client fired.
     push_entity_snapshot();
 
-    // 3. Drain client actions NOW — proxy has valid moves from process_turn().
+    // 3. Process one client action per world tick.  One-per-tick is intentional:
+    //    the proxy moves once per sim step, mirroring the client's input rate, and
+    //    avoids multi-tile teleport bursts.  Do NOT gate on proxy->moves — the
+    //    is_coop_remote path in npcmove() skips the move-grant so proxy->moves is
+    //    always 0 after the first drain tick; gating on it permanently blocks later
+    //    actions.
     npc* proxy = g->critter_by_id<npc>(coop_session::get().proxy_npc_id);
-    while (proxy && proxy->moves > 0) {
-        const auto act = try_pop_action();
-        if (!act) { break; }
-        if (act->seq > last_confirmed_seq_) { last_confirmed_seq_ = act->seq; }
-        execute_client_action(proxy, act->key, act->ctx_json, act->seq);
+    if (proxy) {
+        if (const auto act = try_pop_action()) {
+            if (act->seq > last_confirmed_seq_) { last_confirmed_seq_ = act->seq; }
+            proxy->set_moves(proxy->get_speed()); // ensure move budget for execute
+            execute_client_action(proxy, act->key, act->ctx_json, act->seq);
+        }
+        proxy->set_moves(0); // prevent residual moves carrying into the NPC AI sim
     }
-    // Explicit consume: prevent residual moves carrying into next tick's sim.
-    if (proxy) { proxy->set_moves(0); }
 
     // 3. Build and send sync (tiles only when host submap changes; always sends
     //    monsters + turn + proxy position).
@@ -339,23 +344,29 @@ auto coop_server::execute_client_action(
     if (!proxy) { return; }
 
     const tripoint_bub_ms cur = proxy->bub_pos();
-
+    // Movement keys: proxy mirrors the client's authoritative position exactly.
+    // Use setpos() not move_to(): move_to() pathfinds and may stumble diagonally
+    // when the target tile is blocked, causing x/z drift.  The client's input is
+    // authoritative; the proxy must land on the same tile the client sees itself on.
+    const auto proxy_step = [&proxy](const tripoint_bub_ms& dest) {
+        if (g->m.inbounds(dest)) { proxy->setpos(dest); }
+    };
     if (key == "MOVE_N" || key == "UP") {
-        proxy->move_to(cur + tripoint(0, -1, 0));
+        proxy_step(cur + tripoint(0, -1, 0));
     } else if (key == "MOVE_S" || key == "DOWN") {
-        proxy->move_to(cur + tripoint(0, 1, 0));
+        proxy_step(cur + tripoint(0, 1, 0));
     } else if (key == "MOVE_E" || key == "RIGHT") {
-        proxy->move_to(cur + tripoint(1, 0, 0));
+        proxy_step(cur + tripoint(1, 0, 0));
     } else if (key == "MOVE_W" || key == "LEFT") {
-        proxy->move_to(cur + tripoint(-1, 0, 0));
+        proxy_step(cur + tripoint(-1, 0, 0));
     } else if (key == "MOVE_NE") {
-        proxy->move_to(cur + tripoint(1, -1, 0));
+        proxy_step(cur + tripoint(1, -1, 0));
     } else if (key == "MOVE_NW") {
-        proxy->move_to(cur + tripoint(-1, -1, 0));
+        proxy_step(cur + tripoint(-1, -1, 0));
     } else if (key == "MOVE_SE") {
-        proxy->move_to(cur + tripoint(1, 1, 0));
+        proxy_step(cur + tripoint(1, 1, 0));
     } else if (key == "MOVE_SW") {
-        proxy->move_to(cur + tripoint(-1, 1, 0));
+        proxy_step(cur + tripoint(-1, 1, 0));
     } else if (key == "SMASH") {
         if (!ctx_json.empty()) {
             std::istringstream iss(ctx_json);
