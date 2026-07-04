@@ -965,7 +965,9 @@ auto sub_add_field(SubTile& dst, field_type_id type, int intensity, time_duratio
             const auto& sm_pos = dst.sm->position();
             const tripoint_abs_ms abs_pos{
                 sm_pos.x() * SEEX + dst.local.x(), sm_pos.y() * SEEY + dst.local.y(), sm_pos.z()};
-            _log->push({coop_event_type::field_created, abs_pos, type.to_i()});
+            _log->push(
+                {coop_event_type::field_created, abs_pos, type.to_i(),
+                 intensity}); // value=type, creature_id=intensity
         }
 #endif
     }
@@ -1041,9 +1043,21 @@ auto process_fields_in_submap(submap& sm, const tripoint_abs_sm& pos, mapbuffer&
 
         for (auto it = curfield.begin(); it != curfield.end();) {
             auto& cur = it->second;
+#ifdef COOP_ENABLED
+            // A3b: capture state before this tick's processing so we can detect changes.
+            const int _intensity_before = cur.get_field_intensity();
+            const field_type_id _fd_type_before = cur.get_field_type();
+#endif
 
             // Dead entries — clean up.
             if (!cur.is_field_alive()) {
+#ifdef COOP_ENABLED
+                if (auto* _log = coop_mutation_log::current()) {
+                    const tripoint_abs_ms
+                        _abs{pos.x() * SEEX + local.x(), pos.y() * SEEY + local.y(), pos.z()};
+                    _log->push({coop_event_type::field_expired, _abs, _fd_type_before.to_i()});
+                }
+#endif
                 --sm.field_count;
                 curfield.remove_field(it++);
                 continue;
@@ -1613,6 +1627,23 @@ auto process_fields_in_submap(submap& sm, const tripoint_abs_sm& pos, mapbuffer&
                 cur.set_field_intensity(cur.get_field_intensity() - 1);
             }
 
+#ifdef COOP_ENABLED
+            if (auto* _log = coop_mutation_log::current()) {
+                const tripoint_abs_ms
+                    _abs{pos.x() * SEEX + local.x(), pos.y() * SEEY + local.y(), pos.z()};
+                if (!cur.is_field_alive()) {
+                    // Field died during processing.
+                    _log->push({coop_event_type::field_expired, _abs, _fd_type_before.to_i()});
+                } else if (cur.get_field_intensity() != _intensity_before) {
+                    // Intensity changed (upgrade, burn, decay).
+                    // value=type, creature_id=new_intensity — both needed to identify field at
+                    // multi-field tiles.
+                    _log->push(
+                        {coop_event_type::field_changed, _abs, cur.get_field_type().to_i(),
+                         cur.get_field_intensity()});
+                }
+            }
+#endif
             if (!cur.is_field_alive()) {
                 --sm.field_count;
                 curfield.remove_field(it++);

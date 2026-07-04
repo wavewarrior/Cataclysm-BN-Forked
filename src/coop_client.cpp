@@ -11,6 +11,8 @@
 #include "coordinates.h"
 #include "creature_tracker.h"
 #include "debug.h"
+#include "field.h"
+#include "field_type.h"
 #include "game.h"
 #include "get_version.h"
 #include "json.h"
@@ -279,8 +281,7 @@ auto coop_client::apply_sync(const std::string& json_buf) -> void {
             jin.start_array();
             while (!jin.end_array()) {
                 jin.start_object();
-                int ev_type = 0;
-                int ex = 0, ey = 0, ez = 0, ev_val = 0;
+                int ev_type = 0, ex = 0, ey = 0, ez = 0, ev_val = 0, ev_cid = 0;
                 while (!jin.end_object()) {
                     const auto mk = jin.get_member_name();
                     if (mk == "ev") {
@@ -293,6 +294,8 @@ auto coop_client::apply_sync(const std::string& json_buf) -> void {
                         ez = jin.get_int();
                     } else if (mk == "v") {
                         ev_val = jin.get_int();
+                    } else if (mk == "cid") {
+                        ev_cid = jin.get_int();
                     } else {
                         jin.skip_value();
                     }
@@ -304,10 +307,26 @@ auto coop_client::apply_sync(const std::string& json_buf) -> void {
                     const ter_id ter{ev_val};
                     if (ter) { g->m.ter_set(bpos, ter); }
                 } else if (ev_type == static_cast<int>(evt::furniture_changed)) {
-                    const furn_id furn{ev_val};
-                    g->m.furn_set(bpos, furn);
+                    g->m.furn_set(bpos, furn_id{ev_val});
+                } else if (ev_type == static_cast<int>(evt::field_created)) {
+                    // value=field_type, creature_id=intensity (see sub_add_field hook).
+                    const field_type_id ftype{ev_val};
+                    const int intensity = ev_cid > 0 ? ev_cid : 1;
+                    if (ftype) { g->m.add_field(bpos, ftype, intensity, 0_turns); }
+                } else if (ev_type == static_cast<int>(evt::field_changed)) {
+                    // value=field_type, creature_id=new_intensity.  SET intensity, don't stack.
+                    const field_type_id ftype{ev_val};
+                    const int new_int = ev_cid;
+                    if (ftype && new_int > 0) {
+                        auto* fe = g->m.get_field(bpos).find_field(ftype);
+                        if (fe) { fe->set_field_intensity(new_int); }
+                    }
+                } else if (ev_type == static_cast<int>(evt::field_expired)) {
+                    // value=field_type only.
+                    g->m.remove_field(bpos, field_type_id{ev_val});
                 }
-                // Other event types (creature_moved, item_spawned, …) deferred to A4b.
+                // creature_moved/died: not streamed in A4b (monsters ride monster section).
+                // item_spawned: deferred (no item payload; 30s full sync covers drift).
             }
         } else if (key == "tiles") {
             // Each entry is: { "version": N, "coordinates": [x,y,z], <submap members> }

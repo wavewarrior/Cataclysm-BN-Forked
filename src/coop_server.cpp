@@ -491,15 +491,23 @@ auto coop_server::build_and_send_sync(bool force_full) -> void {
     if (!send_full_tiles && tick_log) {
         auto all_events = tick_log->flush();
         for (auto& ev : all_events) {
-            if (ev.type == coop_event_type::terrain_changed
-                || ev.type == coop_event_type::furniture_changed) {
-                mix_hash(static_cast<uint64_t>(ev.type));
-                mix_hash(static_cast<uint64_t>(ev.pos.x()));
-                mix_hash(static_cast<uint64_t>(ev.pos.y()));
-                mix_hash(static_cast<uint64_t>(ev.pos.z()));
-                mix_hash(static_cast<uint64_t>(ev.value));
-                sent_events.push_back(std::move(ev));
-            }
+            using evt = coop_event_type;
+            // Stream terrain/furniture/field events only.
+            // creature_moved/died: monsters ride the monster section; NPC ids not in
+            //   coop_monster_map_, so client can't apply them yet — deferred.
+            // item_spawned: no item payload; 30s full sync covers drift.
+            const bool streamable =
+                ev.type == evt::terrain_changed || ev.type == evt::furniture_changed
+                || ev.type == evt::field_created || ev.type == evt::field_changed
+                || ev.type == evt::field_expired;
+            if (!streamable) { continue; }
+            mix_hash(static_cast<uint64_t>(ev.type));
+            mix_hash(static_cast<uint64_t>(ev.pos.x()));
+            mix_hash(static_cast<uint64_t>(ev.pos.y()));
+            mix_hash(static_cast<uint64_t>(ev.pos.z()));
+            mix_hash(static_cast<uint64_t>(ev.value));
+            mix_hash(static_cast<uint64_t>(ev.creature_id));
+            sent_events.push_back(std::move(ev));
         }
     }
     jout.member("hash", static_cast<int64_t>(events_hash));
@@ -512,6 +520,7 @@ auto coop_server::build_and_send_sync(bool force_full) -> void {
         jout.member("y", ev.pos.y());
         jout.member("z", ev.pos.z());
         jout.member("v", ev.value);
+        if (ev.creature_id != 0) { jout.member("cid", ev.creature_id); }
         jout.end_object();
     }
     jout.end_array();
