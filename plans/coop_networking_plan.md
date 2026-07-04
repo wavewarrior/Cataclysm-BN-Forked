@@ -1,6 +1,6 @@
 # Co-op Networking Plan
 
-**Status:** A1 + A2 + A5.1 complete. Test infrastructure built (ci-coop CI job, 4-tier test suite). A3 (WorldMutationLog) in progress.
+**Status:** A1 + A2 + A5.1 complete. Two-process integration test green (proxy movement + client reconciliation). A3 (WorldMutationLog) in progress.
 **Goal:** Real-time 2-player co-op that feels snappy and responsive — host parity with single-player, client-side prediction eliminating input lag, server-authoritative world state.
 
 ---
@@ -25,6 +25,9 @@ What **exists** vs what is **not yet implemented** (re-baselined against actual 
 | World transfer on join (A5.1) | ✅ done | `start_host`/`start_join` fully implemented; forced sync on join |
 | `seq` on actions (A2) | ✅ done | `pending_actions_` ring buffer; `next_seq_`; sent with each action |
 | Ring-buffer reconciliation (A2) | ✅ done | `coop_reconcile_pos()` deferred reconciliation; wall-flicker gate in `handle_action.cpp` |
+| Proxy action drain (A2 bugfix) | ✅ done | was `while(moves>0)` — proxy never gets moves from `post_action_world_step` (npcmove zeroes them); replaced with one-action-per-tick unconditional drain |
+| Proxy movement fidelity (A2 bugfix) | ✅ done | was `move_to()` (pathfinds, stumbles diagonally) → `setpos()` (exact client-authoritative placement) |
+| npcmove contract fix | ✅ done | `is_coop_remote` early return lacked `set_moves(0)`; game loop spun 10×, fired reboot/teleport; fixed per npcmove.cpp:790 contract |
 | WorldMutationLog (A3) | 🔧 partial | log module + 8 hooks done; `field_changed`/`field_expired` (A3b) deferred |
 | Delta event stream (A4) | ✅ done (A4a) | terrain+furniture events replace submap blast; `force_resync_` atomic; hash informational; A4b adds creature/field events + hash resync |
 | Activity yield cap (A5.2) | ✅ done | `game::execute_activity_fixed_window_skip`: sync every 10 skipped turns |
