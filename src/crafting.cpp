@@ -1227,11 +1227,11 @@ void complete_craft( Character &who, item &craft )
             food_contained.set_relative_rot( relative_rot );
         }
 
-        newit->set_owner( who.get_faction()->id );
+        newit->set_owner( who.get_faction()->id() );
         // If these aren't equal, newit is a container, so finalize its contents too.
         //TODO!: same as above
         if( newit != &food_contained ) {
-            food_contained.set_owner( who.get_faction()->id );
+            food_contained.set_owner( who.get_faction()->id() );
         }
 
         // If we created a tool that spawns empty, don't preset its ammotype.
@@ -1251,7 +1251,7 @@ void complete_craft( Character &who, item &craft )
             if( bp->goes_bad() ) {
                 bp->set_relative_rot( relative_rot );
             }
-            bp->set_owner( who.get_faction()->id );
+            bp->set_owner( who.get_faction()->id() );
             bp->inherit_flags( used_items, making );
             if( bp->made_of( LIQUID ) ) {
                 liquid_handler::handle_all_liquid( std::move( bp ), PICKUP_RANGE );
@@ -2111,7 +2111,7 @@ static disass_prompt_result prompt_disassemble_in_seq( avatar &you, const item &
     const recipe &r = recipe_dictionary::get_uncraft( obj.typeId() );
     res.r = &r;
     // Only worry about stealing from factions not already hostile
-    if( !obj.is_owned_by( you, true ) && obj.get_owner()->likes_u >= -10 ) {
+    if( !obj.is_owned_by( you, true ) && obj.get_owner()->likes_u() >= -10 ) {
         if( !query_yn( _( "Disassembling the %s may anger the people who own it, continue?" ),
                        obj.tname() ) ) {
             return res;

@@ -482,7 +482,7 @@ void cata::detail::reg_character( sol::state &lua )
 
         luna::set_fx( ut, "get_faction_id", []( const UT_CLASS & charac ) -> faction_id {
             faction *fac = charac.get_faction();
-            return fac == nullptr ? faction_id::NULL_ID() : fac->id;
+            return fac == nullptr ? faction_id::NULL_ID() : fac->id();
         } );
         luna::set_fx( ut, "set_faction_id", []( UT_CLASS & charac, faction_id id ) { charac.set_fac_id( id.str() ); } );
 

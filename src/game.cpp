@@ -4061,7 +4061,7 @@ void game::disp_NPC_epilogues()
 void game::display_faction_epilogues()
 {
     for( const auto &elem : faction_manager_ptr->all() ) {
-        if( elem.second.known_by_u ) {
+        if( elem.second.known_by_u() ) {
             const std::vector<std::string> epilogue = elem.second.epilogue();
             if( !epilogue.empty() ) {
                 const auto new_win = []() {
@@ -4069,7 +4069,7 @@ void game::display_faction_epilogues()
                                                point( std::max( 0, ( TERMX - FULL_SCREEN_WIDTH ) / 2 ),
                                                       std::max( 0, ( TERMY - FULL_SCREEN_HEIGHT ) / 2 ) ) );
                 };
-                scrollable_text( new_win, elem.second.name,
+                scrollable_text( new_win, elem.second.name(),
                                  std::accumulate( epilogue.begin() + 1, epilogue.end(), epilogue.front(),
                 []( const std::string & lhs, const std::string & rhs ) -> std::string {
                     return lhs + "\n" + rhs;
@@ -8766,7 +8766,7 @@ void game::zones_manager()
                     break;
                 }
 
-                mgr.add( name, id, g->u.get_faction()->id, false, true, position->first,
+                mgr.add( name, id, g->u.get_faction()->id(), false, true, position->first,
                          position->second, options );
 
                 zones = get_zones();
@@ -15095,7 +15095,7 @@ void game::perhaps_add_random_npc()
     // create a new "lone wolf" faction for this one NPC
     faction *new_solo_fac = faction_manager_ptr->add_new_faction( tmp->name, faction_id( new_fac_id ),
                             faction_id( "no_faction" ) );
-    tmp->set_fac( new_solo_fac ? new_solo_fac->id : faction_id( "no_faction" ) );
+    tmp->set_fac( new_solo_fac ? new_solo_fac->id() : faction_id( "no_faction" ) );
     // adds the npc to the correct overmap.
     // Only spawn random NPCs on z-level 0
     auto submap_spawn = project_to<coords::sm>( spawn_point );

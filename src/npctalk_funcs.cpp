@@ -121,9 +121,9 @@ void talk_function::mission_success( npc &p )
     faction *p_fac = p.get_faction();
     if( p_fac != nullptr ) {
         int fac_val = std::min( 1 + miss_val / 10, 10 );
-        p_fac->likes_u += fac_val;
-        p_fac->respects_u += fac_val;
-        p_fac->power += fac_val;
+        p_fac->set_likes_u( p_fac->likes_u() + fac_val );
+        p_fac->set_respects_u( p_fac->respects_u() + fac_val );
+        p_fac->set_power( p_fac->power() + fac_val );
     }
     miss->wrap_up();
 }
@@ -747,9 +747,9 @@ void talk_function::leave( npc &p )
     // create a new "lone wolf" faction for this one NPC
     faction *new_solo_fac = g->faction_manager_ptr->add_new_faction( p.name,
                             faction_id( new_fac_id ), faction_id( "no_faction" ) );
-    p.set_fac( new_solo_fac ? new_solo_fac->id : faction_id( "no_faction" ) );
+    p.set_fac( new_solo_fac ? new_solo_fac->id() : faction_id( "no_faction" ) );
     if( new_solo_fac ) {
-        new_solo_fac->known_by_u = true;
+        new_solo_fac->set_known_by_u( true );
     }
     p.chatbin.first_topic = "TALK_STRANGER_NEUTRAL";
     p.set_attitude( NPCATT_NULL );

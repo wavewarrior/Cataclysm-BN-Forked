@@ -492,7 +492,7 @@ void npc::randomize( const npc_class_id &type )
 void npc::randomize_from_faction( faction *fac )
 {
     // Personality = aggression, bravery, altruism, collector
-    set_fac( fac->id );
+    set_fac( fac->id() );
     randomize( npc_class_id::NULL_ID() );
 }
 
@@ -506,7 +506,7 @@ void npc::set_fac( const faction_id &id )
         if( !is_fake() && !is_hallucination() ) {
             my_fac->add_to_membership( getID(), disp_name(), known_to_u );
         }
-        fac_id = my_fac->id;
+        fac_id = my_fac->id();
     } else {
         return;
     }
@@ -897,7 +897,7 @@ void npc::starting_weapon( const npc_class_id &type )
     if( primary_weapon().is_gun() ) {
         primary_weapon().ammo_set( primary_weapon().ammo_default() );
     }
-    primary_weapon().set_owner( get_faction()->id );
+    primary_weapon().set_owner( get_faction()->id() );
 }
 
 bool npc::can_read( const item &book, std::vector<std::string> &fail_reasons )
@@ -975,7 +975,7 @@ void npc::finish_read( item *it )
     const skill_id &skill = reading->skill;
     // NPCs don't need to identify the book or learn recipes yet.
     // NPCs don't read to other NPCs yet.
-    const bool display_messages = my_fac->id == faction_id( "your_followers" ) &&
+    const bool display_messages = my_fac->id() == faction_id( "your_followers" ) &&
                                   g->u.sees( bub_pos() );
     bool continuous = false; //whether to continue reading or not
 
@@ -1485,7 +1485,7 @@ void npc::form_opinion( const Character &u )
         set_attitude( NPCATT_TALK );
     } else if( op_of_u.fear - 2 * personality.aggression - personality.bravery < -30 ) {
         set_attitude( NPCATT_KILL );
-    } else if( my_fac && my_fac->likes_u < -10 ) {
+    } else if( my_fac && my_fac->likes_u() < -10 ) {
         if( is_player_ally() ) {
             mutiny();
         }
@@ -1507,21 +1507,21 @@ void npc::mutiny()
         add_msg( m_bad, _( "%s is tired of your incompetent leadership and abuse!" ), disp_name() );
     }
     // NPCs leaving your faction due to mistreatment further reduce their opinion of you
-    if( my_fac->likes_u < -10 ) {
-        op_of_u.trust += my_fac->respects_u / 10;
-        op_of_u.anger += my_fac->likes_u / 10;
+    if( my_fac->likes_u() < -10 ) {
+        op_of_u.trust += my_fac->respects_u() / 10;
+        op_of_u.anger += my_fac->likes_u() / 10;
     }
     // NPCs leaving your faction for abuse reduce the hatred your (remaining) followers
     // feel for you, but also reduces their respect for you.
-    my_fac->likes_u = std::max( 0, my_fac->likes_u / 2 + 10 );
-    my_fac->respects_u -= 5;
+    my_fac->set_likes_u( std::max( 0, my_fac->likes_u() / 2 + 10 ) );
+    my_fac->set_respects_u( my_fac->respects_u() - 5 );
     g->remove_npc_follower( getID() );
     set_fac( faction_id( "amf" ) );
     chatbin.first_topic = "TALK_STRANGER_NEUTRAL";
     set_attitude( NPCATT_NULL );
     say( _( "<follower_mutiny>  Adios, motherfucker!" ), sounds::sound_t::order );
     if( seen ) {
-        my_fac->known_by_u = true;
+        my_fac->set_known_by_u( true );
     }
 }
 
@@ -1591,9 +1591,9 @@ void npc::make_angry()
     }
 
     // Make associated faction, if any, angry at the player too.
-    if( my_fac && my_fac->id != faction_id( "no_faction" ) && my_fac->id != faction_id( "amf" ) ) {
-        my_fac->likes_u = std::min( -15, my_fac->likes_u - 5 );
-        my_fac->respects_u = std::min( -15, my_fac->respects_u - 5 );
+    if( my_fac && my_fac->id() != faction_id( "no_faction" ) && my_fac->id() != faction_id( "amf" ) ) {
+        my_fac->set_likes_u( std::min( -15, my_fac->likes_u() - 5 ) );
+        my_fac->set_respects_u( std::min( -15, my_fac->respects_u() - 5 ) );
     }
     if( op_of_u.fear > 10 + personality.aggression + personality.bravery ) {
         set_attitude( NPCATT_FLEE_TEMP ); // We don't want to take u on!
@@ -1844,9 +1844,9 @@ void npc::shop_restock()
     std::vector<detached_ptr<item>> ret;
     int shop_value = 75000;
     if( my_fac ) {
-        shop_value = my_fac->wealth * 0.0075;
-        if( is_shopkeeper() && !my_fac->currency.is_empty() ) {
-            item *my_currency = item::spawn_temporary( my_fac->currency );
+        shop_value = my_fac->wealth() * 0.0075;
+        if( is_shopkeeper() && !my_fac->currency().is_empty() ) {
+            item *my_currency = item::spawn_temporary( my_fac->currency() );
             if( !my_currency->is_null() ) {
                 my_currency->set_owner( *this );
                 int my_amount = rng( 5, 15 ) * shop_value / 100 / my_currency->price( true );
@@ -1941,7 +1941,7 @@ int npc::value( const item &it, int market_price ) const
     }
 
     // faction currency trades at market price
-    if( my_fac && my_fac->currency == it.typeId() ) {
+    if( my_fac && my_fac->currency() == it.typeId() ) {
         return market_price;
     }
 
@@ -2145,7 +2145,7 @@ bool npc::has_faction_relationship( const Character &p,
         return false;
     }
 
-    return my_fac->has_relationship( p_fac->id, flag );
+    return my_fac->has_relationship( p_fac->id(), flag );
 }
 
 bool npc::is_ally( const Character &p ) const
@@ -2154,7 +2154,7 @@ bool npc::is_ally( const Character &p ) const
         return true;
     }
     if( p.is_player() ) {
-        if( my_fac && my_fac->id == faction_id( "your_followers" ) ) {
+        if( my_fac && my_fac->id() == faction_id( "your_followers" ) ) {
             return true;
         }
         if( faction_api_version < 2 ) {
@@ -2168,7 +2168,7 @@ bool npc::is_ally( const Character &p ) const
         }
     } else {
         const npc &guy = dynamic_cast<const npc &>( p );
-        if( my_fac && guy.get_faction() && my_fac->id == guy.get_faction()->id ) {
+        if( my_fac && guy.get_faction() && my_fac->id() == guy.get_faction()->id() ) {
             return true;
         }
         if( faction_api_version < 2 ) {
@@ -2200,7 +2200,7 @@ bool npc::is_minion() const
 
 bool npc::guaranteed_hostile() const
 {
-    return is_enemy() || ( my_fac && my_fac->likes_u < -10 ) || g->u.has_trait( trait_PROF_FERAL );
+    return is_enemy() || ( my_fac && my_fac->likes_u() < -10 ) || g->u.has_trait( trait_PROF_FERAL );
 }
 
 bool npc::is_walking_with() const
@@ -2265,7 +2265,7 @@ Attitude npc::attitude_to( const Creature &other ) const
         // check faction relationships first
         const auto *guy_fac = guy.get_faction();
         if( my_fac != nullptr && guy_fac != nullptr ) {
-            const auto rel_data = my_fac->relationship_flags_with( guy_fac->id );
+            const auto *rel_data = my_fac->relationship_flags_with( guy_fac->id() );
             if( rel_data != nullptr ) {
                 if( rel_data->test( npc_factions::kill_on_sight ) ) {
                     return Attitude::A_HOSTILE;
@@ -3323,8 +3323,8 @@ std::pair<PathfindingSettings, RouteSettings> npc::get_pathfinding_pair(
 
 mfaction_id npc::get_monster_faction() const
 {
-    if( my_fac && my_fac->mon_faction.is_valid() ) {
-        return my_fac->mon_faction;
+    if( my_fac && my_fac->mon_faction().is_valid() ) {
+        return my_fac->mon_faction();
     }
 
     // legacy checks

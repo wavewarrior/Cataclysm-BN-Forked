@@ -1421,15 +1421,15 @@ void faction_manager::deserialize( JsonIn &jsin )
         jsin.start_object();
         while( !jsin.end_object() ) {
             faction add_fac;
-            add_fac.id = faction_id( jsin.get_member_name() );
+            add_fac.id_ = faction_id( jsin.get_member_name() );
             jsin.read( add_fac );
-            faction *old_fac = get( add_fac.id, false );
+            faction *old_fac = get( add_fac.id_, false );
             if( old_fac ) {
                 *old_fac = add_fac;
                 // force a revalidation of add_fac
-                get( add_fac.id, false );
+                get( add_fac.id_, false );
             } else {
-                factions[add_fac.id] = add_fac;
+                factions[add_fac.id_] = add_fac;
             }
         }
     } else if( jsin.test_array() ) {
@@ -1438,13 +1438,13 @@ void faction_manager::deserialize( JsonIn &jsin )
         while( !jsin.end_array() ) {
             faction add_fac;
             jsin.read( add_fac );
-            faction *old_fac = get( add_fac.id, false );
+            faction *old_fac = get( add_fac.id_, false );
             if( old_fac ) {
                 *old_fac = add_fac;
                 // force a revalidation of add_fac
-                get( add_fac.id, false );
+                get( add_fac.id_, false );
             } else {
-                factions[add_fac.id] = add_fac;
+                factions[add_fac.id_] = add_fac;
             }
         }
     }

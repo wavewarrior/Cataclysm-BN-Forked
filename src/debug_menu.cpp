@@ -610,8 +610,8 @@ void character_edit_menu( Character &c )
         data << np->name << " " << ( np->male ? _( "Male" ) : _( "Female" ) ) << '\n';
         data << np->myclass.obj().get_name() << "; " <<
              npc_attitude_name( np->get_attitude() ) << "; " <<
-             ( np->get_faction() ? np->get_faction()->name : _( "no faction" ) ) << "; " <<
-             ( np->get_faction() ? np->get_faction()->currency->nname( 1 ) : _( "no currency" ) )
+             ( np->get_faction() ? np->get_faction()->name() : _( "no faction" ) ) << "; " <<
+             ( np->get_faction() ? np->get_faction()->currency()->nname( 1 ) : _( "no currency" ) )
              << "; " <<
              "api: " << np->get_faction_ver() << '\n';
         if( np->has_destination() ) {
@@ -1556,7 +1556,7 @@ void debug()
             // create a new "lone wolf" faction for this one NPC
             faction *new_solo_fac = g->faction_manager_ptr->add_new_faction( temp->name,
                                     faction_id( new_fac_id ), faction_id( "no_faction" ) );
-            temp->set_fac( new_solo_fac ? new_solo_fac->id : faction_id( "no_faction" ) );
+            temp->set_fac( new_solo_fac ? new_solo_fac->id() : faction_id( "no_faction" ) );
             cata::run_hooks( "on_creature_spawn", [&]( sol::table & params ) {
                 params["creature"] = temp.get();
             } );
@@ -2146,12 +2146,12 @@ void debug()
                 std::cout << std::to_string( count ) << " Faction_id key in factions map = " << elem.first.str() <<
                           '\n';
                 std::cout << std::to_string( count ) << " Faction name associated with this id is " <<
-                          elem.second.name << '\n';
-                std::cout << std::to_string( count ) << " the id of that faction object is " << elem.second.id.str()
+                          elem.second.name() << '\n';
+                std::cout << std::to_string( count ) << " the id of that faction object is " << elem.second.id().str()
                           << '\n';
                 count++;
             }
-            std::cout << "Player faction is " << g->u.get_faction()->id.str() << '\n';
+            std::cout << "Player faction is " << g->u.get_faction()->id().str() << '\n';
             break;
         }
         case DEBUG_PRINT_NPC_MAGIC: {

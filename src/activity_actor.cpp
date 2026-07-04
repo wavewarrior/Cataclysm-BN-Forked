@@ -1002,7 +1002,7 @@ void move_items_activity_actor::do_turn(player_activity& act, Character& who) {
         // This is for hauling across zlevels, remove when going up and down stairs
         // is no longer teleportation
         // Also ignores items owned by other NPCs, unless they'd already attack on sight
-        if (target->is_owned_by(who, true) || target->get_owner()->likes_u < -10) {
+        if (target->is_owned_by(who, true) || target->get_owner()->likes_u() < -10) {
             target->set_owner(who);
         } else {
             continue;

@@ -276,7 +276,7 @@ static auto pick_one_up( const pick_one_up_options &opts ) -> bool
 
     const std::optional<int> &quantity = selection.quantity;
     // If the faction would murder you on sight, we no longer care about stealing from them since it can't make things worse
-    if( !loc->is_owned_by( g->u, true ) && loc->get_owner()->likes_u >= -10 ) {
+    if( !loc->is_owned_by( g->u, true ) && loc->get_owner()->likes_u() >= -10 ) {
         // Has the player given input on if stealing is ok?
         if( u.get_value( "THIEF_MODE" ) == "THIEF_ASK" ) {
             pickup::query_thief();

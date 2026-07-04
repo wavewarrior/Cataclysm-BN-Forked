@@ -24,7 +24,7 @@ auto cata::detail::reg_types( sol::state &lua ) -> void
     {
         auto ut = luna::new_usertype<faction>( lua, luna::no_bases, luna::no_constructor );
 
-        luna::set_fx( ut, "str_id", []( const faction & x ) -> faction_id { return x.id; } );
+        luna::set_fx( ut, "str_id", []( const faction & x ) -> faction_id { return x.id(); } );
 
         // Factions are a pain because they _inherit_ from their type, not reference it by id.
         // This causes various weirdness, so let's omit the fields for now.

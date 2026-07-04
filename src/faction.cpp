@@ -50,20 +50,20 @@ std::vector<faction_template> all_templates;
 
 faction_template::faction_template()
 {
-    likes_u = 0;
-    respects_u = 0;
-    known_by_u = true;
-    food_supply = 0;
-    wealth = 0;
-    size = 0;
-    power = 0;
-    lone_wolf_faction = false;
-    currency = itype_id::NULL_ID();
+    likes_u_ = 0;
+    respects_u_ = 0;
+    known_by_u_ = true;
+    food_supply_ = 0;
+    wealth_ = 0;
+    size_ = 0;
+    power_ = 0;
+    lone_wolf_faction_ = false;
+    currency_ = itype_id::NULL_ID();
 }
 
 faction::faction( const faction_template &templ )
 {
-    id = templ.id;
+    id_ = templ.id_;
     // first init *all* members, than copy those from the template
     static_cast<faction_template &>( *this ) = templ;
 }
@@ -77,9 +77,9 @@ void faction_template::load( const JsonObject &jsobj )
 void faction_template::check_consistency()
 {
     for( const faction_template &fac : npc_factions::all_templates ) {
-        for( const auto &epi : fac.epilogue_data ) {
-            if( !std::get<2>( epi ).is_valid() ) {
-                debugmsg( "There's no snippet with id %s", std::get<2>( epi ).str() );
+        for( const auto &epi : fac.epilogue_data_ ) {
+            if( !epi.id.is_valid() ) {
+                debugmsg( "There's no snippet with id %s", epi.id.str() );
             }
         }
     }
@@ -98,49 +98,51 @@ void faction_template::load_relations( const JsonObject &jsobj )
         for( const auto &rel_flag : npc_factions::relation_strs ) {
             fac_relation.set( rel_flag.second, rel_jo.get_bool( rel_flag.first, false ) );
         }
-        relations[fac.name()] = fac_relation;
+        relations_[fac.name()] = fac_relation;
     }
 }
 
 faction_template::faction_template( const JsonObject &jsobj )
-    : name( jsobj.get_string( "name" ) )
-    , likes_u( jsobj.get_int( "likes_u" ) )
-    , respects_u( jsobj.get_int( "respects_u" ) )
-    , known_by_u( jsobj.get_bool( "known_by_u" ) )
-    , id( faction_id( jsobj.get_string( "id" ) ) )
-    , desc( jsobj.get_string( "description" ) )
-    , size( jsobj.get_int( "size" ) )
-    , power( jsobj.get_int( "power" ) )
-    , food_supply( jsobj.get_int( "food_supply" ) )
-    , wealth( jsobj.get_int( "wealth" ) )
+    : name_( jsobj.get_string( "name" ) )
+    , likes_u_( jsobj.get_int( "likes_u" ) )
+    , respects_u_( jsobj.get_int( "respects_u" ) )
+    , known_by_u_( jsobj.get_bool( "known_by_u" ) )
+    , id_( faction_id( jsobj.get_string( "id" ) ) )
+    , desc_( jsobj.get_string( "description" ) )
+    , size_( jsobj.get_int( "size" ) )
+    , power_( jsobj.get_int( "power" ) )
+    , food_supply_( jsobj.get_int( "food_supply" ) )
+    , wealth_( jsobj.get_int( "wealth" ) )
 {
     if( jsobj.has_string( "currency" ) ) {
-        jsobj.read( "currency", currency, true );
+        jsobj.read( "currency", currency_, true );
     } else {
-        currency = itype_id::NULL_ID();
+        currency_ = itype_id::NULL_ID();
     }
-    lone_wolf_faction = jsobj.get_bool( "lone_wolf_faction", false );
+    lone_wolf_faction_ = jsobj.get_bool( "lone_wolf_faction", false );
     load_relations( jsobj );
-    mon_faction = mfaction_str_id( jsobj.get_string( "mon_faction", "human" ) );
+    mon_faction_ = mfaction_str_id( jsobj.get_string( "mon_faction", "human" ) );
     for( const JsonObject jao : jsobj.get_array( "epilogues" ) ) {
-        epilogue_data.emplace( jao.get_int( "power_min", std::numeric_limits<int>::min() ),
-                               jao.get_int( "power_max", std::numeric_limits<int>::max() ),
-                               snippet_id( jao.get_string( "id", "epilogue_faction_default" ) ) );
+        epilogue_data_.emplace( faction_epilogue{
+            .power_min = jao.get_int( "power_min", std::numeric_limits<int>::min() ),
+            .power_max = jao.get_int( "power_max", std::numeric_limits<int>::max() ),
+            .id = snippet_id( jao.get_string( "id", "epilogue_faction_default" ) )
+        } );
     }
 }
 
 std::string faction::describe() const
 {
-    std::string ret = _( desc );
+    std::string ret = _( desc_ );
     return ret;
 }
 
 std::vector<std::string> faction::epilogue() const
 {
     std::vector<std::string> ret;
-    for( const std::tuple<int, int, snippet_id> &epilogue_entry : epilogue_data ) {
-        if( power >= std::get<0>( epilogue_entry ) && power < std::get<1>( epilogue_entry ) ) {
-            ret.emplace_back( std::get<2>( epilogue_entry )->translated() );
+    for( const faction_epilogue &epilogue_entry : epilogue_data_ ) {
+        if( power_ >= epilogue_entry.power_min && power_ < epilogue_entry.power_max ) {
+            ret.emplace_back( epilogue_entry.id->translated() );
         }
     }
     return ret;
@@ -165,11 +167,11 @@ void faction::remove_member( const character_id &guy_id )
         for( const faction_template &elem : npc_factions::all_templates ) {
             // This is a templated base faction - don't delete it, just leave it as zero members for now.
             // Only want to delete dynamically created factions.
-            if( elem.id == id ) {
+            if( elem.id_ == id_ ) {
                 return;
             }
         }
-        g->faction_manager_ptr->remove_faction( id );
+        g->faction_manager_ptr->remove_faction( id_ );
     }
 }
 
@@ -302,7 +304,7 @@ std::string fac_wealth_text( int val, int size )
 std::string faction::food_supply_text()
 {
     //Convert to how many days you can support the population
-    int val = food_supply / ( size * 288 );
+    int val = food_supply_ / ( size_ * 288 );
     if( val >= 30 ) {
         return pgettext( "Faction food", "Overflowing" );
     }
@@ -320,7 +322,7 @@ std::string faction::food_supply_text()
 
 nc_color faction::food_supply_color()
 {
-    int val = food_supply / ( size * 288 );
+    int val = food_supply_ / ( size_ * 288 );
     if( val >= 30 ) {
         return c_green;
     } else if( val >= 14 ) {
@@ -337,8 +339,8 @@ nc_color faction::food_supply_color()
 auto faction::relationship_flags_with( const faction_id &guy_id ) const ->
 const std::bitset<npc_factions::rel_types> *
 {
-    const auto rel_data = relations.find( guy_id.c_str() );
-    return rel_data != relations.end() ? &rel_data->second : nullptr;
+    const auto rel_data = relations_.find( guy_id.c_str() );
+    return rel_data != relations_.end() ? &rel_data->second : nullptr;
 }
 
 bool faction::has_relationship( const faction_id &guy_id, npc_factions::relationship flag ) const
@@ -406,7 +408,7 @@ void faction_manager::create_if_needed()
         return;
     }
     for( const auto &fac_temp : npc_factions::all_templates ) {
-        factions[fac_temp.id] = fac_temp;
+        factions[fac_temp.id_] = fac_temp;
     }
 }
 
@@ -414,12 +416,12 @@ faction *faction_manager::add_new_faction( const std::string &name_new, const fa
         const faction_id &template_id )
 {
     for( const faction_template &fac_temp : npc_factions::all_templates ) {
-        if( template_id == fac_temp.id ) {
+        if( template_id == fac_temp.id_ ) {
             faction fac( fac_temp );
-            fac.name = name_new;
-            fac.id = id_new;
-            factions[fac.id] = fac;
-            return &factions[fac.id];
+            fac.name_ = name_new;
+            fac.id_ = id_new;
+            factions[fac.id_] = fac;
+            return &factions[fac.id_];
         }
     }
     return nullptr;
@@ -434,16 +436,16 @@ faction *faction_manager::get( const faction_id &id, const bool complain )
         if( elem.first == id ) {
             if( !elem.second.validated ) {
                 for( const faction_template &fac_temp : npc_factions::all_templates ) {
-                    if( fac_temp.id == id ) {
-                        elem.second.currency = fac_temp.currency;
-                        elem.second.lone_wolf_faction = fac_temp.lone_wolf_faction;
-                        elem.second.name = fac_temp.name;
-                        elem.second.desc = fac_temp.desc;
-                        elem.second.mon_faction = fac_temp.mon_faction;
-                        elem.second.epilogue_data = fac_temp.epilogue_data;
-                        for( const auto &rel_data : fac_temp.relations ) {
-                            if( !elem.second.relations.contains( rel_data.first ) ) {
-                                elem.second.relations[rel_data.first] = rel_data.second;
+                    if( fac_temp.id_ == id ) {
+                        elem.second.currency_ = fac_temp.currency_;
+                        elem.second.lone_wolf_faction_ = fac_temp.lone_wolf_faction_;
+                        elem.second.name_ = fac_temp.name_;
+                        elem.second.desc_ = fac_temp.desc_;
+                        elem.second.mon_faction_ = fac_temp.mon_faction_;
+                        elem.second.epilogue_data_ = fac_temp.epilogue_data_;
+                        for( const auto &rel_data : fac_temp.relations_ ) {
+                            if( !elem.second.relations_.contains( rel_data.first ) ) {
+                                elem.second.relations_[rel_data.first] = rel_data.second;
                             }
                         }
                         break;
@@ -456,12 +458,12 @@ faction *faction_manager::get( const faction_id &id, const bool complain )
     }
     for( const faction_template &elem : npc_factions::all_templates ) {
         // id isn't already in factions map, so load in the template.
-        if( elem.id == id ) {
-            factions[elem.id] = elem;
+        if( elem.id_ == id ) {
+            factions[elem.id_] = elem;
             if( !factions.empty() ) {
-                factions[elem.id].validated = true;
+                factions[elem.id_].validated = true;
             }
-            return &factions[elem.id];
+            return &factions[elem.id_];
         }
     }
     // Sometimes we add new IDs to the map, sometimes we want to check if its already there.
@@ -622,11 +624,11 @@ std::string faction::faction_info_text() const
 {
     // Parallel to faction::faction_display (curses path untouched).
     std::string out = string_format( _( "Attitude to you:           %s" ),
-                                     fac_ranking_text( likes_u ) );
+                                     fac_ranking_text( likes_u_ ) );
     out += '\n';
-    out += string_format( _( "Faction strength:       %s" ), power );
+    out += string_format( _( "Faction strength:       %s" ), power_ );
     out += '\n';
-    out += _( desc );
+    out += _( desc_ );
     return out;
 }
 
@@ -775,7 +777,7 @@ void faction_manager::display() const
                 break;
             case tab_mode::TAB_OTHERFACTIONS:
                 for( size_t i = 0; i < valfac.size(); i++ ) {
-                    add_row( _( valfac[i]->name ), i );
+                    add_row( _( valfac[i]->name() ), i );
                 }
                 rml_data.detail_rml = cur_fac
                                       ? cata_text_to_rml( cur_fac->faction_info_text() )
@@ -867,7 +869,7 @@ void faction_manager::display() const
         }
         valfac.clear();
         for( const auto &elem : g->faction_manager_ptr->all() ) {
-            if( elem.second.known_by_u && elem.second.id != faction_id( "your_followers" ) ) {
+            if( elem.second.known_by_u() && elem.second.id() != faction_id( "your_followers" ) ) {
                 valfac.push_back( &elem.second );
             }
         }
