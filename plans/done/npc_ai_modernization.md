@@ -1,5 +1,5 @@
-## STATUS (reviewed 2026-06-27)
-**0% DONE — KEEP (tiny, accurate).** Neither helper exists: `grep` for `activate_combat_gear` / `resolve_gun_mode` in `npc.h`/`npcmove.cpp` = 0. `method_of_attack()` still **119 lines** (plan target ~70). The post-review scope (drop the strategy-pattern/perception-split/talk-table fantasies; just extract 2 helpers from one function) is sound and matches reality. 0.5–1 day, low risk, behavior-preserving. Keep — small enough to knock out anytime.
+## STATUS (completed 2026-07-03)
+**100% DONE.** Both helpers extracted: `activate_combat_gear()` and `resolve_gun_mode()` declared in `npc.h` and implemented in `npcmove.cpp`. `method_of_attack()` reduced from **119 lines to 87 lines**. Build green (MSVC Release).
 
 # NPC AI Cleanup — Plan
 

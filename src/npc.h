@@ -1292,6 +1292,8 @@ private:
                                    // overmap/follower removal
 
     bool sees_dangerous_field(const tripoint_bub_ms& p) const;
+    void activate_combat_gear();
+    gun_mode resolve_gun_mode( bool can_use_gun, int dist, bool use_silent ) const;
     bool could_move_onto(const tripoint_bub_ms& p) const;
 
     std::vector<sphere> find_dangerous_explosives() const;

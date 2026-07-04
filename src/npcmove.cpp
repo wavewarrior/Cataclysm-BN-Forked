@@ -1501,6 +1501,45 @@ npc_action npc::method_of_fleeing()
     return npc_flee;
 }
 
+void npc::activate_combat_gear()
+{
+    activate_combat_cbms();
+
+    // Activate Armor & Weapons
+    for( auto &elem : worn ) {
+        // The is_active() part was taken from is_wearing_active_power_armor
+        if( elem->has_flag( flag_COMBAT_NPC_USE ) && !elem->has_flag( flag_COMBAT_NPC_ON ) ) {
+            if( elem->get_use( "transform" ) ) {
+                invoke_item( elem, "transform" );
+            } else if( elem->get_use( "set_transform" ) ) {
+                invoke_item( elem, "set_transform" );
+            }
+        }
+    }
+    item &weapon = primary_weapon();
+    if( !weapon.is_null() && weapon.has_flag( flag_COMBAT_NPC_USE ) &&
+        !weapon.has_flag( flag_COMBAT_NPC_ON ) ) {
+
+        if( weapon.get_use( "transform" ) ) {
+            invoke_item( &weapon, "transform" );
+        } else if( weapon.get_use( "fireweapon_off" ) ) {
+            invoke_item( &weapon, "fireweapon_off" );
+        }
+    }
+}
+
+gun_mode npc::resolve_gun_mode( bool can_use_gun, int dist, bool use_silent ) const
+{
+    gun_mode g_mode = cbm_active.is_null() ? primary_weapon().gun_current_mode() :
+                      cbm_fake_active->gun_current_mode();
+    if( !can_use_gun || dist == 0 ||
+        ( g_mode && ( ( use_silent && !g_mode->is_silent() ) ||
+                      ( item_funcs::shots_remaining( *this, *g_mode ) < g_mode.qty ) ) ) ) {
+        g_mode = gun_mode();
+    }
+    return g_mode;
+}
+
 npc_action npc::method_of_attack()
 {
     Character &player_character = get_player_character();
@@ -1528,32 +1567,7 @@ npc_action npc::method_of_attack()
     const bool not_engaged_yet = !critter->has_effect( effect_hit_by_player ) &&
                                  rules.engagement == combat_engagement::HIT;
 
-    // if there's enough of a threat to be here, power up the combat CBMs
-    activate_combat_cbms();
-
-    // Activate Armor & Weapons
-    for( auto &elem : worn ) {
-        // The is_active() part was taken from is_wearing_active_power_armor
-        if( elem->has_flag( flag_COMBAT_NPC_USE ) && !elem->has_flag( flag_COMBAT_NPC_ON ) ) {
-            if( elem->get_use( "transform" ) ) {
-                invoke_item( elem, "transform" );
-            } else if( elem->get_use( "set_transform" ) ) {
-                invoke_item( elem, "set_transform" );
-            }
-        }
-    }
-    item &weapon = primary_weapon();
-    if( !weapon.is_null() && weapon.has_flag( flag_COMBAT_NPC_USE ) &&
-        !weapon.has_flag( flag_COMBAT_NPC_ON ) ) {
-
-        if( weapon.get_use( "transform" ) ) {
-            invoke_item( &weapon, "transform" );
-        } else if( weapon.get_use( "fireweapon_off" ) ) {
-            invoke_item( &weapon, "fireweapon_off" );
-        }
-
-
-    }
+    activate_combat_gear();
 
     if( emergency() && alt_attack() ) {
         add_msg( m_debug, "%s is trying an alternate attack", disp_name() );
@@ -1566,13 +1580,7 @@ npc_action npc::method_of_attack()
         return npc_noop;
     }
 
-    gun_mode g_mode = cbm_active.is_null() ? primary_weapon().gun_current_mode() :
-                      cbm_fake_active->gun_current_mode();
-    if( !can_use_gun || dist == 0 ||
-        ( g_mode && ( ( use_silent && !g_mode->is_silent() ) ||
-                      ( item_funcs::shots_remaining( *this, *g_mode ) < g_mode.qty ) ) ) ) {
-        g_mode = gun_mode();
-    }
+    gun_mode g_mode = resolve_gun_mode( can_use_gun, dist, use_silent );
 
     // reach attacks are silent and consume no ammo so prefer these if available
     int reach_range = primary_weapon().reach_range( *this );
