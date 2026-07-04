@@ -282,6 +282,7 @@ jobs:
 
       - name: run two-world integration test (Deno harness)
         if: ${{ env.SKIP != 'true' }}
+        timeout-minutes: 10
         env:
           CBN_TEST_BIN: build-coop/tests/cata_test-tiles
         run: |

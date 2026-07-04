@@ -19,7 +19,7 @@
 // Configuration
 // ---------------------------------------------------------------------------
 
-const TIMEOUT_MS = 45_000 // 45 s — allows slow CI machines
+const TIMEOUT_MS = 180_000 // 180 s — two separate cold game data loads (~23 s each) + test runtime
 
 const DEFAULT_BINS = [
   "build-coop/tests/cata_test-tiles",

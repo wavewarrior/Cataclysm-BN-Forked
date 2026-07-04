@@ -47,7 +47,8 @@
 static constexpr uint16_t COOP_INTEG_PORT_BASE = 45802;
 static constexpr int COOP_INTEG_PORT_RANGE = 10; // try 45802..45811
 static constexpr const char* COOP_PORT_FILE = "/tmp/coop_test_port.txt";
-static constexpr int ACCEPT_TIMEOUT_MS = 8000;
+static constexpr int ACCEPT_TIMEOUT_MS = 90'000; // 90 s — covers cold game data load (~23 s
+                                                 // observed)
 
 /// Write the port to the coordination file so the Deno harness can verify it.
 static auto write_port_file(uint16_t port) -> void {
