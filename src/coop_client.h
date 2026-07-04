@@ -14,47 +14,52 @@ class monster;
 
 /// Client-side co-op thin path.
 struct coop_client {
-        coop_client() = default;
-        ~coop_client();
-        coop_client( const coop_client & ) = delete;
-        coop_client &operator=( const coop_client & ) = delete;
+    coop_client() = default;
+    ~coop_client();
+    coop_client(const coop_client&) = delete;
+    coop_client& operator=(const coop_client&) = delete;
 
-        auto connect( const std::string& ip, uint16_t port = 8080 ) -> bool;
-        auto handshake() -> bool;
-        auto receive_world_seed() -> bool;
-        auto apply_world_seed_to_avatar() -> void;
-        auto coop_world_tick() -> void;
-        auto queue_action( const std::string& key, const std::string& ctx_json = {} ) -> void;
-        auto is_connected() const -> bool { return socket_ != nullptr; }
-        auto shutdown() -> void;
-        auto send_chat( const std::string& text ) -> void;
+    auto connect(const std::string& ip, uint16_t port = 8080) -> bool;
+    auto handshake() -> bool;
+    auto receive_world_seed() -> bool;
+    auto apply_world_seed_to_avatar() -> void;
+    auto coop_world_tick() -> void;
+    auto queue_action(const std::string& key, const std::string& ctx_json = {}) -> void;
+    auto is_connected() const -> bool { return socket_ != nullptr; }
+    auto shutdown() -> void;
+    auto send_chat(const std::string& text) -> void;
 
-    private:
-        auto apply_sync( const std::string& json_buf ) -> void;
-        auto handle_disconnect() -> void;
+private:
+    auto apply_sync(const std::string& json_buf) -> void;
+    auto handle_disconnect() -> void;
 
-        NET_StreamSocket *socket_ = nullptr;
+    NET_StreamSocket* socket_ = nullptr;
 
-        struct pending_action {
-            std::string key;
-            std::string ctx_json;
-        };
-        std::deque<pending_action> action_q_; // main-thread only
+    struct pending_action {
+        uint32_t seq = 0;
+        std::string key;
+        std::string ctx_json;
+        bool sent = false; ///< true once the packet has been written to the socket
+    };
+    /// Ring buffer of unconfirmed actions (queued + sent, kept until server confirms via
+    /// last_seq).  Entries are discarded in apply_sync() once seq ≤ last_seq_from_sync.
+    /// Main-thread only — no locking needed.
+    std::deque<pending_action> pending_actions_;
+    uint32_t next_seq_ = 1;
+    bool net_initialized_ = false;
+    // H5: host-assigned monster ID → local monster pointer.
+    // Stable for stationary monsters; updated on position change.
+    std::unordered_map<int, monster*> coop_monster_map_;
 
-        bool net_initialized_ = false;
-        // H5: host-assigned monster ID → local monster pointer.
-        // Stable for stationary monsters; updated on position change.
-        std::unordered_map<int, monster *> coop_monster_map_;
+    // Last proxy and host positions received from sync — used for reconciliation
+    // and future host-avatar rendering.  Initialized to zero; valid after first sync.
+    tripoint_abs_ms sync_proxy_apos_{};
+    tripoint_abs_ms sync_host_apos_{};
 
-        // Last proxy and host positions received from sync — used for reconciliation
-        // and future host-avatar rendering.  Initialized to zero; valid after first sync.
-        tripoint_abs_ms sync_proxy_apos_{};
-        tripoint_abs_ms sync_host_apos_{};
-
-        // World seed data extracted from the packet
-        int world_seed_turn_ = 0;
-        tripoint_abs_ms world_seed_spawn_;
-        std::string world_seed_partner_name_ = "Partner";
+    // World seed data extracted from the packet
+    int world_seed_turn_ = 0;
+    tripoint_abs_ms world_seed_spawn_;
+    std::string world_seed_partner_name_ = "Partner";
 };
 
 #endif // COOP_ENABLED

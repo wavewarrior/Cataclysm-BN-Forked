@@ -234,6 +234,29 @@
         "LINKER": "mold"
       }
     }
+  ,
+  {
+    "name": "ci-coop",
+    "binaryDir": "${sourceDir}/build-coop",
+    "displayName": "CI Co-op Build (Tiles, Sound, COOP=ON)",
+    "description": "CI build with co-op networking enabled. Runs COOP_ENABLED-guarded tests.",
+    "generator": "Ninja",
+    "cacheVariables": {
+      "CMAKE_C_COMPILER": "gcc-14",
+      "CMAKE_CXX_COMPILER": "g++-14",
+      "CMAKE_C_COMPILER_LAUNCHER": "ccache",
+      "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
+      "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+      "SOUND": "ON",
+      "BACKTRACE": "ON",
+      "LIBBACKTRACE": "OFF",
+      "CMAKE_EXPORT_COMPILE_COMMANDS": "OFF",
+      "JSON_FORMAT": "OFF",
+      "TESTS": "ON",
+      "LINKER": "mold",
+      "COOP": "ON"
+    }
+  }
   ],
   "buildPresets": [
     {
@@ -318,5 +341,12 @@
       "targets": ["cataclysm-bn-tiles", "cata_test-tiles"],
       "description": "CI build for tiles and sound."
     }
+  ,
+  {
+    "name": "ci-coop",
+    "configurePreset": "ci-coop",
+    "targets": ["cataclysm-bn-tiles", "cata_test-tiles"],
+    "description": "CI build for co-op tests (COOP=ON). Builds game binary (catches main.cpp COOP_ENABLED loop breaks) and test binary."
+  }
   ]
 }

@@ -2569,6 +2569,17 @@ for( const auto turn_index : std::views::iota( 0, to_turns<int>( duration ) ) ) 
         if( !activity_continues || u.activity->complete() ) {
             break;
         }
+#ifdef COOP_ENABLED
+        // A5.2: activity yield cap — send a sync every COOP_ACTIVITY_YIELD_INTERVAL turns so
+        // the client can catch up during long activities (sleep, craft, read).
+        // Without this the entire 480-turn sleep resolves in one burst and the client
+        // sees no world updates until the host wakes up.
+        static constexpr int COOP_ACTIVITY_YIELD_INTERVAL = 10;
+        if( coop_server_ && coop_server_->is_running() &&
+            skipped_turns % COOP_ACTIVITY_YIELD_INTERVAL == 0 ) {
+            coop_server_->build_and_send_sync();
+        }
+#endif
     }
     run_activity_skip_batch_turns( skipped_turns );
     return skipped_turns;

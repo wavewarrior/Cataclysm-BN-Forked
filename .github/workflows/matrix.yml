@@ -214,6 +214,88 @@ jobs:
           path: build/tests/cata_test${{ matrix.tiles == 1 && '-tiles' || '' }}
           if-no-files-found: ignore
 
+  coop_tests:
+    needs: skip-duplicates
+    if: ${{ needs.skip-duplicates.outputs.should_skip_code != 'true' }}
+    name: "co-op unit tests (COOP=ON)"
+    runs-on: ubuntu-latest
+    env:
+      SKIP: ${{ needs.skip-duplicates.outputs.should_skip_code }}
+    steps:
+      - name: checkout repository
+        if: ${{ env.SKIP != 'true' }}
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: install dependencies
+        if: ${{ env.SKIP != 'true' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-14 mold ninja-build ccache \
+            libasound2-dev libpulse-dev libx11-dev libxext-dev libxrandr-dev \
+            libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxkbcommon-dev \
+            libdrm-dev libgbm-dev libgl1-mesa-dev libgles2-mesa-dev libegl1-mesa-dev \
+            libdbus-1-dev libibus-1.0-dev libudev-dev libwayland-dev libdecor-0-dev \
+            libfreetype-dev libharfbuzz-dev \
+            libtiff-dev libavif-dev libwebp-dev libjpeg-dev libjxl-dev \
+            libflac-dev libvorbis-dev libxmp-dev libmpg123-dev libwavpack-dev \
+            libsqlite3-dev zlib1g-dev gettext libncursesw5-dev
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 100
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 100
+
+      - name: setup ccache
+        if: ${{ env.SKIP != 'true' }}
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: linux-gcc-coop-${{ github.ref_name }}
+          restore-keys: |
+            linux-gcc-coop-main
+            linux-gcc-coop-
+          max-size: 3G
+          save: ${{ github.event_name != 'pull_request' }}
+
+      - name: configure and build (COOP=ON)
+        if: ${{ env.SKIP != 'true' }}
+        uses: lukka/run-cmake@v10
+        with:
+          configurePreset: ci-coop
+          configurePresetAdditionalArgs: "['-DUSE_PREFIX_DATA_DIR=OFF']"
+          buildPreset: ci-coop
+          buildPresetAdditionalArgs: "['-j', '2']"
+
+      - name: run co-op tests
+        if: ${{ env.SKIP != 'true' }}
+        run: |
+          ./build-coop/tests/cata_test-tiles \
+            --user-dir=test_user_dir \
+            --use-colour yes \
+            --error-format=github-action \
+            "[coop]"
+
+
+      - name: install deno
+        if: ${{ env.SKIP != 'true' }}
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: run two-world integration test (Deno harness)
+        if: ${{ env.SKIP != 'true' }}
+        env:
+          CBN_TEST_BIN: build-coop/tests/cata_test-tiles
+        run: |
+          deno run --allow-run --allow-env --allow-read --allow-write \
+            scripts/test_coop.ts
+
+      - name: upload test binary on failure
+        uses: actions/upload-artifact@v4.6.0
+        if: failure()
+        with:
+          name: cata_test-tiles-coop
+          path: build-coop/tests/cata_test-tiles
+          if-no-files-found: ignore
+
   builds:
     needs: skip-duplicates
     if: ${{ github.event_name != 'push' && needs.skip-duplicates.outputs.should_skip_platform != 'true' }}

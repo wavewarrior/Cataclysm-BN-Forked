@@ -20,9 +20,28 @@ enum class coop_pkt : uint8_t {
     vehicle_sync = 21, ///< vehicle state delta (host → client)
     overmap_sync = 22, ///< overmap chunk (host → client)
 
-    chat = 30, ///< free-form text (bidirectional, any time)
+    resync_request = 25, ///< client detected hash mismatch; host responds with forced full sync
+                         ///< (client → host)
+    chat = 30,           ///< free-form text (bidirectional, any time)
 
     disconnect = 99, ///< graceful close notification
+};
+
+/// World mutation event types used by coop_mutation_log (A3).
+/// Stored as uint8_t in the per-tick event buffer and serialised in A4 delta packets.
+enum class coop_event_type : uint8_t {
+    terrain_changed = 1,   ///< submap::set_ter()
+    furniture_changed = 2, ///< submap::set_furn()
+    creature_moved = 3,    ///< Creature::setpos()
+    creature_died = 4,     ///< monster/npc/Character::die()
+    creature_spawned = 5,  ///< future: creature placement
+    creature_hp = 6,       ///< future: hp change
+    item_spawned = 7,      ///< map::add_item()
+    item_removed = 8,      ///< future: item removal
+    field_created = 9,     ///< sub_add_field()
+    field_changed = 10,    ///< set_field_intensity() / set_field_age()
+    field_expired = 11,    ///< field removed in process_fields()
+    turn_advanced = 12,    ///< calendar::turn increment
 };
 
 #endif // COOP_ENABLED

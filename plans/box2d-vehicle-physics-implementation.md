@@ -113,62 +113,20 @@ Beyond VV, the entire collision and movement model has deeper structural issues:
 
 ---
 
-## Phase 1: CMake Integration
+## Phase 1: CMake Integration *(done)*
 
-**Independent of all other phases. Completes when the binary compiles with `-DBOX2D=ON`.**
+**Status:** ✅ Implemented 2026-07-04.
+- `CMakeLists.txt:752–776` — FetchContent block for box2d v3.0.0 (`-DBOX2D=ON` option)
+- `src/CMakeLists.txt` — `target_link_libraries` + `BOX2D_ENABLED` compile definition added after rmlui block
 
-### Step 1 — Add Box2D FetchContent
+**Note on macOS build:** Full link blocked by pre-existing `SDL3_shadercross` / `-fuse-ld=mold` incompatibility (not related to Box2D). Box2D Phase 2 files (`src/physics/`) can be written; syntax-verified via compile_commands.json + `-include cmake_pch.hxx`. Link verification requires Linux CI or fixing the shadercross linker flag.
 
-**File: `CMakeLists.txt`** — insert after `FetchContent_MakeAvailable(RmlUi)` (line 736) and before `add_subdirectory(src)` (line 778):
-
-```cmake
-# --- Box2D physics (single physics authority) ---
-option(BOX2D "Enable Box2D physics" OFF)
-if (BOX2D)
-    set(_cata_saved_build_shared "${BUILD_SHARED_LIBS}")
-    set(BUILD_SHARED_LIBS OFF)
-    set(BOX2D_SAMPLES    OFF CACHE BOOL "" FORCE)
-    set(BOX2D_UNIT_TESTS OFF CACHE BOOL "" FORCE)
-    FetchContent_Declare(
-        box2d
-        GIT_REPOSITORY https://github.com/erincatto/box2d.git
-        GIT_TAG        v3.0.0
-        GIT_SHALLOW    TRUE
-        EXCLUDE_FROM_ALL
-    )
-    FetchContent_MakeAvailable(box2d)
-    set(BUILD_SHARED_LIBS "${_cata_saved_build_shared}")
-    unset(_cata_saved_build_shared)
-    if (TARGET box2d)
-        if (MSVC)
-            target_compile_options(box2d PRIVATE /w)
-        else ()
-            target_compile_options(box2d PRIVATE -w)
-        endif ()
-    endif ()
-endif ()
-```
-
-**File: `src/CMakeLists.txt`** — after `target_link_libraries(cataclysm-bn-tiles-common PUBLIC rmlui)` (line 190):
-
-```cmake
-if (BOX2D)
-    target_link_libraries(cataclysm-bn-tiles-common PUBLIC box2d)
-    target_compile_definitions(cataclysm-bn-tiles-common PUBLIC BOX2D_ENABLED)
-endif ()
-```
-
-**File: `msvc-full-features/vcpkg.json`** — add `"box2d"` to the `dependencies` array.
-
-Include site: `#include <box2d/box2d.h>` (transitively includes all required headers).
-
-Default: `OFF`. Develop with `cmake --preset linux-full -DBOX2D=ON`. Do not change `CMakePresets.json`.
-
-**Phase 1 verification:**
+**Phase 1 verification (Linux):**
 ```sh
 cmake --preset linux-full -DBOX2D=ON
 cmake --build --preset linux-full --target cataclysm-bn-tiles
 ```
+
 
 ---
 ## Code Organisation
@@ -742,7 +700,7 @@ After Phase 11:
 
 ---
 
-## Phase 13: Creature-Phase Bugfix (Independent)
+## Phase 13: Creature-Phase Bugfix *(done)*
 
 **Independent of all physics phases.**
 

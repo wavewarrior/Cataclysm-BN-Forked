@@ -21,7 +21,11 @@
       "description": "update available semantic commit types",
       "command": "deno run -R=data/mods -W=.github/semantic.yml scripts/semantic.ts"
     },
-    "affected-files": "deno run -RWEN --allow-run scripts/affected_files.ts"
+    "affected-files": "deno run -RWEN --allow-run scripts/affected_files.ts",
+    "test:coop": {
+      "description": "run two-process co-op integration test (requires a built cata_test-tiles with COOP=ON)",
+      "command": "deno run --allow-run --allow-env --allow-read --allow-write scripts/test_coop.ts"
+    }
   },
   "test": { "include": ["scripts", ".agents"] },
   "lint": {

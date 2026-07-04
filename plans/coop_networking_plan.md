@@ -1,39 +1,56 @@
 # Co-op Networking Plan
 
-**Status:** Architecture fully documented; world-transfer (A5) first, then A1 → A2 → A3/A4 parallel → A5 remainder  
+**Status:** A1 + A2 + A5.1 complete. Test infrastructure built (ci-coop CI job, 4-tier test suite). A3 (WorldMutationLog) in progress.
 **Goal:** Real-time 2-player co-op that feels snappy and responsive — host parity with single-player, client-side prediction eliminating input lag, server-authoritative world state.
 
 ---
 
 ## Current State Audit
 
-What **exists** vs what is **not yet implemented**:
+
+What **exists** vs what is **not yet implemented** (re-baselined against actual code 2026-07-04):
 
 | System | Status | Notes |
 |---|---|---|
-| 1 Hz accumulator main loop | ✅ exists | `main.cpp:569` `TICK_INTERVAL_MS = 1000.0` |
-| Proxy NPC on host | ✅ exists | `spawn_proxy_npc()`, tagged `COOP_PROXY_CHAR_ID` |
-| Full submap blast sync | ✅ exists | `build_and_send_sync()` — 5×5 grid, periodic/on-shift |
-| Monster stable-ID delta sync | ✅ exists | `monster_id_map_`, pointer-keyed |
-| Client position reconciliation | ✅ exists | ±5 tile drift threshold, `coop_client.cpp:339` |
-| `both_idle()` fast-forward | ✅ exists | reads `client_is_idle_` atomic (fixed) |
-| `client_status` idle packet | ✅ exists | sent every tick from client |
-| Fiber system for host modals | ✅ exists | `coop_fiber.h/cpp`, minicoro-backed |
-| Input-driven tick (A1) | ❌ not started | host input still gated on 1 Hz accumulator |
-| Coalescing window (A1) | ❌ not started | |
-| `seq` on actions (A2) | ❌ not started | actions have key+ctx only |
-| Ring-buffer reconciliation (A2) | ❌ not started | reconciliation is crude ±5-tile snap |
-| WorldMutationLog (A3) | ❌ not started | |
-| Delta event stream (A4) | ❌ not started | |
-| World transfer on join (A5) | ❌ not started | `coop_menu.cpp:109` popup stub |
-| Activity yield cap (A5) | ❌ not started | |
-| Ranged lag compensation (A5) | ❌ not started | FIRE action is log-only (server.cpp:332) |
+| 1 Hz accumulator main loop | ✅ done | `main.cpp:625` `IDLE_TICK_INTERVAL_MS = 1000.0` |
+| Proxy NPC on host | ✅ done | `spawn_proxy_npc()`, tagged `COOP_PROXY_CHAR_ID` |
+| Full submap blast sync | ✅ done | `build_and_send_sync()` — 5×5 grid, periodic/on-shift |
+| Monster stable-ID delta sync | ✅ done | `monster_id_map_`, pointer-keyed |
+| Client position reconciliation | ✅ done | ±5-tile drift snap in `apply_sync`; upgraded to seq-based replay by A2 |
+| `both_idle()` fast-forward | ✅ done | reads `client_is_idle_` atomic |
+| `client_status` idle packet | ✅ done | sent every tick from client |
+| Fiber system for host modals | ✅ done | `coop_fiber.h/cpp`, minicoro-backed |
+| Input-driven tick (A1) | ✅ done | `main.cpp:631–703`: coalescing window + idle floor |
+| Coalescing window (A1) | ✅ done | `COALESCE_WINDOW_MS = 16.0`; resets idle accumulator |
+| World transfer on join (A5.1) | ✅ done | `start_host`/`start_join` fully implemented; forced sync on join |
+| `seq` on actions (A2) | ✅ done | `pending_actions_` ring buffer; `next_seq_`; sent with each action |
+| Ring-buffer reconciliation (A2) | ✅ done | `coop_reconcile_pos()` deferred reconciliation; wall-flicker gate in `handle_action.cpp` |
+| WorldMutationLog (A3) | 🔧 partial | log module + 8 hooks done; `field_changed`/`field_expired` (A3b) deferred |
+| Delta event stream (A4) | ✅ done (A4a) | terrain+furniture events replace submap blast; `force_resync_` atomic; hash informational; A4b adds creature/field events + hash resync |
+| Activity yield cap (A5.2) | ✅ done | `game::execute_activity_fixed_window_skip`: sync every 10 skipped turns |
+| Ranged lag compensation (A5.3) | ✅ done (infra) | `entity_snapshot` history; `resolve_fire_at_seq` called; ballistic resolution deferred |
 | FIRE execution on proxy | ❌ not started | |
 | PICKUP on proxy | ❌ deferred | phase 9 note in execute_client_action |
 | Vertical move on proxy | ❌ deferred | phase 10 note |
 | SLEEP/CRAFT relay | ❌ partial | moves consumed, activity not set |
-
 ---
+
+## Test Infrastructure (built 2026-07-04)
+
+All COOP-enabled code now has CI coverage. The test suite runs in the `coop_tests` CI job (`CMakePresets.json`: `ci-coop` preset, `COOP=ON`).
+
+| File | Tag | Description |
+|---|---|---|
+| `src/coop_packets.h/cpp` | — | Pure packet builders/parsers (`world_seed`, `action`, `sync` header). Architectural seam: decouples JSON protocol from `g→` state. Used by A4 delta stream. |
+| `src/coop_reconcile.h/cpp` | — | Pure `coop_reconcile_pos()`. Deferred reconciliation: discard confirmed → reset to server pos → replay pending. |
+| `src/coop_mutation_log.h/cpp` | — | Per-tick world mutation event buffer (A3). Thread-local singleton; null in SP = zero overhead. FNV-1a rolling hash for A4 integrity check. |
+| `tests/coop_reconcile_test.cpp` | `[coop][reconcile]` | Direction convention anchored to `tripoint_north` etc. (non-circular). Operator+ round-trip. All 8 directions, boundary, fallback. |
+| `tests/coop_packets_test.cpp` | `[coop][packets]` | `world_seed` / `action` round-trips. `parse_sync_header` extracts `last_seq`. Missing field → `-1`. Wrong type → `nullopt`. |
+| `tests/coop_net_test.cpp` | `[coop][net]` | `coop_net::send`/`recv`/`poll` over real loopback socket. 4-byte BE framing. Multi-payload round-trip. Poll before/after send. |
+| `tests/coop_integration_test.cpp` | `[.][coop_role_host]` `[.][coop_role_client]` | Two-process integration: separate `cata_test-tiles` instances, each with own `game* g`. Port-file coordination. Full handshake → world_seed → initial sync → action ticks → reconciliation. |
+| `scripts/test_coop.ts` | — | Deno harness for the two-process test. Spawns both roles simultaneously; port-file polling handles synchronisation. |
+| `.github/workflows/matrix.yml` | `coop_tests` job | Builds `ci-coop` (COOP=ON + `cataclysm-bn-tiles` + `cata_test-tiles`), runs `[coop]` tests, then Deno harness. |
+
 
 ## Architecture Summary
 
@@ -95,101 +112,38 @@ Track A (co-op) depends only on Step A3 (WorldMutationLog) for full desync safet
 
 | Step | Depends on | Effort | What it unlocks |
 |---|---|---|---|
-| **A5: world transfer** | handshake (exists) | 2 days | client can actually join and see the world — everything else is testable |
-| **A1: input-driven tick** | nothing | 2 days | responsive host movement; snappy feel |
-| **A2: seq + ring buffer** | A1 | 2 days | proper per-action reconciliation; unlocks lag compensation |
-| **A3: mutation log hooks** | nothing (additive) | 1 week | events exist; can land in parallel with A1/A2 as own PR |
+| ~~A5.1: world transfer~~ | ✅ done | — | — |
+| ~~A1: input-driven tick~~ | ✅ done | — | — |
+| ~~A2: seq + ring buffer~~ | ✅ done | — | — |
+| **A3: mutation log hooks** | nothing (additive) | 1 week | events exist; lands as own PR in parallel with A2 |
 | **A4: delta stream** | A3 | 3 days | efficient sync; replaces full-submap blast |
-| **A5: activity yield cap** | nothing | 1 day | sleep/craft don't lock out client |
-| **A5: ranged lag comp** | A2 | 2 days | shooting resolves correctly |
+| **A5.2: activity yield cap** | nothing | 1 day | sleep/craft don't lock out client |
+| **A5.3: ranged lag comp** | A2 | 2 days | shooting resolves correctly |
 | **B1–B5** | each other | 8–10 weeks | clean architecture; not co-op critical |
 
-**Minimum viable co-op (playable end-to-end):** A5 world-transfer + A1 + A2  
+**Minimum viable co-op (playable end-to-end):** ✅ A2 complete  
 **Desync-safe co-op:** add A3 + A4  
-**Complete co-op:** add A5 remainder (yield cap + lag comp)
+**Complete co-op:** add A5.2 + A5.3
 
 ---
 
 ## Track A — Co-op Delivery
 
-### Step A5.1 — World Transfer on Join *(do this first)*
-**Files:** `src/coop_menu.cpp`, `src/coop_server.cpp`, `src/coop_client.cpp`, `src/coop_proto.h`  
-**Effort:** 2 days
+### Step A5.1 — World Transfer on Join *(done)*
+**Status:** ✅ Fully implemented. `start_host()` calls `send_world_seed`, `spawn_proxy_npc`, `send_initial_sync`; `start_join()` calls `receive_world_seed`, `apply_world_seed_to_avatar`. No stub remains.
+**Files:** `src/coop_menu.cpp`, `src/coop_server.cpp`, `src/coop_client.cpp`
 
-Currently `coop_menu.cpp:109` shows "World setup not yet implemented" popup and exits. Nothing reaches the game after handshake.
-
-**Protocol flow:**
-```
-host → client:  world_seed packet (already in coop_pkt::world_seed = 2)
-  { "t": 2, "turn": 1234, "seed": 987654, "spawn_x": 1000, "spawn_y": 500, "spawn_z": 0 }
-
-host → client:  forced full sync (build_and_send_sync() with force=true)
-  existing 5×5 submap blast, ~100KB one-time cost
-
-host:  spawn_proxy_npc(spawn_pos, player_name) — already implemented
-
-client:  set calendar::turn from world_seed
-         set RNG seed for local weather/noise
-         receive and apply the forced submap sync
-         g->u.setpos(bub_from_abs(spawn_pos))
-```
-
-- [ ] Add `force_full_` flag to `build_and_send_sync()` — bypasses origin-change / periodic gate
-- [ ] Send `world_seed` packet after handshake succeeds
-- [ ] Send forced full sync immediately after `world_seed`
-- [ ] Client: handle `world_seed` packet in `apply_sync()` — set turn, seed, position
-- [ ] Client: run `g->u.process_turn()` once after position set (initialise avatar stats)
-- [ ] Remove "not yet implemented" popup; replace with loading indicator
-
-**Client character:** Session guest, no save file. Proxy NPC freshly spawned by host. No character-sheet merging. Persistent client characters are Track C.
+*(Stale planning notes removed — A5.1 and A1 are fully implemented in the codebase.)*
 
 ---
 
-### Step A1 — Main Loop Rework
-**Files:** `src/main.cpp`  
-**Effort:** 2 days
-
-**Current (main.cpp:565–623):**
-```
-while (accumulator >= 1000ms):
-    drain pending_action_queue
-    coop_game_tick()
-```
-Host input only processes when the 1 Hz accumulator fires. Client actions wait up to 1 second. Unacceptable latency.
-
-**Proposed replacement:**
-```
-Every outer-loop iteration:
-  1. Poll SDL event
-  2. If host acted → push to pending_action_queue, open coalesce window
-  3. If client action arrived (recv peek on server) → open coalesce window
-  4. If coalesce window open AND elapsed >= 16ms → fire ONE coop_game_tick(); close window; reset idle accum
-  5. Else if no window AND idle accum >= 1000ms → fire ONE idle coop_game_tick()
-  6. redraw_invalidated()
-  7. SDL_Delay(4)
-```
-
-```cpp
-// main.cpp constants (replacing TICK_INTERVAL_MS single-rate)
-constexpr double IDLE_TICK_INTERVAL_MS = 1000.0; // DO NOT lower — game-clock = wall-clock
-constexpr double COALESCE_WINDOW_MS    = 16.0;
-double coalesce_start_ms_ = -1.0;                // -1 = no window open
-```
-
-- [ ] Remove single `TICK_INTERVAL_MS` accumulator gate on action processing
-- [ ] Host input goes directly to `pending_action_queue_` — not gated on accumulator
-- [ ] Coalescing window opened by: (a) host action, (b) client action arriving at server (`action_q_` non-empty after recv)
-- [ ] Coalescing tick resets idle accumulator — paths are mutually exclusive
-- [ ] Idle floor (1 Hz) fires only when no window is pending AND accumulator >= 1000ms
-- [ ] `modal_fiber_` routing unchanged — fiber events bypass action queue as today
-- [ ] `both_idle()` fast-forward: `main_loop_accum_ms_ = 3000.0` — unchanged; gated on `!modal_fiber_`
-- [ ] `both_idle()` already reads `client_is_idle_` atomic — confirmed fixed
-
-**Gotcha:** `post_action_world_step()` does `calendar::turn += 1_turns` every call (`game.cpp:16388`). Calling it 20×/sec = game time at 20× speed. The idle floor MUST stay at 1 Hz.
+### Step A1 — Main Loop Rework *(done)*
+**Status:** ✅ Implemented at `main.cpp:621–703`. Coalescing window (`COALESCE_WINDOW_MS = 16.0`) + idle floor (`IDLE_TICK_INTERVAL_MS = 1000.0`). Host input pushes directly to `pending_action_queue_`; client actions pending open the window; mutually exclusive paths. `both_idle()` fast-forward unchanged.
 
 ---
 
-### Step A2 — Sequence Numbers + Ring-Buffer Reconciliation
+
+### Step A2 — Sequence Numbers + Ring-Buffer Reconciliation *(done)*
 **Files:** `src/coop_client.cpp`, `src/coop_client.h`, `src/coop_proto.h`, `src/coop_server.cpp`  
 **Effort:** 2 days  
 **Depends on:** A1 (actions now fire at input rate; ring buffer needs to handle bursts)
