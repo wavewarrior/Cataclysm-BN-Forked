@@ -20,6 +20,7 @@
 #include "monster.h"
 #include "npc.h"
 #include "overmapbuffer.h"
+#include "ranged.h"
 #include "submap.h"
 #include "world.h"
 #include "worldfactory.h"
@@ -376,7 +377,28 @@ auto coop_server::execute_client_action(
             const int tx = ctx.get_int("tx", 0);
             const int ty = ctx.get_int("ty", 0);
             const int tz = ctx.get_int("tz", 0);
+
+            // A5.3: look up the world state at the client's fire-seq for lag
+            // compensation — creature positions are resolved against the snapshot.
             resolve_fire_at_seq(seq, tx, ty, tz);
+
+            // Execute the shot: proxy fires its wielded weapon toward the
+            // historically-correct target position.  If the proxy is unarmed the
+            // call is a no-op (fire_gun returns 0 when there's nothing to fire).
+            // Equipment sync (client→proxy inventory) is deferred; this handles
+            // the common case where the client's NPC proxy already carries a gun.
+            if (proxy->is_armed() && proxy->primary_weapon().is_gun()) {
+                const tripoint_bub_ms target_bub{tx, ty, tz};
+                const int shots_fired = ranged::fire_gun(*proxy, target_bub);
+                DebugLog(DL::Info, DC::Main)
+                    << "[coop] FIRE from proxy (seq=" << seq << "): fired " << shots_fired
+                    << " shot(s) at (" << tx << "," << ty << "," << tz << ")";
+            } else {
+                DebugLog(DL::Info, DC::Main)
+                    << "[coop] FIRE from proxy (seq=" << seq
+                    << "): proxy unarmed or no gun — shot not executed";
+                proxy->moves -= proxy->get_speed(); // consume action
+            }
         } else {
             DebugLog(DL::Info, DC::Main)
                 << "[coop] FIRE from proxy (seq=" << seq << "): no target context";

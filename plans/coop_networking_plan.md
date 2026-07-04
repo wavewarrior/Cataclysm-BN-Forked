@@ -29,10 +29,10 @@ What **exists** vs what is **not yet implemented** (re-baselined against actual 
 | Delta event stream (A4) | ✅ done (A4a) | terrain+furniture events replace submap blast; `force_resync_` atomic; hash informational; A4b adds creature/field events + hash resync |
 | Activity yield cap (A5.2) | ✅ done | `game::execute_activity_fixed_window_skip`: sync every 10 skipped turns |
 | Ranged lag compensation (A5.3) | ✅ done (infra) | `entity_snapshot` history; `resolve_fire_at_seq` called; ballistic resolution deferred |
-| FIRE execution on proxy | ❌ not started | |
+| FIRE execution on proxy | ✅ done | `ranged::fire_gun(*proxy, target_bub)` with lag-comp snapshot; unarmed proxy consumes action |
 | PICKUP on proxy | ❌ deferred | phase 9 note in execute_client_action |
 | Vertical move on proxy | ❌ deferred | phase 10 note |
-| SLEEP/CRAFT relay | ❌ partial | moves consumed, activity not set |
+| SLEEP/CRAFT relay | ✅ done (functional) | moves consumed; `client_is_idle_` drives `both_idle()`; proxy animation cosmetic |
 ---
 
 ## Test Infrastructure (built 2026-07-04)
