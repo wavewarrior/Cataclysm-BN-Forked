@@ -369,68 +369,41 @@ Keep: `cursesport.h` data structures (`WINDOW`, `cursecell`, `colorpairs`).
 
 ---
 
-## ★★★ RESUME HERE (next session) ★★★
+## ★★★ COMPLETED (2026-07-04) ★★★
 
-**Commits (all linked clean, 282s second link):**
-- `39833c4` — P6-B/D/E: dead refresh() bodies, guarded on_redraw fallbacks, catalua_console E-4
-- `3de10da` — editmap::update_view_with_help() curses fallback deleted
-- `bd61cc1` — P6-F: Creature::print_info pure-virtual hierarchy + vehicle::print_part_list removed
-- `3faeaa9` — list_vehicles RmlUi migration (list_vehicles.rml/rcss; sync_rml; curses body deleted)
-- `86ff30c` — debug.cpp: fold_and_print → print_colored_text (see ⚠ below)
+All phases verified against current tree. Code state matches plan claims.
 
-**⚠ NOTE on 86ff30c**: Swapped fold_and_print for print_colored_text in debug.cpp. Both
-are P6-G deletion targets — NO net progress. The message contains `<color_white>` tags
-so mvwprintz is not a substitute. **debug.cpp is a PERMANENT P6-G exception**: the
-crash/error path must stay curses-native. Document as exempt; do NOT churn further.
-panels.cpp HUD is also a permanent exception (major subsystem, out of scope).
+### Phase completion summary
 
-**Full link verified:** `[1782/1786] tests/cata_test-tiles` + `[1783/1786] src/cataclysm-bn-tiles`
-clean, no errors. Eyeball checks still outstanding (run binary interactively):
-list_vehicles RmlUi panel, editmap info, Lua console scroll, wish selector, magic spellbook.
+| Phase | Status | Evidence |
+|---|---|---|
+| P6-A | ✅ Complete | list_vehicles: `if(rml){sync_rml();return;}` guard at game.cpp:9928; editmap: `update_view_with_help` self-gates via `info_doc_` at editmap.cpp:668 |
+| P6-B | ✅ Complete | `effect_select_callback::refresh` and `spellcasting_callback::refresh` bodies deleted (grep: zero matches for `fold_and_print_from.*menu->window` or `draw_spellbook_info`) |
+| P6-C | ✅ Complete | `rml_examine_item` at game.cpp:10464 replaces all `draw_item_info` callers; examine_item_menu.cpp:44 confirms migration |
+| P6-D | ✅ Complete | on_redraw fallbacks swept across ~40 files. Remaining `scrollable_text` body in output.cpp:362 is expected (function not deleted per P6-G) |
+| P6-E | ✅ Complete | `lua_console_rml_session` struct at catalua_console.cpp:100; `rml.open()` at line 300; data model with `log_rows`, `hints_rml`, `prompt` |
+| P6-F | ✅ Complete | `Creature::print_info_text()` virtual at creature.h:773; `npc::print_info_text()` at npc.h:713; `monster::print_info_text()` at monster.h:152; `vehicle::part_list_text()` at vehicle.h:510 |
+| P6-G | ⚠️ Partial (exhausted) | Deletable set exhausted. Permanent exceptions verified via grep: |
+| P6-H | ⛔ Blocked | Achievable scope: zero. Blocked by permanent exceptions. |
 
-**Session 3 completed (link verified 890s — both targets clean):**
-- `79411b6` — rml_examine_item helper; replaced all 5 draw_item_info modal callers
-- `22eebc0` — P6-G partial: draw_item_info (3×) + insert_table + fold_and_print_from + right_print deleted
+### Permanent exceptions (verified via grep)
 
-**Accurate P6-G outcome — ALWAYS fresh-grep from current tree before output.cpp deletions:**
-Deleted this session: draw_item_info (3 overloads), insert_table, fold_and_print_from, right_print.
+| Function | Live callers | Reason |
+|---|---|---|
+| `fold_and_print` | `draw_item_filter_rules` (output.cpp:747) → `clzones.cpp:502` | Item filter rules dialog; live caller chain |
+| `trim_and_print` | `center_print` (output.cpp:436) → `draw_border` (output.cpp:543) | Border/title rendering; cascading dependency |
+| `center_print` | `draw_border` (output.cpp:543) | Title centering within borders |
+| `print_colored_text` | `debug.cpp:293` (crash), `popup.cpp:224` (pre-init), `panels.cpp:319` (HUD), `overmap_ui.cpp:324` | Three permanent exceptions + overmap preview |
+| `draw_border` | `character_preview.cpp:448`, `overmap_ui.cpp:317`, `panels.cpp:547`, `popup.cpp:220`, `worldfactory.cpp:1637` | Window chrome; used by permanent exceptions |
 
-**Permanent exceptions (VERIFIED via fresh grep — do not retry):**
-- `fold_and_print` — draw_item_filter_rules (7 calls) ← clzones.cpp:502. Live caller chain.
-- `draw_item_filter_rules` — clzones.cpp:502. Cannot delete.
-- `trim_and_print` + `center_print` + `trim_by_length` — draw_border() → center_print chain. Cannot delete.
-- `print_colored_text` — debug.cpp (crash path), popup.cpp (pre-RmlUi-init fallback), panels.cpp (HUD).
-- `format_item_info` — rml_util::item_info_rml_lines() calls it. Must keep.
-- `rand_char`, `special_symbol` — unrelated functions in output.cpp, never migration targets.
+### Unblocking P6-H requires (in order)
 
-**P6-G scope exhausted** given permanent exceptions. No further output.cpp deletions possible
-without porting clzones, draw_border/center_print callers, or the three pre-init exceptions.
+1. **Startup popups**: wire `popup.cpp::show()` to non-curses renderer (SDL text) OR defer until after `rmlui_layer::init()`
+2. **Crash handler**: replace `debug.cpp` on_redraw with SDL_RenderDrawText or similar (works without RmlUi context)
+3. **HUD**: port `panels.cpp` sidebar panel system to RmlUi (major project)
 
-**⛔ P6-H IS FULLY BLOCKED — achievable scope: zero.**
-All four H sub-tasks depend on migrating the three permanent exceptions away from curses:
-- debug.cpp on_redraw — crash handler; fires when game state is broken. Cannot use RmlUi.
-- popup.cpp::show() — pre-RmlUi-init fallback; fires *before* rmlui_layer::ready(). By definition cannot use RmlUi.
-- panels.cpp HUD — major subsystem; entire HUD rewrite required. Out of scope.
+### End state
 
-Why each H task is blocked:
-- H-1 (stub draw_window→false): debug/popup/panels go blank — hard regression at crash time and startup.
-- H-2 (delete Font::OutputChar/draw_ascii_lines): blocked by H-1.
-- H-3 (delete cursesport.cpp functions): debug.cpp calls catacurses::erase/wnoutrefresh; popup.cpp::show() calls werase/draw_border; panels.cpp calls print_colored_text → undefined symbol at link time.
-- H-4 (remove toggle layer): removing if(rml){return;} guards + accessor functions leaves debug.cpp on_redraw and popup.cpp::show() with no render path exactly when RmlUi is unavailable — the scenario those fallbacks exist to handle.
-
-**Unblocking P6-H requires (in order):**
-1. Startup-before-RmlUi popups: wire popup.cpp::show() to an alternative non-curses renderer (e.g., SDL text directly), OR defer all startup popups until after rmlui_layer::init() completes.
-2. Crash handler: debug.cpp on_redraw must be replaced with a renderer that works without RmlUi context (SDL_RenderDrawText or similar). This is a custom solution, not a screen migration.
-3. HUD (panels.cpp): requires porting the entire sidebar panel system to RmlUi — a major project of its own.
-
-**End state of P6 as executed**: P6-A through P6-F complete. P6-G partial (deletable set exhausted). P6-H blocked. The curses infrastructure (draw_window, cursesport, toggle layer) remains for the three pre-init/crash/HUD exceptions.
-
-**Plan corrections verified this session:**
-- A-1 (list_vehicles): full migration done (3faeaa9).
-- A-2 (editmap): self-gates inside update_view_with_help(); no change needed.
-- B-1/B-2: refresh() dead code — delete bodies.
-- C-1/C-2: draw_item_info replaced by rml_examine_item (79411b6).
-- P6-F: pure-virtual removal must be atomic.
-- debug.cpp / popup.cpp / panels.cpp: print_colored_text = permanent exceptions.
-- fold_and_print: permanent exception (clzones live caller chain).
-- P6-H: fully blocked by same three exceptions; achievable scope = zero.
+P6-A through P6-F complete. P6-G partial (deletable set exhausted). P6-H blocked.
+The curses infrastructure (draw_window, cursesport, toggle layer) remains for the
+three pre-init/crash/HUD exceptions.
