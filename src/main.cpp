@@ -678,7 +678,13 @@ int main( int argc, char* argv[] )
                 // While a coalescing window is open but hasn't elapsed: no tick this frame.
 
                 if( fire_tick ) {
-                    // Drain host actions (same as before).
+                    // World step first: process_turn() inside coop_game_tick() refills
+                    // u.moves unconditionally, so the drain below always finds moves > 0.
+                    // Draining before the refill caused a ~1s stall on any keypress that
+                    // arrived when moves==0 (normal at a turn boundary).
+                    g->coop_game_tick();
+
+                    // Drain host actions.
                     while( g->u.moves > 0 ) {
                         if( !g->pending_action_queue_.empty() ) {
                             const auto act = g->pending_action_queue_.front();
@@ -690,8 +696,6 @@ int main( int argc, char* argv[] )
                             break;
                         }
                     }
-
-                    g->coop_game_tick();
 
                     if( g->is_game_over() ) {
                         g->cleanup_at_end();
