@@ -1,6 +1,6 @@
 # Co-op Networking Plan
 
-**Status:** A1 + A2 + A3 + A4 + A5.1 + A5.2 + A5.3 complete. A5.4 verification pending. B1 (monster decide/execute split) complete. B2 Phase 1 (npc_cmd_t struct, execute_action signature) complete. B2 Phase 2 complete. B2 Phase 3 (decide_action() extracted; all bypass paths mapped to command kinds) complete.
+**Status:** Track A complete (A1–A5.4). B1 complete. B2 complete (Phases 1–3). B3 Phase 1 complete: player_cmd_t scaffold + make_player_move_cmd + 11 tests in player_cmd.h/cpp. Next: B3 Phase 2 — wire MoveCmd into both handle_action() switches; B3 Phase 3+ remaining sim commands (pause, smash, pickup, fire, …).
 **Goal:** Real-time 2-player co-op that feels snappy and responsive — host parity with single-player, client-side prediction eliminating input lag, server-authoritative world state.
 
 ---
