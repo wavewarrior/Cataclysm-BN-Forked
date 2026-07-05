@@ -38,7 +38,13 @@ if (MSVC)
     endforeach()
 endif()
 
-file(GLOB_RECURSE CATACLYSM_BN_HEADERS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/*.h)
+# Headers do NOT use CONFIGURE_DEPENDS: adding/removing a .h never needs a
+# cmake re-run because the compiler's -MMD flags track header dependencies
+# automatically.  CONFIGURE_DEPENDS on the .h glob caused every new header
+# to trigger a full cmake reconfigure, which rewrote shadercross/RmlUI
+# build.ninja files and forced a complete rebuild of those deps.
+# The .cpp glob (line 5) keeps CONFIGURE_DEPENDS to detect new source files.
+file(GLOB_RECURSE CATACLYSM_BN_HEADERS ${CMAKE_SOURCE_DIR}/src/*.h)
 list(FILTER CATACLYSM_BN_HEADERS EXCLUDE REGEX "/src/(lua|sol|third-party)/")
 
 add_subdirectory(lua)
