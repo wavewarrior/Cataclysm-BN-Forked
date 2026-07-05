@@ -379,6 +379,57 @@ auto coop_server::execute_player_cmd(npc* proxy, const player_cmd_t& cmd, const 
     }
 }
 
+auto coop_server::apply_pickup_manifest(const std::string& ctx_json) -> void {
+    if (ctx_json.empty()) { return; }
+    std::istringstream iss(ctx_json);
+    JsonIn jin(iss);
+    JsonObject root = jin.get_object();
+    root.allow_omitted_members();
+    for (JsonObject entry : root.get_array("items")) {
+        entry.allow_omitted_members();
+        const tripoint_abs_ms
+            abs_pos{entry.get_int("tx"), entry.get_int("ty"), entry.get_int("tz")};
+        const itype_id type(entry.get_string("type"));
+        const int charges = entry.get_int("charges", 0);
+        const int qty = entry.get_int("qty", 0);
+        const tripoint_bub_ms bub = g->m.abs_to_bub(abs_pos);
+        if (!g->m.inbounds(bub)) { continue; }
+        auto stack = g->m.i_at(bub);
+        if (charges > 0) {
+            auto it = std::ranges::find_if(stack, [&](const item* i) {
+                return i->typeId() == type;
+            });
+            if (it != stack.end()) {
+                const int have = (*it)->charges;
+                if (charges >= have) {
+                    stack.erase(it);
+                } else {
+                    (*it)->charges -= charges;
+                }
+            } else {
+                DebugLog(DL::Info, DC::Main)
+                    << "[coop] C1 PICKUP: cbc item not found: " << type.str();
+            }
+        } else if (qty > 0) {
+            int remaining = qty;
+            auto it = stack.begin();
+            while (it != stack.end() && remaining > 0) {
+                if ((*it)->typeId() == type) {
+                    it = stack.erase(it);
+                    --remaining;
+                } else {
+                    ++it;
+                }
+            }
+            if (remaining > 0) {
+                DebugLog(DL::Info, DC::Main)
+                    << "[coop] C1 PICKUP: " << remaining << " of " << type.str()
+                    << " not found at tile";
+            }
+        }
+    }
+}
+
 auto coop_server::execute_client_action(
     npc* proxy, const std::string& key, const std::string& ctx_json, uint32_t seq) -> void {
     if (!proxy) { return; }
@@ -400,55 +451,7 @@ auto coop_server::execute_client_action(
         // the case where the host world already diverged (e.g. another entity took the item),
         // NOT as a dedup mechanism. C5 (reconnection) will need seq-based dedup.
         proxy->moves -= proxy->get_speed();
-        if (!ctx_json.empty()) {
-            std::istringstream iss(ctx_json);
-            JsonIn jin(iss);
-            JsonObject root = jin.get_object();
-            root.allow_omitted_members();
-            for (JsonObject entry : root.get_array("items")) {
-                entry.allow_omitted_members();
-                const tripoint_abs_ms
-                    abs_pos{entry.get_int("tx"), entry.get_int("ty"), entry.get_int("tz")};
-                const itype_id type(entry.get_string("type"));
-                const int charges = entry.get_int("charges", 0);
-                const int qty = entry.get_int("qty", 0);
-                const tripoint_bub_ms bub = g->m.abs_to_bub(abs_pos);
-                if (!g->m.inbounds(bub)) { continue; }
-                auto stack = g->m.i_at(bub);
-                if (charges > 0) {
-                    auto it = std::ranges::find_if(stack, [&](const item* i) {
-                        return i->typeId() == type;
-                    });
-                    if (it != stack.end()) {
-                        const int have = (*it)->charges;
-                        if (charges >= have) {
-                            stack.erase(it);
-                        } else {
-                            (*it)->charges -= charges;
-                        }
-                    } else {
-                        DebugLog(DL::Info, DC::Main)
-                            << "[coop] C1 PICKUP: cbc item not found: " << type.str();
-                    }
-                } else if (qty > 0) {
-                    int remaining = qty;
-                    auto it = stack.begin();
-                    while (it != stack.end() && remaining > 0) {
-                        if ((*it)->typeId() == type) {
-                            it = stack.erase(it);
-                            --remaining;
-                        } else {
-                            ++it;
-                        }
-                    }
-                    if (remaining > 0) {
-                        DebugLog(DL::Info, DC::Main)
-                            << "[coop] C1 PICKUP: " << remaining << " of " << type.str()
-                            << " not found at tile";
-                    }
-                }
-            }
-        }
+        apply_pickup_manifest(ctx_json);
         return;
     }
     if (key == "SLEEP") {

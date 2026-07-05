@@ -75,6 +75,10 @@ struct coop_server {
     /// Called by execute_client_action() after parsing the string key.
     /// Public so unit tests can call it directly with typed commands.
     auto execute_player_cmd(npc* proxy, const player_cmd_t& cmd, uint32_t seq) -> void; // *NOPAD*
+    /// Test seam: parse a PICKUP manifest JSON and apply item removals to g->m.
+    /// Does NOT need a live server instance or a proxy NPC — safe to call from
+    /// unit tests with a world set up via build_test_map().
+    static auto apply_pickup_manifest(const std::string& ctx_json) -> void; // *NOPAD*
 
 private:
     struct action_entry {
