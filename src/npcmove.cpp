@@ -767,10 +767,16 @@ void npc::move() {
     if (npc_lod_tier == 2 && !calendar::stride_due(npc_macro_interval)) { return; }
     regen_ai_cache();
     adjust_power_cbms();
+    {
+        ZoneScopedN("npc_execute_action");
+        execute_action(decide_action());
+    }
+}
+
+auto npc::decide_action() -> npc_cmd_t {
     // NPCs under operation should just stay still
     if (activity->id() == activity_id("ACT_OPERATION")) {
-        execute_action(npc_cmd_t{.kind = npc_player_activity});
-        return;
+        return npc_cmd_t{.kind = npc_player_activity};
     }
 
     npc_action action = npc_undecided;
@@ -804,12 +810,18 @@ void npc::move() {
      * NPCs flee from uncontained fires within 3 tiles
      */
     if (!in_vehicle && (sees_dangerous_field(bub_pos()) || has_effect(effect_npc_fire_bad))) {
-        if (sees_dangerous_field(bub_pos())) { path.clear(); }
-        const auto escape_dir = good_escape_direction(sees_dangerous_field(bub_pos()));
+        const auto danger_at_pos = sees_dangerous_field(bub_pos());
+        // danger_at_pos: clear path before querying so good_escape_direction() takes the
+        // retreat-zone branch (up to 60 tiles). Without this clear it only rates adjacents.
+        if (danger_at_pos) { path.clear(); }
+        const auto escape_dir = good_escape_direction(danger_at_pos);
         if (escape_dir != bub_pos()) {
-            move_to(escape_dir);
-            return;
+            // Unconditional clear so execute_action(npc_flee) takes move_to(tar) not
+            // move_to_next() — matches the original direct move_to(escape_dir) call.
+            path.clear();
+            return npc_cmd_t{.kind = npc_flee, .dest = escape_dir};
         }
+        // else: no valid escape direction — fall through to normal decision tree
     }
 
     // TODO: Place player-aiding actions here, with a weight
@@ -890,7 +902,6 @@ void npc::move() {
             }
         }
 
-
         action = address_needs();
         print_action("address_needs %s", action);
 
@@ -925,12 +936,14 @@ void npc::move() {
         if (has_stashed_activity()) {
             if (!check_outbounds_activity(get_stashed_activity())) {
                 assign_stashed_activity();
+                return npc_cmd_t{.kind = npc_player_activity};
             } else {
                 // wait a turn, because next turn, the object of our activity
-                // may have been loaded in.
+                // may have been loaded in. set_moves(0) only — npc_pause would run
+                // move_pause() side effects (bionics, aim) that the original didn't.
                 set_moves(0);
+                return npc_cmd_t{.kind = npc_noop};
             }
-            return;
         }
         std::vector<tripoint_bub_ms> activity_route = get_auto_move_route();
         if (!activity_route.empty() && !has_destination_activity()) {
@@ -941,10 +954,7 @@ void npc::move() {
                 final_destination = activity_route.back();
             }
             update_path(final_destination);
-            if (!path.empty()) {
-                move_to_next();
-                return;
-            }
+            if (!path.empty()) { return npc_cmd_t{.kind = npc_move_to_next}; }
         }
         if (has_destination_activity()) {
             start_destination_activity();
@@ -973,7 +983,7 @@ void npc::move() {
             }
         } else if (has_new_items) {
             scan_new_items();
-            return;
+            return npc_cmd_t{.kind = npc_noop};
         } else if (!fetching_item) {
             find_item();
             print_action("find_item %s", action);
@@ -1014,10 +1024,7 @@ void npc::move() {
     }
 
     add_msg(m_debug, "%s chose action %s.", name, npc_action_name(action));
-    {
-        ZoneScopedN("npc_execute_action");
-        execute_action(resolve_cmd(action));
-    }
+    return resolve_cmd(action);
 }
 
 auto npc::resolve_cmd(npc_action action) -> npc_cmd_t {
@@ -1376,6 +1383,10 @@ void npc::execute_action(const npc_cmd_t& cmd) {
 
         case npc_player_activity:
             do_player_activity();
+            break;
+
+        case npc_move_to_next:
+            move_to_next();
             break;
 
         case npc_undecided:
@@ -4159,6 +4170,8 @@ std::string npc_action_name(npc_action action) {
             return "Escape explosion";
         case npc_player_activity:
             return "Performing activity";
+        case npc_move_to_next:
+            return "Follow path (move to next)";
         default:
             return "Unnamed action";
     }

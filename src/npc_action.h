@@ -49,6 +49,9 @@ enum npc_action : int {
     npc_investigate_sound,
     npc_return_to_guard_pos,
     npc_player_activity,
+    /// Follow the current path one step (move_to_next()). Used when the activity
+    /// route has already been computed in decide_action() and must not be recomputed.
+    npc_move_to_next,
     num_npc_actions
 };
 

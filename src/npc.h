@@ -937,7 +937,10 @@ public:
     void shift(point_rel_sm s);
 
     // Movement; the following are defined in npcmove.cpp
-    void move(); // Picks an action & a target and calls execute_action
+    void move(); // Attitude update + guards + regen_ai_cache + execute_action(decide_action())
+    /// Decides the action for this tick. Returns a fully-resolved npc_cmd_t.
+    /// Non-const: may mutate ai_cache, attitude, path (fire-escape only).
+    auto decide_action() -> npc_cmd_t;         // *NOPAD*
     void execute_action(const npc_cmd_t& cmd); // Performs action (mutation pass)
     /// Builds a fully-resolved npc_cmd_t for \p action.
     /// Calls good_escape_direction() (RNG + path-mutating) for npc_flee — exactly once per
