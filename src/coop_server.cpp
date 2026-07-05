@@ -344,35 +344,71 @@ auto coop_server::has_pending_actions() const -> bool {
     return !action_q_.empty();
 }
 
+auto coop_server::execute_player_cmd(npc* proxy, const player_cmd_t& cmd, const uint32_t seq)
+    -> void {
+    if (!proxy) { return; }
+    using K = player_cmd_kind;
+    const tripoint_bub_ms cur = proxy->bub_pos();
+    switch (cmd.kind) {
+        case K::move: {
+            // Authoritative client position: setpos(), not move_to().
+            // move_to() pathfinds and may stumble diagonally on blocked tiles.
+            const tripoint_bub_ms
+                dest{cur.x() + cmd.delta.x(), cur.y() + cmd.delta.y(), cur.z() + cmd.delta.z()};
+            if (g->m.inbounds(dest)) { proxy->setpos(dest); }
+            break;
+        }
+        case K::pause:
+            proxy->moves -= proxy->get_speed();
+            break;
+        case K::pickup:
+            // NPC pickup deferred: proxy-targeted pickup needs item::pickup_target on NPC.
+            proxy->moves -= proxy->get_speed();
+            DebugLog(DL::Info, DC::Main) << "[coop] PICKUP from proxy: NPC pickup deferred";
+            break;
+        case K::sleep:
+        case K::craft:
+            // Activity relay: deduct moves; NPC activity set elsewhere.
+            proxy->moves -= proxy->get_speed();
+            break;
+        case K::none:
+        default:
+            DebugLog(DL::Debug, DC::Main)
+                << "[coop] execute_player_cmd: unhandled kind " << static_cast<int>(cmd.kind);
+            break;
+    }
+}
+
 auto coop_server::execute_client_action(
     npc* proxy, const std::string& key, const std::string& ctx_json, uint32_t seq) -> void {
     if (!proxy) { return; }
 
+    // Try the typed path first: movement and simple no-payload commands.
+    const auto move_cmd = parse_move_cmd(key);
+    if (move_cmd.kind == player_cmd_kind::move) {
+        execute_player_cmd(proxy, move_cmd, seq);
+        return;
+    }
+    if (key == "PAUSE" || key == "WAIT") {
+        execute_player_cmd(proxy, player_cmd_t{.kind = player_cmd_kind::pause}, seq);
+        return;
+    }
+    if (key == "PICKUP") {
+        execute_player_cmd(proxy, player_cmd_t{.kind = player_cmd_kind::pickup}, seq);
+        return;
+    }
+    if (key == "SLEEP") {
+        execute_player_cmd(proxy, player_cmd_t{.kind = player_cmd_kind::sleep}, seq);
+        return;
+    }
+    if (key == "CRAFT") {
+        execute_player_cmd(proxy, player_cmd_t{.kind = player_cmd_kind::craft}, seq);
+        return;
+    }
+
+    // String-only paths: SMASH (needs ctx_json target pos) and FIRE (lag-comp + seq).
     const tripoint_bub_ms cur = proxy->bub_pos();
-    // Movement keys: proxy mirrors the client's authoritative position exactly.
-    // Use setpos() not move_to(): move_to() pathfinds and may stumble diagonally
-    // when the target tile is blocked, causing x/z drift.  The client's input is
-    // authoritative; the proxy must land on the same tile the client sees itself on.
-    const auto proxy_step = [&proxy](const tripoint_bub_ms& dest) {
-        if (g->m.inbounds(dest)) { proxy->setpos(dest); }
-    };
-    if (key == "MOVE_N" || key == "UP") {
-        proxy_step(cur + tripoint(0, -1, 0));
-    } else if (key == "MOVE_S" || key == "DOWN") {
-        proxy_step(cur + tripoint(0, 1, 0));
-    } else if (key == "MOVE_E" || key == "RIGHT") {
-        proxy_step(cur + tripoint(1, 0, 0));
-    } else if (key == "MOVE_W" || key == "LEFT") {
-        proxy_step(cur + tripoint(-1, 0, 0));
-    } else if (key == "MOVE_NE") {
-        proxy_step(cur + tripoint(1, -1, 0));
-    } else if (key == "MOVE_NW") {
-        proxy_step(cur + tripoint(-1, -1, 0));
-    } else if (key == "MOVE_SE") {
-        proxy_step(cur + tripoint(1, 1, 0));
-    } else if (key == "MOVE_SW") {
-        proxy_step(cur + tripoint(-1, 1, 0));
-    } else if (key == "SMASH") {
+    if (key == "SMASH") {
         if (!ctx_json.empty()) {
             std::istringstream iss(ctx_json);
             JsonIn jin(iss);
@@ -393,30 +429,15 @@ auto coop_server::execute_client_action(
             const int tx = ctx.get_int("tx", 0);
             const int ty = ctx.get_int("ty", 0);
             const int tz = ctx.get_int("tz", 0);
-            // A5.3: resolve_fire_at_seq handles snapshot lookup, lag-comp reposition,
-            // fire_gun execution, and position restore.
             resolve_fire_at_seq(proxy, seq, tx, ty, tz);
         } else {
             DebugLog(DL::Info, DC::Main) << "[coop] FIRE seq=" << seq << ": no target context";
             proxy->moves -= proxy->get_speed();
         }
-    } else if (key == "PAUSE" || key == "WAIT") {
-        proxy->moves -= proxy->get_speed();
-    } else if (key == "PICKUP") {
-        // Phase 9: pickup is avatar-centric (g->u); proxy-targeted pickup
-        // requires item::pickup_target on an npc — deferred to Ph9 implementation.
-        // Deduct moves so the client's action is consumed.
-        proxy->moves -= proxy->get_speed();
-        DebugLog(DL::Info, DC::Main) << "[coop] PICKUP from proxy: NPC pickup deferred";
     } else if (key == "MOVE_UP" || key == "MOVE_DOWN") {
-        // Phase 10: vertical_move() acts on host avatar (g->u), not proxy.
-        // True proxy vertical move needs NPC stair navigation — deferred.
-        // Deduct moves to consume the queued action.
+        // Vertical movement deferred: needs NPC stair navigation.
         proxy->moves -= proxy->get_speed();
         DebugLog(DL::Info, DC::Main) << "[coop] " << key << " from proxy: deferred";
-    } else if (key == "SLEEP" || key == "CRAFT") {
-        // Phase 11: activity relay — deduct moves; NPC activity set elsewhere
-        proxy->moves -= proxy->get_speed();
     } else {
         DebugLog(DL::Debug, DC::Main) << "[coop] execute_client_action: unimplemented key=" << key;
     }

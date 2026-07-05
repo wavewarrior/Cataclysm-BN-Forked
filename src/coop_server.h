@@ -3,6 +3,7 @@
 
 #include "coop_proto.h"
 #include "coordinates.h"
+#include "player_cmd.h"
 
 #include <SDL3_net/SDL_net.h>
 #include <atomic>
@@ -70,6 +71,10 @@ struct coop_server {
     /// Test seam: directly set the client-idle flag that is normally written by the
     /// receiver thread when processing client_status packets.
     auto set_client_idle_for_test(bool v) -> void { client_is_idle_.store(v); }
+    /// Typed dispatcher: apply a pre-parsed player_cmd_t to the proxy NPC.
+    /// Called by execute_client_action() after parsing the string key.
+    /// Public so unit tests can call it directly with typed commands.
+    auto execute_player_cmd(npc* proxy, const player_cmd_t& cmd, uint32_t seq) -> void; // *NOPAD*
 
 private:
     struct action_entry {

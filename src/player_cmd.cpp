@@ -24,3 +24,17 @@ std::string_view move_cmd_to_dir_string(const player_cmd_t& cmd) {
     if (d == point_rel_ms{-1, -1}) { return "MOVE_NW"; }
     return {};
 }
+player_cmd_t parse_move_cmd(const std::string_view key) {
+    auto make = [](int dx, int dy) -> player_cmd_t {
+        return {.kind = player_cmd_kind::move, .delta = tripoint_rel_ms{dx, dy, 0}};
+    };
+    if (key == "MOVE_N" || key == "UP") { return make(0, -1); }
+    if (key == "MOVE_S" || key == "DOWN") { return make(0, 1); }
+    if (key == "MOVE_E" || key == "RIGHT") { return make(1, 0); }
+    if (key == "MOVE_W" || key == "LEFT") { return make(-1, 0); }
+    if (key == "MOVE_NE") { return make(1, -1); }
+    if (key == "MOVE_NW") { return make(-1, -1); }
+    if (key == "MOVE_SE") { return make(1, 1); }
+    if (key == "MOVE_SW") { return make(-1, 1); }
+    return {};
+}

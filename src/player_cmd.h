@@ -38,8 +38,14 @@ enum class player_cmd_kind : uint8_t {
     /// delta carries the direction resolved from action_id + iso_rotate.
     move,
 
-    // Phase 4+: pause, pickup, sleep, craft, smash, fire, open, close, …
-    // Each kind lands here alongside its execute_player_cmd() case.
+    // ── Phase 4: simple no-payload simulation commands ───────────────────
+    pause,  ///< ACTION_PAUSE / ACTION_TIMEOUT / ACTION_WAIT
+    pickup, ///< ACTION_PICKUP / ACTION_PICKUP_ALL / ACTION_PICKUP_FEET (moves consumed; NPC impl
+            ///< deferred)
+    sleep,  ///< ACTION_SLEEP
+    craft,  ///< ACTION_CRAFT / ACTION_LONGCRAFT / ACTION_RECRAFT
+
+    // Phase 5+: smash (needs absolute target pos), fire (needs ctx_json + seq)
 };
 
 // ---------------------------------------------------------------------------
@@ -68,3 +74,9 @@ player_cmd_t make_player_move_cmd(action_id act, iso_rotate rot);
 /// Returns an empty string_view for non-move commands or unknown deltas.
 /// Pure: no side effects; safe to call from unit tests.
 std::string_view move_cmd_to_dir_string(const player_cmd_t& cmd);
+
+/// Reverse of move_cmd_to_dir_string(): parse a wire-protocol direction string
+/// ("MOVE_N", "MOVE_NE", …, "UP"/"DOWN" legacy aliases) back to a move player_cmd_t.
+/// Returns player_cmd_kind::none for unknown strings.
+/// Pure: no side effects; safe to call from unit tests.
+player_cmd_t parse_move_cmd(std::string_view key);

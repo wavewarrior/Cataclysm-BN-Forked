@@ -143,3 +143,56 @@ TEST_CASE("move_cmd_to_dir_string — non-move cmd returns empty", "[player_cmd]
     const player_cmd_t cmd; // kind == none
     CHECK(move_cmd_to_dir_string(cmd).empty());
 }
+
+// ---------------------------------------------------------------------------
+// Phase 4 — parse_move_cmd (inverse of move_cmd_to_dir_string)
+// ---------------------------------------------------------------------------
+
+TEST_CASE("parse_move_cmd — all 8 directions", "[player_cmd][parse]") {
+    using P = tripoint_rel_ms;
+    struct Case {
+        std::string_view key;
+        P expected_delta;
+    };
+    for (const auto& [key, expected] : std::initializer_list<Case>{
+             {"MOVE_N", P{0, -1, 0}},
+             {"MOVE_NE", P{1, -1, 0}},
+             {"MOVE_E", P{1, 0, 0}},
+             {"MOVE_SE", P{1, 1, 0}},
+             {"MOVE_S", P{0, 1, 0}},
+             {"MOVE_SW", P{-1, 1, 0}},
+             {"MOVE_W", P{-1, 0, 0}},
+             {"MOVE_NW", P{-1, -1, 0}},
+         }) {
+        const auto cmd = parse_move_cmd(key);
+        REQUIRE(cmd.kind == player_cmd_kind::move);
+        CHECK(cmd.delta == expected);
+    }
+}
+
+TEST_CASE("parse_move_cmd — legacy aliases UP/DOWN/LEFT/RIGHT", "[player_cmd][parse]") {
+    CHECK(parse_move_cmd("UP").delta == tripoint_rel_ms{0, -1, 0});
+    CHECK(parse_move_cmd("DOWN").delta == tripoint_rel_ms{0, 1, 0});
+    CHECK(parse_move_cmd("LEFT").delta == tripoint_rel_ms{-1, 0, 0});
+    CHECK(parse_move_cmd("RIGHT").delta == tripoint_rel_ms{1, 0, 0});
+}
+
+TEST_CASE("parse_move_cmd — unknown string returns none", "[player_cmd][parse]") {
+    CHECK(parse_move_cmd("PAUSE").kind == player_cmd_kind::none);
+    CHECK(parse_move_cmd("FIRE").kind == player_cmd_kind::none);
+    CHECK(parse_move_cmd("").kind == player_cmd_kind::none);
+}
+
+TEST_CASE("round-trip: make_player_move_cmd -> dir_string -> parse_move_cmd", "[player_cmd]["
+                                                                              "parse]") {
+    // Every lateral action_id should survive the full round-trip.
+    for (const auto act :
+         {ACTION_MOVE_FORTH, ACTION_MOVE_FORTH_RIGHT, ACTION_MOVE_RIGHT, ACTION_MOVE_BACK_RIGHT,
+          ACTION_MOVE_BACK, ACTION_MOVE_BACK_LEFT, ACTION_MOVE_LEFT, ACTION_MOVE_FORTH_LEFT}) {
+        const auto original = make_player_move_cmd(act, iso_rotate::no);
+        const auto dir = move_cmd_to_dir_string(original);
+        const auto parsed = parse_move_cmd(dir);
+        REQUIRE(parsed.kind == player_cmd_kind::move);
+        CHECK(parsed.delta == original.delta);
+    }
+}
