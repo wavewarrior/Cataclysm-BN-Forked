@@ -107,6 +107,7 @@
 #include <initializer_list>
 #include <optional>
 #include <set>
+#include <unordered_set>
 #include <sstream>
 #include <utility>
 
@@ -117,16 +118,7 @@ namespace {
 inline void coop_emit_terrain_change(
     const tripoint_abs_ms &abs, const ter_id &ter, const furn_id &furn )
 {
-    std::ostringstream oss;
-    JsonOut jout( oss );
-    jout.start_object();
-    jout.member( "tx", abs.x() );
-    jout.member( "ty", abs.y() );
-    jout.member( "tz", abs.z() );
-    jout.member( "ter", ter.id().str() );
-    jout.member( "furn", furn.id().str() );
-    jout.end_object();
-    g->coop_client_->queue_action( "TERRAIN_CHANGE", oss.str() );
+    g->coop_client_->queue_terrain_change( abs, ter.id().str(), furn.id().str() );
 }
 } // namespace
 #endif // COOP_ENABLED
@@ -772,6 +764,19 @@ static void smash() {
     if (veh != nullptr) {
         if (!veh->handle_potential_theft(get_avatar())) { return; }
     }
+#ifdef COOP_ENABLED
+    // C2c: snapshot terrain + ground items before bash so we can diff what changed.
+    ter_id   smash_ter_before;
+    furn_id  smash_furn_before;
+    std::unordered_set<const item *> smash_items_before;
+    if( g->coop_client_ ) {
+        smash_ter_before  = here.ter(  smashp );
+        smash_furn_before = here.furn( smashp );
+        for( const tripoint_bub_ms &p : here.points_in_radius( smashp, 1 ) ) {
+            for( const item *it : here.i_at( p ) ) { smash_items_before.insert( it ); }
+        }
+    }
+#endif // COOP_ENABLED
     didit = here.bash(smashp, smashskill, false, false, smash_floor).did_bash;
     if (didit) {
         u.anim_on_attack(smashp, false); // sprite lunge toward the smashed tile
@@ -802,6 +807,42 @@ static void smash() {
             }
         }
         u.moves -= move_cost;
+#ifdef COOP_ENABLED
+        if( g->coop_client_ ) {
+            // Emit terrain change if the bash broke through.
+            if( here.ter( smashp ) != smash_ter_before || here.furn( smashp ) != smash_furn_before ) {
+                coop_emit_terrain_change(
+                    here.bub_to_abs( smashp ), here.ter( smashp ), here.furn( smashp ) );
+            }
+            // Emit debris items that appeared on the ground (glass, rubble, etc.).
+            // Without this the host tile diverges and items are lost on next full resync.
+            std::ostringstream drop_oss;
+            JsonOut drop_jout( drop_oss );
+            drop_jout.start_object();
+            drop_jout.member( "items" );
+            drop_jout.start_array();
+            bool has_debris = false;
+            for( const tripoint_bub_ms &p : here.points_in_radius( smashp, 1 ) ) {
+                const tripoint_abs_ms abs = here.bub_to_abs( p );
+                for( const item *it : here.i_at( p ) ) {
+                    if( smash_items_before.count( it ) ) { continue; }
+                    drop_jout.start_object();
+                    drop_jout.member( "tx", abs.x() );
+                    drop_jout.member( "ty", abs.y() );
+                    drop_jout.member( "tz", abs.z() );
+                    std::ostringstream item_oss;
+                    JsonOut jitem( item_oss );
+                    it->serialize( jitem );
+                    drop_jout.member( "data", item_oss.str() );
+                    drop_jout.end_object();
+                    has_debris = true;
+                }
+            }
+            drop_jout.end_array();
+            drop_jout.end_object();
+            if( has_debris ) { g->coop_client_->queue_action( "DROP", drop_oss.str() ); }
+        }
+#endif // COOP_ENABLED
 
         if (smashskill < here.bash_resistance(smashp) && one_in(10)) {
             if (here.has_furn(smashp) && here.furn(smashp).obj().bash.str_min != -1) {

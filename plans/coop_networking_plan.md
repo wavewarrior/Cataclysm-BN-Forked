@@ -1,6 +1,6 @@
 # Co-op Networking Plan
 
-**Status:** Track A complete (A1–A5.4). B1–B4 Phase 1 complete. B3 Phases 1–4 complete. B4 Phase 2 (resolve_hit/emit_visuals separation) in progress. Track C added: full client character parity (own character, all host actions).
+**Status:** Track A complete (A1–A5.4). B1–B4 Phase 1 complete. B3 Phases 1–4 complete. B4 Phase 2 (resolve_hit/emit_visuals separation) in progress. Track C: C1 complete (PICKUP manifest). C2 complete (DROP, TERRAIN_CHANGE for doors, smash bash with debris). C2 construction deferral: build completions not yet wired — items consumed/produced during construction not propagated; next resync will correct terrain but not item state.
 **Goal:** Real-time 2-player co-op where the client plays their own character with full action parity to single-player — pick up items, go upstairs, craft, interact, everything the host can do. Server-authoritative world state; client-side prediction for responsiveness.
 
 ---
@@ -494,7 +494,7 @@ visibility calculation for the host's LOS system.
 | Step | What it is | What it is NOT | Effort |
 |---|---|---|---|
 | **C1: Client→host item mutations** | Client picks up item locally (already works); sends item IDs + positions to host; host removes from its map | NOT npc::pickup | 1 week |
-| **C2: Client→host terrain mutations** | Door opens, terrain changes, items dropped — client mutations propagate to host world map | NOT npc::interact | 2 weeks |
+| **C2: Client→host terrain mutations** ✅ | Door opens (TERRAIN_CHANGE), items dropped (DROP manifest), smash bash (terrain + debris). Construction completion: deferred — `complete_construction()` hook needed for build-finish terrain and item changes. | NOT npc::interact | 2 weeks |
 | **C3: Client→host character delta** | Client sends inventory/stat/effect changes to host each tick (new sync direction) | NOT host-authoritative character | 2 weeks |
 | **C4: Vertical movement** | Client z-changes → host updates proxy z + triggers tile sync for new level | NOT NPC stair navigation | 1 week |
 | **C5: Long activity sync** | When client starts crafting/sleeping, host fast-forwards appropriately (extends A5.2) | NOT NPC activity actors | 2 weeks |

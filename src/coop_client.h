@@ -25,6 +25,10 @@ struct coop_client {
     auto apply_world_seed_to_avatar() -> void;
     auto coop_world_tick() -> void;
     auto queue_action(const std::string& key, const std::string& ctx_json = {}) -> void;
+    /// Convenience: build and queue a TERRAIN_CHANGE packet from typed ids.
+    /// Avoids duplicating JSON-building logic across C2b/C2c call sites.
+    auto queue_terrain_change( const tripoint_abs_ms &pos, const std::string &ter_id,
+                               const std::string &furn_id ) -> void;
     auto is_connected() const -> bool { return socket_ != nullptr; }
     auto shutdown() -> void;
     auto send_chat(const std::string& text) -> void;

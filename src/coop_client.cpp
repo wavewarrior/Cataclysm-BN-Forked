@@ -247,6 +247,22 @@ auto coop_client::queue_action(const std::string& key, const std::string& ctx_js
 }
 
 
+auto coop_client::queue_terrain_change(
+    const tripoint_abs_ms &pos, const std::string &ter_id,
+    const std::string &furn_id ) -> void
+{
+    std::ostringstream oss;
+    JsonOut jout( oss );
+    jout.start_object();
+    jout.member( "tx", pos.x() );
+    jout.member( "ty", pos.y() );
+    jout.member( "tz", pos.z() );
+    jout.member( "ter",  ter_id );
+    jout.member( "furn", furn_id );
+    jout.end_object();
+    queue_action( "TERRAIN_CHANGE", oss.str() );
+}
+
 auto coop_client::apply_sync(const std::string& json_buf) -> void {
     std::istringstream iss(json_buf);
     JsonIn jin(iss);
