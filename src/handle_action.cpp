@@ -3959,38 +3959,14 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
     // The local action already executed above for instant visual feedback
     // (local prediction).  The host mirrors via execute_client_action().
     if (coop_client_) {
-        // Movement: re-derive the actual delta (respects iso_rotate) so the
-        // proxy mirrors the real direction the client moved, not the raw key.
-        const bool is_move_action =
-            (act == ACTION_MOVE_FORTH || act == ACTION_MOVE_FORTH_RIGHT || act == ACTION_MOVE_RIGHT
-             || act == ACTION_MOVE_BACK_RIGHT || act == ACTION_MOVE_BACK
-             || act == ACTION_MOVE_BACK_LEFT || act == ACTION_MOVE_LEFT
-             || act == ACTION_MOVE_FORTH_LEFT);
-        if (is_move_action) {
-            const auto delta = get_delta_from_movement_action(act, iso_rotate::yes);
-            std::string_view dir;
-            if (delta == point_rel_ms{0, -1}) {
-                dir = "MOVE_N";
-            } else if (delta == point_rel_ms{1, -1}) {
-                dir = "MOVE_NE";
-            } else if (delta == point_rel_ms{1, 0}) {
-                dir = "MOVE_E";
-            } else if (delta == point_rel_ms{1, 1}) {
-                dir = "MOVE_SE";
-            } else if (delta == point_rel_ms{0, 1}) {
-                dir = "MOVE_S";
-            } else if (delta == point_rel_ms{-1, 1}) {
-                dir = "MOVE_SW";
-            } else if (delta == point_rel_ms{-1, 0}) {
-                dir = "MOVE_W";
-            } else if (delta == point_rel_ms{-1, -1}) {
-                dir = "MOVE_NW";
-            }
-            // Only queue if the move actually succeeded — blocked moves (wall,
-            // vehicle, creature) leave g->u at coop_pos_before_.  Queuing a
-            // blocked move causes wall-flicker: replay replays the raw delta
-            // into the wall on every sync until the server confirms the no-op.
+        // Build a typed command and forward it to the host proxy.
+        // Fire is queued from inside modal_fiber_ above; burst-fire below.
+        const auto move_cmd = make_player_move_cmd(act, iso_rotate::yes);
+        if (move_cmd.kind == player_cmd_kind::move) {
+            // Only queue if the move actually succeeded — blocked moves leave
+            // g->u at coop_pos_before_ and cause wall-flicker on replay.
             const bool actually_moved = (u.bub_pos().raw() != coop_pos_before_.raw());
+            const auto dir = move_cmd_to_dir_string(move_cmd);
             if (!dir.empty() && actually_moved) { coop_client_->queue_action(std::string(dir)); }
         } else if (act == ACTION_PAUSE || act == ACTION_TIMEOUT || act == ACTION_WAIT) {
             coop_client_->queue_action("PAUSE");

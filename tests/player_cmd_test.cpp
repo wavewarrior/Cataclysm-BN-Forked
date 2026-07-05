@@ -112,3 +112,34 @@ TEST_CASE("player_cmd_t none has zero delta", "[player_cmd][move]") {
     CHECK(cmd.kind == player_cmd_kind::none);
     CHECK(cmd.delta == tripoint_rel_ms::zero());
 }
+
+// ---------------------------------------------------------------------------
+// Phase 3 — move_cmd_to_dir_string
+// ---------------------------------------------------------------------------
+
+TEST_CASE("move_cmd_to_dir_string — all 8 directions", "[player_cmd][dir_string]") {
+    using P = point_rel_ms;
+    struct Case {
+        action_id act;
+        std::string_view expected;
+    };
+    for (const auto& [act, expected] : std::initializer_list<Case>{
+             {ACTION_MOVE_FORTH, "MOVE_N"},
+             {ACTION_MOVE_FORTH_RIGHT, "MOVE_NE"},
+             {ACTION_MOVE_RIGHT, "MOVE_E"},
+             {ACTION_MOVE_BACK_RIGHT, "MOVE_SE"},
+             {ACTION_MOVE_BACK, "MOVE_S"},
+             {ACTION_MOVE_BACK_LEFT, "MOVE_SW"},
+             {ACTION_MOVE_LEFT, "MOVE_W"},
+             {ACTION_MOVE_FORTH_LEFT, "MOVE_NW"},
+         }) {
+        const auto cmd = make_player_move_cmd(act, iso_rotate::no);
+        REQUIRE(cmd.kind == player_cmd_kind::move);
+        CHECK(move_cmd_to_dir_string(cmd) == expected);
+    }
+}
+
+TEST_CASE("move_cmd_to_dir_string — non-move cmd returns empty", "[player_cmd][dir_string]") {
+    const player_cmd_t cmd; // kind == none
+    CHECK(move_cmd_to_dir_string(cmd).empty());
+}

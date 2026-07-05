@@ -38,20 +38,8 @@ enum class player_cmd_kind : uint8_t {
     /// delta carries the direction resolved from action_id + iso_rotate.
     move,
 
-    // ── Phase 2+ stubs (not yet wired) ──────────────────────────────────
-    // pause,
-    // open,
-    // close,
-    // smash,
-    // pickup,
-    // fire,
-    // melee,
-    // throw_item,
-    // use,
-    // eat,
-    // reload,
-    // wait,
-    // craft,
+    // Phase 4+: pause, pickup, sleep, craft, smash, fire, open, close, …
+    // Each kind lands here alongside its execute_player_cmd() case.
 };
 
 // ---------------------------------------------------------------------------
@@ -67,7 +55,7 @@ struct player_cmd_t {
 };
 
 // ---------------------------------------------------------------------------
-// Factory — declared here (not in action.h) to avoid wide rebuild cascade
+// Factory and helpers
 // ---------------------------------------------------------------------------
 
 /// Build a player_cmd_t for a lateral movement action_id.
@@ -75,3 +63,8 @@ struct player_cmd_t {
 /// iso_rotate::no uses raw cardinal/diagonal deltas (direction already resolved).
 /// Returns player_cmd_kind::none for non-movement action_ids.
 player_cmd_t make_player_move_cmd(action_id act, iso_rotate rot);
+
+/// Map a move cmd's delta to its wire-protocol direction string ("MOVE_N" … "MOVE_NW").
+/// Returns an empty string_view for non-move commands or unknown deltas.
+/// Pure: no side effects; safe to call from unit tests.
+std::string_view move_cmd_to_dir_string(const player_cmd_t& cmd);
