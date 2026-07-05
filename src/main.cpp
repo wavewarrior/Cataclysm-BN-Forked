@@ -705,7 +705,14 @@ int main( int argc, char* argv[] )
 
                 // Skip redraw when cleanup_at_end() just cleared the factories;
                 // rendering into empty terrain/furniture tables produces ~300k errors.
+                // Invalidate the main game-world UI adaptor every frame so
+                // ui_manager::redraw_invalidated() actually redraws it.  Without
+                // this, actions execute but the screen stays stale until a menu
+                // forces a full redraw — because handle_action_from() and
+                // coop_game_tick() update game state but nothing marks the adaptor
+                // dirty the way do_turn()'s internal redraw calls would.
                 if( !game_done ) {
+                    g->invalidate_main_ui_adaptor();
                     ui_manager::redraw_invalidated();
                 }
                 SDL_Delay( 4 );
