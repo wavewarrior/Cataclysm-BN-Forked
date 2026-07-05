@@ -703,7 +703,11 @@ int main( int argc, char* argv[] )
                     }
                 }
 
-                ui_manager::redraw_invalidated();
+                // Skip redraw when cleanup_at_end() just cleared the factories;
+                // rendering into empty terrain/furniture tables produces ~300k errors.
+                if( !game_done ) {
+                    ui_manager::redraw_invalidated();
+                }
                 SDL_Delay( 4 );
             }
         }
