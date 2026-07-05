@@ -69,6 +69,7 @@
 #include "panels.h"
 #include "player.h"
 #include "player_activity.h"
+#include "player_cmd.h"
 #include "popup.h"
 #include "ranged.h"
 #include "rng.h"
@@ -1848,7 +1849,7 @@ bool game::handle_action() {
                     pldrive(get_delta_from_movement_action(act, iso_rotate::no)
                                 .reinterpret_as<point_rel_veh>());
                 } else {
-                    auto dest_delta = get_delta_from_movement_action(act, iso_rotate::yes);
+                    auto dest_delta = make_player_move_cmd(act, iso_rotate::yes).delta.xy();
                     if (auto_travel_mode && !u.is_auto_moving()) {
                         for (int i = 0; i < SEEX; i++) {
                             tripoint_bub_ms auto_travel_destination(
@@ -1865,7 +1866,8 @@ bool game::handle_action() {
                             }
                         }
                         act = u.get_next_auto_move_direction();
-                        const auto dest_next = get_delta_from_movement_action(act, iso_rotate::yes);
+                        const auto dest_next =
+                            make_player_move_cmd(act, iso_rotate::yes).delta.xy();
                         if (dest_next == point_rel_ms::zero()) { u.clear_destination(); }
                         dest_delta = dest_next;
                     }
@@ -3006,7 +3008,7 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                     pldrive(get_delta_from_movement_action(act, iso_rotate::no)
                                 .reinterpret_as<point_rel_veh>());
                 } else {
-                    auto dest_delta = get_delta_from_movement_action(act, iso_rotate::yes);
+                    auto dest_delta = make_player_move_cmd(act, iso_rotate::yes).delta.xy();
                     if (auto_travel_mode && !u.is_auto_moving()) {
                         for (int i = 0; i < SEEX; i++) {
                             tripoint_bub_ms auto_travel_destination(
@@ -3023,7 +3025,8 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                             }
                         }
                         act = u.get_next_auto_move_direction();
-                        const auto dest_next = get_delta_from_movement_action(act, iso_rotate::yes);
+                        const auto dest_next =
+                            make_player_move_cmd(act, iso_rotate::yes).delta.xy();
                         if (dest_next == point_rel_ms::zero()) { u.clear_destination(); }
                         dest_delta = dest_next;
                     }
