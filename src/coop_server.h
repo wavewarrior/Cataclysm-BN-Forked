@@ -19,6 +19,22 @@ class monster;
 
 class npc;
 
+/// Single-tick entity position snapshot for A5.3 lag compensation.
+/// Stored in coop_server::position_history_; exposed here so the pure lookup
+/// function coop_lag_find_target() can be unit-tested without game state.
+struct coop_entity_snapshot {
+    uint32_t seq = 0;
+    std::vector<std::pair<int, tripoint_abs_ms>> creature_positions; // stable_id → abs_pos
+};
+
+/// Given a rolling history of entity snapshots, return the stable_id of the
+/// creature at `target_abs` in the best snapshot for `fire_seq`, or -1 if none.
+/// Pure function — no side effects; safe to call from unit tests.
+auto coop_lag_find_target(
+    const std::deque<coop_entity_snapshot>& history, // *NOPAD*
+    uint32_t fire_seq,
+    const tripoint_abs_ms& target_abs) -> int; // *NOPAD*
+
 /// Host-side co-op server.
 struct coop_server {
     coop_server() = default;
@@ -53,10 +69,7 @@ private:
     struct chat_entry {
         std::string text;
     };
-    struct entity_snapshot {
-        uint32_t seq = 0;
-        std::vector<std::pair<int, tripoint_abs_ms>> creature_positions; // stable_id → abs_pos
-    };
+    // entity_snapshot moved to coop_entity_snapshot (public, before this struct)
 
     auto push_action(action_entry e) -> void;
     auto try_pop_action() -> std::optional<action_entry>;
@@ -66,7 +79,8 @@ private:
     auto receiver_loop(std::stop_token st) -> void;
     auto both_idle() const -> bool;
     auto push_entity_snapshot() -> void;
-    auto resolve_fire_at_seq(uint32_t seq, int target_ax, int target_ay, int target_az) -> void;
+    auto resolve_fire_at_seq(npc* proxy, uint32_t seq, int target_ax, int target_ay, int target_az)
+        -> void;
 
     NET_Server* server_sock_ = nullptr;
     // client_sock_ is owned exclusively by the IO thread once receiver_thread_ starts.
@@ -114,7 +128,7 @@ private:
     std::unordered_map<const monster*, int> monster_id_map_;
     int next_monster_id_ = 1;
     uint32_t last_confirmed_seq_ = 0;
-    std::deque<entity_snapshot> position_history_; // rolling window, capped at 10 entries
+    std::deque<coop_entity_snapshot> position_history_; // rolling window, capped at 10 entries
 };
 
 #endif // COOP_ENABLED

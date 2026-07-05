@@ -388,31 +388,12 @@ auto coop_server::execute_client_action(
             const int tx = ctx.get_int("tx", 0);
             const int ty = ctx.get_int("ty", 0);
             const int tz = ctx.get_int("tz", 0);
-
-            // A5.3: look up the world state at the client's fire-seq for lag
-            // compensation — creature positions are resolved against the snapshot.
-            resolve_fire_at_seq(seq, tx, ty, tz);
-
-            // Execute the shot: proxy fires its wielded weapon toward the
-            // historically-correct target position.  If the proxy is unarmed the
-            // call is a no-op (fire_gun returns 0 when there's nothing to fire).
-            // Equipment sync (client→proxy inventory) is deferred; this handles
-            // the common case where the client's NPC proxy already carries a gun.
-            if (proxy->is_armed() && proxy->primary_weapon().is_gun()) {
-                const tripoint_bub_ms target_bub{tx, ty, tz};
-                const int shots_fired = ranged::fire_gun(*proxy, target_bub);
-                DebugLog(DL::Info, DC::Main)
-                    << "[coop] FIRE from proxy (seq=" << seq << "): fired " << shots_fired
-                    << " shot(s) at (" << tx << "," << ty << "," << tz << ")";
-            } else {
-                DebugLog(DL::Info, DC::Main)
-                    << "[coop] FIRE from proxy (seq=" << seq
-                    << "): proxy unarmed or no gun — shot not executed";
-                proxy->moves -= proxy->get_speed(); // consume action
-            }
+            // A5.3: resolve_fire_at_seq handles snapshot lookup, lag-comp reposition,
+            // fire_gun execution, and position restore.
+            resolve_fire_at_seq(proxy, seq, tx, ty, tz);
         } else {
-            DebugLog(DL::Info, DC::Main)
-                << "[coop] FIRE from proxy (seq=" << seq << "): no target context";
+            DebugLog(DL::Info, DC::Main) << "[coop] FIRE seq=" << seq << ": no target context";
+            proxy->moves -= proxy->get_speed();
         }
     } else if (key == "PAUSE" || key == "WAIT") {
         proxy->moves -= proxy->get_speed();
@@ -436,6 +417,21 @@ auto coop_server::execute_client_action(
     }
 }
 
+auto coop_lag_find_target(
+    const std::deque<coop_entity_snapshot>& history, uint32_t fire_seq,
+    const tripoint_abs_ms& target_abs) -> int {
+    const coop_entity_snapshot* best = nullptr;
+    for (const auto& snap : history) {
+        if (snap.seq <= fire_seq && (!best || snap.seq > best->seq)) { best = &snap; }
+    }
+    if (!best && !history.empty()) { best = &history.front(); }
+    if (!best) { return -1; }
+    for (const auto& [cid, snap_apos] : best->creature_positions) {
+        if (snap_apos == target_abs) { return cid; }
+    }
+    return -1;
+}
+
 auto coop_server::push_entity_snapshot() -> void {
     // Ensure monster_id_map_ is up-to-date: assign IDs to any new live monsters.
     // Dead monsters are pruned here to avoid stale pointers in the snapshot.
@@ -448,7 +444,7 @@ auto coop_server::push_entity_snapshot() -> void {
         if (!monster_id_map_.contains(ptr)) { monster_id_map_.emplace(ptr, next_monster_id_++); }
     }
 
-    entity_snapshot snap;
+    coop_entity_snapshot snap;
     snap.seq = last_confirmed_seq_;
     snap.creature_positions.reserve(live_ptrs.size());
     for (monster& mon : g->all_monsters()) {
@@ -463,30 +459,60 @@ auto coop_server::push_entity_snapshot() -> void {
     if (position_history_.size() > 10) { position_history_.pop_front(); }
 }
 
-auto coop_server::resolve_fire_at_seq(uint32_t seq, int target_ax, int target_ay, int target_az)
-    -> void {
-    // Find the snapshot with the highest seq <= the given seq (best match for lag
-    // compensation).  Fall back to the earliest snapshot if all are newer.
-    const entity_snapshot* best = nullptr;
-    for (const auto& snap : position_history_) {
-        if (snap.seq <= seq) {
-            if (!best || snap.seq > best->seq) { best = &snap; }
+auto coop_server::resolve_fire_at_seq(
+    npc* proxy, uint32_t seq, int target_ax, int target_ay, int target_az) -> void {
+    if (!proxy) { return; }
+
+    // A5.3: client sends tx/ty/tz as tripoint_abs_ms (globally consistent).
+    // Derive target_bub for fire_gun + inbounds checks on this machine's reality bubble.
+    const tripoint_abs_ms target_abs{target_ax, target_ay, target_az};
+    const tripoint_bub_ms target_bub = g->m.abs_to_bub(target_abs);
+
+    // A5.3 lag compensation: find the snapshot closest to the client's fire-seq and
+    // temporarily reposition the creature that was at the target tile in that snapshot
+    // but has since moved.  creature_moved events are filtered from the delta stream
+    // (build_and_send_sync streamable filter), so these temp setpos calls do not appear
+    // in the client's event log.  The monster section in the next sync always shows the
+    // authoritative final position.
+    monster* lag_target = nullptr;
+    tripoint_bub_ms lag_original_bub;
+
+    const int cid_at_target = coop_lag_find_target(position_history_, seq, target_abs);
+    if (cid_at_target >= 0) {
+        for (const auto& [ptr, id] : monster_id_map_) {
+            if (id == cid_at_target && !ptr->is_dead()) {
+                lag_target = const_cast<monster*>(ptr);
+                break;
+            }
+        }
+        // Reposition only when the creature has actually moved since the snapshot.
+        if (lag_target && lag_target->abs_pos() != target_abs && g->m.inbounds(target_bub)) {
+            lag_original_bub = lag_target->bub_pos();
+            lag_target->setpos(target_bub);
+            DebugLog(DL::Info, DC::Main)
+                << "[coop] lag-comp seq=" << seq << ": repositioned cid=" << cid_at_target
+                << " from (" << lag_original_bub.x() << "," << lag_original_bub.y() << ")"
+                << " to target (" << target_ax << "," << target_ay << ")";
+        } else {
+            lag_target = nullptr; // already at target — no restore needed
         }
     }
-    if (!best && !position_history_.empty()) { best = &position_history_.front(); }
 
-    if (!best) {
+    // Execute the shot.  fire_gun does trajectory + hit resolution against the
+    // (possibly lag-compensated) world state.
+    if (proxy->is_armed() && proxy->primary_weapon().is_gun()) {
+        const int shots = ranged::fire_gun(*proxy, target_bub);
         DebugLog(DL::Info, DC::Main)
-            << "[coop] resolve_fire_at_seq seq=" << seq << " target=(" << target_ax << ","
-            << target_ay << "," << target_az << "): no snapshot available";
-        return;
+            << "[coop] FIRE seq=" << seq << " fired=" << shots << " at (" << target_ax << ","
+            << target_ay << "," << target_az << ")";
+    } else {
+        proxy->moves -= proxy->get_speed();
+        DebugLog(DL::Info, DC::Main)
+            << "[coop] FIRE seq=" << seq << " proxy unarmed — action consumed";
     }
 
-    DebugLog(DL::Info, DC::Main) << "[coop] resolve_fire_at_seq seq=" << seq
-                                 << " matched_snapshot_seq=" << best->seq << " target=("
-                                 << target_ax << "," << target_ay << "," << target_az << ")"
-                                 << " creatures=" << best->creature_positions.size();
-    // Full ballistic resolution (ranged.cpp integration) deferred to A5.4.
+    // Restore the lag-compensated creature to its authoritative live position.
+    if (lag_target && !lag_target->is_dead()) { lag_target->setpos(lag_original_bub); }
 }
 
 auto coop_server::build_and_send_sync(bool force_full) -> void {
@@ -514,35 +540,13 @@ auto coop_server::build_and_send_sync(bool force_full) -> void {
     // Flush terrain+furniture events from the active tick log.
     // Hash is computed only over the SENT subset so the client can replicate it.
     // Hash-based resync_request is NOT enabled yet (A4b) — hash is informational.
-    std::vector<coop_world_event> sent_events;
-    uint64_t events_hash = 0xcbf29ce484222325ULL; // FNV offset basis
-    auto mix_hash = [&](uint64_t v) {
-        events_hash ^= v;
-        events_hash *= 0x00000100000001B3ULL;
-    };
     auto* tick_log = coop_mutation_log::current();
-    if (!send_full_tiles && tick_log) {
-        auto all_events = tick_log->flush();
-        for (auto& ev : all_events) {
-            using evt = coop_event_type;
-            // Stream terrain/furniture/field events only.
-            // creature_moved/died: monsters ride the monster section; NPC ids not in
-            //   coop_monster_map_, so client can't apply them yet — deferred.
-            // item_spawned: no item payload; 30s full sync covers drift.
-            const bool streamable =
-                ev.type == evt::terrain_changed || ev.type == evt::furniture_changed
-                || ev.type == evt::field_created || ev.type == evt::field_changed
-                || ev.type == evt::field_expired;
-            if (!streamable) { continue; }
-            mix_hash(static_cast<uint64_t>(ev.type));
-            mix_hash(static_cast<uint64_t>(ev.pos.x()));
-            mix_hash(static_cast<uint64_t>(ev.pos.y()));
-            mix_hash(static_cast<uint64_t>(ev.pos.z()));
-            mix_hash(static_cast<uint64_t>(ev.value));
-            mix_hash(static_cast<uint64_t>(ev.creature_id));
-            sent_events.push_back(std::move(ev));
-        }
-    }
+    auto sr =
+        (!send_full_tiles && tick_log)
+            ? coop_collect_streamable(tick_log->flush())
+            : coop_streamable_result{};
+    const auto& sent_events = sr.sent;
+    const auto events_hash = sr.hash;
     jout.member("hash", static_cast<int64_t>(events_hash));
     jout.member("events");
     jout.start_array();

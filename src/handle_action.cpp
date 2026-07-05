@@ -3421,6 +3421,18 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                         // process_activity()
                         local_act->do_turn(u); // runs target_ui::run() inside this fiber
                     }
+                    // A5.3: queue FIRE to host proxy AFTER aim completes so that
+                    // u.last_target_pos (tripoint_abs_ms, set at ranged.cpp:3303) is valid.
+                    // Absolute coords are globally consistent — bub coords differ per machine.
+                    if (coop_client_ && u.last_target_pos.has_value()) {
+                        const auto& tap = *u.last_target_pos;
+                        // Use to_string — locale-independent; ostringstream uses the global
+                        // locale which on en_US adds thousands separators, breaking JSON.
+                        const auto ctx =
+                            "{\"tx\":" + std::to_string(tap.x()) + ",\"ty\":"
+                            + std::to_string(tap.y()) + ",\"tz\":" + std::to_string(tap.z()) + "}";
+                        coop_client_->queue_action("FIRE", ctx);
+                    }
                 });
                 break;
 
@@ -3987,8 +3999,17 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
             coop_client_->queue_action("CRAFT");
         } else if (act == ACTION_SMASH) {
             coop_client_->queue_action("SMASH");
-        } else if (act == ACTION_FIRE || act == ACTION_FIRE_BURST) {
-            coop_client_->queue_action("FIRE");
+        } else if (act == ACTION_FIRE) {
+            // Queued from inside modal_fiber_ above — nothing here.
+        } else if (act == ACTION_FIRE_BURST) {
+            // Burst runs inline; last_target_pos is valid immediately.
+            if (u.last_target_pos.has_value()) {
+                const auto& tap = *u.last_target_pos;
+                const auto ctx =
+                    "{\"tx\":" + std::to_string(tap.x()) + ",\"ty\":" + std::to_string(tap.y())
+                    + ",\"tz\":" + std::to_string(tap.z()) + "}";
+                coop_client_->queue_action("FIRE", ctx);
+            }
         }
     }
 #endif // COOP_ENABLED

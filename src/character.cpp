@@ -3708,6 +3708,14 @@ void Character::die(Creature* nkiller) {
         params["char"] = this;
         params["killer"] = get_killer();
     });
+#ifdef COOP_ENABLED
+    if (auto* _log = coop_mutation_log::current()) {
+        _log->push(
+            {.type = coop_event_type::creature_died,
+             .pos = abs_pos(),
+             .creature_id = getID().get_value()});
+    }
+#endif
 }
 
 void Character::apply_skill_boost() {

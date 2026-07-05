@@ -4378,12 +4378,18 @@ void game::draw_panels( bool /* force_draw */ )
     // Tier-10 curses rip-out: the sidebar is rendered entirely by the RmlUi HUD.
     // draw_panels only drives that persistent document — open/sync while enabled,
     // close on toggle-off. The legacy curses panel render path has been removed.
-    if( sidebar_hud_rmlui_enabled() ) {
-        sidebar_hud_open();
-        sidebar_hud_sync( u );
-    } else {
+    //
+    // Guard: never reopen the HUD during shutdown. cleanup_at_end() closes it at
+    // the top, but ui_adaptor redraws fired by the death/quit screen will re-enter
+    // draw_panels. If we let sidebar_hud_open() run at that point the RmlUI data
+    // model is recreated against a partially-torn-down context → SIGSEGV in
+    // DataTypeRegister::GetDefinitionDetail<std::string>.
+    if( uquit != QUIT_NO || !sidebar_hud_rmlui_enabled() ) {
         sidebar_hud_close();
+        return;
     }
+    sidebar_hud_open();
+    sidebar_hud_sync( u );
 }
 
 void game::draw_pixel_minimap( const catacurses::window &w )

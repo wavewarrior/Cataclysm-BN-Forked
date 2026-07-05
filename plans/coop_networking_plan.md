@@ -1,6 +1,6 @@
 # Co-op Networking Plan
 
-**Status:** A1 + A2 + A5.1 complete. Two-process integration test green (proxy movement + client reconciliation). A3 (WorldMutationLog) in progress.
+**Status:** A1 + A2 + A3 + A4 + A5.1 + A5.2 + A5.3 complete. A5.4 verification pending. `Character::die()` hook added; A4b hash resync live; lag-comp repositioning in `resolve_fire_at_seq` implemented.
 **Goal:** Real-time 2-player co-op that feels snappy and responsive — host parity with single-player, client-side prediction eliminating input lag, server-authoritative world state.
 
 ---
@@ -28,10 +28,10 @@ What **exists** vs what is **not yet implemented** (re-baselined against actual 
 | Proxy action drain (A2 bugfix) | ✅ done | was `while(moves>0)` — proxy never gets moves from `post_action_world_step` (npcmove zeroes them); replaced with one-action-per-tick unconditional drain |
 | Proxy movement fidelity (A2 bugfix) | ✅ done | was `move_to()` (pathfinds, stumbles diagonally) → `setpos()` (exact client-authoritative placement) |
 | npcmove contract fix | ✅ done | `is_coop_remote` early return lacked `set_moves(0)`; game loop spun 10×, fired reboot/teleport; fixed per npcmove.cpp:790 contract |
-| WorldMutationLog (A3) | 🔧 partial | log module + 8 hooks done; `field_changed`/`field_expired` (A3b) deferred |
-| Delta event stream (A4) | ✅ done (A4a) | terrain+furniture events replace submap blast; `force_resync_` atomic; hash informational; A4b adds creature/field events + hash resync |
+| WorldMutationLog (A3) | ✅ done | all 8 hooks confirmed: submap ter/furn, Creature::setpos, monster/npc/Character die, map::add_item, sub_add_field, field_changed/expired in process_fields |
+| Delta event stream (A4) | ✅ done | A4a terrain+furniture+field delta; A4b hash resync: client computes FNV-1a, sends `resync_request` on mismatch; server `force_resync_` → forced full sync |
 | Activity yield cap (A5.2) | ✅ done | `game::execute_activity_fixed_window_skip`: sync every 10 skipped turns |
-| Ranged lag compensation (A5.3) | ✅ done (infra) | `entity_snapshot` history; `resolve_fire_at_seq` called; ballistic resolution deferred |
+| Ranged lag compensation (A5.3) | ✅ done | `resolve_fire_at_seq(proxy,seq,tx,ty,tz)`: snapshot lookup → creature reposition → `fire_gun` → restore; creature_moved filtered from delta stream so temp moves invisible to client |
 | FIRE execution on proxy | ✅ done | `ranged::fire_gun(*proxy, target_bub)` with lag-comp snapshot; unarmed proxy consumes action |
 | PICKUP on proxy | ❌ deferred | phase 9 note in execute_client_action |
 | Vertical move on proxy | ❌ deferred | phase 10 note |

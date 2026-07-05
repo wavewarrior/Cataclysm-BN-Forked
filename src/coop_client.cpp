@@ -4,6 +4,7 @@
 
 #include "avatar.h"
 #include "calendar.h"
+#include "coop_mutation_log.h" // COOP_FNV_OFFSET, coop_hash_event_fields
 #include "coop_net.h"
 #include "coop_packets.h"
 #include "coop_reconcile.h"
@@ -256,6 +257,15 @@ auto coop_client::apply_sync(const std::string& json_buf) -> void {
     // A2: track confirmation seq and proxy position availability for deferred reconciliation.
     int last_seq_from_sync = -1; // -1 = not present in this packet (pre-A2 host)
     bool got_proxy_pos = false;
+    // A4b: replicate the server-side FNV-1a hash over sent events so we can detect
+    // delta desync.  Server mixes creature_id UNCONDITIONALLY (even when 0), but only
+    // serialises "cid" in JSON when non-zero.  Client initialises ev_cid=0 per event and
+    // always mixes it — so absent "cid" → ev_cid=0 → mix(0) — which is NOT a no-op
+    // (hash *= prime).  Order must match server exactly: type,x,y,z,v,cid.
+    uint64_t server_hash = COOP_FNV_OFFSET; // default: no events
+    uint64_t local_hash = COOP_FNV_OFFSET;
+    int ev_count = 0;
+    bool got_tiles = false;
 
     // Use raw JsonIn iteration to handle the mixed-member tile objects.
     // The outer sync object has: "t", "turn", "tiles", "monsters", "proxy_*", "host_*".
@@ -271,9 +281,9 @@ auto coop_client::apply_sync(const std::string& json_buf) -> void {
             if (turn_val >= 0) { calendar::turn = time_point::from_turn(turn_val); }
 
         } else if (key == "hash") {
-            // A4: informational only — hash-based resync_request not enabled yet (A4b).
-            // Stored for future integrity validation once all event types are streamed.
-            jin.skip_value();
+            // A4b: read and store; compared after parsing when delta path was used.
+            // Server stores as int64_t; reinterpret via uint64_t cast to preserve bits.
+            server_hash = static_cast<uint64_t>(jin.get_int64());
 
         } else if (key == "events") {
             // A4 delta stream: apply terrain/furniture events in-place.
@@ -300,6 +310,11 @@ auto coop_client::apply_sync(const std::string& json_buf) -> void {
                         jin.skip_value();
                     }
                 }
+                // A4b: mix event into local hash — same 6-field order as server.
+                // ev_cid is always mixed (including when 0 / "cid" absent from JSON).
+                local_hash =
+                    coop_hash_event_fields(local_hash, ev_type, ex, ey, ez, ev_val, ev_cid);
+                ++ev_count;
                 const tripoint_abs_ms abs_pos{ex, ey, ez};
                 const tripoint_bub_ms bpos = g->m.abs_to_bub(abs_pos);
                 using evt = coop_event_type;
@@ -333,6 +348,7 @@ auto coop_client::apply_sync(const std::string& json_buf) -> void {
             // This is the standard mapbuffer format — see mapbuffer::deserialize_into_vec.
             jin.start_array();
             while (!jin.end_array()) {
+                got_tiles = true;
                 int version = savegame_version;
                 tripoint_abs_sm sm_pos;
                 auto new_sm = std::unique_ptr<submap>{};
@@ -459,6 +475,22 @@ auto coop_client::apply_sync(const std::string& json_buf) -> void {
         } else {
             jin.skip_value();
         }
+    }
+
+    // A4b: hash integrity gate — only valid when we used the delta path (events received,
+    // no full-tile payload).  Full-tile syncs start from a clean state; hash is irrelevant.
+    // On mismatch: log and send resync_request.  Server handles it in receiver_loop by
+    // setting force_resync_ = true, which triggers build_and_send_sync(force_full=true).
+    if (ev_count > 0 && !got_tiles && local_hash != server_hash) {
+        DebugLog(DL::Info, DC::Main)
+            << "[coop] apply_sync: hash mismatch ev=" << ev_count << " local=0x" << std::hex
+            << local_hash << " server=0x" << server_hash << std::dec << " — requesting resync";
+        std::ostringstream rss;
+        JsonOut rsj(rss);
+        rsj.start_object();
+        rsj.member("t", static_cast<int>(coop_pkt::resync_request));
+        rsj.end_object();
+        coop_net::send(socket_, rss.str());
     }
 
     // A2: deferred seq-based reconciliation.

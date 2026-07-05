@@ -17,26 +17,15 @@ auto coop_mutation_log::current() -> coop_mutation_log* { return tl_current_log;
 // ---------------------------------------------------------------------------
 
 auto coop_mutation_log::push(coop_world_event e) -> void {
-    // FNV-1a: mix event type, position, and value into the running hash.
-    // The client replicates this hash; a mismatch triggers resync_request.
-    auto mix = [&](uint64_t v) {
-        running_hash_ ^= v;
-        running_hash_ *= 0x00000100000001B3ULL;
-    };
-    mix(static_cast<uint64_t>(e.type));
-    mix(static_cast<uint64_t>(e.pos.x()));
-    mix(static_cast<uint64_t>(e.pos.y()));
-    mix(static_cast<uint64_t>(e.pos.z()));
-    mix(static_cast<uint64_t>(e.value));
-    mix(static_cast<uint64_t>(e.creature_id));
-
+    // Delegate to the shared canonical hasher — same function as server/client.
+    running_hash_ = coop_hash_event(running_hash_, e);
     events_.push_back(std::move(e));
 }
 
 auto coop_mutation_log::flush() -> std::vector<coop_world_event> {
     std::vector<coop_world_event> out;
     out.swap(events_);
-    running_hash_ = 0xcbf29ce484222325ULL; // reset to FNV offset basis
+    running_hash_ = COOP_FNV_OFFSET; // reset to FNV offset basis
     return out;
 }
 
@@ -47,5 +36,24 @@ auto coop_mutation_log::flush() -> std::vector<coop_world_event> {
 coop_tick_log_guard::coop_tick_log_guard() { tl_current_log = &log_; }
 
 coop_tick_log_guard::~coop_tick_log_guard() { tl_current_log = nullptr; }
+
+// ---------------------------------------------------------------------------
+// A4 delta: streamable event collection + hash
+// ---------------------------------------------------------------------------
+
+auto coop_collect_streamable(std::vector<coop_world_event> events) -> coop_streamable_result {
+    using evt = coop_event_type;
+    coop_streamable_result result;
+    for (auto& ev : events) {
+        const bool streamable =
+            ev.type == evt::terrain_changed || ev.type == evt::furniture_changed
+            || ev.type == evt::field_created || ev.type == evt::field_changed
+            || ev.type == evt::field_expired;
+        if (!streamable) { continue; }
+        result.hash = coop_hash_event(result.hash, ev); // hash BEFORE move
+        result.sent.push_back(std::move(ev));
+    }
+    return result;
+}
 
 #endif // COOP_ENABLED
