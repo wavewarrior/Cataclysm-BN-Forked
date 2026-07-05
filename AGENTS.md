@@ -108,6 +108,18 @@ cmake --preset linux-full
 cmake --build --preset linux-full --target cataclysm-bn-tiles cata_test-tiles
 ```
 
+- **Build rules (HARD — never violate)**:
+  1. **NEVER run a build synchronously or with a short timeout.** A killed build corrupts `.ninja_deps`/`.ninja_log`, causing ninja to do a near-full rebuild on every subsequent run. Always start builds as background jobs with a 1200 s+ timeout and poll to completion:
+     ```sh
+     # CORRECT
+     cmake --build --preset osx-arm-slim --target cataclysm-bn-tiles cata_test-tiles &
+     # then poll; never kill mid-run
+     ```
+  2. **NEVER bundle a build into a `&&`-chain with a short cap.** If the cap fires, ninja is killed mid-write and the dep log is corrupt.
+  3. **Recovery from corrupted dep log**: run ONE complete uninterrupted build to completion — ninja repairs its own log during a clean run.
+  4. **`src/CMakeLists.txt` header glob must NOT use `CONFIGURE_DEPENDS`**. The headers glob (`CATACLYSM_BN_HEADERS`) must be plain — the compiler's `-MMD` flags already track header dependencies. `CONFIGURE_DEPENDS` on headers triggers a cmake re-run on every new `.h`, which cascades into a full shadercross/LLVM/RmlUI rebuild. The `.cpp` glob keeps `CONFIGURE_DEPENDS` (needed to detect new source files).
+  5. **ccache cap**: default 5 GB is too small for LLVM + SPIRV-Tools objects (constant evictions). Project cap is set to **20 GB** (`ccache --max-size=20G`). Verify with `ccache -s`; if cleanups spike, increase the cap.
+
 - **Test**: Create/update relevant `tests/` (Catch2).
 
 ```sh
