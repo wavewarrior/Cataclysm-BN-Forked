@@ -83,6 +83,11 @@
 #include <memory>
 #include <string>
 #include <utility>
+#ifdef COOP_ENABLED
+#include "coop_client.h"
+#endif
+#include <sstream>
+#include <unordered_map>
 
 #define dbg(x) DebugLog((x), DC::Game)
 
@@ -1132,9 +1137,87 @@ void pickup_activity_actor::do_turn( player_activity& act, Character& who )
 
     // Auto_resume implies autopickup.
     const bool autopickup = who.activity->auto_resume;
+    bool keep_going;
 
-    // False indicates that the player canceled pickup when met with some prompt
-    const bool keep_going = pickup::do_pickup( target_items, autopickup );
+#ifdef COOP_ENABLED
+    // C1 (co-op client only) — zero overhead in SP/host paths.
+    // Snapshot tile + type + charge info BEFORE do_pickup() removes items.
+    // After pickup, refs of taken items become invalid; refs of skipped/interrupted
+    // items stay valid — this is the "capture at actual removal" filter.
+    if( g->coop_client_ ) {
+        struct PickupSnap {
+            safe_reference<item> ref;
+            itype_id type;
+            int charges_before; // only meaningful when is_cbc
+            bool is_cbc;        // count_by_charges: ammo, food, etc.
+            tripoint_abs_ms tile;
+        };
+        // Build exact item-pointer → tile map by scanning nearby tiles.
+        // Items within radius 2 of starting_pos covers all pickup cases.
+        map& here = get_map();
+        const tripoint_bub_ms scan_center = starting_pos.value_or( who.bub_pos() );
+        std::unordered_map<const item *, tripoint_abs_ms> ptr_to_tile;
+        for( const tripoint_bub_ms& p : here.points_in_radius( scan_center, 2 ) ) {
+            for( const item * it : here.i_at( p ) ) { ptr_to_tile[it] = here.bub_to_abs( p ); }
+        }
+        std::vector<PickupSnap> snaps;
+        for( const pickup::pick_drop_selection& sel : target_items ) {
+            if( !sel.target ) { continue; }
+            const item* raw = &*sel.target;
+            const auto found = ptr_to_tile.find( raw );
+            if( found == ptr_to_tile.end() ) { continue; }
+            snaps.push_back(
+            {sel.target, raw->typeId(), raw->charges, raw->count_by_charges(), found->second} );
+        }
+
+        keep_going = pickup::do_pickup( target_items, autopickup );
+
+        // Build and emit manifest for items that were ACTUALLY removed.
+        if( !snaps.empty() ) {
+            std::ostringstream oss;
+            JsonOut jout( oss );
+            jout.start_object();
+            jout.member( "items" );
+            jout.start_array();
+            for( const PickupSnap& snap : snaps ) {
+                const bool item_gone = !snap.ref;
+                if( snap.is_cbc ) {
+                    const int charges_now = item_gone ? 0 : ( &*snap.ref )->charges;
+                    const int charges_taken = snap.charges_before - charges_now;
+                    if( charges_taken <= 0 ) { continue; }
+                    jout.start_object();
+                    jout.member( "tx", snap.tile.x() );
+                    jout.member( "ty", snap.tile.y() );
+                    jout.member( "tz", snap.tile.z() );
+                    jout.member( "type", snap.type.str() );
+                    jout.member( "charges", charges_taken );
+                    jout.member( "qty", 0 );
+                    jout.end_object();
+                } else {
+                    if( !item_gone ) { continue; }
+                    jout.start_object();
+                    jout.member( "tx", snap.tile.x() );
+                    jout.member( "ty", snap.tile.y() );
+                    jout.member( "tz", snap.tile.z() );
+                    jout.member( "type", snap.type.str() );
+                    jout.member( "charges", 0 );
+                    jout.member( "qty", 1 );
+                    jout.end_object();
+                }
+            }
+            jout.end_array();
+            jout.end_object();
+            g->coop_client_->queue_action( "PICKUP", oss.str() );
+        }
+    } else {
+#endif // COOP_ENABLED
+
+        // False indicates that the player canceled pickup when met with some prompt
+        keep_going = pickup::do_pickup( target_items, autopickup );
+
+#ifdef COOP_ENABLED
+    } // end coop_client_ else branch
+#endif // COOP_ENABLED
 
     // Check thievey witness
     npc* witness = nullptr;
