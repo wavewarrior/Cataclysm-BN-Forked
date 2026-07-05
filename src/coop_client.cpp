@@ -196,6 +196,12 @@ auto coop_client::coop_world_tick() -> void {
         status_jout.member("d");
         status_jout.start_object();
         status_jout.member("idle", idle);
+        // C3: per-tick character vital stats so the host can track client health/death.
+        // Inventory, effects, and skills are deferred (expensive to serialize per tick).
+        status_jout.member("hp_pct", g->u.hp_percentage());
+        status_jout.member("stamina", g->u.get_stamina());
+        status_jout.member("stamina_max", g->u.get_stamina_max());
+        status_jout.member("dead", g->u.is_dead_state());
         status_jout.end_object();
         status_jout.end_object();
         if (!coop_net::send(socket_, status_oss.str())) {

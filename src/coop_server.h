@@ -71,6 +71,10 @@ struct coop_server {
     /// Test seam: directly set the client-idle flag that is normally written by the
     /// receiver thread when processing client_status packets.
     auto set_client_idle_for_test(bool v) -> void { client_is_idle_.store(v); }
+    /// C3: client's last-reported HP percentage (0–100).  Thread-safe read.
+    auto client_hp_pct() const -> int { return client_hp_pct_.load(); }
+    /// C3: true if the client's avatar reported dead on the last tick.
+    auto client_dead() const -> bool { return client_dead_.load(); }
     /// Typed dispatcher: apply a pre-parsed player_cmd_t to the proxy NPC.
     /// Called by execute_client_action() after parsing the string key.
     /// Public so unit tests can call it directly with typed commands.
@@ -138,6 +142,9 @@ private:
     // is sleeping or in a long activity.  Read by both_idle() on the main thread —
     // atomic so no lock needed for this single bool.
     std::atomic<bool> client_is_idle_{false};
+    // C3 character vitals (written by receiver thread, read by main thread).
+    std::atomic<int>  client_hp_pct_{100};    ///< 0–100; 100 = full health
+    std::atomic<bool> client_dead_{false};    ///< true once client avatar reports death
     // Set by the receiver thread (resync_request packet) to request a forced full
     // submap sync on the next tick.  Must be atomic — IO thread writes, main thread
     // reads+clears in build_and_send_sync().  exchange(false) clears atomically.

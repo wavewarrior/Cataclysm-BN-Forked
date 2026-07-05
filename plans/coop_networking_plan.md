@@ -1,6 +1,6 @@
 # Co-op Networking Plan
 
-**Status:** Track A complete (A1–A5.4). B1–B4 Phase 1 complete. B3 Phases 1–4 complete. B4 Phase 2 (resolve_hit/emit_visuals separation) in progress. Track C: C1 complete (PICKUP manifest). C2 complete (DROP, TERRAIN_CHANGE for doors, smash bash with debris). C2 construction deferral: build completions not yet wired — items consumed/produced during construction not propagated; next resync will correct terrain but not item state.
+**Status:** Track A complete (A1–A5.4). B1–B4 Phase 1 complete. B3 Phases 1–4 complete. B4 Phase 2 in progress. Track C: C1 complete (PICKUP). C2 complete (DROP, TERRAIN_CHANGE doors+smash). C3 partial (hp_pct/dead in client_status; inventory/effects deferred). C4–C6 pending.
 **Goal:** Real-time 2-player co-op where the client plays their own character with full action parity to single-player — pick up items, go upstairs, craft, interact, everything the host can do. Server-authoritative world state; client-side prediction for responsiveness.
 
 ---
@@ -495,7 +495,7 @@ visibility calculation for the host's LOS system.
 |---|---|---|---|
 | **C1: Client→host item mutations** | Client picks up item locally (already works); sends item IDs + positions to host; host removes from its map | NOT npc::pickup | 1 week |
 | **C2: Client→host terrain mutations** ✅ | Door opens (TERRAIN_CHANGE), items dropped (DROP manifest), smash bash (terrain + debris). Construction completion: deferred — `complete_construction()` hook needed for build-finish terrain and item changes. | NOT npc::interact | 2 weeks |
-| **C3: Client→host character delta** | Client sends inventory/stat/effect changes to host each tick (new sync direction) | NOT host-authoritative character | 2 weeks |
+| **C3: Client→host character delta** ✅ (partial) | client_status expanded with hp_pct/stamina/dead each tick. `client_hp_pct_` and `client_dead_` atomics on coop_server. Death event logged. Deferred: inventory sync (expensive per-tick), effect/trait sync, proxy NPC HP mirror. | NOT host-authoritative character | 2 weeks |
 | **C4: Vertical movement** | Client z-changes → host updates proxy z + triggers tile sync for new level | NOT NPC stair navigation | 1 week |
 | **C5: Long activity sync** | When client starts crafting/sleeping, host fast-forwards appropriately (extends A5.2) | NOT NPC activity actors | 2 weeks |
 | **C6: Client character persistence** | Client saves own character file; host loads on join; rejoining restores state | NOT host stores client char | 3 weeks |

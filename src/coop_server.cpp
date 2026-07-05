@@ -240,11 +240,22 @@ auto coop_server::receiver_loop(std::stop_token st) -> void {
                 if (chat_q_.size() >= 64) { chat_q_.pop_front(); }
                 chat_q_.push_back({std::move(text)});
             } else if (t == coop_pkt::client_status) {
-                // Client reports its own idle state (sleeping/long activity) so
-                // both_idle() doesn't have to guess from the stubbed proxy state.
+                // Client reports its own state each tick.
+                // idle: used by both_idle() for fast-forward.
+                // hp_pct, dead: C3 — vital signs for death detection and display.
+                // Inventory, effects, skills: deferred to a later C3 increment.
                 JsonObject d = pkt.get_object("d");
                 d.allow_omitted_members();
                 client_is_idle_.store(d.get_bool("idle", false));
+                client_hp_pct_.store(d.get_int("hp_pct", 100));
+                const bool now_dead = d.get_bool("dead", false);
+                if (now_dead && !client_dead_.load()) {
+                    DebugLog(DL::Info, DC::Main)
+                        << "[coop] C3: client avatar died — hp_pct="
+                        << d.get_int("hp_pct", 0);
+                    // TODO C3: trigger co-op death handling (respawn, game-over, etc.)
+                }
+                client_dead_.store(now_dead);
             } else if (t == coop_pkt::resync_request) {
                 // A4: client detected a hash mismatch and needs a full sync.
                 // Write the atomic flag — main thread reads it in build_and_send_sync().
