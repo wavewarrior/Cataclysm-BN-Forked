@@ -1,6 +1,6 @@
 # Co-op Networking Plan
 
-**Status:** A1 + A2 + A3 + A4 + A5.1 + A5.2 + A5.3 complete. A5.4 verification pending. B1 (monster decide/execute split) complete. B2 Phase 1 (npc_cmd_t struct, execute_action signature) complete. B2 Phase 2 (target/dest fields, resolve_cmd() helper, both call sites fixed) complete.
+**Status:** A1 + A2 + A3 + A4 + A5.1 + A5.2 + A5.3 complete. A5.4 verification pending. B1 (monster decide/execute split) complete. B2 Phase 1 (npc_cmd_t struct, execute_action signature) complete. B2 Phase 2 complete. B2 Phase 3 (decide_action() extracted; all bypass paths mapped to command kinds) complete.
 **Goal:** Real-time 2-player co-op that feels snappy and responsive — host parity with single-player, client-side prediction eliminating input lag, server-authoritative world state.
 
 ---
