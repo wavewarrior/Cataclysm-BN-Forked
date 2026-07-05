@@ -3507,10 +3507,14 @@ void mapgen_palette::load_place_mapings( const JsonObject &jo, const std::string
 }
 
 static std::map<palette_id, mapgen_palette> palettes;
-// Cache: maps {path-ptr, offset} → placing_map, keyed by source location pointer
-// identity (stable within one finalization pass via the stream cache).
+// Cache: maps {path-string, offset} → placing_map.  Keyed by the CONTENT of the
+// path (not the raw pointer) so that different files whose shared_ptr<string>
+// objects happen to be recycled to the same address cannot produce false hits.
+// The raw-pointer key was the bug: during named-palette data loading the
+// shared_ptr lifetime ends per-file, and the next allocation can reuse the same
+// address, aliasing a totally different palette's cache entry.
 // Cleared in reset() at the end of each finalization pass.
-static std::map<std::pair<const std::string *, int>, mapgen_palette::placing_map>
+static std::map<std::pair<std::string, int>, mapgen_palette::placing_map>
 palette_placings_cache;
 
 void mapgen_palette::pre_flatten_palettes()
@@ -3732,7 +3736,7 @@ mapgen_palette mapgen_palette::load_internal( const JsonObject &jo, const std::s
 
     std::string c = "palette " + new_pal.id.str();
     const auto loc = jo.get_source_location();
-    const auto cache_key = std::make_pair( loc.path.get(), loc.offset );
+    const auto cache_key = std::make_pair( loc.path ? *loc.path : std::string{}, loc.offset );
     const auto cache_it = palette_placings_cache.find( cache_key );
     const auto t_inline0 = std::chrono::steady_clock::now();
     if( cache_it != palette_placings_cache.end() ) {
