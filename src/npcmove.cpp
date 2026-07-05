@@ -1,4 +1,3 @@
-#include "npc_action.h"
 #include "active_item_cache.h"
 #include "activity_actor_definitions.h"
 #include "activity_handlers.h"
@@ -45,6 +44,7 @@
 #include "monster.h"
 #include "mtype.h"
 #include "npc.h" // IWYU pragma: associated
+#include "npc_action.h"
 #include "npctalk.h"
 #include "options.h"
 #include "overmap.h"
@@ -154,7 +154,6 @@ static const itype_id fuel_sunlight("sunlight");
 static constexpr float NPC_DANGER_VERY_LOW = 5.0f;
 static constexpr float NPC_DANGER_MAX = 150.0f;
 static constexpr float MAX_FLOAT = 5000000000.0f;
-
 
 
 namespace {
@@ -770,7 +769,7 @@ void npc::move() {
     adjust_power_cbms();
     // NPCs under operation should just stay still
     if (activity->id() == activity_id("ACT_OPERATION")) {
-        execute_action( npc_cmd_t{ .kind = npc_player_activity } );
+        execute_action(npc_cmd_t{.kind = npc_player_activity});
         return;
     }
 
@@ -1017,20 +1016,25 @@ void npc::move() {
     add_msg(m_debug, "%s chose action %s.", name, npc_action_name(action));
     {
         ZoneScopedN("npc_execute_action");
-        execute_action( npc_cmd_t{ .kind = action } );
+        execute_action(resolve_cmd(action));
     }
 }
 
-void npc::execute_action( const npc_cmd_t &cmd ) {
+auto npc::resolve_cmd(npc_action action) -> npc_cmd_t {
+    // good_escape_direction() mutates path and draws RNG — guard it to npc_flee only.
+    Creature* const cmd_target = current_target();
+    const auto cmd_dest =
+        action == npc_flee
+            ? good_escape_direction(false)
+            : (cmd_target != nullptr ? cmd_target->bub_pos() : bub_pos());
+    return npc_cmd_t{.kind = action, .target = cmd_target, .dest = cmd_dest};
+}
+
+void npc::execute_action(const npc_cmd_t& cmd) {
     const auto action = cmd.kind;
     int oldmoves = moves;
-    tripoint_bub_ms tar = bub_pos();
-    Creature* cur = current_target();
-    if (action == npc_flee) {
-        tar = good_escape_direction(false);
-    } else if (cur != nullptr) {
-        tar = cur->bub_pos();
-    }
+    const auto tar = cmd.dest;
+    auto* const cur = cmd.target;
     /*
       debugmsg("%s ran execute_action() with target = %d! Action %s",
                name, target, npc_action_name(action));
@@ -2569,7 +2573,7 @@ void npc::avoid_friendly_fire() {
      */
     npc_action action = address_needs(NPC_DANGER_VERY_LOW + 1);
     if (action == npc_undecided) { move_pause(); }
-    execute_action( npc_cmd_t{ .kind = action } );
+    execute_action(resolve_cmd(action));
 }
 
 void npc::escape_explosion() {

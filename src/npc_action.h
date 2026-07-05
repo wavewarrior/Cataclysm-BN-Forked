@@ -1,6 +1,10 @@
 #pragma once
 
+#include "coordinates.h"
+
 #include <string>
+
+class Creature;
 
 /**
  * Describes the single action an NPC intends to take this tick.
@@ -8,10 +12,9 @@
  * Produced by the decision logic in npc::move() and consumed by
  * npc::execute_action(), which performs all state mutations.
  *
- * Phase B1: npc_cmd_t currently wraps only the action kind.
- * Phase B2 (future): will add resolved target pointer and dest tripoint so
- * execute_action() no longer has to re-derive them from member state via
- * current_target() and bub_pos().
+ * Phase B2: npc_cmd_t carries the resolved target and destination so
+ * execute_action() reads them directly instead of re-deriving them from
+ * member state (current_target() / bub_pos() / good_escape_direction()).
  */
 
 // ---------------------------------------------------------------------------
@@ -57,8 +60,10 @@ std::string npc_action_name(npc_action action);
 
 struct npc_cmd_t {
     npc_action kind = npc_undecided;
-
-    // Phase B2 additions (not yet populated by decide_action):
-    //   Creature* target = nullptr;      // resolved attack/heal target
-    //   tripoint_bub_ms dest = {};       // resolved movement destination
+    /// Resolved attack/heal/follow target. Null when the action does not
+    /// involve a creature target (e.g. npc_pause, npc_flee, npc_reload).
+    Creature* target = nullptr;
+    /// Resolved movement destination. Set to good_escape_direction() for
+    /// npc_flee, to target->bub_pos() for melee/ranged, bub_pos() otherwise.
+    tripoint_bub_ms dest = {};
 };
