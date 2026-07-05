@@ -714,6 +714,12 @@ int main( int argc, char* argv[] )
                 if( !game_done ) {
                     g->invalidate_main_ui_adaptor();
                     ui_manager::redraw_invalidated();
+                    // Present the frame: redraw_invalidated() rebuilds the GPU queues
+                    // but refresh_display() is what submits them to the swapchain.
+                    // Without this, animations and world updates are queued but
+                    // never shown between ticks (only visible when something else —
+                    // e.g. a menu — calls refresh_display() internally).
+                    refresh_display();
                 }
                 SDL_Delay( 4 );
             }
