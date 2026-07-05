@@ -15,6 +15,7 @@
 #include "catalua.h"
 #ifdef COOP_ENABLED
 #include "coop_client.h"
+#include "json.h"
 #endif
 #include "character.h"
 #include "character_display.h"
@@ -108,6 +109,27 @@
 #include <set>
 #include <sstream>
 #include <utility>
+
+#ifdef COOP_ENABLED
+namespace {
+/// Emit a TERRAIN_CHANGE action to the co-op host with the new ter/furn at an abs position.
+/// Only called when g->coop_client_ is non-null (client-side only).
+inline void coop_emit_terrain_change(
+    const tripoint_abs_ms &abs, const ter_id &ter, const furn_id &furn )
+{
+    std::ostringstream oss;
+    JsonOut jout( oss );
+    jout.start_object();
+    jout.member( "tx", abs.x() );
+    jout.member( "ty", abs.y() );
+    jout.member( "tz", abs.z() );
+    jout.member( "ter", ter.id().str() );
+    jout.member( "furn", furn.id().str() );
+    jout.end_object();
+    g->coop_client_->queue_action( "TERRAIN_CHANGE", oss.str() );
+}
+} // namespace
+#endif // COOP_ENABLED
 
 static const activity_id ACT_MOVE_LOOT("ACT_MOVE_LOOT");
 static const activity_id ACT_MULTIPLE_BUTCHER("ACT_MULTIPLE_BUTCHER");
@@ -539,6 +561,11 @@ static void open() {
         }
     } else if (here.open_door(&u, openp, !here.is_outside(u.bub_pos()))) {
         u.moves -= 100;
+#ifdef COOP_ENABLED
+        if( g->coop_client_ ) {
+            coop_emit_terrain_change( here.bub_to_abs( openp ), here.ter( openp ), here.furn( openp ) );
+        }
+#endif // COOP_ENABLED
     } else {
         const ter_str_id tid = here.ter(openp).id();
 
@@ -559,7 +586,18 @@ static void close() {
             _("Close where?"),
             pgettext("no door, gate, etc.", "There is nothing that can be closed nearby."),
             ACTION_CLOSE, false)) {
+#ifdef COOP_ENABLED
+        map &here_c = get_map();
+        const auto ter_before = here_c.ter( *pnt );
+        const auto furn_before = here_c.furn( *pnt );
+#endif // COOP_ENABLED
         doors::close_door(get_map(), g->u, *pnt);
+#ifdef COOP_ENABLED
+        if( g->coop_client_ &&
+            ( here_c.ter( *pnt ) != ter_before || here_c.furn( *pnt ) != furn_before ) ) {
+            coop_emit_terrain_change( here_c.bub_to_abs( *pnt ), here_c.ter( *pnt ), here_c.furn( *pnt ) );
+        }
+#endif // COOP_ENABLED
     }
 }
 

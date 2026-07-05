@@ -83,6 +83,9 @@ struct coop_server {
     /// Full item JSON (item::serialize) is used — no per-instance state loss.
     /// Safe to call from unit tests with a world set up via build_test_map().
     static auto apply_drop_manifest(const std::string& ctx_json) -> void; // *NOPAD*
+    /// Test seam: apply a TERRAIN_CHANGE message to g->m (ter_set + furn_set).
+    /// Emitted by the client when it opens/closes a door or changes terrain.
+    static auto apply_terrain_change( const std::string &ctx_json ) -> void; // *NOPAD*
 
 private:
     struct action_entry {

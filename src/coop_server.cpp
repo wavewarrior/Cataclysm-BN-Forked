@@ -464,6 +464,41 @@ auto coop_server::apply_drop_manifest(const std::string& ctx_json) -> void {
     }
 }
 
+auto coop_server::apply_terrain_change( const std::string &ctx_json ) -> void {
+    if( ctx_json.empty() ) { return; }
+    std::istringstream iss( ctx_json );
+    JsonIn jin( iss );
+    JsonObject root = jin.get_object();
+    root.allow_omitted_members();
+    const tripoint_abs_ms abs_pos{
+        root.get_int( "tx" ), root.get_int( "ty" ), root.get_int( "tz" )};
+    const std::string ter_name  = root.get_string( "ter",  "" );
+    const std::string furn_name = root.get_string( "furn", "" );
+    const tripoint_bub_ms bub = g->m.abs_to_bub( abs_pos );
+    if( !g->m.inbounds( bub ) ) { return; }
+    if( !ter_name.empty() ) {
+        const ter_str_id t( ter_name );
+        if( t.is_valid() ) {
+            g->m.ter_set( bub, t );
+        } else {
+            DebugLog( DL::Info, DC::Main )
+                << "[coop] C2b TERRAIN_CHANGE: unknown ter id '" << ter_name << "' — skipped";
+        }
+    }
+    if( !furn_name.empty() ) {
+        const furn_str_id f( furn_name );
+        if( f.is_valid() ) {
+            g->m.furn_set( bub, f );
+        } else {
+            DebugLog( DL::Info, DC::Main )
+                << "[coop] C2b TERRAIN_CHANGE: unknown furn id '" << furn_name << "' — skipped";
+        }
+    }
+    DebugLog( DL::Info, DC::Main )
+        << "[coop] C2b TERRAIN_CHANGE: " << ter_name << " at ("
+        << abs_pos.x() << "," << abs_pos.y() << "," << abs_pos.z() << ")";
+}
+
 auto coop_server::execute_client_action(
     npc* proxy, const std::string& key, const std::string& ctx_json, uint32_t seq) -> void {
     if (!proxy) { return; }
@@ -496,6 +531,13 @@ auto coop_server::execute_client_action(
         // diff).
         proxy->moves -= proxy->get_speed();
         apply_drop_manifest(ctx_json);
+        return;
+    }
+    if (key == "TERRAIN_CHANGE") {
+        // C2b: client opened/closed a door or otherwise mutated terrain.
+        // Payload: {"tx":N,"ty":N,"tz":N,"ter":"t_id","furn":"f_id"}
+        // Vehicle doors are excluded client-side (no terrain change there).
+        apply_terrain_change(ctx_json);
         return;
     }
     if (key == "SLEEP") {
