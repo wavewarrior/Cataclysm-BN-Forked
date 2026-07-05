@@ -7,6 +7,7 @@
 #include "coop_mutation_log.h" // COOP_FNV_OFFSET, coop_hash_event_fields
 #include "coop_net.h"
 #include "coop_packets.h"
+#include "coop_proto.h"
 #include "coop_reconcile.h"
 #include "coop_session.h"
 #include "coordinates.h"
@@ -529,8 +530,7 @@ auto coop_client::apply_sync(const std::string& json_buf) -> void {
     // match the host's burst limit and prevent blocking the render loop.
     const int turns_advanced =
         std::max(0, to_turn<int>(calendar::turn) - to_turn<int>(turn_before));
-    constexpr int MAX_PROCESS_CATCH_UP = 3;
-    const int catch_up = std::min(turns_advanced, MAX_PROCESS_CATCH_UP);
+    const int catch_up = std::min(turns_advanced, COOP_MAX_CATCH_UP);
     for (int i = 0; i < catch_up; ++i) { g->u.process_turn(); }
 }
 

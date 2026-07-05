@@ -59,6 +59,17 @@ struct coop_server {
     auto send_chat(const std::string& text) -> void;
     auto is_running() const -> bool { return running_.load(); }
     auto has_pending_actions() const -> bool;
+    /// True iff both host and client are in a long idle activity (sleep, craft, …).
+    /// Drives maybe_fast_forward(); public so unit tests can verify the truth table.
+    auto both_idle() const -> bool; // *NOPAD*
+    /// Saturate main_loop_accum_ms_ to COOP_FAST_FORWARD_ACCUM_MS when both players
+    /// are idle, causing the main loop to fire COOP_MAX_CATCH_UP game ticks.
+    /// Returns true if fast-forward was triggered.
+    /// Extracted from coop_world_tick() for testability.
+    auto maybe_fast_forward() -> bool; // *NOPAD*
+    /// Test seam: directly set the client-idle flag that is normally written by the
+    /// receiver thread when processing client_status packets.
+    auto set_client_idle_for_test(bool v) -> void { client_is_idle_.store(v); }
 
 private:
     struct action_entry {
@@ -77,7 +88,6 @@ private:
     auto execute_client_action(
         npc* proxy, const std::string& key, const std::string& ctx_json, uint32_t seq) -> void;
     auto receiver_loop(std::stop_token st) -> void;
-    auto both_idle() const -> bool;
     auto push_entity_snapshot() -> void;
     auto resolve_fire_at_seq(npc* proxy, uint32_t seq, int target_ax, int target_ay, int target_az)
         -> void;

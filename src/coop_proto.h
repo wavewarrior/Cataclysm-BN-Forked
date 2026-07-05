@@ -44,4 +44,14 @@ enum class coop_event_type : uint8_t {
     turn_advanced = 12,    ///< calendar::turn increment
 };
 
+/// Fast-forward timing constants — single source of truth for server, client, and tests.
+///
+/// COOP_IDLE_TICK_MS must match IDLE_TICK_INTERVAL_MS in main.cpp (1000.0).
+/// main.cpp is not included here; add a static_assert there if they ever drift.
+constexpr double COOP_IDLE_TICK_MS = 1000.0; ///< must equal IDLE_TICK_INTERVAL_MS in main.cpp
+constexpr int COOP_MAX_CATCH_UP = 3;         ///< max idle ticks per outer-loop iteration
+/// Accumulator value that triggers COOP_MAX_CATCH_UP game ticks in the main loop.
+/// Derived — changing COOP_IDLE_TICK_MS or COOP_MAX_CATCH_UP automatically updates this.
+constexpr double COOP_FAST_FORWARD_ACCUM_MS = COOP_MAX_CATCH_UP * COOP_IDLE_TICK_MS;
+
 #endif // COOP_ENABLED

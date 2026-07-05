@@ -323,9 +323,14 @@ auto coop_server::coop_world_tick() -> void {
     while (auto msg = try_pop_chat()) { add_msg(m_info, "[partner]: %s", msg->text); }
 
     // 5. Fast-forward when both players are engaged in long activities (sleep,
-    //    craft, read, wait…).  At 1 tick/sec no streak threshold needed — react
-    //    immediately by saturating the accumulator to MAX_CATCH_UP (3 s).
-    if (both_idle()) { g->main_loop_accum_ms_ = 3000.0; }
+    //    craft, read, wait…).
+    maybe_fast_forward();
+}
+
+auto coop_server::maybe_fast_forward() -> bool {
+    if (!both_idle()) { return false; }
+    g->main_loop_accum_ms_ = COOP_FAST_FORWARD_ACCUM_MS;
+    return true;
 }
 
 auto coop_server::both_idle() const -> bool {
