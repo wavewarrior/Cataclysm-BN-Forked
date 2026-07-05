@@ -469,43 +469,41 @@ Once command/pipeline split exists, `game.cpp` decomposes into:
 
 ## Track C — Full Client Parity (client plays own character like single-player)
 
-**Goal:** The client controls their own persistent character with full single-player action parity.
-Every action available in single-player works in co-op.
+**Goal:** Client plays their own persistent character with full SP action parity.
 
 ### Architecture decision: Option B (client avatar authoritative)
 
-Two options exist; Track C commits to **Option B**:
-
-| | Option A: Teach NPC proxy avatar actions | Option B: Client avatar authoritative |
+| | Option A: Teach NPC proxy all avatar actions | Option B: Client avatar authoritative |
 |---|---|---|
-| Model | Proxy NPC gains pickup, stairs, craft, etc. | Client's `g->u` is authoritative; host mirrors it |
-| Problem | NPC/Avatar class divergence is large; every avatar feature needs a proxy counterpart | Client avatar can conflict with host world simulation |
-| Chosen? | ❌ — unending surface area | ✅ — consistent with "plays like SP" |
+| Model | Proxy NPC gains pickup/stairs/craft/etc. | Client's `g->u` runs locally; host reconciles world + character state |
+| Backlog | Reimplement every avatar action on NPCs (endless) | World-mutation propagation + client→host character delta sync |
+| Proxy role | Full avatar mirror | Collision/visibility placeholder only |
+| **Chosen?** | ❌ | ✅ |
 
-**Option B mechanics:**
-- Client runs `g->u` (avatar) locally for all actions — same code path as single-player
-- Each client action is serialized via `player_cmd_t` and sent to host
-- Host applies the action to its copy of the client's character (NOT just a proxy NPC position)
-- Host sends authoritative world state + client character delta back each tick
-- Proxy NPC on host becomes a world-collision/visibility placeholder only, not a full avatar mirror
+**Option B is consistent with Track A's existing infrastructure:**
+- WorldMutationLog (A3) + delta stream (A4) already propagate HOST→CLIENT world changes
+- Option B adds CLIENT→HOST mutations (item pickup, door open, terrain mod from client)
+- Client's character state (inventory, HP, skills) synced CLIENT→HOST each tick (new direction)
+- Proxy NPC never needs `npc::pickup`, NPC stair-nav, or NPC crafting
 
-### Immediate blockers (deferred proxy actions to implement first)
+**What the proxy DOES still need (minimal):** position mirroring (done), collision placeholder,
+visibility calculation for the host's LOS system.
 
-The deferred stubs in `execute_player_cmd()` are the concrete work queue.
-Each unblocks one class of client actions. Priority order:
+### Track C work queue (Option B specific)
 
-| Step | Currently | Work | Unlocks |
+| Step | What it is | What it is NOT | Effort |
 |---|---|---|---|
-| **C1: PICKUP** | `proxy->moves -= speed; // deferred` | Host resolves pickup on client's character copy; delta sync back | Client picks up items |
-| **C2: Vertical movement** | `// deferred` | NPC stair navigation on proxy; z-level sync | Client uses stairs |
-| **C3: USE / INTERACT** | not wired | `player_cmd_t` USE kind; host resolves item use | Client uses items, opens terrain |
-| **C4: CRAFT / SLEEP full relay** | moves consumed only | Activity actor relay; host runs activity, client mirrors | Client crafts, reads, sleeps properly |
-| **C5: Client character persistence** | guest session only | Client saves own character; host stores client char; rejoining restores | Sessions survive disconnect |
-| **C6: Character sheet sync** | position sync only | Per-tick delta: inventory, stats, effects, skills | Client HP/hunger/skills authoritative |
+| **C1: Client→host item mutations** | Client picks up item locally (already works); sends item IDs + positions to host; host removes from its map | NOT npc::pickup | 1 week |
+| **C2: Client→host terrain mutations** | Door opens, terrain changes, items dropped — client mutations propagate to host world map | NOT npc::interact | 2 weeks |
+| **C3: Client→host character delta** | Client sends inventory/stat/effect changes to host each tick (new sync direction) | NOT host-authoritative character | 2 weeks |
+| **C4: Vertical movement** | Client z-changes → host updates proxy z + triggers tile sync for new level | NOT NPC stair navigation | 1 week |
+| **C5: Long activity sync** | When client starts crafting/sleeping, host fast-forwards appropriately (extends A5.2) | NOT NPC activity actors | 2 weeks |
+| **C6: Client character persistence** | Client saves own character file; host loads on join; rejoining restores state | NOT host stores client char | 3 weeks |
 
-**Note:** B4 Phase 2 (ranged stage split) does NOT advance Track C. The actual next step for
-parity is C1 (PICKUP) — the most common blocked action.
----
+**Immediate next step: C1** — item pickup is the most visible blocked action and the
+simplest world-mutation propagation case. The pattern established in C1 extends to C2.
+
+**Note:** B4 Phase 2 (ranged stage split) does NOT advance Track C.
 
 ## Known Anti-Patterns (do not repeat)
 
