@@ -3736,6 +3736,7 @@ mapgen_palette mapgen_palette::load_internal( const JsonObject &jo, const std::s
     const auto cache_it = palette_placings_cache.find( cache_key );
     const auto t_inline0 = std::chrono::steady_clock::now();
     if( cache_it != palette_placings_cache.end() ) {
+        jo.allow_omitted_members(); // fields consumed on cache-miss pass
         format_placings = cache_it->second;
     } else {
         new_pal.load_place_mapings<jmapgen_terrain>( jo, "terrain", format_placings );
