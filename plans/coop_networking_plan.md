@@ -1,7 +1,7 @@
 # Co-op Networking Plan
 
-**Status:** Track A complete (A1–A5.4). B1 complete. B2 complete (Phases 1–3). B3 Phase 1 complete: player_cmd_t scaffold + make_player_move_cmd + 11 tests in player_cmd.h/cpp. Next: B3 Phase 2 — wire MoveCmd into both handle_action() switches; B3 Phase 3+ remaining sim commands (pause, smash, pickup, fire, …).
-**Goal:** Real-time 2-player co-op that feels snappy and responsive — host parity with single-player, client-side prediction eliminating input lag, server-authoritative world state.
+**Status:** Track A complete (A1–A5.4). B1–B4 Phase 1 complete. B3 Phases 1–4 complete. B4 Phase 2 (resolve_hit/emit_visuals separation) in progress. Track C added: full client character parity (own character, all host actions).
+**Goal:** Real-time 2-player co-op where the client plays their own character with full action parity to single-player — pick up items, go upstairs, craft, interact, everything the host can do. Server-authoritative world state; client-side prediction for responsiveness.
 
 ---
 
@@ -102,11 +102,11 @@ Track A (co-op) depends only on Step A3 (WorldMutationLog) for full desync safet
 
 | Decision | Resolution | Rationale |
 |---|---|---|
-| Transport: TCP only vs TCP+UDP | TCP only for Track A. UDP for positional prediction is Track C. | Coalescing window (16ms) absorbs TCP variability. WAN jitter deferred. |
-| Client simulation depth | Thin client. Client owns only `process_turn()` for avatar. | Full rollback requires deterministic sim — years of prerequisite. |
+| Transport: TCP only vs TCP+UDP | TCP only for Track A/B. UDP for positional prediction is Track C. | Coalescing window (16ms) absorbs TCP variability. WAN jitter deferred. |
+| Client simulation depth | Thin client for Track A (client owns only process_turn()). **Track C target: full parity** — client runs own character with all actions, proxy mirrors on host. | Full rollback deferred; per-action authoritative sync achieves parity without deterministic sim. |
 | Fast-forward tick rate | `MAX_CATCH_UP = 3`, matched on both host and client. | Prevents blocking render loop; must be raised symmetrically if at all. |
-| 2-player vs N-player | Hardcode 2-player for Track A, but use extensible data structures now. | `client_sock_` → `clients_[0].sock`; adding client N is iteration, not surgery. |
-| Client persistence | Option A: client is a session guest, no save file. | Cross-session client characters require character-sheet merging — Track C. |
+| 2-player vs N-player | Hardcode 2-player for Track A/B, extensible data structures now. | `client_sock_` → `clients_[0].sock`; adding client N is iteration, not surgery. |
+| Client persistence | **Revised**: client has own character + save file (Track C). | Track A used guest session (Option A). Track C promotes client to full participant. |
 | Host modal behavior | Option A: world stays alive, host character stands idle/vulnerable. | Fiber system already implements this. Option B (pause world) is bad UX. |
 
 ---
@@ -465,6 +465,46 @@ Once command/pipeline split exists, `game.cpp` decomposes into:
 - `src/world_tick.cpp` — per-turn world sim
 - `src/game.cpp` — top-level loop and game state only
 
+---
+
+## Track C — Full Client Parity (client plays own character like single-player)
+
+**Goal:** The client controls their own persistent character with full single-player action parity.
+Every action available in single-player works in co-op.
+
+### Architecture decision: Option B (client avatar authoritative)
+
+Two options exist; Track C commits to **Option B**:
+
+| | Option A: Teach NPC proxy avatar actions | Option B: Client avatar authoritative |
+|---|---|---|
+| Model | Proxy NPC gains pickup, stairs, craft, etc. | Client's `g->u` is authoritative; host mirrors it |
+| Problem | NPC/Avatar class divergence is large; every avatar feature needs a proxy counterpart | Client avatar can conflict with host world simulation |
+| Chosen? | ❌ — unending surface area | ✅ — consistent with "plays like SP" |
+
+**Option B mechanics:**
+- Client runs `g->u` (avatar) locally for all actions — same code path as single-player
+- Each client action is serialized via `player_cmd_t` and sent to host
+- Host applies the action to its copy of the client's character (NOT just a proxy NPC position)
+- Host sends authoritative world state + client character delta back each tick
+- Proxy NPC on host becomes a world-collision/visibility placeholder only, not a full avatar mirror
+
+### Immediate blockers (deferred proxy actions to implement first)
+
+The deferred stubs in `execute_player_cmd()` are the concrete work queue.
+Each unblocks one class of client actions. Priority order:
+
+| Step | Currently | Work | Unlocks |
+|---|---|---|---|
+| **C1: PICKUP** | `proxy->moves -= speed; // deferred` | Host resolves pickup on client's character copy; delta sync back | Client picks up items |
+| **C2: Vertical movement** | `// deferred` | NPC stair navigation on proxy; z-level sync | Client uses stairs |
+| **C3: USE / INTERACT** | not wired | `player_cmd_t` USE kind; host resolves item use | Client uses items, opens terrain |
+| **C4: CRAFT / SLEEP full relay** | moves consumed only | Activity actor relay; host runs activity, client mirrors | Client crafts, reads, sleeps properly |
+| **C5: Client character persistence** | guest session only | Client saves own character; host stores client char; rejoining restores | Sessions survive disconnect |
+| **C6: Character sheet sync** | position sync only | Per-tick delta: inventory, stats, effects, skills | Client HP/hunger/skills authoritative |
+
+**Note:** B4 Phase 2 (ranged stage split) does NOT advance Track C. The actual next step for
+parity is C1 (PICKUP) — the most common blocked action.
 ---
 
 ## Known Anti-Patterns (do not repeat)
