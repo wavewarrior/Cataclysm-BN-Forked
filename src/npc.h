@@ -143,7 +143,7 @@ struct npc_companion_mission {
 std::string npc_class_name( const npc_class_id & );
 std::string npc_class_name_str( const npc_class_id & );
 
-enum npc_action : int;
+#include "npc_action.h"
 
 enum npc_need : int {
     need_none,
@@ -1016,7 +1016,7 @@ class npc: public player
 
         // Movement; the following are defined in npcmove.cpp
         void move();                            // Picks an action & a target and calls execute_action
-        void execute_action( npc_action action ); // Performs action
+        void execute_action( const npc_cmd_t &cmd ); // Performs action (mutation pass)
         void process_turn() override;
         /**
          * Batch catchup: analytically simulate @p n missed turns.

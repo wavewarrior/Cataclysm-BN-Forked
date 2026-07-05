@@ -1,3 +1,4 @@
+#include "npc_action.h"
 #include "active_item_cache.h"
 #include "activity_actor_definitions.h"
 #include "activity_handlers.h"
@@ -154,36 +155,7 @@ static constexpr float NPC_DANGER_VERY_LOW = 5.0f;
 static constexpr float NPC_DANGER_MAX = 150.0f;
 static constexpr float MAX_FLOAT = 5000000000.0f;
 
-enum npc_action : int {
-    npc_undecided = 0,
-    npc_pause,
-    npc_reload,
-    npc_sleep,
-    npc_pickup,
-    npc_heal,
-    npc_use_painkiller,
-    npc_drop_items,
-    npc_flee,
-    npc_melee,
-    npc_shoot,
-    npc_look_for_player,
-    npc_heal_player,
-    npc_follow_player,
-    npc_follow_embarked,
-    npc_talk_to_player,
-    npc_mug_player,
-    npc_goto_to_this_pos,
-    npc_goto_destination,
-    npc_avoid_friendly_fire,
-    npc_escape_explosion,
-    npc_noop,
-    npc_reach_attack,
-    npc_aim,
-    npc_investigate_sound,
-    npc_return_to_guard_pos,
-    npc_player_activity,
-    num_npc_actions
-};
+
 
 namespace {
 const std::vector<bionic_id> power_cbms = {{
@@ -798,7 +770,7 @@ void npc::move() {
     adjust_power_cbms();
     // NPCs under operation should just stay still
     if (activity->id() == activity_id("ACT_OPERATION")) {
-        execute_action(npc_player_activity);
+        execute_action( npc_cmd_t{ .kind = npc_player_activity } );
         return;
     }
 
@@ -1045,11 +1017,12 @@ void npc::move() {
     add_msg(m_debug, "%s chose action %s.", name, npc_action_name(action));
     {
         ZoneScopedN("npc_execute_action");
-        execute_action(action);
+        execute_action( npc_cmd_t{ .kind = action } );
     }
 }
 
-void npc::execute_action(npc_action action) {
+void npc::execute_action( const npc_cmd_t &cmd ) {
+    const auto action = cmd.kind;
     int oldmoves = moves;
     tripoint_bub_ms tar = bub_pos();
     Creature* cur = current_target();
@@ -2596,7 +2569,7 @@ void npc::avoid_friendly_fire() {
      */
     npc_action action = address_needs(NPC_DANGER_VERY_LOW + 1);
     if (action == npc_undecided) { move_pause(); }
-    execute_action(action);
+    execute_action( npc_cmd_t{ .kind = action } );
 }
 
 void npc::escape_explosion() {
