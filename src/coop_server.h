@@ -79,6 +79,10 @@ struct coop_server {
     /// Does NOT need a live server instance or a proxy NPC — safe to call from
     /// unit tests with a world set up via build_test_map().
     static auto apply_pickup_manifest(const std::string& ctx_json) -> void; // *NOPAD*
+    /// Test seam: parse a DROP manifest JSON and add items to g->m.
+    /// Full item JSON (item::serialize) is used — no per-instance state loss.
+    /// Safe to call from unit tests with a world set up via build_test_map().
+    static auto apply_drop_manifest(const std::string& ctx_json) -> void; // *NOPAD*
 
 private:
     struct action_entry {

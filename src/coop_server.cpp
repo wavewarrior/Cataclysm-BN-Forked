@@ -13,6 +13,7 @@
 #include "debug.h"
 #include "game.h"
 #include "get_version.h"
+#include "item.h"
 #include "json.h"
 #include "map.h"
 #include "mapbuffer.h"
@@ -22,6 +23,7 @@
 #include "overmapbuffer.h"
 #include "ranged.h"
 #include "submap.h"
+#include "type_id.h"
 #include "world.h"
 #include "worldfactory.h"
 
@@ -430,6 +432,38 @@ auto coop_server::apply_pickup_manifest(const std::string& ctx_json) -> void {
     }
 }
 
+auto coop_server::apply_drop_manifest(const std::string& ctx_json) -> void {
+    if (ctx_json.empty()) { return; }
+    std::istringstream iss(ctx_json);
+    JsonIn jin(iss);
+    JsonObject root = jin.get_object();
+    root.allow_omitted_members();
+    for (JsonObject entry : root.get_array("items")) {
+        entry.allow_omitted_members();
+        const tripoint_abs_ms
+            abs_pos{entry.get_int("tx"), entry.get_int("ty"), entry.get_int("tz")};
+        const std::string item_json = entry.get_string("data");
+        const tripoint_bub_ms bub = g->m.abs_to_bub(abs_pos);
+        if (!g->m.inbounds(bub)) { continue; }
+        try {
+            std::istringstream item_iss(item_json);
+            JsonIn item_jin(item_iss);
+            detached_ptr<item> it = item::spawn(item_jin);
+            if (!it) {
+                DebugLog(DL::Info, DC::Main)
+                    << "[coop] C2a DROP: item deserialized as null at (" << abs_pos.x() << ","
+                    << abs_pos.y() << "," << abs_pos.z() << ")";
+                continue;
+            }
+            g->m.add_item(bub, std::move(it));
+        } catch (const JsonError& e) {
+            DebugLog(DL::Info, DC::Main)
+                << "[coop] C2a DROP: bad item JSON at (" << abs_pos.x() << "," << abs_pos.y() << ","
+                << abs_pos.z() << "): " << e.what();
+        }
+    }
+}
+
 auto coop_server::execute_client_action(
     npc* proxy, const std::string& key, const std::string& ctx_json, uint32_t seq) -> void {
     if (!proxy) { return; }
@@ -452,6 +486,16 @@ auto coop_server::execute_client_action(
         // NOT as a dedup mechanism. C5 (reconnection) will need seq-based dedup.
         proxy->moves -= proxy->get_speed();
         apply_pickup_manifest(ctx_json);
+        return;
+    }
+    if (key == "DROP") {
+        // C2a (Option B): client dropped items locally; mirror the additions on the host.
+        // Manifest: {"items":[{"tx":…,"ty":…,"tz":…,"data":"<full item JSON>"},…]}
+        // Full item serialization preserves per-instance state (ammo, mods, damage, contents).
+        // Items that went into a vehicle are NOT in the manifest (auto-excluded by client-side
+        // diff).
+        proxy->moves -= proxy->get_speed();
+        apply_drop_manifest(ctx_json);
         return;
     }
     if (key == "SLEEP") {

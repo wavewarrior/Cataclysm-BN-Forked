@@ -1,4 +1,7 @@
 #include "activity_actor_definitions.h"
+#ifdef COOP_ENABLED
+#include "coop_client.h"
+#endif
 #include "activity_handlers.h" // IWYU pragma: associated
 #include "avatar.h"
 #include "avatar_action.h"
@@ -740,6 +743,44 @@ void drop_activity_actor::do_turn( player_activity &, Character& who )
     const auto pos = who.bub_pos() + relpos;
 
     std::vector<detached_ptr<item>> dropped = obtain_activity_items( who, items );
+
+#ifdef COOP_ENABLED
+    // C2a (co-op client only) — serialize each item BEFORE put_into_vehicle_or_drop
+    // moves ownership into the map.  Must happen before the move because:
+    //   - detached_ptr ownership is consumed by put_into_vehicle_or_drop; no access after.
+    //   - cbc stacks may merge into pre-existing pointers (no "new" pointer to diff against).
+    //   - the most common drop target is empty ground (before-set diff yields nothing).
+    // Vehicle drops are skipped: items in vehicle cargo are host-authoritative.
+    // Spillover to adjacent tiles (rare) is a deferred edge case — target pos is used for all entries.
+    if( g->coop_client_ && !dropped.empty() ) {
+        map &here = get_map();
+        const bool goes_to_vehicle =
+            !force_ground && here.veh_at( pos ).part_with_feature( "CARGO", false ).has_value();
+        if( !goes_to_vehicle ) {
+            const tripoint_abs_ms abs = here.bub_to_abs( pos );
+            std::ostringstream oss;
+            JsonOut jout( oss );
+            jout.start_object();
+            jout.member( "items" );
+            jout.start_array();
+            for( const detached_ptr<item> &it : dropped ) {
+                if( !it ) { continue; }
+                jout.start_object();
+                jout.member( "tx", abs.x() );
+                jout.member( "ty", abs.y() );
+                jout.member( "tz", abs.z() );
+                std::ostringstream item_oss;
+                JsonOut jitem( item_oss );
+                it->serialize( jitem );
+                jout.member( "data", item_oss.str() );
+                jout.end_object();
+            }
+            jout.end_array();
+            jout.end_object();
+            g->coop_client_->queue_action( "DROP", oss.str() );
+        }
+    }
+#endif // COOP_ENABLED
 
     put_into_vehicle_or_drop( who, item_drop_reason::deliberate, dropped, pos, force_ground );
 
