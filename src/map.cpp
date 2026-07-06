@@ -2003,18 +2003,20 @@ ter_id map::ter(const tripoint_bub_ms& p) const {
 
 data_vars::data_set* map::ter_vars(const tripoint_bub_ms& p) const {
     if (!inbounds(p)) { return nullptr; }
-
     point_sm_ms l;
     const auto sm = get_submap_at(tripoint_bub_ms(p), l);
+    // get_submap_at can return null when a submap is in-bounds by grid index
+    // but hasn't been loaded (e.g. client rendering beyond the co-op initial
+    // sync's 5×5 area).  Callers already guard nullptr (cata_tiles_color.cpp:71).
+    if (!sm) { return nullptr; }
     return &sm->get_ter_vars(l);
 }
 
-
 data_vars::data_set* map::furn_vars(const tripoint_bub_ms& p) const {
     if (!inbounds(p)) { return nullptr; }
-
     point_sm_ms l;
     const auto sm = get_submap_at(tripoint_bub_ms(p), l);
+    if (!sm) { return nullptr; }
     return &sm->get_furn_vars(l);
 }
 
