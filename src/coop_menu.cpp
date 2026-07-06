@@ -10,6 +10,7 @@
 #include "game.h"
 #include "input.h"
 #include "output.h"
+#include "popup.h"
 #include "string_input_popup.h"
 #include "translations.h"
 #include "ui.h"
@@ -84,21 +85,28 @@ auto start_host() -> void {
         }
     }
 
-    // Show waiting message and poll for a client; Escape cancels.
-    popup(string_format(
-              _("Waiting for client...\nShare IP: %s:8080\n\nPress Escape to cancel."), display_ip),
-          PF_GET_KEY);
-    // PF_GET_KEY already consumed one key; now spin until a client connects or user
-    // re-presses Escape (each handle_input call has a 200 ms timeout).
+    // Show persistent "Waiting for client" popup using static_popup so it stays
+    // visible throughout the polling loop.  static_popup renders via ui_adaptor
+    // on every ui_manager::redraw; handle_input(200) drives both the pacing (200ms
+    // between try_accept calls) and Escape detection.  throbber_popup::refresh()
+    // was rejected: it has a 500ms rate gate and returns instantly between updates,
+    // causing busy-spin when paired with handle_input(0).
     {
+        const std::string wait_msg = string_format(
+            _("Waiting for client...\nShare IP: %s:8080\n\nPress Escape to cancel."),
+            display_ip);
+        static_popup wait_popup;
+        wait_popup.wait_message( "%s", wait_msg );
+
         input_context ctxt("COOP_WAIT");
         ctxt.register_action("QUIT");
         ctxt.register_action("ANY_INPUT");
 
         bool cancelled = false;
         while (!srv.try_accept()) {
-            const std::string action = ctxt.handle_input(200);
-            if (action == "QUIT") {
+            // handle_input(200) provides 200ms pacing AND Escape detection;
+            // ui_manager::redraw inside it repaints wait_popup each iteration.
+            if (ctxt.handle_input(200) == "QUIT") {
                 cancelled = true;
                 break;
             }
