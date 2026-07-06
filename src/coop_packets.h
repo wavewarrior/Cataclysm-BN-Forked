@@ -32,10 +32,27 @@ struct sync_header_data {
     bool has_host_pos = false;
 };
 
-auto build_world_seed_packet(const world_seed_data&) -> std::string;
-auto build_action_packet(const action_packet_data&) -> std::string;
-auto parse_world_seed_packet(const std::string&) -> std::optional<world_seed_data>;
-auto parse_action_packet(const std::string&) -> std::optional<action_packet_data>;
-auto parse_sync_header(const std::string&) -> std::optional<sync_header_data>;
+/// C6: join_info packet — client's starting abs position on join.
+struct join_info_data {
+    tripoint_abs_ms pos;
+};
+
+/// C4: parsed landing position from a MOVE_UP/MOVE_DOWN ctx_json field.
+struct vertical_move_ctx {
+    tripoint_abs_ms landing;
+};
+
+auto build_world_seed_packet( const world_seed_data & ) -> std::string;
+auto build_action_packet( const action_packet_data & ) -> std::string;
+/// C6: build a join_info packet ({"t":12,"d":{"ax":N,"ay":N,"az":N}}).
+auto build_join_info_packet( const join_info_data & ) -> std::string;
+auto parse_world_seed_packet( const std::string & ) -> std::optional<world_seed_data>;
+auto parse_action_packet( const std::string & ) -> std::optional<action_packet_data>;
+auto parse_sync_header( const std::string & ) -> std::optional<sync_header_data>;
+/// C6: parse a join_info packet; returns nullopt on wrong type or JSON error.
+auto parse_join_info_packet( const std::string& ) -> std::optional<join_info_data>; // *NOPAD*
+/// C4: parse a MOVE_UP/MOVE_DOWN ctx_json {"ax":N,"ay":N,"az":N}.
+/// Returns nullopt when the string is empty or malformed.
+auto parse_vertical_move_ctx( const std::string& ) -> std::optional<vertical_move_ctx>; // *NOPAD*
 
 #endif // COOP_ENABLED

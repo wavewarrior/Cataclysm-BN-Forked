@@ -131,13 +131,18 @@ auto start_host() -> void {
         g->coop_server_ = nullptr;
         return;
     }
-    srv.spawn_proxy_npc(g->u.abs_pos(), "Partner"); // spawn near host
+    // C6: wait up to 3 s for the client's join_info (blocking recv on main thread,
+    // same pattern as handshake/send_world_seed — receiver thread NOT yet running).
+    srv.wait_for_join_info(3000);
+    const tripoint_abs_ms proxy_spawn = srv.client_join_pos().value_or(g->u.abs_pos());
+    srv.spawn_proxy_npc(proxy_spawn, "Partner");
     if (!srv.send_initial_sync()) {
         popup(_("Failed to send initial sync."));
         srv.shutdown();
         g->coop_server_ = nullptr;
         return;
     }
+    // Start receiver thread last — after all pre-game setup is complete.
     srv.start_receiver_thread();
 }
 
@@ -165,6 +170,14 @@ auto start_join() -> void {
         popup(_("Failed to receive world seed."));
         cli.shutdown();
         return;
+    }
+
+    // C6: send join_info BEFORE g->setup() so it arrives within the host's 3-second window.
+    // g->u.abs_pos() is valid pre-setup; game::setup() does not reset the avatar position.
+    // g->setup() can take several seconds on modded worlds — sending after it would always
+    // race-lose against wait_for_join_info(3000).
+    if (!cli.send_join_info()) {
+        DebugLog(DL::Info, DC::Main) << "[coop] send_join_info failed — host uses spawn fallback";
     }
 
     try {

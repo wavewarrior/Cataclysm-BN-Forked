@@ -32,6 +32,9 @@ struct coop_client {
     auto is_connected() const -> bool { return socket_ != nullptr; }
     auto shutdown() -> void;
     auto send_chat(const std::string& text) -> void;
+    /// C6: send the client's current abs position to the host immediately after receiving
+    /// world_seed, so spawn_proxy_npc() can place the proxy at the client's saved position.
+    auto send_join_info() -> bool; // *NOPAD*
 
 private:
     auto apply_sync(const std::string& json_buf) -> void;

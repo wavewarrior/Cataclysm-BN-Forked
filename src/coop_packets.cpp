@@ -127,4 +127,57 @@ auto parse_sync_header(const std::string& buf) -> std::optional<sync_header_data
     }
 }
 
+auto build_join_info_packet(const join_info_data& d) -> std::string {
+    std::ostringstream oss;
+    JsonOut jout(oss);
+    jout.start_object();
+    jout.member("t", static_cast<int>(coop_pkt::join_info));
+    jout.member("d");
+    jout.start_object();
+    jout.member("ax", d.pos.x());
+    jout.member("ay", d.pos.y());
+    jout.member("az", d.pos.z());
+    jout.end_object();
+    jout.end_object();
+    return oss.str();
+}
+
+auto parse_join_info_packet(const std::string& buf) -> std::optional<join_info_data> {
+    try {
+        std::istringstream iss(buf);
+        JsonIn jin(iss);
+        JsonObject pkt = jin.get_object();
+        pkt.allow_omitted_members();
+        if (static_cast<coop_pkt>(pkt.get_int("t")) != coop_pkt::join_info) {
+            return std::nullopt;
+        }
+        JsonObject d = pkt.get_object("d");
+        d.allow_omitted_members();
+        join_info_data result;
+        result.pos.x() = d.get_int("ax", 0);
+        result.pos.y() = d.get_int("ay", 0);
+        result.pos.z() = d.get_int("az", 0);
+        return result;
+    } catch (const JsonError&) {
+        return std::nullopt;
+    }
+}
+
+auto parse_vertical_move_ctx(const std::string& buf) -> std::optional<vertical_move_ctx> {
+    if (buf.empty()) { return std::nullopt; }
+    try {
+        std::istringstream iss(buf);
+        JsonIn jin(iss);
+        JsonObject ctx = jin.get_object();
+        ctx.allow_omitted_members();
+        vertical_move_ctx result;
+        result.landing.x() = ctx.get_int("ax", 0);
+        result.landing.y() = ctx.get_int("ay", 0);
+        result.landing.z() = ctx.get_int("az", 0);
+        return result;
+    } catch (const JsonError&) {
+        return std::nullopt;
+    }
+}
+
 #endif // COOP_ENABLED

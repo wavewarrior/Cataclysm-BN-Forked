@@ -88,6 +88,7 @@
 #endif
 #include <sstream>
 #include <unordered_map>
+#include <unordered_set>
 
 #define dbg(x) DebugLog((x), DC::Game)
 
@@ -3430,7 +3431,77 @@ void construction_activity_actor::do_turn( player_activity& act, Character& who 
 
 void construction_activity_actor::finish( player_activity& act, Character& who )
 {
+#ifdef COOP_ENABLED
+    // C2d: snapshot terrain/furniture + exact character tile items before
+    // complete_construction() so we can diff what changed and propagate to the host.
+    ter_id   con_ter_before;
+    furn_id  con_furn_before;
+    ter_id   con_ter_above_before; // complete_construction may also set a roof tile
+    std::vector<const item *> con_items_at_player; // byproducts spawn at who.bub_pos() only
+    if( g->coop_client_ ) {
+        map& here = get_map();
+        const auto local = here.abs_to_bub( target );
+        con_ter_before       = here.ter( local );
+        con_furn_before      = here.furn( local );
+        con_ter_above_before = here.ter( local + tripoint_above );
+        // Snapshot ONLY who.bub_pos() — NOT a radius.  Pre-existing items are moved
+        // to a random dump spot first (construction.cpp:1757-1776); a radius scan
+        // would catch them there and emit spurious DROP, duplicating on the host.
+        for( const item * it : here.i_at( who.bub_pos() ) ) {
+            con_items_at_player.push_back( it );
+        }
+    }
+#endif // COOP_ENABLED
+
     complete_construction( who, target );
+
+#ifdef COOP_ENABLED
+    if( g->coop_client_ ) {
+        map& here = get_map();
+        const auto local = here.abs_to_bub( target );
+        // Target tile terrain/furniture change.
+        if( here.ter( local ) != con_ter_before || here.furn( local ) != con_furn_before ) {
+            g->coop_client_->queue_terrain_change(
+                target, here.ter( local ).id().str(), here.furn( local ).id().str() );
+        }
+        // Roof tile: complete_construction may set the tile directly above (new_ter->roof).
+        const tripoint_abs_ms target_above{target.x(), target.y(), target.z() + 1};
+        const tripoint_bub_ms local_above = local + tripoint_above;
+        if( here.ter( local_above ) != con_ter_above_before ) {
+            g->coop_client_->queue_terrain_change(
+                target_above, here.ter( local_above ).id().str(), furn_id( "f_null" ).id().str() );
+        }
+        // Byproduct items: scan only who.bub_pos() (spawn location in construction.cpp:1799).
+        std::ostringstream drop_oss;
+        JsonOut drop_jout( drop_oss );
+        drop_jout.start_object();
+        drop_jout.member( "items" );
+        drop_jout.start_array();
+        bool has_new = false;
+        const tripoint_abs_ms player_abs = here.bub_to_abs( who.bub_pos() );
+        for( const item * it : here.i_at( who.bub_pos() ) ) {
+            // Skip items that were there before construction finished.
+            using cip = const item*;
+            if( std::ranges::find( con_items_at_player, cip{it} ) != con_items_at_player.end() ) {
+                continue;
+            }
+            drop_jout.start_object();
+            drop_jout.member( "tx", player_abs.x() );
+            drop_jout.member( "ty", player_abs.y() );
+            drop_jout.member( "tz", player_abs.z() );
+            std::ostringstream item_oss;
+            JsonOut jitem( item_oss );
+            it->serialize( jitem );
+            drop_jout.member( "data", item_oss.str() );
+            drop_jout.end_object();
+            has_new = true;
+        }
+        drop_jout.end_array();
+        drop_jout.end_object();
+        if( has_new ) { g->coop_client_->queue_action( "DROP", drop_oss.str() ); }
+    }
+#endif // COOP_ENABLED
+
     act.set_to_null();
 }
 

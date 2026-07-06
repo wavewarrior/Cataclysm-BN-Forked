@@ -160,11 +160,19 @@ auto coop_client::receive_world_seed() -> bool {
 auto coop_client::apply_world_seed_to_avatar() -> void {
     if (world_seed_turn_ >= 0) { calendar::turn = time_point::from_turn(world_seed_turn_); }
     coop_session::get().partner_name = world_seed_partner_name_;
-    // Move client avatar to spawn position.
-    const tripoint_bub_ms bpos = g->m.abs_to_bub(world_seed_spawn_);
-    g->u.setpos(bpos);
+    // C6: skip position override if the client loaded a save (has a real saved position).
+    // Fresh characters have abs_pos == {0,0,0}; loaded saves have a real non-zero position.
+    // On first join: override to world_seed_spawn_ so the client starts near the host.
+    // On rejoin:     keep the saved position; send_join_info() already told the host.
+    const bool has_saved_position = (g->u.abs_pos() != tripoint_abs_ms{0, 0, 0});
+    if (!has_saved_position) {
+        const tripoint_bub_ms bpos = g->m.abs_to_bub(world_seed_spawn_);
+        g->u.setpos(bpos);
+    }
     g->u.process_turn(); // initialise avatar stats at spawn
-    DebugLog(DL::Info, DC::Main) << "[coop] applied world_seed to avatar: turn=" << world_seed_turn_;
+    DebugLog(DL::Info, DC::Main)
+        << "[coop] applied world_seed to avatar: turn=" << world_seed_turn_
+        << " pos_override=" << (!has_saved_position ? "yes" : "no");
 }
 
 auto coop_client::coop_world_tick() -> void {
@@ -546,17 +554,23 @@ auto coop_client::apply_sync(const std::string& json_buf) -> void {
     }
 
     // Process turns for the delta between turn_before and the new calendar::turn.
-    // During fast-forward the host may advance N turns in one burst; without this
-    // loop the client's avatar skips N-1 process_turn() calls → wakes unrested,
-    // heals incorrectly, effects don't tick, etc.  Capped at MAX_CATCH_UP (3) to
-    // match the host's burst limit and prevent blocking the render loop.
+    // During fast-forward the host may advance up to COOP_ACTIVITY_YIELD_INTERVAL turns in
+    // one burst (A5.2 host-activity yield cap).  Without matching this cap the client's avatar
+    // skips N-1 process_turn() calls → wakes unrested, heals incorrectly, effects don't tick.
+    // Cap matches the host's burst limit so both sides always stay in step.
     const int turns_advanced =
         std::max(0, to_turn<int>(calendar::turn) - to_turn<int>(turn_before));
-    const int catch_up = std::min(turns_advanced, COOP_MAX_CATCH_UP);
+    const int catch_up = std::min(turns_advanced, COOP_ACTIVITY_YIELD_INTERVAL);
     for (int i = 0; i < catch_up; ++i) { g->u.process_turn(); }
 }
 
-auto coop_client::handle_disconnect() -> void { shutdown(); }
+auto coop_client::handle_disconnect() -> void {
+    // C6: persist character state (inventory, position, skills, HP) on disconnect.
+    // game::save(false) is the public save path (same as quicksave); saves player data,
+    // map memory, and any world state the client owns.
+    if (g) { g->save(false); }
+    shutdown();
+}
 
 auto coop_client::shutdown() -> void {
     if (socket_) {
@@ -593,6 +607,16 @@ auto coop_client::send_chat(const std::string& text) -> void {
     jout.end_object();
     jout.end_object();
     coop_net::send(socket_, oss.str());
+}
+
+auto coop_client::send_join_info() -> bool {
+    if (!socket_ || !g) { return false; }
+    const auto ap = g->u.abs_pos();
+    const bool ok = coop_net::send(socket_, build_join_info_packet({ap}));
+    DebugLog(DL::Info, DC::Main)
+        << "[coop] send_join_info: (" << ap.x() << "," << ap.y() << "," << ap.z() << ")"
+        << (ok ? "" : " — send failed");
+    return ok;
 }
 
 #endif // COOP_ENABLED

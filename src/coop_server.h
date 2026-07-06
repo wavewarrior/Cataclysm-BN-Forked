@@ -90,6 +90,12 @@ struct coop_server {
     /// Test seam: apply a TERRAIN_CHANGE message to g->m (ter_set + furn_set).
     /// Emitted by the client when it opens/closes a door or changes terrain.
     static auto apply_terrain_change( const std::string &ctx_json ) -> void; // *NOPAD*
+    /// C6: block up to timeout_ms for the client's join_info packet.
+    /// Stores the client's starting abs position in client_join_pos_.
+    /// Returns true on receipt; false on timeout (non-fatal — spawn uses fallback).
+    auto wait_for_join_info(int timeout_ms = 3000) -> bool; // *NOPAD*
+    /// C6: client's starting position received via join_info; nullopt if not yet received.
+    auto client_join_pos() const -> std::optional<tripoint_abs_ms>; // *NOPAD*
 
 private:
     struct action_entry {
@@ -162,6 +168,11 @@ private:
     int next_monster_id_ = 1;
     uint32_t last_confirmed_seq_ = 0;
     std::deque<coop_entity_snapshot> position_history_; // rolling window, capped at 10 entries
+    bool client_death_announced_ = false; ///< main-thread only; gate for C3b death message
+    // C6: client's starting abs position from the join_info packet.
+    // Written by wait_for_join_info() (main thread, pre-receiver); read by client_join_pos()
+    // and spawn_proxy_npc() on the main thread.  No mutex needed — single-threaded access.
+    std::optional<tripoint_abs_ms> client_join_pos_; ///< nullopt until join_info arrives
 };
 
 #endif // COOP_ENABLED

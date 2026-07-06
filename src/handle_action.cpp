@@ -841,6 +841,15 @@ static void smash() {
             drop_jout.end_array();
             drop_jout.end_object();
             if( has_debris ) { g->coop_client_->queue_action( "DROP", drop_oss.str() ); }
+            // Proxy melee: queue SMASH with the absolute target position so the proxy
+            // swings at the correct tile on the host side.  Terrain changes are already
+            // propagated via coop_emit_terrain_change above; this is for the melee animation.
+            const tripoint_abs_ms abs_smashp = here.bub_to_abs( smashp );
+            const auto smash_ctx =
+                "{\"tx\":" + std::to_string( abs_smashp.x() ) +
+                ",\"ty\":" + std::to_string( abs_smashp.y() ) +
+                ",\"tz\":" + std::to_string( abs_smashp.z() ) + "}";
+            g->coop_client_->queue_action( "SMASH", smash_ctx );
         }
 #endif // COOP_ENABLED
 
@@ -2973,15 +2982,6 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
 
     int before_action_moves = u.moves;
 
-#ifdef COOP_ENABLED
-    // Client co-op: suppress vertical movement until the host proxy supports stairs.
-    // Executing locally without mirroring on the proxy causes an irrecoverable z-desync —
-    // the client descends, the proxy stays at z0, and sync sends tiles for the wrong level.
-    if (coop_client_ && (act == ACTION_MOVE_UP || act == ACTION_MOVE_DOWN)) {
-        add_msg(m_info, _("[co-op] Vertical movement not yet supported in co-op mode."));
-        return false;
-    }
-#endif // COOP_ENABLED
 
     // These actions are allowed while deathcam is active
     if (uquit == QUIT_WATCH || !u.is_dead_state()) {
@@ -4055,8 +4055,6 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
             coop_client_->queue_action("SLEEP");
         } else if (act == ACTION_CRAFT || act == ACTION_LONGCRAFT || act == ACTION_RECRAFT) {
             coop_client_->queue_action("CRAFT");
-        } else if (act == ACTION_SMASH) {
-            coop_client_->queue_action("SMASH");
         } else if (act == ACTION_FIRE) {
             // Queued from inside modal_fiber_ above — nothing here.
         } else if (act == ACTION_FIRE_BURST) {
@@ -4067,6 +4065,18 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                     "{\"tx\":" + std::to_string(tap.x()) + ",\"ty\":" + std::to_string(tap.y())
                     + ",\"tz\":" + std::to_string(tap.z()) + "}";
                 coop_client_->queue_action("FIRE", ctx);
+            }
+        } else if (act == ACTION_MOVE_UP || act == ACTION_MOVE_DOWN) {
+            // Queue only if vertical_move() actually changed z — it can fail (no stairs,
+            // blocked, etc.). coop_pos_before_ captures the pre-action bub_pos (existing local).
+            if (u.bub_pos().z() != coop_pos_before_.z()) {
+                const auto ap = u.abs_pos();
+                const auto ctx =
+                    "{\"ax\":" + std::to_string(ap.x()) +
+                    ",\"ay\":" + std::to_string(ap.y()) +
+                    ",\"az\":" + std::to_string(ap.z()) + "}";
+                coop_client_->queue_action(
+                    act == ACTION_MOVE_UP ? "MOVE_UP" : "MOVE_DOWN", ctx);
             }
         }
     }

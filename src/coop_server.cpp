@@ -194,6 +194,31 @@ auto coop_server::start_receiver_thread() -> void {
     receiver_thread_ = std::jthread([this](std::stop_token st) { receiver_loop(st); });
 }
 
+auto coop_server::wait_for_join_info(int timeout_ms) -> bool {
+    // Pre-receiver: read directly from client_sock_ on the main thread, same pattern as
+    // handshake() / send_world_seed().  The receiver thread is NOT yet running at this point.
+    std::string buf;
+    if (!coop_net::recv(client_sock_, buf, timeout_ms)) {
+        DebugLog(DL::Info, DC::Main) << "[coop] wait_for_join_info: timeout — using spawn fallback";
+        return false;
+    }
+    const auto parsed = parse_join_info_packet(buf);
+    if (!parsed) {
+        DebugLog(DL::Info, DC::Main) << "[coop] wait_for_join_info: unexpected packet — using fallback";
+        return false;
+    }
+    client_join_pos_ = parsed->pos;
+    DebugLog(DL::Info, DC::Main)
+        << "[coop] join_info: client start ("
+        << parsed->pos.x() << "," << parsed->pos.y() << "," << parsed->pos.z() << ")";
+    return true;
+}
+
+auto coop_server::client_join_pos() const -> std::optional<tripoint_abs_ms> { // *NOPAD*
+    return client_join_pos_;
+}
+
+
 auto coop_server::receiver_loop(std::stop_token st) -> void {
     std::string buf;
     while (running_ && !st.stop_requested()) {
@@ -253,7 +278,8 @@ auto coop_server::receiver_loop(std::stop_token st) -> void {
                     DebugLog(DL::Info, DC::Main)
                         << "[coop] C3: client avatar died — hp_pct="
                         << d.get_int("hp_pct", 0);
-                    // TODO C3: trigger co-op death handling (respawn, game-over, etc.)
+                    // C3b: death message displayed in coop_world_tick() via client_death_announced_.
+                    // Full respawn / session-end logic deferred to a later phase.
                 }
                 client_dead_.store(now_dead);
             } else if (t == coop_pkt::resync_request) {
@@ -320,6 +346,18 @@ auto coop_server::coop_world_tick() -> void {
     //    actions.
     npc* proxy = g->critter_by_id<npc>(coop_session::get().proxy_npc_id);
     if (proxy) {
+        // C3a: mirror client's reported HP percentage onto the proxy so host-side
+        // NPC AI and combat calculations see the correct health state.
+        // IMPORTANT: always clamp to std::max(1,...) — never 0.  Setting any body
+        // part to 0 triggers is_dead_state() → cleanup_dead() → npc::die(), which
+        // spawns a corpse, drops inventory, and erases the proxy permanently.
+        // The proxy is a session placeholder; client death is signalled via C3b only.
+        const int pct = client_hp_pct_.load();
+        for (const bodypart_id& bp : proxy->get_all_body_parts()) {
+            const int max_hp = proxy->get_part_hp_max(bp);
+            proxy->set_part_hp_cur(bp, std::max(1, max_hp * pct / 100));
+        }
+
         if (const auto act = try_pop_action()) {
             if (act->seq > last_confirmed_seq_) { last_confirmed_seq_ = act->seq; }
             proxy->set_moves(proxy->get_speed()); // ensure move budget for execute
@@ -328,6 +366,16 @@ auto coop_server::coop_world_tick() -> void {
         proxy->set_moves(0); // prevent residual moves carrying into the NPC AI sim
     }
 
+
+    // C3b: death event — display a host-side message the first time the client's
+    // avatar reports dead.  The proxy stays alive (HP clamped to 1) so it remains
+    // a valid session placeholder.  Full respawn / session-end logic is deferred.
+    if (client_dead_.load() && !client_death_announced_) {
+        client_death_announced_ = true;
+        add_msg(m_warning, _("Your co-op partner has died."));
+    } else if (!client_dead_.load()) {
+        client_death_announced_ = false; // reset if partner respawns
+    }
     // 3. Build and send sync (tiles only when host submap changes; always sends
     //    monsters + turn + proxy position).
     build_and_send_sync();
@@ -561,15 +609,17 @@ auto coop_server::execute_client_action(
     }
 
     // String-only paths: SMASH (needs ctx_json target pos) and FIRE (lag-comp + seq).
-    const tripoint_bub_ms cur = proxy->bub_pos();
     if (key == "SMASH") {
         if (!ctx_json.empty()) {
             std::istringstream iss(ctx_json);
             JsonIn jin(iss);
             JsonObject ctx = jin.get_object();
             ctx.allow_omitted_members();
-            const tripoint_bub_ms tpos{
-                ctx.get_int("tx", cur.x()), ctx.get_int("ty", cur.y()), ctx.get_int("tz", cur.z())};
+            // tx/ty/tz are absolute — bub coords are NOT portable across processes.
+            // Matches PICKUP/DROP/TERRAIN_CHANGE/FIRE which all use abs coords.
+            const tripoint_abs_ms abs_tpos{
+                ctx.get_int("tx", 0), ctx.get_int("ty", 0), ctx.get_int("tz", 0)};
+            const tripoint_bub_ms tpos = g->m.abs_to_bub(abs_tpos);
             if (const auto mon_ptr = g->critter_tracker->find(tpos)) {
                 proxy->melee_attack(*mon_ptr, true);
             }
@@ -589,9 +639,22 @@ auto coop_server::execute_client_action(
             proxy->moves -= proxy->get_speed();
         }
     } else if (key == "MOVE_UP" || key == "MOVE_DOWN") {
-        // Vertical movement deferred: needs NPC stair navigation.
-        proxy->moves -= proxy->get_speed();
-        DebugLog(DL::Info, DC::Main) << "[coop] " << key << " from proxy: deferred";
+        const auto vc = parse_vertical_move_ctx(ctx_json);
+        if (vc) {
+            const tripoint_bub_ms bpos = g->m.abs_to_bub(vc->landing);
+            if (g->m.inbounds(bpos)) {
+                proxy->setpos(bpos);
+                DebugLog(DL::Info, DC::Main)
+                    << "[coop] " << key << " proxy→z=" << vc->landing.z();
+            } else {
+                proxy->moves -= proxy->get_speed();
+                DebugLog(DL::Info, DC::Main)
+                    << "[coop] " << key << " landing out of bounds at z=" << vc->landing.z();
+            }
+        } else {
+            proxy->moves -= proxy->get_speed();
+            DebugLog(DL::Info, DC::Main) << "[coop] " << key << ": no ctx — move consumed";
+        }
     } else {
         DebugLog(DL::Debug, DC::Main) << "[coop] execute_client_action: unimplemented key=" << key;
     }

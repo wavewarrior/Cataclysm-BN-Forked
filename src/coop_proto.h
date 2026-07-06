@@ -14,6 +14,7 @@ enum class coop_pkt : uint8_t {
     world_seed = 2, ///< world id, turn, spawn pos, rng seed (host → client)
 
     action = 11,        ///< keypress + context blob (client → host, async)
+    join_info = 12,     ///< client starting position after loading save (client → host, on join)
     client_status = 13, ///< activity, stamina, mood (client → host, per tick)
 
     sync = 20,         ///< tile + monster + entity bulk update (host → client)
@@ -21,7 +22,7 @@ enum class coop_pkt : uint8_t {
     overmap_sync = 22, ///< overmap chunk (host → client)
 
     resync_request = 25, ///< client detected hash mismatch; host responds with forced full sync
-                         ///< (client → host)
+    ///< (client → host)
     chat = 30,           ///< free-form text (bidirectional, any time)
 
     disconnect = 99, ///< graceful close notification
@@ -50,6 +51,10 @@ enum class coop_event_type : uint8_t {
 /// main.cpp is not included here; add a static_assert there if they ever drift.
 constexpr double COOP_IDLE_TICK_MS = 1000.0; ///< must equal IDLE_TICK_INTERVAL_MS in main.cpp
 constexpr int COOP_MAX_CATCH_UP = 3;         ///< max idle ticks per outer-loop iteration
+/// How often the host sends a sync during a long activity (sleep, craft, read).
+/// Also the max process_turn() calls the client runs per sync — both sides share one constant
+/// so they stay in sync.  See game::execute_activity_fixed_window_skip (A5.2).
+constexpr int COOP_ACTIVITY_YIELD_INTERVAL = 10;
 /// Accumulator value that triggers COOP_MAX_CATCH_UP game ticks in the main loop.
 /// Derived — changing COOP_IDLE_TICK_MS or COOP_MAX_CATCH_UP automatically updates this.
 constexpr double COOP_FAST_FORWARD_ACCUM_MS = COOP_MAX_CATCH_UP * COOP_IDLE_TICK_MS;

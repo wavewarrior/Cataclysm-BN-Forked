@@ -1,6 +1,6 @@
 # Co-op Networking Plan
 
-**Status:** Track A complete (A1–A5.4). B1–B4 Phase 1 complete. B3 Phases 1–4 complete. B4 Phase 2 in progress. Track C: C1 complete (PICKUP). C2 complete (DROP, TERRAIN_CHANGE doors+smash). C3 partial (hp_pct/dead in client_status; inventory/effects deferred). C4–C6 pending.
+**Status:** Track A complete (A1–A5.4). B1 ✅ (monster_action_t/decide_action/execute_action in monmove.cpp). B2 ✅ (npc_cmd_t/decide_action/execute_action in npcmove.cpp). B3 Phases 1–4 complete. B3 Phase 5+ (smash/fire/melee typed cmds) pending. B4 Phase 1 ✅. B4 Phase 2 deferred. B5 pending. Track C: C1 ✅ C2 ✅ (incl C2d construction completion). C3 ✅ (hp_pct/stamina/dead; proxy HP mirror max(1,...); death message; inventory/effects deferred). C4 ✅ C5 ✅ C6 ✅. SMASH fixed abs coords. Test suite: 155 assertions / 70 test cases (osx-coop, COOP=ON).
 **Goal:** Real-time 2-player co-op where the client plays their own character with full action parity to single-player — pick up items, go upstairs, craft, interact, everything the host can do. Server-authoritative world state; client-side prediction for responsiveness.
 
 ---
@@ -33,8 +33,8 @@ What **exists** vs what is **not yet implemented** (re-baselined against actual 
 | Activity yield cap (A5.2) | ✅ done | `game::execute_activity_fixed_window_skip`: sync every 10 skipped turns |
 | Ranged lag compensation (A5.3) | ✅ done | `resolve_fire_at_seq(proxy,seq,tx,ty,tz)`: snapshot lookup → creature reposition → `fire_gun` → restore; creature_moved filtered from delta stream so temp moves invisible to client |
 | FIRE execution on proxy | ✅ done | `ranged::fire_gun(*proxy, target_bub)` with lag-comp snapshot; unarmed proxy consumes action |
-| PICKUP on proxy | ❌ deferred | phase 9 note in execute_client_action |
-| Vertical move on proxy | ❌ deferred | phase 10 note |
+| PICKUP on proxy | ✅ done (C1) | `apply_pickup_manifest` — client picks up locally, server mirrors removals |
+| Vertical move on proxy | ✅ done (C4) | `MOVE_UP`/`MOVE_DOWN` ctx carries abs landing pos; `proxy->setpos()` |
 | SLEEP/CRAFT relay | ✅ done (functional) | moves consumed; `client_is_idle_` drives `both_idle()`; proxy animation cosmetic |
 ---
 
@@ -421,18 +421,18 @@ auto monster::decide_action(const game_context& ctx) -> monster_cmd; // pure, no
 auto execute_monster_cmd(monster& mon, const monster_cmd& cmd) -> void; // emits events
 ```
 
-- [ ] Monster AI produces `MonsterCmd` (move, melee, flee, wait, special)
-- [ ] Separate `execute(monster&, MonsterCmd)` function — all world mutation happens here
-- [ ] Mutation log gets events naturally through execution (no bolted-on hooks needed)
-- [ ] AI logic and execution logic independently testable
+- [x] Monster AI produces `monster_action_t` (move, attack, bash, open_door, push, stumble, idle, die)
+- [x] `execute_action(const monster_action_t&)` — all mutation, no reads
+- [x] Mutation log hooks still in place as compatibility layer (removable once B3 done)
+- [x] decide_action() is const — safe for worker-thread calls; testable without mutation
 
 ### Step B2 — NPC Command Pattern
 **Files:** `src/npcmove.cpp`, new `src/npc_cmd.h`  
 **Effort:** 2 weeks
 
-- [ ] Same pattern as B1, more complex AI tree
-- [ ] NPC pathfinding / combat / activity / talk all produce commands
-- [ ] Fixes the "NPC logic is horrendous to work in" complaint
+- [x] Same pattern as B1 — done in npcmove.cpp (npc_cmd_t, decide_action, execute_action)
+- [x] NPC AI produces typed npc_cmd_t; execute_action() applies
+- [x] Separation complete — AI reads, execution writes
 
 ### Step B3 — Player Action Command Factory
 **Files:** `src/handle_action.cpp`, new `src/player_cmd.h`  
@@ -494,7 +494,7 @@ visibility calculation for the host's LOS system.
 | Step | What it is | What it is NOT | Effort |
 |---|---|---|---|
 | **C1: Client→host item mutations** | Client picks up item locally (already works); sends item IDs + positions to host; host removes from its map | NOT npc::pickup | 1 week |
-| **C2: Client→host terrain mutations** ✅ | Door opens (TERRAIN_CHANGE), items dropped (DROP manifest), smash bash (terrain + debris). Construction completion: deferred — `complete_construction()` hook needed for build-finish terrain and item changes. | NOT npc::interact | 2 weeks |
+| **C2: Client→host terrain mutations** ✅ | Door opens (TERRAIN_CHANGE), items dropped (DROP manifest), smash bash (terrain + debris), construction completion (C2d: terrain/roof/byproducts in activity_actor finish()). | NOT npc::interact | 2 weeks |
 | **C3: Client→host character delta** ✅ (partial) | client_status expanded with hp_pct/stamina/dead each tick. `client_hp_pct_` and `client_dead_` atomics on coop_server. Death event logged. Deferred: inventory sync (expensive per-tick), effect/trait sync, proxy NPC HP mirror. | NOT host-authoritative character | 2 weeks |
 | **C4: Vertical movement** | Client z-changes → host updates proxy z + triggers tile sync for new level | NOT NPC stair navigation | 1 week |
 | **C5: Long activity sync** | When client starts crafting/sleeping, host fast-forwards appropriately (extends A5.2) | NOT NPC activity actors | 2 weeks |
