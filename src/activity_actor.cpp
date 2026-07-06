@@ -2958,8 +2958,54 @@ void throw_activity_actor::do_turn( player_activity& act, Character& who )
         int extra_cost = who.item_handling_cost( *it, true, INVENTORY_HANDLING_PENALTY / 2 );
         who.mod_moves( -extra_cost );
     }
+    // C2e: capture thrown item type before split so we can identify the landed item after.
+    // throw_activity_actor::do_turn is the correct hook — plthrow() only assigns this activity;
+    // the actual throw (aim UI + split + throw_item) happens here.
+#ifdef COOP_ENABLED
+    const itype_id c2e_thrown_type = target->typeId();
+#endif // COOP_ENABLED
     detached_ptr<item> det = target->split( 1 );
-    ranged::throw_item( who, trajectory.back(), std::move( det ), blind_throw_pos );
+    const auto throw_result =
+        ranged::throw_item( who, trajectory.back(), std::move( det ), blind_throw_pos );
+#ifdef COOP_ENABLED
+    if( g->coop_client_ ) {
+        // Only relay items that landed on the ground (not consumed/exploded).
+        // Discriminator: check if an item of the thrown type is at end_point after the throw.
+        // Molotovs/grenades are consumed on impact → nothing at end_point → relay skipped.
+        // Inert items (rocks, knives) land as new map items with fresh split pointers.
+        // Note: hit_critter != nullptr means item stopped at a creature's tile; skip to
+        // avoid relaying embedded weapons (item is held by creature, not on ground).
+        if( throw_result.hit_critter == nullptr ) {
+            const tripoint_bub_ms end_bub = throw_result.end_point;
+            const tripoint_abs_ms end_abs = get_map().bub_to_abs( end_bub );
+            for( const item* it : get_map().i_at( end_bub ) ) {
+                if( it->typeId() != c2e_thrown_type ) { continue; }
+                // Found the landed item — emit DROP so it appears on the host map.
+                std::ostringstream drop_oss;
+                JsonOut drop_jout( drop_oss );
+                drop_jout.start_object();
+                drop_jout.member( "items" );
+                drop_jout.start_array();
+                drop_jout.start_object();
+                drop_jout.member( "tx", end_abs.x() );
+                drop_jout.member( "ty", end_abs.y() );
+                drop_jout.member( "tz", end_abs.z() );
+                std::ostringstream item_oss;
+                JsonOut jitem( item_oss );
+                it->serialize( jitem );
+                drop_jout.member( "data", item_oss.str() );
+                drop_jout.end_object();
+                drop_jout.end_array();
+                drop_jout.end_object();
+                g->coop_client_->queue_action( "DROP", drop_oss.str() );
+                DebugLog( DL::Info, DC::Main )
+                    << "[coop] C2e throw relay: " << c2e_thrown_type.str() << " at ("
+                    << end_abs.x() << "," << end_abs.y() << "," << end_abs.z() << ")";
+                break; // one item per throw
+            }
+        }
+    }
+#endif // COOP_ENABLED
 }
 
 void throw_activity_actor::serialize( JsonOut& jsout ) const
