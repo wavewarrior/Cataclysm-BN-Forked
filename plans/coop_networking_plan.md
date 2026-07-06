@@ -460,6 +460,17 @@ auto execute_monster_cmd(monster& mon, const monster_cmd& cmd) -> void; // emits
 > no functional benefit. Both functions are single-use abstractions forbidden by the project's
 > "Simplicity First" rule. Deferred until there is a concrete need (e.g. server-authoritative hit
 > resolution with divergence reconciliation), which requires a separate design.
+>
+> **Fire desync audit (2026-07-06, confirmed):** Client runs `fire()` locally; server runs `fire_gun()`
+> on the proxy NPC. Divergence surface: (1) **Skills/XP** — `who.as_player()->practice()` credits the
+> proxy NPC's own skills (`npc` inherits `player::as_player()` which returns `this`); proxy skills
+> are isolated from the client's avatar. No double-count. (2) **Ammo** — client consumes from their own
+> inventory (client-authoritative by design). Proxy inventory was cleared at spawn; proxy fires via
+> `execute_player_cmd` which may silently fail with no weapon — harmless, moves consumed.
+> (3) **Monster HP/death** — client-side kill is a local map mutation, same as C1/C2/C3 client actions;
+> the 30 s resync corrects divergent monster state. Cosmetic flicker only. **Verdict: dropping B4
+> Phase 2 is safe. The divergence is benign per-entity, consistent with Option B (client-authoritative)
+> design throughout Track C.**
 
 Original three-stage design for reference:
 1. `resolve_trajectory()` — pure, no side effects; client can run this for visual prediction
