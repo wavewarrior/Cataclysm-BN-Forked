@@ -16,6 +16,7 @@
 #include "field.h"
 #include "field_type.h"
 #include "game.h"
+#include "game_constants.h"
 #include "get_version.h"
 #include "json.h"
 #include "map.h"
@@ -166,8 +167,23 @@ auto coop_client::apply_world_seed_to_avatar() -> void {
     // On rejoin:     keep the saved position; send_join_info() already told the host.
     const bool has_saved_position = (g->u.abs_pos() != tripoint_abs_ms{0, 0, 0});
     if (!has_saved_position) {
-        const tripoint_bub_ms bpos = g->m.abs_to_bub(world_seed_spawn_);
-        g->u.setpos(bpos);
+        // g->setup() centered the map on the client's own character (or origin), NOT on
+        // world_seed_spawn_.  abs_to_bub(world_seed_spawn_) returns nonsense bubble coords
+        // until the reality bubble is repositioned — causing the massive drift and
+        // movement crash on unloaded submaps.  Replicate start_game (game.cpp:924-936):
+        // compute the top-left submap corner and call load_map() to reposition abs_sub.
+        const int levz = g->get_levz();
+        auto lev = project_to<coords::sm>( world_seed_spawn_ );
+        lev.x() -= g_half_mapsize;
+        lev.y() -= g_half_mapsize;
+        g->load_map( lev, /*pump_events=*/true );
+        g->m.invalidate_map_cache( levz );
+        g->m.build_map_cache( levz );
+
+        const tripoint_bub_ms bpos = g->m.abs_to_bub( world_seed_spawn_ );
+        g->u.setpos( bpos );
+        g->m.invalidate_map_cache( levz );
+        g->m.build_map_cache( levz );
     }
     g->u.process_turn(); // initialise avatar stats at spawn
     DebugLog(DL::Info, DC::Main)
