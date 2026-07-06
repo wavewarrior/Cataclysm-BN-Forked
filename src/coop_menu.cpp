@@ -85,43 +85,25 @@ auto start_host() -> void {
             SDL_free(addrs);
         }
     }
-    // Show "Waiting for client" using a plain ui_adaptor + catacurses window.
-    // static_popup was replaced here because it relies on the query_popup RmlUI model
-    // (rml_open / g_rml_query_popup_model_active); if anything in the loading chain
-    // already holds that model, rml_open() fails silently and the popup renders empty
-    // with no text — confirmed in practice.  A direct catacurses draw bypasses the
-    // model system entirely and is always visible once the game is loaded.
+    // "Waiting for client" — static_popup renders via RmlUI query_popup.
+    // Root cause of empty popup: static_popup ctor calls rml_sync() when text=""
+    // (construction), then wait_message() sets text but only calls invalidate_ui()
+    // (marks resize).  rml_sync() re-runs only from the on_redraw callback, which
+    // fires on ui_manager::redraw().  handle_input() alone does NOT drive redraw.
+    // Fix: call ui_manager::redraw() each iteration so message_rml stays current.
     {
         const std::string wait_msg = string_format(
             _("Waiting for client...\nShare IP: %s:8080\n\nPress Escape to cancel."),
             display_ip);
-
-        catacurses::window wait_win;
-        ui_adaptor wait_ui;
-        wait_ui.on_screen_resize( [&]( ui_adaptor& ui ) {
-            const int w = std::min( 52, TERMX - 4 );
-            const int h = 6;
-            const int x = ( TERMX - w ) / 2;
-            const int y = ( TERMY - h ) / 2;
-            wait_win = catacurses::newwin( h, w, point( x, y ) );
-            ui.position_from_window( wait_win );
-        } );
-        wait_ui.mark_resize();
-        wait_ui.on_redraw( [&]( const ui_adaptor& ) {
-            werase( wait_win );
-            draw_border( wait_win );
-            fold_and_print( wait_win, point( 1, 1 ), getmaxx( wait_win ) - 2,
-                            c_white, wait_msg );
-            wnoutrefresh( wait_win );
-        } );
+        static_popup wait_popup;
+        wait_popup.wait_message( "%s", wait_msg );
 
         input_context ctxt( "COOP_WAIT" );
         ctxt.register_action( "QUIT" );
 
         bool cancelled = false;
         while( !srv.try_accept() ) {
-            // handle_input(200) provides 200ms pacing, Escape detection, and
-            // drives ui_manager::redraw which repaints wait_win each iteration.
+            ui_manager::redraw();                          // syncs message_rml → visible text
             if( ctxt.handle_input( 200 ) == "QUIT" ) {
                 cancelled = true;
                 break;
