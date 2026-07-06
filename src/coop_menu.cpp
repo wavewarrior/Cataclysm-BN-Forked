@@ -14,6 +14,7 @@
 #include "string_input_popup.h"
 #include "translations.h"
 #include "ui.h"
+#include "ui_manager.h"
 #include "worldfactory.h"
 
 #include <SDL3_net/SDL_net.h>
@@ -84,36 +85,52 @@ auto start_host() -> void {
             SDL_free(addrs);
         }
     }
-
-    // Show persistent "Waiting for client" popup using static_popup so it stays
-    // visible throughout the polling loop.  static_popup renders via ui_adaptor
-    // on every ui_manager::redraw; handle_input(200) drives both the pacing (200ms
-    // between try_accept calls) and Escape detection.  throbber_popup::refresh()
-    // was rejected: it has a 500ms rate gate and returns instantly between updates,
-    // causing busy-spin when paired with handle_input(0).
+    // Show "Waiting for client" using a plain ui_adaptor + catacurses window.
+    // static_popup was replaced here because it relies on the query_popup RmlUI model
+    // (rml_open / g_rml_query_popup_model_active); if anything in the loading chain
+    // already holds that model, rml_open() fails silently and the popup renders empty
+    // with no text — confirmed in practice.  A direct catacurses draw bypasses the
+    // model system entirely and is always visible once the game is loaded.
     {
         const std::string wait_msg = string_format(
             _("Waiting for client...\nShare IP: %s:8080\n\nPress Escape to cancel."),
             display_ip);
-        static_popup wait_popup;
-        wait_popup.wait_message( "%s", wait_msg );
 
-        input_context ctxt("COOP_WAIT");
-        ctxt.register_action("QUIT");
-        ctxt.register_action("ANY_INPUT");
+        catacurses::window wait_win;
+        ui_adaptor wait_ui;
+        wait_ui.on_screen_resize( [&]( ui_adaptor& ui ) {
+            const int w = std::min( 52, TERMX - 4 );
+            const int h = 6;
+            const int x = ( TERMX - w ) / 2;
+            const int y = ( TERMY - h ) / 2;
+            wait_win = catacurses::newwin( h, w, point( x, y ) );
+            ui.position_from_window( wait_win );
+        } );
+        wait_ui.mark_resize();
+        wait_ui.on_redraw( [&]( const ui_adaptor& ) {
+            werase( wait_win );
+            draw_border( wait_win );
+            fold_and_print( wait_win, point( 1, 1 ), getmaxx( wait_win ) - 2,
+                            c_white, wait_msg );
+            wnoutrefresh( wait_win );
+        } );
+
+        input_context ctxt( "COOP_WAIT" );
+        ctxt.register_action( "QUIT" );
 
         bool cancelled = false;
-        while (!srv.try_accept()) {
-            // handle_input(200) provides 200ms pacing AND Escape detection;
-            // ui_manager::redraw inside it repaints wait_popup each iteration.
-            if (ctxt.handle_input(200) == "QUIT") {
+        while( !srv.try_accept() ) {
+            // handle_input(200) provides 200ms pacing, Escape detection, and
+            // drives ui_manager::redraw which repaints wait_win each iteration.
+            if( ctxt.handle_input( 200 ) == "QUIT" ) {
                 cancelled = true;
                 break;
             }
         }
 
-        if (cancelled) {
+        if( cancelled ) {
             srv.shutdown();
+            g->coop_server_ = nullptr;
             return;
         }
     }
