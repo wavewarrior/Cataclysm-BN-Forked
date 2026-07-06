@@ -16,7 +16,14 @@ else ()
     set(CATALUA_BINDINGS_COMPILE_OPTIONS -O0 -g0)
 endif ()
 foreach (catalua_src IN LISTS CATALUA_BINDINGS_SOURCES)
-    set_source_files_properties(${catalua_src} PROPERTIES COMPILE_OPTIONS "${CATALUA_BINDINGS_COMPILE_OPTIONS}")
+    set_source_files_properties(${catalua_src} PROPERTIES
+        COMPILE_OPTIONS "${CATALUA_BINDINGS_COMPILE_OPTIONS}"
+        # catalua_bindings*.cpp use -O0 which conflicts with the PCH built at -O2;
+        # clang rejects including a Release-optimized PCH in a -O0 TU (__OPTIMIZE__
+        # mismatch).  Skip PCH for these files — they're template-heavy anyway so
+        # the PCH savings here are minimal.
+        SKIP_PRECOMPILE_HEADERS ON
+    )
 endforeach ()
 # Large template-heavy files that need /bigobj on MSVC
 if (MSVC)

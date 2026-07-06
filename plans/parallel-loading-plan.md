@@ -2,6 +2,24 @@
 
 > **Implementer**: copy this file to `plans/parallel-loading-plan.md` in the repo before making any code changes (AGENTS.md requirement: plan lives in two places).
 
+---
+
+## Implementation outcome (2026-07-07)
+
+**What actually shipped** (branch `feat/parallel-loading`, 3 commits on `feature/improvements`):
+- **Steps 1–3 (parallel Phase-A reads + preloaded_content_ cache seed)**: `load_data_from_path` reads all `.json` files in parallel via `parallel_for` + `read_entire_file`. Phase B dispatches through the original unmodified `load_all_from_json` — the span-based Phase B described below was implemented and then replaced because `extract_object_spans` had irresolvable span-boundary fragility (`skip_object` consumes trailing separators, making `tell()` positions include commas; `membuf` without `seekoff/seekpos` returned `tell()=-1` universally). The robust fix was to keep parallel I/O and discard the span reparse entirely.
+- **Step 4 (Win32 FILE_FLAG_SEQUENTIAL_SCAN + Defender advisory)**: shipped as planned; compile-unverifiable on macOS.
+- **CMakeLists SKIP_PRECOMPILE_HEADERS** for `catalua_bindings*.cpp`: pre-existing PCH/-O0 conflict on `feature/improvements`, fixed as a separate commit.
+
+**What was dropped — Step 5 (parallel mapgen setup_common)**:
+Implemented fully (H1–H6, warm_shared_palette_piece_ids, collect_and_prepare, parallel_for over setup_fns) and reverted. Both the parallel and the serial-restructured versions of `calculate_mapgen_weights()` produced a hang confirmed by CATA_JSON_PERF output stopping after `finalize[Vehicle prototypes]` with no subsequent `mapgen_setup:` line. Root cause traced to `warm_shared_palette_piece_ids()` calling `check()` on all flat-palette pieces, and/or the collect_and_prepare restructure changing setup ordering. No TSan preset exists in this repo to validate concurrency safety. `src/mapgen.cpp` was restored to `origin/feature/improvements` exactly. The orphaned `get_preloaded_content` method (added for the Step-5 H4 worker bypass) was removed.
+
+**Performance result (macOS, CATA_JSON_PERF, `bn` mod)**: `parse_ms≈5000ms`, `finalize[Mapgen weights]≈8600ms serial unchanged`, `total_wall_ms≈14.5s`. The "load in seconds" goal is NOT met. Parallel file reads address Win11 per-file-open/Defender latency (~2.6s on Win11, marginal on Mac); the dominant 8.6s serial mapgen setup is the key follow-up requiring TSan + profiling.
+
+The plan below documents the intended architecture as designed; the sections on Step 5 and the span-based Phase B were NOT shipped.
+
+---
+
 ## Context
 
 Game startup takes unacceptably long — especially on Windows 11 where it is 3–5× slower than macOS M1. Two root causes: (1) `DynamicDataLoader::load_data_from_path` reads ~800–1100 JSON files serially — on Windows every `CreateFile` triggers a Windows Defender real-time scan (~0.5–2 ms each); (2) `calculate_mapgen_weights()` runs ~740+ mapgen `setup_common()` calls serially in a single thread, estimated at 200–800 µs per entry. The codebase already has `cata_thread_pool`, `parallel_for`, and `parallel_for_chunked` (`src/thread_pool.h`), and the pool is initialized in `game::game()` (line 418) before any JSON loading. The goal is sub-5-second load time on Win11 by parallelizing file I/O and mapgen setup, with parallel finalization as a deferred, measurement-gated step.
