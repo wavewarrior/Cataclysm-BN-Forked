@@ -459,6 +459,11 @@ auto coop_server::execute_player_cmd(npc* proxy, const player_cmd_t& cmd, const 
             // time cost so the world sim stays in step.
             proxy->moves -= proxy->get_speed();
             break;
+        case K::use:
+            // B3 Phase 8: use/activate item — proxy consumes moves only.
+            // Item effects are client-authoritative; proxy mirrors time cost.
+            proxy->moves -= proxy->get_speed();
+            break;
         case K::none:
         default:
             DebugLog(DL::Debug, DC::Main)
@@ -640,6 +645,10 @@ auto coop_server::execute_client_action(
     }
     if (key == "RELOAD") {
         execute_player_cmd(proxy, make_player_reload_cmd(), seq);
+        return;
+    }
+    if (key == "USE") {
+        execute_player_cmd(proxy, make_player_use_cmd(), seq);
         return;
     }
 

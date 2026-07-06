@@ -23,6 +23,9 @@ player_cmd_t make_player_eat_cmd() {
 player_cmd_t make_player_reload_cmd() {
     return player_cmd_t{.kind = player_cmd_kind::reload};
 }
+player_cmd_t make_player_use_cmd() {
+    return player_cmd_t{.kind = player_cmd_kind::use};
+}
 std::string_view move_cmd_to_dir_string(const player_cmd_t& cmd) {
     if (cmd.kind != player_cmd_kind::move) { return {}; }
     const auto d = cmd.delta.xy();

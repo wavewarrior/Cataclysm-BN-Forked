@@ -2332,6 +2332,11 @@ bool game::handle_action() {
                 break;
 
             case ACTION_THROW: {
+                // C2e (deferred): throw relay belongs in throw_activity_actor::do_turn()
+                // (activity_actor.cpp), not here. plthrow() only assigns the activity;
+                // the aim UI + split(1) + throw_item() run later. A before/after ground diff
+                // at end_point (dealt_projectile_attack.end_point) in the activity actor is
+                // the correct hook — requires a live COOP session to verify.
                 avatar_action::plthrow(g->u, nullptr);
                 break;
             }
@@ -3475,6 +3480,10 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                 break;
 
             case ACTION_THROW: {
+                // C2e (deferred): throw relay must hook in throw_activity_actor::do_turn()
+                // (activity_actor.cpp) right after throw_item() — plthrow() here only assigns
+                // the activity.  Requires live COOP session to verify.  Molotovs/grenades
+                // also need separate field-relay; deferred to Phase 9.
                 avatar_action::plthrow(g->u, nullptr);
                 break;
             }
@@ -4062,6 +4071,9 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                    || act == ACTION_RELOAD_WIELDED) {
             // B3 Phase 7: reload — no-payload relay.
             coop_client_->queue_action("RELOAD");
+        } else if (act == ACTION_USE) {
+            // B3 Phase 8: use/activate item — no-payload relay.
+            coop_client_->queue_action("USE");
         } else if (act == ACTION_FIRE) {
             // Queued from inside modal_fiber_ above — nothing here.
         } else if (act == ACTION_FIRE_BURST) {

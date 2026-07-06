@@ -270,3 +270,22 @@ TEST_CASE("make_player_reload_cmd: kind == reload", "[player_cmd]") {
 TEST_CASE("eat and reload are distinct kinds", "[player_cmd]") {
     CHECK(make_player_eat_cmd().kind != make_player_reload_cmd().kind);
 }
+
+// ---------------------------------------------------------------------------
+// B3 Phase 8 — make_player_use_cmd
+// ---------------------------------------------------------------------------
+
+TEST_CASE("make_player_use_cmd: kind == use", "[player_cmd]") {
+    CHECK(make_player_use_cmd().kind == player_cmd_kind::use);
+}
+
+TEST_CASE("make_player_use_cmd: delta and target_abs are zero", "[player_cmd]") {
+    const auto cmd = make_player_use_cmd();
+    CHECK(cmd.delta == tripoint_rel_ms{0, 0, 0});
+    CHECK(cmd.target_abs == tripoint_abs_ms{0, 0, 0});
+}
+
+TEST_CASE("use, eat, reload are all distinct kinds", "[player_cmd]") {
+    CHECK(make_player_use_cmd().kind != make_player_eat_cmd().kind);
+    CHECK(make_player_use_cmd().kind != make_player_reload_cmd().kind);
+}

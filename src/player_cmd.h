@@ -25,8 +25,9 @@
   *   Phase 4: pause, pickup, sleep, craft (no-payload)
   *   Phase 5: smash (abs target pos)
   *   Phase 6: fire (target + seq)
-  *   Phase 7 (current): eat, reload (no-payload)
-  *   Phase 8+: throw (needs item-at-landing-tile relay), melee, use, …
+  *   Phase 7: eat, reload (no-payload)
+  *   Phase 8 (current): use/activate item (no-payload)
+  *   Phase 9+: throw (needs field/explosion propagation), melee (needs target ID), …
  */
 // ---------------------------------------------------------------------------
 // Command kind
@@ -52,8 +53,11 @@ enum class player_cmd_kind : uint8_t {
     eat,    ///< eat/drink; ACTION_EAT — no payload
     reload, ///< reload weapon; ACTION_RELOAD_* — no payload
 
-    // Phase 8+: throw (needs before/after item diff at unknown landing tile — complex),
-    //           melee (needs target identification after autoattack), use, …
+    // Phase 8 (current): use/activate item
+    use,    ///< use/activate item; ACTION_USE — no payload (world effects are client-authoritative)
+
+    // Phase 9+: throw (needs field/explosion propagation, not just item DROP),
+    //           melee (needs post-attack target ID), …
 };
 
 // ---------------------------------------------------------------------------
@@ -91,6 +95,10 @@ player_cmd_t make_player_fire_cmd(tripoint_abs_ms abs_target);
 /// Build a player_cmd_t for eat/drink — no payload.
 /// Pure: no side effects; safe to call from UI and tests.
 player_cmd_t make_player_eat_cmd();
+
+/// Build a player_cmd_t for a use/activate action — no payload.
+/// Pure: no side effects; safe to call from UI and tests.
+player_cmd_t make_player_use_cmd();
 
 /// Build a player_cmd_t for a reload action — no payload.
 /// Pure: no side effects; safe to call from UI and tests.

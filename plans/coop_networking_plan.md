@@ -1,6 +1,6 @@
 # Co-op Networking Plan
 
-**Status:** Track A complete (A1–A5.4). B1 ✅ (monster_action_t/decide_action/execute_action in monmove.cpp). B2 ✅ (npc_cmd_t/decide_action/execute_action in npcmove.cpp). B3 Phases 1–4 complete. B3 Phase 5+ (smash/fire/melee typed cmds) pending. B4 Phase 1 ✅. B4 Phase 2 deferred. B5 pending. Track C: C1 ✅ C2 ✅ (incl C2d construction completion). C3 ✅ (hp_pct/stamina/dead; proxy HP mirror max(1,...); death message; inventory/effects deferred). C4 ✅ C5 ✅ C6 ✅. SMASH fixed abs coords. Test suite: 155 assertions / 70 test cases (osx-coop, COOP=ON).
+**Status:** Track A complete (A1–A5.4). B1 ✅ B2 ✅ B3 Phases 1–7 ✅ (move/pause/pickup/sleep/craft/smash/fire/eat/reload typed cmds). B3 Phase 8+ pending (throw/melee — complex target ID/item relay). B4 Phase 1 ✅. B4 Phase 2 deferred. B5 blocked (internal-linkage statics). Track C: C1 ✅ C2 ✅ (incl C2d construction). C3 ✅ (hp_pct/stamina/dead; proxy HP mirror; death message; C3 death-drop via notify_death() at QUIT_DIED — inventory + client_status dead=true sent synchronously before teardown; inventory/effects deferred). C4 ✅ C5 ✅ C6 ✅. Test suite: 160 assertions / 74 test cases (osx-coop, COOP=ON).
 **Goal:** Real-time 2-player co-op where the client plays their own character with full action parity to single-player — pick up items, go upstairs, craft, interact, everything the host can do. Server-authoritative world state; client-side prediction for responsiveness.
 
 ---

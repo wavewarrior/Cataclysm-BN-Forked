@@ -3476,6 +3476,10 @@ bool game::is_game_over()
         if( u.in_vehicle ) {
             m.unboard_vehicle( u.bub_pos() );
         }
+#ifdef COOP_ENABLED
+        // Same hook as QUIT_DIED: send death-status + inventory drop to host.
+        if( coop_client_ ) { coop_client_->notify_death(); }
+#endif // COOP_ENABLED
         return true;
     }
     if( uquit != QUIT_NO ) {
