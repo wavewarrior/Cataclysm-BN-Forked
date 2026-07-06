@@ -21,12 +21,13 @@
  * testability and a clean path to a future typed wire format.
  *
  * ── Phase roadmap ───────────────────────────────────────────────
- *   Phase 1: scaffold + move (lateral)
- *   Phase 4: pause, pickup, sleep, craft (no-payload)
- *   Phase 5 (current): smash (abs target pos)
- *   Phase 6+: fire (target + seq), melee, throw, use, eat, reload, …
+  *   Phase 1: scaffold + move (lateral)
+  *   Phase 4: pause, pickup, sleep, craft (no-payload)
+  *   Phase 5: smash (abs target pos)
+  *   Phase 6: fire (target + seq)
+  *   Phase 7 (current): eat, reload (no-payload)
+  *   Phase 8+: throw (needs item-at-landing-tile relay), melee, use, …
  */
-
 // ---------------------------------------------------------------------------
 // Command kind
 // ---------------------------------------------------------------------------
@@ -47,8 +48,12 @@ enum class player_cmd_kind : uint8_t {
     // ── Phase 5: target-position commands ────────────────────────────────
     smash,  ///< bash terrain/creature at target_abs; ACTION_SMASH
     fire,   ///< fire weapon at target_abs using lag-comp seq; ACTION_FIRE / ACTION_FIRE_BURST
+    // Phase 7 (current): eat, reload (no-payload relay)
+    eat,    ///< eat/drink; ACTION_EAT — no payload
+    reload, ///< reload weapon; ACTION_RELOAD_* — no payload
 
-    // Phase 7+: melee, throw, use, eat, reload, …
+    // Phase 8+: throw (needs before/after item diff at unknown landing tile — complex),
+    //           melee (needs target identification after autoattack), use, …
 };
 
 // ---------------------------------------------------------------------------
@@ -82,6 +87,14 @@ player_cmd_t make_player_smash_cmd(tripoint_abs_ms abs_target);
 /// seq is passed separately to execute_player_cmd() for lag compensation.
 /// Pure: no side effects; safe to call from UI and tests.
 player_cmd_t make_player_fire_cmd(tripoint_abs_ms abs_target);
+
+/// Build a player_cmd_t for eat/drink — no payload.
+/// Pure: no side effects; safe to call from UI and tests.
+player_cmd_t make_player_eat_cmd();
+
+/// Build a player_cmd_t for a reload action — no payload.
+/// Pure: no side effects; safe to call from UI and tests.
+player_cmd_t make_player_reload_cmd();
 
 /// Map a move cmd's delta to its wire-protocol direction string ("MOVE_N" … "MOVE_NW").
 /// Returns an empty string_view for non-move commands or unknown deltas.

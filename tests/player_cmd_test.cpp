@@ -248,3 +248,25 @@ TEST_CASE("smash and fire commands are distinct kinds", "[player_cmd]") {
     const tripoint_abs_ms t{10, 10, 0};
     CHECK(make_player_smash_cmd(t).kind != make_player_fire_cmd(t).kind);
 }
+
+// ---------------------------------------------------------------------------
+// B3 Phase 7 — make_player_eat_cmd / make_player_reload_cmd
+// ---------------------------------------------------------------------------
+
+TEST_CASE("make_player_eat_cmd: kind == eat", "[player_cmd]") {
+    CHECK(make_player_eat_cmd().kind == player_cmd_kind::eat);
+}
+
+TEST_CASE("make_player_eat_cmd: delta and target_abs are zero", "[player_cmd]") {
+    const auto cmd = make_player_eat_cmd();
+    CHECK(cmd.delta == tripoint_rel_ms{0, 0, 0});
+    CHECK(cmd.target_abs == tripoint_abs_ms{0, 0, 0});
+}
+
+TEST_CASE("make_player_reload_cmd: kind == reload", "[player_cmd]") {
+    CHECK(make_player_reload_cmd().kind == player_cmd_kind::reload);
+}
+
+TEST_CASE("eat and reload are distinct kinds", "[player_cmd]") {
+    CHECK(make_player_eat_cmd().kind != make_player_reload_cmd().kind);
+}

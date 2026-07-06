@@ -17,6 +17,12 @@ player_cmd_t make_player_smash_cmd(const tripoint_abs_ms abs_target) {
 player_cmd_t make_player_fire_cmd(const tripoint_abs_ms abs_target) {
     return player_cmd_t{.kind = player_cmd_kind::fire, .target_abs = abs_target};
 }
+player_cmd_t make_player_eat_cmd() {
+    return player_cmd_t{.kind = player_cmd_kind::eat};
+}
+player_cmd_t make_player_reload_cmd() {
+    return player_cmd_t{.kind = player_cmd_kind::reload};
+}
 std::string_view move_cmd_to_dir_string(const player_cmd_t& cmd) {
     if (cmd.kind != player_cmd_kind::move) { return {}; }
     const auto d = cmd.delta.xy();

@@ -4055,6 +4055,13 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
             coop_client_->queue_action("SLEEP");
         } else if (act == ACTION_CRAFT || act == ACTION_LONGCRAFT || act == ACTION_RECRAFT) {
             coop_client_->queue_action("CRAFT");
+        } else if (act == ACTION_EAT) {
+            // B3 Phase 7: eat/drink — no-payload relay.
+            coop_client_->queue_action("EAT");
+        } else if (act == ACTION_RELOAD_ITEM || act == ACTION_RELOAD_WEAPON
+                   || act == ACTION_RELOAD_WIELDED) {
+            // B3 Phase 7: reload — no-payload relay.
+            coop_client_->queue_action("RELOAD");
         } else if (act == ACTION_FIRE) {
             // Queued from inside modal_fiber_ above — nothing here.
         } else if (act == ACTION_FIRE_BURST) {

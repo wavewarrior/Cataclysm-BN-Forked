@@ -452,6 +452,13 @@ auto coop_server::execute_player_cmd(npc* proxy, const player_cmd_t& cmd, const 
                 proxy, seq,
                 cmd.target_abs.x(), cmd.target_abs.y(), cmd.target_abs.z());
             break;
+        case K::eat:
+        case K::reload:
+            // B3 Phase 7: no-payload relay — proxy consumes moves only.
+            // The client's own character handles eating/reloading; proxy mirrors the
+            // time cost so the world sim stays in step.
+            proxy->moves -= proxy->get_speed();
+            break;
         case K::none:
         default:
             DebugLog(DL::Debug, DC::Main)
@@ -625,6 +632,14 @@ auto coop_server::execute_client_action(
     }
     if (key == "CRAFT") {
         execute_player_cmd(proxy, player_cmd_t{.kind = player_cmd_kind::craft}, seq);
+        return;
+    }
+    if (key == "EAT") {
+        execute_player_cmd(proxy, make_player_eat_cmd(), seq);
+        return;
+    }
+    if (key == "RELOAD") {
+        execute_player_cmd(proxy, make_player_reload_cmd(), seq);
         return;
     }
 
