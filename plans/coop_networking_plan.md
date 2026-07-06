@@ -443,17 +443,28 @@ auto execute_monster_cmd(monster& mon, const monster_cmd& cmd) -> void; // emits
 - [ ] Enables action replay, deterministic testing
 
 ### Step B4 — Ranged Combat Stage Split
-**Files:** `src/ranged.cpp`, new `src/fire_cmd.h`  
+**Files:** `src/ranged.cpp`, new `src/fire_cmd.h`
 **Effort:** 1 week
 
-Separates ranged into three explicit stages:
+**B4 Phase 1 (`resolve_aim_line`):** ✅ done — deterministic LOS, used for lag-compensation history.
+
+**B4 Phase 2 (`resolve_hit` + `emit_visuals`):** ❌ DROPPED — rationale below.
+
+> **Scope cut (2026-07-06):** The client already runs `fire()` locally inside the modal fiber, which calls
+> `ranged::fire_gun()` → `projectile_attack()`. Single-shot animation is `g->draw_bullet()` inside
+> `projectile_attack`; multi-shot uses `draw_bullet_trajectories()` also called inside `fire_gun()`.
+> There is NO way to replay single-shot animation without calling `projectile_attack()` itself, which IS
+> Stage 2 (RNG hit resolution). Therefore `emit_visuals({})` cannot provide a meaningful client-side
+> trajectory preview for single-shot weapons — the only path to animation already runs Stage 2.
+> `resolve_hit()` would be server-only but the server already calls `fire_gun()` unchanged, so it adds
+> no functional benefit. Both functions are single-use abstractions forbidden by the project's
+> "Simplicity First" rule. Deferred until there is a concrete need (e.g. server-authoritative hit
+> resolution with divergence reconciliation), which requires a separate design.
+
+Original three-stage design for reference:
 1. `resolve_trajectory()` — pure, no side effects; client can run this for visual prediction
 2. `resolve_hit(trajectory, world_state)` — server only, authoritative
 3. `emit_visuals(trajectory, hit_result)` — both sides, no game state
-
-- [ ] Client runs stages 1 + 3 immediately for feel
-- [ ] Server runs stages 1 + 2 + 3 authoritatively
-- [ ] Lag compensation history (from A5) plugs into stage 2
 
 ### Step B5 — `game.cpp` Decomposition
 **Files:** `src/game.cpp` (16,000+ lines)  
