@@ -73,28 +73,41 @@ auto start_host() -> void {
         return;
     }
 
-    // Get local LAN IP for display — skip loopback (127.x.x.x) so the partner
-    // gets a routable address.  Fall back to first available if nothing else found.
+    // Get local LAN IP for display.
+    // Preference order: IPv4 private (192.168/10/172.16) > other non-loopback > fallback.
+    // Skip IPv4 loopback (127.), IPv6 loopback (::1), IPv6 link-local (fe80:).
     std::string display_ip = "?.?.?.?";
     {
         int n = 0;
         NET_Address** addrs = NET_GetLocalAddresses(&n);
         if (addrs && n > 0) {
+            std::string any_non_loopback;
             std::string fallback;
+            auto is_loopback = []( const std::string &a ) {
+                return a.rfind( "127.", 0 ) == 0   // IPv4 loopback
+                    || a == "::1"                   // IPv6 loopback
+                    || a.rfind( "fe80:", 0 ) == 0;  // IPv6 link-local
+            };
+            auto is_ipv4_private = []( const std::string &a ) {
+                return a.rfind( "192.168.", 0 ) == 0
+                    || a.rfind( "10.", 0 ) == 0
+                    || a.rfind( "172.", 0 ) == 0;   // good enough approximation
+            };
             for (int i = 0; i < n; ++i) {
                 const char* str = NET_GetAddressString(addrs[i]);
                 if (!str) { continue; }
                 std::string a(str);
-                if (a.rfind("127.", 0) == 0) {
-                    // loopback — keep as last-resort fallback only
+                if (is_loopback(a)) {
                     if (fallback.empty()) { fallback = a; }
-                } else {
-                    display_ip = a;    // first non-loopback wins
+                } else if (is_ipv4_private(a)) {
+                    display_ip = a;   // best candidate — stop searching
                     break;
+                } else {
+                    if (any_non_loopback.empty()) { any_non_loopback = a; }
                 }
             }
-            if (display_ip == "?.?.?.?" && !fallback.empty()) {
-                display_ip = fallback;
+            if (display_ip == "?.?.?.?") {
+                display_ip = any_non_loopback.empty() ? fallback : any_non_loopback;
             }
             for (int i = 0; i < n; ++i) { NET_UnrefAddress(addrs[i]); }
             SDL_free(addrs);
