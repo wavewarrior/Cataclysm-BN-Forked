@@ -438,6 +438,14 @@ void game::load_static_data()
     inp_mngr.init();            // Load input config JSON
     // Init mappings for loading the json stuff
     DynamicDataLoader::get_instance();
+#if defined( _WIN32 )
+    // Performance: each JSON file open on Windows triggers a real-time AV scan.
+    // Adding the data directory to Windows Defender exclusions eliminates this cost.
+    DebugLog( DL::Info, DC::Main )
+        << "Performance tip: add '" << PATH_INFO::datadir()
+        << "' to Windows Defender exclusions to reduce load time "
+           "(Settings \u2192 Windows Security \u2192 Virus & threat protection \u2192 Exclusions).";
+#endif
     fullscreen = false;
     was_fullscreen = false;
     show_panel_adm = false;
