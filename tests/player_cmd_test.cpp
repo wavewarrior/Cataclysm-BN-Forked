@@ -223,3 +223,28 @@ TEST_CASE("move_cmd_to_dir_string: smash returns empty (not a move)", "[player_c
     const auto cmd = make_player_smash_cmd(tripoint_abs_ms{0, 0, 0});
     CHECK(move_cmd_to_dir_string(cmd).empty());
 }
+
+// ---------------------------------------------------------------------------
+// B3 Phase 6 — make_player_fire_cmd
+// ---------------------------------------------------------------------------
+
+TEST_CASE("make_player_fire_cmd: kind == fire", "[player_cmd]") {
+    const auto cmd = make_player_fire_cmd(tripoint_abs_ms{10, 20, 0});
+    CHECK(cmd.kind == player_cmd_kind::fire);
+}
+
+TEST_CASE("make_player_fire_cmd: target_abs preserved", "[player_cmd]") {
+    const tripoint_abs_ms target{-5, 300, 2};
+    const auto cmd = make_player_fire_cmd(target);
+    CHECK(cmd.target_abs == target);
+}
+
+TEST_CASE("make_player_fire_cmd: delta is zero", "[player_cmd]") {
+    const auto cmd = make_player_fire_cmd(tripoint_abs_ms{1, 2, 0});
+    CHECK(cmd.delta == tripoint_rel_ms{0, 0, 0});
+}
+
+TEST_CASE("smash and fire commands are distinct kinds", "[player_cmd]") {
+    const tripoint_abs_ms t{10, 10, 0};
+    CHECK(make_player_smash_cmd(t).kind != make_player_fire_cmd(t).kind);
+}

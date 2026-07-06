@@ -14,6 +14,9 @@ player_cmd_t make_player_move_cmd(const action_id act, const iso_rotate rot) {
 player_cmd_t make_player_smash_cmd(const tripoint_abs_ms abs_target) {
     return player_cmd_t{.kind = player_cmd_kind::smash, .target_abs = abs_target};
 }
+player_cmd_t make_player_fire_cmd(const tripoint_abs_ms abs_target) {
+    return player_cmd_t{.kind = player_cmd_kind::fire, .target_abs = abs_target};
+}
 std::string_view move_cmd_to_dir_string(const player_cmd_t& cmd) {
     if (cmd.kind != player_cmd_kind::move) { return {}; }
     const auto d = cmd.delta.xy();

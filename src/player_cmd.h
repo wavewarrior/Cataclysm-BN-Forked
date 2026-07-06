@@ -46,8 +46,9 @@ enum class player_cmd_kind : uint8_t {
 
     // ── Phase 5: target-position commands ────────────────────────────────
     smash,  ///< bash terrain/creature at target_abs; ACTION_SMASH
+    fire,   ///< fire weapon at target_abs using lag-comp seq; ACTION_FIRE / ACTION_FIRE_BURST
 
-    // Phase 6+: fire (needs seq for lag-comp), melee, throw, use, eat, reload
+    // Phase 7+: melee, throw, use, eat, reload, …
 };
 
 // ---------------------------------------------------------------------------
@@ -76,6 +77,11 @@ player_cmd_t make_player_move_cmd(action_id act, iso_rotate rot);
 /// Build a player_cmd_t for a smash action at abs_target.
 /// Pure: no side effects; safe to call from UI and tests.
 player_cmd_t make_player_smash_cmd(tripoint_abs_ms abs_target);
+
+/// Build a player_cmd_t for a fire action at abs_target.
+/// seq is passed separately to execute_player_cmd() for lag compensation.
+/// Pure: no side effects; safe to call from UI and tests.
+player_cmd_t make_player_fire_cmd(tripoint_abs_ms abs_target);
 
 /// Map a move cmd's delta to its wire-protocol direction string ("MOVE_N" … "MOVE_NW").
 /// Returns an empty string_view for non-move commands or unknown deltas.

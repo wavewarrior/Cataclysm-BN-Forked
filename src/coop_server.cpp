@@ -445,6 +445,13 @@ auto coop_server::execute_player_cmd(npc* proxy, const player_cmd_t& cmd, const 
                 }
             }
             break;
+        case K::fire:
+            // B3 Phase 6: fire weapon at target_abs using lag-comp seq.
+            // resolve_fire_at_seq handles snapshot lookup, creature reposition, fire_gun, restore.
+            resolve_fire_at_seq(
+                proxy, seq,
+                cmd.target_abs.x(), cmd.target_abs.y(), cmd.target_abs.z());
+            break;
         case K::none:
         default:
             DebugLog(DL::Debug, DC::Main)
@@ -621,14 +628,13 @@ auto coop_server::execute_client_action(
         return;
     }
 
-    // String-only paths: FIRE (lag-comp + seq) stays inline; SMASH now uses typed dispatch.
+    // Target-position paths: both SMASH and FIRE use typed commands (B3 Phase 5/6).
     if (key == "SMASH") {
         if (!ctx_json.empty()) {
             std::istringstream iss(ctx_json);
             JsonIn jin(iss);
             JsonObject ctx = jin.get_object();
             ctx.allow_omitted_members();
-            // B3 Phase 5: parse abs coords → typed command → execute_player_cmd.
             const tripoint_abs_ms abs_tpos{
                 ctx.get_int("tx", 0), ctx.get_int("ty", 0), ctx.get_int("tz", 0)};
             execute_player_cmd(proxy, make_player_smash_cmd(abs_tpos), seq);
@@ -641,10 +647,10 @@ auto coop_server::execute_client_action(
             JsonIn jin(iss);
             JsonObject ctx = jin.get_object();
             ctx.allow_omitted_members();
-            const int tx = ctx.get_int("tx", 0);
-            const int ty = ctx.get_int("ty", 0);
-            const int tz = ctx.get_int("tz", 0);
-            resolve_fire_at_seq(proxy, seq, tx, ty, tz);
+            // B3 Phase 6: parse abs coords → typed command → execute_player_cmd.
+            const tripoint_abs_ms abs_tpos{
+                ctx.get_int("tx", 0), ctx.get_int("ty", 0), ctx.get_int("tz", 0)};
+            execute_player_cmd(proxy, make_player_fire_cmd(abs_tpos), seq);
         } else {
             DebugLog(DL::Info, DC::Main) << "[coop] FIRE seq=" << seq << ": no target context";
             proxy->moves -= proxy->get_speed();
