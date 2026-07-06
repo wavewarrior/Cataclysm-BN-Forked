@@ -49,15 +49,14 @@ enum class player_cmd_kind : uint8_t {
     // ── Phase 5: target-position commands ────────────────────────────────
     smash,  ///< bash terrain/creature at target_abs; ACTION_SMASH
     fire,   ///< fire weapon at target_abs using lag-comp seq; ACTION_FIRE / ACTION_FIRE_BURST
-    // Phase 7 (current): eat, reload (no-payload relay)
+    // ── Phase 7: no-payload relay ─────────────────────────────────────────
     eat,    ///< eat/drink; ACTION_EAT — no payload
     reload, ///< reload weapon; ACTION_RELOAD_* — no payload
 
-    // Phase 8 (current): use/activate item
-    use,    ///< use/activate item; ACTION_USE — no payload (world effects are client-authoritative)
+    // ── Phase 8: use/activate item ────────────────────────────────────────
+    use,    ///< use/activate item; ACTION_USE — no payload
 
-    // Phase 9+: throw (needs field/explosion propagation, not just item DROP),
-    //           melee (needs post-attack target ID), …
+    // Phase 9+: melee reach attack (needs instrumenting autoattack — deferred)
 };
 
 // ---------------------------------------------------------------------------
