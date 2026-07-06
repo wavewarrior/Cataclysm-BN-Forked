@@ -73,14 +73,29 @@ auto start_host() -> void {
         return;
     }
 
-    // Get local IP for display
+    // Get local LAN IP for display — skip loopback (127.x.x.x) so the partner
+    // gets a routable address.  Fall back to first available if nothing else found.
     std::string display_ip = "?.?.?.?";
     {
         int n = 0;
         NET_Address** addrs = NET_GetLocalAddresses(&n);
         if (addrs && n > 0) {
-            const char* str = NET_GetAddressString(addrs[0]);
-            if (str) { display_ip = str; }
+            std::string fallback;
+            for (int i = 0; i < n; ++i) {
+                const char* str = NET_GetAddressString(addrs[i]);
+                if (!str) { continue; }
+                std::string a(str);
+                if (a.rfind("127.", 0) == 0) {
+                    // loopback — keep as last-resort fallback only
+                    if (fallback.empty()) { fallback = a; }
+                } else {
+                    display_ip = a;    // first non-loopback wins
+                    break;
+                }
+            }
+            if (display_ip == "?.?.?.?" && !fallback.empty()) {
+                display_ip = fallback;
+            }
             for (int i = 0; i < n; ++i) { NET_UnrefAddress(addrs[i]); }
             SDL_free(addrs);
         }
