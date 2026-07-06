@@ -198,8 +198,11 @@ std::vector<gpu_emitter> build_emitter_snapshot(event_queue& eq, float frame_ms)
     // (my_MAPSIZE > 0), so player-pos checks alone miss the main menu.
     // The reliable discriminator is world_generator->active_world: null
     // when no world is loaded (main menu, between worlds), set after a
-    // world is picked. Decorative warm-amber emitter sized to cover a
-    // 1920×1080 menu (radius ~45 tiles).
+    // world is picked. NOTE: active_world is set ~185ms BEFORE
+    // load_world_modfiles finishes populating ter_t/furn_t factories.
+    // Terrain access (collect_zlev) is guarded separately with
+    // int_id<ter_t>(0).is_valid() to handle that window.
+    // Decorative warm-amber emitter sized to cover a 1920×1080 menu (radius ~45 tiles).
     const auto push_menu_decoration = [&]() {
         // Position is float-valued — make_omni takes ints, but we want
         // sub-tile resolution for the cycle-presets. Build the emitter
@@ -266,7 +269,17 @@ std::vector<gpu_emitter> build_emitter_snapshot(event_queue& eq, float frame_ms)
         }
     }
 
-    collect_zlev(m, zlev, out);
+    // Guard: active_world is set before load_world_modfiles populates the
+    // ter_t/furn_t factories, so the active_world check above is insufficient.
+    // collect_zlev dereferences ter_id→ter_t::obj() (and furn_id→furn_t::obj())
+    // for every submap tile; if the factory is still empty (max: -1), this
+    // crashes.  int_id<ter_t>(0).is_valid() is false only when the factory
+    // has zero entries — a reliable "world JSON is loaded" sentinel.
+    // Flash-drain and menu-decoration above must keep running (frame_build.h
+    // requires the snapshot always builds for per-frame flash aging).
+    if (int_id<ter_t>(0).is_valid()) {
+        collect_zlev(m, zlev, out);
+    }
 
     // Player personal light (torch, flashlight, worn items, mutations) +
     // on-fire glow. Folded in here after dropping collect_character() for
