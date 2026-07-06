@@ -125,8 +125,12 @@ auto coop_server::spawn_proxy_npc(const tripoint_abs_ms& spawn_pos, const std::s
     // inv_clear() is the public API (character.h:1275); worn.clear() is safe here
     // because the NPC hasn't been registered with the game world yet, so
     // location_vector tracking hasn't started for its items.
+    // CL-RANGED: inv_clear() only clears inv, NOT primary_weapon(). Explicitly drop
+    // whatever randomize() wielded — proxy starts unarmed; re-armed per shot via
+    // client_status weapon_id before resolve_fire_at_seq.
     tmp->inv_clear();
     tmp->worn.clear();
+    if (tmp->is_armed()) { tmp->remove_primary_weapon(); }
     if (!player_name.empty()) { tmp->name = player_name; }
     tmp->is_coop_remote = true;
     tmp->set_attitude(NPCATT_FOLLOW);
