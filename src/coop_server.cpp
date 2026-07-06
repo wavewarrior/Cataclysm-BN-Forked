@@ -432,6 +432,19 @@ auto coop_server::execute_player_cmd(npc* proxy, const player_cmd_t& cmd, const 
             // Activity relay: deduct moves; NPC activity set elsewhere.
             proxy->moves -= proxy->get_speed();
             break;
+        case K::smash:
+            // B3 Phase 5: bash terrain/creature at target_abs.
+            // Proxy melee-attacks any creature at the target tile; terrain bashing
+            // is propagated via TERRAIN_CHANGE by the client (C2c) so no map::bash here.
+            {
+                const tripoint_bub_ms tpos = g->m.abs_to_bub(cmd.target_abs);
+                if (const auto mon_ptr = g->critter_tracker->find(tpos)) {
+                    proxy->melee_attack(*mon_ptr, true);
+                } else {
+                    proxy->moves -= proxy->get_speed(); // tile bash: moves consumed
+                }
+            }
+            break;
         case K::none:
         default:
             DebugLog(DL::Debug, DC::Main)
@@ -608,21 +621,19 @@ auto coop_server::execute_client_action(
         return;
     }
 
-    // String-only paths: SMASH (needs ctx_json target pos) and FIRE (lag-comp + seq).
+    // String-only paths: FIRE (lag-comp + seq) stays inline; SMASH now uses typed dispatch.
     if (key == "SMASH") {
         if (!ctx_json.empty()) {
             std::istringstream iss(ctx_json);
             JsonIn jin(iss);
             JsonObject ctx = jin.get_object();
             ctx.allow_omitted_members();
-            // tx/ty/tz are absolute — bub coords are NOT portable across processes.
-            // Matches PICKUP/DROP/TERRAIN_CHANGE/FIRE which all use abs coords.
+            // B3 Phase 5: parse abs coords → typed command → execute_player_cmd.
             const tripoint_abs_ms abs_tpos{
                 ctx.get_int("tx", 0), ctx.get_int("ty", 0), ctx.get_int("tz", 0)};
-            const tripoint_bub_ms tpos = g->m.abs_to_bub(abs_tpos);
-            if (const auto mon_ptr = g->critter_tracker->find(tpos)) {
-                proxy->melee_attack(*mon_ptr, true);
-            }
+            execute_player_cmd(proxy, make_player_smash_cmd(abs_tpos), seq);
+        } else {
+            proxy->moves -= proxy->get_speed();
         }
     } else if (key == "FIRE") {
         if (!ctx_json.empty()) {

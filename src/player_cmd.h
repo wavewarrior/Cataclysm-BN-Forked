@@ -12,19 +12,19 @@
  *
  * Usage flow (B3):
  *   1. Player presses a key → action_id is resolved by look_up_action().
- *   2. make_player_move_cmd() (or the full factory, Phase 2+) produces a
- *      player_cmd_t from the action_id and current context.
+ *   2. Factory function produces a player_cmd_t from action_id + context.
  *   3. execute_player_cmd() applies the command to the game world.
  *
- * Co-op: coop_client serialises these; coop_server::execute_client_action()
- * mirrors them on the proxy NPC.  Phase 2+ will replace the current string
- * dispatch (queue_action("MOVE_N")) with typed commands.
+ * Co-op: coop_server::execute_client_action() parses the wire packet into a
+ * typed player_cmd_t, then delegates to execute_player_cmd() on the proxy.
+ * Wire format (string key + ctx_json) is unchanged; typed commands give
+ * testability and a clean path to a future typed wire format.
  *
  * ── Phase roadmap ───────────────────────────────────────────────
- *   B3 Phase 1 (current): scaffold + move (lateral + vertical)
- *   B3 Phase 2+:          pause, open, close, smash, pickup,
- *                         fire, melee, throw, use, eat, reload,
- *                         wait, craft, …
+ *   Phase 1: scaffold + move (lateral)
+ *   Phase 4: pause, pickup, sleep, craft (no-payload)
+ *   Phase 5 (current): smash (abs target pos)
+ *   Phase 6+: fire (target + seq), melee, throw, use, eat, reload, …
  */
 
 // ---------------------------------------------------------------------------
@@ -40,12 +40,14 @@ enum class player_cmd_kind : uint8_t {
 
     // ── Phase 4: simple no-payload simulation commands ───────────────────
     pause,  ///< ACTION_PAUSE / ACTION_TIMEOUT / ACTION_WAIT
-    pickup, ///< ACTION_PICKUP / ACTION_PICKUP_ALL / ACTION_PICKUP_FEET (moves consumed; NPC impl
-            ///< deferred)
+    pickup, ///< ACTION_PICKUP / ACTION_PICKUP_ALL / ACTION_PICKUP_FEET (moves consumed; NPC impl deferred)
     sleep,  ///< ACTION_SLEEP
     craft,  ///< ACTION_CRAFT / ACTION_LONGCRAFT / ACTION_RECRAFT
 
-    // Phase 5+: smash (needs absolute target pos), fire (needs ctx_json + seq)
+    // ── Phase 5: target-position commands ────────────────────────────────
+    smash,  ///< bash terrain/creature at target_abs; ACTION_SMASH
+
+    // Phase 6+: fire (needs seq for lag-comp), melee, throw, use, eat, reload
 };
 
 // ---------------------------------------------------------------------------
@@ -55,9 +57,13 @@ enum class player_cmd_kind : uint8_t {
 struct player_cmd_t {
     player_cmd_kind kind = player_cmd_kind::none;
 
-    /// For kind == move: the authoritative movement delta (post iso_rotate
-    /// resolution).  Zero for all other command kinds.
+    /// For kind == move: the authoritative movement delta (post iso_rotate).
+    /// Zero for all other command kinds.
     tripoint_rel_ms delta;
+
+    /// For kind == smash: absolute world position of the bash target.
+    /// Zero for all other command kinds.
+    tripoint_abs_ms target_abs;
 };
 
 // ---------------------------------------------------------------------------
@@ -65,10 +71,11 @@ struct player_cmd_t {
 // ---------------------------------------------------------------------------
 
 /// Build a player_cmd_t for a lateral movement action_id.
-/// iso_rotate::yes applies the current tile_iso rotation (call from UI context).
-/// iso_rotate::no uses raw cardinal/diagonal deltas (direction already resolved).
-/// Returns player_cmd_kind::none for non-movement action_ids.
 player_cmd_t make_player_move_cmd(action_id act, iso_rotate rot);
+
+/// Build a player_cmd_t for a smash action at abs_target.
+/// Pure: no side effects; safe to call from UI and tests.
+player_cmd_t make_player_smash_cmd(tripoint_abs_ms abs_target);
 
 /// Map a move cmd's delta to its wire-protocol direction string ("MOVE_N" … "MOVE_NW").
 /// Returns an empty string_view for non-move commands or unknown deltas.

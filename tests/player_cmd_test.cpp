@@ -196,3 +196,30 @@ TEST_CASE("round-trip: make_player_move_cmd -> dir_string -> parse_move_cmd", "[
         CHECK(parsed.delta == original.delta);
     }
 }
+
+// ---------------------------------------------------------------------------
+// B3 Phase 5 — make_player_smash_cmd
+// ---------------------------------------------------------------------------
+
+TEST_CASE("make_player_smash_cmd: kind == smash", "[player_cmd]") {
+    const tripoint_abs_ms target{100, 200, -1};
+    const auto cmd = make_player_smash_cmd(target);
+    CHECK(cmd.kind == player_cmd_kind::smash);
+}
+
+TEST_CASE("make_player_smash_cmd: target_abs preserved", "[player_cmd]") {
+    const tripoint_abs_ms target{42, 99, 1};
+    const auto cmd = make_player_smash_cmd(target);
+    CHECK(cmd.target_abs == target);
+}
+
+TEST_CASE("make_player_smash_cmd: delta is zero", "[player_cmd]") {
+    // target_abs and delta are separate fields; smash must not corrupt move delta.
+    const auto cmd = make_player_smash_cmd(tripoint_abs_ms{1, 2, 0});
+    CHECK(cmd.delta == tripoint_rel_ms{0, 0, 0});
+}
+
+TEST_CASE("move_cmd_to_dir_string: smash returns empty (not a move)", "[player_cmd]") {
+    const auto cmd = make_player_smash_cmd(tripoint_abs_ms{0, 0, 0});
+    CHECK(move_cmd_to_dir_string(cmd).empty());
+}
