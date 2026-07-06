@@ -461,16 +461,17 @@ auto execute_monster_cmd(monster& mon, const monster_cmd& cmd) -> void; // emits
 > "Simplicity First" rule. Deferred until there is a concrete need (e.g. server-authoritative hit
 > resolution with divergence reconciliation), which requires a separate design.
 >
-> **Fire desync audit (2026-07-06, confirmed):** Client runs `fire()` locally; server runs `fire_gun()`
-> on the proxy NPC. Divergence surface: (1) **Skills/XP** — `who.as_player()->practice()` credits the
-> proxy NPC's own skills (`npc` inherits `player::as_player()` which returns `this`); proxy skills
-> are isolated from the client's avatar. No double-count. (2) **Ammo** — client consumes from their own
-> inventory (client-authoritative by design). Proxy inventory was cleared at spawn; proxy fires via
-> `execute_player_cmd` which may silently fail with no weapon — harmless, moves consumed.
-> (3) **Monster HP/death** — client-side kill is a local map mutation, same as C1/C2/C3 client actions;
-> the 30 s resync corrects divergent monster state. Cosmetic flicker only. **Verdict: dropping B4
-> Phase 2 is safe. The divergence is benign per-entity, consistent with Option B (client-authoritative)
-> design throughout Track C.**
+> **Fire desync audit (2026-07-06, REVISED — prior "confirmed benign" was incorrect):**
+> The skills/XP analysis was correct (proxy NPC's own skills, isolated from client). The ammo
+> analysis was wrong: `inv_clear()` only clears `inv`, NOT `primary_weapon()`. After `randomize()` +
+> `inv_clear()` + `worn.clear()`, the proxy retains whatever weapon `randomize()` wielded.
+> Two failure modes: **(a)** if `randomize()` gave a gun → proxy fires the WRONG weapon (divergent
+> damage/range/ammo); **(b)** if `randomize()` gave melee → `proxy->is_armed() && is_gun()` = false
+> → `"proxy unarmed — action consumed"` → client's shots have ZERO authoritative effect on the host
+> map. Host-side monsters take no damage; when the 30 s resync fires, monsters the client killed
+> locally come back to life. **Verdict: ranged co-op is broken for the client at the host-map level.
+> Dropping B4 Phase 2 is still correct (animation works); the proxy arming bug is a separate
+> issue, tracked below as known limitation CL-RANGED.**
 
 Original three-stage design for reference:
 1. `resolve_trajectory()` — pure, no side effects; client can run this for visual prediction
@@ -526,6 +527,13 @@ visibility calculation for the host's LOS system.
 simplest world-mutation propagation case. The pattern established in C1 extends to C2.
 
 **Note:** B4 Phase 2 (ranged stage split) does NOT advance Track C.
+
+## Known Limitations
+
+| ID | Area | Description | Fix options |
+|---|---|---|---|
+| **CL-RANGED** | Proxy arming | `spawn_proxy_npc()` calls `inv_clear()` which does NOT clear `primary_weapon()`. `randomize()` wields a random item; the proxy fires the wrong gun OR fires nothing (if melee). Client's ranged shots have no authoritative effect on the host map — host monsters survive, and the 30 s resync revives them on the client. | **Option A (minimal):** (1) add one line to `spawn_proxy_npc` to call `remove_primary_weapon()` after `inv_clear()`; (2) add `weapon_id`+`ammo_id` to the per-tick `client_status` packet; (3) re-arm proxy with a fresh copy of the client's gun before each `resolve_fire_at_seq` call. Covers basic ranged co-op. Does NOT reproduce gun mods / custom ammo / condition — modded weapons still diverge in damage. **Option B (deferred):** full C3 inventory sync; subsumes Option A. |
+| **CL-POPUP** | Co-op menu uilist | The `uilist` in `coop_menu::run()` (Host/Join/Back) shows an empty popup frame on the main menu. Whether text is invisible (render/color) or truly absent is TBD — waiting on key-press test. If H/J/numbers respond, it's cosmetic; if they don't, the uilist is broken. |  Check `uilist` RmlUI rendering; compare with other uilists in the game. |
 
 ## Known Anti-Patterns (do not repeat)
 
