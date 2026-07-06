@@ -219,6 +219,7 @@ auto coop_client::coop_world_tick() -> void {
         }
     }
 
+
     // 2. Drain all buffered inbound packets from the host (H6).
     while (coop_net::poll(socket_)) {
         std::string buf;
@@ -618,5 +619,71 @@ auto coop_client::send_join_info() -> bool {
         << (ok ? "" : " — send failed");
     return ok;
 }
+
+auto coop_client::notify_death() -> void {
+    if (!socket_ || !g || death_notified_) { return; }
+    death_notified_ = true;
+
+    // 1. Send client_status dead=true immediately — this packet is normally sent
+    //    BEFORE apply_sync/process_turn on each tick, so the killing tick never sees
+    //    dead=true in the per-tick status.  Sending it here fixes C3b host message.
+    {
+        std::ostringstream oss;
+        JsonOut jout(oss);
+        jout.start_object();
+        jout.member("t", static_cast<int>(coop_pkt::client_status));
+        jout.member("d");
+        jout.start_object();
+        jout.member("idle", false);
+        jout.member("hp_pct", 0);
+        jout.member("stamina", 0);
+        jout.member("stamina_max", g->u.get_stamina_max());
+        jout.member("dead", true);
+        jout.end_object();
+        jout.end_object();
+        coop_net::send(socket_, oss.str());
+    }
+
+    // 2. Death-drop: serialise inv_dump() as an action packet sent directly (not
+    //    queued) so it transmits before is_game_over() → teardown closes the socket.
+    const auto items = g->u.inv_dump();
+    if (items.empty()) {
+        DebugLog(DL::Info, DC::Main) << "[coop] C3 death-drop: no items to drop";
+        return;
+    }
+    const auto drop_abs = g->u.abs_pos();
+    // Build the DROP manifest (same format as C2a apply_drop_manifest).
+    std::ostringstream mfst_oss;
+    JsonOut mfst(mfst_oss);
+    mfst.start_object();
+    mfst.member("items");
+    mfst.start_array();
+    int serialized = 0;
+    for (const item* it : items) {
+        if (!it || it->is_null()) { continue; }
+        mfst.start_object();
+        mfst.member("tx", drop_abs.x());
+        mfst.member("ty", drop_abs.y());
+        mfst.member("tz", drop_abs.z());
+        std::ostringstream item_oss;
+        JsonOut jitem(item_oss);
+        it->serialize(jitem);
+        mfst.member("data", item_oss.str());
+        mfst.end_object();
+        ++serialized;
+    }
+    mfst.end_array();
+    mfst.end_object();
+    // Wrap in an action packet and send directly (bypass pending_actions_ queue).
+    const std::string action_json =
+        build_action_packet({next_seq_++, "DROP", mfst_oss.str()});
+    coop_net::send(socket_, action_json);
+    DebugLog(DL::Info, DC::Main)
+        << "[coop] C3 death-drop: " << serialized << " items at ("
+        << drop_abs.x() << "," << drop_abs.y() << "," << drop_abs.z() << ")";
+}
+
+// send_death_drop() is superseded by notify_death(); kept for any future deathcam path.
+auto coop_client::send_death_drop() -> void { notify_death(); }
 
 #endif // COOP_ENABLED

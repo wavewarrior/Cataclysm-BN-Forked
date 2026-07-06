@@ -3463,6 +3463,12 @@ bool game::is_game_over()
         if( u.in_vehicle ) {
             m.unboard_vehicle( u.bub_pos() );
         }
+#ifdef COOP_ENABLED
+        // C3: send death-status + inventory drop to host before corpse placement.
+        // Hooked at QUIT_DIED (not is_dead_state()) so it only fires once death is
+        // final — PROMPT_ON_CHARACTER_DEATH quickload bails out at 3479 before this.
+        if( coop_client_ ) { coop_client_->notify_death(); }
+#endif // COOP_ENABLED
         u.place_corpse();
         return true;
     }

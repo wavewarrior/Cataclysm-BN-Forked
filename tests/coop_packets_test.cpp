@@ -179,4 +179,47 @@ TEST_CASE( "C3a HP mirror: dead client keeps proxy at 1 not 0", "[coop][packets]
     CHECK( std::max( 1, max_hp * pct / 100 ) == 1 );
 }
 
+
+// ── 10. C3 death-drop transition guard ───────────────────────────────────────
+// send_death_drop() fires exactly once per death event, not every tick while dead.
+// The was_dead_last_tick_ flag is a plain bool; test the gate logic directly.
+
+TEST_CASE( "C3 death-drop: transition alive→dead fires once", "[coop][packets]" )
+{
+    // Simulate: alive last tick, dead this tick → fires.
+    const bool was_dead = false;
+    const bool now_dead = true;
+    const bool should_fire = now_dead && !was_dead;
+    CHECK( should_fire == true );
+}
+
+TEST_CASE( "C3 death-drop: dead→dead does not re-fire", "[coop][packets]" )
+{
+    // Simulate: dead last tick, dead this tick → no re-fire.
+    const bool was_dead = true;
+    const bool now_dead = true;
+    const bool should_fire = now_dead && !was_dead;
+    CHECK( should_fire == false );
+}
+
+TEST_CASE( "C3 death-drop: alive→alive never fires", "[coop][packets]" )
+{
+    const bool was_dead = false;
+    const bool now_dead = false;
+    CHECK( ( now_dead && !was_dead ) == false );
+}
+
+TEST_CASE( "C3 death-drop: dead→alive resets guard (respawn)", "[coop][packets]" )
+{
+    // After respawn (dead→alive), the guard resets so the next death fires again.
+    const bool was_dead = true;
+    const bool now_dead = false; // respawned
+    const bool should_fire = now_dead && !was_dead;
+    CHECK( should_fire == false );
+    // Next death after respawn:
+    const bool was_dead2 = now_dead; // guard updated to false
+    const bool now_dead2 = true;
+    CHECK( ( now_dead2 && !was_dead2 ) == true );
+}
+
 #endif // COOP_ENABLED

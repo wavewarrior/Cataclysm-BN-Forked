@@ -35,10 +35,17 @@ struct coop_client {
     /// C6: send the client's current abs position to the host immediately after receiving
     /// world_seed, so spawn_proxy_npc() can place the proxy at the client's saved position.
     auto send_join_info() -> bool; // *NOPAD*
+    /// C3 on-death sync: call from game::is_game_over() when u.is_dead_state() fires.
+    /// Sends client_status dead=true and death-drop manifest synchronously before teardown.
+    /// Safe to call multiple times — guarded by death_notified_.
+    auto notify_death() -> void;
 
 private:
     auto apply_sync(const std::string& json_buf) -> void;
     auto handle_disconnect() -> void;
+    /// C3 on-death inventory sync: serialise inv_dump() as a DROP manifest to the host.
+    /// Called once on the first tick the client's avatar reports dead.
+    auto send_death_drop() -> void;
 
     NET_StreamSocket* socket_ = nullptr;
 
@@ -54,6 +61,7 @@ private:
     std::deque<pending_action> pending_actions_;
     uint32_t next_seq_ = 1;
     bool net_initialized_ = false;
+    bool death_notified_ = false; ///< guard for notify_death(); prevents double-send
     // H5: host-assigned monster ID → local monster pointer.
     // Stable for stationary monsters; updated on position change.
     std::unordered_map<int, monster*> coop_monster_map_;
