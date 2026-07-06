@@ -15,6 +15,7 @@
 #include "catalua.h"
 #ifdef COOP_ENABLED
 #include "coop_client.h"
+#include "coop_session.h"
 #include "json.h"
 #endif
 #include "character.h"
@@ -4096,6 +4097,19 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                     ",\"az\":" + std::to_string(ap.z()) + "}";
                 coop_client_->queue_action(
                     act == ACTION_MOVE_UP ? "MOVE_UP" : "MOVE_DOWN", ctx);
+            }
+        } else if (act == ACTION_AUTOATTACK) {
+            // B3 Phase 9: relay MELEE to host proxy.
+            // autoattack() calls C++ move()/reach_attack() directly — no MOVE packet fires.
+            // coop_session::last_autoattack_target is set ONLY on success; cleared at entry
+            // so failed autoattacks (no hostiles) relay nothing.
+            const auto& tgt = coop_session::get().last_autoattack_target;
+            if (tgt.has_value()) {
+                const auto ctx =
+                    "{\"tx\":" + std::to_string(tgt->x()) +
+                    ",\"ty\":" + std::to_string(tgt->y()) +
+                    ",\"tz\":" + std::to_string(tgt->z()) + "}";
+                coop_client_->queue_action("MELEE", ctx);
             }
         }
     }

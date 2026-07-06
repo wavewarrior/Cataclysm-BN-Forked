@@ -289,3 +289,27 @@ TEST_CASE("use, eat, reload are all distinct kinds", "[player_cmd]") {
     CHECK(make_player_use_cmd().kind != make_player_eat_cmd().kind);
     CHECK(make_player_use_cmd().kind != make_player_reload_cmd().kind);
 }
+
+// ---------------------------------------------------------------------------
+// B3 Phase 9 — make_player_melee_cmd
+// ---------------------------------------------------------------------------
+
+TEST_CASE("make_player_melee_cmd: kind == melee", "[player_cmd]") {
+    const auto cmd = make_player_melee_cmd(tripoint_abs_ms{5, 10, 0});
+    CHECK(cmd.kind == player_cmd_kind::melee);
+}
+
+TEST_CASE("make_player_melee_cmd: target_abs preserved", "[player_cmd]") {
+    const tripoint_abs_ms target{-3, 7, 1};
+    CHECK(make_player_melee_cmd(target).target_abs == target);
+}
+
+TEST_CASE("make_player_melee_cmd: delta is zero", "[player_cmd]") {
+    CHECK(make_player_melee_cmd(tripoint_abs_ms{1, 2, 0}).delta == tripoint_rel_ms{0, 0, 0});
+}
+
+TEST_CASE("melee is distinct from smash and fire", "[player_cmd]") {
+    const tripoint_abs_ms t{0, 0, 0};
+    CHECK(make_player_melee_cmd(t).kind != make_player_smash_cmd(t).kind);
+    CHECK(make_player_melee_cmd(t).kind != make_player_fire_cmd(t).kind);
+}

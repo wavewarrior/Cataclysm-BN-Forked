@@ -464,6 +464,19 @@ auto coop_server::execute_player_cmd(npc* proxy, const player_cmd_t& cmd, const 
             // Item effects are client-authoritative; proxy mirrors time cost.
             proxy->moves -= proxy->get_speed();
             break;
+        case K::melee:
+            // B3 Phase 9: melee attack at target_abs.
+            // Proxy attacks the creature at the target tile — both adjacent and reach
+            // autoattacks relay through this case (no MOVE packet fires for autoattack).
+            {
+                const tripoint_bub_ms tpos = g->m.abs_to_bub(cmd.target_abs);
+                if (const auto mon_ptr = g->critter_tracker->find(tpos)) {
+                    proxy->melee_attack(*mon_ptr, true);
+                } else {
+                    proxy->moves -= proxy->get_speed();
+                }
+            }
+            break;
         case K::none:
         default:
             DebugLog(DL::Debug, DC::Main)
@@ -649,6 +662,21 @@ auto coop_server::execute_client_action(
     }
     if (key == "USE") {
         execute_player_cmd(proxy, make_player_use_cmd(), seq);
+        return;
+    }
+    if (key == "MELEE") {
+        if (!ctx_json.empty()) {
+            std::istringstream iss(ctx_json);
+            JsonIn jin(iss);
+            JsonObject ctx = jin.get_object();
+            ctx.allow_omitted_members();
+            // B3 Phase 9: abs coords — same pattern as SMASH/FIRE.
+            const tripoint_abs_ms abs_tpos{
+                ctx.get_int("tx", 0), ctx.get_int("ty", 0), ctx.get_int("tz", 0)};
+            execute_player_cmd(proxy, make_player_melee_cmd(abs_tpos), seq);
+        } else {
+            proxy->moves -= proxy->get_speed();
+        }
         return;
     }
 

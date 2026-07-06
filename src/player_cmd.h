@@ -56,7 +56,8 @@ enum class player_cmd_kind : uint8_t {
     // ── Phase 8: use/activate item ────────────────────────────────────────
     use,    ///< use/activate item; ACTION_USE — no payload
 
-    // Phase 9+: melee reach attack (needs instrumenting autoattack — deferred)
+    // Phase 9 (current): melee reach/adjacent attack at abs target pos
+    melee,  ///< melee attack at target_abs; ACTION_AUTOATTACK (both adjacent and reach)
 };
 
 // ---------------------------------------------------------------------------
@@ -102,6 +103,10 @@ player_cmd_t make_player_use_cmd();
 /// Build a player_cmd_t for a reload action — no payload.
 /// Pure: no side effects; safe to call from UI and tests.
 player_cmd_t make_player_reload_cmd();
+
+/// Build a player_cmd_t for a melee attack at abs_target.
+/// Pure: no side effects; safe to call from UI and tests.
+player_cmd_t make_player_melee_cmd(tripoint_abs_ms abs_target);
 
 /// Map a move cmd's delta to its wire-protocol direction string ("MOVE_N" … "MOVE_NW").
 /// Returns an empty string_view for non-move commands or unknown deltas.
