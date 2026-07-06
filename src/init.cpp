@@ -122,6 +122,7 @@
 #include "weather_type.h"
 #include "world_type.h"
 #include "worldfactory.h"
+#include "thread_pool.h"
 
 #  include "mod_tileset.h"
 
@@ -141,6 +142,8 @@ static constexpr int stream_cache_limit = 4096;
 
 namespace
 {
+
+
 
 struct json_perf_load_metrics {
     int files = 0;
@@ -194,13 +197,21 @@ shared_ptr_fast<std::istream> DynamicDataLoader::get_cached_stream( const std::s
     // using the previous stream (in such case, `cached` and `stream_cache` have
     // two references to the stream, hence the test for > 2).
     if( !cached ) {
-        cached = make_shared_fast<std::istringstream>( read_entire_file( path ) );
+        // Use preloaded content when available (Phase A pre-loaded all mod files);
+        // this avoids re-reading from disk during finalization — critical on Windows
+        // where every CreateFile triggers an AV scan.
+        auto it = preloaded_content_.find( path );
+        const std::string content = ( it != preloaded_content_.end() )
+                                    ? it->second
+                                    : read_entire_file( path );
+        cached = make_shared_fast<std::istringstream>( content );
     } else if( cached.use_count() > 2 ) {
         cached = make_shared_fast<std::istringstream>( cached->str() );
     }
     stream_cache->cache.insert( stream_cache_limit, path, cached );
     return cached;
 }
+
 
 void DynamicDataLoader::sort_deferred( deferred_json &data, std::string_view id_field )
 {
@@ -626,32 +637,43 @@ void DynamicDataLoader::load_data_from_path( const std::string &path, const std:
         loading_ui &ui )
 {
     assert( !finalized && "Can't load additional data after finalization.  Must be unloaded first." );
-    // We assume that each folder is consistent in itself,
-    // and all the previously loaded folders.
-    // E.g. the core might provide a vpart "frame-x"
-    // the first loaded mode might provide a vehicle that uses that frame
-    // But not the other way round.
 
-    // get a list of all files in the directory
     str_vec files = get_files_from_path( ".json", path, true, true );
     if( files.empty() ) {
         std::ifstream tmp( path.c_str(), std::ios::in );
         if( tmp ) {
-            // path is actually a file, don't checking the extension,
-            // assume we want to load this file anyway
             files.push_back( path );
         }
     }
-    // iterate over each file
+
+    // ── PHASE A (workers): parallel file reads ─────────────────────────────────
+    // Workers call ONLY read_entire_file().  No JSON parsing, no shared state.
+    // Each slot written by exactly one worker (index i) — no mutex needed.
+    std::vector<std::string> file_contents( files.size() );
+    parallel_for( 0, static_cast<int>( files.size() ), [&]( int i ) {
+        file_contents[i] = read_entire_file( files[i] );
+    } );
+
+    // ── PHASE BOUNDARY ─────────────────────────────────────────────────────────
+    // All file content is in memory.  No load_object has been called.
+    // preloaded_content_ is populated for use by get_cached_stream during
+    // finalization (deferred mapgen re-reads hit memory instead of disk).
     g_last_load_metrics = {};
     g_last_load_metrics.files = static_cast<int>( files.size() );
-    for( const auto &file : files ) {
-        auto content = read_entire_file( file );
-        g_last_load_metrics.bytes += content.size();
-        std::istringstream iss( std::move( content ) );
+    for( size_t i = 0; i < files.size(); ++i ) {
+        g_last_load_metrics.bytes += file_contents[i].size();
+        // try_emplace: first mod to load a path wins (mod-override semantics).
+        preloaded_content_.try_emplace( files[i], file_contents[i] );
+    }
+
+    // ── PHASE B (main thread): serial dispatch — original proven path ──────────
+    // Uses std::istringstream + load_all_from_json, identical to the original
+    // serial baseline.  std::move avoids a copy into the istringstream.
+    for( size_t i = 0; i < files.size(); ++i ) {
+        std::istringstream iss( std::move( file_contents[i] ) );
         try {
-            JsonIn jsin( iss, file );
-            load_all_from_json( jsin, src, ui, path, file );
+            JsonIn jsin( iss, files[i] );
+            load_all_from_json( jsin, src, ui, path, files[i] );
         } catch( const JsonError &err ) {
             throw std::runtime_error( err.what() );
         }
@@ -803,6 +825,7 @@ void DynamicDataLoader::finalize_loaded_data( loading_ui &ui )
 
     on_out_of_scope reset_stream_cache( [this]() {
         stream_cache.reset();
+        preloaded_content_.clear(); // free ~50 MB of pre-loaded JSON text
     } );
     stream_cache = std::make_unique<cached_streams>();
     g_deferred_stats = {};

@@ -7,6 +7,7 @@
 #include <string_view>
 #include <vector>
 #include <utility>
+#include <unordered_map>
 
 #include "catalua.h"
 #include "json.h"
@@ -75,6 +76,12 @@ class DynamicDataLoader
 
         struct cached_streams;
         std::unique_ptr<cached_streams> stream_cache;
+
+        // Pre-loaded file content keyed by absolute path.
+        // Populated during load_data_from_path; cleared at end of finalize_loaded_data.
+        // Used by get_cached_stream (deferred finalization) and get_preloaded_content
+        // (parallel mapgen setup) to eliminate repeated Defender-scanned file opens.
+        std::unordered_map<std::string, std::string> preloaded_content_;
 
         /**
          * Maps the type string (coming from json) to the
@@ -187,6 +194,7 @@ class DynamicDataLoader
          * cached stream is returned.
          */
         shared_ptr_fast<std::istream> get_cached_stream( const std::string &path );
+
 };
 
 namespace init
