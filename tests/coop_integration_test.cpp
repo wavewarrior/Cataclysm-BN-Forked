@@ -695,44 +695,46 @@ static auto make_target_ctx( const tripoint_abs_ms& pos ) -> std::string {
     return oss.str();
 }
 
-/// Shared host logic: spawn debug_mon 1 tile east of proxy, arm proxy with a
-/// knife so damage beats debug_mon regen (50 HP/turn), signal client,
+/// Shared host logic: spawn mon_zombie 1 tile east of proxy, signal client,
 /// then track min HP by monster IDENTITY (held shared_ptr) across ticks.
 ///
-/// Correctness notes:
-/// - debug_mon is IMMOBILE — no mobility false-pass (unlike mon_zombie which
-///   can walk away, making find(fixed_pos) null on a live, undamaged target).
-/// - Holding shared_ptr_fast<monster> prevents UAF if cleanup_dead runs.
-///   HP is read by identity (ptr->get_hp()), not by position re-lookup.
-/// - Proxy is unarmed by default (~3-8 bash/hit < 50 HP/turn regen).  Arming
-///   with knife_combat (~20-30 cut/hit) makes each attack net-positive vs regen.
-///   The proxy's weapon tests the RELAY chain, not the damage model.
-/// - coop_world_tick() order: world_step (regen) → proxy action (attack) → read.
-///   So we always capture the post-attack HP trough within the same tick.
+/// Target choice: mon_zombie (no regen, ~65-90 HP) — NOT debug_mon.
+/// debug_mon regenerates 50 HP/turn which outpaces the proxy's unarmed bash
+/// (~3-15/hit × COOP_HIT_ACTIONS).  The proxy is intentionally left UNARMED
+/// because production never syncs the client's melee weapon — the proxy always
+/// fights bare-fisted.  This test exercises the actual production path.
+/// NOTE: melee weapon is not synced (unlike FIRE which syncs weapon_id/ammo_id).
+/// Real co-op melee deals bare-fist damage regardless of the client's weapon.
+/// See plans/coop_networking_plan.md Known Limitations: CL-MELEE-WEAPON.
+///
+/// Identity tracking: hold shared_ptr_fast<monster> at spawn; read hp/is_dead
+/// by identity, not position.  Zombie adjacent to proxy attacks in place rather
+/// than moving, so target_abs stays valid, but identity tracking makes the test
+/// robust even if the zombie shifts tiles.
 static auto run_host_melee_family( coop_server& srv, coop_ctrl_server& ctrl,
                                     const std::string& done_signal ) -> void {
-    // Arm proxy with a melee weapon so hits outpace debug_mon's 50 HP/turn regen.
-    npc* proxy_mutable =
-        const_cast<npc*>( g->critter_by_id<npc>( coop_session::get().proxy_npc_id ) );
-    REQUIRE( proxy_mutable != nullptr );
-    proxy_mutable->wield( item::spawn( itype_id( "knife_combat" ) ) );
+    const npc* proxy_npc = g->critter_by_id<npc>( coop_session::get().proxy_npc_id );
+    REQUIRE( proxy_npc != nullptr );
+    // Proxy is intentionally unarmed — matches production behaviour.
 
-    // Spawn debug_mon 1 tile east of proxy.  Capture shared_ptr immediately so
-    // identity-based HP reads work even if critter_tracker position map changes.
-    const tripoint_bub_ms target_bpos = proxy_mutable->bub_pos() + tripoint( 1, 0, 0 );
-    spawn_test_monster( "debug_mon", target_bpos ); // registers in critter_tracker
+    // Spawn mon_zombie 1 tile east of proxy.  Capture shared_ptr immediately for
+    // identity-based HP reads: immune to UAF (shared_ptr keeps object alive) and to
+    // mobility false-pass (HP read by pointer identity, not position re-lookup).
+    const tripoint_bub_ms target_bpos = proxy_npc->bub_pos() + tripoint( 1, 0, 0 );
+    spawn_test_monster( "mon_zombie", target_bpos );
     const shared_ptr_fast<monster> target_ptr = g->critter_tracker->find( target_bpos );
     REQUIRE( target_ptr != nullptr );
     const int initial_hp = target_ptr->get_hp();
     const tripoint_abs_ms target_abs = target_ptr->abs_pos();
-    INFO( "debug_mon initial_hp=" << initial_hp );
+    INFO( "mon_zombie initial_hp=" << initial_hp );
 
     ctrl.send_signal( "MONSTER_POS " + std::to_string( target_abs.x() ) + " " +
                       std::to_string( target_abs.y() ) + " " +
                       std::to_string( target_abs.z() ) );
 
-    // Read HP by identity each tick — immune to position changes and UAF.
-    // Keep ticking COOP_POST_HIT_DRAIN times after done_signal to drain all queued actions.
+    // Track HP trough by identity each tick; drain COOP_POST_HIT_DRAIN extra ticks
+    // after done_signal to catch all queued actions before asserting.
+    // If zombie dies (min_hp=0 or is_dead_state) the assertion trivially holds.
     int  min_hp     = initial_hp;
     bool done       = false;
     int  post_ticks = 0;
@@ -740,7 +742,12 @@ static auto run_host_melee_family( coop_server& srv, coop_ctrl_server& ctrl,
         std::chrono::steady_clock::now() + std::chrono::milliseconds( 20'000 );
     while( std::chrono::steady_clock::now() < deadline ) {
         srv.coop_world_tick();
-        min_hp = std::min( min_hp, target_ptr->get_hp() ); // identity, not position
+        if( target_ptr->is_dead_state() ) {
+            min_hp = 0; // zombie died — damage confirmed
+            done   = true;
+        } else {
+            min_hp = std::min( min_hp, target_ptr->get_hp() );
+        }
         SDL_Delay( 50 );
         std::string sig;
         if( !done && ctrl.try_recv_line( sig ) && sig == done_signal ) { done = true; }
@@ -748,7 +755,7 @@ static auto run_host_melee_family( coop_server& srv, coop_ctrl_server& ctrl,
     }
     for( int i = 0; i < 5; ++i ) { srv.coop_world_tick(); SDL_Delay( 50 ); }
 
-    INFO( "debug_mon min_hp=" << min_hp );
+    INFO( "mon_zombie min_hp=" << min_hp << " (initial=" << initial_hp << ")" );
     CHECK( min_hp < initial_hp );
 }
 
@@ -936,6 +943,80 @@ static auto run_client_ranged( coop_client& cli, coop_ctrl_client& ctrl ) -> voi
 }
 
 // ---------------------------------------------------------------------------
+// Terrain-change scenario (C2b round-trip verification)
+//
+// Host places t_door_c 1 tile south of spawn before initial sync (client sees
+// it in the 5×5 blast).  Client queues a TERRAIN_CHANGE to open it.  Host
+// asserts the door is t_door_o after processing.
+// This tests the client-detect→serialize→send path; apply_terrain_change is
+// already covered by coop_terrain_test.cpp unit tests.
+// ---------------------------------------------------------------------------
+
+static auto run_host_terrain_change( coop_server& srv, coop_ctrl_server& ctrl ) -> void {
+    // Compute door absolute position at scenario start (before any world ticks that
+    // might shift the reality bubble).  Store as ABSOLUTE and reconvert to bub at each
+    // read — using a stale bub coordinate after a bubble shift maps to the wrong tile.
+    const tripoint_bub_ms door_bpos_init = g->m.abs_to_bub( g->u.abs_pos() ) + tripoint( 0, 1, 0 );
+    const tripoint_abs_ms door_abs       = g->m.bub_to_abs( door_bpos_init );
+    // Fresh bub at read time — immune to bubble shifts.
+    const auto fresh_bpos = [&]() { return g->m.abs_to_bub( door_abs ); };
+
+    REQUIRE( g->m.ter( fresh_bpos() ) == ter_id( "t_door_c" ) ); // pre-sync placement held
+
+    ctrl.send_signal( "DOOR_POS " + std::to_string( door_abs.x() ) + " " +
+                      std::to_string( door_abs.y() ) + " " +
+                      std::to_string( door_abs.z() ) );
+
+    bool done       = false;
+    int  post_ticks = 0;
+    bool terrain_ok = false;
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::milliseconds( 20'000 );
+    while( std::chrono::steady_clock::now() < deadline ) {
+        srv.coop_world_tick();
+        if( g->m.ter( fresh_bpos() ) == ter_id( "t_door_o" ) ) { terrain_ok = true; }
+        SDL_Delay( 50 );
+        std::string sig;
+        if( !done && ctrl.try_recv_line( sig ) && sig == "TERRAIN_DONE" ) { done = true; }
+        if( done && ++post_ticks >= 6 ) { break; }
+    }
+    for( int i = 0; i < 5; ++i ) { srv.coop_world_tick(); SDL_Delay( 50 ); }
+
+    INFO( "door_abs=(" << door_abs.x() << "," << door_abs.y() << "," << door_abs.z() << ")"
+          << " final_ter=" << g->m.ter( fresh_bpos() ).id().str()
+          << " terrain_ok=" << terrain_ok );
+    CHECK( terrain_ok );
+}
+
+static auto run_client_terrain_change( coop_client& cli, coop_ctrl_client& ctrl ) -> void {
+    // Wait for host to send door position.
+    std::string pos_sig;
+    REQUIRE( ctrl.recv_line( pos_sig, FILE_POLL_TIMEOUT_MS ) );
+    int dx = 0, dy = 0, dz = 0;
+    std::istringstream iss( pos_sig );
+    std::string tag;
+    iss >> tag >> dx >> dy >> dz;
+    REQUIRE( tag == "DOOR_POS" );
+    const tripoint_abs_ms door_abs{ dx, dy, dz };
+
+    // Queue TERRAIN_CHANGE: closed door → open door.
+    // queue_terrain_change is the same public API the game calls from handle_action.cpp.
+    cli.queue_terrain_change( door_abs, "t_door_o", "" );
+
+    // Run enough ticks to flush the action (1 action sent per tick).
+    for( int i = 0; i < 8; ++i ) { cli.coop_world_tick(); SDL_Delay( 50 ); }
+    ctrl.send_signal( "TERRAIN_DONE" );
+
+    // Keep connection alive while host asserts.
+    const auto done_deadline =
+        std::chrono::steady_clock::now() + std::chrono::milliseconds( 10'000 );
+    while( std::chrono::steady_clock::now() < done_deadline ) {
+        cli.coop_world_tick();
+        SDL_Delay( 50 );
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Host role
 // ---------------------------------------------------------------------------
 
@@ -985,6 +1066,11 @@ TEST_CASE( "coop integration: host role", "[.][coop_role_host]" ) {
     if( scenario == "pickup" ) {
         g->m.add_item( PICKUP_TILE, item::spawn( PICKUP_KNIFE_ID, calendar::turn,
                                                  item::solitary_tag{} ) );
+    } else if( scenario == "terrain_change" ) {
+        // Place a closed door 1 tile south of spawn — client will open it.
+        // Must happen before initial sync so the client sees t_door_c in the blast.
+        const tripoint_bub_ms door_bpos = g->m.abs_to_bub( spawn_abs ) + tripoint( 0, 1, 0 );
+        g->m.ter_set( door_bpos, ter_id( "t_door_c" ) );
     }
 
     REQUIRE( srv.send_initial_sync() );
@@ -1013,6 +1099,8 @@ TEST_CASE( "coop integration: host role", "[.][coop_role_host]" ) {
         run_host_melee( srv, ctrl );
     } else if( scenario == "smash" ) {
         run_host_smash( srv, ctrl );
+    } else if( scenario == "terrain_change" ) {
+        run_host_terrain_change( srv, ctrl );
     } else {
         FAIL( "unknown COOP_SCENARIO: " + scenario );
     }
@@ -1068,6 +1156,8 @@ TEST_CASE( "coop integration: client role", "[.][coop_role_client]" ) {
         run_client_melee( cli, ctrl );
     } else if( scenario == "smash" ) {
         run_client_smash( cli, ctrl );
+    } else if( scenario == "terrain_change" ) {
+        run_client_terrain_change( cli, ctrl );
     } else {
         FAIL( "unknown COOP_SCENARIO: " + scenario );
     }
