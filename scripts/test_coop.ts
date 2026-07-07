@@ -21,13 +21,13 @@
 // Configuration
 // ---------------------------------------------------------------------------
 
-const GLOBAL_TIMEOUT_MS = 180_000  // 180 s hard cap — both processes together
+const GLOBAL_TIMEOUT_MS = 300_000  // 300 s hard cap — two cold data loads (~50 s each) + scenario
 
 /// Per-phase soft deadlines.  A phase that exceeds its deadline emits a
 /// warning rather than killing the test — the global timeout is the hard gate.
 const PHASE_TIMEOUTS_MS = {
-  handshake:  30_000,  // "handshake complete" must appear in BOTH roles' stderr within 30 s
-  scenario:   90_000,  // scenario-specific assertion within 90 s of handshake
+  handshake:  60_000,  // "handshake complete" must appear in BOTH roles' stderr within 60 s
+  scenario:   120_000, // scenario-specific assertion within 120 s of handshake
 }
 
 /// Log lines that mark phase transitions (searched in streamed stderr).

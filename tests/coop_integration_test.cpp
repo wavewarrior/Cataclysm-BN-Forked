@@ -35,6 +35,7 @@
 #include "item.h"
 #include "map_helpers.h"
 #include "monster.h"
+#include "creature_tracker.h"
 #include "state_helpers.h"
 #include "type_id.h"
 
@@ -671,6 +672,148 @@ static auto run_client_death( coop_client& cli, coop_ctrl_client& ctrl ) -> void
 }
 
 // ---------------------------------------------------------------------------
+// Shared helpers for melee-family E2E scenarios (MELEE + SMASH)
+//
+// Both actions call proxy->melee_attack() on the server when a monster occupies
+// the target tile.  debug_mon has huge HP so the raw reference stays valid
+// across all ticks (no UAF from cleanup_dead).  min_hp tracks the damage trough
+// across every tick, capturing damage before regen can recover it.
+// ---------------------------------------------------------------------------
+
+static constexpr int         COOP_HIT_ACTIONS    = 5;   ///< melee/smash actions queued per scenario
+static constexpr int         COOP_POST_HIT_DRAIN = 8;   ///< ticks after *_DONE to drain all actions
+
+/// Build a target ctx_json {"tx":X,"ty":Y,"tz":Z} used by MELEE and SMASH.
+static auto make_target_ctx( const tripoint_abs_ms& pos ) -> std::string {
+    std::ostringstream oss;
+    JsonOut jout( oss );
+    jout.start_object();
+    jout.member( "tx", pos.x() );
+    jout.member( "ty", pos.y() );
+    jout.member( "tz", pos.z() );
+    jout.end_object();
+    return oss.str();
+}
+
+/// Shared host logic: spawn debug_mon 1 tile east of proxy, arm proxy with a
+/// knife so damage beats debug_mon regen (50 HP/turn), signal client,
+/// then track min HP by monster IDENTITY (held shared_ptr) across ticks.
+///
+/// Correctness notes:
+/// - debug_mon is IMMOBILE — no mobility false-pass (unlike mon_zombie which
+///   can walk away, making find(fixed_pos) null on a live, undamaged target).
+/// - Holding shared_ptr_fast<monster> prevents UAF if cleanup_dead runs.
+///   HP is read by identity (ptr->get_hp()), not by position re-lookup.
+/// - Proxy is unarmed by default (~3-8 bash/hit < 50 HP/turn regen).  Arming
+///   with knife_combat (~20-30 cut/hit) makes each attack net-positive vs regen.
+///   The proxy's weapon tests the RELAY chain, not the damage model.
+/// - coop_world_tick() order: world_step (regen) → proxy action (attack) → read.
+///   So we always capture the post-attack HP trough within the same tick.
+static auto run_host_melee_family( coop_server& srv, coop_ctrl_server& ctrl,
+                                    const std::string& done_signal ) -> void {
+    // Arm proxy with a melee weapon so hits outpace debug_mon's 50 HP/turn regen.
+    npc* proxy_mutable =
+        const_cast<npc*>( g->critter_by_id<npc>( coop_session::get().proxy_npc_id ) );
+    REQUIRE( proxy_mutable != nullptr );
+    proxy_mutable->wield( item::spawn( itype_id( "knife_combat" ) ) );
+
+    // Spawn debug_mon 1 tile east of proxy.  Capture shared_ptr immediately so
+    // identity-based HP reads work even if critter_tracker position map changes.
+    const tripoint_bub_ms target_bpos = proxy_mutable->bub_pos() + tripoint( 1, 0, 0 );
+    spawn_test_monster( "debug_mon", target_bpos ); // registers in critter_tracker
+    const shared_ptr_fast<monster> target_ptr = g->critter_tracker->find( target_bpos );
+    REQUIRE( target_ptr != nullptr );
+    const int initial_hp = target_ptr->get_hp();
+    const tripoint_abs_ms target_abs = target_ptr->abs_pos();
+    INFO( "debug_mon initial_hp=" << initial_hp );
+
+    ctrl.send_signal( "MONSTER_POS " + std::to_string( target_abs.x() ) + " " +
+                      std::to_string( target_abs.y() ) + " " +
+                      std::to_string( target_abs.z() ) );
+
+    // Read HP by identity each tick — immune to position changes and UAF.
+    // Keep ticking COOP_POST_HIT_DRAIN times after done_signal to drain all queued actions.
+    int  min_hp     = initial_hp;
+    bool done       = false;
+    int  post_ticks = 0;
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::milliseconds( 20'000 );
+    while( std::chrono::steady_clock::now() < deadline ) {
+        srv.coop_world_tick();
+        min_hp = std::min( min_hp, target_ptr->get_hp() ); // identity, not position
+        SDL_Delay( 50 );
+        std::string sig;
+        if( !done && ctrl.try_recv_line( sig ) && sig == done_signal ) { done = true; }
+        if( done && ++post_ticks >= COOP_POST_HIT_DRAIN ) { break; }
+    }
+    for( int i = 0; i < 5; ++i ) { srv.coop_world_tick(); SDL_Delay( 50 ); }
+
+    INFO( "debug_mon min_hp=" << min_hp );
+    CHECK( min_hp < initial_hp );
+}
+
+/// Shared client logic: receive monster position, queue N actions, send done signal,
+/// then keep connection alive while host asserts.
+static auto run_client_melee_family( coop_client& cli, coop_ctrl_client& ctrl,
+                                      const std::string& action_key,
+                                      const std::string& done_signal ) -> void {
+    std::string pos_sig;
+    REQUIRE( ctrl.recv_line( pos_sig, FILE_POLL_TIMEOUT_MS ) );
+    int mx = 0, my = 0, mz = 0;
+    std::istringstream iss( pos_sig );
+    std::string tag;
+    iss >> tag >> mx >> my >> mz;
+    REQUIRE( tag == "MONSTER_POS" );
+    const auto ctx = make_target_ctx( tripoint_abs_ms{ mx, my, mz } );
+
+    for( int i = 0; i < COOP_HIT_ACTIONS; ++i ) { cli.queue_action( action_key, ctx ); }
+    // Run COOP_HIT_ACTIONS + 3 ticks to flush all queued actions (1 sent per tick).
+    for( int i = 0; i < COOP_HIT_ACTIONS + 3; ++i ) { cli.coop_world_tick(); SDL_Delay( 50 ); }
+    ctrl.send_signal( done_signal );
+
+    // Keep connection alive while host reads min_hp + trailing ticks.
+    const auto done_deadline =
+        std::chrono::steady_clock::now() + std::chrono::milliseconds( 10'000 );
+    while( std::chrono::steady_clock::now() < done_deadline ) {
+        cli.coop_world_tick();
+        SDL_Delay( 50 );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// MELEE scenario
+//
+// Client queues COOP_HIT_ACTIONS MELEE actions targeting a debug_mon 1 tile
+// east of the proxy.  Server routes MELEE → execute_player_cmd(K::melee) →
+// proxy->melee_attack(*mon_ptr, true).  Host asserts min HP dropped.
+// ---------------------------------------------------------------------------
+
+static auto run_host_melee( coop_server& srv, coop_ctrl_server& ctrl ) -> void {
+    run_host_melee_family( srv, ctrl, "MELEE_DONE" );
+}
+
+static auto run_client_melee( coop_client& cli, coop_ctrl_client& ctrl ) -> void {
+    run_client_melee_family( cli, ctrl, "MELEE", "MELEE_DONE" );
+}
+
+// ---------------------------------------------------------------------------
+// SMASH scenario
+//
+// Client queues COOP_HIT_ACTIONS SMASH actions at the same monster tile.
+// Server routes SMASH → execute_player_cmd(K::smash) → monster present →
+// proxy->melee_attack(*mon_ptr, true).  Shares the same assertion as MELEE
+// but exercises the distinct SMASH code path.
+// ---------------------------------------------------------------------------
+
+static auto run_host_smash( coop_server& srv, coop_ctrl_server& ctrl ) -> void {
+    run_host_melee_family( srv, ctrl, "SMASH_DONE" );
+}
+
+static auto run_client_smash( coop_client& cli, coop_ctrl_client& ctrl ) -> void {
+    run_client_melee_family( cli, ctrl, "SMASH", "SMASH_DONE" );
+}
+
+// ---------------------------------------------------------------------------
 // Ranged scenario (CL-RANGED verification)
 //
 // Client arms itself with a glock_20, queues COOP_FIRE_SHOTS FIRE actions at
@@ -866,6 +1009,10 @@ TEST_CASE( "coop integration: host role", "[.][coop_role_host]" ) {
         run_host_death( srv, ctrl );
     } else if( scenario == "ranged" ) {
         run_host_ranged( srv, ctrl );
+    } else if( scenario == "melee" ) {
+        run_host_melee( srv, ctrl );
+    } else if( scenario == "smash" ) {
+        run_host_smash( srv, ctrl );
     } else {
         FAIL( "unknown COOP_SCENARIO: " + scenario );
     }
@@ -917,6 +1064,10 @@ TEST_CASE( "coop integration: client role", "[.][coop_role_client]" ) {
         run_client_death( cli, ctrl );
     } else if( scenario == "ranged" ) {
         run_client_ranged( cli, ctrl );
+    } else if( scenario == "melee" ) {
+        run_client_melee( cli, ctrl );
+    } else if( scenario == "smash" ) {
+        run_client_smash( cli, ctrl );
     } else {
         FAIL( "unknown COOP_SCENARIO: " + scenario );
     }
