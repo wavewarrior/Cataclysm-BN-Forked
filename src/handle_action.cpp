@@ -3518,12 +3518,23 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                     // Absolute coords are globally consistent — bub coords differ per machine.
                     if (coop_client_ && u.last_target_pos.has_value()) {
                         const auto& tap = *u.last_target_pos;
-                        // Use to_string — locale-independent; ostringstream uses the global
-                        // locale which on en_US adds thousands separators, breaking JSON.
-                        const auto ctx =
-                            "{\"tx\":" + std::to_string(tap.x()) + ",\"ty\":"
-                            + std::to_string(tap.y()) + ",\"tz\":" + std::to_string(tap.z()) + "}";
-                        coop_client_->queue_action("FIRE", ctx);
+                        // CL-RANGED: embed weapon+ammo at fire time so the server arms the
+                        // proxy with exactly the weapon the client fired, not a stale heartbeat.
+                        std::ostringstream ctx_oss;
+                        JsonOut ctx_jout(ctx_oss);
+                        ctx_jout.start_object();
+                        ctx_jout.member("tx", tap.x());
+                        ctx_jout.member("ty", tap.y());
+                        ctx_jout.member("tz", tap.z());
+                        if (u.is_armed() && u.primary_weapon().is_gun()) {
+                            ctx_jout.member("weapon_id", u.primary_weapon().typeId().str());
+                            const itype_id cur_ammo = u.primary_weapon().ammo_current();
+                            if (!cur_ammo.is_null()) {
+                                ctx_jout.member("ammo_id", cur_ammo.str());
+                            }
+                        }
+                        ctx_jout.end_object();
+                        coop_client_->queue_action("FIRE", ctx_oss.str());
                     }
                 });
                 break;
@@ -4081,10 +4092,21 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
             // Burst runs inline; last_target_pos is valid immediately.
             if (u.last_target_pos.has_value()) {
                 const auto& tap = *u.last_target_pos;
-                const auto ctx =
-                    "{\"tx\":" + std::to_string(tap.x()) + ",\"ty\":" + std::to_string(tap.y())
-                    + ",\"tz\":" + std::to_string(tap.z()) + "}";
-                coop_client_->queue_action("FIRE", ctx);
+                std::ostringstream ctx_oss;
+                JsonOut ctx_jout(ctx_oss);
+                ctx_jout.start_object();
+                ctx_jout.member("tx", tap.x());
+                ctx_jout.member("ty", tap.y());
+                ctx_jout.member("tz", tap.z());
+                if (u.is_armed() && u.primary_weapon().is_gun()) {
+                    ctx_jout.member("weapon_id", u.primary_weapon().typeId().str());
+                    const itype_id cur_ammo = u.primary_weapon().ammo_current();
+                    if (!cur_ammo.is_null()) {
+                        ctx_jout.member("ammo_id", cur_ammo.str());
+                    }
+                }
+                ctx_jout.end_object();
+                coop_client_->queue_action("FIRE", ctx_oss.str());
             }
         } else if (act == ACTION_MOVE_UP || act == ACTION_MOVE_DOWN) {
             // Queue only if vertical_move() actually changed z — it can fail (no stairs,

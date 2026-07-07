@@ -33,6 +33,8 @@
 #include "mapdata.h"
 #include "npc.h"
 #include "item.h"
+#include "map_helpers.h"
+#include "monster.h"
 #include "state_helpers.h"
 #include "type_id.h"
 
@@ -669,6 +671,128 @@ static auto run_client_death( coop_client& cli, coop_ctrl_client& ctrl ) -> void
 }
 
 // ---------------------------------------------------------------------------
+// Ranged scenario (CL-RANGED verification)
+//
+// Client arms itself with a glock_20, queues COOP_FIRE_SHOTS FIRE actions at
+// a debug_mon spawned 1 tile east of the proxy.  Host asserts the monster took
+// damage — verifies the arm→ammo_set→wield→fire_gun chain.
+// debug_mon has huge HP so it survives all 10 shots; the raw reference into
+// critter_tracker stays valid for the entire test (no UAF risk from cleanup_dead).
+// ---------------------------------------------------------------------------
+
+static constexpr int         COOP_FIRE_SHOTS    = 10;
+static constexpr const char* RANGED_WEAPON_ID   = "glock_20";
+static constexpr const char* RANGED_AMMO_ID     = "10mm_fmj";
+static constexpr const char* RANGED_TARGET_TYPE = "debug_mon"; // huge HP, survives all shots
+
+static auto run_host_ranged( coop_server& srv, coop_ctrl_server& ctrl ) -> void {
+    // Spawn zombie 1 tile east of the proxy spawn position.
+    const npc* proxy_npc = g->critter_by_id<npc>( coop_session::get().proxy_npc_id );
+    REQUIRE( proxy_npc != nullptr );
+    const tripoint_bub_ms zombie_bpos = proxy_npc->bub_pos() + tripoint( 1, 0, 0 );
+    monster& zomb = spawn_test_monster( RANGED_TARGET_TYPE, zombie_bpos );
+    const int initial_hp = zomb.get_hp();
+    INFO( "zombie initial_hp=" << initial_hp << " at bub=(" << zombie_bpos.x()
+          << "," << zombie_bpos.y() << ")" );
+
+    // Tell client the zombie's absolute position so it can aim at it.
+    const tripoint_abs_ms zombie_abs = zomb.abs_pos();
+    ctrl.send_signal( "MONSTER_POS " + std::to_string( zombie_abs.x() ) + " " +
+                      std::to_string( zombie_abs.y() ) + " " +
+                      std::to_string( zombie_abs.z() ) );
+
+    // Tick until all FIRE actions have been processed (or timeout).
+    //
+    // Timing note: FIRE_DONE arrives on the ctrl socket as soon as the client finishes
+    // queuing all 10 actions (after 15 client ticks), but the host drains ONE action per
+    // world tick — so many FIRE actions are still in-flight when FIRE_DONE arrives.
+    // debug_mon regenerates 50 HP/turn so reading after a long wait risks regen erasing
+    // damage.  Solution: track min_hp across every tick; keep ticking POST_DONE_DRAIN
+    // more ticks after FIRE_DONE to drain all 10 queued actions, then assert the trough.
+    static constexpr int POST_DONE_DRAIN = 12; // drains 10 actions + rounding buffer
+    int  min_hp      = initial_hp;
+    bool fire_done   = false;
+    int  post_ticks  = 0;
+    const auto fire_deadline =
+        std::chrono::steady_clock::now() + std::chrono::milliseconds( 30'000 );
+    while( std::chrono::steady_clock::now() < fire_deadline ) {
+        srv.coop_world_tick();
+        min_hp = std::min( min_hp, zomb.get_hp() ); // capture trough before regen
+        SDL_Delay( 50 );
+        std::string sig;
+        if( !fire_done && ctrl.try_recv_line( sig ) && sig == "FIRE_DONE" ) {
+            fire_done = true;
+        }
+        if( fire_done && ++post_ticks >= POST_DONE_DRAIN ) { break; }
+    }
+
+    // Let the final sync reach the client.
+    for( int i = 0; i < 5; ++i ) { srv.coop_world_tick(); SDL_Delay( 50 ); }
+
+    // min_hp captures the lowest HP seen across all ticks — damage registered even if
+    // regen partially recovered before the final read.
+    INFO( "debug_mon: initial_hp=" << initial_hp << " min_hp=" << min_hp );
+    CHECK( min_hp < initial_hp );
+}
+
+static auto run_client_ranged( coop_client& cli, coop_ctrl_client& ctrl ) -> void {
+    // Arm the client avatar with a pistol so weapon_id/ammo_id embed in FIRE ctx.
+    const itype_id wid( RANGED_WEAPON_ID );
+    const itype_id aid( RANGED_AMMO_ID );
+    REQUIRE( wid.is_valid() );
+    REQUIRE( aid.is_valid() );
+    auto weapon = item::spawn( wid );
+    weapon->ammo_set( aid );
+    g->u.wield( std::move( weapon ) );
+    REQUIRE( g->u.is_armed() );
+    REQUIRE( g->u.primary_weapon().is_gun() );
+
+    // Wait for host to send monster position.
+    std::string pos_sig;
+    REQUIRE( ctrl.recv_line( pos_sig, FILE_POLL_TIMEOUT_MS ) );
+    INFO( "client received: " << pos_sig );
+    // Parse "MONSTER_POS x y z"
+    int mx = 0, my = 0, mz = 0;
+    std::istringstream iss( pos_sig );
+    std::string tag;
+    iss >> tag >> mx >> my >> mz;
+    REQUIRE( tag == "MONSTER_POS" );
+    const tripoint_abs_ms target_abs{ mx, my, mz };
+
+    // Queue COOP_FIRE_SHOTS FIRE actions all aimed at the zombie.
+    // Each action carries weapon_id + ammo_id so the server arms the proxy per shot.
+    const auto& wep = g->u.primary_weapon();
+    const itype_id cur_ammo = wep.ammo_current();
+    for( int i = 0; i < COOP_FIRE_SHOTS; ++i ) {
+        std::ostringstream ctx_oss;
+        JsonOut ctx_jout( ctx_oss );
+        ctx_jout.start_object();
+        ctx_jout.member( "tx", target_abs.x() );
+        ctx_jout.member( "ty", target_abs.y() );
+        ctx_jout.member( "tz", target_abs.z() );
+        ctx_jout.member( "weapon_id", wep.typeId().str() );
+        if( !cur_ammo.is_null() ) { ctx_jout.member( "ammo_id", cur_ammo.str() ); }
+        ctx_jout.end_object();
+        cli.queue_action( "FIRE", ctx_oss.str() );
+    }
+
+    // Run world ticks to flush all actions to the host (one action is sent per tick).
+    for( int i = 0; i < COOP_FIRE_SHOTS + 5; ++i ) {
+        cli.coop_world_tick();
+        SDL_Delay( 50 );
+    }
+    ctrl.send_signal( "FIRE_DONE" );
+
+    // Keep connection alive while host asserts.
+    const auto done_deadline =
+        std::chrono::steady_clock::now() + std::chrono::milliseconds( 10'000 );
+    while( std::chrono::steady_clock::now() < done_deadline ) {
+        cli.coop_world_tick();
+        SDL_Delay( 50 );
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Host role
 // ---------------------------------------------------------------------------
 
@@ -740,6 +864,8 @@ TEST_CASE( "coop integration: host role", "[.][coop_role_host]" ) {
         run_host_submap_shift( srv, ctrl );
     } else if( scenario == "death" ) {
         run_host_death( srv, ctrl );
+    } else if( scenario == "ranged" ) {
+        run_host_ranged( srv, ctrl );
     } else {
         FAIL( "unknown COOP_SCENARIO: " + scenario );
     }
@@ -789,6 +915,8 @@ TEST_CASE( "coop integration: client role", "[.][coop_role_client]" ) {
         run_client_submap_shift( cli, ctrl );
     } else if( scenario == "death" ) {
         run_client_death( cli, ctrl );
+    } else if( scenario == "ranged" ) {
+        run_client_ranged( cli, ctrl );
     } else {
         FAIL( "unknown COOP_SCENARIO: " + scenario );
     }

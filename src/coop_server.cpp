@@ -717,7 +717,38 @@ auto coop_server::execute_client_action(
             // B3 Phase 6: parse abs coords → typed command → execute_player_cmd.
             const tripoint_abs_ms abs_tpos{
                 ctx.get_int("tx", 0), ctx.get_int("ty", 0), ctx.get_int("tz", 0)};
+            // CL-RANGED: arm proxy with the client's weapon embedded in this action's ctx.
+            // weapon_id/ammo_id ride in ctx (same seq unit) — not the heartbeat — so they
+            // reflect the weapon that was actually fired, not a later swap.
+            // Both fields are untrusted peer input; validate with is_valid() before use.
+            bool armed_for_shot = false;
+            const auto wid_str = ctx.get_string("weapon_id", "");
+            if (!wid_str.empty()) {
+                const itype_id wid(wid_str);
+                if (wid.is_valid()) {
+                    auto weapon = item::spawn(wid);
+                    if (weapon->is_gun()) {
+                        const auto aid_str = ctx.get_string("ammo_id", "");
+                        if (!aid_str.empty()) {
+                            const itype_id aid(aid_str);
+                            if (aid.is_valid()) { weapon->ammo_set(aid); }
+                        }
+                        proxy->wield(std::move(weapon));
+                        armed_for_shot = true;
+                    } else {
+                        DebugLog(DL::Error, DC::Main)
+                            << "[coop] FIRE seq=" << seq
+                            << ": weapon_id '" << wid_str << "' is not a gun — shot skipped";
+                    }
+                } else {
+                    DebugLog(DL::Error, DC::Main)
+                        << "[coop] FIRE seq=" << seq
+                        << ": unknown weapon_id '" << wid_str << "' — shot skipped";
+                }
+            }
             execute_player_cmd(proxy, make_player_fire_cmd(abs_tpos), seq);
+            // Disarm after the shot — proxy must not retain client's weapon between actions.
+            if (armed_for_shot) { proxy->remove_primary_weapon(); }
         } else {
             DebugLog(DL::Info, DC::Main) << "[coop] FIRE seq=" << seq << ": no target context";
             proxy->moves -= proxy->get_speed();
