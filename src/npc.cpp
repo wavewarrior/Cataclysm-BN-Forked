@@ -2581,6 +2581,15 @@ bool npc::dispose_item(item& obj, const std::string&) {
 }
 
 void npc::process_turn() {
+#ifdef COOP_ENABLED
+    // Co-op proxy NPC: all character stats (hunger, thirst, morale, effects) are
+    // owned by the client.  Skipping process_turn() prevents spurious morale-
+    // consistency errors and avoids double-advancing proxy vitals on the host.
+    // Moves are granted manually by coop_world_tick() → execute_client_action().
+    if (is_coop_remote) {
+        return;
+    }
+#endif
     player::process_turn();
 
     if (is_player_ally() && calendar::once_every(1_hours) && get_kcal_percent() > 0.95
