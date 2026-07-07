@@ -269,6 +269,30 @@
       "TESTS": "ON"
     }
   }
+  ,
+  {
+    "name": "ci-coop-tsan",
+    "inherits": ["ci-coop"],
+    "binaryDir": "${sourceDir}/build-coop-tsan",
+    "displayName": "CI Co-op TSan (thread sanitizer)",
+    "description": "Co-op build with -fsanitize=thread to detect data races in receiver_thread_.",
+    "cacheVariables": {
+      "CMAKE_CXX_FLAGS": "-fsanitize=thread -fno-omit-frame-pointer",
+      "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=thread"
+    }
+  }
+  ,
+  {
+    "name": "ci-coop-asan",
+    "inherits": ["ci-coop"],
+    "binaryDir": "${sourceDir}/build-coop-asan",
+    "displayName": "CI Co-op ASan+UBSan (address + undefined behaviour)",
+    "description": "Co-op build with -fsanitize=address,undefined to detect memory errors and UB.",
+    "cacheVariables": {
+      "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer",
+      "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined"
+    }
+  }
   ],
   "buildPresets": [
     {
@@ -366,6 +390,20 @@
     "configurePreset": "osx-coop",
     "targets": ["cataclysm-bn-tiles", "cata_test-tiles"],
     "description": "macOS ARM Co-op build (COOP=ON). Builds game binary and test binary for local E2E runs."
+  }
+  ,
+  {
+    "name": "ci-coop-tsan",
+    "configurePreset": "ci-coop-tsan",
+    "targets": ["cataclysm-bn-tiles", "cata_test-tiles"],
+    "description": "TSan-instrumented co-op build."
+  }
+  ,
+  {
+    "name": "ci-coop-asan",
+    "configurePreset": "ci-coop-asan",
+    "targets": ["cataclysm-bn-tiles", "cata_test-tiles"],
+    "description": "ASan+UBSan-instrumented co-op build."
   }
   ]
 }

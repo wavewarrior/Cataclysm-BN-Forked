@@ -297,6 +297,140 @@ jobs:
           path: build-coop/tests/cata_test-tiles
           if-no-files-found: ignore
 
+  coop_tsan:
+    needs: skip-duplicates
+    if: ${{ needs.skip-duplicates.outputs.should_skip_code != 'true' }}
+    name: "co-op TSan (thread sanitizer)"
+    runs-on: ubuntu-latest
+    env:
+      SKIP: ${{ needs.skip-duplicates.outputs.should_skip_code }}
+    steps:
+      - name: checkout repository
+        if: ${{ env.SKIP != 'true' }}
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: install dependencies
+        if: ${{ env.SKIP != 'true' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-14 mold ninja-build ccache \
+            libasound2-dev libpulse-dev libx11-dev libxext-dev libxrandr-dev \
+            libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxkbcommon-dev \
+            libdrm-dev libgbm-dev libgl1-mesa-dev libgles2-mesa-dev libegl1-mesa-dev \
+            libdbus-1-dev libibus-1.0-dev libudev-dev libwayland-dev libdecor-0-dev \
+            libfreetype-dev libharfbuzz-dev \
+            libtiff-dev libavif-dev libwebp-dev libjpeg-dev libjxl-dev \
+            libflac-dev libvorbis-dev libxmp-dev libmpg123-dev libwavpack-dev \
+            libsqlite3-dev zlib1g-dev gettext libncursesw5-dev
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 100
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 100
+
+      - name: setup ccache
+        if: ${{ env.SKIP != 'true' }}
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: linux-gcc-coop-tsan-${{ github.ref_name }}
+          restore-keys: |
+            linux-gcc-coop-tsan-main
+            linux-gcc-coop-tsan-
+          max-size: 3G
+          save: ${{ github.event_name != 'pull_request' }}
+
+      - name: configure and build (COOP=ON, TSan)
+        if: ${{ env.SKIP != 'true' }}
+        uses: lukka/run-cmake@v10
+        with:
+          configurePreset: ci-coop-tsan
+          configurePresetAdditionalArgs: "['-DUSE_PREFIX_DATA_DIR=OFF']"
+          buildPreset: ci-coop-tsan
+          buildPresetAdditionalArgs: "['-j', '2']"
+
+      - name: run co-op tests (TSan)
+        if: ${{ env.SKIP != 'true' }}
+        run: |
+          ./build-coop-tsan/tests/cata_test-tiles \
+            --user-dir=test_user_dir \
+            --use-colour yes \
+            --error-format=github-action \
+            "[coop]"
+
+      - name: upload test binary on failure
+        uses: actions/upload-artifact@v4.6.0
+        if: failure()
+        with:
+          name: cata_test-tiles-coop-tsan
+          path: build-coop-tsan/tests/cata_test-tiles
+          if-no-files-found: ignore
+
+  coop_asan:
+    needs: skip-duplicates
+    if: ${{ needs.skip-duplicates.outputs.should_skip_code != 'true' }}
+    name: "co-op ASan+UBSan (address + undefined behaviour)"
+    runs-on: ubuntu-latest
+    env:
+      SKIP: ${{ needs.skip-duplicates.outputs.should_skip_code }}
+    steps:
+      - name: checkout repository
+        if: ${{ env.SKIP != 'true' }}
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: install dependencies
+        if: ${{ env.SKIP != 'true' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-14 mold ninja-build ccache \
+            libasound2-dev libpulse-dev libx11-dev libxext-dev libxrandr-dev \
+            libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxkbcommon-dev \
+            libdrm-dev libgbm-dev libgl1-mesa-dev libgles2-mesa-dev libegl1-mesa-dev \
+            libdbus-1-dev libibus-1.0-dev libudev-dev libwayland-dev libdecor-0-dev \
+            libfreetype-dev libharfbuzz-dev \
+            libtiff-dev libavif-dev libwebp-dev libjpeg-dev libjxl-dev \
+            libflac-dev libvorbis-dev libxmp-dev libmpg123-dev libwavpack-dev \
+            libsqlite3-dev zlib1g-dev gettext libncursesw5-dev
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 100
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 100
+
+      - name: setup ccache
+        if: ${{ env.SKIP != 'true' }}
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: linux-gcc-coop-asan-${{ github.ref_name }}
+          restore-keys: |
+            linux-gcc-coop-asan-main
+            linux-gcc-coop-asan-
+          max-size: 3G
+          save: ${{ github.event_name != 'pull_request' }}
+
+      - name: configure and build (COOP=ON, ASan+UBSan)
+        if: ${{ env.SKIP != 'true' }}
+        uses: lukka/run-cmake@v10
+        with:
+          configurePreset: ci-coop-asan
+          configurePresetAdditionalArgs: "['-DUSE_PREFIX_DATA_DIR=OFF']"
+          buildPreset: ci-coop-asan
+          buildPresetAdditionalArgs: "['-j', '2']"
+
+      - name: run co-op tests (ASan+UBSan)
+        if: ${{ env.SKIP != 'true' }}
+        run: |
+          ./build-coop-asan/tests/cata_test-tiles \
+            --user-dir=test_user_dir \
+            --use-colour yes \
+            --error-format=github-action \
+            "[coop]"
+
+      - name: upload test binary on failure
+        uses: actions/upload-artifact@v4.6.0
+        if: failure()
+        with:
+          name: cata_test-tiles-coop-asan
+          path: build-coop-asan/tests/cata_test-tiles
+          if-no-files-found: ignore
+
   builds:
     needs: skip-duplicates
     if: ${{ github.event_name != 'push' && needs.skip-duplicates.outputs.should_skip_platform != 'true' }}

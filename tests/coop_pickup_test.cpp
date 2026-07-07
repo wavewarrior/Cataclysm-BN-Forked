@@ -205,4 +205,34 @@ TEST_CASE("apply_pickup_manifest — out-of-bounds tile is skipped", "[coop][pic
     REQUIRE_NOTHROW(coop_server::apply_pickup_manifest(manifest));
 }
 
+// ---------------------------------------------------------------------------
+// 7. same manifest applied twice (concurrent pickup race) — second is no-op
+//
+// Scenario: client picks up an item locally and queues a PICKUP manifest.
+// Before the manifest reaches the host the host avatar also picks up the
+// same item.  The host therefore has 0 of that item when the client's
+// manifest arrives.  apply_pickup_manifest must handle this gracefully:
+// "not found → skip" path must not crash, panic, or leave a negative count.
+// ---------------------------------------------------------------------------
+
+TEST_CASE("apply_pickup_manifest — second identical manifest is a no-op (race)",
+          "[coop][pickup]") {
+    setup_world();
+
+    get_map().add_item(TILE, item::spawn(DISCRETE_ID, calendar::turn, item::solitary_tag{}));
+    REQUIRE(count_items(DISCRETE_ID) == 1);
+
+    const tripoint_abs_ms abs = get_map().bub_to_abs(TILE);
+
+    // First application: item is present, removed successfully.
+    coop_server::apply_pickup_manifest(make_manifest(abs, DISCRETE_ID.str(), 0, 1));
+    CHECK(count_items(DISCRETE_ID) == 0);
+
+    // Second application: item already gone (host also picked it up, or
+    // manifest replayed).  Must not crash and count must remain 0.
+    REQUIRE_NOTHROW(
+        coop_server::apply_pickup_manifest(make_manifest(abs, DISCRETE_ID.str(), 0, 1)));
+    CHECK(count_items(DISCRETE_ID) == 0);
+}
+
 #endif // COOP_ENABLED
