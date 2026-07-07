@@ -40,6 +40,7 @@ struct coop_client {
     /// Sends client_status dead=true and death-drop manifest synchronously before teardown.
     /// Safe to call multiple times — guarded by death_notified_.
     auto notify_death() -> void;
+    // ---- Test seams (all inline; no game-world access) ----
     /// Test seam: skip hashing the next ONE mutation event in apply_sync, inducing a
     /// local_hash ≠ server_hash divergence so the client naturally sends resync_request.
     auto set_skip_one_hash_event_for_test() -> void { skip_one_hash_event_for_test_ = true; }
@@ -54,12 +55,18 @@ struct coop_client {
             transport_.reset();
         }
     }
+    /// Test seam: number of entries in the pending action ring buffer (Gap 4).
+    auto pending_actions_size_for_test() const -> std::size_t { return pending_actions_.size(); }
+    /// Test seam: smallest seq in the ring buffer — the oldest unconfirmed action (Gap 4).
+    auto pending_actions_front_seq_for_test() const -> uint32_t {
+        return pending_actions_.empty() ? 0u : pending_actions_.front().seq;
+    }
+    /// Test seam: set next_seq_ for Gap 6 uint32_t wrap-without-crash test.
+    auto set_next_seq_for_test(uint32_t seq) -> void { next_seq_ = seq; }
 
 private:
     auto apply_sync(const std::string& json_buf) -> void;
     auto handle_disconnect() -> void;
-    /// C3 on-death inventory sync: serialise inv_dump() as a DROP manifest to the host.
-    /// Called once on the first tick the client's avatar reports dead.
     auto send_death_drop() -> void;
 
     std::unique_ptr<coop_transport> transport_;

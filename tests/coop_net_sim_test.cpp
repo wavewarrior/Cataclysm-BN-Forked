@@ -1,24 +1,25 @@
 #ifdef COOP_ENABLED
 /**
- * Phase 5 foundation: coop_sim_transport self-tests.
+ * Phase 5 — network layer tests.
  *
- * Tests the simulator's own behaviour (delivery timing, loss, reorder) —
- * NOT coop_server/coop_client behaviour under latency.
+ * Section A: coop_sim_transport self-tests [coop][simtransport]
+ *   Tests the simulator's own mechanics (latency, loss, reorder, close_abruptly).
+ *   No SDL dependency, no game world.
  *
- * The behavioural sim-driven tests (Gap C: reconcile/lag-comp under 100ms RTT
- * accumulating multi-entry pending; coalescing 16ms→1 tick vs 80ms→2 ticks;
- * Gap 4: ring-buffer cap/drop-oldest; Gap 6: next_seq_ uint32_t wrap in
- * coop_client's ring-buffer trim) all require driving a real coop_server +
- * coop_client through the sim transport.  That requires a transport-injection
- * seam on both classes (e.g. coop_server::inject_transport_for_test(),
- * coop_client::inject_transport_for_test()) which is not yet implemented.
- * Those tests remain open in the plan.
+ * Section B: coop_client ring-buffer tests [coop][ringbuf]
+ *   Gap 4: cap-at-32 with drop-oldest (queue_action public + size/front seams).
+ *   Gap 6: next_seq_ uint32_t wrap is defined and non-crashing (set_next_seq seam).
+ *   No network, no game world — pure deque arithmetic.
  *
- * Tags: [coop][simtransport]
+ * Gap C round-trip (reconcile under latency, full client→server→client) is blocked
+ * by the singleton g/coop_session::get() — two live game* cannot coexist in-process.
+ * Those tests belong in the E2E harness (scripts/test_coop.ts), not here.
  */
 
 #include "catch/catch.hpp"
+#include "coop_client.h"
 #include "coop_sim_transport.h"
+
 
 // ---------------------------------------------------------------------------
 // Delivery timing
@@ -196,6 +197,53 @@ TEST_CASE( "coop_sim_transport: recv returns false when inbox empty regardless o
     std::string out;
     CHECK_FALSE( b.recv( out, 5000 ) ); // timeout arg ignored
     CHECK_FALSE( b.recv( out, -1 ) );   // blocking sentinel also ignored
+}
+
+
+// ===========================================================================
+// Section B: coop_client ring-buffer tests (Gap 4 and Gap 6)
+// No transport, no game world — pure deque arithmetic on queue_action() path.
+// ===========================================================================
+
+TEST_CASE( "Gap 4: ring buffer capped at 32 — oldest seq dropped on overflow",
+           "[coop][ringbuf]" ) {
+    coop_client cli;
+
+    // Queue 35 actions; next_seq_ starts at 1 so seqs are 1..35
+    for( int i = 0; i < 35; ++i ) {
+        cli.queue_action( "MOVE_N" );
+    }
+
+    // Cap is 32: 3 oldest (seq 1, 2, 3) were dropped with pop_front()
+    CHECK( cli.pending_actions_size_for_test() == 32 );
+    CHECK( cli.pending_actions_front_seq_for_test() == 4u ); // oldest surviving = seq 4
+}
+
+TEST_CASE( "Gap 4: ring buffer at exact cap (32) — no drop",
+           "[coop][ringbuf]" ) {
+    coop_client cli;
+    for( int i = 0; i < 32; ++i ) {
+        cli.queue_action( "MOVE_N" );
+    }
+    CHECK( cli.pending_actions_size_for_test() == 32 );
+    CHECK( cli.pending_actions_front_seq_for_test() == 1u ); // no drop yet
+}
+
+TEST_CASE( "Gap 6: next_seq_ wraps from UINT32_MAX to 0 without crash or UB",
+           "[coop][ringbuf]" ) {
+    coop_client cli;
+
+    // Position next_seq_ two below wrap boundary
+    cli.set_next_seq_for_test( std::numeric_limits<uint32_t>::max() - 1 );
+
+    cli.queue_action( "MOVE_N" ); // seq = UINT32_MAX - 1
+    cli.queue_action( "MOVE_N" ); // seq = UINT32_MAX
+    cli.queue_action( "MOVE_N" ); // seq = 0  (uint32_t wraps — defined behaviour)
+
+    // All three are well within the cap; no crash, no UB
+    CHECK( cli.pending_actions_size_for_test() == 3 );
+    // Oldest is UINT32_MAX-1; wrapped seq=0 is newest
+    CHECK( cli.pending_actions_front_seq_for_test() == std::numeric_limits<uint32_t>::max() - 1 );
 }
 
 #endif // COOP_ENABLED
