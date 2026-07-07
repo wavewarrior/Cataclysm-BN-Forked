@@ -953,28 +953,26 @@ static auto run_client_ranged( coop_client& cli, coop_ctrl_client& ctrl ) -> voi
 // ---------------------------------------------------------------------------
 
 static auto run_host_terrain_change( coop_server& srv, coop_ctrl_server& ctrl ) -> void {
-    // Compute door absolute position at scenario start (before any world ticks that
-    // might shift the reality bubble).  Store as ABSOLUTE and reconvert to bub at each
-    // read — using a stale bub coordinate after a bubble shift maps to the wrong tile.
-    const tripoint_bub_ms door_bpos_init = g->m.abs_to_bub( g->u.abs_pos() ) + tripoint( 0, 1, 0 );
-    const tripoint_abs_ms door_abs       = g->m.bub_to_abs( door_bpos_init );
-    // Fresh bub at read time — immune to bubble shifts.
-    const auto fresh_bpos = [&]() { return g->m.abs_to_bub( door_abs ); };
+    // Use t_floor → t_pavement (neutral pair, confirmed persistent across world-steps).
+    // Verification run showed t_pavement persists after all trailing ticks; a t_door_o
+    // → t_door_c revert was traced to CDDA door-closing game mechanics, NOT a relay bug
+    // (apply_terrain_change writes correctly; the door is a valid thing for world-sim to close).
+    const tripoint_bub_ms tile_bpos_init = g->m.abs_to_bub( g->u.abs_pos() ) + tripoint( 0, 1, 0 );
+    const tripoint_abs_ms tile_abs       = g->m.bub_to_abs( tile_bpos_init );
+    const auto fresh_bpos = [&]() { return g->m.abs_to_bub( tile_abs ); };
 
-    REQUIRE( g->m.ter( fresh_bpos() ) == ter_id( "t_door_c" ) ); // pre-sync placement held
+    REQUIRE( g->m.ter( fresh_bpos() ) == ter_id( "t_floor" ) ); // build_test_map baseline
 
-    ctrl.send_signal( "DOOR_POS " + std::to_string( door_abs.x() ) + " " +
-                      std::to_string( door_abs.y() ) + " " +
-                      std::to_string( door_abs.z() ) );
+    ctrl.send_signal( "TILE_POS " + std::to_string( tile_abs.x() ) + " " +
+                      std::to_string( tile_abs.y() ) + " " +
+                      std::to_string( tile_abs.z() ) );
 
     bool done       = false;
     int  post_ticks = 0;
-    bool terrain_ok = false;
     const auto deadline =
         std::chrono::steady_clock::now() + std::chrono::milliseconds( 20'000 );
     while( std::chrono::steady_clock::now() < deadline ) {
         srv.coop_world_tick();
-        if( g->m.ter( fresh_bpos() ) == ter_id( "t_door_o" ) ) { terrain_ok = true; }
         SDL_Delay( 50 );
         std::string sig;
         if( !done && ctrl.try_recv_line( sig ) && sig == "TERRAIN_DONE" ) { done = true; }
@@ -982,32 +980,27 @@ static auto run_host_terrain_change( coop_server& srv, coop_ctrl_server& ctrl ) 
     }
     for( int i = 0; i < 5; ++i ) { srv.coop_world_tick(); SDL_Delay( 50 ); }
 
-    INFO( "door_abs=(" << door_abs.x() << "," << door_abs.y() << "," << door_abs.z() << ")"
-          << " final_ter=" << g->m.ter( fresh_bpos() ).id().str()
-          << " terrain_ok=" << terrain_ok );
-    CHECK( terrain_ok );
+    INFO( "tile_abs=(" << tile_abs.x() << "," << tile_abs.y() << "," << tile_abs.z() << ")"
+          << " final_ter=" << g->m.ter( fresh_bpos() ).id().str() );
+    CHECK( g->m.ter( fresh_bpos() ) == ter_id( "t_pavement" ) );
 }
 
 static auto run_client_terrain_change( coop_client& cli, coop_ctrl_client& ctrl ) -> void {
-    // Wait for host to send door position.
     std::string pos_sig;
     REQUIRE( ctrl.recv_line( pos_sig, FILE_POLL_TIMEOUT_MS ) );
     int dx = 0, dy = 0, dz = 0;
     std::istringstream iss( pos_sig );
     std::string tag;
     iss >> tag >> dx >> dy >> dz;
-    REQUIRE( tag == "DOOR_POS" );
-    const tripoint_abs_ms door_abs{ dx, dy, dz };
+    REQUIRE( tag == "TILE_POS" );
+    const tripoint_abs_ms tile_abs{ dx, dy, dz };
 
-    // Queue TERRAIN_CHANGE: closed door → open door.
-    // queue_terrain_change is the same public API the game calls from handle_action.cpp.
-    cli.queue_terrain_change( door_abs, "t_door_o", "" );
+    // Queue TERRAIN_CHANGE: t_floor → t_pavement (neutral pair, no game mechanics).
+    cli.queue_terrain_change( tile_abs, "t_pavement", "" );
 
-    // Run enough ticks to flush the action (1 action sent per tick).
     for( int i = 0; i < 8; ++i ) { cli.coop_world_tick(); SDL_Delay( 50 ); }
     ctrl.send_signal( "TERRAIN_DONE" );
 
-    // Keep connection alive while host asserts.
     const auto done_deadline =
         std::chrono::steady_clock::now() + std::chrono::milliseconds( 10'000 );
     while( std::chrono::steady_clock::now() < done_deadline ) {
@@ -1067,10 +1060,11 @@ TEST_CASE( "coop integration: host role", "[.][coop_role_host]" ) {
         g->m.add_item( PICKUP_TILE, item::spawn( PICKUP_KNIFE_ID, calendar::turn,
                                                  item::solitary_tag{} ) );
     } else if( scenario == "terrain_change" ) {
-        // Place a closed door 1 tile south of spawn — client will open it.
-        // Must happen before initial sync so the client sees t_door_c in the blast.
-        const tripoint_bub_ms door_bpos = g->m.abs_to_bub( spawn_abs ) + tripoint( 0, 1, 0 );
-        g->m.ter_set( door_bpos, ter_id( "t_door_c" ) );
+        // build_test_map ensures submaps are populated (generated) so do_turn() does
+        // NOT regenerate them back to t_grass during the tick loop.  Tile starts t_floor.
+        // No additional ter_set: we use t_floor → t_pavement (neutral pair, no game mechanics)
+        // to disambiguate from door open/close behaviour.
+        build_test_map( ter_id( "t_floor" ) );
     }
 
     REQUIRE( srv.send_initial_sync() );
