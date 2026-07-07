@@ -4,7 +4,8 @@
 #include "coop_proto.h"
 #include "coordinates.h"
 
-#include <SDL3_net/SDL_net.h>
+#include "coop_net_transport.h"
+#include <memory>
 #include <deque>
 #include <optional>
 #include <string>
@@ -29,7 +30,7 @@ struct coop_client {
     /// Avoids duplicating JSON-building logic across C2b/C2c call sites.
     auto queue_terrain_change( const tripoint_abs_ms &pos, const std::string &ter_id,
                                const std::string &furn_id ) -> void;
-    auto is_connected() const -> bool { return socket_ != nullptr; }
+    auto is_connected() const -> bool { return transport_ != nullptr; }
     auto shutdown() -> void;
     auto send_chat(const std::string& text) -> void;
     /// C6: send the client's current abs position to the host immediately after receiving
@@ -48,7 +49,10 @@ struct coop_client {
     /// protocol disconnect packet — simulates a client crash.  Host should detect
     /// the abrupt drop via receiver_thread_ and set running_=false.
     auto close_socket_abruptly_for_test() -> void {
-        if( socket_ ) { NET_DestroyStreamSocket( socket_ ); socket_ = nullptr; }
+        if( transport_ ) {
+            transport_->close_abruptly();
+            transport_.reset();
+        }
     }
 
 private:
@@ -58,7 +62,7 @@ private:
     /// Called once on the first tick the client's avatar reports dead.
     auto send_death_drop() -> void;
 
-    NET_StreamSocket* socket_ = nullptr;
+    std::unique_ptr<coop_transport> transport_;
 
     struct pending_action {
         uint32_t seq = 0;

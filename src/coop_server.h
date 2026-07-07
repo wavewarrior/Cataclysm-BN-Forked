@@ -15,6 +15,8 @@
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
+#include "coop_net_transport.h"
+#include <memory>
 
 class monster;
 
@@ -45,7 +47,7 @@ struct coop_server {
 
     auto listen(uint16_t port = 8080) -> bool;
     /// Non-blocking: attempt to accept one pending client. Returns true if a
-    /// client connected and client_sock_ is now valid.
+    /// client connected and transport_ is now valid.
     auto try_accept() -> bool;
     auto wait_for_client() -> bool;
     auto handshake() -> bool;
@@ -141,9 +143,7 @@ private:
         -> void;
 
     NET_Server* server_sock_ = nullptr;
-    // client_sock_ is owned exclusively by the IO thread once receiver_thread_ starts.
-    // Main thread MUST NOT call send/recv on it directly — use send_q_ instead.
-    NET_StreamSocket* client_sock_ = nullptr;
+    std::unique_ptr<coop_transport> transport_; ///< owned; nullptr until client connects
 
     std::atomic<bool> running_{false};
     std::jthread receiver_thread_;

@@ -53,20 +53,20 @@ auto coop_client::connect(const std::string& ip, uint16_t port) -> bool {
         DebugLog(DL::Error, DC::Main) << "[coop] DNS failed: " << SDL_GetError();
         return false;
     }
-    socket_ = NET_CreateClient(addr, port, 0);
+    auto* socket = NET_CreateClient(addr, port, 0);
     NET_UnrefAddress(addr);
-    if (!socket_) {
+    if (!socket) {
         DebugLog(DL::Error, DC::Main) << "[coop] connect failed: " << SDL_GetError();
         return false;
     }
     // Wait for non-blocking connect to complete.
-    while (NET_GetConnectionStatus(socket_) == 0) { SDL_Delay(10); }
-    if (NET_GetConnectionStatus(socket_) < 0) {
-        NET_DestroyStreamSocket(socket_);
-        socket_ = nullptr;
+    while (NET_GetConnectionStatus(socket) == 0) { SDL_Delay(10); }
+    if (NET_GetConnectionStatus(socket) < 0) {
+        NET_DestroyStreamSocket(socket);
         DebugLog(DL::Error, DC::Main) << "[coop] connection refused: " << SDL_GetError();
         return false;
     }
+    transport_ = std::make_unique<coop_net_transport>(socket);
     coop_session::get().mode = coop_mode::client;
     DebugLog(DL::Info, DC::Main) << "[coop] connected to " << ip << ":" << port;
     return true;
@@ -90,14 +90,14 @@ auto coop_client::handshake() -> bool {
         jout.end_object();
         jout.end_object();
     }
-    if (!coop_net::send(socket_, oss.str())) {
+    if (!transport_->send(oss.str())) {
         DebugLog(DL::Error, DC::Main) << "[coop] client handshake: send failed";
         return false;
     }
 
     // Receive host handshake
     std::string buf;
-    if (!coop_net::recv(socket_, buf, 5000)) {
+    if (!transport_->recv(buf, 5000)) {
         DebugLog(DL::Error, DC::Main) << "[coop] client handshake: recv failed";
         return false;
     }
@@ -118,7 +118,7 @@ auto coop_client::handshake() -> bool {
 
 auto coop_client::receive_world_seed() -> bool {
     std::string buf;
-    if (!coop_net::recv(socket_, buf, 5000)) {
+    if (!transport_->recv(buf, 5000)) {
         DebugLog(DL::Error, DC::Main) << "[coop] receive_world_seed: recv failed";
         return false;
     }
@@ -203,14 +203,14 @@ auto coop_client::apply_world_seed_to_avatar() -> void {
 }
 
 auto coop_client::coop_world_tick() -> void {
-    if (!coop_session::get().is_client() || !socket_) { return; }
+    if (!coop_session::get().is_client() || !transport_) { return; }
 
     // 1. Send the oldest unsent pending action.  Actions remain in pending_actions_
     //    until the server echoes last_seq ≥ action.seq in a sync packet; they are
     //    discarded in apply_sync().  One per tick matches the server's drain rate.
     for (auto& act : pending_actions_) {
         if (act.sent) { continue; }
-        if (!coop_net::send(socket_, build_action_packet({act.seq, act.key, act.ctx_json}))) {
+        if (!transport_->send(build_action_packet({act.seq, act.key, act.ctx_json}))) {
             DebugLog(DL::Error, DC::Main) << "[coop] coop_world_tick: action send failed";
             handle_disconnect();
             return;
@@ -239,7 +239,7 @@ auto coop_client::coop_world_tick() -> void {
         status_jout.member("dead", g->u.is_dead_state());
         status_jout.end_object();
         status_jout.end_object();
-        if (!coop_net::send(socket_, status_oss.str())) {
+        if (!transport_->send(status_oss.str())) {
             // INFO not ERROR: the host closing the connection is a normal teardown path.
             // Logging at ERROR causes Catch2 to fail every scenario's post-signal ticks.
             DebugLog( DL::Info, DC::Main ) << "[coop] coop_world_tick: status send failed — host disconnected";
@@ -250,9 +250,9 @@ auto coop_client::coop_world_tick() -> void {
 
 
     // 2. Drain all buffered inbound packets from the host (H6).
-    while (coop_net::poll(socket_)) {
+    while (transport_->poll()) {
         std::string buf;
-        if (!coop_net::recv(socket_, buf, 0)) {
+        if (!transport_->recv(buf, 0)) {
             handle_disconnect();
             return;
         }
@@ -559,7 +559,7 @@ auto coop_client::apply_sync(const std::string& json_buf) -> void {
         rsj.start_object();
         rsj.member("t", static_cast<int>(coop_pkt::resync_request));
         rsj.end_object();
-        coop_net::send(socket_, rss.str());
+        transport_->send(rss.str());
     }
 
     // A2: deferred seq-based reconciliation.
@@ -611,17 +611,14 @@ auto coop_client::handle_disconnect() -> void {
 }
 
 auto coop_client::shutdown() -> void {
-    if (socket_) {
-        {
-            std::ostringstream oss;
-            JsonOut jout(oss);
-            jout.start_object();
-            jout.member("t", static_cast<int>(coop_pkt::disconnect));
-            jout.end_object();
-            coop_net::send(socket_, oss.str());
-        }
-        NET_DestroyStreamSocket(socket_);
-        socket_ = nullptr;
+    if (transport_) {
+        std::ostringstream oss;
+        JsonOut jout(oss);
+        jout.start_object();
+        jout.member("t", static_cast<int>(coop_pkt::disconnect));
+        jout.end_object();
+        transport_->send(oss.str());
+        transport_.reset();
     }
     if (net_initialized_) {
         NET_Quit();
@@ -633,7 +630,7 @@ auto coop_client::shutdown() -> void {
 }
 
 auto coop_client::send_chat(const std::string& text) -> void {
-    if (!socket_) { return; }
+    if (!transport_) { return; }
     std::ostringstream oss;
     JsonOut jout(oss);
     jout.start_object();
@@ -644,13 +641,13 @@ auto coop_client::send_chat(const std::string& text) -> void {
     jout.member("text", text);
     jout.end_object();
     jout.end_object();
-    coop_net::send(socket_, oss.str());
+    transport_->send(oss.str());
 }
 
 auto coop_client::send_join_info() -> bool {
-    if (!socket_ || !g) { return false; }
+    if (!transport_ || !g) { return false; }
     const auto ap = g->u.abs_pos();
-    const bool ok = coop_net::send(socket_, build_join_info_packet({ap}));
+    const bool ok = transport_->send(build_join_info_packet({ap}));
     DebugLog(DL::Info, DC::Main)
         << "[coop] send_join_info: (" << ap.x() << "," << ap.y() << "," << ap.z() << ")"
         << (ok ? "" : " — send failed");
@@ -658,7 +655,7 @@ auto coop_client::send_join_info() -> bool {
 }
 
 auto coop_client::notify_death() -> void {
-    if (!socket_ || !g || death_notified_) { return; }
+    if (!transport_ || !g || death_notified_) { return; }
     death_notified_ = true;
 
     // 1. Send client_status dead=true immediately — this packet is normally sent
@@ -678,7 +675,7 @@ auto coop_client::notify_death() -> void {
         jout.member("dead", true);
         jout.end_object();
         jout.end_object();
-        coop_net::send(socket_, oss.str());
+        transport_->send(oss.str());
     }
 
     // 2. Death-drop: serialise inv_dump() as an action packet sent directly (not
@@ -714,7 +711,7 @@ auto coop_client::notify_death() -> void {
     // Wrap in an action packet and send directly (bypass pending_actions_ queue).
     const std::string action_json =
         build_action_packet({next_seq_++, "DROP", mfst_oss.str()});
-    coop_net::send(socket_, action_json);
+    transport_->send(action_json);
     DebugLog(DL::Info, DC::Main)
         << "[coop] C3 death-drop: " << serialized << " items at ("
         << drop_abs.x() << "," << drop_abs.y() << "," << drop_abs.z() << ")";

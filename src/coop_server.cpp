@@ -48,7 +48,7 @@ auto coop_server::listen(uint16_t port) -> bool {
 }
 
 auto coop_server::try_accept() -> bool {
-    if (client_sock_) { return true; }
+    if (transport_) { return true; }
     NET_StreamSocket* candidate = nullptr;
     if (!NET_AcceptClient(server_sock_, &candidate) || !candidate) { return false; }
     while (NET_GetConnectionStatus(candidate) == 0) { SDL_Delay(10); }
@@ -56,7 +56,7 @@ auto coop_server::try_accept() -> bool {
         NET_DestroyStreamSocket(candidate);
         return false;
     }
-    client_sock_ = candidate;
+    transport_ = std::make_unique<coop_net_transport>(candidate);
     coop_session::get().mode = coop_mode::host;
     DebugLog(DL::Info, DC::Main) << "[coop] client connected";
     return true;
@@ -64,7 +64,7 @@ auto coop_server::try_accept() -> bool {
 
 auto coop_server::wait_for_client() -> bool {
     // Short-circuit if try_accept() already stored the client.
-    if (client_sock_) { return true; }
+    if (transport_) { return true; }
     while (true) {
         if (try_accept()) { return true; }
         SDL_Delay(100);
@@ -88,14 +88,14 @@ auto coop_server::handshake() -> bool {
         jout.end_object();
         jout.end_object();
     }
-    if (!coop_net::send(client_sock_, oss.str())) {
+    if (!transport_->send(oss.str())) {
         DebugLog(DL::Error, DC::Main) << "[coop] handshake: send failed";
         return false;
     }
 
     // Receive client handshake
     std::string buf;
-    if (!coop_net::recv(client_sock_, buf, 5000)) {
+    if (!transport_->recv(buf, 5000)) {
         DebugLog(DL::Error, DC::Main) << "[coop] handshake: recv failed";
         return false;
     }
@@ -167,7 +167,7 @@ auto coop_server::send_world_seed(const std::string& player_name) -> bool {
     const world_seed_data
         data{to_turn<int>(calendar::turn), g->u.abs_pos(), player_name,
              aw ? aw->info->world_name : std::string{}};
-    return coop_net::send(client_sock_, build_world_seed_packet(data));
+    return transport_->send(build_world_seed_packet(data));
 }
 
 auto coop_server::send_initial_sync() -> bool {
@@ -184,7 +184,7 @@ auto coop_server::send_initial_sync() -> bool {
         outgoing.swap(send_q_);
     }
     for (const auto& frame : outgoing) {
-        if (!coop_net::send(client_sock_, frame)) { return false; }
+        if (!transport_->send(frame)) { return false; }
     }
     return true;
 }
@@ -199,10 +199,10 @@ auto coop_server::start_receiver_thread() -> void {
 }
 
 auto coop_server::wait_for_join_info(int timeout_ms) -> bool {
-    // Pre-receiver: read directly from client_sock_ on the main thread, same pattern as
+    // Pre-receiver: read directly from transport_ on the main thread, same pattern as
     // handshake() / send_world_seed().  The receiver thread is NOT yet running at this point.
     std::string buf;
-    if (!coop_net::recv(client_sock_, buf, timeout_ms)) {
+    if (!transport_->recv(buf, timeout_ms)) {
         DebugLog(DL::Info, DC::Main) << "[coop] wait_for_join_info: timeout — using spawn fallback";
         return false;
     }
@@ -233,16 +233,16 @@ auto coop_server::receiver_loop(std::stop_token st) -> void {
                 std::scoped_lock lk{send_mtx_};
                 outgoing.swap(send_q_);
             }
-            for (const auto& frame : outgoing) { coop_net::send(client_sock_, frame); }
+            for (const auto& frame : outgoing) { transport_->send(frame); }
         }
 
         // Non-blocking check: skip recv if nothing is waiting.
-        if (!coop_net::poll(client_sock_)) {
+        if (!transport_->poll()) {
             SDL_Delay(1);
             continue;
         }
 
-        if (!coop_net::recv(client_sock_, buf, 5000)) {
+        if (!transport_->recv(buf, 5000)) {
             if (running_) {
                 DebugLog(DL::Info, DC::Main) << "[coop] receiver: client disconnected";
             }
@@ -977,7 +977,7 @@ auto coop_server::shutdown() -> void {
         receiver_thread_.request_stop();
         receiver_thread_.join();
     }
-    if (was_running && client_sock_) {
+    if (was_running && transport_) {
         // Only send disconnect when we initiated the shutdown (not when the receiver
         // already signaled it by clearing running_).
         std::ostringstream oss;
@@ -985,12 +985,9 @@ auto coop_server::shutdown() -> void {
         jout.start_object();
         jout.member("t", static_cast<int>(coop_pkt::disconnect));
         jout.end_object();
-        coop_net::send(client_sock_, oss.str());
+        transport_->send(oss.str());
     }
-    if (client_sock_) {
-        NET_DestroyStreamSocket(client_sock_);
-        client_sock_ = nullptr;
-    }
+    transport_.reset();
     if (server_sock_) {
         NET_DestroyServer(server_sock_);
         server_sock_ = nullptr;
