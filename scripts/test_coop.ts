@@ -8,9 +8,11 @@
  *
  * Each process has its own real game* g (two-world topology).  They
  * communicate over loopback TCP using the actual co-op wire protocol.
+ * A second control socket (OS-assigned port) carries test signals.
  *
  * Usage:
- *   deno task test:coop                          # auto-detects binary
+ *   deno task test:coop                          # auto-detects binary, movement scenario
+ *   COOP_SCENARIO=pickup deno task test:coop     # run a different scenario
  *   deno task test:coop -- /path/to/cata_test-tiles
  *   CBN_TEST_BIN=/path/to/cata_test-tiles deno task test:coop
  */
@@ -19,14 +21,28 @@
 // Configuration
 // ---------------------------------------------------------------------------
 
-const TIMEOUT_MS = 180_000 // 180 s — two separate cold game data loads (~23 s each) + test runtime
+const GLOBAL_TIMEOUT_MS = 180_000  // 180 s hard cap — both processes together
 
-/// Coordination files the C++ tests create in /tmp.  Cleaned before each run
-/// so a crashed previous run cannot falsely satisfy a polling check.
+/// Per-phase soft deadlines.  A phase that exceeds its deadline emits a
+/// warning rather than killing the test — the global timeout is the hard gate.
+const PHASE_TIMEOUTS_MS = {
+  handshake:  30_000,  // "[coop] handshake complete" must appear within 30 s
+  scenario:   90_000,  // scenario-specific assertion within 90 s of handshake
+}
+
+/// Log lines that mark phase transitions (searched in streamed stderr).
+const PHASE_MARKERS = {
+  handshake: "[coop] handshake complete",
+  listening: "[coop] listening on port",
+}
+
+/// Scenario to run — passed through to both processes via COOP_SCENARIO env var.
+const COOP_SCENARIO = Deno.env.get("COOP_SCENARIO") ?? "movement"
+
+/// Coordination files the C++ tests create in /tmp.  Cleaned before each run.
 const COORD_FILES = [
   "/tmp/coop_test_port.txt",
-  "/tmp/coop_test_proxy_pos.txt",
-  "/tmp/coop_test_terrain.txt",
+  "/tmp/coop_test_ctrl_port.txt",
 ]
 
 const DEFAULT_BINS = [
@@ -68,6 +84,8 @@ interface RoleHandle {
   stderr: string[]
   /** Resolves when the process exits AND all output is drained. */
   done: Promise<number> // exit code
+  /** Resolves when the handshake phase marker is seen in stderr. */
+  handshakeSeen: Promise<void>
 }
 
 // ---------------------------------------------------------------------------
@@ -78,6 +96,7 @@ async function streamLines(
   stream: ReadableStream<Uint8Array>,
   lines: string[],
   prefix: string,
+  phaseCallbacks: Map<string, () => void>,
 ): Promise<void> {
   const reader = stream.pipeThrough(new TextDecoderStream()).getReader()
   let buf = ""
@@ -90,6 +109,13 @@ async function streamLines(
     for (const ln of parts) {
       console.log(`${prefix} ${ln}`)
       lines.push(ln)
+      // Fire any phase callbacks whose marker is found in this line.
+      for (const [marker, cb] of phaseCallbacks) {
+        if (ln.includes(marker)) {
+          cb()
+          phaseCallbacks.delete(marker)
+        }
+      }
     }
   }
   if (buf) {
@@ -100,27 +126,35 @@ async function streamLines(
 
 function spawnRole(bin: string, filter: string, name: string): RoleHandle {
   const padded = name.padEnd(6) // "host  " / "client"
+  const env = { ...Deno.env.toObject(), COOP_SCENARIO }
   const cmd = new Deno.Command(bin, {
     args: [filter, `--user-dir=/tmp/coop_test_user_${name}`, "--use-colour", "no"],
     stdout: "piped",
     stderr: "piped",
-    env: Deno.env.toObject(),
+    env,
   })
 
   const proc = cmd.spawn()
   const stdout: string[] = []
   const stderr: string[] = []
 
+  // Resolve when the handshake marker appears in stderr.
+  const { promise: handshakeSeen, resolve: resolveHandshake } =
+    Promise.withResolvers<void>()
+  const phaseCallbacks = new Map<string, () => void>([
+    [PHASE_MARKERS.handshake, resolveHandshake],
+  ])
+
   const done: Promise<number> = (async () => {
     const [status] = await Promise.all([
       proc.status,
-      streamLines(proc.stdout, stdout, `[${padded}]    `),
-      streamLines(proc.stderr, stderr, `[${padded}/err]`),
+      streamLines(proc.stdout, stdout, `[${padded}]    `, new Map()),
+      streamLines(proc.stderr, stderr, `[${padded}/err]`, phaseCallbacks),
     ])
     return status.code
   })()
 
-  return { name, proc, stdout, stderr, done }
+  return { name, proc, stdout, stderr, done, handshakeSeen }
 }
 
 // ---------------------------------------------------------------------------
@@ -129,14 +163,11 @@ function spawnRole(bin: string, filter: string, name: string): RoleHandle {
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   const { promise: raced, resolve, reject } = Promise.withResolvers<T>()
-
   const timer = setTimeout(() => reject(new Error(`Timeout after ${ms}ms: ${label}`)), ms)
-
   promise.then(
     (v) => { clearTimeout(timer); resolve(v) },
     (e) => { clearTimeout(timer); reject(e) },
   )
-
   return raced
 }
 
@@ -144,30 +175,40 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 // Main
 // ---------------------------------------------------------------------------
 
-// 1. Sweep stale /tmp coordination files so a previous crashed run cannot
-//    satisfy a file-poll check in the new run.
+// 1. Sweep stale coordination files.
 for (const f of COORD_FILES) {
   try { Deno.removeSync(f) } catch { /* didn't exist — ok */ }
 }
 
 const bin = resolveTestBin()
-console.log(`[coop-harness] binary : ${bin}`)
-console.log(`[coop-harness] timeout: ${TIMEOUT_MS}ms`)
+console.log(`[coop-harness] binary   : ${bin}`)
+console.log(`[coop-harness] scenario : ${COOP_SCENARIO}`)
+console.log(`[coop-harness] timeout  : ${GLOBAL_TIMEOUT_MS}ms`)
 console.log(`[coop-harness] Output is streamed live; both roles run simultaneously.`)
 console.log()
 
-// 2. Spawn both roles — port-file polling inside the C++ client handles sync.
+// 2. Spawn both roles.
 const host = spawnRole(bin, "[.][coop_role_host]", "host")
 const client = spawnRole(bin, "[.][coop_role_client]", "client")
 
-// 3. Race against global timeout.  On timeout, kill both OS processes so the
-//    next run isn't blocked by a lingering server holding the port.
+// 3. Phase watcher: warn if handshake takes too long (soft deadline).
+withTimeout(
+  Promise.all([host.handshakeSeen, client.handshakeSeen]),
+  PHASE_TIMEOUTS_MS.handshake,
+  "handshake phase",
+).catch(() => {
+  console.warn(
+    `[coop-harness] WARN: handshake not seen within ${PHASE_TIMEOUTS_MS.handshake}ms — processes may be stuck`,
+  )
+})
+
+// 4. Race against hard global timeout.
 let hostCode: number
 let clientCode: number
 try {
   ;[hostCode, clientCode] = await withTimeout(
     Promise.all([host.done, client.done]),
-    TIMEOUT_MS,
+    GLOBAL_TIMEOUT_MS,
     "host + client processes",
   )
 } catch (err) {
