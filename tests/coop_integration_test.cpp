@@ -683,17 +683,6 @@ static auto run_client_death( coop_client& cli, coop_ctrl_client& ctrl ) -> void
 static constexpr int         COOP_HIT_ACTIONS    = 5;   ///< melee/smash actions queued per scenario
 static constexpr int         COOP_POST_HIT_DRAIN = 8;   ///< ticks after *_DONE to drain all actions
 
-/// Build a target ctx_json {"tx":X,"ty":Y,"tz":Z} used by MELEE and SMASH.
-static auto make_target_ctx( const tripoint_abs_ms& pos ) -> std::string {
-    std::ostringstream oss;
-    JsonOut jout( oss );
-    jout.start_object();
-    jout.member( "tx", pos.x() );
-    jout.member( "ty", pos.y() );
-    jout.member( "tz", pos.z() );
-    jout.end_object();
-    return oss.str();
-}
 
 /// Shared host logic: spawn mon_zombie 1 tile east of proxy, signal client,
 /// then track min HP by monster IDENTITY (held shared_ptr) across ticks.
@@ -759,11 +748,20 @@ static auto run_host_melee_family( coop_server& srv, coop_ctrl_server& ctrl,
     CHECK( min_hp < initial_hp );
 }
 
-/// Shared client logic: receive monster position, queue N actions, send done signal,
-/// then keep connection alive while host asserts.
+/// Shared client logic: arm g->u with a knife, receive monster position,
+/// queue N actions with weapon_id embedded in ctx, send done signal.
+/// weapon_id in ctx exercises the CL-MELEE-WEAPON relay end-to-end.
 static auto run_client_melee_family( coop_client& cli, coop_ctrl_client& ctrl,
                                       const std::string& action_key,
                                       const std::string& done_signal ) -> void {
+    // Arm the client avatar with a melee weapon so weapon_id is embedded in ctx_json.
+    // This exercises the full CL-MELEE-WEAPON relay path: client embeds weapon_id at
+    // queue time; server arms proxy before melee_attack; proxy deals weapon damage.
+    const itype_id knife_id( "knife_combat" );
+    REQUIRE( knife_id.is_valid() );
+    g->u.wield( item::spawn( knife_id ) );
+    REQUIRE( g->u.is_armed() );
+
     std::string pos_sig;
     REQUIRE( ctrl.recv_line( pos_sig, FILE_POLL_TIMEOUT_MS ) );
     int mx = 0, my = 0, mz = 0;
@@ -771,14 +769,24 @@ static auto run_client_melee_family( coop_client& cli, coop_ctrl_client& ctrl,
     std::string tag;
     iss >> tag >> mx >> my >> mz;
     REQUIRE( tag == "MONSTER_POS" );
-    const auto ctx = make_target_ctx( tripoint_abs_ms{ mx, my, mz } );
+    const tripoint_abs_ms target_abs{ mx, my, mz };
+
+    // Build ctx with weapon_id — same format the game sends from handle_action.cpp.
+    const auto& wep = g->u.primary_weapon();
+    std::ostringstream ctx_oss;
+    JsonOut ctx_jout( ctx_oss );
+    ctx_jout.start_object();
+    ctx_jout.member( "tx", target_abs.x() );
+    ctx_jout.member( "ty", target_abs.y() );
+    ctx_jout.member( "tz", target_abs.z() );
+    ctx_jout.member( "weapon_id", wep.typeId().str() );
+    ctx_jout.end_object();
+    const auto ctx = ctx_oss.str();
 
     for( int i = 0; i < COOP_HIT_ACTIONS; ++i ) { cli.queue_action( action_key, ctx ); }
-    // Run COOP_HIT_ACTIONS + 3 ticks to flush all queued actions (1 sent per tick).
     for( int i = 0; i < COOP_HIT_ACTIONS + 3; ++i ) { cli.coop_world_tick(); SDL_Delay( 50 ); }
     ctrl.send_signal( done_signal );
 
-    // Keep connection alive while host reads min_hp + trailing ticks.
     const auto done_deadline =
         std::chrono::steady_clock::now() + std::chrono::milliseconds( 10'000 );
     while( std::chrono::steady_clock::now() < done_deadline ) {
@@ -790,9 +798,10 @@ static auto run_client_melee_family( coop_client& cli, coop_ctrl_client& ctrl,
 // ---------------------------------------------------------------------------
 // MELEE scenario
 //
-// Client queues COOP_HIT_ACTIONS MELEE actions targeting a debug_mon 1 tile
-// east of the proxy.  Server routes MELEE → execute_player_cmd(K::melee) →
-// proxy->melee_attack(*mon_ptr, true).  Host asserts min HP dropped.
+// Client arms g->u with knife_combat, queues COOP_HIT_ACTIONS MELEE actions
+// with weapon_id in ctx.  Server: MELEE → arm proxy → melee_attack.
+// Tests CL-MELEE-WEAPON relay: proxy deals knife damage, not bare-fist.
+// Host asserts min HP of mon_zombie dropped.
 // ---------------------------------------------------------------------------
 
 static auto run_host_melee( coop_server& srv, coop_ctrl_server& ctrl ) -> void {

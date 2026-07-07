@@ -846,11 +846,18 @@ static void smash() {
             // swings at the correct tile on the host side.  Terrain changes are already
             // propagated via coop_emit_terrain_change above; this is for the melee animation.
             const tripoint_abs_ms abs_smashp = here.bub_to_abs( smashp );
-            const auto smash_ctx =
-                "{\"tx\":" + std::to_string( abs_smashp.x() ) +
-                ",\"ty\":" + std::to_string( abs_smashp.y() ) +
-                ",\"tz\":" + std::to_string( abs_smashp.z() ) + "}";
-            g->coop_client_->queue_action( "SMASH", smash_ctx );
+            // CL-MELEE-WEAPON: embed weapon at smash time (same pattern as FIRE ctx_json).
+            std::ostringstream smash_ctx_oss;
+            JsonOut smash_ctx_jout( smash_ctx_oss );
+            smash_ctx_jout.start_object();
+            smash_ctx_jout.member( "tx", abs_smashp.x() );
+            smash_ctx_jout.member( "ty", abs_smashp.y() );
+            smash_ctx_jout.member( "tz", abs_smashp.z() );
+            if( g->u.is_armed() ) {
+                smash_ctx_jout.member( "weapon_id", g->u.primary_weapon().typeId().str() );
+            }
+            smash_ctx_jout.end_object();
+            g->coop_client_->queue_action( "SMASH", smash_ctx_oss.str() );
         }
 #endif // COOP_ENABLED
 
@@ -4127,11 +4134,18 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
             // so failed autoattacks (no hostiles) relay nothing.
             const auto& tgt = coop_session::get().last_autoattack_target;
             if (tgt.has_value()) {
-                const auto ctx =
-                    "{\"tx\":" + std::to_string(tgt->x()) +
-                    ",\"ty\":" + std::to_string(tgt->y()) +
-                    ",\"tz\":" + std::to_string(tgt->z()) + "}";
-                coop_client_->queue_action("MELEE", ctx);
+                // CL-MELEE-WEAPON: embed weapon at attack time (same pattern as FIRE ctx_json).
+                std::ostringstream melee_ctx_oss;
+                JsonOut melee_ctx_jout( melee_ctx_oss );
+                melee_ctx_jout.start_object();
+                melee_ctx_jout.member( "tx", tgt->x() );
+                melee_ctx_jout.member( "ty", tgt->y() );
+                melee_ctx_jout.member( "tz", tgt->z() );
+                if( u.is_armed() ) {
+                    melee_ctx_jout.member( "weapon_id", u.primary_weapon().typeId().str() );
+                }
+                melee_ctx_jout.end_object();
+                coop_client_->queue_action( "MELEE", melee_ctx_oss.str() );
             }
         }
     }
