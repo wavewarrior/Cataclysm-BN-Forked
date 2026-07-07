@@ -1,6 +1,6 @@
 # Co-op Test Suite Improvement Plan
 
-**Status:** Planning — not yet started.  
+**Status:** Phases 1–5 COMPLETE (2026-07-07). All unit tests passing (218 assertions, 96 test cases). All 6 E2E scenarios passing. TSan/ASan CI jobs wired but not yet run on this branch.
 **Goal:** Eliminate every gap identified in the 2026-07-07 audit.  
 **Principle:** Phases ordered by value/cost — independent cheap wins first, deliberate enabling investments later. User can stop at any phase and have real coverage delivered.
 
@@ -315,13 +315,17 @@ Phase 5 (sim + ringbuf)   ← requires Phase 4
 
 ## Final Acceptance Criteria
 
-- [ ] All `[coop][simtransport]` tests pass with zero SDL dependency
-- [ ] All `[coop][ringbuf]` tests pass: Gap 4 cap/drop-oldest, Gap 6 wrap-no-crash
-- [ ] All `[coop]` unit tests pass: net (incl. 6 adversarial), packets, reconcile,
-      delta, idle, terrain, pickup, drop, simtransport, ringbuf
-- [ ] `deno task test:coop` passes for all 6 E2E scenarios: movement, pickup,
-      resync, disconnect, submap_shift, death
+- [x] All `[coop][simtransport]` tests pass with zero SDL dependency (10 tests, 29 assertions)
+- [x] All `[coop][ringbuf]` tests pass: Gap 4 cap/drop-oldest, Gap 6 wrap-no-crash (3 tests, 6 assertions)
+- [x] All `[coop]` unit tests pass: net (incl. 6 adversarial), packets, reconcile,
+      delta, idle, terrain, pickup, drop, simtransport, ringbuf — **218 assertions, 96 test cases**
+- [x] `deno task test:coop` passes for all 6 E2E scenarios: movement, pickup,
+      resync, disconnect, submap_shift, death — **verified 2026-07-07**
 - [ ] `ci-coop-tsan` CI job: zero TSan race reports on `[coop]` tests
+      _(presets + workflow job wired; not yet run on this branch — needs push to CI)_
 - [ ] `ci-coop-asan` CI job: zero ASan/UBSan reports on `[coop]` tests
-- [ ] Gap C coalescing + round-trip: tested via E2E harness (future scenario)
-- [ ] Zero unbounded alloc or hang on adversarial framing inputs
+      _(presets + workflow job wired; not yet run on this branch — needs push to CI)_
+- [ ] Gap C coalescing + round-trip: tested via E2E harness
+      _(blocked by g/coop_session singleton; future E2E scenario when singleton is refactored)_
+- [x] Zero unbounded alloc or hang on adversarial framing inputs
+      _(enforced by 4 MB hard cap in coop_net::recv; 6 adversarial [coop][net] tests pass)_
