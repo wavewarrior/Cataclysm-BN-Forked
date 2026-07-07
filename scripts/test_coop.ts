@@ -26,13 +26,15 @@ const GLOBAL_TIMEOUT_MS = 180_000  // 180 s hard cap — both processes together
 /// Per-phase soft deadlines.  A phase that exceeds its deadline emits a
 /// warning rather than killing the test — the global timeout is the hard gate.
 const PHASE_TIMEOUTS_MS = {
-  handshake:  30_000,  // "[coop] handshake complete" must appear within 30 s
+  handshake:  30_000,  // "handshake complete" must appear in BOTH roles' stderr within 30 s
   scenario:   90_000,  // scenario-specific assertion within 90 s of handshake
 }
 
 /// Log lines that mark phase transitions (searched in streamed stderr).
+/// NOTE: host logs "[coop] handshake complete"; client logs "[coop] client handshake complete".
+///       The common substring "handshake complete" matches both.
 const PHASE_MARKERS = {
-  handshake: "[coop] handshake complete",
+  handshake: "handshake complete",
   listening: "[coop] listening on port",
 }
 
