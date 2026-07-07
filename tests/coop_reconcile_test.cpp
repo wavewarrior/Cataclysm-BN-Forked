@@ -108,3 +108,28 @@ TEST_CASE("coop_reconcile_pos: non-movement keys are position no-ops", "[coop][r
         {{1, "PAUSE"}, {2, "SMASH"}, {3, "FIRE"}, {4, "PICKUP"}};
     CHECK(coop_reconcile_pos(server, 0, pending) == server);
 }
+
+// Gap 7: wall-blocked move with non-empty pending buffer.
+// Server says proxy hit a wall (pos unchanged), but client still has MORE
+// actions pending after the blocked one.  Snap to server pos, THEN replay
+// the remaining pending actions from that corrected position.
+TEST_CASE("coop_reconcile_pos: snap correction with pending actions after the blocked one",
+          "[coop][reconcile]") {
+    const auto server = bub(10, 10); // proxy couldn't move — same pos as before
+    // seq=3 confirmed (wall block), seq=4 and seq=5 still pending
+    const std::vector<reconcile_action> pending = {{4, "MOVE_N"}, {5, "MOVE_E"}};
+    // Snap to server (10,10), replay MOVE_N → (10,9), replay MOVE_E → (11,9)
+    CHECK(coop_reconcile_pos(server, 3, pending) ==
+          bub(10, 10) + tripoint_north + tripoint_east);
+}
+
+// Gap 7b: multiple pending actions all replay from corrected server position.
+TEST_CASE("coop_reconcile_pos: snap + three-action replay from corrected position",
+          "[coop][reconcile]") {
+    const auto server = bub(5, 5);
+    const std::vector<reconcile_action> pending = {
+        {10, "MOVE_N"}, {11, "MOVE_N"}, {12, "MOVE_N"}};
+    CHECK(coop_reconcile_pos(server, 9, pending) ==
+          bub(5, 5) + tripoint_north + tripoint_north + tripoint_north);
+}
+
