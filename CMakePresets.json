@@ -257,6 +257,18 @@
       "COOP": "ON"
     }
   }
+  ,
+  {
+    "name": "osx-coop",
+    "inherits": ["osx-arm-slim"],
+    "binaryDir": "${sourceDir}/out/build/osx-coop",
+    "displayName": "macOS ARM Co-op Build (Tiles, Sounds, COOP=ON)",
+    "description": "macOS Apple Silicon build with COOP=ON. Use for local E2E test runs.",
+    "cacheVariables": {
+      "COOP": "ON",
+      "TESTS": "ON"
+    }
+  }
   ],
   "buildPresets": [
     {
@@ -347,6 +359,13 @@
     "configurePreset": "ci-coop",
     "targets": ["cataclysm-bn-tiles", "cata_test-tiles"],
     "description": "CI build for co-op tests (COOP=ON). Builds game binary (catches main.cpp COOP_ENABLED loop breaks) and test binary."
+  }
+  ,
+  {
+    "name": "osx-coop",
+    "configurePreset": "osx-coop",
+    "targets": ["cataclysm-bn-tiles", "cata_test-tiles"],
+    "description": "macOS ARM Co-op build (COOP=ON). Builds game binary and test binary for local E2E runs."
   }
   ]
 }

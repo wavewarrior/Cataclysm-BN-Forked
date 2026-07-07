@@ -21,8 +21,17 @@
 
 const TIMEOUT_MS = 180_000 // 180 s — two separate cold game data loads (~23 s each) + test runtime
 
+/// Coordination files the C++ tests create in /tmp.  Cleaned before each run
+/// so a crashed previous run cannot falsely satisfy a polling check.
+const COORD_FILES = [
+  "/tmp/coop_test_port.txt",
+  "/tmp/coop_test_proxy_pos.txt",
+  "/tmp/coop_test_terrain.txt",
+]
+
 const DEFAULT_BINS = [
-  "build-coop/tests/cata_test-tiles",
+  "out/build/osx-coop/tests/cata_test-tiles",    // macOS COOP preset (local E2E)
+  "build-coop/tests/cata_test-tiles",             // CI Linux (ci-coop preset)
   "build/tests/cata_test-tiles",
   "out/build/linux-full/tests/cata_test-tiles",
 ]
@@ -41,7 +50,10 @@ function resolveTestBin(): string {
     }
   }
   console.error("ERROR: cannot locate cata_test-tiles.")
-  console.error("Set CBN_TEST_BIN or pass path as first argument.")
+  console.error("Build with COOP=ON first:")
+  console.error("  cmake --preset osx-coop")
+  console.error("  cmake --build --preset osx-coop &")
+  console.error("Then re-run this script, or set CBN_TEST_BIN explicitly.")
   Deno.exit(1)
 }
 
@@ -49,38 +61,67 @@ function resolveTestBin(): string {
 // Types
 // ---------------------------------------------------------------------------
 
-interface ProcessResult {
-  role: string
-  exitCode: number
-  stdout: string
-  stderr: string
+interface RoleHandle {
+  name: string
+  proc: Deno.ChildProcess
+  stdout: string[]
+  stderr: string[]
+  /** Resolves when the process exits AND all output is drained. */
+  done: Promise<number> // exit code
 }
 
 // ---------------------------------------------------------------------------
-// Process runner — cmd.output() spawns, waits, and collects all output.
+// Live-streaming process runner
 // ---------------------------------------------------------------------------
 
-async function runRole(bin: string, filter: string, role: string): Promise<ProcessResult> {
+async function streamLines(
+  stream: ReadableStream<Uint8Array>,
+  lines: string[],
+  prefix: string,
+): Promise<void> {
+  const reader = stream.pipeThrough(new TextDecoderStream()).getReader()
+  let buf = ""
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += value
+    const parts = buf.split("\n")
+    buf = parts.pop() ?? ""
+    for (const ln of parts) {
+      console.log(`${prefix} ${ln}`)
+      lines.push(ln)
+    }
+  }
+  if (buf) {
+    console.log(`${prefix} ${buf}`)
+    lines.push(buf)
+  }
+}
+
+function spawnRole(bin: string, filter: string, name: string): RoleHandle {
+  const padded = name.padEnd(6) // "host  " / "client"
   const cmd = new Deno.Command(bin, {
-    args: [filter, "--user-dir", `test_user_dir_coop_${role}`, "--use-colour", "no"],
+    args: [filter, `--user-dir=/tmp/coop_test_user_${name}`, "--use-colour", "no"],
     stdout: "piped",
     stderr: "piped",
     env: Deno.env.toObject(),
   })
 
-  const output = await cmd.output()
-  return {
-    role,
-    exitCode: output.code,
-    stdout: new TextDecoder().decode(output.stdout),
-    stderr: new TextDecoder().decode(output.stderr),
-  }
+  const proc = cmd.spawn()
+  const stdout: string[] = []
+  const stderr: string[] = []
+
+  const done: Promise<number> = (async () => {
+    const [status] = await Promise.all([
+      proc.status,
+      streamLines(proc.stdout, stdout, `[${padded}]    `),
+      streamLines(proc.stderr, stderr, `[${padded}/err]`),
+    ])
+    return status.code
+  })()
+
+  return { name, proc, stdout, stderr, done }
 }
-
-// ---------------------------------------------------------------------------
-// Delay using Promise.withResolvers (project rule: no new Promise callbacks)
-// ---------------------------------------------------------------------------
-
 
 // ---------------------------------------------------------------------------
 // Timeout using Promise.withResolvers
@@ -103,27 +144,37 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 // Main
 // ---------------------------------------------------------------------------
 
+// 1. Sweep stale /tmp coordination files so a previous crashed run cannot
+//    satisfy a file-poll check in the new run.
+for (const f of COORD_FILES) {
+  try { Deno.removeSync(f) } catch { /* didn't exist — ok */ }
+}
+
 const bin = resolveTestBin()
 console.log(`[coop-harness] binary : ${bin}`)
 console.log(`[coop-harness] timeout: ${TIMEOUT_MS}ms`)
+console.log(`[coop-harness] Output is streamed live; both roles run simultaneously.`)
+console.log()
 
-// Host starts immediately; client is delayed so the host can bind its socket
-// before the client attempts to connect.
-const hostPromise = runRole(bin, "[.][coop_role_host]", "host")
+// 2. Spawn both roles — port-file polling inside the C++ client handles sync.
+const host = spawnRole(bin, "[.][coop_role_host]", "host")
+const client = spawnRole(bin, "[.][coop_role_client]", "client")
 
-// Both roles start simultaneously.  The port-file polling inside the C++ client
-// role (read_port_file) handles synchronisation — no fixed delay needed.
-const clientPromise = runRole(bin, "[.][coop_role_client]", "client")
-
-let results: ProcessResult[]
+// 3. Race against global timeout.  On timeout, kill both OS processes so the
+//    next run isn't blocked by a lingering server holding the port.
+let hostCode: number
+let clientCode: number
 try {
-  results = await withTimeout(
-    Promise.all([hostPromise, clientPromise]),
+  ;[hostCode, clientCode] = await withTimeout(
+    Promise.all([host.done, client.done]),
     TIMEOUT_MS,
     "host + client processes",
   )
 } catch (err) {
-  console.error(`[coop-harness] FATAL: ${err}`)
+  console.error(`\n[coop-harness] FATAL: ${err}`)
+  console.error("[coop-harness] Killing both processes...")
+  try { host.proc.kill("SIGKILL") } catch { /* already exited */ }
+  try { client.proc.kill("SIGKILL") } catch { /* already exited */ }
   Deno.exit(1)
 }
 
@@ -131,14 +182,15 @@ try {
 // Report
 // ---------------------------------------------------------------------------
 
-let passed = true
+const roles = [
+  { name: "host", code: hostCode },
+  { name: "client", code: clientCode },
+]
 
-for (const result of results!) {
-  const ok = result.exitCode === 0
-  const status = ok ? "PASS" : "FAIL"
-  console.log(`\n=== ${result.role.toUpperCase()} [${status}] (exit ${result.exitCode}) ===`)
-  if (result.stdout) console.log(result.stdout)
-  if (result.stderr) console.error(result.stderr)
+let passed = true
+for (const { name, code } of roles) {
+  const ok = code === 0
+  console.log(`\n=== ${name.toUpperCase()} [${ok ? "PASS" : "FAIL"}] (exit ${code}) ===`)
   if (!ok) passed = false
 }
 
