@@ -336,6 +336,17 @@ auto coop_server::coop_world_tick() -> void {
     //    proxy exits the sim with fresh moves ready to consume below.
     // A3: capture all world mutations during this tick for A4 delta stream.
     coop_tick_log_guard _tick_log;
+    // Test seam: push a synthetic terrain_changed event directly into the mutation log
+    // so the A4 delta sync carries ev_count=1 regardless of the current tile state.
+    // Used by the resync integration test to trigger the client's hash-mismatch detection.
+    if( pending_test_event_for_resync_ ) {
+        pending_test_event_for_resync_ = false;
+        if( auto* log = coop_mutation_log::current() ) {
+            log->push( { .type = coop_event_type::terrain_changed,
+                         .pos  = tripoint_abs_ms{ 999, 999, 0 }, // far-offscreen: no real tile
+                         .value = 1 } );
+        }
+    }
     g->post_action_world_step();
 
     // 2. Snapshot entity positions BEFORE draining client actions so the
@@ -848,8 +859,11 @@ auto coop_server::build_and_send_sync(bool force_full) -> void {
     ++sync_tick_counter_;
     const bool origin_changed = (abs_sub != last_sync_origin_);
     const bool periodic = (sync_tick_counter_ % TILE_RESYNC_INTERVAL == 0);
-    const bool send_full_tiles =
-        force_full || origin_changed || periodic || force_resync_.exchange(false);
+    // Always evaluate force_resync_.exchange(false) unconditionally — the || short-circuit
+    // would skip it when origin_changed or periodic is true, leaving force_resync_ set and
+    // causing a spurious extra full sync on the next tick (and failing the test seam CHECK).
+    const bool resync_requested = force_resync_.exchange(false);
+    const bool send_full_tiles = force_full || origin_changed || periodic || resync_requested;
     if (send_full_tiles) { last_sync_origin_ = abs_sub; }
 
     // --- events (delta path) ---
@@ -984,6 +998,23 @@ auto coop_server::shutdown() -> void {
     if (net_initialized_) {
         NET_Quit();
         net_initialized_ = false;
+    }
+    // Clean proxy NPC despawn — removes from active_npc, follower list, and overmapbuffer
+    // WITHOUT triggering die(): die() fires C3 death-drop + QUIT_DIED on every shutdown,
+    // including normal session-end, scattering proxy gear and spamming death messages.
+    // Idempotent: proxy_npc_id reset to invalid, second call is a no-op.
+    if( g && coop_session::get().proxy_npc_id.is_valid() ) {
+        const character_id pid = coop_session::get().proxy_npc_id;
+        coop_session::get().proxy_npc_id = character_id{}; // reset first — prevents re-entry
+        const npc* proxy = g->critter_by_id<npc>( pid );
+        if( proxy ) {
+            g->remove_npc_follower( pid );
+            get_overmapbuffer( proxy->get_dimension() ).remove_npc( pid );
+        }
+        if( !g->is_processing_npcs() ) {
+            g->erase_npc( pid );
+        }
+        DebugLog( DL::Info, DC::Main ) << "[coop] proxy NPC despawned on server shutdown";
     }
     coop_session::get().mode = coop_mode::none;
     if (g) { g->coop_server_ = nullptr; }

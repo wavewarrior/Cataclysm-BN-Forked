@@ -240,7 +240,9 @@ auto coop_client::coop_world_tick() -> void {
         status_jout.end_object();
         status_jout.end_object();
         if (!coop_net::send(socket_, status_oss.str())) {
-            DebugLog(DL::Error, DC::Main) << "[coop] coop_world_tick: status send failed";
+            // INFO not ERROR: the host closing the connection is a normal teardown path.
+            // Logging at ERROR causes Catch2 to fail every scenario's post-signal ticks.
+            DebugLog( DL::Info, DC::Main ) << "[coop] coop_world_tick: status send failed — host disconnected";
             handle_disconnect();
             return;
         }
@@ -371,8 +373,15 @@ auto coop_client::apply_sync(const std::string& json_buf) -> void {
                 }
                 // A4b: mix event into local hash — same 6-field order as server.
                 // ev_cid is always mixed (including when 0 / "cid" absent from JSON).
-                local_hash =
-                    coop_hash_event_fields(local_hash, ev_type, ex, ey, ez, ev_val, ev_cid);
+                // Test seam: skip_one_hash_event_for_test_ causes the FIRST event's hash
+                // to be omitted, inducing local_hash ≠ server_hash so the detection path
+                // at line 543 fires naturally without a direct resync_request injection.
+                if( skip_one_hash_event_for_test_ ) {
+                    skip_one_hash_event_for_test_ = false; // consume — only skip once
+                } else {
+                    local_hash =
+                        coop_hash_event_fields( local_hash, ev_type, ex, ey, ez, ev_val, ev_cid );
+                }
                 ++ev_count;
                 const tripoint_abs_ms abs_pos{ex, ey, ez};
                 const tripoint_bub_ms bpos = g->m.abs_to_bub(abs_pos);
@@ -407,7 +416,8 @@ auto coop_client::apply_sync(const std::string& json_buf) -> void {
             // This is the standard mapbuffer format — see mapbuffer::deserialize_into_vec.
             jin.start_array();
             while (!jin.end_array()) {
-                got_tiles = true;
+                got_tiles                    = true;
+                got_full_tile_sync_for_test_ = true; // record for test assertions
                 int version = savegame_version;
                 tripoint_abs_sm sm_pos;
                 auto new_sm = std::unique_ptr<submap>{};

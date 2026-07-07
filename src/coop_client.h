@@ -39,6 +39,17 @@ struct coop_client {
     /// Sends client_status dead=true and death-drop manifest synchronously before teardown.
     /// Safe to call multiple times — guarded by death_notified_.
     auto notify_death() -> void;
+    /// Test seam: skip hashing the next ONE mutation event in apply_sync, inducing a
+    /// local_hash ≠ server_hash divergence so the client naturally sends resync_request.
+    auto set_skip_one_hash_event_for_test() -> void { skip_one_hash_event_for_test_ = true; }
+    /// Test seam: true if apply_sync has processed at least one full-tile sync (got_tiles).
+    auto got_full_tile_sync_for_test() const -> bool { return got_full_tile_sync_for_test_; }
+    /// Test seam: close the underlying TCP socket immediately WITHOUT sending the
+    /// protocol disconnect packet — simulates a client crash.  Host should detect
+    /// the abrupt drop via receiver_thread_ and set running_=false.
+    auto close_socket_abruptly_for_test() -> void {
+        if( socket_ ) { NET_DestroyStreamSocket( socket_ ); socket_ = nullptr; }
+    }
 
 private:
     auto apply_sync(const std::string& json_buf) -> void;
@@ -62,6 +73,11 @@ private:
     uint32_t next_seq_ = 1;
     bool net_initialized_ = false;
     bool death_notified_ = false; ///< guard for notify_death(); prevents double-send
+    /// Test seam: when true, the next event's hash mixing is skipped (see apply_sync).
+    /// Cleared automatically after the first event is skipped.
+    bool skip_one_hash_event_for_test_  = false;
+    /// Test seam: set to true the first time apply_sync processes got_tiles == true.
+    bool got_full_tile_sync_for_test_   = false;
     // H5: host-assigned monster ID → local monster pointer.
     // Stable for stationary monsters; updated on position change.
     std::unordered_map<int, monster*> coop_monster_map_;

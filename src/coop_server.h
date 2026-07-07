@@ -71,6 +71,28 @@ struct coop_server {
     /// Test seam: directly set the client-idle flag that is normally written by the
     /// receiver thread when processing client_status packets.
     auto set_client_idle_for_test(bool v) -> void { client_is_idle_.store(v); }
+    /// Test seam: read force_resync_ without consuming it (main-thread only).
+    auto force_resync_pending_for_test() const -> bool { return force_resync_.load(); }
+    /// Test seam: directly set client HP percentage (normally written by receiver thread).
+    auto set_client_hp_pct_for_test( int v ) -> void { client_hp_pct_.store( v ); }
+    /// Test seam: directly set client-dead flag (normally written by receiver thread).
+    auto set_client_dead_for_test( bool v ) -> void { client_dead_.store( v ); }
+    /// Test seam: read client_death_announced_ (main-thread only, non-atomic).
+    auto client_death_announced_for_test() const -> bool { return client_death_announced_; }
+    /// Test seam: push a synthetic streamable event into the NEXT coop_world_tick()'s
+    /// mutation log directly — immune to the tile already having the target terrain
+    /// (which would make ter_set a no-op → ev_count=0 → hash check never fires).
+    auto queue_test_event_for_resync() -> void { pending_test_event_for_resync_ = true; }
+    /// Test seam: directly set force_resync_=true (bypasses hash detection path;
+    /// use for E2E smoke test of the server's full-sync response).
+    auto set_force_resync_for_test() -> void { force_resync_.store( true ); }
+    /// Test seam: reset last_sync_origin_ so origin_changed fires on the next tick
+    /// (triggers a full sync without needing the host avatar to actually move).
+    auto reset_sync_origin_for_test() -> void {
+        last_sync_origin_ = tripoint_abs_sm{
+            std::numeric_limits<int>::min(), std::numeric_limits<int>::min(),
+            std::numeric_limits<int>::min() };
+    }
     /// C3: client's last-reported HP percentage (0–100).  Thread-safe read.
     auto client_hp_pct() const -> int { return client_hp_pct_.load(); }
     /// C3: true if the client's avatar reported dead on the last tick.
@@ -173,6 +195,9 @@ private:
     // Written by wait_for_join_info() (main thread, pre-receiver); read by client_join_pos()
     // and spawn_proxy_npc() on the main thread.  No mutex needed — single-threaded access.
     std::optional<tripoint_abs_ms> client_join_pos_; ///< nullopt until join_info arrives
+    /// Test seam: when true, next coop_world_tick() pushes a synthetic terrain event
+    /// directly into the mutation log (see queue_test_event_for_resync()).
+    bool pending_test_event_for_resync_ = false;
 };
 
 #endif // COOP_ENABLED
