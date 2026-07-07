@@ -1621,6 +1621,28 @@ std::string sidebar_hud_coverage_report()
     return out;
 }
 
+/* Floating HUD panels implementation. */
+#include "hud_manager.h"
+
+void floating_hud_open()
+{
+    hud_manager::instance().open_all();
+}
+
+void floating_hud_sync( avatar &u )
+{
+    hud_manager::instance().update( u );
+}
+
+void floating_hud_close()
+{
+    hud_manager::instance().close_all();
+}
+
+bool floating_hud_active()
+{
+    return hud_manager::instance().is_active();
+}
 // Resolve a widget's "show_if" to a window_panel render predicate (the data-driven
 // equivalent of the hardcoded panels' render_func). Empty / unknown → always show.
 static std::function<bool()> resolve_widget_show_if( const widget &w )

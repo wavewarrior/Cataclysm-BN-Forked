@@ -30,6 +30,7 @@
 #include "get_version.h"
 #include "help.h"
 #include "loading_ui.h"
+#include "load_profiler.h"
 #include "mapbuffer.h"
 #include "mapsharing.h"
 #include "messages.h"
@@ -899,6 +900,7 @@ bool main_menu::new_character_tab()
     }
     world_generator->set_active_world( world );
     try {
+        load_profiler::reset();
         g->setup();
     } catch( const std::exception &err ) {
         debugmsg( "Error: %s", err.what() );
@@ -1070,18 +1072,21 @@ bool main_menu::load_character_tab( const std::string &worldname )
     world_generator->save_last_world_info();
     world_generator->set_active_world( world );
 
-    try {
-        g->setup();
-    } catch( const std::exception &err ) {
-        debugmsg( "Error: %s", err.what() );
-        return false;
-    }
+    load_profiler::reset();
+    {
+        load_profiler::phase_timer total_timer( load_profiler::load_phase::total );
+        try {
+            g->setup();
+        } catch( const std::exception &err ) {
+            debugmsg( "Error: %s", err.what() );
+            return false;
+        }
 
-    if( g->load( savegames[opt_val] ) ) {
-        cleanup.cancel();
-        return true;
+        if( g->load( savegames[opt_val] ) ) {
+            cleanup.cancel();
+            return true;
+        }
     }
-
     return false;
 }
 

@@ -46,6 +46,7 @@
 #include "cursesdef.h"
 #include "damage.h"
 #include "debug.h"
+#include "load_profiler.h"
 #include "detached_ptr.h"
 #include "distribution_grid.h"
 #include "drawing_primitives.h"
@@ -7559,6 +7560,7 @@ std::vector<tripoint_bub_ms> map::get_dir_circle( const tripoint_bub_ms &f,
 
 void map::load( const tripoint_abs_sm &w, const bool update_vehicle, const bool pump_events )
 {
+    load_profiler::phase_timer load_timer( load_profiler::load_phase::map_load_submaps );
     std::fill( grid.begin(), grid.end(), nullptr );
     submaps_with_active_items.clear();
     loaded_vehicles.clear();
@@ -7570,7 +7572,10 @@ void map::load( const tripoint_abs_sm &w, const bool update_vehicle, const bool 
             inp_mngr.pump_events();
         }
     }
-    reset_vehicle_cache( );
+    {
+        load_profiler::phase_timer veh_timer( load_profiler::load_phase::map_vehicle_cache );
+        reset_vehicle_cache( );
+    }
 }
 
 
@@ -8842,6 +8847,7 @@ void map::spawn_monsters_submap( const tripoint_bub_sm &gp, bool ignore_sight )
 
 void map::spawn_monsters( bool ignore_sight )
 {
+    load_profiler::phase_timer spawn_timer( load_profiler::load_phase::map_spawn_monsters );
     ZoneScoped;
     const auto zmin = zlevels ? -OVERMAP_DEPTH : abs_sub.z();
     const auto zmax = zlevels ? OVERMAP_HEIGHT : abs_sub.z();

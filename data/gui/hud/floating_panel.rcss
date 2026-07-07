@@ -1,0 +1,49 @@
+/* Base styling for floating HUD panels with fade animations.
+   Imported by each panel's RCSS file. */
+
+/* Floating panel container - absolutely positioned, with opacity transitions. */
+.floating-panel {
+    position: absolute;
+    background-color: {{bg}};
+    border: 2dp solid {{bg4}};
+    border-radius: 4dp;
+    padding: 6dp;
+    opacity: 1.0;
+    /* Transition opacity for smooth fades. */
+    transition: opacity 0.3s ease-out;
+}
+
+/* Panel content area. */
+.floating-panel > .content {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Common panel header styling. */
+.panel-header {
+    color: {{yellow}};
+    font-size: 14dp;
+    font-weight: bold;
+    margin-bottom: 4dp;
+    padding-bottom: 2dp;
+    border-bottom: 1dp solid {{bg3}};
+}
+
+/* Common panel body styling. */
+.panel-body {
+    color: {{fg}};
+    font-size: 16dp;
+}
+
+/* Muted text for secondary info. */
+.panel-muted {
+    color: {{fg4}};
+    font-size: 14dp;
+}
+
+/* Separator line. */
+.panel-separator {
+    height: 1dp;
+    background-color: {{bg3}};
+    margin: 4dp 0;
+}

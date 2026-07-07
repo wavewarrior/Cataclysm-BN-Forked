@@ -1,0 +1,52 @@
+/* Message log panel styling. */
+
+.message-log {
+    /* Right side panel positioning. */
+    right: 2%;
+    top: 60dp;
+    width: 30%;
+    height: 40%;
+    
+    /* Styling. */
+    background-color: {{bg}};
+    border: 2dp solid {{bg4}};
+    border-radius: 4dp;
+    padding: 8dp;
+}
+
+/* Scrollable message area. */
+.message-log .scroll-pane {
+    overflow: auto;
+    flex: 1 1 auto;
+}
+
+/* Individual message row. */
+.message-row {
+    display: block;
+    margin-bottom: 2dp;
+    padding: 2dp 0;
+}
+
+/* Message text. */
+.message-text {
+    color: {{fg}};
+    font-size: 14dp;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+/* Panel header. */
+.message-log .panel-header {
+    color: {{yellow}};
+    font-size: 14dp;
+    font-weight: bold;
+    margin-bottom: 6dp;
+    padding-bottom: 4dp;
+    border-bottom: 1dp solid {{bg3}};
+}
+
+/* Panel body. */
+.message-log .panel-body {
+    flex: 1 1 auto;
+    overflow: auto;
+}

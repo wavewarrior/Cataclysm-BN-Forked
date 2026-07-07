@@ -1,0 +1,19 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="hud/floating_panel.rcss"/>
+    <link type="text/rcss" href="hud/message_log.rcss"/>
+</head>
+<body data-model="message_log">
+    <!-- Message log panel - floating panel on the right side.
+         Displays recent game messages and fades when idle. -->
+    <div id="message-log-panel" class="floating-panel message-log">
+        <div class="panel-header">Messages</div>
+        <div class="panel-body scroll-pane">
+            <div class="message-row" data-for="row : data.rows">
+                <div class="message-text" data-rml="row.text_rml"></div>
+            </div>
+        </div>
+    </div>
+</body>
+</rml>

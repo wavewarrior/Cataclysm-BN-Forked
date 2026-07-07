@@ -3769,6 +3769,7 @@ mapgen_palette mapgen_palette::load_internal( const JsonObject &jo, const std::s
         new_pal.load_place_mapings<jmapgen_faction>( jo, "faction_owner_character", format_placings );
         palette_placings_cache.emplace( cache_key, format_placings );
     }
+    jo.allow_omitted_members();
     g_mg_inline_read_us += std::chrono::duration_cast<std::chrono::microseconds>(
                                std::chrono::steady_clock::now() - t_inline0 ).count();
 

@@ -1,0 +1,21 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="hud/floating_panel.rcss"/>
+    <link type="text/rcss" href="hud/top_bar.rcss"/>
+</head>
+<body data-model="top_bar">
+    <!-- Top bar panel: compact status info across the top of the screen.
+         Displays time, weather, location, light level, and date.
+         Uses flexbox to distribute items evenly across the width. -->
+    <div id="top-bar-panel" class="floating-panel top-bar">
+        <div class="top-bar-content">
+            <div class="top-bar-item time" data-rml="data.time_rml"></div>
+            <div class="top-bar-item weather" data-rml="data.weather_rml"></div>
+            <div class="top-bar-item location" data-rml="data.location_rml"></div>
+            <div class="top-bar-item light" data-rml="data.light_rml"></div>
+            <div class="top-bar-item date" data-rml="data.date_rml"></div>
+        </div>
+    </div>
+</body>
+</rml>

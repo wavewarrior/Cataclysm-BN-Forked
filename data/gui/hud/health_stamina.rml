@@ -1,0 +1,30 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="hud/floating_panel.rcss"/>
+    <link type="text/rcss" href="hud/health_stamina.rcss"/>
+</head>
+<body data-model="health_stamina">
+    <!-- Health and stamina bars panel - full width beneath top bar.
+         Shows visual bars and text values for health and stamina. -->
+    <div id="health-stamina-panel" class="floating-panel health-stamina">
+        <div class="bars-container">
+            <!-- Health bar -->
+            <div class="bar-row">
+                <div class="bar-label" data-rml="data.health_text_rml"></div>
+                <div class="bar-track">
+                    <div class="bar-fill health" data-rml="data.health_bar_rml"></div>
+                </div>
+            </div>
+            
+            <!-- Stamina bar -->
+            <div class="bar-row">
+                <div class="bar-label" data-rml="data.stamina_text_rml"></div>
+                <div class="bar-track">
+                    <div class="bar-fill stamina" data-rml="data.stamina_bar_rml"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</rml>

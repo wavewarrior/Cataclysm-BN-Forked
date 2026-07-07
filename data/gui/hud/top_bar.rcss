@@ -1,0 +1,59 @@
+/* Top bar panel styling - compact status info across the top. */
+
+.top-bar {
+    /* Override base positioning. */
+    left: 0%;
+    top: 0%;
+    width: 100%;
+    height: auto;
+    
+    /* Styling. */
+    background-color: {{bg}};
+    border: none;
+    border-bottom: 2dp solid {{bg4}};
+    border-radius: 0;
+    padding: 4dp 8dp;
+}
+
+/* Flex container to distribute items evenly. */
+.top-bar-content {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12dp;
+}
+
+/* Individual top bar items. */
+.top-bar-item {
+    display: flex;
+    align-items: center;
+    color: {{fg}};
+    font-size: 16dp;
+    white-space: nowrap;
+}
+
+/* Time item - slightly brighter. */
+.top-bar-item.time {
+    color: {{fg0}};
+}
+
+/* Weather item. */
+.top-bar-item.weather {
+    color: {{fg}};
+}
+
+/* Location item. */
+.top-bar-item.location {
+    color: {{fg0}};
+}
+
+/* Light item. */
+.top-bar-item.light {
+    color: {{fg}};
+}
+
+/* Date item. */
+.top-bar-item.date {
+    color: {{fg4}};
+}

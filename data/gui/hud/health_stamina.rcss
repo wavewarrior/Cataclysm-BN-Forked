@@ -1,0 +1,67 @@
+/* Health and stamina bars panel styling. */
+
+.health-stamina {
+    /* Positioned below top bar. */
+    left: 0%;
+    top: 24dp;
+    width: 100%;
+    height: auto;
+    
+    /* Styling. */
+    background-color: transparent;
+    border: none;
+    padding: 2dp 8dp;
+}
+
+/* Container for both bars. */
+.bars-container {
+    display: flex;
+    flex-direction: column;
+    gap: 2dp;
+}
+
+/* Individual bar row. */
+.bar-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8dp;
+}
+
+/* Bar label (text value). */
+.bar-label {
+    color: {{fg}};
+    font-size: 14dp;
+    min-width: 80dp;
+    text-align: right;
+}
+
+/* Bar track (background). */
+.bar-track {
+    flex: 1 1 auto;
+    height: 16dp;
+    background-color: {{bg2}};
+    border: 1dp solid {{bg3}};
+    border-radius: 2dp;
+    overflow: hidden;
+}
+
+/* Bar fill (colored portion). */
+.bar-fill {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    font-size: 14dp;
+    line-height: 1;
+}
+
+/* Health bar fill. */
+.bar-fill.health {
+    /* Color comes from the RML content. */
+}
+
+/* Stamina bar fill. */
+.bar-fill.stamina {
+    /* Color comes from the RML content. */
+}

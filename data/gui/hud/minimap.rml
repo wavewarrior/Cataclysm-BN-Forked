@@ -1,0 +1,17 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="hud/floating_panel.rcss"/>
+    <link type="text/rcss" href="hud/minimap.rcss"/>
+</head>
+<body data-model="minimap">
+    <!-- Minimap panel - floating panel on the right side, below message log.
+         This is a placeholder - actual minimap rendering will be added later. -->
+    <div id="minimap-panel" class="floating-panel minimap">
+        <div class="panel-header">Minimap</div>
+        <div class="panel-body">
+            <div class="minimap-content" data-rml="data.minimap_rml"></div>
+        </div>
+    </div>
+</body>
+</rml>

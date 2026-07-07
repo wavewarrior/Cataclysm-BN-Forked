@@ -1,0 +1,42 @@
+/* Minimap panel styling. */
+
+.minimap {
+    /* Right side panel, below message log. */
+    right: 2%;
+    top: calc(60dp + 40% + 10dp);
+    width: 30%;
+    height: 30%;
+    
+    /* Styling. */
+    background-color: {{bg}};
+    border: 2dp solid {{bg4}};
+    border-radius: 4dp;
+    padding: 8dp;
+}
+
+/* Minimap content area. */
+.minimap-content {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: {{fg4}};
+    font-size: 14dp;
+}
+
+/* Panel header. */
+.minimap .panel-header {
+    color: {{yellow}};
+    font-size: 14dp;
+    font-weight: bold;
+    margin-bottom: 6dp;
+    padding-bottom: 4dp;
+    border-bottom: 1dp solid {{bg3}};
+}
+
+/* Panel body. */
+.minimap .panel-body {
+    flex: 1 1 auto;
+    overflow: hidden;
+}

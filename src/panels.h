@@ -108,6 +108,15 @@ bool sidebar_hud_has_producer( const std::string &name );
 // The mechanical Tier-10 rip-out gate ("every panel in my UI built?").
 std::string sidebar_hud_coverage_report();
 
+/* Floating HUD panels (reusable components with fade animations).
+   Separate from the sidebar HUD - these are floating panels positioned
+   absolutely (top bar, health/stamina bars, right-side message log + minimap).
+   Each panel is a reusable component that can be easily added/removed. */
+void floating_hud_open();
+void floating_hud_sync( avatar &u );
+void floating_hud_close();
+bool floating_hud_active();
+
 class panel_manager
 {
     public:

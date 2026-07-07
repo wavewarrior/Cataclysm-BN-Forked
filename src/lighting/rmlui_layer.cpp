@@ -398,6 +398,7 @@ void shutdown()
     // Tear RmlUi down before the interfaces it points at, then release the
     // render interface's GPU resources before the device is destroyed.
     if( g_ready ) {
+        g_world_geom.clear();
         Rml::Shutdown();
     }
     g_open_docs.clear();

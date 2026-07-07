@@ -79,6 +79,7 @@
 #include "cursesport.h"
 #include "damage.h"
 #include "debug.h"
+#include "load_profiler.h"
 #include "dependency_tree.h"
 #include "diary.h"
 #include "distraction_manager.h"
@@ -563,6 +564,7 @@ void game::reenter_fullscreen()
  */
 void game::setup( bool load_world_modfiles )
 {
+    load_profiler::phase_timer setup_timer( load_profiler::load_phase::world_setup );
     loading_ui ui( true );
 
     // Clear all dimension overmapbuffers before reloading JSON data.
@@ -818,10 +820,12 @@ void game::suggest_auto_walk_to_stairs( Character &u, map &m, const std::string 
 // Set up all default values for a new game
 bool game::start_game()
 {
-    if( !gamemode ) {
-        gamemode = std::make_unique<special_game>();
-    }
-
+    load_profiler::reset();
+    {
+        load_profiler::phase_timer total_timer( load_profiler::load_phase::total );
+        if( !gamemode ) {
+            gamemode = std::make_unique<special_game>();
+        }
     seed = rng_bits();
     new_game = true;
     saving_blocked_by_failed_load = false;
@@ -841,7 +845,10 @@ bool game::start_game()
     ui_manager::redraw();
     refresh_display();
 
-    load_master();
+    {
+        load_profiler::phase_timer master_timer( load_profiler::load_phase::save_master );
+        load_master();
+    }
 
     // Populate the overworld dimension_info so get_current_dimension_info() is valid
     // from the very start of a new game.  Use the "default" world_type from JSON so
@@ -920,15 +927,24 @@ bool game::start_game()
     // The player is centered in the map, but lev[xyz] refers to the top left point of the map
     lev.x() -= g_half_mapsize;
     lev.y() -= g_half_mapsize;
-    load_map( lev, /*pump_events=*/true );
+    {
+        load_profiler::phase_timer update_map_timer( load_profiler::load_phase::update_map );
+        load_map( lev, /*pump_events=*/true );
+    }
 
     m.invalidate_map_cache( get_levz() );
-    m.build_map_cache( get_levz() );
+    {
+        load_profiler::phase_timer cache_timer( load_profiler::load_phase::map_cache_build );
+        m.build_map_cache( get_levz() );
+    }
     // Do this after the map cache has been built!
     start_loc.place_player( u );
     // ...but then rebuild it, because we want visibility cache to avoid spawning monsters in sight
     m.invalidate_map_cache( get_levz() );
-    m.build_map_cache( get_levz() );
+    {
+        load_profiler::phase_timer cache_timer2( load_profiler::load_phase::map_cache_build );
+        m.build_map_cache( get_levz() );
+    }
     // Start the overmap with out immediate neighborhood visible, this needs to be after place_player
     get_overmapbuffer( current_dimension_id_ ).reveal( u.abs_omt_pos().xy(),
             get_option<int>( "DISTANCE_INITIAL_VISIBILITY" ), 0 );
@@ -1105,9 +1121,9 @@ bool game::start_game()
     }
 
     cata::run_hooks( "on_game_started" );
+    } // total_timer destroyed → logs summary
     return true;
 }
-
 vehicle *game::place_vehicle_nearby(
     const vproto_id &id, const point_abs_omt &origin, int min_distance,
     int max_distance, const std::vector<std::string> &omt_search_types,
@@ -3631,26 +3647,30 @@ bool game::load_dimension_data()
 
 bool game::load( const std::string &world )
 {
-    world_generator->init();
-    WORLDINFO *wptr = world_generator->get_world( world );
-    if( !wptr ) {
-        return false;
-    }
-    if( wptr->world_saves.empty() ) {
-        debugmsg( "world '%s' contains no saves", world );
-        return false;
-    }
-
-    try {
-        world_generator->set_active_world( wptr );
-        g->setup();
-        if( !g->load( wptr->world_saves.front() ) ) {
+    load_profiler::reset();
+    {
+        load_profiler::phase_timer total_timer( load_profiler::load_phase::total );
+        world_generator->init();
+        WORLDINFO *wptr = world_generator->get_world( world );
+        if( !wptr ) {
             return false;
         }
-    } catch( const std::exception &err ) {
-        debugmsg( "cannot load world '%s': %s", world, err.what() );
-        return false;
-    }
+        if( wptr->world_saves.empty() ) {
+            debugmsg( "world '%s' contains no saves", world );
+            return false;
+        }
+
+        try {
+            world_generator->set_active_world( wptr );
+            g->setup();
+            if( !g->load( wptr->world_saves.front() ) ) {
+                return false;
+            }
+        } catch( const std::exception &err ) {
+            debugmsg( "cannot load world '%s': %s", world, err.what() );
+            return false;
+        }
+    } // total_timer destroyed → logs summary
 
     return true;
 }
@@ -3676,7 +3696,10 @@ bool game::load( const save_t &name )
     }
 
     // Now load up the master game data; factions (and more?)
-    load_master();
+    {
+        load_profiler::phase_timer master_timer( load_profiler::load_phase::save_master );
+        load_master();
+    }
     u = avatar();
     u.recalc_hp();
     u.set_save_id( name.decoded_name() );
@@ -3697,10 +3720,13 @@ bool game::load( const save_t &name )
     }
     fire_loader.clear( submap_loader );
     auto unserialized = false;
-    const auto load_save = [&]( std::istream & fin ) { unserialized = unserialize( fin ); };
-    if( !get_active_world()->read_from_file( name.base_path() + SAVE_EXTENSION, load_save ) ||
-        !unserialized ) {
-        return false;
+    {
+        load_profiler::phase_timer deserialize_timer( load_profiler::load_phase::save_deserialize );
+        const auto load_save = [&]( std::istream & fin ) { unserialized = unserialize( fin ); };
+        if( !get_active_world()->read_from_file( name.base_path() + SAVE_EXTENSION, load_save ) ||
+            !unserialized ) {
+            return false;
+        }
     }
 
     // Restore per-dimension data (region type, etc.) for the dimension the player
@@ -3793,7 +3819,10 @@ bool game::load( const save_t &name )
             despawn_monster( critter );
         }
     }
-    update_map( u );
+    {
+        load_profiler::phase_timer update_map_timer( load_profiler::load_phase::update_map );
+        update_map( u );
+    }
     discard_monster_map_for_loaded_bubble( m, current_dimension_id_ );
     m.build_floor_cache( get_levz() );
     for( auto &e : u.inv_dump() ) {
@@ -3822,14 +3851,20 @@ bool game::load( const save_t &name )
     //needs all npcs and stats loaded
     u.activity->init_all_moves( u );
 
-    cata::load_world_lua_state( get_active_world(), "lua_state.json" );
+    {
+        load_profiler::phase_timer lua_timer( load_profiler::load_phase::save_lua_state );
+        cata::load_world_lua_state( get_active_world(), "lua_state.json" );
+    }
 
     cata::run_on_game_load_hooks( *DynamicDataLoader::get_instance().lua );
 
     // Build caches once so any immediate post-load draws don't use uninitialized lighting/visibility,
     // then re-invalidate so the first real in-game draw rebuilds everything again.
     m.invalidate_map_cache( get_levz() );
-    m.build_map_cache( get_levz() );
+    {
+        load_profiler::phase_timer cache_timer( load_profiler::load_phase::map_cache_build );
+        m.build_map_cache( get_levz() );
+    }
     m.update_visibility_cache( get_levz() );
     m.invalidate_map_cache( get_levz() );
 
@@ -4364,8 +4399,12 @@ void game::draw_panels( bool /* force_draw */ )
     if( sidebar_hud_rmlui_enabled() ) {
         sidebar_hud_open();
         sidebar_hud_sync( u );
+        // Floating HUD panels (top bar, health/stamina, message log, minimap)
+        floating_hud_open();
+        floating_hud_sync( u );
     } else {
         sidebar_hud_close();
+        floating_hud_close();
     }
 }
 
