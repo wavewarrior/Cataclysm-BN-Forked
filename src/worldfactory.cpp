@@ -819,8 +819,8 @@ void worldfactory::show_active_world_mods( const std::vector<mod_id> &world_mods
         }
         int sel_child = -1;
         std::vector<plain_mod_row> built = build_wf_mod_rows(
-                world_mods, static_cast<size_t>( cursor ), _( "--NO ACTIVE MODS--" ),
-                nullptr, sel_child );
+                                               world_mods, static_cast<size_t>( cursor ), _( "--NO ACTIVE MODS--" ),
+                                               nullptr, sel_child );
         data->rows.clear();
         for( const plain_mod_row &p : built ) {
             wf_amod_row r;
@@ -1204,7 +1204,7 @@ int worldfactory::show_modselection_window( const catacurses::window &win,
             return s;
         };
         std::vector<plain_mod_row> ac = build_wf_mod_rows( active_mod_order, cursel[1],
-                _( "--NO ACTIVE MODS--" ), shift_fn, sel_active );
+                                        _( "--NO ACTIVE MODS--" ), shift_fn, sel_active );
         data->active.clear();
         for( const plain_mod_row &p : ac ) {
             wf_mod_row r;
@@ -1216,10 +1216,10 @@ int worldfactory::show_modselection_window( const catacurses::window &win,
         }
         // Headers (focused list marked with < >).
         data->avail_head_rml = cata_text_to_rml( colorize(
-                active_header == 0 ? std::string( "< " ) + _( "Mod List" ) + " >" : _( "Mod List" ), c_cyan ) );
+                                   active_header == 0 ? std::string( "< " ) + _( "Mod List" ) + " >" : _( "Mod List" ), c_cyan ) );
         data->active_head_rml = cata_text_to_rml( colorize(
-                active_header == 1 ? std::string( "< " ) + _( "Mod Load Order" ) + " >" :
-                _( "Mod Load Order" ), c_cyan ) );
+                                    active_header == 1 ? std::string( "< " ) + _( "Mod Load Order" ) + " >" :
+                                    _( "Mod Load Order" ), c_cyan ) );
         // Description of the selected mod.
         if( const MOD_INFORMATION *selmod = get_selected_mod() ) {
             data->desc_rml = cata_text_to_rml( mman_ui->get_information( selmod ) );
@@ -1228,7 +1228,8 @@ int worldfactory::show_modselection_window( const catacurses::window &win,
         }
         // Filter line (live while the popup is open).
         if( fpopup ) {
-            data->filter_rml = cata_text_to_rml( colorize( string_format( "< %s >", fpopup->text() ), c_cyan ) );
+            data->filter_rml = cata_text_to_rml( colorize( string_format( "< %s >", fpopup->text() ),
+                                                 c_cyan ) );
         } else {
             std::string line = colorize( string_format( current_filter.empty() ? _( "[%s] Filter" ) :
                                          _( "[%s] Filter: " ), ctxt.get_desc( "FILTER" ) ), c_light_gray );
@@ -1494,7 +1495,7 @@ int worldfactory::show_worldgen_tab_confirm( const catacurses::window &win, WORL
 
         // +1 for end-of-text cursor
         spopup.window( w_confirmation, namebar_pos, namebar_pos.x + max_worldname_len + 1 )
-        .context( ctxt );
+              .context( ctxt );
 
         ui.position_from_window( win );
     };
@@ -1704,7 +1705,7 @@ void worldfactory::delete_world( const std::string &worldname, const bool delete
     auto file_paths = get_files_from_path( "", worldpath, true, true );
     if( !delete_folder ) {
         std::vector<std::string>::iterator forbidden = std::ranges::find_if( file_paths,
-                isForbidden );
+            isForbidden );
         while( forbidden != file_paths.end() ) {
             file_paths.erase( forbidden );
             forbidden = std::ranges::find_if( file_paths, isForbidden );

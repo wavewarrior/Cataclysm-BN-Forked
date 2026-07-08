@@ -47,7 +47,7 @@ using ItemList = std::vector<item *>;
  * @param birthday The birthday (@ref item::bday) of the items created by this function.
  */
 std::vector<detached_ptr<item>> items_from( const item_group_id &group_id,
-                             const time_point &birthday );
+        const time_point &birthday );
 
 /**
  * Same as above but with implicit birthday at turn 0.
@@ -117,7 +117,7 @@ class Item_spawn_data
          * @param[out] rec Recursion list, output goes here
          */
         virtual std::vector<detached_ptr<item>> create( const time_point &birthday,
-                                             RecursionList &rec ) const = 0;
+                RecursionList &rec ) const = 0;
         std::vector<detached_ptr<item>> create( const time_point &birthday ) const;
         /**
          * The same as create, but create a single item only.

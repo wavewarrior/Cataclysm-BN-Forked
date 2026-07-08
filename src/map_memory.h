@@ -40,9 +40,9 @@ struct mm_submap {
 
         const memorized_terrain_tile &tile( const point_sm_ms &p ) const {
             if( tiles.empty() ) {
-                return default_tile;
-            } else {
-                return tiles[p.y() * SEEX + p.x()];
+            return default_tile;
+        } else {
+            return tiles[p.y() * SEEX + p.x()];
             }
         }
 
@@ -57,9 +57,9 @@ struct mm_submap {
 
         const memorized_terrain_tile &terrain_tile( const point_sm_ms &p ) const {
             if( terrain_tiles.empty() ) {
-                return default_tile;
-            } else {
-                return terrain_tiles[p.y() * SEEX + p.x()];
+            return default_tile;
+        } else {
+            return terrain_tiles[p.y() * SEEX + p.x()];
             }
         }
 
@@ -73,9 +73,9 @@ struct mm_submap {
 
         int symbol( const point_sm_ms &p ) const {
             if( symbols.empty() ) {
-                return default_symbol;
-            } else {
-                return symbols[p.y() * SEEX + p.x()];
+            return default_symbol;
+        } else {
+            return symbols[p.y() * SEEX + p.x()];
             }
         }
 

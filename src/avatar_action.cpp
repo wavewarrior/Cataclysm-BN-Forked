@@ -125,14 +125,14 @@ bool avatar_action::move( avatar &you, map &m, const tripoint_rel_ms &d )
 
     const auto can_use_ladder = [&]() -> bool {
         if( is_riding || m.has_floor_or_support( dest_loc ) )
-        {
-            return false;
-        }
-        return m.has_flag( flag_LADDER, dest_loc + tripoint_below );
-    };
+    {
+        return false;
+    }
+    return m.has_flag( flag_LADDER, dest_loc + tripoint_below );
+};
 
-    bool via_ramp = false;
-    if( m.has_flag( TFLAG_RAMP_UP, dest_loc ) ) {
+bool via_ramp = false;
+if( m.has_flag( TFLAG_RAMP_UP, dest_loc ) ) {
         dest_loc.z() += 1;
         via_ramp = true;
     } else if( m.has_flag( TFLAG_RAMP_DOWN, dest_loc ) || can_use_ladder() ) {
@@ -1274,9 +1274,9 @@ void avatar_action::reload( item &loc, bool prompt, bool empty )
         }
 
         u.assign_activity( std::make_unique<player_activity>(
-            std::make_unique<reload_activity_actor>(
-                safe_reference<item>( use_loc ? loc : *opt.target ),
-                safe_reference<item>( *opt.ammo ), opt.qty() ) ) );
+                               std::make_unique<reload_activity_actor>(
+                                   safe_reference<item>( use_loc ? loc : *opt.target ),
+                                   safe_reference<item>( *opt.ammo ), opt.qty() ) ) );
     }
 }
 
@@ -1347,7 +1347,7 @@ void avatar_action::reload_weapon( bool try_everything )
         return ( ap->get_reload_time() * ( ap->ammo_capacity() - ap->ammo_remaining() ) ) <
                ( bp->get_reload_time() * ( bp->ammo_capacity() - bp->ammo_remaining() ) );
     } );
-    for( item *&candidate : reloadables ) {
+    for( item * &candidate : reloadables ) {
         std::vector<item_reload_option> ammo_list;
         character_funcs::list_ammo( u, *candidate, ammo_list, false, false );
         if( !ammo_list.empty() ) {
@@ -1365,10 +1365,10 @@ void avatar_action::reload_weapon( bool try_everything )
     if( veh && ( turret = veh->turret_query( u.abs_pos() ) ) && turret.can_reload() ) {
         item_reload_option opt = character_funcs::select_ammo( u, turret.base(), true );
         if( opt ) {
-        u.assign_activity( std::make_unique<player_activity>(
-            std::make_unique<reload_activity_actor>(
-                safe_reference<item>( turret.base() ),
-                safe_reference<item>( *opt.ammo ), opt.qty() ) ) );
+            u.assign_activity( std::make_unique<player_activity>(
+                                   std::make_unique<reload_activity_actor>(
+                                       safe_reference<item>( turret.base() ),
+                                       safe_reference<item>( *opt.ammo ), opt.qty() ) ) );
         }
         return;
     }

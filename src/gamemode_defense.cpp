@@ -1022,13 +1022,13 @@ void defense_game::caravan()
             defense_setup_row r;
             r.selected = ( static_cast<int>( i ) == item_selected );
             r.text = cata_text_to_rml( colorize( string_format( "%s x %2d",
-                                       item::nname( cat_items[i], cat_counts[i] ), cat_counts[i] ), c_white ) );
+                                                 item::nname( cat_items[i], cat_counts[i] ), cat_counts[i] ), c_white ) );
             if( cat_counts[i] > 0 ) {
                 const int item_price = item::spawn_temporary( cat_items[i],
                                        calendar::start_of_cataclysm )->price( false );
                 const int price = caravan_price( g->u, item_price * cat_counts[i] );
                 r.detail = cata_text_to_rml( colorize( string_format( "(%s)", format_money( price ) ),
-                                             price > g->u.cash ? c_red : c_green ) );
+                                                       price > g->u.cash ? c_red : c_green ) );
             }
             rml_data->item_rows.emplace_back( std::move( r ) );
         }

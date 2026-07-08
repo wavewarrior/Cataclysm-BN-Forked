@@ -5,7 +5,8 @@
 #include <string>
 #include <vector>
 
-namespace lighting {
+namespace lighting
+{
 
 struct debug_params;
 struct gpu_emitter;
@@ -31,7 +32,8 @@ extern EmitterOverlayState s_emo;
 
 // Clamp ranges + key-step sizes for the F8/F9 handlers and the F4 sliders.
 // Single source so the two input paths can't drift.
-namespace lighting_dbg_range {
+namespace lighting_dbg_range
+{
 inline constexpr float SCALE_MIN = 0.0f, SCALE_MAX = 10.0f, SCALE_STEP = 0.1f;
 inline constexpr float GI_MIN = 0.0f, GI_MAX = 2.0f, GI_STEP = 0.05f;
 inline constexpr float DAMT_MIN = 0.0f, DAMT_MAX = 1.0f, DAMT_STEP = 0.1f;
@@ -89,7 +91,8 @@ extern float g_depth_lean_str;
 extern float g_depth_dark_str;
 
 // Main-menu decorative-emitter tuning.
-namespace menu_emitter_tuning {
+namespace menu_emitter_tuning
+{
 
 extern float radius_input;
 extern float pos_x;
@@ -100,7 +103,8 @@ extern bool blue_backdrop;
 } // namespace menu_emitter_tuning
 
 // Dev cursor light (F4 panel).
-namespace cursor_light_emitter {
+namespace cursor_light_emitter
+{
 
 extern bool enabled;
 extern float radius;
@@ -109,12 +113,13 @@ extern float wx, wy, wz;
 
 } // namespace cursor_light_emitter
 
-namespace sdl_lighting_devui {
+namespace sdl_lighting_devui
+{
 
 // F4 opens the RmlUi dev panel (devui.rml). devui_visible() is the F4 toggle
 // (sdl_input writes it); rml_tick() opens/syncs/closes the doc to match it each
 // frame (called from refresh_display).
-bool& devui_visible();
+bool &devui_visible();
 void rml_tick();
 
 // Place a static dev test light at the hovered world tile. Returns true if it placed

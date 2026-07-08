@@ -18,18 +18,17 @@
 
 #include <vector>
 
-namespace dev_test_lights
-{
+namespace dev_test_lights {
 
 struct light {
-    float wx, wy, wz;     // world-tile position
-    float radius;         // tiles
-    float intensity;      // brightness multiplier
-    float r, g, b;        // colour tint (0..1)
+    float wx, wy, wz; // world-tile position
+    float radius;     // tiles
+    float intensity;  // brightness multiplier
+    float r, g, b;    // colour tint (0..1)
 };
 
-extern bool  place_mode;                      // F4 checkbox: click places a light
-extern float hover_wx, hover_wy, hover_wz;    // last world-tile under the cursor
-extern std::vector<light> lights;             // placed lights; cleared on dev-UI close
+extern bool place_mode;                    // F4 checkbox: click places a light
+extern float hover_wx, hover_wy, hover_wz; // last world-tile under the cursor
+extern std::vector<light> lights;          // placed lights; cleared on dev-UI close
 
 } // namespace dev_test_lights

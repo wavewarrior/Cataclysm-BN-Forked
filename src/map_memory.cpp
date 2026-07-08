@@ -23,8 +23,8 @@ mm_region::mm_region() : submaps {{ nullptr }} {}
 
 bool mm_region::is_empty() const
 {
-    for( const auto &itt : submaps ) {
-        for( const shared_ptr_fast<mm_submap> &it : itt ) {
+for( const auto &itt : submaps ) {
+    for( const shared_ptr_fast<mm_submap> &it : itt ) {
             if( !it->is_empty() ) {
                 return false;
             }

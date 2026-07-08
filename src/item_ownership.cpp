@@ -123,74 +123,82 @@
 #include <unordered_set>
 
 // File-scope id constants (internal linkage).
-static const activity_id ACT_PICKUP("ACT_PICKUP");
-static const std::string has_thievery_witness("has_thievery_witness");
+static const activity_id ACT_PICKUP( "ACT_PICKUP" );
+static const std::string has_thievery_witness( "has_thievery_witness" );
 
-bool item::is_owned_by(const Character& c, bool available_to_take) const {
+bool item::is_owned_by( const Character& c, bool available_to_take ) const
+{
     // owner.is_null() implies faction_id( "no_faction" ) which shouldn't happen, or no owner at
     // all. either way, certain situations this means the thing is available to take. in other
     // scenarios we actually really want to check for id == id, even for no_faction
-    if (get_owner().is_null()) { return available_to_take; }
-    if (!c.get_faction()) {
-        debugmsg("Character %s has no faction", c.disp_name());
+    if( get_owner().is_null() ) { return available_to_take; }
+if( !c.get_faction() ) {
+    debugmsg( "Character %s has no faction", c.disp_name() );
         return false;
     }
     return c.get_faction()->id() == get_owner();
 }
 
-bool item::is_old_owner(const Character& c, bool available_to_take) const {
-    if (get_old_owner().is_null()) { return available_to_take; }
-    if (!c.get_faction()) {
-        debugmsg("Character %s has no faction.", c.disp_name());
+bool item::is_old_owner( const Character& c, bool available_to_take ) const
+{
+    if( get_old_owner().is_null() ) { return available_to_take; }
+if( !c.get_faction() ) {
+    debugmsg( "Character %s has no faction.", c.disp_name() );
         return false;
     }
     return c.get_faction()->id() == get_old_owner();
 }
 
-std::string item::get_owner_name() const {
-    if (!g->faction_manager_ptr->get(get_owner())) {
-        debugmsg("item::get_owner_name() item %s has no valid nor null faction id ", tname());
+std::string item::get_owner_name() const
+{
+    if( !g->faction_manager_ptr->get( get_owner() ) ) {
+    debugmsg( "item::get_owner_name() item %s has no valid nor null faction id ", tname() );
         return "no owner";
     }
-    return g->faction_manager_ptr->get(get_owner())->name();
+    return g->faction_manager_ptr->get( get_owner() )->name();
 }
 
-void item::set_owner(const Character& c) {
-    if (!c.get_faction()) {
-        debugmsg("item::set_owner() Character %s has no valid faction", c.disp_name());
+void item::set_owner( const Character& c )
+{
+    if( !c.get_faction() ) {
+        debugmsg( "item::set_owner() Character %s has no valid faction", c.disp_name() );
         return;
     }
     owner = c.get_faction()->id();
 }
 
-faction_id item::get_owner() const {
+faction_id item::get_owner() const
+{
     validate_ownership();
     return owner;
 }
 
-faction_id item::get_old_owner() const {
+faction_id item::get_old_owner() const
+{
     validate_ownership();
     return old_owner;
 }
 
-void item::validate_ownership() const {
-    if (!old_owner.is_null() && !g->faction_manager_ptr->get(old_owner, false)) {
-        remove_old_owner();
+void item::validate_ownership() const
+{
+    if( !old_owner.is_null() && !g->faction_manager_ptr->get( old_owner, false ) ) {
+    remove_old_owner();
     }
-    if (!owner.is_null() && !g->faction_manager_ptr->get(owner, false)) { remove_owner(); }
+    if( !owner.is_null() && !g->faction_manager_ptr->get( owner, false ) ) { remove_owner(); }
 }
 
 
-bool item::is_money() const { return ammo_types().contains(ammotype("money")); }
+bool item::is_money() const { return ammo_types().contains( ammotype( "money" ) ); }
 
 bool item::count_by_charges() const { return type->count_by_charges(); }
 
 int item::count() const { return count_by_charges() ? charges : 1; }
 
-bool item::craft_has_charges() {
-    if (count_by_charges()) {
+bool item::craft_has_charges()
+{
+    if( count_by_charges() ) {
         return true;
-    } else if (ammo_types().empty()) {
+    } else if( ammo_types().empty() ) {
         return true;
     }
 
@@ -199,99 +207,106 @@ bool item::craft_has_charges() {
 
 
 double item::bonus_from_enchantments(
-    const Character& owner, double base, enchant_vals::mod value, bool round) const {
+    const Character& owner, double base, enchant_vals::mod value, bool round ) const
+{
     double add = 0.0;
     double mul = 0.0;
-    for (const enchantment& ench : get_enchantments()) {
-        if (ench.is_active(owner, *this)) {
-            add += ench.get_value_add(value);
-            mul += ench.get_value_multiply(value);
+    for( const enchantment& ench : get_enchantments() ) {
+        if( ench.is_active( owner, *this ) ) {
+            add += ench.get_value_add( value );
+            mul += ench.get_value_multiply( value );
         }
     }
     // TODO: this part duplicates enchantment::calc_bonus()
     double ret = add + base * mul;
-    if (round) { ret = trunc(ret); }
+    if( round ) { ret = trunc( ret ); }
     return ret;
 }
 
 double item::bonus_from_enchantments_wielded(
-    double base, enchant_vals::mod value, bool round) const {
+    double base, enchant_vals::mod value, bool round ) const
+{
     double add = 0.0;
     double mul = 0.0;
-    for (const enchantment& ench : get_enchantments()) {
-        if (ench.is_active_when_wielded()) {
-            add += ench.get_value_add(value);
-            mul += ench.get_value_multiply(value);
+    for( const enchantment& ench : get_enchantments() ) {
+        if( ench.is_active_when_wielded() ) {
+            add += ench.get_value_add( value );
+            mul += ench.get_value_multiply( value );
         }
     }
     // TODO: this part duplicates enchantment::calc_bonus()
     double ret = add + base * mul;
-    if (round) { ret = trunc(ret); }
+    if( round ) { ret = trunc( ret ); }
     return ret;
 }
 
-const std::vector<relic_recharge>& item::get_relic_recharge_scheme() const {
+const std::vector<relic_recharge> &item::get_relic_recharge_scheme() const
+{
     return relic_data->get_recharge_scheme();
 }
 
-bool item::can_contain(const item& it) const {
+bool item::can_contain( const item& it ) const
+{
     // TODO: Volume check
-    return can_contain(*it.type);
+    return can_contain( *it.type );
 }
 
-bool item::can_contain(const itype& tp) const {
-    if (!type->container) {
-        // TODO: Tools etc.
-        return false;
-    }
-
-    if (tp.phase == LIQUID && !type->container->watertight) { return false; }
-
-    // TODO: Acid in waterskins
-    return true;
+bool item::can_contain( const itype& tp ) const
+{
+    if( !type->container ) {
+    // TODO: Tools etc.
+    return false;
 }
 
-const item& item::get_contained() const {
-    if (contents.empty()) { return null_item_reference(); }
+if( tp.phase == LIQUID && !type->container->watertight ) { return false; }
+
+// TODO: Acid in waterskins
+return true;
+}
+
+const item &item::get_contained() const
+{
+    if( contents.empty() ) { return null_item_reference(); }
     return contents.front();
 }
 
 
-void item::handle_pickup_ownership(Character& c) {
-    if (is_owned_by(c)) { return; }
+void item::handle_pickup_ownership( Character& c )
+{
+    if( is_owned_by( c ) ) { return; }
     // Add ownership to item if unowned
-    if (owner.is_null()) {
-        set_owner(c);
+    if( owner.is_null() ) {
+        set_owner( c );
     } else {
         Character& you = get_player_character();
-        if (!is_owned_by(c) && &c == &you) {
-            std::vector<npc*> witnesses;
-            for (npc& elem : g->all_npcs()) {
+        if( !is_owned_by( c ) && &c == &you ) {
+            std::vector<npc *> witnesses;
+            for( npc& elem : g->all_npcs() ) {
                 // If they already want to murder you, no point in confronting you about theft
-                if (rl_dist(elem.bub_pos(), you.bub_pos()) < g_max_view_distance
-                    && elem.get_faction() && is_owned_by(elem) && elem.sees(you.bub_pos())
-                    && !elem.guaranteed_hostile()) {
-                    elem.say("<witnessed_thievery>", 7);
+                if( rl_dist( elem.bub_pos(), you.bub_pos() ) < g_max_view_distance
+                    && elem.get_faction() && is_owned_by( elem ) && elem.sees( you.bub_pos() )
+                    && !elem.guaranteed_hostile() ) {
+                    elem.say( "<witnessed_thievery>", 7 );
                     npc* npc_to_add = &elem;
-                    witnesses.push_back(npc_to_add);
+                    witnesses.push_back( npc_to_add );
                 }
             }
-            if (!witnesses.empty()) {
-                set_old_owner(get_owner());
+            if( !witnesses.empty() ) {
+                set_old_owner( get_owner() );
                 // Make sure there is only one witness
-                for (npc& guy : g->all_npcs()) {
-                    if (guy.get_attitude() == NPCATT_RECOVER_GOODS) {
-                        guy.set_attitude(NPCATT_NULL);
+                for( npc& guy : g->all_npcs() ) {
+                    if( guy.get_attitude() == NPCATT_RECOVER_GOODS ) {
+                        guy.set_attitude( NPCATT_NULL );
                     }
                 }
-                random_entry(witnesses)->set_attitude(NPCATT_RECOVER_GOODS);
+                random_entry( witnesses )->set_attitude( NPCATT_RECOVER_GOODS );
                 // Notify the activity that we got a witness
-                if (c.activity && !c.activity->is_null() && c.activity->id() == ACT_PICKUP) {
+                if( c.activity && !c.activity->is_null() && c.activity->id() == ACT_PICKUP ) {
                     c.activity->str_values.clear();
-                    c.activity->str_values.emplace_back(has_thievery_witness);
+                    c.activity->str_values.emplace_back( has_thievery_witness );
                 }
             }
-            set_owner(c);
+            set_owner( c );
         }
     }
 }

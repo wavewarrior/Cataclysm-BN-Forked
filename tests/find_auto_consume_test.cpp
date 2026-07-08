@@ -42,17 +42,17 @@ TEST_CASE( "auto_consume_priority", "[auto_consume][food][zone]" )
     you.setpos( zone_origin );
 
     static auto create_zone = [ &, zone_origin_absolute,
-       zone_size]( const std::string & name ) -> void {
+    zone_size]( const std::string & name ) -> void {
         zmgr.add( name, zone_type_id( name ),
-                  faction_id( "your_followers" ), false, true,
-                  zone_origin_absolute - zone_size,
-                  zone_origin_absolute + zone_size );
+        faction_id( "your_followers" ), false, true,
+        zone_origin_absolute - zone_size,
+        zone_origin_absolute + zone_size );
     };
 
     static auto place_items = [&]( const std::vector<std::pair<item *, tripoint_bub_ms>> &item_pairs )
                               ->
     void {
-        for( const auto &[ item, pos ] : item_pairs )
+for( const auto &[ item, pos ] : item_pairs )
         {
             here.add_item_or_charges( pos, item::spawn( *item ) );
         }
@@ -74,7 +74,7 @@ TEST_CASE( "auto_consume_priority", "[auto_consume][food][zone]" )
     SECTION( "auto_eat" ) {
         static const auto check_item_count =
         [&]( const PosCounts & expected ) -> void {
-            for( const auto&[ pos, count ] : expected )
+for( const auto&[ pos, count ] : expected )
             {
                 if( count == 0 ) {
                     INFO( "expected empty at " << pos );
@@ -116,7 +116,7 @@ TEST_CASE( "auto_consume_priority", "[auto_consume][food][zone]" )
     SECTION( "auto_drink" ) {
         static const auto check_drink_amount =
         [&]( const PosCounts & expected ) -> void {
-            for( const auto&[ pos, count ] : expected )
+for( const auto&[ pos, count ] : expected )
             {
                 auto &jar = get_single_food_item( pos );
                 auto &contained = jar.get_contained();

@@ -128,8 +128,8 @@ bool monster::is_immune_field( const field_type_id &fid ) const
 bool monster::will_move_to( const tripoint_bub_ms &p ) const
 {
     if( g->m.impassable( p ) ) {
-        auto above_p = p + tripoint_above;
-        if( digging() ) {
+    auto above_p = p + tripoint_above;
+    if( digging() ) {
             if( !g->m.has_flag( "BURROWABLE", p ) ) {
                 return false;
             }
@@ -144,46 +144,46 @@ bool monster::will_move_to( const tripoint_bub_ms &p ) const
     }
 
     if( digs() && !g->m.ter( p )->is_diggable() && !g->m.has_flag( "BURROWABLE", p ) ) {
-        return false;
-    }
+    return false;
+}
 
-    if( has_flag( MF_AQUATIC ) && ( !g->m.has_flag( "SWIMMABLE", p ) ||
-                                    g->m.veh_at( p ).part_with_feature( "BOARDABLE", true ) ) ) {
+if( has_flag( MF_AQUATIC ) && ( !g->m.has_flag( "SWIMMABLE", p ) ||
+                                        g->m.veh_at( p ).part_with_feature( "BOARDABLE", true ) ) ) {
         return false;
     }
 
     if( has_flag( MF_SUNDEATH ) && g->is_in_sunlight( p ) ) {
-        return false;
-    }
+    return false;
+}
 
-    if( get_size() > creature_size::medium && g->m.has_flag_ter( TFLAG_SMALL_PASSAGE, p ) ) {
-        return false; // if a large critter, can't move through tight passages
-    }
+if( get_size() > creature_size::medium && g->m.has_flag_ter( TFLAG_SMALL_PASSAGE, p ) ) {
+    return false; // if a large critter, can't move through tight passages
+}
 
-    // Various avoiding behaviors.
+// Various avoiding behaviors.
 
-    bool avoid_fire = has_flag( MF_AVOID_FIRE );
-    bool avoid_fall = has_flag( MF_AVOID_FALL );
-    bool avoid_simple = has_flag( MF_AVOID_DANGER_1 );
-    bool avoid_complex = has_flag( MF_AVOID_DANGER_2 );
-    /*
-     * Because some avoidance behaviors are supersets of others,
-     * we can cascade through the implications. Complex implies simple,
-     * and simple implies fire and fall.
-     * unfortunately, fall does not necessarily imply fire, nor the converse.
-     */
-    if( avoid_complex ) {
-        avoid_simple = true;
-    }
-    if( avoid_simple ) {
-        avoid_fire = true;
-        avoid_fall = true;
-    }
+bool avoid_fire = has_flag( MF_AVOID_FIRE );
+bool avoid_fall = has_flag( MF_AVOID_FALL );
+bool avoid_simple = has_flag( MF_AVOID_DANGER_1 );
+bool avoid_complex = has_flag( MF_AVOID_DANGER_2 );
+/*
+ * Because some avoidance behaviors are supersets of others,
+ * we can cascade through the implications. Complex implies simple,
+ * and simple implies fire and fall.
+ * unfortunately, fall does not necessarily imply fire, nor the converse.
+ */
+if( avoid_complex ) {
+    avoid_simple = true;
+}
+if( avoid_simple ) {
+    avoid_fire = true;
+    avoid_fall = true;
+}
 
-    // technically this will shortcut in evaluation from fire or fall
-    // before hitting simple or complex but this is more explicit
-    if( avoid_fire || avoid_fall || avoid_simple || avoid_complex ) {
-        const ter_id target = g->m.ter( p );
+// technically this will shortcut in evaluation from fire or fall
+// before hitting simple or complex but this is more explicit
+if( avoid_fire || avoid_fall || avoid_simple || avoid_complex ) {
+    const ter_id target = g->m.ter( p );
 
         // Don't enter lava if we have any concept of heat being bad
         if( avoid_fire && target == t_lava ) {
@@ -341,33 +341,33 @@ float monster::rate_target( Creature &c, float best, bool smart, int precalc_dis
     const auto d = precalc_dist >= 0 ? precalc_dist
                    : static_cast<int>( rl_dist_fast( bub_pos(), c.bub_pos() ) );
     if( d <= 0 ) {
-        return FLT_MAX;
-    }
+    return FLT_MAX;
+}
 
-    // Check a very common and cheap case first
-    if( !smart && d >= best ) {
-        return FLT_MAX;
-    }
+// Check a very common and cheap case first
+if( !smart && d >= best ) {
+    return FLT_MAX;
+}
 
-    // P-8: use the per-turn cache for repeated Creature::sees() checks in this
-    // direction.  Symmetric LOS reuse happens inside map::sees().
-    if( !turn_cached_sees( *this, c ) ) {
-        return FLT_MAX;
-    }
+// P-8: use the per-turn cache for repeated Creature::sees() checks in this
+// direction.  Symmetric LOS reuse happens inside map::sees().
+if( !turn_cached_sees( *this, c ) ) {
+    return FLT_MAX;
+}
 
-    if( !smart ) {
-        return int( d );
+if( !smart ) {
+    return int( d );
     }
 
     float power = c.power_rating();
     monster *mon = dynamic_cast< monster * >( &c );
     // Their attitude to us and not ours to them, so that bobcats won't get gunned down
     if( mon != nullptr && mon->attitude_to( *this ) == Attitude::A_HOSTILE ) {
-        power += 2;
-    }
+    power += 2;
+}
 
-    if( power > 0 ) {
-        return int( d ) / power;
+if( power > 0 ) {
+    return int( d ) / power;
     }
 
     return FLT_MAX;
@@ -412,20 +412,23 @@ monster_plan_t monster::compute_plan( const monster::compute_plan_context &ctx )
     // Spatial-grid query helper: iterates monsters in buckets within radius buckets.
     // Returns false if the grid is unavailable (caller must fall back).
     const auto for_monsters_nearby = [&]( int radius_buckets, auto &&fn ) -> bool {
-        if( ctx.spatial_grid == nullptr ) {
+        if( ctx.spatial_grid == nullptr )
+        {
             return false;
         }
-        const auto bucket_of = []( const tripoint_bub_ms &pos ) {
+        const auto bucket_of = []( const tripoint_bub_ms & pos )
+        {
             return monster::spatial_grid_t::key_t{
                 pos.x() / monster::spatial_grid_t::bucket_size,
                 pos.y() / monster::spatial_grid_t::bucket_size
             };
         };
         const auto my_bucket = bucket_of( bub_pos() );
-        for( int dx = -radius_buckets; dx <= radius_buckets; ++dx ) {
+        for( int dx = -radius_buckets; dx <= radius_buckets; ++dx )
+        {
             for( int dy = -radius_buckets; dy <= radius_buckets; ++dy ) {
                 const auto it = ctx.spatial_grid->buckets.find(
-                    { my_bucket.first + dx, my_bucket.second + dy } );
+                { my_bucket.first + dx, my_bucket.second + dy } );
                 if( it != ctx.spatial_grid->buckets.end() ) {
                     for( monster *mp : it->second ) {
                         if( mp != this ) {
@@ -569,7 +572,7 @@ monster_plan_t monster::compute_plan( const monster::compute_plan_context &ctx )
                 }
             };
             const int bucket_radius = max_sight_range /
-                monster::spatial_grid_t::bucket_size + 1;
+                                      monster::spatial_grid_t::bucket_size + 1;
             if( !for_monsters_nearby( bucket_radius, process_foe ) ) {
                 for_each_monster( process_foe );
             }
@@ -1777,24 +1780,24 @@ tripoint_bub_ms monster::scent_move() const
 {
     // TODO: Remove when scentmap is 3D
     if( std::abs( bub_pos().z() - g->get_levz() ) > SCENT_MAP_Z_REACH ) {
-        return { -1, -1, INT_MIN };
-    }
+    return { -1, -1, INT_MIN };
+}
 
-    const std::set<scenttype_id> &tracked_scents = type->scents_tracked;
-    const std::set<scenttype_id> &ignored_scents = type->scents_ignored;
+const std::set<scenttype_id> &tracked_scents = type->scents_tracked;
+const std::set<scenttype_id> &ignored_scents = type->scents_ignored;
 
-    std::vector<tripoint_bub_ms> smoves;
+std::vector<tripoint_bub_ms> smoves;
 
-    int bestsmell = 10; // Squares with smell 0 are not eligible targets.
-    int smell_threshold = 200; // Squares at or above this level are ineligible.
-    if( has_flag( MF_KEENNOSE ) ) {
-        bestsmell = 1;
-        smell_threshold = 400;
-    }
+int bestsmell = 10; // Squares with smell 0 are not eligible targets.
+int smell_threshold = 200; // Squares at or above this level are ineligible.
+if( has_flag( MF_KEENNOSE ) ) {
+    bestsmell = 1;
+    smell_threshold = 400;
+}
 
-    const bool fleeing = is_fleeing( g->u );
-    if( fleeing ) {
-        bestsmell = g->scent.get( bub_pos() );
+const bool fleeing = is_fleeing( g->u );
+if( fleeing ) {
+    bestsmell = g->scent.get( bub_pos() );
     }
 
     const scenttype_id player_scent = g->u.get_type_of_scent();
@@ -1806,11 +1809,11 @@ tripoint_bub_ms monster::scent_move() const
     tripoint_bub_ms next( -1, -1, bub_pos().z() );
     if( ( !fleeing && g->scent.get( bub_pos() ) > smell_threshold ) ||
         ( fleeing && bestsmell == 0 ) ) {
-        return next;
-    }
-    const bool can_bash = bash_skill() > 0;
-    for( const auto &dest : g->m.points_in_radius( bub_pos(), 1, SCENT_MAP_Z_REACH ) ) {
-        int smell = g->scent.get( dest );
+    return next;
+}
+const bool can_bash = bash_skill() > 0;
+for( const auto &dest : g->m.points_in_radius( bub_pos(), 1, SCENT_MAP_Z_REACH ) ) {
+    int smell = g->scent.get( dest );
         const scenttype_id &type_scent = g->scent.get_type( dest );
 
         bool right_scent = false;
@@ -1935,11 +1938,11 @@ int monster::calc_movecost( const tripoint_bub_ms &f, const tripoint_bub_ms &t )
 int monster::calc_climb_cost( const tripoint_bub_ms &f, const tripoint_bub_ms &t ) const
 {
     if( flies() ) {
-        return 100;
-    }
+    return 100;
+}
 
-    if( climbs() && !g->m.has_flag( TFLAG_NO_FLOOR, t ) ) {
-        const int diff = g->m.climb_difficulty( f );
+if( climbs() && !g->m.has_flag( TFLAG_NO_FLOOR, t ) ) {
+    const int diff = g->m.climb_difficulty( f );
         if( diff <= 10 ) {
             return 150;
         }
@@ -2046,7 +2049,7 @@ int monster::bash_skill() const
 int monster::group_bash_skill( const tripoint_bub_ms &target ) const
 {
     if( !has_flag( MF_GROUP_BASH ) ) {
-        return bash_skill();
+    return bash_skill();
     }
     int bashskill = 0;
 
@@ -2054,9 +2057,9 @@ int monster::group_bash_skill( const tripoint_bub_ms &target ) const
     const int max_helper_depth = 5;
     const std::vector<tripoint_bub_ms> bzone = get_bashing_zone( target, bub_pos(), max_helper_depth );
 
-    for( const auto &candidate : bzone ) {
-        // Drawing this line backwards excludes the target and includes the candidate.
-        std::vector<tripoint_bub_ms> path_to_target = line_to( target, candidate, 0, 0 );
+for( const auto &candidate : bzone ) {
+    // Drawing this line backwards excludes the target and includes the candidate.
+    std::vector<tripoint_bub_ms> path_to_target = line_to( target, candidate, 0, 0 );
         bool connected = true;
         monster *mon = nullptr;
         for( const tripoint_bub_ms &in_path : path_to_target ) {
@@ -2095,9 +2098,9 @@ bool monster::attack_at( const tripoint_bub_ms &p )
         const auto upper_z = std::max( p.z(), bub_pos().z() );
         const auto vehicle_floor_between =
             here.veh_at( tripoint_bub_ms( bub_pos().xy(), upper_z ) ).part_with_feature( "BOARDABLE",
-                    true ).has_value() ||
+                true ).has_value() ||
             here.veh_at( tripoint_bub_ms( p.xy(), upper_z ) ).part_with_feature( "BOARDABLE",
-                    true ).has_value();
+                true ).has_value();
 
         if( here.floor_between( bub_pos(), p ) || vehicle_floor_between ) {
             return false;
@@ -2242,8 +2245,8 @@ bool monster::move_to( const tripoint_bub_ms &p, bool force, bool step_on_critte
         const float cost = stagger_adjustment *
                            static_cast<float>( climbs() &&
                                                g->m.has_flag( TFLAG_NO_FLOOR, p ) ? calc_climb_cost( bub_pos(),
-                                                       destination ) : calc_movecost( bub_pos(),
-                                                               destination ) );
+                                                   destination ) : calc_movecost( bub_pos(),
+                                                       destination ) );
         if( cost > 0.0f ) {
             moves -= static_cast<int>( std::ceil( cost ) );
         } else {

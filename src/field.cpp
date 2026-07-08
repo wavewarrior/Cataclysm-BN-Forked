@@ -170,10 +170,10 @@ field_entry *field::find_field( const field_type_id &field_type_to_find )
 const field_entry *field::find_field_c( const field_type_id &field_type_to_find ) const
 {
     if( !_displayed_field_type ) {
-        return nullptr;
-    }
-    const auto it = _field_type_list.find( field_type_to_find );
-    if( it != _field_type_list.end() ) {
+    return nullptr;
+}
+const auto it = _field_type_list.find( field_type_to_find );
+if( it != _field_type_list.end() ) {
         return &it->second;
     }
     return nullptr;

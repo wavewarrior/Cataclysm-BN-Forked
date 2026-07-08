@@ -100,10 +100,10 @@ std::string get_input_string_from_file( const std::string &fname )
 int input_event::get_first_input() const
 {
     if( sequence.empty() ) {
-        return UNKNOWN_UNICODE;
-    }
+    return UNKNOWN_UNICODE;
+}
 
-    return sequence[0];
+return sequence[0];
 }
 
 input_manager inp_mngr;
@@ -564,7 +564,7 @@ const action_attributes &input_manager::get_action_attributes(
 translation input_manager::get_default_action_name( const std::string &action_id ) const
 {
     const t_action_contexts::const_iterator default_action_context = action_contexts.find(
-                default_context_id );
+            default_context_id );
     if( default_action_context == action_contexts.end() ) {
         return no_translation( action_id );
     }
@@ -683,9 +683,9 @@ const std::string TIMEOUT = "TIMEOUT";
 
 const std::string &input_context::input_to_action( const input_event &inp ) const
 {
-    for( auto &elem : registered_actions ) {
-        const std::string &action = elem;
-        const std::vector<input_event> &check_inp = inp_mngr.get_input_for_action( action, category );
+for( auto &elem : registered_actions ) {
+    const std::string &action = elem;
+    const std::vector<input_event> &check_inp = inp_mngr.get_input_for_action( action, category );
 
         // Does this action have our queried input event in its keybindings?
         for( auto &check_inp_i : check_inp ) {
@@ -722,7 +722,7 @@ std::vector<char> input_context::keys_bound_to( const std::string &action_descri
 {
     std::vector<char> result;
     const std::vector<input_event> &events = inp_mngr.get_input_for_action( action_descriptor,
-            category );
+        category );
     for( const auto &events_event : events ) {
         // Ignore multi-key input and non-keyboard input
         // TODO: fix for Unicode.
@@ -786,7 +786,7 @@ std::string input_context::get_desc( const std::string &action_descriptor,
 
     bool is_local = false;
     const std::vector<input_event> &events = inp_mngr.get_input_for_action( action_descriptor,
-            category, &is_local );
+        category, &is_local );
 
     if( events.empty() ) {
         return is_local ? _( "Unbound locally!" ) : _( "Unbound globally!" );
@@ -877,16 +877,16 @@ std::string input_context::get_desc(
     const input_event_filter &evt_filter ) const
 {
     return get_desc( action_descriptor, text, evt_filter,
-                     to_translation(
-                         //~ %1$s: action description text before key,
-                         //~ %2$s: key description,
-                         //~ %3$s: action description text after key.
-                         "keybinding", "%1$s(%2$s)%3$s" ),
-                     to_translation(
-                         // \u00A0 is the non-breaking space
-                         //~ %1$s: key description,
-                         //~ %2$s: action description.
-                         "keybinding", "[%1$s]\u00A0%2$s" ) );
+           to_translation(
+           //~ %1$s: action description text before key,
+           //~ %2$s: key description,
+           //~ %3$s: action description text after key.
+           "keybinding", "%1$s(%2$s)%3$s" ),
+    to_translation(
+    // \u00A0 is the non-breaking space
+    //~ %1$s: key description,
+    //~ %2$s: action description.
+    "keybinding", "[%1$s]\u00A0%2$s" ) );
 }
 
 std::string input_context::describe_key_and_name( const std::string &action_descriptor,
@@ -1159,8 +1159,8 @@ action_id input_context::display_menu( const bool permit_execute_action )
         legwidth = width - filter_pos.x * 2 - BORDER_SPACE;
         // +1 for end-of-text cursor
         spopup.window( w_help, filter_pos, filter_pos.x + legwidth + 1 )
-        .max_length( legwidth )
-        .context( ctxt );
+              .max_length( legwidth )
+              .context( ctxt );
         ui.position_from_window( w_help );
     };
     recalc_size( ui );
@@ -1489,7 +1489,7 @@ std::string input_context::get_action_name( const std::string &action_id ) const
     // this context that is masking the global hotkey. Fallback to the global
     // hotkey's name.
     const action_attributes &default_attributes = inp_mngr.get_action_attributes( action_id,
-            default_context_id );
+        default_context_id );
     if( !default_attributes.name.empty() ) {
         return default_attributes.name.translated();
     }
@@ -1522,7 +1522,7 @@ std::string input_context::press_x( const std::string &action_id,
         return _( "mouse movement" );
     }
     const input_manager::t_input_event_list &events = inp_mngr.get_input_for_action( action_id,
-            category );
+        category );
     if( events.empty() ) {
         return key_unbound;
     }

@@ -21,18 +21,18 @@ auto entries_storage() -> std::vector<entry> & // *NOPAD*
 auto normalize_category( const std::string &category_id ) -> std::string
 {
     return category_id.empty() ? std::string{ "misc" } :
-           category_id;
+    category_id;
 }
 
 auto parse_hotkey( const std::optional<std::string> &hotkey ) -> int
 {
     if( !hotkey || hotkey->empty() ) {
-        return -1;
-    }
+    return -1;
+}
 
-    const auto keycode = inp_mngr.get_keycode( *hotkey );
-    if( keycode == 0 ) {
-        debugmsg( "Lua action menu hotkey '%s' is not a known key name.", *hotkey );
+const auto keycode = inp_mngr.get_keycode( *hotkey );
+if( keycode == 0 ) {
+    debugmsg( "Lua action menu hotkey '%s' is not a known key name.", *hotkey );
         return -1;
     }
 
@@ -43,11 +43,11 @@ auto parse_hotkey( const std::optional<std::string> &hotkey ) -> int
 auto register_entry( const entry_options &opts ) -> void
 {
     if( opts.id.empty() ) {
-        debugmsg( "Lua action menu entry id must not be empty." );
+    debugmsg( "Lua action menu entry id must not be empty." );
         return;
     }
     if( opts.fn == sol::lua_nil ) {
-        debugmsg( "Lua action menu entry '%s' has no fn.", opts.id );
+    debugmsg( "Lua action menu entry '%s' has no fn.", opts.id );
         return;
     }
 
@@ -63,7 +63,7 @@ auto register_entry( const entry_options &opts ) -> void
     auto &entries = entries_storage();
     auto existing = std::ranges::find( entries, opts.id, &entry::id );
     if( existing != entries.end() ) {
-        *existing = std::move( new_entry );
+    *existing = std::move( new_entry );
         return;
     }
     entries.push_back( std::move( new_entry ) );

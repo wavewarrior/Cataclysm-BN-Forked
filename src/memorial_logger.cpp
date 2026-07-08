@@ -172,7 +172,7 @@ void memorial_logger::write( std::ostream &file, const std::string &epitaph ) co
     // TODO: fix point types
     const std::string locdesc =
         get_overmapbuffer( get_avatar().get_dimension() ).get_description_at( tripoint_abs_sm(
-                    u.abs_sm_pos() ) );
+                u.abs_sm_pos() ) );
     //~ First parameter is a pronoun ("He"/"She"), second parameter is a description
     //~ that designates the location relative to its surroundings.
     const std::string kill_place = string_format( _( "%1$s was killed in a %2$s." ),

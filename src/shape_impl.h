@@ -65,7 +65,7 @@ class cone : public shape_impl
 
         inclusive_cuboid<rl_vec3d> bounding_box() const override {
             return inclusive_cuboid<rl_vec3d>( rl_vec3d( -sin_angle * h, -h, 0 ),
-                                               rl_vec3d( sin_angle * h, 0, 0 ) );
+            rl_vec3d( sin_angle * h, 0, 0 ) );
         }
 };
 
@@ -94,7 +94,7 @@ class cylinder : public shape_impl
 
         inclusive_cuboid<rl_vec3d> bounding_box() const override {
             return inclusive_cuboid<rl_vec3d>( rl_vec3d( radius, -2 * half_length, 0 ),
-                                               rl_vec3d( radius, 0, 0 ) );
+            rl_vec3d( radius, 0, 0 ) );
         }
 };
 
@@ -281,7 +281,7 @@ class cone_factory : public shape_factory_impl
             std::shared_ptr<cylinder> cyl = std::make_shared<cylinder>( length - 1.0, 0.5 );
             // Offset to prevent it reaching backwards when rotated
             std::shared_ptr<shape_impl> offset_cyl = std::make_shared<offset_shape>( cyl,
-                    rl_vec3d( 0.0, -0.5, 0.0 ) );
+                rl_vec3d( 0.0, -0.5, 0.0 ) );
             auto mindist = std::make_shared<shape_min>( c, offset_cyl );
             auto mindist_minus_origin = std::make_shared<shape_exclude_circle>( mindist, 0.5 );
             rl_vec3d diff = end - start;
@@ -315,8 +315,8 @@ class cone_factory : public shape_factory_impl
 
         std::string get_description() const override {
             return string_format( _( "Cone of length <info>%d</info>, apex angle <info>%d</info>" ),
-                                  static_cast<int>( length ),
-                                  static_cast<int>( std::round( units::to_degrees( half_angle * 2 ) ) ) );
+            static_cast<int>( length ),
+            static_cast<int>( std::round( units::to_degrees( half_angle * 2 ) ) ) );
         }
 };
 

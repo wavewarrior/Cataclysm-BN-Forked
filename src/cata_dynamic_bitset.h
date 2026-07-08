@@ -84,8 +84,8 @@ class cata_dynamic_bitset
         // ----- query -----
 
         bool none() const {
-            for( auto w : data_ ) {
-                if( w ) {
+for( auto w : data_ ) {
+            if( w ) {
                     return false;
                 }
             }
@@ -98,17 +98,17 @@ class cata_dynamic_bitset
 
         bool all() const {
             if( data_.empty() ) {
-                return true;
-            }
-            const size_t full_words = size_ / 64;
-            for( size_t i = 0; i < full_words; ++i ) {
-                if( data_[i] != ~uint64_t( 0 ) ) {
+            return true;
+        }
+        const size_t full_words = size_ / 64;
+        for( size_t i = 0; i < full_words; ++i ) {
+            if( data_[i] != ~uint64_t( 0 ) ) {
                     return false;
                 }
             }
             const size_t rem = size_ % 64;
             if( rem ) {
-                const uint64_t mask = ( uint64_t( 1 ) << rem ) - 1;
+            const uint64_t mask = ( uint64_t( 1 ) << rem ) - 1;
                 if( ( data_[full_words] & mask ) != mask ) {
                     return false;
                 }

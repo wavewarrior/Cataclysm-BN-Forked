@@ -982,14 +982,15 @@ void item::gun_cycle_mode()
     return;
 }
 
-std::map<gunmod_location, int> item::get_mod_locations() const {
+std::map<gunmod_location, int> item::get_mod_locations() const
+{
     std::map<gunmod_location, int> mod_locations = type->gun->valid_mod_locations;
 
-    for (const item* mod : gunmods()) {
-        if (!mod->type->gunmod->add_mod.empty()) {
+    for( const item * mod : gunmods() ) {
+        if( !mod->type->gunmod->add_mod.empty() ) {
             std::map<gunmod_location, int> add_locations = mod->type->gunmod->add_mod;
 
-            for (const std::pair<const gunmod_location, int>& add_location : add_locations) {
+            for( const std::pair<const gunmod_location, int> &add_location : add_locations ) {
                 mod_locations[add_location.first] += add_location.second;
             }
         }
@@ -998,31 +999,33 @@ std::map<gunmod_location, int> item::get_mod_locations() const {
     return mod_locations;
 }
 
-int item::get_free_mod_locations(const gunmod_location& location) const {
-    if (!is_gun()) { return 0; }
+int item::get_free_mod_locations( const gunmod_location& location ) const
+{
+    if( !is_gun() ) { return 0; }
 
-    std::map<gunmod_location, int> mod_locations = get_mod_locations();
+std::map<gunmod_location, int> mod_locations = get_mod_locations();
 
-    const auto loc = mod_locations.find(location);
-    if (loc == mod_locations.end()) { return 0; }
-    int result = loc->second;
-    for (const item* elem : contents.all_items_top()) {
-        const cata::value_ptr<islot_gunmod>& mod = elem->type->gunmod;
-        if (mod && mod->location == location) { result--; }
+const auto loc = mod_locations.find( location );
+if( loc == mod_locations.end() ) { return 0; }
+int result = loc->second;
+for( const item * elem : contents.all_items_top() ) {
+    const cata::value_ptr<islot_gunmod> &mod = elem->type->gunmod;
+    if( mod && mod->location == location ) { result--; }
     }
     return result;
 }
 
-int item::get_gun_ups_drain() const {
+int item::get_gun_ups_drain() const
+{
     int draincount = 0;
-    if (type->gun) {
+    if( type->gun ) {
         int modifier = 0;
         float multiplier = 1.0f;
-        for (const item* mod : gunmods()) {
+        for( const item * mod : gunmods() ) {
             modifier += mod->type->gunmod->ups_charges_modifier;
             multiplier *= mod->type->gunmod->ups_charges_multiplier;
         }
-        draincount = (type->gun->ups_charges * multiplier) + modifier;
+        draincount = ( type->gun->ups_charges * multiplier ) + modifier;
     }
     return draincount;
 }

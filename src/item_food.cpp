@@ -543,7 +543,8 @@ detached_ptr<item>  item::process_rot( detached_ptr<item> &&self, const bool sea
 
 time_duration item::brewing_time() const { return is_brewable() ? type->brewable->time : 0_turns; }
 
-const std::vector<itype_id>& item::brewing_results() const {
+const std::vector<itype_id> &item::brewing_results() const
+{
     static const std::vector<itype_id> nulresult{};
     return is_brewable() ? type->brewable->results : nulresult;
 }

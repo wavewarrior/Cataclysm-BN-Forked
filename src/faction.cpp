@@ -500,7 +500,7 @@ int npc::follower_interaction_flag() const
                                has_bionic( bio_infolink );
     const tripoint_abs_omt player_abspos = get_player_character().abs_omt_pos();
     if( rl_dist( player_abspos, abs_omt_pos() ) > 3 ||
-        ( rl_dist( g->u.bub_pos(), bub_pos() ) > SEEX * 2 || !g->u.sees( bub_pos() ) ) ) {
+            ( rl_dist( g->u.bub_pos(), bub_pos() ) > SEEX * 2 || !g->u.sees( bub_pos() ) ) ) {
         if( u_has_radio && guy_has_radio ) {
             // TODO: better range calculation than just elevation.
             int max_range = 200;
@@ -790,7 +790,7 @@ void faction_manager::display() const
                 rml_data.detail_rml = snippet != nullptr
                                       ? cata_text_to_rml( SNIPPET.get_snippet_by_id( snippet->first ).value().translated() )
                                       : cata_text_to_rml( colorize( _( "You haven't learned anything about the world." ),
-                                              c_light_red ) );
+                                          c_light_red ) );
                 break;
             case tab_mode::TAB_CREATURES:
                 for( size_t i = 0; i < creatures.size(); i++ ) {

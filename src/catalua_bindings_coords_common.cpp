@@ -11,93 +11,93 @@ namespace cata::detail::lua_coords
 auto origin_lua_name( const coords::origin origin ) -> std::string_view
 {
     switch( origin ) {
-        case coords::origin::relative:
-            return "rel";
-        case coords::origin::abs:
-            return "abs";
-        case coords::origin::bubble:
-            return "bub";
-        case coords::origin::vehicle:
-            return "mnt";
-        case coords::origin::submap:
-            return "sm";
-        case coords::origin::overmap_terrain:
-            return "omt";
-        case coords::origin::overmap:
-            return "om";
-        case coords::origin::segment:
-            return "seg";
-        case coords::origin::mem_map_region:
-            return "mmr";
-    }
-    return "unknown";
+    case coords::origin::relative:
+        return "rel";
+    case coords::origin::abs:
+        return "abs";
+    case coords::origin::bubble:
+        return "bub";
+    case coords::origin::vehicle:
+        return "mnt";
+    case coords::origin::submap:
+        return "sm";
+    case coords::origin::overmap_terrain:
+        return "omt";
+    case coords::origin::overmap:
+        return "om";
+    case coords::origin::segment:
+        return "seg";
+    case coords::origin::mem_map_region:
+        return "mmr";
+}
+return "unknown";
 }
 
 auto scale_lua_name( const coords::scale scale ) -> std::string_view
 {
     switch( scale ) {
-        case coords::scale::map_square:
-            return "ms";
-        case coords::scale::vehicle:
-            return "veh";
-        case coords::scale::submap:
-            return "sm";
-        case coords::scale::overmap_terrain:
-            return "omt";
-        case coords::scale::segment:
-            return "seg";
-        case coords::scale::overmap:
-            return "om";
-        case coords::scale::mem_map_region:
-            return "mmr";
-    }
-    return "unknown";
+    case coords::scale::map_square:
+        return "ms";
+    case coords::scale::vehicle:
+        return "veh";
+    case coords::scale::submap:
+        return "sm";
+    case coords::scale::overmap_terrain:
+        return "omt";
+    case coords::scale::segment:
+        return "seg";
+    case coords::scale::overmap:
+        return "om";
+    case coords::scale::mem_map_region:
+        return "mmr";
+}
+return "unknown";
 }
 
 auto origin_type_name( const coords::origin origin ) -> std::string_view
 {
     switch( origin ) {
-        case coords::origin::relative:
-            return "Rel";
-        case coords::origin::abs:
-            return "Abs";
-        case coords::origin::bubble:
-            return "Bub";
-        case coords::origin::vehicle:
-            return "Mnt";
-        case coords::origin::submap:
-            return "Sm";
-        case coords::origin::overmap_terrain:
-            return "Omt";
-        case coords::origin::overmap:
-            return "Om";
-        case coords::origin::segment:
-            return "Seg";
-        case coords::origin::mem_map_region:
-            return "Mmr";
-    }
-    return "Unknown";
+    case coords::origin::relative:
+        return "Rel";
+    case coords::origin::abs:
+        return "Abs";
+    case coords::origin::bubble:
+        return "Bub";
+    case coords::origin::vehicle:
+        return "Mnt";
+    case coords::origin::submap:
+        return "Sm";
+    case coords::origin::overmap_terrain:
+        return "Omt";
+    case coords::origin::overmap:
+        return "Om";
+    case coords::origin::segment:
+        return "Seg";
+    case coords::origin::mem_map_region:
+        return "Mmr";
+}
+return "Unknown";
 }
 
 auto scale_type_name( const coords::scale scale ) -> std::string_view
 {
     switch( scale ) {
-        case coords::scale::map_square:
-            return "Ms";
-        case coords::scale::vehicle:
-            return "Veh";
-        case coords::scale::submap:
-            return "Sm";
-        case coords::scale::overmap_terrain:
-            return "Omt";
-        case coords::scale::segment:
-            return "Seg";
-        case coords::scale::overmap:
-            return "Om";
-        case coords::scale::mem_map_region:
-            return "Mmr";
-    }
-    return "Unknown";
+    case coords::scale::map_square:
+        return "Ms";
+    case coords::scale::vehicle:
+        return "Veh";
+    case coords::scale::submap:
+        return "Sm";
+    case coords::scale::overmap_terrain:
+        return "Omt";
+    case coords::scale::segment:
+        return "Seg";
+    case coords::scale::overmap:
+        return "Om";
+    case coords::scale::mem_map_region:
+        return "Mmr";
+}
+return "Unknown";
 }
 
 auto parse_origin( const std::string_view name ) -> std::optional<coords::origin>
@@ -161,45 +161,45 @@ auto parse_scale( const std::string_view name ) -> std::optional<coords::scale>
 auto is_registered_coord( const coords::origin origin, const coords::scale scale ) -> bool
 {
     switch( origin ) {
-        case coords::origin::relative:
-            return true;
-        case coords::origin::abs:
-            return scale != coords::scale::vehicle;
-        case coords::origin::bubble:
-            return scale == coords::scale::map_square || scale == coords::scale::submap;
-        case coords::origin::vehicle:
-            return scale == coords::scale::vehicle;
-        case coords::origin::submap:
-            return scale == coords::scale::map_square;
-        case coords::origin::overmap_terrain:
-            return scale == coords::scale::map_square || scale == coords::scale::submap;
-        case coords::origin::mem_map_region:
-            return scale == coords::scale::map_square || scale == coords::scale::submap ||
-                   scale == coords::scale::overmap_terrain;
-        case coords::origin::segment:
-            return scale == coords::scale::map_square || scale == coords::scale::submap ||
-                   scale == coords::scale::overmap_terrain ||
-                   scale == coords::scale::mem_map_region;
-        case coords::origin::overmap:
-            return scale == coords::scale::map_square || scale == coords::scale::submap ||
-                   scale == coords::scale::overmap_terrain ||
-                   scale == coords::scale::mem_map_region || scale == coords::scale::segment;
-    }
-    return false;
+    case coords::origin::relative:
+        return true;
+    case coords::origin::abs:
+        return scale != coords::scale::vehicle;
+    case coords::origin::bubble:
+        return scale == coords::scale::map_square || scale == coords::scale::submap;
+    case coords::origin::vehicle:
+        return scale == coords::scale::vehicle;
+    case coords::origin::submap:
+        return scale == coords::scale::map_square;
+    case coords::origin::overmap_terrain:
+        return scale == coords::scale::map_square || scale == coords::scale::submap;
+    case coords::origin::mem_map_region:
+        return scale == coords::scale::map_square || scale == coords::scale::submap ||
+               scale == coords::scale::overmap_terrain;
+    case coords::origin::segment:
+        return scale == coords::scale::map_square || scale == coords::scale::submap ||
+               scale == coords::scale::overmap_terrain ||
+               scale == coords::scale::mem_map_region;
+    case coords::origin::overmap:
+        return scale == coords::scale::map_square || scale == coords::scale::submap ||
+               scale == coords::scale::overmap_terrain ||
+               scale == coords::scale::mem_map_region || scale == coords::scale::segment;
+}
+return false;
 }
 
 auto has_remainder_origin( const coords::scale scale ) -> bool
 {
     switch( scale ) {
-        case coords::scale::submap:
-        case coords::scale::overmap_terrain:
-        case coords::scale::mem_map_region:
-        case coords::scale::segment:
-        case coords::scale::overmap:
-            return true;
-        default:
-            return false;
-    }
+    case coords::scale::submap:
+    case coords::scale::overmap_terrain:
+    case coords::scale::mem_map_region:
+    case coords::scale::segment:
+    case coords::scale::overmap:
+        return true;
+    default:
+        return false;
+}
 }
 
 auto exact_scale_conversion( const coords::scale source, const coords::scale result ) -> bool
@@ -252,21 +252,21 @@ auto coord_type_name( const bool is_tripoint, const coords::origin origin,
 auto point_to_string( const lua_point_coord &coord ) -> std::string
 {
     return string_format( "%s(%d,%d)", coord_type_name( false, coord.origin, coord.scale ),
-                          coord.raw.x, coord.raw.y );
+    coord.raw.x, coord.raw.y );
 }
 
 auto tripoint_to_string( const lua_tripoint_coord &coord ) -> std::string
 {
     return string_format( "%s(%d,%d,%d)", coord_type_name( true, coord.origin, coord.scale ),
-                          coord.raw.x, coord.raw.y, coord.raw.z );
+    coord.raw.x, coord.raw.y, coord.raw.z );
 }
 
 auto make_point_coord( const coords::origin origin, const coords::scale scale,
                        const point &raw ) -> lua_point_coord
 {
     if( !is_registered_coord( origin, scale ) ) {
-        throw std::runtime_error( string_format( "%s%s is not a supported point coordinate type",
-                                  origin_type_name( origin ), scale_type_name( scale ) ) );
+    throw std::runtime_error( string_format( "%s%s is not a supported point coordinate type",
+                              origin_type_name( origin ), scale_type_name( scale ) ) );
     }
     return lua_point_coord{ raw, origin, scale };
 }
@@ -275,8 +275,8 @@ auto make_tripoint_coord( const coords::origin origin, const coords::scale scale
                           const tripoint &raw ) -> lua_tripoint_coord
 {
     if( !is_registered_coord( origin, scale ) ) {
-        throw std::runtime_error( string_format( "%s%s is not a supported tripoint coordinate type",
-                                  origin_type_name( origin ), scale_type_name( scale ) ) );
+    throw std::runtime_error( string_format( "%s%s is not a supported tripoint coordinate type",
+                              origin_type_name( origin ), scale_type_name( scale ) ) );
     }
     return lua_tripoint_coord{ raw, origin, scale };
 }
@@ -330,19 +330,19 @@ auto project_to( const lua_point_coord &coord,
                  const coords::scale result ) -> std::optional<lua_point_coord>
 {
     if( !can_project_to( coord.origin, coord.scale, result ) ) {
-        return std::nullopt;
-    }
-    return make_point_coord( coord.origin, result, project_xy( coord.raw, coord.scale, result ) );
+    return std::nullopt;
+}
+return make_point_coord( coord.origin, result, project_xy( coord.raw, coord.scale, result ) );
 }
 
 auto project_to( const lua_tripoint_coord &coord,
                  const coords::scale result ) -> std::optional<lua_tripoint_coord>
 {
     if( !can_project_to( coord.origin, coord.scale, result ) ) {
-        return std::nullopt;
-    }
-    return make_tripoint_coord( coord.origin, result,
-                                project_tripoint_raw( coord.raw, coord.scale, result ) );
+    return std::nullopt;
+}
+return make_tripoint_coord( coord.origin, result,
+                            project_tripoint_raw( coord.raw, coord.scale, result ) );
 }
 
 auto same_coord_kind( const lua_point_coord &lhs, const lua_point_coord &rhs ) -> bool

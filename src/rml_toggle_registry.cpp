@@ -6,7 +6,8 @@
 // Single source of truth. Order mirrors the F4 dev panel's old hand-written bind
 // list (sdl_lighting_devui.cpp devui_rml_open). default_on matches each toggle's
 // static initializer — only sidebar_hud defaults ON (Tier 7 Phase-1 MVP flip).
-const std::vector<rml_toggle>& rml_toggle_registry() {
+const std::vector<rml_toggle> &rml_toggle_registry()
+{
     static const std::vector<rml_toggle> reg = {
         {"uilist", &uilist_rmlui_enabled, true},
         {"query_popup", &query_popup_rmlui_enabled, false},
@@ -68,10 +69,12 @@ const std::vector<rml_toggle>& rml_toggle_registry() {
     return reg;
 }
 
-void rml_toggles_set_all(bool on) {
-    for (const rml_toggle& t : rml_toggle_registry()) { t.accessor() = on; }
+void rml_toggles_set_all( bool on )
+{
+    for( const rml_toggle& t : rml_toggle_registry() ) { t.accessor() = on; }
 }
 
-void rml_toggles_reset_defaults() {
-    for (const rml_toggle& t : rml_toggle_registry()) { t.accessor() = t.default_on; }
+void rml_toggles_reset_defaults()
+{
+    for( const rml_toggle& t : rml_toggle_registry() ) { t.accessor() = t.default_on; }
 }

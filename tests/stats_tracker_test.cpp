@@ -616,7 +616,7 @@ TEST_CASE( "achievements_tracker", "[stats]" )
         const cata::event swim_underwater = cata::event::make<event_type::avatar_moves>( no_monster,
                                             t_water_dp, character_movemode::CMM_WALK, true, 0 );
         const cata::event swim_underwater_deep = cata::event::make<event_type::avatar_moves>( no_monster,
-                t_water_dp, character_movemode::CMM_WALK, true, -5 );
+            t_water_dp, character_movemode::CMM_WALK, true, -5 );
         const cata::event walk_max_z = cata::event::make<event_type::avatar_moves>( no_monster, t_null,
                                        character_movemode::CMM_WALK, false, OVERMAP_HEIGHT );
         const cata::event walk_min_z = cata::event::make<event_type::avatar_moves>( no_monster, t_null,

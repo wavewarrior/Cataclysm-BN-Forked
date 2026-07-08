@@ -146,7 +146,7 @@ int distribution_grid::mod_resource( int amt, bool recurse )
 int distribution_grid::get_resource( bool recurse ) const
 {
     if( !recurse ) {
-        if( cached_amount_here ) {
+    if( cached_amount_here ) {
             return *cached_amount_here;
         } else {
             cached_amount_here = 0;
@@ -154,8 +154,8 @@ int distribution_grid::get_resource( bool recurse ) const
     }
     int res = 0;
     std::vector<vehicle *> connected_vehicles;
-    for( const auto &c : contents ) {
-        for( const tile_location &loc : c.second ) {
+for( const auto &c : contents ) {
+    for( const tile_location &loc : c.second ) {
             battery_tile *battery = active_tiles::furn_at<battery_tile>( loc.absolute, mb );
             if( battery != nullptr ) {
                 res += battery->get_resource();
@@ -190,13 +190,13 @@ int distribution_grid::get_resource( bool recurse ) const
         res = connected_vehicles.front()->fuel_left( itype_battery, true );
     }
     if( !recurse ) {
-        cached_amount_here = res;
-        return res;
-    }
+    cached_amount_here = res;
+    return res;
+}
 
-    // Chain to grids linked via grid_link_tile portals.
-    // recurse=false on remote calls prevents infinite loops.
-    std::ranges::for_each( flat_contents, [&]( const tripoint_abs_ms & pos ) {
+// Chain to grids linked via grid_link_tile portals.
+// recurse=false on remote calls prevents infinite loops.
+std::ranges::for_each( flat_contents, [&]( const tripoint_abs_ms & pos ) {
         auto *glt = active_tiles::furn_at<grid_link_tile>( pos, mb );
         if( !glt || !glt->linked || glt->paused ) {
             return;
@@ -469,8 +469,8 @@ distribution_grid &distribution_grid_tracker::make_distribution_grid_at(
         return empty_grid;
     }
     const std::set<tripoint_abs_omt> overmap_positions = get_overmapbuffer(
-                dimension_id_ ).electric_grid_at(
-                project_to<coords::omt>( sm_pos ) );
+            dimension_id_ ).electric_grid_at(
+            project_to<coords::omt>( sm_pos ) );
     if( overmap_positions.empty() ) {
         // Remote submap not yet loaded — grid data unavailable.  Return the
         // same empty sentinel used when ELECTRIC_GRID is disabled so callers
@@ -491,7 +491,7 @@ distribution_grid &distribution_grid_tracker::make_distribution_grid_at(
         submap_positions.emplace_back( tp + point_south_east );
     }
     shared_ptr_fast<distribution_grid> dist_grid = make_shared_fast<distribution_grid>
-            ( submap_positions, mb );
+        ( submap_positions, mb );
     for( const tripoint_abs_sm &smp : submap_positions ) {
         shared_ptr_fast<distribution_grid> &old_grid = parent_distribution_grids[smp];
         if( old_grid != dist_grid ) {
@@ -707,7 +707,7 @@ distribution_grid &distribution_grid_tracker::grid_at( const tripoint_abs_ms &p 
 const distribution_grid &distribution_grid_tracker::grid_at( const tripoint_abs_ms &p ) const
 {
     return const_cast<const distribution_grid &>(
-               const_cast<distribution_grid_tracker *>( this )->grid_at( p ) );
+           const_cast<distribution_grid_tracker *>( this )->grid_at( p ) );
 }
 
 std::uintptr_t distribution_grid_tracker::debug_grid_id( const tripoint_abs_omt &omp ) const

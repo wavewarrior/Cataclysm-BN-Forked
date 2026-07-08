@@ -82,7 +82,7 @@ class activity_speed
         //Returns total product of all factors
         inline float total() const {
             return 1.0f * assist * bench_factor * player_speed * stats_total() * skills * tools * morale *
-                   light;
+            light;
         }
 
         //Returns total amonut of moves based on factors

@@ -86,26 +86,26 @@ std::unique_ptr<mattack_actor> leap_actor::clone() const
 bool leap_actor::call( monster &z ) const
 {
     if( !z.can_act() || !z.move_effects( false ) ) {
-        return false;
-    }
+    return false;
+}
 
-    std::vector<tripoint_bub_ms> options;
-    auto target = z.move_target();
-    float best_float = trigdist ? trig_dist( z.bub_pos(), target ) : square_dist( z.bub_pos(), target );
-    if( best_float < min_consider_range || best_float > max_consider_range ) {
-        return false;
-    }
+std::vector<tripoint_bub_ms> options;
+auto target = z.move_target();
+float best_float = trigdist ? trig_dist( z.bub_pos(), target ) : square_dist( z.bub_pos(), target );
+if( best_float < min_consider_range || best_float > max_consider_range ) {
+    return false;
+}
 
-    // We wanted the float for range check
-    // int here will make the jumps more random
-    int best = std::numeric_limits<int>::max();
-    if( !allow_no_target && z.attack_target() == nullptr ) {
-        return false;
-    }
-    map &here = get_map();
-    std::multimap<int, tripoint_bub_ms> candidates;
-    for( const auto &candidate : here.points_in_radius( z.bub_pos(), max_range ) ) {
-        if( candidate == z.bub_pos() ) {
+// We wanted the float for range check
+// int here will make the jumps more random
+int best = std::numeric_limits<int>::max();
+if( !allow_no_target && z.attack_target() == nullptr ) {
+    return false;
+}
+map &here = get_map();
+std::multimap<int, tripoint_bub_ms> candidates;
+for( const auto &candidate : here.points_in_radius( z.bub_pos(), max_range ) ) {
+    if( candidate == z.bub_pos() ) {
             continue;
         }
         float leap_dist = trigdist ? trig_dist( z.bub_pos(), candidate ) :
@@ -119,10 +119,10 @@ bool leap_actor::call( monster &z ) const
         }
         candidates.emplace( candidate_dist, candidate );
     }
-    for( const auto &candidate : candidates ) {
-        const int &cur_dist = candidate.first;
-        const tripoint_bub_ms &dest = candidate.second;
-        if( cur_dist > best ) {
+for( const auto &candidate : candidates ) {
+    const int &cur_dist = candidate.first;
+    const tripoint_bub_ms &dest = candidate.second;
+    if( cur_dist > best ) {
             break;
         }
         if( !z.sees( dest ) ) {
@@ -155,16 +155,16 @@ bool leap_actor::call( monster &z ) const
     }
 
     if( options.empty() ) {
-        return false;    // Nowhere to leap!
-    }
+    return false;    // Nowhere to leap!
+}
 
-    z.moves -= move_cost;
-    const auto chosen = random_entry( options );
-    bool seen = g->u.sees( z ); // We can see them jump...
-    z.setpos( chosen );
-    seen |= g->u.sees( z ); // ... or we can see them land
-    if( seen ) {
-        add_msg( _( "The %s leaps!" ), z.name() );
+z.moves -= move_cost;
+const auto chosen = random_entry( options );
+bool seen = g->u.sees( z ); // We can see them jump...
+z.setpos( chosen );
+seen |= g->u.sees( z ); // ... or we can see them land
+if( seen ) {
+    add_msg( _( "The %s leaps!" ), z.name() );
     }
 
     return true;
@@ -198,33 +198,33 @@ void mon_spellcasting_actor::finalize()
 bool mon_spellcasting_actor::call( monster &mon ) const
 {
     if( !mon.can_act() ) {
-        return false;
-    }
+    return false;
+}
 
-    if( !mon.attack_target() ) {
-        // this is an attack. there is no reason to attack if there isn't a real target.
-        return false;
-    }
+if( !mon.attack_target() ) {
+    // this is an attack. there is no reason to attack if there isn't a real target.
+    return false;
+}
 
-    const auto target = self ? mon.bub_pos() : mon.attack_target()->bub_pos();
+const auto target = self ? mon.bub_pos() : mon.attack_target()->bub_pos();
 
-    std::string fx = spell_data.effect();
-    // is the spell an attack that needs to hit the target?
-    // examples of spells that don't: summons, teleport self
-    const bool targeted_attack = fx == "target_attack" || fx == "projectile_attack" ||
-                                 fx == "cone_attack" || fx == "line_attack";
+std::string fx = spell_data.effect();
+// is the spell an attack that needs to hit the target?
+// examples of spells that don't: summons, teleport self
+const bool targeted_attack = fx == "target_attack" || fx == "projectile_attack" ||
+                             fx == "cone_attack" || fx == "line_attack";
 
-    if( targeted_attack && rl_dist( mon.bub_pos(), target ) > spell_data.range() ) {
+if( targeted_attack && rl_dist( mon.bub_pos(), target ) > spell_data.range() ) {
         return false;
     }
 
     std::string target_name;
     if( const Creature *target_monster = g->critter_at( target ) ) {
-        target_name = target_monster->disp_name();
+    target_name = target_monster->disp_name();
     }
 
     if( g->u.sees( target ) ) {
-        add_msg( spell_data.message(), mon.disp_name(), spell_data.name(), target_name );
+    add_msg( spell_data.message(), mon.disp_name(), spell_data.name(), target_name );
     }
 
     spell_data.cast_all_effects( mon, target );
@@ -253,48 +253,48 @@ void deployer_actor::load_internal( const JsonObject &obj, const std::string & )
 bool deployer_actor::call( monster &mon ) const
 {
     if( !mon.can_act() ) {
-        return false;
-    }
-    bool has_attack_target = mon.attack_target();
-    has_attack_target = has_attack_target || ( !mon.friendly && mon.sees( g->u ) );
-    if( !has_attack_target ) {
-        // this is an attack. there is no reason to attack if there isn't a real target.
-        return false;
-    }
+    return false;
+}
+bool has_attack_target = mon.attack_target();
+has_attack_target = has_attack_target || ( !mon.friendly && mon.sees( g->u ) );
+if( !has_attack_target ) {
+    // this is an attack. there is no reason to attack if there isn't a real target.
+    return false;
+}
 
-    int total_ammo = 0;
-    for( const auto &ammo_entry : mon.type->starting_ammo ) {
-        total_ammo += ammo_entry.second;
-    }
-    if( total_ammo == 0 ) {
-        // Should never happen, but protect us from a div/0 if it does.
-        return false;
-    }
+int total_ammo = 0;
+for( const auto &ammo_entry : mon.type->starting_ammo ) {
+    total_ammo += ammo_entry.second;
+}
+if( total_ammo == 0 ) {
+    // Should never happen, but protect us from a div/0 if it does.
+    return false;
+}
 
-    // Find how much ammo we currently have to get the total ratio
-    int curr_ammo = 0;
-    for( const auto &amm : mon.ammo ) {
-        curr_ammo += amm.second;
-    }
-    float rat = curr_ammo / static_cast<float>( total_ammo );
+// Find how much ammo we currently have to get the total ratio
+int curr_ammo = 0;
+for( const auto &amm : mon.ammo ) {
+    curr_ammo += amm.second;
+}
+float rat = curr_ammo / static_cast<float>( total_ammo );
 
-    weighted_float_list<itype_id> possible_attacks;
-    for( const auto &amm : mon.ammo ) {
-        if( amm.second > 0 && grenades.at( amm.first ).ammo_percentage >= rat ) {
+weighted_float_list<itype_id> possible_attacks;
+for( const auto &amm : mon.ammo ) {
+    if( amm.second > 0 && grenades.at( amm.first ).ammo_percentage >= rat ) {
             possible_attacks.add( amm.first, 1.0 / grenades.at( amm.first ).chance );
         }
     }
     if( possible_attacks.empty() ) {
-        return false;
-    }
+    return false;
+}
 
-    itype_id att = *possible_attacks.pick();
+itype_id att = *possible_attacks.pick();
 
-    std::vector<tripoint_bub_ms> empty_points_in_rad;
+std::vector<tripoint_bub_ms> empty_points_in_rad;
 
-    auto points_in_rad = g->m.points_in_radius( mon.bub_pos(), grenades.at( att ).range );
-    for( tripoint_bub_ms p : points_in_rad ) {
-        if( g->is_empty( p ) ) {
+auto points_in_rad = g->m.points_in_radius( mon.bub_pos(), grenades.at( att ).range );
+for( tripoint_bub_ms p : points_in_rad ) {
+    if( g->is_empty( p ) ) {
             empty_points_in_rad.push_back( p );
         }
     }
@@ -302,21 +302,21 @@ bool deployer_actor::call( monster &mon ) const
     // Get our monster type
     const use_function *usage = att->get_use( "place_monster" );
     if( usage == nullptr ) {
-        // Invalid bomb item usage, Toggle this special off so we stop processing
-        add_msg( m_debug, "Invalid bomb item usage in deployer special for %s.", mon.name() );
+    // Invalid bomb item usage, Toggle this special off so we stop processing
+    add_msg( m_debug, "Invalid bomb item usage in deployer special for %s.", mon.name() );
         return false;
     }
     auto *actor = dynamic_cast<const place_monster_iuse *>( usage->get_actor_ptr() );
     if( actor == nullptr ) {
-        // Invalid bomb item, Toggle this special off so we stop processing
-        add_msg( m_debug, "Invalid bomb type in deployer special for %s.", mon.name() );
+    // Invalid bomb item, Toggle this special off so we stop processing
+    add_msg( m_debug, "Invalid bomb type in deployer special for %s.", mon.name() );
         return false;
     }
 
     const auto where = empty_points_in_rad[ rng( 0, empty_points_in_rad.size() - 1 ) ];
 
     if( monster *const hack = g->place_critter_at( actor->mtypeid, where ) ) {
-        mon.ammo[att]--;
+    mon.ammo[att]--;
         hack->make_ally( mon );
         add_msg( m_bad, grenades.at( att ).message );
     }
@@ -379,15 +379,15 @@ void melee_actor::load_internal( const JsonObject &obj, const std::string & )
 Creature *melee_actor::find_target( monster &z ) const
 {
     if( !z.can_act() ) {
-        return nullptr;
-    }
+    return nullptr;
+}
 
-    Creature *target = z.attack_target();
-    if( target == nullptr || !is_adjacent( z, *target ) ) {
-        return nullptr;
-    }
+Creature *target = z.attack_target();
+if( target == nullptr || !is_adjacent( z, *target ) ) {
+    return nullptr;
+}
 
-    return target;
+return target;
 }
 
 bool melee_actor::call( monster &z ) const
@@ -446,8 +446,8 @@ bool melee_actor::call( monster &z ) const
 void melee_actor::on_damage( monster &z, Creature &target, dealt_damage_instance &dealt ) const
 {
     if( target.is_player() ) {
-        sfx::play_variant_sound( "mon_bite", "bite_hit", sfx::get_heard_volume( z.bub_pos() ),
-                                 sfx::get_heard_angle( z.bub_pos() ) );
+    sfx::play_variant_sound( "mon_bite", "bite_hit", sfx::get_heard_volume( z.bub_pos() ),
+                             sfx::get_heard_angle( z.bub_pos() ) );
         sfx::do_player_death_hurt( dynamic_cast<player &>( target ), false );
     }
     auto msg_type = target.attitude_to( g->u ) == Attitude::A_FRIENDLY ? m_bad : m_neutral;
@@ -456,7 +456,7 @@ void melee_actor::on_damage( monster &z, Creature &target, dealt_damage_instance
                                   body_part_name_accusative( bp ) );
 
     for( const auto &eff : effects ) {
-        if( x_in_y( eff.chance, 100 ) ) {
+    if( x_in_y( eff.chance, 100 ) ) {
             const bodypart_str_id &affected_bp = eff.affect_hit_bp ? bp : convert_bp( eff.bp );
             target.add_effect( eff.id, time_duration::from_turns( eff.duration ), affected_bp );
             if( eff.permanent ) {
@@ -483,8 +483,8 @@ void bite_actor::on_damage( monster &z, Creature &target, dealt_damage_instance 
 {
     melee_actor::on_damage( z, target, dealt );
     if( target.has_effect( effect_grabbed ) && one_in( no_infection_chance - dealt.total_damage() ) ) {
-        const bodypart_str_id &hit = dealt.bp_hit;
-        if( target.has_effect( effect_bite, hit ) ) {
+    const bodypart_str_id &hit = dealt.bp_hit;
+    if( target.has_effect( effect_bite, hit ) ) {
             target.add_effect( effect_bite, 40_minutes, hit );
         } else if( target.has_effect( effect_infected, hit ) ) {
             target.add_effect( effect_infected, 25_minutes, hit );
@@ -493,7 +493,7 @@ void bite_actor::on_damage( monster &z, Creature &target, dealt_damage_instance 
         }
     }
     if( target.has_trait( trait_TOXICFLESH ) ) {
-        z.add_effect( effect_poison, 5_minutes );
+    z.add_effect( effect_poison, 5_minutes );
         z.add_effect( effect_badpoison, 5_minutes );
     }
 }
@@ -658,12 +658,12 @@ auto find_target_vehicle( monster &z, int range ) -> std::optional<tripoint_bub_
 bool gun_actor::call( monster &z ) const
 {
     if( z.type->monster_weapon && z.has_effect( effect_monster_disarmed ) ) {
-        return false;
-    }
-    /// common firing logic.
-    /// @param target_critter can be nullptr if shooting at a vehicle (untargeted).
-    auto attempt_shoot = [&]( const tripoint_bub_ms & aim_pos, Creature * target_critter ) {
-        if( target_critter && z.attitude_to( *target_critter ) == Attitude::A_FRIENDLY ) { return false; }
+    return false;
+}
+/// common firing logic.
+/// @param target_critter can be nullptr if shooting at a vehicle (untargeted).
+auto attempt_shoot = [&]( const tripoint_bub_ms & aim_pos, Creature * target_critter ) {
+    if( target_critter && z.attitude_to( *target_critter ) == Attitude::A_FRIENDLY ) { return false; }
 
         const int dist = rl_dist( z.bub_pos(), aim_pos );
         for( const auto &entry : ranges ) {
@@ -679,7 +679,7 @@ bool gun_actor::call( monster &z ) const
     };
 
     if( z.friendly ) {
-        const int max_range = get_max_range();
+    const int max_range = get_max_range();
 
         const item gun_item( gun_type );
         const bool has_trail = std::ranges::any_of( gun_item.ammo_effects(),
@@ -703,7 +703,7 @@ bool gun_actor::call( monster &z ) const
         return attempt_shoot( target->bub_pos(), target );
     }
     if( target_moving_vehicles ) {
-        if( const auto vehicle_pos = find_target_vehicle( z, get_max_range() ) ) {
+    if( const auto vehicle_pos = find_target_vehicle( z, get_max_range() ) ) {
             return attempt_shoot( *vehicle_pos, nullptr );
         }
     }
@@ -713,7 +713,7 @@ bool gun_actor::call( monster &z ) const
 bool gun_actor::try_target( monster &z, Creature &target ) const
 {
     if( require_sunlight && !g->is_in_sunlight( z.bub_pos() ) ) {
-        if( one_in( 3 ) && g->u.sees( z ) ) {
+    if( one_in( 3 ) && g->u.sees( z ) ) {
             add_msg( _( failure_msg ), z.name() );
         }
         return false;
@@ -727,7 +727,7 @@ bool gun_actor::try_target( monster &z, Creature &target ) const
                                   !target.has_effect( effect_was_laserlocked );
 
     if( not_targeted || not_laser_locked ) {
-        if( targeting_volume > 0 && !targeting_sound.empty() ) {
+    if( targeting_volume > 0 && !targeting_sound.empty() ) {
             sounds::sound( z.bub_pos(), targeting_volume, sounds::sound_t::alarm,
                            _( targeting_sound ) );
         }
@@ -746,12 +746,12 @@ bool gun_actor::try_target( monster &z, Creature &target ) const
     }
 
     if( require_targeting ) {
-        z.add_effect( effect_targeted, time_duration::from_turns( targeting_timeout_extend ) );
+    z.add_effect( effect_targeted, time_duration::from_turns( targeting_timeout_extend ) );
     }
 
     if( laser_lock ) {
-        // To prevent spamming laser locks when the player can tank that stuff somehow
-        target.add_effect( effect_was_laserlocked, 5_turns );
+    // To prevent spamming laser locks when the player can tank that stuff somehow
+    target.add_effect( effect_was_laserlocked, 5_turns );
     }
     return true;
 }

@@ -136,7 +136,7 @@ inline int safe_strerror( int error_code, char *&buffer,
 #endif
 
         public:
-            dispatcher( int err_code, char *&buf, size_t buf_size )
+            dispatcher( int err_code, char * &buf, size_t buf_size )
                 : error_code_( err_code ), buffer_( buf ), buffer_size_( buf_size ) {}
 
             int run()
@@ -369,14 +369,14 @@ const uint64_t basic_data<T>::grisu_pow10_significands[] = {
 template <typename T>
 const int16_t basic_data<T>::grisu_pow10_exponents[] = {
     -1220, -1193, -1166, -1140, -1113, -1087, -1060, -1034, -1007, -980, -954,
-        -927,  -901,  -874,  -847,  -821,  -794,  -768,  -741,  -715,  -688, -661,
-        -635,  -608,  -582,  -555,  -529,  -502,  -475,  -449,  -422,  -396, -369,
-        -343,  -316,  -289,  -263,  -236,  -210,  -183,  -157,  -130,  -103, -77,
-        -50,   -24,   3,     30,    56,    83,    109,   136,   162,   189,  216,
-        242,   269,   295,   322,   348,   375,   402,   428,   455,   481,  508,
-        534,   561,   588,   614,   641,   667,   694,   720,   747,   774,  800,
-        827,   853,   880,   907,   933,   960,   986,   1013,  1039,  1066
-    };
+    -927,  -901,  -874,  -847,  -821,  -794,  -768,  -741,  -715,  -688, -661,
+    -635,  -608,  -582,  -555,  -529,  -502,  -475,  -449,  -422,  -396, -369,
+    -343,  -316,  -289,  -263,  -236,  -210,  -183,  -157,  -130,  -103, -77,
+    -50,   -24,   3,     30,    56,    83,    109,   136,   162,   189,  216,
+    242,   269,   295,   322,   348,   375,   402,   428,   455,   481,  508,
+    534,   561,   588,   614,   641,   667,   694,   720,   747,   774,  800,
+    827,   853,   880,   907,   933,   960,   986,   1013,  1039,  1066
+};
 
 template <typename T>
 const divtest_table_entry<uint32_t> basic_data<T>::divtest_table_for_pow5_32[] = {
@@ -1335,7 +1335,7 @@ class bigint
         void subtract_bigits( int index, bigit other, bigit &borrow ) {
             auto result = static_cast<double_bigit>( ( *this )[index] ) - other - borrow;
             ( *this )[index] = static_cast<bigit>( result );
-            borrow = static_cast<bigit>( result >>( bigit_bits * 2 - 1 ) );
+            borrow = static_cast<bigit>( result >> ( bigit_bits * 2 - 1 ) );
         }
 
         void remove_leading_zeros() {
@@ -1878,7 +1878,7 @@ inline uint64_t umul96_lower64( uint32_t x, uint64_t y ) FMT_NOEXCEPT {
 inline int floor_log10_pow2( int e ) FMT_NOEXCEPT {
     FMT_ASSERT( e <= 1700 && e >= -1700, "too large exponent" );
     const int shift = 22;
-    return ( e * static_cast<int>( data::log10_2_significand >>( 64 - shift ) ) ) >>
+    return ( e * static_cast<int>( data::log10_2_significand >> ( 64 - shift ) ) ) >>
             shift;
 }
 
@@ -1997,7 +1997,7 @@ template <> struct cache_accessor<float> {
 
     static uint32_t compute_delta( const cache_entry_type &cache,
                                    int beta_minus_1 ) FMT_NOEXCEPT {
-        return static_cast<uint32_t>( cache >>( 64 - 1 - beta_minus_1 ) );
+        return static_cast<uint32_t>( cache >> ( 64 - 1 - beta_minus_1 ) );
     }
 
     static bool compute_mul_parity( carrier_uint two_f,
@@ -2012,23 +2012,23 @@ template <> struct cache_accessor<float> {
     static carrier_uint compute_left_endpoint_for_shorter_interval_case(
         const cache_entry_type &cache, int beta_minus_1 ) FMT_NOEXCEPT {
         return static_cast<carrier_uint>(
-            ( cache - ( cache >>( float_info<float>::significand_bits + 2 ) ) ) >>
-            ( 64 - float_info<float>::significand_bits - 1 - beta_minus_1 ) );
+        ( cache - ( cache >> ( float_info<float>::significand_bits + 2 ) ) ) >>
+                ( 64 - float_info<float>::significand_bits - 1 - beta_minus_1 ) );
     }
 
     static carrier_uint compute_right_endpoint_for_shorter_interval_case(
         const cache_entry_type &cache, int beta_minus_1 ) FMT_NOEXCEPT {
         return static_cast<carrier_uint>(
-            ( cache + ( cache >>( float_info<float>::significand_bits + 1 ) ) ) >>
-            ( 64 - float_info<float>::significand_bits - 1 - beta_minus_1 ) );
+        ( cache + ( cache >> ( float_info<float>::significand_bits + 1 ) ) ) >>
+                ( 64 - float_info<float>::significand_bits - 1 - beta_minus_1 ) );
     }
 
     static carrier_uint compute_round_up_for_shorter_interval_case(
         const cache_entry_type &cache, int beta_minus_1 ) FMT_NOEXCEPT {
         return ( static_cast<carrier_uint>(
-                     cache >>
-                     ( 64 - float_info<float>::significand_bits - 2 - beta_minus_1 ) ) +
-                 1 ) /
+        cache >>
+              ( 64 - float_info<float>::significand_bits - 2 - beta_minus_1 ) ) +
+        1 ) /
         2;
     }
 };
@@ -2043,7 +2043,7 @@ template <> struct cache_accessor<double> {
 
 #if FMT_USE_FULL_CACHE_DRAGONBOX
         return data::dragonbox_pow10_significands_128[k -
-                  float_info<double>::min_k];
+                float_info<double>::min_k];
 #else
         static const int compression_ratio = 27;
 
@@ -2054,7 +2054,7 @@ template <> struct cache_accessor<double> {
 
         // Get base cache.
         uint128_wrapper base_cache =
-        data::dragonbox_pow10_significands_128[cache_index];
+            data::dragonbox_pow10_significands_128[cache_index];
         if( offset == 0 ) {
             return base_cache;
         }
@@ -2067,7 +2067,7 @@ template <> struct cache_accessor<double> {
         uint64_t pow5 = data::powers_of_5_64[offset];
         uint128_wrapper recovered_cache = umul128( base_cache.high(), pow5 );
         uint128_wrapper middle_low =
-        umul128( base_cache.low() - ( kb < 0 ? 1u : 0u ), pow5 );
+            umul128( base_cache.low() - ( kb < 0 ? 1u : 0u ), pow5 );
 
         recovered_cache += middle_low.high();
 
@@ -2117,22 +2117,22 @@ template <> struct cache_accessor<double> {
     static carrier_uint compute_left_endpoint_for_shorter_interval_case(
         const cache_entry_type &cache, int beta_minus_1 ) FMT_NOEXCEPT {
         return ( cache.high() -
-                 ( cache.high() >> ( float_info<double>::significand_bits + 2 ) ) ) >>
-                         ( 64 - float_info<double>::significand_bits - 1 - beta_minus_1 );
+        ( cache.high() >> ( float_info<double>::significand_bits + 2 ) ) ) >>
+                ( 64 - float_info<double>::significand_bits - 1 - beta_minus_1 );
     }
 
     static carrier_uint compute_right_endpoint_for_shorter_interval_case(
         const cache_entry_type &cache, int beta_minus_1 ) FMT_NOEXCEPT {
         return ( cache.high() +
-                 ( cache.high() >> ( float_info<double>::significand_bits + 1 ) ) ) >>
-                         ( 64 - float_info<double>::significand_bits - 1 - beta_minus_1 );
+        ( cache.high() >> ( float_info<double>::significand_bits + 1 ) ) ) >>
+                ( 64 - float_info<double>::significand_bits - 1 - beta_minus_1 );
     }
 
     static carrier_uint compute_round_up_for_shorter_interval_case(
         const cache_entry_type &cache, int beta_minus_1 ) FMT_NOEXCEPT {
         return ( ( cache.high() >>
-                   ( 64 - float_info<double>::significand_bits - 2 - beta_minus_1 ) ) +
-                 1 ) /
+                                ( 64 - float_info<double>::significand_bits - 2 - beta_minus_1 ) ) +
+        1 ) /
         2;
     }
 };
@@ -2150,20 +2150,20 @@ template <class T>
 bool is_endpoint_integer( typename float_info<T>::carrier_uint two_f,
                           int exponent, int minus_k ) FMT_NOEXCEPT {
     if( exponent < float_info<T>::case_fc_pm_half_lower_threshold )
-    {
-        return false;
-    }
-    // For k >= 0.
-    if( exponent <= float_info<T>::case_fc_pm_half_upper_threshold )
-    {
-        return true;
-    }
-    // For k < 0.
-    if( exponent > float_info<T>::divisibility_check_by_5_threshold )
-    {
-        return false;
-    }
-    return divisible_by_power_of_5( two_f, minus_k );
+{
+    return false;
+}
+// For k >= 0.
+if( exponent <= float_info<T>::case_fc_pm_half_upper_threshold )
+{
+    return true;
+}
+// For k < 0.
+if( exponent > float_info<T>::divisibility_check_by_5_threshold )
+{
+    return false;
+}
+return divisible_by_power_of_5( two_f, minus_k );
 }
 
 template <class T>
@@ -2171,20 +2171,20 @@ bool is_center_integer( typename float_info<T>::carrier_uint two_f, int exponent
                         int minus_k ) FMT_NOEXCEPT {
     // Exponent for 5 is negative.
     if( exponent > float_info<T>::divisibility_check_by_5_threshold )
-    {
-        return false;
-    }
-    if( exponent > float_info<T>::case_fc_upper_threshold )
-    {
-        return divisible_by_power_of_5( two_f, minus_k );
+{
+    return false;
+}
+if( exponent > float_info<T>::case_fc_upper_threshold )
+{
+    return divisible_by_power_of_5( two_f, minus_k );
     }
     // Both exponents are nonnegative.
     if( exponent >= float_info<T>::case_fc_lower_threshold )
-    {
-        return true;
-    }
-    // Exponent for 2 is negative.
-    return divisible_by_power_of_2( two_f, minus_k - exponent + 1 );
+{
+    return true;
+}
+// Exponent for 2 is negative.
+return divisible_by_power_of_2( two_f, minus_k - exponent + 1 );
 }
 
 // Remove trailing zeros from n and return the number of zeros removed (float)

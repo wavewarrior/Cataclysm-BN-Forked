@@ -125,13 +125,13 @@ void JsonObject::report_unvisited() const
 {
 #ifndef CATA_IN_TOOL
     if(
-        json_report_strict
-        && report_unvisited_members
-        && !reported_unvisited_members
-        && !std::uncaught_exceptions()
+    json_report_strict
+    && report_unvisited_members
+    && !reported_unvisited_members
+    && !std::uncaught_exceptions()
     ) {
-        reported_unvisited_members = true;
-        for( const std::pair<const std::string, int> &p : positions ) {
+    reported_unvisited_members = true;
+    for( const std::pair<const std::string, int> &p : positions ) {
             const std::string &name = p.first;
             if( !visited_members.contains( name ) && !name.starts_with( "//" ) ) {
                 try {
@@ -174,7 +174,7 @@ int JsonObject::verify_position( const std::string &name,
                                  const bool throw_exception ) const
 {
     if( !jsin ) {
-        if( throw_exception ) {
+    if( throw_exception ) {
             throw JsonError( std::string( "member lookup on empty object: " ) + name );
         }
         // 0 is always the opening brace,
@@ -212,7 +212,7 @@ std::string JsonObject::str() const
     allow_omitted_members();
 
     if( jsin && end_ >= start ) {
-        return jsin->substr( start, end_ - start );
+    return jsin->substr( start, end_ - start );
     } else {
         return "{}";
     }
@@ -221,7 +221,7 @@ std::string JsonObject::str() const
 void JsonObject::throw_error( const std::string &err, const std::string &name ) const
 {
     if( !jsin ) {
-        throw JsonError( err );
+    throw JsonError( err );
     }
     jsin->seek( verify_position( name, false ) );
     jsin->error( err );
@@ -259,7 +259,7 @@ void JsonArray::throw_error( const std::string &err, int idx )
 void JsonObject::throw_error( const std::string &err ) const
 {
     if( !jsin ) {
-        throw JsonError( err );
+    throw JsonError( err );
     }
     jsin->error( err );
 }
@@ -342,12 +342,12 @@ JsonIn *JsonObject::get_raw( const std::string &name ) const
 json_source_location JsonObject::get_source_location() const
 {
     if( !jsin ) {
-        throw JsonError( "JsonObject::get_source_location called when stream is null" );
+    throw JsonError( "JsonObject::get_source_location called when stream is null" );
     }
     json_source_location loc;
     loc.path = jsin->get_path();
     if( !loc.path ) {
-        jsin->seek( start );
+    jsin->seek( start );
         jsin->error( "JsonObject::get_source_location called but the path is unknown" );
     }
     loc.offset = start;
@@ -599,7 +599,7 @@ std::string JsonArray::str()
 void JsonArray::verify_index( const size_t i ) const
 {
     if( !jsin ) {
-        throw JsonError( "tried to access empty array." );
+    throw JsonError( "tried to access empty array." );
     } else if( i >= positions.size() ) {
         jsin->seek( start );
         std::stringstream err;
@@ -713,64 +713,64 @@ JsonObject JsonArray::get_object( const size_t i ) const
 bool JsonArray::test_null() const
 {
     if( !has_more() ) {
-        return false;
-    }
-    jsin->seek( positions[index] );
-    return jsin->test_null();
+    return false;
+}
+jsin->seek( positions[index] );
+return jsin->test_null();
 }
 
 bool JsonArray::test_bool() const
 {
     if( !has_more() ) {
-        return false;
-    }
-    jsin->seek( positions[index] );
-    return jsin->test_bool();
+    return false;
+}
+jsin->seek( positions[index] );
+return jsin->test_bool();
 }
 
 bool JsonArray::test_number() const
 {
     if( !has_more() ) {
-        return false;
-    }
-    jsin->seek( positions[index] );
-    return jsin->test_number();
+    return false;
+}
+jsin->seek( positions[index] );
+return jsin->test_number();
 }
 
 bool JsonArray::test_string() const
 {
     if( !has_more() ) {
-        return false;
-    }
-    jsin->seek( positions[index] );
-    return jsin->test_string();
+    return false;
+}
+jsin->seek( positions[index] );
+return jsin->test_string();
 }
 
 bool JsonArray::test_bitset() const
 {
     if( !has_more() ) {
-        return false;
-    }
-    jsin->seek( positions[index] );
-    return jsin->test_bitset();
+    return false;
+}
+jsin->seek( positions[index] );
+return jsin->test_bitset();
 }
 
 bool JsonArray::test_array() const
 {
     if( !has_more() ) {
-        return false;
-    }
-    jsin->seek( positions[index] );
-    return jsin->test_array();
+    return false;
+}
+jsin->seek( positions[index] );
+return jsin->test_array();
 }
 
 bool JsonArray::test_object() const
 {
     if( !has_more() ) {
-        return false;
-    }
-    jsin->seek( positions[index] );
-    return jsin->test_object();
+    return false;
+}
+jsin->seek( positions[index] );
+return jsin->test_object();
 }
 
 /* random-access type checking */

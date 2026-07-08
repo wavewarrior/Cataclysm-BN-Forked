@@ -29,36 +29,36 @@ bool damage_unit::operator==( const damage_unit &other ) const
 const std::string damage_unit::get_name() const
 {
     switch( type ) {
-        case DT_NULL:
-            return "Null";
-        case DT_TRUE:
-            return "True";
-        case DT_BIOLOGICAL:
-            return "Biological";
-        case DT_BASH:
-            return "Bash";
-        case DT_CUT:
-            return "Cut";
-        case DT_ACID:
-            return "Acid";
-        case DT_STAB:
-            return "Pierce";
-        case DT_HEAT:
-            return "Heat";
-        case DT_COLD:
-            return "Cold";
-        case DT_DARK:
-            return "Dark";
-        case DT_LIGHT:
-            return "Light";
-        case DT_PSI:
-            return "Psionic";
-        case DT_ELECTRIC:
-            return "Electric";
-        case DT_BULLET:
-            return "Ballistic";
-        case NUM_DT:
-            return std::to_string( NUM_DT );
+    case DT_NULL:
+        return "Null";
+    case DT_TRUE:
+        return "True";
+    case DT_BIOLOGICAL:
+        return "Biological";
+    case DT_BASH:
+        return "Bash";
+    case DT_CUT:
+        return "Cut";
+    case DT_ACID:
+        return "Acid";
+    case DT_STAB:
+        return "Pierce";
+    case DT_HEAT:
+        return "Heat";
+    case DT_COLD:
+        return "Cold";
+    case DT_DARK:
+        return "Dark";
+    case DT_LIGHT:
+        return "Light";
+    case DT_PSI:
+        return "Psionic";
+    case DT_ELECTRIC:
+        return "Electric";
+    case DT_BULLET:
+        return "Ballistic";
+    case NUM_DT:
+        return std::to_string( NUM_DT );
     }
     return std::to_string( NUM_DT );
 }
@@ -181,8 +181,8 @@ float damage_instance::get_armor_mult( damage_type dt ) const
 
 bool damage_instance::has_armor_piercing() const
 {
-    for( const auto &elem : damage_units ) {
-        if( elem.res_pen != 0.0 || elem.res_mult != 1.0 ) {
+for( const auto &elem : damage_units ) {
+    if( elem.res_pen != 0.0 || elem.res_mult != 1.0 ) {
             return true;
         }
     }
@@ -244,7 +244,7 @@ void dealt_damage_instance::set_damage( damage_type dt, int amount )
 int dealt_damage_instance::type_damage( damage_type dt ) const
 {
     if( static_cast<size_t>( dt ) < dealt_dams.size() ) {
-        return dealt_dams[dt];
+    return dealt_dams[dt];
     }
 
     return 0;
@@ -282,7 +282,7 @@ float resistances::type_resist( damage_type dt ) const
 float resistances::get_effective_resist( const damage_unit &du ) const
 {
     return std::max( type_resist( du.type ) - du.res_pen,
-                     0.0f ) * du.res_mult;
+    0.0f ) * du.res_mult;
 }
 
 resistances resistances::combined_with( const resistances &other ) const
@@ -500,18 +500,18 @@ damage_instance load_damage_instance_inherit( const JsonArray &jarr, const damag
 namespace
 {
 
-struct DamageMapping { const char* name; damage_type type; };
+struct DamageMapping { const char *name; damage_type type; };
 
-constexpr auto physical_damage_mappings = std::array<DamageMapping, 4>
-{{
+constexpr auto physical_damage_mappings = std::array<DamageMapping, 4> {
+    {
         { .name = "bash",       .type = DT_BASH,       },
         { .name = "cut",        .type = DT_CUT,        },
         { .name = "stab",       .type = DT_STAB,       },
         { .name = "bullet",     .type = DT_BULLET,     },
     }
 };
-constexpr auto non_physical_damage_mappings = std::array<DamageMapping, 8>
-{{
+constexpr auto non_physical_damage_mappings = std::array<DamageMapping, 8> {
+    {
         { .name = "biological", .type = DT_BIOLOGICAL, },
         { .name = "acid",       .type = DT_ACID,       },
         { .name = "heat",       .type = DT_HEAT,       },

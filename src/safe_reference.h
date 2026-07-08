@@ -160,11 +160,11 @@ class safe_reference
         auto remove() -> void {
             resolve_redirects();
             if( rec == nullptr ) {
-                return;
-            }
-            //Check if we're the last in-memory reference
-            if( rec->mem_count == 1 ) {
-                if( base_id( rec->id ) == ID_NONE ) {
+            return;
+        }
+        //Check if we're the last in-memory reference
+        if( rec->mem_count == 1 ) {
+            if( base_id( rec->id ) == ID_NONE ) {
                     //If the record doesn't have an ID it's ok to just forget it
                     records_by_pointer.erase( rec->target.p );
                     delete rec;
@@ -221,24 +221,24 @@ class safe_reference
         auto is_unloaded() const -> bool {
             resolve_redirects();
             if( is_unassigned() ) {
-                return false;
-            }
-            if( is_destroyed() ) {
-                return false;
-            }
-            return ( rec->target.p == nullptr || ( !rec->target.p->is_loaded() &&
-                                                   !rec->target.p->is_detached() ) );
+            return false;
         }
+        if( is_destroyed() ) {
+            return false;
+        }
+        return ( rec->target.p == nullptr || ( !rec->target.p->is_loaded() &&
+                                               !rec->target.p->is_detached() ) );
+    }
 
-        auto is_destroyed() const -> bool {
+    auto is_destroyed() const -> bool {
             resolve_redirects();
             if( is_unassigned() ) {
-                return false;
-            }
-            return ( rec->id & DESTROYED_MASK ) != 0;
+            return false;
         }
+        return ( rec->id & DESTROYED_MASK ) != 0;
+    }
 
-        auto serialize() const -> id_type {
+    auto serialize() const -> id_type {
             if( rec == nullptr ) {
                 return ID_NONE;
             }
@@ -256,15 +256,15 @@ class safe_reference
         auto deserialize( id_type id ) -> void {
             fill( id );
             if( rec == nullptr ) {
-                return;
-            }
-            if( rec->json_count != 0 ) {
-                rec->json_count--;
-            } // else { this is indicative of save scumming }
-            rec->mem_count++;
+            return;
         }
+        if( rec->json_count != 0 ) {
+            rec->json_count--;
+        } // else { this is indicative of save scumming }
+        rec->mem_count++;
+    }
 
-        auto get_const() const -> const T* { // *NOPAD*
+    auto get_const() const -> const T* { // *NOPAD*
             if( !rec || !rec->target.p ) {
                 //TODO! more safety and proper error
                 return nullptr;
@@ -295,22 +295,22 @@ class safe_reference
 
         auto operator==( const T &against ) const -> bool {
             if( !rec ) {
-                return false;
-            }
-            resolve_redirects();
-            return rec->target.p == &against;
+            return false;
         }
+        resolve_redirects();
+        return rec->target.p == &against;
+    }
 
-        auto operator==( const T *against ) const -> bool {
+    auto operator==( const T *against ) const -> bool {
             if( !rec ) {
-                return against == nullptr;
-            }
-            resolve_redirects();
-            return rec->target.p == against;
+            return against == nullptr;
         }
+        resolve_redirects();
+        return rec->target.p == against;
+    }
 
-        template <typename U>
-        auto operator!=( const U against ) const -> bool { return !( *this == against ); }
+    template <typename U>
+    auto operator!=( const U against ) const -> bool { return !( *this == against ); }
 
         /**
          * Merge the secondary object into the primary. This means all
@@ -384,11 +384,11 @@ class cache_reference
 
         auto add_to_map() -> void {
             if( !p ) {
-                return;
-            }
-            auto lk = std::lock_guard( reference_map_mutex_ );
-            ref_map_it search = reference_map.find( p );
-            if( search != reference_map.end() ) {
+            return;
+        }
+        auto lk = std::lock_guard( reference_map_mutex_ );
+        ref_map_it search = reference_map.find( p );
+        if( search != reference_map.end() ) {
                 search->second.push_back( this );
             } else {
                 reference_map.insert( {p, {this}} );
@@ -397,11 +397,11 @@ class cache_reference
 
         auto remove_from_map() -> void {
             if( !p ) {
-                return;
-            }
-            auto lk = std::lock_guard( reference_map_mutex_ );
-            ref_map_it search = reference_map.find( p );
-            if( search != reference_map.end() ) {
+            return;
+        }
+        auto lk = std::lock_guard( reference_map_mutex_ );
+        ref_map_it search = reference_map.find( p );
+        if( search != reference_map.end() ) {
                 ref_list &list = search->second;
                 list.erase( std::remove( list.begin(), list.end(), this ), list.end() );
                 if( list.empty() ) {

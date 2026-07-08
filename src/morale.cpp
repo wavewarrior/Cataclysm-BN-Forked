@@ -139,7 +139,7 @@ static const morale_mult prozac_bad( 0.25, 1.0 );
 std::string player_morale::morale_point::get_name() const
 {
     if( subtype.has_description() ) {
-        return type.obj().describe( subtype.describe() );
+    return type.obj().describe( subtype.describe() );
     } else {
         return type.obj().describe();
     }
@@ -148,8 +148,8 @@ std::string player_morale::morale_point::get_name() const
 int player_morale::morale_point::get_net_bonus() const
 {
     return bonus * ( ( !is_permanent() && age > decay_start ) ?
-                     logarithmic_range( to_turns<int>( decay_start ), to_turns<int>( duration ),
-                                        to_turns<int>( age ) ) : 1 );
+    logarithmic_range( to_turns<int>( decay_start ), to_turns<int>( duration ),
+    to_turns<int>( age ) ) : 1 );
 }
 
 int player_morale::morale_point::get_net_bonus( const morale_mult &mult ) const
@@ -499,7 +499,7 @@ int player_morale::get_total_positive_value() const
 int player_morale::get_level() const
 {
     if( !level_is_valid ) {
-        const morale_mult mult = get_temper_mult();
+    const morale_mult mult = get_temper_mult();
 
         int sum_of_positive_squares = 0;
         int sum_of_negative_squares = 0;
@@ -682,8 +682,8 @@ void player_morale::display( int focus_eq, int pain_penalty, int fatigue_cap )
 
             int max_width() const {
                 if( sep_line ) {
-                    return 0;
-                } else if( right.empty() ) {
+                return 0;
+            } else if( right.empty() ) {
                     return left_padding + utf8_width( left ) + right_padding;
                 } else {
                     return left_padding + utf8_width( left ) + middle_padding_max
@@ -722,8 +722,8 @@ void player_morale::display( int focus_eq, int pain_penalty, int fatigue_cap )
         { morale_line::separation_line {} },
 
         positive_morale.empty() &&negative_morale.empty() ?
-        morale_line( _( "Nothing affects your morale" ), c_dark_gray ) :
-        morale_line( _( "Source" ), _( "Value" ), c_light_gray ),
+                       morale_line( _( "Nothing affects your morale" ), c_dark_gray ) :
+                       morale_line( _( "Source" ), _( "Value" ), c_light_gray ),
     };
 
     struct middle_morale_line {
@@ -816,7 +816,8 @@ void player_morale::display( int focus_eq, int pain_penalty, int fatigue_cap )
         morale_rml_row r;
         r.caption = caption;
         r.left_rml = cata_text_to_rml( colorize( ml.get_left(), ml.get_color() ) );
-        if( !ml.get_right().empty() ) {
+        if( !ml.get_right().empty() )
+        {
             r.right_rml = cata_text_to_rml( colorize( ml.get_right(), ml.get_color() ) );
         }
         return r;
@@ -1225,8 +1226,8 @@ bool player_morale::morale_subtype::has_description() const
 std::string player_morale::morale_subtype::describe() const
 {
     switch( subtype_type ) {
-        case morale_subtype_t::by_item:
-            return item_type->nname( 1 );
+    case morale_subtype_t::by_item:
+        return item_type->nname( 1 );
         // TODO: Implement (may need passing an entire effect here...)
         case morale_subtype_t::by_effect:
         default:

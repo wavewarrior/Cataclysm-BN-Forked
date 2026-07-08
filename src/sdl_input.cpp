@@ -32,21 +32,22 @@ static int arrow_combo_modifier = 0;
 
 static constexpr int ERR = -1;
 
-namespace {
+namespace
+{
 
 auto sdl_keycode_opposite_arrow( SDL_Keycode key ) -> SDL_Keycode
 {
     switch( key ) {
-        case SDLK_UP:
-            return SDLK_DOWN;
-        case SDLK_DOWN:
-            return SDLK_UP;
-        case SDLK_LEFT:
-            return SDLK_RIGHT;
-        case SDLK_RIGHT:
-            return SDLK_LEFT;
-    }
-    return 0;
+    case SDLK_UP:
+        return SDLK_DOWN;
+    case SDLK_DOWN:
+        return SDLK_UP;
+    case SDLK_LEFT:
+        return SDLK_RIGHT;
+    case SDLK_RIGHT:
+        return SDLK_LEFT;
+}
+return 0;
 }
 
 auto sdl_keycode_is_arrow( SDL_Keycode key ) -> bool
@@ -92,7 +93,8 @@ auto arrow_combo_to_numpad( SDL_Keycode mod, SDL_Keycode key ) -> int
 
 } // namespace
 
-namespace sdl_input {
+namespace sdl_input
+{
 
 void begin_alt_code()
 {
@@ -103,7 +105,7 @@ void begin_alt_code()
 auto add_alt_code( char c ) -> bool
 {
     if( alt_down ) {
-        if( c >= '0' && c <= '9' ) {
+    if( c >= '0' && c <= '9' ) {
             alt_buffer = alt_buffer * 10 + ( c - '0' );
         }
 
@@ -342,10 +344,10 @@ auto keysym_to_curses( SDL_Keycode sym, SDL_Keymod mod ) -> int
 auto handle_arrow_combo( SDL_Keycode key ) -> int
 {
     if( !arrow_combo_modifier ) {
-        arrow_combo_modifier = key;
-        return 0;
-    }
-    return arrow_combo_to_numpad( arrow_combo_modifier, key );
+    arrow_combo_modifier = key;
+    return 0;
+}
+return arrow_combo_to_numpad( arrow_combo_modifier, key );
 }
 
 void end_arrow_combo()
@@ -360,7 +362,8 @@ auto gamepad_available( const display_context &d ) -> bool
 
 } // namespace sdl_input
 
-namespace sdl_input {
+namespace sdl_input
+{
 
 // ---------------------------------------------------------------------------
 // try_sdl_update — throttle display refreshes to the framerate interval.
@@ -522,7 +525,7 @@ void CheckMessages( display_context &d )
                     const bool shift = ( ev.key.mod & SDL_KMOD_SHIFT ) != 0;
                     const float step = shift ? -100.0f : 100.0f;
                     menu_emitter_tuning::radius_input = std::clamp(
-                        menu_emitter_tuning::radius_input + step, 1.0f, 10000.0f );
+                                                            menu_emitter_tuning::radius_input + step, 1.0f, 10000.0f );
                     break;
                 } else if( lc == KEY_F( 11 ) ) {
                     // F11: cycle menu emitter position preset.
@@ -532,12 +535,18 @@ void CheckMessages( display_context &d )
                     menu_emitter_tuning::pos_preset =
                         ( menu_emitter_tuning::pos_preset + 1 ) % 3;
                     switch( menu_emitter_tuning::pos_preset ) {
-                        case 0: menu_emitter_tuning::pos_x = 8.5f;
-                                menu_emitter_tuning::pos_y = 4.5f;  break;
-                        case 1: menu_emitter_tuning::pos_x = 40.0f;
-                                menu_emitter_tuning::pos_y = 22.0f; break;
-                        case 2: menu_emitter_tuning::pos_x = 70.0f;
-                                menu_emitter_tuning::pos_y = 38.0f; break;
+                        case 0:
+                            menu_emitter_tuning::pos_x = 8.5f;
+                            menu_emitter_tuning::pos_y = 4.5f;
+                            break;
+                        case 1:
+                            menu_emitter_tuning::pos_x = 40.0f;
+                            menu_emitter_tuning::pos_y = 22.0f;
+                            break;
+                        case 2:
+                            menu_emitter_tuning::pos_x = 70.0f;
+                            menu_emitter_tuning::pos_y = 38.0f;
+                            break;
                     }
                     break;
                 } else if( lc == KEY_F( 12 ) ) {
@@ -584,7 +593,7 @@ void CheckMessages( display_context &d )
                                 }
 
                                 quick_shortcuts_t &qsl = quick_shortcuts_map[get_quick_shortcut_name(
-                                                              touch_input_context.get_category() )];
+                                                             touch_input_context.get_category() )];
                                 qsl.remove( d.last_input );
                                 add_quick_shortcut( qsl, d.last_input, false, true );
                                 refresh_display();
@@ -688,7 +697,8 @@ void CheckMessages( display_context &d )
         // on focus gain. This seems to mess up the first redraw and
         // causes black screen that lasts ~0.5 seconds before the screen
         // contents are redrawn in the following code.
-        ui_manager::invalidate( rectangle<point>( point_zero, point( d.WindowWidth, d.WindowHeight ) ), false );
+        ui_manager::invalidate( rectangle<point>( point_zero, point( d.WindowWidth, d.WindowHeight ) ),
+                                false );
         ui_manager::redraw_invalidated();
     }
     if( d.needupdate ) {

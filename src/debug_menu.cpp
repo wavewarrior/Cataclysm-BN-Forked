@@ -120,7 +120,7 @@
 static const mtype_id mon_generator( "mon_generator" );
 
 extern std::map<std::string, weighted_int_list<std::shared_ptr<mapgen_function_json_nested>> >
-        nested_mapgen;
+nested_mapgen;
 
 #include "sdl_wrappers.h"
 #include "cata_tiles.h"
@@ -461,7 +461,7 @@ void teleport_overmap( bool specific_coordinates )
         where = tripoint_abs_omt( OMAPX * coord.x(), OMAPY * coord.y(), coord.z() );
     } else {
         const std::optional<tripoint_rel_ms> dir_ = choose_direction(
-                    _( "Where is the desired overmap?" ) );
+                _( "Where is the desired overmap?" ) );
         if( !dir_ ) {
             return;
         }
@@ -613,7 +613,7 @@ void character_edit_menu( Character &c )
              ( np->get_faction() ? np->get_faction()->name() : _( "no faction" ) ) << "; " <<
              ( np->get_faction() ? np->get_faction()->currency()->nname( 1 ) : _( "no currency" ) )
              << "; " <<
-             "api: " << np->get_faction_ver() << '\n';
+                                                                             "api: " << np->get_faction_ver() << '\n';
         if( np->has_destination() ) {
             data << string_format(
                      _( "Destination: %s %s" ), np->goal.to_string(),
@@ -1452,8 +1452,8 @@ void benchmark( const int max_difference, bench_kind kind )
     }
 
     DebugLog( DL::Info, DC::Main ) << bench_name << ":\n" <<
-                                   "\n| USE_TILES |  RENDERER | FRAMEBUFFER_ACCEL | USE_COLOR_MODULATED_TEXTURES | FPS |" <<
-                                   "\n|:---:|:---:|:---:|:---:|:---:|\n| " <<
+                                                    "\n| USE_TILES |  RENDERER | FRAMEBUFFER_ACCEL | USE_COLOR_MODULATED_TEXTURES | FPS |" <<
+                                                    "\n|:---:|:---:|:---:|:---:|:---:|\n| " <<
                                    true << " | " <<
                                    get_option<std::string>( "RENDERER" ) << " | " <<
                                    get_option<bool>( "FRAMEBUFFER_ACCEL" ) << " | " <<
@@ -2144,10 +2144,11 @@ void debug()
             int count = 0;
             for( const auto &elem : g->faction_manager_ptr->all() ) {
                 std::cout << std::to_string( count ) << " Faction_id key in factions map = " << elem.first.str() <<
-                          '\n';
+                '\n';
                 std::cout << std::to_string( count ) << " Faction name associated with this id is " <<
                           elem.second.name() << '\n';
-                std::cout << std::to_string( count ) << " the id of that faction object is " << elem.second.id().str()
+                std::cout << std::to_string( count ) << " the id of that faction object is " <<
+                          elem.second.id().str()
                           << '\n';
                 count++;
             }

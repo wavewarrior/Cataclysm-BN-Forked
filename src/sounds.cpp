@@ -1135,25 +1135,25 @@ void sfx::sound_thread::operator()() const
     static const skill_id skill_stabbing( "stabbing" );
 
     if( weapon_skill == skill_bashing && weapon_volume <= 8 ) {
-        variant_used = "small_bash";
-        play_variant_sound( "melee_swing", "small_bash", vol_src, ang_src, 0.8, 1.2 );
+    variant_used = "small_bash";
+    play_variant_sound( "melee_swing", "small_bash", vol_src, ang_src, 0.8, 1.2 );
     } else if( weapon_skill == skill_bashing && weapon_volume >= 9 ) {
-        variant_used = "big_bash";
-        play_variant_sound( "melee_swing", "big_bash", vol_src, ang_src, 0.8, 1.2 );
+    variant_used = "big_bash";
+    play_variant_sound( "melee_swing", "big_bash", vol_src, ang_src, 0.8, 1.2 );
     } else if( ( weapon_skill == skill_cutting || weapon_skill == skill_stabbing ) &&
                weapon_volume <= 6 ) {
-        variant_used = "small_cutting";
-        play_variant_sound( "melee_swing", "small_cutting", vol_src, ang_src, 0.8, 1.2 );
+    variant_used = "small_cutting";
+    play_variant_sound( "melee_swing", "small_cutting", vol_src, ang_src, 0.8, 1.2 );
     } else if( ( weapon_skill == skill_cutting || weapon_skill == skill_stabbing ) &&
                weapon_volume >= 7 ) {
-        variant_used = "big_cutting";
-        play_variant_sound( "melee_swing", "big_cutting", vol_src, ang_src, 0.8, 1.2 );
+    variant_used = "big_cutting";
+    play_variant_sound( "melee_swing", "big_cutting", vol_src, ang_src, 0.8, 1.2 );
     } else {
         variant_used = "default";
         play_variant_sound( "melee_swing", "default", vol_src, ang_src, 0.8, 1.2 );
     }
     if( hit ) {
-        if( targ_mon ) {
+    if( targ_mon ) {
             if( material == "steel" ) {
                 std::this_thread::sleep_for( std::chrono::milliseconds( rng( weapon_volume * 12,
                                              weapon_volume * 16 ) ) );

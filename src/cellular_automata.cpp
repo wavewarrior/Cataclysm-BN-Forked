@@ -23,11 +23,11 @@ int CellularAutomata::neighbor_count( const std::vector<std::vector<int>> &cells
     return neighbors;
 }
 std::vector<std::vector<int>> CellularAutomata::generate_cellular_automaton(
-                               point size,
-                               const int alive,
-                               const int iterations,
-                               const int birth_limit,
-                               const int stasis_limit )
+    point size,
+    const int alive,
+    const int iterations,
+    const int birth_limit,
+    const int stasis_limit )
 {
     std::vector<std::vector<int>> current( size.x, std::vector<int>( size.y, 0 ) );
     std::vector<std::vector<int>> next( size.x, std::vector<int>( size.y, 0 ) );

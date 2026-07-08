@@ -64,7 +64,8 @@ void DefaultGeometryRenderer::rect( const SDL_Renderer_Ptr & /*renderer*/, const
     mirror_rect_to_gpu( rect, color );
 }
 
-ColorModulatedGeometryRenderer::ColorModulatedGeometryRenderer( const SDL_Renderer_Ptr & /*renderer*/ )
+ColorModulatedGeometryRenderer::ColorModulatedGeometryRenderer( const SDL_Renderer_Ptr
+        & /*renderer*/ )
 {
     // The colour-modulated SDL_Texture trick was an SDL_Renderer
     // back-end workaround for blend-rate-limited drivers; SDL_GPU has

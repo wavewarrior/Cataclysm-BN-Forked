@@ -244,7 +244,7 @@ class generic_typed_reader
         template<typename C> requires( !reader_detail::Container<C> || !SupportsRelative<C> )
         bool do_relative( const JsonObject &jo, const std::string &name, C & ) const {
             if( jo.has_object( "relative" ) ) {
-                JsonObject relative = jo.get_object( "relative" );
+            JsonObject relative = jo.get_object( "relative" );
                 relative.allow_omitted_members();
                 if( !relative.has_member( name ) ) {
                     return false;
@@ -258,7 +258,7 @@ class generic_typed_reader
         template<reader_detail::RelativeContainer C>
         bool do_relative( const JsonObject &jo, const std::string &name, C &member ) const {
             if( jo.has_object( "relative" ) ) {
-                JsonObject relative = jo.get_object( "relative" );
+            JsonObject relative = jo.get_object( "relative" );
                 relative.allow_omitted_members();
                 const Derived &derived = static_cast<const Derived &>( *this );
                 // This needs to happen here, otherwise we get unvisited members
@@ -275,7 +275,7 @@ class generic_typed_reader
         template<typename C>
         bool read_normal( const JsonObject &jo, const std::string &name, C &member ) const {
             if( jo.has_member( name ) ) {
-                const Derived &derived = static_cast<const Derived &>( *this );
+            const Derived &derived = static_cast<const Derived &>( *this );
                 member = derived.get_next( *jo.get_raw( name ) );
                 return true;
             }
@@ -291,8 +291,8 @@ class generic_typed_reader
         bool operator()( const JsonObject &jo, const std::string &member_name,
                          C &member, bool /*was_loaded*/ ) const {
             return read_normal( jo, member_name, member ) ||
-                   handle_proportional( jo, member_name, member ) ||
-                   do_relative( jo, member_name, member );
+            handle_proportional( jo, member_name, member ) ||
+            do_relative( jo, member_name, member );
         }
 };
 
@@ -332,12 +332,12 @@ class unit_reader : generic_typed_reader<T>
         bool operator()( const JsonObject &jo, const std::string &member_name,
                          T &member, bool /* was_loaded */ ) const {
             if( !jo.has_member( member_name ) ) {
-                return false;
-            }
-            member = read_from_json_string<T>( *jo.get_raw( member_name ), type_units );
-            return true;
+            return false;
         }
-        units::volume get_next( JsonIn &jin ) const {
+        member = read_from_json_string<T>( *jo.get_raw( member_name ), type_units );
+        return true;
+    }
+    units::volume get_next( JsonIn &jin ) const {
             return read_from_json_string<units::volume>( jin, type_units );
         }
 };

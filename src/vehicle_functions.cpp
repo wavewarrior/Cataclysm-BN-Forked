@@ -102,8 +102,8 @@ void perform_reload( vehicle &veh, vehicle_part &cargo_part, item &gun, item &so
         if( gun.magazine_current() ) {
             gun.contents.remove_top_items_with( [&]( detached_ptr<item> &&mag ) -> detached_ptr<item> {
                 if( mag->is_magazine() )
-                {
-                    cargo_part.add_item( std::move( mag ) );
+            {
+                cargo_part.add_item( std::move( mag ) );
                     return detached_ptr<item>(); // Remove from gun
                 }
                 return std::move( mag ); // Keep in gun (shouldn't happen for mag)

@@ -866,7 +866,7 @@ void groundcover_extra::finalize()   // FIXME: return bool for failure
 ter_furn_id groundcover_extra::pick( bool boosted ) const
 {
     if( boosted ) {
-        return boosted_weightlist.lower_bound( rng( 0, 1000000 ) )->second;
+    return boosted_weightlist.lower_bound( rng( 0, 1000000 ) )->second;
     }
     return weightlist.lower_bound( rng( 0, 1000000 ) )->second;
 }
@@ -1128,13 +1128,13 @@ void building_bin::add( const overmap_special_id &building, int weight )
 overmap_special_id building_bin::pick() const
 {
     if( !finalized ) {
-        debugmsg( "Tried to pick a special out of a non-finalized bin" );
+    debugmsg( "Tried to pick a special out of a non-finalized bin" );
         return overmap_special_id( "null" );
     }
 
     const auto *result = buildings.pick();
     if( !result ) {
-        return overmap_special_id( "null" );
+    return overmap_special_id( "null" );
     }
     return *result;
 }

@@ -69,5 +69,5 @@ TEST_CASE( "opening_floor_rebuilds_below_light", "[vision][zlevel]" )
 
     CHECK( below_cache.seen_cache[below_cache.idx( hole_pos.x(), hole_pos.y() )] > 0.0f );
     CHECK( below_cache.visibility_cache[below_cache.idx( hole_pos.x(),
-                                                         hole_pos.y() )] != lit_level::BLANK );
+                                        hole_pos.y() )] != lit_level::BLANK );
 }

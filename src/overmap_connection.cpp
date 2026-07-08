@@ -63,9 +63,9 @@ const overmap_connection &string_id<overmap_connection>::obj() const
 bool overmap_connection::subtype::allows_terrain( const oter_id &oter ) const
 {
     if( oter->type_is( terrain ) ) {
-        return true;    // Can be built on similar terrains.
-    } else {
-        if( oter->get_mapgen_id().starts_with( terrain.str() ) ) {
+    return true;    // Can be built on similar terrains.
+} else {
+    if( oter->get_mapgen_id().starts_with( terrain.str() ) ) {
             return true;    // For bridges, starts the same, is the same
         }
     }
@@ -142,12 +142,12 @@ const overmap_connection::subtype *overmap_connection::pick_subtype_for(
     const oter_id &ground ) const
 {
     if( !ground ) {
-        return nullptr;
-    }
+    return nullptr;
+}
 
-    {
-        auto _ = std::lock_guard{mutex};
-        const auto it = cached_subtypes.find( ground );
+{
+    auto _ = std::lock_guard{mutex};
+    const auto it = cached_subtypes.find( ground );
         if( it != cached_subtypes.end() ) {
             return it->second.value;
         }
@@ -166,8 +166,8 @@ const overmap_connection::subtype *overmap_connection::pick_subtype_for(
     int min_cost = INT_MAX;
     // For loop iterating through all instances of subtypes that can be placed here.
     for( auto iter = std::find_if( subtypes.begin(), subtypes.end(), passes );
-         iter != subtypes.end();
-         iter = std::find_if( ++iter, subtypes.end(), passes ) ) {
+    iter != subtypes.end();
+    iter = std::find_if( ++iter, subtypes.end(), passes ) ) {
         auto subtype = &*iter;
         // If it's hardcoded to be set here
         // We better set it here
@@ -190,7 +190,7 @@ const overmap_connection::subtype *overmap_connection::pick_subtype_for(
     // Null happens when trying to place a road over a cabin for instance
     size_t *idx = weighted_terrain.pick();
     if( idx != nullptr ) {
-        result = &subtypes[*idx];
+    result = &subtypes[*idx];
     }
     // Null subtypes are fine, and expected from this function
     // This is the cache so long roads are easy
@@ -232,10 +232,10 @@ void overmap_connection::load( const JsonObject &jo, const std::string & )
 void overmap_connection::check() const
 {
     if( subtypes.empty() ) {
-        debugmsg( "Overmap connection \"%s\" doesn't have subtypes.", id.c_str() );
+    debugmsg( "Overmap connection \"%s\" doesn't have subtypes.", id.c_str() );
     }
-    for( const auto &subtype : subtypes ) {
-        if( !subtype.terrain.is_valid() ) {
+for( const auto &subtype : subtypes ) {
+    if( !subtype.terrain.is_valid() ) {
             debugmsg( "In overmap connection \"%s\", terrain \"%s\" is invalid.", id.c_str(),
                       subtype.terrain.c_str() );
         }

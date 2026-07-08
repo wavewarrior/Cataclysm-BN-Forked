@@ -166,13 +166,13 @@ static std::string test_action_desc(
             return "unimplemented";
     }
     ss << "expect 1st item to have " << invlet_state_desc( expected_first_invlet_state ) << " invlet" <<
-       '\n';
+    '\n';
     ss << "1st item actually has " << invlet_state_desc( final_first_invlet_state ) << " invlet" <<
-       '\n';
+    '\n';
     ss << "expect 2nd item to have " << invlet_state_desc( expected_second_invlet_state ) << " invlet"
        << '\n';
     ss << "2nd item actually has " << invlet_state_desc( final_second_invlet_state ) << " invlet" <<
-       '\n';
+    '\n';
 
     return ss.str();
 }
@@ -509,7 +509,7 @@ static void stack_invlet_test( player &dummy, inventory_location from, inventory
     ss << "expect the two items to have different invlets" << '\n';
     ss << "actually the two items have " <<
        ( tshirt1.invlet != tshirt2.invlet ? "different" : "the same" ) <<
-       " invlets" << '\n';
+                                         " invlets" << '\n';
     INFO( ss.str() );
     // the wielded/worn item should have different invlet from the remaining item
     CHECK( tshirt1.invlet != tshirt2.invlet );
@@ -563,10 +563,10 @@ static void swap_invlet_test( player &dummy, inventory_location loc )
 
     std::stringstream ss;
     ss << "1. add two items of the same type to " << location_desc( loc ) <<
-       ", and ensure them do not stack" << '\n';
+          ", and ensure them do not stack" << '\n';
     ss << "2. assign different invlets to the two items" << '\n';
     ss << "3. swap the invlets by assign one of the items with the invlet of the other item" <<
-       '\n';
+    '\n';
     ss << "4. move the items to " << location_desc( GROUND ) << '\n';
     ss << "5. move the items to " << location_desc( loc ) << " again" << '\n';
     ss << "expect the items to keep their swapped invlets" << '\n';
@@ -605,7 +605,7 @@ static void merge_invlet_test( player &dummy, inventory_location from )
         invlet_state second_invlet_state = invlet_state( id / INVLET_STATE_NUM );
         // what the invlet should be for the merged stack
         invlet_state expected_merged_invlet_state = first_invlet_state != NONE ? first_invlet_state :
-                second_invlet_state;
+            second_invlet_state;
         char expected_merged_invlet = first_invlet_state != NONE ? invlet_1 : second_invlet_state != NONE ?
                                       invlet_2 : 0;
 
@@ -639,9 +639,9 @@ static void merge_invlet_test( player &dummy, inventory_location from )
         std::stringstream ss;
         ss << "1. add two stackable items to the inventory and " << location_desc( from ) << '\n';
         ss << "2. assign " << invlet_state_desc( first_invlet_state ) << " invlet " << invlet_1 <<
-           " to the item in the inventory " << '\n';
+              " to the item in the inventory " << '\n';
         ss << "3. assign " << invlet_state_desc( second_invlet_state ) << " invlet " << invlet_2 <<
-           " to the " << location_desc( from ) << '\n';
+              " to the " << location_desc( from ) << '\n';
         ss << "4. " << move_action_desc( 0, from, INVENTORY ) << '\n';
         ss << "expect the stack in the inventory to have " << invlet_state_desc(
                expected_merged_invlet_state ) << " invlet " << expected_merged_invlet << '\n';

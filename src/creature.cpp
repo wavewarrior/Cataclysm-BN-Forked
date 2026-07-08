@@ -173,7 +173,7 @@ Creature::Creature( const Creature &source )
     for( auto &bp : source.body ) {
         auto placed = body.emplace( std::piecewise_construct, std::forward_as_tuple( bp.first ),
                                     std::forward_as_tuple( bp.second.get_str_id(),
-                                            new wield_item_location( this ) ) );
+                                        new wield_item_location( this ) ) );
         placed.first->second.set_hp_max( bp.second.get_hp_max() );
         placed.first->second.set_hp_cur( bp.second.get_hp_cur() );
 
@@ -441,8 +441,8 @@ bool Creature::digging() const
 bool Creature::is_dangerous_fields( const field &fld ) const
 {
     // Else check each field to see if it's dangerous to us
-    for( auto &dfield : fld ) {
-        if( is_dangerous_field( dfield.second ) ) {
+for( auto &dfield : fld ) {
+    if( is_dangerous_field( dfield.second ) ) {
             return true;
         }
     }
@@ -776,22 +776,22 @@ Creature *Creature::auto_find_hostile_target( int range, int &boo_hoo, int area 
 int Creature::size_melee_penalty() const
 {
     switch( get_size() ) {
-        case creature_size::tiny:
-            return 30;
-        case creature_size::small:
-            return 15;
-        case creature_size::medium:
-            return 0;
-        case creature_size::large:
-            return -10;
-        case creature_size::huge:
-            return -20;
-        default:
-            break;
-    }
+    case creature_size::tiny:
+        return 30;
+    case creature_size::small:
+        return 15;
+    case creature_size::medium:
+        return 0;
+    case creature_size::large:
+        return -10;
+    case creature_size::huge:
+        return -20;
+    default:
+        break;
+}
 
-    debugmsg( "Invalid target size %d", get_size() );
-    return 0;
+debugmsg( "Invalid target size %d", get_size() );
+return 0;
 }
 
 int Creature::deal_melee_attack( Creature *source, int hitroll )
@@ -1101,7 +1101,7 @@ void Creature::deal_projectile_attack( Creature *source, item *source_weapon,
         const double stamina_percentage = ( sourceplayer ) ? ( ( ( sender->get_stamina() > 0 ?
                                           ( sender->get_stamina() ) :
                                           1 ) ) / sender->get_stamina_max() ) : std::min( 0.8, std::max( 0.01,
-                                                  0.01 * ( sender->hp_percentage() ) ) );
+                                              0.01 * ( sender->hp_percentage() ) ) );
         // NPCs get a worse skill ratio, 0.1 instead of 0.15. If they felt pain, got hungry/thirsty, or got tired they could get an equivalent skill adjust.
         const double wep_skill_adjust = sender_skill * ( ( sourceplayer ) ? 0.15 : 0.1 );
         hit_location_variance = std::max( 0.05, std::min( 0.9,
@@ -1244,7 +1244,8 @@ void Creature::deal_projectile_attack( Creature *source, item *source_weapon,
     // If we have a shield, it might passively block ranged impacts
     block_ranged_hit( source, bp_hit, impact );
     // If the projectile survives, both it and the launcher get credit for the kill.
-    dealt_dam = deal_damage( source, bp_hit, impact, source_weapon, attack.proj.get_drop(), false, is_graze );
+    dealt_dam = deal_damage( source, bp_hit, impact, source_weapon, attack.proj.get_drop(), false,
+                             is_graze );
     dealt_dam.bp_hit = bp_hit.id();
 
     float dmg_after_armor = dealt_dam.total_damage();
@@ -1337,7 +1338,8 @@ void Creature::deal_projectile_attack( Creature *source, item *source_weapon,
         }
     }
 
-    if( proj.has_effect( ammo_effect_BLEED ) && total_damage > 6 && attack.dealt_dam.type_damage( DT_STAB ) > 0 ) {
+    if( proj.has_effect( ammo_effect_BLEED ) && total_damage > 6 &&
+        attack.dealt_dam.type_damage( DT_STAB ) > 0 ) {
         add_msg_if_player( m_bad, _( "The wound bleeds!" ) );
         add_effect( effect_bleed, 6_minutes, bp_hit.id() );
     }
@@ -1362,7 +1364,8 @@ void Creature::deal_projectile_attack( Creature *source, item *source_weapon,
     attack.missed_by = goodhit;
 }
 
-void Creature::deal_projectile_attack( Creature *source, dealt_projectile_attack &attack, bool is_graze )
+void Creature::deal_projectile_attack( Creature *source, dealt_projectile_attack &attack,
+                                       bool is_graze )
 {
     deal_projectile_attack( source, nullptr, attack, is_graze );
 }
@@ -1756,7 +1759,7 @@ bool Creature::has_effect( const efftype_id &eff_id, const bodypart_str_id &bp )
 {
     // null bp means anything, non-null means only that bp
     if( !bp ) {
-        auto got = effects->find( eff_id );
+    auto got = effects->find( eff_id );
         return got != effects->end() && !got->second.begin()->second.is_removed();
     } else {
         auto got_outer = effects->find( eff_id );
@@ -1777,8 +1780,8 @@ bool Creature::has_effect_with_flag( const flag_id &flag ) const
 
 bool Creature::has_effect_with_flag( const flag_id &flag, const bodypart_str_id &bp ) const
 {
-    for( const auto &elem : *effects ) {
-        for( const auto &_it : elem.second ) {
+for( const auto &elem : *effects ) {
+    for( const auto &_it : elem.second ) {
             if( bp == _it.first && !_it.second.is_removed() && _it.second.has_flag( flag ) ) {
                 return true;
             }
@@ -1963,13 +1966,13 @@ void Creature::process_effects()
 
 bool Creature::resists_effect( const effect &e ) const
 {
-    for( auto &i : e.get_resist_effects() ) {
-        if( has_effect( i ) ) {
+for( auto &i : e.get_resist_effects() ) {
+    if( has_effect( i ) ) {
             return true;
         }
     }
-    for( auto &i : e.get_resist_traits() ) {
-        if( has_trait( i ) ) {
+for( auto &i : e.get_resist_traits() ) {
+    if( has_trait( i ) ) {
             return true;
         }
     }
@@ -2075,7 +2078,7 @@ void Creature::set_moves( int nmoves )
 bool Creature::in_sleep_state() const
 {
     return has_effect( effect_sleep ) || has_effect( effect_lying_down ) ||
-           has_effect( effect_npc_suspend );
+    has_effect( effect_npc_suspend );
 }
 
 /*
@@ -2324,10 +2327,10 @@ std::vector<bodypart_id> Creature::get_all_body_parts( bool only_main ) const
 int Creature::get_hp( const bodypart_id &bp ) const
 {
     if( bp ) {
-        return get_part_hp_cur( bp );
+    return get_part_hp_cur( bp );
     }
     int hp_total = 0;
-    for( const std::pair<const bodypart_str_id, bodypart> &elem : get_body() ) {
+for( const std::pair<const bodypart_str_id, bodypart> &elem : get_body() ) {
         hp_total += elem.second.get_hp_cur();
     }
     return hp_total;
@@ -2341,10 +2344,10 @@ int Creature::get_hp() const
 int Creature::get_hp_max( const bodypart_id &bp ) const
 {
     if( bp ) {
-        return get_part_hp_max( bp );
+    return get_part_hp_max( bp );
     }
     int hp_total = 0;
-    for( const std::pair<const bodypart_str_id, bodypart> &elem : get_body() ) {
+for( const std::pair<const bodypart_str_id, bodypart> &elem : get_body() ) {
         hp_total += elem.second.get_hp_max();
     }
     return hp_total;

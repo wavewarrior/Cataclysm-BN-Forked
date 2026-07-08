@@ -194,18 +194,18 @@ void enchantment::reset()
 bool enchantment::is_active( const Character &guy, const item &parent ) const
 {
     if( !guy.has_item( parent ) ) {
-        return false;
-    }
+    return false;
+}
 
-    if( active_conditions.first == has::WIELD && !guy.is_wielding( parent ) ) {
-        return false;
-    }
+if( active_conditions.first == has::WIELD && !guy.is_wielding( parent ) ) {
+    return false;
+}
 
-    if( active_conditions.first == has::WORN && !guy.is_worn( parent ) ) {
-        return false;
-    }
+if( active_conditions.first == has::WORN && !guy.is_worn( parent ) ) {
+    return false;
+}
 
-    return is_active( guy, parent.is_active() );
+return is_active( guy, parent.is_active() );
 }
 
 bool enchantment::is_active( const Character &guy, const bool active ) const
@@ -331,7 +331,7 @@ void enchantment::serialize( JsonOut &jsout ) const
     jsout.start_object();
 
     if( !id.is_empty() ) {
-        jsout.member( "id", id );
+    jsout.member( "id", id );
         jsout.end_object();
         // if the enchantment has an id then it is defined elsewhere and does not need to be serialized.
         return;
@@ -340,19 +340,19 @@ void enchantment::serialize( JsonOut &jsout ) const
     jsout.member( "has", io::enum_to_string<has>( active_conditions.first ) );
     jsout.member( "condition", io::enum_to_string<condition>( active_conditions.second ) );
     if( emitter ) {
-        jsout.member( "emitter", emitter );
+    jsout.member( "emitter", emitter );
     }
 
     if( !hit_you_effect.empty() ) {
-        jsout.member( "hit_you_effect", hit_you_effect );
+    jsout.member( "hit_you_effect", hit_you_effect );
     }
 
     if( !hit_me_effect.empty() ) {
-        jsout.member( "hit_me_effect", hit_me_effect );
+    jsout.member( "hit_me_effect", hit_me_effect );
     }
 
     if( !intermittent_activation.empty() ) {
-        jsout.member( "intermittent_activation" );
+    jsout.member( "intermittent_activation" );
         jsout.start_object();
         jsout.member( "effects" );
         jsout.start_array();
@@ -373,7 +373,7 @@ void enchantment::serialize( JsonOut &jsout ) const
     }
 
     if( !ench_effects.empty() ) {
-        jsout.member( "ench_effects" );
+    jsout.member( "ench_effects" );
         jsout.start_array();
         for( const std::pair<const efftype_id, int> &eff : ench_effects ) {
             jsout.start_object();
@@ -389,7 +389,7 @@ void enchantment::serialize( JsonOut &jsout ) const
     jsout.member( "values" );
     jsout.start_array();
     for( int value = 0; value < static_cast<int>( enchant_vals::mod::NUM_MOD ); value++ ) {
-        enchant_vals::mod enum_value = static_cast<enchant_vals::mod>( value );
+    enchant_vals::mod enum_value = static_cast<enchant_vals::mod>( value );
         if( get_value_add( enum_value ) == 0 && get_value_multiply( enum_value ) == 0.0 ) {
             continue;
         }
@@ -505,15 +505,15 @@ int enchantment::mult_bonus( enchant_vals::mod value_type, int base_value ) cons
 void enchantment::activate_passive( Character &guy ) const
 {
     if( emitter ) {
-        get_map().emit_field( guy.bub_pos(), *emitter );
+    get_map().emit_field( guy.bub_pos(), *emitter );
     }
-    for( const std::pair<efftype_id, int> eff : ench_effects ) {
-        guy.add_effect( eff.first, 1_seconds, bodypart_str_id::NULL_ID(), eff.second );
+for( const std::pair<efftype_id, int> eff : ench_effects ) {
+    guy.add_effect( eff.first, 1_seconds, bodypart_str_id::NULL_ID(), eff.second );
     }
-    for( const std::pair<const time_duration, std::vector<fake_spell>> &activation :
+for( const std::pair<const time_duration, std::vector<fake_spell>> &activation :
          intermittent_activation ) {
-        // a random approximation!
-        if( one_in( to_seconds<int>( activation.first ) ) ) {
+    // a random approximation!
+    if( one_in( to_seconds<int>( activation.first ) ) ) {
             for( const fake_spell &fake : activation.second ) {
                 fake.get_spell( 0 ).cast_all_effects( guy, guy.bub_pos() );
             }
@@ -523,15 +523,15 @@ void enchantment::activate_passive( Character &guy ) const
 
 void enchantment::cast_hit_you( Character &caster, const Creature &target ) const
 {
-    for( const fake_spell &sp : hit_you_effect ) {
-        cast_enchantment_spell( caster, &target, sp );
+for( const fake_spell &sp : hit_you_effect ) {
+    cast_enchantment_spell( caster, &target, sp );
     }
 }
 
 void enchantment::cast_hit_me( Character &caster, const Creature *target ) const
 {
-    for( const fake_spell &sp : hit_me_effect ) {
-        cast_enchantment_spell( caster, target, sp );
+for( const fake_spell &sp : hit_me_effect ) {
+    cast_enchantment_spell( caster, target, sp );
     }
 }
 
@@ -540,18 +540,18 @@ void enchantment::cast_enchantment_spell( Character &caster, const Creature *tar
 {
     // check the chances
     if( !one_in( sp.trigger_once_in ) ) {
-        return;
-    }
+    return;
+}
 
-    if( sp.self ) {
-        caster.add_msg_player_or_npc( m_good,
-                                      sp.trigger_message,
-                                      sp.npc_trigger_message,
-                                      caster.name );
+if( sp.self ) {
+    caster.add_msg_player_or_npc( m_good,
+                                  sp.trigger_message,
+                                  sp.npc_trigger_message,
+                                  caster.name );
         sp.get_spell( sp.level ).cast_all_effects( caster, caster.bub_pos() );
     } else  if( target != nullptr ) {
-        const Creature &trg_crtr = *target;
-        const spell &spell_lvl = sp.get_spell( sp.level );
+    const Creature &trg_crtr = *target;
+    const spell &spell_lvl = sp.get_spell( sp.level );
         if( !spell_lvl.is_valid_target( caster, trg_crtr.bub_pos() ) ||
             !spell_lvl.is_target_in_range( caster, trg_crtr.bub_pos() ) ) {
             return;
@@ -591,7 +591,7 @@ bool is_set_value( const trait_id &mut, float val )
 
 template <float mutation_branch::*First, float mutation_branch::* ...Rest,
           std::enable_if_t<( sizeof...( Rest ) > 0 ), bool>NonEmpty = false >
-                  bool is_set_value( const trait_id &mut, float val )
+              bool is_set_value( const trait_id &mut, float val )
 {
     return ( *mut ).*First == val && is_set_value<Rest...>( mut, val );
 }

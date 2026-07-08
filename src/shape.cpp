@@ -54,7 +54,7 @@ void shape_factory::serialize( JsonOut &jsout ) const
     // TODO: poly_serialized should handle this with some rewriting
     jsout.start_array();
     if( impl != nullptr ) {
-        jsout.write( impl->get_type() );
+    jsout.write( impl->get_type() );
         jsout.start_object();
         impl->serialize( jsout );
         jsout.end_object();

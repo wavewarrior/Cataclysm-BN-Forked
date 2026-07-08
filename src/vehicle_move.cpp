@@ -1640,12 +1640,12 @@ bool vehicle::check_on_ramp( int idir, const tripoint_rel_ms &offset ) const
 static auto ramp_z_delta_at( const map &here, const tripoint_bub_ms &pos ) -> int
 {
     if( here.has_flag( TFLAG_RAMP_UP, pos ) ) {
-        return 1;
-    }
-    if( here.has_flag( TFLAG_RAMP_DOWN, pos ) ) {
-        return -1;
-    }
-    return 0;
+    return 1;
+}
+if( here.has_flag( TFLAG_RAMP_DOWN, pos ) ) {
+    return -1;
+}
+return 0;
 }
 
 void vehicle::adjust_zlevel( int idir, const tripoint_rel_ms &offset )
@@ -1747,35 +1747,35 @@ float map::vehicle_wheel_traction( const vehicle &veh,
                                    const bool ignore_movement_modifiers /*=false*/ ) const
 {
     if( veh.is_in_water( true ) ) {
-        return veh.can_float() ? 1.0f : -1.0f;
+    return veh.can_float() ? 1.0f : -1.0f;
     }
     if( veh.is_in_water() && veh.is_watercraft() && veh.can_float() ) {
-        return 1.0f;
-    }
-    if( veh.is_flying_in_air() ) {
-        return ( veh.has_lift() ) ? 1.0f : -1.0f;
+    return 1.0f;
+}
+if( veh.is_flying_in_air() ) {
+    return ( veh.has_lift() ) ? 1.0f : -1.0f;
     }
 
     const auto &wheel_indices = veh.wheelcache;
     int num_wheels = wheel_indices.size();
     if( num_wheels == 0 ) {
-        // TODO: Assume it is digging in dirt
-        // TODO: Return something that could be reused for dragging
-        return 0.0f;
-    }
+    // TODO: Assume it is digging in dirt
+    // TODO: Return something that could be reused for dragging
+    return 0.0f;
+}
 
-    float traction_wheel_area = 0.0f;
+float traction_wheel_area = 0.0f;
 
-    if( vehicle_movement::is_on_rails( *this, veh ) ) {
-        // Vehicles on rails are considered to have all of their wheels on rails
-        for( int p : veh.rail_wheelcache ) {
+if( vehicle_movement::is_on_rails( *this, veh ) ) {
+    // Vehicles on rails are considered to have all of their wheels on rails
+    for( int p : veh.rail_wheelcache ) {
             traction_wheel_area += veh.cpart( p ).wheel_area();
         }
         return traction_wheel_area;
     }
 
-    for( int p : wheel_indices ) {
-        const auto &pp = veh.bub_part_location( p );
+for( int p : wheel_indices ) {
+    const auto &pp = veh.bub_part_location( p );
         const int wheel_area = veh.cpart( p ).wheel_area();
 
         const auto &tr = ter( pp ).obj();
@@ -1925,18 +1925,18 @@ namespace vehicle_movement
 static auto has_rail_at_vehicle_z( const map &m, const tripoint_bub_ms &p ) -> bool
 {
     if( m.has_flag_ter_or_furn( TFLAG_RAIL, p ) ) {
-        return true;
-    }
-    if( !m.has_flag_ter_or_furn( TFLAG_NO_FLOOR, p ) ) {
-        return false;
-    }
+    return true;
+}
+if( !m.has_flag_ter_or_furn( TFLAG_NO_FLOOR, p ) ) {
+    return false;
+}
 
-    const auto vertical_neighbors = std::array<tripoint_bub_ms, 2> {
-        p + tripoint_rel_ms( 0, 0, 1 ),
-        p + tripoint_rel_ms( 0, 0, -1 ),
-    };
-    return std::ranges::any_of( vertical_neighbors, [&]( const tripoint_bub_ms & candidate ) {
-        return m.has_flag_ter_or_furn( TFLAG_RAIL, candidate );
+const auto vertical_neighbors = std::array<tripoint_bub_ms, 2> {
+    p + tripoint_rel_ms( 0, 0, 1 ),
+    p + tripoint_rel_ms( 0, 0, -1 ),
+};
+return std::ranges::any_of( vertical_neighbors, [&]( const tripoint_bub_ms & candidate ) {
+    return m.has_flag_ter_or_furn( TFLAG_RAIL, candidate );
     } );
 }
 

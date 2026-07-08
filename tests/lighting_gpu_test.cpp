@@ -29,7 +29,7 @@ struct sdl_video_session {
     }
     ~sdl_video_session() noexcept {
         if( ok ) {
-            SDL_QuitSubSystem( SDL_INIT_VIDEO );
+        SDL_QuitSubSystem( SDL_INIT_VIDEO );
         }
     }
     sdl_video_session( const sdl_video_session & ) = delete;

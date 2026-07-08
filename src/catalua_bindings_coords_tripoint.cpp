@@ -36,13 +36,13 @@ auto lua_tripoint_add( const lua_tripoint_coord &lhs,
                        const sol::object &rhs ) -> std::optional<lua_tripoint_coord>
 {
     if( rhs.is<lua_point_coord>() ) {
-        const auto other = rhs.as<lua_point_coord>();
+    const auto other = rhs.as<lua_point_coord>();
         if( lhs.scale == other.scale && other.origin == coords::origin::relative ) {
             return make_tripoint_coord( lhs.origin, lhs.scale, lhs.raw + other.raw );
         }
     }
     if( rhs.is<lua_tripoint_coord>() ) {
-        const auto other = rhs.as<lua_tripoint_coord>();
+    const auto other = rhs.as<lua_tripoint_coord>();
         if( lhs.scale == other.scale && other.origin == coords::origin::relative ) {
             return make_tripoint_coord( lhs.origin, lhs.scale, lhs.raw + other.raw );
         }
@@ -58,13 +58,13 @@ auto lua_tripoint_subtract( const lua_tripoint_coord &lhs,
                             const sol::object &rhs ) -> std::optional<lua_tripoint_coord>
 {
     if( rhs.is<lua_point_coord>() ) {
-        const auto other = rhs.as<lua_point_coord>();
+    const auto other = rhs.as<lua_point_coord>();
         if( lhs.scale == other.scale && other.origin == coords::origin::relative ) {
             return make_tripoint_coord( lhs.origin, lhs.scale, lhs.raw - other.raw );
         }
     }
     if( rhs.is<lua_tripoint_coord>() ) {
-        const auto other = rhs.as<lua_tripoint_coord>();
+    const auto other = rhs.as<lua_tripoint_coord>();
         if( lhs.scale == other.scale && other.origin == coords::origin::relative ) {
             return make_tripoint_coord( lhs.origin, lhs.scale, lhs.raw - other.raw );
         }

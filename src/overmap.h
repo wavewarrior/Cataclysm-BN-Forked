@@ -451,8 +451,8 @@ class overmap
             return npcs;
         }
         std::vector<shared_ptr_fast<npc>> get_npcs( const std::function<bool( const npc & )>
-                                       &predicate )
-                                       const;
+                &predicate )
+        const;
 
     private:
         friend class overmapbuffer;

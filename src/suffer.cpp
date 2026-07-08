@@ -550,7 +550,7 @@ void Character::suffer_from_schizophrenia()
     // Follower turns hostile
     if( one_turn_in( 4_hours ) ) {
         std::vector<shared_ptr_fast<npc>> followers = get_overmapbuffer(
-                                           get_dimension() ).get_npcs_near_player( 12 );
+                get_dimension() ).get_npcs_near_player( 12 );
 
         std::string who_gets_angry = name;
         if( !followers.empty() ) {
@@ -1960,7 +1960,7 @@ void Character::add_addiction( add_type type, int strength )
 bool Character::has_addiction( add_type type ) const
 {
     return std::ranges::any_of( addictions,
-    [type]( const addiction & ad ) {
+           [type]( const addiction & ad ) {
         return ad.type == type && ad.intensity >= MIN_ADDICTION_LEVEL;
     } );
 }

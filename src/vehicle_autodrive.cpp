@@ -936,7 +936,7 @@ const
 }
 
 std::optional<std::vector<navigation_step>> vehicle::autodrive_controller::compute_path(
-            int speed_tps ) const
+    int speed_tps ) const
 {
     if( speed_tps == 0 || speed_tps < -1 ) {
         return std::nullopt;
@@ -947,7 +947,7 @@ std::optional<std::vector<navigation_step>> vehicle::autodrive_controller::compu
     // TODO: check simple reachability first and bail out or set upper bound on node score
     std::unordered_map<node_address, navigation_node, node_address_hasher> known_nodes;
     std::priority_queue<scored_address, std::vector<scored_address>, std::greater<>>
-            open_set;
+    open_set;
     const tripoint_abs_ms veh_pos = driven_veh.abs_ms_location();
     const node_address start = data.nav_to_map.inverse().transform(
                                    veh_pos.raw().xy(), to_orientation( driven_veh.face.dir() ) );

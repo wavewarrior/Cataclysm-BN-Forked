@@ -104,38 +104,38 @@ void ammo_effect::finalize()
 void ammo_effect::check() const
 {
     if( !aoe_field_type.is_valid() ) {
-        debugmsg( "No such field type %s", aoe_field_type_name );
+    debugmsg( "No such field type %s", aoe_field_type_name );
     }
     if( aoe_check_sees_radius < 0 ) {
-        debugmsg( "Value of aoe_check_sees_radius cannot be negative" );
+    debugmsg( "Value of aoe_check_sees_radius cannot be negative" );
     }
     if( aoe_size < 0 ) {
-        debugmsg( "Value of aoe_size cannot be negative" );
+    debugmsg( "Value of aoe_size cannot be negative" );
     }
     if( aoe_chance > 100 || aoe_chance <= 0 ) {
-        debugmsg( "Field chance of %s out of range (%d of min 1 max 100)", id.c_str(), aoe_chance );
+    debugmsg( "Field chance of %s out of range (%d of min 1 max 100)", id.c_str(), aoe_chance );
     }
     if( aoe_radius_z < 0 || aoe_radius < 0 ) {
-        debugmsg( "Radius values cannot be negative" );
+    debugmsg( "Radius values cannot be negative" );
     }
     if( aoe_intensity_min < 0 ) {
-        debugmsg( "Field intensity cannot be negative" );
+    debugmsg( "Field intensity cannot be negative" );
     }
     if( aoe_intensity_max < aoe_intensity_min ) {
-        debugmsg( "Maximum intensity must be greater than or equal to minimum intensity" );
+    debugmsg( "Maximum intensity must be greater than or equal to minimum intensity" );
     }
     if( !trail_field_type.is_valid() ) {
-        debugmsg( "No such field type %s", trail_field_type_name );
+    debugmsg( "No such field type %s", trail_field_type_name );
     }
     if( trail_chance > 100 || trail_chance <= 0 ) {
-        debugmsg( "Field chance divisor cannot be negative" );
+    debugmsg( "Field chance divisor cannot be negative" );
         debugmsg( "Field chance of %s out of range (%d of min 1 max 100)", id.c_str(), trail_chance );
     }
     if( trail_intensity_min < 0 ) {
-        debugmsg( "Field intensity cannot be negative" );
+    debugmsg( "Field intensity cannot be negative" );
     }
     if( trail_intensity_max < trail_intensity_min ) {
-        debugmsg( "Maximum intensity must be greater than or equal to minimum intensity" );
+    debugmsg( "Maximum intensity must be greater than or equal to minimum intensity" );
     }
 }
 

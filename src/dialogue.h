@@ -128,10 +128,10 @@ struct talk_effect_fun_t {
 
         void operator()( const dialogue &d ) const {
             if( !function ) {
-                return;
-            }
-            return function( d );
+            return;
         }
+        return function( d );
+    }
 };
 
 /**
@@ -139,20 +139,20 @@ struct talk_effect_fun_t {
  * TALK_TRIAL_NONE it always succeeds.
  */
 struct talk_effect_t {
-        /**
-          * How (if at all) the NPCs opinion of the player character (@ref npc::op_of_u)
-          * will change.
-          */
-        npc_opinion opinion;
-        /**
-          * How (if at all) the NPCs opinion of the player character (@ref npc::op_of_u)
-          * will change.  These values are divisors of the mission value.
-          */
-        npc_opinion mission_opinion;
-        /**
-          * Topic to switch to. TALK_DONE ends the talking, TALK_NONE keeps the current topic.
-          */
-        talk_topic next_topic = talk_topic( "TALK_NONE" );
+    /**
+      * How (if at all) the NPCs opinion of the player character (@ref npc::op_of_u)
+      * will change.
+      */
+    npc_opinion opinion;
+    /**
+      * How (if at all) the NPCs opinion of the player character (@ref npc::op_of_u)
+      * will change.  These values are divisors of the mission value.
+      */
+    npc_opinion mission_opinion;
+    /**
+      * Topic to switch to. TALK_DONE ends the talking, TALK_NONE keeps the current topic.
+      */
+    talk_topic next_topic = talk_topic( "TALK_NONE" );
 
         talk_topic apply( dialogue &d ) const;
         dialogue_consequence get_consequence( const dialogue &d ) const;
@@ -340,10 +340,10 @@ struct dynamic_line_t {
 
         std::string operator()( const dialogue &d ) const {
             if( !function ) {
-                return std::string{};
-            }
-            return function( d );
+            return std::string{};
         }
+        return function( d );
+    }
 };
 
 /**
@@ -352,9 +352,9 @@ struct dynamic_line_t {
  */
 class json_talk_response
 {
-    private:
-        talk_response actual_response;
-        std::function<bool( const dialogue & )> condition;
+private:
+    talk_response actual_response;
+    std::function<bool( const dialogue & )> condition;
         bool is_switch = false;
         bool is_default = false;
 

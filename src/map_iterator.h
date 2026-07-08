@@ -101,13 +101,13 @@ class tripoint_range : public std::ranges::view_interface<tripoint_range<Tripoin
 
         auto size() const -> size_t {
             Tripoint range( traits::x( maxp ) - traits::x( minp ), traits::y( maxp ) - traits::y( minp ),
-                            traits::z( maxp ) - traits::z( minp ) );
+            traits::z( maxp ) - traits::z( minp ) );
             return std::max( ++traits::x( range ) * ++traits::y( range ) * ++traits::z( range ), 0 );
         }
 
         bool is_point_inside( const Tripoint &point ) const {
-            for( const Tripoint &current : *this ) {
-                if( current == point ) {
+for( const Tripoint &current : *this ) {
+            if( current == point ) {
                     return true;
                 }
             }

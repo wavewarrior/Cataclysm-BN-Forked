@@ -76,9 +76,9 @@ static inline auto suppress_cell_bg( const cata_cursesport::WINDOW *win,
                                      const SDL_Color &c ) noexcept -> bool
 {
     if( !win || !win->transparent_backdrop ) {
-        return false;
-    }
-    return c.r == 0 && c.g == 0 && c.b == 0;
+    return false;
+}
+return c.r == 0 && c.g == 0 && c.b == 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -112,7 +112,7 @@ static bool draw_window( Font_Ptr &font, const catacurses::window &w, point offs
 
     // Keeping track of the last drawn window to determine compatibility.
     const cata_cursesport::WINDOW *winBuffer = static_cast<cata_cursesport::WINDOW *>
-            ( ::winBuffer.lock().get() );
+        ( ::winBuffer.lock().get() );
     bool oldWinCompatible = false;
     /*
     Let's try to keep track of different windows.
@@ -444,7 +444,7 @@ void cata_cursesport::curses_drawwindow( const catacurses::window &w )
         update = true;
     } else if( g && w == g->w_overmap ) {
         ::overmap_tilecontext->draw_om( win->pos, overmap_ui::redraw_info.center,
-                                      overmap_ui::redraw_info.blink );
+                                        overmap_ui::redraw_info.blink );
         update = true;
     } else if( g && w == g->w_pixel_minimap && pixel_minimap_option ) {
         // ensure the space the minimap covers is "dirtied".

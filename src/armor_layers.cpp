@@ -55,21 +55,21 @@ struct item_penalties {
 
     int badness() const {
         return !body_parts_with_stacking_penalty.empty() +
-               !body_parts_with_out_of_order_penalty.empty();
+        !body_parts_with_out_of_order_penalty.empty();
     }
 
     nc_color color_for_stacking_badness() const {
         switch( badness() ) {
-            case 0:
-                return c_light_gray;
-            case 1:
-                return c_yellow;
-            case 2:
-                return c_light_red;
-        }
-        debugmsg( "Unexpected badness %d", badness() );
-        return c_light_gray;
+        case 0:
+            return c_light_gray;
+        case 1:
+            return c_yellow;
+        case 2:
+            return c_light_red;
     }
+    debugmsg( "Unexpected badness %d", badness() );
+    return c_light_gray;
+}
 };
 
 // Figure out encumbrance penalties this clothing is involved in
@@ -338,8 +338,7 @@ std::vector<std::string> mid_pane_lines(
     const item_penalties penalties = get_item_penalties( worn_item_it, c, bp );
     if( !penalties.body_parts_with_stacking_penalty.empty() ) {
         const std::string layer_description = [&]() {
-            switch( worn_item->get_layer() )
-            {
+            switch( worn_item->get_layer() ) {
                 case PERSONAL_LAYER:
                     return _( "in your <color_light_blue>personal aura</color>" );
                 case UNDERWEAR_LAYER:
@@ -566,7 +565,7 @@ void show_armor_layers_ui( Character &who )
     auto do_return_entry = []() {
         avatar &you = get_avatar();
         you.assign_activity( std::make_unique<player_activity>(
-            std::make_unique<armor_layers_activity_actor>() ) );
+                                 std::make_unique<armor_layers_activity_actor>() ) );
         you.activity->auto_resume = true;
         you.activity->moves_left = INT_MAX;
     };
@@ -591,12 +590,12 @@ void show_armor_layers_ui( Character &who )
         data->cat_rml = cata_text_to_rml( colorize( _( "Sort Armor" ), c_white ) +
                                           colorize( string_format( "  << %s >>", name ), c_yellow ) );
         data->hint_rml = cata_text_to_rml( string_format(
-                _( "[<color_yellow>%s</color>] Hide sprite.  "
-                   "[<color_yellow>%s</color>] Change side.  "
-                   "Press [<color_yellow>%s</color>] for help.  "
-                   "Press [<color_yellow>%s</color>] to change keybindings." ),
-                ctxt.get_desc( "TOGGLE_CLOTH" ), ctxt.get_desc( "CHANGE_SIDE" ),
-                ctxt.get_desc( "USAGE_HELP" ), ctxt.get_desc( "HELP_KEYBINDINGS" ) ) );
+                                               _( "[<color_yellow>%s</color>] Hide sprite.  "
+                                                   "[<color_yellow>%s</color>] Change side.  "
+                                                   "Press [<color_yellow>%s</color>] for help.  "
+                                                   "Press [<color_yellow>%s</color>] to change keybindings." ),
+                                               ctxt.get_desc( "TOGGLE_CLOTH" ), ctxt.get_desc( "CHANGE_SIDE" ),
+                                               ctxt.get_desc( "USAGE_HELP" ), ctxt.get_desc( "HELP_KEYBINDINGS" ) ) );
 
         // LEFT worn list (RmlUi renders all rows; no curses windowing)
         data->left.clear();
@@ -628,7 +627,7 @@ void show_armor_layers_ui( Character &who )
         }
 
         // Append one colour-tagged line to a pane vector.
-        const auto push_line = [&]( Rml::Vector<al_line> &v, const std::string &s ) {
+        const auto push_line = [&]( Rml::Vector<al_line> &v, const std::string & s ) {
             al_line ln;
             ln.text_rml = cata_text_to_rml( s );
             v.push_back( ln );
@@ -928,7 +927,7 @@ void show_armor_layers_ui( Character &who )
                 // wear the item
                 loc->obtain( who );
                 const std::optional<location_vector<item>::iterator> position = ( leftListSize > 0 ) ?
-                        access_tmp_worn( leftListIndex ) : std::optional<location_vector<item>::iterator>( std::nullopt );
+                    access_tmp_worn( leftListIndex ) : std::optional<location_vector<item>::iterator>( std::nullopt );
                 if( !who.as_player()->wear_possessed( *loc, true, position ) &&
                     who.is_npc() ) {
                     // TODO: Pass the reason here

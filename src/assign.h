@@ -542,8 +542,8 @@ bool assign( const JsonObject &jo,
              const damage_instance &lo =
                  damage_instance( DT_NULL, 0.0f, 0.0f, 0.0f, 0.0f ),
              const damage_instance &hi = damage_instance( DT_NULL,
-                     float_max,
-                     float_max,
-                     float_max,
-                     float_max ) );
+                 float_max,
+                 float_max,
+                 float_max,
+                 float_max ) );
 

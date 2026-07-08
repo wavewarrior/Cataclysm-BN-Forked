@@ -486,7 +486,7 @@ void grid_link_tile::store( JsonOut &jsout ) const
     jsout.member( "linked", linked );
     jsout.member( "paused", paused );
     if( linked ) {
-        jsout.member( "target_dim_id", target_dim_id );
+    jsout.member( "target_dim_id", target_dim_id );
         jsout.member( "target_pos", target_pos.raw() );
     }
 }
@@ -543,13 +543,13 @@ void portal_tile::store( JsonOut &jsout ) const
     jsout.member( "one_way", one_way );
     jsout.member( "load_radius", load_radius );
     if( !linkable_item_flag.empty() ) {
-        jsout.member( "linkable_item_flag", linkable_item_flag );
+    jsout.member( "linkable_item_flag", linkable_item_flag );
     }
     if( !dynamic_special.is_null() ) {
-        jsout.member( "dynamic_special", dynamic_special );
+    jsout.member( "dynamic_special", dynamic_special );
     }
     if( linked ) {
-        jsout.member( "target_dim_id", target_dim_id );
+    jsout.member( "target_dim_id", target_dim_id );
         jsout.member( "target_pos", target_pos.raw() );
     }
 }

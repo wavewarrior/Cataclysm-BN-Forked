@@ -186,12 +186,12 @@ class sound_on_move_uilist_callback : public uilist_callback
 
         void select( uilist * ) override {
             if( first ) {
-                // Don't emit sound when menu is opened
-                first = false;
-                return;
-            }
-            mmenu->on_move();
+            // Don't emit sound when menu is opened
+            first = false;
+            return;
         }
+        mmenu->on_move();
+    }
 };
 
 std::vector<std::string> main_menu::load_file( const std::string &path,
@@ -557,7 +557,8 @@ bool main_menu::opening_screen()
                 break;
         }
         // Bottom tips line.
-        if( sel_o == main_menu_opts::NEWCHAR && sel2 >= 0 && sel2 < static_cast<int>( vNewGameHints.size() ) ) {
+        if( sel_o == main_menu_opts::NEWCHAR && sel2 >= 0 &&
+            sel2 < static_cast<int>( vNewGameHints.size() ) ) {
             data->tips_rml = cata_text_to_rml( colorize( vNewGameHints[sel2], c_yellow ) );
         } else {
             std::string tips = _( "Bugs?  Suggestions?  Use links in MOTD to report them." );
@@ -1002,7 +1003,7 @@ bool main_menu::load_character_tab( const std::string &worldname )
 
     if( rml.open( loadchar_rmlui_enabled(), "loadchar", ctxt,
     [&]( Rml::DataModelConstructor & c ) {
-        data = std::make_unique<lc_session>();
+    data = std::make_unique<lc_session>();
         register_lc_rml_types( c );
         c.Bind( "rows", &data->rows );
         c.Bind( "tooltip_rml", &data->tooltip_rml );

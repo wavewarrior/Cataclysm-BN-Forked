@@ -31,8 +31,8 @@ static const SkillDisplayType invalid_skill_type;
 template<>
 const Skill &string_id<Skill>::obj() const
 {
-    for( const Skill &skill : Skill::skills ) {
-        if( skill.ident() == *this ) {
+for( const Skill &skill : Skill::skills ) {
+    if( skill.ident() == *this ) {
             return skill;
         }
     }
@@ -143,8 +143,8 @@ SkillDisplayType::SkillDisplayType( const skill_displayType_id &ident,
 template<>
 const SkillDisplayType &skill_displayType_id::obj() const
 {
-    for( const SkillDisplayType &skill : SkillDisplayType::skillTypes ) {
-        if( skill.ident() == *this ) {
+for( const SkillDisplayType &skill : SkillDisplayType::skillTypes ) {
+    if( skill.ident() == *this ) {
             return skill;
         }
     }

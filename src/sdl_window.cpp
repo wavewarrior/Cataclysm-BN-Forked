@@ -173,7 +173,7 @@ static void WinCreate()
                         DebugLog( DL::Info, DC::Main )
                                 << "RENDERER='" << renderer_name
                                 << "' would conflict with the SDL_GPU device on the visible "
-                                "window; forcing the hidden mirror SDL_Renderer to '" << alt
+                           "window; forcing the hidden mirror SDL_Renderer to '" << alt
                                 << "' instead (visible window still on SDL_GPU).";
                         renderer_name = alt;
                         break;
@@ -218,7 +218,8 @@ static void WinCreate()
         SetRenderDrawBlendMode( g_display.renderer, SDL_BLENDMODE_NONE );
     }
 
-    SDL_SetWindowMinimumSize( g_display.window.get(), fontwidth * FULL_SCREEN_WIDTH * g_display.scaling_factor,
+    SDL_SetWindowMinimumSize( g_display.window.get(),
+                              fontwidth * FULL_SCREEN_WIDTH * g_display.scaling_factor,
                               fontheight * FULL_SCREEN_HEIGHT * g_display.scaling_factor );
 
     ClearScreen();
@@ -238,7 +239,7 @@ static void WinCreate()
     if( get_option<bool>( "ENABLE_JOYSTICK" ) && numjoy >= 1 ) {
         if( numjoy > 1 ) {
             dbg( DL::Warn ) << "You have more than one gamepads/joysticks plugged in, "
-                            "only the first will be used.";
+                               "only the first will be used.";
         }
         g_display.joystick = SDL_OpenJoystick( joystick_ids[0] );
         printErrorIf( g_display.joystick == nullptr, "SDL_OpenJoystick failed" );
@@ -309,7 +310,8 @@ bool handle_resize( int w, int h )
         g_display.TERMINAL_WIDTH = g_display.WindowWidth / fontwidth / g_display.scaling_factor;
         g_display.TERMINAL_HEIGHT = g_display.WindowHeight / fontheight / g_display.scaling_factor;
         g_display.need_invalidate_framebuffers = true;
-        catacurses::stdscr = catacurses::newwin( g_display.TERMINAL_HEIGHT, g_display.TERMINAL_WIDTH, point_zero );
+        catacurses::stdscr = catacurses::newwin( g_display.TERMINAL_HEIGHT, g_display.TERMINAL_WIDTH,
+                             point_zero );
         game_ui::init_ui();
         ui_manager::screen_resized();
         // Keep the UI compositor texture sized to the physical swapchain so
@@ -366,7 +368,8 @@ void toggle_fullscreen_window()
         }
         SDL_RestoreWindow( g_display.window.get() );
         SDL_SetWindowSize( g_display.window.get(), restore_win_w, restore_win_h );
-        SDL_SetWindowMinimumSize( g_display.window.get(), fontwidth * FULL_SCREEN_WIDTH * g_display.scaling_factor,
+        SDL_SetWindowMinimumSize( g_display.window.get(),
+                                  fontwidth * FULL_SCREEN_WIDTH * g_display.scaling_factor,
                                   fontheight * FULL_SCREEN_HEIGHT * g_display.scaling_factor );
     } else {
         restore_win_w = g_display.WindowWidth;
@@ -432,8 +435,8 @@ static void init_term_size_and_scaling_factor()
         int display_count = 0;
         SDL_DisplayID *display_list = SDL_GetDisplays( &display_count );
         const SDL_DisplayID current_display_id = ( display_list && current_display_idx < display_count )
-                ? display_list[current_display_idx]
-                : SDL_GetPrimaryDisplay();
+            ? display_list[current_display_idx]
+            : SDL_GetPrimaryDisplay();
         SDL_free( display_list );
 
         const SDL_DisplayMode *current_display = SDL_GetDesktopDisplayMode( current_display_id );
@@ -591,8 +594,8 @@ void catacurses::init_interface()
 
     try {
         g_display.font = std::make_unique<FontFallbackList>( g_display.renderer, g_display.format,
-                          fl.fontwidth, fl.fontheight,
-                          windowsPalette, fl.typeface, fl.fontsize, fl.fontblending );
+                         fl.fontwidth, fl.fontheight,
+                         windowsPalette, fl.typeface, fl.fontsize, fl.fontblending );
         g_display.map_font = std::make_unique<FontFallbackList>( g_display.renderer, g_display.format,
                              fl.map_fontwidth,
                              fl.map_fontheight,

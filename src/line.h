@@ -32,8 +32,8 @@ double iso_tangent( double distance, units::angle vertex );
 constexpr unsigned make_xyz_unit( const tripoint &p ) noexcept
 {
     return ( ( p.x > 0 ) ? 2u : ( p.x < 0 ) ? 1u : 0u ) * 1u +
-           ( ( p.y > 0 ) ? 2u : ( p.y < 0 ) ? 1u : 0u ) * 3u +
-           ( ( p.z > 0 ) ? 2u : ( p.z < 0 ) ? 1u : 0u ) * 9u;
+    ( ( p.y > 0 ) ? 2u : ( p.y < 0 ) ? 1u : 0u ) * 3u +
+    ( ( p.z > 0 ) ? 2u : ( p.z < 0 ) ? 1u : 0u ) * 9u;
 }
 
 // This more general version of this function gives correct values for larger inputs.
@@ -239,20 +239,20 @@ struct FastDistanceApproximation {
         template<typename T>
         bool operator<=( const T &rhs ) const {
             if( trigdist ) {
-                return value <= rhs * rhs;
-            }
-            return value <= rhs;
+            return value <= rhs * rhs;
         }
-        template<typename T>
-        bool operator>=( const T &rhs ) const {
+        return value <= rhs;
+    }
+    template<typename T>
+    bool operator>=( const T &rhs ) const {
             if( trigdist ) {
-                return value >= rhs * rhs;
-            }
-            return value >= rhs;
+            return value >= rhs * rhs;
         }
-        operator int() const {
+        return value >= rhs;
+    }
+    operator int() const {
             if( trigdist ) {
-                return std::sqrt( value );
+            return std::sqrt( value );
             }
             return value;
         }

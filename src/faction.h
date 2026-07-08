@@ -157,8 +157,8 @@ class faction_template
         mfaction_str_id mon_faction_; // mon_faction_id of the monster faction; defaults to human
         std::set<faction_epilogue> epilogue_data_;
 
-    friend class faction;
-    friend class faction_manager;
+        friend class faction;
+        friend class faction_manager;
 };
 
 class faction : public faction_template

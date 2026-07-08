@@ -271,18 +271,18 @@ void translation::deserialize( JsonIn &jsin )
 std::string translation::translated( const int num ) const
 {
     if( !needs_translation || raw.empty() ) {
-        return raw;
-    }
-    // Note1: `raw`, `raw_pl` and `ctxt` are effectively immutable for caching purposes:
-    // in the places where they are changed, cache is explicitly invalidated
-    // Note2: if `raw_pl` is defined, `num` becomes part of the "cache key"
-    // otherwise `num` is ignored (for both translation and cache)
-    if( cached_language_version != current_language_version ||
+    return raw;
+}
+// Note1: `raw`, `raw_pl` and `ctxt` are effectively immutable for caching purposes:
+// in the places where they are changed, cache is explicitly invalidated
+// Note2: if `raw_pl` is defined, `num` becomes part of the "cache key"
+// otherwise `num` is ignored (for both translation and cache)
+if( cached_language_version != current_language_version ||
         ( raw_pl && cached_num != num ) || !cached_translation ) {
-        cached_language_version = current_language_version;
-        cached_num = num;
+    cached_language_version = current_language_version;
+    cached_num = num;
 
-        if( !ctxt ) {
+    if( !ctxt ) {
             if( !raw_pl ) {
                 cached_translation = cata::make_value<std::string>( detail::_translate_internal( raw ) );
             } else {
@@ -336,11 +336,11 @@ bool translation::operator!=( const translation &that ) const
 std::pair<bool, int> translation::legacy_hash() const
 {
     if( needs_translation && !ctxt && !raw_pl ) {
-        return {true, djb2_hash( reinterpret_cast<const unsigned char *>( raw.c_str() ) )};
-    }
-    // Otherwise the translation must have been added after snippets were changed
-    // to use string ids only, so the translation doesn't have a legacy hash value.
-    return {false, 0};
+    return {true, djb2_hash( reinterpret_cast<const unsigned char *>( raw.c_str() ) )};
+}
+// Otherwise the translation must have been added after snippets were changed
+// to use string ids only, so the translation doesn't have a legacy hash value.
+return {false, 0};
 }
 
 translation to_translation( const std::string &raw )

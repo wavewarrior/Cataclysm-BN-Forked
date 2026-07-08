@@ -128,8 +128,8 @@ void cata::detail::reg_creature( sol::state &lua )
         luna::set_fx( ut, "has_effect", []( const Creature & cr, const efftype_id & eff,
         sol::optional<const bodypart_str_id &> bpid ) -> bool {
             if( bpid.has_value() )
-            {
-                return cr.has_effect( eff, *bpid );
+        {
+            return cr.has_effect( eff, *bpid );
             } else
             {
                 return cr.has_effect( eff );
@@ -246,8 +246,8 @@ void cata::detail::reg_creature( sol::state &lua )
         luna::set_fx( ut, "get_hp", []( const Creature & cr,
         sol::optional<const bodypart_id &> bpid ) -> int {
             if( bpid.has_value() )
-            {
-                return cr.get_hp( *bpid );
+        {
+            return cr.get_hp( *bpid );
             } else
             {
                 return cr.get_hp();
@@ -256,8 +256,8 @@ void cata::detail::reg_creature( sol::state &lua )
         luna::set_fx( ut, "get_hp_max", []( const Creature & cr,
         sol::optional<const bodypart_id &> bpid ) -> int {
             if( bpid.has_value() )
-            {
-                return cr.get_hp_max( *bpid );
+        {
+            return cr.get_hp_max( *bpid );
             } else
             {
                 return cr.get_hp_max();
@@ -660,10 +660,10 @@ void cata::detail::reg_character( sol::state &lua )
 
         luna::set_fx( ut, "activate_bionic", []( UT_CLASS & utObj, const bionic_id & bid, std::optional<bool> block_message ) -> bool {
             if( utObj.has_bionic( bid ) )
-            {
-                bionic &bio = utObj.get_bionic_state( bid );
+        {
+            bionic &bio = utObj.get_bionic_state( bid );
                 bio.powered = bio.info().has_flag( STATIC( flag_id( "BIONIC_TOGGLED" ) ) ) ||
-                bio.info().charge_time > 0;
+                                 bio.info().charge_time > 0;
                 if( bio.info().charge_time > 0 ) {
                     bio.charge_timer = bio.info().charge_time;
                 }
@@ -677,8 +677,8 @@ void cata::detail::reg_character( sol::state &lua )
 
         luna::set_fx( ut, "deactivate_bionic", []( UT_CLASS & utObj, const bionic_id & bid, std::optional<bool> block_message ) -> bool {
             if( utObj.has_bionic( bid ) )
-            {
-                bionic &bio = utObj.get_bionic_state( bid );
+        {
+            bionic &bio = utObj.get_bionic_state( bid );
                 return utObj.deactivate_bionic( bio, block_message.value_or( true ) );
             }
             return false;
@@ -720,22 +720,22 @@ void cata::detail::reg_character( sol::state &lua )
         } );
         luna::set_fx( ut, "get_auto_start_thresh", []( UT_CLASS & ch, const bionic_id & bid ) -> float {
             if( ch.has_bionic( bid ) )
-            {
-                return ch.get_bionic_state( bid ).get_auto_start_thresh();
+        {
+            return ch.get_bionic_state( bid ).get_auto_start_thresh();
             }
             return -1.0f;
         } );
         luna::set_fx( ut, "is_auto_start_on", []( UT_CLASS & ch, const bionic_id & bid ) -> bool {
             if( ch.has_bionic( bid ) )
-            {
-                return ch.get_bionic_state( bid ).is_auto_start_on();
+        {
+            return ch.get_bionic_state( bid ).is_auto_start_on();
             }
             return false;
         } );
         luna::set_fx( ut, "is_auto_start_keep_full", []( UT_CLASS & ch, const bionic_id & bid ) -> bool {
             if( ch.has_bionic( bid ) )
-            {
-                return ch.get_bionic_state( bid ).is_auto_start_keep_full();
+        {
+            return ch.get_bionic_state( bid ).is_auto_start_keep_full();
             }
             return false;
         } );
@@ -942,15 +942,15 @@ void cata::detail::reg_character( sol::state &lua )
         luna::set_fx( ut, "assign_activity", []( UT_CLASS & c, const activity_id & id, int moves )
         {
             ( void ) moves; // moves are handled by the actor internally
-            if ( id == activity_id( "ACT_HAIRCUT" ) ) {
+            if( id == activity_id( "ACT_HAIRCUT" ) ) {
                 c.assign_activity( std::make_unique<player_activity>(
-                                      std::make_unique<morale_activity_actor>( morale_act_type::HAIRCUT ) ) );
-            } else if ( id == activity_id( "ACT_MEDITATE" ) ) {
+                                       std::make_unique<morale_activity_actor>( morale_act_type::HAIRCUT ) ) );
+            } else if( id == activity_id( "ACT_MEDITATE" ) ) {
                 c.assign_activity( std::make_unique<player_activity>(
-                                      std::make_unique<morale_activity_actor>( morale_act_type::MEDITATE ) ) );
-            } else if ( id == activity_id( "ACT_SHAVE" ) ) {
+                                       std::make_unique<morale_activity_actor>( morale_act_type::MEDITATE ) ) );
+            } else if( id == activity_id( "ACT_SHAVE" ) ) {
                 c.assign_activity( std::make_unique<player_activity>(
-                                      std::make_unique<morale_activity_actor>( morale_act_type::SHAVE ) ) );
+                                       std::make_unique<morale_activity_actor>( morale_act_type::SHAVE ) ) );
             }
         } );
         SET_FX_T( has_activity, bool( const activity_id & type ) const );

@@ -414,7 +414,7 @@ void map::build_angled_sunlight_cache( const int zlev )
                 const auto uidx = uch.idx( sp.second.x, sp.second.y );
                 return static_cast<bool>( uch.floor_cache[uidx] );
             }
-                                 );
+            );
             solar_cache[ch.idx( x, y )] = !blocked;
         }
         );
@@ -1002,7 +1002,8 @@ void map::add_light_source( const tripoint_bub_ms &p, float luminance )
     add_light_source( p, luminance, light_color_rgb{} );
 }
 
-void map::add_light_source( const tripoint_bub_ms &p, float luminance, const light_color_rgb &color )
+void map::add_light_source( const tripoint_bub_ms &p, float luminance,
+                            const light_color_rgb &color )
 {
     auto &cache = get_cache( p.z() );
     auto &light_source_buffer = cache.light_source_buffer;
@@ -1020,39 +1021,39 @@ void map::add_light_source( const tripoint_bub_ms &p, float luminance, const lig
 lit_level map::light_at( const tripoint_bub_ms &p ) const
 {
     if( !inbounds( p ) ) {
-        return lit_level::DARK;    // Out of bounds
-    }
+    return lit_level::DARK;    // Out of bounds
+}
 
-    const auto &map_cache = get_cache_ref( p.z() );
-    const auto &lm = map_cache.lm;
-    const auto &sm = map_cache.sm;
-    if( sm[map_cache.idx( p.x(), p.y() )] >= LIGHT_SOURCE_BRIGHT ) {
+const auto &map_cache = get_cache_ref( p.z() );
+const auto &lm = map_cache.lm;
+const auto &sm = map_cache.sm;
+if( sm[map_cache.idx( p.x(), p.y() )] >= LIGHT_SOURCE_BRIGHT ) {
         return lit_level::BRIGHT;
     }
 
     const float max_light = lm[map_cache.idx( p.x(), p.y() )].max();
     if( max_light >= LIGHT_AMBIENT_LIT ) {
-        return lit_level::LIT;
-    }
+    return lit_level::LIT;
+}
 
-    if( max_light >= LIGHT_AMBIENT_LOW ) {
-        return lit_level::LOW;
-    }
+if( max_light >= LIGHT_AMBIENT_LOW ) {
+    return lit_level::LOW;
+}
 
-    return lit_level::DARK;
+return lit_level::DARK;
 }
 
 float map::ambient_light_at( const tripoint_bub_ms &p ) const
 {
     if( !inbounds( p ) ) {
-        return 0.0f;
-    }
+    return 0.0f;
+}
 
-    const auto &map_cache = get_cache_ref( p.z() );
-    float light = map_cache.lm[map_cache.idx( p.x(), p.y() )].max();
+const auto &map_cache = get_cache_ref( p.z() );
+float light = map_cache.lm[map_cache.idx( p.x(), p.y() )].max();
 
     if( fov_3d_occlusion && m_solar.direct_active ) {
-        const auto idx = static_cast<size_t>( map_cache.idx( p.x(), p.y() ) );
+    const auto idx = static_cast<size_t>( map_cache.idx( p.x(), p.y() ) );
         if( map_cache.outside_cache[idx] && !map_cache.angled_sunlight_cache[idx] ) {
             light = std::min( light,
                               static_cast<float>( default_daylight_level() ) * SOLAR_SHADOW_SCATTER );
@@ -1231,14 +1232,14 @@ lit_level map::apparent_light_at( const tripoint_bub_ms &p,
 bool map::pl_sees( const tripoint_bub_ms &t, const int max_range ) const
 {
     if( !inbounds( t ) ) {
-        return false;
-    }
+    return false;
+}
 
-    if( outside_player_3d_z_range( t ) ) {
-        return false;
-    }
+if( outside_player_3d_z_range( t ) ) {
+    return false;
+}
 
-    if( max_range >= 0 && square_dist( t, g->u.bub_pos() ) > max_range ) {
+if( max_range >= 0 && square_dist( t, g->u.bub_pos() ) > max_range ) {
         return false;    // Out of range!
     }
 
@@ -1246,7 +1247,7 @@ bool map::pl_sees( const tripoint_bub_ms &t, const int max_range ) const
     const auto visibility_scale_factor = 60.0f / static_cast<float>( g_max_view_distance );
     const auto a = apparent_light_helper( map_cache, t, visibility_scale_factor );
     const auto light_at_player = map_cache.lm[map_cache.idx( g->u.bub_pos().x(),
-                                                g->u.bub_pos().y() )].max();
+                                 g->u.bub_pos().y() )].max();
     return !a.obstructed &&
            ( a.apparent_light >= g->u.get_vision_threshold( light_at_player ) ||
              map_cache.sm[map_cache.idx( t.x(), t.y() )] > 0.0 );
@@ -1255,14 +1256,14 @@ bool map::pl_sees( const tripoint_bub_ms &t, const int max_range ) const
 bool map::pl_line_of_sight( const tripoint_bub_ms &t, const int max_range ) const
 {
     if( !inbounds( t ) ) {
-        return false;
-    }
+    return false;
+}
 
-    if( outside_player_3d_z_range( t ) ) {
-        return false;
-    }
+if( outside_player_3d_z_range( t ) ) {
+    return false;
+}
 
-    if( max_range >= 0 && square_dist( t, g->u.bub_pos() ) > max_range ) {
+if( max_range >= 0 && square_dist( t, g->u.bub_pos() ) > max_range ) {
         // Out of range!
         return false;
     }
@@ -1847,7 +1848,7 @@ void map::apply_vehicle_optics( const tripoint_bub_ms &origin, const int target_
         // Use g_visible_threshold for consistency with apparent_light_helper.
         if( !vp.info().has_flag( "CAMERA" ) &&
             target_cache.seen_cache[target_cache.idx( mirror_pos.x(),
-                                                      mirror_pos.y() )] < LIGHT_TRANSPARENCY_SOLID + g_visible_threshold ) {
+                                    mirror_pos.y() )] < LIGHT_TRANSPARENCY_SOLID + g_visible_threshold ) {
             continue;
         } else if( !vp.info().has_flag( "CAMERA_CONTROL" ) ) {
             mirrors.emplace_back( static_cast<int>( vp.part_index() ) );
@@ -1875,7 +1876,7 @@ void map::apply_vehicle_optics( const tripoint_bub_ms &origin, const int target_
             offset_distance = g_max_view_distance - veh->part_info( mirror ).bonus *
                               veh->part( mirror ).hp() / veh->part_info( mirror ).durability;
             target_cache.camera_cache[target_cache.idx( mirror_pos.x(),
-                                                        mirror_pos.y() )] = LIGHT_TRANSPARENCY_OPEN_AIR;
+                                      mirror_pos.y() )] = LIGHT_TRANSPARENCY_OPEN_AIR;
         }
 
         // TODO: Factor in the mirror facing and only cast in the
@@ -1940,7 +1941,8 @@ void map::apply_light_source( const tripoint_bub_ms &p, float luminance )
     apply_light_source( p, luminance, light_color_rgb{} );
 }
 
-void map::apply_light_source( const tripoint_bub_ms &p, float luminance, const light_color_rgb &color )
+void map::apply_light_source( const tripoint_bub_ms &p, float luminance,
+                              const light_color_rgb &color )
 {
     auto &cache = get_cache( p.z() );
     auto *lm_data        = cache.lm.data();
@@ -1980,10 +1982,14 @@ void map::apply_light_source( const tripoint_bub_ms &p, float luminance, const l
         sssSsss
            sy
     */
-    bool north = ( p2.y() != 0       && lsb_data[p2.x() * sy + p2.y() - 1].luminance       < luminance );
-    bool south = ( p2.y() != sy - 1  && lsb_data[p2.x() * sy + p2.y() + 1].luminance       < luminance );
-    bool east  = ( p2.x() != sx - 1  && lsb_data[( p2.x() + 1 ) * sy + p2.y()].luminance   < luminance );
-    bool west  = ( p2.x() != 0       && lsb_data[( p2.x() - 1 ) * sy + p2.y()].luminance   < luminance );
+    bool north = ( p2.y() != 0       &&
+                   lsb_data[p2.x() * sy + p2.y() - 1].luminance       < luminance );
+    bool south = ( p2.y() != sy - 1  &&
+                   lsb_data[p2.x() * sy + p2.y() + 1].luminance       < luminance );
+    bool east  = ( p2.x() != sx - 1  &&
+                   lsb_data[( p2.x() + 1 ) * sy + p2.y()].luminance   < luminance );
+    bool west  = ( p2.x() != 0       &&
+                   lsb_data[( p2.x() - 1 ) * sy + p2.y()].luminance   < luminance );
 
     // Build octant mask from the directions that have a weaker-or-absent neighbor
     // in the light-source buffer.  Skipping covered directions is an optimization

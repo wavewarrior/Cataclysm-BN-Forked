@@ -103,7 +103,7 @@ int item_stack::amount_can_fit( const item &it ) const
 
 item *item_stack::stacks_with( const item &it )
 {
-    for( item *&here : *items ) {
+    for( item * &here : *items ) {
         if( here->stacks_with( it ) ) {
             return here;
         }
@@ -113,8 +113,8 @@ item *item_stack::stacks_with( const item &it )
 
 const item *item_stack::stacks_with( const item &it ) const
 {
-    for( const item * const &here : *items ) {
-        if( here->stacks_with( it ) ) {
+for( const item * const &here : *items ) {
+    if( here->stacks_with( it ) ) {
             return here;
         }
     }
