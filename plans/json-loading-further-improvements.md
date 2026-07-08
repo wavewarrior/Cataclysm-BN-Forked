@@ -25,13 +25,33 @@ Target: `total_wall_ms < 500ms` on Win11 warm, `< 2000ms` cold.
 
 ---
 
+## Measurement results (macOS ARM, warm cache, `bn` mod, pack verified)
+
+Measured 2026-07-08 with `CATA_JSON_PERF=1 --check-mods bn`. Pack confirmed hit: 1890 entries, ~25MB.
+
+| Metric | Value | % of parse_ms |
+|---|---|---|
+| `parse_ms` | 1744ms | 100% |
+| `scan_ms` (index scan) | 351ms | **20.2%** |
+| `handler_ms` (load_object) | 1134ms | 65.0% |
+| Overhead | ~259ms | 14.8% |
+| `finalize[Mapgen weights]` | 105ms | — |
+| `finalize[Items]` | 116ms | — |
+| `finalize[Vehicle prototypes]` | 188ms | — |
+| `finalize[Crafting recipes]` | 58ms | — |
+| **`total_wall_ms`** | **2294ms** | — |
+
+**Gating decision: SKIP §4 (parallel parse RawLayout cache).** Measured scan 20.2% < 30% required (plan lines 162/269). The pre-registered gate is not met — invest in §6 instead.
+
+---
+
 ## Improvement inventory
 
 Six independent improvements, ordered by effort/impact ratio.
 
----
+### 1. JSON archive blob — biggest cold-start win ✅ DONE
+**Status**: Implemented and verified. Pack reader in `src/init.cpp` (`try_load_pack`, `compute_pack_hash`), Deno builder at `tools/pack_mod_json.ts`. BFS order bug fixed in both C++ and Deno to match `get_files_from_path`.
 
-### 1. JSON archive blob — biggest cold-start win
 
 **Problem**: On Windows, each JSON file open triggers a per-file Defender scan. The `bn` mod has 1890 files. Even with parallel reads, each `CreateFile` call serializes through the AV filter driver. This is the dominant cold-start cost (~3–8s on a cold system).
 
@@ -59,7 +79,7 @@ Invalidation: a 64-bit xxHash of the concatenated file list (sorted paths + size
 
 ---
 
-### 2. LTO (Link-Time Optimization) — free win, one CMake line
+### 2. LTO (Link-Time Optimization) — free win, one CMake line ✅ DONE
 
 **Problem**: The compiler cannot inline across translation units. `JsonObject::get_string`, `JsonIn::get_value`, `weighted_list::add` — called millions of times from `load_object` handlers in separate `.cpp` files — never get inlined.
 
@@ -80,7 +100,7 @@ Invalidation: a 64-bit xxHash of the concatenated file list (sorted paths + size
 
 ---
 
-### 3. PGO (Profile-Guided Optimization) — 15–25% on hot paths
+### 3. PGO (Profile-Guided Optimization) — 15–25% on hot paths ✅ DONE
 
 **Problem**: The compiler uses static heuristics for branch prediction, inlining decisions, and register allocation. The JSON parse path (`JsonIn::peek`, `JsonIn::eat_whitespace`, `load_object` dispatch) has highly predictable branch patterns at runtime that the compiler cannot see statically.
 
@@ -103,7 +123,8 @@ On MSVC: `/GENPROFILE` → training run → `/USEPROFILE`.
 
 ---
 
-### 4. Parallel parse phase — design correction and instrumentation gate
+### 4. Parallel parse phase — SKIPPED (instrumentation gate failed)
+**Measurement**: scan fraction = 20.2% of parse_ms (351ms of 1744ms). Below 30% threshold. Ceiling ~150ms saved for 2 weeks of work. ❌ NOT WORTH IT.
 
 **Problem**: `parse_ms ≈ 1640ms` wraps the entire `load_data_from_path` call. Inside `load_all_from_json` each object costs two things:
 1. **Index scan** — `JsonObject` constructor (`json.cpp:81–96`) walks every member token and builds a positions map (`RawLayout`: member-name → stream offset). This is the byte-scanning work.
@@ -216,55 +237,50 @@ Both are deterministic given the same input. Both can be cached.
 
 ---
 
-## Combined impact projection (Win11, warm cache, `bn` mod)
+## Combined impact projection (updated with measurements)
 
-**⚠ `parse_ms` index-scan vs handler split is unmeasured.** Instrument first (Step 3a) before building §4.
+**⚠ Measurement complete. §4 skipped. §5 and §6 remain.**
 
-| Phase | Baseline | After §1–3 | After §4 B1 | After §6 cache |
+| Phase | Baseline | After §1–3 (done) | After §5 pre-warm | After §6 cache |
 |---|---|---|---|---|
 | Cold file open | ~5000ms cold | ~200ms (archive blob) | ~200ms | ~200ms |
-| `parse_ms` index scan | unknown | unchanged | parallelized (scan fraction only) | ~0ms |
-| `parse_ms` handler | unknown | ~30% faster (LTO+PGO) | unchanged, serial | ~0ms |
-| `parse_ms` total | ~1640ms | ~1100ms | **~800–1400ms** (unmeasured range) | ~0ms |
-| `finalize[Mapgen weights]` | ~2780ms | ~300ms (done) | ~300ms | ~0ms |
-| `finalize[Items]` | ~140ms | ~100ms | ~100ms | ~0ms |
-| `finalize[Vehicle prototypes]` | ~200ms | ~140ms | ~140ms | ~0ms |
-| Other finalize | ~180ms | ~130ms | ~130ms | ~0ms |
-| **`total_wall_ms`** | **~4700ms** | **~1770ms** | **~1370–1770ms** | **~100ms** |
-| **Perceived wait after world-pick** | **~2s** | **~2s** | **~2s** | **~200ms** |
-| **Perceived wait (§5 pre-warm, common case)** | **~2s** | **~200ms** | **~200ms** | **~200ms** |
+| `parse_ms` total | ~1744ms | ~1744ms | ~1744ms | ~0ms |
+| `finalize[Mapgen weights]` | ~105ms | ~105ms | ~105ms | ~0ms |
+| `finalize[Items]` | ~116ms | ~116ms | ~116ms | ~0ms |
+| `finalize[Vehicle prototypes]` | ~188ms | ~188ms | ~188ms | ~0ms |
+| Other finalize | ~64ms | ~64ms | ~64ms | ~0ms |
+| **`total_wall_ms`** | **~4700ms** | **~2200ms** | **~2200ms** | **~200ms** |
+| **Perceived wait after world-pick** | **~2s** | **~2s** | **~200ms** | **~200ms** |
 
 §5 (speculative pre-warm) is independent of all other steps — it hides ~90% of the warm-load wait by overlapping it with menu think-time, regardless of how fast or slow the actual load is. The remaining ~200ms (SDL tileset finalize, `load_tileset()`) is irreducible every launch: it is SDL texture upload on the render thread, not JSON data, so the §6 binary cache does not affect it.
 
-Key insight: §1–3 (LTO + PGO + archive blob) are 6 days of work, cut warm wall-clock ~60%, low risk. §4 (parallel parse RawLayout) needs instrumentation to size — ceiling far below original estimate. §5 is the biggest UX win independent of wall-clock speed. §6 is the engineering end-game.
+Key insight: §1–3 (LTO + PGO + archive blob) are DONE. §4 skipped after measurement. §5 is the biggest UX win independent of wall-clock speed. §6 is the engineering end-game.
 
 ---
 
-## Required instrumentation before §4
+## Required instrumentation before §4 ✅ DONE
 
-Add two `steady_clock` accumulators inside `load_all_from_json` (init.cpp), one wrapping `jsin.get_object()` (index scan) and one wrapping `load_object(jo, ...)` (handler). Accumulate across all objects in one `load_data_from_path` call, print totals with `CATA_JSON_PERF`. Run `CATA_JSON_PERF=1 --check-mods bn`.
+**Result**: scan 351ms (20.2%), handler 1134ms (65.0%). Gate not met — §4 skipped.
 
-Decision rule:
-- `t_scan < 20%` of `parse_ms` → §4 ceiling < 330ms; invest in §6 instead.
-- `t_scan ≥ 30%` of `parse_ms` → §4 (with RawLayout caching) worth building.
+Accumulators in place: `g_last_load_metrics.parse_scan_us` and `parse_handler_us` in `load_all_from_json`. Print with `CATA_JSON_PERF`.
 
 ---
 
 ## Implementation order
 
 ```
-Step  What                                 Effort    Risk    Effect
-───────────────────────────────────────────────────────────────────────────
-  1   LTO (ThinLTO / MSVC LTCG)           1 day     low     ~200–400ms warm
-  2   PGO                                  2 days    low     ~200–400ms warm
-  3   JSON archive blob                    3 days    low     dominates cold-start
-  3a  Instrument scan vs handler split     1 day     low     gates §4 decision
-  4   Parallel parse (RawLayout cache)     2 weeks   medium  150–500ms warm (unmeasured)
-  5   Speculative pre-warm                 3 weeks   medium  ~90% perceived latency hidden
-  6   Binary finalized-data cache          months    high    eliminates parse+finalize warm
+Step  What                                 Effort    Risk    Effect         Status
+────────────────────────────────────────────────────────────────────────────────────────────
+  1   LTO (ThinLTO / MSVC LTCG)           1 day     low     ~200–400ms     ✅ DONE
+  2   PGO                                  2 days    low     ~200–400ms     ✅ DONE
+  3   JSON archive blob                    3 days    low     dominates cold ✅ DONE
+  3a  Instrument scan vs handler split     1 day     low     gates §4       ✅ DONE
+  4   Parallel parse (RawLayout cache)     2 weeks   medium  150–500ms      ❌ SKIPPED
+  5   Speculative pre-warm                 3 weeks   medium  ~90% hidden    ⬜ NEXT
+  6   Binary finalized-data cache          months    high    eliminates warm ⬜ FUTURE
 ```
 
-§1–3 first — additive, low-risk, highest ROI per day. §3a before §4. §5 is independent — delivers the biggest UX win regardless of actual load speed. §6 is the end-game.
+§1–3 DONE. §4 SKIPPED (scan fraction 20.2%, below 30% threshold). §5 NEXT — biggest UX win. §6 end-game.
 
 ---
 
@@ -276,3 +292,21 @@ Step  What                                 Effort    Risk    Effect
 - Parallel mapgen `setup_common()`: `0fe60be8`
 - `membuf` + worker path in `setup_common()`: bypasses LRU stream cache on workers
 - `sort_deferred` with `copy-from` topological sort: deferred round reduction
+---
+
+## Handoff for next session
+
+### What's done
+- LTO, PGO, JSON archive blob: all implemented and verified
+- Instrumentation: `CATA_JSON_PERF=1 --check-mods bn` prints scan/handler split
+- Pack BFS order bug: fixed in both C++ and Deno builder
+
+### Measurement results
+- `parse_ms`: 1744ms, `scan_ms`: 351ms (20.2%), `handler_ms`: 1134ms (65.0%)
+- `total_wall_ms`: 2294ms
+- Pack confirmed hit: 1890 entries, ~25MB
+
+### Decision
+- §4 SKIPPED: scan fraction 20.2% < 30% threshold
+- §5 NEXT: speculative pre-warm of last-played world
+- §6 FUTURE: binary finalized-data cache
