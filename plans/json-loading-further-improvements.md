@@ -50,7 +50,7 @@ Measured 2026-07-08 with `CATA_JSON_PERF=1 --check-mods bn`. Pack confirmed hit:
 Six independent improvements, ordered by effort/impact ratio.
 
 ### 1. JSON archive blob — biggest cold-start win ✅ DONE
-**Status**: Implemented and verified. Pack reader in `src/init.cpp` (`try_load_pack`, `compute_pack_hash`), Deno builder at `tools/pack_mod_json.ts`. BFS order bug fixed in both C++ and Deno to match `get_files_from_path`.
+**Status**: Implemented and verified on macOS (pack_hit confirmed). Cold-start win on Win11 (Defender bypass) still needs validation — pack works, but the actual cold I/O savings hasn't been measured yet.
 
 
 **Problem**: On Windows, each JSON file open triggers a per-file Defender scan. The `bn` mod has 1890 files. Even with parallel reads, each `CreateFile` call serializes through the AV filter driver. This is the dominant cold-start cost (~3–8s on a cold system).
@@ -297,7 +297,7 @@ Step  What                                 Effort    Risk    Effect         Stat
 ## Handoff for next session
 
 ### What's done
-- LTO, PGO, JSON archive blob: all implemented and verified
+- LTO, PGO, JSON archive blob: implemented; pack verified on macOS (Win11 cold-start still TBD)
 - Instrumentation: `CATA_JSON_PERF=1 --check-mods bn` prints scan/handler split
 - Pack BFS order bug: fixed in both C++ and Deno builder
 
@@ -310,3 +310,8 @@ Step  What                                 Effort    Risk    Effect         Stat
 - §4 SKIPPED: scan fraction 20.2% < 30% threshold
 - §5 NEXT: speculative pre-warm of last-played world
 - §6 FUTURE: binary finalized-data cache
+
+### Win11 validation needed
+- Cold-start run with pack vs directory scan to measure actual Defender bypass savings
+- Command: clear cache, then `CATA_JSON_PERF=1 --check-mods bn` twice (once with pack, once without)
+- This is the only genuinely platform-specific measurement remaining; won't change §5/§6 decision
