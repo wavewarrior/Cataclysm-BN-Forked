@@ -580,7 +580,7 @@ bool ExplosionProcess::process_next()
                 break;
             case ExplosionEvent::Kind::FIELD_ADDITION: {
                 const auto &[field, intensity,
-                                    hit_player] = std::get<ExplosionEvent::FieldToAdd>( event.target );
+                             hit_player] = std::get<ExplosionEvent::FieldToAdd>( event.target );
                 add_field( event.position, field, intensity, hit_player );
                 break;
             }
@@ -1390,7 +1390,7 @@ static std::map<const Creature *, int> legacy_blast( const tripoint_bub_ms &p, c
     here.bash( p, fire ? power : ( 2 * power ), true, false, false );
 
     std::priority_queue< std::pair<float, tripoint_bub_ms>, std::vector<std::pair<float, tripoint_bub_ms>>, pair_greater_cmp_first >
-            open;
+    open;
     std::set<tripoint_bub_ms> closed;
     std::map<tripoint_bub_ms, float> dist_map;
     open.emplace( 0.0f, p );

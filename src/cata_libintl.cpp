@@ -296,8 +296,8 @@ ParseRet plf_get_value( const PlfTStream &ts )
 size_t PlfNode::eval( size_t n ) const
 {
     switch( op ) {
-        case PlfOp::Mod: {
-            size_t right = b->eval( n );
+    case PlfOp::Mod: {
+        size_t right = b->eval( n );
             if( right == 0 ) {
                 std::string e = string_format( "DBZ in PlfNode::eval( %d ), node='%s'", n, debug_dump() );
                 throw std::runtime_error( e );
@@ -336,8 +336,8 @@ size_t PlfNode::eval( size_t n ) const
 std::string PlfNode::debug_dump() const
 {
     switch( op ) {
-        case PlfOp::TerCond:
-            return string_format( "(%s?%s:%s)", a->debug_dump(), b->debug_dump(), c->debug_dump() );
+    case PlfOp::TerCond:
+        return string_format( "(%s?%s:%s)", a->debug_dump(), b->debug_dump(), c->debug_dump() );
         case PlfOp::Literal:
             return string_format( "%d", literal_val );
         case PlfOp::Variable:
@@ -384,7 +384,7 @@ trans_catalogue trans_catalogue::load_from_memory( std::string mo_file )
 u8 trans_catalogue::get_u8( u32 offs ) const
 {
     if( offs + 1 > buf_size() ) {
-        std::string e = string_format( "tried get_u8() at offs %#x with file size %#x", offs, buf_size() );
+    std::string e = string_format( "tried get_u8() at offs %#x with file size %#x", offs, buf_size() );
         throw std::runtime_error( e );
     }
     return get_u8_unsafe( offs );
@@ -393,7 +393,7 @@ u8 trans_catalogue::get_u8( u32 offs ) const
 u32 trans_catalogue::get_u32( u32 offs ) const
 {
     if( offs + 4 > buf_size() ) {
-        std::string e = string_format( "tried get_u32() at offs %#x with file size %#x", offs, buf_size() );
+    std::string e = string_format( "tried get_u32() at offs %#x with file size %#x", offs, buf_size() );
         throw std::runtime_error( e );
     }
     return get_u32_unsafe( offs );

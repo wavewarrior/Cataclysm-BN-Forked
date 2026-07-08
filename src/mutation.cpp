@@ -115,12 +115,12 @@ auto get_threshold_mutation_for_tier( const mutation_category_id &category_id,
                                       const size_t tier ) -> trait_id
 {
     if( !category_id.is_valid() ) {
-        return trait_id::NULL_ID();
+    return trait_id::NULL_ID();
     }
 
     const auto &threshold_muts = category_id->threshold_muts;
     if( tier >= threshold_muts.size() ) {
-        return trait_id::NULL_ID();
+    return trait_id::NULL_ID();
     }
 
     return threshold_muts[tier];
@@ -135,8 +135,8 @@ bool Character::has_trait( const trait_id &b ) const
 
 bool Character::has_one_of_traits( const TraitSet &trait_set ) const
 {
-    for( const trait_id &trait : trait_set ) {
-        if( my_mutations.contains( trait ) || enchantment_cache->get_mutations().contains( trait ) ) {
+for( const trait_id &trait : trait_set ) {
+    if( my_mutations.contains( trait ) || enchantment_cache->get_mutations().contains( trait ) ) {
             return true;
         }
     }
@@ -146,7 +146,7 @@ bool Character::has_one_of_traits( const TraitSet &trait_set ) const
 bool Character::has_trait_flag( const trait_flag_str_id &b ) const
 {
     return std::ranges::any_of( cached_mutations,
-    [&b]( const mutation_branch * mut ) -> bool {
+           [&b]( const mutation_branch * mut ) -> bool {
         return mut->flags.contains( b );
     } );
 }
@@ -253,13 +253,13 @@ void Character::apply_mods( const trait_id &mut, bool add_remove )
 bool mutation_branch::conflicts_with_item( const item &it ) const
 {
     // Check if the mutation explicitly permits this item first.
-    for( const flag_id &allowed : allowed_items ) {
-        if( it.has_flag( allowed ) ) {
+for( const flag_id &allowed : allowed_items ) {
+    if( it.has_flag( allowed ) ) {
             return false;
         }
     }
-    for( body_part bp : restricts_gear ) {
-        if( it.covers( convert_bp( bp ).id() ) ) {
+for( body_part bp : restricts_gear ) {
+    if( it.covers( convert_bp( bp ).id() ) ) {
             // If it's oversized, forbid it if we're ONLY permitting allowed_items, otherwise allow it
             if( it.has_flag( STATIC( flag_id( "OVERSIZE" ) ) ) ||
                 it.has_flag( STATIC( flag_id( "resized_large" ) ) ) ) {
@@ -484,8 +484,8 @@ bool Character::is_category_allowed( const mutation_category_id &category ) cons
 
 bool Character::is_weak_to_water() const
 {
-    for( const trait_id &mut : get_mutations() ) {
-        if( mut.obj().weakness_to_water > 0 ) {
+for( const trait_id &mut : get_mutations() ) {
+    if( mut.obj().weakness_to_water > 0 ) {
             return true;
         }
     }
@@ -647,10 +647,10 @@ void Character::activate_mutation( const trait_id &mut )
 
         const time_duration startup_time = ( has_trait( trait_ROOTS2 ) || has_trait( trait_ROOTS3 ) )
                                            ? ( has_trait( trait_ROOTS3 ) ? rng( 15_minutes, 30_minutes )
-                                                                        : rng( 60_minutes, 90_minutes ) )
+                                               : rng( 60_minutes, 90_minutes ) )
                                            : rng( 120_minutes, 180_minutes );
         assign_activity( std::make_unique<player_activity>(
-                              std::make_unique<tree_communion_activity_actor>( to_turns<int>( startup_time ) ) ) );
+                             std::make_unique<tree_communion_activity_actor>( to_turns<int>( startup_time ) ) ) );
     } else if( !mdata.spawn_item.is_empty() ) {
         detached_ptr<item> granted = item::spawn( mdata.spawn_item );
         if( granted->made_of( LIQUID ) ) {
@@ -702,13 +702,13 @@ void Character::deactivate_mutation( const trait_id &mut )
 bool Character::mutation_ok( const trait_id &mutation, bool force_good, bool force_bad ) const
 {
     if( !is_category_allowed( mutation->category ) ) {
-        return false;
-    }
-    if( mutation_branch::trait_is_blacklisted( mutation ) ) {
-        return false;
-    }
-    if( male ) {
-        if( mutation->flags.contains( flag_FEMALE_EXCLUSIVE ) ||
+    return false;
+}
+if( mutation_branch::trait_is_blacklisted( mutation ) ) {
+    return false;
+}
+if( male ) {
+    if( mutation->flags.contains( flag_FEMALE_EXCLUSIVE ) ||
             mutation->flags.contains( flag_FEMALE_PREFERRED ) ) {
             return false;
         }
@@ -719,19 +719,19 @@ bool Character::mutation_ok( const trait_id &mutation, bool force_good, bool for
         }
     }
     if( has_trait( mutation ) || has_child_flag( mutation ) ) {
-        // We already have this mutation or something that replaces it.
-        return false;
-    }
+    // We already have this mutation or something that replaces it.
+    return false;
+}
 
-    for( trait_id mut : get_mutations() ) {
-        if( mut->prevents.contains( mutation ) ) {
+for( trait_id mut : get_mutations() ) {
+    if( mut->prevents.contains( mutation ) ) {
             return false;
         }
     }
 
-    for( const bionic &i : get_bionic_collection() ) {
-        const bionic_id &bid = i.id;
-        for( const trait_id &mid : bid->canceled_mutations ) {
+for( const bionic &i : get_bionic_collection() ) {
+    const bionic_id &bid = i.id;
+    for( const trait_id &mid : bid->canceled_mutations ) {
             if( mid == mutation ) {
                 return false;
             }
@@ -740,16 +740,16 @@ bool Character::mutation_ok( const trait_id &mutation, bool force_good, bool for
 
     const mutation_branch &mdata = mutation.obj();
     if( force_bad && mdata.points > 0 ) {
-        // This is a good mutation, and we're due for a bad one.
-        return false;
-    }
+    // This is a good mutation, and we're due for a bad one.
+    return false;
+}
 
-    if( force_good && mdata.points < 0 ) {
-        // This is a bad mutation, and we're due for a good one.
-        return false;
-    }
+if( force_good && mdata.points < 0 ) {
+    // This is a bad mutation, and we're due for a good one.
+    return false;
+}
 
-    return true;
+return true;
 }
 
 static int sum_of_mutation_costs( const Character &c )
@@ -1580,9 +1580,9 @@ void Character::remove_mutation( const trait_id &mut, bool silent )
 
 bool Character::has_child_flag( const trait_id &flag ) const
 {
-    for( const trait_id &elem : flag->replacements ) {
-        const trait_id &tmp = elem;
-        if( has_trait( tmp ) || has_child_flag( tmp ) ) {
+for( const trait_id &elem : flag->replacements ) {
+    const trait_id &tmp = elem;
+    if( has_trait( tmp ) || has_child_flag( tmp ) ) {
             return true;
         }
     }

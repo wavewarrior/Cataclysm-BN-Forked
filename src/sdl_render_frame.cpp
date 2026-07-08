@@ -67,9 +67,14 @@ static lighting::vol_params g_vol_params;
 static lighting::sprite_instance fullscreen_quad( float w, float h )
 {
     lighting::sprite_instance q{};
-    q.dst_w  = w;     q.dst_h  = h;
-    q.src_uw = 1.f;   q.src_vh = 1.f;
-    q.tint_r = 1.f;   q.tint_g = 1.f;   q.tint_b = 1.f;   q.tint_a = 1.f;
+    q.dst_w  = w;
+    q.dst_h  = h;
+    q.src_uw = 1.f;
+    q.src_vh = 1.f;
+    q.tint_r = 1.f;
+    q.tint_g = 1.f;
+    q.tint_b = 1.f;
+    q.tint_a = 1.f;
     return q;
 }
 
@@ -80,10 +85,12 @@ static auto begin_frame( lighting::render_state &rs ) -> std::optional<lighting:
 static auto build_lighting( lighting::render_state &rs ) -> bool;
 static auto flush_and_gather_rc( lighting::render_state &rs, lighting::frame_context &ctx,
                                  bool rc_rebuild ) -> void;
-static auto assemble_light_inputs( lighting::render_state &rs, lighting::frame_context &ctx ) -> void;
+static auto assemble_light_inputs( lighting::render_state &rs,
+                                   lighting::frame_context &ctx ) -> void;
 static auto maybe_push_menu_background( lighting::render_state &rs,
                                         lighting::frame_context &ctx ) -> void;
-static auto draw_lighting_overlays( lighting::render_state &rs, lighting::frame_context &ctx ) -> void;
+static auto draw_lighting_overlays( lighting::render_state &rs,
+                                    lighting::frame_context &ctx ) -> void;
 static auto composite_ui_pass_a( lighting::render_state &rs, lighting::frame_context &ctx,
                                  int proj_w, int proj_h ) -> void;
 static auto render_world_pass_w( lighting::render_state &rs, lighting::frame_context &ctx,
@@ -95,9 +102,9 @@ static auto composite_swapchain_pass_b( lighting::render_state &rs, lighting::fr
 auto begin_frame( lighting::render_state &rs ) -> std::optional<lighting::frame_context>
 {
     if( test_mode ) {
-        return std::nullopt;
-    }
-    if( !rs.ready() ) {
+    return std::nullopt;
+}
+if( !rs.ready() ) {
         return std::nullopt;
     }
     // RmlUi: lazy init; init() self-guards so this only truly attempts once.
@@ -118,12 +125,12 @@ auto begin_frame( lighting::render_state &rs ) -> std::optional<lighting::frame_
         return std::nullopt;
     }
     if( !ctx.swapchain_tex ) {
-        // Acquire succeeded but the drawable is transiently unavailable (window
-        // occluded/minimised, or a timing gap during the rapid loading-screen
-        // frames). Presenting a nil drawable aborts on Metal
-        // (presentDrawable: "drawable must not be nil"), so CANCEL the command
-        // buffer — submit_frame would present and crash.
-        rs.device().cancel_frame( ctx );
+    // Acquire succeeded but the drawable is transiently unavailable (window
+    // occluded/minimised, or a timing gap during the rapid loading-screen
+    // frames). Presenting a nil drawable aborts on Metal
+    // (presentDrawable: "drawable must not be nil"), so CANCEL the command
+    // buffer — submit_frame would present and crash.
+    rs.device().cancel_frame( ctx );
         return std::nullopt;
     }
     return ctx;
@@ -134,39 +141,39 @@ auto build_lighting( lighting::render_state &rs ) -> bool
     ZoneScopedN( "render_build_lighting" );
     bool rc_rebuild = false;
     if( !rs.collector() ) {
-        return rc_rebuild;
-    }
+    return rc_rebuild;
+}
 
-    // P3: gate SDF rebuild on transparency_generation change, not turn.
-    // Creatures moving don't change the SDF (they're emitters only, not occluders).
-    // Only terrain/furniture/field/vehicle transparency changes matter.
-    //
-    // Origin term tracks the BUBBLE (abs-sub) origin, NOT the camera. The SDF/vis/
-    // skyvis are bubble-indexed (W=H=mapsize*SEEX, transparency_cache[x*H+y]), and
-    // light_pos reaches the shader in bubble-tile coords, so panning the camera one
-    // tile per step does NOT change their content — only the reality bubble shifting
-    // (map reload) does. The old camera-origin term forced a full 2x supersampled DT
-    // recompute every walk-step (the horde walk-lag); the bubble origin fires only on
-    // an actual shift. Emitters refresh every frame outside this gate, so decoupling
-    // from camera scroll does not freeze moving lights.
-    //
-    // P4: split rebuild_pertile into two independent gates so each buffer only
-    // rebuilds when its actual dependency changed:
-    //   rebuild_structure — SDF, sun_sdf, sky_vis (transparency_generation + z + origin)
-    //   rebuild_vis       — FOV visibility mask (player position change)
-    // When a door opens (structure++), vis does NOT need to rebuild. When the player
-    // walks in static terrain, only vis rebuilds — SDF/sun_sdf/sky_vis are skipped.
-    static std::uint64_t last_gen = 0;
-    static int           last_z = INT_MIN;
-    static point         last_origin{ INT_MIN, INT_MIN };
-    static int           last_player_x = INT_MIN;
-    static int           last_player_y = INT_MIN;
+// P3: gate SDF rebuild on transparency_generation change, not turn.
+// Creatures moving don't change the SDF (they're emitters only, not occluders).
+// Only terrain/furniture/field/vehicle transparency changes matter.
+//
+// Origin term tracks the BUBBLE (abs-sub) origin, NOT the camera. The SDF/vis/
+// skyvis are bubble-indexed (W=H=mapsize*SEEX, transparency_cache[x*H+y]), and
+// light_pos reaches the shader in bubble-tile coords, so panning the camera one
+// tile per step does NOT change their content — only the reality bubble shifting
+// (map reload) does. The old camera-origin term forced a full 2x supersampled DT
+// recompute every walk-step (the horde walk-lag); the bubble origin fires only on
+// an actual shift. Emitters refresh every frame outside this gate, so decoupling
+// from camera scroll does not freeze moving lights.
+//
+// P4: split rebuild_pertile into two independent gates so each buffer only
+// rebuilds when its actual dependency changed:
+//   rebuild_structure — SDF, sun_sdf, sky_vis (transparency_generation + z + origin)
+//   rebuild_vis       — FOV visibility mask (player position change)
+// When a door opens (structure++), vis does NOT need to rebuild. When the player
+// walks in static terrain, only vis rebuilds — SDF/sun_sdf/sky_vis are skipped.
+static std::uint64_t last_gen = 0;
+static int           last_z = INT_MIN;
+static point         last_origin{ INT_MIN, INT_MIN };
+static int           last_player_x = INT_MIN;
+static int           last_player_y = INT_MIN;
 
-    lighting::lighting_rebuild_flags rebuild{};
-    int px = 0, py = 0;
-    std::uint64_t gen = 0;
-    if( g && world_generator && world_generator->active_world ) {
-        const int z = g->u.bub_pos().z();
+lighting::lighting_rebuild_flags rebuild{};
+int px = 0, py = 0;
+std::uint64_t gen = 0;
+if( g && world_generator && world_generator->active_world ) {
+    const int z = g->u.bub_pos().z();
         const point origin = g->m.get_abs_sub().raw().xy();
         // Read generation from the current level's cache.
         const auto &cache = g->m.get_cache_ref( z );
@@ -203,8 +210,8 @@ auto build_lighting( lighting::render_state &rs ) -> bool
 
     if( cursor_light_emitter::enabled && g && tilecontext
         && world_generator && world_generator->active_world ) {
-        float msx = 0.0f, msy = 0.0f;
-        SDL_GetMouseState( &msx, &msy );
+    float msx = 0.0f, msy = 0.0f;
+    SDL_GetMouseState( &msx, &msy );
         const point o  = tilecontext->get_tile_map_origin().raw();
         const point op = tilecontext->get_drawing_pixel_offset();
         const int   tw = std::max( 1, tilecontext->get_tile_width() );
@@ -220,12 +227,12 @@ auto build_lighting( lighting::render_state &rs ) -> bool
     // open (the panel drops a static light there on click); despawn all placed
     // lights the moment the panel closes. Pure debugging aid.
     if( !sdl_lighting_devui::devui_visible() ) {
-        if( !dev_test_lights::lights.empty() ) {
+    if( !dev_test_lights::lights.empty() ) {
             dev_test_lights::lights.clear();
         }
     } else if( g && tilecontext && world_generator && world_generator->active_world ) {
-        float msx = 0.0f, msy = 0.0f;
-        SDL_GetMouseState( &msx, &msy );
+    float msx = 0.0f, msy = 0.0f;
+    SDL_GetMouseState( &msx, &msy );
         const point o  = tilecontext->get_tile_map_origin().raw();
         const point op = tilecontext->get_drawing_pixel_offset();
         const int   tw = std::max( 1, tilecontext->get_tile_width() );
@@ -243,7 +250,7 @@ auto build_lighting( lighting::render_state &rs ) -> bool
     // No tilecontext (e.g. main menu) → cam_w=0 → whole-bubble fallback.
     int cam_x0 = -1, cam_y0 = -1, cam_w = 0, cam_h = 0;
     if( tilecontext ) {
-        if( g ) {
+    if( g ) {
             // Compute camera origin from current player position rather than reading
             // tilecontext->get_tile_map_origin(), which is only updated by
             // cata_tiles::draw() and can be stale on frames where refresh_display
@@ -264,8 +271,8 @@ auto build_lighting( lighting::render_state &rs ) -> bool
     }
     lighting::frame_lighting_result fr =
         lighting::build_and_submit_lighting( rs, rebuild, g_dbg_lighting,
-                                             g_skylight_bleed, g_vision_blur,
-                                             cam_x0, cam_y0, cam_w, cam_h );
+            g_skylight_bleed, g_vision_blur,
+            cam_x0, cam_y0, cam_w, cam_h );
     rc_rebuild = fr.built_pertile;
     DebugLogFL( DL::Info, DC::Main )
             << "[flash][gpu] rebuild: struct=" << rebuild.structure
@@ -277,12 +284,12 @@ auto build_lighting( lighting::render_state &rs ) -> bool
             << " cam_xy0=" << cam_x0 << "," << cam_y0
             << " cam_wh=" << cam_w << "x" << cam_h;
     if( fr.built_pertile ) {
-        s_emo.trans_at_player    = fr.trans_at_player;
-        s_emo.sdf_W_at_submit    = fr.sdf_W;
-        s_emo.sdf_size_at_submit = fr.sdf_size;
-    }
-    if( g_dbg_lighting ) {
-        s_emo.snap = std::move( fr.snapshot_copy );
+    s_emo.trans_at_player    = fr.trans_at_player;
+    s_emo.sdf_W_at_submit    = fr.sdf_W;
+    s_emo.sdf_size_at_submit = fr.sdf_size;
+}
+if( g_dbg_lighting ) {
+    s_emo.snap = std::move( fr.snapshot_copy );
     }
     return rc_rebuild;
 }
@@ -305,14 +312,19 @@ static float weather_cloud_mult()
 static auto weather_rain_intensity() -> float
 {
     if( g ) {
-        const weather_type_id wid = get_weather().weather_id;
+    const weather_type_id wid = get_weather().weather_id;
         if( wid.is_valid() && wid->rains ) {
             switch( wid->precip ) {
-                case precip_class::very_light: return 0.1f;
-                case precip_class::light:      return 0.3f;
-                case precip_class::medium:     return 0.6f;
-                case precip_class::heavy:      return 1.0f;
-                default:                       return 0.0f;
+                case precip_class::very_light:
+                    return 0.1f;
+                case precip_class::light:
+                    return 0.3f;
+                case precip_class::medium:
+                    return 0.6f;
+                case precip_class::heavy:
+                    return 1.0f;
+                default:
+                    return 0.0f;
             }
         } else {
             return 0.0f;
@@ -360,7 +372,7 @@ auto flush_and_gather_rc( lighting::render_state &rs,
 {
     ZoneScopedN( "render_flush_gather_rc" );
     if( rs.collector() ) {
-        rs.collector()->flush_to_render_cb( ctx.cmd_buffer );
+    rs.collector()->flush_to_render_cb( ctx.cmd_buffer );
     }
 
     // P3.3: GPU JFA SDF — the SOLE writer of sdf_storage_. Recorded INDEPENDENTLY
@@ -372,7 +384,7 @@ auto flush_and_gather_rc( lighting::render_state &rs,
     // sky/GI reads below and inserts the write→read barrier on sdf_storage_.
     if( rc_rebuild && rs.sdf().populated() && rs.sdf().sdf_buffer()
         && rs.gpu_sdf().ready() && rs.sdf().trans_buffer() ) {
-        rs.gpu_sdf().record( ctx.cmd_buffer, rs.sdf().trans_buffer(),
+    rs.gpu_sdf().record( ctx.cmd_buffer, rs.sdf().trans_buffer(),
                              rs.sdf().sdf_buffer(),
                              static_cast<std::uint32_t>( rs.sdf().map_w() ),
                              static_cast<std::uint32_t>( rs.sdf().map_h() ) );
@@ -382,7 +394,7 @@ auto flush_and_gather_rc( lighting::render_state &rs,
     // their own pipelines created (gi().ready()) and consume the SDF write above.
     if( rc_rebuild && rs.sdf().populated() && rs.gi().ready()
         && rs.collector() && rs.sdf().sdf_buffer() ) {
-        const std::uint32_t map_w = static_cast<std::uint32_t>( rs.sdf().map_w() );
+    const std::uint32_t map_w = static_cast<std::uint32_t>( rs.sdf().map_w() );
         const std::uint32_t map_h = static_cast<std::uint32_t>( rs.sdf().map_h() );
 
         // Celestial light params drive BOTH the sky/sun pass and the GI daylight
@@ -445,8 +457,8 @@ auto flush_and_gather_rc( lighting::render_state &rs,
     }
 
     if( g_rc_readback ) {
-        g_rc_readback = false;
-        if( rs.gi().ready() && rs.sdf().populated() ) {
+    g_rc_readback = false;
+    if( rs.gi().ready() && rs.sdf().populated() ) {
             rs.gi().debug_log_stats( static_cast<std::uint32_t>( rs.sdf().map_w() ),
                                      static_cast<std::uint32_t>( rs.sdf().map_h() ) );
         }
@@ -457,18 +469,18 @@ auto assemble_light_inputs( lighting::render_state &rs,
                             lighting::frame_context &ctx ) -> void
 {
     if( !rs.collector() ) {
-        return;
-    }
+    return;
+}
 
-    lighting::render_state::frame_light_inputs in{};
-    in.tile_pixel_size = tilecontext
-                         ? static_cast<float>( tilecontext->get_tile_width() )
-                         : 32.0f;
-    in.z_level         = g ? static_cast<float>( g->u.bub_pos().z() ) : 0.0f;
-    in.ambient         = 0.05f;
+lighting::render_state::frame_light_inputs in{};
+in.tile_pixel_size = tilecontext
+                     ? static_cast<float>( tilecontext->get_tile_width() )
+                     : 32.0f;
+in.z_level         = g ? static_cast<float>( g->u.bub_pos().z() ) : 0.0f;
+in.ambient         = 0.05f;
 
-    if( g && tilecontext && in.tile_pixel_size > 0.0f ) {
-        const point map_origin  = tilecontext->get_tile_map_origin().raw();
+if( g && tilecontext && in.tile_pixel_size > 0.0f ) {
+    const point map_origin  = tilecontext->get_tile_map_origin().raw();
         const point draw_offset = tilecontext->get_drawing_pixel_offset();
         in.camera_off_x = static_cast<float>( draw_offset.x ) / in.tile_pixel_size
                           - static_cast<float>( map_origin.x );
@@ -491,15 +503,15 @@ auto assemble_light_inputs( lighting::render_state &rs,
             s_emo.draw_off_px_y = draw_offset.y;
         }
     } else if( g_dbg_lighting ) {
-        s_emo.cam_off_x = 0.f;
-        s_emo.cam_off_y = 0.f;
-        s_emo.tile_px   = in.tile_pixel_size;
-        s_emo.op_x      = 0.f;
-        s_emo.op_y      = 0.f;
-        s_emo.player_x  = 0;
-        s_emo.player_y  = 0;
-        s_emo.player_z  = 0;
-        s_emo.screen_w  = static_cast<int>( ctx.swapchain_w );
+    s_emo.cam_off_x = 0.f;
+    s_emo.cam_off_y = 0.f;
+    s_emo.tile_px   = in.tile_pixel_size;
+    s_emo.op_x      = 0.f;
+    s_emo.op_y      = 0.f;
+    s_emo.player_x  = 0;
+    s_emo.player_y  = 0;
+    s_emo.player_z  = 0;
+    s_emo.screen_w  = static_cast<int>( ctx.swapchain_w );
         s_emo.screen_h  = static_cast<int>( ctx.swapchain_h );
         s_emo.map_origin_x = 0;
         s_emo.map_origin_y = 0;
@@ -511,7 +523,7 @@ auto assemble_light_inputs( lighting::render_state &rs,
     in.sun = make_celestial_params( calendar::turn, sun_hour );
     float weather_mult = 1.0f;
     if( g ) {
-        const float base = sunlight( calendar::turn, false );
+    const float base = sunlight( calendar::turn, false );
         const weather_type_id wid = get_weather().weather_id;
         if( base > 1.0f && wid.is_valid() ) {
             const int mod = wid->light_modifier;
@@ -546,7 +558,7 @@ auto assemble_light_inputs( lighting::render_state &rs,
     in.debug = g_dbg_params;
     in.debug.anim_time = std::fmod( static_cast<float>( SDL_GetTicks() ) / 1000.0f, 1000.0f );
     if( g ) {
-        in.debug.player_x = static_cast<float>( g->u.bub_pos().x() ) + 0.5f;
+    in.debug.player_x = static_cast<float>( g->u.bub_pos().x() ) + 0.5f;
         in.debug.player_y = static_cast<float>( g->u.bub_pos().y() ) + 0.5f;
     }
     // Wet specular: fold the user knob with rain intensity so the sheen only shows
@@ -557,8 +569,8 @@ auto assemble_light_inputs( lighting::render_state &rs,
 
     static int emit_dbg_frame = 0;
     if( ++emit_dbg_frame >= 120 ) {
-        emit_dbg_frame = 0;
-        dbg( DL::Debug ) << "lighting: n_emit=" << rs.collector()->last_count()
+    emit_dbg_frame = 0;
+    dbg( DL::Debug ) << "lighting: n_emit=" << rs.collector()->last_count()
                          << " emitter_buf=" << ( rs.collector()->emitter_buffer() ? "ok" : "NULL" )
                          << " sdf_buf=" << ( rs.sdf().sdf_buffer() ? "ok" : "NULL" )
                          << " sampler=" << ( rs.gpu_sampler() ? "ok" : "NULL" )
@@ -579,8 +591,8 @@ auto maybe_push_menu_background( lighting::render_state &rs,
     const bool no_world = !g || !world_generator || !world_generator->active_world;
     if( no_world && rs.tile_sprites_empty() && rs.geometry().white_texture() ) {
         lighting::sprite_instance bg = fullscreen_quad(
-                static_cast<float>( ctx.swapchain_w ),
-                static_cast<float>( ctx.swapchain_h ) );
+                                           static_cast<float>( ctx.swapchain_w ),
+                                           static_cast<float>( ctx.swapchain_h ) );
         bg.tint_r = 0.0f;
         bg.tint_g = 0.0f;
         bg.tint_b = menu_emitter_tuning::blue_backdrop ? 0.3f : 0.0f;
@@ -593,8 +605,7 @@ auto draw_lighting_overlays( lighting::render_state &rs,
 {
     struct transient_routing_guard {
         lighting::render_state &rs;
-        ~transient_routing_guard()
-        {
+        ~transient_routing_guard() {
             rs.set_transient_routing( false );
         }
     } _t_route{ rs };
@@ -843,7 +854,7 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
                                   static_cast<std::uint32_t>( proj_w ),
                                   static_cast<std::uint32_t>( proj_h ) );
 
-    auto blit_layer = [&]( lighting::ui_composite_target *layer ) {
+    auto blit_layer = [&]( lighting::ui_composite_target * layer ) {
         if( !layer || !layer->texture() || !rs.gpu_sampler() ) {
             return;
         }
@@ -863,12 +874,12 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
     // RmlUi (player menus + dev panel + world text) draws into the single swapchain
     // pass (D3D12 single-pass rule).
     rs.tile_batcher().end_pass(
-        rmlui_active
-        ? lighting::sprite_batcher::pass_overlay_fn(
+          rmlui_active
+          ? lighting::sprite_batcher::pass_overlay_fn(
     []( SDL_GPURenderPass * rp, SDL_GPUCommandBuffer * cb ) {
         rmlui_layer::render_in_pass( rp, cb );
     } )
-        : lighting::sprite_batcher::pass_overlay_fn{} );
+    : lighting::sprite_batcher::pass_overlay_fn{} );
 
     rs.device().submit_frame( ctx );
 }

@@ -140,7 +140,7 @@ void diary::show_diary_ui( diary *c_diary )
                                            ctxt.get_desc( "CONFIRM", _( "Edit text" ), input_context::allow_all_keys ),
                                            ctxt.get_desc( "DELETE PAGE", _( "Delete page" ), input_context::allow_all_keys ),
                                            ctxt.get_desc( "EXPORT_DIARY", _( "Export diary" ),
-                                                   input_context::allow_all_keys ) ) );
+                                               input_context::allow_all_keys ) ) );
 
         // pages list (left)
         data->pages.clear();
@@ -289,7 +289,7 @@ void diary::show_diary_ui( diary *c_diary )
 
         w_pages = catacurses::newwin( max.y + 5,
                                       ( uis_padding() != 0 ) ? MAX_DAIRY_UI_WIDTH / 4 - 7 : beg.x - 7, point( uis_padding(),
-                                              beg.y - 3 ) );
+                                          beg.y - 3 ) );
 
         ui.position_from_window( w_pages );
     } );

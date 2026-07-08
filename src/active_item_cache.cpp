@@ -138,12 +138,12 @@ std::vector<item *> active_item_cache::get_for_processing()
 auto active_item_cache::get_for_processing( std::vector<item *> &items_to_process ) -> void
 {
     items_to_process.clear();
-    for( auto &kv : active_items ) {
-        //The algorithm here is a bit weird. We're going to process a fraction of the list at a time, keeping track of where we are in the list with a simple int.
-        //But, the list could change between each run. As such the number will be reduced when items are removed from it (in ::remove) to prevent skips.
-        active_item_queue &queue = kv.second;
+for( auto &kv : active_items ) {
+    //The algorithm here is a bit weird. We're going to process a fraction of the list at a time, keeping track of where we are in the list with a simple int.
+    //But, the list could change between each run. As such the number will be reduced when items are removed from it (in ::remove) to prevent skips.
+    active_item_queue &queue = kv.second;
 
-        if( queue.items.empty() ) { //Prevents a div by 0 in the modulo operations
+    if( queue.items.empty() ) { //Prevents a div by 0 in the modulo operations
             reset_queue_state( queue );
             continue;
         }

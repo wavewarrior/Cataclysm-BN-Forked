@@ -552,11 +552,11 @@ auto recipe::result_name( const bool decorated ) const -> std::string
 bool recipe::will_be_blacklisted() const
 {
     if( requirements_.is_blacklisted() ) {
-        return true;
-    }
+    return true;
+}
 
-    auto any_is_blacklisted = []( const std::vector<std::pair<requirement_id, int>> &reqs ) {
-        auto req_is_blacklisted = []( const std::pair<requirement_id, int> &req ) {
+auto any_is_blacklisted = []( const std::vector<std::pair<requirement_id, int>> &reqs ) {
+    auto req_is_blacklisted = []( const std::pair<requirement_id, int> &req ) {
             return req.first->is_blacklisted();
         };
 
@@ -654,7 +654,7 @@ bool recipe::hot_result() const
     //
     // TODO: Make this less of a hack
     if( create_result()->is_food() ) {
-        const requirement_data::alter_tool_comp_vector &tool_lists = simple_requirements().get_tools();
+    const requirement_data::alter_tool_comp_vector &tool_lists = simple_requirements().get_tools();
         for( const std::vector<tool_comp> &tools : tool_lists ) {
             for( const tool_comp &t : tools ) {
                 if( t.type == itype_hotplate ) {
@@ -669,7 +669,7 @@ bool recipe::hot_result() const
 bool recipe::dehydrate_result() const
 {
     if( create_result()->is_food() ) {
-        const requirement_data::alter_tool_comp_vector &tool_lists = simple_requirements().get_tools();
+    const requirement_data::alter_tool_comp_vector &tool_lists = simple_requirements().get_tools();
         for( const std::vector<tool_comp> &tools : tool_lists ) {
             for( const tool_comp &t : tools ) {
                 if( t.type == itype_dehydrator || t.type == itype_char_smoker ) {
@@ -696,11 +696,11 @@ int recipe::makes_amount() const
 int recipe::disassembly_batch_size() const
 {
     if( !result_->count_by_charges() ) {
-        return 1;
-    } else if( charges.has_value() ) {
-        return *charges;
-    } else {
-        return result_->charges_default();
+    return 1;
+} else if( charges.has_value() ) {
+    return *charges;
+} else {
+    return result_->charges_default();
     }
 }
 

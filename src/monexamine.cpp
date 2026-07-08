@@ -409,9 +409,9 @@ void monexamine::shear_animal( monster &z )
                                          qual_shear ) ) );
 
     you.assign_activity( std::make_unique<player_activity>( std::make_unique<shear_activity_actor>(
-        std::vector<tripoint_abs_ms>{ get_map().bub_to_abs( z.bub_pos() ) },
-        you.best_quality_item( qual_shear ),
-        z.has_effect( effect_tied ) ? std::string() : std::string( "temp_tie" ) ) ) );
+                             std::vector<tripoint_abs_ms> { get_map().bub_to_abs( z.bub_pos() ) },
+                             you.best_quality_item( qual_shear ),
+                             z.has_effect( effect_tied ) ? std::string() : std::string( "temp_tie" ) ) ) );
     if( !z.has_effect( effect_tied ) ) {
         z.add_effect( effect_tied, 1_turns );
     }
@@ -882,7 +882,8 @@ void monexamine::play_with( monster &z )
     std::string pet_name = z.get_name();
     avatar &you = get_avatar();
     int turns = rng( 50, 125 ) * 100;
-    you.assign_activity( std::make_unique<player_activity>( std::make_unique<play_with_pet_activity_actor>( pet_name ) ) );
+    you.assign_activity( std::make_unique<player_activity>
+                         ( std::make_unique<play_with_pet_activity_actor>( pet_name ) ) );
     z.add_effect( effect_ai_waiting, time_duration::from_turns( turns ) );
 }
 
@@ -890,7 +891,8 @@ void monexamine::train_pet( monster &z )
 {
     avatar &you = get_avatar();
     std::string pet_name = z.get_name();
-    you.assign_activity( std::make_unique<player_activity>( std::make_unique<train_pet_activity_actor>( g->shared_from( z ), pet_name ) ) );
+    you.assign_activity( std::make_unique<player_activity>( std::make_unique<train_pet_activity_actor>
+                         ( g->shared_from( z ), pet_name ) ) );
     z.add_effect( effect_ai_waiting, 60_minutes );
 }
 
@@ -1060,7 +1062,7 @@ void monexamine::milk_source( monster &source_mon )
         const int moves = to_moves<int>( time_duration::from_minutes( milkable_ammo->second / 2 ) );
         you.assign_activity( std::make_unique<player_activity>(
                                  std::make_unique<milk_activity_actor>(
-                                         get_map().bub_to_abs( source_mon.bub_pos() ), "" ) ),
+                                     get_map().bub_to_abs( source_mon.bub_pos() ), "" ) ),
                              moves );
         // pin the cow in place if it isn't already
         bool temp_tie = !source_mon.has_effect( effect_tied );

@@ -26,16 +26,16 @@ auto push_path( fs::path path ) -> void
 auto pop_path() -> void
 {
     if( !loading_stack.empty() ) {
-        loading_stack.pop_back();
+    loading_stack.pop_back();
     }
 }
 
 auto get_current_path() -> std::optional<fs::path>
 {
     if( loading_stack.empty() ) {
-        return std::nullopt;
-    }
-    return loading_stack.back();
+    return std::nullopt;
+}
+return loading_stack.back();
 }
 
 auto get_current_mod_path( lua_State *L ) -> std::string
@@ -43,7 +43,7 @@ auto get_current_mod_path( lua_State *L ) -> std::string
     // Get current mod path from game.current_mod_path global
     lua_getglobal( L, "game" );
     if( lua_istable( L, -1 ) ) {
-        lua_getfield( L, -1, "current_mod_path" );
+    lua_getfield( L, -1, "current_mod_path" );
         if( lua_isstring( L, -1 ) ) {
             const auto path = std::string{ lua_tostring( L, -1 ) };
             lua_pop( L, 2 ); // pop path and game table
@@ -83,10 +83,10 @@ auto is_within_allowed_paths( fs::path const &resolved ) -> bool
 
 auto try_file_with_suffixes( fs::path const &base ) -> std::optional<fs::path>
 {
-    for( const auto &suffix : { ".lua", "/init.lua" } ) {
-        auto path = base;
-        path += suffix;
-        if( file_exist( path.string() ) ) {
+for( const auto &suffix : { ".lua", "/init.lua" } ) {
+    auto path = base;
+    path += suffix;
+    if( file_exist( path.string() ) ) {
             return path;
         }
     }
@@ -97,7 +97,7 @@ auto search_module( lua_State *L, std::string_view modname ) -> std::optional<fs
 {
     // Relative import: ./foo or ../bar
     if( modname.starts_with( "./" ) || modname.starts_with( "../" ) ) {
-        auto resolved = resolve_relative_path( modname );
+    auto resolved = resolve_relative_path( modname );
         if( !resolved || !is_within_allowed_paths( *resolved ) ) {
             return std::nullopt;
         }
@@ -109,7 +109,7 @@ auto search_module( lua_State *L, std::string_view modname ) -> std::optional<fs
 
     // lib.* or bn.lib.* -> data/lua/lib/* (shared standard library)
     if( modname.starts_with( "lib." ) || modname.starts_with( "bn.lib." ) ) {
-        const auto prefix_len = modname.starts_with( "lib." ) ? 4 : 7; // "lib." or "bn.lib."
+    const auto prefix_len = modname.starts_with( "lib." ) ? 4 : 7; // "lib." or "bn.lib."
         const auto without_prefix = normalize_module_name( modname.substr( prefix_len ) );
         const auto base_path = fs::path{ PATH_INFO::datadir() } / "lua" / "lib" / without_prefix;
         return try_file_with_suffixes( base_path );
@@ -123,7 +123,7 @@ auto search_module( lua_State *L, std::string_view modname ) -> std::optional<fs
 
     // Search order: mod-local first, then base_path (for tests)
     for( const auto &search_base : { mod_path, base_path } ) {
-        if( search_base.empty() ) {
+    if( search_base.empty() ) {
             continue;
         }
         const auto candidate = search_base / normalized;
@@ -199,7 +199,7 @@ auto register_searcher( lua_State *L ) -> void
     // Shift existing searchers down
     const auto len = static_cast<int>( lua_rawlen( L, -1 ) );
     for( auto i = len; i >= 2; --i ) {
-        lua_rawgeti( L, -1, i );
+    lua_rawgeti( L, -1, i );
         lua_rawseti( L, -2, i + 1 );
     }
 

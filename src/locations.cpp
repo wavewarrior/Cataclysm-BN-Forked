@@ -424,11 +424,11 @@ void monster_battery_item_location::attach( detached_ptr<item> &&obj )
 bool vehicle_item_location::is_loaded( const item * ) const
 {
     if( !veh->is_loaded() ) {
-        return false;
-    }
+    return false;
+}
 
-    //Have to check the bounds, the vehicle might be half outside the bubble
-    return get_map().inbounds( veh->mount_to_bubble( veh->get_part_hack( hack_id ).mount ) );
+//Have to check the bounds, the vehicle might be half outside the bubble
+return get_map().inbounds( veh->mount_to_bubble( veh->get_part_hack( hack_id ).mount ) );
 }
 
 tripoint_bub_ms vehicle_item_location::position( const item * ) const
@@ -487,15 +487,15 @@ std::string vehicle_item_location::describe( const Character *ch, const item * )
     vpart_position part_pos( *veh, veh->get_part_id_hack( hack_id ) );
     std::string res;
     if( auto label = part_pos.get_label() ) {
-        res = colorize( *label, c_light_blue ) + " ";
+    res = colorize( *label, c_light_blue ) + " ";
     }
     if( auto cargo_part = part_pos.part_with_feature( "CARGO", true ) ) {
-        res += cargo_part->part().name();
+    res += cargo_part->part().name();
     } else {
         return "Error: vehicle part without storage";
     }
     if( ch ) {
-        res += " " + direction_suffix( ch->bub_pos().raw(), part_pos.pos().raw() );
+    res += " " + direction_suffix( ch->bub_pos().raw(), part_pos.pos().raw() );
     }
     return res;
 }
@@ -555,12 +555,12 @@ item_location_type contents_item_location::where() const
 int contents_item_location::obtain_cost( const Character &ch, int qty, const item *it ) const
 {
     if( container->get_use( "holster" ) ) {
-        auto ptr = dynamic_cast<const holster_actor *>
-                   ( container->type->get_use( "holster" )->get_actor_ptr() );
+    auto ptr = dynamic_cast<const holster_actor *>
+               ( container->type->get_use( "holster" )->get_actor_ptr() );
         return dynamic_cast<const player *>( &ch )->item_handling_cost( *it, false, ptr->draw_cost );
     } else if( container->get_use( "bandolier" ) ) {
-        auto ptr = dynamic_cast<const bandolier_actor *>
-                   ( container->type->get_use( "bandolier" )->get_actor_ptr() );
+    auto ptr = dynamic_cast<const bandolier_actor *>
+               ( container->type->get_use( "bandolier" )->get_actor_ptr() );
         return dynamic_cast<const player *>( &ch )->item_handling_cost( *it, false, ptr->draw_cost );
     }
 

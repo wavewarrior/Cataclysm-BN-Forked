@@ -626,11 +626,11 @@ void game::chat()
             std::string popupdesc = _( "Enter a sentence to yell" );
             string_input_popup popup;
             popup.title( _( "Yell a sentence" ) )
-            .width( 64 )
-            .description( popupdesc )
-            .identifier( "sentence" )
-            .max_length( 128 )
-            .query();
+                 .width( 64 )
+                 .description( popupdesc )
+                 .identifier( "sentence" )
+                 .max_length( 128 )
+                 .query();
             yell_msg = popup.text();
             is_order = false;
             break;
@@ -679,11 +679,11 @@ void game::chat()
 
             string_input_popup popup;
             popup.title( _( "" ) )
-            .width( 64 )
-            .description( popupdesc )
-            .identifier( "sentence" )
-            .max_length( 128 )
-            .query();
+                 .width( 64 )
+                 .description( popupdesc )
+                 .identifier( "sentence" )
+                 .max_length( 128 )
+                 .query();
             monologue_msg = popup.text();
             is_order = false;
             break;
@@ -1181,35 +1181,35 @@ void npc::talk_to_u( bool radio_contact, bool enforce_first_topic )
 std::string dialogue::dynamic_line( const talk_topic &the_topic ) const
 {
     if( !the_topic.item_type.is_null() ) {
-        cur_item = the_topic.item_type;
-    }
+    cur_item = the_topic.item_type;
+}
 
-    // For compatibility
-    const auto &topic = the_topic.id;
-    const auto iter = json_talk_topics.find( topic );
-    if( iter != json_talk_topics.end() ) {
-        const std::string line = iter->second.get_dynamic_line( *this );
+// For compatibility
+const auto &topic = the_topic.id;
+const auto iter = json_talk_topics.find( topic );
+if( iter != json_talk_topics.end() ) {
+    const std::string line = iter->second.get_dynamic_line( *this );
         if( !line.empty() ) {
             return line;
         }
     }
 
     if( topic == "TALK_NPC_NOFACE" ) {
-        return string_format( _( "&%s stays silent." ), beta->name );
+    return string_format( _( "&%s stays silent." ), beta->name );
     }
 
     if( topic == "TALK_NOFACE" ) {
-        return _( "&You can't talk without your face." );
+    return _( "&You can't talk without your face." );
     } else if( topic == "TALK_DEAF" ) {
-        return _( "&You are deaf and can't talk." );
+    return _( "&You are deaf and can't talk." );
 
     } else if( topic == "TALK_DEAF_ANGRY" ) {
-        return string_format(
-                   _( "&You are deaf and can't talk.  When you don't respond, %s becomes angry!" ),
-                   beta->name );
+    return string_format(
+               _( "&You are deaf and can't talk.  When you don't respond, %s becomes angry!" ),
+               beta->name );
     }
     if( topic == "TALK_SEDATED" ) {
-        int firstaid_lvl = get_player_character().get_skill_level( skill_id( "firstaid" ) );
+    int firstaid_lvl = get_player_character().get_skill_level( skill_id( "firstaid" ) );
         time_duration dur = character_funcs::estimate_effect_dur( firstaid_lvl, effect_narcosis, 15_minutes,
                             6, *beta );
         return string_format(
@@ -1227,7 +1227,7 @@ std::string dialogue::dynamic_line( const talk_topic &the_topic ) const
         }
     };
     if( mission_topics.contains( topic ) ) {
-        if( p->chatbin.mission_selected == nullptr ) {
+    if( p->chatbin.mission_selected == nullptr ) {
             return "mission_selected == nullptr; BUG!  (npctalk.cpp:dynamic_line)";
         }
         mission *miss = p->chatbin.mission_selected;
@@ -1256,9 +1256,9 @@ std::string dialogue::dynamic_line( const talk_topic &the_topic ) const
 
     avatar &you = get_avatar();
     if( topic == "TALK_NONE" || topic == "TALK_DONE" ) {
-        return _( "Bye." );
+    return _( "Bye." );
     } else if( topic == "TALK_TRAIN" ) {
-        if( !you.backlog.empty() && you.backlog.front()->id() == ACT_TRAIN ) {
+    if( !you.backlog.empty() && you.backlog.front()->id() == ACT_TRAIN ) {
             return _( "Shall we resume?" );
         }
         std::vector<skill_id> trainable = p->skills_offered_to( you );
@@ -1276,8 +1276,8 @@ std::string dialogue::dynamic_line( const talk_topic &the_topic ) const
             return _( "Here's what I can teach you…" );
         }
     } else if( topic == "TALK_HOW_MUCH_FURTHER" ) {
-        // TODO: this ignores the z-component
-        const tripoint_abs_omt player_pos = p->abs_omt_pos();
+    // TODO: this ignores the z-component
+    const tripoint_abs_omt player_pos = p->abs_omt_pos();
         int dist = rl_dist( player_pos, p->goal );
         std::string response;
         dist *= 100;
@@ -1294,7 +1294,7 @@ std::string dialogue::dynamic_line( const talk_topic &the_topic ) const
         }
         return response;
     } else if( topic == "TALK_DESCRIBE_MISSION" ) {
-        switch( p->mission ) {
+    switch( p->mission ) {
             case NPC_MISSION_SHELTER:
                 return string_format( _( "I'm holing up here for safety.  Long term, %s" ),
                                       p->myclass.obj().get_job_description() );
@@ -1316,18 +1316,18 @@ std::string dialogue::dynamic_line( const talk_topic &the_topic ) const
                                       "mission: %d.", static_cast<int>( p->mission ) );
         } // switch (p->mission)
     } else if( topic == "TALK_SHOUT" ) {
-        alpha->shout();
+    alpha->shout();
         if( alpha->is_deaf() ) {
             return _( "&You yell, but can't hear yourself." );
         } else {
             return _( "&You yell." );
         }
     } else if( topic == "TALK_SIZE_UP" ) {
-        ///\EFFECT_PER affects whether player can size up NPCs
+    ///\EFFECT_PER affects whether player can size up NPCs
 
-        ///\EFFECT_INT slightly affects whether player can size up NPCs
-        int ability = you.per_cur * 3 + you.int_cur;
-        if( ability <= 10 ) {
+    ///\EFFECT_INT slightly affects whether player can size up NPCs
+    int ability = you.per_cur * 3 + you.int_cur;
+    if( ability <= 10 ) {
             return _( "&You can't make anything out." );
         }
 
@@ -1399,11 +1399,11 @@ std::string dialogue::dynamic_line( const talk_topic &the_topic ) const
         }
         return info;
     } else if( topic == "TALK_LOOK_AT" ) {
-        return "&" + p->short_description();
+    return "&" + p->short_description();
     } else if( topic == "TALK_OPINION" ) {
-        return "&" + p->opinion_text();
+    return "&" + p->opinion_text();
     } else if( topic == "TALK_MIND_CONTROL" ) {
-        const auto player_id = get_avatar().getID();
+    const auto player_id = get_avatar().getID();
         for( auto *miss : p->chatbin.missions_assigned ) {
             if( miss->get_assigned_player_id() == player_id ) {
                 miss->fail();
@@ -2146,7 +2146,7 @@ talk_topic dialogue::opt( dialogue_window &d_win, const std::string &npc_name,
             return;
         }
         rml_data->name_rml = cata_text_to_rml( colorize( _( "Dialogue:" ), c_white ) + " " +
-                             colorize( npc_name, c_light_green ) );
+                                               colorize( npc_name, c_light_green ) );
         rml_data->history_rml = cata_text_to_rml( d_win.history_markup() );
         rml_data->responses.clear();
         for( size_t i = 0; i < response_lines.size(); i++ ) {
@@ -3357,7 +3357,7 @@ void json_talk_response::load_condition( const JsonObject &jo )
 bool json_talk_response::test_condition( const dialogue &d ) const
 {
     if( condition ) {
-        return condition( d );
+    return condition( d );
     }
     return true;
 }
@@ -3365,7 +3365,7 @@ bool json_talk_response::test_condition( const dialogue &d ) const
 bool json_talk_response::gen_responses( dialogue &d, bool switch_done ) const
 {
     if( !is_switch || !switch_done ) {
-        if( test_condition( d ) ) {
+    if( test_condition( d ) ) {
             d.responses.emplace_back( actual_response );
             return is_switch && !is_default;
         }
@@ -3378,7 +3378,7 @@ bool json_talk_response::gen_repeat_response( dialogue &d, const itype_id &item_
         bool switch_done ) const
 {
     if( !is_switch || !switch_done ) {
-        if( test_condition( d ) ) {
+    if( test_condition( d ) ) {
             talk_response result = actual_response;
             result.success.next_topic.item_type = item_id;
             result.failure.next_topic.item_type = item_id;
@@ -3610,12 +3610,12 @@ bool json_talk_topic::gen_responses( dialogue &d ) const
     d.responses.reserve( responses.size() ); // A wild guess, can actually be more or less
 
     bool switch_done = false;
-    for( auto &r : responses ) {
-        switch_done |= r.gen_responses( d, switch_done );
+for( auto &r : responses ) {
+    switch_done |= r.gen_responses( d, switch_done );
     }
-    for( const json_talk_repeat_response &repeat : repeat_responses ) {
-        player *actor = d.alpha;
-        if( repeat.is_npc ) {
+for( const json_talk_repeat_response &repeat : repeat_responses ) {
+    player *actor = d.alpha;
+    if( repeat.is_npc ) {
             actor = dynamic_cast<player *>( d.beta );
         }
         std::function<bool( const item & )> filter = return_true<item>;

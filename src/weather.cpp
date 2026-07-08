@@ -195,7 +195,7 @@ weather_sum sum_conditions( const time_point &start, const time_point &end,
         data.wind_amount += get_local_windpower( weather.windspeed,
                             // TODO: fix point types
                             get_overmapbuffer( get_avatar().get_dimension() ).ter( tripoint_abs_omt( project_to<coords::omt>(
-                                        location ) ) ),
+                                    location ) ) ),
                             location,
                             weather.winddirection, false ) * to_turns<int>( tick_size );
     }
@@ -1168,7 +1168,8 @@ void weather_manager::update_weather()
     }
 
     if( weather_id != old_weather && g->u.has_activity( ACT_WAIT_WEATHER ) ) {
-        g->u.assign_activity( std::make_unique<player_activity>( std::make_unique<wait_activity_actor>( wait_type::WAIT_WEATHER ) ) );
+        g->u.assign_activity( std::make_unique<player_activity>( std::make_unique<wait_activity_actor>
+                              ( wait_type::WAIT_WEATHER ) ) );
     }
 
     if( weather_id->sight_penalty !=
@@ -1274,33 +1275,33 @@ auto weather_manager::get_temperature( const tripoint_abs_omt &location ) const 
 units::temperature
 {
     if( location.z() < 0 && !get_option<bool>( "UNDERGROUND_TEMPERATURE_INFLUENCED_BY_SURFACE" ) ) {
-        // Default behavior: underground is always annual average
-        return temperatures::annual_average;
-    }
+    // Default behavior: underground is always annual average
+    return temperatures::annual_average;
+}
 
-    auto abs_ms = project_to<coords::ms>( location );
-    w_point w = get_cur_weather_gen().get_weather( abs_ms, calendar::turn, g->get_seed() );
+auto abs_ms = project_to<coords::ms>( location );
+w_point w = get_cur_weather_gen().get_weather( abs_ms, calendar::turn, g->get_seed() );
 
-    if( location.z() >= 0 ) {
-        // Surface: full influence from current weather
-        return w.temperature;
-    }
+if( location.z() >= 0 ) {
+    // Surface: full influence from current weather
+    return w.temperature;
+}
 
-    // Underground: gradual transition to annual average
-    if( location.z() <= -3 ) {
-        // Deep underground: always annual average (0% surface influence)
-        return temperatures::annual_average;
-    }
+// Underground: gradual transition to annual average
+if( location.z() <= -3 ) {
+    // Deep underground: always annual average (0% surface influence)
+    return temperatures::annual_average;
+}
 
-    // z=-1: 50%, z=-2: 25%
-    const double influence_factor = location.z() == -1 ? 0.5 : 0.25;
+// z=-1: 50%, z=-2: 25%
+const double influence_factor = location.z() == -1 ? 0.5 : 0.25;
 
-    const double annual_avg_c = units::to_celsius( temperatures::annual_average );
-    const double current_temp_c = units::to_celsius( w.temperature );
-    const double temp_diff_c = current_temp_c - annual_avg_c;
-    const double base_temp_c = annual_avg_c + temp_diff_c * influence_factor;
+const double annual_avg_c = units::to_celsius( temperatures::annual_average );
+const double current_temp_c = units::to_celsius( w.temperature );
+const double temp_diff_c = current_temp_c - annual_avg_c;
+const double base_temp_c = annual_avg_c + temp_diff_c * influence_factor;
 
-    return units::from_celsius( base_temp_c );
+return units::from_celsius( base_temp_c );
 }
 
 auto weather_manager::get_water_temperature( const tripoint_abs_ms & ) const -> units::temperature

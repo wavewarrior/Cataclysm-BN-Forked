@@ -55,7 +55,7 @@ class ter_furn_transform
 
         template<class T, class K>
         std::optional<ter_furn_data<T>> find_transform( const std::map<K, ter_furn_data<T>> &list,
-                                     const K &key ) const;
+                const K &key ) const;
 
         template <class T, class K>
         std::optional<T> next( const std::map<K, ter_furn_data<T>> &list, const K &key ) const;

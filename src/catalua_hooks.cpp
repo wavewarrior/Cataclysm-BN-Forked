@@ -4,8 +4,7 @@
 namespace cata
 {
 
-constexpr auto hook_names = std::array
-{
+constexpr auto hook_names = std::array {
     "on_game_load",
     "on_game_save",
     "on_game_started",

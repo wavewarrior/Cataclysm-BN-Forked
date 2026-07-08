@@ -91,10 +91,10 @@ auto make_horde_vehicle_spawn_fixture(
     REQUIRE( horde != nullptr );
 
     if( options.owned ) {
-        veh->set_owner( you );
+    veh->set_owner( you );
     }
     if( options.tracked ) {
-        veh->toggle_tracking();
+    veh->toggle_tracking();
     }
 
     const auto vehicle_points = veh->get_points( true );

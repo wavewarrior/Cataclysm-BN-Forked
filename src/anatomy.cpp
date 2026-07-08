@@ -91,13 +91,13 @@ void anatomy::check_consistency()
 void anatomy::check() const
 {
     if( !get_part_with_cumulative_hit_size( size_sum ).is_valid() ) {
-        debugmsg( "Invalid size_sum calculation for anatomy %s", id.c_str() );
+    debugmsg( "Invalid size_sum calculation for anatomy %s", id.c_str() );
     }
 
     for( size_t i = 0; i < 3; i++ ) {
-        const float size_all = std::accumulate( cached_bps.begin(), cached_bps.end(), 0.0f, [i]( float acc,
-        const bodypart_id & bp ) {
-            return acc + bp->hit_size_relative[i];
+    const float size_all = std::accumulate( cached_bps.begin(), cached_bps.end(), 0.0f, [i]( float acc,
+    const bodypart_id & bp ) {
+        return acc + bp->hit_size_relative[i];
         } );
         if( size_all <= 0.0f ) {
             debugmsg( "Anatomy %s has no part hittable when size difference is %d", id.c_str(),
@@ -121,9 +121,9 @@ void anatomy::add_body_part( const bodypart_str_id &new_bp )
 // TODO: get_function_with_better_name
 bodypart_str_id anatomy::get_part_with_cumulative_hit_size( float size ) const
 {
-    for( const bodypart_id &part : cached_bps ) {
-        size -= part->hit_size;
-        if( size <= 0.0f ) {
+for( const bodypart_id &part : cached_bps ) {
+    size -= part->hit_size;
+    if( size <= 0.0f ) {
             return part.id();
         }
     }

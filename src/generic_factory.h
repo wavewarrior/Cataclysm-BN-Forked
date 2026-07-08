@@ -393,8 +393,8 @@ class generic_factory
          * Checks loaded/inserted objects for consistency
          */
         void check() const {
-            for( const T &obj : list ) {
-                obj.check();
+for( const T &obj : list ) {
+            obj.check();
             }
         }
         /**
@@ -444,8 +444,8 @@ class generic_factory
          */
         const T &obj( const int_id<T> &id ) const {
             if( !is_valid( id ) ) {
-                debugmsg( "invalid %s id \"%d\" (max: %d)", type_name, id.to_i(),
-                          static_cast<int>( list.size() ) - 1 );
+            debugmsg( "invalid %s id \"%d\" (max: %d)", type_name, id.to_i(),
+                      static_cast<int>( list.size() ) - 1 );
                 return dummy_obj;
             }
             return list[id.to_i()];

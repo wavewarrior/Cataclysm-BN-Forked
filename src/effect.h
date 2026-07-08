@@ -66,7 +66,7 @@ struct caused_effect {
 
         auto tie() const {
             return std::tie( type, intensity_requirement, allow_on_decay, allow_on_remove,
-                             duration, inherit_duration, intensity, inherit_intensity );
+                   duration, inherit_duration, intensity, inherit_intensity );
         }
 
         bool operator==( const caused_effect &rhs ) const {

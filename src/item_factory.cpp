@@ -1171,25 +1171,25 @@ void Item_factory::init()
     // An empty dummy group, it will not spawn anything. However, it makes that item group
     // id valid, so it can be used all over the place without need to explicitly check for it.
     m_template_groups[item_group_id( "EMPTY_GROUP" )] = std::make_unique<Item_group>
-            ( Item_group::G_COLLECTION, 100, 0,
-              0 );
+        ( Item_group::G_COLLECTION, 100, 0,
+          0 );
 }
 
 bool Item_factory::check_ammo_type( std::string &msg, const ammotype &ammo ) const
 {
     if( ammo.is_null() ) {
-        return false;
-    }
+    return false;
+}
 
-    if( !ammo.is_valid() ) {
-        msg += string_format( "ammo type %s is not known\n", ammo.c_str() );
+if( !ammo.is_valid() ) {
+    msg += string_format( "ammo type %s is not known\n", ammo.c_str() );
         return false;
     }
 
     if( std::none_of( m_templates.begin(),
-    m_templates.end(), [&ammo]( const decltype( m_templates )::value_type & e ) {
-    return e.second.ammo && e.second.ammo->type == ammo;
-} ) ) {
+        m_templates.end(), [&ammo]( const decltype( m_templates )::value_type & e ) {
+        return e.second.ammo && e.second.ammo->type == ammo;
+    } ) ) {
         msg += string_format( "there is no actual ammo of type %s defined\n", ammo.c_str() );
         return false;
     }
@@ -1198,11 +1198,11 @@ bool Item_factory::check_ammo_type( std::string &msg, const ammotype &ammo ) con
 
 void Item_factory::check_definitions() const
 {
-    for( const auto &elem : m_templates ) {
-        std::string msg;
-        const itype *type = &elem.second;
+for( const auto &elem : m_templates ) {
+    std::string msg;
+    const itype *type = &elem.second;
 
-        if( !type->category_force.is_valid() ) {
+    if( !type->category_force.is_valid() ) {
             msg += "undefined category " + type->category_force.str() + "\n";
         }
 
@@ -1641,8 +1641,8 @@ void Item_factory::check_definitions() const
         }
         debugmsg( "warnings for type %s:\n%s", type->id.c_str(), msg );
     }
-    for( const auto &e : migrations ) {
-        if( !m_templates.contains( e.second.replace ) ) {
+for( const auto &e : migrations ) {
+    if( !m_templates.contains( e.second.replace ) ) {
             debugmsg( "Invalid migration target: %s", e.second.replace.c_str() );
         }
         for( const auto &c : e.second.contents ) {
@@ -1651,8 +1651,8 @@ void Item_factory::check_definitions() const
             }
         }
     }
-    for( const auto &elem : m_template_groups ) {
-        elem.second->check_consistency( elem.first.str() );
+for( const auto &elem : m_template_groups ) {
+    elem.second->check_consistency( elem.first.str() );
         inp_mngr.pump_events();
     }
 }
@@ -3720,11 +3720,11 @@ std::vector<const itype *> Item_factory::all() const
     std::vector<const itype *> res;
     res.reserve( m_templates.size() + m_runtimes.size() );
 
-    for( const auto &e : m_templates ) {
-        res.push_back( &e.second );
+for( const auto &e : m_templates ) {
+    res.push_back( &e.second );
     }
-    for( const auto &e : m_runtimes ) {
-        res.push_back( e.second.get() );
+for( const auto &e : m_runtimes ) {
+    res.push_back( e.second.get() );
     }
 
     return res;

@@ -330,8 +330,8 @@ void mend_item( avatar &you, item &obj, bool interactive )
 
         const mending_method &method = opt.method;
         you.assign_activity( std::make_unique<player_activity>(
-            std::make_unique<mend_item_activity_actor>(
-                safe_reference<item>( obj ), opt.fault.str(), method.id ) ) );
+                                 std::make_unique<mend_item_activity_actor>(
+                                     safe_reference<item>( obj ), opt.fault.str(), method.id ) ) );
     }
 }
 
@@ -456,9 +456,9 @@ void gunmod_add( avatar &you, item &gun, item &mod )
     const int moves = !you.has_trait( trait_DEBUG_HS ) ? mod.type->gunmod->install_time : 0;
 
     you.assign_activity( std::make_unique<player_activity>(
-        std::make_unique<gunmod_add_activity_actor>(
-            safe_reference<item>( gun ), safe_reference<item>( mod ),
-            roll, risk, itype_id( tool ), qty ) ) );
+                             std::make_unique<gunmod_add_activity_actor>(
+                                 safe_reference<item>( gun ), safe_reference<item>( mod ),
+                                 roll, risk, itype_id( tool ), qty ) ) );
 }
 
 bool gunmod_remove( avatar &you, item &gun, item &mod )
@@ -565,8 +565,8 @@ void toolmod_add( avatar &you, item &tool, item &mod )
     }
 
     you.assign_activity( std::make_unique<player_activity>(
-        std::make_unique<toolmod_add_activity_actor>(
-            safe_reference<item>( tool ), safe_reference<item>( mod ) ) ) );
+                             std::make_unique<toolmod_add_activity_actor>(
+                                 safe_reference<item>( tool ), safe_reference<item>( mod ) ) ) );
 }
 
 static bool is_pet_food( const item &itm )

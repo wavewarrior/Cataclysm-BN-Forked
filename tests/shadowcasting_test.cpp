@@ -477,12 +477,12 @@ struct grid_overlay {
     }
     int width() const {
         if( data.empty() ) {
-            return 0;
-        }
-        return data[0].size();
+        return 0;
     }
+    return data[0].size();
+}
 
-    float get_global( const tripoint_bub_ms &p ) const {
+float get_global( const tripoint_bub_ms &p ) const {
         if( p.y() >= offset.y() && p.y() < offset.y() + height() &&
             p.x() >= offset.x() && p.x() < offset.x() + width() ) {
             return data[p.y() - offset.y()][p.x() - offset.x()];

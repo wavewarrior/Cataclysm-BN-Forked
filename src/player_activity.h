@@ -104,14 +104,14 @@ class player_activity
 
         int get_moves_left() const {
             if( actor ) {
-                return actor->progress.get_moves_left();
+            return actor->progress.get_moves_left();
             }
             return moves_left;
         }
 
         bool complete() const {
             if( actor ) {
-                return actor->progress.complete();
+            return actor->progress.complete();
             }
             return moves_left <= 0;
         }

@@ -180,7 +180,7 @@ static void deserialize( weak_ptr_fast<monster> &obj, JsonIn &jsin )
 void item_contents::serialize( JsonOut &json ) const
 {
     if( !items.empty() ) {
-        json.start_object();
+    json.start_object();
 
         json.member( "items", items );
 
@@ -204,7 +204,7 @@ void player_activity::serialize( JsonOut &json ) const
     json.member( "type", type );
 
     if( !type.is_null() ) {
-        json.member( "actor", actor );
+    json.member( "actor", actor );
         json.member( "index", index );
         json.member( "position", position );
         json.member( "coords", coords );
@@ -328,7 +328,7 @@ void requirement_data::serialize( JsonOut &json ) const
     json.start_object();
 
     if( !is_null() ) {
-        json.member( "blacklisted", blacklisted );
+    json.member( "blacklisted", blacklisted );
         const std::vector<std::vector<item_comp>> req_comps = get_components();
         const std::vector<std::vector<tool_comp>> tool_comps = get_tools();
         const std::vector<std::vector<quality_requirement>> quality_comps = get_qualities();
@@ -854,7 +854,7 @@ void Character::store( JsonOut &json ) const
     json.member( "base_height", init_height );
 
     if( prof.is_valid() ) {
-        json.member( "profession", prof );
+    json.member( "profession", prof );
     }
     json.member( "custom_profession", custom_profession );
 
@@ -886,13 +886,13 @@ void Character::store( JsonOut &json ) const
     if( !backlog.empty() && !backlog.front()->str_values.empty() && ( ( activity &&
             activity->id() == activity_id( "ACT_FETCH_REQUIRED" ) ) || ( destination_activity &&
                     destination_activity->id() == activity_id( "ACT_FETCH_REQUIRED" ) ) ) ) {
-        requirement_data things_to_fetch = requirement_id( backlog.front()->str_values.back() ).obj();
+    requirement_data things_to_fetch = requirement_id( backlog.front()->str_values.back() ).obj();
         json.member( "fetch_data", things_to_fetch );
     }
 
     const item &weapon = primary_weapon();
     if( !weapon.is_null() ) {
-        json.member( "weapon", weapon ); // also saves contents
+    json.member( "weapon", weapon ); // also saves contents
     }
 
     json.member( "stim", stim );
@@ -913,7 +913,7 @@ void Character::store( JsonOut &json ) const
 
     // storing the mount
     if( is_mounted() ) {
-        json.member( "mounted_creature", g->critter_tracker->temporary_id( *mounted_creature ) );
+    json.member( "mounted_creature", g->critter_tracker->temporary_id( *mounted_creature ) );
     }
 
     morale->store( json );
@@ -921,8 +921,8 @@ void Character::store( JsonOut &json ) const
     // skills
     json.member( "skills" );
     json.start_object();
-    for( const auto &pair : *_skills ) {
-        json.member( pair.first.str(), pair.second );
+for( const auto &pair : *_skills ) {
+    json.member( pair.first.str(), pair.second );
     }
     json.end_object();
 
@@ -932,14 +932,14 @@ void Character::store( JsonOut &json ) const
 
     // npc; unimplemented
     if( power_level < 1_kJ ) {
-        json.member( "power_level", std::to_string( units::to_joule( power_level ) ) + " J" );
+    json.member( "power_level", std::to_string( units::to_joule( power_level ) ) + " J" );
     } else {
         json.member( "power_level", std::to_string( units::to_kilojoule( power_level ) ) + " kJ" );
     }
     json.member( "max_power_level", std::to_string( units::to_kilojoule( max_power_level ) ) + " kJ" );
 
     if( !overmap_time.empty() ) {
-        json.member( "overmap_time" );
+    json.member( "overmap_time" );
         json.start_array();
         for( const std::pair<const point_abs_omt, time_duration> &pr : overmap_time ) {
             json.write( pr.first );
@@ -951,8 +951,8 @@ void Character::store( JsonOut &json ) const
     json.member( "automoveroute", auto_move_route );
     json.member( "known_traps" );
     json.start_array();
-    for( const auto &elem : known_traps ) {
-        json.start_object();
+for( const auto &elem : known_traps ) {
+    json.start_object();
         json.member( "x", elem.first.x() );
         json.member( "y", elem.first.y() );
         json.member( "z", elem.first.z() );
@@ -998,7 +998,7 @@ void player::store( JsonOut &json ) const
 
 
     if( const auto lt_ptr = last_target.lock() ) {
-        if( const npc *const guy = dynamic_cast<const npc *>( lt_ptr.get() ) ) {
+    if( const npc *const guy = dynamic_cast<const npc *>( lt_ptr.get() ) ) {
             json.member( "last_target", guy->getID() );
             json.member( "last_target_type", +1 );
         } else if( const monster *const mon = dynamic_cast<const monster *>( lt_ptr.get() ) ) {
@@ -1099,7 +1099,7 @@ void avatar::store( JsonOut &json ) const
     player::store( json );
 
     if( g->scen != nullptr ) {
-        json.member( "scenario", g->scen->ident() );
+    json.member( "scenario", g->scen->ident() );
     }
     // someday, npcs may drive
     json.member( "controlling_vehicle", controlling_vehicle );
@@ -1113,13 +1113,13 @@ void avatar::store( JsonOut &json ) const
 
     // bio_portal_tap persistent link
     if( bio_portal_tap_linked ) {
-        json.member( "bio_portal_tap_linked", bio_portal_tap_linked );
+    json.member( "bio_portal_tap_linked", bio_portal_tap_linked );
         json.member( "bio_portal_tap_dim_id", bio_portal_tap_dim_id );
         json.member( "bio_portal_tap_pos", bio_portal_tap_pos.raw() );
     }
 
     if( shadow_npc ) {
-        json.member( "shadow_npc", *shadow_npc );
+    json.member( "shadow_npc", *shadow_npc );
     }
 
     // stats through kills
@@ -1145,7 +1145,7 @@ void avatar::store( JsonOut &json ) const
     json.member( "assigned_invlet" );
     json.start_array();
     for( auto iter : inv.assigned_invlet ) {
-        json.start_array();
+    json.start_array();
         json.write( iter.first );
         json.write( iter.second );
         json.end_array();
@@ -1163,8 +1163,8 @@ void avatar::store( JsonOut &json ) const
 
     json.member( "faction_warnings" );
     json.start_array();
-    for( const auto &elem : warning_record ) {
-        json.start_object();
+for( const auto &elem : warning_record ) {
+    json.start_object();
         json.member( "fac_warning_id", elem.first );
         json.member( "fac_warning_num", elem.second.first );
         json.member( "fac_warning_time", elem.second.second );
@@ -1353,14 +1353,14 @@ void npc_follower_rules::serialize( JsonOut &json ) const
     json.member( "cbm_recharge", static_cast<int>( cbm_recharge ) );
 
     // serialize the flags so they can be changed between save games
-    for( const auto &rule : ally_rule_strs ) {
-        json.member( "rule_" + rule.first, has_flag( rule.second.rule, false ) );
+for( const auto &rule : ally_rule_strs ) {
+    json.member( "rule_" + rule.first, has_flag( rule.second.rule, false ) );
     }
-    for( const auto &rule : ally_rule_strs ) {
-        json.member( "override_enable_" + rule.first, has_override_enable( rule.second.rule ) );
+for( const auto &rule : ally_rule_strs ) {
+    json.member( "override_enable_" + rule.first, has_override_enable( rule.second.rule ) );
     }
-    for( const auto &rule : ally_rule_strs ) {
-        json.member( "override_" + rule.first, has_override( rule.second.rule ) );
+for( const auto &rule : ally_rule_strs ) {
+    json.member( "override_" + rule.first, has_override( rule.second.rule ) );
     }
 
     json.member( "pickup_whitelist", *pickup_whitelist );
@@ -1450,7 +1450,7 @@ void npc_chatbin::serialize( JsonOut &json ) const
     json.start_object();
     json.member( "first_topic", first_topic );
     if( mission_selected != nullptr ) {
-        json.member( "mission_selected", mission_selected->get_id() );
+    json.member( "mission_selected", mission_selected->get_id() );
     }
     json.member( "skill", skill );
     json.member( "style", style );
@@ -1858,7 +1858,7 @@ void npc::store( JsonOut &json ) const
     json.member( "previous_mission", previous_mission );
     json.member( "faction_api_ver", faction_api_version );
     if( !fac_id.str().empty() ) { // set in constructor
-        json.member( "my_fac", fac_id.c_str() );
+    json.member( "my_fac", fac_id.c_str() );
     }
     json.member( "attitude", static_cast<int>( attitude ) );
     json.member( "previous_attitude", static_cast<int>( previous_attitude ) );
@@ -1868,11 +1868,11 @@ void npc::store( JsonOut &json ) const
 
     json.member( "cbm_toggled", cbm_toggled );
     if( cbm_fake_toggled ) {
-        json.member( "cbm_fake_toggled", cbm_fake_toggled );
+    json.member( "cbm_fake_toggled", cbm_fake_toggled );
     }
     json.member( "cbm_active", cbm_active );
     if( cbm_fake_active ) {
-        json.member( "cbm_fake_active", cbm_fake_active );
+    json.member( "cbm_fake_active", cbm_fake_active );
     }
 
     json.member( "comp_mission_id", comp_mission.mission_id );
@@ -1888,7 +1888,7 @@ void npc::store( JsonOut &json ) const
 
     json.member( "last_updated", last_updated );
     if( !dimension_id_.empty() ) {
-        json.member( "dimension_id", dimension_id_ );
+    json.member( "dimension_id", dimension_id_ );
     }
     json.member( "complaints", complaints );
 }
@@ -1901,8 +1901,8 @@ void npc::store( JsonOut &json ) const
 void location_inventory::json_save_invcache( JsonOut &json ) const
 {
     json.start_array();
-    for( const auto &elem : inv.invlet_cache.get_invlets_by_id() ) {
-        json.start_object();
+for( const auto &elem : inv.invlet_cache.get_invlets_by_id() ) {
+    json.start_object();
         json.member( elem.first.str() );
         json.start_array();
         for( const auto &_sym : elem.second ) {
@@ -1943,8 +1943,8 @@ void location_inventory::json_load_invcache( JsonIn &jsin )
 void location_inventory::json_save_items( JsonOut &json ) const
 {
     json.start_array();
-    for( const auto &elem : inv.items ) {
-        for( const auto &elem_stack_iter : elem ) {
+for( const auto &elem : inv.items ) {
+    for( const auto &elem_stack_iter : elem ) {
             elem_stack_iter->serialize( json );
         }
     }
@@ -1997,10 +1997,10 @@ auto monster::load( const JsonObject &data,
     }
     auto stored_pos_abs = tripoint_abs_ms::zero();
     if( data.read( "pos_abs", stored_pos_abs ) ) {
-        pos_abs = stored_pos_abs;
-    }
-    if( has_legacy_x && has_legacy_y ) {
-        if( legacy_context ) {
+    pos_abs = stored_pos_abs;
+}
+if( has_legacy_x && has_legacy_y ) {
+    if( legacy_context ) {
             const auto abs_sm_pos = project_combine( legacy_context->om_pos, legacy_context->submap_pos );
             const auto legacy_remainder = project_remain<coords::sm>( legacy_bub_pos );
             pos_abs = project_combine( abs_sm_pos, legacy_remainder.remainder );
@@ -2012,7 +2012,7 @@ auto monster::load( const JsonObject &data,
     wandf = 0;
     wander_pos = get_map().abs_to_bub( pos_abs );
     if( !legacy_context ) {
-        auto stored_wander_pos_abs = tripoint_abs_ms::zero();
+    auto stored_wander_pos_abs = tripoint_abs_ms::zero();
         if( data.read( "wander_pos_abs", stored_wander_pos_abs ) ) {
             data.read( "wandf", wandf );
             wander_pos = get_map().abs_to_bub( stored_wander_pos_abs );
@@ -2028,30 +2028,30 @@ auto monster::load( const JsonObject &data,
         }
     }
     if( data.has_object( "tied_item" ) ) {
-        JsonIn *tied_item_json = data.get_raw( "tied_item" );
+    JsonIn *tied_item_json = data.get_raw( "tied_item" );
         set_tied_item( item::spawn( *tied_item_json ) );
     }
     if( data.has_object( "tack_item" ) ) {
-        JsonIn *tack_item_json = data.get_raw( "tack_item" );
+    JsonIn *tack_item_json = data.get_raw( "tack_item" );
         set_tack_item( item::spawn( *tack_item_json ) );
     }
     if( data.has_object( "armor_item" ) ) {
-        JsonIn *armor_item_json = data.get_raw( "armor_item" );
+    JsonIn *armor_item_json = data.get_raw( "armor_item" );
         set_armor_item( item::spawn( *armor_item_json ) );
     }
     if( data.has_object( "storage_item" ) ) {
-        JsonIn *storage_item_json = data.get_raw( "storage_item" );
+    JsonIn *storage_item_json = data.get_raw( "storage_item" );
         set_storage_item( item::spawn( *storage_item_json ) );
     }
     if( data.has_object( "battery_item" ) ) {
-        JsonIn *battery_item_json = data.get_raw( "battery_item" );
+    JsonIn *battery_item_json = data.get_raw( "battery_item" );
         set_battery_item( item::spawn( *battery_item_json ) );
     }
     data.read( "hp", hp );
 
     // sp_timeout indicates an old save, prior to the special_attacks refactor
     if( data.has_array( "sp_timeout" ) ) {
-        JsonArray parray = data.get_array( "sp_timeout" );
+    JsonArray parray = data.get_array( "sp_timeout" );
         size_t index = 0;
         int ptimeout = 0;
         while( parray.has_more() && index < type->special_attacks_names.size() ) {
@@ -2071,7 +2071,7 @@ auto monster::load( const JsonObject &data,
 
     // special_attacks indicates a save after the special_attacks refactor
     if( data.has_object( "special_attacks" ) ) {
-        for( const JsonMember member : data.get_object( "special_attacks" ) ) {
+    for( const JsonMember member : data.get_object( "special_attacks" ) ) {
             JsonObject saobject = member.get_object();
             saobject.allow_omitted_members();
             auto &entry = special_attacks[member.name()];
@@ -2081,9 +2081,9 @@ auto monster::load( const JsonObject &data,
     }
 
     // make sure the loaded monster has every special attack its type says it should have
-    for( auto &sa : type->special_attacks ) {
-        const std::string &aname = sa.first;
-        if( !special_attacks.contains( aname ) ) {
+for( auto &sa : type->special_attacks ) {
+    const std::string &aname = sa.first;
+    if( !special_attacks.contains( aname ) ) {
             auto &entry = special_attacks[aname];
             entry.cooldown = rng( 0, sa.second->cooldown );
         }
@@ -2098,7 +2098,7 @@ auto monster::load( const JsonObject &data,
     data.read( "morale", morale );
 
     if( data.has_member( "faction_anger" ) ) {
-        JsonObject ja = data.get_object( "faction_anger" );
+    JsonObject ja = data.get_object( "faction_anger" );
         for( const auto &member : ja ) {
             mfaction_str_id faction_str( member.name() );
             faction_anger[mfaction_id( faction_str )] = member.get_int();
@@ -2113,7 +2113,7 @@ auto monster::load( const JsonObject &data,
     std::vector<tripoint> plans;
     data.read( "plans", plans );
     if( !plans.empty() ) {
-        goal = tripoint_bub_ms( plans.back() );
+    goal = tripoint_bub_ms( plans.back() );
     }
 
     data.read( "summon_time_limit", summon_time_limit );
@@ -2132,7 +2132,7 @@ auto monster::load( const JsonObject &data,
     baby_timer.reset();
     data.read( "baby_timer", baby_timer );
     if( baby_timer && *baby_timer == calendar::before_time_starts ) {
-        baby_timer.reset();
+    baby_timer.reset();
     }
 
     data.read( "udder_timer", udder_timer );
@@ -2144,8 +2144,8 @@ auto monster::load( const JsonObject &data,
     data.read( "dragged_foe_id", dragged_foe_id );
 
     if( data.has_int( "ammo" ) && !type->starting_ammo.empty() ) {
-        // Legacy loading for ammo.
-        normalize_ammo( data.get_int( "ammo" ) );
+    // Legacy loading for ammo.
+    normalize_ammo( data.get_int( "ammo" ) );
     } else {
         data.read( "ammo", ammo );
         // legacy loading for milkable creatures, fix mismatch.
@@ -2160,12 +2160,12 @@ auto monster::load( const JsonObject &data,
 
     faction = mfaction_str_id( data.get_string( "faction", "" ) );
     if( !data.read( "last_updated", last_updated ) ) {
-        last_updated = calendar::turn;
-    }
-    data.read( "dimension_id", dimension_id_ );
-    data.read( "mounted_player_id", mounted_player_id );
-    data.read( "path", path );
-    data.read( "monster_flags", monster_flags );
+    last_updated = calendar::turn;
+}
+data.read( "dimension_id", dimension_id_ );
+data.read( "mounted_player_id", mounted_player_id );
+data.read( "path", path );
+data.read( "monster_flags", monster_flags );
 }
 
 /*
@@ -2194,7 +2194,7 @@ auto monster::store( JsonOut &json, bool include_local_state ) const -> void
     json.member( "unique_name", unique_name );
     json.member( "pos_abs", pos_abs );
     if( include_local_state ) {
-        json.member( "wander_pos_abs", get_map().bub_to_abs( wander_pos ) );
+    json.member( "wander_pos_abs", get_map().bub_to_abs( wander_pos ) );
         json.member( "wandf", wandf );
     }
     json.member( "hp", hp );
@@ -2210,7 +2210,7 @@ auto monster::store( JsonOut &json, bool include_local_state ) const -> void
     json.member( "morale", morale );
 
     if( !faction_anger.empty() ) {
-        json.member( "faction_anger" );
+    json.member( "faction_anger" );
         json.start_object();
         for( const auto &pair : faction_anger ) {
             json.member( pair.first.id().str(), pair.second );
@@ -2222,19 +2222,19 @@ auto monster::store( JsonOut &json, bool include_local_state ) const -> void
     json.member( "aggro_character", aggro_character );
     json.member( "stairscount", staircount );
     if( tied_item ) {
-        json.member( "tied_item", *tied_item );
+    json.member( "tied_item", *tied_item );
     }
     if( tack_item ) {
-        json.member( "tack_item", *tack_item );
+    json.member( "tack_item", *tack_item );
     }
     if( armor_item ) {
-        json.member( "armor_item", *armor_item );
+    json.member( "armor_item", *armor_item );
     }
     if( storage_item ) {
-        json.member( "storage_item", *storage_item );
+    json.member( "storage_item", *storage_item );
     }
     if( battery_item ) {
-        json.member( "battery_item", *battery_item );
+    json.member( "battery_item", *battery_item );
     }
     // Store the relative position of the goal so it loads correctly after a map shift.
     json.member( "destination", goal - bub_pos() );
@@ -2243,7 +2243,7 @@ auto monster::store( JsonOut &json, bool include_local_state ) const -> void
     json.member( "upgrade_time", upgrade_time );
     json.member( "last_updated", last_updated );
     if( !dimension_id_.empty() ) {
-        json.member( "dimension_id", dimension_id_ );
+    json.member( "dimension_id", dimension_id_ );
     }
     json.member( "reproduces", reproduces );
     json.member( "baby_timer", baby_timer );
@@ -2252,7 +2252,7 @@ auto monster::store( JsonOut &json, bool include_local_state ) const -> void
     json.member( "summon_time_limit", summon_time_limit );
 
     if( horde_attraction > MHA_NULL && horde_attraction < NUM_MONSTER_HORDE_ATTRACTION ) {
-        json.member( "horde_attraction", horde_attraction );
+    json.member( "horde_attraction", horde_attraction );
     }
     json.member( "inv", inv );
     json.member( "corpse_components", corpse_components );
@@ -2332,7 +2332,7 @@ void dimension_info::serialize( JsonOut &jsout ) const
     jsout.member( "world_type", world_type );
     jsout.member( "display_name", display_name );
     if( pocket_info.has_value() ) {
-        jsout.member( "pocket_info", *pocket_info );
+    jsout.member( "pocket_info", *pocket_info );
     }
     jsout.end_object();
 }
@@ -2360,10 +2360,10 @@ void pocket_dimension_data::serialize( JsonOut &jsout ) const
     jsout.member( "return_world_type", return_world_type );
     jsout.member( "return_point", return_point );
     if( last_player_exit.has_value() ) {
-        jsout.member( "last_player_exit", *last_player_exit );
+    jsout.member( "last_player_exit", *last_player_exit );
     }
     if( lifetime.has_value() ) {
-        jsout.member( "lifetime", *lifetime );
+    jsout.member( "lifetime", *lifetime );
     }
     jsout.end_object();
 }
@@ -2866,26 +2866,26 @@ void item::serialize( JsonOut &json ) const
     const_cast<item *>( this )->io( archive );
 
     if( !melee_damage_bonus.damage_units.empty() ) {
-        json.member( "melee_damage_bonus",
-                     damage_instance_serialization::serialize_damage_instance( melee_damage_bonus ) );
+    json.member( "melee_damage_bonus",
+                 damage_instance_serialization::serialize_damage_instance( melee_damage_bonus ) );
     }
 
     if( !ranged_damage_bonus.damage_units.empty() ) {
-        json.member( "ranged_damage_bonus",
-                     damage_instance_serialization::serialize_damage_instance( ranged_damage_bonus ) );
+    json.member( "ranged_damage_bonus",
+                 damage_instance_serialization::serialize_damage_instance( ranged_damage_bonus ) );
     }
 
     if( !contents.empty() ) {
-        json.member( "contents", contents );
+    json.member( "contents", contents );
     }
     if( kills ) {
-        json.member( "item_kill_tracker" );
+    json.member( "item_kill_tracker" );
         kills->serialize( json );
     }
 
     safe_reference<item>::id_type id = safe_reference<item>::lookup_id( this );
     if( id != safe_reference<item>::ID_NONE ) {
-        json.member( "id", id );
+    json.member( "id", id );
     }
 
 }
@@ -3063,8 +3063,8 @@ void vehicle_part::serialize( JsonOut &json ) const
     json.member( "enabled", enabled );
     json.member( "flags", flags );
     if( !carry_names.empty() ) {
-        std::stack<std::string, std::vector<std::string> > carry_copy = carry_names;
-        json.member( "carry" );
+    std::stack<std::string, std::vector<std::string> > carry_copy = carry_names;
+    json.member( "carry" );
         json.start_array();
         while( !carry_copy.empty() ) {
             json.write( carry_copy.top() );
@@ -3075,23 +3075,23 @@ void vehicle_part::serialize( JsonOut &json ) const
     json.member( "passenger_id", passenger_id );
     json.member( "crew_id", crew_id );
     if( z_terrain[0] ) {
-        json.member( "z_offset", z_terrain[0] );
+    json.member( "z_offset", z_terrain[0] );
     }
     json.member( "items", items );
     if( target.first != tripoint_abs_ms::min() ) {
-        json.member( "target_first_x", target.first.x() );
+    json.member( "target_first_x", target.first.x() );
         json.member( "target_first_y", target.first.y() );
         json.member( "target_first_z", target.first.z() );
     }
     if( target.second != tripoint_abs_ms::min() ) {
-        json.member( "target_second_x", target.second.x() );
+    json.member( "target_second_x", target.second.x() );
         json.member( "target_second_y", target.second.y() );
         json.member( "target_second_z", target.second.z() );
     }
     json.member( "ammo_pref", ammo_pref );
     json.member( "part_color", part_color_ );
     if( portal_tap_linked ) {
-        json.member( "portal_tap_linked", portal_tap_linked );
+    json.member( "portal_tap_linked", portal_tap_linked );
         json.member( "portal_tap_dim_id", portal_tap_dim_id );
         json.member( "portal_tap_pos", portal_tap_pos.raw() );
     }
@@ -3128,12 +3128,12 @@ namespace
 auto read_legacy_vehicle_pivot( const JsonObject &data, tripoint_mnt_veh &pivot ) -> void
 {
     if( !data.has_member( "pivot" ) ) {
-        return;
-    }
+    return;
+}
 
-    const auto pivot_json = data.get_array( "pivot" );
-    if( pivot_json.size() != 2 && pivot_json.size() != 3 ) {
-        data.throw_error( "vehicle pivot must have 2 or 3 coordinates", "pivot" );
+const auto pivot_json = data.get_array( "pivot" );
+if( pivot_json.size() != 2 && pivot_json.size() != 3 ) {
+    data.throw_error( "vehicle pivot must have 2 or 3 coordinates", "pivot" );
     }
 
     const auto z = pivot_json.size() == 3 ? pivot_json.get_int( 2 ) : 0;
@@ -3143,13 +3143,13 @@ auto read_legacy_vehicle_pivot( const JsonObject &data, tripoint_mnt_veh &pivot 
 auto read_saved_vehicle_parts( const JsonObject &data, std::vector<vehicle_part> &parts ) -> void
 {
     if( !data.has_array( "parts" ) ) {
-        return;
-    }
+    return;
+}
 
-    parts.clear();
-    const auto part_array = data.get_array( "parts" );
-    for( auto part_index = size_t{ 0 }; part_index < part_array.size(); ++part_index ) {
-        auto part = vehicle_part();
+parts.clear();
+const auto part_array = data.get_array( "parts" );
+for( auto part_index = size_t{ 0 }; part_index < part_array.size(); ++part_index ) {
+    auto part = vehicle_part();
         try {
             part_array.read( part_index, part, true );
             parts.push_back( std::move( part ) );
@@ -3403,8 +3403,8 @@ void vehicle::serialize( JsonOut &json ) const
     json.member( "labels", labels );
     json.member( "zones" );
     json.start_array();
-    for( auto const &z : loot_zones ) {
-        json.start_object();
+for( auto const &z : loot_zones ) {
+    json.start_object();
         json.member( "point", z.first );
         json.member( "zone", z.second );
         json.end_object();
@@ -3412,7 +3412,7 @@ void vehicle::serialize( JsonOut &json ) const
     json.end_array();
     tripoint_bub_ms other_tow_temp_point;
     if( is_towed() ) {
-        vehicle *tower = tow_data.get_towed_by();
+    vehicle *tower = tow_data.get_towed_by();
         if( tower ) {
             other_tow_temp_point = tower->bub_part_location( tower->get_tow_part() );
         }
@@ -3424,7 +3424,7 @@ void vehicle::serialize( JsonOut &json ) const
     json.member( "camera_on", camera_on );
     json.member( "last_update_turn", last_update );
     if( !dimension_id_.empty() ) {
-        json.member( "dimension_id", dimension_id_ );
+    json.member( "dimension_id", dimension_id_ );
     }
     json.member( "pivot", pivot_anchor[0] );
     json.member( "is_following", is_following );
@@ -3555,7 +3555,7 @@ void mission::serialize( JsonOut &json ) const
     json.member( "player_id", player_id );
     json.member( "legacy_no_player_id", legacy_no_player_id );
     if( !dimension_id_.empty() ) {
-        json.member( "dimension_id", dimension_id_ );
+    json.member( "dimension_id", dimension_id_ );
     }
 
     json.end_object();
@@ -3603,8 +3603,8 @@ void faction::serialize( JsonOut &json ) const
     json.member( "opinion_of", opinion_of );
     json.member( "relations" );
     json.start_object();
-    for( const auto &rel_data : relations_ ) {
-        json.member( rel_data.first );
+for( const auto &rel_data : relations_ ) {
+    json.member( rel_data.first );
         json.start_object();
         for( const auto &rel_flag : npc_factions::relation_strs ) {
             json.member( rel_flag.first, rel_data.second.test( rel_flag.second ) );
@@ -3626,8 +3626,8 @@ void Creature::store( JsonOut &jsout ) const
 
     // Because JSON requires string keys we need to convert our int keys
     std::unordered_map<std::string, std::unordered_map<std::string, effect>> tmp_map;
-    for( const auto &maps : *effects ) {
-        for( const auto &i : maps.second ) {
+for( const auto &maps : *effects ) {
+    for( const auto &i : maps.second ) {
             if( i.second.is_removed() ) {
                 continue;
             }
@@ -3736,10 +3736,10 @@ void player_morale::morale_subtype::serialize( JsonOut &json ) const
     json.start_object();
     json.member_as_string( "subtype_type", subtype_type );
     switch( subtype_type ) {
-        case morale_subtype_t::single:
-            break;
-        case morale_subtype_t::by_item:
-            json.member( "item_type", item_type->get_id() );
+    case morale_subtype_t::single:
+        break;
+    case morale_subtype_t::by_item:
+        json.member( "item_type", item_type->get_id() );
             break;
         case morale_subtype_t::by_effect:
             json.member( "eff_type", eff_type );
@@ -3846,7 +3846,7 @@ void mm_submap::serialize( JsonOut &jsout ) const
         jsout.end_array();
     };
 
-    for( const auto p : submap_tiles() ) {
+for( const auto p : submap_tiles() ) {
         const mm_elem elem = { tile( p ), terrain_tile( p ), symbol( p ) };
         if( p.x() == 0 && p.y() == 0 ) {
             last = elem;
@@ -3917,8 +3917,8 @@ void mm_region::serialize( JsonOut &jsout ) const
     jsout.start_array();
     // NOLINTNEXTLINE(modernize-loop-convert): leaving as is for readability
     for( size_t y = 0; y < MM_REG_SIZE; y++ ) {
-        // NOLINTNEXTLINE(modernize-loop-convert): leaving as is for readability
-        for( size_t x = 0; x < MM_REG_SIZE; x++ ) {
+    // NOLINTNEXTLINE(modernize-loop-convert): leaving as is for readability
+    for( size_t x = 0; x < MM_REG_SIZE; x++ ) {
             const shared_ptr_fast<mm_submap> &sm = submaps[x][y];
             if( sm->is_empty() ) {
                 jsout.write_null();
@@ -4167,15 +4167,15 @@ void kill_tracker::serialize( JsonOut &jsout ) const
     jsout.start_object();
     jsout.member( "kills" );
     jsout.start_object();
-    for( auto &elem : kills ) {
-        jsout.member( elem.first.str(), elem.second );
+for( auto &elem : kills ) {
+    jsout.member( elem.first.str(), elem.second );
     }
     jsout.end_object();
 
     jsout.member( "npc_kills" );
     jsout.start_array();
-    for( auto &elem : npc_kills ) {
-        jsout.write( elem );
+for( auto &elem : npc_kills ) {
+    jsout.write( elem );
     }
     jsout.end_array();
     jsout.end_object();
@@ -4258,8 +4258,8 @@ void submap::store( JsonOut &jsout ) const
     jsout.start_array();
     std::string last_id;
     int num_same = 1;
-    for( const auto sm_ms : submap_tiles() ) {
-        const std::string this_id = ter[sm_ms.x()][sm_ms.y()].obj().id.str();
+for( const auto sm_ms : submap_tiles() ) {
+    const std::string this_id = ter[sm_ms.x()][sm_ms.y()].obj().id.str();
         if( !last_id.empty() ) {
             if( this_id == last_id ) {
                 num_same++;
@@ -4282,7 +4282,7 @@ void submap::store( JsonOut &jsout ) const
     }
     // Because of the RLE scheme we have to do one last pass
     if( num_same == 1 ) {
-        jsout.write( last_id );
+    jsout.write( last_id );
     } else {
         jsout.start_array();
         jsout.write( last_id );
@@ -4297,9 +4297,9 @@ void submap::store( JsonOut &jsout ) const
     jsout.start_array();
     int lastrad = -1;
     int count = 0;
-    for( const auto p : submap_tiles() ) {
-        // Save radiation, re-examine this because it doesn't look like it works right
-        int r = get_radiation( p );
+for( const auto p : submap_tiles() ) {
+    // Save radiation, re-examine this because it doesn't look like it works right
+    int r = get_radiation( p );
         if( r == lastrad ) {
             count++;
         } else {
@@ -4318,7 +4318,7 @@ void submap::store( JsonOut &jsout ) const
     // Omitted entirely when all tiles are zero to keep typical saves compact.
     if( std::ranges::any_of( &scent_values[0][0], &scent_values[0][0] + SEEX * SEEY,
     []( int v ) { return v != 0; } ) ) {
-        jsout.member( "scent_values" );
+    jsout.member( "scent_values" );
         jsout.start_array();
         int last_scent = -1;
         int scent_count = 0;
@@ -4345,9 +4345,9 @@ void submap::store( JsonOut &jsout ) const
 
     jsout.member( "furniture" );
     jsout.start_array();
-    for( const auto p : submap_tiles() ) {
-        // Save furniture
-        if( get_furn( p ) ) {
+for( const auto p : submap_tiles() ) {
+    // Save furniture
+    if( get_furn( p ) ) {
             jsout.start_array();
             jsout.write( p.x() );
             jsout.write( p.y() );
@@ -4359,8 +4359,8 @@ void submap::store( JsonOut &jsout ) const
 
     jsout.member( "items" );
     jsout.start_array();
-    for( const auto sm_ms : submap_tiles() ) {
-        if( !itm[sm_ms.x()][sm_ms.y()].empty() ) {
+for( const auto sm_ms : submap_tiles() ) {
+    if( !itm[sm_ms.x()][sm_ms.y()].empty() ) {
             jsout.write( sm_ms.x() );
             jsout.write( sm_ms.y() );
             jsout.write( itm[sm_ms.x()][sm_ms.y()] );
@@ -4370,9 +4370,9 @@ void submap::store( JsonOut &jsout ) const
 
     jsout.member( "traps" );
     jsout.start_array();
-    for( const auto p : submap_tiles() ) {
-        // Save traps
-        if( get_trap( p ) ) {
+for( const auto p : submap_tiles() ) {
+    // Save traps
+    if( get_trap( p ) ) {
             jsout.start_array();
             jsout.write( p.x() );
             jsout.write( p.y() );
@@ -4385,9 +4385,9 @@ void submap::store( JsonOut &jsout ) const
 
     jsout.member( "fields" );
     jsout.start_array();
-    for( const auto sm_ms : submap_tiles() ) {
-        // Save fields
-        if( fld[sm_ms.x()][sm_ms.y()].field_count() > 0 ) {
+for( const auto sm_ms : submap_tiles() ) {
+    // Save fields
+    if( fld[sm_ms.x()][sm_ms.y()].field_count() > 0 ) {
             jsout.write( sm_ms.x() );
             jsout.write( sm_ms.y() );
             jsout.start_array();
@@ -4405,8 +4405,8 @@ void submap::store( JsonOut &jsout ) const
     // Write out as array of arrays of single entries
     jsout.member( "cosmetics" );
     jsout.start_array();
-    for( const auto &cosm : cosmetics ) {
-        jsout.start_array();
+for( const auto &cosm : cosmetics ) {
+    jsout.start_array();
         jsout.write( cosm.pos.x() );
         jsout.write( cosm.pos.y() );
         jsout.write( cosm.type );
@@ -4418,8 +4418,8 @@ void submap::store( JsonOut &jsout ) const
     // Output the spawn points
     jsout.member( "spawns" );
     jsout.start_array();
-    for( auto &elem : spawns ) {
-        jsout.start_array();
+for( auto &elem : spawns ) {
+    jsout.start_array();
         // TODO: json should know how to write string_ids
         jsout.write( elem.type.str() );
         jsout.write( elem.count );
@@ -4435,17 +4435,17 @@ void submap::store( JsonOut &jsout ) const
 
     jsout.member( "vehicles" );
     jsout.start_array();
-    for( auto &elem : vehicles ) {
-        // json lib doesn't know how to turn a vehicle * into a vehicle,
-        // so we have to iterate manually.
-        jsout.write( *elem );
+for( auto &elem : vehicles ) {
+    // json lib doesn't know how to turn a vehicle * into a vehicle,
+    // so we have to iterate manually.
+    jsout.write( *elem );
     }
     jsout.end_array();
 
     jsout.member( "partial_constructions" );
     jsout.start_array();
-    for( auto &elem : partial_constructions ) {
-        jsout.write( elem.first.x() );
+for( auto &elem : partial_constructions ) {
+    jsout.write( elem.first.x() );
         jsout.write( elem.first.y() );
         jsout.write( elem.first.z() );
         jsout.write( elem.second->counter );
@@ -4459,11 +4459,11 @@ void submap::store( JsonOut &jsout ) const
     jsout.end_array();
 
     if( legacy_computer ) {
-        // it's possible that no access to computers has been made and legacy_computer
-        // is not cleared
-        jsout.member( "computers", *legacy_computer );
+    // it's possible that no access to computers has been made and legacy_computer
+    // is not cleared
+    jsout.member( "computers", *legacy_computer );
     } else if( !computers.empty() ) {
-        jsout.member( "computers" );
+    jsout.member( "computers" );
         jsout.start_array();
         for( auto &elem : computers ) {
             jsout.write( elem.first );
@@ -4474,16 +4474,16 @@ void submap::store( JsonOut &jsout ) const
 
     jsout.member( "active_furniture" );
     jsout.start_array();
-    for( auto &pr : active_furniture ) {
-        jsout.write( pr.first );
+for( auto &pr : active_furniture ) {
+    jsout.write( pr.first );
         pr.second.serialize( jsout );
     }
     jsout.end_array();
 
     jsout.member( "furniture_vars" );
     jsout.start_array();
-    for( const auto &[key, value] : frn_vars ) {
-        if( value.empty() ) {
+for( const auto &[key, value] : frn_vars ) {
+    if( value.empty() ) {
             continue;
         }
         jsout.write( key );
@@ -4493,8 +4493,8 @@ void submap::store( JsonOut &jsout ) const
 
     jsout.member( "terrain_vars" );
     jsout.start_array();
-    for( const auto &[key, value] : ter_vars ) {
-        if( value.empty() ) {
+for( const auto &[key, value] : ter_vars ) {
+    if( value.empty() ) {
             continue;
         }
         jsout.write( key );
@@ -4503,8 +4503,8 @@ void submap::store( JsonOut &jsout ) const
     jsout.end_array();
     jsout.member( "transformer_last_run" );
     jsout.start_array();
-    for( const auto &pr : transformer_last_run ) {
-        jsout.write( pr.first );
+for( const auto &pr : transformer_last_run ) {
+    jsout.write( pr.first );
         jsout.write( pr.second );
     }
     jsout.end_array();

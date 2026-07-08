@@ -351,7 +351,7 @@ void bionic_data::load( const JsonObject &jsobj, const std::string &src )
 void bionic_data::finalize() const
 {
     if( has_flag( STATIC( flag_id( "BIONIC_FAULTY" ) ) ) ) {
-        faulty_bionics.push_back( id );
+    faulty_bionics.push_back( id );
     }
 }
 
@@ -881,7 +881,7 @@ bool Character::activate_bionic( bionic &bio, bool eff_only, bool *close_bionics
     } else if( bio.id == bio_water_extractor ) {
         bool no_target = true;
         bool extracted = false;
-        for( item *&it : here.i_at( bub_pos() ) ) {
+        for( item * &it : here.i_at( bub_pos() ) ) {
             static const auto volume_per_water_charge = 500_ml;
             if( it->is_corpse() ) {
                 const int avail = it->get_var( "remaining_water", it->volume() / volume_per_water_charge );
@@ -1145,7 +1145,7 @@ bool Character::activate_bionic( bionic &bio, bool eff_only, bool *close_bionics
 
     } else if( bio.id == bio_probability_travel ) {
         if( const std::optional<tripoint_bub_ms> pnt = choose_adjacent(
-                    _( "Tunnel in which direction?" ) ) ) {
+                _( "Tunnel in which direction?" ) ) ) {
             if( g->m.impassable( *pnt ) ) {
                 add_msg_activate();
                 g->phasing_move( *pnt );
@@ -2294,9 +2294,9 @@ bool Character::uninstall_bionic( const bionic_id &b_id, Character &installer, b
         return true;
     }
     assign_activity( std::make_unique<player_activity>(
-        std::make_unique<operation_activity_actor>(
-            difficulty, success, units::to_kilojoule( b_id->capacity ), pl_skill,
-            "uninstall", b_id, "", autodoc ) ) );
+                         std::make_unique<operation_activity_actor>(
+                             difficulty, success, units::to_kilojoule( b_id->capacity ), pl_skill,
+                             "uninstall", b_id, "", autodoc ) ) );
     for( const std::pair<const bodypart_str_id, int> &elem : b_id->occupied_bodyparts ) {
         add_effect( effect_under_op, difficulty * 20_minutes, elem.first, difficulty );
     }
@@ -2572,13 +2572,13 @@ bool Character::install_bionics( const itype &type, Character &installer, bool a
         return true;
     }
     const std::string installer_name = ( installer.has_trait( trait_PROF_MED ) ||
-                                        installer.has_trait( trait_PROF_AUTODOC ) )
-                                         ? installer.disp_name( true )
-                                         : "NOT_MED";
+                                         installer.has_trait( trait_PROF_AUTODOC ) )
+                                       ? installer.disp_name( true )
+                                       : "NOT_MED";
     assign_activity( std::make_unique<player_activity>(
-        std::make_unique<operation_activity_actor>(
-            difficulty, success, units::to_joule( bioid->capacity ), pl_skill,
-            "install", bioid, installer_name, autodoc ) ) );
+                         std::make_unique<operation_activity_actor>(
+                             difficulty, success, units::to_joule( bioid->capacity ), pl_skill,
+                             "install", bioid, installer_name, autodoc ) ) );
     for( const std::pair<const bodypart_str_id, int> &elem : bioid->occupied_bodyparts ) {
         add_effect( effect_under_op, difficulty * 20_minutes, elem.first, difficulty );
     }
@@ -3046,13 +3046,13 @@ void bionic::serialize( JsonOut &json ) const
     json.member( "ammo_count", ammo_count );
     json.member( "bionic_tags", bionic_tags );
     if( incapacitated_time > 0_turns ) {
-        json.member( "incapacitated_time", incapacitated_time );
+    json.member( "incapacitated_time", incapacitated_time );
     }
     if( is_auto_start_on() ) {
-        json.member( "auto_start_threshold", auto_start_threshold );
+    json.member( "auto_start_threshold", auto_start_threshold );
     }
     if( energy_stored > 0_kJ ) {
-        json.member( "energy_stored", energy_stored );
+    json.member( "energy_stored", energy_stored );
     }
     json.member( "show_sprite", show_sprite );
 

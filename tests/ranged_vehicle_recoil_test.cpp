@@ -237,9 +237,9 @@ TEST_CASE( "perpendicular gun recoil keeps full sideways push on rigid-wheel veh
         REQUIRE( veh->velocity == 0 );
 
         auto shots_fired = 0;
-        for( const auto _ : std::views::iota( 0, 5 ) )
-        {
-            ( void ) _;
+for( const auto _ : std::views::iota( 0, 5 ) )
+    {
+        ( void ) _;
             shots_fired += ranged::fire_gun( player_character, target, 1,
                                              player_character.primary_weapon(), nullptr, shot_origin );
         }

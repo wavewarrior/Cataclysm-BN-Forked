@@ -11,7 +11,7 @@ auto overmap_labels::set_label( const oter_type_str_id &id,
                                 const std::optional<std::string> &label ) -> void
 {
     if( label.has_value() ) {
-        map_labels[id] = *label;
+    map_labels[id] = *label;
         return;
     }
 

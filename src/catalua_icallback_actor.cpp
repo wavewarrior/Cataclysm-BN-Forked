@@ -29,11 +29,11 @@ void lua_iuse_actor::load( const JsonObject & )
 int lua_iuse_actor::use( player &who, item &itm, bool tick, const tripoint_bub_ms &pos ) const
 {
     if( tick ) {
-        // Legacy tick is no longer supported; use game.istate_functions on_tick instead.
-        return 0;
-    }
-    try {
-        sol::state_view lua( use_func.lua_state() );
+    // Legacy tick is no longer supported; use game.istate_functions on_tick instead.
+    return 0;
+}
+try {
+    sol::state_view lua( use_func.lua_state() );
         auto params = lua.create_table();
         params["user"] = who.as_character();
         params["item"] = &itm;

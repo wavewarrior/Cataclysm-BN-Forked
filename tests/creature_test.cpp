@@ -20,8 +20,7 @@ struct Expected {
 };
 
 
-const auto expected_smaller = Expected
-{
+const auto expected_smaller = Expected {
     Weights{
         { bp_torso, 20.0 }, { bp_head, 0.0 }, { bp_eyes, 0.0 }, { bp_mouth, 0.0 }, { bp_arm_l, 15.0 }, { bp_arm_r, 15.0 },
         { bp_hand_l, 0.0 }, { bp_hand_r, 0.0 }, { bp_leg_l, 25.0 }, { bp_leg_r, 25.0 }, { bp_foot_l, 0.0 }, { bp_foot_r, 0.0 }
@@ -33,8 +32,7 @@ const auto expected_smaller = Expected
 };
 
 
-const auto expected_same = Expected
-{
+const auto expected_same = Expected {
     Weights{
         { bp_torso, 33.33 }, { bp_head, 2.33 }, { bp_eyes, 0.33 }, { bp_mouth, 0.0 }, { bp_arm_l, 20.0 }, { bp_arm_r, 20.0 },
         { bp_hand_l, 0.0 }, { bp_hand_r, 0.0 }, { bp_leg_l, 12.0 }, { bp_leg_r, 12.0 }, { bp_foot_l, 0.0 }, { bp_foot_r, 0.0 }
@@ -45,8 +43,7 @@ const auto expected_same = Expected
     }
 };
 
-const auto expected_larger = Expected
-{
+const auto expected_larger = Expected {
     Weights{
         { bp_torso, 36.57 }, { bp_head, 5.71 }, { bp_eyes, 0.57 }, { bp_mouth, 0.0 }, { bp_arm_l, 22.86 }, { bp_arm_r, 22.86 },
         { bp_hand_l, 0.0 }, { bp_hand_r, 0.0 }, { bp_leg_l, 5.71 }, { bp_leg_r, 5.71 }, { bp_foot_l, 0.0 }, { bp_foot_r, 0.0 }

@@ -367,7 +367,7 @@ class JsonIn
         /// Overload for game objects
         template<typename T>
         auto read( detached_ptr<T> &out, bool throw_on_error = false ) -> decltype( T::spawn( *this ),
-                true ) {
+            true ) {
             try {
                 out = T::spawn( *this );
                 return true;
@@ -433,7 +433,7 @@ class JsonIn
         // array ~> vector, deque, list
         template < typename T>
         auto read( T &v, bool throw_on_error = false ) -> decltype( v.front(),
-                true ) requires( !std::is_same_v<void, typename T::value_type> ) {
+            true ) requires( !std::is_same_v<void, typename T::value_type> ) {
             if( !test_array() ) {
                 return error_or_false( throw_on_error, "Expected json array" );
             }
@@ -461,7 +461,7 @@ class JsonIn
         template<typename T>
         auto read( location_vector<T> &v, bool throw_on_error = false ) -> bool {
             if( !test_array() ) {
-                return error_or_false( throw_on_error, "Expected json array" );
+            return error_or_false( throw_on_error, "Expected json array" );
             }
             try {
                 start_array();
@@ -522,7 +522,7 @@ class JsonIn
         bool read( T &v, bool throw_on_error = false ) requires
         std::is_same_v<typename T::key_type, typename T::value_type> {
             if( !test_array() ) {
-                return error_or_false( throw_on_error, "Expected json array" );
+            return error_or_false( throw_on_error, "Expected json array" );
             }
             try {
                 start_array();
@@ -674,11 +674,11 @@ class JsonOut
         template <typename T>
         void write( T val ) requires std::is_fundamental_v<T> {
             if( need_separator ) {
-                write_separator();
+            write_separator();
             }
             if constexpr( std::is_floating_point_v<T> ) {
-                constexpr auto max_digits = std::numeric_limits<T>::digits10;
-                constexpr auto max_repr = pow10<double, max_digits>();
+            constexpr auto max_digits = std::numeric_limits<T>::digits10;
+            constexpr auto max_repr = pow10<double, max_digits>();
                 *stream << std::setprecision( max_digits );
                 if( val >= max_repr ) {
                     *stream << std::scientific ;
@@ -1008,14 +1008,14 @@ class JsonObject
         E get_enum_value( const std::string &name,
                           const E fallback ) const requires std::is_enum_v<E> {
             if( !has_member( name ) ) {
-                return fallback;
-            }
-            mark_visited( name );
-            jsin->seek( verify_position( name ) );
-            return jsin->get_enum_value<E>();
+            return fallback;
         }
-        template<typename E>
-        E get_enum_value( const std::string &name ) const requires std::is_enum_v<E> {
+        mark_visited( name );
+        jsin->seek( verify_position( name ) );
+        return jsin->get_enum_value<E>();
+    }
+    template<typename E>
+    E get_enum_value( const std::string &name ) const requires std::is_enum_v<E> {
             mark_visited( name );
             jsin->seek( verify_position( name ) );
             return jsin->get_enum_value<E>();

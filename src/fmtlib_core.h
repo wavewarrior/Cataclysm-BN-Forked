@@ -1557,16 +1557,16 @@ template <typename OutputIt>
 struct is_back_insert_iterator : std::false_type {};
 template <typename Container>
 struct is_back_insert_iterator<std::back_insert_iterator<Container>>
-            : std::true_type {};
+    : std::true_type {};
 
 template <typename OutputIt>
 struct is_contiguous_back_insert_iterator : std::false_type {};
 template <typename Container>
 struct is_contiguous_back_insert_iterator<std::back_insert_iterator<Container>>
-            : is_contiguous<Container> {};
+    : is_contiguous<Container> {};
 template <typename Char>
 struct is_contiguous_back_insert_iterator<buffer_appender<Char>>
-            : std::true_type {};
+    : std::true_type {};
 
 // A type-erased reference to an std::locale to avoid heavy <locale> include.
 class locale_ref
@@ -1837,10 +1837,10 @@ inline auto make_args_checked( const S &format_str,
 -> format_arg_store<buffer_context<Char>, remove_reference_t<Args>...>
 {
     static_assert(
-        detail::count < (
-            std::is_base_of_v<detail::view, remove_reference_t<Args>> &&
-            std::is_reference_v<Args> )... > () == 0,
-        "passing views as lvalues is disallowed" );
+    detail::count < (
+    std::is_base_of_v<detail::view, remove_reference_t<Args>> &&
+    std::is_reference_v<Args> )... > () == 0,
+    "passing views as lvalues is disallowed" );
     detail::check_format_string<Args...>( format_str );
     return {args...};
 }
@@ -1912,9 +1912,9 @@ class dynamic_format_arg_store
 
         unsigned long long get_types() const {
             return detail::is_unpacked_bit | data_.size() |
-                   ( named_info_.empty()
-                     ? 0ULL
-                     : static_cast<unsigned long long>( detail::has_named_args_bit ) );
+            ( named_info_.empty()
+            ? 0ULL
+            : static_cast<unsigned long long>( detail::has_named_args_bit ) );
         }
 
         const basic_format_arg<Context> *data() const {
@@ -1936,7 +1936,7 @@ class dynamic_format_arg_store
                 data->pop_back();
             };
             std::unique_ptr<std::vector<basic_format_arg<Context>>, decltype( pop_one )>
-                    guard{&data_, pop_one};
+            guard{&data_, pop_one};
             named_info_.push_back( {arg.name, static_cast<int>( data_.size() - 2u )} );
             data_[0].value_.named_args = {named_info_.data(), named_info_.size()};
             guard.release();
@@ -2144,12 +2144,12 @@ template <typename Context> class basic_format_args
 
         template <typename Char> int get_id( basic_string_view<Char> name ) const {
             if( !has_named_args() ) {
-                return -1;
-            }
-            const auto &named_args =
-                ( is_packed() ? values_[-1] : args_[-1].value_ ).named_args;
-            for( size_t i = 0; i < named_args.size; ++i ) {
-                if( named_args.data[i].name == name ) {
+            return -1;
+        }
+        const auto &named_args =
+            ( is_packed() ? values_[-1] : args_[-1].value_ ).named_args;
+        for( size_t i = 0; i < named_args.size; ++i ) {
+            if( named_args.data[i].name == name ) {
                     return named_args.data[i].id;
                 }
             }
@@ -2215,7 +2215,7 @@ template <typename OutputIt, typename S, typename Char = char_t<S>,
 auto vformat_to( OutputIt out, const S &format_str,
                  basic_format_args<buffer_context<type_identity_t<Char>>> args )
 -> OutputIt
-    requires( enable )
+requires( enable )
 {
     decltype( detail::get_buffer<Char>( out ) ) buf( detail::get_buffer_init( out ) );
     detail::vformat_to( buf, to_string_view( format_str ), args );

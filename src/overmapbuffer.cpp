@@ -1700,7 +1700,7 @@ std::vector<shared_ptr_fast<npc>> overmapbuffer::get_companion_mission_npcs( int
 
 // If z == INT_MIN, allow all z-levels
 std::vector<shared_ptr_fast<npc>> overmapbuffer::get_npcs_near( const tripoint_abs_sm &p,
-                               int radius )
+        int radius )
 {
     // get_overmaps_near() acquires+releases mutex internally; collect the list
     // first so we hold npc_mutex_ only while reading NPC containers (not mutex).
@@ -1724,7 +1724,7 @@ std::vector<shared_ptr_fast<npc>> overmapbuffer::get_npcs_near( const tripoint_a
 
 // If z == INT_MIN, allow all z-levels
 std::vector<shared_ptr_fast<npc>> overmapbuffer::get_npcs_near_omt( const tripoint_abs_omt &p,
-                               int radius )
+        int radius )
 {
     auto nearby = get_overmaps_near( project_to<coords::sm>( p.xy() ), radius );
     std::lock_guard<std::mutex> lk( npc_mutex_ );
@@ -2022,8 +2022,8 @@ bool overmapbuffer::is_safe( const tripoint_abs_omt &p )
 }
 
 std::optional<std::vector<tripoint_abs_omt>> overmapbuffer::place_special(
-            const overmap_special &special, const tripoint_abs_omt &origin, om_direction::type dir,
-            const bool must_be_unexplored, const bool force )
+    const overmap_special &special, const tripoint_abs_omt &origin, om_direction::type dir,
+    const bool must_be_unexplored, const bool force )
 {
     const overmap_with_local_coords om_loc = get_om_global( origin );
 
@@ -2118,7 +2118,7 @@ std::set<tripoint_abs_omt> overmapbuffer::electric_grid_at( const tripoint_abs_o
         }
 
         const auto &connections_bitset = cached_om->electric_grid_connections[tripoint_om_omt( local_2d,
-                                                          elem.z() )];
+                                         elem.z() )];
         for( size_t i = 0; i < six_cardinal_directions.size(); i++ ) {
             if( connections_bitset.test( i ) ) {
                 tripoint_abs_omt other = elem + six_cardinal_directions[i];
@@ -2176,9 +2176,9 @@ bool overmapbuffer::add_grid_connection( const tripoint_abs_omt &lhs, const trip
     size_t rhs_i = std::distance( six_cardinal_directions.begin(), rhs_iter );
 
     std::bitset<six_cardinal_directions.size()> &lhs_bitset =
-        lhs_omc.om->electric_grid_connections[lhs_omc.local];
+                                           lhs_omc.om->electric_grid_connections[lhs_omc.local];
     std::bitset<six_cardinal_directions.size()> &rhs_bitset =
-        rhs_omc.om->electric_grid_connections[rhs_omc.local];
+                                           rhs_omc.om->electric_grid_connections[rhs_omc.local];
 
     if( lhs_bitset[lhs_i] && rhs_bitset[rhs_i] ) {
         debugmsg( "Tried to connect to grid two points that are connected to each other" );
@@ -2217,9 +2217,9 @@ bool overmapbuffer::remove_grid_connection( const tripoint_abs_omt &lhs,
     size_t rhs_i = std::distance( six_cardinal_directions.begin(), rhs_iter );
 
     std::bitset<six_cardinal_directions.size()> &lhs_bitset =
-        lhs_omc.om->electric_grid_connections[lhs_omc.local];
+                                           lhs_omc.om->electric_grid_connections[lhs_omc.local];
     std::bitset<six_cardinal_directions.size()> &rhs_bitset =
-        rhs_omc.om->electric_grid_connections[rhs_omc.local];
+                                           rhs_omc.om->electric_grid_connections[rhs_omc.local];
 
     if( !lhs_bitset[lhs_i] && !rhs_bitset[rhs_i] ) {
         debugmsg( "Tried to disconnect from grid two points with no connection to each other" );

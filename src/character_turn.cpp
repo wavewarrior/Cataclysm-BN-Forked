@@ -928,7 +928,7 @@ void Character::process_items()
         }
     }
     bool update_required = get_check_encumbrance();
-    for( item *&w : worn ) {
+    for( item * &w : worn ) {
         if( w->has_flag( flag_USE_UPS ) && needs_elec_charges( w ) ) {
             active_worn_items.push_back( w );
         }

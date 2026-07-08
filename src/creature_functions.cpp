@@ -24,10 +24,10 @@ namespace
 auto overlaps_vehicle( const std::set<tripoint_abs_ms> &veh_area, const tripoint_abs_ms &pos,
                        const int area ) -> bool
 {
-    for( const tripoint_abs_ms &tmp : tripoint_range<tripoint_abs_ms>( tripoint_abs_ms(
-                pos ) - tripoint_rel_ms( area, area, 0 ),
-            tripoint_abs_ms( pos ) + tripoint_rel_ms( area - 1, area - 1, 0 ) ) ) {
-        if( veh_area.contains( tmp ) ) {
+for( const tripoint_abs_ms &tmp : tripoint_range<tripoint_abs_ms>( tripoint_abs_ms(
+    pos ) - tripoint_rel_ms( area, area, 0 ),
+    tripoint_abs_ms( pos ) + tripoint_rel_ms( area - 1, area - 1, 0 ) ) ) {
+    if( veh_area.contains( tmp ) ) {
             return true;
         }
     }

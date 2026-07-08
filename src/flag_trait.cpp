@@ -92,8 +92,8 @@ void json_trait_flag::load_all( const JsonObject &jo, const std::string &src )
 
 void json_trait_flag::check() const
 {
-    for( const auto &conflicting : conflicts_ ) {
-        if( !trait_flag_str_id( conflicting ).is_valid() ) {
+for( const auto &conflicting : conflicts_ ) {
+    if( !trait_flag_str_id( conflicting ).is_valid() ) {
             debugmsg( "trait flag definition %s specifies unknown conflicting field %s", id.str(),
                       conflicting );
         }

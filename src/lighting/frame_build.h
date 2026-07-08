@@ -14,22 +14,21 @@
 //     GPU upload and the previous frame's buffers stay resident (the dirty-gate
 //     win — step 0b). The expensive CPU BFS + big buffer upload are avoided.
 
+#include "gpu_emitter.h"
+
 #include <cstddef>
 #include <vector>
 
-#include "gpu_emitter.h"
-
-namespace lighting
-{
+namespace lighting {
 
 class render_state;
 
 // HUD / debug snapshot bits the caller mirrors into its EmitterOverlayState.
 struct frame_lighting_result {
-    bool   built_pertile   = false; // per-tile buffers were rebuilt this call
-    float  trans_at_player = -1.f;
-    int    sdf_W           = 0;
-    std::size_t sdf_size   = 0;
+    bool built_pertile = false; // per-tile buffers were rebuilt this call
+    float trans_at_player = -1.f;
+    int sdf_W = 0;
+    std::size_t sdf_size = 0;
     // Populated only when want_hud_snapshot: a copy of this frame's emitter
     // snapshot for the F5 HUD (emit[0] line).
     std::vector<gpu_emitter> snapshot_copy;
@@ -68,9 +67,9 @@ struct lighting_rebuild_flags {
 // "no-occluder" sentinel never sampled by on-screen fragments. cam_w<=0 or
 // cam_h<=0 → whole-bubble DT (the pre-B1 behaviour). Absolute-world-tile
 // indexing and the full-size upload are unchanged, so no shader edit is needed.
-frame_lighting_result build_and_submit_lighting( render_state &rs,
-        lighting_rebuild_flags rebuild, bool want_hud_snapshot, float skylight_bleed = 0.0f,
-        float vision_blur = 0.0f,
-        int cam_x0 = -1, int cam_y0 = -1, int cam_w = 0, int cam_h = 0 );
+frame_lighting_result build_and_submit_lighting(
+    render_state& rs, lighting_rebuild_flags rebuild, bool want_hud_snapshot,
+    float skylight_bleed = 0.0f, float vision_blur = 0.0f, int cam_x0 = -1, int cam_y0 = -1,
+    int cam_w = 0, int cam_h = 0);
 
 } // namespace lighting

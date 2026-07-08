@@ -361,22 +361,24 @@ detached_ptr<item> item::fill_with( detached_ptr<item> &&liquid, int amount )
     return detached_ptr<item>();
 }
 
-bool item::spill_contents(Character& c) {
-    if (!is_container() || is_container_empty()) { return true; }
+bool item::spill_contents( Character& c )
+{
+    if( !is_container() || is_container_empty() ) { return true; }
 
-    if (c.is_npc()) { return spill_contents(c.bub_pos()); }
+    if( c.is_npc() ) { return spill_contents( c.bub_pos() ); }
 
-    contents.handle_liquid_or_spill(c);
+    contents.handle_liquid_or_spill( c );
     on_contents_changed();
 
     return true;
 }
 
-bool item::spill_contents(const tripoint_bub_ms& pos) {
-    if (!is_container() || is_container_empty()) { return true; }
+bool item::spill_contents( const tripoint_bub_ms& pos )
+{
+    if( !is_container() || is_container_empty() ) { return true; }
 
-    for (detached_ptr<item>& it : contents.clear_items()) {
-        get_map().add_item_or_charges(pos, std::move(it));
+    for( detached_ptr<item> &it : contents.clear_items() ) {
+        get_map().add_item_or_charges( pos, std::move( it ) );
     }
 
     return true;

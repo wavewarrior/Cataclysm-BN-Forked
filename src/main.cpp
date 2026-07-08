@@ -152,10 +152,10 @@ int main( int argc, char *argv[] )
                     section_default,
                     [&seed]( int num_args, const char **params ) -> int {
                         if( num_args < 1 )
-                        {
-                            return -1;
-                        }
-                        const unsigned char *hash_input = reinterpret_cast<const unsigned char *>( params[0] );
+                    {
+                        return -1;
+                    }
+                    const unsigned char *hash_input = reinterpret_cast<const unsigned char *>( params[0] );
                         seed = djb2_hash( hash_input );
                         return 1;
                     }
@@ -190,18 +190,18 @@ int main( int argc, char *argv[] )
                     section_default,
                     [&dump, &dmode, &opts]( int n, const char *params[] ) -> int {
                         if( n < 1 )
-                        {
-                            return -1;
-                        }
-                        test_mode = true;
-                        dump = params[ 0 ];
-                        for( int i = 2; i < n; ++i )
-                        {
-                            opts.emplace_back( params[ i ] );
+                    {
+                        return -1;
+                    }
+                    test_mode = true;
+                    dump = params[ 0 ];
+                    for( int i = 2; i < n; ++i )
+                    {
+                        opts.emplace_back( params[ i ] );
                         }
                         if( n >= 2 )
-                        {
-                            if( !strcmp( params[ 1 ], "TSV" ) ) {
+                    {
+                        if( !strcmp( params[ 1 ], "TSV" ) ) {
                                 dmode = dump_mode::TSV;
                                 return 0;
                             } else if( !strcmp( params[ 1 ], "HTML" ) ) {
@@ -220,18 +220,18 @@ int main( int argc, char *argv[] )
                     section_default,
                     [&world]( int n, const char *params[] ) -> int {
                         if( n < 1 )
-                        {
-                            return -1;
-                        }
-                        world = params[0];
-                        return 1;
+                    {
+                        return -1;
                     }
-                },
-                {
-                    "--basepath", "<path>",
-                    "Base path for all game data subdirectories",
-                    section_default,
-                    []( int num_args, const char **params )
+                    world = params[0];
+                    return 1;
+                }
+            },
+            {
+                "--basepath", "<path>",
+                "Base path for all game data subdirectories",
+                section_default,
+                []( int num_args, const char **params )
                     {
                         if( num_args < 1 ) {
                             return -1;
@@ -258,10 +258,10 @@ int main( int argc, char *argv[] )
                     section_map_sharing,
                     []( int num_args, const char **params ) -> int {
                         if( num_args < 1 )
-                        {
-                            return -1;
-                        }
-                        MAP_SHARING::setUsername( params[0] );
+                    {
+                        return -1;
+                    }
+                    MAP_SHARING::setUsername( params[0] );
                         return 1;
                     }
                 },
@@ -272,10 +272,10 @@ int main( int argc, char *argv[] )
                     section_map_sharing,
                     []( int num_args, const char **params ) -> int {
                         if( num_args < 1 )
-                        {
-                            return -1;
-                        }
-                        MAP_SHARING::addAdmin( params[0] );
+                    {
+                        return -1;
+                    }
+                    MAP_SHARING::addAdmin( params[0] );
                         return 1;
                     }
                 },
@@ -285,10 +285,10 @@ int main( int argc, char *argv[] )
                     section_map_sharing,
                     []( int num_args, const char **params ) -> int {
                         if( num_args < 1 )
-                        {
-                            return -1;
-                        }
-                        MAP_SHARING::addDebugger( params[0] );
+                    {
+                        return -1;
+                    }
+                    MAP_SHARING::addDebugger( params[0] );
                         return 1;
                     }
                 },
@@ -308,10 +308,10 @@ int main( int argc, char *argv[] )
                     section_user_directory,
                     []( int num_args, const char **params ) -> int {
                         if( num_args < 1 )
-                        {
-                            return -1;
-                        }
-                        PATH_INFO::init_user_dir( params[0] );
+                    {
+                        return -1;
+                    }
+                    PATH_INFO::init_user_dir( params[0] );
                         PATH_INFO::set_standard_filenames();
                         return 1;
                     }
@@ -331,39 +331,39 @@ int main( int argc, char *argv[] )
                     section_default,
                     [&]( int num_args, const char **params ) -> int {
                         if( num_args < 1 )
-                        {
-                            return -1;
-                        }
-                        test_mode = true;
-                        lua_doc_output_path = params[0];
-                        return 0;
+                    {
+                        return -1;
                     }
-                },
-                {
-                    "--lua-types", "<output path>",
-                    "Generate Lua types to given path and exit",
-                    section_default,
-                    [&]( int num_args, const char **params ) -> int {
+                    test_mode = true;
+                    lua_doc_output_path = params[0];
+                    return 0;
+                }
+            },
+            {
+                "--lua-types", "<output path>",
+                "Generate Lua types to given path and exit",
+                section_default,
+                [&]( int num_args, const char **params ) -> int {
                         if( num_args < 1 )
-                        {
-                            return -1;
-                        }
-                        test_mode = true;
-                        lua_types_output_path = params[0];
-                        return 0;
+                    {
+                        return -1;
                     }
+                    test_mode = true;
+                    lua_types_output_path = params[0];
+                    return 0;
                 }
             }
-        };
+        }
+    };
 
-        // The following arguments are dependent on one or more of the previous flags and are run
-        // in a second pass.
-        const std::array<arg_handler, 8> second_pass_arguments = {{
-                {
-                    "--worldmenu", nullptr,
-                    "Enables the world menu in the map-sharing code",
-                    section_map_sharing,
-                    []( int, const char ** ) -> int {
+    // The following arguments are dependent on one or more of the previous flags and are run
+    // in a second pass.
+    const std::array<arg_handler, 8> second_pass_arguments = {{
+            {
+                "--worldmenu", nullptr,
+                "Enables the world menu in the map-sharing code",
+                section_map_sharing,
+                []( int, const char ** ) -> int {
                         MAP_SHARING::setWorldmenu( true );
                         return true;
                     }
@@ -374,10 +374,10 @@ int main( int argc, char *argv[] )
                     nullptr,
                     []( int num_args, const char **params ) -> int {
                         if( num_args < 1 )
-                        {
-                            return -1;
-                        }
-                        PATH_INFO::set_datadir( params[0] );
+                    {
+                        return -1;
+                    }
+                    PATH_INFO::set_datadir( params[0] );
                         return 1;
                     }
                 },
@@ -387,10 +387,10 @@ int main( int argc, char *argv[] )
                     section_user_directory,
                     []( int num_args, const char **params ) -> int {
                         if( num_args < 1 )
-                        {
-                            return -1;
-                        }
-                        PATH_INFO::set_savedir( params[0] );
+                    {
+                        return -1;
+                    }
+                    PATH_INFO::set_savedir( params[0] );
                         return 1;
                     }
                 },
@@ -400,10 +400,10 @@ int main( int argc, char *argv[] )
                     section_user_directory,
                     []( int num_args, const char **params ) -> int {
                         if( num_args < 1 )
-                        {
-                            return -1;
-                        }
-                        PATH_INFO::set_config_dir( params[0] );
+                    {
+                        return -1;
+                    }
+                    PATH_INFO::set_config_dir( params[0] );
                         return 1;
                     }
                 },
@@ -413,10 +413,10 @@ int main( int argc, char *argv[] )
                     section_user_directory,
                     []( int num_args, const char **params ) -> int {
                         if( num_args < 1 )
-                        {
-                            return -1;
-                        }
-                        PATH_INFO::set_memorialdir( params[0] );
+                    {
+                        return -1;
+                    }
+                    PATH_INFO::set_memorialdir( params[0] );
                         return 1;
                     }
                 },
@@ -426,10 +426,10 @@ int main( int argc, char *argv[] )
                     section_user_directory,
                     []( int num_args, const char **params ) -> int {
                         if( num_args < 1 )
-                        {
-                            return -1;
-                        }
-                        PATH_INFO::set_options( params[0] );
+                    {
+                        return -1;
+                    }
+                    PATH_INFO::set_options( params[0] );
                         return 1;
                     }
                 },
@@ -439,10 +439,10 @@ int main( int argc, char *argv[] )
                     nullptr,
                     []( int num_args, const char **params ) -> int {
                         if( num_args < 1 )
-                        {
-                            return -1;
-                        }
-                        PATH_INFO::set_autopickup( params[0] );
+                    {
+                        return -1;
+                    }
+                    PATH_INFO::set_autopickup( params[0] );
                         return 1;
                     }
                 },
@@ -452,10 +452,10 @@ int main( int argc, char *argv[] )
                     nullptr,
                     []( int num_args, const char **params ) -> int {
                         if( num_args < 1 )
-                        {
-                            return -1;
-                        }
-                        PATH_INFO::set_motd( params[0] );
+                    {
+                        return -1;
+                    }
+                    PATH_INFO::set_motd( params[0] );
                         return 1;
                     }
                 },

@@ -86,7 +86,7 @@ void advanced_inv_area::init()
             // Reset position because offset changed
             pos = g->u.bub_pos() + off;
             if( const std::optional<vpart_reference> vp = here.veh_at( pos ).part_with_feature( "CARGO",
-                    false ) ) {
+                false ) ) {
                 veh = &vp->vehicle();
                 vstor = vp->part_index();
             } else {
@@ -346,7 +346,7 @@ void advanced_inv_area::set_container( const advanced_inv_listitem *advitem )
         uistate.adv_inv_container_index = advitem->idx;
         uistate.adv_inv_container_type = it->typeId();
         uistate.adv_inv_container_content_type = !it->is_container_empty() ?
-                it->contents.front().typeId() : itype_id::NULL_ID();
+            it->contents.front().typeId() : itype_id::NULL_ID();
         set_container_position();
     } else {
         uistate.adv_inv_container_location = -1;
@@ -415,7 +415,7 @@ void advanced_inv_area::set_container_position()
     pos = g->u.bub_pos() + off;
     // update vehicle information
     if( const std::optional<vpart_reference> vp = get_map().veh_at( pos ).part_with_feature( "CARGO",
-            false ) ) {
+        false ) ) {
         veh = &vp->vehicle();
         vstor = vp->part_index();
     } else {

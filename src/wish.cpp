@@ -96,7 +96,7 @@ class wish_mutate_callback: public uilist_callback
                 uilist category_menu;
                 // We'll keep vector of values to map it later from user input
                 std::vector<std::pair<const string_id<mutation_category_trait>, std::set<mutation_branch>>*>
-                        entries;
+                entries;
                 int c = 0;
                 auto ch = '0';
                 category_menu.addentry( c, true, ch, "ALL" );
@@ -162,7 +162,7 @@ class wish_mutate_callback: public uilist_callback
                 rml += cata_text_to_rml( colorize( _( "Id:" ), c_light_gray ) );
                 rml += " " + cata_text_to_rml( mdata.id.str() ) + "<br/>";
 
-                auto list_item = [&]( const std::string &label, const auto &items ) {
+                auto list_item = [&]( const std::string & label, const auto & items ) {
                     if( items.empty() ) {
                         return;
                     }
@@ -204,8 +204,8 @@ class wish_mutate_callback: public uilist_callback
                 rml += "<br/>";
                 rml += cata_text_to_rml( colorize(
                                              string_format( _( "pts: %d vis: %d ugly: %d" ),
-                                                     mdata.points, mdata.visibility,
-                                                     mdata.ugliness ), c_light_gray ) );
+                                                 mdata.points, mdata.visibility,
+                                                 mdata.ugliness ), c_light_gray ) );
                 rml += "<br/>";
                 rml += cata_text_to_rml( colorize( mdata.desc(), c_light_gray ) );
             }
@@ -217,8 +217,8 @@ class wish_mutate_callback: public uilist_callback
 
             input_context ctxt( menu->input_category );
             rml += "<br/>" + cata_text_to_rml( string_format(
-                _( "[%s] find, [%s] quit, [t] toggle base trait, [c] mutation categories menu" ),
-                ctxt.get_desc( "FILTER" ), ctxt.get_desc( "QUIT" ) ) );
+                                                   _( "[%s] find, [%s] quit, [t] toggle base trait, [c] mutation categories menu" ),
+                                                   ctxt.get_desc( "FILTER" ), ctxt.get_desc( "QUIT" ) ) );
             rml += "</div>";
             cb->SetInnerRML( rml );
         }
@@ -554,16 +554,16 @@ class wish_monster_callback: public uilist_callback
             }
             input_context ctxt( menu->input_category );
             rml += "<br/>" + cata_text_to_rml( string_format(
-                _( "[%s] find, [f]riendly, [h]allucination, [i]ncrease group, [d]ecrease group, [%s] quit" ),
-                ctxt.get_desc( "FILTER" ), ctxt.get_desc( "QUIT" ) ) );
+                                                   _( "[%s] find, [f]riendly, [h]allucination, [i]ncrease group, [d]ecrease group, [%s] quit" ),
+                                                   ctxt.get_desc( "FILTER" ), ctxt.get_desc( "QUIT" ) ) );
             rml += "</div>";
             cb->SetInnerRML( rml );
         }
 
         ~wish_monster_callback() override = default;
-    };
+};
 
-    void debug_menu::wishmonster( const std::optional<tripoint_bub_ms> &p )
+void debug_menu::wishmonster( const std::optional<tripoint_bub_ms> &p )
 {
     std::vector<const mtype *> mtypes;
 
@@ -637,13 +637,13 @@ class wish_item_callback: public uilist_callback
 
         void select( uilist *menu ) override {
             if( menu->selected < 0 ) {
-                return;
-            }
-            incontainer = standard_itype_ids[menu->selected]->phase == phase_id::LIQUID;
+            return;
         }
+        incontainer = standard_itype_ids[menu->selected]->phase == phase_id::LIQUID;
+    }
 
-        bool key( const input_context &, const input_event &event, int /*entnum*/,
-                  uilist * /*menu*/ ) override {
+    bool key( const input_context &, const input_event &event, int /*entnum*/,
+              uilist * /*menu*/ ) override {
             if( event.get_first_input() == 'f' ) {
                 incontainer = !incontainer;
                 return true;
@@ -690,7 +690,7 @@ class wish_item_callback: public uilist_callback
 
             if( spawn_everything ) {
                 rml += "<br/>" + cata_text_to_rml( colorize(
-                    _( "Select any item to spawn everything (ignores filters)." ), c_green ) );
+                                                       _( "Select any item to spawn everything (ignores filters)." ), c_green ) );
             }
             if( !msg.empty() ) {
                 rml += "<br/>" + cata_text_to_rml( colorize( msg, c_green ) );
@@ -698,12 +698,12 @@ class wish_item_callback: public uilist_callback
             }
             input_context ctxt( menu->input_category );
             rml += "<br/>" + cata_text_to_rml( string_format(
-                _( "[%s] find, [f] container, [F] flag, [E] everything, [%s] quit" ),
-                ctxt.get_desc( "FILTER" ), ctxt.get_desc( "QUIT" ) ) );
+                                                   _( "[%s] find, [f] container, [F] flag, [E] everything, [%s] quit" ),
+                                                   ctxt.get_desc( "FILTER" ), ctxt.get_desc( "QUIT" ) ) );
             rml += "</div>";
             cb->SetInnerRML( rml );
         }
-    };
+};
 
 void debug_menu::wishitem( Character *who )
 {
@@ -797,7 +797,7 @@ void debug_menu::wishitem( Character *who, const tripoint_bub_ms &pos )
                     .description( granted->tname() );
                 }
                 popup.width( 20 )
-                .edit( amount );
+                     .edit( amount );
                 canceled = popup.canceled();
             }
             if( !canceled ) {
@@ -906,8 +906,8 @@ void debug_menu::wishskill( Character *who )
                                       skill.name(),
                                       who->get_skill_level( skill.ident() ) ).substr( 0, skmenu.w_width - 4 );
             skmenu.entries[skill_id + skoffset].txt = string_format( _( "@ %d: %s  " ),
-                    who->get_skill_level( skill.ident() ),
-                    skill.name() );
+                who->get_skill_level( skill.ident() ),
+                skill.name() );
             skmenu.entries[skill_id + skoffset].text_color =
                 who->get_skill_level( skill.ident() ) == origskills[skill_id] ?
                 skmenu.text_color : c_yellow;
@@ -931,8 +931,8 @@ void debug_menu::wishskill( Character *who )
                                    skset != -1 ? skset : origskills[skill_id];
                     who->set_skill_level( skill.ident(), std::max( 0, changeto ) );
                     skmenu.entries[skill_id + skoffset].txt = string_format( _( "@ %d: %s  " ),
-                            who->get_skill_level( skill.ident() ),
-                            skill.name() );
+                        who->get_skill_level( skill.ident() ),
+                        skill.name() );
                     who->get_skill_level_object( skill.ident() ).practice();
                     skmenu.entries[skill_id + skoffset].text_color =
                         who->get_skill_level( skill.ident() ) == origskills[skill_id] ? skmenu.text_color : c_yellow;

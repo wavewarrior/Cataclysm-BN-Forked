@@ -96,7 +96,7 @@ static const trait_flag_str_id flag_FEMALE_PREFERRED( "FEMALE_PREFERRED" );
 static auto profession_age_limits_enabled() -> bool
 {
     if( world_generator && world_generator->active_world ) {
-        return world_generator->active_world->info->WORLD_OPTIONS["ENFORCE_PROFESSION_AGE_RANGE"]
+    return world_generator->active_world->info->WORLD_OPTIONS["ENFORCE_PROFESSION_AGE_RANGE"]
                .value_as<bool>();
     }
     return false;
@@ -105,7 +105,7 @@ static auto profession_age_limits_enabled() -> bool
 static auto profession_age_bounds( const profession &prof ) -> std::pair<int, int>
 {
     if( profession_age_limits_enabled() ) {
-        if( const auto range = prof.starting_age_range() ) {
+    if( const auto range = prof.starting_age_range() ) {
             return { range->min, range->max };
         }
     }
@@ -543,8 +543,8 @@ bool avatar::create( character_type type, const std::string &tempname )
     auto nameExists = [&]( const std::string & name ) {
         return world_generator->active_world->info->save_exists( save_t::from_save_id( name ) ) &&
                !query_yn( _( "A save with the name '%s' already exists in this world.\n"
-                             "Saving will overwrite the already existing character.\n\n"
-                             "Continue anyways?" ), name );
+                      "Saving will overwrite the already existing character.\n\n"
+                      "Continue anyways?" ), name );
     };
     set_body();
     const bool allow_reroll = true;
@@ -865,7 +865,7 @@ tab_direction set_points( avatar &, points_left &points )
             return;
         }
         const int sel = std::max( 0, std::min( highlighted,
-                                  static_cast<int>( opts.size() ) - 1 ) );
+                                               static_cast<int>( opts.size() ) - 1 ) );
         data->tabs = build_nc_char_tabs<nc_rml_tab>( 0 ); // POINTS tab active
         data->points_rml = cata_text_to_rml( points.to_string() );
         data->opts.clear();
@@ -987,8 +987,9 @@ std::string nc_stat_desc( avatar &u, int sel )
             lines.push_back( colorize( string_format( _( "Melee damage bonus: +%.1f" ),
                                        u.bonus_damage( false ) ), COL_STAT_BONUS ) );
             lines.emplace_back();
-            lines.push_back( colorize( _( "Strength also makes you more resistant to many diseases and poisons, and makes actions which require brute force more effective." ),
-                                       COL_STAT_NEUTRAL ) );
+            lines.push_back( colorize(
+                                 _( "Strength also makes you more resistant to many diseases and poisons, and makes actions which require brute force more effective." ),
+                                 COL_STAT_NEUTRAL ) );
             break;
         case 2:
             lines.push_back( colorize( string_format( _( "Melee to-hit bonus: +%.2f" ),
@@ -1013,8 +1014,9 @@ std::string nc_stat_desc( avatar &u, int sel )
             lines.push_back( colorize( string_format( _( "Crafting bonus: +%d%%" ), u.get_int() ),
                                        COL_STAT_BONUS ) );
             lines.emplace_back();
-            lines.push_back( colorize( _( "Intelligence is also used when crafting, installing bionics, and interacting with NPCs." ),
-                                       COL_STAT_NEUTRAL ) );
+            lines.push_back( colorize(
+                                 _( "Intelligence is also used when crafting, installing bionics, and interacting with NPCs." ),
+                                 COL_STAT_NEUTRAL ) );
             break;
         }
         case 4:
@@ -1025,8 +1027,9 @@ std::string nc_stat_desc( avatar &u, int sel )
             lines.push_back( colorize( string_format( _( "Night vision bonus: +%.1f" ),
                                        vision::nv_range_from_per( u.per_max ) ), COL_STAT_BONUS ) );
             lines.emplace_back();
-            lines.push_back( colorize( _( "Perception is also used for detecting traps and other things of interest." ),
-                                       COL_STAT_NEUTRAL ) );
+            lines.push_back( colorize(
+                                 _( "Perception is also used for detecting traps and other things of interest." ),
+                                 COL_STAT_NEUTRAL ) );
             break;
     }
     return join( lines, "\n" );
@@ -1118,17 +1121,17 @@ tab_direction set_stats( avatar &u, points_left &points )
         data->desc_rml = cata_text_to_rml( nc_stat_desc( u, sel ) );
 
         data->hints_rml = cata_text_to_rml( string_format(
-                _( "<color_light_green>%s</color> / <color_light_green>%s</color> to select a statistic.\n"
-                   "<color_light_green>%s</color> to increase the statistic.\n"
-                   "<color_light_green>%s</color> to decrease the statistic.\n"
-                   "\n"
-                   "<color_light_green>%s</color> lets you view and alter keybindings.\n"
-                   "<color_light_green>%s</color> takes you to the next tab.\n"
-                   "<color_light_green>%s</color> returns you to the main menu." ),
-                ctxt.get_desc( "UP" ), ctxt.get_desc( "DOWN" ),
-                ctxt.get_desc( "RIGHT" ), ctxt.get_desc( "LEFT" ),
-                ctxt.get_desc( "HELP_KEYBINDINGS" ), ctxt.get_desc( "NEXT_TAB" ),
-                ctxt.get_desc( "PREV_TAB" ) ) );
+                                                _( "<color_light_green>%s</color> / <color_light_green>%s</color> to select a statistic.\n"
+                                                    "<color_light_green>%s</color> to increase the statistic.\n"
+                                                    "<color_light_green>%s</color> to decrease the statistic.\n"
+                                                    "\n"
+                                                    "<color_light_green>%s</color> lets you view and alter keybindings.\n"
+                                                    "<color_light_green>%s</color> takes you to the next tab.\n"
+                                                    "<color_light_green>%s</color> returns you to the main menu." ),
+                                                ctxt.get_desc( "UP" ), ctxt.get_desc( "DOWN" ),
+                                                ctxt.get_desc( "RIGHT" ), ctxt.get_desc( "LEFT" ),
+                                                ctxt.get_desc( "HELP_KEYBINDINGS" ), ctxt.get_desc( "NEXT_TAB" ),
+                                                ctxt.get_desc( "PREV_TAB" ) ) );
 
         data->handle.DirtyVariable( "tabs" );
         data->handle.DirtyVariable( "points_rml" );
@@ -1455,7 +1458,8 @@ tab_direction set_traits( avatar &u, points_left &points )
             nc_color off_act;
             nc_color on_pas;
             nc_color off_pas;
-            switch( page ) {
+            switch( page )
+            {
                 case 0:
                     on_act = COL_TR_GOOD_ON_ACT;
                     off_act = COL_TR_GOOD_OFF_ACT;
@@ -1477,7 +1481,8 @@ tab_direction set_traits( avatar &u, points_left &points )
             }
             const int cur = iCurrentLine[page];
             std::string html;
-            for( size_t i = 0; i < vStartingTraits[page].size(); i++ ) {
+            for( size_t i = 0; i < vStartingTraits[page].size(); i++ )
+            {
                 const trait_entry &e = vStartingTraits[page][i];
                 nc_color col;
                 if( iCurWorkingPage == page ) {
@@ -1523,8 +1528,8 @@ tab_direction set_traits( avatar &u, points_left &points )
                 pts *= -1;
             }
             data->cost_rml = cata_text_to_rml( colorize( string_format(
-                    vgettext( "%s %s %d point", "%s %s %d points", pts ),
-                    wmd.name(), neg ? _( "earns" ) : _( "costs" ), pts ), col_tr ) );
+                                                   vgettext( "%s %s %d point", "%s %s %d points", pts ),
+                                                   wmd.name(), neg ? _( "earns" ) : _( "costs" ), pts ), col_tr ) );
             data->desc_rml = cata_text_to_rml( colorize( wmd.desc(), col_tr ) );
         } else {
             data->cost_rml.clear();
@@ -1622,7 +1627,7 @@ tab_direction set_traits( avatar &u, points_left &points )
             // Look through the profession bionics, and see if any of them conflict with this trait
             std::vector<bionic_id> cbms_blocking_trait = bionics_cancelling_trait( u.prof->CBMs(), cur_trait );
             std::vector<bionic_id> cbms_blocking_trait2 = bionics_cancelling_trait( u.get_bionics(),
-                    cur_trait );
+                cur_trait );
             for( auto cbm : cbms_blocking_trait2 ) {
                 cbms_blocking_trait.push_back( cbm );
             }
@@ -1932,7 +1937,8 @@ tab_direction set_bionics( avatar &u, points_left &points )
             nc_color off_act;
             nc_color on_pas;
             nc_color off_pas;
-            switch( page ) {
+            switch( page )
+            {
                 case 0:
                     on_act = COL_TR_GOOD_ON_ACT;
                     off_act = COL_TR_GOOD_OFF_ACT;
@@ -1954,7 +1960,8 @@ tab_direction set_bionics( avatar &u, points_left &points )
             }
             const int cur = iCurrentLine[page];
             std::string html;
-            for( size_t i = 0; i < vStartingBionics[page].size(); i++ ) {
+            for( size_t i = 0; i < vStartingBionics[page].size(); i++ )
+            {
                 const bionic_entry &e = vStartingBionics[page][i];
                 nc_color col;
                 if( iCurWorkingPage == page ) {
@@ -1999,8 +2006,8 @@ tab_direction set_bionics( avatar &u, points_left &points )
                 pts *= -1;
             }
             data->cost_rml = cata_text_to_rml( colorize( string_format(
-                    vgettext( "%s %s %d point", "%s %s %d points", pts ),
-                    wb.name.translated(), neg ? _( "earns" ) : _( "costs" ), pts ), col_tr ) );
+                                                   vgettext( "%s %s %d point", "%s %s %d points", pts ),
+                                                   wb.name.translated(), neg ? _( "earns" ) : _( "costs" ), pts ), col_tr ) );
             data->desc_rml = cata_text_to_rml( colorize( wb.description.translated(), col_tr ) );
         } else {
             data->cost_rml.clear();
@@ -2419,12 +2426,12 @@ tab_direction set_profession( avatar &u, points_left &points,
             }
             const std::string msg = neg
                                     ? vgettext( "Profession %1$s earns %2$d point",
-                                            "Profession %1$s earns %2$d points", pts )
+                                                "Profession %1$s earns %2$d points", pts )
                                     : vgettext( "Profession %1$s costs %2$d point",
-                                            "Profession %1$s costs %2$d points", pts );
+                                                "Profession %1$s costs %2$d points", pts );
             data->cost_rml = cata_text_to_rml( colorize( string_format( msg,
-                             pid->gender_appropriate_name( u.male ), pts ),
-                             can_pick ? c_green : c_light_red ) );
+                                               pid->gender_appropriate_name( u.male ), pts ),
+                                               can_pick ? c_green : c_light_red ) );
             data->desc_rml = cata_text_to_rml( colorize( pid->description( u.male ), c_green ) );
 
             // The big info buffer (mirrors the curses w_items buffer verbatim).
@@ -2552,16 +2559,16 @@ tab_direction set_profession( avatar &u, points_left &points,
             data->info_rml = cata_text_to_rml( buf );
 
             data->sort_rml = cata_text_to_rml( string_format(
-                    _( "<color_white>Sort by:</color> %1$s (Press <color_light_green>%2$s</color> to change sorting.)" ),
-                    profession_sorter.sort_by_points ? _( "points" ) : _( "name" ),
-                    ctxt.get_desc( "SORT" ) ) );
+                                                   _( "<color_white>Sort by:</color> %1$s (Press <color_light_green>%2$s</color> to change sorting.)" ),
+                                                   profession_sorter.sort_by_points ? _( "points" ) : _( "name" ),
+                                                   ctxt.get_desc( "SORT" ) ) );
             const std::string g_switch_msg = u.male ?
                                              _( "Press <color_light_green>%1$s</color> to switch to <color_magenta>%2$s</color> (<color_pink>female</color>)." )
                                              :
                                              _( "Press <color_light_green>%1$s</color> to switch to <color_magenta>%2$s</color> (<color_light_cyan>male</color>)." );
             data->gender_rml = cata_text_to_rml( string_format( g_switch_msg,
-                               ctxt.get_desc( "CHANGE_GENDER" ),
-                               pid->gender_appropriate_name( !u.male ) ) );
+                                                 ctxt.get_desc( "CHANGE_GENDER" ),
+                                                 pid->gender_appropriate_name( !u.male ) ) );
         } else {
             data->cost_rml.clear();
             data->desc_rml.clear();
@@ -2928,9 +2935,9 @@ tab_direction set_skills( avatar &u, points_left &points )
                 vgettext( "%d level", "%d levels", upgrade_levels ), upgrade_levels );
         const nc_color ccol = points.skill_points_left() >= cost ? COL_SKILL_USED : c_light_red;
         data->cost_rml = cata_text_to_rml( colorize( string_format(
-                vgettext( "Upgrading %s by %s costs %d point",
-                          "Upgrading %s by %s costs %d points", cost ),
-                currentSkill->name(), upgrade_levels_s, cost ), ccol ) );
+                                               vgettext( "Upgrading %s by %s costs %d point",
+                                                   "Upgrading %s by %s costs %d points", cost ),
+                                               currentSkill->name(), upgrade_levels_s, cost ), ccol ) );
 
         data->rows.clear();
         rml_sel_child = -1;
@@ -3221,12 +3228,12 @@ tab_direction set_scenario( avatar &u, points_left &points,
             }
             const std::string msg = neg
                                     ? vgettext( "Scenario %1$s earns %2$d point",
-                                            "Scenario %1$s earns %2$d points", pts )
+                                                "Scenario %1$s earns %2$d points", pts )
                                     : vgettext( "Scenario %1$s costs %2$d point",
-                                            "Scenario %1$s cost %2$d points", pts );
+                                                "Scenario %1$s cost %2$d points", pts );
             data->cost_rml = cata_text_to_rml( colorize( string_format( msg,
-                             s->gender_appropriate_name( u.male ), pts ),
-                             can_pick ? c_green : c_light_red ) );
+                                               s->gender_appropriate_name( u.male ), pts ),
+                                               can_pick ? c_green : c_light_red ) );
 
             std::string desc;
             if( s->has_flag( "CITY_START" ) && !scenario_sorter.cities_enabled ) {
@@ -3327,9 +3334,9 @@ tab_direction set_scenario( avatar &u, points_left &points,
         }
 
         data->sort_rml = cata_text_to_rml( string_format(
-                _( "<color_white>Sort by:</color> %1$s (Press <color_light_green>%2$s</color> to change sorting.)" ),
-                scenario_sorter.sort_by_points ? _( "points" ) : _( "name" ),
-                ctxt.get_desc( "SORT" ) ) );
+                                               _( "<color_white>Sort by:</color> %1$s (Press <color_light_green>%2$s</color> to change sorting.)" ),
+                                               scenario_sorter.sort_by_points ? _( "points" ) : _( "name" ),
+                                               ctxt.get_desc( "SORT" ) ) );
         data->filter_rml = cata_text_to_rml( string_format( "<%s>",
                                              filterstring.empty() ? _( "no filter" ) : filterstring ) );
 
@@ -3624,7 +3631,7 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
     select_location.text = _( "Select a starting location." );
     int offset = 1;
     const std::string random_start_location_text = string_format( RANDOM_START_LOC_TEXT_TEMPLATE,
-            g->scen->start_location_targets_count() );
+        g->scen->start_location_targets_count() );
     uilist_entry entry_random_start_location( RANDOM_START_LOC_ENTRY, true, -1,
             random_start_location_text );
     select_location.entries.emplace_back( entry_random_start_location );
@@ -3705,8 +3712,8 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
             const std::string locval = you.random_start_location
                                        ? remove_color_tags( random_start_location_text )
                                        : string_format( remove_color_tags( START_LOC_TEXT_TEMPLATE ),
-                                               you.start_location.obj().name(),
-                                               you.start_location.obj().targets_count() );
+                                           you.start_location.obj().name(),
+                                           you.start_location.obj().targets_count() );
             data->location_rml = cata_text_to_rml(
                                      colorize( _( "Starting location:" ), c_light_gray ) + " " +
                                      colorize( locval, you.random_start_location ? c_red : c_white ) );
@@ -3923,8 +3930,9 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
                          ctxt.get_desc( "SAVE_TEMPLATE" ), ctxt.get_desc( "REROLL_CHARACTER" ),
                          ctxt.get_desc( "REROLL_CHARACTER_WITH_SCENARIO" ) );
             } else {
-                s += "\n" + string_format( _( "Press <color_light_green>%s</color> to save a template of this character." ),
-                                           ctxt.get_desc( "SAVE_TEMPLATE" ) );
+                s += "\n" + string_format(
+                         _( "Press <color_light_green>%s</color> to save a template of this character." ),
+                         ctxt.get_desc( "SAVE_TEMPLATE" ) );
             }
             s += "\n" + string_format(
                      _( "Press <color_light_green>%s</color> to finish or <color_light_green>%s</color> to go back." ),
@@ -4122,8 +4130,8 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
             switch( current_selector ) {
                 case char_creation::NAME: {
                     popup.title( _( "Enter name.  Cancel to delete all." ) )
-                    .text( you.name )
-                    .only_digits( false );
+                         .text( you.name )
+                         .only_digits( false );
                     you.name = popup.query_string();
                     no_name_entered = you.name.empty();
                     break;
@@ -4132,8 +4140,8 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
                     const std::string title = string_format( _( "Enter age in years.  Minimum %d, maximum %d" ),
                                               min_allowed_age, max_allowed_age );
                     popup.title( title )
-                    .text( string_format( "%d", you.base_age() ) )
-                    .only_digits( true );
+                         .text( string_format( "%d", you.base_age() ) )
+                         .only_digits( true );
                     const int result = popup.query_int();
                     if( result != 0 ) {
                         you.set_base_age( clamp( result, min_allowed_age, max_allowed_age ) );
@@ -4142,8 +4150,8 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
                 }
                 case char_creation::HEIGHT: {
                     popup.title( _( "Enter height in centimeters.  Minimum 145, maximum 200" ) )
-                    .text( string_format( "%d", you.base_height() ) )
-                    .only_digits( true );
+                         .text( string_format( "%d", you.base_height() ) )
+                         .only_digits( true );
                     const int result = popup.query_int();
                     if( result != 0 ) {
                         you.set_base_height( clamp( result, 145, 200 ) );
@@ -4271,8 +4279,8 @@ trait_id Character::get_random_trait( const std::function<bool( const mutation_b
 
 auto newcharacter::add_default_mutation_type_traits( Character &ch ) -> void
 {
-    for( const auto &default_mutation : get_default_mutations_for_types() ) {
-        const auto mutations = get_mutations_in_type( default_mutation.type_id );
+for( const auto &default_mutation : get_default_mutations_for_types() ) {
+    const auto mutations = get_mutations_in_type( default_mutation.type_id );
         const auto has_mutation_type = std::ranges::any_of( mutations, [&]( const auto & trait ) {
             return ch.has_trait( trait );
         } );
@@ -4480,12 +4488,12 @@ void points_left::init_from_options()
 int points_left::stat_points_left() const
 {
     switch( limit ) {
-        case FREEFORM:
-        case ONE_POOL:
-            return stat_points + trait_points + skill_points;
-        case MULTI_POOL:
-            return std::min( trait_points_left(),
-                             stat_points + std::min( 0, trait_points + skill_points ) );
+    case FREEFORM:
+    case ONE_POOL:
+        return stat_points + trait_points + skill_points;
+    case MULTI_POOL:
+        return std::min( trait_points_left(),
+                         stat_points + std::min( 0, trait_points + skill_points ) );
         case TRANSFER:
             return 0;
     }
@@ -4496,11 +4504,11 @@ int points_left::stat_points_left() const
 int points_left::trait_points_left() const
 {
     switch( limit ) {
-        case FREEFORM:
-        case ONE_POOL:
-            return stat_points + trait_points + skill_points;
-        case MULTI_POOL:
-            return stat_points + trait_points + std::min( 0, skill_points );
+    case FREEFORM:
+    case ONE_POOL:
+        return stat_points + trait_points + skill_points;
+    case MULTI_POOL:
+        return stat_points + trait_points + std::min( 0, skill_points );
         case TRANSFER:
             return 0;
     }

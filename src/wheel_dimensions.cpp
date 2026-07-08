@@ -60,15 +60,15 @@ auto from_legacy_inches( const int legacy_inches ) -> int
 auto read_from_json( const JsonObject &jo, const std::string &member ) -> std::optional<int>
 {
     if( !jo.has_member( member ) ) {
-        return std::nullopt;
-    }
+    return std::nullopt;
+}
 
-    if( jo.has_int( member ) ) {
-        return from_legacy_inches( jo.get_int( member ) );
+if( jo.has_int( member ) ) {
+    return from_legacy_inches( jo.get_int( member ) );
     }
 
     if( jo.has_string( member ) ) {
-        return parse_metric_dimension( jo, member );
+    return parse_metric_dimension( jo, member );
     }
 
     jo.throw_error( "wheel dimensions must be an integer legacy inch value or a \"<n> mm\" string",

@@ -112,9 +112,9 @@ auto make_zone_bounds( const tripoint_abs_ms &first, const tripoint_abs_ms &seco
 {
     return zone_bounds{
         tripoint_abs_ms( std::min( first.x(), second.x() ), std::min( first.y(), second.y() ),
-                         std::min( first.z(), second.z() ) ),
+        std::min( first.z(), second.z() ) ),
         tripoint_abs_ms( std::max( first.x(), second.x() ), std::max( first.y(), second.y() ),
-                         std::max( first.z(), second.z() ) )
+        std::max( first.z(), second.z() ) )
     };
 }
 
@@ -203,17 +203,17 @@ namespace
 auto blueprint_layout_to_string( const blueprint_options::blueprint_layout layout ) -> std::string
 {
     switch( layout ) {
-        case blueprint_options::blueprint_layout::rectangle_fill:
-            return "rectangle_fill";
-        case blueprint_options::blueprint_layout::rectangle_border:
-            return "rectangle_border";
-        case blueprint_options::blueprint_layout::circle_fill:
-            return "circle_fill";
-        case blueprint_options::blueprint_layout::circle_border:
-            return "circle_border";
-    }
-    debugmsg( "Unhandled blueprint layout" );
-    return "rectangle_fill";
+    case blueprint_options::blueprint_layout::rectangle_fill:
+        return "rectangle_fill";
+    case blueprint_options::blueprint_layout::rectangle_border:
+        return "rectangle_border";
+    case blueprint_options::blueprint_layout::circle_fill:
+        return "circle_fill";
+    case blueprint_options::blueprint_layout::circle_border:
+        return "circle_border";
+}
+debugmsg( "Unhandled blueprint layout" );
+return "rectangle_fill";
 }
 
 auto blueprint_layout_from_string( const std::string &value ) -> blueprint_options::blueprint_layout
@@ -233,8 +233,8 @@ auto blueprint_layout_from_string( const std::string &value ) -> blueprint_optio
 auto blueprint_layout_description( const blueprint_options::blueprint_layout layout ) -> std::string
 {
     switch( layout ) {
-        case blueprint_options::blueprint_layout::rectangle_fill:
-            return _( "Filled rectangle" );
+    case blueprint_options::blueprint_layout::rectangle_fill:
+        return _( "Filled rectangle" );
         case blueprint_options::blueprint_layout::rectangle_border:
             return _( "Rectangle border" );
         case blueprint_options::blueprint_layout::circle_fill:
@@ -519,7 +519,7 @@ plot_options::query_seed_result plot_options::query_seed()
     } );
     auto &mgr = zone_manager::get_manager();
     const std::unordered_set<tripoint_abs_ms> &zone_src_set = mgr.get_near( zone_LOOT_SEEDS,
-            here.bub_to_abs( p.bub_pos() ), 60 );
+        here.bub_to_abs( p.bub_pos() ), 60 );
     for( const tripoint_abs_ms &elem : zone_src_set ) {
         auto elem_loc = here.abs_to_bub( elem );
         for( item * const &it : here.i_at( elem_loc ) ) {
@@ -578,7 +578,7 @@ bool loot_options::query()
 std::string loot_options::get_zone_name_suggestion() const
 {
     if( !mark.empty() ) {
-        return string_format( _( "Loot: Custom: %s" ), mark );
+    return string_format( _( "Loot: Custom: %s" ), mark );
     }
     return _( "Loot: Custom: No Filter" );
 }
@@ -641,7 +641,7 @@ bool plot_options::query()
 std::string blueprint_options::get_zone_name_suggestion() const
 {
     if( group ) {
-        return group->name();
+    return group->name();
     }
 
     return _( "No construction" );
@@ -650,7 +650,7 @@ std::string blueprint_options::get_zone_name_suggestion() const
 std::string plot_options::get_zone_name_suggestion() const
 {
     if( !seed.is_empty() ) {
-        auto type = itype_id( seed );
+    auto type = itype_id( seed );
         if( seed->is_seed() ) {
             return seed->seed->plant_name.translated();
         } else {
@@ -839,7 +839,7 @@ void zone_data::set_is_vehicle( const bool is_vehicle_arg )
 tripoint_abs_ms zone_data::get_center_point() const
 {
     return tripoint_abs_ms( ( start.x() + end.x() ) / 2, ( start.y() + end.y() ) / 2,
-                            ( start.z() + end.z() ) / 2 );
+    ( start.z() + end.z() ) / 2 );
 }
 
 auto zone_data::has_inside( const tripoint_abs_ms &p ) const -> bool
@@ -999,9 +999,9 @@ bool zone_manager::has_near( const zone_type_id &type, const tripoint_abs_ms &wh
 
 bool zone_manager::has_loot_dest_near( const tripoint_abs_ms &where ) const
 {
-    for( const auto &ztype : get_manager().get_types() ) {
-        const zone_type_id &type = ztype.first;
-        if( type == zone_FARM_PLOT ||
+for( const auto &ztype : get_manager().get_types() ) {
+    const zone_type_id &type = ztype.first;
+    if( type == zone_FARM_PLOT ||
             type == zone_LOOT_UNSORTED || type == zone_LOOT_IGNORE ||
             type == zone_CONSTRUCTION_BLUEPRINT ||
             type == zone_NO_AUTO_PICKUP || type == zone_NO_NPC_PICKUP ) {
@@ -1017,14 +1017,14 @@ bool zone_manager::has_loot_dest_near( const tripoint_abs_ms &where ) const
 const zone_data *zone_manager::get_zone_at( const tripoint_abs_ms &where,
         const zone_type_id &type ) const
 {
-    for( const zone_data &zone : zones ) {
-        if( zone.has_inside( where ) && zone.get_type() == type ) {
+for( const zone_data &zone : zones ) {
+    if( zone.has_inside( where ) && zone.get_type() == type ) {
             return &zone;
         }
     }
     auto vzones = get_map().get_vehicle_zones( g->get_levz() );
-    for( const zone_data *zone : vzones ) {
-        if( zone->has_inside( where ) && zone->get_type() == type ) {
+for( const zone_data *zone : vzones ) {
+    if( zone->has_inside( where ) && zone->get_type() == type ) {
             return zone;
         }
     }
@@ -1130,14 +1130,14 @@ std::optional<tripoint_abs_ms> zone_manager::get_nearest( const zone_type_id &ty
         int range, const faction_id &fac ) const
 {
     if( range < 0 ) {
-        return std::nullopt;
-    }
+    return std::nullopt;
+}
 
-    tripoint_abs_ms nearest_pos = tripoint_abs_ms( INT_MIN, INT_MIN, INT_MIN );
-    int nearest_dist = range + 1;
-    const std::unordered_set<tripoint_abs_ms> &point_set = get_point_set( type, fac );
-    for( const tripoint_abs_ms &p : point_set ) {
-        int cur_dist = square_dist( p, where );
+tripoint_abs_ms nearest_pos = tripoint_abs_ms( INT_MIN, INT_MIN, INT_MIN );
+int nearest_dist = range + 1;
+const std::unordered_set<tripoint_abs_ms> &point_set = get_point_set( type, fac );
+for( const tripoint_abs_ms &p : point_set ) {
+    int cur_dist = square_dist( p, where );
         if( cur_dist < nearest_dist ) {
             nearest_dist = cur_dist;
             nearest_pos = p;
@@ -1148,8 +1148,8 @@ std::optional<tripoint_abs_ms> zone_manager::get_nearest( const zone_type_id &ty
     }
 
     const std::unordered_set<tripoint_abs_ms> &vzone_set = get_vzone_set( type, fac );
-    for( const tripoint_abs_ms &p : vzone_set ) {
-        int cur_dist = square_dist( p, where );
+for( const tripoint_abs_ms &p : vzone_set ) {
+    int cur_dist = square_dist( p, where );
         if( cur_dist < nearest_dist ) {
             nearest_dist = cur_dist;
             nearest_pos = p;
@@ -1159,9 +1159,9 @@ std::optional<tripoint_abs_ms> zone_manager::get_nearest( const zone_type_id &ty
         }
     }
     if( nearest_dist > range ) {
-        return std::nullopt;
-    }
-    return nearest_pos;
+    return std::nullopt;
+}
+return nearest_pos;
 }
 
 zone_type_id zone_manager::get_near_zone_type_for_item( const item &it,
@@ -1354,7 +1354,7 @@ void zone_manager::add( const std::string &name, const zone_type_id &type, const
     //the start is a vehicle tile with cargo space
     map &here = get_map();
     if( const std::optional<vpart_reference> vp = here.veh_at( here.abs_to_bub(
-                start ) ).part_with_feature( "CARGO", false ) ) {
+            start ) ).part_with_feature( "CARGO", false ) ) {
         // TODO:Allow for loot zones on vehicles to be larger than 1x1
         if( start == end && query_yn( _( "Bind this zone to the cargo part here?" ) ) ) {
             // TODO: refactor zone options for proper validation code
@@ -1625,7 +1625,7 @@ void zone_manager::revert_vzones()
     for( auto zone : removed_vzones ) {
         //Code is copied from add() to avoid yn query
         if( const std::optional<vpart_reference> vp = here.veh_at( here.abs_to_bub(
-                    zone.get_start_point() ) ).part_with_feature( "CARGO", false ) ) {
+                zone.get_start_point() ) ).part_with_feature( "CARGO", false ) ) {
             zone.set_is_vehicle( true );
             vp->vehicle().loot_zones.emplace( vp->mount(), zone );
             vp->vehicle().zones_dirty = false;

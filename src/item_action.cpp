@@ -81,16 +81,16 @@ item_action_generator::~item_action_generator() = default;
 bool item::item_has_uses_recursive() const
 {
     if( !type->use_methods.empty() ) {
-        return true;
-    }
+    return true;
+}
 
-    return contents.item_has_uses_recursive();
+return contents.item_has_uses_recursive();
 }
 
 bool item_contents::item_has_uses_recursive() const
 {
-    for( const item * const &it : items ) {
-        if( it->item_has_uses_recursive() ) {
+for( const item * const &it : items ) {
+    if( it->item_has_uses_recursive() ) {
             return true;
         }
     }
@@ -215,9 +215,9 @@ void item_action_generator::load_item_action( const JsonObject &jo )
 
 void item_action_generator::check_consistency() const
 {
-    for( const auto &elem : item_actions ) {
-        const auto &action = elem.second;
-        if( !item_controller->has_iuse( action.id ) ) {
+for( const auto &elem : item_actions ) {
+    const auto &action = elem.second;
+    if( !item_controller->has_iuse( action.id ) ) {
             debugmsg( "Item action \"%s\" isn't known to the game.  Check item action definitions in JSON.",
                       action.id.c_str() );
         }
@@ -343,10 +343,10 @@ void game::item_action_menu()
 std::string use_function::get_type() const
 {
     if( actor ) {
-        return actor->type;
-    } else {
-        return errstring;
-    }
+    return actor->type;
+} else {
+    return errstring;
+}
 }
 
 ret_val<bool> iuse_actor::can_use( const Character &, const item &, bool,
@@ -368,7 +368,7 @@ std::string iuse_actor::get_name() const
 std::string use_function::get_name() const
 {
     if( actor ) {
-        return actor->get_name();
+    return actor->get_name();
     } else {
         return errstring;
     }

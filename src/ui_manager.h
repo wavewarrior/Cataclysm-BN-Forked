@@ -111,12 +111,10 @@ class ui_adaptor
         // loop in ui_manager.cpp clears these for invalidated adaptors,
         // points render_state at the slice during the redraw_cb, then
         // composites all slices into the global queues for refresh_display.
-        lighting::ui_adaptor_draw_slices &draw_slices() noexcept
-        {
+        lighting::ui_adaptor_draw_slices &draw_slices() noexcept {
             return *slices_;
         }
-        const lighting::ui_adaptor_draw_slices &draw_slices() const noexcept
-        {
+        const lighting::ui_adaptor_draw_slices &draw_slices() const noexcept {
             return *slices_;
         }
 

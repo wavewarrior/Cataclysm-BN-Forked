@@ -321,17 +321,17 @@ struct temperature_effect {
 
     void apply( player &u ) const {
         if( str_pen > 0 ) {
-            u.mod_str_bonus( -str_pen );
+        u.mod_str_bonus( -str_pen );
         }
         if( dex_pen > 0 ) {
-            u.mod_dex_bonus( -dex_pen );
+        u.mod_dex_bonus( -dex_pen );
             u.add_miss_reason( _( miss_msg ), dex_pen );
         }
         if( int_pen > 0 ) {
-            u.mod_int_bonus( -int_pen );
+        u.mod_int_bonus( -int_pen );
         }
         if( per_pen > 0 ) {
-            u.mod_per_bonus( -per_pen );
+        u.mod_per_bonus( -per_pen );
         }
         if( !msg.empty() && !u.has_effect( effect_sleep ) && one_in( msg_chance ) ) {
             u.add_msg_if_player( m_warning, "%s", _( msg ) );

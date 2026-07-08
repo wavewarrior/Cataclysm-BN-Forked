@@ -118,29 +118,29 @@ void material_type::load( const JsonObject &jsobj, const std::string & )
 void material_type::check() const
 {
     if( name().empty() ) {
-        debugmsg( "material %s has no name.", id.c_str() );
+    debugmsg( "material %s has no name.", id.c_str() );
     }
     if( _dmg_adj.size() < 4 ) {
-        debugmsg( "material %s specifies insufficient damaged adjectives.", id.c_str() );
+    debugmsg( "material %s specifies insufficient damaged adjectives.", id.c_str() );
     }
     if( _salvaged_into && ( !_salvaged_into->is_valid() || _salvaged_into->is_null() ) ) {
-        debugmsg( "invalid \"salvaged_into\" %s for %s.", _salvaged_into->c_str(), id.c_str() );
+    debugmsg( "invalid \"salvaged_into\" %s for %s.", _salvaged_into->c_str(), id.c_str() );
     }
     if( !_repaired_with.is_valid() ) {
-        debugmsg( "invalid \"repaired_with\" %s for %s.", _repaired_with.c_str(), id.c_str() );
+    debugmsg( "invalid \"repaired_with\" %s for %s.", _repaired_with.c_str(), id.c_str() );
     }
 
     if( _wind_resist && ( *_wind_resist > 100 || *_wind_resist < 0 ) ) {
-        debugmsg( "Wind resistance outside of range (100%% to 0%%, is %d%%) for %s.", *_wind_resist,
-                  id.str() );
+    debugmsg( "Wind resistance outside of range (100%% to 0%%, is %d%%) for %s.", *_wind_resist,
+              id.str() );
     }
-    for( auto &ca : _compact_accepts ) {
-        if( !ca.is_valid() ) {
+for( auto &ca : _compact_accepts ) {
+    if( !ca.is_valid() ) {
             debugmsg( "invalid \"compact_accepts\" %s for %s.", ca.c_str(), id.c_str() );
         }
     }
-    for( auto &ci : _compacts_into ) {
-        if( //TODO!: move this to type
+for( auto &ci : _compacts_into ) {
+    if( //TODO!: move this to type
             !ci.is_valid() ||
             !item::spawn_temporary( ci, calendar::start_of_cataclysm )->only_made_of( std::set<material_id> { id } )
         ) {

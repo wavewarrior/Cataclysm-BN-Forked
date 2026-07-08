@@ -1,13 +1,12 @@
 #pragma once
 #include <cstdint>
 
-namespace lighting
-{
+namespace lighting {
 
 // Shape tag for a gpu_emitter. Drives the per-emitter light model in the shader.
 enum class emitter_shape : uint32_t {
-    OMNI        = 0, // Omnidirectional point light (default).
-    CONE        = 1, // Directed cone (flashlights, vehicle headlights).
+    OMNI = 0,        // Omnidirectional point light (default).
+    CONE = 1,        // Directed cone (flashlights, vehicle headlights).
     DIRECTIONAL = 2, // Infinite directional light (sun proxy).
 };
 
@@ -47,7 +46,7 @@ struct gpu_emitter {
 
     float pad0, pad1, pad2; // Padding to reach 64 bytes.
 };
-static_assert( sizeof( gpu_emitter ) == 64, "gpu_emitter must be 64 bytes (wire-stable)" );
+static_assert(sizeof(gpu_emitter) == 64, "gpu_emitter must be 64 bytes (wire-stable)");
 
 // Per-frame emitter budget.
 // Estimate: my_MAPSIZE=11 → ~132×132 tiles/z-level; 1–3% emitting ≈ 500–5K.

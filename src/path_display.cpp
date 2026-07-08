@@ -19,8 +19,8 @@ auto create_line_printer( const std::string &base_path )
 
     return [&base_path, colored_base_path]( section s ) -> std::string {
         return string_format( "    %s: %s",
-                              colorize( s.name, c_yellow ),
-                              replace_all( s.path, base_path, colored_base_path ) );
+        colorize( s.name, c_yellow ),
+        replace_all( s.path, base_path, colored_base_path ) );
     };
 };
 
@@ -104,5 +104,5 @@ auto config_directory() -> std::string
 auto resolved_game_paths() -> std::string
 {
     return enumerate_as_string( std::vector{ user_directory(), defaults_directory(), config_directory() },
-                                enumeration_conjunction::newline );
+           enumeration_conjunction::newline );
 }

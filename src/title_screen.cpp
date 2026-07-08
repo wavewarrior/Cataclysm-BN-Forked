@@ -203,8 +203,8 @@ auto get_title_files_from_root( const std::string &root ) -> std::vector<std::st
 auto add_title_files_from_root( std::map<std::string, title_candidate> &candidates,
                                 const title_scan_options &opts ) -> void
 {
-    for( const auto &path : get_title_files_from_root( opts.root ) ) {
-        add_title_file( candidates, opts, path );
+for( const auto &path : get_title_files_from_root( opts.root ) ) {
+    add_title_file( candidates, opts, path );
     }
 }
 
@@ -238,10 +238,10 @@ auto get_installed_mods() -> std::map<mod_id, MOD_INFORMATION>
 auto title_path_for_candidate( const title_candidate &candidate,
                                const std::vector<std::string> &languages ) -> std::optional<std::string>
 {
-    for( const auto &language : languages ) {
-        const auto iter = std::ranges::find_if( candidate.files, [&]( const title_file & file ) {
-            return file.language == language;
-        } );
+for( const auto &language : languages ) {
+    const auto iter = std::ranges::find_if( candidate.files, [&]( const title_file & file ) {
+        return file.language == language;
+    } );
         if( iter != candidate.files.end() ) {
             return iter->path;
         }

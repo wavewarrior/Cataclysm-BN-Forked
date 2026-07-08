@@ -147,9 +147,9 @@ template<typename T>
 bool game_object<T>::is_loaded() const
 {
     if( !loc ) {
-        return false;
-    }
-    return loc->is_loaded( static_cast<const T *>( this ) );
+    return false;
+}
+return loc->is_loaded( static_cast<const T *>( this ) );
 }
 
 template<typename T>
@@ -162,7 +162,7 @@ template<typename T>
 tripoint_bub_ms game_object<T>::position( ) const
 {
     if( !loc ) {
-        if( !saved_loc ) {
+    if( !saved_loc ) {
             debugmsg( "position called on [%s] without a position", debug_name() );
             return tripoint_bub_ms::zero();
         }

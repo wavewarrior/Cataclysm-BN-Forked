@@ -169,7 +169,8 @@ TEST_CASE( "registry directional scale_y selects pivot by change sign", "[ui_twe
     CHECK( r.sample( "x", 500 ).pivot_y == Approx( 1.0f ) );
 }
 
-TEST_CASE( "shipped icons.json parses through load_specs (strict JSON)", "[ui_tween][sidebar_anim]" )
+TEST_CASE( "shipped icons.json parses through load_specs (strict JSON)",
+           "[ui_tween][sidebar_anim]" )
 {
     // Reads the real gfx/widgets/icons.json. If a parser left a field unvisited
     // (the strict-JSON report_unvisited bug), read_from_file_json swallows the

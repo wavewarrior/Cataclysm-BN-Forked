@@ -82,19 +82,19 @@ void cata::detail::reg_bionics( sol::state &lua )
         luna::set_fx( ut, "activate", []( UT_CLASS & bio, Character & ch,
         std::optional<bool> block_message ) -> bool {
             if( !ch.has_bionic( bio.id ) )
-            {
-                return false;
-            }
-            bionic &real_bio = ch.get_bionic_state( bio.id );
-            real_bio.powered = real_bio.info().has_flag( STATIC( flag_id( "BIONIC_TOGGLED" ) ) ) ||
-            real_bio.info().charge_time > 0;
+        {
+            return false;
+        }
+        bionic &real_bio = ch.get_bionic_state( bio.id );
+        real_bio.powered = real_bio.info().has_flag( STATIC( flag_id( "BIONIC_TOGGLED" ) ) ) ||
+                                       real_bio.info().charge_time > 0;
             if( real_bio.info().charge_time > 0 )
-            {
-                real_bio.charge_timer = real_bio.info().charge_time;
+        {
+            real_bio.charge_timer = real_bio.info().charge_time;
             }
             if( !real_bio.id->enchantments.empty() )
-            {
-                ch.recalculate_enchantment_cache();
+        {
+            ch.recalculate_enchantment_cache();
             }
             return ch.activate_bionic( real_bio, block_message.value_or( true ) );
         } );
@@ -103,18 +103,18 @@ void cata::detail::reg_bionics( sol::state &lua )
         luna::set_fx( ut, "deactivate", []( UT_CLASS & bio, Character & ch,
         std::optional<bool> block_message ) -> bool {
             if( !ch.has_bionic( bio.id ) )
-            {
-                return false;
-            }
-            bionic &real_bio = ch.get_bionic_state( bio.id );
-            return ch.deactivate_bionic( real_bio, block_message.value_or( true ) );
-        } );
+        {
+            return false;
+        }
+        bionic &real_bio = ch.get_bionic_state( bio.id );
+        return ch.deactivate_bionic( real_bio, block_message.value_or( true ) );
+    } );
 
         // to_string
         luna::set_fx( ut, sol::meta_function::to_string,
         []( const UT_CLASS & bio ) -> std::string {
             return string_format( "%s[%s]",
-                                  luna::detail::luna_traits<UT_CLASS>::name, bio.id.c_str() );
+            luna::detail::luna_traits<UT_CLASS>::name, bio.id.c_str() );
         } );
     }
 #undef UT_CLASS
@@ -199,8 +199,8 @@ void cata::detail::mod_bionic_data( sol::state &lua )
         luna::set_fx( ut, "coverage_power_gen_penalty",
         []( const UT_CLASS & bd ) -> sol::optional<float> {
             if( bd.coverage_power_gen_penalty.has_value() )
-            {
-                return bd.coverage_power_gen_penalty.value();
+        {
+            return bd.coverage_power_gen_penalty.value();
             }
             return sol::nullopt;
         } );
@@ -374,7 +374,7 @@ void cata::detail::mod_bionic_data( sol::state &lua )
         luna::set_fx( ut, sol::meta_function::to_string,
         []( const UT_CLASS & bd ) -> std::string {
             return string_format( "%s[%s]",
-                                  luna::detail::luna_traits<UT_CLASS>::name, bd.id.c_str() );
+            luna::detail::luna_traits<UT_CLASS>::name, bd.id.c_str() );
         } );
     }
 #undef UT_CLASS

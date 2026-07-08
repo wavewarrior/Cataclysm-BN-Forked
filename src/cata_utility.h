@@ -391,9 +391,9 @@ struct variant_cast_impl<Static, std::variant<Ts...>> {
         template<typename U>
         auto operator()( U &&v ) -> target_type {
             if constexpr( requires { target_type{v}; } ) {
-                return v;
-            } else if constexpr( Static ) {
-                static_assert( !Static, "bad variant cast" );
+            return v;
+        } else if constexpr( Static ) {
+            static_assert( !Static, "bad variant cast" );
             } else {
                 throw std::bad_variant_access();
             }

@@ -612,12 +612,12 @@ bool options_manager::cOpt::hasPrerequisite() const
 bool options_manager::cOpt::checkPrerequisite() const
 {
     if( !hasPrerequisite() ) {
-        return true;
-    }
-    bool isPrerequisiteFulfilled = false;
-    const std::string prerequisite_option_value = get_options().get_option( sPrerequisite ).getValue();
-    for( const std::string &sAllowedPrerequisiteValue : sPrerequisiteAllowedValues ) {
-        if( prerequisite_option_value == sAllowedPrerequisiteValue ) {
+    return true;
+}
+bool isPrerequisiteFulfilled = false;
+const std::string prerequisite_option_value = get_options().get_option( sPrerequisite ).getValue();
+for( const std::string &sAllowedPrerequisiteValue : sPrerequisiteAllowedValues ) {
+    if( prerequisite_option_value == sAllowedPrerequisiteValue ) {
             isPrerequisiteFulfilled = true;
             break;
         }
@@ -629,31 +629,31 @@ bool options_manager::cOpt::checkPrerequisite() const
 bool options_manager::cOpt::is_hidden() const
 {
     switch( hide ) {
-        case COPT_NO_HIDE:
-            return false;
+    case COPT_NO_HIDE:
+        return false;
 
-        case COPT_SDL_HIDE:
-            return true;
+    case COPT_SDL_HIDE:
+        return true;
 
-        case COPT_CURSES_HIDE:
-            return false;
+    case COPT_CURSES_HIDE:
+        return false;
 
-        case COPT_POSIX_CURSES_HIDE:
-            // Check if we on windows and using wincurses.
-            return false;
+    case COPT_POSIX_CURSES_HIDE:
+        // Check if we on windows and using wincurses.
+        return false;
 
-        case COPT_NO_SOUND_HIDE:
+    case COPT_NO_SOUND_HIDE:
 #if !defined(SDL_SOUND) // If not defined, we have no sound support.
-            return true;
+        return true;
 #else
-            return false;
+        return false;
 #endif
 
-        case COPT_ALWAYS_HIDE:
-            return true;
-    }
-    // Make compiler happy, this is unreachable.
-    return false;
+    case COPT_ALWAYS_HIDE:
+        return true;
+}
+// Make compiler happy, this is unreachable.
+return false;
 }
 
 std::string options_manager::cOpt::getName() const
@@ -1101,12 +1101,12 @@ std::vector<options_manager::id_and_option> options_manager::build_tilesets_list
 
     // Load from data directory
     std::vector<options_manager::id_and_option> data_tilesets = load_tilesets_from(
-                PATH_INFO::gfxdir() );
+            PATH_INFO::gfxdir() );
     result.insert( result.end(), data_tilesets.begin(), data_tilesets.end() );
 
     // Load from user directory
     std::vector<options_manager::id_and_option> user_tilesets = load_tilesets_from(
-                PATH_INFO::user_gfx() );
+            PATH_INFO::user_gfx() );
     for( const options_manager::id_and_option &id : user_tilesets ) {
         if( !std::ranges::contains( result, id ) ) {
             result.emplace_back( id );
@@ -2478,12 +2478,12 @@ void options_manager::add_options_performance()
              0, 1, 0 );
         add( "ACTIVITY_SKIP_MONSTER_LOD_GATE", page_id,
              translate_marker( "Activity Skip Monster Gate" ),
-              translate_marker( "Highest real monster LOD tier allowed to run activity-skip AI.  "
-                                "Allowed monsters act one LOD tier less detailed than normal.  "
-                                "0 lets only Tier-0 monsters act as Tier-1.  "
-                                "1 lets Tier-0 and Tier-1 monsters act as Tier-1 and Tier-2, "
-                                "which is the default.  2 also lets Tier-2 monsters run macro AI." ),
-              0, 2, 1 );
+             translate_marker( "Highest real monster LOD tier allowed to run activity-skip AI.  "
+                               "Allowed monsters act one LOD tier less detailed than normal.  "
+                               "0 lets only Tier-0 monsters act as Tier-1.  "
+                               "1 lets Tier-0 and Tier-1 monsters act as Tier-1 and Tier-2, "
+                               "which is the default.  2 also lets Tier-2 monsters run macro AI." ),
+             0, 2, 1 );
         add( "LOD_Z_PENALTY", page_id,
              translate_marker( "Z-Level Distance Penalty" ),
              translate_marker( "Extra distance added per z-level when assigning monster AI tiers.  "
@@ -2573,7 +2573,7 @@ void options_manager::add_options_performance()
 
     add_option_group( performance, Group( "vehicle", to_translation( "Vehicle Throttling" ),
                                           to_translation( "Configure vehicle processing stride to reduce CPU cost "
-                                                          "for parked and off-z vehicles." ) ),
+                                                  "for parked and off-z vehicles." ) ),
     [&]( auto & page_id ) {
         add( "VEHICLE_IDLE_STRIDE", page_id,
              translate_marker( "Idle Stride" ),
@@ -2600,7 +2600,7 @@ void options_manager::add_options_performance()
 
     add_option_group( performance, Group( "item_processing", to_translation( "Item Processing" ),
                                           to_translation( "Configure item processing stride to reduce CPU cost "
-                                                          "for off-z-level items." ) ),
+                                                  "for off-z-level items." ) ),
     [&]( auto & page_id ) {
         add( "ITEM_PROCESS_STRIDE", page_id,
              translate_marker( "Item Process Stride" ),
@@ -3547,10 +3547,10 @@ options_manager::PageItem::fmt_tooltip( const Group &group,
                                         const options_manager::options_container &cont ) const
 {
     switch( type ) {
-        case ItemType::BlankLine:
-            return "";
-        case ItemType::GroupHeader: {
-            return group.tooltip_.translated();
+    case ItemType::BlankLine:
+        return "";
+    case ItemType::GroupHeader: {
+        return group.tooltip_.translated();
         }
         case ItemType::Option: {
             const std::string &opt_name = data;
@@ -3656,8 +3656,8 @@ std::string options_manager::show( bool ingame, const bool world_options_only,
     // temporary alias so the code below does not need to be changed
     options_container &OPTIONS = options;
     options_container &ACTIVE_WORLD_OPTIONS = world_options.has_value() ?
-            *world_options.value() :
-            OPTIONS;
+        *world_options.value() :
+        OPTIONS;
 
     if( !world_options_only ) {
         refresh_title_screen_option();
@@ -4180,8 +4180,8 @@ void options_manager::serialize( JsonOut &json ) const
 {
     json.start_array();
 
-    for( const Page &p : pages_ ) {
-        for( const PageItem &it : p.items_ ) {
+for( const Page &p : pages_ ) {
+    for( const PageItem &it : p.items_ ) {
             if( it.type != ItemType::Option ) {
                 continue;
             }

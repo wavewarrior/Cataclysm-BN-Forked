@@ -22,8 +22,8 @@ const std::string &canvas_legend::entry( char32_t c ) const
 
 char32_t canvas_legend::key_for( const std::string &s ) const
 {
-    for( const auto &it : data ) {
-        if( it.second == s ) {
+for( const auto &it : data ) {
+    if( it.second == s ) {
             return it.first;
         }
     }
@@ -41,13 +41,13 @@ canvas::canvas( const tripoint &size )
 tripoint canvas::calc_size() const
 {
     if( data.empty() || data[0].empty() ) {
-        return tripoint_zero;
-    } else {
-        return tripoint(
-                   static_cast<int>( data[0][0].size() ),
-                   static_cast<int>( data[0].size() ),
-                   static_cast<int>( data.size() )
-               );
+    return tripoint_zero;
+} else {
+    return tripoint(
+               static_cast<int>( data[0][0].size() ),
+               static_cast<int>( data[0].size() ),
+               static_cast<int>( data.size() )
+           );
     }
 }
 

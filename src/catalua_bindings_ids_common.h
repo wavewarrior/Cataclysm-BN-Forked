@@ -78,7 +78,7 @@ auto reg_id( sol::state &lua ) -> void
         SET_FX( is_valid );
         luna::set_fx( ut, sol::meta_function::to_string, []( const IID & id ) -> std::string {
             return string_format( "%s[%d][%s]", luna::detail::luna_traits<IID>::name, id.to_i(),
-                                  id.is_valid() ? id.id().c_str() : "<invalid>" );
+            id.is_valid() ? id.id().c_str() : "<invalid>" );
         } );
     }
 #undef UT_CLASS

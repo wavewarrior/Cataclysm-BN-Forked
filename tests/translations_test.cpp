@@ -149,9 +149,9 @@ TEST_CASE( "translations_actually_translate", "[translations][i18n]" )
     }
 
     const auto has_lang = [&]( const std::string & id ) -> bool {
-        for( const language_info &li : list_available_languages() )
-        {
-            if( li.id == id ) {
+for( const language_info &li : list_available_languages() )
+    {
+        if( li.id == id ) {
                 return true;
             }
         }

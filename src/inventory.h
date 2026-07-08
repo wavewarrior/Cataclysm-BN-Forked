@@ -332,7 +332,7 @@ class location_inventory : public location_visitable<location_inventory>
         // Below, "amount" refers to quantity
         //        "charges" refers to charges
         std::vector<detached_ptr<item>> use_amount( itype_id it, int quantity,
-                                     const std::function<bool( const item & )> &filter = return_true<item> );
+                const std::function<bool( const item & )> &filter = return_true<item> );
 
         bool has_tools( const itype_id &it, int quantity,
                         const std::function<bool( const item & )> &filter = return_true<item> ) const;

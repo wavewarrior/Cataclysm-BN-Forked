@@ -47,8 +47,8 @@ static auto fire_shell_at_target( const itype_id &ammo_id,
     target->worn.clear();
     target->spawn_at_precise( get_map().get_abs_sub().xy(), tripoint_sm_ms::zero() );
     target->setpos( target_pos );
-    for( const auto &armor_id : armor_ids ) {
-        target->worn.push_back( item::spawn( armor_id ) );
+for( const auto &armor_id : armor_ids ) {
+    target->worn.push_back( item::spawn( armor_id ) );
     }
     ACTIVE_OVERMAP_BUFFER.insert_npc( target );
     g->load_npcs();
@@ -143,7 +143,7 @@ static void shape_coverage_vs_distance_no_obstacle( const shape_factory_impl &c,
     CHECK( origin_coverage <= 0.0 );
 
     std::ranges::for_each( cov, [&bb, &reachable_shape_points,
-         &s]( const std::pair<const tripoint_bub_ms, double> &entry ) {
+    &s]( const std::pair<const tripoint_bub_ms, double> &entry ) {
         const auto &p = entry.first;
         const auto coverage = entry.second;
         const auto signed_distance = s->distance_at( p.raw() );

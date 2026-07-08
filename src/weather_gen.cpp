@@ -112,7 +112,7 @@ units::temperature weather_generator::get_weather_temperature( const tripoint_ab
         const time_point &t, const calendar_config &calendar_config, unsigned seed ) const
 {
     return weather_temperature_from_common_data( *this, get_common_data( location.xy(), t,
-            calendar_config, seed ), t );
+    calendar_config, seed ), t );
 }
 
 w_point weather_generator::get_weather( const tripoint_abs_ms &location, const time_point &t,
@@ -334,7 +334,7 @@ void weather_generator::test_weather( unsigned seed = 1000 ) const
     // WEATHERGEN.test_weather(); // Runs this test.
     write_to_file( "weather.output", [&]( std::ostream & testfile ) {
         testfile <<
-                 "|;year;season;day;hour;minute;temperature(F);humidity(%);pressure(mB);weatherdesc;windspeed(mph);winddirection"
+        "|;year;season;day;hour;minute;temperature(F);humidity(%);pressure(mB);weatherdesc;windspeed(mph);winddirection"
                  << '\n';
 
         const time_point begin = calendar::turn;
@@ -403,10 +403,10 @@ weather_generator weather_generator::load( const JsonObject &jo )
     if( !json_report_strict ) {
         for( size_t i = 0; i < season_temp_ids.size(); i++ ) {
             ret.season_stats[i].average_temperature = units::from_celsius(
-                        base_temp +
-                        jo.get_int( legacy_temp_id_values[i].first, 0 ) +
-                        legacy_temp_id_values[i].second
-                    );
+                    base_temp +
+                    jo.get_int( legacy_temp_id_values[i].first, 0 ) +
+                    legacy_temp_id_values[i].second
+                );
         }
     }
     // Reading temperature settings

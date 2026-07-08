@@ -636,12 +636,12 @@ std::optional<construction_id> construction_menu( const bool blueprint )
             add_header_line( " " );
             const auto origin_from_tile = []( const auto & tile ) -> std::optional<std::string> {
                 if( tile.src.empty() )
-                {
-                    return std::nullopt;
-                }
-                return enumerate_as_string( tile.src.begin(), tile.src.end(), []( const auto & source )
-                {
-                    return string_format( "'%s'", source.second->name() );
+            {
+                return std::nullopt;
+            }
+            return enumerate_as_string( tile.src.begin(), tile.src.end(), []( const auto & source )
+            {
+                return string_format( "'%s'", source.second->name() );
                 }, enumeration_conjunction::arrow );
             };
             const auto terrain_it = std::ranges::find_if( options,
@@ -818,16 +818,16 @@ std::optional<construction_id> construction_menu( const bool blueprint )
                     const auto verbose_multipliers = get_option<bool>( "VERBOSE_CRAFTING_SPEED_MODIFIERS" );
                     auto multiplier_color = [&]( int percent ) -> std::string {
                         if( percent > 100 )
-                        {
-                            return "green";
-                        }
-                        if( percent < 100 )
-                        {
-                            return "red";
-                        }
-                        return verbose_multipliers ? "cyan" : "light_gray";
-                    };
-                    auto format_multiplier = [&]( const std::string & label,
+                    {
+                        return "green";
+                    }
+                    if( percent < 100 )
+                    {
+                        return "red";
+                    }
+                    return verbose_multipliers ? "cyan" : "light_gray";
+                };
+                auto format_multiplier = [&]( const std::string & label,
                     float multiplier ) -> std::string {
                         const auto percent = static_cast<int>( multiplier * 100 );
                         return string_format( _( "> %1$s: <color_%2$s>%3$d%%</color>" ), label,
@@ -892,7 +892,7 @@ std::optional<construction_id> construction_menu( const bool blueprint )
                 const auto get_folded_flags_list = [&]( const auto & flags ) ->
                 std::vector<std::string> {
                     return foldstring(
-                        colorize( _( "Terrain needs: " ), color_stage ) + enumerate_as_string( flags.begin(), flags.end(),
+                    colorize( _( "Terrain needs: " ), color_stage ) + enumerate_as_string( flags.begin(), flags.end(),
                     []( const auto & flag ) -> std::string { return colorize( flag, color_data ); },
                     enumeration_conjunction::and_ ), available_window_width );
                 };
@@ -1036,10 +1036,10 @@ std::optional<construction_id> construction_menu( const bool blueprint )
                 const int adjusted_time = first_option->adjusted_time();
                 if( base_time > 0 && adjusted_time > 0 ) {
                     const int pct = static_cast<int>( std::round( 100.0f * base_time /
-                                    static_cast<float>( adjusted_time ) ) );
+                                                      static_cast<float>( adjusted_time ) ) );
                     data->speed_rml = cata_text_to_rml( colorize(
-                            string_format( _( "Construction speed %d%%" ), pct ),
-                            pct < 100 ? c_yellow : c_green ) );
+                                                            string_format( _( "Construction speed %d%%" ), pct ),
+                                                            pct < 100 ? c_yellow : c_green ) );
                 }
             }
         }
@@ -1128,16 +1128,16 @@ std::optional<construction_id> construction_menu( const bool blueprint )
             const auto group_matches_filter = [&]( const construction_group_str_id & group_id,
             const std::string & filter_string ) -> bool {
                 if( filter_string.empty() )
-                {
-                    return true;
-                }
-                std::vector<const construction *> group_options = constructions_by_group( group_id );
-                if( group_options.empty() )
-                {
-                    return false;
-                }
-                const auto match_item = []( const item_comp & comp, const std::string & term ) -> bool {
-                    const std::string comp_name = item::nname( comp.type, comp.count );
+            {
+                return true;
+            }
+            std::vector<const construction *> group_options = constructions_by_group( group_id );
+            if( group_options.empty() )
+            {
+                return false;
+            }
+            const auto match_item = []( const item_comp & comp, const std::string & term ) -> bool {
+                const std::string comp_name = item::nname( comp.type, comp.count );
                     return lcmatch( comp_name, term ) || lcmatch( comp.type.str(), term );
                 };
                 const auto match_tool = []( const tool_comp & tool, const std::string & term ) -> bool {
@@ -1167,19 +1167,19 @@ std::optional<construction_id> construction_menu( const bool blueprint )
                 const auto option_description_matches = [&]( const construction * con,
                 const std::string & term ) -> bool {
                     if( con->post_terrain.is_empty() && con->post_furniture.is_empty() )
-                    {
-                        return false;
-                    }
-                    if( !con->post_terrain.is_empty() )
-                    {
-                        const ter_t &result_ter = con->post_terrain.obj();
+                {
+                    return false;
+                }
+                if( !con->post_terrain.is_empty() )
+                {
+                    const ter_t &result_ter = con->post_terrain.obj();
                         if( match_description( &result_ter, term ) ) {
                             return true;
                         }
                     }
                     if( !con->post_furniture.is_empty() )
-                    {
-                        const furn_t &result_furn = con->post_furniture.obj();
+                {
+                    const furn_t &result_furn = con->post_furniture.obj();
                         if( match_description( &result_furn, term ) ) {
                             return true;
                         }
@@ -1383,9 +1383,9 @@ std::optional<construction_id> construction_menu( const bool blueprint )
 
             std::string description =
                 _( "The default is to search construction names.  Single-character prefixes "
-                   "with a colon <color_red>:</color> search other fields.  Additional filters are separated "
-                   "by commas <color_red>,</color>.\n\n"
-                   "<color_white>Examples:</color>\n" );
+               "with a colon <color_red>:</color> search other fields.  Additional filters are separated "
+               "by commas <color_red>,</color>.\n\n"
+               "<color_white>Examples:</color>\n" );
 
             const std::string example_name = _( "wall" );
             const int example_padding = max_example_length - utf8_width( example_name );
@@ -1795,7 +1795,7 @@ void complete_construction( Character &who, tripoint_abs_ms &where )
     // Spawn byproducts
     if( built.byproduct_item_group ) {
         std::vector<detached_ptr<item>> items_list = item_group::items_from( built.byproduct_item_group,
-                                     calendar::turn );
+            calendar::turn );
         here.spawn_items( who.bub_pos(), std::move( items_list ) );
     }
 
@@ -1810,8 +1810,8 @@ void complete_construction( Character &who, tripoint_abs_ms &where )
     if( who.is_avatar() && !who.backlog.empty() &&
         who.backlog.front()->id() == ACT_MULTIPLE_CONSTRUCTION ) {
         who.backlog.clear();
-        who.assign_activity(std::make_unique<player_activity>(
-            std::make_unique<generic_multi_activity_actor>( ACT_MULTIPLE_CONSTRUCTION )));
+        who.assign_activity( std::make_unique<player_activity>(
+                                 std::make_unique<generic_multi_activity_actor>( ACT_MULTIPLE_CONSTRUCTION ) ) );
     }
 }
 

@@ -48,7 +48,7 @@ const std::string global_vgettext_str = vgettext( "global_vgettext_str", "global
 // CHECK-MESSAGES: [[@LINE-2]]:41: warning: Gettext calls in static variable initialization will cause text to be untranslated (global static) or not updated when switching language (local static). Consider using translation objects (to_translation() or pl_translation()) or translate_marker(), and translate the text on demand (with translation::translated() or gettext calls outside static vars)
 
 const std::string global_vpgettext_str = vpgettext( "ctxt", "global_vpgettext_str",
-        "global_vpgettext_strs", 1 );
+    "global_vpgettext_strs", 1 );
 // CHECK-MESSAGES: [[@LINE-2]]:42: warning: Gettext calls in static variable initialization will cause text to be untranslated (global static) or not updated when switching language (local static). Consider using translation objects (to_translation() or pl_translation()) or translate_marker(), and translate the text on demand (with translation::translated() or gettext calls outside static vars)
 
 static const char *const global_static_cstr = _( "global_static_cstr" );

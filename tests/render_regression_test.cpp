@@ -38,7 +38,7 @@ struct sdl_video_session {
     }
     ~sdl_video_session() noexcept {
         if( ok ) {
-            SDL_QuitSubSystem( SDL_INIT_VIDEO );
+        SDL_QuitSubSystem( SDL_INIT_VIDEO );
         }
     }
 };
@@ -73,14 +73,17 @@ auto compute_region_stats( const std::vector<uint8_t> &pixels, int w, int h,
     for( int y = y1; y < y2; ++y ) {
         for( int x = x1; x < x2; ++x ) {
             const int idx = ( y * w + x ) * 4;
-            if( idx + 3 >= static_cast<int>( pixels.size() ) )
+            if( idx + 3 >= static_cast<int>( pixels.size() ) ) {
                 continue;
+            }
             const float l = pixel_luma( &pixels[idx] );
             s.sum += l;
-            if( l > s.max_val )
+            if( l > s.max_val ) {
                 s.max_val = l;
-            if( l > 0.001f )
+            }
+            if( l > 0.001f ) {
                 ++s.nonzero;
+            }
             ++count;
         }
     }
@@ -95,10 +98,14 @@ auto make_white_sprite( float x, float y, float w, float h ) -> lighting::sprite
     s.dst_y  = y;
     s.dst_w  = w;
     s.dst_h  = h;
-    s.src_u  = 0.0f;  s.src_v  = 0.0f;
-    s.src_uw = 1.0f;  s.src_vh = 1.0f;
-    s.tint_r = 1.0f;  s.tint_g = 1.0f;
-    s.tint_b = 1.0f;  s.tint_a = 1.0f;
+    s.src_u  = 0.0f;
+    s.src_v  = 0.0f;
+    s.src_uw = 1.0f;
+    s.src_vh = 1.0f;
+    s.tint_r = 1.0f;
+    s.tint_g = 1.0f;
+    s.tint_b = 1.0f;
+    s.tint_a = 1.0f;
     s.rotation = 0.0f;
     return s;
 }
@@ -111,11 +118,11 @@ struct test_harness {
     lighting::render_state *rs = nullptr;
 
     auto init() -> bool {
-        if( !sdl.ok ) return false;
-        window = SDL_CreateWindow( "render_test", 320, 240,
-                                   SDL_WINDOW_HIDDEN | SDL_WINDOW_HIGH_PIXEL_DENSITY );
-        if( !window ) return false;
-        if( !lighting::init_render_state_on( window ) ) {
+        if( !sdl.ok ) { return false; }
+    window = SDL_CreateWindow( "render_test", 320, 240,
+                               SDL_WINDOW_HIDDEN | SDL_WINDOW_HIGH_PIXEL_DENSITY );
+    if( !window ) { return false; }
+    if( !lighting::init_render_state_on( window ) ) {
             SDL_DestroyWindow( window );
             window = nullptr;
             return false;
@@ -125,7 +132,7 @@ struct test_harness {
     }
 
     ~test_harness() {
-        if( window ) SDL_DestroyWindow( window );
+        if( window ) { SDL_DestroyWindow( window ); }
     }
 
     sdl_video_session sdl;
@@ -199,8 +206,7 @@ TEST_CASE( "render_regression", "[.gpu][render]" )
     // -----------------------------------------------------------------------
     // Fixture A — Compositor: UI rects → offscreen → stats
     // -----------------------------------------------------------------------
-    SECTION( "compositor_ui_rects" )
-    {
+    SECTION( "compositor_ui_rects" ) {
         SDL_GPUTexture *offscreen = create_offscreen( rs, W, H );
         REQUIRE( offscreen != nullptr );
 
@@ -225,8 +231,7 @@ TEST_CASE( "render_regression", "[.gpu][render]" )
     // -----------------------------------------------------------------------
     // Fixture B — World-lit: checker tile grid → offscreen
     // -----------------------------------------------------------------------
-    SECTION( "world_lit_checker" )
-    {
+    SECTION( "world_lit_checker" ) {
         auto *white = rs.geometry().white_texture();
         REQUIRE( white != nullptr );
 
@@ -245,7 +250,9 @@ TEST_CASE( "render_regression", "[.gpu][render]" )
                 const float y = static_cast<float>( r ) * TILE_PX;
                 const float tint = ( r + c ) % 2 == 0 ? 1.0f : 0.3f;
                 lighting::sprite_instance s = make_white_sprite( x, y, TILE_PX, TILE_PX );
-                s.tint_r = tint; s.tint_g = tint; s.tint_b = tint;
+                s.tint_r = tint;
+                s.tint_g = tint;
+                s.tint_b = tint;
                 rs.queue_tile_sprite( white, s );
             }
         }
@@ -261,8 +268,7 @@ TEST_CASE( "render_regression", "[.gpu][render]" )
     // -----------------------------------------------------------------------
     // Fixture D — UI over world: composite world + UI layers
     // -----------------------------------------------------------------------
-    SECTION( "ui_over_world" )
-    {
+    SECTION( "ui_over_world" ) {
         auto *white = rs.geometry().white_texture();
         REQUIRE( white != nullptr );
 
@@ -281,7 +287,9 @@ TEST_CASE( "render_regression", "[.gpu][render]" )
                 const float y = static_cast<float>( r ) * TILE_PX;
                 const float tint = ( r + c ) % 2 == 0 ? 0.5f : 0.2f;
                 lighting::sprite_instance s = make_white_sprite( x, y, TILE_PX, TILE_PX );
-                s.tint_r = tint; s.tint_g = tint; s.tint_b = tint;
+                s.tint_r = tint;
+                s.tint_g = tint;
+                s.tint_b = tint;
                 rs.queue_tile_sprite( white, s );
             }
         }
@@ -307,8 +315,7 @@ TEST_CASE( "render_regression", "[.gpu][render]" )
     // -----------------------------------------------------------------------
     // Fixture E — Retention: cleared-queue frame is darker
     // -----------------------------------------------------------------------
-    SECTION( "retention_cleared_queue_darker" )
-    {
+    SECTION( "retention_cleared_queue_darker" ) {
         auto *white = rs.geometry().white_texture();
         REQUIRE( white != nullptr );
 
@@ -326,7 +333,9 @@ TEST_CASE( "render_regression", "[.gpu][render]" )
                 const float x = static_cast<float>( c ) * TILE_PX;
                 const float y = static_cast<float>( r ) * TILE_PX;
                 lighting::sprite_instance s = make_white_sprite( x, y, TILE_PX, TILE_PX );
-                s.tint_r = 0.5f; s.tint_g = 0.5f; s.tint_b = 0.5f;
+                s.tint_r = 0.5f;
+                s.tint_g = 0.5f;
+                s.tint_b = 0.5f;
                 rs.queue_tile_sprite( white, s );
             }
         }

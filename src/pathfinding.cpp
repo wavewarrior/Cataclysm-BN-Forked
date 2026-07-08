@@ -105,10 +105,10 @@ constexpr bool RouteSettings::is_in_search_radius( const point_bub_ms start,
         const point_bub_ms end ) const
 {
     if( is_inf( search_radius_coeff ) ) {
-        return true;
-    }
+    return true;
+}
 
-    const auto midpoint = point_bub_ms( ( end.raw() + start.raw() ) / 2 );
+const auto midpoint = point_bub_ms( ( end.raw() + start.raw() ) / 2 );
 
     const float objective_distance =
         rl_dist_exact( tripoint_bub_ms( start, 0 ), tripoint_bub_ms( end, 0 ) );
@@ -1069,8 +1069,8 @@ std::vector<tripoint_bub_ms> Pathfinding::get_route_3d(
             const Pathfinding::ZLevelChange next = z_path.back();
 
             const std::vector<tripoint_bub_ms> path_segment = Pathfinding::get_route_2d(
-                        cur_pos, next.from.xy(), next.from.z(),
-                        path_settings, route_settings );
+                    cur_pos, next.from.xy(), next.from.z(),
+                    path_settings, route_settings );
             if( path_segment.empty() ) {
                 // Give up early based on our inability to path to that z-change
                 result.clear();
@@ -1090,8 +1090,8 @@ std::vector<tripoint_bub_ms> Pathfinding::get_route_3d(
 
         // We arrived to final Z level
         const std::vector<tripoint_bub_ms> final_segment = Pathfinding::get_route_2d(
-                    cur_pos, to.xy(), to.z(),
-                    path_settings, route_settings );
+                cur_pos, to.xy(), to.z(),
+                path_settings, route_settings );
         if( final_segment.empty() ) {
             result.clear();
             return result;

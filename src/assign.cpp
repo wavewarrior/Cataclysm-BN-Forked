@@ -120,7 +120,7 @@ bool assign( const JsonObject &jo,
         }
         if( obj.has_string( name ) ) {
             out = read_from_json_string<units::mass>( *obj.get_raw( name ),
-                    units::mass_units );
+                  units::mass_units );
             return true;
         }
         return false;
@@ -186,7 +186,7 @@ bool assign( const JsonObject &jo,
         }
         if( obj.has_string( name ) ) {
             out = read_from_json_string<units::money>( *obj.get_raw( name ),
-                    units::money_units );
+                  units::money_units );
             return true;
         }
         return false;
@@ -257,7 +257,7 @@ bool assign( const JsonObject &jo,
         }
         if( obj.has_string( name ) ) {
             out = read_from_json_string<units::energy>( *obj.get_raw( name ),
-                    units::energy_units );
+                  units::energy_units );
             return true;
         }
         return false;

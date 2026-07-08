@@ -21,12 +21,10 @@
 //
 // Shaders: data/shaders/lighting/src/gi_field.comp.hlsl + gi_bounce.comp.hlsl.
 
+#include <SDL3/SDL_gpu.h>
 #include <cstdint>
 
-#include <SDL3/SDL_gpu.h>
-
-namespace lighting
-{
+namespace lighting {
 
 class gpu_device;
 
@@ -34,83 +32,81 @@ class gpu_device;
 // match the call site (sdl_render_frame.cpp). 32 bytes; shared by both passes.
 struct gi_params {
     std::uint32_t emitter_count;
-    std::uint32_t map_w;        // runtime tile dims (thread/tile grid extent)
+    std::uint32_t map_w; // runtime tile dims (thread/tile grid extent)
     std::uint32_t map_h;
-    float         current_z;    // probe z-plane (skip off-plane emitters)
-    float         shadow_k;     // sphere-trace cone hardness (reuse sprite knob)
+    float current_z;            // probe z-plane (skip off-plane emitters)
+    float shadow_k;             // sphere-trace cone hardness (reuse sprite knob)
     std::uint32_t shadow_steps; // per-emitter march cap
-    float         pad0;
-    float         pad1;
+    float pad0;
+    float pad1;
     // P2 sun/sky surface-radiance injection into the field (gi_field.comp reads
     // SkyBuf). Colour/intensity mirror the sprite's direct sun/sky terms so the
     // bounced daylight matches. Layout MUST match gi_field.comp's GiParams cbuffer.
-    float         sun_r = 0.f, sun_g = 0.f, sun_b = 0.f, sun_intensity = 0.f;
-    float         sky_r = 0.f, sky_g = 0.f, sky_b = 0.f, sky_intensity = 0.f;
+    float sun_r = 0.f, sun_g = 0.f, sun_b = 0.f, sun_intensity = 0.f;
+    float sky_r = 0.f, sky_g = 0.f, sky_b = 0.f, sky_intensity = 0.f;
 };
 
-class gi_compute_pass
-{
-    public:
-        gi_compute_pass() = default;
-        gi_compute_pass( const gi_compute_pass & ) = delete;
-        gi_compute_pass &operator=( const gi_compute_pass & ) = delete;
-        ~gi_compute_pass();
+class gi_compute_pass {
+public:
+    gi_compute_pass() = default;
+    gi_compute_pass(const gi_compute_pass&) = delete;
+    gi_compute_pass& operator=(const gi_compute_pass&) = delete;
+    ~gi_compute_pass();
 
-        // Compile both compute pipelines + allocate field_buf_/gi_buf_ for a
-        // max_w × max_h tile grid (4 floats/tile). Zeroes gi_buf_ once so the
-        // sprite never reads garbage before the first gather. Returns false on
-        // failure (logged); a failed pipeline leaves gi_buf_ a valid zero buffer
-        // (ready() is false → record() is a no-op → GI reads as off).
-        bool init( gpu_device &dev, std::uint32_t max_w, std::uint32_t max_h );
+    // Compile both compute pipelines + allocate field_buf_/gi_buf_ for a
+    // max_w × max_h tile grid (4 floats/tile). Zeroes gi_buf_ once so the
+    // sprite never reads garbage before the first gather. Returns false on
+    // failure (logged); a failed pipeline leaves gi_buf_ a valid zero buffer
+    // (ready() is false → record() is a no-op → GI reads as off).
+    bool init(gpu_device& dev, std::uint32_t max_w, std::uint32_t max_h);
 
-        // Reallocate the buffers for a new max tile size. Cheap no-op if
-        // unchanged. Returns false on failure.
-        bool resize( std::uint32_t max_w, std::uint32_t max_h );
+    // Reallocate the buffers for a new max tile size. Cheap no-op if
+    // unchanged. Returns false on failure.
+    bool resize(std::uint32_t max_w, std::uint32_t max_h);
 
-        void shutdown() noexcept;
+    void shutdown() noexcept;
 
-        bool ready() const noexcept {
-            return field_pipeline_ != nullptr && bounce_pipeline_ != nullptr
-                   && field_buf_ != nullptr && gi_buf_ != nullptr;
-        }
+    bool ready() const noexcept {
+        return field_pipeline_ != nullptr && bounce_pipeline_ != nullptr && field_buf_ != nullptr
+            && gi_buf_ != nullptr;
+    }
 
-        // The GI radiance buffer. Bound by the sprite pass as GiBuf (fragment
-        // storage buffer). Tile-res, x-major gi[(x*map_h+y)*4 + c]. Always
-        // non-null after a successful init (even if a pipeline failed), so the
-        // sprite's all-or-none storage-buffer bind always has a valid handle.
-        SDL_GPUBuffer *gi_buffer() const noexcept { return gi_buf_; }
+    // The GI radiance buffer. Bound by the sprite pass as GiBuf (fragment
+    // storage buffer). Tile-res, x-major gi[(x*map_h+y)*4 + c]. Always
+    // non-null after a successful init (even if a pipeline failed), so the
+    // sprite's all-or-none storage-buffer bind always has a valid handle.
+    SDL_GPUBuffer* gi_buffer() const noexcept { return gi_buf_; }
 
-        // Run both compute passes on `cb`: field dispatch (writes field_buf_)
-        // then bounce dispatch (reads field_buf_, writes gi_buf_). SDL_GPU
-        // inserts the compute→compute barrier on field_buf_ between them, and the
-        // compute-write→graphics-read barrier on gi_buf_ before the sprite pass.
-        // No-op if not ready or any arg invalid. The field pass binds emitter_buf
-        // (t0) + sdf_buf (t1) + sky_buf (t2) as readonly compute storage buffers;
-        // all three must carry SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ. sky_buf
-        // (sky_sun_pass output) feeds the P2 daylight-bounce injection — it must
-        // be recorded BEFORE this call so SDL_GPU inserts the write→read barrier.
-        void record( SDL_GPUCommandBuffer *cb,
-                     SDL_GPUBuffer *emitter_buf, SDL_GPUBuffer *sdf_buf,
-                     SDL_GPUBuffer *sky_buf,
-                     std::uint32_t runtime_w, std::uint32_t runtime_h,
-                     const gi_params &params );
+    // Run both compute passes on `cb`: field dispatch (writes field_buf_)
+    // then bounce dispatch (reads field_buf_, writes gi_buf_). SDL_GPU
+    // inserts the compute→compute barrier on field_buf_ between them, and the
+    // compute-write→graphics-read barrier on gi_buf_ before the sprite pass.
+    // No-op if not ready or any arg invalid. The field pass binds emitter_buf
+    // (t0) + sdf_buf (t1) + sky_buf (t2) as readonly compute storage buffers;
+    // all three must carry SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ. sky_buf
+    // (sky_sun_pass output) feeds the P2 daylight-bounce injection — it must
+    // be recorded BEFORE this call so SDL_GPU inserts the write→read barrier.
+    void record(
+        SDL_GPUCommandBuffer* cb, SDL_GPUBuffer* emitter_buf, SDL_GPUBuffer* sdf_buf,
+        SDL_GPUBuffer* sky_buf, std::uint32_t runtime_w, std::uint32_t runtime_h,
+        const gi_params& params);
 
-        // Dev oracle: synchronous GPU→CPU readback of gi_buf_ over the runtime
-        // tile region; logs sum/max/nonzero/centroid to DC::Main. Stalls the GPU
-        // (SDL_WaitForGPUIdle) — call on demand (F4 button), never per frame.
-        void debug_log_stats( std::uint32_t runtime_w, std::uint32_t runtime_h );
+    // Dev oracle: synchronous GPU→CPU readback of gi_buf_ over the runtime
+    // tile region; logs sum/max/nonzero/centroid to DC::Main. Stalls the GPU
+    // (SDL_WaitForGPUIdle) — call on demand (F4 button), never per frame.
+    void debug_log_stats(std::uint32_t runtime_w, std::uint32_t runtime_h);
 
-    private:
-        SDL_GPUBuffer *create_buffer( std::uint32_t floats, SDL_GPUBufferUsageFlags usage );
-        void zero_buffer( SDL_GPUBuffer *buf, std::uint32_t floats );
+private:
+    SDL_GPUBuffer* create_buffer(std::uint32_t floats, SDL_GPUBufferUsageFlags usage);
+    void zero_buffer(SDL_GPUBuffer* buf, std::uint32_t floats);
 
-        gpu_device              *dev_ = nullptr;
-        SDL_GPUComputePipeline  *field_pipeline_  = nullptr;
-        SDL_GPUComputePipeline  *bounce_pipeline_ = nullptr;
-        SDL_GPUBuffer           *field_buf_ = nullptr; // pass 1 out / pass 2 in (RW|R)
-        SDL_GPUBuffer           *gi_buf_    = nullptr; // pass 2 out (compute W | graphics R)
-        std::uint32_t            max_w_ = 0;
-        std::uint32_t            max_h_ = 0;
+    gpu_device* dev_ = nullptr;
+    SDL_GPUComputePipeline* field_pipeline_ = nullptr;
+    SDL_GPUComputePipeline* bounce_pipeline_ = nullptr;
+    SDL_GPUBuffer* field_buf_ = nullptr; // pass 1 out / pass 2 in (RW|R)
+    SDL_GPUBuffer* gi_buf_ = nullptr;    // pass 2 out (compute W | graphics R)
+    std::uint32_t max_w_ = 0;
+    std::uint32_t max_h_ = 0;
 };
 
 } // namespace lighting

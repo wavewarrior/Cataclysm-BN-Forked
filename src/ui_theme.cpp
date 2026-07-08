@@ -26,11 +26,13 @@ std::vector<std::string> g_game_order;
 unsigned hex_pair( const std::string &s, std::size_t i )
 {
     const auto v = []( char c ) -> unsigned {
-        if( c >= '0' && c <= '9' ) {
+        if( c >= '0' && c <= '9' )
+        {
             return c - '0';
         }
         const char l = c | 0x20;
-        if( l >= 'a' && l <= 'f' ) {
+        if( l >= 'a' && l <= 'f' )
+        {
             return 10 + l - 'a';
         }
         return 0;

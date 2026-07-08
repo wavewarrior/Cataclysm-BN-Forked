@@ -23,15 +23,13 @@
 #include "gpu_device.h"
 
 #include <SDL3_shadercross/SDL_shadercross.h>
-
 #include <cstdint>
 #include <span>
 #include <string>
 #include <string_view>
 #include <vector>
 
-namespace lighting
-{
+namespace lighting {
 
 // Resource bindings the compiled shader uses. Mirrors
 // SDL_ShaderCross_GraphicsShaderResourceInfo so callers don't need to include
@@ -46,7 +44,7 @@ struct shader_resource_info {
 // Result of a successful compile. `shader` is owned — caller must release
 // with SDL_ReleaseGPUShader(device, shader).
 struct compiled_shader {
-    SDL_GPUShader *shader = nullptr;
+    SDL_GPUShader* shader = nullptr;
     shader_resource_info resources{};
     explicit operator bool() const noexcept { return shader != nullptr; }
 };
@@ -71,7 +69,7 @@ struct compute_resource_info {
 // graphics path (shader → separate pipeline build), shadercross emits the
 // compute pipeline directly from SPIR-V + reflected metadata.
 struct compiled_compute_pipeline {
-    SDL_GPUComputePipeline *pipeline = nullptr;
+    SDL_GPUComputePipeline* pipeline = nullptr;
     compute_resource_info resources{};
     explicit operator bool() const noexcept { return pipeline != nullptr; }
 };
@@ -98,11 +96,8 @@ void shutdown_shader_compiler() noexcept;
 // compiled_shader (operator bool == false). The caller is expected to treat
 // shader-compile failure as fatal.
 compiled_shader compile_graphics_shader(
-    gpu_device &dev,
-    std::string_view source,
-    const char *entrypoint,
-    SDL_ShaderCross_ShaderStage stage,
-    const char *debug_name = nullptr );
+    gpu_device& dev, std::string_view source, const char* entrypoint,
+    SDL_ShaderCross_ShaderStage stage, const char* debug_name = nullptr);
 
 // Single-call HLSL → SDL_GPUComputePipeline. HLSL → SPIR-V → reflect compute
 // metadata → backend-native compute pipeline. The reflected metadata (resource
@@ -117,16 +112,14 @@ compiled_shader compile_graphics_shader(
 // (operator bool == false). Used both by the A0 go/no-go compute spike and the
 // real gi_compute_pass.
 compiled_compute_pipeline compile_compute_pipeline(
-    gpu_device &dev,
-    std::string_view source,
-    const char *entrypoint,
-    const char *debug_name = nullptr );
+    gpu_device& dev, std::string_view source, const char* entrypoint,
+    const char* debug_name = nullptr);
 
 // Load an HLSL shader source from the lighting shader dir
 // (data/shaders/lighting/src/<name>). Single source of truth for the live
 // shaders (no longer embedded in sprite_batcher.cpp). Returns the file text, or
 // an empty string (logged) when missing/unreadable — the caller treats an empty
 // source as a fatal compile failure, same as compile_graphics_shader.
-std::string load_lighting_shader_source( const std::string &name );
+std::string load_lighting_shader_source(const std::string& name);
 
 } // namespace lighting

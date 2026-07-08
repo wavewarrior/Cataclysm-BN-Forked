@@ -113,10 +113,10 @@ int tileray::dir8() const
 int tileray::dir_symbol( int sym ) const
 {
     switch( sym ) {
-        // output.cpp special_symbol() converts yubn to corners, hj to lines, c to cross
-        case 'j':
-            // vertical line
-            return "h\\j/h\\j/"[dir8()];
+    // output.cpp special_symbol() converts yubn to corners, hj to lines, c to cross
+    case 'j':
+        // vertical line
+        return "h\\j/h\\j/"[dir8()];
         case 'h':
             // horizontal line
             return "jhjh"[dir4()];
