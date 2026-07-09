@@ -94,8 +94,7 @@ git_describe(GIT_VERSION --tags --always --match "[0-9A-Z]*.[0-9A-Z]*")
 if (NOT "${GIT_VERSION}" MATCHES "GIT-NOTFOUND")
     string(REPLACE "-NOTFOUND" "" GIT_VERSION ${GIT_VERSION})
     string(TIMESTAMP _timestamp %Y-%m-%d-%H%M)
-    file(WRITE ${CMAKE_SOURCE_DIR}/src/version.h
-         "// NOLINT(cata-header-guard)\n\#define VERSION \"${GIT_VERSION}\"\n\#define BUILD_TIMESTAMP \"${_timestamp}\"\n")
+    file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/generated)
     message(STATUS "${PROJECT_NAME} build version is: ${GIT_VERSION}")
     add_definitions(-DGIT_VERSION)
 
@@ -111,6 +110,9 @@ commit sha: ${_sha1}\n\
 commit url: https://github.com/cataclysmbn/Cataclysm-BN/commit/${_sha1}"
     )
 endif ()
+
+# Include generated headers (version.h) from build tree
+include_directories(${CMAKE_BINARY_DIR}/generated)
 
 #OS Check Placeholders. Will be used for BINDIST
 if ("${CMAKE_SYSTEM_NAME}" MATCHES "Linux")
