@@ -3277,7 +3277,9 @@ static std::map<palette_id, mapgen_palette> palettes;
 // identity (stable within one finalization pass via the stream cache).
 // Cleared in reset() at the end of each finalization pass.
 static std::mutex s_palette_placings_mutex;
-static std::map<std::pair<const std::string *, int>, mapgen_palette::placing_map>
+// Keyed by path VALUE (not pointer) — the shared_ptr backing the path may be
+// released and its memory reused, causing pointer-based key collisions.
+static std::map<std::pair<std::string, int>, mapgen_palette::placing_map>
 palette_placings_cache;
 
 void mapgen_palette::pre_flatten_palettes()
@@ -3482,13 +3484,18 @@ mapgen_palette mapgen_palette::load_internal(
 
     std::string c = "palette " + new_pal.id.str();
     const auto loc = jo.get_source_location();
-    const auto cache_key = std::make_pair( loc.path.get(), loc.offset );
+    // Key by path VALUE, not raw pointer — the shared_ptr backing the path may be released
+    // and its memory reused for a different path, causing cache collisions.
+    const auto cache_key = std::make_pair( *loc.path, loc.offset );
     {
         std::lock_guard<std::mutex> lock( s_palette_placings_mutex );
         const auto cache_it = palette_placings_cache.find( cache_key );
         const auto t_inline0 = std::chrono::steady_clock::now();
         if( cache_it != palette_placings_cache.end() ) {
             format_placings = cache_it->second;
+            // Suppress report_unvisited() on cache hit — the first parse (cache miss)
+            // already validated all members. Typos are caught there.
+            jo.allow_omitted_members();
         } else {
             new_pal.load_place_mapings<jmapgen_terrain>( jo, "terrain", format_placings );
             new_pal.load_place_mapings<jmapgen_furniture>( jo, "furniture", format_placings );
