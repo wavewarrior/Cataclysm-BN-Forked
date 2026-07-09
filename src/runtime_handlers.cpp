@@ -7,6 +7,8 @@
 [[ noreturn ]]
 void exit_handler( int status )
 {
+    // Must join prewarm worker before unload_data() to avoid race
+    init::clear_prewarm();
     DynamicDataLoader::get_instance().unload_data();
     deinitDebug();
     g.reset();

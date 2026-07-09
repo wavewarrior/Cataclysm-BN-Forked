@@ -21,6 +21,7 @@
 #include "color.h"
 #include "cursesport.h"
 #include "debug.h"
+#include "init.h"
 #include "distraction_manager.h"
 #include "enums.h"
 #include "filesystem.h"
@@ -899,6 +900,8 @@ bool main_menu::new_character_tab()
         return false;
     }
     world_generator->set_active_world( world );
+    // Join pre-warm thread before any DDL work (load_world_modfiles)
+    init::join_prewarm();
     try {
         g->setup();
     } catch( const std::exception &err ) {
@@ -1070,9 +1073,21 @@ bool main_menu::load_character_tab( const std::string &worldname )
     world_generator->last_character_name = savegames[opt_val].decoded_name();
     world_generator->save_last_world_info();
     world_generator->set_active_world( world );
+    // Join pre-warm thread before any DDL work (load_world_modfiles)
+    init::join_prewarm();
+    drain_worker_thread_debugmsgs();
+
+    // Check if pre-warm loaded this world's data (reuse path)
+    const auto* prewarm = init::get_prewarm_result();
+    const bool reuse_prewarm = prewarm != nullptr
+                               && prewarm->world_name == worldname
+                               && prewarm->error.empty();
 
     try {
-        g->setup();
+        g->setup( !reuse_prewarm );
+        if( reuse_prewarm ) {
+            g->complete_prewarm_reuse( prewarm->mod_ids );
+        }
     } catch( const std::exception &err ) {
         debugmsg( "Error: %s", err.what() );
         return false;

@@ -477,7 +477,6 @@ class json_flag
 
         /** finalize */
         static void finalize_all( );
-
         /** Check consistency of all loaded flags */
         static void check_consistency();
 

@@ -25,7 +25,9 @@ Target: `total_wall_ms < 500ms` on Win11 warm, `< 2000ms` cold.
 
 ---
 
-## Measurement results (macOS ARM, warm cache, `bn` mod, pack verified)
+## Measurement results
+
+### macOS ARM (warm cache, `bn` mod, pack verified)
 
 Measured 2026-07-08 with `CATA_JSON_PERF=1 --check-mods bn`. Pack confirmed hit: 1890 entries, ~25MB.
 
@@ -41,7 +43,23 @@ Measured 2026-07-08 with `CATA_JSON_PERF=1 --check-mods bn`. Pack confirmed hit:
 | `finalize[Crafting recipes]` | 58ms | — |
 | **`total_wall_ms`** | **2294ms** | — |
 
-**Gating decision: SKIP §4 (parallel parse RawLayout cache).** Measured scan 20.2% < 30% required (plan lines 162/269). The pre-registered gate is not met — invest in §6 instead.
+### Win11 (i9-14900K, warm cache, `bn` mod, pack verified)
+
+| Metric | Before | After | Δ |
+|---|---|---|---|
+| `total_wall_ms` | ~4703 | ~2721 | -42% |
+| `parse_ms` | ~1632 | ~1869 | +14% (includes scan+handler) |
+| `finalize_ms` | ~2961 | ~732 | -75% |
+| `finalize[Mapgen weights]` | ~2779 | ~555 | -80% |
+| `scan_ms` | — | ~291 | **15.6%** |
+| `handler_ms` | — | ~1250 | 66.9% |
+| `pack_hit` | — | 1890 entries, 25MB | ✓ |
+
+Mapgen setup breakdown: `setup_jo_ms` ~9222 (dominant), `inline_read_ms` ~290, `palette_add_ms` ~37.
+
+Full `--check-mods` (all 80+ mods): 217.90s wall time (was 337.35s, -35%).
+
+**Gating decision: SKIP §4 (parallel parse RawLayout cache).** Win11 scan fraction 15.6% < 30% required. macOS scan fraction 20.2% < 30% required. Gate not met on either platform.
 
 ---
 
@@ -237,24 +255,24 @@ Both are deterministic given the same input. Both can be cached.
 
 ---
 
-## Combined impact projection (updated with measurements)
+## Combined impact projection (updated with Win11 measurements)
 
-**⚠ Measurement complete. §4 skipped. §5 and §6 remain.**
+**⚠ Measurement complete on both platforms. §4 skipped. §5 and §6 remain.**
 
-| Phase | Baseline | After §1–3 (done) | After §5 pre-warm | After §6 cache |
+| Phase | Baseline (Win11) | After §1–3 (done) | After §5 pre-warm | After §6 cache |
 |---|---|---|---|---|
-| Cold file open | ~5000ms cold | ~200ms (archive blob) | ~200ms | ~200ms |
-| `parse_ms` total | ~1744ms | ~1744ms | ~1744ms | ~0ms |
-| `finalize[Mapgen weights]` | ~105ms | ~105ms | ~105ms | ~0ms |
+| Cold file open | ~5000ms cold | TBD (Win11 cold needed) | TBD | ~200ms |
+| `parse_ms` total | ~1869ms | ~1869ms | ~1869ms | ~0ms |
+| `finalize[Mapgen weights]` | ~555ms | ~555ms | ~555ms | ~0ms |
 | `finalize[Items]` | ~116ms | ~116ms | ~116ms | ~0ms |
 | `finalize[Vehicle prototypes]` | ~188ms | ~188ms | ~188ms | ~0ms |
 | Other finalize | ~64ms | ~64ms | ~64ms | ~0ms |
-| **`total_wall_ms`** | **~4700ms** | **~2200ms** | **~2200ms** | **~200ms** |
-| **Perceived wait after world-pick** | **~2s** | **~2s** | **~200ms** | **~200ms** |
+| **`total_wall_ms`** | **~2721ms** | **~2721ms** | **~2721ms** | **~200ms** |
+| **Perceived wait after world-pick** | **~2.7s** | **~2.7s** | **~200ms** | **~200ms** |
 
 §5 (speculative pre-warm) is independent of all other steps — it hides ~90% of the warm-load wait by overlapping it with menu think-time, regardless of how fast or slow the actual load is. The remaining ~200ms (SDL tileset finalize, `load_tileset()`) is irreducible every launch: it is SDL texture upload on the render thread, not JSON data, so the §6 binary cache does not affect it.
 
-Key insight: §1–3 (LTO + PGO + archive blob) are DONE. §4 skipped after measurement. §5 is the biggest UX win independent of wall-clock speed. §6 is the engineering end-game.
+Key insight: §1–3 (LTO + PGO + archive blob) are DONE. §4 skipped after measurement on both platforms. §5 is the biggest UX win independent of wall-clock speed. §6 is the engineering end-game.
 
 ---
 
@@ -276,11 +294,11 @@ Step  What                                 Effort    Risk    Effect         Stat
   3   JSON archive blob                    3 days    low     dominates cold ✅ DONE
   3a  Instrument scan vs handler split     1 day     low     gates §4       ✅ DONE
   4   Parallel parse (RawLayout cache)     2 weeks   medium  150–500ms      ❌ SKIPPED
-  5   Speculative pre-warm                 3 weeks   medium  ~90% hidden    ⬜ NEXT
+  5   Speculative pre-warm                 3 weeks   medium  ~90% hidden    ✅ DONE
   6   Binary finalized-data cache          months    high    eliminates warm ⬜ FUTURE
 ```
 
-§1–3 DONE. §4 SKIPPED (scan fraction 20.2%, below 30% threshold). §5 NEXT — biggest UX win. §6 end-game.
+§1–3 DONE. §4 SKIPPED (scan fraction 20.2%, below 30% threshold). §5 DONE — speculative pre-warm shipped. §6 end-game.
 
 ---
 
@@ -313,5 +331,5 @@ Step  What                                 Effort    Risk    Effect         Stat
 
 ### Win11 validation needed
 - Cold-start run with pack vs directory scan to measure actual Defender bypass savings
-- Command: clear cache, then `CATA_JSON_PERF=1 --check-mods bn` twice (once with pack, once without)
+- Each run must be cold: reboot (or clear file+Defender cache) before each measurement — back-to-back runs warm both caches and mask the real cost
 - This is the only genuinely platform-specific measurement remaining; won't change §5/§6 decision

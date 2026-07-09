@@ -107,6 +107,7 @@
 #include "help.h"
 #include "iexamine.h"
 #include "init.h"
+#include "mapgen_async.h"
 #include "input.h"
 #include "int_id.h"
 #include "inventory.h"
@@ -3640,6 +3641,10 @@ bool game::load_dimension_data()
 
 bool game::load( const std::string &world )
 {
+    // Join pre-warm thread before any DDL work.
+    init::join_prewarm();
+    drain_worker_thread_debugmsgs();
+
     world_generator->init();
     WORLDINFO *wptr = world_generator->get_world( world );
     if( !wptr ) {
@@ -3650,9 +3655,18 @@ bool game::load( const std::string &world )
         return false;
     }
 
+    // Check if pre-warm loaded this world's data (reuse path)
+    const auto* prewarm = init::get_prewarm_result();
+    const bool reuse_prewarm = prewarm != nullptr
+                               && prewarm->world_name == world
+                               && prewarm->error.empty();
+
     try {
         world_generator->set_active_world( wptr );
-        g->setup();
+        g->setup( !reuse_prewarm );
+        if( reuse_prewarm ) {
+            g->complete_prewarm_reuse( prewarm->mod_ids );
+        }
         if( !g->load( wptr->world_saves.front() ) ) {
             return false;
         }
@@ -3662,6 +3676,21 @@ bool game::load( const std::string &world )
     }
 
     return true;
+}
+
+void game::complete_prewarm_reuse( const std::vector<mod_id>& mod_ids )
+{
+    loading_ui ui( true );
+    DynamicDataLoader::get_instance().finalize_main_phases( ui );
+    DynamicDataLoader::get_instance().check_consistency( ui );
+    // Run main Lua scripts using prewarmed Lua state
+    auto& loader = DynamicDataLoader::get_instance();
+    init::load_main_lua_scripts( *loader.lua, mod_ids );
+    cata::clear_mod_being_loaded( *loader.lua );
+    refresh_mapgen_postprocess_hook_presence( *loader.lua );
+    // Replay post-load steps skipped by setup(false)
+    load_artifacts( get_active_world(), SAVE_ARTIFACTS );
+    panel_manager::get_manager().reload_widget_layouts();
 }
 
 bool game::load( const save_t &name )

@@ -115,16 +115,19 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include <atomic>
 #include <exception>
 #include <fstream>
 #include <iterator>
 #include <memory>
+#include <optional>
 #include <queue>
 #include <ranges>
 #include <set>
 #include <sstream> // for throwing errors
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -142,8 +145,13 @@ struct DynamicDataLoader::cached_streams {
 // above the total source-file count to read each file from disk exactly once.
 static constexpr int stream_cache_limit = 4096;
 
+// Forward declarations for helpers used by prewarm worker
+static void clear_loaded_data();
+static auto normalize_mod_load_order( std::vector<mod_id> mods ) -> std::vector<mod_id>;
+
 namespace
 {
+
 
 
 struct json_perf_load_metrics {
@@ -211,6 +219,160 @@ static uint64_t compute_pack_hash( const std::string& path )
 }
 
 
+/// Pre-warm state: background thread loading last-world modfiles.
+static std::optional<std::thread> g_prewarm_thread;
+using init::prewarm_result;
+static std::optional<prewarm_result> g_prewarm_result;
+
+using named_entry = std::pair<std::string, std::function<void()>>;
+
+static const std::vector<named_entry> worker_safe_finalizers = {{
+        { translate_marker( "Flags" ), &DynamicDataLoader::finalize_flags },
+        { translate_marker( "Mutation Flags" ), &DynamicDataLoader::finalize_trait_flags },
+        { translate_marker( "Body parts" ), &body_part_type::finalize_all },
+        { translate_marker( "Bionics" ), &bionic_data::finalize_all },
+        { translate_marker( "Weather types" ), &weather_types::finalize_all },
+        { translate_marker( "World types" ), &world_types::finalize_all },
+        { translate_marker( "Field types" ), &field_types::finalize_all },
+        { translate_marker( "Ammo effects" ), &ammo_effects::finalize_all },
+        { translate_marker( "Emissions" ), &emit::finalize },
+        { translate_marker( "Sidebar widgets" ), &widget::finalize_all },
+        { translate_marker( "Items" ), []() { item_controller->finalize(); } },
+        { translate_marker( "Crafting requirements" ), []() { requirement_data::finalize(); } },
+        { translate_marker( "Vehicle parts" ), &vpart_info::finalize },
+        { translate_marker( "Traps" ), &trap::finalize },
+        { translate_marker( "Terrain" ), &set_ter_ids },
+        { translate_marker( "Furniture" ), &finalize_furn },
+        { translate_marker( "Overmap land use codes" ), &overmap_land_use_codes::finalize },
+        { translate_marker( "Overmap terrain" ), &overmap_terrains::finalize },
+        { translate_marker( "Overmap connections" ), &overmap_connections::finalize },
+        { translate_marker( "Overmap specials" ), &overmap_specials::finalize },
+        { translate_marker( "Overmap locations" ), &overmap_locations::finalize },
+        { translate_marker( "Start locations" ), &start_locations::finalize_all },
+        { translate_marker( "Zone manager" ), &zone_manager::reset_manager },
+        { translate_marker( "Vehicle prototypes" ), &vehicle_prototype::finalize },
+        { translate_marker( "Mapgen weights" ), &calculate_mapgen_weights },
+        { translate_marker( "Mapgen parameters" ), &overmap_specials::finalize_mapgen_parameters },
+        { translate_marker( "Monster types" ), []() { MonsterGenerator::generator().finalize_mtypes(); } },
+        { translate_marker( "Monster groups" ), &MonsterGroupManager::FinalizeMonsterGroups },
+        { translate_marker( "Monster factions" ), &monfactions::finalize },
+        { translate_marker( "Factions" ), &npc_factions::finalize },
+        { translate_marker( "Constructions" ), &constructions::finalize },
+        { translate_marker( "Crafting recipes" ), &recipe_dictionary::finalize },
+        { translate_marker( "Recipe groups" ), &recipe_group::check },
+        { translate_marker( "Martial arts" ), &finialize_martial_arts },
+        { translate_marker( "NPC classes" ), &npc_class::finalize_all },
+        { translate_marker( "Missions" ), &mission_type::finalize },
+        { translate_marker( "Behaviors" ), &behavior::finalize },
+        { translate_marker( "Harvest lists" ), &harvest_list::finalize_all },
+        { translate_marker( "Anatomies" ), &anatomy::finalize_all },
+        { translate_marker( "Mutations" ), &mutation_branch::finalize },
+        { translate_marker( "Achievements" ), &achievement::finalize },
+    }
+};
+
+static const std::vector<named_entry> main_thread_finalizers = {{
+        { translate_marker( "Localization" ), &l10n_data::load_mod_catalogues },
+        { translate_marker( "Tileset" ), &load_tileset },
+    }
+};
+
+static void _finalize_entry( loading_ui& ui, const named_entry& e )
+{
+    const auto tf0 = std::chrono::steady_clock::now();
+    e.second();
+    const auto tf_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - tf0 ).count();
+    if( s_json_perf_enabled && tf_ms >= 5 ) {
+        // NOLINTNEXTLINE(cata-text-style)
+        fprintf( stderr, "[JSON_PERF]   finalize[%s]=%lldms\n", e.first.c_str(),
+                 static_cast<long long>( tf_ms ) );
+    }
+    ui.proceed();
+}
+static std::atomic<bool> g_prewarm_joined{ false };
+
+/// Run the FULL load+finalize pipeline on a background thread.
+/// This mirrors load_and_finalize_packs but skips UI rendering.
+/// Returns a prewarm_result (error string or wall time).
+static prewarm_result run_prewarm_load_for_world( std::string world_name, std::vector<mod_id> mod_ids )
+{
+    auto start = std::chrono::steady_clock::now();
+    try {
+        loading_ui ui( false );
+
+        // Clear existing data before loading (same as load_world_modfiles)
+        clear_loaded_data();
+
+        // Separate valid mods
+        std::vector<mod_id> available;
+        for( const mod_id& mod : mod_ids ) {
+            if( mod.is_valid() ) {
+                available.emplace_back( mod );
+                ui.add_entry( mod->name() );
+            } else {
+                debugmsg( "prewarm: unknown content pack [%s]", mod );
+            }
+        }
+
+        DynamicDataLoader& loader = DynamicDataLoader::get_instance();
+
+        // Lua setup (MUST run before load_data_from_path)
+        cata::lua_sidebar_widgets::clear_widgets();
+        loader.lua = cata::make_wrapped_state();
+        cata::init_global_state_tables( *loader.lua, available );
+
+        ui.show();
+
+        // Run mod preload scripts
+        for( const mod_id& mod : available ) {
+            if( mod->lua_api_version ) {
+                cata::set_mod_being_loaded( *loader.lua, mod );
+                cata::run_mod_preload_script( *loader.lua, mod );
+            }
+        }
+
+        // Register Lua callbacks for item parsing
+        cata::reg_lua_icallback_actors( *loader.lua, *item_controller );
+
+        // Load all mod JSON files
+        for( const mod_id& mod : available ) {
+            loader.load_data_from_path( mod->path, mod.str(), ui );
+            ui.proceed();
+        }
+
+        // Finalize worker-safe entries only (0-40)
+        loader.finalize_worker_phases( ui );
+
+        // Resolve Lua callbacks for bionics and mutations
+        cata::resolve_lua_bionic_and_mutation_callbacks();
+
+        // Run mod finalize scripts
+        for( const mod_id& mod : available ) {
+            if( mod->lua_api_version ) {
+                cata::set_mod_being_loaded( *loader.lua, mod );
+                cata::run_mod_finalize_script( *loader.lua, mod );
+            }
+        }
+
+    } catch( const std::exception& e ) {
+        auto result = prewarm_result{};
+        result.error = std::string( "Prewarm failed: " ) + e.what();
+        return result;
+    } catch( ... ) {
+        auto result = prewarm_result{};
+        result.error = "Prewarm failed: unknown exception";
+        return result;
+    }
+
+    auto end = std::chrono::steady_clock::now();
+    auto result = prewarm_result{};
+    result.world_name = std::move( world_name );
+    result.mod_ids = std::move( mod_ids );
+    result.wall_ms = std::chrono::duration_cast<std::chrono::milliseconds>( end - start );
+    return result;
+}
+
 } // namespace
 
 DynamicDataLoader::DynamicDataLoader() { initialize(); }
@@ -222,6 +384,9 @@ DynamicDataLoader &DynamicDataLoader::get_instance()
     static DynamicDataLoader theDynamicDataLoader;
     return theDynamicDataLoader;
 }
+
+void DynamicDataLoader::finalize_flags() { json_flag::finalize_all(); }
+void DynamicDataLoader::finalize_trait_flags() { json_trait_flag::finalize_all(); }
 
 bool DynamicDataLoader::try_load_pack( const std::string& path )
 {
@@ -503,7 +668,7 @@ void DynamicDataLoader::load_deferred( deferred_json& data )
                     load_object( jo, it->second );
                 } catch( const JsonError& err ) { debugmsg( "(json-error)\n%s", err.what() ); }
             }
-            inp_mngr.pump_events();
+            if( !is_pool_worker_thread() ) { inp_mngr.pump_events(); }
         }
         auto it = data.begin();
         std::advance( it, n );
@@ -523,7 +688,7 @@ void DynamicDataLoader::load_deferred( deferred_json& data )
                             "this object is discarded" );
                     } catch( const JsonError& err ) { debugmsg( "(json-error)\n%s", err.what() ); }
                 }
-                inp_mngr.pump_events();
+                if( !is_pool_worker_thread() ) { inp_mngr.pump_events(); }
             }
             data.clear();
             return; // made no progress on this cycle so abort
@@ -894,7 +1059,7 @@ void DynamicDataLoader::load_all_from_json(
     } else {
         jsin.error( "expected object or array" );
     }
-    inp_mngr.pump_events();
+    if( !is_pool_worker_thread() ) { inp_mngr.pump_events(); }
 }
 
 void DynamicDataLoader::unload_data()
@@ -1013,78 +1178,45 @@ void DynamicDataLoader::finalize_loaded_data( loading_ui& ui )
 
     on_out_of_scope reset_stream_cache( [this]() {
         stream_cache.reset();
-        preloaded_content_.clear(); // free ~50 MB of pre-loaded JSON text
+        preloaded_content_.clear();
     } );
     stream_cache = std::make_unique<cached_streams>();
     g_deferred_stats = {};
 
     ui.new_context( _( "Finalizing" ) );
-
-    using named_entry = std::pair<std::string, std::function<void()>>;
-    const std::vector<named_entry> entries = {{
-            {_( "Flags" ), &json_flag::finalize_all},
-            {_( "Mutation Flags" ), &json_trait_flag::finalize_all},
-            {_( "Body parts" ), &body_part_type::finalize_all},
-            {_( "Bionics" ), &bionic_data::finalize_all},
-            {_( "Weather types" ), &weather_types::finalize_all},
-            {_( "World types" ), &world_types::finalize_all},
-            {_( "Field types" ), &field_types::finalize_all},
-            {_( "Ammo effects" ), &ammo_effects::finalize_all},
-            {_( "Emissions" ), &emit::finalize},
-            {_( "Sidebar widgets" ), &widget::finalize_all},
-            {_( "Items" ), []() { item_controller->finalize(); }},
-            {_( "Crafting requirements" ), []() { requirement_data::finalize(); }},
-            {_( "Vehicle parts" ), &vpart_info::finalize},
-            {_( "Traps" ), &trap::finalize},
-            {_( "Terrain" ), &set_ter_ids},
-            {_( "Furniture" ), &finalize_furn},
-            {_( "Overmap land use codes" ), &overmap_land_use_codes::finalize},
-            {_( "Overmap terrain" ), &overmap_terrains::finalize},
-            {_( "Overmap connections" ), &overmap_connections::finalize},
-            {_( "Overmap specials" ), &overmap_specials::finalize},
-            {_( "Overmap locations" ), &overmap_locations::finalize},
-            {_( "Start locations" ), &start_locations::finalize_all},
-            {_( "Zone manager" ), &zone_manager::reset_manager},
-            {_( "Vehicle prototypes" ), &vehicle_prototype::finalize},
-            {_( "Mapgen weights" ), &calculate_mapgen_weights},
-            {_( "Mapgen parameters" ), &overmap_specials::finalize_mapgen_parameters},
-            {_( "Monster types" ), []() { MonsterGenerator::generator().finalize_mtypes(); }},
-            {_( "Monster groups" ), &MonsterGroupManager::FinalizeMonsterGroups},
-            {_( "Monster factions" ), &monfactions::finalize},
-            {_( "Factions" ), &npc_factions::finalize},
-            {_( "Constructions" ), &constructions::finalize},
-            {_( "Crafting recipes" ), &recipe_dictionary::finalize},
-            {_( "Recipe groups" ), &recipe_group::check},
-            {_( "Martial arts" ), &finialize_martial_arts},
-            {_( "NPC classes" ), &npc_class::finalize_all},
-            {_( "Missions" ), &mission_type::finalize},
-            {_( "Behaviors" ), &behavior::finalize},
-            {_( "Harvest lists" ), &harvest_list::finalize_all},
-            {_( "Anatomies" ), &anatomy::finalize_all},
-            {_( "Mutations" ), &mutation_branch::finalize},
-            {_( "Achievements" ), &achievement::finalize},
-            {_( "Localization" ), &l10n_data::load_mod_catalogues},
-            {_( "Tileset" ), &load_tileset},
-        }
-    };
-
-    for( const named_entry& e : entries ) { ui.add_entry( e.first ); }
-
+    for( const named_entry& e : worker_safe_finalizers ) { ui.add_entry( _( e.first.c_str() ) ); }
+    for( const named_entry& e : main_thread_finalizers ) { ui.add_entry( _( e.first.c_str() ) ); }
     ui.show();
-    for( const named_entry& e : entries ) {
-        const auto tf0 = std::chrono::steady_clock::now();
-        e.second();
-        const auto tf_ms =
-            std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::steady_clock::now() - tf0 )
-            .count();
-        if( s_json_perf_enabled && tf_ms >= 5 ) {
-            // NOLINTNEXTLINE(cata-text-style)
-            fprintf( stderr, "[JSON_PERF]   finalize[%s]=%lldms\n", e.first.c_str(),
-                     static_cast<long long>( tf_ms ) );
-        }
-        ui.proceed();
-    }
+    for( const named_entry& e : worker_safe_finalizers ) { _finalize_entry( ui, e ); }
+    for( const named_entry& e : main_thread_finalizers ) { _finalize_entry( ui, e ); }
+
+    finalized = true;
+}
+
+void DynamicDataLoader::finalize_worker_phases( loading_ui& ui )
+{
+    assert( !stream_cache && "Expected stream cache to be null" );
+
+    on_out_of_scope reset_stream_cache( [this]() {
+        stream_cache.reset();
+        preloaded_content_.clear();
+    } );
+    stream_cache = std::make_unique<cached_streams>();
+    g_deferred_stats = {};
+
+    ui.new_context( _( "Finalizing" ) );
+    for( const named_entry& e : worker_safe_finalizers ) { ui.add_entry( _( e.first.c_str() ) ); }
+    ui.show();
+    for( const named_entry& e : worker_safe_finalizers ) { _finalize_entry( ui, e ); }
+}
+
+void DynamicDataLoader::finalize_main_phases( loading_ui& ui )
+{
+    for( const named_entry& e : main_thread_finalizers ) { ui.add_entry( _( e.first.c_str() ) ); }
+    ui.show();
+    for( const named_entry& e : main_thread_finalizers ) { _finalize_entry( ui, e ); }
+
+    finalized = true;
 }
 
 void DynamicDataLoader::check_consistency( loading_ui& ui )
@@ -1451,4 +1583,70 @@ void init::load_soundpack_files( const std::string& soundpack_path )
     // clear_loaded_data() is not needed here, tileset gets loaded on game init before any mods
     loading_ui ui( false );
     DynamicDataLoader::get_instance().load_data_from_path( soundpack_path, "sound_core", ui );
+}
+
+void init::start_prewarm()
+{
+    // Gate: skip if no workers (avoids synchronous execution on single-core)
+    if( get_thread_pool().num_workers() <= 0 ) {
+        return;
+    }
+
+    // Don't start if already active
+    if( g_prewarm_thread.has_value() && g_prewarm_thread->joinable() ) {
+        return;
+    }
+    // Initialize world generator (loads last_world_name and world list)
+    world_generator->init();
+
+    const std::string last_world = world_generator->last_world_name;
+    if( last_world.empty() ) {
+        return;
+    }
+
+    WORLDINFO* world = world_generator->get_world( last_world );
+    if( !world ) {
+        return;
+    }
+
+    // Snapshot mod IDs by value (never pass live world* to worker)
+    auto mod_ids = normalize_mod_load_order( world->active_mod_order );
+
+    g_prewarm_joined = false;
+    g_prewarm_thread = std::thread( [last_world, mod_ids]() {
+        worker_thread_guard guard;
+        g_prewarm_result = run_prewarm_load_for_world( last_world, std::move( mod_ids ) );
+    } );
+}
+
+void init::join_prewarm()
+{
+    if( g_prewarm_thread.has_value() && g_prewarm_thread->joinable() ) {
+        g_prewarm_thread->join();
+        g_prewarm_thread.reset();
+        g_prewarm_joined = true;
+        // Drain debug messages queued from worker thread
+        drain_worker_thread_debugmsgs();
+    }
+}
+
+void init::clear_prewarm()
+{
+    // MUST join, not detach — detach leaves worker mutating DDL globals
+    // while main thread does clear_loaded_data() = concurrent mutation crash.
+    join_prewarm();
+    g_prewarm_result.reset();
+}
+
+bool init::is_prewarm_active()
+{
+    return g_prewarm_thread.has_value() && g_prewarm_thread->joinable();
+}
+
+auto init::get_prewarm_result() -> const prewarm_result*
+{
+    if( g_prewarm_joined && g_prewarm_result.has_value() ) {
+        return &g_prewarm_result.value();
+    }
+    return nullptr;
 }

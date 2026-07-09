@@ -648,6 +648,7 @@ int main( int argc, char *argv[] )
         exit_handler( -999 );
     }
 
+
     // Now we do the actual game.
 
     game_ui::init_ui();
@@ -664,6 +665,7 @@ int main( int argc, char *argv[] )
 
     DebugLog( DL::Info, DC::Main ) << "LAPI version: " << cata::get_lapi_version_string();
     cata::startup_lua_test();
+
 
     if( !lua_doc_output_path.empty() || !lua_types_output_path.empty() ) {
         init_colors();
@@ -689,6 +691,12 @@ int main( int argc, char *argv[] )
         }
         return 0;
     }
+    // Start speculative pre-warm of last-played world's modfiles.
+    // Runs on background thread; main menu stays responsive.
+    // Must be after startup_lua_test() to avoid racing sol/luna global state.
+    // Placed after lua-doc block to avoid spawning a thread that would
+    // terminate the process on early exit (deno task docs:gen).
+    init::start_prewarm();
 
     prompt_select_lang_on_startup();
     replay_buffered_debugmsg_prompts();

@@ -181,6 +181,14 @@ class DynamicDataLoader
          * game should *not* proceed in that case.
          */
         void finalize_loaded_data( loading_ui& ui );
+        /** Finalize only worker-safe entries (for pre-warm worker). */
+        void finalize_worker_phases( loading_ui& ui );
+        /** Finalize only main-thread entries (for pre-warm reuse). */
+        void finalize_main_phases( loading_ui& ui );
+
+        /** Friend wrappers for private finalize methods. */
+        static void finalize_flags();
+        static void finalize_trait_flags();
 
         /**
          * Loads and then removes entries from @param data
@@ -260,5 +268,44 @@ void load_soundpack_files( const std::string& soundpack_path );
  * @return whether all mods were successfully loaded and had no errors
  */
 bool check_mods_for_errors( loading_ui& ui, const std::vector<mod_id> &opts );
+
+/// Result from a background pre-warm load.
+struct prewarm_result {
+    std::string world_name;              ///< World that was prewarmed.
+    std::vector<mod_id> mod_ids;         ///< Mod IDs loaded (for Lua scripts).
+    std::string error;                   ///< Empty on success.
+    std::chrono::milliseconds wall_ms{}; ///< Total wall time spent.
+};
+
+/**
+ * Start speculative pre-warm of the last-played world's modfiles.
+ * Runs on a background thread; does not block.
+ * Only starts if thread pool has workers (avoids sync fallback).
+ * Call after load_static_data() and before the main menu.
+ */
+void start_prewarm();
+
+/**
+ * Join the pre-warm thread and drain its debug messages.
+ * Must be called before any DDL-touching path (world selection, new world, etc.).
+ * No-op if pre-warm was never started or already joined.
+ */
+void join_prewarm();
+
+/**
+ * Clear pre-warm state without waiting. Call when abandoning pre-warm
+ * (e.g., user picks a different world).
+ */
+void clear_prewarm();
+
+/**
+ * Check if pre-warm is active (thread running or result pending).
+ */
+bool is_prewarm_active();
+
+/**
+ * Get the pre-warm result (only after join_prewarm()).
+ */
+auto get_prewarm_result() -> const prewarm_result*;
 
 } // namespace init
