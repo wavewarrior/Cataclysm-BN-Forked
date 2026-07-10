@@ -1,5 +1,4 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include <string>
 #include <utility>
 
@@ -25,16 +24,16 @@
 #include "units_temperature.h"
 #include "vehicle.h"
 #include "weather.h"
-
 #include "activity_actor_definitions.h"
+
 
 static auto prepare_fixed_window_wait( const time_duration &duration ) -> void
 {
-    ( void ) duration; // duration handled by actor internally
     clear_all_state();
 
-    g->timed_events = timed_event_manager {};
-    calendar::turn = calendar::turn_zero + 12_hours;
+    static auto next_start_turn = calendar::turn_zero + 12_hours;
+    calendar::turn = next_start_turn;
+    next_start_turn += 1_hours;
 
     auto &weather = get_weather();
     weather.weather_id = weather_type_id( "clear" );
@@ -46,10 +45,8 @@ static auto prepare_fixed_window_wait( const time_duration &duration ) -> void
     g->m.invalidate_map_cache( g->get_levz() );
     g->m.build_map_cache( g->get_levz(), true );
 
-    g->new_game = false;
-    g->u.set_moves( 100 );
     g->u.assign_activity( std::make_unique<player_activity>(
-                              std::make_unique<wait_activity_actor>( wait_type::WAIT, "" ) ) );
+                              std::make_unique<wait_activity_actor>( wait_type::WAIT, "", duration ) ) );
 
     REQUIRE( g->u.activity );
     REQUIRE( *g->u.activity );

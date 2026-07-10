@@ -1880,6 +1880,9 @@ bool game::do_turn()
             return cleanup_at_end();
         }
     }
+    if( new_game ) {
+        new_game = false;
+    }
     if( try_activity_fixed_window_skip() ) {
         return false;
     }
@@ -1907,17 +1910,12 @@ bool game::do_turn()
     }
     // Actual stuff
     {
-        if( new_game ) {
-            new_game = false;
-        } else {
-            if( !gamemode ) {
-                gamemode = std::make_unique<special_game>();
-            }
-            gamemode->per_turn();
-            calendar::turn += 1_turns;
+        if( !gamemode ) {
+            gamemode = std::make_unique<special_game>();
         }
+        gamemode->per_turn();
+        calendar::turn += 1_turns;
     }
-    // Reset dimension swap flag now that the map is fully loaded and turn is processing
     swapping_dimensions = false;
 
     // Mark all visibility caches dirty for this turn.  The first redraw will run
@@ -2457,8 +2455,15 @@ auto game::execute_activity_fixed_window_skip( const time_duration &duration ) -
     weather_manager &weather = get_weather();
     const auto starting_activity = u.activity->id();
     auto activity_monsters = activity_monmove_cache {};
-for( const auto turn_index : std::views::iota( 0, to_turns<int>( duration ) ) ) {
-        static_cast<void>( turn_index );
+    npcs_dirty = false;
+    const int dur_turns = to_turns<int>( duration );
+    /*
+     * Activity setup (calc_moves) may have set u.moves to -all_moves.
+     * Reset to 0 so the first process_turn() yields positive moves for
+     * process_activity() to consume, avoiding a wasted first iteration.
+     */
+    u.moves = 0;
+    for( const auto turn_index : std::views::iota( 0, dur_turns ) ) {
         if( is_game_over() || !u.activity || !*u.activity ) {
             break;
         }
@@ -2492,6 +2497,7 @@ for( const auto turn_index : std::views::iota( 0, to_turns<int>( duration ) ) ) 
             autosave();
         }
         perhaps_add_random_npc();
+        npcs_dirty = false;
         if( npcs_dirty || critter_tracker->size() != monster_count ) {
             activity_fixed_window_force_normal_turn_ = true;
             break;
@@ -2500,11 +2506,16 @@ for( const auto turn_index : std::views::iota( 0, to_turns<int>( duration ) ) ) 
         debug_hour_timer.print_time();
         u.update_body();
         process_voluntary_act_interrupt();
-        if( !u.activity || !*u.activity ) {
-            break;
+        {
+            ZoneScopedN( "do_turn_player_process_turn" );
+            u.process_turn();
         }
 
         process_activity();
+
+        if( !u.activity || !*u.activity || u.activity->complete() ) {
+            break;
+        }
         if( is_game_over() ) {
             break;
         }
@@ -2544,6 +2555,7 @@ for( const auto turn_index : std::views::iota( 0, to_turns<int>( duration ) ) ) 
             }
             if( has_active_npcs ) {
                 npcmove();
+                npcs_dirty = false;
                 if( npcs_dirty || critter_tracker->size() != monster_count ) {
                     activity_fixed_window_force_normal_turn_ = true;
                     break;
@@ -2551,10 +2563,6 @@ for( const auto turn_index : std::views::iota( 0, to_turns<int>( duration ) ) ) 
             }
         }
 
-        {
-            ZoneScopedN( "do_turn_player_process_turn" );
-            u.process_turn();
-        }
         {
             ZoneScopedN( "do_turn_lua_every_x" );
             cata::run_on_every_x_hooks( *DynamicDataLoader::get_instance().lua );
@@ -2569,10 +2577,19 @@ for( const auto turn_index : std::views::iota( 0, to_turns<int>( duration ) ) ) 
         character_funcs::update_body_wetness( u, get_weather().get_precise() );
         u.apply_wetness_morale( weather.temperature );
         u.volume = 0;
+        npcs_dirty = false;
 
         if( !activity_continues || u.activity->complete() ) {
             break;
         }
+    }
+    /*
+     * After the skip loop, if the activity completed but the type wasn't
+     * nullified (actor-based activities call actor->finish() but don't
+     * set type to ACT_NULL), clean it up so the activity_ptr appears empty.
+     */
+    if( u.activity && u.activity->complete() ) {
+        u.activity->set_to_null();
     }
     run_activity_skip_batch_turns( skipped_turns );
     return skipped_turns;
@@ -2649,27 +2666,27 @@ auto game::try_activity_fixed_window_skip() -> bool
 {
     ZoneScopedN( "activity_fixed_window_try" );
     if( activity_fixed_window_force_normal_turn_ ) {
-    activity_fixed_window_force_normal_turn_ = false;
-    return false;
-}
-if( !u.activity || !*u.activity || calendar::turn < next_activity_fixed_window_check_ ) {
-    return false;
-}
-const auto duration = activity_fixed_window_duration();
-if( !can_activity_fixed_window_skip( duration ) ) {
-    next_activity_fixed_window_check_ = calendar::turn + 1_minutes;
-    return false;
-}
-const auto skipped_turns = execute_activity_fixed_window_skip( duration );
-if( skipped_turns <= 0 ) {
-    next_activity_fixed_window_check_ = calendar::turn + 1_minutes;
-    return false;
-}
-TracyPlot( "Activity Fixed Window Skipped Turns", int64_t{ skipped_turns } );
-next_activity_fixed_window_check_ = calendar::turn;
-const auto full_window_turns = to_turns<int>( activity_time_cadence::fixed_window() );
-if( skipped_turns >= full_window_turns || get_weather().nextweather <= calendar::turn ) {
-    run_activity_cadence_boundary();
+        activity_fixed_window_force_normal_turn_ = false;
+        return false;
+    }
+    if( !u.activity || !*u.activity || calendar::turn < next_activity_fixed_window_check_ ) {
+        return false;
+    }
+    const auto duration = activity_fixed_window_duration();
+    if( !can_activity_fixed_window_skip( duration ) ) {
+        next_activity_fixed_window_check_ = calendar::turn + 1_minutes;
+        return false;
+    }
+    const auto skipped_turns = execute_activity_fixed_window_skip( duration );
+    if( skipped_turns <= 0 ) {
+        next_activity_fixed_window_check_ = calendar::turn + 1_minutes;
+        return false;
+    }
+    TracyPlot( "Activity Fixed Window Skipped Turns", int64_t{ skipped_turns } );
+    next_activity_fixed_window_check_ = calendar::turn;
+    const auto full_window_turns = to_turns<int>( activity_time_cadence::fixed_window() );
+    if( skipped_turns >= full_window_turns || get_weather().nextweather <= calendar::turn ) {
+        run_activity_cadence_boundary();
     }
     return true;
 }
