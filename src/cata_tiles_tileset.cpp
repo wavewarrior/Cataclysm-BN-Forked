@@ -1126,6 +1126,15 @@ bool tileset_loader::copy_surface_to_dynamic_atlas(
             const SDL_FRect fsrc{float( st_sub_rect.x ), float( st_sub_rect.y ), float( st_sub_rect.w ), float( st_sub_rect.h )};
             const SDL_FRect fdst{float( atl_tex.second.x ), float( atl_tex.second.y ), float( atl_tex.second.w ), float( atl_tex.second.h )};
             SDL_RenderTexture( renderer.get(), st_tex, &fsrc, &fdst );
+            // Mirror to the GPU atlas so no-VFX tiles (fx_type::none cache-hit in
+            // get_or_default) are visible in the GPU world-render pass.  Without
+            // this the GPU sheet is allocated but never populated: the shader
+            // samples uninitialised VRAM → solid magenta ground tiles.
+            if( SDL_GPUTexture * gpu_atlas =
+                    ts.tileset_atlas->find_gpu_texture( atl_tex.first.get() ) ) {
+                lighting::get_render_state().upload_surface_subregion_to_gpu_texture(
+                    gpu_atlas, atl_tex.second.x, atl_tex.second.y, st_surf, &st_sub_rect );
+            }
         }
 
         const auto tex_key = tileset_lookup_key{index, TILESET_NO_MASK, tileset_fx_type::none,
@@ -2024,6 +2033,11 @@ void tileset_loader::ensure_default_item_highlight()
 
     auto [tex, rect] = ts.tileset_atlas->allocate_sprite( ts.tile_width, ts.tile_height );
     SDL_UpdateTexture( tex.get(), &rect, surface->pixels, surface->pitch );
+    // Mirror to GPU atlas — same reason as copy_surface_to_dynamic_atlas.
+    if( SDL_GPUTexture * gpu = ts.tileset_atlas->find_gpu_texture( tex.get() ) ) {
+        lighting::get_render_state().upload_surface_subregion_to_gpu_texture(
+            gpu, rect.x, rect.y, surface.get(), nullptr );
+    }
 
     ts.tile_ids[ITEM_HIGHLIGHT].sprite.fg.add( std::vector<int>( {index} ), 1 );
     ts.tile_lookup.emplace(
