@@ -20,7 +20,7 @@
 #ifdef COOP_ENABLED
 
 #include "avatar.h"
-#include "catch/catch.hpp"
+#include "catch/catch_amalgamated.hpp"
 #include "coop_proto.h"
 #include "coop_server.h"
 #include "game.h"

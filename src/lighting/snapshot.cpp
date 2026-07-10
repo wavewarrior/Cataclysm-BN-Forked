@@ -198,11 +198,8 @@ std::vector<gpu_emitter> build_emitter_snapshot(event_queue& eq, float frame_ms)
     // (my_MAPSIZE > 0), so player-pos checks alone miss the main menu.
     // The reliable discriminator is world_generator->active_world: null
     // when no world is loaded (main menu, between worlds), set after a
-    // world is picked. NOTE: active_world is set ~185ms BEFORE
-    // load_world_modfiles finishes populating ter_t/furn_t factories.
-    // Terrain access (collect_zlev) is guarded separately with
-    // int_id<ter_t>(0).is_valid() to handle that window.
-    // Decorative warm-amber emitter sized to cover a 1920×1080 menu (radius ~45 tiles).
+    // world is picked. Decorative warm-amber emitter sized to cover a
+    // 1920×1080 menu (radius ~45 tiles).
     const auto push_menu_decoration = [&]() {
         // Position is float-valued — make_omni takes ints, but we want
         // sub-tile resolution for the cycle-presets. Build the emitter

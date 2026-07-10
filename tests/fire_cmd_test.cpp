@@ -10,7 +10,7 @@
  * resolve_hit() stage (Phase 2) or emit_visuals() (Phase 3).
  */
 
-#include "catch/catch.hpp"
+#include "catch/catch_amalgamated.hpp"
 #include "fire_cmd.h"
 #include "line.h"
 #include "map_helpers.h"

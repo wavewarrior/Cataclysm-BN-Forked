@@ -17,7 +17,7 @@
  */
 
 #include "calendar.h"
-#include "catch/catch.hpp"
+#include "catch/catch_amalgamated.hpp"
 #include "coop_server.h"
 #include "coordinates.h"
 #include "game.h"

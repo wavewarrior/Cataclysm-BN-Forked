@@ -1,7 +1,7 @@
 #include "game_inventory.h"
 
-#include "activity_actor_definitions.h"
 #include "avatar.h"
+#include "activity_actor_definitions.h"
 #include "avatar_action.h"
 #include "avatar_functions.h"
 #include "bionics.h"

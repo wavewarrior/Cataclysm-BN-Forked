@@ -21,7 +21,7 @@
 
 #include "avatar.h"
 #include "calendar.h"
-#include "catch/catch.hpp"
+#include "catch/catch_amalgamated.hpp"
 #include "coop_client.h"
 #include "coop_packets.h"
 #include "coop_reconcile.h"

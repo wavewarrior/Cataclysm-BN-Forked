@@ -1,6 +1,6 @@
 #ifdef COOP_ENABLED
 
-#include "catch/catch.hpp"
+#include "catch/catch_amalgamated.hpp"
 #include "coop_net.h"
 
 #include <SDL3_net/SDL_net.h>

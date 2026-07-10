@@ -16,7 +16,7 @@
  * Those tests belong in the E2E harness (scripts/test_coop.ts), not here.
  */
 
-#include "catch/catch.hpp"
+#include "catch/catch_amalgamated.hpp"
 #include "coop_client.h"
 #include "coop_sim_transport.h"
 

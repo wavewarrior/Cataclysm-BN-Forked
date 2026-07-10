@@ -93,6 +93,7 @@ using namespace cata_tiles_internal;
 static const efftype_id effect_ridden( "ridden" );
 
 static const trait_id trait_INATTENTIVE( "INATTENTIVE" );
+
 static const std::string ZOMBIE_REVIVAL_INDICATOR( "zombie_revival_indicator" );
 
 static const flag_id flag_TINT_NO_FG( "TINT_NO_FG" );
@@ -102,6 +103,7 @@ static const flag_id flag_TINT_NONE( "TINT_NONE" );
 
 namespace
 {
+
 std::string get_ascii_tile_id( const uint32_t sym, const int FG, const int BG )
 {
     return std::string( {
@@ -263,7 +265,6 @@ cata_tiles::cata_tiles( const SDL_Renderer_Ptr& renderer, const GeometryRenderer
 cata_tiles::~cata_tiles() = default;
 
 
-
 const tile_type *tileset::find_tile_type( const std::string& id ) const
 {
     const auto iter = tile_ids.find( id );
@@ -344,7 +345,6 @@ std::tuple<bool, SDL_Surface *, SDL_Rect> tileset::get_sprite_surface( int sprit
 }
 
 
-
 size_t tileset::register_warp_surface(
     SDL_Surface_Ptr surface, const point offset, const bool offset_mode ) const
 {
@@ -374,6 +374,7 @@ std::tuple<SDL_Surface *, point, bool> tileset::get_warp_surface( const size_t w
 #endif
 
 
+
 void cata_tiles::set_draw_scale( float scale )
 {
     assert( tileset_ptr );
@@ -383,6 +384,7 @@ void cata_tiles::set_draw_scale( float scale )
     tile_ratiox = ( static_cast<float>( tile_width ) / static_cast<float>( fontwidth ) );
     tile_ratioy = ( static_cast<float>( tile_height ) / static_cast<float>( fontheight ) );
 }
+
 
 
 
@@ -406,6 +408,7 @@ const color_tint_pair *tileset::get_tint( const std::string& tint_id )
 
 
 
+
 // Tuning knobs for the sprite-animation system, refreshed once per frame from options
 // (avoids re-reading 14 options per creature). File-scope keeps creature.h's
 // animation_tuning type out of cata_tiles.h.
@@ -415,12 +418,10 @@ static animation_tuning s_anim_tuning;
 static bool s_anim_override = false;
 
 
-
 /// Global multiplier on per-tile depth_extrude_lean (0 = lean off, 1 = full, >1 = exaggerated).
 float g_depth_lean_str = 1.0f;
 /// Global multiplier on per-tile depth_extrude_dark (0 = darkening off, 1 = full).
 float g_depth_dark_str = 1.0f;
-
 
 
 void cata_tiles::draw(
@@ -1594,7 +1595,6 @@ void cata_tiles::get_window_tile_counts(
 }
 
 
-
 bool cata_tiles::draw_from_id_string(
     const tile_search_params& tile, const tripoint_bub_ms& pos, const tint_config& bg_tint,
     const tint_config& fg_tint, lit_level ll, bool apply_visual_effects, int overlay_count,
@@ -1905,7 +1905,6 @@ void cata_tiles::draw_om_tile_recursively(
 // render_state::build_outline_ring splices offset silhouette copies of the whole
 // range behind them — one clean composite ring around body + worn items. Ring
 // thickness, alpha, enable and per-attitude colours are live F4 knobs (g_outline_*).
-
 
 
 bool cata_tiles::draw_sprite_at(
@@ -2364,6 +2363,7 @@ bool cata_tiles::draw_block( const tripoint_bub_ms& p, SDL_Color color, int scal
 
 
 
+
 point cata_tiles::player_to_screen( point_bub_ms p ) const
 {
     point screen;
@@ -2382,6 +2382,7 @@ point cata_tiles::player_to_screen( point_bub_ms p ) const
     }
     return {screen};
 }
+
 
 
 

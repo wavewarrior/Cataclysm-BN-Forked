@@ -1,4 +1,10 @@
 #include "player_activity.h"
+#include "player_activity_ptr.h"
+
+#include <algorithm>
+#include <array>
+#include <memory>
+#include <utility>
 
 #include "activity_actor.h"
 #include "activity_actor_definitions.h"
@@ -22,7 +28,6 @@
 #include "npc.h"
 #include "options.h"
 #include "player.h"
-#include "player_activity_ptr.h"
 #include "profile.h"
 #include "recipe.h"
 #include "rng.h"
@@ -31,11 +36,6 @@
 #include "string_formatter.h"
 #include "string_id.h"
 #include "translations.h"
-
-#include <algorithm>
-#include <array>
-#include <memory>
-#include <utility>
 
 using metric = std::pair<units::mass, units::volume>;
 
@@ -67,24 +67,22 @@ static const activity_id ACT_TRAVELLING( "ACT_TRAVELLING" );
 static const activity_id ACT_VEHICLE( "ACT_VEHICLE" );
 static const activity_id ACT_WAIT_STAMINA( "ACT_WAIT_STAMINA" );
 
-player_activity::player_activity(): type( activity_id::NULL_ID() ) {}
+player_activity::player_activity() : type( activity_id::NULL_ID() ) { }
 
-player_activity::player_activity(
-    activity_id t, int turns, int Index, int pos, const std::string& name_in )
-    : type( t ),
-      moves_total( turns ),
-      moves_left( turns ),
-      index( Index ),
-      position( pos ),
-      name( name_in ),
-      placement( tripoint_min ),
-      auto_resume( false ) {}
+player_activity::player_activity( activity_id t, int turns, int Index, int pos,
+                                  const std::string &name_in ) :
+    type( t ), moves_total( turns ), moves_left( turns ),
+    index( Index ),
+    position( pos ), name( name_in ),
+    placement( tripoint_min ), auto_resume( false )
+{
+}
 
-player_activity::player_activity( std::unique_ptr<activity_actor> actor_ )
-    : type( actor_->get_type() ),
-      actor( std::move( actor_ ) ),
-      moves_total( 0 ),
-      moves_left( 0 ) {}
+player_activity::player_activity( std::unique_ptr<activity_actor> actor_ ) : type(
+        actor_->get_type() ),
+    actor( std::move( actor_ ) ), moves_total( 0 ), moves_left( 0 )
+{
+}
 
 player_activity::~player_activity() = default;
 
@@ -110,12 +108,12 @@ int player_activity::get_value( size_t index, int def ) const
     return index < values.size() ? values[index] : def;
 }
 
-std::string player_activity::get_str_value( size_t index, const std::string& def ) const
+std::string player_activity::get_str_value( size_t index, const std::string &def ) const
 {
     return index < str_values.size() ? str_values[index] : def;
 }
 
-void player_activity::init_all_moves( Character& who )
+void player_activity::init_all_moves( Character &who )
 {
     speed = activity_speed();
     speed.type = type;
@@ -123,18 +121,23 @@ void player_activity::init_all_moves( Character& who )
         get_assistants( who );
         speed.assistant_count = assistants().size();
     }
-    if( type->bench_affected() ) { speed.find_best_bench( who.bub_pos() ); }
+    if( type->bench_affected() ) {
+        speed.find_best_bench( who.bub_pos() );
+    }
     if( actor ) {
         speed.morale_factor_custom_formula = [&]( const Character & who ) {
             return actor->calc_morale_factor( who );
         };
-        speed.tools_factor_custom_formula = [&]( const q_reqs & reqs, const inventory & inv ) {
+        speed.tools_factor_custom_formula = [&]( const q_reqs & reqs,
+        const inventory & inv ) {
             return actor->calc_tools_factor( reqs, inv );
         };
-        speed.stats_factor_custom_formula = [&]( const Character & who, const stat_reqs & reqs ) {
+        speed.stats_factor_custom_formula = [&]( const Character & who,
+        const stat_reqs & reqs ) {
             return actor->calc_stats_factors( who, reqs );
         };
-        speed.skills_factor_custom_formula = [&]( const Character & who, const skill_reqs & reqs ) {
+        speed.skills_factor_custom_formula = [&]( const Character & who,
+        const skill_reqs & reqs ) {
             return actor->calc_skill_factor( who, reqs );
         };
 
@@ -147,31 +150,38 @@ void player_activity::init_all_moves( Character& who )
 inline std::vector<npc *> &player_activity::assistants()
 {
     if( !assistants_ids_.empty() && assistants_.empty() ) {
-        for( npc& guy : g->all_npcs() ) {
-            if( assistants_ids_.contains( guy.getID().get_value() ) ) { assistants_.push_back( &guy ); }
+        for( npc &guy : g->all_npcs() ) {
+            if( assistants_ids_.contains( guy.getID().get_value() ) ) {
+                assistants_.push_back( &guy );
+            }
         }
     }
     return assistants_;
 }
 
-std::vector<npc *> player_activity::get_assistants( const Character& who, unsigned short max )
+std::vector<npc *> player_activity::get_assistants( const Character &who, unsigned short max )
 {
-    if( max < 1 ) { return {}; }
+    if( max < 1 ) {
+        return {};
+    }
     int n = 0;
     return g->get_npcs_if( [&]( const npc & guy ) {
-        if( n >= max ) { return false; }
+        if( n >= max ) {
+            return false;
+        }
         // NPCs can help craft if awake, taking orders, within pickup range and have clear path
-        bool ok =
-            guy.is_npc() && &guy != &who && !guy.in_sleep_state() && guy.is_obeying( who )
-            && guy.activity->id() != ACT_ASSIST
-            && rl_dist( guy.bub_pos(), who.bub_pos() ) < PICKUP_RANGE
-            && get_map().clear_path( who.bub_pos(), guy.bub_pos(), PICKUP_RANGE, 1, 100 );
-        if( ok ) { n++; }
+        bool ok = guy.is_npc() && &guy != &who && !guy.in_sleep_state() && guy.is_obeying( who ) &&
+                  guy.activity->id() != ACT_ASSIST &&
+                  rl_dist( guy.bub_pos(), who.bub_pos() ) < PICKUP_RANGE &&
+                  get_map().clear_path( who.bub_pos(), guy.bub_pos(), PICKUP_RANGE, 1, 100 );
+        if( ok ) {
+            n++;
+        }
         return ok;
     } );
 }
 
-void player_activity::get_assistants( const Character& who )
+void player_activity::get_assistants( const Character &who )
 {
     unsigned short max = type->max_assistants();
     if( max < 1 ) {
@@ -180,65 +190,62 @@ void player_activity::get_assistants( const Character& who )
     }
 
     assistants_ = get_assistants( who, max );
-    for( Character * guy : assistants_ ) {
-        guy->assign_activity(
-            std::make_unique<player_activity>( std::make_unique<assist_activity_actor>() ) );
+    for( Character *guy : assistants_ ) {
+        guy->assign_activity( std::make_unique<player_activity>
+                              ( std::make_unique<assist_activity_actor>() ) );
         assistants_ids_.insert( guy->getID().get_value() );
     }
 }
 
-static std::string craft_progress_message( const avatar& u, const player_activity& act )
+static std::string craft_progress_message( const avatar &u, const player_activity &act )
 {
-    const item* craft = &*act.targets.front();
+    const item *craft = &*act.targets.front();
     if( craft == nullptr ) {
         // Should never happen (?)
         return string_format( _( "%s…" ), act.get_verb().translated() );
     }
 
     // Horrid copypaste warning! TODO: Functions
-    const recipe& rec = craft->get_making();
+    const recipe &rec = craft->get_making();
     const auto bench_pos = act.coords.front();
     // Ugly
     const auto bench_t = bench_type( act.values[craft_bench_type_idx] );
 
-    const bench_location bench{bench_t, bench_pos};
+    const bench_location bench{ bench_t, bench_pos };
 
     const float light_mult = lighting_crafting_speed_multiplier( u, rec );
     const float bench_mult = workbench_crafting_speed_multiplier( *craft, bench );
     const float morale_mult = morale_crafting_speed_multiplier( u, rec );
-    const auto tools_mult =
-        ( act.values.size() > craft_tools_mult_percent_idx )
-        ? static_cast<float>( act.values[craft_tools_mult_percent_idx] ) / 100.0f
-        : crafting_tools_speed_multiplier( u, rec );
+    const auto tools_mult = ( act.values.size() > craft_tools_mult_percent_idx )
+                            ? static_cast<float>( act.values[craft_tools_mult_percent_idx] ) / 100.0f
+                            : crafting_tools_speed_multiplier( u, rec );
     const int assistants = u.available_assistant_count( craft->get_making() );
     const float base_total_moves = std::max( 1, rec.batch_time( craft->charges, 1.0f, 0 ) );
     const float assist_total_moves = std::max( 1, rec.batch_time( craft->charges, 1.0f, assistants ) );
     const float assist_mult = base_total_moves / assist_total_moves;
     const float speed_mult = u.get_speed() / 100.0f;
     const float mutation_mult = u.mutation_value( "crafting_speed_modifier" );
-    const float game_opt_mult =
-        get_option<int>( "CRAFTING_SPEED_MULT" ) == 0
-        ? 9999
-        : 100.0f / get_option<int>( "CRAFTING_SPEED_MULT" );
-    const float total_mult =
-        light_mult * bench_mult * morale_mult * tools_mult * assist_mult * speed_mult
-        * mutation_mult * game_opt_mult;
+    const float game_opt_mult = get_option<int>( "CRAFTING_SPEED_MULT" ) == 0
+                                ? 9999
+                                : 100.0f / get_option<int>( "CRAFTING_SPEED_MULT" );
+    const float total_mult = light_mult * bench_mult * morale_mult * tools_mult * assist_mult *
+                             speed_mult *
+                             mutation_mult * game_opt_mult;
 
     const double remaining_percentage = 1.0 - craft->get_counter() / 10'000'000.0;
-    int remaining_turns =
-        remaining_percentage * base_total_moves / 100 / std::max( 0.01f, total_mult );
-    std::string time_desc =
-        string_format( _( "Time left: %s" ), to_string( time_duration::from_turns( remaining_turns ) ) );
+    int remaining_turns = remaining_percentage * base_total_moves / 100 / std::max( 0.01f, total_mult );
+    std::string time_desc = string_format( _( "Time left: %s" ),
+                                           to_string( time_duration::from_turns( remaining_turns ) ) );
 
-    const std::array<std::pair<float, std::string>, 8> mults_with_data = {
-        {   {total_mult, _( "Total" )},
-            {speed_mult, _( "Speed" )},
-            {light_mult, _( "Light" )},
-            {bench_mult, _( "Workbench" )},
-            {morale_mult, _( "Morale" )},
-            {tools_mult, _( "Tools" )},
-            {assist_mult, _( "Assistants" )},
-            {mutation_mult, _( "Traits" )}
+    const std::array<std::pair<float, std::string>, 8> mults_with_data = { {
+            { total_mult, _( "Total" ) },
+            { speed_mult, _( "Speed" ) },
+            { light_mult, _( "Light" ) },
+            { bench_mult, _( "Workbench" ) },
+            { morale_mult, _( "Morale" ) },
+            { tools_mult, _( "Tools" ) },
+            { assist_mult, _( "Assistants" ) },
+            { mutation_mult, _( "Traits" ) }
         }
     };
     std::string mults_desc = _( "Crafting speed multipliers:\n" );
@@ -254,23 +261,27 @@ static std::string craft_progress_message( const avatar& u, const player_activit
         first = false;
     }
 
-    return string_format(
-               _( "%s: %s\n\n%s\n\n%s" ), act.get_verb().translated(), craft->tname(), time_desc,
-               mults_desc );
+    return string_format( _( "%s: %s\n\n%s\n\n%s" ), act.get_verb().translated(), craft->tname(),
+                          time_desc,
+                          mults_desc );
 }
 
-static std::string format_spd(
-    float level, std::string name, int indent = 0, bool force_show = false )
+static std::string format_spd( float level, std::string name, int indent = 0,
+                               bool force_show = false )
 {
-    if( !force_show && level == 1.0f ) { return ""; }
+    if( !force_show && level == 1.0f ) {
+        return "";
+    }
     int percent = static_cast<int>( std::roundf( level * 100.0f ) );
-    nc_color col = percent == 100 ? c_white : percent > 100 ? c_green : c_red;
+    nc_color col = percent == 100
+                   ? c_white
+                   : percent > 100 ? c_green : c_red;
     std::string spaces = "";
     std::string colorized = colorize( std::to_string( percent ) + '%', col );
     return string_format( _( " %s- %s: %s\n" ), spaces.insert( 0, indent, ' ' ), name, colorized );
 }
 
-std::optional<std::string> player_activity::get_progress_message( const avatar& u ) const
+std::optional<std::string> player_activity::get_progress_message( const avatar &u ) const
 {
     if( !type || get_verb().empty() ) {
     return std::optional<std::string>();
@@ -292,7 +303,7 @@ std::optional<std::string> player_activity::get_progress_message( const avatar& 
             if( actor->progress.empty() ) {
                 target = "";
                 progress_desc = "";
-                // shouldn't ever happend actually
+                //shouldn't ever happend actually
                 debugmsg( "Progress counter is empty, despite activity using actor, total tasks %s",
                           actor->progress.get_total_tasks() );
             } else {
@@ -319,25 +330,25 @@ std::optional<std::string> player_activity::get_progress_message( const avatar& 
                                                     speed.moves_per_turn() ) ) );
             }
         } else {
-            if( !targets.empty() && targets.front().is_accessible()
-                && !targets.front().is_destroyed() ) {
+            if( !targets.empty() && targets.front().is_accessible() && !targets.front().is_destroyed() ) {
                 target = string_format( ": %s", targets.front()->tname( targets.front()->count() ) );
             }
             if( moves_total > 0 ) {
-                progress_desc +=
-                    string_format( "%.1f%%\n", ( 1.0f - float( moves_left ) / moves_total ) * 100.0f );
+                progress_desc += string_format( "%.1f%%\n",
+                                                ( 1.0f - float( moves_left ) / moves_total ) * 100.0f );
             }
             if( moves_left > 0 ) {
-                progress_desc += string_format(
-                                     _( "Time left: %s\n" ),
-                                     to_string( time_duration::from_turns( moves_left / speed.moves_per_turn() ) ) );
+                progress_desc += string_format( _( "Time left: %s\n" ),
+                                                to_string( time_duration::from_turns( moves_left / speed.moves_per_turn() ) ) );
             }
-            if( moves_total <= 0 && moves_left <= 0 ) { progress_desc = ""; }
+            if( moves_total <= 0 && moves_left <= 0 ) {
+                progress_desc = "";
+            }
         }
 
         /*
-         * Speed block
-         */
+        * Speed block
+        */
         std::string mults_desc = string_format( _( "Speed multipliers:\n" ) );
         mults_desc += format_spd( speed.total(), "Total", 0, true );
         mults_desc += format_spd( speed.assist, "Assistants", 1 );
@@ -349,13 +360,16 @@ std::optional<std::string> player_activity::get_progress_message( const avatar& 
         mults_desc += format_spd( speed.bench_factor, "Workbench", 1 );
         mults_desc += format_spd( speed.stats_total(), "Stats", 1 );
 
-        for( auto& stat : speed.stats ) {
+        for( auto &stat : speed.stats ) {
             mults_desc += format_spd( stat.second, get_stat_name( stat.first ), 2 );
         }
 
 
-        return string_format(
-                   _( "%s%s\n%s\n%s" ), get_verb().translated(), target, progress_desc, mults_desc );
+
+        return string_format( _( "%s%s\n%s\n%s" ), get_verb().translated(),
+                              target,
+                              progress_desc,
+                              mults_desc );
     }
 
     if( actor ) {
@@ -393,9 +407,11 @@ if( type == ACT_CRAFT ) {
                     u.get_skill_level_object( skill ).can_train() ) {
                     const SkillLevel &skill_level = u.get_skill_level_object( skill );
                     //~ skill_name current_skill_level -> next_skill_level (% to next level)
-                    extra_info = string_format(
-                                     pgettext( "reading progress", "%s %d -> %d (%d%%)" ), skill->name(),
-                                     skill_level.level(), skill_level.level() + 1, skill_level.exercise() );
+                    extra_info = string_format( pgettext( "reading progress", "%s %d -> %d (%d%%)" ),
+                                                skill->name(),
+                                                skill_level.level(),
+                                                skill_level.level() + 1,
+                                                skill_level.exercise() );
                 }
             }
         }
@@ -423,24 +439,32 @@ if( type == ACT_CRAFT ) {
            : string_format( _( "%s: %s" ), get_verb().translated(), extra_info );
 }
 
-void player_activity::start_or_resume( Character& who, bool resuming )
+void player_activity::start_or_resume( Character &who, bool resuming )
 {
-    if( actor && !resuming ) { actor->start( *this, who ); }
+    if( actor && !resuming ) {
+        actor->start( *this, who );
+    }
     init_all_moves( who );
-    if( rooted() ) { who.rooted_message(); }
+    if( rooted() ) {
+        who.rooted_message();
+    }
 }
 
-void player_activity::do_turn( player& p )
+void player_activity::do_turn( player &p )
 {
     ZoneScopedN( "player_activity::do_turn" );
     active = true;
-    on_out_of_scope _resolve_on_return( [this]() { this->resolve_active(); } );
+    on_out_of_scope _resolve_on_return( [this]() {
+        this->resolve_active();
+    } );
 
     /*
-     * Auto-needs block
-     * Should happen before activity or it may fail du to 0 moves
-     */
-    if( *this && type->will_refuel_fires() ) { try_fuel_fire( *this, p ); }
+    * Auto-needs block
+    * Should happen before activity or it may fail du to 0 moves
+    */
+    if( *this && type->will_refuel_fires() ) {
+        try_fuel_fire( *this, p );
+    }
     if( calendar::once_every( 30_minutes ) ) {
         no_food_nearby_for_auto_consume = false;
         no_drink_nearby_for_auto_consume = false;
@@ -477,25 +501,26 @@ void player_activity::do_turn( player& p )
      * Moves block
      * This might finish the activity (set it to null)
      * Leave as is till full migration to actors for "NEITHER"
-     */
+    */
     if( !type->special() ) {
         if( type->complex_moves() ) {
-            if( calendar::once_every( 1_minutes ) ) { calc_moves( p ); }
+            if( calendar::once_every( 1_minutes ) ) {
+                calc_moves( p );
+            }
 
             int moves_total = speed.moves_per_turn();
 
-            // fancy new system
-            if( actor && !actor->progress.invalid() ) {
+            //fancy new system
+            if( actor ) {
                 if( actor->progress.get_moves_left() >= moves_total ) {
-                    actor->progress.mod_moves_left( -moves_total );
+                    actor->progress.mod_moves_left( - moves_total );
                     p.moves = 0;
                 } else {
-                    p.moves -= std::round(
-                                   ( moves_total - actor->progress.get_moves_left() ) * 100.0f / moves_total );
+                    p.moves -= std::round( ( moves_total - actor->progress.get_moves_left() ) * 100.0f / moves_total );
                     actor->progress.mod_moves_left( -actor->progress.get_moves_left() );
                 }
             }
-            // old one
+            //old one
             else {
                 if( moves_left >= moves_total ) {
                     moves_left -= moves_total;
@@ -506,17 +531,17 @@ void player_activity::do_turn( player& p )
                 }
             }
         } else {
-            // fancy new system
-            if( actor && !actor->progress.invalid() ) {
+            //fancy new system
+            if( actor ) {
                 if( actor->progress.get_moves_left() >= 100 ) {
-                    actor->progress.mod_moves_left( -100 );
+                    actor->progress.mod_moves_left( - 100 );
                     p.moves = 0;
                 } else {
                     p.moves -= actor->progress.get_moves_left();
                     actor->progress.mod_moves_left( -actor->progress.get_moves_left() );
                 }
             }
-            // old one
+            //old one
             else {
                 if( moves_left >= 100 ) {
                     moves_left -= 100;
@@ -529,12 +554,14 @@ void player_activity::do_turn( player& p )
         }
     }
 
-    if( actor ) { actor->do_turn( *this, p ); }
+    if( actor ) {
+        actor->do_turn( *this, p );
+    }
 
 
     /*
-     * Stamina block
-     */
+    * Stamina block
+    */
     // Activities should never excessively drain stamina.
     // adjusted stamina because
     // autotravel doesn't reduce stamina after do_turn()
@@ -547,7 +574,9 @@ void player_activity::do_turn( player& p )
     const bool travel_activity = id() == ACT_TRAVELLING;
     const int adjusted_stamina = travel_activity ? p.get_stamina() - 1 : p.get_stamina();
     if( adjusted_stamina < previous_stamina && p.get_stamina() < p.get_stamina_max() / 3 ) {
-        if( one_in( 50 ) ) { p.add_msg_if_player( _( "You pause for a moment to catch your breath." ) ); }
+        if( one_in( 50 ) ) {
+            p.add_msg_if_player( _( "You pause for a moment to catch your breath." ) );
+        }
         auto_resume = true;
         std::unique_ptr<player_activity> new_act = std::make_unique<player_activity>(
                 std::make_unique<wait_stamina_activity_actor>( 200 + p.get_stamina_max() / 3 ) );
@@ -569,7 +598,10 @@ void player_activity::do_turn( player& p )
         } else {
             set_to_null();
         }
-        for( Character * npc : assistants() ) { npc->cancel_activity(); }
+        for( Character *npc : assistants() ) {
+            npc->cancel_activity();
+        }
+
     }
     if( !p.activity ) {
         // Make sure data of previous activity is cleared
@@ -582,20 +614,27 @@ void player_activity::do_turn( player& p )
     }
 }
 
-void player_activity::canceled( Character& who )
+void player_activity::canceled( Character &who )
 {
-    if( *this && actor ) { actor->canceled( *this, who ); }
-    for( Character * npc : assistants() ) { npc->cancel_activity(); }
+    if( *this && actor ) {
+        actor->canceled( *this, who );
+    }
+    for( Character *npc : assistants() ) {
+        npc->cancel_activity();
+    }
 }
 
-template <typename T> bool containers_equal( const T& left, const T& right )
+template <typename T>
+bool containers_equal( const T &left, const T &right )
 {
-    if( left.size() != right.size() ) { return false; }
+    if( left.size() != right.size() ) {
+        return false;
+    }
 
     return std::equal( left.begin(), left.end(), right.begin() );
 }
 
-bool player_activity::can_resume_with( const player_activity& other, const Character& who ) const
+bool player_activity::can_resume_with( const player_activity &other, const Character &who ) const
 {
     // Should be used for relative positions
     // And to forbid resuming now-invalid crafting
@@ -625,7 +664,9 @@ if( actor && other.actor ) {
             return false;
         }
         for( int foo : other.values ) {
-            if( !std::ranges::contains( values, foo ) ) { return false; }
+            if( !std::ranges::contains( values, foo ) ) {
+                return false;
+            }
         }
         if( targets.empty() || other.targets.empty() || targets[0] != other.targets[0] ) {
             return false;
@@ -636,8 +677,8 @@ if( actor && other.actor ) {
         }
     }
 
-    return !auto_resume && index == other.index && position == other.position && name == other.name
-           && targets == other.targets;
+    return !auto_resume && index == other.index &&
+           position == other.position && name == other.name && targets == other.targets;
 }
 
 bool player_activity::is_distraction_ignored( distraction_type type ) const
@@ -651,39 +692,47 @@ void player_activity::ignore_distraction( distraction_type type )
     ignored_distractions.emplace( type );
 }
 
-void player_activity::allow_distractions() { ignored_distractions.clear(); }
-
-void player_activity::inherit_distractions( const player_activity& other )
+void player_activity::allow_distractions()
 {
-    for( auto& type : other.ignored_distractions ) { ignore_distraction( type ); }
+    ignored_distractions.clear();
+}
+
+void player_activity::inherit_distractions( const player_activity &other )
+{
+    for( auto &type : other.ignored_distractions ) {
+        ignore_distraction( type );
+    }
 }
 
 
-activity_ptr::activity_ptr(): act( std::make_unique<player_activity>() ) {}
+activity_ptr::activity_ptr() : act( std::make_unique<player_activity>() ) {}
 
-activity_ptr::activity_ptr( activity_ptr && ) noexcept = default;
-activity_ptr::activity_ptr( std::unique_ptr<player_activity>&& source )
+activity_ptr::activity_ptr( activity_ptr && )  noexcept = default;
+activity_ptr::activity_ptr( std::unique_ptr<player_activity> &&source )
 {
     check_active();
     act = std::move( source );
 }
-activity_ptr &activity_ptr::operator=( activity_ptr && ) noexcept = default;
-activity_ptr &activity_ptr::operator=( std::unique_ptr<player_activity>&& source )
+activity_ptr &activity_ptr::operator=( activity_ptr && )  noexcept = default;
+activity_ptr &activity_ptr::operator=( std::unique_ptr<player_activity> &&source )
 {
     check_active();
     act = std::move( source );
     return *this;
 }
 
-activity_ptr::~activity_ptr() { check_active(); };
+activity_ptr::~activity_ptr()
+{
+    check_active();
+};
 
 void activity_ptr::check_active()
 {
     if( act && act->active ) {
-        // If the activity is active then we're currently inside it's do_turn so it's not safe to
-        // delete it. It will delete itself at the end of it's do_turn function.
+        //If the activity is active then we're currently inside it's do_turn so it's not safe to delete it.
+        //It will delete itself at the end of it's do_turn function.
         act->active = false;
-        player_activity* ptr = act.release();
+        player_activity *ptr = act.release();
         ( void )ptr;
     }
 }
@@ -691,17 +740,26 @@ void activity_ptr::check_active()
 std::unique_ptr<player_activity> activity_ptr::release()
 {
     std::unique_ptr<player_activity> ret = std::move( act );
-    act = std::make_unique<player_activity>();
+    act = std::make_unique < player_activity>();
     return ret;
 }
 
-activity_ptr::operator bool() const { return !!*act; }
+activity_ptr::operator bool() const
+{
+    return !!*act;
+}
 
-void activity_ptr::serialize( JsonOut& json ) const { act->serialize( json ); }
+void activity_ptr::serialize( JsonOut &json ) const
+{
+    act->serialize( json );
+}
 
-void activity_ptr::deserialize( JsonIn& jsin ) { act->deserialize( jsin ); }
+void activity_ptr::deserialize( JsonIn &jsin )
+{
+    act->deserialize( jsin );
+}
 
-auto player_activity::add_tool( item* it ) -> void
+auto player_activity::add_tool( item *it ) -> void
 {
     if( it && !it->has_flag( flag_PSEUDO ) ) {
     tools_.emplace_back( it );

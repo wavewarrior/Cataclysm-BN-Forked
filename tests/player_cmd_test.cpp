@@ -12,7 +12,7 @@
  */
 
 #include "action.h"
-#include "catch/catch.hpp"
+#include "catch/catch_amalgamated.hpp"
 #include "coordinates.h"
 #include "player_cmd.h"
 

@@ -10,7 +10,7 @@
  * Tags: [coop][delta]
  */
 
-#include "catch/catch.hpp"
+#include "catch/catch_amalgamated.hpp"
 #include "coop_mutation_log.h" // COOP_FNV_OFFSET, coop_fnv1a_mix, coop_hash_event*
 #include "coop_proto.h"        // coop_event_type
 #include "coop_server.h"       // coop_entity_snapshot, coop_lag_find_target

@@ -1,6 +1,6 @@
 #ifdef COOP_ENABLED
 
-#include "catch/catch.hpp"
+#include "catch/catch_amalgamated.hpp"
 #include "coop_packets.h"
 #include "coop_proto.h"
 #include "coordinates.h"

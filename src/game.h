@@ -952,7 +952,7 @@ class game: public submap_load_listener
         game::vmenu_ret list_items( const std::vector<map_item_stack> &item_list );
         std::vector<map_item_stack> find_nearby_items( int iRadius );
 
-        game::vmenu_ret list_monsters( const std::vector<Creature*> &monster_list );
+        game::vmenu_ret list_monsters( std::vector<Creature *> monster_list );
 
         /** Check for dangerous stuff at dest_loc, return false if the player decides
         not to step there */
@@ -1054,10 +1054,10 @@ class game: public submap_load_listener
 
         void item_action_menu(); // Displays item action menu
 
+    public:
         bool is_game_over(); // Returns true if the player quit or died
         void death_screen(); // Display our stats, "GAME OVER BOO HOO"
         void win_screen();   // Display our stats, "CONGRATULATIONS!"
-    public:
         // Draws the pixel minimap based on the player's current location
         void draw_pixel_minimap( const catacurses::window& w );
 

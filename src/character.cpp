@@ -697,10 +697,6 @@ void Character::set_all_parts_hp_cur(int set) {
     Creature::set_all_parts_hp_cur(set);
 }
 
-void Character::mod_all_parts_hp_cur(int mod) {
-    if (mod != 0) { cached_dead_state.reset(); }
-    Creature::mod_all_parts_hp_cur(mod);
-}
 
 void Character::mod_all_parts_hp_cur( int mod )
 {
@@ -6502,10 +6498,6 @@ bool Character::is_invisible() const
     );
 }
 
-bool Character::is_invisible() const {
-    return (has_effect_with_flag(flag_EFFECT_INVISIBLE) || is_wearing_active_optcloak()
-            || has_trait(trait_DEBUG_CLOAK) || has_artifact_with(AEP_INVISIBLE));
-}
 
 int Character::visibility(bool, int) const {
     // 0-100 %
@@ -7216,20 +7208,6 @@ int Character::get_env_resist(bodypart_id bp) const {
 
 int Character::get_armor_acid(bodypart_id bp) const { return get_armor_type(DT_ACID, bp); }
 
-int Character::get_stim() const { return stim; }
-
-void Character::set_stim(int new_stim) { stim = new_stim; }
-
-void Character::mod_stim(int mod) { stim += mod; }
-
-int Character::get_rad() const { return radiation; }
-
-void Character::set_rad(int new_rad) { radiation = new_rad; }
-
-void Character::mod_rad(int mod) {
-    if (has_trait_flag(flag_NO_RADIATION)) { return; }
-    set_rad(std::max(0, get_rad() + mod));
-}
 
 int Character::get_stim() const
 {
@@ -10577,12 +10555,6 @@ bool Character::has_distant_destination() const
 
 bool Character::is_auto_moving() const { return destination_point.has_value(); }
 
-bool Character::has_destination() const { return !auto_move_route.empty(); }
-
-bool Character::has_destination_activity() const {
-    return !get_destination_activity().is_null() && destination_point
-        && abs_pos() == *destination_point;
-}
 
 bool Character::has_destination() const
 {
