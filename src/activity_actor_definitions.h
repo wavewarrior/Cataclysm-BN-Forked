@@ -1414,7 +1414,7 @@ enum class wait_type { WAIT, WAIT_WEATHER, WAIT_NPC };
 
 class wait_activity_actor: public activity_actor
 {
-private:
+    private:
         wait_type wtype;
         std::string npc_name;
         time_duration wait_duration = 0_minutes;
@@ -1431,7 +1431,7 @@ private:
 
         void start( player_activity &act, Character & ) override {
             if( wait_duration > 0_minutes ) {
-                progress.emplace( _( "Waiting" ), to_moves<int>( wait_duration ) );
+            progress.emplace( _( "Waiting" ), to_moves<int>( wait_duration ) );
             }
         }
         void do_turn( player_activity &, Character & ) override {}

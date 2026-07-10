@@ -15,7 +15,7 @@ static void init_worker_thread_locals()
     tl_is_worker_thread = true;
     init_crash_handlers();
     const unsigned int seed =
-        static_cast<unsigned int>( std::hash<std::thread::id>{}( std::this_thread::get_id() ) ) ^
+        static_cast<unsigned int>( std::hash<std::thread::id> {}( std::this_thread::get_id() ) ) ^
         static_cast<unsigned int>(
             std::chrono::high_resolution_clock::now().time_since_epoch().count() );
     rng_set_worker_seed( seed );

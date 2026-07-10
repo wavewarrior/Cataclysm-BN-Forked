@@ -4248,7 +4248,8 @@ void reload_activity_actor::calc_all_moves( player_activity& act, Character& who
         act.set_to_null();
         return;
     }
-    int moves = ammo_item->obtain_cost( who, qty ) + who.item_reload_cost( *target_item, *ammo_item, qty );
+    int moves = ammo_item->obtain_cost( who, qty ) + who.item_reload_cost( *target_item, *ammo_item,
+                qty );
     progress.emplace( _( "Reloading" ), moves );
 }
 void reload_activity_actor::finish( player_activity& act, Character& who )
@@ -4919,7 +4920,8 @@ std::unique_ptr<activity_actor> wait_activity_actor::deserialize( JsonIn& jsin )
     data.read( "wait_type", wtype_int );
     data.read( "npc_name", name );
     data.read( "wait_duration", duration );
-    auto act = std::make_unique<wait_activity_actor>( static_cast<wait_type>( wtype_int ), name, duration );
+    auto act = std::make_unique<wait_activity_actor>( static_cast<wait_type>( wtype_int ), name,
+               duration );
     return act;
 }
 
@@ -6558,6 +6560,7 @@ void vehicle_activity_actor::start( player_activity& act, Character & )
 {
     act.moves_left = moves;
     act.placement = placement;
+    act.index = cmd;
     act.values.push_back( placement.x() );
     act.values.push_back( placement.y() );
     act.values.push_back( placement.z() );
