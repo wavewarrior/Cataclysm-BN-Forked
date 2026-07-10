@@ -4241,6 +4241,16 @@ std::unique_ptr<activity_actor> gunmod_add_activity_actor::deserialize( JsonIn& 
 
 // ---- reload_activity_actor ------------------------------------------------
 
+void reload_activity_actor::calc_all_moves( player_activity& act, Character& who )
+{
+    activity_actor::calc_all_moves( act, who );
+    if( !target_item || !ammo_item || qty <= 0 ) {
+        act.set_to_null();
+        return;
+    }
+    int moves = ammo_item->obtain_cost( who, qty ) + who.item_reload_cost( *target_item, *ammo_item, qty );
+    progress.emplace( _( "Reloading" ), moves );
+}
 void reload_activity_actor::finish( player_activity& act, Character& who )
 {
     act.set_to_null();
@@ -4896,6 +4906,7 @@ void wait_activity_actor::serialize( JsonOut& jsout ) const
     jsout.start_object();
     jsout.member( "wait_type", static_cast<int>( wtype ) );
     jsout.member( "npc_name", npc_name );
+    jsout.member( "wait_duration", wait_duration );
     jsout.end_object();
 }
 
@@ -4904,9 +4915,11 @@ std::unique_ptr<activity_actor> wait_activity_actor::deserialize( JsonIn& jsin )
     JsonObject data = jsin.get_object();
     int wtype_int = 0;
     std::string name;
+    time_duration duration = 0_minutes;
     data.read( "wait_type", wtype_int );
     data.read( "npc_name", name );
-    auto act = std::make_unique<wait_activity_actor>( static_cast<wait_type>( wtype_int ), name );
+    data.read( "wait_duration", duration );
+    auto act = std::make_unique<wait_activity_actor>( static_cast<wait_type>( wtype_int ), name, duration );
     return act;
 }
 
@@ -4967,7 +4980,7 @@ std::unique_ptr<activity_actor> play_with_pet_activity_actor::deserialize( JsonI
     return act;
 }
 
-void train_pet_activity_actor::finish( player_activity & /*act*/, Character& who )
+void train_pet_activity_actor::finish( player_activity &act, Character& who )
 {
     player& p = dynamic_cast<player &>( who );
     auto mon = pet.lock();
@@ -4976,7 +4989,7 @@ void train_pet_activity_actor::finish( player_activity & /*act*/, Character& who
         p.add_msg_if_player( m_bad, _( "You lack the skill to train %s effectively." ), pet_name );
         return;
     }
-    if( !mon ) { return; }
+    if( !mon ) { act.set_to_null(); return; }
     mon->remove_effect( effect_well_fed );
     mon->remove_effect( effect_ai_waiting );
     if( 4 * p.get_skill_level( skill_survival ) >= rng( 0, 100 ) ) {

@@ -490,6 +490,7 @@ class reload_activity_actor: public activity_actor
 
         activity_id get_type() const override { return activity_id( "ACT_RELOAD" ); }
 
+        void calc_all_moves( player_activity& act, Character& who ) override;
         void start( player_activity &, Character & ) override {}
         void do_turn( player_activity &, Character & ) override {}
         void finish( player_activity& act, Character& who ) override;
@@ -1413,19 +1414,26 @@ enum class wait_type { WAIT, WAIT_WEATHER, WAIT_NPC };
 
 class wait_activity_actor: public activity_actor
 {
-    private:
+private:
         wait_type wtype;
         std::string npc_name;
+        time_duration wait_duration = 0_minutes;
 
     public:
         wait_activity_actor() = default;
-        wait_activity_actor( wait_type type, const std::string& name = std::string() )
+        wait_activity_actor( wait_type type, const std::string& name = std::string(),
+                             time_duration duration = 0_minutes )
             : wtype( type ),
-              npc_name( name ) {}
+              npc_name( name ),
+              wait_duration( duration ) {}
 
         activity_id get_type() const override;
 
-        void start( player_activity &, Character & ) override {}
+        void start( player_activity &act, Character & ) override {
+            if( wait_duration > 0_minutes ) {
+                progress.emplace( _( "Waiting" ), to_moves<int>( wait_duration ) );
+            }
+        }
         void do_turn( player_activity &, Character & ) override {}
         void finish( player_activity &, Character & ) override;
 
