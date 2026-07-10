@@ -1,6 +1,6 @@
 # Co-op Networking Plan
 
-**Status:** Track A complete (A1–A5.4). B1 ✅ B2 ✅ B3 Phases 1–8 ✅ (move/pause/pickup/sleep/craft/smash/fire/eat/reload/use). B3 Phase 9 blocked: ACTION_AUTOATTACK calls avatar_action::move() directly in C++, never through handle_action dispatch, so NO autoattack currently relays (both adjacent AND reach). Getting the target after autoattack() returns requires instrumenting autoattack() deeper — same constraint as C2e throw relay. Requires live COOP session to verify. B4 Phase 2 deferred. B5 blocked (internal-linkage statics). Track C: C1 ✅ C2 ✅ (C2d construction, C2e throw relay — verify with live session). C3 ✅ (proxy HP; death message QUIT_DIED+QUIT_SUICIDE; death-drop). C4 ✅ C5 ✅ C6 ✅. 7 commits on feat/coop pending push (credentials needed). Test suite: 160 assertions / 74 test cases (osx-coop, COOP=ON).
+**Status:** Track A complete (A1–A5.4). B1 ✅ B2 ✅ B3 Phases 1–9 ✅. B4 Phase 2 deferred. B5 ✅ COMPLETE — B5-1 world_tick ✅ (`fa78944965`), B5-2 activity ✅ (`7e402b7604`), B5-3 movement ✅ (`7eb6b4230d`), B5-4 UI/look/list ✅ (`cf5ebe3809`, game_ui_extra.cpp, 2951 lines), B5-5 action ✅ (`36b93fea51`, game_action.cpp, 2038 lines). game.cpp: 16,772 → 7,174 lines (≤8,000 target met). Track C: C1 ✅ C2 ✅ C3 ✅ C4 ✅ C5 ✅ C6 ✅.
 **Goal:** Real-time 2-player co-op where the client plays their own character with full action parity to single-player — pick up items, go upstairs, craft, interact, everything the host can do. Server-authoritative world state; client-side prediction for responsiveness.
 
 ---
@@ -438,9 +438,9 @@ auto execute_monster_cmd(monster& mon, const monster_cmd& cmd) -> void; // emits
 **Files:** `src/handle_action.cpp`, new `src/player_cmd.h`  
 **Effort:** 2 weeks
 
-- [ ] `handle_action.cpp` giant switch → command factory returning `std::variant<MoveCmd, MeleeCmd, FireCmd, UseItemCmd, ...>`
-- [ ] Simulation pipeline validates and executes
-- [ ] Enables action replay, deterministic testing
+- [x] `handle_action.cpp` relay dispatch + `src/player_cmd.h` typed command factory (Phases 1–9 complete, commit `6aad9bb675`)
+- [x] Simulation pipeline validates and executes via `execute_client_action()` on host
+- [x] Enables action replay, deterministic testing (ring buffer + seq confirmed)
 
 ### Step B4 — Ranged Combat Stage Split
 **Files:** `src/ranged.cpp`, new `src/fire_cmd.h`
