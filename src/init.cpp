@@ -181,11 +181,11 @@ static constexpr uint64_t fnv1a_prime = 1099511628211ULL;
 
 static uint64_t fnv1a_64_accumulate( uint64_t hash, std::string_view sv ) noexcept
 {
-    for( const unsigned char byte : sv ) {
-        hash ^= byte;
-        hash *= fnv1a_prime;
-    }
-    return hash;
+for( const unsigned char byte : sv ) {
+    hash ^= byte;
+    hash *= fnv1a_prime;
+}
+return hash;
 }
 
 // Compute FNV-1a-64 hash of all .json files in path (for pack integrity check)
@@ -210,7 +210,7 @@ static uint64_t compute_pack_hash( const std::string& path )
             std::string input = rel + std::to_string( size );
             hash = fnv1a_64_accumulate( hash, input );
         }
-    } catch( const std::exception& ) {
+    } catch( const std::exception & ) {
         // If directory can't be read, return 0 (will never match pack hash)
         hash = 0;
     }
@@ -282,7 +282,7 @@ static void _finalize_entry( loading_ui& ui, const named_entry& e )
     const auto tf0 = std::chrono::steady_clock::now();
     e.second();
     const auto tf_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now() - tf0 ).count();
+                           std::chrono::steady_clock::now() - tf0 ).count();
     if( s_json_perf_enabled && tf_ms >= 5 ) {
         // NOLINTNEXTLINE(cata-text-style)
         fprintf( stderr, "[JSON_PERF]   finalize[%s]=%lldms\n", e.first.c_str(),
@@ -295,7 +295,8 @@ static std::atomic<bool> g_prewarm_joined{ false };
 /// Run the FULL load+finalize pipeline on a background thread.
 /// This mirrors load_and_finalize_packs but skips UI rendering.
 /// Returns a prewarm_result (error string or wall time).
-static prewarm_result run_prewarm_load_for_world( std::string world_name, std::vector<mod_id> mod_ids )
+static prewarm_result run_prewarm_load_for_world( std::string world_name,
+        std::vector<mod_id> mod_ids )
 {
     auto start = std::chrono::steady_clock::now();
     try {
@@ -398,10 +399,10 @@ bool DynamicDataLoader::try_load_pack( const std::string& path )
         }
         return false;
     }
-    
+
     // Construct pack file path: <path>/data.jsonpack
     const std::string pack_path = path + "/data.jsonpack";
-    
+
     // Check if pack file exists
     if( !std::filesystem::exists( pack_path ) ) {
         if( s_json_perf_enabled ) {
@@ -410,30 +411,30 @@ bool DynamicDataLoader::try_load_pack( const std::string& path )
         }
         return false;
     }
-    
+
     // Read pack file into memory
     std::ifstream ifs( pack_path, std::ios::binary );
     if( !ifs ) {
         return false;
     }
-    
+
     // Read entire file
     m_pack_buffer.assign( std::istreambuf_iterator<char>( ifs ), std::istreambuf_iterator<char>() );
     ifs.close();
-    
+
     // Validate minimum size (header is 20 bytes)
     if( m_pack_buffer.size() < 20 ) {
         m_pack_buffer.clear();
         return false;
     }
-    
+
     // Validate magic bytes: 'C','B','N','P'
     if( m_pack_buffer[0] != 'C' || m_pack_buffer[1] != 'B' ||
         m_pack_buffer[2] != 'N' || m_pack_buffer[3] != 'P' ) {
         m_pack_buffer.clear();
         return false;
     }
-    
+
     // Read version (uint32 LE at offset 4)
     uint32_t version = 0;
     std::memcpy( &version, m_pack_buffer.data() + 4, 4 );
@@ -441,18 +442,18 @@ bool DynamicDataLoader::try_load_pack( const std::string& path )
         m_pack_buffer.clear();
         return false;
     }
-    
+
     // Read entry count (uint32 LE at offset 8)
     uint32_t entry_count = 0;
     std::memcpy( &entry_count, m_pack_buffer.data() + 8, 4 );
-    
+
     // Read stored hash (uint64 LE at offset 12)
     uint64_t stored_hash = 0;
     std::memcpy( &stored_hash, m_pack_buffer.data() + 12, 8 );
-    
+
     // Compute hash from actual directory (detects changes)
     uint64_t computed_hash = compute_pack_hash( path );
-    
+
     // Compare hashes — if mismatch, pack is stale, fall through to file reads
     if( computed_hash != stored_hash ) {
         if( s_json_perf_enabled ) {
@@ -464,11 +465,11 @@ bool DynamicDataLoader::try_load_pack( const std::string& path )
         m_pack_buffer.clear();
         return false;
     }
-    
+
     // Parse entries
     m_pack_entries.clear();
     m_pack_entries.reserve( entry_count );
-    
+
     size_t offset = 20;  // Skip header
     for( uint32_t i = 0; i < entry_count; ++i ) {
         // Read path_len (uint32 LE)
@@ -480,7 +481,7 @@ bool DynamicDataLoader::try_load_pack( const std::string& path )
         }
         std::memcpy( &path_len, m_pack_buffer.data() + offset, 4 );
         offset += 4;
-        
+
         // Read path (UTF-8)
         if( offset + path_len > m_pack_buffer.size() ) {
             m_pack_buffer.clear();
@@ -490,7 +491,7 @@ bool DynamicDataLoader::try_load_pack( const std::string& path )
         PackEntry entry;
         entry.path = m_pack_buffer.substr( offset, path_len );
         offset += path_len;
-        
+
         // Read data_len (uint32 LE)
         uint32_t data_len = 0;
         if( offset + 4 > m_pack_buffer.size() ) {
@@ -500,7 +501,7 @@ bool DynamicDataLoader::try_load_pack( const std::string& path )
         }
         std::memcpy( &data_len, m_pack_buffer.data() + offset, 4 );
         offset += 4;
-        
+
         // Read data (as string_view into buffer)
         if( offset + data_len > m_pack_buffer.size() ) {
             m_pack_buffer.clear();
@@ -509,12 +510,12 @@ bool DynamicDataLoader::try_load_pack( const std::string& path )
         }
         entry.data = std::string_view( m_pack_buffer.data() + offset, data_len );
         offset += data_len;
-        
+
         m_pack_entries.push_back( std::move( entry ) );
     }
-    
-    
-    
+
+
+
     if( s_json_perf_enabled ) {
         // NOLINTNEXTLINE(cata-text-style)
         fprintf( stderr, "[JSON_PERF] pack_hit path=%s entries=%zu buffer_size=%zu\n",
@@ -962,7 +963,7 @@ void DynamicDataLoader::load_data_from_path(
 
     str_vec files;
     std::vector<std::string> file_contents;
-    
+
     // ── TRY ARCHIVE BLOB FIRST ─────────────────────────────────────────────────
     if( try_load_pack( path ) ) {
         // Pack loaded successfully — reconstruct files and file_contents from pack entries
@@ -987,7 +988,7 @@ void DynamicDataLoader::load_data_from_path(
             std::ifstream tmp( path.c_str(), std::ios::in );
             if( tmp ) { files.push_back( path ); }
         }
-        
+
         file_contents.resize( files.size() );
         parallel_for( 0, static_cast<int>( files.size() ), [&]( int i ) {
             file_contents[i] = read_entire_file( files[i] );
@@ -1212,6 +1213,12 @@ void DynamicDataLoader::finalize_worker_phases( loading_ui& ui )
 
 void DynamicDataLoader::finalize_main_phases( loading_ui& ui )
 {
+    // Load the tileset early — before the main_thread_finalizers loop — so that
+    // sprite lookups during subsequent finalization (e.g. Localization triggers) or
+    // early world rendering always find a valid tileset.  The idempotency guard in
+    // cata_tiles::load_tileset() (cata_tiles_tileset.cpp) makes the duplicate call
+    // inside the loop a no-op when args haven't changed.
+    load_tileset();
     for( const named_entry& e : main_thread_finalizers ) { ui.add_entry( _( e.first.c_str() ) ); }
     ui.show();
     for( const named_entry& e : main_thread_finalizers ) { _finalize_entry( ui, e ); }

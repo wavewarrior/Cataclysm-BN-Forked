@@ -197,7 +197,7 @@ class game: public submap_load_listener
     public:
         void setup( bool load_world_modfiles = true );
         /** Complete pre-warm reuse: finalize main-thread + Lua + artifacts. */
-        void complete_prewarm_reuse( const std::vector<mod_id>& mod_ids );
+        void complete_prewarm_reuse( const std::vector<mod_id> &mod_ids );
         /** Saving and loading functions. */
         void serialize( std::ostream& fout );               // for save
         auto unserialize( std::istream& fin ) -> bool;      // for load

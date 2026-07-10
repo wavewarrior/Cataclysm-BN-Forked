@@ -2463,7 +2463,7 @@ auto game::execute_activity_fixed_window_skip( const time_duration &duration ) -
      * process_activity() to consume, avoiding a wasted first iteration.
      */
     u.moves = 0;
-    for( const auto turn_index : std::views::iota( 0, dur_turns ) ) {
+for( const auto turn_index : std::views::iota( 0, dur_turns ) ) {
         if( is_game_over() || !u.activity || !*u.activity ) {
             break;
         }
@@ -2666,27 +2666,27 @@ auto game::try_activity_fixed_window_skip() -> bool
 {
     ZoneScopedN( "activity_fixed_window_try" );
     if( activity_fixed_window_force_normal_turn_ ) {
-        activity_fixed_window_force_normal_turn_ = false;
-        return false;
-    }
-    if( !u.activity || !*u.activity || calendar::turn < next_activity_fixed_window_check_ ) {
-        return false;
-    }
-    const auto duration = activity_fixed_window_duration();
-    if( !can_activity_fixed_window_skip( duration ) ) {
-        next_activity_fixed_window_check_ = calendar::turn + 1_minutes;
-        return false;
-    }
-    const auto skipped_turns = execute_activity_fixed_window_skip( duration );
-    if( skipped_turns <= 0 ) {
-        next_activity_fixed_window_check_ = calendar::turn + 1_minutes;
-        return false;
-    }
-    TracyPlot( "Activity Fixed Window Skipped Turns", int64_t{ skipped_turns } );
-    next_activity_fixed_window_check_ = calendar::turn;
-    const auto full_window_turns = to_turns<int>( activity_time_cadence::fixed_window() );
-    if( skipped_turns >= full_window_turns || get_weather().nextweather <= calendar::turn ) {
-        run_activity_cadence_boundary();
+    activity_fixed_window_force_normal_turn_ = false;
+    return false;
+}
+if( !u.activity || !*u.activity || calendar::turn < next_activity_fixed_window_check_ ) {
+    return false;
+}
+const auto duration = activity_fixed_window_duration();
+if( !can_activity_fixed_window_skip( duration ) ) {
+    next_activity_fixed_window_check_ = calendar::turn + 1_minutes;
+    return false;
+}
+const auto skipped_turns = execute_activity_fixed_window_skip( duration );
+if( skipped_turns <= 0 ) {
+    next_activity_fixed_window_check_ = calendar::turn + 1_minutes;
+    return false;
+}
+TracyPlot( "Activity Fixed Window Skipped Turns", int64_t{ skipped_turns } );
+next_activity_fixed_window_check_ = calendar::turn;
+const auto full_window_turns = to_turns<int>( activity_time_cadence::fixed_window() );
+if( skipped_turns >= full_window_turns || get_weather().nextweather <= calendar::turn ) {
+    run_activity_cadence_boundary();
     }
     return true;
 }
@@ -3695,7 +3695,7 @@ bool game::load( const std::string &world )
     return true;
 }
 
-void game::complete_prewarm_reuse( const std::vector<mod_id>& mod_ids )
+void game::complete_prewarm_reuse( const std::vector<mod_id> &mod_ids )
 {
     loading_ui ui( true );
     DynamicDataLoader::get_instance().finalize_main_phases( ui );
