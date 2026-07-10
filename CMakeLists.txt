@@ -87,6 +87,47 @@ if (NOT CMAKE_BUILD_TYPE AND NOT _is_multi_config)
     set(CMAKE_BUILD_TYPE Debug)
 endif ()
 
+# --- Link performance ---
+# ThinLTO (CMAKE_INTERPROCEDURAL_OPTIMIZATION) runs the whole optimizer
+# backend inside the link step. Point the linker at an on-disk cache so
+# relinks only re-optimize modules whose inputs changed. The cache lives in
+# the build dir but is not a build output, so it survives `ninja clean`.
+if (CMAKE_INTERPROCEDURAL_OPTIMIZATION AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    if (APPLE)
+        add_link_options(
+            "-Wl,-cache_path_lto,${CMAKE_BINARY_DIR}/lto.cache"
+            "-Wl,-prune_interval_lto,3600"
+            "-Wl,-prune_after_lto,604800"
+        )
+    elseif (LINKER MATCHES "mold|lld")
+        add_link_options("-Wl,--thinlto-cache-dir=${CMAKE_BINARY_DIR}/lto.cache")
+    endif ()
+endif ()
+# Apple ld's content-deduplication pass is pure link-time cost;
+# skip it outside distribution builds.
+if (APPLE AND NOT CMAKE_BUILD_TYPE STREQUAL "Release")
+    add_link_options("-Wl,-no_deduplicate")
+endif ()
+# Vendored subtrees inherit CMAKE_INTERPROCEDURAL_OPTIMIZATION and bloat the
+# final ThinLTO link; cross-lib LTO with the game buys nothing there.
+function(_cata_disable_ipo _dir)
+    get_directory_property(_targets DIRECTORY "${_dir}" BUILDSYSTEM_TARGETS)
+    foreach(_t IN LISTS _targets)
+        get_target_property(_type ${_t} TYPE)
+        if(_type STREQUAL "INTERFACE_LIBRARY" OR _type STREQUAL "UTILITY")
+            continue()
+        endif()
+        set_target_properties(${_t} PROPERTIES
+            INTERPROCEDURAL_OPTIMIZATION OFF
+            INTERPROCEDURAL_OPTIMIZATION_RELEASE OFF
+            INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO OFF)
+    endforeach()
+    get_directory_property(_subs DIRECTORY "${_dir}" SUBDIRECTORIES)
+    foreach(_s IN LISTS _subs)
+        _cata_disable_ipo("${_s}")
+    endforeach()
+endfunction()
+
 add_definitions(-DCMAKE)
 
 include(GetGitRevisionDescription)
@@ -286,6 +327,12 @@ if (NOT MSVC)
     string(REGEX REPLACE "[\t ]+" " " CATA_WARNINGS "${CATA_WARNINGS}")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CATA_WARNINGS} ${CATA_OTHER_FLAGS}")
     set(CMAKE_CXX_FLAGS_DEBUG "-Og -g2")
+    # RelWithDebInfo defaults to `-O2 -g -DNDEBUG`; per-config flags come after
+    # CMAKE_CXX_FLAGS, so the trailing -g silently overrides the -g1 intended
+    # above. Pin -g1 (line tables -- enough for backtraces); use the Debug
+    # config for full lldb variable info.
+    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g1 -DNDEBUG")
+    set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O2 -g1 -DNDEBUG")
 endif ()
 
 set(CMAKE_CXX_STANDARD 23)
@@ -591,6 +638,7 @@ if (NOT TARGET SDL3_shadercross::SDL3_shadercross)
         endfunction()
         if(DEFINED sdl3_shadercross_SOURCE_DIR)
             _cata_strip_werror("${sdl3_shadercross_SOURCE_DIR}")
+            _cata_disable_ipo("${sdl3_shadercross_SOURCE_DIR}")
         endif()
     else ()
         message("Using system SDL3_shadercross")
@@ -739,6 +787,7 @@ FetchContent_Declare(
     EXCLUDE_FROM_ALL
 )
 FetchContent_MakeAvailable(RmlUi)
+_cata_disable_ipo("${rmlui_SOURCE_DIR}")
 set(BUILD_SHARED_LIBS "${_cata_saved_build_shared}")
 unset(_cata_saved_build_shared)
 # Vendored third-party: silence warnings so the fork's -Werror/​/WX can't trip.
