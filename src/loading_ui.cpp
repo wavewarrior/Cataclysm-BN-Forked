@@ -51,6 +51,9 @@ Rml::ElementDocument *g_loading_doc = nullptr;
 // toggle is off, RmlUi is not ready (early data load, before the first
 // refresh_display inits the context), or already open. Mirrors sidebar_hud_open's
 // rollback so a failed open leaves no dangling model. passive=true: render-only,
+// Context-global type registration, guarded once (see uilist pattern).
+bool g_loading_types_registered = false;
+
 // never captures input.
 void loading_doc_open()
 {
@@ -68,10 +71,13 @@ void loading_doc_open()
     if( !c ) {
         return;
     }
-    Rml::StructHandle<loading_row_model> rh = c.RegisterStruct<loading_row_model>();
-    rh.RegisterMember( "rml", &loading_row_model::rml );
-    rh.RegisterMember( "state", &loading_row_model::state );
-    c.RegisterArray<Rml::Vector<loading_row_model>>();
+    if( !g_loading_types_registered ) {
+        Rml::StructHandle<loading_row_model> rh = c.RegisterStruct<loading_row_model>();
+        rh.RegisterMember( "rml", &loading_row_model::rml );
+        rh.RegisterMember( "state", &loading_row_model::state );
+        c.RegisterArray<Rml::Vector<loading_row_model>>();
+        g_loading_types_registered = true;
+    }
     g_loading_data = std::make_unique<loading_rml_model>();
     c.Bind( "title_rml", &g_loading_data->title_rml );
     c.Bind( "rows", &g_loading_data->rows );

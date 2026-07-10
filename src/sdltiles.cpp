@@ -124,9 +124,16 @@ void load_tileset()
     }
     const auto tilesName = get_option<std::string>( "TILES" );
     const auto omTilesName = get_option<std::string>( "OVERMAP_TILES" );
+    // active_world may be null during early init (core-data load before any world is selected).
+    // Pass an empty mod list in that case; the idempotency guard will cause a proper reload
+    // once active_world is set and load_tileset() is called again.
+    std::vector<mod_id> mod_list;
+    if( world_generator && world_generator->active_world ) {
+        mod_list = world_generator->active_world->info->active_mod_order;
+    }
     tilecontext->load_tileset(
         tilesName,
-        world_generator->active_world->info->active_mod_order,
+        mod_list,
         /*precheck=*/false,
         /*force=*/false,
         /*pump_events=*/true
@@ -140,9 +147,13 @@ void load_tileset()
     } else {
         if( overmap_tilecontext ) {
             overmap_tilecontext = std::make_shared<cata_tiles>( renderer, geometry );
+            std::vector<mod_id> om_mod_list;
+            if( world_generator && world_generator->active_world ) {
+                om_mod_list = world_generator->active_world->info->active_mod_order;
+            }
             overmap_tilecontext->load_tileset(
                 omTilesName,
-                world_generator->active_world->info->active_mod_order,
+                om_mod_list,
                 /*precheck=*/false,
                 /*force=*/false,
                 /*pump_events=*/true
