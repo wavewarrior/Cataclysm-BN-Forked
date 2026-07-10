@@ -1,5 +1,4 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include "simple_pathfinding.h"
 
 #include "coordinates.h"

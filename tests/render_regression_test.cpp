@@ -17,8 +17,7 @@
 //   D — ui-over-world: UI rects + tile sprites composite
 //   E — retention:  cleared-queue frame is darker
 
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include "lighting/render_state.h"
 #include "lighting/gpu_geometry.h"
 

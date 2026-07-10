@@ -1,5 +1,4 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include <cmath>
 #include <string>
 
@@ -161,22 +160,22 @@ TEST_CASE( "pet training stat scaling with training_level", "[pet][monster][trai
     SECTION( "level 0: stats equal base" ) {
         mon.training_level = 0;
         CHECK( mon.get_hp_max() == base_hp );
-        CHECK( mon.get_melee() == Approx( base_melee ) );
-        CHECK( mon.get_dodge_base() == Approx( base_dodge ) );
+        CHECK( mon.get_melee() == Catch::Approx( base_melee ) );
+        CHECK( mon.get_dodge_base() == Catch::Approx( base_dodge ) );
     }
 
     SECTION( "level 1: stats scaled by multiplier^1" ) {
         mon.training_level = 1;
         CHECK( mon.get_hp_max() == static_cast<int>( base_hp * std::pow( hp_mult, 1 ) ) );
-        CHECK( mon.get_melee() == Approx( base_melee * std::pow( melee_mult, 1 ) ) );
-        CHECK( mon.get_dodge_base() == Approx( base_dodge * std::pow( dodge_mult, 1 ) ) );
+        CHECK( mon.get_melee() == Catch::Approx( base_melee * std::pow( melee_mult, 1 ) ) );
+        CHECK( mon.get_dodge_base() == Catch::Approx( base_dodge * std::pow( dodge_mult, 1 ) ) );
     }
 
     SECTION( "level 2: stats scaled by multiplier^2" ) {
         mon.training_level = 2;
         CHECK( mon.get_hp_max() == static_cast<int>( base_hp * std::pow( hp_mult, 2 ) ) );
-        CHECK( mon.get_melee() == Approx( base_melee * std::pow( melee_mult, 2 ) ) );
-        CHECK( mon.get_dodge_base() == Approx( base_dodge * std::pow( dodge_mult, 2 ) ) );
+        CHECK( mon.get_melee() == Catch::Approx( base_melee * std::pow( melee_mult, 2 ) ) );
+        CHECK( mon.get_dodge_base() == Catch::Approx( base_dodge * std::pow( dodge_mult, 2 ) ) );
     }
 
     SECTION( "higher level gives better stats than lower level" ) {

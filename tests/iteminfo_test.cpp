@@ -1,5 +1,4 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include <memory>
 #include <string>
 #include <vector>
@@ -63,8 +62,8 @@ void test_info_contains( const item &i, const iteminfo_query &q,
 {
     g->u.clear_mutations();
     std::string info = i.info_string( q, 1 );
-    using Catch::Matchers::Contains;
-    REQUIRE_THAT( info, Contains( reference ) );
+    using Catch::Matchers::ContainsSubstring;
+    REQUIRE_THAT( info, ContainsSubstring( reference ) );
 }
 
 /*

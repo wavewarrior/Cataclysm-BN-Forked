@@ -1,5 +1,4 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
@@ -201,14 +200,14 @@ TEST_CASE( "3D_bresenham", "[line]" )
 
 TEST_CASE( "test_normalized_angle", "[line]" )
 {
-    CHECK( get_normalized_angle( point_zero, {10, 0} ) == Approx( 0.0 ) );
-    CHECK( get_normalized_angle( point_zero, {0, 10} ) == Approx( 0.0 ) );
-    CHECK( get_normalized_angle( point_zero, {-10, 0} ) == Approx( 0.0 ) );
-    CHECK( get_normalized_angle( point_zero, {0, -10} ) == Approx( 0.0 ) );
-    CHECK( get_normalized_angle( point_zero, {10, 10} ) == Approx( 1.0 ) );
-    CHECK( get_normalized_angle( point_zero, {-10, 10} ) == Approx( 1.0 ) );
-    CHECK( get_normalized_angle( point_zero, {10, -10} ) == Approx( 1.0 ) );
-    CHECK( get_normalized_angle( point_zero, {-10, -10} ) == Approx( 1.0 ) );
+    CHECK( get_normalized_angle( point_zero, {10, 0} ) == Catch::Approx( 0.0 ) );
+    CHECK( get_normalized_angle( point_zero, {0, 10} ) == Catch::Approx( 0.0 ) );
+    CHECK( get_normalized_angle( point_zero, {-10, 0} ) == Catch::Approx( 0.0 ) );
+    CHECK( get_normalized_angle( point_zero, {0, -10} ) == Catch::Approx( 0.0 ) );
+    CHECK( get_normalized_angle( point_zero, {10, 10} ) == Catch::Approx( 1.0 ) );
+    CHECK( get_normalized_angle( point_zero, {-10, 10} ) == Catch::Approx( 1.0 ) );
+    CHECK( get_normalized_angle( point_zero, {10, -10} ) == Catch::Approx( 1.0 ) );
+    CHECK( get_normalized_angle( point_zero, {-10, -10} ) == Catch::Approx( 1.0 ) );
 }
 
 TEST_CASE( "Test bounds for mapping x/y/z/ offsets to direction enum", "[line]" )

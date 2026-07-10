@@ -1,5 +1,4 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include <cstdio>
 #include <memory>
 #include <string>
@@ -186,7 +185,7 @@ TEST_CASE( "water drag remains positive with excess floating parts", "[vehicle] 
                                     true ) >= 0 );
 
     CHECK( veh_ptr->coeff_water_drag() > 0.0 );
-    CHECK( veh_ptr->water_hull_height() == Approx( 0.8 ) );
+    CHECK( veh_ptr->water_hull_height() == Catch::Approx( 0.8 ) );
 }
 
 std::vector<std::string> vehs_to_test_drag = {

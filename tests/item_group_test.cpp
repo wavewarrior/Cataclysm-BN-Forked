@@ -2,8 +2,7 @@
 #include <utility>
 #include <vector>
 
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include "flag.h"
 #include "item.h"
 #include "item_group.h"

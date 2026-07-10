@@ -1,5 +1,4 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include <memory>
 #include <ranges>
 
@@ -150,7 +149,7 @@ TEST_CASE( "Rate of rotting" )
 
         // After 20 minutes the normal item should have 20 minutes of rot
         CHECK( to_turns<int>( normal_item->get_rot() )
-               == Approx( to_turns<int>( 20_minutes ) ).epsilon( 0.01 ) );
+               == Catch::Approx( to_turns<int>( 20_minutes ) ).epsilon( 0.01 ) );
         // Item in freezer and in preserving container should have no rot
         CHECK( sealed_item->get_rot() == 0_turns );
         CHECK( freeze_item->get_rot() == 0_turns );

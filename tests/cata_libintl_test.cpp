@@ -1,5 +1,4 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include "cata_libintl.h"
 #include "filesystem.h"
 #include "fstream_utils.h"

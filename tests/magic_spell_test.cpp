@@ -1,5 +1,4 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include "avatar.h"
 #include "fstream_utils.h"
 #include "game.h"
@@ -575,7 +574,7 @@ TEST_CASE( "spell effect - target_attack", "[magic][spell][effect][target_attack
     after_hp = mummy.get_hp();
 
     // Should do approximately the expected damage
-    CHECK( before_hp - pew_spell.damage() == Approx( after_hp ).margin( 1 ) );
+    CHECK( before_hp - pew_spell.damage() == Catch::Approx( after_hp ).margin( 1 ) );
 }
 
 // spell_effect::spawn_summoned_monster

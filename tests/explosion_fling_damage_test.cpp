@@ -1,5 +1,4 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include "avatar.h"
 #include "explosion.h"
 #include "explosion_queue.h"

@@ -1,5 +1,4 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include <cmath>
 #include <fstream>
 #include <sstream>
@@ -172,7 +171,7 @@ static void check_shamble_speed( const std::string &monster_type,
     for( int i = 0; i < 10; ++i ) {
         move_stats.add( moves_to_destination( monster_type, tripoint_bub_ms::zero(), destination ) );
         if( ( move_stats.avg() / ( 10000.0 * diagonal_multiplier ) ) ==
-            Approx( 1.0 ).epsilon( 0.02 ) ) {
+            Catch::Approx( 1.0 ).epsilon( 0.02 ) ) {
             break;
         }
     }
@@ -180,7 +179,7 @@ static void check_shamble_speed( const std::string &monster_type,
     CAPTURE( move_stats.avg() );
     INFO( diagonal_multiplier );
     CHECK( ( move_stats.avg() / ( 10000.0 * diagonal_multiplier ) ) ==
-           Approx( 1.0 ).epsilon( 0.02 ) );
+           Catch::Approx( 1.0 ).epsilon( 0.02 ) );
 }
 
 static void test_moves_to_squares( const std::string &monster_type, const bool write_data = false )
@@ -230,12 +229,12 @@ static void test_moves_to_squares( const std::string &monster_type, const bool w
     for( const auto &stat_pair : turns_at_distance ) {
         INFO( "Monster:" << monster_type << " Dist: " << stat_pair.first << " moves: " <<
               stat_pair.second.avg() );
-        CHECK( stat_pair.second.avg() == Approx( 100.0 ).epsilon( 0.1 ) );
+        CHECK( stat_pair.second.avg() == Catch::Approx( 100.0 ).epsilon( 0.1 ) );
     }
     for( const auto &stat_pair : turns_at_slope ) {
         INFO( "Monster:" << monster_type << " Slope: " << stat_pair.first <<
               " moves: " << stat_pair.second.avg() << " types: " << stat_pair.second.types() );
-        CHECK( stat_pair.second.avg() == Approx( 100.0 ).epsilon( 0.1 ) );
+        CHECK( stat_pair.second.avg() == Catch::Approx( 100.0 ).epsilon( 0.1 ) );
     }
     for( auto &stat_pair : turns_at_angle ) {
         std::stringstream sample_string;
@@ -245,7 +244,7 @@ static void test_moves_to_squares( const std::string &monster_type, const bool w
         INFO( "Monster:" << monster_type << " Angle: " << stat_pair.first <<
               " moves: " << stat_pair.second.avg() << " types: " << stat_pair.second.types() <<
               " samples: " << sample_string.str() );
-        CHECK( stat_pair.second.avg() == Approx( 100.0 ).epsilon( 0.1 ) );
+        CHECK( stat_pair.second.avg() == Catch::Approx( 100.0 ).epsilon( 0.1 ) );
     }
 
     if( write_data ) {
@@ -263,11 +262,11 @@ static void monster_check()
     const float diagonal_multiplier = ( get_option<bool>( "CIRCLEDIST" ) ? 1.41 : 1.0 );
     // Have a monster walk some distance in a direction and measure how long it takes.
     float vert_move = moves_to_destination( "mon_pig", tripoint_bub_ms::zero(), {100, 0, 0} );
-    CHECK( ( vert_move / 10000.0 ) == Approx( 1.0 ) );
+    CHECK( ( vert_move / 10000.0 ) == Catch::Approx( 1.0 ) );
     int horiz_move = moves_to_destination( "mon_pig", tripoint_bub_ms::zero(), {0, 100, 0} );
-    CHECK( ( horiz_move / 10000.0 ) == Approx( 1.0 ) );
+    CHECK( ( horiz_move / 10000.0 ) == Catch::Approx( 1.0 ) );
     int diag_move = moves_to_destination( "mon_pig", tripoint_bub_ms::zero(), {100, 100, 0} );
-    CHECK( ( diag_move / ( 10000.0 * diagonal_multiplier ) ) == Approx( 1.0 ).epsilon( 0.05 ) );
+    CHECK( ( diag_move / ( 10000.0 * diagonal_multiplier ) ) == Catch::Approx( 1.0 ).epsilon( 0.05 ) );
 
     check_shamble_speed( "mon_pig", {100, 0, 0} );
     check_shamble_speed( "mon_pig", {0, 100, 0} );

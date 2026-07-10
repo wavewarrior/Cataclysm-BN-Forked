@@ -1,5 +1,4 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include <cstdint>
 
 #include "sidebar_anim.h"
@@ -16,19 +15,19 @@ TEST_CASE( "ease_curve endpoints are exact and clamped", "[ui_tween]" )
 {
     for( int i = 0; i < static_cast<int>( ease_curve::num_curves ); ++i ) {
         const ease_curve c = static_cast<ease_curve>( i );
-        CHECK( ui_tween::apply_ease( c, 0.0f ) == Approx( 0.0f ) );
-        CHECK( ui_tween::apply_ease( c, 1.0f ) == Approx( 1.0f ) );
+        CHECK( ui_tween::apply_ease( c, 0.0f ) == Catch::Approx( 0.0f ) );
+        CHECK( ui_tween::apply_ease( c, 1.0f ) == Catch::Approx( 1.0f ) );
         // Out-of-range progress is clamped to the endpoints.
-        CHECK( ui_tween::apply_ease( c, -0.5f ) == Approx( 0.0f ) );
-        CHECK( ui_tween::apply_ease( c, 1.5f ) == Approx( 1.0f ) );
+        CHECK( ui_tween::apply_ease( c, -0.5f ) == Catch::Approx( 0.0f ) );
+        CHECK( ui_tween::apply_ease( c, 1.5f ) == Catch::Approx( 1.0f ) );
     }
 }
 
 TEST_CASE( "ease_curve known midpoints", "[ui_tween]" )
 {
-    CHECK( ui_tween::apply_ease( ease_curve::linear, 0.5f ) == Approx( 0.5f ) );
-    CHECK( ui_tween::apply_ease( ease_curve::quad_in, 0.5f ) == Approx( 0.25f ) );
-    CHECK( ui_tween::apply_ease( ease_curve::quad_out, 0.5f ) == Approx( 0.75f ) );
+    CHECK( ui_tween::apply_ease( ease_curve::linear, 0.5f ) == Catch::Approx( 0.5f ) );
+    CHECK( ui_tween::apply_ease( ease_curve::quad_in, 0.5f ) == Catch::Approx( 0.25f ) );
+    CHECK( ui_tween::apply_ease( ease_curve::quad_out, 0.5f ) == Catch::Approx( 0.75f ) );
     // back_out overshoots above 1 before settling — that's the effect.
     CHECK( ui_tween::apply_ease( ease_curve::back_out, 0.5f ) > 1.0f );
 }
@@ -46,11 +45,11 @@ TEST_CASE( "string_to_ease / string_to_loop parse with safe fallback", "[ui_twee
 TEST_CASE( "tween once: holds before start and after end", "[ui_tween]" )
 {
     const tween t{ 0.0f, 10.0f, 1000, 100, ease_curve::linear, tween_loop::once, 0 };
-    CHECK( t.value_at( 500 ) == Approx( 0.0f ) );    // before start -> from
-    CHECK( t.value_at( 1000 ) == Approx( 0.0f ) );   // at start
-    CHECK( t.value_at( 1050 ) == Approx( 5.0f ) );   // mid
-    CHECK( t.value_at( 1100 ) == Approx( 10.0f ) );  // end
-    CHECK( t.value_at( 5000 ) == Approx( 10.0f ) );  // long after -> hold at to
+    CHECK( t.value_at( 500 ) == Catch::Approx( 0.0f ) );    // before start -> from
+    CHECK( t.value_at( 1000 ) == Catch::Approx( 0.0f ) );   // at start
+    CHECK( t.value_at( 1050 ) == Catch::Approx( 5.0f ) );   // mid
+    CHECK( t.value_at( 1100 ) == Catch::Approx( 10.0f ) );  // end
+    CHECK( t.value_at( 5000 ) == Catch::Approx( 10.0f ) );  // long after -> hold at to
     CHECK_FALSE( t.settled( 1050 ) );
     CHECK( t.settled( 1100 ) );
 }
@@ -58,30 +57,30 @@ TEST_CASE( "tween once: holds before start and after end", "[ui_tween]" )
 TEST_CASE( "tween loop: sawtooth, infinite never settles", "[ui_tween]" )
 {
     const tween t{ 0.0f, 1.0f, 0, 100, ease_curve::linear, tween_loop::loop, 0 };
-    CHECK( t.value_at( 50 ) == Approx( 0.5f ) );
-    CHECK( t.value_at( 100 ) == Approx( 0.0f ) );  // wraps to start of next leg
-    CHECK( t.value_at( 150 ) == Approx( 0.5f ) );
+    CHECK( t.value_at( 50 ) == Catch::Approx( 0.5f ) );
+    CHECK( t.value_at( 100 ) == Catch::Approx( 0.0f ) );  // wraps to start of next leg
+    CHECK( t.value_at( 150 ) == Catch::Approx( 0.5f ) );
     CHECK_FALSE( t.settled( 100000 ) );
 }
 
 TEST_CASE( "tween pingpong: triangle wave", "[ui_tween]" )
 {
     const tween t{ 0.0f, 1.0f, 0, 100, ease_curve::linear, tween_loop::pingpong, 0 };
-    CHECK( t.value_at( 50 ) == Approx( 0.5f ) );    // rising
-    CHECK( t.value_at( 100 ) == Approx( 1.0f ) );   // peak
-    CHECK( t.value_at( 150 ) == Approx( 0.5f ) );   // falling
-    CHECK( t.value_at( 200 ) == Approx( 0.0f ) );   // trough
+    CHECK( t.value_at( 50 ) == Catch::Approx( 0.5f ) );    // rising
+    CHECK( t.value_at( 100 ) == Catch::Approx( 1.0f ) );   // peak
+    CHECK( t.value_at( 150 ) == Catch::Approx( 0.5f ) );   // falling
+    CHECK( t.value_at( 200 ) == Catch::Approx( 0.0f ) );   // trough
 }
 
 TEST_CASE( "tween finite repeats settle at the right endpoint", "[ui_tween]" )
 {
     // loop, 2 legs -> rests at `to`.
     const tween lp{ 0.0f, 1.0f, 0, 100, ease_curve::linear, tween_loop::loop, 2 };
-    CHECK( lp.value_at( 250 ) == Approx( 1.0f ) );
+    CHECK( lp.value_at( 250 ) == Catch::Approx( 1.0f ) );
     CHECK( lp.settled( 250 ) );
     // pingpong, 2 legs (up then down) -> rests at `from`.
     const tween pp{ 0.0f, 1.0f, 0, 100, ease_curve::linear, tween_loop::pingpong, 2 };
-    CHECK( pp.value_at( 250 ) == Approx( 0.0f ) );
+    CHECK( pp.value_at( 250 ) == Catch::Approx( 0.0f ) );
     CHECK( pp.settled( 250 ) );
 }
 
@@ -118,7 +117,7 @@ TEST_CASE( "registry primes without animating on first sight", "[ui_tween][sideb
     r.bind_specs( { { "heart", { pop_spec() } } } );
     r.update( "val_pain", "heart", 5.0, false, 1000 );
     const sidebar_anim::icon_transform tr = r.sample( "val_pain", 1000 );
-    CHECK( tr.scale == Approx( 1.0f ) );  // no pop on first sample
+    CHECK( tr.scale == Catch::Approx( 1.0f ) );  // no pop on first sample
     CHECK_FALSE( r.any_active( 1000 ) );
 }
 
@@ -133,7 +132,7 @@ TEST_CASE( "registry pops on value change, then settles to identity", "[ui_tween
     // Well past the pop duration: a fresh update prunes the settled tween.
     r.update( "val_pain", "heart", 40.0, false, 5000 );
     CHECK_FALSE( r.any_active( 5000 ) );
-    CHECK( r.sample( "val_pain", 5000 ).scale == Approx( 1.0f ) );
+    CHECK( r.sample( "val_pain", 5000 ).scale == Catch::Approx( 1.0f ) );
 }
 
 TEST_CASE( "registry without specs never animates (opt-in)", "[ui_tween][sidebar_anim]" )
@@ -142,7 +141,7 @@ TEST_CASE( "registry without specs never animates (opt-in)", "[ui_tween][sidebar
     r.update( "val_speed", "gauge", 5.0, false, 1000 );
     r.update( "val_speed", "gauge", 99.0, false, 1100 ); // change, but no spec
     CHECK_FALSE( r.any_active( 1100 ) );
-    CHECK( r.sample( "val_speed", 1100 ).scale == Approx( 1.0f ) );
+    CHECK( r.sample( "val_speed", 1100 ).scale == Catch::Approx( 1.0f ) );
 }
 
 TEST_CASE( "registry directional scale_y selects pivot by change sign", "[ui_tween][sidebar_anim]" )
@@ -163,10 +162,10 @@ TEST_CASE( "registry directional scale_y selects pivot by change sign", "[ui_twe
     r.bind_specs( { { "heart", { up, dn } } } );
     r.update( "x", "heart", 10.0, false, 0 );     // prime
     r.update( "x", "heart", 20.0, false, 100 );   // increase -> top pivot
-    CHECK( r.sample( "x", 100 ).pivot_y == Approx( 0.0f ) );
+    CHECK( r.sample( "x", 100 ).pivot_y == Catch::Approx( 0.0f ) );
     CHECK( r.sample( "x", 100 ).scale_y < 1.0f );  // mid-squash
     r.update( "x", "heart", 5.0, false, 500 );    // decrease -> bottom pivot
-    CHECK( r.sample( "x", 500 ).pivot_y == Approx( 1.0f ) );
+    CHECK( r.sample( "x", 500 ).pivot_y == Catch::Approx( 1.0f ) );
 }
 
 TEST_CASE( "shipped icons.json parses through load_specs (strict JSON)",
@@ -200,6 +199,6 @@ TEST_CASE( "registry critical band blinks then eases back on exit", "[ui_tween][
     }
     // After the ease-out duration, alpha rests opaque and nothing is active.
     r.update( "hp", "heart", 100.0, false, 1000 );
-    CHECK( r.sample( "hp", 1000 ).alpha == Approx( 1.0f ) );
+    CHECK( r.sample( "hp", 1000 ).alpha == Catch::Approx( 1.0f ) );
     CHECK_FALSE( r.any_active( 1000 ) );
 }

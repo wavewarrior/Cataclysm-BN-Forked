@@ -1,7 +1,6 @@
 #pragma GCC diagnostic ignored "-Wunused-macros"
 #define CATCH_CONFIG_ENABLE_PAIR_STRINGMAKER
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include <algorithm>
 #include <unordered_map>
 #include <vector>

@@ -13,8 +13,7 @@
 #endif // _GLIBCXX_DEBUG
 
 #ifdef CATA_CATCH_PCH
-#undef TWOBLUECUBES_SINGLE_INCLUDE_CATCH_HPP_INCLUDED
-#define CATCH_CONFIG_IMPL_ONLY
+#undef CATCH_AMALGAMATED_HPP_INCLUDED
 #endif
 #define CATCH_CONFIG_RUNNER
 #include <algorithm>
@@ -33,7 +32,7 @@
 
 #include "avatar.h"
 #include "calendar.h"
-#include "catch/catch.hpp"
+#include "catch/catch_amalgamated.hpp"
 #include "color.h"
 #include "coordinates.h"
 #include "debug.h"
@@ -238,31 +237,30 @@ static std::string extract_user_dir( std::vector<const char *> &arg_vec )
     return option_user_dir;
 }
 
-struct CataListener : Catch::TestEventListenerBase {
-    using TestEventListenerBase::TestEventListenerBase;
+struct CataListener : Catch::EventListenerBase {
+    using EventListenerBase::EventListenerBase;
 
     void sectionStarting( Catch::SectionInfo const &sectionInfo ) override {
-        TestEventListenerBase::sectionStarting( sectionInfo );
+        EventListenerBase::sectionStarting( sectionInfo );
         // Initialize the cata RNG with the Catch seed for reproducible tests
         rng_set_engine_seed( m_config->rngSeed() );
     }
 
-    bool assertionEnded( Catch::AssertionStats const &assertionStats ) override {
+    void assertionEnded( Catch::AssertionStats const &assertionStats ) override {
 #ifdef BACKTRACE
         Catch::AssertionResult const &result = assertionStats.assertionResult;
 
         if( result.getResultType() == Catch::ResultWas::FatalErrorCondition ) {
             // We are in a signal handler for a fatal error condition, so print a
             // backtrace
-            stream << "Stack trace at fatal error:\n";
-            debug_write_backtrace( stream );
+            std::cerr << "Stack trace at fatal error:\n";
+            debug_write_backtrace( std::cerr );
         }
 #endif
 
-        return TestEventListenerBase::assertionEnded( assertionStats );
+        EventListenerBase::assertionEnded( assertionStats );
     }
 };
-
 CATCH_REGISTER_LISTENER( CataListener )
 
 int main( int argc, const char *argv[] )

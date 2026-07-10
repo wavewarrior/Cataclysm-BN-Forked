@@ -3,19 +3,20 @@ if (BUILD_TESTING)
             ${CMAKE_SOURCE_DIR}/tests/*.cpp)
 
     # Enabling benchmarks
-    add_definitions(-DCATCH_CONFIG_ENABLE_BENCHMARKING)
+    add_definitions(-DCATCH_CONFIG_ENABLE_BENCHMARKING -DCATCH_AMALGAMATED_CUSTOM_MAIN)
 
     # TODO: build MO files required for tests
 
-    # This needs to include catch.h with different macro switch
+    # Catch2 v3 amalgamated source must be compiled
+    set(CATCH_V3_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/catch/catch_amalgamated.cpp)
+    set_source_files_properties(${CATCH_V3_SOURCE} PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+
+    # test_main.cpp includes catch with CATCH_CONFIG_RUNNER - skip PCH
     set_source_files_properties(test_main.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
 
-    # Catch2 v2 uses __COUNTER__, which Clang 22 reports under -Wpedantic.
-    set(CATCH2_COMPILE_OPTIONS $<$<CXX_COMPILER_ID:Clang>:-Wno-c2y-extensions>)
-
-    add_executable(cata_test-tiles ${CATACLYSM_BN_TEST_SOURCES})
+    add_executable(cata_test-tiles ${CATACLYSM_BN_TEST_SOURCES} ${CATCH_V3_SOURCE})
+    target_include_directories(cata_test-tiles PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_link_libraries(cata_test-tiles PRIVATE cataclysm-bn-tiles-common)
-    target_compile_options(cata_test-tiles PRIVATE ${CATCH2_COMPILE_OPTIONS})
 
     add_test(
         NAME test-tiles

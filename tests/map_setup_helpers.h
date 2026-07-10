@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "coordinates.h"
-#include "catch/catch.hpp"
+#include "catch/catch_amalgamated.hpp"
 
 namespace map_helpers
 {

@@ -1,5 +1,4 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include <sstream>
 
 #include "avatar.h"
@@ -260,7 +259,7 @@ static void test_rail_movement( const test_case &t,
     CAPTURE( always_on_rails );
     CAPTURE( scan_log.str() );
 
-    if( units::to_degrees( got_dir ) != Approx( units::to_degrees( expected_dir ) ) ||
+    if( units::to_degrees( got_dir ) != Catch::Approx( units::to_degrees( expected_dir ) ) ||
         got_pos != expected_pos ) {
         FAIL( "direction and/or position mismatch" );
     } else if( ( t.scope & tcscope::check_on_rails ) && !always_on_rails ) {
