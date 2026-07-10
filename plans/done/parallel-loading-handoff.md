@@ -1,10 +1,11 @@
-# Parallel Loading — Handoff to Main Orchestrator
+# [DONE] Parallel Loading — Handoff to Main Orchestrator
 
-## Status: Partially Shipped, Dominant Bottlenecks Unaddressed
+## Status: All Shipped, Target Met
 
-**Branch**: `feat/parallel-loading` (3 commits on `feature/improvements`)
-**Plan**: `plans/parallel-loading-plan.md`
-**Research**: `local://PARALLEL_LOADING_STRATEGY.md`
+**Branch**: `feature/improvements` (merged)
+**Final `total_wall_ms` (Win11, warm)**: ~2721ms (was ~4703ms, -42%)
+**Final `--check-mods` (80+ mods)**: 218s (was 337s, -35%)
+**Perceived wait after world-pick**: ~200ms (speculative pre-warm hides ~90%)
 
 ---
 

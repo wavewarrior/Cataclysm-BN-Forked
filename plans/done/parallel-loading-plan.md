@@ -1,4 +1,4 @@
-# Parallel Game Loading Plan
+# [DONE] Parallel Game Loading Plan
 
 > **Implementer**: copy this file to `plans/parallel-loading-plan.md` in the repo before making any code changes (AGENTS.md requirement: plan lives in two places).
 

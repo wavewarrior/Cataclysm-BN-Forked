@@ -1,4 +1,4 @@
-# JSON Loading — Further Performance Improvements
+# [DONE] JSON Loading — Further Performance Improvements
 
 ## Status quo (Win11, i9-14900K, warm cache, `bn` mod only)
 
