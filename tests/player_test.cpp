@@ -1,5 +1,4 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include <string>
 #include <array>
 #include <list>
@@ -8,7 +7,7 @@
 #include "avatar.h"
 #include "avatar_action.h"
 #include "bodypart.h"
-#include "catch/catch.hpp"
+#include "catch/catch_amalgamated.hpp"
 #include "player.h"
 #include "units_temperature.h"
 #include "weather.h"

@@ -1555,9 +1555,9 @@ bool avatar::add_faction_warning( const faction_id &id )
         warning_record[id] = std::make_pair( 1, calendar::turn );
     }
     faction *fac = g->faction_manager_ptr->get( id );
-    if( fac != nullptr && is_player() && fac->id != faction_id( "no_faction" ) ) {
-        fac->likes_u -= 1;
-        fac->respects_u -= 1;
+    if( fac != nullptr && is_player() && fac->id() != faction_id( "no_faction" ) ) {
+        fac->set_likes_u( fac->likes_u() - 1 );
+        fac->set_respects_u( fac->respects_u() - 1 );
     }
     return false;
 }

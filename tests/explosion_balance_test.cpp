@@ -1,5 +1,4 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include <algorithm>
 #include <cstddef>
 #include <memory>
@@ -102,7 +101,7 @@ void check_lethality( const std::string &explosive_id, const int range, float le
     INFO( "Wounded survivors: " << num_wounded );
     const int average_hp = num_survivors ? total_hp / num_survivors : 0;
     INFO( "average hp of survivors: " << average_hp );
-    CHECK( victims.avg() == Approx( lethality ).margin( margin ) );
+    CHECK( victims.avg() == Catch::Approx( lethality ).margin( margin ) );
 }
 
 auto get_part_hp( vehicle *veh ) -> std::vector<int>

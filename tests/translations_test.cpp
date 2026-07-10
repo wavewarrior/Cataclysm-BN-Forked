@@ -1,5 +1,4 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include "language.h"
 #include "options.h"
 #include "options_helpers.h"

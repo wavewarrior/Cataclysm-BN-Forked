@@ -272,12 +272,14 @@ static std::string format_spd(
 
 std::optional<std::string> player_activity::get_progress_message( const avatar& u ) const
 {
-    if( !type || get_verb().empty() ) { return std::optional<std::string>(); }
+    if( !type || get_verb().empty() ) {
+    return std::optional<std::string>();
+    }
     if( !type->special() && type->verbose_tooltip() ) {
 
     /*
-     * Progress block
-     */
+    * Progress block
+    */
     std::string target = "";
     std::string progress_desc = "Progress: ";
 
@@ -297,32 +299,24 @@ std::optional<std::string> player_activity::get_progress_message( const avatar& 
                 target = string_format( ": %s", actor->progress.front().target_name );
                 if( actor->progress.get_total_tasks() > 1 ) {
                     progress_desc += "\n - Total: ";
-                    progress_desc += string_format(
-                                         "%.1f%%\n",
-                                         ( 1.0f
-                                           - float( actor->progress.get_moves_left() )
-                                           / actor->progress.get_moves_total() )
-                                         * 100.0f );
-                    progress_desc += string_format(
-                                         _( "  - Processing %s out of %s\n" ), actor->progress.get_index(),
-                                         actor->progress.get_total_tasks() );
-                    progress_desc += string_format(
-                                         _( "  - Estimated time: %s\n" ),
-                                         to_string( time_duration::from_turns(
-                                                        actor->progress.get_moves_left() / speed.moves_per_turn() ) ) );
+                    progress_desc += string_format( "%.1f%%\n",
+                                                    ( 1.0f - float( actor->progress.get_moves_left() ) / actor->progress.get_moves_total() ) * 100.0f );
+                    progress_desc += string_format( _( "  - Processing %s out of %s\n" ), actor->progress.get_index(),
+                                                    actor->progress.get_total_tasks() );
+                    progress_desc += string_format( _( "  - Estimated time: %s\n" ),
+                                                    to_string( time_duration::from_turns( actor->progress.get_moves_left() /
+                                                        speed.moves_per_turn() ) ) );
                     progress_desc += " - Current: ";
                 }
-                progress_desc += string_format(
-                                     "%.1f%%\n",
-                                     ( 1.0f
-                                       - float( actor->progress.front().moves_left )
-                                       / actor->progress.front().moves_total )
-                                     * 100.0f );
-                if( actor->progress.get_total_tasks() > 1 ) { progress_desc += "  - "; }
-                progress_desc += string_format(
-                                     _( "Time left: %s\n" ),
-                                     to_string( time_duration::from_turns(
-                                                    actor->progress.front().moves_left / speed.moves_per_turn() ) ) );
+                progress_desc += string_format( "%.1f%%\n",
+                                                ( 1.0f - float( actor->progress.front().moves_left ) / actor->progress.front().moves_total ) *
+                                                100.0f );
+                if( actor->progress.get_total_tasks() > 1 ) {
+                    progress_desc += "  - ";
+                }
+                progress_desc += string_format( _( "Time left: %s\n" ),
+                                                to_string( time_duration::from_turns( actor->progress.front().moves_left /
+                                                    speed.moves_per_turn() ) ) );
             }
         } else {
             if( !targets.empty() && targets.front().is_accessible()
@@ -377,9 +371,14 @@ std::optional<std::string> player_activity::get_progress_message( const avatar& 
         }
     }
 
-    if( type == ACT_ADV_INVENTORY || type == ACT_AIM || type == ACT_ARMOR_LAYERS || type == ACT_ATM
-        || type == ACT_CONSUME_DRINK_MENU || type == ACT_CONSUME_FOOD_MENU
-        || type == ACT_CONSUME_MEDS_MENU || type == ACT_EAT_MENU ) {
+    if( type == ACT_ADV_INVENTORY ||
+        type == ACT_AIM ||
+        type == ACT_ARMOR_LAYERS ||
+        type == ACT_ATM ||
+        type == ACT_CONSUME_DRINK_MENU ||
+        type == ACT_CONSUME_FOOD_MENU ||
+        type == ACT_CONSUME_MEDS_MENU ||
+        type == ACT_EAT_MENU ) {
     return std::nullopt;
 }
 
@@ -387,12 +386,12 @@ std::string extra_info;
 if( type == ACT_CRAFT ) {
     return craft_progress_message( u, *this );
     } else if( type == ACT_READ ) {
-    if( const item * book = &*targets.front() ) {
-            if( const auto& reading = book->type->book ) {
-                const skill_id& skill = reading->skill;
-                if( skill && u.get_skill_level( skill ) < reading->level
-                    && u.get_skill_level_object( skill ).can_train() ) {
-                    const SkillLevel& skill_level = u.get_skill_level_object( skill );
+    if( const item *book = &*targets.front() ) {
+            if( const auto &reading = book->type->book ) {
+                const skill_id &skill = reading->skill;
+                if( skill && u.get_skill_level( skill ) < reading->level &&
+                    u.get_skill_level_object( skill ).can_train() ) {
+                    const SkillLevel &skill_level = u.get_skill_level_object( skill );
                     //~ skill_name current_skill_level -> next_skill_level (% to next level)
                     extra_info = string_format(
                                      pgettext( "reading progress", "%s %d -> %d (%d%%)" ), skill->name(),
@@ -401,10 +400,18 @@ if( type == ACT_CRAFT ) {
             }
         }
     } else if( moves_total > 0 ) {
-    if( type == ACT_BURROW || type == ACT_HACKSAW || type == ACT_JACKHAMMER
-            || type == ACT_PICKAXE || type == ACT_VEHICLE || type == ACT_FILL_PIT || type == ACT_DIG
-            || type == ACT_DIG_CHANNEL || type == ACT_CHOP_TREE || type == ACT_CHOP_LOGS
-            || type == ACT_CHOP_PLANKS ) {
+    if( type == ACT_BURROW ||
+            type == ACT_HACKSAW ||
+            type == ACT_JACKHAMMER ||
+            type == ACT_PICKAXE ||
+            type == ACT_VEHICLE ||
+            type == ACT_FILL_PIT ||
+            type == ACT_DIG ||
+            type == ACT_DIG_CHANNEL ||
+            type == ACT_CHOP_TREE ||
+            type == ACT_CHOP_LOGS ||
+            type == ACT_CHOP_PLANKS
+          ) {
             const int percentage = ( ( moves_total - moves_left ) * 100 ) / moves_total;
 
             extra_info = string_format( "%d%%", percentage );
@@ -593,20 +600,30 @@ bool player_activity::can_resume_with( const player_activity& other, const Chara
     // Should be used for relative positions
     // And to forbid resuming now-invalid crafting
 
-    if( !*this || !other || type->no_resume() ) { return false; }
+    if( !*this || !other || type->no_resume() ) {
+    return false;
+}
 
-if( id() != other.id() ) { return false; }
+if( id() != other.id() ) {
+    return false;
+}
 
 // if actor XOR other.actor then id() != other.id() so
 // we will correctly return false based on final return statement
-if( actor && other.actor ) { return actor->can_resume_with( *other.actor, who ); }
+if( actor && other.actor ) {
+    return actor->can_resume_with( *other.actor, who );
+    }
 
     if( id() == ACT_CLEAR_RUBBLE ) {
-    if( other.coords.empty() || other.coords[0] != coords[0] ) { return false; }
+    if( other.coords.empty() || other.coords[0] != coords[0] ) {
+            return false;
+        }
     } else if( id() == ACT_READ ) {
     // Return false if any NPCs joined or left the study session
     // the vector {1, 2} != {2, 1}, so we'll have to check manually
-    if( values.size() != other.values.size() ) { return false; }
+    if( values.size() != other.values.size() ) {
+            return false;
+        }
         for( int foo : other.values ) {
             if( !std::ranges::contains( values, foo ) ) { return false; }
         }
@@ -614,7 +631,9 @@ if( actor && other.actor ) { return actor->can_resume_with( *other.actor, who );
             return false;
         }
     } else if( id() == ACT_VEHICLE ) {
-    if( values != other.values || str_values != other.str_values ) { return false; }
+    if( values != other.values || str_values != other.str_values ) {
+            return false;
+        }
     }
 
     return !auto_resume && index == other.index && position == other.position && name == other.name
@@ -623,7 +642,8 @@ if( actor && other.actor ) { return actor->can_resume_with( *other.actor, who );
 
 bool player_activity::is_distraction_ignored( distraction_type type ) const
 {
-    return ( get_distraction_manager().is_ignored( type ) || ignored_distractions.contains( type ) );
+    return ( get_distraction_manager().is_ignored( type ) ||
+    ignored_distractions.contains( type ) );
 }
 
 void player_activity::ignore_distraction( distraction_type type )
@@ -683,5 +703,7 @@ void activity_ptr::deserialize( JsonIn& jsin ) { act->deserialize( jsin ); }
 
 auto player_activity::add_tool( item* it ) -> void
 {
-    if( it && !it->has_flag( flag_PSEUDO ) ) { tools_.emplace_back( it ); }
+    if( it && !it->has_flag( flag_PSEUDO ) ) {
+    tools_.emplace_back( it );
+    }
 }

@@ -10,8 +10,7 @@
 // `cata_test-tiles` without a GPU isn't asked to spin up Vulkan/Metal/D3D12.
 // To run locally: `cata_test-tiles "[gpu]"`.
 
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include "lighting/gpu_device.h"
 #include "lighting/shader_compiler.h"
 

@@ -10,9 +10,25 @@
 
 thread_local bool tl_is_worker_thread = false;
 
+static void init_worker_thread_locals()
+{
+    tl_is_worker_thread = true;
+    init_crash_handlers();
+    const unsigned int seed =
+        static_cast<unsigned int>( std::hash<std::thread::id> {}( std::this_thread::get_id() ) ) ^
+        static_cast<unsigned int>(
+            std::chrono::high_resolution_clock::now().time_since_epoch().count() );
+    rng_set_worker_seed( seed );
+}
+
 bool is_pool_worker_thread()
 {
     return tl_is_worker_thread;
+}
+
+void set_worker_thread()
+{
+    init_worker_thread_locals();
 }
 
 cata_thread_pool::cata_thread_pool( unsigned int num_workers )
@@ -39,21 +55,7 @@ cata_thread_pool::~cata_thread_pool()
 
 void cata_thread_pool::worker_loop()
 {
-    tl_is_worker_thread = true;
-    // Windows installs signal handlers per-thread for hardware exception signals
-    // (SIGSEGV, SIGFPE, SIGILL).  Re-run the crash handler setup so that crashes
-    // on worker threads are caught and logged the same way as main-thread crashes.
-    // On POSIX the signal disposition is process-wide, so this is a no-op.
-    init_crash_handlers();
-
-    // Seed this worker's thread-local RNG so compute_plan() calls do not
-    // race on the main thread's global engine (P-5).
-    // Mix thread ID with current time for a unique-ish seed per worker.
-    const unsigned int seed =
-        static_cast<unsigned int>( std::hash<std::thread::id> {}( std::this_thread::get_id() ) ) ^
-        static_cast<unsigned int>(
-            std::chrono::high_resolution_clock::now().time_since_epoch().count() );
-    rng_set_worker_seed( seed );
+    init_worker_thread_locals();
 
     while( true ) {
         std::function<void()> task;

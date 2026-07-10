@@ -1,5 +1,4 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include <string>
 
 #include "avatar.h"
@@ -138,13 +137,13 @@ TEST_CASE( "mutations may affect character metabolic rate", "[biometrics][metabo
     //
     // If metabolism modifiers are changed, the below check(s) need to be adjusted as well.
 
-    CHECK( metabolic_rate_with_mutation( dummy, "MET_RAT" ) == Approx( 1.333f ) );
-    CHECK( metabolic_rate_with_mutation( dummy, "HUNGER" ) == Approx( 1.5f ) );
-    CHECK( metabolic_rate_with_mutation( dummy, "HUNGER2" ) == Approx( 2.0f ) );
-    CHECK( metabolic_rate_with_mutation( dummy, "HUNGER3" ) == Approx( 3.0f ) );
-    CHECK( metabolic_rate_with_mutation( dummy, "LIGHTEATER" ) == Approx( 0.667f ) );
-    CHECK( metabolic_rate_with_mutation( dummy, "COLDBLOOD" ) == Approx( 0.667f ) );
-    CHECK( metabolic_rate_with_mutation( dummy, "COLDBLOOD2" ) == Approx( 0.5f ) );
-    CHECK( metabolic_rate_with_mutation( dummy, "COLDBLOOD3" ) == Approx( 0.5f ) );
-    CHECK( metabolic_rate_with_mutation( dummy, "COLDBLOOD4" ) == Approx( 0.5f ) );
+    CHECK( metabolic_rate_with_mutation( dummy, "MET_RAT" ) == Catch::Approx( 1.333f ) );
+    CHECK( metabolic_rate_with_mutation( dummy, "HUNGER" ) == Catch::Approx( 1.5f ) );
+    CHECK( metabolic_rate_with_mutation( dummy, "HUNGER2" ) == Catch::Approx( 2.0f ) );
+    CHECK( metabolic_rate_with_mutation( dummy, "HUNGER3" ) == Catch::Approx( 3.0f ) );
+    CHECK( metabolic_rate_with_mutation( dummy, "LIGHTEATER" ) == Catch::Approx( 0.667f ) );
+    CHECK( metabolic_rate_with_mutation( dummy, "COLDBLOOD" ) == Catch::Approx( 0.667f ) );
+    CHECK( metabolic_rate_with_mutation( dummy, "COLDBLOOD2" ) == Catch::Approx( 0.5f ) );
+    CHECK( metabolic_rate_with_mutation( dummy, "COLDBLOOD3" ) == Catch::Approx( 0.5f ) );
+    CHECK( metabolic_rate_with_mutation( dummy, "COLDBLOOD4" ) == Catch::Approx( 0.5f ) );
 }

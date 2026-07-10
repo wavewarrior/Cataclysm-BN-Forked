@@ -6,7 +6,7 @@
 #include <utility>
 
 #include "cuboid_rectangle.h"
-#include "catch/catch.hpp"
+#include "catch/catch_amalgamated.hpp"
 #include "cata_variant.h"
 #include "coordinates.h"
 #include "dialogue.h"

@@ -9,7 +9,7 @@
 #include <string>
 #include <type_traits>
 
-#include "catch/catch.hpp"
+#include "catch/catch_amalgamated.hpp"
 
 // Z-value for confidence interval
 constexpr double Z95 = 1.96;
@@ -204,7 +204,7 @@ class statistics
         }
 };
 
-class BinomialMatcher : public Catch::MatcherBase<int>
+class BinomialMatcher : public Catch::Matchers::MatcherBase<int>
 {
     public:
         BinomialMatcher( int num_samples, double p, double max_deviation );

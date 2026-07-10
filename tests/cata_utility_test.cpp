@@ -1,5 +1,4 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include "assertion_helpers.h"
 #include "cata_utility.h"
 #include "string_utils.h"

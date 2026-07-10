@@ -1,5 +1,4 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include "cached_options.h"
 #include "catacharset.h"
 #include "pinyin.h"

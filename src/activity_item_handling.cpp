@@ -781,7 +781,6 @@ void drop_activity_actor::do_turn( player_activity &, Character& who )
         }
     }
 #endif // COOP_ENABLED
-
     put_into_vehicle_or_drop( who, item_drop_reason::deliberate, dropped, pos, force_ground );
 
     get_map().process_falling();
@@ -2426,7 +2425,7 @@ void activity_on_turn_move_loot( player_activity& act, player& p )
             src_veh = &vp->vehicle();
             src_part = vp->part_index();
             for( auto& it : src_veh->get_items( src_part ) ) {
-                if( !it->is_owned_by( p, true ) && it->get_owner()->likes_u >= -10 ) { continue; }
+                if( !it->is_owned_by( p, true ) && it->get_owner()->likes_u() >= -10 ) { continue; }
                 it->set_owner( p );
                 items.emplace_back( it, true );
             }
@@ -2435,7 +2434,7 @@ void activity_on_turn_move_loot( player_activity& act, player& p )
             src_part = -1;
         }
         for( auto& it : here.i_at( src_loc ) ) {
-            if( !it->is_owned_by( p, true ) && it->get_owner()->likes_u >= -10 ) { continue; }
+            if( !it->is_owned_by( p, true ) && it->get_owner()->likes_u() >= -10 ) { continue; }
             it->set_owner( p );
             items.emplace_back( it, false );
         }
@@ -3512,7 +3511,7 @@ bool find_auto_consume( player& p, const consume_type type )
         /* wont eat, e.g cannibal */
         if( !p.will_eat( comest, false ).success() ) { return false; }
         /* not ours, freely steal from hostiles however  */
-        if( !it->is_owned_by( p, true ) && it->get_owner()->likes_u >= -10 ) { return false; }
+        if( !it->is_owned_by( p, true ) && it->get_owner()->likes_u() >= -10 ) { return false; }
         /* not quenching enough or won't sate auto-eat   */
         if( ( type == consume_type::DRINK && comest.get_comestible()->quench < 15 )
             || ( type == consume_type::FOOD && p.compute_effective_nutrients( comest ).kcal < 1 ) )

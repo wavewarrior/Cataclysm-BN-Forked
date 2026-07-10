@@ -9,7 +9,7 @@
 
 #include "avatar.h"
 #include "calendar.h"
-#include "catch/catch.hpp"
+#include "catch/catch_amalgamated.hpp"
 #include "coordinates.h"
 #include "game.h"
 #include "inventory.h"

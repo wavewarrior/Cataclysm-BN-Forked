@@ -1,5 +1,5 @@
-#include "catch/catch.hpp"
-
+#include <iostream>
+#include "catch/catch_amalgamated.hpp"
 #include "player_helpers.h"
 
 #include <cstddef>

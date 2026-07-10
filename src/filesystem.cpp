@@ -154,6 +154,69 @@ const char *cata_files::eol()
     return local_eol;
 }
 
+// On Windows, prepend a CreateFile-based path with FILE_FLAG_SEQUENTIAL_SCAN so
+// the OS prefetcher knows we'll read the file linearly.  This also signals to
+// Windows Defender that a sequential read is coming, reducing per-file AV scan
+// overhead on repeated cold loads.  Falls back to the cata_ifstream path on
+// failure (wrong permissions, network drive, etc.) so behaviour is unchanged
+// for non-standard environments.
+#if defined(_WIN32)
+std::string read_entire_file( const std::string &path )
+{
+    // Keep the wstring alive for the duration of CreateFileW — name it
+    // explicitly so its lifetime is clear; cannot rely on temporary extension.
+    const std::wstring wpath = utf8_to_wstr( path );
+    const HANDLE h = CreateFileW(
+                         wpath.c_str(),
+                         GENERIC_READ, FILE_SHARE_READ,
+                         nullptr, OPEN_EXISTING,
+                         FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr );
+    if( h != INVALID_HANDLE_VALUE ) {
+        LARGE_INTEGER sz{};
+        if( GetFileSizeEx( h, &sz ) && sz.QuadPart > 0 ) {
+            std::string content( static_cast<std::size_t>( sz.QuadPart ), '\0' );
+            DWORD read_bytes = 0;
+            // ReadFile takes LPVOID; explicit cast required — STRICT mode makes
+            // the implicit char*→void* conversion ill-formed in some SDK configs.
+            const BOOL ok = ReadFile( h,
+                                      static_cast<LPVOID>( content.data() ),
+                                      static_cast<DWORD>( content.size() ),
+                                      &read_bytes, nullptr );
+            CloseHandle( h );
+            if( ok ) {
+                content.resize( read_bytes );
+                return content;
+            }
+            // ReadFile failed — fall through to cata_ifstream fallback.
+        } else {
+            CloseHandle( h );
+            if( sz.QuadPart == 0 ) {
+                return {}; // empty file: no need for cata_ifstream fallback
+            }
+            // GetFileSizeEx failed — fall through to cata_ifstream fallback.
+        }
+    }
+    // Fall through to cata_ifstream on any Win32 error (path too long,
+    // network drives, GetFileSizeEx/ReadFile failure, INVALID_HANDLE_VALUE).
+    cata_ifstream infile;
+    infile.mode( cata_ios_mode::binary ).open( path );
+    if( !infile.is_open() ) {
+        return {};
+    }
+    infile->seekg( 0, std::ios::end );
+    const std::streamsize win_sz = infile->tellg();
+    infile->seekg( 0 );
+    if( win_sz <= 0 ) {
+        return {};
+    }
+    std::string win_ret( static_cast<size_t>( win_sz ), '\0' );
+    infile->read( win_ret.data(), win_sz );
+    if( infile->fail() ) {
+        return {};
+    }
+    return win_ret;
+}
+#else
 std::string read_entire_file( const std::string &path )
 {
     cata_ifstream infile;
@@ -174,6 +237,7 @@ std::string read_entire_file( const std::string &path )
     }
     return ret;
 }
+#endif
 
 namespace
 {

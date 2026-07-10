@@ -300,7 +300,8 @@ auto get_projectile_animation_symbol( const projectile& proj ) -> char
 
 auto projectile_draws_as_line( const projectile& proj ) -> bool
 {
-    return proj.has_effect( ammo_effect_DRAW_AS_LINE ) || get_option<bool>( "BULLETS_AS_LASERS" );
+    return proj.has_effect( ammo_effect_DRAW_AS_LINE ) ||
+    get_option<bool>( "BULLETS_AS_LASERS" );
 }
 
 auto add_grouped_shot_hit(
@@ -746,10 +747,14 @@ static double occupied_tile_fraction( creature_size target_size )
 
 double Creature::ranged_target_size() const
 {
-    if( const_cast<Creature &>( *this ).uncanny_dodge() ) { return 0.0; }
+    if( const_cast<Creature &>( *this ).uncanny_dodge() ) {
+    return 0.0;
+}
 bool is_crouched = false;
-if( Character * ch = const_cast<Creature &>( *this ).as_character() ) {
-    if( ch->movement_mode_is( CMM_CROUCH ) ) { is_crouched = true; }
+if( Character *ch = const_cast<Creature &>( *this ).as_character() ) {
+    if( ch->movement_mode_is( CMM_CROUCH ) ) {
+            is_crouched = true;
+        }
     }
     if( has_flag( MF_HARDTOSHOOT ) || is_crouched ) {
     switch( get_size() ) {
@@ -1031,7 +1036,9 @@ auto is_mountable_nearby( const map& m, const tripoint_bub_ms& pos ) -> bool
 
 auto can_use_heavy_weapon( const Character& who, const map& m, const tripoint_bub_ms& pos ) -> bool
 {
-    if( who.is_mounted() && who.mounted_creature->has_flag( MF_RIDEABLE_MECH ) ) { return true; }
+    if( who.is_mounted() && who.mounted_creature->has_flag( MF_RIDEABLE_MECH ) ) {
+    return true;
+}
 return is_mountable_nearby( m, pos );
 }
 
@@ -1880,7 +1887,8 @@ static std::string get_colored_bar(
 static auto outside_visible_z_range( const tripoint_bub_ms& from, const tripoint_bub_ms& to )
 -> bool
 {
-    return get_map().has_zlevels() && fov_3d && std::abs( from.z() - to.z() ) > fov_3d_z_range;
+    return get_map().has_zlevels() && fov_3d &&
+    std::abs( from.z() - to.z() ) > fov_3d_z_range;
 }
 
 static bool pl_sees( const Creature& cr )
@@ -2031,9 +2039,9 @@ static std::vector<std::string> aim_lines(
 
     std::vector<std::string> out;
     out.push_back( steadiness_line( bar_width, steadiness ) );
-    std::vector<std::string> chance = ranged_chance_lines(
-                                          ctxt, bar_width, ranged::get_aim_types( p, weapon ), dispersion_fun, cost_fun,
-                                          confidence_config, range, target_size );
+    std::vector<std::string> chance = ranged_chance_lines( ctxt, bar_width,
+                                      ranged::get_aim_types( p, weapon ), dispersion_fun, cost_fun,
+                                      confidence_config, range, target_size );
     out.insert( out.end(), chance.begin(), chance.end() );
     return out;
 }
@@ -2085,8 +2093,8 @@ std::vector<ranged::aim_type> ranged::get_aim_types( const Character& who, const
         sight_dispersion
     };
     // Remove duplicate thresholds.
-    std::vector<int>::iterator thresholds_it =
-        std::adjacent_find( thresholds.begin(), thresholds.end() );
+    std::vector<int>::iterator thresholds_it = std::adjacent_find( thresholds.begin(),
+        thresholds.end() );
     while( thresholds_it != thresholds.end() ) {
         thresholds.erase( thresholds_it );
         thresholds_it = std::adjacent_find( thresholds.begin(), thresholds.end() );
@@ -2261,16 +2269,18 @@ void ranged::make_gun_sound_effect( const Character& who, bool burst, const item
 
 item::sound_data item::gun_noise( const bool burst ) const
 {
-    if( !is_gun() ) { return {0, ""}; }
+    if( !is_gun() ) {
+    return { 0, "" };
+}
 
 int noise = calc_gun_volume( *this );
 
 if( type->weapon_category.contains( weapon_cat_WATER_CANNONS ) ) {
-    return {noise, _( "Splash!" )};
+    return { noise, _( "Splash!" ) };
 
 } else if( type->weapon_category.contains( weapon_cat_MAGNETIC ) ) {
     if( noise < 20 ) {
-            return {noise, burst ? _( "tz-tz-tzk!" ) : _( "tzk!" )};
+            return { noise, burst ? _( "tz-tz-tzk!" ) : _( "tzk!" ) };
         } else if( noise < 80 ) {
             return {noise, burst ? _( "Brzzip!" ) : _( "tz-Zing!" )};
         } else if( noise < 200 ) {
@@ -2281,7 +2291,7 @@ if( type->weapon_category.contains( weapon_cat_WATER_CANNONS ) ) {
 
     } else if( type->weapon_category.contains( weapon_cat_PNEUMATIC ) ) {
     if( noise < 10 ) {
-            return {noise, burst ? _( "P-p-p-pft!" ) : _( "pft!" )};
+            return { noise, burst ? _( "P-p-p-pft!" ) : _( "pft!" ) };
         } else if( noise < 20 ) {
             return {noise, burst ? _( "F-F-Foomp!" ) : _( "Foomp!" )};
         } else if( noise < 40 ) {
@@ -2291,23 +2301,23 @@ if( type->weapon_category.contains( weapon_cat_WATER_CANNONS ) ) {
         }
 
     } else if( type->weapon_category.contains( weapon_cat_ROCKET_LAUNCHERS ) ) {
-    return {noise, _( "Fwsss!" )};
+    return { noise, _( "Fwsss!" ) };
 } else if( type->weapon_category.contains( weapon_cat_GRENADE_LAUNCHERS ) ) {
-    return {noise, _( "Thump!" )};
-} else if( type->weapon_category.contains( weapon_cat_FLAMETHROWERS )
-               || type->weapon_category.contains( weapon_cat_SPRAY_GUNS ) ) {
-    return {noise, _( "Fwoosh!" )};
-} else if( type->weapon_category.contains( weapon_cat_S_XBOWS )
-               || type->weapon_category.contains( weapon_cat_M_XBOWS ) ) {
-    return {noise, _( "thonk!" )};
+    return { noise, _( "Thump!" ) };
+} else if( type->weapon_category.contains( weapon_cat_FLAMETHROWERS ) ||
+               type->weapon_category.contains( weapon_cat_SPRAY_GUNS ) ) {
+    return { noise, _( "Fwoosh!" ) };
+} else if( type->weapon_category.contains( weapon_cat_S_XBOWS ) ||
+               type->weapon_category.contains( weapon_cat_M_XBOWS ) ) {
+    return { noise, _( "thonk!" ) };
 } else if( type->weapon_category.contains( weapon_cat_ELASTIC ) ) {
-    return {noise, _( "whizz!" )};
+    return { noise, _( "whizz!" ) };
 }
 
 if( type->weapon_category.contains( weapon_cat_ENERGY_WEAPONS ) ) {
     // Lasers and plasma
     if( noise < 20 ) {
-            return {noise, _( "Fzzt!" )};
+            return { noise, _( "Fzzt!" ) };
         } else if( noise < 40 ) {
             return {noise, _( "Pew!" )};
         } else if( noise < 60 ) {
@@ -2319,7 +2329,7 @@ if( type->weapon_category.contains( weapon_cat_ENERGY_WEAPONS ) ) {
         // Default behavior for normal guns without sound class defined.
     } else if( noise > 0 ) {
     if( noise < 50 ) {
-            return {noise, burst ? _( "Brrrip!" ) : _( "plink!" )};
+            return { noise, burst ? _( "Brrrip!" ) : _( "plink!" ) };
         } else if( noise < 150 ) {
             return {noise, burst ? _( "Brrrap!" ) : _( "bang!" )};
         } else if( noise < 175 ) {

@@ -118,7 +118,9 @@ class progress_counter
         //Modifies move_left of the first task(and total progress)
         inline void mod_moves_left( int moves ) {
             moves_left += moves;
-            targets.front().moves_left += moves;
+            if( !targets.empty() ) {
+                targets.front().moves_left += moves;
+            }
         }
         /*
         * Creates a dummy task, ends it instantaneously

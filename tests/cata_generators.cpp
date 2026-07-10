@@ -56,12 +56,12 @@ class RandomTripointGenerator final :
 Catch::Generators::GeneratorWrapper<point> random_points( int low, int high )
 {
     return Catch::Generators::GeneratorWrapper<point>(
-               std::make_unique<RandomPointGenerator>( low, high ) );
+               std::make_unique<RandomPointGenerator>( low, high ).release() );
 }
 
 Catch::Generators::GeneratorWrapper<tripoint> random_tripoints(
     int low, int high, int zlow, int zhigh )
 {
     return Catch::Generators::GeneratorWrapper<tripoint>(
-               std::make_unique<RandomTripointGenerator>( low, high, zlow, zhigh ) );
+               std::make_unique<RandomTripointGenerator>( low, high, zlow, zhigh ).release() );
 }

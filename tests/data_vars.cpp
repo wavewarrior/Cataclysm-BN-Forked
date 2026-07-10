@@ -1,6 +1,6 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include <complex>
+#include <random>
 
 #include "data_vars.h"
 #include "coordinates.h"

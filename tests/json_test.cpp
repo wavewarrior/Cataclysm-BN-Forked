@@ -1,7 +1,7 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include <list>
 #include <sstream>
+#include <random>
 #include <utility>
 
 #include "bodypart.h"
@@ -95,7 +95,7 @@ TEST_CASE( "translation_text_style_check", "[json][translation][.]" )
 
     // string, ascii
     test_translation_text_style_check(
-        Catch::Equals(
+        Catch::Matchers::Equals(
             R"((json-error))" "\n"
             R"(Json error: <unknown source file>:1:5: insufficient spaces at this location.  2 required, but only 1 found.)"
             "\n"
@@ -108,7 +108,7 @@ TEST_CASE( "translation_text_style_check", "[json][translation][.]" )
         R"("foo. bar.")" ); // NOLINT(cata-text-style)
     // string, unicode
     test_translation_text_style_check(
-        Catch::Equals(
+        Catch::Matchers::Equals(
             R"((json-error))" "\n"
             R"(Json error: <unknown source file>:1:8: insufficient spaces at this location.  2 required, but only 1 found.)"
             "\n"
@@ -121,7 +121,7 @@ TEST_CASE( "translation_text_style_check", "[json][translation][.]" )
         R"("…foo. bar.")" ); // NOLINT(cata-text-style)
     // string, escape sequence
     test_translation_text_style_check(
-        Catch::Equals(
+        Catch::Matchers::Equals(
             R"((json-error))" "\n"
             R"(Json error: <unknown source file>:1:11: insufficient spaces at this location.  2 required, but only 1 found.)"
             "\n"
@@ -134,7 +134,7 @@ TEST_CASE( "translation_text_style_check", "[json][translation][.]" )
         R"("\u2026foo. bar.")" ); // NOLINT(cata-text-style)
     // object, ascii
     test_translation_text_style_check(
-        Catch::Equals(
+        Catch::Matchers::Equals(
             R"((json-error))" "\n"
             R"(Json error: <unknown source file>:1:13: insufficient spaces at this location.  2 required, but only 1 found.)"
             "\n"
@@ -147,7 +147,7 @@ TEST_CASE( "translation_text_style_check", "[json][translation][.]" )
         R"({"str": "foo. bar."})" ); // NOLINT(cata-text-style)
     // object, unicode
     test_translation_text_style_check(
-        Catch::Equals(
+        Catch::Matchers::Equals(
             R"((json-error))" "\n"
             R"(Json error: <unknown source file>:1:16: insufficient spaces at this location.  2 required, but only 1 found.)"
             "\n"
@@ -160,7 +160,7 @@ TEST_CASE( "translation_text_style_check", "[json][translation][.]" )
         R"({"str": "…foo. bar."})" ); // NOLINT(cata-text-style)
     // object, escape sequence
     test_translation_text_style_check(
-        Catch::Equals(
+        Catch::Matchers::Equals(
             R"((json-error))" "\n"
             R"(Json error: <unknown source file>:1:19: insufficient spaces at this location.  2 required, but only 1 found.)"
             "\n"
@@ -194,7 +194,7 @@ TEST_CASE( "translation_text_style_check_error_recovery", "[json][translation][.
         // check that the correct debug message is shown
         CHECK_THAT(
             dmsg,
-            Catch::Equals(
+            Catch::Matchers::Equals(
                 R"((json-error))" "\n"
                 R"(Json error: <unknown source file>:2:7: insufficient spaces at this location.  2 required, but only 1 found.)"
                 "\n"
@@ -228,7 +228,7 @@ TEST_CASE( "translation_text_style_check_error_recovery", "[json][translation][.
         // check that the correct debug message is shown
         CHECK_THAT(
             dmsg,
-            Catch::Equals(
+            Catch::Matchers::Equals(
                 R"((json-error))" "\n"
                 R"(Json error: <unknown source file>:2:16: insufficient spaces at this location.  2 required, but only 1 found.)"
                 "\n"
@@ -304,12 +304,12 @@ TEST_CASE( "jsonin_get_string", "[json]" )
 
     // empty json
     test_get_string_throws_matches(
-        Catch::Message(
+        Catch::Matchers::Message(
             "Json error: <unknown source file>:EOF: couldn't find end of string, reached EOF." ),
         std::string() );
     // no starting quote
     test_get_string_throws_matches(
-        Catch::Message(
+        Catch::Matchers::Message(
             R"(Json error: <unknown source file>:1:1: expected string but got 'a')" "\n"
             R"()" "\n"
             R"(a)" "\n"
@@ -318,25 +318,25 @@ TEST_CASE( "jsonin_get_string", "[json]" )
         R"(abc)" );
     // no ending quote
     test_get_string_throws_matches(
-        Catch::Message(
+        Catch::Matchers::Message(
             "Json error: <unknown source file>:EOF: couldn't find end of string, reached EOF." ),
         R"(")" );
     test_get_string_throws_matches(
-        Catch::Message(
+        Catch::Matchers::Message(
             "Json error: <unknown source file>:EOF: couldn't find end of string, reached EOF." ),
         R"("foo)" );
     // incomplete escape sequence and no ending quote
     test_get_string_throws_matches(
-        Catch::Message(
+        Catch::Matchers::Message(
             "Json error: <unknown source file>:EOF: couldn't find end of string, reached EOF." ),
         R"("\)" );
     test_get_string_throws_matches(
-        Catch::Message(
+        Catch::Matchers::Message(
             "Json error: <unknown source file>:EOF: couldn't find end of string, reached EOF." ),
         R"("\u12)" );
     // incorrect escape sequence
     test_get_string_throws_matches(
-        Catch::Message(
+        Catch::Matchers::Message(
             R"(Json error: <unknown source file>:1:3: invalid escape sequence)" "\n"
             R"()" "\n"
             R"("\.)" "\n"
@@ -344,7 +344,7 @@ TEST_CASE( "jsonin_get_string", "[json]" )
             R"(   ")" "\n" ),
         R"("\.")" );
     test_get_string_throws_matches(
-        Catch::Message(
+        Catch::Matchers::Message(
             R"(Json error: <unknown source file>:1:7: expected hex digit)" "\n"
             R"()" "\n"
             R"("\uDEFG)" "\n"
@@ -353,7 +353,7 @@ TEST_CASE( "jsonin_get_string", "[json]" )
         R"("\uDEFG")" );
     // not a valid utf8 sequence
     test_get_string_throws_matches(
-        Catch::Message(
+        Catch::Matchers::Message(
             R"(Json error: <unknown source file>:1:2: invalid utf8 sequence)" "\n"
             R"()" "\n"
             "\"\x80\n"
@@ -361,14 +361,14 @@ TEST_CASE( "jsonin_get_string", "[json]" )
             R"(  ")" "\n" ),
         "\"\x80\"" );
     test_get_string_throws_matches(
-        Catch::Message(
+        Catch::Matchers::Message(
             R"(Json error: <unknown source file>:1:4: invalid utf8 sequence)" "\n"
             R"()" "\n"
             "\"\xFC\x80\"\n"
             R"(   ^)" "\n" ),
         "\"\xFC\x80\"" );
     test_get_string_throws_matches(
-        Catch::Message(
+        Catch::Matchers::Message(
             R"(Json error: <unknown source file>:1:7: invalid unicode codepoint)" "\n"
             R"()" "\n"
             "\"\xFD\x80\x80\x80\x80\x80\n"
@@ -376,7 +376,7 @@ TEST_CASE( "jsonin_get_string", "[json]" )
             R"(       ")" "\n" ),
         "\"\xFD\x80\x80\x80\x80\x80\"" );
     test_get_string_throws_matches(
-        Catch::Message(
+        Catch::Matchers::Message(
             R"(Json error: <unknown source file>:1:7: invalid utf8 sequence)" "\n"
             R"()" "\n"
             "\"\xFC\x80\x80\x80\x80\xC0\n"
@@ -385,7 +385,7 @@ TEST_CASE( "jsonin_get_string", "[json]" )
         "\"\xFC\x80\x80\x80\x80\xC0\"" );
     // end of line
     test_get_string_throws_matches(
-        Catch::Message(
+        Catch::Matchers::Message(
             R"(Json error: <unknown source file>:1:3: reached end of line without closing string)" "\n"
             R"()" "\n"
             R"("a)" "\n"
@@ -393,7 +393,7 @@ TEST_CASE( "jsonin_get_string", "[json]" )
             R"(")" "\n" ),
         "\"a\n\"" );
     test_get_string_throws_matches(
-        Catch::Message(
+        Catch::Matchers::Message(
             R"(Json error: <unknown source file>:1:3: reached end of line without closing string)" "\n"
             R"()" "\n"
             R"("b)" "\n"
@@ -404,7 +404,7 @@ TEST_CASE( "jsonin_get_string", "[json]" )
     // test throwing error after the given number of unicode characters
     // ascii
     test_string_error_throws_matches(
-        Catch::Message(
+        Catch::Matchers::Message(
             R"(Json error: <unknown source file>:1:1: <message>)" "\n"
             R"()" "\n"
             R"(")" "\n"
@@ -412,7 +412,7 @@ TEST_CASE( "jsonin_get_string", "[json]" )
             R"( foobar")" "\n" ),
         R"("foobar")", 0 );
     test_string_error_throws_matches(
-        Catch::Message(
+        Catch::Matchers::Message(
             R"(Json error: <unknown source file>:1:4: <message>)" "\n"
             R"()" "\n"
             R"("foo)" "\n"
@@ -421,7 +421,7 @@ TEST_CASE( "jsonin_get_string", "[json]" )
         R"("foobar")", 3 );
     // unicode
     test_string_error_throws_matches(
-        Catch::Message(
+        Catch::Matchers::Message(
             R"(Json error: <unknown source file>:1:4: <message>)" "\n"
             R"()" "\n"
             R"("foo)" "\n"
@@ -429,7 +429,7 @@ TEST_CASE( "jsonin_get_string", "[json]" )
             R"(    …bar1")" "\n" ),
         R"("foo…bar1")", 3 );
     test_string_error_throws_matches(
-        Catch::Message(
+        Catch::Matchers::Message(
             R"(Json error: <unknown source file>:1:7: <message>)" "\n"
             R"()" "\n"
             R"("foo…)" "\n"
@@ -437,7 +437,7 @@ TEST_CASE( "jsonin_get_string", "[json]" )
             R"(       bar2")" "\n" ),
         R"("foo…bar2")", 4 );
     test_string_error_throws_matches(
-        Catch::Message(
+        Catch::Matchers::Message(
             R"(Json error: <unknown source file>:1:8: <message>)" "\n"
             R"()" "\n"
             R"("foo…b)" "\n"
@@ -446,7 +446,7 @@ TEST_CASE( "jsonin_get_string", "[json]" )
         R"("foo…bar3")", 5 );
     // escape sequence
     test_string_error_throws_matches(
-        Catch::Message(
+        Catch::Matchers::Message(
             R"(Json error: <unknown source file>:1:11: <message>)" "\n"
             R"()" "\n"
             R"("foo\u2026b)" "\n"
@@ -454,7 +454,7 @@ TEST_CASE( "jsonin_get_string", "[json]" )
             R"(           ar")" "\n" ),
         R"("foo\u2026bar")", 5 );
     test_string_error_throws_matches(
-        Catch::Message(
+        Catch::Matchers::Message(
             R"(Json error: <unknown source file>:1:7: <message>)" "\n"
             R"()" "\n"
             R"("foo\nb)" "\n"

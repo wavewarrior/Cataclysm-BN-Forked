@@ -1,6 +1,6 @@
 
 #include "scent_map.h"
-#include "catch/catch.hpp"
+#include "catch/catch_amalgamated.hpp"
 #include "map.h"
 #include "map_helpers.h"
 #include "game.h"

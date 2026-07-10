@@ -1,8 +1,7 @@
 #include "options.h"
 #include "title_screen.h"
 
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 TEST_CASE( "title_screen_option_exists", "[title_screen]" )
 {
     REQUIRE( get_options().has_option( title_screen::option_id ) );

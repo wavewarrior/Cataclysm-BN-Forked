@@ -18,7 +18,12 @@ endif ()
 foreach (catalua_src IN LISTS CATALUA_BINDINGS_SOURCES)
     set_source_files_properties(${catalua_src} PROPERTIES
         COMPILE_OPTIONS "${CATALUA_BINDINGS_COMPILE_OPTIONS}"
-        SKIP_PRECOMPILE_HEADERS ON)
+        # catalua_bindings*.cpp use -O0 which conflicts with the PCH built at -O2;
+        # clang rejects including a Release-optimized PCH in a -O0 TU (__OPTIMIZE__
+        # mismatch).  Skip PCH for these files — they're template-heavy anyway so
+        # the PCH savings here are minimal.
+        SKIP_PRECOMPILE_HEADERS ON
+    )
 endforeach ()
 # Large template-heavy files that need /bigobj on MSVC
 if (MSVC)
@@ -61,14 +66,14 @@ add_subdirectory(sol)
 # Get GIT version strings
 add_custom_target(
     get_version
-    DEPENDS ${CMAKE_SOURCE_DIR}/src/version.h
+    DEPENDS ${CMAKE_BINARY_DIR}/generated/version.h
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_custom_command(
-    OUTPUT ${CMAKE_SOURCE_DIR}/src/version.h
+    OUTPUT ${CMAKE_BINARY_DIR}/generated/version.h
     COMMAND ${CMAKE_COMMAND}
             -D SRC=${CMAKE_SOURCE_DIR}/src/version.h.in
-            -D DST=${CMAKE_SOURCE_DIR}/src/version.h
+            -D DST=${CMAKE_BINARY_DIR}/generated/version.h
             -D GIT_EXECUTABLE=${GIT_EXECUTABLE}
             -P ${CMAKE_SOURCE_DIR}/src/version.cmake
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

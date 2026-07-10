@@ -999,7 +999,7 @@ void npc::talk_to_u( bool radio_contact, bool enforce_first_topic )
         return;
     }
     if( get_faction() ) {
-        get_faction()->known_by_u = true;
+        get_faction()->set_known_by_u( true );
     }
     set_known_to_u( true );
     dialogue d;
@@ -2646,9 +2646,9 @@ void talk_effect_fun_t::set_change_faction_rep( int rep_change )
 {
     function = [rep_change]( const dialogue & d ) {
         npc &p = *d.beta;
-        if( p.get_faction()->id != faction_id( "no_faction" ) ) {
-            p.get_faction()->likes_u += rep_change;
-            p.get_faction()->respects_u += rep_change;
+        if( p.get_faction()->id() != faction_id( "no_faction" ) ) {
+            p.get_faction()->set_likes_u( p.get_faction()->likes_u() + rep_change );
+            p.get_faction()->set_respects_u( p.get_faction()->respects_u() + rep_change );
         }
     };
 }
@@ -2784,8 +2784,8 @@ void talk_effect_fun_t::set_bulk_trade_accept( bool is_trade, bool is_npc )
         tmp->charges = seller_has;
         if( is_trade ) {
             int price = tmp->price( true ) * ( is_npc ? -1 : 1 ) + d.beta->op_of_u.owed;
-            if( d.beta->get_faction() && !d.beta->get_faction()->currency.is_empty() ) {
-                const itype_id &pay_in = d.beta->get_faction()->currency;
+            if( d.beta->get_faction() && !d.beta->get_faction()->currency().is_empty() ) {
+                const itype_id &pay_in = d.beta->get_faction()->currency();
                 item *pay = item::spawn_temporary( pay_in );
                 if( d.beta->value( *pay ) > 0 ) {
                     int required = price / d.beta->value( *pay );

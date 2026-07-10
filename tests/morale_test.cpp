@@ -1,5 +1,4 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include "bodypart.h"
 #include "item.h"
 #include "morale.h"

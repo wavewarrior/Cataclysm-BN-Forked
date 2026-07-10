@@ -101,12 +101,16 @@ class player_activity
         bool is_null() const { return type.is_null(); }
 
         int get_moves_left() const {
-            if( actor ) { return actor->progress.get_moves_left(); }
+            if( actor ) {
+            return actor->progress.get_moves_left();
+            }
             return moves_left;
         }
 
         bool complete() const {
-            if( actor && !actor->progress.invalid() ) { return actor->progress.complete(); }
+            if( actor ) {
+            return actor->progress.complete();
+            }
             return moves_left <= 0;
         }
         // Wrapper func to return assistants array properly

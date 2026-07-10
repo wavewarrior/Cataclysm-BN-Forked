@@ -52,8 +52,8 @@ struct item_penalties {
     std::set<std::string> bad_items_within;
 
     int badness() const {
-        return !body_parts_with_stacking_penalty.empty()
-        + !body_parts_with_out_of_order_penalty.empty();
+        return !body_parts_with_stacking_penalty.empty() +
+        !body_parts_with_out_of_order_penalty.empty();
     }
 
     nc_color color_for_stacking_badness() const {
@@ -535,9 +535,9 @@ void show_armor_layers_ui( Character& who )
     ctxt.register_action( "HELP_KEYBINDINGS" );
 
     auto do_return_entry = []() {
-        avatar& you = get_avatar();
-        you.assign_activity(
-            std::make_unique<player_activity>( std::make_unique<armor_layers_activity_actor>() ) );
+        avatar &you = get_avatar();
+        you.assign_activity( std::make_unique<player_activity>(
+                                 std::make_unique<armor_layers_activity_actor>() ) );
         you.activity->auto_resume = true;
         you.activity->moves_left = INT_MAX;
     };
@@ -901,11 +901,10 @@ void show_armor_layers_ui( Character& who )
             if( loc ) {
                 // wear the item
                 loc->obtain( who );
-                const std::optional<location_vector<item>::iterator> position =
-                    ( leftListSize > 0 )
-                    ? access_tmp_worn( leftListIndex )
-                    : std::optional<location_vector<item>::iterator>( std::nullopt );
-                if( !who.as_player()->wear_possessed( *loc, true, position ) && who.is_npc() ) {
+                const std::optional<location_vector<item>::iterator> position = ( leftListSize > 0 ) ?
+                    access_tmp_worn( leftListIndex ) : std::optional<location_vector<item>::iterator>( std::nullopt );
+                if( !who.as_player()->wear_possessed( *loc, true, position ) &&
+                    who.is_npc() ) {
                     // TODO: Pass the reason here
                     popup( _( "Can't put this on!" ) );
                 }

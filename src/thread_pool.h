@@ -123,6 +123,28 @@ cata_thread_pool &get_thread_pool();
 bool is_pool_worker_thread();
 
 /**
+ * Marks the calling thread as a pool worker thread.
+ *
+ * Use this when spawning a raw std::thread that should be treated as a worker
+ * (e.g. the prewarm thread) so that is_pool_worker_thread() returns true and
+ * SDL pump_events() guards skip on this thread.
+ */
+void set_worker_thread();
+
+/**
+ * RAII guard that marks the calling thread as a pool worker for its lifetime.
+ *
+ * Usage:
+ *   std::thread( []() {
+ *       worker_thread_guard guard;
+ *       // is_pool_worker_thread() returns true here
+ *   } );
+ */
+struct worker_thread_guard {
+    worker_thread_guard() { set_worker_thread(); }
+};
+
+/**
  * Submit a range of work items and block until all complete.
  *
  * Divides [begin, end) into up to num_workers sub-ranges and dispatches each

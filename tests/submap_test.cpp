@@ -1,5 +1,4 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include "coordinates.h"
 #include "submap.h"
 #include "game_constants.h"

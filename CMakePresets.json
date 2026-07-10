@@ -10,8 +10,8 @@
       "name": "windows-tiles-sounds-x64-msvc",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "displayName": "Windows Tiles Sounds x64 MSVC",
-      "description": "Target Windows (64-bit) with the Visual Studio 2022 development environment.",
-      "generator": "Visual Studio 18 2026",
+      "description": "Target Windows (64-bit) with MSVC via Ninja Multi-Config.",
+      "generator": "Ninja Multi-Config",
       "cacheVariables": {
         "CMAKE_PROJECT_INCLUDE_BEFORE": "${sourceDir}/build-scripts/${presetName}.cmake",
         "CMAKE_TOOLCHAIN_FILE": "C:/vcpkg/scripts/buildsystems/vcpkg.cmake",
@@ -26,6 +26,8 @@
         "CMAKE_INSTALL_MESSAGE": "NEVER",
         "CMAKE_C_COMPILER_LAUNCHER": "C:/Users/NIGEL-BEAST/AppData/Local/Microsoft/WinGet/Packages/Mozilla.sccache_Microsoft.Winget.Source_8wekyb3d8bbwe/sccache-v0.16.0-x86_64-pc-windows-msvc/sccache.exe",
         "CMAKE_CXX_COMPILER_LAUNCHER": "C:/Users/NIGEL-BEAST/AppData/Local/Microsoft/WinGet/Packages/Mozilla.sccache_Microsoft.Winget.Source_8wekyb3d8bbwe/sccache-v0.16.0-x86_64-pc-windows-msvc/sccache.exe",
+        "CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE": "ON",
+        "CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO": "ON",
         "CMAKE_MSVC_DEBUG_INFORMATION_FORMAT": "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>",
         "CMAKE_POLICY_CMP0141": "NEW",
         "SDLIMAGE_AVIF": "OFF"
@@ -49,6 +51,7 @@
         "SOUND": "ON",
         "USE_PREFIX_DATA_DIR": "OFF",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "ON",
         "LINKER": "mold",
         "USE_TRACY": "OFF"
       }
@@ -69,6 +72,7 @@
         "SOUND": "ON",
         "USE_PREFIX_DATA_DIR": "OFF",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "ON",
         "USE_TRACY": "OFF",
         "LUA_DOCS_ON_BUILD": "OFF"
       }
@@ -99,6 +103,7 @@
         "USE_XDG_DIR": "ON",
         "USE_HOME_DIR": "OFF",
         "USE_PREFIX_DATA_DIR": "OFF",
+        "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "ON",
         "USE_TRACY": "ON",
         "TRACY_VERSION": "master",
         "TRACY_ON_DEMAND": "ON",
@@ -138,6 +143,7 @@
         "CMAKE_C_COMPILER_LAUNCHER": "ccache",
         "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
         "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "ON",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "SOUND": "ON",
         "LANGUAGES": "all",
@@ -158,6 +164,7 @@
         "CMAKE_C_COMPILER_LAUNCHER": "ccache",
         "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
         "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "ON",
         "CMAKE_FIND_FRAMEWORK": "FIRST",
         "USE_HOME_DIR": "ON",
         "USE_PREFIX_DATA_DIR": "OFF",
@@ -232,6 +239,84 @@
         "JSON_FORMAT": "OFF",
         "TESTS": "ON",
         "LINKER": "mold"
+      }
+    },
+    {
+      "name": "linux-full-pgo-generate",
+      "inherits": ["linux-full"],
+      "displayName": "Linux Full PGO Generate (Training Data)",
+      "description": "PGO generate build for linux-full — produces .profraw data. Run a training session, then merge and rebuild with -pgo-use.",
+      "cacheVariables": {
+        "CMAKE_CXX_FLAGS": "-fprofile-generate",
+        "CMAKE_EXE_LINKER_FLAGS": "-fprofile-generate"
+      }
+    },
+    {
+      "name": "linux-full-pgo-use",
+      "inherits": ["linux-full"],
+      "displayName": "Linux Full PGO Use (Profile-Guided)",
+      "description": "PGO use build for linux-full — consumes merged .profdata. Requires prior -pgo-generate run + llvm-profdata merge.",
+      "cacheVariables": {
+        "CMAKE_CXX_FLAGS": "-fprofile-use=./build/profile/default.profdata -fprofile-correction",
+        "CMAKE_EXE_LINKER_FLAGS": "-fprofile-use=./build/profile/default.profdata -fprofile-correction"
+      }
+    },
+    {
+      "name": "linux-slim-pgo-generate",
+      "inherits": ["linux-slim"],
+      "displayName": "Linux Slim PGO Generate (Training Data)",
+      "description": "PGO generate build for linux-slim — produces .profraw data.",
+      "cacheVariables": {
+        "CMAKE_CXX_FLAGS": "-fprofile-generate",
+        "CMAKE_EXE_LINKER_FLAGS": "-fprofile-generate"
+      }
+    },
+    {
+      "name": "linux-slim-pgo-use",
+      "inherits": ["linux-slim"],
+      "displayName": "Linux Slim PGO Use (Profile-Guided)",
+      "description": "PGO use build for linux-slim — consumes merged .profdata.",
+      "cacheVariables": {
+        "CMAKE_CXX_FLAGS": "-fprofile-use=./build/profile/default.profdata -fprofile-correction",
+        "CMAKE_EXE_LINKER_FLAGS": "-fprofile-use=./build/profile/default.profdata -fprofile-correction"
+      }
+    },
+    {
+      "name": "windows-msvc-pgo-generate",
+      "inherits": ["windows-tiles-sounds-x64-msvc"],
+      "displayName": "Windows MSVC PGO Generate (Training Data)",
+      "description": "PGO generate build for Windows MSVC — produces .profraw data.",
+      "cacheVariables": {
+        "CMAKE_EXE_LINKER_FLAGS": "/GENPROFILE"
+      }
+    },
+    {
+      "name": "windows-msvc-pgo-use",
+      "inherits": ["windows-tiles-sounds-x64-msvc"],
+      "displayName": "Windows MSVC PGO Use (Profile-Guided)",
+      "description": "PGO use build for Windows MSVC — consumes merged .ipdp file.",
+      "cacheVariables": {
+        "CMAKE_EXE_LINKER_FLAGS": "/USEPROFILE"
+      }
+    },
+    {
+      "name": "osx-arm-slim-pgo-generate",
+      "inherits": ["osx-arm-slim"],
+      "displayName": "macOS ARM Slim PGO Generate (Training Data)",
+      "description": "PGO generate build for osx-arm-slim — produces .profraw data.",
+      "cacheVariables": {
+        "CMAKE_CXX_FLAGS": "-fprofile-generate",
+        "CMAKE_EXE_LINKER_FLAGS": "-fprofile-generate"
+      }
+    },
+    {
+      "name": "osx-arm-slim-pgo-use",
+      "inherits": ["osx-arm-slim"],
+      "displayName": "macOS ARM Slim PGO Use (Profile-Guided)",
+      "description": "PGO use build for osx-arm-slim — consumes merged .profdata.",
+      "cacheVariables": {
+        "CMAKE_CXX_FLAGS": "-fprofile-use=./build/profile/default.profdata -fprofile-correction",
+        "CMAKE_EXE_LINKER_FLAGS": "-fprofile-use=./build/profile/default.profdata -fprofile-correction"
       }
     }
   ,
@@ -376,6 +461,50 @@
       "configurePreset": "ci-tiles",
       "targets": ["cataclysm-bn-tiles", "cata_test-tiles"],
       "description": "CI build for tiles and sound."
+    },
+    {
+      "name": "linux-full-pgo-generate",
+      "configurePreset": "linux-full-pgo-generate",
+      "description": "PGO generate build for linux-full."
+    },
+    {
+      "name": "linux-full-pgo-use",
+      "configurePreset": "linux-full-pgo-use",
+      "description": "PGO use build for linux-full."
+    },
+    {
+      "name": "linux-slim-pgo-generate",
+      "configurePreset": "linux-slim-pgo-generate",
+      "description": "PGO generate build for linux-slim."
+    },
+    {
+      "name": "linux-slim-pgo-use",
+      "configurePreset": "linux-slim-pgo-use",
+      "description": "PGO use build for linux-slim."
+    },
+    {
+      "name": "windows-msvc-pgo-generate",
+      "configurePreset": "windows-msvc-pgo-generate",
+      "configuration": "RelWithDebInfo",
+      "targets": ["cataclysm-bn-tiles", "cata_test-tiles", "json_formatter", "translations"],
+      "description": "PGO generate build for Windows MSVC."
+    },
+    {
+      "name": "windows-msvc-pgo-use",
+      "configurePreset": "windows-msvc-pgo-use",
+      "configuration": "RelWithDebInfo",
+      "targets": ["cataclysm-bn-tiles", "cata_test-tiles", "json_formatter", "translations"],
+      "description": "PGO use build for Windows MSVC."
+    },
+    {
+      "name": "osx-arm-slim-pgo-generate",
+      "configurePreset": "osx-arm-slim-pgo-generate",
+      "description": "PGO generate build for macOS ARM."
+    },
+    {
+      "name": "osx-arm-slim-pgo-use",
+      "configurePreset": "osx-arm-slim-pgo-use",
+      "description": "PGO use build for macOS ARM."
     }
   ,
   {

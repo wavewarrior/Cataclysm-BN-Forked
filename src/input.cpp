@@ -96,7 +96,9 @@ std::string get_input_string_from_file( const std::string& fname )
 
 int input_event::get_first_input() const
 {
-    if( sequence.empty() ) { return UNKNOWN_UNICODE; }
+    if( sequence.empty() ) {
+    return UNKNOWN_UNICODE;
+}
 
 return sequence[0];
 }
@@ -538,7 +540,9 @@ translation input_manager::get_default_action_name( const std::string& action_id
 {
     const t_action_contexts::const_iterator default_action_context = action_contexts.find(
             default_context_id );
-    if( default_action_context == action_contexts.end() ) { return no_translation( action_id ); }
+    if( default_action_context == action_contexts.end() ) {
+        return no_translation( action_id );
+    }
 
     const t_actions::const_iterator default_action = default_action_context->second.find( action_id );
     if( default_action != default_action_context->second.end() ) {
@@ -654,8 +658,8 @@ const std::string TIMEOUT = "TIMEOUT";
 
 const std::string &input_context::input_to_action( const input_event& inp ) const
 {
-for( auto& elem : registered_actions ) {
-    const std::string& action = elem;
+for( auto &elem : registered_actions ) {
+    const std::string &action = elem;
     const std::vector<input_event> &check_inp = inp_mngr.get_input_for_action( action, category );
 
         // Does this action have our queried input event in its keybindings?
@@ -688,9 +692,9 @@ std::vector<char> input_context::keys_bound_to(
     const std::string& action_descriptor, const bool restrict_to_printable ) const
 {
     std::vector<char> result;
-    const std::vector<input_event> &events =
-        inp_mngr.get_input_for_action( action_descriptor, category );
-    for( const auto& events_event : events ) {
+    const std::vector<input_event> &events = inp_mngr.get_input_for_action( action_descriptor,
+        category );
+    for( const auto &events_event : events ) {
         // Ignore multi-key input and non-keyboard input
         // TODO: fix for Unicode.
         if( events_event.type == input_event_t::keyboard && events_event.sequence.size() == 1 ) {
@@ -753,8 +757,8 @@ std::string input_context::get_desc(
     }
 
     bool is_local = false;
-    const std::vector<input_event> &events =
-        inp_mngr.get_input_for_action( action_descriptor, category, &is_local );
+    const std::vector<input_event> &events = inp_mngr.get_input_for_action( action_descriptor,
+        category, &is_local );
 
     if( events.empty() ) { return is_local ? _( "Unbound locally!" ) : _( "Unbound globally!" ); }
 
@@ -835,8 +839,7 @@ std::string input_context::get_desc(
     const std::string& action_descriptor, const std::string& text,
     const input_event_filter& evt_filter ) const
 {
-    return get_desc(
-           action_descriptor, text, evt_filter,
+    return get_desc( action_descriptor, text, evt_filter,
            to_translation(
            //~ %1$s: action description text before key,
            //~ %2$s: key description,
@@ -1406,9 +1409,11 @@ std::string input_context::get_action_name( const std::string& action_id ) const
     // 3) If the hotkey has no name, the user has created a local hotkey in
     // this context that is masking the global hotkey. Fallback to the global
     // hotkey's name.
-    const action_attributes& default_attributes =
-        inp_mngr.get_action_attributes( action_id, default_context_id );
-    if( !default_attributes.name.empty() ) { return default_attributes.name.translated(); }
+    const action_attributes &default_attributes = inp_mngr.get_action_attributes( action_id,
+        default_context_id );
+    if( !default_attributes.name.empty() ) {
+        return default_attributes.name.translated();
+    }
 
     // 4) Unable to find suitable name. Keybindings configuration likely borked
     return action_id;
@@ -1432,11 +1437,17 @@ std::string input_context::press_x(
     const std::string& action_id, const std::string& key_bound_pre,
     const std::string& key_bound_suf, const std::string& key_unbound ) const
 {
-    if( action_id == "ANY_INPUT" ) { return _( "any key" ); }
-    if( action_id == "COORDINATE" ) { return _( "mouse movement" ); }
-    const input_manager::t_input_event_list& events =
-        inp_mngr.get_input_for_action( action_id, category );
-    if( events.empty() ) { return key_unbound; }
+    if( action_id == "ANY_INPUT" ) {
+        return _( "any key" );
+    }
+    if( action_id == "COORDINATE" ) {
+        return _( "mouse movement" );
+    }
+    const input_manager::t_input_event_list &events = inp_mngr.get_input_for_action( action_id,
+        category );
+    if( events.empty() ) {
+        return key_unbound;
+    }
     std::string keyed = key_bound_pre;
     for( size_t j = 0; j < events.size(); j++ ) {
         for( size_t k = 0; k < events[j].sequence.size(); ++k ) {

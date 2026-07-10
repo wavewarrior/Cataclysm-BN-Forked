@@ -203,16 +203,19 @@ static bool clear_shot_reach(
     return !get_map().obstructed_by_vehicle_rotation(last_point, target_point);
 }
 
-tripoint_bub_ms npc::good_escape_direction(bool include_pos) {
-    map& here = get_map();
-    if (path.empty()) {
-        zone_type_id retreat_zone = zone_type_id("NPC_RETREAT");
-        const zone_manager& mgr = zone_manager::get_manager();
-        std::optional<tripoint_abs_ms> retreat_target =
-            mgr.get_nearest(retreat_zone, abs_pos(), 60, fac_id);
-        if (retreat_target && *retreat_target != abs_pos()) {
-            update_path(here.abs_to_bub(tripoint_abs_ms(*retreat_target)));
-            if (!path.empty()) { return path[0]; }
+tripoint_bub_ms npc::good_escape_direction( bool include_pos )
+{
+    map &here = get_map();
+    if( path.empty() ) {
+        zone_type_id retreat_zone = zone_type_id( "NPC_RETREAT" );
+        const zone_manager &mgr = zone_manager::get_manager();
+        std::optional<tripoint_abs_ms> retreat_target = mgr.get_nearest( retreat_zone, abs_pos(), 60,
+            fac_id );
+        if( retreat_target && *retreat_target != abs_pos() ) {
+            update_path( here.abs_to_bub( tripoint_abs_ms( *retreat_target ) ) );
+            if( !path.empty() ) {
+                return path[0];
+            }
         }
     }
 
@@ -305,14 +308,16 @@ std::vector<sphere> npc::find_dangerous_explosives() const {
     return result;
 }
 
-float npc::evaluate_enemy(const Creature& target) const {
-    ZoneScopedN("evaluate_enemy");
-    if (target.is_monster()) {
-        const monster& mon = dynamic_cast<const monster&>(target);
-        float diff = static_cast<float>(mon.type->difficulty);
-        return std::min(diff, NPC_DANGER_MAX);
-    } else if (target.is_npc() || target.is_player()) {
-        return std::min(character_danger(dynamic_cast<const player&>(target)), NPC_DANGER_MAX);
+float npc::evaluate_enemy( const Creature &target ) const
+{
+    ZoneScopedN( "evaluate_enemy" );
+    if( target.is_monster() ) {
+    const monster &mon = dynamic_cast<const monster &>( target );
+        float diff = static_cast<float>( mon.type->difficulty );
+        return std::min( diff, NPC_DANGER_MAX );
+    } else if( target.is_npc() || target.is_player() ) {
+    return std::min( character_danger( dynamic_cast<const player &>( target ) ),
+                     NPC_DANGER_MAX );
     } else {
         return 0.0f;
     }
@@ -353,15 +358,15 @@ void npc::assess_danger() {
     // True if this NPC has traits/effects that cause monster::attitude() to return a
     // result different from what a generic NPC would get.  When false, we can use each
     // monster's per-npcmove-pass cached attitude instead of recomputing it.
-    const auto has_special_attitude_traits =
-        guaranteed_hostile() || is_hallucination() || has_mutation_attitude_rules
-        || has_trait(trait_ANIMALEMPATH) || has_trait(trait_ANIMALEMPATH2)
-        || has_trait(trait_ANIMALDISCORD) || has_trait(trait_ANIMALDISCORD2)
-        || has_trait(trait_PROF_FERAL) || has_trait(trait_BEE) || has_trait(trait_FLOWERS)
-        || has_trait(trait_THRESH_MYCUS) || has_trait(trait_MYCUS_FRIEND)
-        || has_trait(trait_PHEROMONE_MAMMAL) || has_trait(trait_PHEROMONE_INSECT)
-        || has_trait(trait_TERRIFYING) || has_effect(effect_attention)
-        || has_effect(effect_feral_infighting_punishment);
+    const auto has_special_attitude_traits = guaranteed_hostile() || is_hallucination() ||
+        has_mutation_attitude_rules ||
+        has_trait( trait_ANIMALEMPATH ) || has_trait( trait_ANIMALEMPATH2 ) ||
+        has_trait( trait_ANIMALDISCORD ) || has_trait( trait_ANIMALDISCORD2 ) ||
+        has_trait( trait_PROF_FERAL ) || has_trait( trait_BEE ) ||
+        has_trait( trait_FLOWERS ) || has_trait( trait_THRESH_MYCUS ) ||
+        has_trait( trait_MYCUS_FRIEND ) || has_trait( trait_PHEROMONE_MAMMAL ) ||
+        has_trait( trait_PHEROMONE_INSECT ) || has_trait( trait_TERRIFYING ) ||
+        has_effect( effect_attention ) || has_effect( effect_feral_infighting_punishment );
 
     float assessment = 0.0f;
     float highest_priority = 1.0f;
@@ -426,9 +431,9 @@ void npc::assess_danger() {
         };
     std::array<float, 27> cur_threat_map{};
     // start with a decayed version of last turn's map
-    for (direction threat_dir : npc_threat_dir) {
-        cur_threat_map[std::to_underlying(threat_dir)] =
-            0.25f * ai_cache.threat_map[std::to_underlying(threat_dir)];
+    for( direction threat_dir : npc_threat_dir ) {
+        cur_threat_map[std::to_underlying( threat_dir )] = 0.25f * ai_cache.threat_map[std::to_underlying(
+                threat_dir )];
     }
     map& here = get_map();
     // cache string_id -> int_id conversion before hot loop
@@ -657,13 +662,12 @@ void npc::assess_danger() {
     // update the threat cache
     for (size_t i = 0; i < 8; i++) {
         direction threat_dir = npc_threat_dir[i];
-        direction dir_right = npc_threat_dir[(i + 1) % 8];
-        direction dir_left = npc_threat_dir[(i + 7) % 8];
-        ai_cache.threat_map[std::to_underlying(threat_dir)] =
-            cur_threat_map[std::to_underlying(threat_dir)]
-            + 0.1f
-                  * (cur_threat_map[std::to_underlying(dir_right)]
-                     + cur_threat_map[std::to_underlying(dir_left)]);
+        direction dir_right = npc_threat_dir[( i + 1 ) % 8];
+        direction dir_left = npc_threat_dir[( i + 7 ) % 8 ];
+        ai_cache.threat_map[std::to_underlying( threat_dir )] =
+            cur_threat_map[std::to_underlying( threat_dir )] + 0.1f *
+            ( cur_threat_map[std::to_underlying( dir_right )] + cur_threat_map[std::to_underlying(
+                    dir_left )] );
     }
     if (assessment <= 2.0f) {
         assessment = -10.0f + 5.0f * assessment; // Low danger if no monsters around
@@ -1413,10 +1417,50 @@ npc_action npc::method_of_fleeing() {
     return npc_flee;
 }
 
-npc_action npc::method_of_attack() {
-    Character& player_character = get_player_character();
-    Creature* critter = current_target();
-    if (critter == nullptr) {
+void npc::activate_combat_gear()
+{
+    activate_combat_cbms();
+
+    // Activate Armor & Weapons
+    for( auto &elem : worn ) {
+        // The is_active() part was taken from is_wearing_active_power_armor
+        if( elem->has_flag( flag_COMBAT_NPC_USE ) && !elem->has_flag( flag_COMBAT_NPC_ON ) ) {
+            if( elem->get_use( "transform" ) ) {
+                invoke_item( elem, "transform" );
+            } else if( elem->get_use( "set_transform" ) ) {
+                invoke_item( elem, "set_transform" );
+            }
+        }
+    }
+    item &weapon = primary_weapon();
+    if( !weapon.is_null() && weapon.has_flag( flag_COMBAT_NPC_USE ) &&
+        !weapon.has_flag( flag_COMBAT_NPC_ON ) ) {
+
+        if( weapon.get_use( "transform" ) ) {
+            invoke_item( &weapon, "transform" );
+        } else if( weapon.get_use( "fireweapon_off" ) ) {
+            invoke_item( &weapon, "fireweapon_off" );
+        }
+    }
+}
+
+gun_mode npc::resolve_gun_mode( bool can_use_gun, int dist, bool use_silent ) const
+{
+    gun_mode g_mode = cbm_active.is_null() ? primary_weapon().gun_current_mode() :
+                      cbm_fake_active->gun_current_mode();
+    if( !can_use_gun || dist == 0 ||
+        ( g_mode && ( ( use_silent && !g_mode->is_silent() ) ||
+                      ( item_funcs::shots_remaining( *this, *g_mode ) < g_mode.qty ) ) ) ) {
+        g_mode = gun_mode();
+    }
+    return g_mode;
+}
+
+npc_action npc::method_of_attack()
+{
+    Character &player_character = get_player_character();
+    Creature *critter = current_target();
+    if( critter == nullptr ) {
         // This function shouldn't be called...
         debugmsg("Ran npc::method_of_attack without a target!");
         return npc_pause;
@@ -1441,30 +1485,7 @@ npc_action npc::method_of_attack() {
     const bool not_engaged_yet =
         !critter->has_effect(effect_hit_by_player) && rules.engagement == combat_engagement::HIT;
 
-    // if there's enough of a threat to be here, power up the combat CBMs
-    activate_combat_cbms();
-
-    // Activate Armor & Weapons
-    for (auto& elem : worn) {
-        // The is_active() part was taken from is_wearing_active_power_armor
-        if (elem->has_flag(flag_COMBAT_NPC_USE) && !elem->has_flag(flag_COMBAT_NPC_ON)) {
-            if (elem->get_use("transform")) {
-                invoke_item(elem, "transform");
-            } else if (elem->get_use("set_transform")) {
-                invoke_item(elem, "set_transform");
-            }
-        }
-    }
-    item& weapon = primary_weapon();
-    if (!weapon.is_null() && weapon.has_flag(flag_COMBAT_NPC_USE)
-        && !weapon.has_flag(flag_COMBAT_NPC_ON)) {
-
-        if (weapon.get_use("transform")) {
-            invoke_item(&weapon, "transform");
-        } else if (weapon.get_use("fireweapon_off")) {
-            invoke_item(&weapon, "fireweapon_off");
-        }
-    }
+    activate_combat_gear();
 
     if (emergency() && alt_attack()) {
         add_msg(m_debug, "%s is trying an alternate attack", disp_name());
@@ -1477,16 +1498,7 @@ npc_action npc::method_of_attack() {
         return npc_noop;
     }
 
-    gun_mode g_mode =
-        cbm_active.is_null()
-            ? primary_weapon().gun_current_mode()
-            : cbm_fake_active->gun_current_mode();
-    if (!can_use_gun || dist == 0
-        || (g_mode
-            && ((use_silent && !g_mode->is_silent())
-                || (item_funcs::shots_remaining(*this, *g_mode) < g_mode.qty)))) {
-        g_mode = gun_mode();
-    }
+    gun_mode g_mode = resolve_gun_mode( can_use_gun, dist, use_silent );
 
     // reach attacks are silent and consume no ammo so prefer these if available
     int reach_range = primary_weapon().reach_range(*this);
@@ -2020,12 +2032,15 @@ npc_action npc::long_term_goal_action() {
     return npc_undecided;
 }
 
-double npc::confidence_mult() const {
-    if (!is_player_ally() || is_player()) { return 1.0f; }
+double npc::confidence_mult() const
+{
+    if( !is_player_ally() || is_player() ) {
+    return 1.0f;
+}
 
-    switch (rules.aim) {
-        case aim_rule::WHEN_CONVENIENT:
-            return emergency() ? 1.5f : 1.0f;
+switch( rules.aim ) {
+    case aim_rule::WHEN_CONVENIENT:
+        return emergency() ? 1.5f : 1.0f;
         case aim_rule::SPRAY:
             return 2.0f;
         case aim_rule::PRECISE:
@@ -2037,25 +2052,34 @@ double npc::confidence_mult() const {
     return 1.0f;
 }
 
-int npc::confident_shoot_range(const item& it, int recoil) const {
-    if (!it.is_gun()) { return 0; }
-    const auto gun_mode_cmp =
-        [](const std::pair<gun_mode_id, gun_mode>& lhs,
-           const std::pair<gun_mode_id, gun_mode>& rhs) { return lhs.second.qty < rhs.second.qty; };
-    std::map<gun_mode_id, gun_mode> modes = it.gun_all_modes();
-    if (modes.empty()) {
-        debugmsg("%s has no gun modes", it.tname());
+int npc::confident_shoot_range( const item &it, int recoil ) const
+{
+    if( !it.is_gun() ) {
+    return 0;
+}
+const auto gun_mode_cmp = []( const std::pair<gun_mode_id, gun_mode> &lhs,
+const std::pair<gun_mode_id, gun_mode> &rhs ) {
+    return lhs.second.qty < rhs.second.qty;
+};
+std::map<gun_mode_id, gun_mode> modes = it.gun_all_modes();
+if( modes.empty() ) {
+    debugmsg( "%s has no gun modes", it.tname() );
         return 0;
     }
     auto best = std::min_element(modes.begin(), modes.end(), gun_mode_cmp);
     return confident_gun_mode_range((*best).second, recoil);
 }
 
-int npc::confident_gun_mode_range(const gun_mode& gun, int at_recoil) const {
-    if (!gun || gun.melee()) { return 0; }
+int npc::confident_gun_mode_range( const gun_mode &gun, int at_recoil ) const
+{
+    if( !gun || gun.melee() ) {
+    return 0;
+}
 
-    const std::optional<shape_factory> shaped = ranged::get_shape_factory(*gun.target);
-    if (shaped) { return static_cast<int>(shaped->get_range()) - 1; }
+const std::optional<shape_factory> shaped = ranged::get_shape_factory( *gun.target );
+if( shaped ) {
+    return static_cast<int>( shaped->get_range() ) - 1;
+    }
 
     // Doesn't use calculate_dispersion because that requires a map
     // TODO: Turn this into a common function.
@@ -2064,8 +2088,10 @@ int npc::confident_gun_mode_range(const gun_mode& gun, int at_recoil) const {
     dispersion_sources mode_disp = ranged::get_weapon_dispersion(*this, *gun);
     mode_disp.add_range(eff_recoil);
     double max_dispersion = mode_disp.max();
-    if (gun->ammo_current()) { max_dispersion += gun->ammo_current()->ammo->dispersion; }
-    double even_chance_range = range_with_even_chance_of_good_hit(max_dispersion);
+    if( gun->ammo_current() ) {
+    max_dispersion += gun->ammo_current()->ammo->dispersion;
+    }
+    double even_chance_range = range_with_even_chance_of_good_hit( max_dispersion );
     double confident_range = even_chance_range * confidence_mult();
     add_msg(m_debug, "%s confident_gun (%s<=%.2f) at %.1f", gun->tname(), gun.name(),
             confident_range, max_dispersion);
@@ -2081,38 +2107,42 @@ int npc::confident_throw_range(const item& thrown, Creature* target) const {
     return static_cast<int>(confident_range);
 }
 
-auto item::ideal_ranged_dps(const Character& who, std::optional<gun_mode>& mode) const -> double {
-    if (!is_gun() || is_gunmod() || !mode) { return 0; }
-    damage_instance gun_damage = this->gun_damage();
-    if (ammo_current()) {
-        itype_id ammo = ammo_current();
-        gun_damage.add(ammo->ammo->damage);
-    } else if (ammo_default()) {
-        itype_id ammo = ammo_default();
-        gun_damage.add(ammo->ammo->damage);
+auto item::ideal_ranged_dps( const Character &who, std::optional<gun_mode> &mode ) const -> double
+{
+    if( !is_gun() || is_gunmod() || !mode ) {
+    return 0;
+}
+damage_instance gun_damage = this->gun_damage();
+if( ammo_current() ) {
+    itype_id ammo = ammo_current();
+        gun_damage.add( ammo->ammo->damage );
+    } else if( ammo_default() ) {
+    itype_id ammo = ammo_default();
+        gun_damage.add( ammo->ammo->damage );
     }
     int burst_size = mode->qty;
-    if (burst_size <= 0) {
-        debugmsg("gun_mode for %s has burst size of 0", this->tname());
+    if( burst_size <= 0 ) {
+    debugmsg( "gun_mode for %s has burst size of 0", this->tname() );
         burst_size = 1;
     }
     float damage_factor = gun_damage.total_damage() * burst_size;
 
-    int move_cost = ranged::time_to_attack(who, *this, nullptr);
-    if (ammo_remaining() == 0) {
-        int reload_cost =
-            get_reload_time() + who.encumb(body_part_hand_l) + who.encumb(body_part_hand_r);
-        // HACK: Doesn't check how much ammo they'll actually get from the reload. Because we don't
-        // know. DPS is less impacted the larger the magazine being swapped.
-        reload_cost /= magazine_integral() ? 1 : std::max(1, ammo_capacity() / burst_size);
+    int move_cost = ranged::time_to_attack( who, *this, nullptr );
+    if( ammo_remaining() == 0 ) {
+    int reload_cost = get_reload_time() + who.encumb( body_part_hand_l ) + who.encumb(
+                              body_part_hand_r );
+        // HACK: Doesn't check how much ammo they'll actually get from the reload. Because we don't know.
+        // DPS is less impacted the larger the magazine being swapped.
+        reload_cost /= magazine_integral() ? 1 : std::max( 1, ammo_capacity() / burst_size );
         move_cost += reload_cost;
     }
-    std::vector<ranged::aim_type> aim_types = ranged::get_aim_types(who, *this);
-    auto regular = std::find_if(aim_types.begin(), aim_types.end(), [](const ranged::aim_type& at) {
-        return at.action == std::string("AIMED_SHOT");
-    });
-    if (regular == aim_types.end()) {
-        debugmsg("Could not find REGULAR aim type for gun %s", tname());
+    std::vector<ranged::aim_type> aim_types = ranged::get_aim_types( who, *this );
+    auto regular = std::find_if( aim_types.begin(),
+    aim_types.end(), []( const ranged::aim_type & at ) {
+        return at.action == std::string( "AIMED_SHOT" );
+    } );
+    if( regular == aim_types.end() ) {
+    debugmsg( "Could not find REGULAR aim type for gun %s", tname() );
         return 0;
     }
     move_cost += ranged::gun_engagement_moves(who, *this, (*regular).threshold);
@@ -2125,26 +2155,30 @@ auto item::ideal_ranged_dps(const Character& who, std::optional<gun_mode>& mode)
 // Index defaults to -1, i.e., wielded weapon
 bool npc::wont_hit_friend(const tripoint_bub_ms& tar, const item& it, bool throwing) const {
     // TODO: Get actual dispersion instead of extracting it (badly) from confident range
-    int confident =
-        throwing ? confident_throw_range(it, nullptr)
-                 : confident_shoot_range(it, ranged::recoil_total(*this));
+    int confident = throwing ?
+                    confident_throw_range( it, nullptr ) :
+    confident_shoot_range( it, ranged::recoil_total( *this ) );
     // if there is no confidence at using weapon, it's not used at range
     // zero confidence leads to divide by zero otherwise
-    if (confident < 1) { return true; }
+    if( confident < 1 ) {
+    return true;
+}
 
-    if (rl_dist(bub_pos(), tar) == 1) {
-        return true; // If we're *really* sure that our aim is dead-on
-    }
+if( rl_dist( bub_pos(), tar ) == 1 ) {
+    return true;    // If we're *really* sure that our aim is dead-on
+}
 
-    units::angle target_angle = coord_to_angle(bub_pos(), tar);
+units::angle target_angle = coord_to_angle( bub_pos(), tar );
 
-    // TODO: Base on dispersion
-    units::angle safe_angle = 30_degrees;
+// TODO: Base on dispersion
+units::angle safe_angle = 30_degrees;
 
-    for (const auto& fr : ai_cache.friends) {
-        const shared_ptr_fast<Creature> ally_p = fr.lock();
-        if (!ally_p) { continue; }
-        const Creature& ally = *ally_p;
+for( const auto &fr : ai_cache.friends ) {
+    const shared_ptr_fast<Creature> ally_p = fr.lock();
+        if( !ally_p ) {
+            continue;
+        }
+        const Creature &ally = *ally_p;
 
         // TODO: Extract common functions with turret target selection
         units::angle safe_angle_ally = safe_angle;
@@ -2534,10 +2568,9 @@ void npc::move_to(const tripoint_bub_ms& pt, bool no_bashing, std::set<tripoint_
 void npc::move_to_next() {
     while (!path.empty() && bub_pos() == path[0]) { path.erase(path.begin()); }
 
-    if (path.empty()) {
-        add_msg(m_debug,
-                "npc::move_to_next() called with an empty path or path "
-                "containing only current position");
+    if( path.empty() ) {
+        add_msg( m_debug, "npc::move_to_next() called with an empty path or path "
+                          "containing only current position" );
         move_pause();
         return;
     }
@@ -2910,10 +2943,10 @@ void npc::pick_up_item() {
         return;
     }
 
-    map& here = get_map();
-    const std::optional<vpart_reference> vp =
-        here.veh_at(wanted_item_pos).part_with_feature(VPFLAG_CARGO, false);
-    const bool has_cargo = vp && !vp->has_feature("LOCKED");
+    map &here = get_map();
+    const std::optional<vpart_reference> vp = here.veh_at( wanted_item_pos ).part_with_feature(
+            VPFLAG_CARGO, false );
+    const bool has_cargo = vp && !vp->has_feature( "LOCKED" );
 
     if ((!here.has_items(wanted_item_pos) && !has_cargo && !here.is_harvestable(wanted_item_pos)
          && sees(wanted_item_pos))
@@ -3047,13 +3080,11 @@ void npc::drop_items(units::mass drop_weight, units::volume drop_volume, int min
     /* Remove this when someone debugs it back to functionality */
     return;
 
-    add_msg(
-        m_debug,
-        "%s is dropping items-%3.2f kg, %3.2f L (%d items, wgt %3.2f/%3.2f kg, "
-        "vol %3.2f/%3.2f L)",
-        name, units::to_kilogram(drop_weight), units::to_liter(drop_volume), inv.size(),
-        units::to_kilogram(weight_carried()), units::to_kilogram(weight_capacity()),
-        units::to_liter(volume_carried()), units::to_liter(volume_capacity()));
+    add_msg( m_debug, "%s is dropping items-%3.2f kg, %3.2f L (%d items, wgt %3.2f/%3.2f kg, "
+                      "vol %3.2f/%3.2f L)",
+             name, units::to_kilogram( drop_weight ), units::to_liter( drop_volume ), inv.size(),
+             units::to_kilogram( weight_carried() ), units::to_kilogram( weight_capacity() ),
+             units::to_liter( volume_carried() ), units::to_liter( volume_capacity() ) );
 
     units::mass weight_dropped = units::from_gram(0);
     units::volume volume_dropped = units::from_liter(0);
@@ -3203,10 +3234,10 @@ bool npc::find_corpse_to_pulp() {
 
     if (corpse == nullptr) {
         // If we're following the player, don't wander off to pulp corpses
-        const auto& around = is_walking_with() ? player_character.bub_pos() : bub_pos();
-        for (item*& location :
-             here.get_active_items_in_radius(around, range, special_item_type::corpse)) {
-            corpse = check_tile(location->position());
+        const auto &around = is_walking_with() ? player_character.bub_pos() : bub_pos();
+        for( item * &location : here.get_active_items_in_radius( around, range,
+                special_item_type::corpse ) ) {
+            corpse = check_tile( location->position() );
 
             if (corpse != nullptr) {
                 pulp_location.emplace(location->position());
@@ -3887,9 +3918,10 @@ void npc::look_for_player(const Character& sought) {
     */
 }
 
-bool npc::saw_player_recently() const {
-    return last_player_seen_pos && get_map().inbounds(*last_player_seen_pos)
-        && last_seen_player_turn > 0;
+bool npc::saw_player_recently() const
+{
+    return last_player_seen_pos && get_map().inbounds( *last_player_seen_pos ) &&
+    last_seen_player_turn > 0;
 }
 
 bool npc::has_omt_destination() const { return goal != no_goal_point; }
@@ -4274,13 +4306,12 @@ void npc::warn_about(
     if (name.empty()) {
         complain_about(warning_name, d, snip, is_enemy(), spriority);
     } else {
-        const std::string range_str =
-            range < 1
-                ? "<punc>"
-                : string_format(_(" %s, %s"), direction_name(direction_from(bub_pos(), danger_pos)),
-                                distance_string(range));
-        const std::string speech = string_format(_("%s %s%s"), snip, name, range_str);
-        complain_about(warning_name, d, speech, is_enemy(), spriority);
+        const std::string range_str = range < 1 ? "<punc>" :
+                                      string_format( _( " %s, %s" ),
+                                          direction_name( direction_from( bub_pos(), danger_pos ) ),
+                                          distance_string( range ) );
+        const std::string speech = string_format( _( "%s %s%s" ), snip, name, range_str );
+        complain_about( warning_name, d, speech, is_enemy(), spriority );
     }
 }
 

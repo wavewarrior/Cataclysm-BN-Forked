@@ -142,193 +142,325 @@ int main(int argc, char* argv[]) {
 
     MAP_SHARING::setDefaults();
     {
-        const char* section_default = nullptr;
-        const char* section_map_sharing = "Map sharing";
-        const char* section_user_directory = "User directories";
-        const std::array<arg_handler, 15> first_pass_arguments = {
-            {{"--seed", "<string of letters and or numbers>",
-              "Sets the random number generator's seed value", section_default,
-              [&seed](int num_args, const char** params) -> int {
-                  if (num_args < 1) { return -1; }
-                  const unsigned char* hash_input = reinterpret_cast<const unsigned char*>(
-                      params[0]);
-                  seed = djb2_hash(hash_input);
-                  return 1;
-              }},
-             {"--jsonverify", nullptr, "Checks the BN json files", section_default,
-              [&verifyexit](int, const char**) -> int {
-                  test_mode = true;
-                  verifyexit = true;
-                  return 0;
-              }},
-             {"--check-mods", "[mods…]", "Checks the json files belonging to BN mods",
-              section_default,
-              [&check_mods, &opts](int n, const char* params[]) -> int {
-                  check_mods = true;
-                  test_mode = true;
-                  for (int i = 0; i < n; ++i) { opts.emplace_back(params[i]); }
-                  return 0;
-              }},
-             {"--dump-stats", "<what> [mode = TSV] [opts…]", "Dumps item stats", section_default,
-              [&dump, &dmode, &opts](int n, const char* params[]) -> int {
-                  if (n < 1) { return -1; }
-                  test_mode = true;
-                  dump = params[0];
-                  for (int i = 2; i < n; ++i) { opts.emplace_back(params[i]); }
-                  if (n >= 2) {
-                      if (!strcmp(params[1], "TSV")) {
-                          dmode = dump_mode::TSV;
-                          return 0;
-                      } else if (!strcmp(params[1], "HTML")) {
-                          dmode = dump_mode::HTML;
-                          return 0;
-                      } else {
-                          return -1;
-                      }
-                  }
-                  return 0;
-              }},
-             {"--world", "<name>", "Load world", section_default,
-              [&world](int n, const char* params[]) -> int {
-                  if (n < 1) { return -1; }
-                  world = params[0];
-                  return 1;
-              }},
-             {"--basepath", "<path>", "Base path for all game data subdirectories", section_default,
-              [](int num_args, const char** params) {
-                  if (num_args < 1) { return -1; }
-                  PATH_INFO::init_base_path(params[0]);
-                  PATH_INFO::set_standard_filenames();
-                  return 1;
-              }},
-             {"--shared", nullptr, "Activates the map-sharing mode", section_map_sharing,
-              [](int, const char**) -> int {
-                  MAP_SHARING::setSharing(true);
-                  MAP_SHARING::setCompetitive(true);
-                  MAP_SHARING::setWorldmenu(false);
-                  return 0;
-              }},
-             {"--username", "<name>",
-              "Instructs map-sharing code to use this name for your character.",
-              section_map_sharing,
-              [](int num_args, const char** params) -> int {
-                  if (num_args < 1) { return -1; }
-                  MAP_SHARING::setUsername(params[0]);
-                  return 1;
-              }},
-             {"--addadmin", "<username>",
-              "Instructs map-sharing code to use this name for your character and give you "
-              "access to the cheat functions.",
-              section_map_sharing,
-              [](int num_args, const char** params) -> int {
-                  if (num_args < 1) { return -1; }
-                  MAP_SHARING::addAdmin(params[0]);
-                  return 1;
-              }},
-             {"--adddebugger", "<username>",
-              "Informs map-sharing code that you're running inside a debugger", section_map_sharing,
-              [](int num_args, const char** params) -> int {
-                  if (num_args < 1) { return -1; }
-                  MAP_SHARING::addDebugger(params[0]);
-                  return 1;
-              }},
-             {"--competitive", nullptr,
-              "Instructs map-sharing code to disable access to the in-game cheat functions",
-              section_map_sharing,
-              [](int, const char**) -> int {
-                  MAP_SHARING::setCompetitive(true);
-                  return 0;
-              }},
-             {"--userdir", "<path>",
-              // NOLINTNEXTLINE(cata-text-style): the dot is not a period
-              "Base path for user-overrides to files from the ./data directory and named below",
-              section_user_directory,
-              [](int num_args, const char** params) -> int {
-                  if (num_args < 1) { return -1; }
-                  PATH_INFO::init_user_dir(params[0]);
-                  PATH_INFO::set_standard_filenames();
-                  return 1;
-              }},
-             {"--dont-debugmsg", nullptr, "If set, no debug messages will be printed",
-              section_default,
-              [](int, const char**) -> int {
-                  dont_debugmsg = true;
-                  return 0;
-              }},
-             {"--lua-doc", "<output path>", "Generate Lua docs to given path and exit",
-              section_default,
-              [&](int num_args, const char** params) -> int {
-                  if (num_args < 1) { return -1; }
-                  test_mode = true;
-                  lua_doc_output_path = params[0];
-                  return 0;
-              }},
-             {"--lua-types", "<output path>", "Generate Lua types to given path and exit",
-              section_default, [&](int num_args, const char** params) -> int {
-                  if (num_args < 1) { return -1; }
-                  test_mode = true;
-                  lua_types_output_path = params[0];
-                  return 0;
-              }}}};
+        const char *section_default = nullptr;
+        const char *section_map_sharing = "Map sharing";
+        const char *section_user_directory = "User directories";
+        const std::array<arg_handler, 15> first_pass_arguments = {{
+                {
+                    "--seed", "<string of letters and or numbers>",
+                    "Sets the random number generator's seed value",
+                    section_default,
+                    [&seed]( int num_args, const char **params ) -> int {
+                        if( num_args < 1 )
+                    {
+                        return -1;
+                    }
+                    const unsigned char *hash_input = reinterpret_cast<const unsigned char *>( params[0] );
+                        seed = djb2_hash( hash_input );
+                        return 1;
+                    }
+                },
+                {
+                    "--jsonverify", nullptr,
+                    "Checks the BN json files",
+                    section_default,
+                    [&verifyexit]( int, const char ** ) -> int {
+                        test_mode = true;
+                        verifyexit = true;
+                        return 0;
+                    }
+                },
+                {
+                    "--check-mods", "[mods…]",
+                    "Checks the json files belonging to BN mods",
+                    section_default,
+                    [&check_mods, &opts]( int n, const char *params[] ) -> int {
+                        check_mods = true;
+                        test_mode = true;
+                        for( int i = 0; i < n; ++i )
+                        {
+                            opts.emplace_back( params[ i ] );
+                        }
+                        return 0;
+                    }
+                },
+                {
+                    "--dump-stats", "<what> [mode = TSV] [opts…]",
+                    "Dumps item stats",
+                    section_default,
+                    [&dump, &dmode, &opts]( int n, const char *params[] ) -> int {
+                        if( n < 1 )
+                    {
+                        return -1;
+                    }
+                    test_mode = true;
+                    dump = params[ 0 ];
+                    for( int i = 2; i < n; ++i )
+                    {
+                        opts.emplace_back( params[ i ] );
+                        }
+                        if( n >= 2 )
+                    {
+                        if( !strcmp( params[ 1 ], "TSV" ) ) {
+                                dmode = dump_mode::TSV;
+                                return 0;
+                            } else if( !strcmp( params[ 1 ], "HTML" ) ) {
+                                dmode = dump_mode::HTML;
+                                return 0;
+                            } else {
+                                return -1;
+                            }
+                        }
+                        return 0;
+                    }
+                },
+                {
+                    "--world", "<name>",
+                    "Load world",
+                    section_default,
+                    [&world]( int n, const char *params[] ) -> int {
+                        if( n < 1 )
+                    {
+                        return -1;
+                    }
+                    world = params[0];
+                    return 1;
+                }
+            },
+            {
+                "--basepath", "<path>",
+                "Base path for all game data subdirectories",
+                section_default,
+                []( int num_args, const char **params )
+                    {
+                        if( num_args < 1 ) {
+                            return -1;
+                        }
+                        PATH_INFO::init_base_path( params[0] );
+                        PATH_INFO::set_standard_filenames();
+                        return 1;
+                    }
+                },
+                {
+                    "--shared", nullptr,
+                    "Activates the map-sharing mode",
+                    section_map_sharing,
+                    []( int, const char ** ) -> int {
+                        MAP_SHARING::setSharing( true );
+                        MAP_SHARING::setCompetitive( true );
+                        MAP_SHARING::setWorldmenu( false );
+                        return 0;
+                    }
+                },
+                {
+                    "--username", "<name>",
+                    "Instructs map-sharing code to use this name for your character.",
+                    section_map_sharing,
+                    []( int num_args, const char **params ) -> int {
+                        if( num_args < 1 )
+                    {
+                        return -1;
+                    }
+                    MAP_SHARING::setUsername( params[0] );
+                        return 1;
+                    }
+                },
+                {
+                    "--addadmin", "<username>",
+                    "Instructs map-sharing code to use this name for your character and give you "
+                    "access to the cheat functions.",
+                    section_map_sharing,
+                    []( int num_args, const char **params ) -> int {
+                        if( num_args < 1 )
+                    {
+                        return -1;
+                    }
+                    MAP_SHARING::addAdmin( params[0] );
+                        return 1;
+                    }
+                },
+                {
+                    "--adddebugger", "<username>",
+                    "Informs map-sharing code that you're running inside a debugger",
+                    section_map_sharing,
+                    []( int num_args, const char **params ) -> int {
+                        if( num_args < 1 )
+                    {
+                        return -1;
+                    }
+                    MAP_SHARING::addDebugger( params[0] );
+                        return 1;
+                    }
+                },
+                {
+                    "--competitive", nullptr,
+                    "Instructs map-sharing code to disable access to the in-game cheat functions",
+                    section_map_sharing,
+                    []( int, const char ** ) -> int {
+                        MAP_SHARING::setCompetitive( true );
+                        return 0;
+                    }
+                },
+                {
+                    "--userdir", "<path>",
+                    // NOLINTNEXTLINE(cata-text-style): the dot is not a period
+                    "Base path for user-overrides to files from the ./data directory and named below",
+                    section_user_directory,
+                    []( int num_args, const char **params ) -> int {
+                        if( num_args < 1 )
+                    {
+                        return -1;
+                    }
+                    PATH_INFO::init_user_dir( params[0] );
+                        PATH_INFO::set_standard_filenames();
+                        return 1;
+                    }
+                },
+                {
+                    "--dont-debugmsg", nullptr,
+                    "If set, no debug messages will be printed",
+                    section_default,
+                    []( int, const char ** ) -> int {
+                        dont_debugmsg = true;
+                        return 0;
+                    }
+                },
+                {
+                    "--lua-doc", "<output path>",
+                    "Generate Lua docs to given path and exit",
+                    section_default,
+                    [&]( int num_args, const char **params ) -> int {
+                        if( num_args < 1 )
+                    {
+                        return -1;
+                    }
+                    test_mode = true;
+                    lua_doc_output_path = params[0];
+                    return 0;
+                }
+            },
+            {
+                "--lua-types", "<output path>",
+                "Generate Lua types to given path and exit",
+                section_default,
+                [&]( int num_args, const char **params ) -> int {
+                        if( num_args < 1 )
+                    {
+                        return -1;
+                    }
+                    test_mode = true;
+                    lua_types_output_path = params[0];
+                    return 0;
+                }
+            }
+        }
+    };
 
-        // The following arguments are dependent on one or more of the previous flags and are run
-        // in a second pass.
-        const std::array<arg_handler, 8> second_pass_arguments = {{
-            {"--worldmenu", nullptr, "Enables the world menu in the map-sharing code",
-             section_map_sharing,
-             [](int, const char**) -> int {
-                 MAP_SHARING::setWorldmenu(true);
-                 return true;
-             }},
-            {"--datadir", "<directory name>", "Sub directory from which game data is loaded",
-             nullptr,
-             [](int num_args, const char** params) -> int {
-                 if (num_args < 1) { return -1; }
-                 PATH_INFO::set_datadir(params[0]);
-                 return 1;
-             }},
-            {"--savedir", "<directory name>", "Subdirectory for game saves", section_user_directory,
-             [](int num_args, const char** params) -> int {
-                 if (num_args < 1) { return -1; }
-                 PATH_INFO::set_savedir(params[0]);
-                 return 1;
-             }},
-            {"--configdir", "<directory name>", "Subdirectory for game configuration",
-             section_user_directory,
-             [](int num_args, const char** params) -> int {
-                 if (num_args < 1) { return -1; }
-                 PATH_INFO::set_config_dir(params[0]);
-                 return 1;
-             }},
-            {"--memorialdir", "<directory name>", "Subdirectory for memorials",
-             section_user_directory,
-             [](int num_args, const char** params) -> int {
-                 if (num_args < 1) { return -1; }
-                 PATH_INFO::set_memorialdir(params[0]);
-                 return 1;
-             }},
-            {"--optionfile", "<filename>", "Name of the options file within the configdir",
-             section_user_directory,
-             [](int num_args, const char** params) -> int {
-                 if (num_args < 1) { return -1; }
-                 PATH_INFO::set_options(params[0]);
-                 return 1;
-             }},
-            {"--autopickupfile", "<filename>",
-             "Name of the autopickup options file within the configdir", nullptr,
-             [](int num_args, const char** params) -> int {
-                 if (num_args < 1) { return -1; }
-                 PATH_INFO::set_autopickup(params[0]);
-                 return 1;
-             }},
-            {"--motdfile", "<filename>",
-             "Name of the message of the day file within the motd directory", nullptr,
-             [](int num_args, const char** params) -> int {
-                 if (num_args < 1) { return -1; }
-                 PATH_INFO::set_motd(params[0]);
-                 return 1;
-             }},
-        }};
+    // The following arguments are dependent on one or more of the previous flags and are run
+    // in a second pass.
+    const std::array<arg_handler, 8> second_pass_arguments = {{
+            {
+                "--worldmenu", nullptr,
+                "Enables the world menu in the map-sharing code",
+                section_map_sharing,
+                []( int, const char ** ) -> int {
+                        MAP_SHARING::setWorldmenu( true );
+                        return true;
+                    }
+                },
+                {
+                    "--datadir", "<directory name>",
+                    "Sub directory from which game data is loaded",
+                    nullptr,
+                    []( int num_args, const char **params ) -> int {
+                        if( num_args < 1 )
+                    {
+                        return -1;
+                    }
+                    PATH_INFO::set_datadir( params[0] );
+                        return 1;
+                    }
+                },
+                {
+                    "--savedir", "<directory name>",
+                    "Subdirectory for game saves",
+                    section_user_directory,
+                    []( int num_args, const char **params ) -> int {
+                        if( num_args < 1 )
+                    {
+                        return -1;
+                    }
+                    PATH_INFO::set_savedir( params[0] );
+                        return 1;
+                    }
+                },
+                {
+                    "--configdir", "<directory name>",
+                    "Subdirectory for game configuration",
+                    section_user_directory,
+                    []( int num_args, const char **params ) -> int {
+                        if( num_args < 1 )
+                    {
+                        return -1;
+                    }
+                    PATH_INFO::set_config_dir( params[0] );
+                        return 1;
+                    }
+                },
+                {
+                    "--memorialdir", "<directory name>",
+                    "Subdirectory for memorials",
+                    section_user_directory,
+                    []( int num_args, const char **params ) -> int {
+                        if( num_args < 1 )
+                    {
+                        return -1;
+                    }
+                    PATH_INFO::set_memorialdir( params[0] );
+                        return 1;
+                    }
+                },
+                {
+                    "--optionfile", "<filename>",
+                    "Name of the options file within the configdir",
+                    section_user_directory,
+                    []( int num_args, const char **params ) -> int {
+                        if( num_args < 1 )
+                    {
+                        return -1;
+                    }
+                    PATH_INFO::set_options( params[0] );
+                        return 1;
+                    }
+                },
+                {
+                    "--autopickupfile", "<filename>",
+                    "Name of the autopickup options file within the configdir",
+                    nullptr,
+                    []( int num_args, const char **params ) -> int {
+                        if( num_args < 1 )
+                    {
+                        return -1;
+                    }
+                    PATH_INFO::set_autopickup( params[0] );
+                        return 1;
+                    }
+                },
+                {
+                    "--motdfile", "<filename>",
+                    "Name of the message of the day file within the motd directory",
+                    nullptr,
+                    []( int num_args, const char **params ) -> int {
+                        if( num_args < 1 )
+                    {
+                        return -1;
+                    }
+                    PATH_INFO::set_motd( params[0] );
+                        return 1;
+                    }
+                },
+            }
+        };
 
         // Process CLI arguments.
         const size_t num_first_pass_arguments =
@@ -507,6 +639,7 @@ int main(int argc, char* argv[]) {
         exit_handler(-999);
     }
 
+
     // Now we do the actual game.
 
     game_ui::init_ui();
@@ -524,7 +657,8 @@ int main(int argc, char* argv[]) {
     DebugLog(DL::Info, DC::Main) << "LAPI version: " << cata::get_lapi_version_string();
     cata::startup_lua_test();
 
-    if (!lua_doc_output_path.empty() || !lua_types_output_path.empty()) {
+
+    if( !lua_doc_output_path.empty() || !lua_types_output_path.empty() ) {
         init_colors();
         const auto doc_script =
             std::filesystem::path{PATH_INFO::datadir()} / "raw" / "generate_docs.lua";
@@ -549,6 +683,12 @@ int main(int argc, char* argv[]) {
         }
         return 0;
     }
+    // Start speculative pre-warm of last-played world's modfiles.
+    // Runs on background thread; main menu stays responsive.
+    // Must be after startup_lua_test() to avoid racing sol/luna global state.
+    // Placed after lua-doc block to avoid spawning a thread that would
+    // terminate the process on early exit (deno task docs:gen).
+    init::start_prewarm();
 
     prompt_select_lang_on_startup();
     replay_buffered_debugmsg_prompts();

@@ -1,5 +1,4 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include "catacharset.h"
 #include "map_setup_helpers.h"
 #include "state_helpers.h"

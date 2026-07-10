@@ -1,5 +1,4 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include "magic.h"
 #include "magic_enchantment.h"
 #include "map.h"
@@ -426,16 +425,16 @@ static void tests_metabolic_rate( Character &guy, float norm, float exp )
 
     std::string s_relic = "test_relic_mods_metabolism";
 
-    REQUIRE( guy.metabolic_rate_base() == Approx( norm ) );
+    REQUIRE( guy.metabolic_rate_base() == Catch::Approx( norm ) );
 
     WHEN( "Character receives relic" ) {
         give_item( guy, s_relic );
         THEN( "Metabolic rate changes" ) {
-            CHECK( guy.metabolic_rate_base() == Approx( exp ) );
+            CHECK( guy.metabolic_rate_base() == Catch::Approx( exp ) );
             AND_WHEN( "Character loses relic" ) {
                 clear_items( guy );
                 THEN( "Metabolic rate goes back to normal" ) {
-                    CHECK( guy.metabolic_rate_base() == Approx( norm ) );
+                    CHECK( guy.metabolic_rate_base() == Catch::Approx( norm ) );
                 }
             }
         }
@@ -445,7 +444,7 @@ static void tests_metabolic_rate( Character &guy, float norm, float exp )
             give_item( guy, s_relic );
         }
         THEN( "Metabolic rate does not go below 0" ) {
-            CHECK( guy.metabolic_rate_base() == Approx( 0.0f ) );
+            CHECK( guy.metabolic_rate_base() == Catch::Approx( 0.0f ) );
         }
     }
 }
@@ -501,7 +500,7 @@ static void tests_mana_pool( Character &guy, const mana_test_case &t )
     REQUIRE( guy.get_int() == t.intellect );
 
     REQUIRE( guy.magic->max_mana( guy ) == t.norm_cap );
-    REQUIRE( guy.magic->mana_regen_rate( guy ) == Approx( norm_regen_rate ) );
+    REQUIRE( guy.magic->mana_regen_rate( guy ) == Catch::Approx( norm_regen_rate ) );
 
     const std::string s_relic = "test_relic_mods_manapool";
 
@@ -509,12 +508,12 @@ static void tests_mana_pool( Character &guy, const mana_test_case &t )
         give_item( guy, s_relic );
         THEN( "Mana pool capacity and regen rate change" ) {
             CHECK( guy.magic->max_mana( guy ) == t.exp_cap );
-            CHECK( guy.magic->mana_regen_rate( guy ) == Approx( exp_regen_rate ) );
+            CHECK( guy.magic->mana_regen_rate( guy ) == Catch::Approx( exp_regen_rate ) );
             AND_WHEN( "Character loses relic" ) {
                 clear_items( guy );
                 THEN( "Mana pool capacity and regen rate go back to normal" ) {
                     REQUIRE( guy.magic->max_mana( guy ) == t.norm_cap );
-                    REQUIRE( guy.magic->mana_regen_rate( guy ) == Approx( norm_regen_rate ) );
+                    REQUIRE( guy.magic->mana_regen_rate( guy ) == Catch::Approx( norm_regen_rate ) );
                 }
             }
         }
@@ -525,7 +524,7 @@ static void tests_mana_pool( Character &guy, const mana_test_case &t )
         }
         THEN( "Mana pool capacity and regen rate don't drop below 0" ) {
             REQUIRE( guy.magic->max_mana( guy ) == 0 );
-            REQUIRE( guy.magic->mana_regen_rate( guy ) == Approx( 0.0 ) );
+            REQUIRE( guy.magic->mana_regen_rate( guy ) == Catch::Approx( 0.0 ) );
         }
     }
 }
@@ -575,7 +574,7 @@ static void tests_stamina( Character &guy,
     std::string s_relic = "test_relic_mods_stamina";
 
     REQUIRE( guy.get_stamina_max() == cap_norm );
-    REQUIRE( measure_stamina_gain_rate( guy ) == Approx( rate_norm ) );
+    REQUIRE( measure_stamina_gain_rate( guy ) == Catch::Approx( rate_norm ) );
 
     WHEN( "Character receives relic" ) {
         give_item( guy, s_relic );
@@ -589,11 +588,11 @@ static void tests_stamina( Character &guy,
             }
         }
         THEN( "Stamina gain rate changes" ) {
-            CHECK( measure_stamina_gain_rate( guy ) == Approx( rate_exp ) );
+            CHECK( measure_stamina_gain_rate( guy ) == Catch::Approx( rate_exp ) );
             AND_WHEN( "Character loses relic" ) {
                 clear_items( guy );
                 THEN( "Stamina gain rate goes back to normal" ) {
-                    CHECK( measure_stamina_gain_rate( guy ) == Approx( rate_norm ) );
+                    CHECK( measure_stamina_gain_rate( guy ) == Catch::Approx( rate_norm ) );
                 }
             }
         }
@@ -607,7 +606,7 @@ static void tests_stamina( Character &guy,
             CHECK( guy.get_stamina_max() == ( base_cap / 10 ) );
         }
         THEN( "Stamina gain rate does not go below 0" ) {
-            CHECK( measure_stamina_gain_rate( guy ) == Approx( 0.0f ) );
+            CHECK( measure_stamina_gain_rate( guy ) == Catch::Approx( 0.0f ) );
         }
     }
 }
@@ -627,8 +626,8 @@ TEST_CASE( "Enchantments modify stamina", "[magic][enchantment][stamina]" )
     REQUIRE( guy.get_stamina_max() == normal_cap );
 
     const float normal_rate = get_option<float>( "PLAYER_BASE_STAMINA_REGEN_RATE" );
-    REQUIRE( normal_rate == Approx( 20.0f ) );
-    REQUIRE( measure_stamina_gain_rate( guy ) == Approx( normal_rate ) );
+    REQUIRE( normal_rate == Catch::Approx( 20.0f ) );
+    REQUIRE( measure_stamina_gain_rate( guy ) == Catch::Approx( normal_rate ) );
 
     guy.set_stamina( 0 );
     REQUIRE( guy.get_stamina() == 0 );
@@ -671,16 +670,16 @@ static void tests_need_rate( Character &guy, const std::string &s_relic, float n
 {
     advance_turn( guy );
 
-    REQUIRE( getter( guy ) == Approx( norm ) );
+    REQUIRE( getter( guy ) == Catch::Approx( norm ) );
 
     WHEN( "Character receives relic" ) {
         give_item( guy, s_relic );
         THEN( "Need rate changes" ) {
-            CHECK( getter( guy ) == Approx( exp ) );
+            CHECK( getter( guy ) == Catch::Approx( exp ) );
             AND_WHEN( "Character loses relic" ) {
                 clear_items( guy );
                 THEN( "Need rate goes back to normal" ) {
-                    CHECK( getter( guy ) == Approx( norm ) );
+                    CHECK( getter( guy ) == Catch::Approx( norm ) );
                 }
             }
         }
@@ -690,7 +689,7 @@ static void tests_need_rate( Character &guy, const std::string &s_relic, float n
             give_item( guy, s_relic );
         }
         THEN( "Need rate does not go below 0" ) {
-            CHECK( getter( guy ) == Approx( 0.0f ) );
+            CHECK( getter( guy ) == Catch::Approx( 0.0f ) );
         }
     }
 }
@@ -709,8 +708,8 @@ TEST_CASE( "Enchantments modify thirst rate", "[magic][enchantment][thirst]" )
     };
 
     const float normal_rate = get_option<float>( "PLAYER_THIRST_RATE" );
-    REQUIRE( normal_rate == Approx( 1.0f ) );
-    REQUIRE( getter( guy ) == Approx( normal_rate ) );
+    REQUIRE( normal_rate == Catch::Approx( 1.0f ) );
+    REQUIRE( getter( guy ) == Catch::Approx( normal_rate ) );
 
     SECTION( "Clean character" ) {
         tests_need_rate( guy, s_relic, 1.0f, 0.9f, getter );
@@ -738,8 +737,8 @@ TEST_CASE( "Enchantments modify fatigue rate", "[magic][enchantment][fatigue]" )
     };
 
     const float normal_rate = get_option<float>( "PLAYER_THIRST_RATE" );
-    REQUIRE( normal_rate == Approx( 1.0f ) );
-    REQUIRE( getter( guy ) == Approx( normal_rate ) );
+    REQUIRE( normal_rate == Catch::Approx( 1.0f ) );
+    REQUIRE( getter( guy ) == Catch::Approx( normal_rate ) );
 
     SECTION( "Clean character" ) {
         tests_need_rate( guy, s_relic, 1.0f, 0.9f, getter );

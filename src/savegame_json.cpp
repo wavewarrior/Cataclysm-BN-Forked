@@ -3568,18 +3568,18 @@ void faction::deserialize( JsonIn &jsin )
     JsonObject jo = jsin.get_object();
     jo.allow_omitted_members();
 
-    jo.read( "id", id );
-    jo.read( "name", name );
-    jo.read( "likes_u", likes_u );
-    jo.read( "respects_u", respects_u );
-    jo.read( "known_by_u", known_by_u );
-    jo.read( "size", size );
-    jo.read( "power", power );
-    if( !jo.read( "food_supply", food_supply ) ) {
-        food_supply = 100;
+    jo.read( "id", id_ );
+    jo.read( "name", name_ );
+    jo.read( "likes_u", likes_u_ );
+    jo.read( "respects_u", respects_u_ );
+    jo.read( "known_by_u", known_by_u_ );
+    jo.read( "size", size_ );
+    jo.read( "power", power_ );
+    if( !jo.read( "food_supply", food_supply_ ) ) {
+        food_supply_ = 100;
     }
-    if( !jo.read( "wealth", wealth ) ) {
-        wealth = 100;
+    if( !jo.read( "wealth", wealth_ ) ) {
+        wealth_ = 100;
     }
     if( jo.has_array( "opinion_of" ) ) {
         opinion_of = jo.get_int_array( "opinion_of" );
@@ -3591,19 +3591,19 @@ void faction::serialize( JsonOut &json ) const
 {
     json.start_object();
 
-    json.member( "id", id );
-    json.member( "name", name );
-    json.member( "likes_u", likes_u );
-    json.member( "respects_u", respects_u );
-    json.member( "known_by_u", known_by_u );
-    json.member( "size", size );
-    json.member( "power", power );
-    json.member( "food_supply", food_supply );
-    json.member( "wealth", wealth );
+    json.member( "id", id_ );
+    json.member( "name", name_ );
+    json.member( "likes_u", likes_u_ );
+    json.member( "respects_u", respects_u_ );
+    json.member( "known_by_u", known_by_u_ );
+    json.member( "size", size_ );
+    json.member( "power", power_ );
+    json.member( "food_supply", food_supply_ );
+    json.member( "wealth", wealth_ );
     json.member( "opinion_of", opinion_of );
     json.member( "relations" );
     json.start_object();
-for( const auto &rel_data : relations ) {
+for( const auto &rel_data : relations_ ) {
     json.member( rel_data.first );
         json.start_object();
         for( const auto &rel_flag : npc_factions::relation_strs ) {

@@ -975,24 +975,36 @@ auto sub_add_field(SubTile& dst, field_type_id type, int intensity, time_duratio
 }
 
 // True if the tile allows movement (movecost > 0).
-auto sub_passable(const SubTile& tile) -> bool {
-    if (!tile.valid()) { return false; }
-    const auto& ter = tile.get_ter_t();
-    const auto& frn = tile.get_furn_t();
-    if (ter.movecost == 0) { return false; }
-    if (frn.movecost < 0) { return false; }
-    return true;
+auto sub_passable( const SubTile &tile ) -> bool
+{
+    if( !tile.valid() ) {
+    return false;
+}
+const auto &ter = tile.get_ter_t();
+const auto &frn = tile.get_furn_t();
+if( ter.movecost == 0 ) {
+    return false;
+}
+if( frn.movecost < 0 ) {
+    return false;
+}
+return true;
 }
 
 // Simplified gas spread check (no wind / vehicle-rotation).
-auto gas_can_spread_sub(const field_entry& cur, const SubTile& dst) -> bool {
-    if (!dst.valid()) { return false; }
-    const auto* f = dst.get_field().find_field(cur.get_field_type());
-    if (f != nullptr && f->get_field_intensity() >= cur.get_field_intensity()) { return false; }
-    const auto& ter = dst.get_ter_t();
-    const auto& frn = dst.get_furn_t();
-    if (ter.movecost == 0 || frn.movecost < 0) {
-        return ter_furn_has_flag(ter, frn, TFLAG_PERMEABLE);
+auto gas_can_spread_sub( const field_entry &cur, const SubTile &dst ) -> bool
+{
+    if( !dst.valid() ) {
+    return false;
+}
+const auto *f = dst.get_field().find_field( cur.get_field_type() );
+if( f != nullptr && f->get_field_intensity() >= cur.get_field_intensity() ) {
+    return false;
+}
+const auto &ter = dst.get_ter_t();
+const auto &frn = dst.get_furn_t();
+if( ter.movecost == 0 || frn.movecost < 0 ) {
+    return ter_furn_has_flag( ter, frn, TFLAG_PERMEABLE );
     }
     return true;
 }
@@ -1025,19 +1037,24 @@ auto gas_spread_sub(field_entry& cur, SubTile& dst) -> void {
 static const std::array<point, 8> eight_dirs_sm = {
     {{-1, -1}, {0, -1}, {1, -1}, {-1, 0}, {1, 0}, {-1, 1}, {0, 1}, {1, 1}}};
 
-auto process_fields_in_submap(submap& sm, const tripoint_abs_sm& pos, mapbuffer& mb) -> bool {
-    ZoneScopedN("process_fields_in_submap");
-    if (sm.field_count == 0) { return false; }
+auto process_fields_in_submap( submap &sm,
+                               const tripoint_abs_sm &pos,
+                               mapbuffer &mb ) -> bool
+{
+    ZoneScopedN( "process_fields_in_submap" );
+    if( sm.field_count == 0 ) {
+    return false;
+}
 
-    auto has_fire = false;
+auto has_fire = false;
 
-    // Snapshot before iterating: wandering-field spread can push_back to sm.field_cache
-    // within the same submap (line ~1742), which would invalidate the range iterators.
-    // Newly-added entries are newborn (age 0) and skip all effects anyway, so processing
-    // them next tick is correct behaviour.
-    const auto field_positions = sm.field_cache;
-    std::ranges::for_each(field_positions, [&](const point_sm_ms& local) {
-        auto& curfield = sm.get_field(local);
+// Snapshot before iterating: wandering-field spread can push_back to sm.field_cache
+// within the same submap (line ~1742), which would invalidate the range iterators.
+// Newly-added entries are newborn (age 0) and skip all effects anyway, so processing
+// them next tick is correct behaviour.
+const auto field_positions = sm.field_cache;
+std::ranges::for_each( field_positions, [&]( const point_sm_ms & local ) {
+        auto &curfield = sm.get_field( local );
 
         if (!curfield.displayed_field_type()) { return; }
 

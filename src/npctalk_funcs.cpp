@@ -118,9 +118,9 @@ void talk_function::mission_success( npc& p )
     faction* p_fac = p.get_faction();
     if( p_fac != nullptr ) {
         int fac_val = std::min( 1 + miss_val / 10, 10 );
-        p_fac->likes_u += fac_val;
-        p_fac->respects_u += fac_val;
-        p_fac->power += fac_val;
+        p_fac->set_likes_u( p_fac->likes_u() + fac_val );
+        p_fac->set_respects_u( p_fac->respects_u() + fac_val );
+        p_fac->set_power( p_fac->power() + fac_val );
     }
     miss->wrap_up();
 }
@@ -203,16 +203,20 @@ void talk_function::sort_loot( npc& p )
 void talk_function::do_construction( npc& p )
 {
     p.assign_activity( std::make_unique<player_activity>(
-                           std::make_unique<generic_multi_activity_actor>( ACT_MULTIPLE_CONSTRUCTION ) ) );
+                           std::make_unique<move_loot_activity_actor>() ) );
 }
 
 void talk_function::do_mining( npc& p )
 {
     p.assign_activity( std::make_unique<player_activity>(
-                           std::make_unique<generic_multi_activity_actor>( ACT_MULTIPLE_MINE ) ) );
+                           std::make_unique<generic_multi_activity_actor>( ACT_MULTIPLE_CONSTRUCTION ) ) );
 }
 
-void talk_function::do_read( npc& p ) { p.do_npc_read(); }
+void talk_function::do_mining( npc &p )
+{
+    p.assign_activity( std::make_unique<player_activity>(
+                           std::make_unique<generic_multi_activity_actor>( ACT_MULTIPLE_MINE ) ) );
+}
 
 void talk_function::dismount( npc& p ) { p.npc_dismount(); }
 
@@ -222,8 +226,8 @@ void talk_function::find_mount( npc& p )
     for( monster& critter : g->all_monsters() ) {
         if( p.can_mount( critter ) ) {
             // keep the horse still for some time, so that NPC can catch up to it and mount it.
-            p.assign_activity(
-                std::make_unique<player_activity>( std::make_unique<find_mount_activity_actor>() ) );
+            p.assign_activity( std::make_unique<player_activity>
+                               ( std::make_unique<find_mount_activity_actor>() ) );
             p.chosen_mount = g->shared_from( critter );
             // we found one, that's all we need.
             return;
@@ -473,8 +477,8 @@ void talk_function::give_aid( npc& p )
 
     p.add_effect( effect_currently_busy, 30_minutes );
     const int moves = to_moves<int>( 30_minutes );
-    u.assign_activity( std::make_unique<player_activity>(
-                           std::make_unique<wait_activity_actor>( wait_type::WAIT_NPC, p.name ) ) );
+    u.assign_activity( std::make_unique<player_activity>( std::make_unique<wait_activity_actor>
+                       ( wait_type::WAIT_NPC, p.name ) ) );
 }
 
 void talk_function::give_all_aid( npc& p )
@@ -490,8 +494,8 @@ void talk_function::give_all_aid( npc& p )
 
     p.add_effect( effect_currently_busy, 60_minutes );
     const int moves = to_moves<int>( 60_minutes );
-    u.assign_activity( std::make_unique<player_activity>(
-                           std::make_unique<wait_activity_actor>( wait_type::WAIT_NPC, p.name ) ) );
+    u.assign_activity( std::make_unique<player_activity>( std::make_unique<wait_activity_actor>
+                       ( wait_type::WAIT_NPC, p.name ) ) );
 }
 
 static void generic_barber( const std::string& mut_type )
@@ -530,8 +534,8 @@ void talk_function::buy_haircut( npc& p )
 {
     g->u.add_morale( MORALE_HAIRCUT, 5, 5, 720_minutes, 3_minutes );
     const int moves = to_moves<int>( 20_minutes );
-    g->u.assign_activity( std::make_unique<player_activity>(
-                              std::make_unique<wait_activity_actor>( wait_type::WAIT_NPC, p.name ) ) );
+    g->u.assign_activity( std::make_unique<player_activity>( std::make_unique<wait_activity_actor>
+                          ( wait_type::WAIT_NPC, p.name ) ) );
     add_msg( m_good, _( "%s gives you a decent haircut…" ), p.name );
 }
 
@@ -539,8 +543,8 @@ void talk_function::buy_shave( npc& p )
 {
     g->u.add_morale( MORALE_SHAVE, 10, 10, 360_minutes, 3_minutes );
     const int moves = to_moves<int>( 5_minutes );
-    g->u.assign_activity( std::make_unique<player_activity>(
-                              std::make_unique<wait_activity_actor>( wait_type::WAIT_NPC, p.name ) ) );
+    g->u.assign_activity( std::make_unique<player_activity>( std::make_unique<wait_activity_actor>
+                          ( wait_type::WAIT_NPC, p.name ) ) );
     add_msg( m_good, _( "%s gives you a decent shave…" ), p.name );
 }
 
@@ -553,8 +557,8 @@ void talk_function::morale_chat( npc& p )
 void talk_function::morale_chat_activity( npc& p )
 {
     const int moves = to_moves<int>( 10_minutes );
-    g->u.assign_activity(
-        std::make_unique<player_activity>( std::make_unique<socialize_activity_actor>( p.name ) ) );
+    g->u.assign_activity( std::make_unique<player_activity>( std::make_unique<socialize_activity_actor>
+                          ( p.name ) ) );
     add_msg( m_good, _( "That was a pleasant conversation with %s." ), p.disp_name() );
     g->u.add_morale( MORALE_CHAT, rng( 3, 10 ), 10, 200_minutes, 5_minutes / 2 );
 }
@@ -674,10 +678,12 @@ void talk_function::leave( npc& p )
     std::string new_fac_id = "solo_";
     new_fac_id += p.name;
     // create a new "lone wolf" faction for this one NPC
-    faction* new_solo_fac = g->faction_manager_ptr->add_new_faction(
-                                p.name, faction_id( new_fac_id ), faction_id( "no_faction" ) );
-    p.set_fac( new_solo_fac ? new_solo_fac->id : faction_id( "no_faction" ) );
-    if( new_solo_fac ) { new_solo_fac->known_by_u = true; }
+    faction *new_solo_fac = g->faction_manager_ptr->add_new_faction( p.name,
+                            faction_id( new_fac_id ), faction_id( "no_faction" ) );
+    p.set_fac( new_solo_fac ? new_solo_fac->id() : faction_id( "no_faction" ) );
+    if( new_solo_fac ) {
+        new_solo_fac->set_known_by_u( true );
+    }
     p.chatbin.first_topic = "TALK_STRANGER_NEUTRAL";
     p.set_attitude( NPCATT_NULL );
     p.mission = NPC_MISSION_NULL;

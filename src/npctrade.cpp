@@ -197,7 +197,7 @@ void item_pricing::set_values( int ip_count )
 // faction we're trading with, as that should always be worth face value.
 void item_pricing::adjust_values( const double adjust, const faction *fac )
 {
-    if( !fac || fac->currency != locs.front()->typeId() ) {
+    if( !fac || fac->currency() != locs.front()->typeId() ) {
         price *= adjust;
     }
 }

@@ -12,6 +12,7 @@
 #include "color.h"
 #include "cursesport.h"
 #include "debug.h"
+#include "init.h"
 #include "distraction_manager.h"
 #include "enums.h"
 #include "filesystem.h"
@@ -559,8 +560,8 @@ bool main_menu::opening_screen()
                 break;
         }
         // Bottom tips line.
-        if( sel_o == main_menu_opts::NEWCHAR && sel2 >= 0
-            && sel2 < static_cast<int>( vNewGameHints.size() ) ) {
+        if( sel_o == main_menu_opts::NEWCHAR && sel2 >= 0 &&
+            sel2 < static_cast<int>( vNewGameHints.size() ) ) {
             data->tips_rml = cata_text_to_rml( colorize( vNewGameHints[sel2], c_yellow ) );
         } else {
             std::string tips = _( "Bugs?  Suggestions?  Use links in MOTD to report them." );
@@ -887,6 +888,8 @@ bool main_menu::new_character_tab()
 
     if( world == nullptr ) { return false; }
     world_generator->set_active_world( world );
+    // Join pre-warm thread before any DDL work (load_world_modfiles)
+    init::join_prewarm();
     try {
         g->setup();
     } catch( const std::exception& err ) {
@@ -983,7 +986,8 @@ bool main_menu::load_character_tab( const std::string& worldname )
         data->handle.DirtyVariable( "tooltip_rml" );
     };
 
-    if( rml.open( loadchar_rmlui_enabled(), "loadchar", ctxt, [&]( Rml::DataModelConstructor & c ) {
+    if( rml.open( loadchar_rmlui_enabled(), "loadchar", ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
     data = std::make_unique<lc_session>();
         register_lc_rml_types( c );
         c.Bind( "rows", &data->rows );
@@ -1045,10 +1049,22 @@ bool main_menu::load_character_tab( const std::string& worldname )
     world_generator->last_character_name = savegames[opt_val].decoded_name();
     world_generator->save_last_world_info();
     world_generator->set_active_world( world );
+    // Join pre-warm thread before any DDL work (load_world_modfiles)
+    init::join_prewarm();
+    drain_worker_thread_debugmsgs();
+
+    // Check if pre-warm loaded this world's data (reuse path)
+    const auto* prewarm = init::get_prewarm_result();
+    const bool reuse_prewarm = prewarm != nullptr
+                               && prewarm->world_name == worldname
+                               && prewarm->error.empty();
 
     try {
-        g->setup();
-    } catch( const std::exception& err ) {
+        g->setup( !reuse_prewarm );
+        if( reuse_prewarm ) {
+            g->complete_prewarm_reuse( prewarm->mod_ids );
+        }
+    } catch( const std::exception &err ) {
         debugmsg( "Error: %s", err.what() );
         return false;
     }

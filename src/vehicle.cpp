@@ -5108,7 +5108,7 @@ if( !c.get_faction() ) {
     debugmsg( "vehicle::is_owned_by() player %s has no faction", c.disp_name() );
         return false;
     }
-    return c.get_faction()->id == get_owner();
+    return c.get_faction()->id() == get_owner();
 }
 
 bool vehicle::is_old_owner( const Character &c, bool available_to_take ) const
@@ -5120,7 +5120,7 @@ if( !c.get_faction() ) {
     debugmsg( "vehicle::is_old_owner() player %s has no faction", c.disp_name() );
         return false;
     }
-    return c.get_faction()->id == get_old_owner();
+    return c.get_faction()->id() == get_old_owner();
 }
 
 std::string vehicle::get_owner_name() const
@@ -5129,7 +5129,7 @@ std::string vehicle::get_owner_name() const
     debugmsg( "vehicle::get_owner_name() vehicle %s has no valid nor null faction id ", disp_name() );
         return _( "no owner" );
     }
-    return _( g->faction_manager_ptr->get( owner )->name );
+    return _( g->faction_manager_ptr->get( owner )->name() );
 }
 
 bool vehicle::has_owner() const
@@ -5150,7 +5150,7 @@ void vehicle::set_owner( const Character &c )
                   c.disp_name() );
         return;
     }
-    owner = faction->id;
+    owner = faction->id();
 }
 
 void vehicle::set_owner( const faction_id &new_owner )
@@ -5207,7 +5207,7 @@ bool vehicle::handle_potential_theft( avatar &you, bool check_only, bool prompt 
     }
 
     if( !has_owner() ) {
-        set_owner( you.get_faction()->id );
+        set_owner( you.get_faction()->id() );
         remove_old_owner();
         return true;
         // if there is a marker for having been stolen, but 15 minutes have passed, then officially transfer ownership
@@ -5215,7 +5215,7 @@ bool vehicle::handle_potential_theft( avatar &you, bool check_only, bool prompt 
 
     if( !has_witnesses && has_old_owner() ) {
         if( !is_old_owner( you ) && theft_time && calendar::turn - *theft_time > 15_minutes ) {
-            set_owner( you.get_faction()->id );
+            set_owner( you.get_faction()->id() );
             remove_old_owner();
         }
         return true;

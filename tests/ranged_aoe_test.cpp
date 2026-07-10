@@ -1,5 +1,4 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include <algorithm>
 #include <array>
 #include <optional>
@@ -210,9 +209,9 @@ TEST_CASE( "expected shape coverage through windows", "[shape]" )
     auto cov = ranged::expected_coverage( *s, here, 3 );
     CHECK( cov[origin + point_east] == 1.0 );
 
-    CHECK( cov[origin + 2 * point_east] == Approx( 0.25 ) );
-    CHECK( cov[origin + 3 * point_east] == Approx( 0.25 ) );
-    CHECK( cov[origin + 4 * point_east] == Approx( 0.25 ) );
+    CHECK( cov[origin + 2 * point_east] == Catch::Approx( 0.25 ) );
+    CHECK( cov[origin + 3 * point_east] == Catch::Approx( 0.25 ) );
+    CHECK( cov[origin + 4 * point_east] == Catch::Approx( 0.25 ) );
 }
 
 TEST_CASE( "character using birdshot against another character", "[ranged]" )

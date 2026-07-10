@@ -1,5 +1,4 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include "debug.h"
 #include "game.h"
 #include "item_stack.h"

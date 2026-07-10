@@ -15,8 +15,7 @@
 #include "vehicle_part.h"
 #include "type_id.h"
 
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 /** food items are counted by charges */
 static auto get_single_food_item( const tripoint_bub_ms &pos ) -> const item &
 {

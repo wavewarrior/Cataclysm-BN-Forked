@@ -1,11 +1,10 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include <set>
 #include <string>
 
 #include "name.h"
 
-class IsOneOf : public Catch::MatcherBase<std::string>
+class IsOneOf : public Catch::Matchers::MatcherBase<std::string>
 {
         std::set< std::string > values;
     public:

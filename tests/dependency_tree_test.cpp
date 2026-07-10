@@ -1,5 +1,4 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include "stringmaker.h"
 #include "mod_manager.h"
 #include "dependency_tree.h"

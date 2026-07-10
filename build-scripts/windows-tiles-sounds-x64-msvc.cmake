@@ -16,6 +16,12 @@ Pre-load script for Windows builds with Ninja Multi-Config and MSVC.
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /bigobj")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /bigobj")
 
+# Speed up Debug linking: incremental link + fast PDB generation.
+# /INCREMENTAL updates the binary incrementally using an .ilk file.
+# /DEBUG:FASTLINK avoids merging all type info into one large PDB.
+set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} /INCREMENTAL /DEBUG:FASTLINK")
+set(CMAKE_SHARED_LINKER_FLAGS_DEBUG "${CMAKE_SHARED_LINKER_FLAGS_DEBUG} /INCREMENTAL /DEBUG:FASTLINK")
+
 if (NOT $ENV{VCPKG_INSTALLATION_ROOT} STREQUAL "")
     set(ENV{VCPKG_ROOT} $ENV{VCPKG_INSTALLATION_ROOT})
 endif()

@@ -16,9 +16,6 @@
 #include "string_id.h"
 #include "type_id.h"
 
-// TODO: Redefine?
-static constexpr int MAX_FAC_NAME_SIZE = 40;
-
 std::string fac_ranking_text( int val );
 std::string fac_respect_text( int val );
 std::string fac_wealth_text( int val, int size );
@@ -28,6 +25,14 @@ class JsonIn;
 class JsonObject;
 class JsonOut;
 class faction;
+struct faction_epilogue {
+    int power_min;
+    int power_max;
+    snippet_id id;
+    bool operator<( const faction_epilogue &rhs ) const {
+        return std::tie( power_min, power_max, id ) < std::tie( rhs.power_min, rhs.power_max, rhs.id );
+    }
+};
 
 using faction_id = string_id<faction>;
 
@@ -74,21 +79,86 @@ class faction_template
         static void check_consistency();
         static void reset();
 
-        std::string name;
-        int likes_u;
-        int respects_u;
-        bool known_by_u;
-        faction_id id;
-        std::string desc;
-        int size; // How big is our sphere of influence?
-        int power; // General measure of our power
-        int food_supply;  //Total nutritional value held
-        int wealth;  //Total trade currency
-        bool lone_wolf_faction; // is this a faction for just one person?
-        itype_id currency; // id of the faction currency
-        std::map<std::string, std::bitset<npc_factions::rel_types>> relations;
-        mfaction_str_id mon_faction; // mon_faction_id of the monster faction; defaults to human
-        std::set<std::tuple<int, int, snippet_id>> epilogue_data;
+        // Accessors - read-only
+        auto name() const -> const std::string & {
+            return name_;
+        }
+        auto id() const -> const faction_id & {
+            return id_;
+        }
+        auto desc() const -> const std::string & {
+            return desc_;
+        }
+        auto size() const -> int {
+            return size_;
+        }
+        auto food_supply() const -> int {
+            return food_supply_;
+        }
+        auto wealth() const -> int {
+            return wealth_;
+        }
+        auto lone_wolf_faction() const -> bool {
+            return lone_wolf_faction_;
+        }
+        auto currency() const -> const itype_id & {
+            return currency_;
+        }
+        auto relations() const -> const std::map<std::string, std::bitset<npc_factions::rel_types>> & {
+            return relations_;
+        }
+        auto mon_faction() const -> const mfaction_str_id & {
+            return mon_faction_;
+        }
+        auto epilogue_data() const -> const std::set<faction_epilogue> & {
+            return epilogue_data_;
+        }
+
+        // Accessors - mutable
+        auto likes_u() const -> int {
+            return likes_u_;
+        }
+        void set_likes_u( int val ) {
+            likes_u_ = val;
+        }
+        auto respects_u() const -> int {
+            return respects_u_;
+        }
+        void set_respects_u( int val ) {
+            respects_u_ = val;
+        }
+        auto known_by_u() const -> bool {
+            return known_by_u_;
+        }
+        void set_known_by_u( bool val ) {
+            known_by_u_ = val;
+        }
+        auto power() const -> int {
+            return power_;
+        }
+        void set_power( int val ) {
+            power_ = val;
+        }
+
+    private:
+        std::string name_;
+        int likes_u_ = 0;
+        int respects_u_ = 0;
+        bool known_by_u_ = false;
+        faction_id id_;
+        std::string desc_;
+        int size_ = 0; // How big is our sphere of influence?
+        int power_ = 0; // General measure of our power
+        int food_supply_ = 0;  //Total nutritional value held
+        int wealth_ = 0;  //Total trade currency
+        bool lone_wolf_faction_ = false; // is this a faction for just one person?
+        itype_id currency_; // id of the faction currency
+        std::map<std::string, std::bitset<npc_factions::rel_types>> relations_;
+        mfaction_str_id mon_faction_; // mon_faction_id of the monster faction; defaults to human
+        std::set<faction_epilogue> epilogue_data_;
+
+        friend class faction;
+        friend class faction_manager;
 };
 
 class faction : public faction_template
@@ -106,7 +176,7 @@ class faction : public faction_template
         std::string describe() const;
         std::vector<std::string> epilogue() const;
 
-        LUA_TYPE_OPS( faction, id );
+        LUA_TYPE_OPS( faction, id_ );
 
         std::string food_supply_text();
         nc_color food_supply_color();

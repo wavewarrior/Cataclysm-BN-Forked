@@ -112,6 +112,7 @@
 #include "help.h"
 #include "iexamine.h"
 #include "init.h"
+#include "mapgen_async.h"
 #include "input.h"
 #include "int_id.h"
 #include "inventory.h"
@@ -443,6 +444,14 @@ void game::load_static_data()
     inp_mngr.init();            // Load input config JSON
     // Init mappings for loading the json stuff
     DynamicDataLoader::get_instance();
+#if defined( _WIN32 )
+    // Performance: each JSON file open on Windows triggers a real-time AV scan.
+    // Adding the data directory to Windows Defender exclusions eliminates this cost.
+    DebugLog( DL::Info, DC::Main )
+            << "Performance tip: add '" << PATH_INFO::datadir()
+            << "' to Windows Defender exclusions to reduce load time "
+       "(Settings \u2192 Windows Security \u2192 Virus & threat protection \u2192 Exclusions).";
+#endif
     fullscreen = false;
     was_fullscreen = false;
     show_panel_adm = false;
@@ -1876,6 +1885,9 @@ bool game::do_turn()
             return cleanup_at_end();
         }
     }
+    if( new_game ) {
+        new_game = false;
+    }
     if( try_activity_fixed_window_skip() ) {
         return false;
     }
@@ -1903,17 +1915,12 @@ bool game::do_turn()
     }
     // Actual stuff
     {
-        if( new_game ) {
-            new_game = false;
-        } else {
-            if( !gamemode ) {
-                gamemode = std::make_unique<special_game>();
-            }
-            gamemode->per_turn();
-            calendar::turn += 1_turns;
+        if( !gamemode ) {
+            gamemode = std::make_unique<special_game>();
         }
+        gamemode->per_turn();
+        calendar::turn += 1_turns;
     }
-    // Reset dimension swap flag now that the map is fully loaded and turn is processing
     swapping_dimensions = false;
 
     // Mark all visibility caches dirty for this turn.  The first redraw will run
@@ -2453,8 +2460,15 @@ auto game::execute_activity_fixed_window_skip( const time_duration &duration ) -
     weather_manager &weather = get_weather();
     const auto starting_activity = u.activity->id();
     auto activity_monsters = activity_monmove_cache {};
-for( const auto turn_index : std::views::iota( 0, to_turns<int>( duration ) ) ) {
-        static_cast<void>( turn_index );
+    npcs_dirty = false;
+    const int dur_turns = to_turns<int>( duration );
+    /*
+     * Activity setup (calc_moves) may have set u.moves to -all_moves.
+     * Reset to 0 so the first process_turn() yields positive moves for
+     * process_activity() to consume, avoiding a wasted first iteration.
+     */
+    u.moves = 0;
+for( const auto turn_index : std::views::iota( 0, dur_turns ) ) {
         if( is_game_over() || !u.activity || !*u.activity ) {
             break;
         }
@@ -2488,6 +2502,7 @@ for( const auto turn_index : std::views::iota( 0, to_turns<int>( duration ) ) ) 
             autosave();
         }
         perhaps_add_random_npc();
+        npcs_dirty = false;
         if( npcs_dirty || critter_tracker->size() != monster_count ) {
             activity_fixed_window_force_normal_turn_ = true;
             break;
@@ -2496,11 +2511,16 @@ for( const auto turn_index : std::views::iota( 0, to_turns<int>( duration ) ) ) 
         debug_hour_timer.print_time();
         u.update_body();
         process_voluntary_act_interrupt();
-        if( !u.activity || !*u.activity ) {
-            break;
+        {
+            ZoneScopedN( "do_turn_player_process_turn" );
+            u.process_turn();
         }
 
         process_activity();
+
+        if( !u.activity || !*u.activity || u.activity->complete() ) {
+            break;
+        }
         if( is_game_over() ) {
             break;
         }
@@ -2540,6 +2560,7 @@ for( const auto turn_index : std::views::iota( 0, to_turns<int>( duration ) ) ) 
             }
             if( has_active_npcs ) {
                 npcmove();
+                npcs_dirty = false;
                 if( npcs_dirty || critter_tracker->size() != monster_count ) {
                     activity_fixed_window_force_normal_turn_ = true;
                     break;
@@ -2547,10 +2568,6 @@ for( const auto turn_index : std::views::iota( 0, to_turns<int>( duration ) ) ) 
             }
         }
 
-        {
-            ZoneScopedN( "do_turn_player_process_turn" );
-            u.process_turn();
-        }
         {
             ZoneScopedN( "do_turn_lua_every_x" );
             cata::run_on_every_x_hooks( *DynamicDataLoader::get_instance().lua );
@@ -2565,6 +2582,7 @@ for( const auto turn_index : std::views::iota( 0, to_turns<int>( duration ) ) ) 
         character_funcs::update_body_wetness( u, get_weather().get_precise() );
         u.apply_wetness_morale( weather.temperature );
         u.volume = 0;
+        npcs_dirty = false;
 
         if( !activity_continues || u.activity->complete() ) {
             break;
@@ -2580,6 +2598,14 @@ for( const auto turn_index : std::views::iota( 0, to_turns<int>( duration ) ) ) 
             coop_server_->build_and_send_sync();
         }
 #endif
+    }
+    /*
+     * After the skip loop, if the activity completed but the type wasn't
+     * nullified (actor-based activities call actor->finish() but don't
+     * set type to ACT_NULL), clean it up so the activity_ptr appears empty.
+     */
+    if( u.activity && u.activity->complete() ) {
+        u.activity->set_to_null();
     }
     run_activity_skip_batch_turns( skipped_turns );
     return skipped_turns;
@@ -3658,6 +3684,10 @@ bool game::load_dimension_data()
 
 bool game::load( const std::string &world )
 {
+    // Join pre-warm thread before any DDL work.
+    init::join_prewarm();
+    drain_worker_thread_debugmsgs();
+
     world_generator->init();
     WORLDINFO *wptr = world_generator->get_world( world );
     if( !wptr ) {
@@ -3668,9 +3698,18 @@ bool game::load( const std::string &world )
         return false;
     }
 
+    // Check if pre-warm loaded this world's data (reuse path)
+    const auto* prewarm = init::get_prewarm_result();
+    const bool reuse_prewarm = prewarm != nullptr
+                               && prewarm->world_name == world
+                               && prewarm->error.empty();
+
     try {
         world_generator->set_active_world( wptr );
-        g->setup();
+        g->setup( !reuse_prewarm );
+        if( reuse_prewarm ) {
+            g->complete_prewarm_reuse( prewarm->mod_ids );
+        }
         if( !g->load( wptr->world_saves.front() ) ) {
             return false;
         }
@@ -3680,6 +3719,21 @@ bool game::load( const std::string &world )
     }
 
     return true;
+}
+
+void game::complete_prewarm_reuse( const std::vector<mod_id> &mod_ids )
+{
+    loading_ui ui( true );
+    DynamicDataLoader::get_instance().finalize_main_phases( ui );
+    DynamicDataLoader::get_instance().check_consistency( ui );
+    // Run main Lua scripts using prewarmed Lua state
+    auto& loader = DynamicDataLoader::get_instance();
+    init::load_main_lua_scripts( *loader.lua, mod_ids );
+    cata::clear_mod_being_loaded( *loader.lua );
+    refresh_mapgen_postprocess_hook_presence( *loader.lua );
+    // Replay post-load steps skipped by setup(false)
+    load_artifacts( get_active_world(), SAVE_ARTIFACTS );
+    panel_manager::get_manager().reload_widget_layouts();
 }
 
 bool game::load( const save_t &name )
@@ -4088,7 +4142,7 @@ void game::disp_NPC_epilogues()
 void game::display_faction_epilogues()
 {
     for( const auto &elem : faction_manager_ptr->all() ) {
-        if( elem.second.known_by_u ) {
+        if( elem.second.known_by_u() ) {
             const std::vector<std::string> epilogue = elem.second.epilogue();
             if( !epilogue.empty() ) {
                 const auto new_win = []() {
@@ -4096,7 +4150,7 @@ void game::display_faction_epilogues()
                                                point( std::max( 0, ( TERMX - FULL_SCREEN_WIDTH ) / 2 ),
                                                       std::max( 0, ( TERMY - FULL_SCREEN_HEIGHT ) / 2 ) ) );
                 };
-                scrollable_text( new_win, elem.second.name,
+                scrollable_text( new_win, elem.second.name(),
                                  std::accumulate( epilogue.begin() + 1, epilogue.end(), epilogue.front(),
                 []( const std::string & lhs, const std::string & rhs ) -> std::string {
                     return lhs + "\n" + rhs;
@@ -8815,7 +8869,7 @@ void game::zones_manager()
                     break;
                 }
 
-                mgr.add( name, id, g->u.get_faction()->id, false, true, position->first,
+                mgr.add( name, id, g->u.get_faction()->id(), false, true, position->first,
                          position->second, options );
 
                 zones = get_zones();
@@ -15192,7 +15246,7 @@ void game::perhaps_add_random_npc()
     // create a new "lone wolf" faction for this one NPC
     faction *new_solo_fac = faction_manager_ptr->add_new_faction( tmp->name, faction_id( new_fac_id ),
                             faction_id( "no_faction" ) );
-    tmp->set_fac( new_solo_fac ? new_solo_fac->id : faction_id( "no_faction" ) );
+    tmp->set_fac( new_solo_fac ? new_solo_fac->id() : faction_id( "no_faction" ) );
     // adds the npc to the correct overmap.
     // Only spawn random NPCs on z-level 0
     auto submap_spawn = project_to<coords::sm>( spawn_point );

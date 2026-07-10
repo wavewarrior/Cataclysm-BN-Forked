@@ -269,17 +269,7 @@ std::vector<gpu_emitter> build_emitter_snapshot(event_queue& eq, float frame_ms)
         }
     }
 
-    // Guard: active_world is set before load_world_modfiles populates the
-    // ter_t/furn_t factories, so the active_world check above is insufficient.
-    // collect_zlev dereferences ter_id→ter_t::obj() (and furn_id→furn_t::obj())
-    // for every submap tile; if the factory is still empty (max: -1), this
-    // crashes.  int_id<ter_t>(0).is_valid() is false only when the factory
-    // has zero entries — a reliable "world JSON is loaded" sentinel.
-    // Flash-drain and menu-decoration above must keep running (frame_build.h
-    // requires the snapshot always builds for per-frame flash aging).
-    if (int_id<ter_t>(0).is_valid()) {
-        collect_zlev(m, zlev, out);
-    }
+    collect_zlev(m, zlev, out);
 
     // Player personal light (torch, flashlight, worn items, mutations) +
     // on-fire glow. Folded in here after dropping collect_character() for

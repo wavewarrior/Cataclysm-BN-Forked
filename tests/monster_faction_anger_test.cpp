@@ -1,4 +1,4 @@
-#include "catch/catch.hpp"
+#include "catch/catch_amalgamated.hpp"
 #include "monster.h"
 #include "mtype.h"
 #include "avatar.h"

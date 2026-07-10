@@ -1,5 +1,4 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include "calendar.h"
 
 TEST_CASE( "time_duration_to_string", "[calendar]" )

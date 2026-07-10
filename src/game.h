@@ -206,6 +206,8 @@ class game: public submap_load_listener
 
     public:
         void setup( bool load_world_modfiles = true );
+        /** Complete pre-warm reuse: finalize main-thread + Lua + artifacts. */
+        void complete_prewarm_reuse( const std::vector<mod_id> &mod_ids );
         /** Saving and loading functions. */
         void serialize( std::ostream& fout );               // for save
         auto unserialize( std::istream& fin ) -> bool;      // for load
@@ -950,7 +952,7 @@ class game: public submap_load_listener
         game::vmenu_ret list_items( const std::vector<map_item_stack> &item_list );
         std::vector<map_item_stack> find_nearby_items( int iRadius );
 
-        game::vmenu_ret list_monsters( std::vector<Creature*> monster_list );
+        game::vmenu_ret list_monsters( const std::vector<Creature*> &monster_list );
 
         /** Check for dangerous stuff at dest_loc, return false if the player decides
         not to step there */
@@ -1052,10 +1054,10 @@ class game: public submap_load_listener
 
         void item_action_menu(); // Displays item action menu
 
+        bool is_game_over(); // Returns true if the player quit or died
         void death_screen(); // Display our stats, "GAME OVER BOO HOO"
         void win_screen();   // Display our stats, "CONGRATULATIONS!"
     public:
-        bool is_game_over(); // Returns true if the player quit or died
         // Draws the pixel minimap based on the player's current location
         void draw_pixel_minimap( const catacurses::window& w );
 
@@ -1380,7 +1382,6 @@ class game: public submap_load_listener
 
     private:
         location_vector<item> fake_items;
-
     public:
         item *add_fake_item( detached_ptr<item>&& fake );
         void remove_fake_item( item* it );

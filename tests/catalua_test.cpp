@@ -1,5 +1,4 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include "avatar.h"
 #include "catacharset.h"
 #include "catalua_coord.h"
@@ -215,7 +214,7 @@ TEST_CASE( "lua_runtime_error", "[lua]" )
     REQUIRE_THROWS_MATCHES(
         run_lua_test_script( lua, "runtime_error.lua" ),
         std::runtime_error,
-        Catch::Message( expected )
+        Catch::Matchers::Message( expected )
     );
 }
 
@@ -236,7 +235,7 @@ TEST_CASE( "lua_called_error_on_lua_side", "[lua]" )
     REQUIRE_THROWS_MATCHES(
         run_lua_test_script( lua, "called_error_on_lua_side.lua" ),
         std::runtime_error,
-        Catch::Message( expected )
+        Catch::Matchers::Message( expected )
     );
 }
 
@@ -264,7 +263,7 @@ TEST_CASE( "lua_called_error_on_cpp_side", "[lua]" )
     REQUIRE_THROWS_MATCHES(
         run_lua_test_script( lua, "called_error_on_cpp_side.lua" ),
         std::runtime_error,
-        Catch::Message( expected )
+        Catch::Matchers::Message( expected )
     );
 }
 
@@ -293,7 +292,7 @@ TEST_CASE( "lua_called_cpp_func_throws", "[lua]" )
     REQUIRE_THROWS_MATCHES(
         run_lua_test_script( lua, "called_cpp_func_throws.lua" ),
         std::runtime_error,
-        Catch::Message( expected )
+        Catch::Matchers::Message( expected )
     );
 }
 
@@ -367,7 +366,7 @@ TEST_CASE( "lua_map_vehicle_replacement", "[lua]" )
     const auto part_count = vehicles.front().v->part_count();
     auto has_lock = false;
     for( auto index = 0; index < part_count; ++index ) {
-        CHECK( vehicles.front().v->part( index ).damage_percent() == Approx( 0.0 ) );
+        CHECK( vehicles.front().v->part( index ).damage_percent() == Catch::Approx( 0.0 ) );
         has_lock = has_lock ||
                    vehicles.front().v->part_with_feature( index, "DOOR_LOCKING", false ) == index;
     }
@@ -413,7 +412,7 @@ TEST_CASE( "lua_table_serde", "[lua]" )
     sol::object mem_float = nt["member_float"];
     REQUIRE( mem_float.valid() );
     REQUIRE( mem_float.is<double>() );
-    CHECK( mem_float.as<double>() == Approx( 16.0 ) );
+    CHECK( mem_float.as<double>() == Catch::Approx( 16.0 ) );
 
     sol::object mem_int = nt["member_int"];
     REQUIRE( mem_int.valid() );

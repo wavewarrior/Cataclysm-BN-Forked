@@ -136,7 +136,7 @@ if( !c.get_faction() ) {
     debugmsg( "Character %s has no faction", c.disp_name() );
         return false;
     }
-    return c.get_faction()->id == get_owner();
+    return c.get_faction()->id() == get_owner();
 }
 
 bool item::is_old_owner( const Character& c, bool available_to_take ) const
@@ -146,7 +146,7 @@ if( !c.get_faction() ) {
     debugmsg( "Character %s has no faction.", c.disp_name() );
         return false;
     }
-    return c.get_faction()->id == get_old_owner();
+    return c.get_faction()->id() == get_old_owner();
 }
 
 std::string item::get_owner_name() const
@@ -155,7 +155,7 @@ std::string item::get_owner_name() const
     debugmsg( "item::get_owner_name() item %s has no valid nor null faction id ", tname() );
         return "no owner";
     }
-    return g->faction_manager_ptr->get( get_owner() )->name;
+    return g->faction_manager_ptr->get( get_owner() )->name();
 }
 
 void item::set_owner( const Character& c )
@@ -164,7 +164,7 @@ void item::set_owner( const Character& c )
         debugmsg( "item::set_owner() Character %s has no valid faction", c.disp_name() );
         return;
     }
-    owner = c.get_faction()->id;
+    owner = c.get_faction()->id();
 }
 
 faction_id item::get_owner() const

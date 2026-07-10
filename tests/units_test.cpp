@@ -1,5 +1,4 @@
-#include "catch/catch.hpp"
-
+#include "catch/catch_amalgamated.hpp"
 #include <sstream>
 #include <string>
 #include <vector>
@@ -114,10 +113,10 @@ TEST_CASE( "angle parsing from JSON", "[units]" )
 TEST_CASE( "angles_to_trig_functions" )
 {
     CHECK( sin( 0_radians ) == 0 );
-    CHECK( sin( 0.5_pi_radians ) == Approx( 1 ) );
-    CHECK( sin( 270_degrees ) == Approx( -1 ) );
-    CHECK( cos( 1_pi_radians ) == Approx( -1 ) );
-    CHECK( cos( 360_degrees ) == Approx( 1 ) );
+    CHECK( sin( 0.5_pi_radians ) == Catch::Approx( 1 ) );
+    CHECK( sin( 270_degrees ) == Catch::Approx( -1 ) );
+    CHECK( cos( 1_pi_radians ) == Catch::Approx( -1 ) );
+    CHECK( cos( 360_degrees ) == Catch::Approx( 1 ) );
     CHECK( units::atan2( 0, -1 ) == 1_pi_radians );
     CHECK( units::atan2( 0, 1 ) == 0_radians );
     CHECK( units::atan2( 1, 0 ) == 90_degrees );

@@ -523,7 +523,7 @@ void veh_interact::do_main_loop()
             } else {
                 if( owner_fac ) {
                     popup( _( "You cannot rename this vehicle as it is owned by: %s." ),
-                           _( owner_fac->name ) );
+                           _( owner_fac->name() ) );
                 }
             }
         } else if( action == "SIPHON" ) {
@@ -548,7 +548,7 @@ void veh_interact::do_main_loop()
             } else {
                 if( owner_fac ) {
                     popup( _( "You cannot assign crew on this vehicle as it is owned by: %s." ),
-                           _( owner_fac->name ) );
+                           _( owner_fac->name() ) );
                 }
             }
         } else if( action == "RELABEL" ) {
@@ -557,7 +557,7 @@ void veh_interact::do_main_loop()
             } else {
                 if( owner_fac ) {
                     popup( _( "You cannot relabel this vehicle as it is owned by: %s." ),
-                           _( owner_fac->name ) );
+                           _( owner_fac->name() ) );
                 }
             }
         } else if( action == "FUEL_LIST_DOWN" ) {
@@ -1025,7 +1025,7 @@ void veh_interact::do_install()
 
     std::array<std::function<bool( const vpart_info* )>, 8> tab_filters; // filter for each tab, last
     // one
-    tab_filters[0] = [&]( const vpart_info* ) { return true; }; // All
+    tab_filters[0] = [&]( const vpart_info* ) { return true; };        // All
     tab_filters[1] = [&]( const vpart_info * p ) {
         auto& part = *p;
         return part.has_flag( VPFLAG_CARGO ) && // Cargo
