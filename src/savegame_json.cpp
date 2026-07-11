@@ -3205,6 +3205,10 @@ void vehicle::deserialize( JsonIn &jsin )
     data.read( "tracking_on", tracking_on );
     data.read( "skidding", skidding );
     data.read( "of_turn_carry", of_turn_carry );
+    data.read( "angular_velocity_rads", angular_velocity_rads );
+    data.read( "physics_pos_x", physics_pos.x );
+    data.read( "physics_pos_y", physics_pos.y );
+    data.read( "physics_angle", physics_angle );
     data.read( "is_locked", is_locked );
     data.read( "is_alarm_on", is_alarm_on );
     data.read( "camera_on", camera_on );
@@ -3394,6 +3398,10 @@ void vehicle::serialize( JsonOut &json ) const
     json.member( "tracking_on", tracking_on );
     json.member( "skidding", skidding );
     json.member( "of_turn_carry", of_turn_carry );
+    json.member( "angular_velocity_rads", angular_velocity_rads );
+    json.member( "physics_pos_x", physics_pos.x );
+    json.member( "physics_pos_y", physics_pos.y );
+    json.member( "physics_angle", physics_angle );
     json.member( "name", name );
     json.member( "owner", owner );
     json.member( "old_owner", old_owner );

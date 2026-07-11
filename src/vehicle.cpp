@@ -3700,6 +3700,23 @@ void vehicle::precalc_mounts( int idir, units::angle dir, const tripoint_mnt_veh
     pivot_rotation[idir] = dir;
 }
 
+#ifdef BOX2D_ENABLED
+void vehicle::refresh_precalc( float physics_angle )
+{
+    const float c = std::cos( physics_angle );
+    const float s = std::sin( physics_angle );
+    for( auto &p : parts ) {
+        if( p.removed ) { continue; }
+        const float mx = static_cast<float>( p.mount.x() );
+        const float my = static_cast<float>( p.mount.y() );
+        p.precalc[0] = point_rel_ms{
+            static_cast<int>( std::round( mx * c - my * s ) ),
+            static_cast<int>( std::round( mx * s + my * c ) )
+        };
+    }
+}
+#endif
+
 bool vehicle::check_rotated_intervening( const tripoint_mnt_veh &from, const tripoint_mnt_veh &to,
         bool( *check )( const vehicle *, const tripoint_mnt_veh & ) ) const
 {

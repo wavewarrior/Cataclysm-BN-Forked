@@ -3,6 +3,11 @@
 #include "coop_mutation_log.h"
 #endif
 
+#ifdef BOX2D_ENABLED
+#include "physics/physics_world.h"
+#include "physics/veh_box2d_solve.h"
+#endif
+
 #include "active_item_cache.h"
 #include "ammo.h"
 #include "ammo_effect.h"
@@ -243,6 +248,9 @@ map::map(int mapsize, bool zlev) {
     dbg(DL::Info) << "map::map(): my_MAPSIZE: " << my_MAPSIZE << " z-levels enabled:" << zlevels;
     skew_vision_cache_mutex = std::make_unique<std::shared_mutex>();
     skew_vision_cache.resize(vision_cache_slots);
+#ifdef BOX2D_ENABLED
+    phys_world = std::make_unique<physics::PhysicsWorld>();
+#endif
 }
 
 // Defined out-of-line so we can use g_mapsize (runtime) rather than the
@@ -356,6 +364,9 @@ void map::on_submap_loaded(const tripoint_abs_sm& p, const std::string& dim_id) 
         // If sm is still null the submap is not yet in memory; leave the grid slot
         // as set by loadn() (which may already hold a valid pointer).
     }
+#ifdef BOX2D_ENABLED
+    if( phys_world && sm != nullptr ) { phys_world->on_submap_loaded( *this, p ); }
+#endif
 }
 
 void map::on_submap_unloaded(const tripoint_abs_sm& pos, const std::string& dim_id) {
@@ -374,6 +385,9 @@ void map::on_submap_unloaded(const tripoint_abs_sm& pos, const std::string& dim_
     {
         std::erase_if(loaded_vehicles, [&](vehicle* veh) { return veh->abs_sm_pos == pos; });
     }
+#ifdef BOX2D_ENABLED
+    if( phys_world ) { phys_world->on_submap_unloaded( pos ); }
+#endif
 
     // Stop tracking active items for this submap.
     submaps_with_active_items.erase(pos);
@@ -696,7 +710,12 @@ std::unique_ptr<vehicle> map::detach_vehicle(vehicle* veh) {
     return std::unique_ptr<vehicle>();
 }
 
-void map::destroy_vehicle(vehicle* veh) { detach_vehicle(veh); }
+void map::destroy_vehicle(vehicle* veh) {
+#ifdef BOX2D_ENABLED
+    if( phys_world ) { phys_world->on_vehicle_removed( veh ); }
+#endif
+    detach_vehicle(veh);
+}
 
 void map::on_vehicle_moved(
     const tripoint_bub_sm& sm_min, const tripoint_bub_sm& sm_max, const int& smz) {
@@ -760,6 +779,11 @@ void map::on_vehicle_moved(
 
 void map::vehmove() {
     ZoneScoped;
+#ifdef BOX2D_ENABLED
+    // Advance the persistent physics world one game tick (~1 s at 60 Hz, 4 sub-steps).
+    if( phys_world ) { phys_world->step( 1.0f / 60.0f, 4 ); }
+#endif
+
 
     // Give vehicles movement points.  Use per-z-level vehicle_list caches
     // (rebuilt from in-bubble grid submaps during shift) rather than
@@ -1047,9 +1071,48 @@ vehicle* map::move_vehicle(vehicle& veh, const tripoint_rel_ms& dp, const tilera
             veh_collisions[static_cast<vehicle*>(coll.target)].push_back(coll);
         }
 
-        for (auto& pair : veh_collisions) {
-            impulse += vehicle_vehicle_collision(veh, *pair.first, pair.second);
+#ifdef BOX2D_ENABLED
+        if( phys_world && !veh_collisions.empty() ) {
+            const auto cluster = solve_vv_cluster( veh, veh_collisions );
+            // bodies[0] is always &veh; bodies[1..N] are the targets in veh_collisions order.
+            for( const auto &body : cluster.bodies ) {
+                body.veh->angular_velocity_rads = body.ang_vel_rads;
+                const auto &fv = body.final_vel_cmps;
+                body.veh->velocity = static_cast<int>(
+                    fv.dot_product( body.veh->face_vec() ) < 0.0f
+                    ? -fv.magnitude()
+                    :  fv.magnitude() );
+                body.veh->move.init( point_rel_ms( fv.as_point() ) );
+            }
+            const auto &veh1 = cluster.bodies[0];
+            // Phase 4 limitation: veh1.impulse_ns is the *aggregate* Δp across all contacts.
+            // In a 2-vehicle collision this is exact.  In a 3+ pileup it is passed unmodified
+            // to each per-partner call, which over-counts damage.  Deferred to Phase 10.
+            for( auto &[partner, cols] : veh_collisions ) {
+                const auto veh2_it = std::ranges::find_if( cluster.bodies,
+                    [partner]( const auto &b ) { return b.veh == partner; } );
+                if( veh2_it == cluster.bodies.end() ) {
+                    impulse += vehicle_vehicle_collision( veh, *partner, cols );
+                    continue;
+                }
+                const auto m1  = to_kilogram( veh.total_mass() );
+                const auto m2  = to_kilogram( partner->total_mass() );
+                const auto dv  = ( m1 + m2 > 0.0f )
+                    ? veh1.impulse_ns * ( 1.0f / m1 + 1.0f / m2 )
+                    : 0.0f;
+                impulse += vehicle_vehicle_collision( veh, *partner, cols,
+                    { .veh1_impulse_ns = veh1.impulse_ns,
+                      .veh2_impulse_ns = veh2_it->impulse_ns,
+                      .delta_vel_mps   = dv } );
+            }
+        } else {
+#endif
+            for( auto &pair : veh_collisions ) {
+                impulse += vehicle_vehicle_collision( veh, *pair.first, pair.second );
+            }
+#ifdef BOX2D_ENABLED
         }
+#endif
 
         // Non-vehicle collisions
         for (const auto& coll : collisions) {
@@ -1222,8 +1285,9 @@ vehicle* map::move_vehicle(vehicle& veh, const tripoint_rel_ms& dp, const tilera
     return &veh;
 }
 
-float map::vehicle_vehicle_collision(
-    vehicle& veh, vehicle& veh2, const std::vector<veh_collision>& collisions) {
+auto map::vehicle_vehicle_collision(
+    vehicle &veh, vehicle &veh2, const std::vector<veh_collision> &collisions,
+    const veh_veh_coll_opts &opts ) -> float {
     if (&veh == &veh2) {
         debugmsg("Vehicle %s collided with itself", veh.name);
         return 0.0f;
@@ -1253,6 +1317,18 @@ float map::vehicle_vehicle_collision(
     float dmg_veh2 = 0;
     // Vertical collisions will be simpler for a while (1D)
     if (!vertical) {
+#ifdef BOX2D_ENABLED
+        if( opts.veh1_impulse_ns != 0.0f ) {
+            // Box2D dispatch already applied final velocities, move direction, and
+            // angular_velocity_rads.  Populate impulse/delta_vel for the damage section.
+            veh1_impulse = opts.veh1_impulse_ns;
+            veh2_impulse = opts.veh2_impulse_ns;
+            delta_vel    = opts.delta_vel_mps;
+            const auto avg = std::max( 0.1f, ( veh2.of_turn + veh.of_turn ) / 2.0f );
+            veh.of_turn  = avg * 0.9f;
+            veh2.of_turn = std::max( 1.0f, avg * 1.1f );
+        } else {
+#endif
         // For reference, a cargo truck weighs ~25300, a bicycle 690,
         //  and 38mph is 3800 'velocity'
         // Converting away from 100*mph, because mixing unit systems is bad.
@@ -1334,6 +1410,9 @@ float map::vehicle_vehicle_collision(
         // Remember that the impulse on vehicle 1 is techncally negative, slowing it
         veh1_impulse = std::abs(m1 * (vel1_y_a - vel1_y));
         veh2_impulse = std::abs(m2 * (vel2_y_a - vel2_y));
+#ifdef BOX2D_ENABLED
+        } // end: analytic elastic formula (BOX2D_ENABLED else)
+#endif
     } else {
         const float m1 = to_kilogram(veh.total_mass());
         // Collision is perfectly inelastic for simplicity
@@ -1815,8 +1894,21 @@ bool map::displace_vehicle(vehicle& veh, const tripoint_rel_ms& dp) {
     std::ranges::for_each(smzs, [&](const int vsmz) {
         on_vehicle_moved(veh_sm_min, veh_sm_max, dest.z() + vsmz);
     });
+#ifdef BOX2D_ENABLED
+    if( phys_world ) { phys_world->on_vehicle_moved( veh ); }
+#endif
     return true;
 }
+#ifdef BOX2D_ENABLED
+auto map::resolve_vehicle_terrain_impulse( vehicle &v, tripoint_bub_ms tile_pos,
+                                            float tile_mass_kg, float restitution )
+    -> physics::terrain_impulse_result
+{
+    if( !phys_world ) { return {}; }
+    return phys_world->resolve_terrain_impulse( v, tile_pos, tile_mass_kg, restitution );
+}
+#endif
+
 
 bool map::displace_water(const tripoint_bub_ms& p) {
     // Check for shallow water
@@ -6985,6 +7077,9 @@ void map::shift(const point_rel_sm& sp) {
     // submaps are marked dirty by loadn(incremental=true).  No blanket
     // invalidate_lightmap_caches() needed — retained submaps stay clean.
     // Entity lights are applied unconditionally in build_map_cache Phase 4.
+#ifdef BOX2D_ENABLED
+    if( phys_world ) { phys_world->on_map_shifted( point{ shift_offset_pt.x(), shift_offset_pt.y() } ); }
+#endif
 }
 
 auto map::apply_boundary_overlay( submap &sm, const tripoint_abs_sm &pos ) -> void

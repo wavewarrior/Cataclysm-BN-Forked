@@ -1,5 +1,9 @@
 #include "mapgen.h"
 
+#ifdef BOX2D_ENABLED
+#include "physics/physics_world.h"
+#endif
+
 #include "advanced_inv_listitem.h"
 #include "all_enum_values.h"
 #include "artifact_enum_traits.h"
@@ -5905,6 +5909,9 @@ vehicle *map::add_vehicle(
         ch.vehicle_list.insert( placed_vehicle );
         add_vehicle_to_cache( placed_vehicle );
         loaded_vehicles.insert( placed_vehicle );
+#ifdef BOX2D_ENABLED
+        if( phys_world ) { phys_world->on_vehicle_added( *placed_vehicle ); }
+#endif
 
         // debugmsg ("grid[%d]->vehicles.size=%d veh.parts.size=%d", nonant,
         // grid[nonant]->vehicles.size(),veh.parts.size());

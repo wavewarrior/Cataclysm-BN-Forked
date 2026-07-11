@@ -112,6 +112,10 @@ namespace cata
 template <class T> class poly_serialized;
 } // namespace cata
 
+#ifdef BOX2D_ENABLED
+namespace physics { class PhysicsWorld; struct terrain_impulse_result; }
+#endif
+
 class map_stack : public item_stack
 {
     private:
@@ -457,6 +461,16 @@ struct level_cache {
  * When the player moves between submaps, the whole map is shifted, so that if the player moves one submap to the right,
  * (0, 0) now points to a tile one submap to the right from before
  */
+/// Options for map::vehicle_vehicle_collision(). When veh1_impulse_ns is non-zero the Box2D
+/// dispatch path has already resolved velocities and only damage/scheduling is needed.
+struct veh_veh_coll_opts {
+#ifdef BOX2D_ENABLED
+    float veh1_impulse_ns = 0.0f;  ///< |Δp| on veh  (N·s); non-zero → skip elastic formula
+    float veh2_impulse_ns = 0.0f;  ///< |Δp| on veh2 (N·s)
+    float delta_vel_mps   = 0.0f;  ///< |Δv_rel| (m/s) for the ≥6 m/s damage threshold
+#endif
+};
+
 class map : public submap_load_listener
 {
         friend class editmap;
@@ -916,10 +930,17 @@ class map : public submap_load_listener
         float vehicle_wheel_traction( const vehicle &veh, bool ignore_movement_modifiers = false ) const;
 
         // Executes vehicle-vehicle collision based on vehicle::collision results
-        // Returns impulse of the executed collision
-        // If vector contains collisions with vehicles other than veh2, they will be ignored
-        float vehicle_vehicle_collision( vehicle &veh, vehicle &veh2,
-                                         const std::vector<veh_collision> &collisions );
+        // Returns impulse of the executed collision; opts.veh1_impulse_ns≠0 → Box2D path.
+        auto vehicle_vehicle_collision( vehicle &veh, vehicle &veh2,
+                                        const std::vector<veh_collision> &collisions,
+                                        const veh_veh_coll_opts &opts = {} ) -> float;
+#ifdef BOX2D_ENABLED
+        /// One-shot transient terrain-impulse solve for a single tile collision.
+        /// Wraps PhysicsWorld::resolve_terrain_impulse; returns {{},0} if no physics world.
+        auto resolve_vehicle_terrain_impulse( vehicle &v, tripoint_bub_ms tile_pos,
+                                              float tile_mass_kg, float restitution )
+            -> physics::terrain_impulse_result;
+#endif
         // Throws vehicle passengers about the vehicle, possibly out of it
         // Returns change in vehicle orientation due to lost control
         units::angle shake_vehicle( vehicle &veh, int velocity_before, units::angle direction );
@@ -2372,6 +2393,11 @@ class map : public submap_load_listener
 
         // The dimension ID this map is bound to (empty = primary dimension)
         std::string bound_dimension_;
+
+#ifdef BOX2D_ENABLED
+        /// Persistent Box2D world; null when built without -DBOX2D=ON.
+        std::unique_ptr<physics::PhysicsWorld> phys_world;
+#endif
 
     public:
         bool has_rope_at( tripoint_bub_ms pt ) const;

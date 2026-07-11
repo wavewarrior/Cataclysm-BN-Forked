@@ -848,6 +848,12 @@ class vehicle
         // Pre-calculate mount points for (idir=0) - current direction or (idir=1) - next turn direction
         void precalc_mounts( int idir, units::angle dir, const tripoint_mnt_veh& pivot );
 
+#ifdef BOX2D_ENABLED
+        /// Repopulate `precalc[0]` for every non-removed part using continuous physics angle.
+        /// Called by `PhysicsWorld::step()` after Box2D position readback (Phase 7).
+        void refresh_precalc( float physics_angle );
+#endif
+
         // get a list of part indices where is a passenger inside
         std::vector<int> boarded_parts() const;
 
@@ -1749,6 +1755,14 @@ class vehicle
         float of_turn = 0.0f;
         // leftover from previous turn
         float of_turn_carry = 0.0f;
+        /// Box2D angular velocity (rad/s); transitional field, Phases 4–12.
+        /// Positive = counter-clockwise. Zero until Phase 4 wires the VV solver.
+        float angular_velocity_rads = 0.0f;
+        /// Continuous floating-point tile position from Box2D (Phase 6); tile-coord units.
+        /// Initialised to tile anchor; updated from b2Body_GetPosition() each physics step.
+        rl_vec2d physics_pos{ 0.0f, 0.0f };
+        /// Box2D heading angle in radians (Phase 6); 0 = +x, CCW positive.
+        float physics_angle = 0.0f;
         int extra_drag = 0;
         // last time point the fluid was inside tanks was checked for processing
         time_point last_fluid_check = calendar::turn_zero;

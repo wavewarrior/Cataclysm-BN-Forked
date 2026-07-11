@@ -2,6 +2,10 @@
 #include "vehicle_part.h" // IWYU pragma: associated
 #include "vehicle_move.h" // IWYU pragma: associated
 
+#ifdef BOX2D_ENABLED
+#include "physics/physics_world.h"  // physics::terrain_impulse_result
+#endif
+
 #include <cassert>
 #include <algorithm>
 #include <ranges>
@@ -871,6 +875,12 @@ auto vehicle::part_collision( const vehicle_part_collision_options &options ) ->
 
             }
 
+            // Bug fix: check dead state here (outside the vert_coll guard) so vertical-
+            // collision creature deaths also set smashed and prevent loop re-entry.
+            if( critter->is_dead_state() ) {
+                smashed = true;
+            }
+
             // Don't fling if vertical - critter got smashed into the ground
             if( !vert_coll ) {
                 if( std::fabs( vel2_a ) > 10.0f ||
@@ -889,6 +899,7 @@ auto vehicle::part_collision( const vehicle_part_collision_options &options ) ->
                 } else {
                     // Vehicle's momentum isn't big enough to push the critter
                     velocity = 0;
+                    smashed  = true;  // belt-and-suspenders with break; ensures correct velocity multiplier
                     break;
                 }
 
@@ -910,6 +921,15 @@ auto vehicle::part_collision( const vehicle_part_collision_options &options ) ->
         }
         // Stop processing when sign inverts, not when we reach 0
     } while( !smashed && sgn( coll_velocity ) == vel_sign );
+#ifdef BOX2D_ENABLED
+    // Phase 5: derive angular spin from Box2D transient terrain-impulse solve.
+    // Linear velocity is kept from the 1-D elastic formula (tile-step remains authoritative);
+    // angular velocity (spin from glancing blow) is the new contribution Box2D provides.
+    if( ret.type != veh_coll_body ) {
+        const auto ti = here.resolve_vehicle_terrain_impulse( *this, p, mass2, e );
+        angular_velocity_rads = ti.angular_vel_rads;
+    }
+#endif
 
     // Apply special effects from collision.
     if( critter != nullptr ) {
