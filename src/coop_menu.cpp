@@ -231,4 +231,16 @@ auto start_join() -> void {
 
 } // namespace coop_menu
 
+auto show_coop_popup( const std::string& message ) -> bool
+{
+    return query_popup()
+           .context( "COOP_POPUP" )
+           .message( "%s", message )
+           .option( "CONFIRM" )
+           .option( "QUIT" )
+           .allow_cancel( true )
+           .query()
+           .action == "CONFIRM";
+}
+
 #endif // COOP_ENABLED

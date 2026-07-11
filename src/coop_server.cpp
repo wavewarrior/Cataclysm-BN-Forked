@@ -26,6 +26,13 @@
 #include "type_id.h"
 #include "world.h"
 #include "worldfactory.h"
+#include "coop_menu.h"
+#include "field_type.h"
+#include "morale_types.h"
+#include "player_activity.h"
+#include "string_formatter.h"
+#include "translations.h"
+#include "vehicle.h"
 
 #include <SDL3_net/SDL_net.h>
 #include <sstream>
@@ -156,6 +163,20 @@ auto coop_server::spawn_proxy_npc(const tripoint_abs_ms& spawn_pos, const std::s
     if (ptr) {
         ptr->is_coop_remote = true; // re-set after load_npcs in case it was cleared
         DebugLog(DL::Info, DC::Main) << "[coop] proxy NPC spawned: " << ptr->name;
+        // G1: apply worn items received in join_info packet
+        if( !client_worn_json_.empty() ) {
+            try {
+                std::istringstream iss( client_worn_json_ );
+                JsonIn jin( iss );
+                jin.start_array();
+                while( !jin.end_array() ) {
+                    detached_ptr<item> w = item::spawn( jin );
+                    if( w ) { ptr->wear_item( std::move( w ), false ); }
+                }
+            } catch( const JsonError& e ) {
+                DebugLog( DL::Error, DC::Main ) << "[coop] spawn_proxy_npc worn: " << e.what();
+            }
+        }
     } else {
         DebugLog(DL::Error, DC::Main) << "[coop] proxy NPC not found after load_npcs";
     }
@@ -212,6 +233,7 @@ auto coop_server::wait_for_join_info(int timeout_ms) -> bool {
         return false;
     }
     client_join_pos_ = parsed->pos;
+    client_worn_json_ = parsed->worn_json; // G1: applied by spawn_proxy_npc
     DebugLog(DL::Info, DC::Main)
         << "[coop] join_info: client start ("
         << parsed->pos.x() << "," << parsed->pos.y() << "," << parsed->pos.z() << ")";
@@ -286,16 +308,66 @@ auto coop_server::receiver_loop(std::stop_token st) -> void {
                     // Full respawn / session-end logic deferred to a later phase.
                 }
                 client_dead_.store(now_dead);
+                // F1: extended client vitals
+                client_stamina_pct_.store( d.get_int( "stamina_pct", 100 ) );
+                {
+                    std::scoped_lock lk{ chat_mtx_ };
+                    client_activity_str_ = d.get_string( "activity", "" );
+                    client_abs_pos_ = tripoint_abs_ms{
+                        d.get_int( "ax", 0 ), d.get_int( "ay", 0 ), d.get_int( "az", 0 ) };
+                }
             } else if (t == coop_pkt::resync_request) {
                 // A4: client detected a hash mismatch and needs a full sync.
                 // Write the atomic flag — main thread reads it in build_and_send_sync().
                 // NEVER touch sync_tick_counter_ here; it's main-thread-only.
                 DebugLog(DL::Info, DC::Main) << "[coop] receiver: client requested full resync";
                 force_resync_.store(true);
+            } else if (t == coop_pkt::overmap_mark) {
+                // F4: client placed or cleared a shared overmap marker.
+                JsonObject d = pkt.get_object("d");
+                d.allow_omitted_members();
+                auto& sess = coop_session::get();
+                if( d.get_bool("clear", false) ) {
+                    sess.shared_mark = std::nullopt;
+                    sess.shared_mark_label.clear();
+                } else {
+                    sess.shared_mark = tripoint_abs_omt{
+                        d.get_int("omx", 0), d.get_int("omy", 0), d.get_int("omz", 0) };
+                    sess.shared_mark_label = d.get_string("label", "");
+                }
             } else if (t == coop_pkt::disconnect) {
                 DebugLog(DL::Info, DC::Main) << "[coop] receiver: client sent disconnect";
                 running_ = false;
                 break;
+            } else if( t == coop_pkt::vehicle_state ) {
+                // E1: store for main-thread application in coop_world_tick()
+                JsonObject d = pkt.get_object( "d" );
+                d.allow_omitted_members();
+                pending_veh_state_t vs;
+                vs.vid      = static_cast<uint32_t>( d.get_int( "vid", 0 ) );
+                vs.abs_pos  = tripoint_abs_ms{ d.get_int( "ax", 0 ), d.get_int( "ay", 0 ),
+                                               d.get_int( "az", 0 ) };
+                vs.face_x   = d.get_int( "face_x", 0 );
+                vs.face_y   = d.get_int( "face_y", 1 );
+                vs.vel      = d.get_int( "velocity", 0 );
+                vs.valid    = true;
+                std::scoped_lock lk{ pending_veh_mtx_ };
+                pending_veh_state_ = vs;
+            } else if( t == coop_pkt::trade_offer ) {
+                // F2: store item JSON for main-thread popup in coop_world_tick()
+                JsonObject d = pkt.get_object( "d" );
+                d.allow_omitted_members();
+                const std::string item_json = d.get_string( "item_json", "" );
+                if( !item_json.empty() ) {
+                    std::scoped_lock lk{ action_mtx_ };
+                    pending_trade_offer_json_ = item_json;
+                }
+            } else if( t == coop_pkt::tap_shoulder ) {
+                // F3: client tapped host's shoulder
+                pending_tap_.store( true );
+            } else if( t == coop_pkt::emote ) {
+                // F6: relay emote to main thread via action queue
+                push_action( { 0, "EMOTE", buf } );
             }
             // other packet types silently ignored until later phases
         } catch (const JsonError& e) {
@@ -391,6 +463,107 @@ auto coop_server::coop_world_tick() -> void {
     } else if (!client_dead_.load()) {
         client_death_announced_ = false; // reset if partner respawns
     }
+
+    // E1: apply pending vehicle state from client (main-thread safe)
+    {
+        pending_veh_state_t vs;
+        {
+            std::scoped_lock lk{ pending_veh_mtx_ };
+            vs = pending_veh_state_;
+            pending_veh_state_.valid = false;
+        }
+        if( vs.valid ) {
+            auto it = vehicle_id_map_rev_.find( vs.vid );
+            if( it != vehicle_id_map_rev_.end() ) {
+                vehicle* veh = it->second;
+                if( veh ) {
+                    const tripoint_bub_ms new_bub = g->m.abs_to_bub( vs.abs_pos );
+                    const tripoint_bub_ms old_bub = veh->bub_ms_location();
+                    const tripoint_rel_ms delta{ new_bub.x() - old_bub.x(),
+                                                  new_bub.y() - old_bub.y(),
+                                                  new_bub.z() - old_bub.z() };
+                    if( delta != tripoint_rel_ms{} ) { g->m.displace_vehicle( *veh, delta ); }
+                    veh->velocity = vs.vel;
+                }
+            }
+        }
+    }
+
+    // F2: process pending trade offer from client
+    {
+        std::optional<std::string> trade_offer;
+        {
+            std::scoped_lock lk{ action_mtx_ };
+            trade_offer = std::move( pending_trade_offer_json_ );
+            pending_trade_offer_json_.reset();
+        }
+        if( trade_offer.has_value() && !trade_offer->empty() ) {
+            try {
+                std::istringstream iss( *trade_offer );
+                JsonIn jin( iss );
+                detached_ptr<item> offered = item::spawn( jin );
+                if( offered ) {
+                    const std::string msg = string_format(
+                        _( "%s wants to give you: %s. Accept?" ),
+                        coop_session::get().partner_name, offered->tname() );
+                    const bool accepted = show_coop_popup( msg );
+                    const std::string ack = accepted ? R"({"t":44})" : R"({"t":45})";
+                    {
+                        std::scoped_lock lk{ send_mtx_ };
+                        send_q_.push_back( ack );
+                    }
+                    if( accepted ) { g->u.i_add( std::move( offered ) ); }
+                }
+            } catch( const JsonError& e ) {
+                DebugLog( DL::Error, DC::Main ) << "[coop] F2 trade JSON: " << e.what();
+            }
+        }
+    }
+
+    // F3: tap-on-shoulder from client — cancel host's current activity
+    if( pending_tap_.exchange( false ) ) {
+        if( g->u.activity ) { g->u.cancel_activity(); }
+        add_msg( m_info, _( "[%s] taps you on the shoulder!" ),
+                 coop_session::get().partner_name );
+    }
+
+    // F5: team activity speed-up — reduce host activity progress when both doing same task
+    if( g->u.activity ) {
+        std::string client_verb;
+        {
+            std::scoped_lock lk{ chat_mtx_ };
+            client_verb = client_activity_str_;
+        }
+        if( !client_verb.empty() ) {
+            const std::string host_verb = g->u.activity->get_verb().translated();
+            if( host_verb == client_verb ) {
+                g->u.activity->moves_left = std::max( 0,
+                    g->u.activity->moves_left - g->u.get_speed() / 2 );
+            }
+        }
+    }
+
+    // G2: client downed detection and countdown
+    if( client_hp_pct_.load() == 0 && !client_dead_.load() && !client_downed_.load() ) {
+        client_downed_.store( true );
+        client_down_turns_remaining_ = COOP_DOWN_TIMEOUT_TURNS;
+        send_chat( string_format( _( "[ALERT] %s is critically wounded! %d seconds remaining!" ),
+                                  coop_session::get().partner_name,
+                                  COOP_DOWN_TIMEOUT_TURNS ) );
+    }
+    if( client_downed_.load() ) {
+        --client_down_turns_remaining_;
+        if( client_down_turns_remaining_ > 0 && client_down_turns_remaining_ % 10 == 0 ) {
+            send_chat( string_format( _( "[%s is downed] %d seconds remaining..." ),
+                                      coop_session::get().partner_name,
+                                      client_down_turns_remaining_ ) );
+        }
+        if( client_down_turns_remaining_ <= 0 ) {
+            client_downed_.store( false );
+            client_dead_.store( true );
+        }
+    }
+
     // 3. Build and send sync (tiles only when host submap changes; always sends
     //    monsters + turn + proxy position).
     build_and_send_sync();
@@ -729,6 +902,137 @@ auto coop_server::execute_client_action(
         }
         return;
     }
+    if( key == "BUTCHER" ) {
+        if( !ctx_json.empty() ) {
+            std::istringstream iss( ctx_json );
+            JsonIn jin( iss );
+            JsonObject ctx = jin.get_object();
+            ctx.allow_omitted_members();
+            const tripoint_abs_ms corpse_abs{
+                ctx.get_int( "ax", 0 ), ctx.get_int( "ay", 0 ), ctx.get_int( "az", 0 ) };
+            map& here = get_map();
+            const auto local = here.abs_to_bub( corpse_abs );
+            std::vector<item*> corpses_to_rm;
+            for( item * const& it : here.i_at( local ) ) {
+                if( it->is_corpse() ) { corpses_to_rm.push_back( it ); }
+            }
+            for( item* it : corpses_to_rm ) { here.i_rem( local, it ); }
+        }
+        return;
+    }
+    if( key == "ITEM_REMOVE" ) {
+        if( !ctx_json.empty() ) {
+            std::istringstream iss( ctx_json );
+            JsonIn jin( iss );
+            JsonObject ctx = jin.get_object();
+            ctx.allow_omitted_members();
+            const tripoint_abs_ms rem_abs{
+                ctx.get_int( "ax", 0 ), ctx.get_int( "ay", 0 ), ctx.get_int( "az", 0 ) };
+            const itype_id rem_type( ctx.get_string( "type", "" ) );
+            map& here = get_map();
+            const auto local = here.abs_to_bub( rem_abs );
+            item* found = nullptr;
+            for( item * const& it : here.i_at( local ) ) {
+                if( it->typeId() == rem_type ) { found = it; break; }
+            }
+            if( found ) { here.i_rem( local, found ); }
+        }
+        return;
+    }
+    if( key == "ITEM_REMOVE_ALL" ) {
+        if( !ctx_json.empty() ) {
+            std::istringstream iss( ctx_json );
+            JsonIn jin( iss );
+            JsonObject ctx = jin.get_object();
+            ctx.allow_omitted_members();
+            const tripoint_abs_ms rem_abs{
+                ctx.get_int( "ax", 0 ), ctx.get_int( "ay", 0 ), ctx.get_int( "az", 0 ) };
+            get_map().i_clear( get_map().abs_to_bub( rem_abs ) );
+        }
+        return;
+    }
+    if( key == "FIELD_SET" ) {
+        if( !ctx_json.empty() ) {
+            std::istringstream iss( ctx_json );
+            JsonIn jin( iss );
+            JsonObject ctx = jin.get_object();
+            ctx.allow_omitted_members();
+            const tripoint_abs_ms fabs{
+                ctx.get_int( "ax", 0 ), ctx.get_int( "ay", 0 ), ctx.get_int( "az", 0 ) };
+            const field_type_id ftype( ctx.get_string( "field", "" ) );
+            const int intensity = ctx.get_int( "intensity", 1 );
+            if( ftype.is_valid() ) {
+                get_map().add_field( get_map().abs_to_bub( fabs ), ftype, intensity );
+            }
+        }
+        return;
+    }
+    if( key == "CAST_SPELL" ) {
+        if( proxy ) { proxy->moves -= proxy->get_speed(); }
+        return;
+    }
+    if( key == "WEAR" ) {
+        if( proxy && !ctx_json.empty() ) {
+            try {
+                std::istringstream iss( ctx_json );
+                JsonIn jin( iss );
+                detached_ptr<item> w = item::spawn( jin );
+                if( w ) { proxy->wear_item( std::move( w ), false ); }
+            } catch( const JsonError& e ) {
+                DebugLog( DL::Error, DC::Main ) << "[coop] WEAR: " << e.what();
+            }
+        }
+        return;
+    }
+    if( key == "WORN_SYNC" ) {
+        if( proxy && !ctx_json.empty() ) {
+            proxy->worn.clear();
+            try {
+                std::istringstream iss( ctx_json );
+                JsonIn jin( iss );
+                jin.start_array();
+                while( !jin.end_array() ) {
+                    detached_ptr<item> w = item::spawn( jin );
+                    if( w ) { proxy->wear_item( std::move( w ), false ); }
+                }
+            } catch( const JsonError& e ) {
+                DebugLog( DL::Error, DC::Main ) << "[coop] WORN_SYNC: " << e.what();
+            }
+        }
+        return;
+    }
+    if( key == "EMOTE" ) {
+        if( !ctx_json.empty() ) {
+            try {
+                std::istringstream iss( ctx_json );
+                JsonIn jin( iss );
+                JsonObject pkt = jin.get_object();
+                pkt.allow_omitted_members();
+                if( pkt.has_object( "d" ) ) {
+                    JsonObject d = pkt.get_object( "d" );
+                    d.allow_omitted_members();
+                    if( d.get_string( "type", "" ) == "high_five" ) {
+                        auto& sess = coop_session::get();
+                        const time_point now = calendar::turn;
+                        if( now - sess.last_high_five_turn >= 600_turns ) {
+                            g->u.add_morale( morale_type( "morale_coop_bonding" ), 5, 10,
+                                             30_minutes, 30_minutes, true );
+                            sess.last_high_five_turn = now;
+                            send_emote( "high_five" ); // confirmation to client
+                            add_msg( m_good, _( "You and %s share a high five!" ),
+                                     sess.partner_name );
+                        } else {
+                            add_msg( m_info, _( "Too soon for another high five!" ) );
+                        }
+                    }
+                }
+            } catch( const JsonError& e ) {
+                DebugLog( DL::Error, DC::Main ) << "[coop] EMOTE: " << e.what();
+            }
+        }
+        return;
+    }
+
 
     // Target-position paths: both SMASH and FIRE use typed commands (B3 Phase 5/6).
     if (key == "SMASH") {
@@ -1005,6 +1309,32 @@ auto coop_server::build_and_send_sync(bool force_full) -> void {
         jout.member("host_az", hpos.z());
     }
 
+    // F1: host vitals for client partner HUD
+    {
+        const bodypart_id torso( "torso" );
+        const int max_hp = g->u.get_part_hp_max( torso );
+        const int cur_hp = g->u.get_part_hp_cur( torso );
+        jout.member( "host_hp_pct", max_hp > 0 ? cur_hp * 100 / max_hp : 100 );
+        const int stam_max = g->u.get_stamina_max();
+        jout.member( "host_stamina_pct", stam_max > 0
+                                             ? g->u.get_stamina() * 100 / stam_max
+                                             : 100 );
+        jout.member( "host_activity",
+                     g->u.activity ? g->u.activity->get_verb().translated() : std::string{} );
+    }
+    // F1: client's own abs position echoed back so it can display the arrow
+    {
+        std::scoped_lock lk{ chat_mtx_ };
+        jout.member( "partner_ax", client_abs_pos_.x() );
+        jout.member( "partner_ay", client_abs_pos_.y() );
+        jout.member( "partner_az", client_abs_pos_.z() );
+    }
+    // F3: one-shot tap notification to client (set by send_tap_shoulder() caller)
+    if( pending_tap_sent_to_client_ ) {
+        jout.member( "tap_pending", true );
+        pending_tap_sent_to_client_ = false;
+    }
+
     jout.end_object();
     // Push onto send queue — IO thread is the sole caller of send on the socket (C5).
     std::scoped_lock lk{send_mtx_};
@@ -1077,6 +1407,35 @@ auto coop_server::send_chat(const std::string& text) -> void {
     std::scoped_lock lk{send_mtx_};
     if (send_q_.size() >= 64) { send_q_.pop_front(); }
     send_q_.push_back(oss.str());
+}
+
+auto coop_server::send_raw( const std::string& json ) -> void {
+    if( !running_ ) { return; }
+    std::scoped_lock lk{send_mtx_};
+    if( send_q_.size() >= 64 ) { send_q_.pop_front(); }
+    send_q_.push_back( json );
+}
+
+auto coop_server::stabilize_client() -> void {
+    client_downed_.store( false );
+    client_down_turns_remaining_ = 0;
+    const std::string msg = R"({"t":49})";
+    std::scoped_lock lk{ send_mtx_ };
+    send_q_.push_back( msg );
+    add_msg( m_good, _( "You stabilize your partner." ) );
+}
+
+auto coop_server::send_tap_shoulder() -> void {
+    pending_tap_sent_to_client_ = true; // surfaced in next sync's "tap_pending" field
+    const std::string msg = R"({"t":46})";
+    std::scoped_lock lk{ send_mtx_ };
+    send_q_.push_back( msg );
+}
+
+auto coop_server::send_emote( const std::string& emote_type ) -> void {
+    const auto msg = string_format( R"({"t":48,"d":{"type":"%s"}})", emote_type );
+    std::scoped_lock lk{ send_mtx_ };
+    send_q_.push_back( msg );
 }
 
 #endif // COOP_ENABLED

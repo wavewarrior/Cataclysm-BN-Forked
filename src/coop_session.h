@@ -1,6 +1,7 @@
 #pragma once
 #ifdef COOP_ENABLED
 
+#include "calendar.h"
 #include "character_id.h"
 #include "coordinates.h"
 
@@ -24,6 +25,22 @@ struct coop_session {
     /// cleared to nullopt at autoattack() entry so failed attacks relay nothing.
     /// Only written by autoattack() — does NOT alias last_target_pos (shared by fire/throw).
     std::optional<tripoint_abs_ms> last_autoattack_target;
+
+    // F1: partner vitals — written by apply_sync() / receiver_loop()
+    int partner_hp_pct = 100;
+    int partner_stamina_pct = 100;
+    std::string partner_activity_str;
+    tripoint_abs_ms partner_abs_pos{};
+
+    // F4: shared overmap marker
+    std::optional<tripoint_abs_omt> shared_mark;
+    std::string shared_mark_label;
+
+    // F6: high-five emote cooldown
+    time_point last_high_five_turn = calendar::before_time_starts;
+
+    // G2: client downed state (written on client side)
+    bool is_downed = false;
 
     auto is_host() const -> bool { return mode == coop_mode::host; }
     auto is_client() const -> bool { return mode == coop_mode::client; }

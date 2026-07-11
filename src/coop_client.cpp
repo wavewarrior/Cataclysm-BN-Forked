@@ -27,6 +27,13 @@
 #include "submap.h"
 #include "type_id.h"
 #include "worldfactory.h"
+#include "bodypart.h"
+#include "item.h"
+#include "morale_types.h"
+#include "vehicle.h"
+#include "vpart_position.h"
+#include "string_utils.h"
+#include "player_activity.h"
 
 #include <SDL3_net/SDL_net.h>
 #include <sstream>
@@ -219,6 +226,38 @@ auto coop_client::coop_world_tick() -> void {
         break;
     }
 
+#ifdef COOP_ENABLED
+    // E1: push vehicle state to host while client is driving.
+    if( g->u.controlling_vehicle ) {
+        const auto vp = get_map().veh_at( g->u.bub_pos() );
+        if( vp ) {
+            const vehicle& veh = vp->vehicle();
+            const auto vid_it = coop_vehicle_map_inv_.find( &veh );
+            if( vid_it != coop_vehicle_map_inv_.end() ) {
+                const bool moving = veh.velocity != 0;
+                if( moving ) { coop_vehicle_stationary_ticks_ = 0; }
+                else         { ++coop_vehicle_stationary_ticks_; }
+                if( coop_vehicle_stationary_ticks_ < 3 ) {
+                    const auto abs = veh.abs_ms_location();
+                    const auto msg = string_format(
+                        R"({"t":42,"vid":%u,"ax":%d,"ay":%d,"az":%d,"face_x":%d,"face_y":%d,"velocity":%d})",
+                        vid_it->second, abs.x(), abs.y(), abs.z(),
+                        veh.face.dx(), veh.face.dy(), veh.velocity );
+                    transport_->send( msg );
+                }
+            }
+        }
+    }
+    // F5: team speed-up — reduce moves_left when both doing the same activity.
+    if( g->u.activity && !host_activity_str_.empty() ) {
+        if( to_lower_case( host_activity_str_ ) ==
+            to_lower_case( g->u.activity->get_verb().translated() ) ) {
+            g->u.activity->moves_left =
+                std::max( 0, g->u.activity->moves_left - g->u.get_speed() / 2 );
+        }
+    }
+#endif
+
     // 1b. Send client_status each tick — host uses this for both_idle() fast-forward.
     //     Reports the client's OWN g->u state; proxy-inference is unreliable since
     //     SLEEP/CRAFT stubs don't set proxy->activity.
@@ -232,11 +271,19 @@ auto coop_client::coop_world_tick() -> void {
         status_jout.start_object();
         status_jout.member("idle", idle);
         // C3: per-tick character vital stats so the host can track client health/death.
-        // Inventory, effects, and skills are deferred (expensive to serialize per tick).
         status_jout.member("hp_pct", g->u.hp_percentage());
         status_jout.member("stamina", g->u.get_stamina());
         status_jout.member("stamina_max", g->u.get_stamina_max());
         status_jout.member("dead", g->u.is_dead_state());
+        // F1: new fields — stamina %, current activity, abs position
+        const int stam_max = std::max( 1, g->u.get_stamina_max() );
+        status_jout.member( "stamina_pct", g->u.get_stamina() * 100 / stam_max );
+        status_jout.member( "activity",
+            g->u.activity ? g->u.activity->get_verb().translated() : std::string{} );
+        const auto cpos = g->u.abs_pos();
+        status_jout.member( "ax", cpos.x() );
+        status_jout.member( "ay", cpos.y() );
+        status_jout.member( "az", cpos.z() );
         status_jout.end_object();
         status_jout.end_object();
         if (!transport_->send(status_oss.str())) {
@@ -272,6 +319,52 @@ auto coop_client::coop_world_tick() -> void {
                 DebugLog(DL::Info, DC::Main) << "[coop] host sent disconnect";
                 handle_disconnect();
                 return;
+            } else if (t == coop_pkt::stabilize) {
+                // G2: host stabilized downed client — restore 5% torso HP.
+                const int max_hp = g->u.get_part_hp_max( body_part_torso );
+                g->u.set_part_hp_cur( body_part_torso, std::max( 1, max_hp * 5 / 100 ) );
+                coop_session::get().is_downed = false;
+                add_msg( m_good, _( "Your partner stabilizes you!" ) );
+            } else if (t == coop_pkt::trade_accept) {
+                // F2: host accepted the item we sent.
+                add_msg( m_good, _( "Partner accepted your item." ) );
+            } else if (t == coop_pkt::trade_reject) {
+                // F2: host declined — item must be restored; CoopServer will re-send it in
+                // next sync under "pending_gift".  Message only on this side.
+                add_msg( m_info, _( "Partner declined your item." ) );
+            } else if (t == coop_pkt::emote) {
+                // F6: high-five emote from host.
+                JsonObject d = pkt.get_object("d");
+                d.allow_omitted_members();
+                const auto etype = d.get_string("type", "");
+                if( etype == "high_five" ) {
+                    const auto& sess = coop_session::get();
+                    const auto delta = sess.partner_abs_pos - g->u.abs_pos();
+                    const int dist2 = delta.x() * delta.x() + delta.y() * delta.y();
+                    if( dist2 <= 4 ) {
+                        g->u.add_morale( morale_type( "morale_coop_bonding" ),
+                                         5, 10, 30_minutes, 30_minutes, true );
+                        coop_session::get().last_high_five_turn = calendar::turn;
+                        add_msg( m_good, _( "High five! You feel great." ) );
+                    } else {
+                        add_msg( m_info, _( "Partner tried to high five but is too far away." ) );
+                    }
+                }
+            } else if (t == coop_pkt::overmap_mark) {
+                // F4: partner placed or cleared a shared overmap marker.
+                JsonObject d = pkt.get_object("d");
+                d.allow_omitted_members();
+                auto& sess = coop_session::get();
+                if( d.get_bool("clear", false) ) {
+                    sess.shared_mark = std::nullopt;
+                    sess.shared_mark_label.clear();
+                } else {
+                    sess.shared_mark = tripoint_abs_omt{
+                        d.get_int("omx", 0),
+                        d.get_int("omy", 0),
+                        d.get_int("omz", 0) };
+                    sess.shared_mark_label = d.get_string("label", "");
+                }
             }
             // other packet types silently ignored
         } catch (const JsonError& e) {
@@ -541,6 +634,41 @@ auto coop_client::apply_sync(const std::string& json_buf) -> void {
             sync_host_apos_.y() = jin.get_int();
         } else if (key == "host_az") {
             sync_host_apos_.z() = jin.get_int();
+        } else if (key == "host_hp_pct") {
+            coop_session::get().partner_hp_pct = jin.get_int();
+        } else if (key == "host_stamina_pct") {
+            coop_session::get().partner_stamina_pct = jin.get_int();
+        } else if (key == "host_activity") {
+            host_activity_str_ = jin.get_string();
+            coop_session::get().partner_activity_str = host_activity_str_;
+        } else if (key == "partner_ax") {
+            coop_session::get().partner_abs_pos.x() = jin.get_int();
+        } else if (key == "partner_ay") {
+            coop_session::get().partner_abs_pos.y() = jin.get_int();
+        } else if (key == "partner_az") {
+            coop_session::get().partner_abs_pos.z() = jin.get_int();
+        } else if (key == "tap_pending") {
+            if( jin.get_bool() ) {
+                if( g->u.activity ) { g->u.cancel_activity(); }
+                add_msg( m_info, _( "[%s] taps you on the shoulder!" ),
+                         coop_session::get().partner_name );
+            }
+        } else if (key == "pending_gift") {
+            const auto gift_json = jin.get_string();
+            if( !gift_json.empty() ) {
+                try {
+                    std::istringstream gift_iss( gift_json );
+                    JsonIn gift_jin( gift_iss );
+                    auto gifted = item::spawn( gift_jin );
+                    if( gifted ) {
+                        const auto name = gifted->tname();
+                        g->u.i_add( std::move( gifted ) );
+                        add_msg( m_good, _( "[Partner] gave you: %s" ), name );
+                    }
+                } catch( const JsonError& ) {
+                    DebugLog( DL::Error, DC::Main ) << "[coop] pending_gift: JSON error";
+                }
+            }
         } else {
             jin.skip_value();
         }
@@ -629,6 +757,28 @@ auto coop_client::shutdown() -> void {
     DebugLog(DL::Info, DC::Main) << "[coop] client shutdown";
 }
 
+auto coop_client::send_join_info() -> bool {
+    if (!transport_ || !g) { return false; }
+    const auto ap = g->u.abs_pos();
+    // G1: serialize worn items so the host proxy NPC spawns with correct armor.
+    std::string worn_json;
+    {
+        std::ostringstream worn_oss;
+        JsonOut worn_jout( worn_oss );
+        worn_jout.start_array();
+        for( const item* w : g->u.worn ) {
+            w->serialize( worn_jout );
+        }
+        worn_jout.end_array();
+        worn_json = worn_oss.str();
+    }
+    const bool ok = transport_->send( build_join_info_packet( {ap, worn_json} ) );
+    DebugLog(DL::Info, DC::Main)
+        << "[coop] send_join_info: (" << ap.x() << "," << ap.y() << "," << ap.z() << ")"
+        << " worn=" << g->u.worn.size() << (ok ? "" : " — send failed");
+    return ok;
+}
+
 auto coop_client::send_chat(const std::string& text) -> void {
     if (!transport_) { return; }
     std::ostringstream oss;
@@ -644,15 +794,6 @@ auto coop_client::send_chat(const std::string& text) -> void {
     transport_->send(oss.str());
 }
 
-auto coop_client::send_join_info() -> bool {
-    if (!transport_ || !g) { return false; }
-    const auto ap = g->u.abs_pos();
-    const bool ok = transport_->send(build_join_info_packet({ap}));
-    DebugLog(DL::Info, DC::Main)
-        << "[coop] send_join_info: (" << ap.x() << "," << ap.y() << "," << ap.z() << ")"
-        << (ok ? "" : " — send failed");
-    return ok;
-}
 
 auto coop_client::notify_death() -> void {
     if (!transport_ || !g || death_notified_) { return; }
@@ -719,5 +860,26 @@ auto coop_client::notify_death() -> void {
 
 // send_death_drop() is superseded by notify_death(); kept for any future deathcam path.
 auto coop_client::send_death_drop() -> void { notify_death(); }
+
+auto coop_client::send_tap_shoulder() -> void {
+    if( !transport_ ) { return; }
+    transport_->send( R"({"t":46})" );
+}
+
+auto coop_client::send_emote( const std::string& emote_type ) -> void {
+    if( !transport_ ) { return; }
+    // F6: cooldown check — 600 turns (≈10 game-minutes)
+    auto& sess = coop_session::get();
+    if( calendar::turn - sess.last_high_five_turn < 600_turns ) {
+        add_msg( m_info, _( "Too soon for another high five!" ) );
+        return;
+    }
+    transport_->send( string_format( R"({"t":48,"d":{"type":"%s"}})", emote_type ) );
+}
+
+auto coop_client::send_raw( const std::string& json ) -> void {
+    if( !transport_ ) { return; }
+    transport_->send( json );
+}
 
 #endif // COOP_ENABLED

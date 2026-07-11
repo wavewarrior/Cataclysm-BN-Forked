@@ -355,6 +355,18 @@ enum action_id : int {
     ACTION_TOGGLE_FPS,
     /** Swap to an NPC in faction menu **/
     ACTION_SWAP_TO_NPC,
+#ifdef COOP_ENABLED
+    /** Interrupt partner's current activity (tap on shoulder) */
+    ACTION_CO_OP_TAP_SHOULDER,
+    /** High-five emote (morale boost when adjacent) */
+    ACTION_CO_OP_EMOTE,
+    /** Host stabilizes downed client partner */
+    ACTION_CO_OP_STABILIZE,
+    /** Pass an item to co-op partner */
+    ACTION_CO_OP_PASS_ITEM,
+    /** Place shared overmap marker */
+    ACTION_CO_OP_MARK_OVERMAP,
+#endif
     /** Not an action, serves as count of enumerated actions */
     NUM_ACTIONS
     /**@}*/

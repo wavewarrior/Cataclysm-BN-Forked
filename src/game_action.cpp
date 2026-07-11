@@ -2136,7 +2136,7 @@ for( const auto &dim_id : submap_loader.active_dimensions() ) {
 
     _perf_sim += std::chrono::duration<double, std::milli>( _perf_clk::now() - _perf_sim_t0 ).count();
     if( ++_perf_n >= 20 ) {
-    dbg( DL::Info ) << "[sim][perf] " << _perf_n << " turns avg: sim_total="
+    DebugLog( DL::Info, DC::Game ) << "[sim][perf] " << _perf_n << " turns avg: sim_total="
                         << ( _perf_sim / _perf_n ) << "ms (build_map_cache=" << ( _perf_cache / _perf_n )
                         << " monmove=" << ( _perf_mon / _perf_n ) << " world_tick="
                         << ( _perf_world / _perf_n ) << ")";

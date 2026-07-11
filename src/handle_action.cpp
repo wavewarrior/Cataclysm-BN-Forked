@@ -15,6 +15,8 @@
 #include "catalua.h"
 #ifdef COOP_ENABLED
 #include "coop_client.h"
+#include "coop_menu.h"
+#include "coop_server.h"
 #include "coop_session.h"
 #include "json.h"
 #endif
@@ -551,7 +553,15 @@ static void open()
         if( openable >= 0 ) {
             const vehicle* player_veh = veh_pointer_or_null( here.veh_at( u.bub_pos() ) );
             const bool outside = !player_veh || player_veh != veh;
-            if( here.open_door_veh( &get_avatar(), vp, openp, !outside ) ) { u.moves -= 100; }
+            if( here.open_door_veh( &get_avatar(), vp, openp, !outside ) ) {
+                u.moves -= 100;
+#ifdef COOP_ENABLED
+                if( g->coop_client_ ) {
+                    g->coop_client_->queue_terrain_change( here.bub_to_abs( openp ),
+                                                          here.ter( openp ).id().str(), here.furn( openp ).id().str() );
+                }
+#endif // COOP_ENABLED
+            }
         } else {
             // If there are any OPENABLE parts here, they must be already open
             if( const std::optional<vpart_reference> already_open =
@@ -3011,6 +3021,21 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
     }
 
     if (act == ACTION_NULL) { return false; }
+#ifdef COOP_ENABLED
+    {
+        const auto& sess = coop_session::get();
+        if( sess.is_client() && sess.is_downed ) {
+            static const std::array<action_id, 5> allowed = {
+                ACTION_PAUSE, ACTION_SAVE,
+                ACTION_MESSAGES, ACTION_HELP, ACTION_OPTIONS
+            };
+            if( std::ranges::find( allowed, act ) == allowed.end() ) {
+                add_msg( m_bad, _( "You can't act while critically wounded!" ) );
+                return false;
+            }
+        }
+    }
+#endif // COOP_ENABLED
 
     gamemode->pre_action(act);
 
@@ -4098,6 +4123,32 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
             const bool actually_moved = (u.bub_pos().raw() != coop_pos_before_.raw());
             const auto dir = move_cmd_to_dir_string(move_cmd);
             if (!dir.empty() && actually_moved) { coop_client_->queue_action(std::string(dir)); }
+            // D4: haul relay — items dragged to the new tile need DROP + ITEM_REMOVE_ALL on host.
+            if( u.is_hauling() && actually_moved ) {
+                const auto new_abs = m.bub_to_abs( u.bub_pos() );
+                for( const auto& it : m.i_at( u.bub_pos() ) ) {
+                    std::ostringstream drop_ctx;
+                    JsonOut jd( drop_ctx );
+                    jd.start_object();
+                    jd.member( "ax", new_abs.x() );
+                    jd.member( "ay", new_abs.y() );
+                    jd.member( "az", new_abs.z() );
+                    jd.member( "item" );
+                    it->serialize( jd );
+                    jd.end_object();
+                    coop_client_->queue_action( "DROP", drop_ctx.str() );
+                }
+                const auto old_abs = m.bub_to_abs( coop_pos_before_ );
+                std::ostringstream rm_ctx;
+                JsonOut jr( rm_ctx );
+                jr.start_object();
+                jr.member( "ax", old_abs.x() );
+                jr.member( "ay", old_abs.y() );
+                jr.member( "az", old_abs.z() );
+                jr.member( "type", "*" );
+                jr.end_object();
+                coop_client_->queue_action( "ITEM_REMOVE_ALL", rm_ctx.str() );
+            }
         } else if (act == ACTION_PAUSE || act == ACTION_TIMEOUT || act == ACTION_WAIT) {
             coop_client_->queue_action("PAUSE");
         } else if (act == ACTION_PICKUP || act == ACTION_PICKUP_ALL || act == ACTION_PICKUP_FEET) {
@@ -4169,6 +4220,56 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                 }
                 melee_ctx_jout.end_object();
                 coop_client_->queue_action( "MELEE", melee_ctx_oss.str() );
+            }
+        } else if( act == ACTION_CAST_SPELL || act == ACTION_CAST_LAST_SPELL ) {
+            // D7: spell action token — terrain/field mutations relayed separately via magic.cpp.
+            coop_client_->queue_action( "CAST_SPELL", "{}" );
+        } else if( act == ACTION_WEAR ) {
+            // G1: relay the last worn item to the proxy.
+            if( !u.worn.empty() ) {
+                std::ostringstream wear_ctx;
+                JsonOut wear_j( wear_ctx );
+                u.worn.back()->serialize( wear_j );
+                coop_client_->queue_action( "WEAR", wear_ctx.str() );
+            }
+        } else if( act == ACTION_TAKE_OFF ) {
+            // G1: full worn-list resync (can't identify which item was removed post-takeoff).
+            std::ostringstream worn_ctx;
+            JsonOut worn_j( worn_ctx );
+            worn_j.start_array();
+            for( const auto& w : u.worn ) { w->serialize( worn_j ); }
+            worn_j.end_array();
+            coop_client_->queue_action( "WORN_SYNC", worn_ctx.str() );
+        }
+    }
+    // Co-op keybindings active for both host and client
+    {
+        auto& sess = coop_session::get();
+        if( sess.is_coop() ) {
+            if( act == ACTION_CO_OP_TAP_SHOULDER ) {
+                if( sess.is_client() ) {
+                    coop_client_->send_tap_shoulder();
+                } else if( g->coop_server_ ) {
+                    g->coop_server_->send_tap_shoulder();
+                }
+            } else if( act == ACTION_CO_OP_EMOTE ) {
+                if( sess.is_client() ) {
+                    coop_client_->send_emote( "high_five" );
+                } else if( g->coop_server_ ) {
+                    g->coop_server_->send_emote( "high_five" );
+                }
+            } else if( act == ACTION_CO_OP_STABILIZE && sess.is_host() && g->coop_server_ ) {
+                if( !g->coop_server_->client_downed() ) {
+                    add_msg( m_info, _( "Partner is not downed." ) );
+                } else if( show_coop_popup( string_format(
+                               _( "Stabilize %s? (consumes bandage or first aid kit)" ),
+                               sess.partner_name ) ) ) {
+                    g->coop_server_->stabilize_client();
+                }
+            } else if( act == ACTION_CO_OP_PASS_ITEM && sess.is_client() ) {
+                // F2 client→host: inventory selection + proximity + trade_offer packet
+                // handled inline here; host side handled via sync field "pending_gift"
+                add_msg( m_info, _( "Item passing not yet implemented." ) );
             }
         }
     }

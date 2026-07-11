@@ -21,6 +21,8 @@
 class monster;
 
 class npc;
+class vehicle;
+
 
 /// Single-tick entity position snapshot for A5.3 lag compensation.
 /// Stored in coop_server::position_history_; exposed here so the pure lookup
@@ -60,6 +62,8 @@ struct coop_server {
     auto build_and_send_sync(bool force_full = false) -> void;
     auto shutdown() -> void;
     auto send_chat(const std::string& text) -> void;
+    /// F4: send a raw JSON packet directly onto the send queue (overmap mark, emotes, etc.)
+    auto send_raw(const std::string& json) -> void;
     auto is_running() const -> bool { return running_.load(); }
     auto has_pending_actions() const -> bool;
     /// True iff both host and client are in a long idle activity (sleep, craft, …).
@@ -120,6 +124,11 @@ struct coop_server {
     auto wait_for_join_info(int timeout_ms = 3000) -> bool; // *NOPAD*
     /// C6: client's starting position received via join_info; nullopt if not yet received.
     auto client_join_pos() const -> std::optional<tripoint_abs_ms>; // *NOPAD*
+    /// G2: true if the client avatar is in the downed state (server-tracked).
+    auto client_downed() const -> bool { return client_downed_.load(); } // *NOPAD*
+    auto stabilize_client() -> void;
+    auto send_tap_shoulder() -> void;
+    auto send_emote( const std::string& emote_type ) -> void;
 
 private:
     struct action_entry {
@@ -198,6 +207,36 @@ private:
     /// Test seam: when true, next coop_world_tick() pushes a synthetic terrain event
     /// directly into the mutation log (see queue_test_event_for_resync()).
     bool pending_test_event_for_resync_ = false;
+    // E1: vehicle tracking — pointer stable while vehicle is alive in current map
+    std::unordered_map<const vehicle*, uint32_t> vehicle_id_map_;
+    std::unordered_map<uint32_t, vehicle*> vehicle_id_map_rev_;
+    uint32_t next_vehicle_id_ = 1;
+    // E1: latest vehicle state from client — receiver writes, world_tick applies
+    struct pending_veh_state_t {
+        uint32_t vid = 0;
+        tripoint_abs_ms abs_pos{};
+        int face_x = 0;
+        int face_y = 1;
+        int vel = 0;
+        bool valid = false;
+    };
+    mutable std::mutex pending_veh_mtx_;
+    pending_veh_state_t pending_veh_state_;
+    // F1: extended client vitals — receiver writes, guarded by chat_mtx_
+    std::atomic<int> client_stamina_pct_{100};
+    std::string client_activity_str_;   ///< guarded by chat_mtx_
+    tripoint_abs_ms client_abs_pos_{};  ///< guarded by chat_mtx_
+    // F2: pending trade offer from client — receiver writes via action_mtx_; world_tick consumes
+    std::optional<std::string> pending_trade_offer_json_; ///< guarded by action_mtx_
+    // F3: tap shoulder
+    std::atomic<bool> pending_tap_{false};
+    bool pending_tap_sent_to_client_ = false; ///< main-thread only
+    // G1: worn JSON from join_info — main-thread only (pre-receiver window)
+    std::string client_worn_json_;
+    // G2: downed state
+    std::atomic<bool> client_downed_{false};
+    int client_down_turns_remaining_ = 0; ///< main-thread only
+    static constexpr int COOP_DOWN_TIMEOUT_TURNS = 100;
 };
 
 #endif // COOP_ENABLED

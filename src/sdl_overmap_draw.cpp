@@ -1,3 +1,6 @@
+#ifdef COOP_ENABLED
+#include "coop_session.h"
+#endif
 #include "cata_tiles.h"   // cata_tiles member declarations
 #include "sdltiles.h"     // tilecontext, overmap_tilecontext, rescale_tileset
 #include "sdl_display.h"  // g_display, display_context, fontwidth, fontheight
@@ -582,6 +585,37 @@ void cata_tiles::draw_om( point dest, const tripoint_abs_omt &center_abs_omt, bo
             tile, global_omt_to_draw_position( center_abs_omt ), std::nullopt, std::nullopt,
             lit_level::LIT, false, 0, false );
     }
+
+#ifdef COOP_ENABLED
+    {
+        const auto& sess = coop_session::get();
+        if( sess.shared_mark.has_value() && sess.shared_mark->z() == center_abs_omt.z() ) {
+            const tripoint_abs_omt& mark = *sess.shared_mark;
+            if( overmap_area.contains( mark ) ) {
+                const tile_search_params tile { "note_*_c_light_cyan", C_OVERMAP_NOTE,
+                                               "overmap_note", 0, 0 };
+                draw_from_id_string(
+                    tile, global_omt_to_draw_position( mark ), std::nullopt, std::nullopt,
+                    lit_level::LIT, false, 0, false );
+                // Draw the label as text to the right of the marker tile, when available.
+                if( !sess.shared_mark_label.empty() ) {
+                    const auto tile_draw_pos = global_omt_to_draw_position( mark ) - o;
+                    const int lx = tile_draw_pos.x() * tile_width  + dest.x + tile_width;
+                    const int ly = tile_draw_pos.y() * tile_height + dest.y;
+                    const char note_fg = static_cast<char>(
+                        cata_cursesport::colorpairs[c_light_cyan.to_color_pair_index()].FG );
+                    if( omt_text_rml ) {
+                        rmlui_layer::world_text_add( lx, ly, sess.shared_mark_label,
+                                                     omt_label_rgba( note_fg ) );
+                    } else {
+                        draw_string( *font, renderer, geometry, sess.shared_mark_label,
+                                     point( lx, ly ), note_fg );
+                    }
+                }
+            }
+        }
+    }
+#endif // COOP_ENABLED
 
     if( blink ) {
         // Draw path for auto-travel

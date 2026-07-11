@@ -377,6 +377,18 @@ std::string action_ident( action_id act )
             return "null";
         case ACTION_SWAP_TO_NPC:
             return "SWAPTONPC";
+#ifdef COOP_ENABLED
+        case ACTION_CO_OP_TAP_SHOULDER:
+            return "CO_OP_TAP_SHOULDER";
+        case ACTION_CO_OP_EMOTE:
+            return "CO_OP_EMOTE";
+        case ACTION_CO_OP_STABILIZE:
+            return "CO_OP_STABILIZE";
+        case ACTION_CO_OP_PASS_ITEM:
+            return "CO_OP_PASS_ITEM";
+        case ACTION_CO_OP_MARK_OVERMAP:
+            return "CO_OP_MARK_OVERMAP";
+#endif
         default:
             return "unknown";
     }

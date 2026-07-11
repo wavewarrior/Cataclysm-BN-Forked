@@ -65,6 +65,14 @@
 #include "weather.h"
 #include "weather_gen.h"
 #include "world_type.h"
+#ifdef COOP_ENABLED
+#include "coop_client.h"
+#include "coop_proto.h"
+#include "coop_server.h"
+#include "coop_session.h"
+#include "json.h"
+#include <sstream>
+#endif
 
 #include <RmlUi/Core.h>
 #include <algorithm>
@@ -1600,6 +1608,9 @@ static tripoint_abs_omt display(
         ictxt.register_action( "SET_SPECIAL_ARGS" );
     }
     ictxt.register_action( "QUIT" );
+#ifdef COOP_ENABLED
+    ictxt.register_action( "CO_OP_MARK_OVERMAP" );
+#endif
     std::string action;
     bool show_explored = true;
     bool fast_scroll = false; /* fast scroll state should reset every time overmap UI is opened */
@@ -1767,6 +1778,33 @@ static tripoint_abs_omt display(
         } else if( action == "MISSIONS" ) {
             g->list_missions();
         }
+#ifdef COOP_ENABLED
+        else if( action == "CO_OP_MARK_OVERMAP" && coop_session::get().is_coop() ) {
+            std::ostringstream pkt;
+            JsonOut jp( pkt );
+            jp.start_object();
+            jp.member( "t", static_cast<int>( coop_pkt::overmap_mark ) );
+            jp.member( "d" );
+            jp.start_object();
+            jp.member( "omx", curs.x() );
+            jp.member( "omy", curs.y() );
+            jp.member( "omz", curs.z() );
+            jp.member( "label", std::string( "Meet here" ) );
+            jp.member( "clear", false );
+            jp.end_object();
+            jp.end_object();
+            const std::string pkt_str = pkt.str();
+            auto& sess = coop_session::get();
+            if( sess.is_client() && g->coop_client_ ) {
+                g->coop_client_->send_raw( pkt_str );
+            } else if( sess.is_host() && g->coop_server_ ) {
+                g->coop_server_->send_raw( pkt_str );
+            }
+            // Update local session immediately so the marker appears without round-trip delay.
+            sess.shared_mark = curs;
+            sess.shared_mark_label = "Meet here";
+        }
+#endif // COOP_ENABLED
 
         std::chrono::time_point<std::chrono::steady_clock> now = std::chrono::steady_clock::now();
         if( now > last_blink + std::chrono::milliseconds( get_option<int>( "BLINK_SPEED" ) ) ) {

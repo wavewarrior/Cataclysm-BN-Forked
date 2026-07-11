@@ -76,6 +76,9 @@
 #include "vehicle_part.h"
 #include "vpart_position.h"
 #include "weather.h"
+#ifdef COOP_ENABLED
+#include "coop_session.h"
+#endif
 
 static const trait_id trait_THRESH_FELINE( "THRESH_FELINE" );
 static const trait_id trait_THRESH_BIRD( "THRESH_BIRD" );
@@ -1009,6 +1012,9 @@ static const std::map<std::string, std::function<bool()>> &render_predicate_regi
     static const std::map<std::string, std::function<bool()>> reg = {
         { "spell_panel", spell_panel },
         { "veh_panel", veh_panel },
+#ifdef COOP_ENABLED
+        { "coop_panel", []() -> bool { return coop_session::get().is_coop(); } },
+#endif
     };
     return reg;
 }
@@ -1171,6 +1177,55 @@ std::string hud_hint( avatar & )
     return colorize( press, c_light_green ) + " " +
            colorize( _( "to open sidebar options" ), c_white );
 }
+
+#ifdef COOP_ENABLED
+static auto hud_coop_partner_text( avatar & /*u*/ ) -> std::string
+{
+    const auto& sess = coop_session::get();
+    if( !sess.is_coop() ) { return {}; }
+
+    const std::string mode = sess.is_host() ? _( "HOST" ) : _( "CLIENT" );
+    auto out = colorize( "[Co-op " + mode + ": " + sess.partner_name + "]", c_light_blue );
+    if( sess.partner_ping_ms > 0 ) {
+        out += "  " + colorize( std::to_string( sess.partner_ping_ms ) + "ms", c_dark_gray );
+    }
+    out += "\n";
+
+    const int hp = sess.partner_hp_pct;
+    const nc_color hp_col = hp > 50 ? c_green : hp > 25 ? c_yellow : c_red;
+    const int filled = hp * 10 / 100;
+    out += colorize( _( "HP: " ), c_white );
+    out += colorize( std::string( filled, '#' ), hp_col );
+    out += colorize( std::string( 10 - filled, '-' ), c_dark_gray );
+    out += " " + colorize( std::to_string( hp ) + "%", hp_col ) + "\n";
+
+    if( !sess.partner_activity_str.empty() ) {
+        out += colorize( sess.partner_activity_str, c_light_gray );
+    }
+    out += "  ";
+    const int stam = sess.partner_stamina_pct;
+    out += colorize( _( "Stam:" ), c_white ) + " "
+         + colorize( std::to_string( stam ) + "%",
+                     stam > 50 ? c_green : stam > 20 ? c_yellow : c_red );
+    out += "\n";
+
+    if( sess.partner_abs_pos != tripoint_abs_ms{} ) {
+        const tripoint_rel_ms delta = sess.partner_abs_pos - g->u.abs_pos();
+        const int dist = rl_dist( tripoint_rel_ms{}, delta );
+        const char* arrow = "?";
+        const int dx = delta.x(), dy = delta.y();
+        if( std::abs( dx ) < std::abs( dy ) / 2 )      { arrow = dy < 0 ? "↑" : "↓"; }
+        else if( std::abs( dy ) < std::abs( dx ) / 2 ) { arrow = dx > 0 ? "→" : "←"; }
+        else if( dx > 0 && dy < 0 )                    { arrow = "↗"; }
+        else if( dx > 0 && dy > 0 )                    { arrow = "↘"; }
+        else if( dx < 0 && dy > 0 )                    { arrow = "↙"; }
+        else                                            { arrow = "↖"; }
+        out += colorize( std::string( _( "Partner: " ) ) + arrow + " "
+                         + std::to_string( dist ) + "m", c_light_cyan );
+    }
+    return out;
+}
+#endif
 
 // Mirrors draw_char_wide (the "Movement" panel): Sound/Mood/Focus, then Stam/Speed/Move.
 // Smiley + stamina are text (emote string / hp-bar string), so this is pure text.
@@ -1385,7 +1440,7 @@ struct hud_producer_entry {
     const char *panel_name;                  // widget id OR built-in label (CI match)
     std::string( *produce )( avatar & );     // variant-specific content producer
 };
-const std::array<hud_producer_entry, 46> g_hud_producers = {{
+const std::vector<hud_producer_entry> g_hud_producers = {
         // Stats — classic (draw_stats) vs labels/wide + narrow (draw_stat_wide/_narrow)
         { "Stats",         hud_stats_text },
         { "stats_compact", hud_stats_text },
@@ -1442,7 +1497,9 @@ const std::array<hud_producer_entry, 46> g_hud_producers = {{
         { "Compass",            hud_compass },
         { "Compact Compass",    hud_compass },
         { "Simple Compass",     hud_compass },
-    }
+#ifdef COOP_ENABLED
+        { "coop_partner",       hud_coop_partner_text },
+#endif
 };
 
 std::string( *hud_producer( const std::string &name ) )( avatar & )

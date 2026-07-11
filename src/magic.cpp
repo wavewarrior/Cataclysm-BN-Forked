@@ -44,6 +44,11 @@
 #include "ui.h"
 #include "units.h"
 
+#ifdef COOP_ENABLED
+#include "coop_client.h"
+#include <map>
+#include <sstream>
+#endif
 #include <RmlUi/Core.h>
 #include <algorithm>
 #include <array>
@@ -1343,6 +1348,24 @@ void spell::cast_spell_effect( Creature& source, const tripoint_bub_ms& target )
 
 void spell::cast_all_effects( Creature& source, const tripoint_bub_ms& target ) const
 {
+#ifdef COOP_ENABLED
+    using coop_field_key = std::pair<tripoint_abs_ms, field_type_id>;
+    std::set<coop_field_key> spell_fields_before;
+    std::map<tripoint_abs_ms, ter_id> spell_ter_before;
+    if( g && g->coop_client_ ) {
+        map& here = get_map();
+        const int radius = range();
+        for( const tripoint_bub_ms& tp :
+             here.points_in_radius( target, radius ) ) {
+            const auto abs = here.bub_to_abs( tp );
+            spell_ter_before[abs] = here.ter( tp );
+            const field& f = here.field_at( tp );
+            for( const auto& [ft, fe] : f ) {
+                if( fe.get_field_intensity() > 0 ) { spell_fields_before.emplace( abs, ft ); }
+            }
+        }
+    }
+#endif
     if( has_flag( spell_flag::WONDER ) ) {
     const auto iter = type->additional_spells.begin();
         for( int num_spells = std::abs( damage() ); num_spells > 0; num_spells-- ) {
@@ -1391,6 +1414,36 @@ void spell::cast_all_effects( Creature& source, const tripoint_bub_ms& target ) 
             }
         }
     }
+#ifdef COOP_ENABLED
+    if( g && g->coop_client_ ) {
+        map& here = get_map();
+        const int radius = range();
+        for( const tripoint_bub_ms& tp :
+             here.points_in_radius( target, radius ) ) {
+            const auto abs = here.bub_to_abs( tp );
+            // terrain change
+            const auto it = spell_ter_before.find( abs );
+            if( it != spell_ter_before.end() && here.ter( tp ) != it->second ) {
+                g->coop_client_->queue_terrain_change( abs, here.ter( tp ).id().str(), here.furn( tp ).id().str() );
+            }
+            // new fields
+            const field& f = here.field_at( tp );
+            for( const auto& [ft, fe] : f ) {
+                if( fe.get_field_intensity() > 0
+                    && spell_fields_before.find( {abs, ft} ) == spell_fields_before.end() ) {
+                    std::ostringstream fctx;
+                    JsonOut jf( fctx );
+                    jf.start_object();
+                    jf.member( "ax", abs.x() ); jf.member( "ay", abs.y() ); jf.member( "az", abs.z() );
+                    jf.member( "field", ft.id().str() );
+                    jf.member( "intensity", fe.get_field_intensity() );
+                    jf.end_object();
+                    g->coop_client_->queue_action( "FIELD_SET", fctx.str() );
+                }
+            }
+        }
+    }
+#endif
 }
 
 std::optional<tripoint_bub_ms> spell::random_valid_target(

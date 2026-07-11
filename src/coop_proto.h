@@ -25,6 +25,15 @@ enum class coop_pkt : uint8_t {
     ///< (client → host)
     chat = 30,           ///< free-form text (bidirectional, any time)
 
+    vehicle_state  = 42, ///< driven vehicle position/heading/velocity (client → host, per tick while driving)
+    trade_offer    = 43, ///< one player offers an item to the other (bidirectional; "from" field disambiguates)
+    trade_accept   = 44, ///< recipient confirms trade; transfer executes
+    trade_reject   = 45, ///< recipient declines trade
+    tap_shoulder   = 46, ///< interrupt partner's current long activity (bidirectional)
+    overmap_mark   = 47, ///< place or clear a shared overmap marker (bidirectional)
+    emote          = 48, ///< player emote — "high_five" in this version (bidirectional)
+    stabilize      = 49, ///< host stabilizes downed client (host → client only)
+
     disconnect = 99, ///< graceful close notification
 };
 

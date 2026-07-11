@@ -12,6 +12,7 @@
 #include <unordered_map>
 
 class monster;
+class vehicle;
 
 /// Client-side co-op thin path.
 struct coop_client {
@@ -33,6 +34,8 @@ struct coop_client {
     auto is_connected() const -> bool { return transport_ != nullptr; }
     auto shutdown() -> void;
     auto send_chat(const std::string& text) -> void;
+    /// F4: send a raw JSON packet directly via transport (overmap mark, emotes, etc.)
+    auto send_raw(const std::string& json) -> void;
     /// C6: send the client's current abs position to the host immediately after receiving
     /// world_seed, so spawn_proxy_npc() can place the proxy at the client's saved position.
     auto send_join_info() -> bool; // *NOPAD*
@@ -63,6 +66,8 @@ struct coop_client {
     }
     /// Test seam: set next_seq_ for Gap 6 uint32_t wrap-without-crash test.
     auto set_next_seq_for_test(uint32_t seq) -> void { next_seq_ = seq; }
+    auto send_tap_shoulder() -> void;
+    auto send_emote( const std::string& emote_type ) -> void;
 
 private:
     auto apply_sync(const std::string& json_buf) -> void;
@@ -90,8 +95,15 @@ private:
     /// Test seam: set to true the first time apply_sync processes got_tiles == true.
     bool got_full_tile_sync_for_test_   = false;
     // H5: host-assigned monster ID → local monster pointer.
-    // Stable for stationary monsters; updated on position change.
     std::unordered_map<int, monster*> coop_monster_map_;
+
+    // E1: vehicle tracking — populated from initial-sync vehicle-ID map sent by host
+    std::unordered_map<const vehicle*, uint32_t> coop_vehicle_map_inv_;
+    std::unordered_map<uint32_t, vehicle*>        coop_vehicle_map_;
+    int coop_vehicle_stationary_ticks_ = 0;
+
+    // F1: host activity string received from sync — used for F5 team speed-up
+    std::string host_activity_str_;
 
     // Last proxy and host positions received from sync — used for reconciliation
     // and future host-avatar rendering.  Initialized to zero; valid after first sync.

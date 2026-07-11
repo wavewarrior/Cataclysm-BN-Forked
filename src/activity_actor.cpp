@@ -85,6 +85,8 @@
 #include <utility>
 #ifdef COOP_ENABLED
 #include "coop_client.h"
+#include "field.h"
+#include <set>
 #endif
 #include <sstream>
 #include <unordered_map>
@@ -766,7 +768,23 @@ void disassemble_activity_actor::do_turn( player_activity& act, Character& who )
         if( !target.loc ) {
             debugmsg( "Lost target of ACT_DISASSEMBLY" );
         } else {
+#ifdef COOP_ENABLED
+            const itype_id rem_type = target.loc->typeId();
+#endif
             crafting::complete_disassemble( who, target, get_map().abs_to_bub( pos ) );
+#ifdef COOP_ENABLED
+            if( g->coop_client_ ) {
+                std::ostringstream ctx;
+                JsonOut jd( ctx );
+                jd.start_object();
+                jd.member( "ax", this->pos.x() );
+                jd.member( "ay", this->pos.y() );
+                jd.member( "az", this->pos.z() );
+                jd.member( "type", rem_type.str() );
+                jd.end_object();
+                g->coop_client_->queue_action( "ITEM_REMOVE", ctx.str() );
+            }
+#endif
         }
         targets.erase( targets.begin() );
         progress.pop();
@@ -2964,6 +2982,24 @@ void throw_activity_actor::do_turn( player_activity& act, Character& who )
 #ifdef COOP_ENABLED
     const itype_id c2e_thrown_type = target->typeId();
 #endif // COOP_ENABLED
+#ifdef COOP_ENABLED
+    using coop_field_key = std::pair<tripoint_abs_ms, field_type_id>;
+    std::set<coop_field_key> coop_fields_before;
+    if( g->coop_client_ ) {
+        map& fhere = get_map();
+        if( !trajectory.empty() ) {
+            const auto impact = tripoint_bub_ms( trajectory.back() );
+            for( const tripoint_bub_ms& tp : fhere.points_in_radius( impact, 5 ) ) {
+                const field& f = fhere.field_at( tp );
+                for( const auto& [ft, fe] : f ) {
+                    if( fe.get_field_intensity() > 0 ) {
+                        coop_fields_before.emplace( fhere.bub_to_abs( tp ), ft );
+                    }
+                }
+            }
+        }
+    }
+#endif // COOP_ENABLED
     detached_ptr<item> det = target->split( 1 );
     const auto throw_result =
         ranged::throw_item( who, trajectory.back(), std::move( det ), blind_throw_pos );
@@ -3003,6 +3039,35 @@ void throw_activity_actor::do_turn( player_activity& act, Character& who )
                     << end_abs.x() << "," << end_abs.y() << "," << end_abs.z() << ")";
                 break; // one item per throw
             }
+        }
+    }
+#endif // COOP_ENABLED
+#ifdef COOP_ENABLED
+    if( g->coop_client_ && !trajectory.empty() ) {
+        map& fhere = get_map();
+        const auto impact = tripoint_bub_ms( trajectory.back() );
+        std::vector<std::pair<tripoint_abs_ms, std::pair<field_type_id, int>>> new_fields;
+        for( const tripoint_bub_ms& tp : fhere.points_in_radius( impact, 5 ) ) {
+            const field& f = fhere.field_at( tp );
+            for( const auto& [ft, fe] : f ) {
+                const auto abs = fhere.bub_to_abs( tp );
+                if( fe.get_field_intensity() > 0
+                    && coop_fields_before.find( {abs, ft} ) == coop_fields_before.end() ) {
+                    new_fields.emplace_back( abs, std::make_pair( ft, fe.get_field_intensity() ) );
+                }
+            }
+        }
+        const auto limit = std::min( static_cast<int>( new_fields.size() ), 25 );
+        for( int i = 0; i < limit; ++i ) {
+            const auto& [abs, finfo] = new_fields[i];
+            std::ostringstream fctx;
+            JsonOut jf( fctx );
+            jf.start_object();
+            jf.member( "ax", abs.x() ); jf.member( "ay", abs.y() ); jf.member( "az", abs.z() );
+            jf.member( "field", finfo.first.id().str() );
+            jf.member( "intensity", finfo.second );
+            jf.end_object();
+            g->coop_client_->queue_action( "FIELD_SET", fctx.str() );
         }
     }
 #endif // COOP_ENABLED
@@ -3809,6 +3874,15 @@ void butchery_activity_actor::finish( player_activity& act, Character& who )
         return 0.5 * skill_level / 10 + 0.3 * ( factor + 50 ) / 100 + 0.2 * p.dex_cur / 20;
     };
 
+#ifdef COOP_ENABLED
+    std::vector<const item*> coop_items_before;
+    bool coop_corpse_detached = false;
+    if( g->coop_client_ ) {
+        for( const item* it : here.i_at( p.bub_pos() ) ) {
+            coop_items_before.push_back( it );
+        }
+    }
+#endif // COOP_ENABLED
     butchery_drops_harvest( &corpse_item, *corpse, p, roll_butchery, this->type, roll_drops );
 
     if( this->type == DISSECT ) {
@@ -3836,10 +3910,16 @@ void butchery_activity_actor::finish( player_activity& act, Character& who )
                 _( "You apply few quick cuts to the %s and leave what's left of it for scavengers." ),
                 corpse_item.tname() );
             target->detach();
+#ifdef COOP_ENABLED
+            coop_corpse_detached = true;
+#endif // COOP_ENABLED
             break;
         case BUTCHER_FULL:
             p.add_msg_if_player( m_good, _( "You finish butchering the %s." ), corpse_item.tname() );
             target->detach();
+#ifdef COOP_ENABLED
+            coop_corpse_detached = true;
+#endif // COOP_ENABLED
             break;
         case F_DRESS: {
             if( roll_butchery() < 0 ) {
@@ -3944,10 +4024,16 @@ void butchery_activity_actor::finish( player_activity& act, Character& who )
                     break;
             }
             target->detach();
+#ifdef COOP_ENABLED
+            coop_corpse_detached = true;
+#endif // COOP_ENABLED
             break;
         case DISSECT:
             p.add_msg_if_player( m_good, _( "You finish dissecting the %s." ), corpse_item.tname() );
             target->detach();
+#ifdef COOP_ENABLED
+            coop_corpse_detached = true;
+#endif // COOP_ENABLED
             break;
     }
 
@@ -3956,6 +4042,33 @@ void butchery_activity_actor::finish( player_activity& act, Character& who )
 
     if( !this->targets.empty() && setup_next_target( act, p ) ) { return; }
 
+#ifdef COOP_ENABLED
+    if( g->coop_client_ && coop_corpse_detached ) {
+        std::ostringstream ctx;
+        JsonOut j( ctx );
+        j.start_object();
+        j.member( "ax", this->placement.x() );
+        j.member( "ay", this->placement.y() );
+        j.member( "az", this->placement.z() );
+        j.end_object();
+        g->coop_client_->queue_action( "BUTCHER", ctx.str() );
+        const auto new_abs = here.bub_to_abs( p.bub_pos() );
+        for( const item* it : here.i_at( p.bub_pos() ) ) {
+            if( std::ranges::find( coop_items_before, it ) == coop_items_before.end() ) {
+                std::ostringstream drop_ctx;
+                JsonOut jd( drop_ctx );
+                jd.start_object();
+                jd.member( "ax", new_abs.x() );
+                jd.member( "ay", new_abs.y() );
+                jd.member( "az", new_abs.z() );
+                jd.member( "item" );
+                it->serialize( jd );
+                jd.end_object();
+                g->coop_client_->queue_action( "DROP", drop_ctx.str() );
+            }
+        }
+    }
+#endif // COOP_ENABLED
     act.set_to_null();
     activity_handlers::resume_for_multi_activities( p );
 }

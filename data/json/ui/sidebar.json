@@ -21,6 +21,8 @@
   { "type": "widget", "id": "compass_simple","style": "native", "native": "draw_simple_compass",    "label": "Simple Compass", "height": 1,  "width": 44, "flags": [ "W_DISABLED_BY_DEFAULT" ] },
   { "type": "widget", "id": "map",           "style": "native", "native": "draw_mminimap",          "label": "Map",           "height": -1, "width": 44, "flags": [ "W_ALWAYS_DRAW" ] },
   { "type": "widget", "id": "ai_goal",       "style": "native", "native": "draw_ai_goal",           "label": "AI Needs",      "height": 1,  "width": 44, "flags": [ "W_DISABLED_BY_DEFAULT" ] },
+  { "type": "widget", "id": "coop_partner", "style": "native", "native": "hud_coop_partner_text", "label": "Co-op Partner", "height": 4, "width": 44, "show_if": "coop_panel" },
+
 
   { "type": "widget", "id": "health_classic",        "style": "native", "native": "draw_health_classic",      "label": "Health",        "height": 7,  "width": 44 },
   { "type": "widget", "id": "veh_classic",           "style": "native", "native": "draw_veh_classic",         "label": "Vehicle",       "height": 2,  "width": 44, "show_if": "veh_panel" },
@@ -78,7 +80,7 @@
       "bodygraph", "bodygraph_temp", "bodygraph_encumb", "bodygraph_status",
       "vehicle", "location", "wind", "location_alt", "weapon", "weightvolume",
       "needs", "sound", "log", "moon", "armor", "armor_comp", "compass",
-      "compass_comp", "compass_simple", "map", "ai_goal"
+      "compass_comp", "compass_simple", "map", "ai_goal", "coop_partner"
     ]
   },
 
@@ -93,7 +95,7 @@
       "weather_classic", "lighting_classic", "weapon_classic", "weapon_classic_alt",
       "weightvolume_classic", "time_classic", "wind_classic", "armor_classic",
       "armor_comp", "compass", "compass_comp", "compass_simple", "log_classic",
-      "map", "ai_goal"
+      "map", "ai_goal", "coop_partner"
     ]
   },
   {
@@ -106,7 +108,7 @@
       "limbs_compact", "sound_compact", "stats_compact", "mana_compact",
       "time_compact", "needs_compact", "env_compact", "veh_compact",
       "weightvolume_compact", "armor_classic", "armor_comp", "log_classic",
-      "compass_compact", "compass_comp_compact", "compass_simple", "map", "ai_goal"
+      "compass_compact", "compass_comp_compact", "compass_simple", "map", "ai_goal", "coop_partner"
     ]
   },
   {
@@ -119,7 +121,7 @@
       "hint", "limbs_narrow", "movement_narrow", "mana_narrow", "stats_narrow",
       "vehicle", "location_narrow", "wind", "weapon", "weightvolume_narrow",
       "needs_narrow", "sound_narrow", "log", "moon_narrow", "armor", "armor_comp",
-      "compass", "compass_comp", "compass_simple", "map", "ai_goal"
+      "compass", "compass_comp", "compass_simple", "map", "ai_goal", "coop_partner"
     ]
   },
   {
@@ -132,7 +134,7 @@
       "hint", "limbs", "movement", "mana", "stats", "vehicle", "location", "wind",
       "location_alt", "weapon", "weightvolume", "needs", "sound", "log", "moon",
       "armor", "armor_comp", "compass", "compass_comp", "compass_simple", "map",
-      "ai_goal"
+      "ai_goal", "coop_partner"
     ]
   }
 ]

@@ -137,6 +137,7 @@ auto build_join_info_packet(const join_info_data& d) -> std::string {
     jout.member("ax", d.pos.x());
     jout.member("ay", d.pos.y());
     jout.member("az", d.pos.z());
+    if( !d.worn_json.empty() ) { jout.member( "worn", d.worn_json ); }
     jout.end_object();
     jout.end_object();
     return oss.str();
@@ -157,6 +158,7 @@ auto parse_join_info_packet(const std::string& buf) -> std::optional<join_info_d
         result.pos.x() = d.get_int("ax", 0);
         result.pos.y() = d.get_int("ay", 0);
         result.pos.z() = d.get_int("az", 0);
+        result.worn_json = d.get_string( "worn", {} );
         return result;
     } catch (const JsonError&) {
         return std::nullopt;

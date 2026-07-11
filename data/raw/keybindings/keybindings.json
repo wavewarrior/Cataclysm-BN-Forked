@@ -1004,6 +1004,13 @@
   },
   {
     "type": "keybinding",
+    "id": "CO_OP_MARK_OVERMAP",
+    "category": "OVERMAP",
+    "name": "Co-op: Place Shared Marker",
+    "bindings": [ { "input_method": "keyboard", "key": "m" } ]
+  },
+  {
+    "type": "keybinding",
     "id": "ROTATE",
     "category": "OVERMAP_EDITOR",
     "name": "Rotate",

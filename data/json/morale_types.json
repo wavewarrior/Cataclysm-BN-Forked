@@ -437,5 +437,10 @@
     "type": "morale_type",
     "text": "Debug Morale",
     "permanent": true
+  },
+  {
+    "id": "morale_coop_bonding",
+    "type": "morale_type",
+    "text": "Feeling good with company"
   }
 ]

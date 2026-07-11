@@ -35,6 +35,7 @@ struct sync_header_data {
 /// C6: join_info packet — client's starting abs position on join.
 struct join_info_data {
     tripoint_abs_ms pos;
+    std::string worn_json; ///< JSON array of serialized worn items; empty = none
 };
 
 /// C4: parsed landing position from a MOVE_UP/MOVE_DOWN ctx_json field.
