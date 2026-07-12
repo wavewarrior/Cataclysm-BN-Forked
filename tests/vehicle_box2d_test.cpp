@@ -274,4 +274,126 @@ TEST_CASE( "Box2D Phase7: mount rotation formula gives correct offsets",
         CHECK( ry == -1 );
     }
 }
+// ── Test 7: Phase 10 Steps 1–3 — filter scheme: VT fires, VV silent ──────────
+// Validates the bit-separation scheme from Step 1:
+//   terrain z-bits = [z+10] (bits 0–20), vehicle z-bits = [z+30] (bits 20–40).
+//   Vehicle mask = terrain bits → VV contacts structurally disabled.
+// Part A: vehicle with Step-1 filter collides into terrain → begin-contact fires (filter
+//         allows VT); angular velocity becomes non-zero from off-centre impact.
+// Part B: two vehicles with Step-1 filter approaching each other → zero contact events
+//         (filter blocks VV entirely).
+TEST_CASE( "Box2D Phase10 Step1-3: VT hit events fire, VV contacts silent",
+           "[vehicle][box2d]" )
+{
+    // z=0 → ter_z_bit = 1<<10 = 1024, veh_z_bit = 1<<30.
+    const uint64_t ter_z_bit = 1ull << 10;
+    const uint64_t veh_z_bit = 1ull << 30;
+    const float    dt        = 1.0f / 60.0f;
+
+    // ── Part A: vehicle approaches terrain — VT hit event must fire ───────────
+    {
+        const auto world = make_test_world();
+
+        // Static terrain body to the east.
+        {
+            auto bdef      = b2DefaultBodyDef();
+            bdef.type      = b2_staticBody;
+            bdef.position  = { 3.0f * TILE_M, 0.0f };
+            const auto bid = b2CreateBody( world, &bdef );
+            auto sdef                = b2DefaultShapeDef();
+            sdef.filter.categoryBits = ter_z_bit;
+            sdef.filter.maskBits     = veh_z_bit;
+            sdef.enableHitEvents     = true;
+            const auto poly = b2MakeBox( TILE_M * 0.499f, TILE_M * 0.499f );
+            b2CreatePolygonShape( bid, &sdef, &poly );
+        }
+
+        // Dynamic vehicle moving east; offset north so impact is off-centre.
+        b2BodyId veh_bid{};
+        {
+            auto bdef               = b2DefaultBodyDef();
+            bdef.type               = b2_dynamicBody;
+            bdef.gravityScale       = 0.0f;
+            bdef.position           = { 0.0f, TILE_M * 0.3f };
+            bdef.linearVelocity     = { 20.0f, 0.0f };
+            veh_bid                 = b2CreateBody( world, &bdef );
+            auto sdef                = b2DefaultShapeDef();
+            sdef.filter.categoryBits = veh_z_bit;
+            sdef.filter.maskBits     = ter_z_bit;
+            sdef.enableHitEvents     = true;
+            sdef.density             = 500.0f;
+            const auto poly = b2MakeBox( TILE_M, TILE_M );
+            b2CreatePolygonShape( veh_bid, &sdef, &poly );
+        }
+
+        // Step until begin-contact fires (filter must allow VT — checks Step 1 correctness).
+        // beginCount fires on first contact regardless of approach speed threshold.
+        int begin_count = 0;
+        for( int i = 0; i < 20 && begin_count == 0; ++i ) {
+            b2World_Step( world, dt, 4 );
+            begin_count += b2World_GetContactEvents( world ).beginCount;
+        }
+        CHECK( begin_count >= 1 );  // VT contact began — filter allows it
+        // Off-centre impact must produce non-zero angular velocity (spin signal that
+        // dispatch_contact_events() reads back into angular_velocity_rads).
+        CHECK( std::abs( b2Body_GetAngularVelocity( veh_bid ) ) > 0.01f );
+
+        b2DestroyWorld( world );
+    }
+
+    // ── Part B: two vehicle bodies approaching each other — VV must be silent ──
+    {
+        const auto world = make_test_world();
+
+        // Vehicle A moving east at 15 m/s.
+        {
+            auto bdef               = b2DefaultBodyDef();
+            bdef.type               = b2_dynamicBody;
+            bdef.gravityScale       = 0.0f;
+            bdef.position           = { 0.0f, 0.0f };
+            bdef.linearVelocity     = { 15.0f, 0.0f };
+            const auto bid          = b2CreateBody( world, &bdef );
+            auto sdef                = b2DefaultShapeDef();
+            sdef.filter.categoryBits = veh_z_bit;
+            sdef.filter.maskBits     = ter_z_bit;   // mask only terrain — VV disabled
+            sdef.enableHitEvents     = true;
+            sdef.density             = 500.0f;
+            const auto poly = b2MakeBox( TILE_M, TILE_M );
+            b2CreatePolygonShape( bid, &sdef, &poly );
+        }
+
+        // Vehicle B stationary, directly in A's path.
+        {
+            auto bdef               = b2DefaultBodyDef();
+            bdef.type               = b2_dynamicBody;
+            bdef.gravityScale       = 0.0f;
+            bdef.position           = { 3.0f * TILE_M, 0.0f };
+            bdef.linearVelocity     = { 0.0f, 0.0f };
+            const auto bid          = b2CreateBody( world, &bdef );
+            auto sdef                = b2DefaultShapeDef();
+            sdef.filter.categoryBits = veh_z_bit;
+            sdef.filter.maskBits     = ter_z_bit;   // mask only terrain — VV disabled
+            sdef.enableHitEvents     = true;
+            sdef.density             = 500.0f;
+            const auto poly = b2MakeBox( TILE_M, TILE_M );
+            b2CreatePolygonShape( bid, &sdef, &poly );
+        }
+
+        // Step 20 frames — A would hit B head-on at 15 m/s without filter.
+        int total_hits  = 0;
+        int total_begin = 0;
+        for( int i = 0; i < 20; ++i ) {
+            b2World_Step( world, dt, 4 );
+            const auto ev = b2World_GetContactEvents( world );
+            total_hits  += ev.hitCount;
+            total_begin += ev.beginCount;
+        }
+        // Filter disables VV → no hit events, no begin-contact events.
+        CHECK( total_hits  == 0 );
+        CHECK( total_begin == 0 );
+
+        b2DestroyWorld( world );
+    }
+}
+
 #endif // BOX2D_ENABLED
