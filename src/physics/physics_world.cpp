@@ -102,6 +102,12 @@ void PhysicsWorld::on_vehicle_moved( vehicle &v )
 {
     const auto it = vehicle_bodies_.find( &v );
     if( it == vehicle_bodies_.end() ) { return; }
+    // Box2D owns position for this vehicle: the readback in vehmove() moves the tile
+    // anchor to match the body, NOT the other way around.  Teleporting the body here
+    // would snap it back to integer-tile-centre metres every tick, defeating sub-tile
+    // integration and creating a staircase feedback loop.
+    if( v.box2d_position_authority ) { return; }
+
 
     const auto bpos = v.bub_ms_location();
     const auto fv   = v.face_vec();

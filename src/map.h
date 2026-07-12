@@ -2405,9 +2405,6 @@ class map : public submap_load_listener
         /// Returns nullptr when built without -DBOX2D=ON or before construction.
         auto get_physics_world() const -> physics::PhysicsWorld *; // *NOPAD*
 #endif
-    private:
-
-    public:
         bool has_rope_at( tripoint_bub_ms pt ) const;
         std::pair<vehicle *, int> get_rope_at( const point_bub_ms &pt ) const;
 
