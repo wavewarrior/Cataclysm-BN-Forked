@@ -38,64 +38,89 @@ cmake --build --preset osx-arm-slim --target cataclysm-bn-tiles
 
 **Depends on**: Phase 10 Step 5 playtested and stable.
 
-Remove all code that Box2D now supersedes. Do this before Step 6 because Step 6 deletes the very fields Phase 12 audits.
+Remove all code that Box2D now supersedes. Do this before Step 6 because Step 6 deletes the very fields Phase 12 audits. **Audited 2026-07-12 — callsites confirmed below.**
 
-**Step-by-step:**
+---
 
-1. **Audit callsites** before deleting anything:
-   ```sh
-   # Run from repo root; re-check after each deletion
-   lsp references of_turn         # should only be vehmove() gain_moves block + savegame
-   lsp references turn_dir        # should only be serialization + act_on_map skid check
-   lsp references angular_velocity_rads  # must be empty after Step 6
-   ```
+#### Step 12-A: Remove transient VV solve  *(Phase 2 — superseded by Phase 10 contact events)*
 
-2. **Remove transient VV solve** (Phase 2 code — superseded by Phase 10 contact events):
-   - Delete `src/physics/veh_box2d_solve.h` and `src/physics/veh_box2d_solve.cpp`
-   - Remove `#include "physics/veh_box2d_solve.h"` from `vehicle_move.cpp`
-   - Remove the `precomputed` branch in `vehicle_vehicle_collision()` (the `vv_solved_body *precomputed = nullptr` path)
+Files to delete entirely:
+- `src/physics/veh_box2d_solve.h`
+- `src/physics/veh_box2d_solve.cpp`
 
-3. **Remove transient terrain solve** (Phase 5 code — superseded by persistent VT contacts):
-   - Delete `resolve_terrain_impulse()` wrapper in `physics_world.cpp:245-313`
-   - Remove its call in `vehicle_move.cpp` (inside `veh_coll_bashable` path)
+Callsites to scrub **before** deleting:
+- `src/map.cpp:8` — `#include "physics/veh_box2d_solve.h"` → delete line
+- `src/map.cpp:1932` — `phys_world->resolve_terrain_impulse(...)` call → remove whole `if (!phys_world)` block
+- `src/map.h:938-942` — `resolve_vehicle_terrain_impulse()` wrapper declaration → delete
+- `src/vehicle_move.cpp` — `veh_coll_bashable` path that calls `here.resolve_vehicle_terrain_impulse()` and writes `angular_velocity_rads` at line 930 → delete that block
 
-4. **Remove 1D elastic analytic formula** in `vehicle_vehicle_collision()`:
-   - The `analytic` branch that uses `get_collision_factor()` math directly
-   - Keep `get_collision_factor()` itself — Phase 11 still needs it for ranged combat penetration
+#### Step 12-B: Remove transient terrain solve  *(Phase 5 — superseded by persistent VT contacts)*
 
-5. **Retire `precalc` field** (see Precalc retirement checklist in Phase 12 section below):
-   - Audit every `precalc` callsite with `lsp references vehicle_part::precalc`
-   - Migrate hot callsites to `part_world_offset(p, veh.physics_angle)` first
-   - Delete `vehicle_part::precalc[2]`, `precalc_mounts()`, `refresh_precalc()` shim
+- `src/physics/physics_world.h:66-70` — `resolve_terrain_impulse()` declaration → delete
+- `src/physics/physics_world.cpp:315-~380` — `PhysicsWorld::resolve_terrain_impulse()` implementation → delete
 
-6. **Remove tile-step detection loop** in `move_vehicle()` — the entire per-tile collision traversal loop is now dead code for Box2D vehicles.
+#### Step 12-C: Remove VV collision `precomputed` branch
 
-7. **Build + run full test suite** after each removal, not at the end:
-   ```sh
-   cmake --build --preset osx-arm-slim --target cataclysm-bn-tiles cata_test-tiles
-   ./cata_test-tiles "[vehicle][box2d]"   # must still pass 38 assertions
-   ```
+In `vehicle_vehicle_collision()` (`src/map.cpp`):
+- Find the `#ifdef BOX2D_ENABLED` block that reads `opts.veh1_impulse_ns` / `opts.delta_vel_mps` and writes `angular_velocity_rads` at line 1103
+- Delete the whole `precomputed` branch; keep the non-Box2D path for fallback until Phase 10 Step 6
+
+#### Step 12-D: Remove 1D elastic analytic formula
+
+In `vehicle_vehicle_collision()`:
+- Delete the `analytic` branch that recomputes impulse from `get_collision_factor()` directly
+- **Keep** `get_collision_factor()` — Phase 11 needs it for penetration falloff
+
+#### Step 12-E: Retire `precalc` field
+
+- Run `lsp references vehicle_part::precalc` — expect ~50 callsites
+- Migrate each read of `precalc[0]` to `part_world_offset(p, veh.physics_angle)` (already implemented in `vehicle_shape.h`)
+- Delete `vehicle_part::precalc[2]` from `vehicle_part.h`
+- Delete `precalc_mounts()` and the `refresh_precalc(float)` shim from `vehicle.h` / `vehicle.cpp`
+
+#### Step 12-F: Remove tile-step detection loop in `move_vehicle()`
+
+- The per-tile collision traversal `for (int count = 0; count < 100; ++count)` loop is dead code for Box2D vehicles
+- Only remove after steps A–E compile cleanly — this loop depends on the 1D impulse math removed in D
+
+#### Step 12 verification
+
+After **each** substep, not at the end:
+```sh
+cmake --build --preset osx-arm-slim --target cataclysm-bn-tiles cata_test-tiles
+./cata_test-tiles "[vehicle][box2d]"   # must pass all 38 assertions
+```
 
 ---
 
 ### 2. Phase 10 Step 6 — Retire Legacy Motion Fields  *(unblocked after Phase 12)*
 
-**Depends on**: Phase 12 complete (so that all consumers of these fields are gone before the fields are deleted).
+**Depends on**: Phase 12 complete (so all consumers of these fields are gone before the fields are deleted).
 
-Fields to delete from `vehicle.h` and all consumers:
-- `of_turn` — movement budget counter; replaced by Box2D sub-step accumulator
-- `velocity` (integer cm/s) — replaced by `b2Body_GetLinearVelocity()` readback
-- `turn_dir` — replaced by `b2Body_GetRotation()` readback
-- `angular_velocity_rads` — transitional field; now populated from Box2D directly each tick
-- `gain_moves()` call in `vehmove()` — the entire budget-replenishment block
-- Discrete `turn()` call chain in `act_on_map()`
+**Audited `of_turn` callsites** (confirmed 2026-07-12):
+- `src/vehicle.h:1755-1757` — field declarations (`of_turn`, `of_turn_carry`) → delete
+- `src/vehicle.cpp:359,360,413,6451,6465,6467` — copy ctor, init, `gain_moves()` body → delete
+- `src/vehicle_move.cpp:1500,1507,1523-1534` — falling budget, traction zero, turn-cost check → delete
+- `src/map.cpp:810-907` — priority queue scheduling and the entire `gain_moves()` block → replace with Box2D sub-step accumulator
+- `src/map.cpp:1351-1432` — VV reordering hack (`avg_of_turn`) → delete (contact events handle ordering)
+- `src/savegame_json.cpp:3207,3357,3400` — serialization read/write/reset → drop; add old-save migration guard
+
+**Audited `angular_velocity_rads` callsites** (confirmed 2026-07-12):
+- `src/vehicle.h:1760` — field declaration → delete after removing all writes
+- `src/vehicle_move.cpp:930` — terrain-impulse write-back (gone after Step 12-A)
+- `src/map.cpp:1103` — VV solve result write (gone after Step 12-C)
+- `src/physics/physics_world.cpp:248,259,336` — pre-step sync, post-step readback, transient solve init → replace 248+336 with direct `b2Body_SetAngularVelocity`/`b2Body_GetAngularVelocity` at the Box2D layer; 259 becomes the sole readback → keep until field deleted
+- `src/savegame_json.cpp:3208,3401` → drop serialization
+- `src/physics/veh_box2d_solve.cpp:59-60` → gone with Step 12-A
+
+**Remaining fields** (`velocity`, `turn_dir`) — defer to after `of_turn` and `angular_velocity_rads` are clean; they have ~200 callsites each and need a separate migration sprint.
 
 **Step-by-step:**
-1. Run `lsp references` on each field before touching it — any remaining callsite is a migration gap.
-2. Replace reads of `velocity` with `b2Body_GetLinearVelocity(body).x * TILE_M * 100.0f` (cm/s equivalent) where game logic still needs a speed scalar (e.g. noise, passenger throw checks).
-3. Delete fields from `vehicle.h`, fix every compile error, rebuild.
-4. Update `savegame_json.cpp` — drop serialization of retired fields; add migration note for old saves.
-5. Run `./cata_test-tiles "[vehicle][box2d]"` — 38 assertions must pass.
+1. Delete `of_turn` + `of_turn_carry` following the callsite list above
+2. Delete `angular_velocity_rads` following the callsite list above
+3. Fix every compile error; rebuild after each field
+4. Update `savegame_json.cpp` — add migration guards for old saves that contain the retired keys
+5. Run `./cata_test-tiles "[vehicle][box2d]"` — all assertions must pass
 
 ---
 
