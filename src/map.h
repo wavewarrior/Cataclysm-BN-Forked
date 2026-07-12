@@ -2400,6 +2400,14 @@ class map : public submap_load_listener
 #endif
 
     public:
+#ifdef BOX2D_ENABLED
+        /// Exposes the Box2D world for debug rendering and toggle.
+        /// Returns nullptr when built without -DBOX2D=ON or before construction.
+        auto get_physics_world() const -> physics::PhysicsWorld *; // *NOPAD*
+#endif
+    private:
+
+    public:
         bool has_rope_at( tripoint_bub_ms pt ) const;
         std::pair<vehicle *, int> get_rope_at( const point_bub_ms &pt ) const;
 

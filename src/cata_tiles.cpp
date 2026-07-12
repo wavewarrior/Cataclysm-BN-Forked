@@ -1,5 +1,9 @@
 #include "cata_tiles.h"
 #include "cata_tiles_internal.h"
+#ifdef BOX2D_ENABLED
+#include "physics/physics_world.h"
+#include "physics/vehicle_shape.h"  // TILE_M
+#endif
 
 #include "action.h"
 #include "avatar.h"
@@ -1489,6 +1493,23 @@ void cata_tiles::draw(
         }
     }
 
+#ifdef BOX2D_ENABLED
+    // Box2D debug overlay — renders collision shapes, contact manifolds, and body
+    // transforms on top of the tile layer.  Skip in iso mode (projection differs).
+    if( !tile_iso ) {
+        if( auto *pw = g ? g->m.get_physics_world() : nullptr;
+            pw && pw->debug_draw_enabled() ) {
+            // Camera transform: screen_x = origin_px + b2_x * m2px
+            const float origin_px = static_cast<float>( op.x )
+                                    - static_cast<float>( o.x() ) * tile_width;
+            const float origin_py = static_cast<float>( op.y )
+                                    - static_cast<float>( o.y() ) * tile_height;
+            const float m2px = static_cast<float>( tile_width )  / TILE_M;
+            const float m2py = static_cast<float>( tile_height ) / TILE_M;
+            pw->draw_debug( renderer.get(), origin_px, origin_py, m2px, m2py );
+        }
+    }
+#endif
     lighting::get_render_state().clear_tile_scissor();
 }
 

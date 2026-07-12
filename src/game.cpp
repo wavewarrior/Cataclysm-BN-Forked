@@ -135,6 +135,9 @@
 #include "npc.h"
 #include "magic.h"
 #include "map.h"
+#ifdef BOX2D_ENABLED
+#include "physics/physics_world.h"
+#endif
 #include "map_functions.h"
 #include "map_item_stack.h"
 #include "map_iterator.h"
@@ -6064,6 +6067,18 @@ void game::toggle_debug_fps()
     g_show_fps = !g_show_fps;
     add_msg( string_format( "FPS counter %s", g_show_fps ? "enabled" : "disabled" ) );
 }
+
+#ifdef BOX2D_ENABLED
+void game::toggle_box2d_debug_draw()
+{
+    if( auto *pw = m.get_physics_world() ) {
+        const auto enabled = pw->toggle_debug_draw();
+        add_msg( string_format( "Box2D debug overlay %s", enabled ? "enabled" : "disabled" ) );
+    } else {
+        add_msg( "Box2D not active (no physics world)" );
+    }
+}
+#endif
 
 void game::debug_hour_timer::print_time()
 {

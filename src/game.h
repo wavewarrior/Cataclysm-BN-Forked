@@ -1188,6 +1188,10 @@ class game: public submap_load_listener
         void toggle_debug_hour_timer();
         // toggles the FPS counter overlay
         void toggle_debug_fps();
+#ifdef BOX2D_ENABLED
+        /// Toggle the Box2D collision-shape overlay (tiles mode only).
+        void toggle_box2d_debug_draw();
+#endif
         /** Creature for which to display the visibility map */
         Creature *displaying_visibility_creature;
         /** Type of lighting condition overlay to display */

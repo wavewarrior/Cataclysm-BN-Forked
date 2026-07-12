@@ -1933,6 +1933,13 @@ auto map::resolve_vehicle_terrain_impulse( vehicle &v, tripoint_bub_ms tile_pos,
 }
 #endif
 
+#ifdef BOX2D_ENABLED
+auto map::get_physics_world() const -> physics::PhysicsWorld *
+{
+    return phys_world.get();
+}
+#endif
+
 
 bool map::displace_water(const tripoint_bub_ms& p) {
     // Check for shallow water

@@ -6,6 +6,7 @@
 #include <map>
 #include <unordered_map>
 #include <vector>
+struct SDL_Renderer; // forward-declare for draw_debug(); no SDL header pulled in here
 
 struct vehicle;
 class map;
@@ -60,6 +61,20 @@ public:
     void step( float dt, int substeps );
     void dispatch_contact_events();
 
+
+    // ── Debug overlay (Phase 10 debugging tool) ───────────────────────────
+    /// Toggle the real-time Box2D shape overlay (tiles mode only).
+    /// Returns the new enabled state.
+    auto toggle_debug_draw() -> bool;
+    auto debug_draw_enabled() const -> bool { return debug_draw_; } // *NOPAD*
+    /// Render collision shapes, contact manifolds, and body transforms via SDL.
+    /// Call from cata_tiles::draw() after all tiles are flushed; skip in iso mode.
+    /// Camera parameters derived from cata_tiles locals:
+    ///   origin_p{x,y} = op.{x,y} - o.{x,y}() * tile_{width,height}
+    ///   m2p{x,y}      = tile_{width,height} / TILE_M
+    auto draw_debug( SDL_Renderer *renderer,
+                     float origin_px, float origin_py,
+                     float m2px,      float m2py ) const -> void;
     // ── Query access ──────────────────────────────────────────────────────
     auto world_id() const -> b2WorldId; // *NOPAD*
 
@@ -89,6 +104,8 @@ private:
 
     auto make_vehicle_body( vehicle &v ) -> b2BodyId;
     void rebuild_bashable_lookup();
+    bool debug_draw_ = false;
+
 };
 
 } // namespace physics
