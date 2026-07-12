@@ -21,12 +21,12 @@ This plan migrates Cataclysm-BN's vehicle and combat systems to Box2D 3.0.0 as t
 | Phase 7 — Continuous Rotation Helpers | ✅ Done | `part_world_offset()` in `vehicle_shape.h`; `refresh_precalc(float)` in `vehicle.cpp`; wired in `step()` |
 | Phase 8 — Co-op Integration | ✅ Done | Integration point identified: `coop_game_tick()` → `post_action_world_step()`; `step()` already called at `vehmove():784` |
 | Phase 9 — Serialization | ✅ Done | `angular_velocity_rads`, `physics_pos_x/y`, `physics_angle` serialized in `savegame_json.cpp`; old-save safe |
-| Phase 10 — Movement Migration | 🔄 Partial | Infrastructure done; full migration (Step 1–6) documented in Phase 10 section below; deferred — root blocker is tile-step retirement |
+| Phase 10 — Movement Migration | 🔄 Steps 1–5 done | Steps 1–3 (dynamic promotion, VT contacts, dispatch); Step 4 (act_on_map inventory); Step 5 (box2d_position_authority flag, act_on_map early-return, vehmove() xy readback) — commit `d6355af`; Step 6 (legacy field retirement) blocked on Phase 12 |
 | Phase 11 — Ranged Combat | ⛔ Blocked | Gated on tile-independent ranged combat rework (external) |
 | Phase 12 — Legacy Cleanup | ⛔ Blocked | Depends on Phase 10 full |
 | Phase 13 — Creature Bugfix | ✅ Done | Bug A (`smashed=true` guard) and Bug B (dead-state check) applied |
 
-**Phases 1–9 and 13 complete.** Phase 10 infrastructure landed; full migration (dynamic body promotion + tile-step retirement) is a multi-session effort with its concrete steps now documented in the Phase 10 section. Phases 11–12 remain blocked on external work.
+**Phases 1–9, 13 and Phase 10 Steps 1–5 complete.** Box2D now owns horizontal vehicle position: `act_on_map()` runs sinking/falling/traction/skidding logic then exits early; `vehmove()` reads `physics_pos` back to the tile grid. Phase 10 Step 6 (legacy field retirement) and Phases 11–12 remain blocked on external work.
 
 ---
 
