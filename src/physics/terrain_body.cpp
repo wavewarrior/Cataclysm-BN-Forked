@@ -23,7 +23,9 @@ auto build_submap_terrain_bodies( b2WorldId         world,
 
     const auto z     = bub_origin.z();
     // z ∈ [-OVERMAP_DEPTH, OVERMAP_HEIGHT] = [-10, 10]; offset by 10 → bit index [0, 20].
-    const auto z_bit = 1ull << static_cast<uint64_t>( z + 10 );
+    // Terrain z-bits occupy [z+10] (bits 0–20); vehicle z-bits occupy [z+30] (bits 20–40).
+    const auto ter_z_bit = 1ull << static_cast<uint64_t>( z + 10 );
+    const auto veh_z_bit = 1ull << static_cast<uint64_t>( z + 30 );
 
     std::vector<b2BodyId> bodies;
     bodies.reserve( 64 );
@@ -46,8 +48,8 @@ auto build_submap_terrain_bodies( b2WorldId         world,
             auto sdef                = b2DefaultShapeDef();
             sdef.friction            = 0.5f;
             sdef.restitution         = ( cls == tile_body_class::solid ) ? 0.1f : 0.4f;
-            sdef.filter.categoryBits = z_bit;
-            sdef.filter.maskBits     = z_bit;
+            sdef.filter.categoryBits = ter_z_bit;
+            sdef.filter.maskBits     = veh_z_bit;
             sdef.enableContactEvents = true;
 
             // Half-extent slightly less than TILE_M/2 to avoid ghost-vertex contacts

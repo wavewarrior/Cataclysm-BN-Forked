@@ -33,10 +33,12 @@ auto PhysicsWorld::make_vehicle_body( vehicle &v ) -> b2BodyId
     const auto fv   = v.face_vec();   // normalized (cos θ, sin θ) in face direction
 
     auto bdef            = b2DefaultBodyDef();
-    // Static body — teleported by on_vehicle_moved() each time the tile-step system moves
-    // the vehicle.  Phase 6/7 read back position/angle after step() for physics_pos /
-    // physics_angle.  Phase 10 full promotes to b2_dynamicBody so Box2D drives movement.
-    bdef.type            = b2_staticBody;
+    // Dynamic body — gravity disabled for top-down game plane.  Tile-step still teleports
+    // bodies via on_vehicle_moved() until Phase 10 Step 5 (tile-step retirement).  Dynamic
+    // type is required so Box2D v3 fires contact events (kinematic and static pairs produce
+    // zero hit events regardless of filter settings).
+    bdef.type            = b2_dynamicBody;
+    bdef.gravityScale    = 0.0f;
     bdef.position        = { static_cast<float>( bpos.x() ) * TILE_M,
                               static_cast<float>( bpos.y() ) * TILE_M };
     bdef.rotation        = b2Rot{ static_cast<float>( fv.x ), static_cast<float>( fv.y ) };
@@ -59,9 +61,12 @@ auto PhysicsWorld::make_vehicle_body( vehicle &v ) -> b2BodyId
     sdef.enableContactEvents = true;
     sdef.enableHitEvents     = true;
 
-    const auto z_bit = 1ull << static_cast<uint64_t>( bpos.z() + 10 );
-    sdef.filter.categoryBits = z_bit;
-    sdef.filter.maskBits     = z_bit;
+    // Bit layout: terrain z-bits occupy [z+10] (bits 0–20); vehicle z-bits occupy [z+30] (bits 20–40).
+    // Vehicle mask = terrain bits → VV contacts are structurally disabled; VT contacts fire.
+    const auto ter_z_bit = 1ull << static_cast<uint64_t>( bpos.z() + 10 );
+    const auto veh_z_bit = 1ull << static_cast<uint64_t>( bpos.z() + 30 );
+    sdef.filter.categoryBits = veh_z_bit;
+    sdef.filter.maskBits     = ter_z_bit;
 
     b2CreatePolygonShape( bid, &sdef, &poly );
     return bid;
@@ -221,19 +226,28 @@ void PhysicsWorld::on_tile_bashed( tripoint_bub_ms pos )
 
 void PhysicsWorld::step( float dt, int substeps )
 {
-    // Vehicle bodies are b2_staticBody (teleported by on_vehicle_moved).
-    // No velocity-sync needed; position readback after step reflects the
-    // most recent on_vehicle_moved teleport and initialises physics_pos /
-    // physics_angle for Phase 10 full (b2_dynamicBody) migration.
+    // ── Pre-step: sync game velocity into Box2D bodies so contact impulses are
+    // physically meaningful.  Tile-step still owns position (on_vehicle_moved()
+    // teleports bodies via b2Body_SetTransform after each tile move).  Direct
+    // velocity set is used here; force-driven movement is wired in Step 5 when
+    // Box2D becomes the position authority.
+    for( auto &[veh, bid] : vehicle_bodies_ ) {
+        const auto fv      = veh->face_vec();
+        const auto spd_mps = static_cast<float>( veh->velocity ) / 100.0f;
+        b2Body_SetLinearVelocity( bid, { static_cast<float>( fv.x ) * spd_mps,
+                                         static_cast<float>( fv.y ) * spd_mps } );
+        b2Body_SetAngularVelocity( bid, veh->angular_velocity_rads );
+    }
+
     b2World_Step( world_, dt, substeps );
 
-    // ── Phase 6: read back physics position + angle → vehicle fields ──────────
+    // ── Post-step: read back physics state → vehicle fields ──────────────────
     for( auto &[veh, bid] : vehicle_bodies_ ) {
-        const auto pos     = b2Body_GetPosition( bid );
-        veh->physics_pos   = rl_vec2d{ pos.x / TILE_M, pos.y / TILE_M };
-        const auto rot     = b2Body_GetRotation( bid );
-        veh->physics_angle = std::atan2( rot.s, rot.c );
-        // Phase 7: repopulate precalc[0] from continuous angle.
+        const auto pos             = b2Body_GetPosition( bid );
+        veh->physics_pos           = rl_vec2d{ pos.x / TILE_M, pos.y / TILE_M };
+        const auto rot             = b2Body_GetRotation( bid );
+        veh->physics_angle         = std::atan2( rot.s, rot.c );
+        veh->angular_velocity_rads = b2Body_GetAngularVelocity( bid );
         veh->refresh_precalc( veh->physics_angle );
     }
 
@@ -242,21 +256,43 @@ void PhysicsWorld::step( float dt, int substeps )
 
 void PhysicsWorld::dispatch_contact_events()
 {
-    // Phase 10 (kinematic transitional):
+    // Vehicles are now b2_dynamicBody (Phase 10 Step 2).  Box2D v3 fires hit events
+    // for dynamic-static pairs.  VV contacts are structurally disabled by the filter
+    // (vehicle category bits 20–40 vs terrain category bits 0–20; vehicle mask only
+    // covers terrain bits).  All hit events here are VT (vehicle–terrain).
     //
-    // Box2D v3.0.0 contact events (begin/end/hit) are only generated when at
-    // least one body in the pair is b2_dynamicBody.  With vehicles as
-    // b2_kinematicBody, ALL contact event counts are zero — kinematic-static
-    // and kinematic-kinematic pairs produce no events.
+    // For each hit event:
+    //   1. Identify which shape belongs to a vehicle (the other is terrain).
+    //   2. Read back Box2D angular velocity — the contact solver has already
+    //      applied the terrain-impact torque (off-center contact point relative
+    //      to vehicle CoM).
+    //   3. Write to vehicle::angular_velocity_rads so the tile-step game sees it.
     //
-    // Angular spin for terrain impacts is already computed by
-    // resolve_terrain_impulse() (Phase 5) called from vehicle::part_collision(),
-    // so no additional dispatch is needed for Phase 10 kinematic.
-    //
-    // TODO Phase 10 full (vehicles promoted to b2_dynamicBody):
-    //   iterate hitEvents; identify struck vehicle via
-    //   vehicle_bodies_.count(static_cast<vehicle*>(b2Body_GetUserData(bid)));
-    //   apply angular_velocity_rads = b2Body_GetAngularVelocity(bid).
+    // NOTE: angular_velocity_rads is also set in the post-step readback loop in
+    // step().  dispatch_contact_events() fires AFTER that loop, so any contact-
+    // impulse modification to angular velocity is captured correctly here.
+
+    const auto events = b2World_GetContactEvents( world_ );
+    for( int i = 0; i < events.hitCount; ++i ) {
+        const auto &hit = events.hitEvents[i];
+
+        // Each hit event has two shapes.  Check both; one may be terrain (no vehicle
+        // pointer in userData), the other is the vehicle body.
+        const auto process_shape = [this]( b2ShapeId sid ) {
+            const auto bid = b2Shape_GetBody( sid );
+            // userData for vehicle bodies is a valid vehicle*; terrain bodies encode
+            // a tripoint_bub_ms as a small integer (see encode_tile_pos / decode_tile_pos).
+            // Distinguish via vehicle_bodies_ membership — O(1) unordered_map lookup.
+            auto *ptr = static_cast<vehicle *>( b2Body_GetUserData( bid ) );
+            if( vehicle_bodies_.count( ptr ) != 0 ) {
+                // Contact impulse has already been applied by the solver.
+                // Read back the resulting angular velocity.
+                ptr->angular_velocity_rads = b2Body_GetAngularVelocity( bid );
+            }
+        };
+        process_shape( hit.shapeIdA );
+        process_shape( hit.shapeIdB );
+    }
 }
 
 // ── Query access ──────────────────────────────────────────────────────────────
