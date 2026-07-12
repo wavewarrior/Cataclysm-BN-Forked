@@ -256,42 +256,41 @@ void PhysicsWorld::step( float dt, int substeps )
 
 void PhysicsWorld::dispatch_contact_events()
 {
-    // Vehicles are now b2_dynamicBody (Phase 10 Step 2).  Box2D v3 fires hit events
-    // for dynamic-static pairs.  VV contacts are structurally disabled by the filter
-    // (vehicle category bits 20–40 vs terrain category bits 0–20; vehicle mask only
-    // covers terrain bits).  All hit events here are VT (vehicle–terrain).
+    // Responsibility split:
+    //   post-step loop (step() above) — writes angular_velocity_rads for ALL vehicles
+    //     unconditionally after every b2World_Step(); this is the authoritative writer.
+    //   dispatch_contact_events() — reserved for per-contact game routing that the
+    //     post-step loop cannot do: bash-tile destruction, VT damage dispatch, sound
+    //     emission, and sustained-contact effects.  Angular velocity is NOT written here
+    //     to avoid redundancy with the post-step loop.
     //
-    // For each hit event:
-    //   1. Identify which shape belongs to a vehicle (the other is terrain).
-    //   2. Read back Box2D angular velocity — the contact solver has already
-    //      applied the terrain-impact torque (off-center contact point relative
-    //      to vehicle CoM).
-    //   3. Write to vehicle::angular_velocity_rads so the tile-step game sees it.
+    // Hit events are NOT used here: Box2D v3.0.0 hitCount is unreliable for
+    // dynamic–static pairs unless approach speed clearly exceeds hitEventThreshold.
+    // Begin-contact events (beginCount) fire on the first frame of every new contact
+    // regardless of speed and are confirmed reliable for dynamic–static pairs (Test 5).
     //
-    // NOTE: angular_velocity_rads is also set in the post-step readback loop in
-    // step().  dispatch_contact_events() fires AFTER that loop, so any contact-
-    // impulse modification to angular velocity is captured correctly here.
+    // TODO Phase 10 Step 5 (tile-step retirement):
+    //   For each begin-contact event that involves a terrain body (identified by
+    //   vehicle_bodies_.count(ptr) == 0), dispatch to the bash/damage system:
+    //     const auto bub = decode_tile_pos(reinterpret_cast<uintptr_t>(b2Body_GetUserData(bid)));
+    //     on_tile_bashed(bub);  // already implemented; call here instead of from vehicle_move.cpp
+    //   For VT hits on vehicle shapes, route sound emission.
 
     const auto events = b2World_GetContactEvents( world_ );
-    for( int i = 0; i < events.hitCount; ++i ) {
-        const auto &hit = events.hitEvents[i];
-
-        // Each hit event has two shapes.  Check both; one may be terrain (no vehicle
-        // pointer in userData), the other is the vehicle body.
-        const auto process_shape = [this]( b2ShapeId sid ) {
+    for( int i = 0; i < events.beginCount; ++i ) {
+        const auto &ev = events.beginEvents[i];
+        // Identify which shape is the vehicle (the other is terrain).
+        // vehicle_bodies_ membership is O(1); terrain userData is a small encoded integer,
+        // not a valid vehicle pointer — the count() guard is mandatory.
+        const auto check = []( b2ShapeId sid ) {
             const auto bid = b2Shape_GetBody( sid );
-            // userData for vehicle bodies is a valid vehicle*; terrain bodies encode
-            // a tripoint_bub_ms as a small integer (see encode_tile_pos / decode_tile_pos).
-            // Distinguish via vehicle_bodies_ membership — O(1) unordered_map lookup.
-            auto *ptr = static_cast<vehicle *>( b2Body_GetUserData( bid ) );
-            if( vehicle_bodies_.count( ptr ) != 0 ) {
-                // Contact impulse has already been applied by the solver.
-                // Read back the resulting angular velocity.
-                ptr->angular_velocity_rads = b2Body_GetAngularVelocity( bid );
-            }
+            auto *ptr      = static_cast<vehicle *>( b2Body_GetUserData( bid ) );
+            // TODO Phase 10 Step 5: vehicle_bodies_.count(ptr) → route bash/damage/sound
+            ( void )ptr;
+            ( void )bid;
         };
-        process_shape( hit.shapeIdA );
-        process_shape( hit.shapeIdB );
+        check( ev.shapeIdA );
+        check( ev.shapeIdB );
     }
 }
 

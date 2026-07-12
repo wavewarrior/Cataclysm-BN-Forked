@@ -304,6 +304,7 @@ TEST_CASE( "Box2D Phase10 Step1-3: VT hit events fire, VV contacts silent",
             sdef.filter.categoryBits = ter_z_bit;
             sdef.filter.maskBits     = veh_z_bit;
             sdef.enableHitEvents     = true;
+            sdef.enableContactEvents = true;  // explicit — beginCount is the filter-validation signal
             const auto poly = b2MakeBox( TILE_M * 0.499f, TILE_M * 0.499f );
             b2CreatePolygonShape( bid, &sdef, &poly );
         }
@@ -321,6 +322,7 @@ TEST_CASE( "Box2D Phase10 Step1-3: VT hit events fire, VV contacts silent",
             sdef.filter.categoryBits = veh_z_bit;
             sdef.filter.maskBits     = ter_z_bit;
             sdef.enableHitEvents     = true;
+            sdef.enableContactEvents = true;  // explicit — beginCount is the filter-validation signal
             sdef.density             = 500.0f;
             const auto poly = b2MakeBox( TILE_M, TILE_M );
             b2CreatePolygonShape( veh_bid, &sdef, &poly );
