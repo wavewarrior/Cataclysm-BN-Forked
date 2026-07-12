@@ -8,6 +8,114 @@ This plan migrates Cataclysm-BN's vehicle and combat systems to Box2D 3.0.0 as t
 
 ---
 
+## Remaining Work  *(as of 2026-07-12)*
+
+Three items remain. They have a dependency chain: **playtest → Phase 12 → Phase 10 Step 6 → Phase 11**.
+
+---
+
+### 0. Playtest Phase 10 Step 5 first  *(prerequisite for everything below)*
+
+Before touching any code, validate that Box2D position authority works correctly in gameplay.
+
+**How to test:**
+```sh
+cmake --build --preset osx-arm-slim --target cataclysm-bn-tiles
+./cataclysm-bn-tiles          # launch with BOX2D=ON build
+```
+1. Start a new game. Spawn a vehicle (`vehicle` debug menu or scenario).
+2. Drive it around for ~60 seconds — verify it moves smoothly with no tile-snap jitter.
+3. Drive into a wall — verify Box2D contact events fire (collision response, angular spin).
+4. Drive over a z-level drop — verify vehicle falls normally (tile-step still owns z).
+5. Park adjacent to another vehicle — verify they do NOT push each other apart (VV filter blocks).
+6. Save and reload — verify `physics_pos` / `physics_angle` restore correctly (no snap to origin).
+
+**Pass criteria:** vehicle moves, collides, falls, and saves/loads without artifact. Only then proceed.
+
+---
+
+### 1. Phase 12 — Legacy Cleanup  *(unblocked after playtest)*
+
+**Depends on**: Phase 10 Step 5 playtested and stable.
+
+Remove all code that Box2D now supersedes. Do this before Step 6 because Step 6 deletes the very fields Phase 12 audits.
+
+**Step-by-step:**
+
+1. **Audit callsites** before deleting anything:
+   ```sh
+   # Run from repo root; re-check after each deletion
+   lsp references of_turn         # should only be vehmove() gain_moves block + savegame
+   lsp references turn_dir        # should only be serialization + act_on_map skid check
+   lsp references angular_velocity_rads  # must be empty after Step 6
+   ```
+
+2. **Remove transient VV solve** (Phase 2 code — superseded by Phase 10 contact events):
+   - Delete `src/physics/veh_box2d_solve.h` and `src/physics/veh_box2d_solve.cpp`
+   - Remove `#include "physics/veh_box2d_solve.h"` from `vehicle_move.cpp`
+   - Remove the `precomputed` branch in `vehicle_vehicle_collision()` (the `vv_solved_body *precomputed = nullptr` path)
+
+3. **Remove transient terrain solve** (Phase 5 code — superseded by persistent VT contacts):
+   - Delete `resolve_terrain_impulse()` wrapper in `physics_world.cpp:245-313`
+   - Remove its call in `vehicle_move.cpp` (inside `veh_coll_bashable` path)
+
+4. **Remove 1D elastic analytic formula** in `vehicle_vehicle_collision()`:
+   - The `analytic` branch that uses `get_collision_factor()` math directly
+   - Keep `get_collision_factor()` itself — Phase 11 still needs it for ranged combat penetration
+
+5. **Retire `precalc` field** (see Precalc retirement checklist in Phase 12 section below):
+   - Audit every `precalc` callsite with `lsp references vehicle_part::precalc`
+   - Migrate hot callsites to `part_world_offset(p, veh.physics_angle)` first
+   - Delete `vehicle_part::precalc[2]`, `precalc_mounts()`, `refresh_precalc()` shim
+
+6. **Remove tile-step detection loop** in `move_vehicle()` — the entire per-tile collision traversal loop is now dead code for Box2D vehicles.
+
+7. **Build + run full test suite** after each removal, not at the end:
+   ```sh
+   cmake --build --preset osx-arm-slim --target cataclysm-bn-tiles cata_test-tiles
+   ./cata_test-tiles "[vehicle][box2d]"   # must still pass 38 assertions
+   ```
+
+---
+
+### 2. Phase 10 Step 6 — Retire Legacy Motion Fields  *(unblocked after Phase 12)*
+
+**Depends on**: Phase 12 complete (so that all consumers of these fields are gone before the fields are deleted).
+
+Fields to delete from `vehicle.h` and all consumers:
+- `of_turn` — movement budget counter; replaced by Box2D sub-step accumulator
+- `velocity` (integer cm/s) — replaced by `b2Body_GetLinearVelocity()` readback
+- `turn_dir` — replaced by `b2Body_GetRotation()` readback
+- `angular_velocity_rads` — transitional field; now populated from Box2D directly each tick
+- `gain_moves()` call in `vehmove()` — the entire budget-replenishment block
+- Discrete `turn()` call chain in `act_on_map()`
+
+**Step-by-step:**
+1. Run `lsp references` on each field before touching it — any remaining callsite is a migration gap.
+2. Replace reads of `velocity` with `b2Body_GetLinearVelocity(body).x * TILE_M * 100.0f` (cm/s equivalent) where game logic still needs a speed scalar (e.g. noise, passenger throw checks).
+3. Delete fields from `vehicle.h`, fix every compile error, rebuild.
+4. Update `savegame_json.cpp` — drop serialization of retired fields; add migration note for old saves.
+5. Run `./cata_test-tiles "[vehicle][box2d]"` — 38 assertions must pass.
+
+---
+
+### 3. Phase 11 — Ranged Combat via Box2D Ray Casts  *(unblocked after Phase 10 Step 6)*
+
+**Depends on**: Phase 10 Step 6 complete AND external tile-independent ranged combat rework.
+
+Replace tile-traversal LOS and hit resolution with `b2World_CastRayClosest()` into the persistent world.
+
+**What to implement:**
+1. **LOS query**: `b2World_CastRayClosest(world, origin_m, target_m, filter)` → first hit body + exact impact point + surface normal. `b2Body_GetUserData(hit.bodyId)` gives the game object pointer for damage dispatch.
+2. **Penetrating rounds**: `b2World_CastRay()` with a custom callback that accumulates all hits along the ray; apply penetration falloff per-hit.
+3. **Cover calculation**: replace per-tile modifier table with fractional occlusion derived from Box2D shape geometry (fraction of ray length occluded by cover shapes).
+4. **API reference** (v3.0.0 confirmed): `b2World_CastRay`, `b2World_CastRayClosest`, `b2World_OverlapAABB`.
+
+**Gate**: do NOT start until the external ranged combat rework (tile-independent projectile path) is merged. Starting early creates merge conflicts in the exact code this phase rewrites.
+
+---
+
+
 ## Codebase Audit — Implementation Status (verified 2026-07-11)
 
 | Phase | Status | Evidence |
