@@ -398,4 +398,82 @@ TEST_CASE( "Box2D Phase10 Step1-3: VT hit events fire, VV contacts silent",
     }
 }
 
+// ── Test 8: Phase 10 Step 5 — dynamic body position integrates into tile coords ──
+// Validates the physics_pos update formula used by PhysicsWorld::step():
+//   physics_pos.{x,y} = b2Body_GetPosition(body).{x,y} / TILE_M
+// and the vehmove() readback gate:
+//   const auto px = static_cast<int>( std::lround( veh.physics_pos.x ) );
+//   if( px != cur.x() ) displace_vehicle( veh, {px - cur.x(), 0, 0} );
+//
+// A b2_dynamicBody (gravityScale=0) at exactly TILE_M m/s must travel TILE_M metres
+// in one simulated second, giving physics_pos.x == 1.0 → tile delta 1.
+//
+// Note: box2d_position_authority flag lifecycle (on_vehicle_added sets it,
+// on_vehicle_removed clears it) requires a game-state vehicle fixture and is
+// covered by integration tests; only the readback math is unit-testable here.
+TEST_CASE( "Box2D Phase10 Step5: dynamic body at TILE_M m/s gives physics_pos tile delta 1",
+           "[vehicle][box2d]" )
+{
+    const auto world = make_test_world();
+
+    auto bdef            = b2DefaultBodyDef();
+    bdef.type            = b2_dynamicBody;
+    bdef.gravityScale    = 0.0f;          // no gravity — mirrors PhysicsWorld setup
+    bdef.position        = { 0.0f, 0.0f };
+    bdef.linearVelocity  = { TILE_M, 0.0f };  // exactly 1 tile/second east
+    const auto body      = b2CreateBody( world, &bdef );
+    auto sdef            = b2DefaultShapeDef();
+    sdef.density         = 500.0f;
+    const auto poly = b2MakeBox( TILE_M * 0.5f, TILE_M * 0.25f );
+    b2CreatePolygonShape( body, &sdef, &poly );
+
+    // Simulate 1 second at 60 Hz (same sub-step count as PhysicsWorld::step).
+    for( int i = 0; i < 60; ++i ) {
+        b2World_Step( world, 1.0f / 60.0f, 4 );
+    }
+
+    const auto pos    = b2Body_GetPosition( body );
+    // physics_pos formula: tile_units = metres / TILE_M
+    const float phys_x = pos.x / TILE_M;
+    CHECK( phys_x == Catch::Approx( 1.0f ).epsilon( 0.02f ) );
+    // Readback gate: std::lround gives integer tile; delta from origin tile 0 is 1.
+    const auto tile_x = static_cast<int>( std::lround( phys_x ) );
+    CHECK( tile_x == 1 );
+    // y must not drift (no gravity, no cross-axis force).
+    CHECK( pos.y == Catch::Approx( 0.0f ).margin( 0.01f ) );
+
+    b2DestroyWorld( world );
+}
+
+// ── Test 9: Phase 10 Step 5 — tile-boundary rounding gates displace_vehicle ────
+// vehmove() readback calls displace_vehicle() only when:
+//   static_cast<int>( std::lround( physics_pos.x ) ) != cur.x()
+// Sub-tile physics_pos must NOT trigger a move; at or past the 0.5-tile threshold
+// it must commit to the neighbouring tile.
+// This pins the boundary that prevents per-tick tile jitter at low speeds.
+TEST_CASE( "Box2D Phase10 Step5: sub-tile physics_pos rounds to zero, >=0.5 to one",
+           "[vehicle][box2d]" )
+{
+    // cur.x() == 10 (a representative tile coordinate).
+    const int cur_x = 10;
+
+    const auto rounded_delta = [&]( float phys_x ) -> int {
+        return static_cast<int>( std::lround( phys_x ) ) - cur_x;
+    };
+
+    // Sub-tile motion — must not trigger displace_vehicle.
+    CHECK( rounded_delta( 10.0f ) == 0 );   // at tile centre — stationary
+    CHECK( rounded_delta( 10.49f ) == 0 );  // just under threshold
+
+    // At or past 0.5 tile — must commit one tile east.
+    CHECK( rounded_delta( 10.5f ) == 1 );   // at boundary: away-from-zero rounding
+    CHECK( rounded_delta( 10.6f ) == 1 );   // past boundary
+    CHECK( rounded_delta( 10.99f ) == 1 );  // near next tile but not there yet
+
+    // West movement: lround rounds half away from zero, so 9.5 → 10 (no move).
+    CHECK( rounded_delta( 9.49f ) == -1 );  // nearer 9 — one tile west
+    CHECK( rounded_delta( 9.5f )  == 0 );   // exactly half: lround→10, no move
+    CHECK( rounded_delta( 9.51f ) == 0 );   // nearer 10 — no move
+}
+
 #endif // BOX2D_ENABLED
