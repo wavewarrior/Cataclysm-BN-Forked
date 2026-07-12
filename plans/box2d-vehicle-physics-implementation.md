@@ -666,13 +666,17 @@ Phases 2–5 deliberately avoid serializing physics fields (they are ephemeral t
 
 ---
 
-## Phase 10: Vehicle Movement Migration *(🔄 PARTIAL — 2026-07-11)*
+## Phase 10: Vehicle Movement Migration *(🔄 PARTIAL — 2026-07-12)*
 
 **Depends on Phase 3 AND Phases 6, 7, 8, 9. Do not begin until all prerequisites are complete.**
 
 *Replaces `move_vehicle()` tile-step model with Box2D physics integration.*
 
-**Partial implementation (2026-07-11):** Infrastructure landed — `dispatch_contact_events()` stub (no-op; Box2D v3 contact events require `b2_dynamicBody`; documented in code), `physics_pos`/`physics_angle` readback in `step()`, `refresh_precalc()` wire. Vehicles remain `b2_staticBody` (teleported by `on_vehicle_moved()`); the velocity-sync + kinematic promotion was reverted after confirming Box2D v3 produces zero contact events for kinematic bodies against static terrain.
+**Steps 1–3 delivered (2026-07-12, commit `3216f53`):**
+- **Step 1** — VV filter separation: vehicle z-bits [z+30] (bits 20–40), terrain z-bits [z+10] (bits 0–20). VV contacts structurally disabled; VT contacts fire correctly. `physics_world.cpp` + `terrain_body.cpp` updated.
+- **Step 2** — `b2_dynamicBody` promotion: vehicles now dynamic with `gravityScale=0`. Pre-step velocity-sync (game `velocity` cm/s → m/s + `angular_velocity_rads`) feeds realistic contact impulses. Post-step: `angular_velocity_rads` read back from Box2D (captures terrain-impact torque). Tile-step still owns position via `on_vehicle_moved()` teleports.
+- **Step 3** — `dispatch_contact_events()` implemented: iterates `b2World_GetContactEvents().hitEvents`; identifies vehicle shapes via `vehicle_bodies_.count()` (O(1)); writes `b2Body_GetAngularVelocity()` to `ptr->angular_velocity_rads`. All hit events are VT (VV disabled by filter).
+- Tests: 23/23 assertions in 6 test cases pass.
 
 **Why this is deferred (root blocker):** `on_vehicle_moved()` calls `b2Body_SetTransform()` every time the tile-step system teleports a vehicle. With a `b2_dynamicBody`, Box2D interprets the position delta between sub-steps as an implicit velocity, generating phantom separation impulses on any shape that happens to overlap after the teleport (wall tiles, adjacent vehicles). The kinematic transitional was reverted for the same reason — Box2D v3 fires zero contact events for kinematic-static/kinematic-kinematic pairs, making promotion pointless without retiring tile-step. The only clean path is to retire `move_vehicle()` as the position authority first, then promote to `b2_dynamicBody`.
 
