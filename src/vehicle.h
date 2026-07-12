@@ -1763,6 +1763,13 @@ class vehicle
         rl_vec2d physics_pos{ 0.0f, 0.0f };
         /// Box2D heading angle in radians (Phase 6); 0 = +x, CCW positive.
         float physics_angle = 0.0f;
+#ifdef BOX2D_ENABLED
+        /// True while PhysicsWorld owns this vehicle's horizontal position.
+        /// act_on_map() skips part_collision() + move_vehicle(); map::vehmove()
+        /// applies physics_pos to the tile grid (Phase 10 Step 5).
+        /// Set by on_vehicle_added(), cleared by on_vehicle_removed().
+        bool box2d_position_authority = false;
+#endif
         int extra_drag = 0;
         // last time point the fluid was inside tanks was checked for processing
         time_point last_fluid_check = calendar::turn_zero;

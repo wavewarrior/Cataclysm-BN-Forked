@@ -1567,6 +1567,20 @@ vehicle *vehicle::act_on_map()
         skidding = true;
     }
 
+#ifdef BOX2D_ENABLED
+    // Box2D owns horizontal position.  All game logic above has run:
+    //   - sinking check (line ~1438)
+    //   - falling / vertical_velocity integration (line ~1477)
+    //   - traction check (line ~1504)
+    //   - of_turn budget consumed (line ~1534)
+    //   - skidding logic (line ~1540)
+    // Skip part_collision() and move_vehicle() — no tile-step position change,
+    // no collision-induced velocity zeroing.  map::vehmove() applies physics_pos.
+    if( box2d_position_authority && !should_fall && requested_z_change == 0 ) {
+        return this;
+    }
+#endif
+
     vehicle_movement::rail_processing_result rpres;
     if( can_use_rails && !falling_only ) {
         rpres = vehicle_movement::process_movement_on_rails( here, *this );

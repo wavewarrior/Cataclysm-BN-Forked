@@ -912,6 +912,30 @@ void map::vehmove() {
 
     // A map shift can occur mid-loop when the player is a vehicle passenger:
     if (last_full_vehicle_list_dirty) { vehicle_list = get_vehicles(); }
+#ifdef BOX2D_ENABLED
+    // Box2D position readback: apply physics_pos to the tile grid for vehicles
+    // under physics authority.  act_on_map() above ran all game logic (sinking,
+    // falling, traction, skidding) but returned early before move_vehicle().
+    // physics_pos was written by step() at line 784 before the tile-step loop.
+    if( phys_world ) {
+        for( wrapped_vehicle &wv : vehicle_list ) {
+            vehicle &veh = *wv.v;
+            if( !veh.box2d_position_authority ) { continue; }
+            // Falling and aircraft z-change: act_on_map() falls through to tile-step
+            // for vertical movement (box2d_position_authority guard checks !should_fall
+            // && requested_z_change==0).  Skip xy readback here; z handled separately.
+            if( veh.is_falling
+                || ( veh.is_aircraft() && veh.get_z_change() != 0 ) ) { continue; }
+            const auto px  = static_cast<int>( std::lround( veh.physics_pos.x ) );
+            const auto py  = static_cast<int>( std::lround( veh.physics_pos.y ) );
+            const auto cur = veh.bub_ms_location();
+            if( px != cur.x() || py != cur.y() ) {
+                displace_vehicle( veh, tripoint_rel_ms{ px - cur.x(), py - cur.y(), 0 } );
+            }
+        }
+    }
+#endif
+
 
     // Process item removal on the vehicles that were modified this turn.
     // Use a copy because part_removal_cleanup can modify the container.

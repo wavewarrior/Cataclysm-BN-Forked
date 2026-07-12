@@ -87,6 +87,14 @@ void PhysicsWorld::rebuild_bashable_lookup()
 void PhysicsWorld::on_vehicle_added( vehicle &v )
 {
     vehicle_bodies_[&v] = make_vehicle_body( v );
+    // Initialise physics_pos from the tile position so the first vehmove() readback
+    // is a no-op rather than teleporting the vehicle to (0,0).
+    const auto bpos = v.bub_ms_location();
+    v.physics_pos   = rl_vec2d{ static_cast<float>( bpos.x() ),
+                                 static_cast<float>( bpos.y() ) };
+    // Mark the vehicle as Box2D-controlled: act_on_map() will skip move_vehicle()
+    // and map::vehmove() will apply physics_pos to the tile grid.
+    v.box2d_position_authority = true;
 }
 
 void PhysicsWorld::on_vehicle_moved( vehicle &v )
@@ -104,6 +112,7 @@ void PhysicsWorld::on_vehicle_moved( vehicle &v )
 
 void PhysicsWorld::on_vehicle_removed( vehicle *v )
 {
+    v->box2d_position_authority = false;  // always clear, even if body is missing
     const auto it = vehicle_bodies_.find( v );
     if( it == vehicle_bodies_.end() ) { return; }
     b2DestroyBody( it->second );
