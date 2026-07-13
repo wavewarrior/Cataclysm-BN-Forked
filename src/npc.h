@@ -1014,30 +1014,30 @@ class npc: public player
          */
         void shift( point_rel_sm s );
 
-    // Movement; the following are defined in npcmove.cpp
-    void move(); // Attitude update + guards + regen_ai_cache + execute_action(decide_action())
-    /// Decides the action for this tick. Returns a fully-resolved npc_cmd_t.
-    /// Non-const: may mutate ai_cache, attitude, path (fire-escape only).
-    auto decide_action() -> npc_cmd_t;         // *NOPAD*
-    void execute_action(const npc_cmd_t& cmd); // Performs action (mutation pass)
-    /// Builds a fully-resolved npc_cmd_t for \p action.
-    /// Calls good_escape_direction() (RNG + path-mutating) for npc_flee — exactly once per
-    /// action decision. Use at every execute_action() call site where action may be npc_flee.
-    auto resolve_cmd(npc_action action) -> npc_cmd_t; // *NOPAD*
-    void process_turn() override;
-    /**
-     * Batch catchup: analytically simulate @p n missed turns.
-     * Processes biology at 30-min/5-min/1-turn granularity, then
-     * calls advance_job_progress(n) to fast-forward any ongoing activity.
-     */
-    void batch_turns(int n) override;
-    /**
-     * Fast-forward the NPC's current activity by @p n turns.
-     * Grants the NPC enough move points (to_moves<int>(n)) to advance
-     * any ongoing player_activity, mirroring what on_load() does for
-     * destination/activity NPCs.
-     */
-    void advance_job_progress(int n);
+        // Movement; the following are defined in npcmove.cpp
+        void move(); // Attitude update + guards + regen_ai_cache + execute_action(decide_action())
+        /// Decides the action for this tick. Returns a fully-resolved npc_cmd_t.
+        /// Non-const: may mutate ai_cache, attitude, path (fire-escape only).
+        auto decide_action() -> npc_cmd_t;         // *NOPAD*
+        void execute_action( const npc_cmd_t &cmd ); // Performs action (mutation pass)
+        /// Builds a fully-resolved npc_cmd_t for \p action.
+        /// Calls good_escape_direction() (RNG + path-mutating) for npc_flee — exactly once per
+        /// action decision. Use at every execute_action() call site where action may be npc_flee.
+        auto resolve_cmd( npc_action action ) -> npc_cmd_t; // *NOPAD*
+        void process_turn() override;
+        /**
+         * Batch catchup: analytically simulate @p n missed turns.
+         * Processes biology at 30-min/5-min/1-turn granularity, then
+         * calls advance_job_progress(n) to fast-forward any ongoing activity.
+         */
+        void batch_turns( int n ) override;
+        /**
+         * Fast-forward the NPC's current activity by @p n turns.
+         * Grants the NPC enough move points (to_moves<int>(n)) to advance
+         * any ongoing player_activity, mirroring what on_load() does for
+         * destination/activity NPCs.
+         */
+        void advance_job_progress( int n );
 
         using Character::invoke_item;
         bool invoke_item( item*, const tripoint_bub_ms& pt ) override;
@@ -1258,60 +1258,60 @@ class npc: public player
         bool suppress_activity_complete_message = false;
         std::string activity_failure_message;
 
-public:
-    std::optional<tripoint_bub_ms> last_player_seen_pos; // Where we last saw the player
-    // Player orders a friendly NPC to move to this position
-    std::optional<tripoint_abs_ms> goto_to_this_pos;
-    int last_seen_player_turn = 0;   // Timeout to forgetting
-    tripoint_bub_ms wanted_item_pos; // The square containing an item we want
-    tripoint_abs_ms guard_pos; // These are the local coordinates that a guard will return to inside
-    // of their goal tripoint
-    tripoint_abs_ms chair_pos = tripoint_abs_ms::zero(); // This is the spot the NPC wants to move
-    // to to sit and relax.
-    std::optional<tripoint_abs_omt> base_location; // our faction base location in OMT coords.
-    /**
-     * Global overmap terrain coordinate, where we want to get to
-     * if no goal exist, this is no_goal_point.
-     */
-    tripoint_abs_omt goal;
-    // Doesnt seem to be used anywhere
-    // Welp will put it as the same thing monsters put it to
-    tripoint_abs_ms wander_pos = tripoint_abs_ms::zero();
-    int wander_time = 0;
-    /**
-     * Location and index of the corpse we'd like to pulp (if any).
-     */
-    std::optional<tripoint_bub_ms> pulp_location;
-    time_point restock;
-    bool fetching_item = false;
-    bool has_new_items = false; // If true, we have something new and should re-equip
-    int worst_item_value = 0;   // The value of our least-wanted item
+    public:
+        std::optional<tripoint_bub_ms> last_player_seen_pos; // Where we last saw the player
+        // Player orders a friendly NPC to move to this position
+        std::optional<tripoint_abs_ms> goto_to_this_pos;
+        int last_seen_player_turn = 0;   // Timeout to forgetting
+        tripoint_bub_ms wanted_item_pos; // The square containing an item we want
+        tripoint_abs_ms guard_pos; // These are the local coordinates that a guard will return to inside
+        // of their goal tripoint
+        tripoint_abs_ms chair_pos = tripoint_abs_ms::zero(); // This is the spot the NPC wants to move
+        // to to sit and relax.
+        std::optional<tripoint_abs_omt> base_location; // our faction base location in OMT coords.
+        /**
+         * Global overmap terrain coordinate, where we want to get to
+         * if no goal exist, this is no_goal_point.
+         */
+        tripoint_abs_omt goal;
+        // Doesnt seem to be used anywhere
+        // Welp will put it as the same thing monsters put it to
+        tripoint_abs_ms wander_pos = tripoint_abs_ms::zero();
+        int wander_time = 0;
+        /**
+         * Location and index of the corpse we'd like to pulp (if any).
+         */
+        std::optional<tripoint_bub_ms> pulp_location;
+        time_point restock;
+        bool fetching_item = false;
+        bool has_new_items = false; // If true, we have something new and should re-equip
+        int worst_item_value = 0;   // The value of our least-wanted item
 
         std::vector<tripoint_bub_ms> path; // Our movement plans
 
-    // Personality & other defining characteristics
-    std::string companion_mission_role_id; // Set mission source or squad leader for a patrol
-    // Mission leader use to determine item sorting, patrols use for points
-    std::vector<tripoint_abs_omt> companion_mission_points;
-    time_point companion_mission_time;     // When you left for ongoing/repeating missions
-    time_point companion_mission_time_ret; // When you are expected to return for
-    // calculated/variable mission returns
-    location_inventory companion_mission_inv; // Inventory that is added and dropped on mission
-    npc_mission mission;
-    npc_mission previous_mission = NPC_MISSION_NULL;
-    npc_personality personality;
-    npc_opinion op_of_u;
-    npc_chatbin chatbin;
-    int patience = 0; // Used when we expect the player to leave the area
-    npc_follower_rules rules;
-    bool marked_for_death = false; // If true, we die as soon as we respawn!
-    bool hit_by_player = false;
-    bool hallucination = false; // If true, NPC is an hallucination
-    std::vector<npc_need> needs;
-    std::optional<int> confident_range_cache;
-    // Dummy point that indicates that the goal is invalid.
-    static constexpr tripoint_abs_omt no_goal_point{tripoint_min};
-    time_point last_updated;
+        // Personality & other defining characteristics
+        std::string companion_mission_role_id; // Set mission source or squad leader for a patrol
+        // Mission leader use to determine item sorting, patrols use for points
+        std::vector<tripoint_abs_omt> companion_mission_points;
+        time_point companion_mission_time;     // When you left for ongoing/repeating missions
+        time_point companion_mission_time_ret; // When you are expected to return for
+        // calculated/variable mission returns
+        location_inventory companion_mission_inv; // Inventory that is added and dropped on mission
+        npc_mission mission;
+        npc_mission previous_mission = NPC_MISSION_NULL;
+        npc_personality personality;
+        npc_opinion op_of_u;
+        npc_chatbin chatbin;
+        int patience = 0; // Used when we expect the player to leave the area
+        npc_follower_rules rules;
+        bool marked_for_death = false; // If true, we die as soon as we respawn!
+        bool hit_by_player = false;
+        bool hallucination = false; // If true, NPC is an hallucination
+        std::vector<npc_need> needs;
+        std::optional<int> confident_range_cache;
+        // Dummy point that indicates that the goal is invalid.
+        static constexpr tripoint_abs_omt no_goal_point{tripoint_min};
+        time_point last_updated;
 
         // LOD tier for distance-based AI fidelity reduction.
         //   0 = Full AI (close or follower)
@@ -1322,17 +1322,17 @@ public:
         int npc_lod_cooldown = 0;
 
 #ifdef COOP_ENABLED
-    /// True when this NPC's actions come from the TCP co-op connection
-    /// rather than the AI.  Set by coop_server::spawn_proxy_npc().
-    /// Transient — not saved; always false after load.
-    bool is_coop_remote = false;
+        /// True when this NPC's actions come from the TCP co-op connection
+        /// rather than the AI.  Set by coop_server::spawn_proxy_npc().
+        /// Transient — not saved; always false after load.
+        bool is_coop_remote = false;
 #endif
 
-    // ID of the dimension this NPC belongs to.  Empty string = primary dimension.
-    // Set when the NPC is spawned or loaded from a non-primary dimension submap.
-    // Persisted across saves so cross-dimension processing survives reload.
-    std::string dimension_id_ = ""; // empty = primary dimension
-    const std::string &get_dimension() const override { return dimension_id_; }
+        // ID of the dimension this NPC belongs to.  Empty string = primary dimension.
+        // Set when the NPC is spawned or loaded from a non-primary dimension submap.
+        // Persisted across saves so cross-dimension processing survives reload.
+        std::string dimension_id_ = ""; // empty = primary dimension
+        const std::string &get_dimension() const override { return dimension_id_; }
 
         /**
          * Do some cleanup and caching as npc is being unloaded from map.
@@ -1379,9 +1379,9 @@ public:
         // Copy of toggled CBM weapon for comparisons;
         location_ptr<item, false> cbm_fake_toggled;
 
-    bool dead = false;             // If true, we need to be cleaned up
-    bool manually_erased_ = false; // Set by erase(); tells cleanup_dead() not to re-do
-    // overmap/follower removal
+        bool dead = false;             // If true, we need to be cleaned up
+        bool manually_erased_ = false; // Set by erase(); tells cleanup_dead() not to re-do
+        // overmap/follower removal
 
         bool sees_dangerous_field( const tripoint_bub_ms& p ) const;
         void activate_combat_gear();

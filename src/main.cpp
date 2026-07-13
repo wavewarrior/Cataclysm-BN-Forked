@@ -67,8 +67,9 @@ class ui_adaptor;
 
 #if !defined(_WIN32)
 [[noreturn]]
-static void signal_handler(int) {
-    exit_handler(0);
+static void signal_handler( int )
+{
+    exit_handler( 0 );
 }
 #endif //! defined(_WIN32)
 
@@ -76,47 +77,51 @@ static void signal_handler(int) {
  * Report fatal error in a user-friendly way
  * (stderr or a message box, depending on build.)
  */
-static void report_fatal_error(const std::string& msg) {
-    if (test_mode) {
+static void report_fatal_error( const std::string& msg )
+{
+    if( test_mode ) {
         std::cerr << "Cataclysm BN: Fatal error" << '\n' << msg << '\n';
     } else {
         SDL_ShowSimpleMessageBox(
-            SDL_MESSAGEBOX_ERROR, "Cataclysm BN: Fatal error", msg.c_str(), nullptr);
+            SDL_MESSAGEBOX_ERROR, "Cataclysm BN: Fatal error", msg.c_str(), nullptr );
     }
 }
 
-namespace {
+namespace
+{
 
 struct arg_handler {
     //! Handler function to be invoked when this argument is encountered. The handler will be
     //! called with the number of parameters after the flag was encountered, along with the array
     //! of following parameters. It must return an integer indicating how many parameters were
     //! consumed by the call or -1 to indicate that a required argument was missing.
-    using handler_method = std::function<int(int, const char**)>;
+    using handler_method = std::function<int( int, const char** )>;
 
-    const char* flag;                //!< The commandline parameter to handle (e.g., "--seed").
-    const char* param_documentation; //!< Human readable description of this arguments parameter.
-    const char* documentation;       //!< Human readable documentation for this argument.
-    const char* help_group; //!< Section of the help message in which to include this argument.
+    const char *flag;                //!< The commandline parameter to handle (e.g., "--seed").
+    const char *param_documentation; //!< Human readable description of this arguments parameter.
+    const char *documentation;       //!< Human readable documentation for this argument.
+    const char *help_group; //!< Section of the help message in which to include this argument.
     handler_method handler; //!< The callback to be invoked when this argument is encountered.
 };
 
 void printHelpMessage(
     const arg_handler* first_pass_arguments, size_t num_first_pass_arguments,
-    const arg_handler* second_pass_arguments, size_t num_second_pass_arguments);
+    const arg_handler* second_pass_arguments, size_t num_second_pass_arguments );
 } // namespace
 
 #if defined(USE_WINMAIN)
 int APIENTRY
-WinMain(HINSTANCE /* hInstance */, HINSTANCE /* hPrevInstance */, LPSTR /* lpCmdLine */,
-        int /* nCmdShow */) {
+WinMain( HINSTANCE /* hInstance */, HINSTANCE /* hPrevInstance */, LPSTR /* lpCmdLine */,
+         int /* nCmdShow */ )
+{
     int argc = __argc;
-    char** argv = __argv;
+    char **argv = __argv;
 #else
-int main(int argc, char* argv[]) {
+int main( int argc, char* argv[] )
+{
 #endif
     init_crash_handlers();
-    int seed = time(nullptr);
+    int seed = time( nullptr );
     bool verifyexit = false;
     bool check_mods = false;
     std::filesystem::path lua_doc_output_path;
@@ -128,15 +133,15 @@ int main(int argc, char* argv[]) {
 
     // Set default file paths
 #if defined(PREFIX)
-    PATH_INFO::init_base_path(std::string(PREFIX));
+    PATH_INFO::init_base_path( std::string( PREFIX ) );
 #else
-    PATH_INFO::init_base_path("");
+    PATH_INFO::init_base_path( "" );
 #endif
 
 #if defined(USE_HOME_DIR) || defined(USE_XDG_DIR)
-    PATH_INFO::init_user_dir("");
+    PATH_INFO::init_user_dir( "" );
 #else
-    PATH_INFO::init_user_dir(".");
+    PATH_INFO::init_user_dir( "." );
 #endif
     PATH_INFO::set_standard_filenames();
 
@@ -464,36 +469,36 @@ int main(int argc, char* argv[]) {
 
         // Process CLI arguments.
         const size_t num_first_pass_arguments =
-            sizeof(first_pass_arguments) / sizeof(first_pass_arguments[0]);
+            sizeof( first_pass_arguments ) / sizeof( first_pass_arguments[0] );
         const size_t num_second_pass_arguments =
-            sizeof(second_pass_arguments) / sizeof(second_pass_arguments[0]);
+            sizeof( second_pass_arguments ) / sizeof( second_pass_arguments[0] );
         int saved_argc = --argc; // skip program name
-        const char** saved_argv = const_cast<const char**>(++argv);
+        const char **saved_argv = const_cast<const char **>( ++argv );
         bool asked_game_path = false;
-        while (argc) {
-            if (!strcmp(argv[0], "--help")) {
-                printHelpMessage(first_pass_arguments.data(), num_first_pass_arguments,
-                                 second_pass_arguments.data(), num_second_pass_arguments);
+        while( argc ) {
+            if( !strcmp( argv[0], "--help" ) ) {
+                printHelpMessage( first_pass_arguments.data(), num_first_pass_arguments,
+                                  second_pass_arguments.data(), num_second_pass_arguments );
                 return 0;
-            } else if (!strcmp(argv[0], "--version")) {
-                cata_printf("%s\n", getVersionString());
+            } else if( !strcmp( argv[0], "--version" ) ) {
+                cata_printf( "%s\n", getVersionString() );
                 return 0;
-            } else if (!strcmp(argv[0], "--paths")) {
+            } else if( !strcmp( argv[0], "--paths" ) ) {
                 asked_game_path = true;
                 argc--;
                 argv++;
             } else {
                 bool arg_handled = false;
-                for (size_t i = 0; i < num_first_pass_arguments; ++i) {
+                for( size_t i = 0; i < num_first_pass_arguments; ++i ) {
                     auto& arg_handler = first_pass_arguments[i];
-                    if (!strcmp(argv[0], arg_handler.flag)) {
+                    if( !strcmp( argv[0], arg_handler.flag ) ) {
                         argc--;
                         argv++;
                         int args_consumed =
-                            arg_handler.handler(argc, const_cast<const char**>(argv));
-                        if (args_consumed < 0) {
-                            cata_printf("Failed parsing parameter '%s'\n", *(argv - 1));
-                            exit(1);
+                            arg_handler.handler( argc, const_cast<const char**>( argv ) );
+                        if( args_consumed < 0 ) {
+                            cata_printf( "Failed parsing parameter '%s'\n", *( argv - 1 ) );
+                            exit( 1 );
                         }
                         argc -= args_consumed;
                         argv += args_consumed;
@@ -502,23 +507,23 @@ int main(int argc, char* argv[]) {
                     }
                 }
                 // Skip other options.
-                if (!arg_handled) {
+                if( !arg_handled ) {
                     --argc;
                     ++argv;
                 }
             }
         }
-        while (saved_argc) {
+        while( saved_argc ) {
             bool arg_handled = false;
-            for (size_t i = 0; i < num_second_pass_arguments; ++i) {
+            for( size_t i = 0; i < num_second_pass_arguments; ++i ) {
                 auto& arg_handler = second_pass_arguments[i];
-                if (!strcmp(saved_argv[0], arg_handler.flag)) {
+                if( !strcmp( saved_argv[0], arg_handler.flag ) ) {
                     --saved_argc;
                     ++saved_argv;
-                    int args_consumed = arg_handler.handler(saved_argc, saved_argv);
-                    if (args_consumed < 0) {
-                        cata_printf("Failed parsing parameter '%s'\n", *(argv - 1));
-                        exit(1);
+                    int args_consumed = arg_handler.handler( saved_argc, saved_argv );
+                    if( args_consumed < 0 ) {
+                        cata_printf( "Failed parsing parameter '%s'\n", *( argv - 1 ) );
+                        exit( 1 );
                     }
                     saved_argc -= args_consumed;
                     saved_argv += args_consumed;
@@ -527,116 +532,116 @@ int main(int argc, char* argv[]) {
                 }
             }
             // Ignore unknown options.
-            if (!arg_handled) {
+            if( !arg_handled ) {
                 --saved_argc;
                 ++saved_argv;
             }
         }
-        if (asked_game_path) {
-            cata_printf(remove_color_tags(resolved_game_paths()));
+        if( asked_game_path ) {
+            cata_printf( remove_color_tags( resolved_game_paths() ) );
             return 0;
         }
     }
 
     std::string current_path = std::filesystem::current_path().string();
 
-    if (!dir_exist(PATH_INFO::datadir())) {
+    if( !dir_exist( PATH_INFO::datadir() ) ) {
         std::string msg = string_format(
-            "Can't find data directory \"%s\"\n"
-            "Current path: \"%s\"\n"
-            "Please ensure the current working directory is correct.\n"
-            "Perhaps you meant to start \"cataclysm-launcher\"?\n",
-            PATH_INFO::datadir(), current_path);
-        report_fatal_error(msg);
-        exit(1);
+                              "Can't find data directory \"%s\"\n"
+                              "Current path: \"%s\"\n"
+                              "Please ensure the current working directory is correct.\n"
+                              "Perhaps you meant to start \"cataclysm-launcher\"?\n",
+                              PATH_INFO::datadir(), current_path );
+        report_fatal_error( msg );
+        exit( 1 );
     }
 
-    const auto check_dir_good = [&current_path](const std::string& dir) {
-        if (!assure_dir_exist(dir)) {
+    const auto check_dir_good = [&current_path]( const std::string & dir ) {
+        if( !assure_dir_exist( dir ) ) {
             std::string msg = string_format(
-                "Can't open or create \"%s\"\n"
-                "Current path: \"%s\"\n"
-                "Please ensure you have write permission.\n",
-                dir.c_str(), current_path);
-            report_fatal_error(msg);
-            exit(1);
+                                  "Can't open or create \"%s\"\n"
+                                  "Current path: \"%s\"\n"
+                                  "Please ensure you have write permission.\n",
+                                  dir.c_str(), current_path );
+            report_fatal_error( msg );
+            exit( 1 );
         }
-        if (!can_write_to_dir(dir)) {
+        if( !can_write_to_dir( dir ) ) {
             std::string msg = string_format(
-                "Can't write to \"%s\"\n"
-                "Current path: \"%s\"\n"
-                "Please ensure you have write permission and free storage space.\n",
-                dir.c_str(), current_path);
-            report_fatal_error(msg);
-            exit(1);
+                                  "Can't write to \"%s\"\n"
+                                  "Current path: \"%s\"\n"
+                                  "Please ensure you have write permission and free storage space.\n",
+                                  dir.c_str(), current_path );
+            report_fatal_error( msg );
+            exit( 1 );
         }
     };
 
-    check_dir_good(PATH_INFO::user_dir());
-    check_dir_good(PATH_INFO::config_dir());
-    check_dir_good(PATH_INFO::savedir());
+    check_dir_good( PATH_INFO::user_dir() );
+    check_dir_good( PATH_INFO::config_dir() );
+    check_dir_good( PATH_INFO::savedir() );
 
-    setupDebug(DebugOutput::file);
+    setupDebug( DebugOutput::file );
 
-    if (!init_language_system()) { exit_handler(-999); }
+    if( !init_language_system() ) { exit_handler( -999 ); }
 
-    DebugLog(DL::Info, DC::Main) << "SDL version used during compile is " << SDL_MAJOR_VERSION
-                                 << "." << SDL_MINOR_VERSION << "." << SDL_MICRO_VERSION;
+    DebugLog( DL::Info, DC::Main ) << "SDL version used during compile is " << SDL_MAJOR_VERSION
+                                   << "." << SDL_MINOR_VERSION << "." << SDL_MICRO_VERSION;
 
     const int linked_ver = SDL_GetVersion();
-    DebugLog(DL::Info, DC::Main) << "SDL version used during linking and in runtime is "
-                                 << SDL_VERSIONNUM_MAJOR(linked_ver) << "."
-                                 << SDL_VERSIONNUM_MINOR(linked_ver) << "."
-                                 << SDL_VERSIONNUM_MICRO(linked_ver);
+    DebugLog( DL::Info, DC::Main ) << "SDL version used during linking and in runtime is "
+                                   << SDL_VERSIONNUM_MAJOR( linked_ver ) << "."
+                                   << SDL_VERSIONNUM_MINOR( linked_ver ) << "."
+                                   << SDL_VERSIONNUM_MICRO( linked_ver );
 
     // in test mode don't initialize curses to avoid escape sequences being inserted into output
     // stream
-    if (!test_mode) {
+    if( !test_mode ) {
         try {
             // set minimum FULL_SCREEN sizes
             FULL_SCREEN_WIDTH = 80;
             FULL_SCREEN_HEIGHT = 24;
             catacurses::init_interface();
-        } catch (const std::exception& err) {
+        } catch( const std::exception& err ) {
             // can't use any curses function as it has not been initialized
             std::cerr << "Error while initializing the interface: " << err.what() << '\n';
-            DebugLog(DL::Error, DC::Main)
-                << "Error while initializing the interface: " << err.what();
+            DebugLog( DL::Error, DC::Main )
+                    << "Error while initializing the interface: " << err.what();
             return 1;
         }
     }
 
-    if (test_mode) {
+    if( test_mode ) {
         get_options().init();
         get_options().load();
     }
     set_language();
 
-    rng_set_engine_seed(seed);
+    rng_set_engine_seed( seed );
 
     g = std::make_unique<game>();
     // First load and initialize everything that does not
     // depend on the mods.
     try {
         g->load_static_data();
-        if (verifyexit) { exit_handler(0); }
-        if (!dump.empty()) {
+        if( verifyexit ) { exit_handler( 0 ); }
+        if( !dump.empty() ) {
             init_colors();
-            exit(g->dump_stats(dump, dmode, opts) ? 0 : 1);
+            exit( g->dump_stats( dump, dmode, opts ) ? 0 : 1 );
         }
-        if (check_mods) {
+        if( check_mods ) {
             init_colors();
-            loading_ui ui(false);
-            const std::vector<mod_id> mods(opts.begin(), opts.end());
-            if (init::check_mods_for_errors(ui, mods)) {
-                exit(0);
+            loading_ui ui( false );
+            const std::vector<mod_id> mods( opts.begin(), opts.end() );
+            if( init::check_mods_for_errors( ui, mods ) ) {
+                exit( 0 );
             } else {
-                exit(1);
+                exit( 1 );
             }
         }
-    } catch (const std::exception& err) {
-        debugmsg("%s", err.what());
-        exit_handler(-999);
+    } catch( const std::exception& err ) {
+        debugmsg( "%s", err.what() );
+        exit_handler( -999 );
     }
 
 
@@ -644,17 +649,17 @@ int main(int argc, char* argv[]) {
 
     game_ui::init_ui();
 
-    catacurses::curs_set(0); // Invisible cursor here, because MAPBUFFER.load() is crash-prone
+    catacurses::curs_set( 0 ); // Invisible cursor here, because MAPBUFFER.load() is crash-prone
 
 #if !defined(_WIN32)
     struct sigaction sigIntHandler;
     sigIntHandler.sa_handler = signal_handler;
-    sigemptyset(&sigIntHandler.sa_mask);
+    sigemptyset( &sigIntHandler.sa_mask );
     sigIntHandler.sa_flags = 0;
-    sigaction(SIGINT, &sigIntHandler, nullptr);
+    sigaction( SIGINT, &sigIntHandler, nullptr );
 #endif
 
-    DebugLog(DL::Info, DC::Main) << "LAPI version: " << cata::get_lapi_version_string();
+    DebugLog( DL::Info, DC::Main ) << "LAPI version: " << cata::get_lapi_version_string();
     cata::startup_lua_test();
 
 
@@ -665,21 +670,21 @@ int main(int argc, char* argv[]) {
         const auto types_script =
             std::filesystem::path{PATH_INFO::datadir()} / "raw" / "generate_types.lua";
 
-        if (!lua_doc_output_path.empty()) {
-            const bool doc_result = cata::generate_lua_docs(doc_script, lua_doc_output_path);
-            if (!doc_result) {
-                cata_printf("Lua doc: Failed.\n");
+        if( !lua_doc_output_path.empty() ) {
+            const bool doc_result = cata::generate_lua_docs( doc_script, lua_doc_output_path );
+            if( !doc_result ) {
+                cata_printf( "Lua doc: Failed.\n" );
                 return 1;
             }
-            cata_printf("Lua doc: Success.\n");
+            cata_printf( "Lua doc: Success.\n" );
         }
-        if (!lua_types_output_path.empty()) {
-            const bool types_result = cata::generate_lua_docs(types_script, lua_types_output_path);
-            if (!types_result) {
-                cata_printf("Lua types: Failed.\n");
+        if( !lua_types_output_path.empty() ) {
+            const bool types_result = cata::generate_lua_docs( types_script, lua_types_output_path );
+            if( !types_result ) {
+                cata_printf( "Lua types: Failed.\n" );
                 return 1;
             }
-            cata_printf("Lua types: Success.\n");
+            cata_printf( "Lua types: Success.\n" );
         }
         return 0;
     }
@@ -693,14 +698,14 @@ int main(int argc, char* argv[]) {
     prompt_select_lang_on_startup();
     replay_buffered_debugmsg_prompts();
 
-    while (true) {
-        if (!world.empty()) {
-            if (!g->load(world)) { break; }
+    while( true ) {
+        if( !world.empty() ) {
+            if( !g->load( world ) ) { break; }
             world.clear(); // ensure quit returns to opening screen
 
         } else {
             main_menu menu;
-            if (!menu.opening_screen()) { break; }
+            if( !menu.opening_screen() ) { break; }
         }
 
         shared_ptr_fast<ui_adaptor> ui = g->create_or_get_main_ui_adaptor();
@@ -715,23 +720,23 @@ int main(int argc, char* argv[]) {
             double coalesce_start_ms = -1.0; // -1 = no window open
             bool game_done = false;
 
-            while (!game_done) {
+            while( !game_done ) {
                 const auto now = clk::now();
                 const double frame_ms =
-                    std::chrono::duration<double, std::milli>(now - last_tick).count();
+                    std::chrono::duration<double, std::milli>( now - last_tick ).count();
                 last_tick = now;
 
                 const auto evt = g->poll_event();
 
                 bool host_acted = false;
-                if (g->modal_fiber_ && !g->modal_fiber_->done()) {
-                    g->modal_fiber_->resume(evt);
-                    if (g->modal_fiber_->done()) { g->modal_fiber_.reset(); }
-                } else if (evt.type != input_event_t::error && evt.type != input_event_t::timeout) {
+                if( g->modal_fiber_ && !g->modal_fiber_->done() ) {
+                    g->modal_fiber_->resume( evt );
+                    if( g->modal_fiber_->done() ) { g->modal_fiber_.reset(); }
+                } else if( evt.type != input_event_t::error && evt.type != input_event_t::timeout ) {
                     const input_context dflt = get_default_mode_input_context();
-                    const auto& action_str = dflt.input_to_action(evt);
-                    if (!action_str.empty() && action_str != "ERROR") {
-                        g->pending_action_queue_.push(action_str);
+                    const auto& action_str = dflt.input_to_action( evt );
+                    if( !action_str.empty() && action_str != "ERROR" ) {
+                        g->pending_action_queue_.push( action_str );
                         host_acted = true;
                     }
                 }
@@ -741,36 +746,36 @@ int main(int argc, char* argv[]) {
                 //   - server has client actions pending (only on host path)
                 const bool client_actions_pending =
                     g->coop_server_ && g->coop_server_->has_pending_actions();
-                if ((host_acted || client_actions_pending) && coalesce_start_ms < 0.0) {
+                if( ( host_acted || client_actions_pending ) && coalesce_start_ms < 0.0 ) {
                     coalesce_start_ms = 0.0; // start window timer
-                } else if (coalesce_start_ms >= 0.0) {
+                } else if( coalesce_start_ms >= 0.0 ) {
                     coalesce_start_ms += frame_ms;
                 }
 
                 // Determine whether to fire a tick this frame.
                 bool fire_tick = false;
                 bool tick_active = false;
-                if (coalesce_start_ms >= COALESCE_WINDOW_MS) {
+                if( coalesce_start_ms >= COALESCE_WINDOW_MS ) {
                     // Active tick: coalescing window elapsed.
                     fire_tick = true;
                     tick_active = true;
                     coalesce_start_ms = -1.0;
                     g->main_loop_accum_ms_ = 0.0; // reset idle floor — paths are mutually exclusive
-                } else if (coalesce_start_ms < 0.0) {
+                } else if( coalesce_start_ms < 0.0 ) {
                     // No window open: idle floor.
                     g->main_loop_accum_ms_ += frame_ms;
-                    if (g->main_loop_accum_ms_ >= IDLE_TICK_INTERVAL_MS) {
+                    if( g->main_loop_accum_ms_ >= IDLE_TICK_INTERVAL_MS ) {
                         g->main_loop_accum_ms_ -= IDLE_TICK_INTERVAL_MS;
                         fire_tick = true;
                     }
                 }
                 // While a coalescing window is open but hasn't elapsed: no tick this frame.
 
-                if (fire_tick) {
-                    DebugLog(DL::Info, DC::Main)
-                        << "[coop][tick=" << (tick_active ? "active" : "idle") << "]"
-                        << " game_turn=" << to_turn<int>(calendar::turn)
-                        << " pending=" << g->pending_action_queue_.size();
+                if( fire_tick ) {
+                    DebugLog( DL::Info, DC::Main )
+                            << "[coop][tick=" << ( tick_active ? "active" : "idle" ) << "]"
+                            << " game_turn=" << to_turn<int>( calendar::turn )
+                            << " pending=" << g->pending_action_queue_.size();
 
                     // World step BEFORE drain: post_action_world_step() calls
                     // u.process_turn() unconditionally (game.cpp:16591), so moves
@@ -781,20 +786,20 @@ int main(int argc, char* argv[]) {
                     g->coop_game_tick();
 
                     // Drain host actions.
-                    while (g->u.moves > 0) {
-                        if (!g->pending_action_queue_.empty()) {
+                    while( g->u.moves > 0 ) {
+                        if( !g->pending_action_queue_.empty() ) {
                             const auto act = g->pending_action_queue_.front();
                             g->pending_action_queue_.pop();
-                            DebugLog(DL::Info, DC::Main) << "[coop][action] " << act;
-                            g->handle_action_from(act);
-                            if (g->modal_fiber_ && !g->modal_fiber_->done()) { break; }
+                            DebugLog( DL::Info, DC::Main ) << "[coop][action] " << act;
+                            g->handle_action_from( act );
+                            if( g->modal_fiber_ && !g->modal_fiber_->done() ) { break; }
                         } else {
                             g->u.moves = 0;
                             break;
                         }
                     }
 
-                    if (g->is_game_over()) {
+                    if( g->is_game_over() ) {
                         g->cleanup_at_end();
                         game_done = true;
                     }
@@ -812,7 +817,7 @@ int main(int argc, char* argv[]) {
                 // forces a full redraw — because handle_action_from() and
                 // coop_game_tick() update game state but nothing marks the adaptor
                 // dirty the way do_turn()'s internal redraw calls would.
-                if (!game_done) {
+                if( !game_done ) {
                     g->invalidate_main_ui_adaptor();
                     ui_manager::redraw_invalidated();
                     // Present the frame: redraw_invalidated() rebuilds the GPU queues
@@ -822,39 +827,41 @@ int main(int argc, char* argv[]) {
                     // e.g. a menu — calls refresh_display() internally).
                     refresh_display();
                 }
-                SDL_Delay(4);
+                SDL_Delay( 4 );
             }
         }
 #else
-        while (!g->do_turn());
+        while( !g->do_turn() );
 #endif
     }
 
-    exit_handler(-999);
+    exit_handler( -999 );
     return 0;
 }
 
-namespace {
+namespace
+{
 void printHelpMessage(
     const arg_handler* first_pass_arguments, size_t num_first_pass_arguments,
-    const arg_handler* second_pass_arguments, size_t num_second_pass_arguments) {
+    const arg_handler* second_pass_arguments, size_t num_second_pass_arguments )
+{
 
     // Group all arguments by help_group.
-    std::multimap<std::string, const arg_handler*> help_map;
-    for (size_t i = 0; i < num_first_pass_arguments; ++i) {
+    std::multimap<std::string, const arg_handler *> help_map;
+    for( size_t i = 0; i < num_first_pass_arguments; ++i ) {
         std::string help_group;
-        if (first_pass_arguments[i].help_group) { help_group = first_pass_arguments[i].help_group; }
-        help_map.insert(std::make_pair(help_group, &first_pass_arguments[i]));
+        if( first_pass_arguments[i].help_group ) { help_group = first_pass_arguments[i].help_group; }
+        help_map.insert( std::make_pair( help_group, &first_pass_arguments[i] ) );
     }
-    for (size_t i = 0; i < num_second_pass_arguments; ++i) {
+    for( size_t i = 0; i < num_second_pass_arguments; ++i ) {
         std::string help_group;
-        if (second_pass_arguments[i].help_group) {
+        if( second_pass_arguments[i].help_group ) {
             help_group = second_pass_arguments[i].help_group;
         }
-        help_map.insert(std::make_pair(help_group, &second_pass_arguments[i]));
+        help_map.insert( std::make_pair( help_group, &second_pass_arguments[i] ) );
     }
 
-    cata_printf(R"(Info:
+    cata_printf( R"(Info:
 --help
     print this message and exit
 --version
@@ -863,21 +870,21 @@ void printHelpMessage(
     print the paths used by the game and exit
 
 Command line parameters:
-)");
+)" );
     std::string current_help_group;
     auto it = help_map.begin();
     auto it_end = help_map.end();
-    for (; it != it_end; ++it) {
-        if (it->first != current_help_group) {
+    for( ; it != it_end; ++it ) {
+        if( it->first != current_help_group ) {
             current_help_group = it->first;
-            cata_printf("\n%s\n", current_help_group.c_str());
+            cata_printf( "\n%s\n", current_help_group.c_str() );
         }
 
         const arg_handler* handler = it->second;
-        cata_printf("%s", handler->flag);
-        if (handler->param_documentation) { cata_printf(" %s", handler->param_documentation); }
-        cata_printf("\n");
-        if (handler->documentation) { cata_printf("    %s\n", handler->documentation); }
+        cata_printf( "%s", handler->flag );
+        if( handler->param_documentation ) { cata_printf( " %s", handler->param_documentation ); }
+        cata_printf( "\n" );
+        if( handler->documentation ) { cata_printf( "    %s\n", handler->documentation ); }
     }
 }
 } // namespace

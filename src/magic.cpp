@@ -1367,7 +1367,7 @@ void spell::cast_all_effects( Creature& source, const tripoint_bub_ms& target ) 
     }
 #endif
     if( has_flag( spell_flag::WONDER ) ) {
-    const auto iter = type->additional_spells.begin();
+        const auto iter = type->additional_spells.begin();
         for( int num_spells = std::abs( damage() ); num_spells > 0; num_spells-- ) {
             if( type->additional_spells.empty() ) {
                 debugmsg( "ERROR: %s has WONDER flag but no spells to choose from!",
@@ -1434,7 +1434,9 @@ void spell::cast_all_effects( Creature& source, const tripoint_bub_ms& target ) 
                     std::ostringstream fctx;
                     JsonOut jf( fctx );
                     jf.start_object();
-                    jf.member( "ax", abs.x() ); jf.member( "ay", abs.y() ); jf.member( "az", abs.z() );
+                    jf.member( "ax", abs.x() );
+                    jf.member( "ay", abs.y() );
+                    jf.member( "az", abs.z() );
                     jf.member( "field", ft.id().str() );
                     jf.member( "intensity", fe.get_field_intensity() );
                     jf.end_object();

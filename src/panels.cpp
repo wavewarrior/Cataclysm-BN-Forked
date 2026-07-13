@@ -1205,14 +1205,14 @@ static auto hud_coop_partner_text( avatar & /*u*/ ) -> std::string
     out += "  ";
     const int stam = sess.partner_stamina_pct;
     out += colorize( _( "Stam:" ), c_white ) + " "
-         + colorize( std::to_string( stam ) + "%",
-                     stam > 50 ? c_green : stam > 20 ? c_yellow : c_red );
+           + colorize( std::to_string( stam ) + "%",
+                       stam > 50 ? c_green : stam > 20 ? c_yellow : c_red );
     out += "\n";
 
     if( sess.partner_abs_pos != tripoint_abs_ms{} ) {
         const tripoint_rel_ms delta = sess.partner_abs_pos - g->u.abs_pos();
         const int dist = rl_dist( tripoint_rel_ms{}, delta );
-        const char* arrow = "?";
+        const char *arrow = "?";
         const int dx = delta.x(), dy = delta.y();
         if( std::abs( dx ) < std::abs( dy ) / 2 )      { arrow = dy < 0 ? "↑" : "↓"; }
         else if( std::abs( dy ) < std::abs( dx ) / 2 ) { arrow = dx > 0 ? "→" : "←"; }
@@ -1441,64 +1441,64 @@ struct hud_producer_entry {
     std::string( *produce )( avatar & );     // variant-specific content producer
 };
 const std::vector<hud_producer_entry> g_hud_producers = {
-        // Stats — classic (draw_stats) vs labels/wide + narrow (draw_stat_wide/_narrow)
-        { "Stats",         hud_stats_text },
-        { "stats_compact", hud_stats_text },
-        { "stats",         hud_stats_wide },
-        { "stats_narrow",  hud_stats_wide },
-        // Sound — compact (draw_stealth: speed+move+sound) vs labels/narrow (sound only)
-        { "Sound",         hud_sound_text },
-        { "sound_compact", hud_sound_text },
-        { "sound",         hud_sound_labels },
-        { "sound_narrow",  hud_sound_labels },
-        // Needs — compact (arrows+Focus) vs labels/narrow (pain/thirst/rest/hunger/heat)
-        { "Needs",         hud_needs_text },
-        { "needs_compact", hud_needs_text },
-        { "needs",         hud_needs_labels },
-        { "needs_narrow",  hud_needs_labels },
-        // Wgt/Vol — content identical across variants (only columns differ)
-        { "Wgt/Vol",              hud_wgtvol },
-        { "weightvolume",         hud_wgtvol },
-        { "weightvolume_compact", hud_wgtvol },
-        { "weightvolume_narrow",  hud_wgtvol },
-        // Mana — native mana panel only (NOT the "Mana" value-widget label)
-        { "mana",         hud_mana },
-        { "mana_compact", hud_mana },
-        { "mana_narrow",  hud_mana },
-        { "mana_wide",    hud_mana },
-        // Pure-text panels (no widget icons / embedded graphics)
-        { "hint",          hud_hint },
-        { "Hint",          hud_hint },
-        { "movement",      hud_movement },
-        { "weapon",        hud_weapon },
-        { "armor",         hud_armor },
-        { "armor_classic", hud_armor },
-        { "Armor",         hud_armor },
-        // Limbs — HP per body part (all variants same data, layout differs)
-        { "limbs",         hud_limbs },
-        { "limbs_compact", hud_limbs },
-        { "limbs_narrow",  hud_limbs },
-        { "Limbs",         hud_limbs },
-        // Log — recent message buffer
-        { "log",           hud_log },
-        { "log_classic",   hud_log },
-        { "Log",           hud_log },
-        // Location — loc_labels family (text rows; inline overmap chunk dropped, phase 2)
-        { "location",      hud_location },
-        { "location_alt",  hud_location },
-        { "location_narrow", hud_location },
-        { "Location",      hud_location },
-        // Compass — MVP directional enemy COUNTS (full mon_info symbol grid is phase 2)
-        { "compass",            hud_compass },
-        { "compass_comp",       hud_compass },
-        { "compass_simple",     hud_compass },
-        { "compass_compact",    hud_compass },
-        { "compass_comp_compact", hud_compass },
-        { "Compass",            hud_compass },
-        { "Compact Compass",    hud_compass },
-        { "Simple Compass",     hud_compass },
+    // Stats — classic (draw_stats) vs labels/wide + narrow (draw_stat_wide/_narrow)
+    { "Stats",         hud_stats_text },
+    { "stats_compact", hud_stats_text },
+    { "stats",         hud_stats_wide },
+    { "stats_narrow",  hud_stats_wide },
+    // Sound — compact (draw_stealth: speed+move+sound) vs labels/narrow (sound only)
+    { "Sound",         hud_sound_text },
+    { "sound_compact", hud_sound_text },
+    { "sound",         hud_sound_labels },
+    { "sound_narrow",  hud_sound_labels },
+    // Needs — compact (arrows+Focus) vs labels/narrow (pain/thirst/rest/hunger/heat)
+    { "Needs",         hud_needs_text },
+    { "needs_compact", hud_needs_text },
+    { "needs",         hud_needs_labels },
+    { "needs_narrow",  hud_needs_labels },
+    // Wgt/Vol — content identical across variants (only columns differ)
+    { "Wgt/Vol",              hud_wgtvol },
+    { "weightvolume",         hud_wgtvol },
+    { "weightvolume_compact", hud_wgtvol },
+    { "weightvolume_narrow",  hud_wgtvol },
+    // Mana — native mana panel only (NOT the "Mana" value-widget label)
+    { "mana",         hud_mana },
+    { "mana_compact", hud_mana },
+    { "mana_narrow",  hud_mana },
+    { "mana_wide",    hud_mana },
+    // Pure-text panels (no widget icons / embedded graphics)
+    { "hint",          hud_hint },
+    { "Hint",          hud_hint },
+    { "movement",      hud_movement },
+    { "weapon",        hud_weapon },
+    { "armor",         hud_armor },
+    { "armor_classic", hud_armor },
+    { "Armor",         hud_armor },
+    // Limbs — HP per body part (all variants same data, layout differs)
+    { "limbs",         hud_limbs },
+    { "limbs_compact", hud_limbs },
+    { "limbs_narrow",  hud_limbs },
+    { "Limbs",         hud_limbs },
+    // Log — recent message buffer
+    { "log",           hud_log },
+    { "log_classic",   hud_log },
+    { "Log",           hud_log },
+    // Location — loc_labels family (text rows; inline overmap chunk dropped, phase 2)
+    { "location",      hud_location },
+    { "location_alt",  hud_location },
+    { "location_narrow", hud_location },
+    { "Location",      hud_location },
+    // Compass — MVP directional enemy COUNTS (full mon_info symbol grid is phase 2)
+    { "compass",            hud_compass },
+    { "compass_comp",       hud_compass },
+    { "compass_simple",     hud_compass },
+    { "compass_compact",    hud_compass },
+    { "compass_comp_compact", hud_compass },
+    { "Compass",            hud_compass },
+    { "Compact Compass",    hud_compass },
+    { "Simple Compass",     hud_compass },
 #ifdef COOP_ENABLED
-        { "coop_partner",       hud_coop_partner_text },
+    { "coop_partner",       hud_coop_partner_text },
 #endif
 };
 

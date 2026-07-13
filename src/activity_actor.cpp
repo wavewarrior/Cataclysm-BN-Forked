@@ -3014,7 +3014,7 @@ void throw_activity_actor::do_turn( player_activity& act, Character& who )
         if( throw_result.hit_critter == nullptr ) {
             const tripoint_bub_ms end_bub = throw_result.end_point;
             const tripoint_abs_ms end_abs = get_map().bub_to_abs( end_bub );
-            for( const item* it : get_map().i_at( end_bub ) ) {
+            for( const item * it : get_map().i_at( end_bub ) ) {
                 if( it->typeId() != c2e_thrown_type ) { continue; }
                 // Found the landed item — emit DROP so it appears on the host map.
                 std::ostringstream drop_oss;
@@ -3035,8 +3035,8 @@ void throw_activity_actor::do_turn( player_activity& act, Character& who )
                 drop_jout.end_object();
                 g->coop_client_->queue_action( "DROP", drop_oss.str() );
                 DebugLog( DL::Info, DC::Main )
-                    << "[coop] C2e throw relay: " << c2e_thrown_type.str() << " at ("
-                    << end_abs.x() << "," << end_abs.y() << "," << end_abs.z() << ")";
+                        << "[coop] C2e throw relay: " << c2e_thrown_type.str() << " at ("
+                        << end_abs.x() << "," << end_abs.y() << "," << end_abs.z() << ")";
                 break; // one item per throw
             }
         }
@@ -3063,7 +3063,9 @@ void throw_activity_actor::do_turn( player_activity& act, Character& who )
             std::ostringstream fctx;
             JsonOut jf( fctx );
             jf.start_object();
-            jf.member( "ax", abs.x() ); jf.member( "ay", abs.y() ); jf.member( "az", abs.z() );
+            jf.member( "ax", abs.x() );
+            jf.member( "ay", abs.y() );
+            jf.member( "az", abs.z() );
             jf.member( "field", finfo.first.id().str() );
             jf.member( "intensity", finfo.second );
             jf.end_object();
@@ -3875,10 +3877,10 @@ void butchery_activity_actor::finish( player_activity& act, Character& who )
     };
 
 #ifdef COOP_ENABLED
-    std::vector<const item*> coop_items_before;
+    std::vector<const item *> coop_items_before;
     bool coop_corpse_detached = false;
     if( g->coop_client_ ) {
-        for( const item* it : here.i_at( p.bub_pos() ) ) {
+        for( const item * it : here.i_at( p.bub_pos() ) ) {
             coop_items_before.push_back( it );
         }
     }
@@ -4053,7 +4055,7 @@ void butchery_activity_actor::finish( player_activity& act, Character& who )
         j.end_object();
         g->coop_client_->queue_action( "BUTCHER", ctx.str() );
         const auto new_abs = here.bub_to_abs( p.bub_pos() );
-        for( const item* it : here.i_at( p.bub_pos() ) ) {
+        for( const item * it : here.i_at( p.bub_pos() ) ) {
             if( std::ranges::find( coop_items_before, it ) == coop_items_before.end() ) {
                 std::ostringstream drop_ctx;
                 JsonOut jd( drop_ctx );
