@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <cmath>
 
 #include "cached_options.h"  // use_tiles, use_tiles_overmap, tile_iso
 #include "cata_tiles.h"      // tilecontext, overmap_tilecontext, get_tile_width/height
@@ -173,4 +174,52 @@ std::optional<tripoint_bub_ms> input_context::get_coordinates(
     }
 
     return tripoint_bub_ms( p, g->get_levz() );
+}
+
+auto input_context::get_aim_angle_to_src( const tripoint_bub_ms &src ) const
+-> std::optional<units::angle>
+{
+    if( !coordinate_input_received || !tilecontext ) { return std::nullopt; }
+const auto o  = tilecontext->get_tile_map_origin().raw();
+const auto op = tilecontext->get_drawing_pixel_offset();
+const auto tw = std::max( 1, tilecontext->get_tile_width() );
+    const auto th = std::max( 1, tilecontext->get_tile_height() );
+    // Same formula as sdl_render_frame.cpp (cursor_light_emitter pixel→world conversion)
+    const auto wx = ( coordinate.x - static_cast<double>( op.x ) ) / tw + o.x;
+    const auto wy = ( coordinate.y - static_cast<double>( op.y ) ) / th + o.y;
+    const auto dx = wx - ( src.x() + 0.5 );
+    const auto dy = wy - ( src.y() + 0.5 );
+    if( std::hypot( dx, dy ) < 0.01 ) { return std::nullopt; }
+    return units::atan2( dy, dx );
+}
+
+auto is_rmb_held() -> bool
+{
+#ifdef TILES
+    float mx = 0.0f, my = 0.0f;
+    const auto buttons = SDL_GetMouseState( &mx, &my );
+    return ( buttons & SDL_BUTTON_RMASK ) != 0;
+#else
+    return false;
+#endif
+}
+
+auto get_sdl_ticks() -> uint64_t
+{
+#ifdef TILES
+    return static_cast<uint64_t>( SDL_GetTicks() );
+#else
+    return 0;
+#endif
+}
+
+auto get_sdl_mouse_pos() -> point
+{
+#ifdef TILES
+    float mx = 0.0f, my = 0.0f;
+    SDL_GetMouseState( &mx, &my );
+    return point( static_cast<int>( mx ), static_cast<int>( my ) );
+#else
+    return point_zero;
+#endif
 }

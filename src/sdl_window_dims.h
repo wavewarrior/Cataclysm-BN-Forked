@@ -13,3 +13,15 @@
 ///   input.h        — input_context::get_coordinates
 ///
 /// sdl_window_dims.cpp is the single definition site for all of the above.
+
+/// Returns true when the right mouse button is physically held down.
+/// In curses builds (no SDL) always returns false.
+auto is_rmb_held() -> bool;
+
+/// Returns SDL_GetTicks() in tiles builds; returns 0 in curses builds.
+auto get_sdl_ticks() -> uint64_t;
+
+/// Returns the current mouse pixel position via SDL_GetMouseState (live, not last-event).
+/// In curses builds returns point_zero.
+struct point;
+auto get_sdl_mouse_pos() -> point;

@@ -593,7 +593,7 @@ void cata_tiles::draw_om( point dest, const tripoint_abs_omt &center_abs_omt, bo
             const tripoint_abs_omt& mark = *sess.shared_mark;
             if( overmap_area.contains( mark ) ) {
                 const tile_search_params tile { "note_*_c_light_cyan", C_OVERMAP_NOTE,
-                                               "overmap_note", 0, 0 };
+                                                "overmap_note", 0, 0 };
                 draw_from_id_string(
                     tile, global_omt_to_draw_position( mark ), std::nullopt, std::nullopt,
                     lit_level::LIT, false, 0, false );
@@ -603,7 +603,7 @@ void cata_tiles::draw_om( point dest, const tripoint_abs_omt &center_abs_omt, bo
                     const int lx = tile_draw_pos.x() * tile_width  + dest.x + tile_width;
                     const int ly = tile_draw_pos.y() * tile_height + dest.y;
                     const char note_fg = static_cast<char>(
-                        cata_cursesport::colorpairs[c_light_cyan.to_color_pair_index()].FG );
+                                             cata_cursesport::colorpairs[c_light_cyan.to_color_pair_index()].FG );
                     if( omt_text_rml ) {
                         rmlui_layer::world_text_add( lx, ly, sess.shared_mark_label,
                                                      omt_label_rgba( note_fg ) );

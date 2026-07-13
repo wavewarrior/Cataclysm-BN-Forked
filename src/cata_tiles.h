@@ -1117,6 +1117,16 @@ class cata_tiles
         void init_draw_cursor( const tripoint_bub_ms& p );
         void draw_cursor();
         void void_cursor();
+        auto init_draw_aim_crosshair( point pixel ) -> void;
+        auto void_aim_crosshair() -> void;
+        auto draw_aim_crosshair() -> void;
+        auto init_draw_throw_arc( const tripoint_bub_ms &src, const tripoint_bub_ms &dst,
+                                  float charge ) -> void;
+        auto void_throw_arc() -> void;
+        auto draw_throw_arc() -> void;
+        auto init_draw_throw_impact( const tripoint_bub_ms &dst, float max_radius_tiles ) -> void;
+        auto void_throw_impact() -> void;
+        auto draw_throw_impact() -> void;
 
         void init_draw_highlight( const tripoint_bub_ms& p );
         void draw_highlight();
@@ -1272,6 +1282,15 @@ class cata_tiles
         bool do_draw_sct = false;
         bool do_draw_zones = false;
         bool do_draw_cone_aoe = false;
+        bool do_draw_aim_crosshair = false;
+        std::optional<point> aim_crosshair_pixel_;
+        bool do_draw_throw_arc = false;
+        tripoint_bub_ms throw_arc_src;
+        tripoint_bub_ms throw_arc_dst;
+        float throw_arc_charge = 0.0f;
+        bool do_draw_throw_impact = false;
+        tripoint_bub_ms throw_impact_dst;
+        float throw_impact_max_r_tiles = 0.5f;
 
         tripoint_bub_ms exp_pos;
         int exp_rad = 0;

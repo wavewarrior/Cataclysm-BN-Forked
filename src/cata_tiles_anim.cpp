@@ -323,6 +323,109 @@ void cata_tiles::void_cursor()
     do_draw_cursor = false;
     cursors.clear();
 }
+auto cata_tiles::init_draw_aim_crosshair( point pixel ) -> void
+{
+    aim_crosshair_pixel_ = pixel;
+    do_draw_aim_crosshair = true;
+}
+auto cata_tiles::void_aim_crosshair() -> void
+{
+    do_draw_aim_crosshair = false;
+    aim_crosshair_pixel_ = std::nullopt;
+}
+auto cata_tiles::draw_aim_crosshair() -> void
+{
+    if( !do_draw_aim_crosshair || !aim_crosshair_pixel_.has_value() ) { return; }
+void_aim_crosshair();
+const auto c = *aim_crosshair_pixel_;
+constexpr auto arm = 6;
+SDL_SetRenderDrawColor( renderer.get(), 255, 80, 0, 220 );
+const std::array<SDL_FPoint, 2> h = {
+    SDL_FPoint{ static_cast<float>( c.x - arm ), static_cast<float>( c.y ) },
+    SDL_FPoint{ static_cast<float>( c.x + arm ), static_cast<float>( c.y ) }
+};
+const std::array<SDL_FPoint, 2> v = {
+    SDL_FPoint{ static_cast<float>( c.x ), static_cast<float>( c.y - arm ) },
+    SDL_FPoint{ static_cast<float>( c.x ), static_cast<float>( c.y + arm ) }
+};
+SDL_RenderLines( renderer.get(), h.data(), 2 );
+SDL_RenderLines( renderer.get(), v.data(), 2 );
+}
+auto cata_tiles::init_draw_throw_arc( const tripoint_bub_ms &src,
+                                      const tripoint_bub_ms &dst,
+                                      float charge ) -> void
+{
+    throw_arc_src    = src;
+    throw_arc_dst    = dst;
+    throw_arc_charge = charge;
+    do_draw_throw_arc = true;
+}
+auto cata_tiles::void_throw_arc() -> void { do_draw_throw_arc = false; }
+auto cata_tiles::draw_throw_arc() -> void
+{
+    if( !do_draw_throw_arc ) { return; }
+do_draw_throw_arc = false;
+const auto p1   = player_to_screen( throw_arc_src.xy() );
+    const auto p2   = player_to_screen( throw_arc_dst.xy() );
+    const auto dist = std::hypot( float( p2.x - p1.x ), float( p2.y - p1.y ) );
+    const auto arc_h = std::max( 8.0f, dist / 3.0f );
+    const SDL_FPoint mid{
+        0.5f * ( float( p1.x ) + float( p2.x ) ),
+        0.5f * ( float( p1.y ) + float( p2.y ) ) - arc_h
+    };
+    constexpr auto N = 24;
+    std::array<SDL_FPoint, N> pts;
+    for( auto i = 0; i < N; ++i ) {
+    const auto t = float( i ) / float( N - 1 );
+        const auto u = 1.0f - t;
+        pts[i] = SDL_FPoint{
+            u *u * float( p1.x ) + 2.0f * u * t * mid.x + t * t * float( p2.x ),
+            u *u * float( p1.y ) + 2.0f * u * t * mid.y + t * t * float( p2.y )
+        };
+    }
+    const auto alpha = static_cast<Uint8>( 120 + static_cast<int>( 135.0f * throw_arc_charge ) );
+    SDL_SetRenderDrawColor( renderer.get(), 255, 140, 0, alpha );
+    SDL_RenderLines( renderer.get(), pts.data(), N );
+}
+auto cata_tiles::init_draw_throw_impact( const tripoint_bub_ms &dst,
+        float max_radius_tiles ) -> void
+{
+    throw_impact_dst         = dst;
+    throw_impact_max_r_tiles = max_radius_tiles;
+    do_draw_throw_impact     = true;
+}
+auto cata_tiles::void_throw_impact() -> void { do_draw_throw_impact = false; }
+auto cata_tiles::draw_throw_impact() -> void
+{
+    if( !do_draw_throw_impact ) { return; }
+const auto c      = player_to_screen( throw_impact_dst.xy() );
+    const auto tile_w = static_cast<float>( tile_width );
+    const auto max_r  = throw_impact_max_r_tiles * tile_w;
+    const bool explosive = ( throw_impact_max_r_tiles > 0.6f );
+    const auto r_ch = static_cast<Uint8>( explosive ? 60 : 130 );
+    const auto draw_ring = [&]( float radius, Uint8 alpha ) {
+        if( radius < 1.0f ) { return; }
+        constexpr auto N = 28;
+        std::array < SDL_FPoint, N + 1 > pts;
+        for( auto i = 0; i <= N; ++i ) {
+            const auto ang = float( i ) * 2.0f * float( M_PI ) / float( N );
+            pts[i] = { float( c.x ) + radius * std::cos( ang ),
+                       float( c.y ) + radius * std::sin( ang )
+                     };
+        }
+        SDL_SetRenderDrawColor( renderer.get(), 255, r_ch, 0, alpha );
+        SDL_RenderLines( renderer.get(), pts.data(), N + 1 );
+    };
+    draw_ring( 4.0f, 230 );
+    constexpr auto period_ms = 1200.0f;
+    constexpr auto n_rings   = 3;
+    const auto t_now = static_cast<float>( SDL_GetTicks() );
+    for( auto i = 0; i < n_rings; ++i ) {
+    const auto offset = float( i ) / float( n_rings );
+        const auto t = std::fmod( t_now / period_ms + offset, 1.0f );
+        draw_ring( t * max_r, static_cast<Uint8>( ( 1.0f - t ) * 200.0f ) );
+    }
+}
 void cata_tiles::void_highlight()
 {
     do_draw_highlight = false;
@@ -517,6 +620,7 @@ void cata_tiles::draw_cursor()
         {"cursor", C_NONE, empty_string, 0, 0}, p, std::nullopt, std::nullopt, lit_level::LIT,
         false, 0, false );
     }
+    draw_aim_crosshair();
 }
 void cata_tiles::draw_highlight()
 {

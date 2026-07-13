@@ -1382,6 +1382,8 @@ void cata_tiles::draw(
             void_highlight();
         }
         if( do_draw_cone_aoe ) { draw_cone_aoe_frame(); }
+        if( do_draw_throw_arc ) { draw_throw_arc(); }
+        if( do_draw_throw_impact ) { draw_throw_impact(); }
     } else if( g->u.view_offset != tripoint_rel_ms::zero() && !g->u.in_vehicle ) {
         // check to see if player is located at ter
         const tile_search_params tile{"cursor", C_NONE, empty_string, 0, 0};
