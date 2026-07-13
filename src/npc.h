@@ -1419,6 +1419,13 @@ class npc_template
         enum class gender { random, male, female };
         gender gender_override = gender::random;
 
+        /**
+         * Override voice pack for this specific NPC instance.
+         * When non-empty, takes precedence over the npc_class voice_pack_id.
+         * See npc_class::voice_pack_id for voice pack directory format.
+         */
+        std::string voice_pack_id;
+
         static void load( const JsonObject& jsobj );
         static void reset();
         static void check_consistency();

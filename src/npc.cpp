@@ -76,6 +76,8 @@
 #include "tileray.h"
 #include "trait_group.h"
 #include "translations.h"
+#include "tts_synthesizer.h"
+#include "tts_voice_registry.h"
 #include "units.h"
 #include "value_ptr.h"
 #include "veh_type.h"
@@ -266,6 +268,7 @@ void npc_template::load( const JsonObject &jsobj )
             guy.miss_ids.emplace_back( line );
         }
     }
+    jsobj.read( "voice_pack", tem.voice_pack_id );
     npc_templates.emplace( string_id<npc_template>( guy.idz ), std::move( tem ) );
 }
 
@@ -1717,6 +1720,17 @@ void npc::say( const std::string &line, const sounds::sound_t spriority ) const
         add_msg( _( "%1$s saying \"%2$s\"" ), name, formatted_line );
         return;
     }
+
+    // Attempt TTS synthesis if a voice pack is assigned
+#ifdef COOP_ENABLED
+    if( g_tts_synthesizer != nullptr ) {
+        const auto voice_pack = tts_voice_registry::instance().resolve_voice( *this );
+        if( voice_pack ) {
+            g_tts_synthesizer->synthesize( formatted_line, *voice_pack );
+        }
+    }
+#endif // COOP_ENABLED
+
     // Sound happens even if we can't hear it
     if( spriority == sounds::sound_t::order || spriority == sounds::sound_t::alert ) {
         sounds::sound( bub_pos(), get_shout_volume(), spriority, sound, false, "speech",

@@ -62,6 +62,32 @@ class npc_class
 
         item_group_id shopkeeper_item_group = item_group_id( "EMPTY_GROUP" );
 
+        /**
+         * Voice pack identifier for TTS synthesis.
+         *
+         * Voice packs are mod-provided directories under `mods/<pack_id>/` containing:
+         * ┌────────────────────┬──────────────────────────────────────────────────────────┐
+         * │ File               │ Description                                              │
+         * ├────────────────────┼──────────────────────────────────────────────────────────┤
+         * │ voice_pack.json    │ Metadata: id, name, models[], sample_rate                │
+         * │ *.onnx             │ ONNX Runtime model files referenced in voice_pack.json   │
+         * │ *.wav (optional)   │ Fallback phoneme samples                                 │
+         * └────────────────────┴──────────────────────────────────────────────────────────┘
+         *
+         * voice_pack.json schema:
+         * {
+         *   "id": "gritty_male_01",           // unique identifier, matches this field
+         *   "name": "Gritty Male",            // human-readable display name
+         *   "models": ["model.onnx"],         // ONNX model file(s) to load
+         *   "sample_rate": 16000              // audio sample rate in Hz
+         * }
+         *
+         * When set, tts_voice_registry auto-registers this pack for all NPCs of
+         * this class during npc_class::finalize_all(). An npc_template can
+         * override this with its own voice_pack_id.
+         */
+        std::string voice_pack_id;
+
     public:
         npc_class_id id;
         bool was_loaded = false;
@@ -79,6 +105,7 @@ class npc_class
 
         std::string get_name() const;
         std::string get_job_description() const;
+        const std::string &get_voice_pack_id() const;
 
         int roll_strength() const;
         int roll_dexterity() const;
