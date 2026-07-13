@@ -66,4 +66,36 @@ auto coop_collect_streamable( std::vector<coop_world_event> events ) -> coop_str
     return result;
 }
 
+// ---------------------------------------------------------------------------
+// Reverse delta — build the inverse of a world-event
+// ---------------------------------------------------------------------------
+
+auto reverse_delta( const coop_world_event& ev ) -> coop_world_event
+{
+    // Determine the inverse event type for the reversed delta.
+    // Most types are self-inverse; field_created ↔ field_expired is the compound case.
+    auto inverse_type = []( coop_event_type t ) -> coop_event_type {
+        switch( t )
+    {
+        case coop_event_type::field_created:
+            return coop_event_type::field_expired;
+        case coop_event_type::field_expired:
+            return coop_event_type::field_created;
+        default:
+            return t;
+    }
+};
+
+coop_world_event rev;
+rev.type = inverse_type( ev.type );
+    rev.pos = ev.pos;
+    rev.value = ev.old_value;
+    rev.old_value = ev.value;
+    rev.creature_id = ev.creature_id;
+    rev.str = ev.str;
+    // Store original type so reverse_delta(rev) round-trips back
+    rev.reverse_type = ev.type;
+    return rev;
+}
+
 #endif // COOP_ENABLED

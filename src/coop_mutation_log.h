@@ -15,8 +15,11 @@ struct coop_world_event {
     coop_event_type type = coop_event_type::terrain_changed;
     tripoint_abs_ms pos;
     int value = 0;       ///< ter_id, furn_id, field intensity, hp, …
+    int old_value = 0;   ///< previous value before mutation (for reversible deltas)
     int creature_id = 0; ///< stable host-assigned monster/npc id
     std::string str;     ///< mtype_id for creature_spawned; empty otherwise
+    coop_event_type reverse_type =
+        coop_event_type::terrain_changed; ///< inverse event type for compound reversals
 };
 
 /// FNV-1a offset basis — initial value for per-tick event hash accumulators.
@@ -86,6 +89,11 @@ struct coop_streamable_result {
 /// Called by build_and_send_sync (server) and exercised directly by unit tests.
 auto coop_collect_streamable( std::vector<coop_world_event> events ) // *NOPAD*
 -> coop_streamable_result;
+
+/// Build the inverse of a world-event delta so it can be replayed backwards.
+/// Swaps value ↔ old_value and sets reverse_type to indicate the inverse operation.
+/// Pure function — no side effects.
+auto reverse_delta( const coop_world_event& ev ) -> coop_world_event;
 
 /// Per-tick mutation log.  Exactly one instance lives on the main thread while
 /// a co-op host tick is running; it is set/cleared via RAII (see coop_tick_log_guard).
