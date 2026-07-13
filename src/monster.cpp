@@ -333,8 +333,8 @@ auto monster::setpos( const tripoint_abs_ms& p ) -> void
     }
     if( wandering ) { unset_dest(); }
 #ifdef COOP_ENABLED
-    if (auto* _log = coop_mutation_log::current()) {
-        _log->push({coop_event_type::creature_moved, pos_abs, 0, 0});
+    if( auto * _log = coop_mutation_log::current() ) {
+        _log->push( {coop_event_type::creature_moved, pos_abs, 0, 0} );
     }
 #endif
 }
@@ -2641,8 +2641,8 @@ void monster::die( Creature* nkiller )
     g->set_critter_died();
     dead = true;
 #ifdef COOP_ENABLED
-    if (auto* _log = coop_mutation_log::current()) {
-        _log->push({coop_event_type::creature_died, abs_pos(), 0, 0});
+    if( auto * _log = coop_mutation_log::current() ) {
+        _log->push( {coop_event_type::creature_died, abs_pos(), 0, 0} );
     }
 #endif
     set_killer( nkiller );

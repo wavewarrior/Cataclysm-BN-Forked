@@ -412,54 +412,28 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
 
     double extend_to_range = no_overshoot ? range : proj_arg.range;
 
-    auto target = target_arg;
-    std::vector<tripoint_bub_ms> trajectory;
-    std::vector<std::pair<monster, const dealt_projectile_attack>> hit_monsters;
+    // Float DDA trajectory: dispersion deflects the aim angle; bullet travels
+    // along the exact deflected angle rather than a Bresenham walk.
+    const auto base_angle = units::atan2(
+                                static_cast<double>( target_arg.y() - source.y() ),
+                                static_cast<double>( target_arg.x() - source.x() ) );
+    const auto deflect_angle =
+        std::min( units::from_arcmin( aim.dispersion ), 30_degrees );
+    const auto actual_angle = base_angle + rng_float( -deflect_angle, deflect_angle );
 
+    // Play miss-sound when the shot deviates >= 1 tile laterally (unchanged threshold)
     if( aim.missed_by_tiles >= 1.0 ) {
-        // We missed enough to target a different tile
-        const double dx = target_arg.x() - source.x();
-        const double dy = target_arg.y() - source.y();
-        units::angle rad = units::atan2( dy, dx );
-
-        // cap wild misses at +/- 30 degrees
-        const auto dispersion_angle =
-            std::min( units::from_arcmin( aim.dispersion ), 30_degrees );
-        rad += ( one_in( 2 ) ? 1 : -1 ) * dispersion_angle;
-
-        // TODO: This should also represent the miss on z axis
-        const int offset = std::min<int>( range, std::sqrt( aim.missed_by_tiles ) );
-        int new_range = no_overshoot ?
-                        range + rng( -offset, offset ) :
-                        rng( range - offset, proj_arg.range );
-        new_range = std::max( new_range, 1 );
-
-        target.x() = source.x() + roll_remainder( new_range * cos( rad ) );
-        target.y() = source.y() + roll_remainder( new_range * sin( rad ) );
-
-        if( target == source ) {
-            target.x() = source.x() + sgn( dx );
-            target.y() = source.y() + sgn( dy );
-        }
-
-        // Don't extend range further, miss here can mean hitting the ground near the target
-        range = rl_dist( source, target );
-        extend_to_range = range;
-
-        sfx::play_variant_sound( "bullet_hit", "hit_wall", sfx::get_heard_volume( target ),
-                                 sfx::get_heard_angle( target ) );
-        // TODO: Z dispersion
-        // If we missed, just draw a straight line.
-        trajectory = line_to( source, target );
-    } else {
-        // Go around obstacles a little if we're on target.
-        trajectory = here.find_clear_path( source, target );
+        sfx::play_variant_sound( "bullet_hit", "hit_wall",
+                                 sfx::get_heard_volume( target_arg ),
+                                 sfx::get_heard_angle( target_arg ) );
     }
 
-    add_msg( m_debug, "missed_by_tiles: %.2f; missed_by: %.2f; target (orig/hit): %d,%d,%d/%d,%d,%d",
-             aim.missed_by_tiles, aim.missed_by,
-             target_arg.x(), target_arg.y(), target_arg.z(),
-             target.x(), target.y(), target.z() );
+    const auto dda_max_range =
+        static_cast<int>( no_overshoot ? range : extend_to_range );
+    auto trajectory = here.ray_cast_angle(
+                          source, units::to_radians( actual_angle ), dda_max_range );
+    std::vector<std::pair<monster, const dealt_projectile_attack>> hit_monsters;
+
 
     // Trace the trajectory, doing damage in order
     auto &tp = attack.end_point;
@@ -473,14 +447,6 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
         here.emit_field( trajectory.front(), muzzle_smoke );
     }
 
-    if( !no_overshoot && range < extend_to_range ) {
-        // Continue line is very "stiff" when the original range is short
-        // TODO: Make it use a more distant point for more realistic extended lines
-        std::vector<tripoint_bub_ms> trajectory_extension = continue_line( trajectory,
-            extend_to_range - range );
-        trajectory.reserve( trajectory.size() + trajectory_extension.size() );
-        trajectory.insert( trajectory.end(), trajectory_extension.begin(), trajectory_extension.end() );
-    }
     // Range can be 0
     size_t traj_len = trajectory.size();
     while( traj_len > 0 && rl_dist( source, trajectory[traj_len - 1] ) > proj_arg.range ) {
@@ -591,16 +557,23 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
         // TODO: add size effects to accuracy
         // If there's a monster in the path of our bullet, and either our aim was true,
         //  OR it's not the monster we were aiming at and we were lucky enough to hit it
-        double cur_missed_by = aim.missed_by;
-
-        // unintentional hit on something other than our actual target
-        // don't re-roll for the actual target, we already decided on a missed_by value for that
-        // at the start, misses should stay as misses
-        if( critter != nullptr && tp != target_arg ) {
-            // Unintentional hit
-            cur_missed_by = std::max( rng_float( 0.1, 1.5 - aim.missed_by ) /
-                                      critter->ranged_target_size(), 0.4 );
-        }
+        // Geometric perpendicular distance from DDA ray to creature centre,
+        // normalised by target size. No random re-roll for bystanders.
+        const auto cur_missed_by = [&]() -> double {
+            if( critter == nullptr ) { return aim.missed_by; }
+            const auto range_to_critter = static_cast<double>( rl_dist( source, tp ) );
+            const auto angle_to_critter = units::atan2(
+                static_cast<double>( tp.y() - source.y() ),
+                static_cast<double>( tp.x() - source.x() ) );
+            auto diff = std::fmod( units::to_radians( actual_angle ) -
+                                   units::to_radians( angle_to_critter ), 2 * M_PI );
+            if( diff < 0.0 ) { diff += 2 * M_PI; }
+            if( diff > M_PI ) { diff = 2 * M_PI - diff; }
+            const auto perp_dist = iso_tangent( range_to_critter,
+                                                units::from_radians( diff ) );
+            const auto sz = critter->ranged_target_size();
+            return sz > 0.0 ? std::min( 1.0, perp_dist / sz ) : 1.0;
+        }();
 
         if( here.obstructed_by_vehicle_rotation( prev_point, tp ) ) {
             //We're firing through an impassible gap in a rotated vehicle, randomly hit one of the two walls
@@ -674,7 +647,7 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
         } else {
             // Track damage before processing so we'll know if we actually hit any cover.
             const float dmg_before_penetration = proj.impact.total_damage();
-            here.shoot( source, tp, proj, !no_item_damage && tp == target );
+            here.shoot( source, tp, proj, !no_item_damage && tp == target_arg );
             const float dmg_after_penetration = proj.impact.total_damage();
             has_momentum = dmg_after_penetration > 0 || ( no_damage && here.passable( tp ) );
             // We lost momentum from hitting something, penalize range.

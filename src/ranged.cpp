@@ -72,6 +72,7 @@
 #include "vehicle.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
+#include "sdl_window_dims.h"
 
 #include <RmlUi/Core.h>
 #include <algorithm>
@@ -437,6 +438,9 @@ class target_ui
         // Aiming destination (cursor position)
         // Use set_cursor_pos() to modify
         tripoint_bub_ms dst;
+        // Continuous aim direction. Derived from mouse pixel (exact) or keyboard
+        // tile-move (atan2 sync). Drives DDA ray for traj and dst.
+        units::angle aim_angle = 0_radians;
         // Creature currently under cursor. nullptr if aiming at empty tile,
         // yourself or a creature you cannot see
         Creature *dst_critter = nullptr;
@@ -477,6 +481,14 @@ class target_ui
         // but increases the further away the new aim point will be
         // relative to the current one.
         double predicted_recoil = 0;
+        // RMB press-to-aim: true when the targeting UI was opened via RMB press
+        bool opened_by_rmb = false;
+
+        // Throw charge (0..1): grows over throw_charge_full_ms ms in Throw mode
+        double throw_charge = 0.0;
+        uint64_t throw_charge_start_ms = 0;
+        static constexpr double throw_charge_full_ms = 1500.0;
+        int max_throw_range = 0;
 
         // For AOE spells, list of tiles affected by the spell
         // relevant for TargetMode::Spell
@@ -510,6 +522,16 @@ class target_ui
         // selects closest position in range.
         // Returns 'false' if cursor position did not change
         bool set_cursor_pos( const tripoint_bub_ms& new_pos );
+
+        // Set aim angle, update traj/dst via DDA ray, update facing and critter.
+        auto set_aim_angle( units::angle angle ) -> void;
+
+        // Sync aim_angle from current dst position (for keyboard/cycle_targets paths).
+        auto sync_aim_angle_from_dst() -> void;
+
+        // Calculate half-angle of spread cone from current dispersion.
+        // Returns 0_radians when not in Fire mode or no relevant weapon.
+        auto calc_spread_half_angle() const -> units::angle;
 
         // Called when range/ammo changes (or may have changed)
         void on_range_ammo_changed();
@@ -2771,6 +2793,13 @@ target_handler::trajectory target_ui::run()
         initial_dst = choose_initial_target();
     }
     set_cursor_pos( initial_dst );
+    sync_aim_angle_from_dst();
+    opened_by_rmb = is_rmb_held();
+    if( mode == TargetMode::Throw ) {
+        max_throw_range = range;
+        throw_charge    = 0.0;
+        throw_charge_start_ms = get_sdl_ticks();
+    }
     if( dst != initial_dst ) {
         // Our target moved out of range
         action.clear();
@@ -2828,6 +2857,32 @@ target_handler::trajectory target_ui::run()
         // If an aiming mode is selected, use "*_SHOT" instead of "FIRE"
         if( mode == TargetMode::Fire && action == "FIRE" && aim_mode->has_threshold ) {
             action = aim_mode->action;
+        }
+
+        // In hold-to-aim mode, LMB (SELECT) fires — redirect to the FIRE path
+        if( opened_by_rmb && action == "SELECT" ) {
+            action = "FIRE";
+        }
+
+        // Update throw charge and effective range each TIMEOUT tick
+        if( action == "TIMEOUT" && mode == TargetMode::Throw && max_throw_range > 0 ) {
+            const auto elapsed = static_cast<double>( get_sdl_ticks() - throw_charge_start_ms );
+            throw_charge      = std::min( 1.0, elapsed / throw_charge_full_ms );
+            const auto eff_range = std::max( 1, static_cast<int>(
+                                                 throw_charge * static_cast<double>( max_throw_range ) ) );
+            if( eff_range != range ) {
+                range = eff_range;
+                set_aim_angle( aim_angle ); // re-cast DDA at same angle with new range
+            }
+        }
+
+        // Hold-to-aim: RMB held → reduce recoil each tick; RMB released → cancel
+        if( opened_by_rmb && action == "TIMEOUT" ) {
+            if( !is_rmb_held() ) {
+                loop_exit_code = ExitCode::Abort;
+                break;
+            }
+            action_aim(); // shrinks spread cone as recoil decays
         }
 
         // Handle received input
@@ -2895,11 +2950,13 @@ target_handler::trajectory target_ui::run()
         case ExitCode::Abort: {
             traj.clear();
             if( mode == TargetMode::Fire || mode == TargetMode::Shape ) { activity->aborted = true; }
+            if( mode == TargetMode::Throw || mode == TargetMode::ThrowBlind ) { g->void_throw_impact(); }
             break;
         }
         case ExitCode::Fire: {
             bool harmful = !( mode == TargetMode::Spell && casting->damage() <= 0 );
             on_target_accepted( harmful );
+            if( mode == TargetMode::Throw || mode == TargetMode::ThrowBlind ) { g->void_throw_impact(); }
             break;
         }
         case ExitCode::Timeout: {
@@ -2916,6 +2973,7 @@ target_handler::trajectory target_ui::run()
             traj.clear();
             activity->aborted = true;
             activity->reload_requested = true;
+            if( mode == TargetMode::Throw || mode == TargetMode::ThrowBlind ) { g->void_throw_impact(); }
             break;
         }
     }
@@ -3028,25 +3086,55 @@ bool target_ui::handle_cursor_movement( const std::string& action, bool& skip_re
             }
         }
     } else if( const std::optional<tripoint_rel_ms> delta = ctxt.get_direction( action ) ) {
-        // Shift view/cursor with directional keys
-        shift_view_or_cursor( *delta );
-    } else if( action == "SELECT" && ( mouse_pos = ctxt.get_coordinates( g->w_terrain ) ) ) {
-        // Set pos by clicking with mouse
-        mouse_pos->z() = you->bub_pos().z() + you->view_offset.z();
-        set_cursor_pos( *mouse_pos );
+        // Keyboard aim: rotate aim angle 1° per key press (Hotline Miami feel)
+        if( shifting_view ) {
+            set_view_offset( you->view_offset + *delta );
+        } else {
+            const auto aim_dx = units::cos( aim_angle );
+            const auto aim_dy = units::sin( aim_angle );
+            const auto key_dx = static_cast<double>( delta->x() );
+            const auto key_dy = static_cast<double>( delta->y() );
+            // z-component of cross product: positive = CCW, negative = CW
+            const auto cross = aim_dx * key_dy - aim_dy * key_dx;
+            const auto dot   = aim_dx * key_dx + aim_dy * key_dy;
+            if( key_dx == 0.0 && key_dy == 0.0 ) {
+                // z-only delta (LEVEL_UP/DOWN handled separately)
+            } else if( cross > 0.0 ) {
+                set_aim_angle( aim_angle - 1_degrees );   // CCW
+            } else if( cross < 0.0 ) {
+                set_aim_angle( aim_angle + 1_degrees );   // CW
+            } else if( dot > 0.0 ) {
+                set_aim_angle( aim_angle + 1_degrees );   // same direction: advance CW
+            } else {
+                set_aim_angle( aim_angle + 180_degrees ); // opposite direction: reverse
+            }
+        }
+    } else if( action == "SELECT" ) {
+        // Mouse aim: float pixel → exact angle → DDA ray
+        if( const auto angle = ctxt.get_aim_angle_to_src( src ) ) {
+            set_aim_angle( *angle );
+        } else if( ( mouse_pos = ctxt.get_coordinates( g->w_terrain ) ) ) {
+            // Curses fallback: tile-snap
+            mouse_pos->z() = you->bub_pos().z() + you->view_offset.z();
+            set_cursor_pos( *mouse_pos );
+            sync_aim_angle_from_dst();
+        }
     } else if( action == "LEVEL_UP" || action == "LEVEL_DOWN" ) {
         // Shift view/cursor up/down one z level
         auto delta = tripoint_rel_ms( 0, 0, action == "LEVEL_UP" ? 1 : -1 );
         shift_view_or_cursor( delta );
     } else if( action == "NEXT_TARGET" ) {
         cycle_targets( 1 );
+        sync_aim_angle_from_dst();
     } else if( action == "PREV_TARGET" ) {
         cycle_targets( -1 );
+        sync_aim_angle_from_dst();
     } else if( action == "CENTER" ) {
         if( shifting_view ) {
             set_view_offset( tripoint_rel_ms::zero() );
         } else {
             set_cursor_pos( src );
+            aim_angle = 0_radians;
         }
     } else {
         return false;
@@ -3175,6 +3263,59 @@ bool target_ui::set_cursor_pos( const tripoint_bub_ms& new_pos )
     update_status();
 
     return true;
+}
+
+auto target_ui::set_aim_angle( units::angle angle ) -> void
+{
+    aim_angle = angle;
+    const auto &here = get_map();
+    const auto ray = here.ray_cast_angle( src, units::to_radians( angle ), range );
+    if( ray.empty() ) { return; }
+    traj = ray;
+    dst  = ray.back();
+
+    if( snap_to_target ) { set_view_offset( dst - src ); }
+
+    // Update facing direction (mirrors set_cursor_pos)
+    const auto d = dst.xy() - src.xy();
+    if( !tile_iso ) {
+        if( d.x() > 0 )      { you->facing = FacingDirection::FD_RIGHT; }
+        else if( d.x() < 0 ) { you->facing = FacingDirection::FD_LEFT; }
+    } else {
+        if( d.x() >= 0 && d.y() >= 0 ) { you->facing = FacingDirection::FD_RIGHT; }
+        if( d.y() <= 0 && d.x() <= 0 ) { you->facing = FacingDirection::FD_LEFT; }
+    }
+
+    // Critter under cursor (mirrors set_cursor_pos)
+    if( src != dst ) {
+        auto *const cr = g->critter_at( dst, true );
+        dst_critter = ( cr && pl_sees( *cr ) ) ? cr : nullptr;
+    } else {
+        dst_critter = nullptr;
+    }
+
+    if( mode == TargetMode::Fire ) { recalc_aim_turning_penalty(); }
+    update_status();
+}
+
+auto target_ui::sync_aim_angle_from_dst() -> void
+{
+    const auto dx = static_cast<double>( dst.x() - src.x() );
+    const auto dy = static_cast<double>( dst.y() - src.y() );
+    if( std::hypot( dx, dy ) > 0.01 ) {
+        aim_angle = units::atan2( dy, dx );
+    }
+}
+
+auto target_ui::calc_spread_half_angle() const -> units::angle
+{
+    if( mode != TargetMode::Fire || !relevant || range < 1 ) { return 0_radians; }
+    const auto &here = get_map();
+    const auto disp = calculate_dispersion( here, *you, *relevant,
+                                            static_cast<int>( predicted_recoil ), false );
+    const auto miss_tiles = iso_tangent( static_cast<double>( range ),
+                                         units::from_arcmin( disp.avg() ) );
+    return units::from_radians( std::atan( miss_tiles / static_cast<double>( range ) ) );
 }
 
 void target_ui::on_range_ammo_changed()
@@ -3708,6 +3849,38 @@ void target_ui::draw_terrain_overlay()
             const tripoint_bub_ms& tile = pr.first;
             g->draw_highlight( tile );
         }
+    }
+
+    // Spread cone: draw two dim edge rays at ±spread half-angle from aim direction
+    if( mode == TargetMode::Fire && dst != src ) {
+        const auto half = calc_spread_half_angle();
+        if( half > 0.01_radians ) {
+            using namespace std::views;
+            const auto &here = get_map();
+            for( const auto edge : { aim_angle - half, aim_angle + half } ) {
+                const auto ray = here.ray_cast_angle( src, units::to_radians( edge ), range );
+                if( ray.empty() ) { continue; }
+                const auto this_z = ray
+                | filter( [&center]( const tripoint_bub_ms & p ) {
+                    return p.z() == center.z();
+                } )
+                | std::ranges::to<std::vector>();
+                if( !this_z.empty() ) {
+                    g->draw_line( this_z.back(), this_z );
+                }
+            }
+        }
+        // Pixel-precise crosshair at actual mouse position
+        g->draw_aim_crosshair( get_sdl_mouse_pos() );
+    }
+
+    // Throw arc and impact indicator
+    if( ( mode == TargetMode::Throw || mode == TargetMode::ThrowBlind ) && dst != src ) {
+        g->draw_throw_arc( src, dst, static_cast<float>( throw_charge ) );
+        const auto max_r_tiles = ( relevant && static_cast<bool>( relevant->type->explosion ) )
+                                 ? relevant->type->explosion.radius
+                                 : 0.5f;
+        g->draw_throw_impact( dst, max_r_tiles );
     }
 }
 

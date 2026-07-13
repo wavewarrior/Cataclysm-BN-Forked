@@ -848,6 +848,11 @@ class map : public submap_load_listener
         std::vector<tripoint_bub_ms> find_clear_path( const tripoint_bub_ms &source,
                 const tripoint_bub_ms &destination ) const;
 
+        /// Amanatides-Woo DDA grid traversal from src along angle for up to
+        /// max_range Euclidean tiles. Returns tiles visited (src excluded).
+        auto ray_cast_angle( const tripoint_bub_ms &src, double angle_rad,
+                             int max_range ) const -> std::vector<tripoint_bub_ms>;
+
         /**
          * Check whether the player can access the items located @p. Certain furniture/terrain
          * may prevent that (e.g. a locked safe).
@@ -933,13 +938,13 @@ class map : public submap_load_listener
         // Returns impulse of the executed collision; opts.veh1_impulse_ns≠0 → Box2D path.
         auto vehicle_vehicle_collision( vehicle &veh, vehicle &veh2,
                                         const std::vector<veh_collision> &collisions,
-                                        const veh_veh_coll_opts &opts = {} ) -> float;
+        const veh_veh_coll_opts &opts = {} ) -> float;
 #ifdef BOX2D_ENABLED
         /// One-shot transient terrain-impulse solve for a single tile collision.
         /// Wraps PhysicsWorld::resolve_terrain_impulse; returns {{},0} if no physics world.
         auto resolve_vehicle_terrain_impulse( vehicle &v, tripoint_bub_ms tile_pos,
                                               float tile_mass_kg, float restitution )
-            -> physics::terrain_impulse_result;
+        -> physics::terrain_impulse_result;
 #endif
         // Throws vehicle passengers about the vehicle, possibly out of it
         // Returns change in vehicle orientation due to lost control
