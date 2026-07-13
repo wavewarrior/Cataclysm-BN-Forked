@@ -681,6 +681,19 @@ void devui_rml_open()
     for( size_t i = 0; i < g_overlay_entries.size(); ++i ) {
         c.Bind( g_overlay_entries[i].var_name, &g_overlay_states[i] );
     }
+    c.BindEventCallback(
+    "update_overlay", []( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList &args ) {
+        auto idx = -1;
+        if( !args.empty() ) { args[0].GetInto( idx ); }
+        if( idx < 0 || idx >= static_cast<int>( g_overlay_entries.size() ) ) { return; }
+        if( g == nullptr ) { return; }
+        const auto &entry = g_overlay_entries[idx];
+        if( entry.action == ACTION_DISPLAY_SUBMAP_GRID ) {
+            g->debug_submap_grid_overlay = !g->debug_submap_grid_overlay;
+        } else {
+            g->display_toggle_overlay( entry.action );
+        }
+    } );
     c.Bind( "sound_place_mode", &g_sound_place_mode );
     c.Bind( "sound_volume", &g_sound_volume );
     c.Bind( "sound_category", &g_sound_category );
@@ -867,27 +880,8 @@ void rml_tick()
                     sig_init = true;
                 }
             }
-            // Two-way overlay sync: detect checkbox changes → push to game,
-            // then read back (reflects mutual exclusion + external toggles).
+            // Overlay sync: read back game state each frame (for external toggles + mutual exclusion).
             if( g != nullptr ) {
-                static std::array<bool, g_overlay_entries.size()> prev_states{};
-                // Phase 1: UI → game. If a checkbox changed since last sync, drive game state.
-                for( size_t i = 0; i < g_overlay_entries.size(); ++i ) {
-                    if( g_overlay_states[i] != prev_states[i] ) {
-                        const auto &entry = g_overlay_entries[i];
-                        if( entry.action == ACTION_DISPLAY_SUBMAP_GRID ) {
-                            g->debug_submap_grid_overlay = g_overlay_states[i];
-                        } else {
-                            const bool game_on = g->display_overlay_state( entry.action );
-                            if( game_on != g_overlay_states[i] ) {
-                                g->display_toggle_overlay( entry.action );
-                            }
-                        }
-                    }
-                }
-                // Phase 2: game → UI. Read back authoritative state (mutual exclusion
-                // means enabling one overlay disables all others; external toggles
-                // from debug menu / keybinds also reflected).
                 for( size_t i = 0; i < g_overlay_entries.size(); ++i ) {
                     const auto &entry = g_overlay_entries[i];
                     if( entry.action == ACTION_DISPLAY_SUBMAP_GRID ) {
@@ -895,7 +889,6 @@ void rml_tick()
                     } else {
                         g_overlay_states[i] = g->display_overlay_state( entry.action );
                     }
-                    prev_states[i] = g_overlay_states[i];
                 }
             }
             g_diag_text = build_diag_text();
