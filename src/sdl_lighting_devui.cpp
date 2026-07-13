@@ -120,19 +120,20 @@ struct overlay_entry {
     const char *var_name; // RmlUi data model variable name (lowercase, no spaces)
 };
 constexpr std::array<overlay_entry, 12> g_overlay_entries = {{
-    { ACTION_DISPLAY_SCENT,        "Scent",           "scent" },
-    { ACTION_DISPLAY_SCENT_TYPE,   "Scent type",      "scenttype" },
-    { ACTION_DISPLAY_TEMPERATURE,  "Temperature",     "temperature" },
-    { ACTION_DISPLAY_VEHICLE_AI,   "Vehicle AI",      "vehicleai" },
-    { ACTION_DISPLAY_VISIBILITY,   "Visibility",      "visibility" },
-    { ACTION_DISPLAY_LIGHTING,     "Lighting",        "lighting" },
-    { ACTION_DISPLAY_RADIATION,    "Radiation",       "radiation" },
-    { ACTION_DISPLAY_TRANSPARENCY, "Transparency",    "transparency" },
-    { ACTION_DISPLAY_OUTSIDE,      "Outside/Shelter", "outsideshelter" },
-    { ACTION_DISPLAY_SOUND,        "Sound",           "sound" },
-    { ACTION_DISPLAY_SUBMAP_GRID,  "Submap Grid",     "submapgrid" },
-    { ACTION_DISPLAY_TILES_NO_VFX, "Disable VFX",     "disablevfx" },
-}};
+        { ACTION_DISPLAY_SCENT,        "Scent",           "scent" },
+        { ACTION_DISPLAY_SCENT_TYPE,   "Scent type",      "scenttype" },
+        { ACTION_DISPLAY_TEMPERATURE,  "Temperature",     "temperature" },
+        { ACTION_DISPLAY_VEHICLE_AI,   "Vehicle AI",      "vehicleai" },
+        { ACTION_DISPLAY_VISIBILITY,   "Visibility",      "visibility" },
+        { ACTION_DISPLAY_LIGHTING,     "Lighting",        "lighting" },
+        { ACTION_DISPLAY_RADIATION,    "Radiation",       "radiation" },
+        { ACTION_DISPLAY_TRANSPARENCY, "Transparency",    "transparency" },
+        { ACTION_DISPLAY_OUTSIDE,      "Outside/Shelter", "outsideshelter" },
+        { ACTION_DISPLAY_SOUND,        "Sound",           "sound" },
+        { ACTION_DISPLAY_SUBMAP_GRID,  "Submap Grid",     "submapgrid" },
+        { ACTION_DISPLAY_TILES_NO_VFX, "Disable VFX",     "disablevfx" },
+    }
+};
 std::array<bool, 12> g_overlay_states{}; // indexed by g_overlay_entries
 
 // Slice 8 — proxies for controls whose backing globals aren't directly bindable
