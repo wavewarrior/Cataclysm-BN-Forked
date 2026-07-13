@@ -28,14 +28,15 @@
 #include "state_helpers.h"
 #include "type_id.h"
 
-static const efftype_id effect_sleep("sleep");
+static const efftype_id effect_sleep( "sleep" );
 
-namespace {
+namespace
+{
 
 /// Scoped helper: puts g->u to sleep for the duration of the scope.
 struct SleepingAvatar {
-    SleepingAvatar() { g->u.add_effect(effect_sleep, 24_hours); }
-    ~SleepingAvatar() { g->u.remove_effect(effect_sleep); }
+    SleepingAvatar() { g->u.add_effect( effect_sleep, 24_hours ); }
+    ~SleepingAvatar() { g->u.remove_effect( effect_sleep ); }
 };
 
 } // anonymous namespace
@@ -44,58 +45,62 @@ struct SleepingAvatar {
 // 1. both_idle() truth table
 // ---------------------------------------------------------------------------
 
-TEST_CASE("both_idle — host awake, client active → false", "[coop][idle]") {
+TEST_CASE( "both_idle — host awake, client active → false", "[coop][idle]" )
+{
     clear_all_state();
-    build_test_map(ter_id("t_grass"));
+    build_test_map( ter_id( "t_grass" ) );
     put_player_underground();
 
-    REQUIRE_FALSE(g->u.in_sleep_state());
+    REQUIRE_FALSE( g->u.in_sleep_state() );
 
     coop_server server;
-    server.set_client_idle_for_test(false);
+    server.set_client_idle_for_test( false );
 
-    CHECK_FALSE(server.both_idle());
+    CHECK_FALSE( server.both_idle() );
 }
 
-TEST_CASE("both_idle — host sleeping, client active → false", "[coop][idle]") {
+TEST_CASE( "both_idle — host sleeping, client active → false", "[coop][idle]" )
+{
     clear_all_state();
-    build_test_map(ter_id("t_grass"));
+    build_test_map( ter_id( "t_grass" ) );
     put_player_underground();
 
     SleepingAvatar _sleep;
-    REQUIRE(g->u.in_sleep_state());
+    REQUIRE( g->u.in_sleep_state() );
 
     coop_server server;
-    server.set_client_idle_for_test(false);
+    server.set_client_idle_for_test( false );
 
-    CHECK_FALSE(server.both_idle());
+    CHECK_FALSE( server.both_idle() );
 }
 
-TEST_CASE("both_idle — host awake, client idle → false", "[coop][idle]") {
+TEST_CASE( "both_idle — host awake, client idle → false", "[coop][idle]" )
+{
     clear_all_state();
-    build_test_map(ter_id("t_grass"));
+    build_test_map( ter_id( "t_grass" ) );
     put_player_underground();
 
-    REQUIRE_FALSE(g->u.in_sleep_state());
+    REQUIRE_FALSE( g->u.in_sleep_state() );
 
     coop_server server;
-    server.set_client_idle_for_test(true);
+    server.set_client_idle_for_test( true );
 
-    CHECK_FALSE(server.both_idle());
+    CHECK_FALSE( server.both_idle() );
 }
 
-TEST_CASE("both_idle — host sleeping, client idle → true", "[coop][idle]") {
+TEST_CASE( "both_idle — host sleeping, client idle → true", "[coop][idle]" )
+{
     clear_all_state();
-    build_test_map(ter_id("t_grass"));
+    build_test_map( ter_id( "t_grass" ) );
     put_player_underground();
 
     SleepingAvatar _sleep;
-    REQUIRE(g->u.in_sleep_state());
+    REQUIRE( g->u.in_sleep_state() );
 
     coop_server server;
-    server.set_client_idle_for_test(true);
+    server.set_client_idle_for_test( true );
 
-    CHECK(server.both_idle());
+    CHECK( server.both_idle() );
 }
 
 // ---------------------------------------------------------------------------
@@ -105,57 +110,61 @@ TEST_CASE("both_idle — host sleeping, client idle → true", "[coop][idle]") {
 TEST_CASE(
     "maybe_fast_forward — sets accum to COOP_FAST_FORWARD_ACCUM_MS when both idle",
     "[coop]["
-    "idle]") {
+    "idle]" )
+{
     clear_all_state();
-    build_test_map(ter_id("t_grass"));
+    build_test_map( ter_id( "t_grass" ) );
     put_player_underground();
 
     SleepingAvatar _sleep;
-    REQUIRE(g->u.in_sleep_state());
+    REQUIRE( g->u.in_sleep_state() );
 
     coop_server server;
-    server.set_client_idle_for_test(true);
-    REQUIRE(server.both_idle());
+    server.set_client_idle_for_test( true );
+    REQUIRE( server.both_idle() );
 
     g->main_loop_accum_ms_ = 0.0;
     const auto triggered = server.maybe_fast_forward();
 
-    CHECK(triggered);
-    CHECK(g->main_loop_accum_ms_ == COOP_FAST_FORWARD_ACCUM_MS);
+    CHECK( triggered );
+    CHECK( g->main_loop_accum_ms_ == COOP_FAST_FORWARD_ACCUM_MS );
 }
 
-TEST_CASE("maybe_fast_forward — does not touch accum when client is active", "[coop][idle]") {
+TEST_CASE( "maybe_fast_forward — does not touch accum when client is active", "[coop][idle]" )
+{
     clear_all_state();
-    build_test_map(ter_id("t_grass"));
+    build_test_map( ter_id( "t_grass" ) );
     put_player_underground();
 
     SleepingAvatar _sleep;
-    REQUIRE(g->u.in_sleep_state());
+    REQUIRE( g->u.in_sleep_state() );
 
     coop_server server;
-    server.set_client_idle_for_test(false); // client active
-    REQUIRE_FALSE(server.both_idle());
+    server.set_client_idle_for_test( false ); // client active
+    REQUIRE_FALSE( server.both_idle() );
 
     g->main_loop_accum_ms_ = 42.0;
     const auto triggered = server.maybe_fast_forward();
 
-    CHECK_FALSE(triggered);
-    CHECK(g->main_loop_accum_ms_ == 42.0); // unchanged
+    CHECK_FALSE( triggered );
+    CHECK( g->main_loop_accum_ms_ == 42.0 ); // unchanged
 }
 
 // ---------------------------------------------------------------------------
 // 3. Constant consistency
 // ---------------------------------------------------------------------------
 
-TEST_CASE("COOP_FAST_FORWARD_ACCUM_MS is derived from COOP_MAX_CATCH_UP * COOP_IDLE_TICK_MS", "[coo"
-                                                                                              "p]["
-                                                                                              "idle"
-                                                                                              "]") {
+TEST_CASE( "COOP_FAST_FORWARD_ACCUM_MS is derived from COOP_MAX_CATCH_UP * COOP_IDLE_TICK_MS",
+           "[coo"
+           "p]["
+           "idle"
+           "]" )
+{
     // COOP_FAST_FORWARD_ACCUM_MS is now defined as COOP_MAX_CATCH_UP * COOP_IDLE_TICK_MS
     // in coop_proto.h — this test is the runtime witness that the definition holds.
     // If COOP_IDLE_TICK_MS drifts from IDLE_TICK_INTERVAL_MS in main.cpp, the fast-forward
     // will fire at the wrong cadence; update COOP_IDLE_TICK_MS to match.
-    CHECK(COOP_FAST_FORWARD_ACCUM_MS == static_cast<double>(COOP_MAX_CATCH_UP) * COOP_IDLE_TICK_MS);
+    CHECK( COOP_FAST_FORWARD_ACCUM_MS == static_cast<double>( COOP_MAX_CATCH_UP ) * COOP_IDLE_TICK_MS );
 }
 
 #endif // COOP_ENABLED

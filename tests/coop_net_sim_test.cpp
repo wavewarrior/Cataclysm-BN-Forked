@@ -26,7 +26,8 @@
 // ---------------------------------------------------------------------------
 
 TEST_CASE( "coop_sim_transport: message delivered at correct sim time",
-           "[coop][simtransport]" ) {
+           "[coop][simtransport]" )
+{
     coop_sim_transport a, b;
     a.wire_peer( &b );
     a.latency_ms = 50;
@@ -44,7 +45,8 @@ TEST_CASE( "coop_sim_transport: message delivered at correct sim time",
 }
 
 TEST_CASE( "coop_sim_transport: message not delivered before latency elapses",
-           "[coop][simtransport]" ) {
+           "[coop][simtransport]" )
+{
     coop_sim_transport a, b;
     a.wire_peer( &b );
     a.latency_ms = 100;
@@ -56,7 +58,8 @@ TEST_CASE( "coop_sim_transport: message not delivered before latency elapses",
 }
 
 TEST_CASE( "coop_sim_transport: zero-latency delivers immediately",
-           "[coop][simtransport]" ) {
+           "[coop][simtransport]" )
+{
     coop_sim_transport a, b;
     a.wire_peer( &b );
     a.latency_ms = 0;
@@ -69,26 +72,32 @@ TEST_CASE( "coop_sim_transport: zero-latency delivers immediately",
 }
 
 TEST_CASE( "coop_sim_transport: multiple messages arrive in-order at correct times",
-           "[coop][simtransport]" ) {
+           "[coop][simtransport]" )
+{
     coop_sim_transport a, b;
     a.wire_peer( &b );
     a.latency_ms = 10;
 
     // Send at t=0, 5, 10 — deliverable at t=10, 15, 20 respectively
     a.send( "m1" );
-    a.advance( 5 ); a.send( "m2" );
-    a.advance( 5 ); a.send( "m3" );
+    a.advance( 5 );
+    a.send( "m2" );
+    a.advance( 5 );
+    a.send( "m3" );
 
     b.advance( 10 );
     std::string s;
-    REQUIRE( b.recv( s ) ); CHECK( s == "m1" );
+    REQUIRE( b.recv( s ) );
+    CHECK( s == "m1" );
     CHECK_FALSE( b.poll() );
 
     b.advance( 5 );
-    REQUIRE( b.recv( s ) ); CHECK( s == "m2" );
+    REQUIRE( b.recv( s ) );
+    CHECK( s == "m2" );
 
     b.advance( 5 );
-    REQUIRE( b.recv( s ) ); CHECK( s == "m3" );
+    REQUIRE( b.recv( s ) );
+    CHECK( s == "m3" );
 }
 
 // ---------------------------------------------------------------------------
@@ -96,7 +105,8 @@ TEST_CASE( "coop_sim_transport: multiple messages arrive in-order at correct tim
 // ---------------------------------------------------------------------------
 
 TEST_CASE( "coop_sim_transport: loss_rate=1.0 drops every message",
-           "[coop][simtransport]" ) {
+           "[coop][simtransport]" )
+{
     coop_sim_transport a, b;
     a.wire_peer( &b );
     a.loss_rate = 1.0f;
@@ -107,7 +117,8 @@ TEST_CASE( "coop_sim_transport: loss_rate=1.0 drops every message",
 }
 
 TEST_CASE( "coop_sim_transport: loss_rate=0.0 delivers all messages",
-           "[coop][simtransport]" ) {
+           "[coop][simtransport]" )
+{
     coop_sim_transport a, b;
     a.wire_peer( &b );
     a.loss_rate = 0.0f;
@@ -124,7 +135,8 @@ TEST_CASE( "coop_sim_transport: loss_rate=0.0 delivers all messages",
 // ---------------------------------------------------------------------------
 
 TEST_CASE( "coop_sim_transport: reorder flag swaps last two enqueued messages",
-           "[coop][simtransport]" ) {
+           "[coop][simtransport]" )
+{
     coop_sim_transport a, b;
     a.wire_peer( &b );
     a.reorder = true;
@@ -134,7 +146,8 @@ TEST_CASE( "coop_sim_transport: reorder flag swaps last two enqueued messages",
 
     b.advance( 0 );
     std::string s1, s2;
-    b.recv( s1 ); b.recv( s2 );
+    b.recv( s1 );
+    b.recv( s2 );
     CHECK( s1 == "second" );
     CHECK( s2 == "first" );
 }
@@ -144,7 +157,8 @@ TEST_CASE( "coop_sim_transport: reorder flag swaps last two enqueued messages",
 // ---------------------------------------------------------------------------
 
 TEST_CASE( "coop_sim_transport: bidirectional wiring delivers cross-direction",
-           "[coop][simtransport]" ) {
+           "[coop][simtransport]" )
+{
     coop_sim_transport a, b;
     a.wire_peer( &b );
     b.wire_peer( &a );
@@ -157,8 +171,10 @@ TEST_CASE( "coop_sim_transport: bidirectional wiring delivers cross-direction",
     b.advance( 20 );
 
     std::string ra, rb;
-    REQUIRE( a.recv( ra ) ); CHECK( ra == "b→a" );
-    REQUIRE( b.recv( rb ) ); CHECK( rb == "a→b" );
+    REQUIRE( a.recv( ra ) );
+    CHECK( ra == "b→a" );
+    REQUIRE( b.recv( rb ) );
+    CHECK( rb == "a→b" );
 }
 
 // ---------------------------------------------------------------------------
@@ -166,7 +182,8 @@ TEST_CASE( "coop_sim_transport: bidirectional wiring delivers cross-direction",
 // ---------------------------------------------------------------------------
 
 TEST_CASE( "coop_sim_transport: close_abruptly drains inbox and severs reverse reference",
-           "[coop][simtransport]" ) {
+           "[coop][simtransport]" )
+{
     coop_sim_transport a, b;
     a.wire_peer( &b );
     b.wire_peer( &a ); // bidirectional so close_abruptly can clear a.peer_
@@ -190,7 +207,8 @@ TEST_CASE( "coop_sim_transport: close_abruptly drains inbox and severs reverse r
 // ---------------------------------------------------------------------------
 
 TEST_CASE( "coop_sim_transport: recv returns false when inbox empty regardless of timeout",
-           "[coop][simtransport]" ) {
+           "[coop][simtransport]" )
+{
     coop_sim_transport a, b;
     a.wire_peer( &b );
     // Nothing sent — recv must return false immediately even with large timeout
@@ -206,7 +224,8 @@ TEST_CASE( "coop_sim_transport: recv returns false when inbox empty regardless o
 // ===========================================================================
 
 TEST_CASE( "Gap 4: ring buffer capped at 32 — oldest seq dropped on overflow",
-           "[coop][ringbuf]" ) {
+           "[coop][ringbuf]" )
+{
     coop_client cli;
 
     // Queue 35 actions; next_seq_ starts at 1 so seqs are 1..35
@@ -220,7 +239,8 @@ TEST_CASE( "Gap 4: ring buffer capped at 32 — oldest seq dropped on overflow",
 }
 
 TEST_CASE( "Gap 4: ring buffer at exact cap (32) — no drop",
-           "[coop][ringbuf]" ) {
+           "[coop][ringbuf]" )
+{
     coop_client cli;
     for( int i = 0; i < 32; ++i ) {
         cli.queue_action( "MOVE_N" );
@@ -230,7 +250,8 @@ TEST_CASE( "Gap 4: ring buffer at exact cap (32) — no drop",
 }
 
 TEST_CASE( "Gap 6: next_seq_ wraps from UINT32_MAX to 0 without crash or UB",
-           "[coop][ringbuf]" ) {
+           "[coop][ringbuf]" )
+{
     coop_client cli;
 
     // Position next_seq_ two below wrap boundary

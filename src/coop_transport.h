@@ -16,8 +16,8 @@ struct coop_transport {
     virtual ~coop_transport() = default;
 
     coop_transport() = default;
-    coop_transport( const coop_transport& ) = delete;
-    coop_transport& operator=( const coop_transport& ) = delete;
+    coop_transport( const coop_transport & ) = delete;
+    coop_transport &operator=( const coop_transport & ) = delete;
 
     /// Send a complete framed payload.  Returns false on socket error.
     virtual auto send( const std::string& payload ) -> bool = 0;

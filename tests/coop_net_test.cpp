@@ -22,10 +22,10 @@ constexpr Uint16 k_test_port = 45701;
 /// (Catch2 exception-mode unwinds the stack through destructors).
 struct LoopbackFixture {
     bool              net_inited = false;
-    NET_Server*       server     = nullptr;
-    NET_Address*      addr       = nullptr;
-    NET_StreamSocket* cli        = nullptr; ///< client-side stream socket
-    NET_StreamSocket* srv        = nullptr; ///< server-side accepted socket
+    NET_Server       *server     = nullptr;
+    NET_Address      *addr       = nullptr;
+    NET_StreamSocket *cli        = nullptr; ///< client-side stream socket
+    NET_StreamSocket *srv        = nullptr; ///< server-side accepted socket
 
     ~LoopbackFixture() {
         if( cli )        { NET_DestroyStreamSocket( cli ); }
@@ -45,7 +45,7 @@ auto send_raw_be32( NET_StreamSocket* sock, uint32_t v ) -> bool
     b[0] = static_cast<uint8_t>( ( v >> 24 ) & 0xFF );
     b[1] = static_cast<uint8_t>( ( v >> 16 ) & 0xFF );
     b[2] = static_cast<uint8_t>( ( v >>  8 ) & 0xFF );
-    b[3] = static_cast<uint8_t>( ( v       ) & 0xFF );
+    b[3] = static_cast<uint8_t>( ( v ) & 0xFF );
     return NET_WriteToStreamSocket( sock, b.data(), 4 );
 }
 
@@ -54,15 +54,15 @@ auto send_raw_be32( NET_StreamSocket* sock, uint32_t v ) -> bool
 auto setup_loopback( LoopbackFixture& fix, Uint16 port ) -> bool
 {
     if( !NET_Init() ) { return false; }
-    fix.net_inited = true;
-    fix.server = NET_CreateServer( nullptr, port, 0 );
-    if( !fix.server ) { return false; }
-    fix.addr = NET_ResolveHostname( "127.0.0.1" );
-    if( !fix.addr || NET_WaitUntilResolved( fix.addr, 2000 ) != NET_SUCCESS ) { return false; }
-    fix.cli = NET_CreateClient( fix.addr, port, 0 );
-    if( !fix.cli || NET_WaitUntilConnected( fix.cli, 2000 ) != NET_SUCCESS ) { return false; }
-    for( int t = 0; t < 2000 && !fix.srv; ++t ) {
-        NET_AcceptClient( fix.server, &fix.srv );
+fix.net_inited = true;
+fix.server = NET_CreateServer( nullptr, port, 0 );
+if( !fix.server ) { return false; }
+fix.addr = NET_ResolveHostname( "127.0.0.1" );
+if( !fix.addr || NET_WaitUntilResolved( fix.addr, 2000 ) != NET_SUCCESS ) { return false; }
+fix.cli = NET_CreateClient( fix.addr, port, 0 );
+if( !fix.cli || NET_WaitUntilConnected( fix.cli, 2000 ) != NET_SUCCESS ) { return false; }
+for( int t = 0; t < 2000 && !fix.srv; ++t ) {
+    NET_AcceptClient( fix.server, &fix.srv );
         if( !fix.srv ) { SDL_Delay( 1 ); }
     }
     return fix.srv != nullptr;

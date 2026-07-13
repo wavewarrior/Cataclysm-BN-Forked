@@ -239,8 +239,7 @@ TEST_CASE( "Box2D Phase7: mount rotation formula gives correct offsets",
 {
     // Helper: apply the same formula as refresh_precalc / part_world_offset.
     const auto rotate = []( float mx, float my, float angle_rads )
-        -> std::pair<int, int>
-    {
+    -> std::pair<int, int> {
         const float c = std::cos( angle_rads );
         const float s = std::sin( angle_rads );
         return {

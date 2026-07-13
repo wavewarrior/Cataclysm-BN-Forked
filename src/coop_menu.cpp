@@ -19,17 +19,19 @@
 
 #include <SDL3_net/SDL_net.h>
 
-namespace coop_menu {
+namespace coop_menu
+{
 
-auto run() -> bool {
+auto run() -> bool
+{
     uilist menu;
-    menu.title = _("CO-OP");
-    menu.addentry(0, true, 'h', _("Host a game"));
-    menu.addentry(1, true, 'j', _("Join a game"));
-    menu.addentry(2, true, 'q', _("Back"));
+    menu.title = _( "CO-OP" );
+    menu.addentry( 0, true, 'h', _( "Host a game" ) );
+    menu.addentry( 1, true, 'j', _( "Join a game" ) );
+    menu.addentry( 2, true, 'q', _( "Back" ) );
     menu.query();
 
-    switch (menu.ret) {
+    switch( menu.ret ) {
         case 0:
             start_host();
             break;
@@ -42,34 +44,35 @@ auto run() -> bool {
     return coop_session::get().is_coop();
 }
 
-auto start_host() -> void {
+auto start_host() -> void
+{
     // Let user pick a world
-    WORLDINFO* world = world_generator->pick_world(true);
-    if (!world) {
+    WORLDINFO* world = world_generator->pick_world( true );
+    if( !world ) {
         return; // user cancelled
     }
 
-    world_generator->set_active_world(world);
+    world_generator->set_active_world( world );
     try {
         g->setup();
-    } catch (const std::exception& err) {
-        popup(string_format(_("World setup failed: %s"), err.what()));
+    } catch( const std::exception& err ) {
+        popup( string_format( _( "World setup failed: %s" ), err.what() ) );
         return;
     }
 
     // Load the most recent save in the chosen world.
-    if (world->world_saves.empty()) {
-        popup(_("No saves found in this world. Start a single-player game first."));
+    if( world->world_saves.empty() ) {
+        popup( _( "No saves found in this world. Start a single-player game first." ) );
         return;
     }
-    if (!g->load(world->world_saves.front())) {
-        popup(_("Failed to load save."));
+    if( !g->load( world->world_saves.front() ) ) {
+        popup( _( "Failed to load save." ) );
         return;
     }
 
     static coop_server srv;
-    if (!srv.listen(8080)) {
-        popup(_("Failed to start server on port 8080."));
+    if( !srv.listen( 8080 ) ) {
+        popup( _( "Failed to start server on port 8080." ) );
         return;
     }
 
@@ -79,38 +82,38 @@ auto start_host() -> void {
     std::string display_ip = "?.?.?.?";
     {
         int n = 0;
-        NET_Address** addrs = NET_GetLocalAddresses(&n);
-        if (addrs && n > 0) {
+        NET_Address **addrs = NET_GetLocalAddresses( &n );
+        if( addrs && n > 0 ) {
             std::string any_non_loopback;
             std::string fallback;
-            auto is_loopback = []( const std::string &a ) {
+            auto is_loopback = []( const std::string & a ) {
                 return a.rfind( "127.", 0 ) == 0   // IPv4 loopback
-                    || a == "::1"                   // IPv6 loopback
-                    || a.rfind( "fe80:", 0 ) == 0;  // IPv6 link-local
+                       || a == "::1"                   // IPv6 loopback
+                       || a.rfind( "fe80:", 0 ) == 0;  // IPv6 link-local
             };
-            auto is_ipv4_private = []( const std::string &a ) {
+            auto is_ipv4_private = []( const std::string & a ) {
                 return a.rfind( "192.168.", 0 ) == 0
-                    || a.rfind( "10.", 0 ) == 0
-                    || a.rfind( "172.", 0 ) == 0;   // good enough approximation
+                       || a.rfind( "10.", 0 ) == 0
+                       || a.rfind( "172.", 0 ) == 0;   // good enough approximation
             };
-            for (int i = 0; i < n; ++i) {
-                const char* str = NET_GetAddressString(addrs[i]);
-                if (!str) { continue; }
-                std::string a(str);
-                if (is_loopback(a)) {
-                    if (fallback.empty()) { fallback = a; }
-                } else if (is_ipv4_private(a)) {
+            for( int i = 0; i < n; ++i ) {
+                const char *str = NET_GetAddressString( addrs[i] );
+                if( !str ) { continue; }
+                std::string a( str );
+                if( is_loopback( a ) ) {
+                    if( fallback.empty() ) { fallback = a; }
+                } else if( is_ipv4_private( a ) ) {
                     display_ip = a;   // best candidate — stop searching
                     break;
                 } else {
-                    if (any_non_loopback.empty()) { any_non_loopback = a; }
+                    if( any_non_loopback.empty() ) { any_non_loopback = a; }
                 }
             }
-            if (display_ip == "?.?.?.?") {
+            if( display_ip == "?.?.?.?" ) {
                 display_ip = any_non_loopback.empty() ? fallback : any_non_loopback;
             }
-            for (int i = 0; i < n; ++i) { NET_UnrefAddress(addrs[i]); }
-            SDL_free(addrs);
+            for( int i = 0; i < n; ++i ) { NET_UnrefAddress( addrs[i] ); }
+            SDL_free( addrs );
         }
     }
     // "Waiting for client" — static_popup renders via RmlUI query_popup.
@@ -121,8 +124,8 @@ auto start_host() -> void {
     // Fix: call ui_manager::redraw() each iteration so message_rml stays current.
     {
         const std::string wait_msg = string_format(
-            _("Waiting for client...\nShare IP: %s:8080\n\nPress Escape to cancel."),
-            display_ip);
+                                         _( "Waiting for client...\nShare IP: %s:8080\n\nPress Escape to cancel." ),
+                                         display_ip );
         static_popup wait_popup;
         wait_popup.wait_message( "%s", wait_msg );
 
@@ -145,14 +148,14 @@ auto start_host() -> void {
         }
     }
     // try_accept() already stored the client; wait_for_client() returns immediately.
-    if (!srv.wait_for_client()) {
-        popup(_("No client connected."));
+    if( !srv.wait_for_client() ) {
+        popup( _( "No client connected." ) );
         srv.shutdown();
         return;
     }
 
-    if (!srv.handshake()) {
-        popup(_("Handshake failed."));
+    if( !srv.handshake() ) {
+        popup( _( "Handshake failed." ) );
         srv.shutdown();
         return;
     }
@@ -160,19 +163,19 @@ auto start_host() -> void {
     // Session established — register on g
     g->coop_server_ = &srv;
 
-    if (!srv.send_world_seed(g->u.get_name())) {
-        popup(_("Failed to send world seed."));
+    if( !srv.send_world_seed( g->u.get_name() ) ) {
+        popup( _( "Failed to send world seed." ) );
         srv.shutdown();
         g->coop_server_ = nullptr;
         return;
     }
     // C6: wait up to 3 s for the client's join_info (blocking recv on main thread,
     // same pattern as handshake/send_world_seed — receiver thread NOT yet running).
-    srv.wait_for_join_info(3000);
-    const tripoint_abs_ms proxy_spawn = srv.client_join_pos().value_or(g->u.abs_pos());
-    srv.spawn_proxy_npc(proxy_spawn, "Partner");
-    if (!srv.send_initial_sync()) {
-        popup(_("Failed to send initial sync."));
+    srv.wait_for_join_info( 3000 );
+    const tripoint_abs_ms proxy_spawn = srv.client_join_pos().value_or( g->u.abs_pos() );
+    srv.spawn_proxy_npc( proxy_spawn, "Partner" );
+    if( !srv.send_initial_sync() ) {
+        popup( _( "Failed to send initial sync." ) );
         srv.shutdown();
         g->coop_server_ = nullptr;
         return;
@@ -181,28 +184,29 @@ auto start_host() -> void {
     srv.start_receiver_thread();
 }
 
-auto start_join() -> void {
+auto start_join() -> void
+{
     std::string ip =
-        string_input_popup().title(_("Enter host IP address:")).width(30).query_string();
+        string_input_popup().title( _( "Enter host IP address:" ) ).width( 30 ).query_string();
 
-    if (ip.empty()) {
-        return; // cancelled
-    }
+    if( ip.empty() ) {
+    return; // cancelled
+}
 
-    static coop_client cli;
-    if (!cli.connect(ip, 8080)) {
-        popup(string_format(_("Failed to connect to %s:8080."), ip));
+static coop_client cli;
+if( !cli.connect( ip, 8080 ) ) {
+    popup( string_format( _( "Failed to connect to %s:8080." ), ip ) );
         return;
     }
 
-    if (!cli.handshake()) {
-        popup(_("Handshake failed."));
+    if( !cli.handshake() ) {
+    popup( _( "Handshake failed." ) );
         cli.shutdown();
         return;
     }
 
-    if (!cli.receive_world_seed()) {
-        popup(_("Failed to receive world seed."));
+    if( !cli.receive_world_seed() ) {
+    popup( _( "Failed to receive world seed." ) );
         cli.shutdown();
         return;
     }
@@ -211,14 +215,14 @@ auto start_join() -> void {
     // g->u.abs_pos() is valid pre-setup; game::setup() does not reset the avatar position.
     // g->setup() can take several seconds on modded worlds — sending after it would always
     // race-lose against wait_for_join_info(3000).
-    if (!cli.send_join_info()) {
-        DebugLog(DL::Info, DC::Main) << "[coop] send_join_info failed — host uses spawn fallback";
+    if( !cli.send_join_info() ) {
+    DebugLog( DL::Info, DC::Main ) << "[coop] send_join_info failed — host uses spawn fallback";
     }
 
     try {
         g->setup();
-    } catch (const std::exception& err) {
-        popup(string_format(_("Client setup failed: %s"), err.what()));
+    } catch( const std::exception& err ) {
+        popup( string_format( _( "Client setup failed: %s" ), err.what() ) );
         cli.shutdown();
         return;
     }
@@ -234,13 +238,13 @@ auto start_join() -> void {
 auto show_coop_popup( const std::string& message ) -> bool
 {
     return query_popup()
-           .context( "COOP_POPUP" )
-           .message( "%s", message )
-           .option( "CONFIRM" )
-           .option( "QUIT" )
-           .allow_cancel( true )
-           .query()
-           .action == "CONFIRM";
+    .context( "COOP_POPUP" )
+    .message( "%s", message )
+    .option( "CONFIRM" )
+    .option( "QUIT" )
+    .allow_cancel( true )
+    .query()
+    .action == "CONFIRM";
 }
 
 #endif // COOP_ENABLED

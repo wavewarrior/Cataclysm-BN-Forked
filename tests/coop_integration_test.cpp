@@ -64,15 +64,16 @@ static constexpr int FILE_POLL_TIMEOUT_MS = 120'000; // 2 min — covers game da
 /// Number of MOVE_N actions the client queues — host asserts proxy moved exactly this far.
 static constexpr int COOP_TEST_MOVES = 3;
 
-static constexpr const char* COOP_PORT_FILE = "/tmp/coop_test_port.txt";
-static constexpr const char* COOP_CTRL_PORT_FILE = "/tmp/coop_test_ctrl_port.txt";
+static constexpr const char *COOP_PORT_FILE = "/tmp/coop_test_port.txt";
+static constexpr const char *COOP_CTRL_PORT_FILE = "/tmp/coop_test_ctrl_port.txt";
 
 // ---------------------------------------------------------------------------
 // Scenario selection
 // ---------------------------------------------------------------------------
 
-static auto get_coop_scenario() -> std::string {
-    const char* s = std::getenv( "COOP_SCENARIO" );
+static auto get_coop_scenario() -> std::string
+{
+    const char *s = std::getenv( "COOP_SCENARIO" );
     return s ? std::string( s ) : std::string( "movement" );
 }
 
@@ -80,16 +81,18 @@ static auto get_coop_scenario() -> std::string {
 // Game-port file helpers (unchanged from original)
 // ---------------------------------------------------------------------------
 
-static auto write_port_file( uint16_t port ) -> void {
+static auto write_port_file( uint16_t port ) -> void
+{
     std::ofstream f( COOP_PORT_FILE );
     f << port << '\n';
 }
 
-static auto read_port_file( uint16_t& port, int timeout_ms = FILE_POLL_TIMEOUT_MS ) -> bool {
+static auto read_port_file( uint16_t &port, int timeout_ms = FILE_POLL_TIMEOUT_MS ) -> bool
+{
     const auto deadline =
         std::chrono::steady_clock::now() + std::chrono::milliseconds( timeout_ms );
     while( std::chrono::steady_clock::now() < deadline ) {
-        std::ifstream f( COOP_PORT_FILE );
+    std::ifstream f( COOP_PORT_FILE );
         if( f.good() ) {
             int p = 0;
             if( f >> p && p > 0 ) {
@@ -107,16 +110,18 @@ static auto read_port_file( uint16_t& port, int timeout_ms = FILE_POLL_TIMEOUT_M
 // Replaces per-scenario /tmp data files with newline-delimited text signals.
 // ---------------------------------------------------------------------------
 
-static auto write_ctrl_port_file( uint16_t port ) -> void {
+static auto write_ctrl_port_file( uint16_t port ) -> void
+{
     std::ofstream f( COOP_CTRL_PORT_FILE );
     f << port << '\n';
 }
 
-static auto read_ctrl_port_file( uint16_t& port, int timeout_ms = FILE_POLL_TIMEOUT_MS ) -> bool {
+static auto read_ctrl_port_file( uint16_t &port, int timeout_ms = FILE_POLL_TIMEOUT_MS ) -> bool
+{
     const auto deadline =
         std::chrono::steady_clock::now() + std::chrono::milliseconds( timeout_ms );
     while( std::chrono::steady_clock::now() < deadline ) {
-        std::ifstream f( COOP_CTRL_PORT_FILE );
+    std::ifstream f( COOP_CTRL_PORT_FILE );
         if( f.good() ) {
             int p = 0;
             if( f >> p && p > 0 ) {
@@ -148,9 +153,9 @@ struct coop_ctrl_server {
         addr.sin_family      = AF_INET;
         addr.sin_addr.s_addr = INADDR_ANY;
         addr.sin_port        = 0;
-        if( ::bind( listen_fd, reinterpret_cast<sockaddr*>( &addr ), sizeof( addr ) ) != 0 ) { return 0; }
+        if( ::bind( listen_fd, reinterpret_cast<sockaddr * >( &addr ), sizeof( addr ) ) != 0 ) { return 0; }
         socklen_t len = sizeof( addr );
-        if( ::getsockname( listen_fd, reinterpret_cast<sockaddr*>( &addr ), &len ) != 0 ) { return 0; }
+        if( ::getsockname( listen_fd, reinterpret_cast<sockaddr * >( &addr ), &len ) != 0 ) { return 0; }
         if( ::listen( listen_fd, 1 ) != 0 ) { return 0; }
         return ntohs( addr.sin_port );
     }
@@ -193,7 +198,7 @@ struct coop_ctrl_server {
         const auto deadline =
             std::chrono::steady_clock::now() + std::chrono::milliseconds( timeout_ms );
         while( std::chrono::steady_clock::now() < deadline ) {
-            if( try_recv_line( out ) ) { return true; }
+        if( try_recv_line( out ) ) { return true; }
             SDL_Delay( 5 );
         }
         return false;
@@ -218,14 +223,14 @@ struct coop_ctrl_client {
         const auto deadline =
             std::chrono::steady_clock::now() + std::chrono::milliseconds( timeout_ms );
         while( std::chrono::steady_clock::now() < deadline ) {
-            fd = ::socket( AF_INET, SOCK_STREAM, 0 );
+        fd = ::socket( AF_INET, SOCK_STREAM, 0 );
             if( fd == -1 ) { return false; }
             sockaddr_in addr{};
             std::memset( &addr, 0, sizeof( addr ) );
             addr.sin_family      = AF_INET;
             addr.sin_addr.s_addr = htonl( INADDR_LOOPBACK );
             addr.sin_port        = htons( port );
-            if( ::connect( fd, reinterpret_cast<sockaddr*>( &addr ), sizeof( addr ) ) == 0 ) {
+            if( ::connect( fd, reinterpret_cast<sockaddr * >( &addr ), sizeof( addr ) ) == 0 ) {
                 return true;
             }
             ::close( fd );
@@ -255,7 +260,7 @@ struct coop_ctrl_client {
         const auto deadline =
             std::chrono::steady_clock::now() + std::chrono::milliseconds( timeout_ms );
         while( std::chrono::steady_clock::now() < deadline ) {
-            if( try_recv_line( out ) ) { return true; }
+        if( try_recv_line( out ) ) { return true; }
             SDL_Delay( 5 );
         }
         return false;
@@ -280,7 +285,8 @@ struct coop_ctrl_client {
 // Movement scenario — extracted from original TEST_CASE bodies
 // ---------------------------------------------------------------------------
 
-static auto run_host_movement( coop_server& srv, coop_ctrl_server& ctrl ) -> void {
+static auto run_host_movement( coop_server& srv, coop_ctrl_server& ctrl ) -> void
+{
     const npc* p_spawn = g->critter_by_id<npc>( coop_session::get().proxy_npc_id );
     REQUIRE( p_spawn != nullptr );
     const tripoint_abs_ms proxy_spawn_pos = p_spawn->abs_pos();
@@ -310,9 +316,9 @@ static auto run_host_movement( coop_server& srv, coop_ctrl_server& ctrl ) -> voi
     const tripoint_abs_ms proxy_final = proxy2->abs_pos();
 
     INFO( "proxy_spawn=(" << proxy_spawn_pos.x() << "," << proxy_spawn_pos.y() << ")"
-                          << " target=(" << target_pos.x() << "," << target_pos.y() << ")"
-                          << " proxy_final=(" << proxy_final.x() << "," << proxy_final.y()
-                          << ")" );
+          << " target=(" << target_pos.x() << "," << target_pos.y() << ")"
+          << " proxy_final=(" << proxy_final.x() << "," << proxy_final.y()
+          << ")" );
     CHECK( proxy_reached_target );
     CHECK( proxy_final == target_pos );
 
@@ -325,7 +331,8 @@ static auto run_host_movement( coop_server& srv, coop_ctrl_server& ctrl ) -> voi
     }
 }
 
-static auto run_client_movement( coop_client& cli, coop_ctrl_client& ctrl ) -> void {
+static auto run_client_movement( coop_client& cli, coop_ctrl_client& ctrl ) -> void
+{
     // Queue 3×MOVE_N immediately.
     for( int i = 0; i < COOP_TEST_MOVES; ++i ) { cli.queue_action( "MOVE_N" ); }
 
@@ -361,7 +368,7 @@ static auto run_client_movement( coop_client& cli, coop_ctrl_client& ctrl ) -> v
 
     const tripoint_abs_ms actual = g->u.abs_pos();
     INFO( "expected=" << expected_proxy_pos.x() << "," << expected_proxy_pos.y()
-                      << "  actual=" << actual.x() << "," << actual.y() );
+          << "  actual=" << actual.x() << "," << actual.y() );
     CHECK( actual == expected_proxy_pos );
 }
 
@@ -377,7 +384,8 @@ static auto run_client_movement( coop_client& cli, coop_ctrl_client& ctrl ) -> v
 // is controlled.  Forcing it through two-process E2E is timing-fragile.
 // ---------------------------------------------------------------------------
 
-static auto run_host_resync( coop_server& srv, coop_ctrl_server& ctrl ) -> void {
+static auto run_host_resync( coop_server& srv, coop_ctrl_server& ctrl ) -> void
+{
     // Directly set force_resync_ — simulates what the client's resync_request
     // normally does via the receiver thread.
     srv.set_force_resync_for_test();
@@ -396,11 +404,12 @@ static auto run_host_resync( coop_server& srv, coop_ctrl_server& ctrl ) -> void 
     ctrl.send_signal( "RESYNC_DONE" );
 }
 
-static auto run_client_resync( coop_client& cli, coop_ctrl_client& ctrl ) -> void {
+static auto run_client_resync( coop_client& cli, coop_ctrl_client& ctrl ) -> void
+{
     const auto deadline =
         std::chrono::steady_clock::now() + std::chrono::milliseconds( FILE_POLL_TIMEOUT_MS );
     while( std::chrono::steady_clock::now() < deadline ) {
-        cli.coop_world_tick();
+    cli.coop_world_tick();
         SDL_Delay( 5 );
         std::string sig;
         if( ctrl.try_recv_line( sig ) && sig == "RESYNC_DONE" ) { break; }
@@ -420,7 +429,8 @@ static auto run_client_resync( coop_client& cli, coop_ctrl_client& ctrl ) -> voi
 static const itype_id PICKUP_KNIFE_ID( "knife_combat" );
 static constexpr tripoint_bub_ms PICKUP_TILE{ 40, 40, 0 };
 
-static auto run_host_pickup( coop_server& srv, coop_ctrl_server& ctrl ) -> void {
+static auto run_host_pickup( coop_server& srv, coop_ctrl_server& ctrl ) -> void
+{
     const tripoint_abs_ms abs = g->m.bub_to_abs( PICKUP_TILE );
     REQUIRE( !g->m.i_at( PICKUP_TILE ).empty() ); // placed in TEST_CASE before initial sync
 
@@ -435,14 +445,15 @@ static auto run_host_pickup( coop_server& srv, coop_ctrl_server& ctrl ) -> void 
     for( int i = 0; i < 5; ++i ) { srv.coop_world_tick(); SDL_Delay( 50 ); }
 
     int remaining = 0;
-    for( const item* it : g->m.i_at( PICKUP_TILE ) ) {
+    for( const item * it : g->m.i_at( PICKUP_TILE ) ) {
         if( it->typeId() == PICKUP_KNIFE_ID ) { ++remaining; }
     }
     CHECK( remaining == 0 );
     ctrl.send_signal( "PICKUP_DONE" );
 }
 
-static auto run_client_pickup( coop_client& cli, coop_ctrl_client& ctrl ) -> void {
+static auto run_client_pickup( coop_client& cli, coop_ctrl_client& ctrl ) -> void
+{
     tripoint_abs_ms item_abs;
     {
         const auto deadline =
@@ -492,14 +503,15 @@ static auto run_client_pickup( coop_client& cli, coop_ctrl_client& ctrl ) -> voi
 // that proxy cleanup on abrupt disconnect is not yet implemented (real bug).
 // ---------------------------------------------------------------------------
 
-static auto run_host_disconnect( coop_server& srv, coop_ctrl_server& ctrl ) -> void {
+static auto run_host_disconnect( coop_server& srv, coop_ctrl_server& ctrl ) -> void
+{
     ctrl.send_signal( "OK_DISCONNECT" );
 
     // Poll until receiver_thread_ sets running_=false (TCP drop detected).
     const auto drop_deadline =
         std::chrono::steady_clock::now() + std::chrono::milliseconds( 10'000 );
     while( srv.is_running() && std::chrono::steady_clock::now() < drop_deadline ) {
-        srv.coop_world_tick();
+    srv.coop_world_tick();
         SDL_Delay( 50 );
     }
     CHECK( !srv.is_running() ); // TCP drop detected within 10 s
@@ -518,7 +530,8 @@ static auto run_host_disconnect( coop_server& srv, coop_ctrl_server& ctrl ) -> v
     CHECK( g->critter_by_id<npc>( proxy_id ) == nullptr );
 }
 
-static auto run_client_disconnect( coop_client& cli, coop_ctrl_client& ctrl ) -> void {
+static auto run_client_disconnect( coop_client& cli, coop_ctrl_client& ctrl ) -> void
+{
     std::string sig;
     ctrl.recv_line( sig, FILE_POLL_TIMEOUT_MS );
     REQUIRE( sig == "OK_DISCONNECT" );
@@ -540,7 +553,8 @@ static auto run_client_disconnect( coop_client& cli, coop_ctrl_client& ctrl ) ->
 
 static constexpr int COOP_SUBMAP_MOVES = 3;
 
-static auto run_host_submap_shift( coop_server& srv, coop_ctrl_server& ctrl ) -> void {
+static auto run_host_submap_shift( coop_server& srv, coop_ctrl_server& ctrl ) -> void
+{
     const npc* p_spawn = g->critter_by_id<npc>( coop_session::get().proxy_npc_id );
     REQUIRE( p_spawn != nullptr );
     const tripoint_abs_ms proxy_spawn_pos = p_spawn->abs_pos();
@@ -577,7 +591,8 @@ static auto run_host_submap_shift( coop_server& srv, coop_ctrl_server& ctrl ) ->
     }
 }
 
-static auto run_client_submap_shift( coop_client& cli, coop_ctrl_client& ctrl ) -> void {
+static auto run_client_submap_shift( coop_client& cli, coop_ctrl_client& ctrl ) -> void
+{
     for( int i = 0; i < COOP_SUBMAP_MOVES; ++i ) { cli.queue_action( "MOVE_N" ); }
 
     tripoint_abs_ms expected_proxy_pos;
@@ -616,7 +631,8 @@ static auto run_client_submap_shift( coop_client& cli, coop_ctrl_client& ctrl ) 
 // Asserts death announced exactly once (second tick must not re-fire).
 // ---------------------------------------------------------------------------
 
-static auto run_host_death( coop_server& srv, coop_ctrl_server& ctrl ) -> void {
+static auto run_host_death( coop_server& srv, coop_ctrl_server& ctrl ) -> void
+{
     // Wait for the client to signal its avatar is dead (CLIENT_DEAD).
     // The client kills g->u directly so every subsequent client_status sends
     // dead=true — no race with the receiver thread overwriting to alive.
@@ -651,7 +667,8 @@ static auto run_host_death( coop_server& srv, coop_ctrl_server& ctrl ) -> void {
     ctrl.send_signal( "DEATH_DONE" );
 }
 
-static auto run_client_death( coop_client& cli, coop_ctrl_client& ctrl ) -> void {
+static auto run_client_death( coop_client& cli, coop_ctrl_client& ctrl ) -> void
+{
     // Kill the avatar so is_dead_state() returns true.  Every subsequent
     // client_status tick then sends dead=true — the receiver thread never races
     // back to alive.  We zero the torso HP (vital part → is_dead_state()=true).
@@ -664,7 +681,7 @@ static auto run_client_death( coop_client& cli, coop_ctrl_client& ctrl ) -> void
     const auto deadline =
         std::chrono::steady_clock::now() + std::chrono::milliseconds( FILE_POLL_TIMEOUT_MS );
     while( std::chrono::steady_clock::now() < deadline ) {
-        cli.coop_world_tick();
+    cli.coop_world_tick();
         SDL_Delay( 5 );
         std::string sig;
         if( ctrl.try_recv_line( sig ) && sig == "DEATH_DONE" ) { break; }
@@ -701,7 +718,8 @@ static constexpr int         COOP_POST_HIT_DRAIN = 8;   ///< ticks after *_DONE 
 /// than moving, so target_abs stays valid, but identity tracking makes the test
 /// robust even if the zombie shifts tiles.
 static auto run_host_melee_family( coop_server& srv, coop_ctrl_server& ctrl,
-                                    const std::string& done_signal ) -> void {
+                                   const std::string& done_signal ) -> void
+{
     const npc* proxy_npc = g->critter_by_id<npc>( coop_session::get().proxy_npc_id );
     REQUIRE( proxy_npc != nullptr );
     // Proxy is intentionally unarmed — matches production behaviour.
@@ -752,8 +770,9 @@ static auto run_host_melee_family( coop_server& srv, coop_ctrl_server& ctrl,
 /// queue N actions with weapon_id embedded in ctx, send done signal.
 /// weapon_id in ctx exercises the CL-MELEE-WEAPON relay end-to-end.
 static auto run_client_melee_family( coop_client& cli, coop_ctrl_client& ctrl,
-                                      const std::string& action_key,
-                                      const std::string& done_signal ) -> void {
+                                     const std::string& action_key,
+                                     const std::string& done_signal ) -> void
+{
     // Arm the client avatar with a melee weapon so weapon_id is embedded in ctx_json.
     // This exercises the full CL-MELEE-WEAPON relay path: client embeds weapon_id at
     // queue time; server arms proxy before melee_attack; proxy deals weapon damage.
@@ -790,7 +809,7 @@ static auto run_client_melee_family( coop_client& cli, coop_ctrl_client& ctrl,
     const auto done_deadline =
         std::chrono::steady_clock::now() + std::chrono::milliseconds( 10'000 );
     while( std::chrono::steady_clock::now() < done_deadline ) {
-        cli.coop_world_tick();
+    cli.coop_world_tick();
         SDL_Delay( 50 );
     }
 }
@@ -804,11 +823,13 @@ static auto run_client_melee_family( coop_client& cli, coop_ctrl_client& ctrl,
 // Host asserts min HP of mon_zombie dropped.
 // ---------------------------------------------------------------------------
 
-static auto run_host_melee( coop_server& srv, coop_ctrl_server& ctrl ) -> void {
+static auto run_host_melee( coop_server& srv, coop_ctrl_server& ctrl ) -> void
+{
     run_host_melee_family( srv, ctrl, "MELEE_DONE" );
 }
 
-static auto run_client_melee( coop_client& cli, coop_ctrl_client& ctrl ) -> void {
+static auto run_client_melee( coop_client& cli, coop_ctrl_client& ctrl ) -> void
+{
     run_client_melee_family( cli, ctrl, "MELEE", "MELEE_DONE" );
 }
 
@@ -821,11 +842,13 @@ static auto run_client_melee( coop_client& cli, coop_ctrl_client& ctrl ) -> void
 // but exercises the distinct SMASH code path.
 // ---------------------------------------------------------------------------
 
-static auto run_host_smash( coop_server& srv, coop_ctrl_server& ctrl ) -> void {
+static auto run_host_smash( coop_server& srv, coop_ctrl_server& ctrl ) -> void
+{
     run_host_melee_family( srv, ctrl, "SMASH_DONE" );
 }
 
-static auto run_client_smash( coop_client& cli, coop_ctrl_client& ctrl ) -> void {
+static auto run_client_smash( coop_client& cli, coop_ctrl_client& ctrl ) -> void
+{
     run_client_melee_family( cli, ctrl, "SMASH", "SMASH_DONE" );
 }
 
@@ -840,11 +863,12 @@ static auto run_client_smash( coop_client& cli, coop_ctrl_client& ctrl ) -> void
 // ---------------------------------------------------------------------------
 
 static constexpr int         COOP_FIRE_SHOTS    = 10;
-static constexpr const char* RANGED_WEAPON_ID   = "glock_20";
-static constexpr const char* RANGED_AMMO_ID     = "10mm_fmj";
-static constexpr const char* RANGED_TARGET_TYPE = "debug_mon"; // huge HP, survives all shots
+static constexpr const char *RANGED_WEAPON_ID   = "glock_20";
+static constexpr const char *RANGED_AMMO_ID     = "10mm_fmj";
+static constexpr const char *RANGED_TARGET_TYPE = "debug_mon"; // huge HP, survives all shots
 
-static auto run_host_ranged( coop_server& srv, coop_ctrl_server& ctrl ) -> void {
+static auto run_host_ranged( coop_server& srv, coop_ctrl_server& ctrl ) -> void
+{
     // Spawn zombie 1 tile east of the proxy spawn position.
     const npc* proxy_npc = g->critter_by_id<npc>( coop_session::get().proxy_npc_id );
     REQUIRE( proxy_npc != nullptr );
@@ -894,7 +918,8 @@ static auto run_host_ranged( coop_server& srv, coop_ctrl_server& ctrl ) -> void 
     CHECK( min_hp < initial_hp );
 }
 
-static auto run_client_ranged( coop_client& cli, coop_ctrl_client& ctrl ) -> void {
+static auto run_client_ranged( coop_client& cli, coop_ctrl_client& ctrl ) -> void
+{
     // Arm the client avatar with a pistol so weapon_id/ammo_id embed in FIRE ctx.
     const itype_id wid( RANGED_WEAPON_ID );
     const itype_id aid( RANGED_AMMO_ID );
@@ -923,8 +948,8 @@ static auto run_client_ranged( coop_client& cli, coop_ctrl_client& ctrl ) -> voi
     const auto& wep = g->u.primary_weapon();
     const itype_id cur_ammo = wep.ammo_current();
     for( int i = 0; i < COOP_FIRE_SHOTS; ++i ) {
-        std::ostringstream ctx_oss;
-        JsonOut ctx_jout( ctx_oss );
+    std::ostringstream ctx_oss;
+    JsonOut ctx_jout( ctx_oss );
         ctx_jout.start_object();
         ctx_jout.member( "tx", target_abs.x() );
         ctx_jout.member( "ty", target_abs.y() );
@@ -937,7 +962,7 @@ static auto run_client_ranged( coop_client& cli, coop_ctrl_client& ctrl ) -> voi
 
     // Run world ticks to flush all actions to the host (one action is sent per tick).
     for( int i = 0; i < COOP_FIRE_SHOTS + 5; ++i ) {
-        cli.coop_world_tick();
+    cli.coop_world_tick();
         SDL_Delay( 50 );
     }
     ctrl.send_signal( "FIRE_DONE" );
@@ -946,7 +971,7 @@ static auto run_client_ranged( coop_client& cli, coop_ctrl_client& ctrl ) -> voi
     const auto done_deadline =
         std::chrono::steady_clock::now() + std::chrono::milliseconds( 10'000 );
     while( std::chrono::steady_clock::now() < done_deadline ) {
-        cli.coop_world_tick();
+    cli.coop_world_tick();
         SDL_Delay( 50 );
     }
 }
@@ -961,7 +986,8 @@ static auto run_client_ranged( coop_client& cli, coop_ctrl_client& ctrl ) -> voi
 // already covered by coop_terrain_test.cpp unit tests.
 // ---------------------------------------------------------------------------
 
-static auto run_host_terrain_change( coop_server& srv, coop_ctrl_server& ctrl ) -> void {
+static auto run_host_terrain_change( coop_server& srv, coop_ctrl_server& ctrl ) -> void
+{
     // Use t_floor → t_pavement (neutral pair, confirmed persistent across world-steps).
     // Verification run showed t_pavement persists after all trailing ticks; a t_door_o
     // → t_door_c revert was traced to CDDA door-closing game mechanics, NOT a relay bug
@@ -994,7 +1020,8 @@ static auto run_host_terrain_change( coop_server& srv, coop_ctrl_server& ctrl ) 
     CHECK( g->m.ter( fresh_bpos() ) == ter_id( "t_pavement" ) );
 }
 
-static auto run_client_terrain_change( coop_client& cli, coop_ctrl_client& ctrl ) -> void {
+static auto run_client_terrain_change( coop_client& cli, coop_ctrl_client& ctrl ) -> void
+{
     std::string pos_sig;
     REQUIRE( ctrl.recv_line( pos_sig, FILE_POLL_TIMEOUT_MS ) );
     int dx = 0, dy = 0, dz = 0;
@@ -1022,7 +1049,8 @@ static auto run_client_terrain_change( coop_client& cli, coop_ctrl_client& ctrl 
 // Host role
 // ---------------------------------------------------------------------------
 
-TEST_CASE( "coop integration: host role", "[.][coop_role_host]" ) {
+TEST_CASE( "coop integration: host role", "[.][coop_role_host]" )
+{
     clear_all_state();
 
     const auto scenario    = get_coop_scenario();
@@ -1067,7 +1095,7 @@ TEST_CASE( "coop integration: host role", "[.][coop_role_host]" ) {
     // Pre-initial-sync per-scenario setup.
     if( scenario == "pickup" ) {
         g->m.add_item( PICKUP_TILE, item::spawn( PICKUP_KNIFE_ID, calendar::turn,
-                                                 item::solitary_tag{} ) );
+                       item::solitary_tag{} ) );
     } else if( scenario == "terrain_change" ) {
         // build_test_map ensures submaps are populated (generated) so do_turn() does
         // NOT regenerate them back to t_grass during the tick loop.  Tile starts t_floor.
@@ -1117,7 +1145,8 @@ TEST_CASE( "coop integration: host role", "[.][coop_role_host]" ) {
 // Client role
 // ---------------------------------------------------------------------------
 
-TEST_CASE( "coop integration: client role", "[.][coop_role_client]" ) {
+TEST_CASE( "coop integration: client role", "[.][coop_role_client]" )
+{
     clear_all_state();
 
     const auto scenario = get_coop_scenario();

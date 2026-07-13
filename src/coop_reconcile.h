@@ -30,5 +30,5 @@ struct reconcile_action {
 /// This function is pure: it never mutates @p pending.  The caller is
 /// responsible for trimming confirmed entries from the ring buffer separately.
 auto coop_reconcile_pos(
-    tripoint_bub_ms server_pos, int last_seq, std::span<const reconcile_action> pending)
-    -> tripoint_bub_ms;
+    tripoint_bub_ms server_pos, int last_seq, std::span<const reconcile_action> pending )
+-> tripoint_bub_ms;

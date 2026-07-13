@@ -301,3 +301,32 @@ TEST_CASE( "Aiming a turret from a solid vehicle", "[ranged][aiming]" )
 //     CHECK( failed.empty() );
 //     CHECK( unseen == 0 );
 // }
+
+TEST_CASE( "ray_cast_angle DDA accuracy", "[ranged]" )
+{
+    clear_map();
+    auto &here = get_map();
+    const auto src = tripoint_bub_ms{ 60, 60, 0 };
+
+    SECTION( "due east" ) {
+        const auto ray = here.ray_cast_angle( src, 0.0, 10 );
+        REQUIRE( !ray.empty() );
+        for( const auto &t : ray ) {
+            CHECK( t.y() == src.y() );
+            CHECK( t.x() > src.x() );
+        }
+        CHECK( ray.back().x() <= src.x() + 10 );
+    }
+
+    SECTION( "45-degree diagonal within one tile of x==y" ) {
+        const auto ray = here.ray_cast_angle( src, M_PI / 4, 10 );
+        for( const auto &t : ray ) {
+            CHECK( std::abs( ( t.x() - src.x() ) - ( t.y() - src.y() ) ) <= 1 );
+        }
+    }
+
+    SECTION( "max_range 0 returns empty" ) {
+        const auto ray = here.ray_cast_angle( src, 0.0, 0 );
+        CHECK( ray.empty() );
+    }
+}

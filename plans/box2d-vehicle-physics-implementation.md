@@ -8,9 +8,11 @@ This plan migrates Cataclysm-BN's vehicle and combat systems to Box2D 3.0.0 as t
 
 ---
 
-## Remaining Work  *(as of 2026-07-12)*
+## Remaining Work  *(as of 2026-07-12, updated 2026-07-13)*
 
-Three items remain. They have a dependency chain: **playtest → Phase 12 → Phase 10 Step 6 → Phase 11**.
+Four items remain. Dependency chain: **playtest → Phase 12 → Phase 10 Step 6 → Phase 11**.
+
+**Phase 11 gate lifted**: the external tile-independent ranged combat rework is complete (2026-07-12). Phase 11 is now gated only on Phase 10 Step 6 (legacy field retirement).
 
 ---
 
@@ -50,7 +52,7 @@ Files to delete entirely:
 
 Callsites to scrub **before** deleting:
 - `src/map.cpp:8` — `#include "physics/veh_box2d_solve.h"` → delete line
-- `src/map.cpp:1932` — `phys_world->resolve_terrain_impulse(...)` call → remove whole `if (!phys_world)` block
+- `src/map.cpp:1926-1934` — delete the entire `resolve_vehicle_terrain_impulse()` wrapper function (early-returns `{}` when `!phys_world`, then delegates to `phys_world->resolve_terrain_impulse`)
 - `src/map.h:938-942` — `resolve_vehicle_terrain_impulse()` wrapper declaration → delete
 - `src/vehicle_move.cpp` — `veh_coll_bashable` path that calls `here.resolve_vehicle_terrain_impulse()` and writes `angular_velocity_rads` at line 930 → delete that block
 
@@ -155,11 +157,11 @@ Replace tile-traversal LOS and hit resolution with `b2World_CastRayClosest()` in
 | Phase 8 — Co-op Integration | ✅ Done | Integration point identified: `coop_game_tick()` → `post_action_world_step()`; `step()` already called at `vehmove():784` |
 | Phase 9 — Serialization | ✅ Done | `angular_velocity_rads`, `physics_pos_x/y`, `physics_angle` serialized in `savegame_json.cpp`; old-save safe |
 | Phase 10 — Movement Migration | 🔄 Steps 1–5 done | Steps 1–3 (dynamic promotion, VT contacts, dispatch); Step 4 (act_on_map inventory); Step 5 (box2d_position_authority flag, act_on_map early-return, vehmove() xy readback) — commit `d6355af`; Step 6 (legacy field retirement) blocked on Phase 12 |
-| Phase 11 — Ranged Combat | ⛔ Blocked | Gated on tile-independent ranged combat rework (external) |
+| Phase 11 — Ranged Combat | 🟡 Unblocked | External ranged rework complete (2026-07-12); now gated on Phase 10 Step 6 |
 | Phase 12 — Legacy Cleanup | ⛔ Blocked | Depends on Phase 10 full |
 | Phase 13 — Creature Bugfix | ✅ Done | Bug A (`smashed=true` guard) and Bug B (dead-state check) applied |
 
-**Phases 1–9, 13 and Phase 10 Steps 1–5 complete.** Box2D now owns horizontal vehicle position: `act_on_map()` runs sinking/falling/traction/skidding logic then exits early; `vehmove()` reads `physics_pos` back to the tile grid. Phase 10 Step 6 (legacy field retirement) and Phases 11–12 remain blocked on external work.
+**Phases 1–9, 13 and Phase 10 Steps 1–5 complete.** Box2D now owns horizontal vehicle position: `act_on_map()` runs sinking/falling/traction/skidding logic then exits early; `vehmove()` reads `physics_pos` back to the tile grid. Phase 10 Step 6 (legacy field retirement) and Phase 12 (Legacy Cleanup) remain. Phase 11 (Ranged Combat) is unblocked — the external tile-independent ranged rework is complete.
 
 ---
 
