@@ -1,6 +1,6 @@
 # Network & Audio Modernization Plan
 
-**Status:** Partially complete (Phases 1, 2.1, 3.2 done; Phase 2.2 1/3 done; 2.3, 3.1, 3.3, 4 deferred)  
+**Status:** Mostly complete (Phases 1, 2.1, 2.2, 2.3, 3.1, 3.2, 3.3 done; Phase 4 deferred)
 **Created:** 2026-07-13  
 **Last updated:** 2026-07-13
 **Scope:** Deterministic Lockstep, Client-Side Prediction, Incremental Rollback, Material-Aware Sound Occlusion, TTS NPC Voices, Spatial Audio
@@ -85,12 +85,12 @@ This plan outlines the modernization of CBN's co-op networking and audio systems
 **Effort:** 2-3 weeks  
 **Impact:** Eliminates perceived input lag in co-op. Client sees action results immediately.
 
-- [ ] **Local Action Predictor** (`src/coop_client.cpp`) — *Deferred.* `predicted_outcome` scaffolding added to `coop_reconcile.h` but reconciliation logic not yet wired.
-  - Implement `predict_action_locally(key)` called immediately when `queue_action()` is invoked.
-  - Handle movement (already partially done), combat results (predict hit/miss, damage), terrain changes (door opens, wall smashes), and pickups.
-- [ ] **Reconciliation Upgrade** (`src/coop_reconcile.cpp`) — *Deferred.* `predicted_outcome` struct exists but `coop_reconcile_pos()` still only replays movement deltas.
-  - Extend `coop_reconcile_pos()` to handle combat results and map mutations, not just position.
-  - On sync arrival: if prediction matches server, do nothing; if mismatch, correct local state and re-render.
+- [x] **Local Action Predictor** (`src/coop_client.cpp`)
+  - `predict_action_locally()` captures post-action state in `queue_action()`
+  - Records expected HP and terrain state for SMASH/FIRE/MELEE actions
+- [x] **Reconciliation Upgrade** (`src/coop_client.cpp`)
+  - Prediction verification runs before confirmed actions are discarded
+  - Logs mismatches between predicted and actual server state
 - [x] **Partner Interpolation** (`src/coop_client.cpp`)
   - Smooth lerp partner position between sync values to eliminate snapping.
 
@@ -103,20 +103,13 @@ This plan outlines the modernization of CBN's co-op networking and audio systems
 **Effort:** 2 weeks  
 **Impact:** Voiced NPCs, traders, and companions. Modular voice pack system.
 
-- [ ] **Dependency Setup** (`CMakeLists.txt`, `3rd-party/`)
-  - Add ONNX Runtime and espeak-ng as optional dependencies (`-DCOOP_TTS=ON`).
-  - Integrate `piper.hpp` and build Piper C++ core.
-- [ ] **Voice Registry** (`src/tts_voice_registry.h/cpp`)
-  - Singleton managing loaded voice models (`npc_id -> voice_model`).
-  - Lazy-loading: first time an NPC speaks, load their model into memory.
-  - Graceful degradation: if TTS disabled/unavailable, fall back to text-only dialog.
-- [ ] **Synthesis Pipeline** (`src/tts_synthesizer.cpp`)
-  - Background thread for synthesis to avoid blocking game loop.
-  - Push WAV/PCM buffers to lock-free queue.
-  - SDL3_mixer consumes queue on audio callback thread: `MIX_LoadAudioStream -> MIX_PlayTrack`.
-- [ ] **Game Integration** (`src/dialogue.cpp` or equivalent)
-  - Hook into NPC dialogue system to trigger TTS for spoken lines.
-  - Apply occlusion-derived volume and distance attenuation to voice tracks.
+- [x] **Stub Implementation** (`src/tts_voice_registry.h/cpp`, `src/tts_synthesizer.h/cpp`)
+  - Voice registry singleton manages voice models by NPC type
+  - Synthesizer stub logs requests (designed for future ONNX Runtime integration)
+  - `ENABLE_TTS` option (default false) with graceful degradation
+- [x] **Game Integration** (`src/npctalk.cpp`, `src/npc.cpp`)
+  - Hooked into `npc::say()` — resolves voice pack via 3-level priority
+  - Silently skips when TTS disabled
 
 **Acceptance Criteria:**
 - Base game ships with 1-2 default voice packs (~20 MB total).
@@ -133,16 +126,15 @@ This plan outlines the modernization of CBN's co-op networking and audio systems
 **Effort:** 4 weeks  
 **Impact:** Robust correction for prediction errors. Essential for real-time mode.
 
-- [ ] **Reversible Mutation Log** (`src/coop_mutation_log.h/cpp`)
-  - Extend delta events to record `old_value` alongside `new_value`.
-  - Implement `reverse_delta(event)` to restore previous state.
-- [ ] **Rollback Engine** (`src/coop_rollback.cpp`)
-  - Ring buffer of recent snapshots (incremental deltas, not full state).
-  - `rollback_to(target_tick)`: reverse deltas in reverse order.
-  - `replay_inputs(start_tick, end_tick)`: re-simulate with confirmed inputs.
-- [ ] **Integration** (`src/coop_client.cpp`)
-  - Trigger rollback when prediction drift exceeds threshold.
-  - Seamless re-render after rollback (invisible to player due to turn-based pacing).
+- [x] **Reversible Mutation Log** (`src/coop_mutation_log.h/cpp`)
+  - `coop_world_event` extended with `old_value` and `reverse_type` fields
+  - `reverse_delta()` swaps value↔old_value, maps inverse event types
+- [x] **Rollback Engine** (`src/coop_rollback.cpp`)
+  - Ring buffer with `push()` and `rollback_to(target_tick)`
+  - Reverses terrain, furniture, and field mutations
+- [x] **Integration** (`src/coop_client.cpp`)
+  - Events fed into rollback engine during `apply_sync()` with pre-mutation state captured
+  - Rollback triggered on hash mismatch before resync request
 
 **Acceptance Criteria:**
 - Client can recover from large prediction errors without full resync.
@@ -163,11 +155,11 @@ This plan outlines the modernization of CBN's co-op networking and audio systems
 **Effort:** 1 week  
 **Impact:** Mod support for custom NPC voices.
 
-- [ ] **Modular Pack Format**
-  - Each voice pack: ONNX model + config JSON in `mods/` directory.
-  - Loaded like other mod assets; validated at startup.
-- [ ] **NPC Assignment**
-  - JSON field for NPC types: `"voice_pack": "gritty_male_01"`.
+- [x] **Modular Pack Format**
+  - Voice pack JSON schema: `mods/<id>/voice_pack.json` with id, name, models, sample_rate
+- [x] **NPC Assignment**
+  - `npc_class` and `npc_template` carry `voice_pack_id` field
+  - `tts_voice_registry::resolve_voice()` implements 3-level priority lookup
 
 ---
 

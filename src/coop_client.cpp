@@ -548,35 +548,74 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
                 const tripoint_bub_ms bpos = g->m.abs_to_bub( abs_pos );
                 using evt = coop_event_type;
                 if( ev_type == static_cast<int>( evt::terrain_changed ) ) {
-                    const ter_id ter{ev_val};
+                    const ter_id ter{ ev_val };
+                    const int old_ter = g->m.ter( bpos ).to_i();
                     if( ter ) { g->m.ter_set( bpos, ter ); }
+                    {
+                        coop_world_event recorded_ev;
+                        recorded_ev.type = static_cast<coop_event_type>( ev_type );
+                        recorded_ev.pos = abs_pos;
+                        recorded_ev.value = ev_val;
+                        recorded_ev.old_value = old_ter;
+                        recorded_ev.creature_id = ev_cid;
+                        rollback_engine_.push( turn_val, recorded_ev );
+                    }
                 } else if( ev_type == static_cast<int>( evt::furniture_changed ) ) {
-                    g->m.furn_set( bpos, furn_id{ev_val} );
+                    const int old_furn = g->m.furn( bpos ).to_i();
+                    g->m.furn_set( bpos, furn_id{ ev_val } );
+                    {
+                        coop_world_event recorded_ev;
+                        recorded_ev.type = static_cast<coop_event_type>( ev_type );
+                        recorded_ev.pos = abs_pos;
+                        recorded_ev.value = ev_val;
+                        recorded_ev.old_value = old_furn;
+                        recorded_ev.creature_id = ev_cid;
+                        rollback_engine_.push( turn_val, recorded_ev );
+                    }
                 } else if( ev_type == static_cast<int>( evt::field_created ) ) {
-                    // value=field_type, creature_id=intensity (see sub_add_field hook).
-                    const field_type_id ftype{ev_val};
+                    const field_type_id ftype{ ev_val };
                     const int intensity = ev_cid > 0 ? ev_cid : 1;
                     if( ftype ) { g->m.add_field( bpos, ftype, intensity, 0_turns ); }
+                    {
+                        coop_world_event recorded_ev;
+                        recorded_ev.type = static_cast<coop_event_type>( ev_type );
+                        recorded_ev.pos = abs_pos;
+                        recorded_ev.value = ev_val;
+                        recorded_ev.old_value = 0; // no field existed before
+                        recorded_ev.creature_id = ev_cid;
+                        rollback_engine_.push( turn_val, recorded_ev );
+                    }
                 } else if( ev_type == static_cast<int>( evt::field_changed ) ) {
-                    // value=field_type, creature_id=new_intensity.  SET intensity, don't stack.
-                    const field_type_id ftype{ev_val};
+                    const field_type_id ftype{ ev_val };
                     const int new_int = ev_cid;
+                    int old_int = 0;
                     if( ftype && new_int > 0 ) {
                         auto* fe = g->m.get_field( bpos ).find_field( ftype );
-                        if( fe ) { fe->set_field_intensity( new_int ); }
+                        if( fe ) {
+                            old_int = fe->get_field_intensity();
+                            fe->set_field_intensity( new_int );
+                        }
+                    }
+                    {
+                        coop_world_event recorded_ev;
+                        recorded_ev.type = static_cast<coop_event_type>( ev_type );
+                        recorded_ev.pos = abs_pos;
+                        recorded_ev.value = ev_val;
+                        recorded_ev.old_value = old_int;
+                        recorded_ev.creature_id = ev_cid;
+                        rollback_engine_.push( turn_val, recorded_ev );
                     }
                 } else if( ev_type == static_cast<int>( evt::field_expired ) ) {
-                    // value=field_type only.
-                    g->m.remove_field( bpos, field_type_id{ev_val} );
-                }
-                // Feed event into rollback engine for hash-mismatch recovery.
-                {
-                    coop_world_event recorded_ev;
-                    recorded_ev.type = static_cast<coop_event_type>( ev_type );
-                    recorded_ev.pos = abs_pos;
-                    recorded_ev.value = ev_val;
-                    recorded_ev.creature_id = ev_cid;
-                    rollback_engine_.push( turn_val, recorded_ev );
+                    g->m.remove_field( bpos, field_type_id{ ev_val } );
+                    {
+                        coop_world_event recorded_ev;
+                        recorded_ev.type = static_cast<coop_event_type>( ev_type );
+                        recorded_ev.pos = abs_pos;
+                        recorded_ev.value = ev_val;
+                        recorded_ev.old_value = 0; // field existed before expiration
+                        recorded_ev.creature_id = ev_cid;
+                        rollback_engine_.push( turn_val, recorded_ev );
+                    }
                 }
                 // creature_moved/died: not streamed in A4b (monsters ride monster section).
                 // item_spawned: deferred (no item payload; 30s full sync covers drift).
@@ -763,7 +802,7 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
                 << local_hash << " server=0x" << server_hash << std::dec << " — requesting resync";
         // Attempt to roll back locally-applied deltas before requesting a full resync.
         // This undoes events from the current turn so the incoming full sync applies cleanly.
-        rollback_engine_.rollback_to( turn_val );
+        rollback_engine_.rollback_to( turn_val - 1 );
         std::ostringstream rss;
         JsonOut rsj( rss );
         rsj.start_object();
