@@ -16,6 +16,7 @@
 #include "rng.h"
 #include "skill.h"
 #include "trait_group.h"
+#include "tts_voice_registry.h"
 #include "json.h"
 
 static const std::array<npc_class_id, 19> legacy_ids = {{
@@ -125,6 +126,13 @@ void npc_class::finalize_all()
                 cl.skills[ pr.first ] = cl.skills[ pr.first ] + pr.second;
             }
         }
+
+        // Auto-register voice packs with TTS registry
+#ifdef COOP_ENABLED
+        if( !cl.voice_pack_id.empty() ) {
+            tts_voice_registry::instance().register_voice( cl.id, cl.voice_pack_id );
+        }
+#endif // COOP_ENABLED
     }
 }
 
@@ -249,6 +257,8 @@ void npc_class::load( const JsonObject &jo, const std::string & )
     optional( jo, was_loaded, "carry_override", carry_override );
     optional( jo, was_loaded, "weapon_override", weapon_override );
 
+    optional( jo, was_loaded, "voice_pack", voice_pack_id );
+
     if( jo.has_member( "traits" ) ) {
         traits = trait_group::load_trait_group( jo.get_member( "traits" ), "collection" );
     }
@@ -353,6 +363,11 @@ std::string npc_class::get_name() const
 std::string npc_class::get_job_description() const
 {
     return job_description.translated();
+}
+
+const std::string &npc_class::get_voice_pack_id() const
+{
+    return voice_pack_id;
 }
 
 const item_group_id &npc_class::get_shopkeeper_items() const
