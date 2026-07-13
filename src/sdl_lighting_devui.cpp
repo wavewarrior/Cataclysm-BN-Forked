@@ -822,12 +822,17 @@ bool place_test_light()
 
 bool place_test_sound()
 {
-    if( !g_devui_visible || !g_sound_place_mode ) { return false; }
+    if( !g_devui_visible || !g_sound_place_mode || g == nullptr ) { return false; }
     const auto hx = static_cast<int>( dev_test_lights::hover_wx );
     const auto hy = static_cast<int>( dev_test_lights::hover_wy );
     const auto hz = static_cast<int>( dev_test_lights::hover_wz );
     sounds::sound( tripoint_bub_ms( hx, hy, hz ), static_cast<int>( g_sound_volume ),
-                   sounds::sound_t::alert, "debug test sound", true );
+                   sounds::sound_t::alert, "debug test sound", false );
+    // Debug tool: sounds are normally drained during the turn loop. Process the
+    // spawned sound immediately so it propagates to monster AI and its occlusion
+    // visualization/markers are computed and rendered this frame.
+    sounds::process_sound_markers( &g->u );
+    sounds::process_sounds();
     return true;
 }
 
