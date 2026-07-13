@@ -158,6 +158,7 @@ enum debug_menu_index {
     DEBUG_TEST_IT_GROUP,
     DEBUG_DAMAGE_SELF,
     DEBUG_SHOW_SOUND,
+    DEBUG_SPAWN_SOUND,
     DEBUG_DISPLAY_WEATHER,
     DEBUG_DISPLAY_SCENTS,
     DEBUG_DISPLAY_DISTRIBUTION_GRIDS,
@@ -325,6 +326,7 @@ static int spawning_uilist()
         { uilist_entry( DEBUG_SPAWN_VEHICLE, true, 'v', _( "Spawn a vehicle" ) ) },
         { uilist_entry( DEBUG_SPAWN_ARTIFACT, true, 'a', _( "Spawn artifact" ) ) },
         { uilist_entry( DEBUG_SPAWN_CLAIRVOYANCE, true, 'c', _( "Spawn clairvoyance artifact" ) ) },
+        { uilist_entry( DEBUG_SPAWN_SOUND, true, 's', _( "Spawn sound at cursor" ) ) },
     };
 
     return uilist( _( "Spawning…" ), uilist_initializer );
@@ -1754,6 +1756,16 @@ void debug()
         case DEBUG_SPAWN_CLAIRVOYANCE:
             u.i_add( item::spawn( "architect_cube", calendar::turn ) );
             break;
+
+        case DEBUG_SPAWN_SOUND: {
+            if( const std::optional<tripoint_bub_ms> pos = g->look_around( LA_MODE_2D ) ) {
+                sounds::sound( *pos, 64, sounds::sound_t::activity, _( "debug sound" ),
+                               false, "fire_gun", "default" );
+                add_msg( m_info, _( "Spawned debug sound at (%d, %d, %d)" ),
+                         pos->x(), pos->y(), pos->z() );
+            }
+        }
+        break;
 
         case DEBUG_MAP_EDITOR:
             g->look_debug();
