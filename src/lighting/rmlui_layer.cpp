@@ -167,11 +167,17 @@ void build_world_text() {
             world_text_geom out;
             out.geom = rm.MakeGeometry(std::move(tm.mesh));
             out.texture = tm.texture;
+            // Callers submit screen_x/screen_y in LOGICAL (point) coordinates —
+            // the same space the tile sprites use (proj = SDL_GetWindowSize). This
+            // geometry, however, renders in the RmlUi context's PHYSICAL-pixel
+            // projection (SDL_GetWindowSizeInPixels). Convert logical -> physical
+            // via the density ratio so world text aligns with the map instead of
+            // clustering toward the top-left on HiDPI displays.
             // GenerateString lays text on the baseline at y=0; nudge down by the
             // point size so screen_y reads as the text's top edge, plus the F4 offsets.
             out.pos = Rml::Vector2f(
-                it.x + g_world_text_dx,
-                it.y + static_cast<float>(g_world_text_px) + g_world_text_dy);
+                it.x * g_density_ratio + g_world_text_dx,
+                it.y * g_density_ratio + static_cast<float>(g_world_text_px) + g_world_text_dy);
             g_world_geom.push_back(std::move(out));
         }
     };
