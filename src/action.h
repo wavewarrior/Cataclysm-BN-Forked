@@ -345,6 +345,8 @@ enum action_id : int {
     ACTION_DISPLAY_TRANSPARENCY,
     /** Toggle outside/sheltered/indoors overlay */
     ACTION_DISPLAY_OUTSIDE,
+    /** Toggle sound propagation debug overlay */
+    ACTION_DISPLAY_SOUND,
     /** Toggle submap grid overlay */
     ACTION_DISPLAY_SUBMAP_GRID,
     /** Toggle zone overlay */

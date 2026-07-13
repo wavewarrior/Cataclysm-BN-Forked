@@ -673,6 +673,77 @@ std::string sounds::sound_at( const tripoint_bub_ms &location )
     return _( "a sound" );
 }
 
+std::unordered_map<tripoint_bub_ms, sounds::sound_vis_tile>
+sounds::compute_sound_visualization( const tripoint_bub_ms &viewer_pos )
+{
+    std::unordered_map<tripoint_bub_ms, sound_vis_tile> result;
+    const float max_volume = 128.0f;
+
+    for( const auto &[source_pos, sound_event] : sounds_since_last_turn ) {
+        if( source_pos.z() != viewer_pos.z() ) {
+            continue;
+        }
+
+        const int radius = std::min( sound_event.volume, 20 );
+        for( int dx = -radius; dx <= radius; dx++ ) {
+            for( int dy = -radius; dy <= radius; dy++ ) {
+                const tripoint_bub_ms tile( source_pos.x() + dx, source_pos.y() + dy, source_pos.z() );
+                const int dist = sound_distance( source_pos, tile );
+                const int heard_vol = sound_event.volume - dist;
+                if( heard_vol <= 0 ) {
+                    continue;
+                }
+
+                auto &data = result[tile];
+                const float contrib = std::clamp( static_cast<float>( heard_vol ) / max_volume, 0.0f, 1.0f );
+                data.intensity = std::min( data.intensity + contrib, 1.0f );
+                data.dominant_category = sound_event.category;
+                if( dx == 0 && dy == 0 ) {
+                    data.is_source = true;
+                }
+            }
+        }
+    }
+    return result;
+}
+
+std::vector<sounds::sound_vis_ray>
+sounds::compute_sound_rays( const tripoint_bub_ms &listener_pos )
+{
+    std::vector<sound_vis_ray> rays;
+
+    for( const auto &[source_pos, sound_event] : sounds_since_last_turn ) {
+        if( source_pos.z() != listener_pos.z() ) {
+            continue;
+        }
+        if( source_pos.xy() == listener_pos.xy() ) {
+            continue;
+        }
+
+        const int dist = sound_distance( source_pos, listener_pos );
+        const int heard_vol = sound_event.volume - dist;
+        if( heard_vol <= 0 ) {
+            continue;
+        }
+
+        sound_vis_ray ray;
+        ray.source = source_pos;
+        ray.target = listener_pos;
+        ray.category = sound_event.category;
+        ray.occlusion_db = 0.0f;
+
+        const auto angle = units::atan2(
+                               static_cast<double>( listener_pos.y() - source_pos.y() ),
+                               static_cast<double>( listener_pos.x() - source_pos.x() ) );
+        const int max_range = std::min( sound_event.volume, 30 );
+        ray.path = get_map().ray_cast_angle( source_pos, units::to_radians( angle ), max_range );
+
+        rays.push_back( ray );
+    }
+
+    return rays;
+}
+
 #if defined(SDL_SOUND)
 void sfx::do_vehicle_engine_sfx()
 {
@@ -1652,4 +1723,5 @@ units::angle sfx::get_heard_angle( const tripoint_bub_ms &source )
     //add_msg(m_warning, "angle: %i", angle);
     return angle;
 }
+
 /*@}*/

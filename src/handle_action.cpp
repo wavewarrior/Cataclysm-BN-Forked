@@ -2881,6 +2881,13 @@ bool game::handle_action()
                 display_outside();
                 break;
 
+            case ACTION_DISPLAY_SOUND:
+                if( MAP_SHARING::isCompetitive() && !MAP_SHARING::isDebugger() ) {
+                    break; // don't do anything when sharing and not debugger
+                }
+                display_sound();
+                break;
+
             case ACTION_DISPLAY_SUBMAP_GRID:
                 g->debug_submap_grid_overlay = !g->debug_submap_grid_overlay;
                 break;
@@ -4073,6 +4080,11 @@ auto game::handle_action_from( const std::string& pre_action ) -> bool
             case ACTION_DISPLAY_OUTSIDE:
                 if( MAP_SHARING::isCompetitive() && !MAP_SHARING::isDebugger() ) { break; }
                 display_outside();
+                break;
+
+            case ACTION_DISPLAY_SOUND:
+                if( MAP_SHARING::isCompetitive() && !MAP_SHARING::isDebugger() ) { break; }
+                display_sound();
                 break;
 
             case ACTION_DISPLAY_SUBMAP_GRID:

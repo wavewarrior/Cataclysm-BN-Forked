@@ -3,6 +3,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <unordered_map>
 
 #include "coordinates.h"
 #include "enum_traits.h"
@@ -82,6 +83,35 @@ std::pair<std::vector<tripoint_bub_ms>, std::vector<tripoint_bub_ms>> get_monste
 std::string sound_at( const tripoint_bub_ms &location );
 /** Tells us if sound has been enabled in options */
 extern bool sound_enabled;
+/// Per-tile sound visualization data (for debug overlay).
+struct sound_vis_tile {
+    float intensity = 0.0f;          ///< Normalized volume [0.0, 1.0] reaching this tile
+    float occlusion_db = 0.0f;       ///< Transmission loss in dB
+    float freq_cutoff_hz = 8000.0f;  ///< Low-pass filter cutoff (200-8000 Hz range)
+    sound_t dominant_category = sound_t::background; ///< Loudest sound category at this tile
+    bool is_source = false;                          ///< True if this tile is a sound source
+};
+
+/// Acoustic ray data for visualization.
+struct sound_vis_ray {
+    tripoint_bub_ms source;
+    tripoint_bub_ms target;
+    std::vector<tripoint_bub_ms> path;     ///< Tiles along the ray
+    float occlusion_db = 0.0f;
+    sound_t category = sound_t::background;
+};
+
+/// Compute sound visualization data for all tiles in the visible map area.
+/// Called once per frame when the sound overlay is active.
+/// @param viewer_pos  Position of the player/listener
+/// @return Map of tile position -> visualization data
+auto compute_sound_visualization( const tripoint_bub_ms &viewer_pos )
+-> std::unordered_map<tripoint_bub_ms, sound_vis_tile>;
+
+/// Compute acoustic rays from active sound sources to the listener.
+auto compute_sound_rays( const tripoint_bub_ms &listener_pos )
+-> std::vector<sound_vis_ray>;
+
 } // namespace sounds
 
 template<>

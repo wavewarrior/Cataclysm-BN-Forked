@@ -1911,14 +1911,9 @@ void debug()
         }
         break;
 
-        case DEBUG_SHOW_SOUND: {
-            // TODO(tiles-rip-out): re-implement the monster-sound overlay ('?' markers)
-            // via the tiles overlay. The old curses w_terrain mvwputch markers were dead
-            // under tiles and have been removed.
-            ui_manager::redraw();
-            inp_mngr.wait_for_any_key();
-        }
-        break;
+        case DEBUG_SHOW_SOUND:
+            g->display_toggle_overlay( ACTION_DISPLAY_SOUND );
+            break;
 
         case DEBUG_DISPLAY_WEATHER:
             ui::omap::display_weather();

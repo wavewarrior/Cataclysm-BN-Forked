@@ -6135,6 +6135,11 @@ void game::display_outside()
     display_toggle_overlay( ACTION_DISPLAY_OUTSIDE );
 }
 
+void game::display_sound()
+{
+    display_toggle_overlay( ACTION_DISPLAY_SOUND );
+}
+
 void game::display_tiles_no_vfx()
 {
     display_toggle_overlay( ACTION_DISPLAY_TILES_NO_VFX );

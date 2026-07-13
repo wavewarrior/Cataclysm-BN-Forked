@@ -631,6 +631,20 @@ void cata_tiles::draw(
     int min_z = OVERMAP_HEIGHT;
     draw_points.clear();
 
+    // Pre-compute sound visualization data once per frame (not per tile)
+    std::unordered_map<tripoint_bub_ms, sounds::sound_vis_tile> sound_data;
+    std::unordered_set<tripoint_bub_ms> ray_tiles;
+    if( g->display_overlay_state( ACTION_DISPLAY_SOUND ) ) {
+        sound_data = sounds::compute_sound_visualization( g->u.bub_pos() );
+        const auto rays = sounds::compute_sound_rays( g->u.bub_pos() );
+        for( const auto &ray : rays ) {
+            for( const auto &pt : ray.path ) {
+                ray_tiles.insert( pt );
+            }
+        }
+    }
+
+
     for( int row = min_row; row < max_row; row++ ) {
 
         for( int col = min_col; col < max_col; col++ ) {
@@ -824,6 +838,54 @@ void cata_tiles::draw(
                         formatted_text( label, catacurses::black, direction::NORTH ) );
                 }
             }
+
+            // Sound propagation debug overlay (per-tile lookup only)
+            if( g->display_overlay_state( ACTION_DISPLAY_SOUND ) ) {
+                const tripoint_bub_ms tile_pos( temp_x, temp_y, center.z() );
+                const bool on_ray = ray_tiles.count( tile_pos );
+
+                const auto it = sound_data.find( tile_pos );
+                if( it != sound_data.end() ) {
+                    const auto &sv = it->second;
+                    const float intensity_clamped = std::clamp( sv.intensity, 0.0f, 1.0f );
+                    const float occlusion_factor = 1.0f - std::clamp( sv.occlusion_db / 60.0f, 0.0f, 1.0f );
+
+                    SDL_Color block_color;
+                    if( intensity_clamped < 0.25f ) {
+                        block_color = { 0, static_cast<uint8_t>( intensity_clamped * 4.0f * 255 ), 255, 128 };
+                    } else if( intensity_clamped < 0.5f ) {
+                        block_color = { 0, 255, static_cast<uint8_t>( ( 1.0f - ( intensity_clamped - 0.25f ) * 4.0f ) * 255 ), 128 };
+                    } else if( intensity_clamped < 0.75f ) {
+                        block_color = { static_cast<uint8_t>( ( intensity_clamped - 0.5f ) * 4.0f * 255 ), 255, 0, 128 };
+                    } else {
+                        block_color = { 255, static_cast<uint8_t>( ( 1.0f - ( intensity_clamped - 0.75f ) * 4.0f ) * 255 ), 0, 128 };
+                    }
+
+                    const float gray = block_color.r * 0.299f + block_color.g * 0.587f + block_color.b * 0.114f;
+                    block_color.r = static_cast<uint8_t>( gray + ( block_color.r - gray ) * occlusion_factor );
+                    block_color.g = static_cast<uint8_t>( gray + ( block_color.g - gray ) * occlusion_factor );
+                    block_color.b = static_cast<uint8_t>( gray + ( block_color.b - gray ) * occlusion_factor );
+
+                    color_blocks.first = SDL_BLENDMODE_BLEND;
+                    color_blocks.second.emplace( player_to_screen( point_bub_ms( temp_x, temp_y ) ), block_color );
+
+                    std::string label = string_format( "%d%%", static_cast<int>( intensity_clamped * 100 ) );
+                    overlay_strings.emplace(
+                        player_to_screen( point_bub_ms( temp_x, temp_y ) ) + point( tile_width / 4, tile_height / 4 ),
+                        formatted_text( label, catacurses::black, direction::NORTH ) );
+
+                    if( sv.is_source ) {
+                        SDL_Color src_color = { 255, 255, 255, 200 };
+                        color_blocks.first = SDL_BLENDMODE_BLEND;
+                        color_blocks.second.emplace( player_to_screen( point_bub_ms( temp_x, temp_y ) ), src_color );
+                    }
+                } else if( on_ray ) {
+                    SDL_Color ray_color = { 0, 255, 255, 100 };
+                    color_blocks.first = SDL_BLENDMODE_BLEND;
+                    color_blocks.second.emplace( player_to_screen( point_bub_ms( temp_x, temp_y ) ), ray_color );
+                }
+            }
+
 
             lit_level ll = lit_level::BLANK;
             int last_vis = center.z() + 1;
