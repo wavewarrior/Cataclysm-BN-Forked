@@ -163,35 +163,284 @@ This plan outlines the modernization of CBN's co-op networking and audio systems
 
 ---
 
-## Phase 4: Polish & Expansion (Weeks 11+)
+## Phase 4: Polish & Expansion
 
 *High-effort, high-reward features. Deferred until core systems are stable.*
 
 ### 4.1 HRTF Binaural Rendering
-**Effort:** 2-3 weeks  
-**Approach:** Post-process stereo mix with HRTF convolution filters.
+**Effort:** 2-3 weeks
+**Impact:** True 3D audio localization. Player hears direction and elevation of sounds accurately with headphones.
 
-- [ ] Load generic HRTF dataset (e.g., MIT KEMAR, 256-tap FIR filters).
-- [ ] Precompute HRTF filter bank at startup.
-- [ ] Per sound event: select bin based on azimuth/elevation, convolve left/right channels.
-- [ ] Apply occlusion-derived low-pass filter before HRTF.
+#### Infrastructure Facts
+- Audio pipeline: `sounds.cpp::process_sound_markers()` → `sdlsound.cpp::play_variant_sound()` → SDL3_mixer `MIX_PlayTrack`
+- Mixer config: 44100 Hz, 2 channels, `SDL_AUDIO_S16` (`sdlsound.cpp:173-204`)
+- Built-in 3D: `MIX_SetTrack3DPosition` with `MIX_Point3D` — simple stereo panning only, no HRTF
+- Insertion points: `MIX_SetTrackRawCallback` (before spatialization) or `MIX_SetPostMixCallback` (final stereo output)
+- No existing DSP/filter effects in codebase
+
+#### Step 1: HRTF Dataset Selection and Embedding
+**Files:** `src/hrtf_dataset.h`, `src/hrtf_dataset.cpp`
+
+**Dataset:** MIT KEMER HRTF database at 44.1 kHz (matches mixer sample rate exactly).
+- Resolution: 256 azimuth bins × 18 elevation bins × 256 taps × 2 channels × 2 bytes = ~1.2 MB uncompressed
+- Compression: Store as quantized Q15 coefficients (16-bit signed) with 8-bin azimuth interpolation
+- Embedded: Compile into binary as `const uint16_t hrtf_data[]` — no external file dependency
+- License: MIT KEMER is CC BY-SA 3.0; attribute in credits
+
+**Implementation:**
+```cpp
+struct hrtf_filter_bank {
+    static constexpr int AZIMUTH_BINS = 256;
+    static constexpr int ELEVATION_BINS = 18;
+    static constexpr int TAPS = 256;
+
+    /// Get FIR filter coefficients for a given azimuth/elevation.
+    /// Returns left and right ear impulse responses.
+    auto get_filters( float azimuth_deg, float elevation_deg,
+                      std::span<int16_t> left, std::span<int16_t> right ) const -> void;
+
+    /// Quantized Q15 FIR coefficients: [azimuth_bin][elevation_bin][tap][ear]
+    const uint16_t* data;
+};
+```
+
+#### Step 2: Convolution Engine
+**Files:** `src/hrtf_convolver.h`, `src/hrtf_convolver.cpp`
+
+**Algorithm:** Overlap-add FFT convolution for real-time performance.
+- Buffer size: 1024 samples (~23ms at 44.1kHz)
+- FFT: Use existing SDL3 `SDL_DSP` or embed kissfft (minimal, single-header)
+- Per-track: Maintain circular buffer of input samples, convolve with selected HRTF filter
+- Latency: ~46ms total (2 buffer periods) — acceptable for turn-based game
+
+**Integration:** Install `MIX_SetPostMixCallback` on the final stereo output bus:
+```cpp
+// In init_sound(), after MIX_CreateMixerDevice:
+if( get_option<bool>( "ENABLE_HRTF" ) ) {
+    MIX_SetPostMixCallback( g_mixer, hrtf_postmix_callback, &hrtf_engine );
+}
+```
+
+**Per-sound HRTF metadata:** Extend `sound_event` struct with azimuth/elevation computed from source position relative to listener. The post-mix callback routes each active track through the appropriate HRTF filter based on its 3D position.
+
+#### Step 3: Occlusion Integration
+**Files:** `src/sdlsound.cpp`
+
+Apply occlusion-derived low-pass filter **before** HRTF convolution:
+1. `process_sound_markers()` computes `occlusion_db` and `freq_cutoff_hz`
+2. Pass `freq_cutoff_hz` to `play_variant_sound()` → stored per-track
+3. HRTF convolver applies first-order low-pass (coefficient = `exp(-2π·cutoff/fs)`) before convolution
+
+#### Step 4: Option and Fallback
+**Files:** `src/options.cpp`
+
+- Add `ENABLE_HRTF` boolean option (default false) under `SOUND_ENABLED` prerequisite
+- When disabled, audio pipeline operates normally (existing stereo panning)
+- Warning: "HRTF requires headphones for intended effect"
+
+#### Acceptance Criteria
+- With headphones, player can localize sound direction and elevation within ±15°
+- Occluded sounds are muffled (low-pass) AND spatialized correctly
+- CPU overhead <5% on target hardware (measure with profiler)
+- Toggleable in options without restarting audio subsystem
+
+---
 
 ### 4.2 Environmental Reverb Zones
-**Effort:** 4-6 weeks  
-**Concept:** Define reverb zones per map area. When sound originates in a zone, apply zone characteristics.
+**Effort:** 4-6 weeks
+**Impact:** Distinct acoustic character per environment (cavernous basement, tight corridor, open field).
 
-- [ ] JSON definition: `decay_time`, `early_delay`, `late_reverb_level`, `diffusion`.
-- [ ] Zone assignment: tile-based property or building-based inheritance.
-- [ ] Implementation: Schroeder reverb algorithm (delay-line, CPU-cheap).
+#### Infrastructure Facts
+- Existing zone detection: `map::is_outside()` (checks roof/shelter in 3×3), `map::is_sheltered()`, `weather::is_sheltered()`
+- Ambient sound system: `sdlsound.cpp:643-701` switches between indoor/outdoor ambience
+- No existing reverb/DSP in SDL3_mixer or codebase
+- `map_data_common_t` already has `acoustics` block (Phase 3.2) — extendable for zone properties
 
-### 4.3 Hybrid Lockstep (Option A)
-**Effort:** 2 weeks  
-**Impact:** Client runs full local simulation; verifies via hash. Reduces bandwidth.
+#### Step 1: Zone Classification System
+**Files:** `src/map.h`, `src/map.cpp`, `src/mapdata.h`
 
-- [ ] Client-side `post_action_world_step()` after receiving both players' inputs.
-- [ ] Hash comparison in `apply_sync()`: compare local hash against server hash.
-- [ ] Mismatch handling: discard local state, apply server sync, log desync.
-- [ ] Gradual trust: reduce sync frequency as confidence grows.
+**Approach:** Classify each tile's acoustic zone based on surrounding geometry.
+
+**Zone types:**
+| Zone | Detection | Decay Time | Diffusion |
+|------|-----------|------------|-----------|
+| `outdoor_open` | `is_outside()` + no walls in 5×5 | 0.3s | High |
+| `outdoor_urban` | `is_outside()` + walls in 5×5 | 0.6s | Medium |
+| `indoor_small` | `!is_outside()` + enclosed 3×3×3 | 0.8s | Low |
+| `indoor_large` | `!is_outside()` + open interior (>10 tiles) | 1.5s | Medium |
+| `underground` | `z < 0` + `!is_outside()` | 1.2s | Low |
+| `water` | standing in water terrain | 0.4s | High |
+
+**Implementation:**
+```cpp
+/// Acoustic zone classification for a tile position.
+enum class acoustic_zone : uint8_t {
+    outdoor_open, outdoor_urban, indoor_small, indoor_large, underground, water
+};
+
+/// Classify the acoustic zone at a position by scanning surrounding geometry.
+/// Cached per turn; invalidated on map mutation.
+auto classify_acoustic_zone( const tripoint_bub_ms& pos ) -> acoustic_zone;
+```
+
+**Caching:** `std::unordered_map<tripoint_bub_ms, acoustic_zone>` cleared in `reset_sounds()` alongside existing sound caches. Zone classification runs once per active sound source per turn.
+
+#### Step 2: Schroeder Reverb Algorithm
+**Files:** `src/reverb_processor.h`, `src/reverb_processor.cpp`
+
+**Architecture:** Classic Schroeder reverb (1962) — parallel comb filters feeding series allpass filters.
+
+**Parameters per zone:**
+```cpp
+struct reverb_zone_params {
+    float decay_time = 0.8f;      ///< Seconds for -60dB decay
+    float diffusion = 0.5f;       ///< Comb filter feedback modulation
+    float early_reflection_level = 0.3f; ///< Level of early reflections
+    float late_reverb_level = 0.7f;     ///< Level of late reverberation
+    float wet_dry_mix = 0.3f;     ///< Blend of dry signal with reverb
+};
+```
+
+**Implementation:**
+- 6 parallel comb filters (tuned to musical intervals for natural decay)
+- 2 series allpass filters (diffusion)
+- Delay lines: `std::deque<int16_t>` with wrap-around indexing
+- All coefficients derived from `decay_time` and `diffusion` parameters
+- Processed in `MIX_SetPostMixCallback` alongside HRTF (if enabled)
+
+**Processing order:** Dry signal → occlusion low-pass → HRTF convolution → reverb mix → output
+
+#### Step 3: Per-Sound Zone Routing
+**Files:** `src/sounds.cpp`, `src/sdlsound.cpp`
+
+Each sound event carries its source zone:
+1. `process_sound_markers()` classifies zone at sound source position
+2. Zone params passed to `play_variant_sound()` → stored per-track metadata
+3. Reverb processor maintains per-zone reverb instances (max 6 concurrent zones)
+4. Each track's output is mixed through its zone's reverb before final output
+
+**Optimization:** If HRTF is disabled, reverb processes the mono-downmixed signal before stereo expansion, reducing computation by 50%.
+
+#### Step 4: JSON Configuration
+**Files:** `data/json/other/reverb_zones.json`
+
+Allow modders to customize zone parameters:
+```json
+{
+    "type": "reverb_zone",
+    "id": "indoor_small",
+    "decay_time": 0.8,
+    "diffusion": 0.5,
+    "early_reflection_level": 0.3,
+    "late_reverb_level": 0.7,
+    "wet_dry_mix": 0.3
+}
+```
+
+#### Acceptance Criteria
+- Walking from outdoors into a building audibly changes the acoustic character
+- Underground areas sound distinctly cavernous vs. above-ground interiors
+- CPU overhead <8% on target hardware (combined with HRTF if both enabled)
+- Toggleable independently of HRTF in options
+
+---
+
+### 4.3 Hybrid Lockstep
+**Effort:** 2 weeks
+**Impact:** Client runs full local simulation; verifies via hash. Reduces bandwidth by ~60%.
+
+#### Infrastructure Facts
+- Current model: Host-authoritative. Client sends actions; host simulates and sends full state sync each tick.
+- Sync packet: `build_and_send_sync()` serializes tiles (5×5 submap), monsters (all in bubble), events, proxy/host positions
+- Estimated bandwidth: ~2-5 KB/sync at 1 sync/sec = ~2-5 KB/s sustained
+- Determinism foundation: Phase 1 added RNG seed distribution, ordered iteration, strict FP flags
+- Hash verification: `coop_hash_event()` / `coop_hash_event_extended()` already compute per-tick FNV-1a hash
+
+#### Step 1: Client-Side Simulation
+**Files:** `src/coop_client.cpp`
+
+**Current flow:**
+```
+Client: queue_action() → send to host → wait for sync → apply_sync() → set state from server
+```
+
+**Hybrid flow:**
+```
+Client: queue_action() → execute locally (post_action_world_step) → send to host
+        → receive sync → compare hash → if match: keep local state; if mismatch: rollback + resync
+```
+
+**Implementation:**
+```cpp
+auto coop_client::queue_action( const std::string& key, const std::string& ctx_json ) -> void
+{
+    // ... existing seq stamping ...
+
+    // NEW: Execute action locally for immediate feedback
+    if( hybrid_lockstep_enabled_ ) {
+        g->handle_action_from( key, ctx_json ); // Re-execute locally
+        local_simulation_tick_++;
+    }
+}
+```
+
+**Caution:** `handle_action_from()` is already called by the main game loop. The hybrid path needs to either:
+(a) Skip server sync application when hash matches (simpler), or
+(b) Have a separate "simulation-only" path that doesn't duplicate side effects
+
+**Recommendation:** Option (a) — when hash matches, `apply_sync()` becomes a no-op for state (still processes turn advancement). When hash mismatches, full rollback + resync.
+
+#### Step 2: Hash Comparison and Trust Model
+**Files:** `src/coop_client.cpp`, `src/coop_server.cpp`
+
+**Hash comparison in `apply_sync()`:**
+```cpp
+if( hybrid_lockstep_enabled_ && local_hash == server_hash ) {
+    // Hashes match — local simulation is authoritative.
+    // Skip state application; only advance turns.
+    trim_confirmed_actions();
+    advance_turns( turns_advanced );
+    trust_score_ = std::min( 100, trust_score_ + 1 );
+    return;
+}
+
+if( local_hash != server_hash ) {
+    DebugLog( DL::Warning, DC::Main ) << "[coop] hash mismatch — rolling back";
+    rollback_engine_.rollback_to( turn_val - 1 );
+    trust_score_ = std::max( 0, trust_score_ - 10 );
+    // Fall through to full state application
+}
+```
+
+**Trust score:** Starts at 50. Increases by 1 per matching hash, decreases by 10 per mismatch. Below 20, temporarily disable hybrid lockstep and revert to host-authoritative until score recovers.
+
+#### Step 3: Bandwidth Reduction
+**Files:** `src/coop_server.cpp`
+
+When client trust score > 70, server sends **delta-only** syncs:
+- Omit full tile serialization (client already has it from local simulation)
+- Send only: `last_seq`, `turn`, `hash`, `events` (mutation log), host position
+- Estimated reduction: 60-70% bandwidth savings
+
+**Fallback:** On hash mismatch or trust drop, immediately revert to full sync.
+
+#### Step 4: Determinism Gaps
+**Known non-deterministic systems:**
+| System | Issue | Fix |
+|--------|-------|-----|
+| Timer-based events | `calendar::turn`-based timers differ if client/server tick rates diverge | Already handled: `COOP_ACTIVITY_YIELD_INTERVAL` caps turn bursts |
+| Random encounters | `g->main_rng` seeded differently | Phase 1: RNG seed distribution solves this |
+| Monster AI | Iterates `monsters` in unspecified order | Phase 1: ordered iteration by `abs_pos()` |
+| Floating point | Different FP instruction ordering | Phase 1: strict FP flags |
+| Time-based effects | Weather, day/night cycle | Driven by `calendar::turn`, not wall clock — deterministic |
+
+**Remaining risk:** If client and host have different mod configurations or JSON data, simulation diverges. Mitigate with mod hash exchange during handshake (already partially implemented).
+
+#### Acceptance Criteria
+- Bandwidth reduced by ≥50% during steady-state gameplay (trust score > 70)
+- Hash mismatch triggers automatic rollback within 1 tick
+- No perceptible difference in gameplay between hybrid and host-authoritative modes
+- Trust score recovers from mismatch within 10 matching ticks
 
 ---
 
@@ -245,6 +494,9 @@ graph TD
 | TTS voice quality disappointing | Piper is proven; fall back to text-only dialog; allow mod-provided voice packs |
 | Reverb zones break determinism | Reverb is client-side audio only; no simulation state affected |
 | Platform TTS availability | Linux/macOS/Windows OK; Android/iOS deferred (App Store may reject TTS) |
+| HRTF convolution CPU cost | Overlap-add FFT with 1024-sample buffers; skip if CPU usage >5% |
+| Hybrid lockstep desync | Trust score model degrades gracefully; full resync on repeated mismatches |
+| Schroeder reverb artifacts | Tune comb filter lengths to prime numbers; test with impulse response |
 
 ---
 
@@ -252,10 +504,14 @@ graph TD
 
 For the fastest meaningful improvement, implement in this order:
 
-1. **Tier 1 3D positioning fix** (2 hours) — immediate quality improvement, zero risk
-2. **Material occlusion Phase 1** (3 days) — derives acoustic properties from existing fields. No JSON changes needed.
-3. **Piper TTS integration** (2 weeks) — NPC voices with minimal dependencies
-4. **Lockstep Phase D** (1 week) — determinism foundation for networking improvements
-5. **Prediction extension** (2-3 weeks) — instant local feedback in co-op
+1. **Tier 1 3D positioning fix** (2 hours) — immediate quality improvement, zero risk **[DONE]**
+2. **Material occlusion Phase 1** (3 days) — derives acoustic properties from existing fields. No JSON changes needed. **[DONE]**
+3. **Piper TTS integration** (2 weeks) — NPC voices with minimal dependencies **[DONE]**
+4. **Lockstep Phase D** (1 week) — determinism foundation for networking improvements **[DONE]**
+5. **Prediction extension** (2-3 weeks) — instant local feedback in co-op **[DONE]**
+6. **HRTF Binaural** (2-3 weeks) — true 3D audio with headphones
+7. **Hybrid Lockstep** (2 weeks) — bandwidth reduction for co-op
+8. **Reverb Zones** (4-6 weeks) — environmental acoustic character
 
-**Total MVP effort:** ~4 weeks solo (or 3 weeks with parallel workstreams).
+**Total MVP effort (Phases 1-3):** ~4 weeks solo (or 3 weeks with parallel workstreams). **[COMPLETE]**
+**Phase 4 effort:** 8-11 weeks additional.
