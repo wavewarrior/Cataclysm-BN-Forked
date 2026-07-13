@@ -181,11 +181,11 @@ This plan outlines the modernization of CBN's co-op networking and audio systems
 #### Step 1: HRTF Dataset Selection and Embedding
 **Files:** `src/hrtf_dataset.h`, `src/hrtf_dataset.cpp`
 
-**Dataset:** MIT KEMER HRTF database at 44.1 kHz (matches mixer sample rate exactly).
+**Dataset:** MIT KEMAR HRTF database at 44.1 kHz (matches mixer sample rate exactly).
 - Resolution: 256 azimuth bins × 18 elevation bins × 256 taps × 2 channels × 2 bytes = ~1.2 MB uncompressed
 - Compression: Store as quantized Q15 coefficients (16-bit signed) with 8-bin azimuth interpolation
 - Embedded: Compile into binary as `const uint16_t hrtf_data[]` — no external file dependency
-- License: MIT KEMER is CC BY-SA 3.0; attribute in credits
+- License: MIT KEMAR is public domain/MIT licensed; attribute in credits
 
 **Implementation:**
 ```cpp
