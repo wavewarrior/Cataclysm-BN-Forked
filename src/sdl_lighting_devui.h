@@ -127,4 +127,8 @@ void rml_tick();
 // the ImGui Effects tab; now driven by a world click from sdl_input.
 bool place_test_light();
 
+
+/// Place a test sound at the hovered world tile. Returns true if placed.
+bool place_test_sound();
+
 } // namespace sdl_lighting_devui

@@ -429,6 +429,13 @@ void CheckMessages( display_context &d )
             d.needupdate = true;
             continue;
         }
+        // Dev test-sound placement: a world click while sound place-mode is on drops a
+        // test sound at that location. Consume the click so it doesn't trigger a game action.
+        if( ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN && ev.button.button == SDL_BUTTON_LEFT
+            && !rmlui_capture && sdl_lighting_devui::place_test_sound() ) {
+            d.needupdate = true;
+            continue;
+        }
         // RmlUi consumed this mouse/keyboard event — keep it out of game.
         if( rmlui_capture ) {
             continue;

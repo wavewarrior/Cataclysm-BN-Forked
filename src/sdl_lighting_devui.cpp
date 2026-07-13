@@ -22,6 +22,7 @@
 #include "ui.h"
 #include "ui_theme.h"
 #include "weather.h"
+#include "sounds.h"
 #include "worldfactory.h"
 
 #include <RmlUi/Core.h>
@@ -135,6 +136,11 @@ constexpr std::array<overlay_entry, 12> g_overlay_entries = {{
     }
 };
 std::array<bool, 12> g_overlay_states{}; // indexed by g_overlay_entries
+
+// ── Sound spawner: click-to-place test sounds for the Sound debug overlay ──
+auto g_sound_place_mode = false;  // checkbox: click spawns a sound
+auto g_sound_volume = 30.0f;      // volume slider (1-128, matches sounds::sound vol param)
+auto g_sound_category = 0;        // index into sound_t enum (0=background)
 
 // Slice 8 — proxies for controls whose backing globals aren't directly bindable
 // (uint32 fields, <select> indices, size_t counts, read-only diagnostics text).
@@ -675,15 +681,9 @@ void devui_rml_open()
     for( size_t i = 0; i < g_overlay_entries.size(); ++i ) {
         c.Bind( g_overlay_entries[i].var_name, &g_overlay_states[i] );
     }
-    c.BindEventCallback(
-    "toggle_overlay", []( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
-        int idx = -1;
-        if( !args.empty() ) { args[0].GetInto( idx ); }
-        if( idx < 0 || idx >= static_cast<int>( g_overlay_entries.size() ) ) { return; }
-        if( g != nullptr ) {
-            g->display_toggle_overlay( g_overlay_entries[idx].action );
-        }
-    } );
+    c.Bind( "sound_place_mode", &g_sound_place_mode );
+    c.Bind( "sound_volume", &g_sound_volume );
+    c.Bind( "sound_category", &g_sound_category );
     // Build + bind the theme/game colour combo (names + selected index).
     g_pk_combo.clear();
     g_pk_combo_labels.clear();
@@ -820,6 +820,17 @@ bool place_test_light()
     return true;
 }
 
+bool place_test_sound()
+{
+    if( !g_devui_visible || !g_sound_place_mode ) { return false; }
+    const auto hx = static_cast<int>( dev_test_lights::hover_wx );
+    const auto hy = static_cast<int>( dev_test_lights::hover_wy );
+    const auto hz = static_cast<int>( dev_test_lights::hover_wz );
+    sounds::sound( tripoint_bub_ms( hx, hy, hz ), static_cast<int>( g_sound_volume ),
+                   sounds::sound_t::alert, "debug test sound", true );
+    return true;
+}
+
 void rml_tick()
 {
     if( g_devui_visible ) {
@@ -856,11 +867,35 @@ void rml_tick()
                     sig_init = true;
                 }
             }
-            // Sync overlay states from game (two-way: checkbox writes via toggle_overlay event,
-            // game state reads back each frame so external toggles reflect).
+            // Two-way overlay sync: detect checkbox changes → push to game,
+            // then read back (reflects mutual exclusion + external toggles).
             if( g != nullptr ) {
+                static std::array<bool, g_overlay_entries.size()> prev_states{};
+                // Phase 1: UI → game. If a checkbox changed since last sync, drive game state.
                 for( size_t i = 0; i < g_overlay_entries.size(); ++i ) {
-                    g_overlay_states[i] = g->display_overlay_state( g_overlay_entries[i].action );
+                    if( g_overlay_states[i] != prev_states[i] ) {
+                        const auto &entry = g_overlay_entries[i];
+                        if( entry.action == ACTION_DISPLAY_SUBMAP_GRID ) {
+                            g->debug_submap_grid_overlay = g_overlay_states[i];
+                        } else {
+                            const bool game_on = g->display_overlay_state( entry.action );
+                            if( game_on != g_overlay_states[i] ) {
+                                g->display_toggle_overlay( entry.action );
+                            }
+                        }
+                    }
+                }
+                // Phase 2: game → UI. Read back authoritative state (mutual exclusion
+                // means enabling one overlay disables all others; external toggles
+                // from debug menu / keybinds also reflected).
+                for( size_t i = 0; i < g_overlay_entries.size(); ++i ) {
+                    const auto &entry = g_overlay_entries[i];
+                    if( entry.action == ACTION_DISPLAY_SUBMAP_GRID ) {
+                        g_overlay_states[i] = g->debug_submap_grid_overlay;
+                    } else {
+                        g_overlay_states[i] = g->display_overlay_state( entry.action );
+                    }
+                    prev_states[i] = g_overlay_states[i];
                 }
             }
             g_diag_text = build_diag_text();
