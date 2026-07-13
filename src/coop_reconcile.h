@@ -3,8 +3,18 @@
 #include "coordinates.h"
 
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string>
+
+/// Predicted outcome of a non-movement action (for client-side prediction)
+struct predicted_outcome {
+    tripoint_bub_ms target_pos;     ///< Target tile affected
+    int target_hp_delta = 0;        ///< Expected HP change to target (negative = damage dealt)
+    int self_hp_delta = 0;          ///< Expected HP change to self (e.g. recoil, backlash)
+    std::string terrain_change;     ///< Expected terrain change (empty = none)
+    std::string item_id;            ///< Expected item spawned/removed (empty = none)
+};
 
 /// Minimal action descriptor used by the reconciliation function.
 /// Decoupled from coop_client::pending_action so the pure function and its
@@ -12,6 +22,10 @@
 struct reconcile_action {
     uint32_t seq = 0;
     std::string key; ///< MOVE_N, MOVE_S, MOVE_E, MOVE_W, MOVE_NE/NW/SE/SW; others are no-ops
+    std::optional<predicted_outcome> outcome;  ///< Only set for predictive actions
+
+    reconcile_action() = default;
+    reconcile_action( uint32_t s, const std::string& k ) : seq( s ), key( k ) {}
 };
 
 /// Compute the reconciled client position after receiving a seq-confirmed sync.

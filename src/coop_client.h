@@ -68,6 +68,9 @@ struct coop_client {
         auto set_next_seq_for_test( uint32_t seq ) -> void { next_seq_ = seq; }
         auto send_tap_shoulder() -> void;
         auto send_emote( const std::string& emote_type ) -> void;
+        /// Smoothly interpolate the host NPC position between sync packets.
+        /// Called each frame from the render loop or coop_world_tick.
+        auto interpolate_host_pos() -> tripoint_abs_ms;
 
     private:
         auto apply_sync( const std::string& json_buf ) -> void;
@@ -109,6 +112,10 @@ struct coop_client {
         // and future host-avatar rendering.  Initialized to zero; valid after first sync.
         tripoint_abs_ms sync_proxy_apos_{};
         tripoint_abs_ms sync_host_apos_{};
+        /// Previous host position (for interpolation between sync packets)
+        tripoint_abs_ms prev_host_apos_{};
+        /// Timestamp of last host position update (ms since epoch, via SDL_GetTicks)
+        uint64_t last_host_pos_time_ = 0;
 
         // World seed data extracted from the packet
         int world_seed_turn_ = 0;
