@@ -540,6 +540,31 @@ void game::draw_cursor( const tripoint_bub_ms &p )
     tilecontext->init_draw_cursor( p );
 }
 
+auto game::draw_aim_crosshair( point pixel ) -> void
+{
+    if( !tilecontext ) { return; }
+tilecontext->init_draw_aim_crosshair( pixel );
+}
+
+auto game::draw_throw_arc( const tripoint_bub_ms &src, const tripoint_bub_ms &dst,
+                           float charge ) -> void
+{
+    if( !tilecontext ) { return; }
+tilecontext->init_draw_throw_arc( src, dst, charge );
+}
+
+auto game::draw_throw_impact( const tripoint_bub_ms &dst, float max_radius_tiles ) -> void
+{
+    if( !tilecontext ) { return; }
+tilecontext->init_draw_throw_impact( dst, max_radius_tiles );
+}
+
+auto game::void_throw_impact() -> void
+{
+    if( !tilecontext ) { return; }
+tilecontext->void_throw_impact();
+}
+
 void game::draw_highlight( const tripoint_bub_ms &p )
 {
     if( test_mode ) {

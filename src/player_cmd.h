@@ -81,16 +81,16 @@ struct player_cmd_t {
 // ---------------------------------------------------------------------------
 
 /// Build a player_cmd_t for a lateral movement action_id.
-player_cmd_t make_player_move_cmd(action_id act, iso_rotate rot);
+player_cmd_t make_player_move_cmd( action_id act, iso_rotate rot );
 
 /// Build a player_cmd_t for a smash action at abs_target.
 /// Pure: no side effects; safe to call from UI and tests.
-player_cmd_t make_player_smash_cmd(tripoint_abs_ms abs_target);
+player_cmd_t make_player_smash_cmd( tripoint_abs_ms abs_target );
 
 /// Build a player_cmd_t for a fire action at abs_target.
 /// seq is passed separately to execute_player_cmd() for lag compensation.
 /// Pure: no side effects; safe to call from UI and tests.
-player_cmd_t make_player_fire_cmd(tripoint_abs_ms abs_target);
+player_cmd_t make_player_fire_cmd( tripoint_abs_ms abs_target );
 
 /// Build a player_cmd_t for eat/drink — no payload.
 /// Pure: no side effects; safe to call from UI and tests.
@@ -106,15 +106,15 @@ player_cmd_t make_player_reload_cmd();
 
 /// Build a player_cmd_t for a melee attack at abs_target.
 /// Pure: no side effects; safe to call from UI and tests.
-player_cmd_t make_player_melee_cmd(tripoint_abs_ms abs_target);
+player_cmd_t make_player_melee_cmd( tripoint_abs_ms abs_target );
 
 /// Map a move cmd's delta to its wire-protocol direction string ("MOVE_N" … "MOVE_NW").
 /// Returns an empty string_view for non-move commands or unknown deltas.
 /// Pure: no side effects; safe to call from unit tests.
-std::string_view move_cmd_to_dir_string(const player_cmd_t& cmd);
+std::string_view move_cmd_to_dir_string( const player_cmd_t &cmd );
 
 /// Reverse of move_cmd_to_dir_string(): parse a wire-protocol direction string
 /// ("MOVE_N", "MOVE_NE", …, "UP"/"DOWN" legacy aliases) back to a move player_cmd_t.
 /// Returns player_cmd_kind::none for unknown strings.
 /// Pure: no side effects; safe to call from unit tests.
-player_cmd_t parse_move_cmd(std::string_view key);
+player_cmd_t parse_move_cmd( std::string_view key );

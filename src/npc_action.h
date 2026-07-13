@@ -55,7 +55,7 @@ enum npc_action : int {
     num_npc_actions
 };
 
-std::string npc_action_name(npc_action action);
+std::string npc_action_name( npc_action action );
 
 // ---------------------------------------------------------------------------
 // Command descriptor
@@ -65,7 +65,7 @@ struct npc_cmd_t {
     npc_action kind = npc_undecided;
     /// Resolved attack/heal/follow target. Null when the action does not
     /// involve a creature target (e.g. npc_pause, npc_flee, npc_reload).
-    Creature* target = nullptr;
+    Creature *target = nullptr;
     /// Resolved movement destination. Set to good_escape_direction() for
     /// npc_flee, to target->bub_pos() for melee/ranged, bub_pos() otherwise.
     tripoint_bub_ms dest = {};

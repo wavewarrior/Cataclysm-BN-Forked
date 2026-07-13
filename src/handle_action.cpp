@@ -115,7 +115,8 @@
 #include <utility>
 
 #ifdef COOP_ENABLED
-namespace {
+namespace
+{
 /// Emit a TERRAIN_CHANGE action to the co-op host with the new ter/furn at an abs position.
 /// Only called when g->coop_client_ is non-null (client-side only).
 inline void coop_emit_terrain_change(
@@ -558,7 +559,7 @@ static void open()
 #ifdef COOP_ENABLED
                 if( g->coop_client_ ) {
                     g->coop_client_->queue_terrain_change( here.bub_to_abs( openp ),
-                                                          here.ter( openp ).id().str(), here.furn( openp ).id().str() );
+                                                           here.ter( openp ).id().str(), here.furn( openp ).id().str() );
                 }
 #endif // COOP_ENABLED
             }
@@ -795,7 +796,7 @@ static void smash()
     furn_id  smash_furn_before;
     std::unordered_set<const item *> smash_items_before;
     if( g->coop_client_ ) {
-        smash_ter_before  = here.ter(  smashp );
+        smash_ter_before  = here.ter( smashp );
         smash_furn_before = here.furn( smashp );
         for( const tripoint_bub_ms &p : here.points_in_radius( smashp, 1 ) ) {
             for( const item *it : here.i_at( p ) ) { smash_items_before.insert( it ); }
@@ -2387,6 +2388,12 @@ bool game::handle_action()
                 fire();
                 break;
 
+            case ACTION_AIM_HOLD:
+                if( u.is_armed() && u.primary_weapon().is_gun() ) {
+                    avatar_action::fire_wielded_weapon( u );
+                }
+                break;
+
             case ACTION_CAST_SPELL:
                 cast_spell();
                 break;
@@ -2939,7 +2946,8 @@ bool game::handle_action()
 /// non-blocking main loop, skipping the blocking get_player_input() call.
 /// Modal-opening cases push to game::modal_fiber_ instead of calling directly;
 /// all other cases execute inline identically to handle_action().
-auto game::handle_action_from(const std::string& pre_action) -> bool {
+auto game::handle_action_from( const std::string& pre_action ) -> bool
+{
     auto action = pre_action;
     input_context ctxt = get_default_mode_input_context();
     action_id act = ACTION_NULL;
@@ -2952,75 +2960,75 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
 #endif
 
     // Auto-move path (identical to handle_action)
-    if (u.has_destination()) {
+    if( u.has_destination() ) {
         act = u.get_next_auto_move_direction();
-        if (act == ACTION_NULL) {
-            add_msg(m_info, _("Auto-move canceled"));
+        if( act == ACTION_NULL ) {
+            add_msg( m_info, _( "Auto-move canceled" ) );
             u.clear_destination();
             return false;
         }
-    } else if (u.has_destination_activity()) {
+    } else if( u.has_destination_activity() ) {
         u.start_destination_activity();
         return false;
     }
     // (no blocking input call — action string comes from pre_action)
 
-    const optional_vpart_position vp = m.veh_at(u.bub_pos());
+    const optional_vpart_position vp = m.veh_at( u.bub_pos() );
     const auto player_vehicle = vp ? &vp->vehicle() : nullptr;
-    const bool local_vehicle_in_control = vp && vp->vehicle().player_in_control(u);
+    const bool local_vehicle_in_control = vp && vp->vehicle().player_in_control( u );
     const auto remote_vehicle = remoteveh();
     const auto controlled_vehicle =
         remote_vehicle != nullptr ? remote_vehicle
         : local_vehicle_in_control
-            ? player_vehicle
-            : nullptr;
+        ? player_vehicle
+        : nullptr;
     const auto veh_ctrl =
-        !u.is_dead_state() && (local_vehicle_in_control || remote_vehicle != nullptr);
+        !u.is_dead_state() && ( local_vehicle_in_control || remote_vehicle != nullptr );
 
     std::optional<tripoint_bub_ms> mouse_target;
 
-    if (uquit == QUIT_WATCH && action == "QUIT") {
+    if( uquit == QUIT_WATCH && action == "QUIT" ) {
         uquit = QUIT_DIED;
         return false;
     }
 
-    if (act == ACTION_NULL) {
-        act = look_up_action(action);
+    if( act == ACTION_NULL ) {
+        act = look_up_action( action );
 
-        if (act == ACTION_KEYBINDINGS) { return false; }
+        if( act == ACTION_KEYBINDINGS ) { return false; }
 
-        if (act == ACTION_MAIN_MENU) {
-            if (uquit == QUIT_WATCH) { return false; }
+        if( act == ACTION_MAIN_MENU ) {
+            if( uquit == QUIT_WATCH ) { return false; }
             u.clear_destination();
             destination_preview.clear();
             act = handle_main_menu();
-            if (act == ACTION_NULL) { return false; }
+            if( act == ACTION_NULL ) { return false; }
         }
 
-        if (act == ACTION_ACTIONMENU) {
-            if (uquit == QUIT_WATCH) { return false; }
+        if( act == ACTION_ACTIONMENU ) {
+            if( uquit == QUIT_WATCH ) { return false; }
             u.clear_destination();
             destination_preview.clear();
             act = handle_action_menu();
-            if (act == ACTION_NULL) { return false; }
+            if( act == ACTION_NULL ) { return false; }
         }
 
-        if (act == ACTION_KEYBINDINGS) {
+        if( act == ACTION_KEYBINDINGS ) {
             u.clear_destination();
             destination_preview.clear();
-            act = ctxt.display_menu(true);
-            if (act == ACTION_NULL) { return false; }
+            act = ctxt.display_menu( true );
+            if( act == ACTION_NULL ) { return false; }
         }
 
-        if (can_action_change_worldstate(act)) { user_action_counter += 1; }
+        if( can_action_change_worldstate( act ) ) { user_action_counter += 1; }
 
-        if (act != ACTION_TIMEOUT) {
+        if( act != ACTION_TIMEOUT ) {
             u.clear_destination();
             destination_preview.clear();
         }
     }
 
-    if (act == ACTION_NULL) { return false; }
+    if( act == ACTION_NULL ) { return false; }
 #ifdef COOP_ENABLED
     {
         const auto& sess = coop_session::get();
@@ -3037,16 +3045,16 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
     }
 #endif // COOP_ENABLED
 
-    gamemode->pre_action(act);
+    gamemode->pre_action( act );
 
-    int soffset = get_option<int>("MOVE_VIEW_OFFSET");
+    int soffset = get_option<int>( "MOVE_VIEW_OFFSET" );
 
     int before_action_moves = u.moves;
 
 
     // These actions are allowed while deathcam is active
-    if (uquit == QUIT_WATCH || !u.is_dead_state()) {
-        switch (act) {
+    if( uquit == QUIT_WATCH || !u.is_dead_state() ) {
+        switch( act ) {
             case ACTION_TOGGLE_MAP_MEMORY:
                 u.toggle_map_memory();
                 break;
@@ -3075,13 +3083,14 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                     {ACTION_SHIFT_NW, {point_north_west, point_north}},
                 };
                 u.view_offset +=
-                    tile_iso ? shift_delta.at(act).second * soffset
-                             : shift_delta.at(act).first * soffset;
-            } break;
+                    tile_iso ? shift_delta.at( act ).second * soffset
+                    : shift_delta.at( act ).first * soffset;
+            }
+            break;
 
             case ACTION_LOOK:
                 // Fiber-wrapped: world ticks while looking around
-                modal_fiber_.emplace([this]() { look_around(); });
+                modal_fiber_.emplace( [this]() { look_around(); } );
                 break;
 
             case ACTION_KEYBINDINGS:
@@ -3094,8 +3103,8 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
 
     // Actions allowed only while alive
 
-    if (!u.is_dead_state()) {
-        switch (act) {
+    if( !u.is_dead_state() ) {
+        switch( act ) {
             case ACTION_NULL:
             case NUM_ACTIONS:
                 break;
@@ -3105,11 +3114,11 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                 break;
 
             case ACTION_TIMEOUT:
-                if (check_safe_mode_allowed(false)) { character_funcs::do_pause(u); }
+                if( check_safe_mode_allowed( false ) ) { character_funcs::do_pause( u ); }
                 break;
 
             case ACTION_PAUSE:
-                if (check_safe_mode_allowed()) { character_funcs::do_pause(u); }
+                if( check_safe_mode_allowed() ) { character_funcs::do_pause( u ); }
                 break;
 
             case ACTION_CYCLE_MOVE:
@@ -3129,7 +3138,7 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                 break;
 
             case ACTION_OPEN_MOVEMENT:
-                modal_fiber_.emplace([this]() { open_movement_mode_menu(); });
+                modal_fiber_.emplace( [this]() { open_movement_mode_menu(); } );
                 break;
 
             case ACTION_MOVE_FORTH:
@@ -3140,175 +3149,175 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
             case ACTION_MOVE_BACK_LEFT:
             case ACTION_MOVE_LEFT:
             case ACTION_MOVE_FORTH_LEFT:
-                if (!u.get_value("remote_controlling").empty()
-                    && (u.has_active_item_with_action("RADIOCONTROL")
-                        || u.has_active_bionic(bio_remote))) {
-                    rcdrive(get_delta_from_movement_action(act, iso_rotate::yes));
-                } else if (veh_ctrl) {
-                    pldrive(get_delta_from_movement_action(act, iso_rotate::no)
-                                .reinterpret_as<point_rel_veh>());
+                if( !u.get_value( "remote_controlling" ).empty()
+                    && ( u.has_active_item_with_action( "RADIOCONTROL" )
+                         || u.has_active_bionic( bio_remote ) ) ) {
+                    rcdrive( get_delta_from_movement_action( act, iso_rotate::yes ) );
+                } else if( veh_ctrl ) {
+                    pldrive( get_delta_from_movement_action( act, iso_rotate::no )
+                             .reinterpret_as<point_rel_veh>() );
                 } else {
-                    auto dest_delta = make_player_move_cmd(act, iso_rotate::yes).delta.xy();
-                    if (auto_travel_mode && !u.is_auto_moving()) {
-                        for (int i = 0; i < SEEX; i++) {
+                    auto dest_delta = make_player_move_cmd( act, iso_rotate::yes ).delta.xy();
+                    if( auto_travel_mode && !u.is_auto_moving() ) {
+                        for( int i = 0; i < SEEX; i++ ) {
                             tripoint_bub_ms auto_travel_destination(
-                                u.bub_pos().x() + dest_delta.x() * (SEEX - i),
-                                u.bub_pos().y() + dest_delta.y() * (SEEX - i), u.bub_pos().z());
+                                u.bub_pos().x() + dest_delta.x() * ( SEEX - i ),
+                                u.bub_pos().y() + dest_delta.y() * ( SEEX - i ), u.bub_pos().z() );
                             destination_preview = m.route(
-                                u.bub_pos(), auto_travel_destination,
-                                u.get_legacy_pathfinding_settings(), u.get_legacy_path_avoid());
-                            if (!destination_preview.empty()) {
+                                                      u.bub_pos(), auto_travel_destination,
+                                                      u.get_legacy_pathfinding_settings(), u.get_legacy_path_avoid() );
+                            if( !destination_preview.empty() ) {
                                 destination_preview.erase(
-                                    destination_preview.begin() + 1, destination_preview.end());
-                                u.set_destination(destination_preview);
+                                    destination_preview.begin() + 1, destination_preview.end() );
+                                u.set_destination( destination_preview );
                                 break;
                             }
                         }
                         act = u.get_next_auto_move_direction();
                         const auto dest_next =
-                            make_player_move_cmd(act, iso_rotate::yes).delta.xy();
-                        if (dest_next == point_rel_ms::zero()) { u.clear_destination(); }
+                            make_player_move_cmd( act, iso_rotate::yes ).delta.xy();
+                        if( dest_next == point_rel_ms::zero() ) { u.clear_destination(); }
                         dest_delta = dest_next;
                     }
-                    if (!avatar_action::move(u, m, dest_delta)) { u.clear_destination(); }
+                    if( !avatar_action::move( u, m, dest_delta ) ) { u.clear_destination(); }
                 }
                 break;
 
             case ACTION_MOVE_DOWN:
-                if (u.is_mounted()) {
+                if( u.is_mounted() ) {
                     const monster* mon = u.mounted_creature.get();
-                    bool ladder = m.has_flag("DIFFICULT_Z", u.bub_pos());
+                    bool ladder = m.has_flag( "DIFFICULT_Z", u.bub_pos() );
 
-                    if (ladder) {
+                    if( ladder ) {
                         const bool can_use_ladder =
-                            mon->has_flag(MF_MOUNTABLE_LADDER) || mon->has_flag(MF_FLIES);
+                            mon->has_flag( MF_MOUNTABLE_LADDER ) || mon->has_flag( MF_FLIES );
 
-                        if (!can_use_ladder) {
-                            add_msg(m_info, _("Your mount can't go downstairs while riding."));
+                        if( !can_use_ladder ) {
+                            add_msg( m_info, _( "Your mount can't go downstairs while riding." ) );
                             break;
                         }
                     } else {
                         const bool can_use_stairs =
-                            mon->has_flag(MF_MOUNTABLE_STAIRS) || mon->has_flag(MF_FLIES);
+                            mon->has_flag( MF_MOUNTABLE_STAIRS ) || mon->has_flag( MF_FLIES );
 
-                        if (!can_use_stairs) {
-                            add_msg(m_info, _("Your mount can't go downstairs while riding."));
+                        if( !can_use_stairs ) {
+                            add_msg( m_info, _( "Your mount can't go downstairs while riding." ) );
                             break;
                         }
                     }
                 }
-                if (controlled_vehicle != nullptr && controlled_vehicle->is_aircraft()) {
-                    pldrive(tripoint_rel_veh::below());
-                } else if (!u.in_vehicle) {
-                    vertical_move(-1, false);
-                } else if (get_map().has_rope_at(u.bub_pos())) {
+                if( controlled_vehicle != nullptr && controlled_vehicle->is_aircraft() ) {
+                    pldrive( tripoint_rel_veh::below() );
+                } else if( !u.in_vehicle ) {
+                    vertical_move( -1, false );
+                } else if( get_map().has_rope_at( u.bub_pos() ) ) {
                     map& here = get_map();
-                    const optional_vpart_position vp_down = here.veh_at(u.bub_pos());
+                    const optional_vpart_position vp_down = here.veh_at( u.bub_pos() );
                     const int idx = vp_down->vehicle().part_with_feature(
-                        vp_down->part_index(), VPFLAG_LADDER, true);
-                    if (idx != -1) {
-                        const vpart_info info = vp_down->vehicle().part_info(idx);
+                                        vp_down->part_index(), VPFLAG_LADDER, true );
+                    if( idx != -1 ) {
+                        const vpart_info info = vp_down->vehicle().part_info( idx );
                         auto where = u.bub_pos();
                         auto below = where;
-                        if (get_map().ter(where).id().str() != "t_open_air") { break; }
+                        if( get_map().ter( where ).id().str() != "t_open_air" ) { break; }
                         below.z()--;
-                        while (get_map().ter(below).id().str() == "t_open_air") {
+                        while( get_map().ter( below ).id().str() == "t_open_air" ) {
                             where.z()--;
                             below.z()--;
                         }
                         const int dist = u.bub_pos().z() - below.z();
-                        if (info.ladder_length() >= dist) {
-                            get_map().unboard_vehicle(u.bub_pos());
-                            vertical_move(-dist, true);
+                        if( info.ladder_length() >= dist ) {
+                            get_map().unboard_vehicle( u.bub_pos() );
+                            vertical_move( -dist, true );
                         }
                     }
                 }
                 break;
 
             case ACTION_MOVE_UP:
-                if (u.is_mounted()) {
+                if( u.is_mounted() ) {
                     const monster* mon = u.mounted_creature.get();
-                    bool ladder = m.has_flag("DIFFICULT_Z", u.bub_pos());
+                    bool ladder = m.has_flag( "DIFFICULT_Z", u.bub_pos() );
 
-                    if (ladder) {
+                    if( ladder ) {
                         const bool can_use_ladder =
-                            mon->has_flag(MF_MOUNTABLE_LADDER) || mon->has_flag(MF_FLIES);
+                            mon->has_flag( MF_MOUNTABLE_LADDER ) || mon->has_flag( MF_FLIES );
 
-                        if (!can_use_ladder) {
-                            add_msg(m_info, _("Your mount can't go upstairs or climb while "
-                                              "riding."));
+                        if( !can_use_ladder ) {
+                            add_msg( m_info, _( "Your mount can't go upstairs or climb while "
+                                                "riding." ) );
                             break;
                         }
                     } else {
                         const bool can_use_stairs =
-                            mon->has_flag(MF_MOUNTABLE_STAIRS) || mon->has_flag(MF_FLIES);
+                            mon->has_flag( MF_MOUNTABLE_STAIRS ) || mon->has_flag( MF_FLIES );
 
-                        if (!can_use_stairs) {
-                            add_msg(m_info, _("Your mount can't go upstairs or climb while "
-                                              "riding."));
+                        if( !can_use_stairs ) {
+                            add_msg( m_info, _( "Your mount can't go upstairs or climb while "
+                                                "riding." ) );
                             break;
                         }
                     }
                 }
-                if (controlled_vehicle != nullptr) {
-                    if (controlled_vehicle->is_aircraft()) {
-                        pldrive(tripoint_rel_veh::above());
-                    } else if (
-                        (controlled_vehicle->has_part("ROTOR")
-                         || controlled_vehicle->has_part("BALLOON")
-                         || controlled_vehicle->has_part("WING"))
-                        && !controlled_vehicle->has_sufficient_lift()) {
-                        add_msg(m_bad, _("The craft struggles to generate enough lift!"));
+                if( controlled_vehicle != nullptr ) {
+                    if( controlled_vehicle->is_aircraft() ) {
+                        pldrive( tripoint_rel_veh::above() );
+                    } else if(
+                        ( controlled_vehicle->has_part( "ROTOR" )
+                          || controlled_vehicle->has_part( "BALLOON" )
+                          || controlled_vehicle->has_part( "WING" ) )
+                        && !controlled_vehicle->has_sufficient_lift() ) {
+                        add_msg( m_bad, _( "The craft struggles to generate enough lift!" ) );
                     } else {
-                        u.add_msg_if_player(_("You need a propeller to take off!"));
+                        u.add_msg_if_player( _( "You need a propeller to take off!" ) );
                     }
-                } else if (!u.in_vehicle) {
-                    if (get_map().has_rope_at(u.bub_pos())) {
+                } else if( !u.in_vehicle ) {
+                    if( get_map().has_rope_at( u.bub_pos() ) ) {
                         auto xy = u.bub_pos().xy();
                         map& here = get_map();
                         auto where = u.bub_pos();
                         auto above = where;
                         above.z()++;
-                        if (get_map().ter(above).id().str() != "t_open_air") {
-                            vertical_move(1, false);
+                        if( get_map().ter( above ).id().str() != "t_open_air" ) {
+                            vertical_move( 1, false );
                             break;
                         }
-                        while (get_map().ter(above).id().str() == "t_open_air"
-                               && !here.veh_at(tripoint_bub_ms(xy, above.z()))) {
+                        while( get_map().ter( above ).id().str() == "t_open_air"
+                               && !here.veh_at( tripoint_bub_ms( xy, above.z() ) ) ) {
                             above.z()++;
                         }
                         const optional_vpart_position vp_up = here.veh_at(
-                            tripoint_bub_ms(xy, above.z()));
+                                tripoint_bub_ms( xy, above.z() ) );
                         const int dist = above.z() - u.bub_pos().z();
-                        if (vp_up) {
+                        if( vp_up ) {
                             const int idx = vp_up->vehicle().part_with_feature(
-                                vp_up->part_index(), VPFLAG_LADDER, true);
-                            if (idx != -1) {
-                                const vpart_info info = vp_up->vehicle().part_info(idx);
-                                if (info.ladder_length() >= dist) {
-                                    vertical_move(dist, true);
-                                    here.board_vehicle(u.bub_pos(), u.as_character());
+                                                vp_up->part_index(), VPFLAG_LADDER, true );
+                            if( idx != -1 ) {
+                                const vpart_info info = vp_up->vehicle().part_info( idx );
+                                if( info.ladder_length() >= dist ) {
+                                    vertical_move( dist, true );
+                                    here.board_vehicle( u.bub_pos(), u.as_character() );
                                     break;
                                 }
                             }
                         } else {
-                            vertical_move(1, false);
+                            vertical_move( 1, false );
                         }
                     } else {
-                        vertical_move(1, false);
+                        vertical_move( 1, false );
                     }
                 } else {
-                    u.add_msg_if_player(_("You need a propeller to take off!"));
+                    u.add_msg_if_player( _( "You need a propeller to take off!" ) );
                 }
                 break;
 
             case ACTION_OPEN:
-                if (u.has_active_mutation(trait_SHELL2)) {
-                    add_msg(m_info, _("You can't open things while you're in your shell."));
-                } else if (u.is_mounted()) {
+                if( u.has_active_mutation( trait_SHELL2 ) ) {
+                    add_msg( m_info, _( "You can't open things while you're in your shell." ) );
+                } else if( u.is_mounted() ) {
                     auto mon = u.mounted_creature.get();
-                    if (!mon->has_flag(MF_MOUNTABLE_DOORS)) {
-                        add_msg(m_info, _("You can't open things while you're riding."));
+                    if( !mon->has_flag( MF_MOUNTABLE_DOORS ) ) {
+                        add_msg( m_info, _( "You can't open things while you're riding." ) );
                         break;
                     } else {
                         open();
@@ -3319,95 +3328,95 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                 break;
 
             case ACTION_CLOSE:
-                if (u.has_active_mutation(trait_SHELL2)) {
-                    add_msg(m_info, _("You can't close things while you're in your shell."));
-                } else if (u.is_mounted()) {
+                if( u.has_active_mutation( trait_SHELL2 ) ) {
+                    add_msg( m_info, _( "You can't close things while you're in your shell." ) );
+                } else if( u.is_mounted() ) {
                     auto mon = u.mounted_creature.get();
-                    if (!mon->has_flag(MF_MOUNTABLE_DOORS)) {
-                        add_msg(m_info, _("You can't close things while you're riding."));
+                    if( !mon->has_flag( MF_MOUNTABLE_DOORS ) ) {
+                        add_msg( m_info, _( "You can't close things while you're riding." ) );
                         break;
                     } else {
                         close();
                     }
-                } else if (mouse_target) {
-                    doors::close_door(m, u, *mouse_target);
+                } else if( mouse_target ) {
+                    doors::close_door( m, u, *mouse_target );
                 } else {
                     close();
                 }
                 break;
 
             case ACTION_SMASH:
-                if (veh_ctrl) {
+                if( veh_ctrl ) {
                     handbrake();
-                } else if (u.has_active_mutation(trait_SHELL2)) {
-                    add_msg(m_info, _("You can't smash things while you're in your shell."));
+                } else if( u.has_active_mutation( trait_SHELL2 ) ) {
+                    add_msg( m_info, _( "You can't smash things while you're in your shell." ) );
                 } else {
                     smash();
                 }
                 break;
 
             case ACTION_EXAMINE:
-                if (u.has_active_mutation(trait_SHELL2)) {
-                    add_msg(m_info, _("You can't examine your surroundings while you're in your "
-                                      "shell."));
-                } else if (mouse_target) {
-                    examine(*mouse_target);
+                if( u.has_active_mutation( trait_SHELL2 ) ) {
+                    add_msg( m_info, _( "You can't examine your surroundings while you're in your "
+                                        "shell." ) );
+                } else if( mouse_target ) {
+                    examine( *mouse_target );
                 } else {
                     examine();
                 }
                 break;
 
             case ACTION_ADVANCEDINV:
-                if (u.has_active_mutation(trait_SHELL2)) {
-                    add_msg(m_info, _("You can't move mass quantities while you're in your "
-                                      "shell."));
-                } else if (u.is_mounted()) {
-                    add_msg(m_info, _("You can't move mass quantities while you're riding."));
+                if( u.has_active_mutation( trait_SHELL2 ) ) {
+                    add_msg( m_info, _( "You can't move mass quantities while you're in your "
+                                        "shell." ) );
+                } else if( u.is_mounted() ) {
+                    add_msg( m_info, _( "You can't move mass quantities while you're riding." ) );
                 } else {
-                    modal_fiber_.emplace([this]() { create_advanced_inv(); });
+                    modal_fiber_.emplace( [this]() { create_advanced_inv(); } );
                 }
                 break;
 
             case ACTION_PICKUP:
-                if (u.has_active_mutation(trait_SHELL2)) {
-                    add_msg(m_info, _("You can't pick anything up while you're in your shell."));
-                } else if (u.is_mounted()) {
-                    add_msg(m_info, _("You can't pick anything up while you're riding."));
-                } else if (mouse_target) {
-                    pickup(*mouse_target);
+                if( u.has_active_mutation( trait_SHELL2 ) ) {
+                    add_msg( m_info, _( "You can't pick anything up while you're in your shell." ) );
+                } else if( u.is_mounted() ) {
+                    add_msg( m_info, _( "You can't pick anything up while you're riding." ) );
+                } else if( mouse_target ) {
+                    pickup( *mouse_target );
                 } else {
                     pickup();
                 }
                 break;
 
             case ACTION_PICKUP_ALL:
-                if (u.has_active_mutation(trait_SHELL2)) {
-                    add_msg(m_info, _("You can't pick anything up while you're in your shell."));
-                } else if (u.is_mounted()) {
-                    add_msg(m_info, _("You can't pick anything up while you're riding."));
+                if( u.has_active_mutation( trait_SHELL2 ) ) {
+                    add_msg( m_info, _( "You can't pick anything up while you're in your shell." ) );
+                } else if( u.is_mounted() ) {
+                    add_msg( m_info, _( "You can't pick anything up while you're riding." ) );
                 } else {
                     pickup_all();
                 }
                 break;
 
             case ACTION_PICKUP_FEET:
-                if (u.has_active_mutation(trait_SHELL2)) {
-                    add_msg(m_info, _("You can't pick anything up while you're in your shell."));
+                if( u.has_active_mutation( trait_SHELL2 ) ) {
+                    add_msg( m_info, _( "You can't pick anything up while you're in your shell." ) );
                 } else {
                     pickup_feet();
                 }
                 break;
 
             case ACTION_GRAB:
-                if (u.has_active_mutation(trait_SHELL2)) {
-                    add_msg(m_info, _("You can't grab things while you're in your shell."));
-                } else if (u.is_mounted()) {
+                if( u.has_active_mutation( trait_SHELL2 ) ) {
+                    add_msg( m_info, _( "You can't grab things while you're in your shell." ) );
+                } else if( u.is_mounted() ) {
                     auto mon = u.mounted_creature.get();
-                    if (!mon->has_flag(MF_RIDEABLE_MECH)) {
-                        add_msg(m_info, _("You can't grab things while you're riding."));
+                    if( !mon->has_flag( MF_RIDEABLE_MECH ) ) {
+                        add_msg( m_info, _( "You can't grab things while you're riding." ) );
                         break;
-                    } else if (!mon->type->mech_weapon.is_empty()) {
-                        add_msg(m_info, _("Your mech doesn't have hands to grab with."));
+                    } else if( !mon->type->mech_weapon.is_empty() ) {
+                        add_msg( m_info, _( "Your mech doesn't have hands to grab with." ) );
                         break;
                     } else {
                         grab();
@@ -3418,69 +3427,69 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                 break;
 
             case ACTION_HAUL:
-                if (u.has_active_mutation(trait_SHELL2)) {
-                    add_msg(m_info, _("You can't haul things while you're in your shell."));
-                } else if (u.is_mounted()) {
-                    add_msg(m_info, _("You can't haul things while you're riding."));
+                if( u.has_active_mutation( trait_SHELL2 ) ) {
+                    add_msg( m_info, _( "You can't haul things while you're in your shell." ) );
+                } else if( u.is_mounted() ) {
+                    add_msg( m_info, _( "You can't haul things while you're riding." ) );
                 } else {
                     haul();
                 }
                 break;
 
             case ACTION_BUTCHER:
-                if (u.has_active_mutation(trait_SHELL2)) {
-                    add_msg(m_info, _("You can't butcher while you're in your shell."));
-                } else if (u.is_mounted()) {
-                    add_msg(m_info, _("You can't butcher while you're riding."));
+                if( u.has_active_mutation( trait_SHELL2 ) ) {
+                    add_msg( m_info, _( "You can't butcher while you're in your shell." ) );
+                } else if( u.is_mounted() ) {
+                    add_msg( m_info, _( "You can't butcher while you're riding." ) );
                 } else {
                     butcher();
                 }
                 break;
 
             case ACTION_CHAT:
-                modal_fiber_.emplace([this]() { chat(); });
+                modal_fiber_.emplace( [this]() { chat(); } );
                 break;
 
             case ACTION_PEEK:
-                if (u.has_active_mutation(trait_SHELL2)) {
-                    add_msg(m_info, _("You can't peek around corners while you're in your shell."));
-                } else if (u.is_mounted()) {
-                    add_msg(m_info, _("You can't peek around corners while you're riding."));
+                if( u.has_active_mutation( trait_SHELL2 ) ) {
+                    add_msg( m_info, _( "You can't peek around corners while you're in your shell." ) );
+                } else if( u.is_mounted() ) {
+                    add_msg( m_info, _( "You can't peek around corners while you're riding." ) );
                 } else {
-                    modal_fiber_.emplace([this]() { peek(); });
+                    modal_fiber_.emplace( [this]() { peek(); } );
                 }
                 break;
 
             case ACTION_LIST_ITEMS:
-                modal_fiber_.emplace([this]() { list_items_monsters(); });
+                modal_fiber_.emplace( [this]() { list_items_monsters(); } );
                 break;
 
             case ACTION_ZONES:
-                modal_fiber_.emplace([this]() { zones_manager(); });
+                modal_fiber_.emplace( [this]() { zones_manager(); } );
                 break;
 
             case ACTION_LOOT:
-                modal_fiber_.emplace([this]() { loot(); });
+                modal_fiber_.emplace( [this]() { loot(); } );
                 break;
 
             case ACTION_INVENTORY:
-                modal_fiber_.emplace([this]() { game_menus::inv::common(u); });
+                modal_fiber_.emplace( [this]() { game_menus::inv::common( u ); } );
                 break;
 
             case ACTION_COMPARE:
-                modal_fiber_.emplace([this]() { game_menus::inv::compare(u, std::nullopt); });
+                modal_fiber_.emplace( [this]() { game_menus::inv::compare( u, std::nullopt ); } );
                 break;
 
             case ACTION_ORGANIZE:
-                modal_fiber_.emplace([this]() { game_menus::inv::swap_letters(u); });
+                modal_fiber_.emplace( [this]() { game_menus::inv::swap_letters( u ); } );
                 break;
 
             case ACTION_USE:
-                avatar_action::use_item(u);
+                avatar_action::use_item( u );
                 break;
 
             case ACTION_USE_WIELDED:
-                avatar_funcs::use_item(u, u.primary_weapon());
+                avatar_funcs::use_item( u, u.primary_weapon() );
                 break;
 
             case ACTION_WEAR:
@@ -3492,11 +3501,11 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                 break;
 
             case ACTION_EAT:
-                if (!avatar_action::eat_here(u)) { avatar_action::eat(u); }
+                if( !avatar_action::eat_here( u ) ) { avatar_action::eat( u ); }
                 break;
 
             case ACTION_OPEN_CONSUME:
-                if (!avatar_action::eat_here(u)) { open_consume_item_menu(); }
+                if( !avatar_action::eat_here( u ) ) { open_consume_item_menu(); }
                 break;
 
             case ACTION_READ:
@@ -3508,7 +3517,7 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                 break;
 
             case ACTION_PICK_STYLE:
-                u.martial_arts_data->pick_style(u);
+                u.martial_arts_data->pick_style( u );
                 break;
 
             case ACTION_RELOAD_ITEM:
@@ -3524,15 +3533,15 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                 break;
 
             case ACTION_UNLOAD:
-                avatar_action::unload(u);
+                avatar_action::unload( u );
                 break;
 
             case ACTION_UNLOAD_ALL:
-                avatar_action::unload_all(u);
+                avatar_action::unload_all( u );
                 break;
 
             case ACTION_MEND:
-                avatar_action::mend(g->u, nullptr);
+                avatar_action::mend( g->u, nullptr );
                 break;
 
             case ACTION_THROW: {
@@ -3540,12 +3549,12 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                 // (activity_actor.cpp) right after throw_item() — plthrow() here only assigns
                 // the activity.  Requires live COOP session to verify.  Molotovs/grenades
                 // also need separate field-relay; deferred to Phase 9.
-                avatar_action::plthrow(g->u, nullptr);
+                avatar_action::plthrow( g->u, nullptr );
                 break;
             }
 
             case ACTION_FIRE:
-                modal_fiber_.emplace([this]() {
+                modal_fiber_.emplace( [this]() {
                     // COOP: avatar_action::fire_wielded_weapon() (called by fire()) assigns
                     // ACT_AIM to u.activity then returns immediately.  If the fiber ends
                     // there, target_ui::run() runs later via aim_activity_actor::do_turn
@@ -3563,39 +3572,45 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                     // to reset.  The loop also handles AIM_AFTER_FIRING: finish() may
                     // re-assign ACT_AIM to u.activity; we pick it up in the next iteration.
                     fire();
-                    while (u.activity && u.activity->id() == activity_id("ACT_AIM")) {
+                    while( u.activity && u.activity->id() == activity_id( "ACT_AIM" ) ) {
                         auto local_act = u.activity.release(); // nulls u.activity; blocks
                         // process_activity()
-                        local_act->do_turn(u); // runs target_ui::run() inside this fiber
+                        local_act->do_turn( u ); // runs target_ui::run() inside this fiber
                     }
                     // A5.3: queue FIRE to host proxy AFTER aim completes so that
                     // u.last_target_pos (tripoint_abs_ms, set at ranged.cpp:3303) is valid.
                     // Absolute coords are globally consistent — bub coords differ per machine.
-                    if (coop_client_ && u.last_target_pos.has_value()) {
+                    if( coop_client_ && u.last_target_pos.has_value() ) {
                         const auto& tap = *u.last_target_pos;
                         // CL-RANGED: embed weapon+ammo at fire time so the server arms the
                         // proxy with exactly the weapon the client fired, not a stale heartbeat.
                         std::ostringstream ctx_oss;
-                        JsonOut ctx_jout(ctx_oss);
+                        JsonOut ctx_jout( ctx_oss );
                         ctx_jout.start_object();
-                        ctx_jout.member("tx", tap.x());
-                        ctx_jout.member("ty", tap.y());
-                        ctx_jout.member("tz", tap.z());
-                        if (u.is_armed() && u.primary_weapon().is_gun()) {
-                            ctx_jout.member("weapon_id", u.primary_weapon().typeId().str());
+                        ctx_jout.member( "tx", tap.x() );
+                        ctx_jout.member( "ty", tap.y() );
+                        ctx_jout.member( "tz", tap.z() );
+                        if( u.is_armed() && u.primary_weapon().is_gun() ) {
+                            ctx_jout.member( "weapon_id", u.primary_weapon().typeId().str() );
                             const itype_id cur_ammo = u.primary_weapon().ammo_current();
-                            if (!cur_ammo.is_null()) {
-                                ctx_jout.member("ammo_id", cur_ammo.str());
+                            if( !cur_ammo.is_null() ) {
+                                ctx_jout.member( "ammo_id", cur_ammo.str() );
                             }
                         }
                         ctx_jout.end_object();
-                        coop_client_->queue_action("FIRE", ctx_oss.str());
+                        coop_client_->queue_action( "FIRE", ctx_oss.str() );
                     }
-                });
+                } );
+                break;
+
+            case ACTION_AIM_HOLD:
+                if( u.is_armed() && u.primary_weapon().is_gun() ) {
+                    avatar_action::fire_wielded_weapon( u );
+                }
                 break;
 
             case ACTION_CAST_SPELL:
-                modal_fiber_.emplace([this]() { cast_spell(); });
+                modal_fiber_.emplace( [this]() { cast_spell(); } );
                 break;
 
             case ACTION_CAST_LAST_SPELL:
@@ -3603,28 +3618,28 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                 break;
 
             case ACTION_FIRE_BURST: {
-                if (u.primary_weapon().gun_set_mode(gun_mode_id("AUTO"))) {
-                    avatar_action::fire_wielded_weapon(u);
+                if( u.primary_weapon().gun_set_mode( gun_mode_id( "AUTO" ) ) ) {
+                    avatar_action::fire_wielded_weapon( u );
                 }
                 break;
             }
 
             case ACTION_SELECT_FIRE_MODE:
-                if (u.is_armed() && u.primary_weapon().is_gun()
-                    && !u.primary_weapon().is_gunmod()) {
-                    if (u.primary_weapon().gun_all_modes().size() > 1) {
+                if( u.is_armed() && u.primary_weapon().is_gun()
+                    && !u.primary_weapon().is_gunmod() ) {
+                    if( u.primary_weapon().gun_all_modes().size() > 1 ) {
                         u.primary_weapon().gun_cycle_mode();
                     } else {
-                        add_msg(m_info, _("Your %s has only one firing mode."),
-                                u.primary_weapon().display_name());
+                        add_msg( m_info, _( "Your %s has only one firing mode." ),
+                                 u.primary_weapon().display_name() );
                     }
                 }
                 break;
 
             case ACTION_SELECT_DEFAULT_AMMO:
-                if (u.is_armed() && u.primary_weapon().is_gun()
-                    && !u.primary_weapon().is_gunmod()) {
-                    ranged::prompt_select_default_ammo_for(u, u.primary_weapon());
+                if( u.is_armed() && u.primary_weapon().is_gun()
+                    && !u.primary_weapon().is_gunmod() ) {
+                    ranged::prompt_select_default_ammo_for( u, u.primary_weapon() );
                 }
                 break;
 
@@ -3633,24 +3648,24 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                 break;
 
             case ACTION_DIR_DROP:
-                if (u.has_active_mutation(trait_SHELL2)) {
-                    add_msg(m_info, _("You can't drop things to another tile while you're in your "
-                                      "shell."));
+                if( u.has_active_mutation( trait_SHELL2 ) ) {
+                    add_msg( m_info, _( "You can't drop things to another tile while you're in your "
+                                        "shell." ) );
                 } else {
                     drop_in_direction();
                 }
                 break;
 
             case ACTION_BIONICS:
-                modal_fiber_.emplace([this]() { show_bionics_ui(u); });
+                modal_fiber_.emplace( [this]() { show_bionics_ui( u ); } );
                 break;
 
             case ACTION_MUTATIONS:
-                modal_fiber_.emplace([this]() { show_mutations_ui(u); });
+                modal_fiber_.emplace( [this]() { show_mutations_ui( u ); } );
                 break;
 
             case ACTION_SORT_ARMOR:
-                modal_fiber_.emplace([this]() { show_armor_layers_ui(u); });
+                modal_fiber_.emplace( [this]() { show_armor_layers_ui( u ); } );
                 break;
 
             case ACTION_WAIT:
@@ -3658,148 +3673,148 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                 break;
 
             case ACTION_CRAFT:
-                if (u.has_active_mutation(trait_SHELL2)) {
-                    add_msg(m_info, _("You can't craft while you're in your shell."));
-                } else if (u.is_mounted()) {
-                    add_msg(m_info, _("You can't craft while you're riding."));
+                if( u.has_active_mutation( trait_SHELL2 ) ) {
+                    add_msg( m_info, _( "You can't craft while you're in your shell." ) );
+                } else if( u.is_mounted() ) {
+                    add_msg( m_info, _( "You can't craft while you're riding." ) );
                 } else {
                     u.craft();
                 }
                 break;
 
             case ACTION_RECRAFT:
-                if (u.has_active_mutation(trait_SHELL2)) {
-                    add_msg(m_info, _("You can't craft while you're in your shell."));
-                } else if (u.is_mounted()) {
-                    add_msg(m_info, _("You can't craft while you're riding."));
+                if( u.has_active_mutation( trait_SHELL2 ) ) {
+                    add_msg( m_info, _( "You can't craft while you're in your shell." ) );
+                } else if( u.is_mounted() ) {
+                    add_msg( m_info, _( "You can't craft while you're riding." ) );
                 } else {
                     u.recraft();
                 }
                 break;
 
             case ACTION_LONGCRAFT:
-                if (u.has_active_mutation(trait_SHELL2)) {
-                    add_msg(m_info, _("You can't craft while you're in your shell."));
-                } else if (u.is_mounted()) {
-                    add_msg(m_info, _("You can't craft while you're riding."));
+                if( u.has_active_mutation( trait_SHELL2 ) ) {
+                    add_msg( m_info, _( "You can't craft while you're in your shell." ) );
+                } else if( u.is_mounted() ) {
+                    add_msg( m_info, _( "You can't craft while you're riding." ) );
                 } else {
                     u.long_craft();
                 }
                 break;
 
             case ACTION_DISASSEMBLE:
-                if (u.controlling_vehicle) {
-                    add_msg(m_info, _("You can't disassemble items while driving."));
-                } else if (u.is_mounted()) {
-                    add_msg(m_info, _("You can't disassemble items while you're riding."));
+                if( u.controlling_vehicle ) {
+                    add_msg( m_info, _( "You can't disassemble items while driving." ) );
+                } else if( u.is_mounted() ) {
+                    add_msg( m_info, _( "You can't disassemble items while you're riding." ) );
                 } else {
-                    crafting::disassemble(u);
+                    crafting::disassemble( u );
                 }
                 break;
 
             case ACTION_SALVAGE:
-                if (u.controlling_vehicle) {
-                    add_msg(m_info, _("You can't salvage items while driving."));
-                } else if (u.is_mounted()) {
-                    add_msg(m_info, _("You can't salvage items while you're riding."));
+                if( u.controlling_vehicle ) {
+                    add_msg( m_info, _( "You can't salvage items while driving." ) );
+                } else if( u.is_mounted() ) {
+                    add_msg( m_info, _( "You can't salvage items while you're riding." ) );
                 } else {
-                    salvage::menu_salvage_single(u);
+                    salvage::menu_salvage_single( u );
                 }
                 break;
 
             case ACTION_CONSTRUCT:
-                if (u.in_vehicle) {
-                    add_msg(m_info, _("You can't construct while in a vehicle."));
-                } else if (u.has_active_mutation(trait_SHELL2)) {
-                    add_msg(m_info, _("You can't construct while you're in your shell."));
-                } else if (u.is_mounted()) {
-                    add_msg(m_info, _("You can't construct while you're riding."));
+                if( u.in_vehicle ) {
+                    add_msg( m_info, _( "You can't construct while in a vehicle." ) );
+                } else if( u.has_active_mutation( trait_SHELL2 ) ) {
+                    add_msg( m_info, _( "You can't construct while you're in your shell." ) );
+                } else if( u.is_mounted() ) {
+                    add_msg( m_info, _( "You can't construct while you're riding." ) );
                 } else {
-                    modal_fiber_.emplace([this]() { construction_menu(false); });
+                    modal_fiber_.emplace( [this]() { construction_menu( false ); } );
                 }
                 break;
 
             case ACTION_SLEEP:
-                if (veh_ctrl) {
-                    add_msg(m_info, _("Vehicle control has moved, %s"),
-                            press_x(ACTION_CONTROL_VEHICLE, _("new binding is "),
-                                    _("new default binding is '^'.")));
+                if( veh_ctrl ) {
+                    add_msg( m_info, _( "Vehicle control has moved, %s" ),
+                             press_x( ACTION_CONTROL_VEHICLE, _( "new binding is " ),
+                                      _( "new default binding is '^'." ) ) );
                 } else {
                     sleep();
                 }
                 break;
 
             case ACTION_CONTROL_VEHICLE:
-                if (u.has_active_mutation(trait_SHELL2)) {
-                    add_msg(m_info, _("You can't operate a vehicle while you're in your shell."));
-                } else if (u.is_mounted()) {
+                if( u.has_active_mutation( trait_SHELL2 ) ) {
+                    add_msg( m_info, _( "You can't operate a vehicle while you're in your shell." ) );
+                } else if( u.is_mounted() ) {
                     u.dismount();
                 } else {
-                    modal_fiber_.emplace([this]() { control_vehicle(); });
+                    modal_fiber_.emplace( [this]() { control_vehicle(); } );
                 }
                 break;
 
             case ACTION_TOGGLE_AUTO_TRAVEL_MODE:
                 auto_travel_mode = !auto_travel_mode;
-                add_msg(m_info,
-                        auto_travel_mode ? _("Auto travel mode ON!") : _("Auto travel mode OFF!"));
+                add_msg( m_info,
+                         auto_travel_mode ? _( "Auto travel mode ON!" ) : _( "Auto travel mode OFF!" ) );
                 break;
 
             case ACTION_TOGGLE_SAFEMODE:
-                if (safe_mode == SAFE_MODE_OFF) {
-                    set_safe_mode(SAFE_MODE_ON);
+                if( safe_mode == SAFE_MODE_OFF ) {
+                    set_safe_mode( SAFE_MODE_ON );
                     mostseen = 0;
-                    add_msg(m_info, _("Safe mode ON!"));
+                    add_msg( m_info, _( "Safe mode ON!" ) );
                 } else {
                     turnssincelastmon = 0;
-                    set_safe_mode(SAFE_MODE_OFF);
-                    add_msg(m_info,
-                            get_option<bool>("AUTOSAFEMODE")
-                                ? _("Safe mode OFF!  (Auto safe mode still enabled!)")
-                                : _("Safe mode OFF!"));
+                    set_safe_mode( SAFE_MODE_OFF );
+                    add_msg( m_info,
+                             get_option<bool>( "AUTOSAFEMODE" )
+                             ? _( "Safe mode OFF!  (Auto safe mode still enabled!)" )
+                             : _( "Safe mode OFF!" ) );
                 }
-                if (u.has_effect(effect_laserlocked)) {
-                    u.remove_effect(effect_laserlocked);
+                if( u.has_effect( effect_laserlocked ) ) {
+                    u.remove_effect( effect_laserlocked );
                     safe_mode_warning_logged = false;
                 }
                 break;
 
             case ACTION_TOGGLE_AUTOSAFE: {
-                auto& autosafemode_option = get_options().get_option("AUTOSAFEMODE");
-                add_msg(m_info,
-                        autosafemode_option.value_as<bool>()
-                            ? _("Auto safe mode OFF!")
-                            : _("Auto safe mode ON!"));
+                auto& autosafemode_option = get_options().get_option( "AUTOSAFEMODE" );
+                add_msg( m_info,
+                         autosafemode_option.value_as<bool>()
+                         ? _( "Auto safe mode OFF!" )
+                         : _( "Auto safe mode ON!" ) );
                 autosafemode_option.setNext();
                 break;
             }
 
             case ACTION_IGNORE_ENEMY:
-                if (safe_mode == SAFE_MODE_STOP) {
-                    add_msg(m_info, _("Ignoring enemy!"));
-                    for (auto& elem : u.get_mon_visible().new_seen_mon) {
+                if( safe_mode == SAFE_MODE_STOP ) {
+                    add_msg( m_info, _( "Ignoring enemy!" ) );
+                    for( auto& elem : u.get_mon_visible().new_seen_mon ) {
                         monster& critter = *elem;
-                        critter.ignoring = rl_dist(u.bub_pos(), critter.bub_pos());
+                        critter.ignoring = rl_dist( u.bub_pos(), critter.bub_pos() );
                     }
-                    set_safe_mode(SAFE_MODE_ON);
-                } else if (u.has_effect(effect_laserlocked)) {
-                    if (u.has_trait(trait_PROF_CHURL)) {
-                        add_msg(m_warning, _("You make the sign of the cross."));
+                    set_safe_mode( SAFE_MODE_ON );
+                } else if( u.has_effect( effect_laserlocked ) ) {
+                    if( u.has_trait( trait_PROF_CHURL ) ) {
+                        add_msg( m_warning, _( "You make the sign of the cross." ) );
                     } else {
-                        add_msg(m_info, _("Ignoring laser targeting!"));
+                        add_msg( m_info, _( "Ignoring laser targeting!" ) );
                     }
-                    u.remove_effect(effect_laserlocked);
+                    u.remove_effect( effect_laserlocked );
                     safe_mode_warning_logged = false;
                 }
                 break;
 
             case ACTION_WHITELIST_ENEMY:
-                if (safe_mode == SAFE_MODE_STOP && !get_safemode().empty()) {
+                if( safe_mode == SAFE_MODE_STOP && !get_safemode().empty() ) {
                     get_safemode().add_rule(
-                        get_safemode().lastmon_whitelist, Attitude::A_ANY, 0, RULE_WHITELISTED);
-                    add_msg(m_info, _("Creature whitelisted: %s"),
-                            get_safemode().lastmon_whitelist);
-                    set_safe_mode(SAFE_MODE_ON);
+                        get_safemode().lastmon_whitelist, Attitude::A_ANY, 0, RULE_WHITELISTED );
+                    add_msg( m_info, _( "Creature whitelisted: %s" ),
+                             get_safemode().lastmon_whitelist );
+                    set_safe_mode( SAFE_MODE_ON );
                     mostseen = 0;
                 } else {
                     get_safemode().show();
@@ -3807,9 +3822,9 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                 break;
 
             case ACTION_SUICIDE:
-                if (query_yn(_("Commit suicide?"))) {
-                    if (query_yn(_("REALLY commit suicide?"))) {
-                        u.apply_damage(&u, body_part_head, 99999);
+                if( query_yn( _( "Commit suicide?" ) ) ) {
+                    if( query_yn( _( "REALLY commit suicide?" ) ) ) {
+                        u.apply_damage( &u, body_part_head, 99999 );
                         u.moves = 0;
                         u.place_corpse();
                         uquit = QUIT_SUICIDE;
@@ -3818,8 +3833,8 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                 break;
 
             case ACTION_SAVE:
-                if (query_yn(_("Save and quit?"))) {
-                    if (save(true)) {
+                if( query_yn( _( "Save and quit?" ) ) ) {
+                    if( save( true ) ) {
                         u.moves = 0;
                         uquit = QUIT_SAVED;
                     }
@@ -3835,105 +3850,105 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                 return false;
 
             case ACTION_PL_INFO:
-                modal_fiber_.emplace([this]() { character_display::disp_info(u); });
+                modal_fiber_.emplace( [this]() { character_display::disp_info( u ); } );
                 break;
 
             case ACTION_MAP:
-                modal_fiber_.emplace([this]() { ui::omap::display(); });
+                modal_fiber_.emplace( [this]() { ui::omap::display(); } );
                 break;
 
             case ACTION_SKY:
-                if (m.is_outside(u.bub_pos())) {
+                if( m.is_outside( u.bub_pos() ) ) {
                     ui::omap::display_visible_weather();
                 } else {
-                    add_msg(m_info, _("You can't see the sky from here."));
+                    add_msg( m_info, _( "You can't see the sky from here." ) );
                 }
                 break;
 
             case ACTION_MISSIONS:
-                modal_fiber_.emplace([this]() { list_missions(); });
+                modal_fiber_.emplace( [this]() { list_missions(); } );
                 break;
 
             case ACTION_SCORES:
-                modal_fiber_.emplace([this]() {
-                    show_scores_ui(*achievements_tracker_ptr, stats(), get_kill_tracker());
-                });
+                modal_fiber_.emplace( [this]() {
+                    show_scores_ui( *achievements_tracker_ptr, stats(), get_kill_tracker() );
+                } );
                 break;
 
             case ACTION_DIARY:
-                modal_fiber_.emplace([this]() { diary::show_diary_ui(u.get_avatar_diary()); });
+                modal_fiber_.emplace( [this]() { diary::show_diary_ui( u.get_avatar_diary() ); } );
                 break;
 
             case ACTION_FACTIONS:
-                modal_fiber_.emplace([this]() { faction_manager_ptr->display(); });
+                modal_fiber_.emplace( [this]() { faction_manager_ptr->display(); } );
                 break;
 
             case ACTION_MORALE:
-                modal_fiber_.emplace([this]() { u.disp_morale(); });
+                modal_fiber_.emplace( [this]() { u.disp_morale(); } );
                 break;
 
             case ACTION_MESSAGES:
-                modal_fiber_.emplace([this]() { Messages::display_messages(); });
+                modal_fiber_.emplace( [this]() { Messages::display_messages(); } );
                 break;
 
             case ACTION_OPEN_WIKI:
-                if (!get_option<std::string>("WIKI_DOC_URL").empty()) {
-                    open_url(get_option<std::string>("WIKI_DOC_URL"));
+                if( !get_option<std::string>( "WIKI_DOC_URL" ).empty() ) {
+                    open_url( get_option<std::string>( "WIKI_DOC_URL" ) );
                 } else {
-                    add_msg(m_bad, _("Invalid Wiki URL specified!"));
+                    add_msg( m_bad, _( "Invalid Wiki URL specified!" ) );
                 }
                 break;
 
             case ACTION_OPEN_HHG:
-                if (!get_option<std::string>("HHG_URL").empty()) {
-                    open_url(get_option<std::string>("HHG_URL") + std::string("/?t=UNDEAD_PEOPLE"));
+                if( !get_option<std::string>( "HHG_URL" ).empty() ) {
+                    open_url( get_option<std::string>( "HHG_URL" ) + std::string( "/?t=UNDEAD_PEOPLE" ) );
                 } else {
-                    add_msg(m_bad, _("Invalid Hitchhiker's Guide URL specified!"));
+                    add_msg( m_bad, _( "Invalid Hitchhiker's Guide URL specified!" ) );
                 }
                 break;
 
             case ACTION_HELP:
-                modal_fiber_.emplace([this]() { get_help().display_help(); });
+                modal_fiber_.emplace( [this]() { get_help().display_help(); } );
                 break;
 
             case ACTION_OPTIONS:
-                modal_fiber_.emplace([this]() { get_options().show(true); });
+                modal_fiber_.emplace( [this]() { get_options().show( true ); } );
                 break;
 
             case ACTION_AUTOPICKUP:
-                modal_fiber_.emplace([this]() { get_auto_pickup().show(); });
+                modal_fiber_.emplace( [this]() { get_auto_pickup().show(); } );
                 break;
 
             case ACTION_AUTONOTES:
-                modal_fiber_.emplace([this]() { get_auto_notes_settings().show_gui(); });
+                modal_fiber_.emplace( [this]() { get_auto_notes_settings().show_gui(); } );
                 break;
 
             case ACTION_SAFEMODE:
-                modal_fiber_.emplace([this]() { get_safemode().show(); });
+                modal_fiber_.emplace( [this]() { get_safemode().show(); } );
                 break;
 
             case ACTION_DISTRACTION_MANAGER:
-                modal_fiber_.emplace([this]() { get_distraction_manager().show(); });
+                modal_fiber_.emplace( [this]() { get_distraction_manager().show(); } );
                 break;
 
             case ACTION_COLOR:
-                modal_fiber_.emplace([this]() { all_colors.show_gui(); });
+                modal_fiber_.emplace( [this]() { all_colors.show_gui(); } );
                 break;
 
             case ACTION_WORLD_MODS:
-                modal_fiber_.emplace([this]() {
+                modal_fiber_.emplace( [this]() {
                     world_generator->show_active_world_mods(
-                        world_generator->active_world->info->active_mod_order);
-                });
+                        world_generator->active_world->info->active_mod_order );
+                } );
                 break;
 
             case ACTION_DEBUG:
-                if (MAP_SHARING::isCompetitive() && !MAP_SHARING::isDebugger()) { break; }
+                if( MAP_SHARING::isCompetitive() && !MAP_SHARING::isDebugger() ) { break; }
                 debug_menu::debug();
                 break;
 
             case ACTION_LUA_CONSOLE:
-                modal_fiber_.emplace([this]() { cata::show_lua_console(); });
+                modal_fiber_.emplace( [this]() { cata::show_lua_console(); } );
                 break;
 
             case ACTION_LUA_RELOAD:
@@ -3953,110 +3968,110 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                 break;
 
             case ACTION_RELOAD_TILESET:
-                reload_tileset([](const std::string& str) { DebugLog(DL::Info, DC::Main) << str; });
+                reload_tileset( []( const std::string & str ) { DebugLog( DL::Info, DC::Main ) << str; } );
                 break;
 
             case ACTION_TOGGLE_AUTO_FEATURES:
-                get_options().get_option("AUTO_FEATURES").setNext();
+                get_options().get_option( "AUTO_FEATURES" ).setNext();
                 get_options().save();
-                add_msg(_("%s are now %s."),
-                        get_options().get_option("AUTO_FEATURES").getMenuText(),
-                        get_option<bool>("AUTO_FEATURES") ? _("ON") : _("OFF"));
+                add_msg( _( "%s are now %s." ),
+                         get_options().get_option( "AUTO_FEATURES" ).getMenuText(),
+                         get_option<bool>( "AUTO_FEATURES" ) ? _( "ON" ) : _( "OFF" ) );
                 break;
 
             case ACTION_TOGGLE_AUTO_PULP_BUTCHER:
-                get_options().get_option("AUTO_PULP_BUTCHER").setNext();
+                get_options().get_option( "AUTO_PULP_BUTCHER" ).setNext();
                 get_options().save();
-                add_msg(_("%s is now set to %s."),
-                        get_options().get_option("AUTO_PULP_BUTCHER").getMenuText(),
-                        get_options().get_option("AUTO_PULP_BUTCHER").getValueName());
+                add_msg( _( "%s is now set to %s." ),
+                         get_options().get_option( "AUTO_PULP_BUTCHER" ).getMenuText(),
+                         get_options().get_option( "AUTO_PULP_BUTCHER" ).getValueName() );
                 break;
 
             case ACTION_TOGGLE_AUTO_MINING:
-                get_options().get_option("AUTO_MINING").setNext();
+                get_options().get_option( "AUTO_MINING" ).setNext();
                 get_options().save();
-                add_msg(_("%s is now %s."), get_options().get_option("AUTO_MINING").getMenuText(),
-                        get_option<bool>("AUTO_MINING") ? _("ON") : _("OFF"));
+                add_msg( _( "%s is now %s." ), get_options().get_option( "AUTO_MINING" ).getMenuText(),
+                         get_option<bool>( "AUTO_MINING" ) ? _( "ON" ) : _( "OFF" ) );
                 break;
 
             case ACTION_TOGGLE_THIEF_MODE:
-                if (g->u.get_value("THIEF_MODE") == "THIEF_ASK") {
-                    u.set_value("THIEF_MODE", "THIEF_HONEST");
-                    u.set_value("THIEF_MODE_KEEP", "YES");
-                    add_msg(_("You will not pick up other peoples belongings."));
-                } else if (g->u.get_value("THIEF_MODE") == "THIEF_HONEST") {
-                    u.set_value("THIEF_MODE", "THIEF_STEAL");
-                    u.set_value("THIEF_MODE_KEEP", "YES");
-                    add_msg(_("You will pick up also those things that belong to others!"));
-                } else if (g->u.get_value("THIEF_MODE") == "THIEF_STEAL") {
-                    u.set_value("THIEF_MODE", "THIEF_ASK");
-                    u.set_value("THIEF_MODE_KEEP", "NO");
-                    add_msg(_("You will be reminded not to steal."));
+                if( g->u.get_value( "THIEF_MODE" ) == "THIEF_ASK" ) {
+                    u.set_value( "THIEF_MODE", "THIEF_HONEST" );
+                    u.set_value( "THIEF_MODE_KEEP", "YES" );
+                    add_msg( _( "You will not pick up other peoples belongings." ) );
+                } else if( g->u.get_value( "THIEF_MODE" ) == "THIEF_HONEST" ) {
+                    u.set_value( "THIEF_MODE", "THIEF_STEAL" );
+                    u.set_value( "THIEF_MODE_KEEP", "YES" );
+                    add_msg( _( "You will pick up also those things that belong to others!" ) );
+                } else if( g->u.get_value( "THIEF_MODE" ) == "THIEF_STEAL" ) {
+                    u.set_value( "THIEF_MODE", "THIEF_ASK" );
+                    u.set_value( "THIEF_MODE_KEEP", "NO" );
+                    add_msg( _( "You will be reminded not to steal." ) );
                 } else {
-                    add_msg(_("THIEF_MODE CONTAINED BAD VALUE [ %s ]!"),
-                            g->u.get_value("THIEF_"
-                                           "MODE"));
+                    add_msg( _( "THIEF_MODE CONTAINED BAD VALUE [ %s ]!" ),
+                             g->u.get_value( "THIEF_"
+                                             "MODE" ) );
                 }
                 break;
 
             case ACTION_TOGGLE_AUTO_FORAGING:
-                get_options().get_option("AUTO_FORAGING").setNext();
+                get_options().get_option( "AUTO_FORAGING" ).setNext();
                 get_options().save();
-                add_msg(_("%s is now set to %s."),
-                        get_options().get_option("AUTO_FORAGING").getMenuText(),
-                        get_options().get_option("AUTO_FORAGING").getValueName());
+                add_msg( _( "%s is now set to %s." ),
+                         get_options().get_option( "AUTO_FORAGING" ).getMenuText(),
+                         get_options().get_option( "AUTO_FORAGING" ).getValueName() );
                 break;
 
             case ACTION_TOGGLE_AUTO_PICKUP:
-                get_options().get_option("AUTO_PICKUP").setNext();
+                get_options().get_option( "AUTO_PICKUP" ).setNext();
                 get_options().save();
-                add_msg(_("%s is now set to %s."),
-                        get_options().get_option("AUTO_PICKUP").getMenuText(),
-                        get_options().get_option("AUTO_PICKUP").getValueName());
+                add_msg( _( "%s is now set to %s." ),
+                         get_options().get_option( "AUTO_PICKUP" ).getMenuText(),
+                         get_options().get_option( "AUTO_PICKUP" ).getValueName() );
                 break;
 
             case ACTION_DISPLAY_SCENT:
-                if (MAP_SHARING::isCompetitive() && !MAP_SHARING::isDebugger()) { break; }
+                if( MAP_SHARING::isCompetitive() && !MAP_SHARING::isDebugger() ) { break; }
                 display_scent();
                 break;
 
             case ACTION_DISPLAY_SCENT_TYPE:
-                if (MAP_SHARING::isCompetitive() && !MAP_SHARING::isDebugger()) { break; }
+                if( MAP_SHARING::isCompetitive() && !MAP_SHARING::isDebugger() ) { break; }
                 display_scent();
                 break;
 
             case ACTION_DISPLAY_TEMPERATURE:
-                if (MAP_SHARING::isCompetitive() && !MAP_SHARING::isDebugger()) { break; }
+                if( MAP_SHARING::isCompetitive() && !MAP_SHARING::isDebugger() ) { break; }
                 display_temperature();
                 break;
 
             case ACTION_DISPLAY_VEHICLE_AI:
-                if (MAP_SHARING::isCompetitive() && !MAP_SHARING::isDebugger()) { break; }
+                if( MAP_SHARING::isCompetitive() && !MAP_SHARING::isDebugger() ) { break; }
                 display_vehicle_ai();
                 break;
 
             case ACTION_DISPLAY_VISIBILITY:
-                if (MAP_SHARING::isCompetitive() && !MAP_SHARING::isDebugger()) { break; }
+                if( MAP_SHARING::isCompetitive() && !MAP_SHARING::isDebugger() ) { break; }
                 display_visibility();
                 break;
 
             case ACTION_DISPLAY_LIGHTING:
-                if (MAP_SHARING::isCompetitive() && !MAP_SHARING::isDebugger()) { break; }
+                if( MAP_SHARING::isCompetitive() && !MAP_SHARING::isDebugger() ) { break; }
                 display_lighting();
                 break;
 
             case ACTION_DISPLAY_RADIATION:
-                if (MAP_SHARING::isCompetitive() && !MAP_SHARING::isDebugger()) { break; }
+                if( MAP_SHARING::isCompetitive() && !MAP_SHARING::isDebugger() ) { break; }
                 display_radiation();
                 break;
 
             case ACTION_DISPLAY_TRANSPARENCY:
-                if (MAP_SHARING::isCompetitive() && !MAP_SHARING::isDebugger()) { break; }
+                if( MAP_SHARING::isCompetitive() && !MAP_SHARING::isDebugger() ) { break; }
                 display_transparency();
                 break;
 
             case ACTION_DISPLAY_OUTSIDE:
-                if (MAP_SHARING::isCompetitive() && !MAP_SHARING::isDebugger()) { break; }
+                if( MAP_SHARING::isCompetitive() && !MAP_SHARING::isDebugger() ) { break; }
                 display_outside();
                 break;
 
@@ -4077,12 +4092,12 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                 break;
 
             case ACTION_TOGGLE_DEBUG_MODE:
-                if (MAP_SHARING::isCompetitive() && !MAP_SHARING::isDebugger()) { break; }
+                if( MAP_SHARING::isCompetitive() && !MAP_SHARING::isDebugger() ) { break; }
                 debug_mode = !debug_mode;
-                if (debug_mode) {
-                    add_msg(m_info, _("Debug mode ON!"));
+                if( debug_mode ) {
+                    add_msg( m_info, _( "Debug mode ON!" ) );
                 } else {
-                    add_msg(m_info, _("Debug mode OFF!"));
+                    add_msg( m_info, _( "Debug mode OFF!" ) );
                 }
                 break;
 
@@ -4097,11 +4112,11 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                 break;
 
             case ACTION_ITEMACTION:
-                modal_fiber_.emplace([this]() { item_action_menu(); });
+                modal_fiber_.emplace( [this]() { item_action_menu(); } );
                 break;
 
             case ACTION_AUTOATTACK:
-                avatar_action::autoattack(u, m);
+                avatar_action::autoattack( u, m );
                 break;
 
             default:
@@ -4113,16 +4128,16 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
     // Client co-op: forward world-affecting actions to the host proxy.
     // The local action already executed above for instant visual feedback
     // (local prediction).  The host mirrors via execute_client_action().
-    if (coop_client_) {
+    if( coop_client_ ) {
         // Build a typed command and forward it to the host proxy.
         // Fire is queued from inside modal_fiber_ above; burst-fire below.
-        const auto move_cmd = make_player_move_cmd(act, iso_rotate::yes);
-        if (move_cmd.kind == player_cmd_kind::move) {
+        const auto move_cmd = make_player_move_cmd( act, iso_rotate::yes );
+        if( move_cmd.kind == player_cmd_kind::move ) {
             // Only queue if the move actually succeeded — blocked moves leave
             // g->u at coop_pos_before_ and cause wall-flicker on replay.
-            const bool actually_moved = (u.bub_pos().raw() != coop_pos_before_.raw());
-            const auto dir = move_cmd_to_dir_string(move_cmd);
-            if (!dir.empty() && actually_moved) { coop_client_->queue_action(std::string(dir)); }
+            const bool actually_moved = ( u.bub_pos().raw() != coop_pos_before_.raw() );
+            const auto dir = move_cmd_to_dir_string( move_cmd );
+            if( !dir.empty() && actually_moved ) { coop_client_->queue_action( std::string( dir ) ); }
             // D4: haul relay — items dragged to the new tile need DROP + ITEM_REMOVE_ALL on host.
             if( u.is_hauling() && actually_moved ) {
                 const auto new_abs = m.bub_to_abs( u.bub_pos() );
@@ -4149,65 +4164,65 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                 jr.end_object();
                 coop_client_->queue_action( "ITEM_REMOVE_ALL", rm_ctx.str() );
             }
-        } else if (act == ACTION_PAUSE || act == ACTION_TIMEOUT || act == ACTION_WAIT) {
-            coop_client_->queue_action("PAUSE");
-        } else if (act == ACTION_PICKUP || act == ACTION_PICKUP_ALL || act == ACTION_PICKUP_FEET) {
-            coop_client_->queue_action("PICKUP");
-        } else if (act == ACTION_SLEEP) {
-            coop_client_->queue_action("SLEEP");
-        } else if (act == ACTION_CRAFT || act == ACTION_LONGCRAFT || act == ACTION_RECRAFT) {
-            coop_client_->queue_action("CRAFT");
-        } else if (act == ACTION_EAT) {
+        } else if( act == ACTION_PAUSE || act == ACTION_TIMEOUT || act == ACTION_WAIT ) {
+            coop_client_->queue_action( "PAUSE" );
+        } else if( act == ACTION_PICKUP || act == ACTION_PICKUP_ALL || act == ACTION_PICKUP_FEET ) {
+            coop_client_->queue_action( "PICKUP" );
+        } else if( act == ACTION_SLEEP ) {
+            coop_client_->queue_action( "SLEEP" );
+        } else if( act == ACTION_CRAFT || act == ACTION_LONGCRAFT || act == ACTION_RECRAFT ) {
+            coop_client_->queue_action( "CRAFT" );
+        } else if( act == ACTION_EAT ) {
             // B3 Phase 7: eat/drink — no-payload relay.
-            coop_client_->queue_action("EAT");
-        } else if (act == ACTION_RELOAD_ITEM || act == ACTION_RELOAD_WEAPON
-                   || act == ACTION_RELOAD_WIELDED) {
+            coop_client_->queue_action( "EAT" );
+        } else if( act == ACTION_RELOAD_ITEM || act == ACTION_RELOAD_WEAPON
+                   || act == ACTION_RELOAD_WIELDED ) {
             // B3 Phase 7: reload — no-payload relay.
-            coop_client_->queue_action("RELOAD");
-        } else if (act == ACTION_USE) {
+            coop_client_->queue_action( "RELOAD" );
+        } else if( act == ACTION_USE ) {
             // B3 Phase 8: use/activate item — no-payload relay.
-            coop_client_->queue_action("USE");
-        } else if (act == ACTION_FIRE) {
+            coop_client_->queue_action( "USE" );
+        } else if( act == ACTION_FIRE ) {
             // Queued from inside modal_fiber_ above — nothing here.
-        } else if (act == ACTION_FIRE_BURST) {
+        } else if( act == ACTION_FIRE_BURST ) {
             // Burst runs inline; last_target_pos is valid immediately.
-            if (u.last_target_pos.has_value()) {
+            if( u.last_target_pos.has_value() ) {
                 const auto& tap = *u.last_target_pos;
                 std::ostringstream ctx_oss;
-                JsonOut ctx_jout(ctx_oss);
+                JsonOut ctx_jout( ctx_oss );
                 ctx_jout.start_object();
-                ctx_jout.member("tx", tap.x());
-                ctx_jout.member("ty", tap.y());
-                ctx_jout.member("tz", tap.z());
-                if (u.is_armed() && u.primary_weapon().is_gun()) {
-                    ctx_jout.member("weapon_id", u.primary_weapon().typeId().str());
+                ctx_jout.member( "tx", tap.x() );
+                ctx_jout.member( "ty", tap.y() );
+                ctx_jout.member( "tz", tap.z() );
+                if( u.is_armed() && u.primary_weapon().is_gun() ) {
+                    ctx_jout.member( "weapon_id", u.primary_weapon().typeId().str() );
                     const itype_id cur_ammo = u.primary_weapon().ammo_current();
-                    if (!cur_ammo.is_null()) {
-                        ctx_jout.member("ammo_id", cur_ammo.str());
+                    if( !cur_ammo.is_null() ) {
+                        ctx_jout.member( "ammo_id", cur_ammo.str() );
                     }
                 }
                 ctx_jout.end_object();
-                coop_client_->queue_action("FIRE", ctx_oss.str());
+                coop_client_->queue_action( "FIRE", ctx_oss.str() );
             }
-        } else if (act == ACTION_MOVE_UP || act == ACTION_MOVE_DOWN) {
+        } else if( act == ACTION_MOVE_UP || act == ACTION_MOVE_DOWN ) {
             // Queue only if vertical_move() actually changed z — it can fail (no stairs,
             // blocked, etc.). coop_pos_before_ captures the pre-action bub_pos (existing local).
-            if (u.bub_pos().z() != coop_pos_before_.z()) {
+            if( u.bub_pos().z() != coop_pos_before_.z() ) {
                 const auto ap = u.abs_pos();
                 const auto ctx =
-                    "{\"ax\":" + std::to_string(ap.x()) +
-                    ",\"ay\":" + std::to_string(ap.y()) +
-                    ",\"az\":" + std::to_string(ap.z()) + "}";
+                    "{\"ax\":" + std::to_string( ap.x() ) +
+                    ",\"ay\":" + std::to_string( ap.y() ) +
+                    ",\"az\":" + std::to_string( ap.z() ) + "}";
                 coop_client_->queue_action(
-                    act == ACTION_MOVE_UP ? "MOVE_UP" : "MOVE_DOWN", ctx);
+                    act == ACTION_MOVE_UP ? "MOVE_UP" : "MOVE_DOWN", ctx );
             }
-        } else if (act == ACTION_AUTOATTACK) {
+        } else if( act == ACTION_AUTOATTACK ) {
             // B3 Phase 9: relay MELEE to host proxy.
             // autoattack() calls C++ move()/reach_attack() directly — no MOVE packet fires.
             // coop_session::last_autoattack_target is set ONLY on success; cleared at entry
             // so failed autoattacks (no hostiles) relay nothing.
             const auto& tgt = coop_session::get().last_autoattack_target;
-            if (tgt.has_value()) {
+            if( tgt.has_value() ) {
                 // CL-MELEE-WEAPON: embed weapon at attack time (same pattern as FIRE ctx_json).
                 std::ostringstream melee_ctx_oss;
                 JsonOut melee_ctx_jout( melee_ctx_oss );
@@ -4262,8 +4277,8 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                 if( !g->coop_server_->client_downed() ) {
                     add_msg( m_info, _( "Partner is not downed." ) );
                 } else if( show_coop_popup( string_format(
-                               _( "Stabilize %s? (consumes bandage or first aid kit)" ),
-                               sess.partner_name ) ) ) {
+                                                _( "Stabilize %s? (consumes bandage or first aid kit)" ),
+                                                sess.partner_name ) ) ) {
                     g->coop_server_->stabilize_client();
                 }
             } else if( act == ACTION_CO_OP_PASS_ITEM && sess.is_client() ) {
@@ -4275,13 +4290,13 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
     }
 #endif // COOP_ENABLED
 
-    if (act != ACTION_TIMEOUT) { u.mod_moves(-current_turn.moves_elapsed()); }
-    gamemode->post_action(act);
+    if( act != ACTION_TIMEOUT ) { u.mod_moves( -current_turn.moves_elapsed() ); }
+    gamemode->post_action( act );
 
-    u.movecounter = (!u.is_dead_state() ? (before_action_moves - u.moves) : 0);
-    dbg(DL::Info) << string_format(
-        "%s: [%d] %d - %d = %d", action_ident(act), to_turn<int>(calendar::turn),
-        before_action_moves, u.movecounter, u.moves);
-    return (!u.is_dead_state());
+    u.movecounter = ( !u.is_dead_state() ? ( before_action_moves - u.moves ) : 0 );
+    dbg( DL::Info ) << string_format(
+                        "%s: [%d] %d - %d = %d", action_ident( act ), to_turn<int>( calendar::turn ),
+                        before_action_moves, u.movecounter, u.moves );
+    return ( !u.is_dead_state() );
 }
 #endif // COOP_ENABLED

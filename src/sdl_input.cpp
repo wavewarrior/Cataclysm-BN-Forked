@@ -657,6 +657,12 @@ void CheckMessages( display_context &d )
                 }
                 break;
 
+            case SDL_EVENT_MOUSE_BUTTON_DOWN:
+                if( ev.button.button == SDL_BUTTON_RIGHT && !rmlui_layer::active() ) {
+                    d.last_input = input_event( MOUSE_BUTTON_RIGHT_DOWN, input_event_t::mouse );
+                }
+                break;
+
             case SDL_EVENT_MOUSE_WHEEL:
                 if( ev.wheel.y > 0 ) {
                     d.last_input = input_event( SCROLLWHEEL_UP, input_event_t::mouse );

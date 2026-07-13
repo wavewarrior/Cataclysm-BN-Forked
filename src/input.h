@@ -9,6 +9,7 @@
 #include <optional>
 
 #include "coordinates.h"
+#include "units_angle.h"
 #include "translations.h"
 
 enum action_id : int;
@@ -86,7 +87,7 @@ static constexpr int NUMPAD_0 = 0x40a;
 bool is_mouse_enabled();
 std::string get_input_string_from_file( const std::string &fname = "input.txt" );
 
-enum mouse_buttons { MOUSE_BUTTON_LEFT = 1, MOUSE_BUTTON_RIGHT, SCROLLWHEEL_UP, SCROLLWHEEL_DOWN, MOUSE_MOVE };
+enum mouse_buttons { MOUSE_BUTTON_LEFT = 1, MOUSE_BUTTON_RIGHT, SCROLLWHEEL_UP, SCROLLWHEEL_DOWN, MOUSE_MOVE, MOUSE_BUTTON_RIGHT_DOWN };
 
 enum class input_event_t : int  {
     error,
@@ -522,6 +523,12 @@ class input_context
          *       For overmap, we'll need another version that spits out tripoint_rel_omt
          */
         std::optional<tripoint_bub_ms> get_coordinates( const catacurses::window &capture_win_ );
+
+        /// Returns aim angle from src tile centre to current mouse pixel.
+        /// Returns nullopt in curses builds (tilecontext is null) or when cursor
+        /// is on src (distance < 0.01 tiles).
+        auto get_aim_angle_to_src( const tripoint_bub_ms &src ) const
+        -> std::optional<units::angle>;
 
         // Below here are shortcuts for registering common key combinations.
         void register_directions();

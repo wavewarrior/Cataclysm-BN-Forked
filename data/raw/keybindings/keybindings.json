@@ -1150,6 +1150,12 @@
   },
   {
     "type": "keybinding",
+    "id": "AIM_HOLD",
+    "name": "Hold to Aim",
+    "bindings": [ { "input_method": "mouse", "key": "MOUSE_RIGHT_DOWN" } ]
+  },
+  {
+    "type": "keybinding",
     "id": "MOUSE_MOVE",
     "name": "Mouse Move",
     "bindings": [ { "input_method": "mouse", "key": "MOUSE_MOVE" } ]

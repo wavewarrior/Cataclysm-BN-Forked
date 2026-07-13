@@ -170,6 +170,8 @@ enum action_id : int {
     ACTION_THROW,
     /** Fire the wielded weapon, or open fire menu if none */
     ACTION_FIRE,
+    /** Hold RMB to enter aim mode; releases via RMB-up, fires via LMB */
+    ACTION_AIM_HOLD,
     /** Burst-fire the current weapon */
     ACTION_FIRE_BURST,
     /** Change fire mode of the current weapon */

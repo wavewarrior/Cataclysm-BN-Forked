@@ -203,6 +203,8 @@ std::string action_ident( action_id act )
             return "throw";
         case ACTION_FIRE:
             return "fire";
+        case ACTION_AIM_HOLD:
+            return "aim_hold";
         case ACTION_FIRE_BURST:
             return "fire_burst";
         case ACTION_CAST_SPELL:

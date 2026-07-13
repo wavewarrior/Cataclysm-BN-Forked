@@ -853,6 +853,10 @@ class game: public submap_load_listener
         void draw_sct();
         void draw_zones( const zone_draw_options& options );
         void draw_cursor( const tripoint_bub_ms& p );
+        auto draw_aim_crosshair( point pixel ) -> void;
+        auto draw_throw_arc( const tripoint_bub_ms &src, const tripoint_bub_ms &dst, float charge ) -> void;
+        auto draw_throw_impact( const tripoint_bub_ms &dst, float max_radius_tiles ) -> void;
+        auto void_throw_impact() -> void;
         // Draw a highlight graphic at p, for example when examining something.
         // TILES only, in curses this does nothing
         void draw_highlight( const tripoint_bub_ms& p );
