@@ -533,6 +533,11 @@
       "str_max": 15,
       "str_min_supported": 100,
       "items": [ { "item": "rag", "count": [ 0, 1 ] }, { "item": "nail", "charges": [ 1, 4 ] } ]
+    },
+    "acoustics": {
+      "transmission_loss_db": 0.0,
+      "absorption_coefficient": 0.7,
+      "surface_type": "porous"
     }
   },
   {

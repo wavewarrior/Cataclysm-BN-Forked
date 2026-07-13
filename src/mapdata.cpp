@@ -477,6 +477,15 @@ void plant_data::deserialize( JsonIn &jsin )
     assign( j, "growth_multiplier", growth_multiplier );
     assign( j, "harvest_multiplier", harvest_multiplier );
 }
+void map_acoustics_info::deserialize( JsonIn &jsin )
+{
+    JsonObject j = jsin.get_object();
+
+    assign( j, "transmission_loss_db", transmission_loss_db );
+    assign( j, "absorption_coefficient", absorption_coefficient );
+    assign( j, "low_freq_bonus", low_freq_bonus );
+    assign( j, "surface_type", surface_type );
+}
 
 pry_result::pry_result() : pry_quality( -1 ), pry_bonus_mult( 1 ),
     difficulty( 1 ), noise( 0 ),
@@ -1406,6 +1415,7 @@ void map_data_common_t::load( const JsonObject &jo, const std::string &src )
         set_flag( flag );
     }
     optional( jo, was_loaded, "curtain_transform", curtain_transform );
+    optional( jo, was_loaded, "acoustics", acoustics );
 }
 
 bool ter_t::is_null() const

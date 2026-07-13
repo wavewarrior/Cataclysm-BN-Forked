@@ -428,10 +428,22 @@ class activity_data_furn : public activity_data_common
         furn_str_id result_;
 };
 
+/// Acoustic properties for sound occlusion (overrides heuristic derivation)
+struct map_acoustics_info {
+    float transmission_loss_db = -1.0f;  ///< -1 = use heuristic; 0-50 = explicit dB loss
+    float absorption_coefficient = -1.0f; ///< -1 = use heuristic; 0-1 = absorption (1=total)
+    float low_freq_bonus = 0.0f;         ///< Extra dB loss for low frequencies (<500Hz)
+    std::string surface_type;            ///< "hard", "soft", "porous", "glass" (metadata)
+
+    void deserialize( JsonIn &jsin );
+
+    bool operator==( const map_acoustics_info& ) const = default;
+};
 struct map_data_common_t {
         map_bash_info bash;
         map_deconstruct_info deconstruct;
         pry_result           pry;
+        map_acoustics_info acoustics;
 
     public:
         virtual ~map_data_common_t() = default;
