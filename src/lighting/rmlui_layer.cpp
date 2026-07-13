@@ -833,7 +833,7 @@ void new_frame() {
 void prepare(SDL_GPUCommandBuffer* cb) {
     const bool doc = g_ready && any_open() && g_context != nullptr;
     const bool wt = world_text_have();
-    if (!doc && !wt) { return; }
+    if (!doc && !wt) { g_world_geom.clear(); return; }
     // Pre-render OUTSIDE the render pass so geometry compiles immediately (not
     // deferred by begin_render_pass). Then upload_pending uploads the compiled
     // data to GPU buffers. The real render pass's ctx->Render() reuses the cached
