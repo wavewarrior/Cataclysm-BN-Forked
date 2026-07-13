@@ -2258,7 +2258,7 @@ static void cycle_action( item& weap, const tripoint_bub_ms& pos )
 
             sfx::play_variant_sound(
                 "fire_gun", "brass_eject", sfx::get_heard_volume( eject ),
-                sfx::get_heard_angle( eject ) );
+                sfx::get_heard_angle( eject ), sfx::get_heard_distance( eject ) );
         }
     }
 

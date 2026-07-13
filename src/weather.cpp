@@ -451,12 +451,12 @@ void weather_effect::thunder( int intensity )
     if( !g->u.has_effect( effect_sleep ) && !g->u.is_deaf() && one_in( intensity ) ) {
         if( g->get_levz() >= 0 ) {
             add_msg( _( "You hear a distant rumble of thunder." ) );
-            sfx::play_variant_sound( "environment", "thunder_far", 80, random_direction() );
+            sfx::play_variant_sound( "environment", "thunder_far", 80, random_direction(), 0 );
         } else if( one_in( std::max( roll_remainder( 2.0f * g->get_levz() /
                                      g->u.mutation_value( "hearing_modifier" ) ), 1 ) ) ) {
             add_msg( _( "You hear a rumble of thunder from above." ) );
             sfx::play_variant_sound( "environment", "thunder_far",
-                                     ( 80 * g->u.mutation_value( "hearing_modifier" ) ), random_direction() );
+                                     ( 80 * g->u.mutation_value( "hearing_modifier" ) ), random_direction(), 0 );
         }
     }
 }
@@ -474,7 +474,7 @@ void weather_effect::lightning( int intensity )
     if( one_in( intensity ) ) {
         if( g->get_levz() >= 0 ) {
             add_msg( _( "A flash of lightning illuminates your surroundings!" ) );
-            sfx::play_variant_sound( "environment", "thunder_near", 100, random_direction() );
+            sfx::play_variant_sound( "environment", "thunder_near", 100, random_direction(), 0 );
             get_weather().lightning_active = true;
 
             // Push a brief, wide lightning flash to the GPU emitter pipeline.

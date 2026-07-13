@@ -408,7 +408,7 @@ bool melee_actor::call( monster &z ) const
     if( hitspread < 0 ) {
         auto msg_type = target->is_avatar() ? m_warning : m_info;
         sfx::play_variant_sound( "mon_bite", "bite_miss", sfx::get_heard_volume( z.bub_pos() ),
-                                 sfx::get_heard_angle( z.bub_pos() ) );
+                                 sfx::get_heard_angle( z.bub_pos() ), sfx::get_heard_distance( z.bub_pos() ) );
         target->add_msg_player_or_npc( msg_type, miss_msg_u, miss_msg_npc, z.name() );
         return true;
     }
@@ -433,7 +433,7 @@ bool melee_actor::call( monster &z ) const
         on_damage( z, *target, dealt_damage );
     } else {
         sfx::play_variant_sound( "mon_bite", "bite_miss", sfx::get_heard_volume( z.bub_pos() ),
-                                 sfx::get_heard_angle( z.bub_pos() ) );
+                                 sfx::get_heard_angle( z.bub_pos() ), sfx::get_heard_distance( z.bub_pos() ) );
         target->add_msg_player_or_npc( m_neutral, no_dmg_msg_u, no_dmg_msg_npc, z.name(),
                                        body_part_name_accusative( bp_hit ) );
     }
@@ -447,7 +447,7 @@ void melee_actor::on_damage( monster &z, Creature &target, dealt_damage_instance
 {
     if( target.is_player() ) {
     sfx::play_variant_sound( "mon_bite", "bite_hit", sfx::get_heard_volume( z.bub_pos() ),
-                             sfx::get_heard_angle( z.bub_pos() ) );
+                             sfx::get_heard_angle( z.bub_pos() ), sfx::get_heard_distance( z.bub_pos() ) );
         sfx::do_player_death_hurt( dynamic_cast<player &>( target ), false );
     }
     auto msg_type = target.attitude_to( g->u ) == Attitude::A_FRIENDLY ? m_bad : m_neutral;

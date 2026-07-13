@@ -593,7 +593,7 @@ if( !track ) {
 }
 
 auto sfx::play_variant_sound( const std::string &id, const std::string &variant, const int volume,
-                              const units::angle angle,
+                              const units::angle angle, int distance,
                               double /*pitch_min*/, double /*pitch_max*/ ) -> void
 {
     if( test_mode ) {
@@ -624,7 +624,9 @@ if( !track ) {
     MIX_SetTrackGain( track, volume_to_gain( vol ) );
 
     const float angle_rad = static_cast<float>( to_degrees( angle ) ) * SDL_PI_F / 180.0f;
-    const MIX_Point3D pos = { SDL_sinf( angle_rad ), 0.0f, SDL_cosf( angle_rad ) };
+    constexpr float TILE_SCALE = 1.5f;
+    const float dist = std::max( static_cast<float>( distance ) * TILE_SCALE, 1.0f );
+    const MIX_Point3D pos = { SDL_sinf( angle_rad ) * dist, 0.0f, SDL_cosf( angle_rad ) * dist };
     MIX_SetTrack3DPosition( track, &pos );
 
     MIX_SetTrackAudio( track, audio );
@@ -793,7 +795,7 @@ if( !track || !MIX_TrackPlaying( track ) ) {
 }
 
 auto sfx::set_channel_3d_position( const channel channel, const units::angle angle,
-                                   int /*distance*/ ) -> void
+                                   int distance, int elevation ) -> void
 {
     if( !sound_init_success || channel == channel::any ) {
         return;
@@ -804,7 +806,10 @@ auto sfx::set_channel_3d_position( const channel channel, const units::angle ang
         return;
     }
     const float angle_rad = static_cast<float>( to_degrees( angle ) ) * SDL_PI_F / 180.0f;
-    const MIX_Point3D pos = { SDL_sinf( angle_rad ), 0.0f, SDL_cosf( angle_rad ) };
+    constexpr float TILE_SCALE = 1.5f;
+    const float dist = std::max( static_cast<float>( distance ) * TILE_SCALE, 1.0f );
+    const float elev = static_cast<float>( elevation ) * TILE_SCALE;
+    const MIX_Point3D pos = { SDL_sinf( angle_rad ) * dist, elev, SDL_cosf( angle_rad ) * dist };
     MIX_SetTrack3DPosition( track, &pos );
 }
 

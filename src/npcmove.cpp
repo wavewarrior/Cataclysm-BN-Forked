@@ -4559,7 +4559,7 @@ void npc::do_reload( item& it )
         add_msg( _( "%1$s reloads their %2$s." ), name, it.tname() );
         sfx::play_variant_sound(
             "reload", it.typeId().str(), sfx::get_heard_volume( bub_pos() ),
-            sfx::get_heard_angle( bub_pos() ) );
+            sfx::get_heard_angle( bub_pos() ), sfx::get_heard_distance( bub_pos() ) );
     }
 
     // Otherwise the NPC may not equip the weapon until they see danger

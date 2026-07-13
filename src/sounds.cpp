@@ -10,6 +10,7 @@
 #include <set>
 #include <system_error>
 #include <unordered_map>
+#include <map>
 
 #include "avatar.h"
 #include "character.h"
@@ -170,6 +171,21 @@ static std::vector<std::pair<tripoint_bub_ms, sound_event>> sounds_since_last_tu
 // The sound events currently displayed to the player.
 static std::unordered_map<tripoint_bub_ms, sound_event> sound_markers;
 
+// Occlusion cache: maps (source, listener) pairs to computed transmission loss in dB.
+// Uses std::map for LRU-style eviction when capacity is exceeded.
+struct occlusion_cache_key {
+    tripoint_bub_ms source;
+    tripoint_bub_ms listener;
+    bool operator<( const occlusion_cache_key &other ) const {
+        if( source != other.source ) {
+            return source < other.source;
+        }
+        return listener < other.listener;
+    }
+};
+static std::map<occlusion_cache_key, float> _occlusion_cache;
+static const size_t OCCLUSION_CACHE_MAX = 512;
+
 // This is an attempt to handle attenuation of sound for underground areas.
 // The main issue it adresses is that you can hear activity
 // relatively deep underground while on the surface.
@@ -192,6 +208,126 @@ static int sound_distance( const tripoint_bub_ms &source, const tripoint_bub_ms 
     // Regardless of underground effects, scale the vertical distance by 5x.
     vertical_attenuation *= 5;
     return rl_dist( source.xy(), sink.xy() ) + vertical_attenuation;
+}
+
+// Compute transmission loss (in dB) for a single tile based on its terrain/furniture.
+// Checks explicit acoustics data first; falls back to bash-str heuristic when absent.
+static float derive_transmission_loss( const tripoint_bub_ms &pos )
+{
+    if( !get_map().inbounds( pos ) ) {
+        return 0.0f;
+    }
+
+    float loss = 0.0f;
+
+    // Helper lambda: use explicit acoustics if available, otherwise fall back to bash heuristic
+    auto compute_loss = []( const map_data_common_t& obj ) -> float {
+        // Check explicit acoustics first
+        if( obj.acoustics.transmission_loss_db >= 0.0f ) {
+            float loss = obj.acoustics.transmission_loss_db;
+            loss *= static_cast<float>( obj.coverage ) / 100.0f;
+            if( obj.transparent ) {
+                loss *= 0.3f;
+            }
+            return std::min( loss, 50.0f );
+        }
+        // Fall back to bash-strength heuristic
+        const int bash_str = obj.bash.str_max;
+        if( bash_str > 0 ) {
+            return std::min( 10.0f * std::log10f( static_cast<float>( bash_str ) + 1.0f ), 50.0f );
+        }
+        return 0.0f;
+    };
+
+    // Check furniture
+    const auto fid = get_map().furn( pos );
+    if( fid ) {
+        loss = compute_loss( fid.obj() );
+    }
+
+    // Check terrain
+    const auto tid = get_map().ter( pos );
+    if( tid ) {
+        loss += compute_loss( tid.obj() );
+    }
+
+    return loss;
+}
+
+// Compute total occlusion (transmission loss in dB) along the acoustic path from source to listener.
+// Uses 8-ray averaging around the direct angle to simulate diffraction around obstacles.
+// Results are cached to avoid recomputing for the same source-listener pair.
+static float compute_occlusion_along_ray( const tripoint_bub_ms &source,
+                                          const tripoint_bub_ms &listener )
+{
+    // Near-field: sounds within 3 tiles have negligible occlusion
+    const int dist = rl_dist( source.xy(), listener.xy() );
+    if( dist < 3 ) {
+        return 0.0f;
+    }
+
+    // Different Z levels: occlusion doesn't apply (vertical propagation)
+    if( source.z() != listener.z() ) {
+        return 0.0f;
+    }
+
+    // Check cache first
+    const occlusion_cache_key key { source, listener };
+    auto cache_it = _occlusion_cache.find( key );
+    if( cache_it != _occlusion_cache.end() ) {
+        return cache_it->second;
+    }
+
+    // Cast 8 rays around the direct angle to simulate diffraction
+    constexpr double PI_D = M_PI;
+    const units::angle base_angle = coord_to_angle( source, listener );
+    const int ray_count = 8;
+    float total_loss = 0.0f;
+    int valid_rays = 0;
+
+    for( int i = 0; i < ray_count; i++ ) {
+        // Spread rays evenly around the circle, centered on the base angle
+        const double spread = ( static_cast<double>( i ) / static_cast<double>( ray_count ) - 0.5 ) * ( PI_D / 4.0 );
+        const units::angle ray_angle_unit = base_angle + units::from_radians( spread );
+        const double ray_angle_rad = units::to_radians( ray_angle_unit );
+
+        const auto ray_path = get_map().ray_cast_angle( source, ray_angle_rad, dist );
+
+        // Sum occlusion along this ray path, skipping source and listener tiles
+        float ray_loss = 0.0f;
+        for( size_t j = 1; j < ray_path.size(); j++ ) {
+            const auto &tile = ray_path[j];
+            if( tile == listener ) {
+                break;
+            }
+            ray_loss += derive_transmission_loss( tile );
+        }
+
+        // Weight this ray: central rays contribute more than edge rays
+        const float weight = 1.0f - ( std::abs( static_cast<float>( i ) - static_cast<float>( ray_count / 2 ) ) /
+                                      static_cast<float>( ray_count / 2 ) ) * 0.5f;
+        total_loss += ray_loss * weight;
+        valid_rays++;
+    }
+
+    // Average the weighted losses
+    float result = 0.0f;
+    if( valid_rays > 0 ) {
+        // Normalize by sum of weights (which equals ray_count * avg_weight ≈ ray_count * 0.75)
+        const float weight_sum = static_cast<float>( ray_count ) * 0.75f;
+        result = total_loss / weight_sum;
+    }
+
+    // Cap at reasonable maximum (60dB = essentially inaudible)
+    result = std::min( result, 60.0f );
+
+    // Store in cache, evict oldest if at capacity
+    if( _occlusion_cache.size() >= OCCLUSION_CACHE_MAX ) {
+        _occlusion_cache.erase( _occlusion_cache.begin() );
+    }
+    _occlusion_cache[ key ] = result;
+
+    return result;
 }
 
 void sounds::ambient_sound( const tripoint_bub_ms &p, int vol, sound_t category,
@@ -488,8 +624,10 @@ void sounds::process_sound_markers( Character *who )
         }
 
         // The heard volume of a sound is the player heard volume, regardless of true volume level.
+        // Material occlusion reduces heard volume based on terrain/furniture between source and listener.
+        const float occlusion_db = compute_occlusion_along_ray( pos, who->bub_pos() );
         const int heard_volume = static_cast<int>( ( raw_volume - weather_vol ) *
-                                 volume_multiplier ) - distance_to_sound;
+                                 volume_multiplier ) - distance_to_sound - static_cast<int>( occlusion_db );
 
         if( heard_volume <= 0 && pos != who->bub_pos() ) {
             continue;
@@ -635,6 +773,7 @@ void sounds::reset_sounds()
     sound_markers.clear();
     _cached_sound_vis.clear();
     _cached_sound_rays.clear();
+    _occlusion_cache.clear();
 }
 
 void sounds::reset_markers()
@@ -712,6 +851,13 @@ static void _snapshot_sound_visualization( const tripoint_bub_ms &viewer_pos )
                 if( dx == 0 && dy == 0 ) {
                     data.is_source = true;
                 }
+
+                // Accumulate occlusion data for this tile from this source
+                if( tile != source_pos ) {
+                    const float tile_occlusion = compute_occlusion_along_ray( source_pos, tile );
+                    // Weight occlusion by contribution (louder sounds dominate perception)
+                    data.occlusion_db = data.occlusion_db + tile_occlusion * contrib;
+                }
             }
         }
 
@@ -729,7 +875,7 @@ static void _snapshot_sound_visualization( const tripoint_bub_ms &viewer_pos )
         ray.source = source_pos;
         ray.target = viewer_pos;
         ray.category = sound_event.category;
-        ray.occlusion_db = 0.0f;
+        ray.occlusion_db = compute_occlusion_along_ray( source_pos, viewer_pos );
 
         const auto angle = units::atan2(
                                static_cast<double>( viewer_pos.y() - source_pos.y() ),
@@ -847,11 +993,11 @@ void sfx::do_vehicle_engine_sfx()
 
     if( current_gear > previous_gear ) {
         play_variant_sound( "vehicle", "gear_shift", get_heard_volume( player_character.bub_pos() ),
-                            0_degrees, 0.8, 0.8 );
+                            0_degrees, 0, 0.8, 0.8 );
         add_msg( m_debug, "GEAR UP" );
     } else if( current_gear < previous_gear ) {
         play_variant_sound( "vehicle", "gear_shift", get_heard_volume( player_character.bub_pos() ),
-                            0_degrees, 1.2, 1.2 );
+                            0_degrees, 0, 1.2, 1.2 );
         add_msg( m_debug, "GEAR DOWN" );
     }
     if( ( safe_speed != 0 ) ) {
@@ -922,6 +1068,8 @@ void sfx::do_vehicle_exterior_engine_sfx()
     }
 
     vol = static_cast<unsigned char>( 128 * noise_factor / veh->vehicle_noise );
+    const int veh_dist = sound_distance( player_character.bub_pos(), veh->bub_ms_location() );
+    const int veh_elev = veh->bub_ms_location().z() - player_character.bub_pos().z();
     std::pair<std::string, std::string> id_and_variant;
 
     for( size_t e = 0; e < veh->engines.size(); ++e ) {
@@ -944,7 +1092,7 @@ void sfx::do_vehicle_exterior_engine_sfx()
 
     if( is_channel_playing( ch ) ) {
         if( engine_external_id_and_variant == id_and_variant ) {
-            set_channel_3d_position( ch, get_heard_angle( veh->bub_ms_location() ) );
+            set_channel_3d_position( ch, get_heard_angle( veh->bub_ms_location() ), veh_dist, veh_elev );
             set_channel_volume( ch, vol );
             add_msg( m_debug, "PLAYING exterior_engine_sound, vol: %d", vol );
         } else {
@@ -952,14 +1100,14 @@ void sfx::do_vehicle_exterior_engine_sfx()
             fade_audio_channel( ch, 0 );
             add_msg( m_debug, "STOP exterior_engine_sound, change id/var" );
             play_ambient_variant_sound( id_and_variant.first, id_and_variant.second, 128, ch, 0 );
-            set_channel_3d_position( ch, get_heard_angle( veh->bub_ms_location() ) );
+            set_channel_3d_position( ch, get_heard_angle( veh->bub_ms_location() ), veh_dist, veh_elev );
             set_channel_volume( ch, vol );
             add_msg( m_debug, "START exterior_engine_sound %s %s vol: %d", id_and_variant.first,
                      id_and_variant.second, get_channel_volume( ch ) );
         }
     } else {
         play_ambient_variant_sound( id_and_variant.first, id_and_variant.second, 128, ch, 0 );
-        set_channel_3d_position( ch, get_heard_angle( veh->bub_ms_location() ) );
+        set_channel_3d_position( ch, get_heard_angle( veh->bub_ms_location() ), veh_dist, veh_elev );
         set_channel_volume( ch, vol );
         add_msg( m_debug, "START exterior_engine_sound NEW %s %s vol: ex:%d true:%d",
                  id_and_variant.first, id_and_variant.second, vol, get_channel_volume( ch ) );
@@ -1122,7 +1270,7 @@ void sfx::generate_gun_sound( const tripoint_bub_ms &source, const item &firing 
         }
     }
 
-    play_variant_sound( selected_sound, weapon_id.str(), heard_volume, angle, 0.8, 1.2 );
+    play_variant_sound( selected_sound, weapon_id.str(), heard_volume, angle, distance, 0.8, 1.2 );
     start_sfx_timestamp = std::chrono::high_resolution_clock::now();
 }
 
@@ -1138,11 +1286,13 @@ struct sound_thread {
 
     skill_id weapon_skill;
     int weapon_volume;
-    // volume and angle for calls to play_variant_sound
+    // volume, angle, and distance for calls to play_variant_sound
     units::angle ang_src;
     int vol_src;
+    int dist_src;
     int vol_targ;
     units::angle ang_targ;
+    int dist_targ;
 
     // Operator overload required for thread API.
     void operator()() const;
@@ -1189,14 +1339,17 @@ sfx::sound_thread::sound_thread( const tripoint_bub_ms &source, const tripoint_b
         p = &g->u;
         // sound comes from the same place as the player is, calculation of angle wouldn't work
         ang_src = 0_degrees;
+        dist_src = 0;
         vol_src = heard_volume;
         vol_targ = heard_volume;
     } else {
         ang_src = get_heard_angle( source );
+        dist_src = sound_distance( get_avatar().bub_pos(), source );
         vol_src = std::max( heard_volume - 30, 0 );
         vol_targ = std::max( heard_volume - 20, 0 );
     }
     ang_targ = get_heard_angle( target );
+    dist_targ = sound_distance( get_avatar().bub_pos(), target );
     weapon_skill = p->primary_weapon().melee_skill();
     weapon_volume = p->primary_weapon().volume() / units::legacy_volume_factor;
 }
@@ -1216,37 +1369,37 @@ void sfx::sound_thread::operator()() const
 
     if( weapon_skill == skill_bashing && weapon_volume <= 8 ) {
     variant_used = "small_bash";
-    play_variant_sound( "melee_swing", "small_bash", vol_src, ang_src, 0.8, 1.2 );
+    play_variant_sound( "melee_swing", "small_bash", vol_src, ang_src, dist_src, 0.8, 1.2 );
     } else if( weapon_skill == skill_bashing && weapon_volume >= 9 ) {
     variant_used = "big_bash";
-    play_variant_sound( "melee_swing", "big_bash", vol_src, ang_src, 0.8, 1.2 );
+    play_variant_sound( "melee_swing", "big_bash", vol_src, ang_src, dist_src, 0.8, 1.2 );
     } else if( ( weapon_skill == skill_cutting || weapon_skill == skill_stabbing ) &&
                weapon_volume <= 6 ) {
     variant_used = "small_cutting";
-    play_variant_sound( "melee_swing", "small_cutting", vol_src, ang_src, 0.8, 1.2 );
+    play_variant_sound( "melee_swing", "small_cutting", vol_src, ang_src, dist_src, 0.8, 1.2 );
     } else if( ( weapon_skill == skill_cutting || weapon_skill == skill_stabbing ) &&
                weapon_volume >= 7 ) {
     variant_used = "big_cutting";
-    play_variant_sound( "melee_swing", "big_cutting", vol_src, ang_src, 0.8, 1.2 );
+    play_variant_sound( "melee_swing", "big_cutting", vol_src, ang_src, dist_src, 0.8, 1.2 );
     } else {
         variant_used = "default";
-        play_variant_sound( "melee_swing", "default", vol_src, ang_src, 0.8, 1.2 );
+        play_variant_sound( "melee_swing", "default", vol_src, ang_src, dist_src, 0.8, 1.2 );
     }
     if( hit ) {
     if( targ_mon ) {
             if( material == "steel" ) {
                 std::this_thread::sleep_for( std::chrono::milliseconds( rng( weapon_volume * 12,
                                              weapon_volume * 16 ) ) );
-                play_variant_sound( "melee_hit_metal", variant_used, vol_targ, ang_targ, 0.8, 1.2 );
+                play_variant_sound( "melee_hit_metal", variant_used, vol_targ, ang_targ, dist_targ, 0.8, 1.2 );
             } else {
                 std::this_thread::sleep_for( std::chrono::milliseconds( rng( weapon_volume * 12,
                                              weapon_volume * 16 ) ) );
-                play_variant_sound( "melee_hit_flesh", variant_used, vol_targ, ang_targ, 0.8, 1.2 );
+                play_variant_sound( "melee_hit_flesh", variant_used, vol_targ, ang_targ, dist_targ, 0.8, 1.2 );
             }
         } else {
             std::this_thread::sleep_for( std::chrono::milliseconds( rng( weapon_volume * 9,
                                          weapon_volume * 12 ) ) );
-            play_variant_sound( "melee_hit_flesh", variant_used, vol_targ, ang_targ, 0.8, 1.2 );
+            play_variant_sound( "melee_hit_flesh", variant_used, vol_targ, ang_targ, dist_targ, 0.8, 1.2 );
         }
     }
 }
@@ -1259,6 +1412,7 @@ void sfx::do_projectile_hit( const Creature &target )
 
     const int heard_volume = sfx::get_heard_volume( target.bub_pos() );
     const units::angle angle = get_heard_angle( target.bub_pos() );
+    const int distance = sound_distance( get_avatar().bub_pos(), target.bub_pos() );
     if( target.is_monster() ) {
         const monster &mon = dynamic_cast<const monster &>( target );
         static const std::set<material_id> fleshy = {
@@ -1273,20 +1427,20 @@ void sfx::do_projectile_hit( const Creature &target )
         } );
 
         if( is_fleshy ) {
-            play_variant_sound( "bullet_hit", "hit_flesh", heard_volume, angle, 0.8, 1.2 );
+            play_variant_sound( "bullet_hit", "hit_flesh", heard_volume, angle, distance, 0.8, 1.2 );
             return;
         } else if( mon.made_of( material_id( "stone" ) ) ) {
-            play_variant_sound( "bullet_hit", "hit_wall", heard_volume, angle, 0.8, 1.2 );
+            play_variant_sound( "bullet_hit", "hit_wall", heard_volume, angle, distance, 0.8, 1.2 );
             return;
         } else if( mon.made_of( material_id( "steel" ) ) ) {
-            play_variant_sound( "bullet_hit", "hit_metal", heard_volume, angle, 0.8, 1.2 );
+            play_variant_sound( "bullet_hit", "hit_metal", heard_volume, angle, distance, 0.8, 1.2 );
             return;
         } else {
-            play_variant_sound( "bullet_hit", "hit_flesh", heard_volume, angle, 0.8, 1.2 );
+            play_variant_sound( "bullet_hit", "hit_flesh", heard_volume, angle, distance, 0.8, 1.2 );
             return;
         }
     }
-    play_variant_sound( "bullet_hit", "hit_flesh", heard_volume, angle, 0.8, 1.2 );
+    play_variant_sound( "bullet_hit", "hit_flesh", heard_volume, angle, distance, 0.8, 1.2 );
 }
 
 void sfx::do_player_death_hurt( const player &target, bool death )
@@ -1561,7 +1715,7 @@ void sfx::do_footstep()
         };
 
         const auto play_plmove_sound_variant = [&]( const std::string & variant ) {
-            play_variant_sound( "plmove", variant, heard_volume, 0_degrees, 0.8, 1.2 );
+            play_variant_sound( "plmove", variant, heard_volume, 0_degrees, 0, 0.8, 1.2 );
             start_sfx_timestamp = std::chrono::high_resolution_clock::now();
         };
 
@@ -1630,11 +1784,11 @@ void sfx::do_obstacle( const std::string &obst )
         "t_sewage",
     };
     if( sfx::has_variant_sound( "plmove", obst ) ) {
-        play_variant_sound( "plmove", obst, heard_volume, 0_degrees, 0.8, 1.2 );
+        play_variant_sound( "plmove", obst, heard_volume, 0_degrees, 0, 0.8, 1.2 );
     } else if( water.contains( obst ) ) {
-        play_variant_sound( "plmove", "walk_water", heard_volume, 0_degrees, 0.8, 1.2 );
+        play_variant_sound( "plmove", "walk_water", heard_volume, 0_degrees, 0, 0.8, 1.2 );
     } else {
-        play_variant_sound( "plmove", "clear_obstacle", heard_volume, 0_degrees, 0.8, 1.2 );
+        play_variant_sound( "plmove", "clear_obstacle", heard_volume, 0_degrees, 0, 0.8, 1.2 );
     }
     // prevent footsteps from triggering
     start_sfx_timestamp = std::chrono::high_resolution_clock::now();
@@ -1669,7 +1823,8 @@ void sfx::end_activity_sounds()
 void sfx::load_sound_effects( const JsonObject & ) { }
 void sfx::load_sound_effect_preload( const JsonObject & ) { }
 void sfx::load_playlist( const JsonObject & ) { }
-void sfx::play_variant_sound( const std::string &, const std::string &, int, units::angle, double,
+void sfx::play_variant_sound( const std::string &, const std::string &, int, units::angle, int,
+                              double,
                               double ) { }
 void sfx::play_variant_sound( const std::string &, const std::string &, int ) { }
 void sfx::play_ambient_variant_sound( const std::string &, const std::string &, int, channel, int,
@@ -1694,6 +1849,11 @@ bool sfx::is_channel_playing( channel )
     return false;
 }
 int sfx::set_channel_volume( channel, int )
+{
+    return 0;
+}
+void sfx::set_channel_3d_position( channel, units::angle, int, int ) { }
+int sfx::get_channel_volume( channel )
 {
     return 0;
 }
@@ -1731,6 +1891,11 @@ units::angle sfx::get_heard_angle( const tripoint_bub_ms &source )
     units::angle angle = coord_to_angle( get_player_character().bub_pos(), source ) + 90_degrees;
     //add_msg(m_warning, "angle: %i", angle);
     return angle;
+}
+
+int sfx::get_heard_distance( const tripoint_bub_ms &source )
+{
+    return sound_distance( get_avatar().bub_pos(), source );
 }
 
 /*@}*/

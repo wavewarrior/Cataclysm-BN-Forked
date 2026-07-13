@@ -164,7 +164,7 @@ void load_sound_effects( const JsonObject &jsobj );
 void load_sound_effect_preload( const JsonObject &jsobj );
 void load_playlist( const JsonObject &jsobj );
 void play_variant_sound( const std::string &id, const std::string &variant, int volume,
-                         units::angle angle, double pitch_min = -1.0, double pitch_max = -1.0 );
+                         units::angle angle, int distance = 0, double pitch_min = -1.0, double pitch_max = -1.0 );
 void play_variant_sound( const std::string &id, const std::string &variant, int volume );
 void play_ambient_variant_sound( const std::string &id, const std::string &variant, int volume,
                                  channel channel, int fade_in_duration, double pitch = -1.0, int loops = -1 );
@@ -178,6 +178,7 @@ void remove_hearing_loss();
 void do_projectile_hit( const Creature &target );
 int get_heard_volume( const tripoint_bub_ms &source );
 units::angle get_heard_angle( const tripoint_bub_ms &source );
+int get_heard_distance( const tripoint_bub_ms &source );
 void do_footstep();
 void do_danger_music();
 void do_ambient();
@@ -190,7 +191,8 @@ bool has_variant_sound( const std::string &id, const std::string &variant );
 void stop_sound_effect_fade( channel channel, int duration );
 void stop_sound_effect_timed( channel channel, int time );
 int set_channel_volume( channel channel, int volume );
-void set_channel_3d_position( channel channel, units::angle angle, int distance = 0 );
+void set_channel_3d_position( channel channel, units::angle angle, int distance = 0,
+                              int elevation = 0 );
 int get_channel_volume( channel channel );
 void do_player_death_hurt( const player &target, bool death );
 void do_fatigue();

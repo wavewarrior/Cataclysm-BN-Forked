@@ -425,7 +425,8 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
     if( aim.missed_by_tiles >= 1.0 ) {
         sfx::play_variant_sound( "bullet_hit", "hit_wall",
                                  sfx::get_heard_volume( target_arg ),
-                                 sfx::get_heard_angle( target_arg ) );
+                                 sfx::get_heard_angle( target_arg ),
+                                 sfx::get_heard_distance( target_arg ) );
     }
 
     const auto dda_max_range =
@@ -717,7 +718,8 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
             z.add_effect( effect_bounced, 1_turns );
             projectile_attack( proj, tp, z.bub_pos(), dispersion, origin, source_weapon, in_veh );
             sfx::play_variant_sound( "fire_gun", "bio_lightning_tail",
-                                     sfx::get_heard_volume( z.bub_pos() ), sfx::get_heard_angle( z.bub_pos() ) );
+                                     sfx::get_heard_volume( z.bub_pos() ), sfx::get_heard_angle( z.bub_pos() ),
+                                     sfx::get_heard_distance( z.bub_pos() ) );
         }
     }
     explosion_handler::get_explosion_queue().execute();

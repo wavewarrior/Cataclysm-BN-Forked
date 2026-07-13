@@ -215,7 +215,7 @@ void cata::detail::reg_game_api( sol::state &lua )
                   sol::overload(
                       sol::resolve<void( const std::string &, const std::string &, int )>( &sfx::play_variant_sound ),
                       sol::resolve<void( const std::string &, const std::string &, int,
-                                         units::angle, double, double )>( &sfx::play_variant_sound )
+                                         units::angle, int, double, double )>( &sfx::play_variant_sound )
                   ) );
     luna::set_fx( lib, "play_ambient_variant_sound", &sfx::play_ambient_variant_sound );
 
