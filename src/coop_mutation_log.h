@@ -45,6 +45,19 @@ constexpr auto coop_hash_event( uint64_t h, const coop_world_event& ev ) -> uint
     return h;
 }
 
+/// Extended hash that also incorporates the str field for creature_spawned events.
+/// Empty str contributes nothing (loop body never executes), so calling this for
+/// any event type is safe — it only adds cost when str is non-empty.
+constexpr auto coop_hash_event_extended( uint64_t h, const coop_world_event& ev ) -> uint64_t
+{
+    h = coop_hash_event( h, ev );
+    // Hash the str field byte-by-byte for events that use it (creature_spawned)
+    for( const char c : ev.str ) {
+        h = coop_fnv1a_mix( h, static_cast<uint64_t>( static_cast<unsigned char>( c ) ) );
+    }
+    return h;
+}
+
 /// Client-side variant: mixes the same 6 fields from JSON-parsed integers.
 /// Called once per event after parsing "ev","x","y","z","v","cid" from JSON.
 constexpr auto coop_hash_event_fields(

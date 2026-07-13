@@ -19,8 +19,14 @@ auto coop_mutation_log::current() -> coop_mutation_log* { return tl_current_log;
 
 auto coop_mutation_log::push( coop_world_event e ) -> void
 {
-    // Delegate to the shared canonical hasher — same function as server/client.
-    running_hash_ = coop_hash_event( running_hash_, e );
+    // Events with str content (creature_spawned, creature_hp) need the extended
+    // hash so that mtype_id strings are included in the integrity check.
+    if( e.type == coop_event_type::creature_spawned
+        || e.type == coop_event_type::creature_hp ) {
+        running_hash_ = coop_hash_event_extended( running_hash_, e );
+    } else {
+        running_hash_ = coop_hash_event( running_hash_, e );
+    }
     events_.push_back( std::move( e ) );
 }
 
