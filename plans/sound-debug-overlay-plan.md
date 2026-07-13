@@ -334,3 +334,56 @@ if( g->display_overlay_state( ACTION_DISPLAY_SOUND ) ) {
 - [ ] In-game: verify heatmap colors propagate from source outward
 - [ ] In-game: verify source tile shows white marker
 - [ ] Performance: no measurable framerate drop with multiple active sounds
+
+---
+
+## F4 Spawner Rework — Animated Occlusion-Aware Wave (2026-07-13)
+
+The per-turn heatmap snapshot (above) stays, but the F4 dev-panel "sound
+spawner" was reworked from a one-frame static blob into a real-time animated
+wave, fixing four user-reported bugs.
+
+### Bugs fixed
+
+1. **Click "did nothing":** the sound *was* spawned, but its only feedback was
+   the offset one-frame blob — so it looked inert. The animated wave now gives
+   immediate, persistent, correctly-placed feedback.
+2. **One-tile offset:** the old blob drew via `cata_tiles::player_to_screen`,
+   which differs by a tile from the GPU overlay mapping the lights use. The wave
+   now draws in `draw_lighting_overlays` with the *same* `s_emo` mapping as the
+   dev lights, so it lands exactly where the lights do.
+3. **No real-time expansion:** replaced the static snapshot with a flood-filled
+   reachable field animated by a wavefront radius that grows over wall-clock time
+   (`speed = 9 tiles/s`), leading band bright, interior a dim trail, fading with
+   age.
+4. **Overlay text froze on toggle-off:** `rmlui_layer::prepare` early-returned
+   without clearing compiled world-text geometry (`g_world_geom`), so
+   `render_in_pass` kept drawing the last frame. Now `g_world_geom.clear()` runs
+   before the empty early-return.
+
+### Implementation
+
+- `src/lighting/dev_test_lights.h` — `sound_pulse` / `sound_pulse_tile` structs,
+  `pulse_now_s()` steady clock, `sound_pulses` vector.
+- `src/sdl_lighting_devui.cpp` `place_test_sound()` — Dijkstra flood from the
+  clicked tile, 8-connected, blocked by `light_transparency <=
+  LIGHT_TRANSPARENCY_SOLID` (walls recorded but not propagated → shadows).
+  Still queues a real `sounds::sound` for AI; dropped the immediate
+  `process_sound_markers`/`process_sounds` that caused the confusing static blob.
+- `src/sdl_render_frame.cpp` `draw_lighting_overlays()` — reveals field tiles up
+  to the current wavefront radius each frame; prunes expired pulses. Gated inside
+  the existing `g_dbg_lighting` block (on by default) for a valid `s_emo` mapping.
+- `src/lighting/rmlui_layer.cpp` `prepare()` — the `g_world_geom.clear()` fix.
+
+### Commits
+
+| Commit | Description |
+|--------|-------------|
+| (this branch) | `fix(devui): clear stale world-text geometry when overlays toggle off` |
+| (this branch) | `feat(devui): animate debug sound spawner as occlusion-aware expanding wave` |
+
+### Verification
+
+- [x] Build: `cataclysm-bn-tiles` + `cata_test-tiles` link clean on `osx-arm-slim` (no warnings from our code).
+- [ ] In-game (user): F4 → Overlays → "spawn sounds on click", click near a wall → wave expands outward, shadowed behind the wall, centred on the clicked tile.
+- [ ] In-game (user): toggle a text overlay on then off → it disappears immediately (no frozen frame).
