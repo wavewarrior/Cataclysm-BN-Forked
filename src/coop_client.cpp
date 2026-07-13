@@ -741,11 +741,11 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
     // Log prediction accuracy for unconfirmed combat actions.
     // These actions executed locally but haven't been confirmed by the server yet.
     if( last_seq_from_sync >= 0 ) {
-        for( const auto& act : pending_actions_ ) {
+    for( const auto& act : pending_actions_ ) {
             if( act.key == "SMASH" || act.key == "FIRE" || act.key == "MELEE" ) {
                 DebugLog( DL::Info, DC::Main )
-                    << "[coop] unconfirmed prediction: " << act.key
-                    << " seq=" << act.seq;
+                        << "[coop] unconfirmed prediction: " << act.key
+                        << " seq=" << act.seq;
             }
         }
     }

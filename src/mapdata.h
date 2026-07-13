@@ -437,7 +437,7 @@ struct map_acoustics_info {
 
     void deserialize( JsonIn &jsin );
 
-    bool operator==( const map_acoustics_info& ) const = default;
+    bool operator==( const map_acoustics_info & ) const = default;
 };
 struct map_data_common_t {
         map_bash_info bash;

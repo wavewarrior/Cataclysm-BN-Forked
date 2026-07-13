@@ -221,9 +221,10 @@ static float derive_transmission_loss( const tripoint_bub_ms &pos )
     float loss = 0.0f;
 
     // Helper lambda: use explicit acoustics if available, otherwise fall back to bash heuristic
-    auto compute_loss = []( const map_data_common_t& obj ) -> float {
+    auto compute_loss = []( const map_data_common_t &obj ) -> float {
         // Check explicit acoustics first
-        if( obj.acoustics.transmission_loss_db >= 0.0f ) {
+        if( obj.acoustics.transmission_loss_db >= 0.0f )
+        {
             float loss = obj.acoustics.transmission_loss_db;
             loss *= static_cast<float>( obj.coverage ) / 100.0f;
             if( obj.transparent ) {
@@ -233,7 +234,8 @@ static float derive_transmission_loss( const tripoint_bub_ms &pos )
         }
         // Fall back to bash-strength heuristic
         const int bash_str = obj.bash.str_max;
-        if( bash_str > 0 ) {
+        if( bash_str > 0 )
+        {
             return std::min( 10.0f * std::log10f( static_cast<float>( bash_str ) + 1.0f ), 50.0f );
         }
         return 0.0f;
@@ -258,7 +260,7 @@ static float derive_transmission_loss( const tripoint_bub_ms &pos )
 // Uses 8-ray averaging around the direct angle to simulate diffraction around obstacles.
 // Results are cached to avoid recomputing for the same source-listener pair.
 static float compute_occlusion_along_ray( const tripoint_bub_ms &source,
-                                          const tripoint_bub_ms &listener )
+        const tripoint_bub_ms &listener )
 {
     // Near-field: sounds within 3 tiles have negligible occlusion
     const int dist = rl_dist( source.xy(), listener.xy() );
@@ -287,7 +289,8 @@ static float compute_occlusion_along_ray( const tripoint_bub_ms &source,
 
     for( int i = 0; i < ray_count; i++ ) {
         // Spread rays evenly around the circle, centered on the base angle
-        const double spread = ( static_cast<double>( i ) / static_cast<double>( ray_count ) - 0.5 ) * ( PI_D / 4.0 );
+        const double spread = ( static_cast<double>( i ) / static_cast<double>( ray_count ) - 0.5 ) *
+                              ( PI_D / 4.0 );
         const units::angle ray_angle_unit = base_angle + units::from_radians( spread );
         const double ray_angle_rad = units::to_radians( ray_angle_unit );
 
@@ -304,7 +307,8 @@ static float compute_occlusion_along_ray( const tripoint_bub_ms &source,
         }
 
         // Weight this ray: central rays contribute more than edge rays
-        const float weight = 1.0f - ( std::abs( static_cast<float>( i ) - static_cast<float>( ray_count / 2 ) ) /
+        const float weight = 1.0f - ( std::abs( static_cast<float>( i ) - static_cast<float>
+                                                ( ray_count / 2 ) ) /
                                       static_cast<float>( ray_count / 2 ) ) * 0.5f;
         total_loss += ray_loss * weight;
         valid_rays++;
