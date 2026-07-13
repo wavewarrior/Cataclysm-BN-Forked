@@ -21,6 +21,7 @@ auto build_world_seed_packet( const world_seed_data& d ) -> std::string
     jout.member( "spawn_z", d.spawn_pos.z() );
     jout.member( "player_name", d.player_name );
     jout.member( "world_name", d.world_name );
+    jout.member( "rng_seed", d.rng_seed );
     jout.end_object();
     jout.end_object();
     return oss.str();
@@ -61,6 +62,7 @@ auto parse_world_seed_packet( const std::string& buf ) -> std::optional<world_se
         result.spawn_pos.z() = d.get_int( "spawn_z", 0 );
         result.player_name = d.get_string( "player_name", "" );
         result.world_name = d.get_string( "world_name", "" );
+        result.rng_seed = static_cast<unsigned int>( d.get_int( "rng_seed", 0 ) );
         return result;
     } catch( const JsonError & ) {
         return std::nullopt;

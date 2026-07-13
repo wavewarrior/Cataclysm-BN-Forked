@@ -25,6 +25,7 @@
 #include "submap.h"
 #include "type_id.h"
 #include "world.h"
+#include "rng.h"
 #include "worldfactory.h"
 #include "coop_menu.h"
 #include "field_type.h"
@@ -35,6 +36,7 @@
 #include "vehicle.h"
 
 #include <SDL3_net/SDL_net.h>
+#include <algorithm>
 #include <sstream>
 
 coop_server::~coop_server() { shutdown(); }
@@ -194,7 +196,7 @@ auto coop_server::send_world_seed( const std::string& player_name ) -> bool
     const auto* aw = g->get_active_world();
     const world_seed_data
     data{to_turn<int>( calendar::turn ), g->u.abs_pos(), player_name,
-         aw ? aw->info->world_name : std::string{}};
+         aw ? aw->info->world_name : std::string{}, g_main_rng_seed};
     return transport_->send( build_world_seed_packet( data ) );
 }
 
@@ -1137,11 +1139,15 @@ auto coop_server::push_entity_snapshot() -> void
 {
     // Ensure monster_id_map_ is up-to-date: assign IDs to any new live monsters.
     // Dead monsters are pruned here to avoid stale pointers in the snapshot.
-    std::unordered_set<const monster *> live_ptrs;
+    std::vector<const monster *> live_ptrs;
     for( monster& mon : g->all_monsters() ) {
-        if( !mon.is_dead() ) { live_ptrs.insert( &mon ); }
+        if( !mon.is_dead() ) { live_ptrs.push_back( &mon ); }
     }
-    std::erase_if( monster_id_map_, [&]( const auto & kv ) { return !live_ptrs.contains( kv.first ); } );
+    // Sort by abs_pos for deterministic ordering
+    std::sort( live_ptrs.begin(), live_ptrs.end(), []( const monster * a, const monster * b ) {
+        return a->abs_pos() < b->abs_pos();
+    } );
+    std::erase_if( monster_id_map_, [&]( const auto & kv ) { return std::find( live_ptrs.begin(), live_ptrs.end(), kv.first ) == live_ptrs.end(); } );
     for( const monster * ptr : live_ptrs ) {
         if( !monster_id_map_.contains( ptr ) ) { monster_id_map_.emplace( ptr, next_monster_id_++ ); }
     }
@@ -1295,11 +1301,15 @@ auto coop_server::build_and_send_sync( bool force_full ) -> void
     jout.end_array();
 
     // H5: assign stable IDs to live monsters keyed by pointer (stable in creature_tracker).
-    std::unordered_set<const monster *> live_ptrs;
+    std::vector<const monster *> live_ptrs;
     for( monster& mon : g->all_monsters() ) {
-        if( !mon.is_dead() ) { live_ptrs.insert( &mon ); }
+        if( !mon.is_dead() ) { live_ptrs.push_back( &mon ); }
     }
-    std::erase_if( monster_id_map_, [&]( const auto & kv ) { return !live_ptrs.contains( kv.first ); } );
+    // Sort by abs_pos for deterministic ordering
+    std::sort( live_ptrs.begin(), live_ptrs.end(), []( const monster * a, const monster * b ) {
+        return a->abs_pos() < b->abs_pos();
+    } );
+    std::erase_if( monster_id_map_, [&]( const auto & kv ) { return std::find( live_ptrs.begin(), live_ptrs.end(), kv.first ) == live_ptrs.end(); } );
     for( const monster * ptr : live_ptrs ) {
         if( !monster_id_map_.contains( ptr ) ) { monster_id_map_.emplace( ptr, next_monster_id_++ ); }
     }

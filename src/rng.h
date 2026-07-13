@@ -21,6 +21,9 @@ struct tripoint;
 // By default, that engine is seeded by time on first call to such a function.
 // If this function is called with a non-zero seed then the engine will be
 // seeded (or re-seeded) with the given seed.
+// Global seed accessor for network distribution
+extern unsigned int g_main_rng_seed;
+unsigned int rng_get_current_seed();
 void rng_set_engine_seed( unsigned int seed );
 
 using cata_default_random_engine = std::minstd_rand0;

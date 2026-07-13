@@ -8,6 +8,14 @@
 #include "calendar.h"
 #include "cata_utility.h"
 #include "units.h"
+#include <algorithm>
+
+unsigned int g_main_rng_seed = 0;
+
+unsigned int rng_get_current_seed()
+{
+    return g_main_rng_seed;
+}
 
 unsigned int rng_bits()
 {
@@ -160,6 +168,7 @@ void rng_set_engine_seed( unsigned int seed )
 {
     if( seed != 0 ) {
         main_rng_engine().seed( seed );
+        g_main_rng_seed = seed;
     }
 }
 

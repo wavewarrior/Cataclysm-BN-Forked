@@ -33,6 +33,7 @@
 #include "vehicle.h"
 #include "vpart_position.h"
 #include "string_utils.h"
+#include "rng.h"
 #include "player_activity.h"
 
 #include <SDL3_net/SDL_net.h>
@@ -163,6 +164,11 @@ auto coop_client::receive_world_seed() -> bool
     world_seed_turn_ = data->turn;
     world_seed_spawn_ = data->spawn_pos;
     world_seed_partner_name_ = data->player_name.empty() ? "Partner" : data->player_name;
+
+    // Apply host's RNG seed so world generation matches
+    if( data->rng_seed != 0 ) {
+        rng_set_engine_seed( data->rng_seed );
+    }
 
     DebugLog( DL::Info, DC::Main ) << "[coop] received world_seed: world=" << data->world_name;
     return true;
@@ -428,6 +434,9 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
     uint64_t local_hash = COOP_FNV_OFFSET;
     int ev_count = 0;
     bool got_tiles = false;
+    // Save previous host position before parsing — JSON member order is not guaranteed,
+    // so we can't rely on seeing host_ax first.
+    prev_host_apos_ = sync_host_apos_;
 
     // Use raw JsonIn iteration to handle the mixed-member tile objects.
     // The outer sync object has: "t", "turn", "tiles", "monsters", "proxy_*", "host_*".
@@ -642,6 +651,8 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
             sync_host_apos_.y() = jin.get_int();
         } else if( key == "host_az" ) {
             sync_host_apos_.z() = jin.get_int();
+            // Record timestamp after all three components are set
+            last_host_pos_time_ = static_cast<uint64_t>( SDL_GetTicks() );
         } else if( key == "host_hp_pct" ) {
             coop_session::get().partner_hp_pct = jin.get_int();
         } else if( key == "host_stamina_pct" ) {
@@ -716,13 +727,25 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
             // Build input for pure reconcile function.
             std::vector<reconcile_action> racts;
             racts.reserve( pending_actions_.size() );
-            for( const auto& a : pending_actions_ ) { racts.push_back( {a.seq, a.key} ); }
+            for( const auto& a : pending_actions_ ) { racts.emplace_back( a.seq, a.key ); }
             const tripoint_bub_ms server_bpos = g->m.abs_to_bub( sync_proxy_apos_ );
             g->u.setpos( coop_reconcile_pos( server_bpos, last_seq_from_sync, racts ) );
             if( std::abs( dx ) > 1 || std::abs( dy ) > 1 || dz != 0 ) {
                 DebugLog( DL::Info, DC::Main )
                         << "[coop] reconciled: drift=" << dx << "," << dy
                         << " pending=" << pending_actions_.size() << " last_seq=" << last_seq_from_sync;
+            }
+        }
+    }
+
+    // Log prediction accuracy for unconfirmed combat actions.
+    // These actions executed locally but haven't been confirmed by the server yet.
+    if( last_seq_from_sync >= 0 ) {
+        for( const auto& act : pending_actions_ ) {
+            if( act.key == "SMASH" || act.key == "FIRE" || act.key == "MELEE" ) {
+                DebugLog( DL::Info, DC::Main )
+                    << "[coop] unconfirmed prediction: " << act.key
+                    << " seq=" << act.seq;
             }
         }
     }
@@ -896,6 +919,24 @@ auto coop_client::send_raw( const std::string& json ) -> void
 {
     if( !transport_ ) { return; }
 transport_->send( json );
+}
+
+auto coop_client::interpolate_host_pos() -> tripoint_abs_ms
+{
+    // No data yet — return zero position
+    if( sync_host_apos_.x() == 0 && sync_host_apos_.y() == 0 ) {
+        return sync_host_apos_;
+    }
+
+    const uint64_t elapsed = SDL_GetTicks() - last_host_pos_time_;
+    // Cap interpolation at 500ms — don't extrapolate too far between syncs
+    const float t = std::min( static_cast<float>( elapsed ) / 500.0f, 1.0f );
+
+    return tripoint_abs_ms{
+        static_cast<int>( prev_host_apos_.x() + ( sync_host_apos_.x() - prev_host_apos_.x() ) * t ),
+        static_cast<int>( prev_host_apos_.y() + ( sync_host_apos_.y() - prev_host_apos_.y() ) * t ),
+        sync_host_apos_.z() // Don't interpolate Z — discrete map levels
+    };
 }
 
 #endif // COOP_ENABLED

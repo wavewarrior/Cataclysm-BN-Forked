@@ -15,6 +15,7 @@ struct world_seed_data {
     tripoint_abs_ms spawn_pos;
     std::string player_name;
     std::string world_name;
+    unsigned int rng_seed = 0;
 };
 
 struct action_packet_data {
