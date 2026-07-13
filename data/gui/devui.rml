@@ -19,6 +19,7 @@
             <div class="devui-tab" data-class-active="tab==4" data-event-click="devui_tab(4)">Anim</div>
             <div class="devui-tab" data-class-active="tab==5" data-event-click="devui_tab(5)">Runic</div>
             <div class="devui-tab" data-class-active="tab==6" data-event-click="devui_tab(6)">Diag</div>
+            <div class="devui-tab" data-class-active="tab==7" data-event-click="devui_tab(7)">Overlays</div>
         </div>
 
         <div class="devui-body">
@@ -340,6 +341,23 @@
             </div>
 
             <!-- ── Diagnostics: read-only HUD text (rebuilt each frame) ────────── -->
+            <!-- ── Overlays: debug overlay toggles ────────────────────────────── -->
+            <div data-if="tab==7">
+                <div class="devui-section">Debug Overlays</div>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="scent" data-event-click="toggle_overlay(0)"/> Scent</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="scenttype" data-event-click="toggle_overlay(1)"/> Scent type</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="temperature" data-event-click="toggle_overlay(2)"/> Temperature</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="vehicleai" data-event-click="toggle_overlay(3)"/> Vehicle AI</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="visibility" data-event-click="toggle_overlay(4)"/> Visibility</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="lighting" data-event-click="toggle_overlay(5)"/> Lighting</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="radiation" data-event-click="toggle_overlay(6)"/> Radiation</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="transparency" data-event-click="toggle_overlay(7)"/> Transparency</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="outsideshelter" data-event-click="toggle_overlay(8)"/> Outside/Shelter</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="sound" data-event-click="toggle_overlay(9)"/> Sound</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="submapgrid" data-event-click="toggle_overlay(10)"/> Submap Grid</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="disablevfx" data-event-click="toggle_overlay(11)"/> Disable VFX</label>
+            </div>
+
             <div data-if="tab==6">
                 <div class="devui-section">Diagnostics</div>
                 <div class="devui-diag">{{diag_text}}</div>

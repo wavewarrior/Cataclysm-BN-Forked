@@ -112,6 +112,29 @@ Rml::ElementDocument *g_devui_doc = nullptr;
 Rml::DataModelHandle g_devui_model;
 bool g_devui_visible = false; // §8 gate — the F4 toggle (RmlUi dev panel open/closed)
 int g_devui_tab = 0;          // slice 7 — active tab (data-if/data-class-active in devui.rml)
+
+// ── Overlays tab: proxy bools synced each frame ─────────────────────────────
+struct overlay_entry {
+    action_id action;
+    const char *label;    // display text
+    const char *var_name; // RmlUi data model variable name (lowercase, no spaces)
+};
+constexpr std::array<overlay_entry, 12> g_overlay_entries = {{
+    { ACTION_DISPLAY_SCENT,        "Scent",           "scent" },
+    { ACTION_DISPLAY_SCENT_TYPE,   "Scent type",      "scenttype" },
+    { ACTION_DISPLAY_TEMPERATURE,  "Temperature",     "temperature" },
+    { ACTION_DISPLAY_VEHICLE_AI,   "Vehicle AI",      "vehicleai" },
+    { ACTION_DISPLAY_VISIBILITY,   "Visibility",      "visibility" },
+    { ACTION_DISPLAY_LIGHTING,     "Lighting",        "lighting" },
+    { ACTION_DISPLAY_RADIATION,    "Radiation",       "radiation" },
+    { ACTION_DISPLAY_TRANSPARENCY, "Transparency",    "transparency" },
+    { ACTION_DISPLAY_OUTSIDE,      "Outside/Shelter", "outsideshelter" },
+    { ACTION_DISPLAY_SOUND,        "Sound",           "sound" },
+    { ACTION_DISPLAY_SUBMAP_GRID,  "Submap Grid",     "submapgrid" },
+    { ACTION_DISPLAY_TILES_NO_VFX, "Disable VFX",     "disablevfx" },
+}};
+std::array<bool, 12> g_overlay_states{}; // indexed by g_overlay_entries
+
 // Slice 8 — proxies for controls whose backing globals aren't directly bindable
 // (uint32 fields, <select> indices, size_t counts, read-only diagnostics text).
 int g_devui_dbg_mode = 0;       // <select> proxy → g_current_dbg_mode (event-applied)
@@ -647,6 +670,19 @@ void devui_rml_open()
         panel->SetProperty( "width", std::to_string( static_cast<int>( w ) ) + "px" );
         panel->SetProperty( "height", std::to_string( static_cast<int>( h ) ) + "px" );
     } );
+    // Overlays tab — bind each overlay state bool + toggle event.
+    for( size_t i = 0; i < g_overlay_entries.size(); ++i ) {
+        c.Bind( g_overlay_entries[i].var_name, &g_overlay_states[i] );
+    }
+    c.BindEventCallback(
+    "toggle_overlay", []( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+        int idx = -1;
+        if( !args.empty() ) { args[0].GetInto( idx ); }
+        if( idx < 0 || idx >= static_cast<int>( g_overlay_entries.size() ) ) { return; }
+        if( g != nullptr ) {
+            g->display_toggle_overlay( g_overlay_entries[idx].action );
+        }
+    } );
     // Build + bind the theme/game colour combo (names + selected index).
     g_pk_combo.clear();
     g_pk_combo_labels.clear();
@@ -817,6 +853,13 @@ void rml_tick()
                     }
                     last_sig = sig;
                     sig_init = true;
+                }
+            }
+            // Sync overlay states from game (two-way: checkbox writes via toggle_overlay event,
+            // game state reads back each frame so external toggles reflect).
+            if( g != nullptr ) {
+                for( size_t i = 0; i < g_overlay_entries.size(); ++i ) {
+                    g_overlay_states[i] = g->display_overlay_state( g_overlay_entries[i].action );
                 }
             }
             g_diag_text = build_diag_text();
