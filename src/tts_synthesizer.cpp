@@ -1,7 +1,5 @@
 #include "tts_synthesizer.h"
 
-#ifdef COOP_ENABLED
-
 #include "debug.h"
 
 tts_synthesizer_base *g_tts_synthesizer = nullptr;
@@ -19,5 +17,3 @@ void init_tts_synthesizer()
     static tts_stub_synthesizer stub;
     g_tts_synthesizer = &stub;
 }
-
-#endif // COOP_ENABLED

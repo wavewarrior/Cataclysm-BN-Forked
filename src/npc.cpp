@@ -1722,14 +1722,12 @@ void npc::say( const std::string &line, const sounds::sound_t spriority ) const
     }
 
     // Attempt TTS synthesis if a voice pack is assigned
-#ifdef COOP_ENABLED
     if( g_tts_synthesizer != nullptr ) {
         const auto voice_pack = tts_voice_registry::instance().resolve_voice( *this );
         if( voice_pack ) {
             g_tts_synthesizer->synthesize( formatted_line, *voice_pack );
         }
     }
-#endif // COOP_ENABLED
 
     // Sound happens even if we can't hear it
     if( spriority == sounds::sound_t::order || spriority == sounds::sound_t::alert ) {

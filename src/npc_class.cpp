@@ -128,11 +128,9 @@ void npc_class::finalize_all()
         }
 
         // Auto-register voice packs with TTS registry
-#ifdef COOP_ENABLED
         if( !cl.voice_pack_id.empty() ) {
             tts_voice_registry::instance().register_voice( cl.id, cl.voice_pack_id );
         }
-#endif // COOP_ENABLED
     }
 }
 

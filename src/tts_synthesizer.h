@@ -1,7 +1,5 @@
 #pragma once
 
-#ifdef COOP_ENABLED
-
 #include <string>
 
 /// Abstract base for TTS synthesis backends.
@@ -30,5 +28,3 @@ extern tts_synthesizer_base *g_tts_synthesizer;
 /// Initialize the global TTS synthesizer to the stub implementation.
 /// Call once at startup; derived backends can replace the pointer later.
 void init_tts_synthesizer();
-
-#endif // COOP_ENABLED

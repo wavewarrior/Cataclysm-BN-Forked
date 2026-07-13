@@ -1515,14 +1515,12 @@ void options_manager::add_options_general()
        );
 
     get_option( "AMBIENT_SOUND_VOLUME" ).setPrerequisite( "SOUND_ENABLED" );
-#ifdef COOP_ENABLED
     add( "ENABLE_TTS", general, translate_marker( "Enable TTS" ),
          translate_marker( "If true, text-to-speech synthesis is enabled for NPC dialogue." ),
          false, COPT_NO_SOUND_HIDE
        );
 
     get_option( "ENABLE_TTS" ).setPrerequisite( "SOUND_ENABLED" );
-#endif
 }
 
 void options_manager::add_options_interface()

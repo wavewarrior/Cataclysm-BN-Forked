@@ -86,10 +86,8 @@
 #include "vehicle_part.h"
 #include "vpart_position.h"
 #include "vpart_range.h"
-#ifdef COOP_ENABLED
 #include "tts_synthesizer.h"
 #include "tts_voice_registry.h"
-#endif
 
 #include <RmlUi/Core.h>
 #include "rml_screen.h"
@@ -1162,14 +1160,12 @@ void npc::talk_to_u( bool radio_contact, bool enforce_first_topic )
         }
         if( next.id == "TALK_DONE" || d.topic_stack.empty() ) {
             d.beta->say( _( "Bye." ) );
-#ifdef COOP_ENABLED
             if( get_option<bool>( "ENABLE_TTS" ) && g_tts_synthesizer != nullptr ) {
                 const std::string tts_text = _( "Bye." );
                 const auto voice = tts_voice_registry::instance().get_voice( myclass );
                 const std::string voice_name = voice.value_or( "default" );
                 g_tts_synthesizer->synthesize( tts_text, voice_name );
             }
-#endif
             d.done = true;
         } else if( next.id != "TALK_NONE" ) {
             d.add_topic( next );

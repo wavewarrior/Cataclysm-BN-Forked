@@ -1,7 +1,5 @@
 #include "tts_voice_registry.h"
 
-#ifdef COOP_ENABLED
-
 #include "debug.h"
 #include "npc_class.h"
 
@@ -68,5 +66,3 @@ tts_voice_registry &tts_voice_registry::instance()
     static tts_voice_registry reg;
     return reg;
 }
-
-#endif // COOP_ENABLED

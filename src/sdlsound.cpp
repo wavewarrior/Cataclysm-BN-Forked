@@ -23,6 +23,7 @@
 #include "rng.h"
 #include "sdl_wrappers.h"
 #include "sounds.h"
+#include "tts_synthesizer.h"
 #include "units_angle.h"
 
 #define dbg(x) DebugLogFL((x),DC::SDL)
@@ -201,6 +202,9 @@ if( !MIX_Init() ) {
     }
 
     music_track = MIX_CreateTrack( g_mixer );
+
+    // Initialize TTS synthesizer stub (lazy init, no-op if TTS option disabled)
+    init_tts_synthesizer();
 
     // ── String-tag grouping ──────────────────────────────────────────────────
 

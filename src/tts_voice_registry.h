@@ -1,6 +1,5 @@
 #pragma once
 
-#ifdef COOP_ENABLED
 
 #include <optional>
 #include <string>
@@ -39,5 +38,3 @@ class tts_voice_registry
 
         std::unordered_map<std::string, std::string> voices_;
 };
-
-#endif // COOP_ENABLED
