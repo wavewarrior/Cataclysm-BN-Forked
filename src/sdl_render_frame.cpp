@@ -661,6 +661,36 @@ auto draw_lighting_overlays( lighting::render_state &rs,
             rs.queue_ui_rect( px - 12.f, py - 1.f, 24.f, 2.f, 0.f, 1.f, 0.f, 1.f );
             rs.queue_ui_rect( px - 1.f, py - 12.f, 2.f, 24.f, 0.f, 1.f, 0.f, 1.f );
         }
+        // ── Animated debug sound pulses (sound spawner) ────────────────────
+        // Reveal the flood-filled reachable field as the wavefront radius grows
+        // over real time: the leading band is bright, the filled interior a dim
+        // trail, everything fading as the pulse ages. Walls left gaps in the
+        // field at spawn, so the wave is naturally shadowed by occluders.
+        {
+            auto &pulses = dev_test_lights::sound_pulses;
+            const double now = dev_test_lights::pulse_now_s();
+            constexpr float speed = 9.0f; // wavefront expansion, tiles/sec
+            for( const auto &p : pulses ) {
+                if( p.z != s_emo.player_z ) { continue; }
+                const float max_r = std::clamp( p.volume, 1.f, 24.f );
+                const float radius = static_cast<float>( now - p.spawn_s ) * speed;
+                const float life = std::clamp( 1.f - radius / max_r, 0.f, 1.f );
+                for( const auto &t : p.field ) {
+                    if( t.dist > radius ) { continue; }
+                    const float band = radius - t.dist; // 0 at the wavefront
+                    const float a = band < 1.5f
+                                    ? life * ( 0.25f + 0.55f * ( 1.f - band / 1.5f ) )
+                                    : life * 0.12f;
+                    const float sx = ( t.tx + s_emo.cam_off_x ) * tp + s_emo.op_x - tp * 0.5f;
+                    const float sy = ( t.ty + s_emo.cam_off_y ) * tp + s_emo.op_y - tp * 0.5f;
+                    rs.queue_ui_rect( sx, sy, tp, tp, 0.30f, 0.80f, 1.0f, a );
+                }
+            }
+            std::erase_if( pulses, [now]( const dev_test_lights::sound_pulse & p ) {
+                const float max_r = std::clamp( p.volume, 1.f, 24.f );
+                return static_cast<float>( now - p.spawn_s ) * speed > max_r;
+            } );
+        }
         // Screen-center cross (cyan).
         {
             const float cx = sw * 0.5f;

@@ -16,6 +16,7 @@
 // (which owns the ImGui mouse state). This split keeps ImGui out of the render
 // frame and game coords out of the UI layer.
 
+#include <chrono>
 #include <vector>
 
 namespace dev_test_lights {
@@ -30,5 +31,31 @@ struct light {
 extern bool place_mode;                    // F4 checkbox: click places a light
 extern float hover_wx, hover_wy, hover_wz; // last world-tile under the cursor
 extern std::vector<light> lights;          // placed lights; cleared on dev-UI close
+
+// Debug sound pulse — an animated expanding sound wave for the sound spawner.
+// Unlike the per-turn sound heatmap snapshot, this animates OUTWARD over real
+// time in the GPU overlay pass. The reachable field is flood-filled from the
+// source at spawn (blocked by opaque tiles), so the wave is shadowed by walls;
+// the overlay then reveals tiles as the wavefront radius grows. Purely a
+// debugging aid; expires by time.
+struct sound_pulse_tile {
+    float tx, ty;   // tile centre (world tiles)
+    float dist;     // flood distance from source (tiles)
+};
+struct sound_pulse {
+    int z = 0;                             // z-level the pulse lives on
+    float volume = 0.f;                    // drives the maximum radius
+    double spawn_s = 0.0;                  // steady-clock seconds at spawn
+    std::vector<sound_pulse_tile> field;   // occlusion-limited reachable tiles
+};
+
+/// Seconds since a steady epoch; shared spawn/draw clock for sound pulses.
+inline double pulse_now_s()
+{
+    return std::chrono::duration<double>(
+               std::chrono::steady_clock::now().time_since_epoch() ).count();
+}
+
+extern std::vector<sound_pulse> sound_pulses; // active debug sound pulses
 
 } // namespace dev_test_lights
