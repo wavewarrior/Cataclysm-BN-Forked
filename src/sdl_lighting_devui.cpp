@@ -677,23 +677,10 @@ void devui_rml_open()
         panel->SetProperty( "width", std::to_string( static_cast<int>( w ) ) + "px" );
         panel->SetProperty( "height", std::to_string( static_cast<int>( h ) ) + "px" );
     } );
-    // Overlays tab — bind each overlay state bool + toggle event.
+    // Overlays tab — bind each overlay state bool (two-way; sync driven in rml_tick).
     for( size_t i = 0; i < g_overlay_entries.size(); ++i ) {
         c.Bind( g_overlay_entries[i].var_name, &g_overlay_states[i] );
     }
-    c.BindEventCallback(
-    "update_overlay", []( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList &args ) {
-        auto idx = -1;
-        if( !args.empty() ) { args[0].GetInto( idx ); }
-        if( idx < 0 || idx >= static_cast<int>( g_overlay_entries.size() ) ) { return; }
-        if( g == nullptr ) { return; }
-        const auto &entry = g_overlay_entries[idx];
-        if( entry.action == ACTION_DISPLAY_SUBMAP_GRID ) {
-            g->debug_submap_grid_overlay = !g->debug_submap_grid_overlay;
-        } else {
-            g->display_toggle_overlay( entry.action );
-        }
-    } );
     c.Bind( "sound_place_mode", &g_sound_place_mode );
     c.Bind( "sound_volume", &g_sound_volume );
     c.Bind( "sound_category", &g_sound_category );
@@ -880,8 +867,23 @@ void rml_tick()
                     sig_init = true;
                 }
             }
-            // Overlay sync: read back game state each frame (for external toggles + mutual exclusion).
+            // Two-way overlay sync. data-checked writes the proxy bool on click;
+            // Phase 1 detects that UI change and drives game state, Phase 2 reads
+            // authoritative game state back (reflects mutual exclusion + external
+            // toggles from the debug menu / keybinds).
             if( g != nullptr ) {
+                static std::array<bool, g_overlay_entries.size()> prev_states{};
+                // Phase 1: UI -> game. A checkbox changed since last sync drives game state.
+                for( size_t i = 0; i < g_overlay_entries.size(); ++i ) {
+                    if( g_overlay_states[i] == prev_states[i] ) { continue; }
+                    const auto &entry = g_overlay_entries[i];
+                    if( entry.action == ACTION_DISPLAY_SUBMAP_GRID ) {
+                        g->debug_submap_grid_overlay = g_overlay_states[i];
+                    } else if( g->display_overlay_state( entry.action ) != g_overlay_states[i] ) {
+                        g->display_toggle_overlay( entry.action );
+                    }
+                }
+                // Phase 2: game -> UI. Read back authoritative state and re-sync prev.
                 for( size_t i = 0; i < g_overlay_entries.size(); ++i ) {
                     const auto &entry = g_overlay_entries[i];
                     if( entry.action == ACTION_DISPLAY_SUBMAP_GRID ) {
@@ -889,6 +891,7 @@ void rml_tick()
                     } else {
                         g_overlay_states[i] = g->display_overlay_state( entry.action );
                     }
+                    prev_states[i] = g_overlay_states[i];
                 }
             }
             g_diag_text = build_diag_text();
