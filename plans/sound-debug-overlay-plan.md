@@ -303,3 +303,34 @@ if( g->display_overlay_state( ACTION_DISPLAY_SOUND ) ) {
 | `src/action.h:303-351` | `action_id` enum | Add `ACTION_DISPLAY_SOUND` near `ACTION_DISPLAY_*` entries. |
 | `src/action.cpp` | action name switch | String mapping for `"debug_sound"`. |
 | `src/handle_action.cpp` | `ACTION_DISPLAY_*
+
+---
+
+## Implementation Notes (Actual)
+
+### Commits
+
+| Commit | Description |
+|--------|-------------|
+| `37079c13bc` | `feat(debug): add sound propagation visualization overlay` — 10 files, +496/-9 |
+| `93da39127d` | `fix(sound): cache sound vis data before sounds_since_last_turn is cleared` — 1 file, +34/-25 |
+| `7506a7c50d` | `feat(debug): add spawn sound at cursor debug action` — 1 file, +12/-0 |
+
+### Key Deviations from Plan
+
+1. **Timing fix (critical):** `sounds_since_last_turn` is cleared at end of `process_sound_markers()` every turn, *before* `cata_tiles::draw()` runs. Solution: snapshot visualization data into static cache (`_cached_sound_vis`, `_cached_sound_rays`) inside `process_sound_markers()` before the clear. `compute_sound_visualization()` and `compute_sound_rays()` now return the cached data. Cache cleared in `reset_sounds()`.
+
+2. **Source markers simplified:** Instead of a separate `get_sound_events()` accessor (which would leak the file-local `sound_event` type), added `is_source` bool to `sound_vis_tile` and set it during snapshot when `dx==0 && dy==0`.
+
+3. **Namespace qualification:** `sound_vis_tile` and `sound_vis_ray` live in `namespace sounds` — static cache variables and local uses in file-scope functions need `sounds::` prefix.
+
+4. **Spawn sound action:** Added `DEBUG_SPAWN_SOUND` to the spawning submenu. Uses `g->look_around(LA_MODE_2D)` for tile selection (NOT `input_context` directly — `w_terrain` is private and `input_context` lacks the assumed registration methods). Emits volume-64 `activity` sound with `fire_gun` SFX.
+
+### Testing Checklist
+
+- [x] Build: clean compile on `osx-arm-slim`, zero warnings from our code
+- [ ] In-game: toggle overlay via F8 → Show sound
+- [ ] In-game: spawn sound via F8 → Spawning → Spawn sound at cursor
+- [ ] In-game: verify heatmap colors propagate from source outward
+- [ ] In-game: verify source tile shows white marker
+- [ ] Performance: no measurable framerate drop with multiple active sounds
