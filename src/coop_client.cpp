@@ -390,10 +390,60 @@ auto coop_client::queue_action( const std::string& key, const std::string& ctx_j
 {
     // handle_action_from() already ran the local game simulation; we only need
     // to stamp a seq number and store the action for replay during reconciliation.
-    pending_actions_.push_back( {next_seq_++, key, ctx_json, false} );
+    pending_actions_.push_back( {next_seq_++, key, ctx_json, false, std::nullopt} );
+    auto &act = pending_actions_.back();
+
+    // Predict outcome for combat actions so we can verify against server on sync.
+    if( key == "SMASH" || key == "FIRE" || key == "MELEE" ) {
+    predict_action_locally( act );
+    }
+
     // Ring buffer cap: 32 entries (~500 ms at 60 fps input rate).
     // Overflow is a rare teleport snap — not a crash.
     if( pending_actions_.size() > 32 ) { pending_actions_.pop_front(); }
+}
+
+auto coop_client::predict_action_locally( pending_action &act ) -> void
+{
+    if( !g ) { return; }
+
+// Parse target position from ctx_json
+std::istringstream iss( act.ctx_json );
+JsonIn jin( iss );
+JsonObject d = jin.get_object();
+
+int tx = 0, ty = 0, tz = 0;
+d.read( "tx", tx );
+d.read( "ty", ty );
+d.read( "tz", tz );
+const tripoint_abs_ms target_abs{ tx, ty, tz };
+
+predicted_outcome outcome;
+outcome.target_pos = g->m.abs_to_bub( target_abs );
+
+// Find monster at target position and record post-action HP
+const auto bub_target = g->m.abs_to_bub( target_abs );
+const monster *mon = g->critter_at<monster>( bub_target );
+if( mon && mon->friendly <= 0 ) {
+    outcome.target_expected_hp = mon->get_hp();
+    }
+
+    // Record self HP after action
+    outcome.self_expected_hp = g->u.get_hp();
+
+    // Record terrain state at target (post-smash)
+    if( act.key == "SMASH" ) {
+    const auto ter_sid = g->m.ter( bub_target ).id();
+        const auto furn_sid = g->m.furn( bub_target ).id();
+        if( !ter_sid.is_null() ) {
+            outcome.terrain_change = ter_sid.str();
+        }
+        if( !furn_sid.is_null() ) {
+            outcome.item_id = furn_sid.str();
+        }
+    }
+
+    act.outcome = outcome;
 }
 
 
@@ -434,6 +484,7 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
     uint64_t local_hash = COOP_FNV_OFFSET;
     int ev_count = 0;
     bool got_tiles = false;
+    int turn_val = to_turn<int>( calendar::turn );
     // Save previous host position before parsing — JSON member order is not guaranteed,
     // so we can't rely on seeing host_ax first.
     prev_host_apos_ = sync_host_apos_;
@@ -448,7 +499,7 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
             last_seq_from_sync = jin.get_int();
 
         } else if( key == "turn" ) {
-            const int turn_val = jin.get_int();
+            turn_val = jin.get_int();
             if( turn_val >= 0 ) { calendar::turn = time_point::from_turn( turn_val ); }
 
         } else if( key == "hash" ) {
@@ -517,6 +568,15 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
                 } else if( ev_type == static_cast<int>( evt::field_expired ) ) {
                     // value=field_type only.
                     g->m.remove_field( bpos, field_type_id{ev_val} );
+                }
+                // Feed event into rollback engine for hash-mismatch recovery.
+                {
+                    coop_world_event recorded_ev;
+                    recorded_ev.type = static_cast<coop_event_type>( ev_type );
+                    recorded_ev.pos = abs_pos;
+                    recorded_ev.value = ev_val;
+                    recorded_ev.creature_id = ev_cid;
+                    rollback_engine_.push( turn_val, recorded_ev );
                 }
                 // creature_moved/died: not streamed in A4b (monsters ride monster section).
                 // item_spawned: deferred (no item payload; 30s full sync covers drift).
@@ -701,6 +761,9 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
     DebugLog( DL::Info, DC::Main )
                 << "[coop] apply_sync: hash mismatch ev=" << ev_count << " local=0x" << std::hex
                 << local_hash << " server=0x" << server_hash << std::dec << " — requesting resync";
+        // Attempt to roll back locally-applied deltas before requesting a full resync.
+        // This undoes events from the current turn so the incoming full sync applies cleanly.
+        rollback_engine_.rollback_to( turn_val );
         std::ostringstream rss;
         JsonOut rsj( rss );
         rsj.start_object();
@@ -710,6 +773,26 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
     }
 
     // A2: deferred seq-based reconciliation.
+    // 0. Verify predictions for confirmed combat actions BEFORE discarding them.
+    if( last_seq_from_sync >= 0 ) {
+    const auto confirmed = static_cast<uint32_t>( last_seq_from_sync );
+        for( const auto &act : pending_actions_ ) {
+            if( act.seq <= confirmed && act.outcome.has_value() ) {
+                const auto &pred = act.outcome.value();
+                if( pred.target_expected_hp >= 0 ) {
+                    const monster *mon = g->critter_at<monster>( pred.target_pos );
+                    const int actual_hp = mon ? mon->get_hp() : 0;
+                    if( actual_hp != pred.target_expected_hp ) {
+                        DebugLog( DL::Info, DC::Main )
+                                << "[coop] prediction mismatch: " << act.key
+                                << " seq=" << act.seq
+                                << " expected_hp=" << pred.target_expected_hp
+                                << " actual_hp=" << actual_hp;
+                    }
+                }
+            }
+        }
+    }
     // 1. Discard actions the server has already processed.
     if( last_seq_from_sync >= 0 ) {
     const auto confirmed = static_cast<uint32_t>( last_seq_from_sync );
@@ -734,18 +817,6 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
                 DebugLog( DL::Info, DC::Main )
                         << "[coop] reconciled: drift=" << dx << "," << dy
                         << " pending=" << pending_actions_.size() << " last_seq=" << last_seq_from_sync;
-            }
-        }
-    }
-
-    // Log prediction accuracy for unconfirmed combat actions.
-    // These actions executed locally but haven't been confirmed by the server yet.
-    if( last_seq_from_sync >= 0 ) {
-    for( const auto& act : pending_actions_ ) {
-            if( act.key == "SMASH" || act.key == "FIRE" || act.key == "MELEE" ) {
-                DebugLog( DL::Info, DC::Main )
-                        << "[coop] unconfirmed prediction: " << act.key
-                        << " seq=" << act.seq;
             }
         }
     }

@@ -10,10 +10,10 @@
 /// Predicted outcome of a non-movement action (for client-side prediction)
 struct predicted_outcome {
     tripoint_bub_ms target_pos;     ///< Target tile affected
-    int target_hp_delta = 0;        ///< Expected HP change to target (negative = damage dealt)
-    int self_hp_delta = 0;          ///< Expected HP change to self (e.g. recoil, backlash)
-    std::string terrain_change;     ///< Expected terrain change (empty = none)
-    std::string item_id;            ///< Expected item spawned/removed (empty = none)
+    int target_expected_hp = -1;    ///< Expected absolute HP of target after action (-1 = unknown/dead)
+    int self_expected_hp = -1;      ///< Expected absolute HP of self after action (-1 = unknown)
+    std::string terrain_change;     ///< Expected terrain id at target after action (empty = none)
+    std::string item_id;            ///< Expected item/furn id at target after action (empty = none)
 };
 
 /// Minimal action descriptor used by the reconciliation function.

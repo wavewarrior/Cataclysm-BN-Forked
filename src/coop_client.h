@@ -3,6 +3,8 @@
 
 #include "coop_proto.h"
 #include "coordinates.h"
+#include "coop_reconcile.h"
+#include "coop_rollback.h"
 
 #include "coop_net_transport.h"
 #include <memory>
@@ -84,7 +86,11 @@ struct coop_client {
             std::string key;
             std::string ctx_json;
             bool sent = false; ///< true once the packet has been written to the socket
+            std::optional<predicted_outcome> outcome; ///< Local prediction for non-movement actions
         };
+
+        /// Predict the local outcome of a non-movement action and attach it to the pending action.
+        auto predict_action_locally( pending_action &act ) -> void;
         /// Ring buffer of unconfirmed actions (queued + sent, kept until server confirms via
         /// last_seq).  Entries are discarded in apply_sync() once seq ≤ last_seq_from_sync.
         /// Main-thread only — no locking needed.
@@ -121,6 +127,9 @@ struct coop_client {
         int world_seed_turn_ = 0;
         tripoint_abs_ms world_seed_spawn_;
         std::string world_seed_partner_name_ = "Partner";
+
+        // Rollback engine for hash-mismatch recovery
+        coop_rollback_engine rollback_engine_;
 };
 
 #endif // COOP_ENABLED

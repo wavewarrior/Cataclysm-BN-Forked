@@ -165,7 +165,7 @@ TEST_CASE( "coop_reconcile_pos: predicted_outcome does not affect position", "[c
     const auto server = bub( 5, 5 );
     predicted_outcome outcome;
     outcome.target_pos = bub( 10, 10 );
-    outcome.target_hp_delta = -50;
+    outcome.target_expected_hp = 50;
     auto smash = reconcile_action{1, "SMASH"};
     smash.outcome = outcome;
     const std::vector<reconcile_action> pending = {smash};
@@ -178,7 +178,7 @@ TEST_CASE( "coop_reconcile_pos: mixed movement and outcome actions", "[coop][rec
     const auto server = bub( 0, 0 );
     predicted_outcome outcome;
     outcome.target_pos = bub( 3, 3 );
-    outcome.target_hp_delta = -100;
+    outcome.target_expected_hp = 100;
     auto smash2 = reconcile_action{2, "SMASH"};
     smash2.outcome = outcome;
     const std::vector<reconcile_action> pending = {
