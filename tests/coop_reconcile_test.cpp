@@ -156,3 +156,37 @@ TEST_CASE( "coop_reconcile_pos: snap + three-action replay from corrected positi
            bub( 5, 5 ) + tripoint_north + tripoint_north + tripoint_north );
 }
 
+// ── predicted_outcome scaffolding (Phase 2.2 deferred) ──────────────────────
+// reconcile_action now carries an optional predicted_outcome.  The position
+// reconciler MUST ignore it — only movement keys affect position.
+
+TEST_CASE( "coop_reconcile_pos: predicted_outcome does not affect position", "[coop][reconcile]" )
+{
+    const auto server = bub( 5, 5 );
+    predicted_outcome outcome;
+    outcome.target_pos = bub( 10, 10 );
+    outcome.target_hp_delta = -50;
+    auto smash = reconcile_action{1, "SMASH"};
+    smash.outcome = outcome;
+    const std::vector<reconcile_action> pending = {smash};
+    // SMASH is a non-movement key → position unchanged despite outcome
+    CHECK( coop_reconcile_pos( server, 0, pending ) == server );
+}
+
+TEST_CASE( "coop_reconcile_pos: mixed movement and outcome actions", "[coop][reconcile]" )
+{
+    const auto server = bub( 0, 0 );
+    predicted_outcome outcome;
+    outcome.target_pos = bub( 3, 3 );
+    outcome.target_hp_delta = -100;
+    auto smash2 = reconcile_action{2, "SMASH"};
+    smash2.outcome = outcome;
+    const std::vector<reconcile_action> pending = {
+        reconcile_action{1, "MOVE_N"},
+        smash2,
+        reconcile_action{3, "MOVE_E"}
+    };
+    // Only MOVE_N and MOVE_E affect position; SMASH with outcome is a no-op
+    CHECK( coop_reconcile_pos( server, 0, pending ) ==
+           bub( 0, 0 ) + tripoint_north + tripoint_east );
+}

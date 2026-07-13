@@ -3,6 +3,7 @@
 #include "catch/catch_amalgamated.hpp"
 #include "coop_packets.h"
 #include "coop_proto.h"
+#include "coop_mutation_log.h"
 #include "coordinates.h"
 
 #include <algorithm>
@@ -220,6 +221,67 @@ TEST_CASE( "C3 death-drop: dead→alive resets guard (respawn)", "[coop][packets
     const bool was_dead2 = now_dead; // guard updated to false
     const bool now_dead2 = true;
     CHECK( ( now_dead2 && !was_dead2 ) == true );
+}
+
+// ── 11. Extended hash includes str field ─────────────────────────────────────
+
+TEST_CASE( "extended hash: empty str equals base hash", "[coop][hash]" )
+{
+    coop_world_event ev;
+    ev.type = coop_event_type::terrain_changed;
+    ev.pos = tripoint_abs_ms{ 1, 2, 0 };
+    ev.value = 42;
+    ev.creature_id = 0;
+    ev.str = "";
+
+    const uint64_t h_base = coop_hash_event( COOP_FNV_OFFSET, ev );
+    const uint64_t h_ext = coop_hash_event_extended( COOP_FNV_OFFSET, ev );
+    CHECK( h_base == h_ext );
+}
+
+TEST_CASE( "extended hash: non-empty str differs from base hash", "[coop][hash]" )
+{
+    coop_world_event ev;
+    ev.type = coop_event_type::creature_spawned;
+    ev.pos = tripoint_abs_ms{ 5, 5, 0 };
+    ev.value = 100;
+    ev.creature_id = 7;
+    ev.str = "mon_dom";
+
+    const uint64_t h_base = coop_hash_event( COOP_FNV_OFFSET, ev );
+    const uint64_t h_ext = coop_hash_event_extended( COOP_FNV_OFFSET, ev );
+    CHECK( h_base != h_ext );
+}
+
+TEST_CASE( "extended hash: different str produces different hash", "[coop][hash]" )
+{
+    coop_world_event ev1, ev2;
+    ev1.type = coop_event_type::creature_spawned;
+    ev1.pos = tripoint_abs_ms{ 0, 0, 0 };
+    ev1.value = 0;
+    ev1.creature_id = 0;
+    ev1.str = "mon_dom";
+
+    ev2 = ev1;
+    ev2.str = "mon_zombie";
+
+    const uint64_t h1 = coop_hash_event_extended( COOP_FNV_OFFSET, ev1 );
+    const uint64_t h2 = coop_hash_event_extended( COOP_FNV_OFFSET, ev2 );
+    CHECK( h1 != h2 );
+}
+
+TEST_CASE( "extended hash: deterministic across calls", "[coop][hash]" )
+{
+    coop_world_event ev;
+    ev.type = coop_event_type::creature_spawned;
+    ev.pos = tripoint_abs_ms{ 3, 3, 0 };
+    ev.value = 50;
+    ev.creature_id = 1;
+    ev.str = "mon_rat";
+
+    const uint64_t h1 = coop_hash_event_extended( COOP_FNV_OFFSET, ev );
+    const uint64_t h2 = coop_hash_event_extended( COOP_FNV_OFFSET, ev );
+    CHECK( h1 == h2 );
 }
 
 #endif // COOP_ENABLED
