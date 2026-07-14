@@ -682,9 +682,10 @@ auto draw_lighting_overlays( lighting::render_state &rs,
         const float tp = s_emo.tile_px > 0.f ? s_emo.tile_px : 32.f;
         constexpr float speed = 9.0f; // wavefront expansion, tiles/sec
 
-        // Collect per-tile instances across all active pulses.
+        // One instance per pulse: source position + current radius/life.
+        // The shader draws a single expanding disc with ring + wake — no per-tile BFS needed.
         std::vector<lighting::sound_wave_instance> instances;
-        instances.reserve( 2048 );
+        instances.reserve( 32 );
 
         for( const auto &p : pulses ) {
             if( p.z != s_emo.player_z ) { continue; }
@@ -692,41 +693,32 @@ auto draw_lighting_overlays( lighting::render_state &rs,
             const float radius = static_cast<float>( now - p.spawn_s ) * speed;
             const float life = std::clamp( 1.f - radius / max_r, 0.f, 1.f );
             if( life <= 0.f ) { continue; }
+            const float sx = ( p.source.x() + 0.5f + s_emo.cam_off_x ) * tp + s_emo.op_x;
+            const float sy = ( p.source.y() + 0.5f + s_emo.cam_off_y ) * tp + s_emo.op_y;
+            instances.push_back( { sx, sy, radius * tp, life } );
+        }
 
-            for( const auto &t : p.field ) {
-                if( t.dist > radius ) { continue; }
-                const float sx = ( t.tx + s_emo.cam_off_x ) * tp + s_emo.op_x;
-                const float sy = ( t.ty + s_emo.cam_off_y ) * tp + s_emo.op_y;
-                instances.push_back( { sx, sy, t.dist, 0.f } );
-            }
-
-            if( !instances.empty() ) {
-                auto *wt = rs.world_target();
-                const float circle_r = tp * 0.55f;
-                const lighting::snd_frag_params fp {
-                    .camera_off_x = static_cast<float>( s_emo.cam_off_x ),
-                    .camera_off_y = static_cast<float>( s_emo.cam_off_y ),
-                    .op_x = s_emo.op_x,
-                    .op_y = s_emo.op_y,
-                    .tile_px_inv = tp > 0.f ? 1.f / tp : 0.f,
-                    .pad0 = 0.f,
-                    .sdf_map_w = static_cast<std::uint32_t>( rs.sdf().map_w() ),
-                    .sdf_map_h = static_cast<std::uint32_t>( rs.sdf().map_h() ),
-                };
-                rs.sound_waves().record( {
-                    .cb = ctx.cmd_buffer,
-                    .target = wt ? wt->texture() : nullptr,
-                    .proj_w = wt ? static_cast<std::uint32_t>( wt->width() ) : 0u,
-                    .proj_h = wt ? static_cast<std::uint32_t>( wt->height() ) : 0u,
-                    .instances = &instances,
-                    .radius = radius,
-                    .life = life,
-                    .circle_radius_px = circle_r,
-                    .sdf_buffer = rs.sdf().sdf_buffer(),
-                    .snd_frag_params = fp,
-                } );
-                instances.clear();
-            }
+        if( !instances.empty() ) {
+            auto *wt = rs.world_target();
+            const lighting::snd_frag_params fp {
+                .camera_off_x = static_cast<float>( s_emo.cam_off_x ),
+                .camera_off_y = static_cast<float>( s_emo.cam_off_y ),
+                .op_x = s_emo.op_x,
+                .op_y = s_emo.op_y,
+                .tile_px_inv = tp > 0.f ? 1.f / tp : 0.f,
+                .pad0 = 0.f,
+                .sdf_map_w = static_cast<std::uint32_t>( rs.sdf().map_w() ),
+                .sdf_map_h = static_cast<std::uint32_t>( rs.sdf().map_h() ),
+            };
+            rs.sound_waves().record( {
+                .cb = ctx.cmd_buffer,
+                .target = wt ? wt->texture() : nullptr,
+                .proj_w = wt ? static_cast<std::uint32_t>( wt->width() ) : 0u,
+                .proj_h = wt ? static_cast<std::uint32_t>( wt->height() ) : 0u,
+                .instances = &instances,
+                .sdf_buffer = rs.sdf().sdf_buffer(),
+                .snd_frag_params = fp,
+            } );
         }
 
         std::erase_if( pulses, [now]( const dev_test_lights::sound_pulse & p ) {
