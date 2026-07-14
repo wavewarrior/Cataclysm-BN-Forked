@@ -8,6 +8,10 @@
 #include "lighting/dev_test_lights.h"
 #include "map.h"
 #include "point.h"
+#include "debug.h"
+
+// NOLINTNEXTLINE(cata-text-style)
+#define dbg(x) DebugLogFL((x), DC::Main)
 
 namespace sfx
 {
@@ -101,6 +105,9 @@ auto emit_sound_pulse( const tripoint_bub_ms& source, float volume ) -> void
     pulse.field.push_back( { source.x() + 0.5f, source.y() + 0.5f, 0.f } );
     pulse.pq.push( { 0, 0, 0.f } );
 
+    dbg( DL::Info ) << "[sound_vis] emit_sound_pulse src=(" << source.x() << "," << source.y()
+                    << ") vol=" << volume << " max_r=" << max_r
+                    << " total=" << ( pulses.size() + 1 );
     pulses.push_back( std::move( pulse ) );
 }
 

@@ -145,7 +145,8 @@ constexpr std::array<overlay_entry, 12> g_overlay_entries = {{
 std::array<bool, 12> g_overlay_states{}; // indexed by g_overlay_entries
 
 // ── Sound spawner: click-to-place test sounds for the Sound debug overlay ──
-auto g_sound_place_mode = false;  // checkbox: click spawns a sound
+auto g_sound_place_mode =
+    true;  // checkbox: click spawns a sound (default on — opt out if unwanted)
 auto g_sound_volume = 30.0f;      // volume slider (1-128, matches sounds::sound vol param)
 auto g_sound_category = 0;        // index into sound_t enum (0=background)
 
