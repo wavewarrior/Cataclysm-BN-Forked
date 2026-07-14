@@ -735,7 +735,6 @@ auto draw_lighting_overlays( lighting::render_state &rs,
         } );
         if( !pulses.empty() ) {
             g_display.needupdate = true;
-            g_display.inputdelay = 25;
         }
     }
 }

@@ -83,6 +83,7 @@
 #include "sdl_lighting_devui.h"
 #include "sidebar_anim.h"
 #include "sounds.h"
+#include "sound_visualization.h"
 #include "string_formatter.h"
 #include "string_id.h"
 #include "string_input_popup.h"
@@ -334,7 +335,7 @@ input_context game::get_player_input( std::string& action )
             // Weather/SCT frame-stepping is tuned to 125ms ticks; keep that while active
             // (sprite anims degrade to 8fps during rain rather than speeding the rain 5x).
             if( weather || sct ) { return 125; }
-            if( creatures_require_animation() ) { return SPRITE_ANIM_FRAME_MS; }
+            if( creatures_require_animation() || sfx::sound_pulses_active() ) { return SPRITE_ANIM_FRAME_MS; }
             return sidebar_requires_animation() ? ANIM_FRAME_MS : 125;
         };
         ctxt.set_timeout( anim_timeout( animate_weather, animate_sct ) );
@@ -387,7 +388,8 @@ input_context game::get_player_input( std::string& action )
             }
             // We don't cache these checks as their result may change after 1st redraw
             if( minimap_requires_animation() || terrain_requires_animation()
-                || sidebar_requires_animation() || creatures_require_animation() ) {
+                || sidebar_requires_animation() || creatures_require_animation()
+                || sfx::sound_pulses_active() ) {
                 // TODO: we redraw *everything* just to animate a couple blinking dots
                 //       on the minimap or a few tiles.
                 //       This is far from ideal, and can probably be done much cheaper
@@ -417,9 +419,12 @@ input_context game::get_player_input( std::string& action )
         ui_manager::redraw_invalidated();
         SCT.vSCT.clear();
 
-        ctxt.set_timeout( 125 );
+        ctxt.set_timeout( sfx::sound_pulses_active() ? 25 : 125 );
         while( handle_mouseview( ctxt, action ) ) {
-            if( action == "TIMEOUT" && current_turn.has_timeout_elapsed() ) { break; }
+            if( action == "TIMEOUT" ) {
+                ctxt.set_timeout( sfx::sound_pulses_active() ? 25 : 125 );
+                if( current_turn.has_timeout_elapsed() ) { break; }
+            }
         }
         ctxt.reset_timeout();
     }

@@ -23,6 +23,9 @@
 #include "sdltiles.h"  // handle_resize
 #include "ui_manager.h" // ui_manager::invalidate, ui_manager::redraw_invalidated
 #include "sdl_lighting_devui.h"
+#include "debug.h"
+
+#define dbg(x) DebugLogFL((x),DC::Main)
 
 // File-scope state for ALT+nnnn code entry and arrow-key combos.
 // These were file-scope statics in sdltiles.cpp and stay file-scope here.
@@ -397,6 +400,10 @@ static void try_sdl_update( display_context &d )
 // ---------------------------------------------------------------------------
 void CheckMessages( display_context &d )
 {
+    static int frame = 0;
+    if( ++frame % 120 == 0 ) {
+        dbg( DL::Info ) << "[input] CheckMessages called, frame=" << frame;
+    }
     SDL_Event ev;
     bool quit = false;
     bool text_refresh = false;
@@ -411,6 +418,13 @@ void CheckMessages( display_context &d )
     bool render_target_reset = false;
 
     while( SDL_PollEvent( &ev ) ) {
+        static uint64_t event_count = 0;
+        if( ++event_count % 60 == 0 ) {
+            dbg( DL::Info ) << "[input] SDL_PollEvent processed " << event_count << " events";
+        }
+        if( ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN ) {
+            dbg( DL::Info ) << "[input] MOUSE_BUTTON_DOWN button=" << ev.button.button;
+        }
         // RmlUi layer sees events first; captures mouse (only) while a menu is open.
         const bool rmlui_capture = rmlui_layer::process_event( ev );
         // Open/close toggle (F4) — handled BEFORE the capture gate so the panel
@@ -424,17 +438,25 @@ void CheckMessages( display_context &d )
         // Dev test-light placement: a world click (not over the RmlUi panel) while the
         // dev panel is open with place-mode on drops a static light. Was the ImGui mouse
         // path; consume the click so it doesn't also trigger a game action.
-        if( ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN && ev.button.button == SDL_BUTTON_LEFT
-            && !rmlui_capture && sdl_lighting_devui::place_test_light() ) {
-            d.needupdate = true;
-            continue;
+        if( !rmlui_capture && ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+            ev.button.button == SDL_BUTTON_LEFT ) {
+            dbg( DL::Info ) << "[light_vis] LEFT_CLICK: rmlui_capture=" << rmlui_capture
+                            << " calling place_test_light()";
+            if( sdl_lighting_devui::place_test_light() ) {
+                d.needupdate = true;
+                continue;
+            }
         }
         // Dev test-sound placement: a world click while sound place-mode is on drops a
         // test sound at that location. Consume the click so it doesn't trigger a game action.
-        if( ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN && ev.button.button == SDL_BUTTON_LEFT
-            && !rmlui_capture && sdl_lighting_devui::place_test_sound() ) {
-            d.needupdate = true;
-            continue;
+        if( !rmlui_capture && ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+            ev.button.button == SDL_BUTTON_LEFT ) {
+            dbg( DL::Info ) << "[sound_vis] LEFT_CLICK: rmlui_capture=" << rmlui_capture
+                            << " calling place_test_sound()";
+            if( sdl_lighting_devui::place_test_sound() ) {
+                d.needupdate = true;
+                continue;
+            }
         }
         // RmlUi consumed this mouse/keyboard event — keep it out of game.
         if( rmlui_capture ) {

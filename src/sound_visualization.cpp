@@ -19,8 +19,7 @@ constexpr auto MAX_ACTIVE_PULSES = std::size_t{ 32 };
 constexpr float WAVEFRONT_SPEED = 9.0f; // tiles/sec (must match render loop)
 constexpr float BFS_MARGIN = 2.0f; // advance BFS this many tiles ahead of wavefront
 
-const auto DIRS = std::array<point, 8>
-{
+const auto DIRS = std::array<point, 8> {
     point( 1, 0 ), point( -1, 0 ), point( 0, 1 ),
     point( 0, -1 ), point( 1, 1 ), point( 1, -1 ), point( -1, 1 ), point( -1, -1 )
 };
@@ -121,6 +120,11 @@ auto advance_all_pulses( double now ) -> void
     for( auto &p : pulses ) {
         advance_pulse_bfs( p, here, now );
     }
+}
+
+auto sound_pulses_active() -> bool
+{
+    return !dev_test_lights::sound_pulses.empty();
 }
 
 } // namespace sfx

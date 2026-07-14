@@ -19,4 +19,9 @@ auto emit_sound_pulse( const tripoint_bub_ms& source, float volume ) -> void;
  */
 auto advance_all_pulses( double now ) -> void;
 
+/// Returns true while any sound pulses are still expanding — lets the game
+/// loop's anim_timeout keep ticking at animation cadence without the render
+/// function fighting over g_display.inputdelay.
+auto sound_pulses_active() -> bool;
+
 } // namespace sfx
