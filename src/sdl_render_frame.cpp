@@ -673,14 +673,20 @@ auto draw_lighting_overlays( lighting::render_state &rs,
     // ── Animated sound pulses — single expanding disc per pulse (GPU shader) ──
     // One instance per pulse: source + elapsed time → radius. No BFS needed.
     {
+        constexpr float speed = 9.0f; // wavefront expansion, tiles/sec
         const double now = dev_test_lights::pulse_now_s();
         auto &pulses = dev_test_lights::sound_pulses;
+
+        // Always expire stale pulses regardless of GPU pass state.
+        std::erase_if( pulses, [now]( const dev_test_lights::sound_pulse & p ) {
+            const float max_r = std::clamp( p.volume, 1.f, 24.f );
+            return static_cast<float>( now - p.spawn_s ) * speed > max_r;
+        } );
+
         if( pulses.empty() || !rs.sound_waves().ready() ) { return; }
         const float tp = s_emo.tile_px > 0.f ? s_emo.tile_px : 32.f;
-        constexpr float speed = 9.0f; // wavefront expansion, tiles/sec
 
         // One instance per pulse: source position + current radius/life.
-        // The shader draws a single expanding disc with ring + wake — no per-tile BFS needed.
         std::vector<lighting::sound_wave_instance> instances;
         instances.reserve( 32 );
 
@@ -718,10 +724,6 @@ auto draw_lighting_overlays( lighting::render_state &rs,
             } );
         }
 
-        std::erase_if( pulses, [now]( const dev_test_lights::sound_pulse & p ) {
-            const float max_r = std::clamp( p.volume, 1.f, 24.f );
-            return static_cast<float>( now - p.spawn_s ) * speed > max_r;
-        } );
         if( !pulses.empty() ) {
             g_display.needupdate = true;
         }
