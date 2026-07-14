@@ -47,6 +47,7 @@
 #include "overmapbuffer.h"
 #include "player_activity.h"
 #include "rng.h"
+#include "sound_visualization.h"
 #include "sounds.h"
 #include "string_formatter.h"
 #include "scent_map.h"
@@ -484,6 +485,7 @@ bool game::walk_move( const tripoint_bub_ms &dest_loc, const bool via_ramp )
                                "none", "none" );    // Sound of footsteps may awaken nearby monsters
             }
             sfx::do_footstep();
+            sfx::emit_sound_pulse( u.bub_pos(), 3.0f );
         }
 
         if( one_in( 20 ) && u.has_artifact_with( AEP_MOVEMENT_NOISE ) ) {

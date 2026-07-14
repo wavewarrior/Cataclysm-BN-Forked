@@ -23,6 +23,7 @@
 #include "creature.h"
 #include "damage.h"
 #include "debug.h"
+#include "sound_visualization.h"
 #include "dispersion.h"
 #include "enums.h"
 #include "explosion_queue.h"
@@ -632,6 +633,7 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
                     here.add_splatter_trail( critter->bloodType(), tp, dest );
                 }
                 sfx::do_projectile_hit( *attack.hit_critter );
+                sfx::emit_sound_pulse( tp, 10.0f );
                 has_momentum = proj.impact.total_damage() > 0 && is_bullet;
 
                 apply_overpenetration_penalty( is_projectile_modify_overpenetration );

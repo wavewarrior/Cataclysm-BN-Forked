@@ -21,6 +21,7 @@
 #include "cursesdef.h"
 #include "damage.h"
 #include "debug.h"
+#include "sound_visualization.h"
 #include "dispersion.h"
 #include "enums.h"
 #include "event.h"
@@ -2287,6 +2288,7 @@ void ranged::make_gun_sound_effect( const Character& who, bool burst, const item
                        data.sound.empty() ? _( "Bang!" ) : data.sound );
     }
     sfx::generate_gun_sound( who.bub_pos(), gun );
+    sfx::emit_sound_pulse( who.bub_pos(), 20.0f );
 }
 
 item::sound_data item::gun_noise( const bool burst ) const

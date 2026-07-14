@@ -61,6 +61,7 @@
 #include "projectile.h"
 #include "rng.h"
 #include "sounds.h"
+#include "sound_visualization.h"
 #include "string_formatter.h"
 #include "string_id.h"
 #include "translations.h"
@@ -538,6 +539,7 @@ void Character::melee_attack( Creature &t, bool allow_special, const matec_id *f
 
         int stumble_pen = stumble( *this, cur_weapon );
         sfx::generate_melee_sound( bub_pos(), t.bub_pos(), false, false );
+        sfx::emit_sound_pulse( bub_pos(), 8.0f );
 
         // Spawn MISS SCT for the attacker (if player) or target (if NPC attacking player).
         if( is_player() ) {
@@ -711,6 +713,8 @@ void Character::melee_attack( Creature &t, bool allow_special, const matec_id *f
                 }
             }
             sfx::generate_melee_sound( bub_pos(), t.bub_pos(), true, t.is_monster(), material );
+            sfx::emit_sound_pulse( bub_pos(), 12.0f );
+            sfx::emit_sound_pulse( t.bub_pos(), 10.0f );
             int dam = dealt_dam.total_damage();
             melee::melee_stats.damage_amount += dam;
 

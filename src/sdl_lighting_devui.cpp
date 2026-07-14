@@ -21,8 +21,12 @@
 #include "rml_util.h"
 #include "ui.h"
 #include "ui_theme.h"
+#include "debug.h"
+
+#define dbg(x) DebugLogFL((x),DC::Main)
 #include "weather.h"
 #include "sounds.h"
+#include "sound_visualization.h"
 #include "worldfactory.h"
 
 #include <RmlUi/Core.h>
@@ -821,6 +825,7 @@ bool place_test_light()
         cursor_light_emitter::color[0], cursor_light_emitter::color[1],
         cursor_light_emitter::color[2]} );
     return true;
+
 }
 
 bool place_test_sound()
@@ -832,58 +837,10 @@ bool place_test_sound()
     // Queue a real sound so monster AI still reacts (drained by the turn loop).
     sounds::sound( src, static_cast<int>( g_sound_volume ),
                    sounds::sound_t::alert, "debug test sound", false );
-    // Flood the sound outward from the source, blocked by opaque tiles, to build
-    // the reachable field the GPU overlay animates the wavefront through. Walls
-    // are recorded (their face lights up) but do not propagate, so they cast the
-    // wave's shadow — the "material-aware" occlusion the overlay shows.
-    map &here = get_map();
-    const int max_r = std::clamp( static_cast<int>( g_sound_volume ), 1, 24 );
-    const int side = 2 * max_r + 1;
-    const auto idx = [&]( int dx, int dy ) { return ( dy + max_r ) * side + ( dx + max_r ); };
-    auto best = std::vector<float>( static_cast<size_t>( side ) * side,
-                                    std::numeric_limits<float>::infinity() );
-    struct pulse_q {
-        int dx, dy;
-        float dist;
-        bool operator<( const pulse_q &o ) const { return dist > o.dist; } // min-heap
-    };
-    auto pq = std::priority_queue<pulse_q> {};
-    const std::array<point, 8> dirs = { point( 1, 0 ), point( -1, 0 ), point( 0, 1 ),
-                                        point( 0, -1 ), point( 1, 1 ), point( 1, -1 ), point( -1, 1 ), point( -1, -1 )
-                                      };
-    best[idx( 0, 0 )] = 0.f;
-    pq.push( { 0, 0, 0.f } );
-    while( !pq.empty() ) {
-        const auto cur = pq.top();
-        pq.pop();
-        if( cur.dist > best[idx( cur.dx, cur.dy )] ) { continue; }
-        for( const point &d : dirs ) {
-            const int ndx = cur.dx + d.x;
-            const int ndy = cur.dy + d.y;
-            if( ndx < -max_r || ndx > max_r || ndy < -max_r || ndy > max_r ) { continue; }
-            const auto np = tripoint_bub_ms( src.x() + ndx, src.y() + ndy, src.z() );
-            if( !here.inbounds( np ) ) { continue; }
-            const float step = ( d.x != 0 && d.y != 0 ) ? 1.41421356f : 1.0f;
-            const float nd = cur.dist + step;
-            if( nd > static_cast<float>( max_r ) || nd >= best[idx( ndx, ndy )] ) { continue; }
-            best[idx( ndx, ndy )] = nd;
-            if( here.light_transparency( np ) > LIGHT_TRANSPARENCY_SOLID ) {
-                pq.push( { ndx, ndy, nd } );
-            }
-        }
-    }
-    auto pulse = dev_test_lights::sound_pulse{ .z = src.z(),
-        .volume = g_sound_volume,
-        .spawn_s = dev_test_lights::pulse_now_s() };
-    for( int dy = -max_r; dy <= max_r; ++dy ) {
-        for( int dx = -max_r; dx <= max_r; ++dx ) {
-            const float d = best[idx( dx, dy )];
-            if( std::isinf( d ) ) { continue; }
-            pulse.field.push_back( { .tx = src.x() + dx + 0.5f,
-                                     .ty = src.y() + dy + 0.5f, .dist = d } );
-        }
-    }
-    dev_test_lights::sound_pulses.push_back( std::move( pulse ) );
+    sfx::emit_sound_pulse( src, g_sound_volume );
+    dbg( DL::Info ) << "[sound_vis] pulse pushed, total_pulses="
+                    << dev_test_lights::sound_pulses.size()
+                    << " field_tiles=" << dev_test_lights::sound_pulses.back().field.size();
     return true;
 }
 
