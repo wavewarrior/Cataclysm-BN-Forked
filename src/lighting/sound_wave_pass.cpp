@@ -88,7 +88,7 @@ auto sound_wave_pass::init(gpu_device& dev, SDL_GPUTextureFormat target_format) 
 
     pipeline_ = make_sound_wave_pipeline(dev.raw(), vert_, frag_, target_format_);
     if (!pipeline_) {
-        dbg(DL::Error) << "sound_wave_pass: pipeline create failed";
+        dbg(DL::Error) << "sound_wave_pass: pipeline create failed: " << SDL_GetError();
         return false;
     }
 

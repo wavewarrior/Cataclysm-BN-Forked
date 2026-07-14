@@ -17,7 +17,6 @@
 // frame and game coords out of the UI layer.
 
 #include <chrono>
-#include <queue>
 #include <vector>
 
 #include "coordinates.h"
@@ -36,28 +35,12 @@ extern float hover_wx, hover_wy, hover_wz; // last world-tile under the cursor
 extern std::vector<light> lights;          // placed lights; cleared on dev-UI close
 
 // Debug sound pulse — an animated expanding sound wave for the sound spawner.
-// Uses lazy BFS: the Dijkstra flood-fill is seeded at emission but advanced
-// incrementally each frame in the render loop, staying just ahead of the
-// animated wavefront. This spreads the BFS cost across frames instead of
-// paying it all at emission time.
-struct sound_pulse_tile {
-    float tx, ty;   // tile centre (world tiles)
-    float dist;     // flood distance from source (tiles)
-};
+// source + volume + spawn_s is all the render loop needs: radius = elapsed * speed.
 struct sound_pulse {
-    int z = 0;                              // z-level the pulse lives on
-    float volume = 0.f;                     // drives the maximum radius
-    double spawn_s = 0.0;                   // steady-clock seconds at spawn
-    tripoint_bub_ms source;                 // world position of the sound source
-    int max_r = 0;                          // clamped radius [1, 24]
-    std::vector<float> best;                // distance grid (side×side, inf=unvisited)
-    std::vector<sound_pulse_tile> field;    // occlusion-limited reachable tiles
-    struct bfs_node {
-        int dx, dy;
-        float dist;
-        auto operator<( const bfs_node &o ) const -> bool { return dist > o.dist; } // min-heap
-    };
-    std::priority_queue<bfs_node> pq;       // persistent BFS frontier
+    int z = 0;                // z-level the pulse lives on
+    float volume = 0.f;       // drives the maximum radius (clamped to [1, 24] tiles)
+    double spawn_s = 0.0;     // steady-clock seconds at spawn
+    tripoint_bub_ms source;   // world position of the sound source
 };
 
 /// Seconds since a steady epoch; shared spawn/draw clock for sound pulses.

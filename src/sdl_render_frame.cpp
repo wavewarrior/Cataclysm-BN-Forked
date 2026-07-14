@@ -670,13 +670,10 @@ auto draw_lighting_overlays( lighting::render_state &rs,
 
     }
 
-    // ── Animated debug sound pulses (shader-rendered, per-tile) ───────────
-    // Each reachable tile from the BFS flood-fill becomes one instanced circle.
-    // Overlapping circles with additive blending trace the occlusion boundary
-    // smoothly — preserving wall shadows while gaining pixel-level smoothness.
+    // ── Animated sound pulses — single expanding disc per pulse (GPU shader) ──
+    // One instance per pulse: source + elapsed time → radius. No BFS needed.
     {
         const double now = dev_test_lights::pulse_now_s();
-        sfx::advance_all_pulses( now );
         auto &pulses = dev_test_lights::sound_pulses;
         if( pulses.empty() || !rs.sound_waves().ready() ) { return; }
         const float tp = s_emo.tile_px > 0.f ? s_emo.tile_px : 32.f;

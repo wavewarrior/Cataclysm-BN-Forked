@@ -25,13 +25,11 @@ cbuffer SoundWaveParams : register(b0, space1) {
 };
 
 struct VS_OUT {
-    float4 pos       : SV_POSITION;
-    float2 source    : TEXCOORD0; // source center in screen pixels
-    float  radius_px : TEXCOORD1; // wavefront radius in pixels
-    float  life      : TEXCOORD2; // fade
+    float4 pos    : SV_POSITION;
+    float2 source : TEXCOORD0; // source center in screen pixels
+    float2 params : TEXCOORD1; // x = radius_px, y = life
 };
 
-// Unit quad (6 verts = 2 triangles), centered at origin, ±1.
 static const float2 quad_verts[6] = {
     float2(-1.0, -1.0), float2( 1.0, -1.0), float2( 1.0,  1.0),
     float2(-1.0, -1.0), float2( 1.0,  1.0), float2(-1.0,  1.0)
@@ -49,9 +47,8 @@ VS_OUT main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
         screen_pos.y / proj_h * -2.0 + 1.0);
 
     VS_OUT o;
-    o.pos       = float4(ndc, 0.0, 1.0);
-    o.source    = inst.source_screen;
-    o.radius_px = inst.radius_px;
-    o.life      = inst.life;
+    o.pos    = float4(ndc, 0.0, 1.0);
+    o.source = inst.source_screen;
+    o.params = float2(inst.radius_px, inst.life);
     return o;
 }
