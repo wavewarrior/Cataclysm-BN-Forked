@@ -30,12 +30,13 @@
 #include "lighting/frame_build.h"
 #include "lighting/rmlui_layer.h"
 #include "lighting/render_state.h"
+#include "sound_visualization.h"
 #include "lighting/sdf_pass.h"
 #include "weather.h"
 #include "weather_type.h"
 #include "worldfactory.h"
 
-#define dbg(x) DebugLogFL((x),DC::SDL)
+#define dbg(x) DebugLogFL((x),DC::Main)
 
 using namespace std::literals;
 
@@ -486,22 +487,20 @@ if( g && tilecontext && in.tile_pixel_size > 0.0f ) {
                           - static_cast<float>( map_origin.x );
         in.camera_off_y = static_cast<float>( draw_offset.y ) / in.tile_pixel_size
                           - static_cast<float>( map_origin.y );
-        if( g_dbg_lighting ) {
-            s_emo.cam_off_x = in.camera_off_x;
-            s_emo.cam_off_y = in.camera_off_y;
-            s_emo.tile_px   = in.tile_pixel_size;
-            s_emo.op_x      = static_cast<float>( draw_offset.x );
-            s_emo.op_y      = static_cast<float>( draw_offset.y );
-            s_emo.player_x  = g->u.bub_pos().x();
-            s_emo.player_y  = g->u.bub_pos().y();
-            s_emo.player_z  = g->u.bub_pos().z();
-            s_emo.screen_w  = static_cast<int>( ctx.swapchain_w );
-            s_emo.screen_h  = static_cast<int>( ctx.swapchain_h );
-            s_emo.map_origin_x = map_origin.x;
-            s_emo.map_origin_y = map_origin.y;
-            s_emo.draw_off_px_x = draw_offset.x;
-            s_emo.draw_off_px_y = draw_offset.y;
-        }
+        s_emo.cam_off_x = in.camera_off_x;
+        s_emo.cam_off_y = in.camera_off_y;
+        s_emo.tile_px   = in.tile_pixel_size;
+        s_emo.op_x      = static_cast<float>( draw_offset.x );
+        s_emo.op_y      = static_cast<float>( draw_offset.y );
+        s_emo.player_x  = g->u.bub_pos().x();
+        s_emo.player_y  = g->u.bub_pos().y();
+        s_emo.player_z  = g->u.bub_pos().z();
+        s_emo.screen_w  = static_cast<int>( ctx.swapchain_w );
+        s_emo.screen_h  = static_cast<int>( ctx.swapchain_h );
+        s_emo.map_origin_x = map_origin.x;
+        s_emo.map_origin_y = map_origin.y;
+        s_emo.draw_off_px_x = draw_offset.x;
+        s_emo.draw_off_px_y = draw_offset.y;
     } else if( g_dbg_lighting ) {
     s_emo.cam_off_x = 0.f;
     s_emo.cam_off_y = 0.f;
@@ -661,36 +660,6 @@ auto draw_lighting_overlays( lighting::render_state &rs,
             rs.queue_ui_rect( px - 12.f, py - 1.f, 24.f, 2.f, 0.f, 1.f, 0.f, 1.f );
             rs.queue_ui_rect( px - 1.f, py - 12.f, 2.f, 24.f, 0.f, 1.f, 0.f, 1.f );
         }
-        // ── Animated debug sound pulses (sound spawner) ────────────────────
-        // Reveal the flood-filled reachable field as the wavefront radius grows
-        // over real time: the leading band is bright, the filled interior a dim
-        // trail, everything fading as the pulse ages. Walls left gaps in the
-        // field at spawn, so the wave is naturally shadowed by occluders.
-        {
-            auto &pulses = dev_test_lights::sound_pulses;
-            const double now = dev_test_lights::pulse_now_s();
-            constexpr float speed = 9.0f; // wavefront expansion, tiles/sec
-            for( const auto &p : pulses ) {
-                if( p.z != s_emo.player_z ) { continue; }
-                const float max_r = std::clamp( p.volume, 1.f, 24.f );
-                const float radius = static_cast<float>( now - p.spawn_s ) * speed;
-                const float life = std::clamp( 1.f - radius / max_r, 0.f, 1.f );
-                for( const auto &t : p.field ) {
-                    if( t.dist > radius ) { continue; }
-                    const float band = radius - t.dist; // 0 at the wavefront
-                    const float a = band < 1.5f
-                                    ? life * ( 0.25f + 0.55f * ( 1.f - band / 1.5f ) )
-                                    : life * 0.12f;
-                    const float sx = ( t.tx + s_emo.cam_off_x ) * tp + s_emo.op_x - tp * 0.5f;
-                    const float sy = ( t.ty + s_emo.cam_off_y ) * tp + s_emo.op_y - tp * 0.5f;
-                    rs.queue_ui_rect( sx, sy, tp, tp, 0.30f, 0.80f, 1.0f, a );
-                }
-            }
-            std::erase_if( pulses, [now]( const dev_test_lights::sound_pulse & p ) {
-                const float max_r = std::clamp( p.volume, 1.f, 24.f );
-                return static_cast<float>( now - p.spawn_s ) * speed > max_r;
-            } );
-        }
         // Screen-center cross (cyan).
         {
             const float cx = sw * 0.5f;
@@ -699,6 +668,75 @@ auto draw_lighting_overlays( lighting::render_state &rs,
             rs.queue_ui_rect( cx - 1.f, cy - 10.f, 2.f, 20.f, 0.f, 1.f, 1.f, 0.9f );
         }
 
+    }
+
+    // ── Animated debug sound pulses (shader-rendered, per-tile) ───────────
+    // Each reachable tile from the BFS flood-fill becomes one instanced circle.
+    // Overlapping circles with additive blending trace the occlusion boundary
+    // smoothly — preserving wall shadows while gaining pixel-level smoothness.
+    {
+        const double now = dev_test_lights::pulse_now_s();
+        sfx::advance_all_pulses( now );
+        auto &pulses = dev_test_lights::sound_pulses;
+        if( pulses.empty() || !rs.sound_waves().ready() ) { return; }
+        const float tp = s_emo.tile_px > 0.f ? s_emo.tile_px : 32.f;
+        constexpr float speed = 9.0f; // wavefront expansion, tiles/sec
+
+        // Collect per-tile instances across all active pulses.
+        std::vector<lighting::sound_wave_instance> instances;
+        instances.reserve( 2048 );
+
+        for( const auto &p : pulses ) {
+            if( p.z != s_emo.player_z ) { continue; }
+            const float max_r = std::clamp( p.volume, 1.f, 24.f );
+            const float radius = static_cast<float>( now - p.spawn_s ) * speed;
+            const float life = std::clamp( 1.f - radius / max_r, 0.f, 1.f );
+            if( life <= 0.f ) { continue; }
+
+            for( const auto &t : p.field ) {
+                if( t.dist > radius ) { continue; }
+                const float sx = ( t.tx + s_emo.cam_off_x ) * tp + s_emo.op_x;
+                const float sy = ( t.ty + s_emo.cam_off_y ) * tp + s_emo.op_y;
+                instances.push_back( { sx, sy, t.dist, 0.f } );
+            }
+
+            if( !instances.empty() ) {
+                const auto win = get_sdl_window_size();
+                const float circle_r = tp * 0.55f;
+                const lighting::snd_frag_params fp {
+                    .camera_off_x = static_cast<float>( s_emo.cam_off_x ),
+                    .camera_off_y = static_cast<float>( s_emo.cam_off_y ),
+                    .op_x = s_emo.op_x,
+                    .op_y = s_emo.op_y,
+                    .tile_px_inv = tp > 0.f ? 1.f / tp : 0.f,
+                    .pad0 = 0.f,
+                    .sdf_map_w = static_cast<std::uint32_t>( rs.sdf().map_w() ),
+                    .sdf_map_h = static_cast<std::uint32_t>( rs.sdf().map_h() ),
+                };
+                rs.sound_waves().record( {
+                    .cb = ctx.cmd_buffer,
+                    .target = rs.world_target() ? rs.world_target()->texture() : nullptr,
+                    .proj_w = static_cast<std::uint32_t>( win.x ),
+                    .proj_h = static_cast<std::uint32_t>( win.y ),
+                    .instances = &instances,
+                    .radius = radius,
+                    .life = life,
+                    .circle_radius_px = circle_r,
+                    .sdf_buffer = rs.sdf().sdf_buffer(),
+                    .snd_frag_params = fp,
+                } );
+                instances.clear();
+            }
+        }
+
+        std::erase_if( pulses, [now]( const dev_test_lights::sound_pulse & p ) {
+            const float max_r = std::clamp( p.volume, 1.f, 24.f );
+            return static_cast<float>( now - p.spawn_s ) * speed > max_r;
+        } );
+        if( !pulses.empty() ) {
+            g_display.needupdate = true;
+            g_display.inputdelay = 25;
+        }
     }
 }
 

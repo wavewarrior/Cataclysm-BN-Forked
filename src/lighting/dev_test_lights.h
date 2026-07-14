@@ -17,7 +17,10 @@
 // frame and game coords out of the UI layer.
 
 #include <chrono>
+#include <queue>
 #include <vector>
+
+#include "coordinates.h"
 
 namespace dev_test_lights {
 
@@ -33,20 +36,28 @@ extern float hover_wx, hover_wy, hover_wz; // last world-tile under the cursor
 extern std::vector<light> lights;          // placed lights; cleared on dev-UI close
 
 // Debug sound pulse — an animated expanding sound wave for the sound spawner.
-// Unlike the per-turn sound heatmap snapshot, this animates OUTWARD over real
-// time in the GPU overlay pass. The reachable field is flood-filled from the
-// source at spawn (blocked by opaque tiles), so the wave is shadowed by walls;
-// the overlay then reveals tiles as the wavefront radius grows. Purely a
-// debugging aid; expires by time.
+// Uses lazy BFS: the Dijkstra flood-fill is seeded at emission but advanced
+// incrementally each frame in the render loop, staying just ahead of the
+// animated wavefront. This spreads the BFS cost across frames instead of
+// paying it all at emission time.
 struct sound_pulse_tile {
     float tx, ty;   // tile centre (world tiles)
     float dist;     // flood distance from source (tiles)
 };
 struct sound_pulse {
-    int z = 0;                             // z-level the pulse lives on
-    float volume = 0.f;                    // drives the maximum radius
-    double spawn_s = 0.0;                  // steady-clock seconds at spawn
-    std::vector<sound_pulse_tile> field;   // occlusion-limited reachable tiles
+    int z = 0;                              // z-level the pulse lives on
+    float volume = 0.f;                     // drives the maximum radius
+    double spawn_s = 0.0;                   // steady-clock seconds at spawn
+    tripoint_bub_ms source;                 // world position of the sound source
+    int max_r = 0;                          // clamped radius [1, 24]
+    std::vector<float> best;                // distance grid (side×side, inf=unvisited)
+    std::vector<sound_pulse_tile> field;    // occlusion-limited reachable tiles
+    struct bfs_node {
+        int dx, dy;
+        float dist;
+        auto operator<( const bfs_node &o ) const -> bool { return dist > o.dist; } // min-heap
+    };
+    std::priority_queue<bfs_node> pq;       // persistent BFS frontier
 };
 
 /// Seconds since a steady epoch; shared spawn/draw clock for sound pulses.
@@ -57,5 +68,6 @@ inline double pulse_now_s()
 }
 
 extern std::vector<sound_pulse> sound_pulses; // active debug sound pulses
+
 
 } // namespace dev_test_lights
