@@ -37,7 +37,7 @@ struct alignas(16) snd_frag_params {
     float op_x;
     float op_y;
     float tile_px_inv;
-    float pad0;
+    float pixel_ratio; // physical / logical pixel ratio (e.g. 2.0 on Retina)
     std::uint32_t sdf_map_w;
     std::uint32_t sdf_map_h;
 };

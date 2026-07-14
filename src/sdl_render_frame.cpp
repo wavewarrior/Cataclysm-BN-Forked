@@ -839,13 +839,16 @@ auto render_world_pass_w( lighting::render_state &rs,
                                    .radius_px = radius * tp, .life = life } );
         }
         if( !instances.empty() ) {
+            const float pixel_ratio = ( proj_w > 0 && wt->width() > 0 )
+                                      ? static_cast<float>( wt->width() ) / static_cast<float>( proj_w )
+                                      : 1.f;
             const lighting::snd_frag_params fp {
                 .camera_off_x = static_cast<float>( s_emo.cam_off_x ),
                 .camera_off_y = static_cast<float>( s_emo.cam_off_y ),
                 .op_x = s_emo.op_x,
                 .op_y = s_emo.op_y,
                 .tile_px_inv = tp > 0.f ? 1.f / tp : 0.f,
-                .pad0 = 0.f,
+                .pixel_ratio = pixel_ratio,
                 .sdf_map_w = static_cast<std::uint32_t>( rs.sdf().map_w() ),
                 .sdf_map_h = static_cast<std::uint32_t>( rs.sdf().map_h() ),
             };

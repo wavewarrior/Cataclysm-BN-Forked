@@ -20,7 +20,7 @@ cbuffer SndFragParams : register(b0, space3) {
     float op_x;
     float op_y;
     float tile_px_inv;
-    float pad0;
+    float pixel_ratio; // physical / logical pixel ratio (e.g. 2.0 on Retina)
     uint  sdf_map_w;
     uint  sdf_map_h;
 }
@@ -68,7 +68,13 @@ float4 main(VS_OUT inp) : SV_Target
 {
     const float r    = inp.params.x;
     const float life = inp.params.y;
-    const float d    = distance(inp.source, inp.pos.xy);
+
+    // SV_POSITION.xy is in physical framebuffer pixels, but source/radius are
+    // in logical pixels. Convert to logical before any distance calculation.
+    const float pr          = pixel_ratio > 0.0 ? pixel_ratio : 1.0;
+    const float2 pos_logical = inp.pos.xy / pr;
+
+    const float d = distance(inp.source, pos_logical);
 
     // Outside disc (with small AA fringe): discard.
     if (r < 1.0 || d > r * 1.03) discard;
@@ -87,7 +93,7 @@ float4 main(VS_OUT inp) : SV_Target
     float diffraction_glow = 0.0;
     float sdf_occ          = 1.0;
     if (sdf_map_w > 0 && sdf_map_h > 0 && tile_px_inv > 0.0) {
-        const float2 tile_pos  = screen_to_tile(inp.pos.xy);
+        const float2 tile_pos  = screen_to_tile(pos_logical);
         const float  wall_dist = sdf_sample(tile_pos);
         const float  near_wall = 0.55;
         if (wall_dist < near_wall) {
