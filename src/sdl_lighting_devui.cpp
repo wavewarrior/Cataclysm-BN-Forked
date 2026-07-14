@@ -840,8 +840,7 @@ bool place_test_sound()
                    sounds::sound_t::alert, "debug test sound", false );
     sfx::emit_sound_pulse( src, g_sound_volume );
     dbg( DL::Info ) << "[sound_vis] pulse pushed, total_pulses="
-                    << dev_test_lights::sound_pulses.size()
-                    << " field_tiles=" << dev_test_lights::sound_pulses.back().field.size();
+                    << dev_test_lights::sound_pulses.size();
     return true;
 }
 

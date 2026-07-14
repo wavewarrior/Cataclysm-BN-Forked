@@ -670,62 +670,21 @@ auto draw_lighting_overlays( lighting::render_state &rs,
 
     }
 
-    // ── Animated sound pulses — single expanding disc per pulse (GPU shader) ──
-    // One instance per pulse: source + elapsed time → radius. No BFS needed.
+    // ── Animated sound pulses — lifecycle only (GPU render is in render_world_pass_w) ──
+    // Must run every frame so pulses expire even when the GPU pass is not ready.
     {
-        constexpr float speed = 9.0f; // wavefront expansion, tiles/sec
+        constexpr float speed = 9.0f;
         const double now = dev_test_lights::pulse_now_s();
         auto &pulses = dev_test_lights::sound_pulses;
-
-        // Always expire stale pulses regardless of GPU pass state.
         std::erase_if( pulses, [now]( const dev_test_lights::sound_pulse & p ) {
             const float max_r = std::clamp( p.volume, 1.f, 24.f );
             return static_cast<float>( now - p.spawn_s ) * speed > max_r;
         } );
-
-        if( pulses.empty() || !rs.sound_waves().ready() ) { return; }
-        const float tp = s_emo.tile_px > 0.f ? s_emo.tile_px : 32.f;
-
-        // One instance per pulse: source position + current radius/life.
-        std::vector<lighting::sound_wave_instance> instances;
-        instances.reserve( 32 );
-
-        for( const auto &p : pulses ) {
-            if( p.z != s_emo.player_z ) { continue; }
-            const float max_r = std::clamp( p.volume, 1.f, 24.f );
-            const float radius = static_cast<float>( now - p.spawn_s ) * speed;
-            const float life = std::clamp( 1.f - radius / max_r, 0.f, 1.f );
-            if( life <= 0.f ) { continue; }
-            const float sx = ( p.source.x() + 0.5f + s_emo.cam_off_x ) * tp + s_emo.op_x;
-            const float sy = ( p.source.y() + 0.5f + s_emo.cam_off_y ) * tp + s_emo.op_y;
-            instances.push_back( { sx, sy, radius * tp, life } );
-        }
-
-        if( !instances.empty() ) {
-            auto *wt = rs.world_target();
-            const lighting::snd_frag_params fp {
-                .camera_off_x = static_cast<float>( s_emo.cam_off_x ),
-                .camera_off_y = static_cast<float>( s_emo.cam_off_y ),
-                .op_x = s_emo.op_x,
-                .op_y = s_emo.op_y,
-                .tile_px_inv = tp > 0.f ? 1.f / tp : 0.f,
-                .pad0 = 0.f,
-                .sdf_map_w = static_cast<std::uint32_t>( rs.sdf().map_w() ),
-                .sdf_map_h = static_cast<std::uint32_t>( rs.sdf().map_h() ),
-            };
-            rs.sound_waves().record( {
-                .cb = ctx.cmd_buffer,
-                .target = wt ? wt->texture() : nullptr,
-                .proj_w = wt ? static_cast<std::uint32_t>( wt->width() ) : 0u,
-                .proj_h = wt ? static_cast<std::uint32_t>( wt->height() ) : 0u,
-                .instances = &instances,
-                .sdf_buffer = rs.sdf().sdf_buffer(),
-                .snd_frag_params = fp,
-            } );
-        }
-
         if( !pulses.empty() ) {
             g_display.needupdate = true;
+            // Ensure world_target is cleared next frame so the disc doesn't
+            // accumulate on a stale background (belt-and-suspenders alongside needupdate).
+            if( auto *wt = rs.world_target() ) { wt->invalidate(); }
         }
     }
 }
@@ -760,9 +719,13 @@ auto render_world_pass_w( lighting::render_state &rs,
         return;
     }
 
-    const bool needs_clear = wt->consume_dirty();
-    const bool have_tiles  = !rs.tile_sprites_empty() && rs.gpu_sampler();
-    if( !needs_clear && !have_tiles ) {
+    const bool needs_clear      = wt->consume_dirty();
+    const bool have_tiles       = !rs.tile_sprites_empty() && rs.gpu_sampler();
+    const bool have_sound_pulses = rs.sound_waves().ready()
+                                   && !dev_test_lights::sound_pulses.empty();
+    // Force a clear when sound pulses are active: the disc moves each frame, so
+    // we need a fresh world-target background or the old disc position persists.
+    if( !needs_clear && !have_tiles && !have_sound_pulses ) {
         return;
     }
 
@@ -853,6 +816,49 @@ auto render_world_pass_w( lighting::render_state &rs,
 
         rs.rain().record( ctx.cmd_buffer, wt->texture(),
                           wt->width(), wt->height(), rp );
+    }
+
+    // Animated sound pulses — rendered AFTER tiles so the disc draws on top.
+    // Must be here (not in draw_lighting_overlays) because render_world_pass_w
+    // clears world_target before drawing tiles; anything written earlier is erased.
+    if( have_sound_pulses ) {
+        constexpr float speed = 9.0f;
+        const double now = dev_test_lights::pulse_now_s();
+        const float tp = s_emo.tile_px > 0.f ? s_emo.tile_px : 32.f;
+        std::vector<lighting::sound_wave_instance> instances;
+        instances.reserve( 32 );
+        for( const auto &p : dev_test_lights::sound_pulses ) {
+            if( p.z != s_emo.player_z ) { continue; }
+            const float max_r = std::clamp( p.volume, 1.f, 24.f );
+            const float radius = static_cast<float>( now - p.spawn_s ) * speed;
+            const float life = std::clamp( 1.f - radius / max_r, 0.f, 1.f );
+            if( life <= 0.f ) { continue; }
+            const float sx = ( p.source.x() + 0.5f + s_emo.cam_off_x ) * tp + s_emo.op_x;
+            const float sy = ( p.source.y() + 0.5f + s_emo.cam_off_y ) * tp + s_emo.op_y;
+            instances.push_back( { .source_x = sx, .source_y = sy,
+                                   .radius_px = radius * tp, .life = life } );
+        }
+        if( !instances.empty() ) {
+            const lighting::snd_frag_params fp {
+                .camera_off_x = static_cast<float>( s_emo.cam_off_x ),
+                .camera_off_y = static_cast<float>( s_emo.cam_off_y ),
+                .op_x = s_emo.op_x,
+                .op_y = s_emo.op_y,
+                .tile_px_inv = tp > 0.f ? 1.f / tp : 0.f,
+                .pad0 = 0.f,
+                .sdf_map_w = static_cast<std::uint32_t>( rs.sdf().map_w() ),
+                .sdf_map_h = static_cast<std::uint32_t>( rs.sdf().map_h() ),
+            };
+            rs.sound_waves().record( {
+                .cb = ctx.cmd_buffer,
+                .target = wt->texture(),
+                .proj_w = static_cast<std::uint32_t>( wt->width() ),
+                .proj_h = static_cast<std::uint32_t>( wt->height() ),
+                .instances = &instances,
+                .sdf_buffer = rs.sdf().sdf_buffer(),
+                .snd_frag_params = fp,
+            } );
+        }
     }
 }
 
