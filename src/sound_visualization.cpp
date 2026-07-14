@@ -19,7 +19,9 @@ constexpr auto MAX_ACTIVE_PULSES = std::size_t{ 32 };
 constexpr float WAVEFRONT_SPEED = 9.0f; // tiles/sec (must match render loop)
 constexpr float BFS_MARGIN = 2.0f; // advance BFS this many tiles ahead of wavefront
 
-const std::array<point, 8> DIRS = { point( 1, 0 ), point( -1, 0 ), point( 0, 1 ),
+const auto DIRS = std::array<point, 8>
+{
+    point( 1, 0 ), point( -1, 0 ), point( 0, 1 ),
     point( 0, -1 ), point( 1, 1 ), point( 1, -1 ), point( -1, 1 ), point( -1, -1 )
 };
 
@@ -38,13 +40,11 @@ auto advance_pulse_bfs( dev_test_lights::sound_pulse &p, map &here, double now )
         const auto cur = p.pq.top();
         p.pq.pop();
 
+        if( cur.dist > p.best[idx( cur.dx, cur.dy )] ) { continue; } // stale entry
         if( cur.dist >= target_dist ) {
-            // Put it back — we've covered enough for this frame
-            p.pq.push( cur );
+            p.pq.push( cur ); // put it back — covered enough for this frame
             break;
         }
-
-        if( cur.dist > p.best[idx( cur.dx, cur.dy )] ) { continue; }
 
         for( const auto &d : DIRS ) {
             const auto ndx = cur.dx + d.x;

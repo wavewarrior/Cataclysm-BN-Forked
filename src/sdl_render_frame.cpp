@@ -701,7 +701,7 @@ auto draw_lighting_overlays( lighting::render_state &rs,
             }
 
             if( !instances.empty() ) {
-                const auto win = get_sdl_window_size();
+                auto *wt = rs.world_target();
                 const float circle_r = tp * 0.55f;
                 const lighting::snd_frag_params fp {
                     .camera_off_x = static_cast<float>( s_emo.cam_off_x ),
@@ -715,9 +715,9 @@ auto draw_lighting_overlays( lighting::render_state &rs,
                 };
                 rs.sound_waves().record( {
                     .cb = ctx.cmd_buffer,
-                    .target = rs.world_target() ? rs.world_target()->texture() : nullptr,
-                    .proj_w = static_cast<std::uint32_t>( win.x ),
-                    .proj_h = static_cast<std::uint32_t>( win.y ),
+                    .target = wt ? wt->texture() : nullptr,
+                    .proj_w = wt ? static_cast<std::uint32_t>( wt->width() ) : 0u,
+                    .proj_h = wt ? static_cast<std::uint32_t>( wt->height() ) : 0u,
                     .instances = &instances,
                     .radius = radius,
                     .life = life,
