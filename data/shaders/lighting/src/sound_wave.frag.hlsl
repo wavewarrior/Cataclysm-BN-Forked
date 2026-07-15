@@ -4,7 +4,11 @@
 // from the pulse source in screen pixels:
 //   - A bright ring marks the wavefront at the outer edge.
 //   - A colored wake fills the interior, fading toward the source.
-//   - SDF diffraction modulates intensity near walls (additive RGB, alpha unchanged).
+//   - A ray-marched SDF visibility test occludes the disc behind walls, so
+//     the wavefront wraps around corners and stops at geometry instead of
+//     drawing straight through it like a plain overlay.
+//   - SDF diffraction adds a subtle glow near walls (additive RGB, alpha
+//     unchanged).
 //
 // Output is premultiplied alpha (pipeline: SRC=ONE, DST=ONE_MINUS_SRC_ALPHA).
 //
@@ -62,6 +66,39 @@ float2 screen_to_tile(float2 screen_px)
     return (screen_px - float2(op_x, op_y)) * tile_px_inv - float2(camera_off_x, camera_off_y);
 }
 
+// Ray-marched line-of-sight test from the pulse source to a target tile,
+// respecting wall geometry via the SDF. True sphere tracing — each step
+// advances by the SDF's own safe distance, so it converges in a handful of
+// steps through open rooms and only slows down (and stays precise) right
+// next to walls. A Quilez-style soft penumbra keeps the shadow boundary
+// from being a hard binary cutoff — this is what makes the wavefront feel
+// bound by room geometry (wraps around corners, stops at walls) instead of
+// an overlay drawn on top of it.
+static const int   SND_VIS_STEPS    = 32;
+static const float SND_VIS_WALL     = 0.08; // SDF distance treated as "blocked"
+static const float SND_VIS_K        = 6.0;  // penumbra softness (higher = sharper)
+static const float SND_VIS_MIN_STEP = 0.05; // floor so marching always progresses
+
+float sdf_visibility(float2 from_tile, float2 to_tile)
+{
+    const float2 delta = to_tile - from_tile;
+    const float  total  = length(delta);
+    if (total < 0.05) return 1.0;
+    const float2 dir = delta / total;
+
+    float t   = 0.1; // skip the source's own cell
+    float vis = 1.0;
+    for (int s = 0; s < SND_VIS_STEPS && t < total; ++s) {
+        const float wd = sdf_sample(from_tile + dir * t);
+        if (wd < SND_VIS_WALL) {
+            return 0.0;
+        }
+        vis = min(vis, saturate(SND_VIS_K * wd / t));
+        t  += max(wd, SND_VIS_MIN_STEP);
+    }
+    return vis;
+}
+
 // ---- Main ----
 
 float4 main(VS_OUT inp) : SV_Target
@@ -89,9 +126,12 @@ float4 main(VS_OUT inp) : SV_Target
     const float behind = smoothstep(0.0, ring_width, to_edge);
     const float wake_t = norm * behind * 0.4;
 
-    // SDF diffraction + wall softening.
+    // Ray-marched occlusion: is this fragment visible from the pulse source?
+    // Blocks the disc at walls and softens the shadow edge so the wavefront
+    // wraps around corners instead of drawing straight through geometry.
     float diffraction_glow = 0.0;
     float sdf_occ          = 1.0;
+    float vis              = 1.0;
     if (sdf_map_w > 0 && sdf_map_h > 0 && tile_px_inv > 0.0) {
         const float2 tile_pos  = screen_to_tile(pos_logical);
         const float  wall_dist = sdf_sample(tile_pos);
@@ -101,11 +141,15 @@ float4 main(VS_OUT inp) : SV_Target
             diffraction_glow = wf * ring_t * 0.5;
             sdf_occ          = smoothstep(-0.25, 0.25, wall_dist);
         }
+        vis = sdf_visibility(screen_to_tile(inp.source), tile_pos);
     }
 
-    // Combine.
+    // Combine. `vis` gates everything on line-of-sight from the source;
+    // `sdf_occ` additionally darkens fragments that are themselves inside
+    // or touching wall geometry.
     const float base      = max(ring_t * 0.9, wake_t);
-    const float intensity = base * sdf_occ;
+    const float occlusion = sdf_occ * vis;
+    const float intensity = base * occlusion;
     const float alpha     = intensity * life;
 
     if (alpha < 0.004) discard;
@@ -119,7 +163,7 @@ float4 main(VS_OUT inp) : SV_Target
     // Diffraction glow is additive in RGB only — never inflate alpha
     // (alpha > 1.0 would reverse premultiplied compositing).
     const float3 diff_col  = float3(0.5, 1.0, 1.0);
-    const float3 final_rgb = col * alpha + diff_col * (diffraction_glow * life);
+    const float3 final_rgb = col * alpha + diff_col * (diffraction_glow * life * vis);
 
     return float4(final_rgb, alpha);
 }

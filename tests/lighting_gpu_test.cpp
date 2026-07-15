@@ -13,6 +13,7 @@
 #include "catch/catch_amalgamated.hpp"
 #include "lighting/gpu_device.h"
 #include "lighting/shader_compiler.h"
+#include "lighting/sound_wave_pass.h"
 
 #include <SDL3/SDL.h>
 
@@ -91,4 +92,36 @@ TEST_CASE( "shader compiler init+quit is idempotent", "[.gpu][lighting]" )
 
     REQUIRE_NOTHROW( lighting::init_shader_compiler() );
     REQUIRE_NOTHROW( lighting::shutdown_shader_compiler() );
+}
+
+TEST_CASE( "sound_wave_pass shader compiles", "[.gpu][lighting]" )
+{
+    sdl_video_session sdl;
+    if( !sdl.ok ) {
+        WARN( "SDL_InitSubSystem(VIDEO) failed: " << SDL_GetError() );
+        return;
+    }
+
+    SDL_Window *win = SDL_CreateWindow( "lighting_gpu_test_sound_wave", 320, 240,
+                                        SDL_WINDOW_HIDDEN );
+    REQUIRE( win != nullptr );
+
+    {
+        lighting::gpu_device dev;
+        REQUIRE_NOTHROW( dev.init( win, /*debug=*/true, /*vsync=*/false ) );
+        REQUIRE( dev.ready() );
+
+        // Exercises the full HLSL -> SPIR-V/MSL cross-compile of the sound
+        // wave shaders — including the ray-marched SDF visibility test in
+        // sound_wave.frag.hlsl — through the real SDL_ShaderCross pipeline.
+        // Catches HLSL syntax/semantic errors a pure C++ build can't.
+        lighting::sound_wave_pass pass;
+        REQUIRE( pass.init( dev, dev.swapchain_format() ) );
+        REQUIRE( pass.ready() );
+
+        pass.shutdown();
+        dev.shutdown();
+    }
+
+    SDL_DestroyWindow( win );
 }

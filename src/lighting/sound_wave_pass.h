@@ -6,7 +6,10 @@
 // quad per pulse. The vertex shader places a large quad centered at the
 // source; the fragment shader computes per-pixel distance from source and
 // draws a bright ring at the wavefront edge with a colored wake behind it.
-// Optional SDF modulation adds a diffraction glow near walls.
+// Optional SDF pass: ray-marched (sphere-traced) visibility occludes the
+// disc behind walls — the wavefront wraps around corners and stops at
+// geometry instead of drawing through it — plus a subtle diffraction glow
+// right at wall edges.
 //
 // Follows the rain_effect pattern: instance storage buffer + procedural quad
 // vertex shader + custom fragment shader, alpha-blended onto the world target.
