@@ -822,21 +822,25 @@ auto sound_pulses_visible( bool player_in_stealth ) -> bool
 
 bool place_test_light()
 {
-    // No-op unless the panel is open with place-mode on (mirrors the old ImGui guard).
+    // Gate solely on the checkbox — placement works even with the F4 panel
+    // closed, so closing it for an unobstructed view doesn't break testing.
     // Returns true when it placed one, so the caller can consume the click.
-    if( !g_devui_visible || !dev_test_lights::place_mode ) { return false; }
+    if( !dev_test_lights::place_mode ) { return false; }
     dev_test_lights::lights.push_back( dev_test_lights::light{
         dev_test_lights::hover_wx, dev_test_lights::hover_wy, dev_test_lights::hover_wz,
         cursor_light_emitter::radius, cursor_light_emitter::intensity,
         cursor_light_emitter::color[0], cursor_light_emitter::color[1],
         cursor_light_emitter::color[2]} );
+    dbg( DL::Info ) << "[light_vis] light placed, total_lights="
+                    << dev_test_lights::lights.size();
     return true;
-
 }
 
 bool place_test_sound()
 {
-    if( !g_devui_visible || !g_sound_place_mode || g == nullptr ) { return false; }
+    // Gate solely on the checkbox + valid game state — same reasoning as
+    // place_test_light(): the F4 panel doesn't need to stay open.
+    if( !g_sound_place_mode || g == nullptr ) { return false; }
     const auto src = tripoint_bub_ms( static_cast<int>( dev_test_lights::hover_wx ),
                                       static_cast<int>( dev_test_lights::hover_wy ),
                                       static_cast<int>( dev_test_lights::hover_wz ) );

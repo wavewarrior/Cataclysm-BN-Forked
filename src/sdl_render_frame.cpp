@@ -40,6 +40,12 @@
 
 using namespace std::literals;
 
+// Sound-pulse wavefront: minimum reachable radius in tiles. Footstep pulses
+// (volume=3, see game_movement.cpp) would otherwise expire at a barely-visible
+// 3-tile radius; louder pulses (melee 8-12, gunfire 20, ballistics 10) already
+// exceed this floor and are unaffected.
+constexpr float k_min_sound_pulse_radius = 6.0f;
+
 // Rolling averages from frame_perf, published every frame by refresh_display.
 // File-static: consumed only within this TU (the overlay in pass_b).
 static float g_fps_avg = 0.0f;
@@ -224,14 +230,12 @@ if( g && world_generator && world_generator->active_world ) {
         cursor_light_emitter::wz = static_cast<float>( g->u.bub_pos().z() );
     }
 
-    // Dev test lights: keep the hovered world-tile fresh while the F4 panel is
-    // open (the panel drops a static light there on click); despawn all placed
-    // lights the moment the panel closes. Pure debugging aid.
-    if( !sdl_lighting_devui::devui_visible() ) {
-    if( !dev_test_lights::lights.empty() ) {
-            dev_test_lights::lights.clear();
-        }
-    } else if( g && tilecontext && world_generator && world_generator->active_world ) {
+    // Dev test lights/sounds: keep the hovered world-tile fresh regardless of
+    // F4-panel visibility — placement is gated solely by the checkbox state
+    // (see place_test_light()/place_test_sound()), so closing the panel for
+    // an unobstructed view no longer breaks click-to-place. Placed lights are
+    // no longer auto-cleared on close; use the panel's "clear placed" button.
+    if( g && tilecontext && world_generator && world_generator->active_world ) {
     float msx = 0.0f, msy = 0.0f;
     SDL_GetMouseState( &msx, &msy );
         const point o  = tilecontext->get_tile_map_origin().raw();
@@ -677,7 +681,7 @@ auto draw_lighting_overlays( lighting::render_state &rs,
         const double now = dev_test_lights::pulse_now_s();
         auto &pulses = dev_test_lights::sound_pulses;
         std::erase_if( pulses, [now]( const dev_test_lights::sound_pulse & p ) {
-            const float max_r = std::clamp( p.volume, 1.f, 24.f );
+            const float max_r = std::clamp( p.volume, k_min_sound_pulse_radius, 24.f );
             return static_cast<float>( now - p.spawn_s ) * speed > max_r;
         } );
         if( !pulses.empty() ) {
@@ -831,7 +835,7 @@ auto render_world_pass_w( lighting::render_state &rs,
         instances.reserve( 32 );
         for( const auto &p : dev_test_lights::sound_pulses ) {
             if( p.z != s_emo.player_z ) { continue; }
-            const float max_r = std::clamp( p.volume, 1.f, 24.f );
+            const float max_r = std::clamp( p.volume, k_min_sound_pulse_radius, 24.f );
             const float radius = static_cast<float>( now - p.spawn_s ) * speed;
             const float life = std::clamp( 1.f - radius / max_r, 0.f, 1.f );
             if( life <= 0.f ) { continue; }
