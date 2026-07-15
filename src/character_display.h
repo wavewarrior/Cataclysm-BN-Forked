@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "character_stat.h"
@@ -26,6 +27,14 @@ namespace character_display
  */
 std::vector<std::string> encumbrance_lines( const Character &ch,
         const item *selected_clothing = nullptr );
+
+/**
+ * Builds the (name, description) pairs for every effect/condition currently
+ * affecting `ch` that the '@' screen's Effects tab shows: active effects,
+ * perceived pain, starvation/BMI, TROGLO sunlight irritation, and active
+ * addictions. Shared by disp_info() and the Qud HUD bottom strip (hud_botbar).
+ */
+std::vector<std::pair<std::string, std::string>> effect_name_and_text( const Character &ch );
 
 /**
  * @brief Handles and displays detailed character info for the '@' screen.

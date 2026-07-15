@@ -27,6 +27,7 @@
 #include "cata_utility.h"
 #include "catacharset.h"
 #include "character.h"
+#include "character_display.h"
 #include "character_effects.h"
 #include "character_functions.h"
 #include "character_martial_arts.h"
@@ -85,6 +86,9 @@ static const trait_id trait_THRESH_BIRD( "THRESH_BIRD" );
 static const trait_id trait_THRESH_URSINE( "THRESH_URSINE" );
 
 static const efftype_id effect_got_checked( "got_checked" );
+static const efftype_id effect_bleed( "bleed" );
+static const efftype_id effect_bite( "bite" );
+static const efftype_id effect_infected( "infected" );
 
 static const flag_id json_flag_THERMOMETER( "THERMOMETER" );
 static const flag_id json_flag_SPLINT( "SPLINT" );
@@ -434,34 +438,40 @@ std::string window_panel::get_name() const
     return name;
 }
 
-void overmap_ui::draw_overmap_chunk( const catacurses::window &w_minimap, const avatar &you,
-                                     const tripoint_abs_omt &global_omt, point start_input,
-                                     const int width, const int height )
+// Colored-text overmap minichunk for the RmlUi HUD "map" panel. Reuses the terrain/
+// note/vehicle cell lookup draw_overmap_chunk (now removed; had zero remaining callers
+// after the Tier-10 curses rip-out) fed into its w_minimap window. MVP simplification
+// (locked design decision): the mission-arrow-past-the-grid-edge and border horde
+// markers were graphical bonuses layered on the physical pixel minimap — dropped here,
+// not portable to an arbitrary text row count. The mission-target and player-position
+// cells were curses "reverse video" (red_background()/mvwputch_hi background swaps),
+// not representable through cata_text_to_rml's foreground-only colour tags, so both
+// are emitted as explicit inline background spans instead.
+auto overmap_ui::overmap_chunk_rows( const avatar &you, const tripoint_abs_omt &global_omt,
+                                     const int width, const int height ) -> std::vector<std::string>
 {
     auto &player_character = get_avatar();
     const point_abs_omt curs = global_omt.xy();
     const auto custom_targ = player_character.get_custom_mission_target();
     const auto mission_targ = you.get_active_mission_target();
     const auto targ = custom_targ != overmap::invalid_tripoint ? custom_targ : mission_targ;
-    auto drew_mission = targ == overmap::invalid_tripoint;
-    const int start_y = start_input.y + ( height / 2 ) - 2;
-    const int start_x = start_input.x + ( width / 2 ) - 2;
+    const bool has_mission = targ != overmap::invalid_tripoint;
 
-    for( int i = -( width / 2 ); i <= width - ( width / 2 ) - 1; i++ ) {
-        for( int j = -( height / 2 ); j <= height - ( height / 2 ) - 1; j++ ) {
+    std::vector<std::string> rows;
+    rows.reserve( height );
+    for( int j = -( height / 2 ); j <= height - ( height / 2 ) - 1; ++j ) {
+        std::string row;
+        for( int i = -( width / 2 ); i <= width - ( width / 2 ) - 1; ++i ) {
             const tripoint_abs_omt omp( curs + point( i, j ), g->get_levz() );
             nc_color ter_color;
             std::string ter_sym;
-            const bool seen = ACTIVE_OVERMAP_BUFFER.seen( omp );
             const bool vehicle_here = ACTIVE_OVERMAP_BUFFER.has_vehicle( omp );
             if( ACTIVE_OVERMAP_BUFFER.has_note( omp ) ) {
-
                 const std::string &note_text = ACTIVE_OVERMAP_BUFFER.note( omp );
-
                 const auto note_info = overmap_ui::get_note_display_info( note_text );
                 ter_color = std::get<1>( note_info );
                 ter_sym = std::string( 1, std::get<0>( note_info ) );
-            } else if( !seen ) {
+            } else if( !ACTIVE_OVERMAP_BUFFER.seen( omp ) ) {
                 ter_sym = " ";
                 ter_color = c_black;
             } else if( vehicle_here ) {
@@ -470,78 +480,23 @@ void overmap_ui::draw_overmap_chunk( const catacurses::window &w_minimap, const 
             } else {
                 const oter_id &cur_ter = ACTIVE_OVERMAP_BUFFER.ter( omp );
                 ter_sym = cur_ter->get_symbol();
-                if( ACTIVE_OVERMAP_BUFFER.is_explored( omp ) ) {
-                    ter_color = c_dark_gray;
-                } else {
-                    ter_color = cur_ter->get_color();
-                }
-            }
-            if( !drew_mission && targ.xy() == omp.xy() ) {
-                // If there is a mission target, and it's not on the same
-                // overmap terrain as the player character, mark it.
-                // TODO: Inform player if the mission is above or below
-                drew_mission = true;
-                if( i != 0 || j != 0 ) {
-                    ter_color = red_background( ter_color );
-                }
+                ter_color = ACTIVE_OVERMAP_BUFFER.is_explored( omp ) ? c_dark_gray : cur_ter->get_color();
             }
             if( i == 0 && j == 0 ) {
-                mvwputch_hi( w_minimap, point( 3 + start_x, 3 + start_y ), ter_color, ter_sym );
+                row += string_format(
+                           R"(<span style="background-color:%s;color:#ffffffff;">%s</span>)",
+                           nc_color_to_hex( ter_color ), rml_escape( ter_sym ) );
+            } else if( has_mission && targ.xy() == omp.xy() ) {
+                row += string_format(
+                           R"(<span style="background-color:%s;">%s</span>)",
+                           nc_color_to_hex( c_red ), cata_text_to_rml( colorize( ter_sym, ter_color ) ) );
             } else {
-                mvwputch( w_minimap, point( 3 + i + start_x, 3 + j + start_y ), ter_color, ter_sym );
+                row += cata_text_to_rml( colorize( ter_sym, ter_color ) );
             }
         }
+        rows.push_back( std::move( row ) );
     }
-
-    // Print arrow to mission if we have one!
-    if( !drew_mission ) {
-        double slope = curs.x() != targ.x() ?
-                       static_cast<double>( targ.y() - curs.y() ) / ( targ.x() - curs.x() ) : 4;
-
-        if( curs.x() == targ.x() || std::fabs( slope ) > 3.5 ) {  // Vertical slope
-            const int arrowy = targ.y() > curs.y() ? 6 : 0;
-
-            mvwputch( w_minimap, point( 3 + start_x, arrowy + start_y ), c_red, '*' );
-        } else {
-            int arrowx = -1;
-            int arrowy = -1;
-            if( std::fabs( slope ) >= 1.0 ) {  // y diff is bigger!
-                arrowy = ( targ.y() > curs.y() ? 6 : 0 );
-                arrowx = static_cast<int>( 3 + 3 * ( targ.y() > curs.y() ? slope : ( 0 - slope ) ) );
-                arrowx = clamp( arrowx, 0, 6 );
-            } else {
-                arrowx = ( targ.x() > curs.x() ? 6 : 0 );
-                arrowy = static_cast<int>( 3 + 3 * ( targ.x() > curs.x() ? slope : ( 0 - slope ) ) );
-                arrowy = clamp( arrowy, 0, 6 );
-            }
-            char glyph = '*';
-            if( targ.z() > you.bub_pos().z() ) {
-                glyph = '^';
-            } else if( targ.z() < you.bub_pos().z() ) {
-                glyph = 'v';
-            }
-
-            mvwputch( w_minimap, point( arrowx + start_x, arrowy + start_y ), c_red, glyph );
-        }
-    }
-    const int sight_points = player_character.overmap_sight_range( g->light_level(
-                                 player_character.bub_pos().z() ) );
-    for( int i = -3; i <= 3; i++ ) {
-        for( int j = -3; j <= 3; j++ ) {
-            if( i > -3 && i < 3 && j > -3 && j < 3 ) {
-                continue; // only do hordes on the border, skip inner map
-            }
-            const tripoint_abs_omt omp( curs + point( i, j ), g->get_levz() );
-            int horde_size = ACTIVE_OVERMAP_BUFFER.get_horde_size( omp );
-            if( horde_size >= HORDE_VISIBILITY_SIZE ) {
-                if( ACTIVE_OVERMAP_BUFFER.seen( omp )
-                    && player_character.overmap_los( omp, sight_points ) ) {
-                    mvwputch( w_minimap, point( i + 3, j + 3 ), c_green,
-                              horde_size > HORDE_VISIBILITY_SIZE * 2 ? 'Z' : 'z' );
-                }
-            }
-        }
-    }
+    return rows;
 }
 
 static void decorate_panel( const std::string &name, const catacurses::window &w )
@@ -1016,9 +971,18 @@ static const std::map<std::string, std::function<bool()>> &render_predicate_regi
     static const std::map<std::string, std::function<bool()>> reg = {
         { "spell_panel", spell_panel },
         { "veh_panel", veh_panel },
+        // Registered unconditionally so non-coop builds hide the panel outright
+        // instead of hitting resolve_widget_show_if's "unknown gate" fallback
+        // (which would debugmsg-spam AND always show it).
+        {
+            "coop_panel", []() -> bool {
 #ifdef COOP_ENABLED
-        { "coop_panel", []() -> bool { return coop_session::get().is_coop(); } },
+                return coop_session::get().is_coop();
+#else
+                return false;
 #endif
+            }
+        },
     };
     return reg;
 }
@@ -1038,10 +1002,17 @@ namespace
 // sidebar_hud.rml iterates `rows`; C++ rebuilds the vector each sync.
 struct hud_row_model {
     Rml::String rml;
+    Rml::String title; // empty → no header chrome
     bool flex = false;
 };
 struct hud_rml_model {
     Rml::Vector<hud_row_model> rows;
+    // Qud top/bottom screen chrome strips (Phase 2): topbar row 1 (name/needs/date),
+    // topbar row 2 (HP/stamina/mana bars, raw RML), bottom effects/hostiles strip (raw
+    // RML). Empty strings render as empty rows when the carve is 0 (HUD not ready).
+    Rml::String topbar_rml;
+    Rml::String topbar2_rml;
+    Rml::String botbar_rml;
     Rml::DataModelHandle handle;
 };
 std::unique_ptr<hud_rml_model> g_hud_data;
@@ -1282,71 +1253,66 @@ std::string hud_armor( avatar &u )
            row( _( "Feet" ), "foot_r" );
 }
 
-// One body-part's HP as a coloured string — reproduces draw_limb_health's TEXT (broken
-// limb #/= mend bar / number / 5-cell hp bar + trailing dots), no curses window. Used by
-// hud_limbs.
-std::string hud_limb_health( avatar &u, const bodypart_id &bp, bool num_style )
+// Emits a Qud "qbar" fill-bar div (see .qbar/.qbar-fill in sidebar_hud.rcss). Percentage
+// clamped 0-100; fill colour is the caller's nc_color converted to hex.
+auto qbar_rml( int cur, int max, const nc_color &color ) -> std::string
 {
-    const int hp_cur = u.get_part_hp_cur( bp );
-    const int hp_max = u.get_part_hp_max( bp );
+    const auto pct = max > 0 ? std::clamp( cur * 100 / max, 0, 100 ) : 0;
+    return string_format(
+               R"(<div class="qbar"><div class="qbar-fill" style="width:%d%%;background-color:%s;"></div></div>)",
+               pct, nc_color_to_hex( color ) );
+}
+
+// One body-part's HP as a Qud fill-bar row (qbar_rml) + numeric readout — replaces
+// draw_limb_health's curses TEXT bar (broken-limb mend # /= bar / plain number / 5-cell
+// hp bar) with an actual div fill bar. Raw RML fragment; used by hud_limbs.
+auto hud_limb_health( avatar &u, const bodypart_id &bp, bool num_style ) -> std::string
+{
+    const auto hp_cur = u.get_part_hp_cur( bp );
+    const auto hp_max = u.get_part_hp_max( bp );
     const bool checked = u.has_effect( effect_got_checked );
-    std::optional<nc_color> color_override;
     if( u.is_limb_broken( bp.id() ) && !bp->essential ) {
-        const int mend_perc = hp_max > 0 ? 100 * hp_cur / hp_max : 0;
+        const auto mend_perc = hp_max > 0 ? 100 * hp_cur / hp_max : 0;
         const bool splinted = u.worn_with_flag( json_flag_SPLINT, bp ) ||
                               ( u.mutation_value( "mending_modifier" ) >= 1.0f );
         const nc_color color = splinted ? c_blue : c_dark_gray;
         if( num_style || checked ) {
-            color_override = color;
-        } else {
-            const int num = mend_perc / 20;
-            return colorize( std::string( num, '#' ) + std::string( 5 - num, '=' ), color );
+            return cata_text_to_rml( colorize( string_format( "%3d", hp_cur ), color ) );
         }
+        return qbar_rml( mend_perc, 100, color ) + string_format( " %d%%", mend_perc );
     }
-    std::pair<std::string, nc_color> hp = get_hp_bar( hp_cur, hp_max );
-    if( color_override ) {
-        hp.second = *color_override;
-    }
+    const auto hp = get_hp_bar( hp_cur, hp_max );
     if( num_style || checked ) {
-        return colorize( string_format( "%3d", hp_cur ), hp.second );
+        return cata_text_to_rml( colorize( string_format( "%3d", hp_cur ), hp.second ) );
     }
-    std::string bar = colorize( hp.first, hp.second );
-    const int dots = 5 - utf8_width( hp.first );
-    if( dots > 0 ) {
-        bar += colorize( std::string( dots, '.' ), c_white );
-    }
-    return bar;
+    return qbar_rml( hp_cur, hp_max, hp.second ) + string_format( " %d/%d", hp_cur, hp_max );
 }
 
 // Mirrors draw_limb_wide / draw_limb2 / draw_limb_narrow (all limb variants — same data,
-// only layout differs, so one producer serves all): "<name>: <hp bar>" per body part in
-// reading order, one row each. Full colour fidelity (limb_color name + hp-bar colour).
-std::string hud_limbs( avatar &u )
+// only layout differs, so one producer serves all): one Qud bar row per body part, in
+// reading order. Full colour fidelity (limb_color name + hp-bar colour). Raw RML.
+auto hud_limbs( avatar &u ) -> std::string
 {
     const bool num_style = get_option<std::string>( "HEALTH_STYLE" ) == "number";
     std::string out;
-    bool first = true;
     for( const bodypart_id &bp : u.get_all_body_parts( true ) ) {
-        if( !first ) {
-            out += "\n";
-        }
-        first = false;
         const std::string name = left_justify( body_part_hp_bar_ui_text( bp.id() ), 5 );
-        out += colorize( name, u.limb_color( bp.id(), true, true, true ) ) + " " +
-               hud_limb_health( u, bp, num_style );
+        out += "<div class=\"hud-limb-row\"><span class=\"hud-limb-name\">" +
+               cata_text_to_rml( colorize( name, u.limb_color( bp.id(), true, true, true ) ) ) +
+               "</span>" + hud_limb_health( u, bp, num_style ) + "</div>";
     }
     return out;
 }
 
 // Mirrors draw_messages (the "Log" panel): the recent message buffer in chronological
-// order, one line each. MVP CHEAPEST SOURCE — Messages::recent_messages drops the
-// per-type colour + age fade the curses display applies (FIDELITY GAP, flag for phase 2:
-// add a coloured accessor). The flex row grows; content top-aligns + clips if it overruns.
-std::string hud_log( avatar & )
+// order, one line each, coloured by msgtype with the same new/recent/old fade the curses
+// display applies (Messages::recent_messages_colored). The flex row grows; content
+// top-aligns + clips if it overruns.
+auto hud_log( avatar & ) -> std::string
 {
     std::string out;
     bool first = true;
-    for( const std::pair<std::string, std::string> &m : Messages::recent_messages( 20 ) ) {
+    for( const std::pair<std::string, std::string> &m : Messages::recent_messages_colored( 20 ) ) {
         if( !first ) {
             out += "\n";
         }
@@ -1403,27 +1369,356 @@ std::string hud_location( avatar &u )
     return out;
 }
 
-// Compass — MVP DESIGN SIMPLIFICATION. The native full compass (draw_compass_padding ->
-// g->mon_info) is a GRAPHICAL 3x3 directional symbol grid + creature list → phase 2. For
-// MVP this renders the essential can't-play-without datum the simple-compass uses: enemy
-// COUNTS per direction (cached visible_count_by_dir, octants N/NE/E/SE/S/SW/W/NW + local).
-// A design call for the user: counts vs the symbol grid (flag at eyeball).
-std::string hud_compass( avatar &u )
+// Compass — Qud-style threat grid: the full mon_info 3x3 directional symbol grid
+// (index layout 7 0 1 / 6 8 2 / 5 4 3, matching monster_visible_info; 8 = center/
+// local) plus a per-direction monster list below it. Raw RML (see g_hud_producers).
+auto hud_compass( avatar &u ) -> std::string
 {
-    static constexpr std::array<const char *, 9> dir_labels = {
-        "N", "NE", "E", "SE", "S", "SW", "W", "NW", "--"
+    static constexpr std::array<int, 9> grid_index = { 7, 0, 1, 6, 8, 2, 5, 4, 3 };
+    static constexpr std::array<const char *, 8> dir_labels = {
+        "N", "NE", "E", "SE", "S", "SW", "W", "NW"
     };
-    const auto &counts = u.get_mon_visible().visible_count_by_dir;
-    std::string out;
-    for( int i = 0; i < 9; ++i ) {
-        if( counts[i] > 0 ) {
-            out += string_format( "%s(%d) ", dir_labels[i], counts[i] );
+    const auto &info = u.get_mon_visible();
+    const auto cell_text = [&]( int i ) -> std::string {
+        if( i == 8 )
+        {
+            return colorize( "\u2302", c_white );
         }
+        std::string s;
+        for( const auto &mon : info.unique_mons[i] | std::views::take( 3 ) )
+        {
+            s += colorize( mon.first->sym, mon.first->color );
+        }
+        if( !info.unique_types[i].empty() )
+        {
+            s += colorize( std::string( info.unique_types[i].size(), '@' ), c_light_red );
+        }
+        return s.empty() ? colorize( "\u00b7", c_dark_gray ) : s;
+    };
+    std::string grid;
+    for( int row = 0; row < 3; ++row ) {
+        grid += "<div class=\"tc-row\">";
+        for( int col = 0; col < 3; ++col ) {
+            const int i = grid_index[row * 3 + col];
+            const bool danger = i < 8 && info.dangerous[i];
+            grid += "<span class=\"tc-cell";
+            grid += danger ? " danger\">" : "\">";
+            grid += cata_text_to_rml( cell_text( i ) );
+            grid += "</span>";
+        }
+        grid += "</div>";
     }
-    if( out.empty() ) {
-        return colorize( _( "No enemies in sight" ), c_dark_gray );
+    // Per-direction monster list: reading order N..NW, capped at 4 lines then folded
+    // into "+n dirs" — the grid above already shows every occupied octant at a glance.
+    std::vector<std::string> lines;
+    int remaining = 0;
+    for( int i = 0; i < 8; ++i ) {
+        if( info.unique_mons[i].empty() ) {
+            continue;
+        }
+        if( static_cast<int>( lines.size() ) >= 4 ) {
+            ++remaining;
+            continue;
+        }
+        std::string names;
+        bool first = true;
+        for( const auto &mon : info.unique_mons[i] ) {
+            if( !first ) {
+                names += ", ";
+            }
+            first = false;
+            names += colorize( mon.first->nname( mon.second ), mon.first->color );
+            if( mon.second > 1 ) {
+                names += string_format( " \u00d7%d", mon.second );
+            }
+        }
+        const nc_color dir_color = info.dangerous[i] ? c_red : c_light_gray;
+        const std::string line = colorize( dir_labels[i], dir_color ) + " " + names;
+        lines.push_back( "<div>" + cata_text_to_rml( line ) + "</div>" );
     }
-    return colorize( out, c_white );
+    if( remaining > 0 ) {
+        lines.push_back( "<div>" + cata_text_to_rml( colorize(
+                             string_format( _( "+%d dirs" ), remaining ), c_dark_gray ) ) + "</div>" );
+    }
+    std::string out = grid;
+    for( const std::string &line : lines ) {
+        out += line;
+    }
+    return out;
+}
+
+// Reference plans/RMLUI_HUD_PANEL_REFERENCE.md §3.18: runs the same "npc_needs" behavior
+// tree tick the NPC AI issues, against the avatar via character_oracle_t.
+auto hud_ai_goal( avatar &u ) -> std::string
+{
+    behavior::tree needs;
+    needs.add( &string_id<behavior::node_t>( "npc_needs" ).obj() );
+    const behavior::character_oracle_t oracle( &u );
+    const auto current_need = needs.tick( &oracle );
+    const auto goal = current_need.empty() || current_need == "idle"
+                      ? std::string( _( "none" ) ) : current_need;
+    return colorize( string_format( _( "Goal: %s" ), goal ), c_light_gray );
+}
+
+// Mirrors hud_armor's per-body-part outermost-armor lookup (get_armor above), but shows
+// only the glyph (item::symbol, tinted item::color) so five parts fit on one strip row.
+auto hud_armor_comp( avatar &u ) -> std::string
+{
+    static constexpr std::array<std::pair<const char *, const char *>, 5> parts = { {
+            { "head", "H" }, { "torso", "T" }, { "arm_r", "A" }, { "leg_r", "L" }, { "foot_r", "F" }
+        }
+    };
+    auto out = std::string();
+    auto first = true;
+    for( const auto &[bp, label] : parts ) {
+        if( !first ) {
+            out += " ";
+        }
+        first = false;
+        out += std::string( label ) + ":";
+        auto glyph = colorize( "-", c_dark_gray );
+        for( const auto &worn_item : u.worn | std::views::reverse ) {
+            if( worn_item->covers( bodypart_id( bp ) ) ) {
+                glyph = colorize( worn_item->symbol(), worn_item->color() );
+                break;
+            }
+        }
+        out += glyph;
+    }
+    return out;
+}
+} // namespace
+
+// (name, icon-id) per lunar phase — untranslated; hud_moon translates `name` at the call
+// site (mirrors how g_hud_producers keeps `title` untranslated until sync time).
+
+auto moon_phase_display( moon_phase phase ) -> moon_phase_info
+{
+    switch( phase ) {
+    case MOON_NEW:
+        return { "New moon", "moon_new" };
+    case MOON_WAXING_CRESCENT:
+        return { "Waxing crescent", "moon_waxing_crescent" };
+    case MOON_HALF_MOON_WAXING:
+        return { "First quarter", "moon_first_quarter" };
+    case MOON_WAXING_GIBBOUS:
+        return { "Waxing gibbous", "moon_waxing_gibbous" };
+    case MOON_FULL:
+        return { "Full moon", "moon_full" };
+    case MOON_WANING_GIBBOUS:
+        return { "Waning gibbous", "moon_waning_gibbous" };
+    case MOON_HALF_MOON_WANING:
+        return { "Last quarter", "moon_last_quarter" };
+    case MOON_WANING_CRESCENT:
+        return { "Waning crescent", "moon_waning_crescent" };
+    case MOON_PHASE_MAX:
+        break;
+}
+return { "Unknown", "moon_full" };
+}
+
+namespace
+{
+// Raw RML: absolute gfxdir() icon path (Phase-1 assumption #2 — sidesteps the untested
+// document-relative resolution, matching widget_icon.cpp's own lookup) + phase name +
+// current-tile outdoor temperature.
+auto hud_moon( avatar &u ) -> std::string
+{
+    const auto info = moon_phase_display( get_moon_phase( calendar::turn ) );
+    const auto icon_src = PATH_INFO::gfxdir() + "widgets/" + info.icon + ".svg?px=32";
+    const auto text = string_format( "%s : %s  %s : %s", _( "Moon" ), _( info.name ),
+                                     _( "Temp" ),
+                                     print_temperature( get_weather().get_temperature( u.abs_pos() ) ) );
+    return "<img class=\"hud-icon\" src=\"" + icon_src + "\"/>" + cata_text_to_rml( text );
+}
+
+} // namespace
+
+// 8-way sector icon bucket for a wind direction angle (reference §3.12).
+auto wind_arrow_icon( int dirangle ) -> const char *
+{
+    if( dirangle < 0 || dirangle >= 360 ) {
+        return "wind";
+    } else if( dirangle <= 23 || dirangle > 338 ) {
+        return "wind_n";
+    } else if( dirangle <= 68 ) {
+        return "wind_ne";
+    } else if( dirangle <= 113 ) {
+        return "wind_e";
+    } else if( dirangle <= 158 ) {
+        return "wind_se";
+    } else if( dirangle <= 203 ) {
+        return "wind_s";
+    } else if( dirangle <= 248 ) {
+        return "wind_sw";
+    } else if( dirangle <= 293 ) {
+        return "wind_w";
+    }
+    return "wind_nw";
+}
+
+namespace
+{
+// Raw RML: sector icon + Beaufort-scale wind description, colored by strength; textual
+// direction fallback appended (reference §3.4).
+auto hud_wind( avatar &u ) -> std::string
+{
+    const auto &weather = get_weather();
+    const auto windpower = get_local_windpower( weather.windspeed,
+                           ACTIVE_OVERMAP_BUFFER.ter( u.abs_omt_pos() ), u.abs_pos(),
+                           weather.winddirection, g->is_sheltered( u.bub_pos() ) );
+    const auto icon_src = PATH_INFO::gfxdir() + "widgets/" +
+                          wind_arrow_icon( weather.winddirection ) + ".svg?px=32";
+    const auto text = colorize( string_format( "%s : %s", _( "Wind" ), get_wind_desc( windpower ) ),
+                                get_wind_color( windpower ) ) + " " +
+                      get_wind_arrow( weather.winddirection );
+    return "<img class=\"hud-icon\" src=\"" + icon_src + "\"/>" + cata_text_to_rml( text );
+}
+
+// Vehicle status: heading + speed (colored by engine strain) + optional cruise/flight
+// readouts + fuel gauge lines. Empty when not in a vehicle — sidebar_hud_sync drops the
+// row (the widget's own show_if:veh_panel already gates on u.in_vehicle).
+auto hud_vehicle( avatar &u ) -> std::string
+{
+    const optional_vpart_position vp = g->m.veh_at( u.bub_pos() );
+    if( !vp ) {
+        return "";
+    }
+    const vehicle *veh = &vp->vehicle();
+    const auto speed = static_cast<int>( convert_velocity( veh->velocity, VU_VEHICLE ) );
+    const auto strain = veh->strain();
+    const auto speed_color = strain <= 0 ? c_light_blue : strain <= 0.2f ? c_yellow :
+                             strain <= 0.4f ? c_light_red : c_red;
+    auto out = string_format( "%s: %s", _( "Head" ), veh->face.to_string_azimuth_from_north() ) +
+               "\n" + colorize( string_format( "%d %s", speed, velocity_units( VU_VEHICLE ) ), speed_color );
+    if( veh->cruise_on ) {
+        const auto cruise = static_cast<int>( convert_velocity( veh->cruise_velocity, VU_VEHICLE ) );
+        out += colorize( string_format( " > %d %s", cruise, velocity_units( VU_VEHICLE ) ), c_light_green );
+    }
+    if( veh->has_part( "WING" ) ) {
+        const auto takeoff = veh->get_takeoff_speed();
+        out += colorize( string_format( " %s: %d %s", _( "flight" ), takeoff,
+                                        velocity_units( VU_VEHICLE ) ),
+                         speed >= takeoff ? c_green : c_dark_gray );
+    }
+    for( const std::string &line : veh->fuel_indicator_lines() ) {
+        out += "\n" + line;
+    }
+    return out;
+}
+
+// Map chunk: 13×7 colored-text overmap minichunk centred on the avatar (see
+// overmap_ui::overmap_chunk_rows — text-producing successor to the removed
+// draw_overmap_chunk). 13×7 mirrors the old curses minimap's cell count; odd
+// dimensions keep the avatar's own tile dead-centre. Raw producer: rows are
+// joined with "\n" inside a `white-space:pre` div (see .hud-map in sidebar_hud.rcss)
+// so the grid's shape survives without per-row RML elements.
+auto hud_map( avatar &u ) -> std::string
+{
+    const auto rows = overmap_ui::overmap_chunk_rows( u, u.abs_omt_pos(), 13, 7 );
+    return "<div class=\"hud-map\">" + join( rows, "\n" ) + "</div>";
+}
+
+// Qud top strip row 1 (Phase 2): name + status words (left) + date/time (right). Built
+// from colorize()-tagged text, converted to RML, then wrapped in the strip-left/-right
+// span pair so RCSS floats the date/time to the right edge (row width is unknown here).
+auto hud_topbar( avatar &u ) -> std::string
+{
+    auto left = colorize( u.get_name(), c_white ) + "  " +
+                string_format( _( "T: %s" ),
+                               print_temperature( get_weather().get_temperature( u.abs_pos() ) ) );
+    const auto append_if = [&]( const std::pair<std::string, nc_color> &p ) {
+        if( !p.first.empty() ) {
+            left += "  " + colorize( p.first, p.second );
+        }
+    };
+    append_if( u.get_hunger_description() );
+    append_if( u.get_thirst_description() );
+    append_if( u.get_fatigue_description() );
+    append_if( u.get_pain_description() );
+
+    auto right = string_format( _( "Date : %s, day %d" ),
+                                calendar::name_season( season_of_year( calendar::turn ) ),
+                                day_of_season<int>( calendar::turn ) + 1 ) + "  ";
+    if( u.has_watch() ) {
+        right += string_format( _( "Time : %s" ), to_string_time_of_day( calendar::turn ) );
+    } else if( g->get_levz() >= 0 ) {
+        right += string_format( _( "Time : %s" ), time_approx() );
+    } else {
+        // NOLINTNEXTLINE(cata-text-style): the question mark does not end a sentence
+        right += std::string( _( "Time : ???" ) );
+    }
+
+    return "<span class=\"strip-left\">" + cata_text_to_rml( left ) + "</span>" +
+           "<span class=\"strip-right\">" + cata_text_to_rml( right ) + "</span>";
+}
+
+// Qud top strip row 2 (Phase 2, raw RML): HP/stamina/mana fill bars, then Focus/Speed/
+// move-mode — same fields hud_movement / hud_sound_text read, laid out as inline qbars.
+auto hud_topbar2( avatar &u ) -> std::string
+{
+    const auto torso = bodypart_id( "torso" );
+    const auto hp_cur = u.get_part_hp_cur( torso );
+    const auto hp_max = u.get_part_hp_max( torso );
+    auto out = std::string( _( "HP" ) ) + " " +
+               qbar_rml( hp_cur, hp_max, get_hp_bar( hp_cur, hp_max ).second ) +
+               string_format( " %d/%d", hp_cur, hp_max );
+
+    const auto sta_cur = u.get_stamina();
+    const auto sta_max = u.get_stamina_max();
+    out += "  " + std::string( _( "STA" ) ) + " " +
+           qbar_rml( sta_cur, sta_max, get_hp_bar( sta_cur, sta_max ).second ) +
+           string_format( " %d/%d", sta_cur, sta_max );
+
+    if( u.magic->max_mana( u ) > 0 ) {
+        const auto mana_cur = u.magic->available_mana();
+        const auto mana_max = u.magic->max_mana( u );
+        out += "  " + std::string( _( "MANA" ) ) + " " +
+               qbar_rml( mana_cur, mana_max, mana_stat( u ).first ) +
+               string_format( " %d/%d", mana_cur, mana_max );
+    }
+
+    out += "  " + cata_text_to_rml( std::string( _( "Focus" ) ) + " " +
+                                    colorize( std::to_string( u.focus_pool ), focus_color( u.focus_pool ) ) );
+    out += "  " + cata_text_to_rml( std::string( _( "Spd" ) ) + " " +
+                                    colorize( std::to_string( u.get_speed() ), focus_color( u.get_speed() ) ) );
+    const auto move_string = std::to_string( u.movecounter ) + move_mode_string( u );
+    out += "  " + cata_text_to_rml( colorize( move_string, move_mode_color( u ) ) );
+    return out;
+}
+
+// Qud bottom strip (Phase 2, raw RML): active effect names (left) + SAFE/HOSTILES
+// readout (right). Shares the effects list with the '@' Effects tab.
+auto hud_botbar( avatar &u ) -> std::string
+{
+    const auto effects = character_display::effect_name_and_text( u );
+    auto left = std::string( _( "EFFECTS:" ) ) + " ";
+    if( effects.empty() ) {
+        left += colorize( _( "none" ), c_dark_gray );
+    } else {
+        constexpr size_t max_shown = 8;
+        auto joined = std::string();
+        auto first = true;
+        for( const auto &effect : effects | std::views::take( max_shown ) ) {
+            if( !first ) {
+                joined += " :: ";
+            }
+            first = false;
+            joined += effect.first;
+        }
+        if( effects.size() > max_shown ) {
+            joined += string_format( " (+%d)", static_cast<int>( effects.size() - max_shown ) );
+        }
+        left += colorize( joined, c_light_gray );
+    }
+
+    const auto hostiles = u.get_mon_visible().nearby_hostile_count;
+    auto right = colorize( _( "SAFE" ), safe_color() ) + "  " +
+                 colorize( string_format( _( "HOSTILES: %d" ), hostiles ),
+                           hostiles > 0 ? c_red : c_dark_gray );
+
+    return "<span class=\"strip-left\">" + cata_text_to_rml( left ) + "</span>" +
+           "<span class=\"strip-right\">" + cata_text_to_rml( right ) + "</span>";
 }
 
 // VARIANT-AWARE producer table: maps a window_panel name to the producer that
@@ -1443,23 +1738,25 @@ std::string hud_compass( avatar &u )
 struct hud_producer_entry {
     const char *panel_name;                  // widget id OR built-in label (CI match)
     std::string( *produce )( avatar & );     // variant-specific content producer
+    const char *title = nullptr;             // untranslated; Qud inset header when set
+    bool raw = false;                        // produce() returns ready RML (skip cata_text_to_rml)
 };
 const std::vector<hud_producer_entry> g_hud_producers = {
     // Stats — classic (draw_stats) vs labels/wide + narrow (draw_stat_wide/_narrow)
-    { "Stats",         hud_stats_text },
-    { "stats_compact", hud_stats_text },
-    { "stats",         hud_stats_wide },
-    { "stats_narrow",  hud_stats_wide },
+    { "Stats",         hud_stats_text, "Stats" },
+    { "stats_compact", hud_stats_text, "Stats" },
+    { "stats",         hud_stats_wide, "Stats" },
+    { "stats_narrow",  hud_stats_wide, "Stats" },
     // Sound — compact (draw_stealth: speed+move+sound) vs labels/narrow (sound only)
     { "Sound",         hud_sound_text },
     { "sound_compact", hud_sound_text },
     { "sound",         hud_sound_labels },
     { "sound_narrow",  hud_sound_labels },
     // Needs — compact (arrows+Focus) vs labels/narrow (pain/thirst/rest/hunger/heat)
-    { "Needs",         hud_needs_text },
-    { "needs_compact", hud_needs_text },
-    { "needs",         hud_needs_labels },
-    { "needs_narrow",  hud_needs_labels },
+    { "Needs",         hud_needs_text, "Needs" },
+    { "needs_compact", hud_needs_text, "Needs" },
+    { "needs",         hud_needs_labels, "Needs" },
+    { "needs_narrow",  hud_needs_labels, "Needs" },
     // Wgt/Vol — content identical across variants (only columns differ)
     { "Wgt/Vol",              hud_wgtvol },
     { "weightvolume",         hud_wgtvol },
@@ -1474,44 +1771,52 @@ const std::vector<hud_producer_entry> g_hud_producers = {
     { "hint",          hud_hint },
     { "Hint",          hud_hint },
     { "movement",      hud_movement },
-    { "weapon",        hud_weapon },
-    { "armor",         hud_armor },
-    { "armor_classic", hud_armor },
-    { "Armor",         hud_armor },
+    { "weapon",        hud_weapon, "Weapon" },
+    { "armor",         hud_armor, "Armor" },
+    { "armor_classic", hud_armor, "Armor" },
+    { "Armor",         hud_armor, "Armor" },
     // Limbs — HP per body part (all variants same data, layout differs)
-    { "limbs",         hud_limbs },
-    { "limbs_compact", hud_limbs },
-    { "limbs_narrow",  hud_limbs },
-    { "Limbs",         hud_limbs },
+    { "limbs",         hud_limbs, "Vitals", true },
+    { "limbs_compact", hud_limbs, "Vitals", true },
+    { "limbs_narrow",  hud_limbs, "Vitals", true },
+    { "Limbs",         hud_limbs, "Vitals", true },
     // Log — recent message buffer
-    { "log",           hud_log },
-    { "log_classic",   hud_log },
-    { "Log",           hud_log },
+    { "log",           hud_log, "Log" },
+    { "log_classic",   hud_log, "Log" },
+    { "Log",           hud_log, "Log" },
     // Location — loc_labels family (text rows; inline overmap chunk dropped, phase 2)
-    { "location",      hud_location },
-    { "location_alt",  hud_location },
-    { "location_narrow", hud_location },
-    { "Location",      hud_location },
-    // Compass — MVP directional enemy COUNTS (full mon_info symbol grid is phase 2)
-    { "compass",            hud_compass },
-    { "compass_comp",       hud_compass },
-    { "compass_simple",     hud_compass },
-    { "compass_compact",    hud_compass },
-    { "compass_comp_compact", hud_compass },
-    { "Compass",            hud_compass },
-    { "Compact Compass",    hud_compass },
-    { "Simple Compass",     hud_compass },
+    { "location",      hud_location, "Location" },
+    { "location_alt",  hud_location, "Location" },
+    { "location_narrow", hud_location, "Location" },
+    { "Location",      hud_location, "Location" },
+    // Compass — Qud threat grid (full mon_info 3x3 symbol grid + direction list, raw RML)
+    { "compass",            hud_compass, "Threats", true },
+    { "compass_comp",       hud_compass, "Threats", true },
+    { "compass_simple",     hud_compass, "Threats", true },
+    { "compass_compact",    hud_compass, "Threats", true },
+    { "compass_comp_compact", hud_compass, "Threats", true },
+    { "Compass",            hud_compass, "Threats", true },
+    { "Compact Compass",    hud_compass, "Threats", true },
+    { "Simple Compass",     hud_compass, "Threats", true },
+    // Phase 3 gap producers — text tier (each independent; no legacy variant naming)
+    { "ai_goal",    hud_ai_goal },
+    { "armor_comp", hud_armor_comp },
+    { "moon",         hud_moon, nullptr, true },
+    { "moon_narrow",  hud_moon, nullptr, true },
+    { "wind",         hud_wind, nullptr, true },
+    { "vehicle",    hud_vehicle, "Vehicle" },
+    { "map",        hud_map, "Map", true },
 #ifdef COOP_ENABLED
     { "coop_partner",       hud_coop_partner_text },
 #endif
 };
 
-std::string( *hud_producer( const std::string &name ) )( avatar & )
+const hud_producer_entry *hud_producer( const std::string &name )
 {
     const std::string lname = to_lower_case( name );
     for( const hud_producer_entry &p : g_hud_producers ) {
         if( lname == to_lower_case( p.panel_name ) ) {
-            return p.produce;
+            return &p;
         }
     }
     return nullptr;
@@ -1548,10 +1853,14 @@ void sidebar_hud_open()
     // safe (uilist precedent, plan "Type-register reuse across reopen").
     Rml::StructHandle<hud_row_model> rh = c.RegisterStruct<hud_row_model>();
     rh.RegisterMember( "rml", &hud_row_model::rml );
+    rh.RegisterMember( "title", &hud_row_model::title );
     rh.RegisterMember( "flex", &hud_row_model::flex );
     c.RegisterArray<Rml::Vector<hud_row_model>>();
     g_hud_data = std::make_unique<hud_rml_model>();
     c.Bind( "rows", &g_hud_data->rows );
+    c.Bind( "topbar_rml", &g_hud_data->topbar_rml );
+    c.Bind( "topbar2_rml", &g_hud_data->topbar2_rml );
+    c.Bind( "botbar_rml", &g_hud_data->botbar_rml );
     g_hud_data->handle = c.GetModelHandle();
     // passive=true: render-only HUD — it must not capture in-game world mouse
     // (look/examine). See rmlui_layer::any_interactive_open / process_event.
@@ -1564,6 +1873,9 @@ void sidebar_hud_open()
         return;
     }
     g_hud_doc = doc;
+    // Opening the HUD claims the top/bottom chrome strips carved out of the terrain
+    // viewport (sidebar_hud_top_rows/_bottom_rows) — apply the new viewport size.
+    g->mark_main_ui_adaptor_resize();
 }
 
 // Position the single column container (#hud-sidebar) at the sidebar rect. The curses
@@ -1573,7 +1885,7 @@ void sidebar_hud_open()
 // first-panel width (matches the legacy overflow-marker assumption).
 static void sidebar_hud_apply_rect()
 {
-    if( g_hud_doc == nullptr || TERMX <= 0 ) {
+    if( g_hud_doc == nullptr || TERMX <= 0 || TERMY <= 0 ) {
         return;
     }
     const auto &layout = panel_manager::get_manager().get_current_layout();
@@ -1584,14 +1896,32 @@ static void sidebar_hud_apply_rect()
     const bool sidebar_right = get_option<std::string>( "SIDEBAR_POSITION" ) == "right";
     const float width_pct = 100.0f * wd / TERMX;
     const float left_pct = sidebar_right ? 100.0f - width_pct : 0.0f;
-    Rml::Element *el = g_hud_doc->GetElementById( "hud-sidebar" );
-    if( el == nullptr ) {
-        return;
+    if( Rml::Element *el = g_hud_doc->GetElementById( "hud-sidebar" ) ) {
+        el->SetProperty( "left", string_format( "%.4f%%", left_pct ) );
+        el->SetProperty( "top", "0%" );
+        el->SetProperty( "width", string_format( "%.4f%%", width_pct ) );
+        el->SetProperty( "height", "100%" );
     }
-    el->SetProperty( "left", string_format( "%.4f%%", left_pct ) );
-    el->SetProperty( "top", "0%" );
-    el->SetProperty( "width", string_format( "%.4f%%", width_pct ) );
-    el->SetProperty( "height", "100%" );
+    // Top/bottom chrome strips span the viewport width only (between the two sidebar
+    // margins), full width minus whatever the sidebar(s) claim on either edge.
+    const int width_left = panel_manager::get_manager().get_width_left();
+    const int width_right = panel_manager::get_manager().get_width_right();
+    const float strip_left_pct = 100.0f * width_left / TERMX;
+    const float strip_width_pct = 100.0f * ( TERMX - width_left - width_right ) / TERMX;
+    const float top_rows_pct = 100.0f * sidebar_hud_top_rows() / TERMY;
+    const float bottom_rows_pct = 100.0f * sidebar_hud_bottom_rows() / TERMY;
+    if( Rml::Element *el = g_hud_doc->GetElementById( "hud-topbar" ) ) {
+        el->SetProperty( "left", string_format( "%.4f%%", strip_left_pct ) );
+        el->SetProperty( "top", "0%" );
+        el->SetProperty( "width", string_format( "%.4f%%", strip_width_pct ) );
+        el->SetProperty( "height", string_format( "%.4f%%", top_rows_pct ) );
+    }
+    if( Rml::Element *el = g_hud_doc->GetElementById( "hud-botbar" ) ) {
+        el->SetProperty( "left", string_format( "%.4f%%", strip_left_pct ) );
+        el->SetProperty( "top", string_format( "%.4f%%", 100.0f - bottom_rows_pct ) );
+        el->SetProperty( "width", string_format( "%.4f%%", strip_width_pct ) );
+        el->SetProperty( "height", string_format( "%.4f%%", bottom_rows_pct ) );
+    }
 }
 
 void sidebar_hud_sync( avatar &u )
@@ -1617,9 +1947,17 @@ void sidebar_hud_sync( avatar &u )
             continue;
         }
         hud_row_model row;
-        std::string( *produce )( avatar & ) = hud_producer( panel.get_name() );
-        if( produce != nullptr ) {
-            row.rml = cata_text_to_rml( produce( u ) );
+        if( panel.hud_produce ) {
+            const std::string s = panel.hud_produce( u );
+            row.rml = panel.hud_raw ? Rml::String( s ) : cata_text_to_rml( s );
+            row.title = "";                     // instance widgets: no header
+        } else if( const hud_producer_entry *p = hud_producer( panel.get_name() ) ) {
+            const std::string s = p->produce( u );
+            if( s.empty() ) {
+                continue;                       // producer opted out (e.g. vehicle w/o vehicle)
+            }
+            row.rml = p->raw ? Rml::String( s ) : cata_text_to_rml( s );
+            row.title = p->title ? Rml::String( to_upper_case( _( p->title ) ) ) : "";
         } else {
             row.rml = cata_text_to_rml( colorize( "[" + panel.get_name() + "]", c_dark_gray ) );
         }
@@ -1627,6 +1965,13 @@ void sidebar_hud_sync( avatar &u )
         g_hud_data->rows.push_back( std::move( row ) );
     }
     g_hud_data->handle.DirtyVariable( "rows" );
+    // Qud top/bottom chrome strips (Phase 2): re-render every sync alongside the rows.
+    g_hud_data->topbar_rml = hud_topbar( u );
+    g_hud_data->topbar2_rml = hud_topbar2( u );
+    g_hud_data->botbar_rml = hud_botbar( u );
+    g_hud_data->handle.DirtyVariable( "topbar_rml" );
+    g_hud_data->handle.DirtyVariable( "topbar2_rml" );
+    g_hud_data->handle.DirtyVariable( "botbar_rml" );
     sidebar_hud_apply_rect();
 }
 
@@ -1641,6 +1986,9 @@ void sidebar_hud_close()
     }
     g_hud_doc = nullptr;
     g_hud_data.reset();
+    // Closing the HUD releases the carved top/bottom chrome strips — the terrain
+    // viewport must reclaim the full height.
+    g->mark_main_ui_adaptor_resize();
 }
 
 bool sidebar_hud_active()
@@ -1648,6 +1996,16 @@ bool sidebar_hud_active()
     // True iff the HUD doc is open → game::draw_panels suppresses the WHOLE curses
     // sidebar (the column owns the entire region). Replaces the per-panel owns_panel gate.
     return g_hud_doc != nullptr;
+}
+
+int sidebar_hud_top_rows()
+{
+    return sidebar_hud_rmlui_enabled() && rmlui_layer::ready() ? 2 : 0;
+}
+
+int sidebar_hud_bottom_rows()
+{
+    return sidebar_hud_rmlui_enabled() && rmlui_layer::ready() ? 1 : 0;
 }
 
 bool sidebar_hud_has_producer( const std::string &name )
@@ -1669,7 +2027,7 @@ std::string sidebar_hud_coverage_report()
             continue;
         }
         total++;
-        if( sidebar_hud_has_producer( panel.get_name() ) ) {
+        if( panel.hud_produce || sidebar_hud_has_producer( panel.get_name() ) ) {
             covered++;
         } else {
             uncovered += ( uncovered.empty() ? "" : ", " ) + panel.get_name();
@@ -1797,98 +2155,125 @@ static std::string value_widget_name( const widget_id &id )
     return name;
 }
 
-// Data-driven value widget: draws "[icon] label value" itself from the widget's
-// _var (via get_var_value), with an optional leading two-tone SVG icon tinted to
-// match the value color. The parity bridge (native) hands its whole window to a
-// draw_* fn; this renderer owns the layout, so it is where icons have a clean home.
+// Data-driven value widget: RmlUi hud_produce reads the widget's _var (via
+// get_var_value) and colors it exactly as the curses draw_* panels did — label in
+// c_light_gray, value bar/number in the value's color. No curses draw (Tier-10
+// rip-out); icons are a Phase-4 SVG concern, not this MVP text row.
 window_panel make_value_widget_panel( const widget &w, int width )
 {
     const widget_id id = w.getId();
-    const std::string label = w.label().translated();
-    const std::string &icon = w.icon();
-    auto draw_func = [id, label, icon]( avatar & u, const catacurses::window & win ) {
-        werase( win );
-        if( !id.is_valid() ) {
-            wnoutrefresh( win );
-            return;
-        }
-        const widget &wd = *id; // static widget data; u carries the live state
-        const int val = wd.get_var_value( u );
-        const nc_color val_color = value_widget_color( wd, val, u );
-        // Animation: feed the live value to the registry once, then drive both the
-        // icon transform and the row-change highlight. State is keyed by widget id
-        // and lives in the registry, not this closure (closures rebuild on reload).
-        const std::uint32_t now = sidebar_anim::now_ms();
-        sidebar_anim::registry &reg = sidebar_anim::get();
-        // Critical band reuses the value colour: the stat's own colouring already
-        // turns red in its danger zone (high pain, low stamina, ...).
-        const bool crit = val_color == c_red || val_color == c_light_red;
-        // Row-change flash: a fading highlight bar behind the whole row, driven by
-        // specs under the reserved "_row" id (the color_blend channel rests at 0,
-        // so it is invisible until a change fires it).
-        reg.update( id.str() + "#row", "_row", static_cast<double>( val ), crit, now );
-        const sidebar_anim::icon_transform row_tr = reg.sample( id.str() + "#row", now );
-        if( row_tr.blend > 0.001f ) {
-            draw_widget_row_highlight( win, 0, getmaxx( win ), row_tr.blend_color, row_tr.blend );
-        }
-        int col = 0;
-        if( !icon.empty() ) {
-            // Tint the icon to the value color so a reddening stat reddens its glyph;
-            // a value change pops the icon (scale ease-back).
-            reg.update( id.str(), icon, static_cast<double>( val ), crit, now );
-            const sidebar_anim::icon_transform tr = reg.sample( id.str(), now );
-            draw_widget_icon( win, point( 0, 0 ), icon, val_color, tr );
-            // A square icon is ~2 cells wide at the usual ~2:1 font ratio; start
-            // the label at col 3 to leave a one-cell gap after it.
-            col = 3;
-        }
-        mvwprintz( win, point( col, 0 ), c_light_gray, "%s", label );
-
-        // Right-hand readout: a fill bar + percent for bounded vars (those with a
-        // max), else the raw number. Reuses get_hp_bar's 5-cell bar string so it
-        // reads like the native HP/stamina panels.
-        const std::optional<int> vmax = value_var_max( wd.var(), u );
-        std::string rhs;
-        if( vmax && *vmax > 0 ) {
-            // Clamp the percent to match get_hp_bar's clamped bar — val can exceed
-            // max (e.g. buffs) and would otherwise print ">100%" beside a full bar.
-            const int pct = std::clamp( 100 * val / *vmax, 0, 100 );
+    const auto hud_produce = [id]( avatar & u ) -> std::string {
+        if( !id.is_valid() )
+    {
+        return "";
+    }
+    const widget &wd = *id; // static widget data; u carries the live state
+    const auto val = wd.get_var_value( u );
+    const auto val_color = value_widget_color( wd, val, u );
+    const auto label = wd.label().translated();
+    // Right-hand readout: a fill bar + percent for bounded vars (those with a
+    // max), else the raw number. Reuses get_hp_bar's 5-cell bar string so it
+    // reads like the native HP/stamina panels.
+    const auto vmax = value_var_max( wd.var(), u );
+    auto rhs = std::string();
+    if( vmax && *vmax > 0 )
+    {
+        // Clamp the percent to match get_hp_bar's clamped bar — val can exceed
+        // max (e.g. buffs) and would otherwise print ">100%" beside a full bar.
+        const auto pct = std::clamp( 100 * val / *vmax, 0, 100 );
             rhs = get_hp_bar( val, *vmax ).first + string_format( " %d%%", pct );
-        } else {
+        } else
+        {
             rhs = string_format( "%d", val );
         }
-        // Right-align to the panel edge, but never overlap the label.
-        const int label_end = col + utf8_width( label ) + 1;
-        const int rhs_x = std::max( label_end, getmaxx( win ) - utf8_width( rhs ) );
-        mvwprintz( win, point( rhs_x, 0 ), val_color, "%s", rhs );
-        wnoutrefresh( win );
+        return colorize( label, c_light_gray ) + "  " + colorize( rhs, val_color );
     };
     const int panel_width = std::max( 1, width > 0 ? width : w.width() );
     const bool default_toggle = !w.has_flag( "W_DISABLED_BY_DEFAULT" );
-    return window_panel( draw_func, value_widget_name( id ), w.height(), panel_width,
-                         default_toggle, resolve_widget_show_if( w ) );
+    window_panel wp( {}, value_widget_name( id ), w.height(), panel_width,
+                     default_toggle, resolve_widget_show_if( w ) );
+    wp.hud_produce = hud_produce;
+    return wp;
+}
+
+// Per-body-part color for a body-graph dimension. The renderer-agnostic core:
+// each body_graph* var picks a different per-bp value to color by, mirroring
+// CDDA's display::get_bodygraph_bp_color but against BN's getters.
+static auto bodygraph_bp_color( const avatar &u, const bodypart_id &bp, widget_var dim ) -> nc_color
+{
+    switch( dim ) {
+    case widget_var::body_graph:
+        return u.limb_color( bp.id(), true, true, true );
+        case widget_var::body_graph_temp: {
+            const auto temp_conv = u.get_part_temp_cur( bp );
+            if( temp_conv > BODYTEMP_SCORCHING ) {
+                return c_red;
+            } else if( temp_conv > BODYTEMP_VERY_HOT ) {
+                return c_light_red;
+            } else if( temp_conv > BODYTEMP_HOT ) {
+                return c_yellow;
+            } else if( temp_conv > BODYTEMP_COLD ) {
+                return c_green;
+            } else if( temp_conv > BODYTEMP_VERY_COLD ) {
+                return c_light_blue;
+            } else if( temp_conv > BODYTEMP_FREEZING ) {
+                return c_cyan;
+            }
+            return c_blue;
+        }
+        case widget_var::body_graph_encumb: {
+            const auto enc = u.encumb( bp.id() );
+            return enc < 10 ? c_light_gray : enc < 40 ? c_yellow : c_light_red;
+        }
+        case widget_var::body_graph_status:
+            if( u.has_effect( effect_bleed, bp.id() ) ) {
+                return c_red;
+            } else if( u.has_effect( effect_bite, bp.id() ) ) {
+                return c_yellow;
+            } else if( u.has_effect( effect_infected, bp.id() ) ) {
+                return c_green;
+            } else if( u.worn_with_flag( json_flag_SPLINT, bp ) ) {
+                return c_blue;
+            }
+            return c_dark_gray;
+        case widget_var::body_graph_wet:
+            return u.get_part( bp ).get_wetness() > 0 ? c_light_blue : c_dark_gray;
+        default:
+            return c_white;
+    }
+}
+
+// Body-graph value widget: one row per main body part (the hud_limbs iteration
+// pattern), label colored by the widget's body_graph* dimension via
+// bodygraph_bp_color(). Color encodes the data; no HP bar, to stay distinct from
+// the native Limbs panel.
+window_panel make_bodygraph_widget_panel( const widget &w, int width )
+{
+    const widget_var dim = w.var();
+    const auto hud_produce = [dim]( avatar & u ) -> std::string {
+        std::string out;
+        bool first = true;
+        for( const bodypart_id &bp : u.get_all_body_parts( true ) )
+        {
+            if( !first ) {
+                out += "\n";
+            }
+            first = false;
+            const auto name = left_justify( body_part_hp_bar_ui_text( bp ), 5 );
+            out += colorize( name, bodygraph_bp_color( u, bp, dim ) );
+        }
+        return out;
+    };
+    const int panel_width = std::max( 1, width > 0 ? width : w.width() );
+    const bool default_toggle = !w.has_flag( "W_DISABLED_BY_DEFAULT" );
+    window_panel wp( {}, value_widget_name( w.getId() ), w.height(), panel_width,
+                     default_toggle, resolve_widget_show_if( w ) );
+    wp.hud_produce = hud_produce;
+    return wp;
 }
 
 // Build a window_panel for any widget, dispatching on style. Unknown styles fall
 // back to the native bridge.
-// Per-body-part color for a body-graph dimension. The renderer-agnostic core:
-// each body_graph* var picks a different per-bp value to color by, mirroring
-// CDDA's display::get_bodygraph_bp_color but against BN's getters.
-
-// Body-graph value widget: lays the main body parts in a 2-column grid (the
-// draw_limb2 layout) and colors each limb label by the widget's body_graph*
-// dimension. Color encodes the data; no HP bar, to stay distinct from the
-// native Limbs panel.
-window_panel make_bodygraph_widget_panel( const widget &w, int width )
-{
-    // Tier-10 curses rip-out: name-only. The RmlUi HUD shows a placeholder for the
-    // body graph until the dedicated HUD plan builds it (no curses draw).
-    const int panel_width = std::max( 1, width > 0 ? width : w.width() );
-    const bool default_toggle = !w.has_flag( "W_DISABLED_BY_DEFAULT" );
-    return window_panel( {}, value_widget_name( w.getId() ), w.height(), panel_width,
-                         default_toggle, resolve_widget_show_if( w ) );
-}
-
 static window_panel make_widget_panel( const widget &w, int width )
 {
     if( w.style() == "number" || w.style() == "value" ) {

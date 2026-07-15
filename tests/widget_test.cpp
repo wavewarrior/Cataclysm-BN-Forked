@@ -2,6 +2,8 @@
 #include <string>
 #include <vector>
 
+#include "calendar.h"
+
 #include "panels.h"
 #include "type_id.h"
 #include "widget.h"
@@ -61,10 +63,10 @@ TEST_CASE( "sidebar container reproduces the labels layout", "[widget][sidebar]"
     REQUIRE( sb_id.is_valid() );
     const widget &s = *sb_id;
     CHECK( s.style() == "sidebar" );
-    // 22 native (labels parity) + 4 value widgets + 4 body_graph widgets.
-    REQUIRE( s._widgets.size() == 30 );
+    // 22 native (labels parity) + 4 value widgets + 4 body_graph widgets + coop_partner.
+    REQUIRE( s._widgets.size() == 31 );
     CHECK( s._widgets.front() == widget_id( "hint" ) );
-    CHECK( s._widgets.back() == widget_id( "ai_goal" ) );
+    CHECK( s._widgets.back() == widget_id( "coop_partner" ) );
 }
 
 TEST_CASE( "value widget parses var + icon and builds a panel", "[widget][sidebar]" )
@@ -81,7 +83,10 @@ TEST_CASE( "value widget parses var + icon and builds a panel", "[widget][sideba
     const window_panel wp = make_value_widget_panel( w, 44 );
     CHECK( wp.get_name() == "Pain" );
     CHECK( wp.get_height() == 1 );
-    CHECK( static_cast<bool>( wp.draw ) );
+    // hud_produce renders text for the RmlUi HUD (value/bodygraph widgets know
+    // their own widget id; hud_producer's name-keyed table can't). No curses draw.
+    CHECK_FALSE( static_cast<bool>( wp.draw ) );
+    CHECK( static_cast<bool>( wp.hud_produce ) );
 
     // A var with no clean BN getter falls back to last (0); stamina has one.
     CHECK( widget_id( "val_stamina" )->var() == widget_var::stamina );
@@ -105,8 +110,9 @@ TEST_CASE( "body_graph widget parses dimension + builds a multi-row panel", "[wi
     const window_panel wp = make_bodygraph_widget_panel( w, 44 );
     CHECK( wp.get_name() == "Bodygraph" );
     CHECK( wp.get_height() == 3 );
-    // Tier-10 curses rip-out: name-only (RmlUi HUD shows a placeholder); no curses draw.
+    // Tier-10 curses rip-out: no curses draw; hud_produce renders the RmlUi rows.
     CHECK_FALSE( static_cast<bool>( wp.draw ) );
+    CHECK( static_cast<bool>( wp.hud_produce ) );
 }
 
 TEST_CASE( "reload_widget_layouts registers the custom sidebar layout", "[widget][sidebar]" )
@@ -142,10 +148,10 @@ TEST_CASE( "widget-engine layouts reproduce the four built-ins", "[widget][sideb
         std::string back;
     };
     const std::vector<layout_case> cases = {
-        { "we_classic",       19, "health_classic", "ai_goal" },
-        { "we_compact",       17, "limbs_compact",  "ai_goal" },
-        { "we_labels_narrow", 21, "hint",           "ai_goal" },
-        { "we_labels",        22, "hint",           "ai_goal" },
+        { "we_classic",       20, "health_classic", "coop_partner" },
+        { "we_compact",       18, "limbs_compact",  "coop_partner" },
+        { "we_labels_narrow", 22, "hint",           "coop_partner" },
+        { "we_labels",        23, "hint",           "coop_partner" },
     };
     for( const layout_case &c : cases ) {
         CAPTURE( c.id );
@@ -164,4 +170,93 @@ TEST_CASE( "widget-engine layouts reproduce the four built-ins", "[widget][sideb
     pm.reload_widget_layouts();
     CHECK( pm.has_layout( "we_classic" ) );
     CHECK( pm.has_layout( "we_labels" ) );
+}
+
+TEST_CASE( "moon_phase_display maps every phase to a name and icon", "[widget][sidebar]" )
+{
+    struct phase_case {
+        moon_phase phase;
+        std::string name;
+        std::string icon;
+    };
+    // Icon ids are hardcoded here against gfx/widgets/icons.json's actual entries —
+    // a renamed/missing icon id should fail this test, not just silently 404 at draw.
+    const std::vector<phase_case> cases = {
+        { MOON_NEW,              "New moon",        "moon_new" },
+        { MOON_WAXING_CRESCENT,  "Waxing crescent",  "moon_waxing_crescent" },
+        { MOON_HALF_MOON_WAXING, "First quarter",    "moon_first_quarter" },
+        { MOON_WAXING_GIBBOUS,   "Waxing gibbous",   "moon_waxing_gibbous" },
+        { MOON_FULL,             "Full moon",        "moon_full" },
+        { MOON_WANING_GIBBOUS,   "Waning gibbous",   "moon_waning_gibbous" },
+        { MOON_HALF_MOON_WANING, "Last quarter",     "moon_last_quarter" },
+        { MOON_WANING_CRESCENT,  "Waning crescent",  "moon_waning_crescent" },
+    };
+    for( const phase_case &c : cases ) {
+        CAPTURE( c.name );
+        const moon_phase_info info = moon_phase_display( c.phase );
+        CHECK( std::string( info.name ) == c.name );
+        CHECK( std::string( info.icon ) == c.icon );
+    }
+}
+
+TEST_CASE( "wind_arrow_icon buckets every angle into its 8-way sector", "[widget][sidebar]" )
+{
+    struct angle_case {
+        int dirangle;
+        std::string icon;
+    };
+    const std::vector<angle_case> cases = {
+        { -1,  "wind" },       // out of range (low) -> no-direction fallback
+        { 0,   "wind_n" },
+        { 23,  "wind_n" },
+        { 24,  "wind_ne" },
+        { 68,  "wind_ne" },
+        { 69,  "wind_e" },
+        { 113, "wind_e" },
+        { 114, "wind_se" },
+        { 158, "wind_se" },
+        { 159, "wind_s" },
+        { 203, "wind_s" },
+        { 204, "wind_sw" },
+        { 248, "wind_sw" },
+        { 249, "wind_w" },
+        { 293, "wind_w" },
+        { 294, "wind_nw" },
+        { 338, "wind_nw" },
+        { 339, "wind_n" },    // wraps back across N (> 338)
+        { 359, "wind_n" },
+        { 360, "wind" },      // out of range (high) -> no-direction fallback
+        { 400, "wind" },
+    };
+    for( const angle_case &c : cases ) {
+        CAPTURE( c.dirangle );
+        CHECK( std::string( wind_arrow_icon( c.dirangle ) ) == c.icon );
+    }
+}
+
+TEST_CASE( "every custom-layout widget has an RmlUi HUD producer", "[widget][sidebar]" )
+{
+    // The mechanical Tier-10 rip-out gate, at the panel level rather than the
+    // string-report level of sidebar_hud_coverage_report(): every widget in the
+    // "custom" (31/31) layout must either resolve through the name-keyed
+    // g_hud_producers table, or carry its own hud_produce (value/bodygraph widgets).
+    panel_manager &pm = panel_manager::get_manager();
+    pm.reload_widget_layouts();
+    REQUIRE( pm.has_layout( "custom" ) );
+
+    const widget_id sb_id( "custom" );
+    REQUIRE( sb_id.is_valid() );
+    REQUIRE( sb_id->_widgets.size() == 31 );
+
+    for( const window_panel &panel : pm.get_current_layout() ) {
+        // Mirror sidebar_hud_coverage_report's own gate: a panel that's toggled off
+        // or whose render() predicate is false (e.g. coop_partner without COOP_ENABLED)
+        // never enters the coverage count.
+        if( !panel.toggle || !panel.render() ) {
+            continue;
+        }
+        CAPTURE( panel.get_name() );
+        CHECK( ( sidebar_hud_has_producer( panel.get_name() ) ||
+                 static_cast<bool>( panel.hud_produce ) ) );
+    }
 }

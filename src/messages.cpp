@@ -264,6 +264,26 @@ class messages_impl
 
             return result;
         }
+        // Same slice as recent_messages(), but the text carries a colorize() tag using
+        // the same new/recent/old fade get_color() applies to the curses draw — the
+        // RmlUi sidebar HUD's "Log" panel needs that colour, recent_messages() doesn't.
+        std::vector<std::pair<std::string, std::string>> recent_messages_colored(
+            size_t count ) const {
+            count = std::min( count, messages.size() );
+
+            std::vector<std::pair<std::string, std::string>> result;
+            result.reserve( count );
+
+            const int offset = static_cast<std::ptrdiff_t>( messages.size() - count );
+
+            std::transform( begin( messages ) + offset, end( messages ), back_inserter( result ),
+            []( const game_message & msg ) {
+                return std::make_pair( to_string_time_of_day( msg.timestamp_in_turns ),
+                                       colorize( msg.get_with_count(), msg.get_color( calendar::turn ) ) );
+            } );
+
+            return result;
+        }
 
         /** Refresh the cooldown timers, removing elapsed ones and making new ones if needed.
          * @param message The current message that needs to be checked.
@@ -317,6 +337,12 @@ messages_impl player_messages;
 std::vector<std::pair<std::string, std::string>> Messages::recent_messages( const size_t count )
 {
     return player_messages.recent_messages( count );
+}
+
+std::vector<std::pair<std::string, std::string>> Messages::recent_messages_colored(
+    const size_t count )
+{
+    return player_messages.recent_messages_colored( count );
 }
 
 void Messages::serialize( JsonOut &json )

@@ -3720,8 +3720,10 @@ shared_ptr_fast<ui_adaptor> game::create_or_get_main_ui_adaptor()
             // (using standard font) that the terrain window can have
             const int sidebar_left = panel_manager::get_manager().get_width_left();
             const int sidebar_right = panel_manager::get_manager().get_width_right();
+            const int top = sidebar_hud_top_rows();
+            const int bottom = sidebar_hud_bottom_rows();
 
-            TERRAIN_WINDOW_HEIGHT = TERMY;
+            TERRAIN_WINDOW_HEIGHT = TERMY - top - bottom;
             TERRAIN_WINDOW_WIDTH = TERMX - ( sidebar_left + sidebar_right );
             TERRAIN_WINDOW_TERM_WIDTH = TERRAIN_WINDOW_WIDTH;
             TERRAIN_WINDOW_TERM_HEIGHT = TERRAIN_WINDOW_HEIGHT;
@@ -3755,7 +3757,7 @@ shared_ptr_fast<ui_adaptor> game::create_or_get_main_ui_adaptor()
             POSY = TERRAIN_WINDOW_HEIGHT / 2;
 
             w_terrain = w_terrain_ptr = catacurses::newwin( TERRAIN_WINDOW_HEIGHT, TERRAIN_WINDOW_WIDTH,
-                                        point( sidebar_left, 0 ) );
+                                        point( sidebar_left, top ) );
 
             // minimap is always MINIMAP_WIDTH x MINIMAP_HEIGHT in size
             w_minimap = w_minimap_ptr = catacurses::newwin( MINIMAP_HEIGHT, MINIMAP_WIDTH, point_zero );

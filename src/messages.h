@@ -23,6 +23,7 @@ class window;
 namespace Messages
 {
 std::vector<std::pair<std::string, std::string>> recent_messages( size_t count );
+std::vector<std::pair<std::string, std::string>> recent_messages_colored( size_t count );
 void add_msg( std::string msg );
 void add_msg( const game_message_params &params, std::string msg );
 void clear_messages();

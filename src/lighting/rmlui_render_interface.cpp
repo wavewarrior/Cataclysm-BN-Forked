@@ -10,8 +10,10 @@
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstddef>
+#include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <unordered_map>
@@ -688,7 +690,44 @@ Rml::TextureHandle rmlui_render_interface::LoadTexture(
                       << " handle=" << ph;
         return static_cast<Rml::TextureHandle>(ph);
     }
-    SDL_Surface* surf = IMG_Load(source.c_str());
+    Rml::String path = source;
+    int svg_px = 0;
+    const std::size_t query_pos = path.rfind("?px=");
+    if (query_pos != Rml::String::npos) {
+        const std::string digits = path.substr(query_pos + 4);
+        path.erase(query_pos); // strip "?px=..." — IMG_Load must never see the query
+        // Sized rasterization only makes sense for an .svg source; a non-svg
+        // path with a stray "?px=" marker just loses the (meaningless) suffix.
+        static const std::string svg_ext = ".svg";
+        const bool is_svg = query_pos >= svg_ext.size() &&
+            path.compare(query_pos - svg_ext.size(), svg_ext.size(), svg_ext) == 0;
+        if (is_svg && !digits.empty() &&
+            std::all_of(digits.begin(), digits.end(),
+                        [](unsigned char c) { return std::isdigit(c) != 0; })) {
+            svg_px = std::atoi(digits.c_str());
+        }
+        if (is_svg && svg_px <= 0) {
+            dbg(DL::Warn) << "rmlui: malformed ?px= size in " << source
+                          << ", loading at native size";
+        }
+    }
+    SDL_Surface* surf = nullptr;
+    if (svg_px > 0) {
+        SDL_IOStream* io = SDL_IOFromFile(path.c_str(), "rb");
+        if (io == nullptr) {
+            dbg(DL::Warn) << "rmlui: cannot open " << path << ": " << SDL_GetError();
+        } else {
+            surf = IMG_LoadSizedSVG_IO(io, svg_px, svg_px);
+            SDL_CloseIO(io);
+            if (!surf) {
+                dbg(DL::Warn) << "rmlui: sized SVG rasterize failed for " << path << ": "
+                              << SDL_GetError();
+            }
+        }
+    }
+    if (!surf) {
+        surf = IMG_Load(path.c_str());
+    }
     if (!surf) {
         dbg(DL::Warn) << "rmlui: LoadTexture failed for " << source << ": " << SDL_GetError();
         return 0;

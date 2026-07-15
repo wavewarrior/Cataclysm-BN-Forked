@@ -20,9 +20,22 @@
          The column is data-driven: C++ walks the current layout in order and fills `rows`
          (one {rml, flex} per present panel). Flex-height sentinels (-1 minimap / -2 log)
          get row.flex=true → flex-grow:1 so they absorb the remaining height. -->
+    <!-- Qud screen chrome (Phase 2): top status strip (2 rows: name/needs/date, then
+         HP/stamina/mana bars) + bottom effects/hostiles strip (1 row). Carved out of
+         the terrain viewport by sidebar_hud_top_rows()/_bottom_rows(); rects placed by
+         sidebar_hud_apply_rect() each sync alongside #hud-sidebar. -->
+    <div id="hud-topbar">
+        <div class="hud-strip-row" data-rml="topbar_rml"></div>
+        <div class="hud-strip-row" data-rml="topbar2_rml"></div>
+    </div>
+    <div id="hud-botbar">
+        <div class="hud-strip-row" data-rml="botbar_rml"></div>
+    </div>
     <div id="hud-sidebar" class="hud-sidebar">
-        <div class="hud-row" data-for="row : rows"
-             data-class-flex="row.flex" data-rml="row.rml"></div>
+        <div class="hud-row" data-for="row : rows" data-class-flex="row.flex">
+            <div class="hud-row-header" data-if="row.title != ''" data-rml="row.title"></div>
+            <div class="hud-row-body" data-rml="row.rml"></div>
+        </div>
     </div>
 </body>
 </rml>

@@ -996,7 +996,8 @@ std::string cs_info_text( const Character &you, unsigned line, player_display_ta
 }
 } // namespace
 
-void character_display::disp_info( Character &ch )
+std::vector<std::pair<std::string, std::string>> character_display::effect_name_and_text(
+    const Character &ch )
 {
     std::vector<std::pair<std::string, std::string>> effect_name_and_text;
     for( auto &elem : ch.get_all_effects() ) {
@@ -1079,6 +1080,13 @@ void character_display::disp_info( Character &ch )
             effect_name_and_text.emplace_back( addiction_name( elem ), addiction_text( elem ) );
         }
     }
+    return effect_name_and_text;
+}
+
+void character_display::disp_info( Character &ch )
+{
+    std::vector<std::pair<std::string, std::string>> effect_name_and_text =
+        character_display::effect_name_and_text( ch );
 
     const unsigned int effect_win_size_y_max = 1 + static_cast<unsigned>( effect_name_and_text.size() );
 

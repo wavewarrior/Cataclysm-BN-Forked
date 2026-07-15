@@ -26,11 +26,26 @@ enum face_type : int {
     num_face_types
 };
 
+enum moon_phase : int;
+
+// (name, icon-id) per lunar phase — untranslated; callers translate `name` (mirrors
+// hud_moon in panels.cpp, and how g_hud_producers keeps `title` untranslated until
+// sync time).
+struct moon_phase_info {
+    const char *name;
+    const char *icon;
+};
+auto moon_phase_display( moon_phase phase ) -> moon_phase_info;
+// 8-way sector icon bucket for a wind direction angle (RMLUI_HUD_PANEL_REFERENCE.md §3.12).
+auto wind_arrow_icon( int dirangle ) -> const char *;
+
 namespace overmap_ui
 {
-void draw_overmap_chunk( const catacurses::window &w_minimap, const avatar &you,
-                         const tripoint_abs_omt &global_omt, point start, int width,
-                         int height );
+// Colored-text overmap minichunk (RmlUi HUD "map" panel): `height` rows of
+// colorize()-tagged single-glyph cells, `width` wide, centred on `global_omt`.
+// Curses-window-free successor to the removed draw_overmap_chunk.
+auto overmap_chunk_rows( const avatar &you, const tripoint_abs_omt &global_omt, int width,
+                         int height ) -> std::vector<std::string>;
 } // namespace overmap_ui
 
 bool default_render();
@@ -49,6 +64,12 @@ class window_panel
         // Optional content-driven height. When set, get_height() returns this instead of the
         // static height, letting a panel shrink/grow to its actual rendered content.
         std::function<int()> dynamic_height;
+        // RmlUi HUD content producer bound to this panel instance (value/bodygraph
+        // widgets know their own widget id; the name-keyed g_hud_producers table can't).
+        // Checked FIRST by sidebar_hud_sync. Output is colorize()-tagged text unless
+        // hud_raw, then it is ready RML.
+        std::function<std::string( avatar & )> hud_produce;
+        bool hud_raw = false;
 
         int get_height() const;
         int get_width() const;
@@ -70,12 +91,13 @@ class window_panel
 // unknown target yields a panel that just erases its window (logged once) — never
 // crashes.
 window_panel make_native_widget_panel( const widget &w, int width );
-// Build a window_panel for a "number"/"value" style widget: draws "[icon] label:
-// value" from the widget's _var, with an optional leading two-tone SVG icon.
+// Build a window_panel for a "number"/"value" style widget: hud_produce renders
+// "label  value" (bar+percent when bounded, else the raw number) from the
+// widget's _var. Icons are a Phase-4 SVG concern, not this text row.
 window_panel make_value_widget_panel( const widget &w, int width );
-// Build a window_panel for a "body_graph" style widget: lays the main body parts
-// in a grid, coloring each by the widget's body_graph* dimension (hp/temp/encumb/
-// status; wet degraded — BN has no per-bp wetness).
+// Build a window_panel for a "body_graph" style widget: hud_produce renders one
+// row per main body part, coloring each by the widget's body_graph* dimension
+// (hp/temp/encumb/status/wet — see bodygraph_bp_color in panels.cpp).
 window_panel make_bodygraph_widget_panel( const widget &w, int width );
 
 // ── Sidebar HUD → RmlUi (Tier 7, render-only, continuous) ────────────────────
@@ -107,6 +129,11 @@ bool sidebar_hud_has_producer( const std::string &name );
 // One-line audit: "sidebar HUD coverage: C/T panels [— uncovered: …]" over the active layout.
 // The mechanical Tier-10 rip-out gate ("every panel in my UI built?").
 std::string sidebar_hud_coverage_report();
+// Rows of standard-font cells reserved above/below the viewport for the Qud HUD
+// chrome strips. 0 whenever the RmlUi HUD can't render (curses fallback keeps the
+// full viewport).
+int sidebar_hud_top_rows();    // = 2 when the HUD can render, else 0
+int sidebar_hud_bottom_rows(); // = 1 when the HUD can render, else 0
 
 class panel_manager
 {
