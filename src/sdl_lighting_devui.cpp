@@ -817,7 +817,10 @@ bool &devui_visible() { return g_devui_visible; }
 
 auto sound_pulses_visible( bool player_in_stealth ) -> bool
 {
-    return player_in_stealth || devui_visible();
+    // g_sound_place_mode: the "spawn sounds on click" checkbox is itself an
+    // explicit opt-in to see the debug pulse, so it renders even with the F4
+    // panel closed — matching place_test_sound()'s panel-independent gate.
+    return player_in_stealth || devui_visible() || g_sound_place_mode;
 }
 
 bool place_test_light()
