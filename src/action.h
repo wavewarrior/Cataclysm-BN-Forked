@@ -54,7 +54,7 @@ enum action_id : int {
     ACTION_MOVE_DOWN,
     /** Ascend a staircase */
     ACTION_MOVE_UP,
-    /** Cycle run/walk/crouch mode */
+    /** Cycle run/walk/crouch/stealth mode */
     ACTION_CYCLE_MOVE,
     /** Reset movement mode to walk  */
     ACTION_RESET_MOVE,

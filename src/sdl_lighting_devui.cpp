@@ -815,6 +815,11 @@ static Rml::String build_diag_text()
 
 bool &devui_visible() { return g_devui_visible; }
 
+auto sound_pulses_visible( bool player_in_stealth ) -> bool
+{
+    return player_in_stealth || devui_visible();
+}
+
 bool place_test_light()
 {
     // No-op unless the panel is open with place-mode on (mirrors the old ImGui guard).

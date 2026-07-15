@@ -2553,7 +2553,7 @@
   },
   {
     "type": "keybinding",
-    "name": "Cycle move mode (run/walk/crouch)",
+    "name": "Cycle move mode (run/walk/crouch/stealth)",
     "category": "DEFAULTMODE",
     "id": "cycle_move"
   },

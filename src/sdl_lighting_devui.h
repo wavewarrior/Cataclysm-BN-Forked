@@ -120,6 +120,13 @@ namespace sdl_lighting_devui
 // (sdl_input writes it); rml_tick() opens/syncs/closes the doc to match it each
 // frame (called from refresh_display).
 bool &devui_visible();
+
+/// True when the animated sound-pulse wavefront VFX (dev_test_lights::sound_pulses
+/// — footsteps/melee/gunfire/ballistics, or an F4-panel test spawn) should be
+/// rendered. `player_in_stealth` is the caller's `movement_mode_is( CMM_STEALTH )`
+/// result; the F4 panel bypass keeps debug-spawned test pulses visible without
+/// requiring the player to also be in stealth mode.
+auto sound_pulses_visible( bool player_in_stealth ) -> bool;
 void rml_tick();
 
 // Place a static dev test light at the hovered world tile. Returns true if it placed

@@ -122,11 +122,20 @@ enum npc_ai_info : size_t {
     num_npc_ai_info,
 };
 
-enum character_movemode : int { CMM_WALK = 0, CMM_RUN, CMM_CROUCH, CMM_COUNT };
+enum character_movemode : int { CMM_WALK = 0, CMM_RUN, CMM_CROUCH, CMM_STEALTH, CMM_COUNT };
 
 template <> struct enum_traits<character_movemode> {
     static constexpr auto last = character_movemode::CMM_COUNT;
 };
+
+/// True for movement modes that share the crouched posture and its gameplay
+/// effects (reduced speed/visibility, stealth bonus, swim style). Stealth
+/// mode additionally gates visibility of the wavefront sound-pulse VFX —
+/// see Character::is_crouching() and sdl_lighting_devui::sound_pulses_visible().
+constexpr auto is_crouch_like_movemode( character_movemode mode ) -> bool
+{
+    return mode == CMM_CROUCH || mode == CMM_STEALTH;
+}
 
 enum class fatigue_levels : int { tired = 191, dead_tired = 383, exhausted = 575, massive = 1000 };
 
@@ -568,6 +577,8 @@ class Character: public Creature, public location_visitable<Character>
 
         /** Check against the character's current movement mode */
         bool movement_mode_is( character_movemode mode ) const;
+        /** True while crouching or in stealth mode (both share the crouched posture) */
+        bool is_crouching() const;
         character_movemode get_movement_mode() const;
 
         virtual void set_movement_mode( character_movemode mode ) = 0;

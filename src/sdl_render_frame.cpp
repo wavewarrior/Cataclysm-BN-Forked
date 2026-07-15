@@ -722,7 +722,9 @@ auto render_world_pass_w( lighting::render_state &rs,
     const bool needs_clear      = wt->consume_dirty();
     const bool have_tiles       = !rs.tile_sprites_empty() && rs.gpu_sampler();
     const bool have_sound_pulses = rs.sound_waves().ready()
-                                   && !dev_test_lights::sound_pulses.empty();
+                                   && !dev_test_lights::sound_pulses.empty()
+                                   && sdl_lighting_devui::sound_pulses_visible(
+                                       g != nullptr && g->u.movement_mode_is( CMM_STEALTH ) );
     // Force a clear when sound pulses are active: the disc moves each frame, so
     // we need a fresh world-target background or the old disc position persists.
     if( !needs_clear && !have_tiles && !have_sound_pulses ) {

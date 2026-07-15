@@ -1185,7 +1185,7 @@ void vehicle::drive_to_local_target( const tripoint_abs_ms &target, bool follow_
     int safe_player_follow_speed = 179;
     if( g->u.movement_mode_is( CMM_RUN ) ) {
         safe_player_follow_speed = 358;
-    } else if( g->u.movement_mode_is( CMM_CROUCH ) ) {
+    } else if( g->u.is_crouching() ) {
         safe_player_follow_speed = 89;
     }
     if( follow_protocol ) {

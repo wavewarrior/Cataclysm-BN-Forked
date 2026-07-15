@@ -249,7 +249,7 @@ bool map::build_vision_transparency_cache( const Character &player )
 
     bool dirty = false;
 
-    if( player.movement_mode_is( CMM_CROUCH ) ) {
+    if( player.is_crouching() ) {
 
         const auto check_vehicle_coverage = []( const vehicle * veh, const tripoint_mnt_veh & p ) -> bool {
             return veh->obstacle_at_position( p ) == -1 && ( veh->part_with_feature( p,  "AISLE", true ) != -1 || veh->part_with_feature( p,  "PROTRUSION", true ) != -1 );

@@ -160,6 +160,9 @@ TEST_CASE( "stamina burn for movement", "[stamina][burn][move]" )
         THEN( "crouching burns 1/2 the normal amount of stamina per turn" ) {
             CHECK( burdened_burn_rate( dummy, CMM_CROUCH, 0.0 ) == normal_burn_rate / 2 );
         }
+        THEN( "stealth burns the same amount as crouching" ) {
+            CHECK( burdened_burn_rate( dummy, CMM_STEALTH, 0.0 ) == normal_burn_rate / 2 );
+        }
     }
 
     GIVEN( "player is at their maximum weight capacity" ) {
@@ -199,6 +202,10 @@ TEST_CASE( "stamina burn for movement", "[stamina][burn][move]" )
             CHECK( burdened_burn_rate( dummy, CMM_CROUCH, 1.50 ) == ( normal_burn_rate + 50 ) / 2 );
             CHECK( burdened_burn_rate( dummy, CMM_CROUCH, 1.99 ) == ( normal_burn_rate + 99 ) / 2 );
             CHECK( burdened_burn_rate( dummy, CMM_CROUCH, 2.00 ) == ( normal_burn_rate + 100 ) / 2 );
+        }
+        THEN( "stealth burn rate increases by 1/2 for each percent overburdened, same as crouching" ) {
+            CHECK( burdened_burn_rate( dummy, CMM_STEALTH, 1.01 ) == ( normal_burn_rate + 1 ) / 2 );
+            CHECK( burdened_burn_rate( dummy, CMM_STEALTH, 2.00 ) == ( normal_burn_rate + 100 ) / 2 );
         }
     }
 }

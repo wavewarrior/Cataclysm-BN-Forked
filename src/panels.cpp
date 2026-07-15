@@ -922,6 +922,8 @@ static nc_color move_mode_color( avatar &u )
 {
     if( u.movement_mode_is( CMM_RUN ) ) {
         return c_red;
+    } else if( u.movement_mode_is( CMM_STEALTH ) ) {
+        return c_cyan;
     } else if( u.movement_mode_is( CMM_CROUCH ) ) {
         return c_light_blue;
     } else {
@@ -933,6 +935,8 @@ static std::string move_mode_string( avatar &u )
 {
     if( u.movement_mode_is( CMM_RUN ) ) {
         return pgettext( "movement-type", "R" );
+    } else if( u.movement_mode_is( CMM_STEALTH ) ) {
+        return pgettext( "movement-type", "S" );
     } else if( u.movement_mode_is( CMM_CROUCH ) ) {
         return pgettext( "movement-type", "C" );
     } else {

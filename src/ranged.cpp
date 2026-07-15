@@ -775,7 +775,7 @@ double Creature::ranged_target_size() const
 }
 bool is_crouched = false;
 if( Character *ch = const_cast<Creature &>( *this ).as_character() ) {
-    if( ch->movement_mode_is( CMM_CROUCH ) ) {
+    if( ch->is_crouching() ) {
             is_crouched = true;
         }
     }
@@ -2415,7 +2415,7 @@ dispersion_sources ranged::get_weapon_dispersion( const Character& who, const it
 
     if( who.has_bionic( bio_targeting ) ) { dispersion.add_multiplier( 0.75 ); }
     // If we're crouched, it's easier to steady our aim.
-    if( who.movement_mode_is( CMM_CROUCH ) ) { dispersion.add_multiplier( 0.75 ); }
+    if( who.is_crouching() ) { dispersion.add_multiplier( 0.75 ); }
 
     // Remotely-fired turrets with installed laser designator
     if( who.has_trait( trait_LASER_GUIDED ) ) { dispersion.add_multiplier( 0.25 ); }

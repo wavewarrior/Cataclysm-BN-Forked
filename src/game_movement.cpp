@@ -306,7 +306,7 @@ bool game::walk_move( const tripoint_bub_ms &dest_loc, const bool via_ramp )
             warn_msg( _( "Run into it if you wish to enter anyway." ) );
             return true;
         } else if( dangerous_terrain_opt == "CROUCHING" &&
-                   ( !u.movement_mode_is( CMM_CROUCH ) || !prompt_dangerous_tile( dest_loc ) ) ) {
+                   ( !u.is_crouching() || !prompt_dangerous_tile( dest_loc ) ) ) {
             warn_msg( _( "Crouch and move into it if you wish to enter anyway." ) );
             return true;
         } else if( dangerous_terrain_opt == "NEVER" && !u.movement_mode_is( CMM_RUN ) ) {
@@ -359,7 +359,7 @@ bool game::walk_move( const tripoint_bub_ms &dest_loc, const bool via_ramp )
         u.moves -= static_cast<int>( std::ceil( base_moves + encumb_moves ) );
         if( u.movement_mode_is( CMM_WALK ) ) {
             crit->use_mech_power( -2 );
-        } else if( u.movement_mode_is( CMM_CROUCH ) ) {
+        } else if( u.is_crouching() ) {
             crit->use_mech_power( -1 );
         } else if( u.movement_mode_is( CMM_RUN ) ) {
             crit->use_mech_power( -3 );
@@ -452,7 +452,7 @@ bool game::walk_move( const tripoint_bub_ms &dest_loc, const bool via_ramp )
             }
             if( u.movement_mode_is( CMM_RUN ) ) {
                 volume *= 1.5;
-            } else if( u.movement_mode_is( CMM_CROUCH ) ) {
+            } else if( u.is_crouching() ) {
                 volume /= 2;
             }
             if( u.is_mounted() ) {
@@ -1982,7 +1982,7 @@ void game::vertical_move( int movez, bool force, bool peeking )
             crit->use_mech_power( -1 );
             if( u.movement_mode_is( CMM_WALK ) ) {
                 crit->use_mech_power( -2 );
-            } else if( u.movement_mode_is( CMM_CROUCH ) ) {
+            } else if( u.is_crouching() ) {
                 crit->use_mech_power( -1 );
             } else if( u.movement_mode_is( CMM_RUN ) ) {
                 crit->use_mech_power( -3 );

@@ -1278,7 +1278,7 @@ void avatar::set_movement_mode( character_movemode new_mode )
                 }
             } else {
                 // Spend moves to stand up if crouched, otherwise just stop running.
-                if( move_mode == CMM_CROUCH ) {
+                if( is_crouching() ) {
                     mod_moves( -100 );
                     recoil = MAX_RECOIL;
                     add_msg( _( "You stand up." ) );
@@ -1301,7 +1301,7 @@ void avatar::set_movement_mode( character_movemode new_mode )
                     }
                 } else {
                     // Spend moves to stand up if crouched, otherwise just stop running.
-                    if( move_mode == CMM_CROUCH ) {
+                    if( is_crouching() ) {
                         mod_moves( -100 );
                         recoil = MAX_RECOIL;
                         add_msg( _( "You stand up and start running." ) );
@@ -1331,7 +1331,7 @@ void avatar::set_movement_mode( character_movemode new_mode )
                 }
             } else {
                 // Don't spend moves if we were already crouching.
-                if( move_mode != CMM_CROUCH ) {
+                if( !is_crouching() ) {
                     recoil = MAX_RECOIL;
                     mod_moves( -100 );
                 }
@@ -1339,11 +1339,28 @@ void avatar::set_movement_mode( character_movemode new_mode )
             }
             break;
         }
+        case CMM_STEALTH: {
+            if( is_mounted() ) {
+                if( mounted_creature->has_flag( MF_RIDEABLE_MECH ) ) {
+                    add_msg( _( "You reduce the power of your mech's leg servos to minimum." ) );
+                } else {
+                    add_msg( _( "You slow your steed to a walk." ) );
+                }
+            } else {
+                // Don't spend moves if we were already crouching or in stealth mode.
+                if( !is_crouching() ) {
+                    recoil = MAX_RECOIL;
+                    mod_moves( -100 );
+                }
+                add_msg( _( "You start moving stealthily." ) );
+            }
+            break;
+        }
         default: {
             return;
         }
     }
-    if( move_mode == CMM_CROUCH || new_mode == CMM_CROUCH ) {
+    if( is_crouch_like_movemode( move_mode ) || is_crouch_like_movemode( new_mode ) ) {
         // crouching affects visibility
         get_map().set_seen_cache_dirty( bub_pos().z() );
     }

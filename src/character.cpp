@@ -385,6 +385,8 @@ template <> std::string enum_to_string<character_movemode>( character_movemode d
             return "run";
         case character_movemode::CMM_CROUCH:
             return "crouch";
+        case character_movemode::CMM_STEALTH:
+            return "stealth";
             // *INDENT-ON*
         case character_movemode::CMM_COUNT:
             break;
@@ -1112,7 +1114,7 @@ int Character::swim_speed() const
     // Running movement mode while swimming means faster swim style, like crawlstroke
     if( move_mode == CMM_RUN ) { ret -= 80; }
     // Crouching movement mode while swimming means slower swim style, like breaststroke
-    if( move_mode == CMM_CROUCH ) { ret += 50; }
+    if( is_crouching() ) { ret += 50; }
 
     if( ret < 30 ) { ret = 30; }
     return ret;
@@ -1797,6 +1799,7 @@ void Character::wait_effects()
 character_movemode Character::get_movement_mode() const { return move_mode; }
 
 bool Character::movement_mode_is( const character_movemode mode ) const { return move_mode == mode; }
+bool Character::is_crouching() const { return is_crouch_like_movemode( move_mode ); }
 
 void Character::expose_to_disease( const diseasetype_id dis_type )
 {
@@ -6492,7 +6495,7 @@ if( has_active_bionic( bio_cloak ) || has_artifact_with( AEP_INVISIBLE ) ||
 if( move_mode == CMM_RUN ) {
     return c_yellow;
 }
-if( move_mode == CMM_CROUCH ) {
+if( is_crouching() ) {
     return c_light_gray;
 }
 return c_white;
@@ -6736,12 +6739,12 @@ int Character::visibility( bool, int ) const
 // if ( dark_clothing() && light check ...
 int stealth_modifier = std::floor( mutation_value( "stealth_modifier" ) );
 int const crouching_bonus = 30;
-if( ( g->u.movement_mode_is( CMM_CROUCH ) ) ) {
-        stealth_modifier += crouching_bonus;
-    };
-    map &here = get_map();
-    int const camo_modifier = 50;
-    if( worn_with_flag( flag_NATURE_CAMO )
+if( g->u.is_crouching() ) {
+    stealth_modifier += crouching_bonus;
+};
+map &here = get_map();
+int const camo_modifier = 50;
+if( worn_with_flag( flag_NATURE_CAMO )
         && ( here.has_flag( "PLOWABLE", bub_pos() ) || here.has_flag( "SHRUB", bub_pos() ) ) ) {
         stealth_modifier += camo_modifier;
     } else if( worn_with_flag( flag_URBAN_CAMO ) && ( here.has_flag( "ROAD", bub_pos() ) ||
@@ -7626,7 +7629,7 @@ float Character::running_move_cost_modifier() const
         // Rationale: Average running speed is 2x walking speed. (NOT sprinting)
         movement_modifier *= 2.0;
     }
-    if( move_mode == CMM_CROUCH ) { movement_modifier *= 0.5; }
+    if( is_crouching() ) { movement_modifier *= 0.5; }
     return movement_modifier;
 }
 

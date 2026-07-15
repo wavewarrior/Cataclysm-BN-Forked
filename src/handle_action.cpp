@@ -1572,7 +1572,8 @@ static void open_movement_mode_menu()
     as_m.entries.emplace_back( CMM_RUN, true, 'r', _( "Run" ) );
     as_m.entries.emplace_back( CMM_WALK, true, 'w', _( "Walk" ) );
     as_m.entries.emplace_back( CMM_CROUCH, true, 'c', _( "Crouch" ) );
-    as_m.entries.emplace_back( CMM_COUNT, true, '"', _( "Cycle move mode (run/walk/crouch)" ) );
+    as_m.entries.emplace_back( CMM_STEALTH, true, 's', _( "Stealth" ) );
+    as_m.entries.emplace_back( CMM_COUNT, true, '"', _( "Cycle move mode (run/walk/crouch/stealth)" ) );
     as_m.selected = 1;
     as_m.query();
 
