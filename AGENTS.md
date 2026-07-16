@@ -1,4 +1,61 @@
-# Cataclysm: Bright Nights - Agent Guidelines
+# Repository Guidelines
+
+## Project Overview
+
+[Cataclysm: Bright Nights](https://github.com/CataclysmBN/Cataclysm-BN) is an open-source, procedurally-generated roguelike survival game. Top-down perspective, turn-based gameplay with deep crafting, combat, and base-building systems.
+
+- **Language**: C++20/23 with heavy use of modern features (ranges, concepts, coroutines).
+- **Renderer**: SDL3 + Vulkan (tileset-based sprite rendering with advanced lighting).
+- **Content**: JSON-driven — items, recipes, monsters, mutations, mapgens, vehicles, and more are all defined in `data/json/` and loaded via factory classes at startup.
+- **Scripting**: Embedded Lua 5.4 VM for modding and in-game scripting.
+- **Networking**: Optional co-op multiplayer via SDL3_net.
+- **Platforms**: Linux, macOS, Windows.
+
+## Architecture & Data Flow
+
+- **Global singleton**: `extern std::unique_ptr<game> g` owns all subsystems — world, entities, trackers, event bus, calendar, UI, and input. Refactoring touches this extensively.
+- **Event bus**: `event_bus` class (pub/sub pattern) for decoupled subsystem communication. Events like `EVENT_PLAYER_MOVED`, `EVENT_ITEM_CREATED`, etc.
+- **JSON-driven factories**: `item_factory`, `monster_factory`, `mutation_factory`, `recipe`, `mapgen`, etc. construct all game content from `data/json/` at startup. Factory classes live flat in `src/` (e.g. `item_factory.cpp`, `generic_factory.cpp`).
+- **Type-safe identifiers**: `string_id<T>` template provides compile-time type-safe string identifiers (e.g. `item_type`, `monster_type`).
+- **Entity tracking**: `weak_ptr_fast<T>` and `creature_tracker` for efficient entity lifetime management without full `std::weak_ptr` overhead.
+- **Chunked tile map**: `map.cpp` / `submap.cpp` implement a chunked, streaming tile map with procedural generation. Terrain is stored in fixed-size submaps that load/unload based on player position.
+- **Range adapters**: C++20 range adapters like `non_dead_range<T>`, `monster_range` for ergonomic entity iteration throughout the codebase.
+
+## Key Directories
+
+| Directory | Contents |
+|-----------|----------|
+| `src/` | ~1000 .cpp/.h files — all game logic. Flat structure with headers co-located beside sources. |
+| `src/lighting/` | 40+ files — Vulkan render pipeline: sprite batching, ambient occlusion, bloom, volumetric fog, sound wave visualization. |
+| `src/lua/` | 50+ files — vendored Lua 5.4 VM plus binding layer for exposing game APIs to Lua scripts. |
+| `src/physics/` | 7 files — Box2D integration for vehicle physics simulation. |
+| `data/json/` | JSON game content: items, recipes, monsters, mutations, terrain, vehicles, mapgens, etc. |
+| `data/mods/` | Bundled mods, each with a `modinfo.json` descriptor. |
+| `tests/` | Catch2 v3 test suite — 200+ test files organized by domain. |
+| `docs/` | Developer documentation, modding guides, i18n docs. Follows Diátaxis framework (explanation, reference, guides, tutorials). |
+| `lang/po/` | Gettext `.po` translation files for all supported locales. |
+| `lang/` | Localization tooling: extraction scripts, POT generation, MO compilation, stats. |
+| `scripts/` | Deno/TypeScript automation: doc generation, migrations, changelog tools. |
+| `build-scripts/` | Shell scripts for build, lint, and validation tasks. |
+| `tools/` | Standalone utility programs (e.g. `check_po_printf_format.py`). |
+
+## Important Files
+
+| File | Lines | Role |
+|------|-------|------|
+| `src/character.cpp` | 11713 | Largest source file — player/NPC character logic, stats, effects, inventory. |
+| `src/map.cpp` | 9817 | Chunked tile map, streaming, procedural generation, terrain interaction. |
+| `src/iuse.cpp` | 8919 | Item-use system — dispatches all item interactions. |
+| `src/vehicle.cpp` | 8430 | Vehicle construction, parts, movement, and physics integration. |
+| `src/game.cpp` | 7196 | Central orchestrator — game loop, tick processing, global state, subsystem init. |
+| `src/overmap.cpp` | 6700 | World-overview map for long-distance travel and wilderness generation. |
+| `src/mapgen.cpp` | 6555 | Map generation engine — parses JSON mapgen rules into terrain. |
+| `src/avatar.cpp` | 1580 | Avatar-specific player behavior (extends character). |
+| `src/CMakeLists.txt` | — | Source compilation, target definitions, header/source globs. |
+| `CMakePresets.json` | — | Build presets: `linux-slim`, `osx-arm-slim`, `linux-full`, `windows-tiles-sounds-x64-msvc`, etc. |
+| `tests/test_main.cpp` | — | Catch2 custom runner — initializes full game state, mods, world, RNG seeding. |
+| `tests/map_helpers.h` | — | Test fixtures: `build_test_map`, `spawn_test_monster`, and map manipulation helpers. |
+| `tests/player_helpers.h` | — | Test helpers: `spawn_npc`, `arm_character`, and player state setup. |
 
 ## HARD CONSTRAINTS (NEVER VIOLATE)
 
@@ -178,3 +235,27 @@ See `token-optimization` skill for details. Track savings with `rtk gain`.
 - When fixing a bug, preserve requested behavior and visible content unless the user explicitly asks to remove it; fix the underlying issue instead of suppressing the affected feature.
 - When reviewing PRs that stop tracking generated or externally pulled files, verify ignore rules by running the generator/pull command or checking `git status --ignored`; do not assume removed tracked files are ignored.
 - When generated or externally pulled files are removed from tracking, verify all CI and release consumers still receive required files or directories.
+
+## Runtime/Tooling Preferences
+
+- **CMake**: ≥ 3.24, Ninja build generator. Out-of-source builds enforced.
+- **Compilers**: Clang (preferred Linux/macOS), GCC-14 (CI), MSVC (Windows).
+- **Deno**: Used for all TypeScript scripts (doc generation, migrations, changelog tools). Run `deno task <name>` for scripted workflows.
+- **Cache**: ccache (Linux/macOS) or sccache (Windows). Project cap is **20 GB** (`ccache --max-size=20G`).
+- **Linker**: mold (Linux) for fast linking; default linker elsewhere.
+- **Localization**: gettext toolchain (`msgfmt`, `msgmerge`, `xgettext`). See `lang/` for extraction and compilation scripts.
+
+## Testing & QA
+
+- **Framework**: Catch2 v3 (amalgamated, bundled in `tests/catch/`).
+- **Binary**: `./out/build/<preset>/tests/cata_test-tiles` — run with optional filter string, e.g. `"[item]"` or `"~[.]"`.
+- **Domain tags**: Tests are tagged by domain — `[item]`, `[melee]`, `[json]`, `[coop]`, `[calendar]`, `[map]`, `[vehicle]`, etc. Filter with `"[tag]"` to run only relevant tests.
+- **Slow tests**: Tagged `[.]` and excluded by default. Include them with `"~[.]"` or explicitly.
+- **Helper modules**:
+  - `tests/map_helpers.h` — `build_test_map`, `spawn_test_monster`, and map manipulation utilities.
+  - `tests/player_helpers.h` — `spawn_npc`, `arm_character`, and player state setup.
+  - `tests/fake_messages.cpp` — Stub for UI/message output to suppress console spam in tests.
+  - `tests/assertion_helpers.h` — `check_containers_equal` and other container comparison utilities.
+  - `tests/stringmaker.h` — Catch2 `StringMaker` specializations for game types.
+- **Probabilistic testing**: `statistics<T>` template with Z-score confidence intervals for stochastic test assertions.
+- **Custom runner**: `tests/test_main.cpp` initializes full game state including mod loading, world setup, and RNG seeding before each test.
