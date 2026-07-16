@@ -38,6 +38,7 @@
 #include "widget.h"
 #include "widget_icon.h"
 #include "sidebar_anim.h"
+#include "hud_anim.h"
 #include "effect.h"
 #include "fstream_utils.h"
 #include "game.h"
@@ -499,21 +500,6 @@ auto overmap_ui::overmap_chunk_rows( const avatar &you, const tripoint_abs_omt &
     return rows;
 }
 
-static void decorate_panel( const std::string &name, const catacurses::window &w )
-{
-    werase( w );
-    draw_border( w );
-
-    static const char *title_prefix = " ";
-    const std::string &title = name;
-    static const char *title_suffix = " ";
-    static const std::string full_title = string_format( "%s%s%s",
-                                          title_prefix, title, title_suffix );
-    const int start_pos = center_text_pos( full_title, 0, getmaxx( w ) - 1 );
-    mvwprintz( w, point( start_pos, 0 ), c_white, title_prefix );
-    wprintz( w, c_light_red, title );
-    wprintz( w, c_white, title_suffix );
-}
 
 static std::string time_approx()
 {
@@ -568,269 +554,6 @@ static std::pair<nc_color, int> morale_stat( const avatar &u )
     return std::make_pair( morale_color, morale_int );
 }
 
-struct temp_delta_extremes {
-    temp_delta_extremes( bodypart_str_id extreme_cur_bp,
-                         int extreme_cur_temp,
-                         bodypart_str_id extreme_conv_bp,
-                         int extreme_conv_temp ) :
-        extreme_cur_bp( extreme_cur_bp ),
-        extreme_cur_temp( extreme_cur_temp ),
-        extreme_conv_bp( extreme_conv_bp ),
-        extreme_conv_temp( extreme_conv_temp )
-    {}
-    bodypart_str_id extreme_cur_bp;
-    int extreme_cur_temp;
-    bodypart_str_id extreme_conv_bp;
-    int extreme_conv_temp;
-};
-
-static temp_delta_extremes temp_delta( const avatar &u )
-{
-    bodypart_str_id extreme_cur_bp;
-    int current_bp_extreme = BODYTEMP_NORM;
-    bodypart_str_id extreme_conv_bp;
-    int conv_bp_extreme = BODYTEMP_NORM;
-    for( const auto &pr : u.get_body() ) {
-        int temp_cur = pr.second.get_temp_cur();
-        if( std::abs( temp_cur - BODYTEMP_NORM ) >
-            std::abs( current_bp_extreme - BODYTEMP_NORM ) ) {
-            extreme_cur_bp = pr.first;
-            current_bp_extreme = temp_cur;
-        }
-
-        int temp_conv = pr.second.get_temp_conv();
-        if( std::abs( temp_conv - BODYTEMP_NORM ) >
-            std::abs( conv_bp_extreme - BODYTEMP_NORM ) ) {
-            extreme_conv_bp = pr.first;
-            conv_bp_extreme = temp_conv;
-        }
-    }
-    return temp_delta_extremes( extreme_cur_bp, current_bp_extreme, extreme_conv_bp, conv_bp_extreme );
-}
-
-static int define_temp_level( const int lvl )
-{
-    if( lvl > BODYTEMP_SCORCHING ) {
-        return 7;
-    } else if( lvl > BODYTEMP_VERY_HOT ) {
-        return 6;
-    } else if( lvl > BODYTEMP_HOT ) {
-        return 5;
-    } else if( lvl > BODYTEMP_COLD ) {
-        return 4;
-    } else if( lvl > BODYTEMP_VERY_COLD ) {
-        return 3;
-    } else if( lvl > BODYTEMP_FREEZING ) {
-        return 2;
-    }
-    return 1;
-}
-
-static std::pair<nc_color, std::string> temp_delta_arrows( const avatar &u )
-{
-    std::string temp_message;
-    nc_color temp_color = c_white;
-    temp_delta_extremes temp_struct = temp_delta( u );
-    // Assign zones for comparisons
-    const int cur_zone = define_temp_level( temp_struct.extreme_cur_temp );
-    const int conv_zone = define_temp_level( temp_struct.extreme_conv_temp );
-
-    // delta will be positive if temp_cur is rising
-    const int delta = conv_zone - cur_zone;
-    // Decide if temp_cur is rising or falling
-    if( delta > 2 ) {
-        temp_message = " ↑↑↑";
-        temp_color = c_red;
-    } else if( delta == 2 ) {
-        temp_message = " ↑↑";
-        temp_color = c_light_red;
-    } else if( delta == 1 ) {
-        temp_message = " ↑";
-        temp_color = c_yellow;
-    } else if( delta == 0 ) {
-        temp_message = "-";
-        temp_color = c_green;
-    } else if( delta == -1 ) {
-        temp_message = " ↓";
-        temp_color = c_light_blue;
-    } else if( delta == -2 ) {
-        temp_message = " ↓↓";
-        temp_color = c_cyan;
-    } else {
-        temp_message = " ↓↓↓";
-        temp_color = c_blue;
-    }
-    return std::make_pair( temp_color, temp_message );
-}
-
-static std::pair<nc_color, std::string> temp_stat( const avatar &u )
-{
-    /// Find hottest/coldest bodypart
-    // Calculate the most extreme body temperatures
-    temp_delta_extremes temp_struct = temp_delta( u );
-    int extreme_cur_temp = temp_struct.extreme_cur_temp;
-
-    // printCur the hottest/coldest bodypart
-    std::string temp_string;
-    nc_color temp_color = c_yellow;
-    if( extreme_cur_temp > BODYTEMP_SCORCHING ) {
-        temp_color = c_red;
-        temp_string = _( "Scorching!" );
-    } else if( extreme_cur_temp > BODYTEMP_VERY_HOT ) {
-        temp_color = c_light_red;
-        temp_string = _( "Very hot!" );
-    } else if( extreme_cur_temp > BODYTEMP_HOT ) {
-        temp_color = c_yellow;
-        temp_string = _( "Warm" );
-    } else if( extreme_cur_temp > BODYTEMP_COLD ) {
-        temp_color = c_green;
-        temp_string = _( "Comfortable" );
-    } else if( extreme_cur_temp > BODYTEMP_VERY_COLD ) {
-        temp_color = c_light_blue;
-        temp_string = _( "Chilly" );
-    } else if( extreme_cur_temp > BODYTEMP_FREEZING ) {
-        temp_color = c_cyan;
-        temp_string = _( "Very cold!" );
-    } else if( extreme_cur_temp <= BODYTEMP_FREEZING ) {
-        temp_color = c_blue;
-        temp_string = _( "Freezing!" );
-    }
-    return std::make_pair( temp_color, temp_string );
-}
-
-static std::string get_armor( const avatar &u, bodypart_id bp, unsigned int truncate = 0 )
-{
-    for( auto it = u.worn.rbegin(); it != u.worn.rend(); ) {
-        if( ( *it )->covers( bp ) ) {
-            return ( *it )->tname( 1, true, truncate );
-        }
-
-        it++;
-    }
-    return "-";
-}
-
-static face_type get_face_type( const avatar &u )
-{
-    face_type fc = face_human;
-    if( u.has_trait( trait_THRESH_FELINE ) ) {
-        fc = face_cat;
-    } else if( u.has_trait( trait_THRESH_URSINE ) ) {
-        fc = face_bear;
-    } else if( u.has_trait( trait_THRESH_BIRD ) ) {
-        fc = face_bird;
-    }
-    return fc;
-}
-
-static std::string morale_emotion( const int morale_cur, const face_type face,
-                                   const bool horizontal_style )
-{
-    if( horizontal_style ) {
-        if( face == face_bear || face == face_cat ) {
-            if( morale_cur >= 200 ) {
-                return "@W@";
-            } else if( morale_cur >= 100 ) {
-                return "OWO";
-            } else if( morale_cur >= 50 ) {
-                return "owo";
-            } else if( morale_cur >= 10 ) {
-                return "^w^";
-            } else if( morale_cur >= -10 ) {
-                return "-w-";
-            } else if( morale_cur >= -50 ) {
-                return "-m-";
-            } else if( morale_cur >= -100 ) {
-                return "TmT";
-            } else if( morale_cur >= -200 ) {
-                return "XmX";
-            } else {
-                return "@m@";
-            }
-        } else if( face == face_bird ) {
-            if( morale_cur >= 200 ) {
-                return "@v@";
-            } else if( morale_cur >= 100 ) {
-                return "OvO";
-            } else if( morale_cur >= 50 ) {
-                return "ovo";
-            } else if( morale_cur >= 10 ) {
-                return "^v^";
-            } else if( morale_cur >= -10 ) {
-                return "-v-";
-            } else if( morale_cur >= -50 ) {
-                return ".v.";
-            } else if( morale_cur >= -100 ) {
-                return "TvT";
-            } else if( morale_cur >= -200 ) {
-                return "XvX";
-            } else {
-                return "@v@";
-            }
-        } else if( morale_cur >= 200 ) {
-            return "@U@";
-        } else if( morale_cur >= 100 ) {
-            return "OuO";
-        } else if( morale_cur >= 50 ) {
-            return "^u^";
-        } else if( morale_cur >= 10 ) {
-            return "n_n";
-        } else if( morale_cur >= -10 ) {
-            return "-_-";
-        } else if( morale_cur >= -50 ) {
-            return "-n-";
-        } else if( morale_cur >= -100 ) {
-            return "TnT";
-        } else if( morale_cur >= -200 ) {
-            return "XnX";
-        } else {
-            return "@n@";
-        }
-    } else if( morale_cur >= 100 ) {
-        return "8D";
-    } else if( morale_cur >= 50 ) {
-        return ":D";
-    } else if( face == face_cat && morale_cur >= 10 ) {
-        return ":3";
-    } else if( face != face_cat && morale_cur >= 10 ) {
-        return ":)";
-    } else if( morale_cur >= -10 ) {
-        return ":|";
-    } else if( morale_cur >= -50 ) {
-        return "):";
-    } else if( morale_cur >= -100 ) {
-        return "D:";
-    } else {
-        return "D8";
-    }
-}
-
-static std::pair<nc_color, std::string> power_stat( const avatar &u )
-{
-    nc_color c_pwr = c_red;
-    std::string s_pwr;
-    if( !u.has_max_power() ) {
-        s_pwr = "--";
-        c_pwr = c_light_gray;
-    } else {
-        if( u.get_power_level() >= u.get_max_power_level() / 2 ) {
-            c_pwr = c_light_blue;
-        } else if( u.get_power_level() >= u.get_max_power_level() / 3 ) {
-            c_pwr = c_yellow;
-        } else if( u.get_power_level() >= u.get_max_power_level() / 4 ) {
-            c_pwr = c_red;
-        }
-
-        if( u.get_power_level() < 1_kJ ) {
-            s_pwr = std::to_string( units::to_joule( u.get_power_level() ) ) +
-                    pgettext( "energy unit: joule", "J" );
-        } else {
-            s_pwr = std::to_string( units::to_kilojoule( u.get_power_level() ) ) +
-                    pgettext( "energy unit: kilojoule", "kJ" );
-        }
-    }
-    return std::make_pair( c_pwr, s_pwr );
-}
 
 static std::pair<nc_color, std::string> mana_stat( const player &u )
 {
@@ -899,21 +622,6 @@ static std::string move_mode_string( avatar &u )
     }
 }
 
-static std::string carry_weight_string( const avatar &u )
-{
-    double weight_carried = round_up( convert_weight( u.weight_carried() ), 1 ); // In kg/lbs
-    double weight_capacity = round_up( convert_weight( u.weight_capacity() ), 1 );
-    return string_format( "%.1f/%.1f", weight_carried, weight_capacity );
-}
-
-static std::string carry_volume_string( const avatar &u )
-{
-    double volume_carried = round_up( convert_volume( to_milliliter( u.volume_carried() ) ),
-                                      2 );
-    double volume_capacity = round_up( convert_volume( to_milliliter( u.volume_capacity() ) ),
-                                       2 ); // In liters/cups/wolf paws or whatever burger units
-    return string_format( "%.2f/%.2f", volume_carried, volume_capacity );
-}
 
 // Phase-accurate moon icon name for the current time. Maps the 8 moon_phase
 // enumerators to the per-phase SVGs in gfx/widgets/ (waxing lights from the
@@ -995,617 +703,187 @@ static const std::map<std::string, std::function<bool()>> &render_predicate_regi
 // stacked above the HUD. Lifecycle is driven from game::draw_panels + cleanup_at_end.
 namespace
 {
-// Bound model (slice 3 structural pivot): the sidebar is ONE flex column of rows, one
-// row per present panel in layout order. Each row is a pre-rendered RML string (a
-// migrated producer's output, or a "[name]" placeholder) plus a flex flag (set for the
-// sentinel-height log/minimap panels so they grow to fill the column). data-for in
-// sidebar_hud.rml iterates `rows`; C++ rebuilds the vector each sync.
-struct hud_row_model {
-    Rml::String rml;
-    Rml::String title; // empty → no header chrome
-    bool flex = false;
-};
+// Fixed-region Qud layout data model. Each region is a pre-rendered RML string
+// filled by sidebar_hud_sync each turn. The RML document binds these directly
+// via data-rml attributes — no layout iteration.
 struct hud_rml_model {
-    Rml::Vector<hud_row_model> rows;
-    // Qud top/bottom screen chrome strips (Phase 2): topbar row 1 (name/needs/date),
-    // topbar row 2 (HP/stamina/mana bars, raw RML), bottom effects/hostiles strip (raw
-    // RML). Empty strings render as empty rows when the carve is 0 (HUD not ready).
     Rml::String topbar_rml;
-    Rml::String topbar2_rml;
+    Rml::String vitals_rml;
+    Rml::String minimap_rml;
+    Rml::String minimap_title;
+    Rml::String log_rml;
+    Rml::String log_title;
     Rml::String botbar_rml;
+    Rml::String hotbar_rml;
     Rml::DataModelHandle handle;
 };
 std::unique_ptr<hud_rml_model> g_hud_data;
 Rml::ElementDocument *g_hud_doc = nullptr;
 
-// One row mirroring draw_stats: "STR n  DEX n  INT n  PER n"; each value is coloured
-// by the same str_string/etc. helper draw_stats uses (label stays default HUD colour).
-// The cata colour tags become RML spans via cata_text_to_rml in sidebar_hud_sync.
-std::string hud_stats_text( avatar &u )
-{
-    const auto seg = [&]( const std::string & label, const nc_color clr, int val ) {
-        const std::string num = val < 100 ? std::to_string( val ) : "99+";
-        return label + " " + colorize( num, clr );
-    };
-    return seg( _( "STR" ), str_string( u ).first, u.get_str() ) + "  " +
-           seg( _( "DEX" ), dex_string( u ).first, u.get_dex() ) + "  " +
-           seg( _( "INT" ), int_string( u ).first, u.get_int() ) + "  " +
-           seg( _( "PER" ), per_string( u ).first, u.get_per() );
-}
 
-// Mirrors draw_stat_wide / draw_stat_narrow (the labels/wide + narrow "Stats" variant):
-// STR/DEX/INT/PER plus a Power readout and the Safe-mode flag, two rows. draw_stats
-// (classic) omits Power+Safe, so this is a distinct content variant — the layout's panel
-// name selects which producer runs (see g_hud_owned).
-std::string hud_stats_wide( avatar &u )
-{
-    const auto seg = [&]( const std::string & label, const nc_color clr, const std::string & val ) {
-        return label + " " + colorize( val, clr );
-    };
-    const std::pair<nc_color, std::string> pwr = power_stat( u );
-    std::string out =
-        seg( _( "Str" ), str_string( u ).first, std::to_string( u.get_str() ) ) + "  " +
-        seg( _( "Dex" ), dex_string( u ).first, std::to_string( u.get_dex() ) ) + "  " +
-        seg( _( "Power" ), pwr.first, pwr.second ) + "\n";
-    out +=
-        seg( _( "Int" ), int_string( u ).first, std::to_string( u.get_int() ) ) + "  " +
-        seg( _( "Per" ), per_string( u ).first, std::to_string( u.get_per() ) ) + "  " +
-        seg( _( "Safe" ), safe_color(), g->safe_mode ? _( "On" ) : _( "Off" ) );
-    return out;
-}
 
-// Mirrors draw_stealth (the "Sound" panel): Speed value + move-mode counter + sound
-// level (or DEAF). Reproduced in reading order with simple spacing — not the curses
-// cell-exact columns — per the slice-1 precedent (eyeball judges parity).
-std::string hud_sound_text( avatar &u )
+
+
+// Temperature hue ladder for the top bar.
+auto temp_color( units::temperature t ) -> nc_color
 {
-    std::string r = std::string( _( "Speed" ) ) + " " +
-                    colorize( std::to_string( u.get_speed() ), value_color( u.get_speed() ) );
-    const std::string move_string = std::to_string( u.movecounter ) + move_mode_string( u );
-    r += "  " + colorize( move_string, move_mode_color( u ) );
-    if( u.is_deaf() ) {
-        r += "  " + colorize( _( "DEAF" ), c_red );
+    const double f = units::to_fahrenheit( t );
+    if( f < 32 ) {
+        return c_light_blue;
+    } else if( f < 50 ) {
+        return c_cyan;
+    } else if( f < 77 ) {
+        return c_light_gray;
+    } else if( f < 95 ) {
+        return c_yellow;
     } else {
-        r += "  " + std::string( _( "Sound:" ) ) + " " +
-             colorize( std::to_string( u.volume ), u.volume != 0 ? c_yellow : c_light_gray );
+        return c_red;
     }
-    return r;
 }
 
-// Mirrors draw_needs_compact (the "Needs" panel), 3 rows. Curses lays it out as two
-// columns (hunger/fatigue/pain | thirst/temp/focus); reproduced row-by-row in reading
-// order, left field then right field, per the slice-1 precedent.
-std::string hud_needs_text( avatar &u )
+// Options struct for vbar_rml.
+struct vbar_options {
+    int cur = 0;
+    int max = 0;
+    nc_color fill = c_white;
+    bool thin = false;
+    bool allow_crit = true;
+    std::string text;
+    std::string id; // element id for animation targeting
+};
+
+// Chunky Qud-style HP bar RML (raw, not through cata_text_to_rml).
+// Ticks at 25/50/75% quarter marks. Crit (<25%) triple-encoded: bright-red fill,
+// dark-red trough, text suffix " !!".
+auto vbar_rml( const vbar_options &o ) -> std::string
 {
-    const auto desc = []( const std::pair<std::string, nc_color> &p ) {
-        return colorize( p.first, p.second );
-    };
-    const std::pair<std::string, nc_color> hunger = u.get_hunger_description();
-    const std::pair<std::string, nc_color> thirst = u.get_thirst_description();
-    const std::pair<std::string, nc_color> fatigue = u.get_fatigue_description();
-    const std::pair<std::string, nc_color> pain = u.get_pain_description();
-    const std::pair<nc_color, std::string> temp = temp_stat( u );
-    const std::pair<nc_color, std::string> arrow = temp_delta_arrows( u );
-    std::string out = desc( hunger ) + "   " + desc( thirst ) + "\n";
-    out += desc( fatigue ) + "   " + colorize( temp.second, temp.first ) +
-           colorize( arrow.second, arrow.first ) + "\n";
-    out += desc( pain ) + "   " + std::string( _( "Focus" ) ) + " " +
-           colorize( std::to_string( u.focus_pool ), focus_color( u.focus_pool ) );
-    return out;
-}
+    const int pct = o.max > 0 ? std::clamp( o.cur * 100 / o.max, 0, 100 ) : 0;
+    const bool crit = o.allow_crit && o.max > 0 && pct < 25;
+    const std::string fill_hex = nc_color_to_hex( crit ? c_light_red : o.fill );
+    const std::string text_suffix = crit ? " !!" : "";
+    const std::string thin_class = o.thin ? " thin" : "";
+    const std::string crit_class = crit ? " crit" : "";
 
-// Mirrors draw_needs_labels / draw_needs_narrow (labels/wide + narrow "Needs" variant):
-// Pain/Thirst, Rest/Hunger, Heat — NO fatigue-arrow or Focus (those belong to the
-// compact variant above). Distinct content → its own producer.
-std::string hud_needs_labels( avatar &u )
-{
-    const auto desc = []( const std::pair<std::string, nc_color> &p ) {
-        return colorize( p.first, p.second );
-    };
-    const std::pair<nc_color, std::string> temp = temp_stat( u );
-    std::string out = std::string( _( "Pain" ) ) + " " + desc( u.get_pain_description() ) + "   " +
-                      std::string( _( "Thirst" ) ) + " " + desc( u.get_thirst_description() ) + "\n";
-    out += std::string( _( "Rest" ) ) + " " + desc( u.get_fatigue_description() ) + "   " +
-           std::string( _( "Hunger" ) ) + " " + desc( u.get_hunger_description() ) + "\n";
-    out += std::string( _( "Heat" ) ) + " " + colorize( temp.second, temp.first );
-    return out;
-}
-
-// Mirrors draw_sound_labels / draw_sound_narrow (labels/wide + narrow "Sound" variant):
-// just the sound level (or Deaf!). draw_stealth (compact) also shows Speed + move, so
-// that stays a separate producer (hud_sound_text).
-std::string hud_sound_labels( avatar &u )
-{
-    if( u.is_deaf() ) {
-        return std::string( _( "Sound:" ) ) + " " + colorize( _( "Deaf!" ), c_red );
-    }
-    return std::string( _( "Sound:" ) ) + " " + colorize( std::to_string( u.volume ), c_yellow );
-}
-
-// Mirrors draw_weightvolume_* (Wgt + Volume). All variants render the same content
-// (only column layout differs), so one producer serves every variant. Threshold colours
-// match draw_weightvolume_labels.
-std::string hud_wgtvol( avatar &u )
-{
-    const nc_color wclr = u.weight_carried() > u.weight_capacity() ? c_red :
-                          u.weight_carried() > u.weight_capacity() * 0.75 ? c_yellow : c_light_gray;
-    const nc_color vclr = u.volume_carried() > u.volume_capacity() * 0.85 ? c_red :
-                          u.volume_carried() > u.volume_capacity() * 0.65 ? c_yellow : c_light_gray;
-    return std::string( _( "Wgt" ) ) + " " + colorize( carry_weight_string( u ), wclr ) + "   " +
-           std::string( _( "Volume" ) ) + " " + colorize( carry_volume_string( u ), vclr );
-}
-
-// Mirrors print_mana (the native "Mana" panel, all variants — content is identical
-// across them, only spacing differs).
-std::string hud_mana( avatar &u )
-{
-    const std::pair<nc_color, std::string> m = mana_stat( u );
-    return std::string( _( "Mana" ) ) + " " + colorize( m.second, m.first ) + "   " +
-           std::string( _( "Max" ) ) + " " +
-           colorize( std::to_string( u.magic->max_mana( u ) ), c_light_blue );
-}
-
-// Mirrors draw_hint: the panel-options keybind prompt. Single variant.
-std::string hud_hint( avatar & )
-{
-    const std::string press = press_x( ACTION_TOGGLE_PANEL_ADM );
-    return colorize( press, c_light_green ) + " " +
-           colorize( _( "to open sidebar options" ), c_white );
-}
-
-#ifdef COOP_ENABLED
-static auto hud_coop_partner_text( avatar & /*u*/ ) -> std::string
-{
-    const auto& sess = coop_session::get();
-    if( !sess.is_coop() ) { return {}; }
-
-    const std::string mode = sess.is_host() ? _( "HOST" ) : _( "CLIENT" );
-    auto out = colorize( "[Co-op " + mode + ": " + sess.partner_name + "]", c_light_blue );
-    if( sess.partner_ping_ms > 0 ) {
-        out += "  " + colorize( std::to_string( sess.partner_ping_ms ) + "ms", c_dark_gray );
-    }
-    out += "\n";
-
-    const int hp = sess.partner_hp_pct;
-    const nc_color hp_col = hp > 50 ? c_green : hp > 25 ? c_yellow : c_red;
-    const int filled = hp * 10 / 100;
-    out += colorize( _( "HP: " ), c_white );
-    out += colorize( std::string( filled, '#' ), hp_col );
-    out += colorize( std::string( 10 - filled, '-' ), c_dark_gray );
-    out += " " + colorize( std::to_string( hp ) + "%", hp_col ) + "\n";
-
-    if( !sess.partner_activity_str.empty() ) {
-        out += colorize( sess.partner_activity_str, c_light_gray );
-    }
-    out += "  ";
-    const int stam = sess.partner_stamina_pct;
-    out += colorize( _( "Stam:" ), c_white ) + " "
-           + colorize( std::to_string( stam ) + "%",
-                       stam > 50 ? c_green : stam > 20 ? c_yellow : c_red );
-    out += "\n";
-
-    if( sess.partner_abs_pos != tripoint_abs_ms{} ) {
-        const tripoint_rel_ms delta = sess.partner_abs_pos - g->u.abs_pos();
-        const int dist = rl_dist( tripoint_rel_ms{}, delta );
-        const char *arrow = "?";
-        const int dx = delta.x(), dy = delta.y();
-        if( std::abs( dx ) < std::abs( dy ) / 2 )      { arrow = dy < 0 ? "↑" : "↓"; }
-        else if( std::abs( dy ) < std::abs( dx ) / 2 ) { arrow = dx > 0 ? "→" : "←"; }
-        else if( dx > 0 && dy < 0 )                    { arrow = "↗"; }
-        else if( dx > 0 && dy > 0 )                    { arrow = "↘"; }
-        else if( dx < 0 && dy > 0 )                    { arrow = "↙"; }
-        else                                            { arrow = "↖"; }
-        out += colorize( std::string( _( "Partner: " ) ) + arrow + " "
-                         + std::to_string( dist ) + "m", c_light_cyan );
-    }
-    return out;
-}
-#endif
-
-// Mirrors draw_char_wide (the "Movement" panel): Sound/Mood/Focus, then Stam/Speed/Move.
-// Smiley + stamina are text (emote string / hp-bar string), so this is pure text.
-std::string hud_movement( avatar &u )
-{
-    const std::pair<nc_color, int> morale = morale_stat( u );
-    const bool m_style = get_option<std::string>( "MORALE_STYLE" ) == "horizontal";
-    const std::string smiley = morale_emotion( morale.second, get_face_type( u ), m_style );
-    const nc_color move_color = move_mode_color( u );
-    const std::string movecost = std::to_string( u.movecounter ) + "(" + move_mode_string( u ) + ")";
-    const nc_color stam_clr = get_hp_bar( u.get_stamina(), u.get_stamina_max() ).second;
-    const std::string stam = get_option<std::string>( "HEALTH_STYLE" ) == "number"
-                             ? std::to_string( u.get_stamina() )
-                             : get_hp_bar( u.get_stamina(), u.get_stamina_max() ).first;
-    std::string out =
-        std::string( _( "Sound" ) ) + " " + colorize( std::to_string( u.volume ), c_light_gray ) + "  " +
-        std::string( _( "Mood" ) ) + " " + colorize( smiley, morale.first ) + "  " +
-        std::string( _( "Focus" ) ) + " " +
-        colorize( std::to_string( u.focus_pool ), focus_color( u.focus_pool ) ) + "\n";
-    out +=
-        std::string( _( "Stam" ) ) + " " + colorize( stam, stam_clr ) + "  " +
-        std::string( _( "Speed" ) ) + " " +
-        colorize( std::to_string( u.get_speed() ), focus_color( u.get_speed() ) ) + "  " +
-        std::string( _( "Move" ) ) + " " + colorize( movecost, move_color );
-    return out;
-}
-
-// Mirrors draw_weapon_labels: wielded weapon + martial style. fmt_wielded_weapon carries
-// its own colour tags; the gray wrap only tints any untagged remainder.
-std::string hud_weapon( avatar &u )
-{
-    return std::string( _( "Wield" ) ) + " " +
-           colorize( character_funcs::fmt_wielded_weapon( u ), c_light_gray ) + "\n" +
-           std::string( _( "Style" ) ) + " " +
-           colorize( u.martial_arts_data->selected_style_name( u ), c_light_gray );
-}
-
-// Mirrors draw_armor / draw_armor_padding: per-body-part outermost armor. get_armor()
-// returns already-coloured text. Single content variant.
-std::string hud_armor( avatar &u )
-{
-    const unsigned int maxlen = 24;
-    const auto row = [&]( const std::string & label, const char *bp ) {
-        return colorize( label, c_light_gray ) + " " + get_armor( u, bodypart_id( bp ), maxlen );
-    };
-    return row( _( "Head" ), "head" ) + "\n" +
-           row( _( "Torso" ), "torso" ) + "\n" +
-           row( _( "Arms" ), "arm_r" ) + "\n" +
-           row( _( "Legs" ), "leg_r" ) + "\n" +
-           row( _( "Feet" ), "foot_r" );
-}
-
-// Emits a Qud "qbar" fill-bar div (see .qbar/.qbar-fill in sidebar_hud.rcss). Percentage
-// clamped 0-100; fill colour is the caller's nc_color converted to hex.
-auto qbar_rml( int cur, int max, const nc_color &color ) -> std::string
-{
-    const auto pct = max > 0 ? std::clamp( cur * 100 / max, 0, 100 ) : 0;
     return string_format(
-               R"(<div class="qbar"><div class="qbar-fill" style="width:%d%%;background-color:%s;"></div></div>)",
-               pct, nc_color_to_hex( color ) );
+               R"(<div id="%s" class="vbar%s%s"><div class="vbar-fill" style="width:%d%%;background-color:%s;"></div>)"
+               R"(<div class="vbar-tick" style="left:25%%;"></div>)"
+               R"(<div class="vbar-tick" style="left:50%%;"></div>)"
+               R"(<div class="vbar-tick" style="left:75%%;"></div>)"
+               R"(<div class="vbar-text">%s</div>)"
+               R"(</div>)",
+               o.id, thin_class, crit_class, pct, fill_hex,
+               o.text + text_suffix );
 }
 
-// One body-part's HP as a Qud fill-bar row (qbar_rml) + numeric readout — replaces
-// draw_limb_health's curses TEXT bar (broken-limb mend # /= bar / plain number / 5-cell
-// hp bar) with an actual div fill bar. Raw RML fragment; used by hud_limbs.
-auto hud_limb_health( avatar &u, const bodypart_id &bp, bool num_style ) -> std::string
+// Qud vitals overlay: chunky HP bars per body part + thin STA/MANA bars.
+auto hud_vitals( avatar &u ) -> std::string
 {
-    const auto hp_cur = u.get_part_hp_cur( bp );
-    const auto hp_max = u.get_part_hp_max( bp );
-    const bool checked = u.has_effect( effect_got_checked );
-    if( u.is_limb_broken( bp.id() ) && !bp->essential ) {
-        const auto mend_perc = hp_max > 0 ? 100 * hp_cur / hp_max : 0;
-        const bool splinted = u.worn_with_flag( json_flag_SPLINT, bp ) ||
-                              ( u.mutation_value( "mending_modifier" ) >= 1.0f );
-        const nc_color color = splinted ? c_blue : c_dark_gray;
-        if( num_style || checked ) {
-            return cata_text_to_rml( colorize( string_format( "%3d", hp_cur ), color ) );
-        }
-        return qbar_rml( mend_perc, 100, color ) + string_format( " %d%%", mend_perc );
-    }
-    const auto hp = get_hp_bar( hp_cur, hp_max );
-    if( num_style || checked ) {
-        return cata_text_to_rml( colorize( string_format( "%3d", hp_cur ), hp.second ) );
-    }
-    return qbar_rml( hp_cur, hp_max, hp.second ) + string_format( " %d/%d", hp_cur, hp_max );
-}
-
-// Mirrors draw_limb_wide / draw_limb2 / draw_limb_narrow (all limb variants — same data,
-// only layout differs, so one producer serves all): one Qud bar row per body part, in
-// reading order. Full colour fidelity (limb_color name + hp-bar colour). Raw RML.
-auto hud_limbs( avatar &u ) -> std::string
-{
-    const bool num_style = get_option<std::string>( "HEALTH_STYLE" ) == "number";
     std::string out;
     for( const bodypart_id &bp : u.get_all_body_parts( true ) ) {
-        const std::string name = left_justify( body_part_hp_bar_ui_text( bp.id() ), 5 );
-        out += "<div class=\"hud-limb-row\"><span class=\"hud-limb-name\">" +
-               cata_text_to_rml( colorize( name, u.limb_color( bp.id(), true, true, true ) ) ) +
-               "</span>" + hud_limb_health( u, bp, num_style ) + "</div>";
+        const auto hp_cur = u.get_part_hp_cur( bp );
+        const auto hp_max = u.get_part_hp_max( bp );
+        const bool broken = u.is_limb_broken( bp.id() ) && !bp->essential;
+
+        nc_color fill = c_white;
+        bool allow_crit = true;
+        std::string label;
+
+        if( broken ) {
+            // Mend bar: gray/blue, no crit
+            const bool splinted = u.worn_with_flag( json_flag_SPLINT, bp ) ||
+                                  ( u.mutation_value( "mending_modifier" ) >= 1.0f );
+            fill = splinted ? c_blue : c_dark_gray;
+            allow_crit = false;
+            const int mend_pct = hp_max > 0 ? 100 * hp_cur / hp_max : 0;
+            label = string_format( "%s %d%%", body_part_hp_bar_ui_text( bp.id() ), mend_pct );
+        } else {
+            const auto hp = get_hp_bar( hp_cur, hp_max );
+            fill = hp.second;
+            label = string_format( "%s %d/%d", body_part_hp_bar_ui_text( bp.id() ), hp_cur, hp_max );
+        }
+
+        const std::string label_hex = nc_color_to_hex( u.limb_color( bp.id(), true, true, true ) );
+        const std::string bar_id = "vbar_" + bp.id().str();
+        out += vbar_rml( { .cur = hp_cur, .max = hp_max, .fill = fill, .thin = false,
+                           .allow_crit = allow_crit, .text = label, .id = bar_id } );
+
+        // Feed animation: HP percentage normalized 0-1, critical when <25%
+        const double norm = hp_max > 0 ? static_cast<double>( hp_cur ) / hp_max : 0.0;
+        hud_anim::feed( { .element_id = bar_id, .spec_icon = "hud_vbar",
+                          .value = norm, .is_critical = allow_crit && norm < 0.25 } );
     }
+
+    // Stamina thin bar
+    {
+        const auto sta_cur = u.get_stamina();
+        const auto sta_max = u.get_stamina_max();
+        const auto hp = get_hp_bar( sta_cur, sta_max );
+        out += vbar_rml( { .cur = sta_cur, .max = sta_max, .fill = hp.second, .thin = true,
+                           .allow_crit = false, .text = string_format( "STA %d/%d", sta_cur, sta_max ),
+                           .id = "vbar_sta" } );
+        const double sta_norm = sta_max > 0 ? static_cast<double>( sta_cur ) / sta_max : 0.0;
+        hud_anim::feed( { .element_id = "vbar_sta", .spec_icon = "hud_vbar",
+                          .value = sta_norm, .is_critical = false } );
+    }
+
+    // Mana thin bar (only when magic is active)
+    if( u.magic->max_mana( u ) > 0 ) {
+        const auto mana_cur = u.magic->available_mana();
+        const auto mana_max = u.magic->max_mana( u );
+        out += vbar_rml( { .cur = mana_cur, .max = mana_max, .fill = mana_stat( u ).first, .thin = true,
+                           .allow_crit = false, .text = string_format( "MANA %d/%d", mana_cur, mana_max ),
+                           .id = "vbar_mana" } );
+        const double mana_norm = static_cast<double>( mana_cur ) / mana_max;
+        hud_anim::feed( { .element_id = "vbar_mana", .spec_icon = "hud_vbar",
+                          .value = mana_norm, .is_critical = false } );
+    }
+
     return out;
 }
 
-// Mirrors draw_messages (the "Log" panel): the recent message buffer in chronological
-// order, one line each, coloured by msgtype with the same new/recent/old fade the curses
-// display applies (Messages::recent_messages_colored). The flex row grows; content
-// top-aligns + clips if it overruns.
+
+/// Rich animated log: consumes recent_messages_rich(100), emits per-message
+/// RML rows with symbol + timestamp prefix, color attributes, and stable IDs
+/// for the animation system to target. Newest message last (chronological).
 auto hud_log( avatar & ) -> std::string
 {
     std::string out;
-    bool first = true;
-    for( const std::pair<std::string, std::string> &m : Messages::recent_messages_colored( 20 ) ) {
-        if( !first ) {
-            out += "\n";
-        }
-        first = false;
-        out += m.second;
-    }
-    return out;
-}
-
-// Mirrors draw_loc_labels (the Location panel, all loc_* variants): Place / X,Y,Z / Sky
-// (weather) / Light / Date / Time, one row each, full colour. The optional inline overmap
-// minichunk (draw_loc_wide_map's `minimap` flag → draw_overmap_chunk) is GRAPHICAL and
-// DROPPED for MVP (phase 2, like the pixel minimap RTT). draw_location_classic is a
-// different compact layout and is NOT served here.
-std::string hud_location( avatar &u )
-{
-    const oter_id &cur_ter = ACTIVE_OVERMAP_BUFFER.ter( u.abs_omt_pos() );
-    const tripoint_abs_omt coord = u.abs_omt_pos();
-    std::string out = std::string( _( "Place: " ) ) +
-                      colorize( cur_ter->get_name(), c_white ) + "\n";
-    out += std::string( _( "X,Y,Z: " ) );
-    if( get_option<std::string>( "OVERMAP_COORDINATE_FORMAT" ) == "subdivided" ) {
-        point_abs_om abs_coord;
-        tripoint_om_omt rel_coord;
-        std::tie( abs_coord, rel_coord ) = project_remain<coords::om>( coord );
-        out += colorize( string_format( "%d'%d, %d'%d, %d", abs_coord.x(), rel_coord.x(),
-                                        abs_coord.y(), rel_coord.y(), coord.z() ), c_white );
-    } else {
-        out += colorize( string_format( "%d, %d, %d", coord.x(), coord.y(), coord.z() ), c_white );
-    }
-    out += "\n";
-    if( g->get_levz() < 0 ) {
-        out += std::string( _( "Sky  : Underground" ) );
-    } else {
-        out += std::string( _( "Sky  :" ) ) + " " +
-               colorize( get_weather().weather_id->name.translated(),
-                         get_weather().weather_id->color );
-    }
-    out += "\n";
-    const std::pair<std::string, nc_color> ll = get_light_level(
-            character_funcs::fine_detail_vision_mod( get_avatar() ) );
-    out += std::string( _( "Light:" ) ) + " " + colorize( ll.first, ll.second ) + "\n";
-    out += string_format( _( "Date : %s, day %d" ),
-                          calendar::name_season( season_of_year( calendar::turn ) ),
-                          day_of_season<int>( calendar::turn ) + 1 ) + "\n";
-    if( u.has_watch() ) {
-        out += string_format( _( "Time : %s" ), to_string_time_of_day( calendar::turn ) );
-    } else if( g->get_levz() >= 0 ) {
-        out += string_format( _( "Time : %s" ), time_approx() );
-    } else {
-        // NOLINTNEXTLINE(cata-text-style): the question mark does not end a sentence
-        out += std::string( _( "Time : ???" ) );
-    }
-    return out;
-}
-
-// Compass — Qud-style threat grid: the full mon_info 3x3 directional symbol grid
-// (index layout 7 0 1 / 6 8 2 / 5 4 3, matching monster_visible_info; 8 = center/
-// local) plus a per-direction monster list below it. Raw RML (see g_hud_producers).
-auto hud_compass( avatar &u ) -> std::string
-{
-    static constexpr std::array<int, 9> grid_index = { 7, 0, 1, 6, 8, 2, 5, 4, 3 };
-    static constexpr std::array<const char *, 8> dir_labels = {
-        "N", "NE", "E", "SE", "S", "SW", "W", "NW"
-    };
-    const auto &info = u.get_mon_visible();
-    const auto cell_text = [&]( int i ) -> std::string {
-        if( i == 8 )
-        {
-            return colorize( "\u2302", c_white );
-        }
-        std::string s;
-        for( const auto &mon : info.unique_mons[i] | std::views::take( 3 ) )
-        {
-            s += colorize( mon.first->sym, mon.first->color );
-        }
-        if( !info.unique_types[i].empty() )
-        {
-            s += colorize( std::string( info.unique_types[i].size(), '@' ), c_light_red );
-        }
-        return s.empty() ? colorize( "\u00b7", c_dark_gray ) : s;
-    };
-    std::string grid;
-    for( int row = 0; row < 3; ++row ) {
-        grid += "<div class=\"tc-row\">";
-        for( int col = 0; col < 3; ++col ) {
-            const int i = grid_index[row * 3 + col];
-            const bool danger = i < 8 && info.dangerous[i];
-            grid += "<span class=\"tc-cell";
-            grid += danger ? " danger\">" : "\">";
-            grid += cata_text_to_rml( cell_text( i ) );
-            grid += "</span>";
-        }
-        grid += "</div>";
-    }
-    // Per-direction monster list: reading order N..NW, capped at 4 lines then folded
-    // into "+n dirs" — the grid above already shows every occupied octant at a glance.
-    std::vector<std::string> lines;
-    int remaining = 0;
-    for( int i = 0; i < 8; ++i ) {
-        if( info.unique_mons[i].empty() ) {
-            continue;
-        }
-        if( static_cast<int>( lines.size() ) >= 4 ) {
-            ++remaining;
-            continue;
-        }
-        std::string names;
-        bool first = true;
-        for( const auto &mon : info.unique_mons[i] ) {
-            if( !first ) {
-                names += ", ";
-            }
-            first = false;
-            names += colorize( mon.first->nname( mon.second ), mon.first->color );
-            if( mon.second > 1 ) {
-                names += string_format( " \u00d7%d", mon.second );
-            }
-        }
-        const nc_color dir_color = info.dangerous[i] ? c_red : c_light_gray;
-        const std::string line = colorize( dir_labels[i], dir_color ) + " " + names;
-        lines.push_back( "<div>" + cata_text_to_rml( line ) + "</div>" );
-    }
-    if( remaining > 0 ) {
-        lines.push_back( "<div>" + cata_text_to_rml( colorize(
-                             string_format( _( "+%d dirs" ), remaining ), c_dark_gray ) ) + "</div>" );
-    }
-    std::string out = grid;
-    for( const std::string &line : lines ) {
-        out += line;
-    }
-    return out;
-}
-
-// Reference plans/RMLUI_HUD_PANEL_REFERENCE.md §3.18: runs the same "npc_needs" behavior
-// tree tick the NPC AI issues, against the avatar via character_oracle_t.
-auto hud_ai_goal( avatar &u ) -> std::string
-{
-    behavior::tree needs;
-    needs.add( &string_id<behavior::node_t>( "npc_needs" ).obj() );
-    const behavior::character_oracle_t oracle( &u );
-    const auto current_need = needs.tick( &oracle );
-    const auto goal = current_need.empty() || current_need == "idle"
-                      ? std::string( _( "none" ) ) : current_need;
-    return colorize( string_format( _( "Goal: %s" ), goal ), c_light_gray );
-}
-
-// Mirrors hud_armor's per-body-part outermost-armor lookup (get_armor above), but shows
-// only the glyph (item::symbol, tinted item::color) so five parts fit on one strip row.
-auto hud_armor_comp( avatar &u ) -> std::string
-{
-    static constexpr std::array<std::pair<const char *, const char *>, 5> parts = { {
-            { "head", "H" }, { "torso", "T" }, { "arm_r", "A" }, { "leg_r", "L" }, { "foot_r", "F" }
-        }
-    };
-    auto out = std::string();
-    auto first = true;
-    for( const auto &[bp, label] : parts ) {
-        if( !first ) {
-            out += " ";
-        }
-        first = false;
-        out += std::string( label ) + ":";
-        auto glyph = colorize( "-", c_dark_gray );
-        for( const auto &worn_item : u.worn | std::views::reverse ) {
-            if( worn_item->covers( bodypart_id( bp ) ) ) {
-                glyph = colorize( worn_item->symbol(), worn_item->color() );
+    const auto msgs = Messages::recent_messages_rich( 100 );
+    for( const Messages::rich_message &m : msgs ) {
+        // Symbol based on message type
+        const char *sym = "-";
+        switch( m.type ) {
+            case m_bad:
+                sym = "!";
                 break;
-            }
+            case m_good:
+                sym = "+";
+                break;
+            case m_warning:
+                sym = "^";
+                break;
+            default:
+                sym = "-";
+                break;
         }
-        out += glyph;
+
+        const std::string hex_color = nc_color_to_hex( m.color );
+        const std::string row_id = "log-" + std::to_string( m.seq );
+
+        out += "<div class=\"hud-log-entry\" id=\"" + row_id + "\" style=\"color:" + hex_color + "\">";
+        out += "<span class=\"hud-log-symbol\">" + std::string( sym ) + "</span>";
+        out += "<span class=\"hud-log-time\">" + rml_escape( m.time ) + "</span>";
+        out += "<span class=\"hud-log-text\">" + rml_escape( m.text ) + "</span>";
+        out += "</div>";
     }
     return out;
-}
-} // namespace
-
-// (name, icon-id) per lunar phase — untranslated; hud_moon translates `name` at the call
-// site (mirrors how g_hud_producers keeps `title` untranslated until sync time).
-
-auto moon_phase_display( moon_phase phase ) -> moon_phase_info
-{
-    switch( phase ) {
-    case MOON_NEW:
-        return { "New moon", "moon_new" };
-    case MOON_WAXING_CRESCENT:
-        return { "Waxing crescent", "moon_waxing_crescent" };
-    case MOON_HALF_MOON_WAXING:
-        return { "First quarter", "moon_first_quarter" };
-    case MOON_WAXING_GIBBOUS:
-        return { "Waxing gibbous", "moon_waxing_gibbous" };
-    case MOON_FULL:
-        return { "Full moon", "moon_full" };
-    case MOON_WANING_GIBBOUS:
-        return { "Waning gibbous", "moon_waning_gibbous" };
-    case MOON_HALF_MOON_WANING:
-        return { "Last quarter", "moon_last_quarter" };
-    case MOON_WANING_CRESCENT:
-        return { "Waning crescent", "moon_waning_crescent" };
-    case MOON_PHASE_MAX:
-        break;
-}
-return { "Unknown", "moon_full" };
-}
-
-namespace
-{
-// Raw RML: absolute gfxdir() icon path (Phase-1 assumption #2 — sidesteps the untested
-// document-relative resolution, matching widget_icon.cpp's own lookup) + phase name +
-// current-tile outdoor temperature.
-auto hud_moon( avatar &u ) -> std::string
-{
-    const auto info = moon_phase_display( get_moon_phase( calendar::turn ) );
-    const auto icon_src = PATH_INFO::gfxdir() + "widgets/" + info.icon + ".svg?px=32";
-    const auto text = string_format( "%s : %s  %s : %s", _( "Moon" ), _( info.name ),
-                                     _( "Temp" ),
-                                     print_temperature( get_weather().get_temperature( u.abs_pos() ) ) );
-    return "<img class=\"hud-icon\" src=\"" + icon_src + "\"/>" + cata_text_to_rml( text );
 }
 
 } // namespace
 
-// 8-way sector icon bucket for a wind direction angle (reference §3.12).
-auto wind_arrow_icon( int dirangle ) -> const char *
-{
-    if( dirangle < 0 || dirangle >= 360 ) {
-        return "wind";
-    } else if( dirangle <= 23 || dirangle > 338 ) {
-        return "wind_n";
-    } else if( dirangle <= 68 ) {
-        return "wind_ne";
-    } else if( dirangle <= 113 ) {
-        return "wind_e";
-    } else if( dirangle <= 158 ) {
-        return "wind_se";
-    } else if( dirangle <= 203 ) {
-        return "wind_s";
-    } else if( dirangle <= 248 ) {
-        return "wind_sw";
-    } else if( dirangle <= 293 ) {
-        return "wind_w";
-    }
-    return "wind_nw";
-}
 
 namespace
 {
-// Raw RML: sector icon + Beaufort-scale wind description, colored by strength; textual
-// direction fallback appended (reference §3.4).
-auto hud_wind( avatar &u ) -> std::string
-{
-    const auto &weather = get_weather();
-    const auto windpower = get_local_windpower( weather.windspeed,
-                           ACTIVE_OVERMAP_BUFFER.ter( u.abs_omt_pos() ), u.abs_pos(),
-                           weather.winddirection, g->is_sheltered( u.bub_pos() ) );
-    const auto icon_src = PATH_INFO::gfxdir() + "widgets/" +
-                          wind_arrow_icon( weather.winddirection ) + ".svg?px=32";
-    const auto text = colorize( string_format( "%s : %s", _( "Wind" ), get_wind_desc( windpower ) ),
-                                get_wind_color( windpower ) ) + " " +
-                      get_wind_arrow( weather.winddirection );
-    return "<img class=\"hud-icon\" src=\"" + icon_src + "\"/>" + cata_text_to_rml( text );
-}
-
-// Vehicle status: heading + speed (colored by engine strain) + optional cruise/flight
-// readouts + fuel gauge lines. Empty when not in a vehicle — sidebar_hud_sync drops the
-// row (the widget's own show_if:veh_panel already gates on u.in_vehicle).
-auto hud_vehicle( avatar &u ) -> std::string
-{
-    const optional_vpart_position vp = g->m.veh_at( u.bub_pos() );
-    if( !vp ) {
-        return "";
-    }
-    const vehicle *veh = &vp->vehicle();
-    const auto speed = static_cast<int>( convert_velocity( veh->velocity, VU_VEHICLE ) );
-    const auto strain = veh->strain();
-    const auto speed_color = strain <= 0 ? c_light_blue : strain <= 0.2f ? c_yellow :
-                             strain <= 0.4f ? c_light_red : c_red;
-    auto out = string_format( "%s: %s", _( "Head" ), veh->face.to_string_azimuth_from_north() ) +
-               "\n" + colorize( string_format( "%d %s", speed, velocity_units( VU_VEHICLE ) ), speed_color );
-    if( veh->cruise_on ) {
-        const auto cruise = static_cast<int>( convert_velocity( veh->cruise_velocity, VU_VEHICLE ) );
-        out += colorize( string_format( " > %d %s", cruise, velocity_units( VU_VEHICLE ) ), c_light_green );
-    }
-    if( veh->has_part( "WING" ) ) {
-        const auto takeoff = veh->get_takeoff_speed();
-        out += colorize( string_format( " %s: %d %s", _( "flight" ), takeoff,
-                                        velocity_units( VU_VEHICLE ) ),
-                         speed >= takeoff ? c_green : c_dark_gray );
-    }
-    for( const std::string &line : veh->fuel_indicator_lines() ) {
-        out += "\n" + line;
-    }
-    return out;
-}
 
 // Map chunk: 13×7 colored-text overmap minichunk centred on the avatar (see
 // overmap_ui::overmap_chunk_rows — text-producing successor to the removed
@@ -1619,17 +897,22 @@ auto hud_map( avatar &u ) -> std::string
     return "<div class=\"hud-map\">" + join( rows, "\n" ) + "</div>";
 }
 
-// Qud top strip row 1 (Phase 2): name + status words (left) + date/time (right). Built
-// from colorize()-tagged text, converted to RML, then wrapped in the strip-left/-right
-// span pair so RCSS floats the date/time to the right edge (row width is unknown here).
+// Qud top bar (single row): name ─── temp ─── condition words (left) +
+// stats ─── time/place (right). All in ONE row, no second/clipped row.
 auto hud_topbar( avatar &u ) -> std::string
 {
-    auto left = colorize( u.get_name(), c_white ) + "  " +
-                string_format( _( "T: %s" ),
-                               print_temperature( get_weather().get_temperature( u.abs_pos() ) ) );
+    // --- Left span: name, temp, conditions ---
+    auto left = colorize( u.get_name(), c_white );
+    left += " \u2500\u2500\u2500 ";
+
+    // Temperature with hue ladder
+    const units::temperature temp = get_weather().get_temperature( u.abs_pos() );
+    left += colorize( string_format( "T:%s", print_temperature( temp ) ), temp_color( temp ) );
+
+    // Condition words (space-separated, colored)
     const auto append_if = [&]( const std::pair<std::string, nc_color> &p ) {
         if( !p.first.empty() ) {
-            left += "  " + colorize( p.first, p.second );
+            left += " " + colorize( p.first, p.second );
         }
     };
     append_if( u.get_hunger_description() );
@@ -1637,60 +920,61 @@ auto hud_topbar( avatar &u ) -> std::string
     append_if( u.get_fatigue_description() );
     append_if( u.get_pain_description() );
 
-    auto right = string_format( _( "Date : %s, day %d" ),
-                                calendar::name_season( season_of_year( calendar::turn ) ),
-                                day_of_season<int>( calendar::turn ) + 1 ) + "  ";
+    // Overburdened
+    if( u.weight_carried() > u.weight_capacity() ) {
+        left += " " + colorize( _( "Overburdened" ), c_red );
+    }
+
+    // --- Right span: stats, time, place ---
+    auto right = std::string();
+    // Stats: pipe-delimited Qud-style
+    right += colorize( "STR:", c_light_gray );
+    right += colorize( std::to_string( u.get_str() ), str_string( u ).first );
+    right += " ";
+    right += colorize( "DEX:", c_light_gray );
+    right += colorize( std::to_string( u.get_dex() ), dex_string( u ).first );
+    right += " ";
+    right += colorize( "INT:", c_light_gray );
+    right += colorize( std::to_string( u.get_int() ), int_string( u ).first );
+    right += " ";
+    right += colorize( "PER:", c_light_gray );
+    right += colorize( std::to_string( u.get_per() ), per_string( u ).first );
+    right += " | ";
+    right += colorize( "SPD:", c_light_gray );
+    right += colorize( std::to_string( u.get_speed() ), value_color( u.get_speed() ) );
+    right += " | ";
+    right += colorize( "FOC:", c_light_gray );
+    right += colorize( std::to_string( u.focus_pool ), focus_color( u.focus_pool ) );
+
+    // Time, day N of Season
+    right += "  ";
     if( u.has_watch() ) {
-        right += string_format( _( "Time : %s" ), to_string_time_of_day( calendar::turn ) );
+        right += colorize( to_string_time_of_day( calendar::turn ), c_light_gray );
     } else if( g->get_levz() >= 0 ) {
-        right += string_format( _( "Time : %s" ), time_approx() );
+        right += colorize( time_approx(), c_light_gray );
     } else {
-        // NOLINTNEXTLINE(cata-text-style): the question mark does not end a sentence
-        right += std::string( _( "Time : ???" ) );
+        right += colorize( "???", c_light_gray );
+    }
+    right += string_format( ", day %d of %s",
+                            day_of_season<int>( calendar::turn ) + 1,
+                            calendar::name_season( season_of_year( calendar::turn ) ) );
+
+    // Place
+    right += " :: ";
+    right += colorize( ACTIVE_OVERMAP_BUFFER.ter( u.abs_omt_pos() )->get_name(), c_white );
+    if( g->get_levz() < 0 ) {
+        right += colorize( string_format( " %dd deep", -g->get_levz() ), c_dark_gray );
     }
 
     return "<span class=\"strip-left\">" + cata_text_to_rml( left ) + "</span>" +
            "<span class=\"strip-right\">" + cata_text_to_rml( right ) + "</span>";
 }
 
-// Qud top strip row 2 (Phase 2, raw RML): HP/stamina/mana fill bars, then Focus/Speed/
-// move-mode — same fields hud_movement / hud_sound_text read, laid out as inline qbars.
-auto hud_topbar2( avatar &u ) -> std::string
-{
-    const auto torso = bodypart_id( "torso" );
-    const auto hp_cur = u.get_part_hp_cur( torso );
-    const auto hp_max = u.get_part_hp_max( torso );
-    auto out = std::string( _( "HP" ) ) + " " +
-               qbar_rml( hp_cur, hp_max, get_hp_bar( hp_cur, hp_max ).second ) +
-               string_format( " %d/%d", hp_cur, hp_max );
 
-    const auto sta_cur = u.get_stamina();
-    const auto sta_max = u.get_stamina_max();
-    out += "  " + std::string( _( "STA" ) ) + " " +
-           qbar_rml( sta_cur, sta_max, get_hp_bar( sta_cur, sta_max ).second ) +
-           string_format( " %d/%d", sta_cur, sta_max );
-
-    if( u.magic->max_mana( u ) > 0 ) {
-        const auto mana_cur = u.magic->available_mana();
-        const auto mana_max = u.magic->max_mana( u );
-        out += "  " + std::string( _( "MANA" ) ) + " " +
-               qbar_rml( mana_cur, mana_max, mana_stat( u ).first ) +
-               string_format( " %d/%d", mana_cur, mana_max );
-    }
-
-    out += "  " + cata_text_to_rml( std::string( _( "Focus" ) ) + " " +
-                                    colorize( std::to_string( u.focus_pool ), focus_color( u.focus_pool ) ) );
-    out += "  " + cata_text_to_rml( std::string( _( "Spd" ) ) + " " +
-                                    colorize( std::to_string( u.get_speed() ), focus_color( u.get_speed() ) ) );
-    const auto move_string = std::to_string( u.movecounter ) + move_mode_string( u );
-    out += "  " + cata_text_to_rml( colorize( move_string, move_mode_color( u ) ) );
-    return out;
-}
-
-// Qud bottom strip (Phase 2, raw RML): active effect names (left) + SAFE/HOSTILES
-// readout (right). Shares the effects list with the '@' Effects tab.
+// Qud bottom bar: EFFECTS (left) + TARGET with inline HP bar + weapon + SAFE/HOSTILES (right).
 auto hud_botbar( avatar &u ) -> std::string
 {
+    // --- Left: EFFECTS list ---
     const auto effects = character_display::effect_name_and_text( u );
     auto left = std::string( _( "EFFECTS:" ) ) + " ";
     if( effects.empty() ) {
@@ -1712,116 +996,82 @@ auto hud_botbar( avatar &u ) -> std::string
         left += colorize( joined, c_light_gray );
     }
 
-    const auto hostiles = u.get_mon_visible().nearby_hostile_count;
-    auto right = colorize( _( "SAFE" ), safe_color() ) + "  " +
-                 colorize( string_format( _( "HOSTILES: %d" ), hostiles ),
-                           hostiles > 0 ? c_red : c_dark_gray );
+    // --- Middle: TARGET with inline HP bar ---
+    auto middle_text = std::string();
+    auto middle_rml = std::string();
+    const auto target_ptr = u.last_target.lock();
+    if( const Creature *t = target_ptr.get() ) {
+        const std::string disp_name = t->disp_name();
+        const auto &att = Creature::get_attitude_ui_data( t->attitude_to( u ) );
+        const int t_hp = t->get_hp();
+        const int t_hp_max = std::max( t->get_hp_max(), 1 );
+        const int pct = std::clamp( t_hp * 100 / t_hp_max, 0, 100 );
+        const std::string hp_hex = nc_color_to_hex( get_hp_bar( t_hp, t_hp_max ).second );
 
-    return "<span class=\"strip-left\">" + cata_text_to_rml( left ) + "</span>" +
-           "<span class=\"strip-right\">" + cata_text_to_rml( right ) + "</span>";
-}
-
-// VARIANT-AWARE producer table: maps a window_panel name to the producer that
-// reproduces THAT variant's content. A logical panel (e.g. Stats) appears in any one
-// layout under exactly one name, so several rows point at different producers — the
-// runtime name selects the right content (classic draw_stats vs labels draw_stat_wide
-// genuinely render different fields). Names matched case-insensitively (hud_producer).
-//
-// Two naming schemes coexist (make_native_widget_panel names a panel by its widget id;
-// the built-in classic/narrow/labels layouts name it by the translate_marker label):
-//   - built-in label:      "Stats" / "Sound" / "Needs" / "Wgt/Vol"
-//   - widget id (variant): "stats"(wide) / "stats_compact"(classic) / "stats_narrow", etc.
-// Unlisted names have NO producer → sidebar_hud_sync emits a "[name]" placeholder (no
-// curses fallback after whole-sidebar suppression). "Mana" (the label) is deliberately
-// NOT listed: it collides with the val_mana value-widget (a bare number), so only the
-// native mana* ids map to the full readout.
-struct hud_producer_entry {
-    const char *panel_name;                  // widget id OR built-in label (CI match)
-    std::string( *produce )( avatar & );     // variant-specific content producer
-    const char *title = nullptr;             // untranslated; Qud inset header when set
-    bool raw = false;                        // produce() returns ready RML (skip cata_text_to_rml)
-};
-const std::vector<hud_producer_entry> g_hud_producers = {
-    // Stats — classic (draw_stats) vs labels/wide + narrow (draw_stat_wide/_narrow)
-    { "Stats",         hud_stats_text, "Stats" },
-    { "stats_compact", hud_stats_text, "Stats" },
-    { "stats",         hud_stats_wide, "Stats" },
-    { "stats_narrow",  hud_stats_wide, "Stats" },
-    // Sound — compact (draw_stealth: speed+move+sound) vs labels/narrow (sound only)
-    { "Sound",         hud_sound_text },
-    { "sound_compact", hud_sound_text },
-    { "sound",         hud_sound_labels },
-    { "sound_narrow",  hud_sound_labels },
-    // Needs — compact (arrows+Focus) vs labels/narrow (pain/thirst/rest/hunger/heat)
-    { "Needs",         hud_needs_text, "Needs" },
-    { "needs_compact", hud_needs_text, "Needs" },
-    { "needs",         hud_needs_labels, "Needs" },
-    { "needs_narrow",  hud_needs_labels, "Needs" },
-    // Wgt/Vol — content identical across variants (only columns differ)
-    { "Wgt/Vol",              hud_wgtvol },
-    { "weightvolume",         hud_wgtvol },
-    { "weightvolume_compact", hud_wgtvol },
-    { "weightvolume_narrow",  hud_wgtvol },
-    // Mana — native mana panel only (NOT the "Mana" value-widget label)
-    { "mana",         hud_mana },
-    { "mana_compact", hud_mana },
-    { "mana_narrow",  hud_mana },
-    { "mana_wide",    hud_mana },
-    // Pure-text panels (no widget icons / embedded graphics)
-    { "hint",          hud_hint },
-    { "Hint",          hud_hint },
-    { "movement",      hud_movement },
-    { "weapon",        hud_weapon, "Weapon" },
-    { "armor",         hud_armor, "Armor" },
-    { "armor_classic", hud_armor, "Armor" },
-    { "Armor",         hud_armor, "Armor" },
-    // Limbs — HP per body part (all variants same data, layout differs)
-    { "limbs",         hud_limbs, "Vitals", true },
-    { "limbs_compact", hud_limbs, "Vitals", true },
-    { "limbs_narrow",  hud_limbs, "Vitals", true },
-    { "Limbs",         hud_limbs, "Vitals", true },
-    // Log — recent message buffer
-    { "log",           hud_log, "Log" },
-    { "log_classic",   hud_log, "Log" },
-    { "Log",           hud_log, "Log" },
-    // Location — loc_labels family (text rows; inline overmap chunk dropped, phase 2)
-    { "location",      hud_location, "Location" },
-    { "location_alt",  hud_location, "Location" },
-    { "location_narrow", hud_location, "Location" },
-    { "Location",      hud_location, "Location" },
-    // Compass — Qud threat grid (full mon_info 3x3 symbol grid + direction list, raw RML)
-    { "compass",            hud_compass, "Threats", true },
-    { "compass_comp",       hud_compass, "Threats", true },
-    { "compass_simple",     hud_compass, "Threats", true },
-    { "compass_compact",    hud_compass, "Threats", true },
-    { "compass_comp_compact", hud_compass, "Threats", true },
-    { "Compass",            hud_compass, "Threats", true },
-    { "Compact Compass",    hud_compass, "Threats", true },
-    { "Simple Compass",     hud_compass, "Threats", true },
-    // Phase 3 gap producers — text tier (each independent; no legacy variant naming)
-    { "ai_goal",    hud_ai_goal },
-    { "armor_comp", hud_armor_comp },
-    { "moon",         hud_moon, nullptr, true },
-    { "moon_narrow",  hud_moon, nullptr, true },
-    { "wind",         hud_wind, nullptr, true },
-    { "vehicle",    hud_vehicle, "Vehicle" },
-    { "map",        hud_map, "Map", true },
-#ifdef COOP_ENABLED
-    { "coop_partner",       hud_coop_partner_text },
-#endif
-};
-
-const hud_producer_entry *hud_producer( const std::string &name )
-{
-    const std::string lname = to_lower_case( name );
-    for( const hud_producer_entry &p : g_hud_producers ) {
-        if( lname == to_lower_case( p.panel_name ) ) {
-            return &p;
-        }
+        middle_text += colorize( "TARGET:", c_light_gray ) + " " +
+                       colorize( disp_name, t->basic_symbol_color() ) + " [" +
+                       colorize( att.first.translated(), att.second ) + "] ";
+        // Inline HP bar: raw RML kept separate from colorize() output
+        middle_rml += string_format(
+                          R"(<span class="tbar"><span class="tbar-fill" style="width:%d%%;background-color:%s;"></span></span>)",
+                          pct, hp_hex );
+        middle_rml += " " + std::to_string( t_hp );
     }
-    return nullptr;
+
+    // --- Right: weapon + SAFE + HOSTILES ---
+    auto right = std::string();
+    right += colorize( character_funcs::fmt_wielded_weapon( u ), c_light_gray ) + "  ";
+    right += colorize( move_mode_string( u ), move_mode_color( u ) ) + "  ";
+    const auto hostiles = u.get_mon_visible().nearby_hostile_count;
+    right += colorize( _( "SAFE" ), safe_color() ) + ": " +
+             colorize( std::to_string( hostiles ),
+                       hostiles > 0 ? c_red : c_dark_gray );
+
+    // Assemble: left span (via cata_text_to_rml) + middle text (via cata_text_to_rml) +
+    // middle raw RML (tbar) + right span (via cata_text_to_rml)
+    std::string out = "<span class=\"strip-left\">" + cata_text_to_rml( left ) + "</span>";
+    if( !middle_text.empty() ) {
+        out += " " + cata_text_to_rml( middle_text ) + " " + middle_rml;
+    }
+    out += "<span class=\"strip-right\">" + cata_text_to_rml( right ) + "</span>";
+    return out;
 }
+
+// Qud ability-bar hotbar: real CBN keybinds, one slot per bound action.
+auto hud_hotbar( avatar & ) -> std::string
+{
+    constexpr std::array<action_id, 9> acts = {
+        ACTION_FIRE, ACTION_RELOAD_WIELDED, ACTION_TOGGLE_RUN,
+        ACTION_TOGGLE_CROUCH, ACTION_WAIT, ACTION_PICKUP,
+        ACTION_CRAFT, ACTION_INVENTORY, ACTION_MAP,
+    };
+    constexpr std::array<const char *, 9> labels = {
+        "Fire", "Reload", "Run", "Crouch", "Wait", "Pick Up", "Craft", "Inventory", "Map",
+    };
+
+    input_context ctxt = get_default_mode_input_context();
+    std::string out;
+    for( int i = 0; i < 9; ++i ) {
+        const std::string key = ctxt.get_desc( action_ident( acts[i] ), true );
+        if( key.empty() ) {
+            continue;
+        }
+        if( !out.empty() ) {
+            out += " ";
+        }
+        out += "[" + colorize( key, c_yellow ) + "] " +
+               colorize( std::string( " " ) + _( labels[i] ) + " ", c_light_gray );
+    }
+    return out;
+}
+
 } // namespace
+
+// Sticky autoscroll: true = snap to bottom on new messages.
+static bool g_hud_log_sticky = true;
+// Previous log window seq range for pruning stale animation keys.
+static std::pair<unsigned, unsigned> g_hud_log_prev_seq = { 0, 0 };
+
 
 bool &sidebar_hud_rmlui_enabled()
 {
@@ -1848,20 +1098,20 @@ void sidebar_hud_open()
     if( !c ) {
         return;
     }
-    // Register the row struct + array once per data-model construction. RegisterStruct
-    // is context-global and persists past RemoveDataModel; re-registering on reopen is
-    // safe (uilist precedent, plan "Type-register reuse across reopen").
-    Rml::StructHandle<hud_row_model> rh = c.RegisterStruct<hud_row_model>();
-    rh.RegisterMember( "rml", &hud_row_model::rml );
-    rh.RegisterMember( "title", &hud_row_model::title );
-    rh.RegisterMember( "flex", &hud_row_model::flex );
-    c.RegisterArray<Rml::Vector<hud_row_model>>();
+    // Fixed-region model: bind each string directly.
     g_hud_data = std::make_unique<hud_rml_model>();
-    c.Bind( "rows", &g_hud_data->rows );
     c.Bind( "topbar_rml", &g_hud_data->topbar_rml );
-    c.Bind( "topbar2_rml", &g_hud_data->topbar2_rml );
+    c.Bind( "vitals_rml", &g_hud_data->vitals_rml );
+    c.Bind( "minimap_rml", &g_hud_data->minimap_rml );
+    c.Bind( "minimap_title", &g_hud_data->minimap_title );
+    c.Bind( "log_rml", &g_hud_data->log_rml );
+    c.Bind( "log_title", &g_hud_data->log_title );
     c.Bind( "botbar_rml", &g_hud_data->botbar_rml );
+    c.Bind( "hotbar_rml", &g_hud_data->hotbar_rml );
     g_hud_data->handle = c.GetModelHandle();
+    // Static dock headers — set once, no DirtyVariable needed.
+    g_hud_data->minimap_title = Rml::String( to_upper_case( _( "Minimap" ) ) );
+    g_hud_data->log_title = Rml::String( to_upper_case( _( "Log" ) ) );
     // passive=true: render-only HUD — it must not capture in-game world mouse
     // (look/examine). See rmlui_layer::any_interactive_open / process_event.
     Rml::ElementDocument *doc =
@@ -1878,49 +1128,67 @@ void sidebar_hud_open()
     g->mark_main_ui_adaptor_resize();
 }
 
-// Position the single column container (#hud-sidebar) at the sidebar rect. The curses
-// terminal is TERMX×TERMY cells over the full window, so the sidebar (W cells wide, full
-// height) is (W/TERMX*100)% wide, full height, anchored at the left or right edge per
-// SIDEBAR_POSITION. Called every sync so it tracks resize for free. Width = the layout's
-// first-panel width (matches the legacy overflow-marker assumption).
+// Position all HUD regions absolutely. Called every sync so it tracks resize.
+// Strips span the FULL viewport width (Qud's do), no longer map-width only.
 static void sidebar_hud_apply_rect()
 {
     if( g_hud_doc == nullptr || TERMX <= 0 || TERMY <= 0 ) {
         return;
     }
-    const auto &layout = panel_manager::get_manager().get_current_layout();
-    if( layout.begin() == layout.end() ) {
-        return;
-    }
-    const int wd = layout.begin()->get_width();
-    const bool sidebar_right = get_option<std::string>( "SIDEBAR_POSITION" ) == "right";
-    const float width_pct = 100.0f * wd / TERMX;
-    const float left_pct = sidebar_right ? 100.0f - width_pct : 0.0f;
-    if( Rml::Element *el = g_hud_doc->GetElementById( "hud-sidebar" ) ) {
-        el->SetProperty( "left", string_format( "%.4f%%", left_pct ) );
-        el->SetProperty( "top", "0%" );
-        el->SetProperty( "width", string_format( "%.4f%%", width_pct ) );
-        el->SetProperty( "height", "100%" );
-    }
-    // Top/bottom chrome strips span the viewport width only (between the two sidebar
-    // margins), full width minus whatever the sidebar(s) claim on either edge.
-    const int width_left = panel_manager::get_manager().get_width_left();
-    const int width_right = panel_manager::get_manager().get_width_right();
-    const float strip_left_pct = 100.0f * width_left / TERMX;
-    const float strip_width_pct = 100.0f * ( TERMX - width_left - width_right ) / TERMX;
+
+    // Top bar: full width, 1 row tall
     const float top_rows_pct = 100.0f * sidebar_hud_top_rows() / TERMY;
-    const float bottom_rows_pct = 100.0f * sidebar_hud_bottom_rows() / TERMY;
     if( Rml::Element *el = g_hud_doc->GetElementById( "hud-topbar" ) ) {
-        el->SetProperty( "left", string_format( "%.4f%%", strip_left_pct ) );
+        el->SetProperty( "left", "0%" );
         el->SetProperty( "top", "0%" );
-        el->SetProperty( "width", string_format( "%.4f%%", strip_width_pct ) );
+        el->SetProperty( "width", "100%" );
         el->SetProperty( "height", string_format( "%.4f%%", top_rows_pct ) );
     }
+
+    // Bottom rows: botbar (row 1 from bottom), hotbar (row 2 from bottom = very bottom)
+    const float bottom_rows_pct = 100.0f * sidebar_hud_bottom_rows() / TERMY;
+    const float botbar_rows_pct = 100.0f * 1.f / TERMY;
+    // botbar sits at (TERMY-2)/TERMY, hotbar at (TERMY-1)/TERMY
     if( Rml::Element *el = g_hud_doc->GetElementById( "hud-botbar" ) ) {
-        el->SetProperty( "left", string_format( "%.4f%%", strip_left_pct ) );
+        el->SetProperty( "left", "0%" );
         el->SetProperty( "top", string_format( "%.4f%%", 100.0f - bottom_rows_pct ) );
-        el->SetProperty( "width", string_format( "%.4f%%", strip_width_pct ) );
-        el->SetProperty( "height", string_format( "%.4f%%", bottom_rows_pct ) );
+        el->SetProperty( "width", "100%" );
+        el->SetProperty( "height", string_format( "%.4f%%", botbar_rows_pct ) );
+    }
+    if( Rml::Element *el = g_hud_doc->GetElementById( "hud-hotbar" ) ) {
+        el->SetProperty( "left", "0%" );
+        el->SetProperty( "top", string_format( "%.4f%%", 100.0f - botbar_rows_pct ) );
+        el->SetProperty( "width", "100%" );
+        el->SetProperty( "height", string_format( "%.4f%%", botbar_rows_pct ) );
+    }
+
+    // Vitals overlay: top-left of the viewport area (respects left sidebar width)
+    const int width_left = panel_manager::get_manager().get_width_left();
+    const int width_right = panel_manager::get_manager().get_width_right();
+    const float width_left_pct = 100.0f * width_left / TERMX;
+    const float width_right_pct = 100.0f * width_right / TERMX;
+    if( Rml::Element *el = g_hud_doc->GetElementById( "hud-vitals" ) ) {
+        el->SetProperty( "left", string_format( "%.4f%%", width_left_pct ) );
+        el->SetProperty( "top", string_format( "%.4f%%", top_rows_pct ) );
+    }
+
+    // Dock: pinned to the sidebar edge, spans from top bar to bottom bars
+    const auto &layout = panel_manager::get_manager().get_current_layout();
+    if( layout.begin() != layout.end() ) {
+        const int wd = layout.begin()->get_width();
+        const bool sidebar_right = get_option<std::string>( "SIDEBAR_POSITION" ) == "right";
+        const float dock_left_pct = sidebar_right
+                                    ? 100.0f - width_right_pct
+                                    : 0.0f;
+        const float dock_width_pct = 100.0f * wd / TERMX;
+        const float dock_top_pct = top_rows_pct;
+        const float dock_height_pct = 100.0f - bottom_rows_pct - dock_top_pct;
+        if( Rml::Element *el = g_hud_doc->GetElementById( "hud-dock" ) ) {
+            el->SetProperty( "left", string_format( "%.4f%%", dock_left_pct ) );
+            el->SetProperty( "top", string_format( "%.4f%%", dock_top_pct ) );
+            el->SetProperty( "width", string_format( "%.4f%%", dock_width_pct ) );
+            el->SetProperty( "height", string_format( "%.4f%%", dock_height_pct ) );
+        }
     }
 }
 
@@ -1929,49 +1197,67 @@ void sidebar_hud_sync( avatar &u )
     if( g_hud_doc == nullptr || !g_hud_data ) {
         return;
     }
-    // One-shot coverage dump the first sync after the HUD opens — surfaces which layout
-    // panels still render a [name] placeholder (the Tier-10 rip-out gate audit).
-    static bool coverage_logged = false;
-    if( !coverage_logged ) {
-        coverage_logged = true;
-        DebugLog( DL::Info, DC::Main ) << sidebar_hud_coverage_report();
-    }
-    // Whole-sidebar ownership: rebuild the row list from EVERY present panel (toggled on +
-    // render predicate true) in layout order. A migrated panel emits its producer's RML; an
-    // unmigrated panel emits a visible "[name]" placeholder (never a silent blank — after
-    // whole-sidebar suppression there is no curses fallback). Sentinel-height panels (log
-    // -2 / minimap -1) get flex=true so they grow to fill the column.
-    g_hud_data->rows.clear();
-    for( const window_panel &panel : panel_manager::get_manager().get_current_layout() ) {
-        if( !panel.toggle || !panel.render() ) {
-            continue;
-        }
-        hud_row_model row;
-        if( panel.hud_produce ) {
-            const std::string s = panel.hud_produce( u );
-            row.rml = panel.hud_raw ? Rml::String( s ) : cata_text_to_rml( s );
-            row.title = "";                     // instance widgets: no header
-        } else if( const hud_producer_entry *p = hud_producer( panel.get_name() ) ) {
-            const std::string s = p->produce( u );
-            if( s.empty() ) {
-                continue;                       // producer opted out (e.g. vehicle w/o vehicle)
-            }
-            row.rml = p->raw ? Rml::String( s ) : cata_text_to_rml( s );
-            row.title = p->title ? Rml::String( to_upper_case( _( p->title ) ) ) : "";
-        } else {
-            row.rml = cata_text_to_rml( colorize( "[" + panel.get_name() + "]", c_dark_gray ) );
-        }
-        row.flex = panel.get_height() < 0;
-        g_hud_data->rows.push_back( std::move( row ) );
-    }
-    g_hud_data->handle.DirtyVariable( "rows" );
-    // Qud top/bottom chrome strips (Phase 2): re-render every sync alongside the rows.
+    // Fixed-region Qud layout: fill each region string from its producer,
+    // dirty the variable, and reposition rects.
     g_hud_data->topbar_rml = hud_topbar( u );
-    g_hud_data->topbar2_rml = hud_topbar2( u );
-    g_hud_data->botbar_rml = hud_botbar( u );
     g_hud_data->handle.DirtyVariable( "topbar_rml" );
-    g_hud_data->handle.DirtyVariable( "topbar2_rml" );
+
+    g_hud_data->vitals_rml = hud_vitals( u );
+    g_hud_data->handle.DirtyVariable( "vitals_rml" );
+
+    g_hud_data->minimap_rml = hud_map( u );
+    g_hud_data->handle.DirtyVariable( "minimap_rml" );
+
+    // Sticky autoscroll: check if user is at bottom BEFORE rebuilding content.
+    {
+        Rml::Element* lb = g_hud_doc->GetElementById( "hud-log-body" );
+        if( lb != nullptr ) {
+            const float st = lb->GetScrollTop();
+            const float ch = lb->GetClientHeight();
+            const float sh = lb->GetScrollHeight();
+            g_hud_log_sticky = ( st + ch >= sh - 4.0f );
+        }
+    }
+
+    // Feed log row animations and prune stale keys.
+    {
+        const auto msgs = Messages::recent_messages_rich( 100 );
+        unsigned cur_min = 0, cur_max = 0;
+        if( !msgs.empty() ) {
+            cur_min = msgs.front().seq;
+            cur_max = msgs.back().seq;
+        }
+        // Forget keys that dropped out of the window.
+        if( g_hud_log_prev_seq.first > 0 ) {
+            for( unsigned s = g_hud_log_prev_seq.first; s < g_hud_log_prev_seq.second; ++s ) {
+                if( s < cur_min || s > cur_max ) {
+                    hud_anim::forget( "log-" + std::to_string( s ) );
+                }
+            }
+        }
+        // Feed current rows.
+        for( const Messages::rich_message &m : msgs ) {
+            hud_anim::feed( { .element_id = "log-" + std::to_string( m.seq ), .spec_icon = "hud_log_entry" } );
+        }
+        g_hud_log_prev_seq = { cur_min, cur_max };
+    }
+
+    g_hud_data->log_rml = hud_log( u );
+    g_hud_data->handle.DirtyVariable( "log_rml" );
+
+    // Snap scroll to bottom if sticky.
+    if( g_hud_log_sticky && g_hud_doc != nullptr ) {
+        if( Rml::Element * lb = g_hud_doc->GetElementById( "hud-log-body" ) ) {
+            lb->SetScrollTop( lb->GetScrollHeight() );
+        }
+    }
+
+    g_hud_data->botbar_rml = hud_botbar( u );
     g_hud_data->handle.DirtyVariable( "botbar_rml" );
+
+    g_hud_data->hotbar_rml = hud_hotbar( u );
+    g_hud_data->handle.DirtyVariable( "hotbar_rml" );
+
     sidebar_hud_apply_rect();
 }
 
@@ -1985,6 +1271,7 @@ void sidebar_hud_close()
         ctx->RemoveDataModel( "sidebar_hud" );
     }
     g_hud_doc = nullptr;
+    hud_anim::clear();
     g_hud_data.reset();
     // Closing the HUD releases the carved top/bottom chrome strips — the terrain
     // viewport must reclaim the full height.
@@ -1997,48 +1284,24 @@ bool sidebar_hud_active()
     // sidebar (the column owns the entire region). Replaces the per-panel owns_panel gate.
     return g_hud_doc != nullptr;
 }
-
 int sidebar_hud_top_rows()
-{
-    return sidebar_hud_rmlui_enabled() && rmlui_layer::ready() ? 2 : 0;
-}
-
-int sidebar_hud_bottom_rows()
 {
     return sidebar_hud_rmlui_enabled() && rmlui_layer::ready() ? 1 : 0;
 }
 
-bool sidebar_hud_has_producer( const std::string &name )
+int sidebar_hud_bottom_rows()
 {
-    // A panel is "covered" iff it has an RmlUi producer (else sidebar_hud_sync emits a
-    // visible [name] placeholder). Mechanical input to the Tier-10 rip-out coverage gate.
-    return hud_producer( name ) != nullptr;
+    return sidebar_hud_rmlui_enabled() && rmlui_layer::ready() ? 2 : 0;
 }
 
-std::string sidebar_hud_coverage_report()
+auto sidebar_hud_anim_tick() -> void
 {
-    // Walk the active sidebar layout and classify each present panel covered/uncovered.
-    // "Is every panel in my one UI built?" — the rip-out flip gate, as a mechanical check.
-    int total = 0;
-    int covered = 0;
-    std::string uncovered;
-    for( const window_panel &panel : panel_manager::get_manager().get_current_layout() ) {
-        if( !panel.toggle || !panel.render() ) {
-            continue;
-        }
-        total++;
-        if( panel.hud_produce || sidebar_hud_has_producer( panel.get_name() ) ) {
-            covered++;
-        } else {
-            uncovered += ( uncovered.empty() ? "" : ", " ) + panel.get_name();
-        }
+    if( g_hud_doc == nullptr ) {
+        return;
     }
-    std::string out = string_format( _( "sidebar HUD coverage: %d/%d panels" ), covered, total );
-    if( !uncovered.empty() ) {
-        out += " — uncovered: " + uncovered;
-    }
-    return out;
+    hud_anim::tick( g_hud_doc, sidebar_anim::now_ms() );
 }
+
 
 // Resolve a widget's "show_if" to a window_panel render predicate (the data-driven
 // equivalent of the hardcoded panels' render_func). Empty / unknown → always show.

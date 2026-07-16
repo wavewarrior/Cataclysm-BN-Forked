@@ -81,6 +81,21 @@
     { "id": "wind_s",  "svg": "wind_s.svg" },
     { "id": "wind_sw", "svg": "wind_sw.svg" },
     { "id": "wind_w",  "svg": "wind_w.svg" },
-    { "id": "wind_nw", "svg": "wind_nw.svg" }
+    { "id": "wind_nw", "svg": "wind_nw.svg" },
+    {
+      "id": "hud_vbar", "svg": "",
+      "animations": [
+        { "trigger": "critical", "property": "alpha", "from": 1.0, "to": 0.3, "duration": 400, "ease": "sine_in_out", "loop": "pingpong", "repeats": 4 },
+        { "trigger": "on_decrease", "property": "offset_y", "from": 3, "to": 0, "duration": 250, "ease": "back_out" },
+        { "trigger": "on_increase", "property": "offset_y", "from": -2, "to": 0, "duration": 200, "ease": "back_out" }
+      ]
+    },
+    {
+      "id": "hud_log_entry", "svg": "",
+      "animations": [
+        { "trigger": "ambient", "property": "offset_y", "from": 5, "to": 0, "duration": 200, "ease": "back_out", "loop": "once" },
+        { "trigger": "ambient", "property": "alpha", "from": 0.0, "to": 1.0, "duration": 200, "ease": "quad_out", "loop": "once" }
+      ]
+    }
   ]
 }

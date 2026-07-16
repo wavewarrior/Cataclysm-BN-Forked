@@ -1,146 +1,214 @@
-/* Tier 7 sidebar HUD layout — STRUCTURAL PIVOT (slice 3, 2026-06-20).
+/* Full Qud-inspired HUD layout — fixed regions, absolute positioning.
+   Regions: #hud-topbar (1 row, full width), #hud-vitals (overlay, top-left),
+   #hud-dock (minimap+log, right edge), #hud-botbar (effects/target, bottom),
+   #hud-hotbar (keybinds, bottom-1).
 
-   ONE absolutely-positioned container (#hud-sidebar) = the sidebar rect. C++
-   (sidebar_hud_apply_rect) injects left/top/width/height as PERCENTAGES of the window
-   each frame: the curses terminal is TERMX*TERMY cells over the full window, so a
-   sidebar W cells wide at the right edge is (W/TERMX*100)% wide anchored at
-   ((TERMX-W)/TERMX*100)% from the left, full height. Auto-tracks resize + honours
-   SIDEBAR_POSITION (left/right).
-
-   Inside it, rows flow as a flex COLUMN (document flow — this is what kills the
-   per-panel height/overlap class the absolute machinery suffered). Fixed-height rows
-   size to content; flex sentinel rows (.flex = log/minimap, height -2/-1) grow to fill
-   the remainder. The body is transparent so the cleared (black) sidebar shows through. */
+   All regions are positioned absolutely by C++ (sidebar_hud_apply_rect) each
+   sync. The sidebar width is carved from the viewport edge. */
 
 body {
     background-color: transparent;
     width: 100%;
     height: 100%;
-}
-
-.hud-sidebar {
-    position: absolute;
-    /* left / top / width / height injected from C++ each frame. */
-    display: flex;
-    flex-direction: column;
-    background-color: {{hud-bg}};
-    border-left: 1dp {{hud-border}};
-    padding: 6dp 8dp;
-}
-
-/* display:block — RmlUi elements default to inline; a row must be block or it flows
-   horizontally (documented gotcha in theme.rcss, bit mutations/diary).
-   white-space:pre-wrap preserves the producers' spacing + newlines. */
-.hud-row {
-    display: block;
-    white-space: pre-wrap;
-    flex: 0 0 auto;
-    margin-bottom: 6dp;
-}
-
-/* Sentinel-height panels (log -2 / minimap -1) absorb the leftover column height;
-   the inner body (not the row) needs to grow so the header stays pinned above it. */
-.hud-row.flex {
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-}
-.hud-row.flex .hud-row-body {
-    flex: 1 1 auto;
-}
-
-/* Qud inset all-caps panel header; empty titles skip this div entirely (data-if). */
-.hud-row-header {
-    color: {{hud-fg-bright}};
-    background-color: {{hud-bg-panel}};
-    border-bottom: 1dp {{hud-border}};
-    font-size: 0.95em;
-    font-weight: bold;
-    letter-spacing: 2dp;
-    padding: 3dp 6dp;
-    margin-bottom: 3dp;
-}
-.hud-row-body {
+    font-family: "Source Code Pro";
+    font-size: 15dp;
     color: {{hud-fg}};
-    padding: 2dp 4dp;
-    line-height: 1.3;
 }
 
-/* Qud fill bar: producer emits <div class="qbar"><div class="qbar-fill"
-   style="width:N%; background-color:#rgb"/></div> */
-.qbar {
-    display: inline-block;
-    width: 60dp;
-    height: 8dp;
-    background-color: {{hud-bar-bg}};
-    border: 1dp {{hud-border}};
-    vertical-align: middle;
-}
-.qbar-fill {
-    height: 100%;
-}
-
-/* Limbs panel: one Qud bar row per body part (producer emits <div class="hud-limb-row">
-   <span class="hud-limb-name">…</span><div class="qbar">…</div> …</div>) */
-.hud-limb-row {
-    display: block;
-    padding: 1dp 0dp;
-}
-.hud-limb-name {
-    display: inline-block;
-    width: 5em;
-}
-
-/* Threat compass grid */
-.tc-row {
-    display: block;
-    white-space: pre;
-    padding: 1dp 0dp;
-}
-.tc-cell {
-    display: inline-block;
-    width: 3em;
-    text-align: center;
-}
-.tc-cell.danger {
-    background-color: {{hud-sel}};
-}
-
-/* Map chunk + inline SVG icons */
-.hud-map {
-    white-space: pre;
-    text-align: center;
-}
-.hud-icon {
-    vertical-align: middle;
-}
-
-/* Qud top/bottom screen chrome strips (Phase 2) — absolute, full viewport width minus
-   the sidebar; rect + height injected from C++ (sidebar_hud_apply_rect) each sync. */
-#hud-topbar,
-#hud-botbar {
-    position: absolute;
-    background-color: {{hud-bg}};
-    overflow: hidden;
-    padding: 2dp 8dp;
-}
-#hud-topbar {
-    border-bottom: 1dp {{hud-border}};
-}
-#hud-botbar {
-    border-top: 1dp {{hud-border}};
-}
+/* Base strip row styles */
 .hud-strip-row {
     display: block;
     white-space: pre;
     color: {{hud-fg}};
-    padding: 2dp 6dp;
+    padding: 1dp 8dp;
 }
-/* Two-span layout for a strip row: left-aligned info, right-aligned readout
-   (producers emit `<span class="strip-left">…</span><span class="strip-right">…</span>`). */
+
+/* Icon inline with text */
+.hud-icon {
+    width: 13dp;
+    height: 13dp;
+    vertical-align: middle;
+}
+
+/* ========== TOP BAR ========== */
+#hud-topbar {
+    position: absolute;
+    background-color: {{hud-bg}};
+    overflow: hidden;
+    border-bottom: 1dp {{hud-border}};
+    padding: 1dp 8dp;
+}
+
+/* ========== BOTTOM BAR ========== */
+#hud-botbar {
+    position: absolute;
+    background-color: {{hud-bg}};
+    overflow: hidden;
+    border-top: 1dp {{hud-border}};
+    padding: 1dp 8dp;
+}
+
+/* ========== HOTBAR ========== */
+#hud-hotbar {
+    position: absolute;
+    background-color: {{hud-bg}};
+    overflow: hidden;
+    padding: 1dp 8dp;
+}
+
+/* ========== VITALS OVERLAY ========== */
+#hud-vitals {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    gap: 2dp;
+}
+
+.hud-vitals-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 2dp;
+}
+
+/* Chunky Qud HP bars */
+.vbar {
+    position: relative;
+    height: 15dp;
+    width: 230dp;
+    background-color: {{hud-bar-bg}};
+    margin-bottom: 2dp;
+}
+.vbar-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: {{hud-fg-bright}};
+}
+.vbar-text {
+    position: absolute;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    color: #0d0d0dff;
+    font-size: 0.85em;
+}
+.vbar-tick {
+    position: absolute;
+    top: 0;
+    width: 1dp;
+    height: 100%;
+    background-color: #0d0d0dff;
+}
+/* Thin bars (STA, MANA) */
+.vbar.thin {
+    height: 9dp;
+    width: 230dp;
+}
+.vbar.thin .vbar-fill {
+    height: 100%;
+}
+.vbar.thin .vbar-text {
+    font-size: 0.75em;
+}
+.vbar.crit {
+    background-color: #401010ff;
+}
+.vbar.crit .vbar-fill {
+    background-color: #e05050ff;
+}
+.vbar.crit .vbar-text {
+    color: #e05050ff;
+}
+
+/* ========== DOCK ========== */
+#hud-dock {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    background-color: {{hud-bg}};
+    border-left: 1dp {{hud-border}};
+    padding: 6dp 12dp;
+}
+
+.dock-flex {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    margin-bottom: 0dp;
+}
+
+.dock-section {
+    display: block;
+    margin-bottom: 6dp;
+}
+
+.dock-header {
+    color: {{hud-accent}};
+    letter-spacing: 2dp;
+    font-size: 0.85em;
+    font-weight: bold;
+    border-bottom: 1dp {{hud-border}};
+    padding: 0dp 2dp 2dp 2dp;
+    margin-bottom: 3dp;
+}
+
+/* ========== LOG ENTRIES ========== */
+.hud-log-entry {
+    display: block;
+    white-space: pre-wrap;
+    word-break: break-word;
+    padding: 1dp 4dp;
+    font-size: 0.9em;
+}
+.hud-log-symbol {
+    display: inline;
+    font-weight: bold;
+    margin-right: 2dp;
+}
+.hud-log-time {
+    display: inline;
+    color: #888888ff;
+    margin-right: 4dp;
+    font-size: 0.85em;
+}
+.hud-log-text {
+    display: inline;
+}
+
+.dock-body {
+    color: {{hud-fg}};
+    white-space: pre-wrap;
+    line-height: 1.3;
+}
+
+.hud-map-body {
+    white-space: pre;
+    text-align: center;
+}
+
+/* Scrollable log area */
+.hud-scroll {
+    overflow-y: auto;
+    min-height: 0;
+}
+
+/* ========== STRIP CHROME ========== */
 .strip-left {
     display: inline;
 }
 .strip-right {
     float: right;
+}
+
+/* Target bar inline in botbar */
+.tbar {
+    display: inline-block;
+    width: 40dp;
+    height: 9dp;
+    background-color: {{hud-bar-bg}};
+    vertical-align: middle;
+}
+.tbar-fill {
+    height: 100%;
 }

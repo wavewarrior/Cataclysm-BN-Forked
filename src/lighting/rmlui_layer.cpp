@@ -334,6 +334,15 @@ bool init(lighting::gpu_device& dev) {
         dbg(DL::Warn) << "rmlui_layer: LoadFontFace failed for " << font;
     }
 
+    // Source Code Pro — bundled for the RmlUi HUD. Loaded non-fallback so the
+    // HUD document can target it explicitly; Terminus remains the fallback.
+    for (const char *f : { "SourceCodePro-Regular.ttf", "SourceCodePro-Semibold.ttf" }) {
+        const std::string p = PATH_INFO::fontdir() + f;
+        if (!Rml::LoadFontFace(p, false)) {
+            dbg(DL::Warn) << "rmlui_layer: LoadFontFace failed for " << p;
+        }
+    }
+
     // Also register the same font from memory under an explicit family name for
     // the §7 world-text layer, which resolves via a direct GetFontFaceHandle()
     // lookup (no document-style fallback resolution). The bytes must stay alive
@@ -487,9 +496,12 @@ bool process_event(const SDL_Event& ev) {
     const int mods = mod_state();
     switch (ev.type) {
         case SDL_EVENT_MOUSE_MOTION:
+            // Always feed motion so RmlUi hover state stays current.
+            // The game always needs motion for cursor tracking and tooltips,
+            // so we never consume it regardless of RmlUi's interaction state.
             g_context->ProcessMouseMove(
                 static_cast<int>(ev.motion.x * sx), static_cast<int>(ev.motion.y * sy), mods);
-            return true;
+            return false;
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
         case SDL_EVENT_MOUSE_BUTTON_UP: {
             const int btn =
@@ -499,8 +511,8 @@ bool process_event(const SDL_Event& ev) {
                     ? 2
                     : 3;
             if (ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-                // Sync hover to the click point so the close-button hit-test is
-                // current even if no motion event preceded this press.
+                // Sync hover to the click point so hit-tests are current even if
+                // no motion event preceded this press.
                 g_context->ProcessMouseMove(
                     static_cast<int>(ev.button.x * sx), static_cast<int>(ev.button.y * sy), mods);
                 if (ev.button.button == SDL_BUTTON_LEFT) {
@@ -523,16 +535,22 @@ bool process_event(const SDL_Event& ev) {
                         }
                     }
                 }
-                g_context->ProcessMouseButtonDown(btn, mods);
-            } else {
-                g_context->ProcessMouseButtonUp(btn, mods);
             }
-            return true;
+            // RmlUi returns true when the mouse is NOT interacting with any element
+            // (respects pointer-events: none on body). Invert: we return true when
+            // RmlUi consumed the event, false when it should pass through to the game.
+            // This naturally pairs DOWN/UP — if DOWN fell through, UP will too,
+            // unless the user dragged onto a panel element (RmlUi then captures).
+            if (ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+                return !g_context->ProcessMouseButtonDown(btn, mods);
+            } else {
+                return !g_context->ProcessMouseButtonUp(btn, mods);
+            }
         }
         case SDL_EVENT_MOUSE_WHEEL:
             // SDL: +y scrolls up; RmlUi: +delta scrolls down.
-            g_context->ProcessMouseWheel(-ev.wheel.y, mods);
-            return true;
+            // RmlUi returns true when not interacting → invert for our convention.
+            return !g_context->ProcessMouseWheel(-ev.wheel.y, mods);
         default:
             // Keyboard / text / everything else: let the game handle it.
             return false;
@@ -552,6 +570,94 @@ constexpr float CRT_FLICKER[20] = {
 // 0..1 -> 0..255 alpha byte for an #rrggbbaa colour.
 unsigned crt_a255(float a01) {
     return static_cast<unsigned>(std::lround(std::clamp(a01, 0.0f, 1.0f) * 255.0f));
+}
+
+// Options for composing a runic frame decorator string.
+struct runic_frame_opts {
+    int pw = 0; // panel border-box width (display px)
+    int ph = 0; // panel border-box height (display px)
+    int ring_disp = 0; // RUNE_RING * dr
+    int need = 0; // minimum dimension threshold
+    unsigned seed = 0;
+    int t_h = 0; // horizontal template
+    int t_v = 1; // vertical template
+    unsigned g = 0; // regen cache-bust token
+    int FRAME_INSET = 0;
+    float dr = 1.0f;
+    // Edge suppression: true = skip that edge's decorator segment
+    bool no_top = false;
+    bool no_bottom = false;
+    bool no_left = false;
+    bool no_right = false;
+};
+
+/// Compose the runic frame decorator string for a given element size.
+/// Returns empty string if the element is too small for the frame.
+auto compose_runic_frame( const runic_frame_opts &opts ) -> std::string
+{
+    if( opts.pw < opts.need || opts.ph < opts.need ) {
+        return "";
+    }
+
+    const int hlen = static_cast<int>(std::lround((opts.pw - 2 * opts.FRAME_INSET) / opts.dr));
+    const int vlen = static_cast<int>(std::lround((opts.ph - 2 * opts.FRAME_INSET) / opts.dr));
+    const int far_x = opts.pw - opts.ring_disp - opts.FRAME_INSET;
+    const int far_y = opts.ph - opts.ring_disp - opts.FRAME_INSET;
+
+
+    // Build decorator segments
+    std::string out;
+    const char *sep = "";
+
+    auto append = [&]( const char *fmt, auto ...args ) {
+        if( out.empty() ) {
+            sep = "";
+        } else {
+            sep = ", ";
+        }
+        char buf[512];
+        std::snprintf( buf, sizeof(buf), fmt, args... );
+        out += sep;
+        out += buf;
+    };
+
+    // Edges
+    if( !opts.no_top ) {
+        append( "image( ?proc:runic-hedge:%d:%u:%d:G%u none scale-none %dpx %dpx ) border-box",
+                hlen, opts.seed, opts.t_h, opts.g, opts.FRAME_INSET, opts.FRAME_INSET );
+    }
+    if( !opts.no_bottom ) {
+        append( "image( ?proc:runic-hedge:%d:%u:%d:G%u flip-vertical scale-none %dpx %dpx ) border-box",
+                hlen, opts.seed, opts.t_h, opts.g, opts.FRAME_INSET, far_y );
+    }
+    if( !opts.no_left ) {
+        append( "image( ?proc:runic-vedge:%d:%u:%d:G%u none scale-none %dpx %dpx ) border-box",
+                vlen, opts.seed, opts.t_v, opts.g, opts.FRAME_INSET, opts.FRAME_INSET );
+    }
+    if( !opts.no_right ) {
+        append( "image( ?proc:runic-vedge:%d:%u:%d:G%u flip-horizontal scale-none %dpx %dpx ) border-box",
+                vlen, opts.seed, opts.t_v, opts.g, far_x, opts.FRAME_INSET );
+    }
+
+    // Corners: original emits TL, BL, BR only (TR = #runic-close interactive button)
+    // Suppression: corner omitted when EITHER adjacent edge is suppressed
+    if( !( opts.no_top || opts.no_left ) ) {
+        // TL
+        append( "image( ?proc:runic-corner:G%u none scale-none %dpx %dpx ) border-box",
+                opts.g, opts.FRAME_INSET, opts.FRAME_INSET );
+    }
+    if( !( opts.no_bottom || opts.no_left ) ) {
+        // BL
+        append( "image( ?proc:runic-corner:G%u flip-vertical scale-none %dpx %dpx ) border-box",
+                opts.g, opts.FRAME_INSET, far_y );
+    }
+    if( !( opts.no_bottom || opts.no_right ) ) {
+        // BR
+        append( "image( ?proc:runic-corner:G%u rotate-180 scale-none %dpx %dpx ) border-box",
+                opts.g, far_x, far_y );
+    }
+
+    return out;
 }
 
 // Apply the F4 CRT knobs to every open document as inline RCSS gradient decorators,
@@ -613,58 +719,37 @@ void apply_crt() {
                               << static_cast<int>(ofs.x) << "," << static_cast<int>(ofs.y);
                 ++dbg_sweeps;
             }
-            char frame[1600];
-            // RmlUi renders `scale-none` tiles at natural size = texture_px * the
-            // context's density-independent-pixel ratio (set below to physical /
-            // logical). The decorator align/offsets are raw px, so to make a tile
-            // DISPLAY N physical px wide we must bake it at N / dr raw px; without
-            // this the edge texture is dr-times too wide, overflows, gets clipped,
-            // and its centred rune group is shoved off to one side.
             const float dr = g_density_ratio * g_ui_scale;
             const int ring_disp = static_cast<int>(std::lround(RUNE_RING * dr));
-            // Need room for the inset frame: each edge length (pw/ph - 2*INSET)
-            // must still fit its two corner margins (2*ring_disp) plus a centre span.
             const int need = 2 * (FRAME_INSET + ring_disp) + 1;
-            if (pw >= need && ph >= need) {
-                const unsigned seed =
-                    rcfg.use_fixed_seed
-                        ? rcfg.seed
-                        : ((static_cast<unsigned>(pw) * 73856093u)
-                           ^ (static_cast<unsigned>(ph) * 19349663u));
-                // Template per edge: Auto keeps top/bottom=centred(0), sides=thirds(1);
-                // a forced value overrides both so the chosen template shows everywhere.
-                const int t_h = rcfg.force_template >= 0 ? rcfg.force_template : 0;
-                const int t_v = rcfg.force_template >= 0 ? rcfg.force_template : 1;
-                const unsigned g = rcfg.regen; // cache-bust token (see :G%u below)
-                // Edge lengths are RAW texture px = (physical span) / dr, so the
-                // dr-scaled natural size spans the inset region exactly (centred).
-                const int hlen = static_cast<int>(std::lround((pw - 2 * FRAME_INSET) / dr));
-                const int vlen = static_cast<int>(std::lround((ph - 2 * FRAME_INSET) / dr));
-                // Far corner offsets use the DISPLAYED corner size (ring * dr).
-                const int far_x = pw - ring_disp - FRAME_INSET; // right-edge / -corner x
-                const int far_y = ph - ring_disp - FRAME_INSET; // bottom-edge / -corner y
-                (void)std::snprintf(
-                    frame, sizeof(frame),
-                    // :%d = template, :G%u = regen cache-bust token.
-                    "image( ?proc:runic-hedge:%d:%u:%d:G%u none scale-none %dpx %dpx ) border-box, "
-                    "image( ?proc:runic-hedge:%d:%u:%d:G%u flip-vertical scale-none %dpx %dpx ) "
-                    "border-box, "
-                    "image( ?proc:runic-vedge:%d:%u:%d:G%u none scale-none %dpx %dpx ) border-box, "
-                    "image( ?proc:runic-vedge:%d:%u:%d:G%u flip-horizontal scale-none %dpx %dpx ) "
-                    "border-box, "
-                    "image( ?proc:runic-corner:G%u none scale-none %dpx %dpx ) border-box, "
-                    "image( ?proc:runic-corner:G%u flip-vertical scale-none %dpx %dpx ) "
-                    "border-box, "
-                    "image( ?proc:runic-corner:G%u rotate-180 scale-none %dpx %dpx ) border-box",
-                    hlen, seed, t_h, g, FRAME_INSET, FRAME_INSET, // top
-                    hlen, seed, t_h, g, FRAME_INSET, far_y,       // bottom
-                    vlen, seed, t_v, g, FRAME_INSET, FRAME_INSET, // left
-                    vlen, seed, t_v, g, far_x, FRAME_INSET,       // right
-                    g, FRAME_INSET, FRAME_INSET,                  // TL (TR = #runic-close)
-                    g, FRAME_INSET, far_y,                        // BL
-                    g, far_x, far_y);                             // BR
-            } else {
+            const unsigned seed =
+                rcfg.use_fixed_seed
+                    ? rcfg.seed
+                    : ((static_cast<unsigned>(pw) * 73856093u)
+                       ^ (static_cast<unsigned>(ph) * 19349663u));
+            const int t_h = rcfg.force_template >= 0 ? rcfg.force_template : 0;
+            const int t_v = rcfg.force_template >= 0 ? rcfg.force_template : 1;
+            const unsigned g = rcfg.regen;
+
+            // Read edge suppression classes
+            const bool no_top = pe->IsClassSet("runic-no-top");
+            const bool no_bottom = pe->IsClassSet("runic-no-bottom");
+            const bool no_left = pe->IsClassSet("runic-no-left");
+            const bool no_right = pe->IsClassSet("runic-no-right");
+
+            std::string frame_str = compose_runic_frame( runic_frame_opts {
+                .pw = pw, .ph = ph, .ring_disp = ring_disp, .need = need,
+                .seed = seed, .t_h = t_h, .t_v = t_v, .g = g,
+                .FRAME_INSET = FRAME_INSET, .dr = dr,
+                .no_top = no_top, .no_bottom = no_bottom,
+                .no_left = no_left, .no_right = no_right
+            } );
+
+            char frame[2048];
+            if( frame_str.empty() ) {
                 (void)std::snprintf(frame, sizeof(frame), "%s", fallback);
+            } else {
+                (void)std::snprintf(frame, sizeof(frame), "%s", frame_str.c_str());
             }
             // F12: magenta cross at the panel-box centre (painted last = on top),
             // so the rune cluster's centring vs the panel vs the screen is visible.
@@ -751,6 +836,115 @@ void apply_crt() {
             } else if (cl != nullptr) {
                 cl->SetProperty("decorator", "none");
                 cl->SetProperty("pointer-events", "none");
+            }
+        }
+        // Second sweep: per-element runic frames for HUD regions (class "runic-region").
+        // Unlike .panel, these get NO #runic-close button and NO vignette. Frame layers
+        // are per-element ("runic-frame-<id>") so each region composes independently.
+        {
+            Rml::ElementList regions;
+            doc->GetElementsByClassName(regions, "runic-region");
+            for (Rml::Element* reg : regions) {
+                const Rml::Vector2f rsz = reg->GetBox().GetSize(Rml::BoxArea::Border);
+                const int rpw = static_cast<int>(std::lround(rsz.x));
+                const int rph = static_cast<int>(std::lround(rsz.y));
+                const float dr = g_density_ratio * g_ui_scale;
+                const int ring_disp = static_cast<int>(std::lround(RUNE_RING * dr));
+                const int need = 2 * (FRAME_INSET + ring_disp) + 1;
+
+                const unsigned seed =
+                    rcfg.use_fixed_seed
+                        ? rcfg.seed
+                        : ((static_cast<unsigned>(rpw) * 73856093u)
+                           ^ (static_cast<unsigned>(rph) * 19349663u));
+                const int t_h = rcfg.force_template >= 0 ? rcfg.force_template : 0;
+                const int t_v = rcfg.force_template >= 0 ? rcfg.force_template : 1;
+                const unsigned g = rcfg.regen;
+
+                const bool no_top = reg->IsClassSet("runic-no-top");
+                const bool no_bottom = reg->IsClassSet("runic-no-bottom");
+                const bool no_left = reg->IsClassSet("runic-no-left");
+                const bool no_right = reg->IsClassSet("runic-no-right");
+
+                std::string frame_str = compose_runic_frame( runic_frame_opts {
+                    .pw = rpw, .ph = rph, .ring_disp = ring_disp, .need = need,
+                    .seed = seed, .t_h = t_h, .t_v = t_v, .g = g,
+                    .FRAME_INSET = FRAME_INSET, .dr = dr,
+                    .no_top = no_top, .no_bottom = no_bottom,
+                    .no_left = no_left, .no_right = no_right
+                } );
+
+                const std::string frame_id = "runic-frame-" + std::string( reg->GetId() );
+                Rml::Element* fr = doc->GetElementById( frame_id.c_str() );
+                if (fr == nullptr) {
+                    Rml::ElementPtr fp = doc->CreateElement("div");
+                    fp->SetId( frame_id.c_str() );
+                    fr = doc->AppendChild(std::move(fp));
+                }
+                if (fr != nullptr) {
+                    const Rml::Vector2f roff = reg->GetAbsoluteOffset(Rml::BoxArea::Border);
+                    fr->SetProperty("position", "absolute");
+                    fr->SetProperty("pointer-events", "none");
+                    fr->SetProperty("z-index", "11");
+                    fr->SetProperty("left", std::to_string(roff.x) + "px");
+                    fr->SetProperty("top", std::to_string(roff.y) + "px");
+                    fr->SetProperty("width", std::to_string(rsz.x) + "px");
+                    fr->SetProperty("height", std::to_string(rsz.y) + "px");
+                    if (frame_str.empty()) {
+                        fr->SetProperty("decorator", "none");
+                    } else {
+                        fr->SetProperty("decorator", frame_str.c_str());
+                    }
+                }
+            }
+        }
+        // Third sweep: corroded edge rules for strips (runic-edge-bottom/top).
+        // Paints a thin decorative line along the strip's edge using the runic-rule
+        {
+            std::unordered_set<Rml::Element*> edge_set;
+            Rml::ElementList edges_tmp;
+            doc->GetElementsByClassName(edges_tmp, "runic-edge-bottom");
+            for (Rml::Element* e : edges_tmp) { edge_set.insert(e); }
+            edges_tmp.clear();
+            doc->GetElementsByClassName(edges_tmp, "runic-edge-top");
+            for (Rml::Element* e : edges_tmp) { edge_set.insert(e); }
+            for (Rml::Element* ed : edge_set) {
+                const Rml::Vector2f esz = ed->GetBox().GetSize(Rml::BoxArea::Border);
+                const int epw = static_cast<int>(std::lround(esz.x));
+                const float dr = g_density_ratio * g_ui_scale;
+                const int len = static_cast<int>(std::lround(epw / dr));
+                if (len < 1) { continue; }
+
+                const unsigned seed = rcfg.use_fixed_seed
+                    ? rcfg.seed
+                    : (static_cast<unsigned>(epw) * 73856093u);
+                const unsigned g = rcfg.regen;
+
+                const bool flip = ed->IsClassSet("runic-edge-top");
+                const std::string dec = std::format(
+                    "image( ?proc:runic-rule:{}:{}:G{} {} scale-none 0px {}px ) border-box",
+                    len, seed, g,
+                    flip ? "flip-vertical" : "none",
+                    flip ? 0 : (esz.y - 4));
+
+                const std::string frame_id = "runic-frame-" + std::string(ed->GetId());
+                Rml::Element* fr = doc->GetElementById(frame_id.c_str());
+                if (fr == nullptr) {
+                    Rml::ElementPtr fp = doc->CreateElement("div");
+                    fp->SetId(frame_id.c_str());
+                    fr = doc->AppendChild(std::move(fp));
+                }
+                if (fr != nullptr) {
+                    const Rml::Vector2f eoff = ed->GetAbsoluteOffset(Rml::BoxArea::Border);
+                    fr->SetProperty("position", "absolute");
+                    fr->SetProperty("pointer-events", "none");
+                    fr->SetProperty("z-index", "11");
+                    fr->SetProperty("left", std::to_string(eoff.x) + "px");
+                    fr->SetProperty("top", std::to_string(eoff.y) + "px");
+                    fr->SetProperty("width", std::to_string(esz.x) + "px");
+                    fr->SetProperty("height", std::to_string(esz.y) + "px");
+                    fr->SetProperty("decorator", dec.c_str());
+                }
             }
         }
         Rml::Element* overlay = doc->GetElementById("crt-overlay");

@@ -1,6 +1,5 @@
 {
   "//": "Central UI theme for the RmlUi menus. 'rcss' values fill {{token}} placeholders in data/gui/*.rcss; 'game_colors' override the nc_color->hex used for menu text. Editable live in the F4 Theme tab.",
-
   "rcss": {
     "aqua": "#8ec07cff",
     "bg": "#1d2021f2",
@@ -13,8 +12,7 @@
     "fg": "#ebdbb2ff",
     "hud-accent": "#c8a820ff",
     "hud-bar-bg": "#123030ff",
-    "hud-bg": "#0d2020f0",
-    "hud-bg-panel": "#102828e8",
+    "hud-bg": "#0a1a1ae0",
     "hud-border": "#2a5a50ff",
     "hud-fg": "#80c0a8ff",
     "hud-fg-bright": "#d0f0e0ff",
@@ -29,7 +27,6 @@
     "yellow": "#b29153ff",
     "yellow-glow": "#fabd2faa"
   },
-
   "game_colors": {
     "c_black": "#1d2021ff",
     "c_blue": "#458588ff",

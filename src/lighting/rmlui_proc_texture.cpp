@@ -726,6 +726,48 @@ std::vector<std::uint8_t> gen_runic_frame(const std::string& variant, int& out_w
         return px;
     }
 
+    // Corroded edge rule for HUD strips: "runic-rule:<len>:<seed>". Generates a
+    // len×4 px RGBA strip: solid 1px line at y=0, dashed line at y=2 (6px on/3px
+    // off), every pixel gated by corrode_keep. Used by runic-edge-bottom/top
+    // sweeps for the topbar/botbar corroded separator lines.
+    if (variant.rfind("runic-rule", 0) == 0) {
+        int rl = UNIT;
+        unsigned rseed = fnv1a(variant);
+        const std::size_t c1 = variant.find(':');
+        if (c1 != std::string::npos) {
+            const std::size_t c2 = variant.find(':', c1 + 1);
+            try {
+                rl = std::stoi(variant.substr(c1 + 1, c2 - c1 - 1));
+                if (c2 != std::string::npos) {
+                    const std::size_t c3 = variant.find(':', c2 + 1);
+                    if (c3 != std::string::npos) {
+                        rseed = std::stoul(variant.substr(c2 + 1, c3 - c2 - 1));
+                    } else {
+                        rseed = std::stoul(variant.substr(c2 + 1));
+                    }
+                }
+            } catch (...) {
+                // Fall through with defaults
+            }
+        }
+        if (rl < 1) { rl = UNIT; }
+        std::vector<std::uint8_t> px = alloc(rl, 4);
+        out_w = rl;
+        out_h = 4;
+        const rgba ink = light_col(cfg);
+        for (int x = 0; x < rl; ++x) {
+            // Solid line at y=0
+            if (corrode_keep(x, 0, 0, rseed)) {
+                put(px, out_w, out_h, x, 0, ink);
+            }
+            // Dashed line at y=2: 6px on / 3px off
+            if ((x % 9) < 6 && corrode_keep(x, 2, 2, rseed)) {
+                put(px, out_w, out_h, x, 2, ink);
+            }
+        }
+        return px;
+    }
+
     // Self-framed bindrune save sigil: "bindrune:<size>:<seed>:<rrggbb>" (size,
     // seed, colour all optional). <size> = square texture px (default 96); <seed>
     // = the per-character hash so each save file gets a unique sigil; <rrggbb> =

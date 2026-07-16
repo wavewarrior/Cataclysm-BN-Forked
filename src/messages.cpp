@@ -48,6 +48,8 @@ struct game_message : public JsonDeserializer, public JsonSerializer {
     // hide the message, because at some point it was in cooldown period.
     bool cooldown_hidden = false;
     game_message_type type  = m_neutral;
+    // Session-monotonic sequence number for stable identity (NOT serialized).
+    unsigned seq = 0;
 
     game_message() = default;
     game_message( std::string &&msg, game_message_type const t ) :
@@ -123,6 +125,7 @@ class messages_impl
         std::vector<game_message> cooldown_templates; // Message cooldown
         time_point curmes = calendar::turn_zero; // The last-seen message.
         bool active = true;
+        unsigned next_seq = 1;
 
         bool has_undisplayed_messages() const {
             return !messages.empty() && messages.back().turn() > curmes;
@@ -201,6 +204,7 @@ class messages_impl
                 messages.pop_front();
             }
 
+            m.seq = next_seq++;
             messages.emplace_back( m );
         }
 
@@ -285,6 +289,31 @@ class messages_impl
             return result;
         }
 
+        /// Rich message accessor for the animated log. Returns structured data
+        /// (time, text, type, color, seq) without colorize tags - the consumer
+        /// formats per-message RML with symbols and attributes.
+        std::vector<rich_message> recent_messages_rich( size_t count ) const {
+            count = std::min( count, messages.size() );
+
+            std::vector<rich_message> result;
+            result.reserve( count );
+
+            const int offset = static_cast<std::ptrdiff_t>( messages.size() - count );
+
+            std::transform( begin( messages ) + offset, end( messages ), back_inserter( result ),
+            []( const game_message & msg ) {
+                rich_message rm;
+                rm.time = to_string_time_of_day( msg.timestamp_in_turns );
+                rm.text = msg.get_with_count();
+                rm.type = msg.type;
+                rm.color = msg.get_color( calendar::turn );
+                rm.seq = msg.seq;
+                return rm;
+            } );
+
+            return result;
+        }
+
         /** Refresh the cooldown timers, removing elapsed ones and making new ones if needed.
          * @param message The current message that needs to be checked.
          * @param flags Flags pertaining to the message.
@@ -345,6 +374,11 @@ std::vector<std::pair<std::string, std::string>> Messages::recent_messages_color
     return player_messages.recent_messages_colored( count );
 }
 
+auto Messages::recent_messages_rich( const size_t count ) -> std::vector<rich_message>
+{
+    return player_messages.recent_messages_rich( count );
+}
+
 void Messages::serialize( JsonOut &json )
 {
     json.member( "player_messages" );
@@ -363,6 +397,10 @@ void Messages::deserialize( const JsonObject &json )
     JsonObject obj = json.get_object( "player_messages" );
     obj.read( "messages", player_messages.messages );
     obj.read( "curmes", player_messages.curmes );
+    // Reloaded messages get fresh sequence numbers.
+    for( game_message &msg : player_messages.messages ) {
+        msg.seq = player_messages.next_seq++;
+    }
 }
 
 void Messages::add_msg( std::string msg )
