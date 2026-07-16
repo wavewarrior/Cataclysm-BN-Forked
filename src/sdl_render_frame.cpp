@@ -993,13 +993,16 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
     // UI post-processing (Phase 9): bloom + chromatic aberration.
     // Reads from intermediate target, writes to swapchain.
     if( use_post_process ) {
-        const float ca_intensity = hud_shake::intensity();
-        const float bloom_strength = 0.3f; // subtle, tunable
-        rs.ui_post().record( ctx.cmd_buffer,
-                             rs.ui_post_target()->texture(),
-                             ctx.swapchain_tex,
-                             ctx.swapchain_w, ctx.swapchain_h,
-                             ca_intensity, bloom_strength );
+        const auto bloom_strength = 0.3f; // subtle, tunable
+        rs.ui_post().record( {
+            .cb = ctx.cmd_buffer,
+            .src_tex = rs.ui_post_target()->texture(),
+            .dst_tex = ctx.swapchain_tex,
+            .width = ctx.swapchain_w,
+            .height = ctx.swapchain_h,
+            .ca_intensity = hud_shake::intensity(),
+            .bloom_strength = bloom_strength,
+        } );
     }
 
     rs.device().submit_frame( ctx );

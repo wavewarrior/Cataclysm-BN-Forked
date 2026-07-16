@@ -20,16 +20,32 @@ class gpu_device;
 
 class ui_post_pass {
 public:
+    // Options for pipeline initialization.
+    struct init_options {
+        gpu_device *dev = nullptr;
+        SDL_GPUTextureFormat format = SDL_GPU_TEXTUREFORMAT_INVALID;
+        std::uint32_t width = 0;
+        std::uint32_t height = 0;
+    };
+
+    // Options for recording a post-process pass.
+    struct record_options {
+        SDL_GPUCommandBuffer *cb = nullptr;
+        SDL_GPUTexture *src_tex = nullptr;
+        SDL_GPUTexture *dst_tex = nullptr;
+        std::uint32_t width = 0;
+        std::uint32_t height = 0;
+        float ca_intensity = 0.f;
+        float bloom_strength = 0.3f;
+    };
+
     ui_post_pass() = default;
     ui_post_pass( const ui_post_pass & ) = delete;
     ui_post_pass &operator=( const ui_post_pass & ) = delete;
     ~ui_post_pass();
 
-    // Build pipeline + shader. `format` is the swapchain/composite texture format.
-    auto init( gpu_device &dev, SDL_GPUTextureFormat format,
-               std::uint32_t full_w, std::uint32_t full_h ) -> bool;
-
-    void shutdown() noexcept;
+    auto init( const init_options &opts ) -> bool;
+    auto shutdown() noexcept -> void;
 
     auto ready() const noexcept -> bool {
         return pipeline_ != nullptr && vert_ != nullptr && post_frag_ != nullptr && sampler_ != nullptr;
@@ -38,10 +54,7 @@ public:
     // `dst_tex` (swapchain). `ca_intensity` in [0,1] controls chromatic
     // aberration strength (0 = off, tied to hud_shake). `bloom_strength`
     // in [0,1] controls bloom amount.
-    auto record( SDL_GPUCommandBuffer *cb, SDL_GPUTexture *src_tex,
-                 SDL_GPUTexture *dst_tex,
-                 std::uint32_t full_w, std::uint32_t full_h,
-                 float ca_intensity, float bloom_strength ) -> void;
+    auto record( const record_options &opts ) -> void;
 private:
     gpu_device *dev_ = nullptr;
     SDL_GPUTextureFormat format_ = SDL_GPU_TEXTUREFORMAT_INVALID;

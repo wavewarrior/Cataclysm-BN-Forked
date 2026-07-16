@@ -209,9 +209,12 @@ void render_state::init(SDL_Window* host_window) {
                              static_cast<std::uint32_t>( pw ),
                              static_cast<std::uint32_t>( ph ) );
         // UI post-processing: bloom + chromatic aberration (Phase 9).
-        ui_post_.init( device_, device_.swapchain_format(),
-                       static_cast<std::uint32_t>( pw ),
-                       static_cast<std::uint32_t>( ph ) );
+        ui_post_.init( {
+            .dev = &device_,
+            .format = device_.swapchain_format(),
+            .width = static_cast<std::uint32_t>( pw ),
+            .height = static_cast<std::uint32_t>( ph ),
+        } );
 
         // GPU JFA SDF pass (P3): seed → flood → resolve on SS-grid. Same max tile
         // extent as the CPU SDF; jfa_sdf_buffer() is scratch output for A/B vs CPU DT.

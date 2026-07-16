@@ -12,16 +12,15 @@ namespace lighting {
 
 ui_post_pass::~ui_post_pass() { shutdown(); }
 
-auto ui_post_pass::init( gpu_device &dev, SDL_GPUTextureFormat format,
-                         std::uint32_t full_w, std::uint32_t full_h ) -> bool
+auto ui_post_pass::init( const init_options &opts ) -> bool
 {
     shutdown();
-    dev_ = &dev;
-    format_ = format;
-    full_w_ = full_w;
-    full_h_ = full_h;
+    dev_ = opts.dev;
+    format_ = opts.format;
+    full_w_ = opts.width;
+    full_h_ = opts.height;
 
-    if( !dev.ready() ) {
+    if( !dev_->ready() ) {
         dbg( DL::Error ) << "ui_post_pass::init: gpu_device not ready";
         return false;
     }
@@ -32,13 +31,13 @@ auto ui_post_pass::init( gpu_device &dev, SDL_GPUTextureFormat format,
     const std::string post_src = load_lighting_shader_source( "ui_post.frag.hlsl" );
 
     auto v = compile_graphics_shader(
-        dev, vert_src, "main", SDL_SHADERCROSS_SHADERSTAGE_VERTEX, "ui_post.vert" );
+        *dev_, vert_src, "main", SDL_SHADERCROSS_SHADERSTAGE_VERTEX, "ui_post.vert" );
     auto f = compile_graphics_shader(
-        dev, post_src, "main", SDL_SHADERCROSS_SHADERSTAGE_FRAGMENT, "ui_post.frag" );
+        *dev_, post_src, "main", SDL_SHADERCROSS_SHADERSTAGE_FRAGMENT, "ui_post.frag" );
 
     if( !v || !f ) {
-        if( v ) { SDL_ReleaseGPUShader( dev.raw(), v.shader ); }
-        if( f ) { SDL_ReleaseGPUShader( dev.raw(), f.shader ); }
+        if( v ) { SDL_ReleaseGPUShader( dev_->raw(), v.shader ); }
+        if( f ) { SDL_ReleaseGPUShader( dev_->raw(), f.shader ); }
         dbg( DL::Error ) << "ui_post_pass: shader compile failed";
         return false;
     }
@@ -54,7 +53,7 @@ auto ui_post_pass::init( gpu_device &dev, SDL_GPUTextureFormat format,
         | SDL_GPU_COLORCOMPONENT_A;
 
     SDL_GPUColorTargetDescription color_target{};
-    color_target.format = format;
+    color_target.format = format_;
     color_target.blend_state = blend;
 
     SDL_GPUGraphicsPipelineCreateInfo pci{};
@@ -69,7 +68,7 @@ auto ui_post_pass::init( gpu_device &dev, SDL_GPUTextureFormat format,
     pci.target_info.color_target_descriptions = &color_target;
     pci.target_info.has_depth_stencil_target = false;
 
-    pipeline_ = SDL_CreateGPUGraphicsPipeline( dev.raw(), &pci );
+    pipeline_ = SDL_CreateGPUGraphicsPipeline( dev_->raw(), &pci );
     if( !pipeline_ ) {
         dbg( DL::Error ) << "ui_post_pass: pipeline creation failed";
         return false;
@@ -83,7 +82,7 @@ auto ui_post_pass::init( gpu_device &dev, SDL_GPUTextureFormat format,
     sci.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
     sci.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
     sci.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
-    sampler_ = SDL_CreateGPUSampler( dev.raw(), &sci );
+    sampler_ = SDL_CreateGPUSampler( dev_->raw(), &sci );
     if( !sampler_ ) {
         dbg( DL::Error ) << "ui_post_pass sampler: " << SDL_GetError();
         return false;
@@ -107,12 +106,9 @@ auto ui_post_pass::shutdown() noexcept -> void
     dev_ = nullptr;
 }
 
-auto ui_post_pass::record( SDL_GPUCommandBuffer *cb, SDL_GPUTexture *src_tex,
-                           SDL_GPUTexture *dst_tex,
-                           std::uint32_t full_w, std::uint32_t full_h,
-                           float ca_intensity, float bloom_strength ) -> void
+auto ui_post_pass::record( const record_options &opts ) -> void
 {
-    if( !ready() || !src_tex || !dst_tex || !dev_ ) {
+    if( !ready() || !opts.src_tex || !opts.dst_tex || !dev_ ) {
         return;
     }
 
@@ -124,30 +120,30 @@ auto ui_post_pass::record( SDL_GPUCommandBuffer *cb, SDL_GPUTexture *src_tex,
         float pad1;
     };
     const UiPostParams params {
-        .ca_intensity = ca_intensity,
-        .bloom_strength = bloom_strength,
+        .ca_intensity = opts.ca_intensity,
+        .bloom_strength = opts.bloom_strength,
         .pad0 = 0.f,
         .pad1 = 0.f,
     };
-    SDL_PushGPUFragmentUniformData( cb, 0, &params, sizeof( params ) );
+    SDL_PushGPUFragmentUniformData( opts.cb, 0, &params, sizeof( params ) );
 
     SDL_GPUColorTargetInfo ct{};
-    ct.texture = dst_tex;
+    ct.texture = opts.dst_tex;
     ct.load_op = SDL_GPU_LOADOP_DONT_CARE;
     ct.store_op = SDL_GPU_STOREOP_STORE;
-    SDL_GPURenderPass *rp = SDL_BeginGPURenderPass( cb, &ct, 1, nullptr );
+    SDL_GPURenderPass *rp = SDL_BeginGPURenderPass( opts.cb, &ct, 1, nullptr );
     if( !rp ) {
         return;
     }
 
     SDL_BindGPUGraphicsPipeline( rp, pipeline_ );
     const SDL_GPUViewport vp { 0.0f, 0.0f,
-                               static_cast<float>( full_w ),
-                               static_cast<float>( full_h ), 0.0f, 1.0f };
+                               static_cast<float>( opts.width ),
+                               static_cast<float>( opts.height ), 0.0f, 1.0f };
     SDL_SetGPUViewport( rp, &vp );
 
     SDL_GPUTextureSamplerBinding tsb{};
-    tsb.texture = src_tex;
+    tsb.texture = opts.src_tex;
     tsb.sampler = sampler_;
     SDL_BindGPUFragmentSamplers( rp, 0, &tsb, 1 );
 
