@@ -24,8 +24,8 @@
         "TESTS": "True",
         "JSON_FORMAT": "ON",
         "CMAKE_INSTALL_MESSAGE": "NEVER",
-        "CMAKE_C_COMPILER_LAUNCHER": "C:/Users/NIGEL-BEAST/AppData/Local/Microsoft/WinGet/Packages/Mozilla.sccache_Microsoft.Winget.Source_8wekyb3d8bbwe/sccache-v0.16.0-x86_64-pc-windows-msvc/sccache.exe",
-        "CMAKE_CXX_COMPILER_LAUNCHER": "C:/Users/NIGEL-BEAST/AppData/Local/Microsoft/WinGet/Packages/Mozilla.sccache_Microsoft.Winget.Source_8wekyb3d8bbwe/sccache-v0.16.0-x86_64-pc-windows-msvc/sccache.exe",
+        "CMAKE_C_COMPILER_LAUNCHER": "sccache",
+        "CMAKE_CXX_COMPILER_LAUNCHER": "sccache",
         "CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE": "ON",
         "CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO": "ON",
         "CMAKE_MSVC_DEBUG_INFORMATION_FORMAT": "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>",
@@ -105,7 +105,7 @@
         "USE_PREFIX_DATA_DIR": "OFF",
         "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "ON",
         "USE_TRACY": "ON",
-        "TRACY_VERSION": "master",
+        "TRACY_VERSION": "v0.13.1",
         "TRACY_ON_DEMAND": "ON",
         "TRACY_ONLY_IPV4": "ON"
       }

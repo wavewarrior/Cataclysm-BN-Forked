@@ -409,7 +409,7 @@ message(STATUS "Searching for SDL3 library --")
             # Install via FetchContent
             FetchContent_Declare(
                     SDL3
-                    URL https://github.com/libsdl-org/SDL/archive/refs/tags/release-3.4.10.tar.gz
+                    URL https://github.com/libsdl-org/SDL/archive/refs/tags/release-3.4.12.tar.gz
                     EXCLUDE_FROM_ALL
             )
             FetchContent_MakeAvailable(SDL3)
@@ -577,7 +577,7 @@ if (NOT TARGET SDL3_shadercross::SDL3_shadercross)
         # SPIRV vulkan-sdk-1.4.350). The old DXC generated DXIL that the Win11
         # D3D12 driver rejected at pipeline creation (E_INVALIDARG) for the
         # radiance-cascade lighting shaders — see src/lighting/CLAUDE.md. Paired
-        # with SDL release-3.4.10 (this shadercross was developed against it).
+        # with SDL release-3.4.12 (this shadercross was developed against it).
         set(SDLSHADERCROSS_DXC          ON  CACHE BOOL "" FORCE)
         set(SDLSHADERCROSS_VENDORED     ON  CACHE BOOL "" FORCE)
         set(SDLSHADERCROSS_SHARED       ${_CATA_SHADERCROSS_SHARED} CACHE BOOL "" FORCE)
@@ -669,7 +669,7 @@ if (BACKTRACE)
         message(STATUS "Integrating libbacktrace build using ExternalProject")
 
         set(LIBBACKTRACE_GIT_REPO https://github.com/ianlancetaylor/libbacktrace.git)
-        set(LIBBACKTRACE_GIT_TAG master)
+        set(LIBBACKTRACE_GIT_TAG 6f8310e238fc3ce68f42f391cbe93fd156bb2c23)
 
         set(LIBBACKTRACE_INSTALL_DIR "${CMAKE_BINARY_DIR}/libbacktrace/install")
         SET(LIBBACKTRACE_LIBRARY "${LIBBACKTRACE_INSTALL_DIR}/lib/libbacktrace.a")

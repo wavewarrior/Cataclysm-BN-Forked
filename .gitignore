@@ -17,6 +17,7 @@ build
 !build-data
 build-data/gettext
 test_user_dir*
+test_shard_*/
 /build-start-time
 /cmake-build-debug/
 /config/
