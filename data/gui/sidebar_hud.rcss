@@ -229,8 +229,14 @@ body {
 .env-fire    { background-color: rgba(255, 100, 30, 0.04); }
 .env-rad     { background-color: rgba(30, 255, 60, 0.04); }
 .env-cold    { background-color: rgba(100, 150, 255, 0.04); }
+.env-storm   { opacity: 0.9; }
 
 /* Smooth transitions for tint changes */
 #hud-topbar, #hud-botbar, #hud-dock, #hud-vitals {
     transition: background-color 0.8s, opacity 0.8s;
+}
+
+/* Status effect animation targets (Phase 7) */
+#status-poison, #status-fire, #status-bleed, #status-rad {
+    display: inline;
 }

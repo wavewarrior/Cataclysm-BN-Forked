@@ -79,6 +79,7 @@
 #include "vehicle_part.h"
 #include "vpart_position.h"
 #include "weather.h"
+#include "weather_type.h"
 #ifdef COOP_ENABLED
 #include "coop_session.h"
 #endif
@@ -1011,10 +1012,14 @@ auto hud_botbar( avatar &u ) -> std::string
     // --- Left: EFFECTS list ---
     const auto effects = character_display::effect_name_and_text( u );
     auto left = std::string( _( "EFFECTS:" ) ) + " ";
+    auto effects_rml = std::string(); // raw RML appended after cata_text_to_rml(left)
     if( effects.empty() ) {
         left += colorize( _( "none" ), c_dark_gray );
     } else {
         constexpr size_t max_shown = 8;
+        // Build raw RML directly — inner <span id="status-*"> wrappers for
+        // Phase 7 animation targets would be escaped by colorize/cata_text_to_rml.
+        const auto gray_hex = nc_color_to_hex( c_light_gray );
         auto joined = std::string();
         auto first = true;
         for( const auto &effect : effects | std::views::take( max_shown ) ) {
@@ -1022,33 +1027,51 @@ auto hud_botbar( avatar &u ) -> std::string
                 joined += " :: ";
             }
             first = false;
-            joined += effect.first;
+            std::string spec_key;
+            if( effect.first.find( _( "Poison" ) ) != std::string::npos ) {
+                spec_key = "poison";
+            } else if( effect.first.find( _( "On Fire" ) ) != std::string::npos
+                       || effect.first.find( _( "Burning" ) ) != std::string::npos ) {
+                spec_key = "fire";
+            } else if( effect.first.find( _( "Bleeding" ) ) != std::string::npos ) {
+                spec_key = "bleed";
+            } else if( effect.first.find( _( "Irradiated" ) ) != std::string::npos
+                       || effect.first.find( _( "Radiation" ) ) != std::string::npos ) {
+                spec_key = "rad";
+            }
+            if( !spec_key.empty() ) {
+                joined += "<span id=\"status-" + spec_key + "\">"
+                          + rml_escape( effect.first ) + "</span>";
+            } else {
+                joined += rml_escape( effect.first );
+            }
         }
         if( effects.size() > max_shown ) {
-            joined += string_format( " (+%d)", static_cast<int>( effects.size() - max_shown ) );
+            joined += rml_escape(
+                          string_format( " (+%d)", static_cast<int>( effects.size() - max_shown ) ) );
         }
-        left += colorize( joined, c_light_gray );
+        effects_rml = "<span style=\"color:" + gray_hex + ";\">" + joined + "</span>";
     }
     // Feed status effect animations (Phase 7): map effect names to animation specs.
     {
-        const auto feed_status_anim = [&]( const std::string & nm, const std::string & spec ) {
+        const auto feed_status_anim = [&]( const std::string & spec ) {
             hud_anim::feed( { .element_id = "status-" + spec, .spec_icon = "status_" + spec,
                               .value = 1.0, .is_critical = false } );
         };
         for( const auto &[nm, desc] : effects ) {
             if( nm.find( _( "Poison" ) ) != std::string::npos ) {
-                feed_status_anim( nm, "poison" );
+                feed_status_anim( "poison" );
             }
             if( nm.find( _( "On Fire" ) ) != std::string::npos ||
                 nm.find( _( "Burning" ) ) != std::string::npos ) {
-                feed_status_anim( nm, "fire" );
+                feed_status_anim( "fire" );
             }
             if( nm.find( _( "Bleeding" ) ) != std::string::npos ) {
-                feed_status_anim( nm, "bleed" );
+                feed_status_anim( "bleed" );
             }
             if( nm.find( _( "Radiation" ) ) != std::string::npos ||
                 nm.find( _( "Irradiated" ) ) != std::string::npos ) {
-                feed_status_anim( nm, "rad" );
+                feed_status_anim( "rad" );
             }
         }
     }
@@ -1086,7 +1109,8 @@ auto hud_botbar( avatar &u ) -> std::string
 
     // Assemble: left span (via cata_text_to_rml) + middle text (via cata_text_to_rml) +
     // middle raw RML (tbar) + right span (via cata_text_to_rml)
-    std::string out = "<span class=\"strip-left\">" + cata_text_to_rml( left ) + "</span>";
+    std::string out = "<span class=\"strip-left\">" + cata_text_to_rml( left ) + effects_rml +
+                      "</span>";
     if( !middle_text.empty() ) {
         out += " " + cata_text_to_rml( middle_text ) + " " + middle_rml;
     }
@@ -1275,6 +1299,8 @@ void sidebar_hud_sync( avatar &u )
             const int max_hp = u.get_hp_max();
             const float intensity = std::clamp( static_cast<float>( dmg ) / max_hp, 0.0f, 1.0f );
             hud_shake::trigger( intensity );
+            hud_anim::feed( { .element_id = "hud-vignette", .spec_icon = "hud_vignette",
+                              .value = intensity, .is_critical = false } );
         }
         prev_total_hp = total_hp;
     }
@@ -1298,6 +1324,16 @@ void sidebar_hud_sync( avatar &u )
             const units::temperature temp = get_weather().get_temperature( u.abs_pos() );
             const bool cold = units::to_celsius( temp ) < 0.0f;
             el->SetClass( "env-cold", cold );
+
+            // Fire proximity: warm tint (radius 3 matches warmth radius)
+            const bool near_fire = get_map().has_nearby_fire( u.bub_pos(), 3 );
+            el->SetClass( "env-fire", near_fire );
+
+            // Storm: shake/vignette modulation
+            const auto &wid = get_weather().weather_id;
+            const bool is_storm = wid == weather_type_id( "thunder" )
+                                  || wid == weather_type_id( "lightning" );
+            el->SetClass( "env-storm", is_storm );
         };
         apply_env_classes( "hud-topbar" );
         apply_env_classes( "hud-botbar" );

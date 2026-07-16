@@ -69,7 +69,8 @@ public:
 
     // True when initialized (GPU pipeline creation is deferred; draw is stubbed).
     auto ready() const noexcept -> bool {
-        return dev_ != nullptr;
+        return dev_ != nullptr && particle_pipeline_ != nullptr
+            && particle_xfer_ != nullptr && particle_storage_ != nullptr;
     }
 
     // Update particles and record draws.

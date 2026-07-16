@@ -98,6 +98,13 @@
       ]
     },
     {
+      "id": "hud_vignette",
+      "animations": [
+        { "trigger": "on_change", "property": "alpha", "from": 0.0, "to": 1.0, "duration": 150, "ease": "quad_in" },
+        { "trigger": "on_decrease", "property": "alpha", "from": 1.0, "to": 0.0, "duration": 800, "ease": "sine_out" }
+      ]
+    },
+    {
       "id": "status_poison", "svg": "status_poison.svg",
       "animations": [
         { "trigger": "ambient", "property": "alpha", "from": 0.5, "to": 1.0, "duration": 1200, "ease": "sine_in_out", "loop": "pingpong" }

@@ -5,6 +5,10 @@
 #include "game.h"
 #include "options.h"
 #include "output.h"
+#include "lighting/rmlui_layer.h"
+#include "rng.h"
+#include "sdltiles.h"
+#include "cata_tiles.h"
 
 /// Map combat_feedback_type to sct_feedback_type for the cSCT entry.
 static sct_feedback_type to_sct_feedback( combat_feedback_type type )
@@ -126,6 +130,53 @@ void spawn_combat_feedback( const Creature &target, const combat_feedback_option
         SCT.vSCT.back().set_is_critical( opts.is_critical );
         SCT.vSCT.back().set_is_triple_crit( opts.is_triple_crit );
         SCT.vSCT.back().set_feedback_type( to_sct_feedback( opts.type ) );
+    }
+
+    // Phase 5: Floating combat text with physics-based trajectory.
+    // Convert target's map position to screen coordinates via tilecontext.
+    if( tilecontext ) {
+        const auto [sx, sy] = tilecontext->player_to_screen( target.bub_pos().xy() );
+
+        // Color by damage type (opts.damage_type is int, cast to damage_type enum).
+        std::uint32_t rgba = 0xFFFFFFFF; // white = physical
+        if( opts.damage_type != 0 ) {
+            const auto dt_enum = static_cast<damage_type>( opts.damage_type );
+            if( dt_enum == DT_HEAT ) {
+                rgba = 0xFF8040FF; // orange = fire
+            } else if( dt_enum == DT_ELECTRIC ) {
+                rgba = 0x40D0FFFF; // cyan = electric
+            } else if( dt_enum == DT_BIOLOGICAL ) {
+                rgba = 0x40FF40FF; // green = bio
+            }
+        }
+
+        auto fscale = 1.0f;
+        auto vy = -30.f;
+        auto ay = 5.f;
+        if( opts.is_triple_crit ) {
+            fscale = 2.0f;
+            vy = -80.f;
+            ay = 20.f;
+        } else if( opts.is_critical ) {
+            fscale = 1.5f;
+            vy = -60.f;
+            ay = 15.f;
+        } else if( opts.is_graze ) {
+            fscale = 0.75f;
+        }
+
+        const auto vx = static_cast<float>( rng( -10, 10 ) );
+        rmlui_layer::combat_text_add( {
+            .x = static_cast<float>( sx ),
+            .y = static_cast<float>( sy ),
+            .text = sText,
+            .rgba = rgba,
+            .font_scale = fscale,
+            .lifetime_ms = 1200.f,
+            .vx = vx,
+            .vy = vy,
+            .ay = ay,
+        } );
     }
 }
 
