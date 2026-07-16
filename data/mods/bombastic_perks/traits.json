@@ -109,16 +109,16 @@
     "purifiable": false,
     "player_display": true
   },
-    {
-      "type": "mutation",
-      "id": "perk_thickblood",
-      "name": "Thickblood",
-      "points": 0,
-      "description": "Your blood is thick and congeals quickly. You bleed less when injured. (BN: no BLEEDSLOW flag available)",
-      "valid": false,
-      "purifiable": false,
-      "player_display": true
-    },
+  {
+    "type": "mutation",
+    "id": "perk_thickblood",
+    "name": "Thickblood",
+    "points": 0,
+    "description": "Your blood is thick and congeals quickly. You bleed less when injured. (BN: no BLEEDSLOW flag available)",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
   {
     "type": "mutation",
     "id": "perk_built_tough",
@@ -152,16 +152,16 @@
     "player_display": true,
     "bodytemp_modifiers": [ -500, 500 ]
   },
-    {
-      "type": "mutation",
-      "id": "perk_gym_rat",
-      "name": "Gym Rat",
-      "points": 0,
-      "description": "Your time exercising has gotten you used to being drenched in your own sweat. Being wet doesn't bother you as much. (wet_protection added)",
-      "valid": false,
-      "purifiable": false,
-      "player_display": true,
-          "wet_protection": [
+  {
+    "type": "mutation",
+    "id": "perk_gym_rat",
+    "name": "Gym Rat",
+    "points": 0,
+    "description": "Your time exercising has gotten you used to being drenched in your own sweat. Being wet doesn't bother you as much. (wet_protection added)",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true,
+    "wet_protection": [
       { "part": "head", "ignored": 5 },
       { "part": "leg_l", "ignored": 16 },
       { "part": "leg_r", "ignored": 16 },
@@ -173,49 +173,49 @@
       { "part": "hand_r", "ignored": 4 },
       { "part": "torso", "ignored": 30 }
     ]
-    },
-    {
-      "type": "mutation",
-      "id": "perk_quickdraw",
-      "name": "Quickdraw",
-      "points": 0,
-      "description": "Practicing with handguns has improved your draw speed. Your melee attacks are 25% faster. (BN: affects attack cost, original CDDA affected item retrieval)",
-      "valid": false,
-      "purifiable": false,
-      "player_display": true,
-      "attackcost_modifier": 0.75
-    },
-    {
-      "type": "mutation",
-      "id": "perk_animal_friend",
-      "name": "Animal Friend",
-      "points": 0,
-      "description": "Even with everything that's happened, you still find solace in nature. Natural animals are less likely to attack you. (BN: ANIMALEMPATH is now a mutation, not a flag)",
-      "valid": false,
-      "purifiable": false,
-      "player_display": true
-    },
-    {
-      "type": "mutation",
-      "id": "perk_vengeful",
-      "name": "Vengeful",
-      "points": 0,
-      "description": "Oh, they're not getting away with THAT. You do +15% damage for two turns after killing an enemy. (BN: adapted from 'after hit' - no on_damage_taken hook)",
-      "valid": false,
-      "purifiable": false,
-      "player_display": true
-    },
-    {
-      "type": "mutation",
-      "id": "perk_twice_shy",
-      "name": "Twice Shy",
-      "points": 0,
-      "description": "Pain is really painful; best to avoid it. For five turns after killing an enemy, you gain +1 bonus dodge and +2 dodge skill. (BN: adapted from 'after hit')",
-      "valid": false,
-      "purifiable": false,
-      "player_display": true,
-      "dodge_modifier": 1
-    },
+  },
+  {
+    "type": "mutation",
+    "id": "perk_quickdraw",
+    "name": "Quickdraw",
+    "points": 0,
+    "description": "Practicing with handguns has improved your draw speed. Your melee attacks are 25% faster. (BN: affects attack cost, original CDDA affected item retrieval)",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true,
+    "attackcost_modifier": 0.75
+  },
+  {
+    "type": "mutation",
+    "id": "perk_animal_friend",
+    "name": "Animal Friend",
+    "points": 0,
+    "description": "Even with everything that's happened, you still find solace in nature. Natural animals are less likely to attack you. (BN: ANIMALEMPATH is now a mutation, not a flag)",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_vengeful",
+    "name": "Vengeful",
+    "points": 0,
+    "description": "Oh, they're not getting away with THAT. You do +15% damage for two turns after killing an enemy. (BN: adapted from 'after hit' - no on_damage_taken hook)",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_twice_shy",
+    "name": "Twice Shy",
+    "points": 0,
+    "description": "Pain is really painful; best to avoid it. For five turns after killing an enemy, you gain +1 bonus dodge and +2 dodge skill. (BN: adapted from 'after hit')",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true,
+    "dodge_modifier": 1
+  },
   {
     "type": "mutation",
     "id": "perk_grit_your_teeth",
@@ -249,47 +249,47 @@
     "player_display": true,
     "active": true
   },
-    {
-      "type": "mutation",
-      "id": "perk_surgical_strikes",
-      "name": "Surgical Strikes",
-      "points": 0,
-      "description": "Careful aim allows you to take down game with little tissue damage. (BN: no gore/blood level API)",
-      "valid": false,
-      "purifiable": false,
-      "player_display": true
-    },
-    {
-      "type": "mutation",
-      "id": "perk_bloody_mess",
-      "name": "Bloody Mess",
-      "points": 0,
-      "description": "For whatever reason you seem to always make a real mess of things. (BN: no gore/blood level API)",
-      "valid": false,
-      "purifiable": false,
-      "player_display": true
-    },
-    {
-      "type": "mutation",
-      "id": "perk_perfect_time",
-      "name": "Perfect Timing",
-      "points": 0,
-      "description": "You used to annoy your friends before the Cataclysm by always being *exactly* on time.",
-      "valid": false,
-      "purifiable": false,
-      "player_display": true,
-      "flags": ["WATCH", "ALARMCLOCK"]
-    },
-    {
-      "type": "mutation",
-      "id": "perk_all_terrain",
-      "name": "All Terrain",
-      "points": 0,
-      "description": "You have a persistent sense of how to move around in sharp and rough terrain. (BN: no ALL_TERRAIN_NAVIGATION flag)",
-      "valid": false,
-      "purifiable": false,
-      "player_display": true
-    },
+  {
+    "type": "mutation",
+    "id": "perk_surgical_strikes",
+    "name": "Surgical Strikes",
+    "points": 0,
+    "description": "Careful aim allows you to take down game with little tissue damage. (BN: no gore/blood level API)",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_bloody_mess",
+    "name": "Bloody Mess",
+    "points": 0,
+    "description": "For whatever reason you seem to always make a real mess of things. (BN: no gore/blood level API)",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_perfect_time",
+    "name": "Perfect Timing",
+    "points": 0,
+    "description": "You used to annoy your friends before the Cataclysm by always being *exactly* on time.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true,
+    "flags": [ "WATCH", "ALARMCLOCK" ]
+  },
+  {
+    "type": "mutation",
+    "id": "perk_all_terrain",
+    "name": "All Terrain",
+    "points": 0,
+    "description": "You have a persistent sense of how to move around in sharp and rough terrain. (BN: no ALL_TERRAIN_NAVIGATION flag)",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
   {
     "type": "mutation",
     "id": "perk_jumpy",
@@ -301,16 +301,16 @@
     "player_display": true,
     "speed_modifier": 1.03
   },
-    {
-      "type": "mutation",
-      "id": "perk_quick_recovery",
-      "name": "Quick Recovery",
-      "points": 0,
-      "description": "You get knocked down, but you get up again. 75% chance to stand up when downed (checked every 5 min). (BN: no on_downed hook, polled)",
-      "valid": false,
-      "purifiable": false,
-      "player_display": true
-    },
+  {
+    "type": "mutation",
+    "id": "perk_quick_recovery",
+    "name": "Quick Recovery",
+    "points": 0,
+    "description": "You get knocked down, but you get up again. 75% chance to stand up when downed (checked every 5 min). (BN: no on_downed hook, polled)",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
   {
     "type": "mutation",
     "id": "perk_sleepy",
@@ -322,17 +322,17 @@
     "player_display": true,
     "fatigue_modifier": -0.5
   },
-    {
-      "type": "mutation",
-      "id": "perk_running_in_heels",
-      "name": "Running in Heels",
-      "points": 0,
-      "description": "You have mastered the ways of the 90s action heroine. Heels only encumber you as much as normal shoes. (BN: flat encumbrance reduction, original CDDA was conditional on wearing high heels)",
-      "valid": false,
-      "purifiable": false,
-      "player_display": true,
-      "encumbrance_always": [ [ "foot_l", -35 ], [ "foot_r", -35 ] ]
-    },
+  {
+    "type": "mutation",
+    "id": "perk_running_in_heels",
+    "name": "Running in Heels",
+    "points": 0,
+    "description": "You have mastered the ways of the 90s action heroine. Heels only encumber you as much as normal shoes. (BN: flat encumbrance reduction, original CDDA was conditional on wearing high heels)",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true,
+    "encumbrance_always": [ [ "foot_l", -35 ], [ "foot_r", -35 ] ]
+  },
   {
     "type": "mutation",
     "id": "perk_duck_and_weave",
@@ -344,75 +344,75 @@
     "player_display": true,
     "dodge_modifier": 5
   },
-    {
-      "type": "mutation",
-      "id": "perk_hobbyist",
-      "name": "Hobbyist",
-      "points": 0,
-      "description": "No work, no social obligations, lots of time to focus on your hobbies. (BN: no learning rate API)",
-      "valid": false,
-      "purifiable": false,
-      "player_display": true
-    },
-    {
-      "type": "mutation",
-      "id": "perk_non_combatant",
-      "name": "Non-Combatant",
-      "points": 0,
-      "description": "Hey, that's against the Geneva Convention! When completely unarmed, you take -25% reduced damage (checked on stat reset). (BN: no conditional armor, uses per-type armor)",
-      "valid": false,
-      "purifiable": false,
-      "player_display": true
-    },
-    {
-      "type": "mutation",
-      "id": "perk_blood_drinker",
-      "name": "Hemophage",
-      "points": 0,
-      "description": "You do not drink…wine. You are immune to the negative consequences of drinking blood. (BN: no HEMOVORE flag, blood drinking heal implemented via perk_blood_drinking_heal)",
-      "valid": false,
-      "purifiable": false,
-      "player_display": true
-    },
-    {
-      "type": "mutation",
-      "id": "perk_red_rage",
-      "name": "Red rage",
-      "points": 0,
-      "description": "You hate the feeling of your blood leaking so much that it empowers you. You deal more melee damage the more you are bleeding (checked every 5 min). (BN: damage scales with bleed intensity)",
-      "valid": false,
-      "purifiable": false,
-      "player_display": true
-    },
-    {
-      "type": "mutation",
-      "id": "perk_peer_pressure",
-      "name": "Peer pressure",
-      "points": 0,
-      "description": "You know how to leverage your allies' presence when talking with others. (BN: no ally count API)",
-      "valid": false,
-      "purifiable": false,
-      "player_display": true
-    },
-    {
-      "type": "mutation",
-      "id": "perk_popeye",
-      "name": "Of Sailors and Spinach",
-      "points": 0,
-      "description": "You spent several years on the high sea and now your muscles visibly swell and clench when you eat raw spinach.",
-      "valid": false,
-      "purifiable": false,
-      "player_display": true,
-      "active": true
-    },
-    {
-      "type": "mutation",
-      "id": "perk_blood_drinking_heal",
-      "name": "The Blood is the Life",
-      "points": 0,
-      "description": "Drinking blood makes you feel really good. Every time you drink blood, you heal a bit of damage and lose a bit of pain.",
-      "valid": false,
-      "purifiable": false,
-      "player_display": true
-    }
-  ]
+  {
+    "type": "mutation",
+    "id": "perk_hobbyist",
+    "name": "Hobbyist",
+    "points": 0,
+    "description": "No work, no social obligations, lots of time to focus on your hobbies. (BN: no learning rate API)",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_non_combatant",
+    "name": "Non-Combatant",
+    "points": 0,
+    "description": "Hey, that's against the Geneva Convention! When completely unarmed, you take -25% reduced damage (checked on stat reset). (BN: no conditional armor, uses per-type armor)",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_blood_drinker",
+    "name": "Hemophage",
+    "points": 0,
+    "description": "You do not drink…wine. You are immune to the negative consequences of drinking blood. (BN: no HEMOVORE flag, blood drinking heal implemented via perk_blood_drinking_heal)",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_red_rage",
+    "name": "Red rage",
+    "points": 0,
+    "description": "You hate the feeling of your blood leaking so much that it empowers you. You deal more melee damage the more you are bleeding (checked every 5 min). (BN: damage scales with bleed intensity)",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_peer_pressure",
+    "name": "Peer pressure",
+    "points": 0,
+    "description": "You know how to leverage your allies' presence when talking with others. (BN: no ally count API)",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_popeye",
+    "name": "Of Sailors and Spinach",
+    "points": 0,
+    "description": "You spent several years on the high sea and now your muscles visibly swell and clench when you eat raw spinach.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true,
+    "active": true
+  },
+  {
+    "type": "mutation",
+    "id": "perk_blood_drinking_heal",
+    "name": "The Blood is the Life",
+    "points": 0,
+    "description": "Drinking blood makes you feel really good. Every time you drink blood, you heal a bit of damage and lose a bit of pain.",
+    "valid": false,
+    "purifiable": false,
+    "player_display": true
+  }
+]

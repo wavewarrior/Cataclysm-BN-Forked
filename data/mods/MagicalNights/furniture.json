@@ -170,7 +170,7 @@
     "flags": [ "TRANSPARENT", "EMITTER", "MINEABLE" ],
     "emissions": [ "emit_glimmer" ],
     "light_emitted": 12,
-    "light_color": [255, 240, 180],
+    "light_color": [ 255, 240, 180 ],
     "bash": {
       "str_min": 25,
       "str_max": 35,

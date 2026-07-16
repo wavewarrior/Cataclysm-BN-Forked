@@ -228,11 +228,7 @@
       ],
       "ranged": { "reduction": [ 10, 10 ], "destroy_threshold": 80 }
     },
-    "acoustics": {
-      "transmission_loss_db": 5.0,
-      "absorption_coefficient": 0.2,
-      "surface_type": "hard"
-    }
+    "acoustics": { "transmission_loss_db": 5.0, "absorption_coefficient": 0.2, "surface_type": "hard" }
   },
   {
     "type": "terrain",
@@ -2074,11 +2070,7 @@
       ],
       "ranged": { "reduction": [ 90, 90 ], "destroy_threshold": 250 }
     },
-    "acoustics": {
-      "transmission_loss_db": 8.0,
-      "absorption_coefficient": 0.05,
-      "surface_type": "hard"
-    }
+    "acoustics": { "transmission_loss_db": 8.0, "absorption_coefficient": 0.05, "surface_type": "hard" }
   },
   {
     "type": "terrain",
@@ -2679,11 +2671,7 @@
       "//": "reduction and destroy_threshold are lower for plain glass",
       "ranged": { "reduction": [ 1, 6 ], "reduction_laser": [ 0, 5 ], "destroy_threshold": 6 }
     },
-    "acoustics": {
-      "transmission_loss_db": 2.0,
-      "absorption_coefficient": 0.02,
-      "surface_type": "glass"
-    }
+    "acoustics": { "transmission_loss_db": 2.0, "absorption_coefficient": 0.02, "surface_type": "glass" }
   },
   {
     "type": "terrain",

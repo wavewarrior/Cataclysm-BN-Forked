@@ -61,7 +61,7 @@
     "coverage": 50,
     "required_str": -1,
     "light_emitted": 10,
-    "light_color": [200, 220, 255],
+    "light_color": [ 200, 220, 255 ],
     "flags": [ "TRANSPARENT", "CONSOLE", "NOITEM", "SHORT", "PERMEABLE" ],
     "connects_to": "COUNTER",
     "deconstruct": {
@@ -113,7 +113,7 @@
     "coverage": 50,
     "required_str": -1,
     "light_emitted": 10,
-    "light_color": [150, 255, 180],
+    "light_color": [ 150, 255, 180 ],
     "flags": [ "TRANSPARENT", "NOITEM", "SHORT", "PERMEABLE" ],
     "crafting_pseudo_item": "fake_artifact_analyzer_console",
     "examine_action": "use_furn_fake_item",

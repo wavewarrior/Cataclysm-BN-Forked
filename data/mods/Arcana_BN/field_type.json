@@ -16,7 +16,7 @@
     "id": "fd_veil_light",
     "type": "field_type",
     "//": "Light is just enough to make the tile it's in fully bright.",
-    "intensity_levels": [ { "name": "strange light", "light_emitted": 10, "light_color": [200, 100, 255] } ],
+    "intensity_levels": [ { "name": "strange light", "light_emitted": 10, "light_color": [ 200, 100, 255 ] } ],
     "half_life": "1 seconds",
     "phase": "plasma",
     "display_field": false

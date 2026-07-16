@@ -3,7 +3,9 @@
     "id": "clair_sense",
     "type": "SPELL",
     "name": { "str": "[Ψ]Clairvoyance" },
-    "description": { "str": "Sense your surroundings with enhanced perception. Grants night vision and ability to see through concealment." },
+    "description": {
+      "str": "Sense your surroundings with enhanced perception. Grants night vision and ability to see through concealment."
+    },
     "valid_targets": [ "self" ],
     "spell_class": "CLAIRSENTIENT",
     "flags": [ "NO_HANDS", "NO_LEGS" ],

@@ -51,7 +51,7 @@
     "color": "light_blue",
     "move_cost": 2,
     "light_emitted": 5,
-    "light_color": [150, 180, 255],
+    "light_color": [ 150, 180, 255 ],
     "trap": "tr_arcane_lab_map_regen_2",
     "flags": [ "TRANSPARENT", "FLAT" ],
     "deconstruct": {

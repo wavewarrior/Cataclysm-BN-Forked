@@ -57,7 +57,7 @@
     "move_cost": 0,
     "coverage": 50,
     "light_emitted": 10,
-    "light_color": [200, 220, 255],
+    "light_color": [ 200, 220, 255 ],
     "roof": "t_flat_roof",
     "flags": [ "TRANSPARENT", "CONSOLE", "NOITEM", "SHORT", "PERMEABLE", "ADV_DECONSTRUCT" ],
     "deconstruct": {

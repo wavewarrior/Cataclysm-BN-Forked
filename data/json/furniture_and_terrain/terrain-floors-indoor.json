@@ -55,7 +55,7 @@
     "color": "white",
     "move_cost": 2,
     "light_emitted": 120,
-    "light_color": [240, 240, 230],
+    "light_color": [ 240, 240, 230 ],
     "roof": "t_flat_roof",
     "flags": [ "TRANSPARENT", "SUPPORTS_ROOF", "FLAT", "ROAD" ],
     "bash": {
@@ -78,7 +78,7 @@
     "color": "white",
     "move_cost": 2,
     "light_emitted": 120,
-    "light_color": [240, 240, 230],
+    "light_color": [ 240, 240, 230 ],
     "roof": "t_flat_roof",
     "looks_like": "t_floor",
     "flags": [ "TRANSPARENT", "FLAMMABLE_HARD", "SUPPORTS_ROOF", "COLLAPSES", "FLAT", "ROAD" ],
@@ -104,7 +104,7 @@
     "color": "light_cyan",
     "move_cost": 2,
     "light_emitted": 120,
-    "light_color": [200, 230, 255],
+    "light_color": [ 200, 230, 255 ],
     "roof": "t_flat_roof",
     "flags": [ "TRANSPARENT", "FLAT", "ROAD" ],
     "bash": {
@@ -403,7 +403,7 @@
     "move_cost": 4,
     "roof": "t_flat_roof",
     "light_emitted": 240,
-    "light_color": [255, 240, 180],
+    "light_color": [ 255, 240, 180 ],
     "flags": [ "TRANSPARENT", "FLAMMABLE_HARD", "SUPPORTS_ROOF", "FLAT", "MINEABLE" ],
     "deconstruct": {
       "ter_set": "t_concrete",
@@ -534,11 +534,7 @@
       "str_min_supported": 100,
       "items": [ { "item": "rag", "count": [ 0, 1 ] }, { "item": "nail", "charges": [ 1, 4 ] } ]
     },
-    "acoustics": {
-      "transmission_loss_db": 0.0,
-      "absorption_coefficient": 0.7,
-      "surface_type": "porous"
-    }
+    "acoustics": { "transmission_loss_db": 0.0, "absorption_coefficient": 0.7, "surface_type": "porous" }
   },
   {
     "type": "terrain",

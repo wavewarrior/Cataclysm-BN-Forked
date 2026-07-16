@@ -47,11 +47,7 @@
       "//": "Variable reduction since might hit more or less material.",
       "ranged": { "reduction": [ 20, 40 ], "destroy_threshold": 210 }
     },
-    "acoustics": {
-      "transmission_loss_db": 8.0,
-      "absorption_coefficient": 0.1,
-      "surface_type": "hard"
-    }
+    "acoustics": { "transmission_loss_db": 8.0, "absorption_coefficient": 0.1, "surface_type": "hard" }
   },
   {
     "type": "terrain",
@@ -546,11 +542,7 @@
       "//": "Stone obstacles have double the expected reduction but lower destroy_threshold in return",
       "ranged": { "reduction": [ 140, 140 ], "destroy_threshold": 140 }
     },
-    "acoustics": {
-      "transmission_loss_db": 12.0,
-      "absorption_coefficient": 0.05,
-      "surface_type": "hard"
-    }
+    "acoustics": { "transmission_loss_db": 12.0, "absorption_coefficient": 0.05, "surface_type": "hard" }
   },
   {
     "type": "terrain",
@@ -582,11 +574,7 @@
       ],
       "ranged": { "reduction": [ 200, 200 ], "destroy_threshold": 600 }
     },
-    "acoustics": {
-      "transmission_loss_db": 10.0,
-      "absorption_coefficient": 0.02,
-      "surface_type": "hard"
-    }
+    "acoustics": { "transmission_loss_db": 10.0, "absorption_coefficient": 0.02, "surface_type": "hard" }
   },
   {
     "type": "terrain",
@@ -856,11 +844,7 @@
       ],
       "ranged": { "reduction": [ 12, 12 ], "destroy_threshold": 150 }
     },
-    "acoustics": {
-      "transmission_loss_db": 6.0,
-      "absorption_coefficient": 0.15,
-      "surface_type": "hard"
-    }
+    "acoustics": { "transmission_loss_db": 6.0, "absorption_coefficient": 0.15, "surface_type": "hard" }
   },
   {
     "type": "terrain",

@@ -7,10 +7,7 @@
     "description": "You have awakened to your latent psionic abilities. Your mental focus enhances your psionic power.",
     "purifiable": false,
     "valid": false,
-    "spells_learned": [
-      [ "telekinetic_pull", 1 ],
-      [ "biokin_overcome_pain", 1 ]
-    ]
+    "spells_learned": [ [ "telekinetic_pull", 1 ], [ "biokin_overcome_pain", 1 ] ]
   },
   {
     "type": "mutation",
@@ -20,12 +17,7 @@
     "description": "You have awakened to telekinetic abilities. You can manipulate objects with your mind.",
     "purifiable": false,
     "valid": false,
-    
-    "spells_learned": [
-      [ "telekinetic_pull", 1 ],
-      [ "telekinetic_push", 1 ],
-      [ "telekinetic_shield", 1 ]
-    ]
+    "spells_learned": [ [ "telekinetic_pull", 1 ], [ "telekinetic_push", 1 ], [ "telekinetic_shield", 1 ] ]
   },
   {
     "type": "mutation",
@@ -35,12 +27,7 @@
     "description": "You have awakened to biokinetic abilities. You can enhance and control your body.",
     "purifiable": false,
     "valid": false,
-    
-    "spells_learned": [
-      [ "biokin_physical_enhance", 1 ],
-      [ "biokin_overcome_pain", 1 ],
-      [ "biokin_heal", 1 ]
-    ]
+    "spells_learned": [ [ "biokin_physical_enhance", 1 ], [ "biokin_overcome_pain", 1 ], [ "biokin_heal", 1 ] ]
   },
   {
     "type": "mutation",
@@ -50,12 +37,7 @@
     "description": "You have awakened to telepathic abilities. You can read and influence minds.",
     "purifiable": false,
     "valid": false,
-    
-    "spells_learned": [
-      [ "telepathic_mind_sense", 1 ],
-      [ "telepathic_blast", 1 ],
-      [ "telepathic_shield", 1 ]
-    ]
+    "spells_learned": [ [ "telepathic_mind_sense", 1 ], [ "telepathic_blast", 1 ], [ "telepathic_shield", 1 ] ]
   },
   {
     "type": "mutation",
@@ -65,12 +47,7 @@
     "description": "You have awakened to pyrokinetic abilities. You can manipulate heat and fire.",
     "purifiable": false,
     "valid": false,
-    
-    "spells_learned": [
-      [ "pyrokinetic_flash", 1 ],
-      [ "pyrokinetic_immolate", 1 ],
-      [ "pyrokinetic_thermoprotect", 1 ]
-    ]
+    "spells_learned": [ [ "pyrokinetic_flash", 1 ], [ "pyrokinetic_immolate", 1 ], [ "pyrokinetic_thermoprotect", 1 ] ]
   },
   {
     "type": "mutation",
@@ -80,12 +57,7 @@
     "description": "You have awakened to electrokinetic abilities. You can manipulate electricity.",
     "purifiable": false,
     "valid": false,
-    
-    "spells_learned": [
-      [ "electro_shock", 1 ],
-      [ "electro_arc", 1 ],
-      [ "electro_armor", 1 ]
-    ]
+    "spells_learned": [ [ "electro_shock", 1 ], [ "electro_arc", 1 ], [ "electro_armor", 1 ] ]
   },
   {
     "type": "mutation",
@@ -95,12 +67,7 @@
     "description": "You have awakened to photokinetic abilities. You can manipulate light.",
     "purifiable": false,
     "valid": false,
-    
-    "spells_learned": [
-      [ "photo_light", 1 ],
-      [ "photo_blind", 1 ],
-      [ "photo_beam", 1 ]
-    ]
+    "spells_learned": [ [ "photo_light", 1 ], [ "photo_blind", 1 ], [ "photo_beam", 1 ] ]
   },
   {
     "type": "mutation",
@@ -110,12 +77,7 @@
     "description": "You have awakened to clairsentient abilities. You can sense beyond normal perception.",
     "purifiable": false,
     "valid": false,
-    
-    "spells_learned": [
-      [ "clair_sense", 1 ],
-      [ "clair_precog", 1 ],
-      [ "clair_see_inv", 1 ]
-    ]
+    "spells_learned": [ [ "clair_sense", 1 ], [ "clair_precog", 1 ], [ "clair_see_inv", 1 ] ]
   },
   {
     "type": "mutation",
@@ -125,12 +87,7 @@
     "description": "You have awakened to teleportation abilities. You can warp space.",
     "purifiable": false,
     "valid": false,
-    
-    "spells_learned": [
-      [ "teleport_short", 1 ],
-      [ "teleport_long", 1 ],
-      [ "teleport_armor", 1 ]
-    ]
+    "spells_learned": [ [ "teleport_short", 1 ], [ "teleport_long", 1 ], [ "teleport_armor", 1 ] ]
   },
   {
     "type": "mutation",
@@ -140,11 +97,6 @@
     "description": "You have awakened to vitakinetic abilities. You can manipulate life energy.",
     "purifiable": false,
     "valid": false,
-    
-    "spells_learned": [
-      [ "vita_heal", 1 ],
-      [ "vita_cure", 1 ],
-      [ "vita_drain", 1 ]
-    ]
+    "spells_learned": [ [ "vita_heal", 1 ], [ "vita_cure", 1 ], [ "vita_drain", 1 ] ]
   }
 ]

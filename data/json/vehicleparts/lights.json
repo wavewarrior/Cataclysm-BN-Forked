@@ -12,7 +12,7 @@
     "//": "essentially an 800lm 10W LED flashlight",
     "epower": -10,
     "bonus": 30,
-    "light_color": [255, 240, 210],
+    "light_color": [ 255, 240, 210 ],
     "folded_volume": "500 ml",
     "breaks_into": [ { "item": "scrap", "count": [ 0, 2 ] } ],
     "requirements": {
@@ -38,7 +38,7 @@
     "durability": 20,
     "description": "A bright light, self-powered by an atomic decay reaction that never stops.  When turned on, it illuminates several squares inside the vehicle.",
     "bonus": 30,
-    "light_color": [180, 220, 255],
+    "light_color": [ 180, 220, 255 ],
     "folded_volume": "1 L",
     "breaks_into": [ { "item": "scrap", "prob": 50 } ],
     "requirements": {
@@ -60,7 +60,7 @@
     "item": "atomic_light",
     "description": "A very dim light, self-powered by an atomic decay reaction that never stops.  When turned on, it illuminates a single square inside the vehicle that isn't suitable for crafting.",
     "bonus": 5,
-    "light_color": [180, 220, 255],
+    "light_color": [ 180, 220, 255 ],
     "folded_volume": "500 ml"
   },
   {
@@ -77,7 +77,7 @@
     "description": "A very bright, circular light that illuminates the area outside the vehicle when turned on.",
     "epower": -200,
     "bonus": 8000,
-    "light_color": [255, 240, 210],
+    "light_color": [ 255, 240, 210 ],
     "damage_modifier": 10,
     "folded_volume": "2 L",
     "breaks_into": [
@@ -121,7 +121,7 @@
     "description": "A bright light that illuminates a narrow cone outside the vehicle when turned on.  During installation, you can choose what direction to point the light, so multiple headlights can illuminate the sides or rear, as well as the front.",
     "epower": -100,
     "bonus": 8000,
-    "light_color": [255, 240, 210],
+    "light_color": [ 255, 240, 210 ],
     "damage_modifier": 10,
     "folded_volume": "250 ml",
     "breaks_into": [ { "item": "cable", "charges": [ 1, 4 ] }, { "item": "scrap", "count": [ 0, 2 ] } ],
@@ -149,7 +149,7 @@
     "description": "A small, lightweight, bright light that illuminates a narrow cone outside the vehicle when turned on.  During installation, you can choose what direction to point the light, so multiple headlights can illuminate the sides or rear, as well as the front.",
     "epower": -187,
     "bonus": 8000,
-    "light_color": [255, 240, 210],
+    "light_color": [ 255, 240, 210 ],
     "damage_modifier": 10,
     "folded_volume": "250 ml",
     "breaks_into": [ { "item": "cable", "charges": [ 1, 4 ] }, { "item": "scrap", "count": [ 0, 2 ] } ],
@@ -206,7 +206,7 @@
     "//": "essentially a pair of overpowered RGB LED flashlights",
     "epower": -10,
     "bonus": 500,
-    "light_color": [180, 220, 255],
+    "light_color": [ 180, 220, 255 ],
     "damage_modifier": 10,
     "folded_volume": "500 ml",
     "breaks_into": [
@@ -260,7 +260,7 @@
     "durability": 400,
     "epower": -10,
     "bonus": 30,
-    "light_color": [255, 240, 210],
+    "light_color": [ 255, 240, 210 ],
     "breaks_into": [
       { "item": "steel_lump", "count": [ 4, 6 ] },
       { "item": "steel_chunk", "count": [ 4, 6 ] },

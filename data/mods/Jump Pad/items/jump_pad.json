@@ -33,7 +33,7 @@
     "required_str": -1,
     "symbol": "_",
     "light_emitted": 10,
-    "light_color": [255, 100, 255],
+    "light_color": [ 255, 100, 255 ],
     "color": "magenta",
     "active": [ "countdown", { "timer": "5 s" } ],
     "flags": [ "LADDER", "TRANSPARENT", "SEEN_FROM_ABOVE" ]
