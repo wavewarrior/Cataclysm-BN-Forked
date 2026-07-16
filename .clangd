@@ -1,3 +1,6 @@
+Index:
+  Background: Build
+
 Style:
   QuotedHeaders: "src/.*"
 

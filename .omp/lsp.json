@@ -1,7 +1,5 @@
 {
   "servers": {
-    "clangd": {
-      "disabled": true
-    }
+    "clangd": {}
   }
 }
