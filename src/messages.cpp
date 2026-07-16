@@ -117,6 +117,7 @@ struct game_message : public JsonDeserializer, public JsonSerializer {
         jsout.end_object();
     }
 };
+using Messages::rich_message;
 
 class messages_impl
 {

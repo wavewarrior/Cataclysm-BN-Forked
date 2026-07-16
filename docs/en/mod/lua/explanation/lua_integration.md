@@ -2,13 +2,13 @@
 
 This document describes implementation details behind Lua integration in Cataclysm: Bright Nights.
 
-BN uses Lua 5.3.6 to run scripts and relies on sol2 v3.3.0 for bindings on C++ side.
+BN uses Lua 5.4.8 to run scripts and relies on sol2 v3.3.0 for bindings on C++ side.
 
 ## C++ layout
 
 ### Lua source files
 
-To simplify build setup and improve portability we bundle `Lua 5.3.6` source code in `src/lua/`
+To simplify build setup and improve portability we bundle `Lua 5.4.8` source code in `src/lua/`
 directory and have the build systems compile it and link into the game executable and library for
 tests.
 

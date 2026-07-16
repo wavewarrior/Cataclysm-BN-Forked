@@ -2,7 +2,7 @@
 
 ## Useful links
 
-- [Lua 5.3 Reference Manual](https://www.lua.org/manual/5.3/)
+- [Lua 5.4 Reference Manual](https://www.lua.org/manual/5.4/)
 - [Sol2 documentation](https://sol2.readthedocs.io/en/latest/)
 - [Programming in Lua (first edition)](https://www.lua.org/pil/contents.html)
 
