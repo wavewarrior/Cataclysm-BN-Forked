@@ -30,7 +30,7 @@
                 <div class="mm-action-list" data-if="show_submenu">
                     <div class="mm-action-row" data-for="s : submenu"
                          data-class-selected="s.selected"
-                         data-event-click="on_sub(s_index)" data-rml="s.text_rml"></div>
+                         data-event-click="on_sub(it_index)" data-rml="s.text_rml"></div>
                 </div>
             </div>
             <div class="mm-right-panel">

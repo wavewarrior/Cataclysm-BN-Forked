@@ -103,7 +103,7 @@ body {
     display: flex;
     flex-direction: column;
     padding-left: 12dp;
-    border-left: 1dp dotted #2a2a3a;
+    border-left: 1dp solid #2a2a3a;
 }
 
 .mm-section-header {
