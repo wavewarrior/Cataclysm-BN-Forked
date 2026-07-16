@@ -125,8 +125,15 @@ void registry::update( const std::string &key, const std::string &icon, double v
     // Start one tween for a spec (used by ambient + critical-enter). For
     // color_blend, latch the spec's target colour onto the channel.
     const auto start = [&]( const anim_spec & sp ) {
-        st.active[sp.prop] = ui_tween::tween{
-            sp.from, sp.to, now, sp.duration_ms, sp.ease, sp.loop, sp.repeats };
+        if( sp.ease == ui_tween::ease_curve::spring ) {
+            auto &spr = st.springs[sp.prop];
+            spr.position = sp.from;
+            spr.target = sp.to;
+            spr.velocity = 0.f;
+        } else {
+            st.active[sp.prop] = ui_tween::tween{
+                sp.from, sp.to, now, sp.duration_ms, sp.ease, sp.loop, sp.repeats };
+        }
         if( sp.prop == anim_prop::color_blend ) {
             st.blend_color = sp.blend_color;
         }
@@ -169,9 +176,21 @@ void registry::update( const std::string &key, const std::string &icon, double v
                 const auto ex = st.active.find( sp.prop );
                 if( ex != st.active.end() ) {
                     from = ex->second.value_at( now );
+                } else {
+                    const auto si = st.springs.find( sp.prop );
+                    if( si != st.springs.end() ) {
+                        from = si->second.position;
+                    }
                 }
-                st.active[sp.prop] = ui_tween::tween{
-                    from, sp.to, now, sp.duration_ms, sp.ease, sp.loop, sp.repeats };
+                if( sp.ease == ui_tween::ease_curve::spring ) {
+                    auto &spr = st.springs[sp.prop];
+                    spr.position = from;
+                    spr.target = sp.to;
+                    spr.velocity = 0.f;
+                } else {
+                    st.active[sp.prop] = ui_tween::tween{
+                        from, sp.to, now, sp.duration_ms, sp.ease, sp.loop, sp.repeats };
+                }
                 if( sp.prop == anim_prop::color_blend ) {
                     st.blend_color = sp.blend_color;
                 }
@@ -202,11 +221,22 @@ void registry::update( const std::string &key, const std::string &icon, double v
                 const auto ex = st.active.find( sp.prop );
                 if( ex != st.active.end() ) {
                     from = ex->second.value_at( now );
+                } else {
+                    const auto si = st.springs.find( sp.prop );
+                    if( si != st.springs.end() ) {
+                        from = si->second.position;
+                    }
                 }
-                // Short ease back to rest (reuse the spec's ease/duration).
-                st.active[sp.prop] = ui_tween::tween{
-                    from, identity_of( sp.prop ), now, sp.duration_ms, sp.ease,
-                    ui_tween::tween_loop::once, 0 };
+                if( sp.ease == ui_tween::ease_curve::spring ) {
+                    auto &spr = st.springs[sp.prop];
+                    spr.position = from;
+                    spr.target = identity_of( sp.prop );
+                    spr.velocity = 0.f;
+                } else {
+                    st.active[sp.prop] = ui_tween::tween{
+                        from, identity_of( sp.prop ), now, sp.duration_ms, sp.ease,
+                        ui_tween::tween_loop::once, 0 };
+                }
             }
         }
     }
@@ -223,6 +253,45 @@ icon_transform registry::sample( const std::string &key, std::uint32_t now ) con
     const channel_state &st = sit->second;
     out.blend_color = st.blend_color;
     out.pivot_y = st.pivot_y;
+
+    // Compute dt for spring stepping.
+    const float dt = st.last_sample_ms > 0
+                     ? std::max( 0.0f, static_cast<float>( now - st.last_sample_ms ) ) / 1000.0f
+                     : 0.0f;
+    st.last_sample_ms = now;
+
+    // Step springs and read positions.
+    for( auto it = st.springs.begin(); it != st.springs.end(); ) {
+        it->second.step( dt );
+        if( it->second.settled() ) {
+            it = st.springs.erase( it );
+        } else {
+            const float v = it->second.position;
+            switch( it->first ) {
+                case anim_prop::scale:
+                    out.scale = v;
+                    break;
+                case anim_prop::scale_y:
+                    out.scale_y = v;
+                    break;
+                case anim_prop::alpha:
+                    out.alpha = v;
+                    break;
+                case anim_prop::offset_y:
+                    out.offset_y = v;
+                    break;
+                case anim_prop::rotation:
+                    out.rotation = v;
+                    break;
+                case anim_prop::color_blend:
+                    out.blend = v;
+                    break;
+            }
+            ++it;
+        }
+    }
+
+    // Regular tweens (Penner curves).
     for( const auto &pr : st.active ) {
         const float v = pr.second.value_at( now );
         switch( pr.first ) {
@@ -257,6 +326,10 @@ for( const auto &kv : states_ ) {
                 return true;
             }
         }
+        // Springs that haven't settled keep the sidebar live.
+        if( !kv.second.springs.empty() ) {
+            return true;
+        }
     }
     return false;
 }
@@ -264,6 +337,10 @@ for( const auto &kv : states_ ) {
 void registry::clear()
 {
     states_.clear();
+}
+void registry::forget( const std::string &key )
+{
+    states_.erase( key );
 }
 
 registry &get()

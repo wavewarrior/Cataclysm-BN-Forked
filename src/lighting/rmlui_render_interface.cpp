@@ -15,6 +15,7 @@
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
+#include <optional>
 #include <functional>
 #include <unordered_map>
 #include <vector>
@@ -30,11 +31,13 @@ namespace {
 constexpr std::uint64_t KEEP_FRAMES = 4;
 
 // Per-RenderGeometry vertex uniform (register b0, space1 in rmlui.vert.hlsl).
+// 80 bytes: 16-byte translation/viewport + 64-byte transform matrix.
 struct vert_params {
     float translation_x;
     float translation_y;
     float viewport_w;
     float viewport_h;
+    float transform[16]; // column-major 4x4; identity when no CSS transform
 };
 
 // Gradient fragment uniform (register b0, space3 in rmlui_gradient.frag.hlsl).
@@ -96,6 +99,9 @@ struct rmlui_render_interface::impl {
 
     bool scissor_enabled = false;
     Rml::Rectanglei scissor{};
+
+    // CSS transform (Phase 1). Set by SetTransform, applied in RenderGeometry/RenderShader.
+    std::optional<Rml::Matrix4f> active_transform;
 
     std::uint32_t compiles_in_pass = 0;
     std::uint32_t textures_in_pass = 0;
@@ -527,10 +533,24 @@ void rmlui_render_interface::RenderGeometry(
     }
     SDL_SetGPUScissor(p->rp, &sc);
 
-    const vert_params
-        vp{translation.x, translation.y, static_cast<float>(p->proj_w),
-           static_cast<float>(p->proj_h)};
-    SDL_PushGPUVertexUniformData(p->cb, 0, &vp, sizeof(vp));
+    vert_params vp{};
+    if( p->active_transform.has_value() ) {
+        // Bake translation into the transform matrix to avoid double-applying.
+        auto tf = p->active_transform.value();
+        auto *raw = tf.data();
+        raw[12] += translation.x;
+        raw[13] += translation.y;
+        std::memcpy( vp.transform, raw, sizeof( vp.transform ) );
+    } else {
+        vp.translation_x = translation.x;
+        vp.translation_y = translation.y;
+        std::memset( vp.transform, 0, sizeof( vp.transform ) );
+        vp.transform[0] = 1.f, vp.transform[5] = 1.f,
+        vp.transform[10] = 1.f, vp.transform[15] = 1.f;
+    }
+    vp.viewport_w = static_cast<float>( p->proj_w );
+    vp.viewport_h = static_cast<float>( p->proj_h );
+    SDL_PushGPUVertexUniformData( p->cb, 0, &vp, sizeof( vp ) );
 
     SDL_DrawGPUIndexedPrimitives(p->rp, g.idx_count, 1, 0, 0, 0);
 }
@@ -653,10 +673,23 @@ void rmlui_render_interface::RenderShader(
     }
     SDL_SetGPUScissor(p->rp, &sc);
 
-    const vert_params
-        vp{translation.x, translation.y, static_cast<float>(p->proj_w),
-           static_cast<float>(p->proj_h)};
-    SDL_PushGPUVertexUniformData(p->cb, 0, &vp, sizeof(vp));
+    vert_params vp{};
+    if( p->active_transform.has_value() ) {
+        auto tf = p->active_transform.value();
+        auto *raw = tf.data();
+        raw[12] += translation.x;
+        raw[13] += translation.y;
+        std::memcpy( vp.transform, raw, sizeof( vp.transform ) );
+    } else {
+        vp.translation_x = translation.x;
+        vp.translation_y = translation.y;
+        std::memset( vp.transform, 0, sizeof( vp.transform ) );
+        vp.transform[0] = 1.f, vp.transform[5] = 1.f,
+        vp.transform[10] = 1.f, vp.transform[15] = 1.f;
+    }
+    vp.viewport_w = static_cast<float>( p->proj_w );
+    vp.viewport_h = static_cast<float>( p->proj_h );
+    SDL_PushGPUVertexUniformData( p->cb, 0, &vp, sizeof( vp ) );
     SDL_PushGPUFragmentUniformData(p->cb, 0, &gp, sizeof(gp));
 
     SDL_DrawGPUIndexedPrimitives(p->rp, g.idx_count, 1, 0, 0, 0);
@@ -775,6 +808,13 @@ void rmlui_render_interface::EnableScissorRegion(bool enable) { p->scissor_enabl
 void rmlui_render_interface::SetScissorRegion(Rml::Rectanglei region) {
     p->scissor = region;
     p->scissor_enabled = true;
+}
+void rmlui_render_interface::SetTransform(const Rml::Matrix4f* transform) {
+    if (transform) {
+        p->active_transform = *transform;
+    } else {
+        p->active_transform.reset();
+    }
 }
 
 } // namespace lighting

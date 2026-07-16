@@ -143,6 +143,18 @@ TEST_CASE( "registry without specs never animates (opt-in)", "[ui_tween][sidebar
     CHECK_FALSE( r.any_active( 1100 ) );
     CHECK( r.sample( "val_speed", 1100 ).scale == Catch::Approx( 1.0f ) );
 }
+TEST_CASE( "registry forget removes state and stops tweens", "[ui_tween][sidebar_anim]" )
+{
+    sidebar_anim::registry r;
+    r.bind_specs( { { "heart", { pop_spec() } } } );
+    r.update( "val_hp", "heart", 50.0, false, 1000 );  // prime
+    r.update( "val_hp", "heart", 40.0, false, 1100 );  // change -> pop starts
+    CHECK( r.any_active( 1150 ) );                       // tween is running
+
+    r.forget( "val_hp" );
+    CHECK_FALSE( r.any_active( 1200 ) );                  // stopped
+    CHECK( r.sample( "val_hp", 1200 ).scale == Catch::Approx( 1.0f ) ); // identity
+}
 
 TEST_CASE( "registry directional scale_y selects pivot by change sign", "[ui_tween][sidebar_anim]" )
 {

@@ -141,6 +141,27 @@ void world_text_begin();
 // Queue one text item for this frame. screen_x/screen_y = physical-pixel
 // position of the text's top-left; rgba = 0xRRGGBBAA (alpha 0xFF = opaque).
 void world_text_add(float screen_x, float screen_y, const std::string& utf8, unsigned int rgba);
+// --- Floating combat text (Phase 5) ---
+// Arcing damage/healing numbers with trajectory, scaling, and lifecycle.
+// Extends the world_text layer with per-item physics.
+
+// Options for submitting a combat text item.
+struct combat_text_options {
+    float x = 0.f;           // initial screen X (logical px)
+    float y = 0.f;           // initial screen Y (logical px)
+    std::string text;        // text to display
+    unsigned int rgba = 0xFFFFFFFFu; // 0xRRGGBBAA
+    float font_scale = 1.0f; // 1.0 = normal, 1.5 = crit
+    float lifetime_ms = 1200.f;
+    float vx = 0.f;          // horizontal velocity px/sec (scatter)
+    float vy = -30.f;        // vertical velocity px/sec (negative = up)
+    float ay = 5.f;          // vertical acceleration px/sec^2 (gravity)
+};
+
+// Submit a floating combat text item.
+auto combat_text_add( const combat_text_options &opts ) -> void;
+auto combat_text_tick( float dt_ms ) -> void;
+auto combat_text_active() -> bool;
 
 // True if any world-text items are queued this frame (render-gate input).
 bool world_text_active();

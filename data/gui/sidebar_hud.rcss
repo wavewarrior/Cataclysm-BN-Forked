@@ -212,3 +212,25 @@ body {
 .tbar-fill {
     height: 100%;
 }
+/* ========== DAMAGE VIGNETTE ========== */
+#hud-vignette {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 20;
+    opacity: 0;
+    decorator: radial-gradient( farthest-corner, #00000000, #e0505099 );
+}
+/* ========== ENVIRONMENTAL TINTING ========== */
+.env-night   { opacity: 0.85; }
+.env-fire    { background-color: rgba(255, 100, 30, 0.04); }
+.env-rad     { background-color: rgba(30, 255, 60, 0.04); }
+.env-cold    { background-color: rgba(100, 150, 255, 0.04); }
+
+/* Smooth transitions for tint changes */
+#hud-topbar, #hud-botbar, #hud-dock, #hud-vitals {
+    transition: background-color 0.8s, opacity 0.8s;
+}

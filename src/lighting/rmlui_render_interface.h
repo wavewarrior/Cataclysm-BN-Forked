@@ -72,6 +72,9 @@ public:
 
     void EnableScissorRegion(bool enable) override;
     void SetScissorRegion(Rml::Rectanglei region) override;
+    // CSS transform support (Phase 1). RmlUi calls SetTransform before rendering
+    // elements with CSS transform. nullptr clears the transform.
+    void SetTransform(const Rml::Matrix4f* transform) override;
 
     // Gradient decorators (linear/radial/conic + repeating). Without these,
     // RmlUi gradient decorators silently render nothing on this backend.

@@ -96,6 +96,30 @@
         { "trigger": "ambient", "property": "offset_y", "from": 5, "to": 0, "duration": 200, "ease": "back_out", "loop": "once" },
         { "trigger": "ambient", "property": "alpha", "from": 0.0, "to": 1.0, "duration": 200, "ease": "quad_out", "loop": "once" }
       ]
+    },
+    {
+      "id": "status_poison", "svg": "status_poison.svg",
+      "animations": [
+        { "trigger": "ambient", "property": "alpha", "from": 0.5, "to": 1.0, "duration": 1200, "ease": "sine_in_out", "loop": "pingpong" }
+      ]
+    },
+    {
+      "id": "status_fire", "svg": "status_fire.svg",
+      "animations": [
+        { "trigger": "ambient", "property": "scale", "from": 1.0, "to": 1.1, "duration": 800, "ease": "sine_in_out", "loop": "pingpong" }
+      ]
+    },
+    {
+      "id": "status_bleed", "svg": "status_bleed.svg",
+      "animations": [
+        { "trigger": "ambient", "property": "alpha", "from": 0.3, "to": 1.0, "duration": 600, "ease": "sine_in_out", "loop": "pingpong" }
+      ]
+    },
+    {
+      "id": "status_rad", "svg": "status_rad.svg",
+      "animations": [
+        { "trigger": "ambient", "property": "rotation", "from": -3, "to": 3, "duration": 1000, "ease": "sine_in_out", "loop": "pingpong" }
+      ]
     }
   ]
 }

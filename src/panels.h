@@ -135,6 +135,8 @@ std::string sidebar_hud_coverage_report();
 int sidebar_hud_top_rows();    // = 2 when the HUD can render, else 0
 int sidebar_hud_bottom_rows(); // = 1 when the HUD can render, else 0
 
+// Tick HUD animations (advance tweens, apply CSS properties). Called each render frame.
+auto sidebar_hud_anim_tick() -> void;
 class panel_manager
 {
     public:

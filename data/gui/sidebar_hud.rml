@@ -40,5 +40,7 @@
     <div id="hud-hotbar">
         <div class="hud-strip-row" data-rml="hotbar_rml"></div>
     </div>
+    <!-- Damage vignette overlay: radial red gradient at edges, fades in/out -->
+    <div id="hud-vignette"></div>
 </body>
 </rml>

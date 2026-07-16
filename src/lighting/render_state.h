@@ -24,7 +24,9 @@
 #include "gpu_geometry.h"
 #include "gpu_sdf_pass.h"
 #include "rain_effect.h"
+#include "hud_particle_effect.h"
 #include "sdf_pass.h"
+#include "sound_wave_pass.h"
 #include "sky_sun_pass.h"
 #include "sprite_batcher.h"
 #include "tonemap_pass.h"
@@ -336,6 +338,12 @@ public:
     // refresh_display between world pass and tonemap; draws droplets onto
     // world_target then runs a fullscreen splat fade/accumulate pass.
     rain_effect& rain() noexcept { return rain_; }
+    // GPU shader-based sound wave visualization (expanding ring wavefronts).
+    // Driven from refresh_display inside the world pass, after tiles.
+    sound_wave_pass& sound_waves() noexcept { return sound_waves_; }
+    // Atmospheric HUD particle effects (embers, dust, pollen, snow).
+    // Driven from composite_swapchain_pass_b after RmlUi renders.
+    hud_particle_effect& hud_particles() noexcept { return hud_particles_; }
 
     // GPU JFA SDF pass (P3). Three compute dispatches: seed → flood → resolve.
     gpu_sdf_pass& gpu_sdf() noexcept { return gpu_sdf_; }
@@ -434,8 +442,10 @@ private:
     gi_compute_pass gi_;
     sky_sun_pass sky_;
     bloom_pass bloom_;
+    hud_particle_effect hud_particles_;
     volumetric_pass volumetric_;
     rain_effect rain_;
+    sound_wave_pass sound_waves_;
     gpu_sdf_pass gpu_sdf_;
 };
 

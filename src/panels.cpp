@@ -31,6 +31,7 @@
 #include "character_effects.h"
 #include "character_functions.h"
 #include "character_martial_arts.h"
+#include "hud_shake.h"
 #include "character_oracle.h"
 #include "color.h"
 #include "cursesdef.h"
@@ -748,6 +749,7 @@ struct vbar_options {
     nc_color fill = c_white;
     bool thin = false;
     bool allow_crit = true;
+    bool use_gradient = false; // HP bars use green→yellow→red gradient
     std::string text;
     std::string id; // element id for animation targeting
 };
@@ -759,7 +761,38 @@ auto vbar_rml( const vbar_options &o ) -> std::string
 {
     const int pct = o.max > 0 ? std::clamp( o.cur * 100 / o.max, 0, 100 ) : 0;
     const bool crit = o.allow_crit && o.max > 0 && pct < 25;
-    const std::string fill_hex = nc_color_to_hex( crit ? c_light_red : o.fill );
+    const std::string fill_hex = [&]() -> std::string {
+        if( crit )
+    {
+        return "#e04040ff";
+    }
+    if( !o.use_gradient )
+    {
+        return nc_color_to_hex( o.fill );
+        }
+        // 3-stop HP gradient: green (#40c040) above 66%, yellow (#c0c040) at 33-66%,
+        // red (#e05050) below 33%. Interpolate between stops for smooth transitions.
+        unsigned char r = 0, g = 0, b = 0;
+        if( pct >= 66 )
+    {
+        const float t = static_cast<float>( pct - 66 ) / 34.f;
+            r = static_cast<unsigned char>( std::lerp( 0xc0, 0x40, t ) );
+            g = static_cast<unsigned char>( std::lerp( 0xc0, 0xc0, t ) );
+            b = static_cast<unsigned char>( std::lerp( 0x40, 0x40, t ) );
+        } else if( pct >= 33 )
+    {
+        const float t = static_cast<float>( pct - 33 ) / 33.f;
+            r = static_cast<unsigned char>( std::lerp( 0xe0, 0xc0, t ) );
+            g = static_cast<unsigned char>( std::lerp( 0x50, 0xc0, t ) );
+            b = static_cast<unsigned char>( std::lerp( 0x50, 0x40, t ) );
+        } else
+        {
+            r = 0xe0;
+            g = 0x50;
+            b = 0x50;
+        }
+        return std::format( "#{:02x}{:02x}{:02x}ff", r, g, b );
+    }();
     const std::string text_suffix = crit ? " !!" : "";
     const std::string thin_class = o.thin ? " thin" : "";
     const std::string crit_class = crit ? " crit" : "";
@@ -805,12 +838,13 @@ auto hud_vitals( avatar &u ) -> std::string
         const std::string label_hex = nc_color_to_hex( u.limb_color( bp.id(), true, true, true ) );
         const std::string bar_id = "vbar_" + bp.id().str();
         out += vbar_rml( { .cur = hp_cur, .max = hp_max, .fill = fill, .thin = false,
-                           .allow_crit = allow_crit, .text = label, .id = bar_id } );
+                           .allow_crit = allow_crit, .use_gradient = true, .text = label, .id = bar_id } );
 
         // Feed animation: HP percentage normalized 0-1, critical when <25%
         const double norm = hp_max > 0 ? static_cast<double>( hp_cur ) / hp_max : 0.0;
         hud_anim::feed( { .element_id = bar_id, .spec_icon = "hud_vbar",
                           .value = norm, .is_critical = allow_crit && norm < 0.25 } );
+
     }
 
     // Stamina thin bar
@@ -994,6 +1028,29 @@ auto hud_botbar( avatar &u ) -> std::string
             joined += string_format( " (+%d)", static_cast<int>( effects.size() - max_shown ) );
         }
         left += colorize( joined, c_light_gray );
+    }
+    // Feed status effect animations (Phase 7): map effect names to animation specs.
+    {
+        const auto feed_status_anim = [&]( const std::string & nm, const std::string & spec ) {
+            hud_anim::feed( { .element_id = "status-" + spec, .spec_icon = "status_" + spec,
+                              .value = 1.0, .is_critical = false } );
+        };
+        for( const auto &[nm, desc] : effects ) {
+            if( nm.find( _( "Poison" ) ) != std::string::npos ) {
+                feed_status_anim( nm, "poison" );
+            }
+            if( nm.find( _( "On Fire" ) ) != std::string::npos ||
+                nm.find( _( "Burning" ) ) != std::string::npos ) {
+                feed_status_anim( nm, "fire" );
+            }
+            if( nm.find( _( "Bleeding" ) ) != std::string::npos ) {
+                feed_status_anim( nm, "bleed" );
+            }
+            if( nm.find( _( "Radiation" ) ) != std::string::npos ||
+                nm.find( _( "Irradiated" ) ) != std::string::npos ) {
+                feed_status_anim( nm, "rad" );
+            }
+        }
     }
 
     // --- Middle: TARGET with inline HP bar ---
@@ -1206,6 +1263,47 @@ void sidebar_hud_sync( avatar &u )
     g_hud_data->handle.DirtyVariable( "vitals_rml" );
 
     g_hud_data->minimap_rml = hud_map( u );
+    // Detect HP decrease for screen shake (Phase 4).
+    {
+        int total_hp = 0;
+        for( const bodypart_id &bp : u.get_all_body_parts( true ) ) {
+            total_hp += u.get_part_hp_cur( bp );
+        }
+        static int prev_total_hp = -1;
+        if( prev_total_hp >= 0 && total_hp < prev_total_hp ) {
+            const int dmg = prev_total_hp - total_hp;
+            const int max_hp = u.get_hp_max();
+            const float intensity = std::clamp( static_cast<float>( dmg ) / max_hp, 0.0f, 1.0f );
+            hud_shake::trigger( intensity );
+        }
+        prev_total_hp = total_hp;
+    }
+    // Environmental HUD tinting (Phase 6): apply CSS classes based on conditions.
+    {
+        const auto apply_env_classes = [&]( const char *id ) {
+            Rml::Element *el = g_hud_doc->GetElementById( id );
+            if( el == nullptr ) {
+                return;
+            }
+            // Night: desaturate HUD (21:00 - 06:00)
+            const int hour = hour_of_day<int>( calendar::turn );
+            const bool is_night = hour >= 21 || hour < 6;
+            el->SetClass( "env-night", is_night );
+
+            // Radiation: green tint
+            const bool irradiated = u.get_rad() > 0.0f;
+            el->SetClass( "env-rad", irradiated );
+
+            // Cold: blue tint (< 0°C)
+            const units::temperature temp = get_weather().get_temperature( u.abs_pos() );
+            const bool cold = units::to_celsius( temp ) < 0.0f;
+            el->SetClass( "env-cold", cold );
+        };
+        apply_env_classes( "hud-topbar" );
+        apply_env_classes( "hud-botbar" );
+        apply_env_classes( "hud-dock" );
+        apply_env_classes( "hud-vitals" );
+    }
     g_hud_data->handle.DirtyVariable( "minimap_rml" );
 
     // Sticky autoscroll: check if user is at bottom BEFORE rebuilding content.
@@ -1299,7 +1397,38 @@ auto sidebar_hud_anim_tick() -> void
     if( g_hud_doc == nullptr ) {
         return;
     }
-    hud_anim::tick( g_hud_doc, sidebar_anim::now_ms() );
+
+    // Decay shake before sampling.
+    static std::uint32_t last_ms = 0;
+    const std::uint32_t now = sidebar_anim::now_ms();
+    if( last_ms > 0 ) {
+        const float dt = std::max( 0.0f, static_cast<float>( now - last_ms ) ) / 1000.0f;
+        hud_shake::tick( dt );
+    }
+    last_ms = now;
+
+    hud_anim::tick( g_hud_doc, now );
+
+    // Screen shake (Phase 4): apply margin offsets to HUD containers.
+    const auto offset = hud_shake::sample();
+    const bool shaking = ( offset.dx != 0.0f || offset.dy != 0.0f );
+    const auto apply_shake = [&]( const char *id ) {
+        Rml::Element *el = g_hud_doc->GetElementById( id );
+        if( el == nullptr ) {
+            return;
+        }
+        if( shaking ) {
+            el->SetProperty( "margin-left", std::format( "{:.1f}px", offset.dx ) );
+            el->SetProperty( "margin-top", std::format( "{:.1f}px", offset.dy ) );
+        } else {
+            el->RemoveProperty( "margin-left" );
+            el->RemoveProperty( "margin-top" );
+        }
+    };
+    apply_shake( "hud-topbar" );
+    apply_shake( "hud-botbar" );
+    apply_shake( "hud-dock" );
+    apply_shake( "hud-vitals" );
 }
 
 

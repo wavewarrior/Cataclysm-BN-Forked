@@ -79,6 +79,8 @@ class registry
         // True if any key has a non-settled tween — drives the idle redraw.
         bool any_active( std::uint32_t now ) const;
         // Forget all live animation state (call on game load — see game::setup).
+        // Forget a single key: remove state and stop active tweens.
+        auto forget( const std::string &key ) -> void;
         void clear();
 
     private:
@@ -90,6 +92,10 @@ class registry
             nc_color blend_color = c_white;
             float pivot_y = 0.5f;
             std::map<anim_prop, ui_tween::tween> active;
+            // Spring-damper tweens (Phase 2): mutable so sample() can step them.
+            mutable std::map<anim_prop, ui_tween::spring_state> springs;
+            // Wall-clock ms of the last sample() call (for spring dt).
+            mutable std::uint32_t last_sample_ms = 0;
         };
         std::map<std::string, channel_state> states_;
         std::map<std::string, std::vector<anim_spec>> specs_;

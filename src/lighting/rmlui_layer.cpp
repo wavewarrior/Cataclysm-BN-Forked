@@ -100,6 +100,19 @@ struct world_text_item {
     std::string text;
     unsigned int rgba = 0xFFFFFFFFu;
 };
+// Floating combat text items (Phase 5): arcing damage/healing numbers.
+struct combat_text_item {
+    float x = 0.f, y = 0.f;       // current screen position (logical px)
+    float ox = 0.f, oy = 0.f;     // initial position
+    std::string text;
+    unsigned int rgba = 0xFFFFFFFFu;
+    float font_scale = 1.0f;
+    float lifetime_ms = 1200.f;
+    float age_ms = 0.f;
+    float vx = 0.f, vy = -30.f;   // velocity px/sec
+    float ay = 5.f;               // gravity px/sec^2
+};
+std::vector<combat_text_item> g_combat_text;
 // This frame's submitted items (cleared by world_text_begin, drained next frame).
 std::vector<world_text_item> g_world_text;
 // Persistent single HUD line (e.g. FPS overlay). SET each frame via set_hud_text
@@ -182,6 +195,43 @@ void build_world_text() {
         }
     };
     for (const world_text_item& it : g_world_text) { emit(it); }
+    // Combat text: emit with per-item font_scale and age-based alpha fade.
+    for( const combat_text_item &it : g_combat_text ) {
+        // Age-based alpha: full opacity for first 60%, linear fade to 0 over last 40%.
+        const float life_ratio = it.age_ms / it.lifetime_ms;
+        const float fade_alpha = life_ratio < 0.6f ? 1.0f : 1.0f - ( life_ratio - 0.6f ) / 0.4f;
+        const unsigned int faded_rgba = ( it.rgba & 0xFFFFFF00u )
+                                        | ( static_cast<unsigned int>( ( it.rgba & 0xFFu ) * fade_alpha ) );
+        const Rml::byte r = ( faded_rgba >> 24 ) & 0xFFu;
+        const Rml::byte g = ( faded_rgba >> 16 ) & 0xFFu;
+        const Rml::byte b = ( faded_rgba >> 8 ) & 0xFFu;
+        const Rml::byte a = faded_rgba & 0xFFu;
+        const Rml::ColourbPremultiplied col(
+            static_cast<Rml::byte>( r * a / 255 ), static_cast<Rml::byte>( g * a / 255 ),
+            static_cast<Rml::byte>( b * a / 255 ), a );
+        static const Rml::String world_text_lang;
+        const Rml::TextShapingContext shaping{ world_text_lang };
+        Rml::TexturedMeshList meshes;
+        // Scale the font face by font_scale (crits get 1.5x).
+        const float scaled_px = g_world_text_px * it.font_scale;
+        const Rml::FontFaceHandle scaled_face = fe->GetFontFaceHandle(
+            WORLD_TEXT_FAMILY, Rml::Style::FontStyle::Normal, Rml::Style::FontWeight::Auto,
+            scaled_px );
+        if( scaled_face == 0 ) {
+            continue;
+        }
+        fe->GenerateString( rm, scaled_face, Rml::FontEffectsHandle( 0 ), it.text,
+                            Rml::Vector2f( 0.f, 0.f ), col, 1.0f, shaping, meshes );
+        for( Rml::TexturedMesh &tm : meshes ) {
+            world_text_geom out;
+            out.geom = rm.MakeGeometry( std::move( tm.mesh ) );
+            out.texture = tm.texture;
+            out.pos = Rml::Vector2f(
+                it.x * g_density_ratio + g_world_text_dx,
+                it.y * g_density_ratio + static_cast<float>( scaled_px ) + g_world_text_dy );
+            g_world_geom.push_back( std::move( out ) );
+        }
+    }
     if (g_hud_active) { emit(g_hud_text); }
     // Compile pass: a Render() with no open pass only compiles geometry CPU-side
     // (begin_render_pass not called yet) so upload_pending() can upload it. The
@@ -1082,6 +1132,34 @@ void set_hud_text(float screen_x, float screen_y, const std::string& utf8, unsig
 void world_text_add(float screen_x, float screen_y, const std::string& utf8, unsigned int rgba) {
     if (utf8.empty()) { return; }
     g_world_text.push_back(world_text_item{screen_x, screen_y, utf8, rgba});
+}
+// Combat text: submit a floating damage/healing number.
+auto combat_text_add( const combat_text_options &opts ) -> void
+{
+    g_combat_text.emplace_back( combat_text_item{
+        opts.x, opts.y, opts.x, opts.y,
+        opts.text, opts.rgba, opts.font_scale,
+        opts.lifetime_ms, 0.f, opts.vx, opts.vy, opts.ay } );
+}
+
+// Advance combat text items by dt_ms, remove expired.
+auto combat_text_tick( float dt_ms ) -> void
+{
+    const float dt_sec = dt_ms / 1000.0f;
+    for( auto &item : g_combat_text ) {
+        item.age_ms += dt_ms;
+        item.vy += item.ay * dt_sec;
+        item.x += item.vx * dt_sec;
+        item.y += item.vy * dt_sec;
+    }
+    std::erase_if( g_combat_text, []( const combat_text_item &it ) {
+        return it.age_ms >= it.lifetime_ms;
+    } );
+}
+
+auto combat_text_active() -> bool
+{
+    return !g_combat_text.empty();
 }
 
 bool world_text_active() { return world_text_have(); }

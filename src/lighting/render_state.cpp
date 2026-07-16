@@ -198,6 +198,12 @@ void render_state::init(SDL_Window* host_window) {
         // High-fidelity rain effect: world-targeted falling droplets + splashes.
         rain_.init(device_, world_fmt, static_cast<std::uint32_t>(pw),
                    static_cast<std::uint32_t>(ph));
+        // GPU sound wave visualization pass (expanding ring wavefronts).
+        sound_waves_.init(device_, world_fmt);
+        // Atmospheric HUD particle effects (Phase 8).
+        hud_particles_.init( device_, device_.swapchain_format(),
+                             static_cast<std::uint32_t>( pw ),
+                             static_cast<std::uint32_t>( ph ) );
 
         // GPU JFA SDF pass (P3): seed → flood → resolve on SS-grid. Same max tile
         // extent as the CPU SDF; jfa_sdf_buffer() is scratch output for A/B vs CPU DT.
@@ -221,6 +227,8 @@ void render_state::shutdown() noexcept {
     bloom_.shutdown();
     volumetric_.shutdown();
     rain_.shutdown();
+    sound_waves_.shutdown();
+    hud_particles_.shutdown();
     gpu_sdf_.shutdown();
 
     // Phase 4: release SDF textures.

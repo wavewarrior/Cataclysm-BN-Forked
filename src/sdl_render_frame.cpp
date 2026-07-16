@@ -15,6 +15,7 @@
 #include "game_constants.h"
 #include "map.h"
 #include "debug.h"
+#include "panels.h"
 #include "game.h"
 #include "profile.h"
 #include "output.h"
@@ -30,7 +31,6 @@
 #include "lighting/frame_build.h"
 #include "lighting/rmlui_layer.h"
 #include "lighting/render_state.h"
-#include "sound_visualization.h"
 #include "lighting/sdf_pass.h"
 #include "weather.h"
 #include "weather_type.h"
@@ -823,7 +823,6 @@ auto render_world_pass_w( lighting::render_state &rs,
         rs.rain().record( ctx.cmd_buffer, wt->texture(),
                           wt->width(), wt->height(), rp );
     }
-
     // Animated sound pulses — rendered AFTER tiles so the disc draws on top.
     // Must be here (not in draw_lighting_overlays) because render_world_pass_w
     // clears world_target before drawing tiles; anything written earlier is erased.
@@ -913,8 +912,22 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
         rmlui_layer::set_hud_text( 0.0f, 0.0f, std::string(), 0u );
     }
 
-    const bool rmlui_active = rmlui_layer::active() || rmlui_layer::world_text_active();
+    const bool rmlui_active = rmlui_layer::active() || rmlui_layer::world_text_active()
+                              || rmlui_layer::combat_text_active();
     if( rmlui_active ) {
+        // Advance HUD animation tweens BEFORE new_frame() so that CSS property
+        // changes (SetProperty on opacity/top) are processed by RmlUi's Update()
+        // in the same frame's layout/render pass.
+        sidebar_hud_anim_tick();
+
+        // Advance floating combat text (Phase 5).
+        static std::uint32_t ct_last_ms = 0;
+        const std::uint32_t ct_now = SDL_GetTicks();
+        if( ct_last_ms > 0 ) {
+            const float dt = std::max( 0.0f, static_cast<float>( ct_now - ct_last_ms ) );
+            rmlui_layer::combat_text_tick( dt );
+        }
+        ct_last_ms = ct_now;
         // new_frame()=Update() + prepare()=geometry upload, both BEFORE begin_pass
         // (D3D12: uploads must not land inside the open render pass).
         rmlui_layer::new_frame();
@@ -943,6 +956,21 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
         blit_layer( rs.world_ldr_target() );
     }
     blit_layer( rs.ui_target() );
+    // Atmospheric HUD particles (Phase 8): render after RmlUi, before final blit.
+    {
+        const lighting::hud_particle_params params {
+            .type = lighting::hud_emitter_type::dust, // placeholder — wire env-driven later
+            .spawn_rate = 3.0f,
+            .intensity = 0.5f,
+            .screen_w = static_cast<std::uint32_t>( proj_w ),
+            .screen_h = static_cast<std::uint32_t>( proj_h ),
+        };
+        if( rs.hud_particles().ready() && rs.ui_target() && rs.ui_target()->texture() ) {
+            rs.hud_particles().record( ctx.cmd_buffer, rs.ui_target()->texture(),
+                                       static_cast<std::uint32_t>( proj_w ),
+                                       static_cast<std::uint32_t>( proj_h ), params );
+        }
+    }
 
     // RmlUi (player menus + dev panel + world text) draws into the single swapchain
     // pass (D3D12 single-pass rule).
