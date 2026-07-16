@@ -34,11 +34,11 @@ enum class ease_curve {
 };
 
 // Parse an ease name (e.g. "back_out", "sine_in_out"); unknown -> linear.
-ease_curve string_to_ease( const std::string &s );
+auto string_to_ease( const std::string &s ) -> ease_curve;
 
 // Apply a curve to a normalized progress t. t is clamped to [0,1] first. The
 // returned value may exceed [0,1] for back/elastic (overshoot is the point).
-float apply_ease( ease_curve c, float t );
+auto apply_ease( ease_curve c, float t ) -> float;
 
 enum class tween_loop {
     once,       // play from->to once, then hold at `to`
@@ -47,7 +47,7 @@ enum class tween_loop {
 };
 
 // Parse a loop name ("once"/"loop"/"pingpong"); unknown -> once.
-tween_loop string_to_loop( const std::string &s );
+auto string_to_loop( const std::string &s ) -> tween_loop;
 
 // One animated scalar channel. POD; copy-cheap. `value_at` is the only consumer.
 struct tween {
@@ -63,12 +63,12 @@ struct tween {
 
     // Sampled value at wall-clock `now` (ms). Holds at the start value before
     // `start_ms`, and at the resting value once finished.
-    float value_at( std::uint32_t now ) const;
+    auto value_at( std::uint32_t now ) const -> float;
 
     // True once the tween has reached its resting state and will not change
     // again: `once` past its end, or a finite-repeat loop/pingpong exhausted.
     // Infinite loops/pingpongs never settle (they keep the sidebar live).
-    bool settled( std::uint32_t now ) const;
+    auto settled( std::uint32_t now ) const -> bool;
 };
 // Spring-damper state for organic animations (Phase 2). Uses a damped harmonic
 // oscillator: a = (-k*(pos-target) - c*vel)/mass. Settles naturally instead of

@@ -12,12 +12,12 @@ constexpr float PI = 3.14159265358979323846f;
 
 // from + (to-from)*t, kept local so this TU has no engine dependency and so
 // overshoot (back/elastic eased > 1) propagates correctly.
-inline float lerp_unclamped( float from, float to, float t )
+inline auto lerp_unclamped( float from, float to, float t ) -> float
 {
     return from + ( to - from ) * t;
 }
 
-float bounce_out( float t )
+auto bounce_out( float t ) -> float
 {
     constexpr float n1 = 7.5625f;
     constexpr float d1 = 2.75f;
@@ -35,7 +35,7 @@ float bounce_out( float t )
 }
 } // namespace
 
-ease_curve string_to_ease( const std::string &s )
+auto string_to_ease( const std::string &s ) -> ease_curve
 {
     static const std::map<std::string, ease_curve> m = {
         { "linear", ease_curve::linear },
@@ -69,7 +69,7 @@ ease_curve string_to_ease( const std::string &s )
     return it != m.end() ? it->second : ease_curve::linear;
 }
 
-tween_loop string_to_loop( const std::string &s )
+auto string_to_loop( const std::string &s ) -> tween_loop
 {
     if( s == "loop" ) {
         return tween_loop::loop;
@@ -80,7 +80,7 @@ tween_loop string_to_loop( const std::string &s )
     return tween_loop::once;
 }
 
-float apply_ease( ease_curve c, float t )
+auto apply_ease( ease_curve c, float t ) -> float
 {
     // Clamp progress; endpoints must be exact so a settled tween reads its target.
     if( t <= 0.0f ) {
@@ -177,7 +177,7 @@ float apply_ease( ease_curve c, float t )
     return t;
 }
 
-float tween::value_at( std::uint32_t now ) const
+auto tween::value_at( std::uint32_t now ) const -> float
 {
     if( duration_ms == 0 ) {
         return to;
@@ -219,7 +219,7 @@ float tween::value_at( std::uint32_t now ) const
            : lerp_unclamped( from, to, eased );
 }
 
-bool tween::settled( std::uint32_t now ) const
+auto tween::settled( std::uint32_t now ) const -> bool
 {
     if( duration_ms == 0 ) {
         return true;
@@ -240,7 +240,7 @@ bool tween::settled( std::uint32_t now ) const
     }
     return true;
 }
-void spring_state::step( float dt_seconds )
+auto spring_state::step( float dt_seconds ) -> void
 {
     // Clamp dt to 1/30s to prevent numerical explosion.
     dt_seconds = std::min( dt_seconds, 1.f / 30.f );
@@ -250,7 +250,7 @@ void spring_state::step( float dt_seconds )
     position += velocity * dt_seconds;
 }
 
-bool spring_state::settled( float threshold ) const
+auto spring_state::settled( float threshold ) const -> bool
 {
     return std::abs( position - target ) < threshold
     && std::abs( velocity ) < threshold;
