@@ -4,7 +4,7 @@
 
 [Cataclysm: Bright Nights](https://github.com/CataclysmBN/Cataclysm-BN) is an open-source, procedurally-generated roguelike survival game. Top-down perspective, turn-based gameplay with deep crafting, combat, and base-building systems.
 
-- **Language**: C++20/23 with heavy use of modern features (ranges, concepts, coroutines).
+- **Language**: C++20/23 with heavy use of modern features (ranges, concepts, stackful fibers via minicoro).
 - **Renderer**: SDL3 + Vulkan (tileset-based sprite rendering with advanced lighting).
 - **Content**: JSON-driven — items, recipes, monsters, mutations, mapgens, vehicles, and more are all defined in `data/json/` and loaded via factory classes at startup.
 - **Scripting**: Embedded Lua 5.4 VM for modding and in-game scripting.
@@ -14,7 +14,7 @@
 ## Architecture & Data Flow
 
 - **Global singleton**: `extern std::unique_ptr<game> g` owns all subsystems — world, entities, trackers, event bus, calendar, UI, and input. Refactoring touches this extensively.
-- **Event bus**: `event_bus` class (pub/sub pattern) for decoupled subsystem communication. Events like `EVENT_PLAYER_MOVED`, `EVENT_ITEM_CREATED`, etc.
+- **Event bus**: `event_bus` class (pub/sub pattern) for decoupled subsystem communication. Events are type-safe templates: `event_type::avatar_moves`, `event_type::character_kills_monster`, `event_type::angers_amigara_horrors`, etc.
 - **JSON-driven factories**: `item_factory`, `monster_factory`, `mutation_factory`, `recipe`, `mapgen`, etc. construct all game content from `data/json/` at startup. Factory classes live flat in `src/` (e.g. `item_factory.cpp`, `generic_factory.cpp`).
 - **Type-safe identifiers**: `string_id<T>` template provides compile-time type-safe string identifiers (e.g. `item_type`, `monster_type`).
 - **Entity tracking**: `weak_ptr_fast<T>` and `creature_tracker` for efficient entity lifetime management without full `std::weak_ptr` overhead.
