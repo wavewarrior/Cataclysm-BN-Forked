@@ -1,6 +1,6 @@
-/* Layout for the title screen (Tier 4 #3: main_menu). Centered column: logo, version,
-   horizontal menu row, inline submenu / MOTD-credits scroll, bottom tips. body sized +
-   centered (the missions gotcha). */
+/* Layout for the title screen (Tier 4 #3: main_menu). CoQ-inspired split panels:
+   top title bar, horizontal nav bar with icon glyphs, split left/right content,
+   bottom keybind hints. Palette lives in mainmenu_theme.rcss. */
 
 body {
     display: flex;
@@ -11,41 +11,142 @@ body {
 }
 
 .mm-panel {
-    width: 80%;
-    min-width: 720dp;
-    height: 92%;
+    width: 90%;
+    min-width: 800dp;
+    height: 94%;
+    display: flex;
+    flex-direction: column;
+    padding: 16dp;
+}
+
+/* Top bar: title + version */
+.mm-topbar {
+    flex: 0 0 auto;
     display: flex;
     flex-direction: column;
     align-items: center;
 }
 
-/* ASCII logo — monospace, preserve its spacing, centered. */
-.mm-logo {
-    flex: 0 0 auto;
-    white-space: pre;
+.mm-title-main {
+    font-size: 48dp;
+    font-weight: bold;
     text-align: center;
-    color: {{fg}};
-    margin-bottom: 8dp;
+    letter-spacing: 10dp;
+}
+
+.mm-title-sub {
+    font-size: 20dp;
+    text-align: center;
+    letter-spacing: 4dp;
+    margin-top: 2dp;
 }
 
 .mm-version {
-    flex: 0 0 auto;
-    margin-bottom: 12dp;
+    font-size: 14dp;
+    text-align: center;
+    margin-top: 6dp;
 }
 
-/* Horizontal menu items. */
-.mm-items {
+/* Decorative separator. */
+.mm-separator {
     flex: 0 0 auto;
-    flex-wrap: wrap;
+    height: 1dp;
+    margin: 10dp 0;
+}
+
+/* Horizontal nav bar. */
+.mm-nav {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
     justify-content: center;
+    flex-wrap: wrap;
 }
 
-.mm-items .tab {
+.mm-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 6dp 14dp;
+    margin: 0 4dp;
+}
+
+.mm-nav-icon {
+    display: block;
+    width: 32dp;
+    height: 32dp;
+}
+
+.mm-nav-label {
+    font-size: 14dp;
+    display: block;
+    margin-top: 2dp;
+}
+
+/* Split content area. */
+.mm-content {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+}
+
+.mm-left-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding-right: 12dp;
+}
+
+.mm-right-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding-left: 12dp;
+    border-left: 1dp dotted #2a2a3a;
+}
+
+.mm-section-header {
     flex: 0 0 auto;
+    margin-bottom: 8dp;
 }
 
-/* Inline submenu (sub-options for the selected item). */
-.mm-sub {
+.mm-action-list {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+.mm-action-row {
+    display: block;
+    padding: 3dp 10dp;
+}
+
+/* Scrollable text pane (MOTD/Credits) in right panel. */
+.mm-scroll-text {
+    flex: 1;
+    min-height: 0;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.mm-scroll-line {
+    display: block;
+    white-space: pre-wrap;
+}
+
+/* Context body (right panel non-scroll content). */
+.mm-context-body {
+    flex: 1;
+    min-height: 0;
+    white-space: pre-wrap;
+    overflow-y: auto;
+}
+
+/* Bottom bar. */
+.mm-footer {
     flex: 0 0 auto;
     display: flex;
     flex-direction: column;
@@ -53,33 +154,12 @@ body {
     margin-top: 8dp;
 }
 
-.mm-subrow {
-    display: block;
-    padding: 1dp 8dp;
-    border-radius: 4dp;
-}
-
-.mm-subrow.selected {
-    background-color: {{yellow}};
-    color: {{bg-hard}};
-}
-
-/* MOTD / Credits scrolling text. */
-.mm-motd {
-    flex: 1;
-    min-height: 0;
-    width: 100%;
-    margin-top: 8dp;
-}
-
-.mm-motd-line {
-    display: block;
-    white-space: pre-wrap;
-}
-
 .mm-tips {
-    flex: 0 0 auto;
-    margin-top: 8dp;
     white-space: pre-wrap;
     text-align: center;
+}
+
+.mm-keybinds {
+    text-align: center;
+    margin-top: 4dp;
 }

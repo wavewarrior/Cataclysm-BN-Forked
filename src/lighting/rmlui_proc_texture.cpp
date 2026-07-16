@@ -2,6 +2,7 @@
 
 #include "fstream_utils.h"
 #include "json.h"
+#include "noise_utils.h"
 #include "path_info.h"
 
 #include <algorithm>
@@ -41,40 +42,11 @@ inline void put(std::vector<std::uint8_t>& px, int W, int H, int x, int y, rgba 
 }
 
 // --- Corrosion -------------------------------------------------------------
-// A cheap integer hash (3 ints -> uint32) and bilinearly-interpolated value
-// noise, both seeded so a given panel corrodes identically across launches and
-// stays cache-correct. corrode_keep() decides whether a pixel survives: it eats
-// blobby patches (low-freq noise) plus a little fine grit, both gated by an
-// envelope that peaks at the rim (rim_dist 0) and fades to nothing by
-// corrode_reach px inward, so band glyphs sitting deeper in stay intact.
-inline std::uint32_t corr_hash(int x, int y, unsigned seed) {
-    std::uint32_t h = seed * 2166136261u;
-    h = (h ^ static_cast<std::uint32_t>(x)) * 16777619u;
-    h = (h ^ static_cast<std::uint32_t>(y)) * 16777619u;
-    h ^= h >> 13;
-    h *= 0x5bd1e995u;
-    h ^= h >> 15;
-    return h;
-}
-inline double corr_hash01(int gx, int gy, unsigned seed) {
-    return (corr_hash(gx, gy, seed) & 0xffffffu) / static_cast<double>(0x1000000);
-}
-inline double corr_vnoise(int x, int y, int grid, unsigned seed) {
-    const int G = grid < 1 ? 1 : grid;
-    const int gx = (x >= 0 ? x : x - G + 1) / G; // floor division
-    const int gy = (y >= 0 ? y : y - G + 1) / G;
-    double fx = (x - gx * G) / static_cast<double>(G);
-    double fy = (y - gy * G) / static_cast<double>(G);
-    fx = fx * fx * (3.0 - 2.0 * fx); // smoothstep
-    fy = fy * fy * (3.0 - 2.0 * fy);
-    const double a = corr_hash01(gx, gy, seed);
-    const double b = corr_hash01(gx + 1, gy, seed);
-    const double c = corr_hash01(gx, gy + 1, seed);
-    const double d = corr_hash01(gx + 1, gy + 1, seed);
-    const double top = a + (b - a) * fx;
-    const double bot = c + (d - c) * fx;
-    return top + (bot - top) * fy;
-}
+// corrode_keep() decides whether a pixel survives: it eats blobby patches
+// (low-freq noise) plus a little fine grit, both gated by an envelope that
+// peaks at the rim (rim_dist 0) and fades to nothing by corrode_reach px
+// inward, so band glyphs sitting deeper in stay intact.
+// corr_hash / corr_vnoise live in noise_utils.h (shared with menu_plexus).
 // true = keep the pixel; false = corroded away. `rim_dist` is the pixel's
 // distance (px) from the nearest frame edge it should rot from (0 at the wall).
 inline bool corrode_keep(int x, int y, int rim_dist, unsigned seed) {
@@ -801,6 +773,78 @@ std::vector<std::uint8_t> gen_runic_frame(const std::string& variant, int& out_w
         sz = std::max(16, sz);
         std::vector<std::uint8_t> px = alloc(sz, sz);
         draw_bindrune(px, sz, bseed, ink);
+        return px;
+    }
+
+    // Standalone boxed rune icon: "runic-icon:<size>:<seed>:<rrggbb>".
+    // Renders a single bordered box containing one symmetrical 5x5 band glyph
+    // at the configured glyph_scale — the same visual style as the frame's band
+    // decorations.  Used for main-menu nav icons.
+    if (variant.rfind("runic-icon", 0) == 0) {
+        int sz = 48;
+        unsigned iseed = fnv1a(variant);
+        rgba ink = light_col(cfg);
+        const std::size_t c1 = variant.find(':');
+        if (c1 != std::string::npos) {
+            const std::size_t c2 = variant.find(':', c1 + 1);
+            try {
+                sz = std::stoi(variant.substr(c1 + 1, c2 - c1 - 1));
+                if (c2 != std::string::npos) {
+                    iseed = static_cast<unsigned>(std::stoul(variant.substr(c2 + 1)));
+                    const std::size_t c3 = variant.find(':', c2 + 1);
+                    if (c3 != std::string::npos) {
+                        const unsigned long rgb = std::stoul(variant.substr(c3 + 1), nullptr, 16);
+                        ink = rgba{static_cast<std::uint8_t>((rgb >> 16) & 0xffu),
+                                   static_cast<std::uint8_t>((rgb >> 8) & 0xffu),
+                                   static_cast<std::uint8_t>(rgb & 0xffu), 255};
+                    }
+                }
+            } catch (...) {
+                sz = 48;
+                iseed = fnv1a(variant);
+                ink = light_col(cfg);
+            }
+        }
+        sz = std::max(16, sz);
+        std::vector<std::uint8_t> px = alloc(sz, sz);
+        // Scale: fit a 5-cell glyph + 2px wall + 2px pad inside sz.
+        const int gs = std::max(1, (sz - 4) / 5);
+        const int glyph_w = 5 * gs;
+        const int total = glyph_w + 4; // 2px wall on each side
+        const int ox = (sz - total) / 2; // centre the box
+        const int oy = (sz - total) / 2;
+        // Draw border box.
+        for (int x = ox; x < ox + total; ++x) {
+            put(px, sz, sz, x, oy, ink);
+            put(px, sz, sz, x, oy + total - 1, ink);
+        }
+        for (int y = oy; y < oy + total; ++y) {
+            put(px, sz, sz, ox, y, ink);
+            put(px, sz, sz, ox + total - 1, y, ink);
+        }
+        // Draw the 5x5 mirrored glyph inside.
+        std::mt19937 gen(iseed);
+        std::uniform_int_distribution<int> bit(0, 99);
+        int grid[5][3];
+        for (int gy = 0; gy < 5; ++gy) {
+            for (int gx = 0; gx < 3; ++gx) {
+                grid[gy][gx] = (bit(gen) < cfg.fill_pct) ? 1 : 0;
+            }
+        }
+        const int gx0 = ox + 2; // inside the wall
+        const int gy0 = oy + 2;
+        for (int gy = 0; gy < 5; ++gy) {
+            for (int gx = 0; gx < 5; ++gx) {
+                const int sxg = (gx < 3) ? gx : 4 - gx; // mirror
+                if (grid[gy][sxg] == 1) {
+                    for (int dy = 0; dy < gs; ++dy) {
+                        for (int dx = 0; dx < gs; ++dx) {
+                            put(px, sz, sz, gx0 + gx * gs + dx, gy0 + gy * gs + dy, ink);
+                        }
+                    }
+                }
+            }
+        }
         return px;
     }
 

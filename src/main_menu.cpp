@@ -26,6 +26,7 @@
 #include "mapbuffer.h"
 #include "mapsharing.h"
 #include "messages.h"
+#include "lighting/menu_plexus.h"
 #include "newcharacter.h"
 #include "options.h"
 #include "output.h"
@@ -37,6 +38,7 @@
 #include "rml_util.h"
 #include "safemode_ui.h"
 #include "scenario.h"
+#include "sdltiles.h"
 #include "sdlsound.h"
 #include "sounds.h"
 #include "string_formatter.h"
@@ -49,6 +51,7 @@
 
 #include <RmlUi/Core.h>
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -89,15 +92,21 @@ point prev_submenu_size;
 // --- RmlUi render path (Tier 4 screen #3: the title screen) -----------------
 struct mm_item {
     Rml::String text_rml;
+    Rml::String icon_dec;   // RCSS decorator for bindrune nav icon
     bool selected = false;
 };
 struct mm_session {
-    Rml::String logo_rml;
+    Rml::String title_main_rml;       // "CATACLYSM"
+    Rml::String title_sub_rml;        // "Bright Nights"
     Rml::String version_rml;
     Rml::String tips_rml;
-    Rml::Vector<mm_item> items;      // top horizontal menu
-    Rml::Vector<mm_item> submenu;    // sub-options for the selected item
-    Rml::Vector<mm_item> motd_lines; // MOTD / Credits text (scrolled)
+    Rml::String keybinds_rml;         // bottom keybind hints
+    Rml::String panel_header_rml;     // left panel section header
+    Rml::String context_header_rml;   // right panel header
+    Rml::String context_body_rml;     // right panel body (tips/preview)
+    Rml::Vector<mm_item> items;       // top nav bar
+    Rml::Vector<mm_item> submenu;     // left panel action list
+    Rml::Vector<mm_item> motd_lines;  // right panel scroll (MOTD/Credits)
     bool show_motd = false;
     bool show_submenu = false;
     Rml::DataModelHandle handle;
@@ -110,6 +119,7 @@ void register_mm_rml_types( Rml::DataModelConstructor& c )
     if( g_mm_types_registered ) { return; }
     Rml::StructHandle<mm_item> ih = c.RegisterStruct<mm_item>();
     ih.RegisterMember( "text_rml", &mm_item::text_rml );
+    ih.RegisterMember( "icon_dec", &mm_item::icon_dec );
     ih.RegisterMember( "selected", &mm_item::selected );
     c.RegisterArray<Rml::Vector<mm_item>>();
 
@@ -228,11 +238,10 @@ void main_menu::init_windows()
     const point p0( ( TERMX - total_w ) / 2, ( TERMY - total_h ) / 2 );
 
     w_open = catacurses::newwin( total_h, total_w, p0 );
-    // Let the decorative lit-world emitter glow show through the main-menu
-    // background instead of a solid black fill. Popups and the OPTIONS panel
-    // are separate windows and stay opaque (readable). Re-applied here because
-    // the window is recreated on resize.
-    cata_cursesport::set_window_transparent_backdrop( w_open, true );
+    // When the RML render path + plexus is active, the plexus IS the background
+    // — no need for the old lit-world bleed-through.  Only enable the transparent
+    // backdrop for the legacy curses path.
+    cata_cursesport::set_window_transparent_backdrop( w_open, !main_menu_rmlui_enabled() );
 
     menu_offset.y = total_h - 3;
     // note: if iMenuOffset is changed,
@@ -471,25 +480,45 @@ bool main_menu::opening_screen()
     rml_doc rml;
     const auto sync_rml = [&]() {
         if( !rml ) { return; }
-        // Logo (mmenu_title ASCII lines).
-        std::string logo;
-        for( size_t i = 0; i < mmenu_title.size(); ++i ) {
-            if( i ) { logo += "\n"; }
-            logo += mmenu_title[i];
-        }
-        data->logo_rml = cata_text_to_rml( logo );
+        // Typography title (replaces ASCII logo).
+        data->title_main_rml = cata_text_to_rml( colorize( "CATACLYSM", c_yellow ) );
+        data->title_sub_rml = cata_text_to_rml( colorize( "Bright Nights", c_light_gray ) );
         data->version_rml = cata_text_to_rml(
                                 colorize( string_format( _( "Version: %s" ), getVersionString() ), c_light_blue ) );
-        // Top menu items.
+        data->keybinds_rml = cata_text_to_rml( colorize(
+                _( "[LEFT/RIGHT] Navigate   [UP/DOWN] Select   [ENTER] Confirm   [ESC] Quit" ),
+                c_dark_gray ) );
+
+        // Nav icons: each menu item gets a unique bindrune sigil seeded by its
+        // index.  The procedural texture generator (?proc:bindrune) produces a
+        // deterministic rune for each seed, matching the frame's runic aesthetic.
+        // Deterministic seeds: 0x4D4F (MOTD), 0x4E47 (NEWCHAR), etc.
+        static const unsigned mm_rune_seeds[] = {
+            0x4D4F, 0x4E47, 0x4C43, 0x574F, 0x5345, 0x4845, 0x4352, 0x5155,
+#ifdef COOP_ENABLED
+            0x434F,
+#endif
+        };
+        static constexpr size_t mm_rune_count = sizeof( mm_rune_seeds ) / sizeof( mm_rune_seeds[0] );
+
+        // Top nav items.
         data->items.clear();
         for( size_t i = 0; i < vMenuItems.size(); ++i ) {
             const bool s = static_cast<int>( i ) == sel1;
             mm_item m;
-            m.text_rml = cata_text_to_rml( string_format(
-                                               "[%s]", shortcut_text( s ? hilite( c_yellow ) : c_yellow, vMenuItems[i] ) ) );
+            m.text_rml = cata_text_to_rml(
+                             shortcut_text( s ? hilite( c_yellow ) : c_yellow, vMenuItems[i] ) );
+            // Boxed band-glyph icon — same style as the runic frame decorations.
+            if( i < mm_rune_count ) {
+                const char *ink = s ? "c4a832" : "a1885f";
+                m.icon_dec = string_format(
+                                 "image( ?proc:runic-icon:48:%u:%s none contain ) border-box",
+                                 mm_rune_seeds[i], ink );
+            }
             m.selected = s;
             data->items.push_back( m );
         }
+
         // Submenu / MOTD-Credits text.
         data->submenu.clear();
         data->motd_lines.clear();
@@ -502,13 +531,22 @@ bool main_menu::opening_screen()
             m.selected = sel;
             data->submenu.push_back( m );
         };
+
+        // Default context for the right panel.
+        data->panel_header_rml = Rml::String();
+        data->context_header_rml = Rml::String();
+        data->context_body_rml = Rml::String();
+
         switch( sel_o ) {
             case main_menu_opts::CREDITS:
             case main_menu_opts::MOTD: {
                 data->show_motd = true;
-                const std::string& text =
+                data->context_header_rml = cata_text_to_rml( colorize(
+                                               sel_o == main_menu_opts::CREDITS ? _( "CREDITS" ) : _( "MESSAGE OF THE DAY" ),
+                                               c_yellow ) );
+                const std::string &text =
                     sel_o == main_menu_opts::CREDITS ? mmenu_credits : mmenu_motd;
-                for( const std::string& ln : foldstring( text, FULL_SCREEN_WIDTH - 2 ) ) {
+                for( const std::string &ln : foldstring( text, FULL_SCREEN_WIDTH - 2 ) ) {
                     mm_item m;
                     m.text_rml = cata_text_to_rml( ln );
                     data->motd_lines.push_back( m );
@@ -517,6 +555,10 @@ bool main_menu::opening_screen()
             }
             case main_menu_opts::SETTINGS:
                 data->show_submenu = true;
+                data->panel_header_rml = cata_text_to_rml( colorize( _( "SETTINGS" ), c_yellow ) );
+                data->context_header_rml = cata_text_to_rml( colorize( _( "TIP" ), c_yellow ) );
+                data->context_body_rml = cata_text_to_rml(
+                                             colorize( string_format( _( "Tip of the day: %s" ), vdaytip ), c_white ) );
                 for( size_t i = 0; i < vSettingsSubItems.size(); ++i ) {
                     push_sub(
                         shortcut_text( static_cast<int>( i ) == sel2 ? hilite( c_yellow ) : c_yellow,
@@ -526,6 +568,12 @@ bool main_menu::opening_screen()
                 break;
             case main_menu_opts::NEWCHAR:
                 data->show_submenu = true;
+                data->panel_header_rml = cata_text_to_rml( colorize( _( "NEW GAME" ), c_yellow ) );
+                data->context_header_rml = cata_text_to_rml( colorize( _( "INFO" ), c_yellow ) );
+                if( sel2 >= 0 && sel2 < static_cast<int>( vNewGameHints.size() ) ) {
+                    data->context_body_rml = cata_text_to_rml(
+                                                 colorize( vNewGameHints[sel2], c_yellow ) );
+                }
                 for( size_t i = 0; i < vNewGameSubItems.size(); ++i ) {
                     push_sub(
                         shortcut_text( static_cast<int>( i ) == sel2 ? hilite( c_yellow ) : c_yellow,
@@ -536,16 +584,20 @@ bool main_menu::opening_screen()
             case main_menu_opts::LOADCHAR:
             case main_menu_opts::WORLD: {
                 data->show_submenu = true;
-                const bool extra_opt = sel1 == getopt( main_menu_opts::WORLD );
+                const bool is_world = sel1 == getopt( main_menu_opts::WORLD );
+                data->panel_header_rml = cata_text_to_rml( colorize(
+                                             is_world ? _( "WORLDS" ) : _( "LOAD GAME" ), c_yellow ) );
+                data->context_header_rml = cata_text_to_rml( colorize( _( "WORLD INFO" ), c_yellow ) );
+                const bool extra_opt = is_world;
                 if( extra_opt ) {
                     push_sub( colorize( _( "Create World" ), sel2 == 0 ? hilite( c_yellow ) : c_yellow ),
                               sel2 == 0 );
                 }
                 const std::vector<std::string> all_worldnames = world_generator->all_worldnames();
                 for( size_t i = 0; i < all_worldnames.size(); ++i ) {
-                    WORLDINFO* world = world_generator->get_world( all_worldnames[i] );
-                    int savegames_count = world->world_saves.size();
-                    nc_color clr =
+                    WORLDINFO *world = world_generator->get_world( all_worldnames[i] );
+                    const int savegames_count = world->world_saves.size();
+                    const nc_color clr =
                         ( all_worldnames[i] == "TUTORIAL" || all_worldnames[i] == "DEFENSE" )
                         ? c_light_cyan
                         : c_white;
@@ -554,35 +606,54 @@ bool main_menu::opening_screen()
                                         sel ? hilite( clr ) : clr ),
                               sel );
                 }
+                // Context body: show selected world info.
+                {
+                    const int world_idx = sel2 - ( extra_opt ? 1 : 0 );
+                    if( world_idx >= 0 && world_idx < static_cast<int>( all_worldnames.size() ) ) {
+                        WORLDINFO *world = world_generator->get_world( all_worldnames[world_idx] );
+                        data->context_body_rml = cata_text_to_rml( colorize( string_format(
+                                                     _( "World: %s\nSaves: %d" ), all_worldnames[world_idx],
+                                                     static_cast<int>( world->world_saves.size() ) ), c_white ) );
+                    }
+                }
                 break;
             }
             default:
+                // HELP, QUIT, COOP — no submenu, show tip of the day.
+                data->context_header_rml = cata_text_to_rml( colorize( _( "TIP" ), c_yellow ) );
+                data->context_body_rml = cata_text_to_rml(
+                                             colorize( string_format( _( "Tip of the day: %s" ), vdaytip ), c_white ) );
                 break;
         }
+
         // Bottom tips line.
         if( sel_o == main_menu_opts::NEWCHAR && sel2 >= 0 &&
             sel2 < static_cast<int>( vNewGameHints.size() ) ) {
             data->tips_rml = cata_text_to_rml( colorize( vNewGameHints[sel2], c_yellow ) );
         } else {
             std::string tips = _( "Bugs?  Suggestions?  Use links in MOTD to report them." );
-            tips += "\n";
-            tips += string_format( _( "Tip of the day: %s" ), vdaytip );
             data->tips_rml = cata_text_to_rml( colorize( tips, c_white ) );
         }
-        data->handle.DirtyVariable( "logo_rml" );
+
+        // Dirty all bound variables.
+        data->handle.DirtyVariable( "title_main_rml" );
+        data->handle.DirtyVariable( "title_sub_rml" );
         data->handle.DirtyVariable( "version_rml" );
+        data->handle.DirtyVariable( "keybinds_rml" );
+        data->handle.DirtyVariable( "panel_header_rml" );
+        data->handle.DirtyVariable( "context_header_rml" );
+        data->handle.DirtyVariable( "context_body_rml" );
         data->handle.DirtyVariable( "items" );
-        // Only dirty arrays that are actually shown — dirtying a cleared array
-        // while RML still has stale iteration state causes out-of-bounds access.
         if( data->show_submenu ) { data->handle.DirtyVariable( "submenu" ); }
         if( data->show_motd ) { data->handle.DirtyVariable( "motd_lines" ); }
         data->handle.DirtyVariable( "tips_rml" );
         data->handle.DirtyVariable( "show_motd" );
         data->handle.DirtyVariable( "show_submenu" );
+
         // MOTD/Credits keyboard scroll-follow.
         if( rml_scroll_pending && data->show_motd ) {
             rml_scroll_pending = false;
-            if( Rml::Element * list = rml.document()->GetElementById( "mm-motd" ) ) {
+            if( Rml::Element *list = rml.document()->GetElementById( "mm-motd" ) ) {
                 if( sel_line >= 0 && sel_line < list->GetNumChildren() ) {
                     list->GetChild( sel_line )->ScrollIntoView(
                         Rml::ScrollIntoViewOptions( Rml::ScrollAlignment::Start ) );
@@ -593,9 +664,14 @@ bool main_menu::opening_screen()
     rml.open( main_menu_rmlui_enabled(), "mainmenu", ctxt, [&]( Rml::DataModelConstructor & c ) {
         data = std::make_unique<mm_session>();
         register_mm_rml_types( c );
-        c.Bind( "logo_rml", &data->logo_rml );
+        c.Bind( "title_main_rml", &data->title_main_rml );
+        c.Bind( "title_sub_rml", &data->title_sub_rml );
         c.Bind( "version_rml", &data->version_rml );
         c.Bind( "tips_rml", &data->tips_rml );
+        c.Bind( "keybinds_rml", &data->keybinds_rml );
+        c.Bind( "panel_header_rml", &data->panel_header_rml );
+        c.Bind( "context_header_rml", &data->context_header_rml );
+        c.Bind( "context_body_rml", &data->context_body_rml );
         c.Bind( "items", &data->items );
         c.Bind( "submenu", &data->submenu );
         c.Bind( "motd_lines", &data->motd_lines );
@@ -630,10 +706,30 @@ bool main_menu::opening_screen()
     ui.on_screen_resize( [this]( ui_adaptor & ui ) {
         init_windows();
         ui.position_from_window( w_open );
+        int lw = 0, lh = 0;
+        SDL_GetWindowSize( get_sdl_window().get(), &lw, &lh );
+        lighting::plexus_resize( lw, lh );
     } );
     ui.mark_resize();
 
+    // Plexus background — init and make visible.
+    lighting::plexus_init();
+    {
+        int lw = 0, lh = 0;
+        SDL_GetWindowSize( get_sdl_window().get(), &lw, &lh );
+        lighting::plexus_resize( lw, lh );
+    }
+    lighting::g_plexus_visible = true;
+    on_out_of_scope plexus_cleanup( []() {
+        lighting::g_plexus_visible = false;
+        lighting::plexus_finish();
+    } );
+
     bool start_new = false;
+    // Set a short input timeout so the loop polls regularly for plexus animation
+    // instead of blocking forever waiting for user input.
+    ctxt.set_timeout( 33 ); // ~30fps loop rate
+    on_out_of_scope reset_timeout( [&]() { ctxt.reset_timeout(); } );
     while( !start ) {
         ui_manager::redraw();
         // Refresh in case player created new world or deleted old world

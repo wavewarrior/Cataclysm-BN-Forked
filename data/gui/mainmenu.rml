@@ -1,36 +1,52 @@
 <rml>
 <head>
     <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="mainmenu_theme.rcss"/>
     <link type="text/rcss" href="mainmenu.rcss"/>
 </head>
 <body data-model="mainmenu">
-    <!-- Tier 4 screen #3: the title screen (main_menu::opening_screen / print_menu).
-         ASCII logo + version + horizontal menu items + submenu (sub-options for the
-         selected item) OR the scrolled MOTD/Credits text + bottom tips. Render-only;
-         the loop owns the 2-level keyboard nav (LEFT/RIGHT=item, UP/DOWN=sub or scroll,
-         CONFIRM acts). Mouse selects (click only). Submenu rendered inline below the
-         menu row (semantic; not the curses floating box). -->
     <div class="panel mm-panel">
-        <div class="mm-logo" data-rml="logo_rml"></div>
-        <div class="mm-version" data-rml="version_rml"></div>
-
-        <div class="tabs mm-items">
-            <div class="item tab" data-for="it : items"
+        <!-- Top bar: title + version -->
+        <div class="mm-topbar">
+            <div class="mm-title-main" data-rml="title_main_rml"></div>
+            <div class="mm-title-sub" data-rml="title_sub_rml"></div>
+            <div class="mm-version" data-rml="version_rml"></div>
+        </div>
+        <div class="mm-separator"></div>
+        <!-- Nav bar: icon glyph + label per item -->
+        <div class="mm-nav">
+            <div class="mm-nav-item" data-for="it : items"
                  data-class-selected="it.selected"
-                 data-event-click="on_item(it_index)" data-rml="it.text_rml"></div>
+                 data-event-click="on_item(it_index)">
+                <div class="mm-nav-icon" data-style-decorator="it.icon_dec"></div>
+                <span class="mm-nav-label" data-rml="it.text_rml"></span>
+            </div>
         </div>
-
-        <div class="mm-sub" data-if="show_submenu">
-            <div class="mm-subrow" data-for="s : submenu"
-                 data-class-selected="s.selected"
-                 data-event-click="on_sub(it_index)" data-rml="s.text_rml"></div>
+        <div class="mm-separator"></div>
+        <!-- Split content -->
+        <div class="mm-content">
+            <div class="mm-left-panel">
+                <div class="mm-section-header" data-rml="panel_header_rml"></div>
+                <div class="mm-action-list" data-if="show_submenu">
+                    <div class="mm-action-row" data-for="s : submenu"
+                         data-class-selected="s.selected"
+                         data-event-click="on_sub(s_index)" data-rml="s.text_rml"></div>
+                </div>
+            </div>
+            <div class="mm-right-panel">
+                <div class="mm-section-header" data-rml="context_header_rml"></div>
+                <div id="mm-motd" class="mm-scroll-text scroll-pane" data-if="show_motd">
+                    <div class="mm-scroll-line" data-for="m : motd_lines" data-rml="m.text_rml"></div>
+                </div>
+                <div class="mm-context-body" data-if="!show_motd" data-rml="context_body_rml"></div>
+            </div>
         </div>
-
-        <div id="mm-motd" class="mm-motd scroll-pane" data-if="show_motd">
-            <div class="mm-motd-line" data-for="m : motd_lines" data-rml="m.text_rml"></div>
+        <div class="mm-separator"></div>
+        <!-- Bottom bar -->
+        <div class="mm-footer">
+            <div class="mm-tips" data-rml="tips_rml"></div>
+            <div class="mm-keybinds" data-rml="keybinds_rml"></div>
         </div>
-
-        <div class="mm-tips" data-rml="tips_rml"></div>
     </div>
     <div class="crt"></div>
 </body>

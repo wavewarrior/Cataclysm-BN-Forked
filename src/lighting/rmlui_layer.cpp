@@ -3,6 +3,7 @@
 #include "debug.h"
 #include "gpu_device.h"
 #include "path_info.h"
+#include "menu_plexus.h"
 #include "rmlui_proc_texture.h"
 #include "rmlui_render_interface.h"
 #include "rmlui_system_interface.h"
@@ -16,6 +17,7 @@
 #include <RmlUi/Debugger.h>
 #include <SDL3/SDL.h>
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -129,6 +131,88 @@ struct world_text_geom {
     Rml::Vector2f pos;
 };
 std::vector<world_text_geom> g_world_geom;
+
+// --- Plexus background (main menu only) ------------------------------------
+// The plexus simulation runs on CPU (menu_plexus.cpp) producing an RGBA pixel
+// buffer.  We upload it as a raw TextureHandle and draw a compiled fullscreen
+// quad BEFORE world text and documents so the semi-transparent menu panel
+// composites on top.  Uses the low-level RenderInterface directly (Rml::Texture
+// has private constructors; only RenderManager/CallbackTexture can make one).
+Rml::CompiledGeometryHandle g_plexus_geom_handle = 0;
+Rml::TextureHandle g_plexus_tex_handle = 0;
+unsigned g_plexus_uploaded_gen = 0;
+int g_plexus_tex_w = 0;
+int g_plexus_tex_h = 0;
+
+auto plexus_active() -> bool {
+    return g_ready && g_context && lighting::g_plexus_visible &&
+           lighting::plexus_width() > 0 && lighting::plexus_height() > 0;
+}
+
+// Advance the plexus simulation (wall-clock gated) and upload the pixel buffer
+// to a GPU texture + (re)compile a fullscreen quad.  Called from prepare()
+// (OUTSIDE the render pass) so stepping and uploading are atomic — the render
+// pass always draws the freshest frame, independent of game-loop speed.
+void rebuild_plexus_geom() {
+    if( !plexus_active() ) { return; }
+
+    // Wall-clock gate: advance the simulation at a fixed ~20fps regardless of
+    // how fast the game loop or GPU frame rate runs.
+    {
+        static auto last_step = std::chrono::steady_clock::now();
+        const auto now = std::chrono::steady_clock::now();
+        if( lighting::plexus_get_config().enabled &&
+            now - last_step >= std::chrono::milliseconds( 50 ) ) {
+            lighting::plexus_step();
+            last_step = now;
+        }
+    }
+
+    const unsigned gen = lighting::plexus_generation();
+    const int pw = lighting::plexus_width();
+    const int ph = lighting::plexus_height();
+    if( gen == g_plexus_uploaded_gen && pw == g_plexus_tex_w && ph == g_plexus_tex_h ) {
+        return;
+    }
+    // Release prior resources.
+    if( g_plexus_tex_handle ) {
+        g_render->ReleaseTexture( g_plexus_tex_handle );
+        g_plexus_tex_handle = 0;
+    }
+    if( g_plexus_geom_handle ) {
+        g_render->ReleaseGeometry( g_plexus_geom_handle );
+        g_plexus_geom_handle = 0;
+    }
+
+    const auto &px = lighting::plexus_pixels();
+    if( px.empty() ) { return; }
+    g_plexus_tex_handle = g_render->GenerateTexture(
+                              { reinterpret_cast<const Rml::byte *>( px.data() ),
+                                static_cast<std::size_t>( pw * ph * 4 ) },
+    { pw, ph } );
+    if( !g_plexus_tex_handle ) { return; }
+
+    // Quad spans the full physical screen; the GPU stretches the logical-res
+    // texture via UVs 0-1.
+    int sw = 0, sh = 0;
+    SDL_GetWindowSizeInPixels( g_window, &sw, &sh );
+    const auto fw = static_cast<float>( sw > 0 ? sw : pw );
+    const auto fh = static_cast<float>( sh > 0 ? sh : ph );
+    const Rml::ColourbPremultiplied white{ 255, 255, 255, 255 };
+    const Rml::Vertex verts[] = {
+        { { 0, 0 }, white, { 0, 0 } },
+        { { fw, 0 }, white, { 1, 0 } },
+        { { fw, fh }, white, { 1, 1 } },
+        { { 0, fh }, white, { 0, 1 } },
+    };
+    const int idxs[] = { 0, 1, 2, 0, 2, 3 };
+    g_plexus_geom_handle = g_render->CompileGeometry(
+                               { verts, 4 }, { idxs, 6 } );
+
+    g_plexus_uploaded_gen = gen;
+    g_plexus_tex_w = pw;
+    g_plexus_tex_h = ph;
+}
 // World-text tuning (F4 sliders; bake the dialed-in values once settled).
 int g_world_text_px = 24;    // font point size
 float g_world_text_dx = 0.f; // extra x offset (px); + shifts right
@@ -1077,20 +1161,24 @@ void new_frame() {
 void prepare(SDL_GPUCommandBuffer* cb) {
     const bool doc = g_ready && any_open() && g_context != nullptr;
     const bool wt = world_text_have();
-    if (!doc && !wt) { g_world_geom.clear(); return; }
+    const bool px = plexus_active();
+    if (!doc && !wt && !px) { g_world_geom.clear(); return; }
     // Pre-render OUTSIDE the render pass so geometry compiles immediately (not
     // deferred by begin_render_pass). Then upload_pending uploads the compiled
     // data to GPU buffers. The real render pass's ctx->Render() reuses the cached
     // handles and renders on this same frame. World text compiles the same way.
     if (doc) { g_context->Render(); }
     if (wt) { build_world_text(); }
+    // Plexus: upload the pixel buffer to a GPU texture (issues a copy pass).
+    if (px) { rebuild_plexus_geom(); }
     g_render->upload_pending(cb);
 }
 
 void render_in_pass(SDL_GPURenderPass* rp, SDL_GPUCommandBuffer* cb) {
     const bool doc = any_open();
     const bool wt = !g_world_geom.empty();
-    if (!g_ready || g_window == nullptr || g_context == nullptr || (!doc && !wt)) { return; }
+    const bool px = plexus_active();
+    if (!g_ready || g_window == nullptr || g_context == nullptr || (!doc && !wt && !px)) { return; }
     int w = 0;
     int h = 0;
     SDL_GetWindowSizeInPixels(g_window, &w, &h);
@@ -1098,9 +1186,13 @@ void render_in_pass(SDL_GPURenderPass* rp, SDL_GPUCommandBuffer* cb) {
     const auto uh = static_cast<std::uint32_t>(h > 0 ? h : 1);
     // RmlUi context is sized in physical pixels, so projection == target.
     g_render->begin_render_pass(rp, cb, uw, uh, uw, uh);
-    // World text draws FIRST so menu documents composite on top of it (SCT sits
-    // on the map, under any open UI).
+    // Plexus background draws FIRST (behind everything).
+    if (px && g_plexus_geom_handle && g_plexus_tex_handle) {
+        g_render->RenderGeometry(g_plexus_geom_handle, Rml::Vector2f(0, 0), g_plexus_tex_handle);
+    }
+    // World text next (SCT sits on the map, under any open UI).
     for (world_text_geom& item : g_world_geom) { item.geom.Render(item.pos, item.texture); }
+    // Documents on top (menu panel composites over the plexus).
     if (doc) {
         g_context->Render(); // all shown documents, z-ordered by open order
     }
