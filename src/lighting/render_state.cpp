@@ -127,6 +127,10 @@ void render_state::init(SDL_Window* host_window) {
         }
         ui_target_ = std::make_unique<ui_composite_target>();
         ui_target_->init(device_, pw, ph);
+        // Intermediate UI composite target for post-processing (Phase 9).
+        // Same format as swapchain so the post-process pass writes directly to it.
+        ui_post_target_ = std::make_unique<ui_composite_target>();
+        ui_post_target_->init(device_, pw, ph);
 
         // World accumulation layer. HDR (RGBA16F) so the lit result keeps
         // values >1 for the tonemap pass instead of clipping at the 8-bit
@@ -204,6 +208,10 @@ void render_state::init(SDL_Window* host_window) {
         hud_particles_.init( device_, device_.swapchain_format(),
                              static_cast<std::uint32_t>( pw ),
                              static_cast<std::uint32_t>( ph ) );
+        // UI post-processing: bloom + chromatic aberration (Phase 9).
+        ui_post_.init( device_, device_.swapchain_format(),
+                       static_cast<std::uint32_t>( pw ),
+                       static_cast<std::uint32_t>( ph ) );
 
         // GPU JFA SDF pass (P3): seed → flood → resolve on SS-grid. Same max tile
         // extent as the CPU SDF; jfa_sdf_buffer() is scratch output for A/B vs CPU DT.
@@ -218,6 +226,7 @@ void render_state::shutdown() noexcept {
 
     // Release the compositor textures + tonemap pass while the device is live.
     ui_target_.reset();
+    ui_post_target_.reset();
     world_target_.reset();
     shadow_mask_.reset();
     world_ldr_target_.reset();
@@ -229,6 +238,7 @@ void render_state::shutdown() noexcept {
     rain_.shutdown();
     sound_waves_.shutdown();
     hud_particles_.shutdown();
+    ui_post_.shutdown();
     gpu_sdf_.shutdown();
 
     // Phase 4: release SDF textures.

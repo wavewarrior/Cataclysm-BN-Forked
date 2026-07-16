@@ -26,6 +26,7 @@
 #include "sdl_geometry.h"
 #include "sdl_lighting_devui.h"
 #include "sdl_render_frame.h"
+#include "hud_shake.h"
 #include "sdl_wrappers.h"
 #include "lighting/dev_test_lights.h"
 #include "lighting/frame_build.h"
@@ -934,7 +935,15 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
         rmlui_layer::prepare( ctx.cmd_buffer );
     }
 
-    rs.tile_batcher().begin_pass( ctx.cmd_buffer, ctx.swapchain_tex,
+    // Determine render target: use intermediate for post-processing (Phase 9),
+    // otherwise render directly to swapchain.
+    const bool use_post_process = rs.ui_post().ready() && rs.ui_post_target()
+                                  && rs.ui_post_target()->texture();
+    SDL_GPUTexture *render_target = use_post_process
+                                    ? rs.ui_post_target()->texture()
+                                    : ctx.swapchain_tex;
+
+    rs.tile_batcher().begin_pass( ctx.cmd_buffer, render_target,
                                   ctx.swapchain_w, ctx.swapchain_h,
                                   clear_black,
                                   static_cast<std::uint32_t>( proj_w ),
@@ -981,6 +990,17 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
         rmlui_layer::render_in_pass( rp, cb );
     } )
     : lighting::sprite_batcher::pass_overlay_fn{} );
+    // UI post-processing (Phase 9): bloom + chromatic aberration.
+    // Reads from intermediate target, writes to swapchain.
+    if( use_post_process ) {
+        const float ca_intensity = hud_shake::intensity();
+        const float bloom_strength = 0.3f; // subtle, tunable
+        rs.ui_post().record( ctx.cmd_buffer,
+                             rs.ui_post_target()->texture(),
+                             ctx.swapchain_tex,
+                             ctx.swapchain_w, ctx.swapchain_h,
+                             ca_intensity, bloom_strength );
+    }
 
     rs.device().submit_frame( ctx );
 }

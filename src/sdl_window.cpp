@@ -334,6 +334,9 @@ bool handle_resize( int w, int h )
                 if( rs.world_ldr_target() ) {
                     rs.world_ldr_target()->resize( pw, ph );
                 }
+                if( rs.ui_post_target() ) {
+                    rs.ui_post_target()->resize( pw, ph );
+                }
                 // Bloom half-res textures track the world_target size.
                 rs.bloom().resize( static_cast<std::uint32_t>( pw ),
                                    static_cast<std::uint32_t>( ph ) );
