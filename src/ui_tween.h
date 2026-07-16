@@ -29,6 +29,7 @@ enum class ease_curve {
     back_in, back_out, back_in_out,
     elastic_in, elastic_out, elastic_in_out,
     bounce_in, bounce_out, bounce_in_out,
+    spring,  // damped harmonic oscillator (organic overshoot + settle)
     num_curves
 };
 
@@ -69,7 +70,23 @@ struct tween {
     // Infinite loops/pingpongs never settle (they keep the sidebar live).
     bool settled( std::uint32_t now ) const;
 };
+// Spring-damper state for organic animations (Phase 2). Uses a damped harmonic
+// oscillator: a = (-k*(pos-target) - c*vel)/mass. Settles naturally instead of
+// following a canned curve. `step` advances by wall-clock dt; `settled` returns
+// true when position and velocity are within threshold of the target.
+struct spring_state {
+    float position = 0.f;
+    float velocity = 0.f;
+    float target = 1.f;
+    float stiffness = 300.f;  // spring constant k
+    float damping = 20.f;     // damping coefficient c
+    float mass = 1.f;
+
+    auto step( float dt_seconds ) -> void;
+    auto settled( float threshold = 0.001f ) const -> bool;
+};
 
 } // namespace ui_tween
+
 
 #endif // CATA_SRC_UI_TWEEN_H

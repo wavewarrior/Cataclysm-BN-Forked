@@ -63,6 +63,7 @@ ease_curve string_to_ease( const std::string &s )
         { "bounce_in", ease_curve::bounce_in },
         { "bounce_out", ease_curve::bounce_out },
         { "bounce_in_out", ease_curve::bounce_in_out },
+        { "spring", ease_curve::spring },
     };
     const auto it = m.find( s );
     return it != m.end() ? it->second : ease_curve::linear;
@@ -239,5 +240,21 @@ bool tween::settled( std::uint32_t now ) const
     }
     return true;
 }
+void spring_state::step( float dt_seconds )
+{
+    // Clamp dt to 1/30s to prevent numerical explosion.
+    dt_seconds = std::min( dt_seconds, 1.f / 30.f );
+    const float displacement = position - target;
+    const float accel = ( -stiffness * displacement - damping * velocity ) / mass;
+    velocity += accel * dt_seconds;
+    position += velocity * dt_seconds;
+}
+
+bool spring_state::settled( float threshold ) const
+{
+    return std::abs( position - target ) < threshold
+    && std::abs( velocity ) < threshold;
+}
 
 } // namespace ui_tween
+
