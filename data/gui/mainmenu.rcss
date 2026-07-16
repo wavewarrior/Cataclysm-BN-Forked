@@ -1,109 +1,98 @@
-/* Layout for the title screen (Tier 4 #3: main_menu). CoQ-inspired split panels:
-   top title bar, horizontal nav bar with icon glyphs, split left/right content,
-   bottom keybind hints. Palette lives in mainmenu_theme.rcss. */
+/* Layout for the title screen (Tier 4 #3: main_menu). Vertical left rail:
+   title block + vertical nav, optional submenu column, open right context area
+   with bottom-anchored card, footer keybind hints. Palette in mainmenu_theme.rcss. */
 
 body {
-    display: flex;
-    justify-content: center;
-    align-items: center;
     width: 100%;
     height: 100%;
 }
 
-.mm-panel {
-    width: 90%;
-    min-width: 800dp;
-    height: 94%;
+.mm-root {
+    width: 100%;
+    height: 100%;
     display: flex;
     flex-direction: column;
-    padding: 16dp;
+    padding: 24dp 28dp;
 }
 
-/* Top bar: title + version */
-.mm-topbar {
-    flex: 0 0 auto;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-}
-
-.mm-title-main {
-    font-size: 48dp;
-    font-weight: bold;
-    text-align: center;
-    letter-spacing: 10dp;
-}
-
-.mm-title-sub {
-    font-size: 20dp;
-    text-align: center;
-    letter-spacing: 4dp;
-    margin-top: 2dp;
-}
-
-.mm-version {
-    font-size: 14dp;
-    text-align: center;
-    margin-top: 6dp;
-}
-
-/* Decorative separator. */
-.mm-separator {
-    flex: 0 0 auto;
-    height: 1dp;
-    margin: 10dp 0;
-}
-
-/* Horizontal nav bar. */
-.mm-nav {
-    flex: 0 0 auto;
-    display: flex;
-    flex-direction: row;
-    justify-content: center;
-    flex-wrap: wrap;
-}
-
-.mm-nav-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 6dp 14dp;
-    margin: 0 4dp;
-}
-
-.mm-nav-icon {
-    display: block;
-    width: 32dp;
-    height: 32dp;
-}
-
-.mm-nav-label {
-    font-size: 14dp;
-    display: block;
-    margin-top: 2dp;
-}
-
-/* Split content area. */
-.mm-content {
+.mm-main {
     flex: 1;
     min-height: 0;
     display: flex;
     flex-direction: row;
 }
 
-.mm-left-panel {
-    flex: 1;
+/* Left rail */
+.mm-rail {
+    flex: 0 0 auto;
+    width: 280dp;
     display: flex;
     flex-direction: column;
-    padding-right: 12dp;
+    padding: 16dp;
 }
 
-.mm-right-panel {
+.mm-title-block {
+    flex: 0 0 auto;
+}
+
+.mm-title-main {
+    font-size: 34dp;
+    font-weight: bold;
+    letter-spacing: 6dp;
+}
+
+.mm-title-sub {
+    font-size: 16dp;
+    letter-spacing: 3dp;
+    margin-top: 2dp;
+}
+
+.mm-version {
+    font-size: 12dp;
+    margin-top: 4dp;
+}
+
+.mm-separator {
+    flex: 0 0 auto;
+    height: 1dp;
+    margin: 12dp 0;
+}
+
+.mm-nav {
     flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
-    padding-left: 12dp;
-    border-left: 1dp solid #2a2a3a;
+    overflow-y: auto;
+}
+
+.mm-nav-item {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 8dp 10dp;
+    margin: 1dp 0;
+}
+
+.mm-nav-icon {
+    flex: 0 0 auto;
+    width: 24dp;
+    height: 24dp;
+}
+
+.mm-nav-label {
+    font-size: 16dp;
+    margin-left: 10dp;
+}
+
+/* Submenu column */
+.mm-subcol {
+    flex: 0 0 auto;
+    width: 240dp;
+    display: flex;
+    flex-direction: column;
+    margin-left: 16dp;
+    padding: 16dp;
 }
 
 .mm-section-header {
@@ -121,15 +110,25 @@ body {
 
 .mm-action-row {
     display: block;
-    padding: 3dp 10dp;
+    padding: 4dp 10dp;
 }
 
-/* Scrollable text pane (MOTD/Credits) in right panel. */
+/* Right context area: open space, content bottom-anchored */
+.mm-context-area {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    margin-left: 16dp;
+}
+
 .mm-scroll-text {
     flex: 1;
     min-height: 0;
-    max-height: 60vh;
     overflow-y: auto;
+    padding: 16dp;
 }
 
 .mm-scroll-line {
@@ -137,21 +136,24 @@ body {
     white-space: pre-wrap;
 }
 
-/* Context body (right panel non-scroll content). */
-.mm-context-body {
-    flex: 1;
-    min-height: 0;
-    white-space: pre-wrap;
+.mm-context-card {
+    flex: 0 0 auto;
+    max-height: 30%;
+    padding: 12dp 16dp;
     overflow-y: auto;
 }
 
-/* Bottom bar. */
+.mm-context-body {
+    white-space: pre-wrap;
+}
+
+/* Footer */
 .mm-footer {
     flex: 0 0 auto;
     display: flex;
     flex-direction: column;
     align-items: center;
-    margin-top: 8dp;
+    margin-top: 10dp;
 }
 
 .mm-tips {

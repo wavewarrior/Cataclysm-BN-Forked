@@ -2,9 +2,9 @@
    Deep charcoal background, warm gold accents, cyan interactive highlights.
    Scoped to .mm-* classes to avoid leaking into the shared theme. */
 
-/* Override panel for the main menu context. */
-.mm-panel {
-    background-color: rgba(10, 10, 15, 0.88);
+/* Translucent surfaces — particles read through. */
+.mm-rail, .mm-subcol, .mm-scroll-text, .mm-context-card {
+    background-color: rgba(10, 10, 15, 0.60);
 }
 
 /* Title treatment. */
@@ -16,7 +16,7 @@
     color: #a1885f;
 }
 
-/* Navigation tabs. */
+/* Navigation items — base state. */
 .mm-nav-item {
     color: #a1885f;
     background-color: transparent;
@@ -25,9 +25,15 @@
     color: #c4a832;
     background-color: rgba(196, 168, 50, 0.1);
 }
+/* Unfocused-column selection: dimmer. */
 .mm-nav-item.selected {
     color: #c4a832;
-    background-color: rgba(196, 168, 50, 0.2);
+    background-color: rgba(196, 168, 50, 0.12);
+}
+/* Focused-column selection: bright highlight. */
+.mm-rail.focused .mm-nav-item.selected {
+    color: #c4a832;
+    background-color: rgba(196, 168, 50, 0.25);
     font-effect: glow(2dp rgba(196, 168, 50, 0.4));
 }
 
@@ -39,7 +45,7 @@
     color: #70d0c0;
 }
 
-/* Action rows (submenu items). */
+/* Action rows (submenu items) — base state. */
 .mm-action-row {
     color: #c4b89a;
 }
@@ -47,9 +53,15 @@
     color: #d4c8a0;
     background-color: rgba(196, 168, 50, 0.08);
 }
+/* Unfocused-column selection. */
 .mm-action-row.selected {
     color: #c4a832;
-    background-color: rgba(196, 168, 50, 0.2);
+    background-color: rgba(196, 168, 50, 0.10);
+}
+/* Focused-column selection. */
+.mm-subcol.focused .mm-action-row.selected {
+    color: #c4a832;
+    background-color: rgba(196, 168, 50, 0.25);
 }
 
 /* Section headers. */
@@ -63,9 +75,6 @@
 /* Separator lines. */
 .mm-separator {
     border-top: 1dp dotted #3a3a4a;
-}
-.mm-separator-thin {
-    border-top: 1dp dotted #2a2a3a;
 }
 
 /* Tips / footer. */

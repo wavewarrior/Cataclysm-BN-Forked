@@ -109,6 +109,7 @@ struct mm_session {
     Rml::Vector<mm_item> motd_lines;  // right panel scroll (MOTD/Credits)
     bool show_motd = false;
     bool show_submenu = false;
+    bool sub_active = false;
     Rml::DataModelHandle handle;
 };
 
@@ -464,6 +465,7 @@ bool main_menu::opening_screen()
     player_character = avatar();
 
     int sel_line = 0;
+    bool sub_focused = false;
 
     // Make [Load Game] the default cursor position if there's game save available
     if( !world_generator->all_worldnames().empty() ) {
@@ -486,7 +488,7 @@ bool main_menu::opening_screen()
         data->version_rml = cata_text_to_rml(
                                 colorize( string_format( _( "Version: %s" ), getVersionString() ), c_light_blue ) );
         data->keybinds_rml = cata_text_to_rml( colorize(
-                _( "[LEFT/RIGHT] Navigate   [UP/DOWN] Select   [ENTER] Confirm   [ESC] Quit" ),
+                _( "[UP/DOWN] Navigate  [RIGHT] Enter column  [LEFT] Back  [ENTER] Confirm  [ESC] Quit" ),
                 c_dark_gray ) );
 
         // Nav icons: each menu item gets a unique bindrune sigil seeded by its
@@ -635,6 +637,9 @@ bool main_menu::opening_screen()
             data->tips_rml = cata_text_to_rml( colorize( tips, c_white ) );
         }
 
+        // Sync the focus flag for RML data-class-focused.
+        data->sub_active = sub_focused;
+
         // Dirty all bound variables.
         data->handle.DirtyVariable( "title_main_rml" );
         data->handle.DirtyVariable( "title_sub_rml" );
@@ -649,6 +654,7 @@ bool main_menu::opening_screen()
         data->handle.DirtyVariable( "tips_rml" );
         data->handle.DirtyVariable( "show_motd" );
         data->handle.DirtyVariable( "show_submenu" );
+        data->handle.DirtyVariable( "sub_active" );
 
         // MOTD/Credits keyboard scroll-follow.
         if( rml_scroll_pending && data->show_motd ) {
@@ -677,6 +683,7 @@ bool main_menu::opening_screen()
         c.Bind( "motd_lines", &data->motd_lines );
         c.Bind( "show_motd", &data->show_motd );
         c.Bind( "show_submenu", &data->show_submenu );
+        c.Bind( "sub_active", &data->sub_active );
         c.BindEventCallback(
         "on_item", [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
             int idx = -1;
@@ -685,13 +692,17 @@ bool main_menu::opening_screen()
                 sel1 = idx;
                 sel2 = 0;
                 sel_line = 0;
+                sub_focused = false;
             }
         } );
         c.BindEventCallback(
         "on_sub", [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
             int idx = -1;
             if( !args.empty() ) { args[0].GetInto( idx ); }
-            if( idx >= 0 ) { sel2 = idx; }
+            if( idx >= 0 ) {
+                sel2 = idx;
+                sub_focused = true;
+            }
         } );
         data->handle = c.GetModelHandle();
     } );
@@ -747,6 +758,7 @@ bool main_menu::opening_screen()
                     sel1 = i;
                     sel2 = i == getopt( main_menu_opts::LOADCHAR ) ? last_world_pos : 0;
                     sel_line = 0;
+                    sub_focused = false;
                     if( i == getopt( main_menu_opts::HELP ) ) {
                         action = "CONFIRM";
                     } else if( i == getopt( main_menu_opts::QUIT ) ) {
@@ -776,75 +788,76 @@ bool main_menu::opening_screen()
             }
         }
 
+        const auto submenu_count = [&]( main_menu_opts o ) -> int {
+            switch( o )
+        {
+            case main_menu_opts::LOADCHAR:
+                return static_cast<int>( world_generator->all_worldnames().size() );
+                case main_menu_opts::WORLD:
+                    return static_cast<int>( world_generator->all_worldnames().size() ) + 1;
+                case main_menu_opts::NEWCHAR:
+                    return static_cast<int>( vNewGameSubItems.size() );
+                case main_menu_opts::SETTINGS:
+                    return static_cast<int>( vSettingsSubItems.size() );
+                default:
+                    return 0;
+            }
+        };
+        const auto cur = static_cast<main_menu_opts>( sel1 );
+
         // also check special keys
         if( action == "QUIT" ) {
             ui_manager::redraw();
             if( query_yn( _( "Really quit?" ) ) ) { return false; }
         } else if( action == "LEFT" || action == "PREV_TAB" ) {
-            sel_line = 0;
-            if( sel1 > 0 ) {
-                sel1--;
-            } else {
-                sel1 = max_menu_opts;
-            }
-            sel2 = sel1 == getopt( main_menu_opts::LOADCHAR ) ? last_world_pos : 0;
-            on_move();
-        } else if( action == "RIGHT" || action == "NEXT_TAB" ) {
-            sel_line = 0;
-            if( sel1 < max_menu_opts ) {
-                sel1++;
-            } else {
-                sel1 = 0;
-            }
-            sel2 = sel1 == getopt( main_menu_opts::LOADCHAR ) ? last_world_pos : 0;
-            on_move();
-        } else if( action == "UP" || action == "DOWN" || action == "PAGE_UP"
-                   || action == "PAGE_DOWN" || action == "SCROLL_UP" || action == "SCROLL_DOWN" ) {
-            int max_item_count = 0;
-            int min_item_val = 0;
-            main_menu_opts opt = static_cast<main_menu_opts>( sel1 );
-            switch( opt ) {
-                case main_menu_opts::MOTD:
-                case main_menu_opts::CREDITS:
-                    rml_scroll_pending = true;
-                    if( action == "UP" || action == "PAGE_UP" || action == "SCROLL_UP" ) {
-                        if( sel_line > 0 ) { sel_line--; }
-                    } else if( action == "DOWN" || action == "PAGE_DOWN"
-                               || action == "SCROLL_DOWN" ) {
-                        int effective_height = sel_line + FULL_SCREEN_HEIGHT - 2;
-                        if( ( opt == main_menu_opts::CREDITS && effective_height < mmenu_credits_len )
-                            || ( opt == main_menu_opts::MOTD && effective_height < mmenu_motd_len ) ) {
-                            sel_line++;
-                        }
-                    }
-                    break;
-                case main_menu_opts::LOADCHAR:
-                    max_item_count = world_generator->all_worldnames().size();
-                    break;
-                case main_menu_opts::WORLD:
-                    // extra 1 = "Create New World"
-                    max_item_count = world_generator->all_worldnames().size() + 1;
-                    break;
-                case main_menu_opts::NEWCHAR:
-                    max_item_count = vNewGameSubItems.size();
-                    break;
-                case main_menu_opts::SETTINGS:
-                    max_item_count = vSettingsSubItems.size();
-                    break;
-                case main_menu_opts::HELP:
-                case main_menu_opts::QUIT:
-                default:
-                    break;
-            }
-            if( max_item_count > 0 ) {
-                if( action == "UP" || action == "PAGE_UP" || action == "SCROLL_UP" ) {
-                    sel2--;
-                    if( sel2 < min_item_val ) { sel2 = max_item_count - 1; }
-                } else if( action == "DOWN" || action == "PAGE_DOWN" || action == "SCROLL_DOWN" ) {
-                    sel2++;
-                    if( sel2 >= max_item_count ) { sel2 = min_item_val; }
-                }
+            if( sub_focused ) {
+                sub_focused = false;
                 on_move();
+            }
+        } else if( action == "RIGHT" || action == "NEXT_TAB" ) {
+            if( submenu_count( cur ) > 0 && !sub_focused ) {
+                sub_focused = true;
+                on_move();
+            }
+        } else if( action == "UP" || action == "DOWN" ) {
+            const int delta = ( action == "UP" ) ? -1 : 1;
+            if( !sub_focused ) {
+                // Move the rail selection with wrap.
+                sel1 = ( sel1 + delta + max_menu_opts + 1 ) % ( max_menu_opts + 1 );
+                sel_line = 0;
+                sel2 = sel1 == getopt( main_menu_opts::LOADCHAR )
+                       ? static_cast<int>( last_world_pos ) : 0;
+                sub_focused = false;
+                on_move();
+            } else {
+                // Move within the submenu column.
+                const int cnt = submenu_count( cur );
+                if( cnt > 0 ) {
+                    sel2 = ( sel2 + delta + cnt ) % cnt;
+                    on_move();
+                }
+            }
+        } else if( action == "PAGE_UP" || action == "PAGE_DOWN"
+                   || action == "SCROLL_UP" || action == "SCROLL_DOWN" ) {
+            if( cur == main_menu_opts::MOTD || cur == main_menu_opts::CREDITS ) {
+                rml_scroll_pending = true;
+                if( action == "PAGE_UP" || action == "SCROLL_UP" ) {
+                    if( sel_line > 0 ) { sel_line--; }
+                } else {
+                    const int effective_height = sel_line + FULL_SCREEN_HEIGHT - 2;
+                    if( ( cur == main_menu_opts::CREDITS && effective_height < mmenu_credits_len )
+                        || ( cur == main_menu_opts::MOTD && effective_height < mmenu_motd_len ) ) {
+                        sel_line++;
+                    }
+                }
+            } else if( sub_focused ) {
+                // Treat as UP/DOWN within submenu.
+                const int delta = ( action == "PAGE_UP" || action == "SCROLL_UP" ) ? -1 : 1;
+                const int cnt = submenu_count( cur );
+                if( cnt > 0 ) {
+                    sel2 = ( sel2 + delta + cnt ) % cnt;
+                    on_move();
+                }
             }
         } else if( action == "CONFIRM" ) {
             switch( static_cast<main_menu_opts>( sel1 ) ) {
