@@ -1,6 +1,7 @@
-/* Layout for the title screen (Tier 4 #3: main_menu). Vertical left rail:
-   title block + vertical nav, optional submenu column, open right context area
-   with bottom-anchored card, footer keybind hints. Palette in mainmenu_theme.rcss. */
+/* Layout for the title screen (Tier 4 #3: main_menu). Vertical left rail
+   with title block above, optional bordered submenu column, open right context
+   area with bottom-anchored card, footer keybind hints.
+   Palette lives in mainmenu_theme.rcss. */
 
 body {
     width: 100%;
@@ -15,24 +16,10 @@ body {
     padding: 24dp 28dp;
 }
 
-.mm-main {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: row;
-}
-
-/* Left rail */
-.mm-rail {
-    flex: 0 0 auto;
-    width: 280dp;
-    display: flex;
-    flex-direction: column;
-    padding: 16dp;
-}
-
+/* Title block — above the columns, left-aligned */
 .mm-title-block {
     flex: 0 0 auto;
+    padding: 0 16dp;
 }
 
 .mm-title-main {
@@ -56,6 +43,48 @@ body {
     flex: 0 0 auto;
     height: 1dp;
     margin: 12dp 0;
+}
+
+/* Main content row: rail + connector-col + subcol + context */
+.mm-main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+}
+
+/* Connector column: flex item between rail and subcol.
+   Natural flow placement — no absolute positioning. */
+.mm-connector-col {
+    flex: 0 0 auto;
+    width: 16dp;
+    display: flex;
+    flex-direction: column;
+}
+.mm-conn-spacer {
+    flex: 0 0 auto;
+}
+.mm-conn-ibeam {
+    flex: 0 0 auto;
+    height: 14dp;
+    width: 100%;
+}
+.mm-conn-bar {
+    margin-top: 6dp;
+    height: 2dp;
+    width: 100%;
+}
+
+/* Left rail — vertical nav only.
+   position:relative so data-style-top bob offset moves the element
+   AND its runic frame together (apply_crt reads GetAbsoluteOffset). */
+.mm-rail {
+    flex: 0 0 auto;
+    width: 260dp;
+    display: flex;
+    flex-direction: column;
+    padding: 12dp 16dp;
+    position: relative;
 }
 
 .mm-nav {
@@ -85,14 +114,20 @@ body {
     margin-left: 10dp;
 }
 
-/* Submenu column */
+/* Submenu column — runic-framed region (runic-region class, no close-X).
+   border: 20dp transparent reserves the ring for apply_crt's procedural frame.
+   position:relative for bob offset. */
 .mm-subcol {
     flex: 0 0 auto;
-    width: 240dp;
+    width: 300dp;
+    align-self: flex-start;
+    max-height: 60vh;
     display: flex;
     flex-direction: column;
-    margin-left: 16dp;
-    padding: 16dp;
+    border: 20dp transparent;
+    padding: 12dp;
+    overflow-y: auto;
+    position: relative;
 }
 
 .mm-section-header {
@@ -101,16 +136,15 @@ body {
 }
 
 .mm-action-list {
-    flex: 1;
-    min-height: 0;
+    flex: 0 0 auto;
     display: flex;
     flex-direction: column;
-    overflow-y: auto;
 }
 
 .mm-action-row {
     display: block;
     padding: 4dp 10dp;
+    margin: 1dp 0;
 }
 
 /* Right context area: open space, content bottom-anchored */
@@ -124,11 +158,19 @@ body {
     margin-left: 16dp;
 }
 
+/* MOTD/Credits panel: fills space, header above scrollable text */
+.mm-motd-panel {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 16dp;
+}
+
 .mm-scroll-text {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: 16dp;
 }
 
 .mm-scroll-line {
@@ -136,6 +178,7 @@ body {
     white-space: pre-wrap;
 }
 
+/* Context card: compact, bottom-anchored */
 .mm-context-card {
     flex: 0 0 auto;
     max-height: 30%;

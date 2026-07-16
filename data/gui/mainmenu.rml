@@ -6,15 +6,17 @@
 </head>
 <body data-model="mainmenu">
     <div class="mm-root">
+        <!-- Title block above the columns -->
+        <div class="mm-title-block">
+            <div class="mm-title-main" data-rml="title_main_rml"></div>
+            <div class="mm-title-sub" data-rml="title_sub_rml"></div>
+            <div class="mm-version" data-rml="version_rml"></div>
+        </div>
+        <div class="mm-separator"></div>
+        <!-- Content: nav rail + connector + subcol + context area -->
         <div class="mm-main">
-            <!-- Left rail: title block + vertical nav -->
-            <div class="mm-rail" data-class-focused="!sub_active">
-                <div class="mm-title-block">
-                    <div class="mm-title-main" data-rml="title_main_rml"></div>
-                    <div class="mm-title-sub" data-rml="title_sub_rml"></div>
-                    <div class="mm-version" data-rml="version_rml"></div>
-                </div>
-                <div class="mm-separator"></div>
+            <div class="mm-rail" data-class-focused="!sub_active"
+                 data-style-top="rail_bob">
                 <div class="mm-nav">
                     <div class="mm-nav-item" data-for="it : items"
                          data-class-selected="it.selected"
@@ -24,8 +26,18 @@
                     </div>
                 </div>
             </div>
-            <!-- Submenu column: only when the selected item has subitems -->
-            <div class="mm-subcol" data-if="show_submenu" data-class-focused="sub_active">
+            <!-- Connector column: flex item between rail and subcol.
+                 Spacer pushes the I-beam to the selected item's Y. -->
+            <div class="mm-connector-col" data-if="show_submenu">
+                <div class="mm-conn-spacer" data-style-height="connector_offset"></div>
+                <div class="mm-conn-ibeam">
+                    <div class="mm-conn-bar"></div>
+                </div>
+            </div>
+            <!-- Submenu column: runic-framed region (no close-X, no vignette) -->
+            <div id="mm-subcol" class="runic-region mm-subcol" data-if="show_submenu"
+                 data-class-focused="sub_active"
+                 data-style-top="subcol_bob">
                 <div class="mm-section-header" data-rml="panel_header_rml"></div>
                 <div class="mm-action-list">
                     <div class="mm-action-row" data-for="s : submenu"
@@ -35,9 +47,14 @@
             </div>
             <!-- Right context area: open space for particles; content anchored bottom -->
             <div class="mm-context-area">
-                <div id="mm-motd" class="mm-scroll-text scroll-pane" data-if="show_motd">
-                    <div class="mm-scroll-line" data-for="m : motd_lines" data-rml="m.text_rml"></div>
+                <!-- MOTD/Credits: header + scrollable text -->
+                <div class="mm-motd-panel" data-if="show_motd">
+                    <div class="mm-section-header" data-rml="context_header_rml"></div>
+                    <div id="mm-motd" class="mm-scroll-text scroll-pane">
+                        <div class="mm-scroll-line" data-for="m : motd_lines" data-rml="m.text_rml"></div>
+                    </div>
                 </div>
+                <!-- Default: bottom-anchored context card -->
                 <div class="mm-context-card" data-if="!show_motd">
                     <div class="mm-section-header" data-rml="context_header_rml"></div>
                     <div class="mm-context-body" data-rml="context_body_rml"></div>

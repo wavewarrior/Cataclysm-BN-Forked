@@ -3,8 +3,22 @@
    Scoped to .mm-* classes to avoid leaking into the shared theme. */
 
 /* Translucent surfaces — particles read through. */
-.mm-rail, .mm-subcol, .mm-scroll-text, .mm-context-card {
+.mm-rail, .mm-motd-panel, .mm-context-card {
     background-color: rgba(10, 10, 15, 0.60);
+}
+
+/* Subcol panel: translucent bg; runic frame from .panel class (apply_crt). */
+.mm-subcol {
+    background-color: rgba(10, 10, 15, 0.60);
+}
+
+/* Connector I-beam: vertical ticks (borders) + horizontal bar (child bg). */
+.mm-conn-ibeam {
+    border-left: 2dp #c4a832;
+    border-right: 2dp #c4a832;
+}
+.mm-conn-bar {
+    background-color: #c4a832;
 }
 
 /* Title treatment. */
@@ -16,38 +30,48 @@
     color: #a1885f;
 }
 
-/* Navigation items — base state. */
+/* Navigation items — base state. Left border reserved transparent for selection accent. */
 .mm-nav-item {
     color: #a1885f;
     background-color: transparent;
+    border-left: 3dp transparent;
+    transition: background-color 0.2s quadratic-in-out, color 0.15s quadratic-in-out;
 }
 .mm-nav-item:hover {
     color: #c4a832;
     background-color: rgba(196, 168, 50, 0.1);
 }
-/* Unfocused-column selection: dimmer. */
+/* Unfocused-column selection: visible but dimmer. */
 .mm-nav-item.selected {
     color: #c4a832;
-    background-color: rgba(196, 168, 50, 0.12);
+    background-color: rgba(196, 168, 50, 0.18);
+    border-left: 3dp #7a6430;
 }
-/* Focused-column selection: bright highlight. */
+/* Focused-column selection: bright highlight + glow + gold accent bar. */
 .mm-rail.focused .mm-nav-item.selected {
-    color: #c4a832;
-    background-color: rgba(196, 168, 50, 0.25);
-    font-effect: glow(2dp rgba(196, 168, 50, 0.4));
+    color: #e0c040;
+    background-color: rgba(196, 168, 50, 0.30);
+    border-left: 3dp #c4a832;
+    font-effect: glow(3dp rgba(196, 168, 50, 0.5));
 }
 
 /* Nav icon glyphs. */
 .mm-nav-icon {
     color: #5ab0a0;
+    transition: color 0.15s quadratic-in-out;
 }
 .mm-nav-item.selected .mm-nav-icon {
     color: #70d0c0;
+}
+.mm-rail.focused .mm-nav-item.selected .mm-nav-icon {
+    color: #90f0e0;
 }
 
 /* Action rows (submenu items) — base state. */
 .mm-action-row {
     color: #c4b89a;
+    border-left: 2dp transparent;
+    transition: background-color 0.2s quadratic-in-out, color 0.15s quadratic-in-out;
 }
 .mm-action-row:hover {
     color: #d4c8a0;
@@ -56,12 +80,15 @@
 /* Unfocused-column selection. */
 .mm-action-row.selected {
     color: #c4a832;
-    background-color: rgba(196, 168, 50, 0.10);
+    background-color: rgba(196, 168, 50, 0.15);
+    border-left: 2dp #7a6430;
 }
-/* Focused-column selection. */
+/* Focused-column selection: bright + glow + accent bar. */
 .mm-subcol.focused .mm-action-row.selected {
-    color: #c4a832;
-    background-color: rgba(196, 168, 50, 0.25);
+    color: #e0c040;
+    background-color: rgba(196, 168, 50, 0.30);
+    border-left: 2dp #c4a832;
+    font-effect: glow(2dp rgba(196, 168, 50, 0.4));
 }
 
 /* Section headers. */

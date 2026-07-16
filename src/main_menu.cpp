@@ -110,6 +110,10 @@ struct mm_session {
     bool show_motd = false;
     bool show_submenu = false;
     bool sub_active = false;
+    Rml::String connector_offset;   // "Xdp" — connector top position
+    Rml::String rail_bob;           // "Xdp" — relative top offset for bob
+    Rml::String subcol_bob;         // "Xdp" — relative top offset for bob
+    float connector_y = 0.0f;       // smoothed connector Y (dp)
     Rml::DataModelHandle handle;
 };
 
@@ -640,6 +644,29 @@ bool main_menu::opening_screen()
         // Sync the focus flag for RML data-class-focused.
         data->sub_active = sub_focused;
 
+        // --- Per-frame animation: connector tracking + panel bob ---
+        using clk = std::chrono::steady_clock;
+        static auto t0 = clk::now();
+        const double elapsed = std::chrono::duration<double>( clk::now() - t0 ).count();
+
+        // Bobbing: subtle sinusoidal float (±2dp, different phases).
+        const auto bob_val = []( double t, double phase ) -> float {
+            return 2.0f * static_cast<float>( std::sin( t * 1.2 + phase ) );
+        };
+        data->rail_bob = string_format( "%.1fdp", bob_val( elapsed, 0.0 ) );
+        data->subcol_bob = string_format( "%.1fdp", bob_val( elapsed, 1.05 ) );
+
+        // Connector: smooth Y tracking of selected rail item centre.
+        // Each nav item ≈ 42dp step (24dp icon + 16dp v-pad + 2dp margin).
+        // Subtract half the I-beam height (7dp) to centre it on the item.
+        constexpr float item_step = 42.0f;
+        constexpr float rail_pad = 12.0f;
+        constexpr float conn_half_h = 7.0f;
+        const float target_y = rail_pad + sel1 * item_step + item_step * 0.5f
+                               + bob_val( elapsed, 0.0 ) - conn_half_h;
+        data->connector_y += ( target_y - data->connector_y ) * 0.25f;
+        data->connector_offset = string_format( "%.1fdp", data->connector_y );
+
         // Dirty all bound variables.
         data->handle.DirtyVariable( "title_main_rml" );
         data->handle.DirtyVariable( "title_sub_rml" );
@@ -655,6 +682,9 @@ bool main_menu::opening_screen()
         data->handle.DirtyVariable( "show_motd" );
         data->handle.DirtyVariable( "show_submenu" );
         data->handle.DirtyVariable( "sub_active" );
+        data->handle.DirtyVariable( "connector_offset" );
+        data->handle.DirtyVariable( "rail_bob" );
+        data->handle.DirtyVariable( "subcol_bob" );
 
         // MOTD/Credits keyboard scroll-follow.
         if( rml_scroll_pending && data->show_motd ) {
@@ -684,6 +714,9 @@ bool main_menu::opening_screen()
         c.Bind( "show_motd", &data->show_motd );
         c.Bind( "show_submenu", &data->show_submenu );
         c.Bind( "sub_active", &data->sub_active );
+        c.Bind( "connector_offset", &data->connector_offset );
+        c.Bind( "rail_bob", &data->rail_bob );
+        c.Bind( "subcol_bob", &data->subcol_bob );
         c.BindEventCallback(
         "on_item", [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
             int idx = -1;
