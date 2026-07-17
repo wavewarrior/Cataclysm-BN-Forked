@@ -455,6 +455,11 @@ void devui_rml_open()
     c.Bind( "mem_radius", &g_dbg_params.mem_radius );
     c.Bind( "sway_amp", &g_dbg_params.sway_amp );
     c.Bind( "sway_freq", &g_dbg_params.sway_freq );
+    c.Bind( "ripple_k", &g_dbg_params.ripple_k );
+    c.Bind( "gust_amp", &g_dbg_params.gust_amp );
+    c.Bind( "gust_freq", &g_dbg_params.gust_freq );
+    c.Bind( "part_radius", &g_dbg_params.part_radius );
+    c.Bind( "part_strength", &g_dbg_params.part_strength );
     c.Bind( "outline_enable", &g_outline_enable );
     c.Bind( "outline_thickness", &g_outline_thickness );
     c.Bind( "outline_alpha", &g_outline_alpha );

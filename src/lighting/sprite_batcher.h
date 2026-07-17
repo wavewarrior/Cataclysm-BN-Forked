@@ -182,6 +182,13 @@ struct debug_params {
     float sky_reach = 10.0f;   // sky march max distance (tiles)
     float sun_steps = 24.0f;   // celestial march steps
     float sun_penumbra = 4.0f; // penumbra angular samples (1=hard edge, 6=very soft)
+    // Wave 2: vegetation life knobs (vertex stage; sprite.vert reads via DebugParams b2/space1).
+    float ripple_k = 1.5f;      // intra-sprite column UV desync (0=rigid, 2=heavy shear)
+    float gust_amp = 0.4f;      // multi-octave wind gust envelope amplitude (0=steady)
+    float gust_freq = 0.3f;     // gust envelope frequency (Hz-ish, slow)
+    float part_radius = 2.5f;   // player foliage parting radius in tiles (0=off)
+    float part_strength = 0.5f; // player foliage parting push strength (0=off)
+    float veg_pad = 0.0f;       // alignment padding (176 bytes = 11 × 16)
 };
 
 // Returns sun/sky params interpolated from a 24h LUT for the given hour (0..24).

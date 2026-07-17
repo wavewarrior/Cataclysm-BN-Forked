@@ -80,6 +80,13 @@ cbuffer DebugParams : register(b2, space1) {
     float sky_reach;
     float sun_steps;
     float sun_penumbra;
+    // Wave 2: vegetation life knobs (vertex-stage — consumed by the sway block below).
+    float ripple_k;      // intra-sprite column UV desync (0=rigid, 2=heavy shear)
+    float gust_amp;      // multi-octave wind gust envelope amplitude (0=steady)
+    float gust_freq;     // gust envelope frequency (Hz-ish, slow)
+    float part_radius;   // player foliage parting radius in tiles (0=off)
+    float part_strength; // player foliage parting push strength (0=off)
+    float veg_pad;       // alignment padding
 };
 
 struct VS_OUT {
@@ -138,20 +145,38 @@ VS_OUT main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
     // edge texels rather than wrapping to neighbouring atlas content.
     // swayw (s.pad1) is the per-sprite foliage weight set at enqueue (0 = no
     // sway). Phase keys off the world-locked base tile so neighbouring plants
-    // desync and the motion sticks to terrain on scroll. The (1.0 - c.y)
-    // gradient pins the base and peaks at the canopy.
+    // desync and the motion sticks to terrain on scroll.
     float2      c_uv = c;
     const float swayw = s.pad1;
     if( swayw > 0.0 ) {
-        const float ph   = base_tile.x * 0.7 + base_tile.y * 1.3;
-        const float wind = sin( anim_time * sway_freq + ph );
-        // Pin the base: the lower BASE_PIN fraction of the sprite stays planted (zero sway)
-        // and the bend ramps in toward the top, so the canopy sways while the trunk/base of
-        // a single un-split sprite (shrubs, etc.) stays put. Sharper than the old linear
-        // (1.0 - c.y), which still swayed the lower half.
+        // Per-tile phase so neighbouring plants desync, world-locked on scroll.
+        float ph = base_tile.x * 0.7 + base_tile.y * 1.3;
+        // §7 intra-sprite ripple: per-column UV desync → shear wave, not rigid slide.
+        ph += c.x * ripple_k;
+        // §7 multi-octave wind: two sine harmonics × slow gust envelope.
+        const float wind1 = sin( anim_time * sway_freq + ph );
+        const float wind2 = sin( anim_time * sway_freq * 2.3 + ph * 1.7 ) * 0.5;
+        const float gust  = 0.6 + 0.4 * sin( anim_time * gust_freq );
+        const float wind  = ( wind1 + wind2 ) * lerp( 1.0, gust, gust_amp );
+        // Pin the base: the lower BASE_PIN fraction of the sprite stays planted
+        // and the bend ramps in toward the top (canopy sways, trunk stays put).
         const float BASE_PIN = 0.55;
         const float bend = 1.0 - smoothstep( 0.0, BASE_PIN, c.y );
         c_uv.x += bend * swayw * sway_amp * wind / max( s.dst_w, 1.0 );
+        // Optional slight vertical canopy bob (subtle).
+        c_uv.y += bend * swayw * sway_amp * wind * 0.15 / max( s.dst_h, 1.0 );
+
+        // §8 player foliage parting: push foliage away from the player.
+        if( part_radius > 0.01 && part_strength > 0.0 ) {
+            const float2 d    = base_tile - float2( player_x, player_y );
+            const float  dist = length( d );
+            if( dist < part_radius && dist > 0.01 ) {
+                const float k = ( 1.0 - dist / part_radius ) * part_strength;
+                const float2 push = normalize( d ) * k;
+                c_uv.x += push.x * bend;
+                c_uv.y += push.y * bend * 0.3; // gentle vertical push
+            }
+        }
     }
 
     // ---- Height depth pillar (DitW) ----

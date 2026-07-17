@@ -127,6 +127,13 @@ cbuffer DebugParams : register(b2, space3) {
     float sky_reach;           // sky march max distance (tiles)
     float sun_steps;           // celestial march steps (float → uint in compute push)
     float sun_penumbra;        // penumbra angular samples (float → uint in compute push)
+    // Wave 2: vegetation life knobs (vertex-stage only; declared for cbuffer layout parity).
+    float ripple_k;
+    float gust_amp;
+    float gust_freq;
+    float part_radius;
+    float part_strength;
+    float veg_pad;
 };
 struct VS_OUT {
     float4 pos      : SV_Position;

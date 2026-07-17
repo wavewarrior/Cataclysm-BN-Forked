@@ -152,6 +152,11 @@
                 <div class="devui-section">Foliage sway</div>
                 <div class="devui-row">sway amplitude <input type="range" min="0" max="8" step="0.1" data-value="sway_amp"/> <span class="devui-val">{{sway_amp}}</span></div>
                 <div class="devui-row">sway frequency <input type="range" min="0" max="3" step="0.05" data-value="sway_freq"/> <span class="devui-val">{{sway_freq}}</span></div>
+                <div class="devui-row">ripple k <input type="range" min="0" max="4" step="0.1" data-value="ripple_k"/> <span class="devui-val">{{ripple_k}}</span></div>
+                <div class="devui-row">gust amplitude <input type="range" min="0" max="1" step="0.05" data-value="gust_amp"/> <span class="devui-val">{{gust_amp}}</span></div>
+                <div class="devui-row">gust frequency <input type="range" min="0" max="1" step="0.01" data-value="gust_freq"/> <span class="devui-val">{{gust_freq}}</span></div>
+                <div class="devui-row">part radius <input type="range" min="0" max="5" step="0.1" data-value="part_radius"/> <span class="devui-val">{{part_radius}}</span></div>
+                <div class="devui-row">part strength <input type="range" min="0" max="2" step="0.05" data-value="part_strength"/> <span class="devui-val">{{part_strength}}</span></div>
 
                 <div class="devui-section">Hover outline</div>
                 <label class="devui-row"><input type="checkbox" value="1" data-checked="outline_enable"/> outline enable</label>
