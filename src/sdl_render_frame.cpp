@@ -878,9 +878,27 @@ auto tonemap_pass_t( lighting::render_state &rs,
     lighting::ui_composite_target *wldr = rs.world_ldr_target();
     if( wt && wt->texture() && wldr && wldr->texture() && rs.gpu_sampler()
         && rs.tonemap().ready() ) {
+        // Fill grade_params from the F4 devui globals each frame.
+        lighting::grade_params grade;
+        grade.cdl_slope_r  = g_grade_cdl_slope_r;
+        grade.cdl_slope_g  = g_grade_cdl_slope_g;
+        grade.cdl_slope_b  = g_grade_cdl_slope_b;
+        grade.cdl_offset_r = g_grade_cdl_offset_r;
+        grade.cdl_offset_g = g_grade_cdl_offset_g;
+        grade.cdl_offset_b = g_grade_cdl_offset_b;
+        grade.cdl_power_r  = g_grade_cdl_power_r;
+        grade.cdl_power_g  = g_grade_cdl_power_g;
+        grade.cdl_power_b  = g_grade_cdl_power_b;
+        grade.temperature      = g_grade_temperature;
+        grade.tint             = g_grade_tint;
+        grade.saturation       = g_grade_saturation;
+        grade.contrast         = g_grade_contrast;
+        grade.vignette_amount  = g_grade_vignette;
+        grade.grain_amount     = g_grade_grain;
+        grade.ca_amount        = g_grade_ca;
         rs.tonemap().record( ctx.cmd_buffer, wt->texture(), rs.gpu_sampler(),
                              wldr->texture(), wldr->width(), wldr->height(),
-                             g_tonemap_exposure, g_tonemap_min_ev, g_tonemap_max_ev );
+                             g_tonemap_exposure, g_tonemap_min_ev, g_tonemap_max_ev, grade );
     }
 }
 

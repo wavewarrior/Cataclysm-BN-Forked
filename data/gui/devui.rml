@@ -216,6 +216,26 @@
                 <div class="devui-row">bloom threshold <input type="range" min="0" max="4" step="0.02" data-value="bloom_threshold"/> <span class="devui-val">{{bloom_threshold}}</span></div>
                 <div class="devui-row">bloom intensity <input type="range" min="0" max="2" step="0.02" data-value="bloom_intensity"/> <span class="devui-val">{{bloom_intensity}}</span></div>
 
+                <div class="devui-section">Colour grade (ASC-CDL)</div>
+                <div class="devui-row">slope R <input type="range" min="0.5" max="2" step="0.01" data-value="grade_cdl_slope_r"/> <span class="devui-val">{{grade_cdl_slope_r}}</span></div>
+                <div class="devui-row">slope G <input type="range" min="0.5" max="2" step="0.01" data-value="grade_cdl_slope_g"/> <span class="devui-val">{{grade_cdl_slope_g}}</span></div>
+                <div class="devui-row">slope B <input type="range" min="0.5" max="2" step="0.01" data-value="grade_cdl_slope_b"/> <span class="devui-val">{{grade_cdl_slope_b}}</span></div>
+                <div class="devui-row">offset R <input type="range" min="-0.5" max="0.5" step="0.005" data-value="grade_cdl_offset_r"/> <span class="devui-val">{{grade_cdl_offset_r}}</span></div>
+                <div class="devui-row">offset G <input type="range" min="-0.5" max="0.5" step="0.005" data-value="grade_cdl_offset_g"/> <span class="devui-val">{{grade_cdl_offset_g}}</span></div>
+                <div class="devui-row">offset B <input type="range" min="-0.5" max="0.5" step="0.005" data-value="grade_cdl_offset_b"/> <span class="devui-val">{{grade_cdl_offset_b}}</span></div>
+                <div class="devui-row">power R <input type="range" min="0.5" max="2" step="0.01" data-value="grade_cdl_power_r"/> <span class="devui-val">{{grade_cdl_power_r}}</span></div>
+                <div class="devui-row">power G <input type="range" min="0.5" max="2" step="0.01" data-value="grade_cdl_power_g"/> <span class="devui-val">{{grade_cdl_power_g}}</span></div>
+                <div class="devui-row">power B <input type="range" min="0.5" max="2" step="0.01" data-value="grade_cdl_power_b"/> <span class="devui-val">{{grade_cdl_power_b}}</span></div>
+                <div class="devui-row">temperature <input type="range" min="-1" max="1" step="0.01" data-value="grade_temperature"/> <span class="devui-val">{{grade_temperature}}</span></div>
+                <div class="devui-row">tint <input type="range" min="-1" max="1" step="0.01" data-value="grade_tint"/> <span class="devui-val">{{grade_tint}}</span></div>
+                <div class="devui-row">saturation <input type="range" min="0" max="2" step="0.01" data-value="grade_saturation"/> <span class="devui-val">{{grade_saturation}}</span></div>
+                <div class="devui-row">contrast <input type="range" min="0.5" max="2" step="0.01" data-value="grade_contrast"/> <span class="devui-val">{{grade_contrast}}</span></div>
+
+                <div class="devui-section">Post FX</div>
+                <div class="devui-row">vignette <input type="range" min="0" max="1" step="0.01" data-value="grade_vignette"/> <span class="devui-val">{{grade_vignette}}</span></div>
+                <div class="devui-row">film grain <input type="range" min="0" max="0.1" step="0.001" data-value="grade_grain"/> <span class="devui-val">{{grade_grain}}</span></div>
+                <div class="devui-row">chromatic aberration <input type="range" min="0" max="0.01" step="0.0001" data-value="grade_ca"/> <span class="devui-val">{{grade_ca}}</span></div>
+
                 <div class="devui-section">Height depth (DitW)</div>
                 <div class="devui-row">lean mul <input type="range" min="0" max="3" step="0.05" data-value="depth_lean_str"/> <span class="devui-val">{{depth_lean_str}}</span></div>
                 <div class="devui-row">dark mul <input type="range" min="0" max="2" step="0.05" data-value="depth_dark_str"/> <span class="devui-val">{{depth_dark_str}}</span></div>

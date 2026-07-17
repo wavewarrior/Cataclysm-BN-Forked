@@ -1,19 +1,18 @@
 #pragma once
 
-// Bloom post pass — Step-4 (HDR RT backbone post chain). Extracts bright pixels
-// from the HDR world_target, blurs them at half resolution, and composites the
-// glow back ADDITIVELY onto world_target — before the tonemap pass maps it down.
+// Bloom post pass — multi-scale dual-filter Kawase bloom. Extracts bright
+// pixels from the HDR world_target, downsamples through a mip chain using a
+// Kawase downfilter, then upsamples back with additive Kawase upfilter, and
+// composites the glow ADDITIVELY onto world_target before tonemapping.
 //
-// Four fullscreen-triangle sub-passes per frame, each with a SINGLE sampler
-// (the tonemap shader is left untouched — no unprecedented 2-sampler Metal
-// path):
-//   1. EXTRACT   world_target (full) → bloom_a_ (half): luminance above threshold
-//   2. BLUR H    bloom_a_ → bloom_b_  (separable Gaussian, horizontal)
-//   3. BLUR V    bloom_b_ → bloom_a_  (separable Gaussian, vertical)
-//   4. COMPOSITE bloom_a_ (half) → world_target (full), additive blend × intensity
+// Sub-passes per frame:
+//   1. EXTRACT     world_target (full) → mip_chain_[0] (half): luminance threshold
+//   2. DOWN chain  mip_chain_[i-1] → mip_chain_[i] for i=1..mip_count_-1
+//   3. UP chain    mip_chain_[i+1] → mip_chain_[i] for i=mip_count_-2..0 (additive)
+//   4. COMPOSITE   mip_chain_[0] → world_target (full), additive blend × intensity
 //
-// Owns its half-res RGBA16F textures + a LINEAR sampler (bilinear upscale).
-// Shaders: data/shaders/lighting/src/bloom_extract.frag, bloom_blur.frag,
+// Owns progressively-halved RGBA16F mip textures + a LINEAR sampler.
+// Shaders: bloom_extract.frag, bloom_kawase_down.frag, bloom_kawase_up.frag,
 // bloom_composite.frag (+ tonemap.vert fullscreen tri).
 
 #include <SDL3/SDL_gpu.h>
@@ -25,14 +24,16 @@ class gpu_device;
 
 class bloom_pass {
 public:
+    static constexpr int MAX_MIP_LEVELS = 5;
+
     bloom_pass() = default;
     bloom_pass(const bloom_pass&) = delete;
     bloom_pass& operator=(const bloom_pass&) = delete;
     ~bloom_pass();
 
-    // Build pipelines + half-res textures + linear sampler. hdr_format is the
+    // Build pipelines + mip chain textures + linear sampler. hdr_format is the
     // world_target format the composite pipeline blends into. full_w/full_h
-    // are the world_target pixel dims (bloom textures are half of these).
+    // are the world_target pixel dims (mip_chain_[0] is half of these).
     bool init(
         gpu_device& dev, SDL_GPUTextureFormat hdr_format, std::uint32_t full_w,
         std::uint32_t full_h);
@@ -41,14 +42,13 @@ public:
 
     void shutdown() noexcept;
 
-    bool ready() const noexcept {
-        return extract_pipeline_ && blur_pipeline_ && composite_pipeline_ && bloom_a_ && bloom_b_
-            && sampler_;
+    auto ready() const noexcept -> bool {
+        return extract_pipeline_ && down_pipeline_ && up_pipeline_ && composite_pipeline_
+            && mip_chain_[0] && sampler_;
     }
 
-    // Run extract → blur → composite, adding glow into `hdr_tex` in place.
-    // No-op if not ready or any argument invalid. `hdr_tex` is both the
-    // extract source and the composite destination (separate passes).
+    // Run extract → kawase down chain → kawase up chain → composite, adding
+    // glow into `hdr_tex` in place. No-op if not ready or any argument invalid.
     void record(
         SDL_GPUCommandBuffer* cb, SDL_GPUTexture* hdr_tex, std::uint32_t full_w,
         std::uint32_t full_h, float threshold, float intensity);
@@ -60,16 +60,19 @@ private:
     SDL_GPUTextureFormat hdr_format_ = SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT;
     SDL_GPUShader* vert_ = nullptr;
     SDL_GPUShader* extract_frag_ = nullptr;
-    SDL_GPUShader* blur_frag_ = nullptr;
+    SDL_GPUShader* down_frag_ = nullptr;
+    SDL_GPUShader* up_frag_ = nullptr;
     SDL_GPUShader* composite_frag_ = nullptr;
-    SDL_GPUGraphicsPipeline* extract_pipeline_ = nullptr;   // → bloom format
-    SDL_GPUGraphicsPipeline* blur_pipeline_ = nullptr;      // → bloom format
+    SDL_GPUGraphicsPipeline* extract_pipeline_ = nullptr;   // → bloom format, no blend
+    SDL_GPUGraphicsPipeline* down_pipeline_ = nullptr;      // → bloom format, no blend
+    SDL_GPUGraphicsPipeline* up_pipeline_ = nullptr;        // → bloom format, additive
     SDL_GPUGraphicsPipeline* composite_pipeline_ = nullptr; // → hdr_format, additive
     SDL_GPUSampler* sampler_ = nullptr;                     // linear/clamp
-    SDL_GPUTexture* bloom_a_ = nullptr;                     // half-res ping
-    SDL_GPUTexture* bloom_b_ = nullptr;                     // half-res pong
-    std::uint32_t half_w_ = 0;
-    std::uint32_t half_h_ = 0;
+
+    SDL_GPUTexture* mip_chain_[MAX_MIP_LEVELS] = {};  // progressively halved
+    std::uint32_t mip_w_[MAX_MIP_LEVELS] = {};
+    std::uint32_t mip_h_[MAX_MIP_LEVELS] = {};
+    int mip_count_ = 0;
 };
 
 } // namespace lighting

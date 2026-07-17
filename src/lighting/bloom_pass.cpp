@@ -62,38 +62,44 @@ bool bloom_pass::init(
     init_shader_compiler();
     const std::string vert_src = load_lighting_shader_source("tonemap.vert.hlsl");
     const std::string extract_src = load_lighting_shader_source("bloom_extract.frag.hlsl");
-    const std::string blur_src = load_lighting_shader_source("bloom_blur.frag.hlsl");
+    const std::string down_src = load_lighting_shader_source("bloom_kawase_down.frag.hlsl");
+    const std::string up_src = load_lighting_shader_source("bloom_kawase_up.frag.hlsl");
     const std::string comp_src = load_lighting_shader_source("bloom_composite.frag.hlsl");
     auto v = compile_graphics_shader(
         dev, vert_src, "main", SDL_SHADERCROSS_SHADERSTAGE_VERTEX, "bloom.vert");
     auto e = compile_graphics_shader(
         dev, extract_src, "main", SDL_SHADERCROSS_SHADERSTAGE_FRAGMENT, "bloom_extract.frag");
-    auto b = compile_graphics_shader(
-        dev, blur_src, "main", SDL_SHADERCROSS_SHADERSTAGE_FRAGMENT, "bloom_blur.frag");
+    auto dn = compile_graphics_shader(
+        dev, down_src, "main", SDL_SHADERCROSS_SHADERSTAGE_FRAGMENT, "bloom_kawase_down.frag");
+    auto up = compile_graphics_shader(
+        dev, up_src, "main", SDL_SHADERCROSS_SHADERSTAGE_FRAGMENT, "bloom_kawase_up.frag");
     auto c = compile_graphics_shader(
         dev, comp_src, "main", SDL_SHADERCROSS_SHADERSTAGE_FRAGMENT, "bloom_composite.frag");
-    if (!v || !e || !b || !c) {
+    if (!v || !e || !dn || !up || !c) {
         if (v) { SDL_ReleaseGPUShader(dev.raw(), v.shader); }
         if (e) { SDL_ReleaseGPUShader(dev.raw(), e.shader); }
-        if (b) { SDL_ReleaseGPUShader(dev.raw(), b.shader); }
+        if (dn) { SDL_ReleaseGPUShader(dev.raw(), dn.shader); }
+        if (up) { SDL_ReleaseGPUShader(dev.raw(), up.shader); }
         if (c) { SDL_ReleaseGPUShader(dev.raw(), c.shader); }
         dbg(DL::Error) << "bloom_pass: shader compile failed";
         return false;
     }
     vert_ = v.shader;
     extract_frag_ = e.shader;
-    blur_frag_ = b.shader;
+    down_frag_ = dn.shader;
+    up_frag_ = up.shader;
     composite_frag_ = c.shader;
 
     DebugLogFL(DL::Info, DC::Main)
         << "bloom shaders reflection: extract(s=" << e.resources.num_samplers
-        << ") blur(s=" << b.resources.num_samplers << ") composite(s=" << c.resources.num_samplers
-        << ") (each expects samplers=1)";
+        << ") down(s=" << dn.resources.num_samplers << ") up(s=" << up.resources.num_samplers
+        << ") composite(s=" << c.resources.num_samplers << ") (each expects samplers=1)";
 
     extract_pipeline_ = make_pipeline(dev.raw(), vert_, extract_frag_, BLOOM_FORMAT, false);
-    blur_pipeline_ = make_pipeline(dev.raw(), vert_, blur_frag_, BLOOM_FORMAT, false);
+    down_pipeline_ = make_pipeline(dev.raw(), vert_, down_frag_, BLOOM_FORMAT, false);
+    up_pipeline_ = make_pipeline(dev.raw(), vert_, up_frag_, BLOOM_FORMAT, true);
     composite_pipeline_ = make_pipeline(dev.raw(), vert_, composite_frag_, hdr_format_, true);
-    if (!extract_pipeline_ || !blur_pipeline_ || !composite_pipeline_) {
+    if (!extract_pipeline_ || !down_pipeline_ || !up_pipeline_ || !composite_pipeline_) {
         DebugLogFL(DL::Error, DC::Main) << "bloom_pass pipeline: " << SDL_GetError();
         return false;
     }
@@ -115,45 +121,69 @@ bool bloom_pass::init(
 }
 
 bool bloom_pass::create_textures(std::uint32_t full_w, std::uint32_t full_h) {
-    half_w_ = full_w > 1u ? full_w / 2u : 1u;
-    half_h_ = full_h > 1u ? full_h / 2u : 1u;
     if (!SDL_GPUTextureSupportsFormat(
             dev_->raw(), BLOOM_FORMAT, SDL_GPU_TEXTURETYPE_2D,
             SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER)) {
         DebugLogFL(DL::Error, DC::Main) << "bloom_pass: RGBA16F COLOR_TARGET|SAMPLER unsupported";
         return false;
     }
+
+    // Build the mip chain: each level is half the previous, starting at half
+    // the full resolution. Stop when either dimension would drop below 2.
+    std::uint32_t w = full_w > 1u ? full_w / 2u : 1u;
+    std::uint32_t h = full_h > 1u ? full_h / 2u : 1u;
+    mip_count_ = 0;
+
     SDL_GPUTextureCreateInfo tci{};
     tci.type = SDL_GPU_TEXTURETYPE_2D;
     tci.format = BLOOM_FORMAT;
     tci.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
-    tci.width = half_w_;
-    tci.height = half_h_;
     tci.layer_count_or_depth = 1;
     tci.num_levels = 1;
     tci.sample_count = SDL_GPU_SAMPLECOUNT_1;
-    bloom_a_ = SDL_CreateGPUTexture(dev_->raw(), &tci);
-    bloom_b_ = SDL_CreateGPUTexture(dev_->raw(), &tci);
-    if (!bloom_a_ || !bloom_b_) {
-        DebugLogFL(DL::Error, DC::Main) << "bloom_pass: texture create: " << SDL_GetError();
-        return false;
+
+    for (int i = 0; i < MAX_MIP_LEVELS; ++i) {
+        if (w < 2 || h < 2) { break; }
+        tci.width = w;
+        tci.height = h;
+        mip_chain_[i] = SDL_CreateGPUTexture(dev_->raw(), &tci);
+        if (!mip_chain_[i]) {
+            DebugLogFL(DL::Error, DC::Main)
+                << "bloom_pass: mip " << i << " texture create: " << SDL_GetError();
+            return false;
+        }
+        mip_w_[i] = w;
+        mip_h_[i] = h;
+        ++mip_count_;
+        w = w > 1u ? w / 2u : 1u;
+        h = h > 1u ? h / 2u : 1u;
     }
-    return true;
+
+    if (mip_count_ < 2) {
+        DebugLogFL(DL::Warn, DC::Main)
+            << "bloom_pass: resolution too small for multi-scale bloom (mip_count="
+            << mip_count_ << ")";
+    }
+
+    return mip_count_ > 0;
 }
 
 bool bloom_pass::resize(std::uint32_t full_w, std::uint32_t full_h) {
-    const std::uint32_t hw = full_w > 1u ? full_w / 2u : 1u;
-    const std::uint32_t hh = full_h > 1u ? full_h / 2u : 1u;
-    if (bloom_a_ && bloom_b_ && hw == half_w_ && hh == half_h_) { return true; }
+    const std::uint32_t new_w0 = full_w > 1u ? full_w / 2u : 1u;
+    const std::uint32_t new_h0 = full_h > 1u ? full_h / 2u : 1u;
+    if (mip_count_ > 0 && mip_chain_[0] && new_w0 == mip_w_[0] && new_h0 == mip_h_[0]) {
+        return true;
+    }
     if (dev_ && dev_->ready()) {
-        if (bloom_a_) {
-            SDL_ReleaseGPUTexture(dev_->raw(), bloom_a_);
-            bloom_a_ = nullptr;
+        for (int i = 0; i < mip_count_; ++i) {
+            if (mip_chain_[i]) {
+                SDL_ReleaseGPUTexture(dev_->raw(), mip_chain_[i]);
+                mip_chain_[i] = nullptr;
+            }
+            mip_w_[i] = 0;
+            mip_h_[i] = 0;
         }
-        if (bloom_b_) {
-            SDL_ReleaseGPUTexture(dev_->raw(), bloom_b_);
-            bloom_b_ = nullptr;
-        }
+        mip_count_ = 0;
     }
     return create_textures(full_w, full_h);
 }
@@ -161,23 +191,30 @@ bool bloom_pass::resize(std::uint32_t full_w, std::uint32_t full_h) {
 void bloom_pass::shutdown() noexcept {
     if (dev_ && dev_->ready()) {
         if (extract_pipeline_) { SDL_ReleaseGPUGraphicsPipeline(dev_->raw(), extract_pipeline_); }
-        if (blur_pipeline_) { SDL_ReleaseGPUGraphicsPipeline(dev_->raw(), blur_pipeline_); }
+        if (down_pipeline_) { SDL_ReleaseGPUGraphicsPipeline(dev_->raw(), down_pipeline_); }
+        if (up_pipeline_) { SDL_ReleaseGPUGraphicsPipeline(dev_->raw(), up_pipeline_); }
         if (composite_pipeline_) {
             SDL_ReleaseGPUGraphicsPipeline(dev_->raw(), composite_pipeline_);
         }
         if (vert_) { SDL_ReleaseGPUShader(dev_->raw(), vert_); }
         if (extract_frag_) { SDL_ReleaseGPUShader(dev_->raw(), extract_frag_); }
-        if (blur_frag_) { SDL_ReleaseGPUShader(dev_->raw(), blur_frag_); }
+        if (down_frag_) { SDL_ReleaseGPUShader(dev_->raw(), down_frag_); }
+        if (up_frag_) { SDL_ReleaseGPUShader(dev_->raw(), up_frag_); }
         if (composite_frag_) { SDL_ReleaseGPUShader(dev_->raw(), composite_frag_); }
         if (sampler_) { SDL_ReleaseGPUSampler(dev_->raw(), sampler_); }
-        if (bloom_a_) { SDL_ReleaseGPUTexture(dev_->raw(), bloom_a_); }
-        if (bloom_b_) { SDL_ReleaseGPUTexture(dev_->raw(), bloom_b_); }
+        for (int i = 0; i < MAX_MIP_LEVELS; ++i) {
+            if (mip_chain_[i]) { SDL_ReleaseGPUTexture(dev_->raw(), mip_chain_[i]); }
+        }
     }
-    vert_ = extract_frag_ = blur_frag_ = composite_frag_ = nullptr;
-    extract_pipeline_ = blur_pipeline_ = composite_pipeline_ = nullptr;
+    vert_ = extract_frag_ = down_frag_ = up_frag_ = composite_frag_ = nullptr;
+    extract_pipeline_ = down_pipeline_ = up_pipeline_ = composite_pipeline_ = nullptr;
     sampler_ = nullptr;
-    bloom_a_ = bloom_b_ = nullptr;
-    half_w_ = half_h_ = 0;
+    for (int i = 0; i < MAX_MIP_LEVELS; ++i) {
+        mip_chain_[i] = nullptr;
+        mip_w_[i] = 0;
+        mip_h_[i] = 0;
+    }
+    mip_count_ = 0;
 }
 
 // One fullscreen sub-pass: bind pipeline, sample `src` with the linear sampler,
@@ -211,40 +248,53 @@ void bloom_pass::record(
     SDL_GPUCommandBuffer* cb, SDL_GPUTexture* hdr_tex, std::uint32_t full_w, std::uint32_t full_h,
     float threshold, float intensity) {
     if (!ready() || !cb || !hdr_tex || full_w == 0 || full_h == 0) { return; }
+    if (mip_count_ < 1) { return; }
 
-    // 1. EXTRACT: world_target → bloom_a_ (half). Uniform: threshold.
+    // 1. EXTRACT: world_target → mip_chain_[0] (half). Uniform: threshold.
     {
         struct {
             float threshold;
             float pad0, pad1, pad2;
         } u{threshold, 0, 0, 0};
         SDL_PushGPUFragmentUniformData(cb, 0, &u, sizeof(u));
-        run_subpass(cb, extract_pipeline_, hdr_tex, sampler_, bloom_a_, half_w_, half_h_, false);
+        run_subpass(
+            cb, extract_pipeline_, hdr_tex, sampler_, mip_chain_[0], mip_w_[0], mip_h_[0], false);
     }
-    // 2. BLUR H: bloom_a_ → bloom_b_. Uniform: texel direction.
-    {
+
+    // 2. DOWN chain: mip_chain_[i-1] → mip_chain_[i] using kawase downfilter.
+    //    Push the SOURCE texture's texel size so the shader samples at correct offsets.
+    for (int i = 1; i < mip_count_; ++i) {
         struct {
-            float dx, dy, pad0, pad1;
-        } u{1.0f / static_cast<float>(half_w_), 0.0f, 0, 0};
+            float tx, ty, pad0, pad1;
+        } u{1.0f / static_cast<float>(mip_w_[i - 1]),
+            1.0f / static_cast<float>(mip_h_[i - 1]), 0, 0};
         SDL_PushGPUFragmentUniformData(cb, 0, &u, sizeof(u));
-        run_subpass(cb, blur_pipeline_, bloom_a_, sampler_, bloom_b_, half_w_, half_h_, false);
+        run_subpass(
+            cb, down_pipeline_, mip_chain_[i - 1], sampler_, mip_chain_[i],
+            mip_w_[i], mip_h_[i], false);
     }
-    // 3. BLUR V: bloom_b_ → bloom_a_.
-    {
+
+    // 3. UP chain: mip_chain_[i+1] → mip_chain_[i] with additive blend (load_op=LOAD).
+    //    Push the SOURCE texture's texel size (the smaller mip being upsampled).
+    for (int i = mip_count_ - 2; i >= 0; --i) {
         struct {
-            float dx, dy, pad0, pad1;
-        } u{0.0f, 1.0f / static_cast<float>(half_h_), 0, 0};
+            float tx, ty, pad0, pad1;
+        } u{1.0f / static_cast<float>(mip_w_[i + 1]),
+            1.0f / static_cast<float>(mip_h_[i + 1]), 0, 0};
         SDL_PushGPUFragmentUniformData(cb, 0, &u, sizeof(u));
-        run_subpass(cb, blur_pipeline_, bloom_b_, sampler_, bloom_a_, half_w_, half_h_, false);
+        run_subpass(
+            cb, up_pipeline_, mip_chain_[i + 1], sampler_, mip_chain_[i],
+            mip_w_[i], mip_h_[i], true);
     }
-    // 4. COMPOSITE: bloom_a_ (half) → hdr_tex (full), additive × intensity.
+
+    // 4. COMPOSITE: mip_chain_[0] (half) → hdr_tex (full), additive × intensity.
     {
         struct {
             float intensity;
             float pad0, pad1, pad2;
         } u{intensity, 0, 0, 0};
         SDL_PushGPUFragmentUniformData(cb, 0, &u, sizeof(u));
-        run_subpass(cb, composite_pipeline_, bloom_a_, sampler_, hdr_tex, full_w, full_h, true);
+        run_subpass(cb, composite_pipeline_, mip_chain_[0], sampler_, hdr_tex, full_w, full_h, true);
     }
 }
 

@@ -333,28 +333,30 @@ float dither_threshold(float2 world_px) {
     const int by = ((int)floor(world_px.y)) & 3;
     return (k_bayer4[by * 4 + bx] + 0.5) / 16.0;
 }
-// --- Bucket A / A1: inline alpha-aware Sobel surface normal ----------------
-// Per-pixel relief derived from the albedo atlas itself (decision #15's
-// "alpha-aware Sobel + edge-fade-to-flat at silhouettes"), computed in the
-// fragment instead of baked to a normal atlas at tileset load. This needs NO
-// second texture, so it sidesteps the Metal/shadercross sampler-vs-storage
-// gate entirely — the question of whether per-pixel normals add visible value
-// in a 2D tile game is answered before any normal-atlas pipeline is built.
-// GetDimensions queries the *currently bound* atlas page, so per-page texel
-// size is correct without a uniform. Tuning is LIVE via DebugParams (F4 panel):
-// nrm_amount / nrm_relief (signed) / nrm_elev. nrm_amount=0 reduces both Lambert
-// sites to the previous flat-normal behaviour exactly.
+// --- Bucket A / A1: inline alpha-shape bevel surface normal ----------------
+// Per-pixel relief derived from the sprite's alpha silhouette (decision #15,
+// upgraded from albedo-luma Sobel to alpha-shape bevel for cleaner results).
+// Alpha defines the sprite's actual shape, so the bevel follows rounded armor,
+// angular weapons, organic creature silhouettes — not internal artwork
+// hatching. Widened 2-texel tap radius for a smoother gradient that reads as
+// a soft height dome rather than a sharp edge outline. Edge-fade-to-flat at
+// silhouettes prevents packed-atlas neighbours from bleeding fake edges.
+// Tuning is LIVE via DebugParams (F4 panel): nrm_amount / nrm_relief / nrm_elev.
+// nrm_amount=0 reduces both Lambert sites to flat-normal behaviour exactly.
 float3 surface_normal(float2 uv) {
     float aw, ah;
     Atlas.GetDimensions(aw, ah);
     const float2 ts = 1.0 / float2(max(aw, 1.0), max(ah, 1.0));
-    const float4 sL = Atlas.Sample(AtlasSmp, uv - float2(ts.x, 0.0));
-    const float4 sR = Atlas.Sample(AtlasSmp, uv + float2(ts.x, 0.0));
-    const float4 sU = Atlas.Sample(AtlasSmp, uv - float2(0.0, ts.y));
-    const float4 sD = Atlas.Sample(AtlasSmp, uv + float2(0.0, ts.y));
-    const float3 luma = float3(0.299, 0.587, 0.114);
-    const float dx = dot(sR.rgb, luma) - dot(sL.rgb, luma);
-    const float dy = dot(sD.rgb, luma) - dot(sU.rgb, luma);
+    // Widened 2-texel tap radius — smoother bevel on the alpha silhouette.
+    const float tap_r = 2.0;
+    const float4 sL = Atlas.Sample(AtlasSmp, uv - float2(ts.x * tap_r, 0.0));
+    const float4 sR = Atlas.Sample(AtlasSmp, uv + float2(ts.x * tap_r, 0.0));
+    const float4 sU = Atlas.Sample(AtlasSmp, uv - float2(0.0, ts.y * tap_r));
+    const float4 sD = Atlas.Sample(AtlasSmp, uv + float2(0.0, ts.y * tap_r));
+    // Alpha-shape gradient: the silhouette alpha IS the height field.
+    // Interior pixels (a≈1) flatten; edge pixels (a<1) produce the bevel.
+    const float dx = sR.a - sL.a;
+    const float dy = sD.a - sU.a;
     // Symmetric height-field tilt; nrm_relief is SIGNED so the F4 slider flips the
     // global relief direction (negative = full negation of both axes) to resolve
     // the y-down/atlas-V sign without a rebuild. Magnitude = relief strength.
@@ -392,17 +394,18 @@ float4 main(VS_OUT i) : SV_Target0 {
         if(texel.a < cut) discard;
         return float4(i.tint.rgb, texel.a * i.tint.a);
     }
-    // Per-pixel surface normal from inline alpha-aware Sobel (Bucket A / A1),
+    // Per-pixel surface normal from inline alpha-shape bevel (Bucket A / A1),
     // driving the emitter + sun Lambert. TALL sprites (creatures, trees, walls,
-    // tall furniture — light_pos != world_pos) use a FLAT normal instead: the
-    // albedo-Sobel relief is meant for GROUND terrain shape, but on busy entity
-    // sprites it tilts per-pixel and — with saturate() clipping the dark side —
-    // averages BELOW flat, crushing dark art (survivors/zombies rendered near-
-    // black while the lit ground stays bright = the "weird toning" on dynamic
-    // tiles). Ground terrain (light_pos == world_pos) keeps the full tuned relief.
+    // tall furniture — light_pos != world_pos) get a GENTLE bevel (30% of full
+    // nrm_amount). The alpha-shape gradient no longer catches interior artwork
+    // hatching (the old albedo-Sobel "weird toning" cause), so tall sprites can
+    // safely receive subtle silhouette relief without darkening. Ground terrain
+    // (light_pos == world_pos) keeps the full tuned relief.
     const bool   frag_is_tall_n = ( i.light_pos.x != i.world_pos.x )
                                   || ( i.light_pos.y != i.world_pos.y );
-    const float3 normal = frag_is_tall_n ? float3( 0.0, 0.0, 1.0 ) : surface_normal( i.uv );
+    const float3 normal = frag_is_tall_n
+                          ? lerp( float3( 0.0, 0.0, 1.0 ), surface_normal( i.uv ), 0.3 )
+                          : surface_normal( i.uv );
     // Sky exposure (0 roofed .. 1 open), hoisted above the emitter loop so the
     // wet-specular term can gate on it (no indoor glint). SkyVisBuf is x-major
     // (skyvis[x*H+y]); bilinear so the indoor daylight-bleed gradient reads smooth.

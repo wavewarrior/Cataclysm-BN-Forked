@@ -16,6 +16,23 @@
 
 namespace lighting {
 
+// ASC-CDL colour grade + post-processing parameters (b1/space3).
+// Wire-stable: matches the GradeParams cbuffer in tonemap.frag.hlsl exactly.
+struct grade_params {
+    float cdl_slope_r = 1.0f, cdl_slope_g = 1.0f, cdl_slope_b = 1.0f, grade_pad0 = 0.0f;
+    float cdl_offset_r = 0.0f, cdl_offset_g = 0.0f, cdl_offset_b = 0.0f, grade_pad1 = 0.0f;
+    float cdl_power_r = 1.0f, cdl_power_g = 1.0f, cdl_power_b = 1.0f, grade_pad2 = 0.0f;
+    float temperature = 0.0f;
+    float tint = 0.0f;
+    float saturation = 1.0f;
+    float contrast = 1.05f;        // slightly punchy default
+    float vignette_amount = 0.15f; // subtle default
+    float grain_amount = 0.025f;   // subtle default
+    float ca_amount = 0.0015f;     // very subtle default
+    float gp_pad0 = 0.0f;          // align Row 4 to 16 bytes
+};
+static_assert( sizeof( grade_params ) == 80, "grade_params is wire-stable with GradeParams cbuffer" );
+
 class gpu_device;
 
 class tonemap_pass {
@@ -43,7 +60,8 @@ public:
     // the F4 tonemap sliders, pushed as a fragment uniform (b0/space3).
     void record(
         SDL_GPUCommandBuffer* cb, SDL_GPUTexture* src, SDL_GPUSampler* sampler, SDL_GPUTexture* dst,
-        std::uint32_t dst_w, std::uint32_t dst_h, float exposure, float min_ev, float max_ev);
+        std::uint32_t dst_w, std::uint32_t dst_h, float exposure, float min_ev, float max_ev,
+        const grade_params& grade );
 
 private:
     gpu_device* dev_ = nullptr;

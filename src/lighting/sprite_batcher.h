@@ -162,7 +162,7 @@ struct debug_params {
     float nrm_relief = -2.0f; // tilt magnitude; SIGNED — negative flips global relief dir
     float nrm_elev = 0.3f;    // implied light height; LOWER=more grazing=stronger relief
     float sdf_sharp = 0.0f;   // SDF sample: 0=bilinear(smooth) .. 1=nearest(tight/grid-snap)
-    float ao_strength = 0.0f; // A4 ambient occlusion: 0=off(default) .. 1=full SDF-cavity darkening
+    float ao_strength = 0.35f; // A4 ambient occlusion: 0=off .. 1=full SDF-cavity darkening (ships ON)
     float shadow_mask_str = 0.0f; // Phase 2 silhouette sun-shadow mask on ground: 0=off(default) ..
                                   // 1=full
     // Foliage sway (vertex stage; sprite.vert reads these via DebugParams b2/space1).

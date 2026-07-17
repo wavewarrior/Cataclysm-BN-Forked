@@ -56,6 +56,23 @@ extern float g_tonemap_max_ev;
 extern bool g_bloom_enable;
 extern float g_bloom_threshold;
 extern float g_bloom_intensity;
+// ASC-CDL colour grade + post-processing controls (F4 sliders).
+extern float g_grade_cdl_slope_r;
+extern float g_grade_cdl_slope_g;
+extern float g_grade_cdl_slope_b;
+extern float g_grade_cdl_offset_r;
+extern float g_grade_cdl_offset_g;
+extern float g_grade_cdl_offset_b;
+extern float g_grade_cdl_power_r;
+extern float g_grade_cdl_power_g;
+extern float g_grade_cdl_power_b;
+extern float g_grade_temperature;
+extern float g_grade_tint;
+extern float g_grade_saturation;
+extern float g_grade_contrast;
+extern float g_grade_vignette;
+extern float g_grade_grain;
+extern float g_grade_ca;
 // Volumetric sun-shaft controls.
 extern bool g_vol_enable;
 extern float g_vol_density;

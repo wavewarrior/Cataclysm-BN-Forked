@@ -92,7 +92,8 @@ void tonemap_pass::shutdown() noexcept {
 
 void tonemap_pass::record(
     SDL_GPUCommandBuffer* cb, SDL_GPUTexture* src, SDL_GPUSampler* sampler, SDL_GPUTexture* dst,
-    std::uint32_t dst_w, std::uint32_t dst_h, float exposure, float min_ev, float max_ev) {
+    std::uint32_t dst_w, std::uint32_t dst_h, float exposure, float min_ev, float max_ev,
+    const grade_params& grade) {
     if (!pipeline_ || !cb || !src || !sampler || !dst || dst_w == 0 || dst_h == 0) { return; }
 
     // Fragment uniform (b0/space3): exposure + EV range + 4B pad → 16B.
@@ -103,6 +104,8 @@ void tonemap_pass::record(
         float pad0;
     } params{exposure, min_ev, max_ev, 0.0f};
     SDL_PushGPUFragmentUniformData(cb, /*slot=*/0, &params, sizeof(params));
+    // Fragment uniform (b1/space3): ASC-CDL grade + post effects → 64B.
+    SDL_PushGPUFragmentUniformData(cb, /*slot=*/1, &grade, sizeof(grade));
 
     SDL_GPUColorTargetInfo ct{};
     ct.texture = dst;
