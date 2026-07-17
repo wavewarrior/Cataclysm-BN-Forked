@@ -2,14 +2,14 @@
 
 ## Status: COMPLETE (2026-07-17)
 
-Eight sessions: 11 god files decomposed, ~46k lines extracted across 38 commits into 38 new domain TUs.
+Nine sessions: 11 god files decomposed, ~47k lines extracted across 42 commits into 42 new domain TUs.
 All tests pass, build green throughout.
 
 ## Summary
 
 | File | Original | Final | Reduction | Domain TUs |
 |------|----------|-------|-----------|------------|
-| `character.cpp` | 11,713 | 4,987 | −6,726 (57%) | `_needs`, `_combat`, `_encumbrance`, `_inventory`, `_bionics`, `_mount`, `_vision`, `_movement`, `_item_use`, `_description` |
+| `character.cpp` | 11,713 | 3,881 | −7,832 (67%) | 12 TUs: `_needs`, `_combat`, `_encumbrance`, `_inventory`, `_bionics`, `_mount`, `_vision`, `_movement`, `_item_use`, `_description`, `_mutation`, `_stats` |
 | `map.cpp` | 9,817 | 5,089 | −4,728 (48%) | `_vehicle`, `_bash`, `_items`, `_terrain` |
 | `iuse.cpp` | 8,919 | 4,464 | −4,455 (50%) | `_electronics`, `_tools`, `_consumables`, `_explosives` |
 | `vehicle.cpp` | 8,430 | 4,575 | −3,855 (46%) | `_power`, `_damage`, `_query`, `_physics`, `_items_tow` |
@@ -19,7 +19,7 @@ All tests pass, build green throughout.
 | `monattack.cpp` | 6,165 | 2,912 | −3,253 (53%) | `_ranged`, `_fungus`, `_melee` |
 | `savegame_json.cpp` | 4,998 | 3,561 | −1,437 (29%) | `_character` |
 | `npcmove.cpp` | 4,613 | 3,357 | −1,256 (27%) | `_combat` |
-| **Total** | **88,146** | **42,085** | **−46,061 (52%)** | **38 files** |
+| **Total** | **88,146** | **40,979** | **−47,167 (54%)** | **42 files** |
 
 ## Dependency Modernization
 
