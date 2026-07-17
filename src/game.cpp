@@ -1321,7 +1321,7 @@ int get_convection_temperature( const tripoint_bub_ms &location )
     int lava_mod = here.tr_at( location ).loadid == tr_lava ?
                    fd_fire.obj().get_convection_temperature_mod() : 0;
     // Modifier from fields
-    for( auto fd : here.field_at( location ) ) {
+    for( const auto &fd : here.field_at( location ) ) {
         // Nullify lava modifier when there is open fire
         if( fd.first.obj().has_fire ) {
             lava_mod = 0;
@@ -1944,7 +1944,7 @@ spell_events &game::spell_events_subscriber()
 void game::disp_NPC_epilogues()
 {
     // TODO: This search needs to be expanded to all NPCs
-    for( auto elem : follower_ids ) {
+    for( const auto &elem : follower_ids ) {
         shared_ptr_fast<npc> guy = get_overmapbuffer( current_dimension_id_ ).find_npc( elem );
         if( !guy ) {
             continue;

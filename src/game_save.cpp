@@ -690,7 +690,7 @@ bool game::load( const save_t &name )
 
 void game::reset_npc_dispositions()
 {
-    for( auto elem : follower_ids ) {
+    for( const auto &elem : follower_ids ) {
         shared_ptr_fast<npc> npc_to_get = get_overmapbuffer( current_dimension_id_ ).find_npc( elem );
         if( !npc_to_get )  {
             continue;
