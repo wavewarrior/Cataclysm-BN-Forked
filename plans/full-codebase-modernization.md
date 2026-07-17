@@ -2,8 +2,7 @@
 
 ## Status: COMPLETE (2026-07-17)
 
-11 god files decomposed, ~57k lines extracted across 57 commits.
-Every file now under 3,900 lines.
+11 god files decomposed, ~59k lines extracted across 59 commits.
 
 | File | Original | Final | Reduction |
 |------|----------|-------|-----------|
@@ -14,7 +13,8 @@ Every file now under 3,900 lines.
 | `iexamine.cpp` | 8,186 | 1,591 | −81% |
 | `iuse_actor.cpp` | 7,879 | 3,773 | −52% |
 | `activity_actor.cpp` | 7,426 | 2,497 | −66% |
+| `game.cpp` | 7,196 | 4,738 | −34% |
 | `monattack.cpp` | 6,165 | 2,912 | −53% |
 | `savegame_json.cpp` | 4,998 | 3,561 | −29% |
 | `npcmove.cpp` | 4,613 | 3,357 | −27% |
-| **Total** | **88,146** | **31,296** | **−64.5%** |
+| **Total** | **95,342** | **36,034** | **−62%** |
