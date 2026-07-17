@@ -2,7 +2,7 @@
 
 ## Status: COMPLETE (2026-07-17)
 
-11 god files decomposed, ~61k lines extracted across 60 commits.
+12 god files decomposed, ~62k lines extracted across 61 commits.
 
 | File | Original | Final | Reduction |
 |------|----------|-------|-----------|
@@ -14,7 +14,8 @@
 | `iuse_actor.cpp` | 7,879 | 3,773 | −52% |
 | `activity_actor.cpp` | 7,426 | 2,497 | −66% |
 | `game.cpp` | 7,196 | 3,082 | −57% |
+| `overmap.cpp` | 6,700 | 6,100 | −9% |
 | `monattack.cpp` | 6,165 | 2,912 | −53% |
 | `savegame_json.cpp` | 4,998 | 3,561 | −29% |
 | `npcmove.cpp` | 4,613 | 3,357 | −27% |
-| **Total** | **95,342** | **34,378** | **−64%** |
+| **Total** | **102,042** | **40,478** | **−60%** |
