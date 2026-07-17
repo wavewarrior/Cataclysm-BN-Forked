@@ -227,3 +227,10 @@ Wave 4 (§11-§13): After all effects land. Measure then optimize.
 - **Wave 2:** Build. Walk through forest. Vegetation sways realistically, parts for player.
 - **Wave 3:** Build. Stand in dark room — dust motes. Stand near fire — embers + heat shimmer. Night outdoors — fireflies.
 - **Wave 4:** Tracy capture. All target scenes at 60+ fps.
+
+## Deferred Backlog
+
+- **Baked SpriteDLight normal atlas (GK §3):** Per-sprite distance-transform dome normals baked at tileset load, sampled from a parallel normal page at runtime. Would give noticeably better per-sprite volume than the inline alpha-Sobel bevel. Blocked on the Metal 2nd-sampler spike (shadercross may now support it — needs a probe). Full spec in `plans/done/GRAVEYARD_KEEPER_VISUAL_PLAN.md §3`.
+- **Heat distortion near fire:** Screen-space UV warp near fire emitters (shimmering air). Needs a new post-pass reading the emitter buffer.
+- **Forward+ tile-binned light culling (LIGHTING_OPT P6):** Only needed if horde density exceeds the existing P1/P2 emitter budget.
+- **LUT bake for colour presets:** Bake the live ASC-CDL grade to a 32³ LUT PNG for instant preset switching. Spec in GK §6 A3/A4.
