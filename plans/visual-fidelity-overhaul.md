@@ -1,6 +1,6 @@
 # Visual Fidelity Overhaul — Eye-Catching Pixel Art Lighting at 60+ FPS
 
-## Status: IN PROGRESS (2026-07-17)
+## Status: COMPLETE (2026-07-17) — verified 59.3 fps in-game on M1 Pro
 
 ## Context
 
