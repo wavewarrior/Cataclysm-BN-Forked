@@ -578,13 +578,8 @@ int mod_state() {
 
 bool process_event(const SDL_Event& ev) {
     if (!g_ready || !any_open() || g_context == nullptr) { return false; }
-    // Only PASSIVE docs open (e.g. the Tier-7 sidebar HUD)? It renders but must not
-    // capture input — fall through so the game keeps world mouse (look/examine) and
-    // its keys. As soon as an interactive (modal) doc stacks on top, resume capture.
-    if (!any_interactive_open()) { return false; }
-    // Debug keys (consumed so the game doesn't also act on them): F9/F10 nudge
-    // the runic-frame inset, F11 toggles the RmlUi element inspector, F12 the
-    // panel-centre marker cross. These help diagnose frame placement in-game.
+
+    // Debug keys (F9-F12): always active, even with passive-only docs.
     if (ev.type == SDL_EVENT_KEY_DOWN) {
         switch (ev.key.key) {
             case SDLK_F9: {
@@ -612,9 +607,9 @@ bool process_event(const SDL_Event& ev) {
                 break;
         }
     }
-    // Mouse only: keyboard belongs to the game's input_context, which drives
-    // menu navigation. We forward mouse so :hover and row click events work.
-    // Context is sized in physical pixels; SDL mouse coords are in window points.
+
+    // Pixel scale for mouse coordinate conversion. Context is sized in physical
+    // pixels; SDL mouse coords are in window points.
     float sx = 1.f;
     float sy = 1.f;
     if (g_window != nullptr) {
@@ -628,14 +623,30 @@ bool process_event(const SDL_Event& ev) {
         if (wh > 0) { sy = static_cast<float>(ph) / wh; }
     }
     const int mods = mod_state();
+
+    // Mouse motion: always feed so RmlUi hover state stays current (needed for
+    // scroll target resolution). Never consumed — game always gets it too.
+    if (ev.type == SDL_EVENT_MOUSE_MOTION) {
+        g_context->ProcessMouseMove(
+            static_cast<int>(ev.motion.x * sx), static_cast<int>(ev.motion.y * sy), mods);
+        return false;
+    }
+
+    // Mouse wheel: always feed to RmlUi so passive docs (HUD log) can scroll.
+    // Return false when passive-only so the game also gets the event.
+    if (ev.type == SDL_EVENT_MOUSE_WHEEL) {
+        g_context->ProcessMouseWheel(-ev.wheel.y, mods);
+        if (!any_interactive_open()) { return false; }
+        return true;
+    }
+
+    // Only PASSIVE docs open and debugger not visible? Fall through so the
+    // game keeps clicks/keys. When the debugger is open, allow clicks through
+    // so the user can interact with the debugger overlay.
+    if (!any_interactive_open() && !g_rml_debugger) { return false; }
+
+    // Interactive mouse handling.
     switch (ev.type) {
-        case SDL_EVENT_MOUSE_MOTION:
-            // Always feed motion so RmlUi hover state stays current.
-            // The game always needs motion for cursor tracking and tooltips,
-            // so we never consume it regardless of RmlUi's interaction state.
-            g_context->ProcessMouseMove(
-                static_cast<int>(ev.motion.x * sx), static_cast<int>(ev.motion.y * sy), mods);
-            return false;
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
         case SDL_EVENT_MOUSE_BUTTON_UP: {
             const int btn =
@@ -645,17 +656,12 @@ bool process_event(const SDL_Event& ev) {
                     ? 2
                     : 3;
             if (ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-                // Sync hover to the click point so hit-tests are current even if
-                // no motion event preceded this press.
                 g_context->ProcessMouseMove(
                     static_cast<int>(ev.button.x * sx), static_cast<int>(ev.button.y * sy), mods);
                 if (ev.button.button == SDL_BUTTON_LEFT) {
                     for (Rml::Element* e = g_context->GetHoverElement(); e != nullptr;
                          e = e->GetParentNode()) {
                         if (e->GetId() == "runic-close") {
-                            // The runic close button → synthesize the screen's cancel.
-                            // Keyboard owns menu input, so push a real ESC keypress the
-                            // game's input_context will consume to close the panel.
                             SDL_Event esc{};
                             esc.type = SDL_EVENT_KEY_DOWN;
                             esc.key.down = true;
@@ -670,23 +676,13 @@ bool process_event(const SDL_Event& ev) {
                     }
                 }
             }
-            // RmlUi returns true when the mouse is NOT interacting with any element
-            // (respects pointer-events: none on body). Invert: we return true when
-            // RmlUi consumed the event, false when it should pass through to the game.
-            // This naturally pairs DOWN/UP — if DOWN fell through, UP will too,
-            // unless the user dragged onto a panel element (RmlUi then captures).
             if (ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
                 return !g_context->ProcessMouseButtonDown(btn, mods);
             } else {
                 return !g_context->ProcessMouseButtonUp(btn, mods);
             }
         }
-        case SDL_EVENT_MOUSE_WHEEL:
-            // SDL: +y scrolls up; RmlUi: +delta scrolls down.
-            // RmlUi returns true when not interacting → invert for our convention.
-            return !g_context->ProcessMouseWheel(-ev.wheel.y, mods);
         default:
-            // Keyboard / text / everything else: let the game handle it.
             return false;
     }
 }

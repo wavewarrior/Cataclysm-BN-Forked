@@ -710,6 +710,7 @@ namespace
 // via data-rml attributes — no layout iteration.
 struct hud_rml_model {
     Rml::String topbar_rml;
+    Rml::String topbar_row2_rml;
     Rml::String vitals_rml;
     Rml::String minimap_rml;
     Rml::String minimap_title;
@@ -848,6 +849,8 @@ auto hud_vitals( avatar &u ) -> std::string
 
     }
 
+    // Visual divider between body-part bars and resource bars.
+    out += "<div class=\"vitals-divider\"></div>";
     // Stamina thin bar
     {
         const auto sta_cur = u.get_stamina();
@@ -920,89 +923,86 @@ auto hud_log( avatar & ) -> std::string
 namespace
 {
 
-// Map chunk: 13×7 colored-text overmap minichunk centred on the avatar (see
-// overmap_ui::overmap_chunk_rows — text-producing successor to the removed
-// draw_overmap_chunk). 13×7 mirrors the old curses minimap's cell count; odd
-// dimensions keep the avatar's own tile dead-centre. Raw producer: rows are
-// joined with "\n" inside a `white-space:pre` div (see .hud-map in sidebar_hud.rcss)
-// so the grid's shape survives without per-row RML elements.
+// Map chunk: 11×11 colored-text overmap minichunk centred on the avatar.
+// Square dimensions keep the avatar dead-centre and give a balanced view.
+// Rows are joined with "\n" inside a white-space:pre div.
 auto hud_map( avatar &u ) -> std::string
 {
-    const auto rows = overmap_ui::overmap_chunk_rows( u, u.abs_omt_pos(), 13, 7 );
+    const auto rows = overmap_ui::overmap_chunk_rows( u, u.abs_omt_pos(), 11, 11 );
     return "<div class=\"hud-map\">" + join( rows, "\n" ) + "</div>";
 }
 
-// Qud top bar (single row): name ─── temp ─── condition words (left) +
-// stats ─── time/place (right). All in ONE row, no second/clipped row.
+// Qud top bar row 1: identity + conditions.
 auto hud_topbar( avatar &u ) -> std::string
 {
-    // --- Left span: name, temp, conditions ---
-    auto left = colorize( u.get_name(), c_white );
-    left += " \u2500\u2500\u2500 ";
-
-    // Temperature with hue ladder
+    auto seg_id = colorize( u.get_name(), c_white );
     const units::temperature temp = get_weather().get_temperature( u.abs_pos() );
-    left += colorize( string_format( "T:%s", print_temperature( temp ) ), temp_color( temp ) );
+    seg_id += "  " + colorize( string_format( "T:%s", print_temperature( temp ) ),
+                               temp_color( temp ) );
 
-    // Condition words (space-separated, colored)
-    const auto append_if = [&]( const std::pair<std::string, nc_color> &p ) {
+    auto seg_cond = std::string();
+    const auto append_cond = [&]( const std::pair<std::string, nc_color> &p ) {
         if( !p.first.empty() ) {
-            left += " " + colorize( p.first, p.second );
+            if( !seg_cond.empty() ) {
+                seg_cond += "  ";
+            }
+            seg_cond += colorize( p.first, p.second );
         }
     };
-    append_if( u.get_hunger_description() );
-    append_if( u.get_thirst_description() );
-    append_if( u.get_fatigue_description() );
-    append_if( u.get_pain_description() );
-
-    // Overburdened
+    append_cond( u.get_hunger_description() );
+    append_cond( u.get_thirst_description() );
+    append_cond( u.get_fatigue_description() );
+    append_cond( u.get_pain_description() );
     if( u.weight_carried() > u.weight_capacity() ) {
-        left += " " + colorize( _( "Overburdened" ), c_red );
+        if( !seg_cond.empty() ) {
+            seg_cond += "  ";
+        }
+        seg_cond += colorize( _( "Overburdened" ), c_red );
     }
 
-    // --- Right span: stats, time, place ---
-    auto right = std::string();
-    // Stats: pipe-delimited Qud-style
-    right += colorize( "STR:", c_light_gray );
-    right += colorize( std::to_string( u.get_str() ), str_string( u ).first );
-    right += " ";
-    right += colorize( "DEX:", c_light_gray );
-    right += colorize( std::to_string( u.get_dex() ), dex_string( u ).first );
-    right += " ";
-    right += colorize( "INT:", c_light_gray );
-    right += colorize( std::to_string( u.get_int() ), int_string( u ).first );
-    right += " ";
-    right += colorize( "PER:", c_light_gray );
-    right += colorize( std::to_string( u.get_per() ), per_string( u ).first );
-    right += " | ";
-    right += colorize( "SPD:", c_light_gray );
-    right += colorize( std::to_string( u.get_speed() ), value_color( u.get_speed() ) );
-    right += " | ";
-    right += colorize( "FOC:", c_light_gray );
-    right += colorize( std::to_string( u.focus_pool ), focus_color( u.focus_pool ) );
+    return "<div class=\"hud-segment\"><span class=\"seg-label\">ID</span> "
+           + cata_text_to_rml( seg_id ) + "</div>"
+           + "<div class=\"hud-segment hud-seg-cond\"><span class=\"seg-label\">COND</span> "
+           + cata_text_to_rml( seg_cond ) + "</div>";
+}
 
-    // Time, day N of Season
-    right += "  ";
+// Qud top bar row 2: stats + time/place.
+auto hud_topbar_row2( avatar &u ) -> std::string
+{
+    auto seg_stats = colorize( "STR:", c_light_gray ) +
+                     colorize( std::to_string( u.get_str() ), str_string( u ).first );
+    seg_stats += " " + colorize( "DEX:", c_light_gray ) +
+                 colorize( std::to_string( u.get_dex() ), dex_string( u ).first );
+    seg_stats += " " + colorize( "INT:", c_light_gray ) +
+                 colorize( std::to_string( u.get_int() ), int_string( u ).first );
+    seg_stats += " " + colorize( "PER:", c_light_gray ) +
+                 colorize( std::to_string( u.get_per() ), per_string( u ).first );
+    seg_stats += "  " + colorize( "SPD:", c_light_gray ) +
+                 colorize( std::to_string( u.get_speed() ), value_color( u.get_speed() ) );
+    seg_stats += "  " + colorize( "FOC:", c_light_gray ) +
+                 colorize( std::to_string( u.focus_pool ), focus_color( u.focus_pool ) );
+
+    auto seg_time = std::string();
     if( u.has_watch() ) {
-        right += colorize( to_string_time_of_day( calendar::turn ), c_light_gray );
+        seg_time += colorize( to_string_time_of_day( calendar::turn ), c_light_gray );
     } else if( g->get_levz() >= 0 ) {
-        right += colorize( time_approx(), c_light_gray );
+        seg_time += colorize( time_approx(), c_light_gray );
     } else {
-        right += colorize( "???", c_light_gray );
+        seg_time += colorize( "???", c_light_gray );
     }
-    right += string_format( ", day %d of %s",
-                            day_of_season<int>( calendar::turn ) + 1,
-                            calendar::name_season( season_of_year( calendar::turn ) ) );
-
-    // Place
-    right += " :: ";
-    right += colorize( ACTIVE_OVERMAP_BUFFER.ter( u.abs_omt_pos() )->get_name(), c_white );
+    seg_time += string_format( ", day %d of %s",
+                               day_of_season<int>( calendar::turn ) + 1,
+                               calendar::name_season( season_of_year( calendar::turn ) ) );
+    seg_time += " :: " +
+                colorize( ACTIVE_OVERMAP_BUFFER.ter( u.abs_omt_pos() )->get_name(), c_white );
     if( g->get_levz() < 0 ) {
-        right += colorize( string_format( " %dd deep", -g->get_levz() ), c_dark_gray );
+        seg_time += colorize( string_format( " %dd deep", -g->get_levz() ), c_dark_gray );
     }
 
-    return "<span class=\"strip-left\">" + cata_text_to_rml( left ) + "</span>" +
-           "<span class=\"strip-right\">" + cata_text_to_rml( right ) + "</span>";
+    return "<div class=\"hud-segment\"><span class=\"seg-label\">STAT</span> "
+           + cata_text_to_rml( seg_stats ) + "</div>"
+           + "<div class=\"hud-segment\"><span class=\"seg-label\">TIME</span> "
+           + cata_text_to_rml( seg_time ) + "</div>";
 }
 
 
@@ -1182,6 +1182,7 @@ void sidebar_hud_open()
     // Fixed-region model: bind each string directly.
     g_hud_data = std::make_unique<hud_rml_model>();
     c.Bind( "topbar_rml", &g_hud_data->topbar_rml );
+    c.Bind( "topbar_row2_rml", &g_hud_data->topbar_row2_rml );
     c.Bind( "vitals_rml", &g_hud_data->vitals_rml );
     c.Bind( "minimap_rml", &g_hud_data->minimap_rml );
     c.Bind( "minimap_title", &g_hud_data->minimap_title );
@@ -1217,58 +1218,63 @@ static void sidebar_hud_apply_rect()
         return;
     }
 
-    // Top bar: full width, 1 row tall
+    // Dock width — needed first so topbar/botbar/hotbar can be narrowed.
+    const auto &layout = panel_manager::get_manager().get_current_layout();
+    const bool sidebar_right = get_option<std::string>( "SIDEBAR_POSITION" ) == "right";
+    float dock_width_pct = 0.0f;
+    if( layout.begin() != layout.end() ) {
+        dock_width_pct = 100.0f * layout.begin()->get_width() / TERMX;
+    }
+    const float bar_width_pct = 100.0f - dock_width_pct;
+    const std::string bar_left = sidebar_right
+                                 ? "0%"
+                                 : string_format( "%.4f%%", dock_width_pct );
+
     const float top_rows_pct = 100.0f * sidebar_hud_top_rows() / TERMY;
+    // Top bar: auto height, narrowed to avoid dock.
     if( Rml::Element *el = g_hud_doc->GetElementById( "hud-topbar" ) ) {
-        el->SetProperty( "left", "0%" );
+        el->SetProperty( "left", bar_left );
         el->SetProperty( "top", "0%" );
-        el->SetProperty( "width", "100%" );
-        el->SetProperty( "height", string_format( "%.4f%%", top_rows_pct ) );
+        el->SetProperty( "width", string_format( "%.4f%%", bar_width_pct ) );
+        el->SetProperty( "height", "auto" );
     }
 
-    // Bottom rows: botbar (row 1 from bottom), hotbar (row 2 from bottom = very bottom)
+    // Bottom rows: botbar + hotbar, narrowed to avoid dock.
     const float bottom_rows_pct = 100.0f * sidebar_hud_bottom_rows() / TERMY;
-    const float botbar_rows_pct = 100.0f * 1.f / TERMY;
-    // botbar sits at (TERMY-2)/TERMY, hotbar at (TERMY-1)/TERMY
+    const float half_bottom_pct = bottom_rows_pct / 2.0f;
     if( Rml::Element *el = g_hud_doc->GetElementById( "hud-botbar" ) ) {
-        el->SetProperty( "left", "0%" );
+        el->SetProperty( "left", bar_left );
         el->SetProperty( "top", string_format( "%.4f%%", 100.0f - bottom_rows_pct ) );
-        el->SetProperty( "width", "100%" );
-        el->SetProperty( "height", string_format( "%.4f%%", botbar_rows_pct ) );
+        el->SetProperty( "width", string_format( "%.4f%%", bar_width_pct ) );
+        el->SetProperty( "height", "auto" );
     }
     if( Rml::Element *el = g_hud_doc->GetElementById( "hud-hotbar" ) ) {
-        el->SetProperty( "left", "0%" );
-        el->SetProperty( "top", string_format( "%.4f%%", 100.0f - botbar_rows_pct ) );
-        el->SetProperty( "width", "100%" );
-        el->SetProperty( "height", string_format( "%.4f%%", botbar_rows_pct ) );
+        el->SetProperty( "left", bar_left );
+        el->SetProperty( "top", string_format( "%.4f%%", 100.0f - half_bottom_pct ) );
+        el->SetProperty( "width", string_format( "%.4f%%", bar_width_pct ) );
+        el->SetProperty( "height", "auto" );
     }
 
-    // Vitals overlay: top-left of the viewport area (respects left sidebar width)
+    // Vitals overlay: top-left of the viewport area.
     const int width_left = panel_manager::get_manager().get_width_left();
     const int width_right = panel_manager::get_manager().get_width_right();
     const float width_left_pct = 100.0f * width_left / TERMX;
     const float width_right_pct = 100.0f * width_right / TERMX;
     if( Rml::Element *el = g_hud_doc->GetElementById( "hud-vitals" ) ) {
         el->SetProperty( "left", string_format( "%.4f%%", width_left_pct ) );
-        el->SetProperty( "top", string_format( "%.4f%%", top_rows_pct ) );
+        el->SetProperty( "top", string_format( "%.4f%%", top_rows_pct + 1.0f ) );
     }
 
-    // Dock: pinned to the sidebar edge, spans from top bar to bottom bars
-    const auto &layout = panel_manager::get_manager().get_current_layout();
+    // Dock: full height, pinned to sidebar edge.
     if( layout.begin() != layout.end() ) {
-        const int wd = layout.begin()->get_width();
-        const bool sidebar_right = get_option<std::string>( "SIDEBAR_POSITION" ) == "right";
         const float dock_left_pct = sidebar_right
                                     ? 100.0f - width_right_pct
                                     : 0.0f;
-        const float dock_width_pct = 100.0f * wd / TERMX;
-        const float dock_top_pct = top_rows_pct;
-        const float dock_height_pct = 100.0f - bottom_rows_pct - dock_top_pct;
         if( Rml::Element *el = g_hud_doc->GetElementById( "hud-dock" ) ) {
             el->SetProperty( "left", string_format( "%.4f%%", dock_left_pct ) );
-            el->SetProperty( "top", string_format( "%.4f%%", dock_top_pct ) );
+            el->SetProperty( "top", "0%" );
             el->SetProperty( "width", string_format( "%.4f%%", dock_width_pct ) );
-            el->SetProperty( "height", string_format( "%.4f%%", dock_height_pct ) );
+            el->SetProperty( "height", "100%" );
         }
     }
 }
@@ -1282,6 +1288,8 @@ void sidebar_hud_sync( avatar &u )
     // dirty the variable, and reposition rects.
     g_hud_data->topbar_rml = hud_topbar( u );
     g_hud_data->handle.DirtyVariable( "topbar_rml" );
+    g_hud_data->topbar_row2_rml = hud_topbar_row2( u );
+    g_hud_data->handle.DirtyVariable( "topbar_row2_rml" );
 
     g_hud_data->vitals_rml = hud_vitals( u );
     g_hud_data->handle.DirtyVariable( "vitals_rml" );
@@ -1420,12 +1428,12 @@ bool sidebar_hud_active()
 }
 int sidebar_hud_top_rows()
 {
-    return sidebar_hud_rmlui_enabled() && rmlui_layer::ready() ? 1 : 0;
+    return sidebar_hud_rmlui_enabled() && rmlui_layer::ready() ? 3 : 0;
 }
 
 int sidebar_hud_bottom_rows()
 {
-    return sidebar_hud_rmlui_enabled() && rmlui_layer::ready() ? 2 : 0;
+    return sidebar_hud_rmlui_enabled() && rmlui_layer::ready() ? 4 : 0;
 }
 
 auto sidebar_hud_anim_tick() -> void

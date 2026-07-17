@@ -20,7 +20,7 @@ body {
     display: block;
     white-space: pre;
     color: {{hud-fg}};
-    padding: 1dp 8dp;
+    padding: 4dp 10dp;
 }
 
 /* Icon inline with text */
@@ -34,26 +34,45 @@ body {
 #hud-topbar {
     position: absolute;
     background-color: {{hud-bg}};
-    overflow: hidden;
     border-bottom: 1dp {{hud-border}};
-    padding: 1dp 8dp;
+    padding: 4dp 10dp;
+}
+#hud-topbar .hud-strip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6dp 16dp;
+    align-items: baseline;
+}
+.hud-segment {
+    display: inline;
+    white-space: nowrap;
+}
+.hud-seg-cond {
+    border-left: 1dp {{hud-border}};
+    border-right: 1dp {{hud-border}};
+    padding: 0dp 12dp;
+}
+.seg-label {
+    display: inline;
+    color: #555555ff;
+    font-size: 0.8em;
+    margin-right: 4dp;
 }
 
 /* ========== BOTTOM BAR ========== */
 #hud-botbar {
     position: absolute;
     background-color: {{hud-bg}};
-    overflow: hidden;
     border-top: 1dp {{hud-border}};
-    padding: 1dp 8dp;
+    padding: 4dp 10dp;
 }
 
 /* ========== HOTBAR ========== */
 #hud-hotbar {
     position: absolute;
     background-color: {{hud-bg}};
-    overflow: hidden;
-    padding: 1dp 8dp;
+    border-top: 1dp {{hud-border}};
+    padding: 3dp 10dp;
 }
 
 /* ========== VITALS OVERLAY ========== */
@@ -61,22 +80,22 @@ body {
     position: absolute;
     display: flex;
     flex-direction: column;
-    gap: 2dp;
+    gap: 4dp;
 }
 
 .hud-vitals-inner {
     display: flex;
     flex-direction: column;
-    gap: 2dp;
+    gap: 4dp;
 }
 
 /* Chunky Qud HP bars */
 .vbar {
     position: relative;
-    height: 15dp;
+    height: 18dp;
     width: 230dp;
     background-color: {{hud-bar-bg}};
-    margin-bottom: 2dp;
+    margin-bottom: 3dp;
 }
 .vbar-fill {
     position: absolute;
@@ -102,7 +121,7 @@ body {
 }
 /* Thin bars (STA, MANA) */
 .vbar.thin {
-    height: 9dp;
+    height: 11dp;
     width: 230dp;
 }
 .vbar.thin .vbar-fill {
@@ -121,6 +140,13 @@ body {
     color: #e05050ff;
 }
 
+/* Divider between body-part bars and resource bars */
+.vitals-divider {
+    height: 1dp;
+    background-color: {{hud-border}};
+    margin: 6dp 0dp;
+}
+
 /* ========== DOCK ========== */
 #hud-dock {
     position: absolute;
@@ -128,19 +154,21 @@ body {
     flex-direction: column;
     background-color: {{hud-bg}};
     border-left: 1dp {{hud-border}};
-    padding: 6dp 12dp;
+    padding: 8dp 14dp;
+}
+
+.dock-section {
+    display: block;
+    flex: 0 0 auto;
+    margin-bottom: 8dp;
 }
 
 .dock-flex {
     display: flex;
     flex-direction: column;
     flex: 1 1 auto;
+    min-height: 0;
     margin-bottom: 0dp;
-}
-
-.dock-section {
-    display: block;
-    margin-bottom: 6dp;
 }
 
 .dock-header {
@@ -158,8 +186,9 @@ body {
     display: block;
     white-space: pre-wrap;
     word-break: break-word;
-    padding: 1dp 4dp;
+    padding: 3dp 6dp;
     font-size: 0.9em;
+    line-height: 1.4;
 }
 .hud-log-symbol {
     display: inline;
@@ -179,17 +208,21 @@ body {
 .dock-body {
     color: {{hud-fg}};
     white-space: pre-wrap;
-    line-height: 1.3;
+    line-height: 1.4;
 }
 
 .hud-map-body {
     white-space: pre;
     text-align: center;
+    padding: 8dp 8dp;
+    line-height: 1.2;
+    min-height: 140dp;
 }
 
 /* Scrollable log area */
 .hud-scroll {
     overflow-y: auto;
+    flex: 1 1 auto;
     min-height: 0;
 }
 

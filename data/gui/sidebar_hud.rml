@@ -9,9 +9,10 @@
          All regions are absolutely positioned; the sidebar width is carved from
          the viewport edge. No dynamic row iteration — fixed data-model strings. -->
 
-    <!-- Top bar: full viewport width, 1 row -->
+    <!-- Top bar: full viewport width, 2 rows -->
     <div id="hud-topbar" class="runic-edge-bottom runic-no-top">
         <div class="hud-strip-row" data-rml="topbar_rml"></div>
+        <div class="hud-strip-row" data-rml="topbar_row2_rml"></div>
     </div>
 
     <!-- Vitals overlay: chunky HP bars floating over the map, top-left -->
