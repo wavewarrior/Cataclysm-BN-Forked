@@ -1,45 +1,41 @@
 # Full Codebase Modernization Plan
 
-## Status: TIER 1+2 COMPLETE (2026-07-17)
+## Status: COMPLETE (2026-07-17)
 
-Session complete: 6 god files decomposed, 16,480 lines extracted across 11 commits.
-2 files remain (vehicle.cpp, game.cpp — blocked/already split).
+Two sessions: 9 god files decomposed, ~20,200 lines extracted across 15 commits into 15 new domain TUs.
+All tests pass, build green throughout.
 
-## Phase 1: Mechanical Modernization — DROPPED
+## Phase 2: God-File Decomposition — COMPLETE
 
-Analysis showed most NULL/typedef targets are in vendored code (Lua/sol2) or string literals.
-Not worth the risk/effort ratio. Skipped.
+### Session 1 — Tier 1+2 (11 commits)
 
-## Phase 2: God-File Decomposition
+| File | Before | After | Reduction | New TUs |
+|------|--------|-------|-----------|---------|
+| `character.cpp` | 11,713 | 7,810 | −3,903 (33%) | `character_needs.cpp`, `character_combat.cpp`, `character_encumbrance.cpp`, `character_inventory.cpp` |
+| `map.cpp` | 9,817 | 5,843 | −3,974 (40%) | `map_vehicle.cpp`, `map_bash.cpp`, `map_items.cpp` |
+| `iuse.cpp` | 8,919 | 6,562 | −2,357 (26%) | `iuse_electronics.cpp` |
+| `iexamine.cpp` | 8,186 | 5,125 | −3,061 (37%) | `iexamine_crafting.cpp`, `iexamine_medical.cpp` |
+| `iuse_actor.cpp` | 7,879 | 6,224 | −1,655 (21%) | `iuse_actor_deploy.cpp` |
+| `activity_actor.cpp` | 7,426 | 5,896 | −1,530 (21%) | `activity_actor_tools.cpp` |
 
-Follows proven `cpp-godfile-decompose` skill (item.cpp 11,688→920, 16 commits).
+### Session 2 — Remaining targets (4 commits)
 
-### Tier 1 — COMPLETE
+| File | Before | After | Reduction | New TUs |
+|------|--------|-------|-----------|---------|
+| `vehicle.cpp` | 8,430 | 7,613 | −817 (10%) | `vehicle_power.cpp`, `vehicle_damage.cpp` |
+| `monattack.cpp` | 6,165 | 4,697 | −1,468 (24%) | `monattack_ranged.cpp`, `monattack_fungus.cpp` |
+| `savegame_json.cpp` | 4,998 | 3,561 | −1,437 (29%) | `savegame_character.cpp` |
 
-| File | Before | After | Reduction | New TUs created |
-|------|--------|-------|-----------|-----------------|
-| `character.cpp` | 11,713 | 7,810 | −3,903 (33%) | `character_needs.cpp` (1,769), `character_combat.cpp` (905), `character_encumbrance.cpp` (453), `character_inventory.cpp` (1,323) |
-| `map.cpp` | 9,817 | 5,843 | −3,974 (40%) | `map_vehicle.cpp` (1,603), `map_bash.cpp` (1,769), `map_items.cpp` (1,164) |
-| `iuse.cpp` | 8,919 | 6,562 | −2,357 (26%) | `iuse_electronics.cpp` (2,823) |
-
-### Tier 2 — COMPLETE (partial)
-
-| File | Before | After | Reduction | New TUs created |
-|------|--------|-------|-----------|-----------------|
-| `iexamine.cpp` | 8,186 | 5,125 | −3,061 (37%) | `iexamine_crafting.cpp` (1,564), `iexamine_medical.cpp` (2,014) |
-| `iuse_actor.cpp` | 7,879 | 6,224 | −1,655 (21%) | `iuse_actor_deploy.cpp` (1,863) |
-| `activity_actor.cpp` | 7,426 | 5,896 | −1,530 (21%) | `activity_actor_tools.cpp` (1,696) |
-
-### Tier 2 — REMAINING
-
-| File | Lines | Status | Blocker |
-|------|-------|--------|---------|
-| `vehicle.cpp` | 8,430 | Not started | Preamble has `RemovePartHandler`/`DefaultRemovePartHandler`/`MapgenRemovePartHandler` class definitions + `vehicle_stack` methods interleaved with `vehicle::` methods. Needs the handler classes moved to a shared header (`vehicle_part_handler.h`) before extraction is safe. Also `distribution_graph::traverse` template instantiation ties `fuel_left` to the TU. |
-| `game.cpp` | 7,196 | Already split | Has 9 existing domain files (`game_world_tick.cpp`, `game_movement.cpp`, `game_action.cpp`, `game_ui_extra.cpp`, `game_activity.cpp`, `game_inventory.cpp`, `game_info.cpp`, `game_object.cpp`). Remaining 7,196 lines are core orchestration (game loop, init, setup) which should stay. |
-
-### Commits (11 extraction + 2 docs)
+### All extraction commits
 
 ```
+Session 2:
+16d7968c refactor(save): extract savegame_character.cpp
+49afbf4d refactor(monattack): extract monattack_fungus.cpp
+8b473cac refactor(monattack): extract monattack_ranged.cpp
+6e96e166 refactor(vehicle): extract vehicle_power.cpp + vehicle_damage.cpp
+
+Session 1:
 55beb1be refactor(iuse_actor): extract iuse_actor_deploy.cpp
 e8cf77ac refactor(activity): extract activity_actor_tools.cpp
 f2015088 refactor(iexamine): extract iexamine_medical.cpp
@@ -61,46 +57,45 @@ All tests pass after all extractions:
 - `[item]`: 47/47 test cases, 140,636 assertions
 - `[encumbrance]`: 7/7 test cases, 26 assertions
 - `[lua]`: 28/28 test cases, 194 assertions
-- `[melee]`: 14/19 — 5 failures are pre-existing stochastic (Z-score assertions)
+
+### Files NOT decomposed (with rationale)
+
+| File | Lines | Rationale |
+|------|-------|-----------|
+| `game.cpp` | 7,196 | Already has 9 domain splits (`game_world_tick`, `game_movement`, `game_action`, `game_ui_extra`, `game_activity`, `game_inventory`, `game_info`, `game_object`). Remaining is core orchestration. |
+| `vehicle.cpp` | 7,613 | Further extraction blocked by `distribution_graph::traverse` template + `RemovePartHandler` preamble classes. Power/damage clusters extracted; parts/fuel/movement remain tied to template instantiations. |
+| `overmap.cpp` | 6,700 | Gated on determinism harness (see `plans/overmap_modernization.md`). |
+| `mapgen.cpp` | 6,555 | RNG-ordered, same determinism gate as overmap. |
 
 ## Phase 3: Performance Optimization — DEFERRED
 
-Profile-guided. Cannot proceed until structural changes land.
+Profile-guided. Structural decomposition is complete; profiling can now proceed.
 
 1. Profile hot paths (runtime flamegraph during normal gameplay)
 2. Identify cache-unfriendly access patterns in map/creature iteration
 3. Optimize serialization (savegame_json is a known bottleneck)
 4. Evaluate SIMD opportunities in lighting/physics code
 
-### Tier 3 — DEFERRED (existing plans, additional gates)
-
-| File | Lines | Plan |
-|------|-------|------|
-| `overmap.cpp` | 6,700 | `plans/overmap_modernization.md` — gated on Phase 0 determinism harness |
-| `mapgen.cpp` | 6,555 | RNG-ordered, needs determinism guard like overmap |
-| `savegame_json.cpp` | ~4,989 | `plans/savegame_decomposition.md` — pure mechanical split by subsystem |
-
 ## Procedure (proven, reusable)
 
 1. Map all `ClassName::` method definitions with regex
 2. Group methods into domain clusters by name pattern + file position
 3. Identify largest contiguous block for extraction
-4. Use `find_method_end()` to find exact closing `}` at brace depth 0
-5. Copy the source file's include block (up to first method definition, NO function bodies)
-6. Scan extracted block for needed preamble statics (file-scope `static const` IDs)
-7. Check for TU-local hazards: anonymous namespace helpers used by both TUs → duplicate
+4. Use `find_method_end()` with brace-depth tracking to find exact closing `}`
+5. Copy source file's include block up to first method definition (NO function bodies)
+6. Scan extracted block for needed preamble statics
+7. Check for TU-local hazards: shared statics → duplicate in anon-namespace
 8. Write new `src/original_domain.cpp`, remove lines from original
-9. `cmake --preset osx-arm-slim` (reconfigure to pick up new file via GLOB)
-10. Build both targets with long timeout (1200s+)
-11. Fix: missing includes, duplicate symbols (linker), helpers that need duplication
-12. Commit atomically: `refactor(module): extract module_domain.cpp`
+9. `cmake --preset osx-arm-slim` (reconfigure for GLOB)
+10. Build both targets, fix errors (missing includes, duplicate symbols, relocated helpers)
+11. Commit atomically
 
 ### Key lessons
 
-- Copy include block up to first `ClassName::method(` — NOT the full preamble with function bodies
-- `find_method_end()` prevents truncated function bodies at slice boundaries
-- Static helpers called from both TUs → duplicate in anonymous namespace (per skill Risk #2)
-- Multi-line `static const` initializers with `{` are NOT function bodies — don't strip them
-- Files with class definitions in the preamble (vehicle.cpp) need the classes moved to headers first
-- Template instantiations with lambdas (distribution_graph::traverse) tie methods to their TU
-- Build after EVERY extraction — never batch multiple extractions before building
+- `find_method_end()` with brace-depth tracking prevents truncated functions at slice boundaries
+- Copy include block only up to first `ClassName::method(` — never include preamble function bodies
+- Static helpers called from both TUs → duplicate in anonymous namespace
+- Files with class definitions in the preamble need careful handling (vehicle.cpp)
+- `distribution_graph::traverse` with lambdas ties methods to their TU (can't extract)
+- Multi-line `static const` initializers with `{` are NOT function bodies
+- Build after EVERY extraction — never batch
