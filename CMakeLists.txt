@@ -367,11 +367,7 @@ find_package(Threads REQUIRED)
 if (USE_TRACY)
 
     if (NOT TRACY_VERSION)
-        if("${CMAKE_SYSTEM_NAME}" MATCHES "Linux")
-            set(TRACY_VERSION 6d1deb5640ed11da01995fb1791115cfebe54dbf)
-        else()
-            set(TRACY_VERSION v0.10)
-        endif()
+        set(TRACY_VERSION v0.13.1)
         message(STATUS "Using tracy version: ${TRACY_VERSION}")
     endif()
 
