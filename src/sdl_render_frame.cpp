@@ -983,12 +983,43 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
         blit_layer( rs.world_ldr_target() );
     }
     blit_layer( rs.ui_target() );
-    // Atmospheric HUD particles (Phase 8): render after RmlUi, before final blit.
+    // Atmospheric HUD particles (Phase 8): environment-driven ambient particles.
+    // Renders after RmlUi, before final blit. Screen-space (not world-locked) so
+    // they drift independently of camera movement — looks natural for dust/embers.
     {
+        auto ptype = lighting::hud_emitter_type::dust;
+        auto prate = 3.0f;
+        auto palpha = 0.4f;
+
+        if( g && world_generator && world_generator->active_world ) {
+            const float hour = hour_of_day<float>( calendar::turn );
+            const bool is_night = hour < 5.5f || hour > 20.5f;
+            const int z = g->u.bub_pos().z();
+            const bool underground = z < 0;
+
+            // Check for nearby fire fields for ember particles.
+            // (Simplified: use sun_intensity as night proxy, underground as cave proxy)
+            if( underground ) {
+                ptype = lighting::hud_emitter_type::dust;
+                prate = 5.0f;
+                palpha = 0.3f;
+            } else if( is_night ) {
+                // Outdoor night: pollen/firefly-like particles (slow, yellow-green)
+                ptype = lighting::hud_emitter_type::pollen;
+                prate = 2.0f;
+                palpha = 0.6f;
+            } else {
+                // Daytime outdoor: occasional dust/pollen
+                ptype = lighting::hud_emitter_type::pollen;
+                prate = 1.5f;
+                palpha = 0.25f;
+            }
+        }
+
         const lighting::hud_particle_params params {
-            .type = lighting::hud_emitter_type::dust, // placeholder — wire env-driven later
-            .spawn_rate = 3.0f,
-            .intensity = 0.5f,
+            .type = ptype,
+            .spawn_rate = prate,
+            .intensity = palpha,
             .screen_w = static_cast<std::uint32_t>( proj_w ),
             .screen_h = static_cast<std::uint32_t>( proj_h ),
         };
