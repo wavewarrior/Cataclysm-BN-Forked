@@ -807,8 +807,8 @@ JsonObject root = jin.get_object();
 root.allow_omitted_members();
 for( JsonObject entry : root.get_array( "items" ) ) {
     entry.allow_omitted_members();
-        const tripoint_abs_ms
-        abs_pos{entry.get_int( "tx" ), entry.get_int( "ty" ), entry.get_int( "tz" )};
+        const tripoint_abs_ms abs_pos{
+            entry.get_int( "tx" ), entry.get_int( "ty" ), entry.get_int( "tz" )};
         const itype_id type( entry.get_string( "type" ) );
         const int charges = entry.get_int( "charges", 0 );
         const int qty = entry.get_int( "qty", 0 );
@@ -859,8 +859,8 @@ JsonObject root = jin.get_object();
 root.allow_omitted_members();
 for( JsonObject entry : root.get_array( "items" ) ) {
     entry.allow_omitted_members();
-        const tripoint_abs_ms
-        abs_pos{entry.get_int( "tx" ), entry.get_int( "ty" ), entry.get_int( "tz" )};
+        const tripoint_abs_ms abs_pos{
+            entry.get_int( "tx" ), entry.get_int( "ty" ), entry.get_int( "tz" )};
         const std::string item_json = entry.get_string( "data" );
         const tripoint_bub_ms bub = g->m.abs_to_bub( abs_pos );
         if( !g->m.inbounds( bub ) ) { continue; }
@@ -877,8 +877,8 @@ for( JsonObject entry : root.get_array( "items" ) ) {
             g->m.add_item( bub, std::move( it ) );
         } catch( const JsonError& e ) {
             DebugLog( DL::Info, DC::Main )
-                    << "[coop] C2a DROP: bad item JSON at (" << abs_pos.x() << "," << abs_pos.y() << ","
-                    << abs_pos.z() << "): " << e.what();
+                    << "[coop] C2a DROP: bad item JSON at (" << abs_pos.x() << ","
+                    << abs_pos.y() << "," << abs_pos.z() << "): " << e.what();
         }
     }
 }
@@ -971,28 +971,18 @@ if( move_cmd.kind == player_cmd_kind::move ) {
     }
     if( key == "PICKUP" ) {
     // C1 (Option B): client picked up items locally; mirror the exact removals on the host.
-    // Manifest: {"items":[{"tx":…,"ty":…,"tz":…,"type":"…","charges":N,"qty":N},…]}
-    // Exactly-once: TCP guarantees no replay within a session. "Not found → skip" handles
-    // the case where the host world already diverged (e.g. another entity took the item),
-    // NOT as a dedup mechanism. C5 (reconnection) will need seq-based dedup.
     proxy->moves -= proxy->get_speed();
         apply_pickup_manifest( ctx_json );
         return;
     }
     if( key == "DROP" ) {
     // C2a (Option B): client dropped items locally; mirror the additions on the host.
-    // Manifest: {"items":[{"tx":…,"ty":…,"tz":…,"data":"<full item JSON>"},…]}
-    // Full item serialization preserves per-instance state (ammo, mods, damage, contents).
-    // Items that went into a vehicle are NOT in the manifest (auto-excluded by client-side
-    // diff).
     proxy->moves -= proxy->get_speed();
         apply_drop_manifest( ctx_json );
         return;
     }
     if( key == "TERRAIN_CHANGE" ) {
     // C2b: client opened/closed a door or otherwise mutated terrain.
-    // Payload: {"tx":N,"ty":N,"tz":N,"ter":"t_id","furn":"f_id"}
-    // Vehicle doors are excluded client-side (no terrain change there).
     apply_terrain_change( ctx_json );
         return;
     }
