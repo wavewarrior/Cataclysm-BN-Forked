@@ -382,6 +382,8 @@ std::string action_ident( action_id act )
         case ACTION_SWAP_TO_NPC:
             return "SWAPTONPC";
 #ifdef COOP_ENABLED
+        case ACTION_CO_OP_CHAT:
+            return "CO_OP_CHAT";
         case ACTION_CO_OP_TAP_SHOULDER:
             return "CO_OP_TAP_SHOULDER";
         case ACTION_CO_OP_EMOTE:

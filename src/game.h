@@ -255,6 +255,8 @@ class game: public submap_load_listener
         // cleared on disconnect. Only one is non-null at a time.
         coop_server *coop_server_ = nullptr;
         coop_client *coop_client_ = nullptr;
+        std::unique_ptr<coop_server> coop_server_owned_;
+        std::unique_ptr<coop_client> coop_client_owned_;
 #endif // COOP_ENABLED
         shared_ptr_fast<ui_adaptor> create_or_get_main_ui_adaptor();
         void invalidate_main_ui_adaptor() const;

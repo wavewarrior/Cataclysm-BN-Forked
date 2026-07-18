@@ -36,6 +36,7 @@
 #include "string_utils.h"
 #include "rng.h"
 #include "player_activity.h"
+#include "skill.h"
 
 #include <SDL3_net/SDL_net.h>
 #include <sstream>
@@ -299,6 +300,26 @@ for( auto& act : pending_actions_ ) {
         status_jout.member( "ax", cpos.x() );
         status_jout.member( "ay", cpos.y() );
         status_jout.member( "az", cpos.z() );
+        // Ping: echo the host's timestamp back for RTT measurement on host side.
+        status_jout.member( "ping_echo", static_cast<int>( last_ping_ts_ ) );
+        // Approximate local ping: time since host sent the sync to when we process it.
+        if( last_ping_ts_ > 0 ) {
+            const auto now_ms = static_cast<uint64_t>( SDL_GetTicks() );
+            coop_session::get().partner_ping_ms = static_cast<int>( now_ms - last_ping_ts_ );
+        }
+        // Skill sync: throttled to every 10 ticks to avoid per-tick overhead.
+        if( ++skill_sync_counter_ >= 10 ) {
+            skill_sync_counter_ = 0;
+            std::vector<std::pair<std::string, int>> skill_pairs;
+            for( const auto &[sid, slvl] : g->u.get_all_skills() ) {
+                if( slvl.level() > 0 ) {
+                    skill_pairs.emplace_back( sid.str(), slvl.level() );
+                }
+            }
+            if( !skill_pairs.empty() ) {
+                build_skill_sync_fields( status_jout, skill_pairs );
+            }
+        }
         status_jout.end_object();
         status_jout.end_object();
         if( !transport_->send( status_oss.str() ) ) {
@@ -794,6 +815,8 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
                     DebugLog( DL::Error, DC::Main ) << "[coop] pending_gift: JSON error";
                 }
             }
+        } else if( key == "ping_ts" ) {
+            last_ping_ts_ = static_cast<uint64_t>( jin.get_int() );
         } else {
             jin.skip_value();
         }

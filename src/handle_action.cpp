@@ -2981,6 +2981,19 @@ auto game::handle_action_from( const std::string& pre_action ) -> bool
                         add_msg( m_info, _( "Offered %s to %s." ), item_name, sess.partner_name );
                     }
                 }
+            } else if( act == ACTION_CO_OP_CHAT ) {
+                const std::string msg = string_input_popup()
+                                        .title( _( "Chat:" ) )
+                                        .width( 50 )
+                                        .query_string();
+                if( !msg.empty() ) {
+                    if( sess.is_client() && coop_client_ ) {
+                        coop_client_->send_chat( msg );
+                    } else if( sess.is_host() && coop_server_ ) {
+                        coop_server_->send_chat( msg );
+                    }
+                    add_msg( m_info, _( "[you]: %s" ), msg );
+                }
             }
         }
     }

@@ -123,6 +123,8 @@ struct coop_client {
         tripoint_abs_ms prev_host_apos_{};
         /// Timestamp of last host position update (ms since epoch, via SDL_GetTicks)
         uint64_t last_host_pos_time_ = 0;
+        /// Last ping_ts from host sync — echoed back in client_status for RTT measurement.
+        uint64_t last_ping_ts_ = 0;
 
         // World seed data extracted from the packet
         int world_seed_turn_ = 0;
@@ -136,6 +138,8 @@ struct coop_client {
         std::string last_host_ip_;
         uint16_t last_host_port_ = 8080;
         std::string session_token_;
+
+        int skill_sync_counter_ = 0; ///< throttle: send skills every 10 ticks
 };
 
 #endif // COOP_ENABLED

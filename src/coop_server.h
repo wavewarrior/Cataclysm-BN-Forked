@@ -253,6 +253,9 @@ struct coop_server {
         std::atomic<bool> client_downed_{false};
         int client_down_turns_remaining_ = 0; ///< main-thread only
         static constexpr int COOP_DOWN_TIMEOUT_TURNS = 100;
+        // Skill sync: receiver writes, world_tick applies to proxy
+        std::mutex pending_skills_mtx_;
+        std::vector<std::pair<std::string, int>> pending_skills_;
         // Reconnection state
         std::atomic<bool> awaiting_reconnect_{false};
         std::atomic<bool> client_disconnected_{false};

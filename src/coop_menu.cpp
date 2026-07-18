@@ -73,8 +73,8 @@ auto start_host() -> void
     }
 
     const int coop_port = get_option<int>( "COOP_PORT" );
-    static coop_server srv;
-    if( !srv.listen( coop_port ) ) {
+    auto srv = std::make_unique<coop_server>();
+    if( !srv->listen( coop_port ) ) {
         popup( string_format( _( "Failed to start server on port %d." ), coop_port ) );
         return;
     }
@@ -136,7 +136,7 @@ auto start_host() -> void
         ctxt.register_action( "QUIT" );
 
         bool cancelled = false;
-        while( !srv.try_accept() ) {
+        while( !srv->try_accept() ) {
             ui_manager::redraw();                          // syncs message_rml → visible text
             if( ctxt.handle_input( 200 ) == "QUIT" ) {
                 cancelled = true;
@@ -145,47 +145,49 @@ auto start_host() -> void
         }
 
         if( cancelled ) {
-            srv.shutdown();
-            g->coop_server_ = nullptr;
+            srv->shutdown();
             return;
         }
     }
     // try_accept() already stored the client; wait_for_client() returns immediately.
-    if( !srv.wait_for_client() ) {
+    if( !srv->wait_for_client() ) {
         popup( _( "No client connected." ) );
-        srv.shutdown();
+        srv->shutdown();
         return;
     }
 
-    if( !srv.handshake() ) {
+    if( !srv->handshake() ) {
         popup( _( "Handshake failed." ) );
-        srv.shutdown();
+        srv->shutdown();
         return;
     }
 
     // Session established — register on g
-    g->coop_server_ = &srv;
+    g->coop_server_owned_ = std::move( srv );
+    g->coop_server_ = g->coop_server_owned_.get();
     coop_session::get().dimension_id = g_active_dimension_id;
 
-    if( !srv.send_world_seed( g->u.get_name() ) ) {
+    if( !g->coop_server_->send_world_seed( g->u.get_name() ) ) {
         popup( _( "Failed to send world seed." ) );
-        srv.shutdown();
+        g->coop_server_->shutdown();
+        g->coop_server_owned_.reset();
         g->coop_server_ = nullptr;
         return;
     }
     // C6: wait up to 3 s for the client's join_info (blocking recv on main thread,
     // same pattern as handshake/send_world_seed — receiver thread NOT yet running).
-    srv.wait_for_join_info( 3000 );
-    const tripoint_abs_ms proxy_spawn = srv.client_join_pos().value_or( g->u.abs_pos() );
-    srv.spawn_proxy_npc( proxy_spawn, "Partner" );
-    if( !srv.send_initial_sync() ) {
+    g->coop_server_->wait_for_join_info( 3000 );
+    const tripoint_abs_ms proxy_spawn = g->coop_server_->client_join_pos().value_or( g->u.abs_pos() );
+    g->coop_server_->spawn_proxy_npc( proxy_spawn, "Partner" );
+    if( !g->coop_server_->send_initial_sync() ) {
         popup( _( "Failed to send initial sync." ) );
-        srv.shutdown();
+        g->coop_server_->shutdown();
+        g->coop_server_owned_.reset();
         g->coop_server_ = nullptr;
         return;
     }
     // Start receiver thread last — after all pre-game setup is complete.
-    srv.start_receiver_thread();
+    g->coop_server_->start_receiver_thread();
 }
 
 auto start_join() -> void
@@ -214,21 +216,21 @@ if( const auto colon = ip.rfind( ':' ); colon != std::string::npos ) {
         ip = ip.substr( 0, colon );
     }
 
-    static coop_client cli;
-    if( !cli.connect( ip, port ) ) {
+    auto cli = std::make_unique<coop_client>();
+    if( !cli->connect( ip, port ) ) {
     popup( string_format( _( "Failed to connect to %s:%d." ), ip, port ) );
         return;
     }
 
-    if( !cli.handshake() ) {
+    if( !cli->handshake() ) {
     popup( _( "Handshake failed." ) );
-        cli.shutdown();
+        cli->shutdown();
         return;
     }
 
-    if( !cli.receive_world_seed() ) {
+    if( !cli->receive_world_seed() ) {
     popup( _( "Failed to receive world seed." ) );
-        cli.shutdown();
+        cli->shutdown();
         return;
     }
 
@@ -236,7 +238,7 @@ if( const auto colon = ip.rfind( ':' ); colon != std::string::npos ) {
     // g->u.abs_pos() is valid pre-setup; game::setup() does not reset the avatar position.
     // g->setup() can take several seconds on modded worlds — sending after it would always
     // race-lose against wait_for_join_info(3000).
-    if( !cli.send_join_info() ) {
+    if( !cli->send_join_info() ) {
     DebugLog( DL::Info, DC::Main ) << "[coop] send_join_info failed — host uses spawn fallback";
     }
 
@@ -244,14 +246,15 @@ if( const auto colon = ip.rfind( ':' ); colon != std::string::npos ) {
         g->setup();
     } catch( const std::exception& err ) {
         popup( string_format( _( "Client setup failed: %s" ), err.what() ) );
-        cli.shutdown();
+        cli->shutdown();
         return;
     }
 
-    cli.apply_world_seed_to_avatar();
+    cli->apply_world_seed_to_avatar();
 
     // Session established — register on g
-    g->coop_client_ = &cli;
+    g->coop_client_owned_ = std::move( cli );
+    g->coop_client_ = g->coop_client_owned_.get();
     coop_session::get().dimension_id = g_active_dimension_id;
 }
 

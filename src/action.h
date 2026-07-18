@@ -360,6 +360,8 @@ enum action_id : int {
     /** Swap to an NPC in faction menu **/
     ACTION_SWAP_TO_NPC,
 #ifdef COOP_ENABLED
+    /** Send a chat message to co-op partner */
+    ACTION_CO_OP_CHAT,
     /** Interrupt partner's current activity (tap on shoulder) */
     ACTION_CO_OP_TAP_SHOULDER,
     /** High-five emote (morale boost when adjacent) */

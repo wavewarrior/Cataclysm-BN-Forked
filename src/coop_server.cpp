@@ -24,6 +24,7 @@
 #include "overmapbuffer.h"
 #include "ranged.h"
 #include "submap.h"
+#include "skill.h"
 #include "type_id.h"
 #include "world.h"
 #include "rng.h"
@@ -340,6 +341,18 @@ auto coop_server::receiver_loop( std::stop_token st ) -> void
                     client_abs_pos_ = tripoint_abs_ms{
                         d.get_int( "ax", 0 ), d.get_int( "ay", 0 ), d.get_int( "az", 0 ) };
                 }
+                // Ping measurement: read echoed timestamp and compute RTT.
+                const int64_t echo_ts = static_cast<int64_t>( d.get_int( "ping_echo", 0 ) );
+                if( echo_ts > 0 ) {
+                    const int64_t now = static_cast<int64_t>( SDL_GetTicks() );
+                    coop_session::get().partner_ping_ms = static_cast<int>( now - echo_ts );
+                }
+                // Skill sync: parse and store for main-thread application in coop_world_tick.
+                const auto skills = parse_skill_sync_fields( d );
+                if( !skills.empty() ) {
+                    std::scoped_lock lk{ pending_skills_mtx_ };
+                    pending_skills_ = skills;
+                }
             } else if( t == coop_pkt::resync_request ) {
                 // A4: client detected a hash mismatch and needs a full sync.
                 // Write the atomic flag — main thread reads it in build_and_send_sync().
@@ -499,6 +512,20 @@ if( client_disconnected_.exchange( false ) ) {
         for( const bodypart_id& bp : proxy->get_all_body_parts() ) {
             const int max_hp = proxy->get_part_hp_max( bp );
             proxy->set_part_hp_cur( bp, std::max( 1, max_hp * pct / 100 ) );
+        }
+        // Skill sync: apply client's skill levels to proxy NPC (main-thread safe).
+        {
+            std::vector<std::pair<std::string, int>> skills;
+            {
+                std::scoped_lock lk{ pending_skills_mtx_ };
+                skills.swap( pending_skills_ );
+            }
+            for( const auto &[sid, lvl] : skills ) {
+                const skill_id sk( sid );
+                if( sk.is_valid() ) {
+                    proxy->set_skill_level( sk, lvl );
+                }
+            }
         }
 
         if( const auto act = try_pop_action() ) {
@@ -1407,6 +1434,9 @@ auto coop_server::build_and_send_sync( bool force_full ) -> void
         jout.member( "partner_ay", client_abs_pos_.y() );
         jout.member( "partner_az", client_abs_pos_.z() );
     }
+    // Ping measurement: embed current timestamp; client echoes it back in client_status.
+    jout.member( "ping_ts", static_cast<int>( SDL_GetTicks() ) );
+
     // F3: one-shot tap notification to client (set by send_tap_shoulder() caller)
     if( pending_tap_sent_to_client_ ) {
         jout.member( "tap_pending", true );

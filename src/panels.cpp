@@ -82,6 +82,7 @@
 #include "weather_type.h"
 #ifdef COOP_ENABLED
 #include "coop_session.h"
+#include "coop_server.h"
 #endif
 
 static const trait_id trait_THRESH_FELINE( "THRESH_FELINE" );
@@ -960,10 +961,63 @@ auto hud_topbar( avatar &u ) -> std::string
         seg_cond += colorize( _( "Overburdened" ), c_red );
     }
 
-    return "<div class=\"hud-segment\"><span class=\"seg-label\">ID</span> "
-           + cata_text_to_rml( seg_id ) + "</div>"
-           + "<div class=\"hud-segment hud-seg-cond\"><span class=\"seg-label\">COND</span> "
-           + cata_text_to_rml( seg_cond ) + "</div>";
+    std::string result = "<div class=\"hud-segment\"><span class=\"seg-label\">ID</span> "
+                         + cata_text_to_rml( seg_id ) + "</div>"
+                         + "<div class=\"hud-segment hud-seg-cond\"><span class=\"seg-label\">COND</span> "
+                         + cata_text_to_rml( seg_cond ) + "</div>";
+
+#ifdef COOP_ENABLED
+    const auto &sess = coop_session::get();
+    if( sess.is_coop() ) {
+        auto seg_coop = colorize( sess.partner_name, c_cyan );
+        // HP color: green > 66%, yellow > 33%, red <= 33%
+        const nc_color hp_col = sess.partner_hp_pct > 66 ? c_green
+                                : sess.partner_hp_pct > 33 ? c_yellow : c_red;
+        seg_coop += " " + colorize( string_format( "HP:%d%%", sess.partner_hp_pct ), hp_col );
+        // Stamina
+        const nc_color sta_col = sess.partner_stamina_pct > 50 ? c_light_green : c_yellow;
+        seg_coop += " " + colorize( string_format( "STA:%d%%", sess.partner_stamina_pct ), sta_col );
+        // Activity
+        if( !sess.partner_activity_str.empty() ) {
+            seg_coop += " " + colorize( sess.partner_activity_str, c_light_blue );
+        }
+        // Ping
+        if( sess.partner_ping_ms > 0 ) {
+            const nc_color ping_col = sess.partner_ping_ms < 100 ? c_green
+                                      : sess.partner_ping_ms < 300 ? c_yellow : c_red;
+            seg_coop += " " + colorize( string_format( "%dms", sess.partner_ping_ms ), ping_col );
+        }
+        // Direction arrow to partner when offscreen
+        const auto partner_delta = sess.partner_abs_pos - u.abs_pos();
+        const int dx = partner_delta.x();
+        const int dy = partner_delta.y();
+        if( std::abs( dx ) > 30 || std::abs( dy ) > 15 ) {
+            // Offscreen — show compass arrow
+            const char *arrow = "?";
+            if( std::abs( dx ) > std::abs( dy ) * 2 ) {
+                arrow = dx > 0 ? "→" : "←";
+            } else if( std::abs( dy ) > std::abs( dx ) * 2 ) {
+                arrow = dy > 0 ? "↓" : "↑";
+            } else if( dx > 0 ) {
+                arrow = dy > 0 ? "↘" : "↗";
+            } else {
+                arrow = dy > 0 ? "↙" : "↖";
+            }
+            seg_coop += " " + colorize( arrow, c_white );
+        }
+        // Reconnecting indicator
+        if( sess.is_host() ) {
+            if( g->coop_server_ && g->coop_server_->awaiting_reconnect() ) {
+                seg_coop += " " + colorize( _( "[RECONNECTING]" ), c_yellow );
+            }
+        }
+        // Build RML
+        result += "<div class=\"hud-segment\"><span class=\"seg-label\">CO-OP</span> "
+                  + cata_text_to_rml( seg_coop ) + "</div>";
+    }
+#endif
+
+    return result;
 }
 
 // Qud top bar row 2: stats + time/place.
