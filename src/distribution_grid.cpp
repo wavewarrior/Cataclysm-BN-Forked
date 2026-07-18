@@ -25,7 +25,7 @@ distribution_grid::distribution_grid( const std::vector<tripoint_abs_sm> &global
     mb( buffer )
 {
     for( const tripoint_abs_sm &sm_coord : submap_coords ) {
-        submap *sm = mb.lookup_submap( sm_coord );
+        submap *sm = mb.lookup_submap_in_memory( sm_coord );
         if( sm == nullptr ) {
             // Debugmsg already printed in mapbuffer.cpp
             return;
@@ -52,7 +52,7 @@ distribution_grid::operator bool() const
 void distribution_grid::update( time_point to )
 {
     for( const auto &c : contents ) {
-        submap *sm = mb.lookup_submap( c.first );
+        submap *sm = mb.lookup_submap_in_memory( c.first );
         if( sm == nullptr ) {
             return;
         }
@@ -549,11 +549,20 @@ void distribution_grid_tracker::on_submap_loaded( const tripoint_abs_sm &pos,
         return;
     }
     tracked_submaps_.insert( pos );
-    make_distribution_grid_at( pos );
+    // Defer the grid rebuild to flush_dirty_omts() rather than rebuilding
+    // inline.  on_submap_loaded fires for every new SM position × 21 z-levels
+    // (315+ calls per shift); each make_distribution_grid_at does a BFS
+    // flood-fill + allocation.  Deferring collapses those into one rebuild
+    // per unique OMT on the next tick — the same pattern on_changed() uses.
+    const tripoint_abs_omt omt_pos = project_to<coords::omt>( pos );
+    dirty_omts_.insert( omt_pos );
 
     // Scan newly-loaded submap for grid_link_tile active furniture and register
     // their export nodes so the link is live immediately on load.
-    submap *sm = mb.lookup_submap( pos );
+    // Use in-memory lookup only — the submap must already be resident when this
+    // notification fires.  The old lookup_submap() call fell through to disk I/O
+    // for every z-level notification, causing multi-second stalls on shift.
+    submap *sm = mb.lookup_submap_in_memory( pos );
     if( sm == nullptr ) {
         return;
     }

@@ -8,10 +8,10 @@
 // Driven by ui_post_pass::record(). Uniforms pushed as fragment cbuffer:
 //   UiPostParams { float ca_intensity, float bloom_strength, float pad0, float pad1 }
 
-Texture2D<float4> ui_tex : register( t0, space0 );
-SamplerState lin_sampler : register( s0, space0 );
+Texture2D<float4> ui_tex : register( t0, space2 );
+SamplerState lin_sampler : register( s0, space2 );
 
-cbuffer UiPostParams : register( b0, space0 ) {
+cbuffer UiPostParams : register( b0, space3 ) {
     float ca_intensity;
     float bloom_strength;
     float pad0;

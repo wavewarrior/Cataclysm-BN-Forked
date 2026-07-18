@@ -834,6 +834,12 @@ void start_fire_activity_actor::do_turn( player_activity& act, Character& who )
     player& p = static_cast<player &>( who );
     map& here = get_map();
     const auto bub_loc = here.abs_to_bub( placement );
+    if( act.get_tools().empty() || !act.get_tools().front() ) {
+        p.add_msg_if_player( m_bad,
+                             _( "You have lost the item you were using to start the fire." ) );
+        p.cancel_activity();
+        return;
+    }
     item& firestarter = *act.get_tools().front();
 
     if( !here.is_flammable( bub_loc )
@@ -879,6 +885,11 @@ void start_fire_activity_actor::finish( player_activity& act, Character& who )
     player& p = static_cast<player &>( who );
     static const std::string iuse_name_string( "firestarter" );
 
+    if( act.get_tools().empty() || !act.get_tools().front() ) {
+        debugmsg( "Lost tool used for starting fire" );
+        act.set_to_null();
+        return;
+    }
     item& it = *act.get_tools().front();
     item* used_tool = it.get_usable_item( iuse_name_string );
     if( used_tool == nullptr ) {
@@ -945,6 +956,11 @@ void fish_activity_actor::do_turn( player_activity& act, Character& who )
                                    std::make_unique<generic_multi_activity_actor>( ACT_MULTIPLE_FISH ) ) );
             return;
         }
+        return;
+    }
+    if( act.get_tools().empty() || !act.get_tools().front() ) {
+        p.add_msg_if_player( m_bad, _( "You have lost your fishing tool." ) );
+        p.cancel_activity();
         return;
     }
     item& rod = *act.get_tools().front();

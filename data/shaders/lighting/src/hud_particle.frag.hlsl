@@ -6,7 +6,7 @@ struct PS_IN {
     float2 uv : TEXCOORD1;
 };
 
-float4 fragment_main( PS_IN i ) : SV_TARGET
+float4 main( PS_IN i ) : SV_TARGET
 {
     // Soft circle: radial falloff from center
     const float2 center = i.uv - 0.5f;

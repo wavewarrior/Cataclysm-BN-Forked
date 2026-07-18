@@ -374,7 +374,12 @@ void map::on_submap_loaded( const tripoint_abs_sm& p, const std::string& dim_id 
         // as set by loadn() (which may already hold a valid pointer).
     }
 #ifdef BOX2D_ENABLED
-    if( phys_world && sm != nullptr ) { phys_world->on_submap_loaded( *this, p ); }
+    // Vehicle physics bodies only matter on the player's z-level.  Creating
+    // bodies for all 21 z-levels (315 submaps per shift × 144 tiles each)
+    // was the dominant cost of submap boundary crossing.
+    if( phys_world && sm != nullptr && g && p.z() == g->u.bub_pos().z() ) {
+        phys_world->on_submap_loaded( *this, p );
+    }
 #endif
 }
 
@@ -396,7 +401,9 @@ void map::on_submap_unloaded( const tripoint_abs_sm& pos, const std::string& dim
         std::erase_if( loaded_vehicles, [&]( vehicle * veh ) { return veh->abs_sm_pos == pos; } );
     }
 #ifdef BOX2D_ENABLED
-    if( phys_world ) { phys_world->on_submap_unloaded( pos ); }
+    if( phys_world && g && pos.z() == g->u.bub_pos().z() ) {
+        phys_world->on_submap_unloaded( pos );
+    }
 #endif
 
     // Stop tracking active items for this submap.

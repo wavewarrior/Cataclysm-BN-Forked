@@ -216,6 +216,31 @@ void PhysicsWorld::on_map_shifted( point delta_tiles )
     rebuild_bashable_lookup();
 }
 
+void PhysicsWorld::on_zlevel_changed( const map &m, int old_z, int new_z )
+{
+    if( old_z == new_z ) { return; }
+
+    // Destroy terrain bodies from the old z-level.
+    std::vector<tripoint_abs_sm> to_remove;
+    for( const auto &[abs_sm, body_list] : terrain_bodies_ ) {
+        if( abs_sm.z() == old_z ) {
+            to_remove.push_back( abs_sm );
+        }
+    }
+    for( const auto &abs_sm : to_remove ) {
+        on_submap_unloaded( abs_sm );
+    }
+
+    // Create terrain bodies for the new z-level (all in-bubble submaps).
+    const auto &origin = m.get_abs_sub();
+    for( int gx = 0; gx < m.getmapsize(); ++gx ) {
+        for( int gy = 0; gy < m.getmapsize(); ++gy ) {
+            const tripoint_abs_sm abs_sm{ origin.x() + gx, origin.y() + gy, new_z };
+            on_submap_loaded( m, abs_sm );
+        }
+    }
+}
+
 // ── Phase 5 hooks ─────────────────────────────────────────────────────────────
 
 void PhysicsWorld::on_tile_bashed( tripoint_bub_ms pos )

@@ -770,7 +770,9 @@ void submap_load_manager::update()
 {
     ZoneScoped;
 
+
     reap_lazy_omt_jobs();
+
 
     TracyPlot( "Thread Pool Workers", static_cast<int64_t>( get_thread_pool().num_workers() ) );
     TracyPlot( "Thread Pool Queue", static_cast<int64_t>( get_thread_pool().queue_size() ) );
@@ -808,6 +810,7 @@ void submap_load_manager::update()
         prev_centers_ = std::move( cur_centers );
     }
 
+
     // Simulated set: positions that need full per-turn processing.
     auto simulated = key_set {};
     auto all_desired = key_set {};
@@ -825,6 +828,7 @@ void submap_load_manager::update()
                static_cast<int64_t>( all_desired.size() - simulated.size() ) );
     TracyPlot( "Total Desired Submaps", static_cast<int64_t>( all_desired.size() ) );
     erase_desired_retained_omts( all_desired );
+
 
     // ---- Synchronous loading for newly-simulated positions ----
     // new_omts is keyed by 2-D horizontal OMT position.  All z-levels for a
@@ -844,6 +848,7 @@ void submap_load_manager::update()
             dirty_omts_.insert( { dim_id, tripoint_abs_omt{ omt_xy, z } } );
         }
     }
+
 
     // ---- Step 1: parallel disk preload for newly-simulated omts ----
     // preload_omt() is thread-safe (disk I/O outside submaps_mutex_; add
@@ -887,6 +892,7 @@ void submap_load_manager::update()
     TracyPlot( "New Sim OMT Z Resident Hits", static_cast<int64_t>( resident_zlevels ) );
     TracyPlot( "New Sim OMT Z Preload Attempts", static_cast<int64_t>( preloaded_zlevels ) );
 
+
     // Drain duplicate submaps created by concurrent preload_omt workers.
     // Must happen on the main thread (safe_reference / cata_arena not thread-safe).
     {
@@ -897,6 +903,7 @@ void submap_load_manager::update()
             MAPBUFFER_REGISTRY.get( dim_id ).drain_pending_submap_destroy();
         } );
     }
+
 
     // ---- Step 2: synchronous mapgen on the main thread ----
     // generate_omt() calls tinymap::generate() which may invoke Lua mapgen.
@@ -927,6 +934,7 @@ void submap_load_manager::update()
     }
     TracyPlot( "New Sim OMT Z Generated", static_cast<int64_t>( generated_zlevels ) );
 
+
     // Drain Lua postprocess hooks queued by mapgen above.
     {
         ZoneScopedN( "slm_mapgen_hooks_sim" );
@@ -935,9 +943,15 @@ void submap_load_manager::update()
         run_deferred_autonotes();
     }
 
+
     // ---- Listener notifications (simulated set only) ----
     // The simulated set is 2-D; fire for every z-level when a horizontal
     // position enters or leaves simulation.
+    //
+    // PERF: Individual listeners handle their own z-level costs:
+    //   - Box2D: z-guarded (only creates bodies on player's z-level)
+    //   - distribution_grid: deferred BFS (dirty_omts_ insert, not inline rebuild)
+    //   - map: cheap hash inserts (vehicle/active-item/funnel registration)
     {
         ZoneScopedN( "slm_listener_notifications" );
         for( const desired_key &key : simulated ) {

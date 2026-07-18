@@ -53,6 +53,11 @@ public:
     /// `delta_tiles` = `shift_offset_pt` from `map::shift` (tile units, signed).
     void on_map_shifted( point delta_tiles );
 
+    // ── Z-level transition ────────────────────────────────────────────────
+    /// Destroy terrain bodies for old_z and create them for new_z.
+    /// Called when the player changes z-level (stairs, ramps, etc.).
+    void on_zlevel_changed( const map &m, int old_z, int new_z );
+
     // ── Phase 5 hooks (wired in Phase 5) ─────────────────────────────────
     /// Remove the Box2D body for the bashable tile at `pos` after it is bashed.
     void on_tile_bashed( tripoint_bub_ms pos );

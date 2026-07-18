@@ -2920,6 +2920,9 @@ void try_fuel_fire( player_activity& act, player& p, const bool starting_fire )
         if( starting_fire ) {
             // Only track firestarter if we have an activity assigned to light a new fire, or it
             // will implode.
+            if( act.get_tools().empty() || !act.get_tools().front() ) {
+                continue;
+            }
             item& firestarter = *act.get_tools().front();
             if( firestarter.has_flag( flag_REQUIRES_TINDER ) ) {
                 if( it->has_flag( flag_TINDER ) ) {

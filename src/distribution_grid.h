@@ -319,7 +319,6 @@ class distribution_grid_tracker : public submap_load_listener
          */
         void on_submap_unloaded( const tripoint_abs_sm &pos,
                                  const std::string &dim_id ) override;
-
         /**
          * Updates grid at given global map square coordinate.
          * Only rebuilds grids in the 5-OMT cluster affected by the change.
