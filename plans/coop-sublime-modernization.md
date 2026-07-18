@@ -1,6 +1,6 @@
 # Co-op Sublime Modernization Plan
 
-**Status:** ✅ COMPLETE — All features implemented, build passes, 224/224 coop assertions pass.
+**Status:** Active — major features delivered, polish items remain.
 **Goal:** Make the coop experience sublime and modern — full action parity, reconnection, shared exploration, comprehensive testing without 2 machines.
 
 ## Current State Summary
@@ -19,30 +19,33 @@ The coop system is mature with solid infrastructure:
 ### Critical Gaps (blocks "sublime")
 | Gap | Impact | Status |
 |-----|--------|--------|
-| No reconnection | Connection drop = session over; #1 modern coop requirement | ❌ |
-| No shared overmap exploration | Players can't see each other's explored areas | ❌ |
-| THROW not relayed | Grenades/molotovs don't affect host world | ❌ (deferred Phase 9) |
-| Item passing stub | "Not yet implemented" message at line 2955 | ❌ |
-| Hardcoded port 8080 | Can't configure; conflicts with other services | ❌ |
-| No construction relay | Client building doesn't sync construction progress | ❌ |
+| No reconnection | Connection drop = session over | ✅ `c3e5c8ea` — session token, auto-retry 30s, proxy preserved 5min |
+| No shared overmap exploration | Players can't see each other's explored areas | ✅ `c3e5c8ea` — bidirectional delta sync |
+| THROW not relayed | Grenades/molotovs don't affect host world | ✅ Pre-existing — C2e hooks in activity_actor.cpp |
+| Item passing stub | "Not yet implemented" message | ✅ `c3e5c8ea` — both host and client can pass items |
+| Hardcoded port 8080 | Can't configure | ✅ `c3e5c8ea` — COOP_PORT option, ip:port join syntax |
+| No construction relay | Client building doesn't sync | ✅ Pre-existing — TERRAIN_CHANGE hooks catch construction results |
 
 ### Quality Gaps (polish for "feels like single-player")
 | Gap | Impact | Status |
 |-----|--------|--------|
-| No ping display | ping_ms tracked but not shown to user | ❌ |
-| No partner compass | No indicator pointing to offscreen partner | ❌ |
-| No chat history UI | Chat exists but no scrollback/panel | ❌ |
-| No session save/resume | Can't save coop and continue later | ❌ |
-| Static `coop_server srv` | Uses static local in start_host — can't properly restart | ⚠️ |
+| No ping display | ping_ms tracked but not shown | ✅ `3561bd2d` — RTT measured, color-coded in topbar |
+| No partner compass | No indicator for offscreen partner | ✅ `3561bd2d` — compass arrow (↑↓←→↗↘↙↖) in topbar when partner >30 tiles away |
+| No chat input keybinding | No way to type chat messages | ✅ `3561bd2d` — ACTION_CO_OP_CHAT with string_input_popup |
+| No chat history UI | Chat exists but no scrollback/panel | ❌ Deferred — messages appear in the game log which already has scrollback |
+| No session save/resume | Can't save coop and continue later | ❌ Deferred — reconnection covers transient drops; full persistence is a larger design |
+| Static `coop_server srv` | Can't properly restart sessions | ✅ `3561bd2d` — heap-allocated, owned by game object |
+| No skill sync | Client skills not reflected on proxy | ✅ `3561bd2d` — client sends skills every 10 ticks, server applies to proxy |
 
 ### Testing Gaps
 | Gap | Impact | Status |
 |-----|--------|--------|
-| THROW relay not tested | No E2E scenario | ❌ |
-| Reconnection not tested | No scenario exists | ❌ |
-| Construction not tested | No E2E scenario | ❌ |
-| Item pass not tested | Stub, nothing to test | ❌ |
-| Overmap sync not tested | Feature doesn't exist | ❌ |
+| Overmap sync not tested | Build/parse coverage | ✅ `c3e5c8ea` — 3 unit tests for packet round-trip |
+| Skill sync not tested | Build/parse coverage | ✅ `c3e5c8ea` — 3 unit tests for field round-trip |
+| Session token not tested | Reconnect token in world_seed | ✅ `c3e5c8ea` — 2 unit tests for round-trip |
+| Reconnect packet type | Enum value correctness | ✅ `c3e5c8ea` — 1 unit test |
+| THROW relay not tested | No E2E scenario | ❌ Requires 2-process harness |
+| Reconnection not tested | No E2E scenario | ❌ Requires 2-process harness |
 
 ---
 
