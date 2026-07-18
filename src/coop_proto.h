@@ -34,6 +34,7 @@ enum class coop_pkt : uint8_t {
     emote          = 48, ///< player emote — "high_five" in this version (bidirectional)
     stabilize      = 49, ///< host stabilizes downed client (host → client only)
 
+    reconnect  = 15, ///< client sends session_token to resume (client → host)
     disconnect = 99, ///< graceful close notification
 };
 

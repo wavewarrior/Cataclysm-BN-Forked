@@ -157,6 +157,9 @@ constexpr auto graphics = "graphics";
 constexpr auto performance = "performance";
 constexpr auto world_default = "world_default";
 constexpr auto debug = "debug";
+#ifdef COOP_ENABLED
+constexpr auto coop = "coop";
+#endif
 
 options_manager::options_manager()
 {
@@ -169,6 +172,9 @@ options_manager::options_manager()
         pages_.emplace_back( world_default, to_translation( "World Defaults" ) );
         pages_.emplace_back( "debug", to_translation( "Debug" ) );
     }
+#ifdef COOP_ENABLED
+    pages_.emplace_back( coop, to_translation( "Co-op" ) );
+#endif
 
     mMigrateOption = { {"DELETE_WORLD", { "WORLD_END", { {"no", "keep" }, {"yes", "delete"} } } } };
 
@@ -1193,6 +1199,9 @@ void options_manager::init()
     add_options_debug();
     add_options_world_default();
     add_options_android();
+#ifdef COOP_ENABLED
+    add_options_coop();
+#endif
 
     for( Page &p : pages_ ) {
         p.removeRepeatedEmptyLines();

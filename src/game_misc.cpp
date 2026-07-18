@@ -1769,6 +1769,7 @@ void game::toggle_debug_fps()
     add_msg( string_format( "FPS counter %s", g_show_fps ? "enabled" : "disabled" ) );
 }
 
+#ifdef BOX2D_ENABLED
 void game::toggle_box2d_debug_draw()
 {
     if( auto *pw = m.get_physics_world() ) {
@@ -1778,6 +1779,7 @@ void game::toggle_box2d_debug_draw()
         add_msg( "Box2D not active (no physics world)" );
     }
 }
+#endif // BOX2D_ENABLED
 
 void game::display_lighting()
 {

@@ -130,6 +130,22 @@ struct coop_server {
         auto send_tap_shoulder() -> void;
         auto send_emote( const std::string& emote_type ) -> void;
 
+        /// Split from shutdown(): tear down transport + receiver thread only,
+        /// preserving server_sock_, proxy NPC, ID maps, and session state.
+        /// Called when the receiver detects a client disconnect.
+        auto handle_client_disconnect() -> void;
+
+        /// Accept a reconnecting client on the existing server_sock_.
+        /// Validates session token, re-establishes transport, sends full sync.
+        /// Returns true if reconnection succeeded.
+        auto accept_reconnect() -> bool;
+
+        /// True if client has disconnected but session is still alive for reconnect.
+        auto awaiting_reconnect() const -> bool { return awaiting_reconnect_.load(); }
+
+        // Session token for reconnection validation
+        std::string session_token_;
+
     private:
         struct action_entry {
             uint32_t seq = 0;
@@ -237,6 +253,11 @@ struct coop_server {
         std::atomic<bool> client_downed_{false};
         int client_down_turns_remaining_ = 0; ///< main-thread only
         static constexpr int COOP_DOWN_TIMEOUT_TURNS = 100;
+        // Reconnection state
+        std::atomic<bool> awaiting_reconnect_{false};
+        std::atomic<bool> client_disconnected_{false};
+        static constexpr int RECONNECT_TIMEOUT_TICKS = 300; // 5 minutes at 1Hz
+        int reconnect_countdown_ = 0;
 };
 
 #endif // COOP_ENABLED

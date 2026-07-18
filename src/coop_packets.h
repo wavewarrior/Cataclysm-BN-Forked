@@ -6,6 +6,11 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <utility>
+#include <vector>
+
+class JsonOut;
+class JsonObject;
 
 /// Plain-data structs and pure serialisation/deserialisation functions for
 /// co-op wire packets.  No game state, no sockets.
@@ -16,6 +21,7 @@ struct world_seed_data {
     std::string player_name;
     std::string world_name;
     unsigned int rng_seed = 0;
+    std::string session_token;
 };
 
 struct action_packet_data {
@@ -43,6 +49,16 @@ struct join_info_data {
 struct vertical_move_ctx {
     tripoint_abs_ms landing;
 };
+
+/// Skill snapshot: skill_id → level pairs.
+struct skill_sync_data {
+    std::vector<std::pair<std::string, int>> skills; // skill_id string → level
+};
+
+auto build_skill_sync_fields( JsonOut& jout,
+                              const std::vector<std::pair<std::string, int>> &skills ) -> void;
+auto parse_skill_sync_fields( const JsonObject& d )
+-> std::vector<std::pair<std::string, int>>; // *NOPAD*
 
 auto build_world_seed_packet( const world_seed_data & ) -> std::string;
 auto build_action_packet( const action_packet_data & ) -> std::string;

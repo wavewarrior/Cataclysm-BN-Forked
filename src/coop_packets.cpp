@@ -22,6 +22,7 @@ auto build_world_seed_packet( const world_seed_data& d ) -> std::string
     jout.member( "player_name", d.player_name );
     jout.member( "world_name", d.world_name );
     jout.member( "rng_seed", d.rng_seed );
+    jout.member( "session_token", d.session_token );
     jout.end_object();
     jout.end_object();
     return oss.str();
@@ -63,6 +64,7 @@ auto parse_world_seed_packet( const std::string& buf ) -> std::optional<world_se
         result.player_name = d.get_string( "player_name", "" );
         result.world_name = d.get_string( "world_name", "" );
         result.rng_seed = static_cast<unsigned int>( d.get_int( "rng_seed", 0 ) );
+        result.session_token = d.get_string( "session_token", "" );
         return result;
     } catch( const JsonError & ) {
         return std::nullopt;
@@ -190,6 +192,35 @@ try {
     } catch( const JsonError & ) {
         return std::nullopt;
     }
+}
+
+auto build_skill_sync_fields( JsonOut& jout,
+                              const std::vector<std::pair<std::string, int>> &skills ) -> void
+{
+    jout.member( "skills" );
+    jout.start_array();
+for( const auto& [id, lvl] : skills ) {
+    jout.start_array();
+        jout.write( id );
+        jout.write( lvl );
+        jout.end_array();
+    }
+    jout.end_array();
+}
+
+auto parse_skill_sync_fields( const JsonObject& d )
+-> std::vector<std::pair<std::string, int>>
+{
+    std::vector<std::pair<std::string, int>> result;
+    if( !d.has_array( "skills" ) ) {
+        return result;
+    }
+    for( const JsonArray& entry : d.get_array( "skills" ) ) {
+        if( entry.size() >= 2 ) {
+            result.emplace_back( entry.get_string( 0 ), entry.get_int( 1 ) );
+        }
+    }
+    return result;
 }
 
 #endif // COOP_ENABLED

@@ -62,6 +62,7 @@ constexpr auto graphics = "graphics";
 constexpr auto performance = "performance";
 constexpr auto world_default = "world_default";
 constexpr auto debug = "debug";
+constexpr auto coop = "coop";
 
 struct debug_log_level {
     DL id;
@@ -2379,3 +2380,17 @@ void options_manager::add_options_android()
 {
 }
 
+
+#ifdef COOP_ENABLED
+void options_manager::add_options_coop()
+{
+    add_option_group( coop, Group( "coop",
+                                   to_translation( "Co-op" ),
+                                   to_translation( "Settings for cooperative multiplayer." ) ),
+    [&]( const std::string & page_id ) {
+        add( "COOP_PORT", page_id, translate_marker( "Co-op Port" ),
+             translate_marker( "TCP port used when hosting or joining a co-op game.  Both players must use the same port." ),
+             1024, 65535, 8080 );
+    } );
+}
+#endif // COOP_ENABLED

@@ -5,6 +5,7 @@
 #include "avatar.h"
 #include "calendar.h"
 #include "coop_mutation_log.h" // COOP_FNV_OFFSET, coop_hash_event_fields
+#include "coop_overmap.h"
 #include "coop_net.h"
 #include "coop_packets.h"
 #include "coop_proto.h"
@@ -76,6 +77,8 @@ auto coop_client::connect( const std::string& ip, uint16_t port ) -> bool
         return false;
     }
     transport_ = std::make_unique<coop_net_transport>( socket );
+    last_host_ip_ = ip;
+    last_host_port_ = port;
     coop_session::get().mode = coop_mode::client;
     DebugLog( DL::Info, DC::Main ) << "[coop] connected to " << ip << ":" << port;
     return true;
@@ -164,6 +167,7 @@ auto coop_client::receive_world_seed() -> bool
     world_seed_turn_ = data->turn;
     world_seed_spawn_ = data->spawn_pos;
     world_seed_partner_name_ = data->player_name.empty() ? "Partner" : data->player_name;
+    session_token_ = data->session_token;
 
     // Apply host's RNG seed so world generation matches
     if( data->rng_seed != 0 ) {
@@ -377,6 +381,9 @@ for( auto& act : pending_actions_ ) {
                         d.get_int( "omz", 0 ) };
                     sess.shared_mark_label = d.get_string( "label", "" );
                 }
+            } else if( t == coop_pkt::overmap_sync ) {
+                // Shared overmap: host revealed tiles — apply to client's overmapbuffer.
+                apply_overmap_sync_packet( buf, coop_session::get().dimension_id );
             }
             // other packet types silently ignored
         } catch( const JsonError& e ) {
@@ -873,11 +880,105 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
 
 auto coop_client::handle_disconnect() -> void
 {
+    // Drop the dead transport — do NOT send disconnect packet (connection is already dead)
+    transport_.reset();
+
+    // Attempt automatic reconnection if we have a session token
+    if( !session_token_.empty() && !last_host_ip_.empty() ) {
+    add_msg( m_warning, _( "Connection lost — attempting to reconnect..." ) );
+        for( int i = 0; i < 30; ++i ) { // 30 attempts over ~30 seconds
+            SDL_Delay( 1000 );
+            if( attempt_reconnect( last_host_ip_, last_host_port_ ) ) {
+                add_msg( m_good, _( "Reconnected!" ) );
+                return;
+            }
+        }
+        add_msg( m_bad, _( "Failed to reconnect. Session ended." ) );
+    }
+
     // C6: persist character state (inventory, position, skills, HP) on disconnect.
     // game::save(false) is the public save path (same as quicksave); saves player data,
     // map memory, and any world state the client owns.
     if( g ) { g->save( false ); }
     shutdown();
+}
+
+auto coop_client::attempt_reconnect( const std::string& ip, uint16_t port ) -> bool
+{
+    // Try to establish a new TCP connection to the host
+    NET_Address* addr = NET_ResolveHostname( ip.c_str() );
+    if( !addr ) {
+        return false;
+    }
+    while( NET_GetAddressStatus( addr ) == 0 ) { SDL_Delay( 10 ); }
+    if( NET_GetAddressStatus( addr ) < 0 ) {
+        NET_UnrefAddress( addr );
+        return false;
+    }
+    auto* socket = NET_CreateClient( addr, port, 0 );
+    NET_UnrefAddress( addr );
+    if( !socket ) {
+        return false;
+    }
+    while( NET_GetConnectionStatus( socket ) == 0 ) { SDL_Delay( 10 ); }
+    if( NET_GetConnectionStatus( socket ) < 0 ) {
+        NET_DestroyStreamSocket( socket );
+        return false;
+    }
+    transport_ = std::make_unique<coop_net_transport>( socket );
+
+    // Send reconnect packet with session token
+    {
+        std::ostringstream oss;
+        JsonOut jout( oss );
+        jout.start_object();
+        jout.member( "t", static_cast<int>( coop_pkt::reconnect ) );
+        jout.member( "d" );
+        jout.start_object();
+        jout.member( "session_token", session_token_ );
+        jout.end_object();
+        jout.end_object();
+        if( !transport_->send( oss.str() ) ) {
+            transport_.reset();
+            return false;
+        }
+    }
+
+    // Wait for the host to respond with a full sync
+    std::string buf;
+    if( !transport_->recv( buf, 5000 ) ) {
+        DebugLog( DL::Error, DC::Main ) << "[coop] attempt_reconnect: no sync response";
+        transport_.reset();
+        return false;
+    }
+
+    // Reset ring buffer — start fresh after reconnection
+    pending_actions_.clear();
+    next_seq_ = 1;
+
+    // Apply the full sync from host
+    try {
+        std::istringstream iss( buf );
+        JsonIn jin( iss );
+        JsonObject pkt = jin.get_object();
+        pkt.allow_omitted_members();
+        const auto t = static_cast<coop_pkt>( pkt.get_int( "t" ) );
+        if( t != coop_pkt::sync ) {
+            DebugLog( DL::Error, DC::Main ) << "[coop] attempt_reconnect: expected sync, got "
+                                            << pkt.get_int( "t" );
+            transport_.reset();
+            return false;
+        }
+        apply_sync( buf );
+    } catch( const JsonError& e ) {
+        DebugLog( DL::Error, DC::Main ) << "[coop] attempt_reconnect: JSON error: " << e.what();
+        transport_.reset();
+        return false;
+    }
+
+    coop_session::get().mode = coop_mode::client;
+    DebugLog( DL::Info, DC::Main ) << "[coop] reconnected to " << ip << ":" << port;
+    return true;
 }
 
 auto coop_client::shutdown() -> void

@@ -692,7 +692,7 @@ float light = light_mod( p.bub_pos() );
     p.assign_activity(
         std::make_unique<player_activity>(
             std::make_unique<start_fire_activity_actor>( &it, bub_to_abs( pos ), potential_skill_gain,
-                                                         moves ) ) );
+                moves ) ) );
     p.activity->add_tool( &it );
     p.activity->values.push_back( g->natural_light_level( pos.z() ) );
     // charges to use are handled by the activity

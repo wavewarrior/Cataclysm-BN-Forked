@@ -68,6 +68,12 @@
 #ifdef BOX2D_ENABLED
 #include "physics/physics_world.h"
 #endif
+#ifdef COOP_ENABLED
+#include "coop_client.h"
+#include "coop_overmap.h"
+#include "coop_server.h"
+#include "coop_session.h"
+#endif
 #include "profile.h"
 
 #define dbg(x) DebugLogFL((x),DC::Game)
@@ -2425,8 +2431,44 @@ void game::update_overmap_seen()
     const tripoint_abs_omt ompos = u.abs_omt_pos();
     const int dist = u.overmap_sight_range( light_level( u.bub_pos().z() ) );
     const int dist_squared = dist * dist;
+    overmapbuffer &omb = get_overmapbuffer( current_dimension_id_ );
+
+#ifdef COOP_ENABLED
+    // Snapshot pre-loop seen state so we can detect newly-revealed tiles.
+    // Only allocate when actually in a coop session.
+    const bool in_coop = coop_session::get().is_coop();
+    std::vector<tripoint_abs_omt> newly_seen;
+    // For each tile we're about to process, record whether it was already seen
+    // BEFORE the sight-line loop runs.  We use a flat vector of bools indexed
+    // the same way points_in_radius iterates; however, since that iteration
+    // order is opaque, we instead re-check after the loop — the set_seen()
+    // call is idempotent so checking .seen() post-loop and comparing to a
+    // pre-loop snapshot is the simplest correct approach.
+    //
+    // Strategy: build a set of tiles that were already seen before the loop,
+    // then after the loop collect any tile that is now seen but wasn't before.
+    std::vector<std::pair<tripoint_abs_omt, bool>> pre_seen;
+    if( in_coop ) {
+        // Reserve for all tiles in the sight radius (generous upper bound).
+        const int side = 2 * dist + 1;
+        pre_seen.reserve( side * side );
+        for( const tripoint_abs_omt &p : points_in_radius( ompos, dist ) ) {
+            // Check all z-levels down to 0 for each column, matching the loop below.
+            for( int z = p.z(); z >= 0; --z ) {
+                const tripoint_abs_omt tp{ p.xy(), z };
+                pre_seen.emplace_back( tp, omb.seen( tp ) );
+            }
+        }
+        // Also include the standing tile itself (set_seen'd before the loop).
+        for( int z = ompos.z(); z >= 0; --z ) {
+            const tripoint_abs_omt tp{ ompos.xy(), z };
+            pre_seen.emplace_back( tp, omb.seen( tp ) );
+        }
+    }
+#endif // COOP_ENABLED
+
     // We can always see where we're standing
-    get_overmapbuffer( current_dimension_id_ ).set_seen( ompos, true );
+    omb.set_seen( ompos, true );
     for( const tripoint_abs_omt &p : points_in_radius( ompos, dist ) ) {
         const point_rel_omt delta = p.xy() - ompos.xy();
         const int h_squared = delta.x() * delta.x() + delta.y() * delta.y();
@@ -2446,16 +2488,35 @@ void game::update_overmap_seen()
         float sight_points = dist;
         for( auto it = line.begin();
              it != line.end() && sight_points >= 0; ++it ) {
-            const oter_id &ter = get_overmapbuffer( current_dimension_id_ ).ter( *it );
+            const oter_id &ter = omb.ter( *it );
             sight_points -= static_cast<int>( ter->get_see_cost() ) * multiplier;
         }
         if( sight_points >= 0 ) {
             tripoint_abs_omt seen( p );
             do {
-                get_overmapbuffer( current_dimension_id_ ).set_seen( seen, true );
+                omb.set_seen( seen, true );
                 --seen.z();
             } while( seen.z() >= 0 );
         }
     }
+
+#ifdef COOP_ENABLED
+    // Collect tiles that were not seen before but are now, and send to partner.
+    if( in_coop ) {
+        for( const auto &[tp, was_seen] : pre_seen ) {
+            if( !was_seen && omb.seen( tp ) ) {
+                newly_seen.push_back( tp );
+            }
+        }
+        if( !newly_seen.empty() ) {
+            const std::string pkt = build_overmap_sync_packet( newly_seen );
+            if( coop_server_ ) {
+                coop_server_->send_raw( pkt );
+            } else if( coop_client_ ) {
+                coop_client_->send_raw( pkt );
+            }
+        }
+    }
+#endif // COOP_ENABLED
 }
 

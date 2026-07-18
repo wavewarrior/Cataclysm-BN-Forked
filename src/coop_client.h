@@ -73,6 +73,7 @@ struct coop_client {
         /// Smoothly interpolate the host NPC position between sync packets.
         /// Called each frame from the render loop or coop_world_tick.
         auto interpolate_host_pos() -> tripoint_abs_ms;
+        auto attempt_reconnect( const std::string& ip, uint16_t port ) -> bool;
 
     private:
         auto apply_sync( const std::string& json_buf ) -> void;
@@ -130,6 +131,11 @@ struct coop_client {
 
         // Rollback engine for hash-mismatch recovery
         coop_rollback_engine rollback_engine_;
+
+        // Reconnection state
+        std::string last_host_ip_;
+        uint16_t last_host_port_ = 8080;
+        std::string session_token_;
 };
 
 #endif // COOP_ENABLED

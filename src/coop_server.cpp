@@ -8,6 +8,7 @@
 #include "coop_net.h"
 #include "coop_packets.h"
 #include "coop_session.h"
+#include "coop_overmap.h"
 #include "coordinates.h"
 #include "creature_tracker.h"
 #include "debug.h"
@@ -37,6 +38,7 @@
 
 #include <SDL3_net/SDL_net.h>
 #include <algorithm>
+#include <ctime>
 #include <sstream>
 
 coop_server::~coop_server() { shutdown(); }
@@ -193,10 +195,16 @@ auto coop_server::spawn_proxy_npc( const tripoint_abs_ms& spawn_pos,
 
 auto coop_server::send_world_seed( const std::string& player_name ) -> bool
 {
+    // Generate a session token for reconnection validation
+    session_token_ = std::to_string( std::time( nullptr ) ) + "-" + std::to_string( rng( 0, 999999 ) );
     const auto* aw = g->get_active_world();
-    const world_seed_data
-    data{to_turn<int>( calendar::turn ), g->u.abs_pos(), player_name,
-         aw ? aw->info->world_name : std::string{}, g_main_rng_seed};
+    world_seed_data data;
+    data.turn = to_turn<int>( calendar::turn );
+    data.spawn_pos = g->u.abs_pos();
+    data.player_name = player_name;
+    data.world_name = aw ? aw->info->world_name : std::string{};
+    data.rng_seed = g_main_rng_seed;
+    data.session_token = session_token_;
     return transport_->send( build_world_seed_packet( data ) );
 }
 
@@ -282,6 +290,7 @@ auto coop_server::receiver_loop( std::stop_token st ) -> void
         if( !transport_->recv( buf, 5000 ) ) {
             if( running_ ) {
                 DebugLog( DL::Info, DC::Main ) << "[coop] receiver: client disconnected";
+                client_disconnected_.store( true );
             }
             break;
         }
@@ -383,13 +392,16 @@ auto coop_server::receiver_loop( std::stop_token st ) -> void
             } else if( t == coop_pkt::emote ) {
                 // F6: relay emote to main thread via action queue
                 push_action( { 0, "EMOTE", buf } );
+            } else if( t == coop_pkt::overmap_sync ) {
+                // Shared overmap: client revealed tiles — apply to host's overmapbuffer.
+                apply_overmap_sync_packet( buf, coop_session::get().dimension_id );
             }
             // other packet types silently ignored until later phases
         } catch( const JsonError& e ) {
             DebugLog( DL::Error, DC::Main ) << "[coop] receiver: JSON parse error: " << e.what();
         }
     }
-    running_ = false;
+    if( !client_disconnected_.load() ) { running_ = false; }
 }
 
 auto coop_server::push_action( action_entry e ) -> void
@@ -419,18 +431,43 @@ auto coop_server::try_pop_chat() -> std::optional<chat_entry>
 
 auto coop_server::coop_world_tick() -> void
 {
-    if( !coop_session::get().is_host() || !running_ ) { return; }
+    if( !coop_session::get().is_host() || ( !running_ && !awaiting_reconnect_.load() ) ) { return; }
 
-// 1. World simulation first — process_turn() inside post_action_world_step()
-//    grants the proxy its move budget via mod_moves(get_speed()).
-//    npcmove() skips AI for is_coop_remote without zeroing moves, so the
-//    proxy exits the sim with fresh moves ready to consume below.
-// A3: capture all world mutations during this tick for A4 delta stream.
-coop_tick_log_guard _tick_log;
-// Test seam: push a synthetic terrain_changed event directly into the mutation log
-// so the A4 delta sync carries ev_count=1 regardless of the current tile state.
-// Used by the resync integration test to trigger the client's hash-mismatch detection.
-if( pending_test_event_for_resync_ ) {
+// Check for unexpected client disconnect — transition to reconnect window
+if( client_disconnected_.exchange( false ) ) {
+    handle_client_disconnect();
+    }
+
+    // While awaiting reconnection: try to accept, count down, skip normal action processing
+    if( awaiting_reconnect_.load() ) {
+    --reconnect_countdown_;
+    if( reconnect_countdown_ <= 0 ) {
+            add_msg( m_bad, _( "Reconnection timed out. Session ended." ) );
+            DebugLog( DL::Info, DC::Main ) << "[coop] reconnect timeout — full shutdown";
+            awaiting_reconnect_.store( false );
+            shutdown();
+            return;
+        }
+        // Non-blocking: try to accept a reconnecting client each tick
+        if( accept_reconnect() ) {
+            add_msg( m_good, _( "Partner reconnected!" ) );
+            return; // resume normal processing next tick
+        }
+        // Still waiting — run world sim but skip client action processing
+        g->post_action_world_step();
+        return;
+    }
+
+    // 1. World simulation first — process_turn() inside post_action_world_step()
+    //    grants the proxy its move budget via mod_moves(get_speed()).
+    //    npcmove() skips AI for is_coop_remote without zeroing moves, so the
+    //    proxy exits the sim with fresh moves ready to consume below.
+    // A3: capture all world mutations during this tick for A4 delta stream.
+    coop_tick_log_guard _tick_log;
+    // Test seam: push a synthetic terrain_changed event directly into the mutation log
+    // so the A4 delta sync carries ev_count=1 regardless of the current tile state.
+    // Used by the resync integration test to trigger the client's hash-mismatch detection.
+    if( pending_test_event_for_resync_ ) {
     pending_test_event_for_resync_ = false;
     if( auto * log = coop_mutation_log::current() ) {
             log->push( { .type = coop_event_type::terrain_changed,
@@ -1382,9 +1419,90 @@ auto coop_server::build_and_send_sync( bool force_full ) -> void
     send_q_.push_back( oss.str() );
 }
 
+auto coop_server::handle_client_disconnect() -> void
+{
+    // Join receiver_thread_ — it has already exited the loop
+    if( receiver_thread_.joinable() ) {
+    receiver_thread_.request_stop();
+        receiver_thread_.join();
+    }
+    // Drop the dead transport socket
+    transport_.reset();
+    // Drain stale send queue — packets destined for the dead socket
+    {
+        std::scoped_lock lk{ send_mtx_ };
+        send_q_.clear();
+    }
+    awaiting_reconnect_.store( true );
+    reconnect_countdown_ = RECONNECT_TIMEOUT_TICKS;
+    DebugLog( DL::Info, DC::Main )
+            << "[coop] Client disconnected — awaiting reconnection (300s timeout)";
+    add_msg( m_warning, _( "[ALERT] Partner disconnected! Waiting for reconnection..." ) );
+    // Preserve server_sock_, proxy NPC, session state, and ID maps
+}
+
+auto coop_server::accept_reconnect() -> bool
+{
+    // try_accept() is non-blocking; returns false if no pending connection
+    if( !try_accept() ) {
+    return false;
+}
+// A new TCP connection is established — read one packet and expect reconnect
+std::string buf;
+if( !transport_->recv( buf, 5000 ) ) {
+    DebugLog( DL::Error, DC::Main ) << "[coop] accept_reconnect: recv failed";
+        transport_.reset();
+        return false;
+    }
+    try {
+        std::istringstream iss( buf );
+        JsonIn jin( iss );
+        JsonObject pkt = jin.get_object();
+        pkt.allow_omitted_members();
+        const auto t = static_cast<coop_pkt>( pkt.get_int( "t" ) );
+        if( t != coop_pkt::reconnect ) {
+            DebugLog( DL::Error, DC::Main ) << "[coop] accept_reconnect: expected reconnect packet, got "
+                                            << pkt.get_int( "t" );
+            transport_.reset();
+            return false;
+        }
+        JsonObject d = pkt.get_object( "d" );
+        d.allow_omitted_members();
+        const std::string token = d.get_string( "session_token", "" );
+        if( token.empty() || token != session_token_ ) {
+            DebugLog( DL::Error, DC::Main ) << "[coop] accept_reconnect: session token mismatch";
+            transport_.reset();
+            return false;
+        }
+    } catch( const JsonError& e ) {
+        DebugLog( DL::Error, DC::Main ) << "[coop] accept_reconnect: JSON error: " << e.what();
+        transport_.reset();
+        return false;
+    }
+    // Token matches — send full sync and restart receiver
+    awaiting_reconnect_.store( false );
+    running_.store( true );
+    build_and_send_sync( true );
+    // Flush the sync packet directly before starting the receiver thread
+    {
+        std::deque<std::string> outgoing;
+        {
+            std::scoped_lock lk{ send_mtx_ };
+            outgoing.swap( send_q_ );
+        }
+        for( const auto& frame : outgoing ) {
+            transport_->send( frame );
+        }
+    }
+    start_receiver_thread();
+    DebugLog( DL::Info, DC::Main ) << "[coop] Client reconnected successfully";
+    return true;
+}
+
 auto coop_server::shutdown() -> void
 {
     const bool was_running = running_.exchange( false );
+    awaiting_reconnect_.store( false );
     // Join first — the IO thread checks running_ and st.stop_requested() at the top of
     // each iteration and exits quickly (no long-blocking recv under C5).
     if( receiver_thread_.joinable() ) {

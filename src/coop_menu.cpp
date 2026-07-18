@@ -16,6 +16,8 @@
 #include "ui.h"
 #include "ui_manager.h"
 #include "worldfactory.h"
+#include "options.h"
+#include "overmapbuffer_registry.h" // g_active_dimension_id
 
 #include <SDL3_net/SDL_net.h>
 
@@ -70,9 +72,10 @@ auto start_host() -> void
         return;
     }
 
+    const int coop_port = get_option<int>( "COOP_PORT" );
     static coop_server srv;
-    if( !srv.listen( 8080 ) ) {
-        popup( _( "Failed to start server on port 8080." ) );
+    if( !srv.listen( coop_port ) ) {
+        popup( string_format( _( "Failed to start server on port %d." ), coop_port ) );
         return;
     }
 
@@ -124,8 +127,8 @@ auto start_host() -> void
     // Fix: call ui_manager::redraw() each iteration so message_rml stays current.
     {
         const std::string wait_msg = string_format(
-                                         _( "Waiting for client...\nShare IP: %s:8080\n\nPress Escape to cancel." ),
-                                         display_ip );
+                                         _( "Waiting for client...\nShare IP: %s:%d\n\nPress Escape to cancel." ),
+                                         display_ip, coop_port );
         static_popup wait_popup;
         wait_popup.wait_message( "%s", wait_msg );
 
@@ -162,6 +165,7 @@ auto start_host() -> void
 
     // Session established — register on g
     g->coop_server_ = &srv;
+    coop_session::get().dimension_id = g_active_dimension_id;
 
     if( !srv.send_world_seed( g->u.get_name() ) ) {
         popup( _( "Failed to send world seed." ) );
@@ -187,15 +191,32 @@ auto start_host() -> void
 auto start_join() -> void
 {
     std::string ip =
-        string_input_popup().title( _( "Enter host IP address:" ) ).width( 30 ).query_string();
+        string_input_popup().title( _( "Enter host IP (or IP:port):" ) ).width( 30 ).query_string();
 
     if( ip.empty() ) {
     return; // cancelled
 }
 
-static coop_client cli;
-if( !cli.connect( ip, 8080 ) ) {
-    popup( string_format( _( "Failed to connect to %s:8080." ), ip ) );
+int port = get_option<int>( "COOP_PORT" );
+// Parse "ip:port" syntax — last colon wins (supports bare IPv4 and bracketed IPv6).
+if( const auto colon = ip.rfind( ':' ); colon != std::string::npos ) {
+    const std::string port_str = ip.substr( colon + 1 );
+        try {
+            port = std::stoi( port_str );
+        } catch( ... ) {
+            popup( string_format( _( "Invalid port: %s" ), port_str ) );
+            return;
+        }
+        if( port < 1 || port > 65535 ) {
+            popup( string_format( _( "Port out of range (1-65535): %d" ), port ) );
+            return;
+        }
+        ip = ip.substr( 0, colon );
+    }
+
+    static coop_client cli;
+    if( !cli.connect( ip, port ) ) {
+    popup( string_format( _( "Failed to connect to %s:%d." ), ip, port ) );
         return;
     }
 
@@ -231,6 +252,7 @@ if( !cli.connect( ip, 8080 ) ) {
 
     // Session established — register on g
     g->coop_client_ = &cli;
+    coop_session::get().dimension_id = g_active_dimension_id;
 }
 
 } // namespace coop_menu

@@ -2949,10 +2949,38 @@ auto game::handle_action_from( const std::string& pre_action ) -> bool
                                                 sess.partner_name ) ) ) {
                     g->coop_server_->stabilize_client();
                 }
-            } else if( act == ACTION_CO_OP_PASS_ITEM && sess.is_client() ) {
-                // F2 client→host: inventory selection + proximity + trade_offer packet
-                // handled inline here; host side handled via sync field "pending_gift"
-                add_msg( m_info, _( "Item passing not yet implemented." ) );
+            } else if( act == ACTION_CO_OP_PASS_ITEM ) {
+                // F2: item passing — both client and host can offer items to their partner
+                const auto& partner_pos = sess.partner_abs_pos;
+                const auto delta = partner_pos - u.abs_pos();
+                const int dist2 = delta.x() * delta.x() + delta.y() * delta.y();
+                if( dist2 > 4 ) {
+                    add_msg( m_info, _( "You need to be closer to your partner to pass items." ) );
+                } else {
+                    item *it = game_menus::inv::titled_menu( u, _( "Pass which item?" ),
+                               _( "You have nothing to pass." ) );
+                    if( it && !it->is_null() ) {
+                        // Serialize the item BEFORE removing from inventory
+                        const std::string item_name = it->tname();
+                        std::ostringstream oss;
+                        JsonOut jout( oss );
+                        jout.start_object();
+                        jout.member( "t", static_cast<int>( coop_pkt::trade_offer ) );
+                        jout.member( "d" );
+                        it->serialize( jout );
+                        jout.end_object();
+                        // Send via the appropriate transport
+                        if( sess.is_client() && coop_client_ ) {
+                            coop_client_->send_raw( oss.str() );
+                        } else if( sess.is_host() && g->coop_server_ ) {
+                            g->coop_server_->send_raw( oss.str() );
+                        }
+                        // Remove item from giver's inventory
+                        const int pos = u.inv_position_by_item( it );
+                        u.i_rem( pos );
+                        add_msg( m_info, _( "Offered %s to %s." ), item_name, sess.partner_name );
+                    }
+                }
             }
         }
     }
