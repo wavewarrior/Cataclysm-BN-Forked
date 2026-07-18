@@ -10,34 +10,10 @@
       "extrude_lean": 0.04
     },
     {
-      "name":         "walls",
-      "extrude_px":   28,
-      "extrude_dark": 0.40,
-      "extrude_lean": 0.02
-    },
-    {
       "name":         "shrubs",
       "extrude_px":   12,
       "extrude_dark": 0.25,
       "extrude_lean": 0.025
-    },
-    {
-      "name":         "fences",
-      "extrude_px":   10,
-      "extrude_dark": 0.20,
-      "extrude_lean": 0.015
-    },
-    {
-      "name":         "tall_furniture",
-      "extrude_px":   16,
-      "extrude_dark": 0.35,
-      "extrude_lean": 0.010
-    },
-    {
-      "name":         "medium_furniture",
-      "extrude_px":   10,
-      "extrude_dark": 0.25,
-      "extrude_lean": 0.008
     }
   ],
   "depth_extrude_rules": [
@@ -49,26 +25,26 @@
     { "id_prefix": "t_wall_log_broken",    "disable": true },
     { "id_prefix": "t_wall_log_chipped",   "disable": true },
     { "id_prefix": "t_wall_wattle_broken", "disable": true },
-    { "id_prefix": "t_wall",               "preset":  "walls" },
+    { "id_prefix": "t_wall",               "disable": true },
     { "id_prefix": "t_fence_post",         "disable": true },
     { "id_prefix": "t_fencegate_o",        "disable": true },
-    { "id_prefix": "t_fence",              "preset":  "fences" },
-    { "id_prefix": "t_bars",               "preset":  "fences" },
-    { "id_prefix": "t_column",             "preset":  "walls" },
+    { "id_prefix": "t_fence",              "disable": true },
+    { "id_prefix": "t_bars",               "disable": true },
+    { "id_prefix": "t_column",             "disable": true },
     { "id_prefix": "t_trunk",              "disable": true },
     { "id_prefix": "t_grave_new",          "disable": true },
-    { "id_prefix": "t_grave",              "preset":  "fences" },
+    { "id_prefix": "t_grave",              "disable": true },
     { "id_prefix": "t_shrub",              "preset":  "shrubs" },
     { "id_prefix": "f_counter",            "disable": true },
-    { "id_prefix": "f_vending",            "preset":  "tall_furniture" },
-    { "id_prefix": "f_fridge",             "preset":  "tall_furniture" },
-    { "id_prefix": "f_locker",             "preset":  "tall_furniture" },
-    { "id_prefix": "f_wardrobe",           "preset":  "tall_furniture" },
-    { "id_prefix": "f_bookcase",           "preset":  "tall_furniture" },
-    { "id_prefix": "f_standing",           "preset":  "tall_furniture" },
-    { "id_prefix": "f_statue",             "preset":  "tall_furniture" },
-    { "id_prefix": "f_rack",               "preset":  "medium_furniture" },
-    { "id_prefix": "f_dresser",            "preset":  "medium_furniture" }
+    { "id_prefix": "f_vending",            "disable": true },
+    { "id_prefix": "f_fridge",             "disable": true },
+    { "id_prefix": "f_locker",             "disable": true },
+    { "id_prefix": "f_wardrobe",           "disable": true },
+    { "id_prefix": "f_bookcase",           "disable": true },
+    { "id_prefix": "f_standing",           "disable": true },
+    { "id_prefix": "f_statue",             "disable": true },
+    { "id_prefix": "f_rack",              "disable": true },
+    { "id_prefix": "f_dresser",            "disable": true }
   ],
   "tiles-new": [
     {

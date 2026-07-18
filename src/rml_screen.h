@@ -56,7 +56,8 @@ class rml_doc
         // would stop the screen from ever reopening).
         bool open(
             bool enabled, const std::string& model_name, input_context& ctx,
-            const std::function<void( Rml::DataModelConstructor & )> &bind );
+            const std::function<void( Rml::DataModelConstructor & )> &bind,
+            bool passive = false );
         // Close the document, remove the data model, and release the guard.
         // Idempotent and a no-op when the curses path ran (nothing opened). Safe
         // to call on any exit path (including an early return); the destructor

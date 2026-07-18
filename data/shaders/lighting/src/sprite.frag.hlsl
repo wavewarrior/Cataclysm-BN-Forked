@@ -36,6 +36,8 @@
 //   slot1.xyz = color     slot1.w = falloff
 //   slot2.xy  = cone_dir  slot2.z = cone_half_angle  slot2.w = asfloat(shape)
 //   slot3.x   = asfloat(flicker_seed)   slot3.yzw = pad0/1/2
+#include "attenuation.hlsl"
+
 struct GpuEmitter {
     float4 pos_radius;
     float4 color_falloff;
@@ -133,7 +135,7 @@ cbuffer DebugParams : register(b2, space3) {
     float gust_freq;
     float part_radius;
     float part_strength;
-    float veg_pad;
+    float nrm_entity_amount;
 };
 struct VS_OUT {
     float4 pos      : SV_Position;
@@ -411,7 +413,7 @@ float4 main(VS_OUT i) : SV_Target0 {
     const bool   frag_is_tall_n = ( i.light_pos.x != i.world_pos.x )
                                   || ( i.light_pos.y != i.world_pos.y );
     const float3 normal = frag_is_tall_n
-                          ? lerp( float3( 0.0, 0.0, 1.0 ), surface_normal( i.uv ), 0.3 )
+                          ? lerp( float3( 0.0, 0.0, 1.0 ), surface_normal( i.uv ), nrm_entity_amount )
                           : surface_normal( i.uv );
     // Sky exposure (0 roofed .. 1 open), hoisted above the emitter loop so the
     // wet-specular term can gate on it (no indoor glint). SkyVisBuf is x-major
@@ -441,8 +443,9 @@ float4 main(VS_OUT i) : SV_Target0 {
         if(abs(e_pos.z - current_z) > 0.5) continue;
         const float2 dv   = e_pos.xy - i.light_pos;
         const float  dist = length(dv);
-        if(dist >= e_radius || dist < 0.01) continue;
-        const float  atten = 1.0 - pow(saturate(dist / e_radius), e_falloff);
+        if(dist < 0.01) continue;
+        const float  atten = point_light_atten(dist, e_radius, e_falloff);
+        if(atten <= 0.0) continue;
 
         // Per-pixel Lambert against this emitter (Bucket A / A1).
         const float2 sh_dir = dv / max(dist, 0.001);
@@ -488,7 +491,7 @@ float4 main(VS_OUT i) : SV_Target0 {
 
         const float2 dv   = e_pos.xy - i.light_pos;
         const float  dist = length(dv);
-        const float  atten = 1.0 - pow(saturate(dist / e_radius), e_falloff);
+        const float  atten = point_light_atten(dist, e_radius, e_falloff);
         const float2 sh_dir = dv / max(dist, 0.001);
         const float  lambert = saturate(lerp(1.0,
                                     saturate(dot(normal, normalize(float3(sh_dir, nrm_elev)))),

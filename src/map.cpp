@@ -1405,6 +1405,20 @@ void map::shift( const point_rel_sm& sp )
                 shift_bitset_cache( gc.floor_cache_dirty, gc.cache_mapsize, 1, sp );
                 shift_bitset_cache( gc.outside_cache_dirty, gc.cache_mapsize, 1, sp );
                 shift_bitset_cache( gc.lightmap_dirty, gc.cache_mapsize, 1, sp );
+                // Force-dirty newly-loaded edge submaps so generate_lightmap recomputes them
+                // instead of displaying stale translated data (prevents the 1-frame flash).
+                const int cms = gc.cache_mapsize; // submap count per axis
+                for( int sz = 0; sz < cms; ++sz ) {
+                    for( int sx = 0; sx < cms; ++sx ) {
+                        const bool is_new_x = ( sp.x() > 0 && sx >= cms - sp.x() )
+                                              || ( sp.x() < 0 && sx < -sp.x() );
+                        const bool is_new_y = ( sp.y() > 0 && sz >= cms - sp.y() )
+                                              || ( sp.y() < 0 && sz < -sp.y() );
+                        if( is_new_x || is_new_y ) {
+                            gc.lightmap_dirty.set( sx + sz * cms );
+                        }
+                    }
+                }
                 // Shift flat cache data so retained submaps' data stays in the
                 // correct tile position.  New edge submaps get stale values that
                 // will be overwritten by the next build_*_cache() call.

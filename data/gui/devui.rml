@@ -128,6 +128,7 @@
                 <div class="devui-row">normal amount <input type="range" min="0" max="10" step="0.1" data-value="nrm_amount"/> <span class="devui-val">{{nrm_amount}}</span></div>
                 <div class="devui-row">normal relief <input type="range" min="-6" max="6" step="0.1" data-value="nrm_relief"/> <span class="devui-val">{{nrm_relief}}</span></div>
                 <div class="devui-row">normal elev <input type="range" min="0.05" max="1.5" step="0.01" data-value="nrm_elev"/> <span class="devui-val">{{nrm_elev}}</span></div>
+                <div class="devui-row">entity relief <input type="range" min="0" max="1" step="0.01" data-value="nrm_entity_amount"/> <span class="devui-val">{{nrm_entity_amount}}</span></div>
 
                 <div class="devui-section">Volumetric sun shafts (C2)</div>
                 <label class="devui-row"><input type="checkbox" value="1" data-checked="vol_enable"/> volumetric</label>
@@ -384,6 +385,8 @@
                 <div class="devui-section">Sound spawner</div>
                 <label class="devui-row"><input type="checkbox" value="1" data-checked="sound_place_mode"/> spawn sounds on click</label>
                 <div class="devui-row">volume <input type="range" min="1" max="128" step="1" data-value="sound_volume"/> <span class="devui-val">{{sound_volume}}</span></div>
+                <div class="devui-row">wave speed <input type="range" min="1" max="30" step="0.5" data-value="sound_wave_speed"/> <span class="devui-val">{{sound_wave_speed}}</span></div>
+                <div class="devui-row">wave max radius <input type="range" min="6" max="100" step="1" data-value="sound_wave_max_radius"/> <span class="devui-val">{{sound_wave_max_radius}}</span></div>
             </div>
 
             <div data-if="tab==6">

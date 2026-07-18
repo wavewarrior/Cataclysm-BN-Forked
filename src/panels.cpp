@@ -1265,16 +1265,16 @@ static void sidebar_hud_apply_rect()
         el->SetProperty( "top", string_format( "%.4f%%", top_rows_pct + 1.0f ) );
     }
 
-    // Dock: full height, pinned to sidebar edge.
+    // Dock: full height minus bars, pinned to sidebar edge.
     if( layout.begin() != layout.end() ) {
         const float dock_left_pct = sidebar_right
                                     ? 100.0f - width_right_pct
                                     : 0.0f;
         if( Rml::Element *el = g_hud_doc->GetElementById( "hud-dock" ) ) {
             el->SetProperty( "left", string_format( "%.4f%%", dock_left_pct ) );
-            el->SetProperty( "top", "0%" );
+            el->SetProperty( "top", string_format( "%.4f%%", top_rows_pct ) );
             el->SetProperty( "width", string_format( "%.4f%%", dock_width_pct ) );
-            el->SetProperty( "height", "100%" );
+            el->SetProperty( "height", string_format( "%.4f%%", 100.0 - top_rows_pct - bottom_rows_pct ) );
         }
     }
 }
@@ -1362,6 +1362,7 @@ void sidebar_hud_sync( avatar &u )
     }
 
     // Feed log row animations and prune stale keys.
+    const auto prev_log_seq = g_hud_log_prev_seq;
     {
         const auto msgs = Messages::recent_messages_rich( 100 );
         unsigned cur_min = 0, cur_max = 0;
@@ -1384,8 +1385,10 @@ void sidebar_hud_sync( avatar &u )
         g_hud_log_prev_seq = { cur_min, cur_max };
     }
 
-    g_hud_data->log_rml = hud_log( u );
-    g_hud_data->handle.DirtyVariable( "log_rml" );
+    if( g_hud_log_prev_seq != prev_log_seq ) {
+        g_hud_data->log_rml = hud_log( u );
+        g_hud_data->handle.DirtyVariable( "log_rml" );
+    }
 
     // Snap scroll to bottom if sticky.
     if( g_hud_log_sticky && g_hud_doc != nullptr ) {

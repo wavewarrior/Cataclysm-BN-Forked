@@ -204,6 +204,8 @@ void render_state::init(SDL_Window* host_window) {
                    static_cast<std::uint32_t>(ph));
         // GPU sound wave visualization pass (expanding ring wavefronts).
         sound_waves_.init(device_, world_fmt);
+        // Box2D debug overlay line pass (world-target format, line-list topology).
+        debug_lines_.init( device_, world_fmt );
         // Atmospheric HUD particle effects (Phase 8).
         hud_particles_.init( device_, device_.swapchain_format(),
                              static_cast<std::uint32_t>( pw ),
@@ -242,6 +244,7 @@ void render_state::shutdown() noexcept {
     sound_waves_.shutdown();
     hud_particles_.shutdown();
     ui_post_.shutdown();
+    debug_lines_.shutdown();
     gpu_sdf_.shutdown();
 
     // Phase 4: release SDF textures.

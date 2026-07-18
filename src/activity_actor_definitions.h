@@ -367,7 +367,7 @@ class repair_item_activity_actor: public activity_actor
 
         activity_id get_type() const override { return activity_id( "ACT_REPAIR_ITEM" ); }
 
-        void start( player_activity &, Character & ) override {}
+        void start( player_activity &, Character & ) override { progress.emplace( _( "Repairing" ), 0 ); }
         void do_turn( player_activity& act, Character& who ) override;
         void finish( player_activity& act, Character& who ) override;
 
@@ -1300,7 +1300,7 @@ class firstaid_activity_actor: public activity_actor
 
         activity_id get_type() const override { return activity_id( "ACT_FIRSTAID" ); }
 
-        void start( player_activity& act, Character & ) override { act.moves_left = moves; }
+        void start( player_activity &, Character & ) override { progress.emplace( _( "First aid" ), moves ); }
         void do_turn( player_activity &, Character & ) override {}
         void finish( player_activity& act, Character& who ) override;
 
@@ -1336,7 +1336,7 @@ class wood_chop_activity_actor: public activity_actor
 
         activity_id get_type() const override;
 
-        void start( player_activity& act, Character & ) override { act.moves_left = moves; }
+        void start( player_activity &, Character & ) override { progress.emplace( _( "Chopping" ), moves ); }
         void do_turn( player_activity& act, Character & ) override;
         void finish( player_activity& act, Character& who ) override;
 
@@ -1661,6 +1661,7 @@ class start_fire_activity_actor: public activity_actor
         safe_reference<item> tool;
         tripoint_abs_ms placement;
         int index = 0; // skill gain
+        int fire_moves = 0; // total moves for progress tracking
 
         bool can_resume_with_internal(
             const activity_actor& other, const Character & /*who*/ ) const override {
@@ -1672,14 +1673,17 @@ class start_fire_activity_actor: public activity_actor
     public:
         start_fire_activity_actor() = default;
         start_fire_activity_actor(
-            const safe_reference<item> &t, const tripoint_abs_ms& place, int skill_gain )
+            const safe_reference<item> &t, const tripoint_abs_ms& place, int skill_gain, int moves )
             : tool( t ),
               placement( place ),
-              index( skill_gain ) {}
+              index( skill_gain ),
+              fire_moves( moves ) {}
 
         activity_id get_type() const override { return activity_id( "ACT_START_FIRE" ); }
 
-        void start( player_activity &, Character & ) override {}
+        void start( player_activity &, Character & ) override {
+            progress.emplace( _( "Starting fire" ), fire_moves );
+        }
         void do_turn( player_activity& act, Character& who ) override;
         void finish( player_activity& act, Character& who ) override;
 
@@ -1861,7 +1865,7 @@ class mind_splicer_activity_actor: public activity_actor
 
         activity_id get_type() const override { return activity_id( "ACT_MIND_SPLICER" ); }
 
-        void start( player_activity& act, Character & ) override { act.moves_left = moves; }
+        void start( player_activity &, Character & ) override { progress.emplace( _( "Mind splicing" ), moves ); }
         void do_turn( player_activity &, Character & ) override {}
         void finish( player_activity& act, Character& who ) override;
 
@@ -1885,7 +1889,7 @@ class robot_control_activity_actor: public activity_actor
 
         activity_id get_type() const override { return activity_id( "ACT_ROBOT_CONTROL" ); }
 
-        void start( player_activity& act, Character & ) override { act.moves_left = moves; }
+        void start( player_activity &, Character & ) override { progress.emplace( _( "Controlling robot" ), moves ); }
         void do_turn( player_activity& act, Character& who ) override;
         void finish( player_activity& act, Character& who ) override;
 
@@ -1917,7 +1921,7 @@ class study_spell_activity_actor: public activity_actor
 
         activity_id get_type() const override { return activity_id( "ACT_STUDY_SPELL" ); }
 
-        void start( player_activity& act, Character & ) override { act.moves_left = moves; }
+        void start( player_activity &, Character & ) override { progress.emplace( _( "Studying spell" ), moves ); }
         void do_turn( player_activity& act, Character& who ) override;
         void finish( player_activity& act, Character& who ) override;
 
@@ -1945,7 +1949,7 @@ class spellcasting_activity_actor: public activity_actor
 
         activity_id get_type() const override { return activity_id( "ACT_SPELLCASTING" ); }
 
-        void start( player_activity& act, Character & ) override { act.moves_left = moves; }
+        void start( player_activity &, Character & ) override { progress.emplace( _( "Casting spell" ), moves ); }
         void do_turn( player_activity& act, Character& who ) override;
         void finish( player_activity& act, Character& who ) override;
 
@@ -1999,7 +2003,7 @@ class hotwire_car_activity_actor: public activity_actor
 
         activity_id get_type() const override { return activity_id( "ACT_HOTWIRE_CAR" ); }
 
-        void start( player_activity& act, Character & ) override { act.moves_left = moves; }
+        void start( player_activity &, Character & ) override { progress.emplace( _( "Hotwiring" ), moves ); }
         void do_turn( player_activity& act, Character& who ) override;
         void finish( player_activity& act, Character& who ) override;
 
@@ -2023,7 +2027,7 @@ class start_engines_activity_actor: public activity_actor
 
         activity_id get_type() const override { return activity_id( "ACT_START_ENGINES" ); }
 
-        void start( player_activity& act, Character & ) override { act.moves_left = moves; }
+        void start( player_activity &, Character & ) override { progress.emplace( _( "Starting engines" ), moves ); }
         void do_turn( player_activity& act, Character& who ) override;
         void finish( player_activity& act, Character& who ) override;
 

@@ -191,7 +191,7 @@ void game_activity_actor::do_turn( player_activity& act, Character& who )
     // ACT_GAME: uses game_item and drains battery
     if( !game_item ) {
         debugmsg( "ACT_GAME with no game item" );
-        act.moves_left = 0;
+        act.set_to_null();
         return;
     }
     item& game_item_ref = *game_item;
@@ -203,7 +203,7 @@ void game_activity_actor::do_turn( player_activity& act, Character& who )
             if( p.use_charges_if_avail( itype_UPS, energy ) ) { energy = 0; }
         }
         if( energy ) {
-            act.moves_left = 0;
+            act.set_to_null();
             add_msg( m_info, _( "The %s runs out of batteries." ), game_item_ref.tname() );
         }
     }
@@ -234,13 +234,13 @@ void vibe_activity_actor::do_turn( player_activity& act, Character& who )
 
     if( !vibrator ) {
         debugmsg( "ACT_VIBE with no vibrator item" );
-        act.moves_left = 0;
+        act.set_to_null();
         return;
     }
     item& vibrator_item = *vibrator;
 
     if( p.encumb( body_part_mouth ) >= 30 ) {
-        act.moves_left = 0;
+        act.set_to_null();
         add_msg( m_bad, _( "You have trouble breathing, and stop." ) );
     }
 
@@ -258,7 +258,7 @@ void vibe_activity_actor::do_turn( player_activity& act, Character& who )
     }
 
     if( p.get_fatigue() >= fatigue_levels::dead_tired ) {
-        act.moves_left = 0;
+        act.set_to_null();
         add_msg( m_info, _( "You're too tired to continue." ) );
     }
 }
@@ -870,7 +870,7 @@ void start_fire_activity_actor::do_turn( player_activity& act, Character& who )
     p.mod_moves( -p.moves );
     const firestarter_actor* actor = dynamic_cast<const firestarter_actor *>( usef->get_actor_ptr() );
     const float light = actor->light_mod( p.bub_pos() );
-    act.moves_left -= light * 100;
+    progress.mod_moves_left( -static_cast<int>( light * 100 ) );
     if( light < 0.1 ) {
         p.add_msg_if_player(
             m_bad,
@@ -924,17 +924,19 @@ void start_fire_activity_actor::serialize( JsonOut& jsout ) const
     jsout.member( "tool", tool );
     jsout.member( "placement", placement );
     jsout.member( "index", index );
+    jsout.member( "fire_moves", fire_moves );
     jsout.end_object();
 }
 
 std::unique_ptr<activity_actor> start_fire_activity_actor::deserialize( JsonIn& jsin )
 {
     std::unique_ptr<start_fire_activity_actor> actor(
-        new start_fire_activity_actor( safe_reference<item>(), tripoint_abs_ms::zero(), 0 ) );
+        new start_fire_activity_actor( safe_reference<item>(), tripoint_abs_ms::zero(), 0, 0 ) );
     JsonObject data = jsin.get_object();
     data.read( "tool", actor->tool );
     data.read( "placement", actor->placement );
     data.read( "index", actor->index );
+    data.read( "fire_moves", actor->fire_moves );
     return actor;
 }
 

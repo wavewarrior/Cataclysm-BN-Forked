@@ -1,8 +1,8 @@
 # GK visual-fidelity plan — IMPLEMENTATION BUILD SHEET
 
-## STATUS (reviewed 2026-06-27)
-Done ~0% — ASPIRATIONAL / UNSTARTED. Verified against code: §1 knobs (nrm_entity_amount, ripple_k, gust_amp, gust_freq, part_radius, part_strength) ABSENT from debug_params; §2 `surface_normal` still albedo-luma Sobel (sprite.frag.hlsl:355) w/ tall-sprite flat override intact (:404); §4/§5 vert sway is still the single-sine block (`player_x/y` declared but UNUSED — no ripple/gust/parting); §6 tonemap.frag has AgX ONLY, no grade block. KEEP as a real backlog (foundation — debug_params/sway/tonemap — all exists and is hookable), but nothing here is built.
-STALE FACTS in §0: debug_params is now **152 B** (not 128 — grew for sun/sky work), so §1's "new size = 128 + N*4" math is wrong. §0 + §6 claim `grade_desat/cool/bright` knobs exist to "replace" — they DON'T exist in tonemap.frag (never landed / removed). §0 register-space table lists fragment storage buffers as `space4`, but live code uses `space2` (per module CLAUDE.md). Re-derive anchors before implementing.
+## STATUS (reviewed 2026-07-18)
+§1 COMPLETE — all knobs (nrm_entity_amount, ripple_k, gust_amp, gust_freq, part_radius, part_strength, sway_amp, sway_freq) present in debug_params (176 bytes). §2 COMPLETE — alpha-shape bevel implemented in `surface_normal()` (sprite.frag.hlsl); tall-sprite entity blend uses `nrm_entity_amount` knob (default 0.3) instead of hardcoded value; F4 slider added. §3 DEFERRED — blocked on Metal second-sampler spike (shadercross mis-bind; see §3a). §4/§5 COMPLETE — foliage sway with ripple/gust/parting fully implemented in sprite.vert.hlsl. §6 tonemap: AgX shipped; grade knobs (grade_desat/cool/bright) live in debug_params and consumed in sprite.frag.hlsl tone-grade block.
+STALE FACTS in §0: debug_params is now **176 B** (11 × 16), not the §1 projection. §0 register-space table lists fragment storage buffers as `space4`, but live code uses `space2`. Re-derive anchors before implementing §3.
 
 > Optimized for a small-context implementer. **Read §0 first, then load ONE chunk (§1–§6) per work session.** Each chunk is self-contained. Anchors are **grep strings** (line numbers drift — confirm by grep before editing).
 

@@ -15,6 +15,7 @@
 // dozens of unrelated render-call substitutions.
 
 #include "bloom_pass.h"
+#include "debug_line_pass.h"
 #include "emitter_collector.h"
 #include "event_queue.h"
 #include "font_engine.h"
@@ -350,6 +351,9 @@ public:
     hud_particle_effect& hud_particles() noexcept { return hud_particles_; }
     // UI post-processing: bloom + chromatic aberration (Phase 9).
     ui_post_pass& ui_post() noexcept { return ui_post_; }
+    // Box2D debug overlay line pass (coloured wireframes over the world target).
+    // Driven from cata_tiles (populate) and render_world_pass_w (record).
+    debug_line_pass& debug_lines() noexcept { return debug_lines_; }
 
     // GPU JFA SDF pass (P3). Three compute dispatches: seed → flood → resolve.
     gpu_sdf_pass& gpu_sdf() noexcept { return gpu_sdf_; }
@@ -457,6 +461,7 @@ private:
     sound_wave_pass sound_waves_;
     ui_post_pass ui_post_;
     gpu_sdf_pass gpu_sdf_;
+    debug_line_pass debug_lines_;
 };
 
 // Process-wide accessor. The object is constructed in init() and torn down

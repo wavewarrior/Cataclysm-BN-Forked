@@ -28,6 +28,8 @@
 //              tile-res, x-major field[(x*map_h+y)*4 + c].
 //   b0 space2  GiParams.
 
+#include "attenuation.hlsl"
+
 StructuredBuffer<float>   Emitters : register(t0, space0);
 StructuredBuffer<float>   SdfBuf   : register(t1, space0);
 StructuredBuffer<float>   SkyBuf   : register(t2, space0);
@@ -125,10 +127,10 @@ void main( uint3 tid : SV_DispatchThreadID )
         }
         const float2 dv   = e_pos.xy - probe;
         const float  dist = length( dv );
-        if( dist >= e_radius || dist < 0.01 ) {
+        if( dist < 0.01 ) {
             continue;
         }
-        const float atten = 1.0 - pow( saturate( dist / e_radius ), e_falloff );
+        const float atten = point_light_atten( dist, e_radius, e_falloff );
         if( atten <= LIGHT_EPS ) {
             continue;
         }

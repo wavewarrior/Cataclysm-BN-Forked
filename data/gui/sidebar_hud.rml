@@ -26,6 +26,7 @@
             <div class="dock-header" data-rml="minimap_title"></div>
             <div class="dock-body hud-map-body" data-rml="minimap_rml"></div>
         </div>
+        <div class="vitals-divider"/>
         <div class="dock-section dock-flex">
             <div class="dock-header" data-rml="log_title"></div>
             <div id="hud-log-body" class="dock-body hud-scroll" data-rml="log_rml"></div>

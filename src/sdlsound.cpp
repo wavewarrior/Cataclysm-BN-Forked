@@ -204,7 +204,9 @@ if( !MIX_Init() ) {
     music_track = MIX_CreateTrack( g_mixer );
 
     // Initialize TTS synthesizer stub (lazy init, no-op if TTS option disabled)
-    init_tts_synthesizer();
+    if( get_option<bool>( "ENABLE_TTS" ) ) {
+        init_tts_synthesizer();
+    }
 
     // ── String-tag grouping ──────────────────────────────────────────────────
 

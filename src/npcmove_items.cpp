@@ -157,7 +157,7 @@ static constexpr float MAX_FLOAT = 5000000000.0f;
 
 // Defined in npcmove.cpp
 auto nearest_passable( const tripoint_bub_ms& p, const tripoint_bub_ms& closest_to )
-    -> std::optional<tripoint_bub_ms>;
+-> std::optional<tripoint_bub_ms>;
 
 
 void npc::find_item()

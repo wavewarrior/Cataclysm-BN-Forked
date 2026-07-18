@@ -427,21 +427,12 @@ auto PhysicsWorld::toggle_debug_draw() -> bool
     return debug_draw_;
 }
 
-auto PhysicsWorld::draw_debug( SDL_Renderer  *renderer,
-                               float          origin_px, float origin_py,
-                               float          m2px,      float m2py ) const -> void
+auto PhysicsWorld::draw_debug( lighting::debug_line_pass &pass ) const -> void
 {
     if( !debug_draw_ || B2_IS_NULL( world_ ) ) { return; }
-    // Save and enable blend mode so alpha composites over the tile layer cleanly.
-    SDL_BlendMode prev_blend{};
-    SDL_GetRenderDrawBlendMode( renderer, &prev_blend );
-    SDL_SetRenderDrawBlendMode( renderer, SDL_BLENDMODE_BLEND );
-
-    auto ctx = DebugDrawContext{ renderer, origin_px, origin_py, m2px, m2py };
+    auto ctx = DebugDrawContext{ &pass, 1.0f / TILE_M };
     auto dd  = make_debug_draw( &ctx );
     b2World_Draw( world_, &dd );
-
-    SDL_SetRenderDrawBlendMode( renderer, prev_blend );
 }
 } // namespace physics
 #endif // BOX2D_ENABLED

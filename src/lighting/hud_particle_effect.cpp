@@ -156,50 +156,88 @@ auto hud_particle_effect::spawn_particle( const hud_particle_params &params ) ->
         case hud_emitter_type::ember:
             p.x = static_cast<float>( rng_float( 0.0, w ) );
             p.y = h * static_cast<float>( rng_float( 0.5, 1.0 ) );
-            p.vx = static_cast<float>( rng_float( -5.0, 5.0 ) );
-            p.vy = static_cast<float>( rng_float( -15.0, -5.0 ) );
-            p.size = static_cast<float>( rng_float( 2.0, 4.0 ) );
-            p.lifetime = static_cast<float>( rng_float( 2.0, 4.0 ) );
-            p.rot_speed = static_cast<float>( rng_float( -30.0, 30.0 ) );
+            p.vx = static_cast<float>( rng_float( -8.0, 8.0 ) );
+            p.vy = static_cast<float>( rng_float( -25.0, -10.0 ) );
+            p.size = static_cast<float>( rng_float( 4.0, 8.0 ) );
+            p.lifetime = static_cast<float>( rng_float( 2.5, 5.0 ) );
+            p.rot_speed = static_cast<float>( rng_float( -60.0, 60.0 ) );
             p.r = static_cast<float>( rng_float( 0.9, 1.0 ) );
             p.g = static_cast<float>( rng_float( 0.3, 0.6 ) );
             p.b = static_cast<float>( rng_float( 0.0, 0.1 ) );
             break;
         case hud_emitter_type::dust:
-            p.x = -10.f;
+            p.x = -20.f;
             p.y = static_cast<float>( rng_float( 0.0, h ) );
-            p.vx = static_cast<float>( rng_float( 10.0, 30.0 ) );
-            p.vy = static_cast<float>( rng_float( -2.0, 2.0 ) );
-            p.size = static_cast<float>( rng_float( 1.0, 3.0 ) );
-            p.lifetime = static_cast<float>( rng_float( 5.0, 8.0 ) );
-            p.rot_speed = static_cast<float>( rng_float( -10.0, 10.0 ) );
+            p.vx = static_cast<float>( rng_float( 15.0, 45.0 ) );
+            p.vy = static_cast<float>( rng_float( -3.0, 3.0 ) );
+            p.size = static_cast<float>( rng_float( 3.0, 7.0 ) );
+            p.lifetime = static_cast<float>( rng_float( 5.0, 9.0 ) );
+            p.rot_speed = static_cast<float>( rng_float( -15.0, 15.0 ) );
             p.r = static_cast<float>( rng_float( 0.5, 0.7 ) );
             p.g = static_cast<float>( rng_float( 0.4, 0.6 ) );
             p.b = static_cast<float>( rng_float( 0.3, 0.5 ) );
             break;
         case hud_emitter_type::pollen:
             p.x = static_cast<float>( rng_float( 0.0, w ) );
-            p.y = h + 10.f;
-            p.vx = static_cast<float>( rng_float( -5.0, 5.0 ) );
-            p.vy = static_cast<float>( rng_float( -8.0, -3.0 ) );
-            p.size = static_cast<float>( rng_float( 1.0, 2.0 ) );
-            p.lifetime = static_cast<float>( rng_float( 6.0, 10.0 ) );
-            p.rot_speed = static_cast<float>( rng_float( -20.0, 20.0 ) );
+            p.y = h + 20.f;
+            p.vx = static_cast<float>( rng_float( -8.0, 8.0 ) );
+            p.vy = static_cast<float>( rng_float( -12.0, -5.0 ) );
+            p.size = static_cast<float>( rng_float( 3.0, 6.0 ) );
+            p.lifetime = static_cast<float>( rng_float( 6.0, 12.0 ) );
+            p.rot_speed = static_cast<float>( rng_float( -30.0, 30.0 ) );
             p.r = static_cast<float>( rng_float( 0.7, 0.9 ) );
             p.g = static_cast<float>( rng_float( 0.8, 1.0 ) );
             p.b = static_cast<float>( rng_float( 0.2, 0.4 ) );
             break;
         case hud_emitter_type::snow:
             p.x = static_cast<float>( rng_float( 0.0, w ) );
-            p.y = -10.f;
-            p.vx = static_cast<float>( rng_float( -10.0, 10.0 ) );
-            p.vy = static_cast<float>( rng_float( 10.0, 25.0 ) );
-            p.size = static_cast<float>( rng_float( 2.0, 4.0 ) );
-            p.lifetime = static_cast<float>( rng_float( 4.0, 6.0 ) );
-            p.rot_speed = static_cast<float>( rng_float( -40.0, 40.0 ) );
+            p.y = -20.f;
+            p.vx = static_cast<float>( rng_float( -15.0, 15.0 ) );
+            p.vy = static_cast<float>( rng_float( 15.0, 35.0 ) );
+            p.size = static_cast<float>( rng_float( 4.0, 10.0 ) );
+            p.lifetime = static_cast<float>( rng_float( 4.0, 7.0 ) );
+            p.rot_speed = static_cast<float>( rng_float( -50.0, 50.0 ) );
             p.r = 1.0f;
             p.g = 1.0f;
             p.b = 1.0f;
+            break;
+        case hud_emitter_type::leaf:
+            // Tumbling leaf — spawns from top or sides, drifts down + sideways
+            if( rng_float( 0.0, 1.0 ) < 0.5 ) {
+                p.x = static_cast<float>( rng_float( 0.0, w ) );
+                p.y = -20.f;
+            } else {
+                p.x = static_cast<float>( rng_float( -20.0, 0.0 ) );
+                p.y = static_cast<float>( rng_float( 0.0, h * 0.5 ) );
+            }
+            p.vx = static_cast<float>( rng_float( 10.0, 35.0 ) );
+            p.vy = static_cast<float>( rng_float( 8.0, 20.0 ) );
+            p.size = static_cast<float>( rng_float( 6.0, 12.0 ) );
+            p.lifetime = static_cast<float>( rng_float( 5.0, 10.0 ) );
+            p.rot_speed = static_cast<float>( rng_float( -120.0, 120.0 ) );
+            // Autumn palette: browns, reds, oranges, yellows
+            switch( rng( 0, 3 ) ) {
+                case 0: // brown
+                    p.r = static_cast<float>( rng_float( 0.45, 0.6 ) );
+                    p.g = static_cast<float>( rng_float( 0.25, 0.35 ) );
+                    p.b = static_cast<float>( rng_float( 0.1, 0.15 ) );
+                    break;
+                case 1: // red
+                    p.r = static_cast<float>( rng_float( 0.7, 0.9 ) );
+                    p.g = static_cast<float>( rng_float( 0.15, 0.3 ) );
+                    p.b = static_cast<float>( rng_float( 0.05, 0.1 ) );
+                    break;
+                case 2: // orange
+                    p.r = static_cast<float>( rng_float( 0.85, 1.0 ) );
+                    p.g = static_cast<float>( rng_float( 0.45, 0.6 ) );
+                    p.b = static_cast<float>( rng_float( 0.05, 0.15 ) );
+                    break;
+                default: // yellow
+                    p.r = static_cast<float>( rng_float( 0.9, 1.0 ) );
+                    p.g = static_cast<float>( rng_float( 0.75, 0.9 ) );
+                    p.b = static_cast<float>( rng_float( 0.1, 0.25 ) );
+                    break;
+            }
             break;
     }
 

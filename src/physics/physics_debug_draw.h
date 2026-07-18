@@ -2,23 +2,20 @@
 #ifdef BOX2D_ENABLED
 #include <box2d/box2d.h>
 
-struct SDL_Renderer; // forward-declare — callers need not include SDL headers
+namespace lighting { class debug_line_pass; } // forward-declare GPU line buffer
 
 namespace physics {
 
-/// Camera-state baked into the debug draw context.
-/// Precomputed once per frame from cata_tiles::draw() locals:
-///   screen_{x,y} = origin_p{x,y} + b2_metres * m2p{x,y}
+/// Debug-draw context for b2DebugDraw callbacks.
+/// Callbacks convert Box2D metres to world-tile coords (÷ TILE_M) and push
+/// line segments into the GPU debug_line_pass.
 struct DebugDrawContext {
-    SDL_Renderer *renderer; ///< raw pointer — lifetime owned by cata_tiles
-    float         origin_px; ///< screen x pixel of Box2D world origin (tile 0,0)
-    float         origin_py; ///< screen y pixel of Box2D world origin
-    float         m2px;      ///< pixels per Box2D metre (x) = tile_width / TILE_M
-    float         m2py;      ///< pixels per Box2D metre (y) = tile_height / TILE_M
+    lighting::debug_line_pass *pass; ///< GPU line buffer — lifetime owned by render_state
+    float                      m2t;  ///< metres-to-tiles scale factor = 1.0f / TILE_M
 };
 
-/// Build a fully configured b2DebugDraw that renders collision shapes, contact
-/// points, and body transforms via SDL_RenderLines.
+/// Build a fully configured b2DebugDraw that populates a GPU debug_line_pass
+/// with collision shapes, contact manifolds, and body transforms.
 /// @p ctx must outlive any b2World_Draw() call using the returned struct.
 auto make_debug_draw( DebugDrawContext *ctx ) -> b2DebugDraw;
 

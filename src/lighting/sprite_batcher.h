@@ -138,7 +138,7 @@ struct debug_params {
     float shadow_k = 8.0f;
     uint32_t shadow_steps = 16u;
     float dither_amt = 1.0f;
-    float dither_bands = 6.0f;
+    float dither_bands = 12.0f;
     float gi_strength = 0.60f; // 1-bounce indirect multiplier (0=off); Alt+F8/F9 to tune
     // Vision rework knobs (Stoneshard-style). All default ON so the effect ships;
     // set any to its off-value to bisect live. Wire-stable with DebugParams cbuffer.
@@ -188,7 +188,7 @@ struct debug_params {
     float gust_freq = 0.3f;     // gust envelope frequency (Hz-ish, slow)
     float part_radius = 2.5f;   // player foliage parting radius in tiles (0=off)
     float part_strength = 0.5f; // player foliage parting push strength (0=off)
-    float veg_pad = 0.0f;       // alignment padding (176 bytes = 11 × 16)
+    float nrm_entity_amount = 0.3f; // entity (tall sprite) normal relief: 0=flat .. 1=full bevel
 };
 
 // Returns sun/sky params interpolated from a 24h LUT for the given hour (0..24).

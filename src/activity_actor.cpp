@@ -1575,16 +1575,17 @@ std::unique_ptr<activity_actor> throw_activity_actor::deserialize( JsonIn& jsin 
 
 // ---- repair_item_activity_actor -------------------------------------------
 
-void repair_item_activity_actor::do_turn( player_activity& act, Character& who )
+void repair_item_activity_actor::do_turn( player_activity& /*act*/, Character& who )
 {
     const float vision_mod = character_funcs::fine_detail_vision_mod( who );
-    const int effective_moves = who.moves / vision_mod;
-    if( effective_moves <= act.moves_left ) {
-        act.moves_left -= effective_moves;
+    const int effective_moves = static_cast<int>( who.moves / vision_mod );
+    const int remaining = progress.get_moves_left();
+    if( effective_moves <= remaining ) {
+        progress.mod_moves_left( -effective_moves );
         who.moves = 0;
     } else {
-        who.moves -= act.moves_left * vision_mod;
-        act.moves_left = 0;
+        who.moves -= static_cast<int>( remaining * vision_mod );
+        progress.mod_moves_left( -remaining );
     }
 }
 
@@ -1825,7 +1826,8 @@ void repair_item_activity_actor::finish( player_activity& act, Character& who )
         } while( chosen == REPEAT_INIT );
     }
 
-    act.moves_left = actor->move_cost;
+    progress.purge();
+    progress.emplace( _( "Repairing" ), actor->move_cost );
 }
 
 void repair_item_activity_actor::serialize( JsonOut& jsout ) const

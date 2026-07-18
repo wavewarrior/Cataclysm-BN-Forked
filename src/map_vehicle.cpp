@@ -302,6 +302,12 @@ std::unique_ptr<vehicle> map::detach_vehicle( vehicle* veh )
         return std::unique_ptr<vehicle>();
     }
 
+#ifdef BOX2D_ENABLED
+    if( auto *pw = get_physics_world(); pw ) {
+        pw->on_vehicle_removed( veh );
+    }
+#endif
+
     int z = veh->abs_sm_pos.z();
     if( z < -OVERMAP_DEPTH || z > OVERMAP_HEIGHT ) {
         debugmsg( "detach_vehicle got a vehicle outside allowed z-level range!  name=%s, "
@@ -355,9 +361,6 @@ std::unique_ptr<vehicle> map::detach_vehicle( vehicle* veh )
 
 void map::destroy_vehicle( vehicle* veh )
 {
-#ifdef BOX2D_ENABLED
-    if( phys_world ) { phys_world->on_vehicle_removed( veh ); }
-#endif
     detach_vehicle( veh );
 }
 

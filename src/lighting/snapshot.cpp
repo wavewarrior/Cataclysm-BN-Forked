@@ -54,7 +54,7 @@ extern float wx, wy, wz; // world-tile position under the cursor
 static const efftype_id snapshot_effect_onfire("onfire");
 
 static constexpr float M_PIf = 3.14159265358979323846f;
-static constexpr float FALLOFF_DEFAULT = 1.5f;
+static constexpr float FALLOFF_DEFAULT = 2.0f;
 
 namespace lighting {
 

@@ -117,7 +117,7 @@ struct {
     bool cities_enabled = false;
     auto operator()( const scenario *a, const scenario *b ) -> bool {
         if( cities_enabled ) {
-            const scenario *gen = scenario::generic();
+        const scenario *gen = scenario::generic();
             if( b == gen ) {
                 return false;
             } else if( a == gen ) {
@@ -127,7 +127,7 @@ struct {
         if( !cities_enabled && a->has_flag( "CITY_START" ) != b->has_flag( "CITY_START" ) ) {
             return a->has_flag( "CITY_START" ) < b->has_flag( "CITY_START" );
         } else if( sort_by_points ) {
-            return a->point_cost() < b->point_cost();
+        return a->point_cost() < b->point_cost();
         } else {
             return localized_compare( a->gender_appropriate_name( male ),
                                       b->gender_appropriate_name( male ) );

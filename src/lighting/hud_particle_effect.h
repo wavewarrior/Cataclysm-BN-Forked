@@ -42,7 +42,8 @@ enum class hud_emitter_type {
     ember,    // orange-red, upward drift, sway
     dust,     // gray-brown, slow horizontal drift
     pollen,   // yellow-green, lazy sine-wave float
-    snow      // white, downward + sway
+    snow,     // white, downward + sway
+    leaf      // autumn brown/red/orange, tumbling drift
 };
 
 // Per-frame particle parameters.

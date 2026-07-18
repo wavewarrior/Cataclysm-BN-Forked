@@ -121,6 +121,10 @@ std::vector<light> lights;
 std::vector<sound_pulse> sound_pulses;
 } // namespace dev_test_lights
 
+// Sound wavefront ring tuning (extern-declared in sdl_lighting_devui.h).
+float g_sound_wave_speed = 12.0f;
+float g_sound_wave_max_radius = 48.0f;
+
 namespace sdl_lighting_devui
 {
 
@@ -437,6 +441,7 @@ void devui_rml_open()
     c.Bind( "nrm_amount", &g_dbg_params.nrm_amount );
     c.Bind( "nrm_relief", &g_dbg_params.nrm_relief );
     c.Bind( "nrm_elev", &g_dbg_params.nrm_elev );
+    c.Bind( "nrm_entity_amount", &g_dbg_params.nrm_entity_amount );
     // Camera follow knobs (CPU-only; pushed into game::main_camera_ in draw_ter).
     c.Bind( "cam_smooth", &camera_dbg::smooth_speed );
     c.Bind( "cam_lookahead", &camera_dbg::look_ahead );
@@ -729,6 +734,8 @@ void devui_rml_open()
     }
     c.Bind( "sound_place_mode", &g_sound_place_mode );
     c.Bind( "sound_volume", &g_sound_volume );
+    c.Bind( "sound_wave_speed", &g_sound_wave_speed );
+    c.Bind( "sound_wave_max_radius", &g_sound_wave_max_radius );
     c.Bind( "sound_category", &g_sound_category );
     // Build + bind the theme/game colour combo (names + selected index).
     g_pk_combo.clear();

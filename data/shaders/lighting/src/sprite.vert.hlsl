@@ -86,7 +86,7 @@ cbuffer DebugParams : register(b2, space1) {
     float gust_freq;     // gust envelope frequency (Hz-ish, slow)
     float part_radius;   // player foliage parting radius in tiles (0=off)
     float part_strength; // player foliage parting push strength (0=off)
-    float veg_pad;       // alignment padding
+    float nrm_entity_amount; // entity (tall sprite) normal relief: 0=flat .. 1=full bevel
 };
 
 struct VS_OUT {

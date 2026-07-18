@@ -24,11 +24,18 @@ static constexpr float TILE_M = 1.78816f;
 ///      reference point) and shape centre coincide with world reality.
 inline auto vehicle_box2d_shape( const vehicle &v ) -> b2Polygon
 {
+    // Guard against vehicles with zero non-removed parts — avoids INT_MIN - INT_MAX
+    // signed overflow when computing bounding box extents.
+    const auto &parts = v.get_all_parts();
+    if( parts.empty() ) {
+        return {}; // empty shape, no body created
+    }
+
     auto min_mx = INT_MAX;
     auto max_mx = INT_MIN;
     auto min_my = INT_MAX;
     auto max_my = INT_MIN;
-    for( const auto &vp : v.get_all_parts() ) {
+    for( const auto &vp : parts ) {
         if( vp.part().removed ) {
             continue;
         }
@@ -37,6 +44,10 @@ inline auto vehicle_box2d_shape( const vehicle &v ) -> b2Polygon
         max_mx = std::max( max_mx, m.x() );
         min_my = std::min( min_my, m.y() );
         max_my = std::max( max_my, m.y() );
+    }
+    // All parts were removed — same overflow guard as the empty() check above.
+    if( min_mx > max_mx ) {
+        return {};
     }
     const auto hw = ( max_mx - min_mx + 1 ) / 2.0f * TILE_M;
     const auto hh = ( max_my - min_my + 1 ) / 2.0f * TILE_M;

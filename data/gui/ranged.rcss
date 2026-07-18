@@ -7,17 +7,21 @@
    inline — see the theme.rcss gotcha) and pre-wrap so the section lines stack and
    wrap like the curses panel. */
 body {
-    display: flex;
-    flex-direction: column;
+    display: block;
     width: 100%;
     height: 100%;
+    pointer-events: none;
 }
 
 .ranged-panel {
-    width: 100%;
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 440dp;
     height: 100%;
     display: flex;
     flex-direction: column;
+    pointer-events: auto;
 }
 
 .ranged-body {

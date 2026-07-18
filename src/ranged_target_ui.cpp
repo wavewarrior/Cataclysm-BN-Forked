@@ -238,7 +238,7 @@ target_handler::trajectory target_ui::run()
     rml.open( ranged_rmlui_enabled(), "ranged", ctxt, [&]( Rml::DataModelConstructor & c ) {
         c.Bind( "body_rml", &rml_data.body_rml );
         rml_data.handle = c.GetModelHandle();
-    } );
+    }, true );
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
         if( rml ) {

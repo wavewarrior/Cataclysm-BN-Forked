@@ -24,7 +24,8 @@ std::set<std::string> &active_models()
 } // namespace
 
 bool rml_doc::open( bool enabled, const std::string &model_name, input_context &ctx,
-                    const std::function<void( Rml::DataModelConstructor & )> &bind )
+                    const std::function<void( Rml::DataModelConstructor & )> &bind,
+                    bool passive )
 {
     if( doc_ != nullptr ) {
         // Already open on this instance — nothing to do.
@@ -45,7 +46,7 @@ bool rml_doc::open( bool enabled, const std::string &model_name, input_context &
     // capture c.GetModelHandle() into the screen's session.
     bind( c );
     Rml::ElementDocument *doc =
-        rmlui_layer::open_document( PATH_INFO::datadir() + "gui/" + model_name + ".rml" );
+        rmlui_layer::open_document( PATH_INFO::datadir() + "gui/" + model_name + ".rml", passive );
     if( doc == nullptr ) {
         // Roll back the model so the guard below is never taken on failure.
         ctx_rml->RemoveDataModel( model_name );

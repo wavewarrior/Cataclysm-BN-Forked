@@ -272,7 +272,7 @@ void train_skill_activity_actor::do_turn( player_activity& act, Character& who )
         debugmsg(
             "train skill tools array and hack values are empty. this would have caused "
             "invalid safe reference error" );
-        act.moves_left = 0;
+        act.set_to_null();
         return;
     }
     item& skill_training_item = *main_tool;
@@ -280,7 +280,7 @@ void train_skill_activity_actor::do_turn( player_activity& act, Character& who )
 
     if( training_skill_interval <= 0 ) {
         debugmsg( "training_iuse_skill_interval is invalid ( %d )", training_skill_interval );
-        act.moves_left = 0;
+        act.set_to_null();
         return;
     }
 
@@ -288,7 +288,7 @@ void train_skill_activity_actor::do_turn( player_activity& act, Character& who )
         std::string training_skill = p.get_value( "training_iuse_skill" );
         if( training_skill.empty() ) {
             debugmsg( "training_iuse_skill is empty" );
-            act.moves_left = 0;
+            act.set_to_null();
             return;
         }
         int training_skill_xp = atoi( p.get_value( "training_iuse_skill_xp" ).c_str() );
@@ -309,12 +309,12 @@ void train_skill_activity_actor::do_turn( player_activity& act, Character& who )
                 }
             }
         } else if( skill_training_item.ammo_required() > 0 ) {
-            act.moves_left = 0;
+            act.set_to_null();
             add_msg( m_info, _( "The %s runs out of power." ), skill_training_item.tname() );
             return;
         }
         if( p.get_skill_level( skill_id( training_skill ) ) >= training_skill_max_level ) {
-            act.moves_left = 0;
+            act.set_to_null();
             add_msg( m_info, _( "You can no longer learn anything from this." ) );
             return;
         }
@@ -333,7 +333,7 @@ void train_skill_activity_actor::do_turn( player_activity& act, Character& who )
                 grid.mod_resource( -used_charges );
             }
         }
-        act.moves_left = 0;
+        act.set_to_null();
         add_msg( m_info, _( "You're too tired to continue." ) );
     }
 }
@@ -480,7 +480,7 @@ void study_spell_activity_actor::do_turn( player_activity& act, Character& who )
     player& p = static_cast<player &>( who );
     if( !character_funcs::can_see_fine_details( p ) ) {
         dark_flag = -1;
-        act.moves_left = 0;
+        progress.mod_moves_left( -progress.get_moves_left() );
         return;
     }
     if( mode == "study" ) {
@@ -503,9 +503,9 @@ void study_spell_activity_actor::do_turn( player_activity& act, Character& who )
         if( new_level > old_level ) {
             total_levels_gained += new_level - old_level;
             g->events().send<event_type::player_levels_spell>( studying.id(), new_level );
-            if( gain_level_mode ) { act.moves_left = 0; }
+            if( gain_level_mode ) { progress.mod_moves_left( -progress.get_moves_left() ); }
         } else if( gain_level_mode ) {
-            act.moves_left = 1000000;
+            progress.mod_moves_left( 1000000 - progress.get_moves_left() );
         }
     }
     turn_counter += 1;
@@ -764,7 +764,7 @@ void pulp_activity_actor::do_turn( player_activity& act, Character& who )
         p.add_msg_player_or_npc(
             m_bad, _( "You are unable to pulp the corpse." ),
             _( "<npcname> is unable to pulp the corpse." ) );
-        act.moves_left = 0;
+        finish( act, who );
         return;
     }
 
@@ -803,8 +803,8 @@ void pulp_activity_actor::do_turn( player_activity& act, Character& who )
                     pos + point( rng( -mess_radius, mess_radius ), rng( -mess_radius, mess_radius ) ) );
             }
 
-            act.moves_left -= 1;
-            if( act.moves_left <= 0 ) { break; }
+            p.mod_moves( -100 );
+            if( p.moves <= 0 ) { break; }
         }
         corpse->set_flag( flag_PULPED );
     }
@@ -817,7 +817,9 @@ void pulp_activity_actor::do_turn( player_activity& act, Character& who )
             vgettext( "<npcname> finished pulping the corpse.",
                       "<npcname> finished pulping the corpses.", num_corpses ) );
     }
-    act.moves_left = 0;
+    // Pulp is a "special" activity — the framework's moves block and complete()
+    // are skipped.  Terminate directly; finish() handles NPC cleanup.
+    finish( act, who );
 }
 
 void pulp_activity_actor::finish( player_activity& act, Character& who )
@@ -975,7 +977,7 @@ std::unique_ptr<activity_actor> start_engines_activity_actor::deserialize( JsonI
 // ---- vehicle_activity_actor ----
 void vehicle_activity_actor::start( player_activity& act, Character & )
 {
-    act.moves_left = moves;
+    progress.emplace( _( "Vehicle work" ), moves );
     act.placement = placement;
     act.index = cmd;
     act.values.push_back( placement.x() );

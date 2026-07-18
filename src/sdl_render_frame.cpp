@@ -678,11 +678,11 @@ auto draw_lighting_overlays( lighting::render_state &rs,
     // ── Animated sound pulses — lifecycle only (GPU render is in render_world_pass_w) ──
     // Must run every frame so pulses expire even when the GPU pass is not ready.
     {
-        constexpr float speed = 9.0f;
+        const float speed = g_sound_wave_speed;
         const double now = dev_test_lights::pulse_now_s();
         auto &pulses = dev_test_lights::sound_pulses;
-        std::erase_if( pulses, [now]( const dev_test_lights::sound_pulse & p ) {
-            const float max_r = std::clamp( p.volume, k_min_sound_pulse_radius, 24.f );
+        std::erase_if( pulses, [now, speed]( const dev_test_lights::sound_pulse & p ) {
+            const float max_r = std::clamp( p.volume, k_min_sound_pulse_radius, g_sound_wave_max_radius );
             return static_cast<float>( now - p.spawn_s ) * speed > max_r;
         } );
         if( !pulses.empty() ) {
@@ -750,6 +750,20 @@ auto render_world_pass_w( lighting::render_state &rs,
         rs.flush_tile_sprites( rs.tile_batcher(), rs.gpu_sampler() );
     }
     rs.tile_batcher().end_pass();
+
+    // Box2D debug overlay — coloured wireframes over the world.  Lines were
+    // populated earlier in cata_tiles::draw() → PhysicsWorld::draw_debug().
+    if( rs.debug_lines().count() > 0 && rs.debug_lines().ready() ) {
+        const float tp = s_emo.tile_px > 0.f ? s_emo.tile_px : 32.f;
+        // cam = tile-space camera origin so that:
+        //   pixel = (tile - cam) * tile_px
+        //   ndc   = pixel / (target * 0.5) - 1
+        const float cam_x = -s_emo.cam_off_x - s_emo.op_x / tp;
+        const float cam_y = -s_emo.cam_off_y - s_emo.op_y / tp;
+        rs.debug_lines().record( ctx.cmd_buffer, wt->texture(),
+                                 wt->width(), wt->height(),
+                                 cam_x, cam_y, tp, tp );
+    }
 
     if( g_vol_enable && rs.volumetric().ready() ) {
         lighting::vol_params vp = g_vol_params;
@@ -828,14 +842,14 @@ auto render_world_pass_w( lighting::render_state &rs,
     // Must be here (not in draw_lighting_overlays) because render_world_pass_w
     // clears world_target before drawing tiles; anything written earlier is erased.
     if( have_sound_pulses ) {
-        constexpr float speed = 9.0f;
+        const float speed = g_sound_wave_speed;
         const double now = dev_test_lights::pulse_now_s();
         const float tp = s_emo.tile_px > 0.f ? s_emo.tile_px : 32.f;
         std::vector<lighting::sound_wave_instance> instances;
         instances.reserve( 32 );
         for( const auto &p : dev_test_lights::sound_pulses ) {
             if( p.z != s_emo.player_z ) { continue; }
-            const float max_r = std::clamp( p.volume, k_min_sound_pulse_radius, 24.f );
+            const float max_r = std::clamp( p.volume, k_min_sound_pulse_radius, g_sound_wave_max_radius );
             const float radius = static_cast<float>( now - p.spawn_s ) * speed;
             const float life = std::clamp( 1.f - radius / max_r, 0.f, 1.f );
             if( life <= 0.f ) { continue; }
@@ -984,49 +998,67 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
     }
     blit_layer( rs.ui_target() );
     // Atmospheric HUD particles (Phase 8): environment-driven ambient particles.
-    // Renders after RmlUi, before final blit. Screen-space (not world-locked) so
-    // they drift independently of camera movement — looks natural for dust/embers.
+    // Screen-space (not world-locked) — drift independently of camera movement.
     {
         auto ptype = lighting::hud_emitter_type::dust;
-        auto prate = 3.0f;
-        auto palpha = 0.4f;
+        auto prate = 4.0f;
+        auto palpha = 0.5f;
 
         if( g && world_generator && world_generator->active_world ) {
             const float hour = hour_of_day<float>( calendar::turn );
             const bool is_night = hour < 5.5f || hour > 20.5f;
             const int z = g->u.bub_pos().z();
             const bool underground = z < 0;
+            const auto season = season_of_year( calendar::turn );
+            const weather_type_id wid = get_weather().weather_id;
+            const bool snowing = wid.is_valid() && wid->precip != precip_class::none
+                                 && !wid->rains;
+            const bool raining = wid.is_valid() && wid->rains;
 
-            // Check for nearby fire fields for ember particles.
-            // (Simplified: use sun_intensity as night proxy, underground as cave proxy)
             if( underground ) {
+                // Caves: slow drifting dust motes
                 ptype = lighting::hud_emitter_type::dust;
-                prate = 5.0f;
-                palpha = 0.3f;
+                prate = 3.0f;
+                palpha = 0.35f;
+            } else if( snowing ) {
+                // Snow weather: dense falling snow
+                ptype = lighting::hud_emitter_type::snow;
+                prate = 8.0f;
+                palpha = 0.7f;
+            } else if( raining ) {
+                // Rain: suppress HUD particles (rain_effect handles world-space rain)
+                prate = 0.0f;
+            } else if( season == AUTUMN ) {
+                // Autumn: tumbling leaves
+                ptype = lighting::hud_emitter_type::leaf;
+                prate = 3.0f;
+                palpha = 0.6f;
             } else if( is_night ) {
-                // Outdoor night: pollen/firefly-like particles (slow, yellow-green)
+                // Night outdoor: slow floating embers / firefly-like motes
+                ptype = lighting::hud_emitter_type::ember;
+                prate = 2.5f;
+                palpha = 0.7f;
+            } else {
+                // Clear day: gentle pollen drift
                 ptype = lighting::hud_emitter_type::pollen;
                 prate = 2.0f;
-                palpha = 0.6f;
-            } else {
-                // Daytime outdoor: occasional dust/pollen
-                ptype = lighting::hud_emitter_type::pollen;
-                prate = 1.5f;
-                palpha = 0.25f;
+                palpha = 0.4f;
             }
         }
 
+        const auto phys_w = rs.ui_target()->width();
+        const auto phys_h = rs.ui_target()->height();
         const lighting::hud_particle_params params {
             .type = ptype,
             .spawn_rate = prate,
             .intensity = palpha,
-            .screen_w = static_cast<std::uint32_t>( proj_w ),
-            .screen_h = static_cast<std::uint32_t>( proj_h ),
+            .screen_w = static_cast<std::uint32_t>( phys_w ),
+            .screen_h = static_cast<std::uint32_t>( phys_h ),
         };
         if( rs.hud_particles().ready() && rs.ui_target() && rs.ui_target()->texture() ) {
             rs.hud_particles().record( ctx.cmd_buffer, rs.ui_target()->texture(),
-                                       static_cast<std::uint32_t>( proj_w ),
-                                       static_cast<std::uint32_t>( proj_h ), params );
+                                       static_cast<std::uint32_t>( phys_w ),
+                                       static_cast<std::uint32_t>( phys_h ), params );
         }
     }
 
