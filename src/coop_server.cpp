@@ -350,7 +350,7 @@ auto coop_server::receiver_loop( std::stop_token st ) -> void
                 // Skill sync: parse and store for main-thread application in coop_world_tick.
                 const auto skills = parse_skill_sync_fields( d );
                 if( !skills.empty() ) {
-                    std::scoped_lock lk{ pending_skills_mtx_ };
+                    std::scoped_lock lk{ pending_sync_mtx_ };
                     pending_skills_ = skills;
                 }
             } else if( t == coop_pkt::resync_request ) {
@@ -406,8 +406,14 @@ auto coop_server::receiver_loop( std::stop_token st ) -> void
                 // F6: relay emote to main thread via action queue
                 push_action( { 0, "EMOTE", buf } );
             } else if( t == coop_pkt::overmap_sync ) {
-                // Shared overmap: client revealed tiles — apply to host's overmapbuffer.
-                apply_overmap_sync_packet( buf, coop_session::get().dimension_id );
+                // Shared overmap: parse on IO thread, defer apply to main thread.
+                auto tiles = parse_overmap_sync_tiles( buf );
+                if( !tiles.empty() ) {
+                    std::scoped_lock lk{ pending_sync_mtx_ }; // ponytail: reuse existing mutex
+                    pending_overmap_tiles_.insert( pending_overmap_tiles_.end(),
+                                                   std::make_move_iterator( tiles.begin() ),
+                                                   std::make_move_iterator( tiles.end() ) );
+                }
             }
             // other packet types silently ignored until later phases
         } catch( const JsonError& e ) {
@@ -517,7 +523,7 @@ if( client_disconnected_.exchange( false ) ) {
         {
             std::vector<std::pair<std::string, int>> skills;
             {
-                std::scoped_lock lk{ pending_skills_mtx_ };
+                std::scoped_lock lk{ pending_sync_mtx_ };
                 skills.swap( pending_skills_ );
             }
             for( const auto &[sid, lvl] : skills ) {
@@ -525,6 +531,17 @@ if( client_disconnected_.exchange( false ) ) {
                 if( sk.is_valid() ) {
                     proxy->set_skill_level( sk, lvl );
                 }
+            }
+        }
+        // Overmap sync: apply tiles parsed by receiver thread (main-thread safe).
+        {
+            std::vector<tripoint_abs_omt> om_tiles;
+            {
+                std::scoped_lock lk{ pending_sync_mtx_ };
+                om_tiles.swap( pending_overmap_tiles_ );
+            }
+            if( !om_tiles.empty() ) {
+                apply_overmap_sync_tiles( om_tiles, coop_session::get().dimension_id );
             }
         }
 

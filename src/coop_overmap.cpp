@@ -28,23 +28,30 @@ auto build_overmap_sync_packet( const std::vector<tripoint_abs_omt> &tiles ) -> 
     return oss.str();
 }
 
-auto apply_overmap_sync_packet( const std::string &json_buf,
-                                const std::string &dim_id ) -> void
+auto parse_overmap_sync_tiles( const std::string &json_buf )
+-> std::vector<tripoint_abs_omt>
 {
+    std::vector<tripoint_abs_omt> result;
     std::istringstream iss( json_buf );
     JsonIn jin( iss );
     JsonObject pkt = jin.get_object();
     pkt.allow_omitted_members();
     if( !pkt.has_array( "tiles" ) ) {
-    return;
+        return result;
+    }
+    JsonArray arr = pkt.get_array( "tiles" );
+    while( arr.has_more() ) {
+        JsonArray tp_arr = arr.next_array();
+        result.emplace_back( tp_arr.get_int( 0 ), tp_arr.get_int( 1 ), tp_arr.get_int( 2 ) );
+    }
+    return result;
 }
-JsonArray arr = pkt.get_array( "tiles" );
-overmapbuffer &omb = get_overmapbuffer( dim_id );
-while( arr.has_more() ) {
-    JsonArray tp_arr = arr.next_array();
-        const tripoint_abs_omt pos{
-            tp_arr.get_int( 0 ), tp_arr.get_int( 1 ), tp_arr.get_int( 2 )
-        };
+
+auto apply_overmap_sync_tiles( const std::vector<tripoint_abs_omt> &tiles,
+                               const std::string &dim_id ) -> void
+{
+    overmapbuffer &omb = get_overmapbuffer( dim_id );
+    for( const auto &pos : tiles ) {
         omb.set_seen( pos, true );
     }
 }

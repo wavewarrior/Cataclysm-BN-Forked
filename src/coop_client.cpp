@@ -403,8 +403,11 @@ for( auto& act : pending_actions_ ) {
                     sess.shared_mark_label = d.get_string( "label", "" );
                 }
             } else if( t == coop_pkt::overmap_sync ) {
-                // Shared overmap: host revealed tiles — apply to client's overmapbuffer.
-                apply_overmap_sync_packet( buf, coop_session::get().dimension_id );
+                // Shared overmap: host revealed tiles — main thread, safe to apply directly.
+                const auto tiles = parse_overmap_sync_tiles( buf );
+                if( !tiles.empty() ) {
+                    apply_overmap_sync_tiles( tiles, coop_session::get().dimension_id );
+                }
             }
             // other packet types silently ignored
         } catch( const JsonError& e ) {

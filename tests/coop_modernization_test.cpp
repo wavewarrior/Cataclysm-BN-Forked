@@ -173,4 +173,27 @@ TEST_CASE( "coop_pkt::reconnect has correct value", "[coop][packets]" )
     CHECK( static_cast<uint8_t>( coop_pkt::reconnect ) == 15 );
 }
 
+// ── 5. Overmap sync build→parse round-trip ──────────────────────────────────
+
+TEST_CASE( "overmap_sync: build then parse round-trip", "[coop][overmap]" )
+{
+    const std::vector<tripoint_abs_omt> original{
+        tripoint_abs_omt{ 42, -7, 0 },
+        tripoint_abs_omt{ 0, 0, -3 },
+    };
+    const std::string json = build_overmap_sync_packet( original );
+    const auto parsed = parse_overmap_sync_tiles( json );
+
+    REQUIRE( parsed.size() == 2 );
+    CHECK( parsed[0] == tripoint_abs_omt{ 42, -7, 0 } );
+    CHECK( parsed[1] == tripoint_abs_omt{ 0, 0, -3 } );
+}
+
+TEST_CASE( "overmap_sync: parse empty packet returns empty", "[coop][overmap]" )
+{
+    const std::string json = build_overmap_sync_packet( {} );
+    const auto parsed = parse_overmap_sync_tiles( json );
+    CHECK( parsed.empty() );
+}
+
 #endif // COOP_ENABLED
