@@ -10,6 +10,7 @@
 #include "coop_packets.h"
 #include "coop_proto.h"
 #include "coop_reconcile.h"
+#include "coop_menu.h"
 #include "coop_session.h"
 #include "coordinates.h"
 #include "creature_tracker.h"
@@ -226,7 +227,23 @@ auto coop_client::apply_world_seed_to_avatar() -> void
 
 auto coop_client::coop_world_tick() -> void
 {
-    if( !coop_session::get().is_client() || !transport_ ) { return; }
+    if( !coop_session::get().is_client() ) { return; }
+
+// Non-blocking reconnection: one attempt per tick.
+if( reconnect_attempts_remaining_ > 0 && !transport_ ) {
+    --reconnect_attempts_remaining_;
+    if( attempt_reconnect( last_host_ip_, last_host_port_ ) ) {
+            add_msg( m_good, _( "Reconnected!" ) );
+            reconnect_attempts_remaining_ = 0;
+        } else if( reconnect_attempts_remaining_ <= 0 ) {
+            add_msg( m_bad, _( "Failed to reconnect. Session ended." ) );
+            if( g ) { g->save( false ); }
+            shutdown();
+        }
+        return; // skip normal tick while reconnecting
+    }
+
+    if( !transport_ ) { return; }
 
 // 1. Send the oldest unsent pending action.  Actions remain in pending_actions_
 //    until the server echoes last_seq ≥ action.seq in a sync packet; they are
@@ -301,7 +318,7 @@ for( auto& act : pending_actions_ ) {
         status_jout.member( "ay", cpos.y() );
         status_jout.member( "az", cpos.z() );
         // Ping: echo the host's timestamp back for RTT measurement on host side.
-        status_jout.member( "ping_echo", static_cast<int>( last_ping_ts_ ) );
+        status_jout.member( "ping_echo", std::to_string( last_ping_ts_ ) );
         // Approximate local ping: time since host sent the sync to when we process it.
         if( last_ping_ts_ > 0 ) {
             const auto now_ms = static_cast<uint64_t>( SDL_GetTicks() );
@@ -369,6 +386,29 @@ for( auto& act : pending_actions_ ) {
                 // F2: host declined — item must be restored; CoopServer will re-send it in
                 // next sync under "pending_gift".  Message only on this side.
                 add_msg( m_info, _( "Partner declined your item." ) );
+            } else if( t == coop_pkt::trade_offer ) {
+                // F2: host offered an item — show accept/reject popup.
+                JsonObject d = pkt.get_object( "d" );
+                d.allow_omitted_members();
+                const std::string item_json = d.get_string( "item_json", "" );
+                if( !item_json.empty() ) {
+                    try {
+                        std::istringstream gift_iss( item_json );
+                        JsonIn gift_jin( gift_iss );
+                        auto offered = item::spawn( gift_jin );
+                        if( offered ) {
+                            const std::string msg = string_format(
+                                                        _( "%s wants to give you: %s. Accept?" ),
+                                                        coop_session::get().partner_name, offered->tname() );
+                            const bool accepted = show_coop_popup( msg );
+                            const std::string ack = accepted ? R"({"t":44})" : R"({"t":45})";
+                            transport_->send( ack );
+                            if( accepted ) { g->u.i_add( std::move( offered ) ); }
+                        }
+                    } catch( const JsonError& e ) {
+                        DebugLog( DL::Error, DC::Main ) << "[coop] F2 trade JSON: " << e.what();
+                    }
+                }
             } else if( t == coop_pkt::emote ) {
                 // F6: high-five emote from host.
                 JsonObject d = pkt.get_object( "d" );
@@ -436,45 +476,42 @@ auto coop_client::queue_action( const std::string& key, const std::string& ctx_j
 
 auto coop_client::predict_action_locally( pending_action &act ) -> void
 {
-    if( !g ) { return; }
+    if( !g || act.ctx_json.empty() ) { return; }
 
-// Parse target position from ctx_json
-std::istringstream iss( act.ctx_json );
-JsonIn jin( iss );
-JsonObject d = jin.get_object();
+try {
+    std::istringstream iss( act.ctx_json );
+        JsonIn jin( iss );
+        JsonObject d = jin.get_object();
+        d.allow_omitted_members();
 
-int tx = 0, ty = 0, tz = 0;
-d.read( "tx", tx );
-d.read( "ty", ty );
-d.read( "tz", tz );
-const tripoint_abs_ms target_abs{ tx, ty, tz };
+        int tx = 0, ty = 0, tz = 0;
+        d.read( "tx", tx );
+        d.read( "ty", ty );
+        d.read( "tz", tz );
+        const tripoint_abs_ms target_abs{ tx, ty, tz };
 
-predicted_outcome outcome;
-outcome.target_pos = g->m.abs_to_bub( target_abs );
+        predicted_outcome outcome;
+        outcome.target_pos = g->m.abs_to_bub( target_abs );
 
-// Find monster at target position and record post-action HP
-const auto bub_target = g->m.abs_to_bub( target_abs );
-const monster *mon = g->critter_at<monster>( bub_target );
-if( mon && mon->friendly <= 0 ) {
-    outcome.target_expected_hp = mon->get_hp();
-    }
-
-    // Record self HP after action
-    outcome.self_expected_hp = g->u.get_hp();
-
-    // Record terrain state at target (post-smash)
-    if( act.key == "SMASH" ) {
-    const auto ter_sid = g->m.ter( bub_target ).id();
-        const auto furn_sid = g->m.furn( bub_target ).id();
-        if( !ter_sid.is_null() ) {
-            outcome.terrain_change = ter_sid.str();
+        const auto bub_target = g->m.abs_to_bub( target_abs );
+        const monster *mon = g->critter_at<monster>( bub_target );
+        if( mon && mon->friendly <= 0 ) {
+            outcome.target_expected_hp = mon->get_hp();
         }
-        if( !furn_sid.is_null() ) {
-            outcome.item_id = furn_sid.str();
-        }
-    }
 
-    act.outcome = outcome;
+        outcome.self_expected_hp = g->u.get_hp();
+
+        if( act.key == "SMASH" ) {
+            const auto ter_sid = g->m.ter( bub_target ).id();
+            const auto furn_sid = g->m.furn( bub_target ).id();
+            if( !ter_sid.is_null() ) { outcome.terrain_change = ter_sid.str(); }
+            if( !furn_sid.is_null() ) { outcome.item_id = furn_sid.str(); }
+        }
+
+        act.outcome = outcome;
+    } catch( const JsonError & ) {
+        // Malformed ctx_json — skip prediction, not fatal.
+    }
 }
 
 
@@ -819,7 +856,7 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
                 }
             }
         } else if( key == "ping_ts" ) {
-            last_ping_ts_ = static_cast<uint64_t>( jin.get_int() );
+            last_ping_ts_ = static_cast<uint64_t>( jin.get_int64() );
         } else {
             jin.skip_value();
         }
@@ -909,22 +946,16 @@ auto coop_client::handle_disconnect() -> void
     // Drop the dead transport — do NOT send disconnect packet (connection is already dead)
     transport_.reset();
 
-    // Attempt automatic reconnection if we have a session token
+    // If we have a session token, enter non-blocking reconnection mode.
+    // coop_world_tick() will attempt one reconnect per tick.
     if( !session_token_.empty() && !last_host_ip_.empty() ) {
     add_msg( m_warning, _( "Connection lost — attempting to reconnect..." ) );
-        for( int i = 0; i < 30; ++i ) { // 30 attempts over ~30 seconds
-            SDL_Delay( 1000 );
-            if( attempt_reconnect( last_host_ip_, last_host_port_ ) ) {
-                add_msg( m_good, _( "Reconnected!" ) );
-                return;
-            }
-        }
-        add_msg( m_bad, _( "Failed to reconnect. Session ended." ) );
+        reconnect_attempts_remaining_ = 30;
+        return; // ponytail: non-blocking; retry in coop_world_tick each tick
     }
 
-    // C6: persist character state (inventory, position, skills, HP) on disconnect.
-    // game::save(false) is the public save path (same as quicksave); saves player data,
-    // map memory, and any world state the client owns.
+    // No session token — full teardown.
+    // C6: persist character state on disconnect.
     if( g ) { g->save( false ); }
     shutdown();
 }

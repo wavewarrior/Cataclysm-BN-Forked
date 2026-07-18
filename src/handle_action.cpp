@@ -2962,12 +2962,17 @@ auto game::handle_action_from( const std::string& pre_action ) -> bool
                     if( it && !it->is_null() ) {
                         // Serialize the item BEFORE removing from inventory
                         const std::string item_name = it->tname();
+                        std::ostringstream item_oss;
+                        JsonOut item_jout( item_oss );
+                        it->serialize( item_jout );
                         std::ostringstream oss;
                         JsonOut jout( oss );
                         jout.start_object();
                         jout.member( "t", static_cast<int>( coop_pkt::trade_offer ) );
                         jout.member( "d" );
-                        it->serialize( jout );
+                        jout.start_object();
+                        jout.member( "item_json", item_oss.str() );
+                        jout.end_object();
                         jout.end_object();
                         // Send via the appropriate transport
                         if( sess.is_client() && coop_client_ ) {

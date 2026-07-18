@@ -257,6 +257,14 @@ struct coop_server {
         std::mutex pending_sync_mtx_;
         std::vector<std::pair<std::string, int>> pending_skills_;
         std::vector<tripoint_abs_omt> pending_overmap_tiles_;
+        // F4: overmap mark — receiver writes, world_tick applies (guarded by pending_sync_mtx_)
+        struct pending_mark_t {
+            bool valid = false;
+            bool clear = false;
+            tripoint_abs_omt pos{};
+            std::string label;
+        };
+        pending_mark_t pending_mark_;
         // Reconnection state
         std::atomic<bool> awaiting_reconnect_{false};
         std::atomic<bool> client_disconnected_{false};

@@ -140,6 +140,7 @@ struct coop_client {
         std::string session_token_;
 
         int skill_sync_counter_ = 0; ///< throttle: send skills every 10 ticks
+        int reconnect_attempts_remaining_ = 0; ///< >0 = non-blocking reconnection in progress
 };
 
 #endif // COOP_ENABLED

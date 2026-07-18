@@ -982,10 +982,10 @@ auto hud_topbar( avatar &u ) -> std::string
             seg_coop += " " + colorize( sess.partner_activity_str, c_light_blue );
         }
         // Ping
-        if( sess.partner_ping_ms > 0 ) {
-            const nc_color ping_col = sess.partner_ping_ms < 100 ? c_green
-                                      : sess.partner_ping_ms < 300 ? c_yellow : c_red;
-            seg_coop += " " + colorize( string_format( "%dms", sess.partner_ping_ms ), ping_col );
+        const int ping = sess.partner_ping_ms.load();
+        if( ping > 0 ) {
+            const nc_color ping_col = ping < 100 ? c_green : ping < 300 ? c_yellow : c_red;
+            seg_coop += " " + colorize( string_format( "%dms", ping ), ping_col );
         }
         // Direction arrow to partner when offscreen
         const auto partner_delta = sess.partner_abs_pos - u.abs_pos();

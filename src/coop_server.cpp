@@ -342,7 +342,8 @@ auto coop_server::receiver_loop( std::stop_token st ) -> void
                         d.get_int( "ax", 0 ), d.get_int( "ay", 0 ), d.get_int( "az", 0 ) };
                 }
                 // Ping measurement: read echoed timestamp and compute RTT.
-                const int64_t echo_ts = static_cast<int64_t>( d.get_int( "ping_echo", 0 ) );
+                const auto echo_str = d.get_string( "ping_echo", "" );
+                const int64_t echo_ts = echo_str.empty() ? 0 : std::stoll( echo_str );
                 if( echo_ts > 0 ) {
                     const int64_t now = static_cast<int64_t>( SDL_GetTicks() );
                     coop_session::get().partner_ping_ms = static_cast<int>( now - echo_ts );
@@ -360,18 +361,19 @@ auto coop_server::receiver_loop( std::stop_token st ) -> void
                 DebugLog( DL::Info, DC::Main ) << "[coop] receiver: client requested full resync";
                 force_resync_.store( true );
             } else if( t == coop_pkt::overmap_mark ) {
-                // F4: client placed or cleared a shared overmap marker.
+                // F4: defer to main thread — coop_session fields not thread-safe.
                 JsonObject d = pkt.get_object( "d" );
                 d.allow_omitted_members();
-                auto& sess = coop_session::get();
-                if( d.get_bool( "clear", false ) ) {
-                    sess.shared_mark = std::nullopt;
-                    sess.shared_mark_label.clear();
-                } else {
-                    sess.shared_mark = tripoint_abs_omt{
+                pending_mark_t mk;
+                mk.valid = true;
+                mk.clear = d.get_bool( "clear", false );
+                if( !mk.clear ) {
+                    mk.pos = tripoint_abs_omt{
                         d.get_int( "omx", 0 ), d.get_int( "omy", 0 ), d.get_int( "omz", 0 ) };
-                    sess.shared_mark_label = d.get_string( "label", "" );
+                    mk.label = d.get_string( "label", "" );
                 }
+                std::scoped_lock lk{ pending_sync_mtx_ };
+                pending_mark_ = std::move( mk );
             } else if( t == coop_pkt::disconnect ) {
                 DebugLog( DL::Info, DC::Main ) << "[coop] receiver: client sent disconnect";
                 running_ = false;
@@ -542,6 +544,25 @@ if( client_disconnected_.exchange( false ) ) {
             }
             if( !om_tiles.empty() ) {
                 apply_overmap_sync_tiles( om_tiles, coop_session::get().dimension_id );
+            }
+        }
+        // F4: apply pending overmap mark from receiver thread.
+        {
+            pending_mark_t mk;
+            {
+                std::scoped_lock lk{ pending_sync_mtx_ };
+                mk = std::move( pending_mark_ );
+                pending_mark_.valid = false;
+            }
+            if( mk.valid ) {
+                auto &sess = coop_session::get();
+                if( mk.clear ) {
+                    sess.shared_mark = std::nullopt;
+                    sess.shared_mark_label.clear();
+                } else {
+                    sess.shared_mark = mk.pos;
+                    sess.shared_mark_label = std::move( mk.label );
+                }
             }
         }
 
@@ -1452,7 +1473,7 @@ auto coop_server::build_and_send_sync( bool force_full ) -> void
         jout.member( "partner_az", client_abs_pos_.z() );
     }
     // Ping measurement: embed current timestamp; client echoes it back in client_status.
-    jout.member( "ping_ts", static_cast<int>( SDL_GetTicks() ) );
+    jout.member( "ping_ts", static_cast<int64_t>( SDL_GetTicks() ) );
 
     // F3: one-shot tap notification to client (set by send_tap_shoulder() caller)
     if( pending_tap_sent_to_client_ ) {
@@ -1496,7 +1517,8 @@ auto coop_server::accept_reconnect() -> bool
 }
 // A new TCP connection is established — read one packet and expect reconnect
 std::string buf;
-if( !transport_->recv( buf, 5000 ) ) {
+if( !transport_->recv( buf,
+    100 ) ) { // ponytail: short timeout, not 5s — avoid stalling main thread
     DebugLog( DL::Error, DC::Main ) << "[coop] accept_reconnect: recv failed";
         transport_.reset();
         return false;
@@ -1529,6 +1551,7 @@ if( !transport_->recv( buf, 5000 ) ) {
     // Token matches — send full sync and restart receiver
     awaiting_reconnect_.store( false );
     running_.store( true );
+    last_confirmed_seq_ = 0; // client resets next_seq_=1; must match
     build_and_send_sync( true );
     // Flush the sync packet directly before starting the receiver thread
     {
