@@ -196,4 +196,84 @@ TEST_CASE( "overmap_sync: parse empty packet returns empty", "[coop][overmap]" )
     CHECK( parsed.empty() );
 }
 
+// ── 6. Mutation sync serialization round-trip ───────────────────────────────
+
+TEST_CASE( "mutation sync: array round-trip via JSON", "[coop][packets]" )
+{
+    // Simulate what the client sends in client_status
+    std::ostringstream oss;
+    JsonOut jout( oss );
+    jout.start_object();
+    jout.member( "mutations" );
+    jout.start_array();
+    jout.write( "THICK_SKIN" );
+    jout.write( "NIGHTVISION" );
+    jout.write( "FLEET" );
+    jout.end_array();
+    jout.end_object();
+
+    // Parse like the server does
+    std::istringstream iss( oss.str() );
+    JsonIn jin( iss );
+    JsonObject d = jin.get_object();
+    d.allow_omitted_members();
+
+    REQUIRE( d.has_array( "mutations" ) );
+    std::vector<std::string> parsed;
+    for( const std::string &s : d.get_array( "mutations" ) ) {
+        parsed.push_back( s );
+    }
+    REQUIRE( parsed.size() == 3 );
+    CHECK( parsed[0] == "THICK_SKIN" );
+    CHECK( parsed[1] == "NIGHTVISION" );
+    CHECK( parsed[2] == "FLEET" );
+}
+
+TEST_CASE( "mutation sync: empty array parses cleanly", "[coop][packets]" )
+{
+    std::istringstream iss( R"({"other": 1})" );
+    JsonIn jin( iss );
+    JsonObject d = jin.get_object();
+    d.allow_omitted_members();
+    CHECK_FALSE( d.has_array( "mutations" ) );
+}
+
+// ── 7. Bionic sync serialization round-trip ─────────────────────────────────
+
+TEST_CASE( "bionic sync: array round-trip via JSON", "[coop][packets]" )
+{
+    std::ostringstream oss;
+    JsonOut jout( oss );
+    jout.start_object();
+    jout.member( "bionics" );
+    jout.start_array();
+    jout.write( "bio_power_storage" );
+    jout.write( "bio_solar" );
+    jout.end_array();
+    jout.end_object();
+
+    std::istringstream iss( oss.str() );
+    JsonIn jin( iss );
+    JsonObject d = jin.get_object();
+    d.allow_omitted_members();
+
+    REQUIRE( d.has_array( "bionics" ) );
+    std::vector<std::string> parsed;
+    for( const std::string &s : d.get_array( "bionics" ) ) {
+        parsed.push_back( s );
+    }
+    REQUIRE( parsed.size() == 2 );
+    CHECK( parsed[0] == "bio_power_storage" );
+    CHECK( parsed[1] == "bio_solar" );
+}
+
+TEST_CASE( "bionic sync: empty array parses cleanly", "[coop][packets]" )
+{
+    std::istringstream iss( R"({"other": 1})" );
+    JsonIn jin( iss );
+    JsonObject d = jin.get_object();
+    d.allow_omitted_members();
+    CHECK_FALSE( d.has_array( "bionics" ) );
+}
+
 #endif // COOP_ENABLED
