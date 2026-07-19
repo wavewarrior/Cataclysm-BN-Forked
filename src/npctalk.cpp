@@ -1116,12 +1116,10 @@ void npc::talk_to_u( bool radio_contact, bool enforce_first_topic )
             }
         }
         talk_topic next = d.opt( d_win, name, d.topic_stack.back() );
-#ifdef COOP_ENABLED
         if( coop_fiber::active() && is_dead_state() ) {
             add_msg( m_bad, _( "Your conversation partner has died." ) );
             return;
         }
-#endif
 
         const auto hook_results = cata::run_hooks( "on_dialogue_option", [ &, this]( auto & params ) {
             params["npc"] = this;

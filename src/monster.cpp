@@ -1,7 +1,5 @@
 #include "monster.h"
-#ifdef COOP_ENABLED
 #include "coop_mutation_log.h"
-#endif
 
 #include "avatar.h"
 #include "bodypart.h"
@@ -332,11 +330,9 @@ auto monster::setpos( const tripoint_abs_ms& p ) -> void
         mounted_player->forced_dismount();
     }
     if( wandering ) { unset_dest(); }
-#ifdef COOP_ENABLED
     if( auto * _log = coop_mutation_log::current() ) {
         _log->push( {coop_event_type::creature_moved, pos_abs, 0, 0} );
     }
-#endif
 }
 
 tripoint_bub_ms monster::bub_pos() const { return get_map().abs_to_bub( pos_abs ); }

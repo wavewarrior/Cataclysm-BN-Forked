@@ -1,4 +1,3 @@
-#ifdef COOP_ENABLED
 /**
  * Adverse network condition tests for co-op.
  *
@@ -221,4 +220,3 @@ TEST_CASE( "adverse: jitter does not crash or desync positions",
     CHECK( cs1 == cs2 );
 }
 
-#endif // COOP_ENABLED

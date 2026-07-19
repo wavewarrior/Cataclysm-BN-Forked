@@ -1,5 +1,4 @@
 #pragma once
-#ifdef COOP_ENABLED
 
 #include "coop_mutation_log.h"
 #include "coordinates.h"
@@ -19,4 +18,3 @@
 /// build_and_send_sync's dx/dy range).
 auto coop_world_checksum( int radius = 2 ) -> uint64_t;
 
-#endif // COOP_ENABLED

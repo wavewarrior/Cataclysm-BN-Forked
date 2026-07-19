@@ -1,5 +1,4 @@
 #pragma once
-#ifdef COOP_ENABLED
 
 #include "coop_mutation_log.h"
 
@@ -32,5 +31,3 @@ struct coop_rollback_engine {
         std::deque<coop_rollback_entry> entries_;
         int capacity_;
 };
-
-#endif // COOP_ENABLED

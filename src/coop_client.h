@@ -1,5 +1,4 @@
 #pragma once
-#ifdef COOP_ENABLED
 
 #include "coop_proto.h"
 #include "coordinates.h"
@@ -147,4 +146,3 @@ struct coop_client {
         int reconnect_attempts_remaining_ = 0; ///< >0 = non-blocking reconnection in progress
 };
 
-#endif // COOP_ENABLED

@@ -1,5 +1,4 @@
 #pragma once
-#ifdef COOP_ENABLED
 
 #include <string>
 
@@ -18,4 +17,3 @@ auto start_join() -> void;
 /// Returns true if the user confirmed, false if dismissed or rejected.
 auto show_coop_popup( const std::string& message ) -> bool;
 
-#endif // COOP_ENABLED

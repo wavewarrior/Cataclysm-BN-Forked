@@ -1,9 +1,7 @@
 #include "game.h"
-#ifdef COOP_ENABLED
 #include "coop_server.h"
 #include "coop_client.h"
 #include "coop_session.h"
-#endif
 
 #include "camera_debug.h"
 
@@ -1651,14 +1649,12 @@ input_context get_default_mode_input_context()
     ctxt.register_action( "MOUSE_MOVE" );
     ctxt.register_action( "SELECT" );
     ctxt.register_action( "SEC_SELECT" );
-#ifdef COOP_ENABLED
     ctxt.register_action( "CO_OP_CHAT", to_translation( "Co-op: Send Chat Message" ) );
     ctxt.register_action( "CO_OP_TAP_SHOULDER", to_translation( "Co-op: Tap Partner's Shoulder" ) );
     ctxt.register_action( "CO_OP_EMOTE", to_translation( "Co-op: High Five" ) );
     ctxt.register_action( "CO_OP_STABILIZE", to_translation( "Co-op: Stabilize Downed Partner" ) );
     ctxt.register_action( "CO_OP_PASS_ITEM", to_translation( "Co-op: Pass Item to Partner" ) );
     ctxt.register_action( "CO_OP_MARK_OVERMAP", to_translation( "Co-op: Place Shared Map Marker" ) );
-#endif
     return ctxt;
 }
 
@@ -1794,12 +1790,10 @@ bool game::is_game_over()
         if( u.in_vehicle ) {
             m.unboard_vehicle( u.bub_pos() );
         }
-#ifdef COOP_ENABLED
         // C3: send death-status + inventory drop to host before corpse placement.
         // Hooked at QUIT_DIED (not is_dead_state()) so it only fires once death is
         // final — PROMPT_ON_CHARACTER_DEATH quickload bails out at 3479 before this.
         if( coop_client_ ) { coop_client_->notify_death(); }
-#endif // COOP_ENABLED
         u.place_corpse();
         return true;
     }
@@ -1807,10 +1801,8 @@ bool game::is_game_over()
         if( u.in_vehicle ) {
             m.unboard_vehicle( u.bub_pos() );
         }
-#ifdef COOP_ENABLED
         // Same hook as QUIT_DIED: send death-status + inventory drop to host.
         if( coop_client_ ) { coop_client_->notify_death(); }
-#endif // COOP_ENABLED
         return true;
     }
     if( uquit != QUIT_NO ) {
@@ -2245,18 +2237,14 @@ monster *game::place_critter_around( const mtype_id &id, const tripoint_bub_ms &
         return nullptr;
     }
     const auto temp = make_shared_fast<monster>( id );
-#ifdef COOP_ENABLED
     if( !coop_session::get().is_client() ) {
-#endif
         cata::run_hooks( "on_creature_spawn", [&]( sol::table & params ) {
             params["creature"] = temp.get();
         } );
         cata::run_hooks( "on_monster_spawn", [&]( sol::table & params ) {
             params["monster"] = temp.get();
         } );
-#ifdef COOP_ENABLED
     }
-#endif
     return place_critter_around( temp, center, radius );
 }
 
@@ -3055,7 +3043,6 @@ void set_scenario( const scenario *new_scenario )
     g->scen = new_scenario;
 }
 
-#ifdef COOP_ENABLED
 auto game::poll_event() -> input_event
 {
     const auto old_delay = inp_mngr.get_timeout();
@@ -3064,12 +3051,8 @@ auto game::poll_event() -> input_event
     inp_mngr.set_timeout( old_delay );        // restore
     return evt;
 }
-#endif // COOP_ENABLED
 
-#ifdef COOP_ENABLED
-#endif // COOP_ENABLED
 
-#ifdef COOP_ENABLED
 
 auto game::coop_game_tick() -> void
 {
@@ -3087,4 +3070,3 @@ auto game::coop_game_tick() -> void
         post_action_world_step();
     }
 }
-#endif // COOP_ENABLED

@@ -80,10 +80,8 @@
 #include "vpart_position.h"
 #include "weather.h"
 #include "weather_type.h"
-#ifdef COOP_ENABLED
 #include "coop_session.h"
 #include "coop_server.h"
-#endif
 
 static const trait_id trait_THRESH_FELINE( "THRESH_FELINE" );
 static const trait_id trait_THRESH_BIRD( "THRESH_BIRD" );
@@ -687,11 +685,7 @@ static const std::map<std::string, std::function<bool()>> &render_predicate_regi
         // (which would debugmsg-spam AND always show it).
         {
             "coop_panel", []() -> bool {
-#ifdef COOP_ENABLED
                 return coop_session::get().is_coop();
-#else
-                return false;
-#endif
             }
         },
     };
@@ -966,7 +960,6 @@ auto hud_topbar( avatar &u ) -> std::string
                          + "<div class=\"hud-segment hud-seg-cond\"><span class=\"seg-label\">COND</span> "
                          + cata_text_to_rml( seg_cond ) + "</div>";
 
-#ifdef COOP_ENABLED
     const auto &sess = coop_session::get();
     if( sess.is_coop() ) {
         auto seg_coop = colorize( sess.partner_name, c_cyan );
@@ -1015,7 +1008,6 @@ auto hud_topbar( avatar &u ) -> std::string
         result += "<div class=\"hud-segment\"><span class=\"seg-label\">CO-OP</span> "
                   + cata_text_to_rml( seg_coop ) + "</div>";
     }
-#endif
 
     return result;
 }

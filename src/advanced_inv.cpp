@@ -1408,7 +1408,6 @@ void advanced_inventory::display()
         aim_location changeSquare = NUM_AIM_LOCATIONS;
 
         const std::string action = is_processing() ? "MOVE_ALL_ITEMS" : ctxt.handle_input();
-#ifdef COOP_ENABLED
         // After a fiber yield the world may have ticked, freeing item* in pane lists.
         // Synchronously rebuild both panes and re-fetch sitem before any branch uses it.
         if( coop_fiber::active() ) {
@@ -1418,7 +1417,6 @@ void advanced_inventory::display()
             panes[dest].fix_index();
             sitem = spane.get_cur_item_ptr();
         }
-#endif
         if( action == "CATEGORY_SELECTION" ) {
             inCategoryMode = !inCategoryMode;
         } else if( action == "ITEMS_DEFAULT" ) {

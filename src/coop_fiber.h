@@ -1,5 +1,4 @@
 #pragma once
-#ifdef COOP_ENABLED
 
 #include "input.h" // input_event
 
@@ -51,4 +50,3 @@ struct coop_fiber {
         static auto entry_( mco_coro* co ) -> void;
 };
 
-#endif // COOP_ENABLED

@@ -315,18 +315,6 @@ if (NOT MSVC)
     endif ()
     set(CATA_OTHER_FLAGS "${CATA_OTHER_FLAGS} -fsigned-char -fno-builtin-std-forward_like")
     add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-finite-math-only>)
-    # Strict floating-point flags for deterministic cooperative gameplay
-    if(COOP_ENABLED)
-        if("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang|AppleClang")
-            add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-ffp-model=strict>)
-            add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-ffp-contract=off>)
-        elseif(MSVC)
-            add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/fp:strict>)
-        elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-            add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fsignaling-nans>)
-            add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fcx-func-support>)
-        endif()
-    endif()
     # Add debug symbols for non-release builds or when backtrace is enabled
     if (BACKTRACE OR NOT RELEASE)
         set(CATA_OTHER_FLAGS "${CATA_OTHER_FLAGS} -g1")
@@ -836,31 +824,27 @@ endif ()
 
 
 # --- Co-op multiplayer (SDL_net3 transport) ---
-option(COOP "Enable co-op multiplayer" OFF)
-if(COOP)
-    message(STATUS "Co-op: enabled — fetching SDL3_net")
-    # SDL3_net pinned to release-3.2.0. Bump deliberately after verifying the new tag builds on all platforms.
-    # C3: force SDL3_net to build the correct variant (static vs shared)
-    set( _cata_sdlnet_saved_build_shared "${BUILD_SHARED_LIBS}" )
-    if( DYNAMIC_LINKING )
-        set( BUILD_SHARED_LIBS ON )
-    else()
-        set( BUILD_SHARED_LIBS OFF )
-    endif()
-    FetchContent_Declare(
-        SDL3_net
-        GIT_REPOSITORY https://github.com/libsdl-org/SDL_net.git
-        GIT_TAG        release-3.2.0
-        GIT_SHALLOW    TRUE
-        EXCLUDE_FROM_ALL
-    )
-    set(SDLNET_SAMPLES OFF CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable( SDL3_net )
-    set( BUILD_SHARED_LIBS "${_cata_sdlnet_saved_build_shared}" )
-    unset( _cata_sdlnet_saved_build_shared )
-    if( DYNAMIC_LINKING )
-        install( TARGETS SDL3_net-shared DESTINATION "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}" )
-    endif()
+# Co-op is always compiled; gated at runtime by coop_session::get().is_coop().
+# SDL3_net pinned to release-3.2.0. Bump deliberately after verifying the new tag builds on all platforms.
+set( _cata_sdlnet_saved_build_shared "${BUILD_SHARED_LIBS}" )
+if( DYNAMIC_LINKING )
+    set( BUILD_SHARED_LIBS ON )
+else()
+    set( BUILD_SHARED_LIBS OFF )
+endif()
+FetchContent_Declare(
+    SDL3_net
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL_net.git
+    GIT_TAG        release-3.2.0
+    GIT_SHALLOW    TRUE
+    EXCLUDE_FROM_ALL
+)
+set(SDLNET_SAMPLES OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable( SDL3_net )
+set( BUILD_SHARED_LIBS "${_cata_sdlnet_saved_build_shared}" )
+unset( _cata_sdlnet_saved_build_shared )
+if( DYNAMIC_LINKING )
+    install( TARGETS SDL3_net-shared DESTINATION "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}" )
 endif()
 
 add_subdirectory(src)

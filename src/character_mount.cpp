@@ -1,7 +1,5 @@
 #include "character.h"
-#ifdef COOP_ENABLED
 #include "coop_mutation_log.h"
-#endif
 #include "action.h"
 #include "activity_actor_definitions.h"
 #include "activity_handlers.h"

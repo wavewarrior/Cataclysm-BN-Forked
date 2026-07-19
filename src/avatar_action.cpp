@@ -16,9 +16,7 @@
 #include "activity_actor_definitions.h"
 #include "avatar.h"
 #include "avatar_functions.h"
-#ifdef COOP_ENABLED
 #include "coop_session.h"
-#endif
 #include "bodypart.h"
 #include "calendar.h"
 #include "character.h"
@@ -657,11 +655,9 @@ static float rate_critter( const Creature &c )
 
 void avatar_action::autoattack( avatar &you, map &m )
 {
-#ifdef COOP_ENABLED
     // B3 Phase 9: clear the co-op autoattack target so failed autoattacks relay nothing.
     // Set only on the success path below — does NOT alias last_target_pos.
     coop_session::get().last_autoattack_target.reset();
-#endif // COOP_ENABLED
     int reach = you.primary_weapon().reach_range( you );
     std::vector<Creature *> critters = ranged::targetable_creatures( you, reach );
     critters.erase( std::remove_if( critters.begin(), critters.end(), []( const Creature * c ) {
@@ -682,12 +678,10 @@ void avatar_action::autoattack( avatar &you, map &m )
     []( const Creature * l, const Creature * r ) {
         return rate_critter( *l ) > rate_critter( *r );
     } );
-#ifdef COOP_ENABLED
     // Co-op: record the target abs pos for the MELEE relay.  Both adjacent and reach
     // attacks set this — avatar_action::move() is called in C++, never via handle_action,
     // so no MOVE packet fires for autoattack and both paths need MELEE queued.
     coop_session::get().last_autoattack_target = get_map().bub_to_abs( best.bub_pos() );
-#endif // COOP_ENABLED
 
     const auto diff = best.bub_pos() - you.bub_pos();
     if( std::abs( diff.x() ) <= 1 && std::abs( diff.y() ) <= 1 && diff.z() == 0 ) {

@@ -83,11 +83,9 @@
 #include <memory>
 #include <string>
 #include <utility>
-#ifdef COOP_ENABLED
 #include "coop_client.h"
 #include "field.h"
 #include <set>
-#endif
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>

@@ -1825,7 +1825,6 @@ void game::butcher()
     }
 }
 
-#ifdef COOP_ENABLED
 auto game::post_action_world_step() -> void
 {
     ZoneScopedN( "game::post_action_world_step" );
@@ -2144,4 +2143,3 @@ for( const auto &dim_id : submap_loader.active_dimensions() ) {
         _perf_n = 0;
     }
 }
-#endif // COOP_ENABLED

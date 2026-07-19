@@ -1,4 +1,3 @@
-#ifdef COOP_ENABLED
 /**
  * C2b TERRAIN_CHANGE — host-side apply_terrain_change tests.
  *
@@ -145,4 +144,3 @@ TEST_CASE( "apply_terrain_change — unknown ter id skipped", "[coop][terrain]" 
     CHECK( get_map().ter( TILE ) != ter_str_id( "t_null" ) );
 }
 
-#endif // COOP_ENABLED

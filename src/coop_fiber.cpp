@@ -1,4 +1,3 @@
-#ifdef COOP_ENABLED
 
 // MINICORO_IMPL must be defined in exactly one translation unit.
 #define MINICORO_IMPL
@@ -66,4 +65,3 @@ auto coop_fiber::yield_event() -> input_event
 // static
 auto coop_fiber::active() -> bool { return active_fiber_ != nullptr; }
 
-#endif // COOP_ENABLED

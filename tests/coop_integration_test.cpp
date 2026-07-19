@@ -1,4 +1,3 @@
-#ifdef COOP_ENABLED
 /**
  * Co-op two-process integration tests.
  *
@@ -1348,4 +1347,3 @@ TEST_CASE( "coop integration: client role", "[.][coop_role_client]" )
     g->coop_client_ = nullptr;
 }
 
-#endif // COOP_ENABLED

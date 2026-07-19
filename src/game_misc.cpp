@@ -1,9 +1,7 @@
 #include "game.h"
-#ifdef COOP_ENABLED
 #include "coop_server.h"
 #include "coop_client.h"
 #include "coop_session.h"
-#endif
 
 #include "camera_debug.h"
 

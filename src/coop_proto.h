@@ -1,5 +1,4 @@
 #pragma once
-#ifdef COOP_ENABLED
 
 #include <cstdint>
 
@@ -69,4 +68,3 @@ constexpr int COOP_ACTIVITY_YIELD_INTERVAL = 10;
 /// Derived — changing COOP_IDLE_TICK_MS or COOP_MAX_CATCH_UP automatically updates this.
 constexpr double COOP_FAST_FORWARD_ACCUM_MS = COOP_MAX_CATCH_UP * COOP_IDLE_TICK_MS;
 
-#endif // COOP_ENABLED

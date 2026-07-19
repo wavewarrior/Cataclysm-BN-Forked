@@ -1,4 +1,3 @@
-#ifdef COOP_ENABLED
 
 #include "catch/catch_amalgamated.hpp"
 #include "coop_packets.h"
@@ -284,4 +283,3 @@ TEST_CASE( "extended hash: deterministic across calls", "[coop][hash]" )
     CHECK( h1 == h2 );
 }
 
-#endif // COOP_ENABLED

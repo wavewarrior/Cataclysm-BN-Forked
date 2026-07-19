@@ -2381,7 +2381,6 @@ void options_manager::add_options_android()
 }
 
 
-#ifdef COOP_ENABLED
 void options_manager::add_options_coop()
 {
     add_option_group( coop, Group( "coop",
@@ -2393,4 +2392,3 @@ void options_manager::add_options_coop()
              1024, 65535, 8080 );
     } );
 }
-#endif // COOP_ENABLED

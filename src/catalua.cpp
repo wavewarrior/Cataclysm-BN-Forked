@@ -1,9 +1,7 @@
 #include "catalua.h"
 
 #include "debug.h"
-#ifdef COOP_ENABLED
 #include "coop_session.h"
-#endif
 
 #include <algorithm>
 #include <clocale>
@@ -931,9 +929,7 @@ void run_on_game_load_hooks( lua_state &state )
 void run_on_mapgen_postprocess_hooks( lua_state &state, map &m, const tripoint_abs_omt &p,
                                       const time_point &when )
 {
-#ifdef COOP_ENABLED
     if( coop_session::get().is_client() ) { return; }
-#endif
     run_hooks( "on_mapgen_postprocess", [&]( sol::table & params ) {
         params["map"] = &m;
         params["omt"] = cata::detail::lua_coords::to_lua( p );
@@ -944,9 +940,7 @@ void run_on_mapgen_postprocess_hooks( lua_state &state, map &m, const tripoint_a
 void run_on_mapgen_postprocess_hooks_batch( lua_state &state, tinymap &tmp,
         std::span<const mapgen_hook_batch_item> items )
 {
-#ifdef COOP_ENABLED
     if( coop_session::get().is_client() ) { return; }
-#endif
     if( items.empty() ) {
         return;
     }

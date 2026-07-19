@@ -68,12 +68,10 @@
 #ifdef BOX2D_ENABLED
 #include "physics/physics_world.h"
 #endif
-#ifdef COOP_ENABLED
 #include "coop_client.h"
 #include "coop_overmap.h"
 #include "coop_server.h"
 #include "coop_session.h"
-#endif
 #include "profile.h"
 
 #define dbg(x) DebugLogFL((x),DC::Game)
@@ -2433,7 +2431,6 @@ void game::update_overmap_seen()
     const int dist_squared = dist * dist;
     overmapbuffer &omb = get_overmapbuffer( current_dimension_id_ );
 
-#ifdef COOP_ENABLED
     // Snapshot pre-loop seen state so we can detect newly-revealed tiles.
     // Only allocate when actually in a coop session.
     const bool in_coop = coop_session::get().is_coop();
@@ -2465,7 +2462,6 @@ void game::update_overmap_seen()
             pre_seen.emplace_back( tp, omb.seen( tp ) );
         }
     }
-#endif // COOP_ENABLED
 
     // We can always see where we're standing
     omb.set_seen( ompos, true );
@@ -2500,7 +2496,6 @@ void game::update_overmap_seen()
         }
     }
 
-#ifdef COOP_ENABLED
     // Collect tiles that were not seen before but are now, and send to partner.
     if( in_coop ) {
         for( const auto &[tp, was_seen] : pre_seen ) {
@@ -2517,6 +2512,5 @@ void game::update_overmap_seen()
             }
         }
     }
-#endif // COOP_ENABLED
 }
 

@@ -1,5 +1,4 @@
 #pragma once
-#ifdef COOP_ENABLED
 
 #include "coordinates.h"
 
@@ -73,4 +72,3 @@ auto parse_join_info_packet( const std::string& ) -> std::optional<join_info_dat
 /// Returns nullopt when the string is empty or malformed.
 auto parse_vertical_move_ctx( const std::string& ) -> std::optional<vertical_move_ctx>; // *NOPAD*
 
-#endif // COOP_ENABLED

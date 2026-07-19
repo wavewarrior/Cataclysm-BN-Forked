@@ -192,9 +192,7 @@ class options_manager
         void add_options_debug();
         void add_options_world_default();
         void add_options_android();
-#ifdef COOP_ENABLED
         void add_options_coop();
-#endif
         void load();
         static void cache_balance_options();
         bool save();

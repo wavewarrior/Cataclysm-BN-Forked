@@ -1,5 +1,4 @@
 #pragma once
-#ifdef COOP_ENABLED
 
 #include <SDL3_net/SDL_net.h>
 #include <string>
@@ -25,4 +24,3 @@ auto poll( NET_StreamSocket* sock ) -> bool;
 
 } // namespace coop_net
 
-#endif // COOP_ENABLED

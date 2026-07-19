@@ -17,7 +17,6 @@
 //   - Main-loop accumulator consumption (IDLE_TICK_INTERVAL_MS drain in main.cpp)
 //   - apply_sync() process_turn() catch-up loop exercise
 
-#ifdef COOP_ENABLED
 
 #include "avatar.h"
 #include "catch/catch_amalgamated.hpp"
@@ -167,4 +166,3 @@ TEST_CASE( "COOP_FAST_FORWARD_ACCUM_MS is derived from COOP_MAX_CATCH_UP * COOP_
     CHECK( COOP_FAST_FORWARD_ACCUM_MS == static_cast<double>( COOP_MAX_CATCH_UP ) * COOP_IDLE_TICK_MS );
 }
 
-#endif // COOP_ENABLED

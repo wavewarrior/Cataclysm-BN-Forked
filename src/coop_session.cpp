@@ -1,4 +1,3 @@
-#ifdef COOP_ENABLED
 
 #include "coop_session.h"
 
@@ -9,4 +8,3 @@ auto coop_session::get() -> coop_session&
     return instance;
 }
 
-#endif // COOP_ENABLED

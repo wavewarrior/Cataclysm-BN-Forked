@@ -556,11 +556,9 @@ void monster::die( Creature* nkiller )
     if( has_effect( effect_ridden ) && mounted_player ) { mounted_player->forced_dismount(); }
     g->set_critter_died();
     dead = true;
-#ifdef COOP_ENABLED
     if( auto * _log = coop_mutation_log::current() ) {
         _log->push( {coop_event_type::creature_died, abs_pos(), 0, 0} );
     }
-#endif
     set_killer( nkiller );
     if( !death_drops ) { return; }
     if( !no_extra_death_drops ) {

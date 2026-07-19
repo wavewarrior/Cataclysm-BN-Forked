@@ -1,7 +1,5 @@
 #include "main_menu.h"
-#ifdef COOP_ENABLED
 #include "coop_menu.h"
-#endif
 
 #include "auto_pickup.h"
 #include "avatar.h"
@@ -72,15 +70,9 @@ enum class main_menu_opts : int {
     HELP = 5,
     CREDITS = 6,
     QUIT = 7,
-#ifdef COOP_ENABLED
     COOP = 8,
-#endif
 };
-#ifdef COOP_ENABLED
 static constexpr int max_menu_opts = 8;
-#else
-static constexpr int max_menu_opts = 7;
-#endif
 
 static int getopt( main_menu_opts o ) { return static_cast<int>( o ); }
 
@@ -292,9 +284,7 @@ void main_menu::init_strings()
     vMenuItems.emplace_back( pgettext( "Main Menu", "H<e|E|?>lp" ) );
     vMenuItems.emplace_back( pgettext( "Main Menu", "<C|c>redits" ) );
     vMenuItems.emplace_back( pgettext( "Main Menu", "<Q|q>uit" ) );
-#ifdef COOP_ENABLED
     vMenuItems.emplace_back( pgettext( "Main Menu", "C<o|O>-op" ) );
-#endif
 
     // new game menu items
     vNewGameSubItems.clear();
@@ -501,9 +491,7 @@ bool main_menu::opening_screen()
         // Deterministic seeds: 0x4D4F (MOTD), 0x4E47 (NEWCHAR), etc.
         static const unsigned mm_rune_seeds[] = {
             0x4D4F, 0x4E47, 0x4C43, 0x574F, 0x5345, 0x4845, 0x4352, 0x5155,
-#ifdef COOP_ENABLED
             0x434F,
-#endif
         };
         static constexpr size_t mm_rune_count = sizeof( mm_rune_seeds ) / sizeof( mm_rune_seeds[0] );
 
@@ -936,11 +924,9 @@ bool main_menu::opening_screen()
                 case main_menu_opts::CREDITS:
                 default:
                     break;
-#ifdef COOP_ENABLED
                 case main_menu_opts::COOP:
                     start = coop_menu::run();
                     break;
-#endif
             }
         }
     }

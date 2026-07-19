@@ -1,7 +1,5 @@
 #include "activity_actor_definitions.h"
-#ifdef COOP_ENABLED
 #include "coop_client.h"
-#endif
 #include "activity_handlers.h" // IWYU pragma: associated
 #include "avatar.h"
 #include "avatar_action.h"

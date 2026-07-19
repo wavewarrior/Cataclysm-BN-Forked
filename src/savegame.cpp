@@ -1070,9 +1070,7 @@ void overmap::serialize( std::ostream &fout ) const
     json.member( "npcs" );
     json.start_array();
     for( auto &i : npcs ) {
-#ifdef COOP_ENABLED
         if( i->is_coop_remote ) { continue; } // proxy NPC is transient session state
-#endif
         json.write( *i );
     }
     json.end_array();

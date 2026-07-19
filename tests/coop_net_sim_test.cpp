@@ -1,4 +1,3 @@
-#ifdef COOP_ENABLED
 /**
  * Phase 5 — network layer tests.
  *
@@ -267,4 +266,3 @@ TEST_CASE( "Gap 6: next_seq_ wraps from UINT32_MAX to 0 without crash or UB",
     CHECK( cli.pending_actions_front_seq_for_test() == std::numeric_limits<uint32_t>::max() - 1 );
 }
 
-#endif // COOP_ENABLED

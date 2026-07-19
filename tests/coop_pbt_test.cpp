@@ -1,4 +1,3 @@
-#ifdef COOP_ENABLED
 /**
  * Property-based concurrent action testing for co-op.
  *
@@ -187,4 +186,3 @@ TEST_CASE( "pbt: same seed produces identical action sequence",
     CHECK( h.proxy != nullptr );
 }
 
-#endif // COOP_ENABLED

@@ -1,4 +1,3 @@
-#ifdef COOP_ENABLED
 
 #include "coop_menu.h"
 
@@ -272,4 +271,3 @@ auto show_coop_popup( const std::string& message ) -> bool
     .action == "CONFIRM";
 }
 
-#endif // COOP_ENABLED

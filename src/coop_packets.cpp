@@ -1,4 +1,3 @@
-#ifdef COOP_ENABLED
 
 #include "coop_packets.h"
 
@@ -224,4 +223,3 @@ auto parse_skill_sync_fields( const JsonObject& d )
     return result;
 }
 
-#endif // COOP_ENABLED

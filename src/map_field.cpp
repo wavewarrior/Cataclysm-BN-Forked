@@ -1,6 +1,4 @@
-#ifdef COOP_ENABLED
 #include "coop_mutation_log.h"
-#endif
 #include "avatar.h"
 #include "bodypart.h"
 #include "calendar.h"
@@ -985,7 +983,6 @@ auto sub_add_field( SubTile& dst, field_type_id type, int intensity, time_durati
         ++dst.sm->field_count;
         dst.sm->field_cache.push_back( dst.local );
         dst.sm->is_uniform = false;
-#ifdef COOP_ENABLED
         if( auto * _log = coop_mutation_log::current() ) {
             const auto& sm_pos = dst.sm->position();
             const tripoint_abs_ms abs_pos{
@@ -994,7 +991,6 @@ auto sub_add_field( SubTile& dst, field_type_id type, int intensity, time_durati
                 coop_event_type::field_created, abs_pos, type.to_i(),
                 intensity} ); // value=type, creature_id=intensity
         }
-#endif
     }
     return dst.get_field().find_field( type );
 }
@@ -1087,21 +1083,17 @@ std::ranges::for_each( field_positions, [&]( const point_sm_ms & local ) {
 
         for( auto it = curfield.begin(); it != curfield.end(); ) {
             auto& cur = it->second;
-#ifdef COOP_ENABLED
             // A3b: capture state before this tick's processing so we can detect changes.
             const int _intensity_before = cur.get_field_intensity();
             const field_type_id _fd_type_before = cur.get_field_type();
-#endif
 
             // Dead entries — clean up.
             if( !cur.is_field_alive() ) {
-#ifdef COOP_ENABLED
                 if( auto * _log = coop_mutation_log::current() ) {
                     const tripoint_abs_ms
                     _abs{pos.x() * SEEX + local.x(), pos.y() * SEEY + local.y(), pos.z()};
                     _log->push( {coop_event_type::field_expired, _abs, _fd_type_before.to_i()} );
                 }
-#endif
                 --sm.field_count;
                 curfield.remove_field( it++ );
                 continue;
@@ -1674,7 +1666,6 @@ std::ranges::for_each( field_positions, [&]( const point_sm_ms & local ) {
                 cur.set_field_intensity( cur.get_field_intensity() - 1 );
             }
 
-#ifdef COOP_ENABLED
             if( auto * _log = coop_mutation_log::current() ) {
                 const tripoint_abs_ms
                 _abs{pos.x() * SEEX + local.x(), pos.y() * SEEY + local.y(), pos.z()};
@@ -1690,7 +1681,6 @@ std::ranges::for_each( field_positions, [&]( const point_sm_ms & local ) {
                         cur.get_field_intensity()} );
                 }
             }
-#endif
             if( !cur.is_field_alive() ) {
                 --sm.field_count;
                 curfield.remove_field( it++ );

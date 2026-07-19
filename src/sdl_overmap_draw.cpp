@@ -1,6 +1,4 @@
-#ifdef COOP_ENABLED
 #include "coop_session.h"
-#endif
 #include "cata_tiles.h"   // cata_tiles member declarations
 #include "sdltiles.h"     // tilecontext, overmap_tilecontext, rescale_tileset
 #include "sdl_display.h"  // g_display, display_context, fontwidth, fontheight
@@ -586,7 +584,6 @@ void cata_tiles::draw_om( point dest, const tripoint_abs_omt &center_abs_omt, bo
             lit_level::LIT, false, 0, false );
     }
 
-#ifdef COOP_ENABLED
     {
         const auto& sess = coop_session::get();
         if( sess.shared_mark.has_value() && sess.shared_mark->z() == center_abs_omt.z() ) {
@@ -615,7 +612,6 @@ void cata_tiles::draw_om( point dest, const tripoint_abs_omt &center_abs_omt, bo
             }
         }
     }
-#endif // COOP_ENABLED
 
     if( blink ) {
         // Draw path for auto-travel

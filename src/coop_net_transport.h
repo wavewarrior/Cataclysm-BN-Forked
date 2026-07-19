@@ -1,5 +1,4 @@
 #pragma once
-#ifdef COOP_ENABLED
 
 #include "coop_net.h"
 #include "coop_transport.h"
@@ -41,4 +40,3 @@ struct coop_net_transport final : coop_transport {
         NET_StreamSocket *sock_ = nullptr;
 };
 
-#endif // COOP_ENABLED

@@ -29,12 +29,11 @@
 #include "debug.h"
 #include "filesystem.h"
 #include "game.h"
-#ifdef COOP_ENABLED
 #include "avatar.h"      // game::u.moves access in the accumulator tick loop
 #include "calendar.h"    // to_turn<int>(calendar::turn) for tick logging
 #include "coop_client.h" // complete type for g->coop_client_->queue_action()
+#include "coop_session.h" // coop_session::get().is_coop() for main loop selection
 #include "coop_server.h" // complete type for g->coop_server_->has_pending_actions()
-#endif
 #include "game_ui.h"
 #include "get_version.h"
 #include "init.h"
@@ -710,12 +709,11 @@ int main( int argc, char* argv[] )
 
         shared_ptr_fast<ui_adaptor> ui = g->create_or_get_main_ui_adaptor();
         options_manager::cache_balance_options();
-#ifdef COOP_ENABLED
-        {
+        if( coop_session::get().is_coop() ) {
+            // Co-op accumulator/fiber main loop — non-blocking tick with input coalescing.
             using clk = std::chrono::steady_clock;
             auto last_tick = clk::now();
-            constexpr double IDLE_TICK_INTERVAL_MS = 1000.0; // game-clock = wall-clock; DO NOT
-            // lower
+            constexpr double IDLE_TICK_INTERVAL_MS = 1000.0;
             constexpr double COALESCE_WINDOW_MS = 16.0;
             double coalesce_start_ms = -1.0; // -1 = no window open
             bool game_done = false;
@@ -741,35 +739,28 @@ int main( int argc, char* argv[] )
                     }
                 }
 
-                // Open (or keep open) the coalescing window when:
-                //   - host acted this frame, OR
-                //   - server has client actions pending (only on host path)
                 const bool client_actions_pending =
                     g->coop_server_ && g->coop_server_->has_pending_actions();
                 if( ( host_acted || client_actions_pending ) && coalesce_start_ms < 0.0 ) {
-                    coalesce_start_ms = 0.0; // start window timer
+                    coalesce_start_ms = 0.0;
                 } else if( coalesce_start_ms >= 0.0 ) {
                     coalesce_start_ms += frame_ms;
                 }
 
-                // Determine whether to fire a tick this frame.
                 bool fire_tick = false;
                 bool tick_active = false;
                 if( coalesce_start_ms >= COALESCE_WINDOW_MS ) {
-                    // Active tick: coalescing window elapsed.
                     fire_tick = true;
                     tick_active = true;
                     coalesce_start_ms = -1.0;
-                    g->main_loop_accum_ms_ = 0.0; // reset idle floor — paths are mutually exclusive
+                    g->main_loop_accum_ms_ = 0.0;
                 } else if( coalesce_start_ms < 0.0 ) {
-                    // No window open: idle floor.
                     g->main_loop_accum_ms_ += frame_ms;
                     if( g->main_loop_accum_ms_ >= IDLE_TICK_INTERVAL_MS ) {
                         g->main_loop_accum_ms_ -= IDLE_TICK_INTERVAL_MS;
                         fire_tick = true;
                     }
                 }
-                // While a coalescing window is open but hasn't elapsed: no tick this frame.
 
                 if( fire_tick ) {
                     DebugLog( DL::Info, DC::Main )
@@ -777,15 +768,8 @@ int main( int argc, char* argv[] )
                             << " game_turn=" << to_turn<int>( calendar::turn )
                             << " pending=" << g->pending_action_queue_.size();
 
-                    // World step BEFORE drain: post_action_world_step() calls
-                    // u.process_turn() unconditionally (game.cpp:16591), so moves
-                    // are always refilled by the time we drain.  Draining after
-                    // eliminates the ~1s stall that occurred when a queued action
-                    // arrived while u.moves==0 at a turn boundary (the "move does
-                    // nothing until I toggle a menu" bug).
                     g->coop_game_tick();
 
-                    // Drain host actions.
                     while( g->u.moves > 0 ) {
                         if( !g->pending_action_queue_.empty() ) {
                             const auto act = g->pending_action_queue_.front();
@@ -805,34 +789,17 @@ int main( int argc, char* argv[] )
                     }
                 }
 
-                // Skip the redraw when teardown just completed: cleanup_at_end()
-                // calls unload_data() → reset_furn_ter(), emptying the terrain/
-                // furniture factories.  Rendering in the same frame produces
-                // ~300k "invalid terrain id (max: -1)" debug errors for every
-                // visible tile.  game_done causes the loop to exit next iteration
-                // anyway, so this redraw carries no value.
-                // Invalidate the main game-world UI adaptor every frame so
-                // ui_manager::redraw_invalidated() actually redraws it.  Without
-                // this, actions execute but the screen stays stale until a menu
-                // forces a full redraw — because handle_action_from() and
-                // coop_game_tick() update game state but nothing marks the adaptor
-                // dirty the way do_turn()'s internal redraw calls would.
                 if( !game_done ) {
                     g->invalidate_main_ui_adaptor();
                     ui_manager::redraw_invalidated();
-                    // Present the frame: redraw_invalidated() rebuilds the GPU queues
-                    // but refresh_display() is what submits them to the swapchain.
-                    // Without this, animations and world updates are queued but
-                    // never shown between ticks (only visible when something else —
-                    // e.g. a menu — calls refresh_display() internally).
                     refresh_display();
                 }
                 SDL_Delay( 4 );
             }
+        } else {
+            // Singleplayer: blocking turn-based main loop.
+            while( !g->do_turn() );
         }
-#else
-        while( !g->do_turn() );
-#endif
     }
 
     exit_handler( -999 );

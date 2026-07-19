@@ -1,4 +1,3 @@
-#ifdef COOP_ENABLED
 
 #include "coop_net.h"
 
@@ -102,4 +101,3 @@ auto poll( NET_StreamSocket* sock ) -> bool
 
 } // namespace coop_net
 
-#endif // COOP_ENABLED

@@ -1,5 +1,4 @@
 #pragma once
-#ifdef COOP_ENABLED
 
 #include <string>
 
@@ -36,4 +35,3 @@ struct coop_transport {
     virtual auto close_abruptly() -> void {}
 };
 
-#endif // COOP_ENABLED

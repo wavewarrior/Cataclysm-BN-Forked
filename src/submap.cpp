@@ -1,7 +1,5 @@
 #include "submap.h"
-#ifdef COOP_ENABLED
 #include "coop_mutation_log.h"
-#endif
 
 #include "debug.h"
 #include "int_id.h"
@@ -555,12 +553,10 @@ auto submap::set_furn( const point_sm_ms& p, furn_id furn ) -> void
     emitter_cache = std::nullopt;
     frn[p.x()][p.y()] = furn;
     frn_vars[p].merge( furn->default_vars );
-#ifdef COOP_ENABLED
     if( auto * log = coop_mutation_log::current() ) {
         const tripoint_abs_ms abs_pos{pos.x() * SEEX + p.x(), pos.y() * SEEY + p.y(), pos.z()};
         log->push( {coop_event_type::furniture_changed, abs_pos, furn.to_i()} );
     }
-#endif
     if( furn != f_null ) { return; }
     frn_vars.erase( p );
 }
@@ -569,10 +565,8 @@ auto submap::set_ter( const point_sm_ms& p, ter_id terr ) -> void
 {
     is_uniform = false;
     ter[p.x()][p.y()] = terr;
-#ifdef COOP_ENABLED
     if( auto * log = coop_mutation_log::current() ) {
         const tripoint_abs_ms abs_pos{pos.x() * SEEX + p.x(), pos.y() * SEEY + p.y(), pos.z()};
         log->push( {coop_event_type::terrain_changed, abs_pos, terr.to_i()} );
     }
-#endif
 }

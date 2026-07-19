@@ -1,4 +1,3 @@
-#ifdef COOP_ENABLED
 /**
  * Vehicle sync integration tests.
  *
@@ -202,4 +201,3 @@ TEST_CASE( "vehicle: unknown vid is silently ignored", "[coop][vehicle]" )
     SUCCEED();
 }
 
-#endif // COOP_ENABLED

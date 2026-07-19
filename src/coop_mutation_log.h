@@ -1,5 +1,4 @@
 #pragma once
-#ifdef COOP_ENABLED
 
 #include "coop_proto.h"
 #include "coordinates.h"
@@ -145,4 +144,3 @@ struct coop_tick_log_guard {
         coop_mutation_log log_;
 };
 
-#endif // COOP_ENABLED

@@ -1,4 +1,3 @@
-#ifdef COOP_ENABLED
 
 #include "coop_client.h"
 
@@ -259,7 +258,6 @@ for( auto& act : pending_actions_ ) {
         break;
     }
 
-#ifdef COOP_ENABLED
     // E1: push vehicle state to host while client is driving.
     if( g->u.controlling_vehicle ) {
     const auto vp = get_map().veh_at( g->u.bub_pos() );
@@ -289,7 +287,6 @@ for( auto& act : pending_actions_ ) {
                 std::max( 0, g->u.activity->moves_left - g->u.get_speed() / 2 );
         }
     }
-#endif
 
     // 1b. Send client_status each tick — host uses this for both_idle() fast-forward.
     //     Reports the client's OWN g->u state; proxy-inference is unreliable since
@@ -1223,4 +1220,3 @@ auto coop_client::interpolate_host_pos() -> tripoint_abs_ms
     };
 }
 
-#endif // COOP_ENABLED

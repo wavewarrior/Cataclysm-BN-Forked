@@ -1,4 +1,3 @@
-#ifdef COOP_ENABLED
 
 #include "coop_checksum.h"
 
@@ -97,4 +96,3 @@ auto coop_world_checksum( int radius ) -> uint64_t
     return h;
 }
 
-#endif // COOP_ENABLED

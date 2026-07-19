@@ -1,4 +1,3 @@
-#ifdef COOP_ENABLED
 
 #include "catch/catch_amalgamated.hpp"
 #include "coop_overmap.h"
@@ -276,4 +275,3 @@ TEST_CASE( "bionic sync: empty array parses cleanly", "[coop][packets]" )
     CHECK_FALSE( d.has_array( "bionics" ) );
 }
 
-#endif // COOP_ENABLED

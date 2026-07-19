@@ -217,7 +217,7 @@ jobs:
   coop_tests:
     needs: skip-duplicates
     if: ${{ needs.skip-duplicates.outputs.should_skip_code != 'true' }}
-    name: "co-op unit tests (COOP=ON)"
+    name: "co-op unit tests"
     runs-on: ubuntu-latest
     env:
       SKIP: ${{ needs.skip-duplicates.outputs.should_skip_code }}
@@ -255,7 +255,7 @@ jobs:
           max-size: 3G
           save: ${{ github.event_name != 'pull_request' }}
 
-      - name: configure and build (COOP=ON)
+      - name: configure and build
         if: ${{ env.SKIP != 'true' }}
         uses: lukka/run-cmake@v10
         with:
@@ -338,7 +338,7 @@ jobs:
           max-size: 3G
           save: ${{ github.event_name != 'pull_request' }}
 
-      - name: configure and build (COOP=ON, TSan)
+      - name: configure and build (TSan)
         if: ${{ env.SKIP != 'true' }}
         uses: lukka/run-cmake@v10
         with:
@@ -405,7 +405,7 @@ jobs:
           max-size: 3G
           save: ${{ github.event_name != 'pull_request' }}
 
-      - name: configure and build (COOP=ON, ASan+UBSan)
+      - name: configure and build (ASan+UBSan)
         if: ${{ env.SKIP != 'true' }}
         uses: lukka/run-cmake@v10
         with:

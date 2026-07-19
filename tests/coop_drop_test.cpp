@@ -1,4 +1,3 @@
-#ifdef COOP_ENABLED
 /**
  * C2a DROP — host-side manifest→addition tests.
  *
@@ -245,4 +244,3 @@ TEST_CASE( "apply_drop_manifest — out-of-bounds tile skipped", "[coop][drop]" 
     REQUIRE_NOTHROW( coop_server::apply_drop_manifest( manifest_oss.str() ) );
 }
 
-#endif // COOP_ENABLED

@@ -1,4 +1,3 @@
-#ifdef COOP_ENABLED
 /**
  * In-process co-op integration tests.
  *
@@ -363,4 +362,3 @@ TEST_CASE( "inproc: checksum converges after 10 ticks of movement",
     CHECK( cs_a == cs_b );
 }
 
-#endif // COOP_ENABLED

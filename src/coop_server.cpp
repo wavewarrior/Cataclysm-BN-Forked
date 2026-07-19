@@ -1,4 +1,3 @@
-#ifdef COOP_ENABLED
 
 #include "coop_server.h"
 
@@ -1733,4 +1732,3 @@ auto coop_server::process_incoming_for_test() -> void
     }
 }
 
-#endif // COOP_ENABLED

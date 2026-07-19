@@ -2157,7 +2157,6 @@ void game::list_items_monsters()
         if( vmenu_tab == 0 ) {
             ret = list_items( items );
         } else if( vmenu_tab == 1 ) {
-#ifdef COOP_ENABLED
             mons = u.get_visible_creatures( current_daylight_level( calendar::turn ) );
             std::sort( mons.begin(), mons.end(), [&]( const Creature * lhs, const Creature * rhs ) {
                 if( !u.has_trait( trait_INATTENTIVE ) ) {
@@ -2168,7 +2167,6 @@ void game::list_items_monsters()
                 }
                 return rl_dist( u.bub_pos(), lhs->bub_pos() ) < rl_dist( u.bub_pos(), rhs->bub_pos() );
             } );
-#endif
             ret = list_monsters( mons );
         } else {
             ret = list_vehicles( vehicles ) == vehicle_menu_ret::CHANGE_TAB ?
@@ -3152,7 +3150,6 @@ game::vmenu_ret game::list_monsters( std::vector<Creature *> monster_list )
         ui_manager::redraw();
 
         action = ctxt.handle_input();
-#ifdef COOP_ENABLED
         // After a fiber yield the world may have ticked, freeing Creature* in
         // monster_list (sync_rml iterates ALL entries on the next redraw).
         // Rebuild the entire list from u.get_visible_creatures() — same data
@@ -3186,7 +3183,6 @@ game::vmenu_ret game::list_monsters( std::vector<Creature *> monster_list )
                 }
             }
         }
-#endif
     } while( action != "QUIT" );
 
     u.view_offset = stored_view_offset;

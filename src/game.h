@@ -38,11 +38,9 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
-#ifdef COOP_ENABLED
 #include "coop_fiber.h"
 
 #include <queue>
-#endif
 
 class Character;
 class Creature_tracker;
@@ -77,11 +75,9 @@ extern std::atomic<uint32_t> g_npc_friends_dirty_version;
 extern uint32_t g_npcmove_attitude_epoch;
 
 class input_context;
-#ifdef COOP_ENABLED
 struct input_event;
 struct coop_server;
 struct coop_client;
-#endif
 
 input_context get_default_mode_input_context();
 
@@ -227,7 +223,6 @@ class game: public submap_load_listener
         void start_calendar();
         /** MAIN GAME LOOP. Returns true if game is over (death, saved, quit, etc.). */
         bool do_turn();
-#ifdef COOP_ENABLED
         /// World simulation pass extracted from do_turn() for the accumulator-gated
         /// non-blocking main loop. Calendar advance + all world sim; NO player input loop.
         auto post_action_world_step() -> void;
@@ -242,7 +237,7 @@ class game: public submap_load_listener
         ///   solo   → post_action_world_step() directly
         auto coop_game_tick() -> void;
 
-        // --- FS-B main loop state (only active when COOP_ENABLED) ---
+        // --- FS-B main loop state (only active in co-op mode) ---
         std::optional<coop_fiber> modal_fiber_;
         std::queue<std::string> pending_action_queue_;
         double main_loop_accum_ms_ = 0.0;
@@ -257,7 +252,6 @@ class game: public submap_load_listener
         coop_client *coop_client_ = nullptr;
         std::unique_ptr<coop_server> coop_server_owned_;
         std::unique_ptr<coop_client> coop_client_owned_;
-#endif // COOP_ENABLED
         shared_ptr_fast<ui_adaptor> create_or_get_main_ui_adaptor();
         void invalidate_main_ui_adaptor() const;
         void mark_main_ui_adaptor_resize() const;
@@ -1357,12 +1351,10 @@ class game: public submap_load_listener
         // Controlled by LAZY_BORDER cached option.
         load_request_handle lazy_border_handle_ = 0;
 
-#ifdef COOP_ENABLED
         // Second reality-bubble handle centered on the co-op proxy NPC.
         // Keeps the proxy's simulation zone loaded when the client roams away
         // from the host avatar.  0 = not active (no co-op session).
         load_request_handle coop_proxy_bubble_handle_ = 0;
-#endif
 
         // True while the bubble is temporarily shrunk for an ongoing long activity.
         // Entry requires >= ACTIVITY_BUBBLE_GRACE minutes remaining; once set, stays true

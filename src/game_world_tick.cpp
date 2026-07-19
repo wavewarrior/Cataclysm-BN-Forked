@@ -1145,9 +1145,7 @@ static bool npc_is_always_full( const npc &guy )
     return guy.is_player_ally() || guy.is_following() ||
            guy.mission == NPC_MISSION_ACTIVITY ||
            guy.mission == NPC_MISSION_GUARD_ALLY
-#ifdef COOP_ENABLED
            || guy.is_coop_remote
-#endif
            ;
 }
 

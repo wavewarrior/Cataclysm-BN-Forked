@@ -1,4 +1,3 @@
-#ifdef COOP_ENABLED
 /**
  * Multi-tick soak scenarios for co-op.
  *
@@ -229,4 +228,3 @@ TEST_CASE( "soak: disconnect and rewire cycles without crash",
     }
 }
 
-#endif // COOP_ENABLED

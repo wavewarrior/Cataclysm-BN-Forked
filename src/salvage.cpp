@@ -23,11 +23,9 @@
 #include "recipe_dictionary.h"
 #include "type_id.h"
 #include "ui_manager.h"
-#ifdef COOP_ENABLED
 #include <sstream>
 #include "coop_client.h"
 #include "game.h"
-#endif
 
 static const skill_id skill_fabrication( "fabrication" );
 
@@ -506,7 +504,6 @@ void salvage_activity_actor::finish( player_activity &act, Character & )
         debugmsg( "salvage_activity_actor call finish function while able to start new salvage" );
     }
     add_msg( _( "You finish salvaging." ) );
-#ifdef COOP_ENABLED
     if( g->coop_client_ ) {
         // D3: the source item was consumed per-step in do_turn(); targets is empty here.
         // pos is the player's abs tile where salvage was performed (set to who.abs_pos()
@@ -522,7 +519,6 @@ void salvage_activity_actor::finish( player_activity &act, Character & )
         j.end_object();
         g->coop_client_->queue_action( "ITEM_REMOVE", ctx.str() );
     }
-#endif
     act.set_to_null();
 }
 

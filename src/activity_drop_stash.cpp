@@ -744,7 +744,6 @@ void drop_activity_actor::do_turn( player_activity &, Character& who )
 
     std::vector<detached_ptr<item>> dropped = obtain_activity_items( who, items );
 
-#ifdef COOP_ENABLED
     // C2a (co-op client only) — serialize each item BEFORE put_into_vehicle_or_drop
     // moves ownership into the map.  Must happen before the move because:
     //   - detached_ptr ownership is consumed by put_into_vehicle_or_drop; no access after.
@@ -780,7 +779,6 @@ void drop_activity_actor::do_turn( player_activity &, Character& who )
             g->coop_client_->queue_action( "DROP", oss.str() );
         }
     }
-#endif // COOP_ENABLED
     put_into_vehicle_or_drop( who, item_drop_reason::deliberate, dropped, pos, force_ground );
 
     get_map().process_falling();

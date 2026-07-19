@@ -343,7 +343,6 @@ target_handler::trajectory target_ui::run()
             int timeout = get_option<int>( "EDGE_SCROLL" );
             action = ctxt.handle_input( timeout );
         }
-#ifdef COOP_ENABLED
         // After a fiber yield the world may have ticked; dst_critter and targets
         // hold raw Creature* that could have been freed.
         // Re-derive from the stable dst position and rebuild the visible target list.
@@ -352,7 +351,6 @@ target_handler::trajectory target_ui::run()
             dst_critter = ( cr && pl_sees( *cr ) ) ? cr : nullptr;
             update_target_list();
         }
-#endif
 
         // If an aiming mode is selected, use "*_SHOT" instead of "FIRE"
         if( mode == TargetMode::Fire && action == "FIRE" && aim_mode->has_threshold ) {

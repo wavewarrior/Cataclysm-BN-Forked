@@ -1,4 +1,3 @@
-#ifdef COOP_ENABLED
 
 #include "coop_overmap.h"
 
@@ -56,4 +55,3 @@ auto apply_overmap_sync_tiles( const std::vector<tripoint_abs_omt> &tiles,
     }
 }
 
-#endif // COOP_ENABLED

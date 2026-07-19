@@ -1,4 +1,3 @@
-#ifdef COOP_ENABLED
 
 #include "coop_mutation_log.h"
 
@@ -98,4 +97,3 @@ rev.type = inverse_type( ev.type );
     return rev;
 }
 
-#endif // COOP_ENABLED

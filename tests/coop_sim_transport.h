@@ -1,5 +1,4 @@
 #pragma once
-#ifdef COOP_ENABLED
 
 /**
  * In-memory transport simulator for deterministic co-op unit tests.
@@ -120,4 +119,3 @@ struct coop_sim_transport final : coop_transport {
         uint64_t rng_state_ = 0xdeadbeefcafe1234ULL;
 };
 
-#endif // COOP_ENABLED

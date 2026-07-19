@@ -1,5 +1,4 @@
 #pragma once
-#ifdef COOP_ENABLED
 
 #include "calendar.h"
 #include "character_id.h"
@@ -55,4 +54,3 @@ struct coop_session {
     static auto get() -> coop_session&; // *NOPAD*
 };
 
-#endif // COOP_ENABLED

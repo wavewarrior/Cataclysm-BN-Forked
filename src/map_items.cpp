@@ -1,7 +1,5 @@
 #include "map.h"
-#ifdef COOP_ENABLED
 #include "coop_mutation_log.h"
-#endif
 
 #ifdef BOX2D_ENABLED
 #include "physics/physics_world.h"
@@ -475,11 +473,9 @@ void map::add_item( const tripoint_bub_ms& p, detached_ptr<item>&& new_item )
     new_item->on_map_placement( *this, p );
 
     current_submap->get_items( l ).push_back( std::move( new_item ) );
-#ifdef COOP_ENABLED
     if( auto * _log = coop_mutation_log::current() ) {
         _log->push( {coop_event_type::item_spawned, bub_to_abs( p ), 0} );
     }
-#endif
     return;
 }
 

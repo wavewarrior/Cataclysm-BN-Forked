@@ -114,7 +114,6 @@
 #include <utility>
 
 
-#ifdef COOP_ENABLED
 namespace
 {
 /// Emit a TERRAIN_CHANGE action to the co-op host with the new ter/furn at an abs position.
@@ -125,7 +124,6 @@ inline void coop_emit_terrain_change(
     g->coop_client_->queue_terrain_change( abs, ter.id().str(), furn.id().str() );
 }
 } // namespace
-#endif // COOP_ENABLED
 
 static const activity_id ACT_MOVE_LOOT( "ACT_MOVE_LOOT" );
 static const activity_id ACT_MULTIPLE_BUTCHER( "ACT_MULTIPLE_BUTCHER" );
@@ -401,12 +399,10 @@ void open()
             const bool outside = !player_veh || player_veh != veh;
             if( here.open_door_veh( &get_avatar(), vp, openp, !outside ) ) {
                 u.moves -= 100;
-#ifdef COOP_ENABLED
                 if( g->coop_client_ ) {
                     g->coop_client_->queue_terrain_change( here.bub_to_abs( openp ),
                                                            here.ter( openp ).id().str(), here.furn( openp ).id().str() );
                 }
-#endif // COOP_ENABLED
             }
         } else {
             // If there are any OPENABLE parts here, they must be already open
@@ -418,11 +414,9 @@ void open()
         }
     } else if( here.open_door( &u, openp, !here.is_outside( u.bub_pos() ) ) ) {
         u.moves -= 100;
-#ifdef COOP_ENABLED
         if( g->coop_client_ ) {
             coop_emit_terrain_change( here.bub_to_abs( openp ), here.ter( openp ), here.furn( openp ) );
         }
-#endif // COOP_ENABLED
     } else {
         const ter_str_id tid = here.ter( openp ).id();
 
@@ -444,18 +438,14 @@ void close()
             _( "Close where?" ),
             pgettext( "no door, gate, etc.", "There is nothing that can be closed nearby." ),
             ACTION_CLOSE, false ) ) {
-#ifdef COOP_ENABLED
         map &here_c = get_map();
         const auto ter_before = here_c.ter( *pnt );
         const auto furn_before = here_c.furn( *pnt );
-#endif // COOP_ENABLED
         doors::close_door( get_map(), g->u, *pnt );
-#ifdef COOP_ENABLED
         if( g->coop_client_ &&
             ( here_c.ter( *pnt ) != ter_before || here_c.furn( *pnt ) != furn_before ) ) {
             coop_emit_terrain_change( here_c.bub_to_abs( *pnt ), here_c.ter( *pnt ), here_c.furn( *pnt ) );
         }
-#endif // COOP_ENABLED
     }
 }
 
@@ -634,7 +624,6 @@ void smash()
     if( veh != nullptr ) {
         if( !veh->handle_potential_theft( get_avatar() ) ) { return; }
     }
-#ifdef COOP_ENABLED
     // C2c: snapshot terrain + ground items before bash so we can diff what changed.
     ter_id   smash_ter_before;
     furn_id  smash_furn_before;
@@ -646,7 +635,6 @@ void smash()
             for( const item *it : here.i_at( p ) ) { smash_items_before.insert( it ); }
         }
     }
-#endif // COOP_ENABLED
     didit = here.bash( smashp, smashskill, false, false, smash_floor ).did_bash;
     if( didit ) {
         u.anim_on_attack( smashp, false ); // sprite lunge toward the smashed tile
@@ -677,7 +665,6 @@ void smash()
             }
         }
         u.moves -= move_cost;
-#ifdef COOP_ENABLED
         if( g->coop_client_ ) {
             // Emit terrain change if the bash broke through.
             if( here.ter( smashp ) != smash_ter_before || here.furn( smashp ) != smash_furn_before ) {
@@ -728,7 +715,6 @@ void smash()
             smash_ctx_jout.end_object();
             g->coop_client_->queue_action( "SMASH", smash_ctx_oss.str() );
         }
-#endif // COOP_ENABLED
 
         if( smashskill < here.bash_resistance( smashp ) && one_in( 10 ) ) {
             if( here.has_furn( smashp ) && here.furn( smashp ).obj().bash.str_min != -1 ) {

@@ -1321,12 +1321,10 @@ class npc: public player
         int8_t npc_lod_tier = 0;
         int npc_lod_cooldown = 0;
 
-#ifdef COOP_ENABLED
         /// True when this NPC's actions come from the TCP co-op connection
         /// rather than the AI.  Set by coop_server::spawn_proxy_npc().
         /// Transient — not saved; always false after load.
         bool is_coop_remote = false;
-#endif
 
         // ID of the dimension this NPC belongs to.  Empty string = primary dimension.
         // Set when the NPC is spawned or loaded from a non-primary dimension submap.

@@ -1,4 +1,3 @@
-#ifdef COOP_ENABLED
 /**
  * Tests for A4b delta-hash agreement and A5.3/A5.4 lag-compensation logic.
  *
@@ -280,4 +279,3 @@ TEST_CASE(
     CHECK( result.hash == manual );
 }
 
-#endif // COOP_ENABLED

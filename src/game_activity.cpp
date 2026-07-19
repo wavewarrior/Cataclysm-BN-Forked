@@ -52,10 +52,8 @@
 #include "translations.h"
 #include "weather.h"
 
-#ifdef COOP_ENABLED
 #include "coop_proto.h"
 #include "coop_server.h"
-#endif
 
 #include "profile.h"
 
@@ -379,7 +377,6 @@ for( const auto turn_index : std::views::iota( 0, dur_turns ) ) {
         if( !activity_continues || u.activity->complete() ) {
             break;
         }
-#ifdef COOP_ENABLED
         // A5.2: activity yield cap — send a sync every COOP_ACTIVITY_YIELD_INTERVAL turns so
         // the client can catch up during long activities (sleep, craft, read).
         // Without this the entire 480-turn sleep resolves in one burst and the client
@@ -389,7 +386,6 @@ for( const auto turn_index : std::views::iota( 0, dur_turns ) ) {
             skipped_turns % COOP_ACTIVITY_YIELD_INTERVAL == 0 ) {
             coop_server_->build_and_send_sync();
         }
-#endif
     }
     /*
      * After the skip loop, if the activity completed but the type wasn't

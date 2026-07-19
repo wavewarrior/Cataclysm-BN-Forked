@@ -83,11 +83,9 @@
 #include <memory>
 #include <string>
 #include <utility>
-#ifdef COOP_ENABLED
 #include "coop_client.h"
 #include "field.h"
 #include <set>
-#endif
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
@@ -607,7 +605,6 @@ void construction_activity_actor::do_turn( player_activity& act, Character& who 
 
 void construction_activity_actor::finish( player_activity& act, Character& who )
 {
-#ifdef COOP_ENABLED
     // C2d: snapshot terrain/furniture + exact character tile items before
     // complete_construction() so we can diff what changed and propagate to the host.
     ter_id   con_ter_before;
@@ -627,11 +624,9 @@ void construction_activity_actor::finish( player_activity& act, Character& who )
             con_items_at_player.push_back( it );
         }
     }
-#endif // COOP_ENABLED
 
     complete_construction( who, target );
 
-#ifdef COOP_ENABLED
     if( g->coop_client_ ) {
         map& here = get_map();
         const auto local = here.abs_to_bub( target );
@@ -676,7 +671,6 @@ void construction_activity_actor::finish( player_activity& act, Character& who )
         drop_jout.end_object();
         if( has_new ) { g->coop_client_->queue_action( "DROP", drop_oss.str() ); }
     }
-#endif // COOP_ENABLED
     act.set_to_null();
 }
 
@@ -939,7 +933,6 @@ void butchery_activity_actor::finish( player_activity& act, Character& who )
         return 0.5 * skill_level / 10 + 0.3 * ( factor + 50 ) / 100 + 0.2 * p.dex_cur / 20;
     };
 
-#ifdef COOP_ENABLED
     std::vector<const item *> coop_items_before;
     bool coop_corpse_detached = false;
     if( g->coop_client_ ) {
@@ -947,7 +940,6 @@ void butchery_activity_actor::finish( player_activity& act, Character& who )
             coop_items_before.push_back( it );
         }
     }
-#endif // COOP_ENABLED
     butchery_drops_harvest( &corpse_item, *corpse, p, roll_butchery, this->type, roll_drops );
 
     if( this->type == DISSECT ) {
@@ -975,16 +967,12 @@ void butchery_activity_actor::finish( player_activity& act, Character& who )
                 _( "You apply few quick cuts to the %s and leave what's left of it for scavengers." ),
                 corpse_item.tname() );
             target->detach();
-#ifdef COOP_ENABLED
             coop_corpse_detached = true;
-#endif // COOP_ENABLED
             break;
         case BUTCHER_FULL:
             p.add_msg_if_player( m_good, _( "You finish butchering the %s." ), corpse_item.tname() );
             target->detach();
-#ifdef COOP_ENABLED
             coop_corpse_detached = true;
-#endif // COOP_ENABLED
             break;
         case F_DRESS: {
             if( roll_butchery() < 0 ) {
@@ -1089,16 +1077,12 @@ void butchery_activity_actor::finish( player_activity& act, Character& who )
                     break;
             }
             target->detach();
-#ifdef COOP_ENABLED
             coop_corpse_detached = true;
-#endif // COOP_ENABLED
             break;
         case DISSECT:
             p.add_msg_if_player( m_good, _( "You finish dissecting the %s." ), corpse_item.tname() );
             target->detach();
-#ifdef COOP_ENABLED
             coop_corpse_detached = true;
-#endif // COOP_ENABLED
             break;
     }
 
@@ -1107,7 +1091,6 @@ void butchery_activity_actor::finish( player_activity& act, Character& who )
 
     if( !this->targets.empty() && setup_next_target( act, p ) ) { return; }
 
-#ifdef COOP_ENABLED
     if( g->coop_client_ && coop_corpse_detached ) {
         std::ostringstream ctx;
         JsonOut j( ctx );
@@ -1133,7 +1116,6 @@ void butchery_activity_actor::finish( player_activity& act, Character& who )
             }
         }
     }
-#endif // COOP_ENABLED
     act.set_to_null();
     activity_handlers::resume_for_multi_activities( p );
 }

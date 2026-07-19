@@ -83,11 +83,9 @@
 #include <memory>
 #include <string>
 #include <utility>
-#ifdef COOP_ENABLED
 #include "coop_client.h"
 #include "field.h"
 #include <set>
-#endif
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
@@ -768,11 +766,8 @@ void disassemble_activity_actor::do_turn( player_activity& act, Character& who )
         if( !target.loc ) {
             debugmsg( "Lost target of ACT_DISASSEMBLY" );
         } else {
-#ifdef COOP_ENABLED
             const itype_id rem_type = target.loc->typeId();
-#endif
             crafting::complete_disassemble( who, target, get_map().abs_to_bub( pos ) );
-#ifdef COOP_ENABLED
             if( g->coop_client_ ) {
                 std::ostringstream ctx;
                 JsonOut jd( ctx );
@@ -784,7 +779,6 @@ void disassemble_activity_actor::do_turn( player_activity& act, Character& who )
                 jd.end_object();
                 g->coop_client_->queue_action( "ITEM_REMOVE", ctx.str() );
             }
-#endif
         }
         targets.erase( targets.begin() );
         progress.pop();
@@ -1158,7 +1152,6 @@ void pickup_activity_actor::do_turn( player_activity& act, Character& who )
     const bool autopickup = who.activity->auto_resume;
     bool keep_going;
 
-#ifdef COOP_ENABLED
     // C1 (co-op client only) — zero overhead in SP/host paths.
     // Snapshot tile + type + charge info BEFORE do_pickup() removes items.
     // After pickup, refs of taken items become invalid; refs of skipped/interrupted
@@ -1229,14 +1222,11 @@ void pickup_activity_actor::do_turn( player_activity& act, Character& who )
             g->coop_client_->queue_action( "PICKUP", oss.str() );
         }
     } else {
-#endif // COOP_ENABLED
 
         // False indicates that the player canceled pickup when met with some prompt
         keep_going = pickup::do_pickup( target_items, autopickup );
 
-#ifdef COOP_ENABLED
     } // end coop_client_ else branch
-#endif // COOP_ENABLED
 
     // Check thievey witness
     npc* witness = nullptr;
@@ -1449,10 +1439,7 @@ void throw_activity_actor::do_turn( player_activity& act, Character& who )
     // C2e: capture thrown item type before split so we can identify the landed item after.
     // throw_activity_actor::do_turn is the correct hook — plthrow() only assigns this activity;
     // the actual throw (aim UI + split + throw_item) happens here.
-#ifdef COOP_ENABLED
     const itype_id c2e_thrown_type = target->typeId();
-#endif // COOP_ENABLED
-#ifdef COOP_ENABLED
     using coop_field_key = std::pair<tripoint_abs_ms, field_type_id>;
     std::set<coop_field_key> coop_fields_before;
     if( g->coop_client_ ) {
@@ -1469,11 +1456,9 @@ void throw_activity_actor::do_turn( player_activity& act, Character& who )
             }
         }
     }
-#endif // COOP_ENABLED
     detached_ptr<item> det = target->split( 1 );
     const auto throw_result =
         ranged::throw_item( who, trajectory.back(), std::move( det ), blind_throw_pos );
-#ifdef COOP_ENABLED
     if( g->coop_client_ ) {
         // Only relay items that landed on the ground (not consumed/exploded).
         // Discriminator: check if an item of the thrown type is at end_point after the throw.
@@ -1511,8 +1496,6 @@ void throw_activity_actor::do_turn( player_activity& act, Character& who )
             }
         }
     }
-#endif // COOP_ENABLED
-#ifdef COOP_ENABLED
     if( g->coop_client_ && !trajectory.empty() ) {
         map& fhere = get_map();
         const auto impact = tripoint_bub_ms( trajectory.back() );
@@ -1542,7 +1525,6 @@ void throw_activity_actor::do_turn( player_activity& act, Character& who )
             g->coop_client_->queue_action( "FIELD_SET", fctx.str() );
         }
     }
-#endif // COOP_ENABLED
 }
 
 void throw_activity_actor::serialize( JsonOut& jsout ) const

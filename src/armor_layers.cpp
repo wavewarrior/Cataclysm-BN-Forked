@@ -754,7 +754,6 @@ void show_armor_layers_ui( Character& who )
 
         ui_manager::redraw();
         const std::string action = ctxt.handle_input();
-#ifdef COOP_ENABLED
         // After a fiber yield the world may have ticked and items may have been
         // added or removed from who.worn.  Rebuild tmp_worn against the current
         // worn list before any action branch dereferences it via access_tmp_worn().
@@ -778,7 +777,6 @@ void show_armor_layers_ui( Character& who )
             leftListIndex = std::clamp( leftListIndex, 0, std::max( 0, leftListSize - 1 ) );
             selected = std::clamp( selected, 0, std::max( 0, leftListSize - 1 ) );
         }
-#endif
         if( who.is_npc() && action == "ASSIGN_INVLETS" ) {
             // It doesn't make sense to assign invlets to NPC items
             continue;

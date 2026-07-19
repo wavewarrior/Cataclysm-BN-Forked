@@ -1,7 +1,5 @@
 #include "character.h"
-#ifdef COOP_ENABLED
 #include "coop_mutation_log.h"
-#endif
 #include "action.h"
 #include "activity_actor_definitions.h"
 #include "activity_handlers.h"
@@ -1733,14 +1731,12 @@ void Character::die( Creature* nkiller )
         params["char"] = this;
         params["killer"] = get_killer();
     } );
-#ifdef COOP_ENABLED
     if( auto * _log = coop_mutation_log::current() ) {
         _log->push( {
             .type = coop_event_type::creature_died,
             .pos = abs_pos(),
             .creature_id = getID().get_value()} );
     }
-#endif
 }
 
 void Character::apply_skill_boost()

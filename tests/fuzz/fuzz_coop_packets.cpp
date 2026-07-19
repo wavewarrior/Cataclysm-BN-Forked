@@ -1,4 +1,3 @@
-#ifdef COOP_ENABLED
 
 #include "coop_packets.h"
 #include "coop_proto.h"
@@ -44,12 +43,3 @@ extern "C" auto LLVMFuzzerTestOneInput( const uint8_t *data, size_t size ) -> in
     return 0;
 }
 
-#else // !COOP_ENABLED
-
-/// Stub so the file compiles without -DCOOP_ENABLED.
-auto main() -> int
-{
-    return 0;
-}
-
-#endif // COOP_ENABLED

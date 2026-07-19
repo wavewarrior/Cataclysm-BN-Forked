@@ -1,4 +1,3 @@
-#ifdef COOP_ENABLED
 /**
  * C1 PICKUP — host-side manifest→removal tests.
  *
@@ -249,4 +248,3 @@ TEST_CASE( "apply_pickup_manifest — second identical manifest is a no-op (race
     CHECK( count_items( DISCRETE_ID ) == 0 );
 }
 
-#endif // COOP_ENABLED

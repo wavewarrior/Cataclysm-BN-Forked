@@ -13,13 +13,11 @@
 #include "calendar.h"
 #include "catacharset.h"
 #include "catalua.h"
-#ifdef COOP_ENABLED
 #include "coop_client.h"
 #include "coop_menu.h"
 #include "coop_server.h"
 #include "coop_session.h"
 #include "json.h"
-#endif
 #include "character.h"
 #include "character_display.h"
 #include "character_martial_arts.h"
@@ -115,7 +113,6 @@
 #include <sstream>
 #include <utility>
 
-#ifdef COOP_ENABLED
 namespace
 {
 /// Emit a TERRAIN_CHANGE action to the co-op host with the new ter/furn at an abs position.
@@ -126,7 +123,6 @@ inline void coop_emit_terrain_change(
     g->coop_client_->queue_terrain_change( abs, ter.id().str(), furn.id().str() );
 }
 } // namespace
-#endif // COOP_ENABLED
 
 #include "handle_action_helpers.h"
 using namespace action_handlers;
@@ -1604,7 +1600,6 @@ bool game::handle_action()
     return ( !u.is_dead_state() );
 }
 
-#ifdef COOP_ENABLED
 /// Variant of handle_action() that takes a pre-resolved action string from the
 /// non-blocking main loop, skipping the blocking get_player_input() call.
 /// Modal-opening cases push to game::modal_fiber_ instead of calling directly;
@@ -1615,12 +1610,10 @@ auto game::handle_action_from( const std::string& pre_action ) -> bool
     input_context ctxt = get_default_mode_input_context();
     action_id act = ACTION_NULL;
     user_turn current_turn;
-#ifdef COOP_ENABLED
     // Capture position before any action executes.  Used at the end of the
     // function to detect whether a movement action was blocked (pos unchanged)
     // and skip queuing it — blocked moves in the ring buffer cause wall-flicker.
     const tripoint_bub_ms coop_pos_before_ = u.bub_pos();
-#endif
 
     // Auto-move path (identical to handle_action)
     if( u.has_destination() ) {
@@ -1692,7 +1685,6 @@ auto game::handle_action_from( const std::string& pre_action ) -> bool
     }
 
     if( act == ACTION_NULL ) { return false; }
-#ifdef COOP_ENABLED
     {
         const auto& sess = coop_session::get();
         if( sess.is_client() && sess.is_downed ) {
@@ -1706,7 +1698,6 @@ auto game::handle_action_from( const std::string& pre_action ) -> bool
             }
         }
     }
-#endif // COOP_ENABLED
 
     gamemode->pre_action( act );
 
@@ -2792,7 +2783,6 @@ auto game::handle_action_from( const std::string& pre_action ) -> bool
         }
     }
 
-#ifdef COOP_ENABLED
     // Client co-op: forward world-affecting actions to the host proxy.
     // The local action already executed above for instant visual feedback
     // (local prediction).  The host mirrors via execute_client_action().
@@ -3002,7 +2992,6 @@ auto game::handle_action_from( const std::string& pre_action ) -> bool
             }
         }
     }
-#endif // COOP_ENABLED
 
     if( act != ACTION_TIMEOUT ) { u.mod_moves( -current_turn.moves_elapsed() ); }
     gamemode->post_action( act );
@@ -3013,4 +3002,3 @@ auto game::handle_action_from( const std::string& pre_action ) -> bool
                         before_action_moves, u.movecounter, u.moves );
     return ( !u.is_dead_state() );
 }
-#endif // COOP_ENABLED

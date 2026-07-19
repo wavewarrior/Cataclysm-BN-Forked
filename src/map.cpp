@@ -1,7 +1,5 @@
 #include "map.h"
-#ifdef COOP_ENABLED
 #include "coop_mutation_log.h"
-#endif
 
 #ifdef BOX2D_ENABLED
 #include "physics/physics_world.h"

@@ -677,7 +677,6 @@ void show_bionics_ui( Character &who )
         cursor = clamp<int>( cursor, 0, current_bionic_list->size() );
 
         const std::string action = ctxt.handle_input();
-#ifdef COOP_ENABLED
         if( coop_fiber::active() ) {
             active  = filtered_bionics( bionics, TAB_ACTIVE );
             passive = filtered_bionics( bionics, TAB_PASSIVE );
@@ -686,7 +685,6 @@ void show_bionics_ui( Character &who )
                 cursor = std::min( cursor, static_cast<int>( current_bionic_list->size() ) - 1 );
             }
         }
-#endif
         const int ch = ctxt.get_raw_input().get_first_input();
         bionic *tmp = nullptr;
 

@@ -659,7 +659,6 @@ void npc::move()
     } else if( attitude == NPCATT_FLEE_TEMP && !has_effect( effect_npc_flee_player ) ) {
         set_attitude( NPCATT_NULL );
     }
-#ifdef COOP_ENABLED
     // Co-op proxy NPC: the game loop already granted moves via process_turn();
     // we must consume them here so the while(moves>0) caller doesn't spin to
     // 10 iterations and call reboot() (which would teleport the proxy).  Drain
@@ -670,7 +669,6 @@ void npc::move()
         set_moves( 0 );
         return;
     }
-#endif
     // Tier 2 macro step: distant NPCs skip full AI on non-step turns.
     if( npc_lod_tier == 2 && !calendar::stride_due( npc_macro_interval ) ) { return; }
     regen_ai_cache();

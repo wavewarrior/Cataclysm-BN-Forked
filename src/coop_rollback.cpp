@@ -1,4 +1,3 @@
-#ifdef COOP_ENABLED
 
 #include "coop_rollback.h"
 #include "calendar.h"
@@ -74,5 +73,3 @@ auto coop_rollback_engine::rollback_to( int target_tick ) -> int
 
     return count;
 }
-
-#endif // COOP_ENABLED

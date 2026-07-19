@@ -1,5 +1,4 @@
 #pragma once
-#ifdef COOP_ENABLED
 
 #include "coordinates.h"
 
@@ -19,4 +18,3 @@ auto parse_overmap_sync_tiles( const std::string &json_buf )
 auto apply_overmap_sync_tiles( const std::vector<tripoint_abs_omt> &tiles,
                                const std::string &dim_id ) -> void;
 
-#endif // COOP_ENABLED

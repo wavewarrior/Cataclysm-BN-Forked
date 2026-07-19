@@ -148,6 +148,10 @@ static void ramp_transition_angled( const vproto_id &veh_id, const units::angle 
 
     vehicle &veh = *veh_ptr;
     veh.check_falling_or_floating();
+#ifdef BOX2D_ENABLED
+    // Ramp tests require tile-step movement (move_vehicle), not Box2D physics.
+    veh.box2d_position_authority = false;
+#endif
 
     REQUIRE( !veh.is_in_water() );
 

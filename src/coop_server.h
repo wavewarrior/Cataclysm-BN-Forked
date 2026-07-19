@@ -1,5 +1,4 @@
 #pragma once
-#ifdef COOP_ENABLED
 
 #include "coop_proto.h"
 #include "coordinates.h"
@@ -295,4 +294,3 @@ struct coop_server {
         int reconnect_countdown_ = 0;
 };
 
-#endif // COOP_ENABLED

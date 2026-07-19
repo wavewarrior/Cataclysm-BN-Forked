@@ -871,11 +871,7 @@ const std::string &input_context::handle_input( const int timeout )
     next_action.type = input_event_t::error;
     const std::string* result = &CATA_ERROR;
     while( true ) {
-#ifdef COOP_ENABLED
         next_action = coop_fiber::active() ? coop_fiber::yield_event() : inp_mngr.get_input_event();
-#else
-        next_action = inp_mngr.get_input_event();
-#endif
         if( next_action.type == input_event_t::timeout ) {
             result = &TIMEOUT;
             break;

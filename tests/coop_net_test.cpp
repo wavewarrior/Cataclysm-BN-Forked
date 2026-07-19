@@ -1,4 +1,3 @@
-#ifdef COOP_ENABLED
 
 #include "catch/catch_amalgamated.hpp"
 #include "coop_net.h"
@@ -306,4 +305,3 @@ TEST_CASE( "coop_net recv: duplicate seq packet received twice without corruptio
     CHECK( buf2 == action );
 }
 
-#endif // COOP_ENABLED

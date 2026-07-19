@@ -44,11 +44,9 @@
 #include "ui.h"
 #include "units.h"
 
-#ifdef COOP_ENABLED
 #include "coop_client.h"
 #include <map>
 #include <sstream>
-#endif
 #include <RmlUi/Core.h>
 #include <algorithm>
 #include <array>
@@ -1348,7 +1346,6 @@ void spell::cast_spell_effect( Creature& source, const tripoint_bub_ms& target )
 
 void spell::cast_all_effects( Creature& source, const tripoint_bub_ms& target ) const
 {
-#ifdef COOP_ENABLED
     using coop_field_key = std::pair<tripoint_abs_ms, field_type_id>;
     std::set<coop_field_key> spell_fields_before;
     std::map<tripoint_abs_ms, ter_id> spell_ter_before;
@@ -1365,7 +1362,6 @@ void spell::cast_all_effects( Creature& source, const tripoint_bub_ms& target ) 
             }
         }
     }
-#endif
     if( has_flag( spell_flag::WONDER ) ) {
         const auto iter = type->additional_spells.begin();
         for( int num_spells = std::abs( damage() ); num_spells > 0; num_spells-- ) {
@@ -1414,7 +1410,6 @@ void spell::cast_all_effects( Creature& source, const tripoint_bub_ms& target ) 
             }
         }
     }
-#ifdef COOP_ENABLED
     if( g && g->coop_client_ ) {
         map& here = get_map();
         const int radius = range();
@@ -1445,7 +1440,6 @@ void spell::cast_all_effects( Creature& source, const tripoint_bub_ms& target ) 
             }
         }
     }
-#endif
 }
 
 std::optional<tripoint_bub_ms> spell::random_valid_target(
