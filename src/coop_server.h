@@ -258,7 +258,9 @@ struct coop_server {
         std::vector<std::pair<std::string, int>> pending_skills_;
         std::vector<tripoint_abs_omt> pending_overmap_tiles_;
         std::vector<std::string> pending_mutations_;  ///< trait_id strings from client
+        bool has_mutations_update_ = false;            ///< true = apply pending (even if empty = clear all)
         std::vector<std::string> pending_bionics_;    ///< bionic_id strings from client
+        bool has_bionics_update_ = false;              ///< true = apply pending (even if empty = clear all)
         // F4: overmap mark — receiver writes, world_tick applies (guarded by pending_sync_mtx_)
         struct pending_mark_t {
             bool valid = false;

@@ -362,11 +362,13 @@ auto coop_server::receiver_loop( std::stop_token st ) -> void
                         bios.push_back( s );
                     }
                 }
-                if( !skills.empty() || !muts.empty() || !bios.empty() ) {
+                const bool has_muts = d.has_array( "mutations" );
+                const bool has_bios = d.has_array( "bionics" );
+                if( !skills.empty() || has_muts || has_bios ) {
                     std::scoped_lock lk{ pending_sync_mtx_ };
                     if( !skills.empty() ) { pending_skills_ = skills; }
-                    if( !muts.empty() ) { pending_mutations_ = std::move( muts ); }
-                    if( !bios.empty() ) { pending_bionics_ = std::move( bios ); }
+                    if( has_muts ) { pending_mutations_ = std::move( muts ); has_mutations_update_ = true; }
+                    if( has_bios ) { pending_bionics_ = std::move( bios ); has_bionics_update_ = true; }
                 }
             } else if( t == coop_pkt::resync_request ) {
                 // A4: client detected a hash mismatch and needs a full sync.
@@ -540,18 +542,28 @@ if( client_disconnected_.exchange( false ) ) {
             std::vector<std::pair<std::string, int>> skills;
             std::vector<std::string> muts;
             std::vector<std::string> bios;
+            bool apply_muts = false;
+            bool apply_bios = false;
             {
                 std::scoped_lock lk{ pending_sync_mtx_ };
                 skills.swap( pending_skills_ );
-                muts.swap( pending_mutations_ );
-                bios.swap( pending_bionics_ );
+                if( has_mutations_update_ ) {
+                    muts.swap( pending_mutations_ );
+                    apply_muts = true;
+                    has_mutations_update_ = false;
+                }
+                if( has_bionics_update_ ) {
+                    bios.swap( pending_bionics_ );
+                    apply_bios = true;
+                    has_bionics_update_ = false;
+                }
             }
             for( const auto &[sid, lvl] : skills ) {
                 const skill_id sk( sid );
                 if( sk.is_valid() ) { proxy->set_skill_level( sk, lvl ); }
             }
-            if( !muts.empty() ) {
-                // Diff: add new, remove stale. Avoids clearing all and re-adding.
+            if( apply_muts ) {
+                // Diff: add new, remove stale. Empty desired = clear all.
                 const auto current = proxy->get_mutations( false );
                 std::unordered_set<std::string> desired( muts.begin(), muts.end() );
                 std::unordered_set<std::string> have;
@@ -566,7 +578,7 @@ if( client_disconnected_.exchange( false ) ) {
                     if( !desired.contains( t.str() ) ) { proxy->unset_mutation( t ); }
                 }
             }
-            if( !bios.empty() ) {
+            if( apply_bios ) {
                 const auto current = proxy->get_bionics();
                 std::unordered_set<std::string> desired( bios.begin(), bios.end() );
                 std::unordered_set<std::string> have;

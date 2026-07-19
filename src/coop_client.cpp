@@ -338,22 +338,20 @@ for( auto& act : pending_actions_ ) {
             if( !skill_pairs.empty() ) {
                 build_skill_sync_fields( status_jout, skill_pairs );
             }
-            // Mutations
-            const auto muts = g->u.get_mutations( false ); // exclude hidden
-            if( !muts.empty() ) {
-                status_jout.member( "mutations" );
-                status_jout.start_array();
-                for( const auto &tid : muts ) { status_jout.write( tid.str() ); }
-                status_jout.end_array();
+            // Mutations — always send so empty list clears stale proxy traits
+            status_jout.member( "mutations" );
+            status_jout.start_array();
+            for( const auto &tid : g->u.get_mutations( false ) ) {
+                status_jout.write( tid.str() );
             }
-            // Bionics
-            const auto bios = g->u.get_bionics();
-            if( !bios.empty() ) {
-                status_jout.member( "bionics" );
-                status_jout.start_array();
-                for( const auto &bid : bios ) { status_jout.write( bid.str() ); }
-                status_jout.end_array();
+            status_jout.end_array();
+            // Bionics — always send so empty list clears stale proxy CBMs
+            status_jout.member( "bionics" );
+            status_jout.start_array();
+            for( const auto &bid : g->u.get_bionics() ) {
+                status_jout.write( bid.str() );
             }
+            status_jout.end_array();
         }
         status_jout.end_object();
         status_jout.end_object();
