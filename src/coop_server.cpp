@@ -1562,12 +1562,12 @@ auto coop_server::accept_reconnect() -> bool
 {
     // try_accept() is non-blocking; returns false if no pending connection
     if( !try_accept() ) {
-        return false;
-    }
-    // A new TCP connection is established — read one packet and expect reconnect
-    std::string buf;
-    if( !transport_->recv( buf, 100 ) ) { // short timeout — avoid stalling main thread
-        DebugLog( DL::Error, DC::Main ) << "[coop] accept_reconnect: recv failed";
+    return false;
+}
+// A new TCP connection is established — read one packet and expect reconnect
+std::string buf;
+if( !transport_->recv( buf, 100 ) ) { // short timeout — avoid stalling main thread
+    DebugLog( DL::Error, DC::Main ) << "[coop] accept_reconnect: recv failed";
         transport_.reset();
         return false;
     }
