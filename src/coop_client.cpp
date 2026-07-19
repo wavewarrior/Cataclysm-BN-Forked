@@ -967,7 +967,7 @@ auto coop_client::handle_disconnect() -> void
     if( !session_token_.empty() && !last_host_ip_.empty() ) {
     add_msg( m_warning, _( "Connection lost — attempting to reconnect..." ) );
         reconnect_attempts_remaining_ = 30;
-        return; // ponytail: non-blocking; retry in coop_world_tick each tick
+        return; // non-blocking; retry in coop_world_tick each tick
     }
 
     // No session token — full teardown.

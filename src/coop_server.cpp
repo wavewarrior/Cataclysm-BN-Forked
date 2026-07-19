@@ -427,7 +427,7 @@ auto coop_server::receiver_loop( std::stop_token st ) -> void
                 // Shared overmap: parse on IO thread, defer apply to main thread.
                 auto tiles = parse_overmap_sync_tiles( buf );
                 if( !tiles.empty() ) {
-                    std::scoped_lock lk{ pending_sync_mtx_ }; // ponytail: reuse existing mutex
+                    std::scoped_lock lk{ pending_sync_mtx_ };
                     pending_overmap_tiles_.insert( pending_overmap_tiles_.end(),
                                                    std::make_move_iterator( tiles.begin() ),
                                                    std::make_move_iterator( tiles.end() ) );
@@ -1565,9 +1565,8 @@ auto coop_server::accept_reconnect() -> bool
     return false;
 }
 // A new TCP connection is established — read one packet and expect reconnect
-std::string buf;
-if( !transport_->recv( buf,
-    100 ) ) { // ponytail: short timeout, not 5s — avoid stalling main thread
+    std::string buf;
+    if( !transport_->recv( buf, 100 ) ) { // short timeout — avoid stalling main thread
     DebugLog( DL::Error, DC::Main ) << "[coop] accept_reconnect: recv failed";
         transport_.reset();
         return false;
