@@ -965,7 +965,7 @@ auto coop_client::handle_disconnect() -> void
     // If we have a session token, enter non-blocking reconnection mode.
     // coop_world_tick() will attempt one reconnect per tick.
     if( !session_token_.empty() && !last_host_ip_.empty() ) {
-    add_msg( m_warning, _( "Connection lost — attempting to reconnect..." ) );
+        add_msg( m_warning, _( "Connection lost — attempting to reconnect..." ) );
         reconnect_attempts_remaining_ = 30;
         return; // non-blocking; retry in coop_world_tick each tick
     }
