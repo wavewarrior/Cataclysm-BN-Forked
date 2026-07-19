@@ -348,11 +348,25 @@ auto coop_server::receiver_loop( std::stop_token st ) -> void
                     const int64_t now = static_cast<int64_t>( SDL_GetTicks() );
                     coop_session::get().partner_ping_ms = static_cast<int>( now - echo_ts );
                 }
-                // Skill sync: parse and store for main-thread application in coop_world_tick.
+                // Character sync: parse skills, mutations, bionics for main-thread apply.
                 const auto skills = parse_skill_sync_fields( d );
-                if( !skills.empty() ) {
+                std::vector<std::string> muts;
+                if( d.has_array( "mutations" ) ) {
+                    for( const std::string &s : d.get_array( "mutations" ) ) {
+                        muts.push_back( s );
+                    }
+                }
+                std::vector<std::string> bios;
+                if( d.has_array( "bionics" ) ) {
+                    for( const std::string &s : d.get_array( "bionics" ) ) {
+                        bios.push_back( s );
+                    }
+                }
+                if( !skills.empty() || !muts.empty() || !bios.empty() ) {
                     std::scoped_lock lk{ pending_sync_mtx_ };
-                    pending_skills_ = skills;
+                    if( !skills.empty() ) { pending_skills_ = skills; }
+                    if( !muts.empty() ) { pending_mutations_ = std::move( muts ); }
+                    if( !bios.empty() ) { pending_bionics_ = std::move( bios ); }
                 }
             } else if( t == coop_pkt::resync_request ) {
                 // A4: client detected a hash mismatch and needs a full sync.
@@ -521,17 +535,50 @@ if( client_disconnected_.exchange( false ) ) {
             const int max_hp = proxy->get_part_hp_max( bp );
             proxy->set_part_hp_cur( bp, std::max( 1, max_hp * pct / 100 ) );
         }
-        // Skill sync: apply client's skill levels to proxy NPC (main-thread safe).
+        // Character sync: apply skills, mutations, bionics from client (main-thread safe).
         {
             std::vector<std::pair<std::string, int>> skills;
+            std::vector<std::string> muts;
+            std::vector<std::string> bios;
             {
                 std::scoped_lock lk{ pending_sync_mtx_ };
                 skills.swap( pending_skills_ );
+                muts.swap( pending_mutations_ );
+                bios.swap( pending_bionics_ );
             }
             for( const auto &[sid, lvl] : skills ) {
                 const skill_id sk( sid );
-                if( sk.is_valid() ) {
-                    proxy->set_skill_level( sk, lvl );
+                if( sk.is_valid() ) { proxy->set_skill_level( sk, lvl ); }
+            }
+            if( !muts.empty() ) {
+                // Diff: add new, remove stale. Avoids clearing all and re-adding.
+                const auto current = proxy->get_mutations( false );
+                std::unordered_set<std::string> desired( muts.begin(), muts.end() );
+                std::unordered_set<std::string> have;
+                for( const auto &t : current ) { have.insert( t.str() ); }
+                for( const auto &tid_str : muts ) {
+                    if( !have.contains( tid_str ) ) {
+                        const trait_id tid( tid_str );
+                        if( tid.is_valid() ) { proxy->set_mutation( tid ); }
+                    }
+                }
+                for( const auto &t : current ) {
+                    if( !desired.contains( t.str() ) ) { proxy->unset_mutation( t ); }
+                }
+            }
+            if( !bios.empty() ) {
+                const auto current = proxy->get_bionics();
+                std::unordered_set<std::string> desired( bios.begin(), bios.end() );
+                std::unordered_set<std::string> have;
+                for( const auto &b : current ) { have.insert( b.str() ); }
+                for( const auto &bid_str : bios ) {
+                    if( !have.contains( bid_str ) ) {
+                        const bionic_id bid( bid_str );
+                        if( bid.is_valid() ) { proxy->add_bionic( bid ); }
+                    }
+                }
+                for( const auto &b : current ) {
+                    if( !desired.contains( b.str() ) ) { proxy->remove_bionic( b ); }
                 }
             }
         }

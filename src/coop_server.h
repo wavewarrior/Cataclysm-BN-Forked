@@ -257,6 +257,8 @@ struct coop_server {
         std::mutex pending_sync_mtx_;
         std::vector<std::pair<std::string, int>> pending_skills_;
         std::vector<tripoint_abs_omt> pending_overmap_tiles_;
+        std::vector<std::string> pending_mutations_;  ///< trait_id strings from client
+        std::vector<std::string> pending_bionics_;    ///< bionic_id strings from client
         // F4: overmap mark — receiver writes, world_tick applies (guarded by pending_sync_mtx_)
         struct pending_mark_t {
             bool valid = false;

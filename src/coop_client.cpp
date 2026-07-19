@@ -324,9 +324,11 @@ for( auto& act : pending_actions_ ) {
             const auto now_ms = static_cast<uint64_t>( SDL_GetTicks() );
             coop_session::get().partner_ping_ms = static_cast<int>( now_ms - last_ping_ts_ );
         }
-        // Skill sync: throttled to every 10 ticks to avoid per-tick overhead.
+        // Character sync: throttled to every 10 ticks to avoid per-tick overhead.
+        // Skills, mutations, and bionics share the same counter.
         if( ++skill_sync_counter_ >= 10 ) {
             skill_sync_counter_ = 0;
+            // Skills
             std::vector<std::pair<std::string, int>> skill_pairs;
             for( const auto &[sid, slvl] : g->u.get_all_skills() ) {
                 if( slvl.level() > 0 ) {
@@ -335,6 +337,22 @@ for( auto& act : pending_actions_ ) {
             }
             if( !skill_pairs.empty() ) {
                 build_skill_sync_fields( status_jout, skill_pairs );
+            }
+            // Mutations
+            const auto muts = g->u.get_mutations( false ); // exclude hidden
+            if( !muts.empty() ) {
+                status_jout.member( "mutations" );
+                status_jout.start_array();
+                for( const auto &tid : muts ) { status_jout.write( tid.str() ); }
+                status_jout.end_array();
+            }
+            // Bionics
+            const auto bios = g->u.get_bionics();
+            if( !bios.empty() ) {
+                status_jout.member( "bionics" );
+                status_jout.start_array();
+                for( const auto &bid : bios ) { status_jout.write( bid.str() ); }
+                status_jout.end_array();
             }
         }
         status_jout.end_object();
