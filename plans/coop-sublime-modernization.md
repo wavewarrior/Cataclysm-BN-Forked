@@ -1,6 +1,6 @@
 # Co-op Sublime Modernization Plan
 
-**Status:** ✅ COMPLETE — 8 commits across 6 sessions. 262/112 coop tests pass. Known limitations documented below.
+**Status:** ✅ COMPLETE — 19 commits across 14 sessions. 273/116 coop tests pass. Known limitations documented below.
 **Goal:** Make the coop experience sublime and modern — full action parity, reconnection, shared exploration, comprehensive testing without 2 machines.
 
 ## Current State Summary
