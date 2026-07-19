@@ -13,7 +13,7 @@ struct coop_net_transport final : coop_transport {
 
         ~coop_net_transport() override {
             if( sock_ ) {
-            NET_DestroyStreamSocket( sock_ );
+                NET_DestroyStreamSocket( sock_ );
                 sock_ = nullptr;
             }
         }
@@ -32,7 +32,7 @@ struct coop_net_transport final : coop_transport {
         /// Simulates a client crash; the remote side detects EOF on its next read.
         auto close_abruptly() -> void override {
             if( sock_ ) {
-            NET_DestroyStreamSocket( sock_ );
+                NET_DestroyStreamSocket( sock_ );
                 sock_ = nullptr;
             }
         }

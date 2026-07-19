@@ -56,7 +56,7 @@ struct coop_client {
         /// the abrupt drop via receiver_thread_ and set running_=false.
         auto close_socket_abruptly_for_test() -> void {
             if( transport_ ) {
-            transport_->close_abruptly();
+                transport_->close_abruptly();
                 transport_.reset();
             }
         }
