@@ -38,13 +38,13 @@ The coop system is mature with solid infrastructure:
 | No skill sync | Client skills not reflected on proxy | ✅ `3561bd2d` — client sends skills every 10 ticks, server applies to proxy |
 
 ### Known Limitations (not bugs — design scope boundaries)
-| Area | Description | Impact | Path to fix |
-|------|-------------|--------|-------------|
-| Mutations/traits | Client mutations (Thick Skin, Night Vision, etc.) not synced to proxy NPC | Host-side proxy HP/combat calcs may diverge from client's actual character | Add trait_id list to client_status every N ticks; proxy `set_mutation()` in world_tick |
-| Bionics/CBMs | Client-installed bionics not reflected on proxy | Proxy lacks bionic armor, power, etc. — host combat resolution may be inaccurate | Same pattern as skills: periodic bionic_id list sync |
-| Inventory sync | Full client inventory not synced to proxy (only worn items via WEAR/WORN_SYNC) | Proxy can't display or use client's carried items | Expensive per-tick; deferred to on-demand sync or hash-based delta |
-| NPC dialogue | Client talking to NPCs runs locally; dialogue state changes not relayed | NPC quest state may diverge between host and client worlds | Requires NPC dialogue event hooks — not yet designed |
-| N-player | Data structures support it but only 1 client slot is wired | 2-player only | `clients_[]` vector, per-client proxy, fan-out sync |
+| Area | Description | Impact | Status |
+|------|-------------|--------|--------|
+| Mutations/traits | Client mutations not synced to proxy NPC | Proxy combat diverges from client | ✅ `39bbfc09` — trait_id list synced every 10 ticks; proxy set_mutation/unset_mutation |
+| Bionics/CBMs | Client bionics not reflected on proxy | Proxy lacks bionic armor/power | ✅ `39bbfc09` — bionic_id list synced every 10 ticks; proxy add_bionic/remove_bionic |
+| Inventory sync | Full client inventory not synced to proxy (only worn items via WEAR/WORN_SYNC) | Proxy can't display or use client's carried items | ❌ Deferred — expensive per-tick; on-demand sync when needed |
+| NPC dialogue | Client talking to NPCs runs locally; dialogue state changes not relayed | NPC quest state may diverge between host and client worlds | ❌ Deferred — requires NPC dialogue event hooks |
+| N-player | Data structures support it but only 1 client slot is wired | 2-player only | ❌ Deferred — `clients_[]` vector, per-client proxy, fan-out sync |
 
 ### Testing Gaps
 | Gap | Impact | Status |
