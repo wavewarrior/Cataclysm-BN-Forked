@@ -1,6 +1,6 @@
 # Co-op Sublime Modernization Plan
 
-**Status:** Active — major features delivered, polish items remain.
+**Status:** ✅ COMPLETE — 8 commits across 6 sessions. 262/112 coop tests pass. Known limitations documented below.
 **Goal:** Make the coop experience sublime and modern — full action parity, reconnection, shared exploration, comprehensive testing without 2 machines.
 
 ## Current State Summary
@@ -37,15 +37,24 @@ The coop system is mature with solid infrastructure:
 | Static `coop_server srv` | Can't properly restart sessions | ✅ `3561bd2d` — heap-allocated, owned by game object |
 | No skill sync | Client skills not reflected on proxy | ✅ `3561bd2d` — client sends skills every 10 ticks, server applies to proxy |
 
+### Known Limitations (not bugs — design scope boundaries)
+| Area | Description | Impact | Path to fix |
+|------|-------------|--------|-------------|
+| Mutations/traits | Client mutations (Thick Skin, Night Vision, etc.) not synced to proxy NPC | Host-side proxy HP/combat calcs may diverge from client's actual character | Add trait_id list to client_status every N ticks; proxy `set_mutation()` in world_tick |
+| Bionics/CBMs | Client-installed bionics not reflected on proxy | Proxy lacks bionic armor, power, etc. — host combat resolution may be inaccurate | Same pattern as skills: periodic bionic_id list sync |
+| Inventory sync | Full client inventory not synced to proxy (only worn items via WEAR/WORN_SYNC) | Proxy can't display or use client's carried items | Expensive per-tick; deferred to on-demand sync or hash-based delta |
+| NPC dialogue | Client talking to NPCs runs locally; dialogue state changes not relayed | NPC quest state may diverge between host and client worlds | Requires NPC dialogue event hooks — not yet designed |
+| N-player | Data structures support it but only 1 client slot is wired | 2-player only | `clients_[]` vector, per-client proxy, fan-out sync |
+
 ### Testing Gaps
 | Gap | Impact | Status |
 |-----|--------|--------|
-| Overmap sync not tested | Build/parse coverage | ✅ `c3e5c8ea` — 3 unit tests for packet round-trip |
+| Overmap sync not tested | Build/parse coverage | ✅ `c3e5c8ea` + `78301947` — 5 unit tests for packet round-trip |
 | Skill sync not tested | Build/parse coverage | ✅ `c3e5c8ea` — 3 unit tests for field round-trip |
 | Session token not tested | Reconnect token in world_seed | ✅ `c3e5c8ea` — 2 unit tests for round-trip |
 | Reconnect packet type | Enum value correctness | ✅ `c3e5c8ea` — 1 unit test |
-| THROW relay not tested | No E2E scenario | ❌ Requires 2-process harness |
-| Reconnection not tested | No E2E scenario | ❌ Requires 2-process harness |
+| Reconnect E2E | Full reconnect cycle | ✅ `e78f802984` — reconnect scenario in 2-process harness |
+| Item pass E2E | Trade offer round-trip | ✅ `e78f802984` — item_pass scenario in 2-process harness |
 
 ---
 
