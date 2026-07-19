@@ -149,6 +149,13 @@ auto coop_server::spawn_proxy_npc( const tripoint_abs_ms& spawn_pos,
     tmp->inv_clear();
     tmp->worn.clear();
     if( tmp->is_armed() ) { tmp->remove_primary_weapon(); }
+    // Reset morale and mutations: randomize() assigned random traits (Optimist,
+    // Stylish, etc.) and worn items that set morale flags.  Clearing inv/worn
+    // without clearing traits leaves orphaned morale state that fires debugmsg
+    // on the periodic check_and_recover_morale() consistency check.
+    // The proxy starts clean; client traits arrive via client_status sync.
+    tmp->clear_mutations();
+    tmp->clear_morale();
     if( !player_name.empty() ) { tmp->name = player_name; }
     tmp->is_coop_remote = true;
     tmp->set_attitude( NPCATT_FOLLOW );
@@ -268,6 +275,130 @@ auto coop_server::client_join_pos() const -> std::optional<tripoint_abs_ms>   //
 }
 
 
+auto coop_server::dispatch_packet( const std::string& buf ) -> void
+{
+    try {
+        std::istringstream iss( buf );
+        JsonIn jin( iss );
+        JsonObject pkt = jin.get_object();
+        pkt.allow_omitted_members();
+        const auto t = static_cast<coop_pkt>( pkt.get_int( "t" ) );
+
+        if( t == coop_pkt::action ) {
+            const auto data = parse_action_packet( buf );
+            if( data ) { push_action( {data->seq, data->key, data->ctx_json} ); }
+        } else if( t == coop_pkt::chat ) {
+            JsonObject d = pkt.get_object( "d" );
+            d.allow_omitted_members();
+            std::string text = d.get_string( "text", "" );
+            if( text.size() > 512 ) { text = text.substr( 0, 512 ); }
+            std::scoped_lock lk{chat_mtx_};
+            if( chat_q_.size() >= 64 ) { chat_q_.pop_front(); }
+            chat_q_.push_back( {std::move( text )} );
+        } else if( t == coop_pkt::client_status ) {
+            JsonObject d = pkt.get_object( "d" );
+            d.allow_omitted_members();
+            client_is_idle_.store( d.get_bool( "idle", false ) );
+            client_hp_pct_.store( d.get_int( "hp_pct", 100 ) );
+            const bool now_dead = d.get_bool( "dead", false );
+            if( now_dead && !client_dead_.load() ) {
+                DebugLog( DL::Info, DC::Main )
+                        << "[coop] C3: client avatar died — hp_pct="
+                        << d.get_int( "hp_pct", 0 );
+            }
+            client_dead_.store( now_dead );
+            client_stamina_pct_.store( d.get_int( "stamina_pct", 100 ) );
+            {
+                std::scoped_lock lk{ chat_mtx_ };
+                client_activity_str_ = d.get_string( "activity", "" );
+                client_abs_pos_ = tripoint_abs_ms{
+                    d.get_int( "ax", 0 ), d.get_int( "ay", 0 ), d.get_int( "az", 0 ) };
+            }
+            const auto echo_str = d.get_string( "ping_echo", "" );
+            const int64_t echo_ts = echo_str.empty() ? 0 : std::stoll( echo_str );
+            if( echo_ts > 0 ) {
+                const int64_t now = static_cast<int64_t>( SDL_GetTicks() );
+                coop_session::get().partner_ping_ms = static_cast<int>( now - echo_ts );
+            }
+            const auto skills = parse_skill_sync_fields( d );
+            std::vector<std::string> muts;
+            if( d.has_array( "mutations" ) ) {
+                for( const std::string &s : d.get_array( "mutations" ) ) {
+                    muts.push_back( s );
+                }
+            }
+            std::vector<std::string> bios;
+            if( d.has_array( "bionics" ) ) {
+                for( const std::string &s : d.get_array( "bionics" ) ) {
+                    bios.push_back( s );
+                }
+            }
+            const bool has_muts = d.has_array( "mutations" );
+            const bool has_bios = d.has_array( "bionics" );
+            if( !skills.empty() || has_muts || has_bios ) {
+                std::scoped_lock lk{ pending_sync_mtx_ };
+                if( !skills.empty() ) { pending_skills_ = skills; }
+                if( has_muts ) { pending_mutations_ = std::move( muts ); has_mutations_update_ = true; }
+                if( has_bios ) { pending_bionics_ = std::move( bios ); has_bionics_update_ = true; }
+            }
+        } else if( t == coop_pkt::resync_request ) {
+            DebugLog( DL::Info, DC::Main ) << "[coop] dispatch: client requested full resync";
+            force_resync_.store( true );
+        } else if( t == coop_pkt::overmap_mark ) {
+            JsonObject d = pkt.get_object( "d" );
+            d.allow_omitted_members();
+            pending_mark_t mk;
+            mk.valid = true;
+            mk.clear = d.get_bool( "clear", false );
+            if( !mk.clear ) {
+                mk.pos = tripoint_abs_omt{
+                    d.get_int( "omx", 0 ), d.get_int( "omy", 0 ), d.get_int( "omz", 0 ) };
+                mk.label = d.get_string( "label", "" );
+            }
+            std::scoped_lock lk{ pending_sync_mtx_ };
+            pending_mark_ = std::move( mk );
+        } else if( t == coop_pkt::disconnect ) {
+            DebugLog( DL::Info, DC::Main ) << "[coop] dispatch: client sent disconnect";
+            running_ = false;
+        } else if( t == coop_pkt::vehicle_state ) {
+            JsonObject d = pkt.get_object( "d" );
+            d.allow_omitted_members();
+            pending_veh_state_t vs;
+            vs.vid      = static_cast<uint32_t>( d.get_int( "vid", 0 ) );
+            vs.abs_pos  = tripoint_abs_ms{ d.get_int( "ax", 0 ), d.get_int( "ay", 0 ),
+                                           d.get_int( "az", 0 ) };
+            vs.face_x   = d.get_int( "face_x", 0 );
+            vs.face_y   = d.get_int( "face_y", 1 );
+            vs.vel      = d.get_int( "velocity", 0 );
+            vs.valid    = true;
+            std::scoped_lock lk{ pending_veh_mtx_ };
+            pending_veh_state_ = vs;
+        } else if( t == coop_pkt::trade_offer ) {
+            JsonObject d = pkt.get_object( "d" );
+            d.allow_omitted_members();
+            const std::string item_json = d.get_string( "item_json", "" );
+            if( !item_json.empty() ) {
+                std::scoped_lock lk{ action_mtx_ };
+                pending_trade_offer_json_ = item_json;
+            }
+        } else if( t == coop_pkt::tap_shoulder ) {
+            pending_tap_.store( true );
+        } else if( t == coop_pkt::emote ) {
+            push_action( { 0, "EMOTE", buf } );
+        } else if( t == coop_pkt::overmap_sync ) {
+            auto tiles = parse_overmap_sync_tiles( buf );
+            if( !tiles.empty() ) {
+                std::scoped_lock lk{ pending_sync_mtx_ };
+                pending_overmap_tiles_.insert( pending_overmap_tiles_.end(),
+                                               std::make_move_iterator( tiles.begin() ),
+                                               std::make_move_iterator( tiles.end() ) );
+            }
+        }
+    } catch( const JsonError& e ) {
+        DebugLog( DL::Error, DC::Main ) << "[coop] dispatch: JSON parse error: " << e.what();
+    }
+}
+
 auto coop_server::receiver_loop( std::stop_token st ) -> void
 {
     std::string buf;
@@ -296,147 +427,7 @@ auto coop_server::receiver_loop( std::stop_token st ) -> void
             break;
         }
 
-        // Parse JSON envelope
-        try {
-            std::istringstream iss( buf );
-            JsonIn jin( iss );
-            JsonObject pkt = jin.get_object();
-            pkt.allow_omitted_members();
-            const auto t = static_cast<coop_pkt>( pkt.get_int( "t" ) );
-
-            if( t == coop_pkt::action ) {
-                const auto data = parse_action_packet( buf );
-                if( data ) { push_action( {data->seq, data->key, data->ctx_json} ); }
-            } else if( t == coop_pkt::chat ) {
-                JsonObject d = pkt.get_object( "d" );
-                d.allow_omitted_members();
-                std::string text = d.get_string( "text", "" );
-                if( text.size() > 512 ) { text = text.substr( 0, 512 ); }
-                std::scoped_lock lk{chat_mtx_};
-                if( chat_q_.size() >= 64 ) { chat_q_.pop_front(); }
-                chat_q_.push_back( {std::move( text )} );
-            } else if( t == coop_pkt::client_status ) {
-                // Client reports its own state each tick.
-                // idle: used by both_idle() for fast-forward.
-                // hp_pct, dead: C3 — vital signs for death detection and display.
-                // Inventory, effects, skills: deferred to a later C3 increment.
-                JsonObject d = pkt.get_object( "d" );
-                d.allow_omitted_members();
-                client_is_idle_.store( d.get_bool( "idle", false ) );
-                client_hp_pct_.store( d.get_int( "hp_pct", 100 ) );
-                const bool now_dead = d.get_bool( "dead", false );
-                if( now_dead && !client_dead_.load() ) {
-                    DebugLog( DL::Info, DC::Main )
-                            << "[coop] C3: client avatar died — hp_pct="
-                            << d.get_int( "hp_pct", 0 );
-                    // C3b: death message displayed in coop_world_tick() via client_death_announced_.
-                    // Full respawn / session-end logic deferred to a later phase.
-                }
-                client_dead_.store( now_dead );
-                // F1: extended client vitals
-                client_stamina_pct_.store( d.get_int( "stamina_pct", 100 ) );
-                {
-                    std::scoped_lock lk{ chat_mtx_ };
-                    client_activity_str_ = d.get_string( "activity", "" );
-                    client_abs_pos_ = tripoint_abs_ms{
-                        d.get_int( "ax", 0 ), d.get_int( "ay", 0 ), d.get_int( "az", 0 ) };
-                }
-                // Ping measurement: read echoed timestamp and compute RTT.
-                const auto echo_str = d.get_string( "ping_echo", "" );
-                const int64_t echo_ts = echo_str.empty() ? 0 : std::stoll( echo_str );
-                if( echo_ts > 0 ) {
-                    const int64_t now = static_cast<int64_t>( SDL_GetTicks() );
-                    coop_session::get().partner_ping_ms = static_cast<int>( now - echo_ts );
-                }
-                // Character sync: parse skills, mutations, bionics for main-thread apply.
-                const auto skills = parse_skill_sync_fields( d );
-                std::vector<std::string> muts;
-                if( d.has_array( "mutations" ) ) {
-                    for( const std::string &s : d.get_array( "mutations" ) ) {
-                        muts.push_back( s );
-                    }
-                }
-                std::vector<std::string> bios;
-                if( d.has_array( "bionics" ) ) {
-                    for( const std::string &s : d.get_array( "bionics" ) ) {
-                        bios.push_back( s );
-                    }
-                }
-                const bool has_muts = d.has_array( "mutations" );
-                const bool has_bios = d.has_array( "bionics" );
-                if( !skills.empty() || has_muts || has_bios ) {
-                    std::scoped_lock lk{ pending_sync_mtx_ };
-                    if( !skills.empty() ) { pending_skills_ = skills; }
-                    if( has_muts ) { pending_mutations_ = std::move( muts ); has_mutations_update_ = true; }
-                    if( has_bios ) { pending_bionics_ = std::move( bios ); has_bionics_update_ = true; }
-                }
-            } else if( t == coop_pkt::resync_request ) {
-                // A4: client detected a hash mismatch and needs a full sync.
-                // Write the atomic flag — main thread reads it in build_and_send_sync().
-                // NEVER touch sync_tick_counter_ here; it's main-thread-only.
-                DebugLog( DL::Info, DC::Main ) << "[coop] receiver: client requested full resync";
-                force_resync_.store( true );
-            } else if( t == coop_pkt::overmap_mark ) {
-                // F4: defer to main thread — coop_session fields not thread-safe.
-                JsonObject d = pkt.get_object( "d" );
-                d.allow_omitted_members();
-                pending_mark_t mk;
-                mk.valid = true;
-                mk.clear = d.get_bool( "clear", false );
-                if( !mk.clear ) {
-                    mk.pos = tripoint_abs_omt{
-                        d.get_int( "omx", 0 ), d.get_int( "omy", 0 ), d.get_int( "omz", 0 ) };
-                    mk.label = d.get_string( "label", "" );
-                }
-                std::scoped_lock lk{ pending_sync_mtx_ };
-                pending_mark_ = std::move( mk );
-            } else if( t == coop_pkt::disconnect ) {
-                DebugLog( DL::Info, DC::Main ) << "[coop] receiver: client sent disconnect";
-                running_ = false;
-                break;
-            } else if( t == coop_pkt::vehicle_state ) {
-                // E1: store for main-thread application in coop_world_tick()
-                JsonObject d = pkt.get_object( "d" );
-                d.allow_omitted_members();
-                pending_veh_state_t vs;
-                vs.vid      = static_cast<uint32_t>( d.get_int( "vid", 0 ) );
-                vs.abs_pos  = tripoint_abs_ms{ d.get_int( "ax", 0 ), d.get_int( "ay", 0 ),
-                                               d.get_int( "az", 0 ) };
-                vs.face_x   = d.get_int( "face_x", 0 );
-                vs.face_y   = d.get_int( "face_y", 1 );
-                vs.vel      = d.get_int( "velocity", 0 );
-                vs.valid    = true;
-                std::scoped_lock lk{ pending_veh_mtx_ };
-                pending_veh_state_ = vs;
-            } else if( t == coop_pkt::trade_offer ) {
-                // F2: store item JSON for main-thread popup in coop_world_tick()
-                JsonObject d = pkt.get_object( "d" );
-                d.allow_omitted_members();
-                const std::string item_json = d.get_string( "item_json", "" );
-                if( !item_json.empty() ) {
-                    std::scoped_lock lk{ action_mtx_ };
-                    pending_trade_offer_json_ = item_json;
-                }
-            } else if( t == coop_pkt::tap_shoulder ) {
-                // F3: client tapped host's shoulder
-                pending_tap_.store( true );
-            } else if( t == coop_pkt::emote ) {
-                // F6: relay emote to main thread via action queue
-                push_action( { 0, "EMOTE", buf } );
-            } else if( t == coop_pkt::overmap_sync ) {
-                // Shared overmap: parse on IO thread, defer apply to main thread.
-                auto tiles = parse_overmap_sync_tiles( buf );
-                if( !tiles.empty() ) {
-                    std::scoped_lock lk{ pending_sync_mtx_ };
-                    pending_overmap_tiles_.insert( pending_overmap_tiles_.end(),
-                                                   std::make_move_iterator( tiles.begin() ),
-                                                   std::make_move_iterator( tiles.end() ) );
-                }
-            }
-            // other packet types silently ignored until later phases
-        } catch( const JsonError& e ) {
-            DebugLog( DL::Error, DC::Main ) << "[coop] receiver: JSON parse error: " << e.what();
-        }
+        dispatch_packet( buf );
     }
     if( !client_disconnected_.load() ) { running_ = false; }
 }
@@ -1719,6 +1710,27 @@ auto coop_server::send_emote( const std::string& emote_type ) -> void
     const auto msg = string_format( R"({"t":48,"d":{"type":"%s"}})", emote_type );
     std::scoped_lock lk{ send_mtx_ };
     send_q_.push_back( msg );
+}
+
+auto coop_server::flush_send_queue_for_test() -> void
+{
+    std::deque<std::string> outgoing;
+    {
+        std::scoped_lock lk{send_mtx_};
+        outgoing.swap( send_q_ );
+    }
+    for( const auto& frame : outgoing ) {
+        transport_->send( frame );
+    }
+}
+
+auto coop_server::process_incoming_for_test() -> void
+{
+    std::string buf;
+    while( transport_ && transport_->poll() ) {
+        if( !transport_->recv( buf, 0 ) ) { break; }
+        dispatch_packet( buf );
+    }
 }
 
 #endif // COOP_ENABLED

@@ -1,0 +1,84 @@
+name: Co-op E2E Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  COOP_ENABLED: 1
+
+jobs:
+  coop-e2e:
+    name: Co-op E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev \
+            libsdl2-mixer-dev gettext
+
+      - name: Install Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Configure
+        run: cmake --preset linux-full -DCOOP=ON
+
+      - name: Build
+        run: cmake --build --preset linux-full --target cataclysm-bn-tiles cata_test-tiles
+
+      - name: Run Catch2 coop tests
+        run: ./out/build/linux-full/tests/cata_test-tiles "[coop]~[.]"
+
+      - name: Run E2E scenarios
+        id: e2e
+        continue-on-error: true
+        run: |
+          scenarios=(
+            movement resync pickup disconnect submap_shift death
+            ranged melee smash terrain_change reconnect item_pass
+          )
+          results=""
+          any_failed=false
+
+          for s in "${scenarios[@]}"; do
+            echo "::group::Scenario: $s"
+            if COOP_SCENARIO="$s" deno run --allow-all scripts/test_coop.ts; then
+              results="${results}| ${s} | :white_check_mark: pass |\n"
+              echo "::endgroup::"
+            else
+              results="${results}| ${s} | :x: fail |\n"
+              any_failed=true
+              echo "::endgroup::"
+            fi
+          done
+
+          # Persist for summary step
+          echo "RESULTS<<EOF" >> "$GITHUB_ENV"
+          echo -e "$results" >> "$GITHUB_ENV"
+          echo "EOF" >> "$GITHUB_ENV"
+
+          if [ "$any_failed" = true ]; then
+            echo "e2e_passed=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          else
+            echo "e2e_passed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Co-op E2E Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Scenario | Result |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|----------|--------|" >> "$GITHUB_STEP_SUMMARY"
+          echo -e "$RESULTS" >> "$GITHUB_STEP_SUMMARY"

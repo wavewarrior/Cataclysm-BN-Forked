@@ -970,37 +970,46 @@ void vehicle::refresh_precalc( float physics_angle )
 bool vehicle::check_rotated_intervening( const tripoint_mnt_veh &from, const tripoint_mnt_veh &to,
         bool( *check )( const vehicle *, const tripoint_mnt_veh & ) ) const
 {
-    auto delta = to - from;
-    if( abs( delta.x() ) <= 1 && abs( delta.y() ) <= 1 ) { //Just a normal move
+    const auto delta = to - from;
+    const int adx = abs( delta.x() );
+    const int ady = abs( delta.y() );
+
+    // Adjacent or identical — no intervening tile to check.
+    if( adx <= 1 && ady <= 1 ) {
         return true;
     }
 
-    if( !( ( abs( delta.x() ) == 2 && abs( delta.y() ) == 1 ) || ( abs( delta.x() ) == 1 &&
-            abs( delta.y() ) == 2 ) ) ) { //Check that we're moving like a knight
-        debugmsg( "Unexpected movement in rotated vehicle vector:%d,%d", delta.x(), delta.y() );
-        return false;
-    }
+    // Walk intermediate tiles along the line from `from` to `to` using integer
+    // midpoints.  For any delta, we check the two candidate intermediate tiles
+    // closest to the midpoint (same approach as the original knight-move case,
+    // generalised to arbitrary deltas produced by Box2D rotation).
+    //
+    // Candidate 1: step halfway along the dominant axis, full step on the minor.
+    // Candidate 2: step halfway along the dominant axis, zero on the minor.
+    // If either has no blocking part, the path is considered clear.
+    const int sx = ( delta.x() > 0 ) ? 1 : ( delta.x() < 0 ) ? -1 : 0;
+    const int sy = ( delta.y() > 0 ) ? 1 : ( delta.y() < 0 ) ? -1 : 0;
 
-    if( abs( delta.x() ) == 2 ) { //Mostly horizontal move
-        auto t1 = from + point_rel_veh( delta.x() / 2, delta.y() );
-        if( check( this, t1 ) ) {
-            return true;
+    if( adx >= ady ) {
+        // Dominant axis is X.
+        const auto t1 = from + point_rel_veh( delta.x() / 2, delta.y() );
+        if( check( this, t1 ) ) { return true; }
+        const auto t2 = from + point_rel_veh( delta.x() / 2, 0 );
+        if( check( this, t2 ) ) { return true; }
+        // For large deltas (>2), also check single-step along dominant axis.
+        if( adx > 2 ) {
+            const auto t3 = from + point_rel_veh( sx, sy );
+            if( check( this, t3 ) ) { return true; }
         }
-
-        auto t2 = from + point_rel_veh( delta.x() / 2, 0 );
-        if( check( this, t2 ) ) {
-            return true;
-        }
-
-    } else { //Mostly vertical move
-        auto t1 = from + point_rel_veh( delta.x(), delta.y() / 2 );
-        if( check( this, t1 ) ) {
-            return true;
-        }
-
-        auto t2 = from + point_rel_veh( 0, delta.y() / 2 );
-        if( check( this, t2 ) ) {
-            return true;
+    } else {
+        // Dominant axis is Y.
+        const auto t1 = from + point_rel_veh( delta.x(), delta.y() / 2 );
+        if( check( this, t1 ) ) { return true; }
+        const auto t2 = from + point_rel_veh( 0, delta.y() / 2 );
+        if( check( this, t2 ) ) { return true; }
+        if( ady > 2 ) {
+            const auto t3 = from + point_rel_veh( sx, sy );
+            if( check( this, t3 ) ) { return true; }
         }
     }
 

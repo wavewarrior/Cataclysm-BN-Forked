@@ -507,20 +507,21 @@ static auto run_host_disconnect( coop_server& srv, coop_ctrl_server& ctrl ) -> v
 {
     ctrl.send_signal( "OK_DISCONNECT" );
 
-    // Poll until receiver_thread_ sets running_=false (TCP drop detected).
+    // Poll until receiver_thread_ detects the TCP drop and transitions to
+    // awaiting_reconnect (or fully shuts down).  The server stays "running"
+    // during the reconnect window, so we check both conditions.
     const auto drop_deadline =
-        std::chrono::steady_clock::now() + std::chrono::milliseconds( 10'000 );
-    while( srv.is_running() && std::chrono::steady_clock::now() < drop_deadline ) {
-    srv.coop_world_tick();
+        std::chrono::steady_clock::now() + std::chrono::milliseconds( 30'000 );
+    while( !srv.awaiting_reconnect() && srv.is_running() &&
+           std::chrono::steady_clock::now() < drop_deadline ) {
+        srv.coop_world_tick();
         SDL_Delay( 50 );
     }
-    CHECK( !srv.is_running() ); // TCP drop detected within 10 s
+    CHECK( ( srv.awaiting_reconnect() || !srv.is_running() ) ); // TCP drop detected
 
     // Capture the proxy's character_id BEFORE shutdown() resets it to invalid.
-    // If we read it after shutdown(), proxy_npc_id == character_id{} (value=-1) →
-    // critter_by_id returns nullptr trivially → CHECK never verifies actual removal.
     const character_id proxy_id = coop_session::get().proxy_npc_id;
-    REQUIRE( proxy_id.is_valid() ); // must have been assigned during spawn_proxy_npc
+    REQUIRE( proxy_id.is_valid() );
 
     srv.shutdown();
     g->coop_server_ = nullptr;

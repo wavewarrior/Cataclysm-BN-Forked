@@ -68,6 +68,10 @@ struct coop_client {
         }
         /// Test seam: set next_seq_ for Gap 6 uint32_t wrap-without-crash test.
         auto set_next_seq_for_test( uint32_t seq ) -> void { next_seq_ = seq; }
+        /// Test seam: inject a pre-built transport for in-process testing (no connect).
+        auto set_transport_for_test( std::unique_ptr<coop_transport> t ) -> void {
+            transport_ = std::move( t );
+        }
         auto send_tap_shoulder() -> void;
         auto send_emote( const std::string& emote_type ) -> void;
         /// Smoothly interpolate the host NPC position between sync packets.

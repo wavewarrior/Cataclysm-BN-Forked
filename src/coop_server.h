@@ -99,6 +99,24 @@ struct coop_server {
                 std::numeric_limits<int>::min(), std::numeric_limits<int>::min(),
                 std::numeric_limits<int>::min() };
         }
+        /// Test seam: inject a pre-built transport for in-process testing (no listen/accept).
+        auto set_transport_for_test( std::unique_ptr<coop_transport> t ) -> void {
+            transport_ = std::move( t );
+        }
+        /// Test seam: set running_ without starting the receiver thread.
+        auto set_running_for_test( bool v ) -> void { running_.store( v ); }
+        /// Test seam: drain send_q_ and send each frame through transport_ (no receiver thread).
+        auto flush_send_queue_for_test() -> void;
+        /// Test seam: drain transport_ inbox and dispatch each packet (no receiver thread).
+        auto process_incoming_for_test() -> void;
+        /// Test seam: register a vehicle pointer in the vehicle_id_map_ / vehicle_id_map_rev_
+        /// so vehicle_state packets can look it up.  Returns the assigned vid.
+        auto register_vehicle_for_test( vehicle *veh ) -> uint32_t {
+            const auto vid = next_vehicle_id_++;
+            vehicle_id_map_.emplace( veh, vid );
+            vehicle_id_map_rev_.emplace( vid, veh );
+            return vid;
+        }
         /// C3: client's last-reported HP percentage (0–100).  Thread-safe read.
         auto client_hp_pct() const -> int { return client_hp_pct_.load(); }
         /// C3: true if the client's avatar reported dead on the last tick.
@@ -166,6 +184,7 @@ struct coop_server {
         auto push_entity_snapshot() -> void;
         auto resolve_fire_at_seq( npc* proxy, uint32_t seq, int target_ax, int target_ay, int target_az )
         -> void;
+        auto dispatch_packet( const std::string& buf ) -> void;
 
         NET_Server *server_sock_ = nullptr;
         std::unique_ptr<coop_transport> transport_; ///< owned; nullptr until client connects
