@@ -1651,6 +1651,14 @@ input_context get_default_mode_input_context()
     ctxt.register_action( "MOUSE_MOVE" );
     ctxt.register_action( "SELECT" );
     ctxt.register_action( "SEC_SELECT" );
+#ifdef COOP_ENABLED
+    ctxt.register_action( "CO_OP_CHAT", to_translation( "Co-op: Send Chat Message" ) );
+    ctxt.register_action( "CO_OP_TAP_SHOULDER", to_translation( "Co-op: Tap Partner's Shoulder" ) );
+    ctxt.register_action( "CO_OP_EMOTE", to_translation( "Co-op: High Five" ) );
+    ctxt.register_action( "CO_OP_STABILIZE", to_translation( "Co-op: Stabilize Downed Partner" ) );
+    ctxt.register_action( "CO_OP_PASS_ITEM", to_translation( "Co-op: Pass Item to Partner" ) );
+    ctxt.register_action( "CO_OP_MARK_OVERMAP", to_translation( "Co-op: Place Shared Map Marker" ) );
+#endif
     return ctxt;
 }
 

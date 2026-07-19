@@ -2605,6 +2605,48 @@
   },
   {
     "type": "keybinding",
+    "id": "CO_OP_CHAT",
+    "name": "Co-op: Send Chat Message",
+    "category": "DEFAULTMODE",
+    "bindings": []
+  },
+  {
+    "type": "keybinding",
+    "id": "CO_OP_TAP_SHOULDER",
+    "name": "Co-op: Tap Partner's Shoulder",
+    "category": "DEFAULTMODE",
+    "bindings": []
+  },
+  {
+    "type": "keybinding",
+    "id": "CO_OP_EMOTE",
+    "name": "Co-op: High Five",
+    "category": "DEFAULTMODE",
+    "bindings": []
+  },
+  {
+    "type": "keybinding",
+    "id": "CO_OP_STABILIZE",
+    "name": "Co-op: Stabilize Downed Partner",
+    "category": "DEFAULTMODE",
+    "bindings": []
+  },
+  {
+    "type": "keybinding",
+    "id": "CO_OP_PASS_ITEM",
+    "name": "Co-op: Pass Item to Partner",
+    "category": "DEFAULTMODE",
+    "bindings": []
+  },
+  {
+    "type": "keybinding",
+    "id": "CO_OP_MARK_OVERMAP",
+    "name": "Co-op: Place Shared Map Marker",
+    "category": "DEFAULTMODE",
+    "bindings": []
+  },
+  {
+    "type": "keybinding",
     "id": "COMPARE",
     "category": "LIST_ITEMS",
     "name": "Compare",
