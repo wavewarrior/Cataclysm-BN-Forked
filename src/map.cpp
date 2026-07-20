@@ -869,6 +869,7 @@ auto map::ray_cast_angle( const tripoint_bub_ms &src, double angle_rad,
     auto ty = src.y();
     auto result = std::vector<tripoint_bub_ms> {};
     result.reserve( static_cast<size_t>( max_range ) + 2 );
+    const auto max_range_sq = max_range * max_range;
     while( true ) {
         if( t_max_x < t_max_y ) {
             t_max_x += t_delta_x;
@@ -877,9 +878,9 @@ auto map::ray_cast_angle( const tripoint_bub_ms &src, double angle_rad,
             t_max_y += t_delta_y;
             ty += step_y;
         }
-        const auto dist = std::hypot( static_cast<double>( tx - src.x() ),
-                                      static_cast<double>( ty - src.y() ) );
-        if( dist > static_cast<double>( max_range ) ) { break; }
+        const auto ddx = tx - src.x();
+        const auto ddy = ty - src.y();
+        if( ddx * ddx + ddy * ddy > max_range_sq ) { break; }
         const auto tile = tripoint_bub_ms{ tx, ty, src.z() };
         if( !inbounds( tile ) ) { break; }
         result.push_back( tile );

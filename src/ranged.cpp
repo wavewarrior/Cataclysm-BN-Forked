@@ -969,6 +969,12 @@ int ranged::fire_gun(
     const auto recoil_origin = shot_origin.value_or( who.bub_pos() );
     int curshot = 0;
     int hits = 0; // total shots on target
+    const auto shot_count = get_shot_count( gun );
+    const auto shot_half_angle = get_shot_half_angle( gun );
+    const auto render_multishot =
+        !shape && shot_count > 1 && get_option<bool>( "ANIMATION_PROJECTILES" );
+    auto projectile_trajectories = std::vector<std::vector<tripoint_bub_ms>> {};
+    auto grouped_shot_hits = std::vector<grouped_shot_hit> {};
     while( curshot != shots ) {
         if( !!ammo && !gun.ammo_remaining() ) { gun.reload( get_avatar(), *ammo, 1 ); }
         if( gun.faults.contains( fault_gun_chamber_spent ) && curshot == 0 ) {
@@ -985,8 +991,6 @@ int ranged::fire_gun(
             ? veh_pointer_or_null( here.veh_at( who.bub_pos() ) )
             : nullptr;
         projectile projectile = make_gun_projectile( gun );
-        const auto shot_count = get_shot_count( gun );
-        const auto shot_half_angle = get_shot_half_angle( gun );
 
         // Apply enchantment bonuses to projectile
         int base_bullet_damage = static_cast<int>( projectile.impact.type_damage( DT_BULLET ) );
@@ -1015,14 +1019,12 @@ int ranged::fire_gun(
 
         if( who.has_trait( trait_NORANGEDCRIT ) ) { projectile.add_effect( ammo_effect_NO_CRIT ); }
         if( !shape ) {
-            const auto render_multishot =
-                shot_count > 1 && get_option<bool>( "ANIMATION_PROJECTILES" );
-            const auto render_projectile = projectile;
-            auto projectile_trajectories = std::vector<std::vector<tripoint_bub_ms>> {};
+            projectile_trajectories.clear();
             projectile_trajectories.reserve( shot_count );
-            auto grouped_shot_hits = std::vector<grouped_shot_hit> {};
+            grouped_shot_hits.clear();
             auto animation_suppression = std::optional<scoped_projectile_animation_suppression> {};
             if( render_multishot ) { animation_suppression.emplace(); }
+            const auto render_projectile = projectile;
             auto shell_hit = false;
             auto shell_headshot = false;
             const auto shell_target =

@@ -389,7 +389,7 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
     const auto is_thrown = proj.has_effect( ammo_effect_THROWN );
     const auto *thrown_item = proj.get_drop();
     auto custom_bullet_sprite = std::string{};
-    if( tilecontext ) {
+    if( tilecontext && do_animation ) {
         const auto set_sprite_from_lookup = [&]( const std::string & candidate, TILE_CATEGORY category ) {
             if( !custom_bullet_sprite.empty() ) { return; }
             auto lookup = tilecontext->find_tile_looks_like( candidate, category );
@@ -536,6 +536,18 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
     }
     size_t ray_hit_idx = 0;
 #endif
+    // Penalize damage and/or range on overpenetration. Hoisted above the
+    // per-tile loop so the closure is materialised once, not per iteration.
+    auto apply_overpenetration_penalty = [&]( bool modify_damage ) {
+        traj_len *= overpenetration_modifier;
+        if( modify_damage ) {
+            proj.impact.mult_damage( overpenetration_modifier );
+            add_msg( m_debug, "Projectile damage and range *= %.1f", overpenetration_modifier );
+        } else {
+            add_msg( m_debug, "Projectile range *= %.1f", overpenetration_modifier );
+        }
+    };
+
     auto *last_hit_critter = static_cast<Creature *>( nullptr );
     for( size_t i = 1; i < traj_len && ( has_momentum || stream ); ++i ) {
         prev_point = tp;
@@ -692,16 +704,6 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
             }
         }
 
-        // Penalize damage and/or range on overpenetration.
-        auto apply_overpenetration_penalty = [&]( bool modify_damage ) {
-            traj_len *= overpenetration_modifier;
-            if( modify_damage ) {
-                proj.impact.mult_damage( overpenetration_modifier );
-                add_msg( m_debug, "Projectile damage and range *= %.1f", overpenetration_modifier );
-            } else {
-                add_msg( m_debug, "Projectile range *= %.1f", overpenetration_modifier );
-            }
-        };
 
         if( critter != nullptr && cur_missed_by < 1.0 ) {
             if( in_veh != nullptr && veh_pointer_or_null( here.veh_at( tp ) ) == in_veh &&
@@ -736,7 +738,6 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
                 // Force embed based on damage after overpenetration penalties
                 if( thrown_item != &null_item_reference() && rng( 1, 100 ) > proj.impact.total_damage() ) {
                     has_momentum = false;
-                    apply_overpenetration_penalty( 0.0 );
                 }
             } else {
                 attack.missed_by = aim.missed_by;

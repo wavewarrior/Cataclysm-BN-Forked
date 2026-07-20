@@ -431,10 +431,6 @@ class monster: public Creature, public location_visitable<monster>
         void melee_attack( Creature& target );
         void melee_attack( Creature& target, float accuracy );
         void melee_attack( Creature& p, bool ) = delete;
-        /// Internal helper for monsters — handles whip scare and other monster-specific logic.
-        void deal_projectile_attack_internal(
-            Creature* source, item* source_weapon, dealt_projectile_attack& attack,
-            bool manual_retaliation );
         void deal_projectile_attack(
             Creature* source, item* source_weapon, dealt_projectile_attack& attack,
             bool is_graze = false ) override;

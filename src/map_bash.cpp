@@ -1556,10 +1556,10 @@ void map::shoot(
     }
 
     furn_id furn_here = furn( p );
-    furn_t furn = furn_here.obj();
+    const auto &furn = furn_here.obj();
 
     ter_id terrain = ter( p );
-    ter_t ter = terrain.obj();
+    const auto &ter = terrain.obj();
 
     double range = rl_dist( origin, p );
     const bool point_blank = range <= 1;
