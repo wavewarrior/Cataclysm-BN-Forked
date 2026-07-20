@@ -353,15 +353,38 @@ void game::draw_bullet( const tripoint_bub_ms &t, const int i,
     }
 
     const auto sprite = get_bullet_sprite( bullet, custom_sprite );
-
     const auto rotation = get_bullet_rotation( get_bullet_dir( trajectory, static_cast<size_t>( i ) ) );
-    auto bullet_cb = make_shared_fast<draw_callback_t>( [&]() {
-        tilecontext->init_draw_bullet( t, sprite, rotation );
-    } );
-    add_draw_callback( bullet_cb );
 
-    bullet_animation().progress();
-    tilecontext->void_bullet();
+    // Previous tile for interpolation; first tile (muzzle) snaps.
+    const tripoint_bub_ms &prev = ( i > 0 ) ? trajectory[i - 1] : t;
+
+    const auto delay_ms = get_option<int>( "ANIMATION_DELAY" );
+    tilecontext->particles().emit( particle{
+        .sprite = sprite,
+        .rotation = rotation,
+        .path = { prev, t },
+        .start_wall = static_cast<double>( SDL_GetTicks() ) / 1000.0,
+        .duration = static_cast<float>( delay_ms ) / 1000.f
+    } );
+
+    static_popup popup;
+    popup.wait_message( "%s", _( "Hang on a bit…" ) ).on_top( true );
+
+    // Render loop — particle interpolates via wall-clock during normal draw pass.
+    // NOLINTNEXTLINE(cata-no-long)
+    long int remain = static_cast<long int>( delay_ms ) * 1'000'000L;
+    while( remain > 0 ) {
+        invalidate_main_ui_adaptor();
+        ui_manager::redraw_invalidated();
+        refresh_display();
+
+        // NOLINTNEXTLINE(cata-no-long)
+        const long int do_sleep = std::min( remain, 16'000'000L );
+        const timespec ts{ 0, do_sleep };
+        nanosleep( &ts, nullptr );
+        inp_mngr.pump_events();
+        remain -= do_sleep;
+    }
 }
 
 namespace
@@ -428,30 +451,49 @@ void draw_bullet_trajectories( const draw_bullet_trajectories_options &options )
         return;
     }
 
+    const auto delay_ms = get_option<int>( "ANIMATION_DELAY" );
+    const auto tile_dur = static_cast<float>( delay_ms ) / 1000.f;
+    const auto wall_start = static_cast<double>( SDL_GetTicks() ) / 1000.0;
     const auto longest_trajectory_size = get_longest_trajectory_size( options.trajectories );
-    for( size_t step = 1; step < longest_trajectory_size; step++ ) {
-        auto points = std::vector<tripoint_bub_ms> {};
-        auto sprites = std::vector<std::string> {};
-        auto rotations = std::vector<int> {};
-        for( const auto &trajectory : options.trajectories ) {
-            if( step >= trajectory.size() || !is_point_visible( trajectory[step] ) ) {
-                continue;
-            }
 
-            points.push_back( trajectory[step] );
-            sprites.push_back( sprite );
-            rotations.push_back( get_bullet_rotation( get_bullet_dir( trajectory, step ) ) );
-        }
-        if( points.empty() ) {
+    // Emit one particle per trajectory — all start simultaneously.
+    for( const auto &trajectory : options.trajectories ) {
+        if( trajectory.size() < 2 ) {
             continue;
         }
-
-        auto bullets_cb = make_shared_fast<game::draw_callback_t>( [&] {
-            tilecontext->init_draw_bullets( points, sprites, rotations );
+        const auto rotation = get_bullet_rotation(
+                                  get_bullet_dir( trajectory, trajectory.size() - 1 ) );
+        tilecontext->particles().emit( particle{
+            .sprite = sprite,
+            .rotation = rotation,
+            .path = trajectory,
+            .start_wall = wall_start,
+            .duration = static_cast<float>( trajectory.size() - 1 ) * tile_dur
         } );
-        g->add_draw_callback( bullets_cb );
-        bullet_animation().progress();
-        tilecontext->void_bullet();
+    }
+
+    if( longest_trajectory_size < 2 ) {
+        return;
+    }
+
+    static_popup popup;
+    popup.wait_message( "%s", _( "Hang on a bit…" ) ).on_top( true );
+
+    // Single render loop for all particles.
+    // NOLINTNEXTLINE(cata-no-long)
+    long int remain = static_cast<long int>( delay_ms )
+                      * static_cast<long int>( longest_trajectory_size - 1 ) * 1'000'000L;
+    while( remain > 0 ) {
+        g->invalidate_main_ui_adaptor();
+        ui_manager::redraw_invalidated();
+        refresh_display();
+
+        // NOLINTNEXTLINE(cata-no-long)
+        const long int do_sleep = std::min( remain, 16'000'000L );
+        const timespec ts{ 0, do_sleep };
+        nanosleep( &ts, nullptr );
+        inp_mngr.pump_events();
+        remain -= do_sleep;
     }
 }
 

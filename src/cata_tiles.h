@@ -11,6 +11,7 @@
 #include "line.h"
 #include "map_memory.h"
 #include "options.h"
+#include "particle_system.h"
 #include "overmapbuffer.h"
 #include "pimpl.h"
 #include "sdl_geometry.h"
@@ -1101,6 +1102,8 @@ class cata_tiles
         void draw_bullet_frame();
         void void_bullet();
 
+        auto particles() -> particle_system & { return particles_; } // *NOPAD*
+
         void init_draw_hit( const tripoint_bub_ms& p, std::string name );
         void draw_hit_frame();
         void void_hit();
@@ -1270,6 +1273,7 @@ class cata_tiles
         idle_animation_manager idle_animations;
 
         bool in_animation = false;
+        particle_system particles_;
 
         bool do_draw_explosion = false;
         bool do_draw_custom_explosion = false;

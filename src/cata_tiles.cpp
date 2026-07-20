@@ -1410,13 +1410,27 @@ void cata_tiles::draw(
     in_animation =
         do_draw_explosion || do_draw_custom_explosion || do_draw_bullet || do_draw_hit
         || do_draw_line || do_draw_cursor || do_draw_highlight || do_draw_weather || do_draw_sct
-        || do_draw_zones || do_draw_cone_aoe;
+        || do_draw_zones || do_draw_cone_aoe || !particles_.idle();
 
     draw_footsteps_frame( center );
     if( in_animation ) {
         if( do_draw_explosion ) { draw_explosion_frame(); }
         if( do_draw_custom_explosion ) { draw_custom_explosion_frame(); }
         if( do_draw_bullet ) { draw_bullet_frame(); }
+        if( !particles_.idle() ) {
+            particles_.update( anim_wall_now_ );
+            for( const auto &p : particles_.active() ) {
+                if( !tile_iso ) {
+                    active_anim_xform_ = sprite_xform{
+                        .off_x = p.off_x * static_cast<float>( tile_width ),
+                        .off_y = p.off_y * static_cast<float>( tile_height ) };
+                }
+                const tile_search_params tile{ p.sprite, C_BULLET, empty_string, 0, p.rotation };
+                draw_from_id_string(
+                    tile, p.tile, std::nullopt, std::nullopt, lit_level::LIT, false, 0, false );
+                active_anim_xform_ = {};
+            }
+        }
         if( do_draw_hit ) {
             draw_hit_frame();
             void_hit();
