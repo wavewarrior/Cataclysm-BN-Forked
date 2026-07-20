@@ -221,27 +221,21 @@ void cata_tiles::init_draw_cone_aoe( const tripoint_bub_ms& origin, const one_bu
     cone_aoe_origin = origin;
     cone_aoe_layer = layer;
 }
-void cata_tiles::init_draw_bullet( const tripoint_bub_ms& p, std::string name, int rotation,
-                                   float off_x, float off_y )
+void cata_tiles::init_draw_bullet( const tripoint_bub_ms& p, std::string name, int rotation )
 {
     do_draw_bullet = true;
     bul_pos.push_back( p );
     bul_id.push_back( std::move( name ) );
     bul_rotation.push_back( rotation );
-    bul_off_x.push_back( off_x );
-    bul_off_y.push_back( off_y );
 }
 void cata_tiles::init_draw_bullets(
     const std::vector<tripoint_bub_ms> &ps, const std::vector<std::string> &names,
-    const std::vector<int> &rotations,
-    const std::vector<float> &off_xs, const std::vector<float> &off_ys )
+    const std::vector<int> &rotations )
 {
     do_draw_bullet = true;
     bul_pos.insert( bul_pos.end(), ps.begin(), ps.end() );
     bul_id.insert( bul_id.end(), names.begin(), names.end() );
     bul_rotation.insert( bul_rotation.end(), rotations.begin(), rotations.end() );
-    bul_off_x.insert( bul_off_x.end(), off_xs.begin(), off_xs.end() );
-    bul_off_y.insert( bul_off_y.end(), off_ys.begin(), off_ys.end() );
 }
 void cata_tiles::init_draw_hit( const tripoint_bub_ms& p, std::string name )
 {
@@ -309,8 +303,6 @@ void cata_tiles::void_bullet()
     bul_pos.clear();
     bul_id.clear();
     bul_rotation.clear();
-    bul_off_x.clear();
-    bul_off_y.clear();
 }
 void cata_tiles::void_hit()
 {
@@ -584,11 +576,6 @@ void cata_tiles::draw_cone_aoe_frame()
 void cata_tiles::draw_bullet_frame()
 {
     for( size_t i = 0; i < bul_pos.size(); ++i ) {
-        if( !tile_iso && i < bul_off_x.size() ) {
-            active_anim_xform_ = sprite_xform{
-                .off_x = bul_off_x[i] * static_cast<float>( tile_width ),
-                .off_y = bul_off_y[i] * static_cast<float>( tile_height ) };
-        }
         const auto tile = tile_search_params{
             .id = bul_id[i],
             .category = C_BULLET,
@@ -597,7 +584,6 @@ void cata_tiles::draw_bullet_frame()
             .rota = bul_rotation[i]};
         draw_from_id_string(
             tile, bul_pos[i], std::nullopt, std::nullopt, lit_level::LIT, false, 0, false );
-        active_anim_xform_ = {};
     }
 }
 void cata_tiles::draw_hit_frame()
