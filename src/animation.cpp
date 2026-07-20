@@ -352,16 +352,54 @@ void game::draw_bullet( const tripoint_bub_ms &t, const int i,
         return;
     }
 
+    constexpr int sub_frames = 4;
     const auto sprite = get_bullet_sprite( bullet, custom_sprite );
-
     const auto rotation = get_bullet_rotation( get_bullet_dir( trajectory, static_cast<size_t>( i ) ) );
-    auto bullet_cb = make_shared_fast<draw_callback_t>( [&]() {
-        tilecontext->init_draw_bullet( t, sprite, rotation );
-    } );
-    add_draw_callback( bullet_cb );
 
-    bullet_animation().progress();
-    tilecontext->void_bullet();
+    // Previous tile for sub-tile interpolation; first tile (muzzle) snaps.
+    const tripoint_bub_ms &prev = ( i > 0 ) ? trajectory[i - 1] : t;
+    const auto dx = static_cast<float>( t.x() - prev.x() );
+    const auto dy = static_cast<float>( t.y() - prev.y() );
+
+    // Total per-tile delay in nanoseconds (matches bullet_animation scale=1).
+    // NOLINTNEXTLINE(cata-no-long)
+    const long int total_delay =
+        static_cast<long int>( get_option<int>( "ANIMATION_DELAY" ) ) * 1'000'000L;
+    // NOLINTNEXTLINE(cata-no-long)
+    const long int sub_delay = total_delay / sub_frames;
+
+    for( int sf = 0; sf < sub_frames; ++sf ) {
+        const auto progress = static_cast<float>( sf + 1 ) / sub_frames;
+        const auto off_x = -dx * ( 1.f - progress );
+        const auto off_y = -dy * ( 1.f - progress );
+
+        auto bullet_cb = make_shared_fast<draw_callback_t>( [ &, off_x, off_y]() {
+            tilecontext->init_draw_bullet( t, sprite, rotation, off_x, off_y );
+        } );
+        add_draw_callback( bullet_cb );
+
+        if( sf == 0 ) {
+            static_popup popup;
+            popup.wait_message( "%s", _( "Hang on a bit…" ) ).on_top( true );
+        }
+
+        invalidate_main_ui_adaptor();
+        ui_manager::redraw_invalidated();
+        refresh_display();
+
+        // NOLINTNEXTLINE(cata-no-long)
+        long int remain = sub_delay;
+        while( remain > 0 ) {
+            // NOLINTNEXTLINE(cata-no-long)
+            const long int do_sleep = std::min( remain, 100'000'000L );
+            const timespec to_sleep = timespec{ 0, do_sleep };
+            nanosleep( &to_sleep, nullptr );
+            inp_mngr.pump_events();
+            remain -= do_sleep;
+        }
+
+        tilecontext->void_bullet();
+    }
 }
 
 namespace
@@ -428,30 +466,83 @@ void draw_bullet_trajectories( const draw_bullet_trajectories_options &options )
         return;
     }
 
+    constexpr int sub_frames = 4;
+    // NOLINTNEXTLINE(cata-no-long)
+    const long int total_delay =
+        static_cast<long int>( get_option<int>( "ANIMATION_DELAY" ) ) * 1'000'000L;
+    // NOLINTNEXTLINE(cata-no-long)
+    const long int sub_delay = total_delay / sub_frames;
+
     const auto longest_trajectory_size = get_longest_trajectory_size( options.trajectories );
     for( size_t step = 1; step < longest_trajectory_size; step++ ) {
         auto points = std::vector<tripoint_bub_ms> {};
         auto sprites = std::vector<std::string> {};
         auto rotations = std::vector<int> {};
+
+        struct bul_delta {
+            float dx;
+            float dy;
+        };
+        auto deltas = std::vector<bul_delta> {};
+
         for( const auto &trajectory : options.trajectories ) {
             if( step >= trajectory.size() || !is_point_visible( trajectory[step] ) ) {
                 continue;
             }
 
-            points.push_back( trajectory[step] );
+            const auto &curr = trajectory[step];
+            const auto &prev = trajectory[step - 1];
+            points.push_back( curr );
             sprites.push_back( sprite );
             rotations.push_back( get_bullet_rotation( get_bullet_dir( trajectory, step ) ) );
+            deltas.push_back( { static_cast<float>( curr.x() - prev.x() ),
+                                static_cast<float>( curr.y() - prev.y() ) } );
         }
         if( points.empty() ) {
             continue;
         }
 
-        auto bullets_cb = make_shared_fast<game::draw_callback_t>( [&] {
-            tilecontext->init_draw_bullets( points, sprites, rotations );
-        } );
-        g->add_draw_callback( bullets_cb );
-        bullet_animation().progress();
-        tilecontext->void_bullet();
+        auto off_xs = std::vector<float> {};
+        auto off_ys = std::vector<float> {};
+        off_xs.reserve( deltas.size() );
+        off_ys.reserve( deltas.size() );
+
+        for( int sf = 0; sf < sub_frames; ++sf ) {
+            const auto progress = static_cast<float>( sf + 1 ) / sub_frames;
+            off_xs.clear();
+            off_ys.clear();
+            for( const auto &d : deltas ) {
+                off_xs.push_back( -d.dx * ( 1.f - progress ) );
+                off_ys.push_back( -d.dy * ( 1.f - progress ) );
+            }
+
+            auto bullets_cb = make_shared_fast<game::draw_callback_t>( [&] {
+                tilecontext->init_draw_bullets( points, sprites, rotations, off_xs, off_ys );
+            } );
+            g->add_draw_callback( bullets_cb );
+
+            if( sf == 0 ) {
+                static_popup popup;
+                popup.wait_message( "%s", _( "Hang on a bit…" ) ).on_top( true );
+            }
+
+            g->invalidate_main_ui_adaptor();
+            ui_manager::redraw_invalidated();
+            refresh_display();
+
+            // NOLINTNEXTLINE(cata-no-long)
+            long int remain = sub_delay;
+            while( remain > 0 ) {
+                // NOLINTNEXTLINE(cata-no-long)
+                const long int do_sleep = std::min( remain, 100'000'000L );
+                const timespec to_sleep = timespec{ 0, do_sleep };
+                nanosleep( &to_sleep, nullptr );
+                inp_mngr.pump_events();
+                remain -= do_sleep;
+            }
+
+            tilecontext->void_bullet();
+        }
     }
 }
 

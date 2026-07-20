@@ -1094,10 +1094,12 @@ class cata_tiles
         void draw_cone_aoe_frame();
         void void_cone_aoe();
 
-        void init_draw_bullet( const tripoint_bub_ms& p, std::string name, int rotation );
+        void init_draw_bullet( const tripoint_bub_ms& p, std::string name, int rotation,
+                               float off_x = 0.f, float off_y = 0.f );
         void init_draw_bullets(
             const std::vector<tripoint_bub_ms> &ps, const std::vector<std::string> &names,
-            const std::vector<int> &rotations );
+            const std::vector<int> &rotations,
+        const std::vector<float> &off_xs = {}, const std::vector<float> &off_ys = {} );
         void draw_bullet_frame();
         void void_bullet();
 
@@ -1304,6 +1306,8 @@ class cata_tiles
         std::vector<tripoint_bub_ms> bul_pos;
         std::vector<std::string> bul_id;
         std::vector<int> bul_rotation;
+        std::vector<float> bul_off_x;
+        std::vector<float> bul_off_y;
 
         tripoint_bub_ms hit_pos;
         std::string hit_entity_id;
