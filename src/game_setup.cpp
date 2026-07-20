@@ -1056,6 +1056,11 @@ void game::unload_npcs()
 {
     for( const auto &npc : active_npc ) {
         npc->on_unload();
+#ifdef BOX2D_ENABLED
+        if( auto *pw = get_map().get_physics_world() ) {
+            pw->on_creature_removed( npc.get() );
+        }
+#endif
     }
 
     active_npc.clear();

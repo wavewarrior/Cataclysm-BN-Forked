@@ -1,5 +1,8 @@
 #include "character.h"
 #include "coop_mutation_log.h"
+#ifdef BOX2D_ENABLED
+#include "physics/physics_world.h"
+#endif
 #include "action.h"
 #include "activity_actor_definitions.h"
 #include "activity_handlers.h"
@@ -805,9 +808,17 @@ tripoint_bub_ms Character::bub_pos() const { return get_map().abs_to_bub( positi
 
 tripoint_abs_ms Character::abs_pos() const { return position; }
 
-auto Character::setpos( const tripoint_bub_ms& p ) -> void { position = get_map().bub_to_abs( p ); }
+auto Character::setpos( const tripoint_bub_ms& p ) -> void { setpos( get_map().bub_to_abs( p ) ); }
 
-auto Character::setpos( const tripoint_abs_ms& p ) -> void { position = p; }
+auto Character::setpos( const tripoint_abs_ms& p ) -> void
+{
+    position = p;
+#ifdef BOX2D_ENABLED
+    if( auto *pw = get_map().get_physics_world() ) {
+        pw->on_creature_moved( *this );
+    }
+#endif
+}
 
 bool Character::has_alarm_clock() const
 {

@@ -8,6 +8,7 @@
 #include <vector>
 namespace lighting { class debug_line_pass; } // forward-declare GPU line buffer
 
+class Creature;
 struct vehicle;
 class map;
 
@@ -41,6 +42,11 @@ public:
     void on_vehicle_added( vehicle &v );
     void on_vehicle_moved( vehicle &v );
     void on_vehicle_removed( vehicle *v );
+
+    // ── Creature lifecycle (Phase 11) ─────────────────────────────────────
+    void on_creature_added( const Creature &c );
+    void on_creature_moved( const Creature &c );
+    void on_creature_removed( const Creature *c );
 
     // ── Terrain lifecycle ──────────────────────────────────────────────────
     /// Called after `grid[idx] = sm` in `map::on_submap_loaded`.
@@ -102,6 +108,14 @@ private:
 
     /// bub_ms → b2BodyId fast-lookup for on_tile_bashed.  Rebuilt after each map shift.
     std::map<tripoint_bub_ms, b2BodyId> bashable_tile_bodies_;
+
+    /// Creature body registry: kinematic sensor bodies for raycast hit detection.
+    struct creature_body {
+        b2BodyId body;
+        b2ShapeId shape;
+        float radius; // last-used circle radius (physics meters)
+    };
+    std::unordered_map<const Creature *, creature_body> creature_bodies_;
 
     auto make_vehicle_body( vehicle &v ) -> b2BodyId;
     void rebuild_bashable_lookup();

@@ -13,6 +13,10 @@
 #include "point.h"
 #include "string_formatter.h"
 #include "type_id.h"
+#ifdef BOX2D_ENABLED
+#include "map.h"
+#include "physics/physics_world.h"
+#endif
 
 #define dbg(x) DebugLogFL((x),DC::Game)
 
@@ -88,6 +92,11 @@ bool Creature_tracker::add( const shared_ptr_fast<monster> &critter_ptr )
     monsters_list.emplace_back( critter_ptr );
     monsters_by_location[critter.bub_pos()] = critter_ptr;
     add_to_faction_map( critter_ptr );
+#ifdef BOX2D_ENABLED
+    if( auto *pw = get_map().get_physics_world() ) {
+        pw->on_creature_added( critter );
+    }
+#endif
     return true;
 }
 
@@ -219,6 +228,11 @@ void Creature_tracker::remove( const monster &critter )
             break;
         }
     }
+#ifdef BOX2D_ENABLED
+    if( auto *pw = get_map().get_physics_world() ) {
+        pw->on_creature_removed( &critter );
+    }
+#endif
     remove_from_location_map( critter );
     removed_.push_back( *iter );
     monsters_list.erase( iter );

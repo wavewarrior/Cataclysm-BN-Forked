@@ -45,6 +45,12 @@
 #include "units.h"
 #include "visitable.h"
 #include "vpart_position.h"
+#ifdef BOX2D_ENABLED
+#include <box2d/box2d.h>
+#include "physics/physics_world.h"
+#include "physics/filter_bits.h"
+#include "physics/vehicle_shape.h" // TILE_M
+#endif
 
 static const ammo_effect_str_id ammo_effect_ACT_ON_RANGED_HIT( "ACT_ON_RANGED_HIT" );
 static const ammo_effect_str_id ammo_effect_BOUNCE( "BOUNCE" );
@@ -477,6 +483,59 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
     int projectile_skip_calculation = range * projectile_skip_multiplier;
     int projectile_skip_current_frame = rng( 0, projectile_skip_calculation );
     bool has_momentum = true;
+
+#ifdef BOX2D_ENABLED
+    // ── Box2D raycast: collect creature hits along the trajectory ──────────
+    struct ray_creature_hit {
+        Creature *critter;
+        float fraction;
+        b2Vec2 center;   // body center position (physics meters), resolved in callback
+        float radius;    // circle shape radius (physics meters), resolved in callback
+    };
+    auto creature_ray_hits = std::vector<ray_creature_hit> {};
+    auto ray_origin_m = b2Vec2{ 0.f, 0.f };
+    auto ray_translation = b2Vec2{ 0.f, 0.f };
+    if( traj_len > 1 ) {
+        if( auto *pw = here.get_physics_world() ) {
+            struct ray_ctx {
+                std::vector<ray_creature_hit> hits;
+                const Creature *shooter;
+            };
+            ray_ctx ctx{ {}, origin };
+
+            ray_origin_m = b2Vec2{
+                static_cast<float>( source.x() ) * TILE_M,
+                static_cast<float>( source.y() ) * TILE_M };
+            const auto &ray_end = trajectory[traj_len - 1];
+            ray_translation = b2Vec2{
+                static_cast<float>( ray_end.x() - source.x() ) * TILE_M,
+                static_cast<float>( ray_end.y() - source.y() ) * TILE_M };
+
+            auto filter = b2DefaultQueryFilter();
+            filter.categoryBits = physics::z_category_bit( source.z() );
+            filter.maskBits     = physics::z_category_bit( source.z() );
+
+            b2World_CastRay( pw->world_id(), ray_origin_m, ray_translation, filter,
+                             []( b2ShapeId shape, b2Vec2 point, b2Vec2 /*normal*/, float fraction,
+            void *raw_ctx ) -> float {
+                if( !b2Shape_IsSensor( shape ) ) { return 1.0f; }
+            auto *rctx = static_cast<ray_ctx *>( raw_ctx );
+            const auto body = b2Shape_GetBody( shape );
+            auto *udata = static_cast<Creature *>( b2Body_GetUserData( body ) );
+            if( !udata || udata == rctx->shooter ) { return 1.0f; }
+            // Resolve geometry NOW while shape ID is guaranteed valid.
+            const auto center = b2Body_GetPosition( body );
+            const auto radius = b2Shape_GetCircle( shape ).radius;
+            rctx->hits.push_back( { udata, fraction, center, radius } );
+            return 1.0f;
+        }, &ctx );
+
+            creature_ray_hits = std::move( ctx.hits );
+            std::ranges::sort( creature_ray_hits, {}, &ray_creature_hit::fraction );
+        }
+    }
+    size_t ray_hit_idx = 0;
+#endif
     auto *last_hit_critter = static_cast<Creature *>( nullptr );
     for( size_t i = 1; i < traj_len && ( has_momentum || stream ); ++i ) {
         prev_point = tp;
@@ -531,9 +590,52 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
             }
         }
 
+#ifdef BOX2D_ENABLED
+        // ── Box2D raycast creature detection ──────────────────────────────────
+        // Pop all creature hits whose ray fraction falls within this DDA step.
+        Creature *critter = nullptr;
+        monster *mon = nullptr;
+        auto cur_missed_by = aim.missed_by;
+        {
+            // Bucket hits by trajectory index: step i covers fractions
+            // [(i-1)/(traj_len-1), i/(traj_len-1)].
+            const auto traj_segs = static_cast<double>( traj_len - 1 );
+            const auto step_frac_hi = traj_segs > 0.0
+                                      ? static_cast<double>( i ) / traj_segs : 1.0;
+
+            while( ray_hit_idx < creature_ray_hits.size() &&
+                   creature_ray_hits[ray_hit_idx].fraction <= step_frac_hi ) {
+                auto &hit = creature_ray_hits[ray_hit_idx++];
+                auto *c = hit.critter;
+                if( c == origin ) { continue; }
+                // Skip friendly within 1 tile of shooter
+                if( c != nullptr && origin != nullptr &&
+                    origin->attitude_to( *c ) == Attitude::A_FRIENDLY &&
+                    rl_dist( source, c->bub_pos() ) <= 1 ) {
+                    continue;
+                }
+                auto *m = dynamic_cast<monster *>( c );
+                if( m != nullptr && m->digging() && rl_dist( source, c->bub_pos() ) > 1 ) {
+                    continue;
+                }
+                // Perpendicular distance from ray to creature body center.
+                const auto ray_len = std::hypot( ray_translation.x, ray_translation.y );
+                const auto perp = ray_len > 0.f
+                                  ? std::abs( ray_translation.x * ( hit.center.y - ray_origin_m.y )
+                                              - ray_translation.y * ( hit.center.x - ray_origin_m.x ) ) / ray_len
+                                  : 0.f;
+                cur_missed_by = hit.radius > 0.f
+                                ? std::clamp( static_cast<double>( perp / hit.radius ), 0.0, 0.99 )
+                                : 0.0;
+                critter = c;
+                mon = m;
+                tp = c->bub_pos(); // snap DDA tile to the creature's actual tile
+                break; // process one creature per DDA step
+            }
+        }
+#else
         Creature *critter = g->critter_at( tp );
         if( origin == critter ) {
-            // No hitting self with "weird" attacks.
             critter = nullptr;
         }
 
@@ -545,22 +647,13 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
         }
 
         auto *mon = dynamic_cast<monster *>( critter );
-        // ignore non-point-blank digging targets (since they are underground)
         if( mon != nullptr && mon->digging() &&
             rl_dist( source, tp ) > 1 ) {
             critter = nullptr;
             mon = nullptr;
         }
 
-        // Reset hit critter from the last iteration
-        attack.hit_critter = nullptr;
-
-        // If we shot us a monster...
-        // TODO: add size effects to accuracy
-        // If there's a monster in the path of our bullet, and either our aim was true,
-        //  OR it's not the monster we were aiming at and we were lucky enough to hit it
-        // Geometric perpendicular distance from DDA ray to creature centre,
-        // normalised by target size. No random re-roll for bystanders.
+        // Geometric perpendicular distance from DDA ray to creature centre.
         const auto cur_missed_by = [&]() -> double {
             if( critter == nullptr ) { return aim.missed_by; }
             const auto range_to_critter = static_cast<double>( rl_dist( source, tp ) );
@@ -576,7 +669,10 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
             const auto sz = critter->ranged_target_size();
             return sz > 0.0 ? std::min( 1.0, perp_dist / sz ) : 1.0;
         }();
+#endif
 
+        // Reset hit critter from the last iteration (shared by both Box2D and tile paths).
+        attack.hit_critter = nullptr;
         if( here.obstructed_by_vehicle_rotation( prev_point, tp ) ) {
             //We're firing through an impassible gap in a rotated vehicle, randomly hit one of the two walls
             auto rand = tp;

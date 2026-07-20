@@ -1,8 +1,11 @@
 #ifdef BOX2D_ENABLED
 #include "physics_world.h"
 #include "terrain_body.h"
+#include "filter_bits.h"
 #include "vehicle_shape.h"  // vehicle_box2d_shape, TILE_M
 #include "vehicle.h"        // vehicle, velo_vec, face_vec, bub_ms_location, total_mass
+#include "creature.h"        // Creature::get_size, bub_pos
+#include "ranged_internal.h" // occupied_tile_fraction
 #include "map.h"            // map::abs_to_bub, impassable_ter_furn, is_bashable_ter_furn
 #include "game_constants.h" // SEEX, SEEY
 #include "units_mass.h"     // units::to_kilogram
@@ -62,12 +65,11 @@ auto PhysicsWorld::make_vehicle_body( vehicle &v ) -> b2BodyId
     sdef.enableContactEvents = true;
     sdef.enableHitEvents     = true;
 
-    // Bit layout: terrain z-bits occupy [z+10] (bits 0–20); vehicle z-bits occupy [z+30] (bits 20–40).
-    // Vehicle mask = terrain bits → VV contacts are structurally disabled; VT contacts fire.
-    const auto ter_z_bit = 1ull << static_cast<uint64_t>( bpos.z() + 10 );
-    const auto veh_z_bit = 1ull << static_cast<uint64_t>( bpos.z() + 30 );
-    sdef.filter.categoryBits = veh_z_bit;
-    sdef.filter.maskBits     = ter_z_bit;
+    // Single z-bit shared by all body types; groupIndex separates categories.
+    const auto z_bit = physics::z_category_bit( bpos.z() );
+    sdef.filter.categoryBits = z_bit;
+    sdef.filter.maskBits     = z_bit;
+    sdef.filter.groupIndex   = physics::vehicle_group;
 
     b2CreatePolygonShape( bid, &sdef, &poly );
     return bid;
@@ -126,6 +128,81 @@ void PhysicsWorld::on_vehicle_removed( vehicle *v )
     if( it == vehicle_bodies_.end() ) { return; }
     b2DestroyBody( it->second );
     vehicle_bodies_.erase( it );
+}
+
+// ── Creature lifecycle (Phase 11) ─────────────────────────────────────────────
+
+void PhysicsWorld::on_creature_added( const Creature &c )
+{
+    if( creature_bodies_.contains( &c ) ) { return; }
+
+    const auto bub = c.bub_pos();
+    const auto cx = static_cast<float>( bub.x() ) * TILE_M;
+    const auto cy = static_cast<float>( bub.y() ) * TILE_M;
+
+    auto bdef     = b2DefaultBodyDef();
+    bdef.type     = b2_kinematicBody;
+    bdef.position = { cx, cy };
+    const auto bid = b2CreateBody( world_, &bdef );
+    b2Body_SetUserData( bid, const_cast<Creature *>( &c ) );
+
+    const auto radius = static_cast<float>( occupied_tile_fraction( c.get_size() ) ) * TILE_M * 0.5f;
+    const auto circle = b2Circle{ { 0.f, 0.f }, radius };
+
+    auto sdef                = b2DefaultShapeDef();
+    sdef.isSensor            = true;
+    sdef.filter.categoryBits = z_category_bit( bub.z() );
+    sdef.filter.maskBits     = z_category_bit( bub.z() );
+    sdef.filter.groupIndex   = creature_group;
+    const auto sid = b2CreateCircleShape( bid, &sdef, &circle );
+
+    creature_bodies_.emplace( &c, creature_body{ bid, sid, radius } );
+}
+
+void PhysicsWorld::on_creature_moved( const Creature &c )
+{
+    const auto it = creature_bodies_.find( &c );
+    if( it == creature_bodies_.end() ) {
+        on_creature_added( c );
+        return;
+    }
+
+    auto &cb = it->second;
+    const auto bub = c.bub_pos();
+    const auto cx = static_cast<float>( bub.x() ) * TILE_M;
+    const auto cy = static_cast<float>( bub.y() ) * TILE_M;
+    b2Body_SetTransform( cb.body, { cx, cy }, b2Rot_identity );
+
+    // Recreate shape if the creature's target size changed (crouch, MF_HARDTOSHOOT).
+    const auto new_radius = static_cast<float>( occupied_tile_fraction( c.get_size() ) ) * TILE_M * 0.5f;
+    if( std::abs( new_radius - cb.radius ) > 0.001f ) {
+        b2DestroyShape( cb.shape );
+        const auto circle = b2Circle{ { 0.f, 0.f }, new_radius };
+        auto sdef                = b2DefaultShapeDef();
+        sdef.isSensor            = true;
+        sdef.filter.categoryBits = z_category_bit( bub.z() );
+        sdef.filter.maskBits     = z_category_bit( bub.z() );
+        sdef.filter.groupIndex   = creature_group;
+        cb.shape  = b2CreateCircleShape( cb.body, &sdef, &circle );
+        cb.radius = new_radius;
+    }
+
+    // Update filter bits if z changed.
+    auto filter = b2Shape_GetFilter( cb.shape );
+    const auto z_bit = z_category_bit( bub.z() );
+    if( filter.categoryBits != z_bit ) {
+        filter.categoryBits = z_bit;
+        filter.maskBits     = z_bit;
+        b2Shape_SetFilter( cb.shape, filter );
+    }
+}
+
+void PhysicsWorld::on_creature_removed( const Creature *c )
+{
+    const auto it = creature_bodies_.find( c );
+    if( it == creature_bodies_.end() ) { return; }
+    b2DestroyBody( it->second.body );
+    creature_bodies_.erase( it );
 }
 
 // ── Terrain lifecycle ─────────────────────────────────────────────────────────
@@ -207,6 +284,13 @@ void PhysicsWorld::on_map_shifted( point delta_tiles )
             const auto rot = b2Body_GetRotation( bid );
             b2Body_SetTransform( bid, { p.x + delta.x, p.y + delta.y }, rot );
         }
+    }
+
+    // Translate creature bodies.
+    for( const auto &[c, cb] : creature_bodies_ ) {
+        const auto p   = b2Body_GetPosition( cb.body );
+        const auto rot = b2Body_GetRotation( cb.body );
+        b2Body_SetTransform( cb.body, { p.x + delta.x, p.y + delta.y }, rot );
     }
 
     // Update bashable tile bub_ms keys — they are bubble-relative and change on shift.

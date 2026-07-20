@@ -1,5 +1,8 @@
 #include "monster.h"
 #include "coop_mutation_log.h"
+#ifdef BOX2D_ENABLED
+#include "physics/physics_world.h"
+#endif
 
 #include "avatar.h"
 #include "bodypart.h"
@@ -325,6 +328,11 @@ auto monster::setpos( const tripoint_abs_ms& p ) -> void
     const auto wandering = is_wandering();
     g->update_zombie_pos( *this, new_bub_pos );
     pos_abs = p;
+#ifdef BOX2D_ENABLED
+    if( auto *pw = get_map().get_physics_world() ) {
+        pw->on_creature_moved( *this );
+    }
+#endif
     if( has_effect( effect_ridden ) && mounted_player && mounted_player->bub_pos() != bub_pos() ) {
         add_msg( m_debug, "Ridden monster %s moved independently and dumped player", get_name() );
         mounted_player->forced_dismount();
