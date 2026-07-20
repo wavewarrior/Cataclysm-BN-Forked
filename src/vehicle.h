@@ -1763,6 +1763,11 @@ class vehicle
         rl_vec2d physics_pos{ 0.0f, 0.0f };
         /// Box2D heading angle in radians (Phase 6); 0 = +x, CCW positive.
         float physics_angle = 0.0f;
+        /// Render-only sub-tile offset: fractional residual of physics_pos after
+        /// integer snap. Tile units. Zero when BOX2D_ENABLED is off or vehicle
+        /// is not under physics authority. Not serialized.
+        float render_offset_x = 0.f;
+        float render_offset_y = 0.f;
 #ifdef BOX2D_ENABLED
         /// True while PhysicsWorld owns this vehicle's horizontal position.
         /// act_on_map() skips part_collision() + move_vehicle(); map::vehmove()

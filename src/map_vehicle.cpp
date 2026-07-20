@@ -579,6 +579,10 @@ void map::vehmove()
             if( px != cur.x() || py != cur.y() ) {
                 displace_vehicle( veh, tripoint_rel_ms{ px - cur.x(), py - cur.y(), 0 } );
             }
+            veh.render_offset_x = static_cast<float>( veh.physics_pos.x -
+                                  std::lround( veh.physics_pos.x ) );
+            veh.render_offset_y = static_cast<float>( veh.physics_pos.y -
+                                  std::lround( veh.physics_pos.y ) );
         }
     }
 #endif

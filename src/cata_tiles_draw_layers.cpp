@@ -531,6 +531,12 @@ bool cata_tiles::draw_vpart(
             you.memorize_tile( here.bub_to_abs( p ), vpname, subtile, rotation );
         }
         if( !overridden ) {
+            // Vehicle smooth render offset (Box2D sub-tile residual).
+            if( !tile_iso ) {
+                active_anim_xform_ = sprite_xform{
+                    .off_x = veh.render_offset_x * static_cast<float>( tile_width ),
+                    .off_y = veh.render_offset_y * static_cast<float>( tile_height ) };
+            }
             const std::optional<vpart_reference> cargopart = vp.part_with_feature( "CARGO", true );
             const bool draw_highlight =
                 cargopart && !veh.get_items( cargopart->part_index() ).empty();
@@ -539,6 +545,7 @@ bool cata_tiles::draw_vpart(
             const bool ret =
                 draw_from_id_string( tile, p, bgCol, fgCol, ll, true, z_drop, false, height_3d );
             if( ret && draw_highlight ) { draw_item_highlight( p ); }
+            active_anim_xform_ = {};
             return ret;
         }
     }
@@ -588,8 +595,15 @@ bool cata_tiles::draw_vpart(
                 get_avatar().memorize_tile( here.bub_to_abs( p ), vpname, subtile, rotation );
             }
             const tile_search_params tile{vpname, C_VEHICLE_PART, empty_string, subtile, rotation};
-            return draw_from_id_string(
-                       tile, p, bgCol, fgCol, lit_level::MEMORIZED, true, z_drop, false, height_3d );
+            if( !tile_iso ) {
+                active_anim_xform_ = sprite_xform{
+                    .off_x = veh.render_offset_x * static_cast<float>( tile_width ),
+                    .off_y = veh.render_offset_y * static_cast<float>( tile_height ) };
+            }
+            const bool ret = draw_from_id_string(
+                                 tile, p, bgCol, fgCol, lit_level::MEMORIZED, true, z_drop, false, height_3d );
+            active_anim_xform_ = {};
+            return ret;
         }
         // No live vehicle at this position — fall back to map memory so previously-seen
         // tiles are shown as a ghost until they scroll out of range (vehicle moved away).
@@ -629,9 +643,15 @@ bool cata_tiles::draw_vpart(
         if( you.get_memorized_tile( abs_pos ).tile == vpname ) {
             you.clear_memorized_overlay( abs_pos );
         }
+        if( !tile_iso ) {
+            active_anim_xform_ = sprite_xform{
+                .off_x = veh->render_offset_x * static_cast<float>( tile_width ),
+                .off_y = veh->render_offset_y * static_cast<float>( tile_height ) };
+        }
         const tile_search_params tile = {vpname, C_VEHICLE_PART, empty_string, subtile, rotation};
         const bool ret =
             draw_from_id_string( tile, p, bgCol, fgCol, ll, true, z_drop, false, height_3d );
+        active_anim_xform_ = {};
         return ret;
     }
     return false;

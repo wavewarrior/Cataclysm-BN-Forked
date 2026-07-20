@@ -120,6 +120,8 @@ void PhysicsWorld::on_vehicle_moved( vehicle &v )
 void PhysicsWorld::on_vehicle_removed( vehicle *v )
 {
     v->box2d_position_authority = false;  // always clear, even if body is missing
+    v->render_offset_x = 0.f;
+    v->render_offset_y = 0.f;
     const auto it = vehicle_bodies_.find( v );
     if( it == vehicle_bodies_.end() ) { return; }
     b2DestroyBody( it->second );
