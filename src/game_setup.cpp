@@ -997,6 +997,11 @@ void game::load_npcs()
         } else {
             active_npc.push_back( temp );
             just_added.push_back( temp );
+#ifdef BOX2D_ENABLED
+            if( auto *pw = m.get_physics_world() ) {
+                pw->on_creature_added( *temp );
+            }
+#endif
             ++g_npc_friends_dirty_version;
         }
     }
@@ -1039,6 +1044,11 @@ void game::load_npcs()
                 } else {
                     active_npc.push_back( temp );
                     just_added.push_back( temp );
+#ifdef BOX2D_ENABLED
+                    if( auto *pw = m.get_physics_world() ) {
+                        pw->on_creature_added( *temp );
+                    }
+#endif
                     ++g_npc_friends_dirty_version;
                 }
             }

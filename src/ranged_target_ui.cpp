@@ -1353,7 +1353,7 @@ void target_ui::draw_terrain_overlay()
     if( mode == TargetMode::Fire && dst != src ) {
         const auto half = calc_spread_half_angle();
         g->draw_aim_cone( src.xy(), static_cast<float>( units::to_radians( aim_angle ) ),
-                          static_cast<float>( units::to_radians( half ) ), range );
+                          static_cast<float>( units::to_radians( half ) ), range, src.z() );
         g->draw_aim_crosshair( get_sdl_mouse_pos() );
     }
 

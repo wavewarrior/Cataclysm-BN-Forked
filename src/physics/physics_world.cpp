@@ -5,7 +5,6 @@
 #include "vehicle_shape.h"  // vehicle_box2d_shape, TILE_M
 #include "vehicle.h"        // vehicle, velo_vec, face_vec, bub_ms_location, total_mass
 #include "creature.h"        // Creature::get_size, bub_pos
-#include "ranged_internal.h" // occupied_tile_fraction
 #include "map.h"            // map::abs_to_bub, impassable_ter_furn, is_bashable_ter_furn
 #include "game_constants.h" // SEEX, SEEY
 #include "units_mass.h"     // units::to_kilogram
@@ -146,11 +145,13 @@ void PhysicsWorld::on_creature_added( const Creature &c )
     const auto bid = b2CreateBody( world_, &bdef );
     b2Body_SetUserData( bid, const_cast<Creature *>( &c ) );
 
-    const auto radius = static_cast<float>( occupied_tile_fraction( c.get_size() ) ) * TILE_M * 0.5f;
+    const auto radius = static_cast<float>( c.effective_target_size() ) * TILE_M * 0.5f;
     const auto circle = b2Circle{ { 0.f, 0.f }, radius };
 
-    auto sdef                = b2DefaultShapeDef();
-    sdef.isSensor            = true;
+    auto sdef                  = b2DefaultShapeDef();
+    sdef.isSensor              = true;
+    sdef.enableContactEvents   = false;
+    sdef.enableSensorEvents    = false;
     sdef.filter.categoryBits = z_category_bit( bub.z() );
     sdef.filter.maskBits     = z_category_bit( bub.z() );
     sdef.filter.groupIndex   = creature_group;
@@ -174,12 +175,14 @@ void PhysicsWorld::on_creature_moved( const Creature &c )
     b2Body_SetTransform( cb.body, { cx, cy }, b2Rot_identity );
 
     // Recreate shape if the creature's target size changed (crouch, MF_HARDTOSHOOT).
-    const auto new_radius = static_cast<float>( occupied_tile_fraction( c.get_size() ) ) * TILE_M * 0.5f;
+    const auto new_radius = static_cast<float>( c.effective_target_size() ) * TILE_M * 0.5f;
     if( std::abs( new_radius - cb.radius ) > 0.001f ) {
         b2DestroyShape( cb.shape );
         const auto circle = b2Circle{ { 0.f, 0.f }, new_radius };
-        auto sdef                = b2DefaultShapeDef();
-        sdef.isSensor            = true;
+        auto sdef                  = b2DefaultShapeDef();
+        sdef.isSensor              = true;
+        sdef.enableContactEvents   = false;
+        sdef.enableSensorEvents    = false;
         sdef.filter.categoryBits = z_category_bit( bub.z() );
         sdef.filter.maskBits     = z_category_bit( bub.z() );
         sdef.filter.groupIndex   = creature_group;
@@ -203,6 +206,14 @@ void PhysicsWorld::on_creature_removed( const Creature *c )
     if( it == creature_bodies_.end() ) { return; }
     b2DestroyBody( it->second.body );
     creature_bodies_.erase( it );
+}
+
+void PhysicsWorld::clear_creature_bodies()
+{
+    for( const auto &[c, cb] : creature_bodies_ ) {
+        b2DestroyBody( cb.body );
+    }
+    creature_bodies_.clear();
 }
 
 // ── Terrain lifecycle ─────────────────────────────────────────────────────────
@@ -406,10 +417,8 @@ void PhysicsWorld::dispatch_contact_events()
     const auto events = b2World_GetContactEvents( world_ );
     for( int i = 0; i < events.beginCount; ++i ) {
         const auto &ev = events.beginEvents[i];
-        // Identify which shape is the vehicle (the other is terrain).
-        // vehicle_bodies_ membership is O(1); terrain userData is a small encoded integer,
-        // not a valid vehicle pointer — the count() guard is mandatory.
         const auto check = []( b2ShapeId sid ) {
+            if( b2Shape_IsSensor( sid ) ) { return; } // creature sensors — not vehicle pointers
             const auto bid = b2Shape_GetBody( sid );
             auto *ptr      = static_cast<vehicle *>( b2Body_GetUserData( bid ) );
             // TODO Phase 10 Step 5: vehicle_bodies_.count(ptr) → route bash/damage/sound

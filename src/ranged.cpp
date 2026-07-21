@@ -505,18 +505,20 @@ double occupied_tile_fraction( creature_size target_size )
 double Creature::ranged_target_size() const
 {
     if( const_cast<Creature &>( *this ).uncanny_dodge() ) {
-    return 0.0;
+        return 0.0;
+    }
+    return effective_target_size();
 }
-bool is_crouched = false;
-if( Character *ch = const_cast<Creature &>( *this ).as_character() ) {
-    if( ch->is_crouching() ) {
-            is_crouched = true;
-        }
+
+auto Creature::effective_target_size() const -> double
+{
+    auto is_crouched = false;
+    if( const auto *ch = as_character() ) {
+        is_crouched = ch->is_crouching();
     }
     if( has_flag( MF_HARDTOSHOOT ) || is_crouched ) {
-    switch( get_size() ) {
+        switch( get_size() ) {
             case creature_size::tiny:
-                // We can't be smaller than tiny, but we can make the hit rate lower.
                 return 0.05;
             case creature_size::small:
                 return occupied_tile_fraction( creature_size::tiny );

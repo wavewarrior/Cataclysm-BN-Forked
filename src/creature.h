@@ -398,6 +398,9 @@ class Creature
          * it.
          */
         double ranged_target_size() const;
+        /// Like ranged_target_size but without uncanny_dodge side effects.
+        /// Used for persistent physics shape sizing (Box2D creature hitboxes).
+        auto effective_target_size() const -> double;
 
         // handles blocking of damage instance. mutates &dam
         virtual bool block_hit( Creature* source, bodypart_id& bp_hit, damage_instance& dam ) = 0;

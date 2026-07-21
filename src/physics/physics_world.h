@@ -47,6 +47,7 @@ public:
     void on_creature_added( const Creature &c );
     void on_creature_moved( const Creature &c );
     void on_creature_removed( const Creature *c );
+    void clear_creature_bodies();
 
     // ── Terrain lifecycle ──────────────────────────────────────────────────
     /// Called after `grid[idx] = sm` in `map::on_submap_loaded`.

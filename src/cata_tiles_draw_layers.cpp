@@ -752,6 +752,14 @@ bool cata_tiles::draw_critter_at(
                 // When deferred y-sort prefetched the xform, use that instead.
                 active_anim_xform_ =
                     prefetch_valid_ ? prefetch_xform_ : compute_anim_xform( critter );
+                // Propagate vehicle sub-tile offset so passengers slide with the vehicle.
+                if( !tile_iso && m->has_effect( effect_ridden ) ) {
+                    if( const auto vp_ride = get_map().veh_at( p ) ) {
+                        const auto &veh = vp_ride->vehicle();
+                        active_anim_xform_.off_x += veh.render_offset_x * static_cast<float>( tile_width );
+                        active_anim_xform_.off_y += veh.render_offset_y * static_cast<float>( tile_height );
+                    }
+                }
                 if( do_outline ) {
                     want_outline_ = true;
                     outline_color_ = outline_color_for( m->attitude_to( g->u ), false );
@@ -1092,6 +1100,14 @@ void cata_tiles::draw_entity_with_overlays(
     // Sprite-animation transform for this character + all its overlays (rigid body).
     // When deferred y-sort prefetched the xform, use that instead.
     active_anim_xform_ = prefetch_valid_ ? prefetch_xform_ : compute_anim_xform( ch );
+    // Propagate vehicle sub-tile offset so passengers slide with the vehicle.
+    if( !tile_iso && ch.in_vehicle ) {
+        if( const auto vp_ride = get_map().veh_at( p ) ) {
+            const auto &veh = vp_ride->vehicle();
+            active_anim_xform_.off_x += veh.render_offset_x * static_cast<float>( tile_width );
+            active_anim_xform_.off_y += veh.render_offset_y * static_cast<float>( tile_height );
+        }
+    }
 
     // first draw the character itself(i guess this means a tileset that
     // takes this seriously needs a naked sprite)

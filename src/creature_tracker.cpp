@@ -240,6 +240,11 @@ void Creature_tracker::remove( const monster &critter )
 
 void Creature_tracker::clear()
 {
+#ifdef BOX2D_ENABLED
+    if( auto *pw = get_map().get_physics_world() ) {
+        pw->clear_creature_bodies();
+    }
+#endif
     monsters_list.clear();
     monsters_by_location.clear();
     monster_faction_map_.clear();

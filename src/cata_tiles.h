@@ -1124,7 +1124,7 @@ class cata_tiles
         auto void_aim_crosshair() -> void;
         auto draw_aim_crosshair() -> void;
         auto init_draw_aim_cone( const point_bub_ms &src, float aim_rad,
-                                 float spread_half_rad, int max_range ) -> void;
+                                 float spread_half_rad, int max_range, int z ) -> void;
         auto void_aim_cone() -> void;
         auto draw_aim_cone() -> void;
         auto init_draw_throw_arc( const tripoint_bub_ms &src, const tripoint_bub_ms &dst,
@@ -1297,6 +1297,7 @@ class cata_tiles
         float aim_cone_angle_ = 0.f;
         float aim_cone_spread_ = 0.f;
         int aim_cone_range_ = 0;
+        int aim_cone_z_ = 0;
         bool do_draw_throw_arc = false;
         tripoint_bub_ms throw_arc_src;
         tripoint_bub_ms throw_arc_dst;

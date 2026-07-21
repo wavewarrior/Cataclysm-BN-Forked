@@ -589,10 +589,10 @@ tilecontext->init_draw_aim_crosshair( pixel );
 }
 
 auto game::draw_aim_cone( const point_bub_ms &src, float aim_rad,
-                          float spread_half_rad, int max_range ) -> void
+                          float spread_half_rad, int max_range, int z ) -> void
 {
     if( !tilecontext ) { return; }
-tilecontext->init_draw_aim_cone( src, aim_rad, spread_half_rad, max_range );
+tilecontext->init_draw_aim_cone( src, aim_rad, spread_half_rad, max_range, z );
 }
 
 auto game::draw_throw_arc( const tripoint_bub_ms &src, const tripoint_bub_ms &dst,
