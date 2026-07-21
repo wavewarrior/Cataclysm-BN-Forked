@@ -1349,26 +1349,11 @@ void target_ui::draw_terrain_overlay()
         }
     }
 
-    // Spread cone: draw two dim edge rays at ±spread half-angle from aim direction
+    // Pixel-accurate spread cone + laser line + crosshair
     if( mode == TargetMode::Fire && dst != src ) {
         const auto half = calc_spread_half_angle();
-        if( half > 0.01_radians ) {
-            using namespace std::views;
-            const auto &here = get_map();
-            for( const auto edge : { aim_angle - half, aim_angle + half } ) {
-                const auto ray = here.ray_cast_angle( src, units::to_radians( edge ), range );
-                if( ray.empty() ) { continue; }
-                const auto this_z = ray
-                | filter( [&center]( const tripoint_bub_ms & p ) {
-                    return p.z() == center.z();
-                } )
-                | std::ranges::to<std::vector>();
-                if( !this_z.empty() ) {
-                    g->draw_line( this_z.back(), this_z );
-                }
-            }
-        }
-        // Pixel-precise crosshair at actual mouse position
+        g->draw_aim_cone( src.xy(), static_cast<float>( units::to_radians( aim_angle ) ),
+                          static_cast<float>( units::to_radians( half ) ), range );
         g->draw_aim_crosshair( get_sdl_mouse_pos() );
     }
 

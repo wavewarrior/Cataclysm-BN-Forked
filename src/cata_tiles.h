@@ -1123,6 +1123,10 @@ class cata_tiles
         auto init_draw_aim_crosshair( point pixel ) -> void;
         auto void_aim_crosshair() -> void;
         auto draw_aim_crosshair() -> void;
+        auto init_draw_aim_cone( const point_bub_ms &src, float aim_rad,
+                                 float spread_half_rad, int max_range ) -> void;
+        auto void_aim_cone() -> void;
+        auto draw_aim_cone() -> void;
         auto init_draw_throw_arc( const tripoint_bub_ms &src, const tripoint_bub_ms &dst,
                                   float charge ) -> void;
         auto void_throw_arc() -> void;
@@ -1288,6 +1292,11 @@ class cata_tiles
         bool do_draw_cone_aoe = false;
         bool do_draw_aim_crosshair = false;
         std::optional<point> aim_crosshair_pixel_;
+        bool do_draw_aim_cone = false;
+        point_bub_ms aim_cone_src_;
+        float aim_cone_angle_ = 0.f;
+        float aim_cone_spread_ = 0.f;
+        int aim_cone_range_ = 0;
         bool do_draw_throw_arc = false;
         tripoint_bub_ms throw_arc_src;
         tripoint_bub_ms throw_arc_dst;

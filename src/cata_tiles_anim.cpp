@@ -351,6 +351,85 @@ const std::array<SDL_FPoint, 2> v = {
 SDL_RenderLines( renderer.get(), h.data(), 2 );
 SDL_RenderLines( renderer.get(), v.data(), 2 );
 }
+auto cata_tiles::init_draw_aim_cone( const point_bub_ms &src, float aim_rad,
+                                     float spread_half_rad, int max_range ) -> void
+{
+    aim_cone_src_    = src;
+    aim_cone_angle_  = aim_rad;
+    aim_cone_spread_ = spread_half_rad;
+    aim_cone_range_  = max_range;
+    do_draw_aim_cone = true;
+}
+auto cata_tiles::void_aim_cone() -> void { do_draw_aim_cone = false; }
+auto cata_tiles::draw_aim_cone() -> void
+{
+    if( !do_draw_aim_cone ) { return; }
+do_draw_aim_cone = false;
+
+const auto origin = player_to_screen( aim_cone_src_ );
+const auto ox = static_cast<float>( origin.x );
+const auto oy = static_cast<float>( origin.y );
+const auto ray_len = static_cast<float>( aim_cone_range_ ) * static_cast<float>( tile_width );
+const auto half = aim_cone_spread_;
+
+// Edge angles
+const auto left_angle  = aim_cone_angle_ - half;
+const auto right_angle = aim_cone_angle_ + half;
+
+// Edge endpoints
+const auto lx = ox + ray_len * std::cos( left_angle );
+const auto ly = oy + ray_len * std::sin( left_angle );
+const auto rx = ox + ray_len * std::cos( right_angle );
+const auto ry = oy + ray_len * std::sin( right_angle );
+
+SDL_SetRenderDrawBlendMode( renderer.get(), SDL_BLENDMODE_BLEND );
+
+    // Filled wedge: triangle fan via SDL_RenderGeometry for translucent fill.
+    if( half > 0.005f ) {
+    constexpr auto fan_segs = 12;
+    const SDL_FColor fill_col{ 1.f, 0.314f, 0.f, 0.07f }; // orange, ~18/255 alpha
+    const auto origin_vtx = SDL_Vertex{ { ox, oy }, fill_col, { 0.f, 0.f } };
+    for( auto i = 0; i < fan_segs; ++i ) {
+            const auto t0 = static_cast<float>( i ) / fan_segs;
+            const auto t1 = static_cast<float>( i + 1 ) / fan_segs;
+            const auto a0 = left_angle + ( right_angle - left_angle ) * t0;
+            const auto a1 = left_angle + ( right_angle - left_angle ) * t1;
+            const std::array<SDL_Vertex, 3> verts = {
+                origin_vtx,
+                SDL_Vertex{ { ox + ray_len *std::cos( a0 ), oy + ray_len * std::sin( a0 ) },
+                    fill_col, { 0.f, 0.f } },
+                SDL_Vertex{ { ox + ray_len *std::cos( a1 ), oy + ray_len * std::sin( a1 ) },
+                    fill_col, { 0.f, 0.f } }
+            };
+            SDL_RenderGeometry( renderer.get(), nullptr, verts.data(), 3, nullptr, 0 );
+        }
+    }
+
+    // Edge lines (dim orange)
+    if( half > 0.005f ) {
+    SDL_SetRenderDrawColor( renderer.get(), 255, 120, 0, 80 );
+        const std::array<SDL_FPoint, 2> el = {
+            SDL_FPoint{ ox, oy }, SDL_FPoint{ lx, ly }
+        };
+        const std::array<SDL_FPoint, 2> er = {
+            SDL_FPoint{ ox, oy }, SDL_FPoint{ rx, ry }
+        };
+        SDL_RenderLines( renderer.get(), el.data(), 2 );
+        SDL_RenderLines( renderer.get(), er.data(), 2 );
+    }
+
+    // Center laser line (bright, always visible)
+    const auto cx = ox + ray_len * std::cos( aim_cone_angle_ );
+    const auto cy = oy + ray_len * std::sin( aim_cone_angle_ );
+    // Brighter and more opaque as spread narrows (cone → laser)
+    const auto laser_alpha = static_cast<Uint8>(
+                                 std::min( 255.f, 140.f + 115.f * ( 1.f - std::min( half / 0.3f, 1.f ) ) ) );
+    SDL_SetRenderDrawColor( renderer.get(), 255, 60, 0, laser_alpha );
+    const std::array<SDL_FPoint, 2> cl = {
+        SDL_FPoint{ ox, oy }, SDL_FPoint{ cx, cy }
+    };
+    SDL_RenderLines( renderer.get(), cl.data(), 2 );
+}
 auto cata_tiles::init_draw_throw_arc( const tripoint_bub_ms &src,
                                       const tripoint_bub_ms &dst,
                                       float charge ) -> void

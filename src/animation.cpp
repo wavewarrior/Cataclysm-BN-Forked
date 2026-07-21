@@ -588,6 +588,13 @@ auto game::draw_aim_crosshair( point pixel ) -> void
 tilecontext->init_draw_aim_crosshair( pixel );
 }
 
+auto game::draw_aim_cone( const point_bub_ms &src, float aim_rad,
+                          float spread_half_rad, int max_range ) -> void
+{
+    if( !tilecontext ) { return; }
+tilecontext->init_draw_aim_cone( src, aim_rad, spread_half_rad, max_range );
+}
+
 auto game::draw_throw_arc( const tripoint_bub_ms &src, const tripoint_bub_ms &dst,
                            float charge ) -> void
 {

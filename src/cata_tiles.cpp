@@ -1410,7 +1410,7 @@ void cata_tiles::draw(
     in_animation =
         do_draw_explosion || do_draw_custom_explosion || do_draw_bullet || do_draw_hit
         || do_draw_line || do_draw_cursor || do_draw_highlight || do_draw_weather || do_draw_sct
-        || do_draw_zones || do_draw_cone_aoe || !particles_.idle();
+        || do_draw_zones || do_draw_cone_aoe || do_draw_aim_cone || !particles_.idle();
 
     draw_footsteps_frame( center );
     if( in_animation ) {
@@ -1459,6 +1459,7 @@ void cata_tiles::draw(
         if( do_draw_cone_aoe ) { draw_cone_aoe_frame(); }
         if( do_draw_throw_arc ) { draw_throw_arc(); }
         if( do_draw_throw_impact ) { draw_throw_impact(); }
+        if( do_draw_aim_cone ) { draw_aim_cone(); }
     } else if( g->u.view_offset != tripoint_rel_ms::zero() && !g->u.in_vehicle ) {
         // check to see if player is located at ter
         const tile_search_params tile{"cursor", C_NONE, empty_string, 0, 0};

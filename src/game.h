@@ -850,6 +850,8 @@ class game: public submap_load_listener
         void draw_zones( const zone_draw_options& options );
         void draw_cursor( const tripoint_bub_ms& p );
         auto draw_aim_crosshair( point pixel ) -> void;
+        auto draw_aim_cone( const point_bub_ms &src, float aim_rad,
+                            float spread_half_rad, int max_range ) -> void;
         auto draw_throw_arc( const tripoint_bub_ms &src, const tripoint_bub_ms &dst, float charge ) -> void;
         auto draw_throw_impact( const tripoint_bub_ms &dst, float max_radius_tiles ) -> void;
         auto void_throw_impact() -> void;
