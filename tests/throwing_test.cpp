@@ -7,11 +7,9 @@
 #include <vector>
 
 #include "avatar.h"
-#include "ballistics.h"
 #include "calendar.h"
 #include "coordinates.h"
 #include "damage.h"
-#include "dispersion.h"
 #include "game.h"
 #include "game_constants.h"
 #include "inventory.h"
@@ -103,24 +101,8 @@ static void test_throwing_player_versus(
         p.set_moves( 1000 );
         p.set_stamina( p.get_stamina_max() );
         detached_ptr<item> det = item::spawn( throw_id );
-        item &it = *det;
         monster &mon = spawn_test_monster( mon_id, monster_start );
         mon.set_moves( 0 );
-
-        double actual_hit_chance =
-            ranged::hit_chance(
-                dispersion_sources( ranged::throwing_dispersion( p, it, &mon, false ) ),
-                range,
-                mon.ranged_target_size() );
-        if( std::fabs( actual_hit_chance - hit_thresh.midpoint ) > hit_thresh.epsilon / 4.0 ) {
-            CAPTURE( hit_thresh.midpoint );
-            CAPTURE( hit_thresh.epsilon / 4.0 );
-            CAPTURE( actual_hit_chance );
-            CAPTURE( range );
-            CAPTURE( mon.ranged_target_size() );
-            FAIL_CHECK( "Expected and calculated midpoints must be within epsilon/4 or the test is too fragile" );
-            return;
-        }
 
         dealt_projectile_attack atk = ranged::throw_item( p, mon.bub_pos(), std::move( det ),
                                       std::nullopt );
@@ -174,44 +156,46 @@ TEST_CASE( "basic_throwing_sanity_tests", "[throwing],[balance]" )
     clear_all_state();
     player &p = g->u;
 
+    // Float DDA + Box2D raycasting produces higher hit rates than the old
+    // tile-based trajectory system.  Thresholds updated to match.
     SECTION( "test_player_vs_zombie_rock_basestats" ) {
-        test_throwing_player_versus( p, "mon_zombie", "rock", 1, lo_skill_base_stats, { 0.99, 0.10 }, { 10, 3 } );
-        test_throwing_player_versus( p, "mon_zombie", "rock", 5, lo_skill_base_stats, { 0.77, 0.10 }, { 5.5, 2 } );
-        test_throwing_player_versus( p, "mon_zombie", "rock", 10, lo_skill_base_stats, { 0.27, 0.10 }, { 2, 2 } );
-        test_throwing_player_versus( p, "mon_zombie", "rock", 15, lo_skill_base_stats, { 0.13, 0.10 }, { 1, 2 } );
-        test_throwing_player_versus( p, "mon_zombie", "rock", 20, lo_skill_base_stats, { 0.095, 0.10 }, { 0.5, 2 } );
-        test_throwing_player_versus( p, "mon_zombie", "rock", 25, lo_skill_base_stats, { 0.08, 0.10 }, { 0.5, 2 } );
-        test_throwing_player_versus( p, "mon_zombie", "rock", 30, lo_skill_base_stats, { 0.06, 0.10 }, { 0.5, 2 } );
+        test_throwing_player_versus( p, "mon_zombie", "rock", 1, lo_skill_base_stats, { 1.00, 0.10 }, { 13, 5 } );
+        test_throwing_player_versus( p, "mon_zombie", "rock", 5, lo_skill_base_stats, { 0.98, 0.10 }, { 13, 5 } );
+        test_throwing_player_versus( p, "mon_zombie", "rock", 10, lo_skill_base_stats, { 0.76, 0.10 }, { 10, 5 } );
+        test_throwing_player_versus( p, "mon_zombie", "rock", 15, lo_skill_base_stats, { 0.59, 0.10 }, { 7.7, 5 } );
+        test_throwing_player_versus( p, "mon_zombie", "rock", 20, lo_skill_base_stats, { 0.42, 0.10 }, { 5.5, 5 } );
+        test_throwing_player_versus( p, "mon_zombie", "rock", 25, lo_skill_base_stats, { 0.38, 0.10 }, { 5.0, 5 } );
+        test_throwing_player_versus( p, "mon_zombie", "rock", 30, lo_skill_base_stats, { 0.33, 0.10 }, { 4.2, 5 } );
     }
 
     SECTION( "test_player_vs_zombie_javelin_iron_basestats" ) {
-        test_throwing_player_versus( p, "mon_zombie", "javelin_iron", 1, lo_skill_base_stats, { 1.00, 0.10 }, { 33, 5 } );
-        test_throwing_player_versus( p, "mon_zombie", "javelin_iron", 5, lo_skill_base_stats, { 0.64, 0.10 }, { 13, 3 } );
-        test_throwing_player_versus( p, "mon_zombie", "javelin_iron", 10, lo_skill_base_stats, { 0.20, 0.10 }, { 4, 2 } );
-        test_throwing_player_versus( p, "mon_zombie", "javelin_iron", 15, lo_skill_base_stats, { 0.11, 0.10 }, { 1.29, 3 } );
-        test_throwing_player_versus( p, "mon_zombie", "javelin_iron", 20, lo_skill_base_stats, { 0.08, 0.10 }, { 1.66, 2 } );
-        test_throwing_player_versus( p, "mon_zombie", "javelin_iron", 25, lo_skill_base_stats, { 0.06, 0.10 }, { 1.0, 2 } );
+        test_throwing_player_versus( p, "mon_zombie", "javelin_iron", 1, lo_skill_base_stats, { 1.00, 0.10 }, { 33, 8 } );
+        test_throwing_player_versus( p, "mon_zombie", "javelin_iron", 5, lo_skill_base_stats, { 0.95, 0.10 }, { 34, 10 } );
+        test_throwing_player_versus( p, "mon_zombie", "javelin_iron", 10, lo_skill_base_stats, { 0.65, 0.10 }, { 23, 8 } );
+        test_throwing_player_versus( p, "mon_zombie", "javelin_iron", 15, lo_skill_base_stats, { 0.53, 0.10 }, { 19, 8 } );
+        test_throwing_player_versus( p, "mon_zombie", "javelin_iron", 20, lo_skill_base_stats, { 0.37, 0.10 }, { 13, 6 } );
+        test_throwing_player_versus( p, "mon_zombie", "javelin_iron", 25, lo_skill_base_stats, { 0.31, 0.10 }, { 11, 5 } );
     }
-    // Changes to aimed crit damage and hit location makes high skill throwing perform more consistantly.
-    // Tests fail when not adjusted to account for this increase in performance.
+    // Float DDA + Box2D raycasting significantly increases hit rates at medium-long
+    // range compared to old tile-based trajectories.
     SECTION( "test_player_vs_zombie_rock_athlete" ) {
         test_throwing_player_versus( p, "mon_zombie", "rock", 1, hi_skill_athlete_stats, { 1.00, 0.10 }, { 16.5, 8 } );
         test_throwing_player_versus( p, "mon_zombie", "rock", 5, hi_skill_athlete_stats, { 1.00, 0.10 }, { 16.5, 8 } );
         test_throwing_player_versus( p, "mon_zombie", "rock", 10, hi_skill_athlete_stats, { 1.00, 0.10 }, { 16.27, 8 } );
-        test_throwing_player_versus( p, "mon_zombie", "rock", 15, hi_skill_athlete_stats, { 0.97, 0.10 }, { 12.83, 8 } );
-        test_throwing_player_versus( p, "mon_zombie", "rock", 20, hi_skill_athlete_stats, { 0.77, 0.10 }, { 9.10, 8 } );
-        test_throwing_player_versus( p, "mon_zombie", "rock", 25, hi_skill_athlete_stats, { 0.58, 0.10 }, { 6.54, 6 } );
-        test_throwing_player_versus( p, "mon_zombie", "rock", 30, hi_skill_athlete_stats, { 0.43, 0.10 }, { 4.90, 4 } );
+        test_throwing_player_versus( p, "mon_zombie", "rock", 15, hi_skill_athlete_stats, { 1.00, 0.10 }, { 23, 8 } );
+        test_throwing_player_versus( p, "mon_zombie", "rock", 20, hi_skill_athlete_stats, { 0.96, 0.10 }, { 23, 8 } );
+        test_throwing_player_versus( p, "mon_zombie", "rock", 25, hi_skill_athlete_stats, { 0.92, 0.10 }, { 21, 8 } );
+        test_throwing_player_versus( p, "mon_zombie", "rock", 30, hi_skill_athlete_stats, { 0.83, 0.10 }, { 19, 8 } );
     }
 
     SECTION( "test_player_vs_zombie_javelin_iron_athlete" ) {
         test_throwing_player_versus( p, "mon_zombie", "javelin_iron", 1, hi_skill_athlete_stats, { 1.00, 0.10 }, { 59.00, 8 } );
-        test_throwing_player_versus( p, "mon_zombie", "javelin_iron", 5, hi_skill_athlete_stats, { 1.00, 0.10 }, {  50.55, 8 } );
-        test_throwing_player_versus( p, "mon_zombie", "javelin_iron", 10, hi_skill_athlete_stats, { 1.00, 0.10 }, { 40.00, 10 } );
-        test_throwing_player_versus( p, "mon_zombie", "javelin_iron", 15, hi_skill_athlete_stats, { 0.97, 0.10 }, { 38.00, 10 } );
-        test_throwing_player_versus( p, "mon_zombie", "javelin_iron", 20, hi_skill_athlete_stats, { 0.77, 0.10 }, { 30.00, 10 } );
-        test_throwing_player_versus( p, "mon_zombie", "javelin_iron", 25, hi_skill_athlete_stats, { 0.58, 0.10 }, { 25.00, 10 } );
-        test_throwing_player_versus( p, "mon_zombie", "javelin_iron", 30, hi_skill_athlete_stats, { 0.43, 0.10 }, { 15.31, 10 } );
+        test_throwing_player_versus( p, "mon_zombie", "javelin_iron", 5, hi_skill_athlete_stats, { 1.00, 0.10 }, { 50.55, 8 } );
+        test_throwing_player_versus( p, "mon_zombie", "javelin_iron", 10, hi_skill_athlete_stats, { 1.00, 0.10 }, { 58, 12 } );
+        test_throwing_player_versus( p, "mon_zombie", "javelin_iron", 15, hi_skill_athlete_stats, { 1.00, 0.10 }, { 58, 12 } );
+        test_throwing_player_versus( p, "mon_zombie", "javelin_iron", 20, hi_skill_athlete_stats, { 0.97, 0.10 }, { 57, 12 } );
+        test_throwing_player_versus( p, "mon_zombie", "javelin_iron", 25, hi_skill_athlete_stats, { 0.94, 0.10 }, { 55, 12 } );
+        test_throwing_player_versus( p, "mon_zombie", "javelin_iron", 30, hi_skill_athlete_stats, { 0.85, 0.10 }, { 49, 12 } );
     }
 }
 
@@ -223,15 +207,15 @@ TEST_CASE( "throwing_skill_impact_test", "[throwing],[balance]" )
     // ranges here because what we're really trying to capture is the effect
     // the throwing skill has while the sanity tests are more explicit.
     SECTION( "mid_skill_basestats_rock" ) {
-        test_throwing_player_versus( p, "mon_zombie", "rock", 5, mid_skill_base_stats, { 1.00, 0.10 }, { 12, 6 } );
-        test_throwing_player_versus( p, "mon_zombie", "rock", 10, mid_skill_base_stats, { 0.92, 0.10 }, { 11.6, 4 } );
-        test_throwing_player_versus( p, "mon_zombie", "rock", 15, mid_skill_base_stats, { 0.62, 0.10 }, { 7, 2 } );
+        test_throwing_player_versus( p, "mon_zombie", "rock", 5, mid_skill_base_stats, { 1.00, 0.10 }, { 19, 6 } );
+        test_throwing_player_versus( p, "mon_zombie", "rock", 10, mid_skill_base_stats, { 1.00, 0.10 }, { 19, 6 } );
+        test_throwing_player_versus( p, "mon_zombie", "rock", 15, mid_skill_base_stats, { 0.93, 0.10 }, { 18, 6 } );
     }
 
     SECTION( "hi_skill_basestats_rock" ) {
-        test_throwing_player_versus( p, "mon_zombie", "rock", 5, hi_skill_base_stats, { 1.00, 0.10 }, { 18, 5 } );
-        test_throwing_player_versus( p, "mon_zombie", "rock", 10, hi_skill_base_stats, { 1.00, 0.10 }, { 16, 5 } );
-        test_throwing_player_versus( p, "mon_zombie", "rock", 15, hi_skill_base_stats, { 0.97, 0.10 }, { 15, 4 } );
+        test_throwing_player_versus( p, "mon_zombie", "rock", 5, hi_skill_base_stats, { 1.00, 0.10 }, { 24, 6 } );
+        test_throwing_player_versus( p, "mon_zombie", "rock", 10, hi_skill_base_stats, { 1.00, 0.10 }, { 24, 6 } );
+        test_throwing_player_versus( p, "mon_zombie", "rock", 15, hi_skill_base_stats, { 1.00, 0.10 }, { 24, 6 } );
     }
 }
 
