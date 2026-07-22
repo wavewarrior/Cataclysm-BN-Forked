@@ -505,9 +505,9 @@ double occupied_tile_fraction( creature_size target_size )
 double Creature::ranged_target_size() const
 {
     if( const_cast<Creature &>( *this ).uncanny_dodge() ) {
-        return 0.0;
-    }
-    return effective_target_size();
+    return 0.0;
+}
+return effective_target_size();
 }
 
 auto Creature::effective_target_size() const -> double

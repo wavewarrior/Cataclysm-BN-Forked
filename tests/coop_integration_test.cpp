@@ -512,8 +512,8 @@ static auto run_host_disconnect( coop_server& srv, coop_ctrl_server& ctrl ) -> v
     const auto drop_deadline =
         std::chrono::steady_clock::now() + std::chrono::milliseconds( 30'000 );
     while( !srv.awaiting_reconnect() && srv.is_running() &&
-           std::chrono::steady_clock::now() < drop_deadline ) {
-        srv.coop_world_tick();
+    std::chrono::steady_clock::now() < drop_deadline ) {
+    srv.coop_world_tick();
         SDL_Delay( 50 );
     }
     CHECK( ( srv.awaiting_reconnect() || !srv.is_running() ) ); // TCP drop detected

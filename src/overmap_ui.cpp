@@ -1773,8 +1773,7 @@ static tripoint_abs_omt display(
             set_special_args( curs );
         } else if( action == "MISSIONS" ) {
             g->list_missions();
-        }
-        else if( action == "CO_OP_MARK_OVERMAP" && coop_session::get().is_coop() ) {
+        } else if( action == "CO_OP_MARK_OVERMAP" && coop_session::get().is_coop() ) {
             std::ostringstream pkt;
             JsonOut jp( pkt );
             jp.start_object();
