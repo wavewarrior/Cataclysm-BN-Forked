@@ -8,7 +8,7 @@ build/verify command, and commit boundary needed to finish the remainder of
 leverage + safety). Each task is independently committable.
 
 Source of record for design rationale = `GI_COMPUTE_AND_PERF_PLAN.md`. This doc is
-the *execution* layer. Module architecture reference = `src/lighting/CLAUDE.md`
+the _execution_ layer. Module architecture reference = `src/lighting/CLAUDE.md`
 (read it if a step confuses you; the critical bits are inlined below).
 
 ---
@@ -33,6 +33,7 @@ visual results — you have no eyes on the rendered frame. So:
 ## Orientation (read once, fully)
 
 ### What is already done (do NOT redo)
+
 - **Stage 0/1** — compute infra + GI gather ported to compute. Committed.
 - **Stage 2a** — directional sky-portal march. Committed.
 - **Stage 2b.1** — unified coverage occluder field + 3D-elevation sun. Committed.
@@ -44,6 +45,7 @@ visual results — you have no eyes on the rendered frame. So:
   this plan was started; code existed in HEAD).
 
 ### Build / verify / run commands (memorize)
+
 ```bash
 # Build the game (Metal, this Mac). ~minutes. Add --clean-first if a binary seems stale.
 cmake --build out/build/osx-arm-slim --target cataclysm-bn-tiles
@@ -60,16 +62,20 @@ out/build/osx-arm-slim/src/cataclysm-bn-tiles --world "Clara City"
 #   - dbg(DL::Info) and DebugLogFL(DL::Info, DC::Main) appear.
 #   - DL::Debug is FILTERED OUT — never rely on it for verification.
 ```
+
 **Commit style:** terse Conventional Commits with a detailed body. Every commit in
 this repo ends with this exact trailer (include it verbatim, blank line before it):
+
 ```
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 ```
+
 **Binary-staleness trap:** a build that prints no errors can still have skipped
 relinking. After building, check the binary mtime is newer than your edit, and run
 the binary under `out/build/osx-arm-slim/src/`, not any stale root copy.
 
 ### Hard gotchas (these have each cost ≥1 build cycle — obey blindly)
+
 1. **Fragment storage-buffer registers + C++ bind slots move in LOCKSTEP.** A
    mismatch = D3D12 device-removed crash. If you add/remove/reorder a
    `register(tN, space2)` storage buffer in `sprite.frag.hlsl`, you MUST update the
@@ -98,6 +104,7 @@ the binary under `out/build/osx-arm-slim/src/`, not any stale root copy.
    Stage explicit file lists only. Each task below names its exact files.
 
 ### The compute-pass pattern (every GPU lighting pass follows it)
+
 A pass = a class in `src/lighting/<name>_pass.{h,cpp}` that: compiles a compute
 pipeline from `data/shaders/lighting/src/<name>.comp.hlsl` via
 `compile_compute_pipeline()`, owns its output `SDL_GPUBuffer`(s), exposes
@@ -113,17 +120,18 @@ accessor (e.g. `rs.gi()`, `rs.sky()`, `rs.sdf()`). Dispatches are issued from
 `flush_and_gather_rc` in `src/sdl_render_frame.cpp`, under the `rc_rebuild` gate.
 
 ### Key files (the lighting GPU pipeline)
-| File | Role |
-|---|---|
-| `src/sdl_render_frame.cpp` | Frame orchestrator. `build_lighting`, `flush_and_gather_rc` (compute dispatches), `assemble_light_inputs` (fragment uniforms), `make_celestial_params`. |
-| `src/lighting/frame_build.cpp` | CPU per-tile build: transparency, SDF (region-limited DT), `occ` coverage field, sky_vis, vis. Submits to collector. |
-| `src/lighting/sdf_pass.{h,cpp}` | Owns + uploads SDF/skyvis/vis/occ storage buffers; `compute_sdf_cpu` (the Euclidean DT, JFA target). |
-| `src/lighting/gi_compute_pass.{h,cpp}` + `data/shaders/lighting/src/gi_field.comp.hlsl` + `gi_bounce.comp.hlsl` | GI: field gather + ray-march bounce → `gi_buf_`. P2 daylight injection lives in `gi_field.comp`. |
-| `src/lighting/sky_sun_pass.{h,cpp}` + `data/shaders/lighting/src/sky_sun.comp.hlsl` | Sky-access + sun/moon occlusion march over `occ` → `sky_buf_`. |
-| `data/shaders/lighting/src/sprite.frag.hlsl` | The lit fragment shader. Consumes all storage buffers; computes `sky_contrib`/`sun_contrib`/`emitter_light`/GI. |
-| `src/lighting/sprite_batcher.cpp` | `bind_lighting_resources` — binds fragment storage buffers (lockstep with sprite.frag registers). |
-| `src/lighting/shader_compiler.{h,cpp}` | `compile_compute_pipeline`, `compile_graphics_shader`, `load_lighting_shader_source`. |
-| `tools/shader_check/` | `shader_reflect_check` Mac-side reflection gate. |
+
+| File                                                                                                            | Role                                                                                                                                                    |
+| --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/sdl_render_frame.cpp`                                                                                      | Frame orchestrator. `build_lighting`, `flush_and_gather_rc` (compute dispatches), `assemble_light_inputs` (fragment uniforms), `make_celestial_params`. |
+| `src/lighting/frame_build.cpp`                                                                                  | CPU per-tile build: transparency, SDF (region-limited DT), `occ` coverage field, sky_vis, vis. Submits to collector.                                    |
+| `src/lighting/sdf_pass.{h,cpp}`                                                                                 | Owns + uploads SDF/skyvis/vis/occ storage buffers; `compute_sdf_cpu` (the Euclidean DT, JFA target).                                                    |
+| `src/lighting/gi_compute_pass.{h,cpp}` + `data/shaders/lighting/src/gi_field.comp.hlsl` + `gi_bounce.comp.hlsl` | GI: field gather + ray-march bounce → `gi_buf_`. P2 daylight injection lives in `gi_field.comp`.                                                        |
+| `src/lighting/sky_sun_pass.{h,cpp}` + `data/shaders/lighting/src/sky_sun.comp.hlsl`                             | Sky-access + sun/moon occlusion march over `occ` → `sky_buf_`.                                                                                          |
+| `data/shaders/lighting/src/sprite.frag.hlsl`                                                                    | The lit fragment shader. Consumes all storage buffers; computes `sky_contrib`/`sun_contrib`/`emitter_light`/GI.                                         |
+| `src/lighting/sprite_batcher.cpp`                                                                               | `bind_lighting_resources` — binds fragment storage buffers (lockstep with sprite.frag registers).                                                       |
+| `src/lighting/shader_compiler.{h,cpp}`                                                                          | `compile_compute_pipeline`, `compile_graphics_shader`, `load_lighting_shader_source`.                                                                   |
+| `tools/shader_check/`                                                                                           | `shader_reflect_check` Mac-side reflection gate.                                                                                                        |
 
 ---
 
@@ -140,9 +148,11 @@ low-risk; P5c (sky gradient) is the only one touching a fragment cbuffer layout 
 do it last and carefully, or skip.
 
 ### P5a — soft sun penumbra (compute-side; no struct change) ✅ DONE `fa905de580`
+
 **Committed.** See commit for details. Implemented 4-tap averaged celestial march (~±5° spread).
 
 ### P5b — retune night ambient floor against directional moonlight ⏳ HUMAN TUNING NEEDED
+
 This is a TUNING task, not a code-structure task. `night_floor` is a `DebugParams`
 knob consumed in `sprite.frag.hlsl` (cbuffer `b2, space3`, line ~101). Stage 2b.2
 added directional moonlight (`sun_contrib` carries the moon at night via
@@ -157,6 +167,7 @@ value does NOT change `sizeof(debug_params)`, so the `static_assert` stays happy
 `tune(lighting): P5b lower night_floor for directional moonlight`.
 
 ### P5d — promote march constants to F4 knobs (optional, do after P5a)
+
 **Goal:** expose `SKY_DIRS`, `SKY_REACH`, `SUN_STEPS`, `SUN_PENUMBRA` (sky_sun.comp)
 and the GI gather constants (`gi_bounce.comp`) as live F4 knobs, mirroring
 `gi_strength`.
@@ -175,6 +186,7 @@ This is fiddly; if context is tight, do ONLY the penumbra width + SKY_REACH (hig
 visual payoff) and leave the rest const. **Gate + build + eyeball + commit** per the loop.
 
 ### P5c — sky colour as horizon→zenith gradient (most invasive; OPTIONAL)
+
 **File:** `sprite.frag.hlsl` `sky_contrib` (line 512) +
 `SunParams` cbuffer (`b1, space3`, lines 80-84) + the C++ `sun_params` struct +
 `make_sun_params` (`src/lighting/sprite_batcher.cpp:83`, decl `sprite_batcher.h:177`
@@ -199,9 +211,11 @@ highest-risk P5 item. **Commit** (3 files: `data/shaders/lighting/src/sprite.fra
 ## Task P6 — correctness gaps
 
 ### P6a — weather-dim the moon (clouds currently ignore moonlight) ✅ DONE `6f109a0737`
+
 **Committed.** Added `weather_cloud_mult()` helper and applied to both `make_celestial_params` moon branch and `assemble_light_inputs` night path.
 
 ### P6b — vehicle occluders in the coverage field (accepted-minor) ✅ DONE `8587d55b8d`
+
 **Committed.** Added `m.veh_at(tp)` check with `obstacle_at_part()` to raise coverage height for parked vehicles.
 
 ---
@@ -216,11 +230,13 @@ and logs `sim_total / build_map_cache / monmove / world_tick` every 20 turns, bu
 produced no output yet. Capture real numbers before optimizing anything in Part B.
 **Steps:** build, have the user run a world and **hold a movement key for ≥20 in-game
 turns**. Then read `debug.log`:
+
 ```bash
 grep "\[sim\]\[perf\]" ~/Library/Application\ Support/Cataclysm-BN/config/debug.log | tail
 grep "\[lighting\]\[perf\] structure_rebuild" ~/Library/Application\ Support/Cataclysm-BN/config/debug.log | tail
 grep "\[render\]\[perf\]" ~/Library/Application\ Support/Cataclysm-BN/config/debug.log | tail
 ```
+
 Note: `[sim][perf] build_map_cache` (map.cpp) is DISTINCT from
 `[lighting][perf] structure_rebuild` (the SDF DT in frame_build) — both ~10ms
 historically; do not conflate. Record `sim_total` and its breakdown. **No commit** —
@@ -232,15 +248,16 @@ this produces the data that decides B2's target. Write the captured numbers into
 ## Task B2 — attack the dominant sim span (gated on B0)
 
 Only act on the span B0 shows dominant. Candidates (from the plan):
+
 - **build_map_cache** (`src/map.cpp` ~9778, already parallel-phased): finer
   dirty-gating of the transparency/lightmap sub-caches (rebuild only changed inputs).
   Correctness-sensitive — gate on measured share, add a dirty flag per sub-cache.
 - **monmove**: already LOD + sleep-skip; inspect sight-cache clearing / tier thresholds.
 - **world_tick**: field decay over loaded submaps (`do_emits` already 10s-gated) —
   check iteration scope.
-**Process:** pick the top span, form a hypothesis, make the smallest change, re-run
-B0's capture, compare. **Commit per change** with the before/after numbers in the body.
-Target (plan): `structure_rebuild < 3ms`, max-frame down from 76ms, fps up from ~32.
+  **Process:** pick the top span, form a hypothesis, make the smallest change, re-run
+  B0's capture, compare. **Commit per change** with the before/after numbers in the body.
+  Target (plan): `structure_rebuild < 3ms`, max-frame down from 76ms, fps up from ~32.
 
 ---
 
@@ -250,7 +267,7 @@ Target (plan): `structure_rebuild < 3ms`, max-frame down from 76ms, fps up from 
 `structure_rebuild` hitch — even region-limited (B1) it runs on the render thread.
 Moving SDF generation to a GPU **Jump-Flood** pass makes it ~free and off the main
 thread, AND unblocks the deferred thin-slab 3D SDF (see Deferred). JFA is only a
-faster way to COMPUTE the same Euclidean DT — the *consumer* layout is unchanged.
+faster way to COMPUTE the same Euclidean DT — the _consumer_ layout is unchanged.
 
 **Invariant you must preserve:** the SDF the fragment + GI read is
 `sdf_storage_` (created in `sdf_pass::init`, lines ~237-249): an SS-finer grid,
@@ -265,6 +282,7 @@ This is multi-session-sized. Land it as the sub-commits below; each builds + gat
 runs green before the next. Do NOT land it as one diff.
 
 ### P3.1 — feed transparency to compute (new readonly input)
+
 - `sdf_pass.{h,cpp}`: add a tile-res, compute-readable transparency buffer
   `trans_storage_` (floats, `0.0=opaque .. 1.0=open`), `map_w*map_h` floats, usage
   `COMPUTE_STORAGE_READ` (+ `COMPUTE_STORAGE_WRITE` not needed). Add `xfer_trans_f_`
@@ -279,6 +297,7 @@ runs green before the next. Do NOT land it as one diff.
   `feat(lighting): P3.1 tile-res transparency compute buffer (JFA input)`.
 
 ### P3.2 — new `gpu_sdf_pass` with JFA shaders (writes a SCRATCH buffer first)
+
 - New `src/lighting/gpu_sdf_pass.{h,cpp}` (copy `gi_compute_pass` scaffold). It owns
   TWO ping-pong seed buffers (`seed_a_`, `seed_b_`: SS-grid, 2 floats/subcell =
   nearest-seed subcell coord, x-major stride `map_h*SS`) and writes the final
@@ -331,6 +350,7 @@ runs green before the next. Do NOT land it as one diff.
   `feat(lighting): P3.2 GPU JFA SDF pass (scratch buffer, A/B vs CPU DT)`.
 
 ### P3.3 — switch the consumers to JFA, delete the CPU DT
+
 - Make `gpu_sdf_pass::resolve` write `sdf_storage_` directly (pass the sdf_pass's
   buffer in, or have render_state point both at one buffer). The SS-grid layout +
   tile units already match — no fragment/GI shader change, no renumber.
@@ -351,6 +371,7 @@ runs green before the next. Do NOT land it as one diff.
   `perf(lighting): P3.3 SDF from GPU JFA; delete CPU DT + dead SDF/skyvis textures`.
 
 ### P3.4 — region-limit JFA (optional perf)
+
 Mirror B1: run JFA only over the camera SS-rect ± margin, scatter into the full
 buffer with a large sentinel outside. Only if the full-grid JFA shows up in `[render][perf]`.
 
@@ -379,7 +400,7 @@ have not yet been exercised). No code owed now.
 One thin-slab 3D SDF (current z + a few levels above, region-limited) sphere-marched
 in 3D for **both** emitters and the sun = the genuinely-merged indoor/outdoor
 structure (replaces the current split: emitter SDF wall-only + sun coverage-march).
-Belongs to the GPU-JFA phase because a 3D *CPU* DT would undo B1. Do NOT attempt
+Belongs to the GPU-JFA phase because a 3D _CPU_ DT would undo B1. Do NOT attempt
 before P3.3 lands. Tracked here only as a pointer; it is a separate plan.
 
 ---
@@ -387,6 +408,7 @@ before P3.3 lands. Tracked here only as a pointer; it is a separate plan.
 ## Appendix
 
 ### sprite.frag.hlsl fragment resource layout (space2 storage; space3 uniforms)
+
 ```
 t0 Atlas (sampled)          s0 AtlasSmp (sampler)
 t1 ShadowMask  (storage TEXTURE — the SOLE storage texture)
@@ -398,6 +420,7 @@ t6 GiBuf       (slot 4)   StructuredBuffer<float>  tile-res, [(x*map_h+y)*4+c] r
 t7 SkyBuf      (slot 5)   StructuredBuffer<float>  tile-res, [(x*map_h+y)*4+c] rgb=sky-access a=celestial-occ
 b0(space3) LightParams   b1 SunParams(48 B,12 floats)   b2 DebugParams
 ```
+
 `DebugParams`/`debug_params` is **136 B** — guarded by
 `static_assert(sizeof(debug_params)==136, …)` at `src/lighting/sprite_batcher.cpp:62`.
 If P5d adds a knob field to the `debug_params` struct (`sprite_batcher.h`), you MUST
@@ -409,15 +432,18 @@ update both that `static_assert` and the matching `DebugParams` cbuffer in
 — bind-array order MUST match t2..t7.
 
 ### Compute shader I/O (current)
+
 ```
 gi_field.comp   ro: Emitters(t0) SdfBuf(t1) SkyBuf(t2)   rw: FieldBuf(u0)   ub: GiParams(b0)
 gi_bounce.comp  ro: FieldBuf(t0) SdfBuf(t1)              rw: GiBuf(u0)      ub: GiParams(b0)
 sky_sun.comp    ro: OccBuf(t0)                           rw: SkyBuf(u0)     ub: SkySunParams(b0)
 ```
+
 `OccBuf` = tile-res, 2 floats/tile `occ[(x*map_h+y)*2+c]`: c0 = occluder height
 (coverage/100, tiles), c1 = roof bit. Built in `frame_build.cpp` ~246-272.
 
 ### Params structs (keep C++ struct == HLSL cbuffer, field order + size)
+
 - `gi_params` (`gi_compute_pass.h`): emitter_count,map_w,map_h,current_z,shadow_k,
   shadow_steps,pad0,pad1, sun_rgb+sun_intensity, sky_rgb+sky_intensity.
 - `sky_sun_params` (`sky_sun_pass.h`, 32 B): map_w,map_h,sun_dir_x,sun_dir_y,
@@ -425,10 +451,12 @@ sky_sun.comp    ro: OccBuf(t0)                           rw: SkyBuf(u0)     ub: 
   currently reserved — repurpose these before growing the struct.)
 
 ### Debug views (F4 panel, `debug_mode`)
+
 GI raw = mode 12; sky-access/sun-occ views exist (mode 13/14 per plan). Use them to
 isolate a term when eyeballing.
 
 ### make_celestial_params (sdl_render_frame.cpp ~265)
+
 Day = sun (`make_sun_params(hour)`); night = moon = sun params with 12h-shifted arc,
 cold blue-white colour (0.55,0.65,0.95), intensity `illum*MOON_MAX(0.18)` where
 `illum` from `get_moon_phase(when)`. Picks the brighter body for the directional term.

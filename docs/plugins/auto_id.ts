@@ -6,11 +6,11 @@ import { getLangPattern } from "./languages.ts"
  * e.g `/ko/foo/bar.md` will have `id` of `foo/bar`
  */
 export const autoId = (options: { languages: string[] }) => {
-  const langPattern = getLangPattern(options.languages)
-  return (site: Lume.Site) => {
-    site.preprocess([".md"], (files) =>
-      files.forEach((file) => {
-        if (!file.data.id) file.data.id = slugify(file.src.path).replace(langPattern, "")
-      }))
-  }
+    const langPattern = getLangPattern(options.languages)
+    return (site: Lume.Site) => {
+        site.preprocess([".md"], (files) =>
+            files.forEach((file) => {
+                if (!file.data.id) file.data.id = slugify(file.src.path).replace(langPattern, "")
+            }))
+    }
 }

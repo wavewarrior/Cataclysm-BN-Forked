@@ -62,6 +62,7 @@ The project already has a **Scrolling Combat Text (SCT)** system (`scrollingcomb
 Extend the current `cSCT` class to support damage-specific features while maintaining backward compatibility.
 
 **Changes:**
+
 - Add a `damage_type` field to `cSCT` for color-coding by type.
 - Add a `size_multiplier` field so critical hits render larger.
 - Add position jitter: each new SCT at the same position gets a small random offset (±2 tiles).
@@ -69,27 +70,29 @@ Extend the current `cSCT` class to support damage-specific features while mainta
 
 **Damage Type Color Mapping:**
 
-| Damage Type | Color (Tile) | Rationale |
-|---|---|---|
-| DT_BASH | White/Gray | Blunt, neutral impact |
-| DT_CUT | Cyan/Light Blue | Sharp, slicing |
-| DT_STAB | Red-Orange | Piercing, aggressive |
-| DT_ACID | Green-Yellow | Corrosive, sickly |
-| DT_HEAT | Orange/Red | Fire, heat |
-| DT_COLD | Light Blue/Cyan | Ice, cold |
-| DT_DARK | Purple/Magenta | Eldritch, dark |
-| DT_LIGHT | Yellow/Gold | Holy, radiant |
-| DT_PSI | Blue/Violet | Mental, psychic |
-| DT_ELECTRIC | Bright Yellow | Lightning |
-| DT_BULLET | White with trail | Fast projectile |
+| Damage Type | Color (Tile)     | Rationale             |
+| ----------- | ---------------- | --------------------- |
+| DT_BASH     | White/Gray       | Blunt, neutral impact |
+| DT_CUT      | Cyan/Light Blue  | Sharp, slicing        |
+| DT_STAB     | Red-Orange       | Piercing, aggressive  |
+| DT_ACID     | Green-Yellow     | Corrosive, sickly     |
+| DT_HEAT     | Orange/Red       | Fire, heat            |
+| DT_COLD     | Light Blue/Cyan  | Ice, cold             |
+| DT_DARK     | Purple/Magenta   | Eldritch, dark        |
+| DT_LIGHT    | Yellow/Gold      | Holy, radiant         |
+| DT_PSI      | Blue/Violet      | Mental, psychic       |
+| DT_ELECTRIC | Bright Yellow    | Lightning             |
+| DT_BULLET   | White with trail | Fast projectile       |
 
 **Size Scaling:**
+
 - Normal damage: 1x (current behavior)
 - Critical hit: 1.5x font size, gold/yellow color overlay on the number
 - Triple critical: 2x font size, bright red/gold color, brief "flash" effect (first frame rendered twice at full opacity before fading)
 - Graze: 0.75x size + dimmed color
 
 **Implementation approach:**
+
 ```cpp
 // In cSCT struct additions:
 enum class sct_damage_type { none, bash, cut, stab, acid, heat, cold, dark, light, psi, electric, bullet };
@@ -109,6 +112,7 @@ bool is_triple_crit = false;
 Create a separate system specifically for floating combat text, decoupled from the general SCT animation system.
 
 **Architecture:**
+
 - New `floating_text_manager` singleton that manages a pool of transient text objects.
 - Each entry has: position (screen-space), velocity (drift upward), lifetime, font size, color, text content, and optional sprite effect.
 - Renders in a dedicated overlay pass after the main frame but before UI elements.
@@ -122,6 +126,7 @@ Create a separate system specifically for floating combat text, decoupled from t
 Keep `cSCT` as the data structure for spawning combat text but replace the rendering in `draw_sct_frame()` with a more sophisticated renderer that supports size scaling, per-type colors, and position jitter.
 
 **Changes:**
+
 - Extend `cSCT` with new fields (damage type, size multiplier, jitter offset).
 - Rewrite `cata_tiles::draw_sct_frame()` to use the font rendering path for all entries (drop ASCII fallback), applying size scaling and color mapping.
 - Add a small random offset at spawn time based on entry count at that position.
@@ -143,16 +148,17 @@ Spawn short text labels like "MISS", "DODGE", "PARRY", "BLOCK" at the target's p
 
 **Text + Color Mapping:**
 
-| Outcome | Text | Color | Size |
-|---|---|---|---|
-| Miss (attack missed) | MISS | White/Gray | 1x |
-| Dodge (target dodged) | DODGE | Light Blue | 1x |
-| Parry (weapon parried) | PARRY | Cyan | 1.1x |
-| Block (shield blocked) | BLOCK | Brown/Tan | 1x |
-| Evade (movement dodge) | EVADE | Light Gray | 0.9x |
-| Deflect (reflected attack) | DEFLECT | Gold | 1.2x |
+| Outcome                    | Text    | Color      | Size |
+| -------------------------- | ------- | ---------- | ---- |
+| Miss (attack missed)       | MISS    | White/Gray | 1x   |
+| Dodge (target dodged)      | DODGE   | Light Blue | 1x   |
+| Parry (weapon parried)     | PARRY   | Cyan       | 1.1x |
+| Block (shield blocked)     | BLOCK   | Brown/Tan  | 1x   |
+| Evade (movement dodge)     | EVADE   | Light Gray | 0.9x |
+| Deflect (reflected attack) | DEFLECT | Gold       | 1.2x |
 
 **Implementation:**
+
 - Spawn SCT entries with `sType` set to the outcome type ("miss", "dodge", etc.).
 - Use existing color mapping: neutral for miss, blue-ish for dodge/evade, cyan for parry, brown for block.
 - Direction: upward from target position (same as damage numbers).
@@ -165,12 +171,14 @@ Spawn short text labels like "MISS", "DODGE", "PARRY", "BLOCK" at the target's p
 Combine text labels with small sprite indicators drawn alongside the text.
 
 **Examples:**
+
 - MISS: "MISS" text with a small X symbol
 - DODGE: "DODGE" text with a zigzag/dash symbol
 - PARRY: "PARRY" text with a sword/shield icon
 - BLOCK: "BLOCK" text with a shield icon
 
 **Implementation:**
+
 - Extend `cSCT` to support an optional sprite ID alongside the text.
 - In `draw_sct_frame()`, render the sprite first, then the text beside it.
 - Use existing tileset glyphs (e.g., 'X' for miss, '~' for dodge, sword glyph for parry).
@@ -183,12 +191,14 @@ Combine text labels with small sprite indicators drawn alongside the text.
 Text labels with a brief color pulse animation on spawn — the text starts bright and saturated, then fades to its final color while drifting upward.
 
 **Examples:**
+
 - MISS: White text that pulses once before settling
 - DODGE: Blue text with a quick blue flash
 - PARRY: Cyan text with a metallic shimmer effect (brief opacity change)
 - BLOCK: Brown/tan text with a solid, heavy appearance (slower fade)
 
 **Implementation:**
+
 - Add a `pulse_color` field to `cSCT` that overrides the base color for the first 2-3 frames.
 - In the render loop, interpolate between pulse_color and final color based on step count.
 
@@ -208,11 +218,13 @@ All five outcome types confirmed: MISS, DODGE, PARRY, BLOCK, GRAZE. Simple text 
 Make critical hits visually distinct through size scaling and color changes, without adding new text labels.
 
 **Behavior:**
+
 - Regular damage: normal font size, standard damage-type color.
 - Critical hit: 1.5x font size, gold/yellow color overlay on the number.
 - Triple critical: 2x font size, bright red/gold color, brief "flash" effect (first frame rendered twice at full opacity before fading).
 
 **Implementation:**
+
 - Add `size_multiplier` and `is_critical` fields to `cSCT`.
 - In `draw_sct_frame()`, scale the font rendering based on `size_multiplier`.
 - For triple crits, render the text twice with slight offset on frame 0 for a "double-strike" effect.
@@ -225,11 +237,13 @@ Make critical hits visually distinct through size scaling and color changes, wit
 Add a "CRIT!" or "!!!" label alongside the damage number for critical hits.
 
 **Behavior:**
+
 - Regular hit: just the damage number.
 - Critical hit: large damage number + small "CRIT!" text above it in gold.
 - Triple critical: extra-large damage number + "TRIPLE CRIT!" in red/gold.
 
 **Implementation:**
+
 - Use the existing two-text-field system (`sText` for damage, `sText2` for label).
 - Position `sText2` above and centered on `sText`.
 
@@ -241,11 +255,13 @@ Add a "CRIT!" or "!!!" label alongside the damage number for critical hits.
 Add a brief animation to critical hits beyond just size/color.
 
 **Examples:**
+
 - Critical hit: damage number scales up from 0.5x to 1.5x over 2 frames, then begins scrolling.
 - Triple critical: same scale-up plus a brief screen shake on the target's tile (subtle, 1-pixel offset).
 - Add spark/particle effects around the text for triple crits.
 
 **Implementation:**
+
 - Add `animation_phase` field to `cSCT`.
 - In `draw_sct_frame()`, apply scale factor based on animation phase before rendering.
 - For screen shake, add a temporary offset to the target's position during the critical hit frame.
@@ -270,6 +286,7 @@ When multiple attacks hit the same creature in quick succession, SCT entries spa
 Add a small random offset (±2-3 tiles) to each new SCT entry's spawn position. Entries that land on the same tile get pushed apart.
 
 **Implementation:**
+
 ```cpp
 // In scrollingcombattext::add():
 const int jitter_range = 2;
@@ -285,6 +302,7 @@ pos += jitter;
 Distribute SCT entries radially around the target's position based on how many entries already exist at that location.
 
 **Implementation:**
+
 ```cpp
 // Count existing entries near this position
 int count = 0;
@@ -340,6 +358,7 @@ Add a small type abbreviation next to the damage number: "B" for bash, "C" for c
 ### Option C: Color + Damage Type Icon
 
 Add a small icon/symbol next to the damage number representing the type:
+
 - Bash: circle/hammer symbol
 - Cut: diagonal line/slash
 - Stab: triangle/point
@@ -361,16 +380,16 @@ Default to color-only for clean visuals, but add an option `SCT_COLORBLIND_MODE`
 
 Add new game options to let players customize floating combat text behavior:
 
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `ANIMATION_SCT_DAMAGE` | bool | true | Show damage numbers |
-| `ANIMATION_SCT_OUTCOMES` | bool | true | Show miss/dodge/parry/block text |
-| `ANIMATION_SCT_CRITICALS` | bool | true | Highlight critical hits with size/color |
-| `ANIMATION_SCT_TYPE_COLORS` | bool | true | Color damage by type |
-| `ANIMATION_SCT_COLORBLIND` | bool | false | Add type abbreviations to numbers |
-| `ANIMATION_SCT_JITTER` | int | 2 | Position jitter range in tiles (0 = none) |
-| `ANIMATION_SCT_MAX_ENTRIES` | int | 15 | Maximum simultaneous SCT entries (old ones removed first) |
-| `ANIMATION_SCT_SPEED` | int | 10 | Animation speed multiplier (5-20, default 10) |
+| Option                      | Type | Default | Description                                               |
+| --------------------------- | ---- | ------- | --------------------------------------------------------- |
+| `ANIMATION_SCT_DAMAGE`      | bool | true    | Show damage numbers                                       |
+| `ANIMATION_SCT_OUTCOMES`    | bool | true    | Show miss/dodge/parry/block text                          |
+| `ANIMATION_SCT_CRITICALS`   | bool | true    | Highlight critical hits with size/color                   |
+| `ANIMATION_SCT_TYPE_COLORS` | bool | true    | Color damage by type                                      |
+| `ANIMATION_SCT_COLORBLIND`  | bool | false   | Add type abbreviations to numbers                         |
+| `ANIMATION_SCT_JITTER`      | int  | 2       | Position jitter range in tiles (0 = none)                 |
+| `ANIMATION_SCT_MAX_ENTRIES` | int  | 15      | Maximum simultaneous SCT entries (old ones removed first) |
+| `ANIMATION_SCT_SPEED`       | int  | 10      | Animation speed multiplier (5-20, default 10)             |
 
 ---
 
@@ -379,10 +398,12 @@ Add new game options to let players customize floating combat text behavior:
 ### Phase 1: Foundation (Core Data Structure Changes)
 
 **Files to modify:**
+
 - `src/output.h` — Extend `cSCT` struct with new fields
 - `src/output.cpp` — Update constructor and `add()` method
 
 **Changes:**
+
 1. Add fields to `cSCT`:
    - `sct_damage_type damage_type = sct_damage_type::none;`
    - `float size_multiplier = 1.0f;`
@@ -399,9 +420,11 @@ Add new game options to let players customize floating combat text behavior:
 ### Phase 2: Renderer Enhancement
 
 **Files to modify:**
+
 - `src/cata_tiles.cpp` — Rewrite `draw_sct_frame()`
 
 **Changes:**
+
 1. **Font-only rendering path** for SCT (drop ASCII fallback). This is tiles-focused; accept edge cases with non-Latin scripts or custom tilesets.
 2. Apply size scaling based on `size_multiplier`.
 3. Map damage type to color using new mapping table.
@@ -411,22 +434,26 @@ Add new game options to let players customize floating combat text behavior:
 ### Phase 3: Spawn Point Integration — Centralized
 
 **Files to modify:**
+
 - `src/creature.cpp` — Add SCT spawn in `deal_damage_handle_type()` (primary)
 - `src/melee.cpp`, `src/ballistics.cpp` — Thread `is_crit`/`is_graze` flags down to damage handler; add SCT for miss/dodge/parry/block outcomes at attack resolution sites
 
 **Changes:**
+
 1. **Centralized spawn**: All damage-related SCT spawned in `Creature::deal_damage_handle_type()`. Pass `bool is_crit, bool is_graze` from callers through the call chain. This ensures all damage types — melee, ranged, environmental, magic — get consistent floating text feedback.
-2. **Distributed spawn for outcomes only**: Miss/dodge/parry/block happen *before* damage is calculated, so they must be spawned at attack resolution sites (`melee.cpp`, `ballistics.cpp`). These are "outcome" SCTs with no damage value.
+2. **Distributed spawn for outcomes only**: Miss/dodge/parry/block happen _before_ damage is calculated, so they must be spawned at attack resolution sites (`melee.cpp`, `ballistics.cpp`). These are "outcome" SCTs with no damage value.
 3. Create centralized `spawn_combat_feedback()` helper function that encapsulates all SCT spawn logic (position jitter calculation, color mapping, size scaling, flag setting). Callers pass high-level info and the helper handles everything else.
 
 ### Phase 4: Defensive Outcome Indicators — All Five Types
 
 **Files to modify:**
+
 - `src/melee.cpp` — Dodge/parry detection and SCT spawn
 - `src/ballistics.cpp` — Ranged dodge/block detection
 - New file: `src/combat_feedback.h/cpp` — Centralized combat feedback spawning (`spawn_combat_feedback()`)
 
 **Changes:**
+
 1. Identify where dodge, parry, block, and evade outcomes are determined in the attack flow.
 2. Spawn SCT entries for all five outcome types with text labels + distinct colors:
    - MISS → white/gray, brief flash
@@ -439,10 +466,12 @@ Add new game options to let players customize floating combat text behavior:
 ### Phase 5: Configuration and Polish
 
 **Files to modify:**
+
 - `src/options.cpp` — Add new options
 - `src/game_options.h` — Declare option keys (if needed)
 
 **Changes:**
+
 1. Add all configuration options from Feature 6 table.
 2. Wire options into SCT spawn logic (gate damage numbers, outcomes, type colors).
 3. Add colorblind mode support (`SCT_COLORBLIND_MODE` adds type abbreviations alongside numbers).
@@ -473,6 +502,7 @@ Add new game options to let players customize floating combat text behavior:
 **Primary spawn point (damage): `Creature::deal_damage()` (line 1380)**
 
 All damage-related SCT spawned here. The `is_crit`/`is_graze` flags are threaded through all call chains:
+
 - Melee: `Character::melee_attack()` → `deal_melee_hit()` → `deal_damage()`
 - Ranged: `Creature::deal_projectile_attack()` → `deal_damage()` (graze auto-detected from goodhit)
 - Monster melee: `monster::melee_attack()` → `deal_melee_hit()` → `deal_damage()`
@@ -481,7 +511,8 @@ This ensures all damage types — melee, ranged, environmental, magic — get co
 
 **Secondary spawn points (outcomes only): Attack resolution functions**
 
-Miss/dodge/parry/block happen *before* damage is calculated, so they must be spawned at attack resolution sites:
+Miss/dodge/parry/block happen _before_ damage is calculated, so they must be spawned at attack resolution sites:
+
 - Melee miss: `melee.cpp` line 541 — player/NPC misses in `Character::melee_attack()`
 - Melee dodge: `creature.cpp` line 826 — active dodges in `Creature::deal_melee_hit()` (hit_spread < 0)
 - Melee block: `melee.cpp` line 2091 — shield/limb blocks in `Character::block_hit()`
@@ -522,6 +553,7 @@ All spawning goes through the centralized `spawn_combat_feedback()` helper.
 ### Completed (Phases 1-3 Foundation)
 
 **Phase 1 - Data Structure Extensions:**
+
 - cSCT struct in output.h extended with new fields:
   - sct_damage_type damage_type
   - float size_multiplier
@@ -530,20 +562,24 @@ All spawning goes through the centralized `spawn_combat_feedback()` helper.
   - sct_feedback_type feedback_type
 
 **Phase 1 - Radial Jitter:**
+
 - scrollingcombattext::add() in output.cpp implements radial distribution for position jitter (angle = count * 45°, radius ~2px)
 - FIFO eviction with configurable max entries via ANIMATION_SCT_MAX_ENTRIES option
 
 **Phase 2 - Centralized Spawning Helper:**
+
 - New file: combat_feedback.h/cpp with:
   - spawn_combat_feedback() - main helper function
   - spawn_damage_number() - convenience for damage numbers
   - spawn_armor_feedback() - for armor damage/destruction feedback
 
 **Phase 2 - Color Mapping:**
+
 - sct_damage_type_to_color() in output.cpp maps damage types to colors:
   - bash→neutral, cut→info, stab→bad, acid→good, heat→warning, etc.
 
 **Phase 3 - Centralized Damage Spawning (IMPLEMENTED):**
+
 - SCT spawn added in Creature::deal_damage() (line 1370) with is_crit/is_graze flags
 - Optional parameters added to all three deal_damage() overloads in creature.h/creature.cpp
 - Scattered SCT spawns removed from:
@@ -553,6 +589,7 @@ All spawning goes through the centralized `spawn_combat_feedback()` helper.
 - Added #include "options.h" to creature.cpp for get_option access
 
 **Phase 3 - Defensive Outcomes (COMPLETE):**
+
 - All five outcome types implemented:
   - MISS: `melee.cpp` line 541 — player/NPC misses in `Character::melee_attack()`
   - DODGE: `creature.cpp` line 826 — active dodges in `Creature::deal_melee_hit()` (hit_spread < 0)
@@ -561,18 +598,22 @@ All spawning goes through the centralized `spawn_combat_feedback()` helper.
   - Ranged DODGE: `creature.cpp` ~line 1012 — projectile dodges in `Creature::deal_projectile_attack()` (goodhit >= 1.0)
 
 **Phase 4 - Graze Detection (COMPLETE):**
+
 - Melee graze: `melee.cpp` line 600 — detected when hit_spread > 0 && <= 5, threaded through deal_melee_hit() → deal_damage()
 - Ranged graze: `creature.cpp` ~line 1008 — auto-detected from goodhit > accuracy_standard in deal_projectile_attack(), threaded to deal_damage()
 
 **Phase 5 - Monster Melee Crits (COMPLETE):**
+
 - `monster.cpp` line 2067 — crit chance computed from hitspread: base 5%, scaling up to ~15% at hitspread >= 20
 - Threaded through deal_melee_hit() → deal_damage()
 
 **Phase 6 - Ballistics Integration (COMPLETE):**
+
 - Ranged MISS/DODGE SCT spawns added in `Creature::deal_projectile_attack()`
 - Graze flag auto-detected and threaded to deal_damage() for proper size/color rendering
 
 **Phase 6 - Configuration & Polish:**
+
 - Wire up remaining options: ANIMATION_SCT_SPEED, off-screen cleanup, colorblind mode
 - Final testing and integration
 
@@ -582,13 +623,13 @@ All spawning goes through the centralized `spawn_combat_feedback()` helper.
 
 ### Games Studied
 
-| Game | Approach | Notes |
-|---|---|---|
-| **StoneShard** | Floating numbers over body parts, color-coded by damage type (cut=red, bash=brown, etc.), criticals are larger and gold. Misses show as "Miss" in gray. Body-part targeting means numbers appear at specific locations on the creature sprite. | Very detailed per-bodypart feedback. Our tile-based approach is simpler but the color-coding principle applies. |
-| **Brotato** | Large floating damage numbers, criticals are bigger and gold/yellow. Misses show as "MISS" in gray. Numbers drift upward and fade. Simple but effective. | Good reference for size-scaling approach. |
-| **Enter the Gungeon / Binding of Isaac** | Damage numbers pop up with a scale-in animation (start small, grow to full size). Criticals are gold and larger. Misses show as "MISS" in gray. Numbers have slight horizontal jitter so they don't stack perfectly. | Scale-up animation is a good pattern for crit satisfaction. |
-| **World of Warcraft** | SCT addon ecosystem: configurable colors per type, position offsets to prevent overlap, separate frames for damage/healing/miss/block. Colorblind-friendly with text labels. | The addon system shows what players want — extensive customization. Our options should cover the most-requested features. |
-| **Katawa Shoujo / Ren'Py combat minigames** | Simple floating numbers with basic color coding. | Not relevant for our tile-based approach but shows minimal viable implementation. |
+| Game                                        | Approach                                                                                                                                                                                                                                       | Notes                                                                                                                     |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **StoneShard**                              | Floating numbers over body parts, color-coded by damage type (cut=red, bash=brown, etc.), criticals are larger and gold. Misses show as "Miss" in gray. Body-part targeting means numbers appear at specific locations on the creature sprite. | Very detailed per-bodypart feedback. Our tile-based approach is simpler but the color-coding principle applies.           |
+| **Brotato**                                 | Large floating damage numbers, criticals are bigger and gold/yellow. Misses show as "MISS" in gray. Numbers drift upward and fade. Simple but effective.                                                                                       | Good reference for size-scaling approach.                                                                                 |
+| **Enter the Gungeon / Binding of Isaac**    | Damage numbers pop up with a scale-in animation (start small, grow to full size). Criticals are gold and larger. Misses show as "MISS" in gray. Numbers have slight horizontal jitter so they don't stack perfectly.                           | Scale-up animation is a good pattern for crit satisfaction.                                                               |
+| **World of Warcraft**                       | SCT addon ecosystem: configurable colors per type, position offsets to prevent overlap, separate frames for damage/healing/miss/block. Colorblind-friendly with text labels.                                                                   | The addon system shows what players want — extensive customization. Our options should cover the most-requested features. |
+| **Katawa Shoujo / Ren'Py combat minigames** | Simple floating numbers with basic color coding.                                                                                                                                                                                               | Not relevant for our tile-based approach but shows minimal viable implementation.                                         |
 
 ### Codebase References
 
@@ -613,14 +654,13 @@ All spawning goes through the centralized `spawn_combat_feedback()` helper.
 
 All decisions locked in during the grill-me session. Each question was answered with a recommendation, and the user confirmed or modified it.
 
-| # | Decision Point | Choice | Rationale |
-|---|---|---|---|
-| 1 | Damage type indication | Color-only default + `SCT_COLORBLIND_MODE` toggle for abbreviations | Clean visuals for most players; colorblind users get unambiguous fallback. Icons reserved for the message log where they have room to breathe. |
-| 2 | Critical hit treatment | Size scaling (1.5x) + gold color; triple crits at 2x + flash. Scale-up animation in Phase 2 as polish. No particles or screen shake. | Universally recognized pattern across games. Defer extra polish to keep Phase 1 focused. |
-| 3 | Spawn location architecture | Centralized for damage (`deal_damage_handle_type()`), distributed only for miss/dodge/parry/block outcomes (happen before damage calc). `is_crit`/`is_graze` flags threaded through call chain. | Single source of truth for damage feedback; defensive outcomes must spawn where they're determined. |
-| 4 | Position jitter strategy | Radial distribution in screen-space pixels (angle = entry_count * 45°, radius ~2px). Not tile-space. | Predictable arc around target; screen-space allows nicer effects later (curved trails, orbital animations) without isometric coordinate transforms. |
-| 5 | Defensive outcome types | All five: MISS, DODGE, PARRY, BLOCK, GRAZE — text labels with distinct colors + brief color pulse on spawn. | Complete combat feedback coverage. `m_grazing` type will be first to use it for SCT (previously unused). |
-| 6 | Max entries & cleanup | FIFO eviction when exceeding max count; immediate removal for off-screen entries. | Simple, predictable, matches player expectations (newest info most relevant). Off-screen check prevents wasted render cycles. |
-| 7 | Font rendering approach | Font-only path in `draw_sct_frame()`, drop ASCII fallback entirely for SCT. Accept edge cases (non-Latin scripts, custom tilesets). | Tiles-focused scope; ASCII fallback was designed for curses display. Edge cases handled iteratively. |
-| 8 | Spawn helper function | Centralized `spawn_combat_feedback()` encapsulating jitter calculation, color mapping, size scaling, and cleanup logic. Callers pass high-level info only. | Keeps all 15+ spawn sites clean; ensures consistent behavior across melee/ranged/magic attack paths. |
-
+| # | Decision Point              | Choice                                                                                                                                                                                          | Rationale                                                                                                                                           |
+| - | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 | Damage type indication      | Color-only default + `SCT_COLORBLIND_MODE` toggle for abbreviations                                                                                                                             | Clean visuals for most players; colorblind users get unambiguous fallback. Icons reserved for the message log where they have room to breathe.      |
+| 2 | Critical hit treatment      | Size scaling (1.5x) + gold color; triple crits at 2x + flash. Scale-up animation in Phase 2 as polish. No particles or screen shake.                                                            | Universally recognized pattern across games. Defer extra polish to keep Phase 1 focused.                                                            |
+| 3 | Spawn location architecture | Centralized for damage (`deal_damage_handle_type()`), distributed only for miss/dodge/parry/block outcomes (happen before damage calc). `is_crit`/`is_graze` flags threaded through call chain. | Single source of truth for damage feedback; defensive outcomes must spawn where they're determined.                                                 |
+| 4 | Position jitter strategy    | Radial distribution in screen-space pixels (angle = entry_count * 45°, radius ~2px). Not tile-space.                                                                                            | Predictable arc around target; screen-space allows nicer effects later (curved trails, orbital animations) without isometric coordinate transforms. |
+| 5 | Defensive outcome types     | All five: MISS, DODGE, PARRY, BLOCK, GRAZE — text labels with distinct colors + brief color pulse on spawn.                                                                                     | Complete combat feedback coverage. `m_grazing` type will be first to use it for SCT (previously unused).                                            |
+| 6 | Max entries & cleanup       | FIFO eviction when exceeding max count; immediate removal for off-screen entries.                                                                                                               | Simple, predictable, matches player expectations (newest info most relevant). Off-screen check prevents wasted render cycles.                       |
+| 7 | Font rendering approach     | Font-only path in `draw_sct_frame()`, drop ASCII fallback entirely for SCT. Accept edge cases (non-Latin scripts, custom tilesets).                                                             | Tiles-focused scope; ASCII fallback was designed for curses display. Edge cases handled iteratively.                                                |
+| 8 | Spawn helper function       | Centralized `spawn_combat_feedback()` encapsulating jitter calculation, color mapping, size scaling, and cleanup logic. Callers pass high-level info only.                                      | Keeps all 15+ spawn sites clean; ensures consistent behavior across melee/ranged/magic attack paths.                                                |

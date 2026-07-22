@@ -2,30 +2,31 @@
 
 ## Progress
 
-| Phase | Status | Notes |
-|-------|--------|-------|
-| 1. Core Data Structures | ✅ Done | light_color_rgb struct, terrain/furniture/fields/vehicle extensions |
-| 2. JSON Parsing | ✅ Done | mapdata.cpp, field_type.cpp, veh_type.cpp |
-| 3. Lightmap Engine | ✅ Done | level_cache extension, add_light_source/apply_light_source/arc color support, dual-pass fusion, box blur |
-| 4. Dawn/Dusk Tint | ✅ Done | integrated into lightmap generation + renderer overlay |
-| 5. Renderer Overlay | ✅ Done | colored light tint + dawn/dusk warm color temperature in cata_tiles.cpp |
-| 6a. Core BN-Forked Items | ✅ Done | ~30 entries across fields, furniture, terrain, vehicle parts |
-| 6b. Mod Entries | ✅ Done | Arcana_BN (8), Jump Pad (1), MagicalNights (1) |
+| Phase                    | Status  | Notes                                                                                                    |
+| ------------------------ | ------- | -------------------------------------------------------------------------------------------------------- |
+| 1. Core Data Structures  | ✅ Done | light_color_rgb struct, terrain/furniture/fields/vehicle extensions                                      |
+| 2. JSON Parsing          | ✅ Done | mapdata.cpp, field_type.cpp, veh_type.cpp                                                                |
+| 3. Lightmap Engine       | ✅ Done | level_cache extension, add_light_source/apply_light_source/arc color support, dual-pass fusion, box blur |
+| 4. Dawn/Dusk Tint        | ✅ Done | integrated into lightmap generation + renderer overlay                                                   |
+| 5. Renderer Overlay      | ✅ Done | colored light tint + dawn/dusk warm color temperature in cata_tiles.cpp                                  |
+| 6a. Core BN-Forked Items | ✅ Done | ~30 entries across fields, furniture, terrain, vehicle parts                                             |
+| 6b. Mod Entries          | ✅ Done | Arcana_BN (8), Jump Pad (1), MagicalNights (1)                                                           |
 
 **All implementation phases complete.**
 
 ## Architecture Comparison: DDA vs BN-Forked
 
-| Aspect | DDA | BN-Forked |
-|--------|-----|-----------|
-| Shadowcasting | Template-based `castLight<T, calc, check>` with template params | Function-pointer `light_model` struct (cleaner for color) |
-| Cache storage | `cata::mdarray<light_color_rgb>` | **std::vector<X-outer layout>** (BN convention) |
-| Light source buffer | `buffered_light_source { luminance, color }` | `std::vector<float>` scalar only |
-| Tile render info | `tile_render_info::com` with `needs_tint`, `tint_color`, `bounds` | Simple struct — no com sub-struct |
-| Draw loop | Row-based pre-pass → layer loop → tint overlay pass | Z-level outer loop → tile inner loop → layers inline |
-| Vehicle luminance | Part type name matching (headlight, taillight) | **bonus field** (BN style) |
+| Aspect              | DDA                                                               | BN-Forked                                                 |
+| ------------------- | ----------------------------------------------------------------- | --------------------------------------------------------- |
+| Shadowcasting       | Template-based `castLight<T, calc, check>` with template params   | Function-pointer `light_model` struct (cleaner for color) |
+| Cache storage       | `cata::mdarray<light_color_rgb>`                                  | **std::vector<X-outer layout>** (BN convention)           |
+| Light source buffer | `buffered_light_source { luminance, color }`                      | `std::vector<float>` scalar only                          |
+| Tile render info    | `tile_render_info::com` with `needs_tint`, `tint_color`, `bounds` | Simple struct — no com sub-struct                         |
+| Draw loop           | Row-based pre-pass → layer loop → tint overlay pass               | Z-level outer loop → tile inner loop → layers inline      |
+| Vehicle luminance   | Part type name matching (headlight, taillight)                    | **bonus field** (BN style)                                |
 
 ## Decisions Made
+
 - ✅ **Vehicle lights**: Add light_color to veh_type.h, luminance from bonus field (BN style)
 - ✅ **Cache storage**: Use std::vector<X-outer layout> matching BN-Forked conventions
 - ✅ **Data population**: Only existing items in BN-Forked + mods in data/mods/ + CataMods repo
@@ -74,6 +75,7 @@ light_color_rgb dawn_dusk_color_for_lightmap(std::string_view dimension);
 ### 1.2 Extend terrain/furniture structs in `src/mapdata.h`
 
 Add to both terrain and furniture structs:
+
 ```cpp
 light_color_rgb light_color = {};
 ```
@@ -83,6 +85,7 @@ Default empty (no color) — backward compatible. Existing items without `light_
 ### 1.3 Extend field_type intensity levels in `src/field_type.h`
 
 Add to the intensity level struct:
+
 ```cpp
 light_color_rgb light_color;
 ```
@@ -92,6 +95,7 @@ Inherit from previous level when not explicitly set (DDA behavior at field_type.
 ### 1.4 Extend vehicle parts in `src/veh_type.h`
 
 Add to vehicle part type struct:
+
 ```cpp
 light_color_rgb light_color = {};
 ```
@@ -105,6 +109,7 @@ Luminance still comes from the `bonus` field (BN-Forked style, not DDA's name-ma
 ### 2.1 Terrain/furniture JSON parsing in `src/mapdata.cpp`
 
 Add to terrain and furniture loading (after existing light_emitted parser):
+
 ```cpp
 if( jo.has_array( "light_color" ) ) {
     JsonArray jarr = jo.get_array( "light_color" );
@@ -117,6 +122,7 @@ if( jo.has_array( "light_color" ) ) {
 ### 2.2 Field type JSON parsing in `src/field_type.cpp`
 
 Add to intensity level loading:
+
 ```cpp
 if( jao.has_array( "light_color" ) ) {
     JsonArray jarr = jao.get_array( "light_color" );
@@ -136,6 +142,7 @@ if( jao.has_array( "light_color" ) ) {
 ### 3.1 Extend `level_cache` in `src/map.h`
 
 Add to the level_cache struct (after existing light_source_buffer):
+
 ```cpp
 // Accumulated colored light energy per tile. Populated during generate_lightmap
 // alongside lm/sm. Zero = uncolored (white) light only.
@@ -146,6 +153,7 @@ bool has_colored_lights = false;
 ```
 
 Change `light_source_buffer` from `std::vector<float>` to a struct:
+
 ```cpp
 struct buffered_light_source {
     float luminance = 0.0f;
@@ -157,6 +165,7 @@ std::vector<buffered_light_source> light_source_buffer;
 ### 3.2 Update `level_cache` constructor in `src/map.cpp`
 
 Add initialization matching BN-Forked's X-outer vector pattern:
+
 ```cpp
 light_color_cache( static_cast<size_t>( mx * my ), light_color_rgb{} ),
 ```
@@ -164,17 +173,20 @@ light_color_cache( static_cast<size_t>( mx * my ), light_color_rgb{} ),
 ### 3.3 Modify `add_light_source()` signature and implementation
 
 New signature:
+
 ```cpp
 void map::add_light_source(const tripoint &p, float luminance, const light_color_rgb &color = {})
 ```
 
 Implementation changes:
+
 - Store color in buffer alongside luminance (brighter sources dominate hue via additive accumulation weighted by luminance)
 - Set `cache.has_colored_lights = true` when non-empty color provided
 
 ### 3.4 Modify `apply_light_source()` and `apply_light_arc()` signatures
 
 Add color propagation parameter:
+
 ```cpp
 void map::apply_light_source(const tripoint &p, float luminance, const light_color_rgb &color = {})
 void map::apply_light_arc(const tripoint &p, units::angle angle, float luminance,
@@ -213,6 +225,7 @@ This avoids modifying the light_model struct and keeps the change localized.
 ### 3.5 Add 3x3 box blur on color cache (conditional)
 
 In `generate_lightmap()`, after all light sources are applied:
+
 ```cpp
 if( map_cache.has_colored_lights ) {
     // 3x3 box blur to soften octant boundary seams
@@ -244,6 +257,7 @@ if( map_cache.has_colored_lights ) {
 ### 4.1 Integrate dawn/dusk into lightmap generation in `src/lightmap.cpp`
 
 Add cached twilight color function (same as DDA):
+
 ```cpp
 static light_color_rgb cached_twilight_color() {
     static time_point cached_turn = calendar::before_time_starts;
@@ -263,6 +277,7 @@ static light_color_rgb cached_twilight_color() {
 ```
 
 Apply during sunlight phase of `generate_lightmap()` (before artificial sources):
+
 - Compute twilight color once per turn via caching
 - For each tile with sunlight reaching it (lm max > indoor baseline), add tint
 - Uses per-channel max blending (same as colored lights)
@@ -277,6 +292,7 @@ Apply during sunlight phase of `generate_lightmap()` (before artificial sources)
 **Insertion point:** After the main z-level/tile drawing loop (around line ~3540), before zone overlays and override drawing.
 
 The approach differs from DDA because BN-Forked's draw loop is structured differently:
+
 - DDA: Row-based pre-pass → layer loop → tint overlay pass
 - BN-Forked: Z-level outer → tile inner → layers inline
 
@@ -329,6 +345,7 @@ if(zlev_cache.has_colored_lights && !iso_mode) {
 ### 5.2 Add dawn/dusk overlay rendering in `src/cata_tiles.cpp`
 
 After the colored light overlay pass (same insertion point):
+
 ```cpp
 // Dawn/dusk warm color temperature overlay on outside tiles during twilight
 if(is_twilight(calendar::turn) && cur_zlevel >= 0) {
@@ -348,96 +365,106 @@ Skip colored light tint overlay when `iso_mode` is true (same as DDA's 952ae182b
 ### Existing BN-Forked items with light_emitted → add light_color:
 
 **Fields (field_type.json):**
-| Field | Color [R,G,B] | Rationale |
-|-------|--------------|-----------|
-| small fire / fire | [255, 100, 30] | Warm orange flame |
-| raging fire | [255, 60, 20] | Hotter, redder |
-| angular ripple | [200, 220, 255] | Cold blue-white |
-| fire vent | [255, 120, 40] | Magma glow |
-| sparks | [95, 204, 247] | Electric cyan (DDA match) |
-| electric crackle | [146, 217, 245] | Electric blue (DDA match) |
-| electric cloud | [182, 231, 250] | Brighter electric (DDA match) |
-| faint plasma | [255, 100, 255] | Faint magenta |
-| glowing plasma | [255, 150, 255] | Pink plasma |
-| glaring plasma | [255, 200, 255] | Bright pink |
-| spotlight | [255, 250, 230] | Warm white |
-| dazzling | [255, 200, 100] | Yellow-white |
-| swirl of fog | [200, 210, 220] | Cool gray |
-| smoke | [180, 170, 160] | Warm gray (incendiary) |
-| airborne incendiary | [255, 100, 30] | Hot orange |
-| lava | [255, 80, 20] | Magma red-orange |
+
+| Field               | Color [R,G,B]   | Rationale                     |
+| ------------------- | --------------- | ----------------------------- |
+| small fire / fire   | [255, 100, 30]  | Warm orange flame             |
+| raging fire         | [255, 60, 20]   | Hotter, redder                |
+| angular ripple      | [200, 220, 255] | Cold blue-white               |
+| fire vent           | [255, 120, 40]  | Magma glow                    |
+| sparks              | [95, 204, 247]  | Electric cyan (DDA match)     |
+| electric crackle    | [146, 217, 245] | Electric blue (DDA match)     |
+| electric cloud      | [182, 231, 250] | Brighter electric (DDA match) |
+| faint plasma        | [255, 100, 255] | Faint magenta                 |
+| glowing plasma      | [255, 150, 255] | Pink plasma                   |
+| glaring plasma      | [255, 200, 255] | Bright pink                   |
+| spotlight           | [255, 250, 230] | Warm white                    |
+| dazzling            | [255, 200, 100] | Yellow-white                  |
+| swirl of fog        | [200, 210, 220] | Cool gray                     |
+| smoke               | [180, 170, 160] | Warm gray (incendiary)        |
+| airborne incendiary | [255, 100, 30]  | Hot orange                    |
+| lava                | [255, 80, 20]   | Magma red-orange              |
 
 **Furniture/Terrain:**
-| Item ID | Color [R,G,B] | Rationale |
-|---------|--------------|-----------|
-| f_floor_lamp_on | [255, 240, 210] | Warm incandescent |
-| f_grid_floodlight_on | [230, 240, 255] | Cool white floodlight |
-| f_street_light_rewired_on | [255, 200, 120] | Sodium vapor orange |
-| f_space_heater_on | [255, 80, 30] | Red glow heater |
-| f_space_heater_large_on | [255, 60, 20] | Hotter large heater |
-| f_olight_on | [240, 250, 255] | Fluorescent white |
-| t_thconc_floor_olight | [240, 250, 255] | Fluorescent ceiling |
-| t_floor_olight | [240, 250, 255] | Fluorescent ceiling |
-| t_metal_floor_olight | [240, 250, 255] | Fluorescent ceiling |
-| t_utility_light | [230, 245, 255] | Cool industrial |
-| f_hot_spring | [180, 220, 255] | Steamy blue-white |
-| f_alien_tendril | [0, 255, 100] | Alien green (DDA match) |
-| f_alien_anemone | [255, 230, 210] | Warm alien bioluminescence |
-| f_alien_pod_organ | [255, 230, 210] | Same as anemone |
-| f_alien_table | [255, 0, 255] | Purple alien altar (DDA match) |
-| f_alien_nerve | [255, 230, 210] | Warm nerve cluster |
-| f_console_table | [120, 200, 255] | Monitor blue glow |
-| f_artifact_analyzer_console | [120, 200, 255] | Monitor blue glow |
-| f_glowingbulb | [200, 255, 200] | Plant bioluminescence green |
-| t_lava | [255, 80, 20] | Magma red-orange |
-| t_console | [120, 200, 255] | Monitor blue glow |
-| t_dimensional_portal | [200, 100, 255] | Purple portal (DDA match) |
-| f_emitter_migo | [0, 255, 0] | Migo green (DDA match) |
+
+| Item ID                     | Color [R,G,B]   | Rationale                      |
+| --------------------------- | --------------- | ------------------------------ |
+| f_floor_lamp_on             | [255, 240, 210] | Warm incandescent              |
+| f_grid_floodlight_on        | [230, 240, 255] | Cool white floodlight          |
+| f_street_light_rewired_on   | [255, 200, 120] | Sodium vapor orange            |
+| f_space_heater_on           | [255, 80, 30]   | Red glow heater                |
+| f_space_heater_large_on     | [255, 60, 20]   | Hotter large heater            |
+| f_olight_on                 | [240, 250, 255] | Fluorescent white              |
+| t_thconc_floor_olight       | [240, 250, 255] | Fluorescent ceiling            |
+| t_floor_olight              | [240, 250, 255] | Fluorescent ceiling            |
+| t_metal_floor_olight        | [240, 250, 255] | Fluorescent ceiling            |
+| t_utility_light             | [230, 245, 255] | Cool industrial                |
+| f_hot_spring                | [180, 220, 255] | Steamy blue-white              |
+| f_alien_tendril             | [0, 255, 100]   | Alien green (DDA match)        |
+| f_alien_anemone             | [255, 230, 210] | Warm alien bioluminescence     |
+| f_alien_pod_organ           | [255, 230, 210] | Same as anemone                |
+| f_alien_table               | [255, 0, 255]   | Purple alien altar (DDA match) |
+| f_alien_nerve               | [255, 230, 210] | Warm nerve cluster             |
+| f_console_table             | [120, 200, 255] | Monitor blue glow              |
+| f_artifact_analyzer_console | [120, 200, 255] | Monitor blue glow              |
+| f_glowingbulb               | [200, 255, 200] | Plant bioluminescence green    |
+| t_lava                      | [255, 80, 20]   | Magma red-orange               |
+| t_console                   | [120, 200, 255] | Monitor blue glow              |
+| t_dimensional_portal        | [200, 100, 255] | Purple portal (DDA match)      |
+| f_emitter_migo              | [0, 255, 0]     | Migo green (DDA match)         |
 
 **Migo furniture (furniture-migo.json):**
-| Item | Color [R,G,B] | Rationale |
-|------|--------------|-----------|
-| migo altar/emitter variants | [0, 255, 0] | Classic alien green |
+
+| Item                        | Color [R,G,B] | Rationale           |
+| --------------------------- | ------------- | ------------------- |
+| migo altar/emitter variants | [0, 255, 0]   | Classic alien green |
 
 **Terrain:**
-| Item ID | Color [R,G,B] | Rationale |
-|---------|--------------|-----------|
+
+| Item ID                                                       | Color [R,G,B]   | Rationale                  |
+| ------------------------------------------------------------- | --------------- | -------------------------- |
 | t_thconc_floor_olight / t_floor_olight / t_metal_floor_olight | [240, 250, 255] | Fluorescent ceiling lights |
-| t_utility_light | [230, 245, 255] | Cool industrial lighting |
-| t_lava | [255, 80, 20] | Magma glow |
-| t_console | [120, 200, 255] | Monitor screen glow |
-| t_dimensional_portal | [200, 100, 255] | Purple portal energy |
+| t_utility_light                                               | [230, 245, 255] | Cool industrial lighting   |
+| t_lava                                                        | [255, 80, 20]   | Magma glow                 |
+| t_console                                                     | [120, 200, 255] | Monitor screen glow        |
+| t_dimensional_portal                                          | [200, 100, 255] | Purple portal energy       |
 
 ### BN-Forked mods (data/mods/):
 
 **Arcana_BN:**
-| Item | Color [R,G,B] | Rationale |
-|------|--------------|-----------|
+
+| Item                         | Color [R,G,B]   | Rationale          |
+| ---------------------------- | --------------- | ------------------ |
 | Arcana field "strange light" | [180, 120, 255] | Purple arcane glow |
-| Arcana furniture (various) | [180, 120, 255] | Purple arcane |
-| Arcana terrain | [180, 120, 255] | Purple arcane |
+| Arcana furniture (various)   | [180, 120, 255] | Purple arcane      |
+| Arcana terrain               | [180, 120, 255] | Purple arcane      |
 
 **Jump Pad:**
-| Item | Color [R,G,B] | Rationale |
-|------|--------------|-----------|
+
+| Item                | Color [R,G,B]   | Rationale             |
+| ------------------- | --------------- | --------------------- |
 | Jump pad item light | [100, 255, 100] | Green activation glow |
 
 **MagicalNights:**
-| Item | Color [R,G,B] | Rationale |
-|------|--------------|-----------|
+
+| Item                    | Color [R,G,B]   | Rationale         |
+| ----------------------- | --------------- | ----------------- |
 | MagicalNights furniture | [200, 150, 255] | Purple magic glow |
 
 ### CataMods repo items (only BN-compatible mods):
 
 **cdda-arcana-mod:**
+
 - Arcana fields → purple [180, 120, 255]
-- Arcana furniture → purple [180, 120, 255]  
+- Arcana furniture → purple [180, 120, 255]
 - Arcana terrain → purple [180, 120, 255]
 
 **Fallout-CDDA-Remastered:**
+
 - Fallout-themed light sources → appropriate colors (yellow warning lights, blue terminal glow)
 
 **BrightNights-Structured-Kenan-Modpack:**
+
 - BL9 furniture/terrain → match DDA equivalents where applicable
 - Hydroponics → green grow lights [100, 255, 100]
 - Steampunk → warm brass/orange [255, 180, 80]
@@ -468,20 +495,20 @@ BN-Forked already has `lightmap_dirty` flag — extend to skip color blur pass t
 
 ## File Change Summary
 
-| File | Changes | Lines |
-|------|---------|-------|
-| `src/lightmap.h` | +light_color_rgb struct, dawn_dusk declaration | ~80 added |
-| `src/mapdata.h` | +light_color on terrain and furniture structs | ~2 added |
-| `src/field_type.h` | +light_color on intensity levels | ~1 added |
-| `src/veh_type.h` | +light_color on vehicle parts | ~1 added |
-| `src/map.h` | +light_color_cache, has_colored_lights, buffered_light_source struct | ~15 added |
-| `src/lightmap.cpp` | Major: add_light_source/apply_light_source/arc color support, dual-pass fusion, blur, dawn/dusk | ~400 modified/added |
-| `src/cata_tiles.cpp` | Colored overlay rendering, dawn/dusk overlay, iso_mode skip | ~150 added |
-| `src/mapdata.cpp` | JSON parsing for light_color on terrain/furniture | ~20 added |
-| `src/field_type.cpp` | JSON parsing for light_color on fields | ~15 added |
-| `src/map.cpp` | level_cache constructor init for new vectors | ~3 added |
-| `data/json/*.json` | ~30+ entries with light_color values | ~60 lines |
-| `data/mods/*/` | Light color entries in BN mods + CataMods | ~20 entries |
+| File                 | Changes                                                                                         | Lines               |
+| -------------------- | ----------------------------------------------------------------------------------------------- | ------------------- |
+| `src/lightmap.h`     | +light_color_rgb struct, dawn_dusk declaration                                                  | ~80 added           |
+| `src/mapdata.h`      | +light_color on terrain and furniture structs                                                   | ~2 added            |
+| `src/field_type.h`   | +light_color on intensity levels                                                                | ~1 added            |
+| `src/veh_type.h`     | +light_color on vehicle parts                                                                   | ~1 added            |
+| `src/map.h`          | +light_color_cache, has_colored_lights, buffered_light_source struct                            | ~15 added           |
+| `src/lightmap.cpp`   | Major: add_light_source/apply_light_source/arc color support, dual-pass fusion, blur, dawn/dusk | ~400 modified/added |
+| `src/cata_tiles.cpp` | Colored overlay rendering, dawn/dusk overlay, iso_mode skip                                     | ~150 added          |
+| `src/mapdata.cpp`    | JSON parsing for light_color on terrain/furniture                                               | ~20 added           |
+| `src/field_type.cpp` | JSON parsing for light_color on fields                                                          | ~15 added           |
+| `src/map.cpp`        | level_cache constructor init for new vectors                                                    | ~3 added            |
+| `data/json/*.json`   | ~30+ entries with light_color values                                                            | ~60 lines           |
+| `data/mods/*/`       | Light color entries in BN mods + CataMods                                                       | ~20 entries         |
 
 **Total: ~750-800 lines, 10-12 files modified/added**
 
