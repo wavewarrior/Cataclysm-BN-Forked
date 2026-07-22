@@ -273,7 +273,6 @@ jobs:
             --error-format=github-action \
             "[coop]"
 
-
       - name: install deno
         if: ${{ env.SKIP != 'true' }}
         uses: denoland/setup-deno@v2

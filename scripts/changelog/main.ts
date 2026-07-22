@@ -9,67 +9,67 @@ import { type Commit, readCommits } from "./read_commits.ts"
 import { paragraph } from "./paragraph.ts"
 
 const asSections = (group: Record<string, string>): string =>
-  Object.entries(group)
-    .map(([type, message]) => `### ${titleCase(type)}\n\n${message}`)
-    .join("\n\n")
+    Object.entries(group)
+        .map(([type, message]) => `### ${titleCase(type)}\n\n${message}`)
+        .join("\n\n")
 
 const formatCommitList = (items: { commit: Commit; info: CommitInfo }[]): string =>
-  items
-    .flatMap((x) =>
-      fmtLink({
-        subject: x.commit.subject,
-        author: x.commit.author,
-        coauthors: x.commit.coauthors,
-      })
-    )
-    .toSorted((a, b) => a.pr - b.pr)
-    .map(({ entry }) => entry)
-    .join("\n")
+    items
+        .flatMap((x) =>
+            fmtLink({
+                subject: x.commit.subject,
+                author: x.commit.author,
+                coauthors: x.commit.coauthors,
+            })
+        )
+        .toSorted((a, b) => a.pr - b.pr)
+        .map(({ entry }) => entry)
+        .join("\n")
 
 const commitsSection = (changelog: Commit[]) => {
-  const parsed = changelog
-    .map((commit) => ({ commit, info: parseCommit(commit.subject) }))
-    .filter((x): x is { commit: Commit; info: CommitInfo } => x.info !== null)
+    const parsed = changelog
+        .map((commit) => ({ commit, info: parseCommit(commit.subject) }))
+        .filter((x): x is { commit: Commit; info: CommitInfo } => x.info !== null)
 
-  const breaking = parsed.filter((x) => x.info.breaking)
-  const regular = parsed.filter((x) => !x.info.breaking)
+    const breaking = parsed.filter((x) => x.info.breaking)
+    const regular = parsed.filter((x) => !x.info.breaking)
 
-  const byTypes = Object.groupBy(regular, (x) => x.info.type)
-  const regularMessages = mapValues(byTypes, formatCommitList)
+    const byTypes = Object.groupBy(regular, (x) => x.info.type)
+    const regularMessages = mapValues(byTypes, formatCommitList)
 
-  const messages: Record<string, string> = {}
+    const messages: Record<string, string> = {}
 
-  if (breaking.length > 0) {
-    messages["Breaking Changes"] = formatCommitList(breaking)
-  }
+    if (breaking.length > 0) {
+        messages["Breaking Changes"] = formatCommitList(breaking)
+    }
 
-  Object.assign(messages, regularMessages)
+    Object.assign(messages, regularMessages)
 
-  return asSections(messages)
+    return asSections(messages)
 }
 
 const authorsSection = (changelog: Commit[]) => {
-  const byAuthors = mapValues(
-    Object.groupBy(changelog.flatMap((x) => [x.author, ...x.coauthors]), (x) => x),
-    (xs) => xs!.length,
-  )
+    const byAuthors = mapValues(
+        Object.groupBy(changelog.flatMap((x) => [x.author, ...x.coauthors]), (x) => x),
+        (xs) => xs!.length,
+    )
 
-  return Object.entries(byAuthors)
-    .sort((a, b) => b[1] - a[1])
-    .map(([k, v]) => `- **${k}** with ${v} contributions`)
-    .join("\n")
+    return Object.entries(byAuthors)
+        .sort((a, b) => b[1] - a[1])
+        .map(([k, v]) => `- **${k}** with ${v} contributions`)
+        .join("\n")
 }
 
 const changelogImage =
-  "https://preview.redd.it/kukz23r0cszb1.png?width=660&format=png&auto=webp&s=8039aa5748462b40570b8ba98600f5f7359f5320"
+    "https://preview.redd.it/kukz23r0cszb1.png?width=660&format=png&auto=webp&s=8039aa5748462b40570b8ba98600f5f7359f5320"
 
 const isoDate = (date: Date | string) => new Date(date).toISOString().split("T")[0]
 
 const redditTemplate = (commits: Commit[]) => {
-  const begin = minBy(commits, (x) => x.date)!.date
-  const end = maxBy(commits, (x) => x.date)!.date
+    const begin = minBy(commits, (x) => x.date)!.date
+    const end = maxBy(commits, (x) => x.date)!.date
 
-  return /*md*/ `
+    return /*md*/ `
 # CBN Changelog: ${isoDate(end)}. {TITLE GOES HERE}
 
 ${changelogImage}
@@ -121,46 +121,46 @@ https://docs.cataclysmbn.org/contribute/contributing/
 }
 
 const main = new Command()
-  .option(
-    "-s, --since <ref>",
-    "Same as git log --since. Accepts dates, SHAs, or tags (e.g., 2024-09-22, HEAD~10, v0.1)",
-    { default: "last monday 1 week ago" },
-  )
-  .option(
-    "-u, --until <ref>",
-    "Same as git log --until. Accepts dates, SHAs, or tags (e.g., 2024-10-01, HEAD, v0.2)",
-    { default: "today" },
-  )
-  .option("-o, --output <file>", "Output file to save changelog to")
-  .option("-q, --quiet", "Do not print the changelog to stdout")
-  .option("-f, --format <format>", "Output format (reddit or default)", {
-    default: "default",
-    value: (val: string) => {
-      if (val !== "reddit" && val !== "default") {
-        throw new Error(`Invalid format "${val}". Must be "reddit" or "default"`)
-      }
-      return val
-    },
-  })
-  .description(paragraph`
+    .option(
+        "-s, --since <ref>",
+        "Same as git log --since. Accepts dates, SHAs, or tags (e.g., 2024-09-22, HEAD~10, v0.1)",
+        { default: "last monday 1 week ago" },
+    )
+    .option(
+        "-u, --until <ref>",
+        "Same as git log --until. Accepts dates, SHAs, or tags (e.g., 2024-10-01, HEAD, v0.2)",
+        { default: "today" },
+    )
+    .option("-o, --output <file>", "Output file to save changelog to")
+    .option("-q, --quiet", "Do not print the changelog to stdout")
+    .option("-f, --format <format>", "Output format (reddit or default)", {
+        default: "default",
+        value: (val: string) => {
+            if (val !== "reddit" && val !== "default") {
+                throw new Error(`Invalid format "${val}". Must be "reddit" or "default"`)
+            }
+            return val
+        },
+    })
+    .description(paragraph`
       Generate a changelog from git commits.
 
       usage (at project root): deno task changelog --since 2024-09-22 --until 2024-09-30
 
       For reddit format, switch to Markdown Editor when pasting the output into Reddit.
     `)
-  .action(async ({ since, until, output, quiet = false, format }) => {
-    const log = quiet ? () => {} : console.log
+    .action(async ({ since, until, output, quiet = false, format }) => {
+        const log = quiet ? () => {} : console.log
 
-    const commits = await readCommits({ since, until })
-    log(`${commits.length} commits found`)
+        const commits = await readCommits({ since, until })
+        log(`${commits.length} commits found`)
 
-    const changelog = format === "reddit" ? redditTemplate(commits) : commitsSection(commits)
+        const changelog = format === "reddit" ? redditTemplate(commits) : commitsSection(commits)
 
-    log(changelog)
-    if (output) await Deno.writeTextFile(output, changelog)
-  })
+        log(changelog)
+        if (output) await Deno.writeTextFile(output, changelog)
+    })
 
 if (import.meta.main) {
-  await main.parse(Deno.args)
+    await main.parse(Deno.args)
 }

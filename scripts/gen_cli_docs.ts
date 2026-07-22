@@ -16,11 +16,11 @@ export type Section = { title: string; flags: Flag[] }
  * - each flags and description is on a separate line
  */
 export const parseSection = (section: string): Section => {
-  // first line is the title
-  const [title, ...lines] = section.split("\n")
-  const flags = chunk(lines, 2).map(([option, desc]) => ({ option, desc: desc.trim() }))
+    // first line is the title
+    const [title, ...lines] = section.split("\n")
+    const flags = chunk(lines, 2).map(([option, desc]) => ({ option, desc: desc.trim() }))
 
-  return { title: title.replace(":", ""), flags }
+    return { title: title.replace(":", ""), flags }
 }
 
 export const flagToMarkdown = ({ option, desc }: Flag): string => /*md*/ `
@@ -33,9 +33,9 @@ export const sectionToMarkdown = ({ title, flags }: Section): string => /*md*/ `
 ${flags.map(flagToMarkdown).join("\n")}`
 
 const toMarkdown = (text: string): string => {
-  const sections = text.trim().split("\n\n").map(parseSection).map(sectionToMarkdown).join("\n")
+    const sections = text.trim().split("\n\n").map(parseSection).map(sectionToMarkdown).join("\n")
 
-  return /*md*/ `\
+    return /*md*/ `\
 ---
 edit: false
 ---
@@ -55,20 +55,20 @@ ${sections}
 }
 
 if (import.meta.main) {
-  const { Command } = await import("@cliffy/command")
+    const { Command } = await import("@cliffy/command")
 
-  const { options: { output } } = await new Command()
-    .description("Generates markdown documentation for the game executable.")
-    .option("-o, --output <output:string>", "Output file path", { required: true })
-    .parse(Deno.args)
+    const { options: { output } } = await new Command()
+        .description("Generates markdown documentation for the game executable.")
+        .option("-o, --output <output:string>", "Output file path", { required: true })
+        .parse(Deno.args)
 
-  const command = new Deno.Command(Deno.env.get("CATA_EXE") ?? "./cataclysm-bn-tiles", {
-    args: ["--help"],
-  })
-  const { stdout } = await command.output()
+    const command = new Deno.Command(Deno.env.get("CATA_EXE") ?? "./cataclysm-bn-tiles", {
+        args: ["--help"],
+    })
+    const { stdout } = await command.output()
 
-  const text = new TextDecoder().decode(stdout)
+    const text = new TextDecoder().decode(stdout)
 
-  const result = toMarkdown(text)
-  await Deno.writeTextFile(output, result)
+    const result = toMarkdown(text)
+    await Deno.writeTextFile(output, result)
 }

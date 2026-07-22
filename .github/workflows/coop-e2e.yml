@@ -7,7 +7,6 @@ on:
     branches: [main]
   workflow_dispatch:
 
-
 jobs:
   coop-e2e:
     name: Co-op E2E

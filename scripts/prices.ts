@@ -12,22 +12,22 @@ import { type Column, stringify } from "https://deno.land/std@0.217.0/csv/string
 const parseCurrency = z.string().transform((c) => toCents(c as Currency))
 
 const schema = z.object({
-  id: z.string(),
-  price_postapoc: parseCurrency,
+    id: z.string(),
+    price_postapoc: parseCurrency,
 })
 
 const columns: Column[] = ["id", "price_postapoc"]
 
 if (import.meta.main) {
-  const main = queryCli({
-    desc: "item prices",
-    schema,
-    map: (xs) => {
-      console.table(xs)
-      const csv = stringify(xs, { columns })
-      return csv
-    },
-  })
+    const main = queryCli({
+        desc: "item prices",
+        schema,
+        map: (xs) => {
+            console.table(xs)
+            const csv = stringify(xs, { columns })
+            return csv
+        },
+    })
 
-  await main().parse(Deno.args)
+    await main().parse(Deno.args)
 }
