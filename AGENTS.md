@@ -24,64 +24,64 @@
 
 ## Key Directories
 
-| Directory | Contents |
-|-----------|----------|
-| `src/` | ~1000 .cpp/.h files — all game logic. Flat structure with headers co-located beside sources. |
-| `src/lighting/` | 40+ files — Vulkan render pipeline: sprite batching, ambient occlusion, bloom, volumetric fog, sound wave visualization. |
-| `src/lua/` | 50+ files — vendored Lua 5.4 VM plus binding layer for exposing game APIs to Lua scripts. |
-| `src/physics/` | 7 files — Box2D integration for vehicle physics simulation. |
-| `data/json/` | JSON game content: items, recipes, monsters, mutations, terrain, vehicles, mapgens, etc. |
-| `data/mods/` | Bundled mods, each with a `modinfo.json` descriptor. |
-| `tests/` | Catch2 v3 test suite — 200+ test files organized by domain. |
-| `docs/` | Developer documentation, modding guides, i18n docs. Follows Diátaxis framework (explanation, reference, guides, tutorials). |
-| `lang/po/` | Gettext `.po` translation files for all supported locales. |
-| `lang/` | Localization tooling: extraction scripts, POT generation, MO compilation, stats. |
-| `scripts/` | Deno/TypeScript automation: doc generation, migrations, changelog tools. |
-| `build-scripts/` | Shell scripts for build, lint, and validation tasks. |
-| `tools/` | Standalone utility programs (e.g. `check_po_printf_format.py`). |
+| Directory        | Contents                                                                                                                    |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `src/`           | ~1000 .cpp/.h files — all game logic. Flat structure with headers co-located beside sources.                                |
+| `src/lighting/`  | 40+ files — Vulkan render pipeline: sprite batching, ambient occlusion, bloom, volumetric fog, sound wave visualization.    |
+| `src/lua/`       | 50+ files — vendored Lua 5.4 VM plus binding layer for exposing game APIs to Lua scripts.                                   |
+| `src/physics/`   | 7 files — Box2D integration for vehicle physics simulation.                                                                 |
+| `data/json/`     | JSON game content: items, recipes, monsters, mutations, terrain, vehicles, mapgens, etc.                                    |
+| `data/mods/`     | Bundled mods, each with a `modinfo.json` descriptor.                                                                        |
+| `tests/`         | Catch2 v3 test suite — 200+ test files organized by domain.                                                                 |
+| `docs/`          | Developer documentation, modding guides, i18n docs. Follows Diátaxis framework (explanation, reference, guides, tutorials). |
+| `lang/po/`       | Gettext `.po` translation files for all supported locales.                                                                  |
+| `lang/`          | Localization tooling: extraction scripts, POT generation, MO compilation, stats.                                            |
+| `scripts/`       | Deno/TypeScript automation: doc generation, migrations, changelog tools.                                                    |
+| `build-scripts/` | Shell scripts for build, lint, and validation tasks.                                                                        |
+| `tools/`         | Standalone utility programs (e.g. `check_po_printf_format.py`).                                                             |
 
 ## Important Files
 
-| File | Lines | Role |
-|------|-------|------|
-| `src/character.cpp` | 11713 | Largest source file — player/NPC character logic, stats, effects, inventory. |
-| `src/map.cpp` | 9817 | Chunked tile map, streaming, procedural generation, terrain interaction. |
-| `src/iuse.cpp` | 8919 | Item-use system — dispatches all item interactions. |
-| `src/vehicle.cpp` | 8430 | Vehicle construction, parts, movement, and physics integration. |
-| `src/iexamine.cpp` | 8186 | Examine/dispatch system for item and terrain examination. |
-| `src/iuse_actor.cpp` | 7879 | Actor-driven item-use activities (cooking, sewing, etc.). |
-| `src/activity_actor.cpp` | 7426 | Activity system — long-running player actions with interruption handling. |
-| `src/game.cpp` | 7196 | Central orchestrator — game loop, tick processing, global state, subsystem init. |
-| `src/overmap.cpp` | 6700 | World-overview map for long-distance travel and wilderness generation. |
-| `src/mapgen.cpp` | 6555 | Map generation engine — parses JSON mapgen rules into terrain. |
-| `src/avatar.cpp` | 1580 | Avatar-specific player behavior (extends character). |
-| `src/CMakeLists.txt` | — | Source compilation, target definitions, header/source globs. |
-| `CMakePresets.json` | — | Build presets: `linux-slim`, `osx-arm-slim`, `linux-full`, `windows-tiles-sounds-x64-msvc`, etc. |
-| `tests/test_main.cpp` | — | Catch2 v3 test runner — initializes full game state, mods, world, RNG seeding. |
-| `tests/map_helpers.h` | — | Test fixtures: `build_test_map`, `spawn_test_monster`, and map manipulation helpers. |
-| `tests/player_helpers.h` | — | Test helpers: `spawn_npc`, `arm_character`, and player state setup. |
+| File                     | Lines | Role                                                                                             |
+| ------------------------ | ----- | ------------------------------------------------------------------------------------------------ |
+| `src/character.cpp`      | 11713 | Largest source file — player/NPC character logic, stats, effects, inventory.                     |
+| `src/map.cpp`            | 9817  | Chunked tile map, streaming, procedural generation, terrain interaction.                         |
+| `src/iuse.cpp`           | 8919  | Item-use system — dispatches all item interactions.                                              |
+| `src/vehicle.cpp`        | 8430  | Vehicle construction, parts, movement, and physics integration.                                  |
+| `src/iexamine.cpp`       | 8186  | Examine/dispatch system for item and terrain examination.                                        |
+| `src/iuse_actor.cpp`     | 7879  | Actor-driven item-use activities (cooking, sewing, etc.).                                        |
+| `src/activity_actor.cpp` | 7426  | Activity system — long-running player actions with interruption handling.                        |
+| `src/game.cpp`           | 7196  | Central orchestrator — game loop, tick processing, global state, subsystem init.                 |
+| `src/overmap.cpp`        | 6700  | World-overview map for long-distance travel and wilderness generation.                           |
+| `src/mapgen.cpp`         | 6555  | Map generation engine — parses JSON mapgen rules into terrain.                                   |
+| `src/avatar.cpp`         | 1580  | Avatar-specific player behavior (extends character).                                             |
+| `src/CMakeLists.txt`     | —     | Source compilation, target definitions, header/source globs.                                     |
+| `CMakePresets.json`      | —     | Build presets: `linux-slim`, `osx-arm-slim`, `linux-full`, `windows-tiles-sounds-x64-msvc`, etc. |
+| `tests/test_main.cpp`    | —     | Catch2 v3 test runner — initializes full game state, mods, world, RNG seeding.                   |
+| `tests/map_helpers.h`    | —     | Test fixtures: `build_test_map`, `spawn_test_monster`, and map manipulation helpers.             |
+| `tests/player_helpers.h` | —     | Test helpers: `spawn_npc`, `arm_character`, and player state setup.                              |
 
 ## Coding Standards (new/modified code)
 
 These standards apply to **new and modified code**. The existing codebase predates many of these conventions — do not churn legacy signatures to match.
 
-| ❌ AVOID                                   | ✅ PREFER                                                                        |
-| ------------------------------------------ | -------------------------------------------------------------------------------- |
-| manual iterator loops (`it++`, `++it`)     | `std::ranges::*`, `collection \| std::views::*`, or range-based `for` if clearer |
-| `int foo()`                                | `auto foo() -> int`                                                              |
-| `Type x = value`                           | `auto x = value`                                                                 |
-| `void fn(a, b, c, d, e)`                   | `void fn(options_struct)`                                                        |
-| `[](){\n return 1; \n }`                   | `[](){ return 1; }`                                                              |
+| ❌ AVOID                               | ✅ PREFER                                                                        |
+| -------------------------------------- | -------------------------------------------------------------------------------- |
+| manual iterator loops (`it++`, `++it`) | `std::ranges::*`, `collection \| std::views::*`, or range-based `for` if clearer |
+| `int foo()`                            | `auto foo() -> int`                                                              |
+| `Type x = value`                       | `auto x = value`                                                                 |
+| `void fn(a, b, c, d, e)`               | `void fn(options_struct)`                                                        |
+| `[](){\n return 1; \n }`               | `[](){ return 1; }`                                                              |
 
 **Adoption reality:**
 
-| Mandate | Current usage | Policy |
-|---------|---------------|--------|
-| `std::ranges`/`views` | 935 + 220 occurrences, 165 `++it` remain | Required for new collection code |
-| Trailing return types | 1,877 occurrences | Required for new functions |
-| `std::expected` for fallible fns | 3 uses (2 files) | Required for new fallible APIs; do not churn existing signatures |
-| `std::optional` | 1,036 occurrences | Genuinely adopted; continue using |
-| `constexpr` | 1,415 occurrences | Healthy adoption; continue using |
+| Mandate                          | Current usage                            | Policy                                                           |
+| -------------------------------- | ---------------------------------------- | ---------------------------------------------------------------- |
+| `std::ranges`/`views`            | 935 + 220 occurrences, 165 `++it` remain | Required for new collection code                                 |
+| Trailing return types            | 1,877 occurrences                        | Required for new functions                                       |
+| `std::expected` for fallible fns | 3 uses (2 files)                         | Required for new fallible APIs; do not churn existing signatures |
+| `std::optional`                  | 1,036 occurrences                        | Genuinely adopted; continue using                                |
+| `constexpr`                      | 1,415 occurrences                        | Healthy adoption; continue using                                 |
 
 **Prefer `std::ranges`/`std::views`/`std::ranges::to`/cata_algo.h for collection work. Avoid manual iterator increment loops unless required by mutation semantics.**
 
@@ -152,6 +152,7 @@ auto print_button( const catacurses::window &w, const button_options &opts ) -> 
 ### WHEN creating a plan
 
 **MUST** write the plan to two places simultaneously:
+
 1. `local://<slug>.md` — for subagent handoff and `do` execution
 2. `plans/<slug>.md` in this repo — permanent record that survives session resets
 

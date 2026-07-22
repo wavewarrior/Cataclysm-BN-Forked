@@ -556,8 +556,6 @@ mod.on_every_5_minutes = function()
     end
     ::continue_periodic_bonus::
   end
-
-  
 end
 
 mod.open_rpg_menu = function(params)

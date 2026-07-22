@@ -315,6 +315,11 @@ TEST_CASE( "inproc: checksum is stable across idle ticks", "[coop][inproc][check
     inproc_harness h;
     h.setup();
 
+    // Let the world settle — initial setup + first post_action_world_step()
+    // may mutate calendar/weather/NPC state once. After settling, idle ticks
+    // with no queued actions must produce zero world-state delta.
+    h.tick();
+    h.tick();
     const auto cs0 = coop_world_checksum();
     h.tick();
     h.tick();

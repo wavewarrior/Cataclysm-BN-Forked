@@ -1,5 +1,6 @@
 #include "catch/catch_amalgamated.hpp"
 
+#include "cata_utility.h"
 #include "action.h"
 #include "avatar.h"
 #include "character.h"
@@ -31,6 +32,10 @@ TEST_CASE( "stealth_mode_mirrors_crouch_posture", "[stealth][movemode]" )
 
 TEST_CASE( "sound_pulses_visible_gated_by_stealth_or_devui", "[stealth][sound]" )
 {
+    // Isolate from the runtime default (g_sound_place_mode defaults true for dev UX).
+    restore_on_out_of_scope<bool> saved_spm( sdl_lighting_devui::sound_place_mode() );
+    sdl_lighting_devui::sound_place_mode() = false;
+
     CHECK_FALSE( sdl_lighting_devui::sound_pulses_visible( false ) );
     CHECK( sdl_lighting_devui::sound_pulses_visible( true ) );
 

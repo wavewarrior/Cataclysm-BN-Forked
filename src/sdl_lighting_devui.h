@@ -148,6 +148,9 @@ bool &devui_visible();
 /// debug-spawned test pulses visible without requiring stealth mode, and work
 /// independently of each other (either alone is enough).
 auto sound_pulses_visible( bool player_in_stealth ) -> bool;
+/// Mutable ref to the "spawn sounds on click" checkbox state. Tests use this
+/// to isolate from the runtime default (which is `true` for dev convenience).
+auto sound_place_mode() -> bool &; // *NOPAD*
 void rml_tick();
 
 // Place a static dev test light at the hovered world tile. Returns true if it placed

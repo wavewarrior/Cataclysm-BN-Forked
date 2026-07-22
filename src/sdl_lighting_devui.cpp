@@ -859,6 +859,7 @@ static Rml::String build_diag_text()
 }
 
 bool &devui_visible() { return g_devui_visible; }
+auto sound_place_mode() -> bool & { return g_sound_place_mode; } // *NOPAD*
 
 auto sound_pulses_visible( bool player_in_stealth ) -> bool
 {

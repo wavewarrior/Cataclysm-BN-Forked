@@ -342,7 +342,9 @@ local function handle_conditional_perks(player)
           local current_turn = get_char_value(player, "bp_turn_counter", 0)
           if current_turn - last_kill_turn <= cond.buff_duration then
             if cond.effect.dodge then player:mod_dex_bonus(cond.effect.dodge * level) end
-            if cond.effect.dodge_skill then player:mod_skill_level(SkillId.new("dodge"), cond.effect.dodge_skill * level) end
+            if cond.effect.dodge_skill then
+              player:mod_skill_level(SkillId.new("dodge"), cond.effect.dodge_skill * level)
+            end
           end
         end
 
@@ -481,9 +483,13 @@ mod.open_perk_menu = function(params)
       )
       .. "\n"
 
-    info_text = info_text .. color_highlight(gettext("Perk Slots:")) .. " "
-      .. color_good(string.format("%d", num_perks)) .. color_text("/", "light_gray")
-      .. color_highlight(string.format("%d", max_perks)) .. "\n\n"
+    info_text = info_text
+      .. color_highlight(gettext("Perk Slots:"))
+      .. " "
+      .. color_good(string.format("%d", num_perks))
+      .. color_text("/", "light_gray")
+      .. color_highlight(string.format("%d", max_perks))
+      .. "\n\n"
 
     if #current_perks > 0 then
       info_text = info_text .. color_highlight(gettext("Active Perks:")) .. "\n"
@@ -592,7 +598,10 @@ mod.choose_perk_menu = function(player)
     elseif chosen.id then
       player:set_mutation(chosen.id)
       set_char_value(player, "bp_num_perks", num_perks + 1)
-      gapi.add_msg(MsgType.good, string.format(gettext("✓ You have gained %s!"), color_highlight(chosen.id:obj():name())))
+      gapi.add_msg(
+        MsgType.good,
+        string.format(gettext("✓ You have gained %s!"), color_highlight(chosen.id:obj():name()))
+      )
     end
   end
 end
