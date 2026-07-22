@@ -713,6 +713,7 @@ struct hud_rml_model {
     Rml::String log_title;
     Rml::String botbar_rml;
     Rml::String hotbar_rml;
+    Rml::String veh_rml;
     Rml::DataModelHandle handle;
 };
 std::unique_ptr<hud_rml_model> g_hud_data;
@@ -1192,6 +1193,127 @@ auto hud_hotbar( avatar & ) -> std::string
     return out;
 }
 
+// Vehicle HUD panel: compact driving info shown when controlling a vehicle.
+// Positioned top-right below the topbar, adjacent to the dock/side panel.
+// *INDENT-OFF*
+auto hud_vehicle( avatar &u ) -> std::string
+{
+    if( !u.controlling_vehicle ) {
+        return std::string();
+    }
+    vehicle *veh = veh_pointer_or_null( get_map().veh_at( u.bub_pos() ) );
+    if( veh == nullptr ) {
+        return std::string();
+    }
+
+    // --- Row 1: Vehicle name + heading ---
+    // Compass direction from face tileray (dir8: 0=E,1=SE,2=S,3=SW,4=W,5=NW,6=N,7=NE)
+    static constexpr std::array<const char *, 8> compass = { "E", "SE", "S", "SW", "W", "NW", "N", "NE" };
+    const int d8 = veh->face.dir8();
+    const char *heading = ( d8 >= 0 && d8 < 8 ) ? compass[d8] : "?";
+
+    std::string out = "<div class=\"veh-row\">";
+    out += "<span class=\"veh-name\">" + rml_escape( veh->name ) + "</span>";
+    out += "<span class=\"veh-heading\">" + cata_text_to_rml(
+               colorize( heading, c_white ) ) + "</span>";
+    out += "</div>";
+
+    // --- Row 2: Speed ---
+    const int cur_vel = veh->velocity;             // cm/s
+    const int safe_vel = veh->safe_velocity();     // cm/s
+    const int max_vel = veh->max_velocity();       // cm/s
+    const int abs_vel = std::abs( cur_vel );
+
+    const auto vel_to_display = []( int v ) -> int {
+        return static_cast<int>( convert_velocity( std::abs( v ), VU_VEHICLE ) );
+    };
+
+    // Color: green if under safe, yellow if safe..max, red if over max
+    nc_color spd_color = c_dark_gray;
+    if( abs_vel > 0 ) {
+        if( abs_vel <= safe_vel ) {
+            spd_color = c_green;
+        } else if( abs_vel <= max_vel ) {
+            spd_color = c_yellow;
+        } else {
+            spd_color = c_red;
+        }
+    }
+
+    const std::string vel_units = velocity_units( VU_VEHICLE );
+    const std::string spd_str = string_format( "%d", vel_to_display( cur_vel ) );
+    const std::string max_str = string_format( "%d", vel_to_display( max_vel ) );
+
+    out += "<div class=\"veh-row\">";
+    out += cata_text_to_rml(
+               colorize( _( "SPD" ), c_dark_gray ) + " " +
+               colorize( spd_str, spd_color ) +
+               colorize( "/" + max_str + " " + vel_units, c_dark_gray ) );
+
+    // Cruise control
+    if( veh->cruise_on && veh->cruise_velocity != 0 ) {
+        const std::string cruise_str = string_format( "%d", vel_to_display( veh->cruise_velocity ) );
+        out += " " + cata_text_to_rml(
+                   colorize( _( "CRU" ), c_dark_gray ) + " " +
+                   colorize( cruise_str, c_cyan ) );
+    }
+    out += "</div>";
+
+    // --- Row 3: Engine + status flags ---
+    out += "<div class=\"veh-row\">";
+    out += cata_text_to_rml(
+               colorize( _( "ENG" ), c_dark_gray ) + " " +
+               colorize( veh->engine_on ? _( "ON" ) : _( "OFF" ),
+                         veh->engine_on ? c_green : c_red ) );
+
+    if( veh->velocity != 0 && std::abs( veh->velocity ) > veh->safe_velocity() ) {
+        out += " " + cata_text_to_rml( colorize( _( "!UNSAFE!" ), c_red ) );
+    }
+    if( veh->cruise_on ) {
+        out += " " + cata_text_to_rml( colorize( _( "CRUISE" ), c_cyan ) );
+    }
+    if( veh->autopilot_on ) {
+        out += " " + cata_text_to_rml( colorize( _( "AUTO" ), c_yellow ) );
+    }
+    if( veh->is_alarm_on ) {
+        out += " " + cata_text_to_rml( colorize( _( "ALARM" ), c_red ) );
+    }
+    if( veh->camera_on ) {
+        out += " " + cata_text_to_rml( colorize( _( "CAM" ), c_light_green ) );
+    }
+    out += "</div>";
+
+    // --- Row 4+: Fuel gauges ---
+    const auto fuels = veh->fuels_left();
+    if( fuels.empty() ) {
+        return out;
+    }
+    out += "<div class=\"veh-fuels\">";
+    for( const auto &[fuel_id, amount] : fuels ) {
+        const int capacity = veh->fuel_capacity( fuel_id );
+        if( capacity <= 0 ) {
+            continue;
+        }
+        const int pct = std::clamp( amount * 100 / capacity, 0, 100 );
+        const std::string fuel_name = item::nname( fuel_id, 1 );
+        const nc_color fuel_color = pct > 50 ? c_green
+                                    : pct > 20 ? c_yellow : c_red;
+        const std::string fuel_hex = nc_color_to_hex( fuel_color );
+
+        out += "<div class=\"veh-fuel-row\">";
+        out += "<span class=\"veh-fuel-label\">" + rml_escape( fuel_name ) + "</span>";
+        out += string_format(
+                   R"(<span class="veh-fuel-bar"><span class="veh-fuel-fill" style="width:%d%%;background-color:%s;"></span></span>)",
+                   pct, fuel_hex );
+        out += "<span class=\"veh-fuel-pct\">" + cata_text_to_rml(
+                   colorize( string_format( "%d%%", pct ), fuel_color ) ) + "</span>";
+        out += "</div>";
+    }
+    out += "</div>";
+    return out;
+}
+// *INDENT-ON*
+
 } // namespace
 
 // Sticky autoscroll: true = snap to bottom on new messages.
@@ -1236,6 +1358,7 @@ void sidebar_hud_open()
     c.Bind( "log_title", &g_hud_data->log_title );
     c.Bind( "botbar_rml", &g_hud_data->botbar_rml );
     c.Bind( "hotbar_rml", &g_hud_data->hotbar_rml );
+    c.Bind( "veh_rml", &g_hud_data->veh_rml );
     g_hud_data->handle = c.GetModelHandle();
     // Static dock headers — set once, no DirtyVariable needed.
     g_hud_data->minimap_title = Rml::String( to_upper_case( _( "Minimap" ) ) );
@@ -1308,6 +1431,16 @@ static void sidebar_hud_apply_rect()
     const float width_right_pct = 100.0f * width_right / TERMX;
     if( Rml::Element *el = g_hud_doc->GetElementById( "hud-vitals" ) ) {
         el->SetProperty( "left", string_format( "%.4f%%", width_left_pct ) );
+        el->SetProperty( "top", string_format( "%.4f%%", top_rows_pct + 1.0f ) );
+    }
+
+    // Vehicle HUD: top-right of the viewport, just below the topbar, next to the dock.
+    if( Rml::Element *el = g_hud_doc->GetElementById( "hud-vehicle" ) ) {
+        // Position it on the viewport side adjacent to the dock, just inside the
+        // viewport edge. Mirror vitals: vitals is top-left, vehicle is top-right
+        // (or the opposite when sidebar is on the left).
+        const float veh_right_pct = sidebar_right ? dock_width_pct : 0.0f;
+        el->SetProperty( "right", string_format( "%.4f%%", veh_right_pct ) );
         el->SetProperty( "top", string_format( "%.4f%%", top_rows_pct + 1.0f ) );
     }
 
@@ -1393,6 +1526,7 @@ void sidebar_hud_sync( avatar &u )
         apply_env_classes( "hud-botbar" );
         apply_env_classes( "hud-dock" );
         apply_env_classes( "hud-vitals" );
+        apply_env_classes( "hud-vehicle" );
     }
     g_hud_data->handle.DirtyVariable( "minimap_rml" );
 
@@ -1448,6 +1582,13 @@ void sidebar_hud_sync( avatar &u )
 
     g_hud_data->hotbar_rml = hud_hotbar( u );
     g_hud_data->handle.DirtyVariable( "hotbar_rml" );
+
+    // Vehicle HUD: only visible when controlling a vehicle.
+    g_hud_data->veh_rml = hud_vehicle( u );
+    g_hud_data->handle.DirtyVariable( "veh_rml" );
+    if( Rml::Element *el = g_hud_doc->GetElementById( "hud-vehicle" ) ) {
+        el->SetProperty( "display", u.controlling_vehicle ? "block" : "none" );
+    }
 
     sidebar_hud_apply_rect();
 }

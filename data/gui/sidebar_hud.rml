@@ -20,6 +20,11 @@
         <div class="hud-vitals-inner" data-rml="vitals_rml"></div>
     </div>
 
+    <!-- Vehicle HUD: driving info panel, top-right, visible only when controlling -->
+    <div id="hud-vehicle">
+        <div class="veh-panel-inner" data-rml="veh_rml"></div>
+    </div>
+
     <!-- Dock: minimap + log stacked vertically at the sidebar edge -->
     <div id="hud-dock" class="runic-region runic-no-right">
         <div class="dock-section">

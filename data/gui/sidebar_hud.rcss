@@ -258,6 +258,79 @@ body {
     opacity: 0;
     decorator: radial-gradient( farthest-corner, #00000000, #e0505099 );
 }
+
+/* ========== VEHICLE HUD ========== */
+#hud-vehicle {
+    position: absolute;
+    display: none;
+    background-color: {{hud-bg}};
+    border: 1dp {{hud-border}};
+    padding: 8dp 12dp;
+    min-width: 180dp;
+    max-width: 260dp;
+}
+.veh-panel-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 2dp;
+}
+.veh-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4dp 10dp;
+    align-items: baseline;
+    white-space: nowrap;
+    font-size: 0.9em;
+    color: {{hud-fg}};
+}
+.veh-name {
+    display: inline;
+    color: {{hud-accent}};
+    font-weight: bold;
+    font-size: 0.85em;
+    letter-spacing: 1dp;
+    margin-right: 6dp;
+}
+.veh-heading {
+    display: inline;
+    font-weight: bold;
+}
+/* Fuel gauges */
+.veh-fuels {
+    display: flex;
+    flex-direction: column;
+    gap: 3dp;
+    margin-top: 4dp;
+    border-top: 1dp {{hud-border}};
+    padding-top: 4dp;
+}
+.veh-fuel-row {
+    display: flex;
+    align-items: center;
+    gap: 6dp;
+    font-size: 0.8em;
+}
+.veh-fuel-label {
+    display: inline;
+    color: #888888ff;
+    min-width: 60dp;
+    white-space: nowrap;
+    overflow: hidden;
+}
+.veh-fuel-bar {
+    display: inline-block;
+    width: 60dp;
+    height: 7dp;
+    background-color: {{hud-bar-bg}};
+}
+.veh-fuel-fill {
+    display: block;
+    height: 100%;
+}
+.veh-fuel-pct {
+    display: inline;
+    min-width: 30dp;
+}
 /* ========== ENVIRONMENTAL TINTING ========== */
 .env-night   { opacity: 0.85; }
 .env-fire    { background-color: rgba(255, 100, 30, 0.04); }
@@ -266,7 +339,7 @@ body {
 .env-storm   { opacity: 0.9; }
 
 /* Smooth transitions for tint changes */
-#hud-topbar, #hud-botbar, #hud-dock, #hud-vitals {
+#hud-topbar, #hud-botbar, #hud-dock, #hud-vitals, #hud-vehicle {
     transition: background-color 0.8s, opacity 0.8s;
 }
 
