@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "cached_options.h"
 #include "calendar.h"
 #include "character.h"
 #include "coordinates.h"
@@ -332,6 +333,7 @@ struct vision_test_case {
     }
 
     void test_all() const {
+        const bool saved_fov_3d = fov_3d;
         // Disabling 3d tests for now since 3d sight casting is actually
         // different (it sees round corners more).
         const bool test_3d = !( flags & vision_test_flags::no_3d );
@@ -345,6 +347,7 @@ struct vision_test_case {
             fov_3d = false;
             test_all_transformations();
         }
+        fov_3d = saved_fov_3d;
     }
 };
 

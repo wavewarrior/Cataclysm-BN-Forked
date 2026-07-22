@@ -2,10 +2,12 @@
 
 #include "calendar.h"
 #include "cata_arena.h"
+#include "game.h"
 #include "map.h"
 #include "map_helpers.h"
 #include "name.h"
 #include "player_helpers.h"
+#include "timed_event.h"
 #include "weather.h"
 
 namespace
@@ -64,6 +66,7 @@ auto clear_states( const enum_bitset<test_state> &states ) -> void
 
     if( normalized_states.test( state::time ) ) {
         set_time( calendar::turn_zero );
+        g->timed_events = timed_event_manager {};
     }
     if( normalized_states.test( state::name ) ) {
         Name::clear();
