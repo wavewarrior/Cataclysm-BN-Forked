@@ -59,6 +59,7 @@ struct inproc_harness {
         srv.set_transport_for_test( std::unique_ptr<coop_transport>( stx ) );
         cli.set_transport_for_test( std::unique_ptr<coop_transport>( ctx ) );
         srv.set_running_for_test( true );
+        srv.set_join_phase_for_test( client_join_phase::connected );
 
         REQUIRE( srv.send_world_seed( "TestClient" ) );
         {

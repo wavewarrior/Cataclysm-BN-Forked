@@ -963,45 +963,50 @@ auto hud_topbar( avatar &u ) -> std::string
 
     const auto &sess = coop_session::get();
     if( sess.is_coop() ) {
-        auto seg_coop = colorize( sess.partner_name, c_cyan );
-        // HP color: green > 66%, yellow > 33%, red <= 33%
-        const nc_color hp_col = sess.partner_hp_pct > 66 ? c_green
-                                : sess.partner_hp_pct > 33 ? c_yellow : c_red;
-        seg_coop += " " + colorize( string_format( "HP:%d%%", sess.partner_hp_pct ), hp_col );
-        // Stamina
-        const nc_color sta_col = sess.partner_stamina_pct > 50 ? c_light_green : c_yellow;
-        seg_coop += " " + colorize( string_format( "STA:%d%%", sess.partner_stamina_pct ), sta_col );
-        // Activity
-        if( !sess.partner_activity_str.empty() ) {
-            seg_coop += " " + colorize( sess.partner_activity_str, c_light_blue );
-        }
-        // Ping
-        const int ping = sess.partner_ping_ms.load();
-        if( ping > 0 ) {
-            const nc_color ping_col = ping < 100 ? c_green : ping < 300 ? c_yellow : c_red;
-            seg_coop += " " + colorize( string_format( "%dms", ping ), ping_col );
-        }
-        // Direction arrow to partner when offscreen
-        const auto partner_delta = sess.partner_abs_pos - u.abs_pos();
-        const int dx = partner_delta.x();
-        const int dy = partner_delta.y();
-        if( std::abs( dx ) > 30 || std::abs( dy ) > 15 ) {
-            // Offscreen — show compass arrow
-            const char *arrow = "?";
-            if( std::abs( dx ) > std::abs( dy ) * 2 ) {
-                arrow = dx > 0 ? "→" : "←";
-            } else if( std::abs( dy ) > std::abs( dx ) * 2 ) {
-                arrow = dy > 0 ? "↓" : "↑";
-            } else if( dx > 0 ) {
-                arrow = dy > 0 ? "↘" : "↗";
-            } else {
-                arrow = dy > 0 ? "↙" : "↖";
+        std::string seg_coop;
+        const bool has_partner = !sess.is_host() ||
+                                 ( g->coop_server_ && g->coop_server_->has_client() );
+        if( !has_partner ) {
+            // Host is listening — no client connected yet
+            seg_coop = colorize( _( "[WAITING FOR PARTNER]" ), c_light_gray );
+        } else {
+            seg_coop = colorize( sess.partner_name, c_cyan );
+            // HP color: green > 66%, yellow > 33%, red <= 33%
+            const nc_color hp_col = sess.partner_hp_pct > 66 ? c_green
+                                    : sess.partner_hp_pct > 33 ? c_yellow : c_red;
+            seg_coop += " " + colorize( string_format( "HP:%d%%", sess.partner_hp_pct ), hp_col );
+            // Stamina
+            const nc_color sta_col = sess.partner_stamina_pct > 50 ? c_light_green : c_yellow;
+            seg_coop += " " + colorize( string_format( "STA:%d%%", sess.partner_stamina_pct ), sta_col );
+            // Activity
+            if( !sess.partner_activity_str.empty() ) {
+                seg_coop += " " + colorize( sess.partner_activity_str, c_light_blue );
             }
-            seg_coop += " " + colorize( arrow, c_white );
-        }
-        // Reconnecting indicator
-        if( sess.is_host() ) {
-            if( g->coop_server_ && g->coop_server_->awaiting_reconnect() ) {
+            // Ping
+            const int ping = sess.partner_ping_ms.load();
+            if( ping > 0 ) {
+                const nc_color ping_col = ping < 100 ? c_green : ping < 300 ? c_yellow : c_red;
+                seg_coop += " " + colorize( string_format( "%dms", ping ), ping_col );
+            }
+            // Direction arrow to partner when offscreen
+            const auto partner_delta = sess.partner_abs_pos - u.abs_pos();
+            const int dx = partner_delta.x();
+            const int dy = partner_delta.y();
+            if( std::abs( dx ) > 30 || std::abs( dy ) > 15 ) {
+                const char *arrow = "?";
+                if( std::abs( dx ) > std::abs( dy ) * 2 ) {
+                    arrow = dx > 0 ? "→" : "←";
+                } else if( std::abs( dy ) > std::abs( dx ) * 2 ) {
+                    arrow = dy > 0 ? "↓" : "↑";
+                } else if( dx > 0 ) {
+                    arrow = dy > 0 ? "↘" : "↗";
+                } else {
+                    arrow = dy > 0 ? "↙" : "↖";
+                }
+                seg_coop += " " + colorize( arrow, c_white );
+            }
+            // Reconnecting indicator
+            if( sess.is_host() && g->coop_server_ && g->coop_server_->awaiting_reconnect() ) {
                 seg_coop += " " + colorize( _( "[RECONNECTING]" ), c_yellow );
             }
         }

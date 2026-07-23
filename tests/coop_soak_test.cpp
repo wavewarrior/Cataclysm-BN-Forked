@@ -62,6 +62,7 @@ struct inproc_harness {
         srv.set_transport_for_test( std::unique_ptr<coop_transport>( stx ) );
         cli.set_transport_for_test( std::unique_ptr<coop_transport>( ctx ) );
         srv.set_running_for_test( true );
+        srv.set_join_phase_for_test( client_join_phase::connected );
 
         REQUIRE( srv.send_world_seed( "TestClient" ) );
         {
@@ -214,6 +215,7 @@ TEST_CASE( "soak: disconnect and rewire cycles without crash",
         h.srv.set_transport_for_test( std::unique_ptr<coop_transport>( new_stx ) );
         h.cli.set_transport_for_test( std::unique_ptr<coop_transport>( new_ctx ) );
         h.srv.set_running_for_test( true );
+        h.srv.set_join_phase_for_test( client_join_phase::connected );
 
         // Re-send initial sync.
         REQUIRE( h.srv.send_initial_sync() );

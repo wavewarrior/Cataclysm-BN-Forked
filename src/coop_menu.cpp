@@ -6,7 +6,9 @@
 #include "coop_server.h"
 #include "coop_session.h"
 #include "debug.h"
+#include "messages.h"
 #include "game.h"
+#include "init.h"
 #include "input.h"
 #include "output.h"
 #include "popup.h"
@@ -52,10 +54,27 @@ auto start_host() -> void
     if( !world ) {
         return; // user cancelled
     }
-
+    // Match the normal load_character_tab path: join the pre-warm thread,
+    // save last-world info, and reuse pre-warmed data when available.
+    world_generator->last_world_name = world->world_name;
+    if( !world->world_saves.empty() ) {
+        world_generator->last_character_name = world->world_saves.front().decoded_name();
+    }
+    world_generator->save_last_world_info();
     world_generator->set_active_world( world );
+
+    init::join_prewarm();
+    drain_worker_thread_debugmsgs();
+
+    const auto *prewarm = init::get_prewarm_result();
+    const bool reuse_prewarm = prewarm != nullptr
+                               && prewarm->world_name == world->world_name
+                               && prewarm->error.empty();
     try {
-        g->setup();
+        g->setup( !reuse_prewarm );
+        if( reuse_prewarm ) {
+            g->complete_prewarm_reuse( prewarm->mod_ids );
+        }
     } catch( const std::exception& err ) {
         popup( string_format( _( "World setup failed: %s" ), err.what() ) );
         return;
@@ -77,6 +96,13 @@ auto start_host() -> void
         popup( string_format( _( "Failed to start server on port %d." ), coop_port ) );
         return;
     }
+
+    // Register on g — host enters gameplay immediately.
+    // Client connections are handled asynchronously via coop_world_tick().
+    g->coop_server_owned_ = std::move( srv );
+    g->coop_server_ = g->coop_server_owned_.get();
+    coop_session::get().mode = coop_mode::host;
+    coop_session::get().dimension_id = g_active_dimension_id;
 
     // Get local LAN IP for display.
     // Preference order: IPv4 private (192.168/10/172.16) > other non-loopback > fallback.
@@ -118,75 +144,8 @@ auto start_host() -> void
             SDL_free( addrs );
         }
     }
-    // "Waiting for client" — static_popup renders via RmlUI query_popup.
-    // Root cause of empty popup: static_popup ctor calls rml_sync() when text=""
-    // (construction), then wait_message() sets text but only calls invalidate_ui()
-    // (marks resize).  rml_sync() re-runs only from the on_redraw callback, which
-    // fires on ui_manager::redraw().  handle_input() alone does NOT drive redraw.
-    // Fix: call ui_manager::redraw() each iteration so message_rml stays current.
-    {
-        const std::string wait_msg = string_format(
-                                         _( "Waiting for client...\nShare IP: %s:%d\n\nPress Escape to cancel." ),
-                                         display_ip, coop_port );
-        static_popup wait_popup;
-        wait_popup.wait_message( "%s", wait_msg );
 
-        input_context ctxt( "COOP_WAIT" );
-        ctxt.register_action( "QUIT" );
-
-        bool cancelled = false;
-        while( !srv->try_accept() ) {
-            ui_manager::redraw();                          // syncs message_rml → visible text
-            if( ctxt.handle_input( 200 ) == "QUIT" ) {
-                cancelled = true;
-                break;
-            }
-        }
-
-        if( cancelled ) {
-            srv->shutdown();
-            return;
-        }
-    }
-    // try_accept() already stored the client; wait_for_client() returns immediately.
-    if( !srv->wait_for_client() ) {
-        popup( _( "No client connected." ) );
-        srv->shutdown();
-        return;
-    }
-
-    if( !srv->handshake() ) {
-        popup( _( "Handshake failed." ) );
-        srv->shutdown();
-        return;
-    }
-
-    // Session established — register on g
-    g->coop_server_owned_ = std::move( srv );
-    g->coop_server_ = g->coop_server_owned_.get();
-    coop_session::get().dimension_id = g_active_dimension_id;
-
-    if( !g->coop_server_->send_world_seed( g->u.get_name() ) ) {
-        popup( _( "Failed to send world seed." ) );
-        g->coop_server_->shutdown();
-        g->coop_server_owned_.reset();
-        g->coop_server_ = nullptr;
-        return;
-    }
-    // C6: wait up to 3 s for the client's join_info (blocking recv on main thread,
-    // same pattern as handshake/send_world_seed — receiver thread NOT yet running).
-    g->coop_server_->wait_for_join_info( 3000 );
-    const tripoint_abs_ms proxy_spawn = g->coop_server_->client_join_pos().value_or( g->u.abs_pos() );
-    g->coop_server_->spawn_proxy_npc( proxy_spawn, "Partner" );
-    if( !g->coop_server_->send_initial_sync() ) {
-        popup( _( "Failed to send initial sync." ) );
-        g->coop_server_->shutdown();
-        g->coop_server_owned_.reset();
-        g->coop_server_ = nullptr;
-        return;
-    }
-    // Start receiver thread last — after all pre-game setup is complete.
-    g->coop_server_->start_receiver_thread();
+    add_msg( m_info, _( "Hosting on %s:%d — waiting for partner..." ), display_ip, coop_port );
 }
 
 auto start_join() -> void

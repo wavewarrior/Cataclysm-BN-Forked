@@ -1,5 +1,6 @@
 #pragma once
 
+#include "coop_packets.h"
 #include "coop_proto.h"
 #include "coordinates.h"
 #include "player_cmd.h"
@@ -39,6 +40,16 @@ auto coop_lag_find_target(
     uint32_t fire_seq,
     const tripoint_abs_ms& target_abs ) -> int; // *NOPAD*
 
+/// Phase of the client connection lifecycle.
+/// Drives the async join state machine in coop_world_tick().
+enum class client_join_phase : uint8_t {
+    listening,       ///< No client — polling try_accept() each tick
+    handshaking,     ///< Background thread running handshake + world_seed + join_info
+    finalizing,      ///< BG thread done — main thread spawns proxy + initial sync
+    connected,       ///< Normal gameplay with a live client
+    disconnected,    ///< Client left — awaiting reconnection
+};
+
 /// Host-side co-op server.
 struct coop_server {
         coop_server() = default;
@@ -53,6 +64,7 @@ struct coop_server {
         auto wait_for_client() -> bool;
         auto handshake() -> bool;
         auto send_world_seed( const std::string& player_name ) -> bool;
+        auto send_world_seed( const world_seed_data& data ) -> bool;
         auto send_initial_sync() -> bool;
         auto spawn_proxy_npc( const tripoint_abs_ms& spawn_pos, const std::string& player_name ) -> npc*;
         auto start_receiver_thread() -> void;
@@ -104,6 +116,8 @@ struct coop_server {
         }
         /// Test seam: set running_ without starting the receiver thread.
         auto set_running_for_test( bool v ) -> void { running_.store( v ); }
+        /// Test seam: set join_phase_ without running the async handshake machinery.
+        auto set_join_phase_for_test( client_join_phase p ) -> void { join_phase_.store( p ); }
         /// Test seam: drain send_q_ and send each frame through transport_ (no receiver thread).
         auto flush_send_queue_for_test() -> void;
         /// Test seam: drain transport_ inbox and dispatch each packet (no receiver thread).
@@ -158,7 +172,14 @@ struct coop_server {
         auto accept_reconnect() -> bool;
 
         /// True if client has disconnected but session is still alive for reconnect.
-        auto awaiting_reconnect() const -> bool { return awaiting_reconnect_.load(); }
+        auto awaiting_reconnect() const -> bool {
+            return join_phase_.load() == client_join_phase::disconnected;
+        }
+
+        /// True when a client is connected or was recently connected (reconnect window).
+        auto has_client() const -> bool; // *NOPAD*
+        /// Current join lifecycle phase — used by UI to show listening/connected/reconnecting.
+        auto join_phase() const -> client_join_phase { return join_phase_.load(); }
 
         // Session token for reconnection validation
         std::string session_token_;
@@ -184,6 +205,12 @@ struct coop_server {
         auto resolve_fire_at_seq( npc* proxy, uint32_t seq, int target_ax, int target_ay, int target_az )
         -> void;
         auto dispatch_packet( const std::string& buf ) -> void;
+
+        // --- Async join state machine (Terraria-style) ---
+        auto process_pending_join() -> void;     ///< Main-thread FSM driver
+        auto run_handshake_bg() -> void;          ///< Background thread entry
+        auto finalize_client_join() -> void;      ///< Main-thread spawn + sync + receiver
+        auto reset_client_state() -> void;         ///< Clear all per-client tracking
 
         NET_Server *server_sock_ = nullptr;
         std::unique_ptr<coop_transport> transport_; ///< owned; nullptr until client connects
@@ -287,10 +314,20 @@ struct coop_server {
             std::string label;
         };
         pending_mark_t pending_mark_;
-        // Reconnection state
-        std::atomic<bool> awaiting_reconnect_{false};
+        // Reconnection / join phase state
         std::atomic<bool> client_disconnected_{false};
         static constexpr int RECONNECT_TIMEOUT_TICKS = 300; // 5 minutes at 1Hz
         int reconnect_countdown_ = 0;
+        // Async client join — background handshake thread + captured seed data
+        std::atomic<client_join_phase> join_phase_{client_join_phase::listening};
+        std::jthread handshake_thread_;
+        std::atomic<int> handshake_result_{0}; ///< 0=pending, 1=ok, -1=failed
+        // Captured on the main thread before launching the handshake bg thread.
+        // Read by run_handshake_bg() only — no concurrent access.
+        int pending_seed_turn_ = 0;
+        tripoint_abs_ms pending_seed_spawn_{};
+        std::string pending_seed_player_name_;
+        std::string pending_seed_world_name_;
+        unsigned int pending_seed_rng_ = 0;
 };
 

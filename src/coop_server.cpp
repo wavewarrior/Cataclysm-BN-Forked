@@ -70,8 +70,7 @@ if( !NET_AcceptClient( server_sock_, &candidate ) || !candidate ) { return false
         return false;
     }
     transport_ = std::make_unique<coop_net_transport>( candidate );
-    coop_session::get().mode = coop_mode::host;
-    DebugLog( DL::Info, DC::Main ) << "[coop] client connected";
+    DebugLog( DL::Info, DC::Main ) << "[coop] client TCP connected";
     return true;
 }
 
@@ -200,19 +199,25 @@ auto coop_server::spawn_proxy_npc( const tripoint_abs_ms& spawn_pos,
     return ptr;
 }
 
+auto coop_server::send_world_seed( const world_seed_data& data ) -> bool
+{
+    session_token_ = data.session_token;
+    return transport_->send( build_world_seed_packet( data ) );
+}
+
 auto coop_server::send_world_seed( const std::string& player_name ) -> bool
 {
-    // Generate a session token for reconnection validation
-    session_token_ = std::to_string( std::time( nullptr ) ) + "-" + std::to_string( rng( 0, 999999 ) );
-    const auto* aw = g->get_active_world();
-    world_seed_data data;
-    data.turn = to_turn<int>( calendar::turn );
-    data.spawn_pos = g->u.abs_pos();
-    data.player_name = player_name;
-    data.world_name = aw ? aw->info->world_name : std::string{};
-    data.rng_seed = g_main_rng_seed;
-    data.session_token = session_token_;
-    return transport_->send( build_world_seed_packet( data ) );
+    const auto *aw = g->get_active_world();
+    const world_seed_data data{
+        .turn = to_turn<int>( calendar::turn ),
+        .spawn_pos = g->u.abs_pos(),
+        .player_name = player_name,
+        .world_name = aw ? aw->info->world_name : std::string{},
+        .rng_seed = g_main_rng_seed,
+        .session_token = std::to_string( std::time( nullptr ) ) + "-"
+        + std::to_string( rng( 0, 999999 ) ),
+    };
+    return send_world_seed( data );
 }
 
 auto coop_server::send_initial_sync() -> bool
@@ -458,21 +463,47 @@ auto coop_server::try_pop_chat() -> std::optional<chat_entry>
 
 auto coop_server::coop_world_tick() -> void
 {
-    if( !coop_session::get().is_host() || ( !running_ && !awaiting_reconnect_.load() ) ) { return; }
+    if( !coop_session::get().is_host() ) {
+    return;
+}
 
-// Check for unexpected client disconnect — transition to reconnect window
-if( client_disconnected_.exchange( false ) ) {
+// --- Pre-connected phases: host plays normally while join FSM runs ---
+const auto phase = join_phase_.load();
+if( phase == client_join_phase::listening ||
+        phase == client_join_phase::handshaking ||
+        phase == client_join_phase::finalizing ) {
+    process_pending_join();
+        g->post_action_world_step();
+        return;
+    }
+
+    // Check for unexpected client disconnect — transition to reconnect window
+    if( client_disconnected_.exchange( false ) ) {
     handle_client_disconnect();
     }
 
     // While awaiting reconnection: try to accept, count down, skip normal action processing
-    if( awaiting_reconnect_.load() ) {
+    if( phase == client_join_phase::disconnected ) {
     --reconnect_countdown_;
     if( reconnect_countdown_ <= 0 ) {
-            add_msg( m_bad, _( "Reconnection timed out. Session ended." ) );
-            DebugLog( DL::Info, DC::Main ) << "[coop] reconnect timeout — full shutdown";
-            awaiting_reconnect_.store( false );
-            shutdown();
+            add_msg( m_bad, _( "Reconnection timed out. Listening for a new partner..." ) );
+            DebugLog( DL::Info, DC::Main ) << "[coop] reconnect timeout — back to listening";
+            // Despawn stale proxy NPC — a new client will spawn a fresh one.
+            if( g && coop_session::get().proxy_npc_id.is_valid() ) {
+                const character_id pid = coop_session::get().proxy_npc_id;
+                coop_session::get().proxy_npc_id = character_id{};
+                const npc *proxy = g->critter_by_id<npc>( pid );
+                if( proxy ) {
+                    g->remove_npc_follower( pid );
+                    get_overmapbuffer( proxy->get_dimension() ).remove_npc( pid );
+                }
+                if( !g->is_processing_npcs() ) {
+                    g->erase_npc( pid );
+                }
+                DebugLog( DL::Info, DC::Main ) << "[coop] proxy NPC despawned on reconnect timeout";
+            }
+            reset_client_state();
+            join_phase_.store( client_join_phase::listening );
             return;
         }
         // Non-blocking: try to accept a reconnecting client each tick
@@ -1540,7 +1571,7 @@ auto coop_server::handle_client_disconnect() -> void
         std::scoped_lock lk{ send_mtx_ };
         send_q_.clear();
     }
-    awaiting_reconnect_.store( true );
+    join_phase_.store( client_join_phase::disconnected );
     reconnect_countdown_ = RECONNECT_TIMEOUT_TICKS;
     DebugLog( DL::Info, DC::Main )
             << "[coop] Client disconnected — awaiting reconnection (300s timeout)";
@@ -1587,7 +1618,7 @@ if( !transport_->recv( buf, 100 ) ) { // short timeout — avoid stalling main t
         return false;
     }
     // Token matches — send full sync and restart receiver
-    awaiting_reconnect_.store( false );
+    join_phase_.store( client_join_phase::connected );
     running_.store( true );
     last_confirmed_seq_ = 0; // client resets next_seq_=1; must match
     build_and_send_sync( true );
@@ -1607,10 +1638,185 @@ if( !transport_->recv( buf, 100 ) ) { // short timeout — avoid stalling main t
     return true;
 }
 
+auto coop_server::has_client() const -> bool
+{
+    const auto p = join_phase_.load();
+    return p == client_join_phase::connected || p == client_join_phase::disconnected;
+}
+
+auto coop_server::process_pending_join() -> void
+{
+    switch( join_phase_.load() ) {
+    case client_join_phase::listening: {
+        if( !server_sock_ || !try_accept() ) {
+                return;
+            }
+            // Client TCP connected — capture main-thread state for the bg handshake.
+            session_token_ = std::to_string( std::time( nullptr ) ) + "-"
+                             + std::to_string( rng( 0, 999999 ) );
+            const auto *aw = g->get_active_world();
+            pending_seed_turn_ = to_turn<int>( calendar::turn );
+            pending_seed_spawn_ = g->u.abs_pos();
+            pending_seed_player_name_ = g->u.get_name();
+            pending_seed_world_name_ = aw ? aw->info->world_name : std::string{};
+            pending_seed_rng_ = g_main_rng_seed;
+            handshake_result_.store( 0 );
+            join_phase_.store( client_join_phase::handshaking );
+            handshake_thread_ = std::jthread( [this]( std::stop_token ) {
+                run_handshake_bg();
+            } );
+            DebugLog( DL::Info, DC::Main ) << "[coop] client accepted — handshake started (async)";
+            return;
+        }
+        case client_join_phase::handshaking: {
+            const int result = handshake_result_.load();
+            if( result == 0 ) {
+                return;  // still running
+            }
+            if( handshake_thread_.joinable() ) {
+                handshake_thread_.join();
+            }
+            if( result < 0 ) {
+                // Handshake failed — drop connection, go back to listening
+                transport_.reset();
+                join_phase_.store( client_join_phase::listening );
+                DebugLog( DL::Error, DC::Main ) << "[coop] async handshake failed — back to listening";
+                add_msg( m_warning, _( "A client tried to connect but handshake failed." ) );
+                return;
+            }
+            join_phase_.store( client_join_phase::finalizing );
+            [[fallthrough]];
+        }
+        case client_join_phase::finalizing:
+            finalize_client_join();
+            return;
+        default:
+            return;
+    }
+}
+
+auto coop_server::run_handshake_bg() -> void
+{
+    try {
+        if( !handshake() ) {
+            handshake_result_.store( -1 );
+            return;
+        }
+        // Send world seed using data captured on the main thread.
+        const world_seed_data data{
+            .turn = pending_seed_turn_,
+            .spawn_pos = pending_seed_spawn_,
+            .player_name = pending_seed_player_name_,
+            .world_name = pending_seed_world_name_,
+            .rng_seed = pending_seed_rng_,
+            .session_token = session_token_,
+        };
+        if( !send_world_seed( data ) ) {
+            DebugLog( DL::Error, DC::Main ) << "[coop] bg: send_world_seed failed";
+            handshake_result_.store( -1 );
+            return;
+        }
+        // Wait for client's join_info (3 s timeout, non-fatal if missed).
+        wait_for_join_info( 3000 );
+        handshake_result_.store( 1 );
+    } catch( const std::exception &e ) {
+        DebugLog( DL::Error, DC::Main ) << "[coop] bg handshake exception: " << e.what();
+        handshake_result_.store( -1 );
+    }
+}
+
+auto coop_server::finalize_client_join() -> void
+{
+    // Clear stale state from any prior client session before spawning a new proxy.
+    reset_client_state();
+    const tripoint_abs_ms proxy_spawn =
+        client_join_pos_.value_or( g->u.abs_pos() );
+    spawn_proxy_npc( proxy_spawn, "Partner" );
+    if( !send_initial_sync() ) {
+    DebugLog( DL::Error, DC::Main ) << "[coop] initial sync failed — dropping client";
+        transport_.reset();
+        join_phase_.store( client_join_phase::listening );
+        return;
+    }
+    start_receiver_thread();
+    join_phase_.store( client_join_phase::connected );
+    add_msg( m_good, _( "Partner connected!" ) );
+    DebugLog( DL::Info, DC::Main ) << "[coop] client join finalized — session active";
+}
+
+auto coop_server::reset_client_state() -> void
+{
+    // Queues: stale actions/chat from the dead client must not leak to a new session.
+    {
+        std::scoped_lock lk{ action_mtx_ };
+        action_q_.clear();
+        pending_trade_offer_json_.reset();
+    }
+    {
+        std::scoped_lock lk{ chat_mtx_ };
+        chat_q_.clear();
+        client_activity_str_.clear();
+        client_abs_pos_ = {};
+    }
+    // Atomics: reset client vitals to safe defaults.
+    client_hp_pct_.store( 100 );
+    client_stamina_pct_.store( 100 );
+    client_dead_.store( false );
+    client_downed_.store( false );
+    client_is_idle_.store( false );
+    force_resync_.store( false );
+    pending_tap_.store( false );
+    // Main-thread-only fields.
+    client_death_announced_ = false;
+    pending_tap_sent_to_client_ = false;
+    client_down_turns_remaining_ = 0;
+    sync_tick_counter_ = 0;
+    last_sync_origin_ = tripoint_abs_sm{
+        std::numeric_limits<int>::min(), std::numeric_limits<int>::min(),
+        std::numeric_limits<int>::min() };
+    // Join info from previous client.
+    client_join_pos_.reset();
+    client_worn_json_.clear();
+    // ID tracking.
+    monster_id_map_.clear();
+    next_monster_id_ = 1;
+    client_known_vehicles_.clear();
+    vehicle_id_map_.clear();
+    vehicle_id_map_rev_.clear();
+    next_vehicle_id_ = 1;
+    last_confirmed_seq_ = 0;
+    position_history_.clear();
+    // Receiver→main-thread sync buffers.
+    {
+        std::scoped_lock lk{ pending_sync_mtx_ };
+        pending_skills_.clear();
+        pending_overmap_tiles_.clear();
+        pending_mutations_.clear();
+        has_mutations_update_ = false;
+        pending_bionics_.clear();
+        has_bionics_update_ = false;
+        pending_mark_ = {};
+    }
+    {
+        std::scoped_lock lk{ pending_veh_mtx_ };
+        pending_veh_state_ = {};
+    }
+    // Partner session state.
+    coop_session::get().partner_hp_pct = 100;
+    coop_session::get().partner_stamina_pct = 100;
+    coop_session::get().partner_activity_str.clear();
+    coop_session::get().partner_abs_pos = {};
+    coop_session::get().partner_ping_ms.store( 0 );
+}
+
 auto coop_server::shutdown() -> void
 {
     const bool was_running = running_.exchange( false );
-    awaiting_reconnect_.store( false );
+    join_phase_.store( client_join_phase::listening );
+    // Join the handshake thread if it's still running (e.g. shutdown during handshaking).
+    if( handshake_thread_.joinable() ) {
+        handshake_thread_.join();
+    }
     // Join first — the IO thread checks running_ and st.stop_requested() at the top of
     // each iteration and exits quickly (no long-blocking recv under C5).
     if( receiver_thread_.joinable() ) {
