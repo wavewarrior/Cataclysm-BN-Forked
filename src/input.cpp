@@ -1109,7 +1109,7 @@ action_id input_context::display_menu( const bool permit_execute_action )
                      height - 2, width - 2, point( maxwidth / 2 - width / 2, maxheight / 2 - height / 2 ) );
         // height of the area usable for display of keybindings, excludes headers & borders
         display_height = height - LEGEND_HEIGHT - BORDER_SPACE; // -2 for the border
-        const point filter_pos( 4, 8 );
+        const point filter_pos( 4, height - BORDER_SPACE - 3 );
         // width of the legend
         legwidth = width - filter_pos.x * 2 - BORDER_SPACE;
         // +1 for end-of-text cursor
