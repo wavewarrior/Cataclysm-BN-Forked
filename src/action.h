@@ -168,6 +168,8 @@ enum action_id : int {
     ACTION_MEND,
     /** Open the throw menu */
     ACTION_THROW,
+    /** Open throw quick-slot selection menu */
+    ACTION_THROW_QUICKSLOT,
     /** Fire the wielded weapon, or open fire menu if none */
     ACTION_FIRE,
     /** Hold RMB to enter aim mode; releases via RMB-up, fires via LMB */

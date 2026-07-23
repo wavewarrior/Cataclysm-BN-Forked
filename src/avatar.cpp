@@ -1578,3 +1578,101 @@ bool avatar::add_faction_warning( const faction_id &id )
     }
     return false;
 }
+
+// ---- Throw quick-slots ----
+
+auto avatar::mark_for_throwing( const itype_id &type ) -> int
+{
+    // Already marked? Return existing slot.
+    for( int i = 0; i < MAX_THROW_SLOTS; ++i ) {
+        if( throw_slots_[i] == type ) {
+            return i;
+        }
+    }
+    // Find first empty slot.
+    for( int i = 0; i < MAX_THROW_SLOTS; ++i ) {
+        if( throw_slots_[i].is_empty() ) {
+            throw_slots_[i] = type;
+            if( active_throw_slot_ < 0 ) {
+                active_throw_slot_ = i;
+            }
+            return i;
+        }
+    }
+    return -1; // all slots full
+}
+
+auto avatar::unmark_for_throwing( const itype_id &type ) -> void
+{
+    for( int i = 0; i < MAX_THROW_SLOTS; ++i ) {
+        if( throw_slots_[i] == type ) {
+            throw_slots_[i] = itype_id{};
+            if( active_throw_slot_ == i ) {
+                active_throw_slot_ = -1;
+            }
+            return;
+        }
+    }
+}
+
+auto avatar::get_active_throwable() -> item *
+{
+    if( active_throw_slot_ < 0 || active_throw_slot_ >= MAX_THROW_SLOTS ) {
+        return nullptr;
+    }
+    const auto &type = throw_slots_[active_throw_slot_];
+    if( type.is_empty() ) {
+        return nullptr;
+    }
+    // Check wielded weapon first.
+    if( primary_weapon().typeId() == type ) {
+        return &primary_weapon();
+    }
+    // Search inventory.
+    const int pos = inv.position_by_type( type );
+    if( pos != INT_MIN ) {
+        return &inv.find_item( pos );
+    }
+    return nullptr;
+}
+
+auto avatar::count_throwable( int slot ) const -> int
+{
+    if( slot < 0 || slot >= MAX_THROW_SLOTS || throw_slots_[slot].is_empty() ) {
+        return 0;
+    }
+    const auto &type = throw_slots_[slot];
+    auto count = inv.count_item( type );
+    if( primary_weapon().typeId() == type ) {
+        count += primary_weapon().count();
+    }
+    return count;
+}
+
+auto avatar::cycle_throw_slot() -> int
+{
+    if( active_throw_slot_ < 0 ) {
+    // Find first non-empty slot.
+    for( int i = 0; i < MAX_THROW_SLOTS; ++i ) {
+            if( !throw_slots_[i].is_empty() ) {
+                active_throw_slot_ = i;
+                return i;
+            }
+        }
+        return -1;
+    }
+    // Cycle forward, wrapping.
+    for( int offset = 1; offset <= MAX_THROW_SLOTS; ++offset ) {
+    const int idx = ( active_throw_slot_ + offset ) % MAX_THROW_SLOTS;
+        if( !throw_slots_[idx].is_empty() ) {
+            active_throw_slot_ = idx;
+            return idx;
+        }
+    }
+    return active_throw_slot_;
+}
+
+auto avatar::set_active_throw_slot( int slot ) -> void
+{
+    active_throw_slot_ = ( slot >= 0 && slot < MAX_THROW_SLOTS ) ? slot : -1;
+}

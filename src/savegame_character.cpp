@@ -894,6 +894,15 @@ for( const auto &elem : warning_record ) {
         json.end_object();
     }
     json.end_array();
+
+    // Throw quick-slots
+    json.member( "throw_slots" );
+    json.start_array();
+for( const auto &slot : throw_slots_ ) {
+    json.write( slot.str() );
+    }
+    json.end_array();
+    json.member( "active_throw_slot", active_throw_slot_ );
 }
 
 void avatar::deserialize( JsonIn &jsin )
@@ -1062,6 +1071,18 @@ void avatar::load( const JsonObject &data )
 
     // monsters recorded by the character
     data.read( "known_monsters", known_monsters );
+
+    // Throw quick-slots
+    if( data.has_array( "throw_slots" ) ) {
+        int idx = 0;
+        for( const std::string &s : data.get_array( "throw_slots" ) ) {
+            if( idx < MAX_THROW_SLOTS ) {
+                throw_slots_[idx++] = s.empty() ? itype_id{} :
+                                      itype_id( s );
+            }
+        }
+    }
+    data.read( "active_throw_slot", active_throw_slot_ );
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

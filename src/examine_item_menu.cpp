@@ -214,6 +214,33 @@ bool run( item& loc, const std::function<int()> &func_pos_x, const std::function
         return true;
     } );
 
+    {
+        bool already_marked = false;
+        for( int i = 0; i < avatar::MAX_THROW_SLOTS; ++i ) {
+            if( you.get_throw_slot( i ) == itm.typeId() ) {
+                already_marked = true;
+                break;
+            }
+        }
+        if( already_marked ) {
+            add_entry( "MARK_THROW", hint_rating::iffy, [&]() {
+                you.unmark_for_throwing( itm.typeId() );
+                add_msg( m_info, _( "'%s' removed from throw quick-slots." ), itm.tname( 1, false ) );
+                return false;
+            } );
+        } else {
+            add_entry( "MARK_THROW", hint_rating::good, [&]() {
+                const int slot = you.mark_for_throwing( itm.typeId() );
+                if( slot >= 0 ) {
+                    add_msg( m_info, _( "'%s' added to throw slot %d." ), itm.tname( 1, false ), slot + 1 );
+                } else {
+                    add_msg( m_warning, _( "All throw quick-slots are full." ) );
+                }
+                return false;
+            } );
+        }
+    }
+
     add_entry( "CHANGE_SIDE", rate_action_change_side( you, itm ), [&]() {
         you.change_side( itm );
         return true;

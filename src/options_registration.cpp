@@ -536,6 +536,11 @@ void options_manager::add_options_interface()
          true
        );
 
+    add( "THROW_RADIAL_HOLD", interface, translate_marker( "Throw quick-slot hold mode" ),
+         translate_marker( "If true, the throw quick-slot menu stays open only while the key is held.  If false, it toggles open/closed." ),
+         true
+       );
+
     add( "QUERY_DISASSEMBLE", interface, translate_marker( "Query on disassembly while butchering" ),
          translate_marker( "If true, will query before disassembling items while butchering." ),
          true

@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <array>
 #include <unordered_set>
 #include <vector>
 
@@ -268,6 +269,25 @@ class avatar : public player
             return mon_visible;
         }
 
+        // ---- Throw quick-slots ----
+        static constexpr int MAX_THROW_SLOTS = 6;
+        /// Mark an item type for quick-throwing. Returns the slot index, or -1 if full.
+        auto mark_for_throwing( const itype_id &type ) -> int;
+        /// Remove an item type from the quick-throw slots.
+        auto unmark_for_throwing( const itype_id &type ) -> void;
+        /// Get a pointer to the first inventory item matching the active throw slot.
+        /// Returns nullptr if no slot is active or no matching item exists.
+        auto get_active_throwable() -> item *;
+        /// Count items in inventory matching the given slot's type.
+        auto count_throwable( int slot ) const -> int;
+        /// Cycle to the next non-empty throw slot (wraps). Returns new active index.
+        auto cycle_throw_slot() -> int;
+        /// Set the active throw slot directly (clamped to -1..MAX_THROW_SLOTS-1).
+        auto set_active_throw_slot( int slot ) -> void;
+        auto get_active_throw_slot() const -> int { return active_throw_slot_; }
+        auto get_throw_slot( int slot ) const -> const itype_id & { return throw_slots_[slot]; }
+        auto is_throw_slot_empty( int slot ) const -> bool { return throw_slots_[slot].is_empty(); }
+
     private:
         // The name used to generate save filenames for this avatar. Not serialized in json.
         std::string save_id;
@@ -336,6 +356,10 @@ class avatar : public player
         std::vector<mtype_id> starting_pets;
 
         std::set<character_id> follower_ids;
+
+        // Throw quick-slots: up to 6 item types for rapid throwing.
+        std::array<itype_id, MAX_THROW_SLOTS> throw_slots_{};
+        int active_throw_slot_ = -1;
 };
 
 avatar &get_avatar();

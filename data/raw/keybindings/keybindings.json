@@ -2025,6 +2025,13 @@
   },
   {
     "type": "keybinding",
+    "name": "Throw quick-slot select",
+    "category": "DEFAULTMODE",
+    "id": "THROW_QUICKSLOT",
+    "bindings": [ { "input_method": "keyboard", "key": "T" } ]
+  },
+  {
+    "type": "keybinding",
     "name": "Blind Throw Item",
     "category": "LOOK",
     "id": "throw_blind",
@@ -3580,6 +3587,13 @@
     "category": "INVENTORY_ITEM",
     "name": "Throw",
     "bindings": [ { "input_method": "keyboard", "key": "t" } ]
+  },
+  {
+    "id": "MARK_THROW",
+    "type": "keybinding",
+    "category": "INVENTORY_ITEM",
+    "name": "Mark/Unmark for throwing",
+    "bindings": [ { "input_method": "keyboard", "key": "T" } ]
   },
   {
     "id": "CHANGE_SIDE",

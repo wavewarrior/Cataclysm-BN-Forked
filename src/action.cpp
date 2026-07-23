@@ -201,6 +201,8 @@ std::string action_ident( action_id act )
             return "mend";
         case ACTION_THROW:
             return "throw";
+        case ACTION_THROW_QUICKSLOT:
+            return "THROW_QUICKSLOT";
         case ACTION_FIRE:
             return "fire";
         case ACTION_AIM_HOLD:

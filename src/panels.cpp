@@ -47,6 +47,7 @@
 #include "game_ui.h"
 #include "input.h"
 #include "item.h"
+#include "itype.h"
 #include "json.h"
 #include "lua_sidebar_widgets.h"
 #include "magic.h"
@@ -1013,6 +1014,35 @@ auto hud_topbar( avatar &u ) -> std::string
         // Build RML
         result += "<div class=\"hud-segment\"><span class=\"seg-label\">CO-OP</span> "
                   + cata_text_to_rml( seg_coop ) + "</div>";
+    }
+
+    // Throw quick-slots
+    bool has_throw_slots = false;
+    for( int i = 0; i < avatar::MAX_THROW_SLOTS; ++i ) {
+        if( !u.is_throw_slot_empty( i ) ) {
+            has_throw_slots = true;
+            break;
+        }
+    }
+    if( has_throw_slots ) {
+        std::string seg_throw;
+        for( int i = 0; i < avatar::MAX_THROW_SLOTS; ++i ) {
+            const bool active = ( i == u.get_active_throw_slot() );
+            const bool empty = u.is_throw_slot_empty( i );
+            std::string slot_str;
+            if( empty ) {
+                slot_str = colorize( string_format( "[%d]---", i + 1 ), c_dark_gray );
+            } else {
+                const auto &type = u.get_throw_slot( i );
+                const int count = u.count_throwable( i );
+                const auto name = type->nname( 1 );
+                const nc_color col = active ? c_yellow : c_light_gray;
+                slot_str = colorize( string_format( "[%d]%s\u00d7%d", i + 1, name, count ), col );
+            }
+            seg_throw += ( i > 0 ? " " : "" ) + slot_str;
+        }
+        result += "<div class=\"hud-segment\"><span class=\"seg-label\">THROW</span> "
+                  + cata_text_to_rml( seg_throw ) + "</div>";
     }
 
     return result;
