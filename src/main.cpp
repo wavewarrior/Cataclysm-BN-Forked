@@ -730,7 +730,7 @@ int main( int argc, char* argv[] )
                 if( g->modal_fiber_ && !g->modal_fiber_->done() ) {
                     g->modal_fiber_->resume( evt );
                     if( g->modal_fiber_->done() ) { g->modal_fiber_.reset(); }
-                } else if( evt.type != input_event_t::error && evt.type != input_event_t::timeout ) {
+                } else if( evt.type == input_event_t::keyboard || evt.type == input_event_t::gamepad ) {
                     const input_context dflt = get_default_mode_input_context();
                     const auto& action_str = dflt.input_to_action( evt );
                     if( !action_str.empty() && action_str != "ERROR" ) {
