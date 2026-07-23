@@ -1292,6 +1292,13 @@ action_id input_context::display_menu( const bool permit_execute_action )
             if( action_index >= filtered_registered_actions.size() ) { continue; }
             const std::string& action_id = filtered_registered_actions[action_index];
 
+            // Hide the full-screen keybindings document while a nested popup is
+            // shown below — otherwise the popup paints underneath this opaque
+            // overlay (Context::Render() only draws SHOWN documents, but this
+            // one stays open/shown the whole time, so it wins the z-order over
+            // anything that isn't opened after it).
+            kb_rml.set_visible( false );
+
             // Check if this entry is local or global.
             bool is_local = false;
             const action_attributes& actions =
@@ -1327,6 +1334,7 @@ action_id input_context::display_menu( const bool permit_execute_action )
 
                 if( action_uses_input( action_id, new_event ) ) {
                     popup_getkey( _( "This key is already used for %s." ), name );
+                    kb_rml.set_visible( true );
                     status = s_show;
                     continue;
                 }
@@ -1356,10 +1364,12 @@ action_id input_context::display_menu( const bool permit_execute_action )
                 action_to_execute = look_up_action( action_id );
                 break;
             }
+            kb_rml.set_visible( true );
             status = s_show;
         }
     }
 
+    kb_rml.set_visible( false );
     if( changed && query_yn( _( "Save changes?" ) ) ) {
         try {
             inp_mngr.save();

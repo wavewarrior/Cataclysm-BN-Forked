@@ -66,6 +66,12 @@ class rml_doc
         bool active() const { return doc_ != nullptr; }
         explicit operator bool() const { return doc_ != nullptr; }
         Rml::ElementDocument *document() const { return doc_; }
+        // Toggle Show()/Hide() on the underlying document without tearing down
+        // the data model. Use to let a nested curses/RmlUi popup paint on top
+        // of a persistent full-screen document (e.g. the keybindings editor)
+        // instead of being buried beneath its opaque background. No-op if not
+        // open.
+        void set_visible( bool visible );
 
         rml_doc() = default;
         ~rml_doc();

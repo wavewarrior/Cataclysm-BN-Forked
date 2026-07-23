@@ -75,6 +75,18 @@ void rml_doc::close()
     model_name_.clear();
 }
 
+void rml_doc::set_visible( bool visible )
+{
+    if( doc_ == nullptr ) {
+        return;
+    }
+    if( visible ) {
+        doc_->Show();
+    } else {
+        doc_->Hide();
+    }
+}
+
 rml_doc::~rml_doc()
 {
     close();
