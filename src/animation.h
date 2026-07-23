@@ -82,3 +82,7 @@ struct draw_bullet_trajectories_options {
 
 /// Draw multiple projectile trajectories in a single animation sequence.
 void draw_bullet_trajectories( const draw_bullet_trajectories_options &options );
+
+/// Emit a fading impact particle at the given position.
+/// `blood` = true for organic splatter, false for sparks/dust.
+void emit_impact_particle( const tripoint_bub_ms &pos, bool blood );

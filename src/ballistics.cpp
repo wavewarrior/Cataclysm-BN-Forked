@@ -27,6 +27,7 @@
 #include "dispersion.h"
 #include "enums.h"
 #include "explosion_queue.h"
+#include "field_type.h"
 #include "game.h"
 #include "item.h"
 #include "line.h"
@@ -732,6 +733,9 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
                 }
                 sfx::do_projectile_hit( *attack.hit_critter );
                 sfx::emit_sound_pulse( tp, 10.0f );
+                if( do_animation ) {
+                    emit_impact_particle( tp, critter->bloodType() != fd_null );
+                }
                 has_momentum = proj.impact.total_damage() > 0 && is_bullet;
 
                 apply_overpenetration_penalty( is_projectile_modify_overpenetration );
@@ -758,6 +762,9 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
         if( !has_momentum && here.impassable( tp ) &&
             !here.has_flag( flag_THIN_OBSTACLE, tp ) ) {
             // Flamethrowers go through bars but not wall
+            if( do_animation ) {
+                emit_impact_particle( tp, false );
+            }
             traj_len = i;
             break;
         }

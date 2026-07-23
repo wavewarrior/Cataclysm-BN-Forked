@@ -9,6 +9,8 @@
           { "id": "f_steam_turbine", "fg": 0 },
           { "id": "animation_bullet_normal_0deg", "fg": 1, "rotates": true },
           { "id": "animation_bullet_normal_45deg", "fg": 2, "rotates": true },
+          { "id": "animation_impact_blood", "fg": 1 },
+          { "id": "animation_impact_sparks", "fg": 2 },
           { "id": "shield_wooden", "fg": 3 },
           { "id": [ "overlay_worn_shield_wooden", "overlay_wielded_shield_wooden" ], "fg": 4 },
           { "id": "shield_wooden_large", "fg": 5 },
