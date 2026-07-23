@@ -22,7 +22,9 @@ struct particle {
     std::vector<tripoint_bub_ms> path;
     double start_wall = 0.0; // SDL wall-clock seconds at emission
     float duration = 0.f;    // total flight time, seconds
+    float alpha = 1.f;       ///< current opacity (1 = opaque); decayed by update()
 
+    bool tumble = false; ///< cycle rotation per waypoint (thrown-item tumble)
     bool alive = true;
 };
 

@@ -221,28 +221,6 @@ void cata_tiles::init_draw_cone_aoe( const tripoint_bub_ms& origin, const one_bu
     cone_aoe_origin = origin;
     cone_aoe_layer = layer;
 }
-void cata_tiles::init_draw_bullet( const tripoint_bub_ms& p, std::string name, int rotation )
-{
-    do_draw_bullet = true;
-    bul_pos.push_back( p );
-    bul_id.push_back( std::move( name ) );
-    bul_rotation.push_back( rotation );
-}
-void cata_tiles::init_draw_bullets(
-    const std::vector<tripoint_bub_ms> &ps, const std::vector<std::string> &names,
-    const std::vector<int> &rotations )
-{
-    do_draw_bullet = true;
-    bul_pos.insert( bul_pos.end(), ps.begin(), ps.end() );
-    bul_id.insert( bul_id.end(), names.begin(), names.end() );
-    bul_rotation.insert( bul_rotation.end(), rotations.begin(), rotations.end() );
-}
-void cata_tiles::init_draw_hit( const tripoint_bub_ms& p, std::string name )
-{
-    do_draw_hit = true;
-    hit_pos = p;
-    hit_entity_id = std::move( name );
-}
 void cata_tiles::init_draw_line(
     const tripoint_bub_ms& p, std::vector<tripoint_bub_ms> trajectory, std::string name,
     bool target_line )
@@ -296,19 +274,6 @@ void cata_tiles::void_custom_explosion()
 {
     do_draw_custom_explosion = false;
     custom_explosion_layer.clear();
-}
-void cata_tiles::void_bullet()
-{
-    do_draw_bullet = false;
-    bul_pos.clear();
-    bul_id.clear();
-    bul_rotation.clear();
-}
-void cata_tiles::void_hit()
-{
-    do_draw_hit = false;
-    hit_pos = {-1, -1, -1};
-    hit_entity_id.clear();
 }
 void cata_tiles::void_line()
 {
@@ -687,31 +652,6 @@ void cata_tiles::draw_cone_aoe_frame()
             tile, tripoint_bub_ms( pv.pt ), std::nullopt, std::nullopt, lit_level::LIT, false, 0,
             false );
     }
-}
-
-void cata_tiles::draw_bullet_frame()
-{
-    for( size_t i = 0; i < bul_pos.size(); ++i ) {
-        const auto tile = tile_search_params{
-            .id = bul_id[i],
-            .category = C_BULLET,
-            .subcategory = empty_string,
-            .subtile = 0,
-            .rota = bul_rotation[i]};
-        draw_from_id_string(
-            tile, bul_pos[i], std::nullopt, std::nullopt, lit_level::LIT, false, 0, false );
-    }
-}
-void cata_tiles::draw_hit_frame()
-{
-    std::string hit_overlay = "animation_hit";
-
-    draw_from_id_string(
-    {hit_entity_id, C_HIT_ENTITY, empty_string, 0, 0}, hit_pos, std::nullopt, std::nullopt,
-    lit_level::LIT, false, 0, false );
-    draw_from_id_string(
-    {hit_overlay, C_NONE, empty_string, 0, 0}, hit_pos, std::nullopt, std::nullopt,
-    lit_level::LIT, false, 0, false );
 }
 void cata_tiles::draw_line()
 {

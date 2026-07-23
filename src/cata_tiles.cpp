@@ -250,8 +250,6 @@ cata_tiles::cata_tiles( const SDL_Renderer_Ptr& renderer, const GeometryRenderer
     in_animation = false;
     do_draw_explosion = false;
     do_draw_custom_explosion = false;
-    do_draw_bullet = false;
-    do_draw_hit = false;
     do_draw_line = false;
     do_draw_cursor = false;
     do_draw_highlight = false;
@@ -1408,7 +1406,7 @@ void cata_tiles::draw(
     }
 
     in_animation =
-        do_draw_explosion || do_draw_custom_explosion || do_draw_bullet || do_draw_hit
+        do_draw_explosion || do_draw_custom_explosion
         || do_draw_line || do_draw_cursor || do_draw_highlight || do_draw_weather || do_draw_sct
         || do_draw_zones || do_draw_cone_aoe || do_draw_aim_cone || !particles_.idle();
 
@@ -1416,24 +1414,20 @@ void cata_tiles::draw(
     if( in_animation ) {
         if( do_draw_explosion ) { draw_explosion_frame(); }
         if( do_draw_custom_explosion ) { draw_custom_explosion_frame(); }
-        if( do_draw_bullet ) { draw_bullet_frame(); }
         if( !particles_.idle() ) {
             particles_.update( anim_wall_now_ );
             for( const auto &p : particles_.active() ) {
                 if( !tile_iso ) {
                     active_anim_xform_ = sprite_xform{
                         .off_x = p.off_x * static_cast<float>( tile_width ),
-                        .off_y = p.off_y * static_cast<float>( tile_height ) };
+                        .off_y = p.off_y * static_cast<float>( tile_height ),
+                        .alpha = p.alpha };
                 }
                 const tile_search_params tile{ p.sprite, C_BULLET, empty_string, 0, p.rotation };
                 draw_from_id_string(
                     tile, p.tile, std::nullopt, std::nullopt, lit_level::LIT, false, 0, false );
                 active_anim_xform_ = {};
             }
-        }
-        if( do_draw_hit ) {
-            draw_hit_frame();
-            void_hit();
         }
         if( do_draw_line ) {
             draw_line();
@@ -2175,7 +2169,7 @@ bool cata_tiles::draw_sprite_at(
         // The background layer (ground under the tile) must stay static.
         const float enq_sway = is_fg ? sway : 0.0f;
         sprite_tex->enqueue_tile_sprite(
-            gpu.texture, gpu.atlas_w, gpu.atlas_h, fdst, flip, 1.0f,
+            gpu.texture, gpu.atlas_w, gpu.atlas_h, fdst, flip, active_anim_xform_.alpha,
             static_cast<double>( rotation ) + active_anim_xform_.tilt_deg, gpu_light_r, gpu_light_g,
             gpu_light_b, gpu_light_mul, enq_sway,
             /*outline=*/0.0f, effective_extrude_px, effective_extrude_dark, effective_extrude_lean );

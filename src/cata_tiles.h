@@ -771,10 +771,11 @@ struct sprite_xform {
     float flash_r = 0.f;  // additive light tint (white if avatar, red otherwise)
     float flash_g = 0.f;
     float flash_b = 0.f;
+    float alpha = 1.f;   // multiplicative opacity (1 = opaque, 0 = invisible)
     bool fg_only = false; // tile-bash recoil: apply to fg layer only (ground/bg stays put)
     bool active() const {
         return off_x != 0.f || off_y != 0.f || tilt_deg != 0.f || flash_r != 0.f || flash_g != 0.f
-               || flash_b != 0.f;
+               || flash_b != 0.f || alpha != 1.f;
     }
 };
 
@@ -1095,18 +1096,8 @@ class cata_tiles
         void draw_cone_aoe_frame();
         void void_cone_aoe();
 
-        void init_draw_bullet( const tripoint_bub_ms& p, std::string name, int rotation );
-        void init_draw_bullets(
-            const std::vector<tripoint_bub_ms> &ps, const std::vector<std::string> &names,
-            const std::vector<int> &rotations );
-        void draw_bullet_frame();
-        void void_bullet();
-
         auto particles() -> particle_system & { return particles_; } // *NOPAD*
 
-        void init_draw_hit( const tripoint_bub_ms& p, std::string name );
-        void draw_hit_frame();
-        void void_hit();
 
         void draw_footsteps_frame( const tripoint_bub_ms& center );
 
@@ -1281,8 +1272,6 @@ class cata_tiles
 
         bool do_draw_explosion = false;
         bool do_draw_custom_explosion = false;
-        bool do_draw_bullet = false;
-        bool do_draw_hit = false;
         bool do_draw_line = false;
         bool do_draw_cursor = false;
         bool do_draw_highlight = false;
@@ -1315,12 +1304,6 @@ class cata_tiles
         tripoint_bub_ms cone_aoe_origin;
         one_bucket cone_aoe_layer;
 
-        std::vector<tripoint_bub_ms> bul_pos;
-        std::vector<std::string> bul_id;
-        std::vector<int> bul_rotation;
-
-        tripoint_bub_ms hit_pos;
-        std::string hit_entity_id;
 
         tripoint_bub_ms line_pos;
         bool is_target_line = false;

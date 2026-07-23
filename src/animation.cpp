@@ -400,30 +400,6 @@ size_t
     return longest_trajectory_size;
 }
 
-auto append_line_points( const draw_bullet_trajectories_options &options,
-                         std::vector<tripoint_bub_ms> &points,
-                         std::vector<std::string> &sprites,
-                         std::vector<int> &rotations ) -> void
-{
-    const auto sprite = get_bullet_sprite( options.bullet, options.custom_sprite );
-    for( const auto &trajectory : options.trajectories ) {
-        if( trajectory.size() < 2 ) {
-            continue;
-        }
-
-        auto line_points = std::vector<tripoint_bub_ms>( trajectory.begin() + 1, trajectory.end() );
-        for( size_t point_index = 0; point_index < line_points.size(); point_index++ ) {
-            if( !is_point_visible( line_points[point_index] ) ) {
-                continue;
-            }
-
-            points.push_back( line_points[point_index] );
-            sprites.push_back( sprite );
-            rotations.push_back( get_bullet_rotation( get_bullet_dir( line_points, point_index ) ) );
-        }
-    }
-}
-
 } // namespace
 
 void draw_bullet_trajectories( const draw_bullet_trajectories_options &options )
@@ -433,27 +409,56 @@ void draw_bullet_trajectories( const draw_bullet_trajectories_options &options )
     }
 
     const auto sprite = get_bullet_sprite( options.bullet, options.custom_sprite );
-    if( options.draw_as_line ) {
-        auto points = std::vector<tripoint_bub_ms> {};
-        auto sprites = std::vector<std::string> {};
-        auto rotations = std::vector<int> {};
-        append_line_points( options, points, sprites, rotations );
-        if( points.empty() ) {
-            return;
-        }
-
-        auto bullets_cb = make_shared_fast<game::draw_callback_t>( [&] {
-            tilecontext->init_draw_bullets( points, sprites, rotations );
-        } );
-        g->add_draw_callback( bullets_cb );
-        bullet_animation().progress( false );
-        tilecontext->void_bullet();
-        return;
-    }
-
     const auto delay_ms = get_option<int>( "ANIMATION_DELAY" );
     const auto tile_dur = static_cast<float>( delay_ms ) / 1000.f;
     const auto wall_start = static_cast<double>( SDL_GetTicks() ) / 1000.0;
+    if( options.draw_as_line ) {
+        // Emit one particle per trajectory using the full path — same as the
+        // animated branch below, but with flight-direction rotation instead of
+        // per-shot end-direction.
+        auto longest = size_t{ 0 };
+        for( const auto &trajectory : options.trajectories ) {
+            if( trajectory.size() < 2 ) {
+                continue;
+            }
+            // Skip the first point (muzzle) for the visible flight path.
+            auto flight = std::vector<tripoint_bub_ms>( trajectory.begin() + 1, trajectory.end() );
+            if( flight.size() < 2 ) {
+                continue;
+            }
+            longest = std::max( longest, flight.size() );
+            const auto rotation = get_bullet_rotation(
+                                      get_bullet_dir( flight, flight.size() - 1 ) );
+            tilecontext->particles().emit( particle{
+                .sprite = sprite,
+                .rotation = rotation,
+                .path = std::move( flight ),
+                .start_wall = wall_start,
+                .duration = static_cast<float>( trajectory.size() - 1 ) * tile_dur,
+            } );
+        }
+        if( longest < 2 ) {
+            return;
+        }
+        static_popup popup;
+        popup.wait_message( "%s", _( "Hang on a bit…" ) ).on_top( true );
+        // NOLINTNEXTLINE(cata-no-long)
+        long int remain = static_cast<long int>( delay_ms )
+                          * static_cast<long int>( longest - 1 ) * 1'000'000L;
+        while( remain > 0 ) {
+            g->invalidate_main_ui_adaptor();
+            ui_manager::redraw_invalidated();
+            refresh_display();
+            // NOLINTNEXTLINE(cata-no-long)
+            const long int do_sleep = std::min( remain, 16'000'000L );
+            const timespec ts{ 0, do_sleep };
+            nanosleep( &ts, nullptr );
+            inp_mngr.pump_events();
+            remain -= do_sleep;
+        }
+        return;
+    }
+
     const auto longest_trajectory_size = get_longest_trajectory_size( options.trajectories );
 
     // Emit one particle per trajectory — all start simultaneously.
@@ -534,39 +539,67 @@ void game::draw_line( const tripoint_bub_ms &p, const tripoint_bub_ms &/*center*
 
 void draw_line_of( const draw_sprite_line_options &options )
 {
-    std::vector<tripoint_bub_ms> ps;
-    std::vector<std::string> ids;
-    std::vector<int> rots;
-
-    ps.reserve( options.points.size() );
-    ids.reserve( options.points.size() );
-    rots.reserve( options.points.size() );
-
-    for( size_t i = 0; i < options.points.size(); ++i ) {
-        if( !is_point_visible( options.points[i] ) ) { continue; }
-
-        int rotation;
-        if( options.rotate ) {
-            const int step = static_cast<int>( i % 8 );
-            const int cardinal_rotations[] = {0, 1, 2, 3};
-            const int diagonal_rotations[] = {5, 6, 7, 8};
-            rotation = ( step % 2 == 0 ) ? cardinal_rotations[step / 2] : diagonal_rotations[step / 2];
-        } else {
-            rotation = get_bullet_rotation( get_bullet_dir( options.points, i ) );
+    // Build visible path from trajectory points.
+    std::vector<tripoint_bub_ms> path;
+    path.reserve( options.points.size() );
+    for( const auto &pt : options.points ) {
+        if( is_point_visible( pt ) ) {
+            path.push_back( pt );
         }
-
-        ps.push_back( options.points[i] );
-        ids.push_back( options.sprite );
-        rots.push_back( rotation );
     }
-    if( ps.empty() ) { return; }
+    if( path.size() < 2 ) {
+        return;
+    }
 
-    auto bullets_cb = make_shared_fast<game::draw_callback_t>( [&] {
-        tilecontext->init_draw_bullets( ps, ids, rots );
+    const auto delay_ms = get_option<int>( "ANIMATION_DELAY" );
+    const auto tile_dur = static_cast<float>( delay_ms ) / 1000.f;
+    const auto rotation = options.rotate ? 0 :
+                          get_bullet_rotation( get_bullet_dir( path, path.size() - 1 ) );
+
+    tilecontext->particles().emit( particle{
+        .sprite = options.sprite,
+        .rotation = rotation,
+        .path = path,
+        .start_wall = static_cast<double>( SDL_GetTicks() ) / 1000.0,
+        .duration = static_cast<float>( path.size() - 1 ) * tile_dur,
+        .tumble = options.rotate,
     } );
-    g->add_draw_callback( bullets_cb );
-    bullet_animation().progress( false );
-    tilecontext->void_bullet();
+
+    static_popup popup;
+    popup.wait_message( "%s", _( "Hang on a bit…" ) ).on_top( true );
+
+    // Render loop — particle interpolates via wall-clock.
+    // NOLINTNEXTLINE(cata-no-long)
+    long int remain = static_cast<long int>( delay_ms )
+                      * static_cast<long int>( path.size() - 1 ) * 1'000'000L;
+    while( remain > 0 ) {
+        g->invalidate_main_ui_adaptor();
+        ui_manager::redraw_invalidated();
+        refresh_display();
+
+        // NOLINTNEXTLINE(cata-no-long)
+        const long int do_sleep = std::min( remain, 16'000'000L );
+        const timespec ts{ 0, do_sleep };
+        nanosleep( &ts, nullptr );
+        inp_mngr.pump_events();
+        remain -= do_sleep;
+    }
+}
+
+void emit_impact_particle( const tripoint_bub_ms &pos, const bool blood )
+{
+    if( test_mode || !tilecontext ) {
+        return;
+    }
+    const auto sprite = blood ? std::string{ "animation_impact_blood" }
+                        :
+                        std::string{ "animation_impact_sparks" };
+    tilecontext->particles().emit( particle{
+        .sprite = sprite,
+        .path = { pos },
+        .start_wall = static_cast<double>( SDL_GetTicks() ) / 1000.0,
+        .duration = 0.3f,
+    } );
 }
 void game::draw_line( const tripoint_bub_ms &p, const std::vector<tripoint_bub_ms> &points )
 {
