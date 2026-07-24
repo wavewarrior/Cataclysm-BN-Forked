@@ -1329,8 +1329,21 @@ action_id input_context::display_menu( const bool permit_execute_action )
                 popup( _( "There are already local keybindings defined for this action, please "
                           "remove them first." ) );
             } else if( status == s_add || status == s_add_global ) {
+                // Drain stale key-up / repeat events left by the hotkey press that
+                // selected this action — otherwise allow_anykey consumes them instantly.
+                inp_mngr.pump_events();
                 const input_event new_event =
                     query_popup().message( _( "New key for %s" ), name ).allow_anykey( true ).query().evt;
+
+                // Reject non-input events (timeout/error) that would corrupt the
+                // keybindings JSON on save (unknown input_event_t in the serializer).
+                if( new_event.type != input_event_t::keyboard
+                    && new_event.type != input_event_t::gamepad
+                    && new_event.type != input_event_t::mouse ) {
+                    kb_rml.set_visible( true );
+                    status = s_show;
+                    continue;
+                }
 
                 if( action_uses_input( action_id, new_event ) ) {
                     popup_getkey( _( "This key is already used for %s." ), name );
