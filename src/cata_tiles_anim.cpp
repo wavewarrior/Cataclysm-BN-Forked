@@ -1,5 +1,6 @@
 #include "cata_tiles.h"
 #include "cata_tiles_internal.h"
+#include "sdl_lighting_devui.h"
 
 #include "cata_utility.h"
 #include "avatar.h"
@@ -505,6 +506,173 @@ const auto c      = player_to_screen( throw_impact_dst.xy() );
     const auto offset = float( i ) / float( n_rings );
         const auto t = std::fmod( t_now / period_ms + offset, 1.0f );
         draw_ring( t * max_r, static_cast<Uint8>( ( 1.0f - t ) * 200.0f ) );
+    }
+}
+auto cata_tiles::draw_hover_effect() -> void
+{
+    // --- Tile highlight: corner brackets ---
+    if( g_hover_highlight_enable && hover_tile_.has_value() ) {
+    const auto screen = player_to_screen( hover_tile_->xy() );
+        const auto tw = static_cast<float>( tile_width );
+        const auto th = static_cast<float>( tile_height );
+
+        // Compute pulsing alpha if enabled.
+        float pulse_mult = 1.0f;
+        if( g_hover_highlight_pulse ) {
+            pulse_mult = 0.7f + 0.3f * std::sin( anim_wall_now_ * g_hover_highlight_pulse_speed * 2.0f *
+                                                 static_cast<float>( M_PI ) );
+        }
+
+        SDL_SetRenderDrawBlendMode( renderer.get(), SDL_BLENDMODE_BLEND );
+
+        // Set draw color: multiply base alpha by pulse.
+        const auto base_a = static_cast<Uint8>( g_hover_highlight_color[3] * 255.0f );
+        const auto pulsed_a = static_cast<Uint8>( base_a * pulse_mult );
+        SDL_SetRenderDrawColor(
+            renderer.get(),
+            static_cast<Uint8>( g_hover_highlight_color[0] * 255.0f ),
+            static_cast<Uint8>( g_hover_highlight_color[1] * 255.0f ),
+            static_cast<Uint8>( g_hover_highlight_color[2] * 255.0f ),
+            pulsed_a
+        );
+
+        const auto x = static_cast<float>( screen.x );
+        const auto y = static_cast<float>( screen.y );
+        const auto arm_len = std::min( g_hover_highlight_corner_len * tw, tw * 0.5f );
+        const auto thickness = static_cast<int>( std::ceil( g_hover_highlight_thickness ) );
+
+        // Draw corner brackets as perpendicular lines with proper thickness offset.
+        // Top-left corner: horizontal offset in Y, vertical offset in X.
+        for( int off = 0; off < thickness; ++off ) {
+            const auto off_f = static_cast<float>( off );
+            const std::array<SDL_FPoint, 2> h = {
+                SDL_FPoint{ x, y + off_f },
+                SDL_FPoint{ x + arm_len, y + off_f }
+            };
+            const std::array<SDL_FPoint, 2> v = {
+                SDL_FPoint{ x + off_f, y },
+                SDL_FPoint{ x + off_f, y + arm_len }
+            };
+            SDL_RenderLines( renderer.get(), h.data(), 2 );
+            SDL_RenderLines( renderer.get(), v.data(), 2 );
+        }
+
+        // Top-right corner: horizontal offset in Y, vertical offset in X.
+        for( int off = 0; off < thickness; ++off ) {
+            const auto off_f = static_cast<float>( off );
+            const std::array<SDL_FPoint, 2> h = {
+                SDL_FPoint{ x + tw, y + off_f },
+                SDL_FPoint{ x + tw - arm_len, y + off_f }
+            };
+            const std::array<SDL_FPoint, 2> v = {
+                SDL_FPoint{ x + tw - off_f, y },
+                SDL_FPoint{ x + tw - off_f, y + arm_len }
+            };
+            SDL_RenderLines( renderer.get(), h.data(), 2 );
+            SDL_RenderLines( renderer.get(), v.data(), 2 );
+        }
+
+        // Bottom-left corner: horizontal offset in Y, vertical offset in X.
+        for( int off = 0; off < thickness; ++off ) {
+            const auto off_f = static_cast<float>( off );
+            const std::array<SDL_FPoint, 2> h = {
+                SDL_FPoint{ x, y + th - off_f },
+                SDL_FPoint{ x + arm_len, y + th - off_f }
+            };
+            const std::array<SDL_FPoint, 2> v = {
+                SDL_FPoint{ x + off_f, y + th },
+                SDL_FPoint{ x + off_f, y + th - arm_len }
+            };
+            SDL_RenderLines( renderer.get(), h.data(), 2 );
+            SDL_RenderLines( renderer.get(), v.data(), 2 );
+        }
+
+        // Bottom-right corner: horizontal offset in Y, vertical offset in X.
+        for( int off = 0; off < thickness; ++off ) {
+            const auto off_f = static_cast<float>( off );
+            const std::array<SDL_FPoint, 2> h = {
+                SDL_FPoint{ x + tw, y + th - off_f },
+                SDL_FPoint{ x + tw - arm_len, y + th - off_f }
+            };
+            const std::array<SDL_FPoint, 2> v = {
+                SDL_FPoint{ x + tw - off_f, y + th },
+                SDL_FPoint{ x + tw - off_f, y + th - arm_len }
+            };
+            SDL_RenderLines( renderer.get(), h.data(), 2 );
+            SDL_RenderLines( renderer.get(), v.data(), 2 );
+        }
+    }
+
+    // --- Dotted line: player center to hover tile center ---
+    if( g_hover_line_enable && hover_tile_.has_value() ) {
+    const auto player_screen = player_to_screen( g->u.bub_pos().xy() );
+        const auto xf = compute_anim_xform( get_avatar() );
+        const auto tw = static_cast<float>( tile_width );
+        const auto th = static_cast<float>( tile_height );
+
+        const auto px = player_screen.x + xf.off_x + tw * 0.5f;
+        const auto py = player_screen.y + xf.off_y + th * 0.5f;
+
+        const auto hover_screen = player_to_screen( hover_tile_->xy() );
+        const auto hx = hover_screen.x + tw * 0.5f;
+        const auto hy = hover_screen.y + th * 0.5f;
+
+        // Skip if player IS the hover tile.
+        if( g->u.bub_pos().xy() == hover_tile_->xy() ) {
+            return;
+        }
+
+        // Compute distance and direction.
+        const auto dx = hx - px;
+        const auto dy = hy - py;
+        const auto dist = std::sqrt( dx * dx + dy * dy );
+
+        // Skip if too close.
+        if( dist < g_hover_line_dot_spacing ) {
+            return;
+        }
+
+        const auto nx = dx / dist;
+        const auto ny = dy / dist;
+        const auto half_size = g_hover_line_dot_size * 0.5f;
+
+        // Compute pulsing alpha (shared with highlight).
+        float pulse_mult = 1.0f;
+        if( g_hover_highlight_pulse ) {
+            pulse_mult = 0.7f + 0.3f * std::sin( anim_wall_now_ * g_hover_highlight_pulse_speed * 2.0f *
+                                                 static_cast<float>( M_PI ) );
+        }
+
+        SDL_SetRenderDrawBlendMode( renderer.get(), SDL_BLENDMODE_BLEND );
+
+        // Walk from player center to hover center in steps.
+        const auto half_spacing = g_hover_line_dot_spacing * 0.5f;
+        const auto start_offset = half_spacing;
+        const auto end_offset = half_spacing;
+
+        for( float step = start_offset; step < dist - end_offset; step += g_hover_line_dot_spacing ) {
+            const auto sx = px + nx * step;
+            const auto sy = py + ny * step;
+            const auto t = step / dist;  // progress along line [0, 1]
+
+            // Compute fade (ramp up over first 25%, down over last 25%).
+            float fade = 1.0f;
+            if( g_hover_line_fade_ends ) {
+                fade = std::min( t * 4.0f, 1.0f ) * std::min( ( 1.0f - t ) * 4.0f, 1.0f );
+            }
+
+            const auto line_a = static_cast<Uint8>( g_hover_line_color[3] * 255.0f * fade * pulse_mult );
+            SDL_SetRenderDrawColor(
+                renderer.get(),
+                static_cast<Uint8>( g_hover_line_color[0] * 255.0f ),
+                static_cast<Uint8>( g_hover_line_color[1] * 255.0f ),
+                static_cast<Uint8>( g_hover_line_color[2] * 255.0f ),
+                line_a
+            );
+
+            const SDL_FRect dot{ sx - half_size, sy - half_size, g_hover_line_dot_size, g_hover_line_dot_size };
+            SDL_RenderFillRect( renderer.get(), &dot );
+        }
     }
 }
 void cata_tiles::void_highlight()

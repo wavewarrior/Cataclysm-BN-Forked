@@ -93,6 +93,21 @@ float g_outline_col_hostile[4] = {1.00f, 0.24f, 0.24f, 1.0f};
 float g_outline_col_neutral[4] = {1.00f, 0.86f, 0.24f, 1.0f};
 float g_outline_col_friendly[4] = {0.31f, 0.90f, 0.31f, 1.0f};
 float g_outline_col_self[4] = {0.31f, 0.86f, 1.00f, 1.0f};
+// Hover tile highlight (CPU-side screen-space overlay, no shader cbuffer).
+bool   g_hover_highlight_enable       = true;
+float  g_hover_highlight_color[4]     = {1.0f, 1.0f, 1.0f, 0.6f}; // RGBA white, 60% alpha
+float  g_hover_highlight_thickness    = 2.0f;                       // border line width in px
+float  g_hover_highlight_corner_len   =
+    0.3f;                       // bracket arm as fraction of tile edge
+bool   g_hover_highlight_pulse        = true;                        // breathing alpha animation
+float  g_hover_highlight_pulse_speed  = 3.0f;                       // oscillation Hz
+
+// Hover dotted line (player → hovered tile).
+bool   g_hover_line_enable            = true;
+float  g_hover_line_color[4]          = {1.0f, 1.0f, 1.0f, 0.35f}; // RGBA white, 35% alpha
+float  g_hover_line_dot_size          = 2.0f;                       // dot diameter in px
+float  g_hover_line_dot_spacing       = 8.0f;                       // center-to-center px
+bool   g_hover_line_fade_ends         = true;                        // fade near player/target
 
 namespace menu_emitter_tuning
 {
@@ -469,6 +484,17 @@ void devui_rml_open()
     c.Bind( "outline_thickness", &g_outline_thickness );
     c.Bind( "outline_alpha", &g_outline_alpha );
     c.Bind( "outline_alpha_cut", &g_outline_alpha_cut );
+    c.Bind( "hover_highlight_enable", &g_hover_highlight_enable );
+    c.Bind( "hover_highlight_color", &g_hover_highlight_color );
+    c.Bind( "hover_highlight_thickness", &g_hover_highlight_thickness );
+    c.Bind( "hover_highlight_corner_len", &g_hover_highlight_corner_len );
+    c.Bind( "hover_highlight_pulse", &g_hover_highlight_pulse );
+    c.Bind( "hover_highlight_pulse_speed", &g_hover_highlight_pulse_speed );
+    c.Bind( "hover_line_enable", &g_hover_line_enable );
+    c.Bind( "hover_line_color", &g_hover_line_color );
+    c.Bind( "hover_line_dot_size", &g_hover_line_dot_size );
+    c.Bind( "hover_line_dot_spacing", &g_hover_line_dot_spacing );
+    c.Bind( "hover_line_fade_ends", &g_hover_line_fade_ends );
     // Slice 8 — Lighting tab. Floats two-way bound to the same globals the ImGui sliders
     // drive; debug_mode + shadow_steps are uint32 so they go through int proxies.
     c.Bind( "emitter_scale", &g_dbg_params.emitter_scale );

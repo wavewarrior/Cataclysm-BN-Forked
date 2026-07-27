@@ -1125,6 +1125,7 @@ class cata_tiles
         auto init_draw_throw_impact( const tripoint_bub_ms &dst, float max_radius_tiles ) -> void;
         auto void_throw_impact() -> void;
         auto draw_throw_impact() -> void;
+        auto draw_hover_effect() -> void;
 
         void init_draw_highlight( const tripoint_bub_ms& p );
         void draw_highlight();

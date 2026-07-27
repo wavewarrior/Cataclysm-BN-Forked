@@ -101,6 +101,18 @@ extern float g_outline_col_hostile[4];
 extern float g_outline_col_neutral[4];
 extern float g_outline_col_friendly[4];
 extern float g_outline_col_self[4];
+// Hover tile highlight and dotted line (CPU-side; see hover-tile-effect-plan.md).
+extern bool   g_hover_highlight_enable;
+extern float  g_hover_highlight_color[4];
+extern float  g_hover_highlight_thickness;
+extern float  g_hover_highlight_corner_len;
+extern bool   g_hover_highlight_pulse;
+extern float  g_hover_highlight_pulse_speed;
+extern bool   g_hover_line_enable;
+extern float  g_hover_line_color[4];
+extern float  g_hover_line_dot_size;
+extern float  g_hover_line_dot_spacing;
+extern bool   g_hover_line_fade_ends;
 // Vision-mask blur (tiles).
 extern float g_vision_blur;
 // Depth extrude (DitW) global multipliers.
