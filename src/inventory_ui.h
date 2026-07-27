@@ -229,10 +229,15 @@ class pickup_inventory_preset : public inventory_selector_preset
 // is finished RML markup (invlet + cell text, colour-tagged via cata_text_to_rml);
 // category rows render as a header; the selected row gets the cursor highlight via
 // CSS. RmlUi-free so the header stays clean (the selector converts to Rml::String).
+// `entry_index` is this row's index into the owning inventory_column::entries
+// vector (rml_rows() skips blank spacer entries, so row position and entries[]
+// position diverge) — used by inventory_selector::rml_sync() to build the flat
+// row -> (column, entry) lookup table that backs mouse click/hover callbacks.
 struct inv_rml_row {
     std::string text;
     bool is_category = false;
     bool selected = false;
+    size_t entry_index = 0;
 };
 
 class inventory_column
@@ -596,6 +601,16 @@ class inventory_selector
         void rml_open();
         void rml_sync() const;
         std::unique_ptr<inventory_rml_state> rml_state_;
+        void rml_on_select( int flat_idx );
+        void rml_on_hover( int flat_idx );
+        /// Toggle one entry's mark for a mouse click in multiselect mode,
+        /// mirroring the per-entry invlet toggle in each subclass's execute().
+        /// No-op default; rml_on_select() only calls it once
+        /// dynamic_cast<inventory_multiselector *> succeeds.
+        virtual void rml_toggle_mark( inventory_entry &/*entry*/ ) {}
+        /// Flat row index (into inventory_rml_state::rows) of the last mouse
+        /// click, for Shift+click range-select in multiselect mode. -1 = none yet.
+        int last_clicked_row_idx_ = -1;
 
 
     public:
@@ -662,6 +677,11 @@ class inventory_selector
         const navigation_mode_data &get_navigation_data( navigation_mode m ) const;
         std::unique_ptr<string_input_popup> spopup;
         weak_ptr_fast<ui_adaptor> ui;
+        /// Set by rml_on_select() for a single-select (pick_selector) click;
+        /// checked (and cleared) at the top of execute()'s loop, mirroring the
+        /// keyboard CONFIRM branch — an RmlUi click callback can't itself
+        /// return a value out of the blocking execute() loop.
+        bool rml_confirm_pending_ = false;
 
     private:
         catacurses::window w_inv;
@@ -718,8 +738,11 @@ class inventory_multiselector : public inventory_selector
     protected:
         void rearrange_columns( size_t client_width ) override;
         size_t query_count( size_t count );
-        void set_chosen_count( inventory_entry &entry, size_t count );
+        virtual void set_chosen_count( inventory_entry &entry, size_t count );
         std::vector<inventory_entry *> get_selection_column_items() const;
+        /// Mouse interactivity: click-to-toggle-mark. Uses the (now virtual)
+        /// set_chosen_count() above so drop/iuse's own bookkeeping still runs.
+        void rml_toggle_mark( inventory_entry &entry ) override;
         std::unique_ptr<inventory_column> selection_col;
 };
 
@@ -733,6 +756,7 @@ class inventory_compare_selector : public inventory_multiselector
         std::vector<const item *> compared;
 
         void toggle_entry( inventory_entry *entry );
+        void rml_toggle_mark( inventory_entry &entry ) override;
         // Tier 3 slice 4: two-selection compare. Same multiselect render as slice 3;
         // only the execute() state differs. Shares the global inventory toggle.
         bool uses_rml() const override;
@@ -753,7 +777,7 @@ class inventory_iuse_selector : public inventory_multiselector
 
     protected:
         stats get_raw_stats() const override;
-        void set_chosen_count( inventory_entry &entry, size_t count );
+        void set_chosen_count( inventory_entry &entry, size_t count ) override;
         // Tier 3 slice 5: same multiselect render as slice 3; custom stats flow
         // through the generic stats header. Shares the global inventory toggle.
         bool uses_rml() const override;
@@ -779,7 +803,7 @@ class inventory_drop_selector : public inventory_multiselector
          */
         stats get_raw_stats() const override;
         /** Toggle item dropping */
-        void set_chosen_count( inventory_entry &entry, size_t count );
+        void set_chosen_count( inventory_entry &entry, size_t count ) override;
         void process_selected( int &count, const std::vector<inventory_entry *> &selected );
         // Tier 3 slice 3: first multiselect family member lit for RmlUi (marks +
         // selection column + query_count). Shares the global inventory toggle.

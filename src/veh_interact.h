@@ -102,6 +102,21 @@ class veh_interact
 
         int highlight_part = -1;
 
+        /// Set by rml_on_overview() when a clicked overview row carries a
+        /// per-part hotkey letter (see part_option::hotkey / calc_overview()).
+        /// Checked and cleared once at the top of do_main_loop()'s while loop,
+        /// which replicates the same overview_opts hotkey lookup used by the
+        /// keyboard path in overview() (raw-hotkey branch) to fire the bound
+        /// overview_action. '\0' means no pending hotkey.
+        char pending_hotkey = '\0';
+
+        /// Set by rml_on_install() when a click on an install row should
+        /// commit that part, mirroring pressing CONFIRM/Enter on it. Checked
+        /// and cleared once at the top of do_install()'s while loop, which
+        /// then falls into the existing CONFIRM branch (reason/shape-select
+        /// logic reused as-is) instead of duplicating it.
+        bool pending_install_confirm = false;
+
         struct install_info_t;
         std::unique_ptr<install_info_t> install_info;
 
@@ -217,6 +232,18 @@ class veh_interact
          */
         void overview( const overview_enable_t &enable = {}, const overview_action_t &action = {} );
         void move_overview_line( int );
+
+        // Mouse callbacks for the overview pane (Step 2, mouse-interactivity
+        // plan). `idx` is the row index into veh_rml_data::overview_rows as
+        // seen by data-for="r : overview_rows" (it_index) — NOT an index into
+        // overview_opts, since overview_rows interleaves header rows.
+        void rml_on_overview( int idx );
+        void rml_on_overview_hover( int idx );
+        // Mouse callbacks for the install/repair sub-mode part list. `idx` is
+        // the row index into veh_rml_data::install_rows, which maps 1:1 onto
+        // install_info->tab_vparts (no interleaved headers there).
+        void rml_on_install( int idx );
+        void rml_on_install_hover( int idx );
 
         void count_durability();
 

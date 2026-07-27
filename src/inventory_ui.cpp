@@ -23,8 +23,10 @@
 #include "output.h"
 #include "player.h"
 #include "point.h"
+#include "rml_callback.h"
 #include "rml_screen.h"
 #include "rml_util.h"
+#include "sdl_wrappers.h"
 #include "string_formatter.h"
 #include "string_id.h"
 #include "string_input_popup.h"
@@ -57,13 +59,13 @@ struct inv_rml_row_model {
     Rml::String text_rml; // finished markup (invlet + cell text); category = header
     bool is_category = false;
     bool selected = false;
-};
-
-// One visible inventory_column, rendered side-by-side (slice 2b). The rows are
-// baked into a single finished-markup string (each row a <div class="inv-row ...">)
-// so the list is a flat data-for over columns — nested data-for is avoided.
-struct inv_col_model {
-    Rml::String html;
+    // Mouse interactivity: every visible column's rows are flattened into one
+    // vector (this codebase avoids nested data-for — see inventory.rml) — so
+    // col_idx records which visible column a row came from, and col_first
+    // flags the first row pulled from each column (for the CSS divider that
+    // keeps columns visually distinct despite the flat list).
+    int col_idx = 0;
+    bool col_first = false;
 };
 
 bool g_inv_rml_types_registered = false;
@@ -75,10 +77,9 @@ void register_inv_rml_types( Rml::DataModelConstructor& c )
     rh.RegisterMember( "text_rml", &inv_rml_row_model::text_rml );
     rh.RegisterMember( "is_category", &inv_rml_row_model::is_category );
     rh.RegisterMember( "selected", &inv_rml_row_model::selected );
+    rh.RegisterMember( "col_idx", &inv_rml_row_model::col_idx );
+    rh.RegisterMember( "col_first", &inv_rml_row_model::col_first );
     c.RegisterArray<Rml::Vector<inv_rml_row_model>>();
-    Rml::StructHandle<inv_col_model> ch = c.RegisterStruct<inv_col_model>();
-    ch.RegisterMember( "html", &inv_col_model::html );
-    c.RegisterArray<Rml::Vector<inv_col_model>>();
     g_inv_rml_types_registered = true;
 }
 } // namespace
@@ -90,8 +91,13 @@ struct inventory_rml_state {
     Rml::String hint_rml;
     Rml::String footer_rml;
     Rml::String filter_rml; // "[F] Filter: <text>" indicator (slice 6)
-    // Visible columns laid out side-by-side; each holds its rows as baked markup.
-    Rml::Vector<inv_col_model> columns;
+    // Every visible column's rows, flattened into one vector (mouse
+    // interactivity: a single flat data-for, no nested data-for/.inv-col).
+    Rml::Vector<inv_rml_row_model> rows;
+    // Parallel to `rows`: row_refs[i] = {index into inventory_selector's full
+    // columns vector, index into that column's entries vector} for rows[i].
+    // Not bound to RmlUi — pure C++ bookkeeping for rml_on_select()/rml_on_hover().
+    std::vector<std::pair<size_t, size_t>> row_refs;
     // Stats header lines (weight/volume), reusing the row model for its text_rml.
     Rml::Vector<inv_rml_row_model> stats;
     Rml::DataModelHandle handle;
@@ -933,6 +939,7 @@ std::vector<inv_rml_row> inventory_column::rml_rows() const
         if( entry.is_category() ) {
             inv_rml_row r;
             r.is_category = true;
+            r.entry_index = i;
             r.text = cata_text_to_rml(
                          colorize( cache.text.empty() ? std::string() : cache.text[0], cache.color ) );
             out.push_back( r );
@@ -942,6 +949,7 @@ std::vector<inv_rml_row> inventory_column::rml_rows() const
             continue; // blank spacer row
         }
         inv_rml_row r;
+        r.entry_index = i;
         r.selected = active && is_selected( entry );
         const bool denied = !cache.denial.empty();
         std::string markup;
@@ -1523,14 +1531,17 @@ void inventory_selector::rml_open()
     if( rml_state_ ) { return; }
     rml_state_ = std::make_unique<inventory_rml_state>();
     inventory_rml_state* st = rml_state_.get();
-    st->rml.open( inventory_rmlui_enabled(), "inventory", ctxt, [st]( Rml::DataModelConstructor & c ) {
+    st->rml.open( inventory_rmlui_enabled(), "inventory", ctxt,
+    [this, st]( Rml::DataModelConstructor & c ) {
         register_inv_rml_types( c );
         c.Bind( "title_rml", &st->title_rml );
         c.Bind( "hint_rml", &st->hint_rml );
         c.Bind( "footer_rml", &st->footer_rml );
         c.Bind( "filter_rml", &st->filter_rml );
-        c.Bind( "columns", &st->columns );
+        c.Bind( "rows", &st->rows );
         c.Bind( "stats", &st->stats );
+        c.BindEventCallback( "on_select", rml_idx_callback( [this]( int idx ) { rml_on_select( idx ); } ) );
+        c.BindEventCallback( "on_hover", rml_idx_callback( [this]( int idx ) { rml_on_hover( idx ); } ) );
         st->handle = c.GetModelHandle();
     } );
 }
@@ -1554,20 +1565,33 @@ void inventory_selector::rml_sync() const
     } else {
         st->filter_rml = Rml::String();
     }
-    // Lay visible columns out side-by-side (slice 2b). Each column's rows are baked
-    // into one markup string (a <div class="inv-row ..."> per row) so the RML is a
-    // flat data-for over columns. The category/selected styling rides CSS classes;
-    // only the active column reports selected=true (cursor highlight).
-    st->columns.clear();
-    for( const inventory_column * col : get_visible_columns() ) {
-        inv_col_model cm;
+    // Flatten every visible column's rows into one vector (mouse interactivity:
+    // this codebase avoids nested data-for — see data/gui/inventory.rml — so a
+    // single flat data-for iterates `rows`). row_refs maps a flat row back to
+    // its owning column (full index, for set_active_column()/get_column()) and
+    // its entry index within that column, for rml_on_select()/rml_on_hover().
+    // The category/selected styling rides CSS classes; only the active column
+    // reports selected=true (cursor highlight).
+    st->rows.clear();
+    st->row_refs.clear();
+    const std::vector<inventory_column *> visible_columns = get_visible_columns();
+    const std::vector<inventory_column *> &all_columns = get_all_columns();
+    for( size_t col_i = 0; col_i < visible_columns.size(); ++col_i ) {
+        const inventory_column *col = visible_columns[col_i];
+        const size_t full_col_idx = static_cast<size_t>(
+                                        std::ranges::find( all_columns, col ) - all_columns.begin() );
+        bool first_row = true;
         for( const inv_rml_row& r : col->rml_rows() ) {
-            std::string cls = "inv-row";
-            if( r.is_category ) { cls += " category"; }
-            if( r.selected ) { cls += " selected"; }
-            cm.html += "<div class=\"" + cls + "\">" + r.text + "</div>";
+            inv_rml_row_model m;
+            m.text_rml = r.text;
+            m.is_category = r.is_category;
+            m.selected = r.selected;
+            m.col_idx = static_cast<int>( col_i );
+            m.col_first = first_row && col_i > 0;
+            first_row = false;
+            st->rows.push_back( std::move( m ) );
+            st->row_refs.emplace_back( full_col_idx, r.entry_index );
         }
-        st->columns.push_back( cm );
     }
     // Stats header (weight/volume), right-aligned — mirrors draw_header's
     // display_stats branch. Each get_stats() line already carries per-segment
@@ -1584,8 +1608,72 @@ void inventory_selector::rml_sync() const
     st->handle.DirtyVariable( "hint_rml" );
     st->handle.DirtyVariable( "footer_rml" );
     st->handle.DirtyVariable( "filter_rml" );
-    st->handle.DirtyVariable( "columns" );
+    st->handle.DirtyVariable( "rows" );
     st->handle.DirtyVariable( "stats" );
+}
+
+void inventory_selector::rml_on_select( int flat_idx )
+{
+    inventory_rml_state* st = rml_state_.get();
+    if( !st || flat_idx < 0 || static_cast<size_t>( flat_idx ) >= st->row_refs.size() ) {
+        return;
+    }
+    const std::vector<inventory_column *> &all_columns = get_all_columns();
+    // Resolve a flat row index to its entry, or nullptr if stale/out of range
+    // (columns can be rebuilt by filtering between rml_sync() calls).
+    const auto resolve = [&]( size_t idx ) -> inventory_entry* {
+        if( idx >= st->row_refs.size() ) { return nullptr; }
+        const auto &ref = st->row_refs[idx];
+        if( ref.first >= all_columns.size() ) { return nullptr; }
+        inventory_column &col = *all_columns[ref.first];
+        if( ref.second >= col.entries.size() ) { return nullptr; }
+        return &col.entries[ref.second];
+    };
+
+    inventory_entry *clicked = resolve( static_cast<size_t>( flat_idx ) );
+    if( clicked == nullptr || clicked->is_category() || !clicked->is_selectable() ) {
+        return;
+    }
+
+    const auto [col_idx, entry_idx] = st->row_refs[static_cast<size_t>( flat_idx )];
+    set_active_column( col_idx );
+    all_columns[col_idx]->select( entry_idx, scroll_direction::FORWARD );
+
+    if( dynamic_cast<inventory_multiselector *>( this ) != nullptr ) {
+        const bool shift_held = ( SDL_GetModState() & SDL_KMOD_SHIFT ) != 0;
+        if( shift_held && last_clicked_row_idx_ >= 0 ) {
+            const int lo = std::min( last_clicked_row_idx_, flat_idx );
+            const int hi = std::max( last_clicked_row_idx_, flat_idx );
+            for( int i = lo; i <= hi; ++i ) {
+                inventory_entry *e = resolve( static_cast<size_t>( i ) );
+                if( e != nullptr && !e->is_category() && e->is_selectable() ) {
+                    rml_toggle_mark( *e );
+                }
+            }
+        } else {
+            rml_toggle_mark( *clicked );
+        }
+        last_clicked_row_idx_ = flat_idx;
+    } else {
+        rml_confirm_pending_ = true;
+    }
+}
+
+void inventory_selector::rml_on_hover( int flat_idx )
+{
+    inventory_rml_state* st = rml_state_.get();
+    if( !st || flat_idx < 0 || static_cast<size_t>( flat_idx ) >= st->row_refs.size() ) {
+        return;
+    }
+    const std::vector<inventory_column *> &all_columns = get_all_columns();
+    const auto [col_idx, entry_idx] = st->row_refs[static_cast<size_t>( flat_idx )];
+    if( col_idx >= all_columns.size() ) { return; }
+    inventory_column &col = *all_columns[col_idx];
+    if( entry_idx >= col.entries.size() || col.entries[entry_idx].is_category() ) {
+        return;
+    }
+    set_active_column( col_idx );
+    col.select( entry_idx, scroll_direction::FORWARD );
 }
 
 void inventory_selector::set_filter()
@@ -1921,6 +2009,15 @@ item *inventory_pick_selector::execute()
     while( true ) {
         ui_manager::redraw();
 
+        // A mouse click (rml_on_select(), fired during the redraw() above)
+        // can't itself return out of this loop, so it leaves this pending
+        // flag for us to consume — mirrors the CONFIRM branch below.
+        if( rml_confirm_pending_ ) {
+            rml_confirm_pending_ = false;
+            const inventory_entry &selected = get_active_column().get_selected();
+            if( selected ) { return selected.any_item(); }
+        }
+
         const inventory_input input = get_input();
 
         if( input.entry != nullptr ) {
@@ -1999,6 +2096,14 @@ void inventory_multiselector::set_chosen_count( inventory_entry& entry, size_t c
     }
 }
 
+void inventory_multiselector::rml_toggle_mark( inventory_entry &entry )
+{
+    // Mirrors the per-entry invlet toggle in execute(): unmarked -> fully
+    // marked, marked -> unmarked. set_chosen_count() is virtual, so this
+    // reaches the owning subclass's own bookkeeping (dropping / to_use maps).
+    set_chosen_count( entry, entry.chosen_count == 0 ? static_cast<size_t>( max_chosen_count ) : size_t{ 0 } );
+}
+
 [[clang::optnone]]
 std::vector<inventory_entry *> inventory_multiselector::get_selection_column_items() const
 {
@@ -2066,6 +2171,11 @@ void inventory_compare_selector::toggle_entry( inventory_entry* entry )
     }
 
     on_change( *entry );
+}
+
+void inventory_compare_selector::rml_toggle_mark( inventory_entry &entry )
+{
+    toggle_entry( &entry );
 }
 
 inventory_iuse_selector::inventory_iuse_selector(

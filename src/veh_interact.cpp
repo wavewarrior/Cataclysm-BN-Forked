@@ -32,6 +32,7 @@
 #include "player_activity.h"
 #include "point.h"
 #include "requirements.h"
+#include "rml_callback.h"
 #include "rml_util.h"
 #include "skill.h"
 #include "string_formatter.h"
@@ -104,6 +105,13 @@ struct veh_overview_row {
     Rml::String detail;
     bool is_header = false;
     bool selected = false;
+    // Index into overview_opts for a part row; -1 for header rows and for
+    // rows built outside calc_overview() (diagram_rows reuses this struct
+    // too — always -1 there). Lets rml_on_overview()/rml_on_overview_hover()
+    // map the flat it_index seen by data-for="r : overview_rows" (which
+    // interleaves header rows) back to the part it represents. Not bound to
+    // RmlUi — pure C++-side bookkeeping.
+    int opts_idx = -1;
 };
 
 struct veh_interact::veh_rml_data {
@@ -471,10 +479,36 @@ void veh_interact::do_main_loop()
         c.Bind( "install_tabs_rml", &rml_data->install_tabs_rml );
         c.Bind( "install_rows", &rml_data->install_rows );
         c.Bind( "install_details_rml", &rml_data->install_details_rml );
+        // Step 2 (mouse-interactivity plan): overview + install row click/hover.
+        c.BindEventCallback( "on_overview", rml_idx_callback(
+        [this]( int idx ) { rml_on_overview( idx ); } ) );
+        c.BindEventCallback( "on_overview_hover", rml_idx_callback(
+        [this]( int idx ) { rml_on_overview_hover( idx ); } ) );
+        c.BindEventCallback( "on_install", rml_idx_callback(
+        [this]( int idx ) { rml_on_install( idx ); } ) );
+        c.BindEventCallback( "on_install_hover", rml_idx_callback(
+        [this]( int idx ) { rml_on_install_hover( idx ); } ) );
         rml_data->handle = c.GetModelHandle();
     } );
 
     while( !finish ) {
+        // rml_on_overview() sets pending_hotkey when a clicked overview row
+        // carries a per-part hotkey letter. Fire it exactly like the raw
+        // hotkey branch in overview() (find the matching part_option, invoke
+        // overview_action) — but note overview_action/overview_enable are
+        // only bound while a nested overview() call (do_repair/do_mend/
+        // do_refill) is on the stack; in that passive main-loop view they
+        // are empty, so this is scaffolding for future callers that bind
+        // an overview action directly on the main loop, and a no-op today.
+        if( pending_hotkey != '\0' ) {
+            const char hotkey = pending_hotkey;
+            pending_hotkey = '\0';
+            if( overview_action ) {
+                auto iter = std::find_if( overview_opts.begin(), overview_opts.end(),
+                [hotkey]( const part_option & e ) { return e.hotkey == hotkey; } );
+                if( iter != overview_opts.end() ) { overview_action( *iter->part ); }
+            }
+        }
         calc_overview();
         ui_manager::redraw();
         const std::string action = main_context.handle_input();
@@ -1081,6 +1115,16 @@ void veh_interact::do_install()
     size_t &tab = install_info->tab = 0;
 
     while( true ) {
+        // rml_on_install() sets pending_install_confirm when a click should
+        // commit the row it already moved install_info->pos to. Falling into
+        // the CONFIRM branch below (instead of duplicating its reason/shape-
+        // selection logic here) keeps one source of truth for "confirm this
+        // part" — the click just supplies a synthetic CONFIRM one loop later.
+        bool forced_confirm = false;
+        if( pending_install_confirm ) {
+            pending_install_confirm = false;
+            forced_confirm = true;
+        }
         sel_vpart_info = tab_vparts.empty() ? nullptr : tab_vparts[pos]; // filtered list can be
         // empty
 
@@ -1113,7 +1157,7 @@ void veh_interact::do_install()
             filter.clear();
             tab = 0;
         }
-        if( action == "INSTALL" || action == "CONFIRM" ) {
+        if( action == "INSTALL" || action == "CONFIRM" || forced_confirm ) {
             if( can_install ) {
                 switch( reason ) {
                     case DOUBLE_STACK:
@@ -1612,6 +1656,75 @@ void veh_interact::move_overview_line( int amount )
     overview_offset += amount;
     overview_offset = std::max( 0, overview_offset );
     overview_offset = std::min( overview_limit, overview_offset );
+}
+
+// Step 2 (mouse-interactivity plan): overview pane mouse callbacks. `idx` is
+// the row index into rml_data->overview_rows as seen by
+// data-for="r : overview_rows" (it_index) — sync_rml() interleaves a header
+// row whenever the group key changes, so this is NOT an overview_opts index;
+// opts_idx (stashed on veh_overview_row by sync_rml()) carries that mapping.
+void veh_interact::rml_on_overview_hover( int idx )
+{
+    if( !rml_data || idx < 0 ||
+        static_cast<size_t>( idx ) >= rml_data->overview_rows.size() ) {
+        return;
+    }
+    const veh_overview_row &row = rml_data->overview_rows[idx];
+    if( row.is_header || row.opts_idx < 0 ||
+        static_cast<size_t>( row.opts_idx ) >= overview_opts.size() ) {
+        return;
+    }
+    highlight_part = veh->index_of_part( overview_opts[row.opts_idx].part );
+    sync_rml();
+}
+
+void veh_interact::rml_on_overview( int idx )
+{
+    if( !rml_data || idx < 0 ||
+        static_cast<size_t>( idx ) >= rml_data->overview_rows.size() ) {
+        return;
+    }
+    const veh_overview_row &row = rml_data->overview_rows[idx];
+    if( row.is_header || row.opts_idx < 0 ||
+        static_cast<size_t>( row.opts_idx ) >= overview_opts.size() ) {
+        return;
+    }
+    const part_option &opt = overview_opts[row.opts_idx];
+    // Move the cursor onto the clicked part's tile, exactly as the keyboard
+    // UP/DOWN path in overview() does — move_cursor() also refreshes
+    // cpart/can_mount/parts_here for the new tile.
+    move_cursor( opt.part->mount - vehicle_cursor );
+    highlight_part = veh->index_of_part( opt.part );
+    if( opt.hotkey ) {
+        // See pending_hotkey's doc comment in veh_interact.h.
+        pending_hotkey = opt.hotkey;
+    }
+    sync_rml();
+}
+
+// Install/repair sub-mode part list. install_rows maps 1:1 onto
+// install_info->tab_vparts (no interleaved headers), so idx is used directly.
+void veh_interact::rml_on_install_hover( int idx )
+{
+    if( !install_info || idx < 0 ||
+        static_cast<size_t>( idx ) >= install_info->tab_vparts.size() ) {
+        return;
+    }
+    install_info->pos = idx;
+    sync_rml();
+}
+
+void veh_interact::rml_on_install( int idx )
+{
+    if( !install_info || idx < 0 ||
+        static_cast<size_t>( idx ) >= install_info->tab_vparts.size() ) {
+        return;
+    }
+    install_info->pos = idx;
+    // See pending_install_confirm's doc comment in veh_interact.h: committed
+    // on do_install()'s next loop iteration via the existing CONFIRM branch.
+    pending_install_confirm = true;
+    sync_rml();
 }
 
 vehicle_part *veh_interact::get_most_damaged_part() const
@@ -2825,6 +2938,7 @@ void veh_interact::sync_rml()
             }
             const nc_color col = opt.hotkey ? c_white : c_dark_gray;
             veh_overview_row row;
+            row.opts_idx = idx;
             row.selected = highlighted;
             row.text = cata_text_to_rml( colorize(
                                              string_format(

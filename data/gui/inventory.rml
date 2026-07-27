@@ -4,13 +4,15 @@
     <link type="text/rcss" href="inventory.rcss"/>
 </head>
 <body data-model="inventory">
-    <!-- Tier 3 framework migration, SLICE 1 (inventory_pick_selector only, gated
-         per selector subclass via inventory_selector::uses_rml()). Title + hint
-         header / a single scrolling list of rows (visible columns flattened — true
-         multi-column side-by-side is a later slice) / footer. Each row is finished
-         markup (invlet + cell text); category rows render as a header; the active
-         column's selected row gets the cursor highlight. Keyboard owns all input
-         (the existing execute() loop); mouse-select is deferred to a later slice. -->
+    <!-- Tier 3 framework migration + mouse interactivity. Gated per selector
+         subclass via inventory_selector::uses_rml(). Title + hint header / a
+         single scrolling flat list of rows, flattened across every visible
+         column (nested data-for is avoided in this codebase) / footer. Each
+         row is finished markup (invlet + cell text); category rows render as
+         a header; the active column's selected row gets the cursor
+         highlight; col_first divides one column's rows from the next via
+         CSS. Keyboard AND mouse (click/hover, Shift+click range-select in
+         multiselect mode) both drive the same execute() loop. -->
     <div class="panel inv-panel">
         <!-- SLICE 2: stats header. Title/hint on the left, the weight/volume
              stats block right-aligned on the right (mirrors draw_header's
@@ -25,11 +27,20 @@
                 <div class="inv-stat" data-for="s : stats" data-rml="s.text_rml"></div>
             </div>
         </div>
-        <!-- SLICE 2b: visible columns side-by-side. Each column's rows are baked
-             into col.html (one <div class="inv-row ..."> per row, category/selected
-             via class) so this stays a flat data-for; nested data-for is avoided. -->
+        <!-- Mouse interactivity: every visible column's rows are flattened into
+             one vector (rows) — this codebase avoids nested data-for — so this
+             is a single flat data-for with per-row click/hover. col_first
+             (stamped in rml_sync()) marks each new column's first row; the
+             CSS .colstart divider (inventory.rcss) keeps columns visually
+             distinct despite the flat list. -->
         <div class="inv-list scroll-pane">
-            <div class="inv-col" data-for="col : columns" data-rml="col.html"></div>
+            <div class="inv-row" data-for="row : rows"
+                 data-class-category="row.is_category"
+                 data-class-selected="row.selected"
+                 data-class-colstart="row.col_first"
+                 data-event-click="on_select(it_index)"
+                 data-event-mouseover="on_hover(it_index)"
+                 data-rml="row.text_rml"></div>
         </div>
         <!-- SLICE 6: footer carries the filter indicator (left) + nav-mode hint
              (centered), mirroring draw_footer. -->

@@ -56,22 +56,17 @@ body {
     color: {{fg4}};
 }
 
-/* The list is a horizontal row of columns (slice 2b); it scrolls vertically as a
-   whole (scroll-pane overflow-y). Columns top-align and size to their content. */
+/* Mouse interactivity: every visible column's rows are flattened into one
+   vector (nested data-for is avoided in this codebase — see inventory.rml),
+   so this is now a single vertical list; it scrolls as a whole (scroll-pane
+   overflow-y). align-items:stretch makes each row (and its hover/selected
+   highlight) span the full width, standard list UX. */
 .inv-list {
     flex: 1;
     min-height: 0;
     display: flex;
-    flex-direction: row;
-    align-items: flex-start;
-}
-.inv-col {
-    display: block;
-    flex: 0 0 auto;
-    margin-right: 24dp;
-}
-.inv-col:last-child {
-    margin-right: 0;
+    flex-direction: column;
+    align-items: stretch;
 }
 .inv-row {
     display: block;
@@ -81,6 +76,8 @@ body {
 }
 .inv-row:hover {
     background-color: {{bg2}};
+    color: {{fg0}};
+    cursor: pointer;
 }
 .inv-row.selected {
     background-color: {{yellow}};
@@ -91,6 +88,18 @@ body {
     margin-top: 4dp;
     border-bottom: 1dp {{bg4}};
     color: {{purple}};
+}
+.inv-row.category:hover {
+    background: none;
+    cursor: default;
+}
+/* Flat-list stand-in for the old side-by-side columns: col_first (the first
+   row pulled from each visible column, stamped in rml_sync()) gets a divider
+   so distinct columns (worn/inventory/ground, etc.) stay visually separate. */
+.inv-row.colstart {
+    margin-top: 8dp;
+    padding-top: 8dp;
+    border-top: 1dp {{bg4}};
 }
 
 .inv-footer {

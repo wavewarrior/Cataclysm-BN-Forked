@@ -102,6 +102,24 @@ body {
     white-space: nowrap;
 }
 
+/* Mouse interactivity (Step 2): clickable overview/install rows get a
+   pointer cursor + the crafting.rcss hover treatment (.cg-row:hover),
+   placed before .selected so an actively-selected row keeps its accent
+   color instead of flickering to the hover shade. Header rows
+   (data-class-header -> .header) are not selectable, so they keep the
+   default cursor and no hover background. */
+.vi-ov-row:hover {
+    background-color: {{bg2}};
+    color: {{fg0}};
+    cursor: pointer;
+}
+
+.vi-ov-row.header:hover {
+    background-color: transparent;
+    color: {{fg3}};
+    cursor: default;
+}
+
 .vi-ov-row.header {
     margin-top: 6dp;
     color: {{fg3}};

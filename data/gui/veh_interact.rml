@@ -29,7 +29,9 @@
                 <div class="vi-mode-overview" data-if="show_overview">
                     <div id="vi-overview" class="vi-overview scroll-pane">
                         <div class="vi-ov-row" data-for="r : overview_rows"
-                             data-class-header="r.is_header" data-class-selected="r.selected">
+                             data-class-header="r.is_header" data-class-selected="r.selected"
+                             data-event-click="on_overview(it_index)"
+                             data-event-mouseover="on_overview_hover(it_index)">
                             <span class="vi-ov-text" data-rml="r.text"></span>
                             <span class="vi-ov-detail" data-rml="r.detail"></span>
                         </div>
@@ -41,7 +43,9 @@
                     <div class="vi-inst-tabs" data-rml="install_tabs_rml"></div>
                     <div id="vi-inst-list" class="vi-inst-list scroll-pane">
                         <div class="vi-ov-row" data-for="r : install_rows"
-                             data-class-selected="r.selected">
+                             data-class-selected="r.selected"
+                             data-event-click="on_install(it_index)"
+                             data-event-mouseover="on_install_hover(it_index)">
                             <span class="vi-ov-text" data-rml="r.text"></span>
                         </div>
                     </div>
