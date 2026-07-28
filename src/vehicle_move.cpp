@@ -1671,15 +1671,21 @@ bool vehicle::check_on_ramp( int idir, const tripoint_rel_ms &offset ) const
     return false;
 }
 
-static auto ramp_z_delta_at( const map &here, const tripoint_bub_ms &pos ) -> int
+static auto ramp_z_delta_at( const map &here, const tripoint_bub_ms &from,
+                             const tripoint_bub_ms &to ) -> int
 {
-    if( here.has_flag( TFLAG_RAMP_UP, pos ) ) {
-    return 1;
-}
-if( here.has_flag( TFLAG_RAMP_DOWN, pos ) ) {
-    return -1;
-}
-return 0;
+    // Only cross when `to` carries a flag `from` didn't already have — the
+    // same "already consumed this step" guard applied to dragged furniture
+    // in ramp_adjusted_furniture_destination(), so a part whose walked line
+    // lingers on (or steps back onto) a tile it's already crossed doesn't
+    // re-apply the same z-step a second time.
+    if( here.has_flag( TFLAG_RAMP_UP, to ) && !here.has_flag( TFLAG_RAMP_UP, from ) ) {
+        return 1;
+    }
+    if( here.has_flag( TFLAG_RAMP_DOWN, to ) && !here.has_flag( TFLAG_RAMP_DOWN, from ) ) {
+        return -1;
+    }
+    return 0;
 }
 
 void vehicle::adjust_zlevel( int idir, const tripoint_rel_ms &offset )
@@ -1689,7 +1695,7 @@ void vehicle::adjust_zlevel( int idir, const tripoint_rel_ms &offset )
     const auto base = bub_ms_location() + offset;
 
     auto new_center = base;
-    new_center.z() += ramp_z_delta_at( m, new_center );
+    new_center.z() += ramp_z_delta_at( m, global_pos, new_center );
 
     auto z_cache = std::map<point_rel_ms, int> {};
     std::ranges::for_each( parts, [&]( vehicle_part & part ) {
@@ -1707,6 +1713,7 @@ void vehicle::adjust_zlevel( int idir, const tripoint_rel_ms &offset )
         const auto part_point = base + tripoint_rel_ms( part_offset, 0 );
         auto line = new_center;
         while( line.xy() != part_point.xy() ) {
+            const auto prev_line = line;
             if( line.x() < part_point.x() ) {
                 ++line.x();
             } else if( line.x() > part_point.x() ) {
@@ -1717,7 +1724,7 @@ void vehicle::adjust_zlevel( int idir, const tripoint_rel_ms &offset )
             } else if( line.y() > part_point.y() ) {
                 --line.y();
             }
-            line.z() += ramp_z_delta_at( m, line );
+            line.z() += ramp_z_delta_at( m, prev_line, line );
         }
 
         const auto z_offset = line.z() - global_pos.z();

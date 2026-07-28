@@ -1007,9 +1007,19 @@ static auto ramp_adjusted_furniture_destination( map &here, const tripoint_bub_m
 {
     auto dest = tripoint_bub_ms( from + horizontal_dp );
 
-    if( here.has_flag( TFLAG_RAMP_UP, dest ) && here.inbounds_z( dest.z() + 1 ) ) {
+    // Only cross when `dest` carries a flag `from` didn't already have.  A
+    // dragged object's own from/to pair is the only ramp-crossing memory it
+    // has (unlike the player, who is guaranteed by construction to already
+    // be standing on the tile *before* the flagged one, so a fresh
+    // destination-only check never double-fires for them).  Guarding on
+    // `from` here gives dragged furniture that same "already consumed this
+    // step" awareness instead of blindly re-deriving the crossing from
+    // `dest` alone.
+    if( here.has_flag( TFLAG_RAMP_UP, dest ) && !here.has_flag( TFLAG_RAMP_UP, from ) &&
+        here.inbounds_z( dest.z() + 1 ) ) {
         dest.z() += 1;
-    } else if( here.has_flag( TFLAG_RAMP_DOWN, dest ) && here.inbounds_z( dest.z() - 1 ) ) {
+    } else if( here.has_flag( TFLAG_RAMP_DOWN, dest ) && !here.has_flag( TFLAG_RAMP_DOWN, from ) &&
+               here.inbounds_z( dest.z() - 1 ) ) {
         dest.z() -= 1;
     }
 
