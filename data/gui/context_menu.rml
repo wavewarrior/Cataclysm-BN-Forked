@@ -1,0 +1,30 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="context_menu.rcss"/>
+</head>
+<body data-model="context_menu">
+    <!-- Floating right-click context menu (mouse interactivity plan, Step 3).
+         FIRST non-fullscreen rml_doc popup in the codebase. #ctx-backdrop is a
+         full-viewport transparent click-catcher painted BEHIND the panel (an
+         earlier sibling in document order): a click lands on it only when it
+         misses the panel, since the panel sits on top and intercepts hits over
+         its own rect — the standard web/desktop "click outside to dismiss"
+         idiom. Rows are a single flat data-for (this codebase avoids nested
+         data-for entirely, see inventory.rml) with both a click and a hover
+         handler; keyboard UP/DOWN/CONFIRM in show_context_menu() share the
+         same `highlighted` flag as mouse hover, so the row highlight tracks
+         either input method identically. -->
+    <div id="ctx-backdrop" data-event-click="on_dismiss()"></div>
+    <div id="ctx-panel" class="ctx-panel" data-style-left="left_style" data-style-top="top_style">
+        <div class="ctx-row" data-for="a : rows"
+             data-class-disabled="!a.enabled"
+             data-class-selected="a.highlighted"
+             data-event-click="on_pick(it_index)"
+             data-event-mouseover="on_hover(it_index)">
+            <span class="ctx-label" data-rml="a.label_rml"></span>
+            <span class="ctx-hotkey" data-rml="a.hotkey_rml"></span>
+        </div>
+    </div>
+</body>
+</rml>

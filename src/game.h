@@ -704,8 +704,12 @@ class game: public submap_load_listener
         bool is_zone_submap_grid_overlay_enabled() const;
         void zones_manager();
 
-        // Look at nearby terrain ';', or select zone points
-        std::optional<tripoint_bub_ms> look_around( look_around_mode mode = LA_MODE_DEFAULT );
+        // Look at nearby terrain ';', or select zone points. `start_point`, when
+        // given, seeds the initial cursor position instead of the player's own
+        // tile (wired for mouse-driven look: middle-click / the right-click
+        // context menu's "Look" entry reuse the clicked tile's coordinates).
+        std::optional<tripoint_bub_ms> look_around( look_around_mode mode = LA_MODE_DEFAULT,
+                const std::optional<tripoint_bub_ms> &start_point = std::nullopt );
         /**
          * @brief
          *
@@ -1052,6 +1056,10 @@ class game: public submap_load_listener
         void open_consume_item_menu();       // Custom menu for consuming specific group of items
         bool handle_action();
         bool try_get_right_click_action( action_id& act, const tripoint_bub_ms& mouse_target );
+        /// Builds a floating context menu of available actions for `target` (the
+        /// game-world tile under the cursor) and maps the chosen entry back into
+        /// `act`. Returns false when nothing is offered/chosen (dismissed).
+        auto show_tile_context_menu( action_id& act, const tripoint_bub_ms& target ) -> bool;
         bool try_get_left_click_action( action_id& act, const tripoint_bub_ms& mouse_target );
 
         void item_action_menu(); // Displays item action menu

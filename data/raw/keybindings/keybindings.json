@@ -43,6 +43,34 @@
   },
   {
     "type": "keybinding",
+    "id": "UP",
+    "category": "CONTEXT_MENU",
+    "name": "Move cursor up",
+    "bindings": [ { "input_method": "keyboard", "key": "UP" }, { "input_method": "keyboard", "key": "NUMPAD_8" } ]
+  },
+  {
+    "type": "keybinding",
+    "id": "DOWN",
+    "category": "CONTEXT_MENU",
+    "name": "Move cursor down",
+    "bindings": [ { "input_method": "keyboard", "key": "DOWN" }, { "input_method": "keyboard", "key": "NUMPAD_2" } ]
+  },
+  {
+    "type": "keybinding",
+    "id": "CONFIRM",
+    "category": "CONTEXT_MENU",
+    "name": "Choose action",
+    "bindings": [ { "input_method": "keyboard", "key": "RETURN" } ]
+  },
+  {
+    "type": "keybinding",
+    "id": "QUIT",
+    "category": "CONTEXT_MENU",
+    "name": "Close menu",
+    "bindings": [ { "input_method": "keyboard", "key": "ESC" } ]
+  },
+  {
+    "type": "keybinding",
     "id": "SHOW_DESCRIPTION",
     "category": "MELEE_STYLE_PICKER",
     "name": "Show description of melee style",
@@ -638,14 +666,20 @@
     "id": "SCROLL_UP",
     "category": "CRAFTING",
     "name": "Scroll item info up",
-    "bindings": [ { "input_method": "keyboard", "key": "PPAGE" } ]
+    "bindings": [
+      { "input_method": "keyboard", "key": "PPAGE" },
+      { "input_method": "mouse", "key": "SCROLL_UP" }
+    ]
   },
   {
     "type": "keybinding",
     "id": "SCROLL_DOWN",
     "category": "CRAFTING",
     "name": "Scroll item info down",
-    "bindings": [ { "input_method": "keyboard", "key": "NPAGE" } ]
+    "bindings": [
+      { "input_method": "keyboard", "key": "NPAGE" },
+      { "input_method": "mouse", "key": "SCROLL_DOWN" }
+    ]
   },
   {
     "type": "keybinding",
@@ -1879,7 +1913,7 @@
     "name": "Look Around",
     "category": "DEFAULTMODE",
     "id": "look",
-    "bindings": [ { "input_method": "keyboard", "key": ";" }, { "input_method": "keyboard", "key": "x" } ]
+    "bindings": [ { "input_method": "keyboard", "key": ";" }, { "input_method": "keyboard", "key": "x" }, { "input_method": "mouse", "key": "MOUSE_MIDDLE" } ]
   },
   {
     "type": "keybinding",

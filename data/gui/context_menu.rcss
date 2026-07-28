@@ -1,0 +1,61 @@
+/* Floating right-click context menu (mouse interactivity plan, Step 3). FIRST
+   non-fullscreen rml_doc popup in the codebase — position comes from C++ on
+   every open (data-style-left/top, dp units; see show_context_menu's screen-
+   to-dp conversion in context_menu.cpp). menu_width_dp/row_height_dp there
+   mirror this file's width/row sizing for the pre-layout on-screen clamp;
+   keep them loosely in sync if this layout changes. Palette variable names
+   ({{bg}} etc.) match theme.rcss's canonical table. */
+
+body {
+    width: 100%;
+    height: 100%;
+}
+
+/* Full-viewport invisible click-catcher, painted behind .ctx-panel (earlier in
+   document order = lower paint priority): a click reaches it only when it
+   misses the panel, which sits on top over its own rect. */
+#ctx-backdrop {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.ctx-panel {
+    position: absolute;
+    width: 240dp;
+    display: flex;
+    flex-direction: column;
+    background-color: {{bg}};
+    border: 2dp {{bg4}};
+}
+
+.ctx-row {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    padding: 6dp 12dp;
+}
+.ctx-row:hover {
+    background-color: {{bg2}};
+    color: {{fg0}};
+    cursor: pointer;
+}
+.ctx-row.selected {
+    background-color: {{yellow}};
+    color: {{bg-hard}};
+}
+.ctx-row.disabled {
+    color: {{bg3}};
+}
+.ctx-row.disabled:hover {
+    background-color: transparent;
+    color: {{bg3}};
+    cursor: default;
+}
+
+.ctx-hotkey {
+    color: {{fg4}};
+    margin-left: 16dp;
+}

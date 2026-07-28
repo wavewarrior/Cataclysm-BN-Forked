@@ -73,6 +73,7 @@
 #include "computer_session.h"
 #include "construction.h"
 #include "construction_group.h"
+#include "context_menu.h"
 #include "coordinates.h"
 #include "crafting.h"
 #include "creature_tracker.h"
@@ -125,6 +126,7 @@
 #include "iuse_actor.h"
 #include "json.h"
 #include "kill_tracker.h"
+#include "lighting/rmlui_layer.h"
 #include "lightmap.h"
 #include "line.h"
 #include "live_view.h"
@@ -188,7 +190,9 @@
 #include "scenario.h"
 #include "scent_map.h"
 #include "scores_ui.h"
+#include "sdl_cursor.h"
 #include "sdl_render_frame.h"
+#include "sdl_wrappers.h"
 #include "sdltiles.h"
 #include "sounds.h"
 #include "start_location.h"
@@ -1394,6 +1398,29 @@ bool game::handle_mouseview( input_context &ctxt, std::string &action )
             if( tilecontext ) {
                 tilecontext->set_hover_tile( mouse_pos );
             }
+            // Contextual cursor (Step 5). Skip entirely while any RmlUi doc
+            // owns the mouse — CSS `cursor:` on its hoverable rows is the
+            // pass-through path there (see rmlui_system_interface.h; it's a
+            // documented no-op today for every migrated screen alike, not
+            // something this change touches). Otherwise hint at what's under
+            // the cursor: a crosshair over a creature the player can see, a
+            // hand over an adjacent examine target — map has no
+            // is_examine_target()/has_examine_target() helper, so this reuses
+            // action.h's can_examine_at(), the closest existing equivalent
+            // (same predicate the action-menu greys ACTION_EXAMINE with) —
+            // else the plain arrow.
+            if( !rmlui_layer::active() ) {
+                if( !mouse_pos ) {
+                    set_game_cursor( cursor_kind::arrow );
+                } else if( const monster *mon = critter_at<monster>( *mouse_pos ); mon && u.sees( *mon ) ) {
+                    set_game_cursor( cursor_kind::crosshair );
+                } else if( square_dist( mouse_pos->xy(), u.bub_pos().xy() ) <= 1 &&
+                           can_examine_at( *mouse_pos ) ) {
+                    set_game_cursor( cursor_kind::hand );
+                } else {
+                    set_game_cursor( cursor_kind::arrow );
+                }
+            }
             if( mouse_pos && ( !liveview_pos || *mouse_pos != *liveview_pos ) ) {
                 liveview_pos = mouse_pos;
                 liveview.show( *liveview_pos );
@@ -1411,6 +1438,9 @@ bool game::handle_mouseview( input_context &ctxt, std::string &action )
         // Hover-outline: clear once the player switches to the keyboard.
         if( tilecontext ) {
             tilecontext->set_hover_tile( std::nullopt );
+        }
+        if( !rmlui_layer::active() ) {
+            set_game_cursor( cursor_kind::arrow );
         }
         return false;
     }
@@ -1744,35 +1774,91 @@ bool game::try_get_right_click_action( action_id &act, const tripoint_bub_ms &mo
         return false;
     }
 
-    const bool is_adjacent = square_dist( mouse_target.xy(), u.bub_pos().xy() ) <= 1;
-    const bool is_self = square_dist( mouse_target.xy(), u.bub_pos().xy() ) <= 0;
-    if( const monster *const mon = critter_at<monster>( mouse_target ) ) {
-        if( !u.sees( *mon ) ) {
-            add_msg( _( "Nothing relevant here." ) );
-            return false;
-        }
-
-        if( !u.primary_weapon().is_gun() ) {
-            add_msg( m_info, _( "You are not wielding a ranged weapon." ) );
-            return false;
-        }
-
-        // TODO: Add weapon range check. This requires weapon to be reloaded.
-
-        act = ACTION_FIRE;
-    } else if( is_adjacent &&
-               m.close_door( tripoint_bub_ms( mouse_target.xy(), u.bub_pos().z() ), !m.is_outside( u.bub_pos() ),
-                             true ) ) {
-        act = ACTION_CLOSE;
-    } else if( is_self ) {
-        act = ACTION_PICKUP;
-    } else if( is_adjacent ) {
-        act = ACTION_EXAMINE;
-    } else {
-        add_msg( _( "Nothing relevant here." ) );
-        return false;
+    // Project Zomboid-style priority chain: a bare right-click while wielding
+    // something is a direct combat action with no menu in the way; Shift+
+    // right-click (any weapon state), or a right-click while unarmed, falls
+    // back to the contextual action menu.
+    const bool shift_held = ( SDL_GetModState() & SDL_KMOD_SHIFT ) != 0;
+    if( !shift_held && u.is_armed() ) {
+        act = u.primary_weapon().is_gun() ? ACTION_FIRE : ACTION_THROW;
+        return true;
     }
 
+    return show_tile_context_menu( act, mouse_target );
+}
+
+auto game::show_tile_context_menu( action_id &act, const tripoint_bub_ms &target ) -> bool
+{
+    const bool is_adjacent = square_dist( target.xy(), u.bub_pos().xy() ) <= 1;
+    const bool is_self = square_dist( target.xy(), u.bub_pos().xy() ) <= 0;
+
+    // Hotkey hints reuse the same action names/bindings registered in
+    // get_default_mode_input_context(); an unbound action just shows no hint
+    // instead of a verbose "Unbound globally!".
+    const input_context hint_ctxt = get_default_mode_input_context();
+    const auto hint_for = [&]( action_id a ) -> std::string {
+        const std::string ident = action_ident( a );
+        if( hint_ctxt.keys_bound_to( ident ).empty() )
+        {
+            return std::string();
+        }
+        return hint_ctxt.get_desc( ident, true );
+    };
+
+    std::vector<context_action> actions;
+    const auto add_once = [&]( const std::string & label, action_id a ) {
+        if( std::ranges::none_of( actions, [a]( const context_action & c ) { return c.act == a; } ) ) {
+            actions.push_back( context_action{ .label = label, .hotkey_hint = hint_for( a ), .act = a } );
+        }
+    };
+
+    if( const monster *const mon = critter_at<monster>( target ); mon && u.sees( *mon ) ) {
+        add_once( _( "Look" ), ACTION_LOOK );
+        if( u.primary_weapon().is_gun() ) {
+            add_once( _( "Fire" ), ACTION_FIRE );
+        }
+        if( is_adjacent ) {
+            add_once( _( "Attack" ), ACTION_AUTOATTACK );
+        }
+    }
+    // The plan's "Trade" entry has no matching action_id in this codebase (no
+    // ACTION_TRADE; npc_trading::trade() takes an npc& directly, incompatible
+    // with this act-based menu contract, and adding a new action_id touches
+    // action.h/action.cpp/keybindings well outside this change's file
+    // ownership). "Talk" (ACTION_CHAT) is the closest reachable equivalent —
+    // it opens the same chat menu 't' does, which offers "Talk to <npc>" when
+    // one is nearby — and is offered on its own.
+    if( const npc *const np = critter_at<npc>( target ); np && u.sees( *np ) ) {
+        add_once( _( "Look" ), ACTION_LOOK );
+        add_once( _( "Talk" ), ACTION_CHAT );
+    }
+    if( can_interact_at( ACTION_CLOSE, target ) ) {
+        add_once( _( "Close" ), ACTION_CLOSE );
+    }
+    if( can_interact_at( ACTION_OPEN, target ) ) {
+        add_once( _( "Open" ), ACTION_OPEN );
+    }
+    if( can_interact_at( ACTION_PICKUP, target ) ) {
+        add_once( _( "Pickup" ), ACTION_PICKUP );
+    }
+    if( is_adjacent ) {
+        add_once( _( "Examine" ), ACTION_EXAMINE );
+    }
+    if( is_self ) {
+        add_once( _( "Pickup" ), ACTION_PICKUP );
+        add_once( _( "Wait" ), ACTION_WAIT );
+    }
+    add_once( _( "Look" ), ACTION_LOOK );
+
+    float mx = 0.0f;
+    float my = 0.0f;
+    SDL_GetMouseState( &mx, &my );
+    const std::optional<action_id> chosen = show_context_menu(
+            point( static_cast<int>( mx ), static_cast<int>( my ) ), actions );
+    if( !chosen ) {
+        return false;
+    }
+    act = *chosen;
     return true;
 }
 

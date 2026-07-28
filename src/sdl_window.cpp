@@ -15,6 +15,7 @@
 #include "options.h"
 #include "output.h"
 #include "sdltiles.h"
+#include "sdl_cursor.h"
 #include "sdl_display.h"
 #include "sdl_font.h"
 #include "sdl_framebuffer.h"
@@ -287,6 +288,7 @@ static void WinDestroy()
     // safe even if try_init_render_state() never succeeded.
     lighting::shutdown_render_state();
 
+    destroy_game_cursors();
     shutdown_sound();
     tilecontext.reset();
 

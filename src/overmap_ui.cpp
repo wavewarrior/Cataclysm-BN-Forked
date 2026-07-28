@@ -1572,6 +1572,8 @@ static tripoint_abs_omt display(
     ictxt.register_action( "CONFIRM" );
     ictxt.register_action( "LEVEL_UP" );
     ictxt.register_action( "LEVEL_DOWN" );
+    ictxt.register_action( "SCROLL_UP" );
+    ictxt.register_action( "SCROLL_DOWN" );
     ictxt.register_action( "ZOOM_OUT" );
     ictxt.register_action( "ZOOM_IN" );
     ictxt.register_action( "HELP_KEYBINDINGS" );
@@ -1652,9 +1654,9 @@ static tripoint_abs_omt display(
             curs += mouse_pos->xy().raw();
         } else if( action == "CENTER" ) {
             curs = orig;
-        } else if( action == "LEVEL_DOWN" && curs.z() > -OVERMAP_DEPTH ) {
+        } else if( ( action == "LEVEL_DOWN" || action == "SCROLL_DOWN" ) && curs.z() > -OVERMAP_DEPTH ) {
             curs.z() -= 1;
-        } else if( action == "LEVEL_UP" && curs.z() < OVERMAP_HEIGHT ) {
+        } else if( ( action == "LEVEL_UP" || action == "SCROLL_UP" ) && curs.z() < OVERMAP_HEIGHT ) {
             curs.z() += 1;
         } else if( action == "ZOOM_OUT" ) {
             g->zoom_out_overmap();

@@ -569,7 +569,13 @@ bool game::handle_action()
             break;
 
             case ACTION_LOOK:
-                look_around();
+                // Middle-click (or any future mouse binding of "look") leaves
+                // ctxt's coordinate state populated from the triggering click
+                // even though act was resolved directly rather than through
+                // look_up_action(); reuse it so the cursor starts on the
+                // clicked tile instead of the player. nullopt (keyboard-
+                // triggered look) falls back to the player's own tile.
+                look_around( LA_MODE_DEFAULT, ctxt.get_coordinates( w_terrain ) );
                 break;
 
             case ACTION_KEYBINDINGS:

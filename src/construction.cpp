@@ -53,6 +53,7 @@
 #include "point.h"
 #include "requirements.h"
 #include "rng.h"
+#include "sdl_wrappers.h"
 #include "skill.h"
 #include "string_formatter.h"
 #include "string_id.h"
@@ -535,6 +536,8 @@ std::optional<construction_id> construction_menu( const bool blueprint )
     ctxt.register_action( "TOGGLE_FAVORITE" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
     ctxt.register_action( "FILTER" );
+    ctxt.register_action( "SCROLL_UP" );
+    ctxt.register_action( "SCROLL_DOWN" );
     ctxt.register_action( "RESET_FILTER" );
 
     const std::vector<construction_category> &construct_cat = construction_categories::get_all();
@@ -1436,14 +1439,16 @@ std::optional<construction_id> construction_menu( const bool blueprint )
             } else {
                 select = constructs.size() - 1;
             }
-        } else if( action == "LEFT" || action == "BACKTAB" ) {
+        } else if( action == "LEFT" || action == "BACKTAB" ||
+                   ( action == "SCROLL_UP" && ( SDL_GetModState() & SDL_KMOD_CTRL ) ) ) {
             update_info = true;
             update_cat = true;
             tabindex--;
             if( tabindex < 0 ) {
                 tabindex = tabcount - 1;
             }
-        } else if( action == "RIGHT" || action == "TAB" ) {
+        } else if( action == "RIGHT" || action == "TAB" ||
+                   ( action == "SCROLL_DOWN" && ( SDL_GetModState() & SDL_KMOD_CTRL ) ) ) {
             update_info = true;
             update_cat = true;
             tabindex = ( tabindex + 1 ) % tabcount;

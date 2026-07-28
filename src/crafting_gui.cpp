@@ -36,6 +36,7 @@
 #include "requirements.h"
 #include "rml_screen.h"
 #include "rml_util.h"
+#include "sdl_wrappers.h"
 #include "string_formatter.h"
 #include "string_input_popup.h"
 #include "string_utils.h"
@@ -590,6 +591,8 @@ static input_context make_crafting_context( bool highlight_unread_recipes )
     ctxt.register_action( "PAGE_DOWN", to_translation( "Fast scroll down" ) );
     ctxt.register_action( "PREV_TAB" );
     ctxt.register_action( "NEXT_TAB" );
+    ctxt.register_action( "SCROLL_UP" );
+    ctxt.register_action( "SCROLL_DOWN" );
     ctxt.register_action( "FILTER" );
     ctxt.register_action( "RESET_FILTER" );
     ctxt.register_action( "TOGGLE_FAVORITE" );
@@ -1472,7 +1475,8 @@ const recipe *select_crafting_recipe( int &batch_size_out, Character& crafter )
                 && shown_recipes
                 .empty_category( tab.cur(), subtab.cur() != "CSC_ALL" ? subtab.cur() : "" ) );
             recalc = true;
-        } else if( action == "PREV_TAB" ) {
+        } else if( action == "PREV_TAB" ||
+                   ( action == "SCROLL_UP" && ( SDL_GetModState() & SDL_KMOD_CTRL ) ) ) {
             tab.prev();
             // Default ALL
             subtab = list_circularizer<std::string>( craft_subcat_list[tab.cur()] );
@@ -1487,7 +1491,8 @@ const recipe *select_crafting_recipe( int &batch_size_out, Character& crafter )
                 && shown_recipes
                 .empty_category( tab.cur(), subtab.cur() != "CSC_ALL" ? subtab.cur() : "" ) );
             recalc = true;
-        } else if( action == "NEXT_TAB" ) {
+        } else if( action == "NEXT_TAB" ||
+                   ( action == "SCROLL_DOWN" && ( SDL_GetModState() & SDL_KMOD_CTRL ) ) ) {
             tab.next();
             // Default ALL
             subtab = list_circularizer<std::string>( craft_subcat_list[tab.cur()] );

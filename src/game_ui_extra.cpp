@@ -1089,11 +1089,13 @@ void game::pre_print_all_tile_info( const tripoint_bub_ms &lp, const catacurses:
     first_line += static_cast<int>( foldstring( info, getmaxx( w_info ) ).size() );
 }
 
-std::optional<tripoint_bub_ms> game::look_around( look_around_mode mode )
+std::optional<tripoint_bub_ms> game::look_around( look_around_mode mode,
+        const std::optional<tripoint_bub_ms> &start_point )
 {
     auto center = u.bub_pos() + u.view_offset;
-    look_around_result result = look_around( /*show_window=*/true, center, center, false, false,
-                                false, false, tripoint_bub_ms::zero(), mode );
+    look_around_result result = look_around( /*show_window=*/true, center,
+                                start_point.value_or( center ),
+                                false, false, false, false, tripoint_bub_ms::zero(), mode );
     return result.position;
 }
 
