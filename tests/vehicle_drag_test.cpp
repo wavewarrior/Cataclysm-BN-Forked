@@ -169,6 +169,7 @@ static void test_vehicle_drag(
 
 TEST_CASE( "water drag remains positive with excess floating parts", "[vehicle] [engine]" )
 {
+    clear_all_state();
     clear_game_drag( ter_id( "t_pavement" ) );
 
     auto *const veh_ptr = get_map().add_vehicle( vproto_id( "none" ), tripoint_bub_ms( 60, 60, 0 ),
