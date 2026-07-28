@@ -2410,6 +2410,11 @@ void game::erase_npc( character_id id )
         debugmsg( "game::erase_npc: NPC (%d) not found in active_npc.", id.get_value() );
         return;
     }
+#ifdef BOX2D_ENABLED
+    if( auto *pw = get_map().get_physics_world() ) {
+        pw->on_creature_removed( it->get() );
+    }
+#endif
     active_npc.erase( it );
 }
 

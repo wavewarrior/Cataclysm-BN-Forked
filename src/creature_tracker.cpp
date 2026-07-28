@@ -328,6 +328,11 @@ void Creature_tracker::remove_dead()
     for( auto iter = monsters_list.begin(); iter != monsters_list.end(); ) {
         const monster &critter = **iter;
         if( critter.is_dead() ) {
+#ifdef BOX2D_ENABLED
+            if( auto *pw = get_map().get_physics_world() ) {
+                pw->on_creature_removed( &critter );
+            }
+#endif
             remove_from_location_map( critter );
             iter = monsters_list.erase( iter );
         } else {
