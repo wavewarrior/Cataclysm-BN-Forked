@@ -140,12 +140,26 @@ TEST_CASE( "Aiming at a target behind wall", "[ranged][aiming]" )
     arm_character( shooter, "glock_19" );
     int max_range = shooter.primary_weapon().gun_range( &shooter );
     REQUIRE( max_range >= 5 );
-    for( int y_off = -1; y_off <= 1; y_off++ ) {
-        g->m.ter_set( shooter_pos + point( 1, y_off ), t_wall );
-    }
-
     set_up_player_vision();
-    monster &z = spawn_test_monster( "debug_mon", shooter_pos + point( 2, 0 ) );
+    // Anchor the wall and the target to the shooter's *actual* post-setup
+    // position rather than the raw shooter_pos constant: place_player() inside
+    // set_up_player_vision() may recentre the reality bubble (e.g. if an
+    // earlier test left g_reality_bubble_size out of sync with the
+    // REALITY_BUBBLE_SIZE option default), shifting the map -- and this
+    // shooter -- into a bub_ms frame the compile-time constant no longer
+    // tracks. Without this, the wall/monster stay pinned to the stale
+    // constant and the "line of fire" below no longer crosses the wall.
+    const tripoint_bub_ms shooter_bpos = shooter.bub_pos();
+    for( int y_off = -1; y_off <= 1; y_off++ ) {
+        g->m.ter_set( shooter_bpos + point( 1, y_off ), t_wall );
+    }
+    // ter_set() only marks the transparency cache dirty; rebuild it now so
+    // is_transparent()/sees() below see the new wall instead of stale,
+    // pre-wall data left over from set_up_player_vision()'s cache build.
+    g->m.update_visibility_cache( shooter_bpos.z() );
+    g->m.invalidate_map_cache( shooter_bpos.z() );
+    g->m.build_map_cache( shooter_bpos.z() );
+    monster &z = spawn_test_monster( "debug_mon", shooter_bpos + point( 2, 0 ) );
     WHEN( "There is no direct, passable line to target" ) {
         const auto path = g->m.find_clear_path( shooter.bub_pos(), z.bub_pos() );
         int impassable_tiles = std::count_if( path.begin(), path.end(),
@@ -179,10 +193,23 @@ TEST_CASE( "Aiming at a target behind bars", "[ranged][aiming]" )
     arm_character( shooter, "glock_19" );
     int max_range = shooter.primary_weapon().gun_range( &shooter );
     REQUIRE( max_range >= 5 );
+    // Anchor to the shooter's actual post-setup position rather than the raw
+    // shooter_pos constant: set_up_player_vision() may recentre the reality
+    // bubble (e.g. if an earlier test left g_reality_bubble_size out of sync
+    // with the REALITY_BUBBLE_SIZE option default), shifting the map -- and
+    // this shooter -- into a bub_ms frame the compile-time constant no
+    // longer tracks. See "Aiming at a target behind wall" above.
+    const tripoint_bub_ms shooter_bpos = shooter.bub_pos();
     for( int y_off = -1; y_off <= 1; y_off++ ) {
-        g->m.ter_set( shooter_pos + point( 1, y_off ), t_window_bars );
+        g->m.ter_set( shooter_bpos + point( 1, y_off ), t_window_bars );
     }
-    monster &z = spawn_test_monster( "debug_mon", shooter_pos + point( 2, 0 ) );
+    // ter_set() only marks the transparency cache dirty; rebuild it now so
+    // is_transparent()/sees() below see the new bars instead of stale,
+    // pre-bars data left over from set_up_player_vision()'s cache build.
+    g->m.update_visibility_cache( shooter_bpos.z() );
+    g->m.invalidate_map_cache( shooter_bpos.z() );
+    g->m.build_map_cache( shooter_bpos.z() );
+    monster &z = spawn_test_monster( "debug_mon", shooter_bpos + point( 2, 0 ) );
     WHEN( "There is no direct, passable line to target" ) {
         const auto path = g->m.find_clear_path( shooter.bub_pos(), z.bub_pos() );
         int impassable_tiles = std::count_if( path.begin(), path.end(),
