@@ -372,6 +372,17 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
         return attack;
     }
 
+    // A target outside the map's vertical span (e.g. one z-level above the
+    // roof, or below the lowest sublevel) has no representable line of
+    // sight: the angle-based DDA raycast below only ever steps through the
+    // shooter's own z-level, so a same-column out-of-range target would
+    // otherwise degenerate to atan2(0, 0) and fire off in an arbitrary
+    // horizontal direction instead of stopping. Treat it as an immediate,
+    // silent stop rather than deriving a bogus trajectory.
+    if( !here.inbounds_z( target_arg.z() ) ) {
+        return attack;
+    }
+
     projectile &proj = attack.proj;
 
     const auto stream = proj.has_effect( ammo_effect_STREAM ) ||
