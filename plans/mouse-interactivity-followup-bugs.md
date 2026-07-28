@@ -69,8 +69,15 @@ set for `vehicle_floor_cache` in the same function. `shadowcasting.cpp` and the 
 tables were **not** touched — confirmed correct via a minimal 2-test repro
 (`vision_see_into_vehicle`, `vision_no_lights`) before any code change.
 
-**Verified**: `[vision]` → All tests passed (3,641 assertions in 18 test cases). Previously 10/18
-passed with 92 failed assertions.
+**Verified in isolation**: `[vision]` → All tests passed (3,641 assertions in 18 test cases).
+Previously 10/18 passed with 92 failed assertions.
+
+**Caveat — still fails under full-suite ordering.** A full `~[.]` run after this fix still shows
+8 × `vision_test.cpp:266`. The specific leak fixed here (`vehicle_obscured_cache` /
+`vehicle_obstructed_cache`) was real and is resolved, but at least one *further* upstream test
+leaves state that corrupts vision when hundreds of cases run first. Same pattern applies to
+`vehicle_ramp_test.cpp:174` (6 × in full suite, clean in isolation). Both need the same treatment:
+find the leaking cache/singleton, clear it unconditionally. See "Residual cross-test leakage" below.
 
 ## 3. Ramp / furniture-grab position tracking — FIXED (`6aa1cdc30b`)
 
@@ -177,6 +184,34 @@ comment acknowledging "cargo/fuel RNG causes small variance". Fails on roughly 2
 session's changes applied. Unrelated to vehicle movement or physics.
 
 ---
+
+## Residual cross-test leakage (new work item)
+
+Full suite `~[.] --rng-seed 1` after all fixes above: **929 test cases, 891 passed, 36 failed**,
+7,879,809 assertions with 259 failed. Runtime **5m33s** — the headline win, since this run
+previously did not terminate at all.
+
+Of those 36, these fail *only* in full-suite ordering and pass 100% in isolation:
+
+| Test | Full-suite | Isolated |
+|---|---|---|
+| `vision_test.cpp:266` | 8 failures | 18/18 pass |
+| `vehicle_ramp_test.cpp:174` | 6 failures | 8/8 pass |
+| `coop_terrain_test.cpp:130`, `coop_pickup_test.cpp:112,129` | 3 failures | 141/141 pass |
+
+This is the same class of bug as §1 and §2 — a cache or singleton surviving a `TEST_CASE` boundary —
+but in a *different* container than the two already fixed. The `PhysicsWorld` singleton is the prime
+suspect: it is constructed once per binary and never rebuilt (see
+`plans/box2d-vehicle-physics-implementation.md` addendum §3), which contradicts Box2D's own guidance
+to recreate the world per test because object pools make body ordering depend on allocation history.
+
+Suggested approach, in order of expected value:
+1. Bisect with `--order rand` across several seeds to identify which predecessor test contaminates
+   `[vision]`. The isolation repro used for §2 (`vision_see_into_vehicle`, `vision_no_lights`) is a
+   good minimal target to append predecessors to.
+2. Audit `clear_states()` in `tests/state_helpers.cpp` for caches it does *not* reset.
+3. Consider rebuilding `PhysicsWorld` per `TEST_CASE` rather than per binary, which would eliminate
+   this entire bug class rather than patching leaks one at a time.
 
 ## Tooling gotcha: stale test binary trap (still applies)
 
