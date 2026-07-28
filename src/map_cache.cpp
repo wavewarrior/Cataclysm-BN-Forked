@@ -773,17 +773,18 @@ void map::build_map_cache( const int zlev, bool skip_lightmap )
             std::mutex dirty_mutex;
             parallel_for( minz, maxz + 1, [&]( int z ) {
                 level_cache& ch = get_cache( z );
-                // vehicle_floor_cache is written by vehicles one level below (via
-                // vehicle_caching_internal_above), so it must be cleared unconditionally —
-                // not gated on veh_in_active_range — to prevent stale entries after shifts.
+                // vehicle_floor_cache, vehicle_obscured_cache, and vehicle_obstructed_cache all
+                // retain stale entries once a vehicle leaves the level (vehicle_floor_cache is
+                // written by vehicles one level below via vehicle_caching_internal_above; the
+                // other two keep whatever diagonal-block flags the last active vehicle wrote).
+                // All three must be cleared unconditionally — not gated on veh_in_active_range —
+                // to prevent stale entries from surviving after the vehicle is gone.
                 std::fill( ch.vehicle_floor_cache.begin(), ch.vehicle_floor_cache.end(), '\0' );
-                if( ch.veh_in_active_range ) {
-                    const diagonal_blocks fill = {false, false};
-                    std::fill( ch.vehicle_obscured_cache.begin(), ch.vehicle_obscured_cache.end(),
-                               fill );
-                    std::fill( ch.vehicle_obstructed_cache.begin(),
-                               ch.vehicle_obstructed_cache.end(), fill );
-                }
+                const diagonal_blocks fill = {false, false};
+                std::fill( ch.vehicle_obscured_cache.begin(), ch.vehicle_obscured_cache.end(),
+                           fill );
+                std::fill( ch.vehicle_obstructed_cache.begin(),
+                           ch.vehicle_obstructed_cache.end(), fill );
 
                 const bool level_seen_dirty = ch.seen_cache_dirty;
                 if( level_seen_dirty ) {
@@ -795,17 +796,18 @@ void map::build_map_cache( const int zlev, bool skip_lightmap )
         } else {
             for( int z = minz; z <= maxz; ++z ) {
                 level_cache& ch = get_cache( z );
-                // vehicle_floor_cache is written by vehicles one level below (via
-                // vehicle_caching_internal_above), so it must be cleared unconditionally —
-                // not gated on veh_in_active_range — to prevent stale entries after shifts.
+                // vehicle_floor_cache, vehicle_obscured_cache, and vehicle_obstructed_cache all
+                // retain stale entries once a vehicle leaves the level (vehicle_floor_cache is
+                // written by vehicles one level below via vehicle_caching_internal_above; the
+                // other two keep whatever diagonal-block flags the last active vehicle wrote).
+                // All three must be cleared unconditionally — not gated on veh_in_active_range —
+                // to prevent stale entries from surviving after the vehicle is gone.
                 std::fill( ch.vehicle_floor_cache.begin(), ch.vehicle_floor_cache.end(), '\0' );
-                if( ch.veh_in_active_range ) {
-                    const diagonal_blocks fill = {false, false};
-                    std::fill( ch.vehicle_obscured_cache.begin(), ch.vehicle_obscured_cache.end(),
-                               fill );
-                    std::fill( ch.vehicle_obstructed_cache.begin(),
-                               ch.vehicle_obstructed_cache.end(), fill );
-                }
+                const diagonal_blocks fill = {false, false};
+                std::fill( ch.vehicle_obscured_cache.begin(), ch.vehicle_obscured_cache.end(),
+                           fill );
+                std::fill( ch.vehicle_obstructed_cache.begin(),
+                           ch.vehicle_obstructed_cache.end(), fill );
 
                 const bool level_seen_dirty = ch.seen_cache_dirty;
                 if( level_seen_dirty ) {
