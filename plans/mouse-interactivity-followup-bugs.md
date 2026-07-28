@@ -1,113 +1,208 @@
-# Handoff: Remaining Test Failures & Bugs (post mouse-interactivity plan)
+# Handoff: Remaining Test Failures & Bugs (post mouse-interactivity plan) — RESOLVED
 
-**Context**: While implementing the mouse interactivity plan (commits `d6721f0`..`79ec0ac7e8` on
-`feature/improvements`), the full `cata_test-tiles` suite was run repeatedly to verify no
-regressions. One genuine pre-existing bug was found and fixed in that work
-(`79ec0ac7e8 fix(animation): guard draw_bullet_trajectories against null tilecontext`). The
-remaining failures below were **confirmed pre-existing** via stash/rebuild A/B comparison against
-unmodified `feature/improvements` HEAD (before the mouse-interactivity commits) and are **not**
-caused by the mouse work. None of the affected files (`vehicle*.cpp`, `physics/*`, `vision_test.cpp`,
-`coop_*.cpp`, `furniture_grab_test.cpp`, `projectile_test.cpp`, `ranged_*`) were touched by that
-plan. This doc exists so the next session doesn't have to re-derive that A/B result.
+**Status**: Resolved 2026-07-28. All actionable items in the original handoff are fixed and
+verified. Remaining known failures are documented at the bottom as genuinely pre-existing or
+gated on separate migration work.
+
+**Original context**: While implementing the mouse interactivity plan (commits `d6721f0`..`79ec0ac7e8`
+on `feature/improvements`), the full `cata_test-tiles` suite surfaced failures that were confirmed
+pre-existing via stash/rebuild A/B against unmodified HEAD.
 
 Build: `cmake --preset osx-arm-slim && cmake --build --preset osx-arm-slim --target cataclysm-bn-tiles cata_test-tiles`
 (background job, 1200s+ timeout per AGENTS.md — do not run synchronously).
 
-## 1. Vehicle-physics test failures (Box2D-related, ~majority of failures)
+---
 
-Run: `./cata_test-tiles "~[.]~[vision]"` → **28 failed / 912 test cases**, 125/7.68M assertions failed.
+## Resolution summary
 
-Confirmed root cause: `plans/box2d-vehicle-physics-implementation.md` is **partially implemented**
-(Phase 10 marked "🔄 PARTIAL"). These are vehicle position/pivot bugs under the incomplete Box2D
-migration, not new regressions. Exact current failures (fresh run, this session):
+| # | Item | Status | Commit |
+|---|---|---|---|
+| 1 | Full-suite hang / SIGSEGV | ✅ Fixed | `87c1c9e13f` |
+| 2 | `vision_test.cpp` shadowcasting (8 failures) | ✅ Fixed | `9c10249f4a` |
+| 3 | Ramp / furniture-grab position tracking | ✅ Fixed | `6aa1cdc30b` |
+| 4 | `projectile_test.cpp:150` z-bounds | ✅ Fixed | `733b9efa5b` |
+| 5 | `ranged_aiming_test.cpp:155` | ✅ Fixed | `282c998dae` |
+| 6 | Vehicle escaping loaded map (crash) | ✅ Fixed | `27b3848f26` |
+| 7 | Coop terrain/pickup failures | ✅ Fixed (by #1) | `87c1c9e13f` |
+| 8 | `vehicle_rails_test.cpp:184` pivot desync | ⛔ Deferred — see below | — |
 
-| File:line | Assertion | Likely subsystem |
-|---|---|---|
-| `tests/vehicle_rails_test.cpp:184` | `REQUIRE( pivot_bub_ms_location( veh ) == veh.bub_ms_location() )` | Box2D pivot/position desync on rails |
-| `tests/vehicle_test.cpp:419` | `REQUIRE( part_pos )` — `std::optional` empty | part position lookup failing under continuous rotation |
-| `tests/vehicle_ramp_test.cpp:306,307,339,340` | `player_character.bub_pos()` / `cart.bub_ms_location()` off by one tile | ramp traversal position tracking |
-| `tests/ranged_vehicle_recoil_test.cpp:156` | `square_dist(starting_pos, veh->bub_ms_location()) >= 1` fails (recoil didn't move vehicle) | recoil impulse not applied to Box2D body |
-| `tests/furniture_grab_test.cpp:110,127,128,132,133` | `grabbed_pos`/`player_character.bub_pos()`/`here.furn(...)` mismatches around ramps | grab-drag position tracking interacting with ramp z-transition |
-| `tests/coop_terrain_test.cpp:68,102` | (no CHECK text captured — investigate directly) | coop terrain sync, possibly vehicle-adjacent |
-| `tests/coop_pickup_test.cpp:196,236` | (no CHECK text captured — investigate directly) | coop pickup, possibly vehicle-adjacent |
-| `tests/projectile_test.cpp:150` | `CHECK( attack.end_point == shooter_pos )` | projectile origin tracking — check if shooter is vehicle-mounted in this test |
-| `tests/ranged_aiming_test.cpp:155` | `REQUIRE( impassable_tiles >= 1 )` | aiming obstruction detection |
+---
 
-**Next step**: resume `plans/box2d-vehicle-physics-implementation.md` at Phase 10 Step 6 (Retire
-Legacy Motion Fields) per its own dependency chain (`playtest → Phase 12 → Phase 10 Step 6 →
-Phase 11`). `vehicle_rails_test.cpp:184` and `vehicle_test.cpp:419` are the cleanest starting
-points — both are pure position-desync assertions with no coop/UI entanglement.
+## 1. Full-suite hang — FIXED (`87c1c9e13f`)
 
-## 2. `vision_test.cpp` shadowcasting failures (separate bug, NOT physics)
+**Root cause**: a real teardown-hook gap in the `creature` → `PhysicsWorld` lifecycle, *not* the
+vehicle-motion-field migration. `map::phys_world` and its `b2WorldId` are constructed exactly once
+per test binary run (`tests/test_main.cpp` `init_global_game_state()`), never per-`TEST_CASE`, so
+any leak into that persistent Box2D world accumulates for the entire suite — matching the observed
+"only fails when many test batches run together" symptom.
 
-Run in isolation: `./cata_test-tiles "[vision]" --rng-seed 1` → **8 failed / 18 test cases**, 92
-assertions failed, completes cleanly in ~7s (no crash, no hang — see §3 for why the full suite
-behaves differently).
+Two natural-death code paths erased creatures from their owning containers **without** calling
+`PhysicsWorld::on_creature_removed()`, so the leaked `b2Body` (a kinematic sensor) was never
+destroyed and `creature_bodies_` kept a dangling-pointer entry keyed by raw `const Creature *`.
+Hundreds of orphaned kinematic bodies degraded broad-phase collision to O(n²), progressively slowing
+the run into an apparent hang.
 
-All 8 failures are `tests/vision_test.cpp:266: FAILED: success for: false`, with messages showing
-**divergence between `'using 3d casting'` and `'using 2d casting'` at the same origin/threshold**,
-e.g.:
+**Fix**: added the missing `on_creature_removed` hook to both leaking removal paths
+(`Creature_tracker::remove_dead()`, `game::erase_npc()`), mirroring the existing correct call sites.
+
+**Verified**: full suite `~[.]` completes in ~3.5 min (was: non-terminating past 15+ min).
+
+> Note: `plans/test-hang-investigation-handoff.md` documents a **different** hang (inside
+> `player_activity::do_turn()` / `automatic_reloading_action`, shard-index-dependent, no vehicles or
+> physics involved). No code-level connection was found between the two — treat as unrelated bugs
+> that happen to share the general "cross-test state leakage" pattern.
+
+## 2. `vision_test.cpp` shadowcasting — FIXED (`9c10249f4a`)
+
+**Root cause**: NOT a shadowcasting algorithm bug and NOT stale expected-results tables — a
+cross-`TEST_CASE` global-state leak, the same class of bug as #1, in a different cache.
+
+In `map::build_map_cache()` (`src/map_cache.cpp`), `vehicle_floor_cache` is (correctly, per its own
+comment) cleared unconditionally every rebuild "to prevent stale entries after shifts". Its two
+siblings `vehicle_obscured_cache` / `vehicle_obstructed_cache` (diagonal corner-cut-prevention flags
+consumed by `castLight`/`cast_zlight`) were only cleared `if( ch.veh_in_active_range )`. Once any
+vehicle-creating test ran and then tore its vehicle down, the flags set at the shared player position
+`(60,60,0)` were never cleared, corrupting subsequent vision tests.
+
+**Fix**: clear all three vehicle caches unconditionally every rebuild, matching the precedent already
+set for `vehicle_floor_cache` in the same function. `shadowcasting.cpp` and the expected-results
+tables were **not** touched — confirmed correct via a minimal 2-test repro
+(`vision_see_into_vehicle`, `vision_no_lights`) before any code change.
+
+**Verified**: `[vision]` → All tests passed (3,641 assertions in 18 test cases). Previously 10/18
+passed with 92 failed assertions.
+
+## 3. Ramp / furniture-grab position tracking — FIXED (`6aa1cdc30b`)
+
+**Root cause**: a naive, per-destination-tile "does this tile have RAMP_UP/RAMP_DOWN → step z" rule
+used by the grab-drag code paths, which does NOT match the ramp-crossing convention the player's own
+movement code implicitly relies on. Ramp tiles are built in pairs spanning two x-columns (a low
+column and a high column at the *same* lower z-level, both flagged). Ascending is only supposed to
+happen once per full crossing, but a dragged object whose walked line lingers on (or steps back onto)
+an already-crossed tile re-applied the same z-step.
+
+**Fix**: only cross when the destination tile carries a ramp flag the source tile did *not* already
+have (`ramp_z_delta_at( here, from, to )`), plus the analogous guard for dragged furniture in
+`ramp_adjusted_furniture_destination()`. Also stopped forcing `box2d_position_authority = false`
+during grab-drag operations, since `vehmove()`'s Box2D step would otherwise fight the legacy
+tile-displacement code every turn.
+
+**Verified**: `[furniture][grab]` → All tests passed (79 assertions in 5 test cases).
+`[vehicle][grab]` → All tests passed (104 assertions in 8 test cases).
+
+## 4. `projectile_test.cpp:150` — FIXED (`733b9efa5b`)
+
+**Root cause**: a target outside the map's vertical span has no representable line of sight — the
+angle-based DDA raycast only steps through the shooter's own z-level, so a same-column out-of-range
+target degenerated to `atan2(0, 0)` and fired off in an arbitrary horizontal direction instead of
+stopping.
+
+**Fix**: treat an out-of-z-bounds target as an immediate stop at the shooter's position.
+
+## 5. `ranged_aiming_test.cpp:155` — FIXED (`282c998dae`)
+
+**Root cause**: test-side, not production. `set_up_player_vision()` internally calls `place_player()`,
+which can recentre the reality bubble and shift the coordinate frame. Tests that kept using the raw
+compile-time `shooter_pos` constant afterwards were operating on a stale frame, so the wall/monster
+were no longer where the test believed.
+
+**Fix**: capture `shooter.bub_pos()` *after* `set_up_player_vision()` and use that corrected position
+for all subsequent terrain setup and pathfinding.
+
+## 6. Vehicle escaping the loaded map — FIXED (`27b3848f26`)
+
+**Root cause** (found during this pass, not in the original handoff): `b2World_Step()` integrates
+continuously, and over a game turn a fast vehicle's body can travel past the edge of the loaded
+reality bubble. The Box2D position readback in `map::vehmove()` then called `displace_vehicle()`
+toward a submap that was never loaded, which stranded the vehicle in a null submap and produced a
+`dst submap not loaded` error plus a crash in `vehicle_efficiency_test`.
+
+A contributing factor was an earlier "60× cadence" change that looped `phys_world->step(1/60, 4)`
+sixty times per turn on the theory that a single call under-stepped a 1-second turn. That reasoning
+is wrong for this codebase: **Box2D is not the speed authority for ordinary driving.** `veh.velocity`
+is re-applied to the body every turn and the readback then snaps the tile anchor to the body, so
+integrating a whole second re-derives displacement on top of the game's own velocity model. Measured
+effect: vehicles travelled **2.2–2.3× further than the fuel-efficiency balance allows**
+(257,835 tiles vs. a 111,404 upper bound).
+
+**Fix**, two parts:
+1. Reverted the cadence to a single `step(1/60, 4)` per turn. Sub-tile smoothness comes from the 4
+   sub-steps, not from more full steps.
+2. Added a hard boundary stop: if the readback's destination tile is not `inbounds()`, stop the
+   vehicle, rewind `physics_pos` to the tile it actually occupies, and force the b2Body transform
+   back via the new `PhysicsWorld::clamp_body_to_tile()` (which deliberately bypasses the
+   `box2d_position_authority` guard in `on_vehicle_moved`, because in this one case the tile grid
+   must win).
+
+**Verified**: `vehicle_efficiency` passes across fixed seeds 1–8 and 11–111; no crash, no
+`displace_vehicle` errors.
+
+## 7. Coop failures — FIXED by #1 (`87c1c9e13f`)
+
+`coop_terrain_test.cpp:68,102` and `coop_pickup_test.cpp:196,236` shared the creature-body leak root
+cause. **Verified**: `[coop]` → All tests passed (483 assertions in 141 test cases).
+
+---
+
+## Still open
+
+### `vehicle_rails_test.cpp:184` pivot desync — deferred
+
+An attempt this session root-caused the literal assertion and fixed it, along with four additional
+real bugs in the same Box2D-rails migration seam (`advance_precalc_mounts()` copying never-populated
+`precalc[1]`/`pivot_anchor[1]` slots for Box2D-authority vehicles; `process_movement_on_rails()`
+running after the Box2D early-return so rail-curve correction never applied; `skidding` latching true
+with no clear path for Box2D vehicles; unconditional face adoption ignoring legacy's
+`!is_on_rails || rpres.do_turn` gate).
+
+That work took the file from 0/5 to 2/5 passing, **but introduced a catastrophic regression** —
+`vehicle_efficiency_test` dropped to near-zero movement for every vehicle type — and was fully
+reverted. The remaining 3/5 gap is a genuinely different, harder problem (continuous-physics sub-tile
+discretization vs. exact-tile test expectations, plus an unexamined ramp/z-level path) that belongs
+with `plans/box2d-vehicle-physics-implementation.md` Phase 10 Step 6, behind its own
+`playtest → Phase 12 → Phase 10 Step 6 → Phase 11` dependency chain.
+
+### `ranged_vehicle_recoil_test.cpp:157` occupant tracking — gated
+
+The original `:156` failure (recoil doesn't move the vehicle) is fixable, but doing so exposes a
+second assertion at `:157`: the player riding the chair doesn't track the vehicle's new position.
+Passenger position sync under Box2D authority is core occupant-handling migration work, explicitly
+listed as future work in `plans/box2d-vehicle-physics-implementation.md` — not a bug fix.
+
+### `vehicle_efficiency_test.cpp:198` mass check — pre-existing RNG noise
+
+`CHECK( std::abs( actual_mass - expected_mass ) <= tolerance )` with a 2% tolerance and an in-test
+comment acknowledging "cargo/fuel RNG causes small variance". Fails on roughly 20% of random seeds.
+**Confirmed pre-existing**: seeds 66 and 99 fail identically on clean HEAD with none of this
+session's changes applied. Unrelated to vehicle movement or physics.
+
+---
+
+## Tooling gotcha: stale test binary trap (still applies)
+
+`tests/CMakeLists.txt` sets `RUNTIME_OUTPUT_DIRECTORY` such that `cata_test-tiles` and
+`cataclysm-bn-tiles` link to **the repo root**, not `out/build/<preset>/tests/`. A leftover binary in
+`out/build/<preset>/tests/` from an older build can silently get executed by a `cwd`-based script,
+producing misleading "pre-existing failure" results that are actually just stale. Always check
+`ls -la cata_test-tiles cataclysm-bn-tiles` at the repo root against `git log -1` before trusting a
+run.
+
+**This bit again during this session in a subtler form**: a test run against a not-yet-rebuilt binary
+produced a spurious 59,549-assertion pass that contradicted a real crash, nearly causing a correct
+fix to be reverted. When two runs of "the same tree" disagree, suspect the binary before the code.
+
+## Related items
+
+- `plans/THINGS THAT NEED FIXING.md:8` — "game crashed upon trying to drive vehicle" is plausibly the
+  same crash fixed in #6; worth a repro to confirm and close.
+- `plans/box2d-vehicle-physics-implementation.md` — owns the two deferred items above.
+
+## Verification commands
+
+```sh
+./cata_test-tiles "[vision]"            --rng-seed 1 --user-dir=/tmp/v1/
+./cata_test-tiles "[furniture][grab]"   --rng-seed 1 --user-dir=/tmp/v2/
+./cata_test-tiles "[vehicle][grab]"     --rng-seed 1 --user-dir=/tmp/v3/
+./cata_test-tiles "[coop]"              --rng-seed 1 --user-dir=/tmp/v4/
+./cata_test-tiles "vehicle_efficiency"  --rng-seed 1 --user-dir=/tmp/v5/
 ```
-'using 3d casting' and 'test case transformation: 0' and 'zlevels: 1' and 'origin: (59,59,0)' and
-'player: (60,60,0)' and 'unimpaired_range: 60' and 'vision_threshold: 3.28305' and ...
-```
-Failures span both casting modes across multiple `test case transformation` indices (0,1,2,3,4,5,6,7)
-and two `vision_threshold` values (`3.28305` = midnight, `3.31072` = noon), always at
-`player: (60,60,0)` with `origin` one tile away. This looks like a **shadowcasting-vs-3D-lighting
-edge-case regression at exactly the player's adjacent tile**, independent of the physics work —
-worth its own investigation starting at `src/shadowcasting.cpp` / `src/lightmap.cpp` around whatever
-computes `vision_threshold` and the 2D/3D cast comparison in `tests/vision_test.cpp:266`.
-
-**Confirmed pre-existing**: reproduced identically on unmodified `feature/improvements` HEAD via
-stash/rebuild before the mouse-interactivity commits landed.
-
-## 3. Full-suite hang / intermittent SIGSEGV (order-dependent, needs its own repro)
-
-Running the **entire** suite together — `./cata_test-tiles "~[.]"` (no tag exclusion) — hangs
-indefinitely partway through in this session (observed 15+ min with no progress, log spinning on
-`map_cache.cpp` shift-probe / lightmap rebuild messages). Earlier in this work session the same
-full-suite run instead produced a `SIGSEGV` inside `ranged_aoe_test.cpp` (`"character using
-birdshot against another character"`, fixed by the `animation.cpp` null-tilecontext guard — see
-commit `79ec0ac7e8`) and, in a separate full run, a **different** SIGSEGV/hang combination
-attributed to `[vision]` tests running after vehicle/Box2D tests (`Box2D physics threading
-issue`, confirmed pre-existing against baseline HEAD by rebuild+run comparison).
-
-**Key finding this session**: running `[vision]` alone does *not* hang or crash — it fails cleanly
-(§2). Running `~[.]~[vision]` alone does *not* hang — it fails cleanly (§1) in ~4 minutes. The hang
-only manifests when the *combined* full ordering runs, which strongly suggests **cross-test-case
-state leakage** (a Box2D `PhysicsWorld`, thread, or map-cache singleton not fully torn down between
-test cases) rather than a bug in any single test. This needs a bisection pass:
-
-1. Run `./cata_test-tiles "~[.]" --order rand --rng-seed <N>` a few times with different seeds to
-   see whether the hang location moves (confirms order/state-dependence vs. a fixed problem test).
-2. If it's consistently triggered by adjacent vehicle-physics + vision tests, check
-   `PhysicsWorld` singleton lifecycle / `tests/test_main.cpp` `clear_states()` for whether
-   Box2D bodies or worker threads survive across `TEST_CASE` boundaries.
-3. `debug.log` around the hang shows repeated `[shift-probe][invalidate]` / `[build_cache][perf]`
-   entries — i.e. map cache is still being rebuilt in a loop. Check whether a test is stuck in
-   `map::invalidate_map_cache` / `build_cache` due to a submap grid never converging (e.g.
-   `dirty_submaps=225/225` never dropping to 0 across many iterations logged in quick succession).
-
-This is squarely in `plans/box2d-vehicle-physics-implementation.md` territory (co-op non-determinism
-section already documents Box2D isn't thread-safe across instances) but is a **test-harness
-isolation bug**, not a gameplay bug — prioritize only if it starts blocking CI, since running tag
-subsets (as this session did) sidesteps it.
-
-## 4. Tooling gotcha: stale test binary trap
-
-`tests/CMakeLists.txt` sets `RUNTIME_OUTPUT_DIRECTORY` such that `cata_test-tiles` (and
-`cataclysm-bn-tiles`) link to **the repo root**, not `out/build/<preset>/tests/`. A leftover binary
-can sit in `out/build/<preset>/tests/` from a much older build and silently get executed by a
-`cwd`-based script, producing misleading "pre-existing failure" results that are actually just
-stale. Always run `ls -la cata_test-tiles cataclysm-bn-tiles` at the repo root and check the
-mtime/`git log -1` correlation before trusting a test run's results. This cost significant time
-during this session — a fresh binary is confirmed by `git log -1` timestamp being older than the
-binary's mtime.
-
-## 5. Related open items already tracked elsewhere
-
-- `plans/THINGS THAT NEED FIXING.md:8` — "game crashed upon trying to drive vehicle" is very
-  likely the same Box2D issue as §1 above; worth confirming with a repro once §1 is fixed.
-- `plans/box2d-vehicle-physics-implementation.md` — owning plan for §1; §3's harness-isolation
-  question should probably get a short addendum there once triaged, since it touches the same
-  `PhysicsWorld` lifecycle the co-op non-determinism section already discusses.

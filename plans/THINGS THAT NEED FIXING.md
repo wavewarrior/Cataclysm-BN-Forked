@@ -5,7 +5,7 @@ THINGS THAT NEED FIXING
 - weird lighting flash (like whole lightmap is offset) for one frame when crossing submap boundary
 - cant light fires using lighters or other items that should allow this. upon activation it states lost item trying to light fire wiht
 
-- game crashed upon trying to drive vehicle (likely Box2D vehicle-physics position desync — see plans/mouse-interactivity-followup-bugs.md §1 for confirmed failing tests and next steps)
+- ~~game crashed upon trying to drive vehicle~~ — LIKELY FIXED 2026-07-28 (`27b3848f26`): Box2D bodies could integrate past the loaded map edge, so the position readback called `displace_vehicle()` into an unloaded submap and crashed. Readback now stops the vehicle at the boundary. Needs an in-game repro to confirm this was the same crash.
 - box2D hitboxes debug overlay not working. 
 - sound placement through debug UI not working. something severly wrong with debug UI focus. click handling sometimes stops working need to close and reopen to regain focus.
 - HUD UI log does not scroll properly, panel should not extend to bottom off screen makes unclear what last message was. rolling text behaviour incorrect. panel should end with clear separation divider element so we know when panel ends and next begins.

@@ -142,6 +142,56 @@ Replace tile-traversal LOS and hit resolution with `b2World_CastRayClosest()` in
 
 ---
 
+## Addendum — findings from the 2026-07-28 followup-bug session
+
+Three constraints discovered while fixing `plans/mouse-interactivity-followup-bugs.md`. All three
+affect Phase 10 Step 6 and Phase 12; read before resuming either.
+
+### 1. Box2D is NOT the speed authority for ordinary driving
+
+`map::vehmove()` must step the world exactly **once** per turn (`step(1/60, 4)`), not sixty times.
+A "60× cadence" change was attempted on the reasoning that one call under-steps a 1-second game turn.
+That reasoning does not hold here: `veh.velocity` is re-applied to the body every turn and the
+readback then snaps the tile anchor to the body, so integrating a full second re-derives displacement
+on top of the game's own velocity model. Measured effect was vehicles travelling **2.2–2.3× further
+than fuel-efficiency balance permits** (257,835 tiles against a 111,404 upper bound in
+`vehicle_efficiency_test`). Sub-tile smoothness comes from the 4 sub-steps, not more full steps.
+
+If Phase 10 Step 6 ever makes Box2D the true velocity authority, this inverts — but until then, one
+step per turn is correct and `vehicle_efficiency_test` is the guard rail that catches violations.
+
+### 2. Continuous integration can carry a body outside the loaded map
+
+`b2World_Step()` has no notion of the reality bubble. A fast vehicle's body can integrate past the
+loaded map edge within a single turn; the readback then calls `displace_vehicle()` toward a submap
+that was never loaded, stranding the vehicle in a null submap (`dst submap not loaded` + crash).
+
+The readback now checks `inbounds()` before displacing and, on failure, stops the vehicle, rewinds
+`physics_pos` to the occupied tile, and force-writes the body transform via
+`PhysicsWorld::clamp_body_to_tile()`. That method deliberately bypasses the
+`box2d_position_authority` guard in `on_vehicle_moved()` — it is the one case where the tile grid
+must win over the body. Any future code that moves bodies independently of the tile grid needs the
+same boundary guard.
+
+### 3. `PhysicsWorld` is a per-binary singleton, not per-`TEST_CASE`
+
+`map::phys_world` and its `b2WorldId` are constructed once in `tests/test_main.cpp`
+`init_global_game_state()` and never rebuilt between test cases. Anything leaked into that world
+accumulates for the entire suite.
+
+This caused the long-standing full-suite hang: two creature-removal paths
+(`Creature_tracker::remove_dead()`, `game::erase_npc()`) erased creatures without calling
+`PhysicsWorld::on_creature_removed()`, so orphaned kinematic sensor bodies piled up and degraded
+broad-phase collision to O(n²). `creature_bodies_` also retained dangling `const Creature *` keys.
+
+Note this contradicts Box2D's own guidance, which recommends recreating the world per test because
+object pools and free lists make body ordering depend on allocation history. Until the harness does
+that, **every** new body/creature registration path must have a matching teardown hook, and any new
+cross-test flakiness should be checked against this singleton first.
+
+---
+
+
 
 ## Codebase Audit — Implementation Status (verified 2026-07-11)
 
