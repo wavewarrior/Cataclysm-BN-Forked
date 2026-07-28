@@ -15,16 +15,21 @@ Build: `cmake --preset osx-arm-slim && cmake --build --preset osx-arm-slim --tar
 
 ## Resolution summary
 
+All "Fixed" rows below were verified with `-DBOX2D=ON`, in isolation, at `--rng-seed 1`. Where a fix
+holds in isolation but not under full-suite ordering, that is stated explicitly rather than counted
+as a pass.
+
 | # | Item | Status | Commit |
 |---|---|---|---|
-| 1 | Full-suite hang / SIGSEGV | ✅ Fixed | `87c1c9e13f` |
-| 2 | `vision_test.cpp` shadowcasting (8 failures) | ✅ Fixed | `9c10249f4a` |
-| 3 | Ramp / furniture-grab position tracking | ✅ Fixed | `6aa1cdc30b` |
+| 1 | Full-suite hang / SIGSEGV | ✅ Fixed — suite terminates (5m33s, was ∞) | `87c1c9e13f` |
+| 2 | `vision_test.cpp` shadowcasting | ⚠️ Fixed in isolation (18/18); still 25 failures under full-suite ordering | `9c10249f4a` |
+| 3 | Grab-drag ramp position tracking | ✅ Fixed for `[furniture][grab]` 5/5 and `[vehicle][grab]` 8/8 — does **not** cover plain `[vehicle][ramp]` | `6aa1cdc30b` |
 | 4 | `projectile_test.cpp:150` z-bounds | ✅ Fixed | `733b9efa5b` |
 | 5 | `ranged_aiming_test.cpp:155` | ✅ Fixed | `282c998dae` |
-| 6 | Vehicle escaping loaded map (crash) | ✅ Fixed | `27b3848f26` |
-| 7 | Coop terrain/pickup failures | ✅ Fixed (by #1) | `87c1c9e13f` |
-| 8 | `vehicle_rails_test.cpp:184` pivot desync | ⛔ Deferred — see below | — |
+| 6 | Vehicle escaping loaded map (crash) | ✅ Fixed — no crash across seeds 1–8, 11–111 | `27b3848f26` |
+| 7 | Coop terrain/pickup failures | ✅ Fixed in isolation (141/141) by #1; 3 failures remain under full-suite ordering | `87c1c9e13f` |
+| 8 | `vehicle_rails_test.cpp:184` pivot desync | ⛔ Deferred — attempted fix caused a movement regression | — |
+| 9 | Boarded-player tracking (`[vehicle][ramp]` 4/8) | 🔍 Pre-existing, **not** addressed — best next target | — |
 
 ---
 
@@ -79,7 +84,7 @@ leaves state that corrupts vision when hundreds of cases run first. Same pattern
 `vehicle_ramp_test.cpp:174` (6 × in full suite, clean in isolation). Both need the same treatment:
 find the leaking cache/singleton, clear it unconditionally. See "Residual cross-test leakage" below.
 
-## 3. Ramp / furniture-grab position tracking — FIXED (`6aa1cdc30b`)
+## 3. Grab-drag ramp position tracking — FIXED (`6aa1cdc30b`)
 
 **Root cause**: a naive, per-destination-tile "does this tile have RAMP_UP/RAMP_DOWN → step z" rule
 used by the grab-drag code paths, which does NOT match the ramp-crossing convention the player's own
@@ -96,6 +101,23 @@ tile-displacement code every turn.
 
 **Verified**: `[furniture][grab]` → All tests passed (79 assertions in 5 test cases).
 `[vehicle][grab]` → All tests passed (104 assertions in 8 test cases).
+
+**Scope limit — plain `[vehicle][ramp]` is NOT fixed by this.** That tag runs 8 cases and **4 fail**
+(`vehicle_ramp_test.cpp:218` — `player_character.bub_pos() == ppos`; `:239` —
+`get_passenger( part_index ) != nullptr`). Both are about a *boarded player* tracking the vehicle
+through a ramp z-transition, which is a different mechanism from the grab-drag double-apply fixed
+here.
+
+**Confirmed pre-existing, not a regression from this commit.** Verified against a worktree at the
+parent commit (`9c10249f4a`) built with `-DBOX2D=ON`: also 4/8 fail, identical assertions. See
+"Boarded-player position tracking" under Still open.
+
+> Methodology warning that cost real time here: a first worktree comparison was built with
+> `cmake --preset osx-arm-slim` and **no `-DBOX2D=ON`**. AGENTS.md states no preset sets that flag,
+> so the worktree silently built with Box2D **disabled**, passed 8/8 on the legacy tile-step path,
+> and produced a false "you shipped a regression" conclusion — which led to two source files being
+> reverted before the mistake was caught. Any A/B against this codebase MUST verify
+> `BOX2D:BOOL=ON` in the comparison build's `CMakeCache.txt` before the result means anything.
 
 ## 4. `projectile_test.cpp:150` — FIXED (`733b9efa5b`)
 
@@ -169,12 +191,47 @@ discretization vs. exact-tile test expectations, plus an unexamined ramp/z-level
 with `plans/box2d-vehicle-physics-implementation.md` Phase 10 Step 6, behind its own
 `playtest → Phase 12 → Phase 10 Step 6 → Phase 11` dependency chain.
 
-### `ranged_vehicle_recoil_test.cpp:157` occupant tracking — gated
+### Boarded-player position tracking under Box2D authority — highest-value next target
 
-The original `:156` failure (recoil doesn't move the vehicle) is fixable, but doing so exposes a
-second assertion at `:157`: the player riding the chair doesn't track the vehicle's new position.
-Passenger position sync under Box2D authority is core occupant-handling migration work, explicitly
-listed as future work in `plans/box2d-vehicle-physics-implementation.md` — not a bug fix.
+A boarded player does not reliably track the vehicle they are riding. Confirmed pre-existing
+(baseline at `9c10249f4a` with `-DBOX2D=ON` fails identically). This is one mechanism surfacing in
+three places:
+
+| Assertion | What it checks |
+|---|---|
+| `vehicle_ramp_test.cpp:218` | `player_character.bub_pos() == ppos` — player vs. the structure part they stand on, mid-ramp |
+| `vehicle_ramp_test.cpp:239` | `get_passenger( part_index ) != nullptr` — passenger lookup after a ramp z-transition |
+| `ranged_vehicle_recoil_test.cpp:157` | `player_character.bub_pos() == veh->bub_ms_location()` — player vs. recoil-moved vehicle |
+
+`:239`'s in-test comment already documents the shape of it: `precalc[0].z` is always zeroed by
+`precalc_mounts()` while `bub_ms_location().z` is non-zero post-transition, so `get_parts_at()` finds
+no BOARDABLE part. That is a coordinate-frame mismatch between the part's mount-space z and the
+vehicle's tile-space z — not a physics-integration bug.
+
+**Why this is the best next target**, rather than the cross-test leakage below:
+- It is a real gameplay defect (a rider desyncing from their vehicle), not test infrastructure.
+- It has a clean deterministic repro that needs no ordering games: `[vehicle][ramp] --rng-seed 1`,
+  4/8 fail every run.
+- One fix plausibly closes assertions across two test files.
+
+**Approach**: start at `vehicle::adjust_zlevel()` / `precalc_mounts()` and establish whether
+`z_terrain[]` and `precalc[].z` agree on a frame. Do NOT reach for the grab-drag `from`/`to` guard —
+that was tried and is wrong here: `adjust_zlevel()` recomputes each part's z from scratch per call,
+and ramp tiles come in flagged pairs, so a from/to guard suppresses the step entirely.
+
+### `ranged_vehicle_recoil_test.cpp:156` recoil impulse — partially understood
+
+The `:156` failure (recoil doesn't move the vehicle) was root-caused and fixed once during the rails
+work, but that fix was reverted with the rest of that attempt. Notably, fixing `:156` immediately
+exposes `:157`, which is the boarded-player tracking gap above — so the two are worth doing together
+rather than separately.
+
+Original framing to preserve: passenger position sync under Box2D authority is listed as future
+occupant-handling work in `plans/box2d-vehicle-physics-implementation.md`. That framing came from
+reading the recoil test alone and treating it as "mechanics that don't exist yet". The ramp failures
+argue it is narrower than that — `:239` points at a concrete coordinate-frame mismatch
+(`precalc[0].z` zeroed vs. `bub_ms_location().z` non-zero), which is a wiring bug rather than
+missing machinery. Worth re-examining under that lens before deferring it to migration work again.
 
 ### `vehicle_efficiency_test.cpp:198` mass check — pre-existing RNG noise
 
