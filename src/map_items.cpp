@@ -815,7 +815,7 @@ void map::process_items_in_vehicle( vehicle& cur_veh, submap& current_submap )
     for( item * active_item_ref : cur_veh.active_items.get_for_processing() ) {
         if( cargo_parts.empty() ) { return; }
         const auto it = std::ranges::find_if( cargo_parts, [&]( const vpart_reference & part ) {
-            return active_item_ref->position() == cur_veh.mount_to_bubble( part.mount() );
+            return active_item_ref->position() == cur_veh.bub_part_location( part.part() );
         } );
 
         if( it == cargo_parts.end() ) {

@@ -2211,7 +2211,7 @@ void vehicle::slow_leak()
 
         auto fuel = p.ammo_current();
         int qty = std::max( ( 0.5 - health ) * ( 0.5 - health ) * p.ammo_remaining() / 10, 1.0 );
-        const auto dest = mount_to_bubble( p.mount );
+        const auto dest = bub_part_location( p );
 
         if( fuel != fuel_type_battery && !g->m.inbounds( dest ) ) {
             // Don't try to leak off the edge of the world
