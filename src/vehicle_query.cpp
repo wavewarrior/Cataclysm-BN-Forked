@@ -1045,7 +1045,10 @@ std::vector<rider_data> vehicle::get_riders() const
 {
     std::vector<rider_data> res;
     for( const vpart_reference &vp : get_avail_parts( VPFLAG_BOARDABLE ) ) {
-        Creature *rider = g->critter_at( vp.pos() );
+        Creature *rider = get_passenger( static_cast<int>( vp.part_index() ) );
+        if( !rider ) {
+            rider = get_pet( static_cast<int>( vp.part_index() ) );
+        }
         if( rider ) {
             rider_data r;
             r.prt = vp.part_index();

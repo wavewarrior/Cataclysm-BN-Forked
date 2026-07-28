@@ -1146,7 +1146,7 @@ void vehicle::relocate_passengers( const std::vector<Character *> &passengers )
     const auto boardables = get_avail_parts( "BOARDABLE" );
     for( auto *passenger : passengers ) {
         for( const vpart_reference &vp : boardables ) {
-            if( vp.part().passenger_id == passenger->getID() ) {
+            if( get_passenger( static_cast<int>( vp.part_index() ) ) == passenger ) {
                 passenger->setpos( vp.pos() );
             }
         }
