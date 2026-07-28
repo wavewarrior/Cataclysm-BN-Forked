@@ -534,10 +534,17 @@ auto vehicle::part_collision( const vehicle_part_collision_options &options ) ->
 
     Creature *driver = pl_ctrl ? &player_character : nullptr;
 
-    // If in a vehicle assume it's this one
+    // Only treat an in_vehicle creature at this tile as already-accounted-for
+    // if they're the registered passenger of THIS vehicle's own boardable
+    // part here — a stale/desynced in_vehicle flag (see the "Part/passenger
+    // position mismatch" case in map::displace_vehicle) must not suppress a
+    // real collision.
     if( ph != nullptr && ph->in_vehicle ) {
-        critter = nullptr;
-        ph = nullptr;
+        const int boarded_part = part_with_feature( bubble_to_mount( p ), "BOARDABLE", true );
+        if( boarded_part >= 0 && get_passenger( boarded_part ) == ph ) {
+            critter = nullptr;
+            ph = nullptr;
+        }
     }
 
     map &here = get_map();

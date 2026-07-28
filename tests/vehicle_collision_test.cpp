@@ -1,3 +1,5 @@
+#include "npc.h"
+#include "veh_type.h"
 #include "catch/catch_amalgamated.hpp"
 #include "coordinates.h"
 #include "game.h"
@@ -93,4 +95,59 @@ TEST_CASE( "vehicle_collision_with_hallucination_terminates", "[vehicle]" )
     CHECK( ret.type == veh_coll_body );
     CHECK( hallucination.is_dead() );
     CHECK( veh_ptr->velocity == 222 );
+}
+
+TEST_CASE( "vehicle_collision_hits_occupant_with_stale_in_vehicle_flag", "[vehicle][collision]" )
+{
+    clear_all_state();
+    auto &here = get_map();
+    build_test_map( ter_id( "t_pavement" ) );
+    clear_vehicles();
+
+    // Build a vehicle with two distinct boardable seats so the collision
+    // target tile belongs to THIS vehicle (is_veh_collision must be false,
+    // reaching the body-collision path this fix changes).
+    const auto veh_pos = tripoint_bub_ms( 60, 60, 0 );
+    auto *veh = here.add_vehicle( vproto_id( "none" ), veh_pos, 0_degrees, 0, 0 );
+    REQUIRE( veh != nullptr );
+    REQUIRE( veh->install_part( tripoint_mnt_veh( 0, 0, 0 ), vpart_id( "frame_vertical" ) ) >= 0 );
+    const int seat_a = veh->install_part( tripoint_mnt_veh( 0, 0, 0 ), vpart_id( "seat" ) );
+    REQUIRE( seat_a >= 0 );
+    REQUIRE( veh->install_part( tripoint_mnt_veh( 1, 0, 0 ), vpart_id( "frame_vertical" ) ) >= 0 );
+    const int seat_b = veh->install_part( tripoint_mnt_veh( 1, 0, 0 ), vpart_id( "seat" ) );
+    REQUIRE( seat_b >= 0 );
+    here.add_vehicle_to_cache( veh );
+
+    // Properly board an NPC on seat A.
+    const auto seat_a_pos = veh->bub_part_location( seat_a );
+    const string_id<npc_template> test_guy( "test_talker" );
+    const character_id model_id = here.place_npc( tripoint_bub_ms( 15, 15, 0 ).xy(), test_guy );
+    g->load_npcs();
+    npc *seated_rider = g->find_npc( model_id );
+    REQUIRE( seated_rider != nullptr );
+    seated_rider->setpos( seat_a_pos );
+    here.board_vehicle( seat_a_pos, seated_rider );
+    REQUIRE( seated_rider->in_vehicle );
+
+    // Stand a second NPC on seat B with a stale in_vehicle flag: standing on
+    // this vehicle's own boardable tile, flagged as riding, but never
+    // registered as seat B's passenger (passenger_flag/passenger_id unset).
+    // This mirrors the real desync class documented at
+    // map_vehicle.cpp's "Part/passenger position mismatch" debug detector.
+    const auto seat_b_pos = veh->bub_part_location( seat_b );
+    const character_id stray_id = here.place_npc( tripoint_bub_ms( 16, 15, 0 ).xy(), test_guy );
+    g->load_npcs();
+    npc *stray_rider = g->find_npc( stray_id );
+    REQUIRE( stray_rider != nullptr );
+    stray_rider->setpos( seat_b_pos );
+    stray_rider->in_vehicle = true;
+    REQUIRE( veh->get_passenger( seat_b ) == nullptr );
+
+    veh->velocity = 222;
+    const auto ret = veh->part_collision( vehicle_part_collision_options{
+        .part = seat_a,
+        .pos = seat_b_pos,
+    } );
+
+    CHECK( ret.type == veh_coll_body );
 }
