@@ -427,7 +427,17 @@ void map::vehmove()
 {
     ZoneScoped;
 #ifdef BOX2D_ENABLED
-    // Advance the persistent physics world one game tick (~1 s at 60 Hz, 4 sub-steps).
+    // Advance the persistent physics world one game tick.
+    //
+    // Deliberately ONE step of 1/60 s, not 60 steps covering a full 1 s turn.
+    // Box2D is not the speed authority for ordinary driving: `veh.velocity` is
+    // re-applied to the body via b2Body_SetLinearVelocity every turn (see
+    // PhysicsWorld::step), and the readback in this function then snaps the tile
+    // anchor to the body.  Integrating a whole second here re-derives the
+    // displacement a second time on top of the game's own velocity model and
+    // roughly doubles effective vehicle speed, which breaks fuel-efficiency
+    // balance (tests/vehicle_efficiency_test.cpp asserts tiles-per-fuel).
+    // Sub-tile smoothness comes from the 4 sub-steps, not from more full steps.
     if( phys_world ) { phys_world->step( 1.0f / 60.0f, 4 ); }
 #endif
 
@@ -577,8 +587,39 @@ void map::vehmove()
             const auto py  = static_cast<int>( std::lround( veh.physics_pos.y ) );
             const auto cur = veh.bub_ms_location();
             if( px != cur.x() || py != cur.y() ) {
-                displace_vehicle( veh, tripoint_rel_ms{ px - cur.x(), py - cur.y(), 0 } );
+                // Refuse to drive out of the loaded reality bubble.  b2World_Step()
+                // integrates continuously and, over a full game turn, can carry a
+                // fast vehicle past the loaded map edge in one readback.  Beyond
+                // that edge there is no terrain to collide with, so instead of
+                // teleporting into unloaded space (which strands the vehicle in a
+                // null submap) treat the boundary as a hard stop and rewind
+                // physics_pos to the tile the vehicle actually occupies.
+                const auto dest = tripoint_bub_ms{ px, py, cur.z() };
+                if( inbounds( dest ) ) {
+                    displace_vehicle( veh, tripoint_rel_ms{ px - cur.x(), py - cur.y(), 0 } );
+                } else {
+                    veh.stop();
+                    veh.physics_pos = rl_vec2d{ static_cast<float>( cur.x() ),
+                                                static_cast<float>( cur.y() ) };
+                    if( phys_world ) { phys_world->clamp_body_to_tile( veh ); }
+                }
             }
+            // Resync the legacy pivot_anchor[0]/pivot_rotation[0] fields with the
+            // current Box2D-driven pivot every turn.  act_on_map() returned early
+            // for box2d_position_authority vehicles above and never reached
+            // move_vehicle(), which normally keeps these fields current via
+            // precalc_mounts(1, ..., pivot_point()) followed by
+            // advance_precalc_mounts() copying index 1 into index 0.  That path
+            // only fires when displace_vehicle() runs above (tile crossing), so
+            // mirroring it here directly — after any displacement, unconditional
+            // on whether one occurred — keeps pivot_anchor[0] tracking
+            // pivot_point() every turn (e.g. as it shifts when mass center moves
+            // while fuel burns), and does so without recomputing precalc[0]
+            // (refresh=false), which refresh_precalc(physics_angle) already
+            // keeps correct from the continuous physics angle.  Without this,
+            // coord_translate(pivot_point()) desyncs from bub_ms_location() —
+            // see vehicle_rails_test.cpp.
+            veh.set_facing_and_pivot( veh.turn_dir, veh.pivot_point(), false );
             veh.render_offset_x = static_cast<float>( veh.physics_pos.x -
                                   std::lround( veh.physics_pos.x ) );
             veh.render_offset_y = static_cast<float>( veh.physics_pos.y -
@@ -1408,6 +1449,7 @@ bool map::displace_vehicle( vehicle& veh, const tripoint_rel_ms& dp )
 
     // Need old coordinates to check for remote control
     const bool remote = veh.remote_controlled( g->u );
+
 
     // record every passenger and pet inside
     std::vector<rider_data> riders = veh.get_riders();

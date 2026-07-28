@@ -118,6 +118,23 @@ void PhysicsWorld::on_vehicle_moved( vehicle &v )
         b2Rot{ static_cast<float>( fv.x ), static_cast<float>( fv.y ) } );
 }
 
+void PhysicsWorld::clamp_body_to_tile( vehicle &v )
+{
+    const auto it = vehicle_bodies_.find( &v );
+    if( it == vehicle_bodies_.end() ) { return; }
+    // Deliberately ignores box2d_position_authority: the caller has determined
+    // the body integrated somewhere the tile grid cannot follow (unloaded map),
+    // so the tile anchor is authoritative for this one write.
+    const auto bpos = v.bub_ms_location();
+    const auto fv   = v.face_vec();
+    b2Body_SetTransform(
+        it->second,
+        { static_cast<float>( bpos.x() ) * TILE_M, static_cast<float>( bpos.y() ) * TILE_M },
+        b2Rot{ static_cast<float>( fv.x ), static_cast<float>( fv.y ) } );
+    b2Body_SetLinearVelocity( it->second, b2Vec2{ 0.0f, 0.0f } );
+    b2Body_SetAngularVelocity( it->second, 0.0f );
+}
+
 void PhysicsWorld::on_vehicle_removed( vehicle *v )
 {
     v->box2d_position_authority = false;  // always clear, even if body is missing

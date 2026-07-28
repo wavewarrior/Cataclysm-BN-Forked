@@ -41,6 +41,11 @@ public:
     // ── Vehicle lifecycle ──────────────────────────────────────────────────
     void on_vehicle_added( vehicle &v );
     void on_vehicle_moved( vehicle &v );
+    /// Force the b2Body transform back to the vehicle's current tile anchor,
+    /// bypassing the `box2d_position_authority` guard in `on_vehicle_moved`.
+    /// Used when continuous integration carried the body past the loaded map
+    /// edge and the tile grid must win instead.
+    void clamp_body_to_tile( vehicle &v );
     void on_vehicle_removed( vehicle *v );
 
     // ── Creature lifecycle (Phase 11) ─────────────────────────────────────
