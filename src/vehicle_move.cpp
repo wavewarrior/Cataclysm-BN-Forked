@@ -1678,8 +1678,12 @@ bool vehicle::check_on_ramp( int idir, const tripoint_rel_ms &offset ) const
     return false;
 }
 
-static auto ramp_z_delta_at( const map &here, const tripoint_bub_ms &from,
-                             const tripoint_bub_ms &to ) -> int
+namespace
+{
+
+// *INDENT-OFF*
+auto ramp_z_delta_at( const map &here, const tripoint_bub_ms &from,
+                      const tripoint_bub_ms &to ) -> int
 {
     // Only cross when `to` carries a flag `from` didn't already have — the
     // same "already consumed this step" guard applied to dragged furniture
@@ -1694,6 +1698,34 @@ static auto ramp_z_delta_at( const map &here, const tripoint_bub_ms &from,
     }
     return 0;
 }
+// *INDENT-ON*
+
+// Walks `from` toward `to` one grid tile at a time, accumulating every ramp
+// crossing along the way via ramp_z_delta_at(). Used for both the vehicle's
+// center-baseline z and each part's z so a multi-tile offset can never skip
+// an intervening ramp tile the way a single non-incremental endpoint check
+// would. Returned point's xy equals `to`'s xy; z is the walked result.
+auto walk_ramp_z( const map &here, tripoint_bub_ms from,
+                  const tripoint_bub_ms &to ) -> tripoint_bub_ms
+{
+    while( from.xy() != to.xy() ) {
+        const auto prev = from;
+        if( from.x() < to.x() ) {
+            ++from.x();
+        } else if( from.x() > to.x() ) {
+            --from.x();
+        }
+        if( from.y() < to.y() ) {
+            ++from.y();
+        } else if( from.y() > to.y() ) {
+            --from.y();
+        }
+        from.z() += ramp_z_delta_at( here, prev, from );
+    }
+    return from;
+}
+
+} // namespace
 
 void vehicle::adjust_zlevel( int idir, const tripoint_rel_ms &offset )
 {
@@ -1701,8 +1733,7 @@ void vehicle::adjust_zlevel( int idir, const tripoint_rel_ms &offset )
     const auto global_pos = bub_ms_location();
     const auto base = bub_ms_location() + offset;
 
-    auto new_center = base;
-    new_center.z() += ramp_z_delta_at( m, global_pos, new_center );
+    const auto new_center = walk_ramp_z( m, global_pos, base );
 
     auto z_cache = std::map<point_rel_ms, int> {};
     std::ranges::for_each( parts, [&]( vehicle_part & part ) {
@@ -1718,21 +1749,7 @@ void vehicle::adjust_zlevel( int idir, const tripoint_rel_ms &offset )
         }
 
         const auto part_point = base + tripoint_rel_ms( part_offset, 0 );
-        auto line = new_center;
-        while( line.xy() != part_point.xy() ) {
-            const auto prev_line = line;
-            if( line.x() < part_point.x() ) {
-                ++line.x();
-            } else if( line.x() > part_point.x() ) {
-                --line.x();
-            }
-            if( line.y() < part_point.y() ) {
-                ++line.y();
-            } else if( line.y() > part_point.y() ) {
-                --line.y();
-            }
-            line.z() += ramp_z_delta_at( m, prev_line, line );
-        }
+        const auto line = walk_ramp_z( m, new_center, part_point );
 
         const auto z_offset = line.z() - global_pos.z();
         part.z_terrain[idir] = z_offset;
