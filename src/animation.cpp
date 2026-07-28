@@ -404,7 +404,7 @@ size_t
 
 void draw_bullet_trajectories( const draw_bullet_trajectories_options &options )
 {
-    if( options.trajectories.empty() ) {
+    if( options.trajectories.empty() || !tilecontext ) {
         return;
     }
 
