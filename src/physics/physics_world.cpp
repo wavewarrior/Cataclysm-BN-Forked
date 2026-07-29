@@ -453,6 +453,24 @@ void PhysicsWorld::on_map_shifted( point delta_tiles )
     rebuild_bashable_lookup();
 }
 
+auto PhysicsWorld::terrain_body_count() const -> size_t
+{
+    size_t n = 0;
+    for( const auto &[abs_sm, body_list] : terrain_bodies_ ) {
+        n += body_list.size();
+    }
+    return n;
+}
+
+auto PhysicsWorld::world_body_count() const -> size_t
+{
+    // Counts bodies as Box2D sees them, which is deliberately NOT the same as
+    // terrain_body_count(): terrain_bodies_[key] is an assignment, so a body that
+    // was dropped from the registry without b2DestroyBody is invisible to that
+    // count while still colliding in the world.  Leak-style bugs only show up here.
+    return static_cast<size_t>( b2World_GetCounters( world_ ).bodyCount );
+}
+
 void PhysicsWorld::on_zlevel_changed( const map &m, int old_z, int new_z )
 {
     if( old_z == new_z ) { return; }

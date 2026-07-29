@@ -654,3 +654,64 @@ TEST_CASE( "box2d_authority_vehicle_bashes_terrain", "[!shouldfail][vehicle][box
     CHECK( here.ter( obstacle ) != before );
 }
 #endif // BOX2D_ENABLED
+
+#ifdef BOX2D_ENABLED
+// Terrain colliders are what stop a vehicle driving through a wall, and several
+// code paths gate their creation on the player's z-level — so a silent zero here
+// is the difference between walls existing and not.  Two invariants:
+//
+//  - on_submap_loaded actually builds bodies for a submap containing obstacles,
+//    and is idempotent: it is now called from more than one place
+//    (game::place_player_overmap's destination-z rebuild as well as
+//    on_zlevel_changed), and terrain_bodies_[key] is a plain assignment, so a
+//    repeat call used to drop live b2BodyIds without destroying them.
+//  - on_zlevel_changed moves colliders to the new level.  This is the machinery
+//    the place_player_overmap fix relies on, so it needs its own coverage.
+TEST_CASE( "box2d_terrain_colliders_build_and_rebuild", "[vehicle][box2d]" )
+{
+    clear_all_state();
+    auto &here = get_map();
+    auto *pw = here.get_physics_world();
+    REQUIRE( pw != nullptr );
+
+    build_test_map( ter_id( "t_pavement" ) );
+
+    // The Catch2 harness mutates already-resident submaps, so it never fires the
+    // submap-loaded notification and the world starts with no colliders at all.
+    // That is itself a known gap; here it just gives a clean baseline.
+    REQUIRE( pw->terrain_body_count() == 0 );
+
+    const auto wall_z0 = tripoint_bub_ms( 60, 60, 0 );
+    here.ter_set( wall_z0, ter_id( "t_wall_wood" ) );
+    REQUIRE_FALSE( here.passable( wall_z0 ) );
+
+    const auto sm_z0 = project_to<coords::sm>( here.bub_to_abs( wall_z0 ) );
+
+    pw->on_submap_loaded( here, sm_z0 );
+    const auto after_first = pw->terrain_body_count();
+    CHECK( after_first > 0 );
+
+    // Idempotent: a repeat call must replace, not stack.  Asserted against the
+    // Box2D world's own body count, NOT the registry: terrain_bodies_[key] is an
+    // assignment, so without the guard the old b2BodyIds are dropped from the
+    // registry while still living in the world — the registry count is unchanged
+    // and would report success.  (Verified: with the guard removed, the registry
+    // assertion still passed and only this one fails.)
+    const auto world_after_first = pw->world_body_count();
+    pw->on_submap_loaded( here, sm_z0 );
+    CHECK( pw->terrain_body_count() == after_first );
+    CHECK( pw->world_body_count() == world_after_first );
+
+    SECTION( "on_zlevel_changed moves colliders to the new level" ) {
+        const auto wall_z1 = tripoint_bub_ms( 60, 60, 1 );
+        here.ter_set( wall_z1, ter_id( "t_wall_wood" ) );
+        REQUIRE_FALSE( here.passable( wall_z1 ) );
+
+        pw->on_zlevel_changed( here, 0, 1 );
+        // z=0's bodies are gone and z=1 now has its own, so the count stays
+        // non-zero.  A zero here would mean a z-change leaves the player on a
+        // level with no collision at all.
+        CHECK( pw->terrain_body_count() > 0 );
+    }
+}
+#endif // BOX2D_ENABLED

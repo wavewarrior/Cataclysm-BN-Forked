@@ -73,6 +73,17 @@ public:
     /// Called when the player changes z-level (stairs, ramps, etc.).
     void on_zlevel_changed( const map &m, int old_z, int new_z );
 
+    /// Total number of terrain collider bodies currently registered, across all
+    /// submaps and z-levels.  Exists so tests can assert that colliders were
+    /// actually built: several code paths gate collider creation on the player's
+    /// z-level, and a silent zero here means vehicles pass through walls.
+    auto terrain_body_count() const -> size_t; // *NOPAD*
+
+    /// Bodies as Box2D itself sees them.  Differs from `terrain_body_count()` on
+    /// purpose: a body dropped from the registry without `b2DestroyBody` still
+    /// collides but is invisible to the registry count, so leaks only show here.
+    auto world_body_count() const -> size_t; // *NOPAD*
+
     // ── Phase 5 hooks (wired in Phase 5) ─────────────────────────────────
     /// Remove the Box2D body for the bashable tile at `pos` after it is bashed.
     void on_tile_bashed( tripoint_bub_ms pos );
