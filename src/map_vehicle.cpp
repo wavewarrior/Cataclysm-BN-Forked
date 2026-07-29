@@ -737,10 +737,18 @@ void map::vehmove()
                 // stopped it.
                 const auto reached = veh.bub_ms_location();
                 if( reached.x() != px || reached.y() != py ) {
-                    // Blocked moves shed speed, as the tile-step mover's collision
-                    // handling did; the iteration bound alone is not a collision,
-                    // so it only resyncs.
-                    if( blocked ) { veh.stop(); }
+                    // Deliberately does NOT touch velocity.  move_vehicle() already
+                    // applies whatever speed loss a real collision causes, inside
+                    // part_collision(); zeroing it here double-penalised that, and
+                    // fired even when nothing was hit.  `blocked` only means "the
+                    // tile-step mover declined to advance", which includes entirely
+                    // benign cases — the very first turn after a vehicle is placed
+                    // or displaced, when its of_turn budget is not yet funded.  That
+                    // cost a full stop from cruise: measured on the road roller,
+                    // velocity 2235 was zeroed on turn 1 with the target 12 tiles
+                    // away and nothing in between, then took 14 turns to accelerate
+                    // back.  In gameplay it meant a single declined step brought the
+                    // vehicle to a dead halt.
                     veh.physics_pos = rl_vec2d{ static_cast<float>( reached.x() ),
                                                 static_cast<float>( reached.y() ) };
                     phys_world->clamp_body_to_tile( veh );
