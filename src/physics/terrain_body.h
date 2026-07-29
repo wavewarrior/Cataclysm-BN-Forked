@@ -32,16 +32,29 @@ auto build_submap_terrain_bodies( b2WorldId         world,
                                    const map        &m,
                                    tripoint_bub_ms   bub_origin ) -> std::vector<b2BodyId>;
 
+/// Sentinel bit set on every encoded tile so the packed value is never zero.
+///
+/// Without it `encode_tile_pos( { 0, 0, 0 } )` is 0, and `b2Body_SetUserData( bid, 0 )`
+/// is indistinguishable from an untagged body.  bub (0,0,0) is the bubble corner on
+/// the most common z-level, so that is a live tile: it would be skipped by every
+/// `ud != nullptr` guard — silently keeping stale userData across map shifts, and
+/// never being identified as terrain by contact-event routing, so a wall there would
+/// never bash.
+constexpr std::uintptr_t tile_pos_tag = std::uintptr_t{ 1 } << 48;
+
 /// Pack a `tripoint_bub_ms` into a pointer-width integer for `b2Body_SetUserData`.
-/// Only the lower 48 bits are used; each coordinate occupies 16 bits (signed).
+/// Coordinates occupy the lower 48 bits, 16 signed bits each; bit 48 is `tile_pos_tag`.
+/// The result is always non-zero, so `b2Body_GetUserData() != nullptr` reliably means
+/// "this body carries a tile identity".
 constexpr auto encode_tile_pos( tripoint_bub_ms p ) -> std::uintptr_t
 {
-    return ( static_cast<std::uintptr_t>( static_cast<uint16_t>( p.z() ) ) << 32 )
+    return tile_pos_tag
+         | ( static_cast<std::uintptr_t>( static_cast<uint16_t>( p.z() ) ) << 32 )
          | ( static_cast<std::uintptr_t>( static_cast<uint16_t>( p.y() ) ) << 16 )
          |   static_cast<std::uintptr_t>( static_cast<uint16_t>( p.x() ) );
 }
 
-/// Inverse of `encode_tile_pos`.
+/// Inverse of `encode_tile_pos`.  Ignores `tile_pos_tag`.
 constexpr auto decode_tile_pos( std::uintptr_t enc ) -> tripoint_bub_ms
 {
     const auto x = static_cast<int>( static_cast<int16_t>(   enc         & 0xFFFF ) );
