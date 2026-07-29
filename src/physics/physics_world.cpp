@@ -132,13 +132,27 @@ void PhysicsWorld::on_vehicle_moved( vehicle &v )
     // per-turn distance, masking the movement-rate bug entirely.
     const auto bpos = v.bub_ms_location();
     const auto fv   = v.face_vec();
+
+    // Carry the sub-tile fraction across the move instead of snapping to the tile
+    // centre.  An external move is a whole-tile displacement, so the vehicle's
+    // position *within* its tile is unchanged by it; discarding that fraction threw
+    // away up to one tile of integration progress every time.
+    //
+    // The tile-step mover has no equivalent loss because its remainder lives in
+    // vehicle::of_turn_carry, a field a displacement does not touch.  That
+    // asymmetry is measurable: vehicle_efficiency_test teleports the vehicle back to
+    // its start every cycle, and under authority the road roller covered 1116 tiles
+    // against the tile-step path's 1248 for identical fuel and cycle count.
+    const auto frac = rl_vec2d{ v.physics_pos.x - std::round( v.physics_pos.x ),
+                                v.physics_pos.y - std::round( v.physics_pos.y ) };
+    const auto nx = static_cast<float>( bpos.x() );
+    const auto ny = static_cast<float>( bpos.y() );
     if( v.box2d_position_authority ) {
-        v.physics_pos = rl_vec2d{ static_cast<float>( bpos.x() ),
-                                  static_cast<float>( bpos.y() ) };
+        v.physics_pos = rl_vec2d{ nx + frac.x, ny + frac.y };
     }
     b2Body_SetTransform(
         it->second,
-        { static_cast<float>( bpos.x() ) * TILE_M, static_cast<float>( bpos.y() ) * TILE_M },
+        { ( nx + frac.x ) * TILE_M, ( ny + frac.y ) * TILE_M },
         b2Rot{ static_cast<float>( fv.x ), static_cast<float>( fv.y ) } );
 }
 
