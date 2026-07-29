@@ -36,7 +36,7 @@ C++ flags used by all builds:
 Additional C++ flags used by optimized builds:
 
 /Z7  Generate embedded CodeView debug information
-/Ob1 Inline Function Expansion (1 = only when marked as such)
+/Ob2 Inline Function Expansion (2 = any suitable function; see below)
 /Oi  Generate Intrinsic Functions
 
 Linker flags used by all builds:
@@ -60,6 +60,11 @@ set(CMAKE_CXX_FLAGS_INIT "\
 /wd4068 /wd4146 /wd4819 /wd6237 /wd6319 /wd26444 /wd26451 /wd26495 /WX- /W1 \
 /TP /Zc:forScope /Zc:inline /Zc:wchar_t"
 )
+# NOTE: CMake's MSVC defaults end every optimized config with /Ob1 ("inline only
+# what is marked inline"), which costs seconds per world load on this codebase.
+# /Ob2 is applied to the game targets only (src/CMakeLists.txt,
+# setup_common_target_properties) so the fetched LLVM/DXC/RmlUi deps keep their
+# own flags and do not rebuild.
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO_INIT "/Oi")
 add_compile_definitions(
     _SCL_SECURE_NO_WARNINGS

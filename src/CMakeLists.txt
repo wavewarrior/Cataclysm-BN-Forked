@@ -83,6 +83,18 @@ function(setup_common_target_properties target_name)
     # Add version dependency
     add_dependencies(${target_name} get_version)
 
+    # MSVC's optimized configs default to /Ob1 — inline ONLY functions marked
+    # `inline`. That is a real load-time tax here: JsonIn/JsonObject accessors,
+    # string_id, the generic_factory templates and the range adapters are tiny
+    # non-`inline` members sitting in the hot path of every mod parse. The clang
+    # presets already inline fully at -O2 (CMakeLists.txt sets "-O2 -g1" for
+    # RelWithDebInfo), so /Ob1 made the Windows build slower than the macOS one at
+    # the same config. MSVC honours the LAST /Ob flag, so appending wins. Scoped to
+    # our targets: the fetched LLVM/DXC/RmlUi deps keep their own flags.
+    if (MSVC)
+        target_compile_options(${target_name} PRIVATE "$<$<NOT:$<CONFIG:Debug>>:/Ob2>")
+    endif ()
+
     # Add common libraries
     target_link_libraries(${target_name} PUBLIC ZLIB::ZLIB)
     target_link_libraries(${target_name} PUBLIC SQLite3::SQLite3)
