@@ -5,6 +5,7 @@
 #include "point_float.h"  // rl_vec2d
 #include <map>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 namespace lighting { class debug_line_pass; } // forward-declare GPU line buffer
 
@@ -57,8 +58,10 @@ public:
     // ── Terrain lifecycle ──────────────────────────────────────────────────
     /// Called after `grid[idx] = sm` in `map::on_submap_loaded`.
     void on_submap_loaded( const map &m, const tripoint_abs_sm &abs_sm_pos );
-    /// Called before `grid[idx] = nullptr` in `map::on_submap_unloaded`.
-    void on_submap_unloaded( const tripoint_abs_sm &abs_sm_pos );
+    /// Called when `abs_sm_pos` leaves the *simulated* set.  `submap_still_resident`
+    /// must say whether the submap is still in memory: this callback also fires on
+    /// simulated -> lazy_border, where the submap and its vehicles are still alive.
+    void on_submap_unloaded( const tripoint_abs_sm &abs_sm_pos, bool submap_still_resident );
 
     // ── Coordinate shift ───────────────────────────────────────────────────
     /// Translate all Box2D bodies by `delta_tiles × TILE_M` metres.
@@ -136,6 +139,14 @@ private:
 
     /// vehicle* → body in the persistent world.
     std::unordered_map<vehicle *, b2BodyId> vehicle_bodies_;
+
+    /// Vehicles whose position authority *this class* revoked because their home
+    /// submap left the simulated set while staying resident.  Only these are
+    /// re-granted when the submap comes back: a vehicle that cleared
+    /// box2d_position_authority itself (e.g. tests/vehicle_ramp_test.cpp does, for
+    /// every vehicle it builds) must stay opted out, and is indistinguishable from
+    /// an unload revocation by the flag alone.
+    std::unordered_set<vehicle *> authority_revoked_by_unload_;
 
     /// abs_sm_pos → flat list of all terrain bodies for that submap.
     std::map<tripoint_abs_sm, std::vector<b2BodyId>> terrain_bodies_;

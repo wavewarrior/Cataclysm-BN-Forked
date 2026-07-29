@@ -150,6 +150,7 @@ void PhysicsWorld::clamp_body_to_tile( vehicle &v )
 
 void PhysicsWorld::on_vehicle_removed( vehicle *v )
 {
+    authority_revoked_by_unload_.erase( v );
     v->box2d_position_authority = false;  // always clear, even if body is missing
     v->render_offset_x = 0.f;
     v->render_offset_y = 0.f;
@@ -273,9 +274,32 @@ void PhysicsWorld::on_submap_loaded( const map &m, const tripoint_abs_sm &abs_sm
     }
 
     terrain_bodies_[abs_sm_pos] = std::move( bodies );
+
+    // Re-grant position authority to vehicles whose home submap just re-entered
+    // the simulated set, undoing the revocation on on_submap_unloaded's
+    // still-resident path.  Without this, each bubble excursion would permanently
+    // convert more vehicles to the tile-step mover and Box2D would decay away
+    // over a long session.
+    //
+    // physics_pos has to be reseated to the current anchor first: while the
+    // tile-step mover owned the vehicle that field went stale (on_vehicle_moved()
+    // only resyncs it under authority), and handing authority back with a stale
+    // value would make the very next readback walk the vehicle back to wherever
+    // it was when authority was revoked.
+    for( auto &[veh, bid] : vehicle_bodies_ ) {
+        if( veh->abs_sm_pos != abs_sm_pos ) { continue; }
+        // Only re-grant what this class revoked.  A vehicle that opted out itself
+        // must stay opted out, and the flag alone cannot tell the two apart.
+        if( authority_revoked_by_unload_.erase( veh ) == 0 ) { continue; }
+        const auto bpos  = veh->bub_ms_location();
+        veh->physics_pos = rl_vec2d{ static_cast<float>( bpos.x() ),
+                                     static_cast<float>( bpos.y() ) };
+        veh->box2d_position_authority = true;
+    }
 }
 
-void PhysicsWorld::on_submap_unloaded( const tripoint_abs_sm &abs_sm_pos )
+void PhysicsWorld::on_submap_unloaded( const tripoint_abs_sm &abs_sm_pos,
+                                       bool submap_still_resident )
 {
     // Remove bashable tile entries before destroying the bodies.
     const auto bash_it = bashable_tiles_.find( abs_sm_pos );
@@ -292,11 +316,52 @@ void PhysicsWorld::on_submap_unloaded( const tripoint_abs_sm &abs_sm_pos )
         terrain_bodies_.erase( it );
     }
 
-    // Destroy vehicle bodies whose home submap is being unloaded.
-    // map::on_submap_unloaded already erases these vehicles from loaded_vehicles;
-    // without this sweep the b2BodyIds would leak in the Box2D world.
+    // Vehicle bodies for the submap leaving the simulated set.
+    //
+    // This callback tracks *simulation* membership, not memory residency (see
+    // src/submap_load_manager.h), so it fires on simulated -> lazy_border while
+    // the submap and every vehicle in it are still alive.  The two cases need
+    // different handling.
+    //
+    // Still resident: keep the body, but revoke authority.  map::on_submap_unloaded
+    // has already dropped these vehicles from loaded_vehicles, so nothing walks
+    // their tile anchor any more — left under authority they would keep being
+    // integrated by step_turn() while sync_game_from_bodies() rewrote their facing
+    // and precalc[] every turn, and physics_pos would drift far from the anchor
+    // until re-entering the simulated set teleported them.  Revoking hands them
+    // back to the tile-step mover, which the authority guards in
+    // sync_game_from_bodies() and the vehmove() readback both honour, while
+    // on_vehicle_moved() keeps the body tracking the anchor.  The body is kept
+    // because nothing ever re-registers one (on_vehicle_added has exactly one
+    // caller, map::add_vehicle), so destroying it here would be permanent.
+    if( submap_still_resident ) {
+        for( auto &[veh, bid] : vehicle_bodies_ ) {
+            if( veh->abs_sm_pos != abs_sm_pos ) { continue; }
+            // Only record vehicles that actually held authority.  Recording an
+            // already-opted-out vehicle would make the re-grant hand it authority
+            // when the submap returns, which is precisely what the set exists to
+            // prevent.
+            if( !veh->box2d_position_authority ) { continue; }
+            authority_revoked_by_unload_.insert( veh );
+            veh->box2d_position_authority = false;
+            veh->render_offset_x = 0.f;
+            veh->render_offset_y = 0.f;
+        }
+        return;
+    }
+
+    // Genuinely gone: destroy the body and clear authority, mirroring
+    // on_vehicle_removed().  Leaving the flag set would strand the vehicle with
+    // authority but no body, and the readback would keep driving it from a
+    // physics_pos that can never be updated again.
     std::erase_if( vehicle_bodies_, [&]( const auto &kv ) {
         if( kv.first->abs_sm_pos == abs_sm_pos ) {
+            // Drop any revocation record too — the vehicle is going away, and a
+            // stale entry here would be a dangling pointer.
+            authority_revoked_by_unload_.erase( kv.first );
+            kv.first->box2d_position_authority = false;
+            kv.first->render_offset_x = 0.f;
+            kv.first->render_offset_y = 0.f;
             b2DestroyBody( kv.second );
             return true;
         }
@@ -355,7 +420,10 @@ void PhysicsWorld::on_zlevel_changed( const map &m, int old_z, int new_z )
         }
     }
     for( const auto &abs_sm : to_remove ) {
-        on_submap_unloaded( abs_sm );
+        // Still resident: only the z-level focus changed, so these submaps and any
+        // vehicles in them are alive.  Passing false would strip the body of every
+        // vehicle on the old z-level, permanently, on each z change.
+        on_submap_unloaded( abs_sm, /*submap_still_resident=*/true );
     }
 
     // Create terrain bodies for the new z-level (all in-bubble submaps).

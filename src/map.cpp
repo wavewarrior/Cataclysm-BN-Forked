@@ -399,8 +399,22 @@ void map::on_submap_unloaded( const tripoint_abs_sm& pos, const std::string& dim
         std::erase_if( loaded_vehicles, [&]( vehicle * veh ) { return veh->abs_sm_pos == pos; } );
     }
 #ifdef BOX2D_ENABLED
-    if( phys_world && g && pos.z() == g->u.bub_pos().z() ) {
-        phys_world->on_submap_unloaded( pos );
+    // Deliberately NOT gated on pos.z() == player z, unlike on_submap_loaded().
+    // Terrain bodies are only built for the player's z-level, but vehicle bodies
+    // are created by on_vehicle_added() for a vehicle at ANY z.  Gating the sweep
+    // on the player's current z therefore leaked the b2Body of every vehicle
+    // whose home submap unloaded while the player stood on a different level —
+    // and the player's z changes, so this is reachable in ordinary play, not just
+    // in debug teleports.  The terrain half of the sweep is a few map lookups
+    // that simply miss when no bodies were built for that submap, so running it
+    // unconditionally is cheap and safe.
+    if( phys_world ) {
+        // This callback fires on simulated -> lazy_border too, where the submap is
+        // still in memory; tell the physics world which case this is so it does not
+        // strip bodies from vehicles that are still alive.
+        const bool still_resident =
+            MAPBUFFER_REGISTRY.get( dim_id ).lookup_submap_in_memory( pos ) != nullptr;
+        phys_world->on_submap_unloaded( pos, still_resident );
     }
 #endif
 
