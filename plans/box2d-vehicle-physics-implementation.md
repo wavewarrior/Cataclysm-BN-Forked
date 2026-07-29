@@ -1678,3 +1678,36 @@ the baseline. Doing that would repeat this plan's own recorded mistake of trusti
 number that looks authoritative because a test went green".
 
 It is also a balance decision: it changes how quickly vehicles pull away.
+
+### Collider lifecycle: second leak, at `map::load()`
+
+`map::load()` drops every submap with a bare
+`std::fill( grid.begin(), grid.end(), nullptr )` and never routes through
+`on_submap_unloaded`, then `loadn()` builds fresh bodies for the new bubble. Terrain
+colliders therefore accumulated across every fast travel and every game start.
+
+Worse than the leak: terrain bodies are keyed by absolute submap but *positioned* in
+bubble coordinates, and a distant load carries no shift delta, so `on_map_shifted`
+never corrected them either. Stranded bodies sat wherever those tiles used to appear
+on screen. Fixed by reusing `clear_world_bodies()` — the same invariant as the
+world-teardown fix, at a second call site.
+
+**The test for it is an explicit `[!shouldfail]` pending spec, not a passing test.**
+The harness cannot build terrain colliders at all: `on_submap_loaded()` fires only
+from `map::loadn()` for the player's z-level, `on_tile_changed()` only refreshes
+submaps that are *already* registered, and a fresh test world is open field where no
+tile earns a collider. `count_home` comes out 0 and the invariant then holds
+trivially. A `REQUIRE( count_home > 0 )` guard makes that vacuity fail loudly — I
+wrote two silently-vacuous versions of this test before adding it.
+
+### Cross-test leakage: root cause found
+
+`clear_map()` reset only `abs_sub`'s z, inheriting its xy from whatever the previous
+`TEST_CASE` left behind. Anything triggering `map::update_map()` mid-test shifts that
+anchor — `map::board_vehicle()` does, via the avatar move path — and it was never
+wound back, so the bub<->abs relationship differed per test by execution order.
+
+Re-anchoring canonically fixes `ranged_vehicle_recoil_test` (both sites) and the
+Box2D bash spec. `vehicle_ramp_test:174` survives it and has a different cause; note
+that its in-suite abort is what *masks* the ramp suite's 83 real assertions, so the
+suite total understates that file.
