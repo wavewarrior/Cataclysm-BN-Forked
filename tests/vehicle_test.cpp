@@ -18,6 +18,7 @@
 #include "json.h"
 #include "map.h"
 #include "map_helpers.h"
+#include "mapbuffer.h"
 #include "mongroup.h"
 #include "monster.h"
 #include "overmapbuffer.h"
@@ -711,5 +712,53 @@ TEST_CASE( "box2d_terrain_colliders_build_and_rebuild", "[vehicle][box2d]" )
         // collision at all.
         CHECK( pw->terrain_body_count() > 0 );
     }
+}
+#endif // BOX2D_ENABLED
+
+#ifdef BOX2D_ENABLED
+// Terrain colliders must not survive a world teardown.
+//
+// PhysicsWorld is constructed once, in the map constructor (map.cpp:256), and map is
+// a pimpl<map> built once in game::game() — so it lives for the whole process.
+// terrain_bodies_ is keyed by tripoint_abs_sm and nothing frees it except the
+// destructor, which never runs mid-session.
+//
+// Returning to the main menu and loading a different world calls MAPBUFFER.clear()
+// (main_menu.cpp:1054/1237/1247/1289, game_setup.cpp:725/742) without touching the
+// map, so colliders built from world A would stay registered at absolute submap
+// coordinates that in world B hold entirely different terrain: invisible walls where
+// A had walls, and no collider where B has one.
+//
+// This covers the reset itself.  The wiring into mapbuffer::clear() is NOT tested:
+// MAPBUFFER.clear() frees every submap while map::grid still points at them, so a
+// test that calls it leaves the map holding dangling pointers and cannot recover —
+// clear_all_state() crashes afterwards.  The game only clears the buffer with no
+// world loaded.  The hook is three lines at the single choke point.
+TEST_CASE( "box2d_world_teardown_drops_all_terrain_colliders", "[vehicle][box2d]" )
+{
+    clear_all_state();
+    auto &here = get_map();
+    auto *pw = here.get_physics_world();
+    REQUIRE( pw != nullptr );
+
+    const auto obstacle = tripoint_bub_ms( 60, 60, 0 );
+    here.ter_set( obstacle, ter_id( "t_wall_wood" ) );
+    REQUIRE( here.impassable_ter_furn( obstacle ) );
+
+    const auto sm = project_to<coords::sm>( here.bub_to_abs( obstacle ) );
+    pw->on_submap_unloaded( sm, /*submap_still_resident=*/false );
+    pw->on_submap_loaded( here, sm );
+    REQUIRE( pw->terrain_body_count() > 0 );
+
+    pw->clear_world_bodies();
+    CHECK( pw->terrain_body_count() == 0 );
+
+    // Idempotent, and a rebuild after teardown still works — a stale registry would
+    // otherwise make the next world's submaps look already-loaded.
+    pw->clear_world_bodies();
+    CHECK( pw->terrain_body_count() == 0 );
+
+    pw->on_submap_loaded( here, sm );
+    CHECK( pw->terrain_body_count() > 0 );
 }
 #endif // BOX2D_ENABLED

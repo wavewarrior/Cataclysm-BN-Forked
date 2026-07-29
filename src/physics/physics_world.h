@@ -55,6 +55,18 @@ public:
     void on_creature_removed( const Creature *c );
     void clear_creature_bodies();
 
+    /// Drop every body belonging to the *world* — terrain colliders and vehicle
+    /// bodies — without destroying the b2World itself.
+    ///
+    /// PhysicsWorld is constructed once, in the map constructor, and map is a
+    /// pimpl<map> built once in game::game(), so it outlives any single world.
+    /// terrain_bodies_ is keyed by absolute submap coordinate, so colliders left
+    /// behind by one world would sit at coordinates that hold entirely different
+    /// terrain in the next one.  Call whenever the submap store is dropped
+    /// wholesale; mapbuffer::clear() is the choke point every such path runs
+    /// through.  Creature bodies are handled separately by clear_creature_bodies().
+    void clear_world_bodies();
+
     // ── Terrain lifecycle ──────────────────────────────────────────────────
     /// Called after `grid[idx] = sm` in `map::on_submap_loaded`.
     void on_submap_loaded( const map &m, const tripoint_abs_sm &abs_sm_pos );

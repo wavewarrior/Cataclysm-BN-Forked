@@ -247,6 +247,42 @@ void PhysicsWorld::clear_creature_bodies()
     creature_bodies_.clear();
 }
 
+void PhysicsWorld::clear_world_bodies()
+{
+    if( !B2_IS_NON_NULL( world_ ) || !b2World_IsValid( world_ ) ) {
+        terrain_bodies_.clear();
+        bashable_tiles_.clear();
+        bashable_tile_bodies_.clear();
+        vehicle_bodies_.clear();
+        authority_revoked_by_unload_.clear();
+        return;
+    }
+
+    // b2Body_IsValid before every destroy: this runs on wholesale teardown, where
+    // some bodies may already be gone.  bashable_tiles_ and bashable_tile_bodies_
+    // alias the same b2BodyIds held in terrain_bodies_, so they are cleared without
+    // a second destroy pass.
+    const auto destroy = []( const b2BodyId bid ) {
+        if( B2_IS_NON_NULL( bid ) && b2Body_IsValid( bid ) ) { b2DestroyBody( bid ); }
+    };
+
+    for( auto &[abs_sm, bodies] : terrain_bodies_ ) {
+        std::ranges::for_each( bodies, destroy );
+    }
+    terrain_bodies_.clear();
+    bashable_tiles_.clear();
+    bashable_tile_bodies_.clear();
+
+    // The vehicles themselves are owned by the submaps being dropped, so every
+    // vehicle* key is about to dangle.  Destroy the bodies and forget the keys
+    // rather than waiting for on_vehicle_removed, which will never come.
+    for( const auto &[veh, bid] : vehicle_bodies_ ) {
+        destroy( bid );
+    }
+    vehicle_bodies_.clear();
+    authority_revoked_by_unload_.clear();
+}
+
 // ── Terrain lifecycle ─────────────────────────────────────────────────────────
 
 void PhysicsWorld::on_submap_loaded( const map &m, const tripoint_abs_sm &abs_sm_pos )

@@ -1,4 +1,5 @@
 #include "mapbuffer.h"
+#include "physics/physics_world.h"
 
 #include <algorithm>
 #include <array>
@@ -83,6 +84,18 @@ mapbuffer::~mapbuffer() = default;
 
 void mapbuffer::clear()
 {
+#ifdef BOX2D_ENABLED
+    // Dropping every submap invalidates every terrain collider and every vehicle
+    // body: PhysicsWorld outlives the world (it is owned by map, which is a
+    // pimpl<map> built once in game::game()), and terrain_bodies_ is keyed by
+    // absolute submap coordinate.  Without this, colliders from the world being
+    // left stay registered at coordinates that hold different terrain in the next
+    // one - invisible walls where the old world had walls, and none where the new
+    // world does.  Guarded because this also runs during early init, before `g`.
+    if( g ) {
+        if( auto *pw = g->m.get_physics_world() ) { pw->clear_world_bodies(); }
+    }
+#endif
     submaps.clear();
     std::lock_guard<std::mutex> pw_lk( pending_writes_mutex_ );
     pending_writes_.clear();
