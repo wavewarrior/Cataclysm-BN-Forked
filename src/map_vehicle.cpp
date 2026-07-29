@@ -427,18 +427,25 @@ void map::vehmove()
 {
     ZoneScoped;
 #ifdef BOX2D_ENABLED
-    // Advance the persistent physics world one game tick.
+    // Advance the persistent physics world one full game turn (1 s).
     //
-    // Deliberately ONE step of 1/60 s, not 60 steps covering a full 1 s turn.
-    // Box2D is not the speed authority for ordinary driving: `veh.velocity` is
-    // re-applied to the body via b2Body_SetLinearVelocity every turn (see
-    // PhysicsWorld::step), and the readback in this function then snaps the tile
-    // anchor to the body.  Integrating a whole second here re-derives the
-    // displacement a second time on top of the game's own velocity model and
-    // roughly doubles effective vehicle speed, which breaks fuel-efficiency
-    // balance (tests/vehicle_efficiency_test.cpp asserts tiles-per-fuel).
-    // Sub-tile smoothness comes from the 4 sub-steps, not from more full steps.
-    if( phys_world ) { phys_world->step( 1.0f / 60.0f, 4 ); }
+    // A prior revision deliberately stepped only 1/60 s here, on the theory that
+    // integrating a whole second "re-derives displacement on top of the game's
+    // own velocity model" and doubled effective speed.  That was a
+    // misdiagnosis.  Measured behaviour of the 1/60 s version: a vehicle at
+    // 1000 cm/s (10 m/s) advanced physics_pos by 0.0932 tiles per turn and
+    // covered 2 tiles in 20 turns, where 10 m/s for 20 s is 111.85 tiles — a
+    // ~56x shortfall that left Box2D-authoritative vehicles nearly stationary
+    // and is the direct cause of the vehicle ramp/rails/recoil movement
+    // failures.  vehicle_efficiency_test did not catch it because it teleports
+    // the vehicle back to its start each turn without resyncing physics_pos, so
+    // it measured a reset-vs-stale-physics_pos artifact rather than real
+    // distance; that desync is fixed in PhysicsWorld::on_vehicle_moved.
+    //
+    // step_turn() sub-steps internally with a step size small enough that no
+    // body can tunnel through the 1-tile terrain bodies, and syncs velocity in
+    // once / out once so contact response is not overwritten mid-turn.
+    if( phys_world ) { phys_world->step_turn( 1.0f ); }
 #endif
 
 
@@ -596,6 +603,10 @@ void map::vehmove()
                 // physics_pos to the tile the vehicle actually occupies.
                 const auto dest = tripoint_bub_ms{ px, py, cur.z() };
                 if( inbounds( dest ) ) {
+                    // Tell on_vehicle_moved this move is physics-driven: the body
+                    // is already at the sub-tile position and must not be snapped
+                    // back to the new tile's centre.
+                    const physics::PhysicsWorld::physics_move_scope readback( *phys_world );
                     displace_vehicle( veh, tripoint_rel_ms{ px - cur.x(), py - cur.y(), 0 } );
                 } else {
                     veh.stop();

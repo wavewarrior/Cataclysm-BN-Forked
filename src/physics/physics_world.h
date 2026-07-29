@@ -9,7 +9,7 @@
 namespace lighting { class debug_line_pass; } // forward-declare GPU line buffer
 
 class Creature;
-struct vehicle;
+class vehicle;
 class map;
 
 namespace physics {
@@ -75,8 +75,42 @@ public:
     void on_tile_bashed( tripoint_bub_ms pos );
 
     // ── Game-loop interface (wired from Phase 8 / Phase 10) ───────────────
+    /// Integrate exactly one game turn.  Syncs game velocity into the bodies
+    /// once, sub-steps `turn_seconds` with a step size small enough that no
+    /// body translates far enough to tunnel through the 1-tile terrain bodies,
+    /// then reads physics state back once.
+    ///
+    /// Sub-stepping (rather than one big step) is required for two reasons:
+    ///  - tunneling: a 1-tile-wide static terrain body is missed entirely if a
+    ///    body translates more than roughly half a tile within a single step.
+    ///  - contact response: syncing velocity in once and out once (instead of
+    ///    per step) is what lets a collision actually change the vehicle's
+    ///    velocity — a per-step re-sync would overwrite the solver's result.
+    void step_turn( float turn_seconds );
+
+    /// Raw single step.  Prefer `step_turn()` from the game loop; this exists
+    /// for tests and for callers that need an explicit dt.
     void step( float dt, int substeps );
     void dispatch_contact_events();
+
+    /// RAII guard marking the *physics readback* as the active mover.
+    ///
+    /// `on_vehicle_moved()` cannot tell from geometry alone whether a tile move
+    /// came from the readback (body is already authoritative — leave it alone)
+    /// or from an external teleport (body must follow, or `physics_pos` and the
+    /// tile anchor diverge permanently).  The readback is the only caller that
+    /// means "physics-driven", so it states that intent explicitly here rather
+    /// than having the hook guess.
+    class physics_move_scope
+    {
+        public:
+            explicit physics_move_scope( PhysicsWorld &w ) : w_( w ) { w_.applying_readback_ = true; }
+            ~physics_move_scope() { w_.applying_readback_ = false; }
+            physics_move_scope( const physics_move_scope & ) = delete;
+            auto operator=( const physics_move_scope & ) -> physics_move_scope & = delete; // *NOPAD*
+        private:
+            PhysicsWorld &w_;
+    };
 
 
     // ── Debug overlay (Phase 10 debugging tool) ───────────────────────────
@@ -125,7 +159,15 @@ private:
 
     auto make_vehicle_body( vehicle &v ) -> b2BodyId;
     void rebuild_bashable_lookup();
+    /// Push game-side velocity into the bodies (once per turn, before stepping).
+    void sync_bodies_from_game();
+    /// Read integrated position/angle/spin back out (once per turn, after stepping).
+    void sync_game_from_bodies();
+    /// Sub-step count that keeps per-step translation below half a tile.
+    auto substeps_for_turn( float turn_seconds ) const -> int; // *NOPAD*
     bool debug_draw_ = false;
+    /// Set only while a `physics_move_scope` is alive; see that class.
+    bool applying_readback_ = false;
 
 };
 

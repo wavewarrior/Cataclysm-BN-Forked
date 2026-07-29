@@ -8,6 +8,7 @@
 #include "map.h"            // map::abs_to_bub, impassable_ter_furn, is_bashable_ter_furn
 #include "game_constants.h" // SEEX, SEEY
 #include "units_mass.h"     // units::to_kilogram
+#include <algorithm>
 #include <cmath>
 #include "physics_debug_draw.h"
 
@@ -103,15 +104,27 @@ void PhysicsWorld::on_vehicle_moved( vehicle &v )
 {
     const auto it = vehicle_bodies_.find( &v );
     if( it == vehicle_bodies_.end() ) { return; }
-    // Box2D owns position for this vehicle: the readback in vehmove() moves the tile
-    // anchor to match the body, NOT the other way around.  Teleporting the body here
-    // would snap it back to integer-tile-centre metres every tick, defeating sub-tile
-    // integration and creating a staircase feedback loop.
-    if( v.box2d_position_authority ) { return; }
 
+    // Physics-driven move (vehmove()'s readback): the body already holds the
+    // authoritative sub-tile position and the tile anchor was just snapped to
+    // match it.  Writing the body here would slam it to the new tile's centre
+    // every turn, destroying sub-tile integration and creating a staircase
+    // feedback loop.
+    if( applying_readback_ ) { return; }
 
+    // Anything else moved the vehicle (debug teleport, tow, test reset, rail
+    // shift, z-change).  The body MUST follow, and physics_pos must be reseated
+    // with it: leaving physics_pos stale makes the next readback compute a
+    // bogus delta from a position the vehicle no longer occupies.  That was the
+    // defect which let vehicle_efficiency_test's per-turn "teleport back to
+    // start" measure a reset-vs-stale-physics_pos artifact instead of the real
+    // per-turn distance, masking the movement-rate bug entirely.
     const auto bpos = v.bub_ms_location();
     const auto fv   = v.face_vec();
+    if( v.box2d_position_authority ) {
+        v.physics_pos = rl_vec2d{ static_cast<float>( bpos.x() ),
+                                  static_cast<float>( bpos.y() ) };
+    }
     b2Body_SetTransform(
         it->second,
         { static_cast<float>( bpos.x() ) * TILE_M, static_cast<float>( bpos.y() ) * TILE_M },
@@ -379,24 +392,26 @@ void PhysicsWorld::on_tile_bashed( tripoint_bub_ms pos )
 
 // ── Game-loop interface ───────────────────────────────────────────────────────
 
-void PhysicsWorld::step( float dt, int substeps )
+void PhysicsWorld::sync_bodies_from_game()
 {
-    // ── Pre-step: sync game velocity into Box2D bodies so contact impulses are
-    // physically meaningful.  Tile-step still owns position (on_vehicle_moved()
-    // teleports bodies via b2Body_SetTransform after each tile move).  Direct
-    // velocity set is used here; force-driven movement is wired in Step 5 when
-    // Box2D becomes the position authority.
+    // Push the game's velocity model into the bodies.  Done once per turn, not
+    // per sub-step: a per-sub-step re-sync would overwrite whatever the contact
+    // solver produced, so collisions could never actually change velocity.
     for( auto &[veh, bid] : vehicle_bodies_ ) {
         const auto fv      = veh->face_vec();
         const auto spd_mps = static_cast<float>( veh->velocity ) / 100.0f;
         b2Body_SetLinearVelocity( bid, { static_cast<float>( fv.x ) * spd_mps,
                                          static_cast<float>( fv.y ) * spd_mps } );
         b2Body_SetAngularVelocity( bid, veh->angular_velocity_rads );
+        // Continuous collision for anything fast enough to cross a whole tile
+        // within one turn; without this a fast body can still skip a 1-tile
+        // static terrain body between sub-steps.
+        b2Body_SetBullet( bid, std::abs( veh->velocity ) > 2000 );
     }
+}
 
-    b2World_Step( world_, dt, substeps );
-
-    // ── Post-step: read back physics state → vehicle fields ──────────────────
+void PhysicsWorld::sync_game_from_bodies()
+{
     for( auto &[veh, bid] : vehicle_bodies_ ) {
         const auto pos             = b2Body_GetPosition( bid );
         veh->physics_pos           = rl_vec2d{ pos.x / TILE_M, pos.y / TILE_M };
@@ -405,7 +420,41 @@ void PhysicsWorld::step( float dt, int substeps )
         veh->angular_velocity_rads = b2Body_GetAngularVelocity( bid );
         veh->refresh_precalc( veh->physics_angle );
     }
+}
 
+auto PhysicsWorld::substeps_for_turn( float turn_seconds ) const -> int
+{
+    // Keep per-step translation under half a tile so a body cannot pass through
+    // a 1-tile-wide static terrain body between steps.
+    constexpr auto max_tiles_per_step = 0.5f;
+    auto max_mps = 0.0f;
+    for( const auto &[veh, bid] : vehicle_bodies_ ) {
+        max_mps = std::max( max_mps, std::abs( static_cast<float>( veh->velocity ) ) / 100.0f );
+    }
+    if( max_mps <= 0.0f ) { return 1; }
+    const auto travel_m   = max_mps * turn_seconds;
+    const auto step_limit = max_tiles_per_step * TILE_M;
+    return std::clamp( static_cast<int>( std::ceil( travel_m / step_limit ) ), 1, 240 );
+}
+
+void PhysicsWorld::step_turn( float turn_seconds )
+{
+    if( turn_seconds <= 0.0f ) { return; }
+    sync_bodies_from_game();
+    const auto steps = substeps_for_turn( turn_seconds );
+    const auto dt    = turn_seconds / static_cast<float>( steps );
+    for( int i = 0; i < steps; ++i ) {
+        b2World_Step( world_, dt, 4 );
+        dispatch_contact_events();
+    }
+    sync_game_from_bodies();
+}
+
+void PhysicsWorld::step( float dt, int substeps )
+{
+    sync_bodies_from_game();
+    b2World_Step( world_, dt, substeps );
+    sync_game_from_bodies();
     dispatch_contact_events();
 }
 
