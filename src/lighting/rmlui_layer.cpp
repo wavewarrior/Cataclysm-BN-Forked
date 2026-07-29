@@ -4,6 +4,7 @@
 #include "gpu_device.h"
 #include "path_info.h"
 #include "menu_plexus.h"
+#include "rml_length.h"
 #include "rmlui_proc_texture.h"
 #include "rmlui_render_interface.h"
 #include "rmlui_system_interface.h"
@@ -721,6 +722,12 @@ struct runic_frame_opts {
     bool no_right = false;
 };
 
+// Pixel lengths go through rml::px (rml_length.h) — never std::to_string or
+// printf "%f", which honour LC_NUMERIC and emit "2,93px" on a comma-decimal
+// locale.  Inside a gradient that comma reads as an argument separator, so
+// RmlUi rejects the entire declaration.
+using rml::px;
+
 /// Compose the runic frame decorator string for a given element size.
 /// Returns empty string if the element is too small for the frame.
 auto compose_runic_frame( const runic_frame_opts &opts ) -> std::string
@@ -921,10 +928,10 @@ void apply_crt() {
                 fr->SetProperty("position", "absolute");
                 fr->SetProperty("pointer-events", "none");
                 fr->SetProperty("z-index", "11");
-                fr->SetProperty("left", std::to_string(foff.x) + "px");
-                fr->SetProperty("top", std::to_string(foff.y) + "px");
-                fr->SetProperty("width", std::to_string(sz.x) + "px");
-                fr->SetProperty("height", std::to_string(sz.y) + "px");
+                fr->SetProperty("left", px(foff.x));
+                fr->SetProperty("top", px(foff.y));
+                fr->SetProperty("width", px(sz.x));
+                fr->SetProperty("height", px(sz.y));
                 fr->SetProperty("decorator", fdec);
             }
             // Interactive close button: a clickable X overlaying the top-right
@@ -957,8 +964,8 @@ void apply_crt() {
                     cl->SetProperty("position", "absolute");
                     cl->SetProperty("pointer-events", "auto");
                     cl->SetProperty("z-index", "12");
-                    cl->SetProperty("left", std::to_string(coff.x + far_x) + "px");
-                    cl->SetProperty("top", std::to_string(coff.y + FRAME_INSET) + "px");
+                    cl->SetProperty("left", px(coff.x + far_x));
+                    cl->SetProperty("top", px(coff.y + FRAME_INSET));
                     cl->SetProperty("width", std::to_string(ring_disp) + "px");
                     cl->SetProperty("height", std::to_string(ring_disp) + "px");
                     cl->SetProperty("decorator", xdec);
@@ -1016,10 +1023,10 @@ void apply_crt() {
                     fr->SetProperty("position", "absolute");
                     fr->SetProperty("pointer-events", "none");
                     fr->SetProperty("z-index", "11");
-                    fr->SetProperty("left", std::to_string(roff.x) + "px");
-                    fr->SetProperty("top", std::to_string(roff.y) + "px");
-                    fr->SetProperty("width", std::to_string(rsz.x) + "px");
-                    fr->SetProperty("height", std::to_string(rsz.y) + "px");
+                    fr->SetProperty("left", px(roff.x));
+                    fr->SetProperty("top", px(roff.y));
+                    fr->SetProperty("width", px(rsz.x));
+                    fr->SetProperty("height", px(rsz.y));
                     if (frame_str.empty()) {
                         fr->SetProperty("decorator", "none");
                     } else {
@@ -1069,10 +1076,10 @@ void apply_crt() {
                     fr->SetProperty("position", "absolute");
                     fr->SetProperty("pointer-events", "none");
                     fr->SetProperty("z-index", "11");
-                    fr->SetProperty("left", std::to_string(eoff.x) + "px");
-                    fr->SetProperty("top", std::to_string(eoff.y) + "px");
-                    fr->SetProperty("width", std::to_string(esz.x) + "px");
-                    fr->SetProperty("height", std::to_string(esz.y) + "px");
+                    fr->SetProperty("left", px(eoff.x));
+                    fr->SetProperty("top", px(eoff.y));
+                    fr->SetProperty("width", px(esz.x));
+                    fr->SetProperty("height", px(esz.y));
                     fr->SetProperty("decorator", dec.c_str());
                 }
             }
@@ -1106,20 +1113,18 @@ void apply_crt() {
         const int idx = static_cast<int>(std::fmod(t * 24.0, 20.0));
         const float ftab = CRT_FLICKER[std::clamp(idx, 0, 19)];
         const unsigned fa = crt_a255(g_crt.flicker * (1.0f - ftab));
-        char dec[320];
-        (void)std::snprintf(
-            dec, sizeof(dec),
-            "linear-gradient( 0deg, #000000%02x, #000000%02x ), "
+        const std::string dec = std::format(
+            "linear-gradient( 0deg, #000000{:02x}, #000000{:02x} ), "
             "repeating-linear-gradient( 0deg, "
-            "#00000000 %.2fpx, #00000000 %.2fpx, "
-            "#000000%02x %.2fpx, #000000%02x %.2fpx )",
+            "#00000000 {:.2f}px, #00000000 {:.2f}px, "
+            "#000000{:02x} {:.2f}px, #000000{:02x} {:.2f}px )",
             fa, fa, phase, phase + gap, sa, phase + gap, sa, phase + pitch);
         overlay->SetProperty("display", "block");
         overlay->SetProperty("position", "absolute");
-        overlay->SetProperty("left", std::to_string(poff.x) + "px");
-        overlay->SetProperty("top", std::to_string(poff.y) + "px");
-        overlay->SetProperty("width", std::to_string(psz.x) + "px");
-        overlay->SetProperty("height", std::to_string(psz.y) + "px");
+        overlay->SetProperty("left", px(poff.x));
+        overlay->SetProperty("top", px(poff.y));
+        overlay->SetProperty("width", px(psz.x));
+        overlay->SetProperty("height", px(psz.y));
         overlay->SetProperty("decorator", dec);
         overlay->SetProperty("opacity", "1.0");
     }
