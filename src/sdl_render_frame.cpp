@@ -1021,30 +1021,20 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
                                     ? rs.ui_post_target()->texture()
                                     : ctx.swapchain_tex;
 
-    rs.tile_batcher().begin_pass( ctx.cmd_buffer, render_target,
-                                  ctx.swapchain_w, ctx.swapchain_h,
-                                  clear_black,
-                                  static_cast<std::uint32_t>( proj_w ),
-                                  static_cast<std::uint32_t>( proj_h ) );
-
-    auto blit_layer = [&]( lighting::ui_composite_target * layer ) {
-        if( !layer || !layer->texture() || !rs.gpu_sampler() ) {
-            return;
-        }
-        const lighting::sprite_instance quad = fullscreen_quad(
-                static_cast<float>( proj_w ), static_cast<float>( proj_h ) );
-        rs.tile_batcher().set_texture( layer->texture(), rs.gpu_sampler(),
-                                       /*is_lit=*/false );
-        rs.tile_batcher().draw( quad );
-    };
-    if( g_shadow_debug && rs.shadow_mask() && rs.shadow_mask()->texture() ) {
-        blit_layer( rs.shadow_mask() );
-    } else {
-        blit_layer( rs.world_ldr_target() );
-    }
-    blit_layer( rs.ui_target() );
     // Atmospheric HUD particles (Phase 8): environment-driven ambient particles.
-    // Screen-space (not world-locked) — drift independently of camera movement.
+    // Screen-space (not world-locked) — they drift independently of camera movement.
+    // Simulated and uploaded HERE, before the pass opens: prepare() records a copy
+    // pass, which cannot nest inside a render pass (same constraint as
+    // rmlui_layer::prepare above). The draw itself is issued from the overlay
+    // callback at end_pass, so the particles land ON TOP of the HUD.
+    //
+    // They used to be drawn into rs.ui_target(), the CACHED curses/UI composite:
+    // that put them under every RmlUi panel, and on frames where the UI is not
+    // dirty (composite_ui_pass_a skips the clear) each frame's draw stacked onto
+    // the last, smearing trails into a texture nothing ever wiped.
+    const std::uint32_t target_w = ctx.swapchain_w;
+    const std::uint32_t target_h = ctx.swapchain_h;
+    std::uint32_t particle_count = 0;
     {
         auto ptype = lighting::hud_emitter_type::dust;
         auto prate = 4.0f;
@@ -1072,7 +1062,8 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
                 prate = 8.0f;
                 palpha = 0.7f;
             } else if( raining ) {
-                // Rain: suppress HUD particles (rain_effect handles world-space rain)
+                // Rain: the world-space rain_effect already fills the screen, so the
+                // ambient layer would only add mush. Deliberately empty.
                 prate = 0.0f;
             } else if( season == AUTUMN ) {
                 // Autumn: tumbling leaves
@@ -1092,36 +1083,49 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
             }
         }
 
-        // ui_target() is null until render_state::init() has populated it, and
-        // refresh_display runs long before that during startup (load_soundset ->
-        // pump_events -> refresh_display). The guard below used to sit AFTER these
-        // two dereferences, so an early frame null-dereferenced here
-        // (EXCEPTION_ACCESS_VIOLATION). Resolve the target ONCE, up front, and
-        // read its size only after it is known good.
-        lighting::ui_composite_target *hud_target = rs.ui_target();
-        if( rs.hud_particles().ready() && hud_target && hud_target->texture() ) {
-            const auto phys_w = hud_target->width();
-            const auto phys_h = hud_target->height();
-            const lighting::hud_particle_params params {
-                .type = ptype,
-                .spawn_rate = prate,
-                .intensity = palpha,
-                .screen_w = static_cast<std::uint32_t>( phys_w ),
-                .screen_h = static_cast<std::uint32_t>( phys_h ),
-            };
-            rs.hud_particles().record( ctx.cmd_buffer, hud_target->texture(),
-                                       static_cast<std::uint32_t>( phys_w ),
-                                       static_cast<std::uint32_t>( phys_h ), params );
-        }
+        particle_count = rs.hud_particles().prepare( ctx.cmd_buffer, {
+            .type = ptype,
+            .spawn_rate = prate,
+            .intensity = palpha,
+            .screen_w = target_w,
+            .screen_h = target_h,
+        } );
     }
 
+    rs.tile_batcher().begin_pass( ctx.cmd_buffer, render_target,
+                                  ctx.swapchain_w, ctx.swapchain_h,
+                                  clear_black,
+                                  static_cast<std::uint32_t>( proj_w ),
+                                  static_cast<std::uint32_t>( proj_h ) );
+
+    auto blit_layer = [&]( lighting::ui_composite_target * layer ) {
+        if( !layer || !layer->texture() || !rs.gpu_sampler() ) {
+            return;
+        }
+        const lighting::sprite_instance quad = fullscreen_quad(
+                static_cast<float>( proj_w ), static_cast<float>( proj_h ) );
+        rs.tile_batcher().set_texture( layer->texture(), rs.gpu_sampler(),
+                                       /*is_lit=*/false );
+        rs.tile_batcher().draw( quad );
+    };
+    if( g_shadow_debug && rs.shadow_mask() && rs.shadow_mask()->texture() ) {
+        blit_layer( rs.shadow_mask() );
+    } else {
+        blit_layer( rs.world_ldr_target() );
+    }
+    blit_layer( rs.ui_target() );
     // RmlUi (player menus + dev panel + world text) draws into the single swapchain
-    // pass (D3D12 single-pass rule).
+    // pass (D3D12 single-pass rule) — and the HUD particles ride along after it, in
+    // the same pass, for the same reason.
     rs.tile_batcher().end_pass(
-          rmlui_active
+          ( rmlui_active || particle_count > 0 )
           ? lighting::sprite_batcher::pass_overlay_fn(
-    []( SDL_GPURenderPass * rp, SDL_GPUCommandBuffer * cb ) {
-        rmlui_layer::render_in_pass( rp, cb );
+    [&rs, rmlui_active, particle_count, target_w, target_h](
+                  SDL_GPURenderPass * rp, SDL_GPUCommandBuffer * cb ) {
+        if( rmlui_active ) {
+            rmlui_layer::render_in_pass( rp, cb );
+        }
+        rs.hud_particles().draw_in_pass( rp, cb, particle_count, target_w, target_h );
     } )
     : lighting::sprite_batcher::pass_overlay_fn{} );
     // UI post-processing (Phase 9): bloom + chromatic aberration.

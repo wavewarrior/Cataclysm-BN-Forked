@@ -27,7 +27,8 @@ struct hud_particle {
     float vx = 0.f;          // horizontal velocity px/sec
     float vy = 0.f;          // vertical velocity px/sec
     float size = 2.f;        // diameter in px
-    float alpha = 1.0f;      // base alpha
+    float alpha = 1.0f;      // current alpha (derived from base_alpha + age)
+    float base_alpha = 1.0f; // spawn alpha, never mutated — the fade reads it
     float age = 0.f;         // seconds alive
     float lifetime = 3.f;    // total lifetime in seconds
     float rotation = 0.f;    // rotation angle (degrees)
@@ -74,10 +75,22 @@ public:
             && particle_xfer_ != nullptr && particle_storage_ != nullptr;
     }
 
-    // Update particles and record draws.
-    auto record( SDL_GPUCommandBuffer *cb, SDL_GPUTexture *ui_tex,
-                 std::uint32_t ui_w, std::uint32_t ui_h,
-                 const hud_particle_params &params ) -> void;
+    // Advance the simulation with the real frame delta and upload this frame's
+    // instances. MUST be called BEFORE the render pass opens (it records a copy
+    // pass, which cannot nest inside one). Returns the instance count to draw,
+    // 0 when there is nothing to draw.
+    auto prepare( SDL_GPUCommandBuffer *cb, const hud_particle_params &params ) -> std::uint32_t;
+
+    // Issue the draw INSIDE an already-open render pass, so the particles land
+    // over everything that pass has drawn — including the RmlUi HUD, which is
+    // itself an overlay callback in that same pass. A standalone pass of our own
+    // is not an option: D3D12 allows one render pass per swapchain target per
+    // command buffer (see sdl_render_frame.cpp), and drawing into the cached
+    // ui_composite_target instead (the old behaviour) put the particles UNDER the
+    // HUD and smeared trails into a texture that is only re-cleared when the UI
+    // goes dirty.
+    auto draw_in_pass( SDL_GPURenderPass *rp, SDL_GPUCommandBuffer *cb, std::uint32_t count,
+                       std::uint32_t target_w, std::uint32_t target_h ) -> void;
 
 private:
     // Spawn a new particle based on emitter type.
@@ -105,6 +118,12 @@ private:
     static constexpr int MAX_PARTICLES = 256;
     std::vector<hud_particle> particles_;
     float spawn_accumulator_ = 0.f;
+    // Wall-clock of the previous record(), for the real frame delta. 0 = first
+    // frame. The simulation used to advance a hardcoded 1/60 s per record()
+    // call, which is not a time step at all: refresh_display only runs on a
+    // redraw, so particles aged (and therefore travelled) at whatever rate the
+    // UI happened to repaint.
+    std::uint64_t last_ticks_ms_ = 0;
 };
 
 } // namespace lighting
