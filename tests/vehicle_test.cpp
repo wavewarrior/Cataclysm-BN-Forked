@@ -838,3 +838,75 @@ TEST_CASE( "box2d_authority_vehicle_climbs_ramp", "[vehicle][box2d][ramp]" )
     CHECK( min_velocity > 0 );
 }
 #endif // BOX2D_ENABLED
+
+#ifdef BOX2D_ENABLED
+// map::load() re-anchors the whole reality bubble.  It must not leave the previous
+// bubble's terrain colliders behind.
+//
+// load() drops every grid pointer with a bare
+// `std::fill( grid.begin(), grid.end(), nullptr )` (map.cpp:1212) and never calls
+// on_submap_unloaded, then loadn() builds fresh bodies for the new bubble.  Terrain
+// bodies are keyed by absolute submap but *positioned* in bubble coordinates, and a
+// distant load carries no shift delta, so on_map_shifted never runs either.  Without
+// an explicit teardown the old bodies both accumulate and sit at stale positions —
+// invisible walls at wherever those tiles used to appear on screen.
+//
+// Travelling away and back is the tightest statement of the invariant: the collider
+// count for a given bubble must be a function of that bubble, not of how many times
+// the player has visited it.
+//
+// PENDING SPEC — tagged [!shouldfail] because the harness cannot yet build terrain
+// colliders at all, so the invariant is currently unmeasurable rather than violated.
+// on_submap_loaded() only fires from map::loadn() for submaps on the player's
+// z-level, on_tile_changed() only refreshes submaps that are ALREADY registered, and
+// a fresh test world is open field where no tile earns a collider.  count_home comes
+// out 0 and the equality below then holds trivially, which is why the REQUIRE guard
+// is there — an earlier assertion in this file passed for exactly that reason while
+// measuring nothing.
+//
+// The defect it targets is real and read-verified: map::load() fills the grid with
+// nullptr (map.cpp:1212 before the fix) and never calls on_submap_unloaded.  The fix
+// is committed; this spec flips green once the harness can produce colliders, at
+// which point drop the tag.
+TEST_CASE( "box2d_map_load_does_not_accumulate_colliders", "[!shouldfail][vehicle][box2d]" )
+{
+    clear_all_state();
+    auto &here = get_map();
+    auto *pw = here.get_physics_world();
+    REQUIRE( pw != nullptr );
+
+    const auto home = here.get_abs_sub();
+    // Far enough that no submap of one bubble is a submap of the other.
+    const auto away = home + tripoint_rel_sm( 3 * MAPSIZE, 3 * MAPSIZE, 0 );
+    REQUIRE( away.z() == home.z() );
+
+    // A fresh test world is open field, and open ground correctly gets no collider,
+    // so the bubble needs real obstacles or there is nothing to count.  These live in
+    // MAPBUFFER-resident submaps, so they survive the travel and are still there when
+    // the bubble is re-anchored back onto them.
+    for( int i = 0; i < 12; i++ ) {
+        here.ter_set( tripoint_bub_ms( 20 + i * 4, 60, 0 ), ter_id( "t_wall_wood" ) );
+    }
+
+    here.load( home, true );
+    const auto count_home = pw->terrain_body_count();
+
+    here.load( away, true );
+    const auto count_away = pw->terrain_body_count();
+
+    here.load( home, true );
+    const auto count_home_again = pw->terrain_body_count();
+
+    CAPTURE( count_home );
+    CAPTURE( count_away );
+    CAPTURE( count_home_again );
+
+    // Guard against a vacuous pass: if no colliders are ever built the equality below
+    // holds trivially.  This is exactly how an earlier assertion in this file managed
+    // to measure nothing at all.
+    REQUIRE( count_home > 0 );
+
+    // Revisiting must reproduce the original count, not add to it.
+    CHECK( count_home_again == count_home );
+}
+#endif // BOX2D_ENABLED
