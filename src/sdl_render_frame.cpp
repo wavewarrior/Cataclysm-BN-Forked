@@ -962,6 +962,46 @@ auto tonemap_pass_t( lighting::render_state &rs,
     }
 }
 
+// ── HUD particle dev knobs (F4 → Effects → HUD particles) ───────────────────
+// The weather picker in composite_swapchain_pass_b owns each emitter's authored
+// rate/alpha. When the dev panel FORCES an emitter there is no weather branch to
+// take them from, so the same numbers live here once and both paths read them.
+auto hud_emitter_base_rate( lighting::hud_emitter_type t ) -> float
+{
+    switch( t ) {
+        case lighting::hud_emitter_type::ember:  return 2.5f;
+        case lighting::hud_emitter_type::dust:   return 3.0f;
+        case lighting::hud_emitter_type::pollen: return 2.0f;
+        case lighting::hud_emitter_type::snow:   return 8.0f;
+        case lighting::hud_emitter_type::leaf:   return 3.0f;
+    }
+    return 3.0f;
+}
+
+auto hud_emitter_base_alpha( lighting::hud_emitter_type t ) -> float
+{
+    switch( t ) {
+        case lighting::hud_emitter_type::ember:  return 0.7f;
+        case lighting::hud_emitter_type::dust:   return 0.35f;
+        case lighting::hud_emitter_type::pollen: return 0.4f;
+        case lighting::hud_emitter_type::snow:   return 0.7f;
+        case lighting::hud_emitter_type::leaf:   return 0.6f;
+    }
+    return 0.5f;
+}
+
+auto hud_emitter_enabled( lighting::hud_emitter_type t ) -> bool
+{
+    switch( t ) {
+        case lighting::hud_emitter_type::ember:  return g_hud_part_ember_enable;
+        case lighting::hud_emitter_type::dust:   return g_hud_part_dust_enable;
+        case lighting::hud_emitter_type::pollen: return g_hud_part_pollen_enable;
+        case lighting::hud_emitter_type::snow:   return g_hud_part_snow_enable;
+        case lighting::hud_emitter_type::leaf:   return g_hud_part_leaf_enable;
+    }
+    return true;
+}
+
 auto composite_swapchain_pass_b( lighting::render_state &rs,
                                  lighting::frame_context &ctx, int proj_w, int proj_h ) -> void
 {
@@ -1035,7 +1075,11 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
     const std::uint32_t target_w = ctx.swapchain_w;
     const std::uint32_t target_h = ctx.swapchain_h;
     std::uint32_t particle_count = 0;
-    {
+    if( !g_hud_part_enable ) {
+        // Off means gone, not "stops spawning": without this the last poolful
+        // hangs on screen until every particle ages out.
+        rs.hud_particles().clear();
+    } else {
         auto ptype = lighting::hud_emitter_type::dust;
         auto prate = 4.0f;
         auto palpha = 0.5f;
@@ -1063,8 +1107,11 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
                 palpha = 0.7f;
             } else if( raining ) {
                 // Rain: the world-space rain_effect already fills the screen, so the
-                // ambient layer would only add mush. Deliberately empty.
-                prate = 0.0f;
+                // ambient layer only adds mush — unless the dev panel asks for it,
+                // in which case dust doubles as wind-blown spray.
+                ptype = lighting::hud_emitter_type::dust;
+                prate = g_hud_part_in_rain ? 4.0f : 0.0f;
+                palpha = 0.5f;
             } else if( season == AUTUMN ) {
                 // Autumn: tumbling leaves
                 ptype = lighting::hud_emitter_type::leaf;
@@ -1083,13 +1130,54 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
             }
         }
 
+        // Dev panel (F4 → Effects → HUD particles).
+        if( g_hud_part_force ) {
+            // Explicit request — the per-emitter kill-switches below do not apply,
+            // otherwise forcing an emitter you had silenced would do nothing and
+            // look like a broken control.
+            ptype = static_cast<lighting::hud_emitter_type>(
+                        std::clamp( g_hud_part_type, 0, 4 ) );
+            prate = hud_emitter_base_rate( ptype );
+            palpha = hud_emitter_base_alpha( ptype );
+        } else if( !hud_emitter_enabled( ptype ) ) {
+            prate = 0.0f;
+        }
+
         particle_count = rs.hud_particles().prepare( ctx.cmd_buffer, {
             .type = ptype,
-            .spawn_rate = prate,
-            .intensity = palpha,
+            .spawn_rate = std::max( 0.f, prate * g_hud_part_rate_scale ),
+            .intensity = std::max( 0.f, palpha * g_hud_part_alpha_scale ),
             .screen_w = target_w,
             .screen_h = target_h,
+            .size_scale = g_hud_part_size_scale,
+            .speed_scale = g_hud_part_speed_scale,
         } );
+    }
+
+    // Gameplay cutout for the particle draw. The map viewport comes from
+    // tilecontext in LOGICAL window pixels (same space the mouse-picking above
+    // uses), while the particle pass runs at the PHYSICAL swapchain size, so it
+    // has to be scaled — on a HiDPI/scaled display the two differ and an
+    // unscaled rect would mask the wrong region.
+    lighting::hud_particle_draw part_draw {
+        .count = particle_count,
+        .target_w = target_w,
+        .target_h = target_h,
+    };
+    if( g_hud_part_mask_play && tilecontext && g
+        && world_generator && world_generator->active_world ) {
+        const point off = tilecontext->get_drawing_pixel_offset();
+        const float map_w = static_cast<float>( tilecontext->get_screentile_width() *
+                                                tilecontext->get_tile_width() );
+        const float map_h = static_cast<float>( tilecontext->get_screentile_height() *
+                                                tilecontext->get_tile_height() );
+        const float sx = proj_w > 0 ? static_cast<float>( target_w ) / static_cast<float>( proj_w ) : 1.f;
+        const float sy = proj_h > 0 ? static_cast<float>( target_h ) / static_cast<float>( proj_h ) : 1.f;
+        part_draw.play_x0 = static_cast<float>( off.x ) * sx;
+        part_draw.play_y0 = static_cast<float>( off.y ) * sy;
+        part_draw.play_x1 = ( static_cast<float>( off.x ) + map_w ) * sx;
+        part_draw.play_y1 = ( static_cast<float>( off.y ) + map_h ) * sy;
+        part_draw.mask_play_area = true;
     }
 
     rs.tile_batcher().begin_pass( ctx.cmd_buffer, render_target,
@@ -1120,12 +1208,15 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
     rs.tile_batcher().end_pass(
           ( rmlui_active || particle_count > 0 )
           ? lighting::sprite_batcher::pass_overlay_fn(
-    [&rs, rmlui_active, particle_count, target_w, target_h](
+    [&rs, rmlui_active, part_draw](
                   SDL_GPURenderPass * rp, SDL_GPUCommandBuffer * cb ) {
         if( rmlui_active ) {
             rmlui_layer::render_in_pass( rp, cb );
         }
-        rs.hud_particles().draw_in_pass( rp, cb, particle_count, target_w, target_h );
+        lighting::hud_particle_draw d = part_draw;
+        d.rp = rp;
+        d.cb = cb;
+        rs.hud_particles().draw_in_pass( d );
     } )
     : lighting::sprite_batcher::pass_overlay_fn{} );
     // UI post-processing (Phase 9): bloom + chromatic aberration.

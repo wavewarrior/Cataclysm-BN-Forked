@@ -163,11 +163,11 @@ namespace
 
 constexpr float REF_HEIGHT = 1080.f; ///< Resolution the px sizes below are authored at.
 
-/// Lifetime that carries a particle `distance` px at `speed` px/s, with `slack`
-/// extra so it dies just past the far edge instead of popping out mid-screen.
-auto travel_lifetime( float distance, float speed, float slack = 1.15f ) -> float
+/// Local alias for the header's pure helper (unit-tested in
+/// tests/hud_particle_test.cpp) — the math MUST have exactly one definition.
+constexpr auto travel_lifetime( float distance, float speed ) -> float
 {
-    return speed > 0.f ? distance * slack / speed : 1.f;
+    return hud_particle_travel_lifetime( distance, speed );
 }
 
 } // namespace
@@ -177,7 +177,12 @@ auto hud_particle_effect::spawn_particle( const hud_particle_params &params ) ->
     hud_particle p{};
     const float w = static_cast<float>( params.screen_w );
     const float h = static_cast<float>( params.screen_h );
-    const float px = h / REF_HEIGHT; // size scale
+    // Resolution scale folded with the dev-panel size knob.
+    const float px = h / REF_HEIGHT * std::max( 0.05f, params.size_scale );
+    // Velocity knob. Speeds below are all `h * fraction * vel`, and the derived
+    // lifetimes divide by that same speed, so this changes how FAST a particle
+    // crosses the screen, never whether it makes it across.
+    const float vel = std::max( 0.05f, params.speed_scale );
 
     switch( params.type ) {
         case hud_emitter_type::ember: {
@@ -185,8 +190,8 @@ auto hud_particle_effect::spawn_particle( const hud_particle_params &params ) ->
             // stay near where it spawned, so its lifetime stays fixed.
             p.x = static_cast<float>( rng_float( 0.0, w ) );
             p.y = h * static_cast<float>( rng_float( 0.5, 1.0 ) );
-            p.vx = h * static_cast<float>( rng_float( -0.012, 0.012 ) );
-            p.vy = -h * static_cast<float>( rng_float( 0.06, 0.13 ) );
+            p.vx = vel * h * static_cast<float>( rng_float( -0.012, 0.012 ) );
+            p.vy = -vel * h * static_cast<float>( rng_float( 0.06, 0.13 ) );
             p.size = px * static_cast<float>( rng_float( 5.0, 10.0 ) );
             p.lifetime = static_cast<float>( rng_float( 3.0, 6.0 ) );
             p.rot_speed = static_cast<float>( rng_float( -60.0, 60.0 ) );
@@ -197,11 +202,11 @@ auto hud_particle_effect::spawn_particle( const hud_particle_params &params ) ->
         }
         case hud_emitter_type::dust: {
             // Drifts in from the left and must reach the right edge.
-            const float speed = h * static_cast<float>( rng_float( 0.05, 0.14 ) );
+            const float speed = vel * h * static_cast<float>( rng_float( 0.05, 0.14 ) );
             p.x = -20.f;
             p.y = static_cast<float>( rng_float( 0.0, h ) );
             p.vx = speed;
-            p.vy = h * static_cast<float>( rng_float( -0.006, 0.006 ) );
+            p.vy = vel * h * static_cast<float>( rng_float( -0.006, 0.006 ) );
             p.size = px * static_cast<float>( rng_float( 4.0, 9.0 ) );
             p.lifetime = travel_lifetime( w + 40.f, speed );
             p.rot_speed = static_cast<float>( rng_float( -15.0, 15.0 ) );
@@ -212,10 +217,10 @@ auto hud_particle_effect::spawn_particle( const hud_particle_params &params ) ->
         }
         case hud_emitter_type::pollen: {
             // Floats up from below the bottom edge to past the top one.
-            const float speed = h * static_cast<float>( rng_float( 0.035, 0.08 ) );
+            const float speed = vel * h * static_cast<float>( rng_float( 0.035, 0.08 ) );
             p.x = static_cast<float>( rng_float( 0.0, w ) );
             p.y = h + 20.f;
-            p.vx = h * static_cast<float>( rng_float( -0.012, 0.012 ) );
+            p.vx = vel * h * static_cast<float>( rng_float( -0.012, 0.012 ) );
             p.vy = -speed;
             p.size = px * static_cast<float>( rng_float( 4.0, 8.0 ) );
             p.lifetime = travel_lifetime( h + 40.f, speed );
@@ -226,10 +231,10 @@ auto hud_particle_effect::spawn_particle( const hud_particle_params &params ) ->
             break;
         }
         case hud_emitter_type::snow: {
-            const float speed = h * static_cast<float>( rng_float( 0.09, 0.20 ) );
+            const float speed = vel * h * static_cast<float>( rng_float( 0.09, 0.20 ) );
             p.x = static_cast<float>( rng_float( 0.0, w ) );
             p.y = -20.f;
-            p.vx = h * static_cast<float>( rng_float( -0.02, 0.02 ) );
+            p.vx = vel * h * static_cast<float>( rng_float( -0.02, 0.02 ) );
             p.vy = speed;
             p.size = px * static_cast<float>( rng_float( 5.0, 12.0 ) );
             p.lifetime = travel_lifetime( h + 40.f, speed );
@@ -241,7 +246,7 @@ auto hud_particle_effect::spawn_particle( const hud_particle_params &params ) ->
         }
         case hud_emitter_type::leaf: {
             // Tumbling leaf — spawns from the top or the left, drifts down + right.
-            const float fall = h * static_cast<float>( rng_float( 0.055, 0.13 ) );
+            const float fall = vel * h * static_cast<float>( rng_float( 0.055, 0.13 ) );
             if( rng_float( 0.0, 1.0 ) < 0.5 ) {
                 p.x = static_cast<float>( rng_float( 0.0, w ) );
                 p.y = -20.f;
@@ -249,7 +254,7 @@ auto hud_particle_effect::spawn_particle( const hud_particle_params &params ) ->
                 p.x = static_cast<float>( rng_float( -20.0, 0.0 ) );
                 p.y = static_cast<float>( rng_float( 0.0, h * 0.5 ) );
             }
-            p.vx = h * static_cast<float>( rng_float( 0.03, 0.08 ) );
+            p.vx = vel * h * static_cast<float>( rng_float( 0.03, 0.08 ) );
             p.vy = fall;
             p.size = px * static_cast<float>( rng_float( 7.0, 15.0 ) );
             p.lifetime = travel_lifetime( h + 40.f, fall );
@@ -288,6 +293,15 @@ auto hud_particle_effect::spawn_particle( const hud_particle_params &params ) ->
 
 // ---- Particle management ------------------------------------------------
 
+auto hud_particle_effect::clear() noexcept -> void
+{
+    particles_.clear();
+    spawn_accumulator_ = 0.f;
+    // Forget the clock too: the next prepare() would otherwise charge the whole
+    // paused interval to its first step and shove the new particles off-screen.
+    last_ticks_ms_ = 0;
+}
+
 auto hud_particle_effect::update_particles( float dt ) -> void
 {
     // Fade in over the first 0.4 s (a particle spawns off-screen, so this is
@@ -301,18 +315,10 @@ auto hud_particle_effect::update_particles( float dt ) -> void
         p.y += p.vy * dt;
         p.rotation += p.rot_speed * dt;
 
-        // Envelope is recomputed from age every step. It used to be a per-frame
-        // MULTIPLY into p.alpha, which compounds: the factor is < 1 on every
-        // frame past fade_start, so alpha collapsed geometrically within a few
-        // frames and the `alpha <= 0.01` reap below then deleted the particle at
-        // ~70% of its nominal lifetime instead of at the end of it.
-        const float fade_start = p.lifetime * 0.7f;
-        const float in = FADE_IN > 0.f ? std::min( 1.f, p.age / FADE_IN ) : 1.f;
-        const float out = p.age > fade_start
-                          ? std::max( 0.f, 1.f - ( p.age - fade_start ) /
-                                      ( p.lifetime - fade_start ) )
-                          : 1.f;
-        p.alpha = p.base_alpha * in * out;
+        // Envelope is a pure function of age (hud_particle_alpha, unit-tested):
+        // it used to be a per-frame MULTIPLY into p.alpha, which compounds and
+        // killed particles at ~70% of their nominal lifetime.
+        p.alpha = hud_particle_alpha( p.base_alpha, p.age, p.lifetime, FADE_IN );
     }
 
     // Remove expired particles. Only `age` decides — alpha is a pure function of
@@ -402,11 +408,9 @@ auto hud_particle_effect::prepare( SDL_GPUCommandBuffer *cb,
                std::min( particles_.size(), static_cast<size_t>( MAX_PARTICLES ) ) );
 }
 
-auto hud_particle_effect::draw_in_pass(
-    SDL_GPURenderPass *rp, SDL_GPUCommandBuffer *cb, std::uint32_t count,
-    std::uint32_t target_w, std::uint32_t target_h ) -> void
+auto hud_particle_effect::draw_in_pass( const hud_particle_draw &d ) -> void
 {
-    if( !ready() || !rp || !cb || count == 0 ) {
+    if( !ready() || !d.rp || !d.cb || d.count == 0 ) {
         return;
     }
 
@@ -418,24 +422,46 @@ auto hud_particle_effect::draw_in_pass(
         std::uint32_t pad;
     };
     const FrameParams fp {
-        .target_w = static_cast<float>( target_w ),
-        .target_h = static_cast<float>( target_h ),
+        .target_w = static_cast<float>( d.target_w ),
+        .target_h = static_cast<float>( d.target_h ),
         .instance_base = 0,
         .pad = 0,
     };
-    SDL_BindGPUGraphicsPipeline( rp, particle_pipeline_ );
-    SDL_PushGPUVertexUniformData( cb, 0, &fp, sizeof( fp ) );
+
+    // Gameplay cutout (fragment slot 0). Matches MaskParams in
+    // hud_particle.frag.hlsl: the rect is discarded, leaving particles on the
+    // HUD chrome only.
+    struct MaskParams {
+        float x0, y0, x1, y1;
+        float enable;
+        float pad0, pad1, pad2;
+    };
+    const MaskParams mp {
+        .x0 = d.play_x0,
+        .y0 = d.play_y0,
+        .x1 = d.play_x1,
+        .y1 = d.play_y1,
+        // A degenerate rect would discard nothing while still costing the test,
+        // so an empty play area disables the mask outright.
+        .enable = ( d.mask_play_area && d.play_x1 > d.play_x0 && d.play_y1 > d.play_y0 )
+        ? 1.0f : 0.0f,
+        .pad0 = 0.f, .pad1 = 0.f, .pad2 = 0.f,
+    };
+
+    SDL_BindGPUGraphicsPipeline( d.rp, particle_pipeline_ );
+    SDL_PushGPUVertexUniformData( d.cb, 0, &fp, sizeof( fp ) );
+    SDL_PushGPUFragmentUniformData( d.cb, 0, &mp, sizeof( mp ) );
 
     const SDL_GPUViewport vp { 0.0f, 0.0f,
-                               static_cast<float>( target_w ),
-                               static_cast<float>( target_h ), 0.0f, 1.0f };
-    SDL_SetGPUViewport( rp, &vp );
+                               static_cast<float>( d.target_w ),
+                               static_cast<float>( d.target_h ), 0.0f, 1.0f };
+    SDL_SetGPUViewport( d.rp, &vp );
 
     // Bind instance storage buffer.
-    SDL_BindGPUVertexStorageBuffers( rp, 0, &particle_storage_, 1 );
+    SDL_BindGPUVertexStorageBuffers( d.rp, 0, &particle_storage_, 1 );
 
     // Draw: 6 vertices per instance (triangle list), N instances.
-    SDL_DrawGPUPrimitives( rp, 6, count, 0, 0 );
+    SDL_DrawGPUPrimitives( d.rp, 6, d.count, 0, 0 );
 }
 
 } // namespace lighting

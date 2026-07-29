@@ -142,6 +142,29 @@
                 <div class="devui-row">rain intensity <input type="range" min="0" max="1" step="0.01" data-value="rain_intensity"/> <span class="devui-val">{{rain_intensity}}</span></div>
                 <div class="devui-row">wet specular <input type="range" min="0" max="3" step="0.03" data-value="spec_strength"/> <span class="devui-val">{{spec_strength}}</span></div>
 
+                <div class="devui-section">HUD particles (ambient, over the HUD)</div>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="hud_part_enable"/> particles enabled</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="hud_part_force"/> force emitter (ignore weather)</label>
+                <div class="devui-row">
+                    <span class="pk-label">emitter</span>
+                    <select data-value="hud_part_type">
+                        <option data-for="n : hud_part_type_names" data-value="it_index">{{n}}</option>
+                    </select>
+                </div>
+                <div class="devui-note">(weather picks the emitter unless forced; the toggles below silence a weather-picked one)</div>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="hud_part_ember"/> ember (night, outdoors)</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="hud_part_dust"/> dust (underground)</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="hud_part_pollen"/> pollen (clear day)</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="hud_part_snow"/> snow (snowfall)</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="hud_part_leaf"/> leaf (autumn)</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="hud_part_in_rain"/> emit during rain (as spray)</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="hud_part_mask_play"/> keep off the map (mask to HUD)</label>
+                <div class="devui-row">spawn rate x <input type="range" min="0" max="6" step="0.1" data-value="hud_part_rate_scale"/> <span class="devui-val">{{hud_part_rate_scale}}</span></div>
+                <div class="devui-row">alpha x <input type="range" min="0" max="3" step="0.05" data-value="hud_part_alpha_scale"/> <span class="devui-val">{{hud_part_alpha_scale}}</span></div>
+                <div class="devui-row">size x <input type="range" min="0.25" max="6" step="0.05" data-value="hud_part_size_scale"/> <span class="devui-val">{{hud_part_size_scale}}</span></div>
+                <div class="devui-row">speed x <input type="range" min="0.1" max="5" step="0.05" data-value="hud_part_speed_scale"/> <span class="devui-val">{{hud_part_speed_scale}}</span></div>
+                <div class="devui-row"><span class="devui-btn" data-event-click="hud_part_reset">Reset particle knobs</span></div>
+
                 <div class="devui-section">Silhouette sun shadows</div>
                 <label class="devui-row"><input type="checkbox" value="1" data-checked="shadow_debug"/> show shadow mask (debug blit)</label>
                 <div class="devui-row">shadow mask strength <input type="range" min="0" max="1" step="0.01" data-value="shadow_mask_str"/> <span class="devui-val">{{shadow_mask_str}}</span></div>

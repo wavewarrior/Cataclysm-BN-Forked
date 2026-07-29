@@ -82,6 +82,20 @@ float g_rain_intensity = 0.5f;
 float g_spec_strength = 0.0f; // wet specular glint (0=off); × rain intensity per-frame
 bool g_splatmap_enable = true;
 float g_splat_blood_strength = 0.85f;
+bool g_hud_part_enable = true;
+bool g_hud_part_force = false;
+int g_hud_part_type = 1; // dust — see lighting::hud_emitter_type
+bool g_hud_part_ember_enable = true;
+bool g_hud_part_dust_enable = true;
+bool g_hud_part_pollen_enable = true;
+bool g_hud_part_snow_enable = true;
+bool g_hud_part_leaf_enable = true;
+bool g_hud_part_in_rain = false;
+bool g_hud_part_mask_play = true;
+float g_hud_part_rate_scale = 1.0f;
+float g_hud_part_alpha_scale = 1.0f;
+float g_hud_part_size_scale = 1.0f;
+float g_hud_part_speed_scale = 1.0f;
 bool g_shadow_debug = false;
 uint32_t g_current_dbg_mode = 0u;
 float g_skylight_bleed = 0.5f;
@@ -197,6 +211,7 @@ bool g_runic_auto_regen = true; // bump regen when a runic field changes (cf. Im
 Rml::String g_diag_text;        // diagnostics tab read-out, rebuilt each frame
 Rml::Vector<Rml::String> g_dbg_mode_names;       // lighting debug-mode <select> options
 Rml::Vector<Rml::String> g_runic_template_names; // runic template <select> options
+Rml::Vector<Rml::String> g_hud_part_type_names;  // HUD particle emitter <select> options
 
 // ── Tier 8 slice 4: composite colour picker (SV square + hue strip) ─────────
 // RmlUi has no native colour picker, but the render interface implements gradient
@@ -473,6 +488,40 @@ void devui_rml_open()
     c.Bind( "spec_strength", &g_spec_strength );
     c.Bind( "splatmap_enable", &g_splatmap_enable );
     c.Bind( "splat_blood_strength", &g_splat_blood_strength );
+    // Atmospheric HUD particles. The emitter <select> binds an int index straight
+    // into g_hud_part_type (the value IS the enum order), so unlike dbg_mode it
+    // needs no apply-event: sdl_render_frame reads the int each frame.
+    c.Bind( "hud_part_enable", &g_hud_part_enable );
+    c.Bind( "hud_part_force", &g_hud_part_force );
+    c.Bind( "hud_part_type", &g_hud_part_type );
+    c.Bind( "hud_part_type_names", &g_hud_part_type_names );
+    c.Bind( "hud_part_ember", &g_hud_part_ember_enable );
+    c.Bind( "hud_part_dust", &g_hud_part_dust_enable );
+    c.Bind( "hud_part_pollen", &g_hud_part_pollen_enable );
+    c.Bind( "hud_part_snow", &g_hud_part_snow_enable );
+    c.Bind( "hud_part_leaf", &g_hud_part_leaf_enable );
+    c.Bind( "hud_part_in_rain", &g_hud_part_in_rain );
+    c.Bind( "hud_part_mask_play", &g_hud_part_mask_play );
+    c.Bind( "hud_part_rate_scale", &g_hud_part_rate_scale );
+    c.Bind( "hud_part_alpha_scale", &g_hud_part_alpha_scale );
+    c.Bind( "hud_part_size_scale", &g_hud_part_size_scale );
+    c.Bind( "hud_part_speed_scale", &g_hud_part_speed_scale );
+    c.BindEventCallback( "hud_part_reset", []( Rml::DataModelHandle, Rml::Event &,
+    const Rml::VariantList & ) {
+        g_hud_part_enable = true;
+        g_hud_part_force = false;
+        g_hud_part_ember_enable = true;
+        g_hud_part_dust_enable = true;
+        g_hud_part_pollen_enable = true;
+        g_hud_part_snow_enable = true;
+        g_hud_part_leaf_enable = true;
+        g_hud_part_in_rain = false;
+        g_hud_part_mask_play = true;
+        g_hud_part_rate_scale = 1.0f;
+        g_hud_part_alpha_scale = 1.0f;
+        g_hud_part_size_scale = 1.0f;
+        g_hud_part_speed_scale = 1.0f;
+    } );
     c.Bind( "shadow_debug", &g_shadow_debug );
     c.Bind( "shadow_mask_str", &g_dbg_params.shadow_mask_str );
     c.Bind( "mem_dim", &g_dbg_params.mem_dim );
@@ -786,6 +835,8 @@ void devui_rml_open()
         "emit_bw", "normal",  "AO",      "shadow mask", "GI",  "sky access", "sun occ"
     };
     g_runic_template_names = {"Auto", "Centred", "Thirds", "Fixed-interval"};
+    // Order MUST match lighting::hud_emitter_type — the <select> index is the enum.
+    g_hud_part_type_names = {"ember", "dust", "pollen", "snow", "leaf"};
     g_devui_dbg_mode = static_cast<int>( g_current_dbg_mode );
     g_devui_shadow_steps = static_cast<int>( g_dbg_params.shadow_steps );
     g_runic_template = lighting::runic_cfg().force_template + 1;

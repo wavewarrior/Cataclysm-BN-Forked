@@ -13,6 +13,7 @@
 // not the world target.
 
 #include <SDL3/SDL_gpu.h>
+#include <algorithm> // std::min / std::max in the constexpr envelope below
 #include <cstdint>
 #include <vector>
 
@@ -54,6 +55,66 @@ struct hud_particle_params {
     float intensity = 1.0f;        // 0..1 scale (drives alpha)
     std::uint32_t screen_w = 1920;
     std::uint32_t screen_h = 1080;
+    // Dev-panel multipliers (F4 → Effects → HUD particles). 1.0 = authored look.
+    // size_scale multiplies the spawn diameter; speed_scale multiplies velocity,
+    // and because lifetimes are derived from travel distance / speed, a particle
+    // still crosses the same screen distance — it just gets there faster.
+    float size_scale = 1.0f;
+    float speed_scale = 1.0f;
+};
+
+// ── Pure simulation math (free functions so they are unit-testable) ─────────
+
+// Lifetime that carries a particle `distance` px at `speed` px/s, with `slack`
+// extra so it dies just past the far edge instead of popping out mid-screen.
+// Emitters spawn just OUTSIDE an edge, so a lifetime picked independently of
+// speed is what stranded every particle in a band hugging its spawn edge.
+constexpr auto hud_particle_travel_lifetime( float distance, float speed,
+        float slack = 1.15f ) -> float
+{
+    return speed > 0.f ? distance * slack / speed : 1.f;
+}
+
+// Alpha envelope at `age`: ramps up over `fade_in` seconds, holds, then ramps
+// down over the last 30% of `lifetime`.
+//
+// A PURE FUNCTION OF AGE ON PURPOSE. This was once applied as a per-frame
+// multiply into the particle's alpha, which compounds — the factor is < 1 on
+// every frame past the fade start, so alpha collapsed geometrically within a
+// few frames and the reap threshold then deleted the particle at ~70% of its
+// nominal lifetime, far from where it was supposed to travel.
+constexpr auto hud_particle_alpha( float base_alpha, float age, float lifetime,
+                                   float fade_in ) -> float
+{
+    if( lifetime <= 0.f || age >= lifetime ) {
+        return 0.f;
+    }
+    const float in = fade_in > 0.f ? std::min( 1.f, age / fade_in ) : 1.f;
+    const float fade_start = lifetime * 0.7f;
+    const float out = age > fade_start
+                      ? std::max( 0.f, 1.f - ( age - fade_start ) / ( lifetime - fade_start ) )
+                      : 1.f;
+    return base_alpha * in * out;
+}
+
+// Arguments for one in-pass particle draw.
+struct hud_particle_draw {
+    SDL_GPURenderPass *rp = nullptr;
+    SDL_GPUCommandBuffer *cb = nullptr;
+    /// Instance count returned by prepare(). 0 = nothing to draw.
+    std::uint32_t count = 0;
+    /// Render target size in PHYSICAL pixels — the viewport this draw sets, and
+    /// the space the vertex shader maps particle positions into.
+    std::uint32_t target_w = 0;
+    std::uint32_t target_h = 0;
+    /// Gameplay viewport in the SAME physical pixels, kept clear of particles so
+    /// a drifting mote is never mistaken for an item or a creature. Ignored when
+    /// mask_play_area is false (no map on screen, or the dev toggle is off).
+    float play_x0 = 0.f;
+    float play_y0 = 0.f;
+    float play_x1 = 0.f;
+    float play_y1 = 0.f;
+    bool mask_play_area = false;
 };
 
 class hud_particle_effect {
@@ -75,6 +136,11 @@ public:
             && particle_xfer_ != nullptr && particle_storage_ != nullptr;
     }
 
+    // Drop every live particle. Switching the effect off has to remove what is
+    // already on screen, not merely stop spawning — otherwise the last poolful
+    // hangs frozen until each one ages out.
+    auto clear() noexcept -> void;
+
     // Advance the simulation with the real frame delta and upload this frame's
     // instances. MUST be called BEFORE the render pass opens (it records a copy
     // pass, which cannot nest inside one). Returns the instance count to draw,
@@ -89,8 +155,7 @@ public:
     // ui_composite_target instead (the old behaviour) put the particles UNDER the
     // HUD and smeared trails into a texture that is only re-cleared when the UI
     // goes dirty.
-    auto draw_in_pass( SDL_GPURenderPass *rp, SDL_GPUCommandBuffer *cb, std::uint32_t count,
-                       std::uint32_t target_w, std::uint32_t target_h ) -> void;
+    auto draw_in_pass( const hud_particle_draw &d ) -> void;
 
 private:
     // Spawn a new particle based on emitter type.

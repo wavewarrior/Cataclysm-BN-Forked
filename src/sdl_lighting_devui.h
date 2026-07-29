@@ -91,6 +91,45 @@ extern bool g_splatmap_enable;
 // composite lands in the HDR world target BEFORE the AgX tonemap + exposure
 // 0.35, which crushes subtle darkening.
 extern float g_splat_blood_strength;
+
+// ── Atmospheric HUD particles (screen-space ambient layer, drawn over the HUD).
+// The weather/time-of-day picker in sdl_render_frame chooses an emitter and its
+// base rate/alpha; everything here overrides or scales that choice.
+// Master kill-switch — off also drops the particles already on screen.
+extern bool g_hud_part_enable;
+// Ignore the weather picker and always emit g_hud_part_type. The point of the
+// knob: every other emitter needs a specific season, hour, z-level or weather to
+// appear, which is unusable for tuning.
+extern bool g_hud_part_force;
+// Emitter index when forcing — matches lighting::hud_emitter_type's order
+// (0 ember, 1 dust, 2 pollen, 3 snow, 4 leaf).
+extern int g_hud_part_type;
+// Per-emitter kill-switches, applied to the WEATHER-PICKED type (a forced type
+// always emits — you asked for it explicitly). Lets a single effect be silenced
+// without disabling the layer.
+extern bool g_hud_part_ember_enable;
+extern bool g_hud_part_dust_enable;
+extern bool g_hud_part_pollen_enable;
+extern bool g_hud_part_snow_enable;
+extern bool g_hud_part_leaf_enable;
+// Emit during rain too. Off by default because the world-space rain_effect
+// already fills the screen; on, rain picks the dust emitter as wind-blown spray.
+extern bool g_hud_part_in_rain;
+// Keep particles OFF the map viewport, so a drifting mote is never mistaken for
+// an item or a creature. On by default — the layer is HUD dressing, and the one
+// place it must not sit is the tiles the player is reading. Off draws over
+// everything (useful for judging density).
+extern bool g_hud_part_mask_play;
+// Multipliers on the picked emitter's parameters. 1.0 = authored look.
+// Spawn rate (particles/second) — the steady-state count is rate x lifetime.
+extern float g_hud_part_rate_scale;
+// Alpha. Values above 1 clip to opaque and are useful for spotting the layer.
+extern float g_hud_part_alpha_scale;
+// Spawn diameter.
+extern float g_hud_part_size_scale;
+// Velocity. Lifetimes are derived from travel distance, so this changes how fast
+// a particle crosses the screen, not whether it makes it across.
+extern float g_hud_part_speed_scale;
 // Silhouette sun-shadow mask kill-gate.
 extern bool g_shadow_debug;
 // Current debug mode display (0-7, cycles through modes).
