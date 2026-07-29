@@ -200,18 +200,18 @@ public:
     SDL_GPUBuffer* lp_emitter_buf = nullptr; // fragment storage BUFFER slot 0 (t2)
     SDL_GPUBuffer* lp_sdf_buf = nullptr;     // fragment storage BUFFER slot 1 (t3)
     SDL_GPUBuffer* lp_sky_vis_buf = nullptr; // fragment storage BUFFER slot 2 (t4)
-    SDL_GPUBuffer* lp_vis_buf = nullptr;     // fragment storage BUFFER slot 3 (VisBuf, t5)
     // 1-bounce GI (Stage 1): GPU compute GI output, a fragment storage
     // BUFFER (GiBuf), not the old IndirectTex storage texture. Storage-buffer
-    // slot 4 ⇒ t6/space2 (Stage 2b dropped SunSdfBuf, which was here).
-    SDL_GPUBuffer* lp_gi_buf = nullptr; // fragment storage BUFFER slot 4 (GiBuf, t6)
+    // slot 3 ⇒ t5/space2 — both Stage 2b's SunSdfBuf and the vision overlay's
+    // VisBuf used to sit ahead of it here.
+    SDL_GPUBuffer* lp_gi_buf = nullptr; // fragment storage BUFFER slot 3 (GiBuf, t5)
     // Sky/sun directional skylight (Stage 2a/2b): GPU compute sky_sun.comp
-    // output (rgb sky-access + a celestial-occ). Storage-buffer slot 5 ⇒
-    // t7/space2 (LAST). Null on the shadow/UI batchers.
-    SDL_GPUBuffer* lp_sky_buf = nullptr; // fragment storage BUFFER slot 5 (SkyBuf, t7)
+    // output (rgb sky-access + a celestial-occ). Storage-buffer slot 4 ⇒
+    // t6/space2 (LAST). Null on the shadow/UI batchers.
+    SDL_GPUBuffer* lp_sky_buf = nullptr; // fragment storage BUFFER slot 4 (SkyBuf, t6)
     // Silhouette sun-shadow mask (Phase 2). The SOLE storage-READ texture now
     // (GI moved to GiBuf) ⇒ storage-texture slot 0 ⇒ t1/space2, ahead of the
-    // storage buffers (t2..t7). Null on the shadow/UI batchers.
+    // storage buffers (t2..t6). Null on the shadow/UI batchers.
     SDL_GPUTexture* lp_shadow_mask = nullptr;
     SDL_GPUSampler* lp_data_sampler = nullptr;
     light_params lp = {};       // defaults: all zero
@@ -223,7 +223,7 @@ public:
         float cam_off_y = 0.0f, Uint32 sdf_map_w = 0u, Uint32 sdf_map_h = 0u,
         SDL_GPUBuffer* emitter_buf = nullptr, SDL_GPUBuffer* sdf_buf = nullptr,
         SDL_GPUSampler* data_sampler = nullptr, SDL_GPUBuffer* sky_vis_buf = nullptr,
-        SDL_GPUBuffer* gi_buf = nullptr, SDL_GPUBuffer* vis_buf = nullptr,
+        SDL_GPUBuffer* gi_buf = nullptr,
         const sun_params* sp = nullptr, const debug_params* dbg = nullptr,
         SDL_GPUBuffer* sky_buf = nullptr) noexcept {
         // data_sampler is vestigial now that all lighting data (emitters,
@@ -235,7 +235,6 @@ public:
         lp_sdf_buf = sdf_buf;
         lp_sky_vis_buf = sky_vis_buf;
         lp_gi_buf = gi_buf;
-        lp_vis_buf = vis_buf;
         lp_sky_buf = sky_buf;
         lp_data_sampler = data_sampler;
         lp.tile_pixel_size = tile_pixel_size;
@@ -788,11 +787,10 @@ private:
         // binding an unpopulated buffer is read-safe. The shadow/UI batchers
         // leave them null → bind nothing. Bound in ONE call so a later bind can't
         // zero an earlier slot.
-        if (lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf && lp_vis_buf && lp_gi_buf
-            && lp_sky_buf) {
-            SDL_GPUBuffer* sbufs[6] =
-                {lp_emitter_buf, lp_sdf_buf, lp_sky_vis_buf, lp_vis_buf, lp_gi_buf, lp_sky_buf};
-            SDL_BindGPUFragmentStorageBuffers(rp, /*first_slot=*/0, sbufs, 6);
+        if (lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf && lp_gi_buf && lp_sky_buf) {
+            SDL_GPUBuffer* sbufs[5] =
+                {lp_emitter_buf, lp_sdf_buf, lp_sky_vis_buf, lp_gi_buf, lp_sky_buf};
+            SDL_BindGPUFragmentStorageBuffers(rp, /*first_slot=*/0, sbufs, 5);
         }
     }
 };
@@ -833,11 +831,11 @@ void sprite_batcher::set_lighting_resources(
     float tile_pixel_size, float z_level, Uint32 emitter_count, float ambient, float cam_off_x,
     float cam_off_y, Uint32 sdf_map_w, Uint32 sdf_map_h, SDL_GPUBuffer* emitter_buf,
     SDL_GPUBuffer* sdf_buf, SDL_GPUSampler* data_sampler, SDL_GPUBuffer* sky_vis_buf,
-    SDL_GPUBuffer* gi_buf, SDL_GPUBuffer* vis_buf, const sun_params* sp, const debug_params* dbg,
+    SDL_GPUBuffer* gi_buf, const sun_params* sp, const debug_params* dbg,
     SDL_GPUBuffer* sky_buf) {
     p->set_lighting_resources(
         tile_pixel_size, z_level, emitter_count, ambient, cam_off_x, cam_off_y, sdf_map_w,
-        sdf_map_h, emitter_buf, sdf_buf, data_sampler, sky_vis_buf, gi_buf, vis_buf, sp, dbg,
+        sdf_map_h, emitter_buf, sdf_buf, data_sampler, sky_vis_buf, gi_buf, sp, dbg,
         sky_buf);
 }
 

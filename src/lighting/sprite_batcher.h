@@ -263,7 +263,9 @@ public:
     //               (Was a sampler texture; Metal mis-binds those.)
     // sky_vis_buf:  GRAPHICS_STORAGE_READ buffer of W×H floats (1.0=open
     //               sky, 0.0=roofed) — fragment storage slot 2 → HLSL
-    //               StructuredBuffer<float> at register(t3, space2).
+    //               StructuredBuffer<float> at register(t4, space2).
+    // gi_buf:       compute GI output — fragment storage slot 3 → t5/space2.
+    // sky_buf:      sky_sun.comp output — fragment storage slot 4 → t6/space2.
     // sp:           sun+sky params pointer (nullptr = no sun)
     void set_lighting_resources(
         float tile_pixel_size, float z_level, Uint32 emitter_count, float ambient,
@@ -271,7 +273,7 @@ public:
         Uint32 sdf_map_h = 0u, SDL_GPUBuffer* emitter_buf = nullptr,
         SDL_GPUBuffer* sdf_buf = nullptr, SDL_GPUSampler* data_sampler = nullptr,
         SDL_GPUBuffer* sky_vis_buf = nullptr, SDL_GPUBuffer* gi_buf = nullptr,
-        SDL_GPUBuffer* vis_buf = nullptr, const sun_params* sp = nullptr,
+        const sun_params* sp = nullptr,
         const debug_params* dbg = nullptr, SDL_GPUBuffer* sky_buf = nullptr);
 
     // Silhouette sun-shadow mask (Phase 2). Now the sole fragment storage-read

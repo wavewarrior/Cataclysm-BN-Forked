@@ -307,10 +307,10 @@ void render_state::begin_lighting_frame(const frame_light_inputs& in) {
     // from the sdf_pass, sampler from this object. Caller only provides
     // what it alone knows (camera, time, tile geometry, ambient).
     SDL_GPUBuffer* ebuf = collector_ ? collector_->emitter_buffer() : nullptr;
-    // The four SDF-family storage buffers are allocated unconditionally in
+    // The SDF-family storage buffers are allocated unconditionally in
     // sdf_pass::init (non-null regardless of populated()). Bind them ALWAYS so
     // every declared fragment storage-buffer slot is filled: the sprite pipeline
-    // reflects 5 storage buffers, and on D3D12 leaving a declared SRV slot
+    // declares and reflects 5 storage buffers, and on D3D12 leaving a declared SRV
     // unbound trips "Missing fragment storage buffer binding!" → device removed
     // (this was the crash — !sdf_ready frames nulled these, so a lit segment
     // bound <5). Read-safety is handled SEPARATELY: sw/sh below stay 0 until
@@ -321,7 +321,6 @@ void render_state::begin_lighting_frame(const frame_light_inputs& in) {
     const bool sdf_ready = sdf_.populated();
     SDL_GPUBuffer* sbuf = sdf_.sdf_buffer();
     SDL_GPUBuffer* kvis = sdf_.sky_vis_buffer();
-    SDL_GPUBuffer* vbuf = sdf_.vis_buffer();
     // GI source for the sprite's GiBuf: the GPU compute GI pass output
     // (gi_compute_pass, single-bounce). The fragment radiance_cascade_pass it
     // replaced failed D3D12 pipeline creation; the gather now runs in compute.
@@ -343,7 +342,7 @@ void render_state::begin_lighting_frame(const frame_light_inputs& in) {
 
     tile_batcher_.set_lighting_resources(
         in.tile_pixel_size, in.z_level, ne, in.ambient, in.camera_off_x, in.camera_off_y, sw, sh,
-        ebuf, sbuf, gpu_sampler_, kvis, gibuf, vbuf, &in.sun, &in.debug, skybuf);
+        ebuf, sbuf, gpu_sampler_, kvis, gibuf, &in.sun, &in.debug, skybuf);
 
     // Silhouette sun-shadow mask (Phase 2): bind it as the tile batcher's 2nd
     // fragment storage texture (sprite.frag ShadowMask, t2/space2). Always
@@ -766,7 +765,7 @@ void render_state::flush_shadow_casters(
     shadow_batcher_.set_lighting_resources(
         in.tile_pixel_size, in.z_level, 0u, in.ambient, in.camera_off_x, in.camera_off_y, 0u, 0u,
         /*emitter*/ nullptr, /*sdf*/ nullptr, gpu_sampler_,
-        /*sky_vis*/ nullptr, /*gi*/ nullptr, /*vis*/ nullptr, &in.sun, &in.debug);
+        /*sky_vis*/ nullptr, /*gi*/ nullptr, &in.sun, &in.debug);
 
     // Clear to opaque black (alpha 1): shadow.frag writes alpha=1 and the
     // batcher MAX-blends alpha, so the mask stays opaque → the Phase-1 debug

@@ -59,19 +59,25 @@ Texture2D<float4>            ShadowMask  : register(t1, space2);
 StructuredBuffer<GpuEmitter> Emitters    : register(t2, space2);
 StructuredBuffer<float>      SdfBuf      : register(t3, space2);
 StructuredBuffer<float>      SkyVisBuf   : register(t4, space2);
-StructuredBuffer<float>      VisBuf      : register(t5, space2); // per-tile visibility (>=0 live, <0 memory)
+// Storage buffer slot 3 ⇒ t5.  (VisBuf, the live-visibility buffer, used to sit
+// here; "remove vision overlay" (46261515ac) deleted its only reader and left the
+// declaration orphaned.  DXC then stripped the unused buffer, punching a hole in
+// the t2..t7 SRV range: shadercross reflected 5 storage buffers while the DXIL
+// still referenced t7, so D3D12 rejected the root signature with E_INVALIDARG and
+// the whole lighting pipeline failed to build.  Fragment storage buffers MUST stay
+// contiguous and every one MUST be read.)
 // 1-bounce indirect light (GI). GPU compute GI pass output (gi_bounce.comp) → gi_buf.
-// Storage buffer slot 4 ⇒ t6 (Stage 2b removed SunSdfBuf, which was here — the sun
+// Storage buffer slot 3 ⇒ t5 (Stage 2b removed SunSdfBuf, which was here — the sun
 // shadow moved to the compute coverage march, see SkyBuf). Tile-res, 4 floats/tile
 // (rgb + pad), x-major gi[(x*sdf_map_h+y)*4 + c], scalar StructuredBuffer<float>.
-StructuredBuffer<float>      GiBuf       : register(t6, space2);
+StructuredBuffer<float>      GiBuf       : register(t5, space2);
 // Stage 2a/2b sky+sun/moon (sky_sun.comp output) — LAST fragment storage buffer,
-// slot 5 ⇒ t7. Tile-res, 4 floats/tile [(x*sdf_map_h+y)*4 + c], x-major. rgb =
+// slot 4 ⇒ t6. Tile-res, 4 floats/tile [(x*sdf_map_h+y)*4 + c], x-major. rgb =
 // directional sky-access (alcove/overhang self-shading + indoor daylight from
 // window openings — REPLACES the flat sky_vis ambient; CPU bleed flood-fill gone).
 // a = celestial (sun/moon) occlusion from the 3D coverage-occluder march
 // (REPLACES the inline sun trace_shadow + SunSdfBuf — Stage 2b).
-StructuredBuffer<float>      SkyBuf      : register(t7, space2);
+StructuredBuffer<float>      SkyBuf      : register(t6, space2);
 cbuffer LightParams : register(b0, space3) {
     float tile_pixel_size; float current_z;
     uint  emitter_count;   float ambient;
@@ -233,32 +239,6 @@ float4 sky_bilinear(float2 p) {
     const float4 b = sky_texel(x0 + 1, y0    );
     const float4 c = sky_texel(x0,     y0 + 1);
     const float4 d = sky_texel(x0 + 1, y0 + 1);
-    return lerp(lerp(a, b, w.x), lerp(c, d, w.x), w.y);
-}
-// LIVE visibility on the SDF_SUPERSAMPLE grid (SS² floats/tile, x-major, stride
-// sdf_map_h*SDF_SS). VisBuf is raw max(seen_cache, camera_cache) in [0,1];
-// 0 = not currently visible. Sampled as finely as the SDF so the vision-edge
-// falloff matches the lighting-shadow sharpness (per-tile value replicated into
-// its subcells CPU-side; the bilinear below smooths over ~1/SS tile).
-float vis_texel(int x, int y) {
-    const int gw = (int)sdf_map_w * SDF_SS;
-    const int gh = (int)sdf_map_h * SDF_SS;
-    x = clamp(x, 0, gw - 1);
-    y = clamp(y, 0, gh - 1);
-    return VisBuf[x * gh + y];
-}
-// Bilinear live visibility over the SS grid. Taps clamped to max(0,.) defensively.
-// p is in TILE units; same subcell-centre mapping as sdf_bilinear (g = p*SS-0.5).
-float vis_bilinear(float2 p) {
-    const float2 g  = p * (float)SDF_SS - 0.5;
-    const float2 fp = floor(g);
-    const int   x0  = (int)fp.x;
-    const int   y0  = (int)fp.y;
-    const float2 w  = g - fp;
-    const float a = max(0.0, vis_texel(x0,     y0    ));
-    const float b = max(0.0, vis_texel(x0 + 1, y0    ));
-    const float c = max(0.0, vis_texel(x0,     y0 + 1));
-    const float d = max(0.0, vis_texel(x0 + 1, y0 + 1));
     return lerp(lerp(a, b, w.x), lerp(c, d, w.x), w.y);
 }
 // Sky visibility, bilinear. UNLIKE sdf/vis, SkyVisBuf is TILE-res (one float per
