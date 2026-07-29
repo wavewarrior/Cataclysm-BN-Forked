@@ -27,9 +27,16 @@ events therefore cannot fire at all, by construction — the filter comment even
 the only source of vehicle-vehicle collision physics that exists. Deleting it would
 remove T-bone spin entirely, i.e. the original motivation for this whole plan.
 
-Note also that the transient solver is currently **unreachable for exactly the vehicles
-that matter**: `vehicle::act_on_map()` returns early at `src/vehicle_move.cpp:~1586` for
-any vehicle with `box2d_position_authority`, before `move_vehicle()` is ever called.
+**Updated:** the transient solver *was* unreachable for authority vehicles, because
+`vehicle::act_on_map()` returns early before `move_vehicle()`. That is no longer true —
+the readback walk in `map::vehmove()` now routes each tile step through
+`move_vehicle()`, which is where `solve_vv_cluster()` lives, so the transient VV solver
+is reachable again and verified working (`box2d_authority_vehicle_hits_vehicle` in
+`tests/vehicle_collision_test.cpp`).
+
+That strengthens rather than removes the argument against 12-A: the transient solver is
+now the *live, tested* VV path, so deleting it would break vehicle-vehicle collision
+outright.
 
 ### Correction 2 — Phase 10 Step 5 left the whole game-consequence layer unimplemented
 
@@ -44,9 +51,26 @@ any vehicle with `box2d_position_authority`, before `move_vehicle()` is ever cal
 | ramp z-transition | `move_vehicle()` → `vehicle::shift_zlevel()` |
 | rail following | `vehicle_movement::process_movement_on_rails()` |
 
-`PhysicsWorld::dispatch_contact_events()` was supposed to route these. It is a **stub**:
-it walks `beginEvents`, computes a `vehicle *`, then does `( void )ptr; ( void )bid;`.
-Two `TODO Phase 10 Step 5` comments in its body mark the gap.
+**RESOLVED — but not via `dispatch_contact_events()`.** That function is still a stub, and
+deliberately so. The readback walk now routes every tile step through `move_vehicle()`,
+which already performs the whole per-tile consequence chain, so all five dropped
+behaviours are restored by reuse rather than reimplementation:
+
+| Behaviour | Now delivered by |
+|---|---|
+| creature collision + damage | `part_collision()` via `move_vehicle()` |
+| terrain bashing | `part_collision()` via `move_vehicle()` |
+| vehicle-vehicle collision | `solve_vv_cluster()` via `move_vehicle()` |
+| ramp z-transition | `adjust_zlevel()` / `shift_zlevel()` via `move_vehicle()` |
+| rail following | still open — `process_movement_on_rails()` is not on this path |
+
+Verified by `box2d_authority_vehicle_bashes_terrain` (drives into a wooden wall, wall
+becomes `t_rock_floor_no_roof`) and `box2d_authority_vehicle_hits_vehicle` (struck vehicle
+shoved or damaged, striker slowed).
+
+`dispatch_contact_events()` therefore has a much smaller remaining job — sound, and any
+purely physical response with no tile-step equivalent. It is explicitly **not** where bash
+force belongs.
 
 Consequence, measured by disabling `box2d_position_authority` and re-running:
 
