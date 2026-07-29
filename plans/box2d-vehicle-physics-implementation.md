@@ -164,7 +164,44 @@ shift_zlevel` per tile and rewinds `physics_pos` on every early exit.
 
 **Remaining:**
 
-1. **Implement `dispatch_contact_events()` for real** — the single gating item. Currently a
+0. **Make terrain bodies exist — newly found, and it precedes everything below.**
+   Measured in the Catch2 harness during `vehmove()`: `terrain_bodies_.size() == 0`
+   and `bashable_tile_bodies_.size() == 0`, i.e. the physics world contains **no
+   terrain colliders at all**, so `b2World_GetContactEvents().beginCount` is always
+   0 and no vehicle-terrain contact can happen. Terrain bodies are built only from
+   `map::on_submap_loaded` (`src/map.cpp:378`, gated on
+   `g && p.z() == g->u.bub_pos().z()`), and `build_test_map()` mutates
+   already-resident submaps without firing that notification.
+
+   Consequences:
+   - `[vehicle][box2d]`'s 38 passing assertions are raw-Box2D unit tests against a
+     throwaway world; **nothing** currently integration-tests VT contact.
+   - Runtime terrain changes are invisible to physics regardless: `ter_set()` and
+     `furn_set()` have no physics hook, so a wall smashed or built mid-game keeps
+     or lacks a collider until its submap reloads.
+   - **Possible live bug, worth checking first:** if the initial reality bubble
+     loads its submaps before `g->u` has a position, the `p.z() == player z` gate
+     fails and a real game also starts with no terrain colliders.
+
+   Fix order: give test maps terrain bodies (an explicit
+   `phys_world->on_submap_loaded( m, sm )` in the fixture is enough to start),
+   assert a non-zero contact count, hook `ter_set`/`furn_set` for runtime changes,
+   *then* do the bash routing below. `tests/vehicle_test.cpp`'s
+   `box2d_authority_vehicle_bashes_terrain` case is the acceptance criterion,
+   tagged `[!shouldfail]` until it works.
+
+   Design notes from an attempt that was written and reverted as unverifiable:
+   a shared `make_tile_body()` in `terrain_body.cpp` should serve both the submap
+   build and any per-tile refresh; `classify_tile()` tests impassability first so
+   walls are `solid` and only `bashable` bodies currently carry user data, leaving
+   walls anonymous to contact dispatch — tag every terrain body; `on_tile_bashed()`
+   erases from `bashable_tile_bodies_`/`bashable_tiles_` but **not**
+   `terrain_bodies_`, which is a latent double-free once anything recreates a tile
+   body; and a per-tile refresh must compare body presence (or class) rather than
+   rebuilding unconditionally, or the fresh body emits a new begin-touch event and
+   re-bashes up to 240 times a turn.
+
+1. **Implement `dispatch_contact_events()` for real** — gated on item 0. Currently a
    stub: it walks `beginEvents`, resolves a `vehicle *`, then discards it
    (`( void )ptr; ( void )bid;`). The per-tile readback walk now makes per-tile
    consequences reachable, which they were not before.
