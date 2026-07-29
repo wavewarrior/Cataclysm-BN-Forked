@@ -10,6 +10,7 @@
 #include "input.h"
 #include "point.h"
 #include "rml_callback.h"
+#include "rml_length.h"
 #include "rml_screen.h"
 #include "rml_util.h"
 #include "string_formatter.h"
@@ -183,8 +184,8 @@ if( Rml::Context * ctx = rmlui_layer::context() ) {
             top_dp = std::clamp( top_dp, 0.0f, max_top );
         }
     }
-    data->left_style = string_format( "%.2fdp", left_dp );
-    data->top_style = string_format( "%.2fdp", top_dp );
+    data->left_style = rml::dp( left_dp );
+    data->top_style = rml::dp( top_dp );
     data->handle.DirtyVariable( "left_style" );
     data->handle.DirtyVariable( "top_style" );
 

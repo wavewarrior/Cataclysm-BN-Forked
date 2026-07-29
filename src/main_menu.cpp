@@ -32,6 +32,7 @@
 #include "path_info.h"
 #include "pldata.h"
 #include "popup.h"
+#include "rml_length.h"
 #include "rml_screen.h"
 #include "rml_util.h"
 #include "safemode_ui.h"
@@ -641,8 +642,8 @@ bool main_menu::opening_screen()
         const auto bob_val = []( double t, double phase ) -> float {
             return 2.0f * static_cast<float>( std::sin( t * 1.2 + phase ) );
         };
-        data->rail_bob = string_format( "%.1fdp", bob_val( elapsed, 0.0 ) );
-        data->subcol_bob = string_format( "%.1fdp", bob_val( elapsed, 1.05 ) );
+        data->rail_bob = rml::dp( bob_val( elapsed, 0.0 ) );
+        data->subcol_bob = rml::dp( bob_val( elapsed, 1.05 ) );
 
         // Connector: smooth Y tracking of selected rail item centre.
         // Each nav item ≈ 42dp step (24dp icon + 16dp v-pad + 2dp margin).
@@ -653,7 +654,7 @@ bool main_menu::opening_screen()
         const float target_y = rail_pad + sel1 * item_step + item_step * 0.5f
                                + bob_val( elapsed, 0.0 ) - conn_half_h;
         data->connector_y += ( target_y - data->connector_y ) * 0.25f;
-        data->connector_offset = string_format( "%.1fdp", data->connector_y );
+        data->connector_offset = rml::dp( data->connector_y );
 
         // Dirty all bound variables.
         data->handle.DirtyVariable( "title_main_rml" );

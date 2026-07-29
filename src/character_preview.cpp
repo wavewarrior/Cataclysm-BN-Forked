@@ -11,6 +11,7 @@
 #include "character.h"
 #include "path_info.h"
 #include "profession.h"
+#include "rml_length.h"
 #include "rml_screen.h"
 #include "rml_util.h"
 #include "sdltiles.h"
@@ -89,10 +90,10 @@ void cp_rml_position( const point &p, const int ncols_width, const int nlines_wi
     if( el == nullptr ) {
         return;
     }
-    el->SetProperty( "left", string_format( "%.4f%%", 100.0f * p.x / TERMX ) );
-    el->SetProperty( "top", string_format( "%.4f%%", 100.0f * p.y / TERMY ) );
-    el->SetProperty( "width", string_format( "%.4f%%", 100.0f * ncols_width / TERMX ) );
-    el->SetProperty( "height", string_format( "%.4f%%", 100.0f * nlines_width / TERMY ) );
+    el->SetProperty( "left", rml::pct( 100.0f * p.x / TERMX ) );
+    el->SetProperty( "top", rml::pct( 100.0f * p.y / TERMY ) );
+    el->SetProperty( "width", rml::pct( 100.0f * ncols_width / TERMX ) );
+    el->SetProperty( "height", rml::pct( 100.0f * nlines_width / TERMY ) );
 }
 } // namespace
 

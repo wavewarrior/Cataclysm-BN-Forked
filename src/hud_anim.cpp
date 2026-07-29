@@ -61,7 +61,7 @@ auto apply_channel( const apply_channel_opts &opts ) -> void
     switch( opts.prop ) {
     case sidebar_anim::anim_prop::alpha:
         if( opts.value != 1.0f ) {
-                opts.el->SetProperty( "opacity", std::to_string( opts.value ) );
+                opts.el->SetProperty( "opacity", std::format( "{:.3f}", opts.value ) );
                 *opts.prop_set = true;
                 *opts.was_animating = true;
             } else if( *opts.prop_set ) {

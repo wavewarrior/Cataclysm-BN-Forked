@@ -14,6 +14,7 @@
 #include "output.h"
 #include "panels.h"
 #include "path_info.h"
+#include "rml_length.h"
 #include "rml_screen.h"
 #include "rml_util.h"
 #include "translations.h"
@@ -105,9 +106,9 @@ void lv_rml_sync( const tripoint_bub_ms &mouse_position )
     const float width_pct = 100.0f * wd / TERMX;
     const float left_pct = sidebar_right ? 100.0f - width_pct : 0.0f;
     if( Rml::Element *el = g_lv_doc->GetElementById( "lv-box" ) ) {
-        el->SetProperty( "left", string_format( "%.4f%%", left_pct ) );
+        el->SetProperty( "left", rml::pct( left_pct ) );
         el->SetProperty( "top", "0%" );
-        el->SetProperty( "width", string_format( "%.4f%%", width_pct ) );
+        el->SetProperty( "width", rml::pct( width_pct ) );
     }
 }
 
