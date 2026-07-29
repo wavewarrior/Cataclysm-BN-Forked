@@ -546,3 +546,52 @@ TEST_CASE( "broken_door_and_lock_can_be_removed", "[vehicle]" )
     CHECK( veh_ptr->can_unmount( door_idx, door_reason ) );
     CHECK( veh_ptr->can_unmount( lock_idx, lock_reason ) );
 }
+
+#ifdef BOX2D_ENABLED
+#include "physics/physics_world.h"
+
+// Box2D position authority is revoked when a vehicle's home submap leaves the
+// simulated set while staying resident, and re-granted when it returns.  The
+// discrimination that matters is that a vehicle which opted out *itself* must
+// never be re-granted: the flag alone cannot distinguish the two cases, so the
+// physics world records which revocations were its own.
+TEST_CASE( "box2d_position_authority_survives_resident_submap_unload", "[vehicle][box2d]" )
+{
+    clear_all_state();
+    auto &here = get_map();
+    auto *pw = here.get_physics_world();
+    REQUIRE( pw != nullptr );
+
+    build_test_map( ter_id( "t_pavement" ) );
+    auto *veh = here.add_vehicle( vproto_id( "car_test" ), tripoint_bub_ms( 60, 60, 0 ),
+                                  0_degrees, 100, 0 );
+    REQUIRE( veh != nullptr );
+    REQUIRE( veh->box2d_position_authority );
+
+    const auto home = veh->abs_sm_pos;
+
+    SECTION( "revoked while resident, then re-granted on return" ) {
+        pw->on_submap_unloaded( home, /*submap_still_resident=*/true );
+        CHECK_FALSE( veh->box2d_position_authority );
+
+        // Move the tile anchor while the tile-step mover owns the vehicle, so a
+        // stale physics_pos would be detectable after the re-grant.
+        REQUIRE( here.displace_vehicle( *veh, tripoint_rel_ms( 2, 0, 0 ) ) );
+        const auto anchor = veh->bub_ms_location();
+
+        pw->on_submap_loaded( here, veh->abs_sm_pos );
+        CHECK( veh->box2d_position_authority );
+        // physics_pos must be reseated to the anchor, or the first readback would
+        // walk the vehicle back to where it sat when authority was revoked.
+        CHECK( veh->physics_pos.x == Catch::Approx( static_cast<float>( anchor.x() ) ) );
+        CHECK( veh->physics_pos.y == Catch::Approx( static_cast<float>( anchor.y() ) ) );
+    }
+
+    SECTION( "a vehicle that opted out itself is never re-granted" ) {
+        veh->box2d_position_authority = false;
+        pw->on_submap_unloaded( home, /*submap_still_resident=*/true );
+        pw->on_submap_loaded( here, home );
+        CHECK_FALSE( veh->box2d_position_authority );
+    }
+}
+#endif // BOX2D_ENABLED
