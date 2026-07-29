@@ -216,6 +216,54 @@ Start from `vehicle::gain_moves()` (`src/vehicle.cpp`, where `slowdown()` and th
 applied per turn) and compare fuel drawn per tile between the two paths at a fixed cruise
 speed.
 
+## Terrain colliders are built against the WRONG player z — start-location dependent
+
+**Promoted to the top open item.** With `BOX2D` always on, this decides whether vehicles
+collide with walls at all.
+
+`map::on_submap_loaded` only forwards to the physics world when the submap's z matches the
+player's current z (`src/map.cpp:378`):
+
+```cpp
+if( phys_world && sm != nullptr && g && p.z() == g->u.bub_pos().z() ) {
+    phys_world->on_submap_loaded( *this, p );
+}
+```
+
+Two ordering facts make that gate unreliable:
+
+1. `game::place_player_overmap` calls `load_map( map_sm_pos )` at `src/game.cpp:2586` and
+   `place_player( player_pos )` only at **2589**. So every submap notification during the
+   load is compared against the player's **previous** z, not the destination z. Nothing
+   rebuilds colliders after `place_player()`.
+2. `PhysicsWorld::on_zlevel_changed` — the only code that rebuilds colliders for a new
+   z-level — has exactly **one** caller, `game::vertical_shift`
+   (`src/game_movement.cpp:2379`). It fires for stairs/ramps and nothing else.
+
+Consequence, and why this has plausibly gone unnoticed: a surface start leaves `g->u` at a
+default-constructed z of 0 while submaps load at z=0, so the comparison passes **by
+coincidence** and the world looks healthy. An underground start (shelter basement, or any
+z<0 scenario) loads its submaps at z<0 against a default z of 0, the gate fails for every
+one, and the game runs with **no terrain colliders at all** until the player happens to
+take a staircase. Fast travel to a different z via `place_player_overmap` has the same
+shape.
+
+Status: the ordering above is **verified by reading the code**. The runtime consequence is
+`[INFERENCE]` from that ordering and has not been confirmed in a running game — measured
+evidence so far is only that the Catch2 harness has `terrain_bodies_.size() == 0`, which is
+a different (and also real) path since `build_test_map()` never fires the notification.
+
+**Confirm first, then fix.** Launch with an underground start and log
+`terrain_bodies_.size()` after load; separately log the gate's two operands at each
+notification. Likely fix is to notify the physics world after the player is placed rather
+than during the load, or to drop the z gate and let `on_submap_loaded` decide for itself
+which z-levels are worth bodies. Note the gate exists for a real reason — the comment at
+`src/map.cpp:375-377` records that building bodies for all 21 z-levels was the dominant cost
+of submap boundary crossing — so removing it needs a cheaper filter, not none.
+
+Everything in `dispatch_contact_events()` is downstream of this: contact events cannot fire
+against colliders that were never created.
+
 ## Which paths are actually exercised — measure before aiming a fix
 
 The readback tile-walk in `map::vehmove()` is not uniformly hit. Counting entries into
