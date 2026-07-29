@@ -1641,3 +1641,40 @@ freed it but the destructor, which never runs mid-session, so `MAPBUFFER.clear()
 returning to the menu left world A's colliders registered at coordinates holding
 world B's terrain. Measured `terrain_body_count() == 1` after teardown. Fixed via
 `clear_world_bodies()` at the `mapbuffer::clear()` choke point.
+
+### Efficiency: resolved, and the residue
+
+Two real defects, both found by decomposing `vehicle_efficiency`'s **per-cycle**
+distance instead of its totals. Totals hid both; the histogram made them obvious.
+
+1. **A declined tile step zeroed velocity.** The readback rewind called `veh.stop()`
+   whenever the walk missed its physics target. But `move_vehicle()` already applies
+   collision speed loss inside `part_collision()`, and `blocked` does not mean "hit
+   something" — it also covers the first turn after a vehicle is placed or displaced,
+   before `of_turn` is funded. Measured: velocity 2235 zeroed on turn 1 with the
+   target 12 tiles away and nothing in between, then 14 turns to recover. In
+   gameplay, one declined step halted the vehicle.
+
+2. **The world was stepped before game logic settled velocity.** `step_turn()` sat at
+   the top of `map::vehmove()`, before vehicles were even given movement points, so
+   integration used the *previous* turn's velocity. Invisible at cruise, which is why
+   it survived; but every speed change cost a full turn on the stale value, and after
+   a stop the first turn produced no movement at all. Now stepped immediately before
+   the readback: `act_on_map()` settles velocity -> step -> apply positions.
+
+`vehicle_efficiency` 59 -> 15 failed assertions; full `[vehicle]` 101 -> 44.
+
+**The residue is an overshoot, and is deliberately left red.** The 15 remaining
+failures are all on the *upper* bound: vehicles now travel slightly too far.
+Regenerating the constants on the shipping build gives ±5% for 85 of 144 slots, but
+up to **1.25x for light, fast-accelerating vehicles** (scooter, motorcycle,
+superbike, quad bike) concentrated in the stop-start conditions.
+
+That is the mirror image of defect 2: stepping a whole turn at *end-of-turn* velocity
+over-credits acceleration exactly as stepping at start-of-turn under-credited it. The
+honest fix is to integrate the acceleration phase properly — sub-step it, or use the
+mean velocity across the turn — not to adopt constants that bake the overshoot into
+the baseline. Doing that would repeat this plan's own recorded mistake of trusting "a
+number that looks authoritative because a test went green".
+
+It is also a balance decision: it changes how quickly vehicles pull away.
