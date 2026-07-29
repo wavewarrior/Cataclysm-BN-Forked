@@ -147,8 +147,16 @@ auto hud_particle_effect::shutdown() noexcept -> void
 
 // ---- Particle spawning ----------------------------------------------------
 
-// Speeds are FRACTIONS OF SCREEN HEIGHT PER SECOND and lifetimes are derived
-// from the distance the particle has to cover, not picked independently.
+// TWO INDEPENDENT AXES: every emitter shares ONE appearance, and the type is
+// carried by MOTION (where it enters, which way it drifts, how long it lives).
+// The main menu shows the reference look — small crisp motes drifting over the
+// context area (data/gui/mainmenu.rml calls it "open space for particles") — and
+// per-type sizes made in-game particles read as fat blobs instead. Size now comes
+// from MOTE_PX_MIN/MAX for all five; only the tint stays type-specific, because
+// colour reads as atmosphere rather than as an object the way size does.
+//
+// Speeds are FRACTIONS OF SCREEN HEIGHT PER SECOND and lifetimes are derived from
+// the distance the particle has to cover, not picked independently.
 //
 // The original constants were absolute px/s (15-45) with independent 2.5-12 s
 // lifetimes — roughly 40-400 px of travel. Every emitter but `ember` spawns just
@@ -156,12 +164,17 @@ auto hud_particle_effect::shutdown() noexcept -> void
 // particle died in a ~150 px band hugging the edge it came from and the other
 // 85% of the screen never saw one. (Verified on this machine: forcing size x15
 // produced a band of blobs across the top ~130 px and nothing below it.)
-// Sizes scale with resolution for the same reason — a 3 px mote leaves about one
-// pixel of visible core after the shader's radial falloff.
+// Sizes scale with resolution so a mote keeps its apparent size on any display.
 namespace
 {
 
 constexpr float REF_HEIGHT = 1080.f; ///< Resolution the px sizes below are authored at.
+
+/// Shared mote diameter at REF_HEIGHT, in px. Matches the main-menu look: big
+/// enough to survive the shader's radial falloff, small enough to stay a speck.
+/// (NOT SIZE_MIN/SIZE_MAX — SIZE_MAX is a <cstdint> macro and expands here.)
+constexpr float MOTE_PX_MIN = 3.0f;
+constexpr float MOTE_PX_MAX = 7.0f;
 
 /// Local alias for the header's pure helper (unit-tested in
 /// tests/hud_particle_test.cpp) — the math MUST have exactly one definition.
@@ -186,13 +199,19 @@ auto hud_particle_effect::spawn_particle( const hud_particle_params &params ) ->
 
     switch( params.type ) {
         case hud_emitter_type::ember: {
-            // Rises from the lower half and burns out — the one emitter meant to
-            // stay near where it spawned, so its lifetime stays fixed.
+            // Rises from the lower half, wanders on the thermal, cools and sinks
+            // back — accel_y is a positive (downward) pull that eats the rise, so
+            // the ember stalls mid-flight instead of exiting in a straight line.
+            // Fast, shallow sway + flicker sell it as a live coal rather than a dot.
             p.x = static_cast<float>( rng_float( 0.0, w ) );
             p.y = h * static_cast<float>( rng_float( 0.5, 1.0 ) );
-            p.vx = vel * h * static_cast<float>( rng_float( -0.012, 0.012 ) );
-            p.vy = -vel * h * static_cast<float>( rng_float( 0.06, 0.13 ) );
-            p.size = px * static_cast<float>( rng_float( 5.0, 10.0 ) );
+            p.vx = vel * h * static_cast<float>( rng_float( -0.008, 0.008 ) );
+            p.vy = -vel * h * static_cast<float>( rng_float( 0.07, 0.15 ) );
+            p.accel_y = vel * h * static_cast<float>( rng_float( 0.02, 0.05 ) );
+            p.sway_amp = vel * h * static_cast<float>( rng_float( 0.010, 0.028 ) );
+            p.sway_freq = static_cast<float>( rng_float( 0.5, 1.3 ) );
+            p.sway_phase = static_cast<float>( rng_float( 0.0, 6.283 ) );
+            p.flicker = static_cast<float>( rng_float( 0.25, 0.6 ) );
             p.lifetime = static_cast<float>( rng_float( 3.0, 6.0 ) );
             p.rot_speed = static_cast<float>( rng_float( -60.0, 60.0 ) );
             p.r = static_cast<float>( rng_float( 0.9, 1.0 ) );
@@ -207,7 +226,10 @@ auto hud_particle_effect::spawn_particle( const hud_particle_params &params ) ->
             p.y = static_cast<float>( rng_float( 0.0, h ) );
             p.vx = speed;
             p.vy = vel * h * static_cast<float>( rng_float( -0.006, 0.006 ) );
-            p.size = px * static_cast<float>( rng_float( 4.0, 9.0 ) );
+            // Barely-there wander: dust is the calm baseline the others deviate from.
+            p.sway_amp = vel * h * static_cast<float>( rng_float( 0.002, 0.008 ) );
+            p.sway_freq = static_cast<float>( rng_float( 0.08, 0.25 ) );
+            p.sway_phase = static_cast<float>( rng_float( 0.0, 6.283 ) );
             p.lifetime = travel_lifetime( w + 40.f, speed );
             p.rot_speed = static_cast<float>( rng_float( -15.0, 15.0 ) );
             p.r = static_cast<float>( rng_float( 0.5, 0.7 ) );
@@ -222,7 +244,10 @@ auto hud_particle_effect::spawn_particle( const hud_particle_params &params ) ->
             p.y = h + 20.f;
             p.vx = vel * h * static_cast<float>( rng_float( -0.012, 0.012 ) );
             p.vy = -speed;
-            p.size = px * static_cast<float>( rng_float( 4.0, 8.0 ) );
+            // Lazy wide loops — the "floating on nothing" read.
+            p.sway_amp = vel * h * static_cast<float>( rng_float( 0.010, 0.026 ) );
+            p.sway_freq = static_cast<float>( rng_float( 0.08, 0.22 ) );
+            p.sway_phase = static_cast<float>( rng_float( 0.0, 6.283 ) );
             p.lifetime = travel_lifetime( h + 40.f, speed );
             p.rot_speed = static_cast<float>( rng_float( -30.0, 30.0 ) );
             p.r = static_cast<float>( rng_float( 0.7, 0.9 ) );
@@ -231,12 +256,18 @@ auto hud_particle_effect::spawn_particle( const hud_particle_params &params ) ->
             break;
         }
         case hud_emitter_type::snow: {
-            const float speed = vel * h * static_cast<float>( rng_float( 0.09, 0.20 ) );
+            // Flakes fall at visibly different rates and each one drifts on its own
+            // phase, so the field never looks like a marching grid. Amplitude runs
+            // wider than the fall speed on the slow ones, which is what produces the
+            // side-to-side flutter instead of a straight drop.
+            const float speed = vel * h * static_cast<float>( rng_float( 0.06, 0.20 ) );
             p.x = static_cast<float>( rng_float( 0.0, w ) );
             p.y = -20.f;
-            p.vx = vel * h * static_cast<float>( rng_float( -0.02, 0.02 ) );
+            p.vx = vel * h * static_cast<float>( rng_float( -0.012, 0.012 ) );
             p.vy = speed;
-            p.size = px * static_cast<float>( rng_float( 5.0, 12.0 ) );
+            p.sway_amp = vel * h * static_cast<float>( rng_float( 0.015, 0.055 ) );
+            p.sway_freq = static_cast<float>( rng_float( 0.12, 0.6 ) );
+            p.sway_phase = static_cast<float>( rng_float( 0.0, 6.283 ) );
             p.lifetime = travel_lifetime( h + 40.f, speed );
             p.rot_speed = static_cast<float>( rng_float( -50.0, 50.0 ) );
             p.r = 1.0f;
@@ -256,9 +287,16 @@ auto hud_particle_effect::spawn_particle( const hud_particle_params &params ) ->
             }
             p.vx = vel * h * static_cast<float>( rng_float( 0.03, 0.08 ) );
             p.vy = fall;
-            p.size = px * static_cast<float>( rng_float( 7.0, 15.0 ) );
             p.lifetime = travel_lifetime( h + 40.f, fall );
             p.rot_speed = static_cast<float>( rng_float( -120.0, 120.0 ) );
+            // Tumble: swirl couples the sideways glide to `rotation`, and the fall
+            // speeds up edge-on (see update_particles), so the leaf pitches over,
+            // slides, stalls and drops in the irregular way real ones do. The slow
+            // sway on top keeps two leaves from ever tracing the same path.
+            p.swirl = vel * h * static_cast<float>( rng_float( 0.03, 0.09 ) );
+            p.sway_amp = vel * h * static_cast<float>( rng_float( 0.006, 0.020 ) );
+            p.sway_freq = static_cast<float>( rng_float( 0.15, 0.45 ) );
+            p.sway_phase = static_cast<float>( rng_float( 0.0, 6.283 ) );
             // Autumn palette: browns, reds, oranges, yellows
             switch( rng( 0, 3 ) ) {
                 case 0: // brown
@@ -286,6 +324,9 @@ auto hud_particle_effect::spawn_particle( const hud_particle_params &params ) ->
         }
     }
 
+    // One size for every emitter — see the header note: a leaf is a leaf because
+    // it tumbles in from the top-left, not because it is twice as fat as a mote.
+    p.size = px * static_cast<float>( rng_float( MOTE_PX_MIN, MOTE_PX_MAX ) );
     p.base_alpha = params.intensity;
     p.alpha = 0.f; // faded in by update_particles on the first step
     return p;
@@ -311,14 +352,24 @@ auto hud_particle_effect::update_particles( float dt ) -> void
 
     for( auto &p : particles_ ) {
         p.age += dt;
-        p.x += p.vx * dt;
-        p.y += p.vy * dt;
+
+        // Buoyancy decay / gust pull. An ember's rise bleeds off as it cools, so
+        // it slows, stalls and starts to sink instead of leaving in a straight line.
+        p.vy += p.accel_y * dt;
+
+        // Sway + leaf tumble live in hud_particle_step_velocity (header, unit-tested)
+        // so the motion that now defines each emitter has exactly one definition.
+        const auto v = hud_particle_step_velocity( p );
+        p.x += v.vx * dt;
+        p.y += v.vy * dt;
         p.rotation += p.rot_speed * dt;
 
         // Envelope is a pure function of age (hud_particle_alpha, unit-tested):
         // it used to be a per-frame MULTIPLY into p.alpha, which compounds and
-        // killed particles at ~70% of their nominal lifetime.
-        p.alpha = hud_particle_alpha( p.base_alpha, p.age, p.lifetime, FADE_IN );
+        // killed particles at ~70% of their nominal lifetime. The flicker rides
+        // on top and can only darken it.
+        p.alpha = hud_particle_alpha( p.base_alpha, p.age, p.lifetime, FADE_IN )
+                  * hud_particle_flicker( p.flicker, p.sway_phase, p.age );
     }
 
     // Remove expired particles. Only `age` decides — alpha is a pure function of

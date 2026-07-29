@@ -13,7 +13,8 @@
 // not the world target.
 
 #include <SDL3/SDL_gpu.h>
-#include <algorithm> // std::min / std::max in the constexpr envelope below
+#include <algorithm> // std::min / std::max / std::clamp in the constexpr math below
+#include <cmath>     // std::sin for the sway/flicker helpers
 #include <cstdint>
 #include <vector>
 
@@ -34,6 +35,15 @@ struct hud_particle {
     float lifetime = 3.f;    // total lifetime in seconds
     float rotation = 0.f;    // rotation angle (degrees)
     float rot_speed = 0.f;   // rotation speed deg/sec
+    // ── Motion character. Now that every emitter shares one appearance, THIS is
+    // what tells snow from embers from leaves. All optional: zeroed fields fall
+    // back to the plain straight-line drift.
+    float sway_amp = 0.f;    // lateral velocity swing, px/sec (0 = no sway)
+    float sway_freq = 0.f;   // sway cycles per second
+    float sway_phase = 0.f;  // sway phase offset, radians — keeps a batch from marching in step
+    float swirl = 0.f;       // leaf tumble: lateral velocity coupled to `rotation`
+    float accel_y = 0.f;     // px/sec^2, e.g. an ember's rise decaying as it cools
+    float flicker = 0.f;     // alpha modulation depth 0..1 (embers guttering)
     float r = 1.0f;          // color components
     float g = 1.0f;
     float b = 1.0f;
@@ -73,6 +83,61 @@ constexpr auto hud_particle_travel_lifetime( float distance, float speed,
         float slack = 1.15f ) -> float
 {
     return speed > 0.f ? distance * slack / speed : 1.f;
+}
+
+// Lateral sway velocity at `age`. Applied in VELOCITY space, not position: the
+// integral of a sine is a sine, so the path is a smooth serpentine and a particle
+// never teleports when its amplitude or the frame delta changes. Zero amplitude
+// or frequency = straight-line drift.
+inline auto hud_particle_sway( float amp, float freq, float phase, float age ) -> float
+{
+    if( amp == 0.f || freq == 0.f ) {
+        return 0.f;
+    }
+    constexpr float TAU = 6.283185307f;
+    return amp * std::sin( TAU * freq * age + phase );
+}
+
+// Alpha multiplier for a guttering ember: 1 at depth 0, dipping to (1 - depth)
+// at the bottom of each cycle. Never inverts or exceeds 1, so it can only ever
+// darken the envelope.
+inline auto hud_particle_flicker( float depth, float phase, float age ) -> float
+{
+    if( depth <= 0.f ) {
+        return 1.f;
+    }
+    constexpr float TAU = 6.283185307f;
+    constexpr float FLICKER_HZ = 7.0f; // fast enough to read as a flame, not a pulse
+    const float wave = 0.5f + 0.5f * std::sin( TAU * FLICKER_HZ * age + phase );
+    return 1.f - std::clamp( depth, 0.f, 1.f ) * ( 1.f - wave );
+}
+
+// Velocity a particle actually travels at this step: its stored drift plus the
+// sway, plus the leaf tumble. Pure and public so the motion — the thing that now
+// distinguishes the emitters — is unit-testable without a GPU.
+//
+// The tumble is the interesting part: BOTH the lateral push and the fall speed
+// key off the same `rotation`, so a leaf slides sideways while broadside and
+// drops when edge-on, which is what makes it read as a leaf rather than a mote
+// on a diagonal.
+struct hud_particle_velocity {
+    float vx = 0.f;
+    float vy = 0.f;
+};
+
+inline auto hud_particle_step_velocity( const hud_particle &p ) -> hud_particle_velocity
+{
+    constexpr float DEG2RAD = 0.01745329f;
+    auto v = hud_particle_velocity{
+        .vx = p.vx + hud_particle_sway( p.sway_amp, p.sway_freq, p.sway_phase, p.age ),
+        .vy = p.vy,
+    };
+    if( p.swirl != 0.f ) {
+        const auto rot = p.rotation * DEG2RAD;
+        v.vx += p.swirl * std::cos( rot );
+        v.vy *= 1.0f + 0.35f * std::abs( std::sin( rot ) );
+    }
+    return v;
 }
 
 // Alpha envelope at `age`: ramps up over `fade_in` seconds, holds, then ramps

@@ -963,9 +963,16 @@ auto tonemap_pass_t( lighting::render_state &rs,
 }
 
 // ── HUD particle dev knobs (F4 → Effects → HUD particles) ───────────────────
-// The weather picker in composite_swapchain_pass_b owns each emitter's authored
-// rate/alpha. When the dev panel FORCES an emitter there is no weather branch to
-// take them from, so the same numbers live here once and both paths read them.
+// Emitters differ by MOTION and density, not by how each mote looks: the size
+// lives in hud_particle_effect.cpp (one range for all five) and the brightness
+// is this one constant. Per-type alphas used to run 0.35..0.7, which made snow
+// and embers read as a different, heavier effect than the main-menu motes the
+// look is modelled on.
+constexpr float HUD_PART_BASE_ALPHA = 0.5f;
+
+// Spawn density IS type-specific — snowfall is busy, pollen is sparse — and the
+// weather picker below and the dev panel's forced emitter must agree on it, so
+// the numbers live here once.
 auto hud_emitter_base_rate( lighting::hud_emitter_type t ) -> float
 {
     switch( t ) {
@@ -976,18 +983,6 @@ auto hud_emitter_base_rate( lighting::hud_emitter_type t ) -> float
         case lighting::hud_emitter_type::leaf:   return 3.0f;
     }
     return 3.0f;
-}
-
-auto hud_emitter_base_alpha( lighting::hud_emitter_type t ) -> float
-{
-    switch( t ) {
-        case lighting::hud_emitter_type::ember:  return 0.7f;
-        case lighting::hud_emitter_type::dust:   return 0.35f;
-        case lighting::hud_emitter_type::pollen: return 0.4f;
-        case lighting::hud_emitter_type::snow:   return 0.7f;
-        case lighting::hud_emitter_type::leaf:   return 0.6f;
-    }
-    return 0.5f;
 }
 
 auto hud_emitter_enabled( lighting::hud_emitter_type t ) -> bool
@@ -1082,7 +1077,8 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
     } else {
         auto ptype = lighting::hud_emitter_type::dust;
         auto prate = 4.0f;
-        auto palpha = 0.5f;
+        // Same for every emitter — see HUD_PART_BASE_ALPHA.
+        const auto palpha = HUD_PART_BASE_ALPHA;
 
         if( g && world_generator && world_generator->active_world ) {
             const float hour = hour_of_day<float>( calendar::turn );
@@ -1099,34 +1095,28 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
                 // Caves: slow drifting dust motes
                 ptype = lighting::hud_emitter_type::dust;
                 prate = 3.0f;
-                palpha = 0.35f;
             } else if( snowing ) {
                 // Snow weather: dense falling snow
                 ptype = lighting::hud_emitter_type::snow;
                 prate = 8.0f;
-                palpha = 0.7f;
             } else if( raining ) {
                 // Rain: the world-space rain_effect already fills the screen, so the
                 // ambient layer only adds mush — unless the dev panel asks for it,
                 // in which case dust doubles as wind-blown spray.
                 ptype = lighting::hud_emitter_type::dust;
                 prate = g_hud_part_in_rain ? 4.0f : 0.0f;
-                palpha = 0.5f;
             } else if( season == AUTUMN ) {
                 // Autumn: tumbling leaves
                 ptype = lighting::hud_emitter_type::leaf;
                 prate = 3.0f;
-                palpha = 0.6f;
             } else if( is_night ) {
                 // Night outdoor: slow floating embers / firefly-like motes
                 ptype = lighting::hud_emitter_type::ember;
                 prate = 2.5f;
-                palpha = 0.7f;
             } else {
                 // Clear day: gentle pollen drift
                 ptype = lighting::hud_emitter_type::pollen;
                 prate = 2.0f;
-                palpha = 0.4f;
             }
         }
 
@@ -1138,7 +1128,6 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
             ptype = static_cast<lighting::hud_emitter_type>(
                         std::clamp( g_hud_part_type, 0, 4 ) );
             prate = hud_emitter_base_rate( ptype );
-            palpha = hud_emitter_base_alpha( ptype );
         } else if( !hud_emitter_enabled( ptype ) ) {
             prate = 0.0f;
         }
