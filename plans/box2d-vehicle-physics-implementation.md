@@ -157,43 +157,49 @@ The stop-start rows pin it further: `Beetle` stop-start burns **identical** fuel
 builds (0.090833), and only the cruise rows diverge. So **acceleration fuel is correct and
 fuel burned holding a steady speed is ~7x too high** under position authority.
 
-**ROOT CAUSE: the vehicle never reaches cruise velocity under position authority.**
-Instrumenting `thrust()` right after `load` is computed, same window on both builds:
+**ROOT CAUSE FOUND AND FIXED: `move` was never updated under position authority.**
 
-| | BOX2D=ON | BOX2D=OFF |
-|---|---|---|
-| `velocity` at cruise | **1873** | **2168** |
-| `vel_inc` (gap to `cruise_velocity` 2235) | **362** | **67** |
-| `load` | **533** | **114** |
-| `accel` | 678 | 585 |
-| `traction` | 1.0000 | 1.0000 |
+`vehicle::slowdown()` (`src/vehicle_move.cpp:113`) multiplies rolling drag by
+`1 + 24 * |sin( face.dir() - move.dir() )|` — up to **25x** — to model a vehicle sliding
+sideways. `move` is set by `veh.move = facing` in `map::move_vehicle()`
+(`src/map_vehicle.cpp:978`), which `act_on_map()` never reaches under authority. So `move`
+kept its constructed heading of 0 degrees while `face` tracked the vehicle: a vehicle
+driving due west (`face` 270, `move` 0) was charged the **full 25x skid penalty every turn
+while travelling perfectly straight**.
 
-`traction` is identical, so the traction/`refresh_precalc` hypothesis is **ruled out**. And
-`accel` is *higher* on ON, so it is not weaker engine output either.
+Measured on `car_test` at cruise, before and after:
 
-The mechanism is the cruise-control clamp at `src/vehicle_move.cpp:216`:
-`vel_inc = min( vel_inc, effective_cruise - velocity )`, then
-`load = 1000 * |vel_inc| / accel` (line 221). At a true steady state `velocity` reaches
-`effective_cruise`, `vel_inc` falls to ~0, `load` falls below the `load >= 1` guard at line
-247, and cruising costs **no** fuel beyond `idle()`. That is what OFF approximately does
-(gap 67, load 114).
+| | before | after | tile-step reference |
+|---|---|---|---|
+| `slowdown` per turn | 362 | **67** | 67 |
+| `face` / `move` | 270 / 0 | **270 / 270** | 270 / 270 |
+| `vel` at cruise | 1873 | 2235 | 2235 |
+| `load` (cruise thrust) | 533 | 114 | 114 |
 
-Under authority the vehicle plateaus **362 cm/s short of target and stays there**, so the
-clamp never closes, and cruise-control burns `load = 533` every single turn forever. 533/114
-= 4.7x per turn, which compounds into the measured 7x fuel over a 100-cycle run. It also
-explains the asymmetry exactly: during acceleration `vel_inc` is not cruise-clamped, so
-`load` saturates near 1000 on both builds — hence stop-start fuel being identical
-(0.090833).
+Chain: inflated drag held the vehicle 362 cm/s below its cruise target permanently;
+`thrust()` clamps `vel_inc` to the remaining gap (`vehicle_move.cpp:216`) and
+`load = 1000*|vel_inc|/accel`, so cruise control burned 533 every turn instead of 114 —
+~4.7x per turn compounding to the ~7x fuel measured over a 100-cycle run. It also explains
+the stop-start parity: during acceleration `vel_inc` is not cruise-clamped, so `load`
+saturates near 1000 regardless.
 
-**Next step:** find what removes the extra velocity per turn under authority, since it is
-not traction and not engine power. `veh->velocity` is pushed into the body by
-`sync_bodies_from_game()` but `sync_game_from_bodies()` deliberately does **not** read linear
-velocity back, so Box2D damping should not be reaching `veh->velocity` at all — worth
-verifying that assumption first. Then check what the per-tile readback walk in
-`map::vehmove()` does to velocity: it calls `displace_vehicle()` once per tile and calls
-`veh.stop()` on a blocked step, so any spurious block would shave speed. Instrument
-`veh->velocity` immediately before and after the readback walk and compare against
-`slowdown()`'s expected drag delta.
+Fixed in `PhysicsWorld::sync_game_from_bodies()` by deriving `move` from the body's linear
+velocity (the actual travel vector, so a genuine slide still registers as a skid), falling
+back to `face` below 0.05 m/s where the direction is numerical noise.
+
+Ruled out along the way, each by measurement: `traction` (identical 1.0 on both builds),
+engine power (`accel` was *higher* on ON), `coeff_air_drag` / `coeff_rolling_drag`
+(byte-identical), a lower cruise equilibrium (`vel_end` identical), early loop exit
+(`cycles_run` 100 both), and distance (`tiles` within 4%). The skid multiplier is applied
+inside `slowdown()` rather than inside the drag coefficients, which is why identical
+coefficients did not exonerate drag.
+
+**Residual: 3-8%, no longer systemic.** `vehicle_efficiency` went from **101** failed
+assertions to **53**, and the remaining gaps are near-misses (`beetle_test` 77,965 against a
+required 80,346 — 3.0% short; another row 8.0% short) rather than multiples. For scale, the
+tile-step build itself sits 3-6% from upstream. Whether the remainder is a second small
+defect or just continuous-vs-quantised integration is open; it is no longer a
+balance-breaking regression.
 
 **This regression was previously hidden twice over.** The committed constants (76,590 for
 `car_test`) sit beside the ON value, so they were generated under `BOX2D=ON` and baked the
