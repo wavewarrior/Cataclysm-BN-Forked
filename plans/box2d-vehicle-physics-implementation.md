@@ -157,13 +157,43 @@ The stop-start rows pin it further: `Beetle` stop-start burns **identical** fuel
 builds (0.090833), and only the cruise rows diverge. So **acceleration fuel is correct and
 fuel burned holding a steady speed is ~7x too high** under position authority.
 
-That is the defect: something in the per-turn engine-load path keeps drawing
-acceleration-level power once the vehicle is already at cruise. Start at
-`vehicle::gain_moves()` (`src/vehicle.cpp:~2905-2945`, where `slowdown()` and `thrust()`
-run each turn) and compare the power drawn per turn between the two paths at a fixed cruise
-velocity. Note `vehicle::act_on_map()` early-returns for authority vehicles
-(`src/vehicle_move.cpp:~1586`) *after* `gain_moves()` has already run, so the thrust path is
-reached on both builds — the difference is in what it computes, not whether it runs.
+**ROOT CAUSE: the vehicle never reaches cruise velocity under position authority.**
+Instrumenting `thrust()` right after `load` is computed, same window on both builds:
+
+| | BOX2D=ON | BOX2D=OFF |
+|---|---|---|
+| `velocity` at cruise | **1873** | **2168** |
+| `vel_inc` (gap to `cruise_velocity` 2235) | **362** | **67** |
+| `load` | **533** | **114** |
+| `accel` | 678 | 585 |
+| `traction` | 1.0000 | 1.0000 |
+
+`traction` is identical, so the traction/`refresh_precalc` hypothesis is **ruled out**. And
+`accel` is *higher* on ON, so it is not weaker engine output either.
+
+The mechanism is the cruise-control clamp at `src/vehicle_move.cpp:216`:
+`vel_inc = min( vel_inc, effective_cruise - velocity )`, then
+`load = 1000 * |vel_inc| / accel` (line 221). At a true steady state `velocity` reaches
+`effective_cruise`, `vel_inc` falls to ~0, `load` falls below the `load >= 1` guard at line
+247, and cruising costs **no** fuel beyond `idle()`. That is what OFF approximately does
+(gap 67, load 114).
+
+Under authority the vehicle plateaus **362 cm/s short of target and stays there**, so the
+clamp never closes, and cruise-control burns `load = 533` every single turn forever. 533/114
+= 4.7x per turn, which compounds into the measured 7x fuel over a 100-cycle run. It also
+explains the asymmetry exactly: during acceleration `vel_inc` is not cruise-clamped, so
+`load` saturates near 1000 on both builds — hence stop-start fuel being identical
+(0.090833).
+
+**Next step:** find what removes the extra velocity per turn under authority, since it is
+not traction and not engine power. `veh->velocity` is pushed into the body by
+`sync_bodies_from_game()` but `sync_game_from_bodies()` deliberately does **not** read linear
+velocity back, so Box2D damping should not be reaching `veh->velocity` at all — worth
+verifying that assumption first. Then check what the per-tile readback walk in
+`map::vehmove()` does to velocity: it calls `displace_vehicle()` once per tile and calls
+`veh.stop()` on a blocked step, so any spurious block would shave speed. Instrument
+`veh->velocity` immediately before and after the readback walk and compare against
+`slowdown()`'s expected drag delta.
 
 **This regression was previously hidden twice over.** The committed constants (76,590 for
 `car_test`) sit beside the ON value, so they were generated under `BOX2D=ON` and baked the
