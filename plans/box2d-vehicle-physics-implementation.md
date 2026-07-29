@@ -1594,3 +1594,50 @@ Drive at ~10 mph into bear/moose 20 times (horizontal). Drive off a z-level onto
 **Transitional fields** (`angular_velocity_rads`, and any spin accumulator): exist only between Phase 4 and Phase 10. Must NOT be serialized before Phase 9. Removed in Phase 12.
 
 **No CMakePresets.json preset for BOX2D**: `-DBOX2D=ON` must always be passed explicitly on the cmake configure line. This is intentional (Box2D is an opt-in experimental build).
+
+## Session findings: what the failing vehicle tests actually mean
+
+Measured by toggling `box2d_position_authority` inside a single binary, so build
+configuration is never a variable.
+
+| Suite | Status | Player-facing? |
+|---|---|---|
+| `vehicle_rails_test` | **fixed** — 0/5 cases -> 5/5 (287 -> 4,284 assertions) | was: trains derail and skid |
+| `vehicle_ramp_test` | still 83 assertions failing | **no** — sets `box2d_position_authority = false` at lines 109/159, so it exercises the legacy tile-step path. Ramps verified working under authority by `box2d_authority_vehicle_climbs_ramp` |
+| `vehicle_efficiency_test` | 59 -> fewer, gap remains | **yes** — vehicles travel 7-27% less per unit fuel |
+| `ranged_vehicle_recoil_test` | 2 assertions | **no** — order-dependent |
+
+### Rails: root cause
+
+`vehicle_movement::process_movement_on_rails()` is called at `vehicle_move.cpp:1606`,
+but the authority early-return is at `1599`. A rail vehicle under authority therefore
+never had its heading corrected to the track: it turned to whatever the driver asked,
+derailed, and then skidded, because `is_on_rails()` going false stops the skid guard
+at `1574` from suppressing it. Rail motion is a *kinematic constraint*, which a free
+rigid-body integrator cannot express, so `on_vehicle_added()` now denies authority to
+`can_use_rails()` vehicles. The body is still built, so collisions still work.
+
+### Efficiency: what is ruled out
+
+All measured directly with authority toggled in one binary:
+
+- **fuel burn** — mean `load` 599.2 either way, 800 `consume_fuel` calls each
+- **drag** — 1062.13 identical, skid factor 1.000 both
+- **velocity** — mean and peak identical
+- **acceleration lag** from `step_turn()` (line 448) preceding `act_on_map()` (line
+  556) — `act_on_map` never changes velocity, in 0 of 800 turns
+- **sub-tile remainder** — real, and fixed (`on_vehicle_moved` now carries the
+  fraction across whole-tile displacements), but worth only ~4 points of the gap
+
+The tile-step path hits the expected 12.499 tiles/turn almost exactly (12.48
+measured); the authority path reaches 11.59. Roughly 0.9 tiles/turn is still
+unaccounted for and is the next thing to chase.
+
+### Not a test failure at all: colliders survived world teardown
+
+`PhysicsWorld` is built once in the `map` constructor, `map` is a `pimpl<map>` built
+once in `game::game()`, and `terrain_bodies_` is keyed by `tripoint_abs_sm`. Nothing
+freed it but the destructor, which never runs mid-session, so `MAPBUFFER.clear()` on
+returning to the menu left world A's colliders registered at coordinates holding
+world B's terrain. Measured `terrain_body_count() == 1` after teardown. Fixed via
+`clear_world_bodies()` at the `mapbuffer::clear()` choke point.
