@@ -164,9 +164,40 @@ shift_zlevel` per tile and rewinds `physics_pos` on every early exit.
 
 **Remaining:**
 
-1. **Implement `dispatch_contact_events()` for real** — route VT begin-contacts to
-   bash/damage/sound, and creature collision. Everything else is gated on this. The
-   per-tile walk now makes this reachable; it was not before.
+1. **Implement `dispatch_contact_events()` for real** — the single gating item. Currently a
+   stub: it walks `beginEvents`, resolves a `vehicle *`, then discards it
+   (`( void )ptr; ( void )bid;`). The per-tile readback walk now makes per-tile
+   consequences reachable, which they were not before.
+
+   Concretely it needs:
+   - **Map access.** Bashing is `map::bash()`, but `dispatch_contact_events()` is called
+     from `step_turn()` which holds no map. Thread `map &` through both (the `vehmove()`
+     call site already has `*this`), matching how `on_submap_loaded`/`on_zlevel_changed`
+     already take one.
+   - **Terrain identification.** Only bashable bodies carry user data
+     (`terrain_body.cpp:60-63` sets an encoded `tripoint_bub_ms`); solid bodies carry
+     none, so "no user data and not in `vehicle_bodies_`" is the solid-terrain case.
+     Beware: `b2Body_GetUserData()` on a vehicle body returns a `vehicle *`, so the
+     `vehicle_bodies_.count()` check must come first or the pointer will be decoded as a
+     tile position.
+   - **A force model.** `map::bash()` takes a strength. Deriving it from contact impulse
+     is a *balance decision*, not a mechanical port: the tile-step path computed bash
+     force from `veh.velocity` and part mass inside `part_collision()`, and any different
+     derivation changes how easily vehicles smash terrain.
+   - **Creature collision.** `veh_coll_body` (damage, being shoved, `throw_from_seat`)
+     also lived in `part_collision()`. Creature bodies are sensors
+     (`physics_world.cpp` sets `isSensor = true`, `enableContactEvents = false`), so they
+     produce no contact events at all as currently configured.
+
+   **Not attempted this session, deliberately.** Two reasons, both learned the hard way
+   here: the force model is a balance decision that should not be invented silently, and
+   there is currently no test that would verify it — `[vehicle][ramp]` opts out of
+   authority entirely, `[vehicle][railroad]` fails before `vehmove()`, and
+   `[vehicle][collision]` drives `part_collision()` directly rather than through physics.
+   Landing it now would mean shipping a balance-affecting feature with no coverage, which
+   is the exact failure mode the corrections at the top of this document exist to record.
+   Write the test first: spawn an authority vehicle, drive it into a bashable wall through
+   `vehmove()`, and assert the terrain actually changes.
 2. **Diagnose ramp and rails where they actually live** — `src/grab.cpp` for the pushed-cart
    ramp cases, and the direct-`displace_vehicle` warm-up for `vehicle_rails_test.cpp:184`.
    Not the readback.
@@ -175,8 +206,27 @@ shift_zlevel` per tile and rewinds `physics_pos` on every early exit.
    parked neighbours shoving each other, then delete the transient solver.
 4. **Calibrate fuel economy** and re-enable the two efficiency `CHECK`s.
 5. **Fix cross-test leakage** — `"vehicle gun recoil*"` and `grabbed_shopping_cart_*` pass
-   in isolation but fail in the full `[vehicle]` run. Suspect the per-binary `PhysicsWorld`
-   singleton (addendum item 3).
+   in isolation but fail in the full `[vehicle]` run. Addendum item 3 nominates the
+   per-binary `PhysicsWorld` as the suspect. Partially checked: instrumenting
+   `vehicle_bodies_.size()` on every change across the whole `[vehicle]` suite showed it
+   only ever taking the values **0 and 1** — so there is no *accumulation* of vehicle
+   bodies, and the "orphaned bodies pile up and degrade broad-phase to O(n^2)" shape of
+   the old creature-body bug is not what is happening here.
+
+   That does **not** clear the registry entirely: a single stale key left behind after a
+   vehicle is freed keeps the size at 1 while still being a use-after-free in
+   `substeps_for_turn()` / `sync_bodies_from_game()`, both of which dereference every key.
+   Two mechanisms could produce exactly that, per `src/submap_load_manager.h:28-36`:
+   `simulated -> lazy_border` fires `on_submap_unloaded` while the submap is **still
+   resident** (so a live vehicle's body is destroyed), and `lazy_border -> evicted` does
+   **not** fire it (so the real free is silent). On top of that,
+   `map::on_submap_unloaded` only calls the physics hook when
+   `pos.z() == g->u.bub_pos().z()` (`src/map.cpp:402`), so submaps unloading on any other
+   z-level never sweep their vehicle bodies at all.
+
+   Next step is a validity check rather than a size check: assert every key in
+   `vehicle_bodies_` is still a live, map-known vehicle, or run the suite under ASAN.
+   Do that before rewriting the submap listener contract.
 6. Only then Phase 12 cleanup (with 12-A rewritten per Correction 1), then Step 6, then
    Phase 11.
 
