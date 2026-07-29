@@ -2583,10 +2583,29 @@ void game::place_player_overmap( const tripoint_abs_omt &om_dest )
     const tripoint_abs_sm map_sm_pos(
         project_to<coords::sm>( om_dest ).raw() + point( -g_half_mapsize, -g_half_mapsize ) );
     const tripoint_bub_ms player_pos( u.bub_pos().xy(), map_sm_pos.z() );
+    const int z_before = u.bub_pos().z();
     load_map( map_sm_pos );
     // update weather now as it could be different on the new location
     get_weather().nextweather = calendar::turn;
     place_player( player_pos );
+#ifdef BOX2D_ENABLED
+    // Rebuild terrain colliders for the destination z-level.
+    //
+    // map::on_submap_loaded only notifies the physics world for submaps whose z
+    // matches g->u.bub_pos().z() (src/map.cpp), and load_map() above ran BEFORE
+    // place_player() had moved the player — so every notification during that load
+    // was tested against the OLD z.  On a z-changing travel that means the
+    // destination level received no colliders at all, and the only other rebuild
+    // path (PhysicsWorld::on_zlevel_changed) is reached solely from
+    // game::vertical_shift, i.e. stairs and ramps.  Without this the player could
+    // drive through walls until they next used a staircase.
+    if( auto *pw = m.get_physics_world(); pw != nullptr ) {
+        const int z_after = u.bub_pos().z();
+        if( z_before != z_after ) {
+            pw->on_zlevel_changed( m, z_before, z_after );
+        }
+    }
+#endif
     m.spawn_monsters( true ); // Static monsters
     update_overmap_seen();
     // load_npcs() scans around the player's absolute position, updated by place_player().

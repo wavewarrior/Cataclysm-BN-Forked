@@ -257,6 +257,37 @@ void PhysicsWorld::on_submap_loaded( const map &m, const tripoint_abs_sm &abs_sm
                                        abs_sm_pos.z() };
     const auto bub_origin = m.abs_to_bub( abs_corner );
 
+    // Idempotency guard.  terrain_bodies_[key] below is a plain assignment, so a
+    // second call for a key that already holds bodies would drop those b2BodyIds
+    // without destroying them — leaving live duplicate colliders stacked on the
+    // same tiles and leaking them for the lifetime of the world.  Previously
+    // unreachable because on_zlevel_changed always ran its removal loop first, but
+    // that is a fragile invariant now that other callers exist (e.g. the
+    // destination-z rebuild in game::place_player_overmap).
+    //
+    // The bashable_tile_bodies_ keys come from bashable_tiles_, NOT from decoding
+    // each body's userData: on_map_shifted() re-bases the bub keys stored in
+    // bashable_tiles_ but does not rewrite the bodies' encoded userData, so after
+    // any shift decode_tile_pos() yields the pre-shift tile.  Erasing by that would
+    // remove the wrong entry and leave the real one holding a destroyed b2BodyId,
+    // which the next on_tile_bashed() at that tile would try to destroy again.
+    if( const auto prev = terrain_bodies_.find( abs_sm_pos ); prev != terrain_bodies_.end() ) {
+        if( const auto tl = bashable_tiles_.find( abs_sm_pos ); tl != bashable_tiles_.end() ) {
+            for( const auto &[bub, bid] : tl->second ) {
+                if( const auto e = bashable_tile_bodies_.find( bub );
+                    e != bashable_tile_bodies_.end() && B2_ID_EQUALS( e->second, bid ) ) {
+                    bashable_tile_bodies_.erase( e );
+                }
+            }
+            bashable_tiles_.erase( tl );
+        }
+        for( const auto bid : prev->second ) {
+            b2DestroyBody( bid );
+        }
+        terrain_bodies_.erase( prev );
+    }
+
+
     auto bodies = build_submap_terrain_bodies( world_, m, bub_origin );
 
     // Populate per-submap bashable tile list for shift-safe on_tile_bashed lookup.
@@ -383,12 +414,26 @@ void PhysicsWorld::on_map_shifted( point delta_tiles )
         b2Body_SetTransform( bid, { p.x + delta.x, p.y + delta.y }, rot );
     }
 
-    // Translate terrain bodies.
+    // Translate terrain bodies, and re-encode their userData tile alongside.
+    //
+    // The userData is an encoded bub_ms tile, and bub coordinates are
+    // bubble-relative, so a shift invalidates it just as it invalidates the
+    // transform.  Updating only the transform left every terrain body advertising
+    // its pre-shift tile, which any consumer that identifies a tile by userData
+    // would then get wrong — including the contact-event routing that still has to
+    // be written, where it would bash the wrong tile once the bubble had moved.
     for( const auto &[abs_sm, body_list] : terrain_bodies_ ) {
         for( const auto bid : body_list ) {
             const auto p   = b2Body_GetPosition( bid );
             const auto rot = b2Body_GetRotation( bid );
             b2Body_SetTransform( bid, { p.x + delta.x, p.y + delta.y }, rot );
+            if( auto *ud = b2Body_GetUserData( bid ); ud != nullptr ) {
+                const auto old_bub = decode_tile_pos( reinterpret_cast<std::uintptr_t>( ud ) );
+                const auto new_bub = tripoint_bub_ms{ old_bub.x() + delta_tiles.x,
+                                                      old_bub.y() + delta_tiles.y,
+                                                      old_bub.z() };
+                b2Body_SetUserData( bid, reinterpret_cast<void *>( encode_tile_pos( new_bub ) ) );
+            }
         }
     }
 
