@@ -594,25 +594,63 @@ void map::vehmove()
             const auto py  = static_cast<int>( std::lround( veh.physics_pos.y ) );
             const auto cur = veh.bub_ms_location();
             if( px != cur.x() || py != cur.y() ) {
-                // Refuse to drive out of the loaded reality bubble.  b2World_Step()
-                // integrates continuously and, over a full game turn, can carry a
-                // fast vehicle past the loaded map edge in one readback.  Beyond
-                // that edge there is no terrain to collide with, so instead of
-                // teleporting into unloaded space (which strands the vehicle in a
-                // null submap) treat the boundary as a hard stop and rewind
-                // physics_pos to the tile the vehicle actually occupies.
-                const auto dest = tripoint_bub_ms{ px, py, cur.z() };
-                if( inbounds( dest ) ) {
-                    // Tell on_vehicle_moved this move is physics-driven: the body
-                    // is already at the sub-tile position and must not be snapped
-                    // back to the new tile's centre.
+                // Walk the tile anchor one tile at a time toward the
+                // physics-derived destination, rather than issuing one
+                // multi-tile displace_vehicle().
+                //
+                // step_turn() integrates a whole game turn, so the span is
+                // routinely several tiles (~5.6 tiles/turn at 10 m/s).  A single
+                // jump would never observe the intermediate tiles, which makes
+                // every per-tile behaviour structurally unreachable: ramp
+                // entry/exit, terrain bashing, and creature collision.  Walking
+                // mirrors what the tile-step mover did, and per tile applies the
+                // same z sequence move_vehicle() uses:
+                //     adjust_zlevel( 1, dp ) -> displace_vehicle( dp ) -> shift_zlevel()
+                // adjust_zlevel fills z_terrain[1] for the destination,
+                // displace_vehicle advances precalc (swapping 1 into 0) and drags
+                // passengers, then shift_zlevel applies the resulting z change.
+                //
+                // Bounded to keep a runaway physics_pos from spinning here; the
+                // bound is generous relative to any legitimate per-turn span.
+                constexpr int max_walk_tiles = 64;
+                bool blocked = false;
+                {
                     const physics::PhysicsWorld::physics_move_scope readback( *phys_world );
-                    displace_vehicle( veh, tripoint_rel_ms{ px - cur.x(), py - cur.y(), 0 } );
-                } else {
-                    veh.stop();
-                    veh.physics_pos = rl_vec2d{ static_cast<float>( cur.x() ),
-                                                static_cast<float>( cur.y() ) };
-                    if( phys_world ) { phys_world->clamp_body_to_tile( veh ); }
+                    for( int walked = 0; walked < max_walk_tiles; ++walked ) {
+                        const auto at = veh.bub_ms_location();
+                        if( at.x() == px && at.y() == py ) { break; }
+                        const auto step = tripoint_rel_ms{
+                            std::clamp( px - at.x(), -1, 1 ),
+                            std::clamp( py - at.y(), -1, 1 ),
+                            0 };
+                        // b2World_Step() has no notion of the reality bubble and
+                        // can integrate a fast body past the loaded map edge
+                        // within one turn.  Beyond that edge there is no terrain
+                        // to collide with, so treat the boundary as a hard stop
+                        // rather than stranding the vehicle in a null submap.
+                        if( !inbounds( at + step ) ) { blocked = true; break; }
+                        veh.adjust_zlevel( 1, step );
+                        if( !displace_vehicle( veh, step ) ) { blocked = true; break; }
+                        veh.shift_zlevel();
+                    }
+                }
+                // If the walk stopped short — blocked tile, map edge, or the
+                // iteration bound — the tile anchor and physics_pos have
+                // diverged.  Rewind physics_pos and the body to the tile actually
+                // reached: leaving physics_pos at the unreached destination makes
+                // the next readback re-derive an even further target from a
+                // position the vehicle never occupied, and the divergence then
+                // grows without bound while the vehicle grinds against whatever
+                // stopped it.
+                const auto reached = veh.bub_ms_location();
+                if( reached.x() != px || reached.y() != py ) {
+                    // Blocked moves shed speed, as the tile-step mover's collision
+                    // handling did; the iteration bound alone is not a collision,
+                    // so it only resyncs.
+                    if( blocked ) { veh.stop(); }
+                    veh.physics_pos = rl_vec2d{ static_cast<float>( reached.x() ),
+                                                static_cast<float>( reached.y() ) };
+                    phys_world->clamp_body_to_tile( veh );
                 }
             }
             // Resync the legacy pivot_anchor[0]/pivot_rotation[0] fields with the
