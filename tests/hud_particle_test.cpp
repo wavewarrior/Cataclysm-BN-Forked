@@ -1,5 +1,8 @@
 #include "catch/catch_amalgamated.hpp"
 
+#include <algorithm>
+#include <cmath>
+
 #include "lighting/hud_particle_effect.h"
 
 // Pure simulation math behind the ambient HUD particle layer. Both functions
@@ -116,4 +119,117 @@ TEST_CASE( "hud_particle_alpha_is_monotonic_over_the_fade_out", "[hud_particle]"
         prev = now;
     }
     CHECK( prev == Catch::Approx( 0.f ).margin( 0.001f ) );
+}
+
+TEST_CASE( "hud_particle_sway_is_bounded_and_zero_mean", "[hud_particle]" )
+{
+    using lighting::hud_particle_sway;
+
+    constexpr float amp = 40.f;
+    constexpr float freq = 0.5f;   // one cycle every 2 s
+    constexpr float phase = 1.1f;
+
+    // Sway is a VELOCITY, so its integral is the lateral displacement. Over a
+    // whole number of cycles that must come back to ~0, or a "sway" would be a
+    // steady sideways drift that walks every particle off one edge.
+    float displacement = 0.f;
+    constexpr float dt = 1.f / 240.f;
+    for( int i = 0; i < 480; ++i ) { // 2 s = exactly one cycle
+        const float v = hud_particle_sway( amp, freq, phase, static_cast<float>( i ) * dt );
+        CHECK( std::abs( v ) <= amp );
+        displacement += v * dt;
+    }
+    CHECK( displacement == Catch::Approx( 0.f ).margin( amp * dt * 2.f ) );
+
+    // Disabled by either factor being zero — that is how the calm emitters opt out.
+    CHECK( hud_particle_sway( 0.f, freq, phase, 1.f ) == Catch::Approx( 0.f ) );
+    CHECK( hud_particle_sway( amp, 0.f, phase, 1.f ) == Catch::Approx( 0.f ) );
+}
+
+TEST_CASE( "hud_particle_flicker_only_darkens", "[hud_particle]" )
+{
+    using lighting::hud_particle_flicker;
+
+    // Depth 0 must be a true no-op: every non-ember emitter multiplies by this.
+    for( int i = 0; i < 20; ++i ) {
+        const float age = static_cast<float>( i ) * 0.037f;
+        CHECK( hud_particle_flicker( 0.f, 0.7f, age ) == Catch::Approx( 1.f ) );
+    }
+
+    // A guttering ember dips but never brightens past full and never inverts,
+    // so the flicker can only ever subtract from the age envelope.
+    constexpr float depth = 0.6f;
+    float lowest = 1.f;
+    for( int i = 0; i < 2000; ++i ) {
+        const float age = static_cast<float>( i ) * 0.001f;
+        const float f = hud_particle_flicker( depth, 0.3f, age );
+        CHECK( f <= 1.0001f );
+        CHECK( f >= 1.f - depth - 0.0001f );
+        lowest = std::min( lowest, f );
+    }
+    // It must actually reach near the bottom of its range, not just hover at 1.
+    CHECK( lowest == Catch::Approx( 1.f - depth ).margin( 0.02f ) );
+}
+
+TEST_CASE( "hud_particle_sway_makes_a_serpentine_not_a_straight_line", "[hud_particle]" )
+{
+    using lighting::hud_particle_step_velocity;
+
+    // A snowflake: falls, and wanders wider than it drifts.
+    auto flake = lighting::hud_particle{};
+    flake.vy = 120.f;
+    flake.vx = 5.f;
+    flake.sway_amp = 60.f;
+    flake.sway_freq = 0.4f;
+
+    auto reversals = 0;
+    auto prev_sign = 0;
+    for( auto i = 0; i < 600; ++i ) {           // 5 s at 120 Hz
+        flake.age = static_cast<float>( i ) / 120.f;
+        const auto v = hud_particle_step_velocity( flake );
+        const auto sign = v.vx > 0.f ? 1 : -1;
+        if( prev_sign != 0 && sign != prev_sign ) {
+            ++reversals;
+        }
+        prev_sign = sign;
+        // Vertical motion is untouched by sway — only the horizontal wanders.
+        CHECK( v.vy == Catch::Approx( flake.vy ) );
+    }
+    // 5 s at 0.4 Hz is two full cycles: the flake must change direction, not
+    // slide steadily to one side.
+    CHECK( reversals >= 3 );
+}
+
+TEST_CASE( "hud_particle_leaf_tumble_couples_glide_and_fall", "[hud_particle]" )
+{
+    using lighting::hud_particle_step_velocity;
+
+    auto leaf = lighting::hud_particle{};
+    leaf.vy = 100.f;
+    leaf.swirl = 80.f;
+
+    // Broadside (rotation 0): maximum sideways glide, minimum fall speed.
+    leaf.rotation = 0.f;
+    const auto flat = hud_particle_step_velocity( leaf );
+    // Edge-on (rotation 90): no glide, fastest fall.
+    leaf.rotation = 90.f;
+    const auto edge = hud_particle_step_velocity( leaf );
+
+    CHECK( flat.vx == Catch::Approx( 80.f ) );
+    CHECK( edge.vx == Catch::Approx( 0.f ).margin( 0.01f ) );
+    CHECK( edge.vy > flat.vy );
+    CHECK( flat.vy == Catch::Approx( 100.f ) );
+    CHECK( edge.vy == Catch::Approx( 135.f ) );
+
+    // Half a turn later the glide reverses — that flip-flop IS the tumble.
+    leaf.rotation = 180.f;
+    CHECK( hud_particle_step_velocity( leaf ).vx == Catch::Approx( -80.f ) );
+
+    // A particle with no swirl is unaffected by its rotation.
+    auto mote = lighting::hud_particle{};
+    mote.vy = 100.f;
+    mote.rotation = 37.f;
+    const auto m = hud_particle_step_velocity( mote );
+    CHECK( m.vx == Catch::Approx( 0.f ) );
+    CHECK( m.vy == Catch::Approx( 100.f ) );
 }
