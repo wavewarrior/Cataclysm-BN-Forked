@@ -104,17 +104,80 @@ strict on both builds. **This is a suppression, not a fix** — do not read the 
 assertion count as calibration. Deliberately calibrating Box2D fuel economy (and
 diagnosing the fire-truck outlier) is open work.
 
+### Which paths are actually exercised — measure before aiming a fix
+
+The readback tile-walk in `map::vehmove()` is not uniformly hit. Counting entries into
+the `px != cur.x() || py != cur.y()` branch per suite:
+
+| Suite | Readback branch entries |
+|---|---|
+| `vehicle_efficiency` | 12,680 |
+| `[vehicle][railroad]` | 14 |
+| `[vehicle][ramp]` | **1** |
+
+`[vehicle][ramp]` is 1 because **the ramp test opts out of Box2D position authority**:
+`tests/vehicle_ramp_test.cpp:109` (grabbed-cart setup) and `:159` (driven-vehicle setup)
+both clear `veh.box2d_position_authority` inside `#ifdef BOX2D_ENABLED`, for every vehicle
+they build. So none of the ramp failures are readback or contact-event problems.
+
+That opt-out used to be **incomplete**, which resolves an apparent contradiction worth
+recording: disabling authority globally moved isolated ramp from 4/8 to 5/8, even though
+the suite had already opted out — which should have been a no-op.
+`PhysicsWorld::sync_game_from_bodies()` iterated every registered vehicle with no
+authority check, so opted-out vehicles kept their tile position but still had
+`physics_angle` overwritten and `precalc[]` re-derived from a body the game was not
+driving, corrupting their part layout. Position/facing/precalc are now gated on authority
+(the `angular_velocity_rads` readback stays unconditional, since Box2D damping is what
+decays a spin the legacy collision paths wrote). That took isolated ramp from 150 to 109
+failed assertions. The suite now genuinely does run the legacy mover.
+
+What those failures actually are: 18 of them (6 `SECTION`s x 3 `TEST_CASE`s, i.e. every
+run) are `REQUIRE( player_character.bub_pos() == map_starting_point )` at
+`vehicle_ramp_test.cpp:174`, immediately after `map::board_vehicle()`. `board_vehicle()`
+does `who->setpos( pos )` with the requested position (correct) and then
+`g->update_map( g->u )` (`src/map_vehicle.cpp:1409`), which can shift the reality bubble
+and rebase bub coordinates — after which the test's stale `map_starting_point` value no
+longer names the player's tile. Investigate there; it is unrelated to physics.
+
+Note the suite mixes two very different kinds of case, so do not treat them together:
+- `grabbed_shopping_cart_*` — a grabbed/pushed cart moved through `src/grab.cpp`, which
+  already calls `adjust_zlevel()` / `shift_zlevel()` (`grab.cpp:217,248`).
+- `vehicle_ramp_test_59/60/61` — a real **driven** motorcycle spawned via
+  `here.add_vehicle` (`vehicle_ramp_test.cpp:148`), set to `velocity = 179` and stepped
+  through up to 10 `here.vehmove()` cycles. These are ordinary driven vehicles, not grab
+  cases, and they too run on the legacy mover because of the line-159 opt-out.
+
+`[vehicle][railroad]`'s failure at `vehicle_rails_test.cpp:184` is likewise not reachable
+from the readback: it happens in the warm-up helper `add_moving_vehicle`, which calls
+`map::displace_vehicle()` **directly** at line 177 before any `vehmove()`.
+
+Confirm a path is exercised (a temporary counter in the branch is enough) before investing
+in it. Two authority-gating attempts were burned on this: one gating per turn only, one
+gating at spawn as well; neither moved rails, and both made ramp worse.
+
 ### Revised order of work
 
+**Done** (see git log): full-turn integration with tunneling-safe sub-steps; velocity
+synced in-once/out-once so contact response survives; `physics_pos` reseated on external
+teleports; readback walks one tile at a time with `adjust_zlevel -> displace_vehicle ->
+shift_zlevel` per tile and rewinds `physics_pos` on every early exit.
+
+**Remaining:**
+
 1. **Implement `dispatch_contact_events()` for real** — route VT begin-contacts to
-   bash/damage/sound, and creature collision. Everything else is gated on this.
-2. **Restore ramp z and rail handling** for authority vehicles (or hand those turns
-   back to the tile-step mover in a way that actually works — see the reverted gate).
+   bash/damage/sound, and creature collision. Everything else is gated on this. The
+   per-tile walk now makes this reachable; it was not before.
+2. **Diagnose ramp and rails where they actually live** — `src/grab.cpp` for the pushed-cart
+   ramp cases, and the direct-`displace_vehicle` warm-up for `vehicle_rails_test.cpp:184`.
+   Not the readback.
 3. **Restore vehicle-vehicle collision** — either re-reach `solve_vv_cluster()` from the
    readback path, or give vehicles a non-negative `groupIndex` plus a rule that stops
    parked neighbours shoving each other, then delete the transient solver.
 4. **Calibrate fuel economy** and re-enable the two efficiency `CHECK`s.
-5. Only then Phase 12 cleanup (with 12-A rewritten per Correction 1), then Step 6, then
+5. **Fix cross-test leakage** — `"vehicle gun recoil*"` and `grabbed_shopping_cart_*` pass
+   in isolation but fail in the full `[vehicle]` run. Suspect the per-binary `PhysicsWorld`
+   singleton (addendum item 3).
+6. Only then Phase 12 cleanup (with 12-A rewritten per Correction 1), then Step 6, then
    Phase 11.
 
 ### Stale line references
