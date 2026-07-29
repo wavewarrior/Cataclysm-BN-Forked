@@ -242,3 +242,6 @@ clang-tidy-trace
 CMakeFiles/
 CMakeCache.txt
 __cmake_systeminformation/
+
+# Stoneshard asset extraction dump (never committed)
+stoneshard-extract/

@@ -24291,7 +24291,12 @@
                 { "weight": 30, "sprite": 13756 },
                 { "weight": 30, "sprite": 13757 },
                 { "weight": 30, "sprite": 13758 },
-                { "weight": 30, "sprite": 13759 }
+                { "weight": 30, "sprite": 13759 },
+                { "weight": 12, "sprite": 19736 },
+                { "weight": 12, "sprite": 19737 },
+                { "weight": 12, "sprite": 19738 },
+                { "weight": 12, "sprite": 19739 },
+                { "weight": 12, "sprite": 19740 }
               ],
               "bg": 9131
             },
@@ -33918,7 +33923,20 @@
         { "id": "t_utility_light", "fg": 18673, "rotates": false },
         { "id": "t_grave_new", "fg": 18674 },
         { "id": "t_grave_new_season_winter", "fg": 18675 },
-        { "id": "t_shrub", "fg": 18676, "bg": 18113, "rotates": false },
+        {
+          "id": "t_shrub",
+          "fg": [
+            { "weight": 40, "sprite": 18676 },
+            { "weight": 10, "sprite": 19752 },
+            { "weight": 10, "sprite": 19753 },
+            { "weight": 10, "sprite": 19754 },
+            { "weight": 10, "sprite": 19755 },
+            { "weight": 10, "sprite": 19756 },
+            { "weight": 10, "sprite": 19757 }
+          ],
+          "bg": 18113,
+          "rotates": false
+        },
         { "id": "t_shrub_season_autumn", "fg": 18677, "bg": 18113, "rotates": false },
         { "id": "t_shrub_season_spring", "fg": 18678, "bg": 18113, "rotates": false },
         { "id": "t_shrub_season_summer", "fg": 18679, "bg": 18113, "rotates": false },
@@ -33968,7 +33986,19 @@
         { "id": "t_stump_season_spring", "fg": 18723, "bg": 18113, "rotates": false },
         { "id": "t_stump_season_summer", "fg": 18724, "bg": 18113, "rotates": false },
         { "id": "t_stump_season_winter", "fg": 18725, "bg": 18123, "rotates": false },
-        { "id": "t_tree", "fg": 18726, "bg": 18113, "rotates": false },
+        {
+          "id": "t_tree",
+          "fg": [
+            { "weight": 40, "sprite": 18726 },
+            { "weight": 10, "sprite": 23864 },
+            { "weight": 10, "sprite": 23865 },
+            { "weight": 10, "sprite": 23866 },
+            { "weight": 10, "sprite": 23867 },
+            { "weight": 10, "sprite": 23868 }
+          ],
+          "bg": 18113,
+          "rotates": false
+        },
         { "id": "t_tree_season_autumn", "fg": 18727, "bg": 18113, "rotates": false },
         { "id": "t_tree_season_spring", "fg": 18728, "bg": 18113, "rotates": false },
         { "id": "t_tree_season_summer", "fg": 18729, "bg": 18113, "rotates": false },
@@ -34023,7 +34053,17 @@
         { "id": "t_tree_beech_harvested_season_spring", "fg": 18778, "bg": 18113, "rotates": false },
         { "id": "t_tree_beech_harvested_season_summer", "fg": 18779, "bg": 18113, "rotates": false },
         { "id": "t_tree_beech_harvested_season_winter", "fg": 18780, "bg": 18123, "rotates": false },
-        { "id": "t_tree_birch", "fg": 18781, "bg": 18113, "rotates": false },
+        {
+          "id": "t_tree_birch",
+          "fg": [
+            { "weight": 40, "sprite": 18781 },
+            { "weight": 12, "sprite": 23869 },
+            { "weight": 12, "sprite": 23870 },
+            { "weight": 12, "sprite": 23871 }
+          ],
+          "bg": 18113,
+          "rotates": false
+        },
         { "id": "t_tree_birch_season_autumn", "fg": 18782, "bg": 18113, "rotates": false },
         { "id": "t_tree_birch_season_spring", "fg": 18783, "bg": 18113, "rotates": false },
         { "id": "t_tree_birch_season_summer", "fg": 18784, "bg": 18113, "rotates": false },
@@ -34078,7 +34118,15 @@
         { "id": "t_tree_cottonwood_season_spring", "fg": 18833, "bg": 18113, "rotates": false },
         { "id": "t_tree_cottonwood_season_summer", "fg": 18834, "bg": 18113, "rotates": false },
         { "id": "t_tree_cottonwood_season_winter", "fg": 18835, "bg": 18123, "rotates": false },
-        { "id": "t_tree_dead", "fg": 18836, "bg": 18113, "rotates": false },
+        {
+          "id": "t_tree_dead",
+          "fg": [
+            { "weight": 40, "sprite": 18836 },
+            { "weight": 12, "sprite": 23878 }
+          ],
+          "bg": 18113,
+          "rotates": false
+        },
         { "id": "t_tree_dead_season_autumn", "fg": 18837, "bg": 18113, "rotates": false },
         { "id": "t_tree_dead_season_spring", "fg": 18838, "bg": 18113, "rotates": false },
         { "id": "t_tree_dead_season_summer", "fg": 18839, "bg": 18113, "rotates": false },
@@ -34192,7 +34240,17 @@
         { "id": "t_tree_pecan_harvested_season_spring", "fg": 18947, "bg": 18113, "rotates": false },
         { "id": "t_tree_pecan_harvested_season_summer", "fg": 18948, "bg": 18113, "rotates": false },
         { "id": "t_tree_pecan_harvested_season_winter", "fg": 18949, "bg": 18123, "rotates": false },
-        { "id": "t_tree_pine", "fg": 18950, "bg": 18113, "rotates": false },
+        {
+          "id": "t_tree_pine",
+          "fg": [
+            { "weight": 40, "sprite": 18950 },
+            { "weight": 12, "sprite": 23872 },
+            { "weight": 12, "sprite": 23873 },
+            { "weight": 12, "sprite": 23874 }
+          ],
+          "bg": 18113,
+          "rotates": false
+        },
         { "id": "t_tree_pine_season_autumn", "fg": 18951, "bg": 18113, "rotates": false },
         { "id": "t_tree_pine_season_spring", "fg": 18952, "bg": 18113, "rotates": false },
         { "id": "t_tree_pine_season_summer", "fg": 18953, "bg": 18113, "rotates": false },
@@ -34232,7 +34290,17 @@
         { "id": "t_tree_walnut_harvested_season_spring", "fg": 18987, "bg": 18113, "rotates": false },
         { "id": "t_tree_walnut_harvested_season_summer", "fg": 18988, "bg": 18113, "rotates": false },
         { "id": "t_tree_walnut_harvested_season_winter", "fg": 18989, "bg": 18123, "rotates": false },
-        { "id": "t_tree_willow", "fg": 18990, "bg": 18113, "rotates": false },
+        {
+          "id": "t_tree_willow",
+          "fg": [
+            { "weight": 40, "sprite": 18990 },
+            { "weight": 12, "sprite": 23875 },
+            { "weight": 12, "sprite": 23876 },
+            { "weight": 12, "sprite": 23877 }
+          ],
+          "bg": 18113,
+          "rotates": false
+        },
         { "id": "t_tree_willow_season_autumn", "fg": 18991, "bg": 18113, "rotates": false },
         { "id": "t_tree_willow_season_spring", "fg": 18992, "bg": 18113, "rotates": false },
         { "id": "t_tree_willow_season_summer", "fg": 18993, "bg": 18113, "rotates": false },
@@ -34247,7 +34315,18 @@
         { "id": "t_tree_young_season_spring", "fg": 19002, "bg": 18113, "rotates": false },
         { "id": "t_tree_young_season_summer", "fg": 19003, "bg": 18113, "rotates": false },
         { "id": "t_tree_young_season_winter", "fg": 19004, "bg": 18123, "rotates": false },
-        { "id": "t_underbrush", "fg": 19005, "bg": 18113, "rotates": false },
+        {
+          "id": "t_underbrush",
+          "fg": [
+            { "weight": 40, "sprite": 19005 },
+            { "weight": 10, "sprite": 19758 },
+            { "weight": 10, "sprite": 19759 },
+            { "weight": 10, "sprite": 19760 },
+            { "weight": 10, "sprite": 19761 }
+          ],
+          "bg": 18113,
+          "rotates": false
+        },
         { "id": "t_underbrush_season_autumn", "fg": 19006, "bg": 18113, "rotates": false },
         { "id": "t_underbrush_season_spring", "fg": 19007, "bg": 18113, "rotates": false },
         { "id": "t_underbrush_season_summer", "fg": 19008, "bg": 18113, "rotates": false },
@@ -35782,6 +35861,20 @@
       "sprite_offset_y": -48
     },
     {
+      "file": "stoneshard_terrain.png",
+      "//": "range 19737 to 19752 - promoted Stoneshard ground art, palette-matched to the UnDeadPeople grass. Opt-in: referenced only from the t_grass center weights.",
+      "tiles": []
+    },
+    {
+      "file": "stoneshard_foliage.png",
+      "//": "range 19753 to 19768 - promoted Stoneshard bushes, palette-matched to the UnDeadPeople foliage. Geometry MUST match large_terrain.png (64x80, offset -16/-48): t_shrub / t_underbrush are defined there, and a tile_type applies ONE offset to every sprite in its fg list. Opt-in: referenced only from those two weight lists.",
+      "sprite_width": 64,
+      "sprite_height": 80,
+      "sprite_offset_x": -16,
+      "sprite_offset_y": -48,
+      "tiles": []
+    },
+    {
       "file": "fallback.png",
       "tiles": [
         { "id": "shot_cone_weak", "fg": 19296 },
@@ -35806,6 +35899,15 @@
         { "offset": 3584, "bold": true, "color": "MAGENTA" },
         { "offset": 3840, "bold": true, "color": "YELLOW" }
       ]
+    },
+    {
+      "file": "stoneshard_trees.png",
+      "//": "range 23865 to 23880 - promoted Stoneshard trees, palette-matched PER SPECIES to the UnDeadPeople tree it joins. Registered AFTER fallback.png deliberately: appending here means no existing sheet's base index shifts. Geometry MUST match large_terrain.png (64x80, offset -16/-48) because every t_tree_* is defined there and a tile_type applies ONE offset to its whole fg list. Opt-in: referenced only from the t_tree_* weight lists.",
+      "sprite_width": 64,
+      "sprite_height": 80,
+      "sprite_offset_x": -16,
+      "sprite_offset_y": -48,
+      "tiles": []
     }
   ]
 }
