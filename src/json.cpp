@@ -1953,12 +1953,17 @@ std::string JsonIn::line_number( int offset_modifier )
     }
     seek( pos );
     std::stringstream ret;
+    // Line/column are machine-readable coordinates, not prose: imbue the classic
+    // locale so numpunct grouping never applies.  set_language() sets the global
+    // locale from the user's system, and on a dot-grouping locale (en_BE, de_DE,
+    // ...) the default stream turned line 4035 into "4.035", which sends anyone
+    // reading the error to the wrong place in the file.
+    ret.imbue( std::locale::classic() );
     switch( error_log_format ) {
         case error_log_format_t::human_readable:
             ret << name << ":" << line << ":" << offset;
             break;
         case error_log_format_t::github_action:
-            ret.imbue( std::locale::classic() );
             ret << "file=" << name << ",line=" << line << ",col=" << offset;
             break;
     }
