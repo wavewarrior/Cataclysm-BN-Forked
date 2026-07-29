@@ -213,20 +213,26 @@ shift_zlevel` per tile and rewinds `physics_pos` on every early exit.
    bodies, and the "orphaned bodies pile up and degrade broad-phase to O(n^2)" shape of
    the old creature-body bug is not what is happening here.
 
-   That does **not** clear the registry entirely: a single stale key left behind after a
-   vehicle is freed keeps the size at 1 while still being a use-after-free in
-   `substeps_for_turn()` / `sync_bodies_from_game()`, both of which dereference every key.
-   Two mechanisms could produce exactly that, per `src/submap_load_manager.h:28-36`:
-   `simulated -> lazy_border` fires `on_submap_unloaded` while the submap is **still
-   resident** (so a live vehicle's body is destroyed), and `lazy_border -> evicted` does
-   **not** fire it (so the real free is silent). On top of that,
-   `map::on_submap_unloaded` only calls the physics hook when
-   `pos.z() == g->u.bub_pos().z()` (`src/map.cpp:402`), so submaps unloading on any other
-   z-level never sweep their vehicle bodies at all.
+   That does **not** clear the registry: a single stale key left behind after a vehicle is
+   freed keeps the size at 1 while still being a use-after-free in `substeps_for_turn()`
+   and `sync_bodies_from_game()`, both of which dereference every key.
 
-   Next step is a validity check rather than a size check: assert every key in
-   `vehicle_bodies_` is still a live, map-known vehicle, or run the suite under ASAN.
-   Do that before rewriting the submap listener contract.
+   **Fixed this session** (see git log): the `pos.z() == player z` guard that skipped the
+   sweep entirely for other z-levels; the sweep destroying bodies without clearing
+   `box2d_position_authority`, which stranded vehicles with authority and no body; and
+   `simulated -> lazy_border` destroying the bodies of vehicles that were still alive.
+   The hook now takes a residency flag, revokes authority while resident (keeping the
+   body), destroys only on genuine removal, and re-grants on return — with the
+   revoke/re-grant contract covered by a flip-tested case in `tests/vehicle_test.cpp`.
+
+   **Still open:** per `src/submap_load_manager.h:31-32`, `lazy_border -> evicted` never
+   fires `on_submap_unloaded` at all, so the sweep does not run at the moment a vehicle is
+   genuinely freed. Dangling keys on true eviction therefore remain possible, and that is
+   now the most likely remaining registry hazard. The header's own prescription is a
+   residency cache built on `mapbuffer::lookup_submap_in_memory()`, or hooking the real
+   free site in mapbuffer eviction. Confirm with a validity check (assert every key is a
+   live, map-known vehicle) or ASAN before rewriting the listener contract — and note the
+   leakage symptom may not be this at all, since size never grew.
 6. Only then Phase 12 cleanup (with 12-A rewritten per Correction 1), then Step 6, then
    Phase 11.
 
