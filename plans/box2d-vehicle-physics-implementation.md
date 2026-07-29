@@ -137,12 +137,33 @@ Stop-start cases lose only ~10-30%; sustained cruise loses ~87%. So the defect i
 **steady-state economy** — drag, rolling resistance, or engine load at constant speed under
 physics authority — not in acceleration or in the measurement.
 
-**Raw distance is NOT the cause.** Movement was verified exact after the `step_turn` fix: a
-car and a fire truck each advance 56 tiles in 10 turns at 1000 cm/s on both pavement and
-dirt, against `10 m/s / 1.78816 m-per-tile = 55.9` expected. Since
-`adjusted_tiles_travelled = tiles_travelled / fuel_percentage_used` and the numerator is
-right, the denominator is wrong: **Box2D-authority vehicles burn roughly 7x more fuel for
-the same distance at cruise.** That is the thing to investigate.
+**Localised to fuel burned at steady speed.** Instrumenting the numerator and denominator
+of `adjusted_tiles_travelled = tiles_travelled / fuel_percentage_used` separately, plus
+cycle count and end velocity, on both builds:
+
+| `Car`, pavement | BOX2D=ON | BOX2D=OFF | ratio |
+|---|---|---|---|
+| `tiles_travelled` | 1200 | 1247 | 0.96 |
+| `fuel_used` | 0.137083 | 0.019583 | **7.00** |
+| `vel_end` | 2235 | 2235 | 1.00 |
+| `cycles_run` | 100 | 100 | 1.00 |
+
+Distance, end velocity and cycle count all match. The vehicle is **not** settling at a
+lower cruise speed, **not** exiting the loop early, and **not** moving less per turn — its
+per-turn distance tracks `vel_end` exactly on both builds (12 tiles/cycle against
+22.35 m/s / 1.78816 = 12.5 expected). The entire ratio is fuel.
+
+The stop-start rows pin it further: `Beetle` stop-start burns **identical** fuel on both
+builds (0.090833), and only the cruise rows diverge. So **acceleration fuel is correct and
+fuel burned holding a steady speed is ~7x too high** under position authority.
+
+That is the defect: something in the per-turn engine-load path keeps drawing
+acceleration-level power once the vehicle is already at cruise. Start at
+`vehicle::gain_moves()` (`src/vehicle.cpp:~2905-2945`, where `slowdown()` and `thrust()`
+run each turn) and compare the power drawn per turn between the two paths at a fixed cruise
+velocity. Note `vehicle::act_on_map()` early-returns for authority vehicles
+(`src/vehicle_move.cpp:~1586`) *after* `gain_moves()` has already run, so the thrust path is
+reached on both builds — the difference is in what it computes, not whether it runs.
 
 **This regression was previously hidden twice over.** The committed constants (76,590 for
 `car_test`) sit beside the ON value, so they were generated under `BOX2D=ON` and baked the
