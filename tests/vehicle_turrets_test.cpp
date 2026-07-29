@@ -52,8 +52,20 @@ static auto biggest_tank( const ammotype &ammo ) -> const vpart_info *
             continue;
         }
 
+        // vpart_info::fuel_type is the tank's *declared default* fuel, and every
+        // generic tank in data/json/vehicleparts/tanks.json leaves it unset.  So
+        // requiring `fuel->ammo->type == ammo` matched only tanks hard-wired to one
+        // fuel and rejected every general-purpose container — for any ammo at all.
+        // That is what made the water cannon and both flamethrowers look like they
+        // had no tank available: a plain watertight tank is exactly what you would
+        // load water or napalm into.
+        //
+        // Accept a tank when it either declares a matching fuel, or declares none
+        // and is therefore general purpose.
         const itype *fuel = &*vp.fuel_type;
-        if( fuel->ammo && fuel->ammo->type == ammo ) {
+        const bool declares_match = fuel->ammo && fuel->ammo->type == ammo;
+        const bool general_purpose = vp.fuel_type.is_null();
+        if( declares_match || general_purpose ) {
             res.push_back( &vp );
         }
     }
@@ -79,8 +91,21 @@ TEST_CASE( "vehicle_turret", "[vehicle][gun][magazine][.]" )
             REQUIRE( veh->install_part( tripoint_mnt_veh::zero(), vpart_id( "storage_battery" ), true ) >= 0 );
             veh->charge_battery( 10000 );
 
-            auto ammo =
-                ammotype( veh->turret_query( veh->part( idx ) ).base().ammo_default().str() );
+            // Take the ammotype from the gun's accepted set, NOT by reinterpreting
+            // ammo_default()'s string.  ammo_default() returns an itype_id — an ammo
+            // *item* — while ammotype names an ammo *category*, and they are separate
+            // id namespaces.  The old `ammotype( ...ammo_default().str() )` only
+            // happened to work for guns whose default ammo item id coincides with an
+            // ammotype name; for the rest it produced an invalid ammotype, so
+            // ammo_set() silently failed and the turret was never ready.  Visible in
+            // the log as "Tried to get invalid ammunition: gas_fungicidal" and
+            // "Tried to set invalid ammo [100] for m249".
+            const auto &accepted = veh->turret_query( veh->part( idx ) ).base().ammo_types();
+            // A gun may accept several ammotypes and `accepted` is a std::set, so this
+            // takes the lowest-sorted one.  That is fine because biggest_tank() now
+            // accepts general-purpose tanks, so it resolves for any liquid ammo rather
+            // than only for ammo with a purpose-built tank.
+            const auto ammo = accepted.empty() ? ammotype::NULL_ID() : *accepted.begin();
 
             if( veh->part_flag( idx, "USE_TANKS" ) ) {
                 auto *tank = biggest_tank( ammo );
