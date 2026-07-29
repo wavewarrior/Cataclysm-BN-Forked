@@ -62,6 +62,7 @@
 #include "path_info.h"
 #include "panels_utility.h"
 #include "player.h"
+#include "rml_length.h"
 #include "rml_screen.h"
 #include "rml_util.h"
 #include "lighting/rmlui_layer.h"
@@ -1415,31 +1416,36 @@ void sidebar_hud_open()
 }
 
 // Position all HUD regions absolutely. Called every sync so it tracks resize.
-// Strips span the FULL viewport width (Qud's do), no longer map-width only.
+// The dock owns the whole sidebar column, edge to edge vertically: the strips are
+// narrowed to clear it, so anything the dock does NOT cover on its own column is
+// bare cleared black — which is exactly what the top-right and bottom-right
+// corners used to be (with the ambient HUD particles drifting across them).
 static void sidebar_hud_apply_rect()
 {
     if( g_hud_doc == nullptr || TERMX <= 0 || TERMY <= 0 ) {
         return;
     }
 
-    // Dock width — needed first so topbar/botbar/hotbar can be narrowed.
-    const auto &layout = panel_manager::get_manager().get_current_layout();
+    // Sidebar column width — needed first so topbar/botbar/hotbar can be narrowed.
+    // panel_manager is the single source: update_offsets() feeds it the active
+    // layout's sidebar width, and the map viewport is carved with the same value.
     const bool sidebar_right = get_option<std::string>( "SIDEBAR_POSITION" ) == "right";
-    float dock_width_pct = 0.0f;
-    if( layout.begin() != layout.end() ) {
-        dock_width_pct = 100.0f * layout.begin()->get_width() / TERMX;
-    }
+    const int width_left = panel_manager::get_manager().get_width_left();
+    const int width_right = panel_manager::get_manager().get_width_right();
+    const float width_left_pct = 100.0f * width_left / TERMX;
+    const float width_right_pct = 100.0f * width_right / TERMX;
+    const float dock_width_pct = sidebar_right ? width_right_pct : width_left_pct;
     const float bar_width_pct = 100.0f - dock_width_pct;
     const std::string bar_left = sidebar_right
                                  ? "0%"
-                                 : string_format( "%.4f%%", dock_width_pct );
+                                 : rml::pct( dock_width_pct );
 
     const float top_rows_pct = 100.0f * sidebar_hud_top_rows() / TERMY;
     // Top bar: auto height, narrowed to avoid dock.
     if( Rml::Element *el = g_hud_doc->GetElementById( "hud-topbar" ) ) {
         el->SetProperty( "left", bar_left );
         el->SetProperty( "top", "0%" );
-        el->SetProperty( "width", string_format( "%.4f%%", bar_width_pct ) );
+        el->SetProperty( "width", rml::pct( bar_width_pct ) );
         el->SetProperty( "height", "auto" );
     }
 
@@ -1448,25 +1454,21 @@ static void sidebar_hud_apply_rect()
     const float half_bottom_pct = bottom_rows_pct / 2.0f;
     if( Rml::Element *el = g_hud_doc->GetElementById( "hud-botbar" ) ) {
         el->SetProperty( "left", bar_left );
-        el->SetProperty( "top", string_format( "%.4f%%", 100.0f - bottom_rows_pct ) );
-        el->SetProperty( "width", string_format( "%.4f%%", bar_width_pct ) );
+        el->SetProperty( "top", rml::pct( 100.0f - bottom_rows_pct ) );
+        el->SetProperty( "width", rml::pct( bar_width_pct ) );
         el->SetProperty( "height", "auto" );
     }
     if( Rml::Element *el = g_hud_doc->GetElementById( "hud-hotbar" ) ) {
         el->SetProperty( "left", bar_left );
-        el->SetProperty( "top", string_format( "%.4f%%", 100.0f - half_bottom_pct ) );
-        el->SetProperty( "width", string_format( "%.4f%%", bar_width_pct ) );
+        el->SetProperty( "top", rml::pct( 100.0f - half_bottom_pct ) );
+        el->SetProperty( "width", rml::pct( bar_width_pct ) );
         el->SetProperty( "height", "auto" );
     }
 
     // Vitals overlay: top-left of the viewport area.
-    const int width_left = panel_manager::get_manager().get_width_left();
-    const int width_right = panel_manager::get_manager().get_width_right();
-    const float width_left_pct = 100.0f * width_left / TERMX;
-    const float width_right_pct = 100.0f * width_right / TERMX;
     if( Rml::Element *el = g_hud_doc->GetElementById( "hud-vitals" ) ) {
-        el->SetProperty( "left", string_format( "%.4f%%", width_left_pct ) );
-        el->SetProperty( "top", string_format( "%.4f%%", top_rows_pct + 1.0f ) );
+        el->SetProperty( "left", rml::pct( width_left_pct ) );
+        el->SetProperty( "top", rml::pct( top_rows_pct + 1.0f ) );
     }
 
     // Vehicle HUD: top-right of the viewport, just below the topbar, next to the dock.
@@ -1475,21 +1477,18 @@ static void sidebar_hud_apply_rect()
         // viewport edge. Mirror vitals: vitals is top-left, vehicle is top-right
         // (or the opposite when sidebar is on the left).
         const float veh_right_pct = sidebar_right ? dock_width_pct : 0.0f;
-        el->SetProperty( "right", string_format( "%.4f%%", veh_right_pct ) );
-        el->SetProperty( "top", string_format( "%.4f%%", top_rows_pct + 1.0f ) );
+        el->SetProperty( "right", rml::pct( veh_right_pct ) );
+        el->SetProperty( "top", rml::pct( top_rows_pct + 1.0f ) );
     }
 
-    // Dock: full height minus bars, pinned to sidebar edge.
-    if( layout.begin() != layout.end() ) {
-        const float dock_left_pct = sidebar_right
-                                    ? 100.0f - width_right_pct
-                                    : 0.0f;
-        if( Rml::Element *el = g_hud_doc->GetElementById( "hud-dock" ) ) {
-            el->SetProperty( "left", string_format( "%.4f%%", dock_left_pct ) );
-            el->SetProperty( "top", string_format( "%.4f%%", top_rows_pct ) );
-            el->SetProperty( "width", string_format( "%.4f%%", dock_width_pct ) );
-            el->SetProperty( "height", string_format( "%.4f%%", 100.0 - top_rows_pct - bottom_rows_pct ) );
-        }
+    // Dock: the full-height sidebar column, pinned to the sidebar edge. Its width
+    // comes from panel_manager (the same value the map viewport is carved with and
+    // the value the strips are narrowed by), so column and strips always meet.
+    if( Rml::Element *el = g_hud_doc->GetElementById( "hud-dock" ) ) {
+        el->SetProperty( "left", rml::pct( sidebar_right ? 100.0f - dock_width_pct : 0.0f ) );
+        el->SetProperty( "top", "0%" );
+        el->SetProperty( "width", rml::pct( dock_width_pct ) );
+        el->SetProperty( "height", "100%" );
     }
 }
 

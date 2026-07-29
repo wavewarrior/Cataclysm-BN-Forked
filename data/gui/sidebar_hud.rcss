@@ -11,7 +11,9 @@ body {
     width: 100%;
     height: 100%;
     font-family: "Source Code Pro";
-    font-size: 15dp;
+    /* Match theme.rcss's body size: at 15dp the dock's log sat ~4px under the
+       curses font it replaced and read as unreadably tiny on a 1080p screen. */
+    font-size: 18dp;
     color: {{hud-fg}};
 }
 
@@ -168,7 +170,9 @@ body {
     flex-direction: column;
     flex: 0 1 auto;
     min-height: 0;
-    max-height: 40vh;
+    /* The dock now spans the full viewport height (sidebar_hud_apply_rect), so the
+       log may use more of it than the old bars-inset column allowed. */
+    max-height: 60vh;
     margin-bottom: 0dp;
 }
 
@@ -188,7 +192,9 @@ body {
     white-space: pre-wrap;
     word-break: break-word;
     padding: 3dp 6dp;
-    font-size: 0.9em;
+    /* Full size: this is the message log, the most-read text in the HUD. Shrinking
+       it below the base size is what made it unreadable. */
+    font-size: 1em;
     line-height: 1.4;
 }
 .hud-log-symbol {
@@ -200,7 +206,7 @@ body {
     display: inline;
     color: #888888ff;
     margin-right: 4dp;
-    font-size: 0.85em;
+    font-size: 0.8em;
 }
 .hud-log-text {
     display: inline;
