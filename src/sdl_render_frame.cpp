@@ -1046,17 +1046,24 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
             }
         }
 
-        const auto phys_w = rs.ui_target()->width();
-        const auto phys_h = rs.ui_target()->height();
-        const lighting::hud_particle_params params {
-            .type = ptype,
-            .spawn_rate = prate,
-            .intensity = palpha,
-            .screen_w = static_cast<std::uint32_t>( phys_w ),
-            .screen_h = static_cast<std::uint32_t>( phys_h ),
-        };
-        if( rs.hud_particles().ready() && rs.ui_target() && rs.ui_target()->texture() ) {
-            rs.hud_particles().record( ctx.cmd_buffer, rs.ui_target()->texture(),
+        // ui_target() is null until render_state::init() has populated it, and
+        // refresh_display runs long before that during startup (load_soundset ->
+        // pump_events -> refresh_display). The guard below used to sit AFTER these
+        // two dereferences, so an early frame null-dereferenced here
+        // (EXCEPTION_ACCESS_VIOLATION). Resolve the target ONCE, up front, and
+        // read its size only after it is known good.
+        lighting::ui_composite_target *hud_target = rs.ui_target();
+        if( rs.hud_particles().ready() && hud_target && hud_target->texture() ) {
+            const auto phys_w = hud_target->width();
+            const auto phys_h = hud_target->height();
+            const lighting::hud_particle_params params {
+                .type = ptype,
+                .spawn_rate = prate,
+                .intensity = palpha,
+                .screen_w = static_cast<std::uint32_t>( phys_w ),
+                .screen_h = static_cast<std::uint32_t>( phys_h ),
+            };
+            rs.hud_particles().record( ctx.cmd_buffer, hud_target->texture(),
                                        static_cast<std::uint32_t>( phys_w ),
                                        static_cast<std::uint32_t>( phys_h ), params );
         }
