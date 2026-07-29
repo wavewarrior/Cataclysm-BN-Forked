@@ -39,10 +39,15 @@ directly instead of re-implementing resolution. `get_riders()` falls back to
 id-keyed path).
 
 **Verified**: `[vehicle][grab]` (104/104 assertions), `[npc][vehicle]` (55/55),
-`[vehicle][engine]` (60,273/60,273, covers `vehicle_efficiency` + `vehicle_drag` +
-the standalone "water drag" case), full `[vehicle]` tag (283,217/283,442 passed,
-identical to pre-change baseline — zero regressions, zero new failures among the
-17 pre-existing failing test cases).
+`[vehicle][engine]` (60,273/60,273), full `[vehicle]` tag identical to its
+pre-change baseline.
+
+**Caveat on that verification, added later:** every measurement above was taken on a
+`-DBOX2D=ON` build. That is **not** the shipping configuration (`BOX2D` defaults OFF,
+no preset or CI job enables it), and it hid a real regression in the sibling
+`part_collision` change — see section 2. Unguarded vehicle code must be verified on a
+`BOX2D=OFF` build; "zero regressions" measured only under `BOX2D=ON` does not support
+that claim.
 
 ### 2. `part_collision`'s false-exclusion bug fixed and proven with a flip-test (`src/vehicle_move.cpp:536-547`)
 
@@ -61,23 +66,39 @@ A creature standing on this vehicle's own boardable tile with a stale/desynced
 `"Part/passenger position mismatch"` debug detector already catches) was wrongly
 excluded from collision.
 
-**Fix**: verify the creature is actually the registered passenger of the specific
-boardable part at the impact tile (`part_with_feature(bubble_to_mount(p), "BOARDABLE", true)`
-+ `get_passenger(that_index) == ph`) before excluding them.
+**Fix, first attempt — REGRESSED, superseded.** The original fix verified the
+creature was the registered passenger of *the specific boardable part at the impact
+tile* (`part_with_feature( bubble_to_mount( p ), "BOARDABLE", true )` +
+`get_passenger( that_index ) == ph`). That was too strict and **regressed
+`[vehicle][ramp]` on the shipping build: 82 → 108 failed assertions, 1 → 3 failed
+test cases.** During a ramp z-transition a rider's part registration and position
+are transiently inconsistent (`precalc[0]`/`[1]` swap plus `z_terrain`, mid
+`displace_vehicle`), so the vehicle stopped recognising its own passenger and
+collided with its own rider.
 
-**Verified with a flip-test** — the only way to prove a collision-suppression bug
-is real: `tests/vehicle_collision_test.cpp`'s new
-`vehicle_collision_hits_occupant_with_stale_in_vehicle_flag` was built, confirmed
-to FAIL against the original buggy code (9/10 assertions passed, the collision
-type check failed), then confirmed to PASS against the fix (10/10). Note: an
-initial test design (two separate vehicles) was wrong — `part_collision`'s
-`is_veh_collision` branch (line ~552) short-circuits to `veh_coll_veh` before the
-body-collision path when the target tile belongs to a *different* vehicle, so
-that scenario can never reach this fix. The corrected test uses one vehicle with
-two boardable seats: a properly-boarded rider on seat A, and a second rider
-standing on seat B with `in_vehicle` set directly (bypassing `board_vehicle`, so
-seat B's `passenger_flag`/`passenger_id` remain unset) — this reaches the actual
-code path the fix changes.
+**Fix, current.** Test *vehicle identity* rather than the part: is this creature the
+passenger of ANY boardable part of this vehicle. Stable across the transition
+window, and a creature riding a *different* vehicle is still a valid collision
+target — which is the stale-flag case the check exists for.
+
+**Verified with a flip-test** — the only way to prove a collision-suppression bug is
+real: `tests/vehicle_collision_test.cpp`'s
+`vehicle_collision_hits_occupant_with_stale_in_vehicle_flag` was confirmed to FAIL
+against the original blanket code (9/10 assertions, the collision-type check failed)
+and to PASS against the fix (10/10). An initial test design (two separate vehicles)
+was wrong — `part_collision`'s `is_veh_collision` branch short-circuits to
+`veh_coll_veh` before the body-collision path when the target tile belongs to a
+*different* vehicle, so that scenario can never reach this code. The corrected test
+uses one vehicle with two boardable seats: a properly-boarded rider on seat A, and a
+second rider standing on seat B with `in_vehicle` set directly (bypassing
+`board_vehicle`, so seat B's `passenger_flag`/`passenger_id` stay unset).
+
+**How the regression was found, and the lesson.** It was invisible for most of this
+work because every measurement was taken on a `-DBOX2D=ON` build, and the ramp suite
+behaves differently there. It only surfaced after building `BOX2D=OFF` — the actual
+shipping configuration — and comparing against the pre-session commit. Bisected by
+reverting `c979a58c` alone, which restored 82/1 exactly. **`part_collision()` is
+unguarded shipping code; changes to it must be verified on a `BOX2D=OFF` build.**
 
 ### 3. `mount_to_bubble()`/`bub_part_location()` z-frame divergence — 6 of 7 real-part call sites converted
 
@@ -292,6 +313,103 @@ no preceding `clear_all_state()` — every sibling `[vehicle][engine]`-tagged te
 case in this file and `vehicle_efficiency_test.cpp` has one. Added
 `clear_all_state();` as the first line of that test case, matching the
 established pattern. Verified via `[vehicle][engine]` (60,273/60,273 passed).
+
+## `vehicle_efficiency` is red on the DEFAULT build — test data, not gameplay
+
+**This is the only finding here with direct player relevance, and the conclusion is that
+players are fine.**
+
+`TEST_CASE( "vehicle_efficiency", "[vehicle] [engine]" )` is **not** tagged `[.]`, so
+unlike `vehicle_turret` it runs in a default/CI invocation. On a `BOX2D=OFF` build it
+fails **144 assertions**, deterministically (identical on `--rng-seed 1` and `7`), and
+identically before and after this session's changes — reproduced by rewinding every
+session-touched file to `91744fb3a7`. So it is **pre-existing branch debt, not introduced
+here**.
+
+The failures are all the *upper* bound (`adjusted_tiles_travelled <= max_dist * 1.05`),
+i.e. vehicles deliver MORE tiles per unit fuel than the committed targets allow.
+
+**The committed targets are simply wrong.** Running the branch's own generator,
+`make_vehicle_efficiency_case` (tagged `[.]`), against a `BOX2D=OFF` build emits values
+that agree with upstream to within a few percent:
+
+| `car_test` targets | pavement | dirt | stop-start pavement | stop-start dirt |
+|---|---|---|---|---|
+| upstream `origin/main` | 617,500 | 403,153 | 56,446 | 28,518 |
+| regenerated, `BOX2D=OFF` | 636,700 | 427,500 | 59,860 | 30,240 |
+| **committed on this branch** | **76,590** | **49,330** | **41,160** | **18,930** |
+
+Shipping fuel economy therefore matches upstream (+3–6%); it is the stored constants that
+do not describe any real build. The metric derivation (`tiles_travelled`,
+`fuel_percentage_used`, `adjusted_tiles_travelled`) is byte-identical to upstream, so this
+is not a units or bookkeeping difference.
+
+**Player impact: none.** Vehicle range per tank on the shipping build is what upstream
+intends. The red test is a stale-data bug.
+
+**Origin: probable, NOT confirmed.** The constants were changed in `a38a56a6a3`
+("coop fixes + test setup", a 91-file grab-bag, no stated rebalance intent, and no
+accompanying vehicle-physics change that would justify the shift). That commit
+(2026-07-19) postdates both Box2D position authority (2026-07-12) and the 1/60 s cadence
+(2026-07-11), so they *could* have been regenerated on a `BOX2D=ON` build where this test
+measured the reset-vs-stale-`physics_pos` artifact — that artifact under-reports by ~5.6x
+(≈1 tile/turn instead of ≈5.6) and the constants are ~5.7x low, which fits. Treat that as
+correlational. A competing explanation — forward-slot values accidentally taken from the
+reverse-test slot — was considered and looks weak (only 1 of `car_test`'s 4 values is
+close to its reverse counterpart) but is not ruled out.
+
+**Remediation, ready to apply.** Regenerate on a `BOX2D=OFF` build:
+
+```sh
+cmake --preset osx-arm-slim -DBOX2D=OFF -B out/build/nobox2d
+cmake --build out/build/nobox2d --target cata_test-tiles
+out/build/nobox2d/tests/cata_test-tiles "make_vehicle_efficiency_case" --rng-seed 1 --user-dir=/tmp/gen/
+```
+
+Not applied here, deliberately: it is a balance-visible data change that deserves its own
+commit, and the forward/reverse slot split needs checking against the call sites before
+36 generated lines are pasted in. Output captured below so it is not lost. **Until someone
+applies it, `vehicle_efficiency` is red on the default build.**
+
+```cpp
+    test_vehicle( "beetle_test", 713837, 440400, 386400, 111300, 91930 );
+    test_vehicle( "car_test", 1020629, 636700, 427500, 59860, 30240 );
+    test_vehicle( "car_sports_test", 1052382, 354400, 287900, 39820, 27380 );
+    test_vehicle( "electric_car_test", 774098, 196900, 154300, 15430, 11860 );
+    test_vehicle( "suv_test", 1220297, 1209000, 695900, 93430, 37220 );
+    test_vehicle( "motorcycle_test", 163085, 120200, 100800, 63320, 51130 );
+    test_vehicle( "quad_bike_test", 264465, 116000, 116000, 46770, 46770 );
+    test_vehicle( "scooter_test", 57587, 233500, 233500, 167900, 167900 );
+    test_vehicle( "superbike_test", 244085, 109700, 64830, 41780, 23930 );
+    test_vehicle( "ambulance_test", 1722821, 622500, 538300, 83190, 69760 );
+    test_vehicle( "fire_engine_test", 2125865, 1974000, 1944000, 419200, 415300 );
+    test_vehicle( "fire_truck_test", 6188273, 415000, 88290, 19750, 4700 );
+    test_vehicle( "truck_swat_test", 5736551, 679000, 149800, 31040, 7604 );
+    test_vehicle( "tractor_plow_test", 725658, 680700, 680700, 132400, 132400 );
+    test_vehicle( "apc_test", 5763771, 2091000, 2091000, 110600, 110600 );
+    test_vehicle( "humvee_test", 5346601, 762400, 572700, 26510, 18280 );
+    test_vehicle( "road_roller_test", 8648054, 587200, 155700, 22760, 6925 );
+    test_vehicle( "golf_cart_test", 319630, 50040, 47650, 22920, 12860 );
+
+    test_vehicle( "beetle_test", 713837, 58720, 58720, 45980, 44560, 0, 0, true );
+    test_vehicle( "car_test", 1020629, 76180, 76310, 48250, 29030, 0, 0, true );
+    test_vehicle( "car_sports_test", 1052382, 355000, 288400, 38800, 24870, 0, 0, true );
+    test_vehicle( "electric_car_test", 774098, 197600, 154800, 15460, 11890, 0, 0, true );
+    test_vehicle( "suv_test", 1220297, 114900, 112400, 70400, 35200, 0, 0, true );
+    test_vehicle( "motorcycle_test", 163085, 20070, 19030, 15490, 14890, 0, 0, true );
+    test_vehicle( "quad_bike_test", 264465, 19650, 19650, 15440, 15440, 0, 0, true );
+    test_vehicle( "scooter_test", 57587, 62440, 62440, 47990, 47990, 0, 0, true );
+    test_vehicle( "superbike_test", 244085, 18270, 10550, 13070, 8497, 0, 0, true );
+    test_vehicle( "ambulance_test", 1722821, 58600, 58030, 42480, 40370, 0, 0, true );
+    test_vehicle( "fire_engine_test", 2125865, 255600, 255400, 191700, 191700, 0, 0, true );
+    test_vehicle( "fire_truck_test", 6188273, 58340, 58830, 19630, 4486, 0, 0, true );
+    test_vehicle( "truck_swat_test", 5736551, 128900, 130100, 29440, 7668, 0, 0, true );
+    test_vehicle( "tractor_plow_test", 725658, 72240, 72240, 53610, 53610, 0, 0, true );
+    test_vehicle( "apc_test", 5763771, 417900, 417900, 107100, 107100, 0, 0, true );
+    test_vehicle( "humvee_test", 5346601, 89940, 89770, 25780, 18120, 0, 0, true );
+    test_vehicle( "road_roller_test", 8648054, 96790, 97500, 22800, 6683, 0, 0, true );
+    test_vehicle( "golf_cart_test", 319630, 50120, 18830, 22970, 9087, 0, 0, true );
+```
 
 ## Verification commands used this session
 
