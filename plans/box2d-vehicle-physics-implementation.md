@@ -240,13 +240,30 @@ Two ordering facts make that gate unreliable:
    z-level — has exactly **one** caller, `game::vertical_shift`
    (`src/game_movement.cpp:2379`). It fires for stairs/ramps and nothing else.
 
-Consequence, and why this has plausibly gone unnoticed: a surface start leaves `g->u` at a
-default-constructed z of 0 while submaps load at z=0, so the comparison passes **by
-coincidence** and the world looks healthy. An underground start (shelter basement, or any
-z<0 scenario) loads its submaps at z<0 against a default z of 0, the gate fails for every
-one, and the game runs with **no terrain colliders at all** until the player happens to
-take a staircase. Fast travel to a different z via `place_player_overmap` has the same
-shape.
+There are **two distinct triggers**, with different confidence levels and different repro
+steps. Do not conflate them, and do not close this item by testing only one.
+
+**(a) Fast travel / overmap teleport across a z-level — follows directly from the verified
+ordering, no extra assumption.** `place_player_overmap` computes the destination as
+`player_pos( u.bub_pos().xy(), map_sm_pos.z() )` (`src/game.cpp:2585`), i.e. the new z comes
+from `map_sm_pos`. It then runs `load_map()` *before* `place_player()`, so every submap
+notification during that load is tested against the player's genuine **old** z. Whenever the
+destination z differs from the origin z, the gate fails for every submap on the destination
+level and no colliders are built there. Nothing rebuilds them afterwards. **Repro this
+first** — it needs no assumption about initialisation order.
+
+The same load-before-place shape appears elsewhere, e.g. `gamemode_defense.cpp:296-299`
+(`g->load_map( ... )` then `player_character.setpos( ... )`), so this is a pattern rather
+than a one-off.
+
+**(b) Initial game start — plausible but UNVERIFIED.** This only fails if `g->u`'s z is
+still 0 or unset at `load_map()` time, which nobody has checked; in `place_player_overmap`
+the player normally has a real previous position rather than a default-constructed one. If
+it is unset, an underground start (shelter basement, any z<0 scenario) would load z<0
+submaps against a 0 and build nothing, while a surface start would pass the comparison
+coincidentally. Verify `g->u.bub_pos().z()` at the moment of the first `load_map()` before
+relying on this. **A next session that tests only an underground start could see no bug — if
+initialisation happens to be fine by then — and wrongly close the item.**
 
 Status: the ordering above is **verified by reading the code**. The runtime consequence is
 `[INFERENCE]` from that ordering and has not been confirmed in a running game — measured
