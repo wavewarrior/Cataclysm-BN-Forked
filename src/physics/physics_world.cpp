@@ -97,7 +97,18 @@ void PhysicsWorld::on_vehicle_added( vehicle &v )
                                  static_cast<float>( bpos.y() ) };
     // Mark the vehicle as Box2D-controlled: act_on_map() will skip move_vehicle()
     // and map::vehmove() will apply physics_pos to the tile grid.
-    v.box2d_position_authority = true;
+    //
+    // Rail vehicles are excluded.  Rail motion is a kinematic constraint — the
+    // vehicle MUST follow the track — implemented by
+    // vehicle_movement::process_movement_on_rails(), which act_on_map() reaches only
+    // *after* the authority early-return (vehicle_move.cpp:1599 vs 1606).  Under
+    // authority a rail vehicle therefore never has its heading corrected to the
+    // track: it turns to whatever the driver asked for, derails, and then skids,
+    // because is_on_rails() goes false and the skid guard at vehicle_move.cpp:1574
+    // stops suppressing it.  A free rigid-body integrator cannot express the
+    // constraint, so the tile-step mover keeps ownership.  The body is still built,
+    // so other vehicles and terrain collide with it normally.
+    v.box2d_position_authority = !v.can_use_rails();
 }
 
 void PhysicsWorld::on_vehicle_moved( vehicle &v )
