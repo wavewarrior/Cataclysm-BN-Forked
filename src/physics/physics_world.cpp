@@ -507,6 +507,33 @@ void PhysicsWorld::sync_game_from_bodies()
         const auto rot     = b2Body_GetRotation( bid );
         veh->physics_angle = std::atan2( rot.s, rot.c );
         veh->refresh_precalc( veh->physics_angle );
+
+        // Keep `move` (the travel-direction tileray) in step with reality.
+        //
+        // Under authority act_on_map() returns early and never reaches
+        // `veh.move = facing` in map::move_vehicle(), so `move` kept whatever
+        // heading it was constructed with — 0 degrees — while `face` tracked the
+        // vehicle.  vehicle::slowdown() then multiplies rolling drag by
+        // `1 + 24 * |sin( face.dir() - move.dir() )|`, so a vehicle driving due
+        // west (face 270, move 0) was charged the FULL 25x skid penalty every
+        // turn while going perfectly straight.  Measured on car_test at cruise:
+        // slowdown 362 cm/s per turn against 67 on the tile-step path, which held
+        // the vehicle 362 cm/s below its cruise target permanently and made
+        // cruise-control thrust burn load 533 instead of 114 — about 7x the fuel
+        // over a run.
+        //
+        // Derive it from the body's linear velocity rather than from `face`: that
+        // is the actual travel vector, so a genuine sideways slide still registers
+        // as a skid.  Below a small speed the direction is numerical noise, so
+        // fall back to `face` — otherwise a stationary or just-starting vehicle
+        // would get a random heading and a random drag penalty.
+        const auto lv = b2Body_GetLinearVelocity( bid );
+        constexpr auto min_dir_mps = 0.05f;
+        if( std::hypot( lv.x, lv.y ) >= min_dir_mps ) {
+            veh->move.init( units::atan2( lv.y, lv.x ) );
+        } else {
+            veh->move = veh->face;
+        }
     }
 }
 
