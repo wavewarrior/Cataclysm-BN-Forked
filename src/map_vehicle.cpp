@@ -582,16 +582,47 @@ void map::vehmove()
     // falling, traction, skidding) but returned early before move_vehicle().
     // physics_pos was written by step() at line 784 before the tile-step loop.
     if( phys_world ) {
+        // move_vehicle() below can destroy vehicles — it bashes terrain, damages
+        // creatures, and reaches vehicle_vehicle_collision(), which can wreck the
+        // OTHER vehicle.  So a raw walk over the snapshot is unsafe twice over: an
+        // entry later in the list may already be freed, and aborting the whole
+        // readback on one wreck would leave every remaining vehicle holding a stale
+        // physics_pos and silently not advancing this turn.
+        //
+        // Collect targets first, then re-validate each against a live list before
+        // touching it, refreshing that list only when a walk actually reported a
+        // destruction or replacement.
+        struct readback_target {
+            vehicle *veh = nullptr;
+            int px = 0;
+            int py = 0;
+        };
+        std::vector<readback_target> targets;
+        targets.reserve( vehicle_list.size() );
         for( wrapped_vehicle &wv : vehicle_list ) {
-            vehicle &veh = *wv.v;
-            if( !veh.box2d_position_authority ) { continue; }
-            // Falling and aircraft z-change: act_on_map() falls through to tile-step
-            // for vertical movement (box2d_position_authority guard checks !should_fall
-            // && requested_z_change==0).  Skip xy readback here; z handled separately.
-            if( veh.is_falling
-                || ( veh.is_aircraft() && veh.get_z_change() != 0 ) ) { continue; }
-            const auto px  = static_cast<int>( std::lround( veh.physics_pos.x ) );
-            const auto py  = static_cast<int>( std::lround( veh.physics_pos.y ) );
+            vehicle &v = *wv.v;
+            if( !v.box2d_position_authority ) { continue; }
+            if( v.is_falling || ( v.is_aircraft() && v.get_z_change() != 0 ) ) { continue; }
+            targets.push_back( { &v,
+                                 static_cast<int>( std::lround( v.physics_pos.x ) ),
+                                 static_cast<int>( std::lround( v.physics_pos.y ) ) } );
+        }
+
+        auto live = vehicle_list;
+        bool live_dirty = false;
+        for( const readback_target &target : targets ) {
+            if( live_dirty ) {
+                live = get_vehicles();
+                live_dirty = false;
+            }
+            if( std::ranges::none_of( live, [&target]( const wrapped_vehicle & w ) {
+            return w.v == target.veh;
+        } ) ) {
+                continue;   // wrecked by an earlier walk this turn
+            }
+            vehicle &veh = *target.veh;
+            const auto px = target.px;
+            const auto py = target.py;
             const auto cur = veh.bub_ms_location();
             if( px != cur.x() || py != cur.y() ) {
                 // Walk the tile anchor one tile at a time toward the
@@ -614,6 +645,9 @@ void map::vehmove()
                 // bound is generous relative to any legitimate per-turn span.
                 constexpr int max_walk_tiles = 64;
                 bool blocked = false;
+                // Set when move_vehicle() wrecks the vehicle: everything after the
+                // walk dereferences `veh`, so it must be skipped entirely.
+                bool destroyed = false;
                 {
                     const physics::PhysicsWorld::physics_move_scope readback( *phys_world );
                     for( int walked = 0; walked < max_walk_tiles; ++walked ) {
@@ -629,10 +663,58 @@ void map::vehmove()
                         // to collide with, so treat the boundary as a hard stop
                         // rather than stranding the vehicle in a null submap.
                         if( !inbounds( at + step ) ) { blocked = true; break; }
-                        veh.adjust_zlevel( 1, step );
-                        if( !displace_vehicle( veh, step ) ) { blocked = true; break; }
-                        veh.shift_zlevel();
+
+                        // Route the step through move_vehicle() rather than calling
+                        // displace_vehicle() directly.
+                        //
+                        // move_vehicle() is itself a single-tile mover — it asserts
+                        // |dp| <= 1 on every axis — and already performs the whole
+                        // per-tile consequence chain: collision detection,
+                        // part_collision() (creature damage, terrain bashing,
+                        // throw_from_seat, sound), the adjust_zlevel/shift_zlevel
+                        // ramp handling, and the displacement itself.  Since this
+                        // walk advances exactly one tile at a time, that is precisely
+                        // its contract, so Box2D decides *where and how far* while
+                        // move_vehicle decides *what happens on the way*.
+                        //
+                        // Reusing it is what keeps collision force balanced: the
+                        // alternative, deriving bash force from Box2D contact
+                        // impulses, would invent a balance model with nothing to
+                        // validate it against.
+                        const vehicle *before = &veh;
+                        vehicle *after = move_vehicle( veh, step, veh.face );
+                        if( after == nullptr ) {
+                            // Wrecked by the collision.  `veh` is dead, so nothing
+                            // below may touch it — and other entries in `targets`
+                            // may have been wrecked with it, so mark the live list
+                            // stale.  Deliberately NOT a return: that would skip the
+                            // readback for every remaining vehicle, leaving them on a
+                            // stale physics_pos and silently not advancing this turn.
+                            destroyed = true;
+                            live_dirty = true;
+                            break;
+                        }
+                        if( after != before ) {
+                            // Split or replaced: `veh` no longer names the vehicle
+                            // that moved, so stop walking it.  A split creates a new
+                            // vehicle, so the live list is stale too.
+                            live_dirty = true;
+                            blocked = true;
+                            break;
+                        }
+                        if( veh.bub_ms_location() == at ) {
+                            // Did not actually advance — blocked by something
+                            // move_vehicle declined to move through.
+                            blocked = true;
+                            break;
+                        }
                     }
+                }
+                if( destroyed ) {
+                    // `veh` is freed.  Everything below — the rewind, the pivot
+                    // resync, the render offsets — dereferences it, so move on to
+                    // the next target rather than guarding each one.
+                    continue;
                 }
                 // If the walk stopped short — blocked tile, map edge, or the
                 // iteration bound — the tile anchor and physics_pos have

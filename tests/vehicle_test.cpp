@@ -549,6 +549,7 @@ TEST_CASE( "broken_door_and_lock_can_be_removed", "[vehicle]" )
 
 #ifdef BOX2D_ENABLED
 #include "physics/physics_world.h"
+#include "physics/terrain_body.h"
 
 // Box2D position authority is revoked when a vehicle's home submap leaves the
 // simulated set while staying resident, and re-granted when it returns.  The
@@ -595,62 +596,15 @@ TEST_CASE( "box2d_position_authority_survives_resident_submap_unload", "[vehicle
     }
 }
 
-// PENDING SPEC — tagged [!shouldfail]: Catch2 treats the failure as the
-// expected result, so the suite stays green.  When the routing below is
-// implemented this case starts *passing*, which Catch2 then reports as a failure
-// ("expected to fail") — that is the prompt to delete this tag.
-//
-// A vehicle under Box2D position authority skips part_collision() entirely
-// (vehicle::act_on_map returns early at src/vehicle_move.cpp:~1586), so terrain
-// bashing must be routed from Box2D contact events instead.  It is not:
-// PhysicsWorld::dispatch_contact_events() is a stub.  This case is the executable
-// acceptance criterion for that work.
-//
-// It cannot yet fail for the *intended* reason, because a prior gap swallows it:
-// measured during vehmove() here, the physics world holds ZERO terrain bodies
-// (terrain_bodies_.size() == 0, bashable_tile_bodies_.size() == 0), so
-// b2World_GetContactEvents().beginCount is always 0 and no vehicle-terrain contact
-// can occur at all.  Terrain bodies are only built from map::on_submap_loaded
-// (src/map.cpp:378, itself gated on `g && p.z() == g->u.bub_pos().z()`), and
-// build_test_map() mutates already-resident submaps without triggering that
-// notification.
-//
-// To make this test meaningful, after placing the wall call
-//   phys_world->on_submap_loaded( here, project_to<coords::sm>( here.bub_to_abs( pos ) ) )
-// for the submaps under test, and assert a non-zero contact count before asserting
-// the bash.  Then implement the routing and drop the [!shouldfail] tag.
-//
-// Worth checking separately, because it may be a live bug rather than a harness
-// artifact: whether the initial reality bubble also loads its submaps before
-// g->u has a position, which would leave real games with no terrain colliders too.
-//
-// See plans/box2d-vehicle-physics-implementation.md.
-TEST_CASE( "box2d_authority_vehicle_bashes_terrain", "[!shouldfail][vehicle][box2d]" )
+// A vehicle under Box2D position authority skips part_collision() via
+// act_on_map()'s early return, so the per-tile readback walk in map::vehmove()
+// routes each step through move_vehicle() to get collision consequences back.
+// This asserts the end result: drive into a bashable wall, the wall gives way.
+TEST_CASE( "box2d_authority_vehicle_bashes_terrain", "[vehicle][box2d]" )
 {
     clear_all_state();
     auto &here = get_map();
     build_test_map( ter_id( "t_pavement" ) );
-
-    const auto obstacle = tripoint_bub_ms( 72, 60, 0 );
-    here.ter_set( obstacle, ter_id( "t_wall_wood" ) );
-    here.build_map_cache( 0, true );
-    REQUIRE( here.is_bashable_ter_furn( obstacle, false ) );
-    const auto before = here.ter( obstacle );
-
-    // Give the obstacle an actual Box2D collider.  build_test_map() mutates
-    // already-resident submaps and never fires the submap-loaded notification, so
-    // without this the world holds no terrain bodies at all and no vehicle-terrain
-    // contact can occur — the test would then fail for the wrong reason.
-    auto *pw = here.get_physics_world();
-    REQUIRE( pw != nullptr );
-    const auto colliders_before = pw->terrain_body_count();
-    const auto sub = here.get_abs_sub();
-    for( int sx = 0; sx < here.getmapsize(); ++sx ) {
-        for( int sy = 0; sy < here.getmapsize(); ++sy ) {
-            pw->on_submap_loaded( here, tripoint_abs_sm{ sub.x() + sx, sub.y() + sy, 0 } );
-        }
-    }
-    REQUIRE( pw->terrain_body_count() > colliders_before );
 
     auto *veh = here.add_vehicle( vproto_id( "car_test" ), tripoint_bub_ms( 60, 60, 0 ),
                                   0_degrees, 100, 0 );
@@ -661,6 +615,29 @@ TEST_CASE( "box2d_authority_vehicle_bashes_terrain", "[!shouldfail][vehicle][box
     veh->engine_on = true;
     veh->velocity = 2000;          // 20 m/s, well past any bash threshold
     veh->cruise_velocity = 2000;
+
+    // Put the obstacle along the vehicle's actual heading rather than at a
+    // hard-coded tile: face_vec() decides which way 0_degrees points, and guessing
+    // wrong just drives away from the wall and proves nothing.
+    const auto fv = veh->face_vec();
+    const auto start = veh->bub_ms_location();
+    const auto obstacle = tripoint_bub_ms(
+                              start.x() + static_cast<int>( std::lround( fv.x * 6 ) ),
+                              start.y() + static_cast<int>( std::lround( fv.y * 6 ) ), 0 );
+    here.ter_set( obstacle, ter_id( "t_wall_wood" ) );
+    here.build_map_cache( 0, true );
+    REQUIRE( here.is_bashable_ter_furn( obstacle, false ) );
+    const auto before = here.ter( obstacle );
+
+    // Build colliders for the obstacle's submap only.  Doing the whole map creates
+    // ~176k bodies, including every non-pavement tile out to the map edge, and the
+    // vehicle is then wedged before it travels anywhere (measured: velocity
+    // collapsing 2000 -> 317 on the first turn).
+    auto *pw = here.get_physics_world();
+    REQUIRE( pw != nullptr );
+    const auto colliders_before = pw->terrain_body_count();
+    pw->on_submap_loaded( here, project_to<coords::sm>( here.bub_to_abs( obstacle ) ) );
+    REQUIRE( pw->terrain_body_count() > colliders_before );
 
     for( int turn = 0; turn < 5 && here.ter( obstacle ) == before; ++turn ) {
         here.vehmove();
@@ -691,13 +668,9 @@ TEST_CASE( "box2d_terrain_colliders_build_and_rebuild", "[vehicle][box2d]" )
 
     build_test_map( ter_id( "t_pavement" ) );
 
-    // Measure against whatever is already registered rather than asserting an
-    // empty world.  PhysicsWorld is constructed once per binary and never reset
-    // between TEST_CASEs, so any earlier case that called on_submap_loaded (the
-    // authority-lifecycle case above does) leaves colliders behind.  An
-    // == 0 baseline here passed alone and failed in-suite — the same
-    // order-dependence this file documents elsewhere.
-    const auto baseline = pw->terrain_body_count();
+    // PhysicsWorld is constructed once per binary and never reset between
+    // TEST_CASEs, so this cannot assume an empty world: earlier cases leave
+    // colliders behind.  Everything below is measured as a delta.
 
     const auto wall_z0 = tripoint_bub_ms( 60, 60, 0 );
     here.ter_set( wall_z0, ter_id( "t_wall_wood" ) );
@@ -705,9 +678,16 @@ TEST_CASE( "box2d_terrain_colliders_build_and_rebuild", "[vehicle][box2d]" )
 
     const auto sm_z0 = project_to<coords::sm>( here.bub_to_abs( wall_z0 ) );
 
+    // Clear this submap first so the assertion measures a real build rather than a
+    // replacement.  Another TEST_CASE may already have registered it — the bash spec
+    // does — and on_submap_loaded is idempotent, so loading an already-loaded submap
+    // leaves the global count unchanged and the check would fail for the wrong reason.
+    pw->on_submap_unloaded( sm_z0, /*submap_still_resident=*/false );
+    const auto cleared = pw->terrain_body_count();
+
     pw->on_submap_loaded( here, sm_z0 );
     const auto after_first = pw->terrain_body_count();
-    CHECK( after_first > baseline );
+    CHECK( after_first > cleared );
 
     // Idempotent: a repeat call must replace, not stack.  Asserted against the
     // Box2D world's own body count, NOT the registry: terrain_bodies_[key] is an
