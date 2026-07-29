@@ -437,6 +437,33 @@ and fail in-suite): any test holding a bub coordinate across a shift boundary se
 different frame depending on how many cases ran before it. Check whether `clear_game()` /
 `build_test_map()` reset `map::abs_sub` before treating those as separate problems.
 
+### Suite total understates it: 26 in-suite vs 82 isolated
+
+`[vehicle]~[.]` on `BOX2D=OFF` reports **54 cases, 45 passed, 9 failed; 28 failed
+assertions** — of which `vehicle_ramp_test.cpp` contributes **26** and
+`ranged_vehicle_recoil_test.cpp` the rest. But running `[vehicle][ramp]` *alone* on the
+same tree gives **82** failed assertions in **1** failed case.
+
+That is genuine order dependence, not a tagging artifact — no ramp `TEST_CASE` is
+`[.]`-tagged (`tests/vehicle_ramp_test.cpp:437,444,451`), so all of them run in both
+invocations. The two figures move in opposite directions: in-suite has **more failing
+cases** (9) but **fewer failed assertions** (28), which is the signature of a `REQUIRE`
+tripping earlier in-suite and aborting each case before the 52 `CHECK( ppos.z() ==
+target_z )` iterations run.
+
+**Quote the isolated figure when describing severity.** The suite total is the smaller
+number but the worse outcome, and reading 28 as "only 28 problems left" understates it.
+
+A single hypothesis may cover this, the stall, and the unresolved recoil/grab leakage:
+`map::get_abs_sub()` was observed drifting one submap per `TEST_CASE`
+(`(-1,0,0) → (-4,0,0)`) while bub coordinates stay pinned. `set_ramp()` and
+`ramp_transition_angled` lay terrain at fixed *bub* coordinates. If the terrain is written
+relative to a drifted origin, a vehicle can drive onto tiles that never received the ramp
+flag — which would produce a stall plus a late-or-absent z transition, and only after other
+cases have run. Test it by logging `get_abs_sub()` and the actual `ter_id` at the transition
+tile inside `ramp_transition_angled`, isolated versus in-suite, before touching vehicle
+physics.
+
 ## Verification commands used this session
 
 ```sh
