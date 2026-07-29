@@ -378,40 +378,38 @@ shift_zlevel` per tile and rewinds `physics_pos` on every early exit.
    rebuilding unconditionally, or the fresh body emits a new begin-touch event and
    re-bashes up to 240 times a turn.
 
-1. **Implement `dispatch_contact_events()` for real** — gated on item 0. Currently a
-   stub: it walks `beginEvents`, resolves a `vehicle *`, then discards it
-   (`( void )ptr; ( void )bid;`). The per-tile readback walk now makes per-tile
-   consequences reachable, which they were not before.
+1. **Route collisions by reusing `part_collision()`, not by inventing a force model.**
 
-   Concretely it needs:
-   - **Map access.** Bashing is `map::bash()`, but `dispatch_contact_events()` is called
-     from `step_turn()` which holds no map. Thread `map &` through both (the `vehmove()`
-     call site already has `*this`), matching how `on_submap_loaded`/`on_zlevel_changed`
-     already take one.
-   - **Terrain identification.** Only bashable bodies carry user data
-     (`terrain_body.cpp:60-63` sets an encoded `tripoint_bub_ms`); solid bodies carry
-     none, so "no user data and not in `vehicle_bodies_`" is the solid-terrain case.
-     Beware: `b2Body_GetUserData()` on a vehicle body returns a `vehicle *`, so the
-     `vehicle_bodies_.count()` check must come first or the pointer will be decoded as a
-     tile position.
-   - **A force model.** `map::bash()` takes a strength. Deriving it from contact impulse
-     is a *balance decision*, not a mechanical port: the tile-step path computed bash
-     force from `veh.velocity` and part mass inside `part_collision()`, and any different
-     derivation changes how easily vehicles smash terrain.
-   - **Creature collision.** `veh_coll_body` (damage, being shoved, `throw_from_seat`)
-     also lived in `part_collision()`. Creature bodies are sensors
-     (`physics_world.cpp` sets `isSensor = true`, `enableContactEvents = false`), so they
-     produce no contact events at all as currently configured.
+   **Prerequisite now satisfied.** The blocker was that no contact could occur at all:
+   `build_test_map()` mutates already-resident submaps and never fires the submap-loaded
+   notification, so the world held no terrain bodies and
+   `b2World_GetContactEvents().beginCount` was always 0. Building colliders explicitly in
+   `tests/vehicle_test.cpp`'s `box2d_authority_vehicle_bashes_terrain` fixes that —
+   measured `begin=48 hit=6` on the first batch, 42 batches over the run, against 176,399
+   terrain bodies. The spec now fails on its final assertion only, the genuine gap.
 
-   **Not attempted this session, deliberately.** Two reasons, both learned the hard way
-   here: the force model is a balance decision that should not be invented silently, and
-   there is currently no test that would verify it — `[vehicle][ramp]` opts out of
-   authority entirely, `[vehicle][railroad]` fails before `vehmove()`, and
-   `[vehicle][collision]` drives `part_collision()` directly rather than through physics.
-   Landing it now would mean shipping a balance-affecting feature with no coverage, which
-   is the exact failure mode the corrections at the top of this document exist to record.
-   Write the test first: spawn an authority vehicle, drive it into a bashable wall through
-   `vehmove()`, and assert the terrain actually changes.
+   **Preferred approach — reuse, don't reinvent.** `vehicle::part_collision()` is public
+   (`src/vehicle.h`, options struct) and already implements the *balanced* force
+   derivation plus creature damage, terrain bashing, `throw_from_seat` and sound. The
+   readback tile-walk in `map::vehmove()` already advances one tile at a time, exactly the
+   granularity `part_collision()` expects, so calling it per step from the walk reuses all
+   of it.
+
+   Deriving a bash force from Box2D contact impulses instead means inventing a balance
+   model — the thing this document already warns against, and something no test could
+   validate beyond "terrain changed".
+
+   Notes for whoever implements it:
+   - Mirror `map::move_vehicle()`'s per-part collision detection rather than inventing a
+     new traversal; it already handles the multi-part case.
+   - `dispatch_contact_events()` then has a much smaller job: sound, and any purely
+     physical response with no tile-step equivalent. It is not the place for bash force.
+   - Its current comment claims hit events are unreliable for dynamic-static pairs.
+     Measured otherwise (`hit=6` above), so re-check that before relying on either kind.
+   - Creature bodies are sensors (`isSensor = true`, `enableContactEvents = false`) and
+     produce no contact events at all, so creature collision must come from
+     `part_collision()` regardless.
+
 2. **Diagnose ramp and rails where they actually live** — `src/grab.cpp` for the pushed-cart
    ramp cases, and the direct-`displace_vehicle` warm-up for `vehicle_rails_test.cpp:184`.
    Not the readback.
