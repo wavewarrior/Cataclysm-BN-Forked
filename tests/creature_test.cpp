@@ -1,6 +1,7 @@
 #include "catch/catch_amalgamated.hpp"
 #include <cstdlib>
 #include <map>
+#include <numeric>
 #include <sstream>
 #include <utility>
 

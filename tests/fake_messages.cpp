@@ -21,6 +21,10 @@ std::vector<std::pair<std::string, std::string>> Messages::recent_messages_color
 {
     return std::vector<std::pair<std::string, std::string>>();
 }
+auto Messages::recent_messages_rich( size_t ) -> std::vector<Messages::rich_message>
+{
+    return {};
+}
 void Messages::add_msg( std::string ) {}
 void Messages::add_msg( const game_message_params &, std::string ) {}
 void Messages::clear_messages() {}

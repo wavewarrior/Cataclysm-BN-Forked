@@ -3,6 +3,7 @@
 #include <climits>
 #include <map>
 #include <memory>
+#include <numeric>
 #include <limits>
 #include <set>
 #include <sstream>

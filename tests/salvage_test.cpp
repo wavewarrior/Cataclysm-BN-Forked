@@ -1,5 +1,6 @@
 #include "catch/catch_amalgamated.hpp"
 #include <memory>
+#include <numeric>
 
 #include "avatar.h"
 #include "game.h"
