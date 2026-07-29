@@ -391,6 +391,52 @@ out/build/nobox2d/tests/cata_test-tiles "make_vehicle_efficiency_case" --rng-see
 ```
 
 
+## Ramp: a vehicle can come to a DEAD STOP driving up a ramp (shipping, pre-existing)
+
+Measured on a `BOX2D=OFF` build, so this one is real for players. `[vehicle][ramp]` fails
+**82 assertions in 1 of 8 test cases** — identical before and after this session, so
+pre-existing.
+
+The failing case is `vehicle_ramp_test_60/ramp up`, vehicle type `motorcycle`. The
+assertions and what they mean, in causal order:
+
+| Site | Assertion | Observed |
+|---|---|---|
+| `:200` (10x) | `veh.velocity == target_velocity` | **`0 == 179`** and `158 == 179` |
+| `:215` (52x) | `ppos.z() == target_z` | `0 == 1` at `cycles == 4`, `pmount (0,0,0)`, `ppos (71,60,0)` |
+| `:218` (14x) | `player_character.bub_pos() == ppos` | boarded rider no longer on its own part |
+
+`:200` looks causal: the vehicle is driven at a fixed `velocity = 179` (~1 tile/s) and the
+z-transition assertions are gated on `cycles > transition_cycle - pmount.x()`, i.e. they
+assume the vehicle covers roughly a tile per cycle. `158` is ordinary drag, but **`0` is a
+dead stop** — so the vehicle never reaches the ramp on schedule, and `:215`/`:218` then fail
+as consequences rather than as independent defects.
+
+**Player-visible consequence:** driving a vehicle up a ramp can bring it to a complete
+halt, and while parts are mid-transition a boarded rider can be positioned off their own
+seat tile.
+
+**Not yet established:** what zeroes the velocity. A collision path (`part_collision` →
+`veh_coll_*`) or an explicit `stop()` are the obvious candidates; `:202`
+(`REQUIRE( !veh.skidding )`) does *not* fail, so skidding is ruled out. Worth instrumenting
+`veh.velocity` per cycle alongside the vehicle's tile to see whether the stop coincides
+with reaching the ramp tile.
+
+**Do not confuse this with the earlier `:174` failures.** Those (18, `bub_pos ==
+map_starting_point` right after `board_vehicle`) were fixed by the `part_collision`
+identity change in section 2 — instrumenting `board_vehicle` afterwards showed abs position,
+`abs_sub` and bub all stable across all 18 invocations. The remaining 82 are a different,
+older defect.
+
+**Aside worth a look on its own:** that instrumentation also showed `map::get_abs_sub()`
+drifting by exactly one submap per invocation across `TEST_CASE`s
+(`(-1,0,0) → (-2,0,0) → (-3,0,0) → (-4,0,0)`) while bub stayed pinned. The map origin is
+evidently not reset between cases. That is a plausible mechanism for the unresolved
+cross-test leakage (`"vehicle gun recoil*"` and `grabbed_shopping_cart_*` pass in isolation
+and fail in-suite): any test holding a bub coordinate across a shift boundary sees a
+different frame depending on how many cases ran before it. Check whether `clear_game()` /
+`build_test_map()` reset `map::abs_sub` before treating those as separate problems.
+
 ## Verification commands used this session
 
 ```sh
