@@ -83,6 +83,15 @@ class rml_doc
         Rml::ElementDocument *doc_ = nullptr;
 };
 
+// Reports that a screen with no remaining non-RmlUi renderer could not open its
+// document, and returns true in that case.
+//
+// A screen whose curses drawing has been deleted cannot degrade gracefully: with
+// no document its on_redraw paints nothing, yet its input loop keeps consuming
+// every key, so the player sees the previous screen frozen.  Callers in that
+// position MUST check this right after open() and back out instead of looping.
+auto rml_doc_unavailable( const rml_doc &doc, const char *screen ) -> bool;
+
 // ── Per-screen enable toggles ────────────────────────────────────────────────
 // (definitions live next to each screen; defaults OFF — opt in via the F4 panel)
 

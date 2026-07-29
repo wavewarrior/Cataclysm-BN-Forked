@@ -55,7 +55,10 @@ const std::vector<rml_toggle> &rml_toggle_registry()
         {"worldfactory", &worldfactory_rmlui_enabled, false},
         {"main_menu", &main_menu_rmlui_enabled, false},
         {"loadchar", &loadchar_rmlui_enabled, false},
-        {"newcharacter", &newcharacter_rmlui_enabled, false},
+        // Must stay ON: the newcharacter tabs' curses drawing was deleted during the
+        // migration, so "off" selects a renderer that no longer exists and the tabs
+        // paint nothing while still consuming input.
+        {"newcharacter", &newcharacter_rmlui_enabled, true},
         {"overmap", &overmap_rmlui_enabled, false},
         {"world_text", &world_text_rmlui_enabled, false},
         {"overmap_text", &overmap_text_rmlui_enabled, false},

@@ -274,6 +274,17 @@ static void WinCreate()
     // the legacy path keeps running invisibly. The SDL log carries the
     // exact failure mode.
     lighting::init_render_state_on( g_display.window.get() );
+    // Bring RmlUi up NOW, not on the first rendered frame.  rml_doc::open() gives up
+    // permanently when the layer isn't ready, and every screen whose curses drawing
+    // was deleted during the migration then paints nothing while its input loop still
+    // swallows keys — the black, unescapable main menu.  begin_frame() also inits
+    // lazily, but that is the first RENDERED frame, and the main menu opens its
+    // document before it ever draws, so it lost the race whenever device setup ran
+    // slow.  init() is idempotent, so the lazy call stays as a fallback for the case
+    // where the device genuinely isn't ready yet.  Mirrors the WinDestroy teardown.
+    if( auto &rs = lighting::get_render_state(); rs.ready() ) {
+        rmlui_layer::init( rs.device() );
+    }
     // Dear ImGui inits lazily in refresh_display (device readiness isn't
     // guaranteed at WinCreate); torn down in WinDestroy.
 }

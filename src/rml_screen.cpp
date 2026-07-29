@@ -4,9 +4,12 @@
 
 #include <RmlUi/Core.h>
 
+#include "debug.h"
 #include "input.h"
 #include "path_info.h"
 #include "lighting/rmlui_layer.h"
+
+#define dbg(x) DebugLogFL((x), DC::SDL)
 
 namespace
 {
@@ -31,15 +34,30 @@ bool rml_doc::open( bool enabled, const std::string &model_name, input_context &
         // Already open on this instance — nothing to do.
         return true;
     }
-    if( !enabled || !rmlui_layer::ready() || active_models().contains( model_name ) ) {
+    // Every bail below is logged: a silent false here leaves the caller drawing
+    // nothing while its input loop still swallows every key, which presents as a
+    // frozen game rather than as a missing document.
+    if( !enabled ) {
+        dbg( DL::Info ) << "rml_doc: '" << model_name << "' skipped — screen toggle is off";
+        return false;
+    }
+    if( !rmlui_layer::ready() ) {
+        dbg( DL::Warn ) << "rml_doc: '" << model_name << "' skipped — rmlui layer not ready";
+        return false;
+    }
+    if( active_models().contains( model_name ) ) {
+        dbg( DL::Warn ) << "rml_doc: '" << model_name << "' skipped — model already live";
         return false;
     }
     Rml::Context *ctx_rml = rmlui_layer::context();
     if( ctx_rml == nullptr ) {
+        dbg( DL::Warn ) << "rml_doc: '" << model_name << "' skipped — no rmlui context";
         return false;
     }
     Rml::DataModelConstructor c = ctx_rml->CreateDataModel( model_name );
     if( !c ) {
+        dbg( DL::Warn ) << "rml_doc: '" << model_name << "' failed — CreateDataModel refused"
+                        " (name already registered?)";
         return false;
     }
     // Screen-specific: register structs, Bind members, BindEventCallback, and
@@ -58,6 +76,17 @@ bool rml_doc::open( bool enabled, const std::string &model_name, input_context &
     active_models().insert( model_name );
     // Tick at 16ms so RmlUi hover/mouse-wheel stay live between keys.
     ctx.set_timeout( 16 );
+    return true;
+}
+
+auto rml_doc_unavailable( const rml_doc &doc, const char *screen ) -> bool
+{
+    if( doc ) {
+        return false;
+    }
+    debugmsg( "%s could not open its RmlUi document and has no other renderer, so it would "
+              "draw nothing while still swallowing input.  Check that the screen's RmlUi "
+              "toggle is on (F4 panel); config/debug.log records the exact reason.", screen );
     return true;
 }
 

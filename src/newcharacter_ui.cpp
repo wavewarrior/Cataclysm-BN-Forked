@@ -408,6 +408,9 @@ tab_direction set_points( avatar &, points_left &points )
         c.Bind( "desc_rml", &data->desc_rml );
         data->handle = c.GetModelHandle();
     } );
+    if( rml_doc_unavailable( rml, _( "Character creation (POINTS tab)" ) ) ) {
+        return tab_direction::QUIT;
+    }
 
     do {
         if( highlighted < 0 ) {
@@ -664,6 +667,9 @@ tab_direction set_stats( avatar &u, points_left &points )
         c.Bind( "hints_rml", &data->hints_rml );
         data->handle = c.GetModelHandle();
     } );
+    if( rml_doc_unavailable( rml, _( "Character creation (STATS tab)" ) ) ) {
+        return tab_direction::QUIT;
+    }
 
     do {
         ui_manager::redraw();
@@ -1063,6 +1069,9 @@ tab_direction set_traits( avatar &u, points_left &points )
         c.Bind( "desc_rml", &data->desc_rml );
         data->handle = c.GetModelHandle();
     } );
+    if( rml_doc_unavailable( rml, _( "Character creation (TRAITS tab)" ) ) ) {
+        return tab_direction::QUIT;
+    }
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
         if( rml ) {
@@ -1539,6 +1548,9 @@ tab_direction set_bionics( avatar &u, points_left &points )
         c.Bind( "desc_rml", &data->desc_rml );
         data->handle = c.GetModelHandle();
     } );
+    if( rml_doc_unavailable( rml, _( "Character creation (BIONICS tab)" ) ) ) {
+        return tab_direction::QUIT;
+    }
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
         if( rml ) {
@@ -2116,6 +2128,9 @@ tab_direction set_profession( avatar &u, points_left &points,
         c.Bind( "filter_rml", &data->filter_rml );
         data->handle = c.GetModelHandle();
     } );
+    if( rml_doc_unavailable( rml, _( "Character creation (PROFESSION tab)" ) ) ) {
+        return tab_direction::QUIT;
+    }
 
     do {
         if( recalc_profs ) {
@@ -2489,6 +2504,9 @@ tab_direction set_skills( avatar &u, points_left &points )
         c.Bind( "desc_rml", &data->desc_rml );
         data->handle = c.GetModelHandle();
     } );
+    if( rml_doc_unavailable( rml, _( "Character creation (SKILLS tab)" ) ) ) {
+        return tab_direction::QUIT;
+    }
 
     do {
         ui_manager::redraw();
@@ -2818,6 +2836,9 @@ tab_direction set_scenario( avatar &u, points_left &points,
         c.Bind( "filter_rml", &data->filter_rml );
         data->handle = c.GetModelHandle();
     } );
+    if( rml_doc_unavailable( rml, _( "Character creation (SCENARIO tab)" ) ) ) {
+        return tab_direction::QUIT;
+    }
 
     do {
         if( recalc_scens ) {
@@ -3391,6 +3412,9 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
         c.Bind( "guide_rml", &data->guide_rml );
         data->handle = c.GetModelHandle();
     } );
+    if( rml_doc_unavailable( rml, _( "Character creation (OVERVIEW tab)" ) ) ) {
+        return tab_direction::QUIT;
+    }
 
     // do not switch IME mode now, but restore previous mode on return
     ime_sentry sentry( ime_sentry::keep );
